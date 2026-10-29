@@ -13,6 +13,7 @@ import {
   type HordeState,
 } from '../core/horde.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
+import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import { createBuildPanel } from './build.ts';
 import { createHud, resultScreen } from './hud.ts';
 import {
@@ -58,8 +59,11 @@ export function start(root: HTMLElement): void {
   if (!context) throw new Error('start: no 2D canvas context');
   const ctx: CanvasRenderingContext2D = context;
 
-  // The game lives in memory until saving lands (ID-008); a reload starts a new one.
-  let game: GameState = newGame();
+  // The game between hordes is saved after every change; a fight is not, so a
+  // reload mid-horde comes back to the camp as it was before it.
+  const storage = browserStorage();
+  const loaded = storage ? loadSave(storage) : { save: null, rejected: false };
+  let game: GameState = loaded.save?.game ?? newGame();
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
   // When the fight ended (ms): read once, so the screen and the rest timers agree.
@@ -75,7 +79,7 @@ export function start(root: HTMLElement): void {
     },
     () => {
       if (!horde || endedAt === null) return;
-      game = finishHorde(game, horde, endedAt);
+      commit(finishHorde(game, horde, endedAt));
       toBuild();
     },
     (defenderId, postId) => {
@@ -91,7 +95,10 @@ export function start(root: HTMLElement): void {
   const panel = createBuildPanel(
     root,
     (base, stock) => {
-      game = { ...game, base, stock };
+      // A build is the player moving on: an old line in the backup section goes,
+      // except the warning that nothing is saved.
+      if (storage) panel.notice('');
+      commit({ ...game, base, stock });
       panel.show(game, selected);
     },
     (defenderId, postId) => {
@@ -104,7 +111,23 @@ export function start(root: HTMLElement): void {
       panel.hide();
       hud.show(true);
     },
+    (loadedGame) => {
+      commit(loadedGame);
+      selected = null;
+      panel.show(game, selected);
+    },
   );
+  // Whether the last write was refused, so the next one that works can say so.
+  let saveRefused = false;
+  /** Takes `next` as the game and saves it; a refused write is said in the build panel. */
+  function commit(next: GameState): void {
+    game = next;
+    if (!storage) return;
+    const ok = writeSave(storage, game, Date.now());
+    if (!ok) panel.notice("Couldn't save: this browser's storage is full or blocked.");
+    else if (saveRefused) panel.notice('Saved.');
+    saveRefused = !ok;
+  }
   function toBuild(): void {
     horde = null;
     selected = null;
@@ -113,6 +136,10 @@ export function start(root: HTMLElement): void {
     panel.show(game, selected);
   }
   toBuild();
+  if (!storage) panel.notice('Saving is off: this browser blocks storage. Keep the backup code.');
+  else if (loaded.rejected) {
+    panel.notice("Your save couldn't be read, so a new camp started. The old save is kept aside.");
+  }
 
   let view: View = { w: 0, h: 0 };
   // Starts framed on the whole field (the first resize fits the zoom to the width).
@@ -127,6 +154,12 @@ export function start(root: HTMLElement): void {
   }
   resize();
   window.addEventListener('resize', resize);
+
+  // A fight isn't saved, and neither is its payout until "Back to build": while one
+  // is on (or its result is up), leaving the page asks first.
+  window.addEventListener('beforeunload', (e) => {
+    if (horde) e.preventDefault();
+  });
 
   const held = new Set<string>();
   const panKey = (e: KeyboardEvent): string | null => {
@@ -280,7 +313,7 @@ export function start(root: HTMLElement): void {
       // Someone back from rest: redraw the start picker.
       const recovered = recover(game, Date.now());
       if (recovered !== game) {
-        game = recovered;
+        commit(recovered);
         panel.show(game, selected);
       }
       drawScene(ctx, buildScene(game, panel.choice(game)), cam, view, { selected });

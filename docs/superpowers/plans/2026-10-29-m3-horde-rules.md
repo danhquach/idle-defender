@@ -6,7 +6,7 @@
 
 ## Roadmap
 
-M3 = ID-006 (horde rules) + ID-007 (victory and defeat screens) + ID-008 (save) + ID-009 (balance simulator). Each ticket's acceptance criteria are written here before it starts; ID-006's are below.
+M3 = ID-006 (horde rules) + ID-007 (victory and defeat screens) + ID-008 (save) + ID-009 (balance simulator). Each ticket's acceptance criteria are written here before it starts.
 
 **M3 stand-ins and later work:**
 - **Grit:** defender HP is a flat 100 until ID-011 adds +5 per Grit point.
@@ -70,3 +70,39 @@ M3 = ID-006 (horde rules) + ID-007 (victory and defeat screens) + ID-008 (save) 
 - Modify `src/ui/hud.ts`: `resultScreen(game, horde, now)` builds both screens' text; the HUD shows it.
 - Modify `src/ui/app.ts`: reads the clock once when the horde ends and passes that `now` to the screen and to `finishHorde`.
 - Tests: `src/core/rules.test.ts`, `game.test.ts`, `hud.test.ts`.
+
+---
+
+## ID-008 — Save
+
+**Acceptance criteria** (also on issue #8):
+
+**Saving**
+- The game between hordes is saved to browser storage as versioned JSON (`v: 1`, `savedAt`, `game`) after every change: a build action, a finished horde, a recovery, a loaded backup code.
+- A fight is not saved. A reload mid-horde comes back to the build screen with the camp as it was before that horde (PM decision, 2026-10-29).
+- Against an accidental refresh: while a horde is on or its result screen is up, leaving the page (reload, closing the tab, navigating away) shows the browser's "Leave site?" warning. In build mode it doesn't (PM decision, 2026-10-29).
+- A reload restores horde number, base (layers, segments with HP, posts), stock, tiers and roster (XP, `injuredUntil`).
+- Rest uses real time: a defender injured before closing the page is back at the same clock time after reopening; one whose time passed while closed is fit.
+- Storage that throws or is missing: the game still plays and the build panel says "Saving is off…"; a refused write says "Couldn't save…", and the next write that works says "Saved.". A build action clears an old line.
+
+**Loading untrusted data** (the save and the backup code)
+- Size-checked before parsing (save ≤ 50,000 chars; paste ≤ twice the longest code).
+- Read through an allow-list that builds a new game field by field: exact keys (`__proto__`, `constructor` and extras refused), whole numbers in range, known tier, post and weapon ids compared exactly, ids `[a-z][a-z0-9-]{0,31}`, names `[A-Za-z][A-Za-z' -]{0,23}` (no HTML, bidi, zero-width or look-alike characters), and the build rules a real camp keeps (layer order, one gate per layer, unlocked tiers only, post order, posts on or behind a wall, unique roster ids).
+- Not refused, so clock skew and retuning never lose a camp: segment max HP is taken from today's numbers by kind and tier, and HP above it is cut to it; a rest later than 2 h past `savedAt` (a clock set back, a code from a device whose clock runs ahead) is cut to that.
+- A save that fails: a new camp starts, the bad one is kept under a second key (not overwritten), and the build panel says so.
+- No save data reaches a URL, the page title, a log line or a network call.
+
+**Backup code**
+- The build panel shows the camp's code (`ID1:` + base64 of the save JSON) in a read-only box that selects on focus.
+- Pasting a code and pressing "Load code": ASCII spaces and line breaks are ignored; empty, too long and unreadable codes each say why and change nothing; a good code asks to confirm, then replaces the camp and saves it.
+
+**General**
+- Text only via `textContent`; no new runtime dependency; core stays pure (storage lives in `src/storage/**`).
+- Tests: round-trip of a new and a played game; rest across a reload; storage that throws; a rejected save kept aside; hostile payloads through every path (prototype keys, extra/missing keys, out-of-range, fractional, text and overflowing numbers, look-alike and padded ids, HTML/bidi/zero-width names, every build rule, deep nesting and long arrays, oversized and ReDoS-shaped input, broken base64 and UTF-8, hidden marks in a code).
+- `security-devops` injection audit passes. Existing tests stay green. Version `0.3.3`.
+
+**Files:**
+- Create `src/storage/validate.ts` (allow-list readers), `src/storage/save.ts` (encode, decode, load, write), `src/storage/code.ts` (backup code), `src/storage/testing.ts`, `save.test.ts`, `code.test.ts`.
+- Modify `src/ui/app.ts`: load at start, `commit` saves after each change, notices.
+- Modify `src/ui/build.ts`: the backup section; `src/page.css`.
+- Modify `vitest.config.ts` (storage tests), `docs/design.md` §12.
