@@ -4,6 +4,7 @@ import {
   type PostKind,
   type SegmentKind,
   type Tier,
+  type TrapKind,
   type TurretMount,
 } from './base.ts';
 import { levelUp, postUsable } from './cards.ts';
@@ -29,6 +30,8 @@ import {
   SPAWN_INTERVAL,
   STAT_EFFECT,
   STEP,
+  TRAP_STRIP,
+  TRAPS,
   TURRET,
   TURRET_RANGE,
   WALK_SPEED,
@@ -135,6 +138,15 @@ export interface Turret {
   condition: number;
   nextShotAt: number;
 }
+/** A trap in the fight; ids = `base.traps` index. Its cell spans `TRAP_STRIP` along `x` and row `row`. */
+export interface Trap {
+  id: number;
+  kind: TrapKind;
+  row: number;
+  durability: number;
+  /** Ids of the enemies that triggered it: each one only once (design §7). */
+  hit: number[];
+}
 /** How a turret looks and whether it fires: lit, dark (no charge), jammed (0 condition), or offline (its wall broke). */
 export type TurretState = 'lit' | 'dark' | 'jammed' | 'offline';
 export type Slot = 'primary' | 'secondary';
@@ -212,6 +224,7 @@ export interface HordeState {
   layers: Layer[];
   posts: Post[];
   turrets: Turret[];
+  traps: Trap[];
   /** Battery bank charge left (design §7). */
   energy: number;
   /** When the fight started (ms since the epoch). */
@@ -248,7 +261,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
   const { hordeNumber, roster, startDefenderId, base, startPostId, bank, startedAt } = setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
-  const { layers, posts, turrets } = layoutOf(base);
+  const { layers, posts, turrets, traps } = layoutOf(base);
   const startPost = posts[startPostId];
   if (!Number.isInteger(startPostId) || !startPost || !postUsable(layers, startPost)) {
     throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
@@ -269,6 +282,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     layers,
     posts,
     turrets,
+    traps,
     energy: bank,
     startedAt,
     defenders: [standing(start, startPost, 0)],
@@ -307,8 +321,13 @@ export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): De
   };
 }
 
-/** The base laid out on the field: layers at their wall `x`, posts unmanned, ids = `base.posts` / `base.turrets` index. */
-export function layoutOf(base: Base): { layers: Layer[]; posts: Post[]; turrets: Turret[] } {
+/** The base laid out on the field: layers at their wall `x`, posts unmanned, ids = `base.posts` / `base.turrets` / `base.traps` index. */
+export function layoutOf(base: Base): {
+  layers: Layer[];
+  posts: Post[];
+  turrets: Turret[];
+  traps: Trap[];
+} {
   const layers: Layer[] = base.layers.map((l) => ({
     column: l.column,
     x: COLUMNS[l.column]!,
@@ -330,7 +349,8 @@ export function layoutOf(base: Base): { layers: Layer[]; posts: Post[]; turrets:
     ...postXY({ kind: t.mount, column: t.column, row: t.row }),
     nextShotAt: 0,
   }));
-  return { layers, posts, turrets };
+  const traps: Trap[] = base.traps.map((t, id) => ({ id, ...t, hit: [] }));
+  return { layers, posts, turrets, traps };
 }
 
 /** Advances the fight by `dt` seconds in fixed steps; returns a new state. */
@@ -431,13 +451,19 @@ export function baseAfter(base: Base, horde: HordeState): Base {
       const h = horde.turrets[i]!;
       return h.mount === t.mount && h.column === t.column && h.row === t.row;
     });
-  if (!match || !sameTurrets) {
+  const sameTraps =
+    b.traps.length === horde.traps.length &&
+    b.traps.every((t, i) => horde.traps[i]!.kind === t.kind && horde.traps[i]!.row === t.row);
+  if (!match || !sameTurrets || !sameTraps) {
     throw new RangeError('baseAfter: the horde was not fought on this base');
   }
   // Turrets keep their exact wear, so a few shots per horde still add up (a whole-point
   // round-up would erase every shot's 0.2).
   b.turrets.forEach((t, i) => {
     t.condition = Math.min(MAX_CONDITION, Math.max(0, horde.turrets[i]!.condition));
+  });
+  b.traps.forEach((t, i) => {
+    t.durability = Math.min(t.durability, Math.max(0, horde.traps[i]!.durability));
   });
   b.layers.forEach((l, i) => {
     l.slots.forEach((slot, row) => {
@@ -515,6 +541,7 @@ function step(s: HordeState, rng: Rng): void {
   fireTurrets(s);
   repair(s);
   repairTurrets(s);
+  springTraps(s);
   removeDead(s);
   const moved = move(s);
   separate(s);
@@ -881,7 +908,7 @@ function move(s: HordeState): Moves {
   const sliding = new Map<number, Slide>();
   const reached = new Map<number, Defender>();
   for (const e of s.enemies) {
-    const speed = ENEMIES[e.kind].speed * STEP;
+    const speed = ENEMIES[e.kind].speed * STEP * trapSlow(s, e);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
       continue;
@@ -902,6 +929,37 @@ function move(s: HordeState): Moves {
     e.inCamp = s.layers.every((l) => e.x < l.x + WALL.depth);
   }
   return { sliding, reached };
+}
+
+/** The trap whose cell `e` stands in, if any. */
+function trapUnder(s: HordeState, e: Enemy): Trap | undefined {
+  if (e.inCamp || e.x < TRAP_STRIP.x || e.x > TRAP_STRIP.x + TRAP_STRIP.width) return undefined;
+  const row = segmentAt(e.y);
+  return s.traps.find((t) => t.row === row);
+}
+
+/**
+ * Design §7: an enemy in a working trap's cell that has not triggered it yet does
+ * so: the trap loses 1 durability and deals its damage. A broken trap (0) does nothing.
+ */
+function springTraps(s: HordeState): void {
+  for (const e of s.enemies) {
+    const t = trapUnder(s, e);
+    if (!t || t.durability <= 0 || t.hit.includes(e.id)) continue;
+    t.hit.push(e.id);
+    t.durability -= 1;
+    e.hp = Math.max(0, e.hp - TRAPS[t.kind].damage);
+  }
+}
+
+/**
+ * Speed factor for `e`: the slow of the trap it stands in, if it triggered that trap.
+ * An enemy that triggered barbed wire stays caught until it leaves the cell, even if
+ * that trigger (or a later one) broke the wire; a broken trap catches no one new.
+ */
+function trapSlow(s: HordeState, e: Enemy): number {
+  const t = trapUnder(s, e);
+  return t?.hit.includes(e.id) ? TRAPS[t.kind].slow : 1;
 }
 
 /** Records each layer `e` (from outside) crossed this step, the first time any enemy does. */

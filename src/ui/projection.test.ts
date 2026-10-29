@@ -115,6 +115,16 @@ describe('slotAt', () => {
   // (x 420); columns 1 (x 760) and 2 (x 1020) empty.
   const base = newBase();
 
+  it('hits a trap cell on the outer layer’s strip, by row', () => {
+    expect(slotAt(1100, 0, base)).toEqual({ column: 2, row: 0, what: 'trap' });
+    expect(slotAt(1160, 250, base)).toEqual({ column: 2, row: 3, what: 'trap' });
+    expect(slotAt(1220, 399, base)).toEqual({ column: 2, row: 4, what: 'trap' });
+    expect(slotAt(1099, 200, base)).toBeNull();
+    expect(slotAt(1221, 200, base)).toBeNull();
+    expect(slotAt(1160, 400, base)).toBeNull();
+    expect(slotAt(1160, -1, base)).toBeNull();
+  });
+
   it('hits each kind of empty slot on its footprint', () => {
     expect(slotAt(770, 40, base)).toEqual({ column: 1, row: 0, what: 'segment' });
     expect(slotAt(680, 200, base)).toEqual({ column: 1, row: 2, what: 'tower' });

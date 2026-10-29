@@ -10,6 +10,7 @@ import {
   type BaseLayer,
   type BasePost,
   type BaseSegment,
+  type BaseTrap,
   type BaseTurret,
 } from '../core/base.ts';
 import {
@@ -38,6 +39,8 @@ import {
   SEGMENTS,
   STATS,
   TIER_ORDER,
+  TRAP_DURABILITY,
+  TRAP_KINDS,
   TURRET_MOUNTS,
   WEAPONS,
   type ItemId,
@@ -259,9 +262,12 @@ function readPower(v: unknown, savedAt: number): Power {
 }
 
 function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean): Base {
-  // A base from before turrets (0.4.6 and older) has none.
+  // A base from before turrets (0.4.6 and older) has none, and one from before traps
+  // (0.4.9 and older) has no traps key and loads with none. A base with traps but no
+  // turrets key was never written, so its traps key is refused as unknown.
   const old = typeof v === 'object' && v !== null && !Object.hasOwn(v, 'turrets');
-  const o = obj(v, ['layers', 'posts', ...(old ? [] : ['turrets'])]);
+  const noTraps = old || (typeof v === 'object' && v !== null && !Object.hasOwn(v, 'traps'));
+  const o = obj(v, ['layers', 'posts', ...(old ? [] : ['turrets']), ...(noTraps ? [] : ['traps'])]);
   const layers = arr(o.layers, 1, COLUMNS.length).map((l) => readLayer(l, tiers));
   for (let i = 1; i < layers.length; i++) {
     if (layers[i]!.column <= layers[i - 1]!.column) fail('layers out of order');
@@ -290,7 +296,21 @@ function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean
       fail('turret on a post');
     }
   }
-  return { layers, posts, turrets };
+  const traps = noTraps ? [] : arr(o.traps, 0, SEGMENTS).map(readTrap);
+  // The order buildTrap keeps, which also means one trap per cell.
+  for (let i = 1; i < traps.length; i++) {
+    if (traps[i]!.row <= traps[i - 1]!.row) fail('traps out of order');
+  }
+  return { layers, posts, turrets, traps };
+}
+
+function readTrap(v: unknown): BaseTrap {
+  const o = obj(v, ['kind', 'row', 'durability']);
+  return {
+    kind: oneOf(o.kind, TRAP_KINDS),
+    row: int(o.row, 0, SEGMENTS - 1),
+    durability: int(o.durability, 0, TRAP_DURABILITY) + 0, // + 0 turns -0 into 0
+  };
 }
 
 function readTurret(v: unknown): BaseTurret {

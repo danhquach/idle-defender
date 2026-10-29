@@ -353,7 +353,7 @@ export function start(root: HTMLElement): void {
 
 /** The base as build mode shows it: no horde, the start defender on the picked post. */
 function buildScene(game: GameState, choice: { defenderId: string; postId: number } | null): Scene {
-  const { layers, posts, turrets } = layoutOf(game.base);
+  const { layers, posts, turrets, traps } = layoutOf(game.base);
   const post = choice ? posts[choice.postId] : undefined;
   const spec = game.roster.find((d) => d.id === choice?.defenderId);
   const defenders = post && spec ? [standing(spec, post, 0)] : [];
@@ -363,6 +363,7 @@ function buildScene(game: GameState, choice: { defenderId: string; postId: numbe
     layers,
     posts,
     turrets,
+    traps,
     energy: game.power.bank,
     defenders,
     enemies: [],

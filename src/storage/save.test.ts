@@ -580,6 +580,7 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
     delete save.game.lab;
     delete save.game.research;
     delete save.game.base.turrets;
+    delete save.game.base.traps;
     expect(decodeSave(JSON.stringify(save))).toEqual({ game: newGame(), savedAt: NOW });
   });
 
@@ -615,6 +616,7 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
     delete save.game.lab;
     delete save.game.research;
     delete save.game.base.turrets;
+    delete save.game.base.traps;
     const first = decodeSave(JSON.stringify(save));
     expect(first?.game).toMatchObject({ tiers: ['wood', 'metal'], lab: 0, research: [] });
     const again = decodeSave(encodeSave(first!.game, NOW));
@@ -681,6 +683,82 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
       raw.replace('"research":[', '"research":[{"__proto__":{"polluted":1}},'),
     ];
     for (const r of raws) expect(decodeSave(r)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('save: traps (ID-017)', () => {
+  const traps = (s: Loose) => s.game.base.traps;
+
+  it('round-trips the traps and their wear', () => {
+    const game = played();
+    expect(game.base.traps).toEqual([
+      { kind: 'wire', row: 1, durability: 30 },
+      { kind: 'spikes', row: 3, durability: 17 },
+    ]);
+    expect(decodeSave(encodeSave(game, NOW))).toEqual({ game, savedAt: NOW });
+  });
+
+  it('loads a save from before traps with none, and saves it again with them', () => {
+    const save = JSON.parse(encodeSave(played(), NOW));
+    delete save.game.base.traps;
+    const first = decodeSave(JSON.stringify(save));
+    expect(first?.game.base.traps).toEqual([]);
+    expect(first?.game.base.turrets).toHaveLength(1);
+    expect(decodeSave(encodeSave(first!.game, NOW))).toEqual(first);
+  });
+
+  it('refuses traps the build rules never make', () => {
+    expect(hostile((s) => (traps(s)[0].durability = 31))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].durability = -1))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].durability = 12.5))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].durability = '30'))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].durability = null))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].kind = 'mines'))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].kind = 'wire '))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].kind = 'Wire'))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].kind = 'wіre'))).toBeNull(); // Cyrillic i
+    expect(hostile((s) => (traps(s)[0].kind = 'wi\u200bre'))).toBeNull(); // zero-width space
+    expect(hostile((s) => (traps(s)[0].kind = '\u202ewire'))).toBeNull(); // bidi override
+    expect(hostile((s) => (traps(s)[0].kind = ['wire']))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].row = 5))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].row = -1))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].row = 0.5))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].extra = 1))).toBeNull();
+    expect(hostile((s) => delete traps(s)[0].durability)).toBeNull();
+    expect(hostile((s) => traps(s).push({ ...traps(s)[1] }))).toBeNull(); // same cell twice
+    expect(hostile((s) => traps(s).reverse())).toBeNull(); // out of order
+    expect(hostile((s) => (s.game.base.traps = null))).toBeNull();
+    expect(hostile((s) => (s.game.base.traps = { 0: traps(s)[0] }))).toBeNull();
+    expect(hostile((s) => (traps(s)[0] = null))).toBeNull();
+    expect(hostile((s) => (traps(s)[0] = 'wire'))).toBeNull();
+  });
+
+  it('refuses traps without turrets: no save ever had them', () => {
+    expect(hostile((s) => delete s.game.base.turrets)).toBeNull();
+  });
+
+  it('refuses more traps than the strip holds, and an oversized list quickly', () => {
+    const row = (n: number) => ({ kind: 'wire', row: n % 5, durability: 0 });
+    expect(
+      hostile((s) => (s.game.base.traps = Array.from({ length: 6 }, (_, n) => row(n)))),
+    ).toBeNull();
+    const many = Array.from({ length: 100_000 }, (_, n) => row(n));
+    const t0 = performance.now();
+    expect(hostile((s) => (s.game.base.traps = many))).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+
+  it('refuses a polluted trap and leaves Object.prototype alone', () => {
+    const raw = encodeSave(played(), NOW);
+    expect(raw).toContain('"kind":"wire"');
+    const bad = raw.replace('{"kind":"wire"', '{"__proto__":{"polluted":1},"kind":"wire"');
+    expect(decodeSave(bad)).toBeNull();
+    const ctor = raw.replace(
+      '{"kind":"wire"',
+      '{"constructor":{"prototype":{"polluted":1}},"kind":"wire"',
+    );
+    expect(decodeSave(ctor)).toBeNull();
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });
