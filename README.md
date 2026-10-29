@@ -1,5 +1,10 @@
 # Idle Defender
 
+[![CI](https://github.com/danhquach/idle-defender/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/danhquach/idle-defender/actions/workflows/ci.yml)
+[![GitHub Pages](https://github.com/danhquach/idle-defender/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/danhquach/idle-defender/actions/workflows/pages/pages-build-deployment)
+
+**Play the test build:** <https://danhquach.github.io/idle-defender/>
+
 A zombie-survival base-defence game for the browser. Years after doomsday,
 you command a fortified base: build barrier layers, power turrets and hold the
 line when a horde of zombies and mutated monsters comes. Each horde is a
@@ -14,7 +19,7 @@ repairs paid in materials), pick the start defender and post, then fight a
 horde with waves, level-up cards and a win/lose result. In a fight, click a
 defender and then a post to walk it there; a defender on a wall that breaks
 drops to a ground post behind it. Damage carries over
-to the next build; nothing is saved yet, so a reload starts a new game. The design is
+to the next build, and the game saves in the browser. The design is
 [`docs/design.md`](docs/design.md); its build order (§14) becomes GitHub
 issues.
 
