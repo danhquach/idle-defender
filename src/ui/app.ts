@@ -14,7 +14,7 @@ import {
 } from '../core/horde.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { createBuildPanel } from './build.ts';
-import { createHud } from './hud.ts';
+import { createHud, resultScreen } from './hud.ts';
 import {
   clampCamera,
   fightHitAt,
@@ -62,6 +62,8 @@ export function start(root: HTMLElement): void {
   let game: GameState = newGame();
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
+  // When the fight ended (ms): read once, so the screen and the rest timers agree.
+  let endedAt: number | null = null;
   let selected: SlotHit | null = null;
   // The defender picked in a fight, waiting for a post to walk to.
   let selectedDefender: string | null = null;
@@ -72,8 +74,8 @@ export function start(root: HTMLElement): void {
       if (horde?.offer) horde = chooseCard(horde, index);
     },
     () => {
-      if (!horde || horde.outcome === 'fighting') return;
-      game = finishHorde(game, horde, Date.now());
+      if (!horde || endedAt === null) return;
+      game = finishHorde(game, horde, endedAt);
       toBuild();
     },
     (defenderId, postId) => {
@@ -96,6 +98,7 @@ export function start(root: HTMLElement): void {
       // The seed is the only randomness from outside the core.
       const now = Date.now();
       horde = startHorde(game, now, defenderId, postId, now);
+      endedAt = null;
       selected = null;
       selectedDefender = null;
       panel.hide();
@@ -269,6 +272,10 @@ export function start(root: HTMLElement): void {
     if (horde) {
       drawScene(ctx, horde, cam, view, null, selectedDefender);
       hud.update(horde);
+      if (horde.outcome !== 'fighting' && endedAt === null) {
+        endedAt = Date.now();
+        hud.showResult(resultScreen(game, horde, endedAt));
+      }
     } else {
       // Someone back from rest: redraw the start picker.
       const recovered = recover(game, Date.now());

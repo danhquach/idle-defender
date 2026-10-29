@@ -17,7 +17,7 @@ import { postUsable } from '../core/cards.ts';
 import { MATERIALS, POST_COST, TIER_ORDER, TIERS, type Stock } from '../core/data.ts';
 import { available, type GameState, type RosterDefender } from '../core/game.ts';
 import { layoutOf } from '../core/horde.ts';
-import { el, POST_NAME, postName, slotName, stockText } from './hud.ts';
+import { clockTime, el, POST_NAME, postName, slotName, stockText } from './hud.ts';
 import type { SlotHit } from './projection.ts';
 
 export function stockBarText(game: GameState): string {
@@ -38,13 +38,7 @@ function usablePosts(base: Base): BasePost[] {
 export function injuredLines(roster: readonly RosterDefender[], now: number): string[] {
   return roster
     .filter((d) => !available(d, now))
-    .map((d) => {
-      const at = new Date(d.injuredUntil!).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      return `${d.name} · injured, back at ${at}`;
-    });
+    .map((d) => `${d.name} · injured, back at ${clockTime(d.injuredUntil!)}`);
 }
 
 /**

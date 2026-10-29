@@ -87,6 +87,8 @@ export interface Defender extends DefenderSpec {
   walking: boolean;
   hp: number;
   maxHp: number;
+  /** The kind of enemy that hit them last; null before any hit. */
+  hitBy: EnemyKind | null;
 }
 /** A defender injured in this fight, and the post they held (stood on or walked to). */
 export interface Injury {
@@ -96,6 +98,17 @@ export interface Injury {
   at: number;
   /** A replacement was offered (taken or skipped); each injury gets one offer. */
   offered: boolean;
+  /** The kind of enemy that landed the last hit; null if none did. */
+  by: EnemyKind | null;
+}
+/** The first crossing of a layer by an enemy from outside, for the defeat screen (design §2). */
+export interface Breach {
+  column: number;
+  row: number;
+  /** The wave under way at the crossing. */
+  wave: number;
+  /** What the enemy went through: a broken wall or gate, or a slot never built. */
+  through: SegmentKind | 'gap';
 }
 /** The open replacement offer: post `postId` is the injured one's, or null for the player's pick. */
 export interface ReplaceOffer {
@@ -136,6 +149,8 @@ export interface HordeState {
   bench: DefenderSpec[];
   /** In injury order; never on the bench, so never back in this fight. */
   injured: Injury[];
+  /** At most one per layer, in crossing order. */
+  breaches: Breach[];
   /** Ids of everyone who took part (starter, recruits, replacements), in join order. */
   tookPart: string[];
   /** Seconds the camp has been falling (an enemy inside, no defender left); 0 when not. */
@@ -185,6 +200,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     defenders: [standing(start, startPost, 0)],
     bench: roster.filter((d) => d !== start).map((d) => ({ ...d })),
     injured: [],
+    breaches: [],
     tookPart: [start.id],
     fallingFor: 0,
     replace: null,
@@ -212,6 +228,7 @@ export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): De
     walking: false,
     hp: DEFENDER_HP,
     maxHp: DEFENDER_HP,
+    hitBy: null,
   };
 }
 
@@ -539,11 +556,28 @@ function move(s: HordeState): Moves {
       e.y += Math.sign(dy) * Math.min(Math.abs(dy), speed);
       stop = stopLine(s, e);
     }
+    const fromX = e.x;
     e.x = Math.max(stop.x, e.x - speed);
+    breach(s, e, fromX);
     // Only through a gap in every layer; from now on it hunts defenders.
     e.inCamp = s.layers.every((l) => e.x < l.x + WALL.depth);
   }
   return { sliding, reached };
+}
+
+/** Records each layer `e` (from outside) crossed this step, the first time any enemy does. */
+function breach(s: HordeState, e: Enemy, fromX: number): void {
+  for (const l of s.layers) {
+    const line = l.x + WALL.depth;
+    if (fromX < line || e.x >= line || s.breaches.some((b) => b.column === l.column)) continue;
+    const row = segmentAt(e.y);
+    s.breaches.push({
+      column: l.column,
+      row,
+      wave: s.wave,
+      through: l.segments[row]?.kind ?? 'gap',
+    });
+  }
 }
 
 /**
@@ -587,7 +621,9 @@ function attack(s: HordeState, moves: Moves): void {
     const enemy = ENEMIES[e.kind];
     let target: { hp: number } | null;
     if (e.inCamp) {
-      target = moves.reached.get(e.id) ?? null;
+      const defender = moves.reached.get(e.id);
+      if (defender) defender.hitBy = e.kind;
+      target = defender ?? null;
     } else {
       const slide = moves.sliding.get(e.id);
       if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
@@ -614,6 +650,7 @@ function injure(s: HordeState): void {
       postId: d.postId,
       at: s.time,
       offered: false,
+      by: d.hitBy,
     });
   }
   s.defenders = kept;

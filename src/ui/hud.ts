@@ -1,11 +1,18 @@
 // HUD over the canvas: status bar, the "camp is falling" warning, the 1-of-3 card
 // panel, the replacement panel, the result panel and a short toast (refused moves).
 // Text reaches the page only through textContent.
-import type { PostKind } from '../core/base.ts';
+import { repairAllCost, type PostKind } from '../core/base.ts';
 import { UPGRADES } from '../core/cards.ts';
-import { FALL_WARNING, MATERIALS, type Stock } from '../core/data.ts';
-import { hordePayout, xpGains } from '../core/game.ts';
-import type { Card, HordeState, Post } from '../core/horde.ts';
+import { FALL_WARNING, MATERIALS, type EnemyKind, type Stock } from '../core/data.ts';
+import { hordePayout, injuredUntil, xpGains, type GameState } from '../core/game.ts';
+import {
+  baseAfter,
+  type Breach,
+  type Card,
+  type HordeState,
+  type Injury,
+  type Post,
+} from '../core/horde.ts';
 import { replacePosts } from '../core/replace.ts';
 import { xpToNext } from '../core/waves.ts';
 
@@ -59,13 +66,80 @@ export function payoutText(s: HordeState): string {
   return `Payout: ${stockText(hordePayout(s))}`;
 }
 
-/** The result screen's lines: XP per defender on a win; the injured either way. */
-export function resultLines(s: HordeState): string[] {
-  if (s.outcome === 'fighting') return [];
+/** A wall-clock time as "14:05", in the player's locale. */
+export const clockTime = (ms: number): string =>
+  new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const ENEMY_NAME: Readonly<Record<EnemyKind, string>> = { shambler: 'Shambler' };
+const THROUGH: Readonly<Record<Breach['through'], string>> = {
+  wall: 'broken wall',
+  gate: 'broken gate',
+  gap: 'open gap',
+};
+
+export interface ResultScreen {
+  title: string;
+  lines: string[];
+  button: string;
+}
+
+/** "Jack · injured by a Shambler · back at 14:05", for a horde that ended at `now`. */
+function injuryLine(s: HordeState, i: Injury, now: number): string {
+  const by = i.by ? ` by a ${ENEMY_NAME[i.by]}` : '';
+  return `${i.defender.name} · injured${by} · back at ${clockTime(injuredUntil(s, i, now))}`;
+}
+
+/** The repair bill for the damage that carries over, against the stock after the payout. */
+function repairLine(game: GameState, s: HordeState): string {
+  const bill = repairAllCost(baseAfter(game.base, s));
+  if (MATERIALS.every((m) => bill[m] === 0)) return 'No repairs needed';
+  const payout = hordePayout(s);
+  const short: Partial<Stock> = {};
+  for (const m of MATERIALS) short[m] = Math.max(0, bill[m] - game.stock[m] - payout[m]);
+  const cover = MATERIALS.some((m) => short[m]! > 0) ? `short by ${stockText(short)}` : 'covered';
+  return `Repair bill: ${stockText(bill)} · ${cover}`;
+}
+
+/**
+ * The victory or defeat screen (design §2) for horde `s`, which ended at `now`: why
+ * it was won or lost, the payout, XP, the injured and when they're back, and the
+ * repair bill. `game` is the game the horde was fought from, before `finishHorde`.
+ */
+export function resultScreen(game: GameState, s: HordeState, now: number): ResultScreen {
+  if (s.outcome === 'fighting') throw new RangeError('resultScreen: the horde is still on');
+  const injured = s.injured.map((i) => injuryLine(s, i, now));
   if (s.outcome === 'won') {
-    return xpGains(s).map((g) => `${g.name} +${g.xp} XP${g.injured ? ' · injured' : ''}`);
+    return {
+      title: `Horde ${s.hordeNumber} held`,
+      lines: [
+        `All ${s.waveCount} waves cleared`,
+        payoutText(s),
+        ...xpGains(s).map((g) => `${g.name} +${g.xp} XP`),
+        ...injured,
+        repairLine(game, s),
+      ],
+      button: 'Back to build',
+    };
   }
-  return ['No XP on a loss', ...s.injured.map((i) => `${i.defender.name} · injured`)];
+  // Outside in: the outer layers have the higher columns. The innermost is where they got in.
+  const path = [...s.breaches].sort((a, b) => b.column - a.column);
+  const inner = path.at(-1);
+  const where = inner
+    ? `Broke in at ${slotName(inner.column, inner.row)}, in wave ${inner.wave} of ${s.waveCount}`
+    : 'Broke in';
+  const why = `${where} · nobody left to hold them for ${FALL_WARNING} s`;
+  return {
+    title: 'The camp fell',
+    lines: [
+      why,
+      ...path.map((b) => `Layer ${b.column + 1} · row ${b.row + 1} · ${THROUGH[b.through]}`),
+      payoutText(s),
+      'No XP on a loss',
+      ...injured,
+      repairLine(game, s),
+    ],
+    button: `Back to build · retry Horde ${s.hordeNumber}`,
+  };
 }
 
 /** The countdown while the camp is falling, else ''. */
@@ -80,7 +154,12 @@ export function createHud(
   onDone: () => void,
   onReplace: (defenderId: string, postId: number) => void,
   onSkip: () => void,
-): { update(state: HordeState): void; show(visible: boolean): void; toast(text: string): void } {
+): {
+  update(state: HordeState): void;
+  showResult(screen: ResultScreen): void;
+  show(visible: boolean): void;
+  toast(text: string): void;
+} {
   const hud = el('div', 'hud');
   const bar = el('div', 'hud-bar');
   const warning = el('div', 'hud-warning');
@@ -91,9 +170,8 @@ export function createHud(
   replace.hidden = true;
   const result = el('div', 'hud-panel hud-result');
   const resultTitle = el('h2', 'hud-result-title');
-  const resultBody = el('p', 'hud-result-body');
   const resultList = el('ul', 'hud-result-list');
-  const back = el('button', 'hud-button', 'Back to build');
+  const back = el('button', 'hud-button');
   back.type = 'button';
   back.addEventListener('click', () => {
     // Hide at once so a double click can't finish the same horde twice.
@@ -101,7 +179,7 @@ export function createHud(
     result.hidden = true;
     onDone();
   });
-  result.append(resultTitle, resultBody, resultList, back);
+  result.append(resultTitle, resultList, back);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
@@ -225,15 +303,13 @@ export function createHud(
         if (state.offer) showOffer(state.offer);
         else cards.replaceChildren();
       }
-
-      const fought = state.outcome !== 'fighting';
-      if (result.hidden === fought) {
-        result.hidden = !fought;
-        resultTitle.textContent = state.outcome === 'won' ? 'Horde held' : 'The camp fell';
-        resultBody.textContent = payoutText(state);
-        resultList.replaceChildren(...resultLines(state).map((line) => el('li', '', line)));
-        if (fought) back.focus();
-      }
+    },
+    showResult(screen) {
+      resultTitle.textContent = screen.title;
+      resultList.replaceChildren(...screen.lines.map((line) => el('li', '', line)));
+      back.textContent = screen.button;
+      result.hidden = false;
+      back.focus();
     },
   };
 }

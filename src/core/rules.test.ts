@@ -2,7 +2,7 @@
 // replacements between waves.
 import { describe, expect, it } from 'vitest';
 import { chooseCard, rollOffer } from './cards.ts';
-import { CAMP, FALL_WARNING, MELEE_REACH, STEP } from './data.ts';
+import { CAMP, COLUMNS, FALL_WARNING, MELEE_REACH, SEGMENTS, STEP } from './data.ts';
 import { moveDefender, newHorde, standing, tick, type HordeState } from './horde.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { rngFrom } from './rng.ts';
@@ -131,7 +131,13 @@ describe('injury', () => {
     expect(after.defenders).toEqual([]);
     expect(after.posts[0]!.defenderId).toBeNull();
     expect(after.injured).toEqual([
-      { defender: { id: 'a', name: 'A', weapon: 'pistol' }, postId: 0, at: 0, offered: false },
+      {
+        defender: { id: 'a', name: 'A', weapon: 'pistol' },
+        postId: 0,
+        at: 0,
+        offered: false,
+        by: 'shambler',
+      },
     ]);
     expect(after.bench.map((d) => d.id)).toEqual(['b', 'c']);
     expect(after.tookPart).toEqual(['a']);
@@ -376,5 +382,77 @@ describe('replacing an injured defender', () => {
     replaceInjured(offered, 'b', 0);
     skipReplace(offered);
     expect(offered).toEqual(before);
+  });
+});
+
+describe('breaches', () => {
+  /** Empty, plus an outer layer at column 1 whose slots are all open gaps. */
+  function twoLayers(): HordeState {
+    const s = empty();
+    s.layers.push({
+      column: 1,
+      x: COLUMNS[1]!,
+      segments: Array.from({ length: SEGMENTS }, (_, index) => ({
+        index,
+        kind: null,
+        tier: null,
+        hp: 0,
+        maxHp: 0,
+      })),
+    });
+    return s;
+  }
+
+  it('records a broken gate, a broken wall and an open gap', () => {
+    const gate = empty();
+    gate.layers[0]!.segments[2]!.hp = 0;
+    enemy(gate, { x: 530, y: 200 });
+    expect(tick(gate, 1).breaches).toEqual([{ column: 0, row: 2, wave: 1, through: 'gate' }]);
+
+    const wall = empty();
+    wall.wave = 3;
+    wall.layers[0]!.segments[1]!.hp = 0;
+    enemy(wall, { x: 530, y: 120 });
+    expect(tick(wall, 1).breaches).toEqual([{ column: 0, row: 1, wave: 3, through: 'wall' }]);
+
+    const gap = empty();
+    gap.layers[0]!.segments[4] = { index: 4, kind: null, tier: null, hp: 0, maxHp: 0 };
+    enemy(gap, { x: 530, y: 360 });
+    expect(tick(gap, 1).breaches).toEqual([{ column: 0, row: 4, wave: 1, through: 'gap' }]);
+  });
+
+  it('keeps only the first crossing of each layer', () => {
+    const s = empty();
+    s.layers[0]!.segments[1]!.hp = 0;
+    s.layers[0]!.segments[3]!.hp = 0;
+    enemy(s, { x: 530, y: 120 });
+    enemy(s, { x: 560, y: 280 });
+    const after = tick(s, 3);
+    expect(after.enemies.every((e) => e.inCamp)).toBe(true);
+    expect(after.breaches).toEqual([{ column: 0, row: 1, wave: 1, through: 'wall' }]);
+  });
+
+  it('records one breach per layer, outer layer first', () => {
+    const s = twoLayers();
+    s.layers[0]!.segments[3]!.hp = 0;
+    enemy(s, { x: 800, y: 280 });
+    expect(tick(s, 12).breaches).toEqual([
+      { column: 1, row: 3, wave: 1, through: 'gap' },
+      { column: 0, row: 3, wave: 1, through: 'wall' },
+    ]);
+  });
+
+  it('an enemy inside the camp walking back over a wall is no breach', () => {
+    const s = quiet();
+    s.defenders[0]!.x = 700;
+    s.defenders[0]!.y = 120;
+    intruder(s, 480, 120);
+    const after = tick(s, 3);
+    expect(after.enemies[0]!.x).toBeGreaterThan(520);
+    expect(after.breaches).toEqual([]);
+  });
+
+  it('an injury with no hit has no cause', () => {
+    expect(injuredAfterWave(quiet()).injured[0]!.by).toBeNull();
   });
 });
