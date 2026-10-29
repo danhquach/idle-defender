@@ -361,10 +361,15 @@ export function createHud(
           onSpend(d.id, b.stat);
           draw();
           // Keep the keyboard where it was; a spent-out row moves on to the next picker
-          // with points left, then to "Back to build".
+          // with points left (wrapping round), then to "Back to build".
           const again = block.querySelectorAll('button')[i];
-          const next = picker.querySelector<HTMLButtonElement>('.hud-pick-stat:not(:disabled)');
-          (again && !again.disabled ? again : (next ?? back)).focus();
+          const open = [...picker.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')].filter(
+            (x) => !x.disabled,
+          );
+          const after = open.find(
+            (x) => block.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING,
+          );
+          (again && !again.disabled ? again : (after ?? open[0] ?? back)).focus();
         });
         buttons.append(button);
       });
