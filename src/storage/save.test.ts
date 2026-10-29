@@ -189,6 +189,28 @@ describe('save', () => {
       expect(hostile((s) => (s.game.roster = []))).toBeNull();
       expect(hostile((s) => s.game.roster.push({ ...bob(s) }))).toBeNull(); // same id
       expect(hostile((s) => (bob(s).weapon = 'railgun'))).toBeNull();
+      // Weapon ids match exactly: no case, padding, look-alikes or prototype names.
+      for (const weapon of [
+        'Knife',
+        ' knife',
+        'knife ',
+        'kn\u0456fe', // Cyrillic і
+        'tool\u200bkit', // zero-width space
+        '__proto__',
+        'constructor',
+        'toString',
+        'hasOwnProperty',
+        'profession',
+        1,
+        null,
+        ['knife'],
+        { knife: true },
+      ]) {
+        expect(
+          hostile((s) => (bob(s).weapon = weapon)),
+          String(weapon),
+        ).toBeNull();
+      }
       expect(hostile((s) => (bob(s).name = '<img src=x onerror=alert(1)>'))).toBeNull();
       expect(hostile((s) => (bob(s).name = 'Bob‮gnp.exe'))).toBeNull(); // bidi override
       expect(hostile((s) => (bob(s).name = 'B​ob'))).toBeNull(); // zero-width space
@@ -243,6 +265,16 @@ describe('save', () => {
     });
     expect(hostile((s) => (s.game.base.layers[0].slots[1].maxHp = 0))).toBeNull();
     expect(hostile((s) => (s.game.base.layers[0].slots[1].maxHp = 'x'))).toBeNull();
+  });
+
+  it('loads every weapon, and an older camp of three pistols unchanged', () => {
+    for (const weapon of ['pistol', 'knife', 'toolkit']) {
+      const loaded = hostile((s) => (s.game.roster[0].weapon = weapon)) as Loose;
+      expect(loaded.game.roster[0].weapon).toBe(weapon);
+    }
+    const old = played();
+    for (const d of old.roster) d.weapon = 'pistol';
+    expect(decodeSave(encodeSave(old, NOW))).toEqual({ savedAt: NOW, game: old });
   });
 
   it('accepts the edges the rules allow', () => {

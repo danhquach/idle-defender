@@ -139,10 +139,24 @@ Defenders stand on **posts** the player builds and chooses between.
 - **Wall-walk / gate posts** (on a wall): melee (Ripper) reaches enemies
   hitting that wall; ranged has a clear line.
 - **Towers** (behind a wall, elevated): ranged gets +range; melee can't
-  reach.
+  reach, not even an enemy inside the camp beside the tower.
 - **Ground posts** (between layers): melee fights enemies that broke
   through; ranged is short-sighted.
-- **Adjacency:** an Engineer buffs the turrets and defenders beside them.
+- **Range by post** *(designer's call, starting points)*: guns (Gunners
+  and Engineers) get ×1.25 range on a tower, ×1 on a wall-walk, ×0.75 on
+  the ground. A Ripper reaches 50 px from their post on a wall-walk or
+  ground post.
+- **Adjacency:** an Engineer buffs the turrets and defenders beside them
+  *(designer's call, starting point: defenders within 100 px fire 15%
+  faster; several Engineers don't stack)*.
+- **Engineer repair** *(designer's call, starting point)*: a standing
+  Engineer restores 3 HP/s to the most damaged standing segment of their
+  post's layer, within one row of the post. Broken segments wait for build
+  mode.
+- **Recruits** *(designer's call)*: a recruit card only offers a defender
+  with a free post they can work from (a Ripper: not a tower). The start,
+  moves and replacements may use any post; the game says when a defender
+  can't work from it.
 - Defenders can be moved between posts during a horde *(guess: with a short
   walk time, so a fallen outer layer means pulling back)*.
 - **Broken wall under a defender** *(designer's call)*: when a segment
@@ -247,7 +261,7 @@ weapon decides which profession they are working as.
 |---|---|---|
 | **Gunner** | Pistol, SMG, rifle, shotgun, LMG, sniper rifle | Ranged damage; good with every gun, but no huge spike in any one |
 | **Ripper** | Knife, machete, sword, chainsaw (machine saw) | Close-quarter damage at walls and gates |
-| **Engineer** | Toolkit, welder | Repairs barriers and turrets; buffs turret damage and fire rate; crafts better batteries |
+| **Engineer** | Toolkit, welder | Repairs barriers and turrets; buffs turret damage and fire rate; crafts better batteries. Also shoots, weaker than a Gunner *(designer's call)* |
 
 More professions later *(guess)*: Marksman (sniper rifles only, bigger
 bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).

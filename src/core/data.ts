@@ -21,15 +21,63 @@ export const SEPARATION_SPEED = 60;
 /** How close to a wall an enemy must be to slide toward a broken segment. */
 export const GAP_SENSE = 200;
 
-export type WeaponId = 'pistol';
-export const WEAPONS: Readonly<
-  Record<
-    WeaponId,
-    { readonly damage: number; readonly fireInterval: number; readonly range: number }
-  >
-> = {
-  pistol: { damage: 6, fireInterval: 0.6, range: 600 },
+// --- Professions (M4). The equipped weapon decides the profession; design §6. ---
+
+export type Profession = 'gunner' | 'ripper' | 'engineer';
+export const PROFESSIONS: Readonly<Record<Profession, { readonly name: string }>> = {
+  gunner: { name: 'Gunner' },
+  ripper: { name: 'Ripper' },
+  engineer: { name: 'Engineer' },
 };
+
+/** Gunners shoot within `range` (× the post's multiplier). */
+interface Gun {
+  readonly name: string;
+  readonly profession: 'gunner';
+  readonly damage: number;
+  readonly fireInterval: number;
+  readonly range: number;
+}
+/** Rippers strike within `reach` of their post; never from a tower. */
+interface Blade {
+  readonly name: string;
+  readonly profession: 'ripper';
+  readonly damage: number;
+  readonly fireInterval: number;
+  readonly reach: number;
+}
+/**
+ * Engineers shoot, weaker than a Gunner, and mostly repair: `repair` HP/s of their
+ * layer (their row ±1); they speed up defenders within `buffRadius` by `ENGINEER_BUFF`.
+ */
+interface Tool {
+  readonly name: string;
+  readonly profession: 'engineer';
+  readonly damage: number;
+  readonly fireInterval: number;
+  readonly range: number;
+  readonly repair: number;
+  readonly buffRadius: number;
+}
+export type Weapon = Gun | Blade | Tool;
+
+export const WEAPONS = {
+  pistol: { name: 'Pistol', profession: 'gunner', damage: 7, fireInterval: 0.6, range: 600 },
+  knife: { name: 'Knife', profession: 'ripper', damage: 10, fireInterval: 0.5, reach: 50 },
+  toolkit: {
+    name: 'Toolkit',
+    profession: 'engineer',
+    damage: 4,
+    fireInterval: 0.6,
+    range: 450,
+    repair: 3,
+    buffRadius: 100,
+  },
+} as const satisfies Record<string, Weapon>;
+export type WeaponId = keyof typeof WEAPONS;
+
+/** Fire-rate bonus for defenders beside an Engineer; several Engineers don't stack. */
+export const ENGINEER_BUFF = 0.15;
 
 export type EnemyKind = 'shambler';
 export const ENEMIES: Readonly<
@@ -83,7 +131,7 @@ export const POST_OFFSET: Readonly<Record<PostKind, number>> = {
   tower: -80,
   ground: -160,
 };
-/** Range multiplier by post kind. */
+/** Range multiplier by post kind, for guns (Gunners and Engineers). */
 export const POST_RANGE: Readonly<Record<PostKind, number>> = {
   tower: 1.25,
   'wall-walk': 1,

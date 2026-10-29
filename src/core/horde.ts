@@ -5,6 +5,7 @@ import {
   COLUMNS,
   DEFENDER_HP,
   ENEMIES,
+  ENGINEER_BUFF,
   ENEMY_RADIUS,
   FALL_WARNING,
   FIELD,
@@ -116,7 +117,9 @@ export interface ReplaceOffer {
   postId: number | null;
 }
 export type MoveResult = { ok: true; state: HordeState } | { ok: false; reason: string };
+/** A Gunner's shot, or a Ripper's strike (drawn short). */
 export interface Shot {
+  melee: boolean;
   fromX: number;
   fromY: number;
   toX: number;
@@ -273,8 +276,31 @@ export function tick(state: HordeState, dt: number): HordeState {
   return s;
 }
 
+/** Whether a defender with `weapon` can do their job from `post`: a Ripper can't reach from a tower. */
+export function canWork(weapon: WeaponId, post: Pick<Post, 'kind'>): boolean {
+  return !(WEAPONS[weapon].profession === 'ripper' && post.kind === 'tower');
+}
+
+/** How far `defender` on `post` attacks: a gun's range × the post's, a Ripper's reach; 0 for one who can't. */
 export function defenderRange(state: HordeState, post: Post, defender: Defender): number {
-  return WEAPONS[defender.weapon].range * POST_RANGE[post.kind] * state.mods.range;
+  const w = WEAPONS[defender.weapon];
+  if (!canWork(defender.weapon, post)) return 0;
+  return w.profession === 'ripper' ? w.reach : w.range * POST_RANGE[post.kind] * state.mods.range;
+}
+
+/** Fire-rate factor for `defender` from a standing Engineer within reach (never stacked, never self). */
+export function engineerBuff(state: HordeState, defender: Defender): number {
+  if (defender.walking) return 1;
+  const near = state.defenders.some((e) => {
+    const w = WEAPONS[e.weapon];
+    return (
+      e !== defender &&
+      !e.walking &&
+      w.profession === 'engineer' &&
+      Math.hypot(e.x - defender.x, e.y - defender.y) <= w.buffRadius + EPS
+    );
+  });
+  return near ? 1 + ENGINEER_BUFF : 1;
 }
 
 /**
@@ -372,6 +398,7 @@ function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   walk(s);
   fire(s);
+  repair(s);
   removeDead(s);
   const moved = move(s);
   separate(s);
@@ -426,7 +453,9 @@ function fire(s: HordeState): void {
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId && !d.walking);
     if (!defender || !due(s.time, defender.nextShotAt)) continue;
+    const weapon = WEAPONS[defender.weapon];
     const range = defenderRange(s, post, defender);
+    if (range <= 0) continue;
     const dist = (e: Enemy): number => Math.hypot(e.x - post.x, e.y - post.y);
     const focus = s.enemies.find((e) => e.id === s.focusId && e.hp > 0);
     let target = focus && dist(focus) <= range ? focus : undefined;
@@ -442,16 +471,37 @@ function fire(s: HordeState): void {
       }
     }
     if (!target) continue;
-    const weapon = WEAPONS[defender.weapon];
     target.hp -= weapon.damage * s.mods.damage;
-    defender.nextShotAt = s.time + weapon.fireInterval / s.mods.fireRate;
+    defender.nextShotAt =
+      s.time + weapon.fireInterval / (s.mods.fireRate * engineerBuff(s, defender));
     s.shots.push({
+      melee: weapon.profession === 'ripper',
       fromX: post.x,
       fromY: post.y,
       toX: target.x,
       toY: target.y,
       at: s.time,
     });
+  }
+}
+
+/**
+ * Design §6: each standing Engineer restores HP to the most damaged standing segment
+ * (lowest HP share; ties → lower row) of its post's layer, within one row of the post.
+ * Broken segments wait for build mode.
+ */
+function repair(s: HordeState): void {
+  for (const d of s.defenders) {
+    const w = WEAPONS[d.weapon];
+    if (d.walking || w.profession !== 'engineer') continue;
+    const post = s.posts[d.postId]!;
+    const layer = s.layers.find((l) => l.column === post.column);
+    let worst: Segment | undefined;
+    for (const seg of layer?.segments ?? []) {
+      if (Math.abs(seg.index - post.row) > 1 || seg.hp <= 0 || seg.hp >= seg.maxHp) continue;
+      if (!worst || seg.hp / seg.maxHp < worst.hp / worst.maxHp) worst = seg;
+    }
+    if (worst) worst.hp = Math.min(worst.maxHp, worst.hp + w.repair * STEP);
   }
 }
 

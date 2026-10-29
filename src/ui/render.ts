@@ -9,6 +9,8 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   WALL,
+  WEAPONS,
+  type Profession,
 } from '../core/data.ts';
 import type { Defender, HordeState, Layer } from '../core/horde.ts';
 import type { Tier } from '../core/base.ts';
@@ -48,7 +50,19 @@ const COLOR = {
   hpBack: '#c43b3b',
   hpFill: '#5ec24a',
   shot: '#e8d36a',
+  strike: '#f2f2f2',
 } as const;
+
+/**
+ * Each defender carries their weapon, so the profession reads at a glance (design §15):
+ * a Gunner's gun points at the horde, a Ripper's blade is raised, an Engineer's toolkit
+ * hangs at their side.
+ */
+const WEAPON_ART: Readonly<Record<Profession, { colour: string; width: number }>> = {
+  gunner: { colour: '#c9c3b6', width: 4 },
+  ripper: { colour: '#eef3f7', width: 3 },
+  engineer: { colour: '#e0892f', width: 0 },
+};
 
 /** Muted top and front colours per wall tier. */
 const TIER_COLOR: Readonly<Record<Tier, { top: string; front: string }>> = {
@@ -63,6 +77,8 @@ const SEGMENT_GAP = 2;
 const CAMP_BOX = { x0: CAMP.x - 90, x1: CAMP.x, height: 70 } as const;
 const DEFENDER = PIECE.defender;
 const ENEMY = { radius: ENEMY_RADIUS * 0.85, z: 10 } as const;
+/** Half the length of a Ripper's strike mark across the enemy, in px. */
+const STRIKE = 7;
 /** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
 const HP_BAR = { w: 24, h: 4, z: 30, gap: 6 } as const;
 
@@ -148,13 +164,43 @@ function drawHpBar(
   ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, hp / maxHp), h);
 }
 
+/** The weapon in a defender's hand: on the horde's side (right), at chest height. */
+function drawWeapon(
+  ctx: CanvasRenderingContext2D,
+  d: Pick<Defender, 'x' | 'y' | 'weapon'>,
+  z0: number,
+  cam: Camera,
+): void {
+  const profession = WEAPONS[d.weapon].profession;
+  const art = WEAPON_ART[profession];
+  const hand = { x: d.x + DEFENDER.halfWidth, y: d.y, z: z0 + DEFENDER.height * 0.55 };
+  const at = project(hand, cam);
+  ctx.strokeStyle = art.colour;
+  ctx.fillStyle = art.colour;
+  ctx.lineWidth = Math.max(1, art.width * cam.zoom);
+  if (profession === 'engineer') {
+    const size = 9 * cam.zoom;
+    ctx.fillRect(at.sx, at.sy, size, size * 0.8);
+    return;
+  }
+  // A gun points level at the horde; a blade is raised.
+  const tip =
+    profession === 'gunner'
+      ? project({ ...hand, x: hand.x + 16 }, cam)
+      : project({ ...hand, x: hand.x + 6, z: hand.z + 16 }, cam);
+  ctx.beginPath();
+  ctx.moveTo(at.sx, at.sy);
+  ctx.lineTo(tip.sx, tip.sy);
+  ctx.stroke();
+}
+
 /**
- * A defender standing `z0` up at `(x, y)`, with a ring at its feet when selected and
- * an HP bar once hurt.
+ * A defender standing `z0` up at `(x, y)` holding their weapon, with a ring at its
+ * feet when selected and an HP bar once hurt.
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp'>,
+  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'weapon'>,
   z0: number,
   selected: boolean,
   cam: Camera,
@@ -182,6 +228,7 @@ function drawDefender(
     },
     cam,
   );
+  drawWeapon(ctx, d, z0, cam);
   if (d.hp < d.maxHp) {
     drawHpBar(ctx, { x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap }, d.hp, d.maxHp, cam);
   }
@@ -358,10 +405,21 @@ export function drawScene(
     outline(ctx, footprint(build.selected), 0, cam);
   }
 
-  // Shots on top: from the defender's chest to the enemy's body.
-  ctx.strokeStyle = COLOR.shot;
+  // Shots on top: from the defender's chest to the enemy's body; a Ripper's strike is a
+  // short slash across the enemy instead.
   ctx.lineWidth = Math.max(1, 2 * cam.zoom);
   for (const shot of scene.shots) {
+    if (shot.melee) {
+      const a = project({ x: shot.toX - STRIKE, y: shot.toY, z: ENEMY.z + STRIKE }, cam);
+      const b = project({ x: shot.toX + STRIKE, y: shot.toY, z: ENEMY.z - STRIKE }, cam);
+      ctx.strokeStyle = COLOR.strike;
+      ctx.beginPath();
+      ctx.moveTo(a.sx, a.sy);
+      ctx.lineTo(b.sx, b.sy);
+      ctx.stroke();
+      continue;
+    }
+    ctx.strokeStyle = COLOR.shot;
     // Shots start at their post's exact coordinates, so this finds the shooter's post.
     const from = scene.posts.find((p) => p.x === shot.fromX && p.y === shot.fromY);
     const z = (from ? postFloor(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;

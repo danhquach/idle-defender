@@ -19,7 +19,16 @@ import { available, type GameState, type RosterDefender } from '../core/game.ts'
 import { layoutOf } from '../core/horde.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
-import { clockTime, el, POST_NAME, postName, slotName, stockText } from './hud.ts';
+import {
+  clockTime,
+  defenderLabel,
+  el,
+  POST_NAME,
+  postName,
+  slotName,
+  stockText,
+  workNote,
+} from './hud.ts';
 import type { SlotHit } from './projection.ts';
 
 /** What the backup section says about a refused code. */
@@ -212,22 +221,34 @@ export function createBuildPanel(
   function startSection(game: GameState): HTMLElement[] {
     const picked = choice(game);
     const defenders = el('select', 'build-select');
-    for (const d of game.roster.filter((r) => available(r, Date.now()))) {
-      const o = el('option', '', d.name);
+    const fit = game.roster.filter((r) => available(r, Date.now()));
+    for (const d of fit) {
+      const o = el('option', '', defenderLabel(d));
       o.value = d.id;
       o.selected = d.id === picked?.defenderId;
       defenders.append(o);
     }
-    defenders.addEventListener('change', () => {
-      defenderId = defenders.value;
-    });
     const posts = el('select', 'build-select');
-    for (const p of usablePosts(game.base)) {
-      const o = el('option', '', postName(p));
+    const usable = usablePosts(game.base);
+    /** Post names, each with a note where the picked defender can't work from it. */
+    const namePosts = (): void => {
+      const weapon = fit.find((d) => d.id === defenders.value)?.weapon;
+      usable.forEach((p, i) => {
+        const note = weapon ? workNote(weapon, p) : '';
+        posts.options[i]!.textContent = postName(p) + (note ? ` · ${note}` : '');
+      });
+    };
+    for (const p of usable) {
+      const o = el('option', '');
       o.value = postKey(p);
       o.selected = picked !== null && game.base.posts[picked.postId] === p;
       posts.append(o);
     }
+    namePosts();
+    defenders.addEventListener('change', () => {
+      defenderId = defenders.value;
+      namePosts();
+    });
     posts.addEventListener('change', () => {
       startKey = posts.value;
     });

@@ -3,12 +3,22 @@
 // Text reaches the page only through textContent.
 import { repairAllCost, type PostKind } from '../core/base.ts';
 import { UPGRADES } from '../core/cards.ts';
-import { FALL_WARNING, MATERIALS, type EnemyKind, type Stock } from '../core/data.ts';
+import {
+  FALL_WARNING,
+  MATERIALS,
+  PROFESSIONS,
+  WEAPONS,
+  type EnemyKind,
+  type Stock,
+  type WeaponId,
+} from '../core/data.ts';
 import { hordePayout, injuredUntil, xpGains, type GameState } from '../core/game.ts';
 import {
   baseAfter,
+  canWork,
   type Breach,
   type Card,
+  type DefenderSpec,
   type HordeState,
   type Injury,
   type Post,
@@ -40,9 +50,16 @@ export const slotName = (column: number, row: number): string =>
 export const postName = (p: Pick<Post, 'kind' | 'column' | 'row'>): string =>
   `${POST_NAME[p.kind]} · ${slotName(p.column, p.row)}`;
 
+/** A defender and the profession their weapon gives them: "Jack — Ripper". */
+export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'weapon'>): string =>
+  `${d.name} — ${PROFESSIONS[WEAPONS[d.weapon].profession].name}`;
+/** Why a defender with `weapon` can't do their job from `post`, or '' when they can. */
+export const workNote = (weapon: WeaponId, post: Pick<Post, 'kind'>): string =>
+  canWork(weapon, post) ? '' : "can't reach from a tower";
+
 function cardText(card: Card): { title: string; body: string } {
   if (card.kind === 'recruit')
-    return { title: `Recruit ${card.defender.name}`, body: 'Takes a free post' };
+    return { title: `Recruit ${defenderLabel(card.defender)}`, body: 'Takes a free post' };
   const u = UPGRADES[card.id];
   return { title: u.name, body: u.text };
 }
@@ -219,8 +236,16 @@ export function createHud(
     const heading = el('h2', 'hud-cards-title', `${name} is injured: send someone in?`);
     const parts: HTMLElement[] = [heading];
     const pick = el('select', 'build-select');
+    // One post pick for every bench button: name who couldn't work from each post.
+    const unfit = (p: Post): string[] =>
+      state.bench.filter((d) => workNote(d.weapon, p) !== '').map((d) => d.name);
     for (const p of posts) {
-      const o = el('option', '', postName(p));
+      const who = unfit(p);
+      const o = el(
+        'option',
+        '',
+        postName(p) + (who.length ? ` · ${who.join(', ')} can't reach` : ''),
+      );
       o.value = String(p.id);
       pick.append(o);
     }
@@ -235,7 +260,10 @@ export function createHud(
     for (const d of state.bench) {
       const button = el('button', 'hud-card hud-card-recruit');
       button.type = 'button';
-      button.append(el('span', 'hud-card-title', `Send in ${d.name}`));
+      button.append(el('span', 'hud-card-title', `Send in ${defenderLabel(d)}`));
+      // A fixed post gets its note on each button; the player's pick carries it per option.
+      const note = offer.postId === null ? '' : workNote(d.weapon, posts[0]!);
+      if (note) button.append(el('span', 'hud-card-body', note));
       button.addEventListener('click', () => answer(() => onReplace(d.id, Number(pick.value))));
       row.append(button);
     }

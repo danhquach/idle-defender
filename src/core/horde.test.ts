@@ -254,7 +254,7 @@ describe('combat', () => {
     enemy(s, { x: 800, y: 390 });
     enemy(s, { x: 850, y: 120 });
     const after = tick(s, STEP);
-    expect(after.enemies.map((e) => e.hp)).toEqual([20, 14]);
+    expect(after.enemies.map((e) => e.hp)).toEqual([20, 13]);
     expect(after.shots).toHaveLength(1);
     expect(after.shots[0]).toMatchObject({ fromX: 420, fromY: 120, toX: 850, toY: 120 });
   });
@@ -264,7 +264,7 @@ describe('combat', () => {
     enemy(s, { x: 800, y: 220 });
     enemy(s, { x: 800, y: 20 });
     const after = tick(s, STEP);
-    expect(after.enemies.map((e) => e.hp)).toEqual([14, 20]);
+    expect(after.enemies.map((e) => e.hp)).toEqual([13, 20]);
   });
 
   it("doesn't shoot out of range", () => {
@@ -278,13 +278,13 @@ describe('combat', () => {
   it('fires every 0.6 s', () => {
     const s = quiet();
     enemy(s, { hp: 1000, maxHp: 1000 });
-    expect(tick(s, 1.25).enemies[0]?.hp).toBe(1000 - 6 * 3);
+    expect(tick(s, 1.25).enemies[0]?.hp).toBe(1000 - 7 * 3);
   });
 
   it('keeps the 0.6 s cadence over a long fight despite float drift', () => {
     const s = quiet();
     enemy(s, { hp: 10_000, maxHp: 10_000 });
-    expect(tick(s, 60).enemies[0]?.hp).toBe(10_000 - 6 * 100);
+    expect(tick(s, 60).enemies[0]?.hp).toBe(10_000 - 7 * 100);
   });
 
   it('drops shot trails after 0.15 s', () => {
@@ -355,7 +355,7 @@ describe('focus', () => {
   it('focus beats closest', () => {
     const { s, p, q } = pq();
     const after = tick(setFocus(s, p), STEP);
-    expect(hp(after, p)).toBe(14);
+    expect(hp(after, p)).toBe(13);
     expect(hp(after, q)).toBe(20);
   });
 
@@ -363,7 +363,7 @@ describe('focus', () => {
     const { s, q } = pq();
     const r = enemy(s, { x: 1300, y: 120 }).id;
     const after = tick(setFocus(s, r), STEP);
-    expect(hp(after, q)).toBe(14);
+    expect(hp(after, q)).toBe(13);
     expect(hp(after, r)).toBe(20);
     expect(after.focusId).toBe(r);
   });

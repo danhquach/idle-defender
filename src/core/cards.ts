@@ -1,5 +1,6 @@
-import { RECRUIT_CHANCE } from './data.ts';
+import { RECRUIT_CHANCE, type WeaponId } from './data.ts';
 import {
+  canWork,
   standing,
   type Card,
   type HordeState,
@@ -17,11 +18,14 @@ export function postUsable(layers: readonly Layer[], post: Post): boolean {
   return seg !== undefined && seg.hp > 0;
 }
 
-/** Where a recruit goes: the free usable post furthest forward (ties → lowest id). */
-export function recruitPost(state: HordeState): Post | undefined {
+/**
+ * Where a recruit with `weapon` goes: the free usable post furthest forward that they
+ * can work from (ties → lowest id); undefined when there is none.
+ */
+export function recruitPost(state: HordeState, weapon: WeaponId): Post | undefined {
   let best: Post | undefined;
   for (const p of state.posts) {
-    if (p.defenderId !== null || !postUsable(state.layers, p)) continue;
+    if (p.defenderId !== null || !postUsable(state.layers, p) || !canWork(weapon, p)) continue;
     if (!best || p.x > best.x) best = p;
   }
   return best;
@@ -40,16 +44,17 @@ export const UPGRADES: Readonly<
 const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
 const OFFER_SIZE = 3;
 
-/** Three cards: distinct upgrades, and at most one recruit when a post is free and the bench has someone. */
+/** Three cards: distinct upgrades, and at most one recruit from the bench defenders with a post to work from. */
 export function rollOffer(rng: Rng, state: HordeState): Card[] {
-  const canRecruit = state.bench.length > 0 && recruitPost(state) !== undefined;
+  const recruits = state.bench.filter((d) => recruitPost(state, d.weapon) !== undefined);
+  const canRecruit = recruits.length > 0;
   const p =
     state.defenders.length < RECRUIT_CHANCE.largeFrom ? RECRUIT_CHANCE.small : RECRUIT_CHANCE.large;
   const cards: Card[] = [];
   let recruited = false;
   while (cards.length < OFFER_SIZE) {
     if (canRecruit && !recruited && chance(rng, p)) {
-      cards.push({ kind: 'recruit', defender: { ...pick(rng, state.bench) } });
+      cards.push({ kind: 'recruit', defender: { ...pick(rng, recruits) } });
       recruited = true;
       continue;
     }
@@ -79,7 +84,7 @@ export function chooseCard(state: HordeState, index: number): HordeState {
   if (!Number.isInteger(index) || !card) throw new RangeError(`chooseCard: no card ${index}`);
   const s = structuredClone(state);
   if (card.kind === 'recruit') {
-    const post = recruitPost(s);
+    const post = recruitPost(s, card.defender.weapon);
     const benchIndex = s.bench.findIndex((d) => d.id === card.defender.id);
     if (!post || benchIndex < 0) throw new RangeError('chooseCard: recruit has nowhere to go');
     const [spec] = s.bench.splice(benchIndex, 1);
