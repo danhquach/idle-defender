@@ -360,6 +360,23 @@ Each defender level gives **stat points** (3 per level, starting point):
   affixes (e.g. +pierce, burning rounds, +damage vs. mutants).
 - A loadout per defender: primary, secondary and one item (§6 Loadout)
   *(guess: armour later, in the item slot)*.
+- **As built (ID-013, starting points):** the free Pistol, Knife and Toolkit
+  are Common and unlimited; every other weapon is one owned item, kept in the
+  camp's **armoury** or carried by one defender at a time (the roster refuses
+  a weapon someone else carries and says who). Rarity multiplies damage, and a
+  tool's repair: Rusty ×0.8, Common ×1, Military ×1.15 (1 affix), Prototype
+  ×1.3 (2), Relic ×1.5 (3); a weapon whose kind fits fewer affixes gets fewer
+  (a Relic blade has 2). Affixes, each at most once, rolled as whole numbers:
+  +5–15% damage, +5–15% fire rate (any weapon), +20–50% magazine, −10–25%
+  reload, pierce (guns: the shot also hits the nearest enemy within 24 px of
+  its line, up to 200 px past the target), +10–25% repair (tools). A horde win
+  drops a weapon with chance 10% + 1% per horde number, capped at 30%: an
+  even pick of base weapon, rarity Rusty 30 / Common 45 / Military 20 /
+  Prototype 5 (Relic never from a horde). The result screen names it with one
+  line per affix. The camp owns at most 30 weapons (armoury and hands
+  together); a drop past that is salvaged for Scrap (Rusty 5, Common 10,
+  Military 25, Prototype 50, Relic 100). Burning rounds and +damage vs.
+  mutants wait for burning effects and mutants. Manual salvage is a follow-up.
 
 ## 7. Turrets, energy and traps
 

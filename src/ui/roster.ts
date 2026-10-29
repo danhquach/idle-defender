@@ -4,6 +4,7 @@
 import {
   ITEMS,
   PROFESSIONS,
+  RARITY_ORDER,
   STAT_NAMES,
   STATS,
   WEAPONS,
@@ -12,8 +13,17 @@ import {
   type Stat,
   type WeaponId,
 } from '../core/data.ts';
-import { available, equip, spendPoint, type GameState, type RosterDefender } from '../core/game.ts';
-import { weaponOf, type Loadout } from '../core/loadout.ts';
+import { heldLabel, type Held } from '../core/armoury.ts';
+import {
+  available,
+  carrierOf,
+  equip,
+  ownedWeapons,
+  spendPoint,
+  type GameState,
+  type RosterDefender,
+} from '../core/game.ts';
+import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
 import { badgeOf, levelOf, titleIn, titleName, unspentPoints } from '../core/stats.ts';
 import { defenderLabel, el, STAT_HINT } from './hud.ts';
 import { BADGE_COLOUR } from './render.ts';
@@ -68,14 +78,11 @@ export function rosterEntry(d: RosterDefender, now: number): RosterEntry {
 }
 
 /**
- * The option of `options` a picker's `raw` value names ('' is none), or undefined:
- * a value edited in the page never reaches the core unless it is one of ours.
+ * The choice a picker's `raw` value names ('' is none), or undefined: a value edited in
+ * the page never reaches the core unless it is one of ours.
  */
-export function optionFor<T extends string | null>(
-  options: readonly T[],
-  raw: string,
-): T | undefined {
-  return options.find((id) => (id ?? '') === raw);
+export function choiceFor<T>(choices: readonly Choice<T>[], raw: string): Choice<T> | undefined {
+  return choices.find((c) => c.value === raw);
 }
 
 /** The title badge for `stats`: colour, pips and the title it stands for; null with no title. */
@@ -102,8 +109,56 @@ export function badgeElement(d: RosterDefender): HTMLElement | null {
   return span;
 }
 
-const slotName = (id: string | null, table: Readonly<Record<string, { name: string }>>): string =>
-  id === null ? 'None' : table[id]!.name;
+/** One option of a picker: the value in the page, its text, and what choosing it gives. */
+export interface Choice<T> {
+  value: string;
+  label: string;
+  pick: T;
+}
+
+const plain = <T extends string | null>(
+  options: readonly T[],
+  table: Readonly<Record<string, { name: string }>>,
+): Choice<T>[] =>
+  options.map((id) => ({
+    value: id ?? '',
+    label: id === null ? 'None' : table[id]!.name,
+    pick: id,
+  }));
+
+/**
+ * What `d` may pick for `slot`: the free weapons, then every owned weapon that fits
+ * (design §6 Gear), rarest first, each named with its rarity and affixes, and who carries it if
+ * someone else does. Picking one carried by another defender is refused by `equip`.
+ */
+export function weaponChoices(
+  game: GameState,
+  d: RosterDefender,
+  slot: 'primary' | 'secondary',
+): Choice<Held | null>[] {
+  const fits = (h: Held): boolean => (slot === 'primary' ? isGun(h) : weaponOf(h).kind !== 'gun');
+  const owned = ownedWeapons(game)
+    .filter(fits)
+    // Rarest first, then by name, so a full armoury reads at a glance.
+    .sort(
+      (a, b) =>
+        RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) ||
+        heldLabel(a).localeCompare(heldLabel(b)) ||
+        a.uid.localeCompare(b.uid),
+    )
+    .map((w) => {
+      const by = carrierOf(game, w.uid);
+      const note = by && by.id !== d.id ? ` · carried by ${by.name}` : '';
+      return { value: w.uid, label: `${heldLabel(w)}${note}`, pick: w };
+    });
+  return [...plain(slot === 'primary' ? PRIMARY_OPTIONS : SECONDARY_OPTIONS, WEAPONS), ...owned];
+}
+
+export const ITEM_CHOICES: readonly Choice<ItemId | null>[] = plain(ITEM_OPTIONS, ITEMS);
+
+/** The page value of what a slot holds: the weapon id, the owned weapon's uid, or '' for none. */
+const valueOf = (h: Held | ItemId | null): string =>
+  h === null ? '' : typeof h === 'string' ? h : h.uid;
 
 /**
  * The roster's entries for `game` at `now`. A spend or an allowed equip goes out
@@ -134,29 +189,28 @@ export function rosterSection(
     }
     const note = el('p', 'build-option-reason');
     note.setAttribute('role', 'status');
-    const pick = <T extends string | null>(
+    const pick = <T>(
       label: string,
-      options: readonly T[],
-      current: T,
-      table: Readonly<Record<string, { name: string }>>,
+      choices: readonly Choice<T>[],
+      current: string,
       change: (value: T) => Loadout,
     ): HTMLElement => {
       const select = el('select', 'build-select');
-      for (const id of options) {
-        const o = el('option', '', slotName(id, table));
-        o.value = id ?? '';
-        o.selected = id === current;
+      for (const c of choices) {
+        const o = el('option', '', c.label);
+        o.value = c.value;
+        o.selected = c.value === current;
         select.append(o);
       }
       select.addEventListener('change', () => {
-        const value = optionFor(options, select.value);
-        if (value === undefined) return;
-        const r = equip(game, d.id, change(value));
+        const chosen = choiceFor(choices, select.value);
+        if (chosen === undefined) return;
+        const r = equip(game, d.id, change(chosen.pick));
         if (r.ok) {
           onChange(r.game);
         } else {
           note.textContent = r.reason;
-          select.value = current ?? '';
+          select.value = current;
         }
       });
       const field = el('label', 'build-field', label);
@@ -165,12 +219,15 @@ export function rosterSection(
     };
     const l = d.loadout;
     card.append(
-      pick('Primary', PRIMARY_OPTIONS, l.primary, WEAPONS, (primary) => ({ ...l, primary })),
-      pick('Secondary', SECONDARY_OPTIONS, l.secondary, WEAPONS, (secondary) => ({
+      pick('Primary', weaponChoices(game, d, 'primary'), valueOf(l.primary), (primary) => ({
+        ...l,
+        primary: primary!,
+      })),
+      pick('Secondary', weaponChoices(game, d, 'secondary'), valueOf(l.secondary), (secondary) => ({
         ...l,
         secondary,
       })),
-      pick('Item', ITEM_OPTIONS, l.item, ITEMS, (item) => ({ ...l, item })),
+      pick('Item', ITEM_CHOICES, valueOf(l.item), (item) => ({ ...l, item })),
       note,
     );
     return card;

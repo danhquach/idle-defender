@@ -91,6 +91,69 @@ export const WEAPONS = {
 } as const satisfies Record<string, Weapon>;
 export type WeaponId = keyof typeof WEAPONS;
 
+// --- Gear (M4): owned weapons of a rarity with rolled affixes; design §6 Gear. ---
+
+export type Rarity = 'rusty' | 'common' | 'military' | 'prototype' | 'relic';
+/**
+ * `power` multiplies damage (and a tool's repair), `affixes` is how many it rolls
+ * (fewer when its kind fits fewer), `salvage` the Scrap it turns into when the
+ * armoury is full.
+ */
+export const RARITIES = {
+  rusty: { name: 'Rusty', power: 0.8, affixes: 0, salvage: 5 },
+  common: { name: 'Common', power: 1, affixes: 0, salvage: 10 },
+  military: { name: 'Military', power: 1.15, affixes: 1, salvage: 25 },
+  prototype: { name: 'Prototype', power: 1.3, affixes: 2, salvage: 50 },
+  relic: { name: 'Relic', power: 1.5, affixes: 3, salvage: 100 },
+} as const satisfies Record<
+  Rarity,
+  { name: string; power: number; affixes: number; salvage: number }
+>;
+export const RARITY_ORDER: readonly Rarity[] = [
+  'rusty',
+  'common',
+  'military',
+  'prototype',
+  'relic',
+];
+
+export type AffixId = 'damage' | 'fireRate' | 'magazine' | 'reload' | 'pierce' | 'repair';
+type WeaponKind = Weapon['kind'];
+const GUNS: readonly WeaponKind[] = ['sidearm', 'gun'];
+/**
+ * Each affix rolls a whole number in [min, max]: a percent, or for pierce the extra
+ * enemies a shot hits. `kinds` are the weapons it fits.
+ */
+export const AFFIXES = {
+  damage: { min: 5, max: 15, kinds: ['sidearm', 'gun', 'blade', 'tool'] },
+  fireRate: { min: 5, max: 15, kinds: ['sidearm', 'gun', 'blade', 'tool'] },
+  magazine: { min: 20, max: 50, kinds: GUNS },
+  reload: { min: 10, max: 25, kinds: GUNS },
+  pierce: { min: 1, max: 1, kinds: GUNS },
+  repair: { min: 10, max: 25, kinds: ['tool'] },
+} as const satisfies Record<AffixId, { min: number; max: number; kinds: readonly WeaponKind[] }>;
+export const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
+
+/**
+ * A horde win's weapon drop (design §4): `base + perHorde × n` chance, capped; the
+ * base weapon even across `WEAPONS`, the rarity by `rarity` weight (no Relic).
+ */
+export const WEAPON_DROP = {
+  base: 0.1,
+  perHorde: 0.01,
+  cap: 0.3,
+  rarity: { rusty: 30, common: 45, military: 20, prototype: 5, relic: 0 },
+} as const satisfies {
+  base: number;
+  perHorde: number;
+  cap: number;
+  rarity: Record<Rarity, number>;
+};
+/** Owned weapons the camp keeps, in the armoury and in hands together. */
+export const ARMOURY_CAP = 30;
+/** A pierced shot hits the nearest enemy within `width` of its line, up to `reach` past the target. */
+export const PIERCE = { width: 2 * ENEMY_RADIUS, reach: 200 } as const;
+
 export type ItemId = 'shield';
 export const ITEMS: Readonly<Record<ItemId, { readonly name: string }>> = {
   shield: { name: 'Shield' },

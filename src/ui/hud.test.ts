@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RECOVERY_MS, type Stats } from '../core/data.ts';
-import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
+import { finishHorde, hordeDrop, newGame, startHorde, type GameState } from '../core/game.ts';
+import { ARMOURY_CAP } from '../core/data.ts';
 import { newHorde, type HordeState } from '../core/horde.ts';
 import { NO_STATS } from '../core/stats.ts';
 import { setup } from '../core/testing.ts';
@@ -84,6 +85,69 @@ describe('hud', () => {
         button: 'Back to build',
         picks: [],
       });
+    });
+
+    /** `ended('won')` with its RNG moved to where the drop is a weapon with 2 affixes. */
+    function withDrop(): { game: GameState; s: HordeState } {
+      const { game, s } = ended('won');
+      for (let n = 0; hordeDrop(game, s)?.weapon.affixes.length !== 2; n++) s.rng = { s: n };
+      return { game, s };
+    }
+
+    it('a weapon drop: its name after the payout, then one line per affix', () => {
+      const { game, s } = withDrop();
+      const w = hordeDrop(game, s)!.weapon;
+      expect(w.rarity).toBe('prototype');
+      const lines = resultScreen(game, s, NOW).lines;
+      expect(lines[1]).toBe('Payout: 20 scrap, 30 wood');
+      expect(lines[2]).toMatch(/^Found: Prototype (Pistol|Knife|Toolkit)$/);
+      expect(lines.slice(3, 5)).toHaveLength(2);
+      for (const line of lines.slice(3, 5)) expect(line).toMatch(/^[+−]\d+% |^Pierce/);
+      expect(lines[5]).toBe('Bob +15 XP · level 1 (15/25)');
+    });
+
+    it('a weapon drop into a full armoury: salvaged, and the screen says for how much', () => {
+      const { game, s } = withDrop();
+      game.armoury = Array.from({ length: ARMOURY_CAP }, (_, i) => ({
+        uid: `h${i + 1}`,
+        base: 'knife' as const,
+        rarity: 'rusty' as const,
+        affixes: [],
+      }));
+      expect(resultScreen(game, s, NOW).lines[2]).toMatch(
+        /^Found: Prototype \w+ · armoury full, salvaged for 50 Scrap$/,
+      );
+    });
+
+    it('the salvage Scrap counts toward the repair bill', () => {
+      const { game, s } = withDrop();
+      for (const seg of s.layers[0]!.segments) seg.hp = 0;
+      const broke = { ...game, stock: { scrap: 0, wood: 1000, metal: 1000, concrete: 1000 } };
+      const short = (g: GameState): number => {
+        const m = /short by (\d+) scrap/.exec(resultScreen(g, s, NOW).lines.at(-1)!);
+        return m ? Number(m[1]) : 0;
+      };
+      // Short of Scrap while the drop is kept; the 50 Scrap salvage tips it to covered.
+      const kept = short(broke);
+      expect(kept).toBeGreaterThan(0);
+      const full = {
+        ...broke,
+        armoury: Array.from({ length: ARMOURY_CAP }, (_, i) => ({
+          uid: `h${i + 1}`,
+          base: 'knife' as const,
+          rarity: 'rusty' as const,
+          affixes: [],
+        })),
+      };
+      expect(kept).toBeLessThan(50);
+      expect(short(full)).toBe(0);
+      expect(resultScreen(full, s, NOW).lines.at(-1)).toMatch(/ · covered$/);
+    });
+
+    it('no drop, no line', () => {
+      const { game, s } = ended('won');
+      for (let n = 0; hordeDrop(game, s) !== null; n++) s.rng = { s: n };
+      expect(resultScreen(game, s, NOW).lines.some((l) => l.startsWith('Found'))).toBe(false);
     });
 
     it('a level-up: the XP line says so, and the picker offers its points (and older unspent ones)', () => {

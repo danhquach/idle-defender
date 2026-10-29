@@ -15,8 +15,8 @@ import {
   type Profession,
   type Stat,
   type Stats,
-  type WeaponId,
 } from './data.ts';
+import type { Held } from './armoury.ts';
 import { gunOf, isGun, professionOf, weaponOf, type Loadout } from './loadout.ts';
 
 export const NO_STATS: Readonly<Stats> = { aim: 0, might: 0, tech: 0, grit: 0 };
@@ -119,7 +119,7 @@ function feed(d: Statted, profession: Profession): { points: number; bonus: numb
 }
 
 /** A specialised gun in a non-Gunner's hands (a sidearm suits everyone). */
-const offProfession = (d: Statted, weapon: WeaponId): boolean =>
+const offProfession = (d: Statted, weapon: Held): boolean =>
   weaponOf(weapon).kind === 'gun' && professionOf(d.loadout) !== 'gunner';
 
 /**
@@ -127,7 +127,7 @@ const offProfession = (d: Statted, weapon: WeaponId): boolean =>
  * Gunner title on every gun shot (less with an off-profession specialised gun), Might
  * and the Ripper title on every blade strike; a tool strike gets none.
  */
-export function damageFactor(d: Statted, weapon: WeaponId): number {
+export function damageFactor(d: Statted, weapon: Held): number {
   const kind = weaponOf(weapon).kind;
   if (kind === 'tool') return 1;
   const f = feed(d, kind === 'blade' ? 'ripper' : 'gunner');
@@ -154,7 +154,7 @@ export function cleaveShare(d: Statted): number {
 }
 
 /** Fire-rate factor for `weapon` from the loadout: a Gunner's guns faster, a shield's holder's guns slower. */
-export function fireRateFactor(d: Statted, weapon: WeaponId): number {
+export function fireRateFactor(d: Statted, weapon: Held): number {
   if (!isGun(weapon)) return 1;
   const gunner = professionOf(d.loadout) === 'gunner' ? 1 + GUNNER.fireRate : 1;
   const shield = d.loadout.item === 'shield' ? 1 - SHIELD.fireRate : 1;
@@ -162,7 +162,7 @@ export function fireRateFactor(d: Statted, weapon: WeaponId): number {
 }
 
 /** Seconds to reload gun `weapon`: a Gunner's 25% faster, an off-profession specialised gun's 50% slower. */
-export function reloadTime(d: Statted, weapon: WeaponId): number {
+export function reloadTime(d: Statted, weapon: Held): number {
   const gunner = professionOf(d.loadout) === 'gunner' ? 1 - GUNNER.reload : 1;
   const off = offProfession(d, weapon) ? 1 + OFF_PROFESSION.reload : 1;
   return gunOf(weapon).reload * gunner * off;

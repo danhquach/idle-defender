@@ -2,6 +2,7 @@
 // panel, the replacement panel, the result panel with its stat-point picker and a
 // short toast (refused moves).
 // Text reaches the page only through textContent.
+import { affixText, heldName } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
 import { UPGRADES } from '../core/cards.ts';
 import {
@@ -16,6 +17,7 @@ import {
   type Stock,
 } from '../core/data.ts';
 import {
+  hordeDrop,
   hordePayout,
   injuredUntil,
   levelGains,
@@ -160,15 +162,26 @@ function repairLine(game: GameState, s: HordeState): string {
   const bill = repairAllCost(baseAfter(game.base, s));
   if (MATERIALS.every((m) => bill[m] === 0)) return 'No repairs needed';
   const payout = hordePayout(s);
+  payout.scrap += hordeDrop(game, s)?.scrap ?? 0;
   const short: Partial<Stock> = {};
   for (const m of MATERIALS) short[m] = Math.max(0, bill[m] - game.stock[m] - payout[m]);
   const cover = MATERIALS.some((m) => short[m]! > 0) ? `short by ${stockText(short)}` : 'covered';
   return `Repair bill: ${stockText(bill)} · ${cover}`;
 }
 
+/** A win's weapon drop (design §6 Gear): its name, then one line per affix; none without a drop. */
+function dropLines(game: GameState, s: HordeState): string[] {
+  const drop = hordeDrop(game, s);
+  if (!drop) return [];
+  const found = drop.kept
+    ? `Found: ${heldName(drop.weapon)}`
+    : `Found: ${heldName(drop.weapon)} · armoury full, salvaged for ${drop.scrap} Scrap`;
+  return [found, ...drop.weapon.affixes.map(affixText)];
+}
+
 /**
  * The victory or defeat screen (design §2) for horde `s`, which ended at `now`: why
- * it was won or lost, the payout, XP, the injured and when they're back, and the
+ * it was won or lost, the payout, any weapon found, XP, the injured and when they're back, and the
  * repair bill. `game` is the game the horde was fought from, before `finishHorde`.
  */
 export function resultScreen(game: GameState, s: HordeState, now: number): ResultScreen {
@@ -190,6 +203,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
       lines: [
         `All ${s.waveCount} waves cleared`,
         payoutText(s),
+        ...dropLines(game, s),
         ...lines,
         ...injured,
         repairLine(game, s),

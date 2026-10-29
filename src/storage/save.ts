@@ -12,10 +12,20 @@ import {
   type BaseSegment,
 } from '../core/base.ts';
 import {
+  affixCount,
+  affixesFor,
+  type Affix,
+  type Held,
+  type OwnedWeapon,
+} from '../core/armoury.ts';
+import {
+  AFFIXES,
+  ARMOURY_CAP,
   COLUMNS,
   ITEMS,
   MATERIALS,
   POST_KINDS,
+  RARITY_ORDER,
   RECOVERY_MS,
   SEGMENTS,
   STATS,
@@ -48,6 +58,8 @@ const MAX_TIME = 1e13;
 const ID = /^[a-z][a-z0-9-]{0,31}$/;
 /** A defender name: plain letters, spaces, apostrophes and hyphens; no look-alikes or hidden marks. */
 const NAME = /^[A-Za-z][A-Za-z' -]{0,23}$/;
+/** An owned weapon's uid: `h` and the horde number that dropped it. */
+const UID = /^h[1-9][0-9]{0,5}$/;
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
 
@@ -135,15 +147,34 @@ function readSave(v: unknown): Save {
 }
 
 function readGame(v: unknown, savedAt: number): GameState {
-  const o = obj(v, ['hordeNumber', 'base', 'stock', 'tiers', 'roster']);
+  // A save from before the armoury (0.4.5 and older) has none: it starts empty.
+  const old = typeof v === 'object' && v !== null && !Object.hasOwn(v, 'armoury');
+  const o = obj(v, [
+    'hordeNumber',
+    'base',
+    'stock',
+    'tiers',
+    'roster',
+    ...(old ? [] : ['armoury']),
+  ]);
   const tiers = readTiers(o.tiers);
-  return {
-    hordeNumber: int(o.hordeNumber, 1, MAX_HORDE),
+  const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
+  const game: GameState = {
+    hordeNumber,
     base: readBase(o.base, tiers),
     stock: readStock(o.stock),
     tiers,
-    roster: readRoster(o.roster, savedAt),
+    roster: readRoster(o.roster, savedAt, hordeNumber),
+    armoury: old ? [] : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber)),
   };
+  // Each owned weapon is one item, in the armoury or in one pair of hands, and the camp keeps at most ARMOURY_CAP.
+  const owned = [
+    ...game.armoury,
+    ...game.roster.flatMap((d) => [d.loadout.primary, d.loadout.secondary]),
+  ].filter((h): h is OwnedWeapon => typeof h === 'object' && h !== null);
+  if (owned.length > ARMOURY_CAP) fail('too many weapons');
+  if (new Set(owned.map((w) => w.uid)).size !== owned.length) fail('weapon twice');
+  return game;
 }
 
 function readTiers(v: unknown): Tier[] {
@@ -226,25 +257,51 @@ function postOrder(a: BasePost, b: BasePost): number {
 }
 
 /** A loadout the game allows (design §6): a gun as primary, a shield only with a blade. */
-function readLoadout(v: unknown): Loadout {
+function readLoadout(v: unknown, hordeNumber: number): Loadout {
   const o = obj(v, ['primary', 'secondary', 'item']);
   const loadout: Loadout = {
-    primary: oneOf(o.primary, WEAPON_IDS),
-    secondary: o.secondary === null ? null : oneOf(o.secondary, WEAPON_IDS),
+    primary: readHeld(o.primary, hordeNumber),
+    secondary: o.secondary === null ? null : readHeld(o.secondary, hordeNumber),
     item: o.item === null ? null : oneOf(o.item, ITEM_IDS),
   };
   if (loadoutError(loadout) !== null) fail('bad loadout');
   return loadout;
 }
 
-function readRoster(v: unknown, savedAt: number): RosterDefender[] {
+/** A free weapon by id, or an owned one. */
+function readHeld(v: unknown, hordeNumber: number): Held {
+  return typeof v === 'string' ? oneOf(v, WEAPON_IDS) : readOwned(v, hordeNumber);
+}
+
+/**
+ * An owned weapon the game could have dropped: a uid from a horde already won, and
+ * exactly its rarity's affixes, each one that fits the weapon, once, in range.
+ */
+function readOwned(v: unknown, hordeNumber: number): OwnedWeapon {
+  const o = obj(v, ['uid', 'base', 'rarity', 'affixes']);
+  const uid = text(o.uid, 7, UID);
+  if (Number(uid.slice(1)) >= hordeNumber) fail('weapon from the future');
+  const base = oneOf(o.base, WEAPON_IDS);
+  const rarity = oneOf(o.rarity, RARITY_ORDER);
+  const count = affixCount(base, rarity);
+  const fits = affixesFor(base);
+  const affixes = arr(o.affixes, count, count).map((a): Affix => {
+    const x = obj(a, ['id', 'value']);
+    const id = oneOf(x.id, fits);
+    return { id, value: int(x.value, AFFIXES[id].min, AFFIXES[id].max) };
+  });
+  if (new Set(affixes.map((a) => a.id)).size !== affixes.length) fail('affix twice');
+  return { uid, base, rarity, affixes };
+}
+
+function readRoster(v: unknown, savedAt: number, hordeNumber: number): RosterDefender[] {
   const list = arr(v, 1, MAX_ROSTER);
   const lacks = (key: string): boolean =>
     list.every((d) => typeof d === 'object' && d !== null && !Object.hasOwn(d, key));
   // A save from before stats (0.4.1 and older) has none on any defender: all 0.
   // One from before loadouts (0.4.3 and older) has a single `weapon` on each instead.
   const old = { stats: lacks('stats'), loadout: lacks('loadout') };
-  const roster = list.map((d) => readDefender(d, savedAt, old));
+  const roster = list.map((d) => readDefender(d, savedAt, hordeNumber, old));
   if (new Set(roster.map((d) => d.id)).size !== roster.length) fail('id twice');
   return roster;
 }
@@ -254,6 +311,7 @@ const DEFENDER_KEYS = ['id', 'name', 'xp', 'injuredUntil'];
 function readDefender(
   v: unknown,
   savedAt: number,
+  hordeNumber: number,
   old: { stats: boolean; loadout: boolean },
 ): RosterDefender {
   const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout'];
@@ -262,7 +320,9 @@ function readDefender(
   return {
     id: text(o.id, 32, ID),
     name: text(o.name, 24, NAME),
-    loadout: old.loadout ? loadoutFrom(oneOf(o.weapon, WEAPON_IDS)) : readLoadout(o.loadout),
+    loadout: old.loadout
+      ? loadoutFrom(oneOf(o.weapon, WEAPON_IDS))
+      : readLoadout(o.loadout, hordeNumber),
     xp,
     stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
