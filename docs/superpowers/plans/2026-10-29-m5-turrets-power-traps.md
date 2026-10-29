@@ -19,7 +19,7 @@ M5 = ID-014 (turrets, plus the Research Lab that unlocks them) + ID-015 (battery
 
 - Everything from the M1–M4 plans' Global Constraints still holds: core is pure, RNG only via `rng.ts`, text only via `textContent`, every number in `data.ts`, no new runtime dependency, public repo rules.
 - Player mistakes return `{ ok: false, reason }`; programmer errors throw `RangeError`.
-- Versions: ID-014 → `0.4.7`, ID-015 → `0.4.8`, ID-016 → `0.4.9`.
+- Versions: ID-014 → `0.4.7`, ID-015 → `0.4.8`, ID-016 → `0.4.9`, ID-017 → `0.4.10`, ID-018 → `0.4.11`.
 
 ---
 
@@ -140,3 +140,30 @@ PM decisions, 2026-10-29: D1 a fixed trap strip in front of the outermost layer'
 1. **Once per enemy:** a trap triggers at most once for each enemy, and a broken trap never triggers.
 2. **Never destroyed:** only Remove takes a trap out of the base.
 3. **Save** refuses every hostile trap shape.
+
+---
+
+## ID-018 — Horde cash shop: temporary buffs and repairs mid-horde
+
+PM decisions, 2026-10-29: D1 a buff that is already running can't be bought again until it ends; D2 cash buffs reach defenders and turrets; D3 Patch wall repairs the most damaged standing segment, broken segments stay broken (nothing is built mid-fight); D4 Fix turret can unjam a jammed turret.
+
+**Acceptance criteria** (also on issue #18). Values marked *(starting point)* are tunable.
+
+1. **Cash.** Each kill adds its enemy's cash (Shambler 2 *(starting point)*) to the horde's cash, whoever or whatever made the kill. Cash starts at 0 every horde, is never saved, and never reaches the base after the horde: it is gone when the horde ends.
+2. **Buffs (D1, D2).** *Adrenaline*: +25% damage for 30 s, 30 cash; *Overdrive*: +25% fire rate for 30 s, 30 cash *(starting points)*. Each multiplies on top of the cards, for defenders and turrets. A running buff is refused ("Already active") until it ends; the time left counts fight time only, so it stops during card picks and replacement offers.
+3. **Patch wall (D3).** 20 cash: +100 HP *(starting points)* to the standing segment with the lowest HP share (ties → outer layer, then lower row), up to its max. Refused "No wall to patch" when every standing segment is full; a broken segment (0 HP) or a gap is never patched.
+4. **Fix turret (D4).** 20 cash: +30 condition *(starting points)* to the most worn turret (jammed first, ties → lower id), up to 100; a jammed turret fires again. Refused "No turret to fix" when every turret is at full condition or there are none.
+5. **Refusals.** Short cash ("Not enough cash"), a paused or finished fight, and the rules above are refused with a reason in the core action (`buy`), not only in the UI. A refused buy changes nothing.
+6. **UI.** The fight status bar shows the cash. A shop row at the bottom of the fight view has a button per item with its price, each a dry run of `buy`: refused ones are disabled with the reason as the tooltip; a running buff shows its seconds left.
+7. **Tests** cover kill cash, each item's effect and refusals, buff expiry and its pause during picks, buffs reaching turrets, the reset between hordes, and the shop row. `docs/design.md` §4 gets an "As built (ID-018)" note; the version goes to 0.4.11.
+
+## ID-018 Numbers (all in `data.ts`, starting points)
+
+- `ENEMIES.shambler.cash = 2`.
+- `SHOP`: adrenaline `{ cost: 30, damage: 1.25, seconds: 30 }`, overdrive `{ cost: 30, fireRate: 1.25, seconds: 30 }`, patch `{ cost: 20, hp: 100 }`, fix `{ cost: 20, condition: 30 }`.
+
+## ID-018 Review Focus
+
+1. **Cash never leaves the horde:** no path writes it to the base or the save.
+2. **Buff timers** run on fight time only and end exactly once.
+3. **Refused buys** leave the state untouched.

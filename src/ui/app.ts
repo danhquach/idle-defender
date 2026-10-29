@@ -21,6 +21,7 @@ import {
 } from '../core/horde.ts';
 import { runGenerator } from '../core/power.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
+import { buy } from '../core/shop.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import { createBuildPanel } from './build.ts';
 import { createHud, defenderLabel, resultScreen } from './hud.ts';
@@ -109,6 +110,12 @@ export function start(root: HTMLElement): void {
     },
     (defenderId, stat) => {
       if (horde && endedAt !== null) spends.push([defenderId, stat]);
+    },
+    (item) => {
+      if (!horde) return;
+      const r = buy(horde, item);
+      if (r.ok) horde = r.state;
+      else hud.toast(r.reason);
     },
   );
   const panel = createBuildPanel(

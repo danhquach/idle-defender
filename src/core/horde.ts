@@ -37,6 +37,8 @@ import {
   WALK_SPEED,
   WALL,
   WAVE_BREAK,
+  SHOP,
+  type BuffId,
   type EnemyKind,
   type Stats,
 } from './data.ts';
@@ -244,6 +246,10 @@ export interface HordeState {
   level: number;
   offer: Card[] | null;
   mods: Mods;
+  /** Horde cash from kills (design §4); spent in the shop, never kept after the horde. */
+  cash: number;
+  /** Fight time each bought buff runs until; 0 = never bought. */
+  buffs: Record<BuffId, number>;
   /** Player-picked target; null = each defender shoots the enemy closest to it. */
   focusId: number | null;
   shots: Shot[];
@@ -296,6 +302,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     level: 1,
     offer: null,
     mods: { damage: 1, fireRate: 1, range: 1 },
+    cash: 0,
+    buffs: { adrenaline: 0, overdrive: 0 },
     focusId: null,
     shots: [],
     outcome: 'fighting',
@@ -377,6 +385,22 @@ export function tick(state: HordeState, dt: number): HordeState {
 /** How far `weapon` (a gun) reaches from `post`: its range × the post's × the cards'. */
 export function gunRange(state: HordeState, post: Pick<Post, 'kind'>, weapon: Held): number {
   return gunOf(weapon).range * POST_RANGE[post.kind] * state.mods.range;
+}
+
+/** Whether the bought buff `id` is still running (fight time stops during picks, so it does too). */
+export function buffOn(state: Pick<HordeState, 'time' | 'buffs'>, id: BuffId): boolean {
+  return !due(state.time, state.buffs[id]);
+}
+
+/** The `damage` or `fireRate` factor the running shop buffs give defenders and turrets. */
+export function boost(
+  state: Pick<HordeState, 'time' | 'buffs'>,
+  stat: 'damage' | 'fireRate',
+): number {
+  let f = 1;
+  if (buffOn(state, 'adrenaline')) f *= SHOP.adrenaline[stat];
+  if (buffOn(state, 'overdrive')) f *= SHOP.overdrive[stat];
+  return f;
 }
 
 /** Fire-rate factor for `defender` from a standing Engineer within reach (never stacked, never self). */
@@ -708,6 +732,7 @@ function fire(s: HordeState, rng: Rng): void {
     const hit =
       weapon.damage *
       s.mods.damage *
+      boost(s, 'damage') *
       damageFactor(defender, id) *
       (crit > 0 && chance(rng, crit) ? STAT_EFFECT.critDamage : 1);
     target.hp -= hit;
@@ -735,7 +760,10 @@ function fire(s: HordeState, rng: Rng): void {
     defender.nextShotAt =
       s.time +
       weapon.fireInterval /
-        (s.mods.fireRate * engineerBuff(s, defender) * fireRateFactor(defender, id));
+        (s.mods.fireRate *
+          boost(s, 'fireRate') *
+          engineerBuff(s, defender) *
+          fireRateFactor(defender, id));
     if (gun) {
       defender.ammo[slot] -= 1;
       if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadTime(defender, id);
@@ -765,9 +793,9 @@ function fireTurrets(s: HordeState): void {
     s.energy = Math.max(0, s.energy - TURRET.draw * STEP);
     if (!due(s.time, t.nextShotAt)) continue;
     const buff = turretBuff(s, t);
-    target.hp -= TURRET.damage * buff;
+    target.hp -= TURRET.damage * buff * boost(s, 'damage');
     const slow = Math.min(1, 0.5 + (0.5 * t.condition) / TURRET.slowBelow);
-    t.nextShotAt = s.time + TURRET.fireInterval / (buff * slow);
+    t.nextShotAt = s.time + TURRET.fireInterval / (buff * slow * boost(s, 'fireRate'));
     wear(t, TURRET.shotWear);
     s.shots.push({
       melee: false,
@@ -825,6 +853,7 @@ function removeDead(s: HordeState): void {
   for (const e of s.enemies) {
     if (e.hp > 0) continue;
     s.xp += ENEMIES[e.kind].xp;
+    s.cash += ENEMIES[e.kind].cash;
     if (e.id === s.focusId) s.focusId = null;
   }
   s.enemies = s.enemies.filter((e) => e.hp > 0);

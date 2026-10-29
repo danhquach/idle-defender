@@ -220,6 +220,15 @@ Defenders stand on **posts** the player builds and chooses between.
   - **active skills**: click-to-target abilities that cost cash and have a
     cooldown, e.g. airstrike, molotov, flashbang.
   Cash can't buy turrets or traps, and it resets to 0 when the horde ends.
+- **As built (ID-018, starting points):** each kill pays its enemy's cash
+  (Shambler 2). A shop row in the fight buys Adrenaline (+25% damage, 30 s,
+  30 cash) and Overdrive (+25% fire rate, 30 s, 30 cash) for defenders and
+  turrets, one of each running at a time, timed in fight time (they stop
+  during picks); Patch wall (20 cash, +100 HP to the standing segment with
+  the lowest HP share; broken segments stay broken); and Fix turret (20
+  cash, +30 condition to the most worn turret, unjamming a jammed one).
+  Cash lives only in the fight and is never saved. Active skills come with
+  ID-019.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or
