@@ -1,4 +1,11 @@
-import { postXY, type Base, type PostKind, type SegmentKind, type Tier } from './base.ts';
+import {
+  postXY,
+  type Base,
+  type PostKind,
+  type SegmentKind,
+  type Tier,
+  type TurretMount,
+} from './base.ts';
 import { levelUp, postUsable } from './cards.ts';
 import {
   CAMP,
@@ -10,6 +17,7 @@ import {
   FALL_WARNING,
   FIELD,
   GAP_SENSE,
+  MAX_CONDITION,
   MELEE_REACH,
   POST_RANGE,
   SEGMENT_HEIGHT,
@@ -21,6 +29,9 @@ import {
   SPAWN_INTERVAL,
   STAT_EFFECT,
   STEP,
+  TURRET,
+  TURRET_BANK,
+  TURRET_RANGE,
   WALK_SPEED,
   WALL,
   WAVE_BREAK,
@@ -110,6 +121,19 @@ export interface Post {
   /** Occupied by, or reserved for a defender walking to it. */
   defenderId: string | null;
 }
+/** A turret in the fight; ids = `base.turrets` index. */
+export interface Turret {
+  id: number;
+  mount: TurretMount;
+  column: number;
+  row: number;
+  x: number;
+  y: number;
+  condition: number;
+  nextShotAt: number;
+}
+/** How a turret looks and whether it fires: lit, dark (no charge), jammed (0 condition), or offline (its wall broke). */
+export type TurretState = 'lit' | 'dark' | 'jammed' | 'offline';
 export type Slot = 'primary' | 'secondary';
 /** A defender in the fight always holds a post: it stands on it, or walks to it. */
 export interface Defender extends DefenderSpec {
@@ -184,6 +208,9 @@ export interface HordeState {
   nextEnemyId: number;
   layers: Layer[];
   posts: Post[];
+  turrets: Turret[];
+  /** Battery bank charge left (design §7); a stand-in full bank until ID-015. */
+  energy: number;
   defenders: Defender[];
   bench: DefenderSpec[];
   /** In injury order; never on the bench, so never back in this fight. */
@@ -216,7 +243,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
   const { hordeNumber, roster, startDefenderId, base, startPostId } = setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
-  const { layers, posts } = layoutOf(base);
+  const { layers, posts, turrets } = layoutOf(base);
   const startPost = posts[startPostId];
   if (!Number.isInteger(startPostId) || !startPost || !postUsable(layers, startPost)) {
     throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
@@ -236,6 +263,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     nextEnemyId: 0,
     layers,
     posts,
+    turrets,
+    energy: TURRET_BANK,
     defenders: [standing(start, startPost, 0)],
     bench: roster.filter((d) => d !== start).map((d) => ({ ...d })),
     injured: [],
@@ -272,8 +301,8 @@ export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): De
   };
 }
 
-/** The base laid out on the field: layers at their wall `x`, posts unmanned, ids = `base.posts` index. */
-export function layoutOf(base: Base): { layers: Layer[]; posts: Post[] } {
+/** The base laid out on the field: layers at their wall `x`, posts unmanned, ids = `base.posts` / `base.turrets` index. */
+export function layoutOf(base: Base): { layers: Layer[]; posts: Post[]; turrets: Turret[] } {
   const layers: Layer[] = base.layers.map((l) => ({
     column: l.column,
     x: COLUMNS[l.column]!,
@@ -289,7 +318,13 @@ export function layoutOf(base: Base): { layers: Layer[]; posts: Post[] } {
     ...postXY(p),
     defenderId: null,
   }));
-  return { layers, posts };
+  const turrets: Turret[] = base.turrets.map((t, id) => ({
+    id,
+    ...t,
+    ...postXY({ kind: t.mount, column: t.column, row: t.row }),
+    nextShotAt: 0,
+  }));
+  return { layers, posts, turrets };
 }
 
 /** Advances the fight by `dt` seconds in fixed steps; returns a new state. */
@@ -332,6 +367,37 @@ export function engineerBuff(state: HordeState, defender: Defender): number {
   return near ? 1 + ENGINEER_BUFF : 1;
 }
 
+/** Whether `t` can fire, and how it shows: a broken wall under a wall mount, then jammed, then the bank. */
+export function turretState(state: Pick<HordeState, 'layers' | 'energy'>, t: Turret): TurretState {
+  if (t.mount === 'wall-walk') {
+    const seg = state.layers.find((l) => l.column === t.column)?.segments[t.row];
+    if (!seg || seg.hp <= 0) return 'offline';
+  }
+  if (t.condition <= 0) return 'jammed';
+  return state.energy > 0 ? 'lit' : 'dark';
+}
+
+/**
+ * Damage and fire-rate factor a turret gets from the best standing Engineer within
+ * their tool's reach (never stacked): `ENGINEER_BUFF`, scaled by Tech and title.
+ */
+export function turretBuff(state: HordeState, t: Turret): number {
+  let best = 1;
+  for (const e of engineersNear(state, t))
+    best = Math.max(best, 1 + ENGINEER_BUFF * repairFactor(e));
+  return best;
+}
+
+/** Standing Engineers whose tool reaches `t`. */
+function engineersNear(state: HordeState, t: Turret): Defender[] {
+  return state.defenders.filter(
+    (e) =>
+      !e.walking &&
+      professionOf(e.loadout) === 'engineer' &&
+      Math.hypot(e.x - t.x, e.y - t.y) <= toolOf(e.loadout.secondary!).buffRadius + EPS,
+  );
+}
+
 /**
  * The base after a fight: each built segment keeps the fight's HP, rounded up (a
  * sliver left standing stays standing) and capped at the base's max HP (so an
@@ -353,7 +419,20 @@ export function baseAfter(base: Base, horde: HordeState): Base {
           );
         }),
     );
-  if (!match) throw new RangeError('baseAfter: the horde was not fought on this base');
+  const sameTurrets =
+    b.turrets.length === horde.turrets.length &&
+    b.turrets.every((t, i) => {
+      const h = horde.turrets[i]!;
+      return h.mount === t.mount && h.column === t.column && h.row === t.row;
+    });
+  if (!match || !sameTurrets) {
+    throw new RangeError('baseAfter: the horde was not fought on this base');
+  }
+  // Turrets keep their exact wear, so a few shots per horde still add up (a whole-point
+  // round-up would erase every shot's 0.2).
+  b.turrets.forEach((t, i) => {
+    t.condition = Math.min(MAX_CONDITION, Math.max(0, horde.turrets[i]!.condition));
+  });
   b.layers.forEach((l, i) => {
     l.slots.forEach((slot, row) => {
       // EPS: float noise from card maths (150 + 1e-12) must not round up a whole point.
@@ -427,7 +506,9 @@ function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   walk(s);
   fire(s, rng);
+  fireTurrets(s);
   repair(s);
+  repairTurrets(s);
   removeDead(s);
   const moved = move(s);
   separate(s);
@@ -638,6 +719,56 @@ function fire(s: HordeState, rng: Rng): void {
 }
 
 /**
+ * Design §7: each turret that can fire and has a target draws `TURRET.draw` charge per
+ * second, and shoots when due; each shot wears it. Below `slowBelow` condition it fires
+ * slower, down to half speed. The bank never goes below 0.
+ */
+function fireTurrets(s: HordeState): void {
+  // In id order, so when the bank runs dry the lower ids get the last charge.
+  for (const t of s.turrets) {
+    if (turretState(s, t) !== 'lit') continue;
+    const target = targetFrom(s, t.x, t.y, TURRET.range * TURRET_RANGE[t.mount]);
+    if (!target) continue;
+    s.energy = Math.max(0, s.energy - TURRET.draw * STEP);
+    if (!due(s.time, t.nextShotAt)) continue;
+    const buff = turretBuff(s, t);
+    target.hp -= TURRET.damage * buff;
+    const slow = Math.min(1, 0.5 + (0.5 * t.condition) / TURRET.slowBelow);
+    t.nextShotAt = s.time + TURRET.fireInterval / (buff * slow);
+    wear(t, TURRET.shotWear);
+    s.shots.push({
+      melee: false,
+      fromX: t.x,
+      fromY: t.y,
+      toX: target.x,
+      toY: target.y,
+      at: s.time,
+    });
+  }
+}
+
+/**
+ * Design §7: each standing Engineer restores `TURRET.engineerRepair` condition/s (Tech
+ * and title scale it) to the most worn turret within their tool's reach (ties → lower
+ * id). A jammed turret waits for build mode.
+ */
+function repairTurrets(s: HordeState): void {
+  for (const d of s.defenders) {
+    if (d.walking || professionOf(d.loadout) !== 'engineer') continue;
+    let worst: Turret | undefined;
+    for (const t of s.turrets) {
+      if (t.condition <= 0 || t.condition >= MAX_CONDITION) continue;
+      if (!engineersNear(s, t).includes(d)) continue;
+      if (!worst || t.condition < worst.condition) worst = t;
+    }
+    if (worst) {
+      const gain = TURRET.engineerRepair * repairFactor(d) * STEP;
+      worst.condition = Math.min(MAX_CONDITION, worst.condition + gain);
+    }
+  }
+}
+
+/**
  * Design §6: each standing Engineer restores HP to the most damaged standing segment
  * (lowest HP share; ties → lower row) of its post's layer, within one row of the post.
  * Broken segments wait for build mode.
@@ -833,10 +964,28 @@ function attack(s: HordeState, moves: Moves): void {
       if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
       const stop = stopLine(s, e);
       target = e.x > stop.x ? null : stop.segment;
+      // Only the damage the segment actually takes wears its turret.
+      if (target && stop.layer) {
+        wearMounted(s, stop.layer.column, stop.segment!.index, Math.min(damage, target.hp));
+      }
     }
     if (!target) continue;
     target.hp = Math.max(0, target.hp - damage);
     e.nextAttackAt = s.time + enemy.attackInterval;
+  }
+}
+
+/** Takes `amount` off `t`'s condition; float noise near 0 (1 − 5 × 0.2) jams it rather than leaving a sliver. */
+function wear(t: Turret, amount: number): void {
+  const c = t.condition - amount;
+  t.condition = c <= EPS ? 0 : c;
+}
+
+/** Design §7: a hit on a segment wears the turret on its wall mount by `hitWear` per point. */
+function wearMounted(s: HordeState, column: number, row: number, damage: number): void {
+  for (const t of s.turrets) {
+    if (t.mount !== 'wall-walk' || t.column !== column || t.row !== row) continue;
+    wear(t, TURRET.hitWear * damage);
   }
 }
 

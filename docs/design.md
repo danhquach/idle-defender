@@ -397,6 +397,25 @@ Each defender level gives **stat points** (3 per level, starting point):
   repaired. Repaired between hordes with Scrap and Parts, faster and
   cheaper by an Engineer; an Engineer on an adjacent post repairs slowly
   mid-horde *(guess)*.
+- **As built (ID-014, starting points):** the Auto-turret is unlocked by
+  research (§11) and built in build mode for 40 Scrap and 20 Wood on a
+  free tower or wall mount (a spot holds a post or a turret, not both).
+  It fires 5 damage every 0.5 s, range 500 (×1.25 on a tower), and draws
+  1 charge per second while it has a target from a stand-in bank of 600,
+  full at each horde start until the battery bank (ID-015). Condition
+  0–100: −0.2 per shot, and a wall turret −0.5 per point of damage its
+  segment takes; below 50 it fires slower, down to half speed; at 0 it
+  is jammed; wear carries between hordes exactly, and a wall turret only
+  wears by the damage its segment can still take. A wall turret whose
+  segment breaks stops firing until the
+  segment is repaired. A full repair costs 20 Scrap, in proportion to the
+  missing condition (Parts join later). A standing Engineer within 100 px
+  gives +15% damage and fire rate (scaled by Tech and title, not stacked)
+  and repairs the most worn turret in reach 0.5 condition/s, never a
+  jammed one. Between hordes a turret can be **salvaged** (50% of its
+  cost × its condition share back, rounded down; the only way one is
+  removed) or **relocated** to another free mount for free. Turrets
+  ignore the in-horde cards.
 
 ### Batteries and energy
 
@@ -613,6 +632,15 @@ Set before sending; they apply to any location, plaza or single building.
   types, battery tiers, new cards in the offer pool, commander perks and
   perk slots, active skills, more cars, larger base area, new world-map
   locations.
+- **As built (ID-014, starting points):** research happens at a
+  **Research Lab**, a camp building built in build mode for 30 Wood and
+  20 Scrap and upgraded to level 2 for 80 Wood and 60 Scrap. Each node
+  needs a Lab level and maybe an earlier node, costs materials and
+  completes at once: **Metal walls** (Lab 1, 40 Scrap and 40 Wood)
+  unlocks the Metal tier; **Auto-turret** (Lab 2 and Metal walls, 60
+  Scrap and 40 Wood) unlocks turrets. A new game starts with no Lab and
+  Wood walls only. Real-time research, Mutated Genes and the rest of the
+  tree come with ID-035.
 - **New defenders** come mainly as **survivors** found on patrols (§10),
   and rarely from a camp level-up (§11 Camp level), each with a name, level, stats and weapon. Needed to replace losses.
 - **Camp capacity:** the camp holds a limited number of people (starting

@@ -173,6 +173,7 @@ body {
 }
 
 .build-slot,
+.build-lab,
 .build-start-section {
   display: flex;
   flex-direction: column;
