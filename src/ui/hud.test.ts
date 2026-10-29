@@ -3,7 +3,16 @@ import { RECOVERY_MS } from '../core/data.ts';
 import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
 import { newHorde, type HordeState } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
-import { clockTime, fallingText, payoutText, resultScreen, statusText, stockText } from './hud.ts';
+import {
+  clockTime,
+  defenderLabel,
+  fallingText,
+  payoutText,
+  resultScreen,
+  statusText,
+  stockText,
+  workNote,
+} from './hud.ts';
 
 const horde = (): HordeState => newHorde(1, setup());
 
@@ -12,6 +21,22 @@ describe('hud', () => {
     const s = horde();
     s.xp = 4;
     expect(statusText(s)).toBe(`Horde 1 · Wave 1/${s.waveCount} · Lv 1 (4/10)`);
+  });
+
+  it("names each defender's profession from their weapon", () => {
+    expect(newGame().roster.map(defenderLabel)).toEqual([
+      'Bob — Gunner',
+      'Jack — Ripper',
+      'John — Engineer',
+    ]);
+  });
+
+  it('says when a defender cannot work from a post', () => {
+    expect(workNote('knife', { kind: 'tower' })).toBe("can't reach from a tower");
+    expect(workNote('knife', { kind: 'wall-walk' })).toBe('');
+    expect(workNote('knife', { kind: 'ground' })).toBe('');
+    expect(workNote('pistol', { kind: 'tower' })).toBe('');
+    expect(workNote('toolkit', { kind: 'tower' })).toBe('');
   });
 
   it('lists amounts in material order, skipping zeros', () => {

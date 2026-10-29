@@ -51,7 +51,12 @@ describe('game', () => {
     expect(g.base).toEqual(newBase());
     expect(g.stock).toEqual(START_STOCK);
     expect(g.tiers).toEqual(START_TIERS);
-    expect(g.roster.length).toBe(3);
+    // One weapon per profession (design §11).
+    expect(g.roster.map((d) => [d.name, d.weapon])).toEqual([
+      ['Bob', 'pistol'],
+      ['Jack', 'knife'],
+      ['John', 'toolkit'],
+    ]);
     expect(g.roster.every((d) => d.xp === 0 && d.injuredUntil === null)).toBe(true);
   });
 
@@ -64,7 +69,7 @@ describe('game', () => {
     expect(h.defenders.map((d) => d.id)).toEqual([g.roster[1]!.id]);
     expect(h.bench).toEqual([
       { id: 'bob', name: 'Bob', weapon: 'pistol' },
-      { id: 'john', name: 'John', weapon: 'pistol' },
+      { id: 'john', name: 'John', weapon: 'toolkit' },
     ]);
   });
 

@@ -29,11 +29,11 @@ export interface GameState {
   roster: RosterDefender[];
 }
 
-// Placeholder starter roster (names are placeholders until the roster ticket).
+// The starter roster: one weapon per profession (design §11).
 const STARTER_ROSTER: readonly DefenderSpec[] = [
   { id: 'bob', name: 'Bob', weapon: 'pistol' },
-  { id: 'jack', name: 'Jack', weapon: 'pistol' },
-  { id: 'john', name: 'John', weapon: 'pistol' },
+  { id: 'jack', name: 'Jack', weapon: 'knife' },
+  { id: 'john', name: 'John', weapon: 'toolkit' },
 ];
 
 export function newGame(): GameState {
