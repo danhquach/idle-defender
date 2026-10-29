@@ -7,6 +7,7 @@ import { moveDefender, newHorde, standing, tick, type HordeState } from './horde
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { rngFrom } from './rng.ts';
 import { enemy, setup } from './testing.ts';
+import { loadoutFrom } from './loadout.ts';
 
 /** Horde 1, a on post 0 (420, 120), no spawns left: only placed enemies move. */
 function quiet(): HordeState {
@@ -132,7 +133,7 @@ describe('injury', () => {
     expect(after.posts[0]!.defenderId).toBeNull();
     expect(after.injured).toEqual([
       {
-        defender: { id: 'a', name: 'A', weapon: 'pistol' },
+        defender: { id: 'a', name: 'A', loadout: loadoutFrom('pistol') },
         postId: 0,
         at: 0,
         offered: false,
@@ -240,7 +241,7 @@ describe('replacing an injured defender', () => {
     expect(s.replace).toBeNull();
     expect(s.posts[0]!.defenderId).toBe('c');
     expect(s.defenders).toEqual([
-      standing({ id: 'c', name: 'C', weapon: 'pistol' }, s.posts[0]!, s.time),
+      standing({ id: 'c', name: 'C', loadout: loadoutFrom('pistol') }, s.posts[0]!, s.time),
     ]);
     expect(s.bench.map((d) => d.id)).toEqual(['b']);
     expect(s.tookPart).toEqual(['a', 'c']);
@@ -284,7 +285,7 @@ describe('replacing an injured defender', () => {
     field(mid, 'c', 1);
     mid.enemies = [];
     // Bench empty and every post taken: put one back on the bench to test the posts alone.
-    mid.bench.push({ id: 'd', name: 'D', weapon: 'pistol' });
+    mid.bench.push({ id: 'd', name: 'D', loadout: loadoutFrom('pistol') });
     mid = tick(mid, STEP);
     expect(mid.wave).toBe(2);
     expect(mid.replace).toBeNull();
@@ -319,7 +320,7 @@ describe('replacing an injured defender', () => {
   it('several injured: one offer each, in injury order', () => {
     const s = quiet();
     field(s, 'b', 1);
-    s.bench.push({ id: 'd', name: 'D', weapon: 'pistol' });
+    s.bench.push({ id: 'd', name: 'D', loadout: loadoutFrom('pistol') });
     // Both go down the same step: injury order is `defenders` order.
     s.defenders[1]!.hp = 0;
     s.defenders[0]!.hp = 0;
@@ -355,14 +356,18 @@ describe('replacing an injured defender', () => {
 
   it('a recruit card counts as taking part', () => {
     const s = quiet();
-    s.offer = [{ kind: 'recruit', defender: { id: 'b', name: 'B', weapon: 'pistol' } }];
+    s.offer = [
+      { kind: 'recruit', defender: { id: 'b', name: 'B', loadout: loadoutFrom('pistol') } },
+    ];
     expect(chooseCard(s, 0).tookPart).toEqual(['a', 'b']);
   });
 
   it('a defender dropped to the bench and sent back in takes part once', () => {
     const s = quiet();
     s.tookPart.push('b'); // b fought, then dropped to the bench
-    s.offer = [{ kind: 'recruit', defender: { id: 'b', name: 'B', weapon: 'pistol' } }];
+    s.offer = [
+      { kind: 'recruit', defender: { id: 'b', name: 'B', loadout: loadoutFrom('pistol') } },
+    ];
     expect(chooseCard(s, 0).tookPart).toEqual(['a', 'b']);
     const t = quiet();
     t.tookPart.push('b');

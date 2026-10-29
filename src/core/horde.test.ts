@@ -4,7 +4,7 @@ import { chooseCard } from './cards.ts';
 import { STEP, WALK_SPEED, type PostKind, type Stock } from './data.ts';
 import {
   baseAfter,
-  defenderRange,
+  gunRange,
   enemyAt,
   moveDefender,
   newHorde,
@@ -14,6 +14,7 @@ import {
   type HordeState,
 } from './horde.ts';
 import { enemy, setup } from './testing.ts';
+import { loadoutFrom } from './loadout.ts';
 
 /** A horde with nobody on the posts, so nothing dies. */
 function unmanned(): HordeState {
@@ -31,9 +32,14 @@ function still(): HordeState {
 }
 
 /** A horde with no spawns left. */
+/**
+ * No spawns left, and `a` on its tower carrying a plain pistol: a Ripper on a tower
+ * shoots with no Gunner handling and no crit roll, so cadence and damage are exact.
+ */
 function quiet(): HordeState {
   const s = newHorde(1, setup());
   s.toSpawn = 0;
+  s.defenders[0]!.loadout = loadoutFrom('knife');
   return s;
 }
 
@@ -246,7 +252,7 @@ describe('tick', () => {
 describe('combat', () => {
   it('tower range is 750 for a pistol', () => {
     const s = newHorde(1, setup());
-    expect(defenderRange(s, s.posts[0]!, s.defenders[0]!)).toBe(750);
+    expect(gunRange(s, s.posts[0]!, 'pistol')).toBe(750);
   });
 
   it('shoots the enemy closest to the defender', () => {
@@ -254,7 +260,7 @@ describe('combat', () => {
     enemy(s, { x: 800, y: 390 });
     enemy(s, { x: 850, y: 120 });
     const after = tick(s, STEP);
-    expect(after.enemies.map((e) => e.hp)).toEqual([20, 13]);
+    expect(after.enemies.map((e) => e.hp)).toEqual([20, 14]);
     expect(after.shots).toHaveLength(1);
     expect(after.shots[0]).toMatchObject({ fromX: 420, fromY: 120, toX: 850, toY: 120 });
   });
@@ -264,7 +270,7 @@ describe('combat', () => {
     enemy(s, { x: 800, y: 220 });
     enemy(s, { x: 800, y: 20 });
     const after = tick(s, STEP);
-    expect(after.enemies.map((e) => e.hp)).toEqual([13, 20]);
+    expect(after.enemies.map((e) => e.hp)).toEqual([14, 20]);
   });
 
   it("doesn't shoot out of range", () => {
@@ -278,13 +284,15 @@ describe('combat', () => {
   it('fires every 0.6 s', () => {
     const s = quiet();
     enemy(s, { hp: 1000, maxHp: 1000 });
-    expect(tick(s, 1.25).enemies[0]?.hp).toBe(1000 - 7 * 3);
+    expect(tick(s, 1.25).enemies[0]?.hp).toBe(1000 - 6 * 3);
   });
 
-  it('keeps the 0.6 s cadence over a long fight despite float drift', () => {
+  it('keeps the 0.6 s cadence and 1.5 s reloads over a long fight despite float drift', () => {
     const s = quiet();
     enemy(s, { hp: 10_000, maxHp: 10_000 });
-    expect(tick(s, 60).enemies[0]?.hp).toBe(10_000 - 7 * 100);
+    // A magazine is 10 shots 0.6 s apart, then a 1.5 s reload: one every 6.9 s. In 60 s,
+    // 8 full magazines (to 55.2 s) and 8 more shots (55.2 … 59.4 s).
+    expect(tick(s, 60).enemies[0]?.hp).toBe(10_000 - 6 * 88);
   });
 
   it('drops shot trails after 0.15 s', () => {
@@ -355,7 +363,7 @@ describe('focus', () => {
   it('focus beats closest', () => {
     const { s, p, q } = pq();
     const after = tick(setFocus(s, p), STEP);
-    expect(hp(after, p)).toBe(13);
+    expect(hp(after, p)).toBe(14);
     expect(hp(after, q)).toBe(20);
   });
 
@@ -363,7 +371,7 @@ describe('focus', () => {
     const { s, q } = pq();
     const r = enemy(s, { x: 1300, y: 120 }).id;
     const after = tick(setFocus(s, r), STEP);
-    expect(hp(after, q)).toBe(13);
+    expect(hp(after, q)).toBe(14);
     expect(hp(after, r)).toBe(20);
     expect(after.focusId).toBe(r);
   });
@@ -519,8 +527,7 @@ describe('fighting on the base', () => {
       (b, s) => buildPost(b, s, { kind: 'wall-walk', column: 0, row: 0 }),
     );
     const s = newHorde(1, { ...setup(), base });
-    const d = s.defenders[0]!;
-    expect(s.posts.map((p) => [p.kind, defenderRange(s, p, d)])).toEqual([
+    expect(s.posts.map((p) => [p.kind, gunRange(s, p, 'pistol')])).toEqual([
       ['ground', 450],
       ['tower', 750],
       ['tower', 750],
@@ -653,14 +660,16 @@ describe('moving defenders', () => {
     expect(late.defenders[0]).toMatchObject({ walking: false, x: 510, y: 40, postId: to });
   });
 
-  it("doesn't fire while walking, and fires on arrival", () => {
+  it('fires a pistol (a sidearm) on the move, from where the walker is, and on arrival', () => {
     const s = fightOn(postsBase([]), ['tower', 1]);
     const moved = mustMove(s, 'a', postId(s, 'wall-walk', 0));
     const target = enemy(moved, { x: 700, y: 40, hp: 1000, maxHp: 1000 });
-    const walking = tick(moved, 1);
-    expect(walking.shots).toEqual([]);
-    expect(walking.enemies[0]!.hp).toBe(1000);
-    const arrived = tick(walking, 0.6);
+    const first = tick(moved, STEP);
+    expect(first.defenders[0]!.walking).toBe(true);
+    expect(first.shots).toEqual([
+      expect.objectContaining({ fromX: first.defenders[0]!.x, fromY: first.defenders[0]!.y }),
+    ]);
+    const arrived = tick(first, 1.6);
     expect(arrived.defenders[0]!.walking).toBe(false);
     expect(arrived.enemies.find((e) => e.id === target.id)!.hp).toBeLessThan(1000);
   });
@@ -785,13 +794,13 @@ describe('dropping off a broken wall', () => {
     const after = tick(s, STEP);
     expect(after.defenders.map((d) => d.id)).toEqual(['a']);
     expect(after.bench).toEqual([
-      { id: 'c', name: 'C', weapon: 'pistol' },
-      { id: 'b', name: 'B', weapon: 'pistol' },
+      { id: 'c', name: 'C', loadout: loadoutFrom('pistol') },
+      { id: 'b', name: 'B', loadout: loadoutFrom('pistol') },
     ]);
     expect(after.posts.filter((p) => p.defenderId === 'b')).toEqual([]);
 
     after.offer = [
-      { kind: 'recruit', defender: { id: 'b', name: 'B', weapon: 'pistol' } },
+      { kind: 'recruit', defender: { id: 'b', name: 'B', loadout: loadoutFrom('pistol') } },
       { kind: 'upgrade', id: 'sharpshooter' },
       { kind: 'upgrade', id: 'reinforce' },
     ];
@@ -869,7 +878,7 @@ describe('dropping off a broken wall', () => {
       reason: 'No wall to stand on',
     });
     after.offer = [
-      { kind: 'recruit', defender: { id: 'b', name: 'B', weapon: 'pistol' } },
+      { kind: 'recruit', defender: { id: 'b', name: 'B', loadout: loadoutFrom('pistol') } },
       { kind: 'upgrade', id: 'sharpshooter' },
       { kind: 'upgrade', id: 'reinforce' },
     ];

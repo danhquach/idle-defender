@@ -13,8 +13,8 @@ import {
   resultScreen,
   statusText,
   stockText,
-  workNote,
 } from './hud.ts';
+import { loadoutFrom } from '../core/loadout.ts';
 
 const horde = (): HordeState => newHorde(1, setup());
 
@@ -33,17 +33,9 @@ describe('hud', () => {
     ]);
     // The name tag is the top title, whatever weapon they hold now.
     const stats: Stats = { ...NO_STATS, aim: 10 };
-    expect(defenderLabel({ name: 'Jack', weapon: 'knife', stats })).toBe(
+    expect(defenderLabel({ name: 'Jack', loadout: loadoutFrom('knife'), stats })).toBe(
       'Jack the Gunner — Ripper',
     );
-  });
-
-  it('says when a defender cannot work from a post', () => {
-    expect(workNote('knife', { kind: 'tower' })).toBe("can't reach from a tower");
-    expect(workNote('knife', { kind: 'wall-walk' })).toBe('');
-    expect(workNote('knife', { kind: 'ground' })).toBe('');
-    expect(workNote('pistol', { kind: 'tower' })).toBe('');
-    expect(workNote('toolkit', { kind: 'tower' })).toBe('');
   });
 
   it('lists amounts in material order, skipping zeros', () => {
@@ -99,7 +91,7 @@ describe('hud', () => {
       game.roster[0]!.xp = 20; // Bob: level 2 with this win
       game.roster[1]!.xp = 30; // Jack: level 2 already, 1 of 3 points spent; no level-up
       game.roster[1]!.stats = { ...NO_STATS, might: 1 };
-      game.roster[1]!.weapon = 'knife';
+      game.roster[1]!.loadout = loadoutFrom('knife');
       game.roster[2]!.xp = 500; // John: points to spend, but not in this fight
       const r = resultScreen(game, s, NOW);
       expect(r.lines.slice(2, 4)).toEqual([

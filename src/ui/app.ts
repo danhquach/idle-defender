@@ -22,7 +22,7 @@ import {
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import { createBuildPanel } from './build.ts';
-import { createHud, defenderLabel, resultScreen, workNote } from './hud.ts';
+import { createHud, defenderLabel, resultScreen } from './hud.ts';
 import {
   clampCamera,
   fightHitAt,
@@ -259,9 +259,6 @@ export function start(root: HTMLElement): void {
       if (hit && selectedDefender !== null) {
         const moved = moveDefender(horde, selectedDefender, hit.postId);
         if (moved.ok) {
-          const d = horde.defenders.find((x) => x.id === selectedDefender)!;
-          const note = workNote(d.weapon, horde.posts[hit.postId]!);
-          if (note) hud.toast(`${defenderLabel(d)} ${note}`);
           horde = moved.state;
           selectedDefender = null;
           return;

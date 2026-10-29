@@ -33,11 +33,11 @@ export interface GameState {
   roster: RosterDefender[];
 }
 
-// The starter roster: one weapon per profession (design §11).
+// The starter roster: one per profession, each with a pistol (design §6, §11).
 const STARTER_ROSTER: readonly DefenderSpec[] = [
-  { id: 'bob', name: 'Bob', weapon: 'pistol' },
-  { id: 'jack', name: 'Jack', weapon: 'knife' },
-  { id: 'john', name: 'John', weapon: 'toolkit' },
+  { id: 'bob', name: 'Bob', loadout: { primary: 'pistol', secondary: null, item: null } },
+  { id: 'jack', name: 'Jack', loadout: { primary: 'pistol', secondary: 'knife', item: null } },
+  { id: 'john', name: 'John', loadout: { primary: 'pistol', secondary: 'toolkit', item: null } },
 ];
 
 export function newGame(): GameState {
@@ -48,6 +48,7 @@ export function newGame(): GameState {
     tiers: [...START_TIERS],
     roster: STARTER_ROSTER.map((d) => ({
       ...d,
+      loadout: { ...d.loadout },
       xp: 0,
       stats: { ...NO_STATS },
       injuredUntil: null,
@@ -178,7 +179,12 @@ export function startHorde(
   }
   return newHorde(seed, {
     hordeNumber: game.hordeNumber,
-    roster: fit.map(({ id, name, weapon, stats }) => ({ id, name, weapon, stats: { ...stats } })),
+    roster: fit.map(({ id, name, loadout, stats }) => ({
+      id,
+      name,
+      loadout: { ...loadout },
+      stats: { ...stats },
+    })),
     startDefenderId: defenderId,
     base: game.base,
     startPostId: postId,

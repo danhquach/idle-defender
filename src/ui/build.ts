@@ -19,16 +19,7 @@ import { available, type GameState, type RosterDefender } from '../core/game.ts'
 import { layoutOf } from '../core/horde.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
-import {
-  clockTime,
-  defenderLabel,
-  el,
-  POST_NAME,
-  postName,
-  slotName,
-  stockText,
-  workNote,
-} from './hud.ts';
+import { clockTime, defenderLabel, el, POST_NAME, postName, slotName, stockText } from './hud.ts';
 import type { SlotHit } from './projection.ts';
 
 /** What the backup section says about a refused code. */
@@ -230,24 +221,14 @@ export function createBuildPanel(
     }
     const posts = el('select', 'build-select');
     const usable = usablePosts(game.base);
-    /** Post names, each with a note where the picked defender can't work from it. */
-    const namePosts = (): void => {
-      const weapon = fit.find((d) => d.id === defenders.value)?.weapon;
-      usable.forEach((p, i) => {
-        const note = weapon ? workNote(weapon, p) : '';
-        posts.options[i]!.textContent = postName(p) + (note ? ` · ${note}` : '');
-      });
-    };
     for (const p of usable) {
-      const o = el('option', '');
+      const o = el('option', '', postName(p));
       o.value = postKey(p);
       o.selected = picked !== null && game.base.posts[picked.postId] === p;
       posts.append(o);
     }
-    namePosts();
     defenders.addEventListener('change', () => {
       defenderId = defenders.value;
-      namePosts();
     });
     posts.addEventListener('change', () => {
       startKey = posts.value;

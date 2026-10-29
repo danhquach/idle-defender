@@ -14,6 +14,7 @@ import {
   summarise,
 } from './sim.ts';
 import { NO_STATS } from './stats.ts';
+import { loadoutFrom } from './loadout.ts';
 
 /** Horde 1 on the starting base: bob on post 0, jack and john on the bench. */
 const fresh = (): HordeState => startHorde(newGame(), 1, 'bob', 0, 0);
@@ -70,7 +71,7 @@ describe('answerOffer', () => {
     const [bob] = s.defenders.splice(0, 1);
     s.posts[0]!.defenderId = null;
     s.injured.push({
-      defender: { id: 'bob', name: 'Bob', weapon: 'pistol' },
+      defender: { id: 'bob', name: 'Bob', loadout: loadoutFrom('pistol') },
       postId: bob!.postId,
       at: 0,
       offered: false,

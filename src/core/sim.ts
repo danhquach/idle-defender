@@ -3,7 +3,7 @@
 // by the balance tests and the `npm run balance` report without playing by hand.
 import { repairSegment } from './base.ts';
 import { chooseCard, postUsable } from './cards.ts';
-import { PROFESSION_STAT, WEAPONS } from './data.ts';
+import { PROFESSION_STAT } from './data.ts';
 import {
   available,
   finishHorde,
@@ -14,6 +14,7 @@ import {
   type GameState,
 } from './game.ts';
 import { layoutOf, tick, type HordeState, type Outcome } from './horde.ts';
+import { professionOf } from './loadout.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { unspentPoints } from './stats.ts';
 
@@ -110,11 +111,11 @@ export function repairWhatYouCan(game: GameState): GameState {
   return { ...game, base, stock };
 }
 
-/** The scripted player's stat points: every one into the stat of the weapon held. */
+/** The scripted player's stat points: every one into the stat of the profession worked. */
 export function spendAll(game: GameState): GameState {
   let g = game;
   for (const d of game.roster) {
-    const stat = PROFESSION_STAT[WEAPONS[d.weapon].profession];
+    const stat = PROFESSION_STAT[professionOf(d.loadout)];
     for (let n = unspentPoints(d); n > 0; n--) {
       const r = spendPoint(g, d.id, stat);
       if (r.ok) g = r.game;

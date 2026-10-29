@@ -13,6 +13,7 @@ import {
 } from '../core/base.ts';
 import {
   COLUMNS,
+  ITEMS,
   MATERIALS,
   POST_KINDS,
   RECOVERY_MS,
@@ -20,12 +21,14 @@ import {
   STATS,
   TIER_ORDER,
   WEAPONS,
+  type ItemId,
   type Stats,
   type Stock,
   type Tier,
   type WeaponId,
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
+import { loadoutError, loadoutFrom, type Loadout } from '../core/loadout.ts';
 import { earnedPoints, NO_STATS, spentPoints } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text } from './validate.ts';
 
@@ -46,6 +49,7 @@ const ID = /^[a-z][a-z0-9-]{0,31}$/;
 /** A defender name: plain letters, spaces, apostrophes and hyphens; no look-alikes or hidden marks. */
 const NAME = /^[A-Za-z][A-Za-z' -]{0,23}$/;
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
+const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
 
 /** The parts of `Storage` the save uses, so tests can pass a plain object. */
 export type SaveStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -221,26 +225,46 @@ function postOrder(a: BasePost, b: BasePost): number {
   return a.column - b.column || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || a.row - b.row;
 }
 
+/** A loadout the game allows (design §6): a gun as primary, a shield only with a blade. */
+function readLoadout(v: unknown): Loadout {
+  const o = obj(v, ['primary', 'secondary', 'item']);
+  const loadout: Loadout = {
+    primary: oneOf(o.primary, WEAPON_IDS),
+    secondary: o.secondary === null ? null : oneOf(o.secondary, WEAPON_IDS),
+    item: o.item === null ? null : oneOf(o.item, ITEM_IDS),
+  };
+  if (loadoutError(loadout) !== null) fail('bad loadout');
+  return loadout;
+}
+
 function readRoster(v: unknown, savedAt: number): RosterDefender[] {
   const list = arr(v, 1, MAX_ROSTER);
+  const lacks = (key: string): boolean =>
+    list.every((d) => typeof d === 'object' && d !== null && !Object.hasOwn(d, key));
   // A save from before stats (0.4.1 and older) has none on any defender: all 0.
-  const old = list.every((d) => typeof d === 'object' && d !== null && !Object.hasOwn(d, 'stats'));
+  // One from before loadouts (0.4.3 and older) has a single `weapon` on each instead.
+  const old = { stats: lacks('stats'), loadout: lacks('loadout') };
   const roster = list.map((d) => readDefender(d, savedAt, old));
   if (new Set(roster.map((d) => d.id)).size !== roster.length) fail('id twice');
   return roster;
 }
 
-const DEFENDER_KEYS = ['id', 'name', 'weapon', 'xp', 'injuredUntil'];
+const DEFENDER_KEYS = ['id', 'name', 'xp', 'injuredUntil'];
 
-function readDefender(v: unknown, savedAt: number, old: boolean): RosterDefender {
-  const o = obj(v, old ? DEFENDER_KEYS : [...DEFENDER_KEYS, 'stats']);
+function readDefender(
+  v: unknown,
+  savedAt: number,
+  old: { stats: boolean; loadout: boolean },
+): RosterDefender {
+  const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout'];
+  const o = obj(v, old.stats ? keys : [...keys, 'stats']);
   const xp = int(o.xp, 0, MAX_COUNT);
   return {
     id: text(o.id, 32, ID),
     name: text(o.name, 24, NAME),
-    weapon: oneOf(o.weapon, WEAPON_IDS),
+    loadout: old.loadout ? loadoutFrom(oneOf(o.weapon, WEAPON_IDS)) : readLoadout(o.loadout),
     xp,
-    stats: old ? { ...NO_STATS } : readStats(o.stats, xp),
+    stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
     // clock set back, a code from a device whose clock runs ahead) is cut to that.
     injuredUntil:

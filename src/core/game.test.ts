@@ -17,6 +17,7 @@ import {
 } from './game.ts';
 import { standing, type HordeState } from './horde.ts';
 import { NO_STATS, spentPoints } from './stats.ts';
+import { loadoutFrom } from './loadout.ts';
 
 const NOW = 1_000_000;
 
@@ -33,7 +34,7 @@ function withInjuryAndRecruit(h: HordeState, recruit: string): HordeState {
   const [d] = h.defenders.splice(0, 1);
   h.posts[d!.postId]!.defenderId = null;
   h.injured.push({
-    defender: { id: d!.id, name: d!.name, weapon: d!.weapon },
+    defender: { id: d!.id, name: d!.name, loadout: { ...d!.loadout } },
     postId: d!.postId,
     at: h.time,
     offered: true,
@@ -54,11 +55,11 @@ describe('game', () => {
     expect(g.base).toEqual(newBase());
     expect(g.stock).toEqual(START_STOCK);
     expect(g.tiers).toEqual(START_TIERS);
-    // One weapon per profession (design §11).
-    expect(g.roster.map((d) => [d.name, d.weapon])).toEqual([
-      ['Bob', 'pistol'],
-      ['Jack', 'knife'],
-      ['John', 'toolkit'],
+    // One per profession, each with a pistol (design §6, §11).
+    expect(g.roster.map((d) => [d.name, d.loadout])).toEqual([
+      ['Bob', { primary: 'pistol', secondary: null, item: null }],
+      ['Jack', { primary: 'pistol', secondary: 'knife', item: null }],
+      ['John', { primary: 'pistol', secondary: 'toolkit', item: null }],
     ]);
     expect(g.roster.every((d) => d.xp === 0 && d.injuredUntil === null)).toBe(true);
     expect(g.roster.every((d) => spentPoints(d.stats) === 0)).toBe(true);
@@ -72,8 +73,8 @@ describe('game', () => {
     expect(h.posts[0]!.defenderId).toBeNull();
     expect(h.defenders.map((d) => d.id)).toEqual([g.roster[1]!.id]);
     expect(h.bench).toEqual([
-      { id: 'bob', name: 'Bob', weapon: 'pistol', stats: { ...NO_STATS } },
-      { id: 'john', name: 'John', weapon: 'toolkit', stats: { ...NO_STATS } },
+      { id: 'bob', name: 'Bob', loadout: loadoutFrom('pistol'), stats: { ...NO_STATS } },
+      { id: 'john', name: 'John', loadout: loadoutFrom('toolkit'), stats: { ...NO_STATS } },
     ]);
   });
 

@@ -6,7 +6,7 @@
 
 ## Roadmap
 
-M4 = ID-010 (weapons → professions, post rules) + ID-011 (XP, stat points, profession levels, titles) + ID-012 (roster screen, equip weapon) + ID-013 (weapon rarity and affixes). Each ticket's acceptance criteria are written here before it starts.
+M4 = ID-010 (weapons → professions, post rules) + ID-011 (XP, stat points, profession levels, titles) + ID-042 (loadouts: primary gun, secondary, item slot; design change of 2026-10-29, PR #55) + ID-012 (roster screen, equip loadout) + ID-013 (weapon rarity and affixes). Each ticket's acceptance criteria are written here before it starts.
 
 **M4 stand-ins and later work:**
 - **Stats:** professions work from the weapon alone until ID-011 adds Aim, Might, Tech and Grit.
@@ -18,9 +18,11 @@ M4 = ID-010 (weapons → professions, post rules) + ID-011 (XP, stat points, pro
 
 - Everything from the M1–M3 plans' Global Constraints still holds: core is pure, RNG only via `rng.ts`, text only via `textContent`, every number in `data.ts`, no new runtime dependency, public repo rules.
 - Player mistakes return `{ ok: false, reason }`; programmer errors throw `RangeError`.
-- Versions: ID-010 → `0.4.1`, ID-011 → `0.4.2`, ID-012 → `0.4.3`, ID-013 → `0.5.0` (milestone done).
+- Versions: ID-010 → `0.4.1`, ID-011 → `0.4.2`, design PR #55 → `0.4.3`, ID-042 → `0.4.4`, ID-012 → `0.4.5`, ID-013 → `0.5.0` (milestone done).
 
 ## Numbers (all in `data.ts`, starting points)
+
+*As of ID-010; ID-042 supersedes the weapon rules (loadouts, everyone shoots, no tower rule or recruit filter) and the pistol is now 6 damage with a 10-round magazine and 1.5 s reload — see the ID-042 section and design §6.*
 
 - `PROFESSIONS`: `gunner`, `ripper`, `engineer`, each with a display name.
 - `WEAPONS` (each names its profession):
@@ -138,6 +140,43 @@ M4 = ID-010 (weapons → professions, post rules) + ID-011 (XP, stat points, pro
 - UI: XP lines, the picker in `hud.ts`; `app.ts` applies the spends; `defenderLabel` uses the name tag.
 - Tests: `src/core/stats.test.ts` (new), `game.test.ts`, `sim.test.ts`, `save.test.ts`, `hud.test.ts`.
 - `docs/design.md` §6.
+
+## ID-042 — Loadouts: primary gun, secondary, item slot
+
+**Acceptance criteria** (also on issue #54; PM decision, 2026-10-29: every defender carries a gun, close-quarter weapons come out only when an enemy is in reach; design §3, §6 as merged in PR #55):
+
+**Loadout and profession**
+- A defender carries `loadout: { primary, secondary, item }`: primary a gun (sidearm or specialised), secondary a sidearm, blade, tool or none, item a shield or none. Profession from the loadout: blade → Ripper, tool → Engineer, anything else → Gunner.
+- New game: Bob pistol; Jack pistol + knife; John pistol + toolkit. A Ripper or Engineer on a tower fires their gun; recruits take any free post (the tower filter goes).
+
+**Fighting**
+- A blade or tool strikes only with an enemy within reach (50 px, not from a tower); otherwise the primary fires.
+- Every gun has a magazine and a reload: the last round starts the reload, which refills it when done.
+- A Gunner fires a sidearm secondary only while the primary reloads with an enemy within 200 px, and switches back when the reload ends.
+- A Gunner fires 15% faster, reloads 25% faster and gets +5% crit chance with any gun, pistol included. A non-Gunner with a specialised gun: −30% damage, +50% reload time. A sidearm in a non-Gunner's hands: no penalty, no bonus. Tested on the pistol and on a test-only rifle (no specialised gun ships until ID-013).
+- A sidearm fires while its holder walks between posts (at ground-post range); other guns and melee don't.
+- Aim and the Gunner title boost every gun shot; Might, cleave and the Ripper title every blade strike; tool strikes get no bonus; Tech and the Engineer title boost repair. Crit chance (Aim + Gunner) is capped at 50%.
+- The toolkit strikes weakly up close and keeps repair and the fire-rate buff.
+- Shield: −30% damage taken; the holder's gun fires 20% slower and they walk 20% slower. A shield without a blade is refused.
+
+**Save**
+- Each roster entry saves `loadout`. A pre-0.4.4 entry's `weapon` maps to a loadout (pistol → pistol; knife → pistol + knife; toolkit → pistol + toolkit), item empty. Invalid combinations (a blade or tool as primary, a specialised gun as secondary, a shield without a blade) refuse the save. Hostile payloads tested; `security-devops` audit of the save change.
+
+**Balance**
+- The `balance.test.ts` targets still hold (all three now shoot, and Bob's Gunner bonus applies from Horde 1). Any retune is a `data.ts` number, listed in the PR.
+
+**General**
+- All numbers in `data.ts`. Design §3, §6 note the numbers as built. Version `0.4.4`.
+
+**Files:**
+- Modify `src/core/data.ts`: weapon kinds, magazines and reloads, `ITEMS`, `GUNNER`, `OFF_PROFESSION`, `SIDEARM_CLOSE`, `SHIELD`.
+- Create `src/core/loadout.ts`: `Loadout`, `professionOf`, `loadoutError`.
+- Modify `src/core/stats.ts`: per-weapon factors.
+- Modify `src/core/horde.ts`: weapon choice, magazines, reloads, walking sidearm, shield.
+- Modify `src/core/cards.ts`, `game.ts`, `sim.ts`: loadouts, no tower filter.
+- Modify `src/storage/save.ts`: `loadout`, old `weapon` mapping.
+- UI: `defenderLabel` from the loadout; `workNote` goes; the sprite shows the profession's weapon.
+- Tests: `src/core/loadout.test.ts` (new), `professions.test.ts`, `stats.test.ts`, `horde.test.ts`, `cards`/`rules`/`game`/`sim`, `save.test.ts`, `hud.test.ts`.
 
 ## ID-012 — Roster screen
 

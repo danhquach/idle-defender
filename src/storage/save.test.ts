@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RECOVERY_MS } from '../core/data.ts';
 import { newGame, recover } from '../core/game.ts';
+import type { Loadout } from '../core/loadout.ts';
 import {
   decodeSave,
   encodeSave,
@@ -188,8 +189,8 @@ describe('save', () => {
       const bob = (s: Loose) => s.game.roster[0];
       expect(hostile((s) => (s.game.roster = []))).toBeNull();
       expect(hostile((s) => s.game.roster.push({ ...bob(s) }))).toBeNull(); // same id
-      expect(hostile((s) => (bob(s).weapon = 'railgun'))).toBeNull();
-      // Weapon ids match exactly: no case, padding, look-alikes or prototype names.
+      expect(hostile((s) => (bob(s).loadout.primary = 'railgun'))).toBeNull();
+      // Weapon and item ids match exactly: no case, padding, look-alikes or prototype names.
       for (const weapon of [
         'Knife',
         ' knife',
@@ -207,7 +208,26 @@ describe('save', () => {
         { knife: true },
       ]) {
         expect(
-          hostile((s) => (bob(s).weapon = weapon)),
+          hostile((s) => (bob(s).loadout.primary = weapon)),
+          String(weapon),
+        ).toBeNull();
+        expect(
+          hostile((s) => (bob(s).loadout.secondary = weapon === null ? 'railgun' : weapon)),
+          String(weapon),
+        ).toBeNull();
+        // The old single `weapon` (before loadouts) goes through the same allow-list.
+        expect(
+          hostile((s) => {
+            for (const d of s.game.roster) {
+              delete d.loadout;
+              d.weapon = 'pistol';
+            }
+            bob(s).weapon = weapon;
+          }),
+          String(weapon),
+        ).toBeNull();
+        expect(
+          hostile((s) => (bob(s).loadout.item = weapon === null ? 'Shield' : weapon)),
           String(weapon),
         ).toBeNull();
       }
@@ -267,14 +287,84 @@ describe('save', () => {
     expect(hostile((s) => (s.game.base.layers[0].slots[1].maxHp = 'x'))).toBeNull();
   });
 
-  it('loads every weapon, and an older camp of three pistols unchanged', () => {
-    for (const weapon of ['pistol', 'knife', 'toolkit']) {
-      const loaded = hostile((s) => (s.game.roster[0].weapon = weapon)) as Loose;
-      expect(loaded.game.roster[0].weapon).toBe(weapon);
+  it('round-trips every loadout the game allows', () => {
+    const loadouts: Loadout[] = [
+      { primary: 'pistol', secondary: null, item: null },
+      { primary: 'pistol', secondary: 'pistol', item: null },
+      { primary: 'pistol', secondary: 'knife', item: null },
+      { primary: 'pistol', secondary: 'knife', item: 'shield' },
+      { primary: 'pistol', secondary: 'toolkit', item: null },
+    ];
+    for (const loadout of loadouts) {
+      const g = played();
+      g.roster[0]!.loadout = loadout;
+      expect(decodeSave(encodeSave(g, NOW)), JSON.stringify(loadout)).toEqual({
+        savedAt: NOW,
+        game: g,
+      });
     }
-    const old = played();
-    for (const d of old.roster) d.weapon = 'pistol';
-    expect(decodeSave(encodeSave(old, NOW))).toEqual({ savedAt: NOW, game: old });
+  });
+
+  it('loads a save from before loadouts: each weapon becomes a pistol plus that weapon', () => {
+    const old = hostile((s) => {
+      const weapons = ['pistol', 'knife', 'toolkit'];
+      s.game.roster.forEach((d: Loose, i: number) => {
+        delete d.loadout;
+        d.weapon = weapons[i];
+      });
+    }) as Loose;
+    expect(old.game.roster.map((d: Loose) => d.loadout)).toEqual([
+      { primary: 'pistol', secondary: null, item: null },
+      { primary: 'pistol', secondary: 'knife', item: null },
+      { primary: 'pistol', secondary: 'toolkit', item: null },
+    ]);
+    // A camp from before ID-010: three pistols, still three pistols.
+    const pistols = hostile((s) => {
+      for (const d of s.game.roster) {
+        delete d.loadout;
+        d.weapon = 'pistol';
+      }
+    }) as Loose;
+    expect(pistols.game.roster.every((d: Loose) => d.loadout.secondary === null)).toBe(true);
+  });
+
+  it('refuses loadouts the game does not allow, and mixed or hostile shapes', () => {
+    const set = (loadout: unknown) => hostile((s) => (s.game.roster[0].loadout = loadout));
+    // A blade or tool as primary; a shield without a blade.
+    expect(set({ primary: 'knife', secondary: null, item: null })).toBeNull();
+    expect(set({ primary: 'toolkit', secondary: 'pistol', item: null })).toBeNull();
+    expect(set({ primary: 'pistol', secondary: null, item: 'shield' })).toBeNull();
+    expect(set({ primary: 'pistol', secondary: 'toolkit', item: 'shield' })).toBeNull();
+    expect(set({ primary: 'pistol', secondary: 'pistol', item: 'shield' })).toBeNull();
+    // Exact shape: no missing, extra or prototype keys; an object, not a list.
+    expect(set({ primary: 'pistol', secondary: null })).toBeNull();
+    expect(set({ primary: 'pistol', secondary: null, item: null, ammo: 99 })).toBeNull();
+    expect(set(['pistol', null, null])).toBeNull();
+    expect(set('pistol')).toBeNull();
+    expect(set(null)).toBeNull();
+    const raw = encodeSave(played(), NOW).replace(
+      '"primary"',
+      '"__proto__":{"polluted":1},"primary"',
+    );
+    expect(decodeSave(raw)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    // Old and new shapes never mix: both keys on one defender, or one of each in a roster.
+    expect(hostile((s) => (s.game.roster[0].weapon = 'pistol'))).toBeNull();
+    expect(
+      hostile((s) => {
+        delete s.game.roster[0].loadout;
+        s.game.roster[0].weapon = 'knife';
+      }),
+    ).toBeNull();
+    // An old weapon is read through the same allow-list.
+    expect(
+      hostile((s) => {
+        for (const d of s.game.roster) {
+          delete d.loadout;
+          d.weapon = '__proto__';
+        }
+      }),
+    ).toBeNull();
   });
 
   it('round-trips stats, and loads a save from before stats with all 0', () => {

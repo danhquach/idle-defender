@@ -27,7 +27,7 @@ export function played(): GameState {
   const [bob] = h.defenders.splice(0, 1);
   h.posts[bob!.postId]!.defenderId = null;
   h.injured.push({
-    defender: { id: bob!.id, name: bob!.name, weapon: bob!.weapon },
+    defender: { id: bob!.id, name: bob!.name, loadout: { ...bob!.loadout } },
     postId: bob!.postId,
     at: 12.7,
     offered: true,
