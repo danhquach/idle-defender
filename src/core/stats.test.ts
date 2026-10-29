@@ -1,7 +1,7 @@
 // Design §6: defender levels, stat points and titles, and what they do in a fight.
 import { describe, expect, it } from 'vitest';
 import { buildPost, newBase, type Base, type BasePost } from './base.ts';
-import { STEP, type Stats, type Stock, type WeaponId } from './data.ts';
+import { STEP, WEAPONS, type Stats, type Stock, type WeaponId } from './data.ts';
 import { hordeXp } from './game.ts';
 import { newHorde, specOf, standing, tick, type DefenderSpec, type HordeState } from './horde.ts';
 import {
@@ -9,10 +9,12 @@ import {
   critChance,
   damageFactor,
   earnedPoints,
+  fireRateFactor,
   levelOf,
   maxHpOf,
   nameTag,
   NO_STATS,
+  reloadTime,
   repairFactor,
   spend,
   titleIn,
@@ -21,12 +23,14 @@ import {
   xpForLevel,
 } from './stats.ts';
 import { enemy, setup } from './testing.ts';
+import { loadoutFrom } from './loadout.ts';
 
 const stats = (s: Partial<Stats>): Stats => ({ ...NO_STATS, ...s });
+/** Bob carrying what `weapon` alone gave before loadouts: a pistol, plus a knife or toolkit. */
 const spec = (weapon: WeaponId, s: Partial<Stats> = {}): DefenderSpec => ({
   id: 'd',
   name: 'Bob',
-  weapon,
+  loadout: loadoutFrom(weapon),
   stats: stats(s),
 });
 const tough = { hp: 1000, maxHp: 1000 };
@@ -129,15 +133,18 @@ describe('titles', () => {
   });
 });
 
-describe('stat effects need a matching weapon (Grit any)', () => {
-  it('damage: +2% per point of Aim (Gunner) or Might (Ripper), times the title bonus', () => {
-    expect(damageFactor(spec('pistol', { aim: 5 }))).toBeCloseTo(1.1);
-    expect(damageFactor(spec('pistol', { aim: 10 }))).toBeCloseTo(1.2 * 1.05);
-    expect(damageFactor(spec('knife', { might: 25 }))).toBeCloseTo(1.5 * 1.15);
-    expect(damageFactor(spec('pistol', { might: 50, tech: 50, grit: 50 }))).toBe(1);
-    expect(damageFactor(spec('knife', { aim: 50 }))).toBe(1);
-    expect(damageFactor(spec('toolkit', { tech: 50, aim: 50 }))).toBe(1);
-    expect(damageFactor({ weapon: 'pistol' })).toBe(1);
+describe('stat effects per weapon (Grit any)', () => {
+  it('damage: Aim and the Gunner title on gun shots, Might and the Ripper title on blade strikes', () => {
+    expect(damageFactor(spec('pistol', { aim: 5 }), 'pistol')).toBeCloseTo(1.1);
+    expect(damageFactor(spec('pistol', { aim: 10 }), 'pistol')).toBeCloseTo(1.2 * 1.05);
+    expect(damageFactor(spec('knife', { might: 25 }), 'knife')).toBeCloseTo(1.5 * 1.15);
+    // Aim counts on a Ripper's pistol too; Might never does.
+    expect(damageFactor(spec('knife', { aim: 10 }), 'pistol')).toBeCloseTo(1.2 * 1.05);
+    expect(damageFactor(spec('pistol', { might: 50, tech: 50, grit: 50 }), 'pistol')).toBe(1);
+    expect(damageFactor(spec('knife', { aim: 50 }), 'knife')).toBe(1);
+    // A tool strike gets nothing.
+    expect(damageFactor(spec('toolkit', { tech: 50, aim: 50, might: 50 }), 'toolkit')).toBe(1);
+    expect(damageFactor({ loadout: loadoutFrom('pistol') }, 'pistol')).toBe(1);
   });
 
   it('repair: +2% per point of Tech, Engineers only, times the title bonus', () => {
@@ -146,24 +153,46 @@ describe('stat effects need a matching weapon (Grit any)', () => {
     expect(repairFactor(spec('pistol', { tech: 30 }))).toBe(1);
   });
 
-  it('crit: 0.5% per point of Aim, Gunners only, capped at 50%', () => {
-    expect(critChance(spec('pistol', { aim: 10 }))).toBeCloseTo(0.05);
+  it('crit: 0.5% per point of Aim for anyone, +5% for a Gunner, capped at 50%', () => {
+    expect(critChance(spec('pistol', {}))).toBeCloseTo(0.05);
+    expect(critChance(spec('pistol', { aim: 10 }))).toBeCloseTo(0.1);
     expect(critChance(spec('pistol', { aim: 100 }))).toBe(0.5);
     expect(critChance(spec('pistol', { aim: 1000 }))).toBe(0.5);
-    expect(critChance(spec('knife', { aim: 100 }))).toBe(0);
+    expect(critChance(spec('knife', { aim: 10 }))).toBeCloseTo(0.05);
+    expect(critChance(spec('knife', {}))).toBe(0);
+    expect(critChance(spec('toolkit', { might: 100 }))).toBe(0);
   });
 
-  it('cleave: 1% per point of Might, Rippers only, capped at 50%', () => {
+  it('cleave: 1% per point of Might, capped at 50% (blade strikes only, in the fight)', () => {
     expect(cleaveShare(spec('knife', { might: 20 }))).toBeCloseTo(0.2);
     expect(cleaveShare(spec('knife', { might: 60 }))).toBe(0.5);
-    expect(cleaveShare(spec('pistol', { might: 60 }))).toBe(0);
+    expect(cleaveShare(spec('pistol', { aim: 60 }))).toBe(0);
   });
 
-  it('Grit: +5 max HP per point with any weapon', () => {
+  it('fire rate and reload: a Gunner 15% faster and 25% quicker; a sidearm is plain for anyone else', () => {
+    expect(fireRateFactor(spec('pistol'), 'pistol')).toBeCloseTo(1.15);
+    expect(fireRateFactor(spec('knife'), 'pistol')).toBe(1);
+    expect(fireRateFactor(spec('toolkit'), 'pistol')).toBe(1);
+    expect(fireRateFactor(spec('knife'), 'knife')).toBe(1);
+    expect(reloadTime(spec('pistol'), 'pistol')).toBeCloseTo(WEAPONS.pistol.reload * 0.75);
+    expect(reloadTime(spec('knife'), 'pistol')).toBe(WEAPONS.pistol.reload);
+    expect(reloadTime(spec('toolkit'), 'pistol')).toBe(WEAPONS.pistol.reload);
+  });
+
+  it("a shield slows its holder's gun by 20%, not their blade", () => {
+    const shielded: DefenderSpec = {
+      ...spec('knife'),
+      loadout: { primary: 'pistol', secondary: 'knife', item: 'shield' },
+    };
+    expect(fireRateFactor(shielded, 'pistol')).toBeCloseTo(0.8);
+    expect(fireRateFactor(shielded, 'knife')).toBe(1);
+  });
+
+  it('Grit: +5 max HP per point with any loadout', () => {
     for (const w of ['pistol', 'knife', 'toolkit'] as const) {
       expect(maxHpOf(spec(w, { grit: 4 }))).toBe(120);
     }
-    expect(maxHpOf({ weapon: 'pistol' })).toBe(100);
+    expect(maxHpOf({ loadout: loadoutFrom('pistol') })).toBe(100);
   });
 });
 
@@ -179,12 +208,14 @@ describe('stats in a fight', () => {
     const s = newHorde(1, {
       ...setup(),
       roster: [
-        { id: 'a', name: 'A', weapon: 'pistol', stats: stats({ grit: 4 }) },
-        { id: 'b', name: 'B', weapon: 'knife', stats: stats({ might: 3 }) },
+        { id: 'a', name: 'A', loadout: loadoutFrom('pistol'), stats: stats({ grit: 4 }) },
+        { id: 'b', name: 'B', loadout: loadoutFrom('knife'), stats: stats({ might: 3 }) },
       ],
     });
     expect(s.defenders[0]).toMatchObject({ hp: 120, maxHp: 120, stats: stats({ grit: 4 }) });
-    expect(s.bench).toEqual([{ id: 'b', name: 'B', weapon: 'knife', stats: stats({ might: 3 }) }]);
+    expect(s.bench).toEqual([
+      { id: 'b', name: 'B', loadout: loadoutFrom('knife'), stats: stats({ might: 3 }) },
+    ]);
   });
 
   it('the injured and benched keep their stats (recruits and replacements bring them back)', () => {
@@ -192,25 +223,26 @@ describe('stats in a fight', () => {
     const copy = specOf(standing(d, newHorde(1, setup()).posts[0]!, 0));
     expect(copy).toEqual(d);
     expect(copy.stats).not.toBe(d.stats);
-    expect(specOf({ id: 'x', name: 'X', weapon: 'knife' })).toEqual({
+    expect(specOf({ id: 'x', name: 'X', loadout: loadoutFrom('knife') })).toEqual({
       id: 'x',
       name: 'X',
-      weapon: 'knife',
+      loadout: loadoutFrom('knife'),
     });
   });
 
   it('Aim adds damage to a Gunner shot', () => {
     const s = fight(newBase(), spec('pistol', { aim: 10 }), 'tower', 1);
     enemy(s, { ...tough, x: 900, y: 120 });
-    // Aim 10 can crit (5%); this seed's first roll doesn't.
+    // Aim 10 plus the Gunner's handling can crit (10%): either hit counts.
     const hit = 1000 - tick(s, STEP).enemies[0]!.hp;
-    expect([7 * 1.2 * 1.05, 7 * 1.2 * 1.05 * 2]).toContainEqual(expect.closeTo(hit, 9));
+    const one = WEAPONS.pistol.damage * 1.2 * 1.05;
+    expect([one, one * 2]).toContainEqual(expect.closeTo(hit, 9));
   });
 
   it('crits deal double, about as often as the chance says', () => {
     const s = fight(newBase(), spec('pistol', { aim: 100 }), 'tower', 1);
     enemy(s, { hp: 1e9, maxHp: 1e9, x: 900, y: 120 });
-    const base = 7 * 3 * 1.5;
+    const base = WEAPONS.pistol.damage * 3 * 1.5;
     const hits: number[] = [];
     let cur = s;
     for (let i = 0; i < 20_000 && hits.length < 400; i++) {
@@ -225,11 +257,11 @@ describe('stats in a fight', () => {
     expect(crits / 400).toBeLessThan(0.6);
   });
 
-  it('without Aim nothing rolls: the RNG is where it was', () => {
-    const s = fight(newBase(), spec('pistol', { might: 50, grit: 5 }), 'tower', 1);
+  it("with no crit chance nothing rolls: a Ripper's pistol without Aim leaves the RNG alone", () => {
+    const s = fight(newBase(), spec('knife', { might: 50, grit: 5 }), 'tower', 1);
     enemy(s, { ...tough, x: 900, y: 120 });
     const after = tick(s, STEP);
-    expect(after.enemies[0]!.hp).toBe(993);
+    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
     expect(after.rng).toEqual(s.rng);
   });
 
@@ -245,7 +277,7 @@ describe('stats in a fight', () => {
     expect(after.enemies.find((e) => e.id === far.id)!.hp).toBe(1000);
   });
 
-  it('a Gunner never cleaves and a Ripper never crits', () => {
+  it('a gun shot never cleaves and a blade strike never crits', () => {
     const g = fight(newBase(), spec('pistol', { might: 50 }), 'tower', 1);
     enemy(g, { ...tough, x: 900, y: 120 });
     const near = enemy(g, { ...tough, x: 900, y: 140 });

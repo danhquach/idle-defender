@@ -21,7 +21,7 @@ export const SEPARATION_SPEED = 60;
 /** How close to a wall an enemy must be to slide toward a broken segment. */
 export const GAP_SENSE = 200;
 
-// --- Professions (M4). The equipped weapon decides the profession; design §6. ---
+// --- Professions (M4). The loadout decides the profession; design §6. ---
 
 export type Profession = 'gunner' | 'ripper' | 'engineer';
 export const PROFESSIONS: Readonly<Record<Profession, { readonly name: string }>> = {
@@ -30,51 +30,80 @@ export const PROFESSIONS: Readonly<Record<Profession, { readonly name: string }>
   engineer: { name: 'Engineer' },
 };
 
-/** Gunners shoot within `range` (× the post's multiplier). */
-interface Gun {
+/**
+ * A gun shoots within `range` (× the post's multiplier), `magazine` rounds between
+ * reloads of `reload` s. A sidearm goes in either slot and suits everyone; a
+ * specialised gun is primary only and suits Gunners (design §6 Loadout).
+ */
+export interface Gun {
   readonly name: string;
-  readonly profession: 'gunner';
+  readonly kind: 'sidearm' | 'gun';
   readonly damage: number;
   readonly fireInterval: number;
   readonly range: number;
+  readonly magazine: number;
+  readonly reload: number;
 }
-/** Rippers strike within `reach` of their post; never from a tower. */
-interface Blade {
+/** A blade (secondary) strikes within `reach` of its holder's post; never from a tower. */
+export interface Blade {
   readonly name: string;
-  readonly profession: 'ripper';
+  readonly kind: 'blade';
   readonly damage: number;
   readonly fireInterval: number;
   readonly reach: number;
 }
 /**
- * Engineers shoot, weaker than a Gunner, and mostly repair: `repair` HP/s of their
- * layer (their row ±1); they speed up defenders within `buffRadius` by `ENGINEER_BUFF`.
+ * A tool (secondary) strikes weakly within `reach` and mostly repairs: `repair` HP/s
+ * of its holder's layer (their row ±1); it speeds up defenders within `buffRadius` by
+ * `ENGINEER_BUFF`.
  */
-interface Tool {
+export interface Tool {
   readonly name: string;
-  readonly profession: 'engineer';
+  readonly kind: 'tool';
   readonly damage: number;
   readonly fireInterval: number;
-  readonly range: number;
+  readonly reach: number;
   readonly repair: number;
   readonly buffRadius: number;
 }
 export type Weapon = Gun | Blade | Tool;
 
 export const WEAPONS = {
-  pistol: { name: 'Pistol', profession: 'gunner', damage: 7, fireInterval: 0.6, range: 600 },
-  knife: { name: 'Knife', profession: 'ripper', damage: 10, fireInterval: 0.5, reach: 50 },
+  pistol: {
+    name: 'Pistol',
+    kind: 'sidearm',
+    damage: 6,
+    fireInterval: 0.6,
+    range: 600,
+    magazine: 10,
+    reload: 1.5,
+  },
+  knife: { name: 'Knife', kind: 'blade', damage: 10, fireInterval: 0.5, reach: 50 },
   toolkit: {
     name: 'Toolkit',
-    profession: 'engineer',
+    kind: 'tool',
     damage: 4,
     fireInterval: 0.6,
-    range: 450,
+    reach: 50,
     repair: 3,
     buffRadius: 100,
   },
 } as const satisfies Record<string, Weapon>;
 export type WeaponId = keyof typeof WEAPONS;
+
+export type ItemId = 'shield';
+export const ITEMS: Readonly<Record<ItemId, { readonly name: string }>> = {
+  shield: { name: 'Shield' },
+};
+
+/** A Gunner with any gun: fire rate and reload speed up, crit chance on top of Aim's. */
+export const GUNNER = { fireRate: 0.15, reload: 0.25, crit: 0.05 } as const;
+/** A non-Gunner with a specialised gun: damage down, reload time up. */
+export const OFF_PROFESSION = { damage: 0.3, reload: 0.5 } as const;
+/** A Gunner's sidearm fires while the primary reloads, at enemies within this many px. */
+export const SIDEARM_CLOSE = 200;
+/** A shield (Ripper only): damage taken down; the holder's gun fire rate and walk speed down. */
+export const SHIELD = { damageTaken: 0.3, fireRate: 0.2, walk: 0.2 } as const;
 
 /** Fire-rate bonus for defenders beside an Engineer; several Engineers don't stack. */
 export const ENGINEER_BUFF = 0.15;
@@ -131,7 +160,7 @@ export const POST_OFFSET: Readonly<Record<PostKind, number>> = {
   tower: -80,
   ground: -160,
 };
-/** Range multiplier by post kind, for guns (Gunners and Engineers). */
+/** Range multiplier by post kind, for every gun; a sidearm fired on the move uses `ground`. */
 export const POST_RANGE: Readonly<Record<PostKind, number>> = {
   tower: 1.25,
   'wall-walk': 1,

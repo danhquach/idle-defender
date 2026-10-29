@@ -1,12 +1,10 @@
-// Design §3 and §6: the weapon decides the profession, and each post kind suits some
-// professions better than others.
+// Design §3 and §6: the loadout decides the profession. Everyone shoots; a blade or
+// tool comes out only when an enemy is in reach, and never from a tower.
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, newBase, type Base, type BasePost } from './base.ts';
 import { chooseCard, rollOffer } from './cards.ts';
-import { ENGINEER_BUFF, STEP, WEAPONS, type Stock, type WeaponId } from './data.ts';
+import { ENGINEER_BUFF, STEP, WALK_SPEED, WEAPONS, type Stock, type WeaponId } from './data.ts';
 import {
-  canWork,
-  defenderRange,
   engineerBuff,
   newHorde,
   standing,
@@ -15,6 +13,7 @@ import {
   type DefenderSpec,
   type HordeState,
 } from './horde.ts';
+import { loadoutFrom, type Loadout } from './loadout.ts';
 import { createRng } from './rng.ts';
 import { enemy, setup } from './testing.ts';
 
@@ -32,7 +31,17 @@ function baseWith(...extra: BasePost[]): Base {
   return base;
 }
 
-const spec = (id: string, weapon: WeaponId): DefenderSpec => ({ id, name: id, weapon });
+/** `id` carrying what `weapon` gave before loadouts: a pistol, plus a knife or toolkit. */
+const spec = (id: string, weapon: WeaponId): DefenderSpec => ({
+  id,
+  name: id,
+  loadout: loadoutFrom(weapon),
+});
+const shielded = (id: string): DefenderSpec => ({
+  id,
+  name: id,
+  loadout: { primary: 'pistol', secondary: 'knife', item: 'shield' } satisfies Loadout,
+});
 
 /**
  * A horde on `base` with no spawns left and nobody on a post; `place` then puts each
@@ -53,26 +62,14 @@ function fight(base: Base, ...place: [DefenderSpec, BasePost['kind'], number][])
 }
 
 const tough = { hp: 1000, maxHp: 1000 };
+/** Shot times in `s`'s trail not yet in `seen`, added to it. */
+function newShots(s: HordeState, seen: Set<number>): number[] {
+  const fresh = s.shots.map((x) => x.at).filter((at) => !seen.has(at));
+  for (const at of fresh) seen.add(at);
+  return fresh;
+}
 
-describe('canWork', () => {
-  it('a Ripper can work anywhere but a tower; guns and toolkits anywhere', () => {
-    for (const kind of ['tower', 'wall-walk', 'ground'] as const) {
-      expect(canWork('pistol', { kind })).toBe(true);
-      expect(canWork('toolkit', { kind })).toBe(true);
-      expect(canWork('knife', { kind })).toBe(kind !== 'tower');
-    }
-  });
-
-  it('every weapon names its profession', () => {
-    expect(Object.entries(WEAPONS).map(([id, w]) => [id, w.profession])).toEqual([
-      ['pistol', 'gunner'],
-      ['knife', 'ripper'],
-      ['toolkit', 'engineer'],
-    ]);
-  });
-});
-
-describe('Ripper', () => {
+describe('Ripper (pistol + knife)', () => {
   const base = baseWith(
     { kind: 'wall-walk', column: 0, row: 2 },
     { kind: 'ground', column: 0, row: 2 },
@@ -86,22 +83,23 @@ describe('Ripper', () => {
     expect(after.shots).toEqual([expect.objectContaining({ melee: true })]);
   });
 
-  it('reaches 50 px from the post, no further', () => {
+  it('reaches 50 px from the post; past that they shoot their pistol instead', () => {
     const s = fight(base, [spec('j', 'knife'), 'wall-walk', 2]);
     // The post is at (510, 200): 10 px in x, so 48 px in y is in reach and 50 is not.
     enemy(s, { ...tough, x: 520, y: 250 });
-    expect(tick(s, STEP).enemies[0]!.hp).toBe(1000);
+    const shot = tick(s, STEP);
+    expect(shot.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
+    expect(shot.shots).toEqual([expect.objectContaining({ melee: false })]);
     s.enemies[0]!.y = 248;
     expect(tick(s, STEP).enemies[0]!.hp).toBe(990);
   });
 
-  it('never strikes from a tower, even an enemy in the camp beside them', () => {
+  it('on a tower, shoots even an enemy in the camp beside them', () => {
     const s = fight(base, [spec('j', 'knife'), 'tower', 1]);
     enemy(s, { ...tough, x: 430, y: 120, inCamp: true });
-    const after = tick(s, 2);
-    expect(after.enemies[0]!.hp).toBe(1000);
-    expect(after.shots).toEqual([]);
-    expect(defenderRange(s, s.posts[1]!, s.defenders[0]!)).toBe(0);
+    const after = tick(s, STEP);
+    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
+    expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
   });
 
   it('fights an enemy that broke through, from a ground post', () => {
@@ -110,37 +108,104 @@ describe('Ripper', () => {
     expect(tick(s, STEP).enemies[0]!.hp).toBe(990);
   });
 
-  it('cards: damage and rate count, Long Sight leaves the reach alone', () => {
+  it('cards: damage and rate count on a strike, Long Sight leaves the reach alone', () => {
     const s = fight(base, [spec('j', 'knife'), 'wall-walk', 2]);
     s.mods = { damage: 1.2, fireRate: 1.25, range: 1.15 };
-    expect(defenderRange(s, s.posts[3]!, s.defenders[0]!)).toBe(50);
     enemy(s, { ...tough, x: 520, y: 200 });
     const after = tick(s, STEP);
     expect(after.enemies[0]!.hp).toBe(988);
     expect(after.defenders[0]!.nextShotAt).toBeCloseTo(0.5 / 1.25);
+    s.enemies[0]!.y = 250;
+    expect(tick(s, STEP).shots).toEqual([expect.objectContaining({ melee: false })]);
   });
 
-  it('a walking Ripper never strikes', () => {
+  it('a walking Ripper never strikes, but their pistol fires on the move', () => {
     const s = fight(base, [spec('j', 'knife'), 'wall-walk', 2]);
     s.defenders[0]!.walking = true;
     s.defenders[0]!.x = 600; // far from the post: still on the way
     enemy(s, { ...tough, x: 520, y: 200 });
-    expect(tick(s, STEP).enemies[0]!.hp).toBe(1000);
+    const after = tick(s, STEP);
+    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
+    expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
+  });
+
+  it('reloads the pistol at the plain speed', () => {
+    const s = fight(newBase(), [spec('j', 'knife'), 'tower', 1]);
+    s.defenders[0]!.ammo.primary = 1;
+    enemy(s, { ...tough, x: 900, y: 120 });
+    const after = tick(s, STEP);
+    expect(after.defenders[0]!.ammo.primary).toBe(0);
+    expect(after.defenders[0]!.reloadedAt.primary).toBeCloseTo(WEAPONS.pistol.reload);
+    expect(after.defenders[0]!.nextShotAt).toBeCloseTo(WEAPONS.pistol.fireInterval);
   });
 });
 
-describe('Engineer', () => {
-  it('shoots, weaker than a Gunner: less damage and range, gun post multipliers', () => {
+describe('Gunner (pistol)', () => {
+  it('fires 15% faster', () => {
+    const s = fight(newBase(), [spec('g', 'pistol'), 'tower', 1]);
+    enemy(s, { ...tough, x: 900, y: 120 });
+    const g = tick(s, STEP).defenders[0]!;
+    expect(g.nextShotAt).toBeCloseTo(0.6 / 1.15);
+  });
+
+  it('starts with a full magazine; the last round starts a 25% quicker reload', () => {
+    const s = fight(newBase(), [spec('g', 'pistol'), 'tower', 1]);
+    expect(s.defenders[0]!.ammo).toEqual({ primary: WEAPONS.pistol.magazine, secondary: 0 });
+    s.defenders[0]!.ammo.primary = 1;
+    enemy(s, { ...tough, x: 900, y: 120 });
+    let t = tick(s, STEP);
+    const done = 1.5 * 0.75;
+    expect(t.defenders[0]!.ammo.primary).toBe(0);
+    expect(t.defenders[0]!.reloadedAt.primary).toBeCloseTo(done);
+    // No shot until the reload ends, then a full magazine and a shot that same step.
+    const seen = new Set<number>([0]);
+    let next: number | undefined;
+    while (next === undefined && t.time < 3) {
+      t = tick(t, STEP);
+      next = newShots(t, seen)[0];
+    }
+    expect(next).toBeGreaterThanOrEqual(done - 1e-9);
+    expect(next).toBeLessThan(done + STEP);
+    expect(t.defenders[0]!.ammo.primary).toBe(WEAPONS.pistol.magazine - 1);
+  });
+
+  it('fires the pistol on the move, at ground-post range from where they are', () => {
+    const s = fight(newBase(), [spec('g', 'pistol'), 'tower', 1]);
+    const g = s.defenders[0]!;
+    g.walking = true;
+    g.x = 300;
+    g.y = 300;
+    enemy(s, { ...tough, x: 300 + 440, y: 300 }); // ground range 450
+    const after = tick(s, STEP);
+    expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
+    expect(after.shots[0]!.fromX).toBe(after.defenders[0]!.x);
+    s.enemies[0]!.x = 300 + 460;
+    expect(tick(s, STEP).shots).toEqual([]);
+  });
+});
+
+describe('Engineer (pistol + toolkit)', () => {
+  const base = baseWith({ kind: 'wall-walk', column: 0, row: 2 });
+
+  it('strikes weakly with the toolkit up close, with no stat bonus', () => {
+    const s = fight(base, [
+      { ...spec('e', 'toolkit'), stats: { aim: 0, might: 30, tech: 30, grit: 0 } },
+      'wall-walk',
+      2,
+    ]);
+    enemy(s, { ...tough, x: 520, y: 200 });
+    const after = tick(s, STEP);
+    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.toolkit.damage);
+    expect(after.shots).toEqual([expect.objectContaining({ melee: true })]);
+  });
+
+  it('shoots their pistol at range, plain (no Gunner handling)', () => {
     const s = fight(newBase(), [spec('e', 'toolkit'), 'tower', 1]);
-    expect(defenderRange(s, s.posts[0]!, s.defenders[0]!)).toBe(450 * 1.25);
     enemy(s, { ...tough, x: 900, y: 120 });
     const after = tick(s, STEP);
-    expect(after.enemies[0]!.hp).toBe(996);
+    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
     expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
-    const pistol = WEAPONS.pistol;
-    const toolkit = WEAPONS.toolkit;
-    expect(toolkit.damage / toolkit.fireInterval).toBeLessThan(pistol.damage / pistol.fireInterval);
-    expect(toolkit.range).toBeLessThan(pistol.range);
+    expect(after.defenders[0]!.nextShotAt).toBeCloseTo(WEAPONS.pistol.fireInterval);
   });
 
   /** An Engineer on the lower tower (row 3): their reach is layer 0, rows 2–4. */
@@ -228,11 +293,11 @@ describe('Engineer', () => {
       expect(engineerBuff(pair(100.5), pair(100.5).defenders[0]!)).toBe(1);
     });
 
-    it('shows in the fire rate', () => {
+    it('shows in the fire rate, on top of the Gunner handling', () => {
       const s = pair(80);
       enemy(s, { ...tough, x: 900, y: 120 });
       const g = tick(s, STEP).defenders.find((d) => d.id === 'g')!;
-      expect(g.nextShotAt).toBeCloseTo(0.6 / (1 + ENGINEER_BUFF));
+      expect(g.nextShotAt).toBeCloseTo(0.6 / (1 + ENGINEER_BUFF) / 1.15);
     });
 
     it("doesn't stack, skips the Engineer, and needs them standing", () => {
@@ -245,7 +310,7 @@ describe('Engineer', () => {
       expect(engineerBuff(walking, walking.defenders[0]!)).toBe(1);
     });
 
-    it('two Engineers side by side speed each other up (they shoot too)', () => {
+    it('two Engineers side by side speed each other up', () => {
       const s = fight(
         newBase(),
         [spec('e', 'toolkit'), 'tower', 1],
@@ -257,20 +322,40 @@ describe('Engineer', () => {
   });
 });
 
+describe('shield (Ripper only)', () => {
+  it('takes 30% less damage from an enemy in the camp', () => {
+    const hit = (d: DefenderSpec): number => {
+      const s = fight(newBase(), [d, 'tower', 1]);
+      enemy(s, { ...tough, x: 430, y: 120, inCamp: true });
+      return 100 - tick(s, STEP).defenders[0]!.hp;
+    };
+    expect(hit(spec('j', 'knife'))).toBe(5);
+    expect(hit(shielded('j'))).toBeCloseTo(3.5);
+  });
+
+  it('slows the holder: their gun fires 20% slower, they walk 20% slower', () => {
+    const s = fight(newBase(), [shielded('j'), 'tower', 1]);
+    enemy(s, { ...tough, x: 900, y: 120 });
+    expect(tick(s, STEP).defenders[0]!.nextShotAt).toBeCloseTo(0.6 / 0.8);
+    const w = fight(newBase(), [shielded('j'), 'tower', 1]);
+    w.defenders[0]!.walking = true;
+    w.defenders[0]!.x = 0;
+    expect(tick(w, STEP).defenders[0]!.x).toBeCloseTo(WALK_SPEED * 0.8 * STEP);
+  });
+});
+
 describe('recruits', () => {
   const recruitCards = (s: HordeState): Card[] =>
     Array.from({ length: 200 }, (_, seed) => rollOffer(createRng(seed), s)).flat();
 
-  it('never offers a Ripper with only towers free; offers the others', () => {
+  it('offers anyone while a post is free, towers included', () => {
     const s = fight(newBase(), [spec('g', 'pistol'), 'tower', 1]);
-    s.bench = [spec('j', 'knife')];
-    expect(recruitCards(s).some((c) => c.kind === 'recruit')).toBe(false);
     s.bench = [spec('j', 'knife'), spec('e', 'toolkit')];
     const offered = recruitCards(s).flatMap((c) => (c.kind === 'recruit' ? [c.defender.id] : []));
-    expect(new Set(offered)).toEqual(new Set(['e']));
+    expect(new Set(offered)).toEqual(new Set(['j', 'e']));
   });
 
-  it('a Ripper goes to the post furthest forward they can work from', () => {
+  it('a Ripper goes to the post furthest forward, a tower too', () => {
     const base = baseWith({ kind: 'ground', column: 0, row: 4 });
     const s = fight(base, [spec('g', 'pistol'), 'tower', 1]);
     s.bench = [spec('j', 'knife')];
@@ -280,7 +365,6 @@ describe('recruits', () => {
       { kind: 'upgrade', id: 'reinforce' },
     ];
     const after = chooseCard(s, 0);
-    // The free tower is further forward, but a Ripper can't reach from it.
-    expect(after.posts.find((p) => p.defenderId === 'j')).toMatchObject({ kind: 'ground', row: 4 });
+    expect(after.posts.find((p) => p.defenderId === 'j')).toMatchObject({ kind: 'tower', row: 3 });
   });
 });

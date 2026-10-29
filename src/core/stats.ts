@@ -1,26 +1,29 @@
 // Defender levels, stat points and titles (design §6), and what they do in a fight.
-// A stat counts only with a matching weapon; Grit counts with any. Pure.
+// A stat counts per weapon (Aim on guns, Might on blades); Grit counts with any. Pure.
 import {
   DEFENDER_HP,
+  GUNNER,
   LEVEL_XP,
+  OFF_PROFESSION,
   POINTS_PER_LEVEL,
   PROFESSION_STAT,
   PROFESSIONS,
+  SHIELD,
   STAT_EFFECT,
   STATS,
   TITLES,
-  WEAPONS,
   type Profession,
   type Stat,
   type Stats,
   type WeaponId,
 } from './data.ts';
+import { gunOf, isGun, professionOf, weaponOf, type Loadout } from './loadout.ts';
 
 export const NO_STATS: Readonly<Stats> = { aim: 0, might: 0, tech: 0, grit: 0 };
 
 /** A defender as far as stats go; no `stats` means all 0. */
 export interface Statted {
-  weapon: WeaponId;
+  loadout: Loadout;
   stats?: Readonly<Stats>;
 }
 
@@ -100,46 +103,66 @@ export function nameTag(d: { name: string; stats?: Readonly<Stats> }): string {
   return t ? `${d.name} the ${PROFESSIONS[t.profession].name}` : d.name;
 }
 
-/** The profession `d` works as, and its points and title bonus there. */
-function matching(d: Statted): { profession: Profession; points: number; bonus: number } {
-  const profession = WEAPONS[d.weapon].profession;
+/** Stat points in `profession`'s stat, and its title bonus. */
+function feed(d: Statted, profession: Profession): { points: number; bonus: number } {
   const stats = d.stats ?? NO_STATS;
   return {
-    profession,
     points: stats[PROFESSION_STAT[profession]],
     bonus: titleIn(stats, profession)?.bonus ?? 0,
   };
 }
 
-/** Damage multiplier: Aim for a Gunner, Might for a Ripper, then the title bonus. An Engineer's shots get none. */
-export function damageFactor(d: Statted): number {
-  const m = matching(d);
-  if (m.profession === 'engineer') return 1;
-  return (1 + STAT_EFFECT.damage * m.points) * (1 + m.bonus);
+/** A specialised gun in a non-Gunner's hands (a sidearm suits everyone). */
+const offProfession = (d: Statted, weapon: WeaponId): boolean =>
+  weaponOf(weapon).kind === 'gun' && professionOf(d.loadout) !== 'gunner';
+
+/**
+ * Damage multiplier for a hit with `weapon`, per weapon (design §6): Aim and the
+ * Gunner title on every gun shot (less with an off-profession specialised gun), Might
+ * and the Ripper title on every blade strike; a tool strike gets none.
+ */
+export function damageFactor(d: Statted, weapon: WeaponId): number {
+  const kind = weaponOf(weapon).kind;
+  if (kind === 'tool') return 1;
+  const f = feed(d, kind === 'blade' ? 'ripper' : 'gunner');
+  const off = offProfession(d, weapon) ? 1 - OFF_PROFESSION.damage : 1;
+  return (1 + STAT_EFFECT.damage * f.points) * (1 + f.bonus) * off;
 }
 
 /** Repair multiplier for an Engineer: Tech, then the title bonus; 1 otherwise. */
 export function repairFactor(d: Statted): number {
-  const m = matching(d);
-  if (m.profession !== 'engineer') return 1;
-  return (1 + STAT_EFFECT.repair * m.points) * (1 + m.bonus);
+  if (professionOf(d.loadout) !== 'engineer') return 1;
+  const f = feed(d, 'engineer');
+  return (1 + STAT_EFFECT.repair * f.points) * (1 + f.bonus);
 }
 
-/** Crit chance from Aim, Gunners only, capped. */
+/** Crit chance of a gun shot: Aim, plus the Gunner's handling, capped. */
 export function critChance(d: Statted): number {
-  const m = matching(d);
-  return m.profession === 'gunner' ? Math.min(STAT_EFFECT.critCap, STAT_EFFECT.crit * m.points) : 0;
+  const gunner = professionOf(d.loadout) === 'gunner' ? GUNNER.crit : 0;
+  return Math.min(STAT_EFFECT.critCap, STAT_EFFECT.crit * feed(d, 'gunner').points + gunner);
 }
 
-/** Share of a strike's damage that cleaves nearby enemies, from Might, Rippers only, capped. */
+/** Share of a blade strike's damage that cleaves nearby enemies, from Might, capped. */
 export function cleaveShare(d: Statted): number {
-  const m = matching(d);
-  return m.profession === 'ripper'
-    ? Math.min(STAT_EFFECT.cleaveCap, STAT_EFFECT.cleave * m.points)
-    : 0;
+  return Math.min(STAT_EFFECT.cleaveCap, STAT_EFFECT.cleave * feed(d, 'ripper').points);
 }
 
-/** Max HP in a horde: the base plus Grit, whatever the weapon. */
+/** Fire-rate factor for `weapon` from the loadout: a Gunner's guns faster, a shield's holder's guns slower. */
+export function fireRateFactor(d: Statted, weapon: WeaponId): number {
+  if (!isGun(weapon)) return 1;
+  const gunner = professionOf(d.loadout) === 'gunner' ? 1 + GUNNER.fireRate : 1;
+  const shield = d.loadout.item === 'shield' ? 1 - SHIELD.fireRate : 1;
+  return gunner * shield;
+}
+
+/** Seconds to reload gun `weapon`: a Gunner's 25% faster, an off-profession specialised gun's 50% slower. */
+export function reloadTime(d: Statted, weapon: WeaponId): number {
+  const gunner = professionOf(d.loadout) === 'gunner' ? 1 - GUNNER.reload : 1;
+  const off = offProfession(d, weapon) ? 1 + OFF_PROFESSION.reload : 1;
+  return gunOf(weapon).reload * gunner * off;
+}
+
+/** Max HP in a horde: the base plus Grit, whatever the loadout. */
 export function maxHpOf(d: Statted): number {
   return DEFENDER_HP + STAT_EFFECT.gritHp * (d.stats ?? NO_STATS).grit;
 }

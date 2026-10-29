@@ -290,6 +290,12 @@ close-quarter weapons come out only when an enemy is close.
 - **Shield** (Ripper only, fills the item slot): −30% damage taken in
   hordes, so a Ripper can act as a tank; in exchange the holder's gun
   fires 20% slower and they walk 20% slower *(starting points)*.
+- **As built (ID-042, starting points):** pistol 6 damage every 0.6 s,
+  range 600, a 10-round magazine and a 1.5 s reload (it was 7 damage with
+  no reload: with every defender shooting, the camp out-gunned the
+  balance targets); knife 10 every 0.5 s, toolkit 4 every 0.6 s, both
+  reaching 50 px. A sidearm fired on the move uses ground-post range
+  (×0.75). One shot cooldown covers every weapon a defender carries.
 
 More professions later *(guess)*: Marksman (sniper rifles only, bigger
 bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).

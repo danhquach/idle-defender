@@ -14,21 +14,40 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   SEPARATION_SPEED,
+  SHIELD,
   SHOT_TRAIL,
+  SIDEARM_CLOSE,
   SPAWN_INTERVAL,
   STAT_EFFECT,
   STEP,
   WALK_SPEED,
   WALL,
   WAVE_BREAK,
-  WEAPONS,
   type EnemyKind,
   type Stats,
   type WeaponId,
 } from './data.ts';
+import {
+  gunOf,
+  isGun,
+  isSidearm,
+  meleeOf,
+  professionOf,
+  toolOf,
+  weaponOf,
+  type Loadout,
+} from './loadout.ts';
 import { openReplace } from './replace.ts';
 import { chance, int, rngFrom, type Rng, type RngState } from './rng.ts';
-import { cleaveShare, critChance, damageFactor, maxHpOf, repairFactor } from './stats.ts';
+import {
+  cleaveShare,
+  critChance,
+  damageFactor,
+  fireRateFactor,
+  maxHpOf,
+  reloadTime,
+  repairFactor,
+} from './stats.ts';
 import { enemyHp, waveCount, waveSize } from './waves.ts';
 
 export type UpgradeId = 'sharpshooter' | 'rapid-fire' | 'long-sight' | 'patch-up' | 'reinforce';
@@ -36,15 +55,16 @@ export type UpgradeId = 'sharpshooter' | 'rapid-fire' | 'long-sight' | 'patch-up
 export interface DefenderSpec {
   id: string;
   name: string;
-  weapon: WeaponId;
+  loadout: Loadout;
   /** Permanent stats from the roster (design §6); none means all 0. */
   stats?: Readonly<Stats>;
 }
 
 /** The spec a fight defender came from, stats and all. */
 export function specOf(d: DefenderSpec): DefenderSpec {
-  const { id, name, weapon, stats } = d;
-  return stats ? { id, name, weapon, stats: { ...stats } } : { id, name, weapon };
+  const { id, name, stats } = d;
+  const loadout = { ...d.loadout };
+  return stats ? { id, name, loadout, stats: { ...stats } } : { id, name, loadout };
 }
 export interface HordeSetup {
   hordeNumber: number;
@@ -89,9 +109,14 @@ export interface Post {
   /** Occupied by, or reserved for a defender walking to it. */
   defenderId: string | null;
 }
+export type Slot = 'primary' | 'secondary';
 /** A defender in the fight always holds a post: it stands on it, or walks to it. */
 export interface Defender extends DefenderSpec {
   nextShotAt: number;
+  /** Rounds left in each gun's magazine (0 for a blade, a tool or none). */
+  ammo: Record<Slot, number>;
+  /** When an empty gun's reload ends. */
+  reloadedAt: Record<Slot, number>;
   x: number;
   y: number;
   postId: number;
@@ -127,7 +152,7 @@ export interface ReplaceOffer {
   postId: number | null;
 }
 export type MoveResult = { ok: true; state: HordeState } | { ok: false; reason: string };
-/** A Gunner's shot, or a Ripper's strike (drawn short). */
+/** A gun's shot, or a blade or tool strike (drawn short). */
 export interface Shot {
   melee: boolean;
   fromX: number;
@@ -230,9 +255,12 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
 /** `spec` at full HP standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
 export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): Defender {
   const hp = maxHpOf(spec);
+  const full = (id: WeaponId | null): number => (id !== null && isGun(id) ? gunOf(id).magazine : 0);
   return {
     ...specOf(spec),
     nextShotAt,
+    ammo: { primary: full(spec.loadout.primary), secondary: full(spec.loadout.secondary) },
+    reloadedAt: { primary: 0, secondary: 0 },
     x: post.x,
     y: post.y,
     postId: post.id,
@@ -284,30 +312,22 @@ export function tick(state: HordeState, dt: number): HordeState {
   return s;
 }
 
-/** Whether a defender with `weapon` can do their job from `post`: a Ripper can't reach from a tower. */
-export function canWork(weapon: WeaponId, post: Pick<Post, 'kind'>): boolean {
-  return !(WEAPONS[weapon].profession === 'ripper' && post.kind === 'tower');
-}
-
-/** How far `defender` on `post` attacks: a gun's range × the post's, a Ripper's reach; 0 for one who can't. */
-export function defenderRange(state: HordeState, post: Post, defender: Defender): number {
-  const w = WEAPONS[defender.weapon];
-  if (!canWork(defender.weapon, post)) return 0;
-  return w.profession === 'ripper' ? w.reach : w.range * POST_RANGE[post.kind] * state.mods.range;
+/** How far `weapon` (a gun) reaches from `post`: its range × the post's × the cards'. */
+export function gunRange(state: HordeState, post: Pick<Post, 'kind'>, weapon: WeaponId): number {
+  return gunOf(weapon).range * POST_RANGE[post.kind] * state.mods.range;
 }
 
 /** Fire-rate factor for `defender` from a standing Engineer within reach (never stacked, never self). */
 export function engineerBuff(state: HordeState, defender: Defender): number {
   if (defender.walking) return 1;
-  const near = state.defenders.some((e) => {
-    const w = WEAPONS[e.weapon];
-    return (
+  const near = state.defenders.some(
+    (e) =>
       e !== defender &&
       !e.walking &&
-      w.profession === 'engineer' &&
-      Math.hypot(e.x - defender.x, e.y - defender.y) <= w.buffRadius + EPS
-    );
-  });
+      professionOf(e.loadout) === 'engineer' &&
+      Math.hypot(e.x - defender.x, e.y - defender.y) <=
+        toolOf(e.loadout.secondary!).buffRadius + EPS,
+  );
   return near ? 1 + ENGINEER_BUFF : 1;
 }
 
@@ -438,11 +458,11 @@ function spawn(s: HordeState, rng: Rng): void {
   }
 }
 
-/** Walkers step straight toward their post at `WALK_SPEED` and take it on arrival. */
+/** Walkers step straight toward their post at `WALK_SPEED` (slower with a shield) and take it on arrival. */
 function walk(s: HordeState): void {
-  const stride = WALK_SPEED * STEP;
   for (const d of s.defenders) {
     if (!d.walking) continue;
+    const stride = WALK_SPEED * (d.loadout.item === 'shield' ? 1 - SHIELD.walk : 1) * STEP;
     const post = s.posts[d.postId]!;
     const dist = Math.hypot(post.x - d.x, post.y - d.y);
     if (dist <= stride + EPS) {
@@ -456,38 +476,101 @@ function walk(s: HordeState): void {
   }
 }
 
+/** The focused enemy if within `range` of `(x, y)`, else the nearest within it (ties → lowest id). */
+function targetFrom(s: HordeState, x: number, y: number, range: number): Enemy | undefined {
+  const dist = (e: Enemy): number => Math.hypot(e.x - x, e.y - y);
+  const focus = s.enemies.find((e) => e.id === s.focusId && e.hp > 0);
+  if (focus && dist(focus) <= range) return focus;
+  let target: Enemy | undefined;
+  let best = Infinity;
+  for (const e of s.enemies) {
+    const d = dist(e);
+    if (e.hp <= 0 || d > range) continue;
+    if (d < best || (d === best && target && e.id < target.id)) {
+      target = e;
+      best = d;
+    }
+  }
+  return target;
+}
+
+/** Refills every empty gun whose reload has ended. */
+function reload(s: HordeState, d: Defender): void {
+  for (const slot of ['primary', 'secondary'] as const) {
+    const id = d.loadout[slot];
+    if (id !== null && isGun(id) && d.ammo[slot] === 0 && due(s.time, d.reloadedAt[slot])) {
+      d.ammo[slot] = gunOf(id).magazine;
+    }
+  }
+}
+
+/** A gun in `slot` with a round in it. */
+function loaded(d: Defender, slot: Slot): boolean {
+  const id = d.loadout[slot];
+  return id !== null && isGun(id) && d.ammo[slot] > 0;
+}
+
+/**
+ * What `d` uses this step and at whom (design §6 Loadout), or null: a blade or tool
+ * on an enemy in reach (standing, not on a tower); else the primary; else, for a
+ * Gunner whose primary reloads, a sidearm secondary at an enemy within
+ * `SIDEARM_CLOSE`. On the move only a sidearm fires, at ground-post range.
+ */
+function choose(
+  s: HordeState,
+  d: Defender,
+  post: Post,
+): { slot: Slot; target: Enemy; x: number; y: number } | null {
+  const { primary, secondary } = d.loadout;
+  if (d.walking) {
+    const slot: Slot | null =
+      isSidearm(primary) && loaded(d, 'primary')
+        ? 'primary'
+        : isSidearm(secondary) && loaded(d, 'secondary')
+          ? 'secondary'
+          : null;
+    if (slot === null) return null;
+    const target = targetFrom(s, d.x, d.y, gunRange(s, { kind: 'ground' }, d.loadout[slot]!));
+    return target ? { slot, target, x: d.x, y: d.y } : null;
+  }
+  if (secondary !== null && !isGun(secondary) && post.kind !== 'tower') {
+    const target = targetFrom(s, post.x, post.y, meleeOf(secondary).reach);
+    if (target) return { slot: 'secondary', target, x: post.x, y: post.y };
+  }
+  if (loaded(d, 'primary')) {
+    const target = targetFrom(s, post.x, post.y, gunRange(s, post, primary));
+    return target ? { slot: 'primary', target, x: post.x, y: post.y } : null;
+  }
+  if (professionOf(d.loadout) === 'gunner' && isSidearm(secondary) && loaded(d, 'secondary')) {
+    const range = Math.min(SIDEARM_CLOSE, gunRange(s, post, secondary!));
+    const target = targetFrom(s, post.x, post.y, range);
+    if (target) return { slot: 'secondary', target, x: post.x, y: post.y };
+  }
+  return null;
+}
+
 function fire(s: HordeState, rng: Rng): void {
   s.shots = s.shots.filter((shot) => s.time - shot.at < SHOT_TRAIL);
   for (const post of s.posts) {
-    const defender = s.defenders.find((d) => d.id === post.defenderId && !d.walking);
-    if (!defender || !due(s.time, defender.nextShotAt)) continue;
-    const weapon = WEAPONS[defender.weapon];
-    const range = defenderRange(s, post, defender);
-    if (range <= 0) continue;
-    const dist = (e: Enemy): number => Math.hypot(e.x - post.x, e.y - post.y);
-    const focus = s.enemies.find((e) => e.id === s.focusId && e.hp > 0);
-    let target = focus && dist(focus) <= range ? focus : undefined;
-    if (!target) {
-      let best = Infinity;
-      for (const e of s.enemies) {
-        const d = dist(e);
-        if (e.hp <= 0 || d > range) continue;
-        if (d < best || (d === best && target && e.id < target.id)) {
-          target = e;
-          best = d;
-        }
-      }
-    }
-    if (!target) continue;
-    // Crits roll only for those who can crit, so a fight without Aim replays as before.
-    const crit = critChance(defender);
+    const defender = s.defenders.find((d) => d.id === post.defenderId);
+    if (!defender) continue;
+    reload(s, defender);
+    if (!due(s.time, defender.nextShotAt)) continue;
+    const use = choose(s, defender, post);
+    if (!use) continue;
+    const { slot, target } = use;
+    const id = defender.loadout[slot]!;
+    const weapon = weaponOf(id);
+    const gun = isGun(id);
+    // Crits roll only when the chance is above 0, so a Ripper or Engineer without Aim leaves the RNG alone.
+    const crit = gun ? critChance(defender) : 0;
     const hit =
       weapon.damage *
       s.mods.damage *
-      damageFactor(defender) *
+      damageFactor(defender, id) *
       (crit > 0 && chance(rng, crit) ? STAT_EFFECT.critDamage : 1);
     target.hp -= hit;
-    const cleave = cleaveShare(defender);
+    const cleave = weapon.kind === 'blade' ? cleaveShare(defender) : 0;
     if (cleave > 0) {
       for (const e of s.enemies) {
         const near = Math.hypot(e.x - target.x, e.y - target.y) <= STAT_EFFECT.cleaveRadius + EPS;
@@ -495,11 +578,17 @@ function fire(s: HordeState, rng: Rng): void {
       }
     }
     defender.nextShotAt =
-      s.time + weapon.fireInterval / (s.mods.fireRate * engineerBuff(s, defender));
+      s.time +
+      weapon.fireInterval /
+        (s.mods.fireRate * engineerBuff(s, defender) * fireRateFactor(defender, id));
+    if (gun) {
+      defender.ammo[slot] -= 1;
+      if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadTime(defender, id);
+    }
     s.shots.push({
-      melee: weapon.profession === 'ripper',
-      fromX: post.x,
-      fromY: post.y,
+      melee: !gun,
+      fromX: use.x,
+      fromY: use.y,
       toX: target.x,
       toY: target.y,
       at: s.time,
@@ -514,8 +603,8 @@ function fire(s: HordeState, rng: Rng): void {
  */
 function repair(s: HordeState): void {
   for (const d of s.defenders) {
-    const w = WEAPONS[d.weapon];
-    if (d.walking || w.profession !== 'engineer') continue;
+    if (d.walking || professionOf(d.loadout) !== 'engineer') continue;
+    const w = toolOf(d.loadout.secondary!);
     const post = s.posts[d.postId]!;
     const layer = s.layers.find((l) => l.column === post.column);
     let worst: Segment | undefined;
@@ -692,9 +781,11 @@ function attack(s: HordeState, moves: Moves): void {
     if (!due(s.time, e.nextAttackAt)) continue;
     const enemy = ENEMIES[e.kind];
     let target: { hp: number } | null;
+    let damage = enemy.damage;
     if (e.inCamp) {
       const defender = moves.reached.get(e.id);
       if (defender) defender.hitBy = e.kind;
+      if (defender?.loadout.item === 'shield') damage *= 1 - SHIELD.damageTaken;
       target = defender ?? null;
     } else {
       const slide = moves.sliding.get(e.id);
@@ -703,7 +794,7 @@ function attack(s: HordeState, moves: Moves): void {
       target = e.x > stop.x ? null : stop.segment;
     }
     if (!target) continue;
-    target.hp = Math.max(0, target.hp - enemy.damage);
+    target.hp = Math.max(0, target.hp - damage);
     e.nextAttackAt = s.time + enemy.attackInterval;
   }
 }

@@ -9,10 +9,10 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   WALL,
-  WEAPONS,
   type Profession,
 } from '../core/data.ts';
 import type { Defender, HordeState, Layer } from '../core/horde.ts';
+import { professionOf } from '../core/loadout.ts';
 import type { Tier } from '../core/base.ts';
 import {
   depthSort,
@@ -54,15 +54,16 @@ const COLOR = {
 } as const;
 
 /**
- * Each defender carries their weapon, so the profession reads at a glance (design §15):
- * a Gunner's gun points at the horde, a Ripper's blade is raised, an Engineer's toolkit
- * hangs at their side.
+ * Each defender carries their loadout, so the profession reads at a glance (design §15):
+ * everyone's gun points at the horde; a Ripper's blade is raised above it, an
+ * Engineer's toolkit hangs below it, and a shield stands in front.
  */
 const WEAPON_ART: Readonly<Record<Profession, { colour: string; width: number }>> = {
   gunner: { colour: '#c9c3b6', width: 4 },
   ripper: { colour: '#eef3f7', width: 3 },
   engineer: { colour: '#e0892f', width: 0 },
 };
+const SHIELD_ART = { colour: '#8d6a43', width: 5 } as const;
 
 /** Muted top and front colours per wall tier. */
 const TIER_COLOR: Readonly<Record<Tier, { top: string; front: string }>> = {
@@ -164,34 +165,48 @@ function drawHpBar(
   ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, hp / maxHp), h);
 }
 
-/** The weapon in a defender's hand: on the horde's side (right), at chest height. */
+/** A straight stroke of `art` from `from` to `to`. */
+function stroke(
+  ctx: CanvasRenderingContext2D,
+  art: { colour: string; width: number },
+  from: { x: number; y: number; z: number },
+  to: { x: number; y: number; z: number },
+  cam: Camera,
+): void {
+  const a = project(from, cam);
+  const b = project(to, cam);
+  ctx.strokeStyle = art.colour;
+  ctx.lineWidth = Math.max(1, art.width * cam.zoom);
+  ctx.beginPath();
+  ctx.moveTo(a.sx, a.sy);
+  ctx.lineTo(b.sx, b.sy);
+  ctx.stroke();
+}
+
+/** The loadout in a defender's hands: on the horde's side (right), at chest height. */
 function drawWeapon(
   ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y' | 'weapon'>,
+  d: Pick<Defender, 'x' | 'y' | 'loadout'>,
   z0: number,
   cam: Camera,
 ): void {
-  const profession = WEAPONS[d.weapon].profession;
-  const art = WEAPON_ART[profession];
+  const profession = professionOf(d.loadout);
   const hand = { x: d.x + DEFENDER.halfWidth, y: d.y, z: z0 + DEFENDER.height * 0.55 };
-  const at = project(hand, cam);
-  ctx.strokeStyle = art.colour;
-  ctx.fillStyle = art.colour;
-  ctx.lineWidth = Math.max(1, art.width * cam.zoom);
-  if (profession === 'engineer') {
+  // Everyone's gun points level at the horde.
+  stroke(ctx, WEAPON_ART.gunner, hand, { ...hand, x: hand.x + 16 }, cam);
+  if (profession === 'ripper') {
+    const grip = { ...hand, z: hand.z + 4 };
+    stroke(ctx, WEAPON_ART.ripper, grip, { ...grip, x: grip.x + 6, z: grip.z + 16 }, cam);
+  } else if (profession === 'engineer') {
+    const at = project({ ...hand, z: hand.z - 12 }, cam);
     const size = 9 * cam.zoom;
+    ctx.fillStyle = WEAPON_ART.engineer.colour;
     ctx.fillRect(at.sx, at.sy, size, size * 0.8);
-    return;
   }
-  // A gun points level at the horde; a blade is raised.
-  const tip =
-    profession === 'gunner'
-      ? project({ ...hand, x: hand.x + 16 }, cam)
-      : project({ ...hand, x: hand.x + 6, z: hand.z + 16 }, cam);
-  ctx.beginPath();
-  ctx.moveTo(at.sx, at.sy);
-  ctx.lineTo(tip.sx, tip.sy);
-  ctx.stroke();
+  if (d.loadout.item === 'shield') {
+    const front = { x: hand.x + 4, y: d.y, z: z0 + 2 };
+    stroke(ctx, SHIELD_ART, front, { ...front, z: front.z + DEFENDER.height * 0.7 }, cam);
+  }
 }
 
 /**
@@ -200,7 +215,7 @@ function drawWeapon(
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'weapon'>,
+  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'loadout'>,
   z0: number,
   selected: boolean,
   cam: Camera,
