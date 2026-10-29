@@ -1,26 +1,23 @@
-// Wires the sim to the page: canvas, frame loop, camera and focus input, and the HUD.
-import { newBase } from '../core/base.ts';
+// Wires the game to the page: canvas, frame loop, camera and click input, the build
+// panel between hordes and the HUD in a fight.
 import { chooseCard } from '../core/cards.ts';
 import { FIELD } from '../core/data.ts';
-import {
-  enemyAt,
-  newHorde,
-  setFocus,
-  tick,
-  type HordeSetup,
-  type HordeState,
-} from '../core/horde.ts';
+import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
+import { enemyAt, layoutOf, setFocus, tick, type HordeState } from '../core/horde.ts';
+import { createBuildPanel } from './build.ts';
 import { createHud } from './hud.ts';
 import {
   clampCamera,
   MARGIN_Y,
+  slotAt,
   TILT,
   unproject,
   zoomAt,
   type Camera,
+  type SlotHit,
   type View,
 } from './projection.ts';
-import { drawScene } from './render.ts';
+import { drawScene, type Scene } from './render.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
 const MAX_DT = 0.1;
@@ -31,19 +28,6 @@ const WHEEL_ZOOM = 0.0015;
 const LINE_PX = 16;
 /** A press that moves less than this (CSS px) before release is a click, not a drag. */
 const CLICK_SLOP = 5;
-
-// Placeholder starter roster (names are placeholders until the roster ticket).
-const SETUP: HordeSetup = {
-  hordeNumber: 1,
-  roster: [
-    { id: 'bob', name: 'Bob', weapon: 'pistol' },
-    { id: 'jack', name: 'Jack', weapon: 'pistol' },
-    { id: 'john', name: 'John', weapon: 'pistol' },
-  ],
-  startDefenderId: 'bob',
-  base: newBase(),
-  startPostId: 0,
-};
 
 const PAN_KEYS: Record<string, [number, number]> = {
   ArrowLeft: [-1, 0],
@@ -64,17 +48,44 @@ export function start(root: HTMLElement): void {
   if (!context) throw new Error('start: no 2D canvas context');
   const ctx: CanvasRenderingContext2D = context;
 
-  // The seed is the only randomness from outside the core.
-  let state: HordeState = newHorde(Date.now(), SETUP);
+  // The game lives in memory until saving lands (ID-008); a reload starts a new one.
+  let game: GameState = newGame();
+  // The fight under way, or null in build mode.
+  let horde: HordeState | null = null;
+  let selected: SlotHit | null = null;
+
   const hud = createHud(
     root,
     (index) => {
-      if (state.offer) state = chooseCard(state, index);
+      if (horde?.offer) horde = chooseCard(horde, index);
     },
     () => {
-      state = newHorde(Date.now(), SETUP);
+      if (!horde || horde.outcome === 'fighting') return;
+      game = finishHorde(game, horde);
+      toBuild();
     },
   );
+  const panel = createBuildPanel(
+    root,
+    (base, stock) => {
+      game = { ...game, base, stock };
+      panel.show(game, selected);
+    },
+    (defenderId, postId) => {
+      // The seed is the only randomness from outside the core.
+      horde = startHorde(game, Date.now(), defenderId, postId);
+      selected = null;
+      panel.hide();
+      hud.show(true);
+    },
+  );
+  function toBuild(): void {
+    horde = null;
+    selected = null;
+    hud.show(false);
+    panel.show(game, selected);
+  }
+  toBuild();
 
   let view: View = { w: 0, h: 0 };
   // Starts framed on the whole field (the first resize fits the zoom to the width).
@@ -96,8 +107,14 @@ export function start(root: HTMLElement): void {
     return key in PAN_KEYS ? key : null;
   };
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !horde && selected) {
+      selected = null;
+      panel.show(game, selected);
+      return;
+    }
     const key = panKey(e);
-    if (!key || e.ctrlKey || e.metaKey || e.altKey) return;
+    // A focused picker keeps its own arrow keys and type-ahead.
+    if (!key || e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement) return;
     held.add(key);
     e.preventDefault();
   });
@@ -134,14 +151,21 @@ export function start(root: HTMLElement): void {
     drag = null;
     press = null;
   };
-  // A click focuses the shambler under it for every defender, or clears the focus on
-  // empty ground. Only finite canvas coordinates reach the core.
+  // In a fight a click focuses the shambler under it for every defender, or clears the
+  // focus on empty ground. In build mode it opens the slot under it (or closes the menu).
+  // Only finite canvas coordinates reach the hit tests, and only in-range grid slots
+  // from `slotAt` reach the core.
   canvas.addEventListener('pointerup', (e) => {
     const click = e.isPrimary && press?.click === true;
     endDrag(e);
     if (!click || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
     const ground = unproject({ sx: e.offsetX, sy: e.offsetY }, cam);
-    state = setFocus(state, enemyAt(state, ground.x, ground.y));
+    if (horde) {
+      horde = setFocus(horde, enemyAt(horde, ground.x, ground.y));
+    } else {
+      selected = slotAt(ground.x, ground.y, game.base);
+      panel.show(game, selected);
+    }
   });
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener(
@@ -165,7 +189,7 @@ export function start(root: HTMLElement): void {
     const dt = last === null || document.hidden ? 0 : Math.min(MAX_DT, (now - last) / 1000);
     last = document.hidden ? null : now;
     if (dt > 0) {
-      state = tick(state, dt);
+      if (horde) horde = tick(horde, dt);
       let dx = 0;
       let dy = 0;
       for (const key of held) {
@@ -183,9 +207,21 @@ export function start(root: HTMLElement): void {
         );
       }
     }
-    drawScene(ctx, state, cam, view);
-    hud.update(state);
+    if (horde) {
+      drawScene(ctx, horde, cam, view);
+      hud.update(horde);
+    } else {
+      drawScene(ctx, buildScene(game, panel.choice(game)), cam, view, { selected });
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+}
+
+/** The base as build mode shows it: no horde, the start defender on the picked post. */
+function buildScene(game: GameState, choice: { defenderId: string; postId: number } | null): Scene {
+  const { layers, posts } = layoutOf(game.base);
+  const post = choice ? posts[choice.postId] : undefined;
+  if (post && choice) post.defenderId = choice.defenderId;
+  return { layers, posts, enemies: [], shots: [], focusId: null };
 }

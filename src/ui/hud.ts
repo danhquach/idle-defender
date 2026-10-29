@@ -1,10 +1,12 @@
 // HUD over the canvas: status bar, the 1-of-3 card panel and the result panel.
 // Text reaches the page only through textContent.
 import { UPGRADES } from '../core/cards.ts';
+import { MATERIALS, type Stock } from '../core/data.ts';
+import { standInPayout } from '../core/game.ts';
 import type { Card, HordeState } from '../core/horde.ts';
 import { xpToNext } from '../core/waves.ts';
 
-function el<K extends keyof HTMLElementTagNameMap>(
+export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className: string,
   text = '',
@@ -31,22 +33,41 @@ export function statusText(s: HordeState): string {
   ].join(' · ');
 }
 
+/** Amounts as "5 scrap, 10 wood" in material order, skipping zeros; "nothing" if all are. */
+export function stockText(stock: Partial<Stock>): string {
+  const parts = MATERIALS.filter((m) => (stock[m] ?? 0) > 0).map((m) => `${stock[m]} ${m}`);
+  return parts.length > 0 ? parts.join(', ') : 'nothing';
+}
+
+export function payoutText(s: HordeState): string {
+  if (s.outcome === 'fighting') return '';
+  return `Payout: ${stockText(standInPayout(s.hordeNumber, s.outcome))}`;
+}
+
 export function createHud(
   root: HTMLElement,
   onChoose: (index: number) => void,
-  onRestart: () => void,
-): { update(state: HordeState): void } {
+  onDone: () => void,
+): { update(state: HordeState): void; show(visible: boolean): void } {
+  const hud = el('div', 'hud');
   const bar = el('div', 'hud-bar');
   const cards = el('div', 'hud-panel hud-cards');
   const result = el('div', 'hud-panel hud-result');
   const resultTitle = el('h2', 'hud-result-title');
-  const again = el('button', 'hud-button', 'Fight again');
-  again.type = 'button';
-  again.addEventListener('click', onRestart);
-  result.append(resultTitle, again);
+  const resultBody = el('p', 'hud-result-body');
+  const back = el('button', 'hud-button', 'Back to build');
+  back.type = 'button';
+  back.addEventListener('click', () => {
+    // Hide at once so a double click can't finish the same horde twice.
+    if (result.hidden) return;
+    result.hidden = true;
+    onDone();
+  });
+  result.append(resultTitle, resultBody, back);
   cards.hidden = true;
   result.hidden = true;
-  root.append(bar, cards, result);
+  hud.append(bar, cards, result);
+  root.append(hud);
 
   let shownOffer: Card[] | null = null;
   // Hide the panel at once: a second click or key before the next frame must not
@@ -82,6 +103,9 @@ export function createHud(
   }
 
   return {
+    show(visible) {
+      hud.hidden = !visible;
+    },
     update(state) {
       const status = statusText(state);
       if (bar.textContent !== status) bar.textContent = status;
@@ -98,7 +122,8 @@ export function createHud(
       if (result.hidden === fought) {
         result.hidden = !fought;
         resultTitle.textContent = state.outcome === 'won' ? 'Horde held' : 'The camp fell';
-        if (fought) again.focus();
+        resultBody.textContent = payoutText(state);
+        if (fought) back.focus();
       }
     },
   };

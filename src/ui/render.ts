@@ -1,23 +1,45 @@
 // Placeholder art (design §15): muted boxes for the base, saturated colour
 // only on the horde. Canvas 2D, no rendering library.
-import { CAMP, ENEMY_RADIUS, FIELD, SEGMENT_HEIGHT, WALL } from '../core/data.ts';
-import type { HordeState } from '../core/horde.ts';
-import { depthSort, project, type Camera, type View } from './projection.ts';
+import {
+  CAMP,
+  COLUMNS,
+  ENEMY_RADIUS,
+  FIELD,
+  POST_OFFSET,
+  SEGMENT_HEIGHT,
+  SEGMENTS,
+  WALL,
+} from '../core/data.ts';
+import type { HordeState, Layer, Post } from '../core/horde.ts';
+import type { Tier } from '../core/base.ts';
+import {
+  depthSort,
+  PIECE,
+  project,
+  wallHeight,
+  type Camera,
+  type SlotHit,
+  type View,
+} from './projection.ts';
 
 const COLOR = {
   sky: '#15171a',
   ground: '#2d2f31',
-  wallTop: '#8a7f6c',
-  wallFront: '#5e5546',
   brokenTop: '#4b4b4b',
   brokenFront: '#363636',
+  gateMark: '#2a2722',
   campTop: '#6e675b',
   campFront: '#4a453c',
   postTop: '#655f55',
   postFront: '#45413a',
+  groundPostTop: '#5a5f52',
+  groundPostFront: '#3f4339',
+  walkTop: '#9a8d74',
+  walkFront: '#6b604e',
   defenderTop: '#7d9cc0',
   defenderFront: '#4f6f94',
   shadow: 'rgba(0, 0, 0, 0.35)',
+  slot: 'rgba(216, 212, 204, 0.18)',
   enemy: '#7ccf3a',
   focus: '#ffe066',
   hpBack: '#c43b3b',
@@ -25,14 +47,27 @@ const COLOR = {
   shot: '#e8d36a',
 } as const;
 
-const WALL_HEIGHT = 40;
+/** Muted top and front colours per wall tier. */
+const TIER_COLOR: Readonly<Record<Tier, { top: string; front: string }>> = {
+  wood: { top: '#8a7f6c', front: '#5e5546' },
+  metal: { top: '#7b828c', front: '#535962' },
+  concrete: { top: '#a19f97', front: '#706e68' },
+  reinforced: { top: '#6c7a86', front: '#46515b' },
+};
+
 /** Gap drawn between wall segments so they read as separate pieces. */
 const SEGMENT_GAP = 2;
 const CAMP_BOX = { x0: CAMP.x - 90, x1: CAMP.x, height: 70 } as const;
-const POST = { halfWidth: 16, halfDepth: 24, height: 50 } as const;
 const DEFENDER = { halfWidth: 7, halfDepth: 10, height: 30 } as const;
 const ENEMY = { radius: ENEMY_RADIUS * 0.85, z: 10 } as const;
 const HP_BAR = { w: 24, h: 4, z: 30 } as const;
+
+/** What the renderer needs from a fight; build mode passes the base laid out the same way. */
+export type Scene = Pick<HordeState, 'layers' | 'posts' | 'enemies' | 'shots' | 'focusId'>;
+/** Build mode extras: empty slot outlines and the selected slot. */
+export interface BuildOverlay {
+  selected: SlotHit | null;
+}
 
 interface Box {
   x0: number;
@@ -56,13 +91,54 @@ function drawBox(ctx: CanvasRenderingContext2D, b: Box, cam: Camera): void {
   ctx.fillRect(backTop.sx, frontTop.sy, frontTop.sx - backTop.sx, frontBottom.sy - frontTop.sy);
 }
 
+/** A flat rectangle outline at height `z`. */
+function outline(
+  ctx: CanvasRenderingContext2D,
+  r: { x0: number; x1: number; y0: number; y1: number },
+  z: number,
+  cam: Camera,
+): void {
+  const a = project({ x: r.x0, y: r.y0, z }, cam);
+  const b = project({ x: r.x1, y: r.y1, z }, cam);
+  ctx.strokeRect(a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
+}
+
+/** A slot's ground footprint. */
+function footprint(slot: SlotHit): { x0: number; x1: number; y0: number; y1: number } {
+  const wx = COLUMNS[slot.column]!;
+  const y0 = slot.row * SEGMENT_HEIGHT;
+  if (slot.what === 'segment') {
+    return {
+      x0: wx,
+      x1: wx + WALL.depth,
+      y0: y0 + SEGMENT_GAP,
+      y1: y0 + SEGMENT_HEIGHT - SEGMENT_GAP,
+    };
+  }
+  const p = PIECE[slot.what];
+  const x = wx + POST_OFFSET[slot.what];
+  const cy = y0 + SEGMENT_HEIGHT / 2;
+  return { x0: x - p.halfWidth, x1: x + p.halfWidth, y0: cy - p.halfDepth, y1: cy + p.halfDepth };
+}
+
+const segmentOf = (layers: readonly Layer[], column: number, row: number) =>
+  layers.find((l) => l.column === column)?.segments[row];
+
+/** Height of a post's floor, where its defender stands. */
+function postTop(layers: readonly Layer[], post: Post): number {
+  if (post.kind !== 'wall-walk') return PIECE[post.kind].height;
+  const seg = segmentOf(layers, post.column, post.row);
+  return (seg ? wallHeight(seg.hp, seg.maxHp) : 0) + PIECE.walk.height;
+}
+
 type Sprite = { y: number; x: number; draw: () => void };
 
 export function drawScene(
   ctx: CanvasRenderingContext2D,
-  state: HordeState,
+  scene: Scene,
   cam: Camera,
   view: View,
+  build: BuildOverlay | null = null,
 ): void {
   ctx.fillStyle = COLOR.sky;
   ctx.fillRect(0, 0, view.w, view.h);
@@ -88,17 +164,41 @@ export function drawScene(
     cam,
   );
 
+  // Build mode: every empty slot as a faint outline on the ground.
+  if (build) {
+    ctx.strokeStyle = COLOR.slot;
+    ctx.lineWidth = 1;
+    for (let row = 0; row < SEGMENTS; row++) {
+      COLUMNS.forEach((_, column) => {
+        if (!segmentOf(scene.layers, column, row)?.kind) {
+          outline(ctx, footprint({ column, row, what: 'segment' }), 0, cam);
+        }
+        for (const what of ['tower', 'ground'] as const) {
+          const taken = scene.posts.some(
+            (p) => p.kind === what && p.column === column && p.row === row,
+          );
+          if (!taken) outline(ctx, footprint({ column, row, what }), 0, cam);
+        }
+      });
+    }
+  }
+
   const sprites: Sprite[] = [];
-  for (const layer of state.layers) {
+  for (const layer of scene.layers) {
     for (const seg of layer.segments) {
-      if (seg.kind === null) continue; // unbuilt: an open gap, nothing to draw
+      if (seg.kind === null || seg.tier === null) continue; // unbuilt: an open gap
       const broken = seg.hp <= 0;
+      const colour = broken
+        ? { top: COLOR.brokenTop, front: COLOR.brokenFront }
+        : TIER_COLOR[seg.tier];
       const y0 = seg.index * SEGMENT_HEIGHT;
+      const height = wallHeight(seg.hp, seg.maxHp);
+      const gate = seg.kind === 'gate';
       // Keyed just past the wall's front edge so enemies stopped at it draw on top.
       sprites.push({
         y: y0 + SEGMENT_HEIGHT / 2,
         x: layer.x + WALL.depth + 0.5,
-        draw: () =>
+        draw: () => {
           drawBox(
             ctx,
             {
@@ -107,17 +207,34 @@ export function drawScene(
               y0: y0 + SEGMENT_GAP,
               y1: y0 + SEGMENT_HEIGHT - SEGMENT_GAP,
               z0: 0,
-              height: broken ? WALL_HEIGHT * 0.3 : WALL_HEIGHT * (0.5 + 0.5 * (seg.hp / seg.maxHp)),
-              top: broken ? COLOR.brokenTop : COLOR.wallTop,
-              front: broken ? COLOR.brokenFront : COLOR.wallFront,
+              height,
+              ...colour,
             },
             cam,
-          ),
+          );
+          if (!gate) return;
+          // A gate: a dark band across the middle of its top face.
+          const g0 = project({ x: layer.x, y: y0 + SEGMENT_HEIGHT * 0.3, z: height }, cam);
+          const g1 = project(
+            { x: layer.x + WALL.depth, y: y0 + SEGMENT_HEIGHT * 0.7, z: height },
+            cam,
+          );
+          ctx.fillStyle = COLOR.gateMark;
+          ctx.fillRect(g0.sx, g0.sy, g1.sx - g0.sx, g1.sy - g0.sy);
+        },
       });
     }
   }
-  for (const post of state.posts) {
+  for (const post of scene.posts) {
     const manned = post.defenderId !== null;
+    const floor = postTop(scene.layers, post);
+    const p = post.kind === 'wall-walk' ? PIECE.walk : PIECE[post.kind];
+    const colour =
+      post.kind === 'tower'
+        ? { top: COLOR.postTop, front: COLOR.postFront }
+        : post.kind === 'ground'
+          ? { top: COLOR.groundPostTop, front: COLOR.groundPostFront }
+          : { top: COLOR.walkTop, front: COLOR.walkFront };
     sprites.push({
       y: post.y,
       x: post.x,
@@ -125,14 +242,13 @@ export function drawScene(
         drawBox(
           ctx,
           {
-            x0: post.x - POST.halfWidth,
-            x1: post.x + POST.halfWidth,
-            y0: post.y - POST.halfDepth,
-            y1: post.y + POST.halfDepth,
-            z0: 0,
-            height: POST.height,
-            top: COLOR.postTop,
-            front: COLOR.postFront,
+            x0: post.x - p.halfWidth,
+            x1: post.x + p.halfWidth,
+            y0: post.y - p.halfDepth,
+            y1: post.y + p.halfDepth,
+            z0: floor - p.height,
+            height: p.height,
+            ...colour,
           },
           cam,
         );
@@ -144,7 +260,7 @@ export function drawScene(
             x1: post.x + DEFENDER.halfWidth,
             y0: post.y - DEFENDER.halfDepth,
             y1: post.y + DEFENDER.halfDepth,
-            z0: POST.height,
+            z0: floor,
             height: DEFENDER.height,
             top: COLOR.defenderTop,
             front: COLOR.defenderFront,
@@ -154,7 +270,7 @@ export function drawScene(
       },
     });
   }
-  for (const e of state.enemies) {
+  for (const e of scene.enemies) {
     sprites.push({
       y: e.y,
       x: e.x,
@@ -166,7 +282,7 @@ export function drawScene(
         ctx.beginPath();
         ctx.ellipse(ground.sx, ground.sy, r, r * 0.4, 0, 0, Math.PI * 2);
         ctx.fill();
-        if (e.id === state.focusId) {
+        if (e.id === scene.focusId) {
           ctx.strokeStyle = COLOR.focus;
           ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
           ctx.beginPath();
@@ -189,17 +305,24 @@ export function drawScene(
   }
   for (const sprite of depthSort(sprites)) sprite.draw();
 
+  // The selected slot: its footprint on the ground, on top of everything.
+  if (build?.selected) {
+    ctx.strokeStyle = COLOR.focus;
+    ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
+    outline(ctx, footprint(build.selected), 0, cam);
+  }
+
   // Shots on top: from the defender's chest to the enemy's body.
   ctx.strokeStyle = COLOR.shot;
   ctx.lineWidth = Math.max(1, 2 * cam.zoom);
-  for (const shot of state.shots) {
-    const from = project(
-      { x: shot.fromX, y: shot.fromY, z: POST.height + DEFENDER.height * 0.7 },
-      cam,
-    );
+  for (const shot of scene.shots) {
+    // Shots start at their post's exact coordinates, so this finds the shooter's post.
+    const from = scene.posts.find((p) => p.x === shot.fromX && p.y === shot.fromY);
+    const z = (from ? postTop(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;
+    const a0 = project({ x: shot.fromX, y: shot.fromY, z }, cam);
     const to = project({ x: shot.toX, y: shot.toY, z: ENEMY.z }, cam);
     ctx.beginPath();
-    ctx.moveTo(from.sx, from.sy);
+    ctx.moveTo(a0.sx, a0.sy);
     ctx.lineTo(to.sx, to.sy);
     ctx.stroke();
   }

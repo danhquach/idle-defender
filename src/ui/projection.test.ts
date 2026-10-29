@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { clampCamera, depthSort, project, unproject, zoomAt } from './projection.ts';
+import { buildPost, buildSegment, newBase, type Base } from '../core/base.ts';
+import { START_STOCK } from '../core/data.ts';
+import {
+  clampCamera,
+  depthSort,
+  project,
+  slotAt,
+  unproject,
+  wallHeight,
+  zoomAt,
+} from './projection.ts';
 
 describe('projection', () => {
   it('projects with tilt and height', () => {
@@ -94,5 +104,74 @@ describe('projection', () => {
       { y: 160, x: 10 },
     ]);
     expect(items[0]).toEqual({ y: 160, x: 10 });
+  });
+});
+
+describe('slotAt', () => {
+  // The starting base: column 0 built (wall x 500), towers at column 0 rows 1 and 3
+  // (x 420); columns 1 (x 760) and 2 (x 1020) empty.
+  const base = newBase();
+
+  it('hits each kind of empty slot on its footprint', () => {
+    expect(slotAt(770, 40, base)).toEqual({ column: 1, row: 0, what: 'segment' });
+    expect(slotAt(680, 200, base)).toEqual({ column: 1, row: 2, what: 'tower' });
+    expect(slotAt(600, 360, base)).toEqual({ column: 1, row: 4, what: 'ground' });
+    expect(slotAt(1030, 399, base)).toEqual({ column: 2, row: 4, what: 'segment' });
+    expect(slotAt(340, 100, base)).toEqual({ column: 0, row: 1, what: 'ground' });
+  });
+
+  it('hits a built piece on its top face, the front one where they overlap', () => {
+    // Tower row 1 (centre y 120): a 50-high box shows 50 × 0.8 / 0.6 ≈ 66.7 behind its footprint.
+    expect(slotAt(420, 60, base)).toEqual({ column: 0, row: 1, what: 'tower' });
+    // The built tower at row 3 covers y 189…304; the empty row-2 slot only 176…224.
+    expect(slotAt(420, 200, base)).toEqual({ column: 0, row: 3, what: 'tower' });
+    expect(slotAt(420, 180, base)).toEqual({ column: 0, row: 2, what: 'tower' });
+    expect(slotAt(420, 160, base)).toBeNull();
+    // A full wall's top face (40 high, ≈ 53.3) at row 1 is in front of row 0's front face.
+    expect(slotAt(510, 75, base)).toEqual({ column: 0, row: 1, what: 'segment' });
+    expect(slotAt(510, 20, base)).toEqual({ column: 0, row: 0, what: 'segment' });
+  });
+
+  it('misses between slots and off the grid', () => {
+    expect(slotAt(460, 120, base)).toBeNull(); // between a tower and the wall
+    expect(slotAt(340, 80, base)).toBeNull(); // between two empty ground slots
+    expect(slotAt(600, 145, base)).toBeNull(); // just past an empty ground slot's depth
+    expect(slotAt(510, 400, base)).toBeNull();
+    expect(slotAt(510, -60, base)).toBeNull();
+    expect(slotAt(1500, 200, base)).toBeNull();
+    expect(slotAt(NaN, 200, base)).toBeNull();
+    expect(slotAt(510, Infinity, base)).toBeNull();
+  });
+
+  it('follows a damaged wall, a wall-walk post and built posts in outer columns', () => {
+    const rich = { ...START_STOCK, wood: 500, scrap: 500 };
+    const ok = (r: ReturnType<typeof buildPost>): Base => {
+      if (!r.ok) throw new Error(r.reason);
+      return r.base;
+    };
+    let b = ok(buildSegment(base, rich, ['wood'], 1, 2, 'wall', 'wood'));
+    b = ok(buildPost(b, rich, { kind: 'ground', column: 1, row: 2 }));
+    b = ok(buildPost(b, rich, { kind: 'wall-walk', column: 0, row: 1 }));
+    // Built ground post (12 high, lift 16) at x 600, centre y 200: covers 160…224.
+    expect(slotAt(600, 162, b)).toEqual({ column: 1, row: 2, what: 'ground' });
+    expect(slotAt(600, 158, b)).toBeNull();
+    // Column 1's new wall at row 2 (x 760).
+    expect(slotAt(765, 150, b)).toEqual({ column: 1, row: 2, what: 'segment' });
+    // Row 1 with a wall-walk post: 40 + 6 high → lift 61.3, from y 18.7.
+    expect(slotAt(510, 20, b)).toEqual({ column: 0, row: 1, what: 'segment' });
+    // At half HP row 1 is 30 high (lift 40): y 20 is row 0 again, y 45 still row 1.
+    b.layers[0]!.slots[1]!.hp = 100;
+    b.posts = b.posts.filter((p) => p.kind !== 'wall-walk');
+    expect(slotAt(510, 20, b)).toEqual({ column: 0, row: 0, what: 'segment' });
+    expect(slotAt(510, 45, b)).toEqual({ column: 0, row: 1, what: 'segment' });
+  });
+});
+
+describe('wallHeight', () => {
+  it('drops with damage to a stub when broken', () => {
+    expect(wallHeight(200, 200)).toBe(40);
+    expect(wallHeight(100, 200)).toBe(30);
+    expect(wallHeight(1, 200)).toBeCloseTo(20.1);
+    expect(wallHeight(0, 200)).toBe(12);
   });
 });

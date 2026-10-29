@@ -8,8 +8,11 @@ the ruins while you're away.
 
 ## Status
 
-The M1 horde prototype is playable: one horde in the browser with waves,
-level-up cards and a win/lose result. The design is
+The game is playable in the browser: build on the base between hordes
+(walls in four tiers, tower, wall-walk and ground posts, upgrades and
+repairs paid in materials), pick the start defender and post, then fight a
+horde with waves, level-up cards and a win/lose result. Damage carries over
+to the next build; nothing is saved yet, so a reload starts a new game. The design is
 [`docs/design.md`](docs/design.md); its build order (§14) becomes GitHub
 issues.
 
