@@ -27,8 +27,9 @@ loot, and the further you push into danger, the more you can win — or lose.
 4. **Your people matter.** Defenders grow into named specialists — "Bob the
    Gunner", "Jack the Ripper" — through the stats you give them, and can be
    lost on a reckless patrol.
-5. **Idle = patrols (and crafting).** Time-based jobs run while the game is
-   closed; nothing else plays itself.
+5. **Idle = patrols (and crafting).** Time-based jobs (patrols, crafting,
+   injury recovery, the generator) run while the game is closed; nothing
+   else plays itself.
 
 ## 2. Core loop
 
@@ -52,13 +53,32 @@ loot, and the further you push into danger, the more you can win — or lose.
 ```
 
 - **No map-by-map progression.** There is one base map. Progress is the
-  **horde level**: Horde 1, 2, 3 … each harder than the last; every 10th
-  horde is a boss horde.
-- **The player starts a horde** when ready; there is no forced timer.
-- **Losing a horde:** the core falls (§3). No horde reward; barrier and
-  turret damage stays and must be repaired; retry the same horde level.
-  Materials and defender XP picked up in the fight are kept. Defenders
-  don't die in hordes *(guess)* — death only happens on patrols (§10).
+  **horde number**: Horde 1, 2, 3 … each harder than the last; every 10th
+  horde is a boss horde. (The in-fight level that triggers card picks is
+  the **fight level**, §4.)
+- **The player starts a horde** when ready; there is no forced timer. At
+  least one defender must be available (not injured, on patrol or
+  crafting) *(designer's call)*. Repairs are optional; a horde can be
+  started with damaged barriers.
+- **Winning a horde:** the last wave is cleared (for a boss horde, the
+  Mutated Horror is dead) *(designer's call)*.
+- **Losing a horde:** the horde is lost when enemies have broken through
+  every barrier layer **at any one gap** (so they are inside the camp) and
+  **every defender on the field is injured** (§4), for 10 seconds
+  *(designer's call: one breach through every layer is enough, and the
+  10-second "camp is falling" warning gives a last skill a chance; if it
+  needed every segment broken, enemies in the camp with no one to hit
+  would stall the fight)*. No win reward (no XP, no Genes); barrier and turret damage stays
+  and must be repaired; injured defenders need rest, Food and Medicine
+  (§11); retry the same horde number. Defenders never die in hordes —
+  death only happens on patrols (§10).
+- **The defeat screen says why** *(designer's call)*: where the first
+  breach was and at which layer, who was injured and by what, the repair bill
+  and the recovery times, so the next step is clear.
+- **A loss still pays a little** Scrap and Wood, scaled by waves survived
+  and capped at a quarter of a win's payout at that horde number, so the
+  base can always be repaired even before patrols unlock, but losing on
+  purpose never beats winning *(designer's call)*.
 
 ## 3. The base (fake 3D, side-on layers)
 
@@ -68,7 +88,7 @@ height, sprites are layered by depth). The camera pans and zooms over it.
 run top to bottom across the map, so they are easy to lay out and read.
 
 ```
- CORE      inner wall     wall + gate     outer layer        horde
+ CAMP      inner wall     wall + gate     outer layer        horde
   │            │               │               │               │
 ┌────┐  [P]   ███   [T] [P]   ▒▒▒   [P]      ┄┄┄           ◄ ◄ ◄
 │    │  [P]   ███       [P]   ▒▒▒             ┄┄┄  traps    ◄ ◄ ◄ ◄
@@ -82,18 +102,25 @@ run top to bottom across the map, so they are easy to lay out and read.
 - **Barrier layers:** the player builds and upgrades each layer. When a
   layer's section breaks, enemies push through to the next one. More layers
   = more time to kill them.
-- **Lanes and segments** *(designer's call)*: the battlefield is split into
-  horizontal **lanes** (rows; starting point 5). Each layer is one
-  **segment** per lane, with its own HP. Enemies walk left along their lane
-  and stop at the first standing segment; when it breaks, that lane is open
-  to the next layer. Enemies can drift to a neighbouring lane but don't
-  path-find around walls. This keeps movement simple with hundreds of
-  enemies on screen.
+- **No lanes; the horde rushes as a crowd** *(designer's call)*: the
+  battlefield is one open field. Enemies spawn along the right edge at
+  any height and rush left as a mass, pushing apart so they don't stack
+  on one spot. Each layer is a row of **segments** top to bottom, each
+  with its own HP. An enemy hits the segment in front of it; when a
+  segment breaks, enemies nearby steer into the gap and through to the
+  next layer, so breaches pull the crowd. No full path-finding: enemies
+  only head left, slide sideways toward a known gap and push each other.
+  This keeps movement cheap with hundreds of enemies on screen.
+- **The camp** (left edge) is where the people live (§11 camp capacity).
+  Enemies that break through every layer enter the camp and
+  attack the nearest uninjured defender; with none left, the loss warning
+  runs (§2).
 - **Building:** walls, gates, traps, towers, turret mounts and posts are
   placed on a grid *(guess)* and cost building materials (§11). Barrier
   tiers: wood → sheet metal → concrete → reinforced.
 - **Repair:** damage carries over between hordes; repaired with materials
-  and by Engineers.
+  and by Engineers. Cost scales with missing HP; a broken (0 HP) segment is
+  repaired the same way, not rebuilt *(designer's call)*.
 - **Persistent:** the whole base stays between hordes, turrets included
   (§7).
 - **Expansion** *(guess)*: the buildable area grows with research, so later
@@ -112,33 +139,61 @@ Defenders stand on **posts** the player builds and chooses between.
 - **Adjacency:** an Engineer buffs the turrets and defenders beside them.
 - Defenders can be moved between posts during a horde *(guess: with a short
   walk time, so a fallen outer layer means pulling back)*.
+- **Broken wall under a defender** *(designer's call)*: when a segment
+  breaks, defenders on its wall-walk or gate post drop to the nearest free
+  ground post behind it and fight from there. Turrets on that mount are
+  jammed (§7).
 
 ## 4. Horde defence (the active part)
 
 - **Real time.** Defenders and turrets aim and fire **automatically** at
   enemies in range. The player doesn't steer units; they act through card
   picks (the game pauses for these), moving defenders between posts,
-  spending horde cash and using active skills.
+  picking focus targets and spending horde cash (buffs, repairs, active
+  skills).
+- **Targeting:** each defender and turret shoots the enemy **closest to
+  itself** within range. **Click an enemy to focus it** *(designer's
+  call)*: every defender and turret with it in range switches to it until
+  it dies or leaves their range, then goes back to closest-first. Clicking
+  empty ground clears the focus. While an active skill is armed, the click
+  aims the skill instead.
 - **Length** *(designer's call)*: a horde takes about 3–5 minutes.
 - **Start:** the commander's equipped perks are on (§5) and **1 defender**
-  takes a post.
-- **Horde levels:** kills give horde XP. Each level pauses for a pick of
-  1 of 3 offers:
+  takes a post; the player picks which available defender and which post.
+  Turrets and traps are whatever was built before the horde (§7); nothing
+  is built mid-fight.
+- **Defender HP and injury:** defenders have HP: 100 + 5 per Grit point
+  *(designer's call, starting point)*. Every recovered defender starts a
+  horde at full HP and doesn't regain HP mid-horde. They are hit by ranged
+  enemies (Spitters) and by enemies that broke into the camp. At 0 HP a
+  defender is **injured**: they leave the fight (their post is free again),
+  can't be recruited back into the same horde, and can't defend or patrol
+  until they recover (§11). No one dies in a horde. The loss rule is in
+  §2.
+- **Fight levels:** kills give fight XP. Each fight level pauses for a pick
+  of 1 of 3 offers:
   - an **upgrade card** (§8), or
   - a **recruit card**: a defender from your roster joins and takes a free
     post. Recruit cards show up by chance (starting point: 30% per offer
     slot, lower once the squad is large).
 - **Recruits come from your roster**, bringing their permanent level,
-  stats, title and weapon. Defenders out on patrol or injured can't be
-  recruited.
+  stats, title and weapon. Defenders out on patrol, crafting or injured
+  can't be recruited. With none available (or no free post), no recruit
+  cards are offered and that slot becomes an upgrade card *(designer's
+  call)*.
 - **Waves:** a horde is 5–10 waves *(starting point)*, growing within the
-  horde; a boss horde ends in a Mutated Horror.
-- **Horde cash:** kills drop cash, spent during the fight on quick repairs,
-  new turrets and buffs. Turrets bought this way stay after the horde (§7).
-- **Active skills** *(guess)*: 2–3 click-to-target abilities on cooldown,
-  e.g. airstrike, molotov, flashbang.
+  horde; Hordes 1–4 send Shamblers and Runners only *(designer's
+  call)*; a boss horde ends in a Mutated Horror.
+- **Horde cash:** kills drop cash, spent during the fight only, on:
+  - **temporary buffs** (e.g. +damage or +fire rate for 30 s),
+  - **repairs** (patch a wall segment or a turret's condition),
+  - **active skills**: click-to-target abilities that cost cash and have a
+    cooldown, e.g. airstrike, molotov, flashbang.
+  Cash can't buy turrets or traps, and it resets to 0 when the horde ends.
 - **Reward on success:** mostly **defender XP** and **Mutated Genes**, plus
-  a small chance of materials or a weapon. Higher horde levels pay more.
+  a small chance of materials or a weapon. Higher horde numbers pay more.
+  Defender XP goes in full to every defender who took part, injured or
+  not, so a recruit never dilutes it *(designer's call)*. Defenders left on the bench get no horde XP; patrols are their other way to level (§10).
 
 ## 5. Commander and perks
 
@@ -190,12 +245,13 @@ Each defender level gives **stat points** (3 per level, starting point):
 | Aim | Gunner | +ranged damage, +crit |
 | Might | Ripper | +melee damage, +cleave |
 | Tech | Engineer | +repair rate, +turret buff, +battery quality |
-| Grit *(guess)* | All | +defender HP; patrol survival and power |
+| Grit | All | +defender HP in hordes; patrol survival and power |
 
 - A stat's effect only applies with a matching weapon: Bob with 50 Aim
   holding a knife gets nothing from his Aim. Crafting uses Tech regardless
   of weapon *(guess)*.
-- Defender XP comes from hordes (main source) and patrols.
+- Defender XP comes from hordes and from patrols (§10); both are full sources, so a defender can level by patrolling alone.
+- No stat respec in v1: points are permanent (weapon swaps are free).
 
 ### Profession level and titles
 
@@ -225,8 +281,10 @@ Each defender level gives **stat points** (3 per level, starting point):
 
 ### Turrets
 
-- Built with materials or bought with horde cash; **both stay** after the
-  horde.
+- **Built before a horde** with materials, in build mode between hordes;
+  they stay between hordes. A turret is jammed (condition 0), never
+  destroyed, so a loss can't delete your build *(designer's call)*. They
+  can't be built or bought during a horde.
 - Fire automatically from mounts on walls and towers; an adjacent Engineer
   adds damage and fire rate (Tech and title scale it).
 - **Energy:** a turret only fires while powered. Each turret draws energy
@@ -244,26 +302,38 @@ Each defender level gives **stat points** (3 per level, starting point):
 - **Batteries** fill the battery bank. Two sources:
   - **Looted** on patrols (gas stations, electronics stores, military
     depots).
-  - **Crafted** by a defender at the workbench from materials (Scrap,
-    Parts, Chemicals *(guess)*). A crafting job takes real time and keeps
+  - **Crafted** by a defender at the workbench from Scrap and Parts. A
+    crafting job takes real time and keeps
     running while the game is closed. Higher Tech = faster crafting and better batteries (more
     charge); an Engineer title adds a quality bonus.
 - **Battery quality:** Makeshift, Standard, High-capacity, Military
   *(starting points)* — more charge per battery.
-- **Generator** *(guess)*: burns Gas between hordes to recharge the bank,
-  slower and less efficient than batteries.
+- **Loading and cap** *(designer's call)*: batteries are loaded into the
+  bank automatically between hordes and used up when loaded; extras wait in
+  storage. The bank has a cap (starting point: 10 Standard batteries' worth)
+  that rises with each battery tier researched.
+- **Generator:** burns **Gas** to recharge the battery bank between hordes,
+  slower and less efficient than batteries. Built in build mode. Starting
+  point *(designer's call)*: 1 Gas = half a Standard battery's charge, 10
+  minutes of real time per Gas, runs while the game is closed, stops at the
+  bank cap.
 - A defender crafting can't patrol or be recruited until the job is done
   *(guess)*.
 
 ### Traps
 
-- On the outer layer (spikes, barbed wire, mines, fire pits): slow and thin
-  the horde before it reaches the first wall. Some use Gas (fire pits)
-  *(guess)*. Built with materials and upgraded through research.
+- On the outer layer, built before a horde: slow and thin the horde before
+  it reaches the first wall.
+- **Basic traps** (spikes, barbed wire) are built from materials.
+- **Chemical traps** are crafted at the workbench from **Chemicals** (a
+  timed job, like batteries), then placed: **slow** (glue), **burn**
+  (incendiary), **corrode** (lowers armour), **paralyze** (stuns for a
+  moment). Each is used up after a number of triggers *(designer's call)*.
+- Trap types and strength are upgraded through research.
 
 ## 8. In-horde upgrade cards (roguelite)
 
-Offered 1 of 3 on each horde level. Lost when the horde ends.
+Offered 1 of 3 on each fight level. Lost when the horde ends.
 
 - **Stat cards:** +damage, +fire rate, +range for one defender or a whole
   profession.
@@ -278,7 +348,8 @@ Offered 1 of 3 on each horde level. Lost when the horde ends.
 
 ## 9. Enemies
 
-All enemies enter from the right edge and push left toward the core.
+All enemies enter from the right edge and rush left toward the camp as
+one crowd (no lanes, §3).
 
 | Enemy | Behaviour | Answer |
 |---|---|---|
@@ -292,8 +363,8 @@ All enemies enter from the right edge and push left toward the core.
 | Mutated Horror | Boss of every 10th horde; one unique ability each | Whole base |
 
 - Mutants appear from Horde 5 *(starting point)*; new types join as horde
-  levels rise.
-- **Scaling:** enemy HP × 1.10 per wave, × 1.15 per horde level (starting
+  numbers rise.
+- **Scaling:** enemy HP × 1.10 per wave, × 1.15 per horde number (starting
   points).
 
 ## 10. World map and patrols (the idle part)
@@ -349,7 +420,7 @@ station + pharmacy + hardware store.
   and the party's odds of defeat / fence off / overrun, updated as
   buildings are ticked and orders changed.
 - **Reward:** plazas give more total loot per trip than single buildings,
-  and the mix saves patrol slots. The trade-off is the big-horde risk.
+  and one party brings back several kinds of loot. The trade-off is the big-horde risk.
 
 ### Sending a patrol
 
@@ -357,8 +428,12 @@ station + pharmacy + hardware store.
   **travel out → search → travel back**. Farther and more dangerous
   locations take longer and pay more. Patrols keep going while the game is
   closed.
-- **Supplies** *(guess)*: a patrol takes Food (and Gas for far trips by
-  vehicle); more supplies, longer search.
+- **Vehicle:** the camp can build a car; a patrol that takes it burns
+  **Gas** and travels faster (starting point: half the travel time). One
+  car = one patrol at a time with it; more cars through research
+  *(designer's call)*. Gas burned scales with trip length and is set so a
+  car trip never brings back more Gas than it burns, even to a gas station
+  *(designer's call; balance test)*.
 - **Loot chance:** each search rolls on the location's loot table. **Party
   strength** vs. the location's danger raises the number of rolls and the
   chance of rarer results.
@@ -392,18 +467,28 @@ Set before sending; they apply to any location, plaza or single building.
   as a rating (Safe / Risky / Dangerous / Deadly) with the chances of each
   outcome.
 - **Outcomes**, worse as the gap grows:
-  - **Injured:** members come back hurt and rest before they can defend or
-    patrol. Medicine shortens the rest.
-  - **Dead:** a member doesn't come back — their level, stats, title and
-    gear are lost; the gear stays at that location and a later patrol
-    there can recover it.
+  - **Injured:** members come back hurt and must recover before they can
+    defend or patrol (§11 Recovery).
+  - **Dead:** a member doesn't come back — their level, stats and title
+    are lost for good. Their weapon stays at that location; the next
+    patrol there collects it with its loot (no roll, no expiry)
+    *(designer's call)*.
   - **Wipe:** the whole party is lost.
 - **Reward grows with risk:** dangerous runs roll more and rarer loot, so
   sending a weak party into a deadly place is a real gamble, not just a
   mistake.
-- **Patrol slots:** 1 at the start, more through research.
-- **Returns:** loot, some defender XP; a "patrol report" lists what came
+- **No patrol limit:** the commander can send as many parties as they like, at the same time, as long as there are idle defenders (not injured, crafting, on another patrol or picked for the next horde). The car is the only shared asset (§10 Vehicle).
+- **Returns:** loot and **defender XP** for every member who comes back, scaled by the trip's danger and length *(designer's call: a Safe 1-hour trip ≈ the XP of winning the current horde; Deadly trips pay up to 3×)*; a "patrol report" lists what came
   back and who didn't.
+- **Survivors:** a patrol can come back with one or more **survivors** it
+  found (chance rises with the location's danger *(designer's call)*). The
+  report shows each survivor's level, stats and weapon, and the player
+  **accepts** them into the camp or **turns them away**. Accepting needs a
+  free camp slot (§11); a turned-away survivor is gone. Undecided
+  survivors wait in the report and take no slot until accepted, so the
+  player can free a slot first *(designer's call)*. A survivor's level is
+  rolled from 1 up to the location's danger tier, with a weapon of a
+  matching rarity *(designer's call)*.
 - New locations are revealed by research, scouting or boss hordes
   *(guess)*.
 
@@ -414,35 +499,53 @@ Set before sending; they apply to any location, plaza or single building.
 | Scrap | Patrols | Building, repairs, crafting, turret maintenance |
 | Parts | Patrols (electronics, military) | Turrets, maintenance, batteries, weapon rarity |
 | Building materials (wood, metal, concrete) | Patrols (hardware, construction) | Barrier tiers |
-| Gas | Patrols (gas station) | Generator, fire traps, vehicle trips *(guess)* |
+| Gas | Patrols (gas station) | Generator (recharges the battery bank), car (faster patrols) |
 | Batteries | Patrols, crafting | Turret energy |
-| Food / snacks | Patrols (supermarket, gas station) | Patrol supplies *(guess)* |
-| Medicine | Patrols (pharmacy, hospital) | Shorten injury rest |
-| Chemicals *(guess)* | Patrols (pharmacy, hospital) | Battery crafting |
+| Food (snacks count as Food) | Patrols (supermarket, gas station) | Injury recovery |
+| Medicine | Patrols (pharmacy, hospital) | Injury recovery (faster than Food) |
+| Chemicals | Patrols (pharmacy, hospital) | Chemical traps (slow, burn, corrode, paralyze) |
 | Mutated Genes | Hordes, especially mutants and bosses | Research |
-| Defender XP | Hordes (main), patrols | Defender levels → stat points |
+| Defender XP | Hordes, patrols | Defender levels → stat points |
 
 - **Research** (paid in Mutated Genes): barrier tiers and traps, turret
   types, battery tiers, new cards in the offer pool, commander perks and
-  perk slots, active skills, patrol slots, larger base area, new world-map
+  perk slots, active skills, more cars, larger base area, new world-map
   locations.
-- **New defenders** for the roster: recruited with Parts *(guess)* or
-  found on patrols *(guess)*, each with a random name and a small stat
-  lean. Needed to replace losses.
+- **New defenders** come mainly as **survivors** found on patrols (§10),
+  each with a name, level, stats and weapon. Needed to replace losses.
+- **Camp capacity:** the camp holds a limited number of people (starting
+  point: 5). Every defender counts, wherever they are (on patrol, crafting,
+  injured). **Camp upgrades** (materials) add slots (starting point: +2
+  each). A full camp can't accept survivors or free recruits.
+- **Dismissing** *(designer's call)*: a defender can be dismissed (with a
+  confirm) to free a slot, e.g. for a better survivor. Their weapon returns
+  to storage; the defender is gone for good. Not allowed while 3 or fewer
+  are alive, so it can't be used to farm roster-floor recruits.
+- **Recovery:** an injured defender (from a horde or a patrol) recovers
+  over real time (starting point: 2 hours), with or without Food. Each
+  **Food** used cuts 30 minutes; each **Medicine** cuts 60 *(designer's
+  call, starting points)*, so 4 Food or 2 Medicine is a full recovery. Both
+  are used up. Recovery runs while the game is closed.
 - **Roster floor** *(designer's call)*: if fewer than 3 defenders are
-  available, a free basic recruit (level 1, Rusty pistol) arrives every
-  hour of real time, so a patrol wipe can never leave the player with no
-  one to defend or patrol.
-- **No deadlock** *(designer's call)*: every won horde also pays a little
-  Scrap and Wood, so the base can be repaired even with no patrol loot.
+  alive, a free basic recruit (level 1, Rusty pistol) arrives every hour of
+  real time (while camp slots allow), so a patrol wipe can never leave the
+  player with no one to defend or patrol. It counts the living roster, not
+  who is available, so sending everyone out doesn't trigger it.
+- **No deadlock** *(designer's call)*: every horde pays a little Scrap and
+  Wood — more on a win, less on a loss — so the base can be repaired even
+  with no patrol loot.
 
 ### Start and pacing *(designer's call, starting points)*
 
 - **New game:** the commander with 1 perk slot (Steady Fire unlocked), 3
   defenders with Rusty weapons (pistol, knife, toolkit — one per
-  profession), a core, one wood wall layer with a gate, 2 tower posts,
-  1 patrol slot, the gas station and supermarket revealed on the world map,
-  and a small stock of Scrap, Wood and 2 Makeshift batteries.
+  profession), a camp with 5 slots, one wood wall layer with a gate, 2 tower posts,
+  1 workbench, the gas station, supermarket and electronics
+  store revealed on the world map (hardware store after Horde 3, pharmacy
+  after Horde 5), and a small stock of Scrap, Wood, 3 Food, Parts for one
+  turret and 2 Makeshift batteries. Why: the first two locations drop no
+  Parts, yet turrets and maintenance need them, and a first loss would
+  otherwise leave injured defenders with no Food.
 - **First session:** Horde 1 is a guided tutorial (placing a defender, a
   card pick, a recruit card); the first patrol is unlocked after Horde 2.
 - **Patrol lengths:** 15 minutes for the nearest Safe location up to 8
@@ -465,9 +568,12 @@ offline progress works across sessions.
 
 ## 14. Build order (draft)
 
+Superseded by the phases, milestones and tickets on GitHub; kept as the
+original outline.
+
 1. Fake-3D base view: camera, one wall layer, one Gunner on a post,
-   shamblers from the right, a core on the left.
-2. A horde: waves, horde level, 1-of-3 cards and recruit cards.
+   shamblers from the right, the camp on the left.
+2. A horde: waves, fight level, 1-of-3 cards and recruit cards.
 3. Building: grid, walls, gates, posts; multiple layers; repairs.
 4. Weapons → professions: Gunner, Ripper, Engineer.
 5. Turrets with energy and maintenance; batteries; traps.
@@ -498,7 +604,7 @@ offline progress works across sessions.
 ## 16. Tech and platform
 
 - **Platform** *(designer's call)*: desktop browser first, **landscape**,
-  mouse and keyboard (clicks for picks, posts and skill targets); itch.io
+  mouse and keyboard (clicks for picks, posts, focus and skill targets); itch.io
   web build. Touch/mobile later.
 - **Stack:** same as Office Immortal so the repo scaffold can be copied
   from the Office Immortal repo: TypeScript, Vite, Vitest, ESLint +
