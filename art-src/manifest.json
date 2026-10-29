@@ -1,0 +1,273 @@
+{
+  "style": {
+    "sprite": "2D game sprite, angled overhead three-quarter view looking down from above at 45 degrees, hand-painted style, soft shading, bold dark outline, single subject centred with empty space around it, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, gritty post-apocalyptic ruins setting",
+    "texture": "seamless tileable texture filling the whole image edge to edge, flat top-down view, hand-painted style, soft even lighting, muted desaturated colours, gritty post-apocalyptic ruins setting, no text, no letters, no single object in focus"
+  },
+  "assets": [
+    {
+      "id": "shambler",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4301,
+      "size": "512x512",
+      "mutant": true,
+      "flip": true,
+      "prompt": "a shambling rotting zombie walking, torn grey clothes, sickly acid green skin, flesh red wounds, arms reaching forward"
+    },
+    {
+      "id": "gunner",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4311,
+      "size": "512x512",
+      "prompt": "a lone survivor soldier standing facing right, full body, holding a long assault rifle in both hands pointed to the right, khaki jacket, dark trousers, boots, helmet, ammunition pouches",
+      "group": "defender"
+    },
+    {
+      "id": "ripper",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4312,
+      "size": "512x512",
+      "prompt": "a lone survivor brawler standing facing right, full body, a big machete raised high above the head in one hand and a pistol in the other hand pointed right, dark red bandana, leather vest, dark trousers, boots",
+      "group": "defender"
+    },
+    {
+      "id": "engineer",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4313,
+      "size": "512x512",
+      "prompt": "a lone survivor mechanic standing facing right, full body, a pistol in one hand pointed right and an orange toolbox hanging from the other hand, a big wrench on the belt, orange work overalls, goggles on the forehead, boots",
+      "group": "defender"
+    },
+    {
+      "id": "shield",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4314,
+      "size": "512x512",
+      "prompt": "a tall improvised riot shield made of a dented scrap metal sheet with a wooden frame and bolts, standing upright, seen from the front"
+    },
+    {
+      "id": "turret-lit",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4321,
+      "size": "512x512",
+      "prompt": "a small automated machine gun turret head, boxy armoured steel housing with a short gun barrel pointing right, glowing warm yellow status lights and a lit amber sensor eye, powered on"
+    },
+    {
+      "id": "turret-dark",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4322,
+      "size": "512x512",
+      "ref": "turret-lit",
+      "prompt": "the same turret, powered off: every light and the sensor eye dark and unlit, dull grey steel, same pose and framing"
+    },
+    {
+      "id": "turret-jammed",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4323,
+      "size": "512x512",
+      "ref": "turret-lit",
+      "prompt": "the same turret, jammed and broken: rusty red-brown scorched housing, bent barrel, lights dark, a cracked sensor eye, same pose and framing"
+    },
+    {
+      "id": "tower",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4331,
+      "size": "512x512",
+      "prompt": "a short square wooden watchtower made of salvaged planks and scaffolding with a flat open wooden platform on top and a low railing, empty platform, sturdy legs with cross braces"
+    },
+    {
+      "id": "ground-post",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4332,
+      "size": "512x512",
+      "prompt": "a low rectangular firing position made of stacked grey sandbags around a flat empty dirt floor, an empty raised sandbag platform"
+    },
+    {
+      "id": "spikes",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4341,
+      "size": "768x512",
+      "prompt": "a wide flat bed of sharpened wooden stakes and rusty iron spikes driven into the dirt pointing up, a rectangular patch of ground trap"
+    },
+    {
+      "id": "wire",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4342,
+      "size": "768x512",
+      "prompt": "a wide low tangle of coiled barbed wire on short wooden stakes stretched across a rectangular patch of dirt, ground trap"
+    },
+    {
+      "id": "spikes-broken",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4343,
+      "size": "768x512",
+      "ref": "spikes",
+      "prompt": "the same spike bed, destroyed: every stake snapped and flattened, splintered wood and bent spikes lying in the dirt, same framing"
+    },
+    {
+      "id": "wire-broken",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4344,
+      "size": "768x512",
+      "ref": "wire",
+      "prompt": "the same barbed wire, destroyed: cut and trampled flat, loose broken strands and knocked over stakes lying in the dirt, same framing"
+    },
+    {
+      "id": "wood-top",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4351,
+      "size": "512x512",
+      "prompt": "weathered grey brown wooden planks nailed side by side, old nails, splinters"
+    },
+    {
+      "id": "wood-front",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4352,
+      "size": "512x512",
+      "prompt": "a palisade wall of upright rough logs and boards, darker weathered wood"
+    },
+    {
+      "id": "metal-top",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4353,
+      "size": "512x512",
+      "prompt": "overlapping dented corrugated sheet metal panels, rust streaks, bolts"
+    },
+    {
+      "id": "metal-front",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4354,
+      "size": "512x512",
+      "prompt": "a wall of riveted scrap steel plates, rust patches, darker grey metal"
+    },
+    {
+      "id": "concrete-top",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4355,
+      "size": "512x512",
+      "prompt": "the top of a cracked pale grey concrete wall, chipped edges, stains"
+    },
+    {
+      "id": "concrete-front",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4356,
+      "size": "512x512",
+      "prompt": "stacked pale grey concrete blocks with cracks and stains, slightly darker"
+    },
+    {
+      "id": "reinforced-top",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4357,
+      "size": "512x512",
+      "prompt": "the top of a reinforced wall: blue grey concrete with heavy riveted steel plates and steel beams"
+    },
+    {
+      "id": "reinforced-front",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4358,
+      "size": "512x512",
+      "prompt": "a reinforced wall face: blue grey concrete with bolted steel armour plates and steel beams, darker"
+    },
+    {
+      "id": "wood-rubble",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4361,
+      "size": "512x512",
+      "prompt": "a low pile of smashed broken wooden planks and logs, collapsed wall debris"
+    },
+    {
+      "id": "metal-rubble",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4362,
+      "size": "512x512",
+      "prompt": "a low pile of crumpled torn sheet metal and bent steel scraps, collapsed wall debris"
+    },
+    {
+      "id": "concrete-rubble",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4363,
+      "size": "512x512",
+      "prompt": "a low pile of broken grey concrete chunks and dust, collapsed wall debris"
+    },
+    {
+      "id": "reinforced-rubble",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4364,
+      "size": "512x512",
+      "prompt": "a low pile of broken blue grey concrete slabs with twisted steel rebar and bent steel beams, collapsed wall debris"
+    },
+    {
+      "id": "cracks",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4367,
+      "size": "512x512",
+      "prompt": "thin dark grey jagged crack lines branching out like a spider web, a few small bullet holes, nothing else, no slab, no tile, no surface"
+    },
+    {
+      "id": "gate",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4366,
+      "size": "512x512",
+      "prompt": "a heavy closed gate door seen from above, dark iron bars and chains over thick boards, a big padlock, a long narrow rectangle"
+    },
+    {
+      "id": "ground",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4371,
+      "size": "512x512",
+      "prompt": "cracked dry grey brown dirt and broken asphalt with small rubble, gravel and patches of dead grass"
+    },
+    {
+      "id": "camp-ground",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4372,
+      "size": "512x512",
+      "prompt": "packed dirt yard with old wooden pallets, scattered straw and worn tarp scraps"
+    },
+    {
+      "id": "shack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4381,
+      "size": "512x512",
+      "prompt": "a small survivor shack built from scrap wood and rusty corrugated metal sheets, a slanted tin roof, a stove pipe"
+    },
+    {
+      "id": "tent",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4382,
+      "size": "512x512",
+      "prompt": "a patched canvas survivor tent beside a rusty oil barrel with a small fire, supply crates"
+    }
+  ]
+}

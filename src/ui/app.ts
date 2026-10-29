@@ -38,6 +38,7 @@ import {
   type View,
 } from './projection.ts';
 import { drawScene, type Scene } from './render.ts';
+import type { Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
 const MAX_DT = 0.1;
@@ -60,7 +61,7 @@ const PAN_KEYS: Record<string, [number, number]> = {
   s: [0, 1],
 };
 
-export function start(root: HTMLElement): void {
+export function start(root: HTMLElement, art: Art): void {
   const canvas = document.createElement('canvas');
   canvas.className = 'view';
   root.append(canvas);
@@ -337,7 +338,7 @@ export function start(root: HTMLElement): void {
       }
     }
     if (horde) {
-      drawScene(ctx, horde, cam, view, null, selectedDefender);
+      drawScene(ctx, art, horde, cam, view, null, selectedDefender);
       hud.update(horde);
       if (horde.outcome !== 'fighting' && endedAt === null) {
         endedAt = Date.now();
@@ -351,7 +352,7 @@ export function start(root: HTMLElement): void {
         commit(settled);
         panel.show(game, selected);
       }
-      drawScene(ctx, buildScene(game, panel.choice(game)), cam, view, { selected });
+      drawScene(ctx, art, buildScene(game, panel.choice(game)), cam, view, { selected });
     }
     requestAnimationFrame(frame);
   }
