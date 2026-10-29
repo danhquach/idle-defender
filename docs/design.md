@@ -681,3 +681,8 @@ original outline.
   headless horde simulator and balance tests (Office Immortal does the same
   for its Paths), so the starting points here can be tuned without code
   changes.
+  The simulator (`src/core/sim.ts`) plays hordes headless with a fixed
+  scripted player; `src/core/balance.test.ts` holds the targets (Horde 1
+  always won, Hordes 1–2 in 3–5 minutes, difficulty rising, a win paying
+  for its repairs, a camp that doesn't build stalling by Horde 5), and
+  `npm run balance` (Node 22.6 or later) prints the full table for tuning.
