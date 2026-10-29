@@ -48,7 +48,7 @@ describe('hud', () => {
     const s = horde();
     expect(payoutText(s)).toBe('');
     s.outcome = 'won';
-    expect(payoutText(s)).toBe('Payout: 20 scrap, 30 wood');
+    expect(payoutText(s)).toBe('Payout: 20 scrap, 30 wood, 1 gas');
     s.outcome = 'lost';
     expect(payoutText(s)).toBe('Payout: 1 scrap, 1 wood');
   });
@@ -76,7 +76,7 @@ describe('hud', () => {
         title: 'Horde 1 held',
         lines: [
           `All ${s.waveCount} waves cleared`,
-          'Payout: 20 scrap, 30 wood',
+          'Payout: 20 scrap, 30 wood, 1 gas',
           'Bob +15 XP · level 1 (15/25)',
           'Jack +15 XP · level 1 (15/25)',
           `Jack · injured by a Shambler · back at ${jackBack}`,
@@ -99,7 +99,7 @@ describe('hud', () => {
       const w = hordeDrop(game, s)!.weapon;
       expect(w.rarity).toBe('prototype');
       const lines = resultScreen(game, s, NOW).lines;
-      expect(lines[1]).toBe('Payout: 20 scrap, 30 wood');
+      expect(lines[1]).toBe('Payout: 20 scrap, 30 wood, 1 gas');
       expect(lines[2]).toMatch(/^Found: Prototype (Pistol|Knife|Toolkit)$/);
       expect(lines.slice(3, 5)).toHaveLength(2);
       for (const line of lines.slice(3, 5)) expect(line).toMatch(/^[+−]\d+% |^Pierce/);

@@ -30,7 +30,6 @@ import {
   STAT_EFFECT,
   STEP,
   TURRET,
-  TURRET_BANK,
   TURRET_RANGE,
   WALK_SPEED,
   WALL,
@@ -85,6 +84,10 @@ export interface HordeSetup {
   base: Base;
   /** Index into `base.posts`; valid only for this `base` (building a post re-sorts them). */
   startPostId: number;
+  /** The battery bank's charge at the start (design §7). */
+  bank: number;
+  /** When the fight started (ms since the epoch), so the generator skips it. */
+  startedAt: number;
 }
 export interface Enemy {
   id: number;
@@ -209,8 +212,10 @@ export interface HordeState {
   layers: Layer[];
   posts: Post[];
   turrets: Turret[];
-  /** Battery bank charge left (design §7); a stand-in full bank until ID-015. */
+  /** Battery bank charge left (design §7). */
   energy: number;
+  /** When the fight started (ms since the epoch). */
+  startedAt: number;
   defenders: Defender[];
   bench: DefenderSpec[];
   /** In injury order; never on the bench, so never back in this fight. */
@@ -240,7 +245,7 @@ const paused = (s: HordeState): boolean =>
   s.offer !== null || s.replace !== null || s.outcome !== 'fighting';
 
 export function newHorde(seed: number, setup: HordeSetup): HordeState {
-  const { hordeNumber, roster, startDefenderId, base, startPostId } = setup;
+  const { hordeNumber, roster, startDefenderId, base, startPostId, bank, startedAt } = setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
   const { layers, posts, turrets } = layoutOf(base);
@@ -264,7 +269,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     layers,
     posts,
     turrets,
-    energy: TURRET_BANK,
+    energy: bank,
+    startedAt,
     defenders: [standing(start, startPost, 0)],
     bench: roster.filter((d) => d !== start).map((d) => ({ ...d })),
     injured: [],

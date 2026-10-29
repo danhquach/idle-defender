@@ -401,8 +401,8 @@ Each defender level gives **stat points** (3 per level, starting point):
   research (§11) and built in build mode for 40 Scrap and 20 Wood on a
   free tower or wall mount (a spot holds a post or a turret, not both).
   It fires 5 damage every 0.5 s, range 500 (×1.25 on a tower), and draws
-  1 charge per second while it has a target from a stand-in bank of 600,
-  full at each horde start until the battery bank (ID-015). Condition
+  1 charge per second while it has a target from the battery bank
+  (below; a stand-in full bank of 600 before ID-015). Condition
   0–100: −0.2 per shot, and a wall turret −0.5 per point of damage its
   segment takes; below 50 it fires slower, down to half speed; at 0 it
   is jammed; wear carries between hordes exactly, and a wall turret only
@@ -439,6 +439,22 @@ Each defender level gives **stat points** (3 per level, starting point):
   bank cap.
 - A defender crafting can't patrol or be recruited until the job is done
   *(guess)*.
+- **As built (ID-015, starting points):** the bank's charge carries from
+  one horde to the next and holds at most 1,000 (10 Standard batteries'
+  worth). Batteries wait in storage by quality (Makeshift 60, Standard 100,
+  High-capacity 160, Military 250 charge) and load into the bank by
+  themselves between hordes (a new game, a finished horde, a loaded save or
+  code), largest first, while each fits under the cap; one that would
+  overflow waits. The **generator** is built once in build mode for 40
+  Scrap and 20 Wood, no research. It burns 1 Gas per 10 minutes of real
+  time for 50 charge, also while the game is closed, while there is Gas and
+  room; progress toward the next Gas carries over, and idle time and fight
+  time earn nothing. The last Gas before the cap fills it and any extra is
+  lost; at the cap or out of Gas it stops, and starts afresh when there is
+  room and Gas again. Until patrols bring them, a new game starts with 2
+  Makeshift batteries and 4 Gas, and each won horde pays 1 Gas. Crafting,
+  battery tiers that raise the cap, and the bank meter come later (ID-016,
+  ID-035).
 
 ### Traps
 

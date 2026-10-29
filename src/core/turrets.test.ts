@@ -13,7 +13,7 @@ import {
   type Base,
   type TurretMount,
 } from './base.ts';
-import { ENGINEER_BUFF, MAX_CONDITION, STEP, TURRET, TURRET_BANK, type Stock } from './data.ts';
+import { ENGINEER_BUFF, MAX_CONDITION, STEP, TURRET, type Stock } from './data.ts';
 import { finishHorde, newGame } from './game.ts';
 import {
   baseAfter,
@@ -161,12 +161,12 @@ describe('turret build actions', () => {
 describe('turrets in a horde', () => {
   it('fire at the nearest enemy in range: 5 damage, wear per shot, charge while it has a target', () => {
     const s = fight(baseWith(['tower', 0, 2]));
-    expect(s.energy).toBe(TURRET_BANK);
+    expect(s.energy).toBe(setup().bank);
     const e = enemy(s, { x: 600, y: 200, hp: 100, maxHp: 100 });
     const t = tick(s, STEP);
     expect(t.enemies.find((x) => x.id === e.id)!.hp).toBe(100 - TURRET.damage);
     expect(t.turrets[0]!.condition).toBeCloseTo(MAX_CONDITION - TURRET.shotWear);
-    expect(t.energy).toBeCloseTo(TURRET_BANK - TURRET.draw * STEP);
+    expect(t.energy).toBeCloseTo(setup().bank - TURRET.draw * STEP);
     expect(t.shots.some((sh) => sh.fromX === t.turrets[0]!.x && !sh.melee)).toBe(true);
     // One shot per 0.5 s.
     const later = tick(t, 0.5);
@@ -196,7 +196,7 @@ describe('turrets in a horde', () => {
   it('idle turrets draw nothing; a tower reaches 625, a wall mount 500', () => {
     const s = fight(baseWith(['tower', 0, 2], ['wall-walk', 0, 0]));
     const t = tick(s, 1);
-    expect(t.energy).toBe(TURRET_BANK);
+    expect(t.energy).toBe(setup().bank);
     const tower = s.turrets.find((x) => x.mount === 'tower')!;
     enemy(s, { x: tower.x + 620, y: tower.y, hp: 100, maxHp: 100 });
     const a = tick(s, STEP);
@@ -227,7 +227,7 @@ describe('turrets in a horde', () => {
     expect(turretState(s, s.turrets[0]!)).toBe('jammed');
     const j = tick(s, 1);
     expect(j.enemies[0]!.hp).toBe(1000);
-    expect(j.energy).toBe(TURRET_BANK);
+    expect(j.energy).toBe(setup().bank);
   });
 
   it('a long fight wears a turret down to jammed, and it stays in the base', () => {

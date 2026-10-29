@@ -22,10 +22,13 @@ import {
 import {
   AFFIXES,
   ARMOURY_CAP,
+  BANK_CAP,
+  BATTERY_IDS,
   COLUMNS,
   ITEMS,
   LAB_LEVELS,
   MATERIALS,
+  MAX_COUNT,
   MAX_CONDITION,
   POST_KINDS,
   RARITY_ORDER,
@@ -46,6 +49,7 @@ import {
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import { loadoutError, loadoutFrom, type Loadout } from '../core/loadout.ts';
+import { loadBatteries, newPower, type Power } from '../core/power.ts';
 import { earnedPoints, NO_STATS, spentPoints } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text } from './validate.ts';
 
@@ -55,8 +59,6 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
 export const SAVE_VERSION = 1;
 /** A full save is about 2 KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 50_000;
-/** Far past anything a game reaches; keeps every count a safe integer. */
-const MAX_COUNT = 1e12;
 const MAX_HORDE = 100_000;
 const MAX_ROSTER = 100;
 /** Latest time a save may name, in ms since the epoch (the year 2286). */
@@ -158,8 +160,13 @@ function readGame(v: unknown, savedAt: number): GameState {
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
   // A save from before the armoury (0.4.5 and older) has none: it starts empty. One
   // from before the Lab (0.4.6 and older) has no Lab and nothing researched, and
-  // keeps its tiers.
-  const old = { armoury: lacks('armoury'), lab: lacks('lab') && lacks('research') };
+  // keeps its tiers. One from before the battery bank (0.4.7 and older) gets a new
+  // game's power.
+  const old = {
+    armoury: lacks('armoury'),
+    lab: lacks('lab') && lacks('research'),
+    power: lacks('power'),
+  };
   const o = obj(v, [
     'hordeNumber',
     'base',
@@ -168,6 +175,7 @@ function readGame(v: unknown, savedAt: number): GameState {
     'roster',
     ...(old.armoury ? [] : ['armoury']),
     ...(old.lab ? [] : ['lab', 'research']),
+    ...(old.power ? [] : ['power']),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -184,6 +192,7 @@ function readGame(v: unknown, savedAt: number): GameState {
       : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber)),
     lab,
     research,
+    power: old.power ? newPower() : readPower(o.power, savedAt),
   };
   // Each owned weapon is one item, in the armoury or in one pair of hands, and the camp keeps at most ARMOURY_CAP.
   const owned = [
@@ -192,7 +201,8 @@ function readGame(v: unknown, savedAt: number): GameState {
   ].filter((h): h is OwnedWeapon => typeof h === 'object' && h !== null);
   if (owned.length > ARMOURY_CAP) fail('too many weapons');
   if (new Set(owned.map((w) => w.uid)).size !== owned.length) fail('weapon twice');
-  return game;
+  // Loading a save is between hordes: batteries waiting in storage go into the bank.
+  return loadBatteries(game);
 }
 
 function readTiers(v: unknown): Tier[] {
@@ -229,6 +239,23 @@ function readStock(v: unknown): Stock {
     metal: int(o.metal, 0, MAX_COUNT),
     concrete: int(o.concrete, 0, MAX_COUNT),
   };
+}
+
+/**
+ * The bank (0 to the cap), whole counts of Gas and each battery, and the generator.
+ * Its clock never runs past the save: a later one (a clock set back) is cut to it.
+ */
+function readPower(v: unknown, savedAt: number): Power {
+  const o = obj(v, ['bank', 'gas', 'batteries', 'generator']);
+  const b = obj(o.batteries, BATTERY_IDS);
+  const batteries = {} as Power['batteries'];
+  for (const id of BATTERY_IDS) batteries[id] = int(b[id], 0, MAX_COUNT);
+  let generator: Power['generator'] = null;
+  if (o.generator !== null) {
+    const g = obj(o.generator, ['at']);
+    generator = { at: g.at === null ? null : Math.min(int(g.at, 0, MAX_TIME), savedAt) };
+  }
+  return { bank: num(o.bank, 0, BANK_CAP), gas: int(o.gas, 0, MAX_COUNT), batteries, generator };
 }
 
 function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean): Base {
