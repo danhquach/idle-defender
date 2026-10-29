@@ -8,6 +8,7 @@ import {
   IMPORT_DONE,
   IMPORT_REFUSAL,
   injuredLines,
+  labLines,
   loadCode,
   pickStart,
   postKey,
@@ -99,5 +100,34 @@ describe('build panel', () => {
     });
     expect(asked).toEqual([IMPORT_CONFIRM]);
     expect(loadCode(code, () => true)).toEqual({ game: g, message: IMPORT_DONE, clearPaste: true });
+  });
+
+  it('shows the Lab: not built, then each node locked with its reason', () => {
+    const g = { ...newGame(), stock: { scrap: 999, wood: 999, metal: 0, concrete: 0 } };
+    const lines = labLines(g);
+    expect(lines.map((l) => (l.kind === 'action' ? l.label : l.text))).toEqual([
+      'Research Lab: not built',
+      'Build Research Lab',
+      'Research Metal walls',
+      'Research Auto-turret',
+    ]);
+    const reasons = lines.map((l) =>
+      l.kind === 'action' && !l.result.ok ? l.result.reason : null,
+    );
+    expect(reasons).toEqual([null, null, 'Needs a Research Lab', 'Needs Lab level 2']);
+  });
+
+  it('shows a levelled Lab with researched nodes as done and no upgrade at the top', () => {
+    let g: GameState = { ...newGame(), stock: { scrap: 999, wood: 999, metal: 0, concrete: 0 } };
+    for (let i = 0; i < 4; i++) {
+      const next = labLines(g).find((l) => l.kind === 'action' && l.result.ok);
+      if (next?.kind !== 'action' || !next.result.ok) throw new Error('nothing to do');
+      g = next.result.game;
+    }
+    expect(labLines(g)).toEqual([
+      { kind: 'heading', text: 'Research Lab · level 2' },
+      { kind: 'note', text: 'Metal walls · researched' },
+      { kind: 'note', text: 'Auto-turret · researched' },
+    ]);
   });
 });

@@ -5,13 +5,21 @@ import {
   COLUMNS,
   ENEMY_RADIUS,
   FIELD,
+  MAX_CONDITION,
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
   WALL,
   type Profession,
 } from '../core/data.ts';
-import type { Defender, HordeState, Layer } from '../core/horde.ts';
+import {
+  turretState,
+  type Defender,
+  type HordeState,
+  type Layer,
+  type Post,
+  type Turret,
+} from '../core/horde.ts';
 import { professionOf } from '../core/loadout.ts';
 import { badgeOf } from '../core/stats.ts';
 import type { Tier } from '../core/base.ts';
@@ -59,7 +67,53 @@ const COLOR = {
   hpFill: '#5ec24a',
   shot: '#e8d36a',
   strike: '#f2f2f2',
+  turretLitTop: '#e3c25a',
+  turretLitFront: '#a8862f',
+  turretDarkTop: '#4a4a48',
+  turretDarkFront: '#2f2f2e',
+  turretJamTop: '#6b3b33',
+  turretJamFront: '#4a2823',
+  turretJamMark: '#f2f2f2',
+  barrel: '#c9c3b6',
+  spark: '#ffd84a',
+  smoke: 'rgba(150, 150, 150, 0.55)',
 } as const;
+
+/** The turret head on its mount, and its barrel toward the horde. */
+const TURRET_ART = {
+  halfWidth: 9,
+  halfDepth: 9,
+  height: 12,
+  barrel: 14,
+  sparkBelow: 50,
+  smokeBelow: 25,
+} as const;
+
+/**
+ * How a turret shows its state (design §15): lit while powered, dark with no charge or
+ * with its wall broken, a red-brown head with a cross when jammed; sparks below half
+ * condition and smoke below a quarter, unless jammed.
+ */
+export function turretLook(
+  scene: Pick<Scene, 'layers' | 'energy'>,
+  t: Turret,
+): { top: string; front: string; jammed: boolean; sparks: boolean; smoke: boolean } {
+  const state = turretState(scene, t);
+  const jammed = state === 'jammed';
+  const share = (t.condition / MAX_CONDITION) * 100;
+  return {
+    top: state === 'lit' ? COLOR.turretLitTop : jammed ? COLOR.turretJamTop : COLOR.turretDarkTop,
+    front:
+      state === 'lit'
+        ? COLOR.turretLitFront
+        : jammed
+          ? COLOR.turretJamFront
+          : COLOR.turretDarkFront,
+    jammed,
+    sparks: !jammed && share < TURRET_ART.sparkBelow,
+    smoke: !jammed && share < TURRET_ART.smokeBelow,
+  };
+}
 
 /**
  * Each defender carries their loadout, so the profession reads at a glance (design §15):
@@ -96,7 +150,7 @@ const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
 /** What the renderer needs from a fight; build mode passes the base laid out the same way. */
 export type Scene = Pick<
   HordeState,
-  'layers' | 'posts' | 'defenders' | 'enemies' | 'shots' | 'focusId'
+  'layers' | 'posts' | 'turrets' | 'energy' | 'defenders' | 'enemies' | 'shots' | 'focusId'
 >;
 /** Build mode extras: empty slot outlines and the selected slot. */
 export interface BuildOverlay {
@@ -285,6 +339,83 @@ function drawDefender(
 
 type Sprite = { y: number; x: number; draw: () => void };
 
+/** Where a turret's head sits: on top of its tower, or on its wall's walk platform. */
+function turretFloor(layers: readonly Layer[], t: Turret): number {
+  return postFloor(layers, { kind: t.mount, column: t.column, row: t.row } as Post);
+}
+
+/** A turret: its mount, its head in its state's colours, its barrel, and its wear. */
+function drawTurret(ctx: CanvasRenderingContext2D, scene: Scene, t: Turret, cam: Camera): void {
+  const floor = turretFloor(scene.layers, t);
+  const mount = t.mount === 'tower' ? PIECE.tower : PIECE.walk;
+  const colour =
+    t.mount === 'tower'
+      ? { top: COLOR.postTop, front: COLOR.postFront }
+      : { top: COLOR.walkTop, front: COLOR.walkFront };
+  const box = (half: { halfWidth: number; halfDepth: number }) => ({
+    x0: t.x - half.halfWidth,
+    x1: t.x + half.halfWidth,
+    y0: t.y - half.halfDepth,
+    y1: t.y + half.halfDepth,
+  });
+  drawBox(ctx, { ...box(mount), z0: floor - mount.height, height: mount.height, ...colour }, cam);
+  const look = turretLook(scene, t);
+  const head = box(TURRET_ART);
+  drawBox(
+    ctx,
+    { ...head, z0: floor, height: TURRET_ART.height, top: look.top, front: look.front },
+    cam,
+  );
+  const zMid = floor + TURRET_ART.height / 2;
+  const muzzle = project(
+    { x: t.x + TURRET_ART.halfWidth + TURRET_ART.barrel, y: t.y, z: zMid },
+    cam,
+  );
+  const breech = project({ x: t.x + TURRET_ART.halfWidth, y: t.y, z: zMid }, cam);
+  ctx.strokeStyle = COLOR.barrel;
+  ctx.lineWidth = Math.max(1, 3 * cam.zoom);
+  ctx.beginPath();
+  ctx.moveTo(breech.sx, breech.sy);
+  ctx.lineTo(muzzle.sx, muzzle.sy);
+  ctx.stroke();
+  const top = floor + TURRET_ART.height;
+  if (look.jammed) {
+    const a = project({ x: head.x0, y: t.y, z: top }, cam);
+    const b = project({ x: head.x1, y: t.y, z: top - TURRET_ART.height }, cam);
+    ctx.strokeStyle = COLOR.turretJamMark;
+    ctx.lineWidth = Math.max(1, 2 * cam.zoom);
+    ctx.beginPath();
+    ctx.moveTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.moveTo(a.sx, b.sy);
+    ctx.lineTo(b.sx, a.sy);
+    ctx.stroke();
+  }
+  if (look.sparks) {
+    ctx.fillStyle = COLOR.spark;
+    for (const [dx, dz] of [
+      [-6, 4],
+      [5, 8],
+      [10, 2],
+    ] as const) {
+      const p = project({ x: t.x + dx, y: t.y, z: top + dz }, cam);
+      ctx.fillRect(p.sx - cam.zoom, p.sy - cam.zoom, 2 * cam.zoom, 2 * cam.zoom);
+    }
+  }
+  if (look.smoke) {
+    ctx.fillStyle = COLOR.smoke;
+    for (const [dx, dz, r] of [
+      [-2, 10, 5],
+      [4, 18, 7],
+    ] as const) {
+      const p = project({ x: t.x + dx, y: t.y, z: top + dz }, cam);
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, r * cam.zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
@@ -327,9 +458,9 @@ export function drawScene(
           outline(ctx, footprint({ column, row, what: 'segment' }), 0, cam);
         }
         for (const what of ['tower', 'ground'] as const) {
-          const taken = scene.posts.some(
-            (p) => p.kind === what && p.column === column && p.row === row,
-          );
+          const taken =
+            scene.posts.some((p) => p.kind === what && p.column === column && p.row === row) ||
+            scene.turrets.some((t) => t.mount === what && t.column === column && t.row === row);
           if (!taken) outline(ctx, footprint({ column, row, what }), 0, cam);
         }
       });
@@ -410,6 +541,9 @@ export function drawScene(
       },
     });
   }
+  for (const t of scene.turrets) {
+    sprites.push({ y: t.y, x: t.x, draw: () => drawTurret(ctx, scene, t, cam) });
+  }
   for (const d of scene.defenders) {
     if (!d.walking) continue;
     sprites.push({
@@ -469,9 +603,12 @@ export function drawScene(
       continue;
     }
     ctx.strokeStyle = COLOR.shot;
-    // Shots start at their post's exact coordinates, so this finds the shooter's post.
+    // Shots start at their post's or turret's exact coordinates, so this finds the shooter.
+    const turret = scene.turrets.find((t) => t.x === shot.fromX && t.y === shot.fromY);
     const from = scene.posts.find((p) => p.x === shot.fromX && p.y === shot.fromY);
-    const z = (from ? postFloor(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;
+    const z = turret
+      ? turretFloor(scene.layers, turret) + TURRET_ART.height / 2
+      : (from ? postFloor(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;
     const a0 = project({ x: shot.fromX, y: shot.fromY, z }, cam);
     const to = project({ x: shot.toX, y: shot.toY, z: ENEMY.z }, cam);
     ctx.beginPath();

@@ -5,6 +5,7 @@ import {
   COLUMNS,
   GATE_HP,
   MATERIALS,
+  MAX_CONDITION,
   POST_COST,
   POST_KINDS,
   POST_OFFSET,
@@ -12,13 +13,16 @@ import {
   SEGMENTS,
   TIER_ORDER,
   TIERS,
+  TURRET,
+  TURRET_MOUNTS,
   type Material,
   type PostKind,
   type Stock,
   type Tier,
+  type TurretMount,
 } from './data.ts';
 
-export type { PostKind, Tier } from './data.ts';
+export type { PostKind, Tier, TurretMount } from './data.ts';
 export type SegmentKind = 'wall' | 'gate';
 export interface BaseSegment {
   kind: SegmentKind;
@@ -36,10 +40,19 @@ export interface BasePost {
   column: number;
   row: number;
 }
-/** Layers sorted by column; posts sorted by (column, kind, row). */
+/** A turret on its mount (design §7): never destroyed, jammed at condition 0. */
+export interface BaseTurret {
+  mount: TurretMount;
+  column: number;
+  row: number;
+  /** 0 (jammed) … `MAX_CONDITION`. */
+  condition: number;
+}
+/** Layers sorted by column; posts and turrets sorted by (column, kind, row). */
 export interface Base {
   layers: BaseLayer[];
   posts: BasePost[];
+  turrets: BaseTurret[];
 }
 export type Result = { ok: true; base: Base; stock: Stock } | { ok: false; reason: string };
 
@@ -74,6 +87,7 @@ export function newBase(): Base {
       { kind: 'tower', column: 0, row: 1 },
       { kind: 'tower', column: 0, row: 3 },
     ],
+    turrets: [],
   };
 }
 
@@ -165,9 +179,7 @@ export function repairAll(base: Base, stock: Stock): Result {
 export function buildPost(base: Base, stock: Stock, post: BasePost): Result {
   checkPost(post);
   const { kind, column, row } = post;
-  if (base.posts.some((p) => p.kind === kind && p.column === column && p.row === row)) {
-    return refuse('Slot taken');
-  }
+  if (spotTaken(base, kind, column, row)) return refuse('Slot taken');
   const layer = layerAt(base, column);
   if (kind === 'wall-walk' && !layer?.slots[row]) return refuse('A wall-walk post needs a wall');
   if (kind !== 'wall-walk' && !layer?.slots.some((s) => s)) {
@@ -175,12 +187,98 @@ export function buildPost(base: Base, stock: Stock, post: BasePost): Result {
   }
   return pay(base, stock, POST_COST[kind], (b) => {
     b.posts.push({ kind, column, row });
-    b.posts.sort((x, y) => x.column - y.column || cmp(x.kind, y.kind) || x.row - y.row);
+    b.posts.sort(byPost);
+  });
+}
+
+/** Where a turret may go, or why not: a free spot, a wall under a wall mount, a wall in front of a tower. */
+function mountError(base: Base, mount: TurretMount, column: number, row: number): string | null {
+  if (spotTaken(base, mount, column, row)) return 'Slot taken';
+  const layer = layerAt(base, column);
+  if (mount === 'wall-walk' && !layer?.slots[row]) return 'A wall mount needs a wall';
+  if (mount === 'tower' && !layer?.slots.some((s) => s))
+    return 'A tower mount needs a wall in front';
+  return null;
+}
+
+/** Builds an Auto-turret at full condition (design §7); needs the Auto-turret researched. */
+export function buildTurret(
+  base: Base,
+  stock: Stock,
+  researched: boolean,
+  mount: TurretMount,
+  column: number,
+  row: number,
+): Result {
+  checkMount(mount, column, row);
+  if (!researched) return refuse('Research the Auto-turret first');
+  const why = mountError(base, mount, column, row);
+  if (why) return refuse(why);
+  return pay(base, stock, TURRET.cost, (b) => {
+    b.turrets.push({ mount, column, row, condition: MAX_CONDITION });
+    b.turrets.sort(byTurret);
+  });
+}
+
+/** Scrap for `turret`'s missing condition, rounded up. */
+export function turretRepairCost(turret: BaseTurret): Stock {
+  const missing = (MAX_CONDITION - turret.condition) / MAX_CONDITION;
+  return stockFrom((m) => (m === 'scrap' ? Math.ceil(TURRET.repairScrap * missing) : 0));
+}
+
+export function repairTurret(base: Base, stock: Stock, index: number): Result {
+  const t = turretAt(base, index);
+  if (t.condition >= MAX_CONDITION) return refuse('Nothing to repair');
+  return pay(base, stock, turretRepairCost(t), (b) => {
+    b.turrets[index]!.condition = MAX_CONDITION;
+  });
+}
+
+/** What dismantling `turret` gives back: `TURRET.salvage` × cost × condition share, rounded down. */
+export function salvageValue(turret: BaseTurret): Stock {
+  const share = (TURRET.salvage * turret.condition) / MAX_CONDITION;
+  return stockFrom((m) => Math.floor(((TURRET.cost as Partial<Stock>)[m] ?? 0) * share));
+}
+
+/** Dismantles turret `index` for its salvage value and frees the mount; never refused. */
+export function salvageTurret(base: Base, stock: Stock, index: number): Result {
+  const value = salvageValue(turretAt(base, index));
+  const b = structuredClone(base);
+  b.turrets.splice(index, 1);
+  return { ok: true, base: b, stock: stockFrom((m) => stock[m] + value[m]) };
+}
+
+/** Moves turret `index` to another free mount, for free, keeping its condition. */
+export function moveTurret(
+  base: Base,
+  stock: Stock,
+  index: number,
+  mount: TurretMount,
+  column: number,
+  row: number,
+): Result {
+  const t = turretAt(base, index);
+  checkMount(mount, column, row);
+  if (t.mount === mount && t.column === column && t.row === row) return refuse('Already there');
+  const why = mountError(base, mount, column, row);
+  if (why) return refuse(why);
+  return pay(base, stock, {}, (b) => {
+    const moved = b.turrets.splice(index, 1)[0]!;
+    b.turrets.push({ ...moved, mount, column, row });
+    b.turrets.sort(byTurret);
   });
 }
 
 const refuse = (reason: string): Result => ({ ok: false, reason });
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const byPost = (x: BasePost, y: BasePost): number =>
+  x.column - y.column || cmp(x.kind, y.kind) || x.row - y.row;
+const byTurret = (x: BaseTurret, y: BaseTurret): number =>
+  x.column - y.column || cmp(x.mount, y.mount) || x.row - y.row;
+/** A post or a turret already holds this spot (a ground spot never holds a turret). */
+const spotTaken = (base: Base, kind: PostKind, column: number, row: number): boolean =>
+  base.posts.some((p) => p.kind === kind && p.column === column && p.row === row) ||
+  base.turrets.some((t) => t.mount === kind && t.column === column && t.row === row);
 const layerAt = (base: Base, column: number): BaseLayer | undefined =>
   base.layers.find((l) => l.column === column);
 const segments = (base: Base): BaseSegment[] =>
@@ -216,6 +314,17 @@ function checkKind(kind: SegmentKind): void {
   if (kind !== 'wall' && kind !== 'gate') {
     throw new RangeError(`base: unknown segment kind ${String(kind)}`);
   }
+}
+function turretAt(base: Base, index: number): BaseTurret {
+  const t = Number.isInteger(index) ? base.turrets[index] : undefined;
+  if (!t) throw new RangeError(`base: no turret ${index}`);
+  return t;
+}
+function checkMount(mount: TurretMount, column: number, row: number): void {
+  if (!TURRET_MOUNTS.includes(mount)) {
+    throw new RangeError(`base: unknown turret mount ${String(mount)}`);
+  }
+  checkSlot(column, row);
 }
 function checkPost(post: BasePost): void {
   if (!POST_KINDS.includes(post.kind)) {

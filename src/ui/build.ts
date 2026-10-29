@@ -15,8 +15,17 @@ import {
   type Result,
 } from '../core/base.ts';
 import { postUsable } from '../core/cards.ts';
-import { MATERIALS, POST_COST, TIER_ORDER, TIERS, type Stock } from '../core/data.ts';
+import {
+  MATERIALS,
+  POST_COST,
+  RESEARCH,
+  RESEARCH_IDS,
+  TIER_ORDER,
+  TIERS,
+  type Stock,
+} from '../core/data.ts';
 import { available, type GameState, type RosterDefender } from '../core/game.ts';
+import { labCost, research, upgradeLab, type GameResult } from '../core/research.ts';
 import { layoutOf } from '../core/horde.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -89,6 +98,40 @@ export function pickStart(
   return { defenderId: defender.id, postId: game.base.posts.indexOf(post) };
 }
 
+/** One Lab line: a done node as a note, or an action with its cost and dry-run result. */
+export type LabLine =
+  | { kind: 'heading' | 'note'; text: string }
+  | { kind: 'action'; label: string; cost: Partial<Stock>; result: GameResult };
+
+/** The Research Lab section (design §11): its level, the next level, then each node. */
+export function labLines(game: GameState): LabLine[] {
+  const cost = labCost(game);
+  const lines: LabLine[] = [
+    {
+      kind: 'heading',
+      text: game.lab === 0 ? 'Research Lab: not built' : `Research Lab · level ${game.lab}`,
+    },
+  ];
+  if (cost) {
+    const label = game.lab === 0 ? 'Build Research Lab' : `Upgrade Lab to level ${game.lab + 1}`;
+    lines.push({ kind: 'action', label, cost, result: upgradeLab(game) });
+  }
+  for (const id of RESEARCH_IDS) {
+    const node = RESEARCH[id];
+    lines.push(
+      game.research.includes(id)
+        ? { kind: 'note', text: `${node.name} · researched` }
+        : {
+            kind: 'action',
+            label: `Research ${node.name}`,
+            cost: node.cost,
+            result: research(game, id),
+          },
+    );
+  }
+  return lines;
+}
+
 export interface BuildPanel {
   /** Redraws the panel for `game` with `selected` open; call when either changes. */
   show(game: GameState, selected: SlotHit | null): void;
@@ -104,7 +147,7 @@ export function createBuildPanel(
   onChange: (base: Base, stock: Stock) => void,
   onStart: (defenderId: string, postId: number) => void,
   onLoad: (game: GameState) => void,
-  onRoster: (game: GameState) => void,
+  onGame: (game: GameState) => void,
 ): BuildPanel {
   const bar = el('div', 'hud-bar build-bar');
   const panel = el('aside', 'build-panel');
@@ -152,18 +195,45 @@ export function createBuildPanel(
   const choice = (game: GameState) => pickStart(game, defenderId, startKey, Date.now());
 
   /** One menu option: its label and cost, and the refusal reason when it isn't allowed. */
-  function option(label: string, cost: Partial<Stock> | null, result: Result): HTMLElement {
+  function choiceButton(
+    label: string,
+    cost: Partial<Stock> | null,
+    refused: string | null,
+    onClick: () => void,
+  ): HTMLElement {
     const button = el('button', 'build-option');
     button.type = 'button';
     button.append(el('span', 'build-option-label', label));
     if (cost) button.append(el('span', 'build-option-cost', `(${stockText(cost)})`));
-    if (!result.ok) {
+    if (refused !== null) {
       button.disabled = true;
-      button.append(el('span', 'build-option-reason', result.reason));
+      button.append(el('span', 'build-option-reason', refused));
     } else {
-      button.addEventListener('click', () => onChange(result.base, result.stock));
+      button.addEventListener('click', onClick);
     }
     return button;
+  }
+  const option = (label: string, cost: Partial<Stock> | null, result: Result): HTMLElement =>
+    choiceButton(label, cost, result.ok ? null : result.reason, () => {
+      if (result.ok) onChange(result.base, result.stock);
+    });
+  const labOption = (label: string, cost: Partial<Stock>, result: GameResult): HTMLElement =>
+    choiceButton(label, cost, result.ok ? null : result.reason, () => {
+      if (result.ok) onGame(result.game);
+    });
+
+  function labSection(game: GameState): HTMLElement {
+    const section = el('section', 'build-lab');
+    section.append(
+      ...labLines(game).map((line) =>
+        line.kind === 'action'
+          ? labOption(line.label, line.cost, line.result)
+          : line.kind === 'heading'
+            ? el('h3', 'build-slot-title', line.text)
+            : el('p', 'build-slot-note', line.text),
+      ),
+    );
+    return section;
   }
 
   function slotMenu(game: GameState, slot: SlotHit): HTMLElement[] {
@@ -282,7 +352,7 @@ export function createBuildPanel(
     });
     start.append(...startSection(game), roster);
     code.value = exportCode(encodeSave(game, Date.now()));
-    return [el('h2', 'build-title', 'Build'), slot, all, start, backup];
+    return [el('h2', 'build-title', 'Build'), slot, all, labSection(game), start, backup];
   }
 
   /** The roster in place of the build panel: a Back button, then each defender. */
@@ -294,7 +364,7 @@ export function createBuildPanel(
       if (shown) api.show(shown.game, shown.selected);
       rosterButton?.focus(); // back where the player came from
     });
-    return [el('h2', 'build-title', 'Roster'), back, ...rosterSection(game, Date.now(), onRoster)];
+    return [el('h2', 'build-title', 'Roster'), back, ...rosterSection(game, Date.now(), onGame)];
   }
 
   const api: BuildPanel = {

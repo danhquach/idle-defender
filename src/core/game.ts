@@ -14,6 +14,7 @@ import {
   ITEMS,
   RARITIES,
   WEAPONS,
+  type ResearchId,
   type Stat,
   type Stats,
   type Stock,
@@ -40,6 +41,10 @@ export interface GameState {
   roster: RosterDefender[];
   /** Owned weapons no defender carries (design §6 Gear). */
   armoury: OwnedWeapon[];
+  /** Research Lab level; 0 = not built (design §11). */
+  lab: number;
+  /** Research nodes done, in the order researched. */
+  research: ResearchId[];
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -63,6 +68,8 @@ export function newGame(): GameState {
       injuredUntil: null,
     })),
     armoury: [],
+    lab: 0,
+    research: [],
   };
 }
 

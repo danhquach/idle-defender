@@ -308,3 +308,78 @@ export const TITLES: readonly {
   { at: 50, rank: 'Master', bonus: 0.3 },
   { at: 100, rank: 'Legendary', bonus: 0.5 },
 ];
+
+// --- Research Lab, turrets and energy (M5). Design §7 and §11. ---
+
+/** What each Research Lab level costs, level 1 first (design §11, as built ID-014). */
+export const LAB_LEVELS: readonly Partial<Stock>[] = [
+  { wood: 30, scrap: 20 },
+  { wood: 80, scrap: 60 },
+];
+
+export type ResearchId = 'metal-walls' | 'auto-turret';
+/**
+ * A research node: the Lab level and earlier node it needs, what it costs, and the
+ * barrier tier it unlocks, if any. Completes at once (design §11, as built ID-014).
+ */
+export const RESEARCH: Readonly<
+  Record<
+    ResearchId,
+    {
+      readonly name: string;
+      readonly lab: number;
+      readonly needs: ResearchId | null;
+      readonly cost: Partial<Stock>;
+      readonly tier: Tier | null;
+    }
+  >
+> = {
+  'metal-walls': {
+    name: 'Metal walls',
+    lab: 1,
+    needs: null,
+    cost: { scrap: 40, wood: 40 },
+    tier: 'metal',
+  },
+  'auto-turret': {
+    name: 'Auto-turret',
+    lab: 2,
+    needs: 'metal-walls',
+    cost: { scrap: 60, wood: 40 },
+    tier: null,
+  },
+};
+export const RESEARCH_IDS = Object.keys(RESEARCH) as ResearchId[];
+
+/** A turret sits on a tower or a wall-walk spot of the grid (design §7). */
+export type TurretMount = Extract<PostKind, 'tower' | 'wall-walk'>;
+export const TURRET_MOUNTS: readonly TurretMount[] = ['tower', 'wall-walk'];
+/** Condition runs 0 (jammed) … `MAX_CONDITION`. */
+export const MAX_CONDITION = 100;
+/**
+ * The Auto-turret (design §7): its cost and gun; `draw` charge per second it has a
+ * target; condition lost per shot (`shotWear`) and per point of damage its wall
+ * segment takes (`hitWear`); below `slowBelow` it fires slower, down to half speed.
+ * A full repair costs `repairScrap`; salvage refunds `salvage` × cost × condition share.
+ * A standing Engineer within its tool's `buffRadius` repairs `engineerRepair` condition/s.
+ */
+export const TURRET = {
+  cost: { scrap: 40, wood: 20 },
+  damage: 5,
+  fireInterval: 0.5,
+  range: 500,
+  draw: 1,
+  shotWear: 0.2,
+  hitWear: 0.5,
+  slowBelow: 50,
+  repairScrap: 20,
+  salvage: 0.5,
+  engineerRepair: 0.5,
+} as const;
+/** Turret range multiplier by mount. */
+export const TURRET_RANGE: Readonly<Record<TurretMount, number>> = {
+  tower: 1.25,
+  'wall-walk': 1,
+};
+/** Stand-in battery bank: full charge at each horde start until ID-015. */
+export const TURRET_BANK = 600;

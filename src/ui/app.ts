@@ -1,7 +1,7 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { chooseCard } from '../core/cards.ts';
-import { FIELD, type Stat } from '../core/data.ts';
+import { FIELD, TURRET_BANK, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -351,10 +351,20 @@ export function start(root: HTMLElement): void {
 
 /** The base as build mode shows it: no horde, the start defender on the picked post. */
 function buildScene(game: GameState, choice: { defenderId: string; postId: number } | null): Scene {
-  const { layers, posts } = layoutOf(game.base);
+  const { layers, posts, turrets } = layoutOf(game.base);
   const post = choice ? posts[choice.postId] : undefined;
   const spec = game.roster.find((d) => d.id === choice?.defenderId);
   const defenders = post && spec ? [standing(spec, post, 0)] : [];
   if (post && spec) post.defenderId = spec.id;
-  return { layers, posts, defenders, enemies: [], shots: [], focusId: null };
+  // A full stand-in bank, so build mode shows each turret lit unless it is jammed or its wall is down.
+  return {
+    layers,
+    posts,
+    turrets,
+    energy: TURRET_BANK,
+    defenders,
+    enemies: [],
+    shots: [],
+    focusId: null,
+  };
 }

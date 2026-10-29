@@ -563,3 +563,124 @@ describe('save: the armoury (design §6 Gear)', () => {
     expect(encodeSave(full, NOW).length).toBeLessThan(MAX_SAVE_CHARS / 5);
   });
 });
+
+describe('save: Research Lab, research and turrets (ID-014)', () => {
+  const turrets = (s: Loose) => s.game.base.turrets;
+
+  it('round-trips the Lab, research and a worn turret', () => {
+    const game = played();
+    expect(game.lab).toBe(2);
+    expect(game.research).toEqual(['metal-walls', 'auto-turret']);
+    expect(game.base.turrets).toEqual([{ mount: 'tower', column: 0, row: 2, condition: 61.2 }]);
+    expect(decodeSave(encodeSave(game, NOW))).toEqual({ game, savedAt: NOW });
+  });
+
+  it('loads a save from before the Lab and turrets: none built, nothing researched, tiers kept', () => {
+    const save = JSON.parse(encodeSave(newGame(), NOW));
+    delete save.game.lab;
+    delete save.game.research;
+    delete save.game.base.turrets;
+    expect(decodeSave(JSON.stringify(save))).toEqual({ game: newGame(), savedAt: NOW });
+  });
+
+  it('refuses a Lab level or research the game could not reach', () => {
+    expect(hostile((s) => delete s.game.lab)).toBeNull(); // research without its Lab
+    expect(hostile((s) => (s.game.lab = 3))).toBeNull();
+    expect(hostile((s) => (s.game.lab = -1))).toBeNull();
+    expect(hostile((s) => (s.game.lab = 1.5))).toBeNull();
+    expect(hostile((s) => (s.game.lab = '2'))).toBeNull();
+    expect(hostile((s) => (s.game.lab = 1))).toBeNull(); // Auto-turret needs Lab 2
+    expect(hostile((s) => s.game.research.reverse())).toBeNull(); // out of order
+    expect(hostile((s) => s.game.research.push('auto-turret'))).toBeNull();
+    expect(hostile((s) => (s.game.research = ['metal-walls', 'death-ray']))).toBeNull();
+    expect(hostile((s) => (s.game.research = ['metal-walls', 'auto-turret ']))).toBeNull();
+    expect(hostile((s) => (s.game.research = ['metal-walls', 'autо-turret']))).toBeNull(); // Cyrillic o
+    expect(hostile((s) => (s.game.research = ['metal-walls', 'auto​-turret']))).toBeNull();
+    expect(hostile((s) => (s.game.research = ['metal-walls', '__proto__']))).toBeNull();
+    expect(hostile((s) => (s.game.research = 'metal-walls'))).toBeNull();
+    expect(hostile((s) => (s.game.research = { 0: 'metal-walls' }))).toBeNull();
+  });
+
+  it('refuses research whose tier is not unlocked', () => {
+    const g = newGame();
+    const raw = (game: Loose) => decodeSave(JSON.stringify({ v: 1, savedAt: NOW, game }));
+    expect(raw({ ...g, lab: 1, research: ['metal-walls'] })).toBeNull(); // Metal not unlocked
+    expect(
+      raw({ ...g, lab: 1, research: ['metal-walls'], tiers: ['wood', 'metal'] }),
+    ).not.toBeNull();
+  });
+
+  it('a save from before the Lab keeps its tiers, and still loads after it is saved again', () => {
+    const save = JSON.parse(encodeSave(played(), NOW));
+    delete save.game.lab;
+    delete save.game.research;
+    delete save.game.base.turrets;
+    const first = decodeSave(JSON.stringify(save));
+    expect(first?.game).toMatchObject({ tiers: ['wood', 'metal'], lab: 0, research: [] });
+    const again = decodeSave(encodeSave(first!.game, NOW));
+    expect(again).toEqual(first);
+  });
+
+  it('refuses turrets the build rules never make', () => {
+    expect(hostile((s) => (turrets(s)[0].condition = 101))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].condition = -1))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].condition = '50'))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].mount = 'ground'))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].mount = 'tower '))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].row = 5))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].column = 3))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].extra = 1))).toBeNull();
+    expect(hostile((s) => delete turrets(s)[0].condition)).toBeNull();
+    expect(hostile((s) => turrets(s).push({ ...turrets(s)[0] }))).toBeNull(); // repeated
+    expect(
+      hostile((s) => turrets(s).unshift({ mount: 'tower', column: 1, row: 0, condition: 9 })),
+    ).toBeNull(); // out of order
+    expect(
+      hostile((s) => turrets(s).push({ mount: 'tower', column: 2, row: 0, condition: 9 })),
+    ).toBeNull(); // no wall
+    expect(
+      hostile((s) => turrets(s).push({ mount: 'wall-walk', column: 1, row: 1, condition: 9 })),
+    ).toBeNull(); // wall mount over an empty slot
+    expect(
+      hostile((s) => turrets(s).push({ mount: 'wall-walk', column: 1, row: 0, condition: 9 })),
+    ).toBeNull(); // the spot holds a wall-walk post
+    expect(
+      hostile((s) => turrets(s).unshift({ mount: 'tower', column: 0, row: 1, condition: 9 })),
+    ).toBeNull(); // the spot holds a tower post
+    expect(hostile((s) => (s.game.research = ['metal-walls']))).toBeNull(); // not researched
+    expect(hostile((s) => (s.game.base.turrets = null))).toBeNull();
+  });
+
+  it('reads a raw turret condition as a finite number in range, fractions included', () => {
+    const raw = encodeSave(played(), NOW);
+    const at = (text: string) => decodeSave(raw.replace('"condition":61.2', `"condition":${text}`));
+    expect(raw).toContain('"condition":61.2');
+    expect(at('1e999')).toBeNull(); // Infinity
+    expect(at('-1e-320')).toBeNull();
+    expect(at('100.0001')).toBeNull();
+    expect(at('1e-320')?.game.base.turrets[0]!.condition).toBe(1e-320);
+    expect(at('-0')?.game.base.turrets[0]!.condition).toBe(0);
+  });
+
+  it('refuses more turrets than the grid holds, quickly', () => {
+    const many = Array.from({ length: 31 }, () => ({
+      mount: 'tower',
+      column: 0,
+      row: 0,
+      condition: 0,
+    }));
+    const t0 = performance.now();
+    expect(hostile((s) => (s.game.base.turrets = many))).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+
+  it('refuses a polluted turret or research entry and leaves Object.prototype alone', () => {
+    const raw = encodeSave(played(), NOW);
+    const raws = [
+      raw.replace('"mount"', '"__proto__":{"polluted":1},"mount"'),
+      raw.replace('"research":[', '"research":[{"__proto__":{"polluted":1}},'),
+    ];
+    for (const r of raws) expect(decodeSave(r)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});

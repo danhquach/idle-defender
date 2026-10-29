@@ -10,6 +10,7 @@ import {
   type BaseLayer,
   type BasePost,
   type BaseSegment,
+  type BaseTurret,
 } from '../core/base.ts';
 import {
   affixCount,
@@ -23,15 +24,21 @@ import {
   ARMOURY_CAP,
   COLUMNS,
   ITEMS,
+  LAB_LEVELS,
   MATERIALS,
+  MAX_CONDITION,
   POST_KINDS,
   RARITY_ORDER,
   RECOVERY_MS,
+  RESEARCH,
+  RESEARCH_IDS,
   SEGMENTS,
   STATS,
   TIER_ORDER,
+  TURRET_MOUNTS,
   WEAPONS,
   type ItemId,
+  type ResearchId,
   type Stats,
   type Stock,
   type Tier,
@@ -147,25 +154,36 @@ function readSave(v: unknown): Save {
 }
 
 function readGame(v: unknown, savedAt: number): GameState {
-  // A save from before the armoury (0.4.5 and older) has none: it starts empty.
-  const old = typeof v === 'object' && v !== null && !Object.hasOwn(v, 'armoury');
+  const lacks = (key: string): boolean =>
+    typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
+  // A save from before the armoury (0.4.5 and older) has none: it starts empty. One
+  // from before the Lab (0.4.6 and older) has no Lab and nothing researched, and
+  // keeps its tiers.
+  const old = { armoury: lacks('armoury'), lab: lacks('lab') && lacks('research') };
   const o = obj(v, [
     'hordeNumber',
     'base',
     'stock',
     'tiers',
     'roster',
-    ...(old ? [] : ['armoury']),
+    ...(old.armoury ? [] : ['armoury']),
+    ...(old.lab ? [] : ['lab', 'research']),
   ]);
   const tiers = readTiers(o.tiers);
+  const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
+  const research = old.lab ? [] : readResearch(o.research, lab, tiers);
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
   const game: GameState = {
     hordeNumber,
-    base: readBase(o.base, tiers),
+    base: readBase(o.base, tiers, research.includes('auto-turret')),
     stock: readStock(o.stock),
     tiers,
     roster: readRoster(o.roster, savedAt, hordeNumber),
-    armoury: old ? [] : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber)),
+    armoury: old.armoury
+      ? []
+      : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber)),
+    lab,
+    research,
   };
   // Each owned weapon is one item, in the armoury or in one pair of hands, and the camp keeps at most ARMOURY_CAP.
   const owned = [
@@ -183,6 +201,26 @@ function readTiers(v: unknown): Tier[] {
   return tiers;
 }
 
+/**
+ * Research the game could have done: known nodes, once each, in an order where each
+ * one's earlier node comes first, each within `lab`'s level, and each one's tier
+ * unlocked. A tier with no node behind it is allowed: a save from before the Lab
+ * keeps its tiers, and must still load after it is saved again.
+ */
+function readResearch(v: unknown, lab: number, tiers: readonly Tier[]): ResearchId[] {
+  const done: ResearchId[] = [];
+  for (const x of arr(v, 0, RESEARCH_IDS.length)) {
+    const id = oneOf(x, RESEARCH_IDS);
+    const node = RESEARCH[id];
+    if (done.includes(id)) fail('research twice');
+    if (node.lab > lab) fail('research above the Lab');
+    if (node.needs && !done.includes(node.needs)) fail('research out of order');
+    if (node.tier && !tiers.includes(node.tier)) fail('tier not unlocked');
+    done.push(id);
+  }
+  return done;
+}
+
 function readStock(v: unknown): Stock {
   const o = obj(v, MATERIALS);
   return {
@@ -193,8 +231,10 @@ function readStock(v: unknown): Stock {
   };
 }
 
-function readBase(v: unknown, tiers: readonly Tier[]): Base {
-  const o = obj(v, ['layers', 'posts']);
+function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean): Base {
+  // A base from before turrets (0.4.6 and older) has none.
+  const old = typeof v === 'object' && v !== null && !Object.hasOwn(v, 'turrets');
+  const o = obj(v, ['layers', 'posts', ...(old ? [] : ['turrets'])]);
   const layers = arr(o.layers, 1, COLUMNS.length).map((l) => readLayer(l, tiers));
   for (let i = 1; i < layers.length; i++) {
     if (layers[i]!.column <= layers[i - 1]!.column) fail('layers out of order');
@@ -208,7 +248,32 @@ function readBase(v: unknown, tiers: readonly Tier[]): Base {
     // The rules buildPost keeps: a wall-walk sits on a wall, the others behind one.
     if (p.kind === 'wall-walk' ? !layer?.slots[p.row] : !layer) fail('post with no wall');
   }
-  return { layers, posts };
+  const turrets = old
+    ? []
+    : arr(o.turrets, 0, COLUMNS.length * SEGMENTS * TURRET_MOUNTS.length).map(readTurret);
+  if (turrets.length > 0 && !turretsResearched) fail('turret not researched');
+  for (let i = 1; i < turrets.length; i++) {
+    if (turretOrder(turrets[i - 1]!, turrets[i]!) >= 0) fail('turrets out of order');
+  }
+  for (const t of turrets) {
+    // The rules buildTurret keeps: a wall mount sits on a wall, a tower behind one, and a spot holds a post or a turret.
+    const layer = layers.find((l) => l.column === t.column);
+    if (t.mount === 'wall-walk' ? !layer?.slots[t.row] : !layer) fail('turret with no wall');
+    if (posts.some((p) => p.kind === t.mount && p.column === t.column && p.row === t.row)) {
+      fail('turret on a post');
+    }
+  }
+  return { layers, posts, turrets };
+}
+
+function readTurret(v: unknown): BaseTurret {
+  const o = obj(v, ['mount', 'column', 'row', 'condition']);
+  return {
+    mount: oneOf(o.mount, TURRET_MOUNTS),
+    column: int(o.column, 0, COLUMNS.length - 1),
+    row: int(o.row, 0, SEGMENTS - 1),
+    condition: num(o.condition, 0, MAX_CONDITION) + 0, // + 0 turns -0 into 0
+  };
 }
 
 function readLayer(v: unknown, tiers: readonly Tier[]): BaseLayer {
@@ -254,6 +319,13 @@ function readStats(v: unknown, xp: number): Stats {
 /** The order buildPost keeps posts in: column, then kind, then row. */
 function postOrder(a: BasePost, b: BasePost): number {
   return a.column - b.column || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || a.row - b.row;
+}
+
+/** The order buildTurret keeps turrets in: column, then mount, then row. */
+function turretOrder(a: BaseTurret, b: BaseTurret): number {
+  return (
+    a.column - b.column || (a.mount < b.mount ? -1 : a.mount > b.mount ? 1 : 0) || a.row - b.row
+  );
 }
 
 /** A loadout the game allows (design §6): a gun as primary, a shield only with a blade. */
