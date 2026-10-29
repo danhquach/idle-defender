@@ -3,7 +3,6 @@ import { levelUp, postUsable } from './cards.ts';
 import {
   CAMP,
   COLUMNS,
-  DEFENDER_HP,
   ENEMIES,
   ENGINEER_BUFF,
   ENEMY_RADIUS,
@@ -17,16 +16,19 @@ import {
   SEPARATION_SPEED,
   SHOT_TRAIL,
   SPAWN_INTERVAL,
+  STAT_EFFECT,
   STEP,
   WALK_SPEED,
   WALL,
   WAVE_BREAK,
   WEAPONS,
   type EnemyKind,
+  type Stats,
   type WeaponId,
 } from './data.ts';
 import { openReplace } from './replace.ts';
-import { int, rngFrom, type Rng, type RngState } from './rng.ts';
+import { chance, int, rngFrom, type Rng, type RngState } from './rng.ts';
+import { cleaveShare, critChance, damageFactor, maxHpOf, repairFactor } from './stats.ts';
 import { enemyHp, waveCount, waveSize } from './waves.ts';
 
 export type UpgradeId = 'sharpshooter' | 'rapid-fire' | 'long-sight' | 'patch-up' | 'reinforce';
@@ -35,6 +37,14 @@ export interface DefenderSpec {
   id: string;
   name: string;
   weapon: WeaponId;
+  /** Permanent stats from the roster (design §6); none means all 0. */
+  stats?: Readonly<Stats>;
+}
+
+/** The spec a fight defender came from, stats and all. */
+export function specOf(d: DefenderSpec): DefenderSpec {
+  const { id, name, weapon, stats } = d;
+  return stats ? { id, name, weapon, stats: { ...stats } } : { id, name, weapon };
 }
 export interface HordeSetup {
   hordeNumber: number;
@@ -219,18 +229,16 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
 
 /** `spec` at full HP standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
 export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): Defender {
-  const { id, name, weapon } = spec;
+  const hp = maxHpOf(spec);
   return {
-    id,
-    name,
-    weapon,
+    ...specOf(spec),
     nextShotAt,
     x: post.x,
     y: post.y,
     postId: post.id,
     walking: false,
-    hp: DEFENDER_HP,
-    maxHp: DEFENDER_HP,
+    hp,
+    maxHp: hp,
     hitBy: null,
   };
 }
@@ -397,7 +405,7 @@ export function enemyAt(state: HordeState, x: number, y: number): number | null 
 function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   walk(s);
-  fire(s);
+  fire(s, rng);
   repair(s);
   removeDead(s);
   const moved = move(s);
@@ -448,7 +456,7 @@ function walk(s: HordeState): void {
   }
 }
 
-function fire(s: HordeState): void {
+function fire(s: HordeState, rng: Rng): void {
   s.shots = s.shots.filter((shot) => s.time - shot.at < SHOT_TRAIL);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId && !d.walking);
@@ -471,7 +479,21 @@ function fire(s: HordeState): void {
       }
     }
     if (!target) continue;
-    target.hp -= weapon.damage * s.mods.damage;
+    // Crits roll only for those who can crit, so a fight without Aim replays as before.
+    const crit = critChance(defender);
+    const hit =
+      weapon.damage *
+      s.mods.damage *
+      damageFactor(defender) *
+      (crit > 0 && chance(rng, crit) ? STAT_EFFECT.critDamage : 1);
+    target.hp -= hit;
+    const cleave = cleaveShare(defender);
+    if (cleave > 0) {
+      for (const e of s.enemies) {
+        const near = Math.hypot(e.x - target.x, e.y - target.y) <= STAT_EFFECT.cleaveRadius + EPS;
+        if (e !== target && e.hp > 0 && near) e.hp -= hit * cleave;
+      }
+    }
     defender.nextShotAt =
       s.time + weapon.fireInterval / (s.mods.fireRate * engineerBuff(s, defender));
     s.shots.push({
@@ -501,7 +523,7 @@ function repair(s: HordeState): void {
       if (Math.abs(seg.index - post.row) > 1 || seg.hp <= 0 || seg.hp >= seg.maxHp) continue;
       if (!worst || seg.hp / seg.maxHp < worst.hp / worst.maxHp) worst = seg;
     }
-    if (worst) worst.hp = Math.min(worst.maxHp, worst.hp + w.repair * STEP);
+    if (worst) worst.hp = Math.min(worst.maxHp, worst.hp + w.repair * repairFactor(d) * STEP);
   }
 }
 
@@ -696,7 +718,7 @@ function injure(s: HordeState): void {
     }
     s.posts[d.postId]!.defenderId = null;
     s.injured.push({
-      defender: { id: d.id, name: d.name, weapon: d.weapon },
+      defender: specOf(d),
       postId: d.postId,
       at: s.time,
       offered: false,
@@ -747,7 +769,7 @@ function drop(s: HordeState): void {
       d.walking = true;
       kept.push(d);
     } else {
-      s.bench.push({ id: d.id, name: d.name, weapon: d.weapon });
+      s.bench.push(specOf(d));
     }
   }
   s.defenders = kept;

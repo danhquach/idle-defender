@@ -301,3 +301,27 @@ body {
   list-style: none;
   color: #d8d4cc;
 }
+
+.hud-picker {
+  margin: 0 0 16px;
+}
+
+.hud-pick {
+  margin-bottom: 12px;
+}
+
+.hud-pick-heading {
+  margin: 0 0 6px;
+  color: #d8d4cc;
+}
+
+.hud-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hud-pick-note {
+  margin: 6px 0 0;
+  color: #e0b84a;
+}

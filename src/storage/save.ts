@@ -17,13 +17,16 @@ import {
   POST_KINDS,
   RECOVERY_MS,
   SEGMENTS,
+  STATS,
   TIER_ORDER,
   WEAPONS,
+  type Stats,
   type Stock,
   type Tier,
   type WeaponId,
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
+import { earnedPoints, NO_STATS, spentPoints } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text } from './validate.ts';
 
 export const SAVE_KEY = 'idle-defender.save';
@@ -204,24 +207,40 @@ function readPost(v: unknown): BasePost {
   };
 }
 
+/** Points spent per stat: no more in all than lifetime `xp` has earned. */
+function readStats(v: unknown, xp: number): Stats {
+  const o = obj(v, STATS);
+  const stats = { ...NO_STATS };
+  for (const s of STATS) stats[s] = int(o[s], 0, MAX_COUNT);
+  if (spentPoints(stats) > earnedPoints(xp)) fail('points not earned');
+  return stats;
+}
+
 /** The order buildPost keeps posts in: column, then kind, then row. */
 function postOrder(a: BasePost, b: BasePost): number {
   return a.column - b.column || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || a.row - b.row;
 }
 
 function readRoster(v: unknown, savedAt: number): RosterDefender[] {
-  const roster = arr(v, 1, MAX_ROSTER).map((d) => readDefender(d, savedAt));
+  const list = arr(v, 1, MAX_ROSTER);
+  // A save from before stats (0.4.1 and older) has none on any defender: all 0.
+  const old = list.every((d) => typeof d === 'object' && d !== null && !Object.hasOwn(d, 'stats'));
+  const roster = list.map((d) => readDefender(d, savedAt, old));
   if (new Set(roster.map((d) => d.id)).size !== roster.length) fail('id twice');
   return roster;
 }
 
-function readDefender(v: unknown, savedAt: number): RosterDefender {
-  const o = obj(v, ['id', 'name', 'weapon', 'xp', 'injuredUntil']);
+const DEFENDER_KEYS = ['id', 'name', 'weapon', 'xp', 'injuredUntil'];
+
+function readDefender(v: unknown, savedAt: number, old: boolean): RosterDefender {
+  const o = obj(v, old ? DEFENDER_KEYS : [...DEFENDER_KEYS, 'stats']);
+  const xp = int(o.xp, 0, MAX_COUNT);
   return {
     id: text(o.id, 32, ID),
     name: text(o.name, 24, NAME),
     weapon: oneOf(o.weapon, WEAPON_IDS),
-    xp: int(o.xp, 0, MAX_COUNT),
+    xp,
+    stats: old ? { ...NO_STATS } : readStats(o.stats, xp),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
     // clock set back, a code from a device whose clock runs ahead) is cut to that.
     injuredUntil:

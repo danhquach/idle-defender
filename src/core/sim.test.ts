@@ -10,8 +10,10 @@ import {
   playCampaign,
   playHorde,
   repairWhatYouCan,
+  spendAll,
   summarise,
 } from './sim.ts';
+import { NO_STATS } from './stats.ts';
 
 /** Horde 1 on the starting base: bob on post 0, jack and john on the bench. */
 const fresh = (): HordeState => startHorde(newGame(), 1, 'bob', 0, 0);
@@ -169,6 +171,23 @@ describe('nextHorde', () => {
 
   it('starts at once with everyone fit', () => {
     expect(nextHorde(newGame(), 100).now).toBe(100);
+  });
+});
+
+describe('spendAll', () => {
+  it("puts every point into the held weapon's stat, and leaves a game with none alone", () => {
+    const g = newGame();
+    g.roster[0]!.xp = 25; // Bob, pistol: 3 points
+    g.roster[1]!.xp = 75; // Jack, knife: 6 points, 1 already in Grit
+    g.roster[1]!.stats = { ...NO_STATS, grit: 1 };
+    const after = spendAll(g);
+    expect(after.roster.map((d) => d.stats)).toEqual([
+      { ...NO_STATS, aim: 3 },
+      { ...NO_STATS, might: 5, grit: 1 },
+      NO_STATS,
+    ]);
+    expect(g.roster[0]!.stats).toEqual(NO_STATS);
+    expect(spendAll(newGame())).toEqual(newGame());
   });
 });
 

@@ -94,7 +94,50 @@ M4 = ID-010 (weapons → professions, post rules) + ID-011 (XP, stat points, pro
 
 ## ID-011 — Defender XP, stat points, profession levels, titles
 
-**Acceptance criteria:** written here before it starts.
+**Acceptance criteria** (also on issue #11; PM decision, 2026-10-29: points are spent on the result screen):
+
+**XP and levels**
+- Roster `xp` is lifetime XP; the level comes from it. Level L → L+1 costs `25 × L` XP (`LEVEL_XP`, starting point): a defender in every win reaches level 2 after Horde 2 and level 3 after Horde 4.
+- Each level gives 3 stat points (design §6). Unspent = `3 × (level − 1)` − points spent.
+- Points are permanent (no respec). Spending with none left returns `{ ok: false, reason }`.
+
+**Stats** (each applies only with a matching weapon; starting points in `data.ts`)
+- **Aim** (Gunner): +2% damage per point; 0.5% crit chance per point, capped at 50%; a crit deals ×2. Crits roll on the horde RNG only when the chance is above 0, so a fight with no Aim replays as before.
+- **Might** (Ripper): +2% damage per point; each strike cleaves enemies within 30 px of the target for 1% of its damage per point, capped at 50%.
+- **Tech** (Engineer): +2% repair rate per point (turret buff and battery quality come with M5).
+- **Grit** (any weapon): +5 max HP per point in hordes, over 100 (patrol effects later).
+- Recruits and replacements fight with their permanent stats (design §4).
+
+**Titles**
+- Profession level = points in that profession's stat. Junior / Adept / Master / Legendary at 10 / 25 / 50 / 100 give +5% / +15% / +30% / +50% to that profession's output (Gunner and Ripper damage, Engineer repair), only with a matching weapon. The title bonus multiplies on top of the stat.
+- Name tag = the highest title ("Bob the Gunner"); ties → higher title, then more points, then Gunner, Ripper, Engineer. It shows wherever `defenderLabel` does.
+
+**Result screen**
+- After a win each XP line shows the gain, level progress and any level-up: "Bob +25 XP · level 2 (10/50) · +3 stat points".
+- Every defender from the win with points to spend gets a picker (Aim, Might, Tech, Grit, one point per click) on the result screen; it shows the new name tag and title as they're earned. Points left unspent carry over (ID-012's roster screen spends them later). The spends apply with "Back to build".
+- A loss still shows "No XP on a loss" and no picker.
+
+**Save**
+- Each roster entry saves `stats: { aim, might, tech, grit }`. A save without `stats` (before 0.4.2) loads with all 0. More points spent than the level allows is refused. Hostile payloads tested (`__proto__`, extra keys, negatives, fractions, oversized).
+- `security-devops` audit of the save change.
+
+**Balance**
+- The balance simulator spends each level's points on the equipped weapon's stat; the `balance.test.ts` targets still hold. Any retune is a `data.ts` number, listed in the PR.
+
+**General**
+- Unit tests: the level curve edges, each stat with a matching and a non-matching weapon, the crit and cleave caps, Grit HP, title thresholds and tie-breaks, the result lines and picker.
+- Design §6 notes the numbers as built. Version `0.4.2`.
+
+**Files:**
+- Modify `src/core/data.ts`: `STATS`, `PROFESSION_STAT`, `LEVEL_XP`, `POINTS_PER_LEVEL`, `STAT_EFFECT`, `TITLES`.
+- Create `src/core/stats.ts`: levels, points, `spend`, titles, name tag, the fight factors.
+- Modify `src/core/horde.ts`: `DefenderSpec.stats`, Grit HP, damage, crit, cleave and repair factors.
+- Modify `src/core/game.ts`: `RosterDefender.stats`, `spendPoint`, `levelGains`.
+- Modify `src/core/sim.ts`: the scripted player spends points.
+- Modify `src/storage/save.ts`: `stats`, with and without.
+- UI: XP lines, the picker in `hud.ts`; `app.ts` applies the spends; `defenderLabel` uses the name tag.
+- Tests: `src/core/stats.test.ts` (new), `game.test.ts`, `sim.test.ts`, `save.test.ts`, `hud.test.ts`.
+- `docs/design.md` §6.
 
 ## ID-012 — Roster screen
 

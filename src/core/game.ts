@@ -9,13 +9,17 @@ import {
   RECOVERY_MS,
   START_STOCK,
   START_TIERS,
+  type Stat,
+  type Stats,
   type Stock,
 } from './data.ts';
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
+import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
 
-/** A defender on the camp's roster: XP banked from hordes (levels come with ID-011). */
+/** A defender on the camp's roster: lifetime XP (the level comes from it) and the stat points spent. */
 export interface RosterDefender extends DefenderSpec {
   xp: number;
+  stats: Stats;
   /** Injured until this time (ms); null when fit. */
   injuredUntil: number | null;
 }
@@ -42,7 +46,12 @@ export function newGame(): GameState {
     base: newBase(),
     stock: { ...START_STOCK },
     tiers: [...START_TIERS],
-    roster: STARTER_ROSTER.map((d) => ({ ...d, xp: 0, injuredUntil: null })),
+    roster: STARTER_ROSTER.map((d) => ({
+      ...d,
+      xp: 0,
+      stats: { ...NO_STATS },
+      injuredUntil: null,
+    })),
   };
 }
 
@@ -98,6 +107,53 @@ export function xpGains(
   }));
 }
 
+/** A win's XP line for one defender: the gain, the level after it and the stat points it brought. */
+export interface LevelGain {
+  id: string;
+  name: string;
+  xp: number;
+  injured: boolean;
+  level: number;
+  /** XP into `level`, and what `level` costs. */
+  into: number;
+  next: number;
+  /** Levels gained by this win. */
+  levels: number;
+  points: number;
+}
+
+/** `xpGains` against the roster of `game` (the game the horde was fought from): the levels each gain brings. */
+export function levelGains(game: GameState, h: HordeState): LevelGain[] {
+  return xpGains(h).map((g) => {
+    const before = game.roster.find((d) => d.id === g.id)?.xp ?? 0;
+    const was = levelOf(before).level;
+    const now = levelOf(before + g.xp);
+    return {
+      ...g,
+      level: now.level,
+      into: now.into,
+      next: now.next,
+      levels: now.level - was,
+      points: earnedPoints(before + g.xp) - earnedPoints(before),
+    };
+  });
+}
+
+/** Puts one stat point of `defenderId` into `stat`; refused with none left. */
+export function spendPoint(
+  game: GameState,
+  defenderId: string,
+  stat: Stat,
+): { ok: true; game: GameState } | { ok: false; reason: string } {
+  const i = game.roster.findIndex((d) => d.id === defenderId);
+  if (i < 0) throw new RangeError(`spendPoint: no defender ${String(defenderId)}`);
+  const r = spend(game.roster[i]!, stat);
+  if (!r.ok) return r;
+  const roster = [...game.roster];
+  roster[i] = r.defender;
+  return { ok: true, game: { ...game, roster } };
+}
+
 /**
  * When `injury` heals, for a horde that ended at `now`: `RECOVERY_MS` from the injury,
  * counted back from `now` in fight time (which stops during offers, so never early).
@@ -122,7 +178,7 @@ export function startHorde(
   }
   return newHorde(seed, {
     hordeNumber: game.hordeNumber,
-    roster: fit.map(({ id, name, weapon }) => ({ id, name, weapon })),
+    roster: fit.map(({ id, name, weapon, stats }) => ({ id, name, weapon, stats: { ...stats } })),
     startDefenderId: defenderId,
     base: game.base,
     startPostId: postId,

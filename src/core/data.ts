@@ -151,7 +151,7 @@ export const START_TIERS: readonly Tier[] = ['wood'];
 
 // --- Horde rules (M3). Design §2, §4 and §11. ---
 
-/** Defender HP in a horde (Grit adds to it with ID-011). */
+/** Defender HP in a horde, before Grit. */
 export const DEFENDER_HP = 100;
 /** How close an enemy inside the camp must be to hit a defender. */
 export const MELEE_REACH = 2 * ENEMY_RADIUS;
@@ -172,3 +172,47 @@ export const RECOVERY_MS = 2 * 60 * 60 * 1000;
 
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;
+
+// --- Defender levels, stats and titles (M4). Design §6. ---
+
+export type Stat = 'aim' | 'might' | 'tech' | 'grit';
+export type Stats = Record<Stat, number>;
+export const STATS: readonly Stat[] = ['aim', 'might', 'tech', 'grit'];
+export const STAT_NAMES: Readonly<Record<Stat, string>> = {
+  aim: 'Aim',
+  might: 'Might',
+  tech: 'Tech',
+  grit: 'Grit',
+};
+/** The stat that feeds each profession; Grit feeds all. */
+export const PROFESSION_STAT: Readonly<Record<Profession, Stat>> = {
+  gunner: 'aim',
+  ripper: 'might',
+  engineer: 'tech',
+};
+/** XP from level L to L + 1 is `LEVEL_XP × L`. */
+export const LEVEL_XP = 25;
+export const POINTS_PER_LEVEL = 3;
+/** Per point of the matching stat; crit and cleave are capped. Grit adds `gritHp` HP per point. */
+export const STAT_EFFECT = {
+  damage: 0.02,
+  repair: 0.02,
+  crit: 0.005,
+  critCap: 0.5,
+  critDamage: 2,
+  cleave: 0.01,
+  cleaveCap: 0.5,
+  cleaveRadius: 30,
+  gritHp: 5,
+} as const;
+/** Titles by profession level (points in the stat), lowest first; `bonus` multiplies the profession's output. */
+export const TITLES: readonly {
+  readonly at: number;
+  readonly rank: string;
+  readonly bonus: number;
+}[] = [
+  { at: 10, rank: 'Junior', bonus: 0.05 },
+  { at: 25, rank: 'Adept', bonus: 0.15 },
+  { at: 50, rank: 'Master', bonus: 0.3 },
+  { at: 100, rank: 'Legendary', bonus: 0.5 },
+];
