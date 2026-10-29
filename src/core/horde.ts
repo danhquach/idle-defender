@@ -6,6 +6,7 @@ import {
   ENEMIES,
   ENGINEER_BUFF,
   ENEMY_RADIUS,
+  PIERCE,
   FALL_WARNING,
   FIELD,
   GAP_SENSE,
@@ -25,8 +26,8 @@ import {
   WAVE_BREAK,
   type EnemyKind,
   type Stats,
-  type WeaponId,
 } from './data.ts';
+import { pierces, type Held } from './armoury.ts';
 import {
   gunOf,
   isGun,
@@ -255,7 +256,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
 /** `spec` at full HP standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
 export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): Defender {
   const hp = maxHpOf(spec);
-  const full = (id: WeaponId | null): number => (id !== null && isGun(id) ? gunOf(id).magazine : 0);
+  const full = (id: Held | null): number => (id !== null && isGun(id) ? gunOf(id).magazine : 0);
   return {
     ...specOf(spec),
     nextShotAt,
@@ -313,7 +314,7 @@ export function tick(state: HordeState, dt: number): HordeState {
 }
 
 /** How far `weapon` (a gun) reaches from `post`: its range × the post's × the cards'. */
-export function gunRange(state: HordeState, post: Pick<Post, 'kind'>, weapon: WeaponId): number {
+export function gunRange(state: HordeState, post: Pick<Post, 'kind'>, weapon: Held): number {
   return gunOf(weapon).range * POST_RANGE[post.kind] * state.mods.range;
 }
 
@@ -549,6 +550,32 @@ function choose(
   return null;
 }
 
+/**
+ * The enemy a pierced shot from (x, y) through `target` hits next: the nearest one past
+ * the target within `PIERCE.width` of the shot's line and `PIERCE.reach` beyond it.
+ */
+function behind(s: HordeState, x: number, y: number, target: Enemy): Enemy | null {
+  const length = Math.hypot(target.x - x, target.y - y);
+  if (length === 0) return null;
+  const ux = (target.x - x) / length;
+  const uy = (target.y - y) / length;
+  let best: Enemy | null = null;
+  let bestAlong = Infinity;
+  for (const e of s.enemies) {
+    if (e === target || e.hp <= 0) continue;
+    const along = (e.x - x) * ux + (e.y - y) * uy;
+    const across = Math.abs((e.x - x) * uy - (e.y - y) * ux);
+    if (along <= length || along > length + PIERCE.reach + EPS || across > PIERCE.width + EPS) {
+      continue;
+    }
+    if (along < bestAlong) {
+      best = e;
+      bestAlong = along;
+    }
+  }
+  return best;
+}
+
 function fire(s: HordeState, rng: Rng): void {
   s.shots = s.shots.filter((shot) => s.time - shot.at < SHOT_TRAIL);
   for (const post of s.posts) {
@@ -570,6 +597,20 @@ function fire(s: HordeState, rng: Rng): void {
       damageFactor(defender, id) *
       (crit > 0 && chance(rng, crit) ? STAT_EFFECT.critDamage : 1);
     target.hp -= hit;
+    if (gun && pierces(id)) {
+      const next = behind(s, use.x, use.y, target);
+      if (next) {
+        next.hp -= hit;
+        s.shots.push({
+          melee: false,
+          fromX: target.x,
+          fromY: target.y,
+          toX: next.x,
+          toY: next.y,
+          at: s.time,
+        });
+      }
+    }
     const cleave = weapon.kind === 'blade' ? cleaveShare(defender) : 0;
     if (cleave > 0) {
       for (const e of s.enemies) {

@@ -1,8 +1,10 @@
 // The loop between hordes (design §2): build on the base, fight a horde, carry the
 // damage, payout, XP and injuries back. Pure: every function returns new state, and
 // real time comes in as `now` (ms since the epoch), never read from a clock.
+import { heldName, isOwned, rollDrop, type Held, type OwnedWeapon } from './armoury.ts';
 import { newBase, type Base, type Tier } from './base.ts';
 import {
+  ARMOURY_CAP,
   DEFENDER_XP,
   HORDE_PAYOUT,
   MATERIALS,
@@ -10,6 +12,7 @@ import {
   START_STOCK,
   START_TIERS,
   ITEMS,
+  RARITIES,
   WEAPONS,
   type Stat,
   type Stats,
@@ -17,6 +20,7 @@ import {
 } from './data.ts';
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
+import { rngFrom } from './rng.ts';
 import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
 
 /** A defender on the camp's roster: lifetime XP (the level comes from it) and the stat points spent. */
@@ -34,6 +38,8 @@ export interface GameState {
   stock: Stock;
   tiers: Tier[];
   roster: RosterDefender[];
+  /** Owned weapons no defender carries (design §6 Gear). */
+  armoury: OwnedWeapon[];
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -56,6 +62,7 @@ export function newGame(): GameState {
       stats: { ...NO_STATS },
       injuredUntil: null,
     })),
+    armoury: [],
   };
 }
 
@@ -158,9 +165,24 @@ export function spendPoint(
   return { ok: true, game: { ...game, roster } };
 }
 
+/** The owned weapons defender `d` carries. */
+const carried = (d: Pick<RosterDefender, 'loadout'>): OwnedWeapon[] =>
+  [d.loadout.primary, d.loadout.secondary].filter(isOwned);
+
+/** Every owned weapon: the armoury's, then each defender's in roster order. */
+export function ownedWeapons(game: GameState): OwnedWeapon[] {
+  return [...game.armoury, ...game.roster.flatMap(carried)];
+}
+
+/** Who carries owned weapon `uid`, or null when it is in the armoury (or unknown). */
+export function carrierOf(game: GameState, uid: string): RosterDefender | null {
+  return game.roster.find((d) => carried(d).some((w) => w.uid === uid)) ?? null;
+}
+
 /**
  * Gives `defenderId` the loadout `loadout` (design §6: free, any time between hordes,
- * injured or not); refused when the game doesn't allow it. Unknown ids throw.
+ * injured or not); refused when the game doesn't allow it. An owned weapon is named by
+ * its uid and comes out of the armoury; one it replaces goes back. Unknown ids throw.
  */
 export function equip(
   game: GameState,
@@ -169,21 +191,65 @@ export function equip(
 ): { ok: true; game: GameState } | { ok: false; reason: string } {
   const i = game.roster.findIndex((d) => d.id === defenderId);
   if (i < 0) throw new RangeError(`equip: no defender ${String(defenderId)}`);
+  const me = game.roster[i]!;
   const known = (id: string | null, table: object): boolean =>
     id === null || Object.hasOwn(table, id);
+  const owned = [...game.armoury, ...carried(me)];
+  // An owned weapon is looked up by uid, so its numbers always come from the game, not the caller.
+  const resolve = (h: Held | null): Held | null | undefined =>
+    isOwned(h)
+      ? (owned.find((w) => w.uid === h.uid) ?? ownedWeapons(game).find((w) => w.uid === h.uid))
+      : known(h, WEAPONS)
+        ? h
+        : undefined;
+  const primary = resolve(loadout.primary);
+  const secondary = resolve(loadout.secondary);
   if (
-    loadout.primary === null ||
-    !known(loadout.primary, WEAPONS) ||
-    !known(loadout.secondary, WEAPONS) ||
+    primary === null ||
+    primary === undefined ||
+    secondary === undefined ||
     !known(loadout.item, ITEMS)
   ) {
     throw new RangeError(`equip: unknown loadout ${JSON.stringify(loadout)}`);
   }
-  const reason = loadoutError(loadout);
+  for (const h of [primary, secondary]) {
+    if (!isOwned(h)) continue;
+    const by = carrierOf(game, h.uid);
+    if (by && by.id !== me.id)
+      return { ok: false, reason: `${by.name} carries the ${heldName(h)}` };
+  }
+  if (isOwned(primary) && isOwned(secondary) && primary.uid === secondary.uid) {
+    return { ok: false, reason: "One weapon can't fill two slots" };
+  }
+  const next: Loadout = { primary, secondary, item: loadout.item };
+  const reason = loadoutError(next);
   if (reason !== null) return { ok: false, reason };
+  const holding = new Set(carried({ loadout: next }).map((w) => w.uid));
   const roster = [...game.roster];
-  roster[i] = { ...game.roster[i]!, loadout: { ...loadout } };
-  return { ok: true, game: { ...game, roster } };
+  roster[i] = { ...me, loadout: next };
+  const armoury = owned.filter((w) => !holding.has(w.uid));
+  return { ok: true, game: { ...game, roster, armoury } };
+}
+
+/** A win's weapon drop: the weapon, and whether it fits in the armoury or was salvaged for `scrap`. */
+export interface Drop {
+  weapon: OwnedWeapon;
+  kept: boolean;
+  /** Scrap it was salvaged for; 0 when kept. */
+  scrap: number;
+}
+
+/**
+ * The weapon horde `h` drops for `game` (design §4), or null: a win only, rolled from
+ * where the fight's RNG ended, so the result screen and `finishHorde` agree. With
+ * `ARMOURY_CAP` owned weapons already it is salvaged for Scrap.
+ */
+export function hordeDrop(game: GameState, h: HordeState): Drop | null {
+  if (h.outcome !== 'won') return null;
+  const weapon = rollDrop(rngFrom({ ...h.rng }), h.hordeNumber);
+  if (!weapon) return null;
+  const kept = ownedWeapons(game).length < ARMOURY_CAP;
+  return { weapon, kept, scrap: kept ? 0 : RARITIES[weapon.rarity].salvage };
 }
 
 /**
@@ -224,7 +290,8 @@ export function startHorde(
 
 /**
  * Back to building at `now` (when the horde ended): the fight's damage stays, the
- * payout is added, a win gives XP and moves on, and the injured rest (`injuredUntil`).
+ * payout is added, a win gives XP and maybe a weapon and moves on, and the injured
+ * rest (`injuredUntil`).
  */
 export function finishHorde(game: GameState, horde: HordeState, now: number): GameState {
   finite('finishHorde', now);
@@ -236,6 +303,9 @@ export function finishHorde(game: GameState, horde: HordeState, now: number): Ga
   const g = structuredClone(game);
   g.base = baseAfter(game.base, horde);
   for (const m of MATERIALS) g.stock[m] += payout[m];
+  const drop = hordeDrop(game, horde);
+  if (drop?.kept) g.armoury.push(drop.weapon);
+  else if (drop) g.stock.scrap += drop.scrap;
   for (const gain of xpGains(horde)) {
     const d = g.roster.find((r) => r.id === gain.id);
     if (d) d.xp += gain.xp;

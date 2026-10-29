@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { RECOVERY_MS } from '../core/data.ts';
-import { newGame, recover } from '../core/game.ts';
+import type { OwnedWeapon } from '../core/armoury.ts';
+import { ARMOURY_CAP, RECOVERY_MS } from '../core/data.ts';
+import { newGame, recover, type GameState } from '../core/game.ts';
 import type { Loadout } from '../core/loadout.ts';
 import {
   decodeSave,
@@ -429,5 +430,136 @@ describe('save', () => {
     expect(hostile((s) => (s.game.roster[0].name = "Mary-Jo O'Neil"))).not.toBeNull();
     expect(hostile((s) => (s.game.base.layers[0].slots[0].hp = 0))).not.toBeNull();
     expect(hostile((s) => (s.game.base.posts = []))).not.toBeNull();
+  });
+});
+
+describe('save: the armoury (design §6 Gear)', () => {
+  const mil = (uid = 'h3'): OwnedWeapon => ({
+    uid,
+    base: 'pistol',
+    rarity: 'military',
+    affixes: [{ id: 'damage', value: 12 }],
+  });
+  /** A played game at horde 10: a Prototype toolkit in the armoury, Bob holding a Military Pistol. */
+  function armed(): GameState {
+    const g = { ...played(), hordeNumber: 10 };
+    g.armoury = [
+      {
+        uid: 'h7',
+        base: 'toolkit',
+        rarity: 'prototype',
+        affixes: [
+          { id: 'repair', value: 25 },
+          { id: 'fireRate', value: 5 },
+        ],
+      },
+    ];
+    g.roster[0]!.loadout.primary = mil();
+    return g;
+  }
+  const encoded = (): Loose => JSON.parse(encodeSave(armed(), NOW));
+  const load = (save: Loose): unknown => decodeSave(JSON.stringify(save));
+  const tweaked = (change: (s: Loose) => void): unknown => {
+    const save = encoded();
+    change(save);
+    return load(save);
+  };
+
+  it('round-trips owned weapons in the armoury and in hands', () => {
+    expect(decodeSave(encodeSave(armed(), NOW))).toEqual({ game: armed(), savedAt: NOW });
+  });
+
+  it('loads a save from before the armoury with an empty one', () => {
+    const save = JSON.parse(encodeSave(played(), NOW));
+    delete save.game.armoury;
+    expect(load(save)).toEqual({ game: played(), savedAt: NOW });
+  });
+
+  it('refuses owned weapons the game could not have made', () => {
+    const w = (s: Loose): Loose => s.game.armoury[0];
+    const held = (s: Loose): Loose => s.game.roster[0].loadout.primary;
+    const cases: [string, (s: Loose) => void][] = [
+      ['unknown rarity', (s) => (w(s).rarity = 'legendary')],
+      ['look-alike rarity', (s) => (w(s).rarity = 'milіtary')],
+      ['unknown base', (s) => (w(s).base = 'rifle')],
+      ['prototype key', (s) => (w(s).base = '__proto__')],
+      ['too few affixes', (s) => w(s).affixes.pop()],
+      ['too many affixes', (s) => w(s).affixes.push({ id: 'damage', value: 5 })],
+      ['affix twice', (s) => (w(s).affixes[1] = { id: 'repair', value: 10 })],
+      ['affix that does not fit', (s) => (w(s).affixes[1] = { id: 'pierce', value: 1 })],
+      ['unknown affix', (s) => (w(s).affixes[1] = { id: 'burning', value: 5 })],
+      ['affix too big', (s) => (w(s).affixes[0].value = 26)],
+      ['affix too small', (s) => (w(s).affixes[0].value = 9)],
+      ['affix not whole', (s) => (w(s).affixes[0].value = 12.5)],
+      ['affix as text', (s) => (w(s).affixes[0].value = '12')],
+      ['affix extra key', (s) => (w(s).affixes[0].note = 'x')],
+      ['weapon extra key', (s) => (w(s).owner = 'bob')],
+      ['weapon missing key', (s) => delete w(s).affixes],
+      ['uid from a horde not yet won', (s) => (w(s).uid = 'h10')],
+      ['uid of another shape', (s) => (w(s).uid = 'pistol')],
+      ['uid with a zero-width space', (s) => (w(s).uid = 'h​7')],
+      ['uid with a bidi override', (s) => (w(s).uid = '‮h7')],
+      ['uid oversized', (s) => (w(s).uid = 'h' + '1'.repeat(10_000))],
+      ['the same uid in the armoury and in hands', (s) => (w(s).uid = 'h3')],
+      ['the same uid in two pairs of hands', (s) => (s.game.roster[1].loadout.primary = held(s))],
+      ['held weapon that breaks the rules', (s) => (held(s).base = 'knife')],
+      ['armoury not a list', (s) => (s.game.armoury = { 0: w(s) })],
+      ['armoury entry not an object', (s) => (s.game.armoury = ['h7'])],
+      [
+        'more than the cap',
+        (s) =>
+          (s.game.armoury = Array.from({ length: ARMOURY_CAP }, (_, i) => ({
+            uid: `h${i + 1}`,
+            base: 'knife',
+            rarity: 'rusty',
+            affixes: [],
+          }))),
+      ],
+    ];
+    for (const [why, change] of cases) expect(tweaked(change), why).toBeNull();
+    expect(load({ ...encoded(), game: { ...encoded().game, armoury: null } })).toBeNull();
+  });
+
+  it('refuses a polluted owned weapon and leaves Object.prototype alone', () => {
+    const raw = encodeSave(armed(), NOW).replace(
+      '"uid":"h7"',
+      '"__proto__":{"polluted":1},"uid":"h7"',
+    );
+    expect(raw).toContain('__proto__');
+    expect(decodeSave(raw)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('accepts the edges: a full armoury, a Relic, the last horde won', () => {
+    expect(
+      tweaked((s) => {
+        s.game.armoury = Array.from({ length: ARMOURY_CAP - 1 }, (_, i) => ({
+          uid: `h${i + 10}`,
+          base: 'knife',
+          rarity: 'relic',
+          affixes: [
+            { id: 'damage', value: 15 },
+            { id: 'fireRate', value: 5 },
+          ],
+        }));
+        s.game.hordeNumber = 100;
+      }),
+    ).not.toBeNull();
+    expect(tweaked((s) => (s.game.armoury[0].uid = 'h9'))).not.toBeNull();
+    // A full armoury of Relic toolkits (three affixes each) stays far under the size cap.
+    const full = armed();
+    full.armoury = Array.from({ length: ARMOURY_CAP - 1 }, (_, i) => ({
+      uid: `h${i + 1000}`,
+      base: 'toolkit' as const,
+      rarity: 'relic' as const,
+      affixes: [
+        { id: 'damage' as const, value: 15 },
+        { id: 'fireRate' as const, value: 15 },
+        { id: 'repair' as const, value: 25 },
+      ],
+    }));
+    full.hordeNumber = 2000;
+    expect(decodeSave(encodeSave(full, NOW))).not.toBeNull();
+    expect(encodeSave(full, NOW).length).toBeLessThan(MAX_SAVE_CHARS / 5);
   });
 });

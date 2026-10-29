@@ -1,5 +1,5 @@
 // Design §6 Loadout: what a defender carries, the profession it gives, and the
-// specialised-gun rules. No specialised gun ships until ID-013, so these tests add a
+// specialised-gun rules. No specialised gun ships yet, so these tests add a
 // rifle to the weapon table.
 import { describe, expect, it, vi } from 'vitest';
 import { STEP, type WeaponId } from './data.ts';
@@ -89,7 +89,9 @@ describe('specialised guns suit Gunners', () => {
       expect(damageFactor(d, rifle)).toBeCloseTo(0.7);
       expect(fireRateFactor(d, rifle)).toBe(1);
       expect(reloadTime(d, rifle)).toBeCloseTo(2 * 1.5);
-      expect(damageFactor({ loadout: L('pistol', d.loadout.secondary) }, 'pistol')).toBe(1);
+      expect(
+        damageFactor({ loadout: L('pistol', d.loadout.secondary as WeaponId | null) }, 'pistol'),
+      ).toBe(1);
     }
   });
 });

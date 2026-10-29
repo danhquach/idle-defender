@@ -1,18 +1,21 @@
 // Design §6: the roster screen's lines and loadout options.
 import { describe, expect, it } from 'vitest';
 import { type Stats } from '../core/data.ts';
-import { newGame, type RosterDefender } from '../core/game.ts';
+import type { OwnedWeapon } from '../core/armoury.ts';
+import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { NO_STATS } from '../core/stats.ts';
 import { BADGE_COLOUR } from './render.ts';
 import {
   badgeStyle,
+  choiceFor,
+  ITEM_CHOICES,
   ITEM_OPTIONS,
-  optionFor,
   pipText,
   PRIMARY_OPTIONS,
   restLeft,
   rosterEntry,
   SECONDARY_OPTIONS,
+  weaponChoices,
 } from './roster.ts';
 
 const NOW = 1_700_000_000_000;
@@ -73,10 +76,14 @@ describe('loadout options', () => {
   });
 
   it('a picker value maps back to one of our options, or to nothing', () => {
-    expect(optionFor(PRIMARY_OPTIONS, 'pistol')).toBe('pistol');
-    expect(optionFor(SECONDARY_OPTIONS, '')).toBeNull();
-    expect(optionFor(ITEM_OPTIONS, '')).toBeNull();
-    expect(optionFor(ITEM_OPTIONS, 'shield')).toBe('shield');
+    const game = newGame();
+    const bob = game.roster[0]!;
+    const primary = weaponChoices(game, bob, 'primary');
+    const secondary = weaponChoices(game, bob, 'secondary');
+    expect(choiceFor(primary, 'pistol')?.pick).toBe('pistol');
+    expect(choiceFor(secondary, '')?.pick).toBeNull();
+    expect(choiceFor(ITEM_CHOICES, '')?.pick).toBeNull();
+    expect(choiceFor(ITEM_CHOICES, 'shield')?.pick).toBe('shield');
     // A primary is never none; edited values never match.
     for (const raw of [
       '',
@@ -88,12 +95,74 @@ describe('loadout options', () => {
       'pist\u043el', // Cyrillic о
       'pis\u200btol', // zero-width space
       'shield',
+      'h1',
       'a'.repeat(100_000),
     ]) {
-      expect(optionFor(PRIMARY_OPTIONS, raw), raw.slice(0, 20)).toBeUndefined();
+      expect(choiceFor(primary, raw), raw.slice(0, 20)).toBeUndefined();
     }
-    expect(optionFor(SECONDARY_OPTIONS, 'kn\u0456fe')).toBeUndefined(); // Cyrillic і
-    expect(optionFor(ITEM_OPTIONS, '__proto__')).toBeUndefined();
+    expect(choiceFor(secondary, 'kn\u0456fe')).toBeUndefined(); // Cyrillic і
+    expect(choiceFor(ITEM_CHOICES, '__proto__')).toBeUndefined();
+  });
+});
+
+describe('owned weapons in the pickers (design §6 Gear)', () => {
+  const pistol: OwnedWeapon = {
+    uid: 'h3',
+    base: 'pistol',
+    rarity: 'military',
+    affixes: [{ id: 'damage', value: 12 }],
+  };
+  const knife: OwnedWeapon = { uid: 'h4', base: 'knife', rarity: 'rusty', affixes: [] };
+  const withArmoury = (): GameState => ({ ...newGame(), hordeNumber: 5, armoury: [pistol, knife] });
+
+  it('the free weapons first, then owned ones that fit the slot, named with rarity and affixes', () => {
+    const game = withArmoury();
+    const bob = game.roster[0]!;
+    expect(weaponChoices(game, bob, 'primary').map((c) => [c.value, c.label])).toEqual([
+      ['pistol', 'Pistol'],
+      ['h3', 'Military Pistol (+12% damage)'],
+    ]);
+    expect(weaponChoices(game, bob, 'secondary').map((c) => c.value)).toEqual([
+      '',
+      'pistol',
+      'knife',
+      'toolkit',
+      'h3',
+      'h4',
+    ]);
+  });
+
+  it('lists owned weapons rarest first, then by name', () => {
+    const game = {
+      ...withArmoury(),
+      hordeNumber: 9,
+      armoury: [
+        knife,
+        { uid: 'h5', base: 'toolkit' as const, rarity: 'common' as const, affixes: [] },
+        pistol,
+        { uid: 'h6', base: 'knife' as const, rarity: 'common' as const, affixes: [] },
+      ],
+    };
+    expect(
+      weaponChoices(game, game.roster[0]!, 'secondary')
+        .slice(4)
+        .map((c) => c.label),
+    ).toEqual(['Military Pistol (+12% damage)', 'Common Knife', 'Common Toolkit', 'Rusty Knife']);
+  });
+
+  it("names who carries an owned weapon, except on the carrier's own picker", () => {
+    let game = withArmoury();
+    game = { ...game, armoury: [knife] };
+    game.roster = game.roster.map((d, i) =>
+      i === 1 ? { ...d, loadout: { ...d.loadout, primary: pistol } } : d,
+    );
+    const [bob, jack] = game.roster;
+    expect(choiceFor(weaponChoices(game, bob!, 'primary'), 'h3')?.label).toBe(
+      'Military Pistol (+12% damage) · carried by Jack',
+    );
+    expect(choiceFor(weaponChoices(game, jack!, 'primary'), 'h3')?.label).toBe(
+      'Military Pistol (+12% damage)',
+    );
   });
 });
 
