@@ -6,15 +6,20 @@
 import {
   buildPost,
   buildSegment,
+  buildTrap,
   buildTurret,
   moveTurret,
   repairAll,
   repairAllCost,
   repairCost,
   repairSegment,
+  removeTrap,
+  repairTrap,
   repairTurret,
   salvageTurret,
   salvageValue,
+  trapRefund,
+  trapRepairCost,
   turretRepairCost,
   upgradeSegment,
   type Base,
@@ -37,6 +42,9 @@ import {
   SEGMENTS,
   TIER_ORDER,
   TIERS,
+  TRAP_DURABILITY,
+  TRAP_KINDS,
+  TRAPS,
   TURRET,
   TURRET_MOUNTS,
   type Stock,
@@ -280,6 +288,51 @@ export function turretLines(game: GameState, index: number): SlotLine[] {
   ];
 }
 
+/** A trap cell's name in menus: the outer layer's strip, by row. */
+export const trapCellName = (row: number): string => `Trap strip · row ${row + 1}`;
+
+/**
+ * The trap cell `row`'s menu (design §7): an empty cell offers each basic trap as a dry
+ * run; a built one shows its durability, then Repair and Remove (asks first).
+ */
+export function trapLines(game: GameState, row: number): SlotLine[] {
+  const { base, stock } = game;
+  const index = base.traps.findIndex((t) => t.row === row);
+  if (index < 0) {
+    return [
+      { kind: 'heading', text: `${trapCellName(row)}: empty` },
+      ...TRAP_KINDS.map((k): SlotLine => ({
+        kind: 'action',
+        label: TRAPS[k].name,
+        cost: TRAPS[k].cost,
+        result: buildTrap(base, stock, k, row),
+      })),
+    ];
+  }
+  const t = base.traps[index]!;
+  const refund = trapRefund(t);
+  return [
+    { kind: 'heading', text: `${TRAPS[t.kind].name} · ${trapCellName(row)}` },
+    {
+      kind: 'note',
+      text: `Durability ${t.durability}/${TRAP_DURABILITY}${t.durability <= 0 ? ' · broken' : ''}`,
+    },
+    {
+      kind: 'action',
+      label: 'Repair trap',
+      cost: trapRepairCost(t),
+      result: repairTrap(base, stock, index),
+    },
+    {
+      kind: 'action',
+      label: `Remove for ${stockText(refund)}`,
+      cost: null,
+      result: removeTrap(base, stock, index),
+      confirm: `Remove this trap for ${stockText(refund)}?`,
+    },
+  ];
+}
+
 /** What clicking `line` gives: its result once `ask` agrees to any `confirm`, else null. */
 export function lineResult(line: SlotLine, ask: (question: string) => boolean): Result | null {
   if (line.kind !== 'action' || !line.result.ok) return null;
@@ -477,6 +530,7 @@ export function createBuildPanel(
   function slotMenu(game: GameState, slot: SlotHit): HTMLElement[] {
     const { base, stock, tiers } = game;
     const { column, row } = slot;
+    if (slot.what === 'trap') return trapLines(game, row).map(slotLine);
     if (slot.what !== 'segment') {
       const kind = slot.what;
       const post: BasePost = { kind, column, row };

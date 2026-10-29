@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildPost, buildSegment, buildTurret } from '../core/base.ts';
-import { BANK_CAP, GENERATOR, TURRET } from '../core/data.ts';
+import { buildPost, buildSegment, buildTrap, buildTurret } from '../core/base.ts';
+import { BANK_CAP, GENERATOR, TRAPS, TURRET } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -18,6 +18,7 @@ import {
   powerLines,
   relocateTargets,
   stockBarText,
+  trapLines,
   turretIndex,
   turretLines,
   type SlotLine,
@@ -321,5 +322,59 @@ describe('turret menu', () => {
       g = { ...g, base: r.base, stock: r.stock };
     }
     expect(relocateTargets(g, 0)).toEqual([]);
+  });
+});
+
+describe('trap menu', () => {
+  const RICH = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+  const text = (l: SlotLine): string => (l.kind === 'action' ? l.label : l.text);
+  const why = (l: SlotLine): string | null =>
+    l.kind === 'action' && !l.result.ok ? l.result.reason : null;
+  /** A new game with spikes in row 2. */
+  function withSpikes(): GameState {
+    const g: GameState = { ...newGame(), stock: RICH };
+    const r = buildTrap(g.base, g.stock, 'spikes', 2);
+    if (!r.ok) throw new Error(r.reason);
+    return { ...g, base: r.base, stock: r.stock };
+  }
+
+  it('offers both basic traps in an empty cell, from a new game, as dry runs', () => {
+    const lines = trapLines(newGame(), 0);
+    expect(lines.map(text)).toEqual(['Trap strip · row 1: empty', 'Spikes', 'Barbed wire']);
+    expect(lines[1]).toMatchObject({ cost: TRAPS.spikes.cost, result: { ok: true } });
+    expect(lines[2]).toMatchObject({ cost: TRAPS.wire.cost, result: { ok: true } });
+    const poor: GameState = { ...newGame(), stock: { scrap: 0, wood: 99, metal: 0, concrete: 0 } };
+    expect(trapLines(poor, 0).slice(1).map(why)).toEqual(['Not enough scrap', 'Not enough scrap']);
+  });
+
+  it('shows a built trap with its durability, Repair and Remove', () => {
+    const g = withSpikes();
+    const lines = trapLines(g, 2);
+    expect(lines.map(text)).toEqual([
+      'Spikes · Trap strip · row 3',
+      'Durability 30/30',
+      'Repair trap',
+      'Remove for 5 scrap, 7 wood',
+    ]);
+    expect(why(lines[2]!)).toBe('Nothing to repair');
+    expect(lines[3]).toMatchObject({
+      cost: null,
+      confirm: 'Remove this trap for 5 scrap, 7 wood?',
+    });
+  });
+
+  it('marks a broken trap and repairs it for its build cost', () => {
+    const g = withSpikes();
+    g.base.traps[0]!.durability = 0;
+    const lines = trapLines(g, 2);
+    expect(text(lines[1]!)).toBe('Durability 0/30 · broken');
+    expect(lines[2]).toMatchObject({ cost: { wood: 15, scrap: 10 }, result: { ok: true } });
+    expect(text(lines[3]!)).toBe('Remove for nothing');
+  });
+
+  it('removes only once the player agrees', () => {
+    const lines = trapLines(withSpikes(), 2);
+    expect(lineResult(lines[3]!, () => false)).toBeNull();
+    expect(lineResult(lines[3]!, () => true)).toMatchObject({ ok: true, base: { traps: [] } });
   });
 });

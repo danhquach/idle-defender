@@ -13,16 +13,21 @@ import {
   SEGMENTS,
   TIER_ORDER,
   TIERS,
+  TRAP_DURABILITY,
+  TRAP_KINDS,
+  TRAP_REFUND,
+  TRAPS,
   TURRET,
   TURRET_MOUNTS,
   type Material,
   type PostKind,
   type Stock,
   type Tier,
+  type TrapKind,
   type TurretMount,
 } from './data.ts';
 
-export type { PostKind, Tier, TurretMount } from './data.ts';
+export type { PostKind, Tier, TrapKind, TurretMount } from './data.ts';
 export type SegmentKind = 'wall' | 'gate';
 export interface BaseSegment {
   kind: SegmentKind;
@@ -48,11 +53,19 @@ export interface BaseTurret {
   /** 0 (jammed) … `MAX_CONDITION`. */
   condition: number;
 }
-/** Layers sorted by column; posts and turrets sorted by (column, kind, row). */
+/** A trap in its cell of the outer layer's strip (design §7): never destroyed, broken at 0. */
+export interface BaseTrap {
+  kind: TrapKind;
+  row: number;
+  /** 0 (broken) … `TRAP_DURABILITY`. */
+  durability: number;
+}
+/** Layers sorted by column; posts and turrets sorted by (column, kind, row); traps by row. */
 export interface Base {
   layers: BaseLayer[];
   posts: BasePost[];
   turrets: BaseTurret[];
+  traps: BaseTrap[];
 }
 export type Result = { ok: true; base: Base; stock: Stock } | { ok: false; reason: string };
 
@@ -88,6 +101,7 @@ export function newBase(): Base {
       { kind: 'tower', column: 0, row: 3 },
     ],
     turrets: [],
+    traps: [],
   };
 }
 
@@ -159,26 +173,32 @@ export function repairSegment(base: Base, stock: Stock, column: number, row: num
   });
 }
 
-/** Every segment's and turret's repair cost, summed. */
+/** Every segment's, turret's and trap's repair cost, summed. */
 export function repairAllCost(base: Base): Stock {
   const total = stockFrom(() => 0);
-  for (const cost of [...segments(base).map(repairCost), ...base.turrets.map(turretRepairCost)]) {
+  for (const cost of [
+    ...segments(base).map(repairCost),
+    ...base.turrets.map(turretRepairCost),
+    ...base.traps.map(trapRepairCost),
+  ]) {
     for (const m of MATERIALS) total[m] += cost[m];
   }
   return total;
 }
 
-/** Repairs every damaged segment and turret, or nothing if the stock can't cover them all. */
+/** Repairs every damaged segment, turret and trap, or nothing if the stock can't cover them all. */
 export function repairAll(base: Base, stock: Stock): Result {
   if (
     segments(base).every((s) => s.hp >= s.maxHp) &&
-    base.turrets.every((t) => t.condition >= MAX_CONDITION)
+    base.turrets.every((t) => t.condition >= MAX_CONDITION) &&
+    base.traps.every((t) => t.durability >= TRAP_DURABILITY)
   ) {
     return refuse('Nothing to repair');
   }
   return pay(base, stock, repairAllCost(base), (b) => {
     for (const s of segments(b)) s.hp = s.maxHp;
     for (const t of b.turrets) t.condition = MAX_CONDITION;
+    for (const t of b.traps) t.durability = TRAP_DURABILITY;
   });
 }
 
@@ -275,6 +295,45 @@ export function moveTurret(
   });
 }
 
+/** Builds a trap at full durability in the strip's cell `row` (design §7); no research needed. */
+export function buildTrap(base: Base, stock: Stock, kind: TrapKind, row: number): Result {
+  checkTrap(kind, row);
+  if (base.traps.some((t) => t.row === row)) return refuse('Slot taken');
+  return pay(base, stock, TRAPS[kind].cost, (b) => {
+    b.traps.push({ kind, row, durability: TRAP_DURABILITY });
+    b.traps.sort((x, y) => x.row - y.row);
+  });
+}
+
+/** The trap's cost × missing / full durability, rounded up per material. */
+export function trapRepairCost(trap: BaseTrap): Stock {
+  const missing = (TRAP_DURABILITY - trap.durability) / TRAP_DURABILITY;
+  const cost = TRAPS[trap.kind].cost;
+  return stockFrom((m) => Math.ceil((cost[m] ?? 0) * missing));
+}
+
+export function repairTrap(base: Base, stock: Stock, index: number): Result {
+  const t = trapAt(base, index);
+  if (t.durability >= TRAP_DURABILITY) return refuse('Nothing to repair');
+  return pay(base, stock, trapRepairCost(t), (b) => {
+    b.traps[index]!.durability = TRAP_DURABILITY;
+  });
+}
+
+/** What removing `trap` gives back: `TRAP_REFUND` × cost × durability share, rounded down. */
+export function trapRefund(trap: BaseTrap): Stock {
+  const share = (TRAP_REFUND * trap.durability) / TRAP_DURABILITY;
+  return stockFrom((m) => Math.floor((TRAPS[trap.kind].cost[m] ?? 0) * share));
+}
+
+/** Removes trap `index` for its refund and frees the cell; never refused. */
+export function removeTrap(base: Base, stock: Stock, index: number): Result {
+  const value = trapRefund(trapAt(base, index));
+  const b = structuredClone(base);
+  b.traps.splice(index, 1);
+  return { ok: true, base: b, stock: stockFrom((m) => stock[m] + value[m]) };
+}
+
 const refuse = (reason: string): Result => ({ ok: false, reason });
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const byPost = (x: BasePost, y: BasePost): number =>
@@ -325,6 +384,17 @@ function turretAt(base: Base, index: number): BaseTurret {
   const t = Number.isInteger(index) ? base.turrets[index] : undefined;
   if (!t) throw new RangeError(`base: no turret ${index}`);
   return t;
+}
+function trapAt(base: Base, index: number): BaseTrap {
+  const t = Number.isInteger(index) ? base.traps[index] : undefined;
+  if (!t) throw new RangeError(`base: no trap ${index}`);
+  return t;
+}
+function checkTrap(kind: TrapKind, row: number): void {
+  if (!TRAP_KINDS.includes(kind)) throw new RangeError(`base: unknown trap ${String(kind)}`);
+  if (!Number.isInteger(row) || row < 0 || row >= SEGMENTS) {
+    throw new RangeError(`base: bad row ${row}`);
+  }
 }
 function checkMount(mount: TurretMount, column: number, row: number): void {
   if (!TURRET_MOUNTS.includes(mount)) {

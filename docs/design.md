@@ -472,6 +472,18 @@ Each defender level gives **stat points** (3 per level, starting point):
   (incendiary), **corrode** (lowers armour), **paralyze** (stuns for a
   moment). Each is used up after a number of triggers *(designer's call)*.
 - Trap types and strength are upgraded through research.
+- **As built (ID-017, starting points):** a fixed trap strip lies in front
+  of the outermost layer's column (`x` 1100–1220), one cell per row, there
+  before that wall is built. Both basic traps are built in build mode from
+  a new game, no research: **spikes** (15 Wood, 10 Scrap) deal 8 damage to
+  each enemy that enters the cell; **barbed wire** (10 Wood, 15 Scrap)
+  holds each enemy that enters to half speed while it is inside. Each
+  trap triggers once per enemy and has 30 durability, −1 per trigger; at 0
+  it is broken and does nothing until repaired between hordes, for its
+  cost in proportion to the missing durability (Repair all includes
+  traps). A trap is never destroyed; **Remove** refunds 50% of its cost ×
+  its durability share, rounded down, and frees the cell. Upgrades and
+  chemical traps come later (ID-034, ID-035).
 
 ## 8. In-horde upgrade cards (roguelite)
 

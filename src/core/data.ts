@@ -415,3 +415,32 @@ export const START_POWER: {
 export const MAX_COUNT = 1e12;
 /** Gas each won horde pays, a stand-in until patrols bring it (PM decision D1). */
 export const GAS_PER_WIN = 1;
+
+// --- Basic traps (ID-017). Design §7. ---
+
+export type TrapKind = 'spikes' | 'wire';
+/** The outer layer's trap strip: one cell per row, `x` in `[x, x + width]` (PM decision D1). */
+export const TRAP_STRIP = { x: 1100, width: 120 } as const;
+/**
+ * A basic trap (design §7): its cost, the damage it deals an enemy that triggers it,
+ * and the speed factor it holds that enemy to while inside its cell.
+ */
+export const TRAPS: Readonly<
+  Record<
+    TrapKind,
+    {
+      readonly name: string;
+      readonly cost: Partial<Stock>;
+      readonly damage: number;
+      readonly slow: number;
+    }
+  >
+> = {
+  spikes: { name: 'Spikes', cost: { wood: 15, scrap: 10 }, damage: 8, slow: 1 },
+  wire: { name: 'Barbed wire', cost: { wood: 10, scrap: 15 }, damage: 0, slow: 0.5 },
+};
+export const TRAP_KINDS = Object.keys(TRAPS) as TrapKind[];
+/** Durability a trap is built with; each trigger costs 1, and at 0 it is broken (PM decision D2). */
+export const TRAP_DURABILITY = 30;
+/** Removing a trap refunds this share of its cost × its durability share, rounded down. */
+export const TRAP_REFUND = 0.5;

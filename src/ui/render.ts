@@ -9,8 +9,10 @@ import {
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
+  TRAP_STRIP,
   WALL,
   type Profession,
+  type TrapKind,
 } from '../core/data.ts';
 import {
   turretState,
@@ -18,6 +20,7 @@ import {
   type HordeState,
   type Layer,
   type Post,
+  type Trap,
   type Turret,
 } from '../core/horde.ts';
 import { professionOf } from '../core/loadout.ts';
@@ -79,7 +82,30 @@ const COLOR = {
   barrel: '#c9c3b6',
   spark: '#ffd84a',
   smoke: 'rgba(150, 150, 150, 0.55)',
+  trapBroken: '#3a3936',
+  trapBrokenMark: '#5c5a55',
 } as const;
+
+/**
+ * Basic traps are flat on the ground (design §7, §15): a muted bed in the cell and a
+ * mark across it, spikes as upright ticks, barbed wire as a zigzag. A broken trap goes
+ * grey.
+ */
+const TRAP_ART: Readonly<Record<TrapKind, { bed: string; mark: string }>> = {
+  spikes: { bed: '#4a3f33', mark: '#b8afa0' },
+  wire: { bed: '#3c4038', mark: '#9aa39a' },
+};
+/** The bed and mark colours a trap is drawn with, and whether it shows as broken. */
+export function trapLook(t: Pick<Trap, 'kind' | 'durability'>): {
+  bed: string;
+  mark: string;
+  broken: boolean;
+} {
+  const broken = t.durability <= 0;
+  return broken
+    ? { bed: COLOR.trapBroken, mark: COLOR.trapBrokenMark, broken }
+    : { ...TRAP_ART[t.kind], broken };
+}
 
 /** The turret head on its mount, and its barrel toward the horde. */
 const TURRET_ART = {
@@ -150,7 +176,15 @@ const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
 /** What the renderer needs from a fight; build mode passes the base laid out the same way. */
 export type Scene = Pick<
   HordeState,
-  'layers' | 'posts' | 'turrets' | 'energy' | 'defenders' | 'enemies' | 'shots' | 'focusId'
+  | 'layers'
+  | 'posts'
+  | 'turrets'
+  | 'traps'
+  | 'energy'
+  | 'defenders'
+  | 'enemies'
+  | 'shots'
+  | 'focusId'
 >;
 /** Build mode extras: empty slot outlines and the selected slot. */
 export interface BuildOverlay {
@@ -195,6 +229,14 @@ function outline(
 function footprint(slot: SlotHit): { x0: number; x1: number; y0: number; y1: number } {
   const wx = COLUMNS[slot.column]!;
   const y0 = slot.row * SEGMENT_HEIGHT;
+  if (slot.what === 'trap') {
+    return {
+      x0: TRAP_STRIP.x,
+      x1: TRAP_STRIP.x + TRAP_STRIP.width,
+      y0: y0 + SEGMENT_GAP,
+      y1: y0 + SEGMENT_HEIGHT - SEGMENT_GAP,
+    };
+  }
   if (slot.what === 'segment') {
     return {
       x0: wx,
@@ -422,6 +464,35 @@ function drawTurret(ctx: CanvasRenderingContext2D, scene: Scene, t: Turret, cam:
   });
 }
 
+/** A trap's bed across its cell and its mark: upright spikes or a wire zigzag. */
+function drawTrap(ctx: CanvasRenderingContext2D, t: Trap, cam: Camera): void {
+  const look = trapLook(t);
+  const r = footprint({ column: COLUMNS.length - 1, row: t.row, what: 'trap' });
+  const a = project({ x: r.x0, y: r.y0 }, cam);
+  const b = project({ x: r.x1, y: r.y1 }, cam);
+  ctx.fillStyle = look.bed;
+  ctx.fillRect(a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
+  ctx.strokeStyle = look.mark;
+  ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+  ctx.beginPath();
+  const cy = (r.y0 + r.y1) / 2;
+  const n = 8;
+  for (let i = 0; i <= n; i++) {
+    const x = r.x0 + ((r.x1 - r.x0) * i) / n;
+    if (t.kind === 'spikes') {
+      const foot = project({ x, y: cy }, cam);
+      const tip = project({ x, y: cy, z: 8 }, cam);
+      ctx.moveTo(foot.sx, foot.sy);
+      ctx.lineTo(tip.sx, tip.sy);
+    } else {
+      const p = project({ x, y: i % 2 === 0 ? r.y0 + 6 : r.y1 - 6, z: 4 }, cam);
+      if (i === 0) ctx.moveTo(p.sx, p.sy);
+      else ctx.lineTo(p.sx, p.sy);
+    }
+  }
+  ctx.stroke();
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
@@ -470,8 +541,14 @@ export function drawScene(
           if (!taken) outline(ctx, footprint({ column, row, what }), 0, cam);
         }
       });
+      if (!scene.traps.some((t) => t.row === row)) {
+        outline(ctx, footprint({ column: COLUMNS.length - 1, row, what: 'trap' }), 0, cam);
+      }
     }
   }
+
+  // Traps lie flat on the ground, under every sprite.
+  for (const t of scene.traps) drawTrap(ctx, t, cam);
 
   const sprites: Sprite[] = [];
   for (const layer of scene.layers) {

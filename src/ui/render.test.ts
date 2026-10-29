@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildTurret, newBase } from '../core/base.ts';
 import { layoutOf } from '../core/horde.ts';
-import { turretLook } from './render.ts';
+import { trapLook, turretLook } from './render.ts';
 
 function scene(condition: number, energy: number, wallHp?: number) {
   const r = buildTurret(
@@ -43,5 +43,22 @@ describe('turret look', () => {
     const dark = scene(100, 0);
     const looks = [jam, at(100), turretLook(dark.s, dark.t)];
     expect(new Set(looks.map((l) => l.top)).size).toBe(3);
+  });
+});
+
+describe('trap look', () => {
+  it('draws spikes and wire apart, and any broken trap grey', () => {
+    const spikes = trapLook({ kind: 'spikes', durability: 1 });
+    const wire = trapLook({ kind: 'wire', durability: 30 });
+    expect(spikes.broken).toBe(false);
+    expect(wire.broken).toBe(false);
+    expect(spikes.bed).not.toBe(wire.bed);
+    const broken = [
+      trapLook({ kind: 'spikes', durability: 0 }),
+      trapLook({ kind: 'wire', durability: 0 }),
+    ];
+    expect(broken[0]).toEqual(broken[1]);
+    expect(broken[0]!.broken).toBe(true);
+    expect(broken[0]!.bed).not.toBe(spikes.bed);
   });
 });

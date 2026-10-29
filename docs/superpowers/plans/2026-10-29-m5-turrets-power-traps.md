@@ -111,3 +111,32 @@ PM decisions, 2026-10-29: D1 relocate picks the destination from a list of the f
 5. **At a glance (§15).** Each turret keeps its lit / dark / offline / jammed look, sparks and smoke, and gets a condition bar (D2).
 6. **Repair all** (D3) repairs every damaged segment and turret, or nothing if the stock can't cover them all; its cost includes the turrets.
 7. **Tests** cover the turret menu lines and their dry runs, relocate targets, the meter and status text, Repair all with turrets, and hit-testing a turret. `docs/design.md` §7 and §15 get "As built (ID-016)" notes; the version goes to 0.4.9.
+
+---
+
+## ID-017 — Basic traps on the outer layer (spikes, barbed wire)
+
+PM decisions, 2026-10-29: D1 a fixed trap strip in front of the outermost layer's column, one cell per row, there before that wall is built; D2 traps wear by one durability per trigger, break at 0 and are repaired between hordes, never destroyed; D3 both basic traps are available from a new game, no research (upgrades come with ID-035).
+
+**Acceptance criteria** (also on issue #17). Values marked *(starting point)* are tunable.
+
+1. **Trap strip (D1).** Five cells on the outer layer, one per row, `x` 1100–1220 *(starting point)*. A cell holds one trap or nothing. Traps are built only between hordes.
+2. **Spikes.** 15 Wood and 10 Scrap *(starting point)*. An enemy entering the cell takes 8 damage, once per enemy *(starting points)*.
+3. **Barbed wire.** 10 Wood and 15 Scrap *(starting point)*. An enemy inside the cell moves at 50% speed *(starting point)*; one trigger per enemy.
+4. **Durability (D2).** 30 *(starting point)*, −1 per trigger. A broken trap (0) does not trigger. Repair between hordes costs materials in proportion to the missing durability (its build cost for a full repair); Repair all includes traps.
+5. **Remove.** Between hordes a trap can be removed for 50% of its cost × its durability share, rounded down; the cell is freed for another trap.
+6. **Refusals.** An occupied cell, short materials, or a trap at full repair is refused with a reason, in the core actions, not only in the UI.
+7. **UI.** In build mode a cell's menu offers Spikes and Barbed wire as dry runs with their costs; a built trap's menu shows its durability with Repair and Remove. The horde view draws each trap, broken ones distinctly.
+8. **Save.** Traps are saved and validated on load against an allow-list (known kind, row 0–4, durability 0–30, no duplicate cells). Older saves load with no traps. Hostile-payload tests and a `security-devops` audit.
+9. **Tests** cover damage, slow, once-per-enemy, wear, broken traps, costs and refusals, repair and remove, Repair all, and save round-trips. `docs/design.md` §7 gets an "As built (ID-017)" note; the version goes to 0.4.10.
+
+## ID-017 Numbers (all in `data.ts`, starting points)
+
+- `TRAP_STRIP = { x: 1100, width: 120 }`.
+- `TRAPS`: spikes `{ cost: { wood: 15, scrap: 10 }, damage: 8, slow: 1 }`, wire `{ cost: { wood: 10, scrap: 15 }, damage: 0, slow: 0.5 }`. `TRAP_DURABILITY = 30`, `TRAP_REFUND = 0.5`.
+
+## ID-017 Review Focus
+
+1. **Once per enemy:** a trap triggers at most once for each enemy, and a broken trap never triggers.
+2. **Never destroyed:** only Remove takes a trap out of the base.
+3. **Save** refuses every hostile trap shape.

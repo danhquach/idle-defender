@@ -2,7 +2,15 @@
 // lifts a sprite. Screen units are CSS pixels.
 import type { Base } from '../core/base.ts';
 import type { HordeState, Layer, Post } from '../core/horde.ts';
-import { COLUMNS, FIELD, POST_OFFSET, SEGMENT_HEIGHT, SEGMENTS, WALL } from '../core/data.ts';
+import {
+  COLUMNS,
+  FIELD,
+  POST_OFFSET,
+  SEGMENT_HEIGHT,
+  SEGMENTS,
+  TRAP_STRIP,
+  WALL,
+} from '../core/data.ts';
 
 export interface Camera {
   x: number;
@@ -98,7 +106,8 @@ export function postFloor(layers: readonly Layer[], post: Post): number {
   return (seg ? wallHeight(seg.hp, seg.maxHp) : 0) + PIECE.walk.height;
 }
 
-export type SlotWhat = 'segment' | 'tower' | 'ground';
+/** A trap cell sits on the outer layer's strip; its hit names the outermost column. */
+export type SlotWhat = 'segment' | 'tower' | 'ground' | 'trap';
 export interface SlotHit {
   column: number;
   row: number;
@@ -112,7 +121,7 @@ const lift = (z: number): number => (z * HEIGHT_SCALE) / TILT;
  * The grid slot drawn under ground point `(x, y)`, or null. A built piece also covers
  * its top face, a turret's head included; where pieces overlap, the front one (higher
  * row) wins, as drawn. The wall band is always `'segment'`: a wall-walk post or turret
- * is built from its segment's menu.
+ * is built from its segment's menu. A trap cell is flat on the ground (design §7).
  */
 export function slotAt(x: number, y: number, base: Base): SlotHit | null {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
@@ -148,6 +157,15 @@ export function slotAt(x: number, y: number, base: Base): SlotHit | null {
         }
       }
     });
+  }
+  if (
+    !hit &&
+    x >= TRAP_STRIP.x &&
+    x <= TRAP_STRIP.x + TRAP_STRIP.width &&
+    y >= 0 &&
+    y < FIELD.height
+  ) {
+    hit = { column: COLUMNS.length - 1, row: Math.floor(y / SEGMENT_HEIGHT), what: 'trap' };
   }
   return hit;
 }
