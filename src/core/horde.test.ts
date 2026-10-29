@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STEP } from './data.ts';
-import { defenderRange, newHorde, tick, type HordeState } from './horde.ts';
+import { defenderRange, enemyAt, newHorde, setFocus, tick, type HordeState } from './horde.ts';
 import { enemy, setup } from './testing.ts';
 
 /** A horde with nobody on the posts, so nothing dies. */
@@ -8,6 +8,13 @@ function unmanned(): HordeState {
   const s = newHorde(1, setup());
   s.defenders = [];
   for (const p of s.posts) p.defenderId = null;
+  return s;
+}
+
+/** Unmanned, with no spawns left: only placed enemies move. */
+function still(): HordeState {
+  const s = unmanned();
+  s.toSpawn = 0;
   return s;
 }
 
@@ -64,9 +71,9 @@ describe('tick', () => {
     expect(tick(newHorde(1, setup()), 5)).toEqual(tick(newHorde(1, setup()), 5));
   });
 
-  it('different seeds, different lanes', () => {
-    const lanes = (seed: number) => tick(newHorde(seed, setup()), 8).enemies.map((e) => e.lane);
-    expect(lanes(1)).not.toEqual(lanes(2));
+  it('different seeds, different spawn points', () => {
+    const ys = (seed: number) => tick(newHorde(seed, setup()), 8).enemies.map((e) => e.y);
+    expect(ys(1)).not.toEqual(ys(2));
   });
 
   it('leaves the input state untouched', () => {
@@ -89,36 +96,127 @@ describe('tick', () => {
     expect(s.enemies).toHaveLength(2);
     for (const e of s.enemies) {
       expect(e.x).toBeLessThanOrEqual(1600);
-      expect(e.lane).toBeGreaterThanOrEqual(0);
-      expect(e.lane).toBeLessThanOrEqual(4);
+      expect(e.y).toBeGreaterThanOrEqual(12);
+      expect(e.y).toBeLessThanOrEqual(388);
     }
   });
 
   it('enemies stop at the wall and hit their segment', () => {
-    const s = unmanned();
-    s.toSpawn = 0;
-    enemy(s, { lane: 2, x: 530 });
+    const s = still();
+    enemy(s, { x: 530, y: 200 });
     const after = tick(s, 1.5);
     expect(after.enemies[0]?.x).toBe(520);
-    expect(after.layers[0]?.segments[2]?.hp).toBe(190);
+    expect(after.enemies[0]?.y).toBe(200);
+    expect(after.layers[0]?.segments.map((g) => g.hp)).toEqual([200, 200, 190, 200, 200]);
   });
 
-  it('a broken segment opens only its lane', () => {
-    const s = unmanned();
-    s.toSpawn = 0;
+  it('a breach pulls nearby enemies through', () => {
+    const s = still();
     s.layers[0]!.segments[2]!.hp = 0;
-    enemy(s, { lane: 2, x: 530 });
-    enemy(s, { lane: 3, x: 530 });
+    enemy(s, { x: 530, y: 200 });
+    enemy(s, { x: 530, y: 300 });
     const after = tick(s, 15);
-    expect(after.enemies[0]?.x).toBe(120);
+    const [a, b] = after.enemies;
+    expect(a?.x).toBe(120);
     expect(after.camp.hp).toBeLessThan(500);
-    expect(after.enemies[1]?.x).toBe(520);
+    expect(b?.y).toBeLessThan(240);
+    expect(b?.x).toBeLessThan(500);
+    expect(after.layers[0]?.segments[3]?.hp).toBe(200);
+  });
+
+  it('slides toward the nearest gap, ties to the lower index', () => {
+    const s = still();
+    s.layers[0]!.segments[1]!.hp = 0;
+    s.layers[0]!.segments[3]!.hp = 0;
+    // y 200 is 80 from both gap centres (120 and 280).
+    enemy(s, { x: 530, y: 200 });
+    expect(tick(s, STEP).enemies[0]?.y).toBeCloseTo(199);
+  });
+
+  it('an enemy the crowd pushes back from a gap still hits the wall', () => {
+    const s = still();
+    s.layers[0]!.segments[2]!.hp = 0;
+    // Both slide up toward the gap; separation pushes the lower one down faster than it slides.
+    enemy(s, { x: 520, y: 290 });
+    enemy(s, { x: 520, y: 300 });
+    expect(tick(s, STEP).layers[0]?.segments[3]?.hp).toBe(195);
+  });
+
+  it('an enemy on a segment boundary belongs to the lower segment', () => {
+    const s = still();
+    s.layers[0]!.segments[1]!.hp = 0;
+    // y 80 is the top edge of segment 1 (the gap), not the bottom of segment 0.
+    enemy(s, { x: 530, y: 80 });
+    const after = tick(s, 2);
+    expect(after.enemies[0]?.x).toBeLessThan(500);
+    expect(after.layers[0]?.segments[0]?.hp).toBe(200);
+  });
+
+  it('walks through a gap in an outer layer and stops at the next one', () => {
+    const s = still();
+    s.layers.push({
+      x: 800,
+      segments: s.layers[0]!.segments.map((g) => ({ ...g, hp: g.index === 2 ? 0 : g.hp })),
+    });
+    enemy(s, { x: 900, y: 200 });
+    const after = tick(s, 15);
+    expect(after.enemies[0]?.x).toBe(520);
+    expect(after.layers[1]?.segments.map((g) => g.hp)).toEqual([200, 200, 0, 200, 200]);
+  });
+
+  it("far enemies don't steer yet", () => {
+    const s = still();
+    s.layers[0]!.segments[2]!.hp = 0;
+    enemy(s, { x: 900, y: 300 });
+    const after = tick(s, STEP);
+    expect(after.enemies[0]?.y).toBe(300);
+    expect(after.enemies[0]?.x).toBeCloseTo(899);
+  });
+
+  it('nobody crosses a standing segment', () => {
+    const s = still();
+    // Sturdy enough that 20 shamblers can't break a segment in 10 s.
+    for (const g of s.layers[0]!.segments) g.hp = g.maxHp = 10_000;
+    for (let i = 0; i < 20; i++) enemy(s, { x: 530, y: 20 + (360 * i) / 19 });
+    const after = tick(s, 10);
+    for (const e of after.enemies) expect(e.x).toBeGreaterThanOrEqual(520);
+  });
+
+  it('enemies push apart and stay in the field', () => {
+    const s = still();
+    enemy(s, { x: 520, y: 200 });
+    enemy(s, { x: 520, y: 200 });
+    const [e0, e1] = tick(s, 1).enemies;
+    expect(e0!.y).toBeLessThan(e1!.y);
+    expect(Math.abs(e0!.y - e1!.y)).toBeGreaterThanOrEqual(24 - 1e-6);
+    for (const e of [e0!, e1!]) {
+      expect(e.y).toBeGreaterThanOrEqual(12);
+      expect(e.y).toBeLessThanOrEqual(388);
+    }
+    const edge = still();
+    enemy(edge, { x: 520, y: 12 });
+    enemy(edge, { x: 520, y: 12 });
+    for (const e of tick(edge, 1).enemies) expect(e.y).toBeGreaterThanOrEqual(12);
+  });
+
+  it('separation does not depend on enemy order', () => {
+    const make = (reverse: boolean) => {
+      const s = still();
+      const placed = [
+        { x: 700, y: 100 },
+        { x: 705, y: 108 },
+        { x: 698, y: 115 },
+      ];
+      for (const p of placed) enemy(s, p);
+      if (reverse) s.enemies.reverse();
+      return tick(s, STEP).enemies.sort((a, b) => a.id - b.id);
+    };
+    expect(make(true)).toEqual(make(false));
   });
 
   it('a segment repaired behind an enemy never pulls it back', () => {
-    const s = unmanned();
-    s.toSpawn = 0;
-    enemy(s, { lane: 2, x: 510 });
+    const s = still();
+    enemy(s, { x: 510, y: 200 });
     const after = tick(s, STEP);
     expect(after.enemies[0]?.x).toBe(509);
   });
@@ -127,7 +225,7 @@ describe('tick', () => {
     const s = unmanned();
     s.camp.hp = 3;
     s.layers[0]!.segments[2]!.hp = 0;
-    enemy(s, { lane: 2, x: 120 });
+    enemy(s, { x: 120, y: 200 });
     const after = tick(s, 1);
     expect(after.camp.hp).toBe(0);
     expect(after.outcome).toBe('lost');
@@ -141,26 +239,27 @@ describe('combat', () => {
     expect(defenderRange(s, s.posts[0]!, s.defenders[0]!)).toBe(750);
   });
 
-  it('shoots the closest-to-camp enemy in range', () => {
+  it('shoots the enemy closest to the defender', () => {
     const s = quiet();
-    enemy(s, { lane: 1, x: 1000 });
-    enemy(s, { lane: 4, x: 900 });
+    enemy(s, { x: 800, y: 390 });
+    enemy(s, { x: 850, y: 120 });
     const after = tick(s, STEP);
     expect(after.enemies.map((e) => e.hp)).toEqual([20, 14]);
     expect(after.shots).toHaveLength(1);
+    expect(after.shots[0]).toMatchObject({ fromX: 420, fromY: 120, toX: 850, toY: 120 });
   });
 
-  it('breaks a tie on x by the lowest id', () => {
+  it('breaks a tie on distance by the lowest id', () => {
     const s = quiet();
-    enemy(s, { lane: 2, x: 900 });
-    enemy(s, { lane: 0, x: 900 });
+    enemy(s, { x: 800, y: 220 });
+    enemy(s, { x: 800, y: 20 });
     const after = tick(s, STEP);
     expect(after.enemies.map((e) => e.hp)).toEqual([14, 20]);
   });
 
   it("doesn't shoot out of range", () => {
     const s = quiet();
-    enemy(s, { lane: 1, x: 1300 });
+    enemy(s, { x: 1300, y: 120 });
     const after = tick(s, STEP);
     expect(after.enemies[0]?.hp).toBe(20);
     expect(after.shots).toEqual([]);
@@ -215,7 +314,7 @@ describe('combat', () => {
 
   it('a killed enemy deals no damage that step', () => {
     const s = newHorde(1, setup());
-    enemy(s, { hp: 1, lane: 1, x: 520, nextAttackAt: 0 });
+    enemy(s, { hp: 1, x: 520, y: 120, nextAttackAt: 0 });
     const after = tick(s, STEP);
     expect(after.layers[0]?.segments[1]?.hp).toBe(200);
   });
@@ -237,5 +336,88 @@ describe('combat', () => {
     expect(after.offer).toBeNull();
     expect(after.level).toBe(1);
     expect(after.xp).toBe(10);
+  });
+});
+
+describe('focus', () => {
+  /** P is nearer the camp, Q nearer post 0 at (420, 120). */
+  function pq(): { s: HordeState; p: number; q: number } {
+    const s = quiet();
+    const p = enemy(s, { x: 800, y: 390 }).id;
+    const q = enemy(s, { x: 850, y: 120 }).id;
+    return { s, p, q };
+  }
+  const hp = (s: HordeState, id: number) => s.enemies.find((e) => e.id === id)?.hp;
+
+  it('focus beats closest', () => {
+    const { s, p, q } = pq();
+    const after = tick(setFocus(s, p), STEP);
+    expect(hp(after, p)).toBe(14);
+    expect(hp(after, q)).toBe(20);
+  });
+
+  it('focus out of range falls back to closest', () => {
+    const { s, q } = pq();
+    const r = enemy(s, { x: 1300, y: 120 }).id;
+    const after = tick(setFocus(s, r), STEP);
+    expect(hp(after, q)).toBe(14);
+    expect(hp(after, r)).toBe(20);
+    expect(after.focusId).toBe(r);
+  });
+
+  it('focus clears when the target dies', () => {
+    const { s, p } = pq();
+    s.enemies.find((e) => e.id === p)!.hp = 1;
+    const after = tick(setFocus(s, p), STEP);
+    expect(hp(after, p)).toBeUndefined();
+    expect(after.focusId).toBeNull();
+  });
+
+  it.each([99, NaN, 1.5, -1, Infinity, Number.MAX_SAFE_INTEGER + 2])(
+    'setFocus rejects %s and leaves the state untouched',
+    (id) => {
+      const { s } = pq();
+      const before = structuredClone(s);
+      expect(() => setFocus(s, id)).toThrow(RangeError);
+      expect(s).toEqual(before);
+    },
+  );
+
+  it('setFocus sets and clears without touching its input', () => {
+    const { s, p } = pq();
+    const before = structuredClone(s);
+    const focused = setFocus(s, p);
+    expect(focused.focusId).toBe(p);
+    expect(s).toEqual(before);
+    expect(setFocus(focused, null).focusId).toBeNull();
+  });
+
+  it('setFocus rejects a dead enemy', () => {
+    const { s, p } = pq();
+    s.enemies.find((e) => e.id === p)!.hp = 0;
+    expect(() => setFocus(s, p)).toThrow(RangeError);
+  });
+
+  it('enemyAt picks the nearest within reach', () => {
+    const { s, q } = pq();
+    expect(enemyAt(s, 852, 118)).toBe(q);
+    expect(enemyAt(s, 600, 250)).toBeNull();
+  });
+
+  it('enemyAt breaks a tie by the lowest id', () => {
+    const s = quiet();
+    const a = enemy(s, { x: 700, y: 100 }).id;
+    enemy(s, { x: 700, y: 120 });
+    expect(enemyAt(s, 700, 110)).toBe(a);
+  });
+
+  it.each([
+    [NaN, 0],
+    [0, NaN],
+    [Infinity, 120],
+    [850, -Infinity],
+  ])('enemyAt(%s, %s) is null', (x, y) => {
+    const { s } = pq();
+    expect(enemyAt(s, x, y)).toBeNull();
   });
 });

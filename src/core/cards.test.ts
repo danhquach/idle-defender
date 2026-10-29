@@ -15,7 +15,7 @@ describe('cards', () => {
   it('a level-up opens an offer of 3 and pauses', () => {
     const s = newHorde(1, setup());
     s.xp = 9;
-    enemy(s, { hp: 1, x: 600, lane: 1 });
+    enemy(s, { hp: 1, x: 600, y: 120 });
     const open = tick(s, STEP);
     expect(open.level).toBe(2);
     expect(open.offer).toHaveLength(3);
@@ -83,7 +83,7 @@ describe('cards', () => {
   it('queues a second level-up', () => {
     const s = newHorde(1, setup());
     s.xp = 23;
-    enemy(s, { hp: 1, x: 600, lane: 1 });
+    enemy(s, { hp: 1, x: 600, y: 120 });
     const first = tick(s, STEP);
     expect(first.level).toBe(2);
     expect(first.xp).toBe(14);

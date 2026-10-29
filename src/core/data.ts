@@ -4,16 +4,23 @@
 /** Fixed simulation step in seconds: results never depend on frame rate. */
 export const STEP = 1 / 30;
 
-export const LANES = 5;
-export const LANE_SPACING = 80;
-export const FIELD_RIGHT = 1600;
+/** The open field: `x` runs 0…right (camp left, horde from the right), `y` 0…height. */
+export const FIELD = { right: 1600, height: 400 } as const;
 
 export const CAMP = { x: 120, maxHp: 500 } as const;
-export const WALL = { x: 500, depth: 20, segmentHp: 200 } as const;
+/** Each wall layer is split top to bottom into `segments` equal segments. */
+export const WALL = { x: 500, depth: 20, segmentHp: 200, segments: 5 } as const;
+export const SEGMENT_HEIGHT = FIELD.height / WALL.segments;
 
-export const POSTS: readonly { x: number; lane: number; kind: 'tower' }[] = [
-  { x: 420, lane: 1, kind: 'tower' },
-  { x: 420, lane: 3, kind: 'tower' },
+export const ENEMY_RADIUS = 12;
+/** Most a crowded enemy is pushed aside per second. */
+export const SEPARATION_SPEED = 60;
+/** How close to a wall an enemy must be to slide toward a broken segment. */
+export const GAP_SENSE = 200;
+
+export const POSTS: readonly { x: number; y: number; kind: 'tower' }[] = [
+  { x: 420, y: 120, kind: 'tower' },
+  { x: 420, y: 280, kind: 'tower' },
 ];
 
 /** Range multiplier for a defender on a tower post. */

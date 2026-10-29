@@ -2,10 +2,12 @@ import { levelUp } from './cards.ts';
 import {
   CAMP,
   ENEMIES,
-  FIELD_RIGHT,
-  LANE_SPACING,
-  LANES,
+  ENEMY_RADIUS,
+  FIELD,
+  GAP_SENSE,
   POSTS,
+  SEGMENT_HEIGHT,
+  SEPARATION_SPEED,
   SHOT_TRAIL,
   SPAWN_INTERVAL,
   STEP,
@@ -34,18 +36,18 @@ export interface HordeSetup {
 export interface Enemy {
   id: number;
   kind: EnemyKind;
-  lane: number;
   x: number;
+  y: number;
   hp: number;
   maxHp: number;
   nextAttackAt: number;
 }
 export interface Segment {
-  lane: number;
+  index: number;
   hp: number;
   maxHp: number;
 }
-/** One wall layer: one segment per lane. */
+/** One wall layer: `WALL.segments` segments, top to bottom. */
 export interface Layer {
   x: number;
   segments: Segment[];
@@ -53,7 +55,7 @@ export interface Layer {
 export interface Post {
   id: number;
   x: number;
-  lane: number;
+  y: number;
   kind: 'tower';
   defenderId: string | null;
 }
@@ -62,9 +64,9 @@ export interface Defender extends DefenderSpec {
 }
 export interface Shot {
   fromX: number;
-  fromLane: number;
+  fromY: number;
   toX: number;
-  toLane: number;
+  toY: number;
   at: number;
 }
 /** Multipliers from upgrade cards; all start at 1. */
@@ -96,6 +98,8 @@ export interface HordeState {
   level: number;
   offer: Card[] | null;
   mods: Mods;
+  /** Player-picked target; null = each defender shoots the enemy closest to it. */
+  focusId: number | null;
   shots: Shot[];
   outcome: Outcome;
 }
@@ -128,8 +132,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     layers: [
       {
         x: WALL.x,
-        segments: Array.from({ length: LANES }, (_, lane) => ({
-          lane,
+        segments: Array.from({ length: WALL.segments }, (_, index) => ({
+          index,
           hp: WALL.segmentHp,
           maxHp: WALL.segmentHp,
         })),
@@ -143,6 +147,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     level: 1,
     offer: null,
     mods: { damage: 1, fireRate: 1, range: 1 },
+    focusId: null,
     shots: [],
     outcome: 'fighting',
   };
@@ -177,12 +182,40 @@ export function defenderRange(state: HordeState, post: Post, defender: Defender)
   );
 }
 
+/** Focuses every defender on enemy `enemyId` (null clears); returns a new state. */
+export function setFocus(state: HordeState, enemyId: number | null): HordeState {
+  if (
+    enemyId !== null &&
+    !(Number.isSafeInteger(enemyId) && state.enemies.some((e) => e.id === enemyId && e.hp > 0))
+  ) {
+    throw new RangeError(`setFocus: no living enemy ${String(enemyId)}`);
+  }
+  const s = structuredClone(state);
+  s.focusId = enemyId;
+  return s;
+}
+
+/** The living enemy nearest `(x, y)` within reach of a click (ties → lowest id), else null. */
+export function enemyAt(state: HordeState, x: number, y: number): number | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  let best: Enemy | null = null;
+  let bestD = 2 * ENEMY_RADIUS;
+  for (const e of state.enemies) {
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (e.hp <= 0 || d > bestD || (d === bestD && best && e.id > best.id)) continue;
+    best = e;
+    bestD = d;
+  }
+  return best?.id ?? null;
+}
+
 function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   fire(s);
   removeDead(s);
-  move(s);
-  attack(s);
+  const sliding = move(s);
+  separate(s);
+  attack(s, sliding);
   advanceWave(s);
   if (s.camp.hp === 0) s.outcome = 'lost';
   // A finished fight has no card to pick, so its XP stays banked.
@@ -196,8 +229,8 @@ function spawn(s: HordeState, rng: Rng): void {
     s.enemies.push({
       id: s.nextEnemyId++,
       kind: 'shambler',
-      lane: int(rng, 0, LANES - 1),
-      x: FIELD_RIGHT,
+      x: FIELD.right,
+      y: int(rng, ENEMY_RADIUS, FIELD.height - ENEMY_RADIUS),
       hp,
       maxHp: hp,
       nextAttackAt: 0,
@@ -213,11 +246,19 @@ function fire(s: HordeState): void {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender || !due(s.time, defender.nextShotAt)) continue;
     const range = defenderRange(s, post, defender);
-    let target: Enemy | undefined;
-    for (const e of s.enemies) {
-      if (e.hp <= 0) continue;
-      if (Math.hypot(e.x - post.x, (e.lane - post.lane) * LANE_SPACING) > range) continue;
-      if (!target || e.x < target.x || (e.x === target.x && e.id < target.id)) target = e;
+    const dist = (e: Enemy): number => Math.hypot(e.x - post.x, e.y - post.y);
+    const focus = s.enemies.find((e) => e.id === s.focusId && e.hp > 0);
+    let target = focus && dist(focus) <= range ? focus : undefined;
+    if (!target) {
+      let best = Infinity;
+      for (const e of s.enemies) {
+        const d = dist(e);
+        if (e.hp <= 0 || d > range) continue;
+        if (d < best || (d === best && target && e.id < target.id)) {
+          target = e;
+          best = d;
+        }
+      }
     }
     if (!target) continue;
     const weapon = WEAPONS[defender.weapon];
@@ -225,39 +266,117 @@ function fire(s: HordeState): void {
     defender.nextShotAt = s.time + weapon.fireInterval / s.mods.fireRate;
     s.shots.push({
       fromX: post.x,
-      fromLane: post.lane,
+      fromY: post.y,
       toX: target.x,
-      toLane: target.lane,
+      toY: target.y,
       at: s.time,
     });
   }
 }
 
 function removeDead(s: HordeState): void {
-  for (const e of s.enemies) if (e.hp <= 0) s.xp += ENEMIES[e.kind].xp;
+  for (const e of s.enemies) {
+    if (e.hp > 0) continue;
+    s.xp += ENEMIES[e.kind].xp;
+    if (e.id === s.focusId) s.focusId = null;
+  }
   s.enemies = s.enemies.filter((e) => e.hp > 0);
 }
 
-/** Where an enemy stops: the nearest standing segment ahead in its lane, else the camp. */
-function stopLine(s: HordeState, e: Enemy): { x: number; segment: Segment | null } {
-  let best: { x: number; segment: Segment | null } = { x: CAMP.x, segment: null };
-  for (const layer of s.layers) {
-    const x = layer.x + WALL.depth;
-    const segment = layer.segments[e.lane];
-    // Only layers not yet passed: a segment patched up behind an enemy never pulls it back.
-    if (segment && segment.hp > 0 && x <= e.x && x > best.x) best = { x, segment };
+const segmentAt = (y: number): number =>
+  Math.min(WALL.segments - 1, Math.max(0, Math.floor(y / SEGMENT_HEIGHT)));
+
+/**
+ * Where an enemy stops: the standing segment in front of it on the nearest layer
+ * not yet crossed, else (through gaps) the camp. Walls ignore the enemy's radius.
+ */
+function stopLine(
+  s: HordeState,
+  e: Enemy,
+): { x: number; segment: Segment | null; layer: Layer | null } {
+  // Only layers not yet crossed: a segment patched up behind an enemy never pulls it back.
+  const ahead = s.layers.filter((l) => l.x + WALL.depth <= e.x).sort((a, b) => b.x - a.x);
+  for (const layer of ahead) {
+    const segment = layer.segments[segmentAt(e.y)];
+    if (segment && segment.hp > 0) return { x: layer.x + WALL.depth, segment, layer };
+  }
+  return { x: CAMP.x, segment: null, layer: null };
+}
+
+/** The broken segment of `layer` whose centre is nearest `y` (ties → lower index). */
+function nearestGap(layer: Layer, y: number): Segment | null {
+  let best: Segment | null = null;
+  let bestD = Infinity;
+  for (const seg of layer.segments) {
+    const d = Math.abs((seg.index + 0.5) * SEGMENT_HEIGHT - y);
+    if (seg.hp <= 0 && d < bestD) {
+      best = seg;
+      bestD = d;
+    }
   }
   return best;
 }
 
-function move(s: HordeState): void {
+/** An enemy sliding toward a gap: where it started this step and the gap centre it heads for. */
+type Slide = { fromY: number; toY: number };
+
+/** Moves every enemy; returns the slides toward a gap this step, by enemy id. */
+function move(s: HordeState): Map<number, Slide> {
+  const sliding = new Map<number, Slide>();
   for (const e of s.enemies) {
-    e.x = Math.max(stopLine(s, e).x, e.x - ENEMIES[e.kind].speed * STEP);
+    const speed = ENEMIES[e.kind].speed * STEP;
+    let stop = stopLine(s, e);
+    const gap = stop.layer && stop.x >= e.x - GAP_SENSE ? nearestGap(stop.layer, e.y) : null;
+    if (gap) {
+      const toY = (gap.index + 0.5) * SEGMENT_HEIGHT;
+      const dy = toY - e.y;
+      sliding.set(e.id, { fromY: e.y, toY });
+      e.y += Math.sign(dy) * Math.min(Math.abs(dy), speed);
+      stop = stopLine(s, e);
+    }
+    e.x = Math.max(stop.x, e.x - speed);
+  }
+  return sliding;
+}
+
+/**
+ * Pushes overlapping enemies apart along `y` only (never `x`, so never through a
+ * wall): the upper one up, the lower one down (equal `y` → lower id up), each by
+ * half the overlap capped per step. Computed from pre-push positions, then clamped
+ * to the field.
+ */
+function separate(s: HordeState): void {
+  const push = new Map<number, number>();
+  const cap = SEPARATION_SPEED * STEP;
+  const es = s.enemies;
+  for (let i = 0; i < es.length; i++) {
+    for (let j = i + 1; j < es.length; j++) {
+      const a = es[i]!;
+      const b = es[j]!;
+      const overlap = 2 * ENEMY_RADIUS - Math.hypot(a.x - b.x, a.y - b.y);
+      if (overlap <= 0) continue;
+      const aUp = a.y < b.y || (a.y === b.y && a.id < b.id);
+      const d = Math.min(overlap / 2, cap);
+      push.set(a.id, (push.get(a.id) ?? 0) + (aUp ? -d : d));
+      push.set(b.id, (push.get(b.id) ?? 0) + (aUp ? d : -d));
+    }
+  }
+  for (const e of es) {
+    const d = push.get(e.id);
+    if (d === undefined) continue;
+    e.y = Math.min(FIELD.height - ENEMY_RADIUS, Math.max(ENEMY_RADIUS, e.y + d));
   }
 }
 
-function attack(s: HordeState): void {
+/**
+ * Enemies at their stop line hit the segment in front (or the camp). One still getting
+ * closer to a gap this step (after separation) holds off; one the crowd pushed back
+ * attacks, so a packed crowd can't keep it from ever hitting the wall.
+ */
+function attack(s: HordeState, sliding: Map<number, Slide>): void {
   for (const e of s.enemies) {
+    const slide = sliding.get(e.id);
+    if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
     const stop = stopLine(s, e);
     if (e.x > stop.x || !due(s.time, e.nextAttackAt)) continue;
     const enemy = ENEMIES[e.kind];

@@ -8,7 +8,8 @@ the ruins while you're away.
 
 ## Status
 
-Design approved, nothing playable yet. The design is
+The M1 horde prototype is playable: one horde in the browser with waves,
+level-up cards and a win/lose result. The design is
 [`docs/design.md`](docs/design.md); its build order (§14) becomes GitHub
 issues.
 
