@@ -1,4 +1,5 @@
 // Wires the sim to the page: canvas, frame loop, camera and focus input, and the HUD.
+import { newBase } from '../core/base.ts';
 import { chooseCard } from '../core/cards.ts';
 import { FIELD } from '../core/data.ts';
 import {
@@ -40,6 +41,8 @@ const SETUP: HordeSetup = {
     { id: 'john', name: 'John', weapon: 'pistol' },
   ],
   startDefenderId: 'bob',
+  base: newBase(),
+  startPostId: 0,
 };
 
 const PAN_KEYS: Record<string, [number, number]> = {

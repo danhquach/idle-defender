@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { chooseCard, rollOffer } from './cards.ts';
-import { STEP } from './data.ts';
+import { buildPost, buildSegment, newBase, type Result } from './base.ts';
+import { STEP, type Stock } from './data.ts';
 import { newHorde, tick, type Card, type HordeState } from './horde.ts';
 import { createRng } from './rng.ts';
 import { enemy, setup } from './testing.ts';
@@ -9,6 +10,7 @@ function offers(s: HordeState): Card[][] {
   return Array.from({ length: 200 }, (_, seed) => rollOffer(createRng(seed), s));
 }
 
+const RICH: Stock = { scrap: 999, wood: 999, metal: 999, concrete: 999 };
 const recruits = (offer: Card[]) => offer.filter((c) => c.kind === 'recruit').length;
 
 describe('cards', () => {
@@ -59,6 +61,62 @@ describe('cards', () => {
     expect(after.bench.map((d) => d.id)).toEqual(['c']);
     expect(after.defenders.map((d) => d.id)).toEqual(['a', 'b']);
     expect(after.offer).toBeNull();
+  });
+
+  it('Patch Up and Reinforce leave an unbuilt slot open', () => {
+    const base = newBase();
+    base.layers[0]!.slots[4] = null;
+    const s = newHorde(1, { ...setup(), base });
+    s.offer = [
+      { kind: 'upgrade', id: 'reinforce' },
+      { kind: 'upgrade', id: 'patch-up' },
+      { kind: 'upgrade', id: 'sharpshooter' },
+    ];
+    let after = chooseCard(s, 0);
+    after.offer = s.offer;
+    after = chooseCard(after, 1);
+    expect(after.layers[0]!.segments[4]).toMatchObject({ kind: null, hp: 0, maxHp: 0 });
+    expect(after.layers[0]!.segments[0]).toMatchObject({ hp: 250, maxHp: 250 });
+  });
+
+  it('recruit takes the free post furthest forward', () => {
+    let r: Result = buildPost(newBase(), RICH, { kind: 'ground', column: 0, row: 0 });
+    if (!r.ok) throw new Error(r.reason);
+    r = buildSegment(r.base, r.stock, ['wood'], 1, 0, 'wall', 'wood');
+    if (!r.ok) throw new Error(r.reason);
+    r = buildPost(r.base, r.stock, { kind: 'tower', column: 1, row: 4 });
+    if (!r.ok) throw new Error(r.reason);
+    const s = newHorde(1, { ...setup(), base: r.base, startPostId: 1 });
+    expect(s.posts.map((p) => [p.kind, p.x])).toEqual([
+      ['ground', 340],
+      ['tower', 420],
+      ['tower', 420],
+      ['tower', 680],
+    ]);
+    s.offer = [
+      { kind: 'recruit', defender: s.bench[0]! },
+      { kind: 'upgrade', id: 'sharpshooter' },
+      { kind: 'upgrade', id: 'reinforce' },
+    ];
+    expect(chooseCard(s, 0).posts[3]?.defenderId).toBe('b');
+  });
+
+  it('recruit skips a wall-walk post over a broken segment', () => {
+    const r = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: 0 });
+    if (!r.ok) throw new Error(r.reason);
+    const s = newHorde(1, { ...setup(), base: r.base });
+    const walk = s.posts.findIndex((p) => p.kind === 'wall-walk');
+    s.posts[1]!.defenderId = 'x';
+    s.layers[0]!.segments[0]!.hp = 0;
+    expect(offers(s).every((o) => recruits(o) === 0)).toBe(true);
+    s.layers[0]!.segments[0]!.hp = 1;
+    expect(offers(s).some((o) => recruits(o) === 1)).toBe(true);
+    s.offer = [
+      { kind: 'recruit', defender: s.bench[0]! },
+      { kind: 'upgrade', id: 'sharpshooter' },
+      { kind: 'upgrade', id: 'reinforce' },
+    ];
+    expect(chooseCard(s, 0).posts[walk]?.defenderId).toBe('b');
   });
 
   it('applies each upgrade', () => {

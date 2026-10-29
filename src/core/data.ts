@@ -8,23 +8,17 @@ export const STEP = 1 / 30;
 export const FIELD = { right: 1600, height: 400 } as const;
 
 export const CAMP = { x: 120, maxHp: 500 } as const;
-/** Each wall layer is split top to bottom into `segments` equal segments. */
-export const WALL = { x: 500, depth: 20, segmentHp: 200, segments: 5 } as const;
-export const SEGMENT_HEIGHT = FIELD.height / WALL.segments;
+/** Wall thickness along `x`; a layer's wall spans `[x, x + depth]`. */
+export const WALL = { depth: 20 } as const;
+/** Segments per layer, top to bottom; row `r` covers `y` in `[r, r + 1) * SEGMENT_HEIGHT`. */
+export const SEGMENTS = 5;
+export const SEGMENT_HEIGHT = FIELD.height / SEGMENTS;
 
 export const ENEMY_RADIUS = 12;
 /** Most a crowded enemy is pushed aside per second. */
 export const SEPARATION_SPEED = 60;
 /** How close to a wall an enemy must be to slide toward a broken segment. */
 export const GAP_SENSE = 200;
-
-export const POSTS: readonly { x: number; y: number; kind: 'tower' }[] = [
-  { x: 420, y: 120, kind: 'tower' },
-  { x: 420, y: 280, kind: 'tower' },
-];
-
-/** Range multiplier for a defender on a tower post. */
-export const TOWER_RANGE_BONUS = 1.25;
 
 export type WeaponId = 'pistol';
 export const WEAPONS: Readonly<
@@ -65,8 +59,6 @@ export const MATERIALS: readonly Material[] = ['scrap', 'wood', 'metal', 'concre
 
 /** Wall `x` of each buildable layer, inner (left) to outer (right). */
 export const COLUMNS: readonly number[] = [500, 760, 1020];
-/** Segments per layer (matches `WALL.segments` until the horde reads the base). */
-export const SEGMENTS = WALL.segments;
 
 export type Tier = 'wood' | 'metal' | 'concrete' | 'reinforced';
 /** In upgrade order. */

@@ -91,6 +91,7 @@ export function drawScene(
   const sprites: Sprite[] = [];
   for (const layer of state.layers) {
     for (const seg of layer.segments) {
+      if (seg.kind === null) continue; // unbuilt: an open gap, nothing to draw
       const broken = seg.hp <= 0;
       const y0 = seg.index * SEGMENT_HEIGHT;
       // Keyed just past the wall's front edge so enemies stopped at it draw on top.
