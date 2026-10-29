@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment } from '../core/base.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { injuredLines, pickStart, postKey, stockBarText } from './build.ts';
+import { exportCode } from '../storage/code.ts';
+import { encodeSave } from '../storage/save.ts';
+import {
+  IMPORT_CONFIRM,
+  IMPORT_DONE,
+  IMPORT_REFUSAL,
+  injuredLines,
+  loadCode,
+  pickStart,
+  postKey,
+  stockBarText,
+} from './build.ts';
 
 describe('build panel', () => {
   it('shows the next horde and every material', () => {
@@ -62,5 +73,31 @@ describe('build panel', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^Jack · injured, back at .*05/);
     expect(injuredLines(g.roster, g.roster[1]!.injuredUntil)).toEqual([]);
+  });
+
+  it('Load code: says why a code is refused, without asking', () => {
+    const asked: string[] = [];
+    const ask = (q: string) => (asked.push(q), true);
+    const refused = { game: null, clearPaste: false };
+    expect(loadCode('', ask)).toEqual({ ...refused, message: IMPORT_REFUSAL.empty });
+    expect(loadCode('ID1:' + 'A'.repeat(200_000), ask)).toEqual({
+      ...refused,
+      message: IMPORT_REFUSAL.tooBig,
+    });
+    expect(loadCode('ID1:nope', ask)).toEqual({ ...refused, message: IMPORT_REFUSAL.bad });
+    expect(asked).toEqual([]);
+  });
+
+  it('Load code: asks first; a no changes nothing, a yes loads and clears the box', () => {
+    const g = { ...newGame(), hordeNumber: 5 };
+    const code = exportCode(encodeSave(g, 1_800_000_000_000));
+    const asked: string[] = [];
+    expect(loadCode(code, (q) => (asked.push(q), false))).toEqual({
+      game: null,
+      message: '',
+      clearPaste: false,
+    });
+    expect(asked).toEqual([IMPORT_CONFIRM]);
+    expect(loadCode(code, () => true)).toEqual({ game: g, message: IMPORT_DONE, clearPaste: true });
   });
 });

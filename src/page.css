@@ -236,13 +236,27 @@ body {
   color: #b3ada2;
 }
 
-.build-select {
+.build-select,
+.build-code {
   padding: 6px;
   border: 1px solid #5e5546;
   border-radius: 6px;
   background: #24262a;
   color: #d8d4cc;
   font: inherit;
+}
+
+.build-backup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.build-code {
+  resize: vertical;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  word-break: break-all;
 }
 
 .hud-button:disabled {

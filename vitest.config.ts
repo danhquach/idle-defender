@@ -6,11 +6,13 @@ export default mergeConfig(
   defineConfig({
     test: {
       // Unit tests cover the pure simulation (src/core/**), the UI's pure
-      // helpers (src/ui/**), the build's Content-Security-Policy, the lint
-      // rules that ban HTML sinks and the version checks.
+      // helpers (src/ui/**), the save and backup code (src/storage/**), the
+      // build's Content-Security-Policy, the lint rules that ban HTML sinks and
+      // the version checks.
       include: [
         'src/core/**/*.test.ts',
         'src/ui/**/*.test.ts',
+        'src/storage/**/*.test.ts',
         'src/csp.test.ts',
         'src/version-checks.test.ts',
         'src/lint.test.ts',

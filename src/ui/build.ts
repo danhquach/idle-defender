@@ -17,8 +17,35 @@ import { postUsable } from '../core/cards.ts';
 import { MATERIALS, POST_COST, TIER_ORDER, TIERS, type Stock } from '../core/data.ts';
 import { available, type GameState, type RosterDefender } from '../core/game.ts';
 import { layoutOf } from '../core/horde.ts';
+import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
+import { encodeSave } from '../storage/save.ts';
 import { clockTime, el, POST_NAME, postName, slotName, stockText } from './hud.ts';
 import type { SlotHit } from './projection.ts';
+
+/** What the backup section says about a refused code. */
+export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
+  {
+    empty: 'Paste a backup code first.',
+    tooBig: 'That is too long to be a backup code.',
+    bad: "That code can't be read.",
+  };
+export const IMPORT_CONFIRM = 'Replace this camp with the one in the code? This camp is lost.';
+export const IMPORT_DONE = 'Backup code loaded.';
+
+/**
+ * What "Load code" does with `pasted`: the camp to load (null for none), the line to
+ * show, and whether to clear the paste box. `confirm` asks the player, only for a
+ * readable code.
+ */
+export function loadCode(
+  pasted: string,
+  confirm: (question: string) => boolean,
+): { game: GameState | null; message: string; clearPaste: boolean } {
+  const result = importCode(pasted);
+  if (!result.ok) return { game: null, message: IMPORT_REFUSAL[result.why], clearPaste: false };
+  if (!confirm(IMPORT_CONFIRM)) return { game: null, message: '', clearPaste: false };
+  return { game: result.save.game, message: IMPORT_DONE, clearPaste: true };
+}
 
 export function stockBarText(game: GameState): string {
   const stock = MATERIALS.map((m) => `${m[0]!.toUpperCase()}${m.slice(1)} ${game.stock[m]}`);
@@ -66,18 +93,51 @@ export interface BuildPanel {
   hide(): void;
   /** The start defender and the `game.base.posts` index picked, or null if none is usable. */
   choice(game: GameState): { defenderId: string; postId: number } | null;
+  /** Shows a line about saving in the backup section (a refused write, a lost save). */
+  notice(text: string): void;
 }
 
 export function createBuildPanel(
   root: HTMLElement,
   onChange: (base: Base, stock: Stock) => void,
   onStart: (defenderId: string, postId: number) => void,
+  onLoad: (game: GameState) => void,
 ): BuildPanel {
   const bar = el('div', 'hud-bar build-bar');
   const panel = el('aside', 'build-panel');
   bar.hidden = true;
   panel.hidden = true;
   root.append(bar, panel);
+
+  // Built once, so a pasted code survives the redraws.
+  const backup = el('section', 'build-backup');
+  const code = el('textarea', 'build-code');
+  code.readOnly = true;
+  code.rows = 2;
+  code.setAttribute('aria-label', 'Backup code for this camp');
+  code.addEventListener('focus', () => code.select());
+  const paste = el('textarea', 'build-code');
+  paste.rows = 2;
+  paste.placeholder = 'Paste a backup code';
+  paste.setAttribute('aria-label', 'Backup code to load');
+  const load = el('button', 'build-option', 'Load code');
+  load.type = 'button';
+  const status = el('p', 'build-slot-note');
+  status.setAttribute('role', 'status');
+  load.addEventListener('click', () => {
+    const { game, message, clearPaste } = loadCode(paste.value, (q) => window.confirm(q));
+    status.textContent = message;
+    if (clearPaste) paste.value = '';
+    if (game) onLoad(game);
+  });
+  backup.append(
+    el('h3', 'build-slot-title', 'Backup code'),
+    el('p', 'build-slot-note', 'Keep it somewhere safe; paste it back to restore this camp.'),
+    code,
+    paste,
+    load,
+    status,
+  );
 
   let defenderId: string | null = null;
   let startKey: string | null = null;
@@ -218,8 +278,16 @@ export function createBuildPanel(
         ...panel.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button, select'),
       ];
       const focused = controls().indexOf(document.activeElement as HTMLButtonElement);
-      panel.replaceChildren(el('h2', 'build-title', 'Build'), slot, all, start);
-      if (focused >= 0) {
+      // The backup section is the same node each time: its focus goes back where it was.
+      const inBackup =
+        document.activeElement instanceof HTMLElement && backup.contains(document.activeElement)
+          ? document.activeElement
+          : null;
+      code.value = exportCode(encodeSave(game, Date.now()));
+      panel.replaceChildren(el('h2', 'build-title', 'Build'), slot, all, start, backup);
+      if (inBackup) {
+        inBackup.focus();
+      } else if (focused >= 0) {
         const after = controls();
         const next = [...after.slice(focused), ...after.slice(0, focused)].find((c) => !c.disabled);
         next?.focus();
@@ -230,6 +298,9 @@ export function createBuildPanel(
     hide() {
       bar.hidden = true;
       panel.hidden = true;
+    },
+    notice(text) {
+      status.textContent = text;
     },
   };
 }

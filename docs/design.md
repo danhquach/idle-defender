@@ -603,6 +603,28 @@ Local save (browser storage) with a backup save code, same approach as
 Office Immortal (see that repo's `docs/design.md` §11 and `src`). Patrol and crafting timers use real time so
 offline progress works across sessions.
 
+- **What is saved:** the game between hordes (horde number, base, stock,
+  unlocked tiers, roster with XP and rest times), as versioned JSON, after
+  every change (a build, a finished horde, a recovery, a loaded code). A
+  fight in progress is not saved: a reload mid-horde comes back to the camp
+  as it was before that horde. While a fight or its result screen is up,
+  leaving the page asks first, so a stray refresh doesn't lose it.
+- **Real time:** a rest is stored as the time it ends, so a defender heals
+  while the game is closed.
+- **Untrusted on the way in:** a save or a pasted code is size-checked, then
+  read through an allow-list (exact keys, known ids, whole numbers in range,
+  names of plain letters, the build rules a real camp keeps). Max HP comes
+  from the current numbers and a rest is cut to 2 h past the save, so a
+  retune or a clock set back never refuses a save. Anything else
+  is refused: a bad save starts a new camp and is kept aside, never
+  overwritten; a bad code changes nothing and says why.
+- **Backup code:** the save as one line of text (a tag and base64) shown in
+  the build panel, to keep outside the browser and paste back in. Loading
+  one asks first, since it replaces the camp.
+- **Storage refused:** where the browser blocks or fills storage the game
+  still plays, and the build panel says saving is off.
+- **Several tabs:** each saves on its own changes; the last write wins.
+
 ## 13. Out of scope (v1)
 
 - Multiplayer, raids on other players' bases, leaderboards.
