@@ -10,11 +10,12 @@ import {
   SEGMENTS,
   WALL,
 } from '../core/data.ts';
-import type { HordeState, Layer, Post } from '../core/horde.ts';
+import type { Defender, HordeState, Layer } from '../core/horde.ts';
 import type { Tier } from '../core/base.ts';
 import {
   depthSort,
   PIECE,
+  postFloor,
   project,
   wallHeight,
   type Camera,
@@ -38,6 +39,8 @@ const COLOR = {
   walkFront: '#6b604e',
   defenderTop: '#7d9cc0',
   defenderFront: '#4f6f94',
+  selected: '#9cc4f0',
+  reserved: 'rgba(156, 196, 240, 0.7)',
   shadow: 'rgba(0, 0, 0, 0.35)',
   slot: 'rgba(216, 212, 204, 0.18)',
   enemy: '#7ccf3a',
@@ -58,12 +61,15 @@ const TIER_COLOR: Readonly<Record<Tier, { top: string; front: string }>> = {
 /** Gap drawn between wall segments so they read as separate pieces. */
 const SEGMENT_GAP = 2;
 const CAMP_BOX = { x0: CAMP.x - 90, x1: CAMP.x, height: 70 } as const;
-const DEFENDER = { halfWidth: 7, halfDepth: 10, height: 30 } as const;
+const DEFENDER = PIECE.defender;
 const ENEMY = { radius: ENEMY_RADIUS * 0.85, z: 10 } as const;
 const HP_BAR = { w: 24, h: 4, z: 30 } as const;
 
 /** What the renderer needs from a fight; build mode passes the base laid out the same way. */
-export type Scene = Pick<HordeState, 'layers' | 'posts' | 'enemies' | 'shots' | 'focusId'>;
+export type Scene = Pick<
+  HordeState,
+  'layers' | 'posts' | 'defenders' | 'enemies' | 'shots' | 'focusId'
+>;
 /** Build mode extras: empty slot outlines and the selected slot. */
 export interface BuildOverlay {
   selected: SlotHit | null;
@@ -124,11 +130,37 @@ function footprint(slot: SlotHit): { x0: number; x1: number; y0: number; y1: num
 const segmentOf = (layers: readonly Layer[], column: number, row: number) =>
   layers.find((l) => l.column === column)?.segments[row];
 
-/** Height of a post's floor, where its defender stands. */
-function postTop(layers: readonly Layer[], post: Post): number {
-  if (post.kind !== 'wall-walk') return PIECE[post.kind].height;
-  const seg = segmentOf(layers, post.column, post.row);
-  return (seg ? wallHeight(seg.hp, seg.maxHp) : 0) + PIECE.walk.height;
+/** A defender standing `z0` up at `(x, y)`, with a ring at its feet when selected. */
+function drawDefender(
+  ctx: CanvasRenderingContext2D,
+  d: Pick<Defender, 'x' | 'y'>,
+  z0: number,
+  selected: boolean,
+  cam: Camera,
+): void {
+  if (selected) {
+    const feet = project({ x: d.x, y: d.y, z: z0 }, cam);
+    const r = DEFENDER.halfDepth * 1.8 * cam.zoom;
+    ctx.strokeStyle = COLOR.selected;
+    ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
+    ctx.beginPath();
+    ctx.ellipse(feet.sx, feet.sy, r, r * 0.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  drawBox(
+    ctx,
+    {
+      x0: d.x - DEFENDER.halfWidth,
+      x1: d.x + DEFENDER.halfWidth,
+      y0: d.y - DEFENDER.halfDepth,
+      y1: d.y + DEFENDER.halfDepth,
+      z0,
+      height: DEFENDER.height,
+      top: COLOR.defenderTop,
+      front: COLOR.defenderFront,
+    },
+    cam,
+  );
 }
 
 type Sprite = { y: number; x: number; draw: () => void };
@@ -139,6 +171,7 @@ export function drawScene(
   cam: Camera,
   view: View,
   build: BuildOverlay | null = null,
+  selectedDefender: string | null = null,
 ): void {
   ctx.fillStyle = COLOR.sky;
   ctx.fillRect(0, 0, view.w, view.h);
@@ -226,8 +259,10 @@ export function drawScene(
     }
   }
   for (const post of scene.posts) {
-    const manned = post.defenderId !== null;
-    const floor = postTop(scene.layers, post);
+    // Standing on it; a post held only by a walker is reserved.
+    const manned = scene.defenders.find((d) => d.postId === post.id && !d.walking);
+    const reserved = !manned && post.defenderId !== null;
+    const floor = postFloor(scene.layers, post);
     const p = post.kind === 'wall-walk' ? PIECE.walk : PIECE[post.kind];
     const colour =
       post.kind === 'tower'
@@ -235,39 +270,32 @@ export function drawScene(
         : post.kind === 'ground'
           ? { top: COLOR.groundPostTop, front: COLOR.groundPostFront }
           : { top: COLOR.walkTop, front: COLOR.walkFront };
+    const footprint = {
+      x0: post.x - p.halfWidth,
+      x1: post.x + p.halfWidth,
+      y0: post.y - p.halfDepth,
+      y1: post.y + p.halfDepth,
+    };
     sprites.push({
       y: post.y,
       x: post.x,
       draw: () => {
-        drawBox(
-          ctx,
-          {
-            x0: post.x - p.halfWidth,
-            x1: post.x + p.halfWidth,
-            y0: post.y - p.halfDepth,
-            y1: post.y + p.halfDepth,
-            z0: floor - p.height,
-            height: p.height,
-            ...colour,
-          },
-          cam,
-        );
-        if (!manned) return;
-        drawBox(
-          ctx,
-          {
-            x0: post.x - DEFENDER.halfWidth,
-            x1: post.x + DEFENDER.halfWidth,
-            y0: post.y - DEFENDER.halfDepth,
-            y1: post.y + DEFENDER.halfDepth,
-            z0: floor,
-            height: DEFENDER.height,
-            top: COLOR.defenderTop,
-            front: COLOR.defenderFront,
-          },
-          cam,
-        );
+        drawBox(ctx, { ...footprint, z0: floor - p.height, height: p.height, ...colour }, cam);
+        if (reserved) {
+          ctx.strokeStyle = COLOR.reserved;
+          ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+          outline(ctx, footprint, floor, cam);
+        }
+        if (manned) drawDefender(ctx, manned, floor, manned.id === selectedDefender, cam);
       },
+    });
+  }
+  for (const d of scene.defenders) {
+    if (!d.walking) continue;
+    sprites.push({
+      y: d.y,
+      x: d.x,
+      draw: () => drawDefender(ctx, d, 0, d.id === selectedDefender, cam),
     });
   }
   for (const e of scene.enemies) {
@@ -318,7 +346,7 @@ export function drawScene(
   for (const shot of scene.shots) {
     // Shots start at their post's exact coordinates, so this finds the shooter's post.
     const from = scene.posts.find((p) => p.x === shot.fromX && p.y === shot.fromY);
-    const z = (from ? postTop(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;
+    const z = (from ? postFloor(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;
     const a0 = project({ x: shot.fromX, y: shot.fromY, z }, cam);
     const to = project({ x: shot.toX, y: shot.toY, z: ENEMY.z }, cam);
     ctx.beginPath();

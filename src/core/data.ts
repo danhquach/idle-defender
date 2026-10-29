@@ -94,6 +94,9 @@ export const POST_COST: Readonly<Record<PostKind, Partial<Stock>>> = {
   ground: { wood: 5 },
 };
 
+/** How fast a defender walks between posts, in px/s. */
+export const WALK_SPEED = 80;
+
 export const START_STOCK: Readonly<Stock> = { scrap: 60, wood: 60, metal: 0, concrete: 0 };
 export const START_TIERS: readonly Tier[] = ['wood'];
 

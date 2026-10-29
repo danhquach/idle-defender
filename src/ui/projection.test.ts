@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, newBase, type Base } from '../core/base.ts';
 import { START_STOCK } from '../core/data.ts';
+import { newHorde, standing } from '../core/horde.ts';
+import { setup } from '../core/testing.ts';
 import {
   clampCamera,
   depthSort,
+  fightHitAt,
   project,
   slotAt,
   unproject,
@@ -164,6 +167,51 @@ describe('slotAt', () => {
     b.posts = b.posts.filter((p) => p.kind !== 'wall-walk');
     expect(slotAt(510, 20, b)).toEqual({ column: 0, row: 0, what: 'segment' });
     expect(slotAt(510, 45, b)).toEqual({ column: 0, row: 1, what: 'segment' });
+  });
+});
+
+describe('fightHitAt', () => {
+  // The starting base plus wall-walk posts on column 0 rows 0 and 1; a stands on the
+  // row-1 tower (420, 120), b walks at (460, 200).
+  function fight() {
+    const rich = { ...START_STOCK, wood: 500, scrap: 500 };
+    let base = newBase();
+    for (const row of [0, 1]) {
+      const r = buildPost(base, rich, { kind: 'wall-walk', column: 0, row });
+      if (!r.ok) throw new Error(r.reason);
+      base = r.base;
+    }
+    const s = newHorde(1, { ...setup(), base, startPostId: 0 });
+    const post = s.posts[1]!;
+    s.defenders.push({ ...standing(s.bench[0]!, post, 0), x: 460, y: 200, walking: true });
+    post.defenderId = 'b';
+    return s;
+  }
+
+  it('hits a defender before the post it stands on', () => {
+    const s = fight();
+    // a on the 50-high tower: its body (z 50…80) shows over y ≈ 3…63.
+    expect(fightHitAt(420, 30, s)).toEqual({ defenderId: 'a' });
+    expect(fightHitAt(420, 100, s)).toEqual({ postId: 0 });
+    // b walks on the ground (z 0…30): y 150…210.
+    expect(fightHitAt(460, 160, s)).toEqual({ defenderId: 'b' });
+    expect(fightHitAt(460, 212, s)).toBeNull();
+  });
+
+  it('a wall-walk post covers its segment; the front one wins', () => {
+    const s = fight();
+    const ww = (row: number) => s.posts.findIndex((p) => p.kind === 'wall-walk' && p.row === row);
+    expect(fightHitAt(510, 70, s)).toEqual({ postId: ww(1) });
+    expect(fightHitAt(510, 10, s)).toEqual({ postId: ww(0) });
+    expect(fightHitAt(515, 150, s)).toEqual({ postId: ww(1) });
+  });
+
+  it('misses open ground and bad points', () => {
+    const s = fight();
+    expect(fightHitAt(460, 300, s)).toBeNull();
+    expect(fightHitAt(800, 200, s)).toBeNull();
+    expect(fightHitAt(NaN, 30, s)).toBeNull();
+    expect(fightHitAt(420, Infinity, s)).toBeNull();
   });
 });
 

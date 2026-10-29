@@ -14,6 +14,7 @@ import {
   SHOT_TRAIL,
   SPAWN_INTERVAL,
   STEP,
+  WALK_SPEED,
   WALL,
   WAVE_BREAK,
   WEAPONS,
@@ -68,11 +69,18 @@ export interface Post {
   row: number;
   x: number;
   y: number;
+  /** Occupied by, or reserved for a defender walking to it. */
   defenderId: string | null;
 }
+/** A defender in the fight always holds a post: it stands on it, or walks to it. */
 export interface Defender extends DefenderSpec {
   nextShotAt: number;
+  x: number;
+  y: number;
+  postId: number;
+  walking: boolean;
 }
+export type MoveResult = { ok: true; state: HordeState } | { ok: false; reason: string };
 export interface Shot {
   fromX: number;
   fromY: number;
@@ -144,7 +152,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     layers,
     camp: { hp: CAMP.maxHp, maxHp: CAMP.maxHp },
     posts,
-    defenders: [{ ...start, nextShotAt: 0 }],
+    defenders: [standing(start, startPost, 0)],
     bench: roster.filter((d) => d !== start).map((d) => ({ ...d })),
     xp: 0,
     level: 1,
@@ -154,6 +162,12 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     shots: [],
     outcome: 'fighting',
   };
+}
+
+/** `spec` standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
+export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): Defender {
+  const { id, name, weapon } = spec;
+  return { id, name, weapon, nextShotAt, x: post.x, y: post.y, postId: post.id, walking: false };
 }
 
 /** The base laid out on the field: layers at their wall `x`, posts unmanned, ids = `base.posts` index. */
@@ -248,6 +262,35 @@ export function setFocus(state: HordeState, enemyId: number | null): HordeState 
   return s;
 }
 
+/**
+ * Sends a defender walking to post `postId`: its old post is free at once and the new
+ * one is reserved. Refuses with a player-facing reason; throws on an unknown id.
+ */
+export function moveDefender(state: HordeState, defenderId: string, postId: number): MoveResult {
+  const defender = state.defenders.find((d) => d.id === defenderId);
+  if (!defender) throw new RangeError(`moveDefender: no defender ${String(defenderId)}`);
+  const target = Number.isInteger(postId) ? state.posts[postId] : undefined;
+  if (!target) throw new RangeError(`moveDefender: no post ${postId}`);
+  const refuse = (reason: string): MoveResult => ({ ok: false, reason });
+  if (state.outcome !== 'fighting') return refuse('The fight is over');
+  if (state.offer !== null) return refuse('Pick a card first');
+  if (defender.postId === postId) {
+    return refuse(defender.walking ? 'Already on the way' : 'Already there');
+  }
+  if (target.defenderId !== null) {
+    const holder = state.defenders.find((d) => d.id === target.defenderId);
+    return refuse(holder?.walking ? 'Post reserved' : 'Post taken');
+  }
+  if (!postUsable(state.layers, target)) return refuse('No wall to stand on');
+  const s = structuredClone(state);
+  const d = s.defenders.find((x) => x.id === defenderId)!;
+  s.posts[d.postId]!.defenderId = null;
+  s.posts[postId]!.defenderId = d.id;
+  d.postId = postId;
+  d.walking = true;
+  return { ok: true, state: s };
+}
+
 /** The living enemy nearest `(x, y)` within reach of a click (ties → lowest id), else null. */
 export function enemyAt(state: HordeState, x: number, y: number): number | null {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
@@ -264,11 +307,13 @@ export function enemyAt(state: HordeState, x: number, y: number): number | null 
 
 function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
+  walk(s);
   fire(s);
   removeDead(s);
   const sliding = move(s);
   separate(s);
   attack(s, sliding);
+  drop(s);
   advanceWave(s);
   if (s.camp.hp === 0) s.outcome = 'lost';
   // A finished fight has no card to pick, so its XP stays banked.
@@ -293,10 +338,28 @@ function spawn(s: HordeState, rng: Rng): void {
   }
 }
 
+/** Walkers step straight toward their post at `WALK_SPEED` and take it on arrival. */
+function walk(s: HordeState): void {
+  const stride = WALK_SPEED * STEP;
+  for (const d of s.defenders) {
+    if (!d.walking) continue;
+    const post = s.posts[d.postId]!;
+    const dist = Math.hypot(post.x - d.x, post.y - d.y);
+    if (dist <= stride + EPS) {
+      d.x = post.x;
+      d.y = post.y;
+      d.walking = false;
+    } else {
+      d.x += ((post.x - d.x) / dist) * stride;
+      d.y += ((post.y - d.y) / dist) * stride;
+    }
+  }
+}
+
 function fire(s: HordeState): void {
   s.shots = s.shots.filter((shot) => s.time - shot.at < SHOT_TRAIL);
   for (const post of s.posts) {
-    const defender = s.defenders.find((d) => d.id === post.defenderId);
+    const defender = s.defenders.find((d) => d.id === post.defenderId && !d.walking);
     if (!defender || !due(s.time, defender.nextShotAt)) continue;
     const range = defenderRange(s, post, defender);
     const dist = (e: Enemy): number => Math.hypot(e.x - post.x, e.y - post.y);
@@ -437,6 +500,42 @@ function attack(s: HordeState, sliding: Map<number, Slide>): void {
     target.hp = Math.max(0, target.hp - enemy.damage);
     e.nextAttackAt = s.time + enemy.attackInterval;
   }
+}
+
+/**
+ * Design §3: a defender holding (standing on or walking to) a wall-walk post whose
+ * segment has broken falls back, in `defenders` order, to the nearest free ground post
+ * behind that layer (ties → lowest id), or to the bench when none is free.
+ */
+function drop(s: HordeState): void {
+  const kept: Defender[] = [];
+  for (const d of s.defenders) {
+    const post = s.posts[d.postId]!;
+    if (postUsable(s.layers, post)) {
+      kept.push(d);
+      continue;
+    }
+    post.defenderId = null;
+    let best: Post | undefined;
+    let bestD = Infinity;
+    for (const p of s.posts) {
+      if (p.kind !== 'ground' || p.defenderId !== null || p.x >= COLUMNS[post.column]!) continue;
+      const dist = Math.hypot(p.x - d.x, p.y - d.y);
+      if (dist < bestD) {
+        best = p;
+        bestD = dist;
+      }
+    }
+    if (best) {
+      best.defenderId = d.id;
+      d.postId = best.id;
+      d.walking = true;
+      kept.push(d);
+    } else {
+      s.bench.push({ id: d.id, name: d.name, weapon: d.weapon });
+    }
+  }
+  s.defenders = kept;
 }
 
 function advanceWave(s: HordeState): void {
