@@ -97,5 +97,14 @@ export const POST_COST: Readonly<Record<PostKind, Partial<Stock>>> = {
 export const START_STOCK: Readonly<Stock> = { scrap: 60, wood: 60, metal: 0, concrete: 0 };
 export const START_TIERS: readonly Tier[] = ['wood'];
 
+/**
+ * M2 stand-in for horde rewards (replaced by ID-006): a win pays `base + perHorde × n`
+ * of each material; a loss pays `lossShare` of that, rounded down (design §2's cap).
+ */
+export const STAND_IN_PAYOUT = {
+  win: { scrap: { base: 15, perHorde: 5 }, wood: { base: 20, perHorde: 10 } },
+  lossShare: 0.25,
+} as const;
+
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;

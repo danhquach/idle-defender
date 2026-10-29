@@ -123,21 +123,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
   const { hordeNumber, roster, startDefenderId, base, startPostId } = setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
-  const layers: Layer[] = base.layers.map((l) => ({
-    column: l.column,
-    x: COLUMNS[l.column]!,
-    segments: l.slots.map((slot, index) =>
-      slot
-        ? { index, kind: slot.kind, tier: slot.tier, hp: slot.hp, maxHp: slot.maxHp }
-        : { index, kind: null, tier: null, hp: 0, maxHp: 0 },
-    ),
-  }));
-  const posts: Post[] = base.posts.map((p, id) => ({
-    id,
-    ...p,
-    ...postXY(p),
-    defenderId: null,
-  }));
+  const { layers, posts } = layoutOf(base);
   const startPost = posts[startPostId];
   if (!Number.isInteger(startPostId) || !startPost || !postUsable(layers, startPost)) {
     throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
@@ -168,6 +154,26 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     shots: [],
     outcome: 'fighting',
   };
+}
+
+/** The base laid out on the field: layers at their wall `x`, posts unmanned, ids = `base.posts` index. */
+export function layoutOf(base: Base): { layers: Layer[]; posts: Post[] } {
+  const layers: Layer[] = base.layers.map((l) => ({
+    column: l.column,
+    x: COLUMNS[l.column]!,
+    segments: l.slots.map((slot, index) =>
+      slot
+        ? { index, kind: slot.kind, tier: slot.tier, hp: slot.hp, maxHp: slot.maxHp }
+        : { index, kind: null, tier: null, hp: 0, maxHp: 0 },
+    ),
+  }));
+  const posts: Post[] = base.posts.map((p, id) => ({
+    id,
+    ...p,
+    ...postXY(p),
+    defenderId: null,
+  }));
+  return { layers, posts };
 }
 
 /** Advances the fight by `dt` seconds in fixed steps; returns a new state. */
