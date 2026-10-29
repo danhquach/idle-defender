@@ -57,3 +57,16 @@ M3 = ID-006 (horde rules) + ID-007 (victory and defeat screens) + ID-008 (save) 
 - UI: the falling warning, the replacement panel and the result lines in `hud.ts`; injured defenders kept off the start picker and listed with their return time in `build.ts`; defender HP bars in `render.ts`.
 - Tests: `src/core/rules.test.ts` (new), `game.test.ts`, `horde.test.ts`, `hud.test.ts`, `build.test.ts`.
 - `docs/design.md` §4: enemies inside the camp and replacing the injured.
+
+---
+
+## ID-007 — Victory and defeat screens
+
+**Acceptance criteria:** on issue #7.
+
+**Files:**
+- Modify `src/core/horde.ts`: `HordeState.breaches` (first crossing of each layer from outside: column, row, wave, through `wall` / `gate` / `gap`), recorded as enemies move; `Injury.by` (the kind of enemy that landed the last hit, carried on `Defender.hitBy`).
+- Modify `src/core/game.ts`: `injuredUntil(horde, injury, now)`, used by `finishHorde`.
+- Modify `src/ui/hud.ts`: `resultScreen(game, horde, now)` builds both screens' text; the HUD shows it.
+- Modify `src/ui/app.ts`: reads the clock once when the horde ends and passes that `now` to the screen and to `finishHorde`.
+- Tests: `src/core/rules.test.ts`, `game.test.ts`, `hud.test.ts`.

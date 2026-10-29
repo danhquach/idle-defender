@@ -6,6 +6,7 @@ import {
   finishHorde,
   hordePayout,
   hordeXp,
+  injuredUntil,
   newGame,
   recover,
   startHorde,
@@ -33,6 +34,7 @@ function withInjuryAndRecruit(h: HordeState, recruit: string): HordeState {
     postId: d!.postId,
     at: h.time,
     offered: true,
+    by: null,
   });
   const spec = h.bench.find((b) => b.id === recruit)!;
   h.bench = h.bench.filter((b) => b !== spec);
@@ -161,6 +163,9 @@ describe('game', () => {
     h.time = 100;
     withInjuryAndRecruit(h, 'john').injured[0]!.at = 30;
     expect(finishHorde(g, h, NOW).roster[0]!.injuredUntil).toBe(NOW - 70_000 + RECOVERY_MS);
+    // The result screen's time is the one finishHorde stores.
+    expect(injuredUntil(h, h.injured[0]!, NOW)).toBe(NOW - 70_000 + RECOVERY_MS);
+    expect(() => injuredUntil(h, h.injured[0]!, NaN)).toThrow(RangeError);
   });
 
   it('recover clears healed injuries only, and returns the same game when none has', () => {
