@@ -7,13 +7,16 @@ import {
   hordePayout,
   hordeXp,
   injuredUntil,
+  levelGains,
   newGame,
   recover,
+  spendPoint,
   startHorde,
   xpGains,
   type GameState,
 } from './game.ts';
 import { standing, type HordeState } from './horde.ts';
+import { NO_STATS, spentPoints } from './stats.ts';
 
 const NOW = 1_000_000;
 
@@ -58,6 +61,7 @@ describe('game', () => {
       ['John', 'toolkit'],
     ]);
     expect(g.roster.every((d) => d.xp === 0 && d.injuredUntil === null)).toBe(true);
+    expect(g.roster.every((d) => spentPoints(d.stats) === 0)).toBe(true);
   });
 
   it('starts a horde with the chosen defender on the chosen post', () => {
@@ -68,8 +72,8 @@ describe('game', () => {
     expect(h.posts[0]!.defenderId).toBeNull();
     expect(h.defenders.map((d) => d.id)).toEqual([g.roster[1]!.id]);
     expect(h.bench).toEqual([
-      { id: 'bob', name: 'Bob', weapon: 'pistol' },
-      { id: 'john', name: 'John', weapon: 'toolkit' },
+      { id: 'bob', name: 'Bob', weapon: 'pistol', stats: { ...NO_STATS } },
+      { id: 'john', name: 'John', weapon: 'toolkit', stats: { ...NO_STATS } },
     ]);
   });
 
@@ -133,6 +137,72 @@ describe('game', () => {
       ['jack', 0],
       ['john', 15],
     ]);
+  });
+
+  it('levelGains: the level after a win, XP into it, and the stat points it brought', () => {
+    const g = newGame();
+    g.roster[0]!.xp = 20; // Bob: 5 short of level 2
+    g.roster[2]!.xp = 70; // John: level 2, 5 short of 3
+    const h = withInjuryAndRecruit(fought(g, 'won'), 'john');
+    expect(levelGains(g, h)).toEqual([
+      {
+        id: 'bob',
+        name: 'Bob',
+        xp: 15,
+        injured: true,
+        level: 2,
+        into: 10,
+        next: 50,
+        levels: 1,
+        points: 3,
+      },
+      {
+        id: 'john',
+        name: 'John',
+        xp: 15,
+        injured: false,
+        level: 3,
+        into: 10,
+        next: 75,
+        levels: 1,
+        points: 3,
+      },
+    ]);
+    g.roster[0]!.xp = 0;
+    expect(levelGains(g, h)[0]).toMatchObject({
+      level: 1,
+      into: 15,
+      next: 25,
+      levels: 0,
+      points: 0,
+    });
+    expect(levelGains(g, fought(g, 'lost'))).toEqual([]);
+  });
+
+  it('spendPoint puts a point in a stat, refuses with none left, leaves the game untouched', () => {
+    const g = newGame();
+    g.roster[1]!.xp = 25;
+    let cur = g;
+    for (let i = 0; i < 3; i++) {
+      const r = spendPoint(cur, 'jack', 'might');
+      if (!r.ok) throw new Error(r.reason);
+      cur = r.game;
+    }
+    expect(cur.roster[1]!.stats).toEqual({ ...NO_STATS, might: 3 });
+    expect(spendPoint(cur, 'jack', 'grit')).toEqual({ ok: false, reason: 'No stat points left' });
+    expect(spendPoint(cur, 'bob', 'aim')).toEqual({ ok: false, reason: 'No stat points left' });
+    expect(g.roster[1]!.stats).toEqual(NO_STATS);
+    expect(() => spendPoint(g, 'nobody', 'aim')).toThrow(RangeError);
+  });
+
+  it('a horde fights with the roster stats', () => {
+    const g = newGame();
+    g.roster[0]!.xp = 25;
+    g.roster[0]!.stats = { ...NO_STATS, grit: 3 };
+    const h = startHorde(g, 7, 'bob', 0, NOW);
+    expect(h.defenders[0]).toMatchObject({ maxHp: 115, stats: { ...NO_STATS, grit: 3 } });
+    h.defenders[0]!.stats = { ...NO_STATS, aim: 99 };
+    expect(g.roster[0]!.stats.aim).toBe(0);
   });
 
   it('a loss keeps the horde number, pays by the wave reached and gives no XP', () => {

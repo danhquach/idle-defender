@@ -1,8 +1,15 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { chooseCard } from '../core/cards.ts';
-import { FIELD } from '../core/data.ts';
-import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
+import { FIELD, type Stat } from '../core/data.ts';
+import {
+  finishHorde,
+  newGame,
+  recover,
+  spendPoint,
+  startHorde,
+  type GameState,
+} from '../core/game.ts';
 import {
   enemyAt,
   layoutOf,
@@ -68,6 +75,8 @@ export function start(root: HTMLElement): void {
   let horde: HordeState | null = null;
   // When the fight ended (ms): read once, so the screen and the rest timers agree.
   let endedAt: number | null = null;
+  // Stat points spent on the result screen, applied with "Back to build".
+  let spends: [string, Stat][] = [];
   let selected: SlotHit | null = null;
   // The defender picked in a fight, waiting for a post to walk to.
   let selectedDefender: string | null = null;
@@ -79,7 +88,13 @@ export function start(root: HTMLElement): void {
     },
     () => {
       if (!horde || endedAt === null) return;
-      commit(finishHorde(game, horde, endedAt));
+      let next = finishHorde(game, horde, endedAt);
+      for (const [id, stat] of spends) {
+        const r = spendPoint(next, id, stat);
+        if (r.ok) next = r.game;
+      }
+      spends = [];
+      commit(next);
       toBuild();
     },
     (defenderId, postId) => {
@@ -90,6 +105,9 @@ export function start(root: HTMLElement): void {
     },
     () => {
       if (horde?.replace) horde = skipReplace(horde);
+    },
+    (defenderId, stat) => {
+      if (horde && endedAt !== null) spends.push([defenderId, stat]);
     },
   );
   const panel = createBuildPanel(
@@ -106,6 +124,7 @@ export function start(root: HTMLElement): void {
       const now = Date.now();
       horde = startHorde(game, now, defenderId, postId, now);
       endedAt = null;
+      spends = [];
       selected = null;
       selectedDefender = null;
       panel.hide();

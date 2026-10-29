@@ -3,9 +3,19 @@
 // by the balance tests and the `npm run balance` report without playing by hand.
 import { repairSegment } from './base.ts';
 import { chooseCard, postUsable } from './cards.ts';
-import { available, finishHorde, newGame, recover, startHorde, type GameState } from './game.ts';
+import { PROFESSION_STAT, WEAPONS } from './data.ts';
+import {
+  available,
+  finishHorde,
+  newGame,
+  recover,
+  spendPoint,
+  startHorde,
+  type GameState,
+} from './game.ts';
 import { layoutOf, tick, type HordeState, type Outcome } from './horde.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
+import { unspentPoints } from './stats.ts';
 
 /** Longest a simulated horde may run, in fight seconds, before it counts as stuck. */
 const MAX_FIGHT = 3600;
@@ -100,6 +110,19 @@ export function repairWhatYouCan(game: GameState): GameState {
   return { ...game, base, stock };
 }
 
+/** The scripted player's stat points: every one into the stat of the weapon held. */
+export function spendAll(game: GameState): GameState {
+  let g = game;
+  for (const d of game.roster) {
+    const stat = PROFESSION_STAT[WEAPONS[d.weapon].profession];
+    for (let n = unspentPoints(d); n > 0; n--) {
+      const r = spendPoint(g, d.id, stat);
+      if (r.ok) g = r.game;
+    }
+  }
+  return g;
+}
+
 /**
  * The scripted player between hordes: waits until the whole roster is fit, then
  * repairs what it can afford. Never builds. Returns the game and the clock it starts at.
@@ -112,8 +135,8 @@ export function nextHorde(game: GameState, now: number): { game: GameState; now:
 /**
  * Plays hordes from a new game until `hordes` have been fought. Between hordes the
  * scripted player waits until the whole roster is fit, repairs what it can afford
- * (most damaged segment first) and retries a lost horde. It never builds. Horde `i`
- * (from 0) uses seed `seed + i`.
+ * (most damaged segment first), spends stat points (`spendAll`) and retries a lost
+ * horde. It never builds. Horde `i` (from 0) uses seed `seed + i`.
  */
 export function playCampaign(seed: number, hordes: number): HordeRun[] {
   if (!Number.isInteger(hordes) || hordes < 0) {
@@ -127,7 +150,7 @@ export function playCampaign(seed: number, hordes: number): HordeRun[] {
     const horde = playHorde(game, seed + i, now);
     now += horde.time * 1000;
     runs.push(summarise(horde, seed + i));
-    game = finishHorde(game, horde, now);
+    game = spendAll(finishHorde(game, horde, now));
   }
   return runs;
 }

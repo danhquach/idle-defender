@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { RECOVERY_MS } from '../core/data.ts';
+import { RECOVERY_MS, type Stats } from '../core/data.ts';
 import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
 import { newHorde, type HordeState } from '../core/horde.ts';
+import { NO_STATS } from '../core/stats.ts';
 import { setup } from '../core/testing.ts';
 import {
   clockTime,
   defenderLabel,
   fallingText,
   payoutText,
+  pickerRow,
   resultScreen,
   statusText,
   stockText,
@@ -29,6 +31,11 @@ describe('hud', () => {
       'Jack — Ripper',
       'John — Engineer',
     ]);
+    // The name tag is the top title, whatever weapon they hold now.
+    const stats: Stats = { ...NO_STATS, aim: 10 };
+    expect(defenderLabel({ name: 'Jack', weapon: 'knife', stats })).toBe(
+      'Jack the Gunner — Ripper',
+    );
   });
 
   it('says when a defender cannot work from a post', () => {
@@ -77,13 +84,63 @@ describe('hud', () => {
         lines: [
           `All ${s.waveCount} waves cleared`,
           'Payout: 20 scrap, 30 wood',
-          'Bob +15 XP',
-          'Jack +15 XP',
+          'Bob +15 XP · level 1 (15/25)',
+          'Jack +15 XP · level 1 (15/25)',
           `Jack · injured by a Shambler · back at ${jackBack}`,
           'No repairs needed',
         ],
         button: 'Back to build',
+        picks: [],
       });
+    });
+
+    it('a level-up: the XP line says so, and the picker offers its points (and older unspent ones)', () => {
+      const { game, s } = ended('won');
+      game.roster[0]!.xp = 20; // Bob: level 2 with this win
+      game.roster[1]!.xp = 30; // Jack: level 2 already, 1 of 3 points spent; no level-up
+      game.roster[1]!.stats = { ...NO_STATS, might: 1 };
+      game.roster[1]!.weapon = 'knife';
+      game.roster[2]!.xp = 500; // John: points to spend, but not in this fight
+      const r = resultScreen(game, s, NOW);
+      expect(r.lines.slice(2, 4)).toEqual([
+        'Bob +15 XP · level 2 (10/50) · +3 stat points',
+        'Jack +15 XP · level 2 (20/50)',
+      ]);
+      expect(r.picks.map((d) => [d.id, d.xp, d.stats])).toEqual([
+        ['bob', 35, NO_STATS],
+        ['jack', 45, { ...NO_STATS, might: 1 }],
+      ]);
+      // Building the screen leaves the game alone.
+      expect(game.roster[0]!.xp).toBe(20);
+    });
+
+    it('the picker row: points left, a button per stat, new titles', () => {
+      const bob = { ...newGame().roster[0]!, xp: 1e6 };
+      expect(pickerRow(bob, NO_STATS)).toEqual({
+        heading: 'Bob · 846 stat points to spend',
+        note: '',
+        buttons: [
+          { stat: 'aim', label: 'Aim 0', disabled: false },
+          { stat: 'might', label: 'Might 0', disabled: false },
+          { stat: 'tech', label: 'Tech 0', disabled: false },
+          { stat: 'grit', label: 'Grit 0', disabled: false },
+        ],
+      });
+      const was: Stats = { ...NO_STATS, aim: 9, might: 24 };
+      const now: Stats = { ...NO_STATS, aim: 10, might: 25 };
+      // Level 13 earns 36 points; 33 spent before, 38 after would be too many, so 36.
+      const xp = 25 * ((13 * 12) / 2);
+      expect(pickerRow({ ...bob, xp, stats: { ...was } }, was)).toMatchObject({
+        heading: 'Bob the Ripper · 3 stat points to spend',
+        note: '',
+      });
+      expect(pickerRow({ ...bob, xp, stats: { ...now, tech: 1 } }, was)).toMatchObject({
+        heading: 'Bob the Ripper · 0 stat points to spend',
+        note: 'New title: Junior Gunner, Adept Ripper',
+      });
+      const none = pickerRow({ ...bob, xp: 25, stats: { ...NO_STATS, grit: 3 } }, NO_STATS);
+      expect(none.heading).toBe('Bob · 0 stat points to spend');
+      expect(none.buttons.every((b) => b.disabled)).toBe(true);
     });
 
     it('the time shown is the one finishHorde stores', () => {
@@ -116,6 +173,7 @@ describe('hud', () => {
           'No repairs needed',
         ],
         button: 'Back to build · retry Horde 1',
+        picks: [],
       });
     });
 

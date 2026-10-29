@@ -282,6 +282,14 @@ Each defender level gives **stat points** (3 per level, starting point):
   of weapon *(guess)*.
 - Defender XP comes from hordes and from patrols (§10); both are full sources, so a defender can level by patrolling alone.
 - No stat respec in v1: points are permanent (weapon swaps are free).
+- **As built (ID-011, starting points):** level L → L+1 costs 25 × L
+  defender XP, so a defender in every win reaches level 2 after Horde 2 and
+  level 3 after Horde 4. Per point: Aim +2% Gunner damage and +0.5% crit
+  chance (a crit deals ×2, chance capped at 50%); Might +2% Ripper damage
+  and a cleave of 1% of each strike to enemies within 30 px of the target
+  (capped at 50%); Tech +2% Engineer repair; Grit +5 HP in hordes over
+  the base 100. Points are spent on the result screen after a win; unspent
+  points carry over.
 
 ### Profession level and titles
 
@@ -296,9 +304,14 @@ Each defender level gives **stat points** (3 per level, starting point):
 | 50 | Master … | +30% |
 | 100 *(guess)* | Legendary … | +50% |
 
+- The title bonus multiplies the profession's output on top of the stat:
+  damage for Gunners and Rippers, repair for Engineers, and only with a
+  matching weapon.
+
 - The highest title becomes the defender's name tag: "Bob the Gunner",
   "Jack the Ripper", "John the Engineer". A defender can hold titles in
-  more than one profession.
+  more than one profession. A tie goes to more points, then Gunner, Ripper,
+  Engineer *(designer's call)*.
 
 ### Gear
 

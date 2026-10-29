@@ -277,6 +277,63 @@ describe('save', () => {
     expect(decodeSave(encodeSave(old, NOW))).toEqual({ savedAt: NOW, game: old });
   });
 
+  it('round-trips stats, and loads a save from before stats with all 0', () => {
+    const g = played();
+    g.roster[1]!.xp = 75;
+    g.roster[1]!.stats = { aim: 1, might: 3, tech: 0, grit: 2 };
+    expect(decodeSave(encodeSave(g, NOW))).toEqual({ savedAt: NOW, game: g });
+    const old = hostile((s) => {
+      for (const d of s.game.roster) delete d.stats;
+    }) as Loose;
+    expect(old.game.roster.map((d: Loose) => d.stats)).toEqual(
+      played().roster.map(() => ({ aim: 0, might: 0, tech: 0, grit: 0 })),
+    );
+  });
+
+  it('refuses hostile stats', () => {
+    const at = (change: (stats: Loose) => void, xp = 75) =>
+      hostile((s) => {
+        s.game.roster[0].xp = xp;
+        change(s.game.roster[0].stats);
+      });
+    expect(at(() => {})).not.toBeNull();
+    expect(at((t) => (t.aim = 6))).not.toBeNull(); // level 3: exactly the 6 points earned
+    expect(at((t) => (t.aim = 7))).toBeNull(); // more than earned
+    expect(at((t) => Object.assign(t, { aim: 2, might: 2, tech: 2, grit: 1 }))).toBeNull();
+    expect(at((t) => (t.aim = 1), 24)).toBeNull(); // level 1 has none
+    expect(at((t) => (t.aim = -1))).toBeNull();
+    expect(at((t) => (t.aim = 0.5))).toBeNull();
+    expect(at((t) => (t.aim = '1'))).toBeNull();
+    expect(at((t) => (t.aim = 1e13), 1e12)).toBeNull();
+    expect(at((t) => (t.luck = 1))).toBeNull();
+    expect(at((t) => delete t.grit)).toBeNull();
+    expect(hostile((s) => (s.game.roster[0].stats = null))).toBeNull();
+    expect(hostile((s) => (s.game.roster[0].stats = [0, 0, 0, 0]))).toBeNull();
+    expect(hostile((s) => (s.game.roster[0].stats = 'aim'))).toBeNull();
+    // The old shape only for the whole roster: one defender without stats among others is refused.
+    expect(hostile((s) => delete s.game.roster[0].stats)).toBeNull();
+    expect(hostile((s) => (s.game.roster[0].level = 9))).toBeNull();
+    // The old shape is exact too: no extra key, no __proto__.
+    const old = (change: (d: Loose) => void) =>
+      hostile((s) => {
+        for (const d of s.game.roster) delete d.stats;
+        change(s.game.roster[0]);
+      });
+    expect(old(() => {})).not.toBeNull();
+    expect(old((d) => (d.level = 9))).toBeNull();
+    const oldRaw = encodeSave(played(), NOW)
+      .replace(/,"stats":\{[^}]*\}/g, '')
+      .replace('"xp"', '"__proto__":{"polluted":1},"xp"');
+    expect(oldRaw).not.toContain('"stats"');
+    expect(decodeSave(oldRaw)).toBeNull();
+    // Overspent at scale: the earned-points check, not the per-stat cap, refuses it.
+    expect(at((t) => (t.aim = 3 * 282_842 + 1), 1e12)).toBeNull();
+    expect(at((t) => (t.aim = 3 * 282_842), 1e12)).not.toBeNull();
+    const raw = encodeSave(played(), NOW).replace('"aim"', '"__proto__":{"polluted":1},"aim"');
+    expect(decodeSave(raw)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
   it('accepts the edges the rules allow', () => {
     expect(hostile((s) => (s.game.roster[0].injuredUntil = NOW + RECOVERY_MS))).not.toBeNull();
     expect(hostile((s) => (s.game.roster[0].name = "Mary-Jo O'Neil"))).not.toBeNull();

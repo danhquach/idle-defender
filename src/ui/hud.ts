@@ -1,5 +1,6 @@
 // HUD over the canvas: status bar, the "camp is falling" warning, the 1-of-3 card
-// panel, the replacement panel, the result panel and a short toast (refused moves).
+// panel, the replacement panel, the result panel with its stat-point picker and a
+// short toast (refused moves).
 // Text reaches the page only through textContent.
 import { repairAllCost, type PostKind } from '../core/base.ts';
 import { UPGRADES } from '../core/cards.ts';
@@ -7,12 +8,22 @@ import {
   FALL_WARNING,
   MATERIALS,
   PROFESSIONS,
+  STAT_NAMES,
+  STATS,
   WEAPONS,
   type EnemyKind,
+  type Profession,
+  type Stat,
   type Stock,
   type WeaponId,
 } from '../core/data.ts';
-import { hordePayout, injuredUntil, xpGains, type GameState } from '../core/game.ts';
+import {
+  hordePayout,
+  injuredUntil,
+  levelGains,
+  type GameState,
+  type RosterDefender,
+} from '../core/game.ts';
 import {
   baseAfter,
   canWork,
@@ -24,6 +35,7 @@ import {
   type Post,
 } from '../core/horde.ts';
 import { replacePosts } from '../core/replace.ts';
+import { nameTag, spend, titleIn, titleName, unspentPoints, type Title } from '../core/stats.ts';
 import { xpToNext } from '../core/waves.ts';
 
 /** How long a toast stays up. */
@@ -50,9 +62,9 @@ export const slotName = (column: number, row: number): string =>
 export const postName = (p: Pick<Post, 'kind' | 'column' | 'row'>): string =>
   `${POST_NAME[p.kind]} · ${slotName(p.column, p.row)}`;
 
-/** A defender and the profession their weapon gives them: "Jack — Ripper". */
-export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'weapon'>): string =>
-  `${d.name} — ${PROFESSIONS[WEAPONS[d.weapon].profession].name}`;
+/** A defender's name tag and the profession their weapon gives them: "Jack the Gunner — Ripper". */
+export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'weapon' | 'stats'>): string =>
+  `${nameTag(d)} — ${PROFESSIONS[WEAPONS[d.weapon].profession].name}`;
 /** Why a defender with `weapon` can't do their job from `post`, or '' when they can. */
 export const workNote = (weapon: WeaponId, post: Pick<Post, 'kind'>): string =>
   canWork(weapon, post) ? '' : "can't reach from a tower";
@@ -98,6 +110,48 @@ export interface ResultScreen {
   title: string;
   lines: string[];
   button: string;
+  /** Defenders from a win with stat points to spend, XP added. */
+  picks: RosterDefender[];
+}
+
+/** What each stat does, for the picker. */
+export const STAT_HINT: Readonly<Record<Stat, string>> = {
+  aim: 'Gunner damage and crits',
+  might: 'Ripper damage and cleave',
+  tech: 'Engineer repair',
+  grit: 'HP in hordes, any weapon',
+};
+
+/** One defender's row in the stat picker. */
+export interface PickerRow {
+  heading: string;
+  /** Titles earned since `was`, e.g. "New title: Junior Gunner"; '' for none. */
+  note: string;
+  buttons: { stat: Stat; label: string; disabled: boolean }[];
+}
+
+/** The picker row for `d` (with `was` its stats before this screen): name tag, points left, a button per stat. */
+export function pickerRow(d: RosterDefender, was: RosterDefender['stats']): PickerRow {
+  const left = unspentPoints(d);
+  const earned = (Object.keys(PROFESSIONS) as Profession[])
+    .map((p) => titleIn(d.stats, p))
+    .filter((t): t is Title => t !== null && titleIn(was, t.profession)?.at !== t.at)
+    .map(titleName);
+  return {
+    heading: `${nameTag(d)} · ${left} stat point${left === 1 ? '' : 's'} to spend`,
+    note: earned.length ? `New title: ${earned.join(', ')}` : '',
+    buttons: STATS.map((stat) => ({
+      stat,
+      label: `${STAT_NAMES[stat]} ${d.stats[stat]}`,
+      disabled: left <= 0,
+    })),
+  };
+}
+
+/** "Bob +25 XP · level 2 (10/50) · +3 stat points". */
+function xpLine(g: ReturnType<typeof levelGains>[number], tag: string): string {
+  const points = g.points ? ` · +${g.points} stat points` : '';
+  return `${tag} +${g.xp} XP · level ${g.level} (${g.into}/${g.next})${points}`;
 }
 
 /** "Jack · injured by a Shambler · back at 14:05", for a horde that ended at `now`. */
@@ -126,16 +180,27 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
   if (s.outcome === 'fighting') throw new RangeError('resultScreen: the horde is still on');
   const injured = s.injured.map((i) => injuryLine(s, i, now));
   if (s.outcome === 'won') {
+    const gains = levelGains(game, s);
+    const lines: string[] = [];
+    const picks: RosterDefender[] = [];
+    for (const g of gains) {
+      const d = game.roster.find((r) => r.id === g.id);
+      lines.push(xpLine(g, d ? nameTag(d) : g.name));
+      if (!d) continue;
+      const after = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
+      if (unspentPoints(after) > 0) picks.push(after);
+    }
     return {
       title: `Horde ${s.hordeNumber} held`,
       lines: [
         `All ${s.waveCount} waves cleared`,
         payoutText(s),
-        ...xpGains(s).map((g) => `${g.name} +${g.xp} XP`),
+        ...lines,
         ...injured,
         repairLine(game, s),
       ],
       button: 'Back to build',
+      picks,
     };
   }
   // Outside in: the outer layers have the higher columns. The innermost is where they got in.
@@ -156,6 +221,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
       repairLine(game, s),
     ],
     button: `Back to build · retry Horde ${s.hordeNumber}`,
+    picks: [],
   };
 }
 
@@ -171,6 +237,7 @@ export function createHud(
   onDone: () => void,
   onReplace: (defenderId: string, postId: number) => void,
   onSkip: () => void,
+  onSpend: (defenderId: string, stat: Stat) => void,
 ): {
   update(state: HordeState): void;
   showResult(screen: ResultScreen): void;
@@ -188,6 +255,7 @@ export function createHud(
   const result = el('div', 'hud-panel hud-result');
   const resultTitle = el('h2', 'hud-result-title');
   const resultList = el('ul', 'hud-result-list');
+  const picker = el('div', 'hud-picker');
   const back = el('button', 'hud-button');
   back.type = 'button';
   back.addEventListener('click', () => {
@@ -196,7 +264,7 @@ export function createHud(
     result.hidden = true;
     onDone();
   });
-  result.append(resultTitle, resultList, back);
+  result.append(resultTitle, resultList, picker, back);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
@@ -273,6 +341,41 @@ export function createHud(
     replace.replaceChildren(...parts, row, skip);
   }
 
+  /** One defender's picker; each click spends a point here and through `onSpend`. */
+  function pickerBlock(start: RosterDefender): HTMLElement {
+    const block = el('div', 'hud-pick');
+    let d = start;
+    const draw = (): void => {
+      const row = pickerRow(d, start.stats);
+      const buttons = el('div', 'hud-pick-row');
+      row.buttons.forEach((b, i) => {
+        const button = el('button', 'hud-button hud-pick-stat', b.label);
+        button.type = 'button';
+        button.disabled = b.disabled;
+        button.title = STAT_HINT[b.stat];
+        button.addEventListener('click', () => {
+          if (result.hidden) return;
+          const r = spend(d, b.stat);
+          if (!r.ok) return;
+          d = r.defender;
+          onSpend(d.id, b.stat);
+          draw();
+          // Keep the keyboard where it was; a spent-out row moves on to the next picker
+          // with points left, then to "Back to build".
+          const again = block.querySelectorAll('button')[i];
+          const next = picker.querySelector<HTMLButtonElement>('.hud-pick-stat:not(:disabled)');
+          (again && !again.disabled ? again : (next ?? back)).focus();
+        });
+        buttons.append(button);
+      });
+      const parts: HTMLElement[] = [el('p', 'hud-pick-heading', row.heading), buttons];
+      if (row.note) parts.push(el('p', 'hud-pick-note', row.note));
+      block.replaceChildren(...parts);
+    };
+    draw();
+    return block;
+  }
+
   function showOffer(offer: Card[]): void {
     const heading = el('h2', 'hud-cards-title', 'Level up: pick one');
     const row = el('div', 'hud-card-row');
@@ -335,6 +438,18 @@ export function createHud(
     showResult(screen) {
       resultTitle.textContent = screen.title;
       resultList.replaceChildren(...screen.lines.map((line) => el('li', '', line)));
+      picker.replaceChildren(
+        ...(screen.picks.length
+          ? [
+              el(
+                'p',
+                'hud-result-body',
+                STATS.map((st) => `${STAT_NAMES[st]}: ${STAT_HINT[st]}`).join(' · '),
+              ),
+              ...screen.picks.map(pickerBlock),
+            ]
+          : []),
+      );
       back.textContent = screen.button;
       result.hidden = false;
       back.focus();
