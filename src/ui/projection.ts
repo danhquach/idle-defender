@@ -1,6 +1,7 @@
 // Angled overhead view of the open field: depth (y) recedes up the screen, height
 // lifts a sprite. Screen units are CSS pixels.
 import type { Base } from '../core/base.ts';
+import type { HordeState, Layer, Post } from '../core/horde.ts';
 import { COLUMNS, FIELD, POST_OFFSET, SEGMENT_HEIGHT, SEGMENTS, WALL } from '../core/data.ts';
 
 export interface Camera {
@@ -80,11 +81,19 @@ export const PIECE = {
   ground: { halfWidth: 16, halfDepth: 24, height: 12 },
   /** The wall-walk platform, on top of its segment. */
   walk: { halfWidth: 8, halfDepth: 24, height: 6 },
+  defender: { halfWidth: 7, halfDepth: 10, height: 30 },
 } as const;
 
 /** A segment's drawn height: lower as it takes damage, a stub once broken. */
 export function wallHeight(hp: number, maxHp: number): number {
   return hp <= 0 ? PIECE.wall.height * 0.3 : PIECE.wall.height * (0.5 + 0.5 * (hp / maxHp));
+}
+
+/** Height of a post's floor, where its defender stands. */
+export function postFloor(layers: readonly Layer[], post: Post): number {
+  if (post.kind !== 'wall-walk') return PIECE[post.kind].height;
+  const seg = layers.find((l) => l.column === post.column)?.segments[post.row];
+  return (seg ? wallHeight(seg.hp, seg.maxHp) : 0) + PIECE.walk.height;
 }
 
 export type SlotWhat = 'segment' | 'tower' | 'ground';
@@ -132,4 +141,60 @@ export function slotAt(x: number, y: number, base: Base): SlotHit | null {
     });
   }
   return hit;
+}
+
+/** Whether a box `z0…z1` high on footprint `(cx ± hw, cy ± hd)` is drawn over ground point `(x, y)`. */
+function covers(
+  x: number,
+  y: number,
+  box: { cx: number; cy: number; hw: number; hd: number; z0: number; z1: number },
+): boolean {
+  return (
+    Math.abs(x - box.cx) <= box.hw &&
+    y >= box.cy - box.hd - lift(box.z1) &&
+    y <= box.cy + box.hd - lift(box.z0)
+  );
+}
+
+export type FightHit = { defenderId: string } | { postId: number };
+
+/**
+ * What a fight click at ground point `(x, y)` lands on, as drawn: a defender's body
+ * first, else a post (a wall-walk post covers its whole segment). Where pieces overlap,
+ * the front one (larger `y`) wins. Null on open ground.
+ */
+export function fightHitAt(
+  x: number,
+  y: number,
+  scene: Pick<HordeState, 'layers' | 'posts' | 'defenders'>,
+): FightHit | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const d = PIECE.defender;
+  let best: { y: number; hit: FightHit } | null = null;
+  for (const def of scene.defenders) {
+    const post = scene.posts[def.postId];
+    const z0 = def.walking || !post ? 0 : postFloor(scene.layers, post);
+    const box = { cx: def.x, cy: def.y, hw: d.halfWidth, hd: d.halfDepth, z0, z1: z0 + d.height };
+    if (covers(x, y, box) && (!best || def.y > best.y)) {
+      best = { y: def.y, hit: { defenderId: def.id } };
+    }
+  }
+  if (best) return best.hit;
+  for (const post of scene.posts) {
+    const p = post.kind === 'wall-walk' ? null : PIECE[post.kind];
+    const box = p
+      ? { cx: post.x, cy: post.y, hw: p.halfWidth, hd: p.halfDepth, z0: 0, z1: p.height }
+      : {
+          cx: post.x,
+          cy: post.y,
+          hw: WALL.depth / 2,
+          hd: SEGMENT_HEIGHT / 2,
+          z0: 0,
+          z1: postFloor(scene.layers, post),
+        };
+    if (covers(x, y, box) && (!best || post.y > best.y)) {
+      best = { y: post.y, hit: { postId: post.id } };
+    }
+  }
+  return best?.hit ?? null;
 }

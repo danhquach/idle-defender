@@ -1,10 +1,14 @@
-// HUD over the canvas: status bar, the 1-of-3 card panel and the result panel.
+// HUD over the canvas: status bar, the 1-of-3 card panel, the result panel and a
+// short toast (refused moves).
 // Text reaches the page only through textContent.
 import { UPGRADES } from '../core/cards.ts';
 import { MATERIALS, type Stock } from '../core/data.ts';
 import { standInPayout } from '../core/game.ts';
 import type { Card, HordeState } from '../core/horde.ts';
 import { xpToNext } from '../core/waves.ts';
+
+/** How long a toast stays up. */
+const TOAST_MS = 2000;
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -48,7 +52,7 @@ export function createHud(
   root: HTMLElement,
   onChoose: (index: number) => void,
   onDone: () => void,
-): { update(state: HordeState): void; show(visible: boolean): void } {
+): { update(state: HordeState): void; show(visible: boolean): void; toast(text: string): void } {
   const hud = el('div', 'hud');
   const bar = el('div', 'hud-bar');
   const cards = el('div', 'hud-panel hud-cards');
@@ -64,9 +68,13 @@ export function createHud(
     onDone();
   });
   result.append(resultTitle, resultBody, back);
+  const toast = el('div', 'hud-toast');
+  toast.setAttribute('role', 'status');
+  toast.hidden = true;
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, cards, result);
+  hud.append(bar, toast, cards, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -105,6 +113,15 @@ export function createHud(
   return {
     show(visible) {
       hud.hidden = !visible;
+      if (!visible) toast.hidden = true;
+    },
+    toast(text) {
+      toast.textContent = text;
+      toast.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.hidden = true;
+      }, TOAST_MS);
     },
     update(state) {
       const status = statusText(state);

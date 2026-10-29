@@ -3,11 +3,20 @@
 import { chooseCard } from '../core/cards.ts';
 import { FIELD } from '../core/data.ts';
 import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
-import { enemyAt, layoutOf, setFocus, tick, type HordeState } from '../core/horde.ts';
+import {
+  enemyAt,
+  layoutOf,
+  moveDefender,
+  setFocus,
+  standing,
+  tick,
+  type HordeState,
+} from '../core/horde.ts';
 import { createBuildPanel } from './build.ts';
 import { createHud } from './hud.ts';
 import {
   clampCamera,
+  fightHitAt,
   MARGIN_Y,
   slotAt,
   TILT,
@@ -53,6 +62,8 @@ export function start(root: HTMLElement): void {
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
   let selected: SlotHit | null = null;
+  // The defender picked in a fight, waiting for a post to walk to.
+  let selectedDefender: string | null = null;
 
   const hud = createHud(
     root,
@@ -75,6 +86,7 @@ export function start(root: HTMLElement): void {
       // The seed is the only randomness from outside the core.
       horde = startHorde(game, Date.now(), defenderId, postId);
       selected = null;
+      selectedDefender = null;
       panel.hide();
       hud.show(true);
     },
@@ -82,6 +94,7 @@ export function start(root: HTMLElement): void {
   function toBuild(): void {
     horde = null;
     selected = null;
+    selectedDefender = null;
     hud.show(false);
     panel.show(game, selected);
   }
@@ -110,6 +123,10 @@ export function start(root: HTMLElement): void {
     if (e.key === 'Escape' && !horde && selected) {
       selected = null;
       panel.show(game, selected);
+      return;
+    }
+    if (e.key === 'Escape' && horde && selectedDefender !== null) {
+      selectedDefender = null;
       return;
     }
     const key = panKey(e);
@@ -151,8 +168,11 @@ export function start(root: HTMLElement): void {
     drag = null;
     press = null;
   };
-  // In a fight a click focuses the shambler under it for every defender, or clears the
-  // focus on empty ground. In build mode it opens the slot under it (or closes the menu).
+  // In a fight a click on one of your defenders selects it; with one selected, a click
+  // on a post sends it there (a refusal shows as a toast, unless a shambler is under the
+  // click). Otherwise a click focuses the
+  // shambler under it for every defender, or clears focus and selection on empty
+  // ground. In build mode it opens the slot under it (or closes the menu).
   // Only finite canvas coordinates reach the hit tests, and only in-range grid slots
   // from `slotAt` reach the core.
   canvas.addEventListener('pointerup', (e) => {
@@ -161,7 +181,27 @@ export function start(root: HTMLElement): void {
     if (!click || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
     const ground = unproject({ sx: e.offsetX, sy: e.offsetY }, cam);
     if (horde) {
-      horde = setFocus(horde, enemyAt(horde, ground.x, ground.y));
+      const hit = fightHitAt(ground.x, ground.y, horde);
+      if (hit && 'defenderId' in hit) {
+        selectedDefender = hit.defenderId;
+        return;
+      }
+      const enemyId = enemyAt(horde, ground.x, ground.y);
+      if (hit && selectedDefender !== null) {
+        const moved = moveDefender(horde, selectedDefender, hit.postId);
+        if (moved.ok) {
+          horde = moved.state;
+          selectedDefender = null;
+          return;
+        }
+        // A refused move over a shambler (one hitting the wall) is a focus click.
+        if (enemyId === null) {
+          hud.toast(moved.reason);
+          return;
+        }
+      }
+      if (enemyId === null) selectedDefender = null;
+      horde = setFocus(horde, enemyId);
     } else {
       selected = slotAt(ground.x, ground.y, game.base);
       panel.show(game, selected);
@@ -190,6 +230,14 @@ export function start(root: HTMLElement): void {
     last = document.hidden ? null : now;
     if (dt > 0) {
       if (horde) horde = tick(horde, dt);
+      // A defender sent to the bench, or a finished fight, drops the selection.
+      if (
+        horde &&
+        selectedDefender !== null &&
+        (horde.outcome !== 'fighting' || !horde.defenders.some((d) => d.id === selectedDefender))
+      ) {
+        selectedDefender = null;
+      }
       let dx = 0;
       let dy = 0;
       for (const key of held) {
@@ -208,7 +256,7 @@ export function start(root: HTMLElement): void {
       }
     }
     if (horde) {
-      drawScene(ctx, horde, cam, view);
+      drawScene(ctx, horde, cam, view, null, selectedDefender);
       hud.update(horde);
     } else {
       drawScene(ctx, buildScene(game, panel.choice(game)), cam, view, { selected });
@@ -222,6 +270,8 @@ export function start(root: HTMLElement): void {
 function buildScene(game: GameState, choice: { defenderId: string; postId: number } | null): Scene {
   const { layers, posts } = layoutOf(game.base);
   const post = choice ? posts[choice.postId] : undefined;
-  if (post && choice) post.defenderId = choice.defenderId;
-  return { layers, posts, enemies: [], shots: [], focusId: null };
+  const spec = game.roster.find((d) => d.id === choice?.defenderId);
+  const defenders = post && spec ? [standing(spec, post, 0)] : [];
+  if (post && spec) post.defenderId = spec.id;
+  return { layers, posts, defenders, enemies: [], shots: [], focusId: null };
 }

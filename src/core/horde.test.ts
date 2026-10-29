@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, newBase, type Base, type Result } from './base.ts';
-import { STEP, type Stock } from './data.ts';
+import { chooseCard } from './cards.ts';
+import { STEP, WALK_SPEED, type PostKind, type Stock } from './data.ts';
 import {
   baseAfter,
   defenderRange,
   enemyAt,
+  moveDefender,
   newHorde,
   setFocus,
+  standing,
   tick,
   type HordeState,
 } from './horde.ts';
@@ -591,5 +594,295 @@ describe('baseAfter', () => {
     const regated = newBase();
     regated.layers[0]!.slots[0]!.kind = 'gate';
     expect(() => baseAfter(regated, s)).toThrow(RangeError);
+  });
+});
+
+/**
+ * Column 0 of the starting base with wall-walk posts on rows 0 and 1 and ground posts
+ * on `groundRows`, plus `extra` build steps. Post ids follow (column, kind, row).
+ */
+function postsBase(groundRows: number[], ...extra: ((b: Base, s: Stock) => Result)[]): Base {
+  return baseWith(
+    ...groundRows.map(
+      (row) => (b: Base, s: Stock) => buildPost(b, s, { kind: 'ground', column: 0, row }),
+    ),
+    (b, s) => buildPost(b, s, { kind: 'wall-walk', column: 0, row: 0 }),
+    (b, s) => buildPost(b, s, { kind: 'wall-walk', column: 0, row: 1 }),
+    ...extra,
+  );
+}
+
+const postId = (s: HordeState, kind: PostKind, row: number, column = 0): number =>
+  s.posts.findIndex((p) => p.kind === kind && p.column === column && p.row === row);
+
+/** No spawns; `a` on (startKind, startRow), and `b` from the bench on (bKind, bRow) if given. */
+function fightOn(base: Base, start: [PostKind, number], b?: [PostKind, number]): HordeState {
+  const probe = stillOn(base);
+  const s = newHorde(1, { ...setup(), base, startPostId: postId(probe, ...start) });
+  s.toSpawn = 0;
+  if (b) {
+    const post = s.posts[postId(s, ...b)]!;
+    const [spec] = s.bench.splice(0, 1);
+    s.defenders.push(standing(spec!, post, 0));
+    post.defenderId = spec!.id;
+  }
+  return s;
+}
+
+/** Breaks segment `row` of column 0 on the next step: 5 HP left and a tough enemy on it. */
+function breakNext(s: HordeState, row: number): void {
+  s.layers[0]!.segments[row]!.hp = 5;
+  enemy(s, { x: 520, y: (row + 0.5) * 80, hp: 1e6, maxHp: 1e6 });
+}
+
+const mustMove = (s: HordeState, id: string, post: number): HordeState => {
+  const r = moveDefender(s, id, post);
+  if (!r.ok) throw new Error(r.reason);
+  return r.state;
+};
+
+describe('moving defenders', () => {
+  it('frees the old post, reserves the new one and arrives after distance / speed', () => {
+    const s = fightOn(postsBase([]), ['tower', 1]);
+    const from = postId(s, 'tower', 1);
+    const to = postId(s, 'wall-walk', 0);
+    const before = structuredClone(s);
+    const moved = mustMove(s, 'a', to);
+    expect(s).toEqual(before);
+    expect(moved.posts[from]!.defenderId).toBeNull();
+    expect(moved.posts[to]!.defenderId).toBe('a');
+    expect(moved.defenders[0]).toMatchObject({ postId: to, walking: true, x: 420, y: 120 });
+
+    const time = Math.hypot(510 - 420, 40 - 120) / WALK_SPEED;
+    const early = tick(moved, time - STEP);
+    expect(early.defenders[0]!.walking).toBe(true);
+    expect(early.defenders[0]!.x).toBeGreaterThan(420);
+    expect(early.defenders[0]!.x).toBeLessThan(510);
+    const late = tick(moved, time + STEP);
+    expect(late.defenders[0]).toMatchObject({ walking: false, x: 510, y: 40, postId: to });
+  });
+
+  it("doesn't fire while walking, and fires on arrival", () => {
+    const s = fightOn(postsBase([]), ['tower', 1]);
+    const moved = mustMove(s, 'a', postId(s, 'wall-walk', 0));
+    const target = enemy(moved, { x: 700, y: 40, hp: 1000, maxHp: 1000 });
+    const walking = tick(moved, 1);
+    expect(walking.shots).toEqual([]);
+    expect(walking.enemies[0]!.hp).toBe(1000);
+    const arrived = tick(walking, 0.6);
+    expect(arrived.defenders[0]!.walking).toBe(false);
+    expect(arrived.enemies.find((e) => e.id === target.id)!.hp).toBeLessThan(1000);
+  });
+
+  it('a walker can be sent on from where it is', () => {
+    const s = fightOn(postsBase([]), ['tower', 1]);
+    const halfway = tick(mustMove(s, 'a', postId(s, 'wall-walk', 0)), 0.5);
+    const { x, y } = halfway.defenders[0]!;
+    const back = mustMove(halfway, 'a', postId(s, 'tower', 1));
+    expect(back.posts[postId(s, 'wall-walk', 0)]!.defenderId).toBeNull();
+    expect(back.defenders[0]).toMatchObject({ x, y, walking: true });
+    expect(tick(back, 1).defenders[0]).toMatchObject({ x: 420, y: 120, walking: false });
+  });
+
+  it('walking never advances while a card offer is open', () => {
+    const s = fightOn(postsBase([]), ['tower', 1]);
+    const moved = mustMove(s, 'a', postId(s, 'wall-walk', 0));
+    moved.offer = [{ kind: 'upgrade', id: 'sharpshooter' }];
+    expect(tick(moved, 1).defenders[0]).toMatchObject({ x: 420, y: 120 });
+  });
+
+  const refusals: [string, string, (s: HordeState) => [HordeState, string, number]][] = [
+    ['to a taken post', 'Post taken', (s) => [s, 'a', postId(s, 'tower', 3)]],
+    [
+      'to a reserved post',
+      'Post reserved',
+      (s) => [mustMove(s, 'b', postId(s, 'wall-walk', 0)), 'a', postId(s, 'wall-walk', 0)],
+    ],
+    [
+      'to a wall-walk post over a broken segment',
+      'No wall to stand on',
+      (s) => {
+        s.layers[0]!.segments[0]!.hp = 0;
+        return [s, 'a', postId(s, 'wall-walk', 0)];
+      },
+    ],
+    ['to its own post', 'Already there', (s) => [s, 'a', postId(s, 'tower', 1)]],
+    [
+      'to the post it is walking to',
+      'Already on the way',
+      (s) => [mustMove(s, 'a', postId(s, 'wall-walk', 0)), 'a', postId(s, 'wall-walk', 0)],
+    ],
+    [
+      'during a card offer',
+      'Pick a card first',
+      (s) => {
+        s.offer = [{ kind: 'upgrade', id: 'sharpshooter' }];
+        return [s, 'a', postId(s, 'wall-walk', 0)];
+      },
+    ],
+    [
+      'after the outcome',
+      'The fight is over',
+      (s) => {
+        s.outcome = 'won';
+        return [s, 'a', postId(s, 'wall-walk', 0)];
+      },
+    ],
+  ];
+  it.each(refusals)('refuses a move %s and changes nothing', (_, reason, make) => {
+    const [s, id, post] = make(fightOn(postsBase([]), ['tower', 1], ['tower', 3]));
+    const before = structuredClone(s);
+    expect(moveDefender(s, id, post)).toEqual({ ok: false, reason });
+    expect(s).toEqual(before);
+  });
+
+  it.each([
+    ['x', 0],
+    ['a', 99],
+    ['a', -1],
+    ['a', 1.5],
+    ['a', Number.NaN],
+  ])('throws for defender %s, post %s', (id, post) => {
+    const s = fightOn(postsBase([]), ['tower', 1]);
+    expect(() => moveDefender(s, id, post)).toThrow(RangeError);
+  });
+
+  it('a benched defender cannot be moved', () => {
+    const s = fightOn(postsBase([]), ['tower', 1]);
+    expect(() => moveDefender(s, 'b', postId(s, 'tower', 3))).toThrow(RangeError);
+  });
+
+  it('same seed and same moves at the same times give the same fight', () => {
+    const run = (): HordeState => {
+      const base = postsBase([2]);
+      const probe = stillOn(base);
+      let s = newHorde(7, { ...setup(), base, startPostId: postId(probe, 'tower', 1) });
+      s = tick(s, 2);
+      if (s.offer) s = chooseCard(s, 0);
+      s = mustMove(s, 'a', postId(s, 'wall-walk', 0));
+      s = tick(s, 4);
+      if (s.offer) s = chooseCard(s, 0);
+      return tick(s, 6);
+    };
+    expect(run()).toEqual(run());
+  });
+});
+
+describe('dropping off a broken wall', () => {
+  it('drops each defender in array order to the nearest free ground post behind', () => {
+    // a (ww row 0) is nearer ground row 1 than row 4; so is b (ww row 1), but a goes first.
+    const s = fightOn(postsBase([1, 4]), ['wall-walk', 0], ['wall-walk', 1]);
+    breakNext(s, 0);
+    breakNext(s, 1);
+    const after = tick(s, STEP);
+    const [a, b] = after.defenders;
+    expect(a).toMatchObject({ id: 'a', postId: postId(s, 'ground', 1), walking: true });
+    expect(b).toMatchObject({ id: 'b', postId: postId(s, 'ground', 4), walking: true });
+    expect(after.posts[postId(s, 'wall-walk', 0)]!.defenderId).toBeNull();
+    expect(after.posts[postId(s, 'wall-walk', 1)]!.defenderId).toBeNull();
+    expect(after.posts[postId(s, 'ground', 1)]!.defenderId).toBe('a');
+    expect(after.posts[postId(s, 'ground', 4)]!.defenderId).toBe('b');
+    const landed = tick(after, 6);
+    expect(landed.defenders[0]).toMatchObject({ x: 340, y: 120, walking: false });
+    expect(landed.defenders[1]).toMatchObject({ x: 340, y: 360, walking: false });
+  });
+
+  it('goes to the bench with no free ground post behind, and can be recruited back', () => {
+    const s = fightOn(postsBase([1]), ['wall-walk', 0], ['wall-walk', 1]);
+    breakNext(s, 0);
+    breakNext(s, 1);
+    const after = tick(s, STEP);
+    expect(after.defenders.map((d) => d.id)).toEqual(['a']);
+    expect(after.bench).toEqual([
+      { id: 'c', name: 'C', weapon: 'pistol' },
+      { id: 'b', name: 'B', weapon: 'pistol' },
+    ]);
+    expect(after.posts.filter((p) => p.defenderId === 'b')).toEqual([]);
+
+    after.offer = [
+      { kind: 'recruit', defender: { id: 'b', name: 'B', weapon: 'pistol' } },
+      { kind: 'upgrade', id: 'sharpshooter' },
+      { kind: 'upgrade', id: 'reinforce' },
+    ];
+    const back = chooseCard(after, 0);
+    expect(back.defenders.map((d) => d.id)).toEqual(['a', 'b']);
+    expect(back.bench.map((d) => d.id)).toEqual(['c']);
+  });
+
+  it('three drop, two ground posts: the first two in array order get them, the third is benched', () => {
+    const base = postsBase([3, 4], (b, s) =>
+      buildPost(b, s, { kind: 'wall-walk', column: 0, row: 2 }),
+    );
+    const s = fightOn(base, ['wall-walk', 2], ['wall-walk', 1]);
+    const post = s.posts[postId(s, 'wall-walk', 0)]!;
+    const [c] = s.bench.splice(0, 1);
+    s.defenders.push(standing(c!, post, 0));
+    post.defenderId = c!.id;
+    for (const row of [0, 1, 2]) breakNext(s, row);
+    const after = tick(s, STEP);
+    // a (row 2) is nearest ground row 3; b (row 1) then takes row 4; c (row 0) is left out.
+    expect(after.defenders.map((d) => [d.id, d.postId])).toEqual([
+      ['a', postId(s, 'ground', 3)],
+      ['b', postId(s, 'ground', 4)],
+    ]);
+    expect(after.bench.map((d) => d.id)).toEqual(['c']);
+  });
+
+  it('ignores ground posts ahead of the broken layer', () => {
+    const base = postsBase(
+      [],
+      (b, s) => buildSegment(b, s, ['wood'], 1, 0, 'wall', 'wood'),
+      (b, s) => buildPost(b, s, { kind: 'ground', column: 1, row: 0 }),
+    );
+    const s = fightOn(base, ['wall-walk', 0]);
+    breakNext(s, 0);
+    const after = tick(s, STEP);
+    expect(after.defenders).toEqual([]);
+    expect(after.posts[postId(s, 'ground', 0, 1)]!.defenderId).toBeNull();
+  });
+
+  it('leaves defenders on other posts alone', () => {
+    const s = fightOn(postsBase([1]), ['wall-walk', 1], ['tower', 1]);
+    breakNext(s, 0);
+    const after = tick(s, STEP);
+    expect(after.defenders.map((d) => [d.id, d.postId, d.walking])).toEqual([
+      ['a', postId(s, 'wall-walk', 1), false],
+      ['b', postId(s, 'tower', 1), false],
+    ]);
+  });
+
+  it('a walker whose target segment breaks re-targets from where it is', () => {
+    const s = fightOn(postsBase([4]), ['tower', 3]);
+    const walking = tick(mustMove(s, 'a', postId(s, 'wall-walk', 0)), 0.5);
+    const { x, y } = walking.defenders[0]!;
+    breakNext(walking, 0);
+    const after = tick(walking, STEP);
+    expect(after.posts[postId(s, 'wall-walk', 0)]!.defenderId).toBeNull();
+    expect(after.posts[postId(s, 'ground', 4)]!.defenderId).toBe('a');
+    const d = after.defenders[0]!;
+    expect(d).toMatchObject({ postId: postId(s, 'ground', 4), walking: true });
+    // The break comes after this step's walk, so it heads off from the next step on.
+    expect(Math.hypot(d.x - x, d.y - y)).toBeCloseTo(WALK_SPEED * STEP);
+    const next = tick(after, STEP).defenders[0]!;
+    const toGround = (p: { x: number; y: number }) => Math.hypot(340 - p.x, 360 - p.y);
+    expect(toGround(next)).toBeCloseTo(toGround(d) - WALK_SPEED * STEP);
+    expect(tick(after, 5).defenders[0]).toMatchObject({ x: 340, y: 360, walking: false });
+  });
+
+  it('a move or recruit never lands on a post whose segment broke', () => {
+    const s = fightOn(postsBase([]), ['tower', 1]);
+    breakNext(s, 0);
+    const after = tick(s, STEP);
+    expect(moveDefender(after, 'a', postId(s, 'wall-walk', 0))).toEqual({
+      ok: false,
+      reason: 'No wall to stand on',
+    });
+    after.offer = [
+      { kind: 'recruit', defender: { id: 'b', name: 'B', weapon: 'pistol' } },
+      { kind: 'upgrade', id: 'sharpshooter' },
+      { kind: 'upgrade', id: 'reinforce' },
+    ];
+    const back = chooseCard(after, 0);
+    expect(back.posts.findIndex((p) => p.defenderId === 'b')).toBe(postId(s, 'wall-walk', 1));
   });
 });

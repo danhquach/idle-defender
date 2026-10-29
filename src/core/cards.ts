@@ -1,5 +1,12 @@
 import { RECRUIT_CHANCE } from './data.ts';
-import type { Card, HordeState, Layer, Post, UpgradeId } from './horde.ts';
+import {
+  standing,
+  type Card,
+  type HordeState,
+  type Layer,
+  type Post,
+  type UpgradeId,
+} from './horde.ts';
 import { chance, pick, rngFrom, type Rng } from './rng.ts';
 import { xpToNext } from './waves.ts';
 
@@ -76,7 +83,7 @@ export function chooseCard(state: HordeState, index: number): HordeState {
     const benchIndex = s.bench.findIndex((d) => d.id === card.defender.id);
     if (!post || benchIndex < 0) throw new RangeError('chooseCard: recruit has nowhere to go');
     const [spec] = s.bench.splice(benchIndex, 1);
-    s.defenders.push({ ...spec!, nextShotAt: s.time });
+    s.defenders.push(standing(spec!, post, s.time));
     post.defenderId = spec!.id;
   } else {
     applyUpgrade(s, card.id);
