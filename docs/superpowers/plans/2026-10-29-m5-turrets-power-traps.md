@@ -19,7 +19,7 @@ M5 = ID-014 (turrets, plus the Research Lab that unlocks them) + ID-015 (battery
 
 - Everything from the M1–M4 plans' Global Constraints still holds: core is pure, RNG only via `rng.ts`, text only via `textContent`, every number in `data.ts`, no new runtime dependency, public repo rules.
 - Player mistakes return `{ ok: false, reason }`; programmer errors throw `RangeError`.
-- Versions: ID-014 → `0.4.7`, ID-015 → `0.4.8`.
+- Versions: ID-014 → `0.4.7`, ID-015 → `0.4.8`, ID-016 → `0.4.9`.
 
 ---
 
@@ -95,3 +95,19 @@ PM decisions, 2026-10-29: D1 until patrols, a new game starts with 2 Makeshift b
 1. **Real time** is only ever read as `now`; idle time, fight time and a clock set back earn no charge.
 2. **The bank** never passes the cap or goes below 0; no battery is used up without its charge landing.
 3. **Save** refuses every hostile bank, battery, Gas and generator shape.
+
+---
+
+## ID-016 — Turret and power UI: build, power/condition at a glance, bank level
+
+PM decisions, 2026-10-29: D1 relocate picks the destination from a list of the free mounts in the turret's menu; D2 a thin condition bar over each turret, in build mode and in fights; D3 Repair all repairs turrets too, all or nothing.
+
+**Acceptance criteria** (also on issue #16).
+
+1. **Build.** In build mode an empty tower spot's menu offers an Auto-turret beside the Tower post, and a built wall segment's menu offers an Auto-turret on its wall mount beside the wall-walk post. Each is a dry run of the core action: its cost shown, a refused one disabled with the core's reason ("Research the Auto-turret first", "Slot taken", …).
+2. **Turret menu.** Selecting a spot that holds a turret shows its condition (n/100) and state (powered; dark: the bank is empty; offline: its wall is broken; jammed), then **Repair** (its Scrap cost; refused "Nothing to repair" at full), **Salvage** (its refund; asks to confirm) and **Relocate** (D1: a list of the free mounts it may move to, each a dry run).
+3. **Selecting.** Clicking a turret's head selects its spot, as a built post's top does.
+4. **Bank meter.** The build panel's power section shows the bank as a meter with "Bank n/1,000"; the fight status bar shows the bank's charge as it drains.
+5. **At a glance (§15).** Each turret keeps its lit / dark / offline / jammed look, sparks and smoke, and gets a condition bar (D2).
+6. **Repair all** (D3) repairs every damaged segment and turret, or nothing if the stock can't cover them all; its cost includes the turrets.
+7. **Tests** cover the turret menu lines and their dry runs, relocate targets, the meter and status text, Repair all with turrets, and hit-testing a turret. `docs/design.md` §7 and §15 get "As built (ID-016)" notes; the version goes to 0.4.9.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPost, buildSegment, newBase, type Base } from '../core/base.ts';
+import { buildPost, buildSegment, buildTurret, newBase, type Base } from '../core/base.ts';
 import { START_STOCK } from '../core/data.ts';
 import { newHorde, standing } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
@@ -167,6 +167,21 @@ describe('slotAt', () => {
     b.posts = b.posts.filter((p) => p.kind !== 'wall-walk');
     expect(slotAt(510, 20, b)).toEqual({ column: 0, row: 0, what: 'segment' });
     expect(slotAt(510, 45, b)).toEqual({ column: 0, row: 1, what: 'segment' });
+  });
+
+  it("selects a turret's spot by its head, on a tower or a wall mount", () => {
+    const rich = { ...START_STOCK, wood: 500, scrap: 500 };
+    let r = buildTurret(base, rich, true, 'tower', 0, 2);
+    if (!r.ok) throw new Error(r.reason);
+    r = buildTurret(r.base, r.stock, true, 'wall-walk', 0, 1);
+    if (!r.ok) throw new Error(r.reason);
+    // Tower turret at row 2 (centre y 200): 50 + 12 high → lift 82.7, from y 93.3; it is
+    // in front of the row-1 tower, which wins there without the turret.
+    expect(slotAt(420, 100, base)).toEqual({ column: 0, row: 1, what: 'tower' });
+    expect(slotAt(420, 100, r.base)).toEqual({ column: 0, row: 2, what: 'tower' });
+    // Wall turret on row 1 (y0 80): 40 + 6 + 12 high → lift 77.3, from y 2.7.
+    expect(slotAt(510, 10, base)).toEqual({ column: 0, row: 0, what: 'segment' });
+    expect(slotAt(510, 10, r.base)).toEqual({ column: 0, row: 1, what: 'segment' });
   });
 });
 

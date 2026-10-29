@@ -6,6 +6,7 @@ import { affixText, heldName } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
 import { UPGRADES } from '../core/cards.ts';
 import {
+  BANK_CAP,
   FALL_WARNING,
   GAS_PER_WIN,
   MATERIALS,
@@ -74,11 +75,19 @@ function cardText(card: Card): { title: string; body: string } {
   return { title: u.name, body: u.text };
 }
 
+/** A level as a whole number, rounded down but never to 0 while any is left. */
+export const wholeLeft = (n: number): number => (n > 0 ? Math.max(1, Math.floor(n)) : 0);
+
+/** The battery bank as "Bank 420/1,000" (design §7). */
+export const bankText = (charge: number): string =>
+  `Bank ${wholeLeft(charge).toLocaleString('en-US')}/${BANK_CAP.toLocaleString('en-US')}`;
+
 export function statusText(s: HordeState): string {
   return [
     `Horde ${s.hordeNumber}`,
     `Wave ${s.wave}/${s.waveCount}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
+    bankText(s.energy),
   ].join(' · ');
 }
 

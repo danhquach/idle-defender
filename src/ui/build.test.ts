@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildPost, buildSegment } from '../core/base.ts';
-import { BANK_CAP, GENERATOR } from '../core/data.ts';
+import { buildPost, buildSegment, buildTurret } from '../core/base.ts';
+import { BANK_CAP, GENERATOR, TURRET } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import {
+  buildTurretLine,
+  lineResult,
   IMPORT_CONFIRM,
   IMPORT_DONE,
   IMPORT_REFUSAL,
@@ -14,7 +16,11 @@ import {
   pickStart,
   postKey,
   powerLines,
+  relocateTargets,
   stockBarText,
+  turretIndex,
+  turretLines,
+  type SlotLine,
 } from './build.ts';
 import { clockTime } from './hud.ts';
 
@@ -139,11 +145,12 @@ describe('build panel', () => {
     const lines = powerLines(g);
     expect(lines.map((l) => (l.kind === 'action' ? l.label : l.text))).toEqual([
       'Generator: not built',
+      'Bank 120/1,000',
       'Build generator',
       'Gas 4 · Batteries in storage: none',
     ]);
-    expect(lines[1]).toMatchObject({ cost: GENERATOR.cost, result: { ok: true } });
-    const poor = powerLines({ ...g, stock: { ...g.stock, wood: 0 } })[1]!;
+    expect(lines[2]).toMatchObject({ cost: GENERATOR.cost, result: { ok: true } });
+    const poor = powerLines({ ...g, stock: { ...g.stock, wood: 0 } })[2]!;
     expect(poor.kind === 'action' && !poor.result.ok && poor.result.reason).toBe('Not enough wood');
     const stored = {
       ...g,
@@ -152,7 +159,7 @@ describe('build panel', () => {
         batteries: { makeshift: 2, standard: 0, 'high-capacity': 1, military: 0 },
       },
     };
-    expect(powerLines(stored)[2]).toEqual({
+    expect(powerLines(stored)[3]).toEqual({
       kind: 'note',
       text: 'Gas 4 · Batteries in storage: 2 Makeshift, 1 High-capacity',
     });
@@ -172,6 +179,147 @@ describe('build panel', () => {
     expect(state({ bank: BANK_CAP, generator: { at: null } })).toBe(
       'Generator · idle: the bank is full',
     );
-    expect(powerLines({ ...g, power: { ...g.power, generator: { at } } })).toHaveLength(2);
+    expect(powerLines({ ...g, power: { ...g.power, generator: { at } } })).toHaveLength(3);
+  });
+
+  it('shows the bank as a meter from empty to the cap, whole charge only', () => {
+    const g = newGame();
+    const meter = (bank: number) => powerLines({ ...g, power: { ...g.power, bank } })[1];
+    expect(meter(0)).toEqual({ kind: 'meter', text: 'Bank 0/1,000', value: 0, max: BANK_CAP });
+    expect(meter(419.9)).toMatchObject({ text: 'Bank 419/1,000', value: 419.9 });
+    expect(meter(0.4)).toMatchObject({ text: 'Bank 1/1,000' }); // turrets still lit
+    expect(meter(BANK_CAP)).toMatchObject({ text: 'Bank 1,000/1,000', value: BANK_CAP });
+  });
+});
+
+describe('turret menu', () => {
+  const RICH = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+  /** A new game with the Auto-turret researched and a turret on the free tower at row 2. */
+  function withTurret(): GameState {
+    const g: GameState = { ...newGame(), stock: RICH, research: ['metal-walls', 'auto-turret'] };
+    const r = buildTurret(g.base, g.stock, true, 'tower', 0, 2);
+    if (!r.ok) throw new Error(r.reason);
+    return { ...g, base: r.base, stock: r.stock };
+  }
+  const text = (l: SlotLine): string => (l.kind === 'action' ? l.label : l.text);
+  const why = (l: SlotLine): string | null =>
+    l.kind === 'action' && !l.result.ok ? l.result.reason : null;
+
+  it('offers an Auto-turret on a free mount, refused until it is researched', () => {
+    const g = { ...newGame(), stock: RICH };
+    expect(buildTurretLine(g, 'tower', 0, 2)).toMatchObject({
+      label: 'Auto-turret',
+      cost: TURRET.cost,
+      result: { ok: false, reason: 'Research the Auto-turret first' },
+    });
+    const done: GameState = { ...g, research: ['metal-walls', 'auto-turret'] };
+    const line = buildTurretLine(done, 'wall-walk', 0, 4);
+    expect(line).toMatchObject({ label: 'Auto-turret (wall mount)', result: { ok: true } });
+    expect(line.kind === 'action' && line.result.ok && line.result.base.turrets).toEqual([
+      { mount: 'wall-walk', column: 0, row: 4, condition: 100 },
+    ]);
+    expect(why(buildTurretLine(done, 'tower', 0, 1))).toBe('Slot taken');
+    expect(why(buildTurretLine(done, 'tower', 1, 0))).toBe('A tower mount needs a wall in front');
+    expect(why(buildTurretLine({ ...done, stock: { ...RICH, scrap: 39 } }, 'tower', 0, 0))).toBe(
+      'Not enough scrap',
+    );
+  });
+
+  it('shows where a turret is, its condition and that it is powered; Repair and Salvage', () => {
+    const g = withTurret();
+    const i = turretIndex(g, 'tower', 0, 2);
+    expect(i).toBe(0);
+    expect(turretIndex(g, 'wall-walk', 0, 2)).toBe(-1);
+    const lines = turretLines(g, i);
+    expect(lines.map(text)).toEqual([
+      'Auto-turret · Tower · Layer 1, row 3',
+      'Condition 100/100 · powered',
+      'Repair turret',
+      'Salvage for 20 scrap, 10 wood',
+    ]);
+    expect(why(lines[2]!)).toBe('Nothing to repair');
+    expect(lines[3]).toMatchObject({
+      cost: null,
+      confirm: 'Salvage this turret for 20 scrap, 10 wood? It is dismantled.',
+    });
+    // Salvage asks first: a no does nothing, a yes dismantles it.
+    const asked: string[] = [];
+    expect(lineResult(lines[3]!, (q) => (asked.push(q), false))).toBeNull();
+    expect(lineResult(lines[3]!, () => true)).toMatchObject({ ok: true, base: { turrets: [] } });
+    expect(asked).toEqual(['Salvage this turret for 20 scrap, 10 wood? It is dismantled.']);
+    // Repair asks nothing; a refused line gives nothing.
+    expect(lineResult(lines[2]!, () => true)).toBeNull();
+    expect(lineResult(lines[0]!, () => true)).toBeNull();
+    const salvaged = lines[3]!;
+    expect(
+      salvaged.kind === 'action' && salvaged.result.ok && salvaged.result.base.turrets,
+    ).toEqual([]);
+  });
+
+  it('a worn turret: its repair cost, a smaller refund, and each state by name', () => {
+    const g = withTurret();
+    g.base.turrets[0]!.condition = 99.8; // any wear shows, as Repair is then offered
+    expect(text(turretLines(g, 0)[1]!)).toBe('Condition 99/100 · powered');
+    g.base.turrets[0]!.condition = 0.3; // not jammed yet, so never shown as 0
+    expect(text(turretLines(g, 0)[1]!)).toBe('Condition 1/100 · powered');
+    g.base.turrets[0]!.condition = 60.2;
+    let lines = turretLines(g, 0);
+    expect(text(lines[1]!)).toBe('Condition 60/100 · powered');
+    expect(lines[2]).toMatchObject({ cost: { scrap: 8 }, result: { ok: true } });
+    expect(text(lines[3]!)).toBe('Salvage for 12 scrap, 6 wood');
+    lines = turretLines({ ...g, power: { ...g.power, bank: 0 } }, 0);
+    expect(text(lines[1]!)).toBe('Condition 60/100 · dark: the bank is empty');
+    g.base.turrets[0]!.condition = 0;
+    lines = turretLines(g, 0);
+    expect(text(lines[1]!)).toBe('Condition 0/100 · jammed');
+    expect(text(lines[3]!)).toBe('Salvage for nothing');
+  });
+
+  it('a wall turret over a broken segment is offline', () => {
+    const g = withTurret();
+    const r = buildTurret(g.base, g.stock, true, 'wall-walk', 0, 0);
+    if (!r.ok) throw new Error(r.reason);
+    const broken: GameState = { ...g, base: r.base, stock: r.stock };
+    broken.base.layers[0]!.slots[0]!.hp = 0;
+    const i = turretIndex(broken, 'wall-walk', 0, 0);
+    expect(text(turretLines(broken, i)[1]!)).toBe(
+      'Condition 100/100 · offline: its wall is broken',
+    );
+  });
+
+  it('relocate lists every free mount it may move to, in field order, each a working move', () => {
+    const g = withTurret();
+    g.base.turrets[0]!.condition = 40;
+    const targets = relocateTargets(g, 0);
+    // The starting base: free towers at rows 1, 5 and a wall mount on each of the 5 segments.
+    expect(targets.map((t) => t.label)).toEqual([
+      'Tower · Layer 1, row 1',
+      'Tower · Layer 1, row 5',
+      'Wall mount · Layer 1, row 1',
+      'Wall mount · Layer 1, row 2',
+      'Wall mount · Layer 1, row 3',
+      'Wall mount · Layer 1, row 4',
+      'Wall mount · Layer 1, row 5',
+    ]);
+    expect(new Set(targets.map((t) => t.key)).size).toBe(targets.length);
+    const to = targets.find((t) => t.key === 'wall-walk:0:4')!;
+    expect(to.result.base.turrets).toEqual([
+      { mount: 'wall-walk', column: 0, row: 4, condition: 40 },
+    ]);
+    expect(to.result.stock).toEqual(g.stock);
+  });
+
+  it('relocate has nowhere to go when every mount is taken', () => {
+    let g = withTurret();
+    for (const [mount, row] of [
+      ['tower', 0],
+      ['tower', 4],
+      ...[0, 1, 2, 3, 4].map((r) => ['wall-walk', r] as const),
+    ] as const) {
+      const r = buildTurret(g.base, g.stock, true, mount, 0, row);
+      if (!r.ok) throw new Error(r.reason);
+      g = { ...g, base: r.base, stock: r.stock };
+    }
+    expect(relocateTargets(g, 0)).toEqual([]);
   });
 });

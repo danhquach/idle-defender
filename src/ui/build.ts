@@ -1,40 +1,63 @@
-// Build mode panel between hordes: stock bar, the selected slot's menu, Repair all,
-// and the start defender and post; or, in its place, the roster. Every option is a dry
-// run of the core action, so a refused one shows disabled with the core's own reason.
+// Build mode panel between hordes: stock bar, the selected slot's menu (a turret's
+// included), Repair all, the Lab, power and the bank meter, and the start defender and
+// post; or, in its place, the roster. Every option is a dry run of the core action, so
+// a refused one shows disabled with the core's own reason.
 // Text only via textContent.
 import {
   buildPost,
   buildSegment,
+  buildTurret,
+  moveTurret,
   repairAll,
   repairAllCost,
   repairCost,
   repairSegment,
+  repairTurret,
+  salvageTurret,
+  salvageValue,
+  turretRepairCost,
   upgradeSegment,
   type Base,
   type BasePost,
   type Result,
+  type TurretMount,
 } from '../core/base.ts';
 import { postUsable } from '../core/cards.ts';
 import {
   BANK_CAP,
   BATTERIES,
   BATTERY_IDS,
+  COLUMNS,
   GENERATOR,
   MATERIALS,
+  MAX_CONDITION,
   POST_COST,
   RESEARCH,
   RESEARCH_IDS,
+  SEGMENTS,
   TIER_ORDER,
   TIERS,
+  TURRET,
+  TURRET_MOUNTS,
   type Stock,
 } from '../core/data.ts';
 import { available, type GameState, type RosterDefender } from '../core/game.ts';
-import { labCost, research, upgradeLab, type GameResult } from '../core/research.ts';
-import { layoutOf } from '../core/horde.ts';
+import { labCost, research, researched, upgradeLab, type GameResult } from '../core/research.ts';
+import { layoutOf, turretState, type TurretState } from '../core/horde.ts';
 import { buildGenerator, nextGasAt } from '../core/power.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
-import { clockTime, defenderLabel, el, POST_NAME, postName, slotName, stockText } from './hud.ts';
+import {
+  bankText,
+  clockTime,
+  defenderLabel,
+  el,
+  POST_NAME,
+  postName,
+  slotName,
+  stockText,
+  wholeLeft,
+} from './hud.ts';
 import type { SlotHit } from './projection.ts';
 import { rosterSection } from './roster.ts';
 
@@ -103,9 +126,10 @@ export function pickStart(
   return { defenderId: defender.id, postId: game.base.posts.indexOf(post) };
 }
 
-/** One Lab line: a done node as a note, or an action with its cost and dry-run result. */
+/** One Lab or power line: a note, the bank meter, or an action with its cost and dry-run result. */
 export type LabLine =
   | { kind: 'heading' | 'note'; text: string }
+  | { kind: 'meter'; text: string; value: number; max: number }
   | { kind: 'action'; label: string; cost: Partial<Stock>; result: GameResult };
 
 /** The Research Lab section (design §11): its level, the next level, then each node. */
@@ -138,8 +162,8 @@ export function labLines(game: GameState): LabLine[] {
 }
 
 /**
- * The power section (design §7): the generator and its state, then the Gas and the
- * batteries waiting in storage. The bank meter comes with ID-016.
+ * The power section (design §7): the generator and its state, the bank meter, then the
+ * Gas and the batteries waiting in storage.
  */
 export function powerLines(game: GameState): LabLine[] {
   const { power } = game;
@@ -154,7 +178,10 @@ export function powerLines(game: GameState): LabLine[] {
           : power.bank >= BANK_CAP
             ? 'Generator · idle: the bank is full'
             : 'Generator · starting';
-  const lines: LabLine[] = [{ kind: 'heading', text: state }];
+  const lines: LabLine[] = [
+    { kind: 'heading', text: state },
+    { kind: 'meter', text: bankText(power.bank), value: power.bank, max: BANK_CAP },
+  ];
   if (power.generator === null) {
     lines.push({
       kind: 'action',
@@ -171,6 +198,116 @@ export function powerLines(game: GameState): LabLine[] {
     text: `Gas ${power.gas} · Batteries in storage: ${stored.length > 0 ? stored.join(', ') : 'none'}`,
   });
   return lines;
+}
+
+/** A turret mount's name in menus. */
+export const MOUNT_NAME: Readonly<Record<TurretMount, string>> = {
+  tower: 'Tower',
+  'wall-walk': 'Wall mount',
+};
+const mountName = (mount: TurretMount, column: number, row: number): string =>
+  `${MOUNT_NAME[mount]} · ${slotName(column, row)}`;
+
+/** A turret's state as the panel says it (design §7). */
+export const TURRET_STATE: Readonly<Record<TurretState, string>> = {
+  lit: 'powered',
+  dark: 'dark: the bank is empty',
+  offline: 'offline: its wall is broken',
+  jammed: 'jammed',
+};
+
+/** One turret menu line: a note, or an action with its cost (or null) and dry-run result. */
+export type SlotLine =
+  | { kind: 'heading' | 'note'; text: string }
+  | {
+      kind: 'action';
+      label: string;
+      cost: Partial<Stock> | null;
+      result: Result;
+      /** Asked before the action goes ahead. */
+      confirm?: string;
+    };
+
+/** The `game.base.turrets` index of the turret on this mount, or -1. */
+export const turretIndex = (
+  game: GameState,
+  mount: TurretMount,
+  column: number,
+  row: number,
+): number =>
+  game.base.turrets.findIndex((t) => t.mount === mount && t.column === column && t.row === row);
+
+/** Building an Auto-turret on this mount, as a dry run. */
+export function buildTurretLine(
+  game: GameState,
+  mount: TurretMount,
+  column: number,
+  row: number,
+): SlotLine {
+  return {
+    kind: 'action',
+    label: `Auto-turret${mount === 'wall-walk' ? ' (wall mount)' : ''}`,
+    cost: TURRET.cost,
+    result: buildTurret(game.base, game.stock, researched(game, 'auto-turret'), mount, column, row),
+  };
+}
+
+/** Turret `index`'s menu: where it is, its condition and state, Repair and Salvage. */
+export function turretLines(game: GameState, index: number): SlotLine[] {
+  const { layers, turrets } = layoutOf(game.base);
+  const t = game.base.turrets[index]!;
+  const state = turretState({ layers, energy: game.power.bank }, turrets[index]!);
+  const value = salvageValue(t);
+  return [
+    { kind: 'heading', text: `Auto-turret · ${mountName(t.mount, t.column, t.row)}` },
+    {
+      kind: 'note',
+      text: `Condition ${wholeLeft(t.condition)}/${MAX_CONDITION} · ${TURRET_STATE[state]}`,
+    },
+    {
+      kind: 'action',
+      label: 'Repair turret',
+      cost: turretRepairCost(t),
+      result: repairTurret(game.base, game.stock, index),
+    },
+    {
+      kind: 'action',
+      label: `Salvage for ${stockText(value)}`,
+      cost: null,
+      result: salvageTurret(game.base, game.stock, index),
+      confirm: `Salvage this turret for ${stockText(value)}? It is dismantled.`,
+    },
+  ];
+}
+
+/** What clicking `line` gives: its result once `ask` agrees to any `confirm`, else null. */
+export function lineResult(line: SlotLine, ask: (question: string) => boolean): Result | null {
+  if (line.kind !== 'action' || !line.result.ok) return null;
+  if (line.confirm !== undefined && !ask(line.confirm)) return null;
+  return line.result;
+}
+
+/** Every free mount turret `index` may move to, in field order, each a dry run that holds. */
+export function relocateTargets(
+  game: GameState,
+  index: number,
+): { key: string; label: string; result: Extract<Result, { ok: true }> }[] {
+  const targets: { key: string; label: string; result: Extract<Result, { ok: true }> }[] = [];
+  COLUMNS.forEach((_, column) => {
+    for (const mount of TURRET_MOUNTS) {
+      for (let row = 0; row < SEGMENTS; row++) {
+        const result = moveTurret(game.base, game.stock, index, mount, column, row);
+        if (result.ok) {
+          targets.push({
+            key: `${mount}:${column}:${row}`,
+            label: mountName(mount, column, row),
+            result,
+          });
+        }
+      }
+    }
+  });
+  return targets;
 }
 
 export interface BuildPanel {
@@ -228,6 +365,8 @@ export function createBuildPanel(
 
   let defenderId: string | null = null;
   let startKey: string | null = null;
+  // The Relocate pick, kept by target key so a redraw (a Gas burnt) doesn't reset it.
+  let relocateKey: string | null = null;
   // The roster shows in place of the build panel until "Back".
   let rosterOpen = false;
   let shown: { game: GameState; selected: SlotHit | null } | null = null;
@@ -263,19 +402,76 @@ export function createBuildPanel(
       if (result.ok) onGame(result.game);
     });
 
-  /** A section of headings, notes and dry-run actions (the Lab, power). */
+  /** The bank meter: a `<meter>` labelled with its text. */
+  function meter(text: string, value: number, max: number): HTMLElement {
+    const label = el('label', 'build-field', text);
+    const bar = el('meter', 'build-meter');
+    bar.min = 0;
+    bar.max = max;
+    bar.value = value;
+    label.append(bar);
+    return label;
+  }
+
+  /** A section of headings, notes, the meter and dry-run actions (the Lab, power). */
   function linesSection(className: string, lines: LabLine[]): HTMLElement {
     const section = el('section', className);
     section.append(
       ...lines.map((line) =>
         line.kind === 'action'
           ? labOption(line.label, line.cost, line.result)
-          : line.kind === 'heading'
-            ? el('h3', 'build-slot-title', line.text)
-            : el('p', 'build-slot-note', line.text),
+          : line.kind === 'meter'
+            ? meter(line.text, line.value, line.max)
+            : line.kind === 'heading'
+              ? el('h3', 'build-slot-title', line.text)
+              : el('p', 'build-slot-note', line.text),
       ),
     );
     return section;
+  }
+
+  /** A turret menu line; an action with `confirm` asks first. */
+  function slotLine(line: SlotLine): HTMLElement {
+    if (line.kind !== 'action') {
+      return line.kind === 'heading'
+        ? el('h3', 'build-slot-title', line.text)
+        : el('p', 'build-slot-note', line.text);
+    }
+    const { result } = line;
+    return choiceButton(line.label, line.cost, result.ok ? null : result.reason, () => {
+      const done = lineResult(line, (q) => window.confirm(q));
+      if (done?.ok) onChange(done.base, done.stock);
+    });
+  }
+
+  /** Turret `index`'s menu, then Relocate: a list of the free mounts and a button. */
+  function turretMenu(game: GameState, index: number): HTMLElement[] {
+    const targets = relocateTargets(game, index);
+    if (targets.length === 0) {
+      return [
+        ...turretLines(game, index).map(slotLine),
+        el('p', 'build-slot-note', 'Relocate: no free mount'),
+      ];
+    }
+    const to = el('select', 'build-select');
+    for (const t of targets) {
+      const o = el('option', '', t.label);
+      o.value = t.key;
+      o.selected = t.key === relocateKey;
+      to.append(o);
+    }
+    to.addEventListener('change', () => {
+      relocateKey = to.value;
+    });
+    const field = el('label', 'build-field', 'Relocate to');
+    field.append(to);
+    const move = el('button', 'build-option', 'Relocate');
+    move.type = 'button';
+    move.addEventListener('click', () => {
+      const target = targets.find((t) => t.key === to.value);
+      if (target) onChange(target.result.base, target.result.stock);
+    });
+    return [...turretLines(game, index).map(slotLine), field, move];
   }
 
   function slotMenu(game: GameState, slot: SlotHit): HTMLElement[] {
@@ -288,9 +484,14 @@ export function createBuildPanel(
       if (built) {
         return [el('h3', 'build-slot-title', `${POST_NAME[kind]} · ${slotName(column, row)}`)];
       }
+      if (kind === 'tower') {
+        const turret = turretIndex(game, 'tower', column, row);
+        if (turret >= 0) return turretMenu(game, turret);
+      }
       return [
         el('h3', 'build-slot-title', `${slotName(column, row)}: empty`),
         option(POST_NAME[kind], POST_COST[kind], buildPost(base, stock, post)),
+        ...(kind === 'tower' ? [slotLine(buildTurretLine(game, 'tower', column, row))] : []),
       ];
     }
     const seg = base.layers.find((l) => l.column === column)?.slots[row] ?? null;
@@ -309,6 +510,15 @@ export function createBuildPanel(
     const next = TIER_ORDER[TIER_ORDER.indexOf(seg.tier) + 1];
     const walk: BasePost = { kind: 'wall-walk', column, row };
     const hasWalk = base.posts.some((p) => postKey(p) === postKey(walk));
+    const turret = turretIndex(game, 'wall-walk', column, row);
+    const mount = hasWalk
+      ? [el('p', 'build-slot-note', 'Has a wall-walk post')]
+      : turret >= 0
+        ? turretMenu(game, turret)
+        : [
+            option(POST_NAME['wall-walk'], POST_COST['wall-walk'], buildPost(base, stock, walk)),
+            slotLine(buildTurretLine(game, 'wall-walk', column, row)),
+          ];
     return [
       el(
         'h3',
@@ -322,9 +532,7 @@ export function createBuildPanel(
         upgradeSegment(base, stock, tiers, column, row),
       ),
       option('Repair', repairCost(seg), repairSegment(base, stock, column, row)),
-      hasWalk
-        ? el('p', 'build-slot-note', 'Has a wall-walk post')
-        : option(POST_NAME['wall-walk'], POST_COST['wall-walk'], buildPost(base, stock, walk)),
+      ...mount,
     ];
   }
 
