@@ -254,3 +254,36 @@ body {
   margin: 0 0 16px;
   color: #b3ada2;
 }
+
+.hud-warning {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border: 1px solid #c43b3b;
+  border-radius: 6px;
+  background: rgb(60 18 18 / 90%);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.hud-warning[hidden] {
+  display: none;
+}
+
+.hud-replace .build-field {
+  margin-bottom: 12px;
+}
+
+.hud-skip {
+  margin-top: 16px;
+}
+
+.hud-result-list {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  color: #d8d4cc;
+}

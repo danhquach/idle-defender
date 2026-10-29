@@ -1,10 +1,12 @@
-// HUD over the canvas: status bar, the 1-of-3 card panel, the result panel and a
-// short toast (refused moves).
+// HUD over the canvas: status bar, the "camp is falling" warning, the 1-of-3 card
+// panel, the replacement panel, the result panel and a short toast (refused moves).
 // Text reaches the page only through textContent.
+import type { PostKind } from '../core/base.ts';
 import { UPGRADES } from '../core/cards.ts';
-import { MATERIALS, type Stock } from '../core/data.ts';
-import { standInPayout } from '../core/game.ts';
-import type { Card, HordeState } from '../core/horde.ts';
+import { FALL_WARNING, MATERIALS, type Stock } from '../core/data.ts';
+import { hordePayout, xpGains } from '../core/game.ts';
+import type { Card, HordeState, Post } from '../core/horde.ts';
+import { replacePosts } from '../core/replace.ts';
 import { xpToNext } from '../core/waves.ts';
 
 /** How long a toast stays up. */
@@ -21,6 +23,16 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+export const POST_NAME: Readonly<Record<PostKind, string>> = {
+  tower: 'Tower',
+  'wall-walk': 'Wall-walk post',
+  ground: 'Ground post',
+};
+export const slotName = (column: number, row: number): string =>
+  `Layer ${column + 1}, row ${row + 1}`;
+export const postName = (p: Pick<Post, 'kind' | 'column' | 'row'>): string =>
+  `${POST_NAME[p.kind]} · ${slotName(p.column, p.row)}`;
+
 function cardText(card: Card): { title: string; body: string } {
   if (card.kind === 'recruit')
     return { title: `Recruit ${card.defender.name}`, body: 'Takes a free post' };
@@ -32,7 +44,6 @@ export function statusText(s: HordeState): string {
   return [
     `Horde ${s.hordeNumber}`,
     `Wave ${s.wave}/${s.waveCount}`,
-    `Camp ${Math.ceil(s.camp.hp)}/${s.camp.maxHp}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
   ].join(' · ');
 }
@@ -45,20 +56,43 @@ export function stockText(stock: Partial<Stock>): string {
 
 export function payoutText(s: HordeState): string {
   if (s.outcome === 'fighting') return '';
-  return `Payout: ${stockText(standInPayout(s.hordeNumber, s.outcome))}`;
+  return `Payout: ${stockText(hordePayout(s))}`;
+}
+
+/** The result screen's lines: XP per defender on a win; the injured either way. */
+export function resultLines(s: HordeState): string[] {
+  if (s.outcome === 'fighting') return [];
+  if (s.outcome === 'won') {
+    return xpGains(s).map((g) => `${g.name} +${g.xp} XP${g.injured ? ' · injured' : ''}`);
+  }
+  return ['No XP on a loss', ...s.injured.map((i) => `${i.defender.name} · injured`)];
+}
+
+/** The countdown while the camp is falling, else ''. */
+export function fallingText(s: HordeState): string {
+  if (s.fallingFor <= 0 || s.outcome !== 'fighting') return '';
+  return `The camp is falling — ${Math.ceil(FALL_WARNING - s.fallingFor)} s`;
 }
 
 export function createHud(
   root: HTMLElement,
   onChoose: (index: number) => void,
   onDone: () => void,
+  onReplace: (defenderId: string, postId: number) => void,
+  onSkip: () => void,
 ): { update(state: HordeState): void; show(visible: boolean): void; toast(text: string): void } {
   const hud = el('div', 'hud');
   const bar = el('div', 'hud-bar');
+  const warning = el('div', 'hud-warning');
+  warning.setAttribute('role', 'alert');
+  warning.hidden = true;
   const cards = el('div', 'hud-panel hud-cards');
+  const replace = el('div', 'hud-panel hud-replace');
+  replace.hidden = true;
   const result = el('div', 'hud-panel hud-result');
   const resultTitle = el('h2', 'hud-result-title');
   const resultBody = el('p', 'hud-result-body');
+  const resultList = el('ul', 'hud-result-list');
   const back = el('button', 'hud-button', 'Back to build');
   back.type = 'button';
   back.addEventListener('click', () => {
@@ -67,14 +101,14 @@ export function createHud(
     result.hidden = true;
     onDone();
   });
-  result.append(resultTitle, resultBody, back);
+  result.append(resultTitle, resultBody, resultList, back);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, toast, cards, result);
+  hud.append(bar, warning, toast, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -91,6 +125,47 @@ export function createHud(
     const index = ['1', '2', '3'].indexOf(e.key);
     if (index >= 0) choose(index);
   });
+
+  // Like the cards: hide at once so a second click can't answer the same offer twice.
+  let shownReplace = '';
+  function answer(act: () => void): void {
+    if (replace.hidden) return;
+    replace.hidden = true;
+    shownReplace = '';
+    act();
+  }
+  function showReplace(state: HordeState): void {
+    const offer = state.replace!;
+    const name = state.injured.find((i) => i.defender.id === offer.injuredId)?.defender.name ?? '';
+    const posts = replacePosts(state);
+    const heading = el('h2', 'hud-cards-title', `${name} is injured: send someone in?`);
+    const parts: HTMLElement[] = [heading];
+    const pick = el('select', 'build-select');
+    for (const p of posts) {
+      const o = el('option', '', postName(p));
+      o.value = String(p.id);
+      pick.append(o);
+    }
+    if (offer.postId === null) {
+      const label = el('label', 'build-field', 'Post');
+      label.append(pick);
+      parts.push(label);
+    } else {
+      parts.push(el('p', 'hud-result-body', `Takes ${postName(posts[0]!)}`));
+    }
+    const row = el('div', 'hud-card-row');
+    for (const d of state.bench) {
+      const button = el('button', 'hud-card hud-card-recruit');
+      button.type = 'button';
+      button.append(el('span', 'hud-card-title', `Send in ${d.name}`));
+      button.addEventListener('click', () => answer(() => onReplace(d.id, Number(pick.value))));
+      row.append(button);
+    }
+    const skip = el('button', 'hud-button hud-skip', 'Skip');
+    skip.type = 'button';
+    skip.addEventListener('click', () => answer(onSkip));
+    replace.replaceChildren(...parts, row, skip);
+  }
 
   function showOffer(offer: Card[]): void {
     const heading = el('h2', 'hud-cards-title', 'Level up: pick one');
@@ -126,6 +201,22 @@ export function createHud(
     update(state) {
       const status = statusText(state);
       if (bar.textContent !== status) bar.textContent = status;
+      const falling = fallingText(state);
+      if (warning.textContent !== falling) warning.textContent = falling;
+      warning.hidden = falling === '';
+
+      // Redraw only when the offer, bench or free posts change (the sim clones each tick).
+      const replaceKey = state.replace
+        ? JSON.stringify([state.replace, state.bench, replacePosts(state).map((p) => p.id)])
+        : '';
+      if (replaceKey !== shownReplace) {
+        shownReplace = replaceKey;
+        replace.hidden = replaceKey === '';
+        if (state.replace) {
+          showReplace(state);
+          replace.querySelector('button')?.focus();
+        } else replace.replaceChildren();
+      }
 
       // The sim clones its state each tick, so compare the offer by content.
       if (JSON.stringify(state.offer) !== JSON.stringify(shownOffer)) {
@@ -140,6 +231,7 @@ export function createHud(
         result.hidden = !fought;
         resultTitle.textContent = state.outcome === 'won' ? 'Horde held' : 'The camp fell';
         resultBody.textContent = payoutText(state);
+        resultList.replaceChildren(...resultLines(state).map((line) => el('li', '', line)));
         if (fought) back.focus();
       }
     },

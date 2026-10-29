@@ -176,6 +176,16 @@ Defenders stand on **posts** the player builds and chooses between.
   can't be recruited back into the same horde, and can't defend or patrol
   until they recover (§11). No one dies in a horde. The loss rule is in
   §2.
+- **Enemies inside the camp** *(designer's call)*: once an enemy has
+  crossed every layer, it walks straight to the nearest defender (walls
+  don't stop it from the camp side) and hits them; with no defender left,
+  it waits at the camp line while the camp falls (§2).
+- **Replacing the injured** *(designer's call)*: when a wave is cleared,
+  the fight pauses to offer a replacement for each injured defender, one
+  offer each in injury order. An available defender from the bench takes
+  the injured one's post, or a free post the player picks if that one is
+  taken or unusable. The player can skip. With nobody available or no free
+  post, no offer shows; after the last wave the horde is won.
 - **Fight levels:** kills give fight XP. Each fight level pauses for a pick
   of 1 of 3 offers:
   - an **upgrade card** (§8), or

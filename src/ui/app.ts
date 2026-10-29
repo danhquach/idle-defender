@@ -2,7 +2,7 @@
 // panel between hordes and the HUD in a fight.
 import { chooseCard } from '../core/cards.ts';
 import { FIELD } from '../core/data.ts';
-import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
+import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import {
   enemyAt,
   layoutOf,
@@ -12,6 +12,7 @@ import {
   tick,
   type HordeState,
 } from '../core/horde.ts';
+import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { createBuildPanel } from './build.ts';
 import { createHud } from './hud.ts';
 import {
@@ -72,8 +73,17 @@ export function start(root: HTMLElement): void {
     },
     () => {
       if (!horde || horde.outcome === 'fighting') return;
-      game = finishHorde(game, horde);
+      game = finishHorde(game, horde, Date.now());
       toBuild();
+    },
+    (defenderId, postId) => {
+      if (!horde?.replace) return;
+      const sent = replaceInjured(horde, defenderId, postId);
+      if (sent.ok) horde = sent.state;
+      else hud.toast(sent.reason);
+    },
+    () => {
+      if (horde?.replace) horde = skipReplace(horde);
     },
   );
   const panel = createBuildPanel(
@@ -84,7 +94,8 @@ export function start(root: HTMLElement): void {
     },
     (defenderId, postId) => {
       // The seed is the only randomness from outside the core.
-      horde = startHorde(game, Date.now(), defenderId, postId);
+      const now = Date.now();
+      horde = startHorde(game, now, defenderId, postId, now);
       selected = null;
       selectedDefender = null;
       panel.hide();
@@ -259,6 +270,12 @@ export function start(root: HTMLElement): void {
       drawScene(ctx, horde, cam, view, null, selectedDefender);
       hud.update(horde);
     } else {
+      // Someone back from rest: redraw the start picker.
+      const recovered = recover(game, Date.now());
+      if (recovered !== game) {
+        game = recovered;
+        panel.show(game, selected);
+      }
       drawScene(ctx, buildScene(game, panel.choice(game)), cam, view, { selected });
     }
     requestAnimationFrame(frame);

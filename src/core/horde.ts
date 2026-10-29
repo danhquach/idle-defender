@@ -3,10 +3,13 @@ import { levelUp, postUsable } from './cards.ts';
 import {
   CAMP,
   COLUMNS,
+  DEFENDER_HP,
   ENEMIES,
   ENEMY_RADIUS,
+  FALL_WARNING,
   FIELD,
   GAP_SENSE,
+  MELEE_REACH,
   POST_RANGE,
   SEGMENT_HEIGHT,
   SEGMENTS,
@@ -21,6 +24,7 @@ import {
   type EnemyKind,
   type WeaponId,
 } from './data.ts';
+import { openReplace } from './replace.ts';
 import { int, rngFrom, type Rng, type RngState } from './rng.ts';
 import { enemyHp, waveCount, waveSize } from './waves.ts';
 
@@ -47,6 +51,8 @@ export interface Enemy {
   hp: number;
   maxHp: number;
   nextAttackAt: number;
+  /** Past every layer: it hunts defenders and walls no longer stop it (sticky). */
+  inCamp: boolean;
 }
 /** An unbuilt slot is `{ kind: null, tier: null, hp: 0, maxHp: 0 }`: an open gap. */
 export interface Segment {
@@ -79,6 +85,22 @@ export interface Defender extends DefenderSpec {
   y: number;
   postId: number;
   walking: boolean;
+  hp: number;
+  maxHp: number;
+}
+/** A defender injured in this fight, and the post they held (stood on or walked to). */
+export interface Injury {
+  defender: DefenderSpec;
+  postId: number;
+  /** Fight time of the injury, in s: rest is timed from here (design §11). */
+  at: number;
+  /** A replacement was offered (taken or skipped); each injury gets one offer. */
+  offered: boolean;
+}
+/** The open replacement offer: post `postId` is the injured one's, or null for the player's pick. */
+export interface ReplaceOffer {
+  injuredId: string;
+  postId: number | null;
 }
 export type MoveResult = { ok: true; state: HordeState } | { ok: false; reason: string };
 export interface Shot {
@@ -109,10 +131,16 @@ export interface HordeState {
   enemies: Enemy[];
   nextEnemyId: number;
   layers: Layer[];
-  camp: { hp: number; maxHp: number };
   posts: Post[];
   defenders: Defender[];
   bench: DefenderSpec[];
+  /** In injury order; never on the bench, so never back in this fight. */
+  injured: Injury[];
+  /** Ids of everyone who took part (starter, recruits, replacements), in join order. */
+  tookPart: string[];
+  /** Seconds the camp has been falling (an enemy inside, no defender left); 0 when not. */
+  fallingFor: number;
+  replace: ReplaceOffer | null;
   xp: number;
   level: number;
   offer: Card[] | null;
@@ -126,6 +154,9 @@ export interface HordeState {
 // Accumulated float time can land a hair before a due time; count it as due.
 const EPS = 1e-9;
 const due = (time: number, at: number): boolean => time >= at - EPS;
+/** Waiting on the player: a card pick or a replacement. */
+const paused = (s: HordeState): boolean =>
+  s.offer !== null || s.replace !== null || s.outcome !== 'fighting';
 
 export function newHorde(seed: number, setup: HordeSetup): HordeState {
   const { hordeNumber, roster, startDefenderId, base, startPostId } = setup;
@@ -150,10 +181,13 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     enemies: [],
     nextEnemyId: 0,
     layers,
-    camp: { hp: CAMP.maxHp, maxHp: CAMP.maxHp },
     posts,
     defenders: [standing(start, startPost, 0)],
     bench: roster.filter((d) => d !== start).map((d) => ({ ...d })),
+    injured: [],
+    tookPart: [start.id],
+    fallingFor: 0,
+    replace: null,
     xp: 0,
     level: 1,
     offer: null,
@@ -164,10 +198,21 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
   };
 }
 
-/** `spec` standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
+/** `spec` at full HP standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
 export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): Defender {
   const { id, name, weapon } = spec;
-  return { id, name, weapon, nextShotAt, x: post.x, y: post.y, postId: post.id, walking: false };
+  return {
+    id,
+    name,
+    weapon,
+    nextShotAt,
+    x: post.x,
+    y: post.y,
+    postId: post.id,
+    walking: false,
+    hp: DEFENDER_HP,
+    maxHp: DEFENDER_HP,
+  };
 }
 
 /** The base laid out on the field: layers at their wall `x`, posts unmanned, ids = `base.posts` index. */
@@ -194,7 +239,7 @@ export function layoutOf(base: Base): { layers: Layer[]; posts: Post[] } {
 export function tick(state: HordeState, dt: number): HordeState {
   if (!Number.isFinite(dt) || dt < 0) throw new RangeError(`tick: bad dt ${dt}`);
   const s = structuredClone(state);
-  if (s.offer !== null || s.outcome !== 'fighting') {
+  if (paused(s)) {
     s.acc = 0;
     return s;
   }
@@ -203,7 +248,7 @@ export function tick(state: HordeState, dt: number): HordeState {
   while (s.acc >= STEP - EPS) {
     s.acc = Math.max(0, s.acc - STEP);
     step(s, rng);
-    if (s.offer !== null || s.outcome !== 'fighting') {
+    if (paused(s)) {
       s.acc = 0;
       break;
     }
@@ -274,6 +319,7 @@ export function moveDefender(state: HordeState, defenderId: string, postId: numb
   const refuse = (reason: string): MoveResult => ({ ok: false, reason });
   if (state.outcome !== 'fighting') return refuse('The fight is over');
   if (state.offer !== null) return refuse('Pick a card first');
+  if (state.replace !== null) return refuse('Pick a replacement first');
   if (defender.postId === postId) {
     return refuse(defender.walking ? 'Already on the way' : 'Already there');
   }
@@ -310,12 +356,13 @@ function step(s: HordeState, rng: Rng): void {
   walk(s);
   fire(s);
   removeDead(s);
-  const sliding = move(s);
+  const moved = move(s);
   separate(s);
-  attack(s, sliding);
+  attack(s, moved);
+  injure(s);
   drop(s);
   advanceWave(s);
-  if (s.camp.hp === 0) s.outcome = 'lost';
+  fall(s);
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
   s.time += STEP;
@@ -332,6 +379,7 @@ function spawn(s: HordeState, rng: Rng): void {
       hp,
       maxHp: hp,
       nextAttackAt: 0,
+      inCamp: false,
     });
     s.toSpawn -= 1;
     s.nextSpawnAt = s.time + SPAWN_INTERVAL;
@@ -435,12 +483,53 @@ function nearestGap(layer: Layer, y: number): Segment | null {
 
 /** An enemy sliding toward a gap: where it started this step and the gap centre it heads for. */
 type Slide = { fromY: number; toY: number };
+/** This step's moves, by enemy id: slides toward a gap, and enemies in the camp within reach of a defender. */
+type Moves = { sliding: Map<number, Slide>; reached: Map<number, Defender> };
 
-/** Moves every enemy; returns the slides toward a gap this step, by enemy id. */
-function move(s: HordeState): Map<number, Slide> {
+/** The defender in the fight nearest `e` (ties → lower index), standing or walking. */
+function nearestDefender(s: HordeState, e: Enemy): Defender | undefined {
+  let best: Defender | undefined;
+  let bestD = Infinity;
+  for (const d of s.defenders) {
+    const dist = Math.hypot(d.x - e.x, d.y - e.y);
+    if (dist < bestD) {
+      best = d;
+      bestD = dist;
+    }
+  }
+  return best;
+}
+
+/**
+ * Design §4: an enemy inside the camp walks straight to the nearest defender (walls
+ * don't stop it from the camp side) and stops within reach; with no defender left it
+ * walks to the camp line and waits.
+ */
+function hunt(s: HordeState, e: Enemy, speed: number, reached: Map<number, Defender>): void {
+  const target = nearestDefender(s, e);
+  if (!target) {
+    if (e.x > CAMP.x) e.x = Math.max(CAMP.x, e.x - speed);
+    return;
+  }
+  const dist = Math.hypot(target.x - e.x, target.y - e.y);
+  const stride = Math.min(speed, dist - MELEE_REACH);
+  if (stride > 0) {
+    e.x += ((target.x - e.x) / dist) * stride;
+    e.y += ((target.y - e.y) / dist) * stride;
+  }
+  if (dist - Math.max(0, stride) <= MELEE_REACH + EPS) reached.set(e.id, target);
+}
+
+/** Moves every enemy; returns this step's slides and the enemies in the camp within reach. */
+function move(s: HordeState): Moves {
   const sliding = new Map<number, Slide>();
+  const reached = new Map<number, Defender>();
   for (const e of s.enemies) {
     const speed = ENEMIES[e.kind].speed * STEP;
+    if (e.inCamp) {
+      hunt(s, e, speed, reached);
+      continue;
+    }
     let stop = stopLine(s, e);
     const gap = stop.layer && stop.x >= e.x - GAP_SENSE ? nearestGap(stop.layer, e.y) : null;
     if (gap) {
@@ -451,8 +540,10 @@ function move(s: HordeState): Map<number, Slide> {
       stop = stopLine(s, e);
     }
     e.x = Math.max(stop.x, e.x - speed);
+    // Only through a gap in every layer; from now on it hunts defenders.
+    e.inCamp = s.layers.every((l) => e.x < l.x + WALL.depth);
   }
-  return sliding;
+  return { sliding, reached };
 }
 
 /**
@@ -485,21 +576,58 @@ function separate(s: HordeState): void {
 }
 
 /**
- * Enemies at their stop line hit the segment in front (or the camp). One still getting
- * closer to a gap this step (after separation) holds off; one the crowd pushed back
- * attacks, so a packed crowd can't keep it from ever hitting the wall.
+ * Enemies at their stop line hit the segment in front. One still getting closer to a
+ * gap this step (after separation) holds off; one the crowd pushed back attacks, so a
+ * packed crowd can't keep it from ever hitting the wall. An enemy in the camp hits the
+ * defender it reached this step (before separation, so a crowd can't hold it off).
  */
-function attack(s: HordeState, sliding: Map<number, Slide>): void {
+function attack(s: HordeState, moves: Moves): void {
   for (const e of s.enemies) {
-    const slide = sliding.get(e.id);
-    if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
-    const stop = stopLine(s, e);
-    if (e.x > stop.x || !due(s.time, e.nextAttackAt)) continue;
+    if (!due(s.time, e.nextAttackAt)) continue;
     const enemy = ENEMIES[e.kind];
-    const target = stop.segment ?? s.camp;
+    let target: { hp: number } | null;
+    if (e.inCamp) {
+      target = moves.reached.get(e.id) ?? null;
+    } else {
+      const slide = moves.sliding.get(e.id);
+      if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
+      const stop = stopLine(s, e);
+      target = e.x > stop.x ? null : stop.segment;
+    }
+    if (!target) continue;
     target.hp = Math.max(0, target.hp - enemy.damage);
     e.nextAttackAt = s.time + enemy.attackInterval;
   }
+}
+
+/** Design §4: a defender at 0 HP is injured and leaves the fight; their post is free at once. */
+function injure(s: HordeState): void {
+  const kept: Defender[] = [];
+  for (const d of s.defenders) {
+    if (d.hp > 0) {
+      kept.push(d);
+      continue;
+    }
+    s.posts[d.postId]!.defenderId = null;
+    s.injured.push({
+      defender: { id: d.id, name: d.name, weapon: d.weapon },
+      postId: d.postId,
+      at: s.time,
+      offered: false,
+    });
+  }
+  s.defenders = kept;
+}
+
+/** Design §2: an enemy in the camp and no defender left for `FALL_WARNING` s loses the horde. */
+function fall(s: HordeState): void {
+  if (s.outcome !== 'fighting') return;
+  if (s.defenders.length > 0 || !s.enemies.some((e) => e.inCamp)) {
+    s.fallingFor = 0;
+    return;
+  }
+  s.fallingFor += STEP;
+  if (due(s.fallingFor, FALL_WARNING)) s.outcome = 'lost';
 }
 
 /**
@@ -547,4 +675,5 @@ function advanceWave(s: HordeState): void {
   s.wave += 1;
   s.toSpawn = waveSize(s.hordeNumber, s.wave);
   s.breakUntil = s.time + WAVE_BREAK;
+  openReplace(s);
 }

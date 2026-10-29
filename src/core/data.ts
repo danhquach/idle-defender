@@ -7,7 +7,8 @@ export const STEP = 1 / 30;
 /** The open field: `x` runs 0…right (camp left, horde from the right), `y` 0…height. */
 export const FIELD = { right: 1600, height: 400 } as const;
 
-export const CAMP = { x: 120, maxHp: 500 } as const;
+/** The camp line: an enemy inside the camp with no defender to hit waits here. */
+export const CAMP = { x: 120 } as const;
 /** Wall thickness along `x`; a layer's wall spans `[x, x + depth]`. */
 export const WALL = { depth: 20 } as const;
 /** Segments per layer, top to bottom; row `r` covers `y` in `[r, r + 1) * SEGMENT_HEIGHT`. */
@@ -100,14 +101,26 @@ export const WALK_SPEED = 80;
 export const START_STOCK: Readonly<Stock> = { scrap: 60, wood: 60, metal: 0, concrete: 0 };
 export const START_TIERS: readonly Tier[] = ['wood'];
 
+// --- Horde rules (M3). Design §2, §4 and §11. ---
+
+/** Defender HP in a horde (Grit adds to it with ID-011). */
+export const DEFENDER_HP = 100;
+/** How close an enemy inside the camp must be to hit a defender. */
+export const MELEE_REACH = 2 * ENEMY_RADIUS;
+/** Seconds the camp holds with an enemy inside and no defender left, before the horde is lost. */
+export const FALL_WARNING = 10;
 /**
- * M2 stand-in for horde rewards (replaced by ID-006): a win pays `base + perHorde × n`
- * of each material; a loss pays `lossShare` of that, rounded down (design §2's cap).
+ * Horde payout: a win pays `base + perHorde × n` of each material (n = horde number);
+ * a loss pays `lossShare × wave reached / wave count` of that, rounded down (design §2).
  */
-export const STAND_IN_PAYOUT = {
+export const HORDE_PAYOUT = {
   win: { scrap: { base: 15, perHorde: 5 }, wood: { base: 20, perHorde: 10 } },
   lossShare: 0.25,
 } as const;
+/** Defender XP for a win: `base + perHorde × n`, in full to everyone who took part. */
+export const DEFENDER_XP = { base: 10, perHorde: 5 } as const;
+/** Real time an injured defender rests before they can defend again, in ms (design §11). */
+export const RECOVERY_MS = 2 * 60 * 60 * 1000;
 
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;
