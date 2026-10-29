@@ -46,7 +46,8 @@ loot, and the further you push into danger, the more you can win — or lose.
    commander perks + 1 defender →         travel → loot roll → return
    recruits, cards, skills                risk and reward ∝ danger
                     │                               │
-   win: XP + Mutated Genes (+ some loot)  location-typed loot, XP
+   win: XP, camp XP, Mutated Genes        location-typed loot, XP
+        (+ some loot)
                     └───────────────┬───────────────┘
                                     ▼
                          stronger base and squad
@@ -62,13 +63,18 @@ loot, and the further you push into danger, the more you can win — or lose.
   started with damaged barriers.
 - **Winning a horde:** the last wave is cleared (for a boss horde, the
   Mutated Horror is dead) *(designer's call)*.
+- **After a horde** *(designer's call)*: the result screen tallies
+  **defender XP** and **camp XP**. A defender who levels up gets stat
+  points (§6). A camp that levels up offers a camp-level pick (§11 Camp
+  level). Fight levels and their cards (§4) belong to the fight only and
+  end with it.
 - **Losing a horde:** the horde is lost when enemies have broken through
   every barrier layer **at any one gap** (so they are inside the camp) and
   **every defender on the field is injured** (§4), for 10 seconds
   *(designer's call: one breach through every layer is enough, and the
   10-second "camp is falling" warning gives a last skill a chance; if it
   needed every segment broken, enemies in the camp with no one to hit
-  would stall the fight)*. No win reward (no XP, no Genes); barrier and turret damage stays
+  would stall the fight)*. No win reward (no defender XP, no camp XP, no Genes); barrier and turret damage stays
   and must be repaired; injured defenders need rest, Food and Medicine
   (§11); retry the same horde number. Defenders never die in hordes —
   death only happens on patrols (§10).
@@ -190,8 +196,8 @@ Defenders stand on **posts** the player builds and chooses between.
   - **active skills**: click-to-target abilities that cost cash and have a
     cooldown, e.g. airstrike, molotov, flashbang.
   Cash can't buy turrets or traps, and it resets to 0 when the horde ends.
-- **Reward on success:** mostly **defender XP** and **Mutated Genes**, plus
-  a small chance of materials or a weapon. Higher horde numbers pay more.
+- **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
+  level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or
   not, so a recruit never dilutes it *(designer's call)*. Defenders left on the bench get no horde XP; patrols are their other way to level (§10).
 
@@ -506,13 +512,14 @@ Set before sending; they apply to any location, plaza or single building.
 | Chemicals | Patrols (pharmacy, hospital) | Chemical traps (slow, burn, corrode, paralyze) |
 | Mutated Genes | Hordes, especially mutants and bosses | Research |
 | Defender XP | Hordes, patrols | Defender levels → stat points |
+| Camp XP | Horde wins | Camp levels → camp-level picks |
 
 - **Research** (paid in Mutated Genes): barrier tiers and traps, turret
   types, battery tiers, new cards in the offer pool, commander perks and
   perk slots, active skills, more cars, larger base area, new world-map
   locations.
 - **New defenders** come mainly as **survivors** found on patrols (§10),
-  each with a name, level, stats and weapon. Needed to replace losses.
+  and rarely from a camp level-up (§11 Camp level), each with a name, level, stats and weapon. Needed to replace losses.
 - **Camp capacity:** the camp holds a limited number of people (starting
   point: 5). Every defender counts, wherever they are (on patrol, crafting,
   injured). **Camp upgrades** (materials) add slots (starting point: +2
@@ -534,6 +541,33 @@ Set before sending; they apply to any location, plaza or single building.
 - **No deadlock** *(designer's call)*: every horde pays a little Scrap and
   Wood — more on a win, less on a loss — so the base can be repaired even
   with no patrol loot.
+
+### Camp level *(designer's call)*
+
+- **Camp XP** comes from winning hordes, and rises with the horde number
+  *(guess: half the horde's defender XP)*. Patrols give no camp XP
+  *(guess)*. A loss gives none (§2).
+- **Camp level-up:** on the result screen after a horde, each camp level
+  gained offers a pick of **1 of 3 permanent camp upgrades** *(guess: 1 of
+  3, like fight cards)*.
+- **Not research:**
+  - Research (Mutated Genes) unlocks new things: tiers, turrets, cards,
+    perks.
+  - Camp-level upgrades are free, small and permanent: they strengthen
+    what the camp already has.
+  - They also differ from **camp upgrades** paid in materials, which only
+    add camp slots.
+  - Example upgrades *(guess)*: +5% horde cash; start each horde with some
+    cash; barrier repairs cost 10% less; injury recovery 10% faster; +5%
+    patrol loot.
+- **A survivor wants to join** *(designer's call: rare)*:
+  - On a camp level-up, one slot of the offer can be a survivor instead of
+    an upgrade *(guess: 10% chance per level-up)*.
+  - Accepting follows the patrol-survivor rules (§10): it needs a free
+    camp slot, and level and weapon are rolled *(guess: level 1 to the camp
+    level, capped at 5)*.
+  - Picking another option turns them away.
+  - Patrols stay the main source of new defenders.
 
 ### Start and pacing *(designer's call, starting points)*
 
