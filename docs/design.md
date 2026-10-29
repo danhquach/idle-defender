@@ -828,6 +828,28 @@ original outline.
 - **Placeholder art first** *(designer's call)*: build with simple shapes
   and coloured blocks; real art follows Office Immortal's pipeline
   (`art-concepts/`, `art-src/`) once the game is fun.
+- **As built (ID-043):** what the horde view shows has final art, generated
+  with Pollinations on the allow-listed models in `docs/art-credits.md`
+  (FLUX.2 Klein 4B for every asset; licences checked first). Each asset's
+  prompt, model, seed, size and reference live in `art-src/manifest.json`,
+  with the generations in `art-src/gen/`; one shared style prompt per kind
+  (sprite or texture), and state variants (dark and jammed turrets, broken
+  traps) are edits of their base generation so they keep its shape.
+  `python3 tools/art/build.py` strips the generations' metadata (it holds
+  the request and service URLs), keys out the magenta background, keeps the
+  biggest shape, mutes everything but mutants, scales a group (the three
+  defenders) by one factor and writes `src/assets/art/*.png`; `src/ui/sprites.ts` maps every enemy kind,
+  profession, turret state, trap (built and broken) and wall tier to its art,
+  and a test fails if any is missing. Walls are boxes with their tier's tiling
+  top and front textures (so they keep the exact projection): lower and
+  cracked as they take damage, the tier's rubble once broken, a door on a
+  gate's top. Defenders and the Shambler stand on their spot; posts and
+  turret heads sit on their footprint; traps lie across their cell. A lit
+  turret glows; sparks, smoke, HP and condition bars and the title badge are
+  drawn over the art as before. The art loads before the game starts; a
+  failed load (or one past 20 s) shows a message instead of a blank canvas. Generation is a
+  development step only: the key stays in `.env` and the page loads only its
+  own bundled files.
 
 ## 16. Tech and platform
 
