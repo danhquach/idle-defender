@@ -180,7 +180,34 @@ M4 = ID-010 (weapons → professions, post rules) + ID-011 (XP, stat points, pro
 
 ## ID-012 — Roster screen
 
-**Acceptance criteria:** written here before it starts.
+**Acceptance criteria** (also on issue #12; PM decision, 2026-10-29: the roster replaces the build panel; the badge shows rank as pips; the pickers list every weapon that ships until ID-013 decides what a camp owns; design §6, §15):
+
+**Roster screen**
+- A "Roster" button on the build panel opens the roster in its place; "Back" returns. Only between hordes, never in a fight.
+- Each defender's entry shows their name tag and profession ("Jack the Ripper — Ripper"), level and XP progress ("level 3 · 20/75 XP"), Aim / Might / Tech / Grit, every title held ("Junior Ripper"), unspent stat points, and status ("Fit" or "Resting · 1h 12m left").
+- A defender with points to spend gets the result screen's picker (one point per click); each point applies and saves at once. No points left → no picker.
+
+**Equip loadout** (free pick, free swaps, injured defenders too)
+- Three pickers per defender: **Primary** (any gun — the pistol until ID-013), **Secondary** (none, a sidearm, blade or tool), **Item** (none or Shield). A change applies and saves at once; the profession updates on the spot.
+- An invalid choice (a shield without a blade, taking the blade away from a shield-holder) is refused with the reason shown, and nothing changes.
+- Core `equip(game, defenderId, loadout)`: `{ ok: false, reason }` for an invalid loadout, `RangeError` for an unknown defender; never mutates its input.
+
+**Title badge** (design §15, placeholder)
+- A defender with a title shows a small badge above their sprite in the base view (build and horde): their top title's profession colour, 1–4 pips for Junior / Adept / Master / Legendary. The same badge sits beside the name tag on the roster. No title → no badge.
+
+**General**
+- Text only via `textContent`; canvas text, if any, is fixed strings.
+- Unit tests: `equip` (valid swaps, refusals, unknown id, no mutation), roster entry lines (fit and resting, with and without points, titles), the picker spending and hiding at zero, badge choice (colour and pips by rank, none without a title).
+- Badge and roster screen checked in a browser preview; the preview server stopped after.
+- `security-devops` audit only if save parsing changes. Design §6 / §15 note what was built. Version `0.4.5`.
+
+**Files:**
+- Modify `src/core/game.ts`: `equip`.
+- Modify `src/core/stats.ts` (or a UI helper): the badge (profession and pips) from the top title.
+- Create `src/ui/roster.ts`: the roster panel and its entry lines.
+- Modify `src/ui/build.ts`, `app.ts`: the Roster button, applying spends and equips.
+- Modify `src/ui/render.ts`: the badge over the sprite.
+- Tests: `game.test.ts`, `src/ui/roster.test.ts` (new), `render`/badge helper tests.
 
 ## ID-013 — Weapon rarity and affixes
 

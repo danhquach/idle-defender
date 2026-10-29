@@ -9,11 +9,14 @@ import {
   RECOVERY_MS,
   START_STOCK,
   START_TIERS,
+  ITEMS,
+  WEAPONS,
   type Stat,
   type Stats,
   type Stock,
 } from './data.ts';
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
+import { loadoutError, type Loadout } from './loadout.ts';
 import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
 
 /** A defender on the camp's roster: lifetime XP (the level comes from it) and the stat points spent. */
@@ -152,6 +155,34 @@ export function spendPoint(
   if (!r.ok) return r;
   const roster = [...game.roster];
   roster[i] = r.defender;
+  return { ok: true, game: { ...game, roster } };
+}
+
+/**
+ * Gives `defenderId` the loadout `loadout` (design §6: free, any time between hordes,
+ * injured or not); refused when the game doesn't allow it. Unknown ids throw.
+ */
+export function equip(
+  game: GameState,
+  defenderId: string,
+  loadout: Loadout,
+): { ok: true; game: GameState } | { ok: false; reason: string } {
+  const i = game.roster.findIndex((d) => d.id === defenderId);
+  if (i < 0) throw new RangeError(`equip: no defender ${String(defenderId)}`);
+  const known = (id: string | null, table: object): boolean =>
+    id === null || Object.hasOwn(table, id);
+  if (
+    loadout.primary === null ||
+    !known(loadout.primary, WEAPONS) ||
+    !known(loadout.secondary, WEAPONS) ||
+    !known(loadout.item, ITEMS)
+  ) {
+    throw new RangeError(`equip: unknown loadout ${JSON.stringify(loadout)}`);
+  }
+  const reason = loadoutError(loadout);
+  if (reason !== null) return { ok: false, reason };
+  const roster = [...game.roster];
+  roster[i] = { ...game.roster[i]!, loadout: { ...loadout } };
   return { ok: true, game: { ...game, roster } };
 }
 

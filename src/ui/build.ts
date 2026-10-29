@@ -1,6 +1,7 @@
 // Build mode panel between hordes: stock bar, the selected slot's menu, Repair all,
-// and the start defender and post. Every option is a dry run of the core action, so
-// a refused one shows disabled with the core's own reason. Text only via textContent.
+// and the start defender and post; or, in its place, the roster. Every option is a dry
+// run of the core action, so a refused one shows disabled with the core's own reason.
+// Text only via textContent.
 import {
   buildPost,
   buildSegment,
@@ -21,6 +22,7 @@ import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clockTime, defenderLabel, el, POST_NAME, postName, slotName, stockText } from './hud.ts';
 import type { SlotHit } from './projection.ts';
+import { rosterSection } from './roster.ts';
 
 /** What the backup section says about a refused code. */
 export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
@@ -102,6 +104,7 @@ export function createBuildPanel(
   onChange: (base: Base, stock: Stock) => void,
   onStart: (defenderId: string, postId: number) => void,
   onLoad: (game: GameState) => void,
+  onRoster: (game: GameState) => void,
 ): BuildPanel {
   const bar = el('div', 'hud-bar build-bar');
   const panel = el('aside', 'build-panel');
@@ -141,6 +144,10 @@ export function createBuildPanel(
 
   let defenderId: string | null = null;
   let startKey: string | null = null;
+  // The roster shows in place of the build panel until "Back".
+  let rosterOpen = false;
+  let shown: { game: GameState; selected: SlotHit | null } | null = null;
+  let rosterButton: HTMLButtonElement | null = null;
   // Build mode reads the clock for injuries; the core only ever gets it as `now`.
   const choice = (game: GameState) => pickStart(game, defenderId, startKey, Date.now());
 
@@ -254,9 +261,46 @@ export function createBuildPanel(
     return [label('Start defender', defenders), label('Start post', posts), ...injured, go];
   }
 
-  return {
+  /** The build panel: the slot menu, Repair all, the start pick and Roster, the backup code. */
+  function buildView(game: GameState, selected: SlotHit | null): HTMLElement[] {
+    const slot = el('section', 'build-slot');
+    slot.append(
+      ...(selected
+        ? slotMenu(game, selected)
+        : [el('p', 'build-slot-note', 'Click a slot on the field to build there.')]),
+    );
+    const all = el('section', 'build-all');
+    all.append(option(`Repair all`, repairAllCost(game.base), repairAll(game.base, game.stock)));
+    const start = el('section', 'build-start-section');
+    const roster = el('button', 'build-option', 'Roster');
+    roster.type = 'button';
+    rosterButton = roster;
+    roster.addEventListener('click', () => {
+      rosterOpen = true;
+      api.show(game, selected);
+      panel.querySelector<HTMLButtonElement>('button')?.focus();
+    });
+    start.append(...startSection(game), roster);
+    code.value = exportCode(encodeSave(game, Date.now()));
+    return [el('h2', 'build-title', 'Build'), slot, all, start, backup];
+  }
+
+  /** The roster in place of the build panel: a Back button, then each defender. */
+  function rosterView(game: GameState): HTMLElement[] {
+    const back = el('button', 'build-option', 'Back');
+    back.type = 'button';
+    back.addEventListener('click', () => {
+      rosterOpen = false;
+      if (shown) api.show(shown.game, shown.selected);
+      rosterButton?.focus(); // back where the player came from
+    });
+    return [el('h2', 'build-title', 'Roster'), back, ...rosterSection(game, Date.now(), onRoster)];
+  }
+
+  const api: BuildPanel = {
     choice,
     show(game, selected) {
+      shown = { game, selected };
       // Pin the pick (or its fallback) by slot, so building a post never moves it.
       const picked = choice(game);
       if (picked) {
@@ -264,16 +308,6 @@ export function createBuildPanel(
         startKey = postKey(game.base.posts[picked.postId]!);
       }
       bar.textContent = stockBarText(game);
-      const slot = el('section', 'build-slot');
-      slot.append(
-        ...(selected
-          ? slotMenu(game, selected)
-          : [el('p', 'build-slot-note', 'Click a slot on the field to build there.')]),
-      );
-      const all = el('section', 'build-all');
-      all.append(option(`Repair all`, repairAllCost(game.base), repairAll(game.base, game.stock)));
-      const start = el('section', 'build-start-section');
-      start.append(...startSection(game));
       // The redraw replaces every control: keep keyboard focus on the same place, or
       // the next control that can take it (the one used may now be disabled).
       const controls = (): (HTMLButtonElement | HTMLSelectElement)[] => [
@@ -285,8 +319,7 @@ export function createBuildPanel(
         document.activeElement instanceof HTMLElement && backup.contains(document.activeElement)
           ? document.activeElement
           : null;
-      code.value = exportCode(encodeSave(game, Date.now()));
-      panel.replaceChildren(el('h2', 'build-title', 'Build'), slot, all, start, backup);
+      panel.replaceChildren(...(rosterOpen ? rosterView(game) : buildView(game, selected)));
       if (inBackup) {
         inBackup.focus();
       } else if (focused >= 0) {
@@ -298,6 +331,8 @@ export function createBuildPanel(
       panel.hidden = false;
     },
     hide() {
+      // A horde starts from the build panel; the next visit opens on it again.
+      rosterOpen = false;
       bar.hidden = true;
       panel.hidden = true;
     },
@@ -305,4 +340,5 @@ export function createBuildPanel(
       status.textContent = text;
     },
   };
+  return api;
 }

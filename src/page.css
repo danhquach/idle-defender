@@ -183,6 +183,26 @@ body {
   font-size: 1rem;
 }
 
+.roster-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #3a3733;
+}
+
+/* The title badge: its colour is set per profession from the script. */
+.roster-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  line-height: 1.4;
+  color: #1b1a18;
+  vertical-align: middle;
+}
+
 .build-slot-hp,
 .build-slot-note {
   font-size: 0.875rem;

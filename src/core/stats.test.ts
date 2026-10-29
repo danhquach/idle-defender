@@ -19,6 +19,7 @@ import {
   spend,
   titleIn,
   topTitle,
+  badgeOf,
   unspentPoints,
   xpForLevel,
 } from './stats.ts';
@@ -130,6 +131,15 @@ describe('titles', () => {
     expect(tag({ might: 10, tech: 10 })).toBe('Bob the Ripper');
     expect(tag({ tech: 50, aim: 49 })).toBe('Bob the Engineer');
     expect(topTitle(stats({ grit: 300 }))).toBeNull();
+  });
+
+  it('the badge is the top title: its profession and 1–4 pips by rank', () => {
+    expect(badgeOf(stats({}))).toBeNull();
+    expect(badgeOf(stats({ aim: 9, grit: 300 }))).toBeNull();
+    expect(badgeOf(stats({ aim: 10 }))).toEqual({ profession: 'gunner', pips: 1 });
+    expect(badgeOf(stats({ might: 25, aim: 10 }))).toEqual({ profession: 'ripper', pips: 2 });
+    expect(badgeOf(stats({ tech: 50 }))).toEqual({ profession: 'engineer', pips: 3 });
+    expect(badgeOf(stats({ aim: 100 }))).toEqual({ profession: 'gunner', pips: 4 });
   });
 });
 
