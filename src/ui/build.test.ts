@@ -120,16 +120,27 @@ describe('build panel', () => {
       'Build Research Lab',
       'Research Metal walls',
       'Research Auto-turret',
+      'Research Flashbang',
+      'Research Molotov',
+      'Research Airstrike',
     ]);
     const reasons = lines.map((l) =>
       l.kind === 'action' && !l.result.ok ? l.result.reason : null,
     );
-    expect(reasons).toEqual([null, null, 'Needs a Research Lab', 'Needs Lab level 2']);
+    expect(reasons).toEqual([
+      null,
+      null,
+      'Needs a Research Lab',
+      'Needs Lab level 2',
+      'Needs a Research Lab',
+      'Needs a Research Lab',
+      'Needs Lab level 2',
+    ]);
   });
 
   it('shows a levelled Lab with researched nodes as done and no upgrade at the top', () => {
     let g: GameState = { ...newGame(), stock: { scrap: 999, wood: 999, metal: 0, concrete: 0 } };
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 7; i++) {
       const next = labLines(g).find((l) => l.kind === 'action' && l.result.ok);
       if (next?.kind !== 'action' || !next.result.ok) throw new Error('nothing to do');
       g = next.result.game;
@@ -138,6 +149,9 @@ describe('build panel', () => {
       { kind: 'heading', text: 'Research Lab · level 2' },
       { kind: 'note', text: 'Metal walls · researched' },
       { kind: 'note', text: 'Auto-turret · researched' },
+      { kind: 'note', text: 'Flashbang · researched' },
+      { kind: 'note', text: 'Molotov · researched' },
+      { kind: 'note', text: 'Airstrike · researched' },
     ]);
   });
 

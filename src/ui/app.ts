@@ -1,7 +1,7 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { chooseCard } from '../core/cards.ts';
-import { FIELD, type Stat } from '../core/data.ts';
+import { FIELD, type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -22,6 +22,7 @@ import {
 import { runGenerator } from '../core/power.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
+import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import { createBuildPanel } from './build.ts';
 import { createHud, defenderLabel, resultScreen } from './hud.ts';
@@ -37,7 +38,7 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
-import { drawScene, type Scene } from './render.ts';
+import { drawScene, type Aim, type Scene } from './render.ts';
 import type { Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
@@ -83,6 +84,10 @@ export function start(root: HTMLElement, art: Art): void {
   let selected: SlotHit | null = null;
   // The defender picked in a fight, waiting for a post to walk to.
   let selectedDefender: string | null = null;
+  // The skill waiting for a click on the field to aim it (design §4).
+  let armed: SkillId | null = null;
+  // Where the pointer is over the canvas (CSS px), for the armed skill's reach.
+  let hover: { sx: number; sy: number } | null = null;
 
   const hud = createHud(
     root,
@@ -117,6 +122,14 @@ export function start(root: HTMLElement, art: Art): void {
       const r = buy(horde, item);
       if (r.ok) horde = r.state;
       else hud.toast(r.reason);
+    },
+    (skill) => {
+      if (!horde) return;
+      // A second click on the armed skill puts it away.
+      const lock = skillLock(horde, skill);
+      if (lock) hud.toast(lock);
+      armed = lock || armed === skill ? null : skill;
+      if (armed) selectedDefender = null;
     },
   );
   const panel = createBuildPanel(
@@ -164,6 +177,7 @@ export function start(root: HTMLElement, art: Art): void {
     horde = null;
     selected = null;
     selectedDefender = null;
+    armed = null;
     hud.show(false);
     panel.show(game, selected);
   }
@@ -199,6 +213,10 @@ export function start(root: HTMLElement, art: Art): void {
     return key in PAN_KEYS ? key : null;
   };
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && horde && armed) {
+      armed = null;
+      return;
+    }
     if (e.key === 'Escape' && !horde && selected) {
       selected = null;
       panel.show(game, selected);
@@ -230,6 +248,9 @@ export function start(root: HTMLElement, art: Art): void {
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (e.isPrimary && Number.isFinite(e.offsetX) && Number.isFinite(e.offsetY)) {
+      hover = { sx: e.offsetX, sy: e.offsetY };
+    }
     if (!drag || !press || !e.isPrimary) return;
     if (Math.hypot(e.clientX - press.x, e.clientY - press.y) >= CLICK_SLOP) press.click = false;
     cam = clampCamera(
@@ -247,11 +268,12 @@ export function start(root: HTMLElement, art: Art): void {
     drag = null;
     press = null;
   };
-  // In a fight a click on one of your defenders selects it; with one selected, a click
-  // on a post sends it there (a refusal shows as a toast, unless a shambler is under the
-  // click). Otherwise a click focuses the
-  // shambler under it for every defender, or clears focus and selection on empty
-  // ground. In build mode it opens the slot under it (or closes the menu).
+  // In a fight with a skill armed, a click aims it there (a refusal shows as a toast)
+  // and puts it away. Otherwise a click on one of your defenders selects it; with one
+  // selected, a click on a post sends it there (a refusal shows as a toast, unless a
+  // shambler is under the click). Otherwise a click focuses the shambler under it for
+  // every defender, or clears focus and selection on empty ground. In build mode it
+  // opens the slot under it (or closes the menu).
   // Only finite canvas coordinates reach the hit tests, and only in-range grid slots
   // from `slotAt` reach the core.
   canvas.addEventListener('pointerup', (e) => {
@@ -259,7 +281,12 @@ export function start(root: HTMLElement, art: Art): void {
     endDrag(e);
     if (!click || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
     const ground = unproject({ sx: e.offsetX, sy: e.offsetY }, cam);
-    if (horde) {
+    if (horde && armed) {
+      const used = useSkill(horde, armed, ground.x, ground.y);
+      if (used.ok) horde = used.state;
+      else hud.toast(used.reason);
+      armed = null;
+    } else if (horde) {
       const hit = fightHitAt(ground.x, ground.y, horde);
       if (hit && 'defenderId' in hit) {
         // Name who was picked once, not on every click of the same defender.
@@ -290,6 +317,9 @@ export function start(root: HTMLElement, art: Art): void {
     }
   });
   canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerleave', () => {
+    hover = null;
+  });
   canvas.addEventListener(
     'wheel',
     (e) => {
@@ -338,8 +368,11 @@ export function start(root: HTMLElement, art: Art): void {
       }
     }
     if (horde) {
-      drawScene(ctx, art, horde, cam, view, null, selectedDefender);
-      hud.update(horde);
+      // A pick, the end of the fight or a cooldown puts an armed skill away.
+      if (armed && skillLock(horde, armed) !== null) armed = null;
+      const aim: Aim | null = armed && hover ? { skill: armed, ...unproject(hover, cam) } : null;
+      drawScene(ctx, art, horde, cam, view, null, selectedDefender, aim);
+      hud.update(horde, armed);
       if (horde.outcome !== 'fighting' && endedAt === null) {
         endedAt = Date.now();
         hud.showResult(resultScreen(game, horde, endedAt));
@@ -377,5 +410,8 @@ function buildScene(game: GameState, choice: { defenderId: string; postId: numbe
     enemies: [],
     shots: [],
     focusId: null,
+    time: 0,
+    fires: [],
+    blasts: [],
   };
 }

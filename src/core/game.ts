@@ -12,6 +12,7 @@ import {
   MATERIALS,
   MAX_COUNT,
   RECOVERY_MS,
+  SKILL_IDS,
   START_STOCK,
   START_TIERS,
   ITEMS,
@@ -301,6 +302,7 @@ export function startHorde(
     startPostId: postId,
     bank: game.power.bank,
     startedAt: now,
+    skills: SKILL_IDS.filter((id) => game.research.includes(id)),
   });
 }
 

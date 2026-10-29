@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTurret, newBase } from '../core/base.ts';
 import { newGame, startHorde } from '../core/game.ts';
 import { layoutOf, type Defender, type Layer, type Post } from '../core/horde.ts';
+import { SKILL_FLASH, SKILLS } from '../core/data.ts';
+import { TILT } from './projection.ts';
 import { drawScene, trapLook, turretLook, type Scene } from './render.ts';
 import { ART_IDS, ART_PX, type Art, type ArtId } from './sprites.ts';
 
@@ -173,7 +175,7 @@ describe('drawScene with art', () => {
     const enemy = { id: 1, kind: 'shambler' as const, x: 600, y: 300 };
     const r = draw({
       ...scene,
-      enemies: [{ ...enemy, hp: 20, maxHp: 20, nextAttackAt: 0, inCamp: false }],
+      enemies: [{ ...enemy, hp: 20, maxHp: 20, nextAttackAt: 0, inCamp: false, stunnedUntil: 0 }],
     });
     const i = r.drawn.indexOf('cracks');
     expect(r.drawn.indexOf('shambler')).toBeGreaterThan(i);
@@ -262,11 +264,36 @@ describe('drawScene with art', () => {
           maxHp: 20,
           nextAttackAt: 0,
           inCamp: false,
+          stunnedUntil: 0,
         },
       ],
     });
     expect(r.drawn).toEqual(
       expect.arrayContaining(['gunner', 'ripper', 'engineer', 'shield', 'shambler']),
     );
+  });
+
+  it('draws a molotov fire, a fading skill flash and the armed reach on the ground (ID-019)', () => {
+    const r = recorder();
+    const rings: number[] = [];
+    const alphas: number[] = [];
+    Object.assign(r.ctx, {
+      ellipse: (_x: number, _y: number, rx: number, ry: number) => {
+        rings.push(rx);
+        expect(ry).toBeCloseTo(rx * TILT, 9);
+      },
+      fill: () => alphas.push(r.ctx.globalAlpha),
+    });
+    const scene: Scene = {
+      ...blank(),
+      time: 0.3,
+      fires: [{ x: 900, y: 200, until: 5 }],
+      blasts: [{ skill: 'airstrike', x: 700, y: 100, at: 0.1 }],
+    };
+    drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill: 'flashbang', x: 500, y: 50 });
+    const { molotov, airstrike, flashbang } = SKILLS;
+    expect(rings).toEqual([molotov.radius, airstrike.radius, flashbang.radius]);
+    expect(alphas[1]).toBeCloseTo(0.6 * (1 - 0.2 / SKILL_FLASH), 9); // the flash fades
+    expect(r.ctx.globalAlpha).toBe(1);
   });
 });

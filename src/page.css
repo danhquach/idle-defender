@@ -379,3 +379,8 @@ body {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.hud-skill[aria-pressed='true'] {
+  outline: 2px solid #ffe066;
+  outline-offset: 1px;
+}

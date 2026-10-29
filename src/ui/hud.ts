@@ -1,6 +1,6 @@
 // HUD over the canvas: status bar, the "camp is falling" warning, the 1-of-3 card
 // panel, the replacement panel, the result panel with its stat-point picker, the horde
-// cash shop row and a short toast (refused moves).
+// cash shop row with the active skills, and a short toast (refused moves).
 // Text reaches the page only through textContent.
 import { affixText, heldName } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
@@ -13,11 +13,14 @@ import {
   PROFESSIONS,
   SHOP,
   SHOP_ITEMS,
+  SKILL_IDS,
+  SKILLS,
   STAT_NAMES,
   STATS,
   type EnemyKind,
   type Profession,
   type ShopItem,
+  type SkillId,
   type Stat,
   type Stock,
 } from '../core/data.ts';
@@ -41,6 +44,7 @@ import {
 import { professionOf } from '../core/loadout.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
+import { skillLeft, skillLock } from '../core/skills.ts';
 import { nameTag, spend, titleIn, titleName, unspentPoints, type Title } from '../core/stats.ts';
 import { xpToNext } from '../core/waves.ts';
 
@@ -108,6 +112,29 @@ export function shopButtons(
         ? `${SHOP[item].name} ${Math.ceil(left)}s`
         : `${SHOP[item].name} · ${SHOP[item].cost}`;
     return { item, label, disabled: lock !== null, reason: lock ?? '' };
+  });
+}
+
+/**
+ * The skill buttons: each a dry run of `useSkill` before aiming (one cooling down shows
+ * its seconds left); the armed one is pressed until it is used or put away.
+ */
+export function skillButtons(
+  s: HordeState,
+  armed: SkillId | null,
+): { skill: SkillId; label: string; disabled: boolean; reason: string; armed: boolean }[] {
+  return SKILL_IDS.map((skill) => {
+    const lock = skillLock(s, skill);
+    const left = skillLeft(s, skill);
+    const { name, cost } = SKILLS[skill];
+    const label = left > 0 ? `${name} ${Math.ceil(left)}s` : `${name} · ${cost}`;
+    return {
+      skill,
+      label,
+      disabled: lock !== null,
+      reason: lock ?? 'Then click the field to aim (Esc to cancel)',
+      armed: lock === null && skill === armed,
+    };
   });
 }
 
@@ -279,8 +306,9 @@ export function createHud(
   onSkip: () => void,
   onSpend: (defenderId: string, stat: Stat) => void,
   onBuy: (item: ShopItem) => void,
+  onArm: (skill: SkillId) => void,
 ): {
-  update(state: HordeState): void;
+  update(state: HordeState, armed?: SkillId | null): void;
   showResult(screen: ResultScreen): void;
   show(visible: boolean): void;
   toast(text: string): void;
@@ -315,6 +343,13 @@ export function createHud(
     const button = el('button', 'hud-button hud-shop-item');
     button.type = 'button';
     button.addEventListener('click', () => onBuy(item));
+    shop.append(button);
+    return button;
+  });
+  const skillItems = SKILL_IDS.map((skill) => {
+    const button = el('button', 'hud-button hud-shop-item hud-skill');
+    button.type = 'button';
+    button.addEventListener('click', () => onArm(skill));
     shop.append(button);
     return button;
   });
@@ -451,7 +486,7 @@ export function createHud(
         toast.hidden = true;
       }, TOAST_MS);
     },
-    update(state) {
+    update(state, armed = null) {
       const status = statusText(state);
       if (bar.textContent !== status) bar.textContent = status;
       const falling = fallingText(state);
@@ -462,6 +497,13 @@ export function createHud(
         if (button.textContent !== b.label) button.textContent = b.label;
         button.disabled = b.disabled;
         button.title = b.reason;
+      });
+      skillButtons(state, armed).forEach((b, i) => {
+        const button = skillItems[i]!;
+        if (button.textContent !== b.label) button.textContent = b.label;
+        button.disabled = b.disabled;
+        button.title = b.reason;
+        button.setAttribute('aria-pressed', String(b.armed));
       });
 
       // Redraw only when the offer, bench or free posts change (the sim clones each tick).
