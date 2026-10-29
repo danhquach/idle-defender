@@ -1,7 +1,24 @@
 import { RECRUIT_CHANCE } from './data.ts';
-import type { Card, HordeState, UpgradeId } from './horde.ts';
+import type { Card, HordeState, Layer, Post, UpgradeId } from './horde.ts';
 import { chance, pick, rngFrom, type Rng } from './rng.ts';
 import { xpToNext } from './waves.ts';
+
+/** A wall-walk post over a broken or unbuilt segment can't be stood on. */
+export function postUsable(layers: readonly Layer[], post: Post): boolean {
+  if (post.kind !== 'wall-walk') return true;
+  const seg = layers.find((l) => l.column === post.column)?.segments[post.row];
+  return seg !== undefined && seg.hp > 0;
+}
+
+/** Where a recruit goes: the free usable post furthest forward (ties → lowest id). */
+export function recruitPost(state: HordeState): Post | undefined {
+  let best: Post | undefined;
+  for (const p of state.posts) {
+    if (p.defenderId !== null || !postUsable(state.layers, p)) continue;
+    if (!best || p.x > best.x) best = p;
+  }
+  return best;
+}
 
 export const UPGRADES: Readonly<
   Record<UpgradeId, { readonly name: string; readonly text: string }>
@@ -18,7 +35,7 @@ const OFFER_SIZE = 3;
 
 /** Three cards: distinct upgrades, and at most one recruit when a post is free and the bench has someone. */
 export function rollOffer(rng: Rng, state: HordeState): Card[] {
-  const canRecruit = state.bench.length > 0 && state.posts.some((p) => p.defenderId === null);
+  const canRecruit = state.bench.length > 0 && recruitPost(state) !== undefined;
   const p =
     state.defenders.length < RECRUIT_CHANCE.largeFrom ? RECRUIT_CHANCE.small : RECRUIT_CHANCE.large;
   const cards: Card[] = [];
@@ -55,7 +72,7 @@ export function chooseCard(state: HordeState, index: number): HordeState {
   if (!Number.isInteger(index) || !card) throw new RangeError(`chooseCard: no card ${index}`);
   const s = structuredClone(state);
   if (card.kind === 'recruit') {
-    const post = s.posts.find((p) => p.defenderId === null);
+    const post = recruitPost(s);
     const benchIndex = s.bench.findIndex((d) => d.id === card.defender.id);
     if (!post || benchIndex < 0) throw new RangeError('chooseCard: recruit has nowhere to go');
     const [spec] = s.bench.splice(benchIndex, 1);

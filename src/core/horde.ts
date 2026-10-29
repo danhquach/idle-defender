@@ -1,17 +1,19 @@
-import { levelUp } from './cards.ts';
+import { postXY, type Base, type PostKind, type SegmentKind, type Tier } from './base.ts';
+import { levelUp, postUsable } from './cards.ts';
 import {
   CAMP,
+  COLUMNS,
   ENEMIES,
   ENEMY_RADIUS,
   FIELD,
   GAP_SENSE,
-  POSTS,
+  POST_RANGE,
   SEGMENT_HEIGHT,
+  SEGMENTS,
   SEPARATION_SPEED,
   SHOT_TRAIL,
   SPAWN_INTERVAL,
   STEP,
-  TOWER_RANGE_BONUS,
   WALL,
   WAVE_BREAK,
   WEAPONS,
@@ -32,6 +34,9 @@ export interface HordeSetup {
   hordeNumber: number;
   roster: DefenderSpec[];
   startDefenderId: string;
+  base: Base;
+  /** Index into `base.posts`; valid only for this `base` (building a post re-sorts them). */
+  startPostId: number;
 }
 export interface Enemy {
   id: number;
@@ -42,21 +47,27 @@ export interface Enemy {
   maxHp: number;
   nextAttackAt: number;
 }
+/** An unbuilt slot is `{ kind: null, tier: null, hp: 0, maxHp: 0 }`: an open gap. */
 export interface Segment {
   index: number;
+  kind: SegmentKind | null;
+  tier: Tier | null;
   hp: number;
   maxHp: number;
 }
-/** One wall layer: `WALL.segments` segments, top to bottom. */
+/** One wall layer: `SEGMENTS` segments, top to bottom. */
 export interface Layer {
+  column: number;
   x: number;
   segments: Segment[];
 }
 export interface Post {
   id: number;
+  kind: PostKind;
+  column: number;
+  row: number;
   x: number;
   y: number;
-  kind: 'tower';
   defenderId: string | null;
 }
 export interface Defender extends DefenderSpec {
@@ -109,14 +120,29 @@ const EPS = 1e-9;
 const due = (time: number, at: number): boolean => time >= at - EPS;
 
 export function newHorde(seed: number, setup: HordeSetup): HordeState {
-  const { hordeNumber, roster, startDefenderId } = setup;
+  const { hordeNumber, roster, startDefenderId, base, startPostId } = setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
-  const posts: Post[] = POSTS.map((p, id) => ({
+  const layers: Layer[] = base.layers.map((l) => ({
+    column: l.column,
+    x: COLUMNS[l.column]!,
+    segments: l.slots.map((slot, index) =>
+      slot
+        ? { index, kind: slot.kind, tier: slot.tier, hp: slot.hp, maxHp: slot.maxHp }
+        : { index, kind: null, tier: null, hp: 0, maxHp: 0 },
+    ),
+  }));
+  const posts: Post[] = base.posts.map((p, id) => ({
     id,
     ...p,
-    defenderId: id === 0 ? start.id : null,
+    ...postXY(p),
+    defenderId: null,
   }));
+  const startPost = posts[startPostId];
+  if (!Number.isInteger(startPostId) || !startPost || !postUsable(layers, startPost)) {
+    throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
+  }
+  startPost.defenderId = start.id;
   return {
     time: 0,
     acc: 0,
@@ -129,16 +155,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     breakUntil: 0,
     enemies: [],
     nextEnemyId: 0,
-    layers: [
-      {
-        x: WALL.x,
-        segments: Array.from({ length: WALL.segments }, (_, index) => ({
-          index,
-          hp: WALL.segmentHp,
-          maxHp: WALL.segmentHp,
-        })),
-      },
-    ],
+    layers,
     camp: { hp: CAMP.maxHp, maxHp: CAMP.maxHp },
     posts,
     defenders: [{ ...start, nextShotAt: 0 }],
@@ -175,11 +192,41 @@ export function tick(state: HordeState, dt: number): HordeState {
 }
 
 export function defenderRange(state: HordeState, post: Post, defender: Defender): number {
-  return (
-    WEAPONS[defender.weapon].range *
-    (post.kind === 'tower' ? TOWER_RANGE_BONUS : 1) *
-    state.mods.range
-  );
+  return WEAPONS[defender.weapon].range * POST_RANGE[post.kind] * state.mods.range;
+}
+
+/**
+ * The base after a fight: each built segment keeps the fight's HP, rounded up (a
+ * sliver left standing stays standing) and capped at the base's max HP (so an
+ * in-fight Reinforce never sticks). Returns a new base.
+ */
+export function baseAfter(base: Base, horde: HordeState): Base {
+  const b = structuredClone(base);
+  const match =
+    b.layers.length === horde.layers.length &&
+    b.layers.every(
+      (l, i) =>
+        l.column === horde.layers[i]!.column &&
+        l.slots.every((slot, row) => {
+          const seg = horde.layers[i]!.segments[row];
+          return (
+            seg !== undefined &&
+            seg.kind === (slot?.kind ?? null) &&
+            seg.tier === (slot?.tier ?? null)
+          );
+        }),
+    );
+  if (!match) throw new RangeError('baseAfter: the horde was not fought on this base');
+  b.layers.forEach((l, i) => {
+    l.slots.forEach((slot, row) => {
+      // EPS: float noise from card maths (150 + 1e-12) must not round up a whole point.
+      if (slot) {
+        const hp = Math.ceil(horde.layers[i]!.segments[row]!.hp - EPS);
+        slot.hp = Math.min(slot.maxHp, Math.max(0, hp));
+      }
+    });
+  });
+  return b;
 }
 
 /** Focuses every defender on enemy `enemyId` (null clears); returns a new state. */
@@ -284,7 +331,7 @@ function removeDead(s: HordeState): void {
 }
 
 const segmentAt = (y: number): number =>
-  Math.min(WALL.segments - 1, Math.max(0, Math.floor(y / SEGMENT_HEIGHT)));
+  Math.min(SEGMENTS - 1, Math.max(0, Math.floor(y / SEGMENT_HEIGHT)));
 
 /**
  * Where an enemy stops: the standing segment in front of it on the nearest layer

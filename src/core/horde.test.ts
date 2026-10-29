@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { STEP } from './data.ts';
-import { defenderRange, enemyAt, newHorde, setFocus, tick, type HordeState } from './horde.ts';
+import { buildPost, buildSegment, newBase, type Base, type Result } from './base.ts';
+import { STEP, type Stock } from './data.ts';
+import {
+  baseAfter,
+  defenderRange,
+  enemyAt,
+  newHorde,
+  setFocus,
+  tick,
+  type HordeState,
+} from './horde.ts';
 import { enemy, setup } from './testing.ts';
 
 /** A horde with nobody on the posts, so nothing dies. */
@@ -107,7 +116,8 @@ describe('tick', () => {
     const after = tick(s, 1.5);
     expect(after.enemies[0]?.x).toBe(520);
     expect(after.enemies[0]?.y).toBe(200);
-    expect(after.layers[0]?.segments.map((g) => g.hp)).toEqual([200, 200, 190, 200, 200]);
+    // Row 2 is the starting base's gate (150 HP); two hits of 5.
+    expect(after.layers[0]?.segments.map((g) => g.hp)).toEqual([200, 200, 140, 200, 200]);
   });
 
   it('a breach pulls nearby enemies through', () => {
@@ -155,6 +165,7 @@ describe('tick', () => {
   it('walks through a gap in an outer layer and stops at the next one', () => {
     const s = still();
     s.layers.push({
+      column: 1,
       x: 800,
       segments: s.layers[0]!.segments.map((g) => ({ ...g, hp: g.index === 2 ? 0 : g.hp })),
     });
@@ -419,5 +430,166 @@ describe('focus', () => {
   ])('enemyAt(%s, %s) is null', (x, y) => {
     const { s } = pq();
     expect(enemyAt(s, x, y)).toBeNull();
+  });
+});
+
+/** The starting base changed by `steps` (each a build action with plenty of stock). */
+function baseWith(...steps: ((b: Base, s: Stock) => Result)[]): Base {
+  let base = newBase();
+  let stock: Stock = { scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 };
+  for (const step of steps) {
+    const r = step(base, stock);
+    if (!r.ok) throw new Error(r.reason);
+    ({ base, stock } = r);
+  }
+  return base;
+}
+
+/** Unmanned, no spawns, on `base`. */
+function stillOn(base: Base): HordeState {
+  const s = newHorde(1, { ...setup(), base });
+  s.defenders = [];
+  for (const p of s.posts) p.defenderId = null;
+  s.toSpawn = 0;
+  return s;
+}
+
+describe('fighting on the base', () => {
+  it('an unbuilt row is an open gap', () => {
+    const base = newBase();
+    base.layers[0]!.slots[4] = null;
+    const s = stillOn(base);
+    expect(s.layers[0]!.segments[4]).toEqual({ index: 4, kind: null, tier: null, hp: 0, maxHp: 0 });
+    enemy(s, { x: 530, y: 360 });
+    const after = tick(s, 15);
+    expect(after.enemies[0]?.x).toBe(120);
+    expect(after.camp.hp).toBeLessThan(500);
+  });
+
+  it('a layer with no segments is no wall', () => {
+    const base = newBase();
+    base.layers[0]!.slots = base.layers[0]!.slots.map(() => null);
+    base.posts = [{ kind: 'ground', column: 0, row: 0 }];
+    const s = stillOn(base);
+    enemy(s, { x: 600, y: 40 });
+    expect(tick(s, 20).enemies[0]?.x).toBe(120);
+  });
+
+  it('two layers: enemies stop at the outer one first', () => {
+    const base = baseWith(
+      ...[0, 1, 2, 3, 4].map(
+        (row) => (b: Base, s: Stock) => buildSegment(b, s, ['wood'], 1, row, 'wall', 'wood'),
+      ),
+    );
+    const s = stillOn(base);
+    expect(s.layers.map((l) => l.x)).toEqual([500, 760]);
+    enemy(s, { x: 900, y: 200 });
+    const after = tick(s, 10);
+    expect(after.enemies[0]?.x).toBe(780);
+    expect(after.layers[1]!.segments[2]!.hp).toBeLessThan(200);
+    expect(after.layers[0]!.segments[2]!.hp).toBe(150);
+  });
+
+  it('shares nothing with the base', () => {
+    const base = newBase();
+    const before = structuredClone(base);
+    const s = newHorde(1, { ...setup(), base });
+    s.layers[0]!.segments[0]!.hp = -1;
+    s.layers[0]!.segments.pop();
+    s.posts[0]!.x = -1;
+    s.posts[0]!.row = 9;
+    expect(base).toEqual(before);
+  });
+
+  it('starts on the chosen post', () => {
+    const s = newHorde(1, { ...setup(), startPostId: 1 });
+    expect(s.posts.map((p) => p.defenderId)).toEqual([null, 'a']);
+  });
+
+  it.each([2, -1, 0.5, Number.NaN])('rejects start post %s', (startPostId) => {
+    expect(() => newHorde(1, { ...setup(), startPostId })).toThrow(RangeError);
+  });
+
+  it('rejects a wall-walk start post over a broken segment', () => {
+    const base = baseWith((b, s) => buildPost(b, s, { kind: 'wall-walk', column: 0, row: 0 }));
+    base.layers[0]!.slots[0]!.hp = 0;
+    const id = base.posts.findIndex((p) => p.kind === 'wall-walk');
+    expect(() => newHorde(1, { ...setup(), base, startPostId: id })).toThrow(RangeError);
+    base.layers[0]!.slots[0]!.hp = 1;
+    expect(newHorde(1, { ...setup(), base, startPostId: id }).posts[id]!.defenderId).toBe('a');
+  });
+
+  it('range by post kind: tower 1.25×, wall-walk 1×, ground 0.75×', () => {
+    const base = baseWith(
+      (b, s) => buildPost(b, s, { kind: 'ground', column: 0, row: 0 }),
+      (b, s) => buildPost(b, s, { kind: 'wall-walk', column: 0, row: 0 }),
+    );
+    const s = newHorde(1, { ...setup(), base });
+    const d = s.defenders[0]!;
+    expect(s.posts.map((p) => [p.kind, defenderRange(s, p, d)])).toEqual([
+      ['ground', 450],
+      ['tower', 750],
+      ['tower', 750],
+      ['wall-walk', 600],
+    ]);
+  });
+});
+
+describe('baseAfter', () => {
+  it('carries the fight damage back to the base', () => {
+    const s = stillOn(newBase());
+    enemy(s, { x: 530, y: 40 });
+    const after = tick(s, 1.5);
+    const base = baseAfter(newBase(), after);
+    expect(base.layers[0]!.slots.map((g) => g?.hp)).toEqual([190, 200, 150, 200, 200]);
+    expect(base.posts).toEqual(newBase().posts);
+  });
+
+  it('rounds up and caps at the base max HP', () => {
+    const s = stillOn(newBase());
+    s.layers[0]!.segments[0]!.hp = 0.4;
+    s.layers[0]!.segments[1]!.maxHp = 250; // Reinforce, then patched to full
+    s.layers[0]!.segments[1]!.hp = 250;
+    s.layers[0]!.segments[3]!.hp = 0;
+    const base = baseAfter(newBase(), s);
+    expect(base.layers[0]!.slots.map((g) => [g?.hp, g?.maxHp])).toEqual([
+      [1, 200],
+      [200, 200],
+      [150, 150],
+      [0, 200],
+      [200, 200],
+    ]);
+  });
+
+  it('leaves its inputs untouched', () => {
+    const base = newBase();
+    const s = stillOn(base);
+    s.layers[0]!.segments[0]!.hp = 7;
+    const before = structuredClone({ base, s });
+    baseAfter(base, s);
+    expect({ base, s }).toEqual(before);
+  });
+
+  it('ignores float noise when rounding up', () => {
+    const s = stillOn(newBase());
+    s.layers[0]!.segments[0]!.hp = 150 + 1e-12;
+    s.layers[0]!.segments[1]!.hp = 150.01;
+    const slots = baseAfter(newBase(), s).layers[0]!.slots;
+    expect([slots[0]?.hp, slots[1]?.hp]).toEqual([150, 151]);
+  });
+
+  it('rejects a horde fought on another base', () => {
+    const s = stillOn(newBase());
+    const bigger = baseWith((b, st) => buildSegment(b, st, ['wood'], 1, 0, 'wall', 'wood'));
+    expect(() => baseAfter(bigger, s)).toThrow(RangeError);
+    const holed = newBase();
+    holed.layers[0]!.slots[4] = null;
+    expect(() => baseAfter(holed, s)).toThrow(RangeError);
+    const upgraded = newBase();
+    upgraded.layers[0]!.slots[0]!.tier = 'metal';
+    expect(() => baseAfter(upgraded, s)).toThrow(RangeError);
+    const regated = newBase();
+    regated.layers[0]!.slots[0]!.kind = 'gate';
+    expect(() => baseAfter(regated, s)).toThrow(RangeError);
   });
 });

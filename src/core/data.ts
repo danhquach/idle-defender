@@ -8,23 +8,17 @@ export const STEP = 1 / 30;
 export const FIELD = { right: 1600, height: 400 } as const;
 
 export const CAMP = { x: 120, maxHp: 500 } as const;
-/** Each wall layer is split top to bottom into `segments` equal segments. */
-export const WALL = { x: 500, depth: 20, segmentHp: 200, segments: 5 } as const;
-export const SEGMENT_HEIGHT = FIELD.height / WALL.segments;
+/** Wall thickness along `x`; a layer's wall spans `[x, x + depth]`. */
+export const WALL = { depth: 20 } as const;
+/** Segments per layer, top to bottom; row `r` covers `y` in `[r, r + 1) * SEGMENT_HEIGHT`. */
+export const SEGMENTS = 5;
+export const SEGMENT_HEIGHT = FIELD.height / SEGMENTS;
 
 export const ENEMY_RADIUS = 12;
 /** Most a crowded enemy is pushed aside per second. */
 export const SEPARATION_SPEED = 60;
 /** How close to a wall an enemy must be to slide toward a broken segment. */
 export const GAP_SENSE = 200;
-
-export const POSTS: readonly { x: number; y: number; kind: 'tower' }[] = [
-  { x: 420, y: 120, kind: 'tower' },
-  { x: 420, y: 280, kind: 'tower' },
-];
-
-/** Range multiplier for a defender on a tower post. */
-export const TOWER_RANGE_BONUS = 1.25;
 
 export type WeaponId = 'pistol';
 export const WEAPONS: Readonly<
@@ -56,6 +50,52 @@ export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;
 /** How long a shot line stays on screen, in seconds. */
 export const SHOT_TRAIL = 0.15;
+
+// --- The base (M2). Grid, tiers and costs; design §3 and §11. ---
+
+export type Material = 'scrap' | 'wood' | 'metal' | 'concrete';
+export type Stock = Record<Material, number>;
+export const MATERIALS: readonly Material[] = ['scrap', 'wood', 'metal', 'concrete'];
+
+/** Wall `x` of each buildable layer, inner (left) to outer (right). */
+export const COLUMNS: readonly number[] = [500, 760, 1020];
+
+export type Tier = 'wood' | 'metal' | 'concrete' | 'reinforced';
+/** In upgrade order. */
+export const TIER_ORDER: readonly Tier[] = ['wood', 'metal', 'concrete', 'reinforced'];
+export const TIERS: Readonly<
+  Record<Tier, { readonly name: string; readonly hp: number; readonly cost: Partial<Stock> }>
+> = {
+  wood: { name: 'Wood', hp: 200, cost: { wood: 10, scrap: 5 } },
+  metal: { name: 'Metal', hp: 400, cost: { metal: 10, scrap: 10 } },
+  concrete: { name: 'Concrete', hp: 800, cost: { concrete: 10, scrap: 15 } },
+  reinforced: { name: 'Reinforced', hp: 1600, cost: { concrete: 10, metal: 10, scrap: 20 } },
+};
+/** A gate has this share of its tier's HP and costs the same. */
+export const GATE_HP = 0.75;
+
+export type PostKind = 'tower' | 'wall-walk' | 'ground';
+export const POST_KINDS: readonly PostKind[] = ['tower', 'wall-walk', 'ground'];
+/** Post `x` relative to its column's wall `x`. */
+export const POST_OFFSET: Readonly<Record<PostKind, number>> = {
+  'wall-walk': 10,
+  tower: -80,
+  ground: -160,
+};
+/** Range multiplier by post kind. */
+export const POST_RANGE: Readonly<Record<PostKind, number>> = {
+  tower: 1.25,
+  'wall-walk': 1,
+  ground: 0.75,
+};
+export const POST_COST: Readonly<Record<PostKind, Partial<Stock>>> = {
+  tower: { wood: 20, scrap: 10 },
+  'wall-walk': { wood: 5, scrap: 5 },
+  ground: { wood: 5 },
+};
+
+export const START_STOCK: Readonly<Stock> = { scrap: 60, wood: 60, metal: 0, concrete: 0 };
+export const START_TIERS: readonly Tier[] = ['wood'];
 
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;
