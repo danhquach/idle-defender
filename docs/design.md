@@ -136,16 +136,17 @@ run top to bottom across the map, so they are easy to lay out and read.
 
 Defenders stand on **posts** the player builds and chooses between.
 
-- **Wall-walk / gate posts** (on a wall): melee (Ripper) reaches enemies
-  hitting that wall; ranged has a clear line.
+- **Wall-walk / gate posts** (on a wall): melee (blade or tool) reaches
+  enemies hitting that wall; ranged has a clear line.
 - **Towers** (behind a wall, elevated): ranged gets +range; melee can't
-  reach, not even an enemy inside the camp beside the tower.
+  reach, not even an enemy inside the camp beside the tower, so a Ripper
+  or Engineer there fights with their gun.
 - **Ground posts** (between layers): melee fights enemies that broke
   through; ranged is short-sighted.
-- **Range by post** *(designer's call, starting points)*: guns (Gunners
-  and Engineers) get ×1.25 range on a tower, ×1 on a wall-walk, ×0.75 on
-  the ground. A Ripper reaches 50 px from their post on a wall-walk or
-  ground post.
+- **Range by post** *(designer's call, starting points)*: every gun (every
+  defender carries one, §6 Loadout) gets ×1.25 range on a tower, ×1 on a
+  wall-walk, ×0.75 on the ground. A blade or tool reaches 50 px from its
+  holder's post on a wall-walk or ground post.
 - **Adjacency:** an Engineer buffs the turrets and defenders beside them
   *(designer's call, starting point: defenders within 100 px fire 15%
   faster; several Engineers don't stack)*.
@@ -153,10 +154,9 @@ Defenders stand on **posts** the player builds and chooses between.
   Engineer restores 3 HP/s to the most damaged standing segment of their
   post's layer, within one row of the post. Broken segments wait for build
   mode.
-- **Recruits** *(designer's call)*: a recruit card only offers a defender
-  with a free post they can work from (a Ripper: not a tower). The start,
-  moves and replacements may use any post; the game says when a defender
-  can't work from it.
+- **Recruits** *(designer's call)*: a recruit card offers a defender with
+  any free post; everyone carries a gun, so every post works. The start,
+  moves and replacements may use any post too.
 - Defenders can be moved between posts during a horde *(guess: with a short
   walk time, so a fallen outer layer means pulling back)*.
 - **Broken wall under a defender** *(designer's call)*: when a segment
@@ -253,15 +253,43 @@ which apply to the whole battlefield.
 
 Defenders are a **permanent roster**: levels, stats, titles and gear stay.
 **No fixed class:** any defender can use any weapon, and the equipped
-weapon decides which profession they are working as.
+loadout decides which profession they are working as.
 
-### Weapons → profession
+### Loadout → profession
 
-| Profession | Weapons | Job |
-|---|---|---|
-| **Gunner** | Pistol, SMG, rifle, shotgun, LMG, sniper rifle | Ranged damage; good with every gun, but no huge spike in any one |
-| **Ripper** | Knife, machete, sword, chainsaw (machine saw) | Close-quarter damage at walls and gates |
-| **Engineer** | Toolkit, welder | Repairs barriers and turrets; buffs turret damage and fire rate; crafts better batteries. Also shoots, weaker than a Gunner *(designer's call)* |
+Each defender carries a **primary** (always a gun), an optional
+**secondary** and one **item** slot *(designer's call)*. Melee range was
+the problem with a melee-only defender: every defender now shoots, and
+close-quarter weapons come out only when an enemy is close.
+
+| Kind | Examples | Slot | Who handles it well |
+|---|---|---|---|
+| **Sidearm** | Pistol | Primary or secondary | Everyone: low damage, but fast to reload and light to handle |
+| **Specialised gun** | SMG, rifle, shotgun, LMG, sniper rifle | Primary | Gunners; anyone else takes a penalty |
+| **Blade** | Knife, machete, sword, chainsaw (machine saw) | Secondary | Rippers: close-quarter damage at walls and gates |
+| **Tool** | Toolkit, welder | Secondary | Engineers: a weak blunt weapon up close; mostly for repairing barriers and turrets, buffing turrets and crafting better batteries |
+
+- **Profession from the loadout:** a blade makes a Ripper, a tool makes
+  an Engineer, anything else (a specialised gun, or only a sidearm) makes
+  a Gunner. Typical loadouts: Gunner rifle + pistol; Ripper pistol +
+  knife; Engineer pistol + toolkit.
+- **Gunner handling** *(starting points)*: a Gunner is better with every
+  gun, sidearm included: fires 15% faster, reloads 25% faster and aims
+  better (+5% crit chance, on top of Aim). A non-Gunner firing a
+  specialised gun deals −30% damage and reloads 50% slower; a sidearm in
+  anyone else's hands has no penalty and no bonus.
+- **Reload:** every gun has a magazine and a reload time.
+- **Switching** (automatic):
+  - A blade or tool strikes when an enemy is within its reach (50 px);
+    otherwise the defender fires their primary.
+  - A Gunner with a sidearm as secondary fires it while the primary
+    reloads, if an enemy is within its close range *(starting point:
+    200 px)*, then switches back to the primary.
+  - A sidearm is the only gun that fires while its holder walks between
+    posts, so a defender can pull back to a safer post and keep shooting.
+- **Shield** (Ripper only, fills the item slot): −30% damage taken in
+  hordes, so a Ripper can act as a tank; in exchange the holder's gun
+  fires 20% slower and they walk 20% slower *(starting points)*.
 
 More professions later *(guess)*: Marksman (sniper rifles only, bigger
 bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).
@@ -272,16 +300,17 @@ Each defender level gives **stat points** (3 per level, starting point):
 
 | Stat | Feeds profession | Effect |
 |---|---|---|
-| Aim | Gunner | +ranged damage, +crit |
-| Might | Ripper | +melee damage, +cleave |
+| Aim | Gunner | +gun damage, +crit (any gun, whoever fires it) |
+| Might | Ripper | +blade damage, +cleave |
 | Tech | Engineer | +repair rate, +turret buff, +battery quality |
 | Grit | All | +defender HP in hordes; patrol survival and power |
 
-- A stat's effect only applies with a matching weapon: Bob with 50 Aim
-  holding a knife gets nothing from his Aim. Crafting uses Tech regardless
-  of weapon *(guess)*.
+- A stat applies per weapon: Aim to every gun shot, Might to every blade
+  strike; tool strikes get no stat bonus. Jack with 50 Might gets nothing
+  from it on his pistol shots. Crafting uses Tech regardless of weapon
+  *(guess)*.
 - Defender XP comes from hordes and from patrols (§10); both are full sources, so a defender can level by patrolling alone.
-- No stat respec in v1: points are permanent (weapon swaps are free).
+- No stat respec in v1: points are permanent (loadout swaps are free).
 - **As built (ID-011, starting points):** level L → L+1 costs 25 × L
   defender XP, so a defender in every win reaches level 2 after Horde 2 and
   level 3 after Horde 4. Per point: Aim +2% Gunner damage and +0.5% crit
@@ -304,9 +333,9 @@ Each defender level gives **stat points** (3 per level, starting point):
 | 50 | Master … | +30% |
 | 100 *(guess)* | Legendary … | +50% |
 
-- The title bonus multiplies the profession's output on top of the stat:
-  damage for Gunners and Rippers, repair for Engineers, and only with a
-  matching weapon.
+- The title bonus multiplies on top of the stat, per weapon like the
+  stats: a Gunner title boosts gun shots, a Ripper title blade strikes,
+  an Engineer title repair.
 
 - The highest title becomes the defender's name tag: "Bob the Gunner",
   "Jack the Ripper", "John the Engineer". A defender can hold titles in
@@ -318,7 +347,8 @@ Each defender level gives **stat points** (3 per level, starting point):
 - Weapons come from patrols (main source), boss hordes and crafting.
 - **Rarity:** Rusty, Common, Military, Prototype, Relic, with rolled
   affixes (e.g. +pierce, burning rounds, +damage vs. mutants).
-- One weapon per defender *(guess: armour later)*.
+- A loadout per defender: primary, secondary and one item (§6 Loadout)
+  *(guess: armour later, in the item slot)*.
 
 ## 7. Turrets, energy and traps
 
@@ -609,8 +639,8 @@ Set before sending; they apply to any location, plaza or single building.
 ### Start and pacing *(designer's call, starting points)*
 
 - **New game:** the commander with 1 perk slot (Steady Fire unlocked), 3
-  defenders with Rusty weapons (pistol, knife, toolkit — one per
-  profession), a camp with 5 slots, one wood wall layer with a gate, 2 tower posts,
+  defenders with Rusty weapons, one per profession (a pistol; a pistol and
+  a knife; a pistol and a toolkit), a camp with 5 slots, one wood wall layer with a gate, 2 tower posts,
   1 workbench, the gas station, supermarket and electronics
   store revealed on the world map (hardware store after Horde 3, pharmacy
   after Horde 5), and a small stock of Scrap, Wood, 3 Food, Parts for one
