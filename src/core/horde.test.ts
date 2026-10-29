@@ -48,7 +48,11 @@ describe('newHorde', () => {
     expect(s.posts[1]?.defenderId).toBeNull();
     expect(s.bench.map((d) => d.id)).toEqual(['b', 'c']);
     expect(s.layers[0]?.segments).toHaveLength(5);
-    expect(s.camp.hp).toBe(500);
+    expect(s.defenders[0]).toMatchObject({ hp: 100, maxHp: 100 });
+    expect(s.injured).toEqual([]);
+    expect(s.tookPart).toEqual(['a']);
+    expect(s.fallingFor).toBe(0);
+    expect(s.replace).toBeNull();
     expect(s.level).toBe(1);
     expect(s.xp).toBe(0);
     expect(s.outcome).toBe('fighting');
@@ -128,10 +132,13 @@ describe('tick', () => {
     s.layers[0]!.segments[2]!.hp = 0;
     enemy(s, { x: 530, y: 200 });
     enemy(s, { x: 530, y: 300 });
-    const after = tick(s, 15);
+    // 10 s: the camp is falling from the first one inside, but not fallen yet.
+    const after = tick(s, 10);
+    expect(after.outcome).toBe('fighting');
     const [a, b] = after.enemies;
-    expect(a?.x).toBe(120);
-    expect(after.camp.hp).toBeLessThan(500);
+    expect(a?.x).toBeCloseTo(230);
+    expect(a?.inCamp).toBe(true);
+    expect(b?.inCamp).toBe(true);
     expect(b?.y).toBeLessThan(240);
     expect(b?.x).toBeLessThan(500);
     expect(after.layers[0]?.segments[3]?.hp).toBe(200);
@@ -234,17 +241,6 @@ describe('tick', () => {
     const after = tick(s, STEP);
     expect(after.enemies[0]?.x).toBe(509);
   });
-
-  it('the camp floors at 0 and the horde is lost', () => {
-    const s = unmanned();
-    s.camp.hp = 3;
-    s.layers[0]!.segments[2]!.hp = 0;
-    enemy(s, { x: 120, y: 200 });
-    const after = tick(s, 1);
-    expect(after.camp.hp).toBe(0);
-    expect(after.outcome).toBe('lost');
-    expect(tick(after, 1)).toEqual(after);
-  });
 });
 
 describe('combat', () => {
@@ -331,13 +327,6 @@ describe('combat', () => {
     enemy(s, { hp: 1, x: 520, y: 120, nextAttackAt: 0 });
     const after = tick(s, STEP);
     expect(after.layers[0]?.segments[1]?.hp).toBe(200);
-  });
-
-  it('camp at 0 HP loses even with no enemies left', () => {
-    const s = quiet();
-    s.wave = s.waveCount;
-    s.camp.hp = 0;
-    expect(tick(s, STEP).outcome).toBe('lost');
   });
 
   it('a finished fight leaves no card offer open', () => {
@@ -464,9 +453,9 @@ describe('fighting on the base', () => {
     const s = stillOn(base);
     expect(s.layers[0]!.segments[4]).toEqual({ index: 4, kind: null, tier: null, hp: 0, maxHp: 0 });
     enemy(s, { x: 530, y: 360 });
-    const after = tick(s, 15);
-    expect(after.enemies[0]?.x).toBe(120);
-    expect(after.camp.hp).toBeLessThan(500);
+    const after = tick(s, 10);
+    expect(after.enemies[0]?.x).toBeLessThan(500);
+    expect(after.enemies[0]?.inCamp).toBe(true);
   });
 
   it('a layer with no segments is no wall', () => {
@@ -475,7 +464,9 @@ describe('fighting on the base', () => {
     base.posts = [{ kind: 'ground', column: 0, row: 0 }];
     const s = stillOn(base);
     enemy(s, { x: 600, y: 40 });
-    expect(tick(s, 20).enemies[0]?.x).toBe(120);
+    const after = tick(s, 12);
+    expect(after.enemies[0]?.x).toBeCloseTo(240);
+    expect(after.enemies[0]?.inCamp).toBe(true);
   });
 
   it('two layers: enemies stop at the outer one first', () => {

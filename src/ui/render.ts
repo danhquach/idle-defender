@@ -63,7 +63,8 @@ const SEGMENT_GAP = 2;
 const CAMP_BOX = { x0: CAMP.x - 90, x1: CAMP.x, height: 70 } as const;
 const DEFENDER = PIECE.defender;
 const ENEMY = { radius: ENEMY_RADIUS * 0.85, z: 10 } as const;
-const HP_BAR = { w: 24, h: 4, z: 30 } as const;
+/** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
+const HP_BAR = { w: 24, h: 4, z: 30, gap: 6 } as const;
 
 /** What the renderer needs from a fight; build mode passes the base laid out the same way. */
 export type Scene = Pick<
@@ -130,10 +131,30 @@ function footprint(slot: SlotHit): { x0: number; x1: number; y0: number; y1: num
 const segmentOf = (layers: readonly Layer[], column: number, row: number) =>
   layers.find((l) => l.column === column)?.segments[row];
 
-/** A defender standing `z0` up at `(x, y)`, with a ring at its feet when selected. */
+/** An HP bar centred over `(x, y)` at height `z`. */
+function drawHpBar(
+  ctx: CanvasRenderingContext2D,
+  at: { x: number; y: number; z: number },
+  hp: number,
+  maxHp: number,
+  cam: Camera,
+): void {
+  const bar = project(at, cam);
+  const w = HP_BAR.w * cam.zoom;
+  const h = HP_BAR.h * cam.zoom;
+  ctx.fillStyle = COLOR.hpBack;
+  ctx.fillRect(bar.sx - w / 2, bar.sy, w, h);
+  ctx.fillStyle = COLOR.hpFill;
+  ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, hp / maxHp), h);
+}
+
+/**
+ * A defender standing `z0` up at `(x, y)`, with a ring at its feet when selected and
+ * an HP bar once hurt.
+ */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y'>,
+  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp'>,
   z0: number,
   selected: boolean,
   cam: Camera,
@@ -161,6 +182,9 @@ function drawDefender(
     },
     cam,
   );
+  if (d.hp < d.maxHp) {
+    drawHpBar(ctx, { x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap }, d.hp, d.maxHp, cam);
+  }
 }
 
 type Sprite = { y: number; x: number; draw: () => void };
@@ -321,13 +345,7 @@ export function drawScene(
         ctx.beginPath();
         ctx.arc(body.sx, body.sy, r, 0, Math.PI * 2);
         ctx.fill();
-        const bar = project({ x: e.x, y: e.y, z: HP_BAR.z }, cam);
-        const w = HP_BAR.w * cam.zoom;
-        const h = HP_BAR.h * cam.zoom;
-        ctx.fillStyle = COLOR.hpBack;
-        ctx.fillRect(bar.sx - w / 2, bar.sy, w, h);
-        ctx.fillStyle = COLOR.hpFill;
-        ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, e.hp / e.maxHp), h);
+        drawHpBar(ctx, { x: e.x, y: e.y, z: HP_BAR.z }, e.hp, e.maxHp, cam);
       },
     });
   }

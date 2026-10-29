@@ -65,9 +65,9 @@ export function rollOffer(rng: Rng, state: HordeState): Card[] {
   return cards;
 }
 
-/** Opens an offer when enough XP is banked and none is open. Mutates `s`. */
+/** Opens an offer when enough XP is banked and no offer or replacement is open. Mutates `s`. */
 export function levelUp(s: HordeState, rng: Rng): void {
-  if (s.offer !== null || s.xp < xpToNext(s.level)) return;
+  if (s.offer !== null || s.replace !== null || s.xp < xpToNext(s.level)) return;
   s.xp -= xpToNext(s.level);
   s.level += 1;
   s.offer = rollOffer(rng, s);
@@ -84,6 +84,7 @@ export function chooseCard(state: HordeState, index: number): HordeState {
     if (!post || benchIndex < 0) throw new RangeError('chooseCard: recruit has nowhere to go');
     const [spec] = s.bench.splice(benchIndex, 1);
     s.defenders.push(standing(spec!, post, s.time));
+    if (!s.tookPart.includes(spec!.id)) s.tookPart.push(spec!.id);
     post.defenderId = spec!.id;
   } else {
     applyUpgrade(s, card.id);

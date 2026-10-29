@@ -27,6 +27,7 @@ export function enemy(s: HordeState, e: Partial<Enemy>): Enemy {
     hp: 20,
     maxHp: 20,
     nextAttackAt: 0,
+    inCamp: false,
     ...e,
   };
   s.enemies.push(made);

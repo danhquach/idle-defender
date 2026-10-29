@@ -1,20 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { newBase } from '../core/base.ts';
-import { newHorde } from '../core/horde.ts';
-import { payoutText, statusText, stockText } from './hud.ts';
+import { newHorde, type HordeState } from '../core/horde.ts';
+import { setup } from '../core/testing.ts';
+import { fallingText, payoutText, resultLines, statusText, stockText } from './hud.ts';
+
+const horde = (): HordeState => newHorde(1, setup());
 
 describe('hud', () => {
-  it('shows horde, wave, camp and level', () => {
-    const s = newHorde(1, {
-      hordeNumber: 1,
-      roster: [{ id: 'a', name: 'A', weapon: 'pistol' }],
-      startDefenderId: 'a',
-      base: newBase(),
-      startPostId: 0,
-    });
-    s.camp.hp = 432.5;
+  it('shows horde, wave and level', () => {
+    const s = horde();
     s.xp = 4;
-    expect(statusText(s)).toBe(`Horde 1 · Wave 1/${s.waveCount} · Camp 433/500 · Lv 1 (4/10)`);
+    expect(statusText(s)).toBe(`Horde 1 · Wave 1/${s.waveCount} · Lv 1 (4/10)`);
   });
 
   it('lists amounts in material order, skipping zeros', () => {
@@ -23,17 +18,39 @@ describe('hud', () => {
   });
 
   it('shows the payout once the horde is over', () => {
-    const s = newHorde(1, {
-      hordeNumber: 1,
-      roster: [{ id: 'a', name: 'A', weapon: 'pistol' }],
-      startDefenderId: 'a',
-      base: newBase(),
-      startPostId: 0,
-    });
+    const s = horde();
     expect(payoutText(s)).toBe('');
     s.outcome = 'won';
     expect(payoutText(s)).toBe('Payout: 20 scrap, 30 wood');
     s.outcome = 'lost';
-    expect(payoutText(s)).toBe('Payout: 5 scrap, 7 wood');
+    expect(payoutText(s)).toBe('Payout: 1 scrap, 1 wood');
+  });
+
+  it('result lines: XP per defender on a win, the injured either way', () => {
+    const s = horde();
+    expect(resultLines(s)).toEqual([]);
+    s.injured.push({
+      defender: { id: 'b', name: 'B', weapon: 'pistol' },
+      postId: 1,
+      at: 0,
+      offered: true,
+    });
+    s.bench = s.bench.filter((d) => d.id !== 'b');
+    s.tookPart.push('b');
+    s.outcome = 'won';
+    expect(resultLines(s)).toEqual(['A +15 XP', 'B +15 XP · injured']);
+    s.outcome = 'lost';
+    expect(resultLines(s)).toEqual(['No XP on a loss', 'B · injured']);
+  });
+
+  it('counts down while the camp is falling', () => {
+    const s = horde();
+    expect(fallingText(s)).toBe('');
+    s.fallingFor = 0.2;
+    expect(fallingText(s)).toBe('The camp is falling — 10 s');
+    s.fallingFor = 9.5;
+    expect(fallingText(s)).toBe('The camp is falling — 1 s');
+    s.outcome = 'lost';
+    expect(fallingText(s)).toBe('');
   });
 });

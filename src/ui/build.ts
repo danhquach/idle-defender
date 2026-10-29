@@ -11,28 +11,20 @@ import {
   upgradeSegment,
   type Base,
   type BasePost,
-  type PostKind,
   type Result,
 } from '../core/base.ts';
 import { postUsable } from '../core/cards.ts';
 import { MATERIALS, POST_COST, TIER_ORDER, TIERS, type Stock } from '../core/data.ts';
-import type { GameState } from '../core/game.ts';
+import { available, type GameState, type RosterDefender } from '../core/game.ts';
 import { layoutOf } from '../core/horde.ts';
-import { el, stockText } from './hud.ts';
+import { el, POST_NAME, postName, slotName, stockText } from './hud.ts';
 import type { SlotHit } from './projection.ts';
-
-const POST_NAME: Readonly<Record<PostKind, string>> = {
-  tower: 'Tower',
-  'wall-walk': 'Wall-walk post',
-  ground: 'Ground post',
-};
 
 export function stockBarText(game: GameState): string {
   const stock = MATERIALS.map((m) => `${m[0]!.toUpperCase()}${m.slice(1)} ${game.stock[m]}`);
   return [`Horde ${game.hordeNumber} next`, ...stock].join(' · ');
 }
 
-const slotName = (column: number, row: number): string => `Layer ${column + 1}, row ${row + 1}`;
 /** A post's slot as a stable key: building a post re-sorts `base.posts`, so ids shift. */
 export const postKey = (p: BasePost): string => `${p.kind}:${p.column}:${p.row}`;
 
@@ -42,19 +34,34 @@ function usablePosts(base: Base): BasePost[] {
   return base.posts.filter((_, i) => postUsable(layers, posts[i]!));
 }
 
+/** "Bob · back at 14:05" for each defender still injured at `now`, in roster order. */
+export function injuredLines(roster: readonly RosterDefender[], now: number): string[] {
+  return roster
+    .filter((d) => !available(d, now))
+    .map((d) => {
+      const at = new Date(d.injuredUntil!).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return `${d.name} · injured, back at ${at}`;
+    });
+}
+
 /**
  * The start defender and `game.base.posts` index for a pick kept by defender id and
- * post key. A pick that's gone or no longer usable falls back to the first roster
- * defender or usable post; null when no post is usable.
+ * post key. A pick that's gone, injured at `now` or no longer usable falls back to the
+ * first fit defender or usable post; null when nobody is fit or no post is usable.
  */
 export function pickStart(
   game: GameState,
   defenderId: string | null,
   startKey: string | null,
+  now: number,
 ): { defenderId: string; postId: number } | null {
   const usable = usablePosts(game.base);
   const post = usable.find((p) => postKey(p) === startKey) ?? usable[0];
-  const defender = game.roster.find((d) => d.id === defenderId) ?? game.roster[0];
+  const fit = game.roster.filter((d) => available(d, now));
+  const defender = fit.find((d) => d.id === defenderId) ?? fit[0];
   if (!post || !defender) return null;
   return { defenderId: defender.id, postId: game.base.posts.indexOf(post) };
 }
@@ -80,7 +87,8 @@ export function createBuildPanel(
 
   let defenderId: string | null = null;
   let startKey: string | null = null;
-  const choice = (game: GameState) => pickStart(game, defenderId, startKey);
+  // Build mode reads the clock for injuries; the core only ever gets it as `now`.
+  const choice = (game: GameState) => pickStart(game, defenderId, startKey, Date.now());
 
   /** One menu option: its label and cost, and the refusal reason when it isn't allowed. */
   function option(label: string, cost: Partial<Stock> | null, result: Result): HTMLElement {
@@ -150,7 +158,7 @@ export function createBuildPanel(
   function startSection(game: GameState): HTMLElement[] {
     const picked = choice(game);
     const defenders = el('select', 'build-select');
-    for (const d of game.roster) {
+    for (const d of game.roster.filter((r) => available(r, Date.now()))) {
       const o = el('option', '', d.name);
       o.value = d.id;
       o.selected = d.id === picked?.defenderId;
@@ -161,7 +169,7 @@ export function createBuildPanel(
     });
     const posts = el('select', 'build-select');
     for (const p of usablePosts(game.base)) {
-      const o = el('option', '', `${POST_NAME[p.kind]} · ${slotName(p.column, p.row)}`);
+      const o = el('option', '', postName(p));
       o.value = postKey(p);
       o.selected = picked !== null && game.base.posts[picked.postId] === p;
       posts.append(o);
@@ -181,7 +189,13 @@ export function createBuildPanel(
       const c = choice(game);
       if (c) onStart(c.defenderId, c.postId);
     });
-    return [label('Start defender', defenders), label('Start post', posts), go];
+    const injured = injuredLines(game.roster, Date.now()).map((line) =>
+      el('p', 'build-slot-note', line),
+    );
+    if (!game.roster.some((d) => available(d, Date.now()))) {
+      injured.unshift(el('p', 'build-slot-note', 'Nobody can defend until someone recovers.'));
+    }
+    return [label('Start defender', defenders), label('Start post', posts), ...injured, go];
   }
 
   return {
