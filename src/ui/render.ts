@@ -8,9 +8,12 @@ import {
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
+  SKILL_FLASH,
+  SKILLS,
   TRAP_STRIP,
   WALL,
   type Profession,
+  type SkillId,
 } from '../core/data.ts';
 import {
   turretState,
@@ -70,7 +73,15 @@ const COLOR = {
   glow: 'rgba(255, 196, 70, 0.45)',
   spark: '#ffd84a',
   smoke: 'rgba(150, 150, 150, 0.55)',
+  fire: 'rgba(255, 120, 30, 0.3)',
+  fireEdge: 'rgba(255, 150, 50, 0.8)',
 } as const;
+/** Each skill's flash where it lands (design §4, as built ID-019). */
+const SKILL_COLOR: Readonly<Record<SkillId, string>> = {
+  flashbang: '#ffffff',
+  molotov: '#ff8a2a',
+  airstrike: '#ffb347',
+};
 
 /** How a trap shows (design §7, §15): its kind's sprite, or its broken one. */
 export function trapLook(t: Pick<Trap, 'kind' | 'durability'>): { art: ArtId; broken: boolean } {
@@ -138,7 +149,16 @@ export type Scene = Pick<
   | 'enemies'
   | 'shots'
   | 'focusId'
+  | 'time'
+  | 'fires'
+  | 'blasts'
 >;
+/** An armed skill's reach around the cursor, on the field. */
+export interface Aim {
+  skill: SkillId;
+  x: number;
+  y: number;
+}
 /** Build mode extras: empty slot outlines and the selected slot. */
 export interface BuildOverlay {
   selected: SlotHit | null;
@@ -535,6 +555,7 @@ export function drawScene(
   view: View,
   build: BuildOverlay | null = null,
   selectedDefender: string | null = null,
+  aim: Aim | null = null,
 ): void {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -566,6 +587,15 @@ export function drawScene(
 
   // Traps lie flat on the ground, under every sprite.
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
+  // Molotov fires burn on the ground too.
+  ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+  for (const f of scene.fires) {
+    groundCircle(ctx, f.x, f.y, SKILLS.molotov.radius, cam);
+    ctx.fillStyle = COLOR.fire;
+    ctx.fill();
+    ctx.strokeStyle = COLOR.fireEdge;
+    ctx.stroke();
+  }
 
   const sprites: Sprite[] = [];
   for (const layer of scene.layers) {
@@ -670,4 +700,32 @@ export function drawScene(
     ctx.lineTo(to.sx, to.sy);
     ctx.stroke();
   }
+
+  // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.
+  for (const b of scene.blasts) {
+    groundCircle(ctx, b.x, b.y, SKILLS[b.skill].radius, cam);
+    ctx.globalAlpha = Math.max(0, 0.6 * (1 - (scene.time - b.at) / SKILL_FLASH));
+    ctx.fillStyle = SKILL_COLOR[b.skill];
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  if (aim) {
+    groundCircle(ctx, aim.x, aim.y, SKILLS[aim.skill].radius, cam);
+    ctx.strokeStyle = COLOR.focus;
+    ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
+    ctx.stroke();
+  }
+}
+
+/** Starts a path round a circle of radius `r` on the ground at `(x, y)`, as the tilted camera sees it. */
+function groundCircle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  cam: Camera,
+): void {
+  const c = project({ x, y }, cam);
+  ctx.beginPath();
+  ctx.ellipse(c.sx, c.sy, r * cam.zoom, r * cam.zoom * TILT, 0, 0, Math.PI * 2);
 }

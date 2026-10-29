@@ -319,7 +319,8 @@ export const LAB_LEVELS: readonly Partial<Stock>[] = [
   { wood: 80, scrap: 60 },
 ];
 
-export type ResearchId = 'metal-walls' | 'auto-turret';
+/** Active skills are researched under their own ids (ID-019). */
+export type ResearchId = 'metal-walls' | 'auto-turret' | 'flashbang' | 'molotov' | 'airstrike';
 /**
  * A research node: the Lab level and earlier node it needs, what it costs, and the
  * barrier tier it unlocks, if any. Completes at once (design §11, as built ID-014).
@@ -347,6 +348,21 @@ export const RESEARCH: Readonly<
     name: 'Auto-turret',
     lab: 2,
     needs: 'metal-walls',
+    cost: { scrap: 60, wood: 40 },
+    tier: null,
+  },
+  flashbang: { name: 'Flashbang', lab: 1, needs: null, cost: { scrap: 30, wood: 20 }, tier: null },
+  molotov: {
+    name: 'Molotov',
+    lab: 1,
+    needs: 'flashbang',
+    cost: { scrap: 30, wood: 30 },
+    tier: null,
+  },
+  airstrike: {
+    name: 'Airstrike',
+    lab: 2,
+    needs: 'molotov',
     cost: { scrap: 60, wood: 40 },
     tier: null,
   },
@@ -464,3 +480,21 @@ export const SHOP = {
 } as const;
 export const SHOP_ITEMS = Object.keys(SHOP) as ShopItem[];
 export const BUFF_IDS: readonly BuffId[] = ['adrenaline', 'overdrive'];
+
+// --- Active skills (ID-019). Design §4. ---
+
+export type SkillId = 'flashbang' | 'molotov' | 'airstrike';
+/**
+ * Click-to-target skills bought with horde cash, each researched at the Lab first and
+ * hitting enemies only, within `radius` of the aim point: an airstrike deals `damage`
+ * at once, a molotov leaves a fire dealing `dps` for `seconds`, a flashbang stuns
+ * (no moving, no attacking) for `seconds`. `cooldown` is fight seconds after a use.
+ */
+export const SKILLS = {
+  flashbang: { name: 'Flashbang', cost: 20, cooldown: 25, radius: 150, seconds: 3 },
+  molotov: { name: 'Molotov', cost: 25, cooldown: 20, radius: 80, dps: 5, seconds: 6 },
+  airstrike: { name: 'Airstrike', cost: 40, cooldown: 40, radius: 120, damage: 40 },
+} as const;
+export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
+/** How long a skill's flash stays on screen, in seconds. */
+export const SKILL_FLASH = 0.4;

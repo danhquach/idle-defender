@@ -14,6 +14,7 @@ import {
   pickerRow,
   resultScreen,
   shopButtons,
+  skillButtons,
   statusText,
   stockText,
 } from './hud.ts';
@@ -53,6 +54,35 @@ describe('hud', () => {
       disabled: true,
       reason: 'Already active',
     });
+  });
+
+  it('shows a skill button per skill as a dry run, cooling down and armed (ID-019)', () => {
+    const s = horde();
+    expect(skillButtons(s, null).map((b) => [b.label, b.reason])).toEqual([
+      ['Flashbang · 20', 'Research Flashbang first'],
+      ['Molotov · 25', 'Research Molotov first'],
+      ['Airstrike · 40', 'Research Airstrike first'],
+    ]);
+    s.skills = ['flashbang', 'molotov'];
+    s.cash = 30;
+    s.cooldowns.molotov = 12.2;
+    s.time = 0.5;
+    const [flashbang, molotov, airstrike] = skillButtons(s, 'flashbang');
+    expect(flashbang).toEqual({
+      skill: 'flashbang',
+      label: 'Flashbang · 20',
+      disabled: false,
+      reason: 'Then click the field to aim (Esc to cancel)',
+      armed: true,
+    });
+    expect(molotov).toMatchObject({
+      label: 'Molotov 12s',
+      disabled: true,
+      reason: 'Not ready yet',
+    });
+    expect(airstrike).toMatchObject({ disabled: true, armed: false });
+    // A skill that can't be used never shows as armed.
+    expect(skillButtons(s, 'molotov')[1]!.armed).toBe(false);
   });
 
   it("names each defender's profession from their weapon", () => {

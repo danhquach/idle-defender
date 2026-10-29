@@ -20,6 +20,7 @@ export function setup(): HordeSetup {
     startPostId: 0,
     bank: 600,
     startedAt: 0,
+    skills: [],
   };
 }
 
@@ -34,6 +35,7 @@ export function enemy(s: HordeState, e: Partial<Enemy>): Enemy {
     maxHp: 20,
     nextAttackAt: 0,
     inCamp: false,
+    stunnedUntil: 0,
     ...e,
   };
   s.enemies.push(made);

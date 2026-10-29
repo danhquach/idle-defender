@@ -229,6 +229,18 @@ Defenders stand on **posts** the player builds and chooses between.
   cash, +30 condition to the most worn turret, unjamming a jammed one).
   Cash lives only in the fight and is never saved. Active skills come with
   ID-019.
+- **As built (ID-019, starting points):** three active skills are researched
+  at the Research Lab: Flashbang (Lab 1, 30 Scrap, 20 Wood), Molotov (Lab 1,
+  after Flashbang, 30 Scrap, 30 Wood) and Airstrike (Lab 2, after Molotov,
+  60 Scrap, 40 Wood). In a fight the shop row arms a researched skill; the
+  next click on the field aims it there and spends the cash (Esc or a second
+  click on the button puts it away). Each hits enemies only, within its
+  radius of the aim point: **Flashbang** (20 cash, 25 s cooldown, radius
+  150) stuns for 3 s, no moving and no attacking; **Molotov** (25 cash, 20 s,
+  radius 80) leaves a fire burning 5 damage/s for 6 s; **Airstrike** (40
+  cash, 40 s, radius 120) deals 40 damage at once. Cooldowns, stuns and fires
+  run on fight time (they stop during picks), every skill is ready when a
+  horde starts, and a skill kill pays XP and cash like any other.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or

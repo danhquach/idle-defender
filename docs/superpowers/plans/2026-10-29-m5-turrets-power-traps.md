@@ -167,3 +167,32 @@ PM decisions, 2026-10-29: D1 a buff that is already running can't be bought agai
 1. **Cash never leaves the horde:** no path writes it to the base or the save.
 2. **Buff timers** run on fight time only and end exactly once.
 3. **Refused buys** leave the state untouched.
+
+---
+
+## ID-019 — Active skills bought with horde cash: airstrike, molotov, flashbang
+
+PM decisions, 2026-10-29: D1 each skill is unlocked by its own Research Lab node; D2 skills hit enemies only (no damage to defenders, walls or turrets); D3 a skill is armed from the shop row, then a click on the field aims it at that point; D4 the numbers below are starting points.
+
+**Acceptance criteria** (also on issue #19). Values marked *(starting point)* are tunable.
+
+1. **Research (D1).** Flashbang: Lab 1, 30 Scrap and 20 Wood. Molotov: Lab 1 + Flashbang, 30 Scrap and 30 Wood. Airstrike: Lab 2 + Molotov, 60 Scrap and 40 Wood *(starting points)*. A horde gets only the skills researched; the rest are refused "Research … first".
+2. **Skills (D2).** Each hits enemies only, within its radius of the aim point. *Flashbang*: 20 cash, 25 s cooldown, radius 150, stuns 3 s (no moving, no attacking). *Molotov*: 25 cash, 20 s, radius 80, a fire burning 5 damage/s for 6 s. *Airstrike*: 40 cash, 40 s, radius 120, 40 damage at once *(starting points)*.
+3. **Arm → aim (D3).** A skill button arms the skill; the next click on the field uses it there and only then spends the cash. A second click on the button or Esc puts it away; a pick, the end of the fight or a refusal does too. While armed, a field click aims the skill instead of focusing or moving.
+4. **Cooldowns, stuns and fires** run on fight time, so they stop during picks and replacement offers. A cooldown starts when the skill is used; every skill is ready when a horde starts, and nothing carries to the next horde. A second flashbang never shortens a stun.
+5. **Kills.** A skill kill pays XP and cash like any other kill.
+6. **Refusals.** Not researched, short cash ("Not enough cash"), cooling down ("Not ready yet"), a paused or finished fight, and an aim off the field ("Aim at the field") are refused with a reason in the core action (`useSkill`), not only in the UI. A refused use changes nothing; a non-finite aim or unknown skill throws.
+7. **UI.** The shop row has a button per skill with its price, each a dry run: refused ones are disabled with the reason as the tooltip, one cooling down shows its seconds left, the armed one is pressed. While armed, a ring shows the skill's reach at the cursor. The horde view draws each fire and a fading flash where a skill lands.
+8. **Save.** The three nodes join the research allow-list, validated on load like the others (known ids, prerequisites, Lab level, no duplicates). Hostile-payload tests and a `security-devops` audit.
+9. **Tests** cover each skill's effect and radius edge, stuns stopping moves and attacks, fire ticking and expiry, cooldowns pausing during picks, refusals, skill kills paying out, research order, the shop row and the drawing. `docs/design.md` §4 gets an "As built (ID-019)" note; the version goes to 0.4.14.
+
+## ID-019 Numbers (all in `data.ts`, starting points)
+
+- `SKILLS`: flashbang `{ cost: 20, cooldown: 25, radius: 150, seconds: 3 }`, molotov `{ cost: 25, cooldown: 20, radius: 80, dps: 5, seconds: 6 }`, airstrike `{ cost: 40, cooldown: 40, radius: 120, damage: 40 }`. `SKILL_FLASH = 0.4`.
+- `RESEARCH`: `flashbang` (Lab 1, `{ scrap: 30, wood: 20 }`), `molotov` (Lab 1, needs `flashbang`, `{ scrap: 30, wood: 30 }`), `airstrike` (Lab 2, needs `molotov`, `{ scrap: 60, wood: 40 }`).
+
+## ID-019 Review Focus
+
+1. **Enemies only:** no skill path touches defenders, walls, turrets or the bank.
+2. **Fight time:** cooldowns, stuns and fires stop during picks.
+3. **Refused uses** leave the state untouched; the aim is validated in the core.

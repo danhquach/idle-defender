@@ -602,6 +602,21 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
     expect(hostile((s) => (s.game.research = { 0: 'metal-walls' }))).toBeNull();
   });
 
+  it('round-trips skill research (ID-019) and refuses it out of order or above the Lab', () => {
+    const g = newGame();
+    const raw = (game: Loose) => decodeSave(JSON.stringify({ v: 1, savedAt: NOW, game }));
+    const all = { ...g, lab: 2, research: ['flashbang', 'molotov', 'airstrike'] };
+    expect(raw(all)?.game.research).toEqual(['flashbang', 'molotov', 'airstrike']);
+    expect(raw({ ...all, lab: 1 })).toBeNull(); // Airstrike needs Lab 2
+    expect(raw({ ...g, lab: 1, research: ['molotov'] })).toBeNull(); // needs Flashbang
+    expect(raw({ ...g, lab: 1, research: ['molotov', 'flashbang'] })).toBeNull();
+    expect(raw({ ...g, lab: 1, research: ['flashbang', 'flashbang'] })).toBeNull();
+    expect(raw({ ...g, research: ['flashbang'] })).toBeNull(); // no Lab
+    expect(raw({ ...g, lab: 1, research: ['flashbаng'] })).toBeNull(); // Cyrillic a
+    expect(raw({ ...g, lab: 1, research: ['constructor'] })).toBeNull();
+    expect(raw({ ...g, lab: 1, research: ['__proto__'] })).toBeNull();
+  });
+
   it('refuses research whose tier is not unlocked', () => {
     const g = newGame();
     const raw = (game: Loose) => decodeSave(JSON.stringify({ v: 1, savedAt: NOW, game }));

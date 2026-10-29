@@ -38,8 +38,11 @@ import {
   WALL,
   WAVE_BREAK,
   SHOP,
+  SKILL_FLASH,
+  SKILLS,
   type BuffId,
   type EnemyKind,
+  type SkillId,
   type Stats,
 } from './data.ts';
 import { pierces, type Held } from './armoury.ts';
@@ -93,6 +96,8 @@ export interface HordeSetup {
   bank: number;
   /** When the fight started (ms since the epoch), so the generator skips it. */
   startedAt: number;
+  /** Active skills researched at the Lab (design §4). */
+  skills: readonly SkillId[];
 }
 export interface Enemy {
   id: number;
@@ -104,6 +109,8 @@ export interface Enemy {
   nextAttackAt: number;
   /** Past every layer: it hunts defenders and walls no longer stop it (sticky). */
   inCamp: boolean;
+  /** Fight time a flashbang stuns it until (no moving, no attacking); 0 = never. */
+  stunnedUntil: number;
 }
 /** An unbuilt slot is `{ kind: null, tier: null, hp: 0, maxHp: 0 }`: an open gap. */
 export interface Segment {
@@ -203,6 +210,19 @@ export interface Shot {
   toY: number;
   at: number;
 }
+/** A molotov's fire on the ground, burning enemies inside until `until` (fight time). */
+export interface Fire {
+  x: number;
+  y: number;
+  until: number;
+}
+/** A skill landing at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
+export interface Blast {
+  skill: SkillId;
+  x: number;
+  y: number;
+  at: number;
+}
 /** Multipliers from upgrade cards; all start at 1. */
 export interface Mods {
   damage: number;
@@ -250,6 +270,12 @@ export interface HordeState {
   cash: number;
   /** Fight time each bought buff runs until; 0 = never bought. */
   buffs: Record<BuffId, number>;
+  /** Active skills researched at the Lab; only these can be used. */
+  skills: SkillId[];
+  /** Fight time each skill is ready again at; 0 = never used. */
+  cooldowns: Record<SkillId, number>;
+  fires: Fire[];
+  blasts: Blast[];
   /** Player-picked target; null = each defender shoots the enemy closest to it. */
   focusId: number | null;
   shots: Shot[];
@@ -264,7 +290,8 @@ const paused = (s: HordeState): boolean =>
   s.offer !== null || s.replace !== null || s.outcome !== 'fighting';
 
 export function newHorde(seed: number, setup: HordeSetup): HordeState {
-  const { hordeNumber, roster, startDefenderId, base, startPostId, bank, startedAt } = setup;
+  const { hordeNumber, roster, startDefenderId, base, startPostId, bank, startedAt, skills } =
+    setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
   const { layers, posts, turrets, traps } = layoutOf(base);
@@ -304,6 +331,10 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     mods: { damage: 1, fireRate: 1, range: 1 },
     cash: 0,
     buffs: { adrenaline: 0, overdrive: 0 },
+    skills: [...skills],
+    cooldowns: { flashbang: 0, molotov: 0, airstrike: 0 },
+    fires: [],
+    blasts: [],
     focusId: null,
     shots: [],
     outcome: 'fighting',
@@ -563,6 +594,7 @@ function step(s: HordeState, rng: Rng): void {
   walk(s);
   fire(s, rng);
   fireTurrets(s);
+  burn(s);
   repair(s);
   repairTurrets(s);
   springTraps(s);
@@ -591,6 +623,7 @@ function spawn(s: HordeState, rng: Rng): void {
       maxHp: hp,
       nextAttackAt: 0,
       inCamp: false,
+      stunnedUntil: 0,
     });
     s.toSpawn -= 1;
     s.nextSpawnAt = s.time + SPAWN_INTERVAL;
@@ -849,7 +882,8 @@ function repair(s: HordeState): void {
   }
 }
 
-function removeDead(s: HordeState): void {
+/** Pays XP and cash for every enemy at 0 HP and takes it off the field. */
+export function removeDead(s: HordeState): void {
   for (const e of s.enemies) {
     if (e.hp > 0) continue;
     s.xp += ENEMIES[e.kind].xp;
@@ -857,6 +891,26 @@ function removeDead(s: HordeState): void {
     if (e.id === s.focusId) s.focusId = null;
   }
   s.enemies = s.enemies.filter((e) => e.hp > 0);
+}
+
+/** Whether a flashbang still holds `e` (fight time, so it waits out picks too). */
+export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  !due(s.time, e.stunnedUntil);
+
+/**
+ * Design §4, as built ID-019: each molotov fire burns every enemy inside it until it
+ * goes out; the flash of a skill fades after `SKILL_FLASH`.
+ */
+function burn(s: HordeState): void {
+  s.fires = s.fires.filter((f) => !due(s.time, f.until));
+  s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
+  for (const f of s.fires) {
+    for (const e of s.enemies) {
+      if (Math.hypot(e.x - f.x, e.y - f.y) <= SKILLS.molotov.radius + EPS) {
+        e.hp = Math.max(0, e.hp - SKILLS.molotov.dps * STEP);
+      }
+    }
+  }
 }
 
 const segmentAt = (y: number): number =>
@@ -937,6 +991,7 @@ function move(s: HordeState): Moves {
   const sliding = new Map<number, Slide>();
   const reached = new Map<number, Defender>();
   for (const e of s.enemies) {
+    if (stunned(s, e)) continue;
     const speed = ENEMIES[e.kind].speed * STEP * trapSlow(s, e);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
@@ -1043,7 +1098,7 @@ function separate(s: HordeState): void {
  */
 function attack(s: HordeState, moves: Moves): void {
   for (const e of s.enemies) {
-    if (!due(s.time, e.nextAttackAt)) continue;
+    if (stunned(s, e) || !due(s.time, e.nextAttackAt)) continue;
     const enemy = ENEMIES[e.kind];
     let target: { hp: number } | null;
     let damage = enemy.damage;
