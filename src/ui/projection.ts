@@ -82,6 +82,8 @@ export const PIECE = {
   /** The wall-walk platform, on top of its segment. */
   walk: { halfWidth: 8, halfDepth: 24, height: 6 },
   defender: { halfWidth: 7, halfDepth: 10, height: 30 },
+  /** A turret's head, on top of its tower or wall-walk mount. */
+  turret: { halfWidth: 9, halfDepth: 9, height: 12 },
 } as const;
 
 /** A segment's drawn height: lower as it takes damage, a stub once broken. */
@@ -108,28 +110,35 @@ const lift = (z: number): number => (z * HEIGHT_SCALE) / TILT;
 
 /**
  * The grid slot drawn under ground point `(x, y)`, or null. A built piece also covers
- * its top face; where pieces overlap, the front one (higher row) wins, as drawn. The
- * wall band is always `'segment'`: a wall-walk post is built from its segment's menu.
+ * its top face, a turret's head included; where pieces overlap, the front one (higher
+ * row) wins, as drawn. The wall band is always `'segment'`: a wall-walk post or turret
+ * is built from its segment's menu.
  */
 export function slotAt(x: number, y: number, base: Base): SlotHit | null {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   const postAt = (kind: string, column: number, row: number): boolean =>
     base.posts.some((p) => p.kind === kind && p.column === column && p.row === row);
+  const turretAt = (kind: string, column: number, row: number): boolean =>
+    base.turrets.some((t) => t.mount === kind && t.column === column && t.row === row);
+  /** How high a built mount stands over its floor: the post, plus a turret's head. */
+  const mounted = (kind: 'tower' | 'ground' | 'wall-walk', column: number, row: number): number => {
+    const piece = (kind === 'wall-walk' ? PIECE.walk : PIECE[kind]).height;
+    if (postAt(kind, column, row)) return piece;
+    return turretAt(kind, column, row) ? piece + PIECE.turret.height : 0;
+  };
   let hit: SlotHit | null = null;
   for (let row = 0; row < SEGMENTS; row++) {
     const y0 = row * SEGMENT_HEIGHT;
     const cy = y0 + SEGMENT_HEIGHT / 2;
     COLUMNS.forEach((wx, column) => {
       const seg = base.layers.find((l) => l.column === column)?.slots[row];
-      const z = seg
-        ? wallHeight(seg.hp, seg.maxHp) + (postAt('wall-walk', column, row) ? PIECE.walk.height : 0)
-        : 0;
+      const z = seg ? wallHeight(seg.hp, seg.maxHp) + mounted('wall-walk', column, row) : 0;
       if (x >= wx && x <= wx + WALL.depth && y >= y0 - lift(z) && y < y0 + SEGMENT_HEIGHT) {
         hit = { column, row, what: 'segment' };
       }
       for (const what of ['tower', 'ground'] as const) {
         const p = PIECE[what];
-        const top = postAt(what, column, row) ? p.height : 0;
+        const top = mounted(what, column, row);
         if (
           Math.abs(x - (wx + POST_OFFSET[what])) <= p.halfWidth &&
           y >= cy - p.halfDepth - lift(top) &&

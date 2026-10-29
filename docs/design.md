@@ -452,9 +452,15 @@ Each defender level gives **stat points** (3 per level, starting point):
   time earn nothing. The last Gas before the cap fills it and any extra is
   lost; at the cap or out of Gas it stops, and starts afresh when there is
   room and Gas again. Until patrols bring them, a new game starts with 2
-  Makeshift batteries and 4 Gas, and each won horde pays 1 Gas. Crafting,
-  battery tiers that raise the cap, and the bank meter come later (ID-016,
-  ID-035).
+  Makeshift batteries and 4 Gas, and each won horde pays 1 Gas. Crafting
+  and battery tiers that raise the cap come later (ID-035).
+- **As built (ID-016):** build mode offers an Auto-turret on an empty tower
+  spot and on a wall segment's mount; a turret's menu shows its condition and
+  state (powered, dark, offline, jammed) with Repair, Salvage (asks first)
+  and Relocate, which lists the free mounts it may move to. Repair all
+  repairs turrets with the walls, all or nothing. The build panel shows the
+  bank as a meter ("Bank n/1,000"), and the fight status bar shows the
+  charge as it drains.
 
 ### Traps
 
@@ -790,7 +796,10 @@ original outline.
   per rank (Junior 1 … Legendary 4); the same badge sits by the name on the
   roster.
 - Turrets show power (lit / dark) and condition (sparks, smoke) at a
-  glance.
+  glance. *As built (ID-014, ID-016, placeholder):* the head is lit when
+  powered, dark with no charge or its wall broken, red-brown with a cross
+  when jammed; sparks below 50 condition, smoke below 25; and a thin steel-blue
+  condition bar over each turret, in build mode and in fights.
 - Muted, desaturated ruins; mutants get the only saturated colours (acid
   green, flesh red).
 - World map as a hand-drawn ruined region with location icons, patrol

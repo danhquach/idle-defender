@@ -6,6 +6,8 @@ import {
   buildTurret,
   moveTurret,
   newBase,
+  repairAll,
+  repairAllCost,
   repairTurret,
   salvageTurret,
   salvageValue,
@@ -123,6 +125,30 @@ describe('turret build actions', () => {
     expect(r.ok && r.stock.scrap).toBe(999 - 8);
     const broke = repairTurret(base, { ...RICH, scrap: 7 }, 0);
     expect(broke).toEqual({ ok: false, reason: 'Not enough scrap' });
+  });
+
+  it('Repair all repairs turrets with the walls, all or nothing', () => {
+    const base = baseWith(['tower', 0, 2], ['wall-walk', 0, 0]);
+    expect(repairAll(base, RICH)).toEqual({ ok: false, reason: 'Nothing to repair' });
+    base.turrets[0]!.condition = 0; // 20 scrap
+    base.turrets[1]!.condition = 61; // 8 scrap
+    expect(repairAllCost(base)).toEqual({ scrap: 28, wood: 0, metal: 0, concrete: 0 });
+    base.layers[0]!.slots[1]!.hp = base.layers[0]!.slots[1]!.maxHp / 2;
+    const cost = repairAllCost(base);
+    expect(cost.scrap).toBeGreaterThan(28);
+    expect(cost.wood).toBeGreaterThan(0);
+    expect(repairAll(base, { ...RICH, scrap: cost.scrap - 1 })).toEqual({
+      ok: false,
+      reason: 'Not enough scrap',
+    });
+    const r = repairAll(base, RICH);
+    expect(r.ok && r.base.turrets.map((t) => t.condition)).toEqual([100, 100]);
+    expect(r.ok && r.base.layers[0]!.slots[1]!.hp).toBe(base.layers[0]!.slots[1]!.maxHp);
+    expect(r.ok && r.stock.scrap).toBe(999 - cost.scrap);
+    // Turrets alone are enough to repair.
+    const worn = baseWith(['tower', 0, 2]);
+    worn.turrets[0]!.condition = 50;
+    expect(repairAll(worn, RICH)).toMatchObject({ ok: true, stock: { scrap: 989 } });
   });
 
   it('salvage refunds half the cost × condition share, rounded down, and frees the mount', () => {

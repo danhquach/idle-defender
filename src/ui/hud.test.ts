@@ -3,6 +3,7 @@ import { RECOVERY_MS, type Stats } from '../core/data.ts';
 import { finishHorde, hordeDrop, newGame, startHorde, type GameState } from '../core/game.ts';
 import { ARMOURY_CAP } from '../core/data.ts';
 import { newHorde, type HordeState } from '../core/horde.ts';
+import { buildTurret } from '../core/base.ts';
 import { NO_STATS } from '../core/stats.ts';
 import { setup } from '../core/testing.ts';
 import {
@@ -23,7 +24,10 @@ describe('hud', () => {
   it('shows horde, wave and level', () => {
     const s = horde();
     s.xp = 4;
-    expect(statusText(s)).toBe(`Horde 1 · Wave 1/${s.waveCount} · Lv 1 (4/10)`);
+    s.energy = 420.7;
+    expect(statusText(s)).toBe(`Horde 1 · Wave 1/${s.waveCount} · Lv 1 (4/10) · Bank 420/1,000`);
+    s.energy = 0;
+    expect(statusText(s)).toMatch(/· Bank 0\/1,000$/);
   });
 
   it("names each defender's profession from their weapon", () => {
@@ -117,6 +121,20 @@ describe('hud', () => {
       expect(resultScreen(game, s, NOW).lines[2]).toMatch(
         /^Found: Prototype \w+ · armoury full, salvaged for 50 Scrap$/,
       );
+    });
+
+    it('a worn turret joins the repair bill, even when it is the only damage', () => {
+      const game = newGame();
+      const built = buildTurret(game.base, game.stock, true, 'tower', 0, 2);
+      if (!built.ok) throw new Error(built.reason);
+      const g: GameState = { ...game, base: built.base, stock: built.stock };
+      const s = startHorde(g, 1, 'bob', 0, NOW);
+      s.outcome = 'won';
+      s.turrets[0]!.condition = 0; // jammed: a full repair, 20 scrap
+      const last = resultScreen(g, s, NOW).lines.at(-1)!;
+      expect(last).toMatch(/^Repair bill: 20 scrap · (covered|short by .*)$/);
+      s.turrets[0]!.condition = 99.8; // any wear costs at least 1 scrap
+      expect(resultScreen(g, s, NOW).lines.at(-1)).toMatch(/^Repair bill: 1 scrap · /);
     });
 
     it('the salvage Scrap counts toward the repair bill', () => {

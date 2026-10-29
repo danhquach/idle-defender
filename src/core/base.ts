@@ -159,20 +159,26 @@ export function repairSegment(base: Base, stock: Stock, column: number, row: num
   });
 }
 
+/** Every segment's and turret's repair cost, summed. */
 export function repairAllCost(base: Base): Stock {
   const total = stockFrom(() => 0);
-  for (const seg of segments(base)) {
-    const cost = repairCost(seg);
+  for (const cost of [...segments(base).map(repairCost), ...base.turrets.map(turretRepairCost)]) {
     for (const m of MATERIALS) total[m] += cost[m];
   }
   return total;
 }
 
-/** Repairs every damaged segment, or nothing if the stock can't cover them all. */
+/** Repairs every damaged segment and turret, or nothing if the stock can't cover them all. */
 export function repairAll(base: Base, stock: Stock): Result {
-  if (segments(base).every((s) => s.hp >= s.maxHp)) return refuse('Nothing to repair');
+  if (
+    segments(base).every((s) => s.hp >= s.maxHp) &&
+    base.turrets.every((t) => t.condition >= MAX_CONDITION)
+  ) {
+    return refuse('Nothing to repair');
+  }
   return pay(base, stock, repairAllCost(base), (b) => {
     for (const s of segments(b)) s.hp = s.maxHp;
+    for (const t of b.turrets) t.condition = MAX_CONDITION;
   });
 }
 

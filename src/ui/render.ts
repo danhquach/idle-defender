@@ -65,6 +65,8 @@ const COLOR = {
   focus: '#ffe066',
   hpBack: '#c43b3b',
   hpFill: '#5ec24a',
+  conditionBack: '#111110',
+  conditionFill: '#a9c4d6',
   shot: '#e8d36a',
   strike: '#f2f2f2',
   turretLitTop: '#e3c25a',
@@ -81,9 +83,7 @@ const COLOR = {
 
 /** The turret head on its mount, and its barrel toward the horde. */
 const TURRET_ART = {
-  halfWidth: 9,
-  halfDepth: 9,
-  height: 12,
+  ...PIECE.turret,
   barrel: 14,
   sparkBelow: 50,
   smokeBelow: 25,
@@ -219,13 +219,14 @@ function drawHpBar(
   hp: number,
   maxHp: number,
   cam: Camera,
+  colour: { back: string; fill: string } = { back: COLOR.hpBack, fill: COLOR.hpFill },
 ): void {
   const bar = project(at, cam);
   const w = HP_BAR.w * cam.zoom;
   const h = HP_BAR.h * cam.zoom;
-  ctx.fillStyle = COLOR.hpBack;
+  ctx.fillStyle = colour.back;
   ctx.fillRect(bar.sx - w / 2, bar.sy, w, h);
-  ctx.fillStyle = COLOR.hpFill;
+  ctx.fillStyle = colour.fill;
   ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, hp / maxHp), h);
 }
 
@@ -344,7 +345,7 @@ function turretFloor(layers: readonly Layer[], t: Turret): number {
   return postFloor(layers, { kind: t.mount, column: t.column, row: t.row } as Post);
 }
 
-/** A turret: its mount, its head in its state's colours, its barrel, and its wear. */
+/** A turret: its mount, its head in its state's colours, its barrel, its wear and its condition bar. */
 function drawTurret(ctx: CanvasRenderingContext2D, scene: Scene, t: Turret, cam: Camera): void {
   const floor = turretFloor(scene.layers, t);
   const mount = t.mount === 'tower' ? PIECE.tower : PIECE.walk;
@@ -414,6 +415,11 @@ function drawTurret(ctx: CanvasRenderingContext2D, scene: Scene, t: Turret, cam:
       ctx.fill();
     }
   }
+  // Clear of the head and its sparks, in a steel colour no head or HP bar uses.
+  drawHpBar(ctx, { x: t.x, y: t.y, z: top + 2 * HP_BAR.gap }, t.condition, MAX_CONDITION, cam, {
+    back: COLOR.conditionBack,
+    fill: COLOR.conditionFill,
+  });
 }
 
 export function drawScene(
