@@ -1,6 +1,6 @@
 // HUD over the canvas: status bar, the "camp is falling" warning, the 1-of-3 card
-// panel, the replacement panel, the result panel with its stat-point picker and a
-// short toast (refused moves).
+// panel, the replacement panel, the result panel with its stat-point picker, the horde
+// cash shop row and a short toast (refused moves).
 // Text reaches the page only through textContent.
 import { affixText, heldName } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
@@ -11,10 +11,13 @@ import {
   GAS_PER_WIN,
   MATERIALS,
   PROFESSIONS,
+  SHOP,
+  SHOP_ITEMS,
   STAT_NAMES,
   STATS,
   type EnemyKind,
   type Profession,
+  type ShopItem,
   type Stat,
   type Stock,
 } from '../core/data.ts';
@@ -37,6 +40,7 @@ import {
 } from '../core/horde.ts';
 import { professionOf } from '../core/loadout.ts';
 import { replacePosts } from '../core/replace.ts';
+import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { nameTag, spend, titleIn, titleName, unspentPoints, type Title } from '../core/stats.ts';
 import { xpToNext } from '../core/waves.ts';
 
@@ -88,7 +92,23 @@ export function statusText(s: HordeState): string {
     `Wave ${s.wave}/${s.waveCount}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
     bankText(s.energy),
+    `Cash ${s.cash}`,
   ].join(' · ');
+}
+
+/** The shop row: a button per item, each a dry run of `buy` (a running buff shows its seconds left). */
+export function shopButtons(
+  s: HordeState,
+): { item: ShopItem; label: string; disabled: boolean; reason: string }[] {
+  return SHOP_ITEMS.map((item) => {
+    const lock = shopLock(s, item);
+    const left = isBuff(item) ? buffLeft(s, item) : 0;
+    const label =
+      left > 0
+        ? `${SHOP[item].name} ${Math.ceil(left)}s`
+        : `${SHOP[item].name} · ${SHOP[item].cost}`;
+    return { item, label, disabled: lock !== null, reason: lock ?? '' };
+  });
 }
 
 /** Amounts as "5 scrap, 10 wood" in material order, skipping zeros; "nothing" if all are. */
@@ -258,6 +278,7 @@ export function createHud(
   onReplace: (defenderId: string, postId: number) => void,
   onSkip: () => void,
   onSpend: (defenderId: string, stat: Stat) => void,
+  onBuy: (item: ShopItem) => void,
 ): {
   update(state: HordeState): void;
   showResult(screen: ResultScreen): void;
@@ -289,9 +310,17 @@ export function createHud(
   toast.setAttribute('role', 'status');
   toast.hidden = true;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  const shop = el('div', 'hud-shop');
+  const shopItems = SHOP_ITEMS.map((item) => {
+    const button = el('button', 'hud-button hud-shop-item');
+    button.type = 'button';
+    button.addEventListener('click', () => onBuy(item));
+    shop.append(button);
+    return button;
+  });
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, warning, toast, cards, replace, result);
+  hud.append(bar, warning, toast, shop, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -428,6 +457,12 @@ export function createHud(
       const falling = fallingText(state);
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';
+      shopButtons(state).forEach((b, i) => {
+        const button = shopItems[i]!;
+        if (button.textContent !== b.label) button.textContent = b.label;
+        button.disabled = b.disabled;
+        button.title = b.reason;
+      });
 
       // Redraw only when the offer, bench or free posts change (the sim clones each tick).
       const replaceKey = state.replace

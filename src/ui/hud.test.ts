@@ -13,6 +13,7 @@ import {
   payoutText,
   pickerRow,
   resultScreen,
+  shopButtons,
   statusText,
   stockText,
 } from './hud.ts';
@@ -25,9 +26,33 @@ describe('hud', () => {
     const s = horde();
     s.xp = 4;
     s.energy = 420.7;
-    expect(statusText(s)).toBe(`Horde 1 · Wave 1/${s.waveCount} · Lv 1 (4/10) · Bank 420/1,000`);
+    expect(statusText(s)).toBe(
+      `Horde 1 · Wave 1/${s.waveCount} · Lv 1 (4/10) · Bank 420/1,000 · Cash 0`,
+    );
     s.energy = 0;
-    expect(statusText(s)).toMatch(/· Bank 0\/1,000$/);
+    s.cash = 36;
+    expect(statusText(s)).toMatch(/· Bank 0\/1,000 · Cash 36$/);
+  });
+
+  it('shows a shop button per item as a dry run of buy, with a running buff counting down', () => {
+    const s = horde();
+    expect(shopButtons(s)).toEqual([
+      { item: 'adrenaline', label: 'Adrenaline · 30', disabled: true, reason: 'Not enough cash' },
+      { item: 'overdrive', label: 'Overdrive · 30', disabled: true, reason: 'Not enough cash' },
+      { item: 'patch', label: 'Patch wall · 20', disabled: true, reason: 'No wall to patch' },
+      { item: 'fix', label: 'Fix turret · 20', disabled: true, reason: 'No turret to fix' },
+    ]);
+    s.cash = 30;
+    s.buffs.overdrive = 12.2;
+    s.time = 0.5;
+    const [adrenaline, overdrive] = shopButtons(s);
+    expect(adrenaline).toMatchObject({ disabled: false, reason: '' });
+    expect(overdrive).toEqual({
+      item: 'overdrive',
+      label: 'Overdrive 12s',
+      disabled: true,
+      reason: 'Already active',
+    });
   });
 
   it("names each defender's profession from their weapon", () => {

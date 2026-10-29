@@ -351,3 +351,21 @@ body {
   margin: 6px 0 0;
   color: #e0b84a;
 }
+
+.hud-shop {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+}
+
+.hud-shop-item {
+  padding: 6px 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

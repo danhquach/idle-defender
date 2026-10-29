@@ -181,10 +181,12 @@ export const ENEMIES: Readonly<
       readonly damage: number;
       readonly attackInterval: number;
       readonly xp: number;
+      /** Horde cash its kill pays (design §4). */
+      readonly cash: number;
     }
   >
 > = {
-  shambler: { hp: 20, speed: 30, damage: 5, attackInterval: 1, xp: 1 },
+  shambler: { hp: 20, speed: 30, damage: 5, attackInterval: 1, xp: 1, cash: 2 },
 };
 
 export const SPAWN_INTERVAL = 0.8;
@@ -444,3 +446,21 @@ export const TRAP_KINDS = Object.keys(TRAPS) as TrapKind[];
 export const TRAP_DURABILITY = 30;
 /** Removing a trap refunds this share of its cost × its durability share, rounded down. */
 export const TRAP_REFUND = 0.5;
+
+// --- Horde cash shop (ID-018). Design §4. ---
+
+export type BuffId = 'adrenaline' | 'overdrive';
+export type ShopItem = BuffId | 'patch' | 'fix';
+/**
+ * What horde cash buys mid-fight: two timed buffs for defenders and turrets
+ * (`damage` / `fireRate` factors, `seconds` of fight time), a wall patch (`hp` to the
+ * most damaged standing segment) and a turret fix (`condition` to the most worn turret).
+ */
+export const SHOP = {
+  adrenaline: { name: 'Adrenaline', cost: 30, damage: 1.25, fireRate: 1, seconds: 30 },
+  overdrive: { name: 'Overdrive', cost: 30, damage: 1, fireRate: 1.25, seconds: 30 },
+  patch: { name: 'Patch wall', cost: 20, hp: 100 },
+  fix: { name: 'Fix turret', cost: 20, condition: 30 },
+} as const;
+export const SHOP_ITEMS = Object.keys(SHOP) as ShopItem[];
+export const BUFF_IDS: readonly BuffId[] = ['adrenaline', 'overdrive'];
