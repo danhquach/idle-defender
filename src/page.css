@@ -1,0 +1,14 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #15171a;
+  color: #d8d4cc;
+}
+
+body {
+  margin: 0;
+}
+
+#app {
+  padding: 16px;
+}

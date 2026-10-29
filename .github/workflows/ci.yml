@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Lint, unit, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Version raised over main's
+        # Each PR to main raises the game's version. Dependabot's PRs never bump it
+        # and are let through.
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --depth=1 --no-tags origin "$BASE_REF"
+          node tools/version-check.mjs bump FETCH_HEAD
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  check:
+    # The required status check on main: green only when every job above is.
+    # Add new jobs to `needs`.
+    name: Lint, test, build
+    needs: [build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed
+        if: needs.build.result != 'success'
+        run: exit 1
