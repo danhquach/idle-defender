@@ -296,6 +296,11 @@ close-quarter weapons come out only when an enemy is close.
   balance targets); knife 10 every 0.5 s, toolkit 4 every 0.6 s, both
   reaching 50 px. A sidearm fired on the move uses ground-post range
   (×0.75). One shot cooldown covers every weapon a defender carries.
+- **Roster screen (as built, ID-012):** a Roster button on the build panel
+  opens it in the panel's place: each defender's level and XP, stats,
+  titles, unspent points (spent there) and rest time, and three pickers
+  (primary, secondary, item). Swaps are free between hordes, injured or
+  not; a loadout the rules refuse says why and changes nothing.
 
 More professions later *(guess)*: Marksman (sniper rifles only, bigger
 bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).
@@ -719,7 +724,10 @@ original outline.
   and large mutants; sprites sorted by depth. Base on the left, horde from
   the right.
 - Weapon visible on each defender sprite so the profession reads at a
-  glance; title shown as a small badge.
+  glance; title shown as a small badge. *As built (ID-012, placeholder):* a
+  plate above the defender in their top title's profession colour, one pip
+  per rank (Junior 1 … Legendary 4); the same badge sits by the name on the
+  roster.
 - Turrets show power (lit / dark) and condition (sparks, smoke) at a
   glance.
 - Muted, desaturated ruins; mutants get the only saturated colours (acid

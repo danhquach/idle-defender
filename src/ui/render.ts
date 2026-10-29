@@ -13,6 +13,7 @@ import {
 } from '../core/data.ts';
 import type { Defender, HordeState, Layer } from '../core/horde.ts';
 import { professionOf } from '../core/loadout.ts';
+import { badgeOf } from '../core/stats.ts';
 import type { Tier } from '../core/base.ts';
 import {
   depthSort,
@@ -24,6 +25,13 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
+
+/** Title badge colour per profession: muted, so the horde keeps the saturated colours. */
+export const BADGE_COLOUR: Readonly<Record<Profession, string>> = {
+  gunner: '#b9a35c',
+  ripper: '#a8615c',
+  engineer: '#c47f3c',
+};
 
 const COLOR = {
   sky: '#15171a',
@@ -82,6 +90,8 @@ const ENEMY = { radius: ENEMY_RADIUS * 0.85, z: 10 } as const;
 const STRIKE = 7;
 /** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
 const HP_BAR = { w: 24, h: 4, z: 30, gap: 6 } as const;
+/** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
+const BADGE = { pip: 4, gap: 2, pad: 2, z: 14 } as const;
 
 /** What the renderer needs from a fight; build mode passes the base laid out the same way. */
 export type Scene = Pick<
@@ -209,13 +219,36 @@ function drawWeapon(
   }
 }
 
+/** A titled defender's badge: their top title's colour, one light pip per rank. */
+function drawBadge(
+  ctx: CanvasRenderingContext2D,
+  d: Pick<Defender, 'x' | 'y' | 'stats'>,
+  z0: number,
+  cam: Camera,
+): void {
+  const badge = d.stats ? badgeOf(d.stats) : null;
+  if (!badge) return;
+  const at = project({ x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap + BADGE.z }, cam);
+  const pip = BADGE.pip * cam.zoom;
+  const gap = BADGE.gap * cam.zoom;
+  const pad = BADGE.pad * cam.zoom;
+  const w = badge.pips * pip + (badge.pips - 1) * gap + 2 * pad;
+  const h = pip + 2 * pad;
+  ctx.fillStyle = BADGE_COLOUR[badge.profession];
+  ctx.fillRect(at.sx - w / 2, at.sy - h / 2, w, h);
+  ctx.fillStyle = COLOR.strike;
+  for (let i = 0; i < badge.pips; i++) {
+    ctx.fillRect(at.sx - w / 2 + pad + i * (pip + gap), at.sy - pip / 2, pip, pip);
+  }
+}
+
 /**
  * A defender standing `z0` up at `(x, y)` holding their weapon, with a ring at its
- * feet when selected and an HP bar once hurt.
+ * feet when selected, their title badge and an HP bar once hurt.
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'loadout'>,
+  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'loadout' | 'stats'>,
   z0: number,
   selected: boolean,
   cam: Camera,
@@ -244,6 +277,7 @@ function drawDefender(
     cam,
   );
   drawWeapon(ctx, d, z0, cam);
+  drawBadge(ctx, d, z0, cam);
   if (d.hp < d.maxHp) {
     drawHpBar(ctx, { x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap }, d.hp, d.maxHp, cam);
   }

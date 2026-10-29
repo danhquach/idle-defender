@@ -97,6 +97,12 @@ export function topTitle(stats: Readonly<Stats>): Title | null {
   return best;
 }
 
+/** The title badge (design §15): the top title's profession and 1–4 pips by rank; null with none. */
+export function badgeOf(stats: Readonly<Stats>): { profession: Profession; pips: number } | null {
+  const t = topTitle(stats);
+  return t ? { profession: t.profession, pips: TITLES.findIndex((x) => x.at === t.at) + 1 } : null;
+}
+
 /** "Bob the Gunner" with a title, else "Bob". */
 export function nameTag(d: { name: string; stats?: Readonly<Stats> }): string {
   const t = d.stats ? topTitle(d.stats) : null;

@@ -11,13 +11,14 @@ import {
   newGame,
   recover,
   spendPoint,
+  equip,
   startHorde,
   xpGains,
   type GameState,
 } from './game.ts';
 import { standing, type HordeState } from './horde.ts';
 import { NO_STATS, spentPoints } from './stats.ts';
-import { loadoutFrom } from './loadout.ts';
+import { loadoutFrom, type Loadout } from './loadout.ts';
 
 const NOW = 1_000_000;
 
@@ -194,6 +195,56 @@ describe('game', () => {
     expect(spendPoint(cur, 'bob', 'aim')).toEqual({ ok: false, reason: 'No stat points left' });
     expect(g.roster[1]!.stats).toEqual(NO_STATS);
     expect(() => spendPoint(g, 'nobody', 'aim')).toThrow(RangeError);
+  });
+
+  it('equip swaps a loadout, injured or not, and leaves the game untouched', () => {
+    const g = newGame();
+    g.roster[0]!.injuredUntil = NOW + 1000;
+    const r = equip(g, 'bob', { primary: 'pistol', secondary: 'knife', item: 'shield' });
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.game.roster[0]!.loadout).toEqual({
+      primary: 'pistol',
+      secondary: 'knife',
+      item: 'shield',
+    });
+    expect(r.game.roster.slice(1)).toEqual(g.roster.slice(1));
+    expect(g.roster[0]!.loadout).toEqual(loadoutFrom('pistol'));
+    // Back to a Gunner: the shield has to go with the knife.
+    const back = equip(r.game, 'bob', { primary: 'pistol', secondary: null, item: null });
+    expect(back.ok && back.game.roster[0]!.loadout).toEqual(loadoutFrom('pistol'));
+  });
+
+  it('equip refuses what the game does not allow; unknown ids throw', () => {
+    const g = newGame();
+    expect(equip(g, 'jack', { primary: 'pistol', secondary: null, item: 'shield' })).toEqual({
+      ok: false,
+      reason: 'A shield needs a blade',
+    });
+    expect(equip(g, 'jack', { primary: 'knife', secondary: null, item: null })).toEqual({
+      ok: false,
+      reason: 'The primary must be a gun',
+    });
+    expect(() => equip(g, 'nobody', loadoutFrom('pistol'))).toThrow(RangeError);
+    for (const bad of [
+      { primary: 'railgun', secondary: null, item: null },
+      { primary: 'pistol', secondary: 'toString', item: null },
+      { primary: 'pistol', secondary: 'knife', item: 'cape' },
+      { primary: null, secondary: null, item: null },
+      { primary: 'pistol', secondary: '__proto__', item: null },
+      { primary: 'pistol', secondary: 'knife', item: 'constructor' },
+      { primary: 'pist\u043el', secondary: null, item: null }, // Cyrillic о
+      { primary: 'pis\u200btol', secondary: null, item: null }, // zero-width space
+      { primary: 'Pistol', secondary: null, item: null },
+      { primary: 1, secondary: null, item: null },
+      { primary: 'a'.repeat(100_000), secondary: null, item: null },
+    ]) {
+      expect(
+        () => equip(g, 'bob', bad as unknown as Loadout),
+        JSON.stringify(bad).slice(0, 80),
+      ).toThrow(RangeError);
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
   });
 
   it('a horde fights with the roster stats', () => {

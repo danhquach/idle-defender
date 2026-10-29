@@ -135,6 +135,10 @@ export function start(root: HTMLElement): void {
       selected = null;
       panel.show(game, selected);
     },
+    (next) => {
+      commit(next);
+      panel.show(game, selected);
+    },
   );
   // Whether the last write was refused, so the next one that works can say so.
   let saveRefused = false;

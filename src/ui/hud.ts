@@ -111,10 +111,10 @@ export interface ResultScreen {
 
 /** What each stat does, for the picker. */
 export const STAT_HINT: Readonly<Record<Stat, string>> = {
-  aim: 'Gunner damage and crits',
-  might: 'Ripper damage and cleave',
+  aim: 'Gun damage and crits, any gun',
+  might: 'Blade damage and cleave',
   tech: 'Engineer repair',
-  grit: 'HP in hordes, any weapon',
+  grit: 'HP in hordes, any loadout',
 };
 
 /** One defender's row in the stat picker. */
