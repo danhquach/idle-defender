@@ -1,7 +1,7 @@
 {
   "name": "idle-defender",
   "private": true,
-  "version": "0.3.3",
+  "version": "0.4.0",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "check:version": "git fetch --quiet --no-tags origin main && node tools/version-check.mjs bump FETCH_HEAD",
     "test": "vitest run",
+    "balance": "node --experimental-strip-types tools/balance.mjs",
     "lint": "tsc --noEmit && eslint . && prettier --check .",
     "format": "prettier --write .",
     "prepare": "node tools/install-hooks.mjs"

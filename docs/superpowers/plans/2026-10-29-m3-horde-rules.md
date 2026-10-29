@@ -106,3 +106,33 @@ M3 = ID-006 (horde rules) + ID-007 (victory and defeat screens) + ID-008 (save) 
 - Modify `src/ui/app.ts`: load at start, `commit` saves after each change, notices.
 - Modify `src/ui/build.ts`: the backup section; `src/page.css`.
 - Modify `vitest.config.ts` (storage tests), `docs/design.md` §12.
+
+---
+
+## ID-009 — Balance simulator and balance tests
+
+**Acceptance criteria** (also on issue #9):
+
+**Simulator** (`src/core/sim.ts`, pure and seeded like the rest of core)
+- `playHorde(game, seed, now)` plays the game's next horde to the end with a fixed scripted player: the first fit defender starts on the usable post furthest forward; a recruit card is taken when offered, else the first card; every replacement is taken (first bench defender, first allowed post); no focus, no cash. A horde still on after an hour of fight time throws (a stuck fight is a bug, not a result).
+- `summarise` reads a finished horde: outcome, wave reached, fight seconds, who took part, who was injured, share of wall HP left.
+- `playCampaign(seed, hordes)` chains hordes from a new game through `finishHorde`: it waits until the whole roster is fit, repairs segments most damaged first while the stock covers them, and retries a lost horde. It never builds.
+- The same seed always gives the same result.
+
+**Report**
+- `npm run balance -- [seeds] [hordes]` (each a whole number 1–100, else a one-line error) prints, for each horde on the starting base, the win rate, wave reached, length (min / median / max minutes) and injuries, then how far a campaign gets per seed. Plain text; runs on Node's type stripping (Node 22.6 or later), no new dependency.
+
+**Balance tests** (`src/core/balance.test.ts`, 20 seeds, hordes 1–8 on the starting base)
+- Horde 1 (the tutorial) is won on every seed with nobody injured; Horde 2 is won on every seed.
+- Hordes 1 and 2 last 3–5 minutes (design §4).
+- The win rate never rises from one horde to the next.
+- The starting base wins nothing from Horde 5 on: past that the camp must grow (design §2).
+- A win's payout covers repairing that horde's damage (checked on at least one damaged win).
+- A campaign without building reaches Horde 4 on every seed and stalls before Horde 6.
+
+**General**
+- Design §16 says where the simulator and report live. Unit tests for the scripted player's start, card and replacement choices, the stuck-fight limit, the summary, repairs (most damaged first, skipping what it can't afford), waiting out injuries, never building, and the campaign. Existing tests stay green. Version `0.4.0`.
+
+**Files:**
+- Create `src/core/sim.ts`, `src/core/sim.test.ts`, `src/core/balance.test.ts`, `tools/balance.mjs`.
+- Modify `package.json` (`balance` script, version), `docs/design.md` §16.
