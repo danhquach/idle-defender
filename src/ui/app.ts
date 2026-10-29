@@ -1,7 +1,7 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { chooseCard } from '../core/cards.ts';
-import { FIELD, TURRET_BANK, type Stat } from '../core/data.ts';
+import { FIELD, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -19,6 +19,7 @@ import {
   tick,
   type HordeState,
 } from '../core/horde.ts';
+import { runGenerator } from '../core/power.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import { createBuildPanel } from './build.ts';
@@ -336,10 +337,11 @@ export function start(root: HTMLElement): void {
         hud.showResult(resultScreen(game, horde, endedAt));
       }
     } else {
-      // Someone back from rest: redraw the start picker.
-      const recovered = recover(game, Date.now());
-      if (recovered !== game) {
-        commit(recovered);
+      // Someone back from rest, or the generator burnt a Gas: save and redraw.
+      const now = Date.now();
+      const settled = runGenerator(recover(game, now), now);
+      if (settled !== game) {
+        commit(settled);
         panel.show(game, selected);
       }
       drawScene(ctx, buildScene(game, panel.choice(game)), cam, view, { selected });
@@ -356,12 +358,12 @@ function buildScene(game: GameState, choice: { defenderId: string; postId: numbe
   const spec = game.roster.find((d) => d.id === choice?.defenderId);
   const defenders = post && spec ? [standing(spec, post, 0)] : [];
   if (post && spec) post.defenderId = spec.id;
-  // A full stand-in bank, so build mode shows each turret lit unless it is jammed or its wall is down.
+  // The bank as it stands, so build mode shows each turret lit or dark as the next fight starts.
   return {
     layers,
     posts,
     turrets,
-    energy: TURRET_BANK,
+    energy: game.power.bank,
     defenders,
     enemies: [],
     shots: [],

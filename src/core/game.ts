@@ -5,9 +5,12 @@ import { heldName, isOwned, rollDrop, type Held, type OwnedWeapon } from './armo
 import { newBase, type Base, type Tier } from './base.ts';
 import {
   ARMOURY_CAP,
+  BANK_CAP,
   DEFENDER_XP,
+  GAS_PER_WIN,
   HORDE_PAYOUT,
   MATERIALS,
+  MAX_COUNT,
   RECOVERY_MS,
   START_STOCK,
   START_TIERS,
@@ -21,6 +24,7 @@ import {
 } from './data.ts';
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
+import { loadBatteries, newPower, runGenerator, type Power } from './power.ts';
 import { rngFrom } from './rng.ts';
 import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
 
@@ -45,6 +49,8 @@ export interface GameState {
   lab: number;
   /** Research nodes done, in the order researched. */
   research: ResearchId[];
+  /** The battery bank, batteries, Gas and generator (design §7). */
+  power: Power;
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -55,7 +61,7 @@ const STARTER_ROSTER: readonly DefenderSpec[] = [
 ];
 
 export function newGame(): GameState {
-  return {
+  return loadBatteries({
     hordeNumber: 1,
     base: newBase(),
     stock: { ...START_STOCK },
@@ -70,7 +76,8 @@ export function newGame(): GameState {
     armoury: [],
     lab: 0,
     research: [],
-  };
+    power: newPower(),
+  });
 }
 
 function finite(name: string, now: number): void {
@@ -292,13 +299,16 @@ export function startHorde(
     startDefenderId: defenderId,
     base: game.base,
     startPostId: postId,
+    bank: game.power.bank,
+    startedAt: now,
   });
 }
 
 /**
  * Back to building at `now` (when the horde ended): the fight's damage stays, the
  * payout is added, a win gives XP and maybe a weapon and moves on, and the injured
- * rest (`injuredUntil`).
+ * rest (`injuredUntil`). The bank keeps the charge left; the generator's clock skips
+ * the fight, then it runs to `now` and batteries load.
  */
 export function finishHorde(game: GameState, horde: HordeState, now: number): GameState {
   finite('finishHorde', now);
@@ -321,6 +331,13 @@ export function finishHorde(game: GameState, horde: HordeState, now: number): Ga
     const d = g.roster.find((r) => r.id === i.defender.id);
     if (d) d.injuredUntil = injuredUntil(horde, i, now);
   }
-  if (horde.outcome === 'won') g.hordeNumber += 1;
-  return g;
+  if (horde.outcome === 'won') {
+    g.hordeNumber += 1;
+    // Capped where a save reads it, so a win never leaves a save that won't load.
+    g.power.gas = Math.min(MAX_COUNT, g.power.gas + GAS_PER_WIN);
+  }
+  g.power.bank = Math.min(BANK_CAP, Math.max(0, horde.energy));
+  const gen = g.power.generator;
+  if (gen && gen.at !== null) gen.at = Math.min(now, gen.at + Math.max(0, now - horde.startedAt));
+  return loadBatteries(runGenerator(g, now));
 }

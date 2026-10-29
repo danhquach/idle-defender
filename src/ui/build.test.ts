@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment } from '../core/base.ts';
+import { BANK_CAP, GENERATOR } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -12,8 +13,10 @@ import {
   loadCode,
   pickStart,
   postKey,
+  powerLines,
   stockBarText,
 } from './build.ts';
+import { clockTime } from './hud.ts';
 
 describe('build panel', () => {
   it('shows the next horde and every material', () => {
@@ -129,5 +132,46 @@ describe('build panel', () => {
       { kind: 'note', text: 'Metal walls · researched' },
       { kind: 'note', text: 'Auto-turret · researched' },
     ]);
+  });
+
+  it('shows the generator to build, the Gas and the batteries in storage', () => {
+    const g = newGame();
+    const lines = powerLines(g);
+    expect(lines.map((l) => (l.kind === 'action' ? l.label : l.text))).toEqual([
+      'Generator: not built',
+      'Build generator',
+      'Gas 4 · Batteries in storage: none',
+    ]);
+    expect(lines[1]).toMatchObject({ cost: GENERATOR.cost, result: { ok: true } });
+    const poor = powerLines({ ...g, stock: { ...g.stock, wood: 0 } })[1]!;
+    expect(poor.kind === 'action' && !poor.result.ok && poor.result.reason).toBe('Not enough wood');
+    const stored = {
+      ...g,
+      power: {
+        ...g.power,
+        batteries: { makeshift: 2, standard: 0, 'high-capacity': 1, military: 0 },
+      },
+    };
+    expect(powerLines(stored)[2]).toEqual({
+      kind: 'note',
+      text: 'Gas 4 · Batteries in storage: 2 Makeshift, 1 High-capacity',
+    });
+  });
+
+  it('says when the generator is running, or why it is idle', () => {
+    const g = newGame();
+    const at = 1_800_000_000_000;
+    const state = (p: Partial<GameState['power']>): string => {
+      const line = powerLines({ ...g, power: { ...g.power, ...p } })[0]!;
+      return line.kind === 'action' ? line.label : line.text;
+    };
+    expect(state({ generator: { at } })).toBe(
+      `Generator · running, next Gas at ${clockTime(at + GENERATOR.gasMs)}`,
+    );
+    expect(state({ gas: 0, generator: { at: null } })).toBe('Generator · idle: no Gas');
+    expect(state({ bank: BANK_CAP, generator: { at: null } })).toBe(
+      'Generator · idle: the bank is full',
+    );
+    expect(powerLines({ ...g, power: { ...g.power, generator: { at } } })).toHaveLength(2);
   });
 });

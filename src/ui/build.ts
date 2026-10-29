@@ -16,6 +16,10 @@ import {
 } from '../core/base.ts';
 import { postUsable } from '../core/cards.ts';
 import {
+  BANK_CAP,
+  BATTERIES,
+  BATTERY_IDS,
+  GENERATOR,
   MATERIALS,
   POST_COST,
   RESEARCH,
@@ -27,6 +31,7 @@ import {
 import { available, type GameState, type RosterDefender } from '../core/game.ts';
 import { labCost, research, upgradeLab, type GameResult } from '../core/research.ts';
 import { layoutOf } from '../core/horde.ts';
+import { buildGenerator, nextGasAt } from '../core/power.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clockTime, defenderLabel, el, POST_NAME, postName, slotName, stockText } from './hud.ts';
@@ -132,6 +137,42 @@ export function labLines(game: GameState): LabLine[] {
   return lines;
 }
 
+/**
+ * The power section (design §7): the generator and its state, then the Gas and the
+ * batteries waiting in storage. The bank meter comes with ID-016.
+ */
+export function powerLines(game: GameState): LabLine[] {
+  const { power } = game;
+  const next = nextGasAt(power);
+  const state =
+    power.generator === null
+      ? 'Generator: not built'
+      : next !== null
+        ? `Generator · running, next Gas at ${clockTime(next)}`
+        : power.gas === 0
+          ? 'Generator · idle: no Gas'
+          : power.bank >= BANK_CAP
+            ? 'Generator · idle: the bank is full'
+            : 'Generator · starting';
+  const lines: LabLine[] = [{ kind: 'heading', text: state }];
+  if (power.generator === null) {
+    lines.push({
+      kind: 'action',
+      label: 'Build generator',
+      cost: GENERATOR.cost,
+      result: buildGenerator(game),
+    });
+  }
+  const stored = BATTERY_IDS.filter((b) => power.batteries[b] > 0).map(
+    (b) => `${power.batteries[b]} ${BATTERIES[b].name}`,
+  );
+  lines.push({
+    kind: 'note',
+    text: `Gas ${power.gas} · Batteries in storage: ${stored.length > 0 ? stored.join(', ') : 'none'}`,
+  });
+  return lines;
+}
+
 export interface BuildPanel {
   /** Redraws the panel for `game` with `selected` open; call when either changes. */
   show(game: GameState, selected: SlotHit | null): void;
@@ -222,10 +263,11 @@ export function createBuildPanel(
       if (result.ok) onGame(result.game);
     });
 
-  function labSection(game: GameState): HTMLElement {
-    const section = el('section', 'build-lab');
+  /** A section of headings, notes and dry-run actions (the Lab, power). */
+  function linesSection(className: string, lines: LabLine[]): HTMLElement {
+    const section = el('section', className);
     section.append(
-      ...labLines(game).map((line) =>
+      ...lines.map((line) =>
         line.kind === 'action'
           ? labOption(line.label, line.cost, line.result)
           : line.kind === 'heading'
@@ -352,7 +394,15 @@ export function createBuildPanel(
     });
     start.append(...startSection(game), roster);
     code.value = exportCode(encodeSave(game, Date.now()));
-    return [el('h2', 'build-title', 'Build'), slot, all, labSection(game), start, backup];
+    return [
+      el('h2', 'build-title', 'Build'),
+      slot,
+      all,
+      linesSection('build-lab', labLines(game)),
+      linesSection('build-power', powerLines(game)),
+      start,
+      backup,
+    ];
   }
 
   /** The roster in place of the build panel: a Back button, then each defender. */

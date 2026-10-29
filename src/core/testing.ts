@@ -6,7 +6,7 @@ import type { Loadout } from './loadout.ts';
 /** A pistol and nothing else: a Gunner. */
 export const pistol = (): Loadout => ({ primary: 'pistol', secondary: null, item: null });
 
-/** Horde 1 on the starting base, three pistol defenders a, b, c, starting with a on post 0. */
+/** Horde 1 on the starting base, three pistol defenders a, b, c, starting with a on post 0, a bank of 600. */
 export function setup(): HordeSetup {
   return {
     hordeNumber: 1,
@@ -18,6 +18,8 @@ export function setup(): HordeSetup {
     startDefenderId: 'a',
     base: newBase(),
     startPostId: 0,
+    bank: 600,
+    startedAt: 0,
   };
 }
 

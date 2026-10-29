@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
-import { ARMOURY_CAP, RECOVERY_MS } from '../core/data.ts';
+import { ARMOURY_CAP, BANK_CAP, RECOVERY_MS } from '../core/data.ts';
 import { newGame, recover, type GameState } from '../core/game.ts';
 import type { Loadout } from '../core/loadout.ts';
 import {
@@ -681,6 +681,139 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
       raw.replace('"research":[', '"research":[{"__proto__":{"polluted":1}},'),
     ];
     for (const r of raws) expect(decodeSave(r)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('save: battery bank and generator (ID-015)', () => {
+  const power = (s: Loose) => s.game.power;
+  /** played() with a generator running since `at`, some Gas, a part-drawn bank and batteries left over. */
+  function powered(at = NOW - 1000): GameState {
+    const g = played();
+    return {
+      ...g,
+      power: {
+        bank: 990.25, // no battery fits, so loading leaves it as it is
+        gas: 7,
+        batteries: { makeshift: 1, standard: 0, 'high-capacity': 2, military: 3 },
+        generator: { at },
+      },
+    };
+  }
+  const encoded = (game: GameState): Loose => JSON.parse(encodeSave(game, NOW));
+  const decode = (save: Loose) => decodeSave(JSON.stringify(save));
+
+  it('round-trips the bank, Gas, batteries and a running or idle generator', () => {
+    for (const game of [
+      powered(),
+      { ...powered(), power: { ...powered().power, generator: { at: null } } },
+    ]) {
+      expect(decodeSave(encodeSave(game, NOW))).toEqual({ game, savedAt: NOW });
+    }
+    const none = { ...powered(), power: { ...powered().power, generator: null } };
+    expect(decodeSave(encodeSave(none, NOW))).toEqual({ game: none, savedAt: NOW });
+  });
+
+  it('loads batteries waiting in storage into the bank on load', () => {
+    const s = encoded(powered());
+    power(s).bank = 0;
+    expect(decode(s)!.game.power).toMatchObject({
+      bank: 3 * 250 + 160 + 60,
+      batteries: { makeshift: 0, standard: 0, 'high-capacity': 1, military: 0 },
+    });
+  });
+
+  it('loads a save from before the bank with a new game power, its batteries loaded', () => {
+    const s = encoded(newGame());
+    delete s.game.power;
+    expect(decode(s)).toEqual({ game: newGame(), savedAt: NOW });
+    const played0 = encoded(played());
+    delete played0.game.power;
+    expect(decode(played0)!.game.power).toEqual(newGame().power);
+  });
+
+  it('cuts a generator clock later than the save to the save', () => {
+    const s = encoded(powered(NOW + 5 * 60 * 60 * 1000));
+    expect(decode(s)!.game.power.generator).toEqual({ at: NOW });
+  });
+
+  it('refuses hostile bank, Gas, battery and generator shapes', () => {
+    const bad: ((p: Loose) => void)[] = [
+      (p) => (p.bank = -0.01),
+      (p) => (p.bank = 1000.01),
+      (p) => (p.bank = '500'),
+      (p) => (p.bank = null),
+      (p) => (p.bank = Number.NaN), // JSON turns it into null
+      (p) => (p.gas = 1.5),
+      (p) => (p.gas = -1),
+      (p) => (p.gas = 1e13),
+      (p) => (p.gas = '7'),
+      (p) => (p.batteries.military = 0.5),
+      (p) => (p.batteries.military = -1),
+      (p) => (p.batteries.military = 1e13),
+      (p) => (p.batteries.military = '3'),
+      (p) => (p.batteries.nuclear = 1),
+      (p) => (p.batteries['military '] = 1),
+      (p) => (p.batteries['mіlitary'] = 1), // Cyrillic i
+      (p) => delete p.batteries.standard,
+      (p) => (p.batteries = [1, 2, 3, 4]),
+      (p) => (p.batteries = null),
+      (p) => (p.generator = {}),
+      (p) => (p.generator = { at: 1.5 }),
+      (p) => (p.generator = { at: -1 }),
+      (p) => (p.generator = { at: '1' }),
+      (p) => (p.generator = { at: 1e14 }),
+      (p) => (p.generator = { at: 1, extra: 1 }),
+      (p) => (p.generator = true),
+      (p) => (p.generator = [1]),
+      (p) => delete p.generator,
+      (p) => delete p.gas,
+      (p) => (p.extra = 1),
+    ];
+    for (const change of bad) expect(hostile((s) => change(power(s)))).toBeNull();
+    expect(hostile((s) => (s.game.power = null))).toBeNull();
+    expect(hostile((s) => (s.game.power = 'full'))).toBeNull();
+    expect(hostile((s) => (s.game.power = []))).toBeNull();
+  });
+
+  it('accepts the edge values and refuses Infinity written into the raw save', () => {
+    const edge = (change: (p: Loose) => void) => {
+      const s = encoded(powered());
+      change(power(s));
+      return decode(s);
+    };
+    const empty = edge((p) => {
+      p.bank = 0;
+      for (const k of Object.keys(p.batteries)) p.batteries[k] = 0;
+    });
+    expect(empty?.game.power.bank).toBe(0);
+    expect(edge((p) => (p.bank = BANK_CAP))?.game.power.bank).toBe(BANK_CAP);
+    expect(edge((p) => (p.gas = 1e12))?.game.power.gas).toBe(1e12);
+    expect(edge((p) => (p.gas = 1e12 + 1))).toBeNull();
+    expect(edge((p) => (p.batteries.makeshift = 1e12))).not.toBeNull();
+    expect(edge((p) => (p.generator = { at: 0 }))?.game.power.generator).toEqual({ at: 0 });
+    const raw = encodeSave(powered(), NOW);
+    for (const r of [
+      raw.replace('"bank":990.25', '"bank":1e999'),
+      raw.replace('"gas":7', '"gas":1e999'),
+      raw.replace(`"at":${NOW - 1000}`, '"at":1e999'),
+    ]) {
+      expect(r).not.toBe(raw);
+      expect(decodeSave(r)).toBeNull();
+    }
+  });
+
+  it('refuses a polluted power entry and leaves Object.prototype alone', () => {
+    const raw = encodeSave(powered(), NOW);
+    const raws = [
+      raw.replace('"power":{', '"power":{"__proto__":{"polluted":1},'),
+      raw.replace('"batteries":{', '"batteries":{"__proto__":{"polluted":1},'),
+      raw.replace('"generator":{', '"generator":{"constructor":{"prototype":{"polluted":1}},'),
+    ];
+    for (const r of raws) {
+      expect(r).not.toBe(raw);
+      expect(decodeSave(r)).toBeNull();
+    }
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });

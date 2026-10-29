@@ -55,7 +55,11 @@ function nodeOf(id: ResearchId): (typeof RESEARCH)[ResearchId] {
 }
 
 /** Charges `cost` and applies `change` to a copy, or refuses naming the first short material. */
-function pay(game: GameState, cost: Partial<Stock>, change: (g: GameState) => void): GameResult {
+export function pay(
+  game: GameState,
+  cost: Partial<Stock>,
+  change: (g: GameState) => void,
+): GameResult {
   const short = MATERIALS.find((m) => game.stock[m] < (cost[m] ?? 0));
   if (short) return { ok: false, reason: `Not enough ${short}` };
   const g = structuredClone(game);

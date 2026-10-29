@@ -381,5 +381,37 @@ export const TURRET_RANGE: Readonly<Record<TurretMount, number>> = {
   tower: 1.25,
   'wall-walk': 1,
 };
-/** Stand-in battery bank: full charge at each horde start until ID-015. */
-export const TURRET_BANK = 600;
+
+// --- Battery bank and generator (ID-015). Design §7. ---
+
+export type Battery = 'makeshift' | 'standard' | 'high-capacity' | 'military';
+/** Charge each battery quality holds, smallest first (design §7, as built ID-015). */
+export const BATTERIES: Readonly<
+  Record<Battery, { readonly name: string; readonly charge: number }>
+> = {
+  makeshift: { name: 'Makeshift', charge: 60 },
+  standard: { name: 'Standard', charge: 100 },
+  'high-capacity': { name: 'High-capacity', charge: 160 },
+  military: { name: 'Military', charge: 250 },
+};
+export const BATTERY_IDS = Object.keys(BATTERIES) as Battery[];
+/** The bank holds at most this much charge: 10 Standard batteries' worth. */
+export const BANK_CAP = 10 * BATTERIES.standard.charge;
+/**
+ * The generator (design §7): built once for `cost`; burns 1 Gas every `gasMs` of real
+ * time for `gasCharge` charge, while there is Gas and room in the bank.
+ */
+export const GENERATOR = {
+  cost: { scrap: 40, wood: 20 },
+  gasMs: 10 * 60 * 1000,
+  gasCharge: BATTERIES.standard.charge / 2,
+} as const;
+/** A new game's batteries and Gas (design §11 start, PM decision D1 for ID-015). */
+export const START_POWER: {
+  readonly gas: number;
+  readonly batteries: Partial<Record<Battery, number>>;
+} = { gas: 4, batteries: { makeshift: 2 } };
+/** Far past anything a game reaches; keeps every count a safe integer, and a save refuses more. */
+export const MAX_COUNT = 1e12;
+/** Gas each won horde pays, a stand-in until patrols bring it (PM decision D1). */
+export const GAS_PER_WIN = 1;

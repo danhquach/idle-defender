@@ -7,6 +7,7 @@ import { repairAllCost, type PostKind } from '../core/base.ts';
 import { UPGRADES } from '../core/cards.ts';
 import {
   FALL_WARNING,
+  GAS_PER_WIN,
   MATERIALS,
   PROFESSIONS,
   STAT_NAMES,
@@ -89,7 +90,8 @@ export function stockText(stock: Partial<Stock>): string {
 
 export function payoutText(s: HordeState): string {
   if (s.outcome === 'fighting') return '';
-  return `Payout: ${stockText(hordePayout(s))}`;
+  const gas = s.outcome === 'won' ? `, ${GAS_PER_WIN} gas` : '';
+  return `Payout: ${stockText(hordePayout(s))}${gas}`;
 }
 
 /** A wall-clock time as "14:05", in the player's locale. */
