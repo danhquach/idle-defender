@@ -98,6 +98,7 @@ export function badgeElement(d: RosterDefender): HTMLElement | null {
   const span = el('span', 'roster-badge', badge.pips);
   span.style.backgroundColor = badge.colour;
   span.title = badge.title;
+  span.setAttribute('aria-label', badge.title);
   return span;
 }
 

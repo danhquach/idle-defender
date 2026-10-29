@@ -91,7 +91,7 @@ const STRIKE = 7;
 /** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
 const HP_BAR = { w: 24, h: 4, z: 30, gap: 6 } as const;
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
-const BADGE = { pip: 4, gap: 2, pad: 2, z: 14 } as const;
+const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
 
 /** What the renderer needs from a fight; build mode passes the base laid out the same way. */
 export type Scene = Pick<
@@ -219,7 +219,7 @@ function drawWeapon(
   }
 }
 
-/** A titled defender's badge: their top title's colour, one light pip per rank. */
+/** A titled defender's badge: their top title's colour, one dark pip per rank. */
 function drawBadge(
   ctx: CanvasRenderingContext2D,
   d: Pick<Defender, 'x' | 'y' | 'stats'>,
@@ -236,7 +236,7 @@ function drawBadge(
   const h = pip + 2 * pad;
   ctx.fillStyle = BADGE_COLOUR[badge.profession];
   ctx.fillRect(at.sx - w / 2, at.sy - h / 2, w, h);
-  ctx.fillStyle = COLOR.strike;
+  ctx.fillStyle = BADGE.pipColour;
   for (let i = 0; i < badge.pips; i++) {
     ctx.fillRect(at.sx - w / 2 + pad + i * (pip + gap), at.sy - pip / 2, pip, pip);
   }

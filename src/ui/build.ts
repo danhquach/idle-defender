@@ -261,6 +261,30 @@ export function createBuildPanel(
     return [label('Start defender', defenders), label('Start post', posts), ...injured, go];
   }
 
+  /** The build panel: the slot menu, Repair all, the start pick and Roster, the backup code. */
+  function buildView(game: GameState, selected: SlotHit | null): HTMLElement[] {
+    const slot = el('section', 'build-slot');
+    slot.append(
+      ...(selected
+        ? slotMenu(game, selected)
+        : [el('p', 'build-slot-note', 'Click a slot on the field to build there.')]),
+    );
+    const all = el('section', 'build-all');
+    all.append(option(`Repair all`, repairAllCost(game.base), repairAll(game.base, game.stock)));
+    const start = el('section', 'build-start-section');
+    const roster = el('button', 'build-option', 'Roster');
+    roster.type = 'button';
+    rosterButton = roster;
+    roster.addEventListener('click', () => {
+      rosterOpen = true;
+      api.show(game, selected);
+      panel.querySelector<HTMLButtonElement>('button')?.focus();
+    });
+    start.append(...startSection(game), roster);
+    code.value = exportCode(encodeSave(game, Date.now()));
+    return [el('h2', 'build-title', 'Build'), slot, all, start, backup];
+  }
+
   /** The roster in place of the build panel: a Back button, then each defender. */
   function rosterView(game: GameState): HTMLElement[] {
     const back = el('button', 'build-option', 'Back');
@@ -284,24 +308,6 @@ export function createBuildPanel(
         startKey = postKey(game.base.posts[picked.postId]!);
       }
       bar.textContent = stockBarText(game);
-      const slot = el('section', 'build-slot');
-      slot.append(
-        ...(selected
-          ? slotMenu(game, selected)
-          : [el('p', 'build-slot-note', 'Click a slot on the field to build there.')]),
-      );
-      const all = el('section', 'build-all');
-      all.append(option(`Repair all`, repairAllCost(game.base), repairAll(game.base, game.stock)));
-      const start = el('section', 'build-start-section');
-      const roster = el('button', 'build-option', 'Roster');
-      roster.type = 'button';
-      rosterButton = roster;
-      roster.addEventListener('click', () => {
-        rosterOpen = true;
-        api.show(game, selected);
-        panel.querySelector<HTMLButtonElement>('button')?.focus();
-      });
-      start.append(...startSection(game), roster);
       // The redraw replaces every control: keep keyboard focus on the same place, or
       // the next control that can take it (the one used may now be disabled).
       const controls = (): (HTMLButtonElement | HTMLSelectElement)[] => [
@@ -313,9 +319,7 @@ export function createBuildPanel(
         document.activeElement instanceof HTMLElement && backup.contains(document.activeElement)
           ? document.activeElement
           : null;
-      code.value = exportCode(encodeSave(game, Date.now()));
-      if (rosterOpen) panel.replaceChildren(...rosterView(game));
-      else panel.replaceChildren(el('h2', 'build-title', 'Build'), slot, all, start, backup);
+      panel.replaceChildren(...(rosterOpen ? rosterView(game) : buildView(game, selected)));
       if (inBackup) {
         inBackup.focus();
       } else if (focused >= 0) {
