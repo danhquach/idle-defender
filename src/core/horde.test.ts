@@ -23,7 +23,7 @@ import {
   tick,
   type HordeState,
 } from './horde.ts';
-import { enemy, setup } from './testing.ts';
+import { enemy, landed, setup } from './testing.ts';
 import { loadoutFrom } from './loadout.ts';
 
 /** The starting base's gate row, and the `y` at the middle of a row. */
@@ -303,18 +303,18 @@ describe('combat', () => {
     const s = quiet();
     enemy(s, { x: 800, y: 630 });
     enemy(s, { x: 850, y: 360 });
-    const after = tick(s, STEP);
-    expect(after.enemies.map((e) => e.hp)).toEqual([20, 14]);
-    expect(after.shots).toHaveLength(1);
-    expect(after.shots[0]).toMatchObject({ fromX: 420, fromY: 360, toX: 850, toY: 360 });
+    const fired = tick(s, STEP);
+    expect(fired.bullets).toHaveLength(1);
+    expect(fired.bullets[0]).toMatchObject({ fromX: 420, fromY: 360, owner: 'a' });
+    expect(landed(fired).enemies.map((e) => e.hp)).toEqual([20, 20 - 6.2]);
   });
 
   it('breaks a tie on distance by the lowest id', () => {
     const s = quiet();
     enemy(s, { x: 800, y: 460 });
     enemy(s, { x: 800, y: 260 });
-    const after = tick(s, STEP);
-    expect(after.enemies.map((e) => e.hp)).toEqual([14, 20]);
+    const after = landed(tick(s, STEP));
+    expect(after.enemies.map((e) => e.hp)).toEqual([20 - 6.2, 20]);
   });
 
   it("doesn't shoot out of range", () => {
@@ -322,13 +322,13 @@ describe('combat', () => {
     enemy(s, { x: 1300, y: 360 });
     const after = tick(s, STEP);
     expect(after.enemies[0]?.hp).toBe(20);
-    expect(after.shots).toEqual([]);
+    expect(after.bullets).toEqual([]);
   });
 
   it('fires every 0.6 s', () => {
     const s = quiet();
     enemy(s, { hp: 1000, maxHp: 1000 });
-    expect(tick(s, 1.25).enemies[0]?.hp).toBe(1000 - 6 * 3);
+    expect(landed(tick(s, 1.25)).enemies[0]?.hp).toBeCloseTo(1000 - 6.2 * 3, 9);
   });
 
   it('keeps the 0.6 s cadence and 1.5 s reloads over a long fight despite float drift', () => {
@@ -336,14 +336,16 @@ describe('combat', () => {
     enemy(s, { hp: 10_000, maxHp: 10_000 });
     // A magazine is 10 shots 0.6 s apart, then a 1.5 s reload: one every 6.9 s. In 60 s,
     // 8 full magazines (to 55.2 s) and 8 more shots (55.2 … 59.4 s).
-    expect(tick(s, 60).enemies[0]?.hp).toBe(10_000 - 6 * 88);
+    expect(landed(tick(s, 60)).enemies[0]?.hp).toBeCloseTo(10_000 - 6.2 * 88, 9);
   });
 
-  it('drops shot trails after 0.15 s', () => {
+  it('a gun leaves no line behind: its bullet is in flight, then gone once it lands', () => {
     const s = quiet();
     enemy(s, { hp: 1000, maxHp: 1000 });
-    expect(tick(s, STEP).shots).toHaveLength(1);
-    expect(tick(s, 0.3).shots).toEqual([]);
+    const fired = tick(s, STEP);
+    expect(fired.strikes).toEqual([]);
+    expect(fired.bullets).toHaveLength(1);
+    expect(tick(s, 0.3).bullets).toEqual([]);
   });
 
   it('a kill gives XP and levels up at 10', () => {
@@ -376,7 +378,23 @@ describe('combat', () => {
 
   it('a killed enemy deals no damage that step', () => {
     const s = newHorde(1, setup());
-    enemy(s, { hp: 1, x: 520, y: 120, nextAttackAt: 0 });
+    const e = enemy(s, { hp: 1, x: 520, y: 120, nextAttackAt: 0 });
+    // A bullet about to land on it this step.
+    s.bullets.push({
+      x: e.x - 20,
+      y: e.y,
+      dx: 1,
+      dy: 0,
+      speed: 1800,
+      damage: 6,
+      owner: 'a',
+      fromX: 420,
+      fromY: 120,
+      aim: 100,
+      left: 500,
+      pierce: false,
+      hit: [],
+    });
     const after = tick(s, STEP);
     expect(after.layers[0]?.segments[1]?.hp).toBe(200);
   });
@@ -386,8 +404,9 @@ describe('combat', () => {
     s.wave = s.waveCount;
     s.xp = 9;
     enemy(s, { hp: 1 });
-    const after = tick(s, STEP);
+    const after = landed(tick(s, STEP));
     expect(after.outcome).toBe('won');
+    expect(after.bullets).toEqual([]);
     expect(after.offer).toBeNull();
     expect(after.level).toBe(1);
     expect(after.xp).toBe(10);
@@ -406,16 +425,16 @@ describe('focus', () => {
 
   it('focus beats closest', () => {
     const { s, p, q } = pq();
-    const after = tick(setFocus(s, p), STEP);
-    expect(hp(after, p)).toBe(14);
+    const after = landed(tick(setFocus(s, p), STEP));
+    expect(hp(after, p)).toBe(20 - 6.2);
     expect(hp(after, q)).toBe(20);
   });
 
   it('focus out of range falls back to closest', () => {
     const { s, q } = pq();
     const r = enemy(s, { x: 1300, y: 360 }).id;
-    const after = tick(setFocus(s, r), STEP);
-    expect(hp(after, q)).toBe(14);
+    const after = landed(tick(setFocus(s, r), STEP));
+    expect(hp(after, q)).toBe(20 - 6.2);
     expect(hp(after, r)).toBe(20);
     expect(after.focusId).toBe(r);
   });
@@ -423,7 +442,7 @@ describe('focus', () => {
   it('focus clears when the target dies', () => {
     const { s, p } = pq();
     s.enemies.find((e) => e.id === p)!.hp = 1;
-    const after = tick(setFocus(s, p), STEP);
+    const after = landed(tick(setFocus(s, p), STEP));
     expect(hp(after, p)).toBeUndefined();
     expect(after.focusId).toBeNull();
   });
@@ -709,7 +728,7 @@ describe('moving defenders', () => {
     const target = enemy(moved, { x: 700, y: 20, hp: 1000, maxHp: 1000 });
     const first = tick(moved, STEP);
     expect(first.defenders[0]!.walking).toBe(true);
-    expect(first.shots).toEqual([
+    expect(first.bullets).toEqual([
       expect.objectContaining({ fromX: first.defenders[0]!.x, fromY: first.defenders[0]!.y }),
     ]);
     // The whole walk from the tower again, so it has certainly arrived.

@@ -19,6 +19,8 @@ const RIFLE = vi.hoisted(
       range: 800,
       magazine: 20,
       reload: 2,
+      speed: 2400,
+      spread: 1,
     }) as const,
 );
 
@@ -111,12 +113,12 @@ describe('a Gunner with a rifle and a sidearm', () => {
   it('fires the sidearm while the rifle reloads, at an enemy within 200 px', () => {
     const after = tick(reloading(420 + 199), STEP);
     expect(after.defenders[0]!.ammo.secondary).toBe(9);
-    expect(after.shots).toHaveLength(1);
+    expect(after.bullets).toHaveLength(1);
   });
 
   it('holds fire at an enemy further than 200 px while the rifle reloads', () => {
     const after = tick(reloading(420 + 201), STEP);
-    expect(after.shots).toEqual([]);
+    expect(after.bullets).toEqual([]);
     expect(after.defenders[0]!.ammo.secondary).toBe(10);
   });
 
@@ -140,9 +142,9 @@ describe('a Gunner with a rifle and a sidearm', () => {
       enemy(s, { hp: 1000, maxHp: 1000, x: 500, y: 360 });
       return tick(s, STEP);
     };
-    expect(walk(L(rifle)).shots).toEqual([]);
+    expect(walk(L(rifle)).bullets).toEqual([]);
     const moving = walk(L(rifle, 'pistol'));
-    expect(moving.shots).toHaveLength(1);
+    expect(moving.bullets).toHaveLength(1);
     expect(moving.defenders[0]!.ammo).toEqual({ primary: RIFLE.magazine, secondary: 9 });
   });
 

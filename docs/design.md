@@ -343,7 +343,8 @@ close-quarter weapons come out only when an enemy is close.
 - **Shield** (Ripper only, fills the item slot): −30% damage taken in
   hordes, so a Ripper can act as a tank; in exchange the holder's gun
   fires 20% slower and they walk 20% slower *(starting points)*.
-- **As built (ID-042, starting points):** pistol 6 damage every 0.6 s,
+- **As built (ID-042, starting points):** pistol 6 damage (6.2 since
+  ID-044, Ballistics below) every 0.6 s,
   range 600, a 10-round magazine and a 1.5 s reload (it was 7 damage with
   no reload: with every defender shooting, the camp out-gunned the
   balance targets); knife 10 every 0.5 s, toolkit 4 every 0.6 s, both
@@ -354,6 +355,37 @@ close-quarter weapons come out only when an enemy is close.
   titles, unspent points (spent there) and rest time, and three pickers
   (primary, secondary, item). Swaps are free between hordes, injured or
   not; a loadout the rules refuse says why and changes nothing.
+
+### Ballistics
+
+Every gun shot (defenders' guns and turrets) is a bullet that flies from
+the muzzle and deals damage only when it reaches an enemy; blade and tool
+strikes stay instant.
+
+- **Speed** is per gun *(starting points)*: pistol 1,800 px/s, turret
+  2,000 px/s.
+- **Hits by collision:** a bullet hits the first living enemy whose body
+  its path crosses in a step (swept, so a fast bullet never tunnels
+  through), once, and is gone. If its target dies or steps aside it flies
+  on and can hit anyone else in its path; past its gun's range it falls
+  with no damage. Bullets pass over walls, gates and defenders and never
+  hurt the camp.
+- **Lead:** shooters aim where the target will be when the bullet
+  arrives, from its velocity over the last step. A Shambler walking
+  straight is hit; one that changes lane after the shot can be missed.
+- **Spread:** each gun has a cone *(starting points: pistol ±2.5°,
+  turret ±1°)*; a Gunner's is halved. The angle is rolled through the
+  seeded RNG, so a run stays deterministic. Aim only adds crit chance.
+- **Pierce:** a piercing bullet goes through its first enemy and hits the
+  next one it crosses within 200 px, then stops.
+- **As built (ID-044, starting points):** the crit is rolled at the
+  trigger. About 1 bullet in 10 hits nobody, so the pistol was retuned
+  from 6 to 6.2 damage and its cone set at ±2.5° (±2° left a tutorial
+  defender injured on one seed): the balance tests hold. Bullets in
+  flight are cleared when a horde ends and are never saved (a horde is
+  never saved mid-fight, §12). 300 enemies and 200 bullets in flight cost
+  about 1.3 ms a step in Node, well inside the 33 ms a step allows, so no
+  broad phase is needed yet.
 
 More professions later *(guess)*: Marksman (sniper rifles only, bigger
 bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).
@@ -421,8 +453,8 @@ Each defender level gives **stat points** (3 per level, starting point):
   ×1.3 (2), Relic ×1.5 (3); a weapon whose kind fits fewer affixes gets fewer
   (a Relic blade has 2). Affixes, each at most once, rolled as whole numbers:
   +5–15% damage, +5–15% fire rate (any weapon), +20–50% magazine, −10–25%
-  reload, pierce (guns: the shot also hits the nearest enemy within 24 px of
-  its line, up to 200 px past the target), +10–25% repair (tools). A horde win
+  reload, pierce (guns: the bullet goes through its first enemy, then hits
+  the next it crosses within 200 px; §6 Ballistics), +10–25% repair (tools). A horde win
   drops a weapon with chance 10% + 1% per horde number, capped at 30%: an
   even pick of base weapon, rarity Rusty 30 / Common 45 / Military 20 /
   Prototype 5 (Relic never from a horde). The result screen names it with one

@@ -23,7 +23,8 @@ import {
   unspentPoints,
   xpForLevel,
 } from './stats.ts';
-import { enemy, setup } from './testing.ts';
+import { rngFrom } from './rng.ts';
+import { enemy, landed, setup } from './testing.ts';
 import { loadoutFrom } from './loadout.ts';
 
 const stats = (s: Partial<Stats>): Stats => ({ ...NO_STATS, ...s });
@@ -244,7 +245,7 @@ describe('stats in a fight', () => {
     const s = fight(newBase(), spec('pistol', { aim: 10 }), 'tower', 4);
     enemy(s, { ...tough, x: 900, y: 360 });
     // Aim 10 plus the Gunner's handling can crit (10%): either hit counts.
-    const hit = 1000 - tick(s, STEP).enemies[0]!.hp;
+    const hit = 1000 - landed(tick(s, STEP)).enemies[0]!.hp;
     const one = WEAPONS.pistol.damage * 1.2 * 1.05;
     expect([one, one * 2]).toContainEqual(expect.closeTo(hit, 9));
   });
@@ -267,12 +268,15 @@ describe('stats in a fight', () => {
     expect(crits / 400).toBeLessThan(0.6);
   });
 
-  it("with no crit chance nothing rolls: a Ripper's pistol without Aim leaves the RNG alone", () => {
+  it("with no crit chance no crit rolls: a Ripper's pistol without Aim rolls only its spread", () => {
     const s = fight(newBase(), spec('knife', { might: 50, grit: 5 }), 'tower', 4);
     enemy(s, { ...tough, x: 900, y: 360 });
     const after = tick(s, STEP);
-    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
-    expect(after.rng).toEqual(s.rng);
+    expect(after.bullets[0]!.damage).toBe(WEAPONS.pistol.damage);
+    // Only the spread rolled, once.
+    const one = structuredClone(s.rng);
+    rngFrom(one)();
+    expect(after.rng).toEqual(one);
   });
 
   it('Might adds damage and cleaves enemies within 30 px of the target', () => {

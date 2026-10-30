@@ -124,7 +124,8 @@ function blank(): Scene {
     traps: [],
     defenders: [],
     enemies: [],
-    shots: [],
+    strikes: [],
+    bullets: [],
     energy: 10,
   };
 }
@@ -175,7 +176,18 @@ describe('drawScene with art', () => {
     const enemy = { id: 1, kind: 'shambler' as const, x: 600, y: 300 };
     const r = draw({
       ...scene,
-      enemies: [{ ...enemy, hp: 20, maxHp: 20, nextAttackAt: 0, inCamp: false, stunnedUntil: 0 }],
+      enemies: [
+        {
+          ...enemy,
+          hp: 20,
+          maxHp: 20,
+          nextAttackAt: 0,
+          inCamp: false,
+          stunnedUntil: 0,
+          vx: 0,
+          vy: 0,
+        },
+      ],
     });
     const i = r.drawn.indexOf('cracks');
     expect(r.drawn.indexOf('shambler')).toBeGreaterThan(i);
@@ -265,6 +277,8 @@ describe('drawScene with art', () => {
           nextAttackAt: 0,
           inCamp: false,
           stunnedUntil: 0,
+          vx: 0,
+          vy: 0,
         },
       ],
     });

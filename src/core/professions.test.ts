@@ -25,7 +25,7 @@ import {
 } from './horde.ts';
 import { loadoutFrom, type Loadout } from './loadout.ts';
 import { createRng } from './rng.ts';
-import { enemy, setup } from './testing.ts';
+import { enemy, landed, setup } from './testing.ts';
 
 /** The starting gate's row, and the `y` of its middle. */
 const GATE = START_BASE.gate;
@@ -76,12 +76,11 @@ function fight(base: Base, ...place: [DefenderSpec, BasePost['kind'], number][])
 }
 
 const tough = { hp: 1000, maxHp: 1000 };
-/** Shot times in `s`'s trail not yet in `seen`, added to it. */
-function newShots(s: HordeState, seen: Set<number>): number[] {
-  const fresh = s.shots.map((x) => x.at).filter((at) => !seen.has(at));
-  for (const at of fresh) seen.add(at);
-  return fresh;
-}
+/** One strike and no bullet: the blade or tool was used. */
+const struck = (s: HordeState): boolean => s.strikes.length === 1 && s.bullets.length === 0;
+/** A round gone from the first defender's pistol and no strike: the gun fired. */
+const shot = (s: HordeState): boolean =>
+  s.defenders[0]!.ammo.primary === WEAPONS.pistol.magazine - 1 && s.strikes.length === 0;
 
 describe('Ripper (pistol + knife)', () => {
   const base = baseWith(
@@ -94,7 +93,7 @@ describe('Ripper (pistol + knife)', () => {
     enemy(s, { ...tough, x: 520, y: GATE_Y });
     const after = tick(s, STEP);
     expect(after.enemies[0]!.hp).toBe(990);
-    expect(after.shots).toEqual([expect.objectContaining({ melee: true })]);
+    expect(struck(after)).toBe(true);
   });
 
   it('reaches 50 px from the post; past that they shoot their pistol instead', () => {
@@ -102,9 +101,9 @@ describe('Ripper (pistol + knife)', () => {
     // The post (spot 0) is at (510, 420): 10 px in x, so 48 px in y is in reach and 50 is not.
     const postY = GATE_Y - SEGMENT_HEIGHT / 4;
     enemy(s, { ...tough, x: 520, y: postY + 50 });
-    const shot = tick(s, STEP);
-    expect(shot.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
-    expect(shot.shots).toEqual([expect.objectContaining({ melee: false })]);
+    const fired = tick(s, STEP);
+    expect(shot(fired)).toBe(true);
+    expect(landed(fired).enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
     s.enemies[0]!.y = postY + 48;
     expect(tick(s, STEP).enemies[0]!.hp).toBe(990);
   });
@@ -114,7 +113,7 @@ describe('Ripper (pistol + knife)', () => {
     enemy(s, { ...tough, x: 430, y: 360, inCamp: true });
     const after = tick(s, STEP);
     expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
-    expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
+    expect(after.strikes).toEqual([]);
   });
 
   it('fights an enemy that broke through, from a ground post', () => {
@@ -131,7 +130,7 @@ describe('Ripper (pistol + knife)', () => {
     expect(after.enemies[0]!.hp).toBe(988);
     expect(after.defenders[0]!.nextShotAt).toBeCloseTo(0.5 / 1.25);
     s.enemies[0]!.y = GATE_Y + 50;
-    expect(tick(s, STEP).shots).toEqual([expect.objectContaining({ melee: false })]);
+    expect(shot(tick(s, STEP))).toBe(true);
   });
 
   it('a walking Ripper never strikes, but their pistol fires on the move', () => {
@@ -140,8 +139,8 @@ describe('Ripper (pistol + knife)', () => {
     s.defenders[0]!.x = 600; // far from the post: still on the way
     enemy(s, { ...tough, x: 520, y: GATE_Y });
     const after = tick(s, STEP);
-    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
-    expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
+    expect(shot(after)).toBe(true);
+    expect(landed(after).enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
   });
 
   it('reloads the pistol at the plain speed', () => {
@@ -173,11 +172,11 @@ describe('Gunner (pistol)', () => {
     expect(t.defenders[0]!.ammo.primary).toBe(0);
     expect(t.defenders[0]!.reloadedAt.primary).toBeCloseTo(done);
     // No shot until the reload ends, then a full magazine and a shot that same step.
-    const seen = new Set<number>([0]);
     let next: number | undefined;
     while (next === undefined && t.time < 3) {
+      const at = t.time;
       t = tick(t, STEP);
-      next = newShots(t, seen)[0];
+      if (t.defenders[0]!.ammo.primary > 0) next = at;
     }
     expect(next).toBeGreaterThanOrEqual(done - 1e-9);
     expect(next).toBeLessThan(done + STEP);
@@ -192,10 +191,12 @@ describe('Gunner (pistol)', () => {
     g.y = 300;
     enemy(s, { ...tough, x: 300 + 440, y: 300 }); // ground range 450
     const after = tick(s, STEP);
-    expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
-    expect(after.shots[0]!.fromX).toBe(after.defenders[0]!.x);
+    expect(shot(after)).toBe(true);
+    expect(after.bullets[0]!.fromX).toBe(after.defenders[0]!.x);
+    // Ground-post range, less the step it has already flown.
+    expect(after.bullets[0]!.left).toBeCloseTo(450 - WEAPONS.pistol.speed * STEP);
     s.enemies[0]!.x = 300 + 460;
-    expect(tick(s, STEP).shots).toEqual([]);
+    expect(tick(s, STEP).bullets).toEqual([]);
   });
 });
 
@@ -211,15 +212,17 @@ describe('Engineer (pistol + toolkit)', () => {
     enemy(s, { ...tough, x: 520, y: GATE_Y });
     const after = tick(s, STEP);
     expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.toolkit.damage);
-    expect(after.shots).toEqual([expect.objectContaining({ melee: true })]);
+    expect(struck(after)).toBe(true);
   });
 
   it('shoots their pistol at range, plain (no Gunner handling)', () => {
     const s = fight(newBase(), [spec('e', 'toolkit'), 'tower', 4]);
-    enemy(s, { ...tough, x: 900, y: 360 });
+    // Close enough that the full ±2.5° cone still hits.
+    enemy(s, { ...tough, x: 600, y: 360 });
     const after = tick(s, STEP);
-    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
-    expect(after.shots).toEqual([expect.objectContaining({ melee: false })]);
+    expect(shot(after)).toBe(true);
+    expect(after.bullets[0]!.pierce).toBe(false);
+    expect(landed(after).enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
     expect(after.defenders[0]!.nextShotAt).toBeCloseTo(WEAPONS.pistol.fireInterval);
   });
 

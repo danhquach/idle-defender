@@ -1,6 +1,7 @@
 // Fixtures shared by the core tests; never imported by game code.
 import { newBase } from './base.ts';
-import type { Enemy, HordeSetup, HordeState } from './horde.ts';
+import { STEP } from './data.ts';
+import { tick, type Enemy, type HordeSetup, type HordeState } from './horde.ts';
 import type { Loadout } from './loadout.ts';
 
 /** A pistol and nothing else: a Gunner. */
@@ -24,6 +25,13 @@ export function setup(): HordeSetup {
   };
 }
 
+/** `s` ticked a step at a time until every bullet in flight has landed or fallen (at most 2 s). */
+export function landed(s: HordeState): HordeState {
+  let t = s;
+  for (let i = 0; i < 60 && t.bullets.length > 0; i++) t = tick(t, STEP);
+  return t;
+}
+
 /** Adds a shambler to `s` (x 600, y 360 — level with post 0 — and 20 HP unless overridden). */
 export function enemy(s: HordeState, e: Partial<Enemy>): Enemy {
   const made: Enemy = {
@@ -36,6 +44,8 @@ export function enemy(s: HordeState, e: Partial<Enemy>): Enemy {
     nextAttackAt: 0,
     inCamp: false,
     stunnedUntil: 0,
+    vx: 0,
+    vy: 0,
     ...e,
   };
   s.enemies.push(made);
