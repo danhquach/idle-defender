@@ -636,13 +636,15 @@ function step(s: HordeState, rng: Rng): void {
   repairTurrets(s);
   springTraps(s);
   removeDead(s);
-  const was = new Map(s.enemies.map((e) => [e.id, { x: e.x, y: e.y }]));
+  // Moving and separating keep the enemies' order, so their old places line up by index.
+  const wasX = s.enemies.map((e) => e.x);
+  const wasY = s.enemies.map((e) => e.y);
   const moved = move(s);
   separate(s);
-  for (const e of s.enemies) {
-    e.vx = (e.x - was.get(e.id)!.x) / STEP;
-    e.vy = (e.y - was.get(e.id)!.y) / STEP;
-  }
+  s.enemies.forEach((e, i) => {
+    e.vx = (e.x - wasX[i]!) / STEP;
+    e.vy = (e.y - wasY[i]!) / STEP;
+  });
   attack(s, moved);
   injure(s);
   drop(s);
@@ -819,7 +821,7 @@ function launch(
 function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: number } | null {
   let best: { enemy: Enemy; at: number } | null = null;
   for (const e of s.enemies) {
-    if (e.hp <= 0 || b.hit.includes(e.id)) continue;
+    if (e.hp <= 0) continue;
     const wx = b.x - e.x;
     const wy = b.y - e.y;
     const along = b.dx * wx + b.dy * wy;
@@ -832,6 +834,7 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
       at = -along - Math.sqrt(disc);
       if (at < 0 || at > travel + EPS) continue;
     }
+    if (b.hit.includes(e.id)) continue;
     if (!best || at < best.at || (at === best.at && e.id < best.enemy.id)) best = { enemy: e, at };
   }
   return best;

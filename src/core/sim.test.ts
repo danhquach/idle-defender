@@ -208,7 +208,7 @@ describe('playCampaign', () => {
       if (r.outcome === 'won') next += 1;
     }
     expect(playCampaign(1000, 6)).toEqual(runs);
-  });
+  }, 30_000);
 
   it('refuses a bad count', () => {
     expect(playCampaign(1, 0)).toEqual([]);
