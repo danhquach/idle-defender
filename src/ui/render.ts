@@ -3,7 +3,9 @@
 import {
   COLUMNS,
   FIELD,
+  IMPACT_FLASH,
   MAX_CONDITION,
+  MUZZLE_FLASH,
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
@@ -16,8 +18,10 @@ import {
 } from '../core/data.ts';
 import {
   turretState,
+  type Bullet,
   type Defender,
   type HordeState,
+  type Impact,
   type Layer,
   type Post,
   type Trap,
@@ -69,8 +73,12 @@ const COLOR = {
   hpFill: '#5ec24a',
   conditionBack: '#111110',
   conditionFill: '#a9c4d6',
-  shot: '#e8d36a',
   strike: '#f2f2f2',
+  slug: '#fffbe8',
+  flash: '#fff2b0',
+  flashEdge: 'rgba(255, 170, 60, 0.6)',
+  blood: '#8e1f1a',
+  dust: '#a8987c',
   glow: 'rgba(255, 196, 70, 0.45)',
   spark: '#ffd84a',
   smoke: 'rgba(150, 150, 150, 0.55)',
@@ -130,8 +138,16 @@ const STAND = { defender: 40, enemy: 34, shield: 26 } as const;
 const ENEMY = { shadow: 10, z: 10 } as const;
 /** Half the length of a Ripper's strike mark across the enemy, in px. */
 const STRIKE = 7;
-/** A bullet's tracer length behind it, in field px. */
-const TRACER = 24;
+/**
+ * Where a gun's barrel ends on its shooter's sprite (design §15): `dx` ahead of the
+ * shooter's spot, `z` above its floor. Bullets start their drop to body height there.
+ */
+const MUZZLE = { defender: { dx: 12, z: 12 }, turret: { dx: 13, z: 2 } } as const;
+/**
+ * Effect sizes in px at zoom 1, each kept at least `min` px on screen so they still read
+ * at 0.5× zoom: a bullet's slug and streak width, a muzzle flash, an impact's puff.
+ */
+const EFFECT = { slug: 1.5, streak: 1.5, flash: 5, puff: 6, min: 1 } as const;
 /** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
 const HP_BAR = { w: 24, h: 4, z: 36, gap: 6 } as const;
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
@@ -151,6 +167,8 @@ export type Scene = Pick<
   | 'enemies'
   | 'strikes'
   | 'bullets'
+  | 'shots'
+  | 'impacts'
   | 'focusId'
   | 'time'
   | 'fires'
@@ -549,6 +567,113 @@ function drawGround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera): void 
   }
 }
 
+/** A size `px` at zoom 1, on screen, never under `EFFECT.min`. */
+const sized = (px: number, cam: Camera): number => Math.max(EFFECT.min, px * cam.zoom);
+
+/**
+ * The barrel end of whoever shoots from `(x, y)`: a turret there, else the defender on
+ * the post there (bullets leave their post's or turret's exact coordinates), else a
+ * defender walking on the ground.
+ */
+function muzzleAt(scene: Scene, x: number, y: number): { x: number; y: number; z: number } {
+  const turret = scene.turrets.find((t) => t.x === x && t.y === y);
+  if (turret) {
+    const floor = turretFloor(scene.layers, turret) + MUZZLE.turret.z;
+    return { x: x + MUZZLE.turret.dx, y, z: floor };
+  }
+  const post = scene.posts.find((p) => p.x === x && p.y === y);
+  const floor = post ? postFloor(scene.layers, post) : 0;
+  return { x: x + MUZZLE.defender.dx, y, z: floor + MUZZLE.defender.z };
+}
+
+/** How far into its `life` s the newest of `owner`'s shots is, 0…1; null with none showing. */
+function flashAge(scene: Scene, owner: string): number | null {
+  let age: number | null = null;
+  for (const k of scene.shots) {
+    const a = (scene.time - k.at) / MUZZLE_FLASH;
+    if (k.owner === owner && a >= 0 && a < 1 && (age === null || a < age)) age = a;
+  }
+  return age;
+}
+
+/** A muzzle flash at the barrel end of whoever shoots from `(x, y)`, fading over `MUZZLE_FLASH`. */
+function drawFlash(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  owner: string,
+  x: number,
+  y: number,
+  cam: Camera,
+): void {
+  const age = flashAge(scene, owner);
+  if (age === null) return;
+  const c = project(muzzleAt(scene, x, y), cam);
+  const r = sized(EFFECT.flash, cam);
+  ctx.globalAlpha = 1 - age;
+  ctx.fillStyle = COLOR.flashEdge;
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, r * 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = COLOR.flash;
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * A bullet at its simulated spot (design §15): a bright slug with its gun's streak behind
+ * it, dropping from the muzzle to body height over the distance it was aimed. The streak
+ * never reaches back past the muzzle, so nothing joins shooter and target.
+ */
+function drawBullet(ctx: CanvasRenderingContext2D, scene: Scene, b: Bullet, cam: Camera): void {
+  const muzzle = muzzleAt(scene, b.fromX, b.fromY).z;
+  const flown = Math.hypot(b.x - b.fromX, b.y - b.fromY);
+  const zAt = (d: number): number =>
+    muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? d / b.aim : 1);
+  const tail = Math.min(b.tracer.length, flown);
+  const a = project({ x: b.x - b.dx * tail, y: b.y - b.dy * tail, z: zAt(flown - tail) }, cam);
+  const head = project({ x: b.x, y: b.y, z: zAt(flown) }, cam);
+  ctx.strokeStyle = b.tracer.colour;
+  ctx.lineWidth = sized(EFFECT.streak, cam);
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(a.sx, a.sy);
+  ctx.lineTo(head.sx, head.sy);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = COLOR.slug;
+  ctx.beginPath();
+  ctx.arc(head.sx, head.sy, sized(EFFECT.slug, cam), 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Where a bullet ended, fading and spreading over `IMPACT_FLASH`: a blood puff at body
+ * height on a hit, a dust kick on the ground where a miss fell.
+ */
+function drawImpact(ctx: CanvasRenderingContext2D, i: Impact, time: number, cam: Camera): void {
+  const age = (time - i.at) / IMPACT_FLASH;
+  if (age < 0 || age >= 1) return;
+  // Three blobs, thrown up and out as they grow.
+  const blob = sized((EFFECT.puff / 2) * (0.5 + age), cam);
+  const spread = (EFFECT.puff / 2) * (0.5 + age);
+  ctx.globalAlpha = 0.8 * (1 - age);
+  ctx.fillStyle = i.hit ? COLOR.blood : COLOR.dust;
+  for (const [dx, dz] of [
+    [-1, 1.2],
+    [0, 2.4],
+    [1, 0.8],
+  ] as const) {
+    const at = { x: i.x + dx * spread * 1.2, y: i.y, z: (i.hit ? ENEMY.z : 0) + dz * spread };
+    const c = project(at, cam);
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, blob, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   art: Art,
@@ -598,6 +723,8 @@ export function drawScene(
     ctx.strokeStyle = COLOR.fireEdge;
     ctx.stroke();
   }
+  // A miss's dust kick is on the ground too.
+  for (const i of scene.impacts) if (!i.hit) drawImpact(ctx, i, scene.time, cam);
 
   const sprites: Sprite[] = [];
   for (const layer of scene.layers) {
@@ -627,7 +754,10 @@ export function drawScene(
           ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
           outline(ctx, around(post, p), floor, cam);
         }
-        if (manned) drawDefender(ctx, art, manned, floor, manned.id === selectedDefender, cam);
+        if (manned) {
+          drawDefender(ctx, art, manned, floor, manned.id === selectedDefender, cam);
+          drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
+        }
       },
     });
   }
@@ -635,7 +765,10 @@ export function drawScene(
     sprites.push({
       y: mountDepth(t.mount, t.y, t.row),
       x: t.x,
-      draw: () => drawTurret(ctx, art, scene, t, cam),
+      draw: () => {
+        drawTurret(ctx, art, scene, t, cam);
+        drawFlash(ctx, scene, `turret:${t.id}`, t.x, t.y, cam);
+      },
     });
   }
   for (const d of scene.defenders) {
@@ -643,7 +776,10 @@ export function drawScene(
     sprites.push({
       y: d.y,
       x: d.x,
-      draw: () => drawDefender(ctx, art, d, 0, d.id === selectedDefender, cam),
+      draw: () => {
+        drawDefender(ctx, art, d, 0, d.id === selectedDefender, cam);
+        drawFlash(ctx, scene, d.id, d.x, d.y, cam);
+      },
     });
   }
   for (const e of scene.enemies) {
@@ -669,6 +805,9 @@ export function drawScene(
       },
     });
   }
+  for (const b of scene.bullets) {
+    sprites.push({ y: b.y, x: b.x, draw: () => drawBullet(ctx, scene, b, cam) });
+  }
   for (const sprite of depthSort(sprites)) sprite.draw();
 
   // The selected slot: its footprint on the ground, on top of everything.
@@ -678,8 +817,7 @@ export function drawScene(
     outline(ctx, footprint(build.selected), 0, cam);
   }
 
-  // On top: a blade or tool strike is a short slash across the enemy; a bullet is a short
-  // tracer, dropping from the muzzle to body height over the distance it was aimed.
+  // On top: a blade or tool strike is a short slash across the enemy; a hit's blood puff.
   ctx.lineWidth = Math.max(1, 2 * cam.zoom);
   ctx.strokeStyle = COLOR.strike;
   for (const k of scene.strikes) {
@@ -690,25 +828,7 @@ export function drawScene(
     ctx.lineTo(b.sx, b.sy);
     ctx.stroke();
   }
-  ctx.strokeStyle = COLOR.shot;
-  for (const b of scene.bullets) {
-    // Bullets leave their post's or turret's exact coordinates, so this finds the shooter.
-    const turret = scene.turrets.find((t) => t.x === b.fromX && t.y === b.fromY);
-    const from = scene.posts.find((p) => p.x === b.fromX && p.y === b.fromY);
-    const muzzle = turret
-      ? turretFloor(scene.layers, turret) + PIECE.turret.height / 2
-      : (from ? postFloor(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;
-    const flown = Math.hypot(b.x - b.fromX, b.y - b.fromY);
-    const zAt = (d: number): number =>
-      muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? d / b.aim : 1);
-    const tail = Math.min(TRACER, flown);
-    const a = project({ x: b.x - b.dx * tail, y: b.y - b.dy * tail, z: zAt(flown - tail) }, cam);
-    const head = project({ x: b.x, y: b.y, z: zAt(flown) }, cam);
-    ctx.beginPath();
-    ctx.moveTo(a.sx, a.sy);
-    ctx.lineTo(head.sx, head.sy);
-    ctx.stroke();
-  }
+  for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
 
   // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.
   for (const b of scene.blasts) {

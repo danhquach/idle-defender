@@ -936,6 +936,16 @@ original outline.
   load. `src/ui/ground.ts` paints it all once into one field-sized canvas at
   the tiles' own resolution, drawn whole each frame, so no tile edge can show
   at any zoom.
+- **As built (ID-045):** no line joins shooter and target. Each bullet is drawn
+  at its simulated spot, in the depth sort, as a bright slug with a streak
+  behind it whose length and colour are its gun's (`tracer` in the gun data:
+  pistol 12 px, turret 14 px), dropping from the barrel to body height over
+  the distance it was aimed. The fight records each shot (a 0.05 s muzzle
+  flash at the barrel end of the defender's or turret's sprite) and each
+  bullet's end (0.25 s: a blood puff on the body for a hit, a dust kick on the
+  ground where a miss fell). Effects are drawn shapes, not sprites, so they
+  need no art; each stays at least 1 px on screen at 0.5× zoom. Blade and
+  tool strikes keep their slash.
 
 ## 16. Tech and platform
 

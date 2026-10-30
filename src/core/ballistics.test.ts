@@ -1,7 +1,16 @@
 // Design §6 Ballistics (ID-044): gun shots are bullets that fly, hit by collision and can miss.
 import { describe, expect, it } from 'vitest';
 import { buildTurret, newBase } from './base.ts';
-import { ENEMY_RADIUS, GUNNER, PIERCE, STEP, TURRET, WEAPONS } from './data.ts';
+import {
+  ENEMY_RADIUS,
+  GUNNER,
+  IMPACT_FLASH,
+  MUZZLE_FLASH,
+  PIERCE,
+  STEP,
+  TURRET,
+  WEAPONS,
+} from './data.ts';
 import { leadPoint, newHorde, tick, type Bullet, type HordeState } from './horde.ts';
 import { loadoutFrom } from './loadout.ts';
 import { spreadOf } from './stats.ts';
@@ -35,6 +44,7 @@ function bullet(s: HordeState, b: Partial<Bullet>): Bullet {
     left: 600,
     pierce: false,
     hit: [],
+    tracer: WEAPONS.pistol.tracer,
     ...b,
   };
   s.bullets.push(made);
@@ -146,13 +156,17 @@ describe('bullets in flight', () => {
     expect([hpOf(done, first), hpOf(done, beyond)]).toEqual([94, 100]);
   });
 
-  it('are cleared when the horde ends', () => {
+  it('are cleared when the horde ends, with their flashes and impacts', () => {
     const s = holding();
     s.wave = s.waveCount;
     bullet(s, { left: 600 });
+    s.shots.push({ owner: 'a', at: 0 });
+    s.impacts.push({ x: 500, y: 360, hit: true, at: 0 });
     const after = tick(s, STEP);
     expect(after.outcome).toBe('won');
     expect(after.bullets).toEqual([]);
+    expect(after.shots).toEqual([]);
+    expect(after.impacts).toEqual([]);
   });
 });
 
@@ -233,9 +247,69 @@ describe('turret bullets', () => {
     const e = enemy(s, { hp: 100, maxHp: 100, x: 800, y: 440, stunnedUntil: 9 });
     const fired = tick(s, STEP);
     expect(fired.bullets).toEqual([
-      expect.objectContaining({ owner: 'turret:0', speed: TURRET.speed, damage: TURRET.damage }),
+      expect.objectContaining({
+        owner: 'turret:0',
+        speed: TURRET.speed,
+        damage: TURRET.damage,
+        tracer: TURRET.tracer,
+      }),
     ]);
+    expect(fired.shots).toEqual([{ owner: 'turret:0', at: STEP }]);
     expect(hpOf(fired, e.id)).toBe(100);
     expect(hpOf(landed(fired), e.id)).toBe(100 - TURRET.damage);
+  });
+});
+
+// Design §15 (ID-045): what the renderer needs to draw shots, recorded by the fight.
+describe('shots and impacts', () => {
+  it("a gun going off is a shot by its owner for MUZZLE_FLASH s, its bullet in its gun's tracer", () => {
+    const s = quiet();
+    enemy(s, { hp: 1000, maxHp: 1000, x: 800, y: 360, stunnedUntil: 9 });
+    s.defenders[0]!.loadout.secondary = 'knife'; // never in reach from the tower
+    const fired = tick(s, STEP);
+    // Stamped with the time the fight shows next, so its first frame shows it new.
+    expect(fired.shots).toEqual([{ owner: 'a', at: fired.time }]);
+    expect(fired.bullets[0]!.tracer).toEqual(WEAPONS.pistol.tracer);
+    // Pruned once it is MUZZLE_FLASH old, while the next shot is not due yet.
+    let t = fired;
+    while (t.time - fired.time < MUZZLE_FLASH) t = tick(t, STEP);
+    t = tick(t, STEP);
+    expect(t.shots).toEqual([]);
+  });
+
+  it('a hit leaves an impact on the body, a pierce one per enemy, for IMPACT_FLASH s', () => {
+    const s = holding();
+    const e = enemy(s, { hp: 100, maxHp: 100, x: 500, y: 360, stunnedUntil: 9 });
+    bullet(s, {});
+    const after = landed(s);
+    expect(after.impacts).toEqual([
+      { x: 500 - ENEMY_RADIUS, y: 360, hit: true, at: expect.any(Number) },
+    ]);
+    expect(hpOf(after, e.id)).toBe(94);
+
+    const p = holding();
+    enemy(p, { hp: 100, maxHp: 100, x: 500, y: 360, stunnedUntil: 9 });
+    enemy(p, { hp: 100, maxHp: 100, x: 600, y: 360, stunnedUntil: 9 });
+    bullet(p, { pierce: true });
+    expect(landed(p).impacts.map((i) => [i.x, i.hit])).toEqual([
+      [500 - ENEMY_RADIUS, true],
+      [600 - ENEMY_RADIUS, true],
+    ]);
+
+    let t = after;
+    const at = t.impacts[0]!.at;
+    while (t.time - at < IMPACT_FLASH) t = tick(t, STEP);
+    t = tick(t, STEP);
+    expect(t.impacts).toEqual([]);
+  });
+
+  it('a miss leaves dust where it fell past its range', () => {
+    const s = holding();
+    bullet(s, { left: 300 });
+    const after = landed(s);
+    expect(after.bullets).toEqual([]);
+    expect(after.impacts).toHaveLength(1);
+    expect(after.impacts[0]).toMatchObject({ y: 360, hit: false });
+    expect(after.impacts[0]!.x).toBeCloseTo(420 + 300, 6);
   });
 });
