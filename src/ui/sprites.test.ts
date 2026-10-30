@@ -131,7 +131,7 @@ describe('art coverage', () => {
   it('keeps the mutants and the Horror saturated and mutes the Runner (ID-051, ID-041, §15)', () => {
     const mutant = (id: string): boolean =>
       manifest.assets.find((a) => a.id === id)?.mutant === true;
-    for (const k of ['crawler', 'bloater', 'spitter', 'brute', 'screamer', 'horror']) {
+    for (const k of ['crawler', 'swollen', 'spewer', 'brute', 'screamer', 'horror']) {
       expect(mutant(k), k).toBe(true);
       // The Brute's grey armour makes it the least saturated mutant: about 0.38.
       expect(saturatedShare(k), k).toBeGreaterThan(0.35);

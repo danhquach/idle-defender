@@ -45,12 +45,12 @@ import {
   SHOP,
   SKILL_FLASH,
   SKILLS,
-  BLOATER,
+  SWOLLEN,
   BRUTE,
   CRAWLER,
   HORROR,
   SCREAMER,
-  SPITTER,
+  SPEWER,
   meleeReach,
   type BuffId,
   type EnemyKind,
@@ -320,7 +320,7 @@ export interface Impact {
   hit: boolean;
   at: number;
 }
-/** A Spitter's glob flying from `(fromX, fromY)` to `(x, y)`, from `at` for `SPITTER.splash` s. */
+/** A Spewer's glob flying from `(fromX, fromY)` to `(x, y)`, from `at` for `SPEWER.splash` s. */
 export interface Spit {
   fromX: number;
   fromY: number;
@@ -328,7 +328,7 @@ export interface Spit {
   y: number;
   at: number;
 }
-/** Bloater `id` blowing up at `(x, y)` in the step ending at `at` (not a kill), drawn for `BLOATER.burst` s. */
+/** Swollen `id` blowing up at `(x, y)` in the step ending at `at` (not a kill), drawn for `SWOLLEN.burst` s. */
 export interface Burst {
   id: number;
   x: number;
@@ -1242,8 +1242,8 @@ function fire(s: HordeState, rng: Rng): void {
   s.strikes = s.strikes.filter((k) => s.time - k.at < STRIKE_FLASH);
   s.shots = s.shots.filter((k) => s.time - k.at < MUZZLE_FLASH);
   s.impacts = s.impacts.filter((k) => s.time - k.at < IMPACT_FLASH);
-  s.spits = s.spits.filter((k) => s.time - k.at < SPITTER.splash);
-  s.bursts = s.bursts.filter((k) => s.time - k.at < BLOATER.burst);
+  s.spits = s.spits.filter((k) => s.time - k.at < SPEWER.splash);
+  s.bursts = s.bursts.filter((k) => s.time - k.at < SWOLLEN.burst);
   s.arcs = s.arcs.filter((k) => s.time - k.at < CARD.chain.flash);
   s.pops = s.pops.filter((k) => s.time - k.at < CARD.explode.flash);
   for (const post of s.posts) {
@@ -1570,8 +1570,8 @@ function hunt(s: HordeState, e: Enemy, speed: number, reached: Map<number, Defen
   if (dist - Math.max(0, stride) <= reach + EPS) reached.set(e.id, target);
 }
 
-/** How far short of its stop line `e` halts: a Spitter at `SPITTER.stop`, the rest at it. */
-const standOff = (e: Enemy): number => (e.kind === 'spitter' ? SPITTER.stop : 0);
+/** How far short of its stop line `e` halts: a Spewer at `SPEWER.stop`, the rest at it. */
+const standOff = (e: Enemy): number => (e.kind === 'spewer' ? SPEWER.stop : 0);
 
 /** Design §9: a Screamer speeds up the other enemies near it; several don't stack. */
 function screamed(screamers: readonly Enemy[], e: Enemy): number {
@@ -1643,7 +1643,7 @@ function move(s: HordeState): Moves {
       continue;
     }
     const fromX = e.x;
-    // Never backwards: a Spitter pushed into a walled row inside its range stays put.
+    // Never backwards: a Spewer pushed into a walled row inside its range stays put.
     e.x = Math.min(e.x, Math.max(stop.x + (stop.layer ? standOff(e) : 0), e.x - speed));
     breach(s, e, fromX);
     // Only through a gap in every layer; from now on it hunts defenders.
@@ -1760,8 +1760,8 @@ function separate(s: HordeState): void {
  * gap this step (after separation) holds off; one the crowd pushed back attacks, so a
  * packed crowd can't keep it from ever hitting the wall. An enemy in the camp hits the
  * defender it reached this step (before separation, so a crowd can't hold it off).
- * Design §9: a climbing Crawler doesn't attack; a Spitter spits from its stand-off; a
- * Bloater's hit is its blast, which takes it off the field with no kill paid.
+ * Design §9: a climbing Crawler doesn't attack; a Spewer spits from its stand-off; a
+ * Swollen's hit is its blast, which takes it off the field with no kill paid.
  */
 function attack(s: HordeState, moves: Moves): void {
   const blown = new Set<number>();
@@ -1775,19 +1775,19 @@ function attack(s: HordeState, moves: Moves): void {
       const damage =
         enemy.damage * (defender.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
       defender.hp = Math.max(0, defender.hp - damage);
-      if (e.kind === 'bloater') blown.add(e.id);
+      if (e.kind === 'swollen') blown.add(e.id);
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
     const slide = moves.sliding.get(e.id);
     if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
-    if (e.kind === 'spitter' && spit(s, e)) {
+    if (e.kind === 'spewer' && spit(s, e)) {
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
     const stop = stopLine(s, e);
     if (!stop.segment || !stop.layer || e.x > stop.x + standOff(e) + EPS) continue;
-    if (e.kind === 'bloater') {
+    if (e.kind === 'swollen') {
       blast(s, stop.layer, stop.segment.index);
       blown.add(e.id);
       continue;
@@ -1798,7 +1798,7 @@ function attack(s: HordeState, moves: Moves): void {
       damage *= HORROR.charge.hit;
     }
     hitSegment(s, stop.layer, stop.segment, damage);
-    if (e.kind === 'spitter') {
+    if (e.kind === 'spewer') {
       s.spits.push({ fromX: e.x, fromY: e.y, x: stop.x, y: e.y, at: s.time + STEP });
     } else if (took(s, 'spiked-walls')) {
       // Spiked Walls (design §8): a blow on the wall costs the one landing it.
@@ -1821,35 +1821,35 @@ function hitSegment(s: HordeState, layer: Layer, segment: Segment, damage: numbe
   segment.hp = Math.max(0, segment.hp - damage);
 }
 
-/** Design §9: a Bloater's blast on segment `row` of `layer`, and on its standing neighbours. */
+/** Design §9: a Swollen's blast on segment `row` of `layer`, and on its standing neighbours. */
 function blast(s: HordeState, layer: Layer, row: number): void {
   const centre = layer.segments[row]!;
-  hitSegment(s, layer, centre, BLOATER.wall);
+  hitSegment(s, layer, centre, SWOLLEN.wall);
   for (const n of [row - 1, row + 1]) {
     const seg = layer.segments[n];
-    if (seg) hitSegment(s, layer, seg, BLOATER.splash);
+    if (seg) hitSegment(s, layer, seg, SWOLLEN.splash);
   }
 }
 
 /**
- * Design §9: a Spitter spits at the nearest defender or working turret (not jammed,
- * its wall standing) within `SPITTER.range` (ties → defenders first, then lower
+ * Design §9: a Spewer spits at the nearest defender or working turret (not jammed,
+ * its wall standing) within `SPEWER.range` (ties → defenders first, then lower
  * index): HP off a defender (a shield blocks its share), condition off a turret.
  * Returns false when there is none.
  */
 function spit(s: HordeState, e: Enemy): boolean {
   let best: { x: number; y: number; hit: () => void } | null = null;
   let bestD = Infinity;
-  const damage = ENEMIES.spitter.damage;
+  const damage = ENEMIES.spewer.damage;
   for (const d of s.defenders) {
     const dist = Math.hypot(d.x - e.x, d.y - e.y);
-    if (dist > SPITTER.range + EPS || dist >= bestD) continue;
+    if (dist > SPEWER.range + EPS || dist >= bestD) continue;
     bestD = dist;
     best = {
       x: d.x,
       y: d.y,
       hit: () => {
-        d.hitBy = 'spitter';
+        d.hitBy = 'spewer';
         const taken = damage * (d.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
         d.hp = Math.max(0, d.hp - taken);
       },
@@ -1859,7 +1859,7 @@ function spit(s: HordeState, e: Enemy): boolean {
     const state = turretState(s, t);
     if (state === 'jammed' || state === 'offline') continue;
     const dist = Math.hypot(t.x - e.x, t.y - e.y);
-    if (dist > SPITTER.range + EPS || dist >= bestD) continue;
+    if (dist > SPEWER.range + EPS || dist >= bestD) continue;
     bestD = dist;
     best = { x: t.x, y: t.y, hit: () => wear(t, damage) };
   }
