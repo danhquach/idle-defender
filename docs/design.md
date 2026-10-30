@@ -303,6 +303,28 @@ which apply to the whole battlefield.
 | Fortify | All barrier layers +30% max HP |
 | Power Saver | Turrets use 25% less energy |
 
+- **As built (ID-020, starting points):** a new game has 1 perk slot with
+  Steady Fire unlocked and equipped. Every other perk and slots 2–4 are
+  research nodes at the Research Lab, paid in materials until Mutated Genes
+  come (ID-035): Scavenger's Eye (Lab 1, 30 Scrap, 30 Wood), Fortify (Lab 1,
+  40/40), Butcher's Hunger (Lab 1, 30/30), Rally Call (Lab 1, 30/20), Second
+  Look (Lab 2, 60/40), Overclock and Power Saver (Lab 2, after Auto-turret,
+  60/40 each); Perk slot 2 (Lab 1, 50/50), 3 (Lab 2, 80/80, after slot 2)
+  and 4 (Lab 2, 120/120, after slot 3). Perks are equipped between hordes
+  only, each once, and are copied into the fight. Effects: **Steady Fire**
+  guns (not blades, tools or turrets) ×1.15 fire rate; **Scavenger's Eye**
+  kill cash ×1.25 (fractions kept, whole cash shown); **Fortify** every
+  segment ×1.3 HP and max HP for the fight, and the base keeps the same
+  share of its own max afterwards; **Butcher's Hunger** each blade or tool
+  kill (cleave included) heals the damaged standing segment nearest the
+  defender 3 HP, up to max; **Rally Call** recruit chance ×2, still one
+  recruit per offer at most; **Second Look** one seeded reroll of the open
+  offer per wave; **Overclock** turret damage ×1.2 and draw ×1.1; **Power
+  Saver** turret draw ×0.75 (with Overclock, ×0.825). All stack
+  multiplicatively with cards, shop buffs and Engineers. Perk levels and
+  boss-horde unlocks come with ID-035. To absorb the starting Steady Fire,
+  enemy HP now grows × 1.17 per horde (was × 1.15; §9).
+
 ## 6. Defenders, weapons and professions
 
 Defenders are a **permanent roster**: levels, stats, titles and gear stay.
@@ -679,8 +701,9 @@ one crowd (no lanes, §3).
 
 - Mutants appear from Horde 5 *(starting point)*; new types join as horde
   numbers rise.
-- **Scaling:** enemy HP × 1.10 per wave, × 1.15 per horde number (starting
-  points).
+- **Scaling:** enemy HP × 1.10 per wave, × 1.17 per horde number (starting
+  points; × 1.15 until ID-020, raised so a new game's Steady Fire keeps the
+  balance targets: a campaign without building still stalls before Horde 6).
 - **As built (ID-023, starting points):**
 
   | Enemy | HP | Speed px/s | Hit | Radius | XP / cash |

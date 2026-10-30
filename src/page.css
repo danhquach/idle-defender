@@ -80,6 +80,10 @@ body {
   gap: 12px;
 }
 
+.hud-reroll {
+  margin-top: 12px;
+}
+
 .hud-card {
   display: flex;
   flex-direction: column;

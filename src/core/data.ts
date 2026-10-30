@@ -517,8 +517,15 @@ export const LAB_LEVELS: readonly Partial<Stock>[] = [
   { wood: 80, scrap: 60 },
 ];
 
-/** Active skills are researched under their own ids (ID-019). */
-export type ResearchId = 'metal-walls' | 'auto-turret' | 'flashbang' | 'molotov' | 'airstrike';
+/** Active skills and commander perks are researched under their own ids (ID-019, ID-020). */
+export type ResearchId =
+  | 'metal-walls'
+  | 'auto-turret'
+  | 'flashbang'
+  | 'molotov'
+  | 'airstrike'
+  | Exclude<PerkId, typeof START_PERK>
+  | PerkSlotId;
 /**
  * A research node: the Lab level and earlier node it needs, what it costs, and the
  * barrier tier it unlocks, if any. Completes at once (design §11, as built ID-014).
@@ -564,6 +571,16 @@ export const RESEARCH: Readonly<
     cost: { scrap: 60, wood: 40 },
     tier: null,
   },
+  'scavengers-eye': perkNode("Scavenger's Eye", 1, null, { scrap: 30, wood: 30 }),
+  fortify: perkNode('Fortify', 1, null, { scrap: 40, wood: 40 }),
+  'butchers-hunger': perkNode("Butcher's Hunger", 1, null, { scrap: 30, wood: 30 }),
+  'rally-call': perkNode('Rally Call', 1, null, { scrap: 30, wood: 20 }),
+  'second-look': perkNode('Second Look', 2, null, { scrap: 60, wood: 40 }),
+  overclock: perkNode('Overclock', 2, 'auto-turret', { scrap: 60, wood: 40 }),
+  'power-saver': perkNode('Power Saver', 2, 'auto-turret', { scrap: 60, wood: 40 }),
+  'perk-slot-2': perkNode('Perk slot 2', 1, null, { scrap: 50, wood: 50 }),
+  'perk-slot-3': perkNode('Perk slot 3', 2, 'perk-slot-2', { scrap: 80, wood: 80 }),
+  'perk-slot-4': perkNode('Perk slot 4', 2, 'perk-slot-3', { scrap: 120, wood: 120 }),
 };
 export const RESEARCH_IDS = Object.keys(RESEARCH) as ResearchId[];
 
@@ -699,3 +716,61 @@ export const SKILLS = {
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 /** How long a skill's flash stays on screen, in seconds. */
 export const SKILL_FLASH = 0.4;
+
+// --- Commander perks (ID-020). Design §5. ---
+
+export type PerkId =
+  | 'steady-fire'
+  | 'scavengers-eye'
+  | 'fortify'
+  | 'butchers-hunger'
+  | 'rally-call'
+  | 'second-look'
+  | 'overclock'
+  | 'power-saver';
+/** Battlefield-wide effects the commander equips between hordes, one per perk slot. */
+export const PERKS: Readonly<Record<PerkId, { readonly name: string; readonly text: string }>> = {
+  'steady-fire': { name: 'Steady Fire', text: 'Guns fire 15% faster' },
+  'scavengers-eye': { name: "Scavenger's Eye", text: '+25% horde cash' },
+  fortify: { name: 'Fortify', text: 'Barrier segments +30% max HP' },
+  'butchers-hunger': {
+    name: "Butcher's Hunger",
+    text: 'Blade and tool kills heal the nearest damaged wall 3 HP',
+  },
+  'rally-call': { name: 'Rally Call', text: 'Recruit cards appear twice as often' },
+  'second-look': { name: 'Second Look', text: 'Reroll the card offer once per wave' },
+  overclock: { name: 'Overclock', text: 'Turrets +20% damage, +10% energy use' },
+  'power-saver': { name: 'Power Saver', text: 'Turrets use 25% less energy' },
+};
+export const PERK_IDS = Object.keys(PERKS) as PerkId[];
+/** The perk a new game has unlocked and equipped; every other one is researched. */
+export const START_PERK = 'steady-fire';
+export type PerkSlotId = 'perk-slot-2' | 'perk-slot-3' | 'perk-slot-4';
+/** Research nodes that each add a perk slot to the 1 a new game has. */
+export const PERK_SLOT_IDS: readonly PerkSlotId[] = ['perk-slot-2', 'perk-slot-3', 'perk-slot-4'];
+/** Perk effect sizes (design §5, starting points; as built ID-020). */
+export const PERK = {
+  /** Steady Fire: gun fire-rate factor. */
+  steadyFire: 1.15,
+  /** Scavenger's Eye: kill-cash factor. */
+  cash: 1.25,
+  /** Fortify: segment max-HP factor for the fight. */
+  fortify: 1.3,
+  /** Butcher's Hunger: HP a blade or tool kill heals. */
+  butcherHeal: 3,
+  /** Rally Call: recruit-chance factor. */
+  rally: 2,
+  /** Overclock: turret damage and charge-draw factors. */
+  overclock: { damage: 1.2, draw: 1.1 },
+  /** Power Saver: turret charge-draw factor. */
+  powerSaver: 0.75,
+} as const;
+
+function perkNode(
+  name: string,
+  lab: number,
+  needs: ResearchId | null,
+  cost: Partial<Stock>,
+): (typeof RESEARCH)[ResearchId] {
+  return { name, lab, needs, cost, tier: null };
+}

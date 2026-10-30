@@ -1,15 +1,17 @@
 // HUD over the canvas: status bar, the "camp is falling" warning, the 1-of-3 card
 // panel, the replacement panel, the result panel with its stat-point picker, the horde
-// cash shop row with the active skills, and a short toast (refused moves).
+// cash shop row with the active skills, the commander's perks and Second Look's
+// reroll, and a short toast (refused moves).
 // Text reaches the page only through textContent.
 import { affixText, heldName } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
-import { synergyOf, UPGRADES } from '../core/cards.ts';
+import { rerollLock, synergyOf, UPGRADES } from '../core/cards.ts';
 import {
   BANK_CAP,
   FALL_WARNING,
   GAS_PER_WIN,
   MATERIALS,
+  PERKS,
   PROFESSIONS,
   SHOP,
   SHOP_ITEMS,
@@ -35,6 +37,7 @@ import {
 } from '../core/game.ts';
 import {
   baseAfter,
+  perkOn,
   type Breach,
   type Card,
   type DefenderSpec,
@@ -115,7 +118,9 @@ export function statusText(s: HordeState): string {
     `Wave ${s.wave}/${s.waveCount}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
     bankText(s.energy),
-    `Cash ${s.cash}`,
+    // Scavenger's Eye pays fractions of cash; only whole ones are shown.
+    `Cash ${Math.floor(s.cash)}`,
+    ...(s.perks.length ? [`Perks: ${s.perks.map((p) => PERKS[p].name).join(', ')}`] : []),
   ].join(' · ');
 }
 
@@ -365,6 +370,7 @@ export function createHud(
   onSpend: (defenderId: string, stat: Stat) => void,
   onBuy: (item: ShopItem) => void,
   onArm: (skill: SkillId) => void,
+  onReroll: () => void,
 ): {
   update(state: HordeState, armed?: SkillId | null): void;
   showResult(screen: ResultScreen): void;
@@ -425,6 +431,8 @@ export function createHud(
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
+  // Second Look's reroll can deal the same three cards; its button still has to grey out.
+  let shownRerolled = 0;
   // Hide the panel at once: a second click or key before the next frame must not
   // pick from an offer the player hasn't seen yet.
   function choose(index: number): void {
@@ -537,6 +545,17 @@ export function createHud(
       row.append(button);
     });
     cards.replaceChildren(heading, row);
+    if (perkOn(state, 'second-look')) {
+      const lock = rerollLock(state);
+      const reroll = el('button', 'hud-button hud-reroll', 'Reroll (Second Look)');
+      reroll.type = 'button';
+      reroll.disabled = lock !== null;
+      reroll.title = lock ?? '';
+      reroll.addEventListener('click', () => {
+        if (!cards.hidden && rerollLock(state) === null) onReroll();
+      });
+      cards.append(reroll);
+    }
   }
 
   return {
@@ -593,8 +612,12 @@ export function createHud(
       }
 
       // The sim clones its state each tick, so compare the offer by content.
-      if (JSON.stringify(state.offer) !== JSON.stringify(shownOffer)) {
+      if (
+        JSON.stringify(state.offer) !== JSON.stringify(shownOffer) ||
+        state.rerolledWave !== shownRerolled
+      ) {
         shownOffer = state.offer;
+        shownRerolled = state.rerolledWave;
         cards.hidden = state.offer === null;
         if (state.offer) showOffer(state.offer, state);
         else cards.replaceChildren();

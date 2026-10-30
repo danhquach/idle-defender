@@ -1,6 +1,6 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
-import { chooseCard } from '../core/cards.ts';
+import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
 import { type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
@@ -133,6 +133,9 @@ export function start(root: HTMLElement, art: Art): void {
       if (lock) hud.toast(lock);
       armed = lock || armed === skill ? null : skill;
       if (armed) selectedDefender = null;
+    },
+    () => {
+      if (horde && rerollLock(horde) === null) horde = rerollOffer(horde);
     },
   );
   const panel = createBuildPanel(

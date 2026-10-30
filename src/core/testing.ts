@@ -22,6 +22,7 @@ export function setup(): HordeSetup {
     bank: 600,
     startedAt: 0,
     skills: [],
+    perks: [],
   };
 }
 
