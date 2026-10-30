@@ -471,6 +471,70 @@ export const DEFENDER_XP = { base: 10, perHorde: 5 } as const;
 /** Real time an injured defender rests before they can defend again, in ms (design §11). */
 export const RECOVERY_MS = 2 * 60 * 60 * 1000;
 
+// --- The camp (M8). Design §11, as built ID-033 (starting points). ---
+
+/**
+ * Camp capacity, the roster floor and camp levels: `slots` people to start, `perUpgrade`
+ * more per material camp upgrade; below `floor` living defenders a free recruit arrives
+ * every `recruitMs`; camp XP from level L to L + 1 is `levelXp × L`.
+ */
+export const CAMP_SIZE = {
+  slots: 5,
+  perUpgrade: 2,
+  floor: 3,
+  recruitMs: 60 * 60 * 1000,
+  levelXp: 30,
+} as const;
+/** What each material camp upgrade costs, the first one first. */
+export const CAMP_UPGRADES: readonly Partial<Stock>[] = [
+  { wood: 60, scrap: 40 },
+  { wood: 80, metal: 40, scrap: 60 },
+  { metal: 80, concrete: 40, scrap: 80 },
+];
+
+export type CampPickId = 'scavenging' | 'stockpile' | 'salvage' | 'medic' | 'foraging';
+export const CAMP_PICK_IDS: readonly CampPickId[] = [
+  'scavenging',
+  'stockpile',
+  'salvage',
+  'medic',
+  'foraging',
+];
+/** Ranks each camp-level pick stacks to. */
+export const CAMP_PICK_RANKS = 5;
+/**
+ * The permanent camp-level picks (design §11 Camp level), each `per` rank: kill cash
+ * (+%), cash at the start of a horde, repair cost (−%), injury rest (−%), patrol
+ * materials and Gas (+%).
+ */
+export const CAMP_PICKS: Readonly<Record<CampPickId, { name: string; per: number; text: string }>> =
+  {
+    scavenging: { name: 'Scavenging', per: 5, text: '+5% horde cash per kill' },
+    stockpile: { name: 'Stockpile', per: 10, text: 'Start each horde with +10 cash' },
+    salvage: { name: 'Salvage Crew', per: 10, text: 'Repairs cost 10% less' },
+    medic: { name: 'Field Medic', per: 10, text: 'Injuries heal 10% faster' },
+    foraging: { name: 'Foraging', per: 5, text: '+5% patrol materials and Gas' },
+  };
+/** Names the roster floor's free recruits are given. */
+export const RECRUIT_NAMES: readonly string[] = [
+  'Ava',
+  'Ben',
+  'Cole',
+  'Dana',
+  'Eli',
+  'Faye',
+  'Gus',
+  'Hana',
+  'Ivan',
+  'Jade',
+  'Kai',
+  'Lena',
+  'Max',
+  'Nora',
+  'Owen',
+  'Rosa',
+];
+
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;
 

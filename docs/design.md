@@ -1077,6 +1077,25 @@ Set before sending; they apply to any location, plaza or single building.
 - **No deadlock** *(designer's call)*: every horde pays a little Scrap and
   Wood — more on a win, less on a loss — so the base can be repaired even
   with no patrol loot.
+- **As built (ID-033, starting points):** the camp holds 5 people; the
+  roster's camp section sells up to 3 **camp upgrades** of +2 slots each
+  (60 Wood + 40 Scrap, then 80 Wood + 40 Metal + 60 Scrap, then 80 Metal +
+  40 Concrete + 80 Scrap), so at most 11. **Dismiss** asks first, is refused
+  while 3 or fewer are alive or the defender is on patrol, and puts their
+  owned weapons in the armoury. The **roster floor**'s clock starts when the
+  living roster drops below 3 (from the patrol's return when one dies); each
+  hour a free recruit arrives (level 1, a pistol, a name from a fixed list),
+  caught up while the game is closed, until 3 are alive again. A patrol
+  still can't take every defender at the camp (ID-027). **Camp XP** is half
+  a win's defender XP, rounded down; camp level L to L + 1 costs 30 × L XP
+  (level 2 at about Horde 3, level 5 at about Horde 15). Each level gained
+  offers 3 different picks, rolled from the fight's seed; the result screen
+  holds "Back to build" until each is picked (any left over show in the
+  roster). The picks stack to 5 ranks each and leave the pool at the top:
+  **Scavenging** +5% kill cash, **Stockpile** +10 cash at the start of a
+  horde, **Salvage Crew** −10% on every repair, **Field Medic** −10% injury
+  rest, **Foraging** +5% patrol materials and Gas (to the nearest whole).
+  The survivor slot comes with ID-032.
 
 ### Camp level *(designer's call)*
 

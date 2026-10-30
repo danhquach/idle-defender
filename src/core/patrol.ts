@@ -5,6 +5,7 @@
 // Risk (ID-027): party strength against the location's danger rates the trip, and the
 // same seed rolls who comes back injured, who dies and whether the party is wiped out.
 import { isOwned, rollWeapon, type OwnedWeapon } from './armoury.ts';
+import { lootBonus, recoveryMs, startFloor } from './camp.ts';
 import {
   ARMOURY_CAP,
   BATTERY_IDS,
@@ -15,7 +16,6 @@ import {
   PATROL,
   RARITIES,
   RARITY_ORDER,
-  RECOVERY_MS,
   stockOf,
   type Battery,
   type LocationId,
@@ -351,7 +351,7 @@ function spareLast(outcome: PatrolOutcome, game: GameState): PatrolOutcome {
  * Brings home every patrol due by `now`, oldest due first. A party that isn't wiped out
  * brings its loot into the camp (capped at `MAX_COUNT`; a weapon with no room is
  * salvaged for Scrap), picks up the weapons left where it went, and its members who
- * come back get XP; the injured rest `RECOVERY_MS` from its return. The dead leave the
+ * come back get XP; the injured rest `recoveryMs` from its return. The dead leave the
  * roster and their owned weapons stay at the location. Each patrol leaves a report.
  * Returns `game` itself when none is due.
  */
@@ -365,6 +365,10 @@ export function settlePatrols(game: GameState, now: number): GameState {
   for (const p of due) {
     const outcome = spareLast(patrolOutcome(p), g);
     const haul = outcome.wiped ? noHaul() : patrolLoot(p);
+    // Foraging (a camp-level pick, design §11): more materials and Gas, to the nearest whole.
+    const more = (n: number): number => Math.round((n * (100 + lootBonus(g.camp))) / 100);
+    for (const m of MATERIALS) haul.stock[m] = more(haul.stock[m]);
+    haul.gas = more(haul.gas);
     // Into the armoury if there is room, else salvaged for Scrap.
     const store = (weapon: OwnedWeapon): ReportWeapon => {
       const kept = ownedWeapons(g).length < ARMOURY_CAP;
@@ -401,12 +405,13 @@ export function settlePatrols(game: GameState, now: number): GameState {
           if (w !== null && isOwned(w)) g.leftBehind.push({ location: p.location, weapon: w });
         }
         g.roster = g.roster.filter((r) => r.id !== id);
+        startFloor(g, patrolDue(p));
         continue;
       }
       d.xp = Math.min(MAX_COUNT, d.xp + xp);
       if (outcome.injured.includes(id)) {
         injured.push(d.name);
-        d.injuredUntil = patrolDue(p) + RECOVERY_MS;
+        d.injuredUntil = patrolDue(p) + recoveryMs(g.camp);
       }
     }
     g.reports.push({
