@@ -1,7 +1,7 @@
 // Build mode panel between hordes: stock bar, the selected slot's menu (a turret's
 // included), Repair all, the Lab, power and the bank meter, and the start defender and
-// post; or, in its place, the roster. Every option is a dry run of the core action, so
-// a refused one shows disabled with the core's own reason.
+// post; or, in its place, the roster or the perk loadout. Every option is a dry run of
+// the core action, so a refused one shows disabled with the core's own reason.
 // Text only via textContent.
 import {
   buildPost,
@@ -74,6 +74,7 @@ import {
   wholeLeft,
 } from './hud.ts';
 import type { SlotHit } from './projection.ts';
+import { perkLines, type PerkLine } from './perks.ts';
 import { rosterSection } from './roster.ts';
 
 /** What the backup section says about a refused code. */
@@ -466,10 +467,11 @@ export function createBuildPanel(
   let startKey: string | null = null;
   // The Relocate pick, kept by target key so a redraw (a Gas burnt) doesn't reset it.
   let relocateKey: string | null = null;
-  // The roster shows in place of the build panel until "Back".
-  let rosterOpen = false;
+  // The roster or the perk loadout shows in place of the build panel until "Back".
+  let open: 'build' | 'roster' | 'perks' = 'build';
   let shown: { game: GameState; selected: SlotHit | null } | null = null;
-  let rosterButton: HTMLButtonElement | null = null;
+  // The buttons that open each view, from the last redraw, for "Back" to focus.
+  const openers: Partial<Record<'roster' | 'perks', HTMLButtonElement>> = {};
   // Build mode reads the clock for injuries; the core only ever gets it as `now`.
   const choice = (game: GameState) => pickStart(game, defenderId, startKey, Date.now());
 
@@ -496,7 +498,7 @@ export function createBuildPanel(
     choiceButton(label, cost, result.ok ? null : result.reason, () => {
       if (result.ok) onChange(result.base, result.stock);
     });
-  const labOption = (label: string, cost: Partial<Stock>, result: GameResult): HTMLElement =>
+  const labOption = (label: string, cost: Partial<Stock> | null, result: GameResult): HTMLElement =>
     choiceButton(label, cost, result.ok ? null : result.reason, () => {
       if (result.ok) onGame(result.game);
     });
@@ -685,7 +687,7 @@ export function createBuildPanel(
     return [label('Start defender', defenders), label('Start post', posts), ...injured, go];
   }
 
-  /** The build panel: the slot menu, Repair all, the start pick and Roster, the backup code. */
+  /** The build panel: the slot menu, Repair all, the start pick, Roster and Perks, the backup code. */
   function buildView(game: GameState, selected: SlotHit | null): HTMLElement[] {
     const slot = el('section', 'build-slot');
     slot.append(
@@ -696,15 +698,22 @@ export function createBuildPanel(
     const all = el('section', 'build-all');
     all.append(option(`Repair all`, repairAllCost(game.base), repairAll(game.base, game.stock)));
     const start = el('section', 'build-start-section');
-    const roster = el('button', 'build-option', 'Roster');
-    roster.type = 'button';
-    rosterButton = roster;
-    roster.addEventListener('click', () => {
-      rosterOpen = true;
-      api.show(game, selected);
-      panel.querySelector<HTMLButtonElement>('button')?.focus();
-    });
-    start.append(...startSection(game), roster);
+    const viewButton = (label: string, view: 'roster' | 'perks'): HTMLButtonElement => {
+      const button = el('button', 'build-option', label);
+      button.type = 'button';
+      button.addEventListener('click', () => {
+        open = view;
+        api.show(game, selected);
+        panel.querySelector<HTMLButtonElement>('button')?.focus();
+      });
+      openers[view] = button;
+      return button;
+    };
+    start.append(
+      ...startSection(game),
+      viewButton('Roster', 'roster'),
+      viewButton('Perks', 'perks'),
+    );
     code.value = exportCode(encodeSave(game, Date.now()));
     return [
       el('h2', 'build-title', 'Build'),
@@ -717,16 +726,40 @@ export function createBuildPanel(
     ];
   }
 
-  /** The roster in place of the build panel: a Back button, then each defender. */
-  function rosterView(game: GameState): HTMLElement[] {
+  /** "Back" from the roster or the perk loadout to the build panel. */
+  function backButton(view: 'roster' | 'perks'): HTMLElement {
     const back = el('button', 'build-option', 'Back');
     back.type = 'button';
     back.addEventListener('click', () => {
-      rosterOpen = false;
+      open = 'build';
       if (shown) api.show(shown.game, shown.selected);
-      rosterButton?.focus(); // back where the player came from
+      openers[view]?.focus(); // back where the player came from
     });
-    return [el('h2', 'build-title', 'Roster'), back, ...rosterSection(game, Date.now(), onGame)];
+    return back;
+  }
+
+  /** The roster in place of the build panel: a Back button, then each defender. */
+  function rosterView(game: GameState): HTMLElement[] {
+    return [
+      el('h2', 'build-title', 'Roster'),
+      backButton('roster'),
+      ...rosterSection(game, Date.now(), onGame),
+    ];
+  }
+
+  /** One perk loadout line as a page element. */
+  function perkLine(line: PerkLine): HTMLElement {
+    if (line.kind === 'action') return labOption(line.label, null, line.result);
+    return line.kind === 'heading'
+      ? el('h3', 'build-slot-title', line.text)
+      : el('p', 'build-slot-note', line.text);
+  }
+
+  /** The perk loadout in place of the build panel: a Back button, the slots, then each perk. */
+  function perksView(game: GameState): HTMLElement[] {
+    const section = el('section', 'build-perks');
+    section.append(...perkLines(game).map(perkLine));
+    return [el('h2', 'build-title', 'Perks'), backButton('perks'), section];
   }
 
   const api: BuildPanel = {
@@ -751,7 +784,13 @@ export function createBuildPanel(
         document.activeElement instanceof HTMLElement && backup.contains(document.activeElement)
           ? document.activeElement
           : null;
-      panel.replaceChildren(...(rosterOpen ? rosterView(game) : buildView(game, selected)));
+      panel.replaceChildren(
+        ...(open === 'roster'
+          ? rosterView(game)
+          : open === 'perks'
+            ? perksView(game)
+            : buildView(game, selected)),
+      );
       if (inBackup) {
         inBackup.focus();
       } else if (focused >= 0) {
@@ -764,7 +803,7 @@ export function createBuildPanel(
     },
     hide() {
       // A horde starts from the build panel; the next visit opens on it again.
-      rosterOpen = false;
+      open = 'build';
       bar.hidden = true;
       panel.hidden = true;
     },
