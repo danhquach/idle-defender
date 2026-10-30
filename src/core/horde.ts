@@ -1327,21 +1327,26 @@ function breach(s: HordeState, e: Enemy, fromX: number, over = false): void {
  * Pushes overlapping enemies (bodies of their kind's radius) apart along `y` only
  * (never `x`, so never through a wall): the upper one up, the lower one down (equal
  * `y` → lower id up), each by half the overlap capped per step. Computed from
- * pre-push positions, then clamped to the field. An enemy in the camp and one still
- * outside never push each other: a wall stands between them, so one pressed against
- * it can't hold a hunter off for good.
+ * pre-push positions, then clamped to the field by each body's radius. An enemy in
+ * the camp and one still outside never push each other: a wall stands between them,
+ * so one pressed against it can't hold a hunter off for good.
  */
 function separate(s: HordeState): void {
   const push = new Map<number, number>();
   const cap = SEPARATION_SPEED * STEP;
   const es = s.enemies;
+  const radius = es.map((e) => ENEMIES[e.kind].radius);
   for (let i = 0; i < es.length; i++) {
     for (let j = i + 1; j < es.length; j++) {
       const a = es[i]!;
       const b = es[j]!;
       if (a.inCamp !== b.inCamp) continue;
-      const reach = ENEMIES[a.kind].radius + ENEMIES[b.kind].radius;
-      const overlap = reach - Math.hypot(a.x - b.x, a.y - b.y);
+      const reach = radius[i]! + radius[j]!;
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      // Most pairs are far apart: skip them before the square root.
+      if (dx >= reach || -dx >= reach || dy >= reach || -dy >= reach) continue;
+      const overlap = reach - Math.hypot(dx, dy);
       if (overlap <= 0) continue;
       const aUp = a.y < b.y || (a.y === b.y && a.id < b.id);
       const d = Math.min(overlap / 2, cap);
@@ -1349,11 +1354,12 @@ function separate(s: HordeState): void {
       push.set(b.id, (push.get(b.id) ?? 0) + (aUp ? d : -d));
     }
   }
-  for (const e of es) {
+  es.forEach((e, i) => {
     const d = push.get(e.id);
-    if (d === undefined) continue;
-    e.y = Math.min(FIELD.height - ENEMY_RADIUS, Math.max(ENEMY_RADIUS, e.y + d));
-  }
+    if (d === undefined) return;
+    const r = radius[i]!;
+    e.y = Math.min(FIELD.height - r, Math.max(r, e.y + d));
+  });
 }
 
 /**
