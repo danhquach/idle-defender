@@ -8,9 +8,10 @@ import {
   type TrapKind,
   type TurretMount,
 } from './base.ts';
-import { levelUp, postUsable } from './cards.ts';
+import { levelUp, masterGunner, postUsable } from './cards.ts';
 import {
   CAMP,
+  CARD,
   COLUMNS,
   ENEMIES,
   ENGINEER_BUFF,
@@ -81,7 +82,23 @@ import {
 } from './stats.ts';
 import { enemyHp, horrorAbility, kindFor, waveCount, waveMix, waveSize } from './waves.ts';
 
-export type UpgradeId = 'sharpshooter' | 'rapid-fire' | 'long-sight' | 'patch-up' | 'reinforce';
+export type UpgradeId =
+  | 'sharpshooter'
+  | 'rapid-fire'
+  | 'long-sight'
+  | 'patch-up'
+  | 'reinforce'
+  | 'piercing-rounds'
+  | 'ricochet'
+  | 'split-shot'
+  | 'burning-rounds'
+  | 'explode-on-kill'
+  | 'chain-lightning'
+  | 'cleave'
+  | 'spiked-walls'
+  | 'slow-field'
+  | 'recharge'
+  | 'power-surge';
 
 export interface DefenderSpec {
   id: string;
@@ -132,6 +149,8 @@ export interface Enemy {
   climbed: boolean;
   /** A Mutated Horror's ability clock (design §9, ID-024); only the Horror has one. */
   horror?: HorrorClock;
+  /** Burning Rounds (design §8): fight time it burns until; absent or 0 = not burning. */
+  burnUntil?: number;
 }
 /** Fight times are when, so they stop during picks; a stun pushes them back. */
 export interface HorrorClock {
@@ -275,6 +294,8 @@ export interface Bullet {
   hit: number[];
   /** How it looks in flight: its gun's. */
   tracer: Tracer;
+  /** A Ricochet's bounce (design §8): it never bounces again. */
+  ricochet?: true;
 }
 /**
  * A gun going off: `owner` (as on its bullet) fired in the step ending at `at`, when it
@@ -314,6 +335,20 @@ export interface Fire {
   x: number;
   y: number;
   until: number;
+}
+/** Chain Lightning arcing from `(fromX, fromY)` to `(x, y)` in the step ending at `at`, drawn for `CARD.chain.flash` s. */
+export interface Arc {
+  fromX: number;
+  fromY: number;
+  x: number;
+  y: number;
+  at: number;
+}
+/** An Explode on Kill burst at `(x, y)` in the step ending at `at`, drawn for `CARD.explode.flash` s. */
+export interface Pop {
+  x: number;
+  y: number;
+  at: number;
 }
 /** A skill landing at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
 export interface Blast {
@@ -365,6 +400,10 @@ export interface HordeState {
   level: number;
   offer: Card[] | null;
   mods: Mods;
+  /** Upgrade cards taken this horde, in pick order, each once (design §8). */
+  taken: UpgradeId[];
+  /** Power Surge: turrets draw no charge while `wave` is this one; 0 = none. */
+  freeWave: number;
   /** Horde cash from kills (design §4); spent in the shop, never kept after the horde. */
   cash: number;
   /** Fight time each bought buff runs until; 0 = never bought. */
@@ -385,6 +424,8 @@ export interface HordeState {
   impacts: Impact[];
   spits: Spit[];
   bursts: Burst[];
+  arcs: Arc[];
+  pops: Pop[];
   /** This horde's Mutated Horror's ability; null = no boss horde (design §9). */
   boss: HorrorAbility | null;
   /** Whether the Horror has come (with the first spawn of the last wave). */
@@ -439,6 +480,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     level: 1,
     offer: null,
     mods: { damage: 1, fireRate: 1, range: 1 },
+    taken: [],
+    freeWave: 0,
     cash: 0,
     buffs: { adrenaline: 0, overdrive: 0 },
     skills: [...skills],
@@ -452,6 +495,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     impacts: [],
     spits: [],
     bursts: [],
+    arcs: [],
+    pops: [],
     boss: horrorAbility(hordeNumber),
     bossSpawned: false,
     outcome: 'fighting',
@@ -566,14 +611,25 @@ export function engineerBuff(state: HordeState, defender: Defender): number {
 }
 
 /** Whether `t` can fire, and how it shows: a broken wall under a wall mount, then jammed, then the bank. */
-export function turretState(state: Pick<HordeState, 'layers' | 'energy'>, t: Turret): TurretState {
+export function turretState(
+  state: Pick<HordeState, 'layers' | 'energy'> & Partial<Pick<HordeState, 'wave' | 'freeWave'>>,
+  t: Turret,
+): TurretState {
   if (t.mount === 'wall-walk') {
     const seg = state.layers.find((l) => l.column === t.column)?.segments[t.row];
     if (!seg || seg.hp <= 0) return 'offline';
   }
   if (t.condition <= 0) return 'jammed';
-  return state.energy > 0 ? 'lit' : 'dark';
+  return state.energy > 0 || freePower(state) ? 'lit' : 'dark';
 }
+
+/** Whether a Power Surge runs turrets free this wave (design §8). */
+const freePower = (state: Partial<Pick<HordeState, 'wave' | 'freeWave'>>): boolean =>
+  state.freeWave !== undefined && state.freeWave > 0 && state.freeWave === state.wave;
+
+/** Whether upgrade card `id` was taken this horde. */
+export const took = (state: Pick<HordeState, 'taken'>, id: UpgradeId): boolean =>
+  state.taken.includes(id);
 
 /**
  * Damage and fire-rate factor a turret gets from the best standing Engineer within
@@ -714,7 +770,7 @@ function step(s: HordeState, rng: Rng): void {
   walk(s);
   fire(s, rng);
   fireTurrets(s, rng);
-  fly(s);
+  fly(s, rng);
   burn(s);
   repair(s);
   repairTurrets(s);
@@ -741,6 +797,8 @@ function step(s: HordeState, rng: Rng): void {
     s.impacts = [];
     s.spits = [];
     s.bursts = [];
+    s.arcs = [];
+    s.pops = [];
   }
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
@@ -952,7 +1010,9 @@ export function leadPoint(x: number, y: number, e: Enemy, speed: number): { x: n
 
 /**
  * Fires `pellets` bullets from `(x, y)` at where `target` will be, each turned off by up
- * to `spread`° on its own roll (seeded); one muzzle flash for the lot.
+ * to `spread`° on its own roll (seeded); one muzzle flash for the lot. With `split`
+ * (Split Shot, design §8) two more fly at ±`CARD.split.angle`° off the aim, each at
+ * `CARD.split.share` of the damage.
  */
 function launch(
   s: HordeState,
@@ -964,26 +1024,34 @@ function launch(
     spread: number;
     range: number;
     pellets: number;
+    split?: boolean;
   },
 ): void {
-  const { x, y, target, spread, range, pellets, ...rest } = shot;
+  const { x, y, target, spread, range, pellets, split, ...rest } = shot;
   const aim = leadPoint(x, y, target, rest.speed);
   const heading = Math.atan2(aim.y - y, aim.x - x);
   const distance = Math.hypot(aim.x - x, aim.y - y);
+  const bullet = (angle: number, damage: number): Bullet => ({
+    ...rest,
+    damage,
+    x,
+    y,
+    dx: Math.cos(angle),
+    dy: Math.sin(angle),
+    fromX: x,
+    fromY: y,
+    aim: distance,
+    left: range,
+    hit: [],
+  });
   for (let i = 0; i < pellets; i++) {
-    const angle = heading + ((rng() * 2 - 1) * spread * Math.PI) / 180;
-    s.bullets.push({
-      ...rest,
-      x,
-      y,
-      dx: Math.cos(angle),
-      dy: Math.sin(angle),
-      fromX: x,
-      fromY: y,
-      aim: distance,
-      left: range,
-      hit: [],
-    });
+    s.bullets.push(bullet(heading + ((rng() * 2 - 1) * spread * Math.PI) / 180, rest.damage));
+  }
+  if (split) {
+    for (const side of [-1, 1]) {
+      const angle = heading + (side * CARD.split.angle * Math.PI) / 180;
+      s.bullets.push(bullet(angle, rest.damage * CARD.split.share));
+    }
   }
   s.shots.push({ owner: rest.owner, at: s.time + STEP });
 }
@@ -1028,12 +1096,16 @@ export const hitDamage = (e: Enemy, damage: number): number =>
 /**
  * Design §6 Ballistics: each bullet flies one step along its swept path (so a fast one
  * never tunnels) and hits the first enemy it crosses, once; a piercing one goes on to
- * the next within `PIERCE.reach`. Spent, or past its range, it is gone.
+ * the next within `PIERCE.reach`. Spent, or past its range, it is gone. A squad
+ * bullet's hit also sets off the behaviour cards taken (design §8, `cardHit`).
  */
-function fly(s: HordeState): void {
+function fly(s: HordeState, rng: Rng): void {
+  const bounces: Bullet[] = [];
   s.bullets = s.bullets.filter((b) => {
     let travel = Math.min(b.speed * STEP, b.left);
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
+      const first = b.hit.length === 0;
+      const alive = hit.enemy.hp > 0;
       hit.enemy.hp -= hitDamage(hit.enemy, b.damage);
       b.hit.push(hit.enemy.id);
       b.x += b.dx * hit.at;
@@ -1041,6 +1113,7 @@ function fly(s: HordeState): void {
       b.left -= hit.at;
       travel -= hit.at;
       s.impacts.push({ x: b.x, y: b.y, hit: true, at: s.time + STEP });
+      if (!b.owner.startsWith('turret:')) cardHit(s, rng, b, hit.enemy, first, alive, bounces);
       if (b.pierce <= 0) return false;
       b.pierce -= 1;
       b.left = Math.min(b.left, PIERCE.reach);
@@ -1053,6 +1126,68 @@ function fly(s: HordeState): void {
     s.impacts.push({ x: b.x, y: b.y, hit: false, at: s.time + STEP });
     return false;
   });
+  // Bounces fly from the next step, so one never hits twice in the step it was born.
+  s.bullets.push(...bounces);
+}
+
+/** The living enemies other than `e` within `radius` of it, nearest first (ties → lowest id). */
+function around(s: HordeState, e: Enemy, radius: number): Enemy[] {
+  const near: { enemy: Enemy; d: number }[] = [];
+  for (const o of s.enemies) {
+    if (o === e || o.hp <= 0) continue;
+    const d = Math.hypot(o.x - e.x, o.y - e.y);
+    if (d <= radius + EPS) near.push({ enemy: o, d });
+  }
+  near.sort((a, b) => a.d - b.d || a.enemy.id - b.enemy.id);
+  return near.map((n) => n.enemy);
+}
+
+/**
+ * Design §8: what the behaviour cards taken do when squad bullet `b` hits `e` (`alive`
+ * before the hit). Burning Rounds sets it alight; Explode on Kill bursts where the
+ * bullet killed it; Chain Lightning may arc to the nearest others; on the bullet's
+ * `first` hit, a Ricochet bounce heads for the nearest other enemy (into `bounces`).
+ */
+function cardHit(
+  s: HordeState,
+  rng: Rng,
+  b: Bullet,
+  e: Enemy,
+  first: boolean,
+  alive: boolean,
+  bounces: Bullet[],
+): void {
+  if (took(s, 'burning-rounds')) e.burnUntil = s.time + CARD.burn.seconds;
+  // A burst is flat damage, as a trap's: armour doesn't take it off (an arc is a hit and does).
+  if (took(s, 'explode-on-kill') && alive && e.hp <= 0) {
+    for (const o of around(s, e, CARD.explode.radius)) o.hp -= CARD.explode.damage;
+    s.pops.push({ x: e.x, y: e.y, at: s.time + STEP });
+  }
+  if (took(s, 'chain-lightning') && chance(rng, CARD.chain.chance)) {
+    for (const o of around(s, e, CARD.chain.radius).slice(0, CARD.chain.targets)) {
+      o.hp -= hitDamage(o, b.damage * CARD.chain.share);
+      s.arcs.push({ fromX: e.x, fromY: e.y, x: o.x, y: o.y, at: s.time + STEP });
+    }
+  }
+  if (!first || b.ricochet || !took(s, 'ricochet')) return;
+  const next = around(s, e, CARD.ricochet.range).find((o) => !b.hit.includes(o.id));
+  if (!next) return;
+  const aim = leadPoint(b.x, b.y, next, b.speed);
+  const d = Math.hypot(aim.x - b.x, aim.y - b.y) || 1;
+  bounces.push({
+    ...b,
+    dx: (aim.x - b.x) / d,
+    dy: (aim.y - b.y) / d,
+    damage: b.damage * CARD.ricochet.share,
+    fromX: b.x,
+    fromY: b.y,
+    aim: d,
+    left: CARD.ricochet.range,
+    // Ricochet + Piercing Rounds: the bounce keeps the pierce the bullet had before this hit.
+    pierce: took(s, 'piercing-rounds') ? b.pierce : 0,
+    hit: [e.id],
+    ricochet: true,
+  });
 }
 
 function fire(s: HordeState, rng: Rng): void {
@@ -1061,6 +1196,8 @@ function fire(s: HordeState, rng: Rng): void {
   s.impacts = s.impacts.filter((k) => s.time - k.at < IMPACT_FLASH);
   s.spits = s.spits.filter((k) => s.time - k.at < SPITTER.splash);
   s.bursts = s.bursts.filter((k) => s.time - k.at < BLOATER.burst);
+  s.arcs = s.arcs.filter((k) => s.time - k.at < CARD.chain.flash);
+  s.pops = s.pops.filter((k) => s.time - k.at < CARD.explode.flash);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -1090,15 +1227,22 @@ function fire(s: HordeState, rng: Rng): void {
         spread: spreadOf(defender, id),
         range: gunRange(s, defender.walking ? { kind: 'ground' } : post, id),
         damage: hit,
-        pierce: pierceOf(id),
+        pierce: pierceOf(id) + (took(s, 'piercing-rounds') ? 1 : 0),
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
+        split: took(s, 'split-shot'),
       });
     } else {
       target.hp -= hit;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
-    const cleave = weapon.kind === 'blade' ? cleaveShare(defender) : 0;
+    const cleave = gun
+      ? 0
+      : Math.min(
+          STAT_EFFECT.cleaveCap,
+          (weapon.kind === 'blade' ? cleaveShare(defender) : 0) +
+            (took(s, 'cleave') ? CARD.cleave : 0),
+        );
     if (cleave > 0) {
       for (const e of s.enemies) {
         const near = Math.hypot(e.x - target.x, e.y - target.y) <= STAT_EFFECT.cleaveRadius + EPS;
@@ -1131,7 +1275,7 @@ function fireTurrets(s: HordeState, rng: Rng): void {
     const range = TURRET.range * TURRET_RANGE[t.mount];
     const target = targetFrom(s, t.x, t.y, range);
     if (!target) continue;
-    s.energy = Math.max(0, s.energy - TURRET.draw * STEP);
+    if (!freePower(s)) s.energy = Math.max(0, s.energy - TURRET.draw * STEP);
     if (!due(s.time, t.nextShotAt)) continue;
     const buff = turretBuff(s, t);
     launch(s, rng, {
@@ -1194,10 +1338,22 @@ function repair(s: HordeState): void {
   }
 }
 
-/** Pays XP and cash for every enemy at 0 HP and takes it off the field. */
+/** Whether Burning Rounds still has `e` alight. */
+export const burning = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.burnUntil !== undefined && e.burnUntil > 0 && !due(s.time, e.burnUntil);
+
+/**
+ * Pays XP and cash for every enemy at 0 HP and takes it off the field. Design §8: with
+ * Burning Rounds and a Master Gunner in the fight, one that dies burning sets the living
+ * enemies within `CARD.burn.spread` alight.
+ */
 export function removeDead(s: HordeState): void {
+  const spreads = took(s, 'burning-rounds') && masterGunner(s);
   for (const e of s.enemies) {
     if (e.hp > 0) continue;
+    if (spreads && burning(s, e)) {
+      for (const o of around(s, e, CARD.burn.spread)) o.burnUntil = s.time + CARD.burn.seconds;
+    }
     s.xp += ENEMIES[e.kind].xp;
     s.cash += ENEMIES[e.kind].cash;
     if (e.id === s.focusId) s.focusId = null;
@@ -1211,9 +1367,13 @@ export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
 
 /**
  * Design §4, as built ID-019: each molotov fire burns every enemy inside it until it
- * goes out; the flash of a skill fades after `SKILL_FLASH`.
+ * goes out; the flash of a skill fades after `SKILL_FLASH`. Design §8: an enemy set
+ * alight by Burning Rounds burns at `CARD.burn.dps`.
  */
 function burn(s: HordeState): void {
+  for (const e of s.enemies) {
+    if (burning(s, e)) e.hp = Math.max(0, e.hp - CARD.burn.dps * STEP);
+  }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
   for (const f of s.fires) {
@@ -1342,11 +1502,14 @@ function move(s: HordeState): Moves {
   const sliding = new Map<number, Slide>();
   const reached = new Map<number, Defender>();
   const screamers = s.enemies.filter((e) => e.kind === 'screamer' && e.hp > 0);
+  const field = slowField(s);
   for (const e of s.enemies) {
     if (stunned(s, e)) continue;
+    const slowed = field !== null && !e.inCamp && e.x >= field.from && e.x <= field.to + EPS;
     const speed =
       ENEMIES[e.kind].speed *
       STEP *
+      (slowed ? 1 - CARD.slowField.slow : 1) *
       trapSlow(s, e) *
       screamed(screamers, e) *
       (charging(s, e) ? HORROR.charge.speed : 1);
@@ -1376,6 +1539,21 @@ function move(s: HordeState): Moves {
     e.inCamp = s.layers.every((l) => e.x < l.x + WALL.depth);
   }
   return { sliding, reached };
+}
+
+/**
+ * Slow Field (design §8): the strip `CARD.slowField.reach` px deep in front of the
+ * outermost layer with a segment standing; null without the card or a standing layer.
+ */
+function slowField(s: HordeState): { from: number; to: number } | null {
+  if (!took(s, 'slow-field')) return null;
+  let outer: Layer | undefined;
+  for (const l of s.layers) {
+    if (l.segments.some((seg) => seg.hp > 0) && (!outer || l.x > outer.x)) outer = l;
+  }
+  if (!outer) return null;
+  const from = outer.x + WALL.depth;
+  return { from, to: from + CARD.slowField.reach };
 }
 
 /** The trap whose cell `e` stands in, if any. */
@@ -1511,6 +1689,9 @@ function attack(s: HordeState, moves: Moves): void {
     hitSegment(s, stop.layer, stop.segment, damage);
     if (e.kind === 'spitter') {
       s.spits.push({ fromX: e.x, fromY: e.y, x: stop.x, y: e.y, at: s.time + STEP });
+    } else if (took(s, 'spiked-walls')) {
+      // Spiked Walls (design §8): a blow on the wall costs the one landing it.
+      e.hp = Math.max(0, e.hp - CARD.spikes);
     }
     e.nextAttackAt = s.time + enemy.attackInterval;
   }

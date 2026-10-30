@@ -420,6 +420,8 @@ function buildScene(game: GameState, choice: { defenderId: string; postId: numbe
     impacts: [],
     spits: [],
     bursts: [],
+    arcs: [],
+    pops: [],
     focusId: null,
     time: 0,
     outcome: 'fighting',

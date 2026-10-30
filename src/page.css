@@ -105,6 +105,39 @@ body {
   border-color: #4f6f94;
 }
 
+/* Card rarity (design §8): common grey, rare blue, epic purple. */
+.hud-card-common {
+  border-color: #6b6b6b;
+}
+
+.hud-card-rare {
+  border-color: #3f7fd0;
+}
+
+.hud-card-epic {
+  border-color: #9a5ad6;
+}
+
+.hud-card-kind {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8f8a80;
+}
+
+.hud-card-rare .hud-card-kind {
+  color: #7fb0ec;
+}
+
+.hud-card-epic .hud-card-kind {
+  color: #c19aec;
+}
+
+.hud-card-synergy {
+  font-size: 0.8125rem;
+  color: #e9c46a;
+}
+
 .hud-card-key {
   font-size: 0.75rem;
   color: #8f8a80;

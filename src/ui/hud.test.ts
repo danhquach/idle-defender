@@ -21,6 +21,7 @@ import {
   stockText,
 } from './hud.ts';
 import { loadoutFrom } from '../core/loadout.ts';
+import { cardText } from './hud.ts';
 
 const horde = (): HordeState => newHorde(1, setup());
 
@@ -433,5 +434,29 @@ describe('hud', () => {
     expect(fallingText(s)).toBe('The camp is falling — 1 s');
     s.outcome = 'lost';
     expect(fallingText(s)).toBe('');
+  });
+});
+
+describe('card text (ID-022)', () => {
+  it("an upgrade names its rarity and category; a recruit doesn't", () => {
+    const s = newHorde(1, setup());
+    expect(cardText({ kind: 'upgrade', id: 'split-shot' }, s)).toEqual({
+      title: 'Split Shot',
+      body: 'Each shot also fires 2 bullets in a fan at half damage',
+      kind: 'Epic behaviour',
+    });
+    expect(cardText({ kind: 'upgrade', id: 'sharpshooter' }, s).kind).toBe('Common stat');
+    const recruit = cardText({ kind: 'recruit', defender: s.bench[0]! }, s);
+    expect(recruit.kind).toBeUndefined();
+    expect(recruit.synergy).toBeUndefined();
+  });
+
+  it('shows a synergy line only when the card would turn one on', () => {
+    const s = newHorde(1, setup());
+    expect(cardText({ kind: 'upgrade', id: 'ricochet' }, s).synergy).toBeUndefined();
+    s.taken = ['piercing-rounds'];
+    expect(cardText({ kind: 'upgrade', id: 'ricochet' }, s).synergy).toBe(
+      'Synergy — Piercing Rounds: bounces pierce',
+    );
   });
 });

@@ -269,6 +269,52 @@ describe('drawScene with art', () => {
     expect(r.drawn.filter((id) => id === 'shambler')).toHaveLength(1);
   });
 
+  it('draws a burning enemy, a Chain Lightning arc and an Explode on Kill ring (ID-022)', () => {
+    const r = recorder();
+    const strokes: unknown[] = [];
+    const fills: unknown[] = [];
+    const c = r.ctx as unknown as { strokeStyle: unknown; fillStyle: unknown } & Record<
+      'stroke' | 'fill',
+      () => void
+    >;
+    c.stroke = () => strokes.push(c.strokeStyle);
+    c.fill = () => fills.push(c.fillStyle);
+    const shambler = (id: number, burnUntil?: number): Enemy => ({
+      id,
+      kind: 'shambler',
+      x: 700 + id * 60,
+      y: 300,
+      hp: 10,
+      maxHp: 10,
+      nextAttackAt: 0,
+      inCamp: false,
+      stunnedUntil: 0,
+      vx: 0,
+      vy: 0,
+      climbUntil: 0,
+      climbed: false,
+      ...(burnUntil === undefined ? {} : { burnUntil }),
+    });
+    const scene = (time: number, burnUntil: number): Scene => ({
+      ...blank(),
+      time,
+      enemies: [shambler(0, burnUntil)],
+      arcs: [{ fromX: 700, fromY: 300, x: 760, y: 320, at: 1 }],
+      pops: [{ x: 700, y: 300, at: 1 }],
+    });
+    drawScene(r.ctx, r.art, scene(1, 2), CAM, VIEW);
+    expect(strokes).toContain('#cfe6ff');
+    expect(strokes).toContain('#ff9a3c');
+    expect(fills).toContain('#ff7a1a');
+    // Later: the arc and ring have faded, the burn is out.
+    strokes.length = 0;
+    fills.length = 0;
+    drawScene(r.ctx, r.art, scene(3, 2), CAM, VIEW);
+    expect(strokes).not.toContain('#cfe6ff');
+    expect(strokes).not.toContain('#ff9a3c');
+    expect(fills).not.toContain('#ff7a1a');
+  });
+
   it("draws a broken segment as its tier's rubble only", () => {
     const r = draw(withSegment(blank(), { kind: 'gate', tier: 'concrete', hp: 0, maxHp: 100 }));
     expect(r.drawn).toContain('concrete-rubble');

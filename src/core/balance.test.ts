@@ -4,7 +4,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Held } from './armoury.ts';
 import { lineWall, repairAllCost, segmentMaxHp } from './base.ts';
-import { postUsable } from './cards.ts';
+import { chooseCard, postUsable, UPGRADES } from './cards.ts';
 import { ENEMY_MIX, HORROR, MATERIALS, STEP, type EnemyKind, type HorrorAbility } from './data.ts';
 import { finishHorde, hordePayout, hordeXp, newGame, startHorde, type GameState } from './game.ts';
 import { newHorde, standing, tick, type HordeState } from './horde.ts';
@@ -164,6 +164,8 @@ describe('a full firing line on the starting wall (ID-048)', () => {
 describe('the specialised guns (ID-046)', () => {
   // A lone Gunner on the upper tower (420, 360) with one Common gun, against 20-HP
   // shamblers held in place, so only the gun differs: kills in the time, mean of the seeds.
+  // Level-ups take the first stat card offered, else none: the other cards (ID-022)
+  // favour some guns over others.
   type Gun = 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'lmg' | 'sniper';
   const GUNS: readonly Gun[] = ['pistol', 'smg', 'rifle', 'shotgun', 'lmg', 'sniper'];
   const held = (g: Gun): Held =>
@@ -181,6 +183,11 @@ describe('the specialised guns (ID-046)', () => {
   } as const;
   type Scene = keyof typeof SCENES;
   const SCENE_IDS = Object.keys(SCENES) as Scene[];
+
+  function gunNeutral(t: HordeState): HordeState {
+    const i = t.offer!.findIndex((c) => c.kind === 'upgrade' && UPGRADES[c.id].category === 'stat');
+    return i < 0 ? { ...t, offer: null } : chooseCard(t, i);
+  }
 
   function kills(g: Gun, scene: Scene): number {
     const { count, x, y, seconds, seeds } = SCENES[scene];
@@ -200,7 +207,7 @@ describe('the specialised guns (ID-046)', () => {
       }
       let t = s;
       for (let i = 0; i < seconds / STEP && t.outcome === 'fighting'; i++) {
-        t = t.offer || t.replace ? answerOffer(t) : tick(t, STEP);
+        t = t.offer ? gunNeutral(t) : t.replace ? answerOffer(t) : tick(t, STEP);
       }
       total += count - t.enemies.filter((e) => e.hp > 0).length;
     }

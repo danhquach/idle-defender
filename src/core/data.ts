@@ -432,6 +432,39 @@ export const RECOVERY_MS = 2 * 60 * 60 * 1000;
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;
 
+export type CardRarity = 'common' | 'rare' | 'epic';
+/**
+ * Design §8, as built ID-022: each offer slot's rarity odds in wave `w` (from 1) are
+ * `start + per × (w − 1)` percent, held at `limit` (common never below, the rest never above).
+ */
+export const RARITY: Readonly<
+  Record<CardRarity, { readonly start: number; readonly per: number; readonly limit: number }>
+> = {
+  common: { start: 70, per: -4, limit: 40 },
+  rare: { start: 25, per: 3, limit: 45 },
+  epic: { start: 5, per: 1, limit: 15 },
+};
+
+/**
+ * What the in-horde cards do (design §8, as built ID-022). Shares are of the bullet's
+ * damage; radii and ranges in px; times in s.
+ */
+export const CARD = {
+  ricochet: { range: 150, share: 0.25 },
+  split: { angle: 10, share: 0.5 },
+  burn: { dps: 3, seconds: 3, spread: 40 },
+  explode: { damage: 15, radius: 40, flash: 0.3 },
+  chain: { chance: 0.1, targets: 2, radius: 100, share: 0.5, flash: 0.2 },
+  /** Cleave share added to blade and tool hits (still capped at `STAT_EFFECT.cleaveCap`). */
+  cleave: 0.2,
+  /** Damage to an enemy each time it hits a standing segment. */
+  spikes: 3,
+  /** The field in front of the outermost standing layer, and how much it slows. */
+  slowField: { reach: 120, slow: 0.3 },
+  /** Share of `BANK_CAP` a Recharge adds. */
+  recharge: 0.25,
+} as const;
+
 // --- Defender levels, stats and titles (M4). Design §6. ---
 
 export type Stat = 'aim' | 'might' | 'tech' | 'grit';

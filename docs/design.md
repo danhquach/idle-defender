@@ -622,6 +622,44 @@ Offered 1 of 3 on each fight level. Lost when the horde ends.
 - **Synergies:** some cards upgrade when paired (e.g. burning rounds + a
   Master Gunner = burn spreads).
 - **Rarity:** common / rare / epic; rarer offers more often in later waves.
+- **As built (ID-022, starting points):** stat cards stay squad-wide (per-
+  profession stat cards and research-unlocked cards come later). Behaviour
+  cards act on the squad's gun bullets only (turrets never), and each is
+  taken once per horde:
+
+  | Card | Rarity | Effect |
+  |---|---|---|
+  | Piercing Rounds | rare | +1 pierce on every squad bullet |
+  | Ricochet | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **25%** damage; a bounce never bounces |
+  | Split Shot | epic | Each shot adds 2 bullets at ±10°, 50% damage each |
+  | Burning Rounds | rare | The enemy hit burns 3 dmg/s for 3 s; a new hit resets it, never stacks |
+  | Explode on Kill | rare | A bullet kill bursts 15 damage on enemies within 40 px; bursts don't chain |
+  | Chain Lightning | epic | **10%** of bullet hits (seeded) arc to the 2 nearest within 100 px at 50% damage (armour applies); the one beam drawn |
+  | Cleave | common | +20% cleave share on blade and tool hits, still capped at 50% |
+
+  Barrier: Spiked Walls (rare, once): an enemy hitting a standing segment
+  takes 3 damage per blow (a Spitter's spit from afar doesn't count); Slow
+  Field (rare, once): enemies within 120 px in front of the outermost layer
+  with a segment standing move 30% slower, multiplying with wire. Patch Up and
+  Reinforce stay common and repeatable. Power (repeatable, offered only when
+  the base has a turret, since the bank exists from the start): Recharge
+  (common) adds 25% of the bank cap, capped; **Power Surge** (rare; named so
+  it doesn't clash with the shop's Overdrive buff) runs turrets with no draw,
+  and lit on an empty bank, until the current wave ends (picked on a wave's
+  last kill, the break has begun, so it covers the next wave). Explode on
+  Kill's burst is flat damage that armour doesn't reduce; a Chain Lightning
+  arc is a hit and does. Each offer slot rolls a rarity from the wave:
+  common 70 − 4(w − 1)% (min 40), rare 25 + 3(w − 1)% (max 45), epic
+  5 + (w − 1)% (max 15), taken in proportion (from wave 8 they sum to 99);
+  none of that rarity left → the next rarity down, then up (five repeatable
+  commons are always eligible, so a slot never comes up empty). Synergies: Burning Rounds with a Master (or
+  Legendary) Gunner in the fight spreads burn to enemies within 40 px of one
+  that dies burning; Ricochet + Piercing Rounds bounces keep the pierce the
+  bullet had left. A card shows a synergy line when it would turn one on.
+  Retune: the ticket's 50% Ricochet and 15% Chain Lightning let a campaign
+  without building win Horde 5 and a full firing line win 60% of Horde 5;
+  bold numbers above hold every balance target. The gun-role scenes (ID-046)
+  now take only stat cards: behaviour cards favour fast guns.
 
 ## 9. Enemies
 
