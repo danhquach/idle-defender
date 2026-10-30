@@ -9,6 +9,7 @@ import {
   START_BASE,
   STEP,
   WALK_SPEED,
+  WEAPONS,
   type PostKind,
   type Stock,
 } from './data.ts';
@@ -394,6 +395,7 @@ describe('combat', () => {
       left: 500,
       pierce: false,
       hit: [],
+      tracer: WEAPONS.pistol.tracer,
     });
     const after = tick(s, STEP);
     expect(after.layers[0]?.segments[1]?.hp).toBe(200);

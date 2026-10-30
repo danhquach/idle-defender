@@ -32,11 +32,17 @@ export const PROFESSIONS: Readonly<Record<Profession, { readonly name: string }>
   engineer: { name: 'Engineer' },
 };
 
+/** How a gun's bullets look in flight (design §15): a streak `length` px behind the slug, in `colour`. */
+export interface Tracer {
+  readonly length: number;
+  readonly colour: string;
+}
 /**
  * A gun shoots within `range` (× the post's multiplier), `magazine` rounds between
  * reloads of `reload` s. Its bullets fly at `speed` px/s, each turned off the aim by up
- * to `spread` degrees either way (design §6 Ballistics). A sidearm goes in either slot
- * and suits everyone; a specialised gun is primary only and suits Gunners (design §6 Loadout).
+ * to `spread` degrees either way (design §6 Ballistics), and look like `tracer`. A sidearm
+ * goes in either slot and suits everyone; a specialised gun is primary only and suits
+ * Gunners (design §6 Loadout).
  */
 export interface Gun {
   readonly name: string;
@@ -48,6 +54,7 @@ export interface Gun {
   readonly reload: number;
   readonly speed: number;
   readonly spread: number;
+  readonly tracer: Tracer;
 }
 /** A blade (secondary) strikes within `reach` of its holder's post; never from a tower. */
 export interface Blade {
@@ -84,6 +91,7 @@ export const WEAPONS = {
     reload: 1.5,
     speed: 1800,
     spread: 2.5,
+    tracer: { length: 12, colour: '#ffd36a' },
   },
   knife: { name: 'Knife', kind: 'blade', damage: 10, fireInterval: 0.5, reach: 50 },
   toolkit: {
@@ -200,6 +208,10 @@ export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;
 /** How long a blade or tool strike stays on screen, in seconds. */
 export const STRIKE_FLASH = 0.15;
+/** How long a gun's muzzle flash shows, in seconds (design §15). */
+export const MUZZLE_FLASH = 0.05;
+/** How long a bullet's impact (a puff on a hit, dust on a miss) shows, in seconds. */
+export const IMPACT_FLASH = 0.25;
 
 // --- The base (M2). Grid, tiers and costs; design §3 and §11. ---
 
@@ -387,7 +399,7 @@ export const TURRET_MOUNTS: readonly TurretMount[] = ['tower', 'wall-walk'];
 /** Condition runs 0 (jammed) … `MAX_CONDITION`. */
 export const MAX_CONDITION = 100;
 /**
- * The Auto-turret (design §7): its cost and gun (bullets at `speed` px/s, ±`spread`°); `draw` charge per second it has a
+ * The Auto-turret (design §7): its cost and gun (bullets at `speed` px/s, ±`spread`°, looking like `tracer`); `draw` charge per second it has a
  * target; condition lost per shot (`shotWear`) and per point of damage its wall
  * segment takes (`hitWear`); below `slowBelow` it fires slower, down to half speed.
  * A full repair costs `repairScrap`; salvage refunds `salvage` × cost × condition share.
@@ -400,6 +412,7 @@ export const TURRET = {
   range: 500,
   speed: 2000,
   spread: 1,
+  tracer: { length: 14, colour: '#ffe9a0' },
   draw: 1,
   shotWear: 0.2,
   hitWear: 0.5,

@@ -94,6 +94,8 @@ describe('Ripper (pistol + knife)', () => {
     const after = tick(s, STEP);
     expect(after.enemies[0]!.hp).toBe(990);
     expect(struck(after)).toBe(true);
+    // A strike is no gunshot: no muzzle flash (ID-045).
+    expect(after.shots).toEqual([]);
   });
 
   it('reaches 50 px from the post; past that they shoot their pistol instead', () => {

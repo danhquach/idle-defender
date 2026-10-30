@@ -31,6 +31,8 @@ import {
   STAT_EFFECT,
   STEP,
   STRIKE_FLASH,
+  MUZZLE_FLASH,
+  IMPACT_FLASH,
   TRAP_STRIP,
   TRAPS,
   TURRET,
@@ -45,6 +47,7 @@ import {
   type EnemyKind,
   type SkillId,
   type Stats,
+  type Tracer,
 } from './data.ts';
 import { pierces, type Held } from './armoury.ts';
 import {
@@ -240,6 +243,26 @@ export interface Bullet {
   pierce: boolean;
   /** Ids of the enemies it hit: never the same one twice. */
   hit: number[];
+  /** How it looks in flight: its gun's. */
+  tracer: Tracer;
+}
+/**
+ * A gun going off: `owner` (as on its bullet) fired in the step ending at `at`, when it
+ * is first drawn; drawn for `MUZZLE_FLASH` s.
+ */
+export interface Shot {
+  owner: string;
+  at: number;
+}
+/**
+ * Where a bullet ended in the step ending at `at`, drawn for `IMPACT_FLASH` s: on an
+ * enemy it hit (`hit`), or where it fell past its range with no damage.
+ */
+export interface Impact {
+  x: number;
+  y: number;
+  hit: boolean;
+  at: number;
 }
 /** A molotov's fire on the ground, burning enemies inside until `until` (fight time). */
 export interface Fire {
@@ -312,6 +335,9 @@ export interface HordeState {
   strikes: Strike[];
   /** In flight; cleared when the horde ends and never saved. */
   bullets: Bullet[];
+  /** Recent muzzle flashes and bullet ends, for the renderer; cleared when the horde ends. */
+  shots: Shot[];
+  impacts: Impact[];
   outcome: Outcome;
 }
 
@@ -371,6 +397,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     focusId: null,
     strikes: [],
     bullets: [],
+    shots: [],
+    impacts: [],
     outcome: 'fighting',
   };
 }
@@ -650,7 +678,11 @@ function step(s: HordeState, rng: Rng): void {
   drop(s);
   advanceWave(s);
   fall(s);
-  if (s.outcome !== 'fighting') s.bullets = [];
+  if (s.outcome !== 'fighting') {
+    s.bullets = [];
+    s.shots = [];
+    s.impacts = [];
+  }
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
   s.time += STEP;
@@ -787,7 +819,7 @@ export function leadPoint(x: number, y: number, e: Enemy, speed: number): { x: n
 function launch(
   s: HordeState,
   rng: Rng,
-  shot: Pick<Bullet, 'owner' | 'speed' | 'damage' | 'pierce'> & {
+  shot: Pick<Bullet, 'owner' | 'speed' | 'damage' | 'pierce' | 'tracer'> & {
     x: number;
     y: number;
     target: Enemy;
@@ -811,6 +843,7 @@ function launch(
     left: range,
     hit: [],
   });
+  s.shots.push({ owner: rest.owner, at: s.time + STEP });
 }
 
 /**
@@ -855,6 +888,7 @@ function fly(s: HordeState): void {
       b.y += b.dy * hit.at;
       b.left -= hit.at;
       travel -= hit.at;
+      s.impacts.push({ x: b.x, y: b.y, hit: true, at: s.time + STEP });
       if (!b.pierce) return false;
       b.pierce = false;
       b.left = Math.min(b.left, PIERCE.reach);
@@ -863,12 +897,16 @@ function fly(s: HordeState): void {
     b.x += b.dx * travel;
     b.y += b.dy * travel;
     b.left -= travel;
-    return b.left > EPS;
+    if (b.left > EPS) return true;
+    s.impacts.push({ x: b.x, y: b.y, hit: false, at: s.time + STEP });
+    return false;
   });
 }
 
 function fire(s: HordeState, rng: Rng): void {
   s.strikes = s.strikes.filter((k) => s.time - k.at < STRIKE_FLASH);
+  s.shots = s.shots.filter((k) => s.time - k.at < MUZZLE_FLASH);
+  s.impacts = s.impacts.filter((k) => s.time - k.at < IMPACT_FLASH);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -899,6 +937,7 @@ function fire(s: HordeState, rng: Rng): void {
         range: gunRange(s, defender.walking ? { kind: 'ground' } : post, id),
         damage: hit,
         pierce: pierces(id),
+        tracer: gunOf(id).tracer,
       });
     } else {
       target.hp -= hit;
@@ -950,6 +989,7 @@ function fireTurrets(s: HordeState, rng: Rng): void {
       range,
       damage: TURRET.damage * buff * boost(s, 'damage'),
       pierce: false,
+      tracer: TURRET.tracer,
     });
     const slow = Math.min(1, 0.5 + (0.5 * t.condition) / TURRET.slowBelow);
     t.nextShotAt = s.time + TURRET.fireInterval / (buff * slow * boost(s, 'fireRate'));

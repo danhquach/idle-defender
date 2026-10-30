@@ -2,9 +2,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTurret, newBase } from '../core/base.ts';
 import { newGame, startHorde } from '../core/game.ts';
-import { layoutOf, type Defender, type Layer, type Post } from '../core/horde.ts';
-import { SKILL_FLASH, SKILLS } from '../core/data.ts';
-import { TILT } from './projection.ts';
+import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
+import {
+  IMPACT_FLASH,
+  MUZZLE_FLASH,
+  SKILL_FLASH,
+  SKILLS,
+  STEP,
+  TURRET,
+  WEAPONS,
+  type Tracer,
+} from '../core/data.ts';
+import type { Bullet, Enemy } from '../core/horde.ts';
+import { project, TILT } from './projection.ts';
 import { drawScene, trapLook, turretLook, type Scene } from './render.ts';
 import { ART_IDS, ART_PX, type Art, type ArtId } from './sprites.ts';
 
@@ -136,41 +146,43 @@ const withSegment = (s: Scene, seg: Partial<Layer['segments'][number]>): Scene =
   ),
 });
 
+function stubCanvas() {
+  vi.stubGlobal(
+    'DOMMatrix',
+    class {
+      translate() {
+        return this;
+      }
+      scale() {
+        return this;
+      }
+    },
+  );
+  // The ground is painted once into its own canvas (ground.test.ts); here it only
+  // needs to be drawn, under a name the recorder can see.
+  const noop = () => {};
+  vi.stubGlobal(
+    'OffscreenCanvas',
+    class {
+      id = 'ground-canvas';
+      getContext() {
+        return {
+          drawImage: noop,
+          fillRect: noop,
+          save: noop,
+          restore: noop,
+          translate: noop,
+          scale: noop,
+          createPattern: () => ({ setTransform: noop }),
+          createLinearGradient: () => ({ addColorStop: noop }),
+        };
+      }
+    },
+  );
+}
+
 describe('drawScene with art', () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      'DOMMatrix',
-      class {
-        translate() {
-          return this;
-        }
-        scale() {
-          return this;
-        }
-      },
-    );
-    // The ground is painted once into its own canvas (ground.test.ts); here it only
-    // needs to be drawn, under a name the recorder can see.
-    const noop = () => {};
-    vi.stubGlobal(
-      'OffscreenCanvas',
-      class {
-        id = 'ground-canvas';
-        getContext() {
-          return {
-            drawImage: noop,
-            fillRect: noop,
-            save: noop,
-            restore: noop,
-            translate: noop,
-            scale: noop,
-            createPattern: () => ({ setTransform: noop }),
-            createLinearGradient: () => ({ addColorStop: noop }),
-          };
-        }
-      },
-    );
-  });
+  beforeEach(stubCanvas);
   afterEach(() => vi.unstubAllGlobals());
 
   const draw = (scene: Scene) => {
@@ -331,5 +343,303 @@ describe('drawScene with art', () => {
     expect(rings).toEqual([molotov.radius, airstrike.radius, flashbang.radius]);
     expect(alphas[1]).toBeCloseTo(0.6 * (1 - 0.2 / SKILL_FLASH), 9); // the flash fades
     expect(r.ctx.globalAlpha).toBe(1);
+  });
+});
+
+/** Lines and dots the renderer drew, with their colour and alpha, and the sprites between them. */
+function geometry(cam: { x: number; y: number; zoom: number }, scene: Scene) {
+  const r = recorder();
+  type Mark =
+    | { kind: 'line'; a: [number, number]; b: [number, number]; colour: string; width: number }
+    | { kind: 'dot'; x: number; y: number; r: number; colour: string; alpha: number }
+    | { kind: 'art'; id: ArtId };
+  const marks: Mark[] = [];
+  let from: [number, number] = [0, 0];
+  const ctx = r.ctx as unknown as Record<string, unknown> & {
+    strokeStyle: string;
+    fillStyle: string;
+    lineWidth: number;
+    globalAlpha: number;
+  };
+  Object.assign(ctx, {
+    strokeStyle: '',
+    fillStyle: '',
+    lineWidth: 1,
+    drawImage: (img: { id: ArtId }) => marks.push({ kind: 'art', id: img.id }),
+    moveTo: (x: number, y: number) => (from = [x, y]),
+    lineTo: (x: number, y: number) =>
+      marks.push({
+        kind: 'line',
+        a: from,
+        b: [x, y],
+        colour: ctx.strokeStyle,
+        width: ctx.lineWidth,
+      }),
+    arc: (x: number, y: number, rad: number) =>
+      marks.push({ kind: 'dot', x, y, r: rad, colour: ctx.fillStyle, alpha: ctx.globalAlpha }),
+  });
+  drawScene(r.ctx, r.art, scene, cam, VIEW);
+  const lines = marks.filter((m) => m.kind === 'line');
+  const dots = marks.filter((m) => m.kind === 'dot');
+  return { marks, lines, dots, alpha: ctx.globalAlpha };
+}
+
+const PUFF = { blood: '#8e1f1a', dust: '#a8987c', flash: '#fff2b0', slug: '#fffbe8' } as const;
+
+describe('bullet visuals (ID-045)', () => {
+  beforeEach(stubCanvas);
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** A fight with defender 0 on their post, one enemy out in the field, nothing else moving. */
+  function fight() {
+    const game = newGame();
+    const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+    const d = h.defenders[0]!;
+    const post = h.posts[d.postId]!;
+    const target: Enemy = {
+      id: 1,
+      kind: 'shambler',
+      x: post.x + 400,
+      y: post.y + 30,
+      hp: 20,
+      maxHp: 20,
+      nextAttackAt: 0,
+      inCamp: false,
+      stunnedUntil: 0,
+      vx: 0,
+      vy: 0,
+    };
+    const scene: Scene = { ...h, enemies: [target], bullets: [], shots: [], impacts: [] };
+    return { scene, d, post, target };
+  }
+  /** A bullet from `post` toward `target`, `flown` px out. */
+  function flying(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    flown: number,
+    tracer: Tracer = WEAPONS.pistol.tracer,
+  ): Bullet {
+    const aim = Math.hypot(to.x - from.x, to.y - from.y);
+    const dx = (to.x - from.x) / aim;
+    const dy = (to.y - from.y) / aim;
+    return {
+      x: from.x + dx * flown,
+      y: from.y + dy * flown,
+      dx,
+      dy,
+      speed: 1800,
+      damage: 6,
+      owner: 'a',
+      fromX: from.x,
+      fromY: from.y,
+      aim,
+      left: 600 - flown,
+      pierce: false,
+      hit: [],
+      tracer,
+    };
+  }
+
+  it.each([0.5, 1, 2])(
+    'no laser at %s× zoom: every line is a short streak, none joins shooter and target',
+    (zoom) => {
+      const cam = { x: 0, y: 0, zoom };
+      const { scene, post, target } = fight();
+      // Just fired, midway, and about to land.
+      const bullets = [5, 60, 200, 370].map((f) => flying(post, target, f));
+      const g = geometry(cam, { ...scene, bullets });
+      expect(g.lines).toHaveLength(bullets.length);
+      const shooter = project(post, cam);
+      const enemyAt = project(target, cam);
+      for (const l of g.lines) {
+        if (l.kind !== 'line') continue;
+        const len = Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]);
+        // The streak drops toward body height too, so a hair over its flat length.
+        expect(len).toBeLessThanOrEqual(WEAPONS.pistol.tracer.length * zoom * 1.1);
+        const near = (p: [number, number], q: { sx: number; sy: number }) =>
+          Math.hypot(p[0] - q.sx, p[1] - q.sy) < 1;
+        expect(near(l.a, shooter) && near(l.b, enemyAt)).toBe(false);
+      }
+    },
+  );
+
+  it('draws each bullet as a slug at its simulated position, through the depth sort', () => {
+    const cam = { x: 37, y: 12, zoom: 1.5 };
+    const { scene, post, target } = fight();
+    const b = flying(post, target, 150);
+    // An enemy in front of the bullet (lower on screen) draws over it.
+    const front: Enemy = { ...target, id: 2, x: b.x + 5, y: b.y + 40 };
+    const g = geometry(cam, { ...scene, enemies: [target, front], bullets: [b] });
+    const slugs = g.dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.slug);
+    expect(slugs).toHaveLength(1);
+    const slug = slugs[0]!;
+    if (slug.kind !== 'dot') throw new Error('not a dot');
+    expect(slug.x).toBeCloseTo((b.x - cam.x) * cam.zoom, 9);
+    // On screen it sits between the ground under it and the muzzle height.
+    const ground = project({ x: b.x, y: b.y }, cam).sy;
+    expect(slug.y).toBeLessThan(ground);
+    const at = g.marks.indexOf(slug);
+    const shamblers = g.marks.flatMap((m, i) =>
+      m.kind === 'art' && m.id === 'shambler' ? [i] : [],
+    );
+    expect(shamblers).toHaveLength(2);
+    expect(shamblers[1]).toBeGreaterThan(at); // the enemy in front
+  });
+
+  it("takes each bullet's streak length and colour from its gun", () => {
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene, post, target } = fight();
+    const long: Tracer = { length: 40, colour: '#123456' };
+    const g = geometry(cam, {
+      ...scene,
+      bullets: [
+        flying(post, { x: target.x, y: post.y }, 200),
+        flying(post, { x: target.x, y: post.y }, 200, long),
+      ],
+    });
+    const byColour = Object.fromEntries(
+      g.lines.map((l) => (l.kind === 'line' ? [l.colour, Math.abs(l.b[0] - l.a[0])] : [])),
+    );
+    expect(byColour[WEAPONS.pistol.tracer.colour]).toBeCloseTo(WEAPONS.pistol.tracer.length, 6);
+    expect(byColour[long.colour]).toBeCloseTo(40, 6);
+    expect(TURRET.tracer).not.toEqual(WEAPONS.pistol.tracer);
+  });
+
+  it('flashes at the barrel for MUZZLE_FLASH s after a shot, fading', () => {
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene, d, post } = fight();
+    const at = (time: number) =>
+      geometry(cam, { ...scene, time, shots: [{ owner: d.id, at: 1 }] }).dots.filter(
+        (m) => m.kind === 'dot' && m.colour === PUFF.flash,
+      );
+    const fresh = at(1);
+    expect(fresh).toHaveLength(1);
+    const flash = fresh[0]!;
+    if (flash.kind !== 'dot') throw new Error('not a dot');
+    // Ahead of the shooter's spot and up at the weapon, not on the ground.
+    expect(flash.x).toBeGreaterThan(project(post, cam).sx);
+    expect(flash.y).toBeLessThan(project(post, cam).sy);
+    expect(flash.alpha).toBe(1);
+    const half = at(1 + MUZZLE_FLASH / 2)[0]!;
+    expect(half.kind === 'dot' && half.alpha).toBeCloseTo(0.5, 9);
+    expect(at(1 + MUZZLE_FLASH)).toEqual([]);
+    // Someone else's shot flashes nothing here.
+    expect(geometry(cam, { ...scene, time: 1, shots: [{ owner: 'zz', at: 1 }] }).dots).toEqual([]);
+  });
+
+  it('shows a real shot at full flash on the first frame after the step that fired it', () => {
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene } = fight();
+    const game = newGame();
+    const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+    const d = h.defenders[0]!;
+    const post = h.posts[d.postId]!;
+    h.toSpawn = 0;
+    h.enemies = [{ ...scene.enemies[0]!, x: post.x + 300 }];
+    d.nextShotAt = 0;
+    const fired = tick(h, STEP);
+    expect(fired.shots.map((k) => k.owner)).toEqual([d.id]);
+    const flashes = (t: Scene) =>
+      geometry(cam, t).dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.flash);
+    const first = flashes(fired);
+    expect(first).toHaveLength(1);
+    expect(first[0]!.kind === 'dot' && first[0]!.alpha).toBe(1);
+    // Still showing, fading, on the next frame: about MUZZLE_FLASH in all.
+    expect(flashes(tick(fired, STEP))).toHaveLength(1);
+  });
+
+  it('flashes at a walking defender and starts their bullet at a standing height', () => {
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene, d, target } = fight();
+    const walker = { ...d, walking: true, x: 300, y: 500 };
+    const g = geometry(cam, {
+      ...scene,
+      posts: [],
+      defenders: [walker],
+      time: 1,
+      shots: [{ owner: d.id, at: 1 }],
+      bullets: [flying(walker, target, 30)],
+    });
+    const flash = g.dots.find((m) => m.kind === 'dot' && m.colour === PUFF.flash);
+    expect(flash).toBeDefined();
+    const feet = project(walker, cam).sy;
+    if (flash?.kind !== 'dot') throw new Error('not a dot');
+    // Up at the weapon, well under a tower's height.
+    expect(feet - flash.y).toBeGreaterThan(5);
+    expect(feet - flash.y).toBeLessThan(30);
+    const streak = g.lines[0]!;
+    if (streak.kind !== 'line') throw new Error('not a line');
+    expect(feet - streak.a[1]).toBeLessThan(30);
+  });
+
+  it("flashes at a turret's barrel when it fires", () => {
+    const built = buildTurret(
+      newBase(),
+      { scrap: 99, wood: 99, metal: 0, concrete: 0 },
+      true,
+      'tower',
+      0,
+      5,
+    );
+    if (!built.ok) throw new Error(built.reason);
+    const { turrets, layers } = layoutOf(built.base);
+    const { scene } = fight();
+    const g = geometry(
+      { x: 0, y: 0, zoom: 1 },
+      { ...scene, layers, turrets, time: 2, shots: [{ owner: `turret:${turrets[0]!.id}`, at: 2 }] },
+    );
+    expect(g.dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.flash)).toHaveLength(1);
+  });
+
+  it('a hit puffs blood at body height, a miss kicks dust on the ground; both fade out', () => {
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene } = fight();
+    const impacts = [
+      { x: 900, y: 300, hit: true, at: 1 },
+      { x: 1100, y: 500, hit: false, at: 1 },
+    ];
+    const g = geometry(cam, { ...scene, enemies: [], time: 1.05, impacts });
+    const blood = g.dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.blood);
+    const dust = g.dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.dust);
+    expect(blood.length).toBeGreaterThan(0);
+    expect(dust.length).toBeGreaterThan(0);
+    const lowest = (ds: typeof blood) => Math.max(...ds.map((m) => (m.kind === 'dot' ? m.y : 0)));
+    // Blood sits well up the body; dust hugs the ground.
+    expect(project({ x: 900, y: 300 }, cam).sy - lowest(blood)).toBeGreaterThan(5);
+    expect(project({ x: 1100, y: 500 }, cam).sy - lowest(dust)).toBeLessThan(5);
+    expect(g.alpha).toBe(1);
+    const gone = geometry(cam, { ...scene, enemies: [], time: 1 + IMPACT_FLASH, impacts });
+    expect(gone.dots).toEqual([]);
+  });
+
+  it('keeps the melee slash: one short line across the enemy, no bullet marks', () => {
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene, target } = fight();
+    const g = geometry(cam, { ...scene, strikes: [{ x: target.x, y: target.y, at: 0 }] });
+    expect(g.lines).toHaveLength(1);
+    expect(g.dots).toEqual([]);
+  });
+
+  it('keeps every effect at least 1 px on screen at 0.5× zoom, and scales it up at 2×', () => {
+    const { scene, d, post, target } = fight();
+    const busy = (zoom: number) =>
+      geometry(
+        { x: 0, y: 0, zoom },
+        {
+          ...scene,
+          time: 1,
+          bullets: [flying(post, target, 100)],
+          shots: [{ owner: d.id, at: 1 }],
+          impacts: [{ x: 900, y: 300, hit: true, at: 1 }],
+        },
+      );
+    const small = busy(0.5);
+    const big = busy(2);
+    for (const m of small.marks) {
+      if (m.kind === 'dot') expect(m.r).toBeGreaterThanOrEqual(1);
+      if (m.kind === 'line') expect(m.width).toBeGreaterThanOrEqual(1);
+    }
+    const sizes = (g: typeof small) => g.dots.map((m) => (m.kind === 'dot' ? m.r : 0));
+    sizes(big).forEach((r, i) => expect(r).toBeGreaterThan(sizes(small)[i]!));
   });
 });
