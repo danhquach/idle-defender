@@ -20,7 +20,6 @@ import {
   FIELD,
   GAP_SENSE,
   MAX_CONDITION,
-  MELEE_REACH,
   POST_RANGE,
   SEGMENT_HEIGHT,
   SEGMENTS,
@@ -43,6 +42,12 @@ import {
   SHOP,
   SKILL_FLASH,
   SKILLS,
+  BLOATER,
+  BRUTE,
+  CRAWLER,
+  SCREAMER,
+  SPITTER,
+  meleeReach,
   type BuffId,
   type EnemyKind,
   type SkillId,
@@ -72,7 +77,7 @@ import {
   repairFactor,
   spreadOf,
 } from './stats.ts';
-import { enemyHp, waveCount, waveSize } from './waves.ts';
+import { enemyHp, kindFor, waveCount, waveMix, waveSize } from './waves.ts';
 
 export type UpgradeId = 'sharpshooter' | 'rapid-fire' | 'long-sight' | 'patch-up' | 'reinforce';
 
@@ -119,6 +124,10 @@ export interface Enemy {
   /** Velocity over the last step in px/s, which shooters lead (design §6 Ballistics). */
   vx: number;
   vy: number;
+  /** A Crawler on a wall: fight time it drops behind it; 0 = not climbing. */
+  climbUntil: number;
+  /** A Crawler that has climbed a wall: it climbs only once (design §9). */
+  climbed: boolean;
 }
 /** An unbuilt slot is `{ kind: null, tier: null, hp: 0, maxHp: 0 }`: an open gap. */
 export interface Segment {
@@ -204,8 +213,11 @@ export interface Breach {
   row: number;
   /** The wave under way at the crossing. */
   wave: number;
-  /** What the enemy went through: a broken wall or gate, or a slot never built. */
-  through: SegmentKind | 'gap';
+  /**
+   * What the enemy went through: a broken wall or gate, a slot never built, or over a
+   * standing segment (a Crawler, `climbed`).
+   */
+  through: SegmentKind | 'gap' | 'climbed';
 }
 /** The open replacement offer: post `postId` is the injured one's, or null for the player's pick. */
 export interface ReplaceOffer {
@@ -263,6 +275,21 @@ export interface Impact {
   x: number;
   y: number;
   hit: boolean;
+  at: number;
+}
+/** A Spitter's glob flying from `(fromX, fromY)` to `(x, y)`, from `at` for `SPITTER.splash` s. */
+export interface Spit {
+  fromX: number;
+  fromY: number;
+  x: number;
+  y: number;
+  at: number;
+}
+/** Bloater `id` blowing up at `(x, y)` in the step ending at `at` (not a kill), drawn for `BLOATER.burst` s. */
+export interface Burst {
+  id: number;
+  x: number;
+  y: number;
   at: number;
 }
 /** A molotov's fire on the ground, burning enemies inside until `until` (fight time). */
@@ -339,6 +366,8 @@ export interface HordeState {
   /** Recent muzzle flashes and bullet ends, for the renderer; cleared when the horde ends. */
   shots: Shot[];
   impacts: Impact[];
+  spits: Spit[];
+  bursts: Burst[];
   outcome: Outcome;
 }
 
@@ -400,6 +429,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     bullets: [],
     shots: [],
     impacts: [],
+    spits: [],
+    bursts: [],
     outcome: 'fighting',
   };
 }
@@ -644,10 +675,11 @@ export function moveDefender(state: HordeState, defenderId: string, postId: numb
 export function enemyAt(state: HordeState, x: number, y: number): number | null {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   let best: Enemy | null = null;
-  let bestD = 2 * ENEMY_RADIUS;
+  let bestD = Infinity;
   for (const e of state.enemies) {
     const d = Math.hypot(e.x - x, e.y - y);
-    if (e.hp <= 0 || d > bestD || (d === bestD && best && e.id > best.id)) continue;
+    if (e.hp <= 0 || d > ENEMIES[e.kind].radius + ENEMY_RADIUS) continue;
+    if (d > bestD || (d === bestD && best && e.id > best.id)) continue;
     best = e;
     bestD = d;
   }
@@ -683,6 +715,8 @@ function step(s: HordeState, rng: Rng): void {
     s.bullets = [];
     s.shots = [];
     s.impacts = [];
+    s.spits = [];
+    s.bursts = [];
   }
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
@@ -691,12 +725,15 @@ function step(s: HordeState, rng: Rng): void {
 
 function spawn(s: HordeState, rng: Rng): void {
   while (s.toSpawn > 0 && due(s.time, s.nextSpawnAt) && due(s.time, s.breakUntil)) {
-    const hp = enemyHp('shambler', s.hordeNumber, s.wave);
+    // Shamblers only (the tutorial) roll nothing, so its seeds play as before.
+    const kind = waveMix(s.hordeNumber).length > 1 ? kindFor(s.hordeNumber, rng()) : 'shambler';
+    const hp = enemyHp(kind, s.hordeNumber, s.wave);
+    const r = ENEMIES[kind].radius;
     s.enemies.push({
       id: s.nextEnemyId++,
-      kind: 'shambler',
+      kind,
       x: FIELD.right,
-      y: int(rng, ENEMY_RADIUS, FIELD.height - ENEMY_RADIUS),
+      y: int(rng, r, FIELD.height - r),
       hp,
       maxHp: hp,
       nextAttackAt: 0,
@@ -704,6 +741,8 @@ function spawn(s: HordeState, rng: Rng): void {
       stunnedUntil: 0,
       vx: 0,
       vy: 0,
+      climbUntil: 0,
+      climbed: false,
     });
     s.toSpawn -= 1;
     s.nextSpawnAt = s.time + SPAWN_INTERVAL;
@@ -855,9 +894,10 @@ function launch(
 }
 
 /**
- * The first living enemy `b` has not hit whose body its next `travel` px cross, and how
- * far along; ties → lowest id. One already overlapping the bullet is crossed at 0, even
- * behind its heading: point-blank, a shot at an enemy against the post always lands.
+ * The first living enemy `b` has not hit whose body (its kind's radius) its next
+ * `travel` px cross, and how far along; ties → lowest id. One already overlapping the
+ * bullet is crossed at 0, even behind its heading: point-blank, a shot at an enemy
+ * against the post always lands.
  */
 function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: number } | null {
   let best: { enemy: Enemy; at: number } | null = null;
@@ -866,7 +906,8 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
     const wx = b.x - e.x;
     const wy = b.y - e.y;
     const along = b.dx * wx + b.dy * wy;
-    const gap = wx * wx + wy * wy - ENEMY_RADIUS * ENEMY_RADIUS;
+    const r = ENEMIES[e.kind].radius;
+    const gap = wx * wx + wy * wy - r * r;
     let at: number;
     if (gap <= 0) at = 0;
     else {
@@ -881,6 +922,10 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
   return best;
 }
 
+/** What a bullet of `damage` does to `e`: a Brute's armour takes some off (design §9). */
+export const hitDamage = (e: Enemy, damage: number): number =>
+  e.kind === 'brute' ? Math.max(BRUTE.min, damage - BRUTE.armour) : damage;
+
 /**
  * Design §6 Ballistics: each bullet flies one step along its swept path (so a fast one
  * never tunnels) and hits the first enemy it crosses, once; a piercing one goes on to
@@ -890,7 +935,7 @@ function fly(s: HordeState): void {
   s.bullets = s.bullets.filter((b) => {
     let travel = Math.min(b.speed * STEP, b.left);
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
-      hit.enemy.hp -= b.damage;
+      hit.enemy.hp -= hitDamage(hit.enemy, b.damage);
       b.hit.push(hit.enemy.id);
       b.x += b.dx * hit.at;
       b.y += b.dy * hit.at;
@@ -915,6 +960,8 @@ function fire(s: HordeState, rng: Rng): void {
   s.strikes = s.strikes.filter((k) => s.time - k.at < STRIKE_FLASH);
   s.shots = s.shots.filter((k) => s.time - k.at < MUZZLE_FLASH);
   s.impacts = s.impacts.filter((k) => s.time - k.at < IMPACT_FLASH);
+  s.spits = s.spits.filter((k) => s.time - k.at < SPITTER.splash);
+  s.bursts = s.bursts.filter((k) => s.time - k.at < BLOATER.burst);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -1144,27 +1191,68 @@ function hunt(s: HordeState, e: Enemy, speed: number, reached: Map<number, Defen
     return;
   }
   const dist = Math.hypot(target.x - e.x, target.y - e.y);
-  const stride = Math.min(speed, dist - MELEE_REACH);
+  const reach = meleeReach(e.kind);
+  const stride = Math.min(speed, dist - reach);
   if (stride > 0) {
     e.x += ((target.x - e.x) / dist) * stride;
     e.y += ((target.y - e.y) / dist) * stride;
   }
-  if (dist - Math.max(0, stride) <= MELEE_REACH + EPS) reached.set(e.id, target);
+  if (dist - Math.max(0, stride) <= reach + EPS) reached.set(e.id, target);
+}
+
+/** How far short of its stop line `e` halts: a Spitter at `SPITTER.stop`, the rest at it. */
+const standOff = (e: Enemy): number => (e.kind === 'spitter' ? SPITTER.stop : 0);
+
+/** Design §9: a Screamer speeds up the other enemies near it; several don't stack. */
+function screamed(screamers: readonly Enemy[], e: Enemy): number {
+  const near = screamers.some(
+    (o) => o !== e && Math.hypot(o.x - e.x, o.y - e.y) <= SCREAMER.radius + EPS,
+  );
+  return near ? 1 + SCREAMER.speed : 1;
+}
+
+/**
+ * Design §9: a Crawler that reaches a standing segment for the first time climbs it
+ * for `CRAWLER.climb` s, then drops behind that layer. If the segment breaks under it,
+ * it stops climbing and walks on. Returns whether it is (still) on the wall.
+ */
+function climb(s: HordeState, e: Enemy, stop: ReturnType<typeof stopLine>, speed: number): boolean {
+  if (e.kind !== 'crawler' || e.climbed) return false;
+  const onWall = stop.segment !== null && e.x <= stop.x + speed + EPS;
+  if (e.climbUntil === 0) {
+    if (!onWall) return false;
+    e.x = stop.x;
+    e.climbUntil = s.time + CRAWLER.climb;
+    return true;
+  }
+  if (!onWall) {
+    e.climbUntil = 0;
+    return false;
+  }
+  if (!due(s.time, e.climbUntil)) return true;
+  const fromX = e.x;
+  e.x = stop.layer!.x;
+  e.climbUntil = 0;
+  e.climbed = true;
+  breach(s, e, fromX, true);
+  return true;
 }
 
 /** Moves every enemy; returns this step's slides and the enemies in the camp within reach. */
 function move(s: HordeState): Moves {
   const sliding = new Map<number, Slide>();
   const reached = new Map<number, Defender>();
+  const screamers = s.enemies.filter((e) => e.kind === 'screamer' && e.hp > 0);
   for (const e of s.enemies) {
     if (stunned(s, e)) continue;
-    const speed = ENEMIES[e.kind].speed * STEP * trapSlow(s, e);
+    const speed = ENEMIES[e.kind].speed * STEP * trapSlow(s, e) * screamed(screamers, e);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
       continue;
     }
     let stop = stopLine(s, e);
-    const gap = stop.layer && stop.x >= e.x - GAP_SENSE ? nearestGap(stop.layer, e.y) : null;
+    const sense = stop.layer && stop.x + standOff(e) >= e.x - GAP_SENSE;
+    const gap = sense && e.climbUntil === 0 ? nearestGap(stop.layer!, e.y) : null;
     if (gap) {
       const toY = (gap.index + 0.5) * SEGMENT_HEIGHT;
       const dy = toY - e.y;
@@ -1172,8 +1260,13 @@ function move(s: HordeState): Moves {
       e.y += Math.sign(dy) * Math.min(Math.abs(dy), speed);
       stop = stopLine(s, e);
     }
+    if (climb(s, e, stop, speed)) {
+      e.inCamp = s.layers.every((l) => e.x < l.x + WALL.depth);
+      continue;
+    }
     const fromX = e.x;
-    e.x = Math.max(stop.x, e.x - speed);
+    // Never backwards: a Spitter pushed into a walled row inside its range stays put.
+    e.x = Math.min(e.x, Math.max(stop.x + (stop.layer ? standOff(e) : 0), e.x - speed));
     breach(s, e, fromX);
     // Only through a gap in every layer; from now on it hunts defenders.
     e.inCamp = s.layers.every((l) => e.x < l.x + WALL.depth);
@@ -1212,8 +1305,11 @@ function trapSlow(s: HordeState, e: Enemy): number {
   return t?.hit.includes(e.id) ? TRAPS[t.kind].slow : 1;
 }
 
-/** Records each layer `e` (from outside) crossed this step, the first time any enemy does. */
-function breach(s: HordeState, e: Enemy, fromX: number): void {
+/**
+ * Records each layer `e` (from outside) crossed this step, the first time any enemy
+ * does; a Crawler dropping over a standing segment went over it, not through.
+ */
+function breach(s: HordeState, e: Enemy, fromX: number, over = false): void {
   for (const l of s.layers) {
     const line = l.x + WALL.depth;
     if (fromX < line || e.x >= line || s.breaches.some((b) => b.column === l.column)) continue;
@@ -1222,28 +1318,35 @@ function breach(s: HordeState, e: Enemy, fromX: number): void {
       column: l.column,
       row,
       wave: s.wave,
-      through: l.segments[row]?.kind ?? 'gap',
+      through: over ? 'climbed' : (l.segments[row]?.kind ?? 'gap'),
     });
   }
 }
 
 /**
- * Pushes overlapping enemies apart along `y` only (never `x`, so never through a
- * wall): the upper one up, the lower one down (equal `y` → lower id up), each by
- * half the overlap capped per step. Computed from pre-push positions, then clamped
- * to the field. An enemy in the camp and one still outside never push each other: a
- * wall stands between them, so one pressed against it can't hold a hunter off for good.
+ * Pushes overlapping enemies (bodies of their kind's radius) apart along `y` only
+ * (never `x`, so never through a wall): the upper one up, the lower one down (equal
+ * `y` → lower id up), each by half the overlap capped per step. Computed from
+ * pre-push positions, then clamped to the field by each body's radius. An enemy in
+ * the camp and one still outside never push each other: a wall stands between them,
+ * so one pressed against it can't hold a hunter off for good.
  */
 function separate(s: HordeState): void {
   const push = new Map<number, number>();
   const cap = SEPARATION_SPEED * STEP;
   const es = s.enemies;
+  const radius = es.map((e) => ENEMIES[e.kind].radius);
   for (let i = 0; i < es.length; i++) {
     for (let j = i + 1; j < es.length; j++) {
       const a = es[i]!;
       const b = es[j]!;
       if (a.inCamp !== b.inCamp) continue;
-      const overlap = 2 * ENEMY_RADIUS - Math.hypot(a.x - b.x, a.y - b.y);
+      const reach = radius[i]! + radius[j]!;
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      // Most pairs are far apart: skip them before the square root.
+      if (dx >= reach || -dx >= reach || dy >= reach || -dy >= reach) continue;
+      const overlap = reach - Math.hypot(dx, dy);
       if (overlap <= 0) continue;
       const aUp = a.y < b.y || (a.y === b.y && a.id < b.id);
       const d = Math.min(overlap / 2, cap);
@@ -1251,11 +1354,12 @@ function separate(s: HordeState): void {
       push.set(b.id, (push.get(b.id) ?? 0) + (aUp ? d : -d));
     }
   }
-  for (const e of es) {
+  es.forEach((e, i) => {
     const d = push.get(e.id);
-    if (d === undefined) continue;
-    e.y = Math.min(FIELD.height - ENEMY_RADIUS, Math.max(ENEMY_RADIUS, e.y + d));
-  }
+    if (d === undefined) return;
+    const r = radius[i]!;
+    e.y = Math.min(FIELD.height - r, Math.max(r, e.y + d));
+  });
 }
 
 /**
@@ -1263,32 +1367,105 @@ function separate(s: HordeState): void {
  * gap this step (after separation) holds off; one the crowd pushed back attacks, so a
  * packed crowd can't keep it from ever hitting the wall. An enemy in the camp hits the
  * defender it reached this step (before separation, so a crowd can't hold it off).
+ * Design §9: a climbing Crawler doesn't attack; a Spitter spits from its stand-off; a
+ * Bloater's hit is its blast, which takes it off the field with no kill paid.
  */
 function attack(s: HordeState, moves: Moves): void {
+  const blown = new Set<number>();
   for (const e of s.enemies) {
-    if (stunned(s, e) || !due(s.time, e.nextAttackAt)) continue;
+    if (stunned(s, e) || e.climbUntil > 0 || !due(s.time, e.nextAttackAt)) continue;
     const enemy = ENEMIES[e.kind];
-    let target: { hp: number } | null;
-    let damage = enemy.damage;
     if (e.inCamp) {
       const defender = moves.reached.get(e.id);
-      if (defender) defender.hitBy = e.kind;
-      if (defender?.loadout.item === 'shield') damage *= 1 - SHIELD.damageTaken;
-      target = defender ?? null;
-    } else {
-      const slide = moves.sliding.get(e.id);
-      if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
-      const stop = stopLine(s, e);
-      target = e.x > stop.x ? null : stop.segment;
-      // Only the damage the segment actually takes wears its turret.
-      if (target && stop.layer) {
-        wearMounted(s, stop.layer.column, stop.segment!.index, Math.min(damage, target.hp));
-      }
+      if (!defender) continue;
+      defender.hitBy = e.kind;
+      const damage =
+        enemy.damage * (defender.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
+      defender.hp = Math.max(0, defender.hp - damage);
+      if (e.kind === 'bloater') blown.add(e.id);
+      e.nextAttackAt = s.time + enemy.attackInterval;
+      continue;
     }
-    if (!target) continue;
-    target.hp = Math.max(0, target.hp - damage);
+    const slide = moves.sliding.get(e.id);
+    if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
+    if (e.kind === 'spitter' && spit(s, e)) {
+      e.nextAttackAt = s.time + enemy.attackInterval;
+      continue;
+    }
+    const stop = stopLine(s, e);
+    if (!stop.segment || !stop.layer || e.x > stop.x + standOff(e) + EPS) continue;
+    if (e.kind === 'bloater') {
+      blast(s, stop.layer, stop.segment.index);
+      blown.add(e.id);
+      continue;
+    }
+    hitSegment(s, stop.layer, stop.segment, enemy.damage);
+    if (e.kind === 'spitter') {
+      s.spits.push({ fromX: e.x, fromY: e.y, x: stop.x, y: e.y, at: s.time + STEP });
+    }
     e.nextAttackAt = s.time + enemy.attackInterval;
   }
+  if (blown.size === 0) return;
+  for (const e of s.enemies) {
+    if (blown.has(e.id)) s.bursts.push({ id: e.id, x: e.x, y: e.y, at: s.time + STEP });
+  }
+  for (const id of blown) if (s.focusId === id) s.focusId = null;
+  s.enemies = s.enemies.filter((e) => !blown.has(e.id));
+}
+
+/** Takes `damage` off a standing segment; only the damage it actually takes wears its turret. */
+function hitSegment(s: HordeState, layer: Layer, segment: Segment, damage: number): void {
+  if (segment.hp <= 0) return;
+  wearMounted(s, layer.column, segment.index, Math.min(damage, segment.hp));
+  segment.hp = Math.max(0, segment.hp - damage);
+}
+
+/** Design §9: a Bloater's blast on segment `row` of `layer`, and on its standing neighbours. */
+function blast(s: HordeState, layer: Layer, row: number): void {
+  const centre = layer.segments[row]!;
+  hitSegment(s, layer, centre, BLOATER.wall);
+  for (const n of [row - 1, row + 1]) {
+    const seg = layer.segments[n];
+    if (seg) hitSegment(s, layer, seg, BLOATER.splash);
+  }
+}
+
+/**
+ * Design §9: a Spitter spits at the nearest defender or working turret (not jammed,
+ * its wall standing) within `SPITTER.range` (ties → defenders first, then lower
+ * index): HP off a defender (a shield blocks its share), condition off a turret.
+ * Returns false when there is none.
+ */
+function spit(s: HordeState, e: Enemy): boolean {
+  let best: { x: number; y: number; hit: () => void } | null = null;
+  let bestD = Infinity;
+  const damage = ENEMIES.spitter.damage;
+  for (const d of s.defenders) {
+    const dist = Math.hypot(d.x - e.x, d.y - e.y);
+    if (dist > SPITTER.range + EPS || dist >= bestD) continue;
+    bestD = dist;
+    best = {
+      x: d.x,
+      y: d.y,
+      hit: () => {
+        d.hitBy = 'spitter';
+        const taken = damage * (d.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
+        d.hp = Math.max(0, d.hp - taken);
+      },
+    };
+  }
+  for (const t of s.turrets) {
+    const state = turretState(s, t);
+    if (state === 'jammed' || state === 'offline') continue;
+    const dist = Math.hypot(t.x - e.x, t.y - e.y);
+    if (dist > SPITTER.range + EPS || dist >= bestD) continue;
+    bestD = dist;
+    best = { x: t.x, y: t.y, hit: () => wear(t, damage) };
+  }
+  if (!best) return false;
+  best.hit();
+  s.spits.push({ fromX: e.x, fromY: e.y, x: best.x, y: best.y, at: s.time + STEP });
+  return true;
 }
 
 /** Takes `amount` off `t`'s condition; float noise near 0 (1 − 5 × 0.2) jams it rather than leaving a sliver. */

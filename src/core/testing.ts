@@ -46,6 +46,8 @@ export function enemy(s: HordeState, e: Partial<Enemy>): Enemy {
     stunnedUntil: 0,
     vx: 0,
     vy: 0,
+    climbUntil: 0,
+    climbed: false,
     ...e,
   };
   s.enemies.push(made);

@@ -146,6 +146,20 @@ describe('hud', () => {
       });
     });
 
+    it('says a Crawler climbed over a standing wall, not through it (ID-023)', () => {
+      const { game, s } = ended('lost');
+      s.breaches = [{ column: 0, row: 4, wave: 2, through: 'climbed' }];
+      expect(resultScreen(game, s, NOW).lines).toContain('Layer 1 · row 5 · climbed over');
+    });
+
+    it('names the kind of enemy behind each injury (ID-023)', () => {
+      const { game, s } = ended('won');
+      s.injured[0]!.by = 'spitter';
+      expect(resultScreen(game, s, NOW).lines).toContain(
+        `Jack · injured by a Spitter · back at ${jackBack}`,
+      );
+    });
+
     /** `ended('won')` with its RNG moved to where the drop is a weapon with 2 affixes. */
     function withDrop(): { game: GameState; s: HordeState } {
       const { game, s } = ended('won');

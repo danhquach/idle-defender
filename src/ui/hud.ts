@@ -157,11 +157,20 @@ export function payoutText(s: HordeState): string {
 export const clockTime = (ms: number): string =>
   new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-const ENEMY_NAME: Readonly<Record<EnemyKind, string>> = { shambler: 'Shambler' };
+const ENEMY_NAME: Readonly<Record<EnemyKind, string>> = {
+  shambler: 'Shambler',
+  runner: 'Runner',
+  crawler: 'Crawler',
+  bloater: 'Bloater',
+  spitter: 'Spitter',
+  brute: 'Brute',
+  screamer: 'Screamer',
+};
 const THROUGH: Readonly<Record<Breach['through'], string>> = {
   wall: 'broken wall',
   gate: 'broken gate',
   gap: 'open gap',
+  climbed: 'climbed over',
 };
 
 export interface ResultScreen {

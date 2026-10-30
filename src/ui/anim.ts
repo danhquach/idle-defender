@@ -170,7 +170,7 @@ interface Seen {
  * What animation needs from earlier frames, which the fight doesn't keep: how far each
  * enemy and defender has walked and when they last lost HP, each shooter's last shot (the
  * fight drops it with its muzzle flash), and the enemies that died, kept until they have
- * fallen. Fed the fight each frame; a fight whose time runs back is a new one, and starts
+ * fallen. A Bloater that blew up (in `bursts`) didn't die: it leaves no body. Fed the fight each frame; a fight whose time runs back is a new one, and starts
  * it afresh.
  */
 export class Animator {
@@ -185,6 +185,7 @@ export class Animator {
     enemies: readonly Enemy[];
     defenders: readonly Pick<Defender, 'id' | 'hp' | 'x' | 'y'>[];
     shots: readonly Shot[];
+    bursts?: readonly { id: number }[];
   }): void {
     const t = scene.time;
     if (t < this.time) {
@@ -199,8 +200,9 @@ export class Animator {
     for (const e of scene.enemies) {
       enemies.set(e.id, { ...this.seen(this.enemies.get(e.id), e, t, dt), enemy: e });
     }
+    const burst = new Set(scene.bursts?.map((b) => b.id));
     for (const [id, was] of this.enemies) {
-      if (!enemies.has(id)) this.corpses.push({ enemy: was.enemy, at: t });
+      if (!enemies.has(id) && !burst.has(id)) this.corpses.push({ enemy: was.enemy, at: t });
     }
     this.enemies = enemies;
     this.corpses = this.corpses.filter((c) => t - c.at < ANIM.fall.time);

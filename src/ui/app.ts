@@ -418,6 +418,8 @@ function buildScene(game: GameState, choice: { defenderId: string; postId: numbe
     bullets: [],
     shots: [],
     impacts: [],
+    spits: [],
+    bursts: [],
     focusId: null,
     time: 0,
     outcome: 'fighting',

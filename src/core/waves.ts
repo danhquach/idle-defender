@@ -1,4 +1,4 @@
-import { ENEMIES, type EnemyKind } from './data.ts';
+import { ENEMIES, ENEMY_MIX, type EnemyKind } from './data.ts';
 
 function whole(name: string, n: number): void {
   if (!Number.isInteger(n) || n < 1)
@@ -23,6 +23,31 @@ export function enemyHp(kind: EnemyKind, hordeNumber: number, wave: number): num
   whole('enemyHp', hordeNumber);
   whole('enemyHp', wave);
   return Math.round(ENEMIES[kind].hp * 1.1 ** (wave - 1) * 1.15 ** (hordeNumber - 1));
+}
+
+/** Each kind's share of a wave in Horde `hordeNumber` (design §9); Shamblers take the rest. */
+export function waveMix(hordeNumber: number): [EnemyKind, number][] {
+  whole('waveMix', hordeNumber);
+  const mix: [EnemyKind, number][] = [];
+  for (const [kind, m] of Object.entries(ENEMY_MIX) as [
+    EnemyKind,
+    { from: number; share: number },
+  ][]) {
+    if (hordeNumber >= m.from) mix.push([kind, m.share]);
+  }
+  const rest = 1 - mix.reduce((sum, [, share]) => sum + share, 0);
+  return [['shambler', rest], ...mix];
+}
+
+/** The kind a roll in `[0, 1)` picks from Horde `hordeNumber`'s mix. */
+export function kindFor(hordeNumber: number, roll: number): EnemyKind {
+  let left = roll;
+  const mix = waveMix(hordeNumber);
+  for (const [kind, share] of mix) {
+    if (left < share) return kind;
+    left -= share;
+  }
+  return mix[mix.length - 1]![0];
 }
 
 /** Fight XP needed to go from `level` to the next. */

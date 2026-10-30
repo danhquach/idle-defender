@@ -17,6 +17,7 @@ export const SEGMENT_HEIGHT = FIELD.height / SEGMENTS;
 /** The starting layer's gate row and tower rows (design §11): the gate near the middle. */
 export const START_BASE = { gate: 5, towers: [4, 6] } as const;
 
+/** A Shambler's body radius, and a defender's: the default body size. */
 export const ENEMY_RADIUS = 12;
 /** Most a crowded enemy is pushed aside per second. */
 export const SEPARATION_SPEED = 60;
@@ -264,7 +265,9 @@ export const SHIELD = { damageTaken: 0.3, fireRate: 0.2, walk: 0.2 } as const;
 /** Fire-rate bonus for defenders beside an Engineer; several Engineers don't stack. */
 export const ENGINEER_BUFF = 0.15;
 
-export type EnemyKind = 'shambler';
+export type EnemyKind =
+  'shambler' | 'runner' | 'crawler' | 'bloater' | 'spitter' | 'brute' | 'screamer';
+/** Design §9, as built ID-023 (starting points). `radius` is the body bullets hit. */
 export const ENEMIES: Readonly<
   Record<
     EnemyKind,
@@ -273,14 +276,50 @@ export const ENEMIES: Readonly<
       readonly speed: number;
       readonly damage: number;
       readonly attackInterval: number;
+      readonly radius: number;
       readonly xp: number;
       /** Horde cash its kill pays (design §4). */
       readonly cash: number;
     }
   >
 > = {
-  shambler: { hp: 20, speed: 30, damage: 5, attackInterval: 1, xp: 1, cash: 2 },
+  shambler: { hp: 20, speed: 30, damage: 5, attackInterval: 1, radius: 12, xp: 1, cash: 2 },
+  runner: { hp: 15, speed: 75, damage: 3, attackInterval: 0.8, radius: 10, xp: 1, cash: 2 },
+  crawler: { hp: 40, speed: 40, damage: 20, attackInterval: 1, radius: 9, xp: 2, cash: 3 },
+  // Its hit is its blast (BLOATER); `damage` is what it does to a defender in the camp.
+  bloater: { hp: 60, speed: 18, damage: 50, attackInterval: 1, radius: 18, xp: 3, cash: 4 },
+  spitter: { hp: 25, speed: 28, damage: 8, attackInterval: 2, radius: 12, xp: 2, cash: 3 },
+  brute: { hp: 150, speed: 20, damage: 25, attackInterval: 1.5, radius: 20, xp: 5, cash: 6 },
+  screamer: { hp: 30, speed: 30, damage: 2, attackInterval: 1, radius: 12, xp: 3, cash: 4 },
 };
+/**
+ * The share of a wave each kind takes from the horde it joins (design §9); Shamblers
+ * fill the rest. Horde 1, the tutorial, is Shamblers only.
+ */
+export const ENEMY_MIX: Readonly<Partial<Record<EnemyKind, { from: number; share: number }>>> = {
+  runner: { from: 2, share: 0.15 },
+  crawler: { from: 5, share: 0.1 },
+  spitter: { from: 6, share: 0.1 },
+  bloater: { from: 7, share: 0.1 },
+  brute: { from: 8, share: 0.1 },
+  screamer: { from: 9, share: 0.1 },
+};
+/** A Crawler climbs the first standing segment it reaches for `time` s, then drops behind it. */
+export const CRAWLER = { climb: 3 } as const;
+/**
+ * A Bloater at a standing segment blows up: `wall` to it, `splash` to the segments above
+ * and below; its burst is drawn for `burst` s.
+ */
+export const BLOATER = { wall: 150, splash: 50, burst: 0.4 } as const;
+/**
+ * A Spitter stops `stop` px short of its stop line (so the wall-walk is in reach) and
+ * spits at anything within `range`; each glob is drawn for `splash` s (it lands at once).
+ */
+export const SPITTER = { stop: 150, range: 250, splash: 0.3 } as const;
+/** Each bullet hitting a Brute does `armour` less damage, but at least `min`. */
+export const BRUTE = { armour: 3, min: 1 } as const;
+/** Other enemies within `radius` of a Screamer move `speed` faster; several don't stack. */
+export const SCREAMER = { radius: 150, speed: 0.3 } as const;
 
 export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;
@@ -349,8 +388,10 @@ export const START_TIERS: readonly Tier[] = ['wood'];
 
 /** Defender HP in a horde, before Grit. */
 export const DEFENDER_HP = 100;
-/** How close an enemy inside the camp must be to hit a defender. */
+/** How close a Shambler inside the camp must be to hit a defender: body to body. */
 export const MELEE_REACH = 2 * ENEMY_RADIUS;
+/** How close an enemy of `kind` inside the camp must be to hit a defender. */
+export const meleeReach = (kind: EnemyKind): number => ENEMIES[kind].radius + ENEMY_RADIUS;
 /** Seconds the camp holds with an enemy inside and no defender left, before the horde is lost. */
 export const FALL_WARNING = 10;
 /**

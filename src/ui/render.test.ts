@@ -4,6 +4,7 @@ import { buildTurret, newBase } from '../core/base.ts';
 import { newGame, startHorde } from '../core/game.ts';
 import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
 import {
+  ENEMIES,
   IMPACT_FLASH,
   MUZZLE_FLASH,
   SKILL_FLASH,
@@ -11,6 +12,7 @@ import {
   STEP,
   TURRET,
   WEAPONS,
+  type EnemyKind,
   type Tracer,
 } from '../core/data.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
@@ -108,6 +110,13 @@ function recorder() {
     fill: noop,
     arc: noop,
     ellipse: noop,
+    rect: noop,
+    closePath: noop,
+    save: noop,
+    restore: noop,
+    translate: noop,
+    rotate: noop,
+    scale: noop,
   };
   // Fresh images each time, so the renderer's pattern cache never hides a texture.
   const art = Object.fromEntries(
@@ -221,6 +230,8 @@ describe('drawScene with art', () => {
           stunnedUntil: 0,
           vx: 0,
           vy: 0,
+          climbUntil: 0,
+          climbed: false,
         },
       ],
     });
@@ -229,6 +240,33 @@ describe('drawScene with art', () => {
     expect(i).toBeGreaterThanOrEqual(0);
     expect(r.alphas[i]).toBeLessThan(1);
     expect(r.alphas.slice(i + 1).every((a) => a === 1)).toBe(true);
+  });
+
+  it('draws every enemy kind (art or placeholder shape) and a Spitter glob without a throw (ID-023)', () => {
+    const kinds = Object.keys(ENEMIES) as EnemyKind[];
+    const base = blank();
+    const r = draw({
+      ...base,
+      time: 1,
+      enemies: kinds.map((kind, i) => ({
+        id: i,
+        kind,
+        x: 700 + i * 40,
+        y: 300,
+        hp: 10,
+        maxHp: 10,
+        nextAttackAt: 0,
+        inCamp: false,
+        stunnedUntil: 0,
+        vx: 0,
+        vy: 0,
+        climbUntil: 0,
+        climbed: false,
+      })),
+      spits: [{ fromX: 900, fromY: 300, x: 520, y: 300, at: 0.9 }],
+    });
+    // Only the Shambler has art yet; the rest are drawn shapes.
+    expect(r.drawn.filter((id) => id === 'shambler')).toHaveLength(1);
   });
 
   it("draws a broken segment as its tier's rubble only", () => {
@@ -322,6 +360,8 @@ describe('drawScene with art', () => {
           stunnedUntil: 0,
           vx: 0,
           vy: 0,
+          climbUntil: 0,
+          climbed: false,
         },
       ],
     });
@@ -425,6 +465,8 @@ describe('bullet visuals (ID-045)', () => {
       stunnedUntil: 0,
       vx: 0,
       vy: 0,
+      climbUntil: 0,
+      climbed: false,
     };
     const scene: Scene = { ...h, enemies: [target], bullets: [], shots: [], impacts: [] };
     return { scene, d, post, target };
@@ -725,6 +767,8 @@ describe('sprite animation (ID-049)', () => {
       stunnedUntil: 0,
       vx: -30,
       vy: 0,
+      climbUntil: 0,
+      climbed: false,
     };
     return { ...h, time: 3, enemies: [e], bullets: [], shots: [], impacts: [], strikes: [] };
   }
@@ -792,8 +836,12 @@ describe('sprite animation (ID-049)', () => {
     expect(poses(fast, new Animator()).draws).toEqual(poses(slow, new Animator()).draws);
   });
 
-  it('without an animator (build mode) nothing moves', () => {
-    const s = walking();
+  it('without an animator (build mode) nothing moves, placeholder shapes included', () => {
+    const w = walking();
+    const s = {
+      ...w,
+      enemies: [...w.enemies, { ...w.enemies[0]!, id: 8, kind: 'runner' as const }],
+    };
     const r = recorder();
     const moved: unknown[] = [];
     Object.assign(r.ctx, { save: () => moved.push('save') });
