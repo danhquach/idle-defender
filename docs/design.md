@@ -991,6 +991,25 @@ original outline.
   ground where a miss fell). Effects are drawn shapes, not sprites, so they
   need no art; each stays at least 1 px on screen at 0.5× zoom. Blade and
   tool strikes keep their slash.
+- **As built (ID-049):** sprites move, drawn from the still art (no frames):
+  each is moved, turned and stretched about its feet (`src/ui/anim.ts`).
+  Enemies bob once per 20 px of ground they actually cover (so slower over a
+  trap, and smooth however their pace wobbles), lean side to side, ease into
+  and out of the walk over 0.15 s (no walk when only jostled by the crowd,
+  under 4 px/s; a full one from 12 px/s), and breathe, lunge 6 px forward
+  over 0.25 s as they hit a wall or defender, flinch 3 px back from a hit
+  with a 0.1 s white flash (damage every step, such as a fire, twitches them
+  every 0.2 s rather than holding them back), and on death flash from the
+  killing blow, tip over backward and fade over 0.7 s where they fell (not
+  after the fight's last kill, which ends it). Defenders breathe at their
+  post, bob the same way walking between posts, kick back 3 px from each
+  shot (starting with its muzzle flash), swing forward over a blade or tool
+  strike's slash, and flinch when hit. Each sprite's cycle starts at its own
+  phase. Every clock is fight time, so pause freezes it and game speed
+  carries it; the core only records which defender struck. Hits, shots and
+  deaths are remembered between frames by the view, never by the fight;
+  build mode stands still. 300 animated Shamblers hold 60 fps (about 1.3 ms
+  of work a frame, median).
 
 ## 16. Tech and platform
 
