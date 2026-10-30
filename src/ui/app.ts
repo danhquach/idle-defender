@@ -1,7 +1,8 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
+import { recruitArrivals, takeCampPick } from '../core/camp.ts';
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
-import { SKILLS, type SkillId, type Stat } from '../core/data.ts';
+import { SKILLS, type CampPickId, type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -28,6 +29,7 @@ import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import { Animator } from './anim.ts';
 import { createBuildPanel, FIELD_GREW } from './build.ts';
 import { createHud, defenderLabel, resultScreen } from './hud.ts';
+import { recruitNotice } from './roster.ts';
 import {
   clampCamera,
   fitCamera,
@@ -85,6 +87,8 @@ export function start(root: HTMLElement, art: Art): void {
   let endedAt: number | null = null;
   // Stat points spent on the result screen, applied with "Back to build".
   let spends: [string, Stat][] = [];
+  // Camp-level picks taken on the result screen, applied in order with "Back to build".
+  let campPicks: CampPickId[] = [];
   let selected: SlotHit | null = null;
   // The defender picked in a fight, waiting for a post to walk to.
   let selectedDefender: string | null = null;
@@ -106,6 +110,11 @@ export function start(root: HTMLElement, art: Art): void {
         if (r.ok) next = r.game;
       }
       spends = [];
+      for (const id of campPicks) {
+        const r = takeCampPick(next, id);
+        if (r.ok) next = r.game;
+      }
+      campPicks = [];
       commit(next);
       toBuild();
     },
@@ -146,6 +155,9 @@ export function start(root: HTMLElement, art: Art): void {
     () => {
       if (horde && rerollLock(horde) === null) horde = rerollOffer(horde);
     },
+    (id) => {
+      if (horde && endedAt !== null) campPicks.push(id);
+    },
   );
   const panel = createBuildPanel(
     root,
@@ -162,6 +174,7 @@ export function start(root: HTMLElement, art: Art): void {
       horde = startHorde(game, now, defenderId, postId, now);
       endedAt = null;
       spends = [];
+      campPicks = [];
       selected = null;
       selectedDefender = null;
       panel.hide();
@@ -397,10 +410,20 @@ export function start(root: HTMLElement, art: Art): void {
         hud.showResult(resultScreen(game, horde, endedAt));
       }
     } else {
-      // Someone back from rest or patrol, or the generator burnt a Gas: save and redraw.
+      // Someone back from rest or patrol, a free recruit, or the generator burnt a Gas:
+      // save and redraw.
       const now = Date.now();
-      const settled = settlePatrols(runGenerator(recover(game, now), now), now);
+      const settled = recruitArrivals(
+        settlePatrols(runGenerator(recover(game, now), now), now),
+        now,
+      );
       if (settled !== game) {
+        const arrived = settled.roster.filter(
+          (d) => d.id.startsWith('recruit-') && !game.roster.some((r) => r.id === d.id),
+        );
+        if (arrived.length > 0) {
+          panel.notice(recruitNotice(arrived.map((d) => d.name)));
+        }
         commit(settled);
         panel.show(game, selected);
       }

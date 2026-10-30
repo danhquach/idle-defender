@@ -168,31 +168,44 @@ export function upgradeSegment(
   });
 }
 
-/** The tier's cost × missing / max HP, rounded up per material. */
-export function repairCost(seg: BaseSegment): Stock {
-  const missing = (seg.maxHp - seg.hp) / seg.maxHp;
+/**
+ * `cost` × `lost` / `whole`, less `off` percent (a camp-level pick, design §11): one
+ * division, so whole numbers don't drift past a whole when rounded up. With none off it is
+ * the plain share, computed as before.
+ */
+const share = (cost: number, lost: number, whole: number, off: number): number =>
+  off === 0 ? cost * (lost / whole) : (cost * lost * (100 - off)) / (whole * 100);
+
+/** The tier's cost × missing / max HP, less `off` percent, rounded up per material. */
+export function repairCost(seg: BaseSegment, off = 0): Stock {
   const cost = TIERS[seg.tier].cost;
-  return stockFrom((m) => Math.ceil((cost[m] ?? 0) * missing));
+  return stockFrom((m) => Math.ceil(share(cost[m] ?? 0, seg.maxHp - seg.hp, seg.maxHp, off)));
 }
 
-export function repairSegment(base: Base, stock: Stock, column: number, row: number): Result {
+export function repairSegment(
+  base: Base,
+  stock: Stock,
+  column: number,
+  row: number,
+  off = 0,
+): Result {
   checkSlot(column, row);
   const seg = layerAt(base, column)?.slots[row];
   if (!seg) return refuse('Nothing built here');
   if (seg.hp >= seg.maxHp) return refuse('Nothing to repair');
-  return pay(base, stock, repairCost(seg), (b) => {
+  return pay(base, stock, repairCost(seg, off), (b) => {
     const s = layerAt(b, column)!.slots[row]!;
     s.hp = s.maxHp;
   });
 }
 
-/** Every segment's, turret's and trap's repair cost, summed. */
-export function repairAllCost(base: Base): Stock {
+/** Every segment's, turret's and trap's repair cost, `off` percent less, summed. */
+export function repairAllCost(base: Base, off = 0): Stock {
   const total = stockFrom(() => 0);
   for (const cost of [
-    ...segments(base).map(repairCost),
-    ...base.turrets.map(turretRepairCost),
-    ...base.traps.map(trapRepairCost),
+    ...segments(base).map((s) => repairCost(s, off)),
+    ...base.turrets.map((t) => turretRepairCost(t, off)),
+    ...base.traps.map((t) => trapRepairCost(t, off)),
   ]) {
     for (const m of MATERIALS) total[m] += cost[m];
   }
@@ -200,7 +213,7 @@ export function repairAllCost(base: Base): Stock {
 }
 
 /** Repairs every damaged segment, turret and trap, or nothing if the stock can't cover them all. */
-export function repairAll(base: Base, stock: Stock): Result {
+export function repairAll(base: Base, stock: Stock, off = 0): Result {
   if (
     segments(base).every((s) => s.hp >= s.maxHp) &&
     base.turrets.every((t) => t.condition >= MAX_CONDITION) &&
@@ -208,7 +221,7 @@ export function repairAll(base: Base, stock: Stock): Result {
   ) {
     return refuse('Nothing to repair');
   }
-  return pay(base, stock, repairAllCost(base), (b) => {
+  return pay(base, stock, repairAllCost(base, off), (b) => {
     for (const s of segments(b)) s.hp = s.maxHp;
     for (const t of b.turrets) t.condition = MAX_CONDITION;
     for (const t of b.traps) t.durability = TRAP_DURABILITY;
@@ -301,15 +314,17 @@ export function buildTurret(
 }
 
 /** Scrap for `turret`'s missing condition, rounded up. */
-export function turretRepairCost(turret: BaseTurret): Stock {
-  const missing = (MAX_CONDITION - turret.condition) / MAX_CONDITION;
-  return stockFrom((m) => (m === 'scrap' ? Math.ceil(TURRET.repairScrap * missing) : 0));
+export function turretRepairCost(turret: BaseTurret, off = 0): Stock {
+  const lost = MAX_CONDITION - turret.condition;
+  return stockFrom((m) =>
+    m === 'scrap' ? Math.ceil(share(TURRET.repairScrap, lost, MAX_CONDITION, off)) : 0,
+  );
 }
 
-export function repairTurret(base: Base, stock: Stock, index: number): Result {
+export function repairTurret(base: Base, stock: Stock, index: number, off = 0): Result {
   const t = turretAt(base, index);
   if (t.condition >= MAX_CONDITION) return refuse('Nothing to repair');
-  return pay(base, stock, turretRepairCost(t), (b) => {
+  return pay(base, stock, turretRepairCost(t, off), (b) => {
     b.turrets[index]!.condition = MAX_CONDITION;
   });
 }
@@ -363,16 +378,16 @@ export function buildTrap(base: Base, stock: Stock, kind: TrapKind, row: number)
 }
 
 /** The trap's cost × missing / full durability, rounded up per material. */
-export function trapRepairCost(trap: BaseTrap): Stock {
-  const missing = (TRAP_DURABILITY - trap.durability) / TRAP_DURABILITY;
+export function trapRepairCost(trap: BaseTrap, off = 0): Stock {
+  const lost = TRAP_DURABILITY - trap.durability;
   const cost = TRAPS[trap.kind].cost;
-  return stockFrom((m) => Math.ceil((cost[m] ?? 0) * missing));
+  return stockFrom((m) => Math.ceil(share(cost[m] ?? 0, lost, TRAP_DURABILITY, off)));
 }
 
-export function repairTrap(base: Base, stock: Stock, index: number): Result {
+export function repairTrap(base: Base, stock: Stock, index: number, off = 0): Result {
   const t = trapAt(base, index);
   if (t.durability >= TRAP_DURABILITY) return refuse('Nothing to repair');
-  return pay(base, stock, trapRepairCost(t), (b) => {
+  return pay(base, stock, trapRepairCost(t, off), (b) => {
     b.traps[index]!.durability = TRAP_DURABILITY;
   });
 }

@@ -132,6 +132,9 @@ export interface HordeSetup {
   skills: readonly SkillId[];
   /** The commander's equipped perks (design §5). */
   perks: readonly PerkId[];
+  /** Kill-cash factor and starting cash from camp-level picks (design §11); 1 and 0 by default. */
+  cashRate?: number;
+  startCash?: number;
 }
 export interface Enemy {
   id: number;
@@ -419,6 +422,8 @@ export interface HordeState {
   freeWave: number;
   /** Horde cash from kills (design §4); spent in the shop, never kept after the horde. */
   cash: number;
+  /** Kill-cash factor from camp-level picks (design §11). */
+  cashRate: number;
   /** Mutants killed this horde; a win pays Mutated Genes for them (design §11). */
   mutantKills: number;
   /** Fight time each bought buff runs until; 0 = never bought. */
@@ -471,6 +476,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     startedAt,
     skills,
     perks,
+    cashRate = 1,
+    startCash = 0,
   } = setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
@@ -517,7 +524,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     mods: { damage: 1, fireRate: 1, range: 1 },
     taken: [],
     freeWave: 0,
-    cash: 0,
+    cash: startCash,
+    cashRate,
     mutantKills: 0,
     buffs: { adrenaline: 0, overdrive: 0 },
     skills: [...skills],
@@ -1442,7 +1450,7 @@ export function removeDead(s: HordeState): void {
       for (const o of around(s, e, CARD.burn.spread)) o.burnUntil = s.time + CARD.burn.seconds;
     }
     s.xp += ENEMIES[e.kind].xp;
-    s.cash += ENEMIES[e.kind].cash * (perkOn(s, 'scavengers-eye') ? PERK.cash : 1);
+    s.cash += ENEMIES[e.kind].cash * (perkOn(s, 'scavengers-eye') ? PERK.cash : 1) * s.cashRate;
     if (MUTANTS.includes(e.kind)) s.mutantKills += 1;
     if (e.id === s.focusId) s.focusId = null;
   }

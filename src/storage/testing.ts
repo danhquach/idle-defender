@@ -17,11 +17,18 @@ export function prePatrol(game: GameState): Record<string, unknown> {
 
 /** `game` as JSON from ID-026 (v5): no weapons left on the map, and no casualties in its reports. */
 export function preRisk(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preCamp(game);
   delete json.leftBehind;
   for (const r of json.reports as Record<string, unknown>[]) {
     for (const key of ['injured', 'dead', 'wiped', 'recovered']) delete r[key];
   }
+  return json;
+}
+
+/** `game` as JSON from before ID-033 (v6 and older): no camp. */
+export function preCamp(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete json.camp;
   return json;
 }
 

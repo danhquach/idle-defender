@@ -1,7 +1,20 @@
-// The roster screen between hordes (design §6): each defender's level, stats, titles
-// and status, their stat-point picker and loadout pickers, and the title badge (§15).
-// Text only via textContent; the badge colour is a constant.
+// The roster screen between hordes (design §6): the camp (§11: people and slots, the
+// camp upgrade, camp level and picks, the next free recruit), then each defender's
+// level, stats, titles and status, their stat-point picker, loadout pickers and Dismiss,
+// and the title badge (§15). Text only via textContent; the badge colour is a constant.
 import {
+  campLevelOf,
+  campSlots,
+  campUpgradeCost,
+  dismiss,
+  dismissLock,
+  takeCampPick,
+  upgradeCamp,
+} from '../core/camp.ts';
+import {
+  CAMP_PICK_IDS,
+  CAMP_PICK_RANKS,
+  CAMP_PICKS,
   ITEMS,
   LOCATIONS,
   PROFESSIONS,
@@ -28,7 +41,7 @@ import {
 import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
 import { patrolDue, type Patrol } from '../core/patrol.ts';
 import { badgeOf, levelOf, titleIn, titleName, unspentPoints } from '../core/stats.ts';
-import { defenderLabel, el, STAT_HINT } from './hud.ts';
+import { campPickText, defenderLabel, el, STAT_HINT, stockText } from './hud.ts';
 import { BADGE_COLOUR } from './render.ts';
 
 /** "●●" for an Adept: one pip per rank. */
@@ -82,6 +95,69 @@ export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): Ro
         ? 'Fit'
         : `Resting · ${restLeft(d.injuredUntil!, now)} left`,
   };
+}
+
+/**
+ * The camp's lines (design §11): people and slots, the camp level and its XP, the picks
+ * taken, and when the roster floor's next free recruit arrives.
+ */
+export function campLines(game: GameState, now: number): string[] {
+  const { level, into, next } = campLevelOf(game.camp.xp);
+  const taken = CAMP_PICK_IDS.filter((id) => game.camp.picks[id] > 0).map(
+    (id) => `${CAMP_PICKS[id].name} ${game.camp.picks[id]}/${CAMP_PICK_RANKS}`,
+  );
+  const at = game.camp.recruitAt;
+  return [
+    `Camp ${game.roster.length}/${campSlots(game)} people`,
+    `Camp level ${level} · ${into}/${next} XP`,
+    taken.length ? `Camp picks: ${taken.join(', ')}` : 'No camp picks yet',
+    ...(at === null ? [] : [`A free recruit arrives in ${restLeft(at, now)}`]),
+  ];
+}
+
+/**
+ * The camp section: its lines, the next camp upgrade with its cost or why not, and any
+ * camp-level offer still waiting. A change goes out through `onChange`.
+ */
+export function campSection(
+  game: GameState,
+  now: number,
+  onChange: (next: GameState) => void,
+): HTMLElement {
+  const section = el('section', 'roster-entry');
+  section.append(
+    el('h3', 'build-slot-title', 'Camp'),
+    ...campLines(game, now).map((line) => el('p', 'build-slot-note', line)),
+  );
+  const cost = campUpgradeCost(game);
+  const upgrade = el('button', 'build-option');
+  upgrade.type = 'button';
+  upgrade.append(
+    el('span', 'build-option-label', cost ? 'Expand the camp (+2 people)' : 'Expand the camp'),
+  );
+  if (cost) upgrade.append(el('span', 'build-option-cost', `(${stockText(cost)})`));
+  const r = upgradeCamp(game);
+  if (r.ok) upgrade.addEventListener('click', () => onChange(r.game));
+  else {
+    upgrade.disabled = true;
+    upgrade.append(el('span', 'build-option-reason', r.reason));
+  }
+  section.append(upgrade);
+  const offer = game.camp.offers[0];
+  if (offer) {
+    const row = el('div', 'hud-pick-row');
+    for (const id of offer) {
+      const button = el('button', 'hud-button', campPickText(game.camp, id));
+      button.type = 'button';
+      button.addEventListener('click', () => {
+        const taken = takeCampPick(game, id);
+        if (taken.ok) onChange(taken.game);
+      });
+      row.append(button);
+    }
+    section.append(el('p', 'build-slot-note', 'Camp level up: pick one'), row);
+  }
+  return section;
 }
 
 /**
@@ -168,16 +244,19 @@ const valueOf = (h: Held | ItemId | null): string =>
   h === null ? '' : typeof h === 'string' ? h : h.uid;
 
 /**
- * The roster's entries for `game` at `now`. A spend or an allowed equip goes out
- * through `onChange` with the new game; a refused equip says why under that defender
- * and changes nothing.
+ * The camp section, then the roster's entries for `game` at `now`. A spend, an allowed
+ * equip or a dismiss `ask` agrees to goes out through `onChange` with the new game; a
+ * refused equip says why under that defender and changes nothing.
  */
 export function rosterSection(
   game: GameState,
   now: number,
   onChange: (next: GameState) => void,
+  ask: (question: string) => boolean,
 ): HTMLElement[] {
-  return game.roster.map((d) => {
+  return [campSection(game, now, onChange), ...game.roster.map((d) => defenderCard(d))];
+
+  function defenderCard(d: RosterDefender): HTMLElement {
     const entry = rosterEntry(
       d,
       now,
@@ -239,11 +318,48 @@ export function rosterSection(
         secondary,
       })),
       pick('Item', ITEM_CHOICES, valueOf(l.item), (item) => ({ ...l, item })),
+      dismissButton(game, d, onChange, ask),
       note,
     );
     return card;
-  });
+  }
 }
+
+/** "Dismiss": asks first; the defender leaves for good and their weapons go to the armoury. */
+function dismissButton(
+  game: GameState,
+  d: RosterDefender,
+  onChange: (next: GameState) => void,
+  ask: (question: string) => boolean,
+): HTMLElement {
+  const button = el('button', 'build-option');
+  button.type = 'button';
+  button.append(el('span', 'build-option-label', 'Dismiss'));
+  const lock = dismissLock(game, d.id);
+  if (lock !== null) {
+    button.disabled = true;
+    button.append(el('span', 'build-option-reason', lock));
+    return button;
+  }
+  button.addEventListener('click', () => {
+    if (!ask(dismissQuestion(d))) return;
+    const r = dismiss(game, d.id);
+    if (r.ok) onChange(r.game);
+  });
+  return button;
+}
+
+/** "Ava joined the camp as a free recruit." / "Ava and Ben joined the camp as free recruits." */
+export function recruitNotice(names: readonly string[]): string {
+  const who = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+  return names.length > 1
+    ? `${who} joined the camp as free recruits.`
+    : `${who} joined the camp as a free recruit.`;
+}
+
+/** The confirm for dismissing `d`. */
+export const dismissQuestion = (d: Pick<RosterDefender, 'name'>): string =>
+  `Dismiss ${d.name}? They leave the camp for good; their weapons go to the armoury.`;
 
 function statButton(
   game: GameState,

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { buildTurret, lineWall, spotOf } from '../core/base.ts';
+import { newCamp, NO_PICKS, recruitArrivals } from '../core/camp.ts';
 import {
   ARMOURY_CAP,
   BANK_CAP,
+  CAMP_PICK_RANKS,
+  CAMP_SIZE,
+  CAMP_UPGRADES,
   MAX_COUNT,
   PATROL,
   RECOVERY_MS,
@@ -11,7 +15,7 @@ import {
   STEP,
   stockOf,
 } from '../core/data.ts';
-import { newGame, recover, startHorde, type GameState } from '../core/game.ts';
+import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { tick } from '../core/horde.ts';
 import { isGun, type Loadout } from '../core/loadout.ts';
 import {
@@ -33,7 +37,7 @@ import {
   writeSave,
   type SaveStorage,
 } from './save.ts';
-import { NOW, oldStock, played, prePatrol, preRisk } from './testing.ts';
+import { NOW, oldStock, played, preCamp, prePatrol, preRisk } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1102,7 +1106,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 7, '1', '6', 1.5, null]) {
+    for (const v of [0, 8, '1', '7', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1351,7 +1355,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(6);
+    expect(SAVE_VERSION).toBe(7);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1689,6 +1693,149 @@ describe('save: patrols (ID-026)', () => {
     const from = '"leftBehind":[{';
     expect(json.includes(from)).toBe(true);
     expect(decodeSave(json.replace(from, `${from}"__proto__":{"polluted":1},`))).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('save: the camp (ID-033)', () => {
+  /** A camp at level 3 (90 XP) with one pick taken and one offer waiting, a clock running, 4 people. */
+  function camped(): GameState {
+    const g = played();
+    return {
+      ...g,
+      roster: [...g.roster, { ...g.roster[0]!, id: 'recruit-1', name: 'Ava', injuredUntil: null }],
+      camp: {
+        upgrades: 1,
+        xp: 90,
+        picks: { ...NO_PICKS, medic: 1 },
+        offers: [['salvage', 'foraging', 'medic']],
+        recruitAt: NOW + 30 * 60 * 1000,
+        recruits: 1,
+      },
+    };
+  }
+  const withCamp = (change: (camp: Loose, game: Loose) => void): unknown => {
+    const save = JSON.parse(encodeSave(camped(), NOW));
+    change(save.game.camp, save.game);
+    return decodeSave(JSON.stringify(save));
+  };
+
+  it('round-trips a camp exactly', () => {
+    expect(decodeSave(encodeSave(camped(), NOW))?.game).toEqual(camped());
+  });
+
+  it('round-trips a game straight after a win that levelled the camp twice', () => {
+    const g = { ...played(), hordeNumber: 23, camp: { ...newCamp(), xp: 29 } };
+    const h = startHorde(recover(g, NOW + 3 * 60 * 60 * 1000), 5, 'jack', 0, NOW);
+    h.outcome = 'won';
+    const after = finishHorde(g, h, NOW);
+    expect(after.camp.offers).toHaveLength(2);
+    expect(decodeSave(encodeSave(after, NOW))?.game).toEqual(after);
+  });
+
+  it('loads a v6 save with a new camp, and refuses a v7 save without one', () => {
+    const v6 = JSON.stringify({ v: 6, savedAt: NOW, game: preCamp(played()) });
+    expect(decodeSave(v6)?.game.camp).toEqual(newCamp());
+    expect(hostile((s) => delete s.game.camp)).toBeNull();
+    expect(decodeSave(JSON.stringify({ v: 6, savedAt: NOW, game: played() }))).toBeNull();
+  });
+
+  it('round-trips a stopped clock, and a far-past one stops at the floor once loaded', () => {
+    const stopped = withCamp((c) => (c.recruitAt = null)) as { game: GameState };
+    expect(stopped.game.camp.recruitAt).toBeNull();
+    const past = withCamp((c, g) => {
+      c.recruitAt = 0;
+      g.roster = g.roster.slice(0, 1);
+      g.patrols = [];
+    }) as { game: GameState };
+    const caught = recruitArrivals(past.game, NOW);
+    expect(caught.roster).toHaveLength(3);
+    expect(caught.camp.recruitAt).toBeNull();
+    expect(decodeSave(encodeSave(caught, NOW))?.game).toEqual(caught);
+  });
+
+  it('a recruit count at or near its cap stops there and still reloads', () => {
+    for (const recruits of [MAX_COUNT - 1, MAX_COUNT]) {
+      const near = withCamp((c, g) => {
+        Object.assign(c, { recruits, recruitAt: 0 });
+        g.roster = g.roster.slice(0, 1);
+        g.patrols = [];
+      }) as { game: GameState };
+      const after = recruitArrivals(near.game, NOW);
+      expect(after.camp.recruits).toBeLessThanOrEqual(MAX_COUNT);
+      expect(after.camp.recruitAt).toBeNull();
+      expect(recruitArrivals(after, NOW + 10 * 60 * 60 * 1000)).toBe(after);
+      expect(decodeSave(encodeSave(after, NOW))?.game).toEqual(after);
+    }
+  });
+
+  it('cuts a recruit clock past an hour from the save to that', () => {
+    const later = withCamp((c) => (c.recruitAt = NOW + 50 * 60 * 60 * 1000)) as { game: GameState };
+    expect(later.game.camp.recruitAt).toBe(NOW + CAMP_SIZE.recruitMs);
+  });
+
+  it('refuses a camp the game could not have reached', () => {
+    const cases: [string, (c: Loose, g: Loose) => void][] = [
+      ['not an object', (c, g) => (g.camp = [c])],
+      ['extra key', (c) => (c.extra = 1)],
+      ['missing key', (c) => delete c.recruits],
+      ['upgrades negative', (c) => (c.upgrades = -1)],
+      ['upgrades past the last', (c) => (c.upgrades = CAMP_UPGRADES.length + 1)],
+      ['upgrades fractional', (c) => (c.upgrades = 0.5)],
+      ['upgrades as text', (c) => (c.upgrades = '1')],
+      ['xp negative', (c) => (c.xp = -1)],
+      ['xp too big', (c) => (c.xp = MAX_COUNT + 1)],
+      ['xp NaN-ish', (c) => (c.xp = null)],
+      ['pick over its ranks', (c) => (c.picks.medic = CAMP_PICK_RANKS + 1)],
+      ['unknown pick', (c) => (c.picks.cheat = 1)],
+      ['missing pick', (c) => delete c.picks.medic],
+      ['picks not earned', (c) => (c.picks.salvage = 2)],
+      ['offers not earned', (c) => c.offers.push(['salvage'])],
+      ['offer empty', (c) => (c.offers = [[]])],
+      ['offer of four', (c) => (c.offers = [['salvage', 'foraging', 'medic', 'stockpile']])],
+      ['pick twice in an offer', (c) => (c.offers = [['salvage', 'salvage']])],
+      ['unknown offered pick', (c) => (c.offers = [['cheat']])],
+      ['bidi offered pick', (c) => (c.offers = [['‮medic']])],
+      ['zero-width offered pick', (c) => (c.offers = [['med​ic']])],
+      ['padded offered pick', (c) => (c.offers = [[' medic']])],
+      ['offers not an array', (c) => (c.offers = 'salvage')],
+      ['too many offers', (c) => (c.offers = Array(26).fill(['salvage']))],
+      [
+        'offer at the top rank',
+        (c) => {
+          c.xp = MAX_COUNT;
+          c.picks.medic = CAMP_PICK_RANKS;
+          c.offers = [['medic']];
+        },
+      ],
+      ['recruitAt negative', (c) => (c.recruitAt = -1)],
+      ['recruitAt as text', (c) => (c.recruitAt = '1')],
+      ['recruits negative', (c) => (c.recruits = -1)],
+      ['recruits fractional', (c) => (c.recruits = 1.5)],
+      ['recruits as text', (c) => (c.recruits = '1')],
+      ['recruits past the cap', (c) => (c.recruits = MAX_COUNT + 1)],
+      ['recruit not counted', (c) => (c.recruits = 0)],
+      ['recruitAt past the latest time', (c) => (c.recruitAt = 1e14)],
+      [
+        'more people than slots',
+        (c, g) => {
+          c.upgrades = 0;
+          g.roster.push({ ...g.roster[0], id: 'extra-a' }, { ...g.roster[0], id: 'extra-b' });
+        },
+      ],
+    ];
+    for (const [name, change] of cases) expect(withCamp(change), name).toBeNull();
+  });
+
+  it('refuses a polluted camp and leaves Object.prototype alone', () => {
+    const json = encodeSave(camped(), NOW);
+    for (const from of ['"camp":{', '"picks":{']) {
+      expect(json.includes(from)).toBe(true);
+      expect(decodeSave(json.replace(from, `${from}"__proto__":{"polluted":1},`))).toBeNull();
+    }
+    const offer = '"offers":[[';
+    expect(json.includes(offer)).toBe(true);
+    expect(decodeSave(json.replace(offer, `${offer}{"__proto__":{"polluted":1}},`))).toBeNull();
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });

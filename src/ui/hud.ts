@@ -5,9 +5,21 @@
 // Text reaches the page only through textContent.
 import { affixText, heldName } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
+import {
+  campAfterPick,
+  campLevelOf,
+  campXpAfter,
+  campXpFor,
+  hordeCampOffers,
+  recoveryMs,
+  repairOff,
+  type Camp,
+} from '../core/camp.ts';
 import { rerollLock, synergyOf, UPGRADES } from '../core/cards.ts';
 import {
   BANK_CAP,
+  CAMP_PICK_RANKS,
+  CAMP_PICKS,
   FALL_WARNING,
   GAS_PER_WIN,
   MATERIALS,
@@ -20,6 +32,7 @@ import {
   STAT_NAMES,
   STATS,
   type EnemyKind,
+  type CampPickId,
   type HorrorAbility,
   type Profession,
   type ShopItem,
@@ -234,6 +247,8 @@ export interface ResultScreen {
   button: string;
   /** Defenders from a win with stat points to spend, XP added. */
   picks: RosterDefender[];
+  /** Camp-level picks and the offers to pick from before "Back to build" (design §11). */
+  camp: Pick<Camp, 'picks' | 'offers'>;
 }
 
 /** What each stat does, for the picker. */
@@ -277,14 +292,30 @@ function xpLine(g: ReturnType<typeof levelGains>[number], tag: string): string {
 }
 
 /** "Jack · injured by a Shambler · back at 14:05", for a horde that ended at `now`. */
-function injuryLine(s: HordeState, i: Injury, now: number): string {
+function injuryLine(game: GameState, s: HordeState, i: Injury, now: number): string {
   const by = i.by ? ` by ${i.by === 'horror' ? 'the' : 'a'} ${ENEMY_NAME[i.by]}` : '';
-  return `${i.defender.name} · injured${by} · back at ${clockTime(injuredUntil(s, i, now))}`;
+  const back = injuredUntil(s, i, now, recoveryMs(game.camp));
+  return `${i.defender.name} · injured${by} · back at ${clockTime(back)}`;
+}
+
+/** "Camp +12 XP · level 2 (5/60)" for a win, with "· level up!" when it brings one. */
+function campLine(game: GameState, s: HordeState): string {
+  const gain = campXpFor(s);
+  const was = campLevelOf(game.camp.xp).level;
+  const now = campLevelOf(campXpAfter(game, s));
+  const up = now.level > was ? ' · level up!' : '';
+  return `Camp +${gain} XP · level ${now.level} (${now.into}/${now.next})${up}`;
+}
+
+/** A camp-level pick as "Scavenging 2/5: +5% horde cash per kill", its rank after taking it. */
+export function campPickText(camp: Pick<Camp, 'picks'>, id: CampPickId): string {
+  const { name, text } = CAMP_PICKS[id];
+  return `${name} ${camp.picks[id] + 1}/${CAMP_PICK_RANKS}: ${text}`;
 }
 
 /** The repair bill for the damage that carries over, against the stock after the payout. */
 function repairLine(game: GameState, s: HordeState): string {
-  const bill = repairAllCost(baseAfter(game.base, s));
+  const bill = repairAllCost(baseAfter(game.base, s), repairOff(game.camp));
   if (MATERIALS.every((m) => bill[m] === 0)) return 'No repairs needed';
   const payout = hordePayout(s);
   payout.scrap += hordeDrop(game, s)?.scrap ?? 0;
@@ -320,7 +351,12 @@ function dropLines(game: GameState, s: HordeState): string[] {
  */
 export function resultScreen(game: GameState, s: HordeState, now: number): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('resultScreen: the horde is still on');
-  const injured = s.injured.map((i) => injuryLine(s, i, now));
+  const injured = s.injured.map((i) => injuryLine(game, s, i, now));
+  // Offers left from before (normally none: each is picked on its result screen), then this win's.
+  const camp = {
+    picks: game.camp.picks,
+    offers: [...game.camp.offers, ...hordeCampOffers(game, s)],
+  };
   if (s.outcome === 'won') {
     const gains = levelGains(game, s);
     const lines: string[] = [];
@@ -342,11 +378,13 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
         ...findLines(s),
         ...dropLines(game, s),
         ...lines,
+        campLine(game, s),
         ...injured,
         repairLine(game, s),
       ],
       button: 'Back to build',
       picks,
+      camp,
     };
   }
   // Outside in: the outer layers have the higher columns. The innermost is where they got in.
@@ -370,6 +408,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
     ],
     button: `Back to build · retry Horde ${s.hordeNumber}`,
     picks: [],
+    camp,
   };
 }
 
@@ -389,6 +428,7 @@ export function createHud(
   onBuy: (item: ShopItem) => void,
   onArm: (skill: SkillId) => void,
   onReroll: () => void,
+  onCampPick: (id: CampPickId) => void,
 ): {
   update(state: HordeState, armed?: SkillId | null): void;
   showResult(screen: ResultScreen): void;
@@ -415,15 +455,16 @@ export function createHud(
   const resultTitle = el('h2', 'hud-result-title');
   const resultList = el('ul', 'hud-result-list');
   const picker = el('div', 'hud-picker');
+  const campPicker = el('div', 'hud-picker');
   const back = el('button', 'hud-button');
   back.type = 'button';
   back.addEventListener('click', () => {
     // Hide at once so a double click can't finish the same horde twice.
-    if (result.hidden) return;
+    if (result.hidden || back.disabled) return;
     result.hidden = true;
     onDone();
   });
-  result.append(resultTitle, resultList, picker, back);
+  result.append(resultTitle, resultList, picker, campPicker, back);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
@@ -552,6 +593,36 @@ export function createHud(
     return block;
   }
 
+  /**
+   * The camp's level-up offers, oldest first, one at a time; each pick goes out through
+   * `onCampPick`. "Back to build" waits until none is left.
+   */
+  function campBlock(camp: Pick<Camp, 'picks' | 'offers'>): void {
+    const offer = camp.offers[0];
+    back.disabled = offer !== undefined;
+    if (!offer) {
+      campPicker.replaceChildren();
+      return;
+    }
+    const more = camp.offers.length > 1 ? ` (${camp.offers.length} to pick)` : '';
+    const row = el('div', 'hud-card-row');
+    for (const id of offer) {
+      const button = el('button', 'hud-card hud-card-camp');
+      button.type = 'button';
+      button.append(el('span', 'hud-card-title', campPickText(camp, id)));
+      button.addEventListener('click', () => {
+        if (result.hidden) return;
+        const r = campAfterPick(camp, id);
+        if (!r.ok) return;
+        onCampPick(id);
+        campBlock(r.camp);
+        (campPicker.querySelector('button') ?? back).focus();
+      });
+      row.append(button);
+    }
+    campPicker.replaceChildren(el('h3', 'hud-pick-heading', `Camp level up: pick one${more}`), row);
+  }
+
   function showOffer(offer: Card[], state: HordeState): void {
     const heading = el('h2', 'hud-cards-title', 'Level up: pick one');
     const row = el('div', 'hud-card-row');
@@ -662,8 +733,9 @@ export function createHud(
           : []),
       );
       back.textContent = screen.button;
+      campBlock(screen.camp);
       result.hidden = false;
-      back.focus();
+      (campPicker.querySelector('button') ?? back).focus();
     },
   };
 }

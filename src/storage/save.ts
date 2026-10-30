@@ -15,6 +15,7 @@ import {
   type BaseTurret,
   type PostKind,
 } from '../core/base.ts';
+import { campLevelOf, campSlots, newCamp, NO_PICKS, type Camp } from '../core/camp.ts';
 import {
   affixCount,
   affixesFor,
@@ -28,6 +29,10 @@ import {
   BANK_CAP,
   BATTERY_IDS,
   BUILDING_MATERIALS,
+  CAMP_PICK_IDS,
+  CAMP_PICK_RANKS,
+  CAMP_SIZE,
+  CAMP_UPGRADES,
   COLUMNS,
   ITEMS,
   LAB_LEVELS,
@@ -83,6 +88,9 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 7 since the camp (ID-033): a v6 save has no camp, so it gets a new one (5 slots, no camp
+ * XP or picks; the roster floor's clock starts when the game next runs).
+ *
  * 6 since patrol risk (ID-027): a v5 save has no weapons left on the map, and its reports
  * name no casualties.
  *
@@ -90,7 +98,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -107,6 +115,8 @@ const MAX_ROSTER = 100;
 const MAX_TIME = 1e13;
 /** A defender id: lowercase, safe in an `<option value>` and a lookup key. */
 const ID = /^[a-z][a-z0-9-]{0,31}$/;
+/** A free recruit's id and its number (design §11). */
+const RECRUIT = /^recruit-([0-9]+)$/;
 /** A defender name: plain letters, spaces, apostrophes and hyphens; no look-alikes or hidden marks. */
 const NAME = /^[A-Za-z][A-Za-z' -]{0,23}$/;
 /** An owned weapon's uid: `h` and the horde number that dropped it, or `p`, the patrol number that found it and its place in the haul. */
@@ -198,14 +208,20 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
+  if (![SAVE_VERSION, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
-  const materials = o.v === SAVE_VERSION || o.v === 5 || o.v === 4 ? MATERIALS : BUILDING_MATERIALS;
-  const patrols = o.v === SAVE_VERSION ? 'risk' : o.v === 5 ? 'patrols' : null;
-  if (o.v === 1) {
-    return { game: readGame(o.game, savedAt, V1_GRID, materials, patrols), savedAt, grew: true };
+  const ver = o.v as number;
+  const materials = ver >= 4 ? MATERIALS : BUILDING_MATERIALS;
+  const patrols = ver >= 6 ? 'risk' : ver === 5 ? 'patrols' : null;
+  const camp = ver === SAVE_VERSION;
+  if (ver === 1) {
+    return {
+      game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp),
+      savedAt,
+      grew: true,
+    };
   }
-  return { game: readGame(o.game, savedAt, GRID, materials, patrols), savedAt };
+  return { game: readGame(o.game, savedAt, GRID, materials, patrols, camp), savedAt };
 }
 
 function readGame(
@@ -215,6 +231,8 @@ function readGame(
   materials: readonly Material[],
   /** What the save's patrols carry: none (v4 and older), no risk yet (v5), or all of it. */
   patrols: 'patrols' | 'risk' | null,
+  /** Whether the save has a camp (v7). */
+  hasCamp: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -240,6 +258,7 @@ function readGame(
     ...(old.perks ? [] : ['perks']),
     ...(patrols ? ['patrols', 'patrolsSent', 'reports'] : []),
     ...(patrols === 'risk' ? ['leftBehind'] : []),
+    ...(hasCamp ? ['camp'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -265,7 +284,14 @@ function readGame(
     patrolsSent,
     reports: patrols ? readReports(o.reports, savedAt, patrolsSent, out, patrols === 'risk') : [],
     leftBehind: patrols === 'risk' ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent) : [],
+    camp: hasCamp ? readCamp(o.camp, savedAt) : newCamp(),
   };
+  if (game.roster.length > campSlots(game)) fail('more people than camp slots');
+  // A free recruit's number comes from the camp's count, so the next one is always new.
+  for (const d of game.roster) {
+    const n = RECRUIT.exec(d.id)?.[1];
+    if (n !== undefined && Number(n) > game.camp.recruits) fail('recruit not counted');
+  }
   // Each owned weapon is one item, in the armoury, in one pair of hands or left on the
   // map, and the camp keeps at most ARMOURY_CAP.
   const owned = [
@@ -282,6 +308,39 @@ function readGame(
   }
   // Loading a save is between hordes: batteries waiting in storage go into the bank.
   return loadBatteries(game);
+}
+
+/**
+ * The camp (design §11): upgrades bought, lifetime camp XP, and picks and offers no more
+ * than its levels have earned, each pick within its ranks and each offer distinct picks
+ * still below the top. The floor's clock never runs past a recruit's wait from the save
+ * (a clock set back is cut to that).
+ */
+function readCamp(v: unknown, savedAt: number): Camp {
+  const o = obj(v, ['upgrades', 'xp', 'picks', 'offers', 'recruitAt', 'recruits']);
+  const xp = int(o.xp, 0, MAX_COUNT);
+  const p = obj(o.picks, CAMP_PICK_IDS);
+  const picks = { ...NO_PICKS };
+  for (const id of CAMP_PICK_IDS) picks[id] = int(p[id], 0, CAMP_PICK_RANKS);
+  const offers = arr(o.offers, 0, CAMP_PICK_IDS.length * CAMP_PICK_RANKS).map((x) => {
+    const offer = arr(x, 1, 3).map((id) => oneOf(id, CAMP_PICK_IDS));
+    if (new Set(offer).size !== offer.length) fail('pick twice in an offer');
+    if (offer.some((id) => picks[id] >= CAMP_PICK_RANKS)) fail('offer at the top rank');
+    return offer;
+  });
+  const taken = CAMP_PICK_IDS.reduce((n, id) => n + picks[id], 0);
+  if (taken + offers.length > campLevelOf(xp).level - 1) fail('picks not earned');
+  return {
+    upgrades: int(o.upgrades, 0, CAMP_UPGRADES.length),
+    xp,
+    picks,
+    offers,
+    recruitAt:
+      o.recruitAt === null
+        ? null
+        : Math.min(int(o.recruitAt, 0, MAX_TIME), savedAt + CAMP_SIZE.recruitMs),
+    recruits: int(o.recruits, 0, MAX_COUNT),
+  };
 }
 
 function readTiers(v: unknown): Tier[] {

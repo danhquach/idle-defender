@@ -31,6 +31,7 @@ import {
   type Result,
   type TurretMount,
 } from '../core/base.ts';
+import { repairOff } from '../core/camp.ts';
 import { postUsable } from '../core/cards.ts';
 import {
   BANK_CAP,
@@ -328,8 +329,8 @@ export function turretLines(game: GameState, index: number): SlotLine[] {
     {
       kind: 'action',
       label: 'Repair turret',
-      cost: turretRepairCost(t),
-      result: repairTurret(game.base, game.stock, index),
+      cost: turretRepairCost(t, repairOff(game.camp)),
+      result: repairTurret(game.base, game.stock, index, repairOff(game.camp)),
     },
     {
       kind: 'action',
@@ -373,8 +374,8 @@ export function trapLines(game: GameState, row: number): SlotLine[] {
     {
       kind: 'action',
       label: 'Repair trap',
-      cost: trapRepairCost(t),
-      result: repairTrap(base, stock, index),
+      cost: trapRepairCost(t, repairOff(game.camp)),
+      result: repairTrap(base, stock, index, repairOff(game.camp)),
     },
     {
       kind: 'action',
@@ -655,7 +656,11 @@ export function createBuildPanel(
         next ? TIERS[next].cost : null,
         upgradeSegment(base, stock, tiers, column, row),
       ),
-      option('Repair', repairCost(seg), repairSegment(base, stock, column, row)),
+      option(
+        'Repair',
+        repairCost(seg, repairOff(game.camp)),
+        repairSegment(base, stock, column, row, repairOff(game.camp)),
+      ),
       ...mount,
       slotLine(lineWallLine(game, column)),
     ];
@@ -713,7 +718,10 @@ export function createBuildPanel(
         : [el('p', 'build-slot-note', 'Click a slot on the field to build there.')]),
     );
     const all = el('section', 'build-all');
-    all.append(option(`Repair all`, repairAllCost(game.base), repairAll(game.base, game.stock)));
+    const off = repairOff(game.camp);
+    all.append(
+      option(`Repair all`, repairAllCost(game.base, off), repairAll(game.base, game.stock, off)),
+    );
     const start = el('section', 'build-start-section');
     const viewButton = (label: string, view: 'roster' | 'perks'): HTMLButtonElement => {
       const button = el('button', 'build-option', label);
@@ -760,7 +768,7 @@ export function createBuildPanel(
     return [
       el('h2', 'build-title', 'Roster'),
       backButton('roster'),
-      ...rosterSection(game, Date.now(), onGame),
+      ...rosterSection(game, Date.now(), onGame, (q) => window.confirm(q)),
     ];
   }
 

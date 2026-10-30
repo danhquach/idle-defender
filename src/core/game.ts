@@ -4,6 +4,15 @@
 import { heldName, isOwned, rollDrop, type Held, type OwnedWeapon } from './armoury.ts';
 import { newBase, type Base, type Tier } from './base.ts';
 import {
+  campXpAfter,
+  cashRate,
+  hordeCampOffers,
+  newCamp,
+  recoveryMs,
+  startCash,
+  type Camp,
+} from './camp.ts';
+import {
   ARMOURY_CAP,
   BANK_CAP,
   DEFENDER_XP,
@@ -68,6 +77,8 @@ export interface GameState {
   reports: PatrolReport[];
   /** Weapons the dead left on the map, oldest first, for the next patrol there (design §10). */
   leftBehind: LeftWeapon[];
+  /** Capacity, camp XP and level picks, and the roster floor (design §11). */
+  camp: Camp;
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -99,6 +110,7 @@ export function newGame(): GameState {
     patrolsSent: 0,
     reports: [],
     leftBehind: [],
+    camp: newCamp(),
   });
 }
 
@@ -331,12 +343,18 @@ export function hordeDrop(game: GameState, h: HordeState): Drop | null {
 }
 
 /**
- * When `injury` heals, for a horde that ended at `now`: `RECOVERY_MS` from the injury,
- * counted back from `now` in fight time (which stops during offers, so never early).
+ * When `injury` heals, for a horde that ended at `now`: `rest` (`RECOVERY_MS` less any
+ * Field Medic) from the injury, counted back from `now` in fight time (which stops during
+ * offers, so never early).
  */
-export function injuredUntil(horde: HordeState, injury: Injury, now: number): number {
+export function injuredUntil(
+  horde: HordeState,
+  injury: Injury,
+  now: number,
+  rest = RECOVERY_MS,
+): number {
   finite('injuredUntil', now);
-  return now - (horde.time - injury.at) * 1000 + RECOVERY_MS;
+  return now - (horde.time - injury.at) * 1000 + rest;
 }
 
 /** Horde `game.hordeNumber` on the current base, with the defenders fit and home at `now`; `postId` indexes `game.base.posts`. */
@@ -367,14 +385,16 @@ export function startHorde(
     startedAt: now,
     skills: SKILL_IDS.filter((id) => game.research.includes(id)),
     perks: game.perks,
+    cashRate: cashRate(game.camp),
+    startCash: startCash(game.camp),
   });
 }
 
 /**
- * Back to building at `now` (when the horde ended): the fight's damage stays, the
- * payout is added, a win gives XP and maybe a weapon or a find and moves on, and the injured
- * rest (`injuredUntil`). The bank keeps the charge left; the generator's clock skips
- * the fight, then it runs to `now` and batteries load.
+ * Back to building at `now` (when the horde ended): the fight's damage stays and the
+ * payout is added. A win gives XP, camp XP and its level-up offers, maybe a weapon or a
+ * find, and moves on. The injured rest (`injuredUntil`). The bank keeps the charge left;
+ * the generator's clock skips the fight, then it runs to `now` and batteries load.
  */
 export function finishHorde(game: GameState, horde: HordeState, now: number): GameState {
   finite('finishHorde', now);
@@ -398,9 +418,11 @@ export function finishHorde(game: GameState, horde: HordeState, now: number): Ga
   }
   for (const i of horde.injured) {
     const d = g.roster.find((r) => r.id === i.defender.id);
-    if (d) d.injuredUntil = injuredUntil(horde, i, now);
+    if (d) d.injuredUntil = injuredUntil(horde, i, now, recoveryMs(game.camp));
   }
   if (horde.outcome === 'won') {
+    g.camp.offers.push(...hordeCampOffers(game, horde));
+    g.camp.xp = campXpAfter(game, horde);
     g.hordeNumber += 1;
     // Capped where a save reads it, so a win never leaves a save that won't load.
     g.power.gas = Math.min(MAX_COUNT, g.power.gas + GAS_PER_WIN);

@@ -188,11 +188,13 @@ describe('hud', () => {
           'Found: 2 food', // this seed's find
           'Bob +15 XP · level 1 (15/25)',
           'Jack +15 XP · level 1 (15/25)',
+          'Camp +7 XP · level 1 (7/30)',
           `Jack · injured by a Shambler · back at ${jackBack}`,
           'No repairs needed',
         ],
         button: 'Back to build',
         picks: [],
+        camp: { picks: game.camp.picks, offers: [] },
       });
     });
 
@@ -409,6 +411,7 @@ describe('hud', () => {
         ],
         button: 'Back to build · retry Horde 1',
         picks: [],
+        camp: { picks: game.camp.picks, offers: [] },
       });
     });
 
