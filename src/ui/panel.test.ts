@@ -2,6 +2,7 @@
 // Design §5, as built ID-021: the build panel opens the perk loadout and the roster in
 // its place; Equip and Unequip hand the new game on; Back returns focus to the opener.
 import { describe, expect, it } from 'vitest';
+import { buildSegment, type Base } from '../core/base.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createBuildPanel } from './build.ts';
 
@@ -78,5 +79,44 @@ describe('perk loadout in the build panel', () => {
     panel.hide();
     panel.show(newGame(), null);
     expect(title()).toBe('Build');
+  });
+});
+
+describe('gates in the build menu (ID-026)', () => {
+  /** The panel on `game` with slot `column`, `row` picked; each build is kept in `built`. */
+  function slotPanel(game: GameState, column: number, row: number) {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const built: Base[] = [];
+    const panel = createBuildPanel(
+      root,
+      (base) => built.push(base),
+      () => {},
+      () => {},
+      () => {},
+    );
+    panel.show(game, { column, row, what: 'segment' });
+    const button = (label: string) =>
+      [...root.querySelectorAll('button')].find((b) => b.textContent?.startsWith(label));
+    return { built, button };
+  }
+
+  it('builds a gate on an empty slot of a new layer', () => {
+    const { built, button } = slotPanel(newGame(), 1, 2);
+    const gate = button('Wood gate')!;
+    expect(gate.disabled).toBe(false);
+    gate.click();
+    expect(built[0]!.layers.find((l) => l.column === 1)!.slots[2]!.kind).toBe('gate');
+    // Locked tiers say so, as walls do.
+    expect(button('Metal gate')!.disabled).toBe(true);
+  });
+
+  it('offers no gate on a layer that has one', () => {
+    const g = newGame();
+    const r = buildSegment(g.base, g.stock, g.tiers, 1, 0, 'gate', 'wood');
+    if (!r.ok) throw new Error(r.reason);
+    const { button } = slotPanel({ ...g, base: r.base, stock: r.stock }, 1, 1);
+    expect(button('Wood gate')).toBeUndefined();
+    expect(button('Wood wall')!.disabled).toBe(false);
   });
 });

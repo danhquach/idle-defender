@@ -924,6 +924,35 @@ Set before sending; they apply to any location, plaza or single building.
   matching rarity *(designer's call)*.
 - New locations are revealed by research, scouting or boss hordes
   *(guess)*.
+- **As built (ID-026, starting points):** the ten single-building
+  locations above, round trips (out, search, back in equal thirds): gas
+  station T1 15 min, supermarket T1 20 min, electronics store T2 45 min,
+  hardware store T2 1 h, pharmacy T2 1 h, construction site T3 2 h,
+  police station T3 2 h, hospital T4 3 h, military depot T4 4 h, the
+  crater T5 8 h. Patrols open after Horde 2; the gas station, supermarket
+  and electronics store show from the start, the hardware store after
+  Horde 3 and the pharmacy after Horde 5; the rest wait for research
+  (ID-035). A patrol needs a gate with HP above 0, and 1 or more idle
+  defenders (fit and not already out); there is no limit on parties out.
+  A location or defender the game never offers is a programming error and
+  throws, as an unknown id does when equipping.
+  A party out can't defend, and its weapons can't be changed. Each search
+  makes **3 rolls**, +1 per 3 × tier of **party strength** (each member's
+  level + primary weapon's rarity power + Grit), +2 at most; each extra
+  roll also gives a found weapon a 25% chance of one rarity up. Found
+  weapons' rarity rises with the tier (the crater never drops Rusty);
+  Gas and batteries go to the power, weapons to the armoury (salvaged for
+  Scrap when it is full). Stand-ins until the items exist: the toolkit
+  for Tools, the knife for a machete or chainsaw; ammo-type affixes are
+  left out; the crater's "Anything" rolls another location's table. Loot
+  comes from the seed the patrol left with, so a patrol that finished
+  while the game was closed brings back the same. **Patrol XP** per
+  member: the horde-win XP of the horde number it left at × hours out ×
+  (1 + 0.5 per tier above 1). Each return leaves a report (the latest 20
+  are kept) for the world map screen (ID-028). Gates can be built from
+  the build menu, one per layer (a layer that has one offers none).
+  Risk, injuries and deaths come with ID-027; until then every member
+  comes back.
 
 ## 11. Resources and research
 

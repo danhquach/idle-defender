@@ -8,6 +8,13 @@ import { BUILDING_MATERIALS, stockOf } from '../core/data.ts';
 export const oldStock = (game: GameState): Record<string, number> =>
   Object.fromEntries(BUILDING_MATERIALS.map((m) => [m, game.stock[m]]));
 
+/** `game` as JSON from before ID-026 (v4 and older): no patrols, count or reports. */
+export function prePatrol(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  for (const key of ['patrols', 'patrolsSent', 'reports']) delete json[key];
+  return json;
+}
+
 /** A fixed save time, in ms since the epoch. */
 export const NOW = 1_800_000_000_000;
 

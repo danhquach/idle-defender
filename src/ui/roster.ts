@@ -3,6 +3,7 @@
 // Text only via textContent; the badge colour is a constant.
 import {
   ITEMS,
+  LOCATIONS,
   PROFESSIONS,
   RARITY_ORDER,
   STAT_NAMES,
@@ -25,6 +26,7 @@ import {
   type RosterDefender,
 } from '../core/game.ts';
 import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
+import { patrolDue, type Patrol } from '../core/patrol.ts';
 import { badgeOf, levelOf, titleIn, titleName, unspentPoints } from '../core/stats.ts';
 import { defenderLabel, el, STAT_HINT } from './hud.ts';
 import { BADGE_COLOUR } from './render.ts';
@@ -61,7 +63,8 @@ export interface RosterEntry {
   status: string;
 }
 
-export function rosterEntry(d: RosterDefender, now: number): RosterEntry {
+/** `patrol` is the one `d` is out on, if any. */
+export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): RosterEntry {
   const { level, into, next } = levelOf(d.xp);
   const titles = (Object.keys(PROFESSIONS) as Profession[])
     .map((p) => titleIn(d.stats, p))
@@ -73,7 +76,11 @@ export function rosterEntry(d: RosterDefender, now: number): RosterEntry {
     stats: STATS.map((s) => `${STAT_NAMES[s]} ${d.stats[s]}`).join(' · '),
     titles: titles.length ? titles.join(', ') : 'No titles yet',
     points: left > 0 ? `${left} stat point${left === 1 ? '' : 's'} to spend` : '',
-    status: available(d, now) ? 'Fit' : `Resting · ${restLeft(d.injuredUntil!, now)} left`,
+    status: patrol
+      ? `On patrol · ${LOCATIONS[patrol.location].name} · ${restLeft(patrolDue(patrol), now)} left`
+      : available(d, now)
+        ? 'Fit'
+        : `Resting · ${restLeft(d.injuredUntil!, now)} left`,
   };
 }
 
@@ -171,7 +178,11 @@ export function rosterSection(
   onChange: (next: GameState) => void,
 ): HTMLElement[] {
   return game.roster.map((d) => {
-    const entry = rosterEntry(d, now);
+    const entry = rosterEntry(
+      d,
+      now,
+      game.patrols.find((p) => p.members.includes(d.id)),
+    );
     const card = el('section', 'roster-entry');
     const head = el('h3', 'build-slot-title', entry.label);
     const badge = badgeElement(d);

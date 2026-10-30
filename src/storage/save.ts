@@ -31,9 +31,12 @@ import {
   COLUMNS,
   ITEMS,
   LAB_LEVELS,
+  LOCATION_IDS,
+  LOCATIONS,
   MATERIALS,
   MAX_COUNT,
   MAX_CONDITION,
+  PATROL,
   PERK_IDS,
   START_PERK,
   POST_KINDS,
@@ -51,6 +54,7 @@ import {
   WALK_SPOTS,
   WEAPONS,
   stockOf,
+  type Battery,
   type FreeWeaponId,
   type ItemId,
   type Material,
@@ -62,6 +66,12 @@ import {
   type WeaponId,
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
+import {
+  partyStrength,
+  type Patrol,
+  type PatrolReport,
+  type ReportWeapon,
+} from '../core/patrol.ts';
 import { loadoutError, loadoutFrom, type Loadout } from '../core/loadout.ts';
 import { perkSlots, unlockedPerks } from '../core/perks.ts';
 import { loadBatteries, newPower, type Power } from '../core/power.ts';
@@ -72,10 +82,11 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
- * 4 since the resource inventory (ID-025); a v3 save has the same shape, with only the
- * building materials in its stock (the rest start at 0), and a v2 one less its perks too.
+ * 5 since patrols (ID-026); a v4 save has the same shape less its patrols and reports (none
+ * out, none kept). A v3 save also has only the building materials in its stock (the rest
+ * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -94,8 +105,10 @@ const MAX_TIME = 1e13;
 const ID = /^[a-z][a-z0-9-]{0,31}$/;
 /** A defender name: plain letters, spaces, apostrophes and hyphens; no look-alikes or hidden marks. */
 const NAME = /^[A-Za-z][A-Za-z' -]{0,23}$/;
-/** An owned weapon's uid: `h` and the horde number that dropped it. */
-const UID = /^h[1-9][0-9]{0,5}$/;
+/** An owned weapon's uid: `h` and the horde number that dropped it, or `p`, the patrol number that found it and its place in the haul. */
+const UID = /^(?:h[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-[0-9])$/;
+/** Seeds are 32-bit. */
+const MAX_SEED = 0xffffffff;
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 /** Only a free weapon is held by id; any other is an owned item with a uid. */
 const FREE_IDS: readonly FreeWeaponId[] = FREE_WEAPONS;
@@ -181,13 +194,14 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (o.v !== SAVE_VERSION && o.v !== 3 && o.v !== 2 && o.v !== 1) fail('version');
+  if (o.v !== SAVE_VERSION && o.v !== 4 && o.v !== 3 && o.v !== 2 && o.v !== 1) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
-  const materials = o.v === SAVE_VERSION ? MATERIALS : BUILDING_MATERIALS;
+  const materials = o.v === SAVE_VERSION || o.v === 4 ? MATERIALS : BUILDING_MATERIALS;
+  const patrols = o.v === SAVE_VERSION;
   if (o.v === 1) {
-    return { game: readGame(o.game, savedAt, V1_GRID, materials), savedAt, grew: true };
+    return { game: readGame(o.game, savedAt, V1_GRID, materials, patrols), savedAt, grew: true };
   }
-  return { game: readGame(o.game, savedAt, GRID, materials), savedAt };
+  return { game: readGame(o.game, savedAt, GRID, materials, patrols), savedAt };
 }
 
 function readGame(
@@ -195,6 +209,7 @@ function readGame(
   savedAt: number,
   grid: Grid,
   materials: readonly Material[],
+  patrols: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -218,24 +233,31 @@ function readGame(
     ...(old.lab ? [] : ['lab', 'research']),
     ...(old.power ? [] : ['power']),
     ...(old.perks ? [] : ['perks']),
+    ...(patrols ? ['patrols', 'patrolsSent', 'reports'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
   const research = old.lab ? [] : readResearch(o.research, lab, tiers);
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
+  const patrolsSent = patrols ? int(o.patrolsSent, 0, PATROL.max) : 0;
+  const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent);
+  const out = patrols ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, roster) : [];
   const game: GameState = {
     hordeNumber,
     base: readBase(o.base, tiers, research.includes('auto-turret'), grid),
     stock: readStock(o.stock, materials),
     tiers,
-    roster: readRoster(o.roster, savedAt, hordeNumber),
+    roster,
     armoury: old.armoury
       ? []
-      : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber)),
+      : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber, patrolsSent)),
     lab,
     research,
     power: old.power ? newPower() : readPower(o.power, savedAt),
     perks: old.perks ? [START_PERK] : readPerks(o.perks, research),
+    patrols: out,
+    patrolsSent,
+    reports: patrols ? readReports(o.reports, savedAt, patrolsSent, out) : [],
   };
   // Each owned weapon is one item, in the armoury or in one pair of hands, and the camp keeps at most ARMOURY_CAP.
   const owned = [
@@ -244,6 +266,11 @@ function readGame(
   ].filter((h): h is OwnedWeapon => typeof h === 'object' && h !== null);
   if (owned.length > ARMOURY_CAP) fail('too many weapons');
   if (new Set(owned.map((w) => w.uid)).size !== owned.length) fail('weapon twice');
+  // A patrol's weapons reach the camp when it comes back, not before.
+  const away = new Set(out.map((p) => p.no));
+  if (owned.some((w) => w.uid.startsWith('p') && away.has(Number(w.uid.slice(1).split('-')[0])))) {
+    fail('weapon from a patrol still out');
+  }
   // Loading a save is between hordes: batteries waiting in storage go into the bank.
   return loadBatteries(game);
 }
@@ -472,11 +499,11 @@ function turretOrder(a: BaseTurret, b: BaseTurret): number {
 }
 
 /** A loadout the game allows (design §6): a gun as primary, a shield only with a blade. */
-function readLoadout(v: unknown, hordeNumber: number): Loadout {
+function readLoadout(v: unknown, hordeNumber: number, patrolsSent: number): Loadout {
   const o = obj(v, ['primary', 'secondary', 'item']);
   const loadout: Loadout = {
-    primary: readHeld(o.primary, hordeNumber),
-    secondary: o.secondary === null ? null : readHeld(o.secondary, hordeNumber),
+    primary: readHeld(o.primary, hordeNumber, patrolsSent),
+    secondary: o.secondary === null ? null : readHeld(o.secondary, hordeNumber, patrolsSent),
     item: o.item === null ? null : oneOf(o.item, ITEM_IDS),
   };
   if (loadoutError(loadout) !== null) fail('bad loadout');
@@ -484,18 +511,20 @@ function readLoadout(v: unknown, hordeNumber: number): Loadout {
 }
 
 /** A free weapon by id, or an owned one. */
-function readHeld(v: unknown, hordeNumber: number): Held {
-  return typeof v === 'string' ? oneOf(v, FREE_IDS) : readOwned(v, hordeNumber);
+function readHeld(v: unknown, hordeNumber: number, patrolsSent: number): Held {
+  return typeof v === 'string' ? oneOf(v, FREE_IDS) : readOwned(v, hordeNumber, patrolsSent);
 }
 
 /**
- * An owned weapon the game could have dropped: a uid from a horde already won, and
- * exactly its rarity's affixes, each one that fits the weapon, once, in range.
+ * An owned weapon the game could have dropped: a uid from a horde already won or a
+ * patrol already sent, and exactly its rarity's affixes, each one that fits the
+ * weapon, once, in range.
  */
-function readOwned(v: unknown, hordeNumber: number): OwnedWeapon {
+function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedWeapon {
   const o = obj(v, ['uid', 'base', 'rarity', 'affixes']);
-  const uid = text(o.uid, 7, UID);
-  if (Number(uid.slice(1)) >= hordeNumber) fail('weapon from the future');
+  const uid = text(o.uid, 9, UID);
+  const from = Number(uid.slice(1).split('-')[0]);
+  if (from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) fail('weapon from the future');
   const base = oneOf(o.base, WEAPON_IDS);
   const rarity = oneOf(o.rarity, RARITY_ORDER);
   const count = affixCount(base, rarity);
@@ -509,14 +538,19 @@ function readOwned(v: unknown, hordeNumber: number): OwnedWeapon {
   return { uid, base, rarity, affixes };
 }
 
-function readRoster(v: unknown, savedAt: number, hordeNumber: number): RosterDefender[] {
+function readRoster(
+  v: unknown,
+  savedAt: number,
+  hordeNumber: number,
+  patrolsSent: number,
+): RosterDefender[] {
   const list = arr(v, 1, MAX_ROSTER);
   const lacks = (key: string): boolean =>
     list.every((d) => typeof d === 'object' && d !== null && !Object.hasOwn(d, key));
   // A save from before stats (0.4.1 and older) has none on any defender: all 0.
   // One from before loadouts (0.4.3 and older) has a single `weapon` on each instead.
   const old = { stats: lacks('stats'), loadout: lacks('loadout') };
-  const roster = list.map((d) => readDefender(d, savedAt, hordeNumber, old));
+  const roster = list.map((d) => readDefender(d, savedAt, hordeNumber, patrolsSent, old));
   if (new Set(roster.map((d) => d.id)).size !== roster.length) fail('id twice');
   return roster;
 }
@@ -527,6 +561,7 @@ function readDefender(
   v: unknown,
   savedAt: number,
   hordeNumber: number,
+  patrolsSent: number,
   old: { stats: boolean; loadout: boolean },
 ): RosterDefender {
   const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout'];
@@ -537,7 +572,7 @@ function readDefender(
     name: text(o.name, 24, NAME),
     loadout: old.loadout
       ? loadoutFrom(oneOf(o.weapon, FREE_IDS))
-      : readLoadout(o.loadout, hordeNumber),
+      : readLoadout(o.loadout, hordeNumber, patrolsSent),
     xp,
     stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
@@ -547,4 +582,102 @@ function readDefender(
         ? null
         : Math.min(num(o.injuredUntil, 0, MAX_TIME), savedAt + RECOVERY_MS),
   };
+}
+
+/**
+ * Parties out (design §10): each sent once, in order, from patrol 1 to `patrolsSent`, to
+ * a location on the map, after patrols opened. Each member is on the roster, on one
+ * patrol only, and was fit when it left. A start after the save (a clock set back) is cut
+ * to it, as the generator's is. Its strength is never above what the party has now:
+ * levels and weapons don't change while away, and stat points only grow.
+ */
+function readPatrols(
+  v: unknown,
+  savedAt: number,
+  hordeNumber: number,
+  patrolsSent: number,
+  roster: readonly RosterDefender[],
+): Patrol[] {
+  const seen = new Set<string>();
+  const patrols = arr(v, 0, roster.length).map((x): Patrol => {
+    const o = obj(x, ['no', 'location', 'members', 'sentAt', 'sentHorde', 'strength', 'seed']);
+    const no = int(o.no, 1, patrolsSent);
+    const sentHorde = int(o.sentHorde, PATROL.unlock, hordeNumber);
+    const location = oneOf(o.location, LOCATION_IDS);
+    const reveal = LOCATIONS[location].reveal;
+    if (reveal === null || reveal > sentHorde) fail('location not on the map');
+    const sentAt = Math.min(int(o.sentAt, 0, MAX_TIME), savedAt);
+    const members = arr(o.members, 1, roster.length).map((m) => {
+      const id = text(m, 32, ID);
+      const d = roster.find((r) => r.id === id);
+      if (!d) fail('patrol member not on the roster');
+      if (seen.has(id)) fail('member on two patrols');
+      if (d.injuredUntil !== null && d.injuredUntil > sentAt) fail('sent injured');
+      seen.add(id);
+      return d;
+    });
+    const strength = num(o.strength, 0, MAX_COUNT);
+    if (strength > partyStrength(members)) fail('patrol stronger than its party');
+    return {
+      no,
+      location,
+      members: members.map((d) => d.id),
+      sentAt,
+      sentHorde,
+      strength,
+      seed: int(o.seed, 0, MAX_SEED),
+    };
+  });
+  for (let i = 1; i < patrols.length; i++) {
+    if (patrols[i]!.no <= patrols[i - 1]!.no) fail('patrols out of order');
+  }
+  return patrols;
+}
+
+/** Patrol reports: at most `PATROL.reports`, each from a patrol sent and back, oldest first. */
+function readReports(
+  v: unknown,
+  savedAt: number,
+  patrolsSent: number,
+  out: readonly Patrol[],
+): PatrolReport[] {
+  const reports = arr(v, 0, PATROL.reports).map((x): PatrolReport => {
+    const o = obj(x, [
+      'no',
+      'location',
+      'names',
+      'returnedAt',
+      'stock',
+      'gas',
+      'batteries',
+      'weapons',
+      'xp',
+    ]);
+    const no = int(o.no, 1, patrolsSent);
+    if (out.some((p) => p.no === no)) fail('report from a patrol still out');
+    const b = obj(o.batteries, BATTERY_IDS);
+    const batteries = {} as Record<Battery, number>;
+    for (const id of BATTERY_IDS) batteries[id] = int(b[id], 0, MAX_COUNT);
+    return {
+      no,
+      location: oneOf(o.location, LOCATION_IDS),
+      names: arr(o.names, 0, MAX_ROSTER).map((n) => text(n, 24, NAME)),
+      returnedAt: Math.min(int(o.returnedAt, 0, MAX_TIME), savedAt),
+      stock: readStock(o.stock, MATERIALS),
+      gas: int(o.gas, 0, MAX_COUNT),
+      batteries,
+      weapons: arr(o.weapons, 0, PATROL.rolls + PATROL.bonusRolls).map((w): ReportWeapon => {
+        const x = obj(w, ['base', 'rarity', 'kept']);
+        if (typeof x.kept !== 'boolean') fail('kept');
+        return {
+          base: oneOf(x.base, WEAPON_IDS),
+          rarity: oneOf(x.rarity, RARITY_ORDER),
+          kept: x.kept,
+        };
+      }),
+      xp: int(o.xp, 0, MAX_COUNT),
+    };
+  });
+  if (new Set(reports.map((r) => r.no)).size !== reports.length) fail('report twice');
+  return reports;
 }

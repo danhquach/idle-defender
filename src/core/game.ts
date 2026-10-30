@@ -30,6 +30,7 @@ import {
 } from './data.ts';
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
+import type { Patrol, PatrolReport } from './patrol.ts';
 import { loadBatteries, newPower, runGenerator, type Power } from './power.ts';
 import { chance, pick, rngFrom } from './rng.ts';
 import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
@@ -59,6 +60,12 @@ export interface GameState {
   power: Power;
   /** Commander perks equipped, one per perk slot (design §5). */
   perks: PerkId[];
+  /** Parties out on patrol (design §10), in the order sent. */
+  patrols: Patrol[];
+  /** Patrols sent so far; the next one is number `patrolsSent + 1`. */
+  patrolsSent: number;
+  /** The latest patrol reports, oldest first. */
+  reports: PatrolReport[];
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -86,6 +93,9 @@ export function newGame(): GameState {
     research: [],
     power: newPower(),
     perks: [START_PERK],
+    patrols: [],
+    patrolsSent: 0,
+    reports: [],
   });
 }
 
@@ -97,6 +107,10 @@ function finite(name: string, now: number): void {
 export function available(d: RosterDefender, now: number): boolean {
   return d.injuredUntil === null || now >= d.injuredUntil;
 }
+
+/** Whether defender `id` is out on a patrol. */
+export const onPatrol = (game: Pick<GameState, 'patrols'>, id: string): boolean =>
+  game.patrols.some((p) => p.members.includes(id));
 
 /** Clears every injury that has healed by `now`; returns `game` itself when none has. */
 export function recover(game: GameState, now: number): GameState {
@@ -251,6 +265,8 @@ export function equip(
   const i = game.roster.findIndex((d) => d.id === defenderId);
   if (i < 0) throw new RangeError(`equip: no defender ${String(defenderId)}`);
   const me = game.roster[i]!;
+  // A patrol takes its weapons with it (design §10).
+  if (onPatrol(game, me.id)) return { ok: false, reason: `${me.name} is on patrol` };
   const known = (id: string | null, table: object): boolean =>
     id === null || Object.hasOwn(table, id);
   const owned = [...game.armoury, ...carried(me)];
@@ -320,7 +336,7 @@ export function injuredUntil(horde: HordeState, injury: Injury, now: number): nu
   return now - (horde.time - injury.at) * 1000 + RECOVERY_MS;
 }
 
-/** Horde `game.hordeNumber` on the current base, with the defenders fit at `now`; `postId` indexes `game.base.posts`. */
+/** Horde `game.hordeNumber` on the current base, with the defenders fit and home at `now`; `postId` indexes `game.base.posts`. */
 export function startHorde(
   game: GameState,
   seed: number,
@@ -329,7 +345,7 @@ export function startHorde(
   now: number,
 ): HordeState {
   finite('startHorde', now);
-  const fit = game.roster.filter((d) => available(d, now));
+  const fit = game.roster.filter((d) => available(d, now) && !onPatrol(game, d.id));
   if (!fit.some((d) => d.id === defenderId)) {
     throw new RangeError(`startHorde: ${String(defenderId)} can't defend`);
   }

@@ -19,6 +19,7 @@ import {
   tick,
   type HordeState,
 } from '../core/horde.ts';
+import { settlePatrols } from '../core/patrol.ts';
 import { runGenerator } from '../core/power.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
@@ -387,9 +388,9 @@ export function start(root: HTMLElement, art: Art): void {
         hud.showResult(resultScreen(game, horde, endedAt));
       }
     } else {
-      // Someone back from rest, or the generator burnt a Gas: save and redraw.
+      // Someone back from rest or patrol, or the generator burnt a Gas: save and redraw.
       const now = Date.now();
-      const settled = runGenerator(recover(game, now), now);
+      const settled = settlePatrols(runGenerator(recover(game, now), now), now);
       if (settled !== game) {
         commit(settled);
         panel.show(game, selected);

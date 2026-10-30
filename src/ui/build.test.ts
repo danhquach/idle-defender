@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, buildTrap, buildTurret, lineWall } from '../core/base.ts';
 import { BANK_CAP, GENERATOR, SEGMENTS, TRAPS, TURRET, stockOf } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
+import { sendPatrol } from '../core/patrol.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
-import { oldStock } from '../storage/testing.ts';
+import { oldStock, prePatrol } from '../storage/testing.ts';
 import {
   buildTurretLine,
   lineResult,
@@ -84,13 +85,20 @@ describe('build panel', () => {
     expect(pickStart(g, null, null, 999)).toBeNull();
   });
 
+  it('skips defenders out on patrol, and lists when they are back', () => {
+    const r = sendPatrol({ ...newGame(), hordeNumber: 3 }, 'gas-station', ['bob'], 1, 0);
+    if (!r.ok) throw new Error(r.reason);
+    expect(pickStart(r.game, 'bob', null, 0)).toEqual({ defenderId: 'jack', postId: 0 });
+    expect(injuredLines(r.game, 0)).toEqual([`Bob · on patrol, back at ${clockTime(15 * 60_000)}`]);
+  });
+
   it('lists who is injured and when they are back', () => {
     const g = newGame();
     g.roster[1]!.injuredUntil = new Date(2026, 0, 1, 14, 5).getTime();
-    const lines = injuredLines(g.roster, 0);
+    const lines = injuredLines(g, 0);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^Jack · injured, back at .*05/);
-    expect(injuredLines(g.roster, g.roster[1]!.injuredUntil)).toEqual([]);
+    expect(injuredLines(g, g.roster[1]!.injuredUntil)).toEqual([]);
   });
 
   it('Load code: says why a code is refused, without asking', () => {
@@ -120,6 +128,7 @@ describe('build panel', () => {
     // A code from before the taller field (a v1 save, 5 rows) says the field grew.
     const old = JSON.parse(encodeSave(g, 1_800_000_000_000));
     old.v = 1;
+    old.game = prePatrol(g);
     old.game.stock = oldStock(g);
     old.game.base.layers[0].slots = old.game.base.layers[0].slots.slice(3, 8);
     old.game.base.posts = old.game.base.posts.map((p: { row: number }) => ({
