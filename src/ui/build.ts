@@ -8,6 +8,8 @@ import {
   buildSegment,
   buildTrap,
   buildTurret,
+  freeWalkSpots,
+  lineWall,
   moveTurret,
   repairAll,
   repairAllCost,
@@ -18,6 +20,8 @@ import {
   repairTurret,
   salvageTurret,
   salvageValue,
+  spotField,
+  spotOf,
   trapRefund,
   trapRepairCost,
   turretRepairCost,
@@ -47,6 +51,7 @@ import {
   TRAPS,
   TURRET,
   TURRET_MOUNTS,
+  WALK_SPOTS,
   type Stock,
 } from '../core/data.ts';
 import { available, type GameState, type RosterDefender } from '../core/game.ts';
@@ -63,6 +68,7 @@ import {
   POST_NAME,
   postName,
   slotName,
+  spotName,
   stockText,
   wholeLeft,
 } from './hud.ts';
@@ -104,7 +110,7 @@ export function stockBarText(game: GameState): string {
 }
 
 /** A post's slot as a stable key: building a post re-sorts `base.posts`, so ids shift. */
-export const postKey = (p: BasePost): string => `${p.kind}:${p.column}:${p.row}`;
+export const postKey = (p: BasePost): string => `${p.kind}:${p.column}:${p.row}:${spotOf(p)}`;
 
 /** Posts a start defender may take: every post but a wall-walk over a broken segment. */
 function usablePosts(base: Base): BasePost[] {
@@ -217,8 +223,12 @@ export const MOUNT_NAME: Readonly<Record<TurretMount, string>> = {
   tower: 'Tower',
   'wall-walk': 'Wall mount',
 };
-const mountName = (mount: TurretMount, column: number, row: number): string =>
-  `${MOUNT_NAME[mount]} · ${slotName(column, row)}`;
+const mountName = (mount: TurretMount, column: number, row: number, spot: number): string =>
+  `${MOUNT_NAME[mount]} · ${slotName(column, row)}` +
+  (mount === 'wall-walk' ? `, ${spotName(spot)}` : '');
+/** The spots a mount kind has on a slot: two on a wall, one on a tower. */
+const spotsOf = (kind: TurretMount): number[] =>
+  Array.from({ length: kind === 'wall-walk' ? WALK_SPOTS : 1 }, (_, spot) => spot);
 
 /** A turret's state as the panel says it (design §7). */
 export const TURRET_STATE: Readonly<Record<TurretState, string>> = {
@@ -246,8 +256,11 @@ export const turretIndex = (
   mount: TurretMount,
   column: number,
   row: number,
+  spot = 0,
 ): number =>
-  game.base.turrets.findIndex((t) => t.mount === mount && t.column === column && t.row === row);
+  game.base.turrets.findIndex(
+    (t) => t.mount === mount && t.column === column && t.row === row && spotOf(t) === spot,
+  );
 
 /** Building an Auto-turret on this mount, as a dry run. */
 export function buildTurretLine(
@@ -255,12 +268,38 @@ export function buildTurretLine(
   mount: TurretMount,
   column: number,
   row: number,
+  spot = 0,
 ): SlotLine {
+  const ok = researched(game, 'auto-turret');
   return {
     kind: 'action',
-    label: `Auto-turret${mount === 'wall-walk' ? ' (wall mount)' : ''}`,
+    label: `Auto-turret${mount === 'wall-walk' ? ` (wall mount, ${spotName(spot)})` : ''}`,
     cost: TURRET.cost,
-    result: buildTurret(game.base, game.stock, researched(game, 'auto-turret'), mount, column, row),
+    result: buildTurret(game.base, game.stock, ok, mount, column, row, spot),
+  };
+}
+
+/**
+ * "Line the wall" on layer `column` (design §3): one wall-walk post per free spot of
+ * its standing segments, with the total cost shown first. It asks before going ahead,
+ * saying how many the stock covers when it can't cover them all.
+ */
+export function lineWallLine(game: GameState, column: number): SlotLine {
+  const free = freeWalkSpots(game.base, column).length;
+  const cost = Object.fromEntries(
+    Object.entries(POST_COST['wall-walk']).map(([m, n]) => [m, n * free]),
+  ) as Partial<Stock>;
+  const result = lineWall(game.base, game.stock, column);
+  const built = result.ok ? result.base.posts.length - game.base.posts.length : 0;
+  const posts = (n: number): string => `${n} wall-walk post${n === 1 ? '' : 's'}`;
+  return {
+    kind: 'action',
+    label: free > 0 ? `Line the wall: ${posts(free)}` : 'Line the wall',
+    cost: free > 0 ? cost : null,
+    result,
+    confirm:
+      `Line layer ${column + 1} with ${posts(free)} for ${stockText(cost)}?` +
+      (built < free ? ` The stock covers ${built}.` : ''),
   };
 }
 
@@ -271,7 +310,7 @@ export function turretLines(game: GameState, index: number): SlotLine[] {
   const state = turretState({ layers, energy: game.power.bank }, turrets[index]!);
   const value = salvageValue(t);
   return [
-    { kind: 'heading', text: `Auto-turret · ${mountName(t.mount, t.column, t.row)}` },
+    { kind: 'heading', text: `Auto-turret · ${mountName(t.mount, t.column, t.row, spotOf(t))}` },
     {
       kind: 'note',
       text: `Condition ${wholeLeft(t.condition)}/${MAX_CONDITION} · ${TURRET_STATE[state]}`,
@@ -353,13 +392,15 @@ export function relocateTargets(
   COLUMNS.forEach((_, column) => {
     for (const mount of TURRET_MOUNTS) {
       for (let row = 0; row < SEGMENTS; row++) {
-        const result = moveTurret(game.base, game.stock, index, mount, column, row);
-        if (result.ok) {
-          targets.push({
-            key: `${mount}:${column}:${row}`,
-            label: mountName(mount, column, row),
-            result,
-          });
+        for (const spot of spotsOf(mount)) {
+          const result = moveTurret(game.base, game.stock, index, mount, column, row, spot);
+          if (result.ok) {
+            targets.push({
+              key: `${mount}:${column}:${row}:${spot}`,
+              label: mountName(mount, column, row, spot),
+              result,
+            });
+          }
         }
       }
     }
@@ -566,17 +607,20 @@ export function createBuildPanel(
       ];
     }
     const next = TIER_ORDER[TIER_ORDER.indexOf(seg.tier) + 1];
-    const walk: BasePost = { kind: 'wall-walk', column, row };
-    const hasWalk = base.posts.some((p) => postKey(p) === postKey(walk));
-    const turret = turretIndex(game, 'wall-walk', column, row);
-    const mount = hasWalk
-      ? [el('p', 'build-slot-note', 'Has a wall-walk post')]
-      : turret >= 0
-        ? turretMenu(game, turret)
-        : [
-            option(POST_NAME['wall-walk'], POST_COST['wall-walk'], buildPost(base, stock, walk)),
-            slotLine(buildTurretLine(game, 'wall-walk', column, row)),
-          ];
+    // Each wall-walk spot, top to bottom: its post, its turret's menu, or what may go there.
+    const mount = spotsOf('wall-walk').flatMap((spot): HTMLElement[] => {
+      const walk: BasePost = { kind: 'wall-walk', column, row, ...spotField(spot) };
+      const name = `${POST_NAME['wall-walk']} (${spotName(spot)})`;
+      if (base.posts.some((p) => postKey(p) === postKey(walk))) {
+        return [el('p', 'build-slot-note', `Has a wall-walk post on ${spotName(spot)}`)];
+      }
+      const turret = turretIndex(game, 'wall-walk', column, row, spot);
+      if (turret >= 0) return turretMenu(game, turret);
+      return [
+        option(name, POST_COST['wall-walk'], buildPost(base, stock, walk)),
+        slotLine(buildTurretLine(game, 'wall-walk', column, row, spot)),
+      ];
+    });
     return [
       el(
         'h3',
@@ -591,6 +635,7 @@ export function createBuildPanel(
       ),
       option('Repair', repairCost(seg), repairSegment(base, stock, column, row)),
       ...mount,
+      slotLine(lineWallLine(game, column)),
     ];
   }
 

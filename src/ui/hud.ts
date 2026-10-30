@@ -69,8 +69,11 @@ export const POST_NAME: Readonly<Record<PostKind, string>> = {
 };
 export const slotName = (column: number, row: number): string =>
   `Layer ${column + 1}, row ${row + 1}`;
-export const postName = (p: Pick<Post, 'kind' | 'column' | 'row'>): string =>
-  `${POST_NAME[p.kind]} · ${slotName(p.column, p.row)}`;
+/** A wall-walk spot's name on its segment, top to bottom: "spot 1", "spot 2". */
+export const spotName = (spot: number): string => `spot ${spot + 1}`;
+export const postName = (p: Pick<Post, 'kind' | 'column' | 'row' | 'spot'>): string =>
+  `${POST_NAME[p.kind]} · ${slotName(p.column, p.row)}` +
+  (p.kind === 'wall-walk' ? `, ${spotName(p.spot ?? 0)}` : '');
 
 /** A defender's name tag and the profession their loadout gives them: "Jack the Gunner — Ripper". */
 export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'loadout' | 'stats'>): string =>

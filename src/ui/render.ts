@@ -28,6 +28,7 @@ import { professionOf } from '../core/loadout.ts';
 import { badgeOf } from '../core/stats.ts';
 import {
   depthSort,
+  mountDepth,
   HEIGHT_SCALE,
   PIECE,
   postFloor,
@@ -615,7 +616,7 @@ export function drawScene(
     const reserved = !manned && post.defenderId !== null;
     const floor = postFloor(scene.layers, post);
     sprites.push({
-      y: post.y,
+      y: mountDepth(post.kind, post.y, post.row),
       x: post.x,
       draw: () => {
         drawMount(ctx, art, post.kind, post, floor, cam);
@@ -630,7 +631,11 @@ export function drawScene(
     });
   }
   for (const t of scene.turrets) {
-    sprites.push({ y: t.y, x: t.x, draw: () => drawTurret(ctx, art, scene, t, cam) });
+    sprites.push({
+      y: mountDepth(t.mount, t.y, t.row),
+      x: t.x,
+      draw: () => drawTurret(ctx, art, scene, t, cam),
+    });
   }
   for (const d of scene.defenders) {
     if (!d.walking) continue;

@@ -1,5 +1,6 @@
 import {
   postXY,
+  spotOf,
   type Base,
   type PostKind,
   type SegmentKind,
@@ -131,6 +132,8 @@ export interface Post {
   kind: PostKind;
   column: number;
   row: number;
+  /** A wall-walk's spot on its segment; absent = 0. */
+  spot?: number;
   x: number;
   y: number;
   /** Occupied by, or reserved for a defender walking to it. */
@@ -142,6 +145,8 @@ export interface Turret {
   mount: TurretMount;
   column: number;
   row: number;
+  /** A wall mount's spot on its segment; absent = 0. */
+  spot?: number;
   x: number;
   y: number;
   condition: number;
@@ -385,7 +390,7 @@ export function layoutOf(base: Base): {
   const turrets: Turret[] = base.turrets.map((t, id) => ({
     id,
     ...t,
-    ...postXY({ kind: t.mount, column: t.column, row: t.row }),
+    ...postXY({ kind: t.mount, column: t.column, row: t.row, spot: spotOf(t) }),
     nextShotAt: 0,
   }));
   const traps: Trap[] = base.traps.map((t, id) => ({ id, ...t, hit: [] }));
@@ -504,7 +509,9 @@ export function baseAfter(base: Base, horde: HordeState): Base {
     b.turrets.length === horde.turrets.length &&
     b.turrets.every((t, i) => {
       const h = horde.turrets[i]!;
-      return h.mount === t.mount && h.column === t.column && h.row === t.row;
+      return (
+        h.mount === t.mount && h.column === t.column && h.row === t.row && spotOf(h) === spotOf(t)
+      );
     });
   const sameTraps =
     b.traps.length === horde.traps.length &&
@@ -1065,7 +1072,8 @@ function breach(s: HordeState, e: Enemy, fromX: number): void {
  * Pushes overlapping enemies apart along `y` only (never `x`, so never through a
  * wall): the upper one up, the lower one down (equal `y` → lower id up), each by
  * half the overlap capped per step. Computed from pre-push positions, then clamped
- * to the field.
+ * to the field. An enemy in the camp and one still outside never push each other: a
+ * wall stands between them, so one pressed against it can't hold a hunter off for good.
  */
 function separate(s: HordeState): void {
   const push = new Map<number, number>();
@@ -1075,6 +1083,7 @@ function separate(s: HordeState): void {
     for (let j = i + 1; j < es.length; j++) {
       const a = es[i]!;
       const b = es[j]!;
+      if (a.inCamp !== b.inCamp) continue;
       const overlap = 2 * ENEMY_RADIUS - Math.hypot(a.x - b.x, a.y - b.y);
       if (overlap <= 0) continue;
       const aUp = a.y < b.y || (a.y === b.y && a.id < b.id);

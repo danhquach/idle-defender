@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { buildPost, buildSegment, buildTurret, newBase, type Base } from '../core/base.ts';
-import { FIELD, START_STOCK } from '../core/data.ts';
-import { newHorde, standing } from '../core/horde.ts';
+import {
+  buildPost,
+  buildSegment,
+  buildTurret,
+  newBase,
+  spotField,
+  spotOf,
+  type Base,
+} from '../core/base.ts';
+import { FIELD, SEGMENT_HEIGHT, START_STOCK, WALL } from '../core/data.ts';
+import { layoutOf, newHorde, standing } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
 import {
   clampCamera,
@@ -9,6 +17,8 @@ import {
   fightHitAt,
   fitCamera,
   MARGIN_Y,
+  mountDepth,
+  PIECE,
   project,
   slotAt,
   unproject,
@@ -150,6 +160,60 @@ describe('projection', () => {
   });
 });
 
+describe('two spots on one wall segment (ID-048)', () => {
+  const rich = { ...START_STOCK, wood: 500, scrap: 500 };
+  let base = newBase();
+  for (const spot of [1, 0] as const) {
+    const r = buildPost(base, rich, { kind: 'wall-walk', column: 0, row: 3, ...spotField(spot) });
+    if (!r.ok) throw new Error(r.reason);
+    base = r.base;
+  }
+  const r = buildTurret(base, rich, true, 'wall-walk', 0, 2, 0);
+  if (!r.ok) throw new Error(r.reason);
+  const { posts, turrets } = layoutOf(r.base);
+  const [top, bottom] = posts.filter((p) => p.kind === 'wall-walk');
+
+  it('stand side by side without their platforms or defenders overlapping', () => {
+    expect(spotOf(top!)).toBe(0);
+    expect(spotOf(bottom!)).toBe(1);
+    expect(top!.x).toBe(bottom!.x);
+    for (const half of [PIECE.walk.halfDepth, PIECE.defender.halfDepth]) {
+      expect(top!.y + half).toBeLessThan(bottom!.y - half);
+      // Each stays on its own segment.
+      expect(top!.y - half).toBeGreaterThanOrEqual(3 * SEGMENT_HEIGHT);
+      expect(bottom!.y + half).toBeLessThanOrEqual(4 * SEGMENT_HEIGHT);
+    }
+  });
+
+  it('draw on top of their segment, back spot first; other pieces keep their y', () => {
+    const segment = (row: number) => ({
+      name: `wall ${row}`,
+      y: (row + 0.5) * SEGMENT_HEIGHT,
+      x: 500 + WALL.depth + 0.5,
+    });
+    const sprites = [
+      { name: 'spot 2', y: mountDepth(bottom!.kind, bottom!.y, bottom!.row), x: bottom!.x },
+      { name: 'spot 1', y: mountDepth(top!.kind, top!.y, top!.row), x: top!.x },
+      {
+        name: 'turret',
+        y: mountDepth(turrets[0]!.mount, turrets[0]!.y, turrets[0]!.row),
+        x: turrets[0]!.x,
+      },
+      segment(3),
+      segment(2),
+    ];
+    expect(depthSort(sprites).map((x) => x.name)).toEqual([
+      'wall 2',
+      'turret',
+      'wall 3',
+      'spot 1',
+      'spot 2',
+    ]);
+    expect(mountDepth('tower', 123, 1)).toBe(123);
+    expect(mountDepth('ground', 5, 0)).toBe(5);
+  });
+});
+
 describe('slotAt', () => {
   // The starting base: column 0 built (wall x 500), towers at column 0 rows 4 and 6
   // (x 420); columns 1 (x 760) and 2 (x 1020) empty.
@@ -241,8 +305,12 @@ describe('fightHitAt', () => {
   function fight() {
     const rich = { ...START_STOCK, wood: 500, scrap: 500 };
     let base = newBase();
-    for (const row of [0, 1]) {
-      const r = buildPost(base, rich, { kind: 'wall-walk', column: 0, row });
+    for (const [row, spot] of [
+      [0, 0],
+      [0, 1],
+      [1, 0],
+    ] as const) {
+      const r = buildPost(base, rich, { kind: 'wall-walk', column: 0, row, ...spotField(spot) });
       if (!r.ok) throw new Error(r.reason);
       base = r.base;
     }
@@ -263,12 +331,16 @@ describe('fightHitAt', () => {
     expect(fightHitAt(460, 452, s)).toBeNull();
   });
 
-  it('a wall-walk post covers its segment; the front one wins', () => {
+  it('a wall-walk post covers its spot of the segment, up to its top; the front one wins', () => {
     const s = fight();
-    const ww = (row: number) => s.posts.findIndex((p) => p.kind === 'wall-walk' && p.row === row);
-    expect(fightHitAt(510, 70, s)).toEqual({ postId: ww(1) });
-    expect(fightHitAt(510, 10, s)).toEqual({ postId: ww(0) });
-    expect(fightHitAt(515, 150, s)).toEqual({ postId: ww(1) });
+    const ww = (row: number, spot: number) =>
+      s.posts.findIndex((p) => p.kind === 'wall-walk' && p.row === row && spotOf(p) === spot);
+    // Each spot is 40 deep; its 46-high post lifts its top 61 up the screen.
+    expect(fightHitAt(510, -40, s)).toEqual({ postId: ww(0, 0) });
+    expect(fightHitAt(510, 0, s)).toEqual({ postId: ww(0, 1) });
+    expect(fightHitAt(510, 70, s)).toEqual({ postId: ww(1, 0) });
+    // Row 1's spot 2 is unbuilt.
+    expect(fightHitAt(515, 150, s)).toBeNull();
   });
 
   it('misses open ground and bad points', () => {

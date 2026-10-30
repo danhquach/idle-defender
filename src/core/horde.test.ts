@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildPost, buildSegment, newBase, type Base, type Result } from './base.ts';
+import { buildPost, buildSegment, newBase, spotOf, type Base, type Result } from './base.ts';
 import { chooseCard } from './cards.ts';
 import {
   FIELD,
+  MELEE_REACH,
   SEGMENT_HEIGHT,
   SEGMENTS,
   START_BASE,
@@ -254,6 +255,19 @@ describe('tick', () => {
     enemy(edge, { x: 520, y: 12 });
     enemy(edge, { x: 520, y: 12 });
     for (const e of tick(edge, 1).enemies) expect(e.y).toBeGreaterThanOrEqual(12);
+  });
+
+  it('an enemy outside, pressed to the wall, never holds off a hunter in the camp behind it', () => {
+    // a stands on the wall-walk at (510, 20); row 9 is broken, row 8 stands. The hunter
+    // walks up the wall line past an enemy pressed against row 8, 24 px away.
+    const s = fightOn(postsBase([]), ['wall-walk', 0]);
+    s.layers[0]!.segments[9]!.hp = 0;
+    enemy(s, { x: 520, y: 716, hp: 1e6, maxHp: 1e6 });
+    const hunter = enemy(s, { x: 510, y: 738, hp: 1e6, maxHp: 1e6, inCamp: true });
+    const after = tick(s, 30);
+    const h = after.enemies.find((e) => e.id === hunter.id)!;
+    expect(h.y).toBeLessThan(20 + 2 * MELEE_REACH);
+    expect(after.defenders[0]!.hp).toBeLessThan(after.defenders[0]!.maxHp);
   });
 
   it('separation does not depend on enemy order', () => {
@@ -680,26 +694,26 @@ describe('moving defenders', () => {
     expect(moved.posts[to]!.defenderId).toBe('a');
     expect(moved.defenders[0]).toMatchObject({ postId: to, walking: true, x: 420, y: 360 });
 
-    const time = Math.hypot(510 - 420, 40 - 360) / WALK_SPEED;
+    const time = Math.hypot(510 - 420, 20 - 360) / WALK_SPEED;
     const early = tick(moved, time - STEP);
     expect(early.defenders[0]!.walking).toBe(true);
     expect(early.defenders[0]!.x).toBeGreaterThan(420);
     expect(early.defenders[0]!.x).toBeLessThan(510);
     const late = tick(moved, time + STEP);
-    expect(late.defenders[0]).toMatchObject({ walking: false, x: 510, y: 40, postId: to });
+    expect(late.defenders[0]).toMatchObject({ walking: false, x: 510, y: 20, postId: to });
   });
 
   it('fires a pistol (a sidearm) on the move, from where the walker is, and on arrival', () => {
     const s = fightOn(postsBase([]), ['tower', 4]);
     const moved = mustMove(s, 'a', postId(s, 'wall-walk', 0));
-    const target = enemy(moved, { x: 700, y: 40, hp: 1000, maxHp: 1000 });
+    const target = enemy(moved, { x: 700, y: 20, hp: 1000, maxHp: 1000 });
     const first = tick(moved, STEP);
     expect(first.defenders[0]!.walking).toBe(true);
     expect(first.shots).toEqual([
       expect.objectContaining({ fromX: first.defenders[0]!.x, fromY: first.defenders[0]!.y }),
     ]);
     // The whole walk from the tower again, so it has certainly arrived.
-    const arrived = tick(first, Math.hypot(510 - 420, 40 - 360) / WALK_SPEED);
+    const arrived = tick(first, Math.hypot(510 - 420, 20 - 360) / WALK_SPEED);
     expect(arrived.defenders[0]!.walking).toBe(false);
     expect(arrived.enemies.find((e) => e.id === target.id)!.hp).toBeLessThan(1000);
   });
@@ -856,6 +870,33 @@ describe('dropping off a broken wall', () => {
       ['b', postId(s, 'ground', 4)],
     ]);
     expect(after.bench.map((d) => d.id)).toEqual(['c']);
+  });
+
+  it('drops both defenders off the two spots of one broken segment (ID-048)', () => {
+    const base = postsBase([0, 3], (b, st) =>
+      buildPost(b, st, { kind: 'wall-walk', column: 0, row: 0, spot: 1 }),
+    );
+    const spot1 = (st: HordeState) =>
+      st.posts.findIndex((p) => p.kind === 'wall-walk' && p.row === 0 && spotOf(p) === 1);
+    const probe = fightOn(base, ['tower', 4]);
+    expect(probe.posts[spot1(probe)]).toMatchObject({ x: 510, y: 60 });
+    expect(probe.posts[postId(probe, 'wall-walk', 0)]).toMatchObject({ x: 510, y: 20 });
+    // a starts on spot 2, b stands on spot 1 of the same segment.
+    const s = newHorde(1, { ...setup(), base, startPostId: spot1(probe) });
+    s.toSpawn = 0;
+    const post = s.posts[postId(s, 'wall-walk', 0)]!;
+    const [b] = s.bench.splice(0, 1);
+    s.defenders.push(standing(b!, post, 0));
+    post.defenderId = b!.id;
+    breakNext(s, 0);
+    const after = tick(s, STEP);
+    // Both are nearest ground row 0; a goes first in array order, b takes row 3.
+    expect(after.defenders.map((d) => [d.id, d.postId, d.walking])).toEqual([
+      ['a', postId(s, 'ground', 0), true],
+      ['b', postId(s, 'ground', 3), true],
+    ]);
+    expect(after.posts[spot1(s)]!.defenderId).toBeNull();
+    expect(after.posts[postId(s, 'wall-walk', 0)]!.defenderId).toBeNull();
   });
 
   it('ignores ground posts ahead of the broken layer', () => {

@@ -6,12 +6,14 @@
 // crashing, and is kept aside rather than overwritten.
 import {
   segmentMaxHp,
+  spotOf,
   type Base,
   type BaseLayer,
   type BasePost,
   type BaseSegment,
   type BaseTrap,
   type BaseTurret,
+  type PostKind,
 } from '../core/base.ts';
 import {
   affixCount,
@@ -42,6 +44,7 @@ import {
   TRAP_DURABILITY,
   TRAP_KINDS,
   TURRET_MOUNTS,
+  WALK_SPOTS,
   WEAPONS,
   type ItemId,
   type ResearchId,
@@ -54,7 +57,7 @@ import type { GameState, RosterDefender } from '../core/game.ts';
 import { loadoutError, loadoutFrom, type Loadout } from '../core/loadout.ts';
 import { loadBatteries, newPower, type Power } from '../core/power.ts';
 import { earnedPoints, NO_STATS, spentPoints } from '../core/stats.ts';
-import { arr, fail, int, num, obj, oneOf, text } from './validate.ts';
+import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
@@ -288,7 +291,9 @@ function readBase(
   for (let i = 1; i < layers.length; i++) {
     if (layers[i]!.column <= layers[i - 1]!.column) fail('layers out of order');
   }
-  const posts = arr(o.posts, 0, COLUMNS.length * SEGMENTS * POST_KINDS.length).map((p) =>
+  // Each kind once per slot, plus a wall-walk's extra spots.
+  const postSlots = POST_KINDS.length + WALK_SPOTS - 1;
+  const posts = arr(o.posts, 0, COLUMNS.length * SEGMENTS * postSlots).map((p) =>
     readPost(p, grid),
   );
   for (let i = 1; i < posts.length; i++) {
@@ -301,8 +306,8 @@ function readBase(
   }
   const turrets = old
     ? []
-    : arr(o.turrets, 0, COLUMNS.length * SEGMENTS * TURRET_MOUNTS.length).map((t) =>
-        readTurret(t, grid),
+    : arr(o.turrets, 0, COLUMNS.length * SEGMENTS * (TURRET_MOUNTS.length + WALK_SPOTS - 1)).map(
+        (t) => readTurret(t, grid),
       );
   if (turrets.length > 0 && !turretsResearched) fail('turret not researched');
   for (let i = 1; i < turrets.length; i++) {
@@ -312,7 +317,12 @@ function readBase(
     // The rules buildTurret keeps: a wall mount sits on a wall, a tower behind one, and a spot holds a post or a turret.
     const layer = layers.find((l) => l.column === t.column);
     if (t.mount === 'wall-walk' ? !layer?.slots[t.row] : !layer) fail('turret with no wall');
-    if (posts.some((p) => p.kind === t.mount && p.column === t.column && p.row === t.row)) {
+    if (
+      posts.some(
+        (p) =>
+          p.kind === t.mount && p.column === t.column && p.row === t.row && spotOf(p) === spotOf(t),
+      )
+    ) {
       fail('turret on a post');
     }
   }
@@ -334,13 +344,30 @@ function readTrap(v: unknown, grid: Grid): BaseTrap {
 }
 
 function readTurret(v: unknown, grid: Grid): BaseTurret {
-  const o = obj(v, ['mount', 'column', 'row', 'condition']);
+  const keys = ['mount', 'column', 'row', 'condition'];
+  const o = obj(v, hasSpot(v) ? [...keys, 'spot'] : keys);
+  const mount = oneOf(o.mount, TURRET_MOUNTS);
   return {
-    mount: oneOf(o.mount, TURRET_MOUNTS),
+    mount,
     column: int(o.column, 0, COLUMNS.length - 1),
     row: int(o.row, 0, grid.rows - 1) + grid.shift,
+    ...readSpot(o, mount),
     condition: num(o.condition, 0, MAX_CONDITION) + 0, // + 0 turns -0 into 0
   };
+}
+
+const hasSpot = (v: unknown): boolean =>
+  typeof v === 'object' && v !== null && Object.hasOwn(v, 'spot');
+
+/**
+ * A wall-walk's spot past the first, as `spotField` writes it: spot 0 is never written,
+ * and only a wall-walk has others. A post from before spots (0.4.15 and older) has none:
+ * it keeps the first spot of its segment.
+ */
+function readSpot(o: Obj, kind: PostKind): { spot?: number } {
+  if (!Object.hasOwn(o, 'spot')) return {};
+  if (kind !== 'wall-walk') fail('spot off a wall');
+  return { spot: int(o.spot, 1, WALK_SPOTS - 1) };
 }
 
 function readLayer(v: unknown, tiers: readonly Tier[], grid: Grid): BaseLayer {
@@ -367,11 +394,14 @@ function readSegment(v: unknown, tiers: readonly Tier[]): BaseSegment {
 }
 
 function readPost(v: unknown, grid: Grid): BasePost {
-  const o = obj(v, ['kind', 'column', 'row']);
+  const keys = ['kind', 'column', 'row'];
+  const o = obj(v, hasSpot(v) ? [...keys, 'spot'] : keys);
+  const kind = oneOf(o.kind, POST_KINDS);
   return {
-    kind: oneOf(o.kind, POST_KINDS),
+    kind,
     column: int(o.column, 0, COLUMNS.length - 1),
     row: int(o.row, 0, grid.rows - 1) + grid.shift,
+    ...readSpot(o, kind),
   };
 }
 
@@ -384,15 +414,23 @@ function readStats(v: unknown, xp: number): Stats {
   return stats;
 }
 
-/** The order buildPost keeps posts in: column, then kind, then row. */
+/** The order buildPost keeps posts in: column, then kind, then row, then spot. */
 function postOrder(a: BasePost, b: BasePost): number {
-  return a.column - b.column || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || a.row - b.row;
+  return (
+    a.column - b.column ||
+    (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) ||
+    a.row - b.row ||
+    spotOf(a) - spotOf(b)
+  );
 }
 
-/** The order buildTurret keeps turrets in: column, then mount, then row. */
+/** The order buildTurret keeps turrets in: column, then mount, then row, then spot. */
 function turretOrder(a: BaseTurret, b: BaseTurret): number {
   return (
-    a.column - b.column || (a.mount < b.mount ? -1 : a.mount > b.mount ? 1 : 0) || a.row - b.row
+    a.column - b.column ||
+    (a.mount < b.mount ? -1 : a.mount > b.mount ? 1 : 0) ||
+    a.row - b.row ||
+    spotOf(a) - spotOf(b)
   );
 }
 

@@ -20,6 +20,7 @@ import {
   TRAPS,
   TURRET,
   TURRET_MOUNTS,
+  WALK_SPOTS,
   type Material,
   type PostKind,
   type Stock,
@@ -45,12 +46,16 @@ export interface BasePost {
   kind: PostKind;
   column: number;
   row: number;
+  /** A wall-walk post's spot on its segment, 0 … `WALK_SPOTS - 1`; absent = 0, the only one other kinds have. */
+  spot?: number;
 }
 /** A turret on its mount (design §7): never destroyed, jammed at condition 0. */
 export interface BaseTurret {
   mount: TurretMount;
   column: number;
   row: number;
+  /** A wall mount's spot on its segment, as a post's; absent = 0. */
+  spot?: number;
   /** 0 (jammed) … `MAX_CONDITION`. */
   condition: number;
 }
@@ -61,7 +66,7 @@ export interface BaseTrap {
   /** 0 (broken) … `TRAP_DURABILITY`. */
   durability: number;
 }
-/** Layers sorted by column; posts and turrets sorted by (column, kind, row); traps by row. */
+/** Layers sorted by column; posts and turrets sorted by (column, kind, row, spot); traps by row. */
 export interface Base {
   layers: BaseLayer[];
   posts: BasePost[];
@@ -76,13 +81,21 @@ export function segmentMaxHp(kind: SegmentKind, tier: Tier): number {
   return TIERS[tier].hp * (kind === 'gate' ? GATE_HP : 1);
 }
 
+/** Where a post stands; a wall-walk spot sits in its share of the segment, top to bottom. */
 export function postXY(post: BasePost): { x: number; y: number } {
   checkPost(post);
+  const along = post.kind === 'wall-walk' ? (spotOf(post) + 0.5) / WALK_SPOTS : 0.5;
   return {
     x: COLUMNS[post.column]! + POST_OFFSET[post.kind],
-    y: (post.row + 0.5) * SEGMENT_HEIGHT,
+    y: (post.row + along) * SEGMENT_HEIGHT,
   };
 }
+
+/** A post's or turret's spot on its segment: 0 unless set. */
+export const spotOf = (p: { spot?: number }): number => p.spot ?? 0;
+
+/** `{ spot }` for a spot past the first, else nothing: spot 0 is never written out. */
+export const spotField = (spot: number): { spot?: number } => (spot > 0 ? { spot } : {});
 
 /** The starting base (design §11): one wood layer with a gate, two towers. */
 export function newBase(): Base {
@@ -205,21 +218,61 @@ export function repairAll(base: Base, stock: Stock): Result {
 export function buildPost(base: Base, stock: Stock, post: BasePost): Result {
   checkPost(post);
   const { kind, column, row } = post;
-  if (spotTaken(base, kind, column, row)) return refuse('Slot taken');
+  const spot = spotOf(post);
+  if (spotTaken(base, kind, column, row, spot)) return refuse('Slot taken');
   const layer = layerAt(base, column);
   if (kind === 'wall-walk' && !layer?.slots[row]) return refuse('A wall-walk post needs a wall');
   if (kind !== 'wall-walk' && !layer?.slots.some((s) => s)) {
     return refuse(`${kind === 'tower' ? 'A tower' : 'A ground post'} needs a wall in front`);
   }
   return pay(base, stock, POST_COST[kind], (b) => {
-    b.posts.push({ kind, column, row });
+    b.posts.push({ kind, column, row, ...spotField(spot) });
     b.posts.sort(byPost);
   });
 }
 
+/** Every free wall-walk spot on layer `column`'s built segments, top to bottom: what "Line the wall" fills. */
+export function freeWalkSpots(base: Base, column: number): BasePost[] {
+  checkSlot(column, 0);
+  const free: BasePost[] = [];
+  layerAt(base, column)?.slots.forEach((seg, row) => {
+    if (!seg) return;
+    for (let spot = 0; spot < WALK_SPOTS; spot++) {
+      if (!spotTaken(base, 'wall-walk', column, row, spot)) {
+        free.push({ kind: 'wall-walk', column, row, ...spotField(spot) });
+      }
+    }
+  });
+  return free;
+}
+
+/**
+ * "Line the wall": a wall-walk post on every free spot of layer `column`'s built
+ * segments (as `buildPost` allows), top to bottom, stopping when the stock runs out. Refused when no spot is
+ * free or the stock can't cover even one.
+ */
+export function lineWall(base: Base, stock: Stock, column: number): Result {
+  const free = freeWalkSpots(base, column);
+  if (free.length === 0) return refuse('No free spot on this wall');
+  let result = buildPost(base, stock, free[0]!);
+  if (!result.ok) return result;
+  for (const post of free.slice(1)) {
+    const next = buildPost(result.base, result.stock, post);
+    if (!next.ok) break;
+    result = next;
+  }
+  return result;
+}
+
 /** Where a turret may go, or why not: a free spot, a wall under a wall mount, a wall in front of a tower. */
-function mountError(base: Base, mount: TurretMount, column: number, row: number): string | null {
-  if (spotTaken(base, mount, column, row)) return 'Slot taken';
+function mountError(
+  base: Base,
+  mount: TurretMount,
+  column: number,
+  row: number,
+  spot: number,
+): string | null {
+  if (spotTaken(base, mount, column, row, spot)) return 'Slot taken';
   const layer = layerAt(base, column);
   if (mount === 'wall-walk' && !layer?.slots[row]) return 'A wall mount needs a wall';
   if (mount === 'tower' && !layer?.slots.some((s) => s))
@@ -235,13 +288,14 @@ export function buildTurret(
   mount: TurretMount,
   column: number,
   row: number,
+  spot = 0,
 ): Result {
-  checkMount(mount, column, row);
+  checkMount(mount, column, row, spot);
   if (!researched) return refuse('Research the Auto-turret first');
-  const why = mountError(base, mount, column, row);
+  const why = mountError(base, mount, column, row, spot);
   if (why) return refuse(why);
   return pay(base, stock, TURRET.cost, (b) => {
-    b.turrets.push({ mount, column, row, condition: MAX_CONDITION });
+    b.turrets.push({ mount, column, row, ...spotField(spot), condition: MAX_CONDITION });
     b.turrets.sort(byTurret);
   });
 }
@@ -282,15 +336,18 @@ export function moveTurret(
   mount: TurretMount,
   column: number,
   row: number,
+  spot = 0,
 ): Result {
   const t = turretAt(base, index);
-  checkMount(mount, column, row);
-  if (t.mount === mount && t.column === column && t.row === row) return refuse('Already there');
-  const why = mountError(base, mount, column, row);
+  checkMount(mount, column, row, spot);
+  if (t.mount === mount && t.column === column && t.row === row && spotOf(t) === spot) {
+    return refuse('Already there');
+  }
+  const why = mountError(base, mount, column, row, spot);
   if (why) return refuse(why);
   return pay(base, stock, {}, (b) => {
-    const moved = b.turrets.splice(index, 1)[0]!;
-    b.turrets.push({ ...moved, mount, column, row });
+    const { condition } = b.turrets.splice(index, 1)[0]!;
+    b.turrets.push({ mount, column, row, ...spotField(spot), condition });
     b.turrets.sort(byTurret);
   });
 }
@@ -337,13 +394,23 @@ export function removeTrap(base: Base, stock: Stock, index: number): Result {
 const refuse = (reason: string): Result => ({ ok: false, reason });
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const byPost = (x: BasePost, y: BasePost): number =>
-  x.column - y.column || cmp(x.kind, y.kind) || x.row - y.row;
+  x.column - y.column || cmp(x.kind, y.kind) || x.row - y.row || spotOf(x) - spotOf(y);
 const byTurret = (x: BaseTurret, y: BaseTurret): number =>
-  x.column - y.column || cmp(x.mount, y.mount) || x.row - y.row;
+  x.column - y.column || cmp(x.mount, y.mount) || x.row - y.row || spotOf(x) - spotOf(y);
 /** A post or a turret already holds this spot (a ground spot never holds a turret). */
-const spotTaken = (base: Base, kind: PostKind, column: number, row: number): boolean =>
-  base.posts.some((p) => p.kind === kind && p.column === column && p.row === row) ||
-  base.turrets.some((t) => t.mount === kind && t.column === column && t.row === row);
+const spotTaken = (
+  base: Base,
+  kind: PostKind,
+  column: number,
+  row: number,
+  spot: number,
+): boolean =>
+  base.posts.some(
+    (p) => p.kind === kind && p.column === column && p.row === row && spotOf(p) === spot,
+  ) ||
+  base.turrets.some(
+    (t) => t.mount === kind && t.column === column && t.row === row && spotOf(t) === spot,
+  );
 const layerAt = (base: Base, column: number): BaseLayer | undefined =>
   base.layers.find((l) => l.column === column);
 const segments = (base: Base): BaseSegment[] =>
@@ -396,15 +463,24 @@ function checkTrap(kind: TrapKind, row: number): void {
     throw new RangeError(`base: bad row ${row}`);
   }
 }
-function checkMount(mount: TurretMount, column: number, row: number): void {
+function checkMount(mount: TurretMount, column: number, row: number, spot: number): void {
   if (!TURRET_MOUNTS.includes(mount)) {
     throw new RangeError(`base: unknown turret mount ${String(mount)}`);
   }
   checkSlot(column, row);
+  checkSpot(mount, spot);
 }
 function checkPost(post: BasePost): void {
   if (!POST_KINDS.includes(post.kind)) {
     throw new RangeError(`base: unknown post kind ${String(post.kind)}`);
   }
   checkSlot(post.column, post.row);
+  checkSpot(post.kind, spotOf(post));
+}
+/** Only a wall-walk has more than one spot. */
+function checkSpot(kind: PostKind, spot: number): void {
+  const spots = kind === 'wall-walk' ? WALK_SPOTS : 1;
+  if (!Number.isInteger(spot) || spot < 0 || spot >= spots) {
+    throw new RangeError(`base: bad spot ${spot} for ${kind}`);
+  }
 }

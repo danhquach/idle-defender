@@ -221,6 +221,11 @@ export const GATE_HP = 0.75;
 
 export type PostKind = 'tower' | 'wall-walk' | 'ground';
 export const POST_KINDS: readonly PostKind[] = ['tower', 'wall-walk', 'ground'];
+/**
+ * Wall-walk spots side by side on each wall or gate segment, top to bottom; each holds
+ * a post or a turret. Spot `s` stands at `y = (row + (s + 0.5) / WALK_SPOTS) × SEGMENT_HEIGHT`.
+ */
+export const WALK_SPOTS = 2; // the drawn platform (PIECE.walk in ui/projection.ts) is sized to fit two
 /** Post `x` relative to its column's wall `x`. */
 export const POST_OFFSET: Readonly<Record<PostKind, number>> = {
   'wall-walk': 10,
