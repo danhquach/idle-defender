@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RECOVERY_MS, type Stats, stockOf } from '../core/data.ts';
+import { RECOVERY_MS, SKILL_IDS, type Stats, stockOf } from '../core/data.ts';
 import {
   finishHorde,
   hordeDrop,
@@ -110,7 +110,7 @@ describe('hud', () => {
       skill: 'flashbang',
       label: 'Flashbang · 20',
       disabled: false,
-      reason: 'Then click the field to aim (Esc to cancel)',
+      reason: 'Thrown across the field at once',
       armed: true,
     });
     expect(molotov).toMatchObject({
@@ -119,6 +119,17 @@ describe('hud', () => {
       reason: 'Not ready yet',
     });
     expect(airstrike).toMatchObject({ disabled: true, armed: false });
+    const ready = {
+      ...s,
+      skills: [...SKILL_IDS],
+      cooldowns: { ...s.cooldowns, molotov: 0 },
+      cash: 100,
+    };
+    expect(skillButtons(ready, null).map((b) => b.reason)).toEqual([
+      'Thrown across the field at once',
+      'Thrown across the field at once',
+      'Then click a row to carpet bomb (Esc to cancel)',
+    ]);
     // A skill that can't be used never shows as armed.
     expect(skillButtons(s, 'molotov')[1]!.armed).toBe(false);
   });

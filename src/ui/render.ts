@@ -20,7 +20,6 @@ import {
   WALL,
   type EnemyKind,
   type Profession,
-  type SkillId,
 } from '../core/data.ts';
 import {
   burning,
@@ -40,6 +39,7 @@ import {
 } from '../core/horde.ts';
 import { baseOf } from '../core/armoury.ts';
 import { professionOf } from '../core/loadout.ts';
+import { carpet } from '../core/skills.ts';
 import { badgeOf } from '../core/stats.ts';
 import {
   depthSort,
@@ -62,6 +62,7 @@ import {
   ENEMY_ART,
   GATE_POSTS,
   GUNNER_ART,
+  SKILL_ART,
   TIER_ART,
   TRAP_ART,
   TURRET_ART,
@@ -95,25 +96,19 @@ const COLOR = {
   flashEdge: 'rgba(255, 170, 60, 0.6)',
   blood: '#8e1f1a',
   dust: '#a8987c',
-  outline: '#1b1a18',
-  hitFlash: '#ffffff',
   acid: '#a6e22e',
   glow: 'rgba(255, 196, 70, 0.45)',
   spark: '#ffd84a',
   smoke: 'rgba(150, 150, 150, 0.55)',
-  fire: 'rgba(255, 120, 30, 0.3)',
-  fireEdge: 'rgba(255, 150, 50, 0.8)',
   lightning: '#cfe6ff',
   pop: '#ff9a3c',
   flame: '#ff7a1a',
 } as const;
-/** Each skill's flash where it lands (design §4, as built ID-019). */
-const SKILL_COLOR: Readonly<Record<SkillId, string>> = {
-  flashbang: '#ffffff',
-  molotov: '#ff8a2a',
-  airstrike: '#ffb347',
-};
-
+/**
+ * A molotov fire's art (ID-041): see-through at `alpha`, flaring up over `in` s once lit
+ * and dying down over its last `out` s, its size wavering by `flicker`.
+ */
+const FIRE = { alpha: 0.7, in: 0.15, out: 0.5, flicker: 0.03 } as const;
 /** How a trap shows (design §7, §15): its kind's sprite, or its broken one. */
 export function trapLook(t: Pick<Trap, 'kind' | 'durability'>): { art: ArtId; broken: boolean } {
   const broken = t.durability <= 0;
@@ -205,7 +200,7 @@ export type Scene = Pick<
   Partial<Pick<HordeState, 'wave' | 'freeWave'>>;
 /** An armed skill's reach around the cursor, on the field. */
 export interface Aim {
-  skill: SkillId;
+  skill: 'airstrike';
   x: number;
   y: number;
 }
@@ -769,8 +764,8 @@ function drawShadow(
 }
 
 /**
- * An enemy's body, feet on `feet`, in `pose`: its kind's art, or the Horror's placeholder
- * (design §15, ID-023), both scaled by its radius (a Shambler's is the reference).
+ * An enemy's body, feet on `feet`, in `pose`: its kind's art (design §15), scaled by its
+ * radius (a Shambler's is the reference).
  */
 function drawEnemy(
   ctx: CanvasRenderingContext2D,
@@ -781,52 +776,7 @@ function drawEnemy(
   pose: Readonly<Pose>,
 ): void {
   const size = ENEMIES[kind].radius / ENEMY_RADIUS;
-  const look = ENEMY_ART[kind];
-  if ('art' in look) {
-    drawStanding(ctx, art[look.art], feet, STAND.enemy * size, cam, pose);
-    return;
-  }
-  const h = STAND.enemy * size * cam.zoom;
-  // Standing still (build mode) needs no transform, as with `drawStanding`.
-  if (pose === STILL) {
-    drawHorror(ctx, look.placeholder, h, feet.sx, feet.sy);
-    return;
-  }
-  ctx.save();
-  ctx.translate(feet.sx + pose.dx * cam.zoom, feet.sy - pose.lift * cam.zoom);
-  ctx.rotate(pose.rot);
-  ctx.scale(pose.sx, pose.sy);
-  ctx.globalAlpha *= pose.alpha;
-  drawHorror(ctx, look.placeholder, h);
-  if (pose.flash > 0) {
-    ctx.globalAlpha *= pose.flash;
-    drawHorror(ctx, COLOR.hitFlash, h);
-  }
-  ctx.restore();
-}
-
-/**
- * The Horror's placeholder body `h` screen px tall, feet on `(x, y)`: a hulking mass with
- * arms to the ground and growths on its back, filled with a dark outline.
- */
-function drawHorror(ctx: CanvasRenderingContext2D, fill: string, h: number, x = 0, y = 0): void {
-  ctx.fillStyle = fill;
-  ctx.strokeStyle = COLOR.outline;
-  ctx.lineWidth = Math.max(1, h / 24);
-  ctx.beginPath();
-  ctx.ellipse(x, y - h * 0.5, h * 0.42, h * 0.48, 0, 0, Math.PI * 2);
-  ctx.moveTo(x - h * 0.38, y - h * 0.55);
-  ctx.lineTo(x - h * 0.55, y);
-  ctx.lineTo(x - h * 0.3, y - h * 0.3);
-  ctx.moveTo(x + h * 0.38, y - h * 0.55);
-  ctx.lineTo(x + h * 0.55, y);
-  ctx.lineTo(x + h * 0.3, y - h * 0.3);
-  ctx.moveTo(x + h * 0.32, y - h * 0.82);
-  ctx.arc(x + h * 0.18, y - h * 0.82, h * 0.14, 0, Math.PI * 2);
-  ctx.moveTo(x - h * 0.02, y - h * 0.96);
-  ctx.arc(x - h * 0.14, y - h * 0.96, h * 0.12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  drawStanding(ctx, art[ENEMY_ART[kind]], feet, STAND.enemy * size, cam, pose);
 }
 
 /** A Bloater blowing up: an acid-green ring swelling and fading (design §9, ID-023). */
@@ -967,14 +917,14 @@ export function drawScene(
 
   // Traps lie flat on the ground, under every sprite.
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
-  // Molotov fires burn on the ground too.
-  ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+  // Molotov fires burn on the ground too, see-through, flaring up and dying down.
   for (const f of scene.fires) {
-    groundCircle(ctx, f.x, f.y, SKILLS.molotov.radius, cam);
-    ctx.fillStyle = COLOR.fire;
-    ctx.fill();
-    ctx.strokeStyle = COLOR.fireEdge;
-    ctx.stroke();
+    const fade = Math.min((scene.time - f.at) / FIRE.in, (f.until - scene.time) / FIRE.out, 1);
+    if (fade <= 0) continue;
+    ctx.globalAlpha = FIRE.alpha * fade;
+    const flicker = 1 + FIRE.flicker * Math.sin(scene.time * 12 + f.x);
+    groundArt(ctx, art[SKILL_ART.molotov], f.x, f.y, SKILLS.molotov.radius * flicker, cam);
+    ctx.globalAlpha = 1;
   }
   // A miss's dust kick is on the ground too.
   for (const i of scene.impacts) if (!i.hit) drawImpact(ctx, i, scene.time, cam);
@@ -1106,18 +1056,38 @@ export function drawScene(
 
   // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.
   for (const b of scene.blasts) {
-    groundCircle(ctx, b.x, b.y, SKILLS[b.skill].radius, cam);
-    ctx.globalAlpha = Math.max(0, 0.6 * (1 - (scene.time - b.at) / SKILL_FLASH));
-    ctx.fillStyle = SKILL_COLOR[b.skill];
-    ctx.fill();
+    const age = Math.max(0, (scene.time - b.at) / SKILL_FLASH);
+    if (age >= 1) continue;
+    // Its art swells to fill the reach as it fades.
+    ctx.globalAlpha = 1 - age;
+    const r = SKILLS[b.skill].radius * (0.85 + 0.15 * age);
+    groundArt(ctx, art[SKILL_ART[b.skill]], b.x, b.y, r, cam);
     ctx.globalAlpha = 1;
   }
   if (aim) {
-    groundCircle(ctx, aim.x, aim.y, SKILLS[aim.skill].radius, cam);
+    // An airstrike shows every bomb along its row.
     ctx.strokeStyle = COLOR.focus;
     ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
-    ctx.stroke();
+    for (const p of carpet(scene, aim.y)) {
+      groundCircle(ctx, p.x, p.y, SKILLS.airstrike.radius, cam);
+      ctx.stroke();
+    }
   }
+}
+
+/** `img` lying flat on the ground at `(x, y)`, `2r` across, squashed by the camera's tilt. */
+function groundArt(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  r: number,
+  cam: Camera,
+): void {
+  const c = project({ x, y }, cam);
+  const w = 2 * r * cam.zoom;
+  const h = (w * img.height * TILT) / img.width;
+  ctx.drawImage(img, c.sx - w / 2, c.sy - h / 2, w, h);
 }
 
 /** Starts a path round a circle of radius `r` on the ground at `(x, y)`, as the tilted camera sees it. */

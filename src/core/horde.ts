@@ -335,11 +335,19 @@ export interface Burst {
   y: number;
   at: number;
 }
-/** A molotov's fire on the ground, burning enemies inside until `until` (fight time). */
+/** A molotov's fire on the ground, lit at `at`, burning enemies inside until `until` (fight time). */
 export interface Fire {
   x: number;
   y: number;
+  at: number;
   until: number;
+}
+/** A bomb, bottle or flashbang still in the air, landing at `(x, y)` at `at` (ID-041). */
+export interface Incoming {
+  skill: SkillId;
+  x: number;
+  y: number;
+  at: number;
 }
 /** Chain Lightning arcing from `(fromX, fromY)` to `(x, y)` in the step ending at `at`, drawn for `CARD.chain.flash` s. */
 export interface Arc {
@@ -355,9 +363,9 @@ export interface Pop {
   y: number;
   at: number;
 }
-/** A skill landing at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
+/** A bomb or flashbang going off at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
 export interface Blast {
-  skill: SkillId;
+  skill: 'airstrike' | 'flashbang';
   x: number;
   y: number;
   at: number;
@@ -425,6 +433,7 @@ export interface HordeState {
   rerolledWave: number;
   fires: Fire[];
   blasts: Blast[];
+  incoming: Incoming[];
   /** Player-picked target; null = each defender shoots the enemy closest to it. */
   focusId: number | null;
   strikes: Strike[];
@@ -517,6 +526,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     rerolledWave: 0,
     fires: [],
     blasts: [],
+    incoming: [],
     focusId: null,
     strikes: [],
     bullets: [],
@@ -807,6 +817,7 @@ function step(s: HordeState, rng: Rng): void {
   fire(s, rng);
   fireTurrets(s, rng);
   fly(s, rng);
+  land(s);
   burn(s);
   repair(s);
   repairTurrets(s);
@@ -835,6 +846,7 @@ function step(s: HordeState, rng: Rng): void {
     s.bursts = [];
     s.arcs = [];
     s.pops = [];
+    s.incoming = [];
   }
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
@@ -1440,6 +1452,29 @@ export function removeDead(s: HordeState): void {
 /** Whether a flashbang still holds `e` (fight time, so it waits out picks too). */
 export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   !due(s.time, e.stunnedUntil);
+
+/**
+ * Design §4, ID-041: each airstrike bomb that lands hits every enemy within its radius
+ * at once, and each flashbang stuns them, both flashing; each molotov bottle lights a fire.
+ */
+function land(s: HordeState): void {
+  const landed = s.incoming.filter((i) => due(s.time, i.at));
+  if (landed.length === 0) return;
+  s.incoming = s.incoming.filter((i) => !due(s.time, i.at));
+  for (const i of landed) {
+    if (i.skill === 'molotov') {
+      s.fires.push({ x: i.x, y: i.y, at: s.time, until: s.time + SKILLS.molotov.seconds });
+      continue;
+    }
+    const skill = i.skill;
+    s.blasts.push({ skill, x: i.x, y: i.y, at: s.time });
+    for (const e of s.enemies) {
+      if (e.hp <= 0 || Math.hypot(e.x - i.x, e.y - i.y) > SKILLS[skill].radius + EPS) continue;
+      if (skill === 'airstrike') e.hp = Math.max(0, e.hp - SKILLS.airstrike.damage);
+      else e.stunnedUntil = Math.max(e.stunnedUntil, s.time + SKILLS.flashbang.seconds);
+    }
+  }
+}
 
 /**
  * Design §4, as built ID-019: each molotov fire burns every enemy inside it until it

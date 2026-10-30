@@ -52,6 +52,7 @@ import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
 import { nameTag, spend, titleIn, titleName, unspentPoints, type Title } from '../core/stats.ts';
 import { horrorAbility, xpToNext } from '../core/waves.ts';
+import { ART_URLS, SHOP_ICON, SKILL_ICON, type ArtId } from './sprites.ts';
 
 /** How long a toast stays up. */
 const TOAST_MS = 2000;
@@ -140,6 +141,12 @@ export function shopButtons(
   });
 }
 
+/** What a ready skill's button says it does next (design §4, ID-041). */
+const AIM_HINT = {
+  row: 'Then click a row to carpet bomb (Esc to cancel)',
+  none: 'Thrown across the field at once',
+} as const;
+
 /**
  * The skill buttons: each a dry run of `useSkill` before aiming (one cooling down shows
  * its seconds left); the armed one is pressed until it is used or put away.
@@ -157,7 +164,7 @@ export function skillButtons(
       skill,
       label,
       disabled: lock !== null,
-      reason: lock ?? 'Then click the field to aim (Esc to cancel)',
+      reason: lock ?? AIM_HINT[SKILLS[skill].aim],
       armed: lock === null && skill === armed,
     };
   });
@@ -422,20 +429,25 @@ export function createHud(
   toast.hidden = true;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   const shop = el('div', 'hud-shop');
-  const shopItems = SHOP_ITEMS.map((item) => {
-    const button = el('button', 'hud-button hud-shop-item');
+  // Each button: its icon (decoration only, so a screen reader reads the label) and its label.
+  const iconButton = (className: string, icon: ArtId, onClick: () => void) => {
+    const button = el('button', className);
     button.type = 'button';
-    button.addEventListener('click', () => onBuy(item));
+    button.addEventListener('click', onClick);
+    const img = el('img', 'hud-icon');
+    img.src = ART_URLS[icon] ?? '';
+    img.alt = '';
+    const label = el('span', 'hud-shop-label');
+    button.append(img, label);
     shop.append(button);
-    return button;
-  });
-  const skillItems = SKILL_IDS.map((skill) => {
-    const button = el('button', 'hud-button hud-shop-item hud-skill');
-    button.type = 'button';
-    button.addEventListener('click', () => onArm(skill));
-    shop.append(button);
-    return button;
-  });
+    return { button, label };
+  };
+  const shopItems = SHOP_ITEMS.map((item) =>
+    iconButton('hud-button hud-shop-item', SHOP_ICON[item], () => onBuy(item)),
+  );
+  const skillItems = SKILL_IDS.map((skill) =>
+    iconButton('hud-button hud-shop-item hud-skill', SKILL_ICON[skill], () => onArm(skill)),
+  );
   cards.hidden = true;
   result.hidden = true;
   hud.append(bar, boss, warning, toast, shop, cards, replace, result);
@@ -596,14 +608,14 @@ export function createHud(
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';
       shopButtons(state).forEach((b, i) => {
-        const button = shopItems[i]!;
-        if (button.textContent !== b.label) button.textContent = b.label;
+        const { button, label } = shopItems[i]!;
+        if (label.textContent !== b.label) label.textContent = b.label;
         button.disabled = b.disabled;
         button.title = b.reason;
       });
       skillButtons(state, armed).forEach((b, i) => {
-        const button = skillItems[i]!;
-        if (button.textContent !== b.label) button.textContent = b.label;
+        const { button, label } = skillItems[i]!;
+        if (label.textContent !== b.label) label.textContent = b.label;
         button.disabled = b.disabled;
         button.title = b.reason;
         button.setAttribute('aria-pressed', String(b.armed));

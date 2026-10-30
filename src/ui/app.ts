@@ -1,7 +1,7 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
-import { type SkillId, type Stat } from '../core/data.ts';
+import { SKILLS, type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -129,6 +129,14 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (skill) => {
       if (!horde) return;
+      // A skill with nothing to aim goes off at once (its aim point is ignored).
+      if (SKILLS[skill].aim === 'none') {
+        const used = useSkill(horde, skill, 0, 0);
+        if (used.ok) horde = used.state;
+        else hud.toast(used.reason);
+        armed = null;
+        return;
+      }
       // A second click on the armed skill puts it away.
       const lock = skillLock(horde, skill);
       if (lock) hud.toast(lock);
@@ -380,7 +388,8 @@ export function start(root: HTMLElement, art: Art): void {
     if (horde) {
       // A pick, the end of the fight or a cooldown puts an armed skill away.
       if (armed && skillLock(horde, armed) !== null) armed = null;
-      const aim: Aim | null = armed && hover ? { skill: armed, ...unproject(hover, cam) } : null;
+      const aim: Aim | null =
+        armed === 'airstrike' && hover ? { skill: armed, ...unproject(hover, cam) } : null;
       drawScene(ctx, art, horde, cam, view, null, selectedDefender, aim, animator);
       hud.update(horde, armed);
       if (horde.outcome !== 'fighting' && endedAt === null) {

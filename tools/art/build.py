@@ -24,6 +24,8 @@ Manifest asset keys (unknown keys stop the build):
   domain photograph the generation was drawn from, credited in
   docs/art-credits.md under its id), flip (mirror left to right),
   mutant (keep its colours saturated; everything else is muted, §15),
+  white (drain every colour, so a glow painted with coloured rays reads as plain
+  white light and keeps no pink from the background it was keyed out of, ID-041),
   group (sprites in one group share one scale, so a raised weapon doesn't
   shrink a body), palette (id of a texture whose colours this texture takes
   on, so two surfaces read as one ground), edge (id of a texture this one is a
@@ -67,7 +69,7 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
-    "palette", "edge", "part", "style", "photo", "ajar",
+    "palette", "edge", "part", "style", "photo", "ajar", "white",
 }
 CONCEPTS = ROOT / "art-concepts"
 REQUIRED = {"id", "kind", "model", "seed", "size", "prompt"}
@@ -216,9 +218,9 @@ def prepare(img: Image.Image, asset: dict) -> Image.Image:
         img = gate_width(img, (asset["ajar"]["hinges"][0] - box[1]) // 2, asset["id"])
     if asset.get("flip"):
         img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    if not asset.get("mutant"):
+    if asset.get("white") or not asset.get("mutant"):
         rgb, alpha = img.convert("RGB"), img.getchannel("A")
-        img = ImageEnhance.Color(rgb).enhance(MUTED)
+        img = ImageEnhance.Color(rgb).enhance(0 if asset.get("white") else MUTED)
         img.putalpha(alpha)
     return img
 
