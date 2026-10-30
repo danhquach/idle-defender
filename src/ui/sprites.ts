@@ -6,6 +6,12 @@ import type { TurretState } from '../core/horde.ts';
 
 export const ART_IDS = [
   'shambler',
+  'runner',
+  'crawler',
+  'bloater',
+  'spitter',
+  'brute',
+  'screamer',
   'gunner',
   'gunner-pistol',
   'gunner-smg',
@@ -69,21 +75,22 @@ export const ART_URLS: Readonly<Record<string, string>> = Object.fromEntries(
   ).map(([path, url]) => [path.slice(path.lastIndexOf('/') + 1, -'.png'.length), url]),
 );
 
-/** A drawn placeholder body (design §15, ID-023) until a kind has generated art. */
-export type EnemyShape = 'lean' | 'low' | 'round' | 'hunch' | 'block' | 'spike' | 'horror';
-export type EnemyLook = { art: ArtId } | { shape: EnemyShape; colour: string };
-/** Mutants get the only saturated colours (design §15): acid green and flesh red. */
-const ACID = '#8fd92b';
-const FLESH = '#d2453c';
+/**
+ * Every kind has generated art but the Mutated Horror, a drawn placeholder body (design
+ * §15, ID-023) until its art lands (ID-041) in a mutant's flesh red.
+ */
+export type EnemyLook = { art: ArtId } | { placeholder: string };
+/** A mutant's flesh red (design §15). */
+export const FLESH = '#d2453c';
 export const ENEMY_ART: Readonly<Record<EnemyKind, EnemyLook>> = {
   shambler: { art: 'shambler' },
-  runner: { shape: 'lean', colour: '#8a8173' },
-  crawler: { shape: 'low', colour: ACID },
-  bloater: { shape: 'round', colour: ACID },
-  spitter: { shape: 'hunch', colour: ACID },
-  brute: { shape: 'block', colour: FLESH },
-  screamer: { shape: 'spike', colour: FLESH },
-  horror: { shape: 'horror', colour: FLESH },
+  runner: { art: 'runner' },
+  crawler: { art: 'crawler' },
+  bloater: { art: 'bloater' },
+  spitter: { art: 'spitter' },
+  brute: { art: 'brute' },
+  screamer: { art: 'screamer' },
+  horror: { placeholder: FLESH },
 };
 
 /** The weapon in the sprite's hands tells the profession (design §15). */

@@ -1,6 +1,7 @@
 // ID-043: every thing the horde view draws has bundled art, and the art is
 // reproducible from art-src/manifest.json with an allowed model.
 import { readdirSync, readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ENEMIES, PROFESSIONS, TIERS, TRAP_KINDS, WEAPONS } from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
@@ -10,6 +11,7 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
+  FLESH,
   GUNNER_ART,
   LOAD_TIMEOUT_MS,
   loadArt,
@@ -27,6 +29,7 @@ const manifest = JSON.parse(readFileSync(new URL('art-src/manifest.json', root),
     prompt?: string;
     ref?: string | string[];
     part?: true;
+    mutant?: true;
   }[];
 };
 /** Generations used only as references of other sprites (ID-046), and the rest. */
@@ -34,6 +37,57 @@ const parts = manifest.assets.filter((a) => a.part);
 const shipped = manifest.assets.filter((a) => !a.part);
 const credits = readFileSync(new URL('docs/art-credits.md', root), 'utf8');
 const ids = new Set<string>(ART_IDS);
+
+/** HSV saturation of 0–255 channels, 0 to 1. */
+const saturation = (r: number, g: number, b: number): number => {
+  const max = Math.max(r, g, b);
+  return max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
+};
+
+/**
+ * The share of a sprite's opaque pixels (alpha over half) that are saturated (over 0.5):
+ * decodes the 8-bit RGBA, non-interlaced PNG the art build writes.
+ */
+function saturatedShare(id: string): number {
+  const png = readFileSync(new URL(`src/assets/art/${id}.png`, root));
+  const w = png.readUInt32BE(16);
+  const h = png.readUInt32BE(20);
+  expect([png[24], png[25], png[28]], id).toEqual([8, 6, 0]);
+  const idat: Buffer[] = [];
+  for (let at = 8; at < png.length;) {
+    const len = png.readUInt32BE(at);
+    if (png.toString('latin1', at + 4, at + 8) === 'IDAT')
+      idat.push(png.subarray(at + 8, at + 8 + len));
+    at += len + 12;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const row = w * 4;
+  const px = new Uint8Array(row * h);
+  for (let y = 0; y < h; y++) {
+    const filter = raw[y * (row + 1)]!;
+    for (let x = 0; x < row; x++) {
+      const v = raw[y * (row + 1) + 1 + x]!;
+      const a = x >= 4 ? px[y * row + x - 4]! : 0;
+      const b = y > 0 ? px[(y - 1) * row + x]! : 0;
+      const c = x >= 4 && y > 0 ? px[(y - 1) * row + x - 4]! : 0;
+      const p = a + b - c;
+      const pa = Math.abs(p - a);
+      const pb = Math.abs(p - b);
+      const pc = Math.abs(p - c);
+      const paeth = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      const pred = [0, a, b, (a + b) >> 1, paeth][filter]!;
+      px[y * row + x] = (v + pred) & 0xff;
+    }
+  }
+  let opaque = 0;
+  let saturated = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3]! <= 128) continue;
+    opaque++;
+    if (saturation(px[i]!, px[i + 1]!, px[i + 2]!) > 0.5) saturated++;
+  }
+  return saturated / opaque;
+}
 
 /** The PNG colour type from its header: 6 is RGBA (has transparency), 2 is RGB. */
 const colourType = (id: string): number =>
@@ -63,25 +117,24 @@ describe('art coverage', () => {
     expect(new Set(used)).toEqual(ids);
   });
 
-  it('gives every enemy kind art or a placeholder shape of its own; only mutants are saturated (ID-023)', () => {
+  it('gives every enemy kind art but the Horror, whose placeholder is mutant red (ID-051)', () => {
     const kinds = Object.keys(ENEMIES) as (keyof typeof ENEMY_ART)[];
-    const shapes = kinds.flatMap((k) => {
-      const look = ENEMY_ART[k];
-      return 'shape' in look ? [look.shape] : [];
-    });
-    expect(shapes.length + kinds.filter((k) => 'art' in ENEMY_ART[k]).length).toBe(kinds.length);
-    expect(new Set(shapes).size).toBe(shapes.length);
-    const saturation = (hex: string): number => {
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-      const max = Math.max(r!, g!, b!);
-      return max === 0 ? 0 : (max - Math.min(r!, g!, b!)) / max;
-    };
-    for (const k of kinds) {
-      const look = ENEMY_ART[k];
-      if (!('colour' in look)) continue;
-      const mutant = !['shambler', 'runner'].includes(k);
-      expect(saturation(look.colour) > 0.5, k).toBe(mutant);
+    expect(kinds.filter((k) => !('art' in ENEMY_ART[k]))).toEqual(['horror']);
+    expect(ENEMY_ART.horror).toEqual({ placeholder: FLESH });
+    const hex = [1, 3, 5].map((i) => parseInt(FLESH.slice(i, i + 2), 16));
+    expect(saturation(hex[0]!, hex[1]!, hex[2]!)).toBeGreaterThan(0.5);
+  });
+
+  it('keeps the five new mutants saturated and mutes the Runner (ID-051, §15)', () => {
+    const mutant = (id: string): boolean =>
+      manifest.assets.find((a) => a.id === id)?.mutant === true;
+    for (const k of ['crawler', 'bloater', 'spitter', 'brute', 'screamer']) {
+      expect(mutant(k), k).toBe(true);
+      // The Brute's grey armour makes it the least saturated mutant: about 0.38.
+      expect(saturatedShare(k), k).toBeGreaterThan(0.35);
     }
+    expect(mutant('runner')).toBe(false);
+    expect(saturatedShare('runner')).toBeLessThan(0.2);
   });
 
   it('gives every gun a Gunner sprite of its own (ID-046)', () => {
