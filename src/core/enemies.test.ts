@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildTurret, newBase, type Base } from './base.ts';
 import {
-  BLOATER,
+  SWOLLEN,
   BRUTE,
   CRAWLER,
   ENEMIES,
@@ -10,7 +10,7 @@ import {
   MELEE_REACH,
   SCREAMER,
   SEGMENT_HEIGHT,
-  SPITTER,
+  SPEWER,
   STEP,
   START_BASE,
   WEAPONS,
@@ -67,8 +67,8 @@ describe('the horde mix', () => {
   it('adds each mutant at its horde (Crawler 5 … Screamer 9), 10% each, Shamblers the rest', () => {
     const joins: [EnemyKind, number][] = [
       ['crawler', 5],
-      ['spitter', 6],
-      ['bloater', 7],
+      ['spewer', 6],
+      ['swollen', 7],
       ['brute', 8],
       ['screamer', 9],
     ];
@@ -279,16 +279,16 @@ describe('Crawler', () => {
   });
 });
 
-describe('Bloater', () => {
+describe('Swollen', () => {
   it('explodes at a standing segment: big damage there and to the segments above and below', () => {
     const s = quiet();
     const before = [3, 4, 5, 6].map((r) => hpAt(s, r));
-    const e = enemy(s, { kind: 'bloater', x: 521, y: ROW4, hp: 60, maxHp: 60 });
+    const e = enemy(s, { kind: 'swollen', x: 521, y: ROW4, hp: 60, maxHp: 60 });
     const t = run(s, 0.2);
     expect(one(t, e.id)).toBeUndefined();
-    expect(hpAt(t, 4)).toBe(before[1]! - BLOATER.wall);
-    expect(hpAt(t, 3)).toBe(before[0]! - BLOATER.splash);
-    expect(hpAt(t, 5)).toBe(before[2]! - BLOATER.splash);
+    expect(hpAt(t, 4)).toBe(before[1]! - SWOLLEN.wall);
+    expect(hpAt(t, 3)).toBe(before[0]! - SWOLLEN.splash);
+    expect(hpAt(t, 5)).toBe(before[2]! - SWOLLEN.splash);
     expect(hpAt(t, 6)).toBe(before[3]);
     // A burst, not a death: the renderer shows it blow up, not fall.
     expect(t.bursts).toEqual([{ id: e.id, x: 520, y: ROW4, at: expect.any(Number) }]);
@@ -301,42 +301,42 @@ describe('Bloater', () => {
   it('killed first, it pops harmlessly and pays its kill', () => {
     const s = quiet();
     const walls = s.layers[0]!.segments.map((g) => g.hp);
-    enemy(s, { kind: 'bloater', x: 540, y: ROW4, hp: 0 });
+    enemy(s, { kind: 'swollen', x: 540, y: ROW4, hp: 0 });
     const t = tick(s, STEP);
     expect(t.enemies).toEqual([]);
     expect(t.bursts).toEqual([]);
     expect(t.layers[0]!.segments.map((g) => g.hp)).toEqual(walls);
-    expect(t.xp).toBe(ENEMIES.bloater.xp);
-    expect(t.cash).toBe(ENEMIES.bloater.cash);
+    expect(t.xp).toBe(ENEMIES.swollen.xp);
+    expect(t.cash).toBe(ENEMIES.swollen.cash);
     expect(t.mutantKills).toBe(1);
   });
 
   it('in the camp it blows up on the defender it reaches', () => {
     const s = quiet();
     const a = s.defenders[0]!;
-    const x = a.x + meleeReach('bloater');
-    const e = enemy(s, { kind: 'bloater', x, y: a.y, hp: 60, maxHp: 60, inCamp: true });
+    const x = a.x + meleeReach('swollen');
+    const e = enemy(s, { kind: 'swollen', x, y: a.y, hp: 60, maxHp: 60, inCamp: true });
     const t = tick(s, STEP);
     expect(one(t, e.id)).toBeUndefined();
     expect(t.bursts.map((b) => b.id)).toEqual([e.id]);
-    expect(t.defenders[0]!.hp).toBe(a.hp - ENEMIES.bloater.damage);
+    expect(t.defenders[0]!.hp).toBe(a.hp - ENEMIES.swollen.damage);
   });
 });
 
-describe('Spitter', () => {
+describe('Spewer', () => {
   it('stops short of the wall and spits at it when nothing else is in range', () => {
     const s = quiet();
     const full = hpAt(s, 0);
-    const e = enemy(s, { ...tough, kind: 'spitter', x: 700, y: 40 });
+    const e = enemy(s, { ...tough, kind: 'spewer', x: 700, y: 40 });
     let t = s;
     let spat = 0;
     for (let i = 0; i < 6 / STEP; i++) {
       t = tick(t, STEP);
       spat += t.spits.filter((k) => Math.abs(k.at - t.time) < 1e-9).length;
     }
-    expect(one(t, e.id)!.x).toBe(520 + SPITTER.stop);
+    expect(one(t, e.id)!.x).toBe(520 + SPEWER.stop);
     expect(spat).toBeGreaterThan(0);
-    expect(hpAt(t, 0)).toBe(full - spat * ENEMIES.spitter.damage);
+    expect(hpAt(t, 0)).toBe(full - spat * ENEMIES.spewer.damage);
     expect(t.defenders[0]!.hp).toBe(s.defenders[0]!.hp);
   });
 
@@ -344,16 +344,16 @@ describe('Spitter', () => {
     const s = quiet();
     const a = s.defenders[0]!;
     const full = hpAt(s, 4);
-    enemy(s, { ...tough, kind: 'spitter', x: a.x + SPITTER.range - 1, y: a.y });
+    enemy(s, { ...tough, kind: 'spewer', x: a.x + SPEWER.range - 1, y: a.y });
     const t = tick(s, STEP);
-    expect(t.defenders[0]!.hp).toBe(a.hp - ENEMIES.spitter.damage);
-    expect(t.defenders[0]!.hitBy).toBe('spitter');
+    expect(t.defenders[0]!.hp).toBe(a.hp - ENEMIES.spewer.damage);
+    expect(t.defenders[0]!.hitBy).toBe('spewer');
     expect(t.spits).toEqual([
       { fromX: expect.any(Number), fromY: a.y, x: a.x, y: a.y, at: expect.any(Number) },
     ]);
     expect(hpAt(t, 4)).toBe(full);
     // Never steps back to its stand-off once inside it.
-    expect(t.enemies[0]!.x).toBeLessThan(a.x + SPITTER.range);
+    expect(t.enemies[0]!.x).toBeLessThan(a.x + SPEWER.range);
   });
 
   it('spits at a turret in range, wearing its condition', () => {
@@ -362,13 +362,13 @@ describe('Spitter', () => {
     const s = quiet(built.base);
     s.defenders[0]!.x = -1000;
     const turret = s.turrets[0]!;
-    enemy(s, { ...tough, kind: 'spitter', x: turret.x + 180, y: turret.y, stunnedUntil: 0 });
+    enemy(s, { ...tough, kind: 'spewer', x: turret.x + 180, y: turret.y, stunnedUntil: 0 });
     const t = tick(s, STEP);
     // The turret's own shot wears it too; the spit takes its damage on top.
     const shotWear =
       turret.condition - tick(quietTurretOnly(built.base), STEP).turrets[0]!.condition;
     expect(t.turrets[0]!.condition).toBeCloseTo(
-      turret.condition - shotWear - ENEMIES.spitter.damage,
+      turret.condition - shotWear - ENEMIES.spewer.damage,
       9,
     );
   });
@@ -380,13 +380,13 @@ describe('Spitter', () => {
     s.defenders[0]!.x = -1000;
     s.layers[0]!.segments[4]!.hp = 0;
     const turret = s.turrets[0]!;
-    enemy(s, { ...tough, kind: 'spitter', x: turret.x + 180, y: turret.y });
+    enemy(s, { ...tough, kind: 'spewer', x: turret.x + 180, y: turret.y });
     const t = tick(s, STEP);
     expect(t.turrets[0]!.condition).toBe(turret.condition);
     expect(t.spits.some((k) => k.x === turret.x && k.y === turret.y)).toBe(false);
   });
 
-  /** As the turret test, with the Spitter swapped for a Shambler: only the turret's own wear. */
+  /** As the turret test, with the Spewer swapped for a Shambler: only the turret's own wear. */
   function quietTurretOnly(base: Base): HordeState {
     const s = quiet(base);
     s.defenders[0]!.x = -1000;

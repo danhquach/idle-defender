@@ -243,9 +243,9 @@ describe('hud', () => {
 
     it('names the kind of enemy behind each injury (ID-023)', () => {
       const { game, s } = ended('won');
-      s.injured[0]!.by = 'spitter';
+      s.injured[0]!.by = 'spewer';
       expect(resultScreen(game, s, NOW).lines).toContain(
-        `Jack · injured by a Spitter · back at ${jackBack}`,
+        `Jack · injured by a Spewer · back at ${jackBack}`,
       );
     });
 

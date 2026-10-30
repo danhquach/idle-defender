@@ -195,9 +195,9 @@ describe('Animator', () => {
     expect(a.corpses).toEqual([]);
   });
 
-  it('leaves no body for a Bloater that blew up rather than died (ID-023)', () => {
+  it('leaves no body for a Swollen that blew up rather than died (ID-023)', () => {
     const a = new Animator();
-    const e = enemy({ kind: 'bloater' });
+    const e = enemy({ kind: 'swollen' });
     a.observe(frame(4, [e]));
     a.observe(frame(4.1, [], { bursts: [{ id: e.id }] }));
     expect(a.corpses).toEqual([]);

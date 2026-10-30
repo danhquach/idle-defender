@@ -170,7 +170,7 @@ interface Seen {
  * What animation needs from earlier frames, which the fight doesn't keep: how far each
  * enemy and defender has walked and when they last lost HP, each shooter's last shot (the
  * fight drops it with its muzzle flash), and the enemies that died, kept until they have
- * fallen. A Bloater that blew up (in `bursts`) didn't die: it leaves no body. Fed the fight each frame; a fight whose time runs back is a new one, and starts
+ * fallen. A Swollen that blew up (in `bursts`) didn't die: it leaves no body. Fed the fight each frame; a fight whose time runs back is a new one, and starts
  * it afresh.
  */
 export class Animator {
