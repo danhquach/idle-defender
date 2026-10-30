@@ -5,15 +5,17 @@
 export const STEP = 1 / 30;
 
 /** The open field: `x` runs 0…right (camp left, horde from the right), `y` 0…height. */
-export const FIELD = { right: 1600, height: 400 } as const;
+export const FIELD = { right: 1600, height: 800 } as const;
 
 /** The camp line: an enemy inside the camp with no defender to hit waits here. */
 export const CAMP = { x: 120 } as const;
 /** Wall thickness along `x`; a layer's wall spans `[x, x + depth]`. */
 export const WALL = { depth: 20 } as const;
 /** Segments per layer, top to bottom; row `r` covers `y` in `[r, r + 1) * SEGMENT_HEIGHT`. */
-export const SEGMENTS = 5;
+export const SEGMENTS = 10;
 export const SEGMENT_HEIGHT = FIELD.height / SEGMENTS;
+/** The starting layer's gate row and tower rows (design §11): the gate near the middle. */
+export const START_BASE = { gate: 5, towers: [4, 6] } as const;
 
 export const ENEMY_RADIUS = 12;
 /** Most a crowded enemy is pushed aside per second. */

@@ -2,14 +2,23 @@
 // replacements between waves.
 import { describe, expect, it } from 'vitest';
 import { chooseCard, rollOffer } from './cards.ts';
-import { CAMP, COLUMNS, FALL_WARNING, MELEE_REACH, SEGMENTS, STEP } from './data.ts';
+import {
+  CAMP,
+  COLUMNS,
+  FALL_WARNING,
+  MELEE_REACH,
+  SEGMENT_HEIGHT,
+  SEGMENTS,
+  START_BASE,
+  STEP,
+} from './data.ts';
 import { moveDefender, newHorde, standing, tick, type HordeState } from './horde.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { rngFrom } from './rng.ts';
 import { enemy, setup } from './testing.ts';
 import { loadoutFrom } from './loadout.ts';
 
-/** Horde 1, a on post 0 (420, 120), no spawns left: only placed enemies move. */
+/** Horde 1, a on post 0 (420, 360), no spawns left: only placed enemies move. */
 function quiet(): HordeState {
   const s = newHorde(1, setup());
   s.toSpawn = 0;
@@ -66,7 +75,7 @@ describe('defenders in the camp', () => {
 
   it('an enemy in the camp hits a defender within reach for its damage, once a second', () => {
     const s = quiet();
-    intruder(s, 420 + MELEE_REACH, 120);
+    intruder(s, 420 + MELEE_REACH, 360);
     const after = tick(s, STEP);
     expect(after.defenders[0]?.hp).toBe(95);
     expect(tick(after, 1 - 2 * STEP).defenders[0]?.hp).toBe(95);
@@ -75,32 +84,32 @@ describe('defenders in the camp', () => {
 
   it('walks straight to the nearest defender and stops within reach', () => {
     const s = quiet();
-    intruder(s, 300, 120);
+    intruder(s, 300, 360);
     const after = tick(s, 5);
     const e = after.enemies[0]!;
-    expect(e.y).toBeCloseTo(120);
-    expect(Math.hypot(e.x - 420, e.y - 120)).toBeCloseTo(MELEE_REACH);
+    expect(e.y).toBeCloseTo(360);
+    expect(Math.hypot(e.x - 420, e.y - 360)).toBeCloseTo(MELEE_REACH);
     expect(after.defenders[0]!.hp).toBeLessThan(100);
   });
 
   it('walls do not stop an enemy in the camp going back out to a defender', () => {
     const s = quiet();
     // Standing on the far side of a whole wall, but already in the camp.
-    intruder(s, 600, 120);
+    intruder(s, 600, 360);
     const after = tick(s, 6);
     expect(after.enemies[0]!.x).toBeCloseTo(420 + MELEE_REACH);
   });
 
   it('goes for the nearest defender, ties to the lower index', () => {
     const s = quiet();
-    field(s, 'b', 1); // (420, 280)
-    intruder(s, 420, 200 + 1);
+    field(s, 'b', 1); // (420, 520)
+    intruder(s, 420, 440 + 1);
     let after = tick(s, 3);
     expect(after.defenders[1]!.hp).toBeLessThan(100);
     expect(after.defenders[0]!.hp).toBe(100);
     const t = quiet();
     field(t, 'b', 1);
-    intruder(t, 420, 200);
+    intruder(t, 420, 440);
     after = tick(t, 3);
     expect(after.defenders[0]!.hp).toBeLessThan(100);
     expect(after.defenders[1]!.hp).toBe(100);
@@ -108,10 +117,10 @@ describe('defenders in the camp', () => {
 
   it('enemies outside never hit defenders', () => {
     const s = quiet();
-    enemy(s, { x: 520, y: 120, hp: 1e6, maxHp: 1e6 });
+    enemy(s, { x: 520, y: 360, hp: 1e6, maxHp: 1e6 });
     const after = tick(s, 5);
     expect(after.defenders[0]!.hp).toBe(100);
-    expect(after.layers[0]!.segments[1]!.hp).toBeLessThan(200);
+    expect(after.layers[0]!.segments[4]!.hp).toBeLessThan(200);
   });
 
   it('with no defender left it walks to the camp line and waits', () => {
@@ -127,7 +136,7 @@ describe('injury', () => {
   it('at 0 HP the defender leaves the fight, frees the post and is injured, not benched', () => {
     const s = quiet();
     s.defenders[0]!.hp = 5;
-    intruder(s, 420 + MELEE_REACH, 120);
+    intruder(s, 420 + MELEE_REACH, 360);
     const after = tick(s, STEP);
     expect(after.defenders).toEqual([]);
     expect(after.posts[0]!.defenderId).toBeNull();
@@ -410,9 +419,10 @@ describe('breaches', () => {
 
   it('records a broken gate, a broken wall and an open gap', () => {
     const gate = empty();
-    gate.layers[0]!.segments[2]!.hp = 0;
-    enemy(gate, { x: 530, y: 200 });
-    expect(tick(gate, 1).breaches).toEqual([{ column: 0, row: 2, wave: 1, through: 'gate' }]);
+    const gateRow = START_BASE.gate;
+    gate.layers[0]!.segments[gateRow]!.hp = 0;
+    enemy(gate, { x: 530, y: (gateRow + 0.5) * SEGMENT_HEIGHT });
+    expect(tick(gate, 1).breaches).toEqual([{ column: 0, row: gateRow, wave: 1, through: 'gate' }]);
 
     const wall = empty();
     wall.wave = 3;

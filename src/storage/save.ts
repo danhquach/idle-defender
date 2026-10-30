@@ -59,7 +59,15 @@ import { arr, fail, int, num, obj, oneOf, text } from './validate.ts';
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+/** Rows a save's base holds, and how far down today's field they sit. */
+interface Grid {
+  rows: number;
+  shift: number;
+}
+const GRID: Grid = { rows: SEGMENTS, shift: 0 };
+/** A v1 save (0.4.x and older) had 5 rows; they become rows 3–7 and the new rows are empty. */
+const V1_GRID: Grid = { rows: 5, shift: 3 };
 /** A full save is about 2 KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 50_000;
 const MAX_HORDE = 100_000;
@@ -82,6 +90,8 @@ export interface Save {
   game: GameState;
   /** When it was written, in ms since the epoch. */
   savedAt: number;
+  /** Set when a 5-row (v1) base was moved onto today's taller field. */
+  grew?: true;
 }
 
 /** The page's storage, or null where it is blocked (some private modes throw on access). */
@@ -153,12 +163,13 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (o.v !== SAVE_VERSION) fail('version');
+  if (o.v !== SAVE_VERSION && o.v !== 1) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
-  return { game: readGame(o.game, savedAt), savedAt };
+  if (o.v === 1) return { game: readGame(o.game, savedAt, V1_GRID), savedAt, grew: true };
+  return { game: readGame(o.game, savedAt, GRID), savedAt };
 }
 
-function readGame(v: unknown, savedAt: number): GameState {
+function readGame(v: unknown, savedAt: number, grid: Grid): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
   // A save from before the armoury (0.4.5 and older) has none: it starts empty. One
@@ -186,7 +197,7 @@ function readGame(v: unknown, savedAt: number): GameState {
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
   const game: GameState = {
     hordeNumber,
-    base: readBase(o.base, tiers, research.includes('auto-turret')),
+    base: readBase(o.base, tiers, research.includes('auto-turret'), grid),
     stock: readStock(o.stock),
     tiers,
     roster: readRoster(o.roster, savedAt, hordeNumber),
@@ -261,18 +272,25 @@ function readPower(v: unknown, savedAt: number): Power {
   return { bank: num(o.bank, 0, BANK_CAP), gas: int(o.gas, 0, MAX_COUNT), batteries, generator };
 }
 
-function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean): Base {
+function readBase(
+  v: unknown,
+  tiers: readonly Tier[],
+  turretsResearched: boolean,
+  grid: Grid,
+): Base {
   // A base from before turrets (0.4.6 and older) has none, and one from before traps
   // (0.4.9 and older) has no traps key and loads with none. A base with traps but no
   // turrets key was never written, so its traps key is refused as unknown.
   const old = typeof v === 'object' && v !== null && !Object.hasOwn(v, 'turrets');
   const noTraps = old || (typeof v === 'object' && v !== null && !Object.hasOwn(v, 'traps'));
   const o = obj(v, ['layers', 'posts', ...(old ? [] : ['turrets']), ...(noTraps ? [] : ['traps'])]);
-  const layers = arr(o.layers, 1, COLUMNS.length).map((l) => readLayer(l, tiers));
+  const layers = arr(o.layers, 1, COLUMNS.length).map((l) => readLayer(l, tiers, grid));
   for (let i = 1; i < layers.length; i++) {
     if (layers[i]!.column <= layers[i - 1]!.column) fail('layers out of order');
   }
-  const posts = arr(o.posts, 0, COLUMNS.length * SEGMENTS * POST_KINDS.length).map(readPost);
+  const posts = arr(o.posts, 0, COLUMNS.length * SEGMENTS * POST_KINDS.length).map((p) =>
+    readPost(p, grid),
+  );
   for (let i = 1; i < posts.length; i++) {
     if (postOrder(posts[i - 1]!, posts[i]!) >= 0) fail('posts out of order');
   }
@@ -283,7 +301,9 @@ function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean
   }
   const turrets = old
     ? []
-    : arr(o.turrets, 0, COLUMNS.length * SEGMENTS * TURRET_MOUNTS.length).map(readTurret);
+    : arr(o.turrets, 0, COLUMNS.length * SEGMENTS * TURRET_MOUNTS.length).map((t) =>
+        readTurret(t, grid),
+      );
   if (turrets.length > 0 && !turretsResearched) fail('turret not researched');
   for (let i = 1; i < turrets.length; i++) {
     if (turretOrder(turrets[i - 1]!, turrets[i]!) >= 0) fail('turrets out of order');
@@ -296,7 +316,7 @@ function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean
       fail('turret on a post');
     }
   }
-  const traps = noTraps ? [] : arr(o.traps, 0, SEGMENTS).map(readTrap);
+  const traps = noTraps ? [] : arr(o.traps, 0, SEGMENTS).map((t) => readTrap(t, grid));
   // The order buildTrap keeps, which also means one trap per cell.
   for (let i = 1; i < traps.length; i++) {
     if (traps[i]!.row <= traps[i - 1]!.row) fail('traps out of order');
@@ -304,30 +324,31 @@ function readBase(v: unknown, tiers: readonly Tier[], turretsResearched: boolean
   return { layers, posts, turrets, traps };
 }
 
-function readTrap(v: unknown): BaseTrap {
+function readTrap(v: unknown, grid: Grid): BaseTrap {
   const o = obj(v, ['kind', 'row', 'durability']);
   return {
     kind: oneOf(o.kind, TRAP_KINDS),
-    row: int(o.row, 0, SEGMENTS - 1),
+    row: int(o.row, 0, grid.rows - 1) + grid.shift,
     durability: int(o.durability, 0, TRAP_DURABILITY) + 0, // + 0 turns -0 into 0
   };
 }
 
-function readTurret(v: unknown): BaseTurret {
+function readTurret(v: unknown, grid: Grid): BaseTurret {
   const o = obj(v, ['mount', 'column', 'row', 'condition']);
   return {
     mount: oneOf(o.mount, TURRET_MOUNTS),
     column: int(o.column, 0, COLUMNS.length - 1),
-    row: int(o.row, 0, SEGMENTS - 1),
+    row: int(o.row, 0, grid.rows - 1) + grid.shift,
     condition: num(o.condition, 0, MAX_CONDITION) + 0, // + 0 turns -0 into 0
   };
 }
 
-function readLayer(v: unknown, tiers: readonly Tier[]): BaseLayer {
+function readLayer(v: unknown, tiers: readonly Tier[], grid: Grid): BaseLayer {
   const o = obj(v, ['column', 'slots']);
-  const slots = arr(o.slots, SEGMENTS, SEGMENTS).map((s) =>
+  const read = arr(o.slots, grid.rows, grid.rows).map((s) =>
     s === null ? null : readSegment(s, tiers),
   );
+  const slots = Array.from({ length: SEGMENTS }, (_, row) => read[row - grid.shift] ?? null);
   if (slots.every((s) => s === null)) fail('empty layer');
   if (slots.filter((s) => s?.kind === 'gate').length > 1) fail('two gates');
   return { column: int(o.column, 0, COLUMNS.length - 1), slots };
@@ -345,12 +366,12 @@ function readSegment(v: unknown, tiers: readonly Tier[]): BaseSegment {
   return { kind, tier, hp: Math.min(int(o.hp, 0, MAX_COUNT), maxHp), maxHp };
 }
 
-function readPost(v: unknown): BasePost {
+function readPost(v: unknown, grid: Grid): BasePost {
   const o = obj(v, ['kind', 'column', 'row']);
   return {
     kind: oneOf(o.kind, POST_KINDS),
     column: int(o.column, 0, COLUMNS.length - 1),
-    row: int(o.row, 0, SEGMENTS - 1),
+    row: int(o.row, 0, grid.rows - 1) + grid.shift,
   };
 }
 

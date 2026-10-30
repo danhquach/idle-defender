@@ -241,8 +241,8 @@ describe('stats in a fight', () => {
   });
 
   it('Aim adds damage to a Gunner shot', () => {
-    const s = fight(newBase(), spec('pistol', { aim: 10 }), 'tower', 1);
-    enemy(s, { ...tough, x: 900, y: 120 });
+    const s = fight(newBase(), spec('pistol', { aim: 10 }), 'tower', 4);
+    enemy(s, { ...tough, x: 900, y: 360 });
     // Aim 10 plus the Gunner's handling can crit (10%): either hit counts.
     const hit = 1000 - tick(s, STEP).enemies[0]!.hp;
     const one = WEAPONS.pistol.damage * 1.2 * 1.05;
@@ -250,8 +250,8 @@ describe('stats in a fight', () => {
   });
 
   it('crits deal double, about as often as the chance says', () => {
-    const s = fight(newBase(), spec('pistol', { aim: 100 }), 'tower', 1);
-    enemy(s, { hp: 1e9, maxHp: 1e9, x: 900, y: 120 });
+    const s = fight(newBase(), spec('pistol', { aim: 100 }), 'tower', 4);
+    enemy(s, { hp: 1e9, maxHp: 1e9, x: 900, y: 360 });
     const base = WEAPONS.pistol.damage * 3 * 1.5;
     const hits: number[] = [];
     let cur = s;
@@ -268,8 +268,8 @@ describe('stats in a fight', () => {
   });
 
   it("with no crit chance nothing rolls: a Ripper's pistol without Aim leaves the RNG alone", () => {
-    const s = fight(newBase(), spec('knife', { might: 50, grit: 5 }), 'tower', 1);
-    enemy(s, { ...tough, x: 900, y: 120 });
+    const s = fight(newBase(), spec('knife', { might: 50, grit: 5 }), 'tower', 4);
+    enemy(s, { ...tough, x: 900, y: 360 });
     const after = tick(s, STEP);
     expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
     expect(after.rng).toEqual(s.rng);
@@ -288,9 +288,9 @@ describe('stats in a fight', () => {
   });
 
   it('a gun shot never cleaves and a blade strike never crits', () => {
-    const g = fight(newBase(), spec('pistol', { might: 50 }), 'tower', 1);
-    enemy(g, { ...tough, x: 900, y: 120 });
-    const near = enemy(g, { ...tough, x: 900, y: 140 });
+    const g = fight(newBase(), spec('pistol', { might: 50 }), 'tower', 4);
+    enemy(g, { ...tough, x: 900, y: 360 });
+    const near = enemy(g, { ...tough, x: 900, y: 380 });
     expect(tick(g, STEP).enemies.find((e) => e.id === near.id)!.hp).toBe(1000);
     const r = fight(wallWalk, spec('knife', { aim: 100 }), 'wall-walk', 2);
     enemy(r, { ...tough, x: 520, y: 200 });
@@ -300,8 +300,8 @@ describe('stats in a fight', () => {
   });
 
   it('Tech speeds up an Engineer’s repair', () => {
-    const s = fight(newBase(), spec('toolkit', { tech: 10 }), 'tower', 3);
-    s.layers[0]!.segments[3]!.hp = 100;
-    expect(tick(s, 1).layers[0]!.segments[3]!.hp).toBeCloseTo(100 + 3 * 1.2 * 1.05);
+    const s = fight(newBase(), spec('toolkit', { tech: 10 }), 'tower', 6);
+    s.layers[0]!.segments[6]!.hp = 100;
+    expect(tick(s, 1).layers[0]!.segments[6]!.hp).toBeCloseTo(100 + 3 * 1.2 * 1.05);
   });
 });

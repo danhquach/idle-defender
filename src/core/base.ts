@@ -11,6 +11,7 @@ import {
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
+  START_BASE,
   TIER_ORDER,
   TIERS,
   TRAP_DURABILITY,
@@ -93,13 +94,12 @@ export function newBase(): Base {
     layers: [
       {
         column: 0,
-        slots: Array.from({ length: SEGMENTS }, (_, row) => segment(row === 2 ? 'gate' : 'wall')),
+        slots: Array.from({ length: SEGMENTS }, (_, row) =>
+          segment(row === START_BASE.gate ? 'gate' : 'wall'),
+        ),
       },
     ],
-    posts: [
-      { kind: 'tower', column: 0, row: 1 },
-      { kind: 'tower', column: 0, row: 3 },
-    ],
+    posts: START_BASE.towers.map((row) => ({ kind: 'tower', column: 0, row })),
     turrets: [],
     traps: [],
   };

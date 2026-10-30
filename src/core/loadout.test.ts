@@ -97,14 +97,14 @@ describe('specialised guns suit Gunners', () => {
 });
 
 describe('a Gunner with a rifle and a sidearm', () => {
-  /** The Gunner alone on the upper tower (420, 120), the rifle empty and reloading. */
+  /** The Gunner alone on the upper tower (420, 360), the rifle empty and reloading. */
   function reloading(enemyX: number): HordeState {
     const s = newHorde(1, { ...setup(), roster: [who(L(rifle, 'pistol'))], startDefenderId: 'd' });
     s.toSpawn = 0;
     const d = s.defenders[0]!;
     d.ammo.primary = 0;
     d.reloadedAt.primary = 1;
-    enemy(s, { hp: 1000, maxHp: 1000, x: enemyX, y: 120 });
+    enemy(s, { hp: 1000, maxHp: 1000, x: enemyX, y: 360 });
     return s;
   }
 
@@ -137,7 +137,7 @@ describe('a Gunner with a rifle and a sidearm', () => {
       s.toSpawn = 0;
       s.defenders[0]!.walking = true;
       s.defenders[0]!.x = 300;
-      enemy(s, { hp: 1000, maxHp: 1000, x: 500, y: 120 });
+      enemy(s, { hp: 1000, maxHp: 1000, x: 500, y: 360 });
       return tick(s, STEP);
     };
     expect(walk(L(rifle)).shots).toEqual([]);
@@ -149,7 +149,7 @@ describe('a Gunner with a rifle and a sidearm', () => {
   it('a standing Gunner with a loaded rifle fires the rifle, not the sidearm', () => {
     const s = newHorde(1, { ...setup(), roster: [who(L(rifle, 'pistol'))], startDefenderId: 'd' });
     s.toSpawn = 0;
-    enemy(s, { hp: 1000, maxHp: 1000, x: 520, y: 120 });
+    enemy(s, { hp: 1000, maxHp: 1000, x: 520, y: 360 });
     const after = tick(s, STEP);
     expect(after.defenders[0]!.ammo).toEqual({ primary: RIFLE.magazine - 1, secondary: 10 });
   });

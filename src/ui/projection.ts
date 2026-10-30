@@ -63,6 +63,12 @@ export function clampCamera(cam: Camera, view: View): Camera {
   };
 }
 
+/** The opening view: the zoom that fits the whole field, width and height, centred. */
+export function fitCamera(view: View): Camera {
+  const zoom = Math.min(view.w / FIELD.right, view.h / ((FIELD.height + MARGIN_Y) * TILT));
+  return clampCamera({ x: 0, y: -MARGIN_Y, zoom }, view);
+}
+
 /** Zooms by `factor` keeping the world point under `anchor` in place, then clamps. */
 export function zoomAt(
   cam: Camera,

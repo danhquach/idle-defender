@@ -13,6 +13,7 @@ import {
   spendAll,
   summarise,
 } from './sim.ts';
+import { SEGMENTS, START_BASE } from './data.ts';
 import { NO_STATS } from './stats.ts';
 import { loadoutFrom } from './loadout.ts';
 
@@ -132,12 +133,16 @@ describe('summarise', () => {
   });
 });
 
-/** A new game with segments of column 0 at these HP (rows 0…), the rest full (row 2 is the 150 HP gate). */
+/** A new game with segments of column 0 at these HP (rows 0…), the rest full (the starting gate row is 150 HP). */
 function damaged(...hps: number[]): GameState {
   const game = newGame();
   hps.forEach((hp, row) => (game.base.layers[0]!.slots[row]!.hp = hp));
   return game;
 }
+
+/** Full HP of every starting segment (200, the gate 150), with `at` rows overridden. */
+const slotHps = (at: Record<number, number>): number[] =>
+  Array.from({ length: SEGMENTS }, (_, row) => at[row] ?? (row === START_BASE.gate ? 150 : 200));
 
 describe('repairWhatYouCan', () => {
   it('repairs the most damaged segment first, while the stock covers it', () => {
@@ -145,7 +150,7 @@ describe('repairWhatYouCan', () => {
     game.stock = { scrap: 5, wood: 15, metal: 0, concrete: 0 };
     const after = repairWhatYouCan(game);
     // Row 1 (empty) costs 10 wood 5 scrap; then row 0 needs 3 scrap it no longer has.
-    expect(after.base.layers[0]!.slots.map((s) => s!.hp)).toEqual([100, 200, 150, 200, 200]);
+    expect(after.base.layers[0]!.slots.map((s) => s!.hp)).toEqual(slotHps({ 0: 100 }));
     expect(after.stock).toEqual({ scrap: 0, wood: 5, metal: 0, concrete: 0 });
   });
 
@@ -153,7 +158,7 @@ describe('repairWhatYouCan', () => {
     const game = damaged(0, 150);
     game.stock = { scrap: 2, wood: 3, metal: 0, concrete: 0 };
     const after = repairWhatYouCan(game);
-    expect(after.base.layers[0]!.slots.map((s) => s!.hp)).toEqual([0, 200, 150, 200, 200]);
+    expect(after.base.layers[0]!.slots.map((s) => s!.hp)).toEqual(slotHps({ 0: 0 }));
   });
 });
 

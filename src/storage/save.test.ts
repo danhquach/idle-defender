@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
-import { ARMOURY_CAP, BANK_CAP, RECOVERY_MS } from '../core/data.ts';
-import { newGame, recover, type GameState } from '../core/game.ts';
+import { ARMOURY_CAP, BANK_CAP, RECOVERY_MS, SEGMENTS, STEP } from '../core/data.ts';
+import { newGame, recover, startHorde, type GameState } from '../core/game.ts';
+import { tick } from '../core/horde.ts';
 import type { Loadout } from '../core/loadout.ts';
 import {
   decodeSave,
@@ -10,6 +11,7 @@ import {
   MAX_SAVE_CHARS,
   REJECTED_KEY,
   SAVE_KEY,
+  SAVE_VERSION,
   writeSave,
   type SaveStorage,
 } from './save.ts';
@@ -104,7 +106,7 @@ describe('save', () => {
     });
 
     it('a wrong version, time or extra key at the top', () => {
-      expect(hostile((s) => (s.v = 2))).toBeNull();
+      expect(hostile((s) => (s.v = SAVE_VERSION + 1))).toBeNull();
       expect(hostile((s) => (s.v = '1'))).toBeNull();
       expect(hostile((s) => (s.savedAt = -1))).toBeNull();
       expect(hostile((s) => (s.savedAt = 1.5))).toBeNull();
@@ -164,9 +166,7 @@ describe('save', () => {
       ).toBeNull();
       expect(hostile((s) => (s.game.tiers = ['wood']))).toBeNull(); // metal wall, metal locked
       expect(hostile((s) => s.game.base.layers[0].slots.push(null))).toBeNull();
-      expect(
-        hostile((s) => (s.game.base.layers[0].slots = [null, null, null, null, null])),
-      ).toBeNull();
+      expect(hostile((s) => (s.game.base.layers[0].slots = Array(SEGMENTS).fill(null)))).toBeNull();
     });
 
     it('layers out of order, repeated, off the grid or missing', () => {
@@ -181,7 +181,7 @@ describe('save', () => {
       expect(hostile((s) => (posts(s)[0].kind = 'turret'))).toBeNull();
       expect(hostile((s) => posts(s).push({ ...posts(s)[0] }))).toBeNull();
       expect(hostile((s) => posts(s).reverse())).toBeNull();
-      expect(hostile((s) => (posts(s)[0].row = 5))).toBeNull();
+      expect(hostile((s) => (posts(s)[0].row = SEGMENTS))).toBeNull();
       expect(hostile((s) => posts(s).push({ kind: 'tower', column: 2, row: 0 }))).toBeNull();
       expect(hostile((s) => posts(s).push({ kind: 'wall-walk', column: 1, row: 1 }))).toBeNull();
     });
@@ -604,7 +604,8 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
 
   it('round-trips skill research (ID-019) and refuses it out of order or above the Lab', () => {
     const g = newGame();
-    const raw = (game: Loose) => decodeSave(JSON.stringify({ v: 1, savedAt: NOW, game }));
+    const raw = (game: Loose) =>
+      decodeSave(JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game }));
     const all = { ...g, lab: 2, research: ['flashbang', 'molotov', 'airstrike'] };
     expect(raw(all)?.game.research).toEqual(['flashbang', 'molotov', 'airstrike']);
     expect(raw({ ...all, lab: 1 })).toBeNull(); // Airstrike needs Lab 2
@@ -619,7 +620,8 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
 
   it('refuses research whose tier is not unlocked', () => {
     const g = newGame();
-    const raw = (game: Loose) => decodeSave(JSON.stringify({ v: 1, savedAt: NOW, game }));
+    const raw = (game: Loose) =>
+      decodeSave(JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game }));
     expect(raw({ ...g, lab: 1, research: ['metal-walls'] })).toBeNull(); // Metal not unlocked
     expect(
       raw({ ...g, lab: 1, research: ['metal-walls'], tiers: ['wood', 'metal'] }),
@@ -644,7 +646,7 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
     expect(hostile((s) => (turrets(s)[0].condition = '50'))).toBeNull();
     expect(hostile((s) => (turrets(s)[0].mount = 'ground'))).toBeNull();
     expect(hostile((s) => (turrets(s)[0].mount = 'tower '))).toBeNull();
-    expect(hostile((s) => (turrets(s)[0].row = 5))).toBeNull();
+    expect(hostile((s) => (turrets(s)[0].row = SEGMENTS))).toBeNull();
     expect(hostile((s) => (turrets(s)[0].column = 3))).toBeNull();
     expect(hostile((s) => (turrets(s)[0].extra = 1))).toBeNull();
     expect(hostile((s) => delete turrets(s)[0].condition)).toBeNull();
@@ -662,7 +664,7 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
       hostile((s) => turrets(s).push({ mount: 'wall-walk', column: 1, row: 0, condition: 9 })),
     ).toBeNull(); // the spot holds a wall-walk post
     expect(
-      hostile((s) => turrets(s).unshift({ mount: 'tower', column: 0, row: 1, condition: 9 })),
+      hostile((s) => turrets(s).push({ mount: 'tower', column: 0, row: 4, condition: 9 })),
     ).toBeNull(); // the spot holds a tower post
     expect(hostile((s) => (s.game.research = ['metal-walls']))).toBeNull(); // not researched
     expect(hostile((s) => (s.game.base.turrets = null))).toBeNull();
@@ -736,7 +738,7 @@ describe('save: traps (ID-017)', () => {
     expect(hostile((s) => (traps(s)[0].kind = 'wi\u200bre'))).toBeNull(); // zero-width space
     expect(hostile((s) => (traps(s)[0].kind = '\u202ewire'))).toBeNull(); // bidi override
     expect(hostile((s) => (traps(s)[0].kind = ['wire']))).toBeNull();
-    expect(hostile((s) => (traps(s)[0].row = 5))).toBeNull();
+    expect(hostile((s) => (traps(s)[0].row = SEGMENTS))).toBeNull();
     expect(hostile((s) => (traps(s)[0].row = -1))).toBeNull();
     expect(hostile((s) => (traps(s)[0].row = 0.5))).toBeNull();
     expect(hostile((s) => (traps(s)[0].extra = 1))).toBeNull();
@@ -908,5 +910,148 @@ describe('save: battery bank and generator (ID-015)', () => {
       expect(decodeSave(r)).toBeNull();
     }
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('save: the taller field (ID-047)', () => {
+  const wood = (kind: 'wall' | 'gate', hp = kind === 'gate' ? 150 : 200) => ({
+    kind,
+    tier: 'wood',
+    hp,
+    maxHp: kind === 'gate' ? 150 : 200,
+  });
+  /** The 5-row starting base a v1 save held: gate on row 2, towers on rows 1 and 3. */
+  const oldStart = () => ({
+    layers: [
+      { column: 0, slots: [wood('wall'), wood('wall'), wood('gate'), wood('wall'), wood('wall')] },
+    ],
+    posts: [
+      { kind: 'tower', column: 0, row: 1 },
+      { kind: 'tower', column: 0, row: 3 },
+    ],
+    turrets: [],
+    traps: [],
+  });
+  /** `game` as a v1 save JSON with `base` in its place. */
+  const v1 = (game: GameState, base: Loose): string =>
+    JSON.stringify({ v: 1, savedAt: NOW, game: { ...JSON.parse(JSON.stringify(game)), base } });
+
+  it('moves an old base onto rows 3–7; the new rows are empty ground', () => {
+    const base = {
+      layers: [
+        {
+          column: 0,
+          slots: [wood('wall', 123), wood('wall'), wood('gate'), wood('wall'), wood('wall')],
+        },
+        { column: 1, slots: [null, null, null, null, wood('wall')] },
+      ],
+      posts: [
+        { kind: 'tower', column: 0, row: 1 },
+        { kind: 'tower', column: 0, row: 3 },
+        { kind: 'wall-walk', column: 1, row: 4 },
+      ],
+      turrets: [{ mount: 'tower', column: 0, row: 2, condition: 61.2 }],
+      traps: [{ kind: 'wire', row: 0, durability: 17 }],
+    };
+    const game = played();
+    const save = decodeSave(v1(game, base))!;
+    expect(save.grew).toBe(true);
+    const b = save.game.base;
+    expect(b.layers[0]!.slots.map((s) => s?.kind ?? null)).toEqual([
+      ...[null, null, null],
+      ...['wall', 'wall', 'gate', 'wall', 'wall'],
+      ...[null, null],
+    ]);
+    expect(b.layers[0]!.slots[3]!.hp).toBe(123);
+    expect(b.layers[1]!.slots.map((s) => s?.kind ?? null)).toEqual([
+      ...Array(7).fill(null),
+      'wall',
+      null,
+      null,
+    ]);
+    expect(b.posts).toEqual([
+      { kind: 'tower', column: 0, row: 4 },
+      { kind: 'tower', column: 0, row: 6 },
+      { kind: 'wall-walk', column: 1, row: 7 },
+    ]);
+    expect(b.turrets).toEqual([{ mount: 'tower', column: 0, row: 5, condition: 61.2 }]);
+    expect(b.traps).toEqual([{ kind: 'wire', row: 3, durability: 17 }]);
+    // No lost resources: everything but the base is as saved.
+    expect({ ...save.game, base: null }).toEqual({ ...game, base: null });
+  });
+
+  it('the old starting base lands where the new one stands, less the new rows', () => {
+    const b = decodeSave(v1(newGame(), oldStart()))!.game.base;
+    const start = newGame().base;
+    expect(b.posts).toEqual(start.posts);
+    b.layers[0]!.slots.forEach((s, row) =>
+      expect(s).toEqual(row >= 3 && row <= 7 ? start.layers[0]!.slots[row] : null),
+    );
+  });
+
+  it('saves again as the current version and reloads the same, without the notice', () => {
+    const first = decodeSave(v1(newGame(), oldStart()))!;
+    const raw = encodeSave(first.game, NOW);
+    expect(JSON.parse(raw).v).toBe(SAVE_VERSION);
+    expect(decodeSave(raw)).toEqual({ game: first.game, savedAt: NOW });
+  });
+
+  it('loads through storage with the notice flag', () => {
+    const s = memory();
+    s.setItem(SAVE_KEY, v1(newGame(), oldStart()));
+    const loaded = loadSave(s);
+    expect(loaded.rejected).toBe(false);
+    expect(loaded.save?.grew).toBe(true);
+  });
+
+  it('plays a horde on a moved base without crashing', () => {
+    const game = decodeSave(v1(newGame(), oldStart()))!.game;
+    let h = startHorde(game, 1, game.roster[0]!.id, 0, NOW);
+    // The empty new rows are open gaps until built, so the fight may end early; it must not throw.
+    for (let i = 0; i < 60 / STEP && h.outcome === 'fighting'; i++) h = tick(h, STEP);
+    expect(h.time).toBeGreaterThan(0);
+  });
+
+  it('refuses a v1 save that is not 5 rows, an old row off its grid, or an unknown version', () => {
+    const start = oldStart();
+    const ten = { ...start, layers: [{ column: 0, slots: newGame().base.layers[0]!.slots }] };
+    expect(decodeSave(v1(newGame(), ten))).toBeNull();
+    const offGrid = { ...start, posts: [...start.posts, { kind: 'tower', column: 0, row: 5 }] };
+    expect(decodeSave(v1(newGame(), offGrid))).toBeNull();
+    const trap = { ...start, traps: [{ kind: 'wire', row: 5, durability: 1 }] };
+    expect(decodeSave(v1(newGame(), trap))).toBeNull();
+    // Rows are checked on the old grid before the shift: -1 never becomes row 2.
+    for (const row of [-1, 5]) {
+      const posts = [{ kind: 'tower', column: 0, row }, ...start.posts];
+      expect(decodeSave(v1(newGame(), { ...start, posts })), `post ${row}`).toBeNull();
+      const traps = [{ kind: 'wire', row, durability: 1 }];
+      expect(decodeSave(v1(newGame(), { ...start, traps })), `trap ${row}`).toBeNull();
+      const turrets = [{ mount: 'tower', column: 0, row, condition: 50 }];
+      expect(decodeSave(v1(played(), { ...start, turrets })), `turret ${row}`).toBeNull();
+    }
+    // The same turret on a good old row loads, so only the row refuses above.
+    const turrets = [{ mount: 'tower', column: 0, row: 2, condition: 50 }];
+    expect(decodeSave(v1(played(), { ...start, turrets }))).not.toBeNull();
+    // Layers of the wrong length, empty, or with two gates.
+    const layer = (slots: unknown[]) => ({ ...start, layers: [{ column: 0, slots }] });
+    expect(decodeSave(v1(newGame(), layer(start.layers[0]!.slots.slice(0, 4))))).toBeNull();
+    expect(decodeSave(v1(newGame(), layer([...start.layers[0]!.slots, null])))).toBeNull();
+    expect(decodeSave(v1(newGame(), layer(Array(5).fill(null))))).toBeNull();
+    const twoGates = [wood('gate'), wood('wall'), wood('gate'), wood('wall'), wood('wall')];
+    expect(decodeSave(v1(newGame(), layer(twoGates)))).toBeNull();
+    // Unknown keys on the v1 path, prototype names included.
+    expect(decodeSave(v1(newGame(), { ...start, extra: 1 }))).toBeNull();
+    const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
+    expect(decodeSave(proto)).toBeNull();
+    expect(({} as Record<string, unknown>).x).toBeUndefined();
+    for (const v of [0, 3, '1', 1.5, null]) {
+      expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
+    }
+    // A current save never takes the v1 path: 5 slots are refused.
+    expect(
+      decodeSave(
+        JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game: { ...newGame(), base: start } }),
+      ),
+    ).toBeNull();
   });
 });

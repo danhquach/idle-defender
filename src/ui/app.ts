@@ -1,7 +1,7 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { chooseCard } from '../core/cards.ts';
-import { FIELD, type SkillId, type Stat } from '../core/data.ts';
+import { type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -24,12 +24,12 @@ import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
 import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
-import { createBuildPanel } from './build.ts';
+import { createBuildPanel, FIELD_GREW } from './build.ts';
 import { createHud, defenderLabel, resultScreen } from './hud.ts';
 import {
   clampCamera,
+  fitCamera,
   fightHitAt,
-  MARGIN_Y,
   slotAt,
   TILT,
   unproject,
@@ -185,11 +185,12 @@ export function start(root: HTMLElement, art: Art): void {
   if (!storage) panel.notice('Saving is off: this browser blocks storage. Keep the backup code.');
   else if (loaded.rejected) {
     panel.notice("Your save couldn't be read, so a new camp started. The old save is kept aside.");
+  } else if (loaded.save?.grew) {
+    panel.notice(FIELD_GREW);
   }
 
   let view: View = { w: 0, h: 0 };
-  // Starts framed on the whole field (the first resize fits the zoom to the width).
-  let cam: Camera = { x: 0, y: -MARGIN_Y, zoom: window.innerWidth / FIELD.right };
+  let cam: Camera = { x: 0, y: 0, zoom: 1 };
   function resize(): void {
     const dpr = window.devicePixelRatio || 1;
     view = { w: window.innerWidth, h: window.innerHeight };
@@ -199,6 +200,8 @@ export function start(root: HTMLElement, art: Art): void {
     cam = clampCamera(cam, view);
   }
   resize();
+  // Starts framed on the whole field, its full width and height.
+  cam = fitCamera(view);
   window.addEventListener('resize', resize);
 
   // A fight isn't saved, and neither is its payout until "Back to build": while one

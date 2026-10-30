@@ -14,7 +14,7 @@ import {
   type Base,
   type TrapKind,
 } from './base.ts';
-import { ENEMIES, STEP, TRAP_DURABILITY, TRAP_STRIP, TRAPS, type Stock } from './data.ts';
+import { ENEMIES, SEGMENTS, STEP, TRAP_DURABILITY, TRAP_STRIP, TRAPS, type Stock } from './data.ts';
 import { finishHorde, newGame } from './game.ts';
 import { baseAfter, newHorde, tick, type HordeState } from './horde.ts';
 import { enemy, setup } from './testing.ts';
@@ -78,7 +78,7 @@ describe('trap build actions', () => {
 
   it('throws on a programmer error: unknown kind or a row off the strip', () => {
     expect(() => buildTrap(newBase(), RICH, 'mines' as TrapKind, 0)).toThrow(RangeError);
-    expect(() => buildTrap(newBase(), RICH, 'spikes', 5)).toThrow(RangeError);
+    expect(() => buildTrap(newBase(), RICH, 'spikes', SEGMENTS)).toThrow(RangeError);
     expect(() => buildTrap(newBase(), RICH, 'spikes', -1)).toThrow(RangeError);
     expect(() => buildTrap(newBase(), RICH, 'spikes', 1.5)).toThrow(RangeError);
     expect(() => repairTrap(newBase(), RICH, 0)).toThrow(RangeError);

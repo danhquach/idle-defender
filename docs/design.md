@@ -131,6 +131,19 @@ run top to bottom across the map, so they are easy to lay out and read.
   (§7).
 - **Expansion** *(guess)*: the buildable area grows with research, so later
   bases can hold more layers.
+- **As built (ID-047, starting points):** the field is 1,600 × 800 px with
+  10 segments per layer (80 px each), top to bottom. Enemies spawn along the
+  whole right edge and spread over the full height. The starting layer is
+  10 wood segments with the gate on row 5 (rows count 0–9 from the top) and
+  towers on rows 4 and 6. Segment and repair costs are per segment, so a
+  full wood wall now costs 100 Wood and 50 Scrap; build mode shows each
+  segment's cost and the Repair all total. The balance targets held without
+  a retune. The camera opens fitting the whole field, width and height, and
+  pans to every corner at 0.5–2× zoom. A save from before (5 rows, save v1)
+  loads with its rows moved to rows 3–7, which puts the old start exactly
+  where the new one stands; the new rows are empty ground (open gaps until
+  built) and the build panel says so when it loads, from storage or a
+  backup code.
 
 ### Posts and positioning
 
