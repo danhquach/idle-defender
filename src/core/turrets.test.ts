@@ -27,7 +27,7 @@ import {
   type HordeState,
 } from './horde.ts';
 import { loadoutFrom } from './loadout.ts';
-import { enemy, setup } from './testing.ts';
+import { enemy, landed, setup } from './testing.ts';
 
 const RICH: Stock = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
 
@@ -190,21 +190,24 @@ describe('turrets in a horde', () => {
     expect(s.energy).toBe(setup().bank);
     const e = enemy(s, { x: 600, y: 440, hp: 100, maxHp: 100 });
     const t = tick(s, STEP);
-    expect(t.enemies.find((x) => x.id === e.id)!.hp).toBe(100 - TURRET.damage);
+    expect(t.bullets).toEqual([
+      expect.objectContaining({ owner: 'turret:0', fromX: t.turrets[0]!.x, damage: TURRET.damage }),
+    ]);
     expect(t.turrets[0]!.condition).toBeCloseTo(MAX_CONDITION - TURRET.shotWear);
     expect(t.energy).toBeCloseTo(setup().bank - TURRET.draw * STEP);
-    expect(t.shots.some((sh) => sh.fromX === t.turrets[0]!.x && !sh.melee)).toBe(true);
+    expect(landed(t).enemies.find((x) => x.id === e.id)!.hp).toBe(100 - TURRET.damage);
     // One shot per 0.5 s.
-    const later = tick(t, 0.5);
+    const later = landed(tick(t, 0.5));
     expect(later.enemies[0]!.hp).toBe(100 - 2 * TURRET.damage);
   });
 
   it('take the focused enemy in range over a closer one', () => {
     const s = fight(baseWith(['tower', 0, 5]));
-    const near = enemy(s, { x: 600, y: 440, hp: 100, maxHp: 100 });
+    // Off the line of fire to the far one, which a bullet would otherwise hit first.
+    const near = enemy(s, { x: 600, y: 360, hp: 100, maxHp: 100 });
     const far = enemy(s, { x: 900, y: 440, hp: 100, maxHp: 100 });
     s.focusId = far.id;
-    const t = tick(s, STEP);
+    const t = landed(tick(s, STEP));
     expect(t.enemies.find((e) => e.id === far.id)!.hp).toBe(95);
     expect(t.enemies.find((e) => e.id === near.id)!.hp).toBe(100);
   });
@@ -225,7 +228,7 @@ describe('turrets in a horde', () => {
     expect(t.energy).toBe(setup().bank);
     const tower = s.turrets.find((x) => x.mount === 'tower')!;
     enemy(s, { x: tower.x + 620, y: tower.y, hp: 100, maxHp: 100 });
-    const a = tick(s, STEP);
+    const a = landed(tick(s, STEP));
     expect(a.enemies[0]!.hp).toBe(95);
     const s2 = fight(baseWith(['wall-walk', 0, 0]));
     const wall = s2.turrets[0]!;
@@ -294,7 +297,7 @@ describe('turrets in a horde', () => {
     s.turrets[0]!.condition = 40;
     enemy(s, { x: 600, y: 440, hp: 100, maxHp: 100 });
     const t = tick(s, STEP);
-    expect(t.enemies[0]!.hp).toBeCloseTo(100 - TURRET.damage * (1 + ENGINEER_BUFF));
+    expect(landed(t).enemies[0]!.hp).toBeCloseTo(100 - TURRET.damage * (1 + ENGINEER_BUFF));
     expect(t.turrets[0]!.nextShotAt).toBeCloseTo(
       TURRET.fireInterval / ((1 + ENGINEER_BUFF) * (0.5 + 40 / 100)),
     );

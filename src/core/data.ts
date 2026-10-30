@@ -34,8 +34,9 @@ export const PROFESSIONS: Readonly<Record<Profession, { readonly name: string }>
 
 /**
  * A gun shoots within `range` (× the post's multiplier), `magazine` rounds between
- * reloads of `reload` s. A sidearm goes in either slot and suits everyone; a
- * specialised gun is primary only and suits Gunners (design §6 Loadout).
+ * reloads of `reload` s. Its bullets fly at `speed` px/s, each turned off the aim by up
+ * to `spread` degrees either way (design §6 Ballistics). A sidearm goes in either slot
+ * and suits everyone; a specialised gun is primary only and suits Gunners (design §6 Loadout).
  */
 export interface Gun {
   readonly name: string;
@@ -45,6 +46,8 @@ export interface Gun {
   readonly range: number;
   readonly magazine: number;
   readonly reload: number;
+  readonly speed: number;
+  readonly spread: number;
 }
 /** A blade (secondary) strikes within `reach` of its holder's post; never from a tower. */
 export interface Blade {
@@ -74,11 +77,13 @@ export const WEAPONS = {
   pistol: {
     name: 'Pistol',
     kind: 'sidearm',
-    damage: 6,
+    damage: 6.2,
     fireInterval: 0.6,
     range: 600,
     magazine: 10,
     reload: 1.5,
+    speed: 1800,
+    spread: 2.5,
   },
   knife: { name: 'Knife', kind: 'blade', damage: 10, fireInterval: 0.5, reach: 50 },
   toolkit: {
@@ -153,16 +158,16 @@ export const WEAPON_DROP = {
 };
 /** Owned weapons the camp keeps, in the armoury and in hands together. */
 export const ARMOURY_CAP = 30;
-/** A pierced shot hits the nearest enemy within `width` of its line, up to `reach` past the target. */
-export const PIERCE = { width: 2 * ENEMY_RADIUS, reach: 200 } as const;
+/** A piercing bullet goes through its first enemy and hits the next one it crosses within `reach` px. */
+export const PIERCE = { reach: 200 } as const;
 
 export type ItemId = 'shield';
 export const ITEMS: Readonly<Record<ItemId, { readonly name: string }>> = {
   shield: { name: 'Shield' },
 };
 
-/** A Gunner with any gun: fire rate and reload speed up, crit chance on top of Aim's. */
-export const GUNNER = { fireRate: 0.15, reload: 0.25, crit: 0.05 } as const;
+/** A Gunner with any gun: fire rate and reload speed up, crit chance on top of Aim's, spread cone × `spread`. */
+export const GUNNER = { fireRate: 0.15, reload: 0.25, crit: 0.05, spread: 0.5 } as const;
 /** A non-Gunner with a specialised gun: damage down, reload time up. */
 export const OFF_PROFESSION = { damage: 0.3, reload: 0.5 } as const;
 /** A Gunner's sidearm fires while the primary reloads, at enemies within this many px. */
@@ -193,8 +198,8 @@ export const ENEMIES: Readonly<
 
 export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;
-/** How long a shot line stays on screen, in seconds. */
-export const SHOT_TRAIL = 0.15;
+/** How long a blade or tool strike stays on screen, in seconds. */
+export const STRIKE_FLASH = 0.15;
 
 // --- The base (M2). Grid, tiers and costs; design §3 and §11. ---
 
@@ -382,7 +387,7 @@ export const TURRET_MOUNTS: readonly TurretMount[] = ['tower', 'wall-walk'];
 /** Condition runs 0 (jammed) … `MAX_CONDITION`. */
 export const MAX_CONDITION = 100;
 /**
- * The Auto-turret (design §7): its cost and gun; `draw` charge per second it has a
+ * The Auto-turret (design §7): its cost and gun (bullets at `speed` px/s, ±`spread`°); `draw` charge per second it has a
  * target; condition lost per shot (`shotWear`) and per point of damage its wall
  * segment takes (`hitWear`); below `slowBelow` it fires slower, down to half speed.
  * A full repair costs `repairScrap`; salvage refunds `salvage` × cost × condition share.
@@ -393,6 +398,8 @@ export const TURRET = {
   damage: 5,
   fireInterval: 0.5,
   range: 500,
+  speed: 2000,
+  spread: 1,
   draw: 1,
   shotWear: 0.2,
   hitWear: 0.5,

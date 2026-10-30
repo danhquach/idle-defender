@@ -6,7 +6,7 @@ import { ENEMIES, MAX_CONDITION, SHOP, SHOP_ITEMS, STEP, TURRET, type Stock } fr
 import { finishHorde, newGame } from './game.ts';
 import { boost, newHorde, tick, type HordeState } from './horde.ts';
 import { buffLeft, buy, shopLock } from './shop.ts';
-import { enemy, setup } from './testing.ts';
+import { enemy, landed, setup } from './testing.ts';
 
 const RICH: Stock = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
 
@@ -64,7 +64,7 @@ describe('buffs', () => {
     t.defenders = [];
     for (const p of t.posts) p.defenderId = null;
     const e = enemy(t, { x: 700, y: 40, hp: 100, maxHp: 100 });
-    const hit = tick(bought(t, 'adrenaline'), STEP);
+    const hit = landed(tick(bought(t, 'adrenaline'), STEP));
     expect(100 - hit.enemies.find((x) => x.id === e.id)!.hp).toBeCloseTo(
       TURRET.damage * SHOP.adrenaline.damage,
     );
@@ -161,7 +161,8 @@ describe('repairs', () => {
     s.turrets[0]!.condition = 0;
     const e = enemy(s, { x: 700, y: 40, hp: 100, maxHp: 100 });
     expect(tick(s, STEP).enemies.find((x) => x.id === e.id)!.hp).toBe(100);
-    expect(tick(bought(s, 'fix'), STEP).enemies.find((x) => x.id === e.id)!.hp).toBeLessThan(100);
+    const fixed = landed(tick(bought(s, 'fix'), STEP));
+    expect(fixed.enemies.find((x) => x.id === e.id)!.hp).toBeLessThan(100);
   });
 
   it('refuses Fix turret with no turret, or all at full', () => {

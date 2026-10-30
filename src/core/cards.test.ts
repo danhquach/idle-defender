@@ -4,7 +4,7 @@ import { buildPost, buildSegment, newBase, type Result } from './base.ts';
 import { STEP, type Stock } from './data.ts';
 import { newHorde, tick, type Card, type HordeState } from './horde.ts';
 import { createRng } from './rng.ts';
-import { enemy, setup } from './testing.ts';
+import { enemy, landed, setup } from './testing.ts';
 
 function offers(s: HordeState): Card[][] {
   return Array.from({ length: 200 }, (_, seed) => rollOffer(createRng(seed), s));
@@ -18,7 +18,7 @@ describe('cards', () => {
     const s = newHorde(1, setup());
     s.xp = 9;
     enemy(s, { hp: 1, x: 600, y: 120 });
-    const open = tick(s, STEP);
+    const open = landed(tick(s, STEP));
     expect(open.level).toBe(2);
     expect(open.offer).toHaveLength(3);
     expect(tick(open, 5)).toEqual(open);
@@ -141,7 +141,8 @@ describe('cards', () => {
   it('queues a second level-up', () => {
     const s = newHorde(1, setup());
     s.xp = 23;
-    enemy(s, { hp: 1, x: 600, y: 120 });
+    // Point-blank, so the bullet lands this step, before the first level-up pauses the fight.
+    enemy(s, { hp: 1, x: 440, y: 360 });
     const first = tick(s, STEP);
     expect(first.level).toBe(2);
     expect(first.xp).toBe(14);

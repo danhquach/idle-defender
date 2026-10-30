@@ -101,7 +101,7 @@ function work(h: OwnedWeapon): Weapon {
   }
 }
 
-/** A gun whose shots also hit the next enemy in line. */
+/** A gun whose bullets go through their first enemy to the next one in their path. */
 export const pierces = (h: Held | null): boolean =>
   isOwned(h) && h.affixes.some((a) => a.id === 'pierce');
 

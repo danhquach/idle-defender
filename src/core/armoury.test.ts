@@ -25,7 +25,7 @@ import { newHorde, tick, type HordeState } from './horde.ts';
 import type { Loadout } from './loadout.ts';
 import { createRng } from './rng.ts';
 import { reloadTime } from './stats.ts';
-import { enemy, setup } from './testing.ts';
+import { enemy, landed, setup } from './testing.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -53,7 +53,7 @@ const gun = (primary: Loadout['primary']): Loadout => ({ primary, secondary: nul
 function firstHit(primary: Loadout['primary']): number {
   const s = alone(gun(primary));
   enemy(s, { hp: 1000, maxHp: 1000 });
-  const after = tick(s, STEP);
+  const after = landed(tick(s, STEP));
   return 1000 - after.enemies[0]!.hp;
 }
 
@@ -124,29 +124,25 @@ describe('affixes in a fight', () => {
     const next = enemy(s, { hp: 1000, maxHp: 1000, x: 650 });
     const further = enemy(s, { hp: 1000, maxHp: 1000, x: 700 });
     const off = enemy(s, { hp: 1000, maxHp: 1000, x: 650, y: 440 });
-    const after = tick(s, STEP);
+    const after = landed(tick(s, STEP));
     const hp = (id: number): number => after.enemies.find((e) => e.id === id)!.hp;
     expect(hp(target.id)).toBeLessThan(1000);
     expect(hp(next.id)).toBe(hp(target.id));
     expect(hp(further.id)).toBe(1000);
     expect(hp(off.id)).toBe(1000);
-    // The trail shows both hits: shooter to target, then target to the next.
-    expect(after.shots.map((t) => [t.toX, t.toY]).sort((a, b) => a[0]! - b[0]!)).toEqual([
-      [target.x, target.y],
-      [next.x, next.y],
-    ]);
-    // Past PIERCE.reach behind the target, nothing is hit.
+    // Past PIERCE.reach behind the target (its body's edge to the next one's), nothing is hit.
     const far = alone(gun(owned('pistol', 'military', one('pierce', 1))));
-    enemy(far, { hp: 1000, maxHp: 1000, x: 600 });
-    const beyond = enemy(far, { hp: 1000, maxHp: 1000, x: 801 });
-    expect(tick(far, STEP).enemies.find((e) => e.id === beyond.id)!.hp).toBe(1000);
+    // Stunned, so neither walks into reach while the bullet flies: 201 px edge to edge.
+    enemy(far, { hp: 1000, maxHp: 1000, x: 600, stunnedUntil: 9 });
+    const beyond = enemy(far, { hp: 1000, maxHp: 1000, x: 801, stunnedUntil: 9 });
+    expect(landed(tick(far, STEP)).enemies.find((e) => e.id === beyond.id)!.hp).toBe(1000);
   });
 
   it('without pierce, only the target is hit', () => {
     const s = alone(gun('pistol'));
     enemy(s, { hp: 1000, maxHp: 1000, x: 600 });
     const next = enemy(s, { hp: 1000, maxHp: 1000, x: 650 });
-    expect(tick(s, STEP).enemies.find((e) => e.id === next.id)!.hp).toBe(1000);
+    expect(landed(tick(s, STEP)).enemies.find((e) => e.id === next.id)!.hp).toBe(1000);
   });
 
   it('+repair: an Engineer mends faster', () => {

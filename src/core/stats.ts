@@ -148,6 +148,12 @@ export function critChance(d: Statted): number {
   return Math.min(STAT_EFFECT.critCap, STAT_EFFECT.crit * feed(d, 'gunner').points + gunner);
 }
 
+/** Degrees either way gun `weapon`'s bullets stray off the aim: a Gunner's cone is narrower. Aim only crits. */
+export function spreadOf(d: Statted, weapon: Held): number {
+  const gunner = professionOf(d.loadout) === 'gunner' ? GUNNER.spread : 1;
+  return gunOf(weapon).spread * gunner;
+}
+
 /** Share of a blade strike's damage that cleaves nearby enemies, from Might, capped. */
 export function cleaveShare(d: Statted): number {
   return Math.min(STAT_EFFECT.cleaveCap, STAT_EFFECT.cleave * feed(d, 'ripper').points);

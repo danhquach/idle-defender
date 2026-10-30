@@ -26,11 +26,11 @@ import {
   SEGMENTS,
   SEPARATION_SPEED,
   SHIELD,
-  SHOT_TRAIL,
   SIDEARM_CLOSE,
   SPAWN_INTERVAL,
   STAT_EFFECT,
   STEP,
+  STRIKE_FLASH,
   TRAP_STRIP,
   TRAPS,
   TURRET,
@@ -67,6 +67,7 @@ import {
   maxHpOf,
   reloadTime,
   repairFactor,
+  spreadOf,
 } from './stats.ts';
 import { enemyHp, waveCount, waveSize } from './waves.ts';
 
@@ -112,6 +113,9 @@ export interface Enemy {
   inCamp: boolean;
   /** Fight time a flashbang stuns it until (no moving, no attacking); 0 = never. */
   stunnedUntil: number;
+  /** Velocity over the last step in px/s, which shooters lead (design §6 Ballistics). */
+  vx: number;
+  vy: number;
 }
 /** An unbuilt slot is `{ kind: null, tier: null, hp: 0, maxHp: 0 }`: an open gap. */
 export interface Segment {
@@ -206,14 +210,36 @@ export interface ReplaceOffer {
   postId: number | null;
 }
 export type MoveResult = { ok: true; state: HordeState } | { ok: false; reason: string };
-/** A gun's shot, or a blade or tool strike (drawn short). */
-export interface Shot {
-  melee: boolean;
+/** A blade or tool strike landing on `(x, y)`, drawn for `STRIKE_FLASH` s. */
+export interface Strike {
+  x: number;
+  y: number;
+  at: number;
+}
+/**
+ * A gun's bullet in flight (design §6 Ballistics): it moves `speed` px/s along the unit
+ * heading `(dx, dy)` and hits the first living enemy whose body it crosses.
+ */
+export interface Bullet {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  speed: number;
+  /** Dealt on a hit; the crit was rolled at the trigger. */
+  damage: number;
+  /** The shooter: a defender's id, or `turret:<id>`. */
+  owner: string;
+  /** The muzzle, and how far from it the shot was aimed (the renderer drops it to body height over that). */
   fromX: number;
   fromY: number;
-  toX: number;
-  toY: number;
-  at: number;
+  aim: number;
+  /** Px it can still fly; at 0 it falls with no damage. */
+  left: number;
+  /** Goes through its next hit, then flies at most `PIERCE.reach` on. */
+  pierce: boolean;
+  /** Ids of the enemies it hit: never the same one twice. */
+  hit: number[];
 }
 /** A molotov's fire on the ground, burning enemies inside until `until` (fight time). */
 export interface Fire {
@@ -283,7 +309,9 @@ export interface HordeState {
   blasts: Blast[];
   /** Player-picked target; null = each defender shoots the enemy closest to it. */
   focusId: number | null;
-  shots: Shot[];
+  strikes: Strike[];
+  /** In flight; cleared when the horde ends and never saved. */
+  bullets: Bullet[];
   outcome: Outcome;
 }
 
@@ -341,7 +369,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     fires: [],
     blasts: [],
     focusId: null,
-    shots: [],
+    strikes: [],
+    bullets: [],
     outcome: 'fighting',
   };
 }
@@ -600,19 +629,28 @@ function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   walk(s);
   fire(s, rng);
-  fireTurrets(s);
+  fireTurrets(s, rng);
+  fly(s);
   burn(s);
   repair(s);
   repairTurrets(s);
   springTraps(s);
   removeDead(s);
+  // Moving and separating keep the enemies' order, so their old places line up by index.
+  const wasX = s.enemies.map((e) => e.x);
+  const wasY = s.enemies.map((e) => e.y);
   const moved = move(s);
   separate(s);
+  s.enemies.forEach((e, i) => {
+    e.vx = (e.x - wasX[i]!) / STEP;
+    e.vy = (e.y - wasY[i]!) / STEP;
+  });
   attack(s, moved);
   injure(s);
   drop(s);
   advanceWave(s);
   fall(s);
+  if (s.outcome !== 'fighting') s.bullets = [];
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
   s.time += STEP;
@@ -631,6 +669,8 @@ function spawn(s: HordeState, rng: Rng): void {
       nextAttackAt: 0,
       inCamp: false,
       stunnedUntil: 0,
+      vx: 0,
+      vy: 0,
     });
     s.toSpawn -= 1;
     s.nextSpawnAt = s.time + SPAWN_INTERVAL;
@@ -729,33 +769,106 @@ function choose(
 }
 
 /**
- * The enemy a pierced shot from (x, y) through `target` hits next: the nearest one past
- * the target within `PIERCE.width` of the shot's line and `PIERCE.reach` beyond it.
+ * Where to aim from `(x, y)` at `e` with a bullet at `speed` px/s: where `e` will be when
+ * the bullet gets there, if it keeps its current velocity (design §6 Ballistics).
  */
-function behind(s: HordeState, x: number, y: number, target: Enemy): Enemy | null {
-  const length = Math.hypot(target.x - x, target.y - y);
-  if (length === 0) return null;
-  const ux = (target.x - x) / length;
-  const uy = (target.y - y) / length;
-  let best: Enemy | null = null;
-  let bestAlong = Infinity;
+export function leadPoint(x: number, y: number, e: Enemy, speed: number): { x: number; y: number } {
+  const ox = e.x - x;
+  const oy = e.y - y;
+  // |o + v t| = speed × t. Bullets outrun enemies (a < 0), so one root is ≥ 0.
+  const a = e.vx * e.vx + e.vy * e.vy - speed * speed;
+  const b = 2 * (ox * e.vx + oy * e.vy);
+  const c = ox * ox + oy * oy;
+  const t = a < 0 ? (-b - Math.sqrt(b * b - 4 * a * c)) / (2 * a) : 0;
+  return { x: e.x + e.vx * t, y: e.y + e.vy * t };
+}
+
+/** Fires a bullet from `(x, y)` at where `target` will be, turned off by up to `spread`° (seeded). */
+function launch(
+  s: HordeState,
+  rng: Rng,
+  shot: Pick<Bullet, 'owner' | 'speed' | 'damage' | 'pierce'> & {
+    x: number;
+    y: number;
+    target: Enemy;
+    spread: number;
+    range: number;
+  },
+): void {
+  const { x, y, target, spread, range, ...rest } = shot;
+  const aim = leadPoint(x, y, target, rest.speed);
+  const off = ((rng() * 2 - 1) * spread * Math.PI) / 180;
+  const angle = Math.atan2(aim.y - y, aim.x - x) + off;
+  s.bullets.push({
+    ...rest,
+    x,
+    y,
+    dx: Math.cos(angle),
+    dy: Math.sin(angle),
+    fromX: x,
+    fromY: y,
+    aim: Math.hypot(aim.x - x, aim.y - y),
+    left: range,
+    hit: [],
+  });
+}
+
+/**
+ * The first living enemy `b` has not hit whose body its next `travel` px cross, and how
+ * far along; ties → lowest id. One already overlapping the bullet is crossed at 0, even
+ * behind its heading: point-blank, a shot at an enemy against the post always lands.
+ */
+function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: number } | null {
+  let best: { enemy: Enemy; at: number } | null = null;
   for (const e of s.enemies) {
-    if (e === target || e.hp <= 0) continue;
-    const along = (e.x - x) * ux + (e.y - y) * uy;
-    const across = Math.abs((e.x - x) * uy - (e.y - y) * ux);
-    if (along <= length || along > length + PIERCE.reach + EPS || across > PIERCE.width + EPS) {
-      continue;
+    if (e.hp <= 0) continue;
+    const wx = b.x - e.x;
+    const wy = b.y - e.y;
+    const along = b.dx * wx + b.dy * wy;
+    const gap = wx * wx + wy * wy - ENEMY_RADIUS * ENEMY_RADIUS;
+    let at: number;
+    if (gap <= 0) at = 0;
+    else {
+      const disc = along * along - gap;
+      if (disc < 0) continue;
+      at = -along - Math.sqrt(disc);
+      if (at < 0 || at > travel + EPS) continue;
     }
-    if (along < bestAlong) {
-      best = e;
-      bestAlong = along;
-    }
+    if (b.hit.includes(e.id)) continue;
+    if (!best || at < best.at || (at === best.at && e.id < best.enemy.id)) best = { enemy: e, at };
   }
   return best;
 }
 
+/**
+ * Design §6 Ballistics: each bullet flies one step along its swept path (so a fast one
+ * never tunnels) and hits the first enemy it crosses, once; a piercing one goes on to
+ * the next within `PIERCE.reach`. Spent, or past its range, it is gone.
+ */
+function fly(s: HordeState): void {
+  s.bullets = s.bullets.filter((b) => {
+    let travel = Math.min(b.speed * STEP, b.left);
+    for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
+      hit.enemy.hp -= b.damage;
+      b.hit.push(hit.enemy.id);
+      b.x += b.dx * hit.at;
+      b.y += b.dy * hit.at;
+      b.left -= hit.at;
+      travel -= hit.at;
+      if (!b.pierce) return false;
+      b.pierce = false;
+      b.left = Math.min(b.left, PIERCE.reach);
+      travel = Math.min(travel, b.left);
+    }
+    b.x += b.dx * travel;
+    b.y += b.dy * travel;
+    b.left -= travel;
+    return b.left > EPS;
+  });
+}
+
 function fire(s: HordeState, rng: Rng): void {
-  s.shots = s.shots.filter((shot) => s.time - shot.at < SHOT_TRAIL);
+  s.strikes = s.strikes.filter((k) => s.time - k.at < STRIKE_FLASH);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -775,20 +888,21 @@ function fire(s: HordeState, rng: Rng): void {
       boost(s, 'damage') *
       damageFactor(defender, id) *
       (crit > 0 && chance(rng, crit) ? STAT_EFFECT.critDamage : 1);
-    target.hp -= hit;
-    if (gun && pierces(id)) {
-      const next = behind(s, use.x, use.y, target);
-      if (next) {
-        next.hp -= hit;
-        s.shots.push({
-          melee: false,
-          fromX: target.x,
-          fromY: target.y,
-          toX: next.x,
-          toY: next.y,
-          at: s.time,
-        });
-      }
+    if (gun) {
+      launch(s, rng, {
+        owner: defender.id,
+        x: use.x,
+        y: use.y,
+        target,
+        speed: gunOf(id).speed,
+        spread: spreadOf(defender, id),
+        range: gunRange(s, defender.walking ? { kind: 'ground' } : post, id),
+        damage: hit,
+        pierce: pierces(id),
+      });
+    } else {
+      target.hp -= hit;
+      s.strikes.push({ x: target.x, y: target.y, at: s.time });
     }
     const cleave = weapon.kind === 'blade' ? cleaveShare(defender) : 0;
     if (cleave > 0) {
@@ -808,43 +922,38 @@ function fire(s: HordeState, rng: Rng): void {
       defender.ammo[slot] -= 1;
       if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadTime(defender, id);
     }
-    s.shots.push({
-      melee: !gun,
-      fromX: use.x,
-      fromY: use.y,
-      toX: target.x,
-      toY: target.y,
-      at: s.time,
-    });
   }
 }
 
 /**
  * Design §7: each turret that can fire and has a target draws `TURRET.draw` charge per
- * second, and shoots when due; each shot wears it. Below `slowBelow` condition it fires
+ * second, and shoots a bullet when due; each shot wears it. Below `slowBelow` condition it fires
  * slower, down to half speed. The bank never goes below 0.
  */
-function fireTurrets(s: HordeState): void {
+function fireTurrets(s: HordeState, rng: Rng): void {
   // In id order, so when the bank runs dry the lower ids get the last charge.
   for (const t of s.turrets) {
     if (turretState(s, t) !== 'lit') continue;
-    const target = targetFrom(s, t.x, t.y, TURRET.range * TURRET_RANGE[t.mount]);
+    const range = TURRET.range * TURRET_RANGE[t.mount];
+    const target = targetFrom(s, t.x, t.y, range);
     if (!target) continue;
     s.energy = Math.max(0, s.energy - TURRET.draw * STEP);
     if (!due(s.time, t.nextShotAt)) continue;
     const buff = turretBuff(s, t);
-    target.hp -= TURRET.damage * buff * boost(s, 'damage');
+    launch(s, rng, {
+      owner: `turret:${t.id}`,
+      x: t.x,
+      y: t.y,
+      target,
+      speed: TURRET.speed,
+      spread: TURRET.spread,
+      range,
+      damage: TURRET.damage * buff * boost(s, 'damage'),
+      pierce: false,
+    });
     const slow = Math.min(1, 0.5 + (0.5 * t.condition) / TURRET.slowBelow);
     t.nextShotAt = s.time + TURRET.fireInterval / (buff * slow * boost(s, 'fireRate'));
     wear(t, TURRET.shotWear);
-    s.shots.push({
-      melee: false,
-      fromX: t.x,
-      fromY: t.y,
-      toX: target.x,
-      toY: target.y,
-      at: s.time,
-    });
   }
 }
 

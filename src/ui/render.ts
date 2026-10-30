@@ -131,6 +131,8 @@ const STAND = { defender: 40, enemy: 34, shield: 26 } as const;
 const ENEMY = { shadow: 10, z: 10 } as const;
 /** Half the length of a Ripper's strike mark across the enemy, in px. */
 const STRIKE = 7;
+/** A bullet's tracer length behind it, in field px. */
+const TRACER = 24;
 /** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
 const HP_BAR = { w: 24, h: 4, z: 36, gap: 6 } as const;
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
@@ -148,7 +150,8 @@ export type Scene = Pick<
   | 'energy'
   | 'defenders'
   | 'enemies'
-  | 'shots'
+  | 'strikes'
+  | 'bullets'
   | 'focusId'
   | 'time'
   | 'fires'
@@ -677,32 +680,35 @@ export function drawScene(
     outline(ctx, footprint(build.selected), 0, cam);
   }
 
-  // Shots on top: from the defender's chest to the enemy's body; a Ripper's strike is a
-  // short slash across the enemy instead.
+  // On top: a blade or tool strike is a short slash across the enemy; a bullet is a short
+  // tracer, dropping from the muzzle to body height over the distance it was aimed.
   ctx.lineWidth = Math.max(1, 2 * cam.zoom);
-  for (const shot of scene.shots) {
-    if (shot.melee) {
-      const a = project({ x: shot.toX - STRIKE, y: shot.toY, z: ENEMY.z + STRIKE }, cam);
-      const b = project({ x: shot.toX + STRIKE, y: shot.toY, z: ENEMY.z - STRIKE }, cam);
-      ctx.strokeStyle = COLOR.strike;
-      ctx.beginPath();
-      ctx.moveTo(a.sx, a.sy);
-      ctx.lineTo(b.sx, b.sy);
-      ctx.stroke();
-      continue;
-    }
-    ctx.strokeStyle = COLOR.shot;
-    // Shots start at their post's or turret's exact coordinates, so this finds the shooter.
-    const turret = scene.turrets.find((t) => t.x === shot.fromX && t.y === shot.fromY);
-    const from = scene.posts.find((p) => p.x === shot.fromX && p.y === shot.fromY);
-    const z = turret
+  ctx.strokeStyle = COLOR.strike;
+  for (const k of scene.strikes) {
+    const a = project({ x: k.x - STRIKE, y: k.y, z: ENEMY.z + STRIKE }, cam);
+    const b = project({ x: k.x + STRIKE, y: k.y, z: ENEMY.z - STRIKE }, cam);
+    ctx.beginPath();
+    ctx.moveTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = COLOR.shot;
+  for (const b of scene.bullets) {
+    // Bullets leave their post's or turret's exact coordinates, so this finds the shooter.
+    const turret = scene.turrets.find((t) => t.x === b.fromX && t.y === b.fromY);
+    const from = scene.posts.find((p) => p.x === b.fromX && p.y === b.fromY);
+    const muzzle = turret
       ? turretFloor(scene.layers, turret) + PIECE.turret.height / 2
       : (from ? postFloor(scene.layers, from) : PIECE.tower.height) + DEFENDER.height * 0.7;
-    const a0 = project({ x: shot.fromX, y: shot.fromY, z }, cam);
-    const to = project({ x: shot.toX, y: shot.toY, z: ENEMY.z }, cam);
+    const flown = Math.hypot(b.x - b.fromX, b.y - b.fromY);
+    const zAt = (d: number): number =>
+      muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? d / b.aim : 1);
+    const tail = Math.min(TRACER, flown);
+    const a = project({ x: b.x - b.dx * tail, y: b.y - b.dy * tail, z: zAt(flown - tail) }, cam);
+    const head = project({ x: b.x, y: b.y, z: zAt(flown) }, cam);
     ctx.beginPath();
-    ctx.moveTo(a0.sx, a0.sy);
-    ctx.lineTo(to.sx, to.sy);
+    ctx.moveTo(a.sx, a.sy);
+    ctx.lineTo(head.sx, head.sy);
     ctx.stroke();
   }
 
