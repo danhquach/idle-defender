@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, buildTurret, newBase, type Base } from '../core/base.ts';
-import { START_STOCK } from '../core/data.ts';
+import { FIELD, START_STOCK } from '../core/data.ts';
 import { newHorde, standing } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
 import {
   clampCamera,
   depthSort,
   fightHitAt,
+  fitCamera,
+  MARGIN_Y,
   project,
   slotAt,
   unproject,
   wallHeight,
   zoomAt,
+  type Camera,
 } from './projection.ts';
 
 describe('projection', () => {
@@ -40,17 +43,54 @@ describe('projection', () => {
   });
 
   it('clamps vertical pan to the field', () => {
-    // The pannable depth is -MARGIN_Y…400; a view 120 high at zoom 2 shows 100 world units.
+    // The pannable depth is -MARGIN_Y…800; a view 120 high at zoom 2 shows 100 world units.
     const short = { w: 800, h: 120 };
     expect(clampCamera({ x: 0, y: -500, zoom: 2 }, short).y).toBe(-80);
-    expect(clampCamera({ x: 0, y: 500, zoom: 2 }, short).y).toBe(300);
+    expect(clampCamera({ x: 0, y: 900, zoom: 2 }, short).y).toBe(700);
   });
 
   it('centres the field on an axis where it all fits', () => {
-    // 600 / 1.2 = 500 world units deep, more than the 480 to show: centred at (-80 + 400 - 500) / 2.
-    expect(clampCamera({ x: 0, y: 300, zoom: 2 }, { w: 800, h: 600 }).y).toBe(-90);
+    // 600 / 0.6 = 1000 world units deep, more than the 880 to show: centred at (-80 + 800 - 1000) / 2.
+    expect(clampCamera({ x: 0, y: 300, zoom: 1 }, { w: 800, h: 600 }).y).toBe(-140);
     // 2000 wide at zoom 0.5 shows 4000 world units of a 1600 field: centred at -1200.
     expect(clampCamera({ x: 300, y: 0, zoom: 0.5 }, { w: 2000, h: 600 }).x).toBe(-1200);
+  });
+
+  /** True when the world point shows inside `view` under `cam` (with a rounding hair). */
+  const shows = (p: { x: number; y: number }, cam: Camera, view: { w: number; h: number }) => {
+    const { sx, sy } = project(p, cam);
+    return sx >= -1e-9 && sx <= view.w + 1e-9 && sy >= -1e-9 && sy <= view.h + 1e-9;
+  };
+  const corners = [
+    { x: 0, y: -MARGIN_Y },
+    { x: FIELD.right, y: -MARGIN_Y },
+    { x: 0, y: FIELD.height },
+    { x: FIELD.right, y: FIELD.height },
+  ];
+
+  it('opens framed on the whole field, fitting the height as well as the width', () => {
+    // Wide screen: the width decides (1920 / 1600 = 1.2); the height has room and is centred.
+    const wide = { w: 1920, h: 1080 };
+    const w = fitCamera(wide);
+    expect(w.zoom).toBeCloseTo(1.2);
+    expect(corners.every((c) => shows(c, w, wide))).toBe(true);
+    // A short, very wide screen: the height decides (600 / (880 × 0.6) ≈ 1.136).
+    const strip = { w: 3440, h: 600 };
+    const s = fitCamera(strip);
+    expect(s.zoom).toBeCloseTo(600 / ((FIELD.height + MARGIN_Y) * 0.6));
+    expect(corners.every((c) => shows(c, s, strip))).toBe(true);
+    // Too small to fit even at the 0.5 floor: zoomed out as far as it goes.
+    expect(fitCamera({ w: 400, h: 200 }).zoom).toBe(0.5);
+  });
+
+  it('pans to every corner at any zoom', () => {
+    const view = { w: 1280, h: 720 };
+    for (const zoom of [0.5, 1, 2]) {
+      const topLeft = clampCamera({ x: -1e6, y: -1e6, zoom }, view);
+      const bottomRight = clampCamera({ x: 1e6, y: 1e6, zoom }, view);
+      expect(shows(corners[0]!, topLeft, view), `zoom ${zoom}`).toBe(true);
+      expect(shows(corners[3]!, bottomRight, view), `zoom ${zoom}`).toBe(true);
+    }
   });
 
   it('zooms around the cursor', () => {
@@ -111,17 +151,17 @@ describe('projection', () => {
 });
 
 describe('slotAt', () => {
-  // The starting base: column 0 built (wall x 500), towers at column 0 rows 1 and 3
+  // The starting base: column 0 built (wall x 500), towers at column 0 rows 4 and 6
   // (x 420); columns 1 (x 760) and 2 (x 1020) empty.
   const base = newBase();
 
   it('hits a trap cell on the outer layer’s strip, by row', () => {
     expect(slotAt(1100, 0, base)).toEqual({ column: 2, row: 0, what: 'trap' });
     expect(slotAt(1160, 250, base)).toEqual({ column: 2, row: 3, what: 'trap' });
-    expect(slotAt(1220, 399, base)).toEqual({ column: 2, row: 4, what: 'trap' });
+    expect(slotAt(1220, 799, base)).toEqual({ column: 2, row: 9, what: 'trap' });
     expect(slotAt(1099, 200, base)).toBeNull();
     expect(slotAt(1221, 200, base)).toBeNull();
-    expect(slotAt(1160, 400, base)).toBeNull();
+    expect(slotAt(1160, 800, base)).toBeNull();
     expect(slotAt(1160, -1, base)).toBeNull();
   });
 
@@ -129,17 +169,17 @@ describe('slotAt', () => {
     expect(slotAt(770, 40, base)).toEqual({ column: 1, row: 0, what: 'segment' });
     expect(slotAt(680, 200, base)).toEqual({ column: 1, row: 2, what: 'tower' });
     expect(slotAt(600, 360, base)).toEqual({ column: 1, row: 4, what: 'ground' });
-    expect(slotAt(1030, 399, base)).toEqual({ column: 2, row: 4, what: 'segment' });
+    expect(slotAt(1030, 799, base)).toEqual({ column: 2, row: 9, what: 'segment' });
     expect(slotAt(340, 100, base)).toEqual({ column: 0, row: 1, what: 'ground' });
   });
 
   it('hits a built piece on its top face, the front one where they overlap', () => {
-    // Tower row 1 (centre y 120): a 50-high box shows 50 × 0.8 / 0.6 ≈ 66.7 behind its footprint.
-    expect(slotAt(420, 60, base)).toEqual({ column: 0, row: 1, what: 'tower' });
-    // The built tower at row 3 covers y 189…304; the empty row-2 slot only 176…224.
-    expect(slotAt(420, 200, base)).toEqual({ column: 0, row: 3, what: 'tower' });
-    expect(slotAt(420, 180, base)).toEqual({ column: 0, row: 2, what: 'tower' });
-    expect(slotAt(420, 160, base)).toBeNull();
+    // Tower row 4 (centre y 360): a 50-high box shows 50 × 0.8 / 0.6 ≈ 66.7 behind its footprint.
+    expect(slotAt(420, 300, base)).toEqual({ column: 0, row: 4, what: 'tower' });
+    // The built tower at row 6 covers y 429…544; the empty row-5 slot only 416…464.
+    expect(slotAt(420, 440, base)).toEqual({ column: 0, row: 6, what: 'tower' });
+    expect(slotAt(420, 420, base)).toEqual({ column: 0, row: 5, what: 'tower' });
+    expect(slotAt(420, 400, base)).toBeNull();
     // A full wall's top face (40 high, ≈ 53.3) at row 1 is in front of row 0's front face.
     expect(slotAt(510, 75, base)).toEqual({ column: 0, row: 1, what: 'segment' });
     expect(slotAt(510, 20, base)).toEqual({ column: 0, row: 0, what: 'segment' });
@@ -149,7 +189,7 @@ describe('slotAt', () => {
     expect(slotAt(460, 120, base)).toBeNull(); // between a tower and the wall
     expect(slotAt(340, 80, base)).toBeNull(); // between two empty ground slots
     expect(slotAt(600, 145, base)).toBeNull(); // just past an empty ground slot's depth
-    expect(slotAt(510, 400, base)).toBeNull();
+    expect(slotAt(510, 800, base)).toBeNull();
     expect(slotAt(510, -60, base)).toBeNull();
     expect(slotAt(1500, 200, base)).toBeNull();
     expect(slotAt(NaN, 200, base)).toBeNull();
@@ -181,14 +221,14 @@ describe('slotAt', () => {
 
   it("selects a turret's spot by its head, on a tower or a wall mount", () => {
     const rich = { ...START_STOCK, wood: 500, scrap: 500 };
-    let r = buildTurret(base, rich, true, 'tower', 0, 2);
+    let r = buildTurret(base, rich, true, 'tower', 0, 5);
     if (!r.ok) throw new Error(r.reason);
     r = buildTurret(r.base, r.stock, true, 'wall-walk', 0, 1);
     if (!r.ok) throw new Error(r.reason);
-    // Tower turret at row 2 (centre y 200): 50 + 12 high → lift 82.7, from y 93.3; it is
-    // in front of the row-1 tower, which wins there without the turret.
-    expect(slotAt(420, 100, base)).toEqual({ column: 0, row: 1, what: 'tower' });
-    expect(slotAt(420, 100, r.base)).toEqual({ column: 0, row: 2, what: 'tower' });
+    // Tower turret at row 5 (centre y 440): 50 + 12 high → lift 82.7, from y 333.3; it is
+    // in front of the row-4 tower, which wins there without the turret.
+    expect(slotAt(420, 340, base)).toEqual({ column: 0, row: 4, what: 'tower' });
+    expect(slotAt(420, 340, r.base)).toEqual({ column: 0, row: 5, what: 'tower' });
     // Wall turret on row 1 (y0 80): 40 + 6 + 12 high → lift 77.3, from y 2.7.
     expect(slotAt(510, 10, base)).toEqual({ column: 0, row: 0, what: 'segment' });
     expect(slotAt(510, 10, r.base)).toEqual({ column: 0, row: 1, what: 'segment' });
@@ -197,7 +237,7 @@ describe('slotAt', () => {
 
 describe('fightHitAt', () => {
   // The starting base plus wall-walk posts on column 0 rows 0 and 1; a stands on the
-  // row-1 tower (420, 120), b walks at (460, 200).
+  // row-4 tower (420, 360), b walks at (460, 440).
   function fight() {
     const rich = { ...START_STOCK, wood: 500, scrap: 500 };
     let base = newBase();
@@ -208,19 +248,19 @@ describe('fightHitAt', () => {
     }
     const s = newHorde(1, { ...setup(), base, startPostId: 0 });
     const post = s.posts[1]!;
-    s.defenders.push({ ...standing(s.bench[0]!, post, 0), x: 460, y: 200, walking: true });
+    s.defenders.push({ ...standing(s.bench[0]!, post, 0), x: 460, y: 440, walking: true });
     post.defenderId = 'b';
     return s;
   }
 
   it('hits a defender before the post it stands on', () => {
     const s = fight();
-    // a on the 50-high tower: its body (z 50…80) shows over y ≈ 3…63.
-    expect(fightHitAt(420, 30, s)).toEqual({ defenderId: 'a' });
-    expect(fightHitAt(420, 100, s)).toEqual({ postId: 0 });
-    // b walks on the ground (z 0…30): y 150…210.
-    expect(fightHitAt(460, 160, s)).toEqual({ defenderId: 'b' });
-    expect(fightHitAt(460, 212, s)).toBeNull();
+    // a on the 50-high tower: its body (z 50…80) shows over y ≈ 243…303.
+    expect(fightHitAt(420, 270, s)).toEqual({ defenderId: 'a' });
+    expect(fightHitAt(420, 340, s)).toEqual({ postId: 0 });
+    // b walks on the ground (z 0…30): y 390…450.
+    expect(fightHitAt(460, 400, s)).toEqual({ defenderId: 'b' });
+    expect(fightHitAt(460, 452, s)).toBeNull();
   });
 
   it('a wall-walk post covers its segment; the front one wins', () => {

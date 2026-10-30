@@ -24,13 +24,13 @@ export function setup(): HordeSetup {
   };
 }
 
-/** Adds a shambler to `s` (x 600, y 120 — level with post 0 — and 20 HP unless overridden). */
+/** Adds a shambler to `s` (x 600, y 360 — level with post 0 — and 20 HP unless overridden). */
 export function enemy(s: HordeState, e: Partial<Enemy>): Enemy {
   const made: Enemy = {
     id: s.nextEnemyId++,
     kind: 'shambler',
     x: 600,
-    y: 120,
+    y: 360,
     hp: 20,
     maxHp: 20,
     nextAttackAt: 0,

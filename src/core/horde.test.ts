@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, newBase, type Base, type Result } from './base.ts';
 import { chooseCard } from './cards.ts';
-import { STEP, WALK_SPEED, type PostKind, type Stock } from './data.ts';
+import {
+  FIELD,
+  SEGMENT_HEIGHT,
+  SEGMENTS,
+  START_BASE,
+  STEP,
+  WALK_SPEED,
+  type PostKind,
+  type Stock,
+} from './data.ts';
 import {
   baseAfter,
   gunRange,
@@ -15,6 +24,13 @@ import {
 } from './horde.ts';
 import { enemy, setup } from './testing.ts';
 import { loadoutFrom } from './loadout.ts';
+
+/** The starting base's gate row, and the `y` at the middle of a row. */
+const GATE = START_BASE.gate;
+const rowY = (row: number): number => (row + 0.5) * SEGMENT_HEIGHT;
+/** Segment HP across the starting layer: walls 200, the gate 150, with `at` rows overridden. */
+const hpsWith = (at: Record<number, number> = {}): number[] =>
+  Array.from({ length: SEGMENTS }, (_, row) => at[row] ?? (row === GATE ? 150 : 200));
 
 /** A horde with nobody on the posts, so nothing dies. */
 function unmanned(): HordeState {
@@ -53,7 +69,7 @@ describe('newHorde', () => {
     expect(s.posts[0]?.defenderId).toBe('a');
     expect(s.posts[1]?.defenderId).toBeNull();
     expect(s.bench.map((d) => d.id)).toEqual(['b', 'c']);
-    expect(s.layers[0]?.segments).toHaveLength(5);
+    expect(s.layers[0]?.segments).toHaveLength(SEGMENTS);
     expect(s.defenders[0]).toMatchObject({ hp: 100, maxHp: 100 });
     expect(s.injured).toEqual([]);
     expect(s.tookPart).toEqual(['a']);
@@ -119,25 +135,37 @@ describe('tick', () => {
     for (const e of s.enemies) {
       expect(e.x).toBeLessThanOrEqual(1600);
       expect(e.y).toBeGreaterThanOrEqual(12);
-      expect(e.y).toBeLessThanOrEqual(388);
+      expect(e.y).toBeLessThanOrEqual(FIELD.height - 12);
     }
+  });
+
+  it('spreads spawns over the full height: every row gets some', () => {
+    // Wave 1's first 8 spawns on 10 seeds, seen as they appear at the right edge.
+    const ys: number[] = [];
+    for (let seed = 1; seed <= 10; seed++) {
+      const s = newHorde(seed, setup());
+      s.defenders = [];
+      ys.push(...tick(s, 7).enemies.map((e) => e.y));
+    }
+    expect(ys).toHaveLength(80);
+    expect(new Set(ys.map((y) => Math.floor(y / SEGMENT_HEIGHT))).size).toBe(SEGMENTS);
   });
 
   it('enemies stop at the wall and hit their segment', () => {
     const s = still();
-    enemy(s, { x: 530, y: 200 });
+    enemy(s, { x: 530, y: rowY(GATE) });
     const after = tick(s, 1.5);
     expect(after.enemies[0]?.x).toBe(520);
-    expect(after.enemies[0]?.y).toBe(200);
-    // Row 2 is the starting base's gate (150 HP); two hits of 5.
-    expect(after.layers[0]?.segments.map((g) => g.hp)).toEqual([200, 200, 140, 200, 200]);
+    expect(after.enemies[0]?.y).toBe(rowY(GATE));
+    // The gate row (150 HP) takes two hits of 5.
+    expect(after.layers[0]?.segments.map((g) => g.hp)).toEqual(hpsWith({ [GATE]: 140 }));
   });
 
   it('a breach pulls nearby enemies through', () => {
     const s = still();
-    s.layers[0]!.segments[2]!.hp = 0;
-    enemy(s, { x: 530, y: 200 });
-    enemy(s, { x: 530, y: 300 });
+    s.layers[0]!.segments[GATE]!.hp = 0;
+    enemy(s, { x: 530, y: rowY(GATE) });
+    enemy(s, { x: 530, y: rowY(GATE) + 100 });
     // 10 s: the camp is falling from the first one inside, but not fallen yet.
     const after = tick(s, 10);
     expect(after.outcome).toBe('fighting');
@@ -145,27 +173,27 @@ describe('tick', () => {
     expect(a?.x).toBeCloseTo(230);
     expect(a?.inCamp).toBe(true);
     expect(b?.inCamp).toBe(true);
-    expect(b?.y).toBeLessThan(240);
+    expect(b?.y).toBeLessThan(rowY(GATE) + 40);
     expect(b?.x).toBeLessThan(500);
-    expect(after.layers[0]?.segments[3]?.hp).toBe(200);
+    expect(after.layers[0]?.segments[GATE + 1]?.hp).toBe(200);
   });
 
   it('slides toward the nearest gap, ties to the lower index', () => {
     const s = still();
-    s.layers[0]!.segments[1]!.hp = 0;
-    s.layers[0]!.segments[3]!.hp = 0;
-    // y 200 is 80 from both gap centres (120 and 280).
-    enemy(s, { x: 530, y: 200 });
-    expect(tick(s, STEP).enemies[0]?.y).toBeCloseTo(199);
+    s.layers[0]!.segments[GATE - 1]!.hp = 0;
+    s.layers[0]!.segments[GATE + 1]!.hp = 0;
+    // The gate row's middle is 80 from both gap centres (the rows above and below).
+    enemy(s, { x: 530, y: rowY(GATE) });
+    expect(tick(s, STEP).enemies[0]?.y).toBeCloseTo(rowY(GATE) - 1);
   });
 
   it('an enemy the crowd pushes back from a gap still hits the wall', () => {
     const s = still();
-    s.layers[0]!.segments[2]!.hp = 0;
+    s.layers[0]!.segments[GATE]!.hp = 0;
     // Both slide up toward the gap; separation pushes the lower one down faster than it slides.
-    enemy(s, { x: 520, y: 290 });
-    enemy(s, { x: 520, y: 300 });
-    expect(tick(s, STEP).layers[0]?.segments[3]?.hp).toBe(195);
+    enemy(s, { x: 520, y: rowY(GATE) + 90 });
+    enemy(s, { x: 520, y: rowY(GATE) + 100 });
+    expect(tick(s, STEP).layers[0]?.segments[GATE + 1]?.hp).toBe(195);
   });
 
   it('an enemy on a segment boundary belongs to the lower segment', () => {
@@ -183,17 +211,19 @@ describe('tick', () => {
     s.layers.push({
       column: 1,
       x: 800,
-      segments: s.layers[0]!.segments.map((g) => ({ ...g, hp: g.index === 2 ? 0 : g.hp })),
+      segments: s.layers[0]!.segments.map((g) => ({ ...g, hp: g.index === GATE ? 0 : g.hp })),
     });
-    enemy(s, { x: 900, y: 200 });
+    enemy(s, { x: 900, y: rowY(GATE) });
     const after = tick(s, 15);
     expect(after.enemies[0]?.x).toBe(520);
-    expect(after.layers[1]?.segments.map((g) => g.hp)).toEqual([200, 200, 0, 200, 200]);
+    expect(after.layers[1]?.segments.map((g) => g.hp)).toEqual(
+      Array.from({ length: SEGMENTS }, (_, row) => (row === GATE ? 0 : 200)),
+    );
   });
 
   it("far enemies don't steer yet", () => {
     const s = still();
-    s.layers[0]!.segments[2]!.hp = 0;
+    s.layers[0]!.segments[GATE]!.hp = 0;
     enemy(s, { x: 900, y: 300 });
     const after = tick(s, STEP);
     expect(after.enemies[0]?.y).toBe(300);
@@ -204,7 +234,7 @@ describe('tick', () => {
     const s = still();
     // Sturdy enough that 20 shamblers can't break a segment in 10 s.
     for (const g of s.layers[0]!.segments) g.hp = g.maxHp = 10_000;
-    for (let i = 0; i < 20; i++) enemy(s, { x: 530, y: 20 + (360 * i) / 19 });
+    for (let i = 0; i < 20; i++) enemy(s, { x: 530, y: 20 + ((FIELD.height - 40) * i) / 19 });
     const after = tick(s, 10);
     for (const e of after.enemies) expect(e.x).toBeGreaterThanOrEqual(520);
   });
@@ -218,7 +248,7 @@ describe('tick', () => {
     expect(Math.abs(e0!.y - e1!.y)).toBeGreaterThanOrEqual(24 - 1e-6);
     for (const e of [e0!, e1!]) {
       expect(e.y).toBeGreaterThanOrEqual(12);
-      expect(e.y).toBeLessThanOrEqual(388);
+      expect(e.y).toBeLessThanOrEqual(FIELD.height - 12);
     }
     const edge = still();
     enemy(edge, { x: 520, y: 12 });
@@ -257,25 +287,25 @@ describe('combat', () => {
 
   it('shoots the enemy closest to the defender', () => {
     const s = quiet();
-    enemy(s, { x: 800, y: 390 });
-    enemy(s, { x: 850, y: 120 });
+    enemy(s, { x: 800, y: 630 });
+    enemy(s, { x: 850, y: 360 });
     const after = tick(s, STEP);
     expect(after.enemies.map((e) => e.hp)).toEqual([20, 14]);
     expect(after.shots).toHaveLength(1);
-    expect(after.shots[0]).toMatchObject({ fromX: 420, fromY: 120, toX: 850, toY: 120 });
+    expect(after.shots[0]).toMatchObject({ fromX: 420, fromY: 360, toX: 850, toY: 360 });
   });
 
   it('breaks a tie on distance by the lowest id', () => {
     const s = quiet();
-    enemy(s, { x: 800, y: 220 });
-    enemy(s, { x: 800, y: 20 });
+    enemy(s, { x: 800, y: 460 });
+    enemy(s, { x: 800, y: 260 });
     const after = tick(s, STEP);
     expect(after.enemies.map((e) => e.hp)).toEqual([14, 20]);
   });
 
   it("doesn't shoot out of range", () => {
     const s = quiet();
-    enemy(s, { x: 1300, y: 120 });
+    enemy(s, { x: 1300, y: 360 });
     const after = tick(s, STEP);
     expect(after.enemies[0]?.hp).toBe(20);
     expect(after.shots).toEqual([]);
@@ -351,11 +381,11 @@ describe('combat', () => {
 });
 
 describe('focus', () => {
-  /** P is nearer the camp, Q nearer post 0 at (420, 120). */
+  /** P is nearer the camp, Q nearer post 0 at (420, 360). */
   function pq(): { s: HordeState; p: number; q: number } {
     const s = quiet();
-    const p = enemy(s, { x: 800, y: 390 }).id;
-    const q = enemy(s, { x: 850, y: 120 }).id;
+    const p = enemy(s, { x: 800, y: 630 }).id;
+    const q = enemy(s, { x: 850, y: 360 }).id;
     return { s, p, q };
   }
   const hp = (s: HordeState, id: number) => s.enemies.find((e) => e.id === id)?.hp;
@@ -369,7 +399,7 @@ describe('focus', () => {
 
   it('focus out of range falls back to closest', () => {
     const { s, q } = pq();
-    const r = enemy(s, { x: 1300, y: 120 }).id;
+    const r = enemy(s, { x: 1300, y: 360 }).id;
     const after = tick(setFocus(s, r), STEP);
     expect(hp(after, q)).toBe(14);
     expect(hp(after, r)).toBe(20);
@@ -411,8 +441,8 @@ describe('focus', () => {
 
   it('enemyAt picks the nearest within reach', () => {
     const { s, q } = pq();
-    expect(enemyAt(s, 852, 118)).toBe(q);
-    expect(enemyAt(s, 600, 250)).toBeNull();
+    expect(enemyAt(s, 852, 358)).toBe(q);
+    expect(enemyAt(s, 600, 490)).toBeNull();
   });
 
   it('enemyAt breaks a tie by the lowest id', () => {
@@ -479,17 +509,17 @@ describe('fighting on the base', () => {
 
   it('two layers: enemies stop at the outer one first', () => {
     const base = baseWith(
-      ...[0, 1, 2, 3, 4].map(
+      ...Array.from({ length: SEGMENTS }, (_, row) => row).map(
         (row) => (b: Base, s: Stock) => buildSegment(b, s, ['wood'], 1, row, 'wall', 'wood'),
       ),
     );
     const s = stillOn(base);
     expect(s.layers.map((l) => l.x)).toEqual([500, 760]);
-    enemy(s, { x: 900, y: 200 });
+    enemy(s, { x: 900, y: rowY(GATE) });
     const after = tick(s, 10);
     expect(after.enemies[0]?.x).toBe(780);
-    expect(after.layers[1]!.segments[2]!.hp).toBeLessThan(200);
-    expect(after.layers[0]!.segments[2]!.hp).toBe(150);
+    expect(after.layers[1]!.segments[GATE]!.hp).toBeLessThan(200);
+    expect(after.layers[0]!.segments[GATE]!.hp).toBe(150);
   });
 
   it('shares nothing with the base', () => {
@@ -542,7 +572,7 @@ describe('baseAfter', () => {
     enemy(s, { x: 530, y: 40 });
     const after = tick(s, 1.5);
     const base = baseAfter(newBase(), after);
-    expect(base.layers[0]!.slots.map((g) => g?.hp)).toEqual([190, 200, 150, 200, 200]);
+    expect(base.layers[0]!.slots.map((g) => g?.hp)).toEqual(hpsWith({ 0: 190 }));
     expect(base.posts).toEqual(newBase().posts);
   });
 
@@ -553,13 +583,12 @@ describe('baseAfter', () => {
     s.layers[0]!.segments[1]!.hp = 250;
     s.layers[0]!.segments[3]!.hp = 0;
     const base = baseAfter(newBase(), s);
-    expect(base.layers[0]!.slots.map((g) => [g?.hp, g?.maxHp])).toEqual([
-      [1, 200],
-      [200, 200],
-      [150, 150],
-      [0, 200],
-      [200, 200],
-    ]);
+    const expected = Array.from({ length: SEGMENTS }, (_, row) =>
+      row === GATE ? [150, 150] : [200, 200],
+    );
+    expected[0] = [1, 200];
+    expected[3] = [0, 200];
+    expect(base.layers[0]!.slots.map((g) => [g?.hp, g?.maxHp])).toEqual(expected);
   });
 
   it('leaves its inputs untouched', () => {
@@ -641,17 +670,17 @@ const mustMove = (s: HordeState, id: string, post: number): HordeState => {
 
 describe('moving defenders', () => {
   it('frees the old post, reserves the new one and arrives after distance / speed', () => {
-    const s = fightOn(postsBase([]), ['tower', 1]);
-    const from = postId(s, 'tower', 1);
+    const s = fightOn(postsBase([]), ['tower', 4]);
+    const from = postId(s, 'tower', 4);
     const to = postId(s, 'wall-walk', 0);
     const before = structuredClone(s);
     const moved = mustMove(s, 'a', to);
     expect(s).toEqual(before);
     expect(moved.posts[from]!.defenderId).toBeNull();
     expect(moved.posts[to]!.defenderId).toBe('a');
-    expect(moved.defenders[0]).toMatchObject({ postId: to, walking: true, x: 420, y: 120 });
+    expect(moved.defenders[0]).toMatchObject({ postId: to, walking: true, x: 420, y: 360 });
 
-    const time = Math.hypot(510 - 420, 40 - 120) / WALK_SPEED;
+    const time = Math.hypot(510 - 420, 40 - 360) / WALK_SPEED;
     const early = tick(moved, time - STEP);
     expect(early.defenders[0]!.walking).toBe(true);
     expect(early.defenders[0]!.x).toBeGreaterThan(420);
@@ -661,7 +690,7 @@ describe('moving defenders', () => {
   });
 
   it('fires a pistol (a sidearm) on the move, from where the walker is, and on arrival', () => {
-    const s = fightOn(postsBase([]), ['tower', 1]);
+    const s = fightOn(postsBase([]), ['tower', 4]);
     const moved = mustMove(s, 'a', postId(s, 'wall-walk', 0));
     const target = enemy(moved, { x: 700, y: 40, hp: 1000, maxHp: 1000 });
     const first = tick(moved, STEP);
@@ -669,30 +698,31 @@ describe('moving defenders', () => {
     expect(first.shots).toEqual([
       expect.objectContaining({ fromX: first.defenders[0]!.x, fromY: first.defenders[0]!.y }),
     ]);
-    const arrived = tick(first, 1.6);
+    // The whole walk from the tower again, so it has certainly arrived.
+    const arrived = tick(first, Math.hypot(510 - 420, 40 - 360) / WALK_SPEED);
     expect(arrived.defenders[0]!.walking).toBe(false);
     expect(arrived.enemies.find((e) => e.id === target.id)!.hp).toBeLessThan(1000);
   });
 
   it('a walker can be sent on from where it is', () => {
-    const s = fightOn(postsBase([]), ['tower', 1]);
+    const s = fightOn(postsBase([]), ['tower', 4]);
     const halfway = tick(mustMove(s, 'a', postId(s, 'wall-walk', 0)), 0.5);
     const { x, y } = halfway.defenders[0]!;
-    const back = mustMove(halfway, 'a', postId(s, 'tower', 1));
+    const back = mustMove(halfway, 'a', postId(s, 'tower', 4));
     expect(back.posts[postId(s, 'wall-walk', 0)]!.defenderId).toBeNull();
     expect(back.defenders[0]).toMatchObject({ x, y, walking: true });
-    expect(tick(back, 1).defenders[0]).toMatchObject({ x: 420, y: 120, walking: false });
+    expect(tick(back, 1).defenders[0]).toMatchObject({ x: 420, y: 360, walking: false });
   });
 
   it('walking never advances while a card offer is open', () => {
-    const s = fightOn(postsBase([]), ['tower', 1]);
+    const s = fightOn(postsBase([]), ['tower', 4]);
     const moved = mustMove(s, 'a', postId(s, 'wall-walk', 0));
     moved.offer = [{ kind: 'upgrade', id: 'sharpshooter' }];
-    expect(tick(moved, 1).defenders[0]).toMatchObject({ x: 420, y: 120 });
+    expect(tick(moved, 1).defenders[0]).toMatchObject({ x: 420, y: 360 });
   });
 
   const refusals: [string, string, (s: HordeState) => [HordeState, string, number]][] = [
-    ['to a taken post', 'Post taken', (s) => [s, 'a', postId(s, 'tower', 3)]],
+    ['to a taken post', 'Post taken', (s) => [s, 'a', postId(s, 'tower', 6)]],
     [
       'to a reserved post',
       'Post reserved',
@@ -706,7 +736,7 @@ describe('moving defenders', () => {
         return [s, 'a', postId(s, 'wall-walk', 0)];
       },
     ],
-    ['to its own post', 'Already there', (s) => [s, 'a', postId(s, 'tower', 1)]],
+    ['to its own post', 'Already there', (s) => [s, 'a', postId(s, 'tower', 4)]],
     [
       'to the post it is walking to',
       'Already on the way',
@@ -730,7 +760,7 @@ describe('moving defenders', () => {
     ],
   ];
   it.each(refusals)('refuses a move %s and changes nothing', (_, reason, make) => {
-    const [s, id, post] = make(fightOn(postsBase([]), ['tower', 1], ['tower', 3]));
+    const [s, id, post] = make(fightOn(postsBase([]), ['tower', 4], ['tower', 6]));
     const before = structuredClone(s);
     expect(moveDefender(s, id, post)).toEqual({ ok: false, reason });
     expect(s).toEqual(before);
@@ -743,20 +773,20 @@ describe('moving defenders', () => {
     ['a', 1.5],
     ['a', Number.NaN],
   ])('throws for defender %s, post %s', (id, post) => {
-    const s = fightOn(postsBase([]), ['tower', 1]);
+    const s = fightOn(postsBase([]), ['tower', 4]);
     expect(() => moveDefender(s, id, post)).toThrow(RangeError);
   });
 
   it('a benched defender cannot be moved', () => {
-    const s = fightOn(postsBase([]), ['tower', 1]);
-    expect(() => moveDefender(s, 'b', postId(s, 'tower', 3))).toThrow(RangeError);
+    const s = fightOn(postsBase([]), ['tower', 4]);
+    expect(() => moveDefender(s, 'b', postId(s, 'tower', 6))).toThrow(RangeError);
   });
 
   it('same seed and same moves at the same times give the same fight', () => {
     const run = (): HordeState => {
       const base = postsBase([2]);
       const probe = stillOn(base);
-      let s = newHorde(7, { ...setup(), base, startPostId: postId(probe, 'tower', 1) });
+      let s = newHorde(7, { ...setup(), base, startPostId: postId(probe, 'tower', 4) });
       s = tick(s, 2);
       if (s.offer) s = chooseCard(s, 0);
       s = mustMove(s, 'a', postId(s, 'wall-walk', 0));
@@ -842,17 +872,17 @@ describe('dropping off a broken wall', () => {
   });
 
   it('leaves defenders on other posts alone', () => {
-    const s = fightOn(postsBase([1]), ['wall-walk', 1], ['tower', 1]);
+    const s = fightOn(postsBase([1]), ['wall-walk', 1], ['tower', 4]);
     breakNext(s, 0);
     const after = tick(s, STEP);
     expect(after.defenders.map((d) => [d.id, d.postId, d.walking])).toEqual([
       ['a', postId(s, 'wall-walk', 1), false],
-      ['b', postId(s, 'tower', 1), false],
+      ['b', postId(s, 'tower', 4), false],
     ]);
   });
 
   it('a walker whose target segment breaks re-targets from where it is', () => {
-    const s = fightOn(postsBase([4]), ['tower', 3]);
+    const s = fightOn(postsBase([4]), ['tower', 6]);
     const walking = tick(mustMove(s, 'a', postId(s, 'wall-walk', 0)), 0.5);
     const { x, y } = walking.defenders[0]!;
     breakNext(walking, 0);
@@ -870,7 +900,7 @@ describe('dropping off a broken wall', () => {
   });
 
   it('a move or recruit never lands on a post whose segment broke', () => {
-    const s = fightOn(postsBase([]), ['tower', 1]);
+    const s = fightOn(postsBase([]), ['tower', 4]);
     breakNext(s, 0);
     const after = tick(s, STEP);
     expect(moveDefender(after, 'a', postId(s, 'wall-walk', 0))).toEqual({

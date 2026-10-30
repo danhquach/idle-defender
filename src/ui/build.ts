@@ -78,6 +78,9 @@ export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }
   };
 export const IMPORT_CONFIRM = 'Replace this camp with the one in the code? This camp is lost.';
 export const IMPORT_DONE = 'Backup code loaded.';
+/** Shown when a save from before the taller field (ID-047) is loaded. */
+export const FIELD_GREW =
+  'The field grew: your walls now hold the middle rows. Build the new rows top and bottom.';
 
 /**
  * What "Load code" does with `pasted`: the camp to load (null for none), the line to
@@ -91,7 +94,8 @@ export function loadCode(
   const result = importCode(pasted);
   if (!result.ok) return { game: null, message: IMPORT_REFUSAL[result.why], clearPaste: false };
   if (!confirm(IMPORT_CONFIRM)) return { game: null, message: '', clearPaste: false };
-  return { game: result.save.game, message: IMPORT_DONE, clearPaste: true };
+  const message = result.save.grew ? `${IMPORT_DONE} ${FIELD_GREW}` : IMPORT_DONE;
+  return { game: result.save.game, message, clearPaste: true };
 }
 
 export function stockBarText(game: GameState): string {

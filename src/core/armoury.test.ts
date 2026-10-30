@@ -123,7 +123,7 @@ describe('affixes in a fight', () => {
     const target = enemy(s, { hp: 1000, maxHp: 1000, x: 600 });
     const next = enemy(s, { hp: 1000, maxHp: 1000, x: 650 });
     const further = enemy(s, { hp: 1000, maxHp: 1000, x: 700 });
-    const off = enemy(s, { hp: 1000, maxHp: 1000, x: 650, y: 200 });
+    const off = enemy(s, { hp: 1000, maxHp: 1000, x: 650, y: 440 });
     const after = tick(s, STEP);
     const hp = (id: number): number => after.enemies.find((e) => e.id === id)!.hp;
     expect(hp(target.id)).toBeLessThan(1000);

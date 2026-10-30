@@ -13,7 +13,7 @@ import {
   type Base,
   type Result,
 } from './base.ts';
-import { START_STOCK, type Stock, type Tier } from './data.ts';
+import { SEGMENTS, START_BASE, START_STOCK, type Stock, type Tier } from './data.ts';
 
 const WOOD: Tier[] = ['wood'];
 const ALL: Tier[] = ['wood', 'metal', 'concrete', 'reinforced'];
@@ -41,16 +41,22 @@ describe('newBase', () => {
     expect(base.layers).toHaveLength(1);
     const layer = base.layers[0]!;
     expect(layer.column).toBe(0);
-    expect(layer.slots.map((s) => s?.kind)).toEqual(['wall', 'wall', 'gate', 'wall', 'wall']);
+    const gate = START_BASE.gate;
+    expect(layer.slots).toHaveLength(SEGMENTS);
+    expect(layer.slots.map((s) => s?.kind)).toEqual(
+      Array.from({ length: SEGMENTS }, (_, row) => (row === gate ? 'gate' : 'wall')),
+    );
     expect(layer.slots.every((s) => s?.tier === 'wood')).toBe(true);
-    expect(layer.slots.map((s) => s?.hp)).toEqual([200, 200, 150, 200, 200]);
+    expect(layer.slots.map((s) => s?.hp)).toEqual(
+      Array.from({ length: SEGMENTS }, (_, row) => (row === gate ? 150 : 200)),
+    );
     expect(base.posts).toEqual([
-      { kind: 'tower', column: 0, row: 1 },
-      { kind: 'tower', column: 0, row: 3 },
+      { kind: 'tower', column: 0, row: 4 },
+      { kind: 'tower', column: 0, row: 6 },
     ]);
     expect(base.posts.map(postXY)).toEqual([
-      { x: 420, y: 120 },
-      { x: 420, y: 280 },
+      { x: 420, y: 360 },
+      { x: 420, y: 520 },
     ]);
   });
 
@@ -76,10 +82,7 @@ describe('buildSegment', () => {
     expect(r.base.layers.map((l) => l.column)).toEqual([0, 1]);
     expect(r.base.layers[1]!.slots).toEqual([
       { kind: 'wall', tier: 'wood', hp: 200, maxHp: 200 },
-      null,
-      null,
-      null,
-      null,
+      ...Array.from({ length: SEGMENTS - 1 }, () => null),
     ]);
   });
 
@@ -127,8 +130,8 @@ describe('upgradeSegment', () => {
   });
 
   it('a gate stays a gate', () => {
-    const r = ok(upgradeSegment(newBase(), rich(), ALL, 0, 2));
-    expect(r.base.layers[0]!.slots[2]).toEqual({
+    const r = ok(upgradeSegment(newBase(), rich(), ALL, 0, START_BASE.gate));
+    expect(r.base.layers[0]!.slots[START_BASE.gate]).toEqual({
       kind: 'gate',
       tier: 'metal',
       hp: 300,
@@ -198,15 +201,15 @@ describe('repair', () => {
 
 describe('buildPost', () => {
   it('builds each kind, charges its cost and keeps posts sorted', () => {
-    let r = ok(buildPost(newBase(), rich(), { kind: 'ground', column: 0, row: 4 }));
+    let r = ok(buildPost(newBase(), rich(), { kind: 'ground', column: 0, row: SEGMENTS - 1 }));
     r = ok(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 0 }));
     r = ok(buildPost(r.base, r.stock, { kind: 'tower', column: 0, row: 0 }));
     expect(r.stock).toEqual({ ...rich(), wood: 999 - 5 - 5 - 20, scrap: 999 - 5 - 10 });
     expect(r.base.posts).toEqual([
-      { kind: 'ground', column: 0, row: 4 },
+      { kind: 'ground', column: 0, row: SEGMENTS - 1 },
       { kind: 'tower', column: 0, row: 0 },
-      { kind: 'tower', column: 0, row: 1 },
-      { kind: 'tower', column: 0, row: 3 },
+      { kind: 'tower', column: 0, row: 4 },
+      { kind: 'tower', column: 0, row: 6 },
       { kind: 'wall-walk', column: 0, row: 0 },
     ]);
   });
@@ -216,7 +219,7 @@ describe('buildPost', () => {
   });
 
   it('refuses a taken slot, a missing wall and short stock', () => {
-    expect(reason(buildPost(newBase(), rich(), { kind: 'tower', column: 0, row: 1 }))).toBe(
+    expect(reason(buildPost(newBase(), rich(), { kind: 'tower', column: 0, row: 4 }))).toBe(
       'Slot taken',
     );
     expect(reason(buildPost(newBase(), rich(), { kind: 'tower', column: 1, row: 1 }))).toBe(
@@ -248,7 +251,7 @@ describe('purity', () => {
     ['repairAll ok', (b, s) => repairAll(b, s)],
     ['repairAll refused', (b) => repairAll(b, empty())],
     ['post ok', (b, s) => buildPost(b, s, { kind: 'ground', column: 0, row: 0 })],
-    ['post refused', (b, s) => buildPost(b, s, { kind: 'tower', column: 0, row: 1 })],
+    ['post refused', (b, s) => buildPost(b, s, { kind: 'tower', column: 0, row: 4 })],
   ];
   for (const [name, act] of actions) {
     it(`${name} leaves its inputs untouched`, () => {
@@ -276,7 +279,7 @@ describe('bad arguments', () => {
       [3, 0],
       [-1, 0],
       [0, -1],
-      [0, 5],
+      [0, SEGMENTS],
       [0, 1.5],
       [Number.NaN, 0],
     ] as const) {

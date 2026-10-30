@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, buildTrap, buildTurret } from '../core/base.ts';
-import { BANK_CAP, GENERATOR, TRAPS, TURRET } from '../core/data.ts';
+import { BANK_CAP, GENERATOR, SEGMENTS, TRAPS, TURRET } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -9,6 +9,7 @@ import {
   lineResult,
   IMPORT_CONFIRM,
   IMPORT_DONE,
+  FIELD_GREW,
   IMPORT_REFUSAL,
   injuredLines,
   labLines,
@@ -110,6 +111,17 @@ describe('build panel', () => {
     });
     expect(asked).toEqual([IMPORT_CONFIRM]);
     expect(loadCode(code, () => true)).toEqual({ game: g, message: IMPORT_DONE, clearPaste: true });
+    // A code from before the taller field (a v1 save, 5 rows) says the field grew.
+    const old = JSON.parse(encodeSave(g, 1_800_000_000_000));
+    old.v = 1;
+    old.game.base.layers[0].slots = old.game.base.layers[0].slots.slice(3, 8);
+    old.game.base.posts = old.game.base.posts.map((p: { row: number }) => ({
+      ...p,
+      row: p.row - 3,
+    }));
+    const loaded = loadCode(exportCode(JSON.stringify(old)), () => true);
+    expect(loaded.message).toBe(`${IMPORT_DONE} ${FIELD_GREW}`);
+    expect(loaded.game?.base.posts).toEqual(g.base.posts);
   });
 
   it('shows the Lab: not built, then each node locked with its reason', () => {
@@ -212,17 +224,19 @@ describe('turret menu', () => {
   /** A new game with the Auto-turret researched and a turret on the free tower at row 2. */
   function withTurret(): GameState {
     const g: GameState = { ...newGame(), stock: RICH, research: ['metal-walls', 'auto-turret'] };
-    const r = buildTurret(g.base, g.stock, true, 'tower', 0, 2);
+    const r = buildTurret(g.base, g.stock, true, 'tower', 0, 5);
     if (!r.ok) throw new Error(r.reason);
     return { ...g, base: r.base, stock: r.stock };
   }
   const text = (l: SlotLine): string => (l.kind === 'action' ? l.label : l.text);
   const why = (l: SlotLine): string | null =>
     l.kind === 'action' && !l.result.ok ? l.result.reason : null;
+  /** Tower mounts still free with `withTurret()` on the starting base (posts on 4, 6; turret on 5). */
+  const FREE_TOWER_ROWS = [0, 1, 2, 3, 7, 8, 9];
 
   it('offers an Auto-turret on a free mount, refused until it is researched', () => {
     const g = { ...newGame(), stock: RICH };
-    expect(buildTurretLine(g, 'tower', 0, 2)).toMatchObject({
+    expect(buildTurretLine(g, 'tower', 0, 5)).toMatchObject({
       label: 'Auto-turret',
       cost: TURRET.cost,
       result: { ok: false, reason: 'Research the Auto-turret first' },
@@ -233,7 +247,7 @@ describe('turret menu', () => {
     expect(line.kind === 'action' && line.result.ok && line.result.base.turrets).toEqual([
       { mount: 'wall-walk', column: 0, row: 4, condition: 100 },
     ]);
-    expect(why(buildTurretLine(done, 'tower', 0, 1))).toBe('Slot taken');
+    expect(why(buildTurretLine(done, 'tower', 0, 4))).toBe('Slot taken');
     expect(why(buildTurretLine(done, 'tower', 1, 0))).toBe('A tower mount needs a wall in front');
     expect(why(buildTurretLine({ ...done, stock: { ...RICH, scrap: 39 } }, 'tower', 0, 0))).toBe(
       'Not enough scrap',
@@ -242,12 +256,12 @@ describe('turret menu', () => {
 
   it('shows where a turret is, its condition and that it is powered; Repair and Salvage', () => {
     const g = withTurret();
-    const i = turretIndex(g, 'tower', 0, 2);
+    const i = turretIndex(g, 'tower', 0, 5);
     expect(i).toBe(0);
     expect(turretIndex(g, 'wall-walk', 0, 2)).toBe(-1);
     const lines = turretLines(g, i);
     expect(lines.map(text)).toEqual([
-      'Auto-turret · Tower · Layer 1, row 3',
+      'Auto-turret · Tower · Layer 1, row 6',
       'Condition 100/100 · powered',
       'Repair turret',
       'Salvage for 20 scrap, 10 wood',
@@ -306,15 +320,11 @@ describe('turret menu', () => {
     const g = withTurret();
     g.base.turrets[0]!.condition = 40;
     const targets = relocateTargets(g, 0);
-    // The starting base: free towers at rows 1, 5 and a wall mount on each of the 5 segments.
+    // The starting base: free tower mounts on every row but the two tower posts (rows 5, 7)
+    // and the turret's own (row 6), and a wall mount on each segment.
     expect(targets.map((t) => t.label)).toEqual([
-      'Tower · Layer 1, row 1',
-      'Tower · Layer 1, row 5',
-      'Wall mount · Layer 1, row 1',
-      'Wall mount · Layer 1, row 2',
-      'Wall mount · Layer 1, row 3',
-      'Wall mount · Layer 1, row 4',
-      'Wall mount · Layer 1, row 5',
+      ...FREE_TOWER_ROWS.map((row) => `Tower · Layer 1, row ${row + 1}`),
+      ...Array.from({ length: SEGMENTS }, (_, row) => `Wall mount · Layer 1, row ${row + 1}`),
     ]);
     expect(new Set(targets.map((t) => t.key)).size).toBe(targets.length);
     const to = targets.find((t) => t.key === 'wall-walk:0:4')!;
@@ -327,9 +337,8 @@ describe('turret menu', () => {
   it('relocate has nowhere to go when every mount is taken', () => {
     let g = withTurret();
     for (const [mount, row] of [
-      ['tower', 0],
-      ['tower', 4],
-      ...[0, 1, 2, 3, 4].map((r) => ['wall-walk', r] as const),
+      ...FREE_TOWER_ROWS.map((r) => ['tower', r] as const),
+      ...Array.from({ length: SEGMENTS }, (_, r) => ['wall-walk', r] as const),
     ] as const) {
       const r = buildTurret(g.base, g.stock, true, mount, 0, row);
       if (!r.ok) throw new Error(r.reason);
