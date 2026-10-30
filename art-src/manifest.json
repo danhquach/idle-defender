@@ -17,6 +17,65 @@
       "prompt": "a shambling rotting zombie walking, torn grey clothes, sickly acid green skin, flesh red wounds, arms reaching forward"
     },
     {
+      "id": "runner",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4401,
+      "size": "512x512",
+      "flip": true,
+      "prompt": "a lean gaunt zombie sprinting forward, thin wiry body leaning into a fast run, torn grey clothes, pale grey-brown dead skin, mouth open, arms swinging"
+    },
+    {
+      "id": "crawler",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4414,
+      "size": "512x512",
+      "mutant": true,
+      "flip": true,
+      "prompt": "a mutant zombie crawling low on all fours, fleshy wiry body pressed close to the ground, long clawed arms and legs splayed wide ready to climb a wall, hunched spine, bright saturated acid green skin with darker green blotches, torn rags, open jaw with teeth"
+    },
+    {
+      "id": "bloater",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4422,
+      "size": "512x512",
+      "mutant": true,
+      "flip": true,
+      "prompt": "a grotesquely swollen bloated mutant zombie waddling forward, huge round inflated belly and body like a balloon about to burst, small head sunk into fat shoulders, stubby arms, stretched shiny skin with bulging pustules, bright saturated acid green skin, torn rags stretched over the belly"
+    },
+    {
+      "id": "spitter",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4437,
+      "size": "512x512",
+      "mutant": true,
+      "flip": true,
+      "prompt": "full body of a hunched mutant zombie walking on two bent legs with both legs and both feet clearly visible, two thin arms hanging down in front, a big swollen fleshy acid sac growing out of its upper back, green with pustules, part of its own skin, head thrust forward with lips closed and a small drip of green acid at the chin, bright saturated acid green skin, torn rag trousers, nothing coming out of its mouth"
+    },
+    {
+      "id": "brute",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4443,
+      "size": "512x512",
+      "mutant": true,
+      "flip": true,
+      "prompt": "full body of a huge hulking brute mutant zombie stomping forward on two thick legs, massive broad shoulders and huge fists, thick bony armour plates and scrap metal fused into its chest and shoulders, small head sunk between the shoulders, raw flesh red skin with exposed muscle, torn rag trousers"
+    },
+    {
+      "id": "screamer",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4451,
+      "size": "512x512",
+      "mutant": true,
+      "flip": true,
+      "prompt": "full body of a thin mutant zombie standing on two legs with both feet visible, head thrown back screaming with its jaw stretched impossibly wide open showing rows of teeth, jagged bony spikes jutting out of its skull, shoulders and spine, two clawed arms spread out to the sides, raw flesh red skin, torn rag trousers"
+    },
+    {
       "id": "gunner",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",

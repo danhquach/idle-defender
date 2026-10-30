@@ -65,7 +65,6 @@ import {
   TRAP_ART,
   TURRET_ART,
   type GunId,
-  type EnemyShape,
   ART_PX,
   type Art,
   type ArtId,
@@ -761,7 +760,7 @@ function drawShadow(
 }
 
 /**
- * An enemy's body, feet on `feet`, in `pose`: its kind's art, or its placeholder shape
+ * An enemy's body, feet on `feet`, in `pose`: its kind's art, or the Horror's placeholder
  * (design §15, ID-023), both scaled by its radius (a Shambler's is the reference).
  */
 function drawEnemy(
@@ -781,7 +780,7 @@ function drawEnemy(
   const h = STAND.enemy * size * cam.zoom;
   // Standing still (build mode) needs no transform, as with `drawStanding`.
   if (pose === STILL) {
-    drawShape(ctx, look.shape, look.colour, h, feet.sx, feet.sy);
+    drawHorror(ctx, look.placeholder, h, feet.sx, feet.sy);
     return;
   }
   ctx.save();
@@ -789,76 +788,34 @@ function drawEnemy(
   ctx.rotate(pose.rot);
   ctx.scale(pose.sx, pose.sy);
   ctx.globalAlpha *= pose.alpha;
-  drawShape(ctx, look.shape, look.colour, h);
+  drawHorror(ctx, look.placeholder, h);
   if (pose.flash > 0) {
     ctx.globalAlpha *= pose.flash;
-    drawShape(ctx, look.shape, COLOR.hitFlash, h);
+    drawHorror(ctx, COLOR.hitFlash, h);
   }
   ctx.restore();
 }
 
 /**
- * A placeholder enemy body `h` screen px tall, feet on `(x, y)`: a filled shape per kind
- * with a dark outline, so each reads by its silhouette.
+ * The Horror's placeholder body `h` screen px tall, feet on `(x, y)`: a hulking mass with
+ * arms to the ground and growths on its back, filled with a dark outline.
  */
-function drawShape(
-  ctx: CanvasRenderingContext2D,
-  shape: EnemyShape,
-  fill: string,
-  h: number,
-  x = 0,
-  y = 0,
-): void {
+function drawHorror(ctx: CanvasRenderingContext2D, fill: string, h: number, x = 0, y = 0): void {
   ctx.fillStyle = fill;
   ctx.strokeStyle = COLOR.outline;
   ctx.lineWidth = Math.max(1, h / 24);
   ctx.beginPath();
-  switch (shape) {
-    case 'lean': // a thin body pitched forward, mid-stride
-      ctx.ellipse(x - h * 0.08, y - h * 0.45, h * 0.15, h * 0.45, -0.35, 0, Math.PI * 2);
-      break;
-    case 'low': // flat to the ground, legs out
-      ctx.ellipse(x, y - h * 0.18, h * 0.42, h * 0.16, 0, 0, Math.PI * 2);
-      for (const dx of [-0.3, -0.1, 0.1, 0.3]) {
-        ctx.moveTo(x + h * dx, y - h * 0.1);
-        ctx.lineTo(x + h * dx * 1.5, y);
-      }
-      break;
-    case 'round': // swollen
-      ctx.arc(x, y - h * 0.4, h * 0.4, 0, Math.PI * 2);
-      break;
-    case 'hunch': // a body and the sac on its back
-      ctx.ellipse(x, y - h * 0.38, h * 0.18, h * 0.38, 0, 0, Math.PI * 2);
-      ctx.moveTo(x + h * 0.38, y - h * 0.6);
-      ctx.arc(x + h * 0.2, y - h * 0.6, h * 0.18, 0, Math.PI * 2);
-      break;
-    case 'block': // broad and square
-      ctx.rect(x - h * 0.32, y - h, h * 0.64, h);
-      break;
-    case 'horror': // a hulking mass with arms to the ground and growths on its back
-      ctx.ellipse(x, y - h * 0.5, h * 0.42, h * 0.48, 0, 0, Math.PI * 2);
-      ctx.moveTo(x - h * 0.38, y - h * 0.55);
-      ctx.lineTo(x - h * 0.55, y);
-      ctx.lineTo(x - h * 0.3, y - h * 0.3);
-      ctx.moveTo(x + h * 0.38, y - h * 0.55);
-      ctx.lineTo(x + h * 0.55, y);
-      ctx.lineTo(x + h * 0.3, y - h * 0.3);
-      ctx.moveTo(x + h * 0.32, y - h * 0.82);
-      ctx.arc(x + h * 0.18, y - h * 0.82, h * 0.14, 0, Math.PI * 2);
-      ctx.moveTo(x - h * 0.02, y - h * 0.96);
-      ctx.arc(x - h * 0.14, y - h * 0.96, h * 0.12, 0, Math.PI * 2);
-      break;
-    case 'spike': // a jagged crown, mouth open
-      ctx.moveTo(x - h * 0.25, y);
-      ctx.lineTo(x - h * 0.3, y - h * 0.7);
-      ctx.lineTo(x - h * 0.12, y - h * 0.55);
-      ctx.lineTo(x, y - h);
-      ctx.lineTo(x + h * 0.12, y - h * 0.55);
-      ctx.lineTo(x + h * 0.3, y - h * 0.7);
-      ctx.lineTo(x + h * 0.25, y);
-      ctx.closePath();
-      break;
-  }
+  ctx.ellipse(x, y - h * 0.5, h * 0.42, h * 0.48, 0, 0, Math.PI * 2);
+  ctx.moveTo(x - h * 0.38, y - h * 0.55);
+  ctx.lineTo(x - h * 0.55, y);
+  ctx.lineTo(x - h * 0.3, y - h * 0.3);
+  ctx.moveTo(x + h * 0.38, y - h * 0.55);
+  ctx.lineTo(x + h * 0.55, y);
+  ctx.lineTo(x + h * 0.3, y - h * 0.3);
+  ctx.moveTo(x + h * 0.32, y - h * 0.82);
+  ctx.arc(x + h * 0.18, y - h * 0.82, h * 0.14, 0, Math.PI * 2);
+  ctx.moveTo(x - h * 0.02, y - h * 0.96);
+  ctx.arc(x - h * 0.14, y - h * 0.96, h * 0.12, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 }

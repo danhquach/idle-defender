@@ -757,9 +757,8 @@ one crowd (no lanes, §3).
   the full line wins Horde 5 15% of seeds against 25% with Shamblers only,
   every other balance target holds, and a lone pistol Gunner misses Runners
   about three times as often as Shamblers (lead from last step's velocity).
-  Placeholder art (§15): each new kind is a drawn shape of its own, sized by
-  its radius, mutants in acid green or flesh red, the Runner muted; generated
-  art follows in its own ticket.
+  Art (§15): each kind has generated art of its own (ID-051), sized by its
+  radius, mutants in acid green or flesh red, the Runner muted.
 - **As built (ID-024, starting points): boss hordes.** Every 10th horde is a
   boss horde: its waves are as usual, and one **Mutated Horror** comes with the
   first spawn of the last wave (the random mix never rolls one). The horde is
@@ -1168,6 +1167,18 @@ original outline.
   deaths are remembered between frames by the view, never by the fight;
   build mode stands still. 300 animated Shamblers hold 60 fps (about 1.3 ms
   of work a frame, median).
+- **As built (ID-051):** the six enemy kinds from ID-023 have generated
+  art in place of their drawn shapes, made the same way as the Shambler's
+  (shared sprite style, FLUX.2 Klein 4B, one manifest entry each, picked
+  from three seeds): a lean, muted Runner; and mutants that keep their
+  colour (manifest `mutant`): a low acid-green Crawler, a swollen Bloater,
+  a hunched Spitter with an acid sac on its back, an armoured flesh-red
+  Brute and a spiked Screamer screaming open-mouthed. Each is mirrored to
+  face the way the Shambler does and drawn by its radius like the
+  Shambler's art, so it moves in the ID-049 poses with no new frames. The
+  Spitter's art has no spit of its own: the glob and the Bloater's burst
+  stay drawn effects. Only the Mutated Horror is still a drawn placeholder
+  (ID-041).
 
 ## 16. Tech and platform
 
