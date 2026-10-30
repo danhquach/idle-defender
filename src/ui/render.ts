@@ -1,7 +1,6 @@
 // The horde view (design §15): generated sprites and tiling textures (sprites.ts) on
 // the shared projection and depth sort. Canvas 2D, no rendering library.
 import {
-  CAMP,
   COLUMNS,
   FIELD,
   MAX_CONDITION,
@@ -39,6 +38,7 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
+import { CAMP_YARD, groundCanvas } from './ground.ts';
 import {
   BASE_ART,
   DEFENDER_ART,
@@ -114,12 +114,11 @@ export function turretLook(
   };
 }
 
-/** World units one tile of a texture covers. */
-const TILE = { wall: 48, ground: 160 } as const;
+/** World units one tile of a wall texture covers. */
+const TILE = { wall: 48 } as const;
 /** Gap drawn between wall segments so they read as separate pieces. */
 const SEGMENT_GAP = 2;
-/** The camp's yard behind the inner wall, and its huts along the field's depth. */
-const CAMP_YARD = { x0: CAMP.x - 90, x1: CAMP.x } as const;
+/** The camp's huts along the field's depth, in its yard. */
 const CAMP_PROPS = { count: 5, height: 58 } as const;
 const DEFENDER = PIECE.defender;
 /**
@@ -537,12 +536,11 @@ function drawSegment(
   }
 }
 
-/** The ground, then the camp's yard with its huts at the back, behind every sprite. */
+/** The ground with the camp's yard in it (ground.ts), then the huts, behind every sprite. */
 function drawGround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera): void {
   const field = faces({ x0: 0, x1: FIELD.right, y0: 0, y1: FIELD.height, z0: 0, height: 0 }, cam);
-  fillTexture(ctx, art[BASE_ART.ground], field.top, TILE.ground, TILT, cam);
-  const yard = faces({ ...CAMP_YARD, y0: 0, y1: FIELD.height, z0: 0, height: 0 }, cam);
-  fillTexture(ctx, art[BASE_ART.camp], yard.top, TILE.wall * 2, TILT, cam);
+  const ground = groundCanvas(art);
+  if (ground) ctx.drawImage(ground, field.top.sx, field.top.sy, field.top.w, field.top.h);
   const step = FIELD.height / CAMP_PROPS.count;
   for (let i = 0; i < CAMP_PROPS.count; i++) {
     const prop = art[BASE_ART.campProps[i % BASE_ART.campProps.length]!];
