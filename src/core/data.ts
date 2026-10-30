@@ -816,3 +816,201 @@ function perkNode(
 ): (typeof RESEARCH)[ResearchId] {
   return { name, lab, needs, cost, tier: null };
 }
+
+// --- World map and patrols (M7). Design §10, as built ID-026 (starting points). ---
+
+export type LocationId =
+  | 'gas-station'
+  | 'supermarket'
+  | 'electronics'
+  | 'hardware'
+  | 'pharmacy'
+  | 'construction'
+  | 'police'
+  | 'hospital'
+  | 'military'
+  | 'crater';
+
+/**
+ * One loot-table line, picked by `weight`: some of a material, some Gas, one battery,
+ * a weapon of one of `bases`, or (the crater) a roll on another location's table.
+ */
+export type LootEntry =
+  | { kind: 'material'; id: Material; min: number; max: number; weight: number }
+  | { kind: 'gas'; min: number; max: number; weight: number }
+  | { kind: 'battery'; id: Battery; weight: number }
+  | { kind: 'weapon'; bases: readonly WeaponId[]; weight: number }
+  | { kind: 'anything'; weight: number };
+
+export interface Location {
+  readonly name: string;
+  /** Danger tier, 1 (Safe) … 5. */
+  readonly tier: number;
+  /** Minutes each way, and minutes searching. */
+  readonly travel: number;
+  readonly search: number;
+  /** The horde number from which it shows on the map; null until research reveals it (ID-035). */
+  readonly reveal: number | null;
+  readonly loot: readonly LootEntry[];
+}
+
+const mat = (id: Material, min: number, max: number, weight: number): LootEntry => ({
+  kind: 'material',
+  id,
+  min,
+  max,
+  weight,
+});
+
+/**
+ * The single-building locations (design §10). "Mostly" lines weigh about 3× the
+ * "sometimes" ones. Stand-ins until the items exist: the toolkit for Tools, the knife
+ * for a machete or chainsaw; ammo-type affixes are left out.
+ */
+export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
+  'gas-station': {
+    name: 'Gas station',
+    tier: 1,
+    travel: 5,
+    search: 5,
+    reveal: 1,
+    loot: [
+      { kind: 'gas', min: 1, max: 2, weight: 30 },
+      { kind: 'battery', id: 'makeshift', weight: 20 },
+      mat('food', 1, 2, 30),
+      mat('scrap', 3, 6, 10),
+    ],
+  },
+  supermarket: {
+    name: 'Supermarket',
+    tier: 1,
+    travel: 7,
+    search: 6,
+    reveal: 1,
+    loot: [mat('food', 2, 3, 60), { kind: 'battery', id: 'makeshift', weight: 15 }],
+  },
+  electronics: {
+    name: 'Electronics store',
+    tier: 2,
+    travel: 15,
+    search: 15,
+    reveal: 1,
+    loot: [
+      mat('parts', 2, 4, 40),
+      { kind: 'battery', id: 'standard', weight: 20 },
+      mat('scrap', 4, 8, 15),
+    ],
+  },
+  hardware: {
+    name: 'Hardware store',
+    tier: 2,
+    travel: 20,
+    search: 20,
+    reveal: 4,
+    loot: [
+      mat('wood', 8, 15, 25),
+      mat('metal', 3, 6, 20),
+      mat('scrap', 5, 10, 15),
+      { kind: 'weapon', bases: ['toolkit'], weight: 5 },
+    ],
+  },
+  pharmacy: {
+    name: 'Pharmacy',
+    tier: 2,
+    travel: 20,
+    search: 20,
+    reveal: 6,
+    loot: [mat('medicine', 1, 3, 60), mat('chemicals', 1, 2, 20)],
+  },
+  construction: {
+    name: 'Construction site',
+    tier: 3,
+    travel: 40,
+    search: 40,
+    reveal: null,
+    loot: [
+      mat('concrete', 5, 10, 30),
+      mat('metal', 4, 8, 30),
+      { kind: 'weapon', bases: ['knife'], weight: 10 },
+    ],
+  },
+  police: {
+    name: 'Police station',
+    tier: 3,
+    travel: 40,
+    search: 40,
+    reveal: null,
+    loot: [{ kind: 'weapon', bases: ['pistol', 'shotgun', 'smg'], weight: 60 }],
+  },
+  hospital: {
+    name: 'Hospital',
+    tier: 4,
+    travel: 60,
+    search: 60,
+    reveal: null,
+    loot: [mat('medicine', 3, 6, 60), mat('chemicals', 2, 4, 15), mat('genes', 1, 3, 5)],
+  },
+  military: {
+    name: 'Military depot',
+    tier: 4,
+    travel: 80,
+    search: 80,
+    reveal: null,
+    loot: [
+      { kind: 'weapon', bases: ['rifle', 'lmg', 'sniper'], weight: 30 },
+      { kind: 'battery', id: 'high-capacity', weight: 30 },
+      mat('parts', 3, 6, 20),
+    ],
+  },
+  crater: {
+    name: 'The crater',
+    tier: 5,
+    travel: 160,
+    search: 160,
+    reveal: null,
+    loot: [
+      mat('genes', 3, 6, 30),
+      { kind: 'weapon', bases: ['pistol', 'smg', 'rifle', 'shotgun', 'lmg', 'sniper'], weight: 30 },
+      { kind: 'anything', weight: 20 },
+    ],
+  },
+};
+export const LOCATION_IDS = Object.keys(LOCATIONS) as LocationId[];
+
+/**
+ * Patrol rules (design §10, ID-026 starting points):
+ * - `unlock`: the horde number from which patrols can be sent (after Horde 2).
+ * - `rolls`: loot rolls per search; `bonusRolls` more at most, one per `need × tier` of party strength.
+ * - `bump`: chance per bonus roll that a weapon comes one rarity up.
+ * - `rarity`: a found weapon's rarity weights by tier (index 0 = tier 1).
+ * - `xpDanger`: patrol XP multiplier per tier above 1 (tier 5 = 3×).
+ * - `reports`: patrol reports kept, newest last.
+ * - `max`: patrols a game can send, so every patrol number fits in a weapon uid.
+ */
+export const PATROL = {
+  unlock: 3,
+  rolls: 3,
+  bonusRolls: 2,
+  need: 3,
+  bump: 0.25,
+  rarity: [
+    { rusty: 50, common: 40, military: 10, prototype: 0, relic: 0 },
+    { rusty: 35, common: 45, military: 18, prototype: 2, relic: 0 },
+    { rusty: 20, common: 45, military: 28, prototype: 7, relic: 0 },
+    { rusty: 5, common: 35, military: 40, prototype: 18, relic: 2 },
+    { rusty: 0, common: 15, military: 40, prototype: 30, relic: 15 },
+  ],
+  xpDanger: 0.5,
+  reports: 20,
+  max: 999_999,
+} as const satisfies {
+  unlock: number;
+  rolls: number;
+  bonusRolls: number;
+  need: number;
+  bump: number;
+  rarity: readonly Record<Rarity, number>[];
+  xpDanger: number;
+  reports: number;
+  max: number;
+};

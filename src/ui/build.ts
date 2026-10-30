@@ -55,7 +55,8 @@ import {
   WALK_SPOTS,
   type Stock,
 } from '../core/data.ts';
-import { available, type GameState, type RosterDefender } from '../core/game.ts';
+import { available, type GameState } from '../core/game.ts';
+import { idle, patrolDue } from '../core/patrol.ts';
 import { labCost, research, researched, upgradeLab, type GameResult } from '../core/research.ts';
 import { layoutOf, turretState, type TurretState } from '../core/horde.ts';
 import { buildGenerator, nextGasAt } from '../core/power.ts';
@@ -122,11 +123,16 @@ function usablePosts(base: Base): BasePost[] {
   return base.posts.filter((_, i) => postUsable(layers, posts[i]!));
 }
 
-/** "Bob · back at 14:05" for each defender still injured at `now`, in roster order. */
-export function injuredLines(roster: readonly RosterDefender[], now: number): string[] {
-  return roster
+/** "Bob · injured, back at 14:05" for each defender still injured at `now`, then each out on patrol, in roster order. */
+export function injuredLines(game: Pick<GameState, 'roster' | 'patrols'>, now: number): string[] {
+  const injured = game.roster
     .filter((d) => !available(d, now))
     .map((d) => `${d.name} · injured, back at ${clockTime(d.injuredUntil!)}`);
+  const away = game.roster.flatMap((d) => {
+    const p = game.patrols.find((x) => x.members.includes(d.id));
+    return p ? [`${d.name} · on patrol, back at ${clockTime(patrolDue(p))}`] : [];
+  });
+  return [...injured, ...away];
 }
 
 /**
@@ -142,7 +148,7 @@ export function pickStart(
 ): { defenderId: string; postId: number } | null {
   const usable = usablePosts(game.base);
   const post = usable.find((p) => postKey(p) === startKey) ?? usable[0];
-  const fit = game.roster.filter((d) => available(d, now));
+  const fit = game.roster.filter((d) => idle(game, d, now));
   const defender = fit.find((d) => d.id === defenderId) ?? fit[0];
   if (!post || !defender) return null;
   return { defenderId: defender.id, postId: game.base.posts.indexOf(post) };
@@ -609,6 +615,17 @@ export function createBuildPanel(
             buildSegment(base, stock, tiers, column, row, 'wall', t),
           ),
         ),
+        // Patrols leave by a gate (design §10); one per layer, so a layer with one offers none.
+        ...(base.layers.find((l) => l.column === column)?.slots.some((s) => s?.kind === 'gate')
+          ? []
+          : TIER_ORDER
+        ).map((t) =>
+          option(
+            `${TIERS[t].name} gate`,
+            TIERS[t].cost,
+            buildSegment(base, stock, tiers, column, row, 'gate', t),
+          ),
+        ),
       ];
     }
     const next = TIER_ORDER[TIER_ORDER.indexOf(seg.tier) + 1];
@@ -647,7 +664,7 @@ export function createBuildPanel(
   function startSection(game: GameState): HTMLElement[] {
     const picked = choice(game);
     const defenders = el('select', 'build-select');
-    const fit = game.roster.filter((r) => available(r, Date.now()));
+    const fit = game.roster.filter((r) => idle(game, r, Date.now()));
     for (const d of fit) {
       const o = el('option', '', defenderLabel(d));
       o.value = d.id;
@@ -680,11 +697,9 @@ export function createBuildPanel(
       const c = choice(game);
       if (c) onStart(c.defenderId, c.postId);
     });
-    const injured = injuredLines(game.roster, Date.now()).map((line) =>
-      el('p', 'build-slot-note', line),
-    );
-    if (!game.roster.some((d) => available(d, Date.now()))) {
-      injured.unshift(el('p', 'build-slot-note', 'Nobody can defend until someone recovers.'));
+    const injured = injuredLines(game, Date.now()).map((line) => el('p', 'build-slot-note', line));
+    if (!game.roster.some((d) => idle(game, d, Date.now()))) {
+      injured.unshift(el('p', 'build-slot-note', 'Nobody can defend until someone is back.'));
     }
     return [label('Start defender', defenders), label('Start post', posts), ...injured, go];
   }

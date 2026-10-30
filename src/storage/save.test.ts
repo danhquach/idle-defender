@@ -13,6 +13,7 @@ import {
 import { newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { tick } from '../core/horde.ts';
 import type { Loadout } from '../core/loadout.ts';
+import { sendPatrol, settlePatrols } from '../core/patrol.ts';
 import {
   decodeSave,
   encodeSave,
@@ -24,7 +25,7 @@ import {
   writeSave,
   type SaveStorage,
 } from './save.ts';
-import { NOW, oldStock, played } from './testing.ts';
+import { NOW, oldStock, played, prePatrol } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -982,7 +983,7 @@ describe('save: the taller field (ID-047)', () => {
     JSON.stringify({
       v: 1,
       savedAt: NOW,
-      game: { ...JSON.parse(JSON.stringify(game)), base, stock: oldStock(game) },
+      game: { ...prePatrol(game), base, stock: oldStock(game) },
     });
 
   it('moves an old base onto rows 3–7; the new rows are empty ground', () => {
@@ -1093,7 +1094,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 5, '1', '4', 1.5, null]) {
+    for (const v of [0, 6, '1', '5', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1288,6 +1289,7 @@ describe('save: commander perks (ID-020)', () => {
   it('still loads a version 2 save, which saves again as the current version', () => {
     const save = JSON.parse(encodeSave(played(), NOW));
     save.v = 2;
+    save.game = prePatrol(played());
     save.game.stock = oldStock(played());
     delete save.game.perks;
     const loaded = decodeSave(JSON.stringify(save));
@@ -1337,20 +1339,21 @@ describe('save: commander perks (ID-020)', () => {
 describe('save: resource inventory (ID-025)', () => {
   const raw = (v: number, game: Loose) => decodeSave(JSON.stringify({ v, savedAt: NOW, game }));
   const withStock = (stock: Loose) => ({ ...newGame(), stock });
+  const oldWithStock = (stock: Loose) => ({ ...prePatrol(newGame()), stock });
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(4);
+    expect(SAVE_VERSION).toBe(5);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
 
   it('loads a v3 save with only the building materials; the rest start at 0', () => {
     const old = { scrap: 7, wood: 8, metal: 9, concrete: 1 };
-    expect(raw(3, withStock(old))?.game.stock).toEqual(stockOf(old));
+    expect(raw(3, oldWithStock(old))?.game.stock).toEqual(stockOf(old));
     // A v3 save never held the new keys, so one that does is not ours.
-    expect(raw(3, withStock({ ...old, genes: 5 }))).toBeNull();
-    // And a v4 save must hold them all.
+    expect(raw(3, oldWithStock({ ...old, genes: 5 }))).toBeNull();
+    // And a current save must hold them all.
     expect(raw(SAVE_VERSION, withStock(old))).toBeNull();
   });
 
@@ -1373,5 +1376,174 @@ describe('save: resource inventory (ID-025)', () => {
     expect(raw(SAVE_VERSION, withStock({ ...full, genes: MAX_COUNT }))?.game.stock.genes).toBe(
       MAX_COUNT,
     );
+  });
+});
+
+describe('save: patrols (ID-026)', () => {
+  const H = 60 * 60 * 1000;
+  /**
+   * Horde 3: Bob back from the gas station (patrol 1), a police patrol (2) back with its
+   * weapons, and Jack and John out at the electronics store (3).
+   */
+  function patrolling(): GameState {
+    let g: GameState = { ...newGame(), hordeNumber: 3 };
+    const r1 = sendPatrol(g, 'gas-station', ['bob'], 3, NOW - 3 * H);
+    if (!r1.ok) throw new Error(r1.reason);
+    g = settlePatrols(r1.game, NOW - 2 * H);
+    // The police station waits for research, so this patrol is placed by hand.
+    const police = { ...g.patrols[0], no: 2, location: 'police' as const, members: ['bob'] };
+    g = {
+      ...g,
+      patrols: [{ ...police, sentAt: NOW - 2.5 * H, sentHorde: 3, strength: 1, seed: 5 }],
+    };
+    g = settlePatrols({ ...g, patrolsSent: 2 }, NOW - H / 2);
+    const r3 = sendPatrol(g, 'electronics', ['jack', 'john'], 9, NOW - H / 4);
+    if (!r3.ok) throw new Error(r3.reason);
+    return r3.game;
+  }
+  const raw = (game: Loose, v: unknown = SAVE_VERSION) =>
+    decodeSave(JSON.stringify({ v, savedAt: NOW, game }));
+  const poke = (change: (g: Loose) => void) => {
+    const g = JSON.parse(JSON.stringify(patrolling()));
+    change(g);
+    return raw(g);
+  };
+
+  it('round-trips patrols out, the count, reports and weapons found', () => {
+    const g = patrolling();
+    expect(g.armoury.some((w) => w.uid.startsWith('p2-'))).toBe(true);
+    expect(g.reports.map((r) => r.no)).toEqual([1, 2]);
+    expect(decodeSave(encodeSave(g, NOW))?.game).toEqual(g);
+  });
+
+  it('settles a patrol that came due while the game was closed', () => {
+    const loaded = decodeSave(encodeSave(patrolling(), NOW))!.game;
+    const back = settlePatrols(loaded, NOW + H);
+    expect(back.patrols).toEqual([]);
+    expect(back.reports.at(-1)!.names).toEqual(['Jack', 'John']);
+  });
+
+  it('loads a v4 save with no patrols, and refuses a v5 save without them', () => {
+    const old = raw(prePatrol(newGame()), 4);
+    expect(old?.game.patrols).toEqual([]);
+    expect(old?.game.patrolsSent).toBe(0);
+    expect(old?.game.reports).toEqual([]);
+    expect(raw(prePatrol(newGame()))).toBeNull();
+    expect(raw(newGame(), 4)).toBeNull();
+  });
+
+  it('cuts a send time after the save to the save', () => {
+    const loaded = poke((g) => (g.patrols[0].sentAt = NOW + 9 * H));
+    expect(loaded?.game.patrols[0]!.sentAt).toBe(NOW);
+  });
+
+  it('refuses patrols the game could not have sent', () => {
+    const cases: [string, (g: Loose) => void][] = [
+      ['unknown location', (g) => (g.patrols[0].location = 'mall')],
+      ['hidden location', (g) => (g.patrols[0].location = 'crater')],
+      ['not yet revealed when sent', (g) => (g.patrols[0].location = 'hardware')],
+      ['look-alike location', (g) => (g.patrols[0].location = 'electronics​')],
+      ['bidi location', (g) => (g.patrols[0].location = '‮electronics')],
+      ['unknown member', (g) => (g.patrols[0].members = ['zed'])],
+      ['member twice', (g) => (g.patrols[0].members = ['jack', 'jack'])],
+      ['no members', (g) => (g.patrols[0].members = [])],
+      [
+        'member on two patrols',
+        (g) => {
+          g.patrolsSent = 4;
+          g.patrols.push({ ...g.patrols[0], no: 4, members: ['john'], strength: 0 });
+        },
+      ],
+      [
+        'patrols out of order',
+        (g) => {
+          g.patrolsSent = 4;
+          g.patrols.unshift({ ...g.patrols[0], no: 4, members: ['bob'], strength: 0 });
+        },
+      ],
+      [
+        'number twice',
+        (g) => {
+          g.patrolsSent = 4;
+          g.patrols.push({ ...g.patrols[0], members: ['bob'], strength: 0 });
+        },
+      ],
+      ['bidi member id', (g) => (g.patrols[0].members = ['\u202ejack'])],
+      ['zero-width member id', (g) => (g.patrols[0].members = ['ja\u200bck'])],
+      ['number past the count', (g) => (g.patrols[0].no = 4)],
+      ['number 0', (g) => (g.patrols[0].no = 0)],
+      ['sent before patrols opened', (g) => (g.patrols[0].sentHorde = 2)],
+      ['sent from a future horde', (g) => (g.patrols[0].sentHorde = 4)],
+      ['stronger than its party', (g) => (g.patrols[0].strength = 99)],
+      ['sent injured', (g) => (g.roster[1].injuredUntil = NOW)],
+      ['negative seed', (g) => (g.patrols[0].seed = -1)],
+      ['fractional seed', (g) => (g.patrols[0].seed = 1.5)],
+      ['huge seed', (g) => (g.patrols[0].seed = 2 ** 32)],
+      ['string time', (g) => (g.patrols[0].sentAt = String(NOW))],
+      ['NaN strength', (g) => (g.patrols[0].strength = 'NaN')],
+      ['extra key', (g) => (g.patrols[0].extra = 1)],
+      ['missing key', (g) => delete g.patrols[0].seed],
+      ['patrols not an array', (g) => (g.patrols = {})],
+      ['more patrols than defenders', (g) => (g.patrols = Array(4).fill(g.patrols[0]))],
+      ['count negative', (g) => (g.patrolsSent = -1)],
+      ['count fractional', (g) => (g.patrolsSent = 3.5)],
+      ['count too high', (g) => (g.patrolsSent = MAX_COUNT + 1)],
+      ['weapon from a patrol still out', (g) => (g.armoury[0].uid = 'p3-0')],
+      ['weapon from a patrol never sent', (g) => (g.armoury[0].uid = 'p4-0')],
+      ['weapon uid malformed', (g) => (g.armoury[0].uid = 'p2-')],
+      ['weapon uid oversized', (g) => (g.armoury[0].uid = 'p2-0000')],
+      ['weapon uid padded', (g) => (g.armoury[0].uid = 'p2-00')],
+      ['count past what a uid holds', (g) => (g.patrolsSent = 1_000_000)],
+    ];
+    for (const [name, change] of cases) expect(poke(change), name).toBeNull();
+  });
+
+  it('refuses reports the game could not have written', () => {
+    const cases: [string, (g: Loose) => void][] = [
+      ['from a patrol still out', (g) => (g.reports[0].no = 3)],
+      ['from a patrol never sent', (g) => (g.reports[0].no = 4)],
+      ['twice', (g) => (g.reports[1].no = 1)],
+      ['unknown location', (g) => (g.reports[0].location = 'mall')],
+      ['bidi name', (g) => (g.reports[0].names = ['‮Bob'])],
+      ['zero-width name', (g) => (g.reports[0].names = ['Bo​b'])],
+      ['markup name', (g) => (g.reports[0].names = ['<img src=x>'])],
+      ['oversized name', (g) => (g.reports[0].names = ['B'.repeat(25)])],
+      ['kept not a boolean', (g) => (g.reports[1].weapons[0].kept = 'yes')],
+      ['unknown weapon', (g) => (g.reports[1].weapons[0].base = 'bazooka')],
+      ['too many weapons', (g) => (g.reports[1].weapons = Array(6).fill(g.reports[1].weapons[0]))],
+      ['negative gas', (g) => (g.reports[0].gas = -1)],
+      ['unknown material', (g) => (g.reports[0].stock.gold = 1)],
+      ['missing battery', (g) => delete g.reports[0].batteries.makeshift],
+      ['fractional xp', (g) => (g.reports[0].xp = 1.5)],
+      ['too many reports', (g) => (g.reports = Array(21).fill(g.reports[0]))],
+      ['too many names', (g) => (g.reports[0].names = Array(101).fill('Bob'))],
+      ['unknown rarity', (g) => (g.reports[1].weapons[0].rarity = 'legendary')],
+      ['string return time', (g) => (g.reports[0].returnedAt = String(NOW))],
+    ];
+    for (const [name, change] of cases) expect(poke(change), name).toBeNull();
+  });
+
+  it('refuses polluted patrols and reports and leaves Object.prototype alone', () => {
+    const json = encodeSave(patrolling(), NOW);
+    for (const [from, to] of [
+      ['"location":"electronics"', '"location":"electronics","__proto__":{"polluted":1}'],
+      ['"returnedAt":', '"__proto__":{"polluted":1},"returnedAt":'],
+      ['"patrolsSent":', '"constructor":{"polluted":1},"patrolsSent":'],
+    ] as const) {
+      expect(json.includes(from), from).toBe(true);
+      expect(decodeSave(json.replace(from, to)), to).toBeNull();
+    }
+    // Inside a report's stock: `power` has no `returnedAt`, so this lands in a report.
+    const inStock = json.replace(/("returnedAt":\d+,"stock":\{)/, '$1"__proto__":{"polluted":1},');
+    expect(inStock).not.toBe(json);
+    expect(decodeSave(inStock)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('loads a second patrol in order, so the cases above fail only on their fault', () => {
+    const g = JSON.parse(JSON.stringify(patrolling()));
+    g.patrolsSent = 4;
+    g.patrols.push({ ...g.patrols[0], no: 4, members: ['bob'], strength: 0 });
+    expect(raw(g)?.game.patrols.map((p) => p.no)).toEqual([3, 4]);
   });
 });

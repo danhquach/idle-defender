@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { type Stats } from '../core/data.ts';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
+import { sendPatrol } from '../core/patrol.ts';
 import { NO_STATS } from '../core/stats.ts';
 import { BADGE_COLOUR } from './render.ts';
 import {
@@ -52,6 +53,20 @@ describe('roster entry', () => {
 
   it('all points spent: no picker line', () => {
     expect(rosterEntry(jack({ xp: 25 }, { grit: 3 }), NOW).points).toBe('');
+  });
+
+  it('a defender on patrol says where and how long is left', () => {
+    const r = sendPatrol(
+      { ...newGame(), hordeNumber: 3 },
+      'electronics',
+      ['jack'],
+      1,
+      NOW - 5 * 60_000,
+    );
+    if (!r.ok) throw new Error(r.reason);
+    expect(rosterEntry(jack(), NOW, r.game.patrols[0]).status).toBe(
+      'On patrol · Electronics store · 40m left',
+    );
   });
 
   it('a resting defender says how long is left, rounded up to the minute', () => {
