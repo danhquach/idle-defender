@@ -176,6 +176,25 @@ Defenders stand on **posts** the player builds and chooses between.
   breaks, defenders on its wall-walk or gate post drop to the nearest free
   ground post behind it and fight from there. Turrets on that mount are
   jammed (§7).
+- **As built (ID-048, starting points):** each wall or gate segment has 2
+  wall-walk spots side by side, top to bottom (a quarter and three quarters
+  down the segment), so a 10-row wall lines up 20 defenders. Each spot holds
+  a post or a turret, not both, and keeps the wall-walk rules: ×1 gun range,
+  50 px melee reach, dropping to the nearest free ground post when the
+  segment breaks. A segment's build menu lists both spots, plus "Line the
+  wall": a wall-walk post on every free spot of that layer's built segments,
+  top to bottom, showing the total cost and asking first (and how many the
+  stock covers when it can't cover them all); it stops when the stock runs
+  out. The start pick, moves and replacements name each spot ("spot 1",
+  "spot 2"); a defender on the wall draws on its top, the back spot first.
+  A save from before spots keeps each wall-walk post and wall mount on spot
+  1, and only spot 2 is written to a save. Balance: firepower is capped by
+  the roster, not posts: three staffed wall-walk posts win as much as a full
+  line, so post cost stays as it is; a full line on the starting wall still
+  wins Horde 5 at most half the time and Horde 7 never (balance test). Lining
+  the wall found a stand-off, now fixed: an enemy in the camp hunting up the
+  wall line was pushed back for good by one pressed against the wall's
+  front; enemies on opposite sides of the walls no longer push each other.
 
 ## 4. Horde defence (the active part)
 

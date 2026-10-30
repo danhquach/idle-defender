@@ -9,6 +9,7 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   TRAP_STRIP,
+  WALK_SPOTS,
   WALL,
 } from '../core/data.ts';
 
@@ -83,6 +84,15 @@ export function zoomAt(
   return clampCamera({ x: wx - anchor.sx / zoom, y: wy - anchor.sy / (zoom * TILT), zoom }, view);
 }
 
+/**
+ * The depth key `y` of a piece on a slot: a wall-walk post or wall mount never sorts
+ * before its own segment (keyed at the row's middle), so it is always drawn on top of
+ * it; spot 1 still sorts after spot 0.
+ */
+export function mountDepth(kind: Post['kind'], y: number, row: number): number {
+  return kind === 'wall-walk' ? Math.max(y, (row + 0.5) * SEGMENT_HEIGHT) : y;
+}
+
 /** Back to front: y ascending, then x descending. Returns a new array. */
 export function depthSort<T extends { y: number; x: number }>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => a.y - b.y || b.x - a.x);
@@ -93,8 +103,8 @@ export const PIECE = {
   wall: { height: 40 },
   tower: { halfWidth: 16, halfDepth: 24, height: 50 },
   ground: { halfWidth: 16, halfDepth: 24, height: 12 },
-  /** The wall-walk platform, on top of its segment. */
-  walk: { halfWidth: 8, halfDepth: 24, height: 6 },
+  /** A wall-walk platform on top of its segment: its spots' platforms never touch. */
+  walk: { halfWidth: 8, halfDepth: 18, height: 6 },
   defender: { halfWidth: 7, halfDepth: 10, height: 30 },
   /** A turret's head, on top of its tower or wall-walk mount. */
   turret: { halfWidth: 9, halfDepth: 9, height: 12 },
@@ -135,11 +145,11 @@ export function slotAt(x: number, y: number, base: Base): SlotHit | null {
     base.posts.some((p) => p.kind === kind && p.column === column && p.row === row);
   const turretAt = (kind: string, column: number, row: number): boolean =>
     base.turrets.some((t) => t.mount === kind && t.column === column && t.row === row);
-  /** How high a built mount stands over its floor: the post, plus a turret's head. */
+  /** How high a slot's tallest mount stands over its floor: a turret's head, else a post. */
   const mounted = (kind: 'tower' | 'ground' | 'wall-walk', column: number, row: number): number => {
     const piece = (kind === 'wall-walk' ? PIECE.walk : PIECE[kind]).height;
-    if (postAt(kind, column, row)) return piece;
-    return turretAt(kind, column, row) ? piece + PIECE.turret.height : 0;
+    if (turretAt(kind, column, row)) return piece + PIECE.turret.height;
+    return postAt(kind, column, row) ? piece : 0;
   };
   let hit: SlotHit | null = null;
   for (let row = 0; row < SEGMENTS; row++) {
@@ -193,7 +203,7 @@ export type FightHit = { defenderId: string } | { postId: number };
 
 /**
  * What a fight click at ground point `(x, y)` lands on, as drawn: a defender's body
- * first, else a post (a wall-walk post covers its whole segment). Where pieces overlap,
+ * first, else a post (a wall-walk post covers its spot's share of the segment). Where pieces overlap,
  * the front one (larger `y`) wins. Null on open ground.
  */
 export function fightHitAt(
@@ -221,7 +231,7 @@ export function fightHitAt(
           cx: post.x,
           cy: post.y,
           hw: WALL.depth / 2,
-          hd: SEGMENT_HEIGHT / 2,
+          hd: SEGMENT_HEIGHT / (2 * WALK_SPOTS),
           z0: 0,
           z1: postFloor(scene.layers, post),
         };

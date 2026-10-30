@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPost,
   buildSegment,
+  buildTurret,
+  freeWalkSpots,
+  lineWall,
+  moveTurret,
   newBase,
   postXY,
   repairAll,
@@ -66,7 +70,9 @@ describe('newBase', () => {
   });
 
   it('post positions per kind', () => {
-    expect(postXY({ kind: 'wall-walk', column: 1, row: 0 })).toEqual({ x: 770, y: 40 });
+    // A wall-walk's two spots split the 80 px segment: spot 0 above the middle, spot 1 below.
+    expect(postXY({ kind: 'wall-walk', column: 1, row: 0 })).toEqual({ x: 770, y: 20 });
+    expect(postXY({ kind: 'wall-walk', column: 1, row: 0, spot: 1 })).toEqual({ x: 770, y: 60 });
     expect(postXY({ kind: 'ground', column: 2, row: 4 })).toEqual({ x: 860, y: 360 });
   });
 });
@@ -237,6 +243,101 @@ describe('buildPost', () => {
     expect(
       reason(buildPost(newBase(), { ...rich(), wood: 19 }, { kind: 'tower', column: 0, row: 0 })),
     ).toBe('Not enough wood');
+  });
+});
+
+describe('wall-walk spots (ID-048)', () => {
+  it('holds 2 wall-walk posts side by side per segment, kept sorted by spot', () => {
+    let r = ok(buildPost(newBase(), rich(), { kind: 'wall-walk', column: 0, row: 3, spot: 1 }));
+    r = ok(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3 }));
+    expect(r.base.posts.filter((p) => p.kind === 'wall-walk')).toEqual([
+      { kind: 'wall-walk', column: 0, row: 3 },
+      { kind: 'wall-walk', column: 0, row: 3, spot: 1 },
+    ]);
+    expect(reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3 }))).toBe(
+      'Slot taken',
+    );
+    expect(
+      reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3, spot: 1 })),
+    ).toBe('Slot taken');
+    // A spot written as 0 is the same spot as none.
+    expect(
+      reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3, spot: 0 })),
+    ).toBe('Slot taken');
+  });
+
+  it('a spot holds a post or a turret, not both; the other spot stays free', () => {
+    const t = ok(buildTurret(newBase(), rich(), true, 'wall-walk', 0, 2, 1));
+    expect(t.base.turrets).toEqual([
+      { mount: 'wall-walk', column: 0, row: 2, spot: 1, condition: 100 },
+    ]);
+    expect(
+      reason(buildPost(t.base, t.stock, { kind: 'wall-walk', column: 0, row: 2, spot: 1 })),
+    ).toBe('Slot taken');
+    const p = ok(buildPost(t.base, t.stock, { kind: 'wall-walk', column: 0, row: 2 }));
+    expect(reason(buildTurret(p.base, p.stock, true, 'wall-walk', 0, 2, 0))).toBe('Slot taken');
+    // A turret moves between the two spots of one segment.
+    const m = ok(moveTurret(t.base, t.stock, 0, 'wall-walk', 0, 2, 0));
+    expect(m.base.turrets).toEqual([{ mount: 'wall-walk', column: 0, row: 2, condition: 100 }]);
+    expect(reason(moveTurret(m.base, m.stock, 0, 'wall-walk', 0, 2))).toBe('Already there');
+  });
+
+  it('refuses a spot past the second, a fraction, or a spot on a tower or the ground', () => {
+    const at = (kind: 'tower' | 'ground' | 'wall-walk', spot: number) => () =>
+      buildPost(newBase(), rich(), { kind, column: 0, row: 0, spot });
+    expect(at('wall-walk', 2)).toThrow(RangeError);
+    expect(at('wall-walk', -1)).toThrow(RangeError);
+    expect(at('wall-walk', 0.5)).toThrow(RangeError);
+    expect(at('tower', 1)).toThrow(RangeError);
+    expect(at('ground', 1)).toThrow(RangeError);
+    expect(() => buildTurret(newBase(), rich(), true, 'tower', 0, 0, 1)).toThrow(RangeError);
+    expect(() => buildTurret(newBase(), rich(), true, 'wall-walk', 0, 0, 2)).toThrow(RangeError);
+  });
+
+  it('a 10-row wall lines up 20 defenders', () => {
+    const r = ok(lineWall(newBase(), rich(), 0));
+    expect(r.base.posts.filter((p) => p.kind === 'wall-walk')).toHaveLength(2 * SEGMENTS);
+    expect(r.stock).toEqual({ ...rich(), wood: 999 - 5 * 20, scrap: 999 - 5 * 20 });
+    expect(reason(lineWall(r.base, r.stock, 0))).toBe('No free spot on this wall');
+  });
+
+  it('"Line the wall" fills free spots top to bottom and skips taken ones and gaps', () => {
+    let b = ok(buildPost(newBase(), rich(), { kind: 'wall-walk', column: 0, row: 0 })).base;
+    b = ok(buildTurret(b, rich(), true, 'wall-walk', 0, 1, 1)).base;
+    b.layers[0]!.slots[2] = null; // an open gap
+    const free = freeWalkSpots(b, 0);
+    expect(free.slice(0, 3)).toEqual([
+      { kind: 'wall-walk', column: 0, row: 0, spot: 1 },
+      { kind: 'wall-walk', column: 0, row: 1 },
+      { kind: 'wall-walk', column: 0, row: 3 },
+    ]);
+    expect(free).toHaveLength(2 * SEGMENTS - 2 - 2);
+    expect(freeWalkSpots(b, 1)).toEqual([]);
+    expect(reason(lineWall(b, rich(), 1))).toBe('No free spot on this wall');
+  });
+
+  it('"Line the wall" stops when the stock runs out, and refuses when it covers none', () => {
+    // 23 wood and scrap: four posts (5 each), with 3 left over.
+    const r = ok(lineWall(newBase(), { ...empty(), wood: 23, scrap: 23 }, 0));
+    expect(r.base.posts.filter((p) => p.kind === 'wall-walk')).toEqual([
+      { kind: 'wall-walk', column: 0, row: 0 },
+      { kind: 'wall-walk', column: 0, row: 0, spot: 1 },
+      { kind: 'wall-walk', column: 0, row: 1 },
+      { kind: 'wall-walk', column: 0, row: 1, spot: 1 },
+    ]);
+    expect(r.stock).toEqual({ ...empty(), wood: 3, scrap: 3 });
+    expect(reason(lineWall(newBase(), { ...empty(), wood: 4, scrap: 99 }, 0))).toBe(
+      'Not enough wood',
+    );
+  });
+
+  it('"Line the wall" is pure and refuses a bad column', () => {
+    const base = newBase();
+    const before = structuredClone(base);
+    ok(lineWall(base, rich(), 0));
+    expect(base).toEqual(before);
+    expect(() => lineWall(base, rich(), 3)).toThrow(RangeError);
+    expect(() => freeWalkSpots(base, -1)).toThrow(RangeError);
   });
 });
 

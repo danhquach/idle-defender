@@ -99,12 +99,13 @@ describe('Ripper (pistol + knife)', () => {
 
   it('reaches 50 px from the post; past that they shoot their pistol instead', () => {
     const s = fight(base, [spec('j', 'knife'), 'wall-walk', GATE]);
-    // The post is at (510, 440): 10 px in x, so 48 px in y is in reach and 50 is not.
-    enemy(s, { ...tough, x: 520, y: GATE_Y + 50 });
+    // The post (spot 0) is at (510, 420): 10 px in x, so 48 px in y is in reach and 50 is not.
+    const postY = GATE_Y - SEGMENT_HEIGHT / 4;
+    enemy(s, { ...tough, x: 520, y: postY + 50 });
     const shot = tick(s, STEP);
     expect(shot.enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
     expect(shot.shots).toEqual([expect.objectContaining({ melee: false })]);
-    s.enemies[0]!.y = GATE_Y + 48;
+    s.enemies[0]!.y = postY + 48;
     expect(tick(s, STEP).enemies[0]!.hp).toBe(990);
   });
 

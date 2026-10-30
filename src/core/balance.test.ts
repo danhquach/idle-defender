@@ -2,7 +2,7 @@
 // scripted player in sim.ts, still meet the design's targets. A retune that breaks
 // one fails here; `npm run balance` shows the full table.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { repairAllCost } from './base.ts';
+import { lineWall, repairAllCost } from './base.ts';
 import { MATERIALS } from './data.ts';
 import { finishHorde, hordePayout, newGame } from './game.ts';
 import type { HordeState } from './horde.ts';
@@ -86,4 +86,36 @@ describe('a campaign without building', () => {
       expect(reached, `seed ${seed}`).toBeLessThanOrEqual(5);
     }
   }, 60_000);
+});
+
+describe('a full firing line on the starting wall (ID-048)', () => {
+  // Every wall-walk spot of the starting layer built: 20 posts for 3 defenders. A line
+  // adds no firepower past the roster; three staffed wall-walk posts play the same.
+  const byHorde = new Map<number, HordeRun[]>();
+  beforeAll(() => {
+    for (let n = 1; n <= 7; n++) {
+      const game = bareGame(n);
+      const lined = lineWall(game.base, { scrap: 999, wood: 999, metal: 0, concrete: 0 }, 0);
+      if (!lined.ok) throw new Error(lined.reason);
+      const g = { ...game, base: lined.base };
+      byHorde.set(
+        n,
+        Array.from({ length: SEEDS }, (_, i) => summarise(playHorde(g, i + 1, 0), i + 1)),
+      );
+    }
+  }, 60_000);
+
+  it("doesn't trivialise the curve: Horde 5 at most half won, Horde 6 rarely, Horde 7 never", () => {
+    expect(winRate(byHorde.get(5)!)).toBeLessThanOrEqual(0.5);
+    expect(winRate(byHorde.get(6)!)).toBeLessThanOrEqual(0.25);
+    expect(winRate(byHorde.get(7)!)).toBe(0);
+  });
+
+  it('never stalls: an enemy in the camp reaches the wall line, so every horde ends within 12 minutes', () => {
+    for (const runs of byHorde.values()) {
+      for (const r of runs) {
+        expect(r.seconds, `horde ${r.hordeNumber} seed ${r.seed}`).toBeLessThanOrEqual(720);
+      }
+    }
+  });
 });

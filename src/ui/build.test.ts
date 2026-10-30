@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPost, buildSegment, buildTrap, buildTurret } from '../core/base.ts';
+import { buildPost, buildSegment, buildTrap, buildTurret, lineWall } from '../core/base.ts';
 import { BANK_CAP, GENERATOR, SEGMENTS, TRAPS, TURRET } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
@@ -13,6 +13,7 @@ import {
   IMPORT_REFUSAL,
   injuredLines,
   labLines,
+  lineWallLine,
   loadCode,
   pickStart,
   postKey,
@@ -24,7 +25,7 @@ import {
   turretLines,
   type SlotLine,
 } from './build.ts';
-import { clockTime } from './hud.ts';
+import { clockTime, postName } from './hud.ts';
 
 describe('build panel', () => {
   it('shows the next horde and every material', () => {
@@ -219,6 +220,59 @@ describe('build panel', () => {
   });
 });
 
+describe('wall-walk spots (ID-048)', () => {
+  const RICH = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+
+  it('names each spot, and the start pick keeps and lists spot 2 apart from spot 1', () => {
+    const g = { ...newGame(), stock: RICH };
+    const r = lineWall(g.base, g.stock, 0);
+    if (!r.ok) throw new Error(r.reason);
+    const lined: GameState = { ...g, base: r.base, stock: r.stock };
+    const second = { kind: 'wall-walk', column: 0, row: 3, spot: 1 } as const;
+    expect(postName(second)).toBe('Wall-walk post · Layer 1, row 4, spot 2');
+    expect(postName({ ...second, spot: undefined })).toBe(
+      'Wall-walk post · Layer 1, row 4, spot 1',
+    );
+    expect(postName({ kind: 'tower', column: 0, row: 3 })).toBe('Tower · Layer 1, row 4');
+    expect(postKey(second)).not.toBe(postKey({ ...second, spot: 0 }));
+    expect(postKey({ ...second, spot: 0 })).toBe(postKey({ ...second, spot: undefined }));
+    const pick = pickStart(lined, null, postKey(second), 0)!;
+    expect(lined.base.posts[pick.postId]).toEqual(second);
+  });
+
+  it('"Line the wall" shows the total cost first and asks before going ahead', () => {
+    const g = { ...newGame(), stock: RICH };
+    const line = lineWallLine(g, 0);
+    expect(line).toMatchObject({
+      kind: 'action',
+      label: 'Line the wall: 20 wall-walk posts',
+      cost: { wood: 100, scrap: 100 },
+      confirm: 'Line layer 1 with 20 wall-walk posts for 100 scrap, 100 wood?',
+      result: { ok: true },
+    });
+    expect(lineResult(line, () => false)).toBeNull();
+    const done = lineResult(line, () => true);
+    expect(done?.ok && done.base.posts.filter((p) => p.kind === 'wall-walk')).toHaveLength(20);
+  });
+
+  it('"Line the wall" says how many the stock covers when short, and refuses with none free', () => {
+    const g = { ...newGame(), stock: { scrap: 23, wood: 60, metal: 0, concrete: 0 } };
+    const line = lineWallLine(g, 0);
+    expect(line).toMatchObject({
+      confirm: 'Line layer 1 with 20 wall-walk posts for 100 scrap, 100 wood? The stock covers 4.',
+      result: { ok: true },
+    });
+    const r = lineWall(g.base, RICH, 0);
+    if (!r.ok) throw new Error(r.reason);
+    const full = lineWallLine({ ...g, base: r.base }, 0);
+    expect(full).toMatchObject({
+      label: 'Line the wall',
+      cost: null,
+      result: { ok: false, reason: 'No free spot on this wall' },
+    });
+  });
+});
+
 describe('turret menu', () => {
   const RICH = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
   /** A new game with the Auto-turret researched and a turret on the free tower at row 2. */
@@ -243,7 +297,7 @@ describe('turret menu', () => {
     });
     const done: GameState = { ...g, research: ['metal-walls', 'auto-turret'] };
     const line = buildTurretLine(done, 'wall-walk', 0, 4);
-    expect(line).toMatchObject({ label: 'Auto-turret (wall mount)', result: { ok: true } });
+    expect(line).toMatchObject({ label: 'Auto-turret (wall mount, spot 1)', result: { ok: true } });
     expect(line.kind === 'action' && line.result.ok && line.result.base.turrets).toEqual([
       { mount: 'wall-walk', column: 0, row: 4, condition: 100 },
     ]);
@@ -321,26 +375,34 @@ describe('turret menu', () => {
     g.base.turrets[0]!.condition = 40;
     const targets = relocateTargets(g, 0);
     // The starting base: free tower mounts on every row but the two tower posts (rows 5, 7)
-    // and the turret's own (row 6), and a wall mount on each segment.
+    // and the turret's own (row 6), and both wall mounts on each segment.
     expect(targets.map((t) => t.label)).toEqual([
       ...FREE_TOWER_ROWS.map((row) => `Tower · Layer 1, row ${row + 1}`),
-      ...Array.from({ length: SEGMENTS }, (_, row) => `Wall mount · Layer 1, row ${row + 1}`),
+      ...Array.from({ length: SEGMENTS }, (_, row) =>
+        [1, 2].map((spot) => `Wall mount · Layer 1, row ${row + 1}, spot ${spot}`),
+      ).flat(),
     ]);
     expect(new Set(targets.map((t) => t.key)).size).toBe(targets.length);
-    const to = targets.find((t) => t.key === 'wall-walk:0:4')!;
+    const to = targets.find((t) => t.key === 'wall-walk:0:4:0')!;
     expect(to.result.base.turrets).toEqual([
       { mount: 'wall-walk', column: 0, row: 4, condition: 40 },
+    ]);
+    const second = targets.find((t) => t.key === 'wall-walk:0:4:1')!;
+    expect(second.result.base.turrets).toEqual([
+      { mount: 'wall-walk', column: 0, row: 4, spot: 1, condition: 40 },
     ]);
     expect(to.result.stock).toEqual(g.stock);
   });
 
   it('relocate has nowhere to go when every mount is taken', () => {
     let g = withTurret();
-    for (const [mount, row] of [
-      ...FREE_TOWER_ROWS.map((r) => ['tower', r] as const),
-      ...Array.from({ length: SEGMENTS }, (_, r) => ['wall-walk', r] as const),
+    g.stock = { ...g.stock, scrap: 9999, wood: 9999 }; // 27 turrets
+    for (const [mount, row, spot] of [
+      ...FREE_TOWER_ROWS.map((r) => ['tower', r, 0] as const),
+      ...Array.from({ length: SEGMENTS }, (_, r) => ['wall-walk', r, 0] as const),
+      ...Array.from({ length: SEGMENTS }, (_, r) => ['wall-walk', r, 1] as const),
     ] as const) {
-      const r = buildTurret(g.base, g.stock, true, mount, 0, row);
+      const r = buildTurret(g.base, g.stock, true, mount, 0, row, spot);
       if (!r.ok) throw new Error(r.reason);
       g = { ...g, base: r.base, stock: r.stock };
     }

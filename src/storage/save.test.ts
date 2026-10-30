@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
+import { buildTurret, lineWall, spotOf } from '../core/base.ts';
 import { ARMOURY_CAP, BANK_CAP, RECOVERY_MS, SEGMENTS, STEP } from '../core/data.ts';
 import { newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { tick } from '../core/horde.ts';
@@ -1053,5 +1054,162 @@ describe('save: the taller field (ID-047)', () => {
         JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game: { ...newGame(), base: start } }),
       ),
     ).toBeNull();
+  });
+});
+
+describe('save: wall-walk spots (ID-048)', () => {
+  const RICH = { scrap: 9999, wood: 9999, metal: 0, concrete: 0 };
+  /** `played()` with a wall mount on row 9's spot 2, then the rest of layer 1 lined with posts. */
+  function lined(): GameState {
+    const game = played();
+    const t = buildTurret(game.base, RICH, true, 'wall-walk', 0, 9, 1);
+    if (!t.ok) throw new Error(t.reason);
+    const r = lineWall(t.base, t.stock, 0);
+    if (!r.ok) throw new Error(r.reason);
+    return { ...game, base: r.base };
+  }
+  const tweaked = (change: (base: Loose) => void): unknown => {
+    const save = JSON.parse(encodeSave(lined(), NOW));
+    change(save.game.base);
+    return decodeSave(JSON.stringify(save));
+  };
+  const walk = (base: Loose, row: number, spot?: number): number =>
+    base.posts.findIndex(
+      (p: Loose) => p.kind === 'wall-walk' && p.row === row && (p.spot ?? 0) === (spot ?? 0),
+    );
+
+  it('round-trips both spots, writing a spot only past the first', () => {
+    const game = lined();
+    // Layer 1: 20 spots, one taken by the turret; layer 2 keeps its one post.
+    expect(game.base.posts.filter((p) => p.kind === 'wall-walk' && p.column === 0)).toHaveLength(
+      19,
+    );
+    const json = JSON.parse(encodeSave(game, NOW));
+    expect(json.game.base.posts[walk(json.game.base, 2)]).toEqual({
+      kind: 'wall-walk',
+      column: 0,
+      row: 2,
+    });
+    expect(json.game.base.turrets).toContainEqual({
+      mount: 'wall-walk',
+      column: 0,
+      row: 9,
+      spot: 1,
+      condition: 100,
+    });
+    expect(decodeSave(encodeSave(game, NOW))).toEqual({ game, savedAt: NOW });
+  });
+
+  it('loads an older wall-walk post (no spot) on the first spot of its segment', () => {
+    const save = JSON.parse(encodeSave(newGame(), NOW));
+    save.game.base.posts.push({ kind: 'wall-walk', column: 0, row: 3 });
+    const loaded = decodeSave(JSON.stringify(save));
+    const post = loaded!.game.base.posts.find((p) => p.kind === 'wall-walk')!;
+    expect(post).toEqual({ kind: 'wall-walk', column: 0, row: 3 });
+    expect(spotOf(post)).toBe(0);
+  });
+
+  it('refuses a spot the game never writes', () => {
+    for (const spot of [0, 2, -1, 1.5, '1', null, true, 1e300]) {
+      expect(
+        tweaked((b) => (b.posts[walk(b, 2, 1)].spot = spot)),
+        String(spot),
+      ).toBeNull();
+    }
+    // Only a wall-walk or wall mount has a second spot.
+    expect(tweaked((b) => (b.posts[0].spot = 1))).toBeNull();
+    expect(
+      tweaked((b) => {
+        expect(b.turrets[0].mount).toBe('tower');
+        b.turrets[0].spot = 1;
+      }),
+    ).toBeNull();
+    // A look-alike key, or a prototype name, is an unknown key.
+    expect(
+      tweaked((b) => (b.posts[walk(b, 2, 1)] = { ...b.posts[walk(b, 2, 1)], spоt: 1 })),
+    ).toBeNull();
+    const proto = encodeSave(lined(), NOW).replace(
+      '"row":2,"spot":1',
+      '"row":2,"__proto__":{"x":1},"spot":1',
+    );
+    expect(proto).not.toBe(encodeSave(lined(), NOW));
+    expect(decodeSave(proto)).toBeNull();
+    expect(({} as Record<string, unknown>).x).toBeUndefined();
+  });
+
+  it('refuses spots out of order, a spot twice, or a post and a turret on one spot', () => {
+    expect(
+      tweaked((b) => {
+        const [first, second] = [walk(b, 2), walk(b, 2, 1)];
+        [b.posts[first], b.posts[second]] = [b.posts[second], b.posts[first]];
+      }),
+    ).toBeNull();
+    expect(tweaked((b) => b.posts.splice(walk(b, 2, 1), 0, b.posts[walk(b, 2, 1)]))).toBeNull();
+    // Row 9's spot 2 holds the turret: a post there too is refused, on spot 1 it is fine.
+    expect(
+      tweaked((b) =>
+        b.posts.splice(walk(b, 9) + 1, 0, { kind: 'wall-walk', column: 0, row: 9, spot: 1 }),
+      ),
+    ).toBeNull();
+    expect(tweaked(() => {})).not.toBeNull();
+  });
+
+  const cmp = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
+  /** Every layer a full wood wall, so every slot can hold every post or turret. */
+  const fullWalls = (b: Loose): void => {
+    const wall = { kind: 'wall', tier: 'wood', hp: 200, maxHp: 200 };
+    b.layers = [0, 1, 2].map((column) => ({
+      column,
+      slots: Array.from({ length: SEGMENTS }, () => ({ ...wall })),
+    }));
+  };
+  const everySlot = <T>(make: (column: number, row: number) => T[]): T[] =>
+    [0, 1, 2]
+      .flatMap((column) => Array.from({ length: SEGMENTS }, (_, row) => make(column, row)))
+      .flat();
+
+  it('loads a grid full of posts or of turrets, and refuses one more of either', () => {
+    // Per slot: a ground post, a tower and both wall-walk spots (in buildPost's order).
+    const posts = everySlot((column, row) => [
+      { kind: 'ground', column, row },
+      { kind: 'tower', column, row },
+      { kind: 'wall-walk', column, row },
+      { kind: 'wall-walk', column, row, spot: 1 },
+    ]).sort(
+      (a, b) =>
+        a.column - b.column ||
+        cmp(a.kind, b.kind) ||
+        a.row - b.row ||
+        (a.spot ?? 0) - (b.spot ?? 0),
+    );
+    const full = (b: Loose) => {
+      fullWalls(b);
+      b.posts = posts;
+      b.turrets = [];
+    };
+    expect(posts).toHaveLength(3 * SEGMENTS * 4);
+    expect(tweaked(full)).not.toBeNull();
+    expect(tweaked((b) => (full(b), b.posts.push({ ...posts.at(-1) })))).toBeNull();
+
+    // Per slot: a tower mount and both wall mounts; ground posts only, so no spot clashes.
+    const turrets = everySlot((column, row) => [
+      { mount: 'tower', column, row, condition: 100 },
+      { mount: 'wall-walk', column, row, condition: 100 },
+      { mount: 'wall-walk', column, row, spot: 1, condition: 100 },
+    ]).sort(
+      (a, b) =>
+        a.column - b.column ||
+        cmp(a.mount, b.mount) ||
+        a.row - b.row ||
+        (a.spot ?? 0) - (b.spot ?? 0),
+    );
+    const armed = (b: Loose) => {
+      fullWalls(b);
+      b.posts = [{ kind: 'ground', column: 0, row: 0 }];
+      b.turrets = turrets;
+    };
+    expect(turrets).toHaveLength(3 * SEGMENTS * 3);
+    expect(tweaked(armed)).not.toBeNull();
+    expect(tweaked((b) => (armed(b), b.turrets.push({ ...turrets.at(-1) })))).toBeNull();
   });
 });
