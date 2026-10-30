@@ -692,6 +692,46 @@ one crowd (no lanes, §3).
   Placeholder art (§15): each new kind is a drawn shape of its own, sized by
   its radius, mutants in acid green or flesh red, the Runner muted; generated
   art follows in its own ticket.
+- **As built (ID-024, starting points): boss hordes.** Every 10th horde is a
+  boss horde: its waves are as usual, and one **Mutated Horror** comes with the
+  first spawn of the last wave (the random mix never rolls one). The horde is
+  won once the last wave is cleared and the Horror is dead.
+
+  | Enemy | HP | Speed px/s | Hit | Radius | Armour | XP / cash |
+  |---|---|---|---|---|---|---|
+  | Mutated Horror | 150 | 15 | 60 / 2 s | 32 | −2 per bullet (min 1) | 50 / 40 |
+
+  Its HP scales like every enemy's (about 1,130 at Horde 10's last wave). Its
+  armour works like a Brute's: blades, tools, traps and skills ignore it. It
+  smashes walls and gates and hunts defenders in the camp like any enemy. Each
+  boss horde's Horror has one ability, in turn: Horde 10 a **Broodmother**,
+  20 a **Rammer**, 30 a **Regenerator**, then again from 40.
+  - **Broodmother:** every 25 s, 2 Shamblers at the wave's HP beside it, on its
+    side of every wall; they pay their kills like any Shambler.
+  - **Rammer:** every 10 s it charges at 3× speed for 2 s; its first wall hit
+    in a charge does 2×.
+  - **Regenerator:** heals 3% of its max HP a second once 0.3 s pass without
+    it losing HP.
+
+  Ability clocks run on fight time (they stop during picks) and wait out a
+  flashbang: a stunned Rammer holds its charge, and a Regenerator's 0.3 s
+  count waits out the stun too. The HUD marks a boss horde on the start button ("Boss horde") and
+  in the status line, shows a boss bar with the Horror's name, ability and HP
+  while it is on the field, and the result screen names it ("injured by the
+  Mutated Horror", "the Mutated Horror: Rammer is dead", or "still stood").
+  Placeholder art: a large flesh-red hulk, sized by its radius.
+
+  Retune: the ticket's starting points (400 HP, −5 armour, Brood 4 Shamblers
+  every 10 s, Regen 2%/s after 3 s) made the Horror unbeatable: a pistol did
+  1.2 per bullet, the Brood's Shamblers (151 HP each at Horde 10) drew all fire,
+  and under steady fire the Regenerator never healed. The balance test's Horde 10
+  reference camp is the starting wall in concrete with every wall-walk spot
+  built and the starter roster carrying the XP of winning Hordes 1–9, against
+  the Horror alone with the whole squad posted. With the numbers above, that
+  camp wins against the Broodmother on 8 of 20 seeds, the Rammer on 20 (losing
+  more wall than with no ability) and the Regenerator on 14, against 20 of 20
+  with no ability. A lone pistol Gunner never wins. Horde 10 played in full is
+  ID-052; rewards for a boss win come with the Mutated Genes tickets.
 
 ## 10. World map and patrols (the idle part)
 

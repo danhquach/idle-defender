@@ -5,8 +5,9 @@ import { ARMOURY_CAP } from '../core/data.ts';
 import { newHorde, type HordeState } from '../core/horde.ts';
 import { buildTurret } from '../core/base.ts';
 import { NO_STATS } from '../core/stats.ts';
-import { setup } from '../core/testing.ts';
+import { enemy, setup } from '../core/testing.ts';
 import {
+  bossBar,
   clockTime,
   defenderLabel,
   fallingText,
@@ -15,6 +16,7 @@ import {
   resultScreen,
   shopButtons,
   skillButtons,
+  startLabel,
   statusText,
   stockText,
 } from './hud.ts';
@@ -33,6 +35,28 @@ describe('hud', () => {
     s.energy = 0;
     s.cash = 36;
     expect(statusText(s)).toMatch(/· Bank 0\/1,000 · Cash 36$/);
+  });
+
+  it('marks a boss horde on the start button and in the status line (ID-024)', () => {
+    expect(startLabel(9)).toBe('Start Horde 9');
+    expect(startLabel(10)).toBe('Start Horde 10 · Boss horde');
+    expect(startLabel(20)).toBe('Start Horde 20 · Boss horde');
+    const s = newHorde(1, { ...setup(), hordeNumber: 10 });
+    expect(statusText(s)).toMatch(/^Horde 10 \(boss\) · Wave 1\//);
+  });
+
+  it('shows the boss bar only while a Mutated Horror is on the field (ID-024)', () => {
+    const s = newHorde(1, { ...setup(), hordeNumber: 10 });
+    expect(bossBar(s)).toBeNull();
+    enemy(s, { kind: 'runner' });
+    expect(bossBar(s)).toBeNull();
+    const e = enemy(s, { kind: 'horror', hp: 1234.4, maxHp: 2000 });
+    e.horror = { ability: 'brood', nextAt: 0, chargeUntil: 0, charged: false, hitAt: 0, seenHp: 0 };
+    expect(bossBar(s)).toEqual({
+      label: 'Mutated Horror: Broodmother · 1,234/2,000',
+      hp: 1234,
+      maxHp: 2000,
+    });
   });
 
   it('shows a shop button per item as a dry run of buy, with a running buff counting down', () => {
@@ -150,6 +174,45 @@ describe('hud', () => {
       const { game, s } = ended('lost');
       s.breaches = [{ column: 0, row: 4, wave: 2, through: 'climbed' }];
       expect(resultScreen(game, s, NOW).lines).toContain('Layer 1 · row 5 · climbed over');
+    });
+
+    it('a boss horde names its Mutated Horror: dead on a win, still standing on a loss (ID-024)', () => {
+      const { game, s } = ended('won');
+      s.boss = 'charge';
+      s.injured[0]!.by = 'horror';
+      const won = resultScreen(game, s, NOW).lines;
+      expect(won[0]).toBe(`All ${s.waveCount} waves cleared · the Mutated Horror: Rammer is dead`);
+      expect(won).toContain(`Jack · injured by the Mutated Horror · back at ${jackBack}`);
+
+      const lost = ended('lost');
+      lost.s.boss = 'regen';
+      expect(resultScreen(lost.game, lost.s, NOW).lines.join('\n')).not.toMatch(/Horror/);
+      lost.s.enemies.push({
+        id: 99,
+        kind: 'horror',
+        x: 300,
+        y: 300,
+        hp: 10,
+        maxHp: 100,
+        nextAttackAt: 0,
+        inCamp: true,
+        stunnedUntil: 0,
+        vx: 0,
+        vy: 0,
+        climbUntil: 0,
+        climbed: false,
+        horror: {
+          ability: 'regen',
+          nextAt: 0,
+          chargeUntil: 0,
+          charged: false,
+          hitAt: 0,
+          seenHp: 10,
+        },
+      });
+      expect(resultScreen(lost.game, lost.s, NOW).lines[1]).toBe(
+        'The Mutated Horror: Regenerator still stood',
+      );
     });
 
     it('names the kind of enemy behind each injury (ID-023)', () => {

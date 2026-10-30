@@ -70,7 +70,7 @@ export const ART_URLS: Readonly<Record<string, string>> = Object.fromEntries(
 );
 
 /** A drawn placeholder body (design §15, ID-023) until a kind has generated art. */
-export type EnemyShape = 'lean' | 'low' | 'round' | 'hunch' | 'block' | 'spike';
+export type EnemyShape = 'lean' | 'low' | 'round' | 'hunch' | 'block' | 'spike' | 'horror';
 export type EnemyLook = { art: ArtId } | { shape: EnemyShape; colour: string };
 /** Mutants get the only saturated colours (design §15): acid green and flesh red. */
 const ACID = '#8fd92b';
@@ -83,6 +83,7 @@ export const ENEMY_ART: Readonly<Record<EnemyKind, EnemyLook>> = {
   spitter: { shape: 'hunch', colour: ACID },
   brute: { shape: 'block', colour: FLESH },
   screamer: { shape: 'spike', colour: FLESH },
+  horror: { shape: 'horror', colour: FLESH },
 };
 
 /** The weapon in the sprite's hands tells the profession (design §15). */

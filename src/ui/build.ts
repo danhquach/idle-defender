@@ -69,6 +69,7 @@ import {
   postName,
   slotName,
   spotName,
+  startLabel,
   stockText,
   wholeLeft,
 } from './hud.ts';
@@ -668,7 +669,7 @@ export function createBuildPanel(
       l.append(control);
       return l;
     };
-    const go = el('button', 'hud-button build-start', `Start Horde ${game.hordeNumber}`);
+    const go = el('button', 'hud-button build-start', startLabel(game.hordeNumber));
     go.type = 'button';
     go.disabled = picked === null;
     go.addEventListener('click', () => {
