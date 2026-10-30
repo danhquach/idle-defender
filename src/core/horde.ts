@@ -45,11 +45,13 @@ import {
   BLOATER,
   BRUTE,
   CRAWLER,
+  HORROR,
   SCREAMER,
   SPITTER,
   meleeReach,
   type BuffId,
   type EnemyKind,
+  type HorrorAbility,
   type SkillId,
   type Stats,
   type Tracer,
@@ -77,7 +79,7 @@ import {
   repairFactor,
   spreadOf,
 } from './stats.ts';
-import { enemyHp, kindFor, waveCount, waveMix, waveSize } from './waves.ts';
+import { enemyHp, horrorAbility, kindFor, waveCount, waveMix, waveSize } from './waves.ts';
 
 export type UpgradeId = 'sharpshooter' | 'rapid-fire' | 'long-sight' | 'patch-up' | 'reinforce';
 
@@ -128,6 +130,21 @@ export interface Enemy {
   climbUntil: number;
   /** A Crawler that has climbed a wall: it climbs only once (design §9). */
   climbed: boolean;
+  /** A Mutated Horror's ability clock (design §9, ID-024); only the Horror has one. */
+  horror?: HorrorClock;
+}
+/** Fight times are when, so they stop during picks; a stun pushes them back. */
+export interface HorrorClock {
+  ability: HorrorAbility;
+  /** When its brood or charge comes next. */
+  nextAt: number;
+  /** A charge runs until then; 0 = not charging. */
+  chargeUntil: number;
+  /** Its first wall hit in this charge is done. */
+  charged: boolean;
+  /** When it last lost HP, and its HP after the last step, to tell a hit. */
+  hitAt: number;
+  seenHp: number;
 }
 /** An unbuilt slot is `{ kind: null, tier: null, hp: 0, maxHp: 0 }`: an open gap. */
 export interface Segment {
@@ -368,6 +385,10 @@ export interface HordeState {
   impacts: Impact[];
   spits: Spit[];
   bursts: Burst[];
+  /** This horde's Mutated Horror's ability; null = no boss horde (design §9). */
+  boss: HorrorAbility | null;
+  /** Whether the Horror has come (with the first spawn of the last wave). */
+  bossSpawned: boolean;
   outcome: Outcome;
 }
 
@@ -431,6 +452,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     impacts: [],
     spits: [],
     bursts: [],
+    boss: horrorAbility(hordeNumber),
+    bossSpawned: false,
     outcome: 'fighting',
   };
 }
@@ -697,6 +720,7 @@ function step(s: HordeState, rng: Rng): void {
   repairTurrets(s);
   springTraps(s);
   removeDead(s);
+  mutate(s, rng);
   // Moving and separating keep the enemies' order, so their old places line up by index.
   const wasX = s.enemies.map((e) => e.x);
   const wasY = s.enemies.map((e) => e.y);
@@ -724,30 +748,101 @@ function step(s: HordeState, rng: Rng): void {
 }
 
 function spawn(s: HordeState, rng: Rng): void {
+  if (s.boss && !s.bossSpawned && s.wave === s.waveCount && due(s.time, s.breakUntil)) {
+    s.bossSpawned = true;
+    const r = ENEMIES.horror.radius;
+    const e = place(s, 'horror', FIELD.right, int(rng, r, FIELD.height - r));
+    e.horror = {
+      ability: s.boss,
+      // A Regenerator has no clock of its own; only its last hit counts.
+      nextAt: s.boss === 'regen' ? 0 : s.time + HORROR[s.boss].every,
+      chargeUntil: 0,
+      charged: false,
+      hitAt: s.time,
+      seenHp: e.hp,
+    };
+  }
   while (s.toSpawn > 0 && due(s.time, s.nextSpawnAt) && due(s.time, s.breakUntil)) {
     // Shamblers only (the tutorial) roll nothing, so its seeds play as before.
     const kind = waveMix(s.hordeNumber).length > 1 ? kindFor(s.hordeNumber, rng()) : 'shambler';
-    const hp = enemyHp(kind, s.hordeNumber, s.wave);
     const r = ENEMIES[kind].radius;
-    s.enemies.push({
-      id: s.nextEnemyId++,
-      kind,
-      x: FIELD.right,
-      y: int(rng, r, FIELD.height - r),
-      hp,
-      maxHp: hp,
-      nextAttackAt: 0,
-      inCamp: false,
-      stunnedUntil: 0,
-      vx: 0,
-      vy: 0,
-      climbUntil: 0,
-      climbed: false,
-    });
+    place(s, kind, FIELD.right, int(rng, r, FIELD.height - r));
     s.toSpawn -= 1;
     s.nextSpawnAt = s.time + SPAWN_INTERVAL;
   }
 }
+
+/** A new enemy of `kind` at `(x, y)` with this wave's HP. */
+function place(s: HordeState, kind: EnemyKind, x: number, y: number): Enemy {
+  const hp = enemyHp(kind, s.hordeNumber, s.wave);
+  const e: Enemy = {
+    id: s.nextEnemyId++,
+    kind,
+    x,
+    y,
+    hp,
+    maxHp: hp,
+    nextAttackAt: 0,
+    inCamp: false,
+    stunnedUntil: 0,
+    vx: 0,
+    vy: 0,
+    climbUntil: 0,
+    climbed: false,
+  };
+  s.enemies.push(e);
+  return e;
+}
+
+/**
+ * Design §9, as built ID-024: each Mutated Horror's ability. A Broodmother spawns
+ * Shamblers beside itself, on its side of every wall; a Rammer starts a charge; a
+ * Regenerator heals once it has gone `HORROR.regen.after` s without losing HP.
+ * Stunned, its clocks wait.
+ */
+function mutate(s: HordeState, rng: Rng): void {
+  // Up to today's length: a brood joins the end and has no clock.
+  for (let i = 0, n = s.enemies.length; i < n; i++) {
+    const e = s.enemies[i]!;
+    const h = e.horror;
+    if (!h) continue;
+    if (e.hp < h.seenHp) h.hitAt = s.time;
+    if (stunned(s, e)) {
+      h.nextAt += STEP;
+      if (h.chargeUntil > 0) h.chargeUntil += STEP;
+      h.hitAt += STEP;
+    } else if (h.ability === 'regen') {
+      if (due(s.time, h.hitAt + HORROR.regen.after)) {
+        e.hp = Math.min(e.maxHp, e.hp + HORROR.regen.rate * e.maxHp * STEP);
+      }
+    } else if (h.chargeUntil > 0 && due(s.time, h.chargeUntil)) {
+      h.chargeUntil = 0;
+    } else if (due(s.time, h.nextAt)) {
+      h.nextAt = s.time + HORROR[h.ability].every;
+      if (h.ability === 'charge') {
+        h.chargeUntil = s.time + HORROR.charge.time;
+        h.charged = false;
+      } else brood(s, e, rng);
+    }
+    h.seenHp = e.hp;
+  }
+}
+
+/** `HORROR.brood.count` Shamblers in a column through the Horror, spread by the RNG. */
+function brood(s: HordeState, e: Enemy, rng: Rng): void {
+  const r = ENEMIES.shambler.radius;
+  const reach = ENEMIES.horror.radius + r;
+  for (let i = 0; i < HORROR.brood.count; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const y = e.y + side * (reach + Math.floor(i / 2) * 2 * r) + int(rng, -4, 4);
+    const child = place(s, 'shambler', e.x, Math.min(FIELD.height - r, Math.max(r, y)));
+    child.inCamp = e.inCamp;
+  }
+}
+
+/** Whether a Rammer's charge is on. */
+const charging = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.horror !== undefined && e.horror.chargeUntil > 0 && !due(s.time, e.horror.chargeUntil);
 
 /** Walkers step straight toward their post at `WALK_SPEED` (slower with a shield) and take it on arrival. */
 function walk(s: HordeState): void {
@@ -924,7 +1019,11 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
 
 /** What a bullet of `damage` does to `e`: a Brute's armour takes some off (design §9). */
 export const hitDamage = (e: Enemy, damage: number): number =>
-  e.kind === 'brute' ? Math.max(BRUTE.min, damage - BRUTE.armour) : damage;
+  e.kind === 'brute'
+    ? Math.max(BRUTE.min, damage - BRUTE.armour)
+    : e.kind === 'horror'
+      ? Math.max(HORROR.min, damage - HORROR.armour)
+      : damage;
 
 /**
  * Design §6 Ballistics: each bullet flies one step along its swept path (so a fast one
@@ -1245,7 +1344,12 @@ function move(s: HordeState): Moves {
   const screamers = s.enemies.filter((e) => e.kind === 'screamer' && e.hp > 0);
   for (const e of s.enemies) {
     if (stunned(s, e)) continue;
-    const speed = ENEMIES[e.kind].speed * STEP * trapSlow(s, e) * screamed(screamers, e);
+    const speed =
+      ENEMIES[e.kind].speed *
+      STEP *
+      trapSlow(s, e) *
+      screamed(screamers, e) *
+      (charging(s, e) ? HORROR.charge.speed : 1);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
       continue;
@@ -1399,7 +1503,12 @@ function attack(s: HordeState, moves: Moves): void {
       blown.add(e.id);
       continue;
     }
-    hitSegment(s, stop.layer, stop.segment, enemy.damage);
+    let damage = enemy.damage;
+    if (e.horror && charging(s, e) && !e.horror.charged) {
+      e.horror.charged = true;
+      damage *= HORROR.charge.hit;
+    }
+    hitSegment(s, stop.layer, stop.segment, damage);
     if (e.kind === 'spitter') {
       s.spits.push({ fromX: e.x, fromY: e.y, x: stop.x, y: e.y, at: s.time + STEP });
     }
@@ -1552,6 +1661,8 @@ function drop(s: HordeState): void {
 function advanceWave(s: HordeState): void {
   if (s.toSpawn > 0 || s.enemies.length > 0) return;
   if (s.wave >= s.waveCount) {
+    // A boss horde is won once its Horror has come and gone (design §2).
+    if (s.boss && !s.bossSpawned) return;
     s.outcome = 'won';
     return;
   }

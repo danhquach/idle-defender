@@ -1,4 +1,11 @@
-import { ENEMIES, ENEMY_MIX, type EnemyKind } from './data.ts';
+import {
+  ENEMIES,
+  ENEMY_MIX,
+  HORROR,
+  HORROR_ABILITIES,
+  type EnemyKind,
+  type HorrorAbility,
+} from './data.ts';
 
 function whole(name: string, n: number): void {
   if (!Number.isInteger(n) || n < 1)
@@ -48,6 +55,16 @@ export function kindFor(hordeNumber: number, roll: number): EnemyKind {
     left -= share;
   }
   return mix[mix.length - 1]![0];
+}
+
+/**
+ * The ability of Horde `hordeNumber`'s Mutated Horror, or null when it is no boss horde
+ * (design §9): every `HORROR.every`th horde, the abilities taken in turn.
+ */
+export function horrorAbility(hordeNumber: number): HorrorAbility | null {
+  whole('horrorAbility', hordeNumber);
+  if (hordeNumber % HORROR.every !== 0) return null;
+  return HORROR_ABILITIES[(hordeNumber / HORROR.every - 1) % HORROR_ABILITIES.length]!;
 }
 
 /** Fight XP needed to go from `level` to the next. */

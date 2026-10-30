@@ -266,7 +266,7 @@ export const SHIELD = { damageTaken: 0.3, fireRate: 0.2, walk: 0.2 } as const;
 export const ENGINEER_BUFF = 0.15;
 
 export type EnemyKind =
-  'shambler' | 'runner' | 'crawler' | 'bloater' | 'spitter' | 'brute' | 'screamer';
+  'shambler' | 'runner' | 'crawler' | 'bloater' | 'spitter' | 'brute' | 'screamer' | 'horror';
 /** Design §9, as built ID-023 (starting points). `radius` is the body bullets hit. */
 export const ENEMIES: Readonly<
   Record<
@@ -291,6 +291,8 @@ export const ENEMIES: Readonly<
   spitter: { hp: 25, speed: 28, damage: 8, attackInterval: 2, radius: 12, xp: 2, cash: 3 },
   brute: { hp: 150, speed: 20, damage: 25, attackInterval: 1.5, radius: 20, xp: 5, cash: 6 },
   screamer: { hp: 30, speed: 30, damage: 2, attackInterval: 1, radius: 12, xp: 3, cash: 4 },
+  // The boss (ID-024): never rolled, one per boss horde (HORROR).
+  horror: { hp: 150, speed: 15, damage: 60, attackInterval: 2, radius: 32, xp: 50, cash: 40 },
 };
 /**
  * The share of a wave each kind takes from the horde it joins (design §9); Shamblers
@@ -320,6 +322,26 @@ export const SPITTER = { stop: 150, range: 250, splash: 0.3 } as const;
 export const BRUTE = { armour: 3, min: 1 } as const;
 /** Other enemies within `radius` of a Screamer move `speed` faster; several don't stack. */
 export const SCREAMER = { radius: 150, speed: 0.3 } as const;
+
+/** A Mutated Horror's one ability (design §9, ID-024); boss hordes take them in this order. */
+export type HorrorAbility = 'brood' | 'charge' | 'regen';
+export const HORROR_ABILITIES: readonly HorrorAbility[] = ['brood', 'charge', 'regen'];
+/**
+ * Design §9, as built ID-024 (starting points): every `every`th horde is a boss horde,
+ * whose last wave brings a Mutated Horror. Armour like a Brute's. Brood: every
+ * `brood.every` s, `brood.count` Shamblers around it. Charge: every `charge.every` s,
+ * `charge.speed`× speed for `charge.time` s; its first wall hit in a charge does
+ * `charge.hit`×. Regen: `regen.rate` of its max HP per second, once `regen.after` s
+ * have passed without a hit. Ability clocks run on fight time and wait out a stun.
+ */
+export const HORROR = {
+  every: 10,
+  armour: 2,
+  min: 1,
+  brood: { every: 25, count: 2 },
+  charge: { every: 10, time: 2, speed: 3, hit: 2 },
+  regen: { rate: 0.03, after: 0.3 },
+} as const;
 
 export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;

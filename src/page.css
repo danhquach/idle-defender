@@ -384,3 +384,38 @@ body {
   outline: 2px solid #ffe066;
   outline-offset: 1px;
 }
+
+.hud-boss {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: min(480px, calc(100% - 32px));
+  padding: 6px 12px;
+  transform: translateX(-50%);
+  border: 1px solid #d2453c;
+  border-radius: 6px;
+  background: rgb(40 16 16 / 85%);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.hud-boss[hidden] {
+  display: none;
+}
+
+.hud-boss-label {
+  white-space: nowrap;
+}
+
+.hud-boss-hp {
+  flex: 1;
+  min-width: 0;
+}
+
+.hud-boss:not([hidden]) ~ .hud-warning {
+  top: 84px;
+}

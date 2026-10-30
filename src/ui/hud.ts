@@ -18,6 +18,7 @@ import {
   STAT_NAMES,
   STATS,
   type EnemyKind,
+  type HorrorAbility,
   type Profession,
   type ShopItem,
   type SkillId,
@@ -46,7 +47,7 @@ import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
 import { nameTag, spend, titleIn, titleName, unspentPoints, type Title } from '../core/stats.ts';
-import { xpToNext } from '../core/waves.ts';
+import { horrorAbility, xpToNext } from '../core/waves.ts';
 
 /** How long a toast stays up. */
 const TOAST_MS = 2000;
@@ -95,7 +96,7 @@ export const bankText = (charge: number): string =>
 
 export function statusText(s: HordeState): string {
   return [
-    `Horde ${s.hordeNumber}`,
+    s.boss ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
     `Wave ${s.wave}/${s.waveCount}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
     bankText(s.energy),
@@ -165,7 +166,33 @@ const ENEMY_NAME: Readonly<Record<EnemyKind, string>> = {
   spitter: 'Spitter',
   brute: 'Brute',
   screamer: 'Screamer',
+  horror: 'Mutated Horror',
 };
+/** Each Mutated Horror goes by its ability (design §9, ID-024). */
+const HORROR_NAME: Readonly<Record<HorrorAbility, string>> = {
+  brood: 'Broodmother',
+  charge: 'Rammer',
+  regen: 'Regenerator',
+};
+/** "Mutated Horror: Broodmother". */
+const horrorName = (ability: HorrorAbility): string =>
+  `${ENEMY_NAME.horror}: ${HORROR_NAME[ability]}`;
+
+/** The start button: "Start Horde 10 · Boss horde" for a boss horde. */
+export const startLabel = (hordeNumber: number): string =>
+  `Start Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
+
+/** The boss bar while a Mutated Horror is on the field, else null. */
+export function bossBar(s: HordeState): { label: string; hp: number; maxHp: number } | null {
+  const e = s.enemies.find((x) => x.horror);
+  if (!e?.horror) return null;
+  const hp = wholeLeft(e.hp);
+  return {
+    label: `${horrorName(e.horror.ability)} · ${hp.toLocaleString('en-US')}/${e.maxHp.toLocaleString('en-US')}`,
+    hp,
+    maxHp: e.maxHp,
+  };
+}
 const THROUGH: Readonly<Record<Breach['through'], string>> = {
   wall: 'broken wall',
   gate: 'broken gate',
@@ -223,7 +250,7 @@ function xpLine(g: ReturnType<typeof levelGains>[number], tag: string): string {
 
 /** "Jack · injured by a Shambler · back at 14:05", for a horde that ended at `now`. */
 function injuryLine(s: HordeState, i: Injury, now: number): string {
-  const by = i.by ? ` by a ${ENEMY_NAME[i.by]}` : '';
+  const by = i.by ? ` by ${i.by === 'horror' ? 'the' : 'a'} ${ENEMY_NAME[i.by]}` : '';
   return `${i.defender.name} · injured${by} · back at ${clockTime(injuredUntil(s, i, now))}`;
 }
 
@@ -271,7 +298,9 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
     return {
       title: `Horde ${s.hordeNumber} held`,
       lines: [
-        `All ${s.waveCount} waves cleared`,
+        s.boss
+          ? `All ${s.waveCount} waves cleared · the ${horrorName(s.boss)} is dead`
+          : `All ${s.waveCount} waves cleared`,
         payoutText(s),
         ...dropLines(game, s),
         ...lines,
@@ -289,10 +318,12 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
     ? `Broke in at ${slotName(inner.column, inner.row)}, in wave ${inner.wave} of ${s.waveCount}`
     : 'Broke in';
   const why = `${where} · nobody left to hold them for ${FALL_WARNING} s`;
+  const horror = s.enemies.find((e) => e.horror)?.horror;
   return {
     title: 'The camp fell',
     lines: [
       why,
+      ...(horror ? [`The ${horrorName(horror.ability)} still stood`] : []),
       ...path.map((b) => `Layer ${b.column + 1} · row ${b.row + 1} · ${THROUGH[b.through]}`),
       payoutText(s),
       'No XP on a loss',
@@ -327,6 +358,14 @@ export function createHud(
 } {
   const hud = el('div', 'hud');
   const bar = el('div', 'hud-bar');
+  const boss = el('div', 'hud-boss');
+  const bossLabel = el('span', 'hud-boss-label');
+  bossLabel.id = 'hud-boss-label';
+  const bossHp = el('meter', 'hud-boss-hp');
+  bossHp.min = 0;
+  bossHp.setAttribute('aria-labelledby', bossLabel.id);
+  boss.append(bossLabel, bossHp);
+  boss.hidden = true;
   const warning = el('div', 'hud-warning');
   warning.setAttribute('role', 'alert');
   warning.hidden = true;
@@ -367,7 +406,7 @@ export function createHud(
   });
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, warning, toast, shop, cards, replace, result);
+  hud.append(bar, boss, warning, toast, shop, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -501,6 +540,13 @@ export function createHud(
     update(state, armed = null) {
       const status = statusText(state);
       if (bar.textContent !== status) bar.textContent = status;
+      const horror = bossBar(state);
+      boss.hidden = horror === null;
+      if (horror) {
+        if (bossLabel.textContent !== horror.label) bossLabel.textContent = horror.label;
+        bossHp.max = horror.maxHp;
+        bossHp.value = horror.hp;
+      }
       const falling = fallingText(state);
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';

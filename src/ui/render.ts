@@ -824,6 +824,19 @@ function drawShape(
     case 'block': // broad and square
       ctx.rect(x - h * 0.32, y - h, h * 0.64, h);
       break;
+    case 'horror': // a hulking mass with arms to the ground and growths on its back
+      ctx.ellipse(x, y - h * 0.5, h * 0.42, h * 0.48, 0, 0, Math.PI * 2);
+      ctx.moveTo(x - h * 0.38, y - h * 0.55);
+      ctx.lineTo(x - h * 0.55, y);
+      ctx.lineTo(x - h * 0.3, y - h * 0.3);
+      ctx.moveTo(x + h * 0.38, y - h * 0.55);
+      ctx.lineTo(x + h * 0.55, y);
+      ctx.lineTo(x + h * 0.3, y - h * 0.3);
+      ctx.moveTo(x + h * 0.32, y - h * 0.82);
+      ctx.arc(x + h * 0.18, y - h * 0.82, h * 0.14, 0, Math.PI * 2);
+      ctx.moveTo(x - h * 0.02, y - h * 0.96);
+      ctx.arc(x - h * 0.14, y - h * 0.96, h * 0.12, 0, Math.PI * 2);
+      break;
     case 'spike': // a jagged crown, mouth open
       ctx.moveTo(x - h * 0.25, y);
       ctx.lineTo(x - h * 0.3, y - h * 0.7);

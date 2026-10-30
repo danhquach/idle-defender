@@ -117,7 +117,8 @@ describe('the horde mix', () => {
     expect(new Set(h1.values())).toEqual(new Set(['shambler']));
     const h9 = spawned(9, 3, 60);
     const seen = new Set([1, 2, 3, 4, 5].flatMap((seed) => [...spawned(9, seed, 60).values()]));
-    expect(seen).toEqual(new Set(Object.keys(ENEMIES)));
+    // Every kind but the Horror, which comes only as a boss (ID-024).
+    expect(seen).toEqual(new Set(Object.keys(ENEMIES).filter((k) => k !== 'horror')));
     expect([...spawned(9, 3, 60)]).toEqual([...h9]);
     expect([...spawned(9, 4, 60)]).not.toEqual([...h9]);
   });
