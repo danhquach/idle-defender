@@ -951,8 +951,35 @@ Set before sending; they apply to any location, plaza or single building.
   (1 + 0.5 per tier above 1). Each return leaves a report (the latest 20
   are kept) for the world map screen (ID-028). Gates can be built from
   the build menu, one per layer (a layer that has one offers none).
-  Risk, injuries and deaths come with ID-027; until then every member
-  comes back.
+  Risk, injuries and deaths come with ID-027.
+- **As built (ID-027, starting points):** a location's **danger** is
+  6 × its tier of party strength, and the party's strength over it rates
+  the trip: 1 or more **Safe**, 0.6 **Risky**, 0.3 **Dangerous**, below
+  that **Deadly** (a starting pair is Risky at the gas station, Dangerous
+  at the hardware store). The odds, per member for injury and death and per party for
+  a wipe:
+
+  | Rating | Injured | Dead | Wipe |
+  |---|---|---|---|
+  | Safe | 5% | 0% | 0% |
+  | Risky | 15% | 3% | 0% |
+  | Dangerous | 30% | 10% | 5% |
+  | Deadly | 40% | 20% | 20% |
+
+  The wipe is rolled first, then each member's death, then injury, from
+  the patrol's seed on a stream of their own, so the loot is unchanged and
+  a late settle comes out the same. A party that loses every member is
+  wiped out: no loot, no XP. Survivors bring the loot and XP; the injured
+  rest 2 hours from the return (§11 Recovery). The dead leave the roster,
+  and their owned weapons (a free one is just gone) wait at the location
+  until the next party back from there, which brings them home into the
+  armoury (salvaged for Scrap when full); the party that lost them doesn't.
+  At most 40 wait across the map; past that the oldest is lost. The report
+  names the injured, the dead, a wipe and the weapons recovered. Until the
+  roster floor (ID-033), a patrol can't take every defender who isn't
+  already out: one stays at the camp; and if a patrol from an older save
+  would kill the last defender alive, one member comes back injured
+  instead. Save v6.
 
 ## 11. Resources and research
 

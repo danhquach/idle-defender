@@ -2,6 +2,8 @@
 // location on the world map, searches it and comes back in real time, so a patrol
 // finishes while the game is closed. Its loot is rolled from the seed it left with, so
 // the result never depends on when it is settled. Pure: real time comes in as `now`.
+// Risk (ID-027): party strength against the location's danger rates the trip, and the
+// same seed rolls who comes back injured, who dies and whether the party is wiped out.
 import { isOwned, rollWeapon, type OwnedWeapon } from './armoury.ts';
 import {
   ARMOURY_CAP,
@@ -13,11 +15,13 @@ import {
   PATROL,
   RARITIES,
   RARITY_ORDER,
+  RECOVERY_MS,
   stockOf,
   type Battery,
   type LocationId,
   type LootEntry,
   type Rarity,
+  type RiskRating,
   type Stock,
   type WeaponId,
 } from './data.ts';
@@ -49,6 +53,12 @@ export interface Patrol {
   seed: number;
 }
 
+/** An owned weapon a dead member left at `location`, waiting for the next patrol there. */
+export interface LeftWeapon {
+  location: LocationId;
+  weapon: OwnedWeapon;
+}
+
 /** A found weapon as the report lists it: kept in the armoury, or salvaged for Scrap. */
 export interface ReportWeapon {
   base: WeaponId;
@@ -60,14 +70,22 @@ export interface ReportWeapon {
 export interface PatrolReport {
   no: number;
   location: LocationId;
+  /** Every member sent, in the order sent. */
   names: string[];
+  /** Members who came back injured, and who didn't come back, by name. */
+  injured: string[];
+  dead: string[];
+  /** The whole party was lost: no loot, no XP. */
+  wiped: boolean;
   returnedAt: number;
   /** Materials, including the Scrap salvaged from weapons with no room. */
   stock: Stock;
   gas: number;
   batteries: Record<Battery, number>;
   weapons: ReportWeapon[];
-  /** XP each member got. */
+  /** Weapons the dead had left at the location, picked up on this trip. */
+  recovered: ReportWeapon[];
+  /** XP each member who came back got. */
   xp: number;
 }
 
@@ -110,6 +128,33 @@ export function memberStrength(d: Pick<RosterDefender, 'xp' | 'stats' | 'loadout
 export const partyStrength = (
   members: readonly Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>[],
 ): number => members.reduce((sum, d) => sum + memberStrength(d), 0);
+
+/** The party strength that matches `location`'s danger (design §10 Risk and reward). */
+export const locationDanger = (location: LocationId): number =>
+  PATROL.danger * PATROL.need * LOCATIONS[location].tier;
+
+/** A trip's rating and odds: each member's chance to be injured or killed, and the party's to be wiped out. */
+export interface PatrolRisk {
+  rating: RiskRating;
+  injured: number;
+  dead: number;
+  wipe: number;
+}
+
+/** The risk for a party of `strength` at `location`. */
+export function riskOf(strength: number, location: LocationId): PatrolRisk {
+  const ratio = strength / locationDanger(location);
+  // The last rating starts at 0, so every strength finds one (NaN rates the worst).
+  const { rating, injured, dead, wipe } =
+    PATROL.risk.find((r) => ratio >= r.from) ?? PATROL.risk.at(-1)!;
+  return { rating, injured, dead, wipe };
+}
+
+/** The risk `members` would run at `location`, for the risk screen (ID-028). */
+export const patrolRisk = (
+  members: readonly Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>[],
+  location: LocationId,
+): PatrolRisk => riskOf(partyStrength(members), location);
 
 /** Loot rolls past the base `PATROL.rolls`: one per `need × tier` of strength, at most `bonusRolls`. */
 export function bonusRolls(strength: number, location: LocationId): number {
@@ -159,6 +204,10 @@ export function sendPatrol(
   for (const d of members) {
     if (onPatrol(game, d.id)) return { ok: false, reason: `${d.name} is on patrol` };
     if (!available(d, now)) return { ok: false, reason: `${d.name} is injured` };
+  }
+  // A wipe must never leave the camp empty (until the roster floor, ID-033).
+  if (game.roster.every((d) => onPatrol(game, d.id) || memberIds.includes(d.id))) {
+    return { ok: false, reason: 'Keep one defender at the camp' };
   }
   const patrol: Patrol = {
     no: game.patrolsSent + 1,
@@ -244,25 +293,67 @@ function rollEntry(rng: Rng, location: LocationId, tier: number, bonus: number, 
   }
 }
 
+const noHaul = (): Haul => ({
+  stock: stockOf(),
+  gas: 0,
+  batteries: Object.fromEntries(BATTERY_IDS.map((b) => [b, 0])) as Record<Battery, number>,
+  weapons: [],
+});
+
 /** What patrol `p` finds: `PATROL.rolls` plus its bonus rolls, from its seed. */
 export function patrolLoot(p: Patrol): Haul {
   const rng = createRng(p.seed);
   const bonus = bonusRolls(p.strength, p.location);
-  const haul: Haul = {
-    stock: stockOf(),
-    gas: 0,
-    batteries: Object.fromEntries(BATTERY_IDS.map((b) => [b, 0])) as Record<Battery, number>,
-    weapons: [],
-  };
+  const haul = noHaul();
   const tier = LOCATIONS[p.location].tier;
   for (let n = PATROL.rolls + bonus; n > 0; n--) rollEntry(rng, p.location, tier, bonus, haul);
   return haul;
 }
 
+/** Who patrol `p` loses: member ids killed and injured, and whether all were killed. */
+export interface PatrolOutcome {
+  wiped: boolean;
+  dead: string[];
+  injured: string[];
+}
+
 /**
- * Brings home every patrol due by `now`, oldest due first: loot into the camp (capped
- * at `MAX_COUNT`; a weapon with no room is salvaged for Scrap), XP to each member, and
- * a report. Returns `game` itself when none is due.
+ * Rolls patrol `p`'s casualties from its seed, on a stream of their own so its loot
+ * never shifts: the wipe first, then each member's death, then injury. A party that
+ * loses everyone one by one is wiped out too: nobody is left to carry the loot.
+ */
+export function patrolOutcome(p: Patrol): PatrolOutcome {
+  const rng = createRng(p.seed ^ 0x85ebca6b);
+  const risk = riskOf(p.strength, p.location);
+  if (chance(rng, risk.wipe)) return { wiped: true, dead: [...p.members], injured: [] };
+  const dead: string[] = [];
+  const injured: string[] = [];
+  for (const id of p.members) {
+    if (chance(rng, risk.dead)) dead.push(id);
+    else if (chance(rng, risk.injured)) injured.push(id);
+  }
+  return { wiped: dead.length === p.members.length, dead, injured };
+}
+
+/**
+ * `outcome` with one member spared, back injured, when it would leave nobody alive: a
+ * save from before ID-027 may have every defender out at once.
+ */
+function spareLast(outcome: PatrolOutcome, game: GameState): PatrolOutcome {
+  if (outcome.dead.length === 0 || game.roster.some((d) => !outcome.dead.includes(d.id))) {
+    return outcome;
+  }
+  const [spared, ...dead] = outcome.dead;
+  return { wiped: false, dead, injured: [...outcome.injured, spared!] };
+}
+
+/**
+ * Brings home every patrol due by `now`, oldest due first. A party that isn't wiped out
+ * brings its loot into the camp (capped at `MAX_COUNT`; a weapon with no room is
+ * salvaged for Scrap), picks up the weapons left where it went, and its members who
+ * come back get XP; the injured rest `RECOVERY_MS` from its return. The dead leave the
+ * roster and their owned weapons stay at the location. Each patrol leaves a report.
+ * Returns `game` itself when none is due.
  */
 export function settlePatrols(game: GameState, now: number): GameState {
   if (!Number.isFinite(now)) throw new RangeError(`settlePatrols: bad time ${now}`);
@@ -272,43 +363,71 @@ export function settlePatrols(game: GameState, now: number): GameState {
   if (due.length === 0) return game;
   const g = structuredClone(game);
   for (const p of due) {
-    const haul = patrolLoot(p);
+    const outcome = spareLast(patrolOutcome(p), g);
+    const haul = outcome.wiped ? noHaul() : patrolLoot(p);
+    // Into the armoury if there is room, else salvaged for Scrap.
+    const store = (weapon: OwnedWeapon): ReportWeapon => {
+      const kept = ownedWeapons(g).length < ARMOURY_CAP;
+      if (kept) g.armoury.push(weapon);
+      else haul.stock.scrap += RARITIES[weapon.rarity].salvage;
+      return { base: weapon.base, rarity: weapon.rarity, kept };
+    };
     // The affixes come from their own stream, so the haul's rolls never shift.
     const affixRng = createRng(p.seed ^ 0x9e3779b9);
-    const weapons: ReportWeapon[] = haul.weapons.map((w, k) => {
-      const kept = ownedWeapons(g).length < ARMOURY_CAP;
-      const weapon: OwnedWeapon = rollWeapon(affixRng, `p${p.no}-${k}`, w.base, w.rarity);
-      if (kept) g.armoury.push(weapon);
-      else haul.stock.scrap += RARITIES[w.rarity].salvage;
-      return { ...w, kept };
-    });
+    const weapons = haul.weapons.map((w, k) =>
+      store(rollWeapon(affixRng, `p${p.no}-${k}`, w.base, w.rarity)),
+    );
+    // What the dead left here before this trip comes home with it.
+    const recovered = outcome.wiped
+      ? []
+      : g.leftBehind.filter((l) => l.location === p.location).map((l) => store(l.weapon));
+    if (!outcome.wiped) g.leftBehind = g.leftBehind.filter((l) => l.location !== p.location);
     for (const m of MATERIALS) g.stock[m] = Math.min(MAX_COUNT, g.stock[m] + haul.stock[m]);
     g.power.gas = Math.min(MAX_COUNT, g.power.gas + haul.gas);
     for (const b of BATTERY_IDS) {
       g.power.batteries[b] = Math.min(MAX_COUNT, g.power.batteries[b] + haul.batteries[b]);
     }
-    const xp = patrolXp(p.location, p.sentHorde);
+    const xp = outcome.wiped ? 0 : patrolXp(p.location, p.sentHorde);
     const names: string[] = [];
+    const injured: string[] = [];
+    const dead: string[] = [];
     for (const id of p.members) {
       const d = g.roster.find((r) => r.id === id);
       if (!d) continue;
-      d.xp = Math.min(MAX_COUNT, d.xp + xp);
       names.push(d.name);
+      if (outcome.dead.includes(id)) {
+        dead.push(d.name);
+        for (const w of [d.loadout.primary, d.loadout.secondary]) {
+          if (w !== null && isOwned(w)) g.leftBehind.push({ location: p.location, weapon: w });
+        }
+        g.roster = g.roster.filter((r) => r.id !== id);
+        continue;
+      }
+      d.xp = Math.min(MAX_COUNT, d.xp + xp);
+      if (outcome.injured.includes(id)) {
+        injured.push(d.name);
+        d.injuredUntil = patrolDue(p) + RECOVERY_MS;
+      }
     }
     g.reports.push({
       no: p.no,
       location: p.location,
       names,
+      injured,
+      dead,
+      wiped: outcome.wiped,
       returnedAt: patrolDue(p),
       stock: haul.stock,
       gas: haul.gas,
       batteries: haul.batteries,
       weapons,
+      recovered,
       xp,
     });
   }
   const back = new Set(due.map((p) => p.no));
   g.patrols = g.patrols.filter((p) => !back.has(p.no));
   g.reports = g.reports.slice(-PATROL.reports);
+  g.leftBehind = g.leftBehind.slice(-PATROL.left);
   return loadBatteries(g);
 }

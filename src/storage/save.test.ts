@@ -5,6 +5,7 @@ import {
   ARMOURY_CAP,
   BANK_CAP,
   MAX_COUNT,
+  PATROL,
   RECOVERY_MS,
   SEGMENTS,
   STEP,
@@ -12,8 +13,15 @@ import {
 } from '../core/data.ts';
 import { newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { tick } from '../core/horde.ts';
-import type { Loadout } from '../core/loadout.ts';
-import { sendPatrol, settlePatrols } from '../core/patrol.ts';
+import { isGun, type Loadout } from '../core/loadout.ts';
+import {
+  patrolLoot,
+  patrolOutcome,
+  sendPatrol,
+  settlePatrols,
+  type Patrol,
+  type PatrolOutcome,
+} from '../core/patrol.ts';
 import {
   decodeSave,
   encodeSave,
@@ -25,7 +33,7 @@ import {
   writeSave,
   type SaveStorage,
 } from './save.ts';
-import { NOW, oldStock, played, prePatrol } from './testing.ts';
+import { NOW, oldStock, played, prePatrol, preRisk } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1094,7 +1102,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 6, '1', '5', 1.5, null]) {
+    for (const v of [0, 7, '1', '6', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1343,7 +1351,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(5);
+    expect(SAVE_VERSION).toBe(6);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1385,21 +1393,40 @@ describe('save: patrols (ID-026)', () => {
    * Horde 3: Bob back from the gas station (patrol 1), a police patrol (2) back with its
    * weapons, and Jack and John out at the electronics store (3).
    */
+  /** The first seed from 1 for which `test` passes on `p`. */
+  function seedFor(p: Patrol, test: (o: PatrolOutcome, seed: number) => boolean): number {
+    for (let seed = 1; seed < 10_000; seed++) {
+      if (test(patrolOutcome({ ...p, seed }), seed)) return seed;
+    }
+    throw new Error('no such seed');
+  }
+  const unhurt = (o: PatrolOutcome) => !o.wiped && o.dead.length + o.injured.length === 0;
+  /** `game` with its last patrol on the first seed where `test` passes. */
+  function reseed(game: GameState, test: (o: PatrolOutcome) => boolean): GameState {
+    const p = game.patrols.at(-1)!;
+    return { ...game, patrols: [...game.patrols.slice(0, -1), { ...p, seed: seedFor(p, test) }] };
+  }
+
   function patrolling(): GameState {
     let g: GameState = { ...newGame(), hordeNumber: 3 };
-    const r1 = sendPatrol(g, 'gas-station', ['bob'], 3, NOW - 3 * H);
+    // Seeds where everyone comes back fit, so this fixture is about loot only.
+    const r1 = sendPatrol(g, 'gas-station', ['bob'], 0, NOW - 3 * H);
     if (!r1.ok) throw new Error(r1.reason);
-    g = settlePatrols(r1.game, NOW - 2 * H);
-    // The police station waits for research, so this patrol is placed by hand.
-    const police = { ...g.patrols[0], no: 2, location: 'police' as const, members: ['bob'] };
-    g = {
-      ...g,
-      patrols: [{ ...police, sentAt: NOW - 2.5 * H, sentHorde: 3, strength: 1, seed: 5 }],
+    g = settlePatrols(reseed(r1.game, unhurt), NOW - 2 * H);
+    // The police station waits for research, so this patrol is placed by hand; it finds weapons.
+    const police: Patrol = {
+      ...g.patrols[0]!,
+      ...{ no: 2, location: 'police', members: ['bob'], sentAt: NOW - 2.5 * H },
+      ...{ sentHorde: 3, strength: 1, seed: 0 },
     };
-    g = settlePatrols({ ...g, patrolsSent: 2 }, NOW - H / 2);
-    const r3 = sendPatrol(g, 'electronics', ['jack', 'john'], 9, NOW - H / 4);
+    police.seed = seedFor(
+      police,
+      (o, seed) => unhurt(o) && patrolLoot({ ...police, seed }).weapons.length > 0,
+    );
+    g = settlePatrols({ ...g, patrols: [police], patrolsSent: 2 }, NOW - H / 2);
+    const r3 = sendPatrol(g, 'electronics', ['jack', 'john'], 0, NOW - H / 4);
     if (!r3.ok) throw new Error(r3.reason);
-    return r3.game;
+    return reseed(r3.game, unhurt);
   }
   const raw = (game: Loose, v: unknown = SAVE_VERSION) =>
     decodeSave(JSON.stringify({ v, savedAt: NOW, game }));
@@ -1545,5 +1572,123 @@ describe('save: patrols (ID-026)', () => {
     g.patrolsSent = 4;
     g.patrols.push({ ...g.patrols[0], no: 4, members: ['bob'], strength: 0 });
     expect(raw(g)?.game.patrols.map((p) => p.no)).toEqual([3, 4]);
+  });
+  /**
+   * Patrolling's camp an hour on: John took a police gun to the electronics store and
+   * died there, leaving it behind; Jack came back injured.
+   */
+  function losing(): GameState {
+    const g = structuredClone(patrolling());
+    const gun = g.armoury.findIndex((w) => isGun(w));
+    const john = g.roster.find((d) => d.id === 'john')!;
+    john.loadout = { ...john.loadout, primary: g.armoury.splice(gun, 1)[0]! };
+    g.patrols[0] = { ...g.patrols[0]!, strength: 3.6 };
+    const hurt = (o: PatrolOutcome) =>
+      !o.wiped && o.dead.join() === 'john' && o.injured.join() === 'jack';
+    return settlePatrols(reseed(g, hurt), NOW + H);
+  }
+  const lost = (change: (g: Loose) => void, v: unknown = SAVE_VERSION) => {
+    const g = JSON.parse(JSON.stringify(losing()));
+    change(g);
+    return decodeSave(JSON.stringify({ v, savedAt: NOW + H, game: g }));
+  };
+
+  it('round-trips casualties and the weapons the dead left (ID-027)', () => {
+    const g = losing();
+    expect(g.reports.at(-1)).toMatchObject({ injured: ['Jack'], dead: ['John'], wiped: false });
+    expect(g.leftBehind.map((l) => l.location)).toEqual(['electronics']);
+    expect(decodeSave(encodeSave(g, NOW + H))?.game).toEqual(g);
+  });
+
+  it('loads a v5 save with no weapons left and no casualties, and refuses a v6 save without them', () => {
+    const v5 = preRisk(patrolling());
+    const old = raw(v5, 5)?.game;
+    expect(old?.leftBehind).toEqual([]);
+    expect(old?.reports.map((r) => [r.injured, r.dead, r.wiped, r.recovered])).toEqual([
+      [[], [], false, []],
+      [[], [], false, []],
+    ]);
+    expect(raw(v5)).toBeNull();
+    expect(raw(patrolling(), 5)).toBeNull();
+  });
+
+  it('refuses weapons left behind and casualties the game could not have written', () => {
+    const cases: [string, (g: Loose) => void][] = [
+      ['left not an array', (g) => (g.leftBehind = {})],
+      ['too many left', (g) => (g.leftBehind = Array(PATROL.left + 1).fill(g.leftBehind[0]))],
+      ['left at an unknown location', (g) => (g.leftBehind[0].location = 'mall')],
+      ['left at a hidden location', (g) => (g.leftBehind[0].location = 'crater')],
+      ['left at a bidi location', (g) => (g.leftBehind[0].location = '\u202eelectronics')],
+      ['left weapon malformed', (g) => (g.leftBehind[0].weapon.uid = 'x1')],
+      ['left weapon also in the armoury', (g) => g.armoury.push(g.leftBehind[0].weapon)],
+      ['left weapon twice', (g) => g.leftBehind.push(g.leftBehind[0])],
+      ['left weapon from the future', (g) => (g.leftBehind[0].weapon.uid = 'p9-0')],
+      ['left extra key', (g) => (g.leftBehind[0].extra = 1)],
+      ['left missing weapon', (g) => delete g.leftBehind[0].weapon],
+      ['dead not in the party', (g) => (g.reports.at(-1).dead = ['Bob'])],
+      ['injured not in the party', (g) => (g.reports.at(-1).injured = ['Bob'])],
+      ['injured and dead', (g) => (g.reports.at(-1).injured = ['John'])],
+      ['dead twice', (g) => (g.reports.at(-1).dead = ['John', 'John'])],
+      ['injured twice', (g) => (g.reports.at(-1).injured = ['Jack', 'Jack'])],
+      [
+        'wiped by one name twice',
+        (g) =>
+          Object.assign(g.reports.at(-1), { dead: ['John', 'John'], injured: [], wiped: true }),
+      ],
+      ['oversized casualty', (g) => (g.reports.at(-1).dead = ['J'.repeat(25)])],
+      ['bidi casualty', (g) => (g.reports.at(-1).dead = ['\u202eJohn'])],
+      ['zero-width casualty', (g) => (g.reports.at(-1).dead = ['Jo\u200bhn'])],
+      ['markup casualty', (g) => (g.reports.at(-1).dead = ['<b>John</b>'])],
+      ['casualties not an array', (g) => (g.reports.at(-1).dead = 'John')],
+      ['wiped not a boolean', (g) => (g.reports.at(-1).wiped = 'no')],
+      ['wiped with a survivor', (g) => (g.reports.at(-1).wiped = true)],
+      ['all dead but not wiped', (g) => (g.reports.at(-1).dead = ['Jack', 'John'])],
+      [
+        'wiped but brought loot back',
+        (g) => {
+          const r = g.reports.at(-1);
+          Object.assign(r, { dead: ['Jack', 'John'], injured: [], wiped: true, xp: 0 });
+        },
+      ],
+      [
+        'too many recovered',
+        (g) =>
+          (g.reports.at(-1).recovered = Array(PATROL.left + 1).fill({
+            base: 'pistol',
+            rarity: 'rusty',
+            kept: true,
+          })),
+      ],
+      [
+        'recovered kept not a boolean',
+        (g) => (g.reports.at(-1).recovered = [{ base: 'pistol', rarity: 'rusty', kept: 1 }]),
+      ],
+      ['missing casualties key', (g) => delete g.reports.at(-1).dead],
+      ['missing left key', (g) => delete g.leftBehind],
+    ];
+    for (const [name, change] of cases) expect(lost(change), name).toBeNull();
+    // A wiped-out party that brought nothing back loads, so the case above fails on its loot.
+    const wiped = lost((g) => {
+      const r = g.reports.at(-1);
+      Object.assign(r, {
+        dead: ['Jack', 'John'],
+        injured: [],
+        wiped: true,
+        xp: 0,
+        gas: 0,
+        weapons: [],
+      });
+      for (const k of Object.keys(r.stock)) r.stock[k] = 0;
+      for (const k of Object.keys(r.batteries)) r.batteries[k] = 0;
+    });
+    expect(wiped?.game.reports.at(-1)!.wiped).toBe(true);
+  });
+
+  it('refuses polluted weapons left behind and leaves Object.prototype alone', () => {
+    const json = encodeSave(losing(), NOW + H);
+    const from = '"leftBehind":[{';
+    expect(json.includes(from)).toBe(true);
+    expect(decodeSave(json.replace(from, `${from}"__proto__":{"polluted":1},`))).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });

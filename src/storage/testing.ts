@@ -8,10 +8,20 @@ import { BUILDING_MATERIALS, stockOf } from '../core/data.ts';
 export const oldStock = (game: GameState): Record<string, number> =>
   Object.fromEntries(BUILDING_MATERIALS.map((m) => [m, game.stock[m]]));
 
-/** `game` as JSON from before ID-026 (v4 and older): no patrols, count or reports. */
+/** `game` as JSON from before ID-026 (v4 and older): no patrols, count, reports or weapons left. */
 export function prePatrol(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preRisk(game);
   for (const key of ['patrols', 'patrolsSent', 'reports']) delete json[key];
+  return json;
+}
+
+/** `game` as JSON from ID-026 (v5): no weapons left on the map, and no casualties in its reports. */
+export function preRisk(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete json.leftBehind;
+  for (const r of json.reports as Record<string, unknown>[]) {
+    for (const key of ['injured', 'dead', 'wiped', 'recovered']) delete r[key];
+  }
   return json;
 }
 
