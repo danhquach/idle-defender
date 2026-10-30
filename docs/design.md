@@ -1152,8 +1152,9 @@ original outline.
   and a test fails if any is missing. Walls are boxes with their tier's tiling
   top and front textures (so they keep the exact projection): lower and
   cracked as they take damage, the tier's rubble once broken, a door on a
-  gate's top. Defenders and the Shambler stand on their spot; posts and
-  turret heads sit on their footprint; traps lie across their cell. A lit
+  gate's top (redrawn in ID-054). Defenders and the Shambler stand on
+  their spot; posts and turret heads sit on their footprint; traps lie
+  across their cell. A lit
   turret glows; sparks, smoke, HP and condition bars and the title badge are
   drawn over the art as before. The art loads before the game starts; a
   failed load (or one past 20 s) shows a message instead of a blank canvas. Generation is a
@@ -1218,6 +1219,25 @@ original outline.
   Spitter's art has no spit of its own: the glob and the Bloater's burst
   stay drawn effects. Only the Mutated Horror is still a drawn placeholder
   (ID-041).
+- **As built (ID-054):** the gate is part of the wall. The camera looks
+  along the wall, so its outward face never shows; the gate is drawn where
+  the wall shows, on its segment's top, in place of the tier's top texture:
+  a straight gate seen from above, a post at each end in line with the
+  segments beside it and two leaves standing a little open toward the
+  field over a dark passage. Each tier has its own gate (wood planks and
+  iron bands, corrugated metal, steel-plated reinforced concrete, concrete
+  slabs in steel frames), picked from three seeds each: the wood gate is an
+  edit of an angled gate generation (manifest `part`), the other three are
+  edits of the wood gate, so all four share one outline. The leaves are
+  generated closed and opened by the art build (manifest `ajar`: each leaf
+  turned about its post, a share of its length shown, the passage behind
+  it filled dark), the same amount on every tier; every gate is padded so
+  its posts fill 60% of its width and lie exactly across the wall's depth,
+  the leaves over the field beyond. The gate lowers with its wall, cracks
+  show over it, a broken one is its tier's rubble. Its wall-walk spots get
+  no plank platform (it would cover the gate); a defender or turret there
+  stands at the same height as on any segment, drawn over the gate. The old
+  top-down door art is gone.
 
 ## 16. Tech and platform
 

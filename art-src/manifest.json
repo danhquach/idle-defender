@@ -396,12 +396,57 @@
       "prompt": "thin dark grey jagged crack lines branching out like a spider web, a few small bullet holes, nothing else, no slab, no tile, no surface"
     },
     {
-      "id": "gate",
+      "id": "gate-angled",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4366,
+      "seed": 4542,
       "size": "512x512",
-      "prompt": "a heavy closed gate door seen from above, dark iron bars and chains over thick boards, a big padlock, a long narrow rectangle"
+      "prompt": "a closed heavy wooden double gate between two thick square wooden gateposts, salvaged planks with iron bands and a crossbar, a short piece of plank wall on each side, all the same height",
+      "part": true
+    },
+    {
+      "id": "wood-gate",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4545,
+      "size": "512x1024",
+      "ref": "gate-angled",
+      "style": "verbatim",
+      "prompt": "the same wooden gate turned so it runs straight from the top of the image to the bottom, seen from high above looking down, slightly from the right side so the right face of the closed double door and its iron bands show, one gatepost at the top and one at the bottom, a long narrow vertical shape, same planks, posts and iron bands, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
+    },
+    {
+      "id": "metal-gate",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4564,
+      "size": "512x1024",
+      "ref": "wood-gate",
+      "style": "verbatim",
+      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to metal: the posts are riveted grey scrap steel, the leaves are dented grey corrugated sheet metal with rust streaks and bolts, steel bands. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
+    },
+    {
+      "id": "reinforced-gate",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4571,
+      "size": "512x1024",
+      "ref": "wood-gate",
+      "style": "verbatim",
+      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to reinforced concrete and steel: the posts are blue grey concrete capped with riveted steel plates, the leaves are heavy bolted steel armour plates on steel beams, blue grey and dark steel. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
+    },
+    {
+      "id": "concrete-gate",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4581,
+      "size": "512x1024",
+      "ref": "wood-gate",
+      "style": "verbatim",
+      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to concrete: the posts are cracked pale grey concrete blocks with chipped edges and stains, the leaves are heavy pale grey concrete slabs in plain grey steel frames. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
     },
     {
       "id": "ground",
