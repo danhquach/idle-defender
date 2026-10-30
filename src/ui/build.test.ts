@@ -136,6 +136,16 @@ describe('build panel', () => {
       'Research Flashbang',
       'Research Molotov',
       'Research Airstrike',
+      "Research Scavenger's Eye",
+      'Research Fortify',
+      "Research Butcher's Hunger",
+      'Research Rally Call',
+      'Research Second Look',
+      'Research Overclock',
+      'Research Power Saver',
+      'Research Perk slot 2',
+      'Research Perk slot 3',
+      'Research Perk slot 4',
     ]);
     const reasons = lines.map((l) =>
       l.kind === 'action' && !l.result.ok ? l.result.reason : null,
@@ -148,12 +158,22 @@ describe('build panel', () => {
       'Needs a Research Lab',
       'Needs a Research Lab',
       'Needs Lab level 2',
+      'Needs a Research Lab',
+      'Needs a Research Lab',
+      'Needs a Research Lab',
+      'Needs a Research Lab',
+      'Needs Lab level 2',
+      'Needs Lab level 2',
+      'Needs Lab level 2',
+      'Needs a Research Lab',
+      'Needs Lab level 2',
+      'Needs Lab level 2',
     ]);
   });
 
   it('shows a levelled Lab with researched nodes as done and no upgrade at the top', () => {
     let g: GameState = { ...newGame(), stock: { scrap: 999, wood: 999, metal: 0, concrete: 0 } };
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 17; i++) {
       const next = labLines(g).find((l) => l.kind === 'action' && l.result.ok);
       if (next?.kind !== 'action' || !next.result.ok) throw new Error('nothing to do');
       g = next.result.game;
@@ -165,6 +185,16 @@ describe('build panel', () => {
       { kind: 'note', text: 'Flashbang · researched' },
       { kind: 'note', text: 'Molotov · researched' },
       { kind: 'note', text: 'Airstrike · researched' },
+      { kind: 'note', text: "Scavenger's Eye · researched" },
+      { kind: 'note', text: 'Fortify · researched' },
+      { kind: 'note', text: "Butcher's Hunger · researched" },
+      { kind: 'note', text: 'Rally Call · researched' },
+      { kind: 'note', text: 'Second Look · researched' },
+      { kind: 'note', text: 'Overclock · researched' },
+      { kind: 'note', text: 'Power Saver · researched' },
+      { kind: 'note', text: 'Perk slot 2 · researched' },
+      { kind: 'note', text: 'Perk slot 3 · researched' },
+      { kind: 'note', text: 'Perk slot 4 · researched' },
     ]);
   });
 

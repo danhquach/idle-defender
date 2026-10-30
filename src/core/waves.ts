@@ -25,11 +25,11 @@ export function waveSize(hordeNumber: number, wave: number): number {
   return Math.round((8 + 4 * (wave - 1)) * 1.1 ** (hordeNumber - 1));
 }
 
-/** Enemy HP: ×1.10 per wave, ×1.15 per horde (design §9). */
+/** Enemy HP: ×1.10 per wave, ×1.17 per horde (design §9; 1.15 before ID-020). */
 export function enemyHp(kind: EnemyKind, hordeNumber: number, wave: number): number {
   whole('enemyHp', hordeNumber);
   whole('enemyHp', wave);
-  return Math.round(ENEMIES[kind].hp * 1.1 ** (wave - 1) * 1.15 ** (hordeNumber - 1));
+  return Math.round(ENEMIES[kind].hp * 1.1 ** (wave - 1) * 1.17 ** (hordeNumber - 1));
 }
 
 /** Each kind's share of a wave in Horde `hordeNumber` (design §9); Shamblers take the rest. */

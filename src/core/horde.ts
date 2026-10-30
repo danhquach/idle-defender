@@ -16,6 +16,7 @@ import {
   ENEMIES,
   ENGINEER_BUFF,
   ENEMY_RADIUS,
+  PERK,
   PIERCE,
   FALL_WARNING,
   FIELD,
@@ -53,6 +54,7 @@ import {
   type BuffId,
   type EnemyKind,
   type HorrorAbility,
+  type PerkId,
   type SkillId,
   type Stats,
   type Tracer,
@@ -127,6 +129,8 @@ export interface HordeSetup {
   startedAt: number;
   /** Active skills researched at the Lab (design §4). */
   skills: readonly SkillId[];
+  /** The commander's equipped perks (design §5). */
+  perks: readonly PerkId[];
 }
 export interface Enemy {
   id: number;
@@ -412,6 +416,10 @@ export interface HordeState {
   skills: SkillId[];
   /** Fight time each skill is ready again at; 0 = never used. */
   cooldowns: Record<SkillId, number>;
+  /** The commander's perks, fixed for the fight (design §5). */
+  perks: PerkId[];
+  /** The wave Second Look's reroll was used in; 0 = not yet. */
+  rerolledWave: number;
   fires: Fire[];
   blasts: Blast[];
   /** Player-picked target; null = each defender shoots the enemy closest to it. */
@@ -441,11 +449,26 @@ const paused = (s: HordeState): boolean =>
   s.offer !== null || s.replace !== null || s.outcome !== 'fighting';
 
 export function newHorde(seed: number, setup: HordeSetup): HordeState {
-  const { hordeNumber, roster, startDefenderId, base, startPostId, bank, startedAt, skills } =
-    setup;
+  const {
+    hordeNumber,
+    roster,
+    startDefenderId,
+    base,
+    startPostId,
+    bank,
+    startedAt,
+    skills,
+    perks,
+  } = setup;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
   const { layers, posts, turrets, traps } = layoutOf(base);
+  if (perks.includes('fortify')) {
+    for (const seg of layers.flatMap((l) => l.segments)) {
+      seg.hp *= PERK.fortify;
+      seg.maxHp *= PERK.fortify;
+    }
+  }
   const startPost = posts[startPostId];
   if (!Number.isInteger(startPostId) || !startPost || !postUsable(layers, startPost)) {
     throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
@@ -486,6 +509,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     buffs: { adrenaline: 0, overdrive: 0 },
     skills: [...skills],
     cooldowns: { flashbang: 0, molotov: 0, airstrike: 0 },
+    perks: [...perks],
+    rerolledWave: 0,
     fires: [],
     blasts: [],
     focusId: null,
@@ -631,6 +656,10 @@ const freePower = (state: Partial<Pick<HordeState, 'wave' | 'freeWave'>>): boole
 export const took = (state: Pick<HordeState, 'taken'>, id: UpgradeId): boolean =>
   state.taken.includes(id);
 
+/** Whether the commander has perk `id` equipped in this fight. */
+export const perkOn = (state: Pick<HordeState, 'perks'>, id: PerkId): boolean =>
+  state.perks.includes(id);
+
 /**
  * Damage and fire-rate factor a turret gets from the best standing Engineer within
  * their tool's reach (never stacked): `ENGINEER_BUFF`, scaled by Tech and title.
@@ -655,7 +684,8 @@ function engineersNear(state: HordeState, t: Turret): Defender[] {
 /**
  * The base after a fight: each built segment keeps the fight's HP, rounded up (a
  * sliver left standing stays standing) and capped at the base's max HP (so an
- * in-fight Reinforce never sticks). Returns a new base.
+ * in-fight Reinforce never sticks); under Fortify, scaled back by its factor first.
+ * Returns a new base.
  */
 export function baseAfter(base: Base, horde: HordeState): Base {
   const b = structuredClone(base);
@@ -698,8 +728,10 @@ export function baseAfter(base: Base, horde: HordeState): Base {
   b.layers.forEach((l, i) => {
     l.slots.forEach((slot, row) => {
       // EPS: float noise from card maths (150 + 1e-12) must not round up a whole point.
+      // Fortify's extra HP lasts the fight: the base keeps the same share of its own max.
       if (slot) {
-        const hp = Math.ceil(horde.layers[i]!.segments[row]!.hp - EPS);
+        const fortify = perkOn(horde, 'fortify') ? PERK.fortify : 1;
+        const hp = Math.ceil(horde.layers[i]!.segments[row]!.hp / fortify - EPS);
         slot.hp = Math.min(slot.maxHp, Math.max(0, hp));
       }
     });
@@ -1236,6 +1268,8 @@ function fire(s: HordeState, rng: Rng): void {
       target.hp -= hit;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
+    // Butcher's Hunger counts the blade or tool kills of this strike, cleave included.
+    let kills = !gun && target.hp <= 0 ? 1 : 0;
     const cleave = gun
       ? 0
       : Math.min(
@@ -1246,16 +1280,21 @@ function fire(s: HordeState, rng: Rng): void {
     if (cleave > 0) {
       for (const e of s.enemies) {
         const near = Math.hypot(e.x - target.x, e.y - target.y) <= STAT_EFFECT.cleaveRadius + EPS;
-        if (e !== target && e.hp > 0 && near) e.hp -= hit * cleave;
+        if (e !== target && e.hp > 0 && near) {
+          e.hp -= hit * cleave;
+          if (e.hp <= 0) kills += 1;
+        }
       }
     }
+    if (kills > 0 && perkOn(s, 'butchers-hunger')) hunger(s, defender, kills);
     defender.nextShotAt =
       s.time +
       weapon.fireInterval /
         (s.mods.fireRate *
           boost(s, 'fireRate') *
           engineerBuff(s, defender) *
-          fireRateFactor(defender, id));
+          fireRateFactor(defender, id) *
+          (gun && perkOn(s, 'steady-fire') ? PERK.steadyFire : 1));
     if (gun) {
       defender.ammo[slot] -= 1;
       if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadTime(defender, id);
@@ -1275,7 +1314,7 @@ function fireTurrets(s: HordeState, rng: Rng): void {
     const range = TURRET.range * TURRET_RANGE[t.mount];
     const target = targetFrom(s, t.x, t.y, range);
     if (!target) continue;
-    if (!freePower(s)) s.energy = Math.max(0, s.energy - TURRET.draw * STEP);
+    if (!freePower(s)) s.energy = Math.max(0, s.energy - TURRET.draw * drawFactor(s) * STEP);
     if (!due(s.time, t.nextShotAt)) continue;
     const buff = turretBuff(s, t);
     launch(s, rng, {
@@ -1286,7 +1325,11 @@ function fireTurrets(s: HordeState, rng: Rng): void {
       speed: TURRET.speed,
       spread: TURRET.spread,
       range,
-      damage: TURRET.damage * buff * boost(s, 'damage'),
+      damage:
+        TURRET.damage *
+        buff *
+        boost(s, 'damage') *
+        (perkOn(s, 'overclock') ? PERK.overclock.damage : 1),
       pierce: 0,
       pellets: 1,
       tracer: TURRET.tracer,
@@ -1295,6 +1338,34 @@ function fireTurrets(s: HordeState, rng: Rng): void {
     t.nextShotAt = s.time + TURRET.fireInterval / (buff * slow * boost(s, 'fireRate'));
     wear(t, TURRET.shotWear);
   }
+}
+
+/** Turret charge-draw factor from Overclock and Power Saver (design §5); they multiply. */
+export function drawFactor(s: Pick<HordeState, 'perks'>): number {
+  return (
+    (perkOn(s, 'overclock') ? PERK.overclock.draw : 1) *
+    (perkOn(s, 'power-saver') ? PERK.powerSaver : 1)
+  );
+}
+
+/**
+ * Butcher's Hunger (design §5): `kills` × `PERK.butcherHeal` HP to the damaged standing
+ * segment nearest `d` (ties → the earlier layer, then the lower row), up to its max.
+ */
+function hunger(s: HordeState, d: Defender, kills: number): void {
+  let best: Segment | undefined;
+  let bestDist = Infinity;
+  for (const l of s.layers) {
+    for (const seg of l.segments) {
+      if (seg.hp <= 0 || seg.hp >= seg.maxHp) continue;
+      const dist = Math.hypot(l.x - d.x, (seg.index + 0.5) * SEGMENT_HEIGHT - d.y);
+      if (dist < bestDist - EPS) {
+        best = seg;
+        bestDist = dist;
+      }
+    }
+  }
+  if (best) best.hp = Math.min(best.maxHp, best.hp + PERK.butcherHeal * kills);
 }
 
 /**
@@ -1355,7 +1426,7 @@ export function removeDead(s: HordeState): void {
       for (const o of around(s, e, CARD.burn.spread)) o.burnUntil = s.time + CARD.burn.seconds;
     }
     s.xp += ENEMIES[e.kind].xp;
-    s.cash += ENEMIES[e.kind].cash;
+    s.cash += ENEMIES[e.kind].cash * (perkOn(s, 'scavengers-eye') ? PERK.cash : 1);
     if (e.id === s.focusId) s.focusId = null;
   }
   s.enemies = s.enemies.filter((e) => e.hp > 0);

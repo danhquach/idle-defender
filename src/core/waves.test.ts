@@ -14,10 +14,11 @@ describe('wave plan', () => {
     expect(waveSize(2, 1)).toBe(9);
   });
 
-  it('enemyHp scales ×1.10 per wave and ×1.15 per horde', () => {
+  it('enemyHp scales ×1.10 per wave and ×1.17 per horde (ID-020)', () => {
     expect(enemyHp('shambler', 1, 1)).toBe(20);
     expect(enemyHp('shambler', 1, 2)).toBe(22);
     expect(enemyHp('shambler', 2, 1)).toBe(23);
+    expect(enemyHp('shambler', 3, 1)).toBe(27); // 26 at ×1.15
   });
 
   it('xpToNext follows the curve', () => {

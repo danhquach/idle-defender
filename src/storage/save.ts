@@ -33,6 +33,8 @@ import {
   MATERIALS,
   MAX_COUNT,
   MAX_CONDITION,
+  PERK_IDS,
+  START_PERK,
   POST_KINDS,
   RARITY_ORDER,
   RECOVERY_MS,
@@ -49,6 +51,7 @@ import {
   WEAPONS,
   type FreeWeaponId,
   type ItemId,
+  type PerkId,
   type ResearchId,
   type Stats,
   type Stock,
@@ -57,6 +60,7 @@ import {
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import { loadoutError, loadoutFrom, type Loadout } from '../core/loadout.ts';
+import { perkSlots, unlockedPerks } from '../core/perks.ts';
 import { loadBatteries, newPower, type Power } from '../core/power.ts';
 import { earnedPoints, NO_STATS, spentPoints } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
@@ -64,7 +68,8 @@ import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
-export const SAVE_VERSION = 2;
+/** 3 since perks (ID-020); a v2 save has the same shape, less the perks it gains on load. */
+export const SAVE_VERSION = 3;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -170,7 +175,7 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (o.v !== SAVE_VERSION && o.v !== 1) fail('version');
+  if (o.v !== SAVE_VERSION && o.v !== 2 && o.v !== 1) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
   if (o.v === 1) return { game: readGame(o.game, savedAt, V1_GRID), savedAt, grew: true };
   return { game: readGame(o.game, savedAt, GRID), savedAt };
@@ -182,11 +187,12 @@ function readGame(v: unknown, savedAt: number, grid: Grid): GameState {
   // A save from before the armoury (0.4.5 and older) has none: it starts empty. One
   // from before the Lab (0.4.6 and older) has no Lab and nothing researched, and
   // keeps its tiers. One from before the battery bank (0.4.7 and older) gets a new
-  // game's power.
+  // game's power. One from before perks (0.4.24 and older) gets a new game's perk.
   const old = {
     armoury: lacks('armoury'),
     lab: lacks('lab') && lacks('research'),
     power: lacks('power'),
+    perks: lacks('perks'),
   };
   const o = obj(v, [
     'hordeNumber',
@@ -197,6 +203,7 @@ function readGame(v: unknown, savedAt: number, grid: Grid): GameState {
     ...(old.armoury ? [] : ['armoury']),
     ...(old.lab ? [] : ['lab', 'research']),
     ...(old.power ? [] : ['power']),
+    ...(old.perks ? [] : ['perks']),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -214,6 +221,7 @@ function readGame(v: unknown, savedAt: number, grid: Grid): GameState {
     lab,
     research,
     power: old.power ? newPower() : readPower(o.power, savedAt),
+    perks: old.perks ? [START_PERK] : readPerks(o.perks, research),
   };
   // Each owned weapon is one item, in the armoury or in one pair of hands, and the camp keeps at most ARMOURY_CAP.
   const owned = [
@@ -250,6 +258,19 @@ function readResearch(v: unknown, lab: number, tiers: readonly Tier[]): Research
     done.push(id);
   }
   return done;
+}
+
+/** Equipped perks: known, once each, unlocked, and no more than the slots researched. */
+function readPerks(v: unknown, research: readonly ResearchId[]): PerkId[] {
+  const unlocked = unlockedPerks({ research });
+  const perks: PerkId[] = [];
+  for (const x of arr(v, 0, perkSlots({ research }))) {
+    const id = oneOf(x, PERK_IDS);
+    if (perks.includes(id)) fail('perk twice');
+    if (!unlocked.includes(id)) fail('perk not unlocked');
+    perks.push(id);
+  }
+  return perks;
 }
 
 function readStock(v: unknown): Stock {

@@ -1,7 +1,8 @@
-import { BANK_CAP, CARD, RARITY, RECRUIT_CHANCE, TITLES, type CardRarity } from './data.ts';
+import { BANK_CAP, CARD, PERK, RARITY, RECRUIT_CHANCE, TITLES, type CardRarity } from './data.ts';
 import { professionOf } from './loadout.ts';
 import { titleIn } from './stats.ts';
 import {
+  perkOn,
   standing,
   type Card,
   type HordeState,
@@ -220,13 +221,15 @@ function rollUpgrade(rng: Rng, pool: readonly UpgradeId[], wave: number): Upgrad
 
 /**
  * Three cards: distinct upgrades by rarity, and at most one recruit from the bench while
- * a post is free.
+ * a post is free. Rally Call (design §5) multiplies the recruit chance.
  */
 export function rollOffer(rng: Rng, state: HordeState): Card[] {
   const recruits = recruitPost(state) === undefined ? [] : state.bench;
   const canRecruit = recruits.length > 0;
   const p =
-    state.defenders.length < RECRUIT_CHANCE.largeFrom ? RECRUIT_CHANCE.small : RECRUIT_CHANCE.large;
+    (state.defenders.length < RECRUIT_CHANCE.largeFrom
+      ? RECRUIT_CHANCE.small
+      : RECRUIT_CHANCE.large) * (perkOn(state, 'rally-call') ? PERK.rally : 1);
   const pool = UPGRADE_IDS.filter((id) => eligible(state, id));
   const cards: Card[] = [];
   let recruited = false;
@@ -250,6 +253,24 @@ export function levelUp(s: HordeState, rng: Rng): void {
   s.xp -= xpToNext(s.level);
   s.level += 1;
   s.offer = rollOffer(rng, s);
+}
+
+/** Why the open offer can't be rerolled, or null when it can (Second Look, design §5). */
+export function rerollLock(state: HordeState): string | null {
+  if (!perkOn(state, 'second-look')) return 'Needs Second Look';
+  if (state.offer === null) return 'No offer to reroll';
+  if (state.rerolledWave === state.wave) return 'Already rerolled this wave';
+  return null;
+}
+
+/** Rolls the open offer again (seeded), once per wave; returns a new state. */
+export function rerollOffer(state: HordeState): HordeState {
+  const lock = rerollLock(state);
+  if (lock) throw new RangeError(`rerollOffer: ${lock}`);
+  const s = structuredClone(state);
+  s.offer = rollOffer(rngFrom(s.rng), s);
+  s.rerolledWave = s.wave;
+  return s;
 }
 
 /** Applies card `index` of the open offer; returns a new state. */

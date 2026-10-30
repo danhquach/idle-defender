@@ -127,7 +127,7 @@ describe('the horde mix', () => {
     const s = newHorde(1, { ...setup(), hordeNumber: 9 });
     const t = run(s, 10);
     for (const e of t.enemies) {
-      expect(e.maxHp).toBe(Math.round(ENEMIES[e.kind].hp * 1.15 ** 8));
+      expect(e.maxHp).toBe(Math.round(ENEMIES[e.kind].hp * 1.17 ** 8));
     }
   });
 });

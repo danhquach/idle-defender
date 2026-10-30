@@ -38,6 +38,12 @@ describe('hud', () => {
     expect(statusText(s)).toMatch(/· Bank 0\/1,000 · Cash 36$/);
   });
 
+  it("shows the commander's perks and only whole cash (ID-020)", () => {
+    const s = newHorde(1, { ...setup(), perks: ['steady-fire', 'scavengers-eye'] });
+    s.cash = 12.5;
+    expect(statusText(s)).toMatch(/· Cash 12 · Perks: Steady Fire, Scavenger's Eye$/);
+  });
+
   it('marks a boss horde on the start button and in the status line (ID-024)', () => {
     expect(startLabel(9)).toBe('Start Horde 9');
     expect(startLabel(10)).toBe('Start Horde 10 · Boss horde');

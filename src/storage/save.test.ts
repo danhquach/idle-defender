@@ -1081,7 +1081,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 3, '1', 1.5, null]) {
+    for (const v of [0, 4, '1', '3', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1247,5 +1247,78 @@ describe('save: wall-walk spots (ID-048)', () => {
     expect(turrets).toHaveLength(3 * SEGMENTS * 3);
     expect(tweaked(armed)).not.toBeNull();
     expect(tweaked((b) => (armed(b), b.turrets.push({ ...turrets.at(-1) })))).toBeNull();
+  });
+});
+
+describe('save: commander perks (ID-020)', () => {
+  const raw = (game: Loose) => decodeSave(JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game }));
+  /** A new game with the Lab at 2 and `research` done. */
+  const lab2 = (research: string[], perks: string[]) => ({ ...newGame(), lab: 2, research, perks });
+
+  it('round-trips equipped perks and slots researched', () => {
+    const game = {
+      ...lab2(
+        ['metal-walls', 'auto-turret', 'overclock', 'perk-slot-2'],
+        ['overclock', 'steady-fire'],
+      ),
+      tiers: ['wood', 'metal'],
+    };
+    expect(raw(game)?.game).toEqual(game);
+    expect(raw(lab2([], []))?.game.perks).toEqual([]); // an empty slot is fine
+  });
+
+  it('loads a save from before perks with 1 slot and Steady Fire equipped', () => {
+    const save = JSON.parse(encodeSave(played(), NOW));
+    delete save.game.perks;
+    expect(decodeSave(JSON.stringify(save))?.game.perks).toEqual(['steady-fire']);
+  });
+
+  it('writes version 3 and still loads a version 2 save, which saves again as 3', () => {
+    expect(SAVE_VERSION).toBe(3);
+    const save = JSON.parse(encodeSave(played(), NOW));
+    expect(save.v).toBe(3);
+    save.v = 2;
+    delete save.game.perks;
+    const loaded = decodeSave(JSON.stringify(save));
+    expect(loaded?.game).toEqual(played());
+    expect(JSON.parse(encodeSave(loaded!.game, NOW)).v).toBe(3);
+  });
+
+  it('refuses perks the game could not have equipped', () => {
+    expect(raw(lab2([], ['fortify']))).toBeNull(); // not researched
+    expect(raw(lab2(['fortify'], ['fortify', 'steady-fire']))).toBeNull(); // one slot only
+    expect(raw(lab2(['perk-slot-2'], ['steady-fire', 'steady-fire']))).toBeNull();
+    expect(raw(lab2([], ['death-ray']))).toBeNull();
+    expect(raw(lab2([], ['steady-fire ']))).toBeNull();
+    expect(raw(lab2([], ['steady‐fire']))).toBeNull(); // a Unicode hyphen
+    expect(raw(lab2([], ['steady-fire\u200b']))).toBeNull(); // zero-width space
+    expect(raw(lab2([], ['\u202esteady-fire']))).toBeNull(); // bidi override
+    expect(raw(lab2([], ['__proto__']))).toBeNull();
+    expect(raw(lab2([], ['constructor']))).toBeNull();
+    expect(raw({ ...newGame(), perks: 'steady-fire' })).toBeNull();
+    expect(raw({ ...newGame(), perks: { 0: 'steady-fire' } })).toBeNull();
+    expect(raw({ ...newGame(), perks: [1] })).toBeNull();
+    expect(raw({ ...newGame(), perks: null })).toBeNull();
+    expect(raw(lab2(['perk-slot-3'], []))).toBeNull(); // a slot out of order
+  });
+
+  it('refuses an oversized perk list without reading it', () => {
+    expect(
+      raw(
+        lab2(
+          [],
+          Array.from({ length: 10_000 }, () => 'steady-fire'),
+        ),
+      ),
+    ).toBeNull();
+  });
+
+  it('refuses a polluted perk entry and leaves Object.prototype alone', () => {
+    const r = encodeSave(newGame(), NOW).replace(
+      '"perks":[',
+      '"perks":[{"__proto__":{"polluted":1}},',
+    );
+    expect(decodeSave(r)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });

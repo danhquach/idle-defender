@@ -13,11 +13,13 @@ import {
   MAX_COUNT,
   RECOVERY_MS,
   SKILL_IDS,
+  START_PERK,
   START_STOCK,
   START_TIERS,
   ITEMS,
   RARITIES,
   FREE_WEAPONS,
+  type PerkId,
   type ResearchId,
   type Stat,
   type Stats,
@@ -52,6 +54,8 @@ export interface GameState {
   research: ResearchId[];
   /** The battery bank, batteries, Gas and generator (design §7). */
   power: Power;
+  /** Commander perks equipped, one per perk slot (design §5). */
+  perks: PerkId[];
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -78,6 +82,7 @@ export function newGame(): GameState {
     lab: 0,
     research: [],
     power: newPower(),
+    perks: [START_PERK],
   });
 }
 
@@ -303,6 +308,7 @@ export function startHorde(
     bank: game.power.bank,
     startedAt: now,
     skills: SKILL_IDS.filter((id) => game.research.includes(id)),
+    perks: game.perks,
   });
 }
 
