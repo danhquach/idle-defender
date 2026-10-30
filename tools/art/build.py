@@ -22,13 +22,18 @@ Manifest asset keys (unknown keys stop the build):
   ref (id of the generation it edits), flip (mirror left to right),
   mutant (keep its colours saturated; everything else is muted, §15),
   group (sprites in one group share one scale, so a raised weapon doesn't
-  shrink a body).
+  shrink a body), palette (id of a texture whose colours this texture takes
+  on, so two surfaces read as one ground), edge (id of a texture this one is a
+  variant of: it takes on that texture's colours and shares its seam border,
+  so any variant tiles next to any other, ID-050).
 
 A sprite has its magenta background keyed out to transparency, only its
 biggest shape kept (detached parts under KEEP of it are dropped), and is
 trimmed to its content and scaled so its longer side is SPRITE_PX; a group is
 scaled so its biggest member's longer side is SPRITE_PX. A texture is made to
-tile and scaled to TEXTURE_PX square.
+tile and scaled to TEXTURE_PX square; a variant family (a texture and those
+with it as `edge`) shares only a narrow border, so each variant keeps most of
+its own look.
 """
 
 import json
@@ -46,7 +51,10 @@ GEN = ROOT / "art-src" / "gen"
 OUT = ROOT / "src" / "assets" / "art"
 CREDITS = ROOT / "docs" / "art-credits.md"
 
-KEYS = {"id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group"}
+KEYS = {
+    "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
+    "palette", "edge",
+}
 CONCEPTS = ROOT / "art-concepts"
 REQUIRED = {"id", "kind", "model", "seed", "size", "prompt"}
 SPRITE_PX = 192
@@ -58,6 +66,9 @@ MUTED = 0.7
 KEY_IN, KEY_OUT = 50, 110
 # Shapes smaller than this share of the biggest one are dropped as specks.
 KEEP = 0.04
+# A variant family blends to its shared border over the outer 1 / NARROW of each
+# half tile; any other texture blends over the whole half.
+NARROW = 4
 
 
 def allowed_models() -> set[str]:
@@ -151,22 +162,73 @@ def scaled(img: Image.Image, scale: float) -> Image.Image:
     return img.resize(size, Image.Resampling.LANCZOS)
 
 
-def texture(img: Image.Image) -> Image.Image:
-    """Tiles without seams: blended with itself shifted half a tile, the seams faded out."""
+def square(img: Image.Image, side: int | None = None) -> np.ndarray:
+    """A generation muted and cropped square (resized to `side` if given), as floats."""
     img = ImageEnhance.Color(img.convert("RGB")).enhance(MUTED)
-    side = min(img.size)
-    img = img.crop((0, 0, side, side))
-    a = np.asarray(img).astype(np.float32)
-    shifted = np.roll(a, (side // 2, side // 2), axis=(0, 1))
+    crop = min(img.size)
+    img = img.crop((0, 0, crop, crop))
+    if side and side != crop:
+        img = img.resize((side, side), Image.Resampling.LANCZOS)
+    return np.asarray(img).astype(np.float32)
+
+
+def recolour(a: np.ndarray, like: np.ndarray) -> np.ndarray:
+    """`a` with each channel's mean and spread moved to `like`'s: one palette and lighting."""
+    mean, std = a.mean(axis=(0, 1)), a.std(axis=(0, 1)) + 1e-6
+    return (a - mean) / std * like.std(axis=(0, 1)) + like.mean(axis=(0, 1))
+
+
+def texture(
+    img: Image.Image,
+    palette: Image.Image | None = None,
+    edge: Image.Image | None = None,
+    narrow: bool = False,
+) -> Image.Image:
+    """
+    Tiles without seams: blended with a copy shifted half a tile, the seams faded out.
+    The copy is `edge`'s when given, so every variant of it meets the others on the same
+    border; `palette`'s (or `edge`'s) colours are taken on first.
+    """
+    a = square(img)
+    side = a.shape[0]
+    like = edge if edge is not None else palette
+    if like is not None:
+        a = recolour(a, square(like, side))
+    border = square(edge, side) if edge is not None else a
+    shifted = np.roll(border, (side // 2, side // 2), axis=(0, 1))
     # Weight 1 at the centre of the tile, 0 at its edges, where the seams are.
     ramp = 1 - np.abs(np.linspace(-1, 1, side))
+    if narrow:
+        ramp = np.minimum(1, ramp * NARROW)
     weight = np.minimum.outer(ramp, ramp)[..., None]
     out = a * weight + shifted * (1 - weight)
     tile = Image.fromarray(out.clip(0, 255).astype(np.uint8), "RGB")
     return tile.resize((TEXTURE_PX, TEXTURE_PX), Image.Resampling.LANCZOS)
 
 
-def check(asset: dict, models: set[str], ids: set[str]) -> None:
+def check_wraps(tile: Image.Image, name: str) -> None:
+    """Stops the build if a texture's wrap is a bigger step than any line inside it."""
+    a = np.asarray(tile).astype(np.float32)
+    for axis in (0, 1):
+        steps = np.abs(np.diff(a, axis=axis)).mean(axis=(1, 2) if axis == 0 else (0, 2))
+        inner = steps.max()
+        wrap = np.abs(a.take(0, axis=axis) - a.take(-1, axis=axis)).mean()
+        if wrap > inner:
+            sys.exit(f"{name}: does not tile (edge step {wrap:.1f}, inside {inner:.1f})")
+
+
+def check_seams(tiles: list[Image.Image], name: str) -> None:
+    """Stops the build if a variant family's tiles don't meet on the same border."""
+    rims = [np.asarray(t).astype(np.int16) for t in tiles]
+    for r in rims[1:]:
+        for rim in (np.s_[0, :], np.s_[-1, :], np.s_[:, 0], np.s_[:, -1]):
+            if np.abs(r[rim] - rims[0][rim]).max() > 8:
+                sys.exit(f"{name}: variants do not share their seam border")
+
+
+def check(
+    asset: dict, models: set[str], ids: set[str], textures: set[str], variants: set[str]
+) -> None:
     unknown = set(asset) - KEYS
     missing = REQUIRED - set(asset)
     name = asset.get("id", "?")
@@ -178,6 +240,11 @@ def check(asset: dict, models: set[str], ids: set[str]) -> None:
         sys.exit(f"{name}: kind must be sprite or texture")
     if "ref" in asset and asset["ref"] not in ids:
         sys.exit(f"{name}: ref {asset['ref']} is not an asset")
+    for key in ("palette", "edge"):
+        if key in asset and (asset["kind"] != "texture" or asset[key] not in textures):
+            sys.exit(f"{name}: {key} must be a texture's, on a texture")
+    if "edge" in asset and ("palette" in asset or asset["edge"] in variants):
+        sys.exit(f"{name}: an edge takes its root's palette, and a root has no edge of its own")
     if not re.fullmatch(r"[a-z]+(-[a-z]+)*", name):
         sys.exit(f"{name}: ids are lower-case words joined by hyphens")
 
@@ -186,22 +253,40 @@ def main(only: list[str]) -> None:
     manifest = json.loads(MANIFEST.read_text())
     assets = manifest["assets"]
     ids = {a["id"] for a in assets}
+    textures = {a["id"] for a in assets if a.get("kind") == "texture"}
+    variants = {a["id"] for a in assets if "edge" in a}
     models = allowed_models()
     for asset in assets:
-        check(asset, models, ids)
+        check(asset, models, ids, textures, variants)
     unknown = set(only) - ids
     if unknown:
         sys.exit(f"not in the manifest: {sorted(unknown)}")
     for jpg in [*GEN.glob("*.jpg"), *CONCEPTS.glob("*.jpg")]:
         strip_metadata(jpg)
     OUT.mkdir(parents=True, exist_ok=True)
-    built: dict[str, Image.Image] = {}
+    sources: dict[str, Image.Image] = {}
     for asset in assets:
         src_path = GEN / f"{asset['id']}.jpg"
         if not src_path.exists():
             sys.exit(f"{asset['id']}: no generation at art-src/gen/{asset['id']}.jpg")
-        src = Image.open(src_path)
-        built[asset["id"]] = prepare(src, asset) if asset["kind"] == "sprite" else texture(src)
+        sources[asset["id"]] = Image.open(src_path)
+    families = {a["edge"] for a in assets if "edge" in a}
+    built: dict[str, Image.Image] = {}
+    for asset in assets:
+        src = sources[asset["id"]]
+        if asset["kind"] == "sprite":
+            built[asset["id"]] = prepare(src, asset)
+            continue
+        built[asset["id"]] = texture(
+            src,
+            palette=sources.get(asset.get("palette", "")),
+            edge=sources.get(asset.get("edge", "")),
+            narrow=asset["id"] in families or "edge" in asset,
+        )
+        check_wraps(built[asset["id"]], asset["id"])
+    for root in families:
+        family = [built[a["id"]] for a in assets if a["id"] == root or a.get("edge") == root]
+        check_seams(family, root)
     # A group shares one scale; any other sprite is scaled on its own.
     longest: dict[str, int] = {}
     for asset in assets:

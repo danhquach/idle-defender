@@ -149,6 +149,27 @@ describe('drawScene with art', () => {
         }
       },
     );
+    // The ground is painted once into its own canvas (ground.test.ts); here it only
+    // needs to be drawn, under a name the recorder can see.
+    const noop = () => {};
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        id = 'ground-canvas';
+        getContext() {
+          return {
+            drawImage: noop,
+            fillRect: noop,
+            save: noop,
+            restore: noop,
+            translate: noop,
+            scale: noop,
+            createPattern: () => ({ setTransform: noop }),
+            createLinearGradient: () => ({ addColorStop: noop }),
+          };
+        }
+      },
+    );
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -158,10 +179,11 @@ describe('drawScene with art', () => {
     return r;
   };
 
-  it('draws the ground and the camp, and skips an unbuilt slot', () => {
+  it('draws the painted ground (field and yard) first, then the camp, and skips an unbuilt slot', () => {
     const r = draw(blank());
-    expect(r.textured).toEqual(['ground', 'camp-ground']);
-    expect(new Set(r.drawn)).toEqual(new Set(['shack', 'tent']));
+    expect(r.textured).toEqual([]);
+    expect(r.drawn[0]).toBe('ground-canvas');
+    expect(new Set(r.drawn.slice(1))).toEqual(new Set(['shack', 'tent']));
   });
 
   it("draws a whole wall in its tier's textures, with no cracks", () => {

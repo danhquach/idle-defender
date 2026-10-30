@@ -34,7 +34,12 @@ export const ART_IDS = [
   'cracks',
   'gate',
   'ground',
+  'ground-b',
+  'ground-c',
   'camp-ground',
+  'ground-crack',
+  'debris',
+  'dry-grass',
   'shack',
   'tent',
 ] as const;
@@ -91,8 +96,11 @@ export const TIER_ART: Readonly<Record<Tier, { top: ArtId; front: ArtId; rubble:
 
 /** Everything else the horde view draws. */
 export const BASE_ART = {
-  ground: 'ground',
+  /** Ground tile variants sharing one seam border (ID-050); the first sets the tile size. */
+  groundTiles: ['ground', 'ground-b', 'ground-c'],
   camp: 'camp-ground',
+  /** Scattered over the field and the yard. */
+  decals: ['ground-crack', 'debris', 'dry-grass'],
   campProps: ['shack', 'tent'],
   tower: 'tower',
   groundPost: 'ground-post',

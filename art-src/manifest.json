@@ -249,9 +249,52 @@
       "id": "camp-ground",
       "kind": "texture",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4372,
+      "seed": 4375,
       "size": "512x512",
-      "prompt": "packed dirt yard with old wooden pallets, scattered straw and worn tarp scraps"
+      "prompt": "packed trampled dry dirt yard with scattered straw, small gravel and faint footprints",
+      "palette": "ground"
+    },
+    {
+      "id": "ground-b",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4373,
+      "size": "512x512",
+      "prompt": "cracked dry grey brown dirt and broken asphalt with small rubble, gravel and patches of dead grass",
+      "edge": "ground"
+    },
+    {
+      "id": "ground-c",
+      "kind": "texture",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4374,
+      "size": "512x512",
+      "prompt": "cracked dry grey brown dirt and broken asphalt with small rubble, gravel and patches of dead grass",
+      "edge": "ground"
+    },
+    {
+      "id": "ground-crack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4379,
+      "size": "512x512",
+      "prompt": "only thin black jagged crack lines branching out like lightning, nothing else, no patch, no dirt, no slab, no surface"
+    },
+    {
+      "id": "debris",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4380,
+      "size": "512x512",
+      "prompt": "a loose pile of a few broken grey concrete chunks and small rubble stones touching each other, nothing under them, no slab, no base, no tile, no platform"
+    },
+    {
+      "id": "dry-grass",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4378,
+      "size": "512x512",
+      "prompt": "a low flat clump of dry dead yellow brown grass tufts, seen from above"
     },
     {
       "id": "shack",

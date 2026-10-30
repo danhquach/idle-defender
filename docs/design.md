@@ -926,6 +926,16 @@ original outline.
   failed load (or one past 20 s) shows a message instead of a blank canvas. Generation is a
   development step only: the key stays in `.env` and the page loads only its
   own bundled files.
+- **As built (ID-050):** the ground is one surface. Three ground-tile variants
+  share one seam border (manifest `edge`: the build blends each into the same
+  narrow border and stops if they don't meet), so any variant tiles next to
+  any other; the camp yard takes the field's palette and lighting (manifest
+  `palette`) and fades into the field at both sides. A fixed seed picks the
+  variant for each 160-unit tile and scatters decals (cracks, debris, dry
+  grass) over field and yard, so every base shows the same layout on every
+  load. `src/ui/ground.ts` paints it all once into one field-sized canvas at
+  the tiles' own resolution, drawn whole each frame, so no tile edge can show
+  at any zoom.
 
 ## 16. Tech and platform
 
