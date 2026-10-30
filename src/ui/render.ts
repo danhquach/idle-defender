@@ -60,6 +60,7 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
+  GATE_POSTS,
   GUNNER_ART,
   TIER_ART,
   TRAP_ART,
@@ -498,18 +499,26 @@ const around = (
   y1: at.y + half.halfDepth,
 });
 
-/** A post or turret mount: a watchtower, a sandbag pit, or a plank platform on a wall. */
+/**
+ * A post or turret mount: a watchtower, a sandbag pit, or a plank platform on a wall.
+ * A standing gate's top is its walk, so its spots get no platform that would hide the
+ * gate; whoever stands there keeps the platform's floor. A broken one's rubble gets the
+ * platform back, as a broken wall's does.
+ */
 function drawMount(
   ctx: CanvasRenderingContext2D,
   art: Art,
+  layers: readonly Layer[],
   kind: Post['kind'],
-  at: { x: number; y: number },
+  at: { x: number; y: number; column: number; row: number },
   floor: number,
   cam: Camera,
 ): void {
   const p = kind === 'wall-walk' ? PIECE.walk : PIECE[kind];
   const box = { ...around(at, p), z0: floor - p.height, height: p.height };
   if (kind === 'wall-walk') {
+    const seg = segmentOf(layers, at.column, at.row);
+    if (seg?.kind === 'gate' && seg.hp > 0) return;
     drawBox(ctx, box, art[BASE_ART.walk.top], art[BASE_ART.walk.front], cam);
   } else {
     drawOnBox(ctx, art[kind === 'tower' ? BASE_ART.tower : BASE_ART.groundPost], box, cam);
@@ -525,7 +534,7 @@ function drawTurret(
   cam: Camera,
 ): void {
   const floor = turretFloor(scene.layers, t);
-  drawMount(ctx, art, t.mount, t, floor, cam);
+  drawMount(ctx, art, scene.layers, t.mount, t, floor, cam);
   const look = turretLook(scene, t);
   const top = floor + PIECE.turret.height;
   if (look.glow) {
@@ -584,7 +593,8 @@ function drawTrap(ctx: CanvasRenderingContext2D, art: Art, t: Trap, cam: Camera)
 
 /**
  * A wall segment in its tier's textures, lower as it takes damage with cracks showing
- * through; a gate's door across its top; a broken one is its tier's rubble.
+ * through; a gate's top is its tier's gate, posts in line with the wall and the leaves
+ * ajar toward the field; a broken one is its tier's rubble.
  */
 function drawSegment(
   ctx: CanvasRenderingContext2D,
@@ -610,9 +620,8 @@ function drawSegment(
   drawBox(ctx, box, art[tier.top], art[tier.front], cam);
   const f = faces(box, cam);
   if (seg.kind === 'gate') {
-    const band = SEGMENT_HEIGHT * 0.2;
-    const door = faces({ ...box, y0: y0 + band, y1: y0 + SEGMENT_HEIGHT - band }, cam).top;
-    ctx.drawImage(art[BASE_ART.gate], door.sx, door.sy, door.w, door.h);
+    const gate = art[tier.gate];
+    ctx.drawImage(gate, f.top.sx, f.top.sy, f.top.w / GATE_POSTS, f.top.h);
   }
   const damage = 1 - seg.hp / seg.maxHp;
   if (damage > 0) {
@@ -991,7 +1000,7 @@ export function drawScene(
       y: mountDepth(post.kind, post.y, post.row),
       x: post.x,
       draw: () => {
-        drawMount(ctx, art, post.kind, post, floor, cam);
+        drawMount(ctx, art, scene.layers, post.kind, post, floor, cam);
         if (reserved) {
           const p = post.kind === 'wall-walk' ? PIECE.walk : PIECE[post.kind];
           ctx.strokeStyle = COLOR.reserved;

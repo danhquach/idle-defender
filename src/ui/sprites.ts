@@ -43,7 +43,10 @@ export const ART_IDS = [
   'concrete-rubble',
   'reinforced-rubble',
   'cracks',
-  'gate',
+  'wood-gate',
+  'metal-gate',
+  'reinforced-gate',
+  'concrete-gate',
   'ground',
   'ground-b',
   'ground-c',
@@ -127,13 +130,34 @@ export const TRAP_ART: Readonly<Record<TrapKind, { built: ArtId; broken: ArtId }
   wire: { built: 'wire', broken: 'wire-broken' },
 };
 
-/** A wall tier's faces (tiling textures) and the rubble a broken segment leaves. */
-export const TIER_ART: Readonly<Record<Tier, { top: ArtId; front: ArtId; rubble: ArtId }>> = {
-  wood: { top: 'wood-top', front: 'wood-front', rubble: 'wood-rubble' },
-  metal: { top: 'metal-top', front: 'metal-front', rubble: 'metal-rubble' },
-  concrete: { top: 'concrete-top', front: 'concrete-front', rubble: 'concrete-rubble' },
-  reinforced: { top: 'reinforced-top', front: 'reinforced-front', rubble: 'reinforced-rubble' },
+/**
+ * A wall tier's faces (tiling textures), the gate seen from above in its place on a
+ * gate segment, and the rubble a broken segment leaves.
+ */
+export const TIER_ART: Readonly<
+  Record<Tier, { top: ArtId; front: ArtId; gate: ArtId; rubble: ArtId }>
+> = {
+  wood: { top: 'wood-top', front: 'wood-front', gate: 'wood-gate', rubble: 'wood-rubble' },
+  metal: { top: 'metal-top', front: 'metal-front', gate: 'metal-gate', rubble: 'metal-rubble' },
+  concrete: {
+    top: 'concrete-top',
+    front: 'concrete-front',
+    gate: 'concrete-gate',
+    rubble: 'concrete-rubble',
+  },
+  reinforced: {
+    top: 'reinforced-top',
+    front: 'reinforced-front',
+    gate: 'reinforced-gate',
+    rubble: 'reinforced-rubble',
+  },
 };
+/**
+ * The share of a gate's art width its posts fill: the wall's depth. The leaves swung
+ * open stick out past it, over the field. tools/art/build.py pads every gate to its
+ * own `GATE_POSTS`, which must be the same number.
+ */
+export const GATE_POSTS = 0.6;
 
 /** Everything else the horde view draws. */
 export const BASE_ART = {
@@ -146,7 +170,6 @@ export const BASE_ART = {
   tower: 'tower',
   groundPost: 'ground-post',
   walk: { top: 'wood-top', front: 'wood-front' },
-  gate: 'gate',
   cracks: 'cracks',
   shield: 'shield',
 } as const satisfies Record<string, ArtId | readonly ArtId[] | Record<string, ArtId>>;

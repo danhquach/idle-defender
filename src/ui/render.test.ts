@@ -12,15 +12,18 @@ import {
   STEP,
   TURRET,
   WEAPONS,
+  SEGMENT_HEIGHT,
+  WALL,
   type EnemyKind,
   type Tracer,
   stockOf,
 } from '../core/data.ts';
+import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
 import { ANIM, Animator } from './anim.ts';
-import { project, TILT } from './projection.ts';
+import { HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
 import { drawScene, trapLook, turretLook, type Scene } from './render.ts';
-import { ART_IDS, ART_PX, type Art, type ArtId } from './sprites.ts';
+import { ART_IDS, ART_PX, GATE_POSTS, TIER_ART, type Art, type ArtId } from './sprites.ts';
 
 function scene(condition: number, energy: number, wallHp?: number) {
   const r = buildTurret(
@@ -316,16 +319,107 @@ describe('drawScene with art', () => {
     expect(fills).not.toContain('#ff7a1a');
   });
 
-  it("draws a broken segment as its tier's rubble only", () => {
-    const r = draw(withSegment(blank(), { kind: 'gate', tier: 'concrete', hp: 0, maxHp: 100 }));
-    expect(r.drawn).toContain('concrete-rubble');
-    expect(r.textured).not.toContain('concrete-top');
-    expect(r.drawn).not.toContain('gate');
+  it("draws a broken gate as its tier's rubble only, in every tier", () => {
+    for (const tier of Object.keys(TIER_ART) as Tier[]) {
+      const r = draw(withSegment(blank(), { kind: 'gate', tier, hp: 0, maxHp: 100 }));
+      expect(r.drawn).toContain(TIER_ART[tier].rubble);
+      expect(r.textured).not.toContain(TIER_ART[tier].top);
+      expect(r.drawn.some((id) => id.endsWith('-gate'))).toBe(false);
+    }
   });
 
-  it("puts a door on a standing gate's top", () => {
-    const r = draw(withSegment(blank(), { kind: 'gate', tier: 'reinforced', hp: 100, maxHp: 100 }));
-    expect(r.drawn).toContain('gate');
+  /** Where each sprite was drawn, in order. */
+  const placed = (scene: Scene, cam = CAM) => {
+    const r = recorder();
+    const at: { id: ArtId; x: number; y: number; w: number; h: number }[] = [];
+    Object.assign(r.ctx, {
+      drawImage: (img: { id: ArtId }, ...n: number[]) => {
+        r.drawn.push(img.id);
+        const [x, y, w, h] = n.length === 8 ? n.slice(4) : n;
+        at.push({ id: img.id, x: x!, y: y!, w: w!, h: h! });
+      },
+    });
+    drawScene(r.ctx, r.art, scene, cam, VIEW);
+    return { ...r, at };
+  };
+
+  it("lays a standing gate over its segment's top in its tier: posts on the wall, leaves out over the field", () => {
+    for (const zoom of [0.5, 1, 2]) {
+      for (const tier of Object.keys(TIER_ART) as Tier[]) {
+        const scene = withSegment(blank(), { kind: 'gate', tier, hp: 100, maxHp: 100 });
+        const cam = { x: 0, y: 0, zoom };
+        const r = placed(scene, cam);
+        const gate = r.at.filter((a) => a.id === TIER_ART[tier].gate);
+        expect(gate).toHaveLength(1);
+        const x0 = scene.layers[0]!.x;
+        const z = wallHeight(100, 100);
+        const back = project({ x: x0, y: 2, z }, cam);
+        const front = project({ x: x0 + WALL.depth, y: SEGMENT_HEIGHT - 2, z }, cam);
+        expect(gate[0]!.x).toBeCloseTo(back.sx);
+        expect(gate[0]!.y).toBeCloseTo(back.sy);
+        expect(gate[0]!.h).toBeCloseTo(front.sy - back.sy);
+        // The posts fill the wall's depth; the rest of the art is the leaves swung out.
+        expect(gate[0]!.w * GATE_POSTS).toBeCloseTo(front.sx - back.sx);
+        expect(r.textured).toEqual(expect.arrayContaining([TIER_ART[tier].front]));
+        expect(r.drawn).not.toContain('cracks');
+      }
+    }
+  });
+
+  it('lowers a damaged gate with its wall and shows cracks over it', () => {
+    const at = (hp: number) =>
+      placed(withSegment(blank(), { kind: 'gate', tier: 'wood', hp, maxHp: 100 }));
+    const whole = at(100).at.find((a) => a.id === 'wood-gate')!;
+    const hurt = at(40);
+    const gate = hurt.at.find((a) => a.id === 'wood-gate')!;
+    const drop = (wallHeight(100, 100) - wallHeight(40, 100)) * HEIGHT_SCALE;
+    expect(gate.y - whole.y).toBeCloseTo(drop);
+    expect(gate.h).toBeCloseTo(whole.h);
+    expect(hurt.drawn.indexOf('cracks')).toBeGreaterThan(hurt.drawn.indexOf('wood-gate'));
+  });
+
+  it('draws a defender on a gate post over the gate, where a wall-walk defender stands, with no platform', () => {
+    // Metal segments, so the only plank texture is a wall-walk platform's.
+    const gate = withSegment(blank(), { kind: 'gate', tier: 'metal', hp: 100, maxHp: 100 });
+    const wall = withSegment(blank(), { kind: 'wall', tier: 'metal', hp: 100, maxHp: 100 });
+    const d0 = startHorde(newGame(), 1, newGame().roster[0]!.id, 0, 0).defenders[0]!;
+    const post: Post = {
+      id: 0,
+      kind: 'wall-walk',
+      column: 0,
+      row: 0,
+      x: gate.layers[0]!.x + WALL.depth / 2,
+      y: SEGMENT_HEIGHT / 4,
+      defenderId: d0.id,
+    };
+    const defender = { ...d0, x: post.x, y: post.y, walking: false, postId: post.id };
+    const onGate = placed({ ...gate, posts: [post], defenders: [defender] });
+    const onWall = placed({ ...wall, posts: [post], defenders: [defender] });
+    const sprite = (r: ReturnType<typeof placed>) =>
+      r.at.filter((a) => a.id.startsWith('gunner') || a.id === 'ripper' || a.id === 'engineer');
+    expect(sprite(onGate)).toHaveLength(1);
+    expect(sprite(onGate)).toEqual(sprite(onWall));
+    const order = onGate.at.map((a) => a.id);
+    expect(order.indexOf(sprite(onGate)[0]!.id)).toBeGreaterThan(order.indexOf('metal-gate'));
+    expect(onWall.textured).toContain('wood-top');
+    expect(onGate.textured).not.toContain('wood-top');
+    // A turret on a gate's spot sits on the gate the same way.
+    const turret = {
+      id: 0,
+      mount: 'wall-walk' as const,
+      column: 0,
+      row: 0,
+      x: post.x,
+      y: post.y,
+      condition: 100,
+      nextShotAt: 0,
+    };
+    const mounted = placed({ ...gate, turrets: [turret] });
+    expect(mounted.drawn).toContain('turret-lit');
+    expect(mounted.textured).not.toContain('wood-top');
+    // A broken gate's rubble gets its platform back, as a broken wall's does.
+    const broken = withSegment(blank(), { kind: 'gate', tier: 'metal', hp: 0, maxHp: 100 });
+    expect(placed({ ...broken, posts: [post] }).textured).toContain('wood-top');
   });
 
   it('draws each mount, each turret state, and both trap states', () => {

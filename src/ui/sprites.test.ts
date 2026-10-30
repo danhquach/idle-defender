@@ -12,6 +12,7 @@ import {
   DEFENDER_ART,
   ENEMY_ART,
   FLESH,
+  GATE_POSTS,
   GUNNER_ART,
   LOAD_TIMEOUT_MS,
   loadArt,
@@ -44,11 +45,8 @@ const saturation = (r: number, g: number, b: number): number => {
   return max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
 };
 
-/**
- * The share of a sprite's opaque pixels (alpha over half) that are saturated (over 0.5):
- * decodes the 8-bit RGBA, non-interlaced PNG the art build writes.
- */
-function saturatedShare(id: string): number {
+/** A sprite's pixels: decodes the 8-bit RGBA, non-interlaced PNG the art build writes. */
+function pixels(id: string): { w: number; h: number; px: Uint8Array } {
   const png = readFileSync(new URL(`src/assets/art/${id}.png`, root));
   const w = png.readUInt32BE(16);
   const h = png.readUInt32BE(20);
@@ -79,6 +77,12 @@ function saturatedShare(id: string): number {
       px[y * row + x] = (v + pred) & 0xff;
     }
   }
+  return { w, h, px };
+}
+
+/** The share of a sprite's opaque pixels (alpha over half) that are saturated (over 0.5). */
+function saturatedShare(id: string): number {
+  const { px } = pixels(id);
   let opaque = 0;
   let saturated = 0;
   for (let i = 0; i < px.length; i += 4) {
@@ -135,6 +139,17 @@ describe('art coverage', () => {
     }
     expect(mutant('runner')).toBe(false);
     expect(saturatedShare('runner')).toBeLessThan(0.2);
+  });
+
+  it("fills each tier gate's width with its posts as the renderer expects (ID-054)", () => {
+    for (const tier of Object.keys(TIERS) as (keyof typeof TIER_ART)[]) {
+      const id = TIER_ART[tier].gate;
+      const { w, px } = pixels(id);
+      // The top post's rows: the posts' right edge, the leaves never reach that high.
+      let posts = 0;
+      for (let x = 0; x < w; x++) if (px[(2 * w + x) * 4 + 3]! > 128) posts = x + 1;
+      expect(Math.abs(posts / w - GATE_POSTS), id).toBeLessThan(1 / w + 0.01);
+    }
   });
 
   it('gives every gun a Gunner sprite of its own (ID-046)', () => {
@@ -211,8 +226,10 @@ describe('loading the art', () => {
   });
 
   it('rejects naming the sprites that failed', async () => {
-    fakeImages((url) => (url.includes('/gunner.') || url.includes('/gate.') ? 'error' : 'load'));
-    await expect(loadArt()).rejects.toThrow('art failed to load: gunner, gate');
+    fakeImages((url) =>
+      url.includes('/gunner.') || url.includes('/wood-gate.') ? 'error' : 'load',
+    );
+    await expect(loadArt()).rejects.toThrow('art failed to load: gunner, wood-gate');
   });
 
   it('gives up on a sprite that never loads', async () => {
