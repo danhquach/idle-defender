@@ -1322,8 +1322,11 @@ original outline.
   hand-drawn ink-and-watercolour map of ruins, fields, a river and roads,
   picked from three seeds: the build's new `picture` kind cuts off the paper
   frame the model drew (5% a side), mutes it and darkens it 22% toward the
-  page so the drawn routes and rings stand out, and scales it to 1152 px
-  wide; the map shows it cropped to its shape (`object-fit: cover`). Each
+  page so the drawn routes and rings stand out, scales it to 1152 px wide
+  and saves it with a 256-colour palette; the map shows it cropped to its
+  shape (`object-fit: cover`). It is the one piece of art the game doesn't
+  wait for at start (`LAZY_ART`): it loads in the background, so it can't
+  hold up or fail the start. Each
   location has an **icon** in one shared look (an isometric ruin with a pale
   roof and one muted colour accent; the crater a ring of rock round a green
   glow, kept muted), keyed like a sprite and drawn inside its 48 px risk

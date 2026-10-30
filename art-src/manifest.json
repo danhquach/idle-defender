@@ -516,12 +516,7 @@
       "ref": "gate-angled",
       "style": "verbatim",
       "prompt": "the same wooden gate turned so it runs straight from the top of the image to the bottom, seen from high above looking down, slightly from the right side so the right face of the closed double door and its iron bands show, one gatepost at the top and one at the bottom, a long narrow vertical shape, same planks, posts and iron bands, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
     },
     {
       "id": "metal-gate",
@@ -532,12 +527,7 @@
       "ref": "wood-gate",
       "style": "verbatim",
       "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to metal: the posts are riveted grey scrap steel, the leaves are dented grey corrugated sheet metal with rust streaks and bolts, steel bands. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
     },
     {
       "id": "reinforced-gate",
@@ -548,12 +538,7 @@
       "ref": "wood-gate",
       "style": "verbatim",
       "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to reinforced concrete and steel: the posts are blue grey concrete capped with riveted steel plates, the leaves are heavy bolted steel armour plates on steel beams, blue grey and dark steel. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
     },
     {
       "id": "concrete-gate",
@@ -564,12 +549,7 @@
       "ref": "wood-gate",
       "style": "verbatim",
       "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to concrete: the posts are cracked pale grey concrete blocks with chipped edges and stains, the leaves are heavy pale grey concrete slabs in plain grey steel frames. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
     },
     {
       "id": "ground",

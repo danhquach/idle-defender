@@ -15,6 +15,7 @@ import {
   GUNNER_ART,
   LOAD_TIMEOUT_MS,
   loadArt,
+  LAZY_ART,
   MAP_ART,
   MAP_PICTURE,
   SHOP_ICON,
@@ -226,6 +227,17 @@ describe('loading the art', () => {
   it('loads every sprite by id', async () => {
     fakeImages(() => 'load');
     expect(Object.keys(await loadArt()).sort()).toEqual([...ART_IDS].sort());
+  });
+
+  it('never waits for, or fails on, the lazy art', async () => {
+    expect(LAZY_ART).toEqual(['world-map']);
+    fakeImages((url) => (url.includes('/world-map') ? 'error' : 'load'));
+    expect(Object.keys(await loadArt()).sort()).toEqual([...ART_IDS].sort());
+    vi.useFakeTimers();
+    fakeImages((url) => (url.includes('/world-map') ? 'hang' : 'load'));
+    const art = loadArt();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(art).resolves.toBeDefined();
   });
 
   it('rejects naming the sprites that failed', async () => {

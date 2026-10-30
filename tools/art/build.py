@@ -52,7 +52,7 @@ with it as `edge`) shares only a narrow border, so each variant keeps most of
 its own look. A picture (the world map's region, ID-028) is a whole opaque image:
 PICTURE_CROP of each side is cut off (the drawn paper frame the model adds), it is
 muted, darkened toward the page by PICTURE_DARKEN so the routes and risk rings drawn
-over it stand out, and scaled to PICTURE_PX wide.
+over it stand out, scaled to PICTURE_PX wide and saved with a 256-colour palette.
 """
 
 import json
@@ -289,7 +289,12 @@ def picture(img: Image.Image) -> Image.Image:
     img = img.crop((dx, dy, img.width - dx, img.height - dy))
     img = ImageEnhance.Color(img).enhance(MUTED)
     img = Image.blend(img, Image.new("RGB", img.size, PAGE), PICTURE_DARKEN)
-    return img.resize((PICTURE_PX, round(img.height * PICTURE_PX / img.width)), Image.Resampling.LANCZOS)
+    img = img.resize(
+        (PICTURE_PX, round(img.height * PICTURE_PX / img.width)), Image.Resampling.LANCZOS
+    )
+    # A 256-colour palette, dithered: under half the size of full colour, and the
+    # game doesn't wait for it at start (src/ui/sprites.ts LAZY_ART).
+    return img.quantize(256, Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
 
 
 def check_wraps(tile: Image.Image, name: str) -> None:

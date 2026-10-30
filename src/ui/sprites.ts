@@ -92,6 +92,13 @@ export const ART_IDS = [
 export type ArtId = (typeof ART_IDS)[number];
 
 /**
+ * Art the game doesn't wait for: the world map's region (ID-028) is the biggest file and
+ * only shows behind a button after Horde 2, so it loads in the background.
+ */
+export const LAZY_ART: readonly ArtId[] = ['world-map'];
+const PRELOAD = ART_IDS.filter((id) => !LAZY_ART.includes(id));
+
+/**
  * A sprite's longer side in px, or its group's (tools/art/build.py `SPRITE_PX`): a
  * sprite's own height over this is how much of its drawn height it fills.
  */
@@ -246,11 +253,12 @@ export type Art = Readonly<Record<ArtId, HTMLImageElement>>;
 /**
  * Loads every sprite; rejects naming the ones that failed or took longer than
  * `LOAD_TIMEOUT_MS`. Waits on the load event, not `decode()`, which some browsers
- * leave pending for a page loaded in the background.
+ * leave pending for a page loaded in the background. `LAZY_ART` starts loading but is
+ * never waited for, so it can neither hold up nor fail the start.
  */
 export async function loadArt(): Promise<Art> {
   const loaded = await Promise.allSettled(
-    ART_IDS.map(
+    PRELOAD.map(
       (id) =>
         new Promise<readonly [ArtId, HTMLImageElement]>((resolve, reject) => {
           const url = ART_URLS[id];
@@ -269,9 +277,15 @@ export async function loadArt(): Promise<Art> {
         }),
     ),
   );
-  const failed = ART_IDS.filter((_, i) => loaded[i]!.status === 'rejected');
+  const failed = PRELOAD.filter((_, i) => loaded[i]!.status === 'rejected');
   if (failed.length) throw new Error(`art failed to load: ${failed.join(', ')}`);
-  return Object.fromEntries(
-    loaded.map((r) => (r as PromiseFulfilledResult<readonly [ArtId, HTMLImageElement]>).value),
-  ) as Art;
+  const lazy = LAZY_ART.map((id) => {
+    const img = new Image();
+    img.src = ART_URLS[id] ?? '';
+    return [id, img] as const;
+  });
+  return Object.fromEntries([
+    ...loaded.map((r) => (r as PromiseFulfilledResult<readonly [ArtId, HTMLImageElement]>).value),
+    ...lazy,
+  ]) as Art;
 }
