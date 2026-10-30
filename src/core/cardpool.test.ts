@@ -421,11 +421,11 @@ describe('barrier cards', () => {
     expect(atWall().e.hp).toBe(1000);
   });
 
-  it('Spiked Walls: a Spitter spitting from afar is not spiked', () => {
+  it('Spiked Walls: a Spewer spitting from afar is not spiked', () => {
     const s = quiet('spiked-walls');
     s.defenders = [];
     s.posts.forEach((p) => (p.defenderId = null));
-    const e = enemy(s, { ...tough, kind: 'spitter', x: s.layers[0]!.x + 20 + 250, y: ROW4 });
+    const e = enemy(s, { ...tough, kind: 'spewer', x: s.layers[0]!.x + 20 + 250, y: ROW4 });
     expect(tick(s, STEP).enemies.find((x) => x.id === e.id)!.hp).toBe(1000);
   });
 

@@ -247,7 +247,7 @@ describe('drawScene with art', () => {
     expect(r.alphas.slice(i + 1).every((a) => a === 1)).toBe(true);
   });
 
-  it('draws every enemy kind’s art and a Spitter glob without a throw (ID-023)', () => {
+  it('draws every enemy kind’s art and a Spewer glob without a throw (ID-023)', () => {
     const kinds = Object.keys(ENEMIES) as EnemyKind[];
     const base = blank();
     const r = draw({

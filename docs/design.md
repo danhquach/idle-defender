@@ -217,7 +217,7 @@ Defenders stand on **posts** the player builds and chooses between.
 - **Defender HP and injury:** defenders have HP: 100 + 5 per Grit point
   *(designer's call, starting point)*. Every recovered defender starts a
   horde at full HP and doesn't regain HP mid-horde. They are hit by ranged
-  enemies (Spitters) and by enemies that broke into the camp. At 0 HP a
+  enemies (Spewers) and by enemies that broke into the camp. At 0 HP a
   defender is **injured**: they leave the fight (their post is free again),
   can't be recruited back into the same horde, and can't defend or patrol
   until they recover (§11). No one dies in a horde. The loss rule is in
@@ -678,7 +678,7 @@ Offered 1 of 3 on each fight level. Lost when the horde ends.
   | Cleave | common | +20% cleave share on blade and tool hits, still capped at 50% |
 
   Barrier: Spiked Walls (rare, once): an enemy hitting a standing segment
-  takes 3 damage per blow (a Spitter's spit from afar doesn't count); Slow
+  takes 3 damage per blow (a Spewer's spit from afar doesn't count); Slow
   Field (rare, once): enemies within 120 px in front of the outermost layer
   with a segment standing move 30% slower, multiplying with wire. Patch Up and
   Reinforce stay common and repeatable. Power (repeatable, offered only when
@@ -711,11 +711,13 @@ one crowd (no lanes, §3).
 | Shambler | Slow, many | Anything |
 | Runner | Fast, low HP | Traps, Gunner fire rate |
 | Crawler | Climbs walls, skips a layer *(guess)* | Ripper on the wall-walk |
-| Bloater | Explodes at a wall, big layer damage | Kill early from a tower |
-| Spitter | Stops short, spits acid at walls, posts and turrets | Long-range Gunner |
+| Swollen | Explodes at a wall, big layer damage | Kill early from a tower |
+| Spewer | Stops short, spits acid at walls, posts and turrets | Long-range Gunner |
 | Brute | Armoured, smashes walls and gates | Ripper (chainsaw), pierce |
 | Screamer | Speeds up nearby enemies | Focus it first |
 | Mutated Horror | Boss of every 10th horde; one unique ability each | Whole base |
+
+Renamed in ID-053: the Spewer and the Swollen had names other games already use; mechanics and numbers are unchanged.
 
 - Mutants appear from Horde 5 *(starting point)*; new types join as horde
   numbers rise.
@@ -729,8 +731,8 @@ one crowd (no lanes, §3).
   | Shambler | 20 | 30 | 5 / 1 s | 12 | 1 / 2 |
   | Runner | 15 | 75 | 3 / 0.8 s | 10 | 1 / 2 |
   | Crawler | 40 | 40 | 20 / 1 s | 9 | 2 / 3 |
-  | Bloater | 60 | 18 | blast | 18 | 3 / 4 |
-  | Spitter | 25 | 28 | 8 / 2 s | 12 | 2 / 3 |
+  | Swollen | 60 | 18 | blast | 18 | 3 / 4 |
+  | Spewer | 25 | 28 | 8 / 2 s | 12 | 2 / 3 |
   | Brute | 150 | 20 | 25 / 1.5 s | 20 | 5 / 6 |
   | Screamer | 30 | 30 | 2 / 1 s | 12 | 3 / 4 |
 
@@ -738,19 +740,19 @@ one crowd (no lanes, §3).
   (two bodies touch at the sum of their radii); in the camp an enemy hits a
   defender from its radius plus a defender's (12). Each wave rolls each
   enemy's kind through the seeded RNG: Runners are 15% of a wave from Horde 2,
-  then each mutant 10% from its horde (Crawler 5, Spitter 6, Bloater 7, Brute
+  then each mutant 10% from its horde (Crawler 5, Spewer 6, Swollen 7, Brute
   8, Screamer 9), Shamblers the rest; Horde 1 stays Shamblers only and rolls
   nothing, so its seeds play as before. Behaviours:
   - **Crawler:** at the first standing segment it reaches it climbs for 3 s
     (still a target, wall-walk melee included; no attacks), then drops behind
     that layer; once only. The defeat screen lists such a crossing as "climbed
     over". If the segment breaks under it, it walks on through the gap.
-  - **Bloater:** at a standing segment it blows up: 150 to it and 50 to the
+  - **Swollen:** at a standing segment it blows up: 150 to it and 50 to the
     standing segments above and below (wearing their turrets), and is gone
     with no kill paid: an acid-green burst swells and fades over 0.4 s, and it
     leaves no falling body (ID-049). Killed first, it pops harmlessly and pays its kill. In
     the camp it blows up on the defender it reaches for 50.
-  - **Spitter:** stops 150 px short of its stop line, so the wall-walk is in
+  - **Spewer:** stops 150 px short of its stop line, so the wall-walk is in
     reach, and spits every 2 s at the nearest defender or working turret (not
     jammed, its wall standing) within 250 px (HP off a defender, a shield blocking its share; condition
     off a turret), else at the segment in front. A spit lands at once; a
@@ -762,9 +764,9 @@ one crowd (no lanes, §3).
 
   Retune: the ticket's starting points made hordes easier, not harder (Runner
   10 HP, Crawler 15 HP / 4 hit: a full firing line won Horde 5 65% of seeds
-  against 25% with Shamblers only), and a Spitter parked 250 px out reached
+  against 25% with Shamblers only), and a Spewer parked 250 px out reached
   no defender. Runner HP went to 15, the Crawler to 40 HP and a 20 hit (it
-  skips the wall and hits defenders), and the Spitter's stop to 150 px. Now
+  skips the wall and hits defenders), and the Spewer's stop to 150 px. Now
   the full line wins Horde 5 15% of seeds against 25% with Shamblers only,
   every other balance target holds, and a lone pistol Gunner misses Runners
   about three times as often as Shamblers (lead from last step's velocity).
@@ -1026,7 +1028,7 @@ Set before sending; they apply to any location, plaza or single building.
   Metal, Concrete, Parts, Food, Medicine, Chemicals and Mutated Genes
   (Gas and batteries stay with the power, §7); a new game adds 3 Food.
   A horde win pays **2 Genes + 1 per 5 hordes**, +1 per 5 mutants killed
-  (Crawler, Spitter, Bloater, Brute, Screamer; a Bloater that blows
+  (Crawler, Spewer, Swollen, Brute, Screamer; a Swollen that blows
   itself up isn't a kill) and +10 for a boss horde; a loss pays none.
   A win also has a **20% chance to find 2 + 1 per 5 hordes** of one of
   Parts, Metal, Food, Medicine or Chemicals, rolled after the weapon
@@ -1269,12 +1271,12 @@ original outline.
   art in place of their drawn shapes, made the same way as the Shambler's
   (shared sprite style, FLUX.2 Klein 4B, one manifest entry each, picked
   from three seeds): a lean, muted Runner; and mutants that keep their
-  colour (manifest `mutant`): a low acid-green Crawler, a swollen Bloater,
-  a hunched Spitter with an acid sac on its back, an armoured flesh-red
+  colour (manifest `mutant`): a low acid-green Crawler, a bloated Swollen,
+  a hunched Spewer with an acid sac on its back, an armoured flesh-red
   Brute and a spiked Screamer screaming open-mouthed. Each is mirrored to
   face the way the Shambler does and drawn by its radius like the
   Shambler's art, so it moves in the ID-049 poses with no new frames. The
-  Spitter's art has no spit of its own: the glob and the Bloater's burst
+  Spewer's art has no spit of its own: the glob and the Swollen's burst
   stay drawn effects. The Mutated Horror got its art in ID-041.
 - **As built (ID-054):** the gate is part of the wall. The camera looks
   along the wall, so its outward face never shows; the gate is drawn where
