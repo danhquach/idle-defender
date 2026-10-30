@@ -221,6 +221,7 @@ body {
 
 .build-slot,
 .build-lab,
+.build-perks,
 .build-start-section {
   display: flex;
   flex-direction: column;

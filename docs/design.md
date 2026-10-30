@@ -324,6 +324,13 @@ which apply to the whole battlefield.
   multiplicatively with cards, shop buffs and Engineers. Perk levels and
   boss-horde unlocks come with ID-035. To absorb the starting Steady Fire,
   enemy HP now grows × 1.17 per horde (was × 1.15; §9).
+- **As built (ID-021):** the build panel has a **Perks** button next to
+  Roster that opens the perk loadout in its place: "Perk slots: N of 4",
+  each slot with its perk and Unequip, Empty, or (not owned yet) the
+  research that adds it; then all eight perks with their effect and
+  Equip, Equipped, or where to research them (Lab level, cost and the node
+  needed first). Equip is refused with the core's reason when every slot is
+  full; swapping is Unequip, then Equip. Changes are saved at once.
 
 ## 6. Defenders, weapons and professions
 
