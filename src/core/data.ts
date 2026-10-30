@@ -1008,6 +1008,24 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
 export const LOCATION_IDS = Object.keys(LOCATIONS) as LocationId[];
 
 /**
+ * Where each location and the camp sit on the world map (ID-028), as shares of the
+ * map's width and height. A longer trip sits farther from the camp.
+ */
+export const MAP_CAMP = { x: 0.08, y: 0.5 } as const;
+export const MAP_SPOTS: Readonly<Record<LocationId, { readonly x: number; readonly y: number }>> = {
+  'gas-station': { x: 0.22, y: 0.38 },
+  supermarket: { x: 0.25, y: 0.66 },
+  electronics: { x: 0.34, y: 0.28 },
+  hardware: { x: 0.44, y: 0.5 },
+  pharmacy: { x: 0.4, y: 0.8 },
+  construction: { x: 0.58, y: 0.28 },
+  police: { x: 0.6, y: 0.72 },
+  hospital: { x: 0.74, y: 0.2 },
+  military: { x: 0.8, y: 0.76 },
+  crater: { x: 0.92, y: 0.5 },
+};
+
+/**
  * Patrol rules (design §10, ID-026 starting points):
  * - `unlock`: the horde number from which patrols can be sent (after Horde 2).
  * - `rolls`: loot rolls per search; `bonusRolls` more at most, one per `need × tier` of party strength.

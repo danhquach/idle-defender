@@ -625,6 +625,105 @@
       "seed": 4382,
       "size": "512x512",
       "prompt": "a patched canvas survivor tent beside a rusty oil barrel with a small fire, supply crates"
+    },
+    {
+      "id": "world-map",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2801,
+      "size": "1536x1024",
+      "prompt": "a hand-drawn game world map of a ruined post-apocalyptic region seen from directly above, worn parchment paper, ink and muted watercolour, faint terrain: dry fields, a winding river, scattered ruined city blocks, broken highways, dead trees, rubble, craters, open empty ground across the whole map so places can be marked on it, muted desaturated browns, greys and dull greens, no text, no letters, no labels, no compass, no legend, no frame, no border, no people"
+    },
+    {
+      "id": "map-gas-station",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2812,
+      "size": "512x512",
+      "prompt": "a small game map icon of a ruined abandoned gas station: a flat canopy roof over two fuel pumps beside a small shop with broken windows, seen from above at an angle, simple bold shape that reads at a tiny size, few details. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
+    },
+    {
+      "id": "map-supermarket",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2821,
+      "size": "512x512",
+      "prompt": "a small game map icon of a ruined abandoned supermarket: a wide low store with a flat roof, a broken glass front and a few tipped shopping carts, muted mustard yellow accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale roof or top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
+    },
+    {
+      "id": "map-electronics",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2832,
+      "size": "512x512",
+      "prompt": "a small game map icon of a ruined abandoned electronics store: a small shop with a satellite dish and antennas on its flat roof and broken display windows, muted steel blue accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale roof or top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
+    },
+    {
+      "id": "map-hardware",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2841,
+      "size": "512x512",
+      "prompt": "a small game map icon of a ruined abandoned hardware store: a warehouse shop with stacked wooden planks and a pile of metal pipes outside its door, muted brown wood accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale roof or top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
+    },
+    {
+      "id": "map-pharmacy",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2852,
+      "size": "512x512",
+      "prompt": "a small game map icon of a ruined abandoned pharmacy: a small corner shop with a muted green cross sign on its flat roof and broken windows, muted sage green accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale roof or top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person, no red, no pink"
+    },
+    {
+      "id": "map-construction",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2862,
+      "size": "512x512",
+      "prompt": "a small game map icon of an abandoned construction site: an unfinished concrete building frame with bare steel beams and a small tower crane beside it, muted orange accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
+    },
+    {
+      "id": "map-police",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2871,
+      "size": "512x512",
+      "prompt": "a small game map icon of a ruined abandoned police station: a sturdy square building with a flat roof, barred windows and a wrecked police car outside, muted dark navy blue accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale roof or top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
+    },
+    {
+      "id": "map-hospital",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2882,
+      "size": "512x512",
+      "prompt": "a small game map icon of a ruined abandoned hospital: a tall wide building with a round helipad on its flat roof, a muted grey-blue cross on its front and broken windows, muted grey-blue accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale roof or top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person, no red, no pink"
+    },
+    {
+      "id": "map-military",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2892,
+      "size": "512x512",
+      "prompt": "a small game map icon of an abandoned military depot: a small fenced compound with a camouflage-green bunker, stacked supply crates and a wooden watchtower, muted olive green accent, seen from above at the same isometric three-quarter angle and scale as a small building, distinct simple bold silhouette that reads at a tiny size, few details, a bright pale roof or top. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
+    },
+    {
+      "id": "map-crater",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 2901,
+      "size": "512x512",
+      "prompt": "a small game map icon of a deep round blast crater: a cracked raised rim of pale broken rock and rubble around a dark pit with a sickly acid-green glow at its bottom, the glow contained inside the crater with no outer halo, seen from above at an isometric three-quarter angle, distinct simple bold silhouette that reads at a tiny size, few details. Hand-drawn ink lines and muted watercolour like an old paper map, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no surrounding ground, no person"
     }
   ]
 }

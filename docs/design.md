@@ -994,6 +994,26 @@ Set before sending; they apply to any location, plaza or single building.
   already out: one stays at the camp; and if a patrol from an older save
   would kill the last defender alive, one member comes back injured
   instead. Save v6.
+- **As built (ID-028):** the **World map** button in the build panel
+  (disabled until patrols open after Horde 2) opens the map in place of the
+  field (which takes no clicks while it shows), with its panel beside it.
+  The camp and each revealed location sit at fixed spots (`MAP_SPOTS`; a
+  longer trip sits farther), joined by a route. Each location shows its
+  name, tier and a ring in its risk colour, with the rating written under
+  it: the rating of the party ticked in the panel, or with nobody ticked, of
+  the biggest party allowed (every idle defender, less the weakest if one
+  must stay at camp; "Nobody can go" when that leaves no one). Picking a
+  location shows its round trip, what it mostly and sometimes drops (an
+  entry at least half the top weight is "mostly"), the weapons the fallen
+  left there, a party picker (who is out or injured says until when) and
+  the risk screen: party strength vs. danger, the rating, each member's
+  injury and death chance, the wipe chance and the loot rolls. Send shows
+  the core's refusal when it can't go. Each patrol out is a dot on its
+  route (out, held at the location while searching, back), labelled with
+  where it went, who went and the time left, with the same line in the
+  panel, both moving every second (the timer stops when the map closes);
+  the reports follow, newest first, with loot, XP and casualties. Loading
+  another camp forgets the map's picks. No save change.
 
 ## 11. Resources and research
 
@@ -1297,6 +1317,22 @@ original outline.
   their button's label; the icon has empty alt text, so a screen reader
   reads only the label. The armed airstrike's aim shows every bomb's ring
   along the row. No drawn placeholder remains.
+- **As built (ID-028):** the world map has generated art (FLUX.2 Klein 4B,
+  prompts sent as they are, one manifest entry each). The **region** is one
+  hand-drawn ink-and-watercolour map of ruins, fields, a river and roads,
+  picked from three seeds: the build's new `picture` kind cuts off the paper
+  frame the model drew (5% a side), mutes it and darkens it 22% toward the
+  page so the drawn routes and rings stand out, scales it to 1152 px wide
+  and saves it with a 256-colour palette; the map shows it cropped to its
+  shape (`object-fit: cover`). It is the one piece of art the game doesn't
+  wait for at start (`LAZY_ART`): it loads in the background, so it can't
+  hold up or fail the start. Each
+  location has an **icon** in one shared look (an isometric ruin with a pale
+  roof and one muted colour accent; the crater a ring of rock round a green
+  glow, kept muted), keyed like a sprite and drawn inside its 48 px risk
+  ring; the gas station's three seeds set the look, the others were picked
+  from two. Each pick passed an art review before it was used. A test fails
+  if any location lacks its icon.
 
 ## 16. Tech and platform
 

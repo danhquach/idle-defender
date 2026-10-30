@@ -3,6 +3,7 @@
 // and bundled with the build. The page never fetches art from anywhere else.
 import type {
   EnemyKind,
+  LocationId,
   Profession,
   ShopItem,
   SkillId,
@@ -76,8 +77,26 @@ export const ART_IDS = [
   'dry-grass',
   'shack',
   'tent',
+  'world-map',
+  'map-gas-station',
+  'map-supermarket',
+  'map-electronics',
+  'map-hardware',
+  'map-pharmacy',
+  'map-construction',
+  'map-police',
+  'map-hospital',
+  'map-military',
+  'map-crater',
 ] as const;
 export type ArtId = (typeof ART_IDS)[number];
+
+/**
+ * Art the game doesn't wait for: the world map's region (ID-028) is the biggest file and
+ * only shows behind a button after Horde 2, so it loads in the background.
+ */
+export const LAZY_ART: readonly ArtId[] = ['world-map'];
+const PRELOAD = ART_IDS.filter((id) => !LAZY_ART.includes(id));
 
 /**
  * A sprite's longer side in px, or its group's (tools/art/build.py `SPRITE_PX`): a
@@ -118,6 +137,23 @@ export const SKILL_ART: Readonly<Record<SkillId, ArtId>> = {
   airstrike: 'airstrike',
   flashbang: 'flashbang',
   molotov: 'molotov',
+};
+
+/** The world map's region (ID-028), drawn under the routes and places. */
+export const MAP_PICTURE: ArtId = 'world-map';
+
+/** Each location's icon on the world map (ID-028), inside its risk ring. */
+export const MAP_ART: Readonly<Record<LocationId, ArtId>> = {
+  'gas-station': 'map-gas-station',
+  supermarket: 'map-supermarket',
+  electronics: 'map-electronics',
+  hardware: 'map-hardware',
+  pharmacy: 'map-pharmacy',
+  construction: 'map-construction',
+  police: 'map-police',
+  hospital: 'map-hospital',
+  military: 'map-military',
+  crater: 'map-crater',
 };
 
 /** Each horde cash shop item's icon on its button (design §15, ID-041). */
@@ -217,11 +253,12 @@ export type Art = Readonly<Record<ArtId, HTMLImageElement>>;
 /**
  * Loads every sprite; rejects naming the ones that failed or took longer than
  * `LOAD_TIMEOUT_MS`. Waits on the load event, not `decode()`, which some browsers
- * leave pending for a page loaded in the background.
+ * leave pending for a page loaded in the background. `LAZY_ART` starts loading but is
+ * never waited for, so it can neither hold up nor fail the start.
  */
 export async function loadArt(): Promise<Art> {
   const loaded = await Promise.allSettled(
-    ART_IDS.map(
+    PRELOAD.map(
       (id) =>
         new Promise<readonly [ArtId, HTMLImageElement]>((resolve, reject) => {
           const url = ART_URLS[id];
@@ -240,9 +277,15 @@ export async function loadArt(): Promise<Art> {
         }),
     ),
   );
-  const failed = ART_IDS.filter((_, i) => loaded[i]!.status === 'rejected');
+  const failed = PRELOAD.filter((_, i) => loaded[i]!.status === 'rejected');
   if (failed.length) throw new Error(`art failed to load: ${failed.join(', ')}`);
-  return Object.fromEntries(
-    loaded.map((r) => (r as PromiseFulfilledResult<readonly [ArtId, HTMLImageElement]>).value),
-  ) as Art;
+  const lazy = LAZY_ART.map((id) => {
+    const img = new Image();
+    img.src = ART_URLS[id] ?? '';
+    return [id, img] as const;
+  });
+  return Object.fromEntries([
+    ...loaded.map((r) => (r as PromiseFulfilledResult<readonly [ArtId, HTMLImageElement]>).value),
+    ...lazy,
+  ]) as Art;
 }

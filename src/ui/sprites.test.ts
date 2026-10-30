@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ENEMIES, PROFESSIONS, TIERS, TRAP_KINDS, WEAPONS } from '../core/data.ts';
+import { ENEMIES, LOCATION_IDS, PROFESSIONS, TIERS, TRAP_KINDS, WEAPONS } from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
 import {
   ART_IDS,
@@ -15,6 +15,9 @@ import {
   GUNNER_ART,
   LOAD_TIMEOUT_MS,
   loadArt,
+  LAZY_ART,
+  MAP_ART,
+  MAP_PICTURE,
   SHOP_ICON,
   SKILL_ART,
   SKILL_ICON,
@@ -104,7 +107,7 @@ describe('art coverage', () => {
     expect(Object.keys(ART_URLS).sort()).toEqual([...ART_IDS].sort());
   });
 
-  it('maps every enemy kind, profession, turret state, trap kind and wall tier to art', () => {
+  it('maps every enemy kind, profession, turret state, trap kind, wall tier and map location to art', () => {
     const states: TurretState[] = ['lit', 'dark', 'jammed', 'offline'];
     const used = [
       ...Object.keys(ENEMIES).map((k) => ENEMY_ART[k as keyof typeof ENEMY_ART]),
@@ -113,6 +116,8 @@ describe('art coverage', () => {
       ...Object.values(SKILL_ART),
       ...Object.values(SHOP_ICON),
       ...Object.values(SKILL_ICON),
+      ...LOCATION_IDS.map((l) => MAP_ART[l]),
+      MAP_PICTURE,
       ...states.map((s) => TURRET_ART[s]),
       ...TRAP_KINDS.flatMap((k) => [TRAP_ART[k].built, TRAP_ART[k].broken]),
       ...Object.keys(TIERS).flatMap((t) => Object.values(TIER_ART[t as keyof typeof TIER_ART])),
@@ -222,6 +227,17 @@ describe('loading the art', () => {
   it('loads every sprite by id', async () => {
     fakeImages(() => 'load');
     expect(Object.keys(await loadArt()).sort()).toEqual([...ART_IDS].sort());
+  });
+
+  it('never waits for, or fails on, the lazy art', async () => {
+    expect(LAZY_ART).toEqual(['world-map']);
+    fakeImages((url) => (url.includes('/world-map') ? 'error' : 'load'));
+    expect(Object.keys(await loadArt()).sort()).toEqual([...ART_IDS].sort());
+    vi.useFakeTimers();
+    fakeImages((url) => (url.includes('/world-map') ? 'hang' : 'load'));
+    const art = loadArt();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(art).resolves.toBeDefined();
   });
 
   it('rejects naming the sprites that failed', async () => {
