@@ -412,8 +412,9 @@ strikes stay instant.
 - **Spread:** each gun has a cone *(starting points: pistol ±2.5°,
   turret ±1°)*; a Gunner's is halved. The angle is rolled through the
   seeded RNG, so a run stays deterministic. Aim only adds crit chance.
-- **Pierce:** a piercing bullet goes through its first enemy and hits the
-  next one it crosses within 200 px, then stops.
+- **Pierce:** a bullet with pierce N goes through N enemies, each time
+  hitting the next one it crosses within 200 px, then stops (ID-046: the
+  sniper rifle has 1 by default; a pierce affix adds 1).
 - **As built (ID-044, starting points):** the crit is rolled at the
   trigger. About 1 bullet in 10 hits nobody, so the pistol was retuned
   from 6 to 6.2 damage and its cone set at ±2.5° (±2° left a tutorial
@@ -489,8 +490,8 @@ Each defender level gives **stat points** (3 per level, starting point):
   ×1.3 (2), Relic ×1.5 (3); a weapon whose kind fits fewer affixes gets fewer
   (a Relic blade has 2). Affixes, each at most once, rolled as whole numbers:
   +5–15% damage, +5–15% fire rate (any weapon), +20–50% magazine, −10–25%
-  reload, pierce (guns: the bullet goes through its first enemy, then hits
-  the next it crosses within 200 px; §6 Ballistics), +10–25% repair (tools). A horde win
+  reload, pierce (guns: the bullet goes through one more enemy, hitting the
+  next it crosses within 200 px; §6 Ballistics), +10–25% repair (tools). A horde win
   drops a weapon with chance 10% + 1% per horde number, capped at 30%: an
   even pick of base weapon, rarity Rusty 30 / Common 45 / Military 20 /
   Prototype 5 (Relic never from a horde). The result screen names it with one

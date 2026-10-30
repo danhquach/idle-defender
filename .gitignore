@@ -20,3 +20,7 @@ coverage/
 # OS / editor
 .DS_Store
 *.swp
+
+# Python bytecode (holds absolute paths)
+__pycache__/
+*.pyc

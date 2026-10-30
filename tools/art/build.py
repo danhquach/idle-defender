@@ -252,15 +252,27 @@ def check(
     if asset["kind"] not in ("sprite", "texture"):
         sys.exit(f"{name}: kind must be sprite or texture")
     if asset.get("style", asset["kind"]) not in styles:
-        sys.exit(f"{name}: no style {asset.get('style')} in the manifest")
+        sys.exit(f"{name}: no style {asset.get('style', asset['kind'])} in the manifest")
     if "part" in asset and (asset["part"] is not True or asset["kind"] != "sprite"):
         sys.exit(f"{name}: part is true, on a sprite")
     refs = asset.get("ref", [])
-    for ref in [refs] if isinstance(refs, str) else refs:
+    refs = [refs] if isinstance(refs, str) else refs
+    if "ref" in asset and (
+        not isinstance(refs, list)
+        or not refs
+        or not all(isinstance(r, str) for r in refs)
+        or len(set(refs)) != len(refs)
+        or name in refs
+    ):
+        sys.exit(f"{name}: ref is an asset id or a list of distinct ids, never its own")
+    for ref in refs:
         if ref not in ids:
             sys.exit(f"{name}: ref {ref} is not an asset")
-    if "photo" in asset and asset["photo"] not in CREDITS.read_text():
-        sys.exit(f"{name}: photo {asset['photo']} is not credited in art-credits.md")
+    photo = asset.get("photo")
+    if photo is not None and (
+        not isinstance(photo, str) or f"| {photo} |" not in CREDITS.read_text()
+    ):
+        sys.exit(f"{name}: photo {photo} is not a row of the art-credits.md table")
     for key in ("palette", "edge"):
         if key in asset and (asset["kind"] != "texture" or asset[key] not in textures):
             sys.exit(f"{name}: {key} must be a texture's, on a texture")
@@ -282,6 +294,9 @@ def main(only: list[str]) -> None:
     unknown = set(only) - ids
     if unknown:
         sys.exit(f"not in the manifest: {sorted(unknown)}")
+    parts = sorted({a["id"] for a in assets if a.get("part")} & set(only))
+    if parts:
+        print(f"parts are never written out, only used as references: {parts}")
     for jpg in [*GEN.glob("*.jpg"), *CONCEPTS.glob("*.jpg")]:
         strip_metadata(jpg)
     OUT.mkdir(parents=True, exist_ok=True)

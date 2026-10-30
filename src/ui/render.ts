@@ -407,7 +407,7 @@ function drawDefender(
   const profession = professionOf(d.loadout);
   const sprite =
     profession === 'gunner'
-      ? GUNNER_ART[baseOf(d.loadout.primary) as GunId]
+      ? (GUNNER_ART[baseOf(d.loadout.primary) as GunId] ?? DEFENDER_ART.gunner)
       : DEFENDER_ART[profession];
   drawStanding(ctx, art[sprite], feet, STAND.defender, cam);
   if (d.loadout.item === 'shield') {
