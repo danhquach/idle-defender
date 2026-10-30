@@ -3,6 +3,7 @@
 // and bundled with the build. The page never fetches art from anywhere else.
 import type {
   EnemyKind,
+  LocationId,
   Profession,
   ShopItem,
   SkillId,
@@ -76,6 +77,17 @@ export const ART_IDS = [
   'dry-grass',
   'shack',
   'tent',
+  'world-map',
+  'map-gas-station',
+  'map-supermarket',
+  'map-electronics',
+  'map-hardware',
+  'map-pharmacy',
+  'map-construction',
+  'map-police',
+  'map-hospital',
+  'map-military',
+  'map-crater',
 ] as const;
 export type ArtId = (typeof ART_IDS)[number];
 
@@ -118,6 +130,23 @@ export const SKILL_ART: Readonly<Record<SkillId, ArtId>> = {
   airstrike: 'airstrike',
   flashbang: 'flashbang',
   molotov: 'molotov',
+};
+
+/** The world map's region (ID-028), drawn under the routes and places. */
+export const MAP_PICTURE: ArtId = 'world-map';
+
+/** Each location's icon on the world map (ID-028), inside its risk ring. */
+export const MAP_ART: Readonly<Record<LocationId, ArtId>> = {
+  'gas-station': 'map-gas-station',
+  supermarket: 'map-supermarket',
+  electronics: 'map-electronics',
+  hardware: 'map-hardware',
+  pharmacy: 'map-pharmacy',
+  construction: 'map-construction',
+  police: 'map-police',
+  hospital: 'map-hospital',
+  military: 'map-military',
+  crater: 'map-crater',
 };
 
 /** Each horde cash shop item's icon on its button (design §15, ID-041). */

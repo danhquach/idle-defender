@@ -18,7 +18,7 @@ art-concepts/*.jpg in place, so none of it is committed.
 
 Manifest asset keys (unknown keys stop the build):
 
-  id*, kind* ("sprite" or "texture"), model*, seed*, size*, prompt*,
+  id*, kind* ("sprite", "texture" or "picture"), model*, seed*, size*, prompt*,
   ref (id of the generation it edits, or a list of ids it combines: the
   first is the subject, the others what it takes on, ID-046), photo (a public
   domain photograph the generation was drawn from, credited in
@@ -49,7 +49,10 @@ trimmed to its content and scaled so its longer side is SPRITE_PX; a group is
 scaled so its biggest member's longer side is SPRITE_PX. A texture is made to
 tile and scaled to TEXTURE_PX square; a variant family (a texture and those
 with it as `edge`) shares only a narrow border, so each variant keeps most of
-its own look.
+its own look. A picture (the world map's region, ID-028) is a whole opaque image:
+PICTURE_CROP of each side is cut off (the drawn paper frame the model adds), it is
+muted, darkened toward the page by PICTURE_DARKEN so the routes and risk rings drawn
+over it stand out, and scaled to PICTURE_PX wide.
 """
 
 import json
@@ -75,6 +78,11 @@ CONCEPTS = ROOT / "art-concepts"
 REQUIRED = {"id", "kind", "model", "seed", "size", "prompt"}
 SPRITE_PX = 192
 TEXTURE_PX = 256
+PICTURE_PX = 1152
+PICTURE_CROP = 0.05
+PICTURE_DARKEN = 0.22
+# The page background (src/page.css) a picture is darkened toward.
+PAGE = (21, 23, 26)
 # Ruins are muted (§15); only mutants keep their saturated colours.
 MUTED = 0.7
 # How magenta a pixel is: min(red, blue) - green. At or above KEY_OUT it is
@@ -274,6 +282,16 @@ def texture(
     return tile.resize((TEXTURE_PX, TEXTURE_PX), Image.Resampling.LANCZOS)
 
 
+def picture(img: Image.Image) -> Image.Image:
+    """The frame cut off, muted, darkened toward the page and scaled to PICTURE_PX wide."""
+    img = img.convert("RGB")
+    dx, dy = round(img.width * PICTURE_CROP), round(img.height * PICTURE_CROP)
+    img = img.crop((dx, dy, img.width - dx, img.height - dy))
+    img = ImageEnhance.Color(img).enhance(MUTED)
+    img = Image.blend(img, Image.new("RGB", img.size, PAGE), PICTURE_DARKEN)
+    return img.resize((PICTURE_PX, round(img.height * PICTURE_PX / img.width)), Image.Resampling.LANCZOS)
+
+
 def check_wraps(tile: Image.Image, name: str) -> None:
     """Stops the build if a texture's wrap is a bigger step than any line inside it."""
     a = np.asarray(tile).astype(np.float32)
@@ -329,8 +347,8 @@ def check(
         sys.exit(f"{name}: unknown keys {sorted(unknown)}, missing {sorted(missing)}")
     if asset["model"] not in models:
         sys.exit(f"{name}: model {asset['model']} is not in the art-credits allow-list")
-    if asset["kind"] not in ("sprite", "texture"):
-        sys.exit(f"{name}: kind must be sprite or texture")
+    if asset["kind"] not in ("sprite", "texture", "picture"):
+        sys.exit(f"{name}: kind must be sprite, texture or picture")
     if asset.get("style", asset["kind"]) not in styles:
         sys.exit(f"{name}: no style {asset.get('style', asset['kind'])} in the manifest")
     if "part" in asset and (asset["part"] is not True or asset["kind"] != "sprite"):
@@ -397,6 +415,9 @@ def main(only: list[str]) -> None:
         src = sources[asset["id"]]
         if asset["kind"] == "sprite":
             built[asset["id"]] = prepare(src, asset)
+            continue
+        if asset["kind"] == "picture":
+            built[asset["id"]] = picture(src)
             continue
         built[asset["id"]] = texture(
             src,

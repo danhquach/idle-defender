@@ -465,3 +465,177 @@ body {
 .hud-boss:not([hidden]) ~ .hud-warning {
   top: 84px;
 }
+
+/* The world map (ID-028): fills the screen left of the build panel. Places sit at
+   shares of its size; each one's ring takes its risk colour from the script. */
+/* Covers the field, so only the map and the panel show and no click reaches the field. */
+.worldmap-backdrop {
+  position: absolute;
+  inset: 0;
+  background: #15171a;
+}
+
+.worldmap-backdrop[hidden] {
+  display: none;
+}
+
+.worldmap {
+  position: absolute;
+  top: 48px;
+  left: 12px;
+  right: 304px;
+  bottom: 12px;
+  overflow: hidden;
+  border: 1px solid #4a4740;
+  border-radius: 8px;
+  background: #2a2925;
+}
+
+/* The region's art fills the map, cropped to its shape. */
+.worldmap-region {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.worldmap-routes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.worldmap-route {
+  stroke: #e0d9c8;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 1px #15171a);
+  stroke-dasharray: 6 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.worldmap-route.is-picked {
+  stroke: #fff8e6;
+  stroke-width: 3;
+}
+
+.worldmap-camp,
+.worldmap-spot,
+.worldmap-patrol {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.worldmap-camp {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #4d4a40;
+  font-weight: 600;
+}
+
+.worldmap-spot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.worldmap-spot:focus-visible,
+.worldmap-spot.is-picked {
+  outline: 2px solid #e0d9c8;
+}
+
+.worldmap-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--risk);
+  border-radius: 50%;
+  background: #4a473f;
+  box-shadow: 0 0 0 1px #15171a;
+  box-sizing: border-box;
+}
+
+.worldmap-icon-art {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.worldmap-name {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgb(21 23 26 / 75%);
+  white-space: nowrap;
+}
+
+.worldmap-risk {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgb(21 23 26 / 85%);
+  color: var(--risk);
+  font-weight: 600;
+}
+
+.worldmap-patrol {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #15171a;
+  border-radius: 50%;
+  background: #e0d9c8;
+  pointer-events: none;
+}
+
+/* What the dot is: where, who and the time left, beside it. */
+.worldmap-patrol-label {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgb(21 23 26 / 85%);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.worldmap-party {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #3a3733;
+  border-radius: 4px;
+}
+
+.worldmap-member {
+  font-size: 0.875rem;
+}
+
+.worldmap-member input {
+  margin-right: 6px;
+}
+
+.worldmap-report {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #3a3733;
+}
+
+.worldmap-report h4 {
+  margin: 0;
+}

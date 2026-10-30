@@ -1,7 +1,8 @@
 // Build mode panel between hordes: stock bar, the selected slot's menu (a turret's
 // included), Repair all, the Lab, power and the bank meter, and the start defender and
-// post; or, in its place, the roster or the perk loadout. Every option is a dry run of
-// the core action, so a refused one shows disabled with the core's own reason.
+// post; or, in its place, the roster, the perk loadout or the world map's panel. Every
+// option is a dry run of the core action, so a refused one shows disabled with the core's
+// own reason.
 // Text only via textContent.
 import {
   buildPost,
@@ -52,11 +53,13 @@ import {
   TRAPS,
   TURRET,
   TURRET_MOUNTS,
+  LOCATIONS,
   WALK_SPOTS,
+  type LocationId,
   type Stock,
 } from '../core/data.ts';
 import { available, type GameState } from '../core/game.ts';
-import { idle, patrolDue } from '../core/patrol.ts';
+import { idle, patrolDue, revealedLocations, sendPatrol } from '../core/patrol.ts';
 import { labCost, research, researched, upgradeLab, type GameResult } from '../core/research.ts';
 import { layoutOf, turretState, type TurretState } from '../core/horde.ts';
 import { buildGenerator, nextGasAt } from '../core/power.ts';
@@ -77,6 +80,18 @@ import {
 } from './hud.ts';
 import type { SlotHit } from './projection.ts';
 import { perkLines, type PerkLine } from './perks.ts';
+import {
+  locationLines,
+  mapContents,
+  mapRefusal,
+  partyRows,
+  patrolLine,
+  pickedParty,
+  ratedParty,
+  reportLines,
+  riskLines,
+  tickMap,
+} from './worldmap.ts';
 import { rosterSection } from './roster.ts';
 
 /** What the backup section says about a refused code. */
@@ -418,6 +433,9 @@ export function relocateTargets(
   return targets;
 }
 
+/** What may show in place of the build panel. */
+type View = 'roster' | 'perks' | 'map';
+
 export interface BuildPanel {
   /** Redraws the panel for `game` with `selected` open; call when either changes. */
   show(game: GameState, selected: SlotHit | null): void;
@@ -441,6 +459,9 @@ export function createBuildPanel(
   panel.hidden = true;
   root.append(bar, panel);
 
+  // The world map's location and party picks, kept across redraws and visits.
+  let mapLocation: LocationId | null = null;
+  const mapParty = new Set<string>();
   // Built once, so a pasted code survives the redraws.
   const backup = el('section', 'build-backup');
   const code = el('textarea', 'build-code');
@@ -460,7 +481,12 @@ export function createBuildPanel(
     const { game, message, clearPaste } = loadCode(paste.value, (q) => window.confirm(q));
     status.textContent = message;
     if (clearPaste) paste.value = '';
-    if (game) onLoad(game);
+    if (game) {
+      // Another camp: picks made on the world map belong to the old one.
+      mapLocation = null;
+      mapParty.clear();
+      onLoad(game);
+    }
   });
   backup.append(
     el('h3', 'build-slot-title', 'Backup code'),
@@ -475,11 +501,23 @@ export function createBuildPanel(
   let startKey: string | null = null;
   // The Relocate pick, kept by target key so a redraw (a Gas burnt) doesn't reset it.
   let relocateKey: string | null = null;
-  // The roster or the perk loadout shows in place of the build panel until "Back".
-  let open: 'build' | 'roster' | 'perks' = 'build';
+  // The roster, the perk loadout or the world map shows in place of the build panel until "Back".
+  let open: 'build' | View = 'build';
   let shown: { game: GameState; selected: SlotHit | null } | null = null;
   // The buttons that open each view, from the last redraw, for "Back" to focus.
-  const openers: Partial<Record<'roster' | 'perks', HTMLButtonElement>> = {};
+  const openers: Partial<Record<View, HTMLButtonElement>> = {};
+  // The map fills the screen beside the panel over a backdrop that keeps clicks off the
+  // field; its patrol timers tick every second.
+  const backdrop = el('div', 'worldmap-backdrop');
+  const map = el('div', 'worldmap');
+  backdrop.append(map);
+  backdrop.hidden = true;
+  root.prepend(backdrop);
+  let ticker: ReturnType<typeof setInterval> | null = null;
+  function stopTicker(): void {
+    if (ticker !== null) clearInterval(ticker);
+    ticker = null;
+  }
   // Build mode reads the clock for injuries; the core only ever gets it as `now`.
   const choice = (game: GameState) => pickStart(game, defenderId, startKey, Date.now());
 
@@ -715,21 +753,27 @@ export function createBuildPanel(
     const all = el('section', 'build-all');
     all.append(option(`Repair all`, repairAllCost(game.base), repairAll(game.base, game.stock)));
     const start = el('section', 'build-start-section');
-    const viewButton = (label: string, view: 'roster' | 'perks'): HTMLButtonElement => {
+    const viewButton = (label: string, view: View, refused: string | null = null): HTMLElement => {
       const button = el('button', 'build-option', label);
       button.type = 'button';
+      openers[view] = button;
+      if (refused !== null) {
+        button.disabled = true;
+        button.append(el('span', 'build-option-reason', refused));
+        return button;
+      }
       button.addEventListener('click', () => {
         open = view;
         api.show(game, selected);
         panel.querySelector<HTMLButtonElement>('button')?.focus();
       });
-      openers[view] = button;
       return button;
     };
     start.append(
       ...startSection(game),
       viewButton('Roster', 'roster'),
       viewButton('Perks', 'perks'),
+      viewButton('World map', 'map', mapRefusal(game)),
     );
     code.value = exportCode(encodeSave(game, Date.now()));
     return [
@@ -743,8 +787,8 @@ export function createBuildPanel(
     ];
   }
 
-  /** "Back" from the roster or the perk loadout to the build panel. */
-  function backButton(view: 'roster' | 'perks'): HTMLElement {
+  /** "Back" from the roster, the perk loadout or the world map to the build panel. */
+  function backButton(view: View): HTMLElement {
     const back = el('button', 'build-option', 'Back');
     back.type = 'button';
     back.addEventListener('click', () => {
@@ -779,6 +823,95 @@ export function createBuildPanel(
     return [el('h2', 'build-title', 'Perks'), backButton('perks'), section];
   }
 
+  /**
+   * The world map's panel: the picked location's facts, the party picker, the risk
+   * screen and Send; then the patrols out and the reports, newest first.
+   */
+  function mapView(game: GameState): HTMLElement[] {
+    const now = Date.now();
+    if (mapLocation !== null && !revealedLocations(game).includes(mapLocation)) mapLocation = null;
+    const where = el('section', 'build-slot');
+    if (mapLocation === null) {
+      where.append(el('p', 'build-slot-note', 'Pick a place on the map to send a patrol there.'));
+    } else {
+      const location = mapLocation;
+      const party = pickedParty(game, mapParty, now);
+      const ids = party.map((d) => d.id);
+      const picker = el('fieldset', 'worldmap-party');
+      picker.append(el('legend', 'build-slot-title', 'Who goes'));
+      for (const row of partyRows(game, now)) {
+        const box = el('input', '');
+        box.type = 'checkbox';
+        box.disabled = !row.free;
+        box.checked = row.free && mapParty.has(row.id);
+        box.addEventListener('change', () => {
+          if (box.checked) mapParty.add(row.id);
+          else mapParty.delete(row.id);
+          api.show(game, shown?.selected ?? null);
+        });
+        const label = el('label', 'worldmap-member');
+        label.append(box, document.createTextNode(row.label));
+        picker.append(label);
+      }
+      const risk = el('section', 'worldmap-risk-screen');
+      risk.setAttribute('aria-live', 'polite');
+      risk.append(...riskLines(party, location).map((t) => el('p', 'build-slot-note', t)));
+      const dry = sendPatrol(game, location, ids, 0, now);
+      where.append(
+        el('h3', 'build-slot-title', LOCATIONS[location].name),
+        ...locationLines(game, location).map((t) => el('p', 'build-slot-note', t)),
+        picker,
+        risk,
+        choiceButton('Send patrol', null, dry.ok ? null : dry.reason, () => {
+          // The send time is the patrol's seed: the only randomness from outside the core.
+          const at = Date.now();
+          const sent = sendPatrol(game, location, ids, at, at);
+          // Refused since the redraw (someone back injured): redraw to show why.
+          if (!sent.ok) return api.show(game, shown?.selected ?? null);
+          for (const id of ids) mapParty.delete(id);
+          onGame(sent.game);
+        }),
+      );
+    }
+    const out = el('section', 'build-slot');
+    out.append(el('h3', 'build-slot-title', 'Patrols out'));
+    if (game.patrols.length === 0) out.append(el('p', 'build-slot-note', 'None out.'));
+    for (const p of game.patrols) {
+      const line = el('p', 'build-slot-note', patrolLine(game, p, now));
+      line.dataset.patrol = String(p.no);
+      out.append(line);
+    }
+    const reports = el('section', 'build-slot');
+    reports.append(el('h3', 'build-slot-title', 'Patrol reports'));
+    if (game.reports.length === 0)
+      reports.append(el('p', 'build-slot-note', 'No patrol back yet.'));
+    for (const r of [...game.reports].reverse()) {
+      const { title, lines } = reportLines(r);
+      const item = el('article', 'worldmap-report');
+      item.append(
+        el('h4', 'build-slot-title', title),
+        ...lines.map((t) => el('p', 'build-slot-note', t)),
+      );
+      reports.append(item);
+    }
+    // Picking a place redraws the map: keep keyboard focus on the same place.
+    const active = document.activeElement;
+    const focusedSpot =
+      active instanceof HTMLElement && map.contains(active) ? active.dataset.location : undefined;
+    map.replaceChildren(
+      ...mapContents(game, ratedParty(game, mapParty, now), mapLocation, now, (location) => {
+        mapLocation = location;
+        api.show(game, shown?.selected ?? null);
+      }),
+    );
+    if (focusedSpot !== undefined) {
+      [...map.querySelectorAll<HTMLButtonElement>('button')]
+        .find((b) => b.dataset.location === focusedSpot)
+        ?.focus();
+    }
+    return [el('h2', 'build-title', 'World map'), backButton('map'), where, out, reports];
+  }
+
   const api: BuildPanel = {
     choice,
     show(game, selected) {
@@ -792,10 +925,11 @@ export function createBuildPanel(
       bar.textContent = stockBarText(game);
       // The redraw replaces every control: keep keyboard focus on the same place, or
       // the next control that can take it (the one used may now be disabled).
-      const controls = (): (HTMLButtonElement | HTMLSelectElement)[] => [
-        ...panel.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button, select'),
+      type Control = HTMLButtonElement | HTMLSelectElement | HTMLInputElement;
+      const controls = (): Control[] => [
+        ...panel.querySelectorAll<Control>('button, select, input[type="checkbox"]'),
       ];
-      const focused = controls().indexOf(document.activeElement as HTMLButtonElement);
+      const focused = controls().indexOf(document.activeElement as Control);
       // The backup section is the same node each time: its focus goes back where it was.
       const inBackup =
         document.activeElement instanceof HTMLElement && backup.contains(document.activeElement)
@@ -806,8 +940,16 @@ export function createBuildPanel(
           ? rosterView(game)
           : open === 'perks'
             ? perksView(game)
-            : buildView(game, selected)),
+            : open === 'map'
+              ? mapView(game)
+              : buildView(game, selected)),
       );
+      backdrop.hidden = open !== 'map';
+      if (open !== 'map') stopTicker();
+      else
+        ticker ??= setInterval(() => {
+          if (shown) tickMap(root, shown.game, Date.now());
+        }, 1000);
       if (inBackup) {
         inBackup.focus();
       } else if (focused >= 0) {
@@ -823,6 +965,8 @@ export function createBuildPanel(
       open = 'build';
       bar.hidden = true;
       panel.hidden = true;
+      backdrop.hidden = true;
+      stopTicker();
     },
     notice(text) {
       status.textContent = text;
