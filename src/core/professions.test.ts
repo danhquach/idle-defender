@@ -12,7 +12,7 @@ import {
   WALK_SPEED,
   WEAPONS,
   type Stock,
-  type WeaponId,
+  type FreeWeaponId,
 } from './data.ts';
 import {
   engineerBuff,
@@ -46,7 +46,7 @@ function baseWith(...extra: BasePost[]): Base {
 }
 
 /** `id` carrying what `weapon` gave before loadouts: a pistol, plus a knife or toolkit. */
-const spec = (id: string, weapon: WeaponId): DefenderSpec => ({
+const spec = (id: string, weapon: FreeWeaponId): DefenderSpec => ({
   id,
   name: id,
   loadout: loadoutFrom(weapon),
@@ -223,7 +223,7 @@ describe('Engineer (pistol + toolkit)', () => {
     enemy(s, { ...tough, x: 600, y: 360 });
     const after = tick(s, STEP);
     expect(shot(after)).toBe(true);
-    expect(after.bullets[0]!.pierce).toBe(false);
+    expect(after.bullets[0]!.pierce).toBe(0);
     expect(landed(after).enemies[0]!.hp).toBe(1000 - WEAPONS.pistol.damage);
     expect(after.defenders[0]!.nextShotAt).toBeCloseTo(WEAPONS.pistol.fireInterval);
   });

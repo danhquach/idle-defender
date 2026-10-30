@@ -39,10 +39,11 @@ export interface Tracer {
 }
 /**
  * A gun shoots within `range` (× the post's multiplier), `magazine` rounds between
- * reloads of `reload` s. Its bullets fly at `speed` px/s, each turned off the aim by up
- * to `spread` degrees either way (design §6 Ballistics), and look like `tracer`. A sidearm
- * goes in either slot and suits everyone; a specialised gun is primary only and suits
- * Gunners (design §6 Loadout).
+ * reloads of `reload` s. Each round is `pellets` bullets of `damage` each; they fly at
+ * `speed` px/s, each turned off the aim by up to `spread` degrees either way (design §6
+ * Ballistics), go through `pierce` enemies, and look like `tracer`. A sidearm goes in
+ * either slot and suits everyone; a specialised gun is primary only and suits Gunners
+ * (design §6 Loadout).
  */
 export interface Gun {
   readonly name: string;
@@ -54,6 +55,8 @@ export interface Gun {
   readonly reload: number;
   readonly speed: number;
   readonly spread: number;
+  readonly pellets: number;
+  readonly pierce: number;
   readonly tracer: Tracer;
 }
 /** A blade (secondary) strikes within `reach` of its holder's post; never from a tower. */
@@ -91,7 +94,79 @@ export const WEAPONS = {
     reload: 1.5,
     speed: 1800,
     spread: 2.5,
+    pellets: 1,
+    pierce: 0,
     tracer: { length: 12, colour: '#ffd36a' },
+  },
+  smg: {
+    name: 'SMG',
+    kind: 'gun',
+    damage: 5,
+    fireInterval: 0.2,
+    range: 400,
+    magazine: 30,
+    reload: 2,
+    speed: 1600,
+    spread: 5,
+    pellets: 1,
+    pierce: 0,
+    tracer: { length: 10, colour: '#ffd36a' },
+  },
+  rifle: {
+    name: 'Rifle',
+    kind: 'gun',
+    damage: 7,
+    fireInterval: 0.4,
+    range: 750,
+    magazine: 20,
+    reload: 2,
+    speed: 2200,
+    spread: 1.5,
+    pellets: 1,
+    pierce: 0,
+    tracer: { length: 16, colour: '#ffe08a' },
+  },
+  shotgun: {
+    name: 'Shotgun',
+    kind: 'gun',
+    damage: 4,
+    fireInterval: 0.75,
+    range: 350,
+    magazine: 8,
+    reload: 2.5,
+    speed: 1400,
+    spread: 12,
+    pellets: 6,
+    pierce: 0,
+    tracer: { length: 8, colour: '#ffc04a' },
+  },
+  lmg: {
+    name: 'LMG',
+    kind: 'gun',
+    damage: 6,
+    fireInterval: 0.22,
+    range: 500,
+    magazine: 60,
+    reload: 5,
+    speed: 2000,
+    spread: 4,
+    pellets: 1,
+    pierce: 0,
+    tracer: { length: 14, colour: '#ffb347' },
+  },
+  sniper: {
+    name: 'Sniper rifle',
+    kind: 'gun',
+    damage: 22,
+    fireInterval: 2,
+    range: 1100,
+    magazine: 5,
+    reload: 3.5,
+    speed: 3000,
+    spread: 0.5,
+    pellets: 1,
+    pierce: 1,
+    tracer: { length: 24, colour: '#fff3c4' },
   },
   knife: { name: 'Knife', kind: 'blade', damage: 10, fireInterval: 0.5, reach: 50 },
   toolkit: {
@@ -105,6 +180,9 @@ export const WEAPONS = {
   },
 } as const satisfies Record<string, Weapon>;
 export type WeaponId = keyof typeof WEAPONS;
+/** Free, unlimited Common weapons, held by id; every other weapon is an owned item (design §6 Gear). */
+export const FREE_WEAPONS = ['pistol', 'knife', 'toolkit'] as const satisfies readonly WeaponId[];
+export type FreeWeaponId = (typeof FREE_WEAPONS)[number];
 
 // --- Gear (M4): owned weapons of a rarity with rolled affixes; design §6 Gear. ---
 
@@ -166,7 +244,7 @@ export const WEAPON_DROP = {
 };
 /** Owned weapons the camp keeps, in the armoury and in hands together. */
 export const ARMOURY_CAP = 30;
-/** A piercing bullet goes through its first enemy and hits the next one it crosses within `reach` px. */
+/** A piercing bullet goes through an enemy and hits the next one it crosses within `reach` px. */
 export const PIERCE = { reach: 200 } as const;
 
 export type ItemId = 'shield';

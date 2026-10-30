@@ -42,7 +42,7 @@ function bullet(s: HordeState, b: Partial<Bullet>): Bullet {
     fromY: 360,
     aim: 400,
     left: 600,
-    pierce: false,
+    pierce: 0,
     hit: [],
     tracer: WEAPONS.pistol.tracer,
     ...b,
@@ -138,7 +138,7 @@ describe('bullets in flight', () => {
     const ids = [550, 600, 650].map(
       (x) => enemy(s, { hp: 100, maxHp: 100, x, y: 360, stunnedUntil: 9 }).id,
     );
-    bullet(s, { pierce: true });
+    bullet(s, { pierce: 1 });
     const after = landed(s);
     expect(ids.map((id) => hpOf(after, id))).toEqual([94, 94, 100]);
     // The first hit is at its body's edge (538); the next body starts 210 px on: out of reach.
@@ -151,7 +151,7 @@ describe('bullets in flight', () => {
       y: 360,
       stunnedUntil: 9,
     }).id;
-    bullet(far, { pierce: true });
+    bullet(far, { pierce: 1 });
     const done = landed(far);
     expect([hpOf(done, first), hpOf(done, beyond)]).toEqual([94, 100]);
   });
@@ -290,7 +290,7 @@ describe('shots and impacts', () => {
     const p = holding();
     enemy(p, { hp: 100, maxHp: 100, x: 500, y: 360, stunnedUntil: 9 });
     enemy(p, { hp: 100, maxHp: 100, x: 600, y: 360, stunnedUntil: 9 });
-    bullet(p, { pierce: true });
+    bullet(p, { pierce: 1 });
     expect(landed(p).impacts.map((i) => [i.x, i.hit])).toEqual([
       [500 - ENEMY_RADIUS, true],
       [600 - ENEMY_RADIUS, true],

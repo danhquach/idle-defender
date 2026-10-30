@@ -1,7 +1,7 @@
 // Design §6: defender levels, stat points and titles, and what they do in a fight.
 import { describe, expect, it } from 'vitest';
 import { buildPost, newBase, type Base, type BasePost } from './base.ts';
-import { STEP, WEAPONS, type Stats, type Stock, type WeaponId } from './data.ts';
+import { STEP, WEAPONS, type Stats, type Stock, type FreeWeaponId } from './data.ts';
 import { hordeXp } from './game.ts';
 import { newHorde, specOf, standing, tick, type DefenderSpec, type HordeState } from './horde.ts';
 import {
@@ -29,7 +29,7 @@ import { loadoutFrom } from './loadout.ts';
 
 const stats = (s: Partial<Stats>): Stats => ({ ...NO_STATS, ...s });
 /** Bob carrying what `weapon` alone gave before loadouts: a pistol, plus a knife or toolkit. */
-const spec = (weapon: WeaponId, s: Partial<Stats> = {}): DefenderSpec => ({
+const spec = (weapon: FreeWeaponId, s: Partial<Stats> = {}): DefenderSpec => ({
   id: 'd',
   name: 'Bob',
   loadout: loadoutFrom(weapon),

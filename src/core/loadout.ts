@@ -4,12 +4,12 @@ import { baseOf, statsOf, type Held } from './armoury.ts';
 import {
   WEAPONS,
   type Blade,
+  type FreeWeaponId,
   type Gun,
   type ItemId,
   type Profession,
   type Tool,
   type Weapon,
-  type WeaponId,
 } from './data.ts';
 
 export interface Loadout {
@@ -20,10 +20,7 @@ export interface Loadout {
   item: ItemId | null;
 }
 
-/**
- * The numbers weapon `h` fights with (rarity and affixes applied), as any weapon, so a
- * kind no shipped weapon has yet (a specialised gun) still type-checks.
- */
+/** The numbers weapon `h` fights with (rarity and affixes applied), as any weapon. */
 export const weaponOf = (h: Held): Weapon => statsOf(h);
 /** The kind of weapon `h` is, without working out its numbers. */
 const kindOf = (h: Held): Weapon['kind'] => (WEAPONS[baseOf(h)] as Weapon).kind;
@@ -52,8 +49,8 @@ export function loadoutError(l: Loadout): string | null {
   return null;
 }
 
-/** The loadout a single pre-loadout weapon (before 0.4.4) becomes: a gun, plus the old weapon if it isn't one. */
-export function loadoutFrom(weapon: WeaponId): Loadout {
+/** The loadout a single pre-loadout weapon (before 0.4.4, always a free one) becomes: a gun, plus the old weapon if it isn't one. */
+export function loadoutFrom(weapon: FreeWeaponId): Loadout {
   return isGun(weapon)
     ? { primary: weapon, secondary: null, item: null }
     : { primary: 'pistol', secondary: weapon, item: null };

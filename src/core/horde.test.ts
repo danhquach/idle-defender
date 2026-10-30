@@ -393,7 +393,7 @@ describe('combat', () => {
       fromY: 120,
       aim: 100,
       left: 500,
-      pierce: false,
+      pierce: 0,
       hit: [],
       tracer: WEAPONS.pistol.tracer,
     });

@@ -44,8 +44,10 @@ import {
   TRAP_DURABILITY,
   TRAP_KINDS,
   TURRET_MOUNTS,
+  FREE_WEAPONS,
   WALK_SPOTS,
   WEAPONS,
+  type FreeWeaponId,
   type ItemId,
   type ResearchId,
   type Stats,
@@ -84,6 +86,8 @@ const NAME = /^[A-Za-z][A-Za-z' -]{0,23}$/;
 /** An owned weapon's uid: `h` and the horde number that dropped it. */
 const UID = /^h[1-9][0-9]{0,5}$/;
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
+/** Only a free weapon is held by id; any other is an owned item with a uid. */
+const FREE_IDS: readonly FreeWeaponId[] = FREE_WEAPONS;
 const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
 
 /** The parts of `Storage` the save uses, so tests can pass a plain object. */
@@ -448,7 +452,7 @@ function readLoadout(v: unknown, hordeNumber: number): Loadout {
 
 /** A free weapon by id, or an owned one. */
 function readHeld(v: unknown, hordeNumber: number): Held {
-  return typeof v === 'string' ? oneOf(v, WEAPON_IDS) : readOwned(v, hordeNumber);
+  return typeof v === 'string' ? oneOf(v, FREE_IDS) : readOwned(v, hordeNumber);
 }
 
 /**
@@ -499,7 +503,7 @@ function readDefender(
     id: text(o.id, 32, ID),
     name: text(o.name, 24, NAME),
     loadout: old.loadout
-      ? loadoutFrom(oneOf(o.weapon, WEAPON_IDS))
+      ? loadoutFrom(oneOf(o.weapon, FREE_IDS))
       : readLoadout(o.loadout, hordeNumber),
     xp,
     stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp),

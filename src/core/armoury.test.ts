@@ -246,8 +246,11 @@ describe('rolling a weapon', () => {
     ] as const) {
       expect(Math.abs(counts[r] / drops - want)).toBeLessThan(0.025);
     }
-    for (const id of Object.keys(WEAPONS)) {
-      expect(Math.abs(bases[id]! / drops - 1 / 3)).toBeLessThan(0.03);
+    // Even across every base weapon, the five specialised guns included (σ ≈ 0.006).
+    const ids = Object.keys(WEAPONS);
+    expect(ids).toHaveLength(8);
+    for (const id of ids) {
+      expect(Math.abs(bases[id]! / drops - 1 / ids.length), id).toBeLessThan(0.02);
     }
   });
 });
