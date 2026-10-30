@@ -7,6 +7,7 @@ import {
   MAX_COUNT,
   PATROL,
   RARITY_ORDER,
+  RECOVERY_MS,
   WEAPONS,
   type LocationId,
 } from './data.ts';
@@ -15,13 +16,17 @@ import {
   bonusRolls,
   hasGate,
   idle,
+  locationDanger,
   memberStrength,
   partyStrength,
   patrolDue,
   patrolLoot,
+  patrolOutcome,
+  patrolRisk,
   patrolXp,
   patrolsUnlocked,
   revealedLocations,
+  riskOf,
   sendPatrol,
   settlePatrols,
   tripMinutes,
@@ -36,6 +41,20 @@ const ready = (patch: Partial<GameState> = {}): GameState => ({
   ...newGame(),
   hordeNumber: PATROL.unlock,
   ...patch,
+});
+
+/** `game` with `ids` given enough Grit to rate Safe anywhere, so loot tests lose no one. */
+const tough = (game: GameState, ...ids: string[]): GameState => ({
+  ...game,
+  roster: game.roster.map((d) =>
+    ids.includes(d.id) ? { ...d, stats: { ...d.stats, grit: 40 } } : d,
+  ),
+});
+
+/** `game` with a fourth defender, Dan, so three can be out with one left at the camp. */
+const withDan = (game: GameState): GameState => ({
+  ...game,
+  roster: [...game.roster, { ...game.roster[0]!, id: 'dan', name: 'Dan' }],
 });
 
 function sent(game: GameState, location: LocationId, ids: string[], seed = 1, now = NOW) {
@@ -115,7 +134,7 @@ describe('sending a patrol', () => {
   });
 
   it('records the party, time, horde, strength and seed, and numbers each patrol', () => {
-    const g = sent(ready(), 'gas-station', ['bob', 'jack'], 42);
+    const g = sent(withDan(ready()), 'gas-station', ['bob', 'jack'], 42);
     expect(g.patrols).toEqual([
       {
         no: 1,
@@ -132,10 +151,21 @@ describe('sending a patrol', () => {
   });
 
   it('has no limit on parties at once', () => {
-    let g = ready();
+    let g = withDan(ready());
     for (const id of ['bob', 'jack', 'john']) g = sent(g, 'gas-station', [id]);
     expect(g.patrols).toHaveLength(3);
-    expect(g.roster.every((d) => !idle(g, d, NOW))).toBe(true);
+    expect(g.roster.filter((d) => idle(g, d, NOW)).map((d) => d.id)).toEqual(['dan']);
+  });
+
+  it('keeps one defender at the camp, so a wipe never empties it (ID-027)', () => {
+    const keep = { ok: false, reason: 'Keep one defender at the camp' };
+    expect(sendPatrol(ready(), 'gas-station', ['bob', 'jack', 'john'], 1, NOW)).toEqual(keep);
+    const two = sent(ready(), 'gas-station', ['bob', 'jack']);
+    expect(sendPatrol(two, 'supermarket', ['john'], 1, NOW)).toEqual(keep);
+    // An injured defender at home is still at the camp: the fit ones may all go.
+    const hurt = ready();
+    hurt.roster[2] = { ...hurt.roster[2]!, injuredUntil: NOW + MIN };
+    expect(sendPatrol(hurt, 'gas-station', ['bob', 'jack'], 1, NOW).ok).toBe(true);
   });
 
   it('refuses a hidden location, no standing gate, an injured member or one already out', () => {
@@ -201,7 +231,7 @@ describe('patrol timer and offline progress', () => {
   });
 
   it('settles only patrols that are due, and returns the same game when none is', () => {
-    let g = sent(ready(), 'gas-station', ['bob']);
+    let g = sent(tough(ready(), 'bob', 'jack'), 'gas-station', ['bob'], 2);
     g = sent(g, 'electronics', ['jack']);
     expect(settlePatrols(g, NOW + 15 * MIN - 1)).toBe(g);
     const half = settlePatrols(g, NOW + 15 * MIN);
@@ -214,7 +244,7 @@ describe('patrol timer and offline progress', () => {
   });
 
   it('gives the same result however late it is settled (the game was closed)', () => {
-    const g = sent(ready(), 'electronics', ['bob', 'jack'], 7);
+    const g = sent(withDan(ready()), 'electronics', ['bob', 'jack'], 7);
     const due = NOW + 45 * MIN;
     const soon = settlePatrols(g, due);
     const days = settlePatrols(g, due + 3 * 24 * 60 * MIN);
@@ -244,7 +274,7 @@ describe('patrol timer and offline progress', () => {
 
 describe('loot', () => {
   it('lands in the camp and in the report: materials, Gas, batteries and weapons', () => {
-    const g = sent(ready(), 'gas-station', ['bob', 'jack', 'john'], 3);
+    const g = sent(tough(ready(), 'bob', 'jack'), 'gas-station', ['bob', 'jack'], 3);
     const haul = patrolLoot(g.patrols[0]!);
     const back = settlePatrols(g, NOW + 15 * MIN);
     const r = back.reports[0]!;
@@ -252,7 +282,7 @@ describe('loot', () => {
     expect(back.power.gas).toBe(g.power.gas + haul.gas);
     expect(r.gas).toBe(haul.gas);
     expect(r.batteries).toEqual(haul.batteries);
-    expect(r.names).toEqual(['Bob', 'Jack', 'John']);
+    expect(r.names).toEqual(['Bob', 'Jack']);
     expect(r.returnedAt).toBe(NOW + 15 * MIN);
   });
 
@@ -353,7 +383,7 @@ describe('loot', () => {
 
   it('keeps found weapons as `p<no>-<k>`, and salvages them for Scrap with a full armoury', () => {
     // The police station waits for research; place the patrol there by hand.
-    const g = ready({ patrols: [patrolAt('police', { seed: 5 })], patrolsSent: 1 });
+    const g = ready({ patrols: [patrolAt('police', { seed: 5, strength: 30 })], patrolsSent: 1 });
     const haul = patrolLoot(g.patrols[0]!);
     expect(haul.weapons.length).toBeGreaterThan(0);
     const back = settlePatrols(g, NOW + 120 * MIN);
@@ -382,12 +412,14 @@ describe('loot', () => {
   });
 
   it('keeps the latest reports only', () => {
-    let g = ready();
+    let g = tough(ready(), 'bob');
     for (let i = 0; i < PATROL.reports + 3; i++) {
       g = settlePatrols(
         sent(g, 'gas-station', ['bob'], i, NOW + i * 15 * MIN),
         NOW + (i + 1) * 15 * MIN,
       );
+      // A Safe trip may still hurt him; he is rested for the next one.
+      g = { ...g, roster: g.roster.map((d) => ({ ...d, injuredUntil: null })) };
     }
     expect(g.reports).toHaveLength(PATROL.reports);
     expect(g.reports.at(-1)!.no).toBe(PATROL.reports + 3);
@@ -408,5 +440,239 @@ describe('patrol XP', () => {
     const xp = patrolXp('electronics', PATROL.unlock);
     expect(back.roster.map((d) => d.xp)).toEqual([xp, xp, 0]);
     expect(back.reports[0]!.xp).toBe(xp);
+  });
+});
+
+/** The first seed from 1 whose outcome for `p` passes `test`. */
+function seedWhere(p: Patrol, test: (o: ReturnType<typeof patrolOutcome>) => boolean): number {
+  for (let seed = 1; seed < 10_000; seed++) if (test(patrolOutcome({ ...p, seed }))) return seed;
+  throw new Error('no such seed');
+}
+
+/** Bob carrying two owned weapons: a gun and a blade. */
+const GUN = { uid: 'h1', base: 'pistol' as const, rarity: 'rusty' as const, affixes: [] };
+const BLADE = { uid: 'h2', base: 'knife' as const, rarity: 'rusty' as const, affixes: [] };
+const armed = (game: GameState): GameState => ({
+  ...game,
+  roster: game.roster.map((d) =>
+    d.id === 'bob' ? { ...d, loadout: { primary: GUN, secondary: BLADE, item: null } } : d,
+  ),
+});
+
+describe('patrol risk (ID-027)', () => {
+  it("rates party strength against the location's danger, 6 per tier", () => {
+    expect(LOCATION_IDS.map(locationDanger)).toEqual(
+      LOCATION_IDS.map((id) => 6 * LOCATIONS[id].tier),
+    );
+    const at = (strength: number) => riskOf(strength, 'gas-station').rating;
+    expect([6, 5.99, 3.6, 3.59, 1.8, 1.79, 0].map(at)).toEqual([
+      'safe',
+      'risky',
+      'risky',
+      'dangerous',
+      'dangerous',
+      'deadly',
+      'deadly',
+    ]);
+    expect(riskOf(1e9, 'crater')).toEqual({ rating: 'safe', injured: 0.05, dead: 0, wipe: 0 });
+    expect(riskOf(0, 'crater')).toEqual({ rating: 'deadly', injured: 0.4, dead: 0.2, wipe: 0.2 });
+  });
+
+  it('shows a party its risk before it leaves', () => {
+    const g = ready();
+    const party = g.roster.slice(0, 2);
+    expect(patrolRisk(party, 'electronics')).toEqual(riskOf(partyStrength(party), 'electronics'));
+    // A starting pair rates Risky at the gas station and Dangerous at the hardware store.
+    expect(patrolRisk(party, 'gas-station').rating).toBe('risky');
+    expect(patrolRisk(party, 'hardware').rating).toBe('dangerous');
+  });
+
+  it('rolls casualties at the odds of each rating', () => {
+    const N = 4000;
+    for (const r of PATROL.risk) {
+      const strength = r.from * locationDanger('hardware');
+      const party = ['a', 'b', 'c'];
+      let wipes = 0;
+      let dead = 0;
+      let injured = 0;
+      let rolled = 0;
+      for (let seed = 0; seed < N; seed++) {
+        const o = patrolOutcome(patrolAt('hardware', { members: party, strength, seed }));
+        if (o.wiped && o.dead.length === party.length && o.injured.length === 0) wipes++;
+        if (o.injured.some((id) => o.dead.includes(id))) throw new Error('injured and dead');
+        dead += o.dead.length;
+        injured += o.injured.length;
+        rolled += o.wiped ? 0 : party.length;
+      }
+      // A wipe is rolled first; one by one, all three dying counts as one too.
+      expect(wipes / N, r.rating).toBeGreaterThanOrEqual(r.wipe - 0.02);
+      expect(wipes / N, r.rating).toBeLessThanOrEqual(r.wipe + r.dead ** 3 + 0.02);
+      const lost = dead - wipes * party.length;
+      expect(lost / rolled, r.rating).toBeCloseTo(r.dead * (1 - r.dead ** 2), 1);
+      expect(injured / rolled, r.rating).toBeCloseTo((1 - r.dead) * r.injured, 1);
+    }
+  });
+
+  it('never kills anyone on a Safe trip', () => {
+    for (let seed = 0; seed < 2000; seed++) {
+      const o = patrolOutcome(patrolAt('crater', { members: ['a', 'b'], strength: 999, seed }));
+      expect(o.dead).toEqual([]);
+      expect(o.wiped).toBe(false);
+    }
+  });
+
+  it('rolls casualties on their own stream: the survivors bring the loot of ID-026', () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1 });
+    const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 1);
+    const back = settlePatrols(
+      ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }),
+      NOW + 60 * MIN,
+    );
+    const haul = patrolLoot({ ...p, seed });
+    expect(back.reports[0]!.stock).toEqual(haul.stock);
+    expect(back.reports[0]!.weapons.map(({ base, rarity }) => ({ base, rarity }))).toEqual(
+      haul.weapons,
+    );
+    expect(patrolOutcome({ ...p, seed })).toEqual(patrolOutcome({ ...p, seed }));
+  });
+
+  it('sends the injured home to rest from the return, with their XP', () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1 });
+    const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 0 && o.injured.length > 0);
+    const g = ready({ patrols: [{ ...p, seed }], patrolsSent: 1 });
+    const back = settlePatrols(g, NOW + 9 * 60 * MIN);
+    const o = patrolOutcome({ ...p, seed });
+    const due = patrolDue(p);
+    for (const d of back.roster.filter((x) => o.injured.includes(x.id))) {
+      expect(d.injuredUntil).toBe(due + RECOVERY_MS);
+      expect(d.xp).toBe(patrolXp('electronics', PATROL.unlock));
+      expect(sendPatrol(back, 'gas-station', [d.id], 1, due + RECOVERY_MS - 1)).toEqual({
+        ok: false,
+        reason: `${d.name} is injured`,
+      });
+    }
+    expect(back.reports[0]!.injured).toEqual(
+      g.roster.filter((d) => o.injured.includes(d.id)).map((d) => d.name),
+    );
+    expect(back.reports[0]!.dead).toEqual([]);
+  });
+
+  it('loses the dead for good and leaves their owned weapons where they fell', () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1 });
+    const seed = seedWhere(
+      p,
+      (o) => !o.wiped && o.dead.includes('bob') && !o.dead.includes('jack'),
+    );
+    const g = armed(ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }));
+    const back = settlePatrols(g, NOW + 60 * MIN);
+    expect(back.roster.map((d) => d.id)).toEqual(['jack', 'john']);
+    expect(back.leftBehind).toEqual([
+      { location: 'electronics', weapon: GUN },
+      { location: 'electronics', weapon: BLADE },
+    ]);
+    expect(back.armoury).not.toContainEqual(GUN);
+    const r = back.reports[0]!;
+    expect(r).toMatchObject({ names: ['Bob', 'Jack'], dead: ['Bob'], wiped: false, recovered: [] });
+    // The survivor still brings the loot home.
+    expect(r.xp).toBe(patrolXp('electronics', PATROL.unlock));
+    // A free weapon is just gone.
+    const plain = settlePatrols(
+      ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }),
+      NOW + 60 * MIN,
+    );
+    expect(plain.leftBehind).toEqual([]);
+  });
+
+  it('brings home what the dead left with the next party there, and nothing from elsewhere', () => {
+    const left = [
+      { location: 'electronics' as const, weapon: GUN },
+      { location: 'gas-station' as const, weapon: BLADE },
+    ];
+    const p = patrolAt('electronics', { members: ['jack'], strength: 999 });
+    const g = ready({ patrols: [p], patrolsSent: 1, leftBehind: left });
+    const back = settlePatrols(g, NOW + 60 * MIN);
+    expect(back.armoury[0]).toEqual(GUN);
+    expect(back.reports[0]!.recovered).toEqual([{ base: 'pistol', rarity: 'rusty', kept: true }]);
+    expect(back.leftBehind).toEqual([left[1]]);
+    // With a full armoury it is salvaged for Scrap, as a found weapon is.
+    const full = ready({
+      patrols: [p],
+      patrolsSent: 1,
+      leftBehind: left,
+      armoury: Array.from({ length: ARMOURY_CAP }, (_, i) => ({ ...GUN, uid: `h${i + 10}` })),
+    });
+    const salvaged = settlePatrols(full, NOW + 60 * MIN);
+    expect(salvaged.reports[0]!.recovered).toEqual([
+      { base: 'pistol', rarity: 'rusty', kept: false },
+    ]);
+    expect(salvaged.leftBehind).toEqual([left[1]]);
+    expect(salvaged.stock.scrap).toBeGreaterThan(back.stock.scrap);
+  });
+
+  it("doesn't carry home its own dead's weapons on the same trip", () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1 });
+    const seed = seedWhere(
+      p,
+      (o) => !o.wiped && o.dead.includes('bob') && !o.dead.includes('jack'),
+    );
+    const back = settlePatrols(
+      armed(ready({ patrols: [{ ...p, seed }], patrolsSent: 1 })),
+      NOW + 60 * MIN,
+    );
+    expect(back.reports[0]!.recovered).toEqual([]);
+    expect(back.leftBehind).toHaveLength(2);
+  });
+
+  it('brings back nothing from a wipe and leaves every weapon there', () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 0 });
+    const seed = seedWhere(p, (o) => o.wiped);
+    const left = { location: 'electronics' as const, weapon: { ...GUN, uid: 'h9' } };
+    const g = armed(ready({ patrols: [{ ...p, seed }], patrolsSent: 1, leftBehind: [left] }));
+    const back = settlePatrols(g, NOW + 60 * MIN);
+    expect(back.roster.map((d) => d.id)).toEqual(['john']);
+    expect(back.stock).toEqual(g.stock);
+    expect(back.power.gas).toBe(g.power.gas);
+    expect(back.armoury).toEqual([]);
+    expect(back.leftBehind.map((l) => l.weapon.uid)).toEqual(['h9', 'h1', 'h2']);
+    expect(back.reports[0]).toMatchObject({
+      names: ['Bob', 'Jack'],
+      dead: ['Bob', 'Jack'],
+      injured: [],
+      wiped: true,
+      weapons: [],
+      recovered: [],
+      xp: 0,
+    });
+  });
+
+  it('keeps at most PATROL.left weapons waiting on the map, the latest', () => {
+    const many = Array.from({ length: PATROL.left }, (_, i) => ({
+      location: 'gas-station' as const,
+      weapon: { ...GUN, uid: `h${i + 10}` },
+    }));
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 0 });
+    const seed = seedWhere(p, (o) => o.wiped);
+    const g = armed(ready({ patrols: [{ ...p, seed }], patrolsSent: 1, leftBehind: many }));
+    const back = settlePatrols(g, NOW + 60 * MIN);
+    expect(back.leftBehind).toHaveLength(PATROL.left);
+    expect(back.leftBehind.at(-1)!.weapon).toEqual(BLADE);
+    expect(back.leftBehind[0]!.weapon.uid).toBe('h12');
+  });
+
+  it('spares one member when a wipe would leave nobody alive (a save from before ID-027)', () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack', 'john'], strength: 0 });
+    const seed = seedWhere(p, (o) => o.wiped);
+    const back = settlePatrols(
+      ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }),
+      NOW + 60 * MIN,
+    );
+    expect(back.roster.map((d) => d.id)).toEqual(['bob']);
+    expect(back.roster[0]!.injuredUntil).toBe(patrolDue(p) + RECOVERY_MS);
+    expect(back.reports[0]).toMatchObject({
+      dead: ['Jack', 'John'],
+      injured: ['Bob'],
+      wiped: false,
+    });
+    expect(back.reports[0]!.xp).toBe(patrolXp('electronics', PATROL.unlock));
   });
 });

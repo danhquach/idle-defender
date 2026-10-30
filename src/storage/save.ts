@@ -68,6 +68,7 @@ import {
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
   partyStrength,
+  type LeftWeapon,
   type Patrol,
   type PatrolReport,
   type ReportWeapon,
@@ -82,11 +83,14 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
- * 5 since patrols (ID-026); a v4 save has the same shape less its patrols and reports (none
+ * 6 since patrol risk (ID-027): a v5 save has no weapons left on the map, and its reports
+ * name no casualties.
+ *
+ * 5 since patrols (ID-026): a v4 save has the same shape less its patrols and reports (none
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -194,10 +198,10 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (o.v !== SAVE_VERSION && o.v !== 4 && o.v !== 3 && o.v !== 2 && o.v !== 1) fail('version');
+  if (![SAVE_VERSION, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
-  const materials = o.v === SAVE_VERSION || o.v === 4 ? MATERIALS : BUILDING_MATERIALS;
-  const patrols = o.v === SAVE_VERSION;
+  const materials = o.v === SAVE_VERSION || o.v === 5 || o.v === 4 ? MATERIALS : BUILDING_MATERIALS;
+  const patrols = o.v === SAVE_VERSION ? 'risk' : o.v === 5 ? 'patrols' : null;
   if (o.v === 1) {
     return { game: readGame(o.game, savedAt, V1_GRID, materials, patrols), savedAt, grew: true };
   }
@@ -209,7 +213,8 @@ function readGame(
   savedAt: number,
   grid: Grid,
   materials: readonly Material[],
-  patrols: boolean,
+  /** What the save's patrols carry: none (v4 and older), no risk yet (v5), or all of it. */
+  patrols: 'patrols' | 'risk' | null,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -234,6 +239,7 @@ function readGame(
     ...(old.power ? [] : ['power']),
     ...(old.perks ? [] : ['perks']),
     ...(patrols ? ['patrols', 'patrolsSent', 'reports'] : []),
+    ...(patrols === 'risk' ? ['leftBehind'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -257,18 +263,21 @@ function readGame(
     perks: old.perks ? [START_PERK] : readPerks(o.perks, research),
     patrols: out,
     patrolsSent,
-    reports: patrols ? readReports(o.reports, savedAt, patrolsSent, out) : [],
+    reports: patrols ? readReports(o.reports, savedAt, patrolsSent, out, patrols === 'risk') : [],
+    leftBehind: patrols === 'risk' ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent) : [],
   };
-  // Each owned weapon is one item, in the armoury or in one pair of hands, and the camp keeps at most ARMOURY_CAP.
+  // Each owned weapon is one item, in the armoury, in one pair of hands or left on the
+  // map, and the camp keeps at most ARMOURY_CAP.
   const owned = [
     ...game.armoury,
     ...game.roster.flatMap((d) => [d.loadout.primary, d.loadout.secondary]),
   ].filter((h): h is OwnedWeapon => typeof h === 'object' && h !== null);
   if (owned.length > ARMOURY_CAP) fail('too many weapons');
-  if (new Set(owned.map((w) => w.uid)).size !== owned.length) fail('weapon twice');
+  const every = [...owned, ...game.leftBehind.map((l) => l.weapon)];
+  if (new Set(every.map((w) => w.uid)).size !== every.length) fail('weapon twice');
   // A patrol's weapons reach the camp when it comes back, not before.
   const away = new Set(out.map((p) => p.no));
-  if (owned.some((w) => w.uid.startsWith('p') && away.has(Number(w.uid.slice(1).split('-')[0])))) {
+  if (every.some((w) => w.uid.startsWith('p') && away.has(Number(w.uid.slice(1).split('-')[0])))) {
     fail('weapon from a patrol still out');
   }
   // Loading a save is between hordes: batteries waiting in storage go into the bank.
@@ -634,12 +643,42 @@ function readPatrols(
   return patrols;
 }
 
-/** Patrol reports: at most `PATROL.reports`, each from a patrol sent and back, oldest first. */
+/**
+ * Weapons the dead left on the map (design §10): at most `PATROL.left`, each an owned
+ * weapon at a location that has been on the map.
+ */
+function readLeftBehind(v: unknown, hordeNumber: number, patrolsSent: number): LeftWeapon[] {
+  return arr(v, 0, PATROL.left).map((x): LeftWeapon => {
+    const o = obj(x, ['location', 'weapon']);
+    const location = oneOf(o.location, LOCATION_IDS);
+    const reveal = LOCATIONS[location].reveal;
+    if (reveal === null || reveal > hordeNumber) fail('location not on the map');
+    return { location, weapon: readOwned(o.weapon, hordeNumber, patrolsSent) };
+  });
+}
+
+function readReportWeapon(w: unknown): ReportWeapon {
+  const x = obj(w, ['base', 'rarity', 'kept']);
+  if (typeof x.kept !== 'boolean') fail('kept');
+  return {
+    base: oneOf(x.base, WEAPON_IDS),
+    rarity: oneOf(x.rarity, RARITY_ORDER),
+    kept: x.kept,
+  };
+}
+
+/**
+ * Patrol reports: at most `PATROL.reports`, each from a patrol sent and back, oldest
+ * first. The injured and dead are members named in it, never both; a wiped-out party
+ * lost every member and brought back nothing. A v5 report (`risk` false) has no
+ * casualties.
+ */
 function readReports(
   v: unknown,
   savedAt: number,
   patrolsSent: number,
   out: readonly Patrol[],
+  risk: boolean,
 ): PatrolReport[] {
   const reports = arr(v, 0, PATROL.reports).map((x): PatrolReport => {
     const o = obj(x, [
@@ -652,31 +691,52 @@ function readReports(
       'batteries',
       'weapons',
       'xp',
+      ...(risk ? ['injured', 'dead', 'wiped', 'recovered'] : []),
     ]);
     const no = int(o.no, 1, patrolsSent);
     if (out.some((p) => p.no === no)) fail('report from a patrol still out');
     const b = obj(o.batteries, BATTERY_IDS);
     const batteries = {} as Record<Battery, number>;
     for (const id of BATTERY_IDS) batteries[id] = int(b[id], 0, MAX_COUNT);
-    return {
+    const names = arr(o.names, 0, MAX_ROSTER).map((n) => text(n, 24, NAME));
+    const named = (list: unknown): string[] =>
+      arr(list, 0, names.length).map((n) => text(n, 24, NAME));
+    const injured = risk ? named(o.injured) : [];
+    const dead = risk ? named(o.dead) : [];
+    // Each member is hurt or killed once at most; names may repeat, so they are counted.
+    const count = (list: readonly string[], name: string) => list.filter((n) => n === name).length;
+    for (const n of [...injured, ...dead]) {
+      if (count(injured, n) + count(dead, n) > count(names, n)) fail('casualty not in the party');
+    }
+    if (risk && typeof o.wiped !== 'boolean') fail('wiped');
+    const wiped = risk && o.wiped === true;
+    if (wiped !== (names.length > 0 && dead.length === names.length)) fail('wipe');
+    const report: PatrolReport = {
       no,
       location: oneOf(o.location, LOCATION_IDS),
-      names: arr(o.names, 0, MAX_ROSTER).map((n) => text(n, 24, NAME)),
+      names,
+      injured,
+      dead,
+      wiped,
       returnedAt: Math.min(int(o.returnedAt, 0, MAX_TIME), savedAt),
       stock: readStock(o.stock, MATERIALS),
       gas: int(o.gas, 0, MAX_COUNT),
       batteries,
-      weapons: arr(o.weapons, 0, PATROL.rolls + PATROL.bonusRolls).map((w): ReportWeapon => {
-        const x = obj(w, ['base', 'rarity', 'kept']);
-        if (typeof x.kept !== 'boolean') fail('kept');
-        return {
-          base: oneOf(x.base, WEAPON_IDS),
-          rarity: oneOf(x.rarity, RARITY_ORDER),
-          kept: x.kept,
-        };
-      }),
+      weapons: arr(o.weapons, 0, PATROL.rolls + PATROL.bonusRolls).map(readReportWeapon),
+      recovered: risk ? arr(o.recovered, 0, PATROL.left).map(readReportWeapon) : [],
       xp: int(o.xp, 0, MAX_COUNT),
     };
+    const found =
+      report.xp > 0 ||
+      report.gas > 0 ||
+      report.weapons.length > 0 ||
+      report.recovered.length > 0 ||
+      MATERIALS.some((m) => report.stock[m] > 0) ||
+      BATTERY_IDS.some((id) => batteries[id] > 0);
+    if (wiped && found) {
+      fail('a wiped-out party brought something back');
+    }
+    return report;
   });
   if (new Set(reports.map((r) => r.no)).size !== reports.length) fail('report twice');
   return reports;

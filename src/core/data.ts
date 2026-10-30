@@ -986,6 +986,11 @@ export const LOCATION_IDS = Object.keys(LOCATIONS) as LocationId[];
  * - `xpDanger`: patrol XP multiplier per tier above 1 (tier 5 = 3×).
  * - `reports`: patrol reports kept, newest last.
  * - `max`: patrols a game can send, so every patrol number fits in a weapon uid.
+ * - `danger`: a location's danger is `danger × need × tier` of party strength (ID-027).
+ * - `risk`: each rating, safest first, from the lowest strength-to-danger ratio it
+ *   covers, with the chance each member is injured or killed and the party wiped out.
+ * - `left`: weapons the dead may leave across the map; past that the oldest is lost,
+ *   so a save stays small.
  */
 export const PATROL = {
   unlock: 3,
@@ -1003,6 +1008,14 @@ export const PATROL = {
   xpDanger: 0.5,
   reports: 20,
   max: 999_999,
+  danger: 2,
+  risk: [
+    { rating: 'safe', from: 1, injured: 0.05, dead: 0, wipe: 0 },
+    { rating: 'risky', from: 0.6, injured: 0.15, dead: 0.03, wipe: 0 },
+    { rating: 'dangerous', from: 0.3, injured: 0.3, dead: 0.1, wipe: 0.05 },
+    { rating: 'deadly', from: 0, injured: 0.4, dead: 0.2, wipe: 0.2 },
+  ],
+  left: 40,
 } as const satisfies {
   unlock: number;
   rolls: number;
@@ -1013,4 +1026,15 @@ export const PATROL = {
   xpDanger: number;
   reports: number;
   max: number;
+  danger: number;
+  risk: readonly {
+    rating: string;
+    from: number;
+    injured: number;
+    dead: number;
+    wipe: number;
+  }[];
+  left: number;
 };
+/** How a patrol's odds read before it leaves (design §10 Risk and reward). */
+export type RiskRating = (typeof PATROL.risk)[number]['rating'];

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { type Stats } from '../core/data.ts';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
-import { sendPatrol } from '../core/patrol.ts';
+import { patrolOutcome, sendPatrol, settlePatrols } from '../core/patrol.ts';
 import { NO_STATS } from '../core/stats.ts';
 import { BADGE_COLOUR } from './render.ts';
 import {
@@ -25,6 +25,10 @@ const jack = (d: Partial<RosterDefender> = {}, stats: Partial<Stats> = {}): Rost
   ...d,
   stats: { ...NO_STATS, ...stats },
 });
+
+/** Jack back injured, John dead. */
+const isHurt = (o: { wiped: boolean; dead: string[]; injured: string[] }): boolean =>
+  !o.wiped && o.dead.join() === 'john' && o.injured.join() === 'jack';
 
 describe('roster entry', () => {
   it('a new defender: level 1, no stats, no titles, no points, fit', () => {
@@ -67,6 +71,17 @@ describe('roster entry', () => {
     expect(rosterEntry(jack(), NOW, r.game.patrols[0]).status).toBe(
       'On patrol · Electronics store · 40m left',
     );
+  });
+
+  it('a defender back injured from patrol is resting; one who died is gone (ID-027)', () => {
+    const r = sendPatrol({ ...newGame(), hordeNumber: 3 }, 'electronics', ['jack', 'john'], 1, NOW);
+    if (!r.ok) throw new Error(r.reason);
+    const p = r.game.patrols[0]!;
+    let seed = 1;
+    while (!isHurt(patrolOutcome({ ...p, seed }))) seed++;
+    const back = settlePatrols({ ...r.game, patrols: [{ ...p, seed }] }, NOW + 45 * 60_000);
+    expect(back.roster.map((d) => d.id)).toEqual(['bob', 'jack']);
+    expect(rosterEntry(back.roster[1]!, NOW + 45 * 60_000).status).toBe('Resting · 2h 0m left');
   });
 
   it('a resting defender says how long is left, rounded up to the minute', () => {

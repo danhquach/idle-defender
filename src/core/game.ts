@@ -30,7 +30,7 @@ import {
 } from './data.ts';
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
-import type { Patrol, PatrolReport } from './patrol.ts';
+import type { LeftWeapon, Patrol, PatrolReport } from './patrol.ts';
 import { loadBatteries, newPower, runGenerator, type Power } from './power.ts';
 import { chance, pick, rngFrom } from './rng.ts';
 import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
@@ -66,6 +66,8 @@ export interface GameState {
   patrolsSent: number;
   /** The latest patrol reports, oldest first. */
   reports: PatrolReport[];
+  /** Weapons the dead left on the map, oldest first, for the next patrol there (design §10). */
+  leftBehind: LeftWeapon[];
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -96,6 +98,7 @@ export function newGame(): GameState {
     patrols: [],
     patrolsSent: 0,
     reports: [],
+    leftBehind: [],
   });
 }
 
