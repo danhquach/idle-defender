@@ -14,12 +14,21 @@ import {
   type Base,
   type TrapKind,
 } from './base.ts';
-import { ENEMIES, SEGMENTS, STEP, TRAP_DURABILITY, TRAP_STRIP, TRAPS, type Stock } from './data.ts';
+import {
+  ENEMIES,
+  SEGMENTS,
+  STEP,
+  TRAP_DURABILITY,
+  TRAP_STRIP,
+  TRAPS,
+  type Stock,
+  stockOf,
+} from './data.ts';
 import { finishHorde, newGame } from './game.ts';
 import { baseAfter, newHorde, tick, type HordeState } from './horde.ts';
 import { enemy, setup } from './testing.ts';
 
-const RICH: Stock = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+const RICH: Stock = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
 /** Inside the strip, level with row 1. */
 const IN = { x: TRAP_STRIP.x + TRAP_STRIP.width / 2, y: 120 };
 const STRIDE = ENEMIES.shambler.speed * STEP;
@@ -53,9 +62,9 @@ describe('trap build actions', () => {
       { kind: 'spikes', row: 1, durability: TRAP_DURABILITY },
       { kind: 'wire', row: 3, durability: TRAP_DURABILITY },
     ]);
-    expect(r.ok && r.stock).toEqual({ scrap: 989, wood: 984, metal: 0, concrete: 0 });
+    expect(r.ok && r.stock).toEqual(stockOf({ scrap: 989, wood: 984, metal: 0, concrete: 0 }));
     const w = buildTrap(newBase(), RICH, 'wire', 0);
-    expect(w.ok && w.stock).toEqual({ scrap: 984, wood: 989, metal: 0, concrete: 0 });
+    expect(w.ok && w.stock).toEqual(stockOf({ scrap: 984, wood: 989, metal: 0, concrete: 0 }));
   });
 
   it('needs no research: a new game can build both', () => {
@@ -68,7 +77,7 @@ describe('trap build actions', () => {
     const base = baseWith(['spikes', 2]);
     expect(buildTrap(base, RICH, 'wire', 2)).toEqual({ ok: false, reason: 'Slot taken' });
     expect(buildTrap(base, RICH, 'spikes', 2)).toEqual({ ok: false, reason: 'Slot taken' });
-    const poor = { scrap: 9, wood: 99, metal: 0, concrete: 0 };
+    const poor = stockOf({ scrap: 9, wood: 99, metal: 0, concrete: 0 });
     expect(buildTrap(newBase(), poor, 'spikes', 0)).toEqual({
       ok: false,
       reason: 'Not enough scrap',
@@ -89,13 +98,17 @@ describe('trap build actions', () => {
     const base = baseWith(['spikes', 0]);
     expect(repairTrap(base, RICH, 0)).toEqual({ ok: false, reason: 'Nothing to repair' });
     base.traps[0]!.durability = 20; // a third missing: 5 Wood, 3.33 → 4 Scrap
-    expect(trapRepairCost(base.traps[0]!)).toEqual({ scrap: 4, wood: 5, metal: 0, concrete: 0 });
+    expect(trapRepairCost(base.traps[0]!)).toEqual(
+      stockOf({ scrap: 4, wood: 5, metal: 0, concrete: 0 }),
+    );
     const r = repairTrap(base, RICH, 0);
     expect(r.ok && r.base.traps[0]!.durability).toBe(TRAP_DURABILITY);
-    expect(r.ok && r.stock).toEqual({ scrap: 995, wood: 994, metal: 0, concrete: 0 });
+    expect(r.ok && r.stock).toEqual(stockOf({ scrap: 995, wood: 994, metal: 0, concrete: 0 }));
     base.traps[0]!.durability = 0; // broken: the build cost
-    expect(trapRepairCost(base.traps[0]!)).toEqual({ scrap: 10, wood: 15, metal: 0, concrete: 0 });
-    expect(repairTrap(base, { scrap: 9, wood: 99, metal: 0, concrete: 0 }, 0)).toEqual({
+    expect(trapRepairCost(base.traps[0]!)).toEqual(
+      stockOf({ scrap: 10, wood: 15, metal: 0, concrete: 0 }),
+    );
+    expect(repairTrap(base, stockOf({ scrap: 9, wood: 99, metal: 0, concrete: 0 }), 0)).toEqual({
       ok: false,
       reason: 'Not enough scrap',
     });
@@ -103,14 +116,20 @@ describe('trap build actions', () => {
 
   it('removes for half its cost × its durability share, rounded down, and frees the cell', () => {
     const base = baseWith(['wire', 1], ['spikes', 4]);
-    expect(trapRefund(base.traps[0]!)).toEqual({ scrap: 7, wood: 5, metal: 0, concrete: 0 });
+    expect(trapRefund(base.traps[0]!)).toEqual(
+      stockOf({ scrap: 7, wood: 5, metal: 0, concrete: 0 }),
+    );
     base.traps[1]!.durability = 10; // a sixth: 2.5 → 2 Wood, 1.67 → 1 Scrap
-    expect(trapRefund(base.traps[1]!)).toEqual({ scrap: 1, wood: 2, metal: 0, concrete: 0 });
+    expect(trapRefund(base.traps[1]!)).toEqual(
+      stockOf({ scrap: 1, wood: 2, metal: 0, concrete: 0 }),
+    );
     base.traps[1]!.durability = 0;
-    expect(trapRefund(base.traps[1]!)).toEqual({ scrap: 0, wood: 0, metal: 0, concrete: 0 });
+    expect(trapRefund(base.traps[1]!)).toEqual(
+      stockOf({ scrap: 0, wood: 0, metal: 0, concrete: 0 }),
+    );
     const r = removeTrap(base, RICH, 0);
     expect(r.ok && r.base.traps).toEqual([{ kind: 'spikes', row: 4, durability: 0 }]);
-    expect(r.ok && r.stock).toEqual({ scrap: 1006, wood: 1004, metal: 0, concrete: 0 });
+    expect(r.ok && r.stock).toEqual(stockOf({ scrap: 1006, wood: 1004, metal: 0, concrete: 0 }));
     expect(r.ok && buildTrap(r.base, r.stock, 'spikes', 1).ok).toBe(true);
   });
 
@@ -121,7 +140,7 @@ describe('trap build actions', () => {
     base.layers[0]!.slots[0]!.hp -= 100;
     const cost = repairAllCost(base);
     // Spikes 15 Wood 10 Scrap; wire half of 10 Wood 15 Scrap → 5, 7.5 → 8; the wood wall half of 10 Wood 5 Scrap → 5, 3.
-    expect(cost).toEqual({ scrap: 21, wood: 25, metal: 0, concrete: 0 });
+    expect(cost).toEqual(stockOf({ scrap: 21, wood: 25, metal: 0, concrete: 0 }));
     const r = repairAll(base, RICH);
     expect(r.ok && r.base.traps.map((t) => t.durability)).toEqual([30, 30]);
     expect(repairAll(base, { ...cost, scrap: cost.scrap - 1 }).ok).toBe(false);

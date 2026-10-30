@@ -15,7 +15,15 @@ import {
   type Base,
   type TurretMount,
 } from './base.ts';
-import { ENGINEER_BUFF, MAX_CONDITION, SEGMENTS, STEP, TURRET, type Stock } from './data.ts';
+import {
+  ENGINEER_BUFF,
+  MAX_CONDITION,
+  SEGMENTS,
+  STEP,
+  TURRET,
+  type Stock,
+  stockOf,
+} from './data.ts';
 import { finishHorde, newGame } from './game.ts';
 import {
   baseAfter,
@@ -29,7 +37,7 @@ import {
 import { loadoutFrom } from './loadout.ts';
 import { enemy, landed, setup } from './testing.ts';
 
-const RICH: Stock = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+const RICH: Stock = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
 
 /** The starting base with turrets at `spots`. */
 function baseWith(...spots: [TurretMount, number, number][]): Base {
@@ -59,7 +67,7 @@ describe('turret build actions', () => {
     expect(r.ok && r.base.turrets).toEqual([
       { mount: 'tower', column: 0, row: 5, condition: MAX_CONDITION },
     ]);
-    expect(r.ok && r.stock).toEqual({ scrap: 959, wood: 979, metal: 0, concrete: 0 });
+    expect(r.ok && r.stock).toEqual(stockOf({ scrap: 959, wood: 979, metal: 0, concrete: 0 }));
     expect(buildTurret(newBase(), RICH, true, 'wall-walk', 0, 0).ok).toBe(true);
   });
 
@@ -84,7 +92,7 @@ describe('turret build actions', () => {
       ok: false,
       reason: 'A tower mount needs a wall in front',
     });
-    const poor = { scrap: 39, wood: 99, metal: 0, concrete: 0 };
+    const poor = stockOf({ scrap: 39, wood: 99, metal: 0, concrete: 0 });
     expect(buildTurret(newBase(), poor, true, 'tower', 0, 5)).toEqual({
       ok: false,
       reason: 'Not enough scrap',
@@ -114,12 +122,14 @@ describe('turret build actions', () => {
     base.turrets[0]!.condition = 0;
     expect(turretRepairCost(base.turrets[0]!).scrap).toBe(TURRET.repairScrap);
     base.turrets[0]!.condition = 61;
-    expect(turretRepairCost(base.turrets[0]!)).toEqual({
-      scrap: 8,
-      wood: 0,
-      metal: 0,
-      concrete: 0,
-    });
+    expect(turretRepairCost(base.turrets[0]!)).toEqual(
+      stockOf({
+        scrap: 8,
+        wood: 0,
+        metal: 0,
+        concrete: 0,
+      }),
+    );
     const r = repairTurret(base, RICH, 0);
     expect(r.ok && r.base.turrets[0]!.condition).toBe(MAX_CONDITION);
     expect(r.ok && r.stock.scrap).toBe(999 - 8);
@@ -132,7 +142,7 @@ describe('turret build actions', () => {
     expect(repairAll(base, RICH)).toEqual({ ok: false, reason: 'Nothing to repair' });
     base.turrets[0]!.condition = 0; // 20 scrap
     base.turrets[1]!.condition = 61; // 8 scrap
-    expect(repairAllCost(base)).toEqual({ scrap: 28, wood: 0, metal: 0, concrete: 0 });
+    expect(repairAllCost(base)).toEqual(stockOf({ scrap: 28, wood: 0, metal: 0, concrete: 0 }));
     base.layers[0]!.slots[1]!.hp = base.layers[0]!.slots[1]!.maxHp / 2;
     const cost = repairAllCost(base);
     expect(cost.scrap).toBeGreaterThan(28);
@@ -160,7 +170,7 @@ describe('turret build actions', () => {
     expect(salvageValue(base.turrets[0]!)).toMatchObject({ scrap: 0, wood: 0 });
     const r = salvageTurret(base, RICH, 1);
     expect(r.ok && r.base.turrets).toEqual([base.turrets[0]]);
-    expect(r.ok && r.stock).toEqual({ scrap: 1019, wood: 1009, metal: 0, concrete: 0 });
+    expect(r.ok && r.stock).toEqual(stockOf({ scrap: 1019, wood: 1009, metal: 0, concrete: 0 }));
     expect(r.ok && buildTurret(r.base, r.stock, true, 'tower', 0, 7).ok).toBe(true);
   });
 

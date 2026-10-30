@@ -33,6 +33,7 @@ import {
   STEP,
   STRIKE_FLASH,
   MUZZLE_FLASH,
+  MUTANTS,
   IMPACT_FLASH,
   TRAP_STRIP,
   TRAPS,
@@ -410,6 +411,8 @@ export interface HordeState {
   freeWave: number;
   /** Horde cash from kills (design §4); spent in the shop, never kept after the horde. */
   cash: number;
+  /** Mutants killed this horde; a win pays Mutated Genes for them (design §11). */
+  mutantKills: number;
   /** Fight time each bought buff runs until; 0 = never bought. */
   buffs: Record<BuffId, number>;
   /** Active skills researched at the Lab; only these can be used. */
@@ -506,6 +509,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     taken: [],
     freeWave: 0,
     cash: 0,
+    mutantKills: 0,
     buffs: { adrenaline: 0, overdrive: 0 },
     skills: [...skills],
     cooldowns: { flashbang: 0, molotov: 0, airstrike: 0 },
@@ -1414,9 +1418,9 @@ export const burning = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   e.burnUntil !== undefined && e.burnUntil > 0 && !due(s.time, e.burnUntil);
 
 /**
- * Pays XP and cash for every enemy at 0 HP and takes it off the field. Design §8: with
- * Burning Rounds and a Master Gunner in the fight, one that dies burning sets the living
- * enemies within `CARD.burn.spread` alight.
+ * Pays XP and cash for every enemy at 0 HP, counts the mutants among them (ID-025), and
+ * takes it off the field. Design §8: with Burning Rounds and a Master Gunner in the fight,
+ * one that dies burning sets the living enemies within `CARD.burn.spread` alight.
  */
 export function removeDead(s: HordeState): void {
   const spreads = took(s, 'burning-rounds') && masterGunner(s);
@@ -1427,6 +1431,7 @@ export function removeDead(s: HordeState): void {
     }
     s.xp += ENEMIES[e.kind].xp;
     s.cash += ENEMIES[e.kind].cash * (perkOn(s, 'scavengers-eye') ? PERK.cash : 1);
+    if (MUTANTS.includes(e.kind)) s.mutantKills += 1;
     if (e.id === s.focusId) s.focusId = null;
   }
   s.enemies = s.enemies.filter((e) => e.hp > 0);

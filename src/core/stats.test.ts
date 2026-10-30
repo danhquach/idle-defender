@@ -1,7 +1,7 @@
 // Design §6: defender levels, stat points and titles, and what they do in a fight.
 import { describe, expect, it } from 'vitest';
 import { buildPost, newBase, type Base, type BasePost } from './base.ts';
-import { STEP, WEAPONS, type Stats, type Stock, type FreeWeaponId } from './data.ts';
+import { STEP, WEAPONS, type Stats, type Stock, type FreeWeaponId, stockOf } from './data.ts';
 import { hordeXp } from './game.ts';
 import { newHorde, specOf, standing, tick, type DefenderSpec, type HordeState } from './horde.ts';
 import {
@@ -208,7 +208,7 @@ describe('stat effects per weapon (Grit any)', () => {
 });
 
 describe('stats in a fight', () => {
-  const RICH: Stock = { scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 };
+  const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
   const wallWalk = (() => {
     const r = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: 2 });
     if (!r.ok) throw new Error(r.reason);

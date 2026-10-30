@@ -17,6 +17,7 @@ import {
   meleeReach,
   type EnemyKind,
   type Stock,
+  stockOf,
 } from './data.ts';
 import {
   enemyAt,
@@ -33,7 +34,7 @@ import { answerOffer } from './sim.ts';
 import { enemy, landed, setup } from './testing.ts';
 import { kindFor, waveMix } from './waves.ts';
 
-const RICH: Stock = { scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 };
+const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
 const tough = { hp: 1000, maxHp: 1000 };
 /** Row 4's middle: level with defender a on the upper tower (420, 360). */
 const ROW4 = 4.5 * SEGMENT_HEIGHT;
@@ -291,9 +292,10 @@ describe('Bloater', () => {
     expect(hpAt(t, 6)).toBe(before[3]);
     // A burst, not a death: the renderer shows it blow up, not fall.
     expect(t.bursts).toEqual([{ id: e.id, x: 520, y: ROW4, at: expect.any(Number) }]);
-    // It wasn't killed, so it pays nothing.
+    // It wasn't killed, so it pays nothing and earns no Genes (ID-025).
     expect(t.xp).toBe(0);
     expect(t.cash).toBe(0);
+    expect(t.mutantKills).toBe(0);
   });
 
   it('killed first, it pops harmlessly and pays its kill', () => {
@@ -306,6 +308,7 @@ describe('Bloater', () => {
     expect(t.layers[0]!.segments.map((g) => g.hp)).toEqual(walls);
     expect(t.xp).toBe(ENEMIES.bloater.xp);
     expect(t.cash).toBe(ENEMIES.bloater.cash);
+    expect(t.mutantKills).toBe(1);
   });
 
   it('in the camp it blows up on the defender it reaches', () => {

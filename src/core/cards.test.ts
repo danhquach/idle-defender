@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { chooseCard, rollOffer } from './cards.ts';
 import { buildPost, buildSegment, newBase, type Result } from './base.ts';
-import { STEP, type Stock } from './data.ts';
+import { STEP, type Stock, stockOf } from './data.ts';
 import { newHorde, tick, type Card, type HordeState } from './horde.ts';
 import { createRng } from './rng.ts';
 import { enemy, landed, setup } from './testing.ts';
@@ -10,7 +10,7 @@ function offers(s: HordeState): Card[][] {
   return Array.from({ length: 200 }, (_, seed) => rollOffer(createRng(seed), s));
 }
 
-const RICH: Stock = { scrap: 999, wood: 999, metal: 999, concrete: 999 };
+const RICH: Stock = stockOf({ scrap: 999, wood: 999, metal: 999, concrete: 999 });
 const recruits = (offer: Card[]) => offer.filter((c) => c.kind === 'recruit').length;
 
 describe('cards', () => {

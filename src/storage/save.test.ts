@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { buildTurret, lineWall, spotOf } from '../core/base.ts';
-import { ARMOURY_CAP, BANK_CAP, RECOVERY_MS, SEGMENTS, STEP } from '../core/data.ts';
+import {
+  ARMOURY_CAP,
+  BANK_CAP,
+  MAX_COUNT,
+  RECOVERY_MS,
+  SEGMENTS,
+  STEP,
+  stockOf,
+} from '../core/data.ts';
 import { newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { tick } from '../core/horde.ts';
 import type { Loadout } from '../core/loadout.ts';
@@ -16,7 +24,7 @@ import {
   writeSave,
   type SaveStorage,
 } from './save.ts';
-import { NOW, played } from './testing.ts';
+import { NOW, oldStock, played } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -969,9 +977,13 @@ describe('save: the taller field (ID-047)', () => {
     turrets: [],
     traps: [],
   });
-  /** `game` as a v1 save JSON with `base` in its place. */
+  /** `game` as a v1 save JSON with `base` in its place and only the building materials. */
   const v1 = (game: GameState, base: Loose): string =>
-    JSON.stringify({ v: 1, savedAt: NOW, game: { ...JSON.parse(JSON.stringify(game)), base } });
+    JSON.stringify({
+      v: 1,
+      savedAt: NOW,
+      game: { ...JSON.parse(JSON.stringify(game)), base, stock: oldStock(game) },
+    });
 
   it('moves an old base onto rows 3–7; the new rows are empty ground', () => {
     const base = {
@@ -1081,7 +1093,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 4, '1', '3', 1.5, null]) {
+    for (const v of [0, 5, '1', '4', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1094,7 +1106,7 @@ describe('save: the taller field (ID-047)', () => {
 });
 
 describe('save: wall-walk spots (ID-048)', () => {
-  const RICH = { scrap: 9999, wood: 9999, metal: 0, concrete: 0 };
+  const RICH = stockOf({ scrap: 9999, wood: 9999, metal: 0, concrete: 0 });
   /** `played()` with a wall mount on row 9's spot 2, then the rest of layer 1 lined with posts. */
   function lined(): GameState {
     const game = played();
@@ -1273,15 +1285,14 @@ describe('save: commander perks (ID-020)', () => {
     expect(decodeSave(JSON.stringify(save))?.game.perks).toEqual(['steady-fire']);
   });
 
-  it('writes version 3 and still loads a version 2 save, which saves again as 3', () => {
-    expect(SAVE_VERSION).toBe(3);
+  it('still loads a version 2 save, which saves again as the current version', () => {
     const save = JSON.parse(encodeSave(played(), NOW));
-    expect(save.v).toBe(3);
     save.v = 2;
+    save.game.stock = oldStock(played());
     delete save.game.perks;
     const loaded = decodeSave(JSON.stringify(save));
-    expect(loaded?.game).toEqual(played());
-    expect(JSON.parse(encodeSave(loaded!.game, NOW)).v).toBe(3);
+    expect(loaded?.game).toEqual(played()); // its new resources are all 0, as a v2 save loads them
+    expect(JSON.parse(encodeSave(loaded!.game, NOW)).v).toBe(SAVE_VERSION);
   });
 
   it('refuses perks the game could not have equipped', () => {
@@ -1320,5 +1331,47 @@ describe('save: commander perks (ID-020)', () => {
     );
     expect(decodeSave(r)).toBeNull();
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('save: resource inventory (ID-025)', () => {
+  const raw = (v: number, game: Loose) => decodeSave(JSON.stringify({ v, savedAt: NOW, game }));
+  const withStock = (stock: Loose) => ({ ...newGame(), stock });
+  const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
+
+  it('round-trips every resource', () => {
+    expect(SAVE_VERSION).toBe(4);
+    const game = withStock(full);
+    expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
+  });
+
+  it('loads a v3 save with only the building materials; the rest start at 0', () => {
+    const old = { scrap: 7, wood: 8, metal: 9, concrete: 1 };
+    expect(raw(3, withStock(old))?.game.stock).toEqual(stockOf(old));
+    // A v3 save never held the new keys, so one that does is not ours.
+    expect(raw(3, withStock({ ...old, genes: 5 }))).toBeNull();
+    // And a v4 save must hold them all.
+    expect(raw(SAVE_VERSION, withStock(old))).toBeNull();
+  });
+
+  it('refuses hostile counts and keys', () => {
+    for (const genes of [-1, 1.5, MAX_COUNT + 1, '5', null, NaN, Infinity, [5], { n: 5 }, true]) {
+      expect(raw(SAVE_VERSION, withStock({ ...full, genes })), String(genes)).toBeNull();
+    }
+    expect(raw(SAVE_VERSION, withStock({ ...full, gold: 1 }))).toBeNull();
+    expect(raw(SAVE_VERSION, withStock({ ...full, 'genes​': 1 }))).toBeNull();
+    expect(raw(SAVE_VERSION, withStock({ ...full, '\u202egenes': 1 }))).toBeNull(); // bidi override
+    expect(raw(SAVE_VERSION, withStock({ ...full, Genes: 1 }))).toBeNull();
+    expect(raw(SAVE_VERSION, withStock({ ...full, constructor: 1 }))).toBeNull();
+    expect(raw(SAVE_VERSION, withStock(Object.entries(full)))).toBeNull();
+    const proto = JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game: withStock(full) }).replace(
+      '"genes":99',
+      '"genes":99,"__proto__":{"polluted":1}',
+    );
+    expect(decodeSave(proto)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(raw(SAVE_VERSION, withStock({ ...full, genes: MAX_COUNT }))?.game.stock.genes).toBe(
+      MAX_COUNT,
+    );
   });
 });

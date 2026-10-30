@@ -10,6 +10,7 @@ import {
   WEAPONS,
   type HorrorAbility,
   type Stock,
+  stockOf,
 } from './data.ts';
 import {
   hitDamage,
@@ -24,7 +25,7 @@ import { loadoutFrom } from './loadout.ts';
 import { enemy, setup } from './testing.ts';
 import { enemyHp, horrorAbility, kindFor, waveCount, waveSize } from './waves.ts';
 
-const RICH: Stock = { scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 };
+const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
 /** Row 4's middle: level with defender a on the upper tower (420, 360). */
 const ROW4 = 4.5 * SEGMENT_HEIGHT;
 

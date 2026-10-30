@@ -27,6 +27,7 @@ import {
   ARMOURY_CAP,
   BANK_CAP,
   BATTERY_IDS,
+  BUILDING_MATERIALS,
   COLUMNS,
   ITEMS,
   LAB_LEVELS,
@@ -49,8 +50,10 @@ import {
   FREE_WEAPONS,
   WALK_SPOTS,
   WEAPONS,
+  stockOf,
   type FreeWeaponId,
   type ItemId,
+  type Material,
   type PerkId,
   type ResearchId,
   type Stats,
@@ -68,8 +71,11 @@ import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
-/** 3 since perks (ID-020); a v2 save has the same shape, less the perks it gains on load. */
-export const SAVE_VERSION = 3;
+/**
+ * 4 since the resource inventory (ID-025); a v3 save has the same shape, with only the
+ * building materials in its stock (the rest start at 0), and a v2 one less its perks too.
+ */
+export const SAVE_VERSION = 4;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -175,13 +181,21 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (o.v !== SAVE_VERSION && o.v !== 2 && o.v !== 1) fail('version');
+  if (o.v !== SAVE_VERSION && o.v !== 3 && o.v !== 2 && o.v !== 1) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
-  if (o.v === 1) return { game: readGame(o.game, savedAt, V1_GRID), savedAt, grew: true };
-  return { game: readGame(o.game, savedAt, GRID), savedAt };
+  const materials = o.v === SAVE_VERSION ? MATERIALS : BUILDING_MATERIALS;
+  if (o.v === 1) {
+    return { game: readGame(o.game, savedAt, V1_GRID, materials), savedAt, grew: true };
+  }
+  return { game: readGame(o.game, savedAt, GRID, materials), savedAt };
 }
 
-function readGame(v: unknown, savedAt: number, grid: Grid): GameState {
+function readGame(
+  v: unknown,
+  savedAt: number,
+  grid: Grid,
+  materials: readonly Material[],
+): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
   // A save from before the armoury (0.4.5 and older) has none: it starts empty. One
@@ -212,7 +226,7 @@ function readGame(v: unknown, savedAt: number, grid: Grid): GameState {
   const game: GameState = {
     hordeNumber,
     base: readBase(o.base, tiers, research.includes('auto-turret'), grid),
-    stock: readStock(o.stock),
+    stock: readStock(o.stock, materials),
     tiers,
     roster: readRoster(o.roster, savedAt, hordeNumber),
     armoury: old.armoury
@@ -273,14 +287,12 @@ function readPerks(v: unknown, research: readonly ResearchId[]): PerkId[] {
   return perks;
 }
 
-function readStock(v: unknown): Stock {
-  const o = obj(v, MATERIALS);
-  return {
-    scrap: int(o.scrap, 0, MAX_COUNT),
-    wood: int(o.wood, 0, MAX_COUNT),
-    metal: int(o.metal, 0, MAX_COUNT),
-    concrete: int(o.concrete, 0, MAX_COUNT),
-  };
+/** Exactly `materials`, each a whole count; any the save predates start at 0. */
+function readStock(v: unknown, materials: readonly Material[]): Stock {
+  const o = obj(v, materials);
+  const stock = stockOf();
+  for (const m of materials) stock[m] = int(o[m], 0, MAX_COUNT);
+  return stock;
 }
 
 /**

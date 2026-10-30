@@ -7,7 +7,9 @@ import {
   ARMOURY_CAP,
   BANK_CAP,
   DEFENDER_XP,
+  FIND,
   GAS_PER_WIN,
+  GENES,
   HORDE_PAYOUT,
   MATERIALS,
   MAX_COUNT,
@@ -24,11 +26,12 @@ import {
   type Stat,
   type Stats,
   type Stock,
+  stockOf,
 } from './data.ts';
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
 import { loadBatteries, newPower, runGenerator, type Power } from './power.ts';
-import { rngFrom } from './rng.ts';
+import { chance, pick, rngFrom } from './rng.ts';
 import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
 
 /** A defender on the camp's roster: lifetime XP (the level comes from it) and the stat points spent. */
@@ -105,18 +108,54 @@ export function recover(game: GameState, now: number): GameState {
 }
 
 /**
- * Scrap and Wood for a finished horde: a win pays in full; a loss pays a quarter of
- * that scaled by the wave reached, rounded down, so losing never beats winning (§2).
+ * Scrap, Wood and Mutated Genes for a finished horde: a win pays in full; a loss pays a
+ * quarter of the Scrap and Wood scaled by the wave reached, rounded down, so losing
+ * never beats winning, and no Genes (§2).
  */
 export function hordePayout(
-  h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'wave' | 'waveCount'>,
+  h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'wave' | 'waveCount' | 'mutantKills' | 'boss'>,
 ): Stock {
   if (h.outcome === 'fighting') throw new RangeError('hordePayout: the horde is still on');
   const { win, lossShare } = HORDE_PAYOUT;
   const share = h.outcome === 'won' ? 1 : (lossShare * h.wave) / h.waveCount;
   const pay = (m: { base: number; perHorde: number }): number =>
     Math.floor((m.base + m.perHorde * h.hordeNumber) * share);
-  return { scrap: pay(win.scrap), wood: pay(win.wood), metal: 0, concrete: 0 };
+  return stockOf({ scrap: pay(win.scrap), wood: pay(win.wood), genes: hordeGenes(h) });
+}
+
+/** Mutated Genes horde `h` pays (design §4, §11): a win only, more for mutants and a boss. */
+export function hordeGenes(
+  h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'mutantKills' | 'boss'>,
+): number {
+  if (h.outcome !== 'won') return 0;
+  return (
+    GENES.base +
+    Math.floor(h.hordeNumber / GENES.every) +
+    Math.floor(h.mutantKills / GENES.perMutants) +
+    (h.boss ? GENES.boss : 0)
+  );
+}
+
+/** A win's material find: what it is and how many. */
+export interface Find {
+  material: (typeof FIND.materials)[number];
+  amount: number;
+}
+
+/**
+ * The materials horde `h` finds (design §4), or null (most wins, every loss). Rolled
+ * from where the fight's RNG ended, after the weapon drop's roll so those odds don't
+ * move, so the result screen and `finishHorde` agree.
+ */
+export function hordeFind(h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'rng'>): Find | null {
+  if (h.outcome !== 'won') return null;
+  const rng = rngFrom({ ...h.rng });
+  rollDrop(rng, h.hordeNumber);
+  if (!chance(rng, FIND.chance)) return null;
+  return {
+    material: pick(rng, FIND.materials),
+    amount: FIND.base + Math.floor(h.hordeNumber / FIND.every),
+  };
 }
 
 /** Defender XP each defender who took part gets for winning horde `hordeNumber`. */
@@ -314,7 +353,7 @@ export function startHorde(
 
 /**
  * Back to building at `now` (when the horde ended): the fight's damage stays, the
- * payout is added, a win gives XP and maybe a weapon and moves on, and the injured
+ * payout is added, a win gives XP and maybe a weapon or a find and moves on, and the injured
  * rest (`injuredUntil`). The bank keeps the charge left; the generator's clock skips
  * the fight, then it runs to `now` and batteries load.
  */
@@ -327,10 +366,13 @@ export function finishHorde(game: GameState, horde: HordeState, now: number): Ga
   const payout = hordePayout(horde);
   const g = structuredClone(game);
   g.base = baseAfter(game.base, horde);
-  for (const m of MATERIALS) g.stock[m] += payout[m];
   const drop = hordeDrop(game, horde);
   if (drop?.kept) g.armoury.push(drop.weapon);
-  else if (drop) g.stock.scrap += drop.scrap;
+  else if (drop) payout.scrap += drop.scrap;
+  const find = hordeFind(horde);
+  if (find) payout[find.material] += find.amount;
+  // Capped where a save reads it, so a win never leaves a save that won't load.
+  for (const m of MATERIALS) g.stock[m] = Math.min(MAX_COUNT, g.stock[m] + payout[m]);
   for (const gain of xpGains(horde)) {
     const d = g.roster.find((r) => r.id === gain.id);
     if (d) d.xp += gain.xp;

@@ -13,7 +13,7 @@ import {
   spendAll,
   summarise,
 } from './sim.ts';
-import { SEGMENTS, START_BASE } from './data.ts';
+import { SEGMENTS, START_BASE, stockOf } from './data.ts';
 import { NO_STATS } from './stats.ts';
 import { loadoutFrom } from './loadout.ts';
 
@@ -147,16 +147,16 @@ const slotHps = (at: Record<number, number>): number[] =>
 describe('repairWhatYouCan', () => {
   it('repairs the most damaged segment first, while the stock covers it', () => {
     const game = damaged(100, 0);
-    game.stock = { scrap: 5, wood: 15, metal: 0, concrete: 0 };
+    game.stock = stockOf({ scrap: 5, wood: 15, metal: 0, concrete: 0 });
     const after = repairWhatYouCan(game);
     // Row 1 (empty) costs 10 wood 5 scrap; then row 0 needs 3 scrap it no longer has.
     expect(after.base.layers[0]!.slots.map((s) => s!.hp)).toEqual(slotHps({ 0: 100 }));
-    expect(after.stock).toEqual({ scrap: 0, wood: 5, metal: 0, concrete: 0 });
+    expect(after.stock).toEqual(stockOf({ scrap: 0, wood: 5, metal: 0, concrete: 0 }));
   });
 
   it("skips a segment it can't afford and repairs a cheaper one", () => {
     const game = damaged(0, 150);
-    game.stock = { scrap: 2, wood: 3, metal: 0, concrete: 0 };
+    game.stock = stockOf({ scrap: 2, wood: 3, metal: 0, concrete: 0 });
     const after = repairWhatYouCan(game);
     expect(after.base.layers[0]!.slots.map((s) => s!.hp)).toEqual(slotHps({ 0: 0 }));
   });

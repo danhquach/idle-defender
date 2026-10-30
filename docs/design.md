@@ -954,6 +954,16 @@ Set before sending; they apply to any location, plaza or single building.
   Scrap and 40 Wood) unlocks turrets. A new game starts with no Lab and
   Wood walls only. Real-time research, Mutated Genes and the rest of the
   tree come with ID-035.
+- **As built (ID-025, starting points):** the camp stores Scrap, Wood,
+  Metal, Concrete, Parts, Food, Medicine, Chemicals and Mutated Genes
+  (Gas and batteries stay with the power, §7); a new game adds 3 Food.
+  A horde win pays **2 Genes + 1 per 5 hordes**, +1 per 5 mutants killed
+  (Crawler, Spitter, Bloater, Brute, Screamer; a Bloater that blows
+  itself up isn't a kill) and +10 for a boss horde; a loss pays none.
+  A win also has a **20% chance to find 2 + 1 per 5 hordes** of one of
+  Parts, Metal, Food, Medicine or Chemicals, rolled after the weapon
+  drop so its odds don't move. Nothing spends Genes yet (ID-035); the
+  starting Parts come with the ticket that makes turrets cost Parts.
 - **New defenders** come mainly as **survivors** found on patrols (§10),
   and rarely from a camp level-up (§11 Camp level), each with a name, level, stats and weapon. Needed to replace losses.
 - **Camp capacity:** the camp holds a limited number of people (starting

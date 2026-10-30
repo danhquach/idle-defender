@@ -12,6 +12,7 @@ import {
   WEAPONS,
   type PostKind,
   type Stock,
+  stockOf,
 } from './data.ts';
 import {
   baseAfter,
@@ -501,7 +502,7 @@ describe('focus', () => {
 /** The starting base changed by `steps` (each a build action with plenty of stock). */
 function baseWith(...steps: ((b: Base, s: Stock) => Result)[]): Base {
   let base = newBase();
-  let stock: Stock = { scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 };
+  let stock: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
   for (const step of steps) {
     const r = step(base, stock);
     if (!r.ok) throw new Error(r.reason);

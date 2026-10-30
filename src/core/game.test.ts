@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newBase } from './base.ts';
-import { RECOVERY_MS, START_STOCK, START_TIERS } from './data.ts';
+import { RECOVERY_MS, START_STOCK, START_TIERS, stockOf } from './data.ts';
 import {
   available,
   finishHorde,
@@ -80,37 +80,64 @@ describe('game', () => {
   });
 
   it('pays a win in full, more each horde', () => {
-    expect(hordePayout({ hordeNumber: 1, outcome: 'won', wave: 5, waveCount: 5 })).toEqual({
-      scrap: 20,
-      wood: 30,
-      metal: 0,
-      concrete: 0,
-    });
-    expect(hordePayout({ hordeNumber: 4, outcome: 'won', wave: 6, waveCount: 6 })).toEqual({
-      scrap: 35,
-      wood: 60,
-      metal: 0,
-      concrete: 0,
-    });
+    const won = (hordeNumber: number, waveCount: number) =>
+      hordePayout({
+        mutantKills: 0,
+        boss: null,
+        hordeNumber,
+        outcome: 'won',
+        wave: waveCount,
+        waveCount,
+      });
+    expect(won(1, 5)).toEqual(stockOf({ scrap: 20, wood: 30, genes: 2 }));
+    expect(won(4, 6)).toEqual(stockOf({ scrap: 35, wood: 60, genes: 2 }));
   });
 
   it('pays a loss a quarter scaled by the wave reached, rounded down', () => {
     const lost = (wave: number) =>
-      hordePayout({ hordeNumber: 1, outcome: 'lost', wave, waveCount: 5 });
-    expect(lost(1)).toEqual({ scrap: 1, wood: 1, metal: 0, concrete: 0 });
-    expect(lost(3)).toEqual({ scrap: 3, wood: 4, metal: 0, concrete: 0 });
-    expect(lost(5)).toEqual({ scrap: 5, wood: 7, metal: 0, concrete: 0 });
+      hordePayout({
+        mutantKills: 0,
+        boss: null,
+        hordeNumber: 1,
+        outcome: 'lost',
+        wave,
+        waveCount: 5,
+      });
+    expect(lost(1)).toEqual(stockOf({ scrap: 1, wood: 1 }));
+    expect(lost(3)).toEqual(stockOf({ scrap: 3, wood: 4 }));
+    expect(lost(5)).toEqual(stockOf({ scrap: 5, wood: 7 }));
     // Never beats a win, at any horde and wave.
     for (let n = 1; n <= 30; n++) {
-      const win = hordePayout({ hordeNumber: n, outcome: 'won', wave: 1, waveCount: 10 });
+      const win = hordePayout({
+        mutantKills: 0,
+        boss: null,
+        hordeNumber: n,
+        outcome: 'won',
+        wave: 1,
+        waveCount: 10,
+      });
       for (let wave = 1; wave <= 10; wave++) {
-        const loss = hordePayout({ hordeNumber: n, outcome: 'lost', wave, waveCount: 10 });
+        const loss = hordePayout({
+          mutantKills: 0,
+          boss: null,
+          hordeNumber: n,
+          outcome: 'lost',
+          wave,
+          waveCount: 10,
+        });
         expect(loss.scrap * 4).toBeLessThanOrEqual(win.scrap);
         expect(loss.wood * 4).toBeLessThanOrEqual(win.wood);
       }
     }
     expect(() =>
-      hordePayout({ hordeNumber: 1, outcome: 'fighting', wave: 1, waveCount: 5 }),
+      hordePayout({
+        mutantKills: 0,
+        boss: null,
+        hordeNumber: 1,
+        outcome: 'fighting',
+        wave: 1,
+        waveCount: 5,
+      }),
     ).toThrow(RangeError);
   });
 
@@ -118,7 +145,8 @@ describe('game', () => {
     const g = newGame();
     const next = finishHorde(g, fought(g, 'won'), NOW);
     expect(next.hordeNumber).toBe(2);
-    expect(next.stock).toEqual({ scrap: 80, wood: 90, metal: 0, concrete: 0 });
+    // 2 Genes for the win; this seed also finds 2 Food (3 to start).
+    expect(next.stock).toEqual(stockOf({ scrap: 80, wood: 90, food: 5, genes: 2 }));
     expect(next.base.layers[0]!.slots[0]!.hp).toBe(120);
     expect(next.base.layers[0]!.slots[1]!.hp).toBe(200);
     expect(next.roster.map((d) => d.xp)).toEqual([hordeXp(1), 0, 0]);
@@ -263,7 +291,7 @@ describe('game', () => {
     h.wave = 5;
     const next = finishHorde(g, h, NOW);
     expect(next.hordeNumber).toBe(1);
-    expect(next.stock).toEqual({ scrap: 65, wood: 67, metal: 0, concrete: 0 });
+    expect(next.stock).toEqual(stockOf({ scrap: 65, wood: 67, food: 3 })); // no Genes or find on a loss
     expect(next.base.layers[0]!.slots[0]!.hp).toBe(120);
     expect(xpGains(h)).toEqual([]);
     expect(next.roster.every((d) => d.xp === 0)).toBe(true);

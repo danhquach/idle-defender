@@ -13,6 +13,7 @@ import {
   WEAPONS,
   type Stock,
   type FreeWeaponId,
+  stockOf,
 } from './data.ts';
 import {
   engineerBuff,
@@ -31,7 +32,7 @@ import { enemy, landed, setup } from './testing.ts';
 const GATE = START_BASE.gate;
 const GATE_Y = (GATE + 0.5) * SEGMENT_HEIGHT;
 
-const RICH: Stock = { scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 };
+const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
 
 /** The starting base plus `extra` posts. Posts sort by (column, kind, row). */
 function baseWith(...extra: BasePost[]): Base {

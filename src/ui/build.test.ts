@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, buildTrap, buildTurret, lineWall } from '../core/base.ts';
-import { BANK_CAP, GENERATOR, SEGMENTS, TRAPS, TURRET } from '../core/data.ts';
+import { BANK_CAP, GENERATOR, SEGMENTS, TRAPS, TURRET, stockOf } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
+import { oldStock } from '../storage/testing.ts';
 import {
   buildTurretLine,
   lineResult,
@@ -28,9 +29,13 @@ import {
 import { clockTime, postName } from './hud.ts';
 
 describe('build panel', () => {
-  it('shows the next horde and every material', () => {
+  it('shows the next horde, every building material, and the other resources the camp has', () => {
     expect(stockBarText(newGame())).toBe(
-      'Horde 1 next · Scrap 60 · Wood 60 · Metal 0 · Concrete 0',
+      'Horde 1 next · Scrap 60 · Wood 60 · Metal 0 · Concrete 0 · Food 3',
+    );
+    const g = { ...newGame(), stock: stockOf({ scrap: 1, parts: 2, chemicals: 4, genes: 7 }) };
+    expect(stockBarText(g)).toBe(
+      'Horde 1 next · Scrap 1 · Wood 0 · Metal 0 · Concrete 0 · Parts 2 · Chemicals 4 · Genes 7',
     );
   });
 
@@ -115,6 +120,7 @@ describe('build panel', () => {
     // A code from before the taller field (a v1 save, 5 rows) says the field grew.
     const old = JSON.parse(encodeSave(g, 1_800_000_000_000));
     old.v = 1;
+    old.game.stock = oldStock(g);
     old.game.base.layers[0].slots = old.game.base.layers[0].slots.slice(3, 8);
     old.game.base.posts = old.game.base.posts.map((p: { row: number }) => ({
       ...p,
@@ -126,7 +132,7 @@ describe('build panel', () => {
   });
 
   it('shows the Lab: not built, then each node locked with its reason', () => {
-    const g = { ...newGame(), stock: { scrap: 999, wood: 999, metal: 0, concrete: 0 } };
+    const g = { ...newGame(), stock: stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }) };
     const lines = labLines(g);
     expect(lines.map((l) => (l.kind === 'action' ? l.label : l.text))).toEqual([
       'Research Lab: not built',
@@ -172,7 +178,10 @@ describe('build panel', () => {
   });
 
   it('shows a levelled Lab with researched nodes as done and no upgrade at the top', () => {
-    let g: GameState = { ...newGame(), stock: { scrap: 999, wood: 999, metal: 0, concrete: 0 } };
+    let g: GameState = {
+      ...newGame(),
+      stock: stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }),
+    };
     for (let i = 0; i < 17; i++) {
       const next = labLines(g).find((l) => l.kind === 'action' && l.result.ok);
       if (next?.kind !== 'action' || !next.result.ok) throw new Error('nothing to do');
@@ -251,7 +260,7 @@ describe('build panel', () => {
 });
 
 describe('wall-walk spots (ID-048)', () => {
-  const RICH = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+  const RICH = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
 
   it('names each spot, and the start pick keeps and lists spot 2 apart from spot 1', () => {
     const g = { ...newGame(), stock: RICH };
@@ -286,7 +295,7 @@ describe('wall-walk spots (ID-048)', () => {
   });
 
   it('"Line the wall" says how many the stock covers when short, and refuses with none free', () => {
-    const g = { ...newGame(), stock: { scrap: 23, wood: 60, metal: 0, concrete: 0 } };
+    const g = { ...newGame(), stock: stockOf({ scrap: 23, wood: 60, metal: 0, concrete: 0 }) };
     const line = lineWallLine(g, 0);
     expect(line).toMatchObject({
       confirm: 'Line layer 1 with 20 wall-walk posts for 100 scrap, 100 wood? The stock covers 4.',
@@ -304,7 +313,7 @@ describe('wall-walk spots (ID-048)', () => {
 });
 
 describe('turret menu', () => {
-  const RICH = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+  const RICH = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
   /** A new game with the Auto-turret researched and a turret on the free tower at row 2. */
   function withTurret(): GameState {
     const g: GameState = { ...newGame(), stock: RICH, research: ['metal-walls', 'auto-turret'] };
@@ -441,7 +450,7 @@ describe('turret menu', () => {
 });
 
 describe('trap menu', () => {
-  const RICH = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+  const RICH = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
   const text = (l: SlotLine): string => (l.kind === 'action' ? l.label : l.text);
   const why = (l: SlotLine): string | null =>
     l.kind === 'action' && !l.result.ok ? l.result.reason : null;
@@ -458,7 +467,10 @@ describe('trap menu', () => {
     expect(lines.map(text)).toEqual(['Trap strip · row 1: empty', 'Spikes', 'Barbed wire']);
     expect(lines[1]).toMatchObject({ cost: TRAPS.spikes.cost, result: { ok: true } });
     expect(lines[2]).toMatchObject({ cost: TRAPS.wire.cost, result: { ok: true } });
-    const poor: GameState = { ...newGame(), stock: { scrap: 0, wood: 99, metal: 0, concrete: 0 } };
+    const poor: GameState = {
+      ...newGame(),
+      stock: stockOf({ scrap: 0, wood: 99, metal: 0, concrete: 0 }),
+    };
     expect(trapLines(poor, 0).slice(1).map(why)).toEqual(['Not enough scrap', 'Not enough scrap']);
   });
 
