@@ -20,6 +20,7 @@ import {
 } from '../core/data.ts';
 import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
+import { carpet } from '../core/skills.ts';
 import { ANIM, Animator } from './anim.ts';
 import { HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
 import { drawScene, trapLook, turretLook, type Scene } from './render.ts';
@@ -246,7 +247,7 @@ describe('drawScene with art', () => {
     expect(r.alphas.slice(i + 1).every((a) => a === 1)).toBe(true);
   });
 
-  it('draws every enemy kind (art or placeholder shape) and a Spitter glob without a throw (ID-023)', () => {
+  it('draws every enemy kind’s art and a Spitter glob without a throw (ID-023)', () => {
     const kinds = Object.keys(ENEMIES) as EnemyKind[];
     const base = blank();
     const r = draw({
@@ -519,28 +520,82 @@ describe('drawScene with art', () => {
     );
   });
 
-  it('draws a molotov fire, a fading skill flash and the armed reach on the ground (ID-019)', () => {
+  it('draws a molotov fire and a fading skill flash from their art, no flat circles (ID-019, ID-041)', () => {
     const r = recorder();
     const rings: number[] = [];
-    const alphas: number[] = [];
-    Object.assign(r.ctx, {
-      ellipse: (_x: number, _y: number, rx: number, ry: number) => {
-        rings.push(rx);
-        expect(ry).toBeCloseTo(rx * TILT, 9);
-      },
-      fill: () => alphas.push(r.ctx.globalAlpha),
-    });
+    Object.assign(r.ctx, { ellipse: (_x: number, _y: number, rx: number) => rings.push(rx) });
     const scene: Scene = {
       ...blank(),
       time: 0.3,
-      fires: [{ x: 900, y: 200, until: 5 }],
+      fires: [{ x: 900, y: 200, at: 0, until: 5 }],
       blasts: [{ skill: 'airstrike', x: 700, y: 100, at: 0.1 }],
     };
-    drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill: 'flashbang', x: 500, y: 50 });
-    const { molotov, airstrike, flashbang } = SKILLS;
-    expect(rings).toEqual([molotov.radius, airstrike.radius, flashbang.radius]);
-    expect(alphas[1]).toBeCloseTo(0.6 * (1 - 0.2 / SKILL_FLASH), 9); // the flash fades
+    drawScene(r.ctx, r.art, scene, CAM, VIEW);
+    expect(rings).toEqual([]);
+    // The fire is its art, see-through; the airstrike's flash is its art, fading.
+    expect(r.alphas[r.drawn.indexOf('molotov')]).toBeCloseTo(0.7, 9);
+    expect(r.drawn.indexOf('molotov')).toBeLessThan(r.drawn.indexOf('airstrike'));
+    expect(r.alphas[r.drawn.indexOf('airstrike')]).toBeCloseTo(1 - 0.2 / SKILL_FLASH, 9);
     expect(r.ctx.globalAlpha).toBe(1);
+  });
+
+  it('fades a fire in as it lights and out as it dies, and not at all once out (ID-041)', () => {
+    const alphaAt = (time: number): number | undefined => {
+      const r = recorder();
+      const fires = [{ x: 900, y: 200, at: 1, until: 7 }];
+      drawScene(r.ctx, r.art, { ...blank(), time, fires }, CAM, VIEW);
+      const i = r.drawn.indexOf('molotov');
+      return i < 0 ? undefined : r.alphas[i];
+    };
+    expect(alphaAt(1)).toBeUndefined(); // just lit: nothing yet
+    expect(alphaAt(1.075)).toBeCloseTo(0.35, 6);
+    expect(alphaAt(4)).toBeCloseTo(0.7, 6);
+    expect(alphaAt(6.75)).toBeCloseTo(0.35, 6);
+    expect(alphaAt(7)).toBeUndefined();
+  });
+
+  it('shows an armed airstrike as every bomb along the hovered row (ID-041)', () => {
+    const r = recorder();
+    const centres: number[][] = [];
+    Object.assign(r.ctx, {
+      ellipse: (x: number, y: number, rx: number) => centres.push([x, y, rx]),
+    });
+    const scene = blank();
+    drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill: 'airstrike', x: 900, y: 300 });
+    const bombs = carpet(scene, 300).map((p) => project(p, CAM));
+    expect(bombs.length).toBeGreaterThan(1);
+    expect(centres).toEqual(bombs.map((b) => [b.sx, b.sy, SKILLS.airstrike.radius]));
+  });
+
+  it('lays a skill flash’s art flat across its reach, swelling as it fades (ID-041)', () => {
+    const r = recorder();
+    const boxes: { w: number; h: number; cx: number; cy: number }[] = [];
+    Object.assign(r.ctx, {
+      drawImage: (
+        img: { id: ArtId; width: number; height: number },
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+      ) => {
+        if (img.id === 'airstrike')
+          boxes.push({ w, h: (h / w) * (img.width / img.height), cx: x + w / 2, cy: y + h / 2 });
+      },
+    });
+    const blast = { skill: 'airstrike' as const, x: 700, y: 100, at: 0 };
+    for (const time of [0, SKILL_FLASH / 2]) {
+      drawScene(r.ctx, r.art, { ...blank(), time, blasts: [blast] }, CAM, VIEW);
+    }
+    const reach = 2 * SKILLS.airstrike.radius * CAM.zoom;
+    expect(boxes[0]!.w).toBeCloseTo(reach * 0.85, 6);
+    expect(boxes[1]!.w).toBeCloseTo(reach * 0.925, 6);
+    for (const b of boxes) expect(b.h).toBeCloseTo(TILT, 6); // squashed like the ground
+    const c = project(blast, CAM);
+    expect(boxes[0]!.cx).toBeCloseTo(c.sx, 6);
+    expect(boxes[0]!.cy).toBeCloseTo(c.sy, 6);
+    // Gone once the flash is over.
+    drawScene(r.ctx, r.art, { ...blank(), time: SKILL_FLASH, blasts: [blast] }, CAM, VIEW);
+    expect(boxes).toHaveLength(2);
   });
 });
 
@@ -977,11 +1032,11 @@ describe('sprite animation (ID-049)', () => {
     expect(poses(fast, new Animator()).draws).toEqual(poses(slow, new Animator()).draws);
   });
 
-  it('without an animator (build mode) nothing moves, placeholder shapes included', () => {
+  it('without an animator (build mode) nothing moves, the Horror included', () => {
     const w = walking();
     const s = {
       ...w,
-      enemies: [...w.enemies, { ...w.enemies[0]!, id: 8, kind: 'runner' as const }],
+      enemies: [...w.enemies, { ...w.enemies[0]!, id: 8, kind: 'horror' as const }],
     };
     const r = recorder();
     const moved: unknown[] = [];

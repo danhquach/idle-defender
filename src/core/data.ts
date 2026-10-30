@@ -745,15 +745,45 @@ export const BUFF_IDS: readonly BuffId[] = ['adrenaline', 'overdrive'];
 
 export type SkillId = 'flashbang' | 'molotov' | 'airstrike';
 /**
- * Click-to-target skills bought with horde cash, each researched at the Lab first and
- * hitting enemies only, within `radius` of the aim point: an airstrike deals `damage`
- * at once, a molotov leaves a fire dealing `dps` for `seconds`, a flashbang stuns
- * (no moving, no attacking) for `seconds`. `cooldown` is fight seconds after a use.
+ * Skills bought with horde cash, each researched at the Lab first and hitting enemies
+ * only, within `radius` of where each lands. `aim` is what the player picks: an airstrike
+ * a row, carpet bombed from the outer wall's front to the field's end, a bomb dealing
+ * `damage` every `every` s, `2 × radius` apart; a flashbang or a molotov nothing: `count`
+ * land at random on the field past the outer wall, one every `every` s, a flashbang
+ * stunning (no moving, no attacking) for `seconds`, a molotov's fire dealing `dps` for
+ * `seconds` (ID-041). `cooldown` is fight seconds after a use.
  */
 export const SKILLS = {
-  flashbang: { name: 'Flashbang', cost: 20, cooldown: 25, radius: 150, seconds: 3 },
-  molotov: { name: 'Molotov', cost: 25, cooldown: 20, radius: 80, dps: 5, seconds: 6 },
-  airstrike: { name: 'Airstrike', cost: 40, cooldown: 40, radius: 120, damage: 40 },
+  flashbang: {
+    name: 'Flashbang',
+    aim: 'none',
+    cost: 20,
+    cooldown: 25,
+    radius: 100,
+    seconds: 3,
+    count: 4,
+    every: 0.15,
+  },
+  molotov: {
+    name: 'Molotov',
+    aim: 'none',
+    cost: 25,
+    cooldown: 20,
+    radius: 50,
+    dps: 5,
+    seconds: 6,
+    count: 5,
+    every: 0.15,
+  },
+  airstrike: {
+    name: 'Airstrike',
+    aim: 'row',
+    cost: 40,
+    cooldown: 40,
+    radius: 60,
+    damage: 40,
+    every: 0.1,
+  },
 } as const;
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 /** How long a skill's flash stays on screen, in seconds. */

@@ -11,11 +11,13 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
-  FLESH,
   GATE_POSTS,
   GUNNER_ART,
   LOAD_TIMEOUT_MS,
   loadArt,
+  SHOP_ICON,
+  SKILL_ART,
+  SKILL_ICON,
   TIER_ART,
   TRAP_ART,
   TURRET_ART,
@@ -105,12 +107,12 @@ describe('art coverage', () => {
   it('maps every enemy kind, profession, turret state, trap kind and wall tier to art', () => {
     const states: TurretState[] = ['lit', 'dark', 'jammed', 'offline'];
     const used = [
-      ...Object.keys(ENEMIES).flatMap((k) => {
-        const look = ENEMY_ART[k as keyof typeof ENEMY_ART];
-        return 'art' in look ? [look.art] : [];
-      }),
+      ...Object.keys(ENEMIES).map((k) => ENEMY_ART[k as keyof typeof ENEMY_ART]),
       ...Object.keys(PROFESSIONS).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
       ...Object.values(GUNNER_ART),
+      ...Object.values(SKILL_ART),
+      ...Object.values(SHOP_ICON),
+      ...Object.values(SKILL_ICON),
       ...states.map((s) => TURRET_ART[s]),
       ...TRAP_KINDS.flatMap((k) => [TRAP_ART[k].built, TRAP_ART[k].broken]),
       ...Object.keys(TIERS).flatMap((t) => Object.values(TIER_ART[t as keyof typeof TIER_ART])),
@@ -121,18 +123,15 @@ describe('art coverage', () => {
     expect(new Set(used)).toEqual(ids);
   });
 
-  it('gives every enemy kind art but the Horror, whose placeholder is mutant red (ID-051)', () => {
+  it('gives every enemy kind its own art, the Horror included (ID-041)', () => {
     const kinds = Object.keys(ENEMIES) as (keyof typeof ENEMY_ART)[];
-    expect(kinds.filter((k) => !('art' in ENEMY_ART[k]))).toEqual(['horror']);
-    expect(ENEMY_ART.horror).toEqual({ placeholder: FLESH });
-    const hex = [1, 3, 5].map((i) => parseInt(FLESH.slice(i, i + 2), 16));
-    expect(saturation(hex[0]!, hex[1]!, hex[2]!)).toBeGreaterThan(0.5);
+    expect(kinds.map((k) => ENEMY_ART[k])).toEqual(kinds);
   });
 
-  it('keeps the five new mutants saturated and mutes the Runner (ID-051, §15)', () => {
+  it('keeps the mutants and the Horror saturated and mutes the Runner (ID-051, ID-041, §15)', () => {
     const mutant = (id: string): boolean =>
       manifest.assets.find((a) => a.id === id)?.mutant === true;
-    for (const k of ['crawler', 'bloater', 'spitter', 'brute', 'screamer']) {
+    for (const k of ['crawler', 'bloater', 'spitter', 'brute', 'screamer', 'horror']) {
       expect(mutant(k), k).toBe(true);
       // The Brute's grey armour makes it the least saturated mutant: about 0.38.
       expect(saturatedShare(k), k).toBeGreaterThan(0.35);

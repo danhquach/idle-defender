@@ -1,7 +1,16 @@
 // The game's art (design §15, ID-043): sprites and textures generated at development
 // time (prompts and seeds in art-src/manifest.json), cleaned by tools/art/build.py
 // and bundled with the build. The page never fetches art from anywhere else.
-import type { EnemyKind, Profession, Tier, TrapKind, WeaponId, WEAPONS } from '../core/data.ts';
+import type {
+  EnemyKind,
+  Profession,
+  ShopItem,
+  SkillId,
+  Tier,
+  TrapKind,
+  WeaponId,
+  WEAPONS,
+} from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
 
 export const ART_IDS = [
@@ -12,6 +21,17 @@ export const ART_IDS = [
   'spitter',
   'brute',
   'screamer',
+  'horror',
+  'airstrike',
+  'molotov',
+  'flashbang',
+  'icon-adrenaline',
+  'icon-overdrive',
+  'icon-patch',
+  'icon-fix',
+  'icon-flashbang',
+  'icon-molotov',
+  'icon-airstrike',
   'gunner',
   'gunner-pistol',
   'gunner-smg',
@@ -78,22 +98,40 @@ export const ART_URLS: Readonly<Record<string, string>> = Object.fromEntries(
   ).map(([path, url]) => [path.slice(path.lastIndexOf('/') + 1, -'.png'.length), url]),
 );
 
+/** Every enemy kind's generated art (design §15, ID-043, ID-051, ID-041). */
+export const ENEMY_ART: Readonly<Record<EnemyKind, ArtId>> = {
+  shambler: 'shambler',
+  runner: 'runner',
+  crawler: 'crawler',
+  bloater: 'bloater',
+  spitter: 'spitter',
+  brute: 'brute',
+  screamer: 'screamer',
+  horror: 'horror',
+};
+
 /**
- * Every kind has generated art but the Mutated Horror, a drawn placeholder body (design
- * §15, ID-023) until its art lands (ID-041) in a mutant's flesh red.
+ * Each skill's art, lying on the ground across its reach (design §15, ID-041): a bomb's
+ * or a flashbang's flash where it goes off, a molotov's fire for as long as it burns.
  */
-export type EnemyLook = { art: ArtId } | { placeholder: string };
-/** A mutant's flesh red (design §15). */
-export const FLESH = '#d2453c';
-export const ENEMY_ART: Readonly<Record<EnemyKind, EnemyLook>> = {
-  shambler: { art: 'shambler' },
-  runner: { art: 'runner' },
-  crawler: { art: 'crawler' },
-  bloater: { art: 'bloater' },
-  spitter: { art: 'spitter' },
-  brute: { art: 'brute' },
-  screamer: { art: 'screamer' },
-  horror: { placeholder: FLESH },
+export const SKILL_ART: Readonly<Record<SkillId, ArtId>> = {
+  airstrike: 'airstrike',
+  flashbang: 'flashbang',
+  molotov: 'molotov',
+};
+
+/** Each horde cash shop item's icon on its button (design §15, ID-041). */
+export const SHOP_ICON: Readonly<Record<ShopItem, ArtId>> = {
+  adrenaline: 'icon-adrenaline',
+  overdrive: 'icon-overdrive',
+  patch: 'icon-patch',
+  fix: 'icon-fix',
+};
+/** Each skill's icon on its button (design §15, ID-041). */
+export const SKILL_ICON: Readonly<Record<SkillId, ArtId>> = {
+  flashbang: 'icon-flashbang',
+  molotov: 'icon-molotov',
+  airstrike: 'icon-airstrike',
 };
 
 /** The weapon in the sprite's hands tells the profession (design §15). */

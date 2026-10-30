@@ -274,6 +274,17 @@ Defenders stand on **posts** the player builds and chooses between.
   cash, 40 s, radius 120) deals 40 damage at once. Cooldowns, stuns and fires
   run on fight time (they stop during picks), every skill is ready when a
   horde starts, and a skill kill pays XP and cash like any other.
+- **As built (ID-041, PM decision): skills thrown across the field.** Only
+  the **Airstrike** is aimed, and at a row: it carpet bombs that row from the
+  outermost wall's front to the field's end, a bomb (radius 60, 40 damage)
+  landing every 0.1 s, 2 × radius apart (about 9 bombs). The **Molotov** and
+  the **Flashbang** go off as soon as their button is pressed: the Molotov
+  throws 5 bottles, one every 0.15 s, each a fire of radius 50 burning
+  5 damage/s for 6 s; the Flashbang throws 4, one every 0.15 s, each
+  stunning within radius 100 for 3 s. Each lands at a spot from the fight's
+  seeded randomness, past the outermost wall and inside the field. Costs and
+  cooldowns are as before. Bombs and bottles in the air wait out picks like
+  everything on fight time, and are dropped when the fight ends.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or
@@ -786,7 +797,8 @@ one crowd (no lanes, §3).
   in the status line, shows a boss bar with the Horror's name, ability and HP
   while it is on the field, and the result screen names it ("injured by the
   Mutated Horror", "the Mutated Horror: Rammer is dead", or "still stood").
-  Placeholder art: a large flesh-red hulk, sized by its radius.
+  Art (§15, ID-041): a generated flesh-red hulk with growths over its back,
+  sized by its radius.
 
   Retune: the ticket's starting points (400 HP, −5 armour, Brood 4 Shamblers
   every 10 s, Regen 2%/s after 3 s) made the Horror unbeatable: a pistol did
@@ -1244,8 +1256,7 @@ original outline.
   face the way the Shambler does and drawn by its radius like the
   Shambler's art, so it moves in the ID-049 poses with no new frames. The
   Spitter's art has no spit of its own: the glob and the Bloater's burst
-  stay drawn effects. Only the Mutated Horror is still a drawn placeholder
-  (ID-041).
+  stay drawn effects. The Mutated Horror got its art in ID-041.
 - **As built (ID-054):** the gate is part of the wall. The camera looks
   along the wall, so its outward face never shows; the gate is drawn where
   the wall shows, on its segment's top, in place of the tier's top texture:
@@ -1265,6 +1276,25 @@ original outline.
   no plank platform (it would cover the gate); a defender or turret there
   stands at the same height as on any segment, drawn over the gate. The old
   top-down door art is gone.
+- **As built (ID-041):** the last placeholders have art, made the same way
+  (FLUX.2 Klein 4B, one manifest entry each, picked from three seeds). The
+  **Mutated Horror** is a hulking flesh-red mutant with growths over its
+  back and arms to the ground, kept saturated (manifest `mutant`), drawn by
+  its radius in the ID-049 poses. Each skill lies flat on the ground across
+  its radius, squashed by the camera's tilt: an **airstrike** bomb's blast
+  and a **flashbang**'s white burst swell from 85% to full size while fading
+  over 0.4 s; a **molotov** fire is drawn at 70% opacity under every sprite,
+  flaring up over its first 0.15 s, dying down over its last 0.5 s and
+  wavering 3% in size. The skills use the `object` style (or their prompt
+  as sent) rather than the angled sprite style, since they lie on the
+  ground; the flashbang's soft glow kept pink from the magenta it was keyed
+  out of, so the build drains all its colour (manifest `white`). The four
+  horde cash shop items and three skills each show an icon (an adrenaline
+  syringe, a lightning-bolt bullet, a hammer over a plank, crossed wrenches
+  on a gear, a stun grenade, a burning bottle, a falling bomb) 20 px beside
+  their button's label; the icon has empty alt text, so a screen reader
+  reads only the label. The armed airstrike's aim shows every bomb's ring
+  along the row. No drawn placeholder remains.
 
 ## 16. Tech and platform
 

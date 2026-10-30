@@ -418,6 +418,14 @@ body {
   white-space: nowrap;
 }
 
+.hud-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  vertical-align: middle;
+  object-fit: contain;
+}
+
 .hud-skill[aria-pressed='true'] {
   outline: 2px solid #ffe066;
   outline-offset: 1px;

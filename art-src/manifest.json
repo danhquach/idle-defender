@@ -76,6 +76,109 @@
       "prompt": "full body of a thin mutant zombie standing on two legs with both feet visible, head thrown back screaming with its jaw stretched impossibly wide open showing rows of teeth, jagged bony spikes jutting out of its skull, shoulders and spine, two clawed arms spread out to the sides, raw flesh red skin, torn rag trousers"
     },
     {
+      "id": "horror",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5201,
+      "size": "512x512",
+      "mutant": true,
+      "flip": true,
+      "prompt": "full body of a colossal hulking mutated horror boss lumbering forward on two thick stumpy legs, enormous hunched back covered in swollen fleshy growths and tumours, very long heavy arms with huge clawed hands dragging near the ground, small sunken eyeless head with a wide toothy maw, raw flesh red skin with exposed muscle and bone, scraps of torn rags"
+    },
+    {
+      "id": "airstrike",
+      "kind": "sprite",
+      "style": "object",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5215,
+      "size": "512x512",
+      "mutant": true,
+      "prompt": "a round explosion blast seen from directly above, a bright orange and yellow fireball in the centre with licking flames, a few thin wispy see-through puffs of pale grey smoke drifting around it with wide gaps between them, small bits of flying rubble, the whole blast a circle"
+    },
+    {
+      "id": "flashbang",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5242,
+      "size": "512x512",
+      "white": true,
+      "prompt": "a round blinding flash of a stun grenade going off seen from directly above, a burst of brilliant white light with pale yellow and blue tinged rays radiating out, a thin bright shockwave ring around it, a small spent metal grenade canister in the centre, the whole burst a circle. 2D game sprite, hand-painted style, soft shading, single object centred with empty space around it, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-adrenaline",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5252,
+      "size": "512x512",
+      "prompt": "a game UI icon of an adrenaline syringe filled with glowing red liquid, angled diagonally, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-overdrive",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5263,
+      "size": "512x512",
+      "prompt": "a game UI icon of a brass rifle bullet with a bright yellow lightning bolt across it and speed lines behind it, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-patch",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5271,
+      "size": "512x512",
+      "prompt": "a game UI icon of a claw hammer crossed over a short wooden plank with nails, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-fix",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5283,
+      "size": "512x512",
+      "prompt": "a game UI icon of a steel wrench crossed over a metal cog gear, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-flashbang",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5292,
+      "size": "512x512",
+      "prompt": "a game UI icon of a cylindrical stun grenade with its pin pulled and a bright white starburst flash behind it, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-molotov",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5301,
+      "size": "512x512",
+      "prompt": "a game UI icon of a glass bottle with a burning rag stuffed in its neck, orange flame on top, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-airstrike",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5311,
+      "size": "512x512",
+      "prompt": "a game UI icon of a finned aerial bomb falling nose down, dark olive drab body, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "molotov",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5232,
+      "size": "512x512",
+      "mutant": true,
+      "prompt": "a messy uneven spread of burning fire seen from directly above, irregular clumps of realistic orange and yellow flames of many sizes, thin wisps of flame and glowing embers scattered between them, a few broken glass shards, the fire alone with no surface beneath it, no puddle, no dirt patch. 2D game sprite, hand-painted style, soft shading, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
       "id": "gunner",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
