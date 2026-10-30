@@ -1,7 +1,7 @@
 // The camp (design §11, as built ID-033): capacity and the material camp upgrades that
-// add slots, dismissing, the roster floor's free recruits, and camp XP with its
-// permanent level-up picks. Pure: each action returns a new game or a refusal the UI
-// shows as-is; real time comes in as `now`.
+// add slots, dismissing, the roster floor's free recruits, camp XP with its permanent
+// level-up picks, and Food and Medicine cutting an injury's rest (ID-031). Pure: each
+// action returns a new game or a refusal the UI shows as-is; real time comes in as `now`.
 import { isOwned } from './armoury.ts';
 import {
   CAMP_SIZE,
@@ -14,6 +14,7 @@ import {
   MAX_COUNT,
   RECOVERY_MS,
   RECRUIT_NAMES,
+  TREATMENT_MS,
   type CampPickId,
   type Stock,
 } from './data.ts';
@@ -189,6 +190,35 @@ export const repairOff = (camp: Pick<Camp, 'picks'>): number => bonus(camp, 'sal
 /** How long an injury rests, in ms. */
 export const recoveryMs = (camp: Pick<Camp, 'picks'>): number =>
   (RECOVERY_MS * (100 - bonus(camp, 'medic'))) / 100;
+/** What an injured defender can use up to rest less (design §11 Recovery). */
+export type Treatment = keyof typeof TREATMENT_MS;
+
+/**
+ * Uses one `item` on defender `id`, injured at `now` (design §11 Recovery): it is used
+ * up and cuts `TREATMENT_MS[item]` off the rest; a cut past `now` heals them at once.
+ */
+export function treat(game: GameState, id: string, item: Treatment, now: number): GameResult {
+  if (!Number.isFinite(now)) throw new RangeError(`treat: bad time ${now}`);
+  const d = game.roster.find((r) => r.id === id);
+  if (!d) throw new RangeError(`treat: no defender ${String(id)}`);
+  if (!Object.hasOwn(TREATMENT_MS, item)) throw new RangeError(`treat: no item ${String(item)}`);
+  if (d.injuredUntil === null || now >= d.injuredUntil) {
+    return { ok: false, reason: `${d.name} isn't injured` };
+  }
+  if (game.stock[item] < 1) return { ok: false, reason: `No ${item} left` };
+  const until = d.injuredUntil - TREATMENT_MS[item];
+  return {
+    ok: true,
+    game: {
+      ...game,
+      stock: { ...game.stock, [item]: game.stock[item] - 1 },
+      roster: game.roster.map((r) =>
+        r.id === id ? { ...r, injuredUntil: until > now ? until : null } : r,
+      ),
+    },
+  };
+}
+
 /** Percent more patrol materials and Gas. */
 export const lootBonus = (camp: Pick<Camp, 'picks'>): number => bonus(camp, 'foraging');
 

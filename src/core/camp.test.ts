@@ -18,6 +18,7 @@ import {
   recoveryMs,
   repairOff,
   takeCampPick,
+  treat,
   upgradeCamp,
 } from './camp.ts';
 import {
@@ -31,9 +32,11 @@ import {
   RECRUIT_NAMES,
   stockOf,
   TIERS,
+  TREATMENT_MS,
   type CampPickId,
 } from './data.ts';
 import {
+  available,
   finishHorde,
   newGame,
   ownedWeapons,
@@ -424,5 +427,91 @@ describe('the roster floor', () => {
     expect(back.camp.recruitAt).toBe(patrolDue(p) + HOUR);
     // Already due: it arrives as soon as the game runs again.
     expect(recruitArrivals(back, late).roster).toHaveLength(3);
+  });
+});
+
+describe('injury recovery with Food and Medicine (ID-031)', () => {
+  const MIN = 60_000;
+  /** A new game with Bob injured for a full rest from `NOW`, and `stock`. */
+  const hurt = (stock: Parameters<typeof stockOf>[0], rest = RECOVERY_MS): GameState => {
+    const g = newGame();
+    return {
+      ...g,
+      stock: stockOf(stock),
+      roster: g.roster.map((d) => (d.id === 'bob' ? { ...d, injuredUntil: NOW + rest } : d)),
+    };
+  };
+  const bob = (g: GameState): RosterDefender => g.roster.find((d) => d.id === 'bob')!;
+  const ok = (r: ReturnType<typeof treat>): GameState => {
+    if (!r.ok) throw new Error(r.reason);
+    return r.game;
+  };
+
+  it('each Food cuts 30 minutes and each Medicine 60, and both are used up', () => {
+    expect(TREATMENT_MS).toEqual({ food: 30 * MIN, medicine: 60 * MIN });
+    const g = hurt({ food: 3, medicine: 2 });
+    const fed = ok(treat(g, 'bob', 'food', NOW));
+    expect(bob(fed).injuredUntil).toBe(NOW + RECOVERY_MS - 30 * MIN);
+    expect(fed.stock).toEqual(stockOf({ food: 2, medicine: 2 }));
+    const dosed = ok(treat(fed, 'bob', 'medicine', NOW));
+    expect(bob(dosed).injuredUntil).toBe(NOW + RECOVERY_MS - 90 * MIN);
+    expect(dosed.stock).toEqual(stockOf({ food: 2, medicine: 1 }));
+    // Nobody else is touched, and the game handed in is unchanged.
+    expect(dosed.roster.filter((d) => d.id !== 'bob')).toEqual(g.roster.slice(1));
+    expect(bob(g).injuredUntil).toBe(NOW + RECOVERY_MS);
+    expect(g.stock).toEqual(stockOf({ food: 3, medicine: 2 }));
+  });
+
+  it('4 Food or 2 Medicine is a full recovery: fit at once, free to defend', () => {
+    let fed = hurt({ food: 4 });
+    for (let i = 0; i < 4; i += 1) fed = ok(treat(fed, 'bob', 'food', NOW));
+    expect(bob(fed).injuredUntil).toBeNull();
+    expect(fed.stock.food).toBe(0);
+    let dosed = hurt({ medicine: 2 });
+    for (let i = 0; i < 2; i += 1) dosed = ok(treat(dosed, 'bob', 'medicine', NOW));
+    expect(bob(dosed).injuredUntil).toBeNull();
+    expect(available(bob(dosed), NOW)).toBe(true);
+    expect(() => startHorde(dosed, 1, 'bob', 0, NOW)).not.toThrow();
+  });
+
+  it('a cut longer than the rest left heals at once, and the item is still used up', () => {
+    const g = hurt({ medicine: 1 }, 10 * MIN);
+    const r = ok(treat(g, 'bob', 'medicine', NOW));
+    expect(bob(r).injuredUntil).toBeNull();
+    expect(r.stock.medicine).toBe(0);
+  });
+
+  it('Field Medic shortens the rest, not the cut; the cut counts from the rest left', () => {
+    const medic = withPicks(newGame(), { medic: 1 });
+    const g = withPicks(hurt({ food: 1 }, recoveryMs(medic.camp)), { medic: 1 });
+    const later = NOW + 20 * MIN;
+    expect(bob(ok(treat(g, 'bob', 'food', later))).injuredUntil).toBe(
+      NOW + RECOVERY_MS * 0.9 - 30 * MIN,
+    );
+  });
+
+  it('a cut that lands exactly on now heals at once', () => {
+    const g = hurt({ food: 1 }, 30 * MIN);
+    expect(bob(ok(treat(g, 'bob', 'food', NOW))).injuredUntil).toBeNull();
+  });
+
+  it('refuses a defender who is not injured or has healed, and with none left; spends nothing', () => {
+    const g = hurt({ food: 0, medicine: 1 });
+    expect(treat(g, 'jack', 'medicine', NOW)).toEqual({ ok: false, reason: "Jack isn't injured" });
+    expect(treat(g, 'bob', 'medicine', NOW + RECOVERY_MS)).toEqual({
+      ok: false,
+      reason: "Bob isn't injured",
+    });
+    expect(treat(g, 'bob', 'food', NOW)).toEqual({ ok: false, reason: 'No food left' });
+    expect(g.stock).toEqual(stockOf({ medicine: 1 }));
+  });
+
+  it('throws on an unknown defender or a bad time', () => {
+    const g = hurt({ food: 1 });
+    expect(() => treat(g, 'nobody', 'food', NOW)).toThrow(RangeError);
+    expect(() => treat(g, 'bob', 'food', Number.NaN)).toThrow(RangeError);
+    for (const item of ['bandage', 'toString', '__proto__']) {
+      expect(() => treat(g, 'bob', item as 'food', NOW)).toThrow(RangeError);
+    }
   });
 });

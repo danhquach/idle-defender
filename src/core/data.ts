@@ -470,6 +470,8 @@ export const FIND = {
 export const DEFENDER_XP = { base: 10, perHorde: 5 } as const;
 /** Real time an injured defender rests before they can defend again, in ms (design §11). */
 export const RECOVERY_MS = 2 * 60 * 60 * 1000;
+/** Rest each Food or Medicine used cuts, in ms (design §11): 4 Food or 2 Medicine is a full rest. */
+export const TREATMENT_MS = { food: 30 * 60 * 1000, medicine: 60 * 60 * 1000 } as const;
 
 // --- The camp (M8). Design §11, as built ID-033 (starting points). ---
 
