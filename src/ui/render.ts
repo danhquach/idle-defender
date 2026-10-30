@@ -27,6 +27,7 @@ import {
   type Trap,
   type Turret,
 } from '../core/horde.ts';
+import { baseOf } from '../core/armoury.ts';
 import { professionOf } from '../core/loadout.ts';
 import { badgeOf } from '../core/stats.ts';
 import {
@@ -47,9 +48,11 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
+  GUNNER_ART,
   TIER_ART,
   TRAP_ART,
   TURRET_ART,
+  type GunId,
   ART_PX,
   type Art,
   type ArtId,
@@ -381,8 +384,8 @@ function drawBadge(
 
 /**
  * A defender standing `z0` up at `(x, y)`: their profession's sprite (the weapon tells
- * it, design §15), a shield in front if they carry one, a ring at their feet when
- * selected, their title badge and an HP bar once hurt.
+ * it, design §15; a Gunner's shows their primary), a shield in front if they carry
+ * one, a ring at their feet when selected, their title badge and an HP bar once hurt.
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
@@ -401,7 +404,12 @@ function drawDefender(
     ctx.ellipse(feet.sx, feet.sy, r, r * 0.5, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
-  drawStanding(ctx, art[DEFENDER_ART[professionOf(d.loadout)]], feet, STAND.defender, cam);
+  const profession = professionOf(d.loadout);
+  const sprite =
+    profession === 'gunner'
+      ? GUNNER_ART[baseOf(d.loadout.primary) as GunId]
+      : DEFENDER_ART[profession];
+  drawStanding(ctx, art[sprite], feet, STAND.defender, cam);
   if (d.loadout.item === 'shield') {
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
     drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam);

@@ -49,7 +49,7 @@ import {
   type Stats,
   type Tracer,
 } from './data.ts';
-import { pierces, type Held } from './armoury.ts';
+import { pierceOf, type Held } from './armoury.ts';
 import {
   gunOf,
   isGun,
@@ -239,8 +239,8 @@ export interface Bullet {
   aim: number;
   /** Px it can still fly; at 0 it falls with no damage. */
   left: number;
-  /** Goes through its next hit, then flies at most `PIERCE.reach` on. */
-  pierce: boolean;
+  /** Enemies it can still go through; after each it flies at most `PIERCE.reach` on. */
+  pierce: number;
   /** Ids of the enemies it hit: never the same one twice. */
   hit: number[];
   /** How it looks in flight: its gun's. */
@@ -815,7 +815,10 @@ export function leadPoint(x: number, y: number, e: Enemy, speed: number): { x: n
   return { x: e.x + e.vx * t, y: e.y + e.vy * t };
 }
 
-/** Fires a bullet from `(x, y)` at where `target` will be, turned off by up to `spread`° (seeded). */
+/**
+ * Fires `pellets` bullets from `(x, y)` at where `target` will be, each turned off by up
+ * to `spread`° on its own roll (seeded); one muzzle flash for the lot.
+ */
 function launch(
   s: HordeState,
   rng: Rng,
@@ -825,24 +828,28 @@ function launch(
     target: Enemy;
     spread: number;
     range: number;
+    pellets: number;
   },
 ): void {
-  const { x, y, target, spread, range, ...rest } = shot;
+  const { x, y, target, spread, range, pellets, ...rest } = shot;
   const aim = leadPoint(x, y, target, rest.speed);
-  const off = ((rng() * 2 - 1) * spread * Math.PI) / 180;
-  const angle = Math.atan2(aim.y - y, aim.x - x) + off;
-  s.bullets.push({
-    ...rest,
-    x,
-    y,
-    dx: Math.cos(angle),
-    dy: Math.sin(angle),
-    fromX: x,
-    fromY: y,
-    aim: Math.hypot(aim.x - x, aim.y - y),
-    left: range,
-    hit: [],
-  });
+  const heading = Math.atan2(aim.y - y, aim.x - x);
+  const distance = Math.hypot(aim.x - x, aim.y - y);
+  for (let i = 0; i < pellets; i++) {
+    const angle = heading + ((rng() * 2 - 1) * spread * Math.PI) / 180;
+    s.bullets.push({
+      ...rest,
+      x,
+      y,
+      dx: Math.cos(angle),
+      dy: Math.sin(angle),
+      fromX: x,
+      fromY: y,
+      aim: distance,
+      left: range,
+      hit: [],
+    });
+  }
   s.shots.push({ owner: rest.owner, at: s.time + STEP });
 }
 
@@ -889,8 +896,8 @@ function fly(s: HordeState): void {
       b.left -= hit.at;
       travel -= hit.at;
       s.impacts.push({ x: b.x, y: b.y, hit: true, at: s.time + STEP });
-      if (!b.pierce) return false;
-      b.pierce = false;
+      if (b.pierce <= 0) return false;
+      b.pierce -= 1;
       b.left = Math.min(b.left, PIERCE.reach);
       travel = Math.min(travel, b.left);
     }
@@ -936,7 +943,8 @@ function fire(s: HordeState, rng: Rng): void {
         spread: spreadOf(defender, id),
         range: gunRange(s, defender.walking ? { kind: 'ground' } : post, id),
         damage: hit,
-        pierce: pierces(id),
+        pierce: pierceOf(id),
+        pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
       });
     } else {
@@ -988,7 +996,8 @@ function fireTurrets(s: HordeState, rng: Rng): void {
       spread: TURRET.spread,
       range,
       damage: TURRET.damage * buff * boost(s, 'damage'),
-      pierce: false,
+      pierce: 0,
+      pellets: 1,
       tracer: TURRET.tracer,
     });
     const slow = Math.min(1, 0.5 + (0.5 * t.condition) / TURRET.slowBelow);

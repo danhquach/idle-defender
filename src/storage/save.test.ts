@@ -328,6 +328,16 @@ describe('save', () => {
       }
     }) as Loose;
     expect(pistols.game.roster.every((d: Loose) => d.loadout.secondary === null)).toBe(true);
+    // Every old weapon was free: a specialised gun there is refused (ID-046).
+    for (const never of ['smg', 'sniper', 'constructor']) {
+      const forged = hostile((s) => {
+        s.game.roster.forEach((d: Loose, i: number) => {
+          delete d.loadout;
+          d.weapon = i === 0 ? never : 'pistol';
+        });
+      });
+      expect(forged, never).toBeNull();
+    }
   });
 
   it('refuses loadouts the game does not allow, and mixed or hostile shapes', () => {
@@ -470,6 +480,21 @@ describe('save: the armoury (design §6 Gear)', () => {
     expect(decodeSave(encodeSave(armed(), NOW))).toEqual({ game: armed(), savedAt: NOW });
   });
 
+  it('round-trips the specialised guns, a sniper with a pierce affix in hands (ID-046)', () => {
+    const g = armed();
+    g.armoury.push(
+      { uid: 'h4', base: 'shotgun', rarity: 'common', affixes: [] },
+      { uid: 'h5', base: 'lmg', rarity: 'rusty', affixes: [] },
+    );
+    g.roster[0]!.loadout.primary = {
+      uid: 'h8',
+      base: 'sniper',
+      rarity: 'military',
+      affixes: [{ id: 'pierce', value: 1 }],
+    };
+    expect(decodeSave(encodeSave(g, NOW))).toEqual({ game: g, savedAt: NOW });
+  });
+
   it('loads a save from before the armoury with an empty one', () => {
     const save = JSON.parse(encodeSave(played(), NOW));
     delete save.game.armoury;
@@ -482,8 +507,10 @@ describe('save: the armoury (design §6 Gear)', () => {
     const cases: [string, (s: Loose) => void][] = [
       ['unknown rarity', (s) => (w(s).rarity = 'legendary')],
       ['look-alike rarity', (s) => (w(s).rarity = 'milіtary')],
-      ['unknown base', (s) => (w(s).base = 'rifle')],
+      ['unknown base', (s) => (w(s).base = 'flamethrower')],
       ['prototype key', (s) => (w(s).base = '__proto__')],
+      ['constructor as base', (s) => (w(s).base = 'constructor')],
+      ['toString as base', (s) => (w(s).base = 'toString')],
       ['too few affixes', (s) => w(s).affixes.pop()],
       ['too many affixes', (s) => w(s).affixes.push({ id: 'damage', value: 5 })],
       ['affix twice', (s) => (w(s).affixes[1] = { id: 'repair', value: 10 })],
@@ -504,6 +531,15 @@ describe('save: the armoury (design §6 Gear)', () => {
       ['the same uid in the armoury and in hands', (s) => (w(s).uid = 'h3')],
       ['the same uid in two pairs of hands', (s) => (s.game.roster[1].loadout.primary = held(s))],
       ['held weapon that breaks the rules', (s) => (held(s).base = 'knife')],
+      // A specialised gun is only ever an owned item: by id it would be free and unlimited.
+      ['specialised gun held by id', (s) => (s.game.roster[0].loadout.primary = 'smg')],
+      ['sniper held by id', (s) => (s.game.roster[1].loadout.primary = 'sniper')],
+      [
+        'specialised gun held by id as secondary',
+        (s) => (s.game.roster[1].loadout.secondary = 'smg'),
+      ],
+      ['constructor held by id', (s) => (s.game.roster[1].loadout.primary = 'constructor')],
+      ['toString held by id', (s) => (s.game.roster[1].loadout.secondary = 'toString')],
       ['armoury not a list', (s) => (s.game.armoury = { 0: w(s) })],
       ['armoury entry not an object', (s) => (s.game.armoury = ['h7'])],
       [

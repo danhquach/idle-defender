@@ -17,7 +17,7 @@ import {
   START_TIERS,
   ITEMS,
   RARITIES,
-  WEAPONS,
+  FREE_WEAPONS,
   type ResearchId,
   type Stat,
   type Stats,
@@ -214,7 +214,7 @@ export function equip(
   const resolve = (h: Held | null): Held | null | undefined =>
     isOwned(h)
       ? (owned.find((w) => w.uid === h.uid) ?? ownedWeapons(game).find((w) => w.uid === h.uid))
-      : known(h, WEAPONS)
+      : h === null || (FREE_WEAPONS as readonly string[]).includes(h)
         ? h
         : undefined;
   const primary = resolve(loadout.primary);

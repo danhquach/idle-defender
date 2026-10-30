@@ -1,38 +1,18 @@
 // Design §6 Loadout: what a defender carries, the profession it gives, and the
-// specialised-gun rules. No specialised gun ships yet, so these tests add a
-// rifle to the weapon table.
-import { describe, expect, it, vi } from 'vitest';
-import { STEP, type WeaponId } from './data.ts';
+// specialised-gun rules, with a Common rifle as the specialised gun.
+import { describe, expect, it } from 'vitest';
+import type { Held, OwnedWeapon } from './armoury.ts';
+import { STEP, WEAPONS } from './data.ts';
 import { newHorde, standing, tick, type DefenderSpec, type HordeState } from './horde.ts';
 import { loadoutError, loadoutFrom, professionOf, type Loadout } from './loadout.ts';
 import { damageFactor, fireRateFactor, reloadTime } from './stats.ts';
 import { enemy, setup } from './testing.ts';
 
-// Hoisted with vi.mock, which runs before the rest of the file.
-const RIFLE = vi.hoisted(
-  () =>
-    ({
-      name: 'Rifle',
-      kind: 'gun',
-      damage: 12,
-      fireInterval: 0.8,
-      range: 800,
-      magazine: 20,
-      reload: 2,
-      speed: 2400,
-      spread: 1,
-    }) as const,
-);
-
-vi.mock('./data.ts', async (importOriginal) => {
-  const data = await importOriginal<typeof import('./data.ts')>();
-  return { ...data, WEAPONS: { ...data.WEAPONS, rifle: RIFLE } };
-});
-
-const rifle = 'rifle' as WeaponId;
+const RIFLE = WEAPONS.rifle;
+const rifle: OwnedWeapon = { uid: 'h1', base: 'rifle', rarity: 'common', affixes: [] };
 const L = (
-  primary: WeaponId,
-  secondary: WeaponId | null = null,
+  primary: Held,
+  secondary: Held | null = null,
   item: 'shield' | null = null,
 ): Loadout => ({
   primary,
@@ -74,7 +54,6 @@ describe('loadout and profession', () => {
     expect(loadoutFrom('pistol')).toEqual(L('pistol'));
     expect(loadoutFrom('knife')).toEqual(L('pistol', 'knife'));
     expect(loadoutFrom('toolkit')).toEqual(L('pistol', 'toolkit'));
-    expect(loadoutFrom(rifle)).toEqual(L(rifle));
   });
 });
 
@@ -83,17 +62,15 @@ describe('specialised guns suit Gunners', () => {
     const g = who(L(rifle, 'pistol'));
     expect(damageFactor(g, rifle)).toBe(1);
     expect(fireRateFactor(g, rifle)).toBeCloseTo(1.15);
-    expect(reloadTime(g, rifle)).toBeCloseTo(2 * 0.75);
+    expect(reloadTime(g, rifle)).toBeCloseTo(RIFLE.reload * 0.75);
   });
 
   it('anyone else: −30% damage and a 50% slower reload; their sidearm stays plain', () => {
     for (const d of [who(L(rifle, 'knife')), who(L(rifle, 'toolkit'))]) {
       expect(damageFactor(d, rifle)).toBeCloseTo(0.7);
       expect(fireRateFactor(d, rifle)).toBe(1);
-      expect(reloadTime(d, rifle)).toBeCloseTo(2 * 1.5);
-      expect(
-        damageFactor({ loadout: L('pistol', d.loadout.secondary as WeaponId | null) }, 'pistol'),
-      ).toBe(1);
+      expect(reloadTime(d, rifle)).toBeCloseTo(RIFLE.reload * 1.5);
+      expect(damageFactor({ loadout: L('pistol', d.loadout.secondary) }, 'pistol')).toBe(1);
     }
   });
 });

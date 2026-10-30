@@ -19,13 +19,21 @@ art-concepts/*.jpg in place, so none of it is committed.
 Manifest asset keys (unknown keys stop the build):
 
   id*, kind* ("sprite" or "texture"), model*, seed*, size*, prompt*,
-  ref (id of the generation it edits), flip (mirror left to right),
+  ref (id of the generation it edits, or a list of ids it combines: the
+  first is the subject, the others what it takes on, ID-046), photo (a public
+  domain photograph the generation was drawn from, credited in
+  docs/art-credits.md under its id), flip (mirror left to right),
   mutant (keep its colours saturated; everything else is muted, §15),
   group (sprites in one group share one scale, so a raised weapon doesn't
   shrink a body), palette (id of a texture whose colours this texture takes
   on, so two surfaces read as one ground), edge (id of a texture this one is a
   variant of: it takes on that texture's colours and shares its seam border,
-  so any variant tiles next to any other, ID-050).
+  so any variant tiles next to any other, ID-050), part (a generation used only
+  inside other sprites as a reference, never written out itself; ID-046: a Gunner
+  holding each gun is drawn from the weaponless body part and that weapon's part),
+  style (the manifest style to use instead of its kind's: a
+  weapon on its own is generated with the `object` style; the empty `verbatim`
+  style means the prompt was sent as it is, with no style added).
 
 A sprite has its magenta background keyed out to transparency, only its
 biggest shape kept (detached parts under KEEP of it are dropped), and is
@@ -53,7 +61,7 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
-    "palette", "edge",
+    "palette", "edge", "part", "style", "photo",
 }
 CONCEPTS = ROOT / "art-concepts"
 REQUIRED = {"id", "kind", "model", "seed", "size", "prompt"}
@@ -227,19 +235,32 @@ def check_seams(tiles: list[Image.Image], name: str) -> None:
 
 
 def check(
-    asset: dict, models: set[str], ids: set[str], textures: set[str], variants: set[str]
+    asset: dict,
+    models: set[str],
+    ids: set[str],
+    textures: set[str],
+    variants: set[str],
+    styles: set[str],
 ) -> None:
     unknown = set(asset) - KEYS
-    missing = REQUIRED - set(asset)
     name = asset.get("id", "?")
+    missing = REQUIRED - set(asset)
     if unknown or missing:
         sys.exit(f"{name}: unknown keys {sorted(unknown)}, missing {sorted(missing)}")
     if asset["model"] not in models:
         sys.exit(f"{name}: model {asset['model']} is not in the art-credits allow-list")
     if asset["kind"] not in ("sprite", "texture"):
         sys.exit(f"{name}: kind must be sprite or texture")
-    if "ref" in asset and asset["ref"] not in ids:
-        sys.exit(f"{name}: ref {asset['ref']} is not an asset")
+    if asset.get("style", asset["kind"]) not in styles:
+        sys.exit(f"{name}: no style {asset.get('style')} in the manifest")
+    if "part" in asset and (asset["part"] is not True or asset["kind"] != "sprite"):
+        sys.exit(f"{name}: part is true, on a sprite")
+    refs = asset.get("ref", [])
+    for ref in [refs] if isinstance(refs, str) else refs:
+        if ref not in ids:
+            sys.exit(f"{name}: ref {ref} is not an asset")
+    if "photo" in asset and asset["photo"] not in CREDITS.read_text():
+        sys.exit(f"{name}: photo {asset['photo']} is not credited in art-credits.md")
     for key in ("palette", "edge"):
         if key in asset and (asset["kind"] != "texture" or asset[key] not in textures):
             sys.exit(f"{name}: {key} must be a texture's, on a texture")
@@ -257,7 +278,7 @@ def main(only: list[str]) -> None:
     variants = {a["id"] for a in assets if "edge" in a}
     models = allowed_models()
     for asset in assets:
-        check(asset, models, ids, textures, variants)
+        check(asset, models, ids, textures, variants, set(manifest["style"]))
     unknown = set(only) - ids
     if unknown:
         sys.exit(f"not in the manifest: {sorted(unknown)}")
@@ -273,6 +294,8 @@ def main(only: list[str]) -> None:
     families = {a["edge"] for a in assets if "edge" in a}
     built: dict[str, Image.Image] = {}
     for asset in assets:
+        if asset.get("part"):
+            continue
         src = sources[asset["id"]]
         if asset["kind"] == "sprite":
             built[asset["id"]] = prepare(src, asset)
@@ -290,11 +313,11 @@ def main(only: list[str]) -> None:
     # A group shares one scale; any other sprite is scaled on its own.
     longest: dict[str, int] = {}
     for asset in assets:
-        if asset["kind"] == "sprite":
+        if asset["kind"] == "sprite" and not asset.get("part"):
             key = asset.get("group", asset["id"])
             longest[key] = max(longest.get(key, 0), *built[asset["id"]].size)
     for asset in assets:
-        if only and asset["id"] not in only:
+        if (only and asset["id"] not in only) or asset.get("part"):
             continue
         img = built[asset["id"]]
         if asset["kind"] == "sprite":

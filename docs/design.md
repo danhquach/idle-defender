@@ -350,6 +350,42 @@ close-quarter weapons come out only when an enemy is close.
   balance targets); knife 10 every 0.5 s, toolkit 4 every 0.6 s, both
   reaching 50 px. A sidearm fired on the move uses ground-post range
   (×0.75). One shot cooldown covers every weapon a defender carries.
+- **Specialised guns (as built, ID-046, starting points):** each is an owned
+  item only (a horde drop, picked evenly with the other base weapons; never
+  free like the pistol, knife and toolkit), primary only, with the Gunner and
+  non-Gunner rules above, rarity and affixes. A shotgun round is 6 pellets, each
+  rolling its own angle in the cone and hitting on its own for the listed
+  damage (no distance falloff, one muzzle flash); the crit is rolled once per
+  round, so all six pellets crit together. The sniper rifle pierces one
+  enemy by default; a pierce affix adds one more.
+
+  | Gun | Damage | Every | Range | Magazine | Reload | Speed | Spread | Pellets | Pierce |
+  |---|---|---|---|---|---|---|---|---|---|
+  | Pistol | 6.2 | 0.6 s | 600 | 10 | 1.5 s | 1,800 | ±2.5° | 1 | 0 |
+  | SMG | 5 | 0.2 s | 400 | 30 | 2 s | 1,600 | ±5° | 1 | 0 |
+  | Rifle | 7 | 0.4 s | 750 | 20 | 2 s | 2,200 | ±1.5° | 1 | 0 |
+  | Shotgun | 4 per pellet | 0.75 s | 350 | 8 | 2.5 s | 1,400 | ±12° | 6 | 0 |
+  | LMG | 6 | 0.22 s | 500 | 60 | 5 s | 2,000 | ±4° | 1 | 0 |
+  | Sniper rifle | 22 | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 1 |
+
+  Balance (a lone Common-gun Gunner on the upper tower against 20-HP Shamblers
+  held in place; kills, mean of the seeds; `balance.test.ts`):
+
+  | Gun | Close crowd, 20 s | Far (530–830 px), 20 s | Lane, 20 s | Sustained, 60 s | Horde 4 wins (Bob's gun + pistol) |
+  |---|---|---|---|---|---|
+  | Pistol | 8.3 | 8.0 | 8.3 | 25.8 | 5% |
+  | SMG | 22.0 | 0 | 16.8 | 60.0 | 100% |
+  | Rifle | 16.7 | 16.2 | 16.3 | 50.8 | 95% |
+  | Shotgun | **26.2** | 0 | 12.0 | 51.8 | 95% |
+  | LMG | 21.5 | 13.6 | 20.3 | **66.2** | 100% |
+  | Sniper rifle | 21.7 | **21.4** | **21.0** | 62.2 | 75% |
+
+  Each beats the pistol in its role at least twice over (the rifle, the
+  all-rounder, 1.5× everywhere); the shotgun leads up close, the sniper far and
+  in a lane, the LMG in sustained fire; no gun leads more than two, the rifle
+  none, and the SMG and shotgun can't reach far. One specialised gun lifts
+  Horde 4 from about 5% to 75–100% won, but Horde 6 stays at most a quarter won
+  with any of them (the curve still needs the camp to grow).
 - **Roster screen (as built, ID-012):** a Roster button on the build panel
   opens it in the panel's place: each defender's level and XP, stats,
   titles, unspent points (spent there) and rest time, and three pickers
@@ -936,6 +972,14 @@ original outline.
   load. `src/ui/ground.ts` paints it all once into one field-sized canvas at
   the tiles' own resolution, drawn whole each frame, so no tile edge can show
   at any zoom.
+- **As built (ID-046):** a Gunner's sprite shows their primary: the rifle
+  (the original Gunner art), the pistol (an edit of it), and the SMG,
+  shotgun, LMG and sniper rifle. Each of those four is two generations: the
+  gun alone, drawn from a public-domain US government photograph (manifest
+  `photo`, credited in `docs/art-credits.md`), then the Gunner holding it,
+  drawn from a weaponless Gunner body and that gun together (a `ref` list of
+  `part` generations, which are never shipped themselves). Rippers and
+  Engineers keep their own art whatever their primary.
 - **As built (ID-045):** no line joins shooter and target. Each bullet is drawn
   at its simulated spot, in the depth sort, as a bright slug with a streak
   behind it whose length and colour are its gun's (`tracer` in the gun data:

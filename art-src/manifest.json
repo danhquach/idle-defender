@@ -1,7 +1,9 @@
 {
   "style": {
     "sprite": "2D game sprite, angled overhead three-quarter view looking down from above at 45 degrees, hand-painted style, soft shading, bold dark outline, single subject centred with empty space around it, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, gritty post-apocalyptic ruins setting",
-    "texture": "seamless tileable texture filling the whole image edge to edge, flat top-down view, hand-painted style, soft even lighting, muted desaturated colours, gritty post-apocalyptic ruins setting, no text, no letters, no single object in focus"
+    "texture": "seamless tileable texture filling the whole image edge to edge, flat top-down view, hand-painted style, soft even lighting, muted desaturated colours, gritty post-apocalyptic ruins setting, no text, no letters, no single object in focus",
+    "object": "2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred with empty space around it, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person",
+    "verbatim": ""
   },
   "assets": [
     {
@@ -21,6 +23,111 @@
       "seed": 4311,
       "size": "512x512",
       "prompt": "a lone survivor soldier standing facing right, full body, holding a long assault rifle in both hands pointed to the right, khaki jacket, dark trousers, boots, helmet, ammunition pouches",
+      "group": "defender"
+    },
+    {
+      "id": "gunner-pistol",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4319,
+      "size": "512x512",
+      "ref": "gunner",
+      "prompt": "the same soldier, now holding only a small handgun pistol in one hand pointed to the right instead of the rifle, the other hand empty at the side, same clothes and framing",
+      "group": "defender"
+    },
+    {
+      "id": "gunner-body",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4330,
+      "size": "512x512",
+      "ref": "gunner",
+      "prompt": "the same soldier with the rifle removed completely, both hands empty and held forward in front of the body at waist height in the same pose as if gripping a gun, no weapon anywhere, same clothes and framing",
+      "part": true
+    },
+    {
+      "id": "weapon-smg",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4349,
+      "size": "768x512",
+      "style": "object",
+      "prompt": "redraw the submachine gun from the reference photo as a game sprite, only the gun, side view, muzzle pointing right. From left to right: short folding stock, pistol grip with the trigger guard just in front of it, then a clear gap, then a slightly curved box magazine pointing straight down from the middle of the receiver, well forward of the trigger guard and never touching the grip, then a short handguard and barrel with a round front sight. Plain black steel, no markings",
+      "part": true,
+      "photo": "150114-A-BD610-111"
+    },
+    {
+      "id": "weapon-shotgun",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4362,
+      "size": "768x512",
+      "style": "object",
+      "prompt": "redraw the pump-action shotgun from the reference photo as a game sprite, only the gun, keeping its exact silhouette, side view, muzzle pointing right. From left to right: solid stock, receiver with the trigger guard under it, then the pump grip slid along under the barrel, a long tube magazine under the barrel reaching nearly to the muzzle, a single thick barrel with a bead sight. Dark matte steel and black synthetic stock and pump, no markings",
+      "part": true,
+      "photo": "commons-199972340"
+    },
+    {
+      "id": "weapon-lmg",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4336,
+      "size": "768x512",
+      "style": "object",
+      "prompt": "redraw the machine gun from the reference photo as a game sprite, keeping its exact silhouette: a large square green ammunition box hanging under the middle of the gun, a feed cover on top of the receiver with a carrying handle, a bipod folded forward under the long heavy barrel, a fixed sloped stock, side view, muzzle pointing right, no curved rifle magazine, dark steel with olive ammunition box",
+      "part": true,
+      "photo": "DA-SC-85-11586"
+    },
+    {
+      "id": "weapon-sniper",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4381,
+      "size": "768x512",
+      "style": "object",
+      "prompt": "redraw the bolt-action sniper rifle from the reference photo as a game sprite, only the rifle, keeping its exact silhouette, side view, muzzle pointing right. From left to right: solid stock with a cheek rest, pistol grip with the trigger guard, bolt handle sticking out to the side, a long telescopic scope mounted on top over the receiver, a long thin heavy barrel, a small bipod folded under the fore-end. Dark green stock and black steel, no markings",
+      "part": true,
+      "photo": "commons-11317366"
+    },
+    {
+      "id": "gunner-smg",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4358,
+      "size": "512x512",
+      "ref": ["gunner-body", "weapon-smg"],
+      "prompt": "the soldier from the first image holding the submachine gun from the second image, the gun exactly as in the second image, held in front of the chest with both hands: the right hand on the pistol grip with a finger by the trigger, the left hand forward under the handguard, never on the magazine, the stock tucked against the shoulder, muzzle pointed to the right and slightly down, same soldier, same clothes, same framing",
+      "group": "defender"
+    },
+    {
+      "id": "gunner-shotgun",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4372,
+      "size": "512x512",
+      "ref": ["gunner-body", "weapon-shotgun"],
+      "style": "verbatim",
+      "prompt": "Helmeted soldier sprite, angled overhead three-quarter view, holding the exact black pump-action shotgun from the reference in a natural two-hand grip: right hand wrapping the grip with the finger resting beside the trigger guard, left hand gripping the pump under the barrel, barrel level and pointing right and slightly down, stock tucked with no protruding parts behind the body; keep the soldier’s clothes, body shape, framing, and hand-painted 2D game sprite art style unchanged, bold dark outline, plain flat magenta #FF00FF background, no text, no shadow, no ground.",
+      "group": "defender"
+    },
+    {
+      "id": "gunner-lmg",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4355,
+      "size": "512x512",
+      "ref": ["gunner-body", "weapon-lmg"],
+      "prompt": "the soldier from the first image carrying the light machine gun from the second image, the gun exactly as in the second image with its olive ammunition box, carry handle and bipod, held at the hip with both hands: the right hand on the pistol grip behind the trigger, the left hand under the front of the gun gripping the handguard, stock tucked under the arm against the side, muzzle pointed to the right and slightly down, same soldier, same clothes, same framing",
+      "group": "defender"
+    },
+    {
+      "id": "gunner-sniper",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4384,
+      "size": "512x512",
+      "ref": ["gunner-body", "weapon-sniper"],
+      "prompt": "the soldier from the first image holding the scoped sniper rifle from the second image, the rifle exactly as in the second image, held in a natural two-hand grip at chest height: the right hand wrapping the pistol grip with the finger beside the trigger guard, the left hand under the fore-end, the stock tucked against the shoulder, the long barrel pointing to the right and slightly down, same soldier, same clothes, same framing",
       "group": "defender"
     },
     {

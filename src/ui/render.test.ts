@@ -281,7 +281,7 @@ describe('drawScene with art', () => {
     expect(dark.drawn).toContain('turret-dark');
   });
 
-  it('draws each profession by its weapon, a shield in front, and the Shambler', () => {
+  it('draws each profession by its weapon, a Gunner by their gun, a shield in front, and the Shambler', () => {
     const base = blank();
     const game = newGame();
     const d0 = startHorde(game, 1, game.roster[0]!.id, 0, 0).defenders[0]!;
@@ -299,6 +299,14 @@ describe('drawScene with art', () => {
         at(0, d0.loadout),
         at(1, { ...d0.loadout, secondary: 'knife', item: 'shield' }),
         at(2, { ...d0.loadout, secondary: 'toolkit' }),
+        at(3, {
+          ...d0.loadout,
+          primary: { uid: 'h1', base: 'rifle', rarity: 'common', affixes: [] },
+        }),
+        at(4, {
+          ...d0.loadout,
+          primary: { uid: 'h2', base: 'sniper', rarity: 'rusty', affixes: [] },
+        }),
       ],
       enemies: [
         {
@@ -317,7 +325,15 @@ describe('drawScene with art', () => {
       ],
     });
     expect(r.drawn).toEqual(
-      expect.arrayContaining(['gunner', 'ripper', 'engineer', 'shield', 'shambler']),
+      expect.arrayContaining([
+        'gunner-pistol',
+        'gunner',
+        'gunner-sniper',
+        'ripper',
+        'engineer',
+        'shield',
+        'shambler',
+      ]),
     );
   });
 
@@ -434,7 +450,7 @@ describe('bullet visuals (ID-045)', () => {
       fromY: from.y,
       aim,
       left: 600 - flown,
-      pierce: false,
+      pierce: 0,
       hit: [],
       tracer,
     };

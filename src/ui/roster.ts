@@ -7,11 +7,12 @@ import {
   RARITY_ORDER,
   STAT_NAMES,
   STATS,
+  FREE_WEAPONS,
   WEAPONS,
+  type FreeWeaponId,
   type ItemId,
   type Profession,
   type Stat,
-  type WeaponId,
 } from '../core/data.ts';
 import { heldLabel, type Held } from '../core/armoury.ts';
 import {
@@ -31,15 +32,14 @@ import { BADGE_COLOUR } from './render.ts';
 /** "●●" for an Adept: one pip per rank. */
 export const pipText = (pips: number): string => '●'.repeat(pips);
 
-const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
-/** What each slot may hold (design §6): guns as primary; a sidearm, blade or tool as secondary. */
-export const PRIMARY_OPTIONS: readonly WeaponId[] = WEAPON_IDS.filter((id) => {
-  const kind = weaponOf(id).kind;
-  return kind === 'sidearm' || kind === 'gun';
-});
-export const SECONDARY_OPTIONS: readonly (WeaponId | null)[] = [
+/**
+ * The free weapons each slot may hold (design §6): guns as primary; a sidearm, blade or
+ * tool as secondary. Specialised guns are owned items, listed with the armoury's.
+ */
+export const PRIMARY_OPTIONS: readonly FreeWeaponId[] = FREE_WEAPONS.filter((id) => isGun(id));
+export const SECONDARY_OPTIONS: readonly (FreeWeaponId | null)[] = [
   null,
-  ...WEAPON_IDS.filter((id) => weaponOf(id).kind !== 'gun'),
+  ...FREE_WEAPONS.filter((id) => weaponOf(id).kind !== 'gun'),
 ];
 export const ITEM_OPTIONS: readonly (ItemId | null)[] = [null, ...(Object.keys(ITEMS) as ItemId[])];
 

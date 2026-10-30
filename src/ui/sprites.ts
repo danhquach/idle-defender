@@ -1,12 +1,17 @@
 // The game's art (design §15, ID-043): sprites and textures generated at development
 // time (prompts and seeds in art-src/manifest.json), cleaned by tools/art/build.py
 // and bundled with the build. The page never fetches art from anywhere else.
-import type { EnemyKind, Profession, Tier, TrapKind } from '../core/data.ts';
+import type { EnemyKind, Profession, Tier, TrapKind, WeaponId, WEAPONS } from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
 
 export const ART_IDS = [
   'shambler',
   'gunner',
+  'gunner-pistol',
+  'gunner-smg',
+  'gunner-shotgun',
+  'gunner-lmg',
+  'gunner-sniper',
   'ripper',
   'engineer',
   'shield',
@@ -71,6 +76,20 @@ export const DEFENDER_ART: Readonly<Record<Profession, ArtId>> = {
   gunner: 'gunner',
   ripper: 'ripper',
   engineer: 'engineer',
+};
+
+/** Every gun: a sidearm or a specialised gun. */
+export type GunId = {
+  [K in WeaponId]: (typeof WEAPONS)[K]['kind'] extends 'sidearm' | 'gun' ? K : never;
+}[WeaponId];
+/** A Gunner's sprite holds their primary, so the gun reads at a glance (design §15, ID-046). */
+export const GUNNER_ART: Readonly<Record<GunId, ArtId>> = {
+  pistol: 'gunner-pistol',
+  smg: 'gunner-smg',
+  rifle: 'gunner',
+  shotgun: 'gunner-shotgun',
+  lmg: 'gunner-lmg',
+  sniper: 'gunner-sniper',
 };
 
 /** A turret with its wall broken (offline) shows dark, like one with no charge. */

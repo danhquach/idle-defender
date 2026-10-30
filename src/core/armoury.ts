@@ -8,6 +8,7 @@ import {
   WEAPON_DROP,
   WEAPONS,
   type AffixId,
+  type FreeWeaponId,
   type Rarity,
   type Weapon,
   type WeaponId,
@@ -28,7 +29,7 @@ export interface OwnedWeapon {
 }
 
 /** What a loadout slot holds: a free Common weapon by id, or an owned one. */
-export type Held = WeaponId | OwnedWeapon;
+export type Held = FreeWeaponId | OwnedWeapon;
 
 export const isOwned = (h: Held | null): h is OwnedWeapon => typeof h === 'object' && h !== null;
 export const baseOf = (h: Held): WeaponId => (isOwned(h) ? h.base : h);
@@ -52,7 +53,7 @@ const AFFIX_TEXT: Readonly<Record<AffixId, (v: number) => string>> = {
   fireRate: (v) => `+${v}% fire rate`,
   magazine: (v) => `+${v}% magazine`,
   reload: (v) => `−${v}% reload time`,
-  pierce: () => 'Pierce: hits the next enemy in line',
+  pierce: () => 'Pierce: goes through one more enemy in line',
   repair: (v) => `+${v}% repair`,
 };
 export const affixText = (a: Affix): string => AFFIX_TEXT[a.id](a.value);
@@ -101,9 +102,12 @@ function work(h: OwnedWeapon): Weapon {
   }
 }
 
-/** A gun whose bullets go through their first enemy to the next one in their path. */
-export const pierces = (h: Held | null): boolean =>
-  isOwned(h) && h.affixes.some((a) => a.id === 'pierce');
+/** How many enemies a bullet from gun `h` goes through: its base gun's, plus a pierce affix's. */
+export const pierceOf = (h: Held): number => {
+  const w: Weapon = WEAPONS[baseOf(h)];
+  const base = w.kind === 'sidearm' || w.kind === 'gun' ? w.pierce : 0;
+  return base + (isOwned(h) ? (h.affixes.find((a) => a.id === 'pierce')?.value ?? 0) : 0);
+};
 
 /** Chance that winning horde `hordeNumber` drops a weapon. */
 export const dropChance = (hordeNumber: number): number =>
