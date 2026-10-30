@@ -4,7 +4,7 @@
 // Text reaches the page only through textContent.
 import { affixText, heldName } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
-import { UPGRADES } from '../core/cards.ts';
+import { synergyOf, UPGRADES } from '../core/cards.ts';
 import {
   BANK_CAP,
   FALL_WARNING,
@@ -80,11 +80,26 @@ export const postName = (p: Pick<Post, 'kind' | 'column' | 'row' | 'spot'>): str
 export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'loadout' | 'stats'>): string =>
   `${nameTag(d)} — ${PROFESSIONS[professionOf(d.loadout)].name}`;
 
-function cardText(card: Card): { title: string; body: string } {
+const capital = (w: string): string => w.charAt(0).toUpperCase() + w.slice(1);
+
+/**
+ * A card's words (design §8): an upgrade's rarity and category ("Rare behaviour"), and
+ * the synergy it turns on, if any.
+ */
+export function cardText(
+  card: Card,
+  state: HordeState,
+): { title: string; body: string; kind?: string; synergy?: string } {
   if (card.kind === 'recruit')
     return { title: `Recruit ${defenderLabel(card.defender)}`, body: 'Takes a free post' };
   const u = UPGRADES[card.id];
-  return { title: u.name, body: u.text };
+  const synergy = synergyOf(state, card.id);
+  return {
+    title: u.name,
+    body: u.text,
+    kind: `${capital(u.rarity)} ${u.category}`,
+    ...(synergy ? { synergy: `Synergy — ${synergy}` } : {}),
+  };
 }
 
 /** A level as a whole number, rounded down but never to 0 while any is left. */
@@ -506,18 +521,18 @@ export function createHud(
     return block;
   }
 
-  function showOffer(offer: Card[]): void {
+  function showOffer(offer: Card[], state: HordeState): void {
     const heading = el('h2', 'hud-cards-title', 'Level up: pick one');
     const row = el('div', 'hud-card-row');
     offer.forEach((card, i) => {
-      const { title, body } = cardText(card);
-      const button = el('button', `hud-card hud-card-${card.kind}`);
+      const { title, body, kind, synergy } = cardText(card, state);
+      const rarity = card.kind === 'upgrade' ? ` hud-card-${UPGRADES[card.id].rarity}` : '';
+      const button = el('button', `hud-card hud-card-${card.kind}${rarity}`);
       button.type = 'button';
-      button.append(
-        el('span', 'hud-card-key', String(i + 1)),
-        el('span', 'hud-card-title', title),
-        el('span', 'hud-card-body', body),
-      );
+      button.append(el('span', 'hud-card-key', String(i + 1)), el('span', 'hud-card-title', title));
+      if (kind) button.append(el('span', 'hud-card-kind', kind));
+      button.append(el('span', 'hud-card-body', body));
+      if (synergy) button.append(el('span', 'hud-card-synergy', synergy));
       button.addEventListener('click', () => choose(i));
       row.append(button);
     });
@@ -581,7 +596,7 @@ export function createHud(
       if (JSON.stringify(state.offer) !== JSON.stringify(shownOffer)) {
         shownOffer = state.offer;
         cards.hidden = state.offer === null;
-        if (state.offer) showOffer(state.offer);
+        if (state.offer) showOffer(state.offer, state);
         else cards.replaceChildren();
       }
     },

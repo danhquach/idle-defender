@@ -15,6 +15,7 @@ import {
   SKILLS,
   SPITTER,
   BLOATER,
+  CARD,
   TRAP_STRIP,
   WALL,
   type EnemyKind,
@@ -22,12 +23,15 @@ import {
   type SkillId,
 } from '../core/data.ts';
 import {
+  burning,
   turretState,
+  type Arc,
   type Bullet,
   type Defender,
   type HordeState,
   type Impact,
   type Layer,
+  type Pop,
   type Post,
   type Burst,
   type Spit,
@@ -99,6 +103,9 @@ const COLOR = {
   smoke: 'rgba(150, 150, 150, 0.55)',
   fire: 'rgba(255, 120, 30, 0.3)',
   fireEdge: 'rgba(255, 150, 50, 0.8)',
+  lightning: '#cfe6ff',
+  pop: '#ff9a3c',
+  flame: '#ff7a1a',
 } as const;
 /** Each skill's flash where it lands (design §4, as built ID-019). */
 const SKILL_COLOR: Readonly<Record<SkillId, string>> = {
@@ -186,12 +193,16 @@ export type Scene = Pick<
   | 'impacts'
   | 'spits'
   | 'bursts'
+  | 'arcs'
+  | 'pops'
   | 'focusId'
   | 'time'
   | 'fires'
   | 'blasts'
   | 'outcome'
->;
+> &
+  // A Power Surge lights turrets on an empty bank (design §8); build mode has none.
+  Partial<Pick<HordeState, 'wave' | 'freeWave'>>;
 /** An armed skill's reach around the cursor, on the field. */
 export interface Aim {
   skill: SkillId;
@@ -863,6 +874,65 @@ function drawBurst(ctx: CanvasRenderingContext2D, k: Burst, time: number, cam: C
   ctx.globalAlpha = 1;
 }
 
+/** Explode on Kill (design §8): an orange ring spreading over the burst's reach. */
+function drawPop(ctx: CanvasRenderingContext2D, k: Pop, time: number, cam: Camera): void {
+  const age = (time - k.at) / CARD.explode.flash;
+  if (age < 0 || age >= 1) return;
+  groundCircle(ctx, k.x, k.y, CARD.explode.radius * (0.4 + 0.6 * age), cam);
+  ctx.globalAlpha = 0.9 * (1 - age);
+  ctx.strokeStyle = COLOR.pop;
+  ctx.lineWidth = sized(2, cam);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * Chain Lightning (design §8), the one card that draws a beam: a jagged bolt at body
+ * height from the enemy hit to the one it arced to, fading out.
+ */
+function drawArc(ctx: CanvasRenderingContext2D, k: Arc, time: number, cam: Camera): void {
+  const age = (time - k.at) / CARD.chain.flash;
+  if (age < 0 || age >= 1) return;
+  const a = project({ x: k.fromX, y: k.fromY, z: ENEMY.z }, cam);
+  const b = project({ x: k.x, y: k.y, z: ENEMY.z }, cam);
+  // Fixed kinks (no RNG in the renderer): alternate sides of the line, a fifth of the way each.
+  const nx = -(b.sy - a.sy) * 0.08;
+  const ny = (b.sx - a.sx) * 0.08;
+  ctx.globalAlpha = 1 - age;
+  ctx.strokeStyle = COLOR.lightning;
+  ctx.lineWidth = sized(1.5, cam);
+  ctx.beginPath();
+  ctx.moveTo(a.sx, a.sy);
+  for (let i = 1; i < 5; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    ctx.lineTo(
+      a.sx + ((b.sx - a.sx) * i) / 5 + side * nx,
+      a.sy + ((b.sy - a.sy) * i) / 5 + side * ny,
+    );
+  }
+  ctx.lineTo(b.sx, b.sy);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/** Burning Rounds (design §8): a flickering flame on a burning enemy, scaled by its body. */
+function drawFlame(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  time: number,
+  cam: Camera,
+): void {
+  const c = project({ x, y, z: ENEMY.z * size * 1.6 }, cam);
+  ctx.globalAlpha = 0.6 + 0.3 * Math.sin(time * 25);
+  ctx.fillStyle = COLOR.flame;
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, sized(EFFECT.puff * size * 0.7, cam), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
 /** A Spitter's glob arcing to where it lands, then a splash there (design §9, ID-023). */
 function drawSpit(ctx: CanvasRenderingContext2D, k: Spit, time: number, cam: Camera): void {
   const age = (time - k.at) / SPITTER.splash;
@@ -1018,6 +1088,7 @@ export function drawScene(
         }
         const pose = anim ? enemyPose(e, scene.time, anim.enemy(e.id)) : STILL;
         drawEnemy(ctx, art, e.kind, ground, cam, pose);
+        if (burning(scene, e)) drawFlame(ctx, e.x, e.y, size, scene.time, cam);
         drawHpBar(ctx, { x: e.x, y: e.y, z: HP_BAR.z * size }, e.hp, e.maxHp, cam);
       },
     });
@@ -1064,6 +1135,8 @@ export function drawScene(
   for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
   for (const k of scene.spits) drawSpit(ctx, k, scene.time, cam);
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
+  for (const k of scene.pops) drawPop(ctx, k, scene.time, cam);
+  for (const k of scene.arcs) drawArc(ctx, k, scene.time, cam);
 
   // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.
   for (const b of scene.blasts) {
