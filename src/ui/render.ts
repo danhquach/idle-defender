@@ -2,6 +2,8 @@
 // the shared projection and depth sort. Canvas 2D, no rendering library.
 import {
   COLUMNS,
+  ENEMIES,
+  ENEMY_RADIUS,
   FIELD,
   IMPACT_FLASH,
   MAX_CONDITION,
@@ -11,8 +13,11 @@ import {
   SEGMENTS,
   SKILL_FLASH,
   SKILLS,
+  SPITTER,
+  BLOATER,
   TRAP_STRIP,
   WALL,
+  type EnemyKind,
   type Profession,
   type SkillId,
 } from '../core/data.ts';
@@ -24,6 +29,8 @@ import {
   type Impact,
   type Layer,
   type Post,
+  type Burst,
+  type Spit,
   type Trap,
   type Turret,
 } from '../core/horde.ts';
@@ -54,6 +61,7 @@ import {
   TRAP_ART,
   TURRET_ART,
   type GunId,
+  type EnemyShape,
   ART_PX,
   type Art,
   type ArtId,
@@ -83,6 +91,9 @@ const COLOR = {
   flashEdge: 'rgba(255, 170, 60, 0.6)',
   blood: '#8e1f1a',
   dust: '#a8987c',
+  outline: '#1b1a18',
+  hitFlash: '#ffffff',
+  acid: '#a6e22e',
   glow: 'rgba(255, 196, 70, 0.45)',
   spark: '#ffd84a',
   smoke: 'rgba(150, 150, 150, 0.55)',
@@ -173,6 +184,8 @@ export type Scene = Pick<
   | 'bullets'
   | 'shots'
   | 'impacts'
+  | 'spits'
+  | 'bursts'
   | 'focusId'
   | 'time'
   | 'fires'
@@ -719,18 +732,139 @@ function drawImpact(ctx: CanvasRenderingContext2D, i: Impact, time: number, cam:
   ctx.globalAlpha = 1;
 }
 
-/** An enemy's shadow on the ground, `alpha` as solid as a living one's. */
+/** An enemy's shadow on the ground, `size` × a Shambler's, `alpha` as solid as a living one's. */
 function drawShadow(
   ctx: CanvasRenderingContext2D,
   at: { sx: number; sy: number },
   alpha: number,
   cam: Camera,
+  size = 1,
 ): void {
-  const r = ENEMY.shadow * cam.zoom;
+  const r = ENEMY.shadow * size * cam.zoom;
   ctx.globalAlpha = alpha;
   ctx.fillStyle = COLOR.shadow;
   ctx.beginPath();
   ctx.ellipse(at.sx, at.sy, r, r * 0.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * An enemy's body, feet on `feet`, in `pose`: its kind's art, or its placeholder shape
+ * (design §15, ID-023), both scaled by its radius (a Shambler's is the reference).
+ */
+function drawEnemy(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  kind: EnemyKind,
+  feet: { sx: number; sy: number },
+  cam: Camera,
+  pose: Readonly<Pose>,
+): void {
+  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
+  const look = ENEMY_ART[kind];
+  if ('art' in look) {
+    drawStanding(ctx, art[look.art], feet, STAND.enemy * size, cam, pose);
+    return;
+  }
+  const h = STAND.enemy * size * cam.zoom;
+  // Standing still (build mode) needs no transform, as with `drawStanding`.
+  if (pose === STILL) {
+    drawShape(ctx, look.shape, look.colour, h, feet.sx, feet.sy);
+    return;
+  }
+  ctx.save();
+  ctx.translate(feet.sx + pose.dx * cam.zoom, feet.sy - pose.lift * cam.zoom);
+  ctx.rotate(pose.rot);
+  ctx.scale(pose.sx, pose.sy);
+  ctx.globalAlpha *= pose.alpha;
+  drawShape(ctx, look.shape, look.colour, h);
+  if (pose.flash > 0) {
+    ctx.globalAlpha *= pose.flash;
+    drawShape(ctx, look.shape, COLOR.hitFlash, h);
+  }
+  ctx.restore();
+}
+
+/**
+ * A placeholder enemy body `h` screen px tall, feet on `(x, y)`: a filled shape per kind
+ * with a dark outline, so each reads by its silhouette.
+ */
+function drawShape(
+  ctx: CanvasRenderingContext2D,
+  shape: EnemyShape,
+  fill: string,
+  h: number,
+  x = 0,
+  y = 0,
+): void {
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = COLOR.outline;
+  ctx.lineWidth = Math.max(1, h / 24);
+  ctx.beginPath();
+  switch (shape) {
+    case 'lean': // a thin body pitched forward, mid-stride
+      ctx.ellipse(x - h * 0.08, y - h * 0.45, h * 0.15, h * 0.45, -0.35, 0, Math.PI * 2);
+      break;
+    case 'low': // flat to the ground, legs out
+      ctx.ellipse(x, y - h * 0.18, h * 0.42, h * 0.16, 0, 0, Math.PI * 2);
+      for (const dx of [-0.3, -0.1, 0.1, 0.3]) {
+        ctx.moveTo(x + h * dx, y - h * 0.1);
+        ctx.lineTo(x + h * dx * 1.5, y);
+      }
+      break;
+    case 'round': // swollen
+      ctx.arc(x, y - h * 0.4, h * 0.4, 0, Math.PI * 2);
+      break;
+    case 'hunch': // a body and the sac on its back
+      ctx.ellipse(x, y - h * 0.38, h * 0.18, h * 0.38, 0, 0, Math.PI * 2);
+      ctx.moveTo(x + h * 0.38, y - h * 0.6);
+      ctx.arc(x + h * 0.2, y - h * 0.6, h * 0.18, 0, Math.PI * 2);
+      break;
+    case 'block': // broad and square
+      ctx.rect(x - h * 0.32, y - h, h * 0.64, h);
+      break;
+    case 'spike': // a jagged crown, mouth open
+      ctx.moveTo(x - h * 0.25, y);
+      ctx.lineTo(x - h * 0.3, y - h * 0.7);
+      ctx.lineTo(x - h * 0.12, y - h * 0.55);
+      ctx.lineTo(x, y - h);
+      ctx.lineTo(x + h * 0.12, y - h * 0.55);
+      ctx.lineTo(x + h * 0.3, y - h * 0.7);
+      ctx.lineTo(x + h * 0.25, y);
+      ctx.closePath();
+      break;
+  }
+  ctx.fill();
+  ctx.stroke();
+}
+
+/** A Bloater blowing up: an acid-green ring swelling and fading (design §9, ID-023). */
+function drawBurst(ctx: CanvasRenderingContext2D, k: Burst, time: number, cam: Camera): void {
+  const age = (time - k.at) / BLOATER.burst;
+  if (age < 0 || age >= 1) return;
+  groundCircle(ctx, k.x, k.y, ENEMIES.bloater.radius * (1 + 2 * age), cam);
+  ctx.globalAlpha = 0.7 * (1 - age);
+  ctx.fillStyle = COLOR.acid;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/** A Spitter's glob arcing to where it lands, then a splash there (design §9, ID-023). */
+function drawSpit(ctx: CanvasRenderingContext2D, k: Spit, time: number, cam: Camera): void {
+  const age = (time - k.at) / SPITTER.splash;
+  if (age < 0 || age >= 1) return;
+  const fly = Math.min(1, age * 2);
+  const at = {
+    x: k.fromX + (k.x - k.fromX) * fly,
+    y: k.fromY + (k.y - k.fromY) * fly,
+    z: ENEMY.z + Math.sin(Math.PI * fly) * 40,
+  };
+  const c = project(at, cam);
+  ctx.fillStyle = COLOR.acid;
+  ctx.globalAlpha = fly < 1 ? 1 : 0.8 * (1 - (age - 0.5) * 2);
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, sized(fly < 1 ? EFFECT.puff / 2 : EFFECT.puff, cam), 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
 }
@@ -859,7 +993,8 @@ export function drawScene(
       x: e.x,
       draw: () => {
         const ground = project({ x: e.x, y: e.y }, cam);
-        drawShadow(ctx, ground, 1, cam);
+        const size = ENEMIES[e.kind].radius / ENEMY_RADIUS;
+        drawShadow(ctx, ground, 1, cam, size);
         if (e.id === scene.focusId) {
           const r = ENEMY.shadow * 1.8 * cam.zoom;
           ctx.strokeStyle = COLOR.focus;
@@ -869,8 +1004,8 @@ export function drawScene(
           ctx.stroke();
         }
         const pose = anim ? enemyPose(e, scene.time, anim.enemy(e.id)) : STILL;
-        drawStanding(ctx, art[ENEMY_ART[e.kind]], ground, STAND.enemy, cam, pose);
-        drawHpBar(ctx, { x: e.x, y: e.y, z: HP_BAR.z }, e.hp, e.maxHp, cam);
+        drawEnemy(ctx, art, e.kind, ground, cam, pose);
+        drawHpBar(ctx, { x: e.x, y: e.y, z: HP_BAR.z * size }, e.hp, e.maxHp, cam);
       },
     });
   }
@@ -885,8 +1020,8 @@ export function drawScene(
       draw: () => {
         const ground = project({ x: e.x, y: e.y }, cam);
         const pose = fallPose(scene.time - c.at);
-        drawShadow(ctx, ground, pose.alpha, cam);
-        drawStanding(ctx, art[ENEMY_ART[e.kind]], ground, STAND.enemy, cam, pose);
+        drawShadow(ctx, ground, pose.alpha, cam, ENEMIES[e.kind].radius / ENEMY_RADIUS);
+        drawEnemy(ctx, art, e.kind, ground, cam, pose);
       },
     });
   }
@@ -914,6 +1049,8 @@ export function drawScene(
     ctx.stroke();
   }
   for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
+  for (const k of scene.spits) drawSpit(ctx, k, scene.time, cam);
+  for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
 
   // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.
   for (const b of scene.blasts) {

@@ -34,6 +34,8 @@ function enemy(over: Partial<Enemy> = {}): Enemy {
     stunnedUntil: 0,
     vx: -30,
     vy: 0,
+    climbUntil: 0,
+    climbed: false,
     ...over,
   };
 }
@@ -190,6 +192,14 @@ describe('Animator', () => {
     a.observe(frame(4.1 + ANIM.fall.time - 0.01, []));
     expect(a.corpses).toHaveLength(1);
     a.observe(frame(4.1 + ANIM.fall.time, []));
+    expect(a.corpses).toEqual([]);
+  });
+
+  it('leaves no body for a Bloater that blew up rather than died (ID-023)', () => {
+    const a = new Animator();
+    const e = enemy({ kind: 'bloater' });
+    a.observe(frame(4, [e]));
+    a.observe(frame(4.1, [], { bursts: [{ id: e.id }] }));
     expect(a.corpses).toEqual([]);
   });
 

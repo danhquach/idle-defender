@@ -4,7 +4,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Held } from './armoury.ts';
 import { lineWall, repairAllCost } from './base.ts';
-import { MATERIALS, STEP } from './data.ts';
+import { ENEMY_MIX, MATERIALS, STEP, type EnemyKind } from './data.ts';
 import { finishHorde, hordePayout, newGame } from './game.ts';
 import { newHorde, tick, type HordeState } from './horde.ts';
 import { createRng } from './rng.ts';
@@ -12,7 +12,7 @@ import { answerOffer, playCampaign, playHorde, summarise, type HordeRun } from '
 import { enemy, setup } from './testing.ts';
 
 const SEEDS = 20;
-const HORDES = 8;
+const HORDES = 9;
 
 /** Horde `n` on the starting base with a fresh roster. */
 const bareGame = (n: number) => ({ ...newGame(), hordeNumber: n });
@@ -113,6 +113,35 @@ describe('a full firing line on the starting wall (ID-048)', () => {
     expect(winRate(byHorde.get(6)!)).toBeLessThanOrEqual(0.25);
     expect(winRate(byHorde.get(7)!)).toBe(0);
   });
+
+  it('mutants make it harder: from Horde 5 the line wins less than against Shamblers only (ID-023)', () => {
+    const mix = ENEMY_MIX as Record<string, unknown>;
+    const saved = { ...mix };
+    const shamblersOnly = new Map<number, number>();
+    try {
+      for (const k of Object.keys(mix)) delete mix[k];
+      for (let n = 5; n <= 7; n++) {
+        const game = bareGame(n);
+        const lined = lineWall(game.base, { scrap: 999, wood: 999, metal: 0, concrete: 0 }, 0);
+        if (!lined.ok) throw new Error(lined.reason);
+        const g = { ...game, base: lined.base };
+        const runs = Array.from({ length: SEEDS }, (_, i) =>
+          summarise(playHorde(g, i + 1, 0), i + 1),
+        );
+        shamblersOnly.set(n, winRate(runs));
+      }
+    } finally {
+      Object.assign(mix, saved);
+    }
+    let mixed = 0;
+    let plain = 0;
+    for (let n = 5; n <= 7; n++) {
+      expect(winRate(byHorde.get(n)!), `horde ${n}`).toBeLessThanOrEqual(shamblersOnly.get(n)!);
+      mixed += winRate(byHorde.get(n)!);
+      plain += shamblersOnly.get(n)!;
+    }
+    expect(mixed).toBeLessThan(plain);
+  }, 60_000);
 
   it('never stalls: an enemy in the camp reaches the wall line, so every horde ends within 12 minutes', () => {
     for (const runs of byHorde.values()) {
@@ -237,4 +266,43 @@ describe('the specialised guns (ID-046)', () => {
       expect(winRateWith(g, 6), `${g} H6`).toBeLessThanOrEqual(0.25);
     }
   }, 60_000);
+});
+
+describe('lead against Runners and lane drift (ID-023)', () => {
+  // A lone pistol Gunner on the upper tower against 10 walking enemies of one kind,
+  // 530–830 px out over 400 px of height: the share of bullets that hit nobody.
+  function missRate(kind: EnemyKind): number {
+    let hits = 0;
+    let misses = 0;
+    for (let seed = 1; seed <= 5; seed++) {
+      const s = newHorde(seed, {
+        ...setup(),
+        roster: [
+          { id: 'a', name: 'A', loadout: { primary: 'pistol', secondary: null, item: null } },
+        ],
+      });
+      s.toSpawn = 0;
+      const rng = createRng(seed * 7919);
+      for (let i = 0; i < 10; i++) {
+        enemy(s, { kind, hp: 1e6, maxHp: 1e6, x: 950 + rng() * 300, y: 160 + rng() * 400 });
+      }
+      let t = s;
+      for (let i = 0; i < 15 / STEP && t.outcome === 'fighting'; i++) {
+        t = t.offer || t.replace ? answerOffer(t) : tick(t, STEP);
+        for (const k of t.impacts) {
+          if (Math.abs(k.at - t.time) > 1e-9) continue;
+          if (k.hit) hits++;
+          else misses++;
+        }
+      }
+    }
+    return misses / (hits + misses);
+  }
+
+  it('misses happen, more on Runners than on Shamblers, while the balance targets above hold', () => {
+    const shambler = missRate('shambler');
+    const runner = missRate('runner');
+    expect(shambler).toBeGreaterThan(0);
+    expect(runner).toBeGreaterThan(shambler);
+  });
 });

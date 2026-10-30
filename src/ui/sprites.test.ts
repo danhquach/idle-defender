@@ -47,7 +47,10 @@ describe('art coverage', () => {
   it('maps every enemy kind, profession, turret state, trap kind and wall tier to art', () => {
     const states: TurretState[] = ['lit', 'dark', 'jammed', 'offline'];
     const used = [
-      ...Object.keys(ENEMIES).map((k) => ENEMY_ART[k as keyof typeof ENEMY_ART]),
+      ...Object.keys(ENEMIES).flatMap((k) => {
+        const look = ENEMY_ART[k as keyof typeof ENEMY_ART];
+        return 'art' in look ? [look.art] : [];
+      }),
       ...Object.keys(PROFESSIONS).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
       ...Object.values(GUNNER_ART),
       ...states.map((s) => TURRET_ART[s]),
@@ -58,6 +61,27 @@ describe('art coverage', () => {
     for (const id of used) expect(ids.has(id), String(id)).toBe(true);
     // And no art goes unused.
     expect(new Set(used)).toEqual(ids);
+  });
+
+  it('gives every enemy kind art or a placeholder shape of its own; only mutants are saturated (ID-023)', () => {
+    const kinds = Object.keys(ENEMIES) as (keyof typeof ENEMY_ART)[];
+    const shapes = kinds.flatMap((k) => {
+      const look = ENEMY_ART[k];
+      return 'shape' in look ? [look.shape] : [];
+    });
+    expect(shapes.length + kinds.filter((k) => 'art' in ENEMY_ART[k]).length).toBe(kinds.length);
+    expect(new Set(shapes).size).toBe(shapes.length);
+    const saturation = (hex: string): number => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r!, g!, b!);
+      return max === 0 ? 0 : (max - Math.min(r!, g!, b!)) / max;
+    };
+    for (const k of kinds) {
+      const look = ENEMY_ART[k];
+      if (!('colour' in look)) continue;
+      const mutant = !['shambler', 'runner'].includes(k);
+      expect(saturation(look.colour) > 0.5, k).toBe(mutant);
+    }
   });
 
   it('gives every gun a Gunner sprite of its own (ID-046)', () => {

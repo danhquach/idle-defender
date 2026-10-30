@@ -69,7 +69,21 @@ export const ART_URLS: Readonly<Record<string, string>> = Object.fromEntries(
   ).map(([path, url]) => [path.slice(path.lastIndexOf('/') + 1, -'.png'.length), url]),
 );
 
-export const ENEMY_ART: Readonly<Record<EnemyKind, ArtId>> = { shambler: 'shambler' };
+/** A drawn placeholder body (design §15, ID-023) until a kind has generated art. */
+export type EnemyShape = 'lean' | 'low' | 'round' | 'hunch' | 'block' | 'spike';
+export type EnemyLook = { art: ArtId } | { shape: EnemyShape; colour: string };
+/** Mutants get the only saturated colours (design §15): acid green and flesh red. */
+const ACID = '#8fd92b';
+const FLESH = '#d2453c';
+export const ENEMY_ART: Readonly<Record<EnemyKind, EnemyLook>> = {
+  shambler: { art: 'shambler' },
+  runner: { shape: 'lean', colour: '#8a8173' },
+  crawler: { shape: 'low', colour: ACID },
+  bloater: { shape: 'round', colour: ACID },
+  spitter: { shape: 'hunch', colour: ACID },
+  brute: { shape: 'block', colour: FLESH },
+  screamer: { shape: 'spike', colour: FLESH },
+};
 
 /** The weapon in the sprite's hands tells the profession (design §15). */
 export const DEFENDER_ART: Readonly<Record<Profession, ArtId>> = {

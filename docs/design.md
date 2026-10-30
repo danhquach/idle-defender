@@ -245,7 +245,8 @@ Defenders stand on **posts** the player builds and chooses between.
   call)*.
 - **Waves:** a horde is 5–10 waves *(starting point)*, growing within the
   horde; Hordes 1–4 send Shamblers and Runners only *(designer's
-  call)*; a boss horde ends in a Mutated Horror.
+  call; as built ID-023, Horde 1 is Shamblers only)*; a boss horde ends in
+  a Mutated Horror.
 - **Horde cash:** kills drop cash, spent during the fight only, on:
   - **temporary buffs** (e.g. +damage or +fire rate for 30 s),
   - **repairs** (patch a wall segment or a turret's condition),
@@ -642,6 +643,55 @@ one crowd (no lanes, §3).
   numbers rise.
 - **Scaling:** enemy HP × 1.10 per wave, × 1.15 per horde number (starting
   points).
+- **As built (ID-023, starting points):**
+
+  | Enemy | HP | Speed px/s | Hit | Radius | XP / cash |
+  |---|---|---|---|---|---|
+  | Shambler | 20 | 30 | 5 / 1 s | 12 | 1 / 2 |
+  | Runner | 15 | 75 | 3 / 0.8 s | 10 | 1 / 2 |
+  | Crawler | 40 | 40 | 20 / 1 s | 9 | 2 / 3 |
+  | Bloater | 60 | 18 | blast | 18 | 3 / 4 |
+  | Spitter | 25 | 28 | 8 / 2 s | 12 | 2 / 3 |
+  | Brute | 150 | 20 | 25 / 1.5 s | 20 | 5 / 6 |
+  | Screamer | 30 | 30 | 2 / 1 s | 12 | 3 / 4 |
+
+  The radius is the body bullets hit, clicks focus and the crowd keeps apart
+  (two bodies touch at the sum of their radii); in the camp an enemy hits a
+  defender from its radius plus a defender's (12). Each wave rolls each
+  enemy's kind through the seeded RNG: Runners are 15% of a wave from Horde 2,
+  then each mutant 10% from its horde (Crawler 5, Spitter 6, Bloater 7, Brute
+  8, Screamer 9), Shamblers the rest; Horde 1 stays Shamblers only and rolls
+  nothing, so its seeds play as before. Behaviours:
+  - **Crawler:** at the first standing segment it reaches it climbs for 3 s
+    (still a target, wall-walk melee included; no attacks), then drops behind
+    that layer; once only. The defeat screen lists such a crossing as "climbed
+    over". If the segment breaks under it, it walks on through the gap.
+  - **Bloater:** at a standing segment it blows up: 150 to it and 50 to the
+    standing segments above and below (wearing their turrets), and is gone
+    with no kill paid: an acid-green burst swells and fades over 0.4 s, and it
+    leaves no falling body (ID-049). Killed first, it pops harmlessly and pays its kill. In
+    the camp it blows up on the defender it reaches for 50.
+  - **Spitter:** stops 150 px short of its stop line, so the wall-walk is in
+    reach, and spits every 2 s at the nearest defender or working turret (not
+    jammed, its wall standing) within 250 px (HP off a defender, a shield blocking its share; condition
+    off a turret), else at the segment in front. A spit lands at once; a
+    green glob arcs to it for 0.3 s.
+  - **Brute:** each bullet does 3 less damage (at least 1); each pierce pass
+    pays it again; blades, tools, traps and skills ignore it.
+  - **Screamer:** other enemies within 150 px move 30% faster; several don't
+    stack.
+
+  Retune: the ticket's starting points made hordes easier, not harder (Runner
+  10 HP, Crawler 15 HP / 4 hit: a full firing line won Horde 5 65% of seeds
+  against 25% with Shamblers only), and a Spitter parked 250 px out reached
+  no defender. Runner HP went to 15, the Crawler to 40 HP and a 20 hit (it
+  skips the wall and hits defenders), and the Spitter's stop to 150 px. Now
+  the full line wins Horde 5 15% of seeds against 25% with Shamblers only,
+  every other balance target holds, and a lone pistol Gunner misses Runners
+  about three times as often as Shamblers (lead from last step's velocity).
+  Placeholder art (§15): each new kind is a drawn shape of its own, sized by
+  its radius, mutants in acid green or flesh red, the Runner muted; generated
+  art follows in its own ticket.
 
 ## 10. World map and patrols (the idle part)
 
