@@ -14,6 +14,7 @@ import {
   type Tracer,
 } from '../core/data.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
+import { ANIM, Animator } from './anim.ts';
 import { project, TILT } from './projection.ts';
 import { drawScene, trapLook, turretLook, type Scene } from './render.ts';
 import { ART_IDS, ART_PX, type Art, type ArtId } from './sprites.ts';
@@ -631,7 +632,10 @@ describe('bullet visuals (ID-045)', () => {
   it('keeps the melee slash: one short line across the enemy, no bullet marks', () => {
     const cam = { x: 0, y: 0, zoom: 1 };
     const { scene, target } = fight();
-    const g = geometry(cam, { ...scene, strikes: [{ x: target.x, y: target.y, at: 0 }] });
+    const g = geometry(cam, {
+      ...scene,
+      strikes: [{ x: target.x, y: target.y, at: 0, owner: 'a' }],
+    });
     expect(g.lines).toHaveLength(1);
     expect(g.dots).toEqual([]);
   });
@@ -657,5 +661,143 @@ describe('bullet visuals (ID-045)', () => {
     }
     const sizes = (g: typeof small) => g.dots.map((m) => (m.kind === 'dot' ? m.r : 0));
     sizes(big).forEach((r, i) => expect(r).toBeGreaterThan(sizes(small)[i]!));
+  });
+});
+
+describe('sprite animation (ID-049)', () => {
+  beforeEach(() => {
+    stubCanvas();
+    // A hit's white silhouette is a sprite-sized canvas; the ground's is field-sized.
+    const Ground = globalThis.OffscreenCanvas as unknown as new () => { id: string };
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class extends Ground {
+        constructor(w: number, h: number) {
+          super();
+          if (w === ART_PX && h === ART_PX) this.id = 'white';
+        }
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Each sprite drawn, with the move, turn and alpha it was drawn under. */
+  function poses(scene: Scene, anim: Animator) {
+    const r = recorder();
+    type Draw = { id: ArtId | 'white'; tx: number; ty: number; rot: number; alpha: number };
+    const draws: Draw[] = [];
+    let t = { tx: 0, ty: 0, rot: 0 };
+    const stack: (typeof t)[] = [];
+    const ctx = r.ctx as unknown as Record<string, unknown> & { globalAlpha: number };
+    Object.assign(ctx, {
+      save: () => stack.push({ ...t, alpha: ctx.globalAlpha } as typeof t),
+      restore: () => {
+        const top = stack.pop() as typeof t & { alpha: number };
+        t = { tx: top.tx, ty: top.ty, rot: top.rot };
+        ctx.globalAlpha = top.alpha;
+      },
+      translate: (x: number, y: number) => (t = { ...t, tx: t.tx + x, ty: t.ty + y }),
+      rotate: (a: number) => (t = { ...t, rot: t.rot + a }),
+      scale: () => {},
+      drawImage: (img: { id: ArtId }) => draws.push({ id: img.id, ...t, alpha: ctx.globalAlpha }),
+    });
+    drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, null, anim);
+    return {
+      draws,
+      shambler: draws.filter((d) => d.id === 'shambler'),
+      flashes: draws.filter((d) => d.id === 'white'),
+      balanced: stack.length === 0 && ctx.globalAlpha === 1,
+    };
+  }
+  /** A fight with one Shambler walking up the field. */
+  function walking() {
+    const game = newGame();
+    const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+    const e: Enemy = {
+      id: 7,
+      kind: 'shambler',
+      x: 900,
+      y: 60,
+      hp: 20,
+      maxHp: 20,
+      nextAttackAt: 0,
+      inCamp: false,
+      stunnedUntil: 0,
+      vx: -30,
+      vy: 0,
+    };
+    return { ...h, time: 3, enemies: [e], bullets: [], shots: [], impacts: [], strikes: [] };
+  }
+
+  it('a hit makes the enemy flinch back and flash white', () => {
+    const anim = new Animator();
+    const s = walking();
+    const before = poses(s, anim).shambler[0]!;
+    const hurt = { ...s, time: s.time + STEP, enemies: [{ ...s.enemies[0]!, hp: 12 }] };
+    const hit = poses(hurt, anim);
+    const unhurt = poses({ ...hurt, enemies: [s.enemies[0]!] }, new Animator());
+    expect(hit.shambler[0]!.tx).toBeCloseTo(unhurt.shambler[0]!.tx + ANIM.flinch.px, 6);
+    expect(hit.flashes).toHaveLength(1);
+    expect(unhurt.flashes).toHaveLength(0);
+    expect(before.tx).not.toBe(hit.shambler[0]!.tx);
+    expect(hit.balanced).toBe(true);
+  });
+
+  it('a dead enemy falls and fades where it stood before it is removed', () => {
+    const anim = new Animator();
+    const s = walking();
+    poses(s, anim);
+    const gone = (dt: number) => poses({ ...s, time: s.time + dt, enemies: [] }, anim);
+    const first = gone(STEP);
+    expect(first.shambler).toHaveLength(1);
+    expect(first.shambler[0]!.rot).toBeCloseTo(0, 6);
+    // The killing blow flashes it, though it never flinched.
+    expect(first.flashes).toHaveLength(1);
+    const mid = gone(STEP + 0.3);
+    expect(mid.shambler[0]!.rot).toBeGreaterThan(0.5);
+    const fading = gone(STEP + ANIM.fall.time - 0.1);
+    expect(fading.shambler[0]!.alpha).toBeLessThan(0.5);
+    expect(gone(STEP + ANIM.fall.time).shambler).toHaveLength(0);
+  });
+
+  it("the fight's last kill ends it mid-fall, so the result screen shows no corpse", () => {
+    const anim = new Animator();
+    const s = walking();
+    poses(s, anim);
+    const won = poses({ ...s, time: s.time + STEP, enemies: [], outcome: 'won' }, anim);
+    expect(won.shambler).toHaveLength(0);
+    expect(anim.corpses).toHaveLength(1);
+  });
+
+  it('pause freezes motion; running the fight moves it again', () => {
+    const anim = new Animator();
+    const game = newGame();
+    let h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+    while (h.enemies.length === 0) h = tick(h, 0.1);
+    h = tick(h, 0.5);
+    // An open card pick pauses the fight (any offer, even an empty one).
+    const paused = { ...h, offer: [] as typeof h.offer };
+    const a = poses(tick(paused, 0.5), anim).draws;
+    const b = poses(tick(tick(paused, 0.5), 0.5), anim).draws;
+    expect(b).toEqual(a);
+    expect(poses(tick(h, 0.2), anim).draws).not.toEqual(a);
+  });
+
+  it('follows game speed: the same fight time gives the same pose however it was stepped', () => {
+    const game = newGame();
+    let h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+    while (h.enemies.length === 0) h = tick(h, 0.1);
+    const fast = tick(h, 1);
+    const slow = tick(tick(tick(tick(h, 0.25), 0.25), 0.25), 0.25);
+    expect(poses(fast, new Animator()).draws).toEqual(poses(slow, new Animator()).draws);
+  });
+
+  it('without an animator (build mode) nothing moves', () => {
+    const s = walking();
+    const r = recorder();
+    const moved: unknown[] = [];
+    Object.assign(r.ctx, { save: () => moved.push('save') });
+    drawScene(r.ctx, r.art, s, CAM, VIEW);
+    expect(moved).toEqual([]);
   });
 });

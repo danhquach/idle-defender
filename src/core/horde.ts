@@ -213,11 +213,12 @@ export interface ReplaceOffer {
   postId: number | null;
 }
 export type MoveResult = { ok: true; state: HordeState } | { ok: false; reason: string };
-/** A blade or tool strike landing on `(x, y)`, drawn for `STRIKE_FLASH` s. */
+/** A blade or tool strike by defender `owner` landing on `(x, y)`, drawn for `STRIKE_FLASH` s. */
 export interface Strike {
   x: number;
   y: number;
   at: number;
+  owner: string;
 }
 /**
  * A gun's bullet in flight (design §6 Ballistics): it moves `speed` px/s along the unit
@@ -949,7 +950,7 @@ function fire(s: HordeState, rng: Rng): void {
       });
     } else {
       target.hp -= hit;
-      s.strikes.push({ x: target.x, y: target.y, at: s.time });
+      s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
     const cleave = weapon.kind === 'blade' ? cleaveShare(defender) : 0;
     if (cleave > 0) {

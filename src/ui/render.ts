@@ -44,6 +44,7 @@ import {
   type View,
 } from './projection.ts';
 import { CAMP_YARD, groundCanvas } from './ground.ts';
+import { defenderPose, enemyPose, fallPose, STILL, type Animator, type Pose } from './anim.ts';
 import {
   BASE_ART,
   DEFENDER_ART,
@@ -176,6 +177,7 @@ export type Scene = Pick<
   | 'time'
   | 'fires'
   | 'blasts'
+  | 'outcome'
 >;
 /** An armed skill's reach around the cursor, on the field. */
 export interface Aim {
@@ -279,17 +281,51 @@ function drawOnBox(
   ctx.drawImage(img, f.top.sx + (w - dw) / 2, f.top.sy + h - dh, dw, dh);
 }
 
-/** A sprite with its bottom centre on `feet`, `height` px (at zoom 1) for an `ART_PX`-tall one. */
+const flashes = new WeakMap<HTMLImageElement, OffscreenCanvas>();
+/** `img`'s shape in plain white, made once per image, for a hit's flash. */
+function whiteOf(img: HTMLImageElement): OffscreenCanvas {
+  let white = flashes.get(img);
+  if (!white) {
+    white = new OffscreenCanvas(img.width, img.height);
+    const g = white.getContext('2d')!;
+    g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, img.width, img.height);
+    flashes.set(img, white);
+  }
+  return white;
+}
+
+/**
+ * A sprite with its bottom centre on `feet`, `height` px (at zoom 1) for an `ART_PX`-tall
+ * one, moved by its animation `pose` (anim.ts) about its feet.
+ */
 function drawStanding(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   feet: { sx: number; sy: number },
   height: number,
   cam: Camera,
+  pose: Readonly<Pose> = STILL,
 ): void {
   const dh = ((height * img.height) / ART_PX) * cam.zoom;
   const dw = (img.width / img.height) * dh;
-  ctx.drawImage(img, feet.sx - dw / 2, feet.sy - dh, dw, dh);
+  if (pose === STILL) {
+    ctx.drawImage(img, feet.sx - dw / 2, feet.sy - dh, dw, dh);
+    return;
+  }
+  ctx.save();
+  ctx.translate(feet.sx + pose.dx * cam.zoom, feet.sy - pose.lift * cam.zoom);
+  ctx.rotate(pose.rot);
+  ctx.scale(pose.sx, pose.sy);
+  ctx.globalAlpha *= pose.alpha;
+  ctx.drawImage(img, -dw / 2, -dh, dw, dh);
+  if (pose.flash > 0) {
+    ctx.globalAlpha *= pose.flash;
+    ctx.drawImage(whiteOf(img), -dw / 2, -dh, dw, dh);
+  }
+  ctx.restore();
 }
 
 /** Fills `r` with the middle of `img` cut to `r`'s shape, so it is never squashed. */
@@ -384,8 +420,8 @@ function drawBadge(
 
 /**
  * A defender standing `z0` up at `(x, y)`: their profession's sprite (the weapon tells
- * it, design §15; a Gunner's shows their primary), a shield in front if they carry
- * one, a ring at their feet when selected, their title badge and an HP bar once hurt.
+ * it, design §15; a Gunner's shows their primary) in `pose`, a shield in front if they
+ * carry one, a ring at their feet when selected, their title badge and an HP bar once hurt.
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
@@ -394,6 +430,7 @@ function drawDefender(
   z0: number,
   selected: boolean,
   cam: Camera,
+  pose: Readonly<Pose> = STILL,
 ): void {
   const feet = project({ x: d.x, y: d.y, z: z0 }, cam);
   if (selected) {
@@ -409,10 +446,10 @@ function drawDefender(
     profession === 'gunner'
       ? (GUNNER_ART[baseOf(d.loadout.primary) as GunId] ?? DEFENDER_ART.gunner)
       : DEFENDER_ART[profession];
-  drawStanding(ctx, art[sprite], feet, STAND.defender, cam);
+  drawStanding(ctx, art[sprite], feet, STAND.defender, cam, pose);
   if (d.loadout.item === 'shield') {
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
-    drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam);
+    drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam, pose);
   }
   drawBadge(ctx, d, z0, cam);
   if (d.hp < d.maxHp) {
@@ -682,6 +719,27 @@ function drawImpact(ctx: CanvasRenderingContext2D, i: Impact, time: number, cam:
   ctx.globalAlpha = 1;
 }
 
+/** An enemy's shadow on the ground, `alpha` as solid as a living one's. */
+function drawShadow(
+  ctx: CanvasRenderingContext2D,
+  at: { sx: number; sy: number },
+  alpha: number,
+  cam: Camera,
+): void {
+  const r = ENEMY.shadow * cam.zoom;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = COLOR.shadow;
+  ctx.beginPath();
+  ctx.ellipse(at.sx, at.sy, r, r * 0.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * The horde view. With `anim` (a fight), sprites move (anim.ts): it is fed this frame's
+ * fight first, and dead enemies fall there before they go. Without it (build mode)
+ * everything stands still.
+ */
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   art: Art,
@@ -691,7 +749,11 @@ export function drawScene(
   build: BuildOverlay | null = null,
   selectedDefender: string | null = null,
   aim: Aim | null = null,
+  anim: Animator | null = null,
 ): void {
+  anim?.observe(scene);
+  const defenderPoseOf = (d: Defender): Readonly<Pose> =>
+    anim ? defenderPose(d, scene.time, anim.acts(d.id, scene.strikes)) : STILL;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = COLOR.sky;
@@ -763,7 +825,8 @@ export function drawScene(
           outline(ctx, around(post, p), floor, cam);
         }
         if (manned) {
-          drawDefender(ctx, art, manned, floor, manned.id === selectedDefender, cam);
+          const pose = defenderPoseOf(manned);
+          drawDefender(ctx, art, manned, floor, manned.id === selectedDefender, cam, pose);
           drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
         }
       },
@@ -785,7 +848,7 @@ export function drawScene(
       y: d.y,
       x: d.x,
       draw: () => {
-        drawDefender(ctx, art, d, 0, d.id === selectedDefender, cam);
+        drawDefender(ctx, art, d, 0, d.id === selectedDefender, cam, defenderPoseOf(d));
         drawFlash(ctx, scene, d.id, d.x, d.y, cam);
       },
     });
@@ -796,20 +859,34 @@ export function drawScene(
       x: e.x,
       draw: () => {
         const ground = project({ x: e.x, y: e.y }, cam);
-        const r = ENEMY.shadow * cam.zoom;
-        ctx.fillStyle = COLOR.shadow;
-        ctx.beginPath();
-        ctx.ellipse(ground.sx, ground.sy, r, r * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
+        drawShadow(ctx, ground, 1, cam);
         if (e.id === scene.focusId) {
+          const r = ENEMY.shadow * 1.8 * cam.zoom;
           ctx.strokeStyle = COLOR.focus;
           ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
           ctx.beginPath();
-          ctx.ellipse(ground.sx, ground.sy, r * 1.8, r * 1.8 * 0.5, 0, 0, Math.PI * 2);
+          ctx.ellipse(ground.sx, ground.sy, r, r * 0.5, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-        drawStanding(ctx, art[ENEMY_ART[e.kind]], ground, STAND.enemy, cam);
+        const pose = anim ? enemyPose(e, scene.time, anim.enemy(e.id)) : STILL;
+        drawStanding(ctx, art[ENEMY_ART[e.kind]], ground, STAND.enemy, cam, pose);
         drawHpBar(ctx, { x: e.x, y: e.y, z: HP_BAR.z }, e.hp, e.maxHp, cam);
+      },
+    });
+  }
+  // The dead fall where they stood, with no HP bar, then are gone. A fight's last kill
+  // ends it and stops its clock mid-fall, so the result screen shows none.
+  const corpses = scene.outcome === 'fighting' ? (anim?.corpses ?? []) : [];
+  for (const c of corpses) {
+    const e = c.enemy;
+    sprites.push({
+      y: e.y,
+      x: e.x,
+      draw: () => {
+        const ground = project({ x: e.x, y: e.y }, cam);
+        const pose = fallPose(scene.time - c.at);
+        drawShadow(ctx, ground, pose.alpha, cam);
+        drawStanding(ctx, art[ENEMY_ART[e.kind]], ground, STAND.enemy, cam, pose);
       },
     });
   }

@@ -24,6 +24,7 @@ import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
 import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
+import { Animator } from './anim.ts';
 import { createBuildPanel, FIELD_GREW } from './build.ts';
 import { createHud, defenderLabel, resultScreen } from './hud.ts';
 import {
@@ -77,6 +78,8 @@ export function start(root: HTMLElement, art: Art): void {
   let game: GameState = loaded.save?.game ?? newGame();
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
+  // What the fight's animation remembers between frames (anim.ts); a new fight resets it.
+  const animator = new Animator();
   // When the fight ended (ms): read once, so the screen and the rest timers agree.
   let endedAt: number | null = null;
   // Stat points spent on the result screen, applied with "Back to build".
@@ -374,7 +377,7 @@ export function start(root: HTMLElement, art: Art): void {
       // A pick, the end of the fight or a cooldown puts an armed skill away.
       if (armed && skillLock(horde, armed) !== null) armed = null;
       const aim: Aim | null = armed && hover ? { skill: armed, ...unproject(hover, cam) } : null;
-      drawScene(ctx, art, horde, cam, view, null, selectedDefender, aim);
+      drawScene(ctx, art, horde, cam, view, null, selectedDefender, aim, animator);
       hud.update(horde, armed);
       if (horde.outcome !== 'fighting' && endedAt === null) {
         endedAt = Date.now();
@@ -417,6 +420,7 @@ function buildScene(game: GameState, choice: { defenderId: string; postId: numbe
     impacts: [],
     focusId: null,
     time: 0,
+    outcome: 'fighting',
     fires: [],
     blasts: [],
   };
