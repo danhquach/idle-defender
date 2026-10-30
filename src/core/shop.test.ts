@@ -2,13 +2,22 @@
 // (defenders and turrets), a wall patch and a turret fix; it is gone when the horde ends.
 import { describe, expect, it } from 'vitest';
 import { buildTurret, newBase } from './base.ts';
-import { ENEMIES, MAX_CONDITION, SHOP, SHOP_ITEMS, STEP, TURRET, type Stock } from './data.ts';
+import {
+  ENEMIES,
+  MAX_CONDITION,
+  SHOP,
+  SHOP_ITEMS,
+  STEP,
+  TURRET,
+  type Stock,
+  stockOf,
+} from './data.ts';
 import { finishHorde, newGame } from './game.ts';
 import { boost, newHorde, tick, type HordeState } from './horde.ts';
 import { buffLeft, buy, shopLock } from './shop.ts';
 import { enemy, landed, setup } from './testing.ts';
 
-const RICH: Stock = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+const RICH: Stock = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
 
 /** A horde with no spawns left, `cash` in hand, and `a` on post 0. */
 function fight(cash = 100, turrets = 0): HordeState {

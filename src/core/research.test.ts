@@ -2,13 +2,13 @@
 // nodes are bought with materials, each after its Lab level and earlier node.
 import { describe, expect, it } from 'vitest';
 import { buildSegment } from './base.ts';
-import { LAB_LEVELS, RESEARCH, type ResearchId } from './data.ts';
+import { LAB_LEVELS, RESEARCH, type ResearchId, stockOf } from './data.ts';
 import { newGame, type GameState } from './game.ts';
 import { labCost, research, researched, researchLock, upgradeLab } from './research.ts';
 
 const rich = (): GameState => ({
   ...newGame(),
-  stock: { scrap: 999, wood: 999, metal: 0, concrete: 0 },
+  stock: stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }),
 });
 
 function ok(r: ReturnType<typeof upgradeLab>): GameState {
@@ -38,7 +38,7 @@ describe('Research Lab', () => {
   });
 
   it('refuses when materials are short, naming the first one, and changes nothing', () => {
-    const g = { ...newGame(), stock: { scrap: 20, wood: 29, metal: 0, concrete: 0 } };
+    const g = { ...newGame(), stock: stockOf({ scrap: 20, wood: 29, metal: 0, concrete: 0 }) };
     const before = structuredClone(g);
     expect(upgradeLab(g)).toEqual({ ok: false, reason: 'Not enough wood' });
     expect(g).toEqual(before);
@@ -76,7 +76,7 @@ describe('research', () => {
     let g = ok(research(ok(upgradeLab(rich())), 'metal-walls'));
     expect(research(g, 'metal-walls')).toEqual({ ok: false, reason: 'Already researched' });
     g = ok(upgradeLab(g));
-    g = { ...g, stock: { scrap: 59, wood: 99, metal: 0, concrete: 0 } };
+    g = { ...g, stock: stockOf({ scrap: 59, wood: 99, metal: 0, concrete: 0 }) };
     expect(research(g, 'auto-turret')).toEqual({ ok: false, reason: 'Not enough scrap' });
     expect(g.research).toEqual(['metal-walls']);
   });

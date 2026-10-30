@@ -5,7 +5,15 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Held } from './armoury.ts';
 import { lineWall, repairAllCost, segmentMaxHp } from './base.ts';
 import { chooseCard, postUsable, UPGRADES } from './cards.ts';
-import { ENEMY_MIX, HORROR, MATERIALS, STEP, type EnemyKind, type HorrorAbility } from './data.ts';
+import {
+  ENEMY_MIX,
+  HORROR,
+  MATERIALS,
+  STEP,
+  type EnemyKind,
+  type HorrorAbility,
+  stockOf,
+} from './data.ts';
 import { finishHorde, hordePayout, hordeXp, newGame, startHorde, type GameState } from './game.ts';
 import { newHorde, standing, tick, type HordeState } from './horde.ts';
 import { createRng } from './rng.ts';
@@ -107,7 +115,11 @@ describe('a full firing line on the starting wall (ID-048)', () => {
   beforeAll(() => {
     for (let n = 1; n <= 7; n++) {
       const game = bareGame(n);
-      const lined = lineWall(game.base, { scrap: 999, wood: 999, metal: 0, concrete: 0 }, 0);
+      const lined = lineWall(
+        game.base,
+        stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }),
+        0,
+      );
       if (!lined.ok) throw new Error(lined.reason);
       const g = { ...game, base: lined.base };
       byHorde.set(
@@ -131,7 +143,11 @@ describe('a full firing line on the starting wall (ID-048)', () => {
       for (const k of Object.keys(mix)) delete mix[k];
       for (let n = 5; n <= 7; n++) {
         const game = bareGame(n);
-        const lined = lineWall(game.base, { scrap: 999, wood: 999, metal: 0, concrete: 0 }, 0);
+        const lined = lineWall(
+          game.base,
+          stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }),
+          0,
+        );
         if (!lined.ok) throw new Error(lined.reason);
         const g = { ...game, base: lined.base };
         const runs = Array.from({ length: SEEDS }, (_, i) =>
@@ -337,7 +353,7 @@ describe('the Mutated Horror (ID-024)', () => {
         .map((d) => ({ ...d, xp: veteranXp })),
     });
     if (lined) {
-      const l = lineWall(game.base, { scrap: 999, wood: 999, metal: 0, concrete: 0 }, 0);
+      const l = lineWall(game.base, stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }), 0);
       if (!l.ok) throw new Error(l.reason);
       game = { ...game, base: l.base };
     }

@@ -36,6 +36,7 @@ import {
   BANK_CAP,
   BATTERIES,
   BATTERY_IDS,
+  BUILDING_MATERIALS,
   COLUMNS,
   GENERATOR,
   MATERIALS,
@@ -107,7 +108,8 @@ export function loadCode(
 }
 
 export function stockBarText(game: GameState): string {
-  const stock = MATERIALS.map((m) => `${m[0]!.toUpperCase()}${m.slice(1)} ${game.stock[m]}`);
+  const shown = MATERIALS.filter((m) => BUILDING_MATERIALS.includes(m) || game.stock[m] > 0);
+  const stock = shown.map((m) => `${m[0]!.toUpperCase()}${m.slice(1)} ${game.stock[m]}`);
   return [`Horde ${game.hordeNumber} next`, ...stock].join(' · ');
 }
 

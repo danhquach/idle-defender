@@ -354,9 +354,28 @@ export const IMPACT_FLASH = 0.25;
 
 // --- The base (M2). Grid, tiers and costs; design §3 and §11. ---
 
-export type Material = 'scrap' | 'wood' | 'metal' | 'concrete';
+/** Every resource the camp stores (design §11, ID-025); Gas and batteries live in `Power`. */
+export const MATERIALS = [
+  'scrap',
+  'wood',
+  'metal',
+  'concrete',
+  'parts',
+  'food',
+  'medicine',
+  'chemicals',
+  'genes',
+] as const;
+export type Material = (typeof MATERIALS)[number];
 export type Stock = Record<Material, number>;
-export const MATERIALS: readonly Material[] = ['scrap', 'wood', 'metal', 'concrete'];
+/**
+ * The building materials: always on the stock bar, and all a save from before ID-025
+ * (v3 and older) holds.
+ */
+export const BUILDING_MATERIALS: readonly Material[] = ['scrap', 'wood', 'metal', 'concrete'];
+/** A full stock: `partial`'s counts, 0 for the rest. */
+export const stockOf = (partial: Partial<Stock> = {}): Stock =>
+  Object.fromEntries(MATERIALS.map((m) => [m, partial[m] ?? 0])) as Stock;
 
 /** Wall `x` of each buildable layer, inner (left) to outer (right). */
 export const COLUMNS: readonly number[] = [500, 760, 1020];
@@ -403,7 +422,8 @@ export const POST_COST: Readonly<Record<PostKind, Partial<Stock>>> = {
 /** How fast a defender walks between posts, in px/s. */
 export const WALK_SPEED = 80;
 
-export const START_STOCK: Readonly<Stock> = { scrap: 60, wood: 60, metal: 0, concrete: 0 };
+/** Design §11 Start: 3 Food so a first loss doesn't leave the injured with none. */
+export const START_STOCK: Readonly<Stock> = stockOf({ scrap: 60, wood: 60, food: 3 });
 export const START_TIERS: readonly Tier[] = ['wood'];
 
 // --- Horde rules (M3). Design §2, §4 and §11. ---
@@ -424,6 +444,28 @@ export const HORDE_PAYOUT = {
   win: { scrap: { base: 15, perHorde: 5 }, wood: { base: 20, perHorde: 10 } },
   lossShare: 0.25,
 } as const;
+/**
+ * Mutated Genes for a win (design §4, §11, ID-025 starting points): `base + ⌊n / every⌋`,
+ * plus 1 per `perMutants` mutants killed and `boss` for a boss horde. A loss pays none.
+ */
+export const GENES = { base: 2, every: 5, perMutants: 5, boss: 10 } as const;
+/** The enemy kinds that count as mutants for Genes (design §9). */
+export const MUTANTS: readonly EnemyKind[] = ['crawler', 'spitter', 'bloater', 'brute', 'screamer'];
+/**
+ * A win's material find (design §4 "a small chance of materials"): `chance` of
+ * `base + ⌊n / every⌋` of one of `materials`, evenly.
+ */
+export const FIND = {
+  chance: 0.2,
+  base: 2,
+  every: 5,
+  materials: ['parts', 'metal', 'food', 'medicine', 'chemicals'],
+} as const satisfies {
+  chance: number;
+  base: number;
+  every: number;
+  materials: readonly Material[];
+};
 /** Defender XP for a win: `base + perHorde × n`, in full to everyone who took part. */
 export const DEFENDER_XP = { base: 10, perHorde: 5 } as const;
 /** Real time an injured defender rests before they can defend again, in ms (design §11). */

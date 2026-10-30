@@ -415,12 +415,8 @@ const layerAt = (base: Base, column: number): BaseLayer | undefined =>
   base.layers.find((l) => l.column === column);
 const segments = (base: Base): BaseSegment[] =>
   base.layers.flatMap((l) => l.slots.filter((s): s is BaseSegment => s !== null));
-const stockFrom = (f: (m: Material) => number): Stock => ({
-  scrap: f('scrap'),
-  wood: f('wood'),
-  metal: f('metal'),
-  concrete: f('concrete'),
-});
+const stockFrom = (f: (m: Material) => number): Stock =>
+  Object.fromEntries(MATERIALS.map((m) => [m, f(m)])) as Stock;
 
 /** Charges `cost` and applies `change` to a copy, or refuses naming the first short material. */
 function pay(base: Base, stock: Stock, cost: Partial<Stock>, change: (b: Base) => void): Result {

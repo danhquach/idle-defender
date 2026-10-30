@@ -17,12 +17,12 @@ import {
   type Base,
   type Result,
 } from './base.ts';
-import { SEGMENTS, START_BASE, START_STOCK, type Stock, type Tier } from './data.ts';
+import { SEGMENTS, START_BASE, START_STOCK, stockOf, type Stock, type Tier } from './data.ts';
 
 const WOOD: Tier[] = ['wood'];
 const ALL: Tier[] = ['wood', 'metal', 'concrete', 'reinforced'];
-const rich = (): Stock => ({ scrap: 999, wood: 999, metal: 999, concrete: 999 });
-const empty = (): Stock => ({ scrap: 0, wood: 0, metal: 0, concrete: 0 });
+const rich = (): Stock => stockOf({ scrap: 999, wood: 999, metal: 999, concrete: 999 });
+const empty = (): Stock => stockOf();
 
 function ok(r: Result): { base: Base; stock: Stock } {
   if (!r.ok) throw new Error(`refused: ${r.reason}`);
@@ -119,7 +119,7 @@ describe('buildSegment', () => {
 
   it('builds a reinforced wall from concrete, metal and scrap', () => {
     const r = ok(buildSegment(newBase(), rich(), ALL, 1, 0, 'wall', 'reinforced'));
-    expect(r.stock).toEqual({ scrap: 979, wood: 999, metal: 989, concrete: 989 });
+    expect(r.stock).toEqual(stockOf({ scrap: 979, wood: 999, metal: 989, concrete: 989 }));
   });
 });
 

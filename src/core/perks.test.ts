@@ -14,6 +14,7 @@ import {
   type PerkId,
   type ResearchId,
   type Stock,
+  stockOf,
 } from './data.ts';
 import { newGame, startHorde, type GameState } from './game.ts';
 import { baseAfter, drawFactor, newHorde, removeDead, tick, type HordeState } from './horde.ts';
@@ -22,7 +23,7 @@ import { research, researchLock, upgradeLab } from './research.ts';
 import { createRng } from './rng.ts';
 import { enemy, landed, setup } from './testing.ts';
 
-const RICH: Stock = { scrap: 9999, wood: 9999, metal: 0, concrete: 0 };
+const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 0, concrete: 0 });
 const tough = { hp: 1000, maxHp: 1000 };
 const still = { stunnedUntil: 1e9 };
 

@@ -14,6 +14,7 @@ import {
   WEAPONS,
   type EnemyKind,
   type Tracer,
+  stockOf,
 } from '../core/data.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
 import { ANIM, Animator } from './anim.ts';
@@ -24,7 +25,7 @@ import { ART_IDS, ART_PX, type Art, type ArtId } from './sprites.ts';
 function scene(condition: number, energy: number, wallHp?: number) {
   const r = buildTurret(
     newBase(),
-    { scrap: 99, wood: 99, metal: 0, concrete: 0 },
+    stockOf({ scrap: 99, wood: 99, metal: 0, concrete: 0 }),
     true,
     'wall-walk',
     0,
@@ -680,7 +681,7 @@ describe('bullet visuals (ID-045)', () => {
   it("flashes at a turret's barrel when it fires", () => {
     const built = buildTurret(
       newBase(),
-      { scrap: 99, wood: 99, metal: 0, concrete: 0 },
+      stockOf({ scrap: 99, wood: 99, metal: 0, concrete: 0 }),
       true,
       'tower',
       0,

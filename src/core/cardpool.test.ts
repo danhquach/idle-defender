@@ -24,6 +24,7 @@ import {
   type CardRarity,
   type EnemyKind,
   type Stock,
+  stockOf,
 } from './data.ts';
 import {
   newHorde,
@@ -472,7 +473,7 @@ function groundBase(): { base: Base; postId: number } {
   if (!r.ok) throw new Error(r.reason);
   return { base: r.base, postId: r.base.posts.findIndex((p) => p.kind === 'ground') };
 }
-const RICH: Stock = { scrap: 999, wood: 999, metal: 999, concrete: 999 };
+const RICH: Stock = stockOf({ scrap: 999, wood: 999, metal: 999, concrete: 999 });
 
 describe('power cards', () => {
   it('Recharge: adds a quarter of the cap, never past it', () => {

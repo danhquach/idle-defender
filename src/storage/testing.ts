@@ -2,6 +2,11 @@
 import { buildPost, buildSegment, buildTrap, buildTurret, upgradeSegment } from '../core/base.ts';
 import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
 import { research, upgradeLab, type GameResult } from '../core/research.ts';
+import { BUILDING_MATERIALS, stockOf } from '../core/data.ts';
+
+/** `game`'s stock as a save from before ID-025 (v3 and older) holds it: building materials only. */
+export const oldStock = (game: GameState): Record<string, number> =>
+  Object.fromEntries(BUILDING_MATERIALS.map((m) => [m, game.stock[m]]));
 
 /** A fixed save time, in ms since the epoch. */
 export const NOW = 1_800_000_000_000;
@@ -12,7 +17,10 @@ export const NOW = 1_800_000_000_000;
  * lost with Bob injured, a wall hurt, the turret worn and the spikes sprung.
  */
 export function played(): GameState {
-  let g: GameState = { ...newGame(), stock: { scrap: 500, wood: 500, metal: 50, concrete: 0 } };
+  let g: GameState = {
+    ...newGame(),
+    stock: stockOf({ scrap: 500, wood: 500, metal: 50, concrete: 0 }),
+  };
   const lab: ((x: GameState) => GameResult)[] = [
     upgradeLab,
     (x) => research(x, 'metal-walls'),

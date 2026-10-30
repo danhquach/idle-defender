@@ -10,6 +10,7 @@ import {
   STEP,
   TURRET,
   WEAPONS,
+  stockOf,
 } from './data.ts';
 import { leadPoint, newHorde, tick, type Bullet, type HordeState } from './horde.ts';
 import { loadoutFrom } from './loadout.ts';
@@ -238,7 +239,7 @@ describe('aiming', () => {
 
 describe('turret bullets', () => {
   it('a turret fires a bullet at 2,000 px/s that lands for its damage', () => {
-    const rich = { scrap: 999, wood: 999, metal: 0, concrete: 0 };
+    const rich = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
     const built = buildTurret(newBase(), rich, true, 'tower', 0, 5);
     if (!built.ok) throw new Error(built.reason);
     const s = newHorde(1, { ...setup(), base: built.base });

@@ -29,6 +29,7 @@ import {
 } from '../core/data.ts';
 import {
   hordeDrop,
+  hordeFind,
   hordePayout,
   injuredUntil,
   levelGains,
@@ -280,10 +281,18 @@ function repairLine(game: GameState, s: HordeState): string {
   if (MATERIALS.every((m) => bill[m] === 0)) return 'No repairs needed';
   const payout = hordePayout(s);
   payout.scrap += hordeDrop(game, s)?.scrap ?? 0;
+  const find = hordeFind(s);
+  if (find) payout[find.material] += find.amount;
   const short: Partial<Stock> = {};
   for (const m of MATERIALS) short[m] = Math.max(0, bill[m] - game.stock[m] - payout[m]);
   const cover = MATERIALS.some((m) => short[m]! > 0) ? `short by ${stockText(short)}` : 'covered';
   return `Repair bill: ${stockText(bill)} · ${cover}`;
+}
+
+/** A win's material find (design §4), as "Found: 4 parts"; none without one. */
+function findLines(s: HordeState): string[] {
+  const find = hordeFind(s);
+  return find ? [`Found: ${stockText({ [find.material]: find.amount })}`] : [];
 }
 
 /** A win's weapon drop (design §6 Gear): its name, then one line per affix; none without a drop. */
@@ -298,8 +307,9 @@ function dropLines(game: GameState, s: HordeState): string[] {
 
 /**
  * The victory or defeat screen (design §2) for horde `s`, which ended at `now`: why
- * it was won or lost, the payout, any weapon found, XP, the injured and when they're back, and the
- * repair bill. `game` is the game the horde was fought from, before `finishHorde`.
+ * it was won or lost, the payout, any materials or weapon found, XP, the injured and when
+ * they're back, and the repair bill. `game` is the game the horde was fought from,
+ * before `finishHorde`.
  */
 export function resultScreen(game: GameState, s: HordeState, now: number): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('resultScreen: the horde is still on');
@@ -322,6 +332,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
           ? `All ${s.waveCount} waves cleared · the ${horrorName(s.boss)} is dead`
           : `All ${s.waveCount} waves cleared`,
         payoutText(s),
+        ...findLines(s),
         ...dropLines(game, s),
         ...lines,
         ...injured,

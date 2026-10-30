@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { RECOVERY_MS, type Stats } from '../core/data.ts';
-import { finishHorde, hordeDrop, newGame, startHorde, type GameState } from '../core/game.ts';
+import { RECOVERY_MS, type Stats, stockOf } from '../core/data.ts';
+import {
+  finishHorde,
+  hordeDrop,
+  hordeFind,
+  newGame,
+  startHorde,
+  type GameState,
+} from '../core/game.ts';
 import { ARMOURY_CAP } from '../core/data.ts';
 import { newHorde, type HordeState } from '../core/horde.ts';
 import { buildTurret } from '../core/base.ts';
@@ -131,14 +138,14 @@ describe('hud', () => {
 
   it('lists amounts in material order, skipping zeros', () => {
     expect(stockText({ wood: 10, scrap: 5 })).toBe('5 scrap, 10 wood');
-    expect(stockText({ scrap: 0, wood: 0, metal: 0, concrete: 0 })).toBe('nothing');
+    expect(stockText(stockOf({ scrap: 0, wood: 0, metal: 0, concrete: 0 }))).toBe('nothing');
   });
 
   it('shows the payout once the horde is over', () => {
     const s = horde();
     expect(payoutText(s)).toBe('');
     s.outcome = 'won';
-    expect(payoutText(s)).toBe('Payout: 20 scrap, 30 wood, 1 gas');
+    expect(payoutText(s)).toBe('Payout: 20 scrap, 30 wood, 2 genes, 1 gas');
     s.outcome = 'lost';
     expect(payoutText(s)).toBe('Payout: 1 scrap, 1 wood');
   });
@@ -166,7 +173,8 @@ describe('hud', () => {
         title: 'Horde 1 held',
         lines: [
           `All ${s.waveCount} waves cleared`,
-          'Payout: 20 scrap, 30 wood, 1 gas',
+          'Payout: 20 scrap, 30 wood, 2 genes, 1 gas',
+          'Found: 2 food', // this seed's find
           'Bob +15 XP · level 1 (15/25)',
           'Jack +15 XP · level 1 (15/25)',
           `Jack · injured by a Shambler · back at ${jackBack}`,
@@ -242,7 +250,7 @@ describe('hud', () => {
       const w = hordeDrop(game, s)!.weapon;
       expect(w.rarity).toBe('prototype');
       const lines = resultScreen(game, s, NOW).lines;
-      expect(lines[1]).toBe('Payout: 20 scrap, 30 wood, 1 gas');
+      expect(lines[1]).toBe('Payout: 20 scrap, 30 wood, 2 genes, 1 gas');
       expect(lines[2]).toMatch(/^Found: Prototype (Pistol|Knife|Toolkit)$/);
       expect(lines.slice(3, 5)).toHaveLength(2);
       for (const line of lines.slice(3, 5)) expect(line).toMatch(/^[+−]\d+% |^Pierce/);
@@ -279,7 +287,10 @@ describe('hud', () => {
     it('the salvage Scrap counts toward the repair bill', () => {
       const { game, s } = withDrop();
       for (const seg of s.layers[0]!.segments) seg.hp = 0;
-      const broke = { ...game, stock: { scrap: 0, wood: 1000, metal: 1000, concrete: 1000 } };
+      const broke = {
+        ...game,
+        stock: stockOf({ scrap: 0, wood: 1000, metal: 1000, concrete: 1000 }),
+      };
       const short = (g: GameState): number => {
         const m = /short by (\d+) scrap/.exec(resultScreen(g, s, NOW).lines.at(-1)!);
         return m ? Number(m[1]) : 0;
@@ -303,7 +314,7 @@ describe('hud', () => {
 
     it('no drop, no line', () => {
       const { game, s } = ended('won');
-      for (let n = 0; hordeDrop(game, s) !== null; n++) s.rng = { s: n };
+      for (let n = 0; hordeDrop(game, s) ?? hordeFind(s); n++) s.rng = { s: n };
       expect(resultScreen(game, s, NOW).lines.some((l) => l.startsWith('Found'))).toBe(false);
     });
 
@@ -315,7 +326,7 @@ describe('hud', () => {
       game.roster[1]!.loadout = loadoutFrom('knife');
       game.roster[2]!.xp = 500; // John: points to spend, but not in this fight
       const r = resultScreen(game, s, NOW);
-      expect(r.lines.slice(2, 4)).toEqual([
+      expect(r.lines.slice(3, 5)).toEqual([
         'Bob +15 XP · level 2 (10/50) · +3 stat points',
         'Jack +15 XP · level 2 (20/50)',
       ]);
@@ -397,7 +408,7 @@ describe('hud', () => {
       const line = (g: GameState) => resultScreen(g, s, NOW).lines.at(-1);
       expect(line(game)).toBe('Repair bill: 5 scrap, 10 wood · covered');
       // The loss pays 1 scrap, 1 wood; 4 scrap on hand leaves only wood short.
-      const poor = { ...game, stock: { scrap: 4, wood: 0, metal: 0, concrete: 0 } };
+      const poor = { ...game, stock: stockOf({ scrap: 4, wood: 0, metal: 0, concrete: 0 }) };
       expect(line(poor)).toBe('Repair bill: 5 scrap, 10 wood · short by 9 wood');
     });
 
@@ -418,7 +429,7 @@ describe('hud', () => {
     it('the repair bill prices partial damage and can be short of scrap', () => {
       const { game, s } = ended('lost');
       s.layers[0]!.segments[0]!.hp = 100; // half a wood wall: 3 scrap, 5 wood (rounded up)
-      const poor = { ...game, stock: { scrap: 0, wood: 9, metal: 0, concrete: 0 } };
+      const poor = { ...game, stock: stockOf({ scrap: 0, wood: 9, metal: 0, concrete: 0 }) };
       expect(resultScreen(poor, s, NOW).lines.at(-1)).toBe(
         'Repair bill: 3 scrap, 5 wood · short by 2 scrap',
       );
