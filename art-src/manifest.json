@@ -36,7 +36,7 @@
       "prompt": "a mutant zombie crawling low on all fours, fleshy wiry body pressed close to the ground, long clawed arms and legs splayed wide ready to climb a wall, hunched spine, bright saturated acid green skin with darker green blotches, torn rags, open jaw with teeth"
     },
     {
-      "id": "bloater",
+      "id": "swollen",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
       "seed": 4422,
@@ -46,7 +46,7 @@
       "prompt": "a grotesquely swollen bloated mutant zombie waddling forward, huge round inflated belly and body like a balloon about to burst, small head sunk into fat shoulders, stubby arms, stretched shiny skin with bulging pustules, bright saturated acid green skin, torn rags stretched over the belly"
     },
     {
-      "id": "spitter",
+      "id": "spewer",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
       "seed": 4437,

@@ -13,8 +13,8 @@ import {
   SEGMENTS,
   SKILL_FLASH,
   SKILLS,
-  SPITTER,
-  BLOATER,
+  SPEWER,
+  SWOLLEN,
   CARD,
   TRAP_STRIP,
   WALL,
@@ -779,11 +779,11 @@ function drawEnemy(
   drawStanding(ctx, art[ENEMY_ART[kind]], feet, STAND.enemy * size, cam, pose);
 }
 
-/** A Bloater blowing up: an acid-green ring swelling and fading (design §9, ID-023). */
+/** A Swollen blowing up: an acid-green ring swelling and fading (design §9, ID-023). */
 function drawBurst(ctx: CanvasRenderingContext2D, k: Burst, time: number, cam: Camera): void {
-  const age = (time - k.at) / BLOATER.burst;
+  const age = (time - k.at) / SWOLLEN.burst;
   if (age < 0 || age >= 1) return;
-  groundCircle(ctx, k.x, k.y, ENEMIES.bloater.radius * (1 + 2 * age), cam);
+  groundCircle(ctx, k.x, k.y, ENEMIES.swollen.radius * (1 + 2 * age), cam);
   ctx.globalAlpha = 0.7 * (1 - age);
   ctx.fillStyle = COLOR.acid;
   ctx.fill();
@@ -849,9 +849,9 @@ function drawFlame(
   ctx.globalAlpha = 1;
 }
 
-/** A Spitter's glob arcing to where it lands, then a splash there (design §9, ID-023). */
+/** A Spewer's glob arcing to where it lands, then a splash there (design §9, ID-023). */
 function drawSpit(ctx: CanvasRenderingContext2D, k: Spit, time: number, cam: Camera): void {
-  const age = (time - k.at) / SPITTER.splash;
+  const age = (time - k.at) / SPEWER.splash;
   if (age < 0 || age >= 1) return;
   const fly = Math.min(1, age * 2);
   const at = {

@@ -266,7 +266,7 @@ export const SHIELD = { damageTaken: 0.3, fireRate: 0.2, walk: 0.2 } as const;
 export const ENGINEER_BUFF = 0.15;
 
 export type EnemyKind =
-  'shambler' | 'runner' | 'crawler' | 'bloater' | 'spitter' | 'brute' | 'screamer' | 'horror';
+  'shambler' | 'runner' | 'crawler' | 'swollen' | 'spewer' | 'brute' | 'screamer' | 'horror';
 /** Design §9, as built ID-023 (starting points). `radius` is the body bullets hit. */
 export const ENEMIES: Readonly<
   Record<
@@ -286,9 +286,9 @@ export const ENEMIES: Readonly<
   shambler: { hp: 20, speed: 30, damage: 5, attackInterval: 1, radius: 12, xp: 1, cash: 2 },
   runner: { hp: 15, speed: 75, damage: 3, attackInterval: 0.8, radius: 10, xp: 1, cash: 2 },
   crawler: { hp: 40, speed: 40, damage: 20, attackInterval: 1, radius: 9, xp: 2, cash: 3 },
-  // Its hit is its blast (BLOATER); `damage` is what it does to a defender in the camp.
-  bloater: { hp: 60, speed: 18, damage: 50, attackInterval: 1, radius: 18, xp: 3, cash: 4 },
-  spitter: { hp: 25, speed: 28, damage: 8, attackInterval: 2, radius: 12, xp: 2, cash: 3 },
+  // Its hit is its blast (SWOLLEN); `damage` is what it does to a defender in the camp.
+  swollen: { hp: 60, speed: 18, damage: 50, attackInterval: 1, radius: 18, xp: 3, cash: 4 },
+  spewer: { hp: 25, speed: 28, damage: 8, attackInterval: 2, radius: 12, xp: 2, cash: 3 },
   brute: { hp: 150, speed: 20, damage: 25, attackInterval: 1.5, radius: 20, xp: 5, cash: 6 },
   screamer: { hp: 30, speed: 30, damage: 2, attackInterval: 1, radius: 12, xp: 3, cash: 4 },
   // The boss (ID-024): never rolled, one per boss horde (HORROR).
@@ -301,23 +301,23 @@ export const ENEMIES: Readonly<
 export const ENEMY_MIX: Readonly<Partial<Record<EnemyKind, { from: number; share: number }>>> = {
   runner: { from: 2, share: 0.15 },
   crawler: { from: 5, share: 0.1 },
-  spitter: { from: 6, share: 0.1 },
-  bloater: { from: 7, share: 0.1 },
+  spewer: { from: 6, share: 0.1 },
+  swollen: { from: 7, share: 0.1 },
   brute: { from: 8, share: 0.1 },
   screamer: { from: 9, share: 0.1 },
 };
 /** A Crawler climbs the first standing segment it reaches for `time` s, then drops behind it. */
 export const CRAWLER = { climb: 3 } as const;
 /**
- * A Bloater at a standing segment blows up: `wall` to it, `splash` to the segments above
+ * A Swollen at a standing segment blows up: `wall` to it, `splash` to the segments above
  * and below; its burst is drawn for `burst` s.
  */
-export const BLOATER = { wall: 150, splash: 50, burst: 0.4 } as const;
+export const SWOLLEN = { wall: 150, splash: 50, burst: 0.4 } as const;
 /**
- * A Spitter stops `stop` px short of its stop line (so the wall-walk is in reach) and
+ * A Spewer stops `stop` px short of its stop line (so the wall-walk is in reach) and
  * spits at anything within `range`; each glob is drawn for `splash` s (it lands at once).
  */
-export const SPITTER = { stop: 150, range: 250, splash: 0.3 } as const;
+export const SPEWER = { stop: 150, range: 250, splash: 0.3 } as const;
 /** Each bullet hitting a Brute does `armour` less damage, but at least `min`. */
 export const BRUTE = { armour: 3, min: 1 } as const;
 /** Other enemies within `radius` of a Screamer move `speed` faster; several don't stack. */
@@ -450,7 +450,7 @@ export const HORDE_PAYOUT = {
  */
 export const GENES = { base: 2, every: 5, perMutants: 5, boss: 10 } as const;
 /** The enemy kinds that count as mutants for Genes (design §9). */
-export const MUTANTS: readonly EnemyKind[] = ['crawler', 'spitter', 'bloater', 'brute', 'screamer'];
+export const MUTANTS: readonly EnemyKind[] = ['crawler', 'spewer', 'swollen', 'brute', 'screamer'];
 /**
  * A win's material find (design §4 "a small chance of materials"): `chance` of
  * `base + ⌊n / every⌋` of one of `materials`, evenly.
