@@ -1,8 +1,8 @@
 // Wires the game to the page: canvas, frame loop, camera and click input, the build
 // panel between hordes and the HUD in a fight.
-import { recruitArrivals, takeCampPick } from '../core/camp.ts';
+import { recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
-import { SKILLS, type CampPickId, type SkillId, type Stat } from '../core/data.ts';
+import { SKILLS, type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -87,8 +87,8 @@ export function start(root: HTMLElement, art: Art): void {
   let endedAt: number | null = null;
   // Stat points spent on the result screen, applied with "Back to build".
   let spends: [string, Stat][] = [];
-  // Camp-level picks taken on the result screen, applied in order with "Back to build".
-  let campPicks: CampPickId[] = [];
+  // Camp-level picks (or a survivor let in) on the result screen, applied in order with "Back to build".
+  let campPicks: CampChoice[] = [];
   let selected: SlotHit | null = null;
   // The defender picked in a fight, waiting for a post to walk to.
   let selectedDefender: string | null = null;
@@ -112,7 +112,13 @@ export function start(root: HTMLElement, art: Art): void {
       spends = [];
       for (const id of campPicks) {
         const r = takeCampPick(next, id);
-        if (r.ok) next = r.game;
+        // The HUD counts room as the core does, so a refusal is a bug: say so, and the
+        // offer and those after it stay for the roster.
+        if (!r.ok) {
+          hud.toast(r.reason);
+          break;
+        }
+        next = r.game;
       }
       campPicks = [];
       commit(next);

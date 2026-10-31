@@ -13,7 +13,12 @@ import {
   hordeCampOffers,
   recoveryMs,
   repairOff,
+  roomLock,
+  roomOf,
   type Camp,
+  type CampChoice,
+  type Room,
+  type Survivor,
 } from '../core/camp.ts';
 import { rerollLock, synergyOf, UPGRADES } from '../core/cards.ts';
 import {
@@ -63,7 +68,15 @@ import { professionOf } from '../core/loadout.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
-import { nameTag, spend, titleIn, titleName, unspentPoints, type Title } from '../core/stats.ts';
+import {
+  levelOf,
+  nameTag,
+  spend,
+  titleIn,
+  titleName,
+  unspentPoints,
+  type Title,
+} from '../core/stats.ts';
 import { horrorAbility, xpToNext } from '../core/waves.ts';
 import { ART_URLS, SHOP_ICON, SKILL_ICON, type ArtId } from './sprites.ts';
 
@@ -247,8 +260,27 @@ export interface ResultScreen {
   button: string;
   /** Defenders from a win with stat points to spend, XP added. */
   picks: RosterDefender[];
-  /** Camp-level picks and the offers to pick from before "Back to build" (design §11). */
-  camp: Pick<Camp, 'picks' | 'offers'>;
+  /**
+   * Camp-level picks and the offers to pick from before "Back to build" (design §11),
+   * with the room left after the horde for a survivor to join.
+   */
+  camp: CampScreen;
+}
+
+export type CampScreen = Pick<Camp, 'picks' | 'offers'> & { room: Room };
+
+/** A survivor (design §10) as "Ava · level 3 · Aim 2, Grit 4 · Military Rifle (+10% damage)". */
+export function survivorText(s: Survivor): string {
+  const stats = STATS.filter((st) => s.stats[st] > 0).map(
+    (st) => `${STAT_NAMES[st]} ${s.stats[st]}`,
+  );
+  const affixes = s.weapon.affixes.map(affixText);
+  return [
+    s.name,
+    `level ${levelOf(s.xp).level}`,
+    ...(stats.length > 0 ? [stats.join(', ')] : []),
+    heldName(s.weapon) + (affixes.length > 0 ? ` (${affixes.join(', ')})` : ''),
+  ].join(' · ');
 }
 
 /** What each stat does, for the picker. */
@@ -353,9 +385,13 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
   if (s.outcome === 'fighting') throw new RangeError('resultScreen: the horde is still on');
   const injured = s.injured.map((i) => injuryLine(game, s, i, now));
   // Offers left from before (normally none: each is picked on its result screen), then this win's.
-  const camp = {
+  // A weapon the win drops takes armoury room before any survivor can.
+  const free = roomOf(game);
+  const room = hordeDrop(game, s)?.kept ? { ...free, weapons: free.weapons - 1 } : free;
+  const camp: CampScreen = {
     picks: game.camp.picks,
     offers: [...game.camp.offers, ...hordeCampOffers(game, s)],
+    room,
   };
   if (s.outcome === 'won') {
     const gains = levelGains(game, s);
@@ -428,7 +464,7 @@ export function createHud(
   onBuy: (item: ShopItem) => void,
   onArm: (skill: SkillId) => void,
   onReroll: () => void,
-  onCampPick: (id: CampPickId) => void,
+  onCampPick: (choice: CampChoice) => void,
 ): {
   update(state: HordeState, armed?: SkillId | null): void;
   showResult(screen: ResultScreen): void;
@@ -597,7 +633,7 @@ export function createHud(
    * The camp's level-up offers, oldest first, one at a time; each pick goes out through
    * `onCampPick`. "Back to build" waits until none is left.
    */
-  function campBlock(camp: Pick<Camp, 'picks' | 'offers'>): void {
+  function campBlock(camp: CampScreen): void {
     const offer = camp.offers[0];
     back.disabled = offer !== undefined;
     if (!offer) {
@@ -606,19 +642,47 @@ export function createHud(
     }
     const more = camp.offers.length > 1 ? ` (${camp.offers.length} to pick)` : '';
     const row = el('div', 'hud-card-row');
-    for (const id of offer) {
+    const choose = (choice: CampChoice, button: HTMLButtonElement): void => {
+      button.addEventListener('click', () => {
+        if (result.hidden || button.disabled) return;
+        const r = campAfterPick(camp, choice);
+        if (!r.ok) return;
+        onCampPick(choice);
+        const room =
+          choice === 'join'
+            ? { people: camp.room.people - 1, weapons: camp.room.weapons - 1 }
+            : camp.room;
+        campBlock({ ...r.camp, room });
+        (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus();
+      });
+      row.append(button);
+    };
+    for (const id of offer.picks) {
       const button = el('button', 'hud-card hud-card-camp');
       button.type = 'button';
       button.append(el('span', 'hud-card-title', campPickText(camp, id)));
-      button.addEventListener('click', () => {
-        if (result.hidden) return;
-        const r = campAfterPick(camp, id);
-        if (!r.ok) return;
-        onCampPick(id);
-        campBlock(r.camp);
-        (campPicker.querySelector('button') ?? back).focus();
-      });
-      row.append(button);
+      choose(id, button);
+    }
+    if (offer.survivor) {
+      // A survivor wants to join (design §11): taking a pick instead turns them away.
+      const button = el('button', 'hud-card hud-card-camp');
+      button.type = 'button';
+      button.append(
+        el('span', 'hud-card-title', `Survivor wants to join: ${survivorText(offer.survivor)}`),
+      );
+      const lock = roomLock(camp.room);
+      if (lock !== null) {
+        button.disabled = true;
+        button.append(el('span', 'hud-card-body', lock));
+      }
+      choose('join', button);
+      // With no pick left to take instead, turning them away answers the offer.
+      if (offer.picks.length === 0) {
+        const away = el('button', 'hud-card hud-card-camp');
+        away.type = 'button';
+        away.append(el('span', 'hud-card-title', `Turn ${offer.survivor.name} away`));
+        choose('away', away);
+      }
     }
     campPicker.replaceChildren(el('h3', 'hud-pick-heading', `Camp level up: pick one${more}`), row);
   }
@@ -735,7 +799,7 @@ export function createHud(
       back.textContent = screen.button;
       campBlock(screen.camp);
       result.hidden = false;
-      (campPicker.querySelector('button') ?? back).focus();
+      (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus();
     },
   };
 }

@@ -15,7 +15,15 @@ import {
   type BaseTurret,
   type PostKind,
 } from '../core/base.ts';
-import { campLevelOf, campSlots, newCamp, NO_PICKS, type Camp } from '../core/camp.ts';
+import {
+  campLevelOf,
+  campSlots,
+  newCamp,
+  NO_PICKS,
+  type Camp,
+  type CampOffer,
+  type Survivor,
+} from '../core/camp.ts';
 import {
   affixCount,
   affixesFor,
@@ -57,13 +65,14 @@ import {
   revealOf,
   SEGMENTS,
   STATS,
+  SURVIVOR,
   TIER_ORDER,
   TRAP_DURABILITY,
   TRAP_KINDS,
   TURRET_MOUNTS,
   FREE_WEAPONS,
   WALK_SPOTS,
-  WEAPONS,
+  WEAPON_IDS,
   stockOf,
   type Battery,
   type FreeWeaponId,
@@ -76,12 +85,12 @@ import {
   type Stats,
   type Stock,
   type Tier,
-  type WeaponId,
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
   focusOptions,
   partyStrength,
+  tripOf,
   type BigHorde,
   type LeftWeapon,
   type Lost,
@@ -92,13 +101,16 @@ import {
 import { loadoutError, loadoutFrom, type Loadout } from '../core/loadout.ts';
 import { perkSlots, unlockedPerks } from '../core/perks.ts';
 import { loadBatteries, newPower, type Power } from '../core/power.ts';
-import { earnedPoints, NO_STATS, spentPoints } from '../core/stats.ts';
+import { earnedPoints, levelOf, NO_STATS, spentPoints, xpForLevel } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 9 since survivors (ID-032): a v8 save's reports have no survivors waiting and its camp
+ * offers are bare lists of picks, with no survivor.
+ *
  * 8 since plazas and orders (ID-029): a v7 patrol searched one building with no focus and
  * the Balanced order, so it loads that way; a v7 report has no big horde, no retreat and
  * those defaults. A plaza can only appear in a v8 save.
@@ -113,7 +125,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -138,13 +150,17 @@ const NAME = /^[A-Za-z][A-Za-z' -]{0,23}$/;
 const MAX_BUILDINGS = Math.max(1, ...Object.values(PLAZAS).map((z) => z.buildings.length));
 /** Weapons one patrol can find: a haul's rolls for each building. */
 const MAX_FOUND = (PATROL.rolls + PATROL.bonusRolls) * MAX_BUILDINGS;
-/** An owned weapon's uid: `h` and the horde number that dropped it, or `p`, the patrol number that found it and its place in the haul. */
+/**
+ * An owned weapon's uid: `h` and the horde number that dropped it; `p`, the patrol number
+ * that found it and its place in the haul; or a survivor's (`SURVIVOR_ID`).
+ */
 const UID = new RegExp(
-  `^(?:h[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')}))$`,
+  `^(?:h[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5})$`,
 );
+/** A survivor's id (design §10): `s`, the patrol and its try; or `c` and the camp level. */
+const SURVIVOR_ID = /^(?:s([1-9][0-9]{0,5})-([0-9])|c([1-9][0-9]{0,5}))$/;
 /** Seeds are 32-bit. */
 const MAX_SEED = 0xffffffff;
-const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 /** Only a free weapon is held by id; any other is an owned item with a uid. */
 const FREE_IDS: readonly FreeWeaponId[] = FREE_WEAPONS;
 const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
@@ -229,12 +245,12 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
+  if (![SAVE_VERSION, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
   const ver = o.v as number;
   const materials = ver >= 4 ? MATERIALS : BUILDING_MATERIALS;
   const patrols = ver >= 8 ? 'plazas' : ver >= 6 ? 'risk' : ver === 5 ? 'patrols' : null;
-  const camp = ver >= 7;
+  const camp = ver >= 7 ? (ver === SAVE_VERSION ? 'survivors' : 'camp') : null;
   if (ver === 1) {
     return {
       game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp),
@@ -252,8 +268,8 @@ function readGame(
   materials: readonly Material[],
   /** What the save's patrols carry: none (v4 and older), no risk yet (v5), no plazas yet (v6, v7), or all of it. */
   patrols: 'patrols' | 'risk' | 'plazas' | null,
-  /** Whether the save has a camp (v7). */
-  hasCamp: boolean,
+  /** What the save's camp carries: none (v6 and older), no survivors yet (v7, v8), or all of it. */
+  hasCamp: 'camp' | 'survivors' | null,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -287,6 +303,7 @@ function readGame(
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
   const patrolsSent = patrols ? int(o.patrolsSent, 0, PATROL.max) : 0;
   const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent);
+  const survivors = hasCamp === 'survivors';
   const risk = patrols === 'risk' || patrols === 'plazas';
   const plazas = patrols === 'plazas';
   const out = patrols
@@ -307,9 +324,11 @@ function readGame(
     perks: old.perks ? [START_PERK] : readPerks(o.perks, research),
     patrols: out,
     patrolsSent,
-    reports: patrols ? readReports(o.reports, savedAt, patrolsSent, out, risk, plazas) : [],
+    reports: patrols
+      ? readReports(o.reports, savedAt, patrolsSent, out, risk, plazas, survivors)
+      : [],
     leftBehind: risk ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent, plazas) : [],
-    camp: hasCamp ? readCamp(o.camp, savedAt) : newCamp(),
+    camp: hasCamp ? readCamp(o.camp, savedAt, survivors) : newCamp(),
   };
   if (game.roster.length > campSlots(game)) fail('more people than camp slots');
   // A free recruit's number comes from the camp's count, so the next one is always new.
@@ -324,12 +343,31 @@ function readGame(
     ...game.roster.flatMap((d) => [d.loadout.primary, d.loadout.secondary]),
   ].filter((h): h is OwnedWeapon => typeof h === 'object' && h !== null);
   if (owned.length > ARMOURY_CAP) fail('too many weapons');
-  const every = [...owned, ...game.leftBehind.map((l) => l.weapon)];
+  // Survivors waiting to join, in patrol reports and camp offers (design §10, §11).
+  const waiting = [
+    ...game.reports.flatMap((r) => r.survivors),
+    ...game.camp.offers.flatMap((c) => (c.survivor ? [c.survivor] : [])),
+  ];
+  const every = [
+    ...owned,
+    ...game.leftBehind.map((l) => l.weapon),
+    ...waiting.map((s) => s.weapon),
+  ];
   if (new Set(every.map((w) => w.uid)).size !== every.length) fail('weapon twice');
+  const people = [...game.roster.map((d) => d.id), ...waiting.map((s) => s.id)];
+  if (new Set(people).size !== people.length) fail('survivor twice');
   // A patrol's weapons reach the camp when it comes back, not before.
   const away = new Set(out.map((p) => p.no));
-  if (every.some((w) => w.uid.startsWith('p') && away.has(Number(w.uid.slice(1).split('-')[0])))) {
+  if (every.some((w) => /^[ps]/.test(w.uid) && away.has(Number(w.uid.slice(1).split('-')[0])))) {
     fail('weapon from a patrol still out');
+  }
+  // A survivor (and their weapon) comes from a patrol sent or a camp level reached.
+  const level = campLevelOf(game.camp.xp).level;
+  for (const id of [...people, ...every.map((w) => w.uid)]) {
+    const m = SURVIVOR_ID.exec(id);
+    if (m && Number(m[1] ?? 0) > patrolsSent) fail('survivor from the future');
+    if (m && Number(m[2] ?? 0) >= SURVIVOR.tries) fail('survivor try');
+    if (m && Number(m[3] ?? 0) > level) fail('survivor from the future');
   }
   // Loading a save is between hordes: batteries waiting in storage go into the bank.
   return loadBatteries(game);
@@ -341,17 +379,26 @@ function readGame(
  * still below the top. The floor's clock never runs past a recruit's wait from the save
  * (a clock set back is cut to that).
  */
-function readCamp(v: unknown, savedAt: number): Camp {
+function readCamp(v: unknown, savedAt: number, survivors: boolean): Camp {
   const o = obj(v, ['upgrades', 'xp', 'picks', 'offers', 'recruitAt', 'recruits']);
   const xp = int(o.xp, 0, MAX_COUNT);
   const p = obj(o.picks, CAMP_PICK_IDS);
   const picks = { ...NO_PICKS };
   for (const id of CAMP_PICK_IDS) picks[id] = int(p[id], 0, CAMP_PICK_RANKS);
-  const offers = arr(o.offers, 0, CAMP_PICK_IDS.length * CAMP_PICK_RANKS).map((x) => {
-    const offer = arr(x, 1, 3).map((id) => oneOf(id, CAMP_PICK_IDS));
+  const offers = arr(o.offers, 0, CAMP_PICK_IDS.length * CAMP_PICK_RANKS).map((x): CampOffer => {
+    // A v7 offer is a bare list of picks.
+    const c = survivors ? obj(x, ['picks', 'survivor']) : { picks: x, survivor: null };
+    const survivor = c.survivor === null ? null : readSurvivor(c.survivor, 'c');
+    // Level 1 to the camp level their offer came with (`c<level>`), at most 5.
+    if (survivor && levelOf(survivor.xp).level > Number(survivor.id.slice(1))) {
+      fail('survivor level');
+    }
+    const offer = arr(c.picks, survivor ? 0 : 1, survivor ? 2 : 3).map((id) =>
+      oneOf(id, CAMP_PICK_IDS),
+    );
     if (new Set(offer).size !== offer.length) fail('pick twice in an offer');
     if (offer.some((id) => picks[id] >= CAMP_PICK_RANKS)) fail('offer at the top rank');
-    return offer;
+    return { picks: offer, survivor };
   });
   const taken = CAMP_PICK_IDS.reduce((n, id) => n + picks[id], 0);
   if (taken + offers.length > campLevelOf(xp).level - 1) fail('picks not earned');
@@ -617,7 +664,10 @@ function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedW
   const o = obj(v, ['uid', 'base', 'rarity', 'affixes']);
   const uid = text(o.uid, 8 + String(MAX_FOUND - 1).length, UID);
   const from = Number(uid.slice(1).split('-')[0]);
-  if (from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) fail('weapon from the future');
+  // A survivor's camp-level weapon (`c`) is checked against the camp, once it is read.
+  if (!uid.startsWith('c') && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
+    fail('weapon from the future');
+  }
   const base = oneOf(o.base, WEAPON_IDS);
   const rarity = oneOf(o.rarity, RARITY_ORDER);
   const count = affixCount(base, rarity);
@@ -784,6 +834,25 @@ function readLeftBehind(
   });
 }
 
+/**
+ * A survivor waiting to join (design §10): from a patrol (`s`) or a camp level-up (`c`),
+ * a plain name, the XP of a level no higher than any tier, points no more than that
+ * earns, and an owned weapon whose uid is their id. Where the id comes from is checked
+ * with the rest of the game.
+ */
+function readSurvivor(v: unknown, from: 's' | 'c'): Survivor {
+  const o = obj(v, ['id', 'name', 'xp', 'stats', 'weapon']);
+  const id = text(o.id, 9, SURVIVOR_ID);
+  if (!id.startsWith(from)) fail('survivor id');
+  const xp = int(o.xp, 0, MAX_COUNT);
+  const { level } = levelOf(xp);
+  if (level > SURVIVOR.campLevel || xp !== xpForLevel(level)) fail('survivor level');
+  // The weapon's uid is the survivor's own, so the future checks pass it through.
+  const weapon = readOwned(o.weapon, MAX_HORDE, PATROL.max);
+  if (weapon.uid !== id) fail('survivor weapon');
+  return { id, name: text(o.name, 24, NAME), xp, stats: readStats(o.stats, xp), weapon };
+}
+
 /** How a big horde ended; only a plaza has one. */
 function readBigHorde(v: unknown, location: PlaceId): BigHorde | null {
   if (v === null) return null;
@@ -835,6 +904,8 @@ function readReports(
   out: readonly Patrol[],
   risk: boolean,
   plazas: boolean,
+  /** Whether reports list survivors waiting (v9). */
+  survivors: boolean,
 ): PatrolReport[] {
   const reports = arr(v, 0, PATROL.reports).map((x): PatrolReport => {
     const o = obj(x, [
@@ -849,6 +920,7 @@ function readReports(
       'xp',
       ...(risk ? ['injured', 'dead', 'wiped', 'recovered'] : []),
       ...(plazas ? ['buildings', 'searched', 'bigHorde', 'order', 'focus', 'lost'] : []),
+      ...(survivors ? ['survivors'] : []),
     ]);
     const no = int(o.no, 1, patrolsSent);
     if (out.some((p) => p.no === no)) fail('report from a patrol still out');
@@ -905,12 +977,21 @@ function readReports(
       weapons: arr(o.weapons, 0, maxWeapons).map(readReportWeapon),
       recovered: risk ? arr(o.recovered, 0, PATROL.left).map(readReportWeapon) : [],
       xp: int(o.xp, 0, MAX_COUNT),
+      survivors: survivors
+        ? arr(o.survivors, 0, SURVIVOR.tries).map((x) => {
+            const s = readSurvivor(x, 's');
+            if (!s.id.startsWith(`s${no}-`)) fail('survivor from another patrol');
+            if (levelOf(s.xp).level > tripOf(location, buildings).tier) fail('survivor level');
+            return s;
+          })
+        : [],
     };
     const found =
       report.xp > 0 ||
       report.gas > 0 ||
       report.weapons.length > 0 ||
       report.recovered.length > 0 ||
+      report.survivors.length > 0 ||
       MATERIALS.some((m) => report.stock[m] > 0) ||
       BATTERY_IDS.some((id) => batteries[id] > 0);
     if (wiped && found) {

@@ -3,6 +3,7 @@
 // with its own uid, in the armoury or in one defender's hands. Pure.
 import {
   AFFIXES,
+  PATROL,
   RARITIES,
   RARITY_ORDER,
   WEAPON_DROP,
@@ -115,6 +116,20 @@ export const dropChance = (hordeNumber: number): number =>
 
 function rollRarity(rng: Rng): Rarity {
   const weights = WEAPON_DROP.rarity;
+  const total = RARITY_ORDER.reduce((sum, r) => sum + weights[r], 0);
+  let roll = rng() * total;
+  for (const r of RARITY_ORDER) {
+    if (roll < weights[r]) return r;
+    roll -= weights[r];
+  }
+  // Only reached through float rounding at the very top: the last weighted rarity.
+  return RARITY_ORDER.filter((r) => weights[r] > 0).at(-1)!;
+}
+
+/** A rarity from a tier-`tier` place's weights (`PATROL.rarity`, design §10). */
+export function tierRarity(rng: Rng, tier: number): Rarity {
+  const weights = PATROL.rarity[tier - 1];
+  if (!weights) throw new RangeError(`tierRarity: bad tier ${tier}`);
   const total = RARITY_ORDER.reduce((sum, r) => sum + weights[r], 0);
   let roll = rng() * total;
   for (const r of RARITY_ORDER) {

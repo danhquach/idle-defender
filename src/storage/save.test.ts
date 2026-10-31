@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { buildTurret, lineWall, spotOf } from '../core/base.ts';
-import { newCamp, NO_PICKS, recruitArrivals } from '../core/camp.ts';
+import {
+  newCamp,
+  NO_PICKS,
+  recruitArrivals,
+  rollSurvivor,
+  survivorDefender,
+  type Survivor,
+} from '../core/camp.ts';
 import {
   ARMOURY_CAP,
   BANK_CAP,
@@ -17,6 +24,8 @@ import {
 } from '../core/data.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { tick } from '../core/horde.ts';
+import { createRng } from '../core/rng.ts';
+import { xpForLevel } from '../core/stats.ts';
 import { isGun, type Loadout } from '../core/loadout.ts';
 import {
   patrolLoot,
@@ -37,7 +46,16 @@ import {
   writeSave,
   type SaveStorage,
 } from './save.ts';
-import { NOW, oldStock, played, preCamp, prePatrol, prePlazas, preRisk } from './testing.ts';
+import {
+  NOW,
+  oldStock,
+  played,
+  preCamp,
+  prePatrol,
+  prePlazas,
+  preRisk,
+  preSurvivors,
+} from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1106,7 +1124,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 9, '1', '8', 1.5, null]) {
+    for (const v of [0, 10, '1', '9', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1355,7 +1373,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(8);
+    expect(SAVE_VERSION).toBe(9);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1709,7 +1727,7 @@ describe('save: the camp (ID-033)', () => {
         upgrades: 1,
         xp: 90,
         picks: { ...NO_PICKS, medic: 1 },
-        offers: [['salvage', 'foraging', 'medic']],
+        offers: [{ picks: ['salvage', 'foraging', 'medic'], survivor: null }],
         recruitAt: NOW + 30 * 60 * 1000,
         recruits: 1,
       },
@@ -1834,9 +1852,228 @@ describe('save: the camp (ID-033)', () => {
       expect(json.includes(from)).toBe(true);
       expect(decodeSave(json.replace(from, `${from}"__proto__":{"polluted":1},`))).toBeNull();
     }
-    const offer = '"offers":[[';
+    const offer = '"offers":[{';
     expect(json.includes(offer)).toBe(true);
-    expect(decodeSave(json.replace(offer, `${offer}{"__proto__":{"polluted":1}},`))).toBeNull();
+    expect(decodeSave(json.replace(offer, `${offer}"__proto__":{"polluted":1},`))).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('save: survivors (ID-032)', () => {
+  const survivor = (id: string, level: number, seed = 3): Survivor =>
+    rollSurvivor(createRng(seed), id, level, level);
+  /**
+   * Patrol 7 back with two survivors waiting, camp level 3 with a survivor in its offer,
+   * and two who already joined: one from patrol 5, one from camp level 2.
+   */
+  function joined(): GameState {
+    const g = played();
+    return {
+      ...g,
+      hordeNumber: PATROL.unlock,
+      patrolsSent: 7,
+      roster: [
+        ...g.roster,
+        survivorDefender(survivor('s5-0', 3)),
+        survivorDefender(survivor('c2', 2)),
+      ],
+      reports: [
+        {
+          no: 7,
+          location: 'gas-station',
+          buildings: ['gas-station'],
+          searched: 1,
+          bigHorde: null,
+          order: 'balanced',
+          focus: 'anything',
+          lost: {
+            stock: stockOf(),
+            gas: 0,
+            batteries: { makeshift: 0, standard: 0, 'high-capacity': 0, military: 0 },
+            weapons: 0,
+          },
+          names: ['Bob'],
+          injured: [],
+          dead: [],
+          wiped: false,
+          returnedAt: NOW,
+          stock: stockOf(),
+          gas: 0,
+          batteries: { makeshift: 0, standard: 0, 'high-capacity': 0, military: 0 },
+          weapons: [],
+          recovered: [],
+          xp: 10,
+          survivors: [survivor('s7-0', 1, 4), survivor('s7-1', 1, 5)],
+        },
+      ],
+      camp: {
+        ...newCamp(),
+        xp: 90,
+        offers: [{ picks: ['salvage', 'foraging'], survivor: survivor('c3', 3, 6) }],
+      },
+    };
+  }
+  const changed = (change: (game: Loose) => void): unknown => {
+    const save = JSON.parse(encodeSave(joined(), NOW));
+    change(save.game);
+    return decodeSave(JSON.stringify(save));
+  };
+
+  it('round-trips survivors waiting and those who joined', () => {
+    expect(decodeSave(encodeSave(joined(), NOW))?.game).toEqual(joined());
+    // A survivor offer with no picks left still holds the survivor.
+    expect(changed((g) => (g.camp.offers[0].picks = []))).not.toBeNull();
+  });
+
+  it('loads a v8 save with no survivors and its offers as bare picks, and refuses mixed shapes', () => {
+    const g = { ...joined(), reports: [{ ...joined().reports[0]!, survivors: [] }] };
+    const plain = {
+      ...g,
+      camp: { ...g.camp, offers: [{ picks: g.camp.offers[0]!.picks, survivor: null }] },
+    };
+    const v8 = preSurvivors(plain);
+    const old = decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: v8 }))?.game;
+    expect(old).toEqual(plain);
+    // A v8 save never held survivors; a v9 one must.
+    expect(
+      decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: JSON.parse(encodeSave(g, NOW)).game })),
+    ).toBeNull();
+    expect(decodeSave(JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game: v8 }))).toBeNull();
+  });
+
+  it('refuses survivors the game could not have written', () => {
+    const report = (g: Loose) => g.reports[0].survivors[0];
+    const offer = (g: Loose) => g.camp.offers[0];
+    const cases: [string, (g: Loose) => void][] = [
+      [
+        'from another patrol',
+        (g) =>
+          Object.assign(
+            report(g),
+            { id: 's6-0' },
+            { weapon: { ...report(g).weapon, uid: 's6-0' } },
+          ),
+      ],
+      [
+        'a camp id in a report',
+        (g) => Object.assign(report(g), { id: 'c1', weapon: { ...report(g).weapon, uid: 'c1' } }),
+      ],
+      [
+        'a patrol id in an offer',
+        (g) =>
+          Object.assign(offer(g).survivor, {
+            id: 's7-9',
+            weapon: { ...offer(g).survivor.weapon, uid: 's7-9' },
+          }),
+      ],
+      ['weapon uid not theirs', (g) => (report(g).weapon.uid = 's7-1')],
+      ['XP between levels', (g) => (report(g).xp += 1)],
+      ['level above any tier', (g) => (report(g).xp = xpForLevel(6))],
+      ['points not earned', (g) => (report(g).stats.grit = 99)],
+      // Patrol 7 went to the gas station (tier 1).
+      [
+        'level above the tier',
+        (g) =>
+          Object.assign(report(g), {
+            xp: xpForLevel(2),
+            stats: { aim: 0, might: 0, tech: 0, grit: 0 },
+          }),
+      ],
+      ['bidi name', (g) => (report(g).name = '\u202eAva')],
+      ['zero-width name', (g) => (report(g).name = 'Ava\u200b')],
+      ['look-alike name', (g) => (report(g).name = '\u0410va')],
+      ['oversized name', (g) => (report(g).name = 'A'.repeat(25))],
+      ['extra key', (g) => (report(g).extra = 1)],
+      ['missing key', (g) => delete report(g).stats],
+      [
+        'three in a report',
+        (g) =>
+          g.reports[0].survivors.push({
+            ...report(g),
+            id: 's7-2',
+            weapon: { ...report(g).weapon, uid: 's7-2' },
+          }),
+      ],
+      ['twice in a report', (g) => (g.reports[0].survivors[1] = report(g))],
+      [
+        'an offer survivor already on the roster',
+        (g) => {
+          // Their weapon goes, so only the person is twice, not the weapon.
+          g.roster[4].loadout = { primary: 'pistol', secondary: null, item: null };
+          Object.assign(offer(g).survivor, {
+            id: 'c2',
+            weapon: { ...offer(g).survivor.weapon, uid: 'c2' },
+          });
+        },
+      ],
+      [
+        'a try past the last',
+        (g) =>
+          Object.assign(report(g), { id: 's7-2', weapon: { ...report(g).weapon, uid: 's7-2' } }),
+      ],
+      [
+        'an offer survivor beyond the camp level',
+        (g) =>
+          Object.assign(offer(g).survivor, {
+            id: 'c4',
+            weapon: { ...offer(g).survivor.weapon, uid: 'c4' },
+          }),
+      ],
+      ['a survivor offer with 3 picks', (g) => offer(g).picks.push('medic')],
+      [
+        'a camp survivor above the level they came with',
+        (g) => {
+          g.camp.xp = 400; // camp level 5
+          Object.assign(offer(g).survivor, {
+            id: 'c1',
+            weapon: { ...offer(g).survivor.weapon, uid: 'c1' },
+          });
+        },
+      ],
+      [
+        'an offer with neither',
+        (g) => {
+          offer(g).survivor = null;
+          offer(g).picks = [];
+        },
+      ],
+      [
+        'a joined survivor from a patrol not sent',
+        (g) => {
+          const { loadout } = g.roster[3];
+          g.roster[3].id = 's9-0';
+          (loadout.primary.uid === 's5-0' ? loadout.primary : loadout.secondary).uid = 's9-0';
+        },
+      ],
+      ['a joined survivor from a camp level not reached', (g) => (g.roster[4].id = 'c7')],
+      ['an offer as a bare list', (g) => (g.camp.offers[0] = ['salvage'])],
+      ['a survivor as text', (g) => (g.reports[0].survivors[0] = 's7-0')],
+    ];
+    for (const [why, change] of cases) expect(changed(change), why).toBeNull();
+  });
+
+  it('loads a survivor who joined and was dismissed, their weapon in the armoury', () => {
+    const g = joined();
+    const [s5, c2] = g.roster
+      .slice(-2)
+      .map(
+        (d) =>
+          [d.loadout.primary, d.loadout.secondary].find(
+            (w) => typeof w === 'object' && w !== null,
+          ) as OwnedWeapon,
+      );
+    const gone = { ...g, roster: g.roster.slice(0, -2), armoury: [...g.armoury, s5!, c2!] };
+    expect(decodeSave(encodeSave(gone, NOW))?.game).toEqual(gone);
+  });
+
+  it('refuses a polluted survivor and leaves Object.prototype alone', () => {
+    const json = encodeSave(joined(), NOW);
+    const at = '"survivors":[{';
+    expect(json.includes(at)).toBe(true);
+    expect(decodeSave(json.replace(at, `${at}"__proto__":{"polluted":1},`))).toBeNull();
+    const offer = '"survivor":{';
+    expect(json.includes(offer)).toBe(true);
+    expect(decodeSave(json.replace(offer, `${offer}"constructor":{"polluted":1},`))).toBeNull();
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });
@@ -1922,8 +2159,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 8', () => {
-    expect(SAVE_VERSION).toBe(8);
+  it('is version 9 (survivors came after plazas, ID-032)', () => {
+    expect(SAVE_VERSION).toBe(9);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {
@@ -1969,7 +2206,7 @@ describe('save: plazas and orders (ID-029)', () => {
       focus: 'anything',
     });
     expect(old?.reports[0]!.lost.weapons).toBe(0);
-    expect(JSON.parse(encodeSave(old!, NOW)).v).toBe(8);
+    expect(JSON.parse(encodeSave(old!, NOW)).v).toBe(SAVE_VERSION);
     // A v8 save must carry the new fields; a v7 one cannot name a plaza.
     expect(raw(prePlazas(g))).toBeNull();
     expect(raw(g, 7)).toBeNull();
