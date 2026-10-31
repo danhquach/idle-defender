@@ -35,20 +35,26 @@ import {
   CAMP_UPGRADES,
   COLUMNS,
   ITEMS,
+  buildingsOf,
+  FOCUS_IDS,
+  isPlaza,
   LAB_LEVELS,
   LOCATION_IDS,
-  LOCATIONS,
   MATERIALS,
   MAX_COUNT,
   MAX_CONDITION,
+  ORDER_IDS,
   PATROL,
   PERK_IDS,
+  PLACE_IDS,
+  PLAZAS,
   START_PERK,
   POST_KINDS,
   RARITY_ORDER,
   RECOVERY_MS,
   RESEARCH,
   RESEARCH_IDS,
+  revealOf,
   SEGMENTS,
   STATS,
   TIER_ORDER,
@@ -62,7 +68,9 @@ import {
   type Battery,
   type FreeWeaponId,
   type ItemId,
+  type LocationId,
   type Material,
+  type PlaceId,
   type PerkId,
   type ResearchId,
   type Stats,
@@ -72,8 +80,11 @@ import {
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
+  focusOptions,
   partyStrength,
+  type BigHorde,
   type LeftWeapon,
+  type Lost,
   type Patrol,
   type PatrolReport,
   type ReportWeapon,
@@ -88,6 +99,10 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 8 since plazas and orders (ID-029): a v7 patrol searched one building with no focus and
+ * the Balanced order, so it loads that way; a v7 report has no big horde, no retreat and
+ * those defaults. A plaza can only appear in a v8 save.
+ *
  * 7 since the camp (ID-033): a v6 save has no camp, so it gets a new one (5 slots, no camp
  * XP or picks; the roster floor's clock starts when the game next runs).
  *
@@ -98,7 +113,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -119,8 +134,14 @@ const ID = /^[a-z][a-z0-9-]{0,31}$/;
 const RECRUIT = /^recruit-([0-9]+)$/;
 /** A defender name: plain letters, spaces, apostrophes and hyphens; no look-alikes or hidden marks. */
 const NAME = /^[A-Za-z][A-Za-z' -]{0,23}$/;
+/** Most buildings a place holds, so the most a patrol can tick. */
+const MAX_BUILDINGS = Math.max(1, ...Object.values(PLAZAS).map((z) => z.buildings.length));
+/** Weapons one patrol can find: a haul's rolls for each building. */
+const MAX_FOUND = (PATROL.rolls + PATROL.bonusRolls) * MAX_BUILDINGS;
 /** An owned weapon's uid: `h` and the horde number that dropped it, or `p`, the patrol number that found it and its place in the haul. */
-const UID = /^(?:h[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-[0-9])$/;
+const UID = new RegExp(
+  `^(?:h[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')}))$`,
+);
 /** Seeds are 32-bit. */
 const MAX_SEED = 0xffffffff;
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
@@ -208,12 +229,12 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
+  if (![SAVE_VERSION, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
   const ver = o.v as number;
   const materials = ver >= 4 ? MATERIALS : BUILDING_MATERIALS;
-  const patrols = ver >= 6 ? 'risk' : ver === 5 ? 'patrols' : null;
-  const camp = ver === SAVE_VERSION;
+  const patrols = ver >= 8 ? 'plazas' : ver >= 6 ? 'risk' : ver === 5 ? 'patrols' : null;
+  const camp = ver >= 7;
   if (ver === 1) {
     return {
       game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp),
@@ -229,8 +250,8 @@ function readGame(
   savedAt: number,
   grid: Grid,
   materials: readonly Material[],
-  /** What the save's patrols carry: none (v4 and older), no risk yet (v5), or all of it. */
-  patrols: 'patrols' | 'risk' | null,
+  /** What the save's patrols carry: none (v4 and older), no risk yet (v5), no plazas yet (v6, v7), or all of it. */
+  patrols: 'patrols' | 'risk' | 'plazas' | null,
   /** Whether the save has a camp (v7). */
   hasCamp: boolean,
 ): GameState {
@@ -257,7 +278,7 @@ function readGame(
     ...(old.power ? [] : ['power']),
     ...(old.perks ? [] : ['perks']),
     ...(patrols ? ['patrols', 'patrolsSent', 'reports'] : []),
-    ...(patrols === 'risk' ? ['leftBehind'] : []),
+    ...(patrols === 'risk' || patrols === 'plazas' ? ['leftBehind'] : []),
     ...(hasCamp ? ['camp'] : []),
   ]);
   const tiers = readTiers(o.tiers);
@@ -266,7 +287,11 @@ function readGame(
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
   const patrolsSent = patrols ? int(o.patrolsSent, 0, PATROL.max) : 0;
   const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent);
-  const out = patrols ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, roster) : [];
+  const risk = patrols === 'risk' || patrols === 'plazas';
+  const plazas = patrols === 'plazas';
+  const out = patrols
+    ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, roster, plazas)
+    : [];
   const game: GameState = {
     hordeNumber,
     base: readBase(o.base, tiers, research.includes('auto-turret'), grid),
@@ -282,8 +307,8 @@ function readGame(
     perks: old.perks ? [START_PERK] : readPerks(o.perks, research),
     patrols: out,
     patrolsSent,
-    reports: patrols ? readReports(o.reports, savedAt, patrolsSent, out, patrols === 'risk') : [],
-    leftBehind: patrols === 'risk' ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent) : [],
+    reports: patrols ? readReports(o.reports, savedAt, patrolsSent, out, risk, plazas) : [],
+    leftBehind: risk ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent, plazas) : [],
     camp: hasCamp ? readCamp(o.camp, savedAt) : newCamp(),
   };
   if (game.roster.length > campSlots(game)) fail('more people than camp slots');
@@ -590,7 +615,7 @@ function readHeld(v: unknown, hordeNumber: number, patrolsSent: number): Held {
  */
 function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedWeapon {
   const o = obj(v, ['uid', 'base', 'rarity', 'affixes']);
-  const uid = text(o.uid, 9, UID);
+  const uid = text(o.uid, 8 + String(MAX_FOUND - 1).length, UID);
   const from = Number(uid.slice(1).split('-')[0]);
   if (from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) fail('weapon from the future');
   const base = oneOf(o.base, WEAPON_IDS);
@@ -665,15 +690,32 @@ function readPatrols(
   hordeNumber: number,
   patrolsSent: number,
   roster: readonly RosterDefender[],
+  plazas: boolean,
 ): Patrol[] {
   const seen = new Set<string>();
   const patrols = arr(v, 0, roster.length).map((x): Patrol => {
-    const o = obj(x, ['no', 'location', 'members', 'sentAt', 'sentHorde', 'strength', 'seed']);
+    const o = obj(x, [
+      'no',
+      'location',
+      'members',
+      'sentAt',
+      'sentHorde',
+      'strength',
+      'seed',
+      ...(plazas ? ['buildings', 'focus', 'order'] : []),
+    ]);
     const no = int(o.no, 1, patrolsSent);
     const sentHorde = int(o.sentHorde, PATROL.unlock, hordeNumber);
-    const location = oneOf(o.location, LOCATION_IDS);
-    const reveal = LOCATIONS[location].reveal;
+    const location = oneOf(o.location, plazas ? PLACE_IDS : LOCATION_IDS);
+    const reveal = revealOf(location);
     if (reveal === null || reveal > sentHorde) fail('location not on the map');
+    const { buildings, focus, order } = plazas
+      ? readOrders(o, location)
+      : {
+          buildings: [location as LocationId],
+          focus: 'anything' as const,
+          order: 'balanced' as const,
+        };
     const sentAt = Math.min(int(o.sentAt, 0, MAX_TIME), savedAt);
     const members = arr(o.members, 1, roster.length).map((m) => {
       const id = text(m, 32, ID);
@@ -689,6 +731,9 @@ function readPatrols(
     return {
       no,
       location,
+      buildings,
+      focus,
+      order,
       members: members.map((d) => d.id),
       sentAt,
       sentHorde,
@@ -703,17 +748,68 @@ function readPatrols(
 }
 
 /**
- * Weapons the dead left on the map (design §10): at most `PATROL.left`, each an owned
- * weapon at a location that has been on the map.
+ * A patrol's or report's buildings, focus and order (ID-029): buildings of the place,
+ * each once, in its order; a focus its buildings can drop; a known order.
  */
-function readLeftBehind(v: unknown, hordeNumber: number, patrolsSent: number): LeftWeapon[] {
+function readOrders(
+  o: Obj,
+  location: PlaceId,
+): { buildings: LocationId[]; focus: Patrol['focus']; order: Patrol['order'] } {
+  const buildings = arr(o.buildings, 1, MAX_BUILDINGS).map((b) => oneOf(b, LOCATION_IDS));
+  const inOrder = buildingsOf(location).filter((b) => buildings.includes(b));
+  if (inOrder.length !== buildings.length || inOrder.some((b, i) => b !== buildings[i])) {
+    fail('buildings not in the place');
+  }
+  const focus = oneOf(o.focus, FOCUS_IDS);
+  if (!focusOptions(buildings).includes(focus)) fail('focus not found there');
+  return { buildings, focus, order: oneOf(o.order, ORDER_IDS) };
+}
+
+/**
+ * Weapons the dead left on the map (design §10): at most `PATROL.left`, each an owned
+ * weapon at a place that has been on the map.
+ */
+function readLeftBehind(
+  v: unknown,
+  hordeNumber: number,
+  patrolsSent: number,
+  plazas: boolean,
+): LeftWeapon[] {
   return arr(v, 0, PATROL.left).map((x): LeftWeapon => {
     const o = obj(x, ['location', 'weapon']);
-    const location = oneOf(o.location, LOCATION_IDS);
-    const reveal = LOCATIONS[location].reveal;
+    const location = oneOf(o.location, plazas ? PLACE_IDS : LOCATION_IDS);
+    const reveal = revealOf(location);
     if (reveal === null || reveal > hordeNumber) fail('location not on the map');
     return { location, weapon: readOwned(o.weapon, hordeNumber, patrolsSent) };
   });
+}
+
+/** How a big horde ended; only a plaza has one. */
+function readBigHorde(v: unknown, location: PlaceId): BigHorde | null {
+  if (v === null) return null;
+  if (!isPlaza(location)) fail('big horde at a single building');
+  return oneOf(v, ['defeat', 'fence', 'overrun'] as const);
+}
+
+const noLost = (): Lost => ({
+  stock: stockOf(),
+  gas: 0,
+  batteries: Object.fromEntries(BATTERY_IDS.map((b) => [b, 0])) as Record<Battery, number>,
+  weapons: 0,
+});
+
+/** What a retreat dropped, at most `found` weapons. */
+function readLost(v: unknown, found: number): Lost {
+  const o = obj(v, ['stock', 'gas', 'batteries', 'weapons']);
+  const b = obj(o.batteries, BATTERY_IDS);
+  const batteries = {} as Record<Battery, number>;
+  for (const id of BATTERY_IDS) batteries[id] = int(b[id], 0, MAX_COUNT);
+  return {
+    stock: readStock(o.stock, MATERIALS),
+    gas: int(o.gas, 0, MAX_COUNT),
+    batteries,
+    weapons: int(o.weapons, 0, found),
+  };
 }
 
 function readReportWeapon(w: unknown): ReportWeapon {
@@ -738,6 +834,7 @@ function readReports(
   patrolsSent: number,
   out: readonly Patrol[],
   risk: boolean,
+  plazas: boolean,
 ): PatrolReport[] {
   const reports = arr(v, 0, PATROL.reports).map((x): PatrolReport => {
     const o = obj(x, [
@@ -751,6 +848,7 @@ function readReports(
       'weapons',
       'xp',
       ...(risk ? ['injured', 'dead', 'wiped', 'recovered'] : []),
+      ...(plazas ? ['buildings', 'searched', 'bigHorde', 'order', 'focus', 'lost'] : []),
     ]);
     const no = int(o.no, 1, patrolsSent);
     if (out.some((p) => p.no === no)) fail('report from a patrol still out');
@@ -770,9 +868,32 @@ function readReports(
     if (risk && typeof o.wiped !== 'boolean') fail('wiped');
     const wiped = risk && o.wiped === true;
     if (wiped !== (names.length > 0 && dead.length === names.length)) fail('wipe');
+    const location = oneOf(o.location, plazas ? PLACE_IDS : LOCATION_IDS);
+    const { buildings, focus, order } = plazas
+      ? readOrders(o, location)
+      : {
+          buildings: [location as LocationId],
+          focus: 'anything' as const,
+          order: 'balanced' as const,
+        };
+    const bigHorde = plazas ? readBigHorde(o.bigHorde, location) : null;
+    const searched = plazas ? int(o.searched, 0, buildings.length) : 1;
+    // Only a retreat searches less than every building.
+    if (searched !== buildings.length && bigHorde !== 'fence' && bigHorde !== 'overrun') {
+      fail('searched less without a retreat');
+    }
+    // A building's haul has at most `PATROL.rolls + PATROL.bonusRolls` weapons.
+    const maxWeapons = (PATROL.rolls + PATROL.bonusRolls) * buildings.length;
+    const lost = plazas ? readLost(o.lost, maxWeapons) : noLost();
     const report: PatrolReport = {
       no,
-      location: oneOf(o.location, LOCATION_IDS),
+      location,
+      buildings,
+      searched,
+      bigHorde,
+      order,
+      focus,
+      lost,
       names,
       injured,
       dead,
@@ -781,7 +902,7 @@ function readReports(
       stock: readStock(o.stock, MATERIALS),
       gas: int(o.gas, 0, MAX_COUNT),
       batteries,
-      weapons: arr(o.weapons, 0, PATROL.rolls + PATROL.bonusRolls).map(readReportWeapon),
+      weapons: arr(o.weapons, 0, maxWeapons).map(readReportWeapon),
       recovered: risk ? arr(o.recovered, 0, PATROL.left).map(readReportWeapon) : [],
       xp: int(o.xp, 0, MAX_COUNT),
     };
