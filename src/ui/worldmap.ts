@@ -230,6 +230,9 @@ export function reportLines(r: PatrolReport): { title: string; lines: string[] }
   lines.push(`${r.xp} XP each`);
   if (r.injured.length > 0) lines.push(`Injured: ${r.injured.join(', ')}`);
   if (r.dead.length > 0) lines.push(`Didn't come back: ${r.dead.join(', ')}`);
+  if (r.survivors.length > 0) {
+    lines.push(`Survivors wait until ${PATROL.reports} newer reports are in, then leave.`);
+  }
   return { title, lines };
 }
 

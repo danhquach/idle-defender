@@ -1103,6 +1103,21 @@ Set before sending; they apply to any location, plaza or single building.
   horde, **Salvage Crew** −10% on every repair, **Field Medic** −10% injury
   rest, **Foraging** +5% patrol materials and Gas (to the nearest whole).
   The survivor slot comes with ID-032.
+- **As built (ID-032, starting points):** a patrol back from a tier-T location
+  (not wiped out) has 2 tries of 5% × T each to find a **survivor** (tier 1 about
+  10%, the crater about 44% for one or more), rolled from its seed on a stream of
+  their own, so loot and casualties don't move. Each is level 1 to T, with that
+  level's stat points rolled across the stats, a name from the recruits' list and
+  any weapon at the tier's patrol rarity; a gun is their primary, anything else
+  goes beside a free pistol. They wait in the report, taking no slot, with **Let
+  them join** and **Turn them away**; letting one in needs a free camp slot and armoury room
+  for their weapon, and a report dropped from the latest 20 takes its undecided
+  survivors with it. Each camp level-up offer has a 10% chance that a survivor
+  takes one of its 3 slots: level 1 to the new camp level, at most 5, weapon at
+  that level's tier. Letting them in takes no pick and needs the same room (the
+  result screen counts the slots and armoury room left after the win); a pick
+  turns them away, and an offer with no pick left (every one at the top rank)
+  shows **Turn away** so it can always be answered. Save v8.
 
 ### Camp level *(designer's call)*
 

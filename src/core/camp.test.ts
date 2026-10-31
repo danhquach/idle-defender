@@ -186,8 +186,9 @@ describe('camp XP and levels', () => {
     const h = fought(g, 'won');
     const offers = hordeCampOffers(g, h);
     expect(offers).toHaveLength(1);
-    expect(new Set(offers[0]).size).toBe(3);
-    for (const id of offers[0]!) expect(CAMP_PICK_IDS).toContain(id);
+    expect(new Set(offers[0]!.picks).size).toBe(3);
+    expect(offers[0]!.survivor).toBeNull();
+    for (const id of offers[0]!.picks) expect(CAMP_PICK_IDS).toContain(id);
     expect(finishHorde(g, h, NOW).camp.offers).toEqual(offers);
     // No level, no offer.
     expect(hordeCampOffers(newGame(), fought(newGame(), 'won'))).toEqual([]);
@@ -204,7 +205,7 @@ describe('camp XP and levels', () => {
     let hud = after.camp;
     let game = after;
     for (const offer of after.camp.offers) {
-      const id = offer.find((x) => hud.offers[0]!.includes(x))!;
+      const id = offer.picks.find((x) => hud.offers[0]!.picks.includes(x))!;
       const h = campAfterPick(hud, id);
       const t = takeCampPick(game, id);
       if (!h.ok || !t.ok) throw new Error('pick refused');
@@ -228,7 +229,7 @@ describe('camp XP and levels', () => {
     const seen = new Set<string>();
     for (let seed = 1; seed < 30; seed++) {
       const [offer] = hordeCampOffers(g, fought(g, 'won', seed));
-      expect([...offer!].sort()).toEqual(['foraging', 'medic']);
+      expect([...offer!.picks].sort()).toEqual(['foraging', 'medic']);
     }
     const plain = { ...newGame(), camp: { ...newGame().camp, xp: 25 } };
     for (let seed = 1; seed < 30; seed++) {
@@ -241,14 +242,14 @@ describe('camp XP and levels', () => {
 describe('camp-level picks', () => {
   const offered = (offers: CampPickId[][]): GameState => ({
     ...newGame(),
-    camp: { ...newGame().camp, offers },
+    camp: { ...newGame().camp, offers: offers.map((picks) => ({ picks, survivor: null })) },
   });
 
   it('takes a pick from the oldest offer: a rank up, the offer gone', () => {
     const r = takeCampPick(offered([['medic', 'salvage', 'foraging'], ['medic']]), 'salvage');
     if (!r.ok) throw new Error(r.reason);
     expect(r.game.camp.picks.salvage).toBe(1);
-    expect(r.game.camp.offers).toEqual([['medic']]);
+    expect(r.game.camp.offers).toEqual([{ picks: ['medic'], survivor: null }]);
   });
 
   it('refuses a pick not on the oldest offer, or with none waiting', () => {
@@ -266,7 +267,7 @@ describe('camp-level picks', () => {
     const r = campAfterPick(g.camp, 'medic');
     if (!r.ok) throw new Error(r.reason);
     expect(r.camp.picks.medic).toBe(CAMP_PICK_RANKS);
-    expect(r.camp.offers).toEqual([['salvage']]);
+    expect(r.camp.offers).toEqual([{ picks: ['salvage'], survivor: null }]);
   });
 });
 

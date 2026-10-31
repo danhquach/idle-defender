@@ -4,8 +4,8 @@
 // the result never depends on when it is settled. Pure: real time comes in as `now`.
 // Risk (ID-027): party strength against the location's danger rates the trip, and the
 // same seed rolls who comes back injured, who dies and whether the party is wiped out.
-import { isOwned, rollWeapon, type OwnedWeapon } from './armoury.ts';
-import { lootBonus, recoveryMs, startFloor } from './camp.ts';
+import { isOwned, rollWeapon, tierRarity, type OwnedWeapon } from './armoury.ts';
+import { lootBonus, recoveryMs, rollSurvivor, startFloor, type Survivor } from './camp.ts';
 import {
   ARMOURY_CAP,
   BATTERY_IDS,
@@ -17,6 +17,7 @@ import {
   RARITIES,
   RARITY_ORDER,
   stockOf,
+  SURVIVOR,
   type Battery,
   type LocationId,
   type LootEntry,
@@ -87,6 +88,8 @@ export interface PatrolReport {
   recovered: ReportWeapon[];
   /** XP each member who came back got. */
   xp: number;
+  /** Survivors found and not yet accepted or turned away; they take no camp slot (design §10). */
+  survivors: Survivor[];
 }
 
 /** Free to send at `now`: fit and not out on patrol. */
@@ -244,17 +247,7 @@ function pickEntry(rng: Rng, table: readonly LootEntry[]): LootEntry {
 }
 
 function rollRarity(rng: Rng, tier: number, bonus: number): Rarity {
-  const weights = PATROL.rarity[tier - 1]!;
-  const total = RARITY_ORDER.reduce((sum, r) => sum + weights[r], 0);
-  let roll = rng() * total;
-  let rarity = RARITY_ORDER.filter((r) => weights[r] > 0).at(-1)!;
-  for (const r of RARITY_ORDER) {
-    if (roll < weights[r]) {
-      rarity = r;
-      break;
-    }
-    roll -= weights[r];
-  }
+  const rarity = tierRarity(rng, tier);
   // Each bonus roll's worth of strength may lift it one rarity.
   const i = RARITY_ORDER.indexOf(rarity);
   return chance(rng, PATROL.bump * bonus)
@@ -308,6 +301,23 @@ export function patrolLoot(p: Patrol): Haul {
   const tier = LOCATIONS[p.location].tier;
   for (let n = PATROL.rolls + bonus; n > 0; n--) rollEntry(rng, p.location, tier, bonus, haul);
   return haul;
+}
+
+/**
+ * The survivors patrol `p` finds (design §10), from its seed on a stream of their own:
+ * `SURVIVOR.tries` chances of `SURVIVOR.perTier × tier` each, each of level 1 to the
+ * tier with a weapon at the tier's rarity. A wiped-out party brings none back.
+ */
+export function patrolSurvivors(p: Patrol): Survivor[] {
+  const rng = createRng(p.seed ^ 0xc2b2ae35);
+  const tier = LOCATIONS[p.location].tier;
+  const found: Survivor[] = [];
+  for (let k = 0; k < SURVIVOR.tries; k++) {
+    if (chance(rng, SURVIVOR.perTier * tier)) {
+      found.push(rollSurvivor(rng, `s${p.no}-${k}`, int(rng, 1, tier), tier));
+    }
+  }
+  return found;
 }
 
 /** Who patrol `p` loses: member ids killed and injured, and whether all were killed. */
@@ -428,6 +438,7 @@ export function settlePatrols(game: GameState, now: number): GameState {
       weapons,
       recovered,
       xp,
+      survivors: outcome.wiped ? [] : patrolSurvivors(p),
     });
   }
   const back = new Set(due.map((p) => p.no));

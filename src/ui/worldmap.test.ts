@@ -64,6 +64,7 @@ const report = (r: Partial<PatrolReport> = {}): PatrolReport => ({
   weapons: [],
   recovered: [],
   xp: 30,
+  survivors: [],
   ...r,
 });
 

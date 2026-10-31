@@ -181,6 +181,7 @@ export const WEAPONS = {
   },
 } as const satisfies Record<string, Weapon>;
 export type WeaponId = keyof typeof WEAPONS;
+export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 /** Free, unlimited Common weapons, held by id; every other weapon is an owned item (design §6 Gear). */
 export const FREE_WEAPONS = ['pistol', 'knife', 'toolkit'] as const satisfies readonly WeaponId[];
 export type FreeWeaponId = (typeof FREE_WEAPONS)[number];
@@ -536,6 +537,13 @@ export const RECRUIT_NAMES: readonly string[] = [
   'Owen',
   'Rosa',
 ];
+/**
+ * Survivors (design §10, §11, as built ID-032, starting points): a patrol back from a
+ * tier-T location has `tries` chances of `perTier × T` each to find one; a camp level-up
+ * offer has a `camp` chance that one of its slots is a survivor, of level 1 to the camp
+ * level, at most `campLevel`.
+ */
+export const SURVIVOR = { perTier: 0.05, tries: 2, camp: 0.1, campLevel: 5 } as const;
 
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;

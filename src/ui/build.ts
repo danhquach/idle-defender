@@ -32,7 +32,7 @@ import {
   type Result,
   type TurretMount,
 } from '../core/base.ts';
-import { repairOff } from '../core/camp.ts';
+import { acceptSurvivor, repairOff, turnAway } from '../core/camp.ts';
 import { postUsable } from '../core/cards.ts';
 import {
   BANK_CAP,
@@ -77,6 +77,7 @@ import {
   spotName,
   startLabel,
   stockText,
+  survivorText,
   wholeLeft,
 } from './hud.ts';
 import type { SlotHit } from './projection.ts';
@@ -900,6 +901,20 @@ export function createBuildPanel(
         el('h4', 'build-slot-title', title),
         ...lines.map((t) => el('p', 'build-slot-note', t)),
       );
+      // Survivors wait here, taking no camp slot, until let in or turned away (design §10).
+      for (const s of r.survivors) {
+        const accepted = acceptSurvivor(game, r.no, s.id);
+        item.append(
+          el('p', 'build-slot-note', `Survivor wants to join: ${survivorText(s)}`),
+          choiceButton(`Let ${s.name} join`, null, accepted.ok ? null : accepted.reason, () => {
+            if (accepted.ok) onGame(accepted.game);
+          }),
+          choiceButton(`Turn ${s.name} away`, null, null, () => {
+            const away = turnAway(game, r.no, s.id);
+            if (away.ok) onGame(away.game);
+          }),
+        );
+      }
       reports.append(item);
     }
     // Picking a place redraws the map: keep keyboard focus on the same place.

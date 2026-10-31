@@ -27,8 +27,17 @@ export function preRisk(game: GameState): Record<string, unknown> {
 
 /** `game` as JSON from before ID-033 (v6 and older): no camp. */
 export function preCamp(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preSurvivors(game);
   delete json.camp;
+  return json;
+}
+
+/** `game` as JSON from ID-033 (v7): no survivors in its reports, and camp offers are bare lists of picks. */
+export function preSurvivors(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  for (const r of json.reports as Record<string, unknown>[]) delete r.survivors;
+  const camp = json.camp as { offers: unknown[] };
+  camp.offers = (camp.offers as { picks: string[] }[]).map((o) => o.picks);
   return json;
 }
 
