@@ -43,6 +43,7 @@ import { carpet } from '../core/skills.ts';
 import { badgeOf } from '../core/stats.ts';
 import {
   depthSort,
+  FRAME,
   mountDepth,
   HEIGHT_SCALE,
   PIECE,
@@ -86,6 +87,9 @@ const COLOR = {
   shadow: 'rgba(0, 0, 0, 0.35)',
   slot: 'rgba(216, 212, 204, 0.18)',
   focus: '#ffe066',
+  offFrame: '#d2453c',
+  plate: 'rgba(21, 23, 26, 0.6)',
+  plateText: '#d8d4cc',
   hpBack: '#c43b3b',
   hpFill: '#5ec24a',
   conditionBack: '#111110',
@@ -165,6 +169,16 @@ const MUZZLE = { defender: { dx: 12, z: 12 }, turret: { dx: 13, z: 2 } } as cons
  * at 0.5× zoom: a bullet's slug and streak width, a muzzle flash, an impact's puff.
  */
 const EFFECT = { slug: 1.5, streak: 1.5, flash: 5, puff: 6, min: 1 } as const;
+/**
+ * The marker at the frame's left edge for a row's enemies past it (ID-064), in screen
+ * px: an arrow `arrow` tall pointing at the camp, then the count on a plate, all at `alpha`.
+ */
+const OFF_FRAME = {
+  arrow: 12,
+  pad: 4,
+  font: 'bold 13px system-ui, sans-serif',
+  alpha: 0.85,
+} as const;
 /** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
 const HP_BAR = { w: 24, h: 4, z: 36, gap: 6 } as const;
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
@@ -626,17 +640,20 @@ function drawSegment(
   }
 }
 
-/**
- * The ground with the camp's yard in it (ground.ts) over its block repeated past the
- * field's edges, so none of the sky shows at any zoom or pan; then the huts, behind
- * every sprite.
- */
-function drawGround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera, view: View): void {
+/** The ground's block (ground.ts) repeated over the whole view, so no sky shows round the frame. */
+function drawSurround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera, view: View): void {
   const surround = surroundCanvas(art);
-  if (surround) {
-    const all = { sx: 0, sy: 0, w: view.w, h: view.h };
-    fillTexture(ctx, surround, all, SURROUND_BLOCK * GROUND_TILE, TILT, cam);
-  }
+  if (!surround) return;
+  const all = { sx: 0, sy: 0, w: view.w, h: view.h };
+  fillTexture(ctx, surround, all, SURROUND_BLOCK * GROUND_TILE, TILT, cam);
+}
+
+/**
+ * The field's ground with the camp's yard in it (ground.ts), then the huts, behind every
+ * sprite. The fixed frame (ID-064) clips the yard and huts away; ID-065's camp scene
+ * shows them again.
+ */
+function drawGround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera): void {
   const field = faces({ x0: 0, x1: FIELD.right, y0: 0, y1: FIELD.height, z0: 0, height: 0 }, cam);
   const ground = groundCanvas(art);
   if (ground) ctx.drawImage(ground, field.top.sx, field.top.sy, field.top.w, field.top.h);
@@ -900,7 +917,16 @@ export function drawScene(
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = COLOR.sky;
   ctx.fillRect(0, 0, view.w, view.h);
-  drawGround(ctx, art, cam, view);
+  drawSurround(ctx, art, cam, view);
+  // Nothing left of the frame shows (ID-064): the camp's yard and huts stay out of
+  // view, and an enemy past the frame shows as a marker at its edge instead.
+  // On a whole pixel, so the clip's edge doesn't smear a seam into the surround.
+  const left = Math.max(0, Math.round(project({ x: FRAME.left, y: 0 }, cam).sx));
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, 0, Math.max(0, view.w - left), view.h);
+  ctx.clip();
+  drawGround(ctx, art, cam);
 
   // Build mode: every empty slot as a faint outline on the ground.
   if (build) {
@@ -1082,6 +1108,57 @@ export function drawScene(
       ctx.stroke();
     }
   }
+  ctx.restore();
+  for (const { row, count } of offFrame(scene.enemies)) drawOffFrame(ctx, row, count, left, cam);
+}
+
+/** Per row, top to bottom, how many enemies are left of the frame (heading for the camp). */
+export function offFrame(
+  enemies: readonly { x: number; y: number }[],
+): { row: number; count: number }[] {
+  const counts = new Array<number>(SEGMENTS).fill(0);
+  for (const e of enemies) {
+    if (!(e.x < FRAME.left)) continue;
+    const row = Math.min(SEGMENTS - 1, Math.max(0, Math.floor(e.y / SEGMENT_HEIGHT)));
+    // A NaN `y` stays NaN through the clamp: no row to mark.
+    if (Number.isFinite(row)) counts[row]!++;
+  }
+  return counts.flatMap((count, row) => (count > 0 ? [{ row, count }] : []));
+}
+
+/**
+ * A row's marker at the frame's left edge `left`: an arrow pointing at the camp and the
+ * count, see-through so a defender under it still shows.
+ */
+function drawOffFrame(
+  ctx: CanvasRenderingContext2D,
+  row: number,
+  count: number,
+  left: number,
+  cam: Camera,
+): void {
+  const { sy } = project({ x: FRAME.left, y: (row + 0.5) * SEGMENT_HEIGHT }, cam);
+  const a = OFF_FRAME.arrow;
+  const x = left + OFF_FRAME.pad;
+  const label = String(count);
+  ctx.save();
+  ctx.globalAlpha = OFF_FRAME.alpha;
+  ctx.font = OFF_FRAME.font;
+  const w = a / 2 + OFF_FRAME.pad * 3 + ctx.measureText(label).width;
+  ctx.fillStyle = COLOR.plate;
+  ctx.fillRect(x, sy - a / 2 - OFF_FRAME.pad, w, a + OFF_FRAME.pad * 2);
+  ctx.fillStyle = COLOR.offFrame;
+  ctx.beginPath();
+  ctx.moveTo(x + OFF_FRAME.pad, sy);
+  ctx.lineTo(x + OFF_FRAME.pad + a / 2, sy - a / 2);
+  ctx.lineTo(x + OFF_FRAME.pad + a / 2, sy + a / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = COLOR.plateText;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + OFF_FRAME.pad * 2 + a / 2, sy);
+  ctx.restore();
 }
 
 /** `img` lying flat on the ground at `(x, y)`, `2r` across, squashed by the camera's tilt. */

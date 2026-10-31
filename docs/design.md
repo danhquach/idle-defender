@@ -89,7 +89,8 @@ loot, and the further you push into danger, the more you can win — or lose.
 ## 3. The base (fake 3D, side-on layers)
 
 One large map viewed from above at an angle (2.5D: walls and towers have
-height, sprites are layered by depth). The camera pans and zooms over it.
+height, sprites are layered by depth). A fight shows one fixed frame of it
+(§15, ID-064): nothing pans or zooms.
 **The base is on the left; hordes attack from the right.** Barrier layers
 run top to bottom across the map, so they are easy to lay out and read.
 
@@ -138,13 +139,13 @@ run top to bottom across the map, so they are easy to lay out and read.
   towers on rows 4 and 6. Segment and repair costs are per segment, so a
   full wood wall now costs 100 Wood and 50 Scrap; build mode shows each
   segment's cost and the Repair all total. The balance targets held without
-  a retune. The camera opens fitting the whole field, width and height, and
-  pans to every corner at 0.5–2× zoom (ID-057 changed the opening view,
-  §15). A save from before (5 rows, save v1) loads with its rows moved to
-  rows 3–7, which puts the old start exactly
-  where the new one stands; the new rows are empty ground (open gaps until
-  built) and the build panel says so when it loads, from storage or a
-  backup code.
+  a retune. The camera opened fitting the whole field and panned to every
+  corner at 0.5–2× zoom; ID-064 replaced that with one fixed frame, from the
+  wall to the spawn edge, with no pan or zoom (§15). A save from before (5
+  rows, save v1) loads with its rows moved to rows 3–7, which puts the old
+  start exactly where the new one stands; the new rows are empty ground (open
+  gaps until built) and the build panel says so when it loads, from storage
+  or a backup code.
 
 ### Posts and positioning
 
@@ -1508,23 +1509,30 @@ original outline.
   liquid with a helix (kept saturated as a mutant thing). Each pick passed an
   art review; a test fails if any resource lacks its icon. The top bar
   (ID-058) puts them to use.
-- **As built (ID-057):** the field fills the screen. The opening view is
-  zoomed so the field fills the canvas height (with the 80-unit strip above
-  it, where the back row's tops show): about 1.7× at 1440×900 and 1.36× at
-  1280×720, against 0.9× and 0.8× for the old fit-the-width view, so units
-  stand about twice as tall (capped at 2×, so a tall, narrow window shows
-  little width). It is panned so the outer wall (the outermost built layer)
-  stands near the left with its ground posts and a little ground behind them,
-  and the field runs on toward the spawn side; panning reaches the rest, and
-  **Home** (not while a picker has focus) comes back to it. Wall first by
-  choice: the defence line and the way the horde comes matter most at a
-  glance, so the camp's yard and huts (left of the wall) and the spawn edge
-  start off screen, a pan away. Past the field's edges a seeded 4×4 block of
-  the ground's tile variants repeats without end, on the field tiles' 160-unit
-  grid and with their shared seam border, drawn under the painted field: no
-  bare background shows at any zoom (0.5–2×) or pan, and the field's edge
-  doesn't show. Zoom and pan limits, and the screen-to-ground mapping that
-  clicks, focus and skill aim use, are unchanged.
+- **As built (ID-064):** fights show one fixed frame, replacing ID-057's
+  pannable opening view. The frame runs from x 300 (column 0's ground posts
+  at 500 − 160, less the post's half width and a 24-unit gap) to the spawn
+  edge at 1,600, and takes in every row plus the 80-unit strip above, where
+  the back row's tops show. The camp's yard and huts, left of it, aren't
+  shown. The zoom fits that frame (the smaller of width fit and height fit)
+  between the top bar and the bottom HUD (48 px kept clear at the top; at the
+  bottom the shop bar's measured height, at least 64 px, so a bar wrapped onto
+  two rows takes more), so the HUD never covers the field: about 1.11× at 1440×900 and 0.98× at 1280×720,
+  never under 0.5× (a narrower window keeps the wall-side edge). It is worked
+  out again only when the window is resized. Nothing pans or zooms in any mode:
+  drag, WASD and the arrow keys, the mouse wheel and Home do nothing, and the
+  Help tab lists none of them. The trade-off is size: units stand about 24 px
+  tall at 1280×720 (ID-057's view made them about 1.4 times that), so the
+  whole fight, the wall and the spawn edge, is always in view. An enemy past
+  every wall in its row, heading for the camp, leaves the frame: each such row
+  shows a marker at the frame's left edge, an arrow pointing at the camp and
+  the count, see-through so a defender under it still shows. A click left of
+  the frame lands on nothing (an armed skill stays armed). Spare space round the
+  frame shows ID-057's ground fill: past the field's edges a seeded 4×4 block
+  of the ground's tile variants repeats without end, on the field tiles'
+  160-unit grid and with their shared seam border, so no bare background
+  shows. Effects keep the ID-045 minimum of 1 px at the frame's zoom. Until
+  ID-065 gives build mode its own scene, build mode shows the same frame.
 
 ## 16. Tech and platform
 

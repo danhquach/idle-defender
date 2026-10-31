@@ -4,7 +4,9 @@ import { buildTurret, newBase } from '../core/base.ts';
 import { newGame, startHorde } from '../core/game.ts';
 import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
 import {
+  CAMP,
   ENEMIES,
+  FIELD,
   IMPACT_FLASH,
   MUZZLE_FLASH,
   SKILL_FLASH,
@@ -22,9 +24,9 @@ import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
 import { carpet } from '../core/skills.ts';
 import { ANIM, Animator } from './anim.ts';
-import { HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
+import { FRAME, frameCamera, HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK } from './ground.ts';
-import { drawScene, trapLook, turretLook, type Scene } from './render.ts';
+import { drawScene, offFrame, trapLook, turretLook, type Scene } from './render.ts';
 import { ART_IDS, ART_PX, GATE_POSTS, TIER_ART, type Art, type ArtId } from './sprites.ts';
 
 function scene(condition: number, energy: number, wallHp?: number) {
@@ -118,6 +120,9 @@ function recorder() {
     ellipse: noop,
     rect: noop,
     closePath: noop,
+    clip: noop,
+    fillText: noop,
+    measureText: () => ({ width: 0 }),
     save: noop,
     restore: noop,
     translate: noop,
@@ -260,6 +265,99 @@ describe('drawScene with art', () => {
     const origin = project({ x: 0, y: 0 }, CAM);
     const s = (SURROUND_BLOCK * GROUND_TILE * CAM.zoom) / (SURROUND_BLOCK * ART_PX);
     expect(matrix).toEqual([s, s * TILT, origin.sx, origin.sy]);
+  });
+
+  it('clips everything but the surround at the frame’s left edge, so the yard and huts never show (ID-064)', () => {
+    const r = recorder();
+    const calls: string[] = [];
+    const rects: number[][] = [];
+    const cam = frameCamera({ w: 1600, h: 900 });
+    Object.assign(r.ctx, {
+      rect: (...args: number[]) => rects.push(args),
+      clip: () => calls.push('clip'),
+      save: () => calls.push('save'),
+      restore: () => calls.push('restore'),
+      drawImage: (img: { id: string }) => calls.push(img.id),
+    });
+    drawScene(r.ctx, r.art, blank(), cam, VIEW);
+    // Saved and clipped before the field's ground, the huts after it; restored at the end.
+    expect(calls.slice(0, 3)).toEqual(['save', 'clip', 'ground-canvas']);
+    expect(calls.at(-1)).toBe('restore');
+    const left = Math.round(project({ x: FRAME.left, y: 0 }, cam).sx);
+    expect(rects[0]).toEqual([left, 0, VIEW.w - left, VIEW.h]);
+    // The huts stand left of the frame, so the clip hides them.
+    expect(project({ x: CAMP.x, y: 0 }, cam).sx).toBeLessThan(left);
+  });
+
+  describe('enemies left of the frame (ID-064)', () => {
+    const at = (id: number, x: number, y: number): Enemy => ({
+      id,
+      kind: 'shambler',
+      x,
+      y,
+      hp: 20,
+      maxHp: 20,
+      nextAttackAt: 0,
+      inCamp: false,
+      stunnedUntil: 0,
+      vx: 0,
+      vy: 0,
+      climbUntil: 0,
+      climbed: false,
+    });
+
+    it('counts them per row, top to bottom; none inside the frame', () => {
+      const row = (r: number) => (r + 0.5) * SEGMENT_HEIGHT;
+      const enemies = [
+        at(1, FRAME.left - 1, row(7)),
+        at(2, CAMP.x, row(2)),
+        at(3, 200, row(7)),
+        at(4, FRAME.left, row(3)),
+        at(5, 900, row(0)),
+        // Off the field's depth: kept on its nearest row; a NaN spot is dropped.
+        at(6, 100, -40),
+        at(7, 100, FIELD.height + 40),
+        at(8, 100, NaN),
+      ];
+      expect(offFrame(enemies)).toEqual([
+        { row: 0, count: 1 },
+        { row: 2, count: 1 },
+        { row: 7, count: 2 },
+        { row: 9, count: 1 },
+      ]);
+      expect(offFrame([])).toEqual([]);
+    });
+
+    it('marks each row at the frame’s left edge with its count, over everything', () => {
+      const r = recorder();
+      const texts: { text: string; x: number; y: number }[] = [];
+      const order: string[] = [];
+      const cam = frameCamera({ w: 1280, h: 720 });
+      Object.assign(r.ctx, {
+        restore: () => order.push('restore'),
+        fillText: (text: string, x: number, y: number) => {
+          order.push('text');
+          texts.push({ text, x, y });
+        },
+      });
+      const scene = {
+        ...blank(),
+        enemies: [
+          at(1, 200, 4.5 * SEGMENT_HEIGHT),
+          at(2, 150, 4.2 * SEGMENT_HEIGHT),
+          at(3, 900, 50),
+        ],
+      };
+      drawScene(r.ctx, r.art, scene, cam, VIEW);
+      expect(texts).toHaveLength(1);
+      expect(texts[0]!.text).toBe('2');
+      const left = project({ x: FRAME.left, y: 0 }, cam).sx;
+      expect(texts[0]!.x).toBeGreaterThan(left);
+      expect(texts[0]!.x).toBeLessThan(left + 40);
+      expect(texts[0]!.y).toBeCloseTo(project({ x: 0, y: 4.5 * SEGMENT_HEIGHT }, cam).sy, 9);
+      // Drawn after the clip is lifted, so the marker itself is never clipped.
+      expect(order.indexOf('restore')).toBeLessThan(order.indexOf('text'));
+    });
   });
 
   it("draws a whole wall in its tier's textures, with no cracks", () => {
@@ -942,7 +1040,9 @@ describe('bullet visuals (ID-045)', () => {
       );
     const small = busy(0.5);
     const big = busy(2);
-    for (const m of small.marks) {
+    // The fixed frame's zoom at 1280×720 (ID-064), about 0.98×, keeps the minimum too.
+    const framed = busy(frameCamera({ w: 1280, h: 720 }).zoom);
+    for (const m of [...small.marks, ...framed.marks]) {
       if (m.kind === 'dot') expect(m.r).toBeGreaterThanOrEqual(1);
       if (m.kind === 'line') expect(m.width).toBeGreaterThanOrEqual(1);
     }
@@ -1094,6 +1194,7 @@ describe('sprite animation (ID-049)', () => {
     const moved: unknown[] = [];
     Object.assign(r.ctx, { save: () => moved.push('save') });
     drawScene(r.ctx, r.art, s, CAM, VIEW);
-    expect(moved).toEqual([]);
+    // The frame's clip (ID-064) is the only save: no sprite is posed.
+    expect(moved).toEqual(['save']);
   });
 });

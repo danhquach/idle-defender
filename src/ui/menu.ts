@@ -40,13 +40,6 @@ export const SAVE_STATUS: Readonly<Record<SaveStatus, { text: string; tone: stri
 export const CONTROLS: readonly { group: string; rows: readonly (readonly [string, string])[] }[] =
   [
     {
-      group: 'Field',
-      rows: [
-        ['W A S D or arrows', 'Pan the field (or drag it)'],
-        ['Mouse wheel', 'Zoom in and out'],
-      ],
-    },
-    {
       group: 'Between hordes',
       rows: [
         ['Click a slot', 'Open it to build or repair'],
@@ -111,8 +104,6 @@ export interface MenuOptions {
   onNewCamp: (game: GameState) => void;
   reduceMotion: boolean;
   onReduceMotion: (on: boolean) => void;
-  /** Called as the menu opens. */
-  onOpen: () => void;
 }
 
 export interface Menu {
@@ -387,7 +378,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     );
   }
 
-  // Keys pressed in the menu stay in it: the field's keys (pan, cards, Esc) never see them.
+  // Keys pressed in the menu stay in it: the field's keys (cards, Esc) never see them.
   dialog.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'Escape') {
@@ -443,7 +434,6 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     open() {
       if (opened) return;
       opened = true;
-      opts.onOpen();
       for (const c of confirms) c.cancel();
       load.message.textContent = '';
       fresh.message.textContent = '';

@@ -27,11 +27,15 @@ export interface View {
 export const TILT = 0.6;
 /** How much world height lifts a sprite on screen. */
 export const HEIGHT_SCALE = 0.8;
-export const ZOOM = { min: 0.5, max: 2 } as const;
-/** The camera may show a strip this deep above the field. */
+/** The frame's zoom never goes under this: a narrower window keeps the wall side. */
+export const MIN_ZOOM = 0.5;
+/** The frame takes in a strip this deep above the field, where the back row's tops show. */
 export const MARGIN_Y = 80;
-
-const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+/**
+ * Screen px kept clear for the top bar and, at least, for the bottom HUD (shop and
+ * skills): the frame fits between them, so neither covers the field.
+ */
+export const HUD_SPACE = { top: 48, bottom: 64 } as const;
 
 export function project(
   p: { x: number; y: number; z?: number },
@@ -47,56 +51,6 @@ export function project(
 /** The ground point (z = 0) under a screen point: the inverse of `project`. */
 export function unproject(s: { sx: number; sy: number }, cam: Camera): { x: number; y: number } {
   return { x: s.sx / cam.zoom + cam.x, y: s.sy / (cam.zoom * TILT) + cam.y };
-}
-
-/** Pans `v` so `[lo, hi]` fills the visible span; centres it when it all fits. */
-function fit(v: number, lo: number, hi: number, visible: number): number {
-  return visible >= hi - lo ? (lo + hi - visible) / 2 : clamp(v, lo, hi - visible);
-}
-
-/** Keeps the zoom in range and the view on the field. */
-export function clampCamera(cam: Camera, view: View): Camera {
-  const zoom = clamp(cam.zoom, ZOOM.min, ZOOM.max);
-  return {
-    x: fit(cam.x, 0, FIELD.right, view.w / zoom),
-    y: fit(cam.y, -MARGIN_Y, FIELD.height, view.h / (zoom * TILT)),
-    zoom,
-  };
-}
-
-/** The outer wall's `x`: the outermost layer's column `x` (the first column's for a base with none). */
-export function baseEdge(base: Pick<Base, 'layers'>): number {
-  const column = Math.max(0, ...base.layers.map((l) => l.column));
-  return COLUMNS[column] ?? COLUMNS[0]!;
-}
-
-/** Ground shown behind the outer wall's ground posts in the opening view. */
-const OPENING_GAP = 24;
-
-/**
- * The opening view (ID-057): zoomed so the field fills the screen's height (with the
- * strip above it, where the back row's tops show), panned so the outer wall at `edge`
- * stands near the left with its ground posts behind it and the field runs on toward the
- * spawn side. Panning reaches the rest.
- */
-export function openingCamera(view: View, edge: number): Camera {
-  const behind = -POST_OFFSET.ground + PIECE.ground.halfWidth + OPENING_GAP;
-  const zoom = view.h / ((FIELD.height + MARGIN_Y) * TILT);
-  return clampCamera({ x: edge - behind, y: -MARGIN_Y, zoom }, view);
-}
-
-/** Zooms by `factor` keeping the world point under `anchor` in place, then clamps. */
-export function zoomAt(
-  cam: Camera,
-  factor: number,
-  anchor: { sx: number; sy: number },
-  view: View,
-): Camera {
-  if (![factor, anchor.sx, anchor.sy].every(Number.isFinite)) return clampCamera(cam, view);
-  const zoom = clamp(cam.zoom * factor, ZOOM.min, ZOOM.max);
-  const wx = cam.x + anchor.sx / cam.zoom;
-  const wy = cam.y + anchor.sy / (cam.zoom * TILT);
-  return clampCamera({ x: wx - anchor.sx / zoom, y: wy - anchor.sy / (zoom * TILT), zoom }, view);
 }
 
 /**
@@ -124,6 +78,42 @@ export const PIECE = {
   /** A turret's head, on top of its tower or wall-walk mount. */
   turret: { halfWidth: 9, halfDepth: 9, height: 12 },
 } as const;
+
+/** Ground shown behind column 0's ground posts at the frame's left edge. */
+const FRAME_GAP = 24;
+
+/**
+ * The one fixed world frame every fight shows (ID-064): from just behind column 0's
+ * ground posts to the spawn edge, every row and the strip above. The camp's yard and
+ * huts are left of it.
+ */
+export const FRAME = {
+  left: COLUMNS[0]! + POST_OFFSET.ground - PIECE.ground.halfWidth - FRAME_GAP,
+  right: FIELD.right,
+  top: -MARGIN_Y,
+  bottom: FIELD.height,
+} as const;
+
+/**
+ * The camera on the frame for a `view`: zoomed to fit it (the smaller of width fit and
+ * height fit, between the HUD's bands), never under MIN_ZOOM, centred in the spare
+ * space. A frame wider or taller than the view keeps its left (wall-side) or top edge.
+ * `bottom` is the bottom HUD's measured height; a wrapped shop bar takes more.
+ */
+export function frameCamera(view: View, bottom = 0): Camera {
+  const w = FRAME.right - FRAME.left;
+  const h = (FRAME.bottom - FRAME.top) * TILT;
+  const below = Math.max(HUD_SPACE.bottom, bottom);
+  const band = Math.max(0, view.h - HUD_SPACE.top - below);
+  const zoom = Math.max(MIN_ZOOM, Math.min(view.w / w, band / h));
+  const spareX = Math.max(0, view.w - w * zoom) / 2;
+  const spareY = Math.max(0, band - h * zoom) / 2;
+  return {
+    x: FRAME.left - spareX / zoom,
+    y: FRAME.top - (HUD_SPACE.top + spareY) / (zoom * TILT),
+    zoom,
+  };
+}
 
 /** A segment's drawn height: lower as it takes damage, a stub once broken. */
 export function wallHeight(hp: number, maxHp: number): number {
