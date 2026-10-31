@@ -3,7 +3,16 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ENEMIES, LOCATION_IDS, PROFESSIONS, TIERS, TRAP_KINDS, WEAPONS } from '../core/data.ts';
+import {
+  buildingsOf,
+  ENEMIES,
+  LOCATION_IDS,
+  PLACE_IDS,
+  PROFESSIONS,
+  TIERS,
+  TRAP_KINDS,
+  WEAPONS,
+} from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
 import {
   ART_IDS,
@@ -18,6 +27,7 @@ import {
   LAZY_ART,
   MAP_ART,
   MAP_PICTURE,
+  placeArt,
   SHOP_ICON,
   SKILL_ART,
   SKILL_ICON,
@@ -126,6 +136,15 @@ describe('art coverage', () => {
     for (const id of used) expect(ids.has(id), String(id)).toBe(true);
     // And no art goes unused.
     expect(new Set(used)).toEqual(ids);
+  });
+
+  it("gives every place, plazas included, an icon of its buildings' art, bundled (ID-029)", () => {
+    for (const id of PLACE_IDS) {
+      expect(placeArt(id), id).toEqual(buildingsOf(id).map((b) => MAP_ART[b]));
+      for (const art of placeArt(id)) expect(ART_URLS[art], `${id} ${art}`).toBeTruthy();
+    }
+    expect(placeArt('riverside')).toHaveLength(3);
+    expect(placeArt('gas-station')).toEqual([MAP_ART['gas-station']]);
   });
 
   it('gives every enemy kind its own art, the Horror included (ID-041)', () => {

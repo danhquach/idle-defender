@@ -145,6 +145,9 @@ describe('dismiss', () => {
     const p: Patrol = {
       no: 1,
       location: 'gas-station',
+      buildings: ['gas-station'],
+      focus: 'anything',
+      order: 'balanced',
       members: ['extra-1'],
       sentAt: NOW,
       sentHorde: PATROL.unlock,
@@ -328,6 +331,9 @@ describe('camp-level pick effects', () => {
     const p: Patrol = {
       no: 1,
       location: 'supermarket',
+      buildings: ['supermarket'],
+      focus: 'anything',
+      order: 'balanced',
       members: ['bob'],
       sentAt: NOW,
       sentHorde: PATROL.unlock,
@@ -395,6 +401,9 @@ describe('the roster floor', () => {
     const p: Patrol = {
       no: 1,
       location: 'gas-station',
+      buildings: ['gas-station'],
+      focus: 'anything',
+      order: 'balanced',
       members: ['bob', 'jack'],
       sentAt: NOW,
       sentHorde: PATROL.unlock,
@@ -411,6 +420,9 @@ describe('the roster floor', () => {
       const c: Patrol = {
         no: 1,
         location: 'military',
+        buildings: ['military'],
+        focus: 'anything',
+        order: 'balanced',
         members: ['bob'],
         sentAt: NOW,
         sentHorde: PATROL.unlock,

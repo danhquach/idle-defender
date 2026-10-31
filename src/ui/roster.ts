@@ -19,7 +19,7 @@ import {
   CAMP_PICK_RANKS,
   CAMP_PICKS,
   ITEMS,
-  LOCATIONS,
+  placeName,
   PROFESSIONS,
   RARITY_ORDER,
   STAT_NAMES,
@@ -94,7 +94,7 @@ export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): Ro
     titles: titles.length ? titles.join(', ') : 'No titles yet',
     points: left > 0 ? `${left} stat point${left === 1 ? '' : 's'} to spend` : '',
     status: patrol
-      ? `On patrol · ${LOCATIONS[patrol.location].name} · ${restLeft(patrolDue(patrol), now)} left`
+      ? `On patrol · ${placeName(patrol.location)} · ${restLeft(patrolDue(patrol), now)} left`
       : available(d, now)
         ? 'Fit'
         : `Resting · ${restLeft(d.injuredUntil!, now)} left`,

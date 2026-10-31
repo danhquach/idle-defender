@@ -27,8 +27,21 @@ export function preRisk(game: GameState): Record<string, unknown> {
 
 /** `game` as JSON from before ID-033 (v6 and older): no camp. */
 export function preCamp(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = prePlazas(game);
   delete json.camp;
+  return json;
+}
+
+/** `game` as JSON from before ID-029 (v7 and older): no buildings, focus or order, no big horde or retreat in reports. */
+export function prePlazas(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  for (const p of json.patrols as Record<string, unknown>[]) {
+    for (const key of ['buildings', 'focus', 'order']) delete p[key];
+  }
+  for (const r of json.reports as Record<string, unknown>[]) {
+    for (const key of ['buildings', 'searched', 'bigHorde', 'order', 'focus', 'lost'])
+      delete r[key];
+  }
   return json;
 }
 
