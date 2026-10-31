@@ -53,6 +53,7 @@ const patrolAt = (location: LocationId, seed: number, patch: Partial<Patrol> = {
   sentHorde: PATROL.unlock,
   strength: 100,
   seed,
+  car: null,
   ...patch,
 });
 

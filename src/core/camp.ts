@@ -11,6 +11,7 @@ import {
   CAMP_PICK_RANKS,
   CAMP_PICKS,
   CAMP_UPGRADES,
+  CAR,
   DEFENDER_XP,
   MATERIALS,
   MAX_COUNT,
@@ -28,7 +29,7 @@ import {
 import { ownedWeapons, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
 import { isGun } from './loadout.ts';
-import type { GameResult } from './research.ts';
+import { pay, type GameResult } from './research.ts';
 import { chance, createRng, int, pick, type Rng } from './rng.ts';
 import { NO_STATS, xpForLevel } from './stats.ts';
 
@@ -70,6 +71,8 @@ export interface Camp {
   recruitAt: number | null;
   /** Free recruits so far; the next one is `recruit-<recruits + 1>`. */
   recruits: number;
+  /** Cars built (design §10 Vehicle, ID-030); a patrol names the one it took by index. */
+  cars: number;
 }
 
 export const NO_PICKS: Readonly<Record<CampPickId, number>> = Object.fromEntries(
@@ -77,7 +80,15 @@ export const NO_PICKS: Readonly<Record<CampPickId, number>> = Object.fromEntries
 ) as Record<CampPickId, number>;
 
 export function newCamp(): Camp {
-  return { upgrades: 0, xp: 0, picks: { ...NO_PICKS }, offers: [], recruitAt: null, recruits: 0 };
+  return {
+    upgrades: 0,
+    xp: 0,
+    picks: { ...NO_PICKS },
+    offers: [],
+    recruitAt: null,
+    recruits: 0,
+    cars: 0,
+  };
 }
 
 /** People the camp holds: every defender counts, wherever they are. */
@@ -101,6 +112,14 @@ export function upgradeCamp(game: GameState): GameResult {
     ok: true,
     game: { ...game, stock, camp: { ...game.camp, upgrades: game.camp.upgrades + 1 } },
   };
+}
+
+/** Builds a car (design §10 Vehicle): the first needs no research; more come from it (ID-035). */
+export function buildCar(game: GameState): GameResult {
+  if (game.camp.cars >= CAR.limit) return { ok: false, reason: 'More cars come with research' };
+  return pay(game, CAR.cost, (g) => {
+    g.camp.cars += 1;
+  });
 }
 
 /** Why defender `id` can't be dismissed, or null when they can. */
@@ -353,6 +372,8 @@ export function treat(game: GameState, id: string, item: Treatment, now: number)
 
 /** Percent more patrol materials and Gas. */
 export const lootBonus = (camp: Pick<Camp, 'picks'>): number => bonus(camp, 'foraging');
+/** Foraging's bonus at its top rank (the most a patrol's materials and Gas can grow). */
+export const MAX_FORAGING = CAMP_PICK_RANKS * CAMP_PICKS.foraging.per;
 
 /**
  * Below the roster floor with a slot free: the floor's recruits keep coming, until the

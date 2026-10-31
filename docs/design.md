@@ -1081,6 +1081,31 @@ Set before sending; they apply to any location, plaza or single building.
   to the place, each once, in its order; the focus one its buildings can
   drop). A v7 save loads with single-building patrols, Anything and
   Balanced, and reports with those defaults and nothing lost.
+- **As built (ID-030, starting points):** the camp builds a **car** from
+  the camp section of the Roster view for 40 Metal, 20 Parts and 30 Scrap;
+  the first needs no research and more come from a research node (ID-035).
+  While a car is free, the send-patrol screen offers **Take the car**,
+  labelled with the round trip by car and on foot and the Gas it burns
+  against the camp's (with "as much as it could find" when that sets the
+  price); picking a place or sending starts on foot again. By car each
+  way takes half the time, rounded up to whole minutes (the longest of a
+  plaza's ticked buildings, as on foot); the search is
+  unchanged (the gas station 11 min, the crater 5 h 20 m). Gas is paid when
+  the patrol leaves: 1 per 10 minutes of the whole round trip by car
+  (out, search, back), rounded up, and **never less than the most Gas the
+  trip could bring home** (every roll at its most, bonus rolls included,
+  with Foraging at rank 5): the gas station, and any Riverside trip that
+  ticks it, burns 13; the crater 32 (it can find 13 through "Anything").
+  Without enough Gas, Send says so. A balance test runs every place, every
+  set of buildings and every loot focus at the strongest party with
+  Foraging at rank 5. The car changes only the clock and the Gas: the loot,
+  risk and XP are those of the trip on foot. A car is busy until its
+  patrol's due time and the patrol is settled (also while the game is
+  closed) and is never lost, even in a wipe. Patrol lines and the map's
+  marker say "by car" and move on the shorter route. **Save v10:** the
+  camp stores its car count (0 to the limit, 1 for now), each patrol which
+  car it took (null on foot), every car out one the camp built and on one
+  patrol at a time. A v9 save loads with no car and every patrol on foot.
 
 ## 11. Resources and research
 

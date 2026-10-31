@@ -2,10 +2,12 @@
 // location, its route from the camp and its risk colour; the patrols out on their
 // routes; and, in the build panel, the picked location, the party picker, the risk
 // screen and the patrol reports. Plazas (ID-029) are places of several buildings, with
-// loot focus, orders and a big-horde risk. Text only via textContent; colours are constants.
+// loot focus, orders and a big-horde risk; a patrol may take the car (ID-030). Text only
+// via textContent; colours are constants.
 import {
   BATTERIES,
   buildingsOf,
+  CAR,
   FOCUS_IDS,
   isPlaza,
   LOCATIONS,
@@ -27,6 +29,7 @@ import { onPatrol, type GameState, type RosterDefender } from '../core/game.ts';
 import {
   bigHordeChance,
   bonusRolls,
+  carGas,
   focusOptions,
   hordeCasualties,
   hordeOdds,
@@ -249,14 +252,15 @@ export function partyRows(game: GameState, now: number): PartyRow[] {
 export const waitingAt = (game: GameState, place: PlaceId): number =>
   game.leftBehind.filter((w) => w.location === place).length;
 
-/** The place panel's facts: tier, trip, loot (of each ticked building in a plaza) and weapons waiting. */
+/** The place panel's facts: tier, trip (by car when `car`), loot (of each ticked building in a plaza) and weapons waiting. */
 export function locationLines(
   game: GameState,
   place: PlaceId,
   buildings: readonly LocationId[] = buildingsOf(place),
+  car = false,
 ): string[] {
   if (buildings.length === 0) return ['Tick a building to search.'];
-  const trip = tripOf(place, buildings);
+  const trip = tripOf(place, buildings, car);
   const waiting = waitingAt(game, place);
   const loot = isPlaza(place)
     ? buildings.map((b) => {
@@ -268,7 +272,7 @@ export function locationLines(
         `Sometimes: ${lootLines(place as LocationId).sometimes}`,
       ];
   return [
-    `Tier ${trip.tier} · round trip ${tripText(trip.minutes)}`,
+    `Tier ${trip.tier} · round trip ${tripText(trip.minutes)}${car ? ' by car' : ''}`,
     ...loot,
     ...(waiting > 0
       ? [`${waiting} weapon${waiting === 1 ? '' : 's'} left here by the fallen`]
@@ -278,7 +282,7 @@ export function locationLines(
 
 /** How far along its route `p` is at `now`: 0 at the camp, 1 at the place. */
 export function routeShare(p: Patrol, now: number): number {
-  const { travel, search } = tripOf(p.location, p.buildings);
+  const { travel, search } = tripOf(p.location, p.buildings, p.car !== null);
   const minutes = (now - p.sentAt) / 60_000;
   if (minutes <= 0) return 0;
   if (minutes < travel) return minutes / travel;
@@ -286,10 +290,27 @@ export function routeShare(p: Patrol, now: number): number {
   return Math.max(0, 1 - (minutes - travel - search) / travel);
 }
 
-/** "Gas station · Bob, Ann · 12m left". */
+/** "Gas station · Bob, Ann · 12m left", with " · by car" when it took the car. */
 export function patrolLine(game: GameState, p: Patrol, now: number): string {
   const names = p.members.map((id) => game.roster.find((d) => d.id === id)?.name ?? '?');
-  return `${placeName(p.location)} · ${names.join(', ')} · ${restLeft(patrolDue(p), now)} left`;
+  const car = p.car === null ? '' : ' · by car';
+  return `${placeName(p.location)}${car} · ${names.join(', ')} · ${restLeft(patrolDue(p), now)} left`;
+}
+
+/**
+ * The "Take the car" toggle's label: the round trip by car and on foot, and the Gas it
+ * burns against the camp's; when the Gas it could find sets the price, it says so.
+ */
+export function carLabel(
+  game: GameState,
+  place: PlaceId,
+  buildings: readonly LocationId[],
+): string {
+  const car = tripOf(place, buildings, true).minutes;
+  const foot = tripOf(place, buildings).minutes;
+  const gas = carGas(place, buildings);
+  const why = gas > Math.ceil(car / CAR.gasPer) ? ', as much as it could find' : '';
+  return `Take the car · round trip ${tripText(car)} (${tripText(foot)} on foot) · burns ${gas} Gas${why} (camp has ${game.power.gas})`;
 }
 
 const weaponText = (w: ReportWeapon): string =>

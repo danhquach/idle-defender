@@ -6,12 +6,21 @@
 // same seed rolls who comes back injured, who dies and whether the party is wiped out.
 // Plazas and orders (ID-029): a trip searches the ticked buildings of a place; a plaza may
 // draw a big horde; the order says what the party protects when things go wrong.
+// The car (ID-030): a patrol that takes it travels faster and pays Gas when it leaves.
 import { isOwned, rollWeapon, tierRarity, type OwnedWeapon } from './armoury.ts';
-import { lootBonus, recoveryMs, rollSurvivor, startFloor, type Survivor } from './camp.ts';
+import {
+  lootBonus,
+  MAX_FORAGING,
+  recoveryMs,
+  rollSurvivor,
+  startFloor,
+  type Survivor,
+} from './camp.ts';
 import {
   ARMOURY_CAP,
   BATTERY_IDS,
   buildingsOf,
+  CAR,
   FOCUS_IDS,
   focusOf,
   isPlaza,
@@ -71,6 +80,8 @@ export interface Patrol {
   /** Party strength when it left (`partyStrength`). */
   strength: number;
   seed: number;
+  /** The car it took (0 is the camp's first), or null on foot (ID-030). */
+  car: number | null;
 }
 
 /** An owned weapon a dead member left at `location`, waiting for the next patrol there. */
@@ -167,25 +178,83 @@ export interface Trip {
   minutes: number;
 }
 
-/** The trip to `buildings` of `place` (all of them by default); a single location is a place whose only building is itself. */
+/**
+ * The trip to `buildings` of `place` (all of them by default); a single location is a
+ * place whose only building is itself. By `car`, each way takes half the time, rounded up.
+ */
 export function tripOf(
   place: PlaceId,
   buildings: readonly LocationId[] = buildingsOf(place),
+  car = false,
 ): Trip {
   if (buildings.length === 0) throw new RangeError('tripOf: no building');
   const ls = buildings.map((b) => LOCATIONS[b]);
-  const travel = Math.max(...ls.map((l) => l.travel));
+  const walk = Math.max(...ls.map((l) => l.travel));
+  const travel = car ? Math.ceil(walk / 2) : walk;
   const search = ls.reduce((sum, l) => sum + l.search, 0);
   return { travel, search, tier: Math.max(...ls.map((l) => l.tier)), minutes: 2 * travel + search };
 }
 
 /** Total minutes out, searching and back. */
-export const tripMinutes = (place: PlaceId, buildings?: readonly LocationId[]): number =>
-  tripOf(place, buildings).minutes;
+export const tripMinutes = (
+  place: PlaceId,
+  buildings?: readonly LocationId[],
+  car = false,
+): number => tripOf(place, buildings, car).minutes;
 
 /** When patrol `p` is back (ms). */
 export const patrolDue = (p: Patrol): number =>
-  p.sentAt + tripMinutes(p.location, p.buildings) * 60_000;
+  p.sentAt + tripMinutes(p.location, p.buildings, p.car !== null) * 60_000;
+
+/** The most Gas one roll on `location`'s table can find; the crater's "anything" rolls another table. */
+function gasPerRoll(location: LocationId): number {
+  return Math.max(
+    0,
+    ...LOCATIONS[location].loot.map((e) =>
+      e.kind === 'gas'
+        ? e.max
+        : e.kind === 'anything'
+          ? Math.max(
+              0,
+              ...LOCATION_IDS.filter((id) => id !== location).flatMap((id) =>
+                LOCATIONS[id].loot.map((o) => (o.kind === 'gas' ? o.max : 0)),
+              ),
+            )
+          : 0,
+    ),
+  );
+}
+
+/**
+ * The most Gas a trip to `buildings` could bring home: every roll, bonus ones included,
+ * finding the most Gas, with Foraging at its top rank.
+ */
+export function mostGas(
+  place: PlaceId,
+  buildings: readonly LocationId[] = buildingsOf(place),
+): number {
+  const rolls = PATROL.rolls + PATROL.bonusRolls;
+  const found = buildings.reduce((sum, b) => sum + rolls * gasPerRoll(b), 0);
+  return Math.round((found * (100 + MAX_FORAGING)) / 100);
+}
+
+/**
+ * The Gas a car trip burns (design §10 Vehicle): 1 per `CAR.gasPer` minutes of the round
+ * trip by car, rounded up, and never less than the most Gas it could bring home, so the
+ * car never pays for itself in Gas.
+ */
+export function carGas(place: PlaceId, buildings?: readonly LocationId[]): number {
+  const burn = Math.ceil(tripMinutes(place, buildings, true) / CAR.gasPer);
+  return Math.max(burn, mostGas(place, buildings));
+}
+
+/** A car not out on a patrol (the lowest one), or null when every car is out or none is built. */
+export function freeCar(game: Pick<GameState, 'camp' | 'patrols'>): number | null {
+  for (let c = 0; c < game.camp.cars; c++) {
+    if (!game.patrols.some((p) => p.car === c)) return c;
+  }
+  return null;
+}
 
 /** One member's strength: level, the rarity power of the primary weapon, and Grit. */
 export function memberStrength(d: Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>): number {
@@ -334,13 +403,16 @@ export interface PatrolOptions {
   focus?: Focus;
   /** Default: 'balanced'. */
   order?: Order;
+  /** Take a free car (ID-030); default: on foot. */
+  car?: boolean;
 }
 
 /**
  * Sends `memberIds` to `place` at `now`; refused when patrols are locked, the place is
  * hidden, no building is ticked, a ticked building isn't in the place, the focus can't
- * drop there, the base has no standing gate, or a member isn't idle. There is no limit
- * on parties out at once. Unknown ids throw.
+ * drop there, the base has no standing gate, a member isn't idle, or the car is asked
+ * for with none free or too little Gas. The car's Gas is paid on leaving. There is no
+ * limit on parties out at once. Unknown ids throw.
  */
 export function sendPatrol(
   game: GameState,
@@ -397,6 +469,19 @@ export function sendPatrol(
   if (game.roster.every((d) => onPatrol(game, d.id) || memberIds.includes(d.id))) {
     return { ok: false, reason: 'Keep one defender at the camp' };
   }
+  const byCar = options.car === true;
+  const car = byCar ? freeCar(game) : null;
+  const gas = byCar ? carGas(location, buildings) : 0;
+  if (byCar) {
+    if (game.camp.cars === 0) return { ok: false, reason: 'Build a car first' };
+    if (car === null) return { ok: false, reason: 'The car is out on patrol' };
+    if (game.power.gas < gas) {
+      return {
+        ok: false,
+        reason: `Not enough Gas: the car needs ${gas}, the camp has ${game.power.gas}`,
+      };
+    }
+  }
   const patrol: Patrol = {
     no: game.patrolsSent + 1,
     location,
@@ -408,10 +493,16 @@ export function sendPatrol(
     sentHorde: game.hordeNumber,
     strength: partyStrength(members),
     seed: seed >>> 0,
+    car,
   };
   return {
     ok: true,
-    game: { ...game, patrols: [...game.patrols, patrol], patrolsSent: patrol.no },
+    game: {
+      ...game,
+      power: gas > 0 ? { ...game.power, gas: game.power.gas - gas } : game.power,
+      patrols: [...game.patrols, patrol],
+      patrolsSent: patrol.no,
+    },
   };
 }
 

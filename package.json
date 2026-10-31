@@ -1,7 +1,7 @@
 {
   "name": "idle-defender",
   "private": true,
-  "version": "0.4.41",
+  "version": "0.4.42",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

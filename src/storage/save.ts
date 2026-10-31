@@ -41,6 +41,7 @@ import {
   CAMP_PICK_RANKS,
   CAMP_SIZE,
   CAMP_UPGRADES,
+  CAR,
   COLUMNS,
   ITEMS,
   buildingsOf,
@@ -108,6 +109,8 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 10 since the car (ID-030): a v9 save's camp has no car and its patrols went on foot.
+ *
  * 9 since survivors (ID-032): a v8 save's reports have no survivors waiting and its camp
  * offers are bare lists of picks, with no survivor.
  *
@@ -125,7 +128,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -245,12 +248,12 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
+  if (![SAVE_VERSION, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
   const ver = o.v as number;
   const materials = ver >= 4 ? MATERIALS : BUILDING_MATERIALS;
   const patrols = ver >= 8 ? 'plazas' : ver >= 6 ? 'risk' : ver === 5 ? 'patrols' : null;
-  const camp = ver >= 7 ? (ver === SAVE_VERSION ? 'survivors' : 'camp') : null;
+  const camp = ver >= 7 ? (ver >= 10 ? 'cars' : ver === 9 ? 'survivors' : 'camp') : null;
   if (ver === 1) {
     return {
       game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp),
@@ -268,8 +271,8 @@ function readGame(
   materials: readonly Material[],
   /** What the save's patrols carry: none (v4 and older), no risk yet (v5), no plazas yet (v6, v7), or all of it. */
   patrols: 'patrols' | 'risk' | 'plazas' | null,
-  /** What the save's camp carries: none (v6 and older), no survivors yet (v7, v8), or all of it. */
-  hasCamp: 'camp' | 'survivors' | null,
+  /** What the save's camp carries: none (v6 and older), no survivors yet (v7, v8), no car yet (v9), or all of it. */
+  hasCamp: 'camp' | 'survivors' | 'cars' | null,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -303,11 +306,12 @@ function readGame(
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
   const patrolsSent = patrols ? int(o.patrolsSent, 0, PATROL.max) : 0;
   const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent);
-  const survivors = hasCamp === 'survivors';
+  const cars = hasCamp === 'cars';
+  const survivors = hasCamp === 'survivors' || cars;
   const risk = patrols === 'risk' || patrols === 'plazas';
   const plazas = patrols === 'plazas';
   const out = patrols
-    ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, roster, plazas)
+    ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, roster, plazas, cars)
     : [];
   const game: GameState = {
     hordeNumber,
@@ -328,8 +332,12 @@ function readGame(
       ? readReports(o.reports, savedAt, patrolsSent, out, risk, plazas, survivors)
       : [],
     leftBehind: risk ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent, plazas) : [],
-    camp: hasCamp ? readCamp(o.camp, savedAt, survivors) : newCamp(),
+    camp: hasCamp ? readCamp(o.camp, savedAt, survivors, cars) : newCamp(),
   };
+  // Each car out is one the camp built, on one patrol at a time.
+  const taken = out.flatMap((p) => (p.car === null ? [] : [p.car]));
+  if (taken.some((c) => c >= game.camp.cars)) fail('car not built');
+  if (new Set(taken).size !== taken.length) fail('car on two patrols');
   if (game.roster.length > campSlots(game)) fail('more people than camp slots');
   // A free recruit's number comes from the camp's count, so the next one is always new.
   for (const d of game.roster) {
@@ -379,8 +387,16 @@ function readGame(
  * still below the top. The floor's clock never runs past a recruit's wait from the save
  * (a clock set back is cut to that).
  */
-function readCamp(v: unknown, savedAt: number, survivors: boolean): Camp {
-  const o = obj(v, ['upgrades', 'xp', 'picks', 'offers', 'recruitAt', 'recruits']);
+function readCamp(v: unknown, savedAt: number, survivors: boolean, cars: boolean): Camp {
+  const o = obj(v, [
+    'upgrades',
+    'xp',
+    'picks',
+    'offers',
+    'recruitAt',
+    'recruits',
+    ...(cars ? ['cars'] : []),
+  ]);
   const xp = int(o.xp, 0, MAX_COUNT);
   const p = obj(o.picks, CAMP_PICK_IDS);
   const picks = { ...NO_PICKS };
@@ -412,6 +428,7 @@ function readCamp(v: unknown, savedAt: number, survivors: boolean): Camp {
         ? null
         : Math.min(int(o.recruitAt, 0, MAX_TIME), savedAt + CAMP_SIZE.recruitMs),
     recruits: int(o.recruits, 0, MAX_COUNT),
+    cars: cars ? int(o.cars, 0, CAR.limit) : 0,
   };
 }
 
@@ -741,6 +758,8 @@ function readPatrols(
   patrolsSent: number,
   roster: readonly RosterDefender[],
   plazas: boolean,
+  /** Whether a patrol names the car it took (v10); an older one went on foot. */
+  cars: boolean,
 ): Patrol[] {
   const seen = new Set<string>();
   const patrols = arr(v, 0, roster.length).map((x): Patrol => {
@@ -753,6 +772,7 @@ function readPatrols(
       'strength',
       'seed',
       ...(plazas ? ['buildings', 'focus', 'order'] : []),
+      ...(cars ? ['car'] : []),
     ]);
     const no = int(o.no, 1, patrolsSent);
     const sentHorde = int(o.sentHorde, PATROL.unlock, hordeNumber);
@@ -789,6 +809,7 @@ function readPatrols(
       sentHorde,
       strength,
       seed: int(o.seed, 0, MAX_SEED),
+      car: !cars || o.car === null ? null : int(o.car, 0, CAR.limit - 1),
     };
   });
   for (let i = 1; i < patrols.length; i++) {

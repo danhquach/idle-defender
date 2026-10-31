@@ -69,7 +69,7 @@ import {
   type Stock,
 } from '../core/data.ts';
 import { available, type GameState } from '../core/game.ts';
-import { idle, patrolDue, revealedPlaces, sendPatrol } from '../core/patrol.ts';
+import { freeCar, idle, patrolDue, revealedPlaces, sendPatrol } from '../core/patrol.ts';
 import { labCost, research, researched, upgradeLab, type GameResult } from '../core/research.ts';
 import { layoutOf, turretState, type TurretState } from '../core/horde.ts';
 import { buildGenerator, nextGasAt } from '../core/power.ts';
@@ -90,6 +90,7 @@ import {
 import type { SlotHit } from './projection.ts';
 import { perkLines, type PerkLine } from './perks.ts';
 import {
+  carLabel,
   focusRows,
   locationLines,
   mapContents,
@@ -446,17 +447,19 @@ export function createBuildPanel(
   panel.hidden = true;
   root.append(bar, panel);
 
-  // The world map's place, buildings, loot focus, order and party picks, kept across redraws and visits.
+  // The world map's place, buildings, loot focus, order, car and party picks, kept across redraws and visits.
   let mapLocation: PlaceId | null = null;
   let mapBuildings = new Set<LocationId>();
   let mapFocus: Focus = 'anything';
   let mapOrder: Order = 'balanced';
+  let mapCar = false;
   const mapParty = new Set<string>();
-  /** Picks a place: all its buildings ticked, any focus. */
+  /** Picks a place: all its buildings ticked, any focus, on foot. */
   const pickPlace = (place: PlaceId | null): void => {
     mapLocation = place;
     mapBuildings = new Set(place === null ? [] : buildingsOf(place));
     mapFocus = 'anything';
+    mapCar = false;
   };
   // A line at the foot of the panel: a recruit back, a lost save. Built once, so it
   // survives the redraws.
@@ -888,6 +891,25 @@ export function createBuildPanel(
         return label;
       };
       orders.append(labelled('Loot focus', focus), labelled('When things go wrong', order));
+      // The car (ID-030): offered while one is free; each place and each send starts on foot.
+      const byCar = mapCar && freeCar(game) !== null && buildings.length > 0;
+      if (game.camp.cars > 0 && buildings.length > 0) {
+        if (freeCar(game) === null) {
+          orders.append(el('p', 'build-slot-note', 'The car is out on patrol'));
+        } else {
+          const box = el('input', '');
+          box.type = 'checkbox';
+          box.checked = byCar;
+          box.dataset.car = 'take';
+          box.addEventListener('change', () => {
+            mapCar = box.checked;
+            redraw();
+          });
+          const label = el('label', 'worldmap-member');
+          label.append(box, document.createTextNode(carLabel(game, location, buildings)));
+          orders.append(label);
+        }
+      }
       const risk = el('section', 'worldmap-risk-screen');
       risk.setAttribute('aria-live', 'polite');
       risk.append(
@@ -895,11 +917,13 @@ export function createBuildPanel(
           el('p', 'build-slot-note', t),
         ),
       );
-      const options = { buildings, focus: focusNow, order: mapOrder };
+      const options = { buildings, focus: focusNow, order: mapOrder, car: byCar };
       const dry = sendPatrol(game, location, ids, 0, now, options);
       where.append(
         el('h3', 'build-slot-title', placeName(location)),
-        ...locationLines(game, location, buildings).map((t) => el('p', 'build-slot-note', t)),
+        ...locationLines(game, location, buildings, byCar).map((t) =>
+          el('p', 'build-slot-note', t),
+        ),
         ...(isPlaza(location) ? [search] : []),
         picker,
         orders,
@@ -911,6 +935,7 @@ export function createBuildPanel(
           // Refused since the redraw (someone back injured): redraw to show why.
           if (!sent.ok) return redraw();
           for (const id of ids) mapParty.delete(id);
+          mapCar = false;
           onGame(sent.game);
         }),
       );

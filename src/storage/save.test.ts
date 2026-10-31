@@ -54,6 +54,7 @@ import {
   prePatrol,
   prePlazas,
   preRisk,
+  preCars,
   preSurvivors,
 } from './testing.ts';
 
@@ -1124,7 +1125,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 10, '1', '9', 1.5, null]) {
+    for (const v of [0, 11, '1', '10', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1373,7 +1374,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(9);
+    expect(SAVE_VERSION).toBe(10);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1730,6 +1731,7 @@ describe('save: the camp (ID-033)', () => {
         offers: [{ picks: ['salvage', 'foraging', 'medic'], survivor: null }],
         recruitAt: NOW + 30 * 60 * 1000,
         recruits: 1,
+        cars: 0,
       },
     };
   }
@@ -2159,8 +2161,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 9 (survivors came after plazas, ID-032)', () => {
-    expect(SAVE_VERSION).toBe(9);
+  it('is version 10 (survivors, then the car, came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(10);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {
@@ -2383,3 +2385,97 @@ describe('save: plazas and orders (ID-029)', () => {
 });
 
 const ALL_THREE = ['gas-station', 'pharmacy', 'hardware'];
+
+describe('save: the car (ID-030)', () => {
+  const H = 60 * 60 * 1000;
+  /** A camp with its car out with Bob to the electronics store, and Jack on foot to the gas station. */
+  function driving(): GameState {
+    const g = newGame();
+    let game: GameState = {
+      ...g,
+      hordeNumber: PATROL.unlock,
+      roster: [...g.roster, { ...g.roster[0]!, id: 'dan', name: 'Dan' }],
+      power: { ...g.power, gas: 20 },
+      camp: { ...g.camp, upgrades: 1, cars: 1 },
+    };
+    for (const [place, id, car] of [
+      ['electronics', 'bob', true],
+      ['gas-station', 'jack', false],
+    ] as const) {
+      const r = sendPatrol(game, place, [id], 5, NOW - H / 4, { car });
+      if (!r.ok) throw new Error(r.reason);
+      game = r.game;
+    }
+    return game;
+  }
+  const raw = (game: Loose, v: unknown = SAVE_VERSION) =>
+    decodeSave(JSON.stringify({ v, savedAt: NOW, game }));
+  const poke = (change: (g: Loose) => void) => {
+    const g = JSON.parse(JSON.stringify(driving()));
+    change(g);
+    return raw(g);
+  };
+
+  it('round-trips the car count and which patrol has the car', () => {
+    const g = driving();
+    expect(g.camp.cars).toBe(1);
+    expect(g.patrols.map((p) => p.car)).toEqual([0, null]);
+    expect(raw(JSON.parse(JSON.stringify(g)))?.game).toEqual(g);
+  });
+
+  it('loads a v9 save with no car and every patrol on foot, and never mixes the shapes', () => {
+    const foot = { ...driving(), patrols: driving().patrols.map((p) => ({ ...p, car: null })) };
+    const plain = { ...foot, camp: { ...foot.camp, cars: 0 } };
+    expect(raw(preCars(plain), 9)?.game).toEqual(plain);
+    // A v9 save never named a car; a v10 one always does.
+    expect(raw(JSON.parse(JSON.stringify(driving())), 9)).toBeNull();
+    expect(raw(preCars(plain))).toBeNull();
+    expect(poke((g) => delete g.camp.cars)).toBeNull();
+    expect(poke((g) => delete g.patrols[0].car)).toBeNull();
+  });
+
+  it('refuses hostile car values', () => {
+    const cases: [string, (g: Loose) => void][] = [
+      ['more cars than the limit', (g) => (g.camp.cars = 2)],
+      ['a negative count', (g) => (g.camp.cars = -1)],
+      ['a fractional count', (g) => (g.camp.cars = 0.5)],
+      ['a count as text', (g) => (g.camp.cars = '1')],
+      ['a huge count', (g) => (g.camp.cars = 1e308)],
+      ['a count as an object', (g) => (g.camp.cars = { valueOf: 1 })],
+      ['a car out the camp never built', (g) => (g.camp.cars = 0)],
+      ['a car past the limit', (g) => (g.patrols[0].car = 1)],
+      ['a negative car', (g) => (g.patrols[0].car = -1)],
+      ['a car as text', (g) => (g.patrols[0].car = '0')],
+      ['a car as true', (g) => (g.patrols[0].car = true)],
+      ['a car as a list', (g) => (g.patrols[0].car = [0])],
+      ['one car on two patrols', (g) => (g.patrols[1].car = 0)],
+      ['an unknown key beside it', (g) => (g.patrols[0].truck = 0)],
+    ];
+    for (const [name, change] of cases) expect(poke(change), name).toBeNull();
+    // The edges it allows: no car out, and a car built but at home.
+    expect(poke((g) => (g.patrols[0].car = null))).not.toBeNull();
+    expect(
+      poke((g) => {
+        g.patrols = [];
+      }),
+    ).not.toBeNull();
+  });
+
+  it('refuses prototype keys on the camp and on a patrol', () => {
+    for (const json of [
+      encodeSave(driving(), NOW).replace('"cars":1', '"__proto__":{"polluted":1},"cars":1'),
+      encodeSave(driving(), NOW).replace('"car":0', '"constructor":{"polluted":1},"car":0'),
+    ]) {
+      expect(json).toContain('polluted');
+      expect(decodeSave(json)).toBeNull();
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('frees the car on a loaded patrol once it is back, however late', () => {
+    const loaded = raw(JSON.parse(JSON.stringify(driving())))!.game;
+    const back = settlePatrols(loaded, NOW + 24 * H);
+    expect(back.patrols).toEqual([]);
+    expect(back.camp.cars).toBe(1);
+  });
+});

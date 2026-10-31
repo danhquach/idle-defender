@@ -171,6 +171,7 @@ describe('recovery in the roster view (ID-031)', () => {
           sentHorde: 3,
           strength: 1,
           seed: 1,
+          car: null,
         },
       ],
     };

@@ -153,6 +153,7 @@ describe('dismiss', () => {
       sentHorde: PATROL.unlock,
       strength: 1,
       seed: 1,
+      car: null,
     };
     const out = { ...g, patrols: [p], patrolsSent: 1 };
     expect(dismissLock(out, 'extra-1')).toBe('Extra is on patrol');
@@ -340,6 +341,7 @@ describe('camp-level pick effects', () => {
       sentHorde: PATROL.unlock,
       strength: 1e6,
       seed: 3,
+      car: null,
     };
     const base: GameState = {
       ...newGame(),
@@ -410,6 +412,7 @@ describe('the roster floor', () => {
       sentHorde: PATROL.unlock,
       strength: 1,
       seed: 1,
+      car: null,
     };
     const out: GameState = { ...newGame(), patrols: [p], patrolsSent: 1 };
     expect(recruitArrivals(out, NOW)).toBe(out);
@@ -429,6 +432,7 @@ describe('the roster floor', () => {
         sentHorde: PATROL.unlock,
         strength: 0,
         seed,
+        car: null,
       };
       if (patrolOutcome(c).dead.includes('bob')) p = c;
     }
