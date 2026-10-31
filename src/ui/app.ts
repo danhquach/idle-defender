@@ -30,6 +30,15 @@ import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import { readReduceMotion, writeReduceMotion } from '../storage/settings.ts';
 import { Animator } from './anim.ts';
 import { createBuildPanel, FIELD_GREW } from './build.ts';
+import {
+  buildCamera,
+  EASE_MS,
+  easeCamera,
+  fenceTier,
+  ghostsOf,
+  plotsOf,
+  targetAt,
+} from './buildscene.ts';
 import { createHud, defenderLabel, resultScreen } from './hud.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
@@ -37,13 +46,13 @@ import {
   fightHitAt,
   frameCamera,
   FRAME,
-  slotAt,
+  project,
   unproject,
   type Camera,
   type SlotHit,
   type View,
 } from './projection.ts';
-import { drawScene, type Aim, type Scene } from './render.ts';
+import { drawScene, type Aim, type CampView, type Scene } from './render.ts';
 import type { Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
@@ -195,6 +204,9 @@ export function start(root: HTMLElement, art: Art): void {
       campPicks = [];
       selected = null;
       selectedDefender = null;
+      canvas.style.cursor = '';
+      // Into the fight frame: eased from the build frame, a hard cut with Reduce motion on.
+      ease = animator.reduced ? null : { from: buildCam, at: null };
       panel.hide();
       hud.show(true);
       menu.refresh();
@@ -228,13 +240,39 @@ export function start(root: HTMLElement, art: Art): void {
     if (storage) menu.status(writeSave(storage, game, Date.now()) ? 'ok' : 'failed');
     menu.refresh();
   }
+  // Two fixed frames (ID-064, ID-065), fitted to the window: nothing pans or zooms. The
+  // build scene fits left of the build panel; a fight shows the fight frame.
+  let view: View = { w: 0, h: 0 };
+  let fightCam: Camera = { x: 0, y: 0, zoom: 1 };
+  let buildCam: Camera = fightCam;
+  // The camera drawn last, which clicks land through.
+  let cam: Camera = fightCam;
+  // Start Horde's ease from the build frame; `at` is the first fight frame's time.
+  let ease: { from: Camera; at: number | null } | null = null;
+  function resize(): void {
+    const dpr = window.devicePixelRatio || 1;
+    view = { w: window.innerWidth, h: window.innerHeight };
+    canvas.width = Math.round(view.w * dpr);
+    canvas.height = Math.round(view.h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fightCam = frameCamera(view, hud.bottomSpace());
+    buildCam = buildCamera(view, panel.room(view));
+    cam = horde ? fightCam : buildCam;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // "Back to build" swaps the scene while the result screen closes: a hard cut to the build frame.
   function toBuild(): void {
     horde = null;
     selected = null;
     selectedDefender = null;
     armed = null;
+    ease = null;
     hud.show(false);
     panel.show(game, selected);
+    buildCam = buildCamera(view, panel.room(view));
+    cam = buildCam;
     menu.refresh();
   }
   toBuild();
@@ -246,20 +284,6 @@ export function start(root: HTMLElement, art: Art): void {
   } else if (loaded.save?.grew) {
     panel.notice(FIELD_GREW);
   }
-
-  // One fixed frame in every mode (ID-064), fitted to the window: nothing pans or zooms.
-  let view: View = { w: 0, h: 0 };
-  let cam: Camera = { x: 0, y: 0, zoom: 1 };
-  function resize(): void {
-    const dpr = window.devicePixelRatio || 1;
-    view = { w: window.innerWidth, h: window.innerHeight };
-    canvas.width = Math.round(view.w * dpr);
-    canvas.height = Math.round(view.h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cam = frameCamera(view, hud.bottomSpace());
-  }
-  resize();
-  window.addEventListener('resize', resize);
 
   // A fight isn't saved, and neither is its payout until "Back to build": while one
   // is on (or its result is up), leaving the page asks first.
@@ -301,23 +325,26 @@ export function start(root: HTMLElement, art: Art): void {
     if (Math.hypot(e.clientX - press.x, e.clientY - press.y) >= CLICK_SLOP) press.click = false;
   });
   const endPress = (e: PointerEvent): void => {
-    if (e.isPrimary) press = null;
+    if (!e.isPrimary) return;
+    press = null;
+    // A finger lifted hovers nothing: no highlight left on a tapped slot.
+    if (e.pointerType !== 'mouse') hover = null;
   };
   // In a fight with a skill armed, a click aims it there (a refusal shows as a toast)
   // and puts it away. Otherwise a click on one of your defenders selects it; with one
   // selected, a click on a post sends it there (a refusal shows as a toast, unless a
   // shambler is under the click). Otherwise a click focuses the shambler under it for
   // every defender, or clears focus and selection on empty ground. In build mode it
-  // opens the slot under it (or closes the menu).
-  // Only finite canvas coordinates reach the hit tests, and only in-range grid slots
-  // from `slotAt` reach the core. Left of the frame nothing is drawn, so a click there
-  // lands on nothing: an armed skill stays armed.
+  // opens the slot under it (or closes the menu), or the part of the panel for the plot
+  // under it. Only finite canvas coordinates reach the hit tests, and only in-range grid
+  // slots from `slotAt` reach the core. In a fight nothing is drawn left of the frame, so
+  // a click there lands on nothing: an armed skill stays armed.
   canvas.addEventListener('pointerup', (e) => {
     const click = e.isPrimary && press?.click === true;
     endPress(e);
     if (!click || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
     const ground = unproject({ sx: e.offsetX, sy: e.offsetY }, cam);
-    if (ground.x < FRAME.left) return;
+    if (horde && ground.x < FRAME.left) return;
     if (horde && armed) {
       const used = useSkill(horde, armed, ground.x, ground.y);
       if (used.ok) horde = used.state;
@@ -349,8 +376,14 @@ export function start(root: HTMLElement, art: Art): void {
       if (enemyId === null) selectedDefender = null;
       horde = setFocus(horde, enemyId);
     } else {
-      selected = slotAt(ground.x, ground.y, game.base);
-      panel.show(game, selected);
+      const hit = targetAt(ground.x, ground.y, game.base, plotsOf(game));
+      if (hit && 'plot' in hit) {
+        selected = null;
+        panel.reveal(game, hit.plot.opens);
+      } else {
+        selected = hit?.slot ?? null;
+        panel.show(game, selected);
+      }
     }
   });
   canvas.addEventListener('pointercancel', endPress);
@@ -382,9 +415,30 @@ export function start(root: HTMLElement, art: Art): void {
     if (horde) {
       // A pick, the end of the fight or a cooldown puts an armed skill away.
       if (armed && skillLock(horde, armed) !== null) armed = null;
+      // Start Horde's ease: the camp shows until the clip has slid to the frame's edge.
+      let t = 1;
+      if (ease) {
+        ease.at ??= now;
+        t = (now - ease.at) / EASE_MS;
+        if (t >= 1) ease = null;
+      }
+      cam = ease ? easeCamera(ease.from, fightCam, t) : fightCam;
       const aim: Aim | null =
         armed === 'airstrike' && hover ? { skill: armed, ...unproject(hover, cam) } : null;
-      drawScene(ctx, art, horde, cam, view, null, selectedDefender, aim, animator);
+      const edge = project({ x: FRAME.left, y: 0 }, fightCam).sx;
+      drawScene(
+        ctx,
+        art,
+        horde,
+        cam,
+        view,
+        null,
+        selectedDefender,
+        aim,
+        animator,
+        ease ? campView(game) : null,
+        ease ? Math.max(0, t) * edge : null,
+      );
       hud.update(horde, armed);
       if (horde.outcome !== 'fighting' && endedAt === null) {
         endedAt = Date.now();
@@ -412,11 +466,24 @@ export function start(root: HTMLElement, art: Art): void {
         commit(settled);
         panel.show(game, selected);
       }
-      drawScene(ctx, art, buildScene(game, panel.choice(game)), cam, view, { selected });
+      // Worked out each frame, so a build, a resize or a still pointer never leaves it stale.
+      const plots = plotsOf(game);
+      const under = hover ? unproject(hover, cam) : null;
+      const target = under ? targetAt(under.x, under.y, game.base, plots) : null;
+      canvas.style.cursor = target ? 'pointer' : '';
+      const overlay = { selected, hover: target, ghosts: ghostsOf(game.base) };
+      const scene = buildScene(game, panel.choice(game));
+      const camp = { fence: fenceTier(game.base), plots };
+      drawScene(ctx, art, scene, cam, view, overlay, null, null, null, camp);
     }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+}
+
+/** The camp around the field, read from the game: its fence's tier and its plots (ID-065). */
+function campView(game: GameState): CampView {
+  return { fence: fenceTier(game.base), plots: plotsOf(game) };
 }
 
 /** The base as build mode shows it: no horde, the start defender on the picked post. */

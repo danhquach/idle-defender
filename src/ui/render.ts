@@ -17,9 +17,11 @@ import {
   SWOLLEN,
   CARD,
   TRAP_STRIP,
+  TRAP_DURABILITY,
   WALL,
   type EnemyKind,
   type Profession,
+  type Tier,
 } from '../core/data.ts';
 import {
   burning,
@@ -55,7 +57,20 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
-import { CAMP_YARD, GROUND_TILE, groundCanvas, SURROUND_BLOCK, surroundCanvas } from './ground.ts';
+import { GROUND_TILE, groundCanvas, SURROUND_BLOCK, surroundCanvas } from './ground.ts';
+import {
+  conditionOf,
+  FENCE,
+  FENCE_RUNS,
+  ghostAt,
+  NEEDS_WALL,
+  PLOT,
+  PLOT_AT,
+  TIER_BADGE,
+  type Ghost,
+  type Plot,
+  type Target,
+} from './buildscene.ts';
 import { defenderPose, enemyPose, fallPose, STILL, type Animator, type Pose } from './anim.ts';
 import {
   BASE_ART,
@@ -85,7 +100,6 @@ const COLOR = {
   selected: '#9cc4f0',
   reserved: 'rgba(156, 196, 240, 0.7)',
   shadow: 'rgba(0, 0, 0, 0.35)',
-  slot: 'rgba(216, 212, 204, 0.18)',
   focus: '#ffe066',
   offFrame: '#d2453c',
   plate: 'rgba(21, 23, 26, 0.6)',
@@ -107,6 +121,14 @@ const COLOR = {
   lightning: '#cfe6ff',
   pop: '#ff9a3c',
   flame: '#ff7a1a',
+  ghost: 'rgba(240, 236, 226, 0.85)',
+  ghostDim: 'rgba(232, 228, 218, 0.4)',
+  edge: 'rgba(17, 17, 16, 0.6)',
+  window: '#f2c867',
+  outside: 'rgba(0, 0, 0, 0.3)',
+  hover: '#cfe3fa',
+  broken: '#e0483e',
+  badgeText: '#111110',
 } as const;
 /**
  * A molotov fire's art (ID-041): see-through at `alpha`, flaring up over `in` s once lit
@@ -147,8 +169,27 @@ export function turretLook(
 const TILE = { wall: 48 } as const;
 /** Gap drawn between wall segments so they read as separate pieces. */
 const SEGMENT_GAP = 2;
-/** The camp's huts along the field's depth, in its yard. */
-const CAMP_PROPS = { count: 5, height: 58 } as const;
+/** A built hut's drawn height (screen px at zoom 1). */
+const HUT_HEIGHT = 58;
+/**
+ * The build scene's marks (ID-065), screen px at zoom 1 unless named: a ghost's "+" arm,
+ * a wall-walk spot's ghost square, a tier badge, a broken piece's cross, the dash; a
+ * name plate's and a slot reason's fonts are fixed px so they read at any zoom.
+ */
+const MARK = {
+  plus: 6,
+  spot: 5,
+  badge: 11,
+  cross: 7,
+  dash: [4, 3],
+  plate: 'bold 11px system-ui, sans-serif',
+  badgeFont: 'bold 9px system-ui, sans-serif',
+} as const;
+/** A built Lab's and Generator's boxes: the Generator is the smaller. */
+const BUILDING = {
+  lab: { halfWidth: PLOT.halfWidth - 8, halfDepth: PLOT.halfDepth - 12, height: PLOT.height },
+  generator: { halfWidth: 26, halfDepth: 20, height: 22 },
+} as const;
 const DEFENDER = PIECE.defender;
 /**
  * Drawn heights (screen px at zoom 1) of a standing sprite `ART_PX` tall, feet on its
@@ -218,9 +259,16 @@ export interface Aim {
   x: number;
   y: number;
 }
-/** Build mode extras: empty slot outlines and the selected slot. */
+/** Build mode extras (ID-065): the empty slots' ghosts, the hovered target and the selected slot. */
 export interface BuildOverlay {
   selected: SlotHit | null;
+  hover: Target | null;
+  ghosts: { slots: readonly Ghost[]; lines: readonly number[] };
+}
+/** The camp around the field in the build scene (ID-065): its fence's tier and its plots. */
+export interface CampView {
+  fence: Tier;
+  plots: readonly Plot[];
 }
 
 interface Box {
@@ -649,19 +697,384 @@ function drawSurround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera, view
 }
 
 /**
- * The field's ground with the camp's yard in it (ground.ts), then the huts, behind every
- * sprite. The fixed frame (ID-064) clips the yard and huts away; ID-065's camp scene
- * shows them again.
+ * The field's ground with the camp's yard in it (ground.ts), behind every sprite. The
+ * fixed fight frame (ID-064) clips the yard away; the build scene (ID-065) shows it.
  */
 function drawGround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera): void {
   const field = faces({ x0: 0, x1: FIELD.right, y0: 0, y1: FIELD.height, z0: 0, height: 0 }, cam);
   const ground = groundCanvas(art);
   if (ground) ctx.drawImage(ground, field.top.sx, field.top.sy, field.top.w, field.top.h);
-  const step = FIELD.height / CAMP_PROPS.count;
-  for (let i = 0; i < CAMP_PROPS.count; i++) {
-    const prop = art[BASE_ART.campProps[i % BASE_ART.campProps.length]!];
-    const feet = project({ x: (CAMP_YARD.x0 + CAMP_YARD.x1) / 2, y: (i + 0.8) * step }, cam);
-    drawStanding(ctx, prop, feet, CAMP_PROPS.height, cam);
+}
+
+/** One run of the camp's fence: a low wall in `tier`'s textures. */
+function drawFence(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  run: (typeof FENCE_RUNS)[number],
+  tier: Tier,
+  cam: Camera,
+): void {
+  const t = TIER_ART[tier];
+  drawBox(ctx, { ...run, z0: 0, height: FENCE.height }, art[t.top], art[t.front], cam);
+}
+
+/**
+ * A name plate over `(x, y, z)` (or under it, `below`): fixed-size text on a see-through
+ * plate, centred.
+ */
+function drawPlate(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  at: { x: number; y: number; z: number },
+  cam: Camera,
+  below = false,
+): void {
+  if (text === '') return;
+  const p = project(at, cam);
+  ctx.font = MARK.plate;
+  const w = ctx.measureText(text).width + 2 * OFF_FRAME.pad;
+  const h = 14;
+  const top = below ? p.sy + 2 : p.sy - h;
+  ctx.fillStyle = COLOR.plate;
+  ctx.fillRect(p.sx - w / 2, top, w, h);
+  ctx.fillStyle = COLOR.plateText;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, p.sx, top + h / 2);
+}
+
+/**
+ * Strokes the path `trace` lays down in `colour` over a dark edge 2 px wider, so a mark
+ * stands out on the busy ground.
+ */
+function strokeEdged(
+  ctx: CanvasRenderingContext2D,
+  colour: string,
+  width: number,
+  trace: () => void,
+): void {
+  for (const [style, w] of [
+    [COLOR.edge, width + 2],
+    [colour, width],
+  ] as const) {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    trace();
+    ctx.stroke();
+  }
+}
+
+/** Lays down a flat rectangle at height `z` as a path. */
+function rectPath(
+  ctx: CanvasRenderingContext2D,
+  r: { x0: number; x1: number; y0: number; y1: number },
+  z: number,
+  cam: Camera,
+): void {
+  const a = project({ x: r.x0, y: r.y0, z }, cam);
+  const b = project({ x: r.x1, y: r.y1, z }, cam);
+  ctx.rect(a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
+}
+
+/**
+ * An empty slot: a flat dashed outline at height `z`, then a "+" at `plus`; with no
+ * `plus`, only a dimmed outline (a slot that can't be built yet, a plot kept free).
+ */
+function drawGhost(
+  ctx: CanvasRenderingContext2D,
+  r: { x0: number; x1: number; y0: number; y1: number },
+  plus: { x: number; y: number; z: number } | null,
+  z: number,
+  cam: Camera,
+): void {
+  ctx.setLineDash([...MARK.dash]);
+  if (plus) strokeEdged(ctx, COLOR.ghost, 1, () => rectPath(ctx, r, z, cam));
+  else {
+    ctx.strokeStyle = COLOR.ghostDim;
+    ctx.lineWidth = 1;
+    outline(ctx, r, z, cam);
+  }
+  ctx.setLineDash([]);
+  if (plus) drawPlus(ctx, plus, cam);
+}
+
+/** A "+" standing at `(x, y, z)`. */
+function drawPlus(
+  ctx: CanvasRenderingContext2D,
+  at: { x: number; y: number; z: number },
+  cam: Camera,
+): void {
+  const c = project(at, cam);
+  const a = Math.max(3, MARK.plus * cam.zoom);
+  strokeEdged(ctx, COLOR.ghost, Math.max(1.5, 2 * cam.zoom), () => {
+    ctx.moveTo(c.sx - a, c.sy);
+    ctx.lineTo(c.sx + a, c.sy);
+    ctx.moveTo(c.sx, c.sy - a);
+    ctx.lineTo(c.sx, c.sy + a);
+  });
+}
+
+/** A free wall-walk spot on a wall's top: a small ring round a "+", unlike the wall's texture. */
+function drawSpotGhost(
+  ctx: CanvasRenderingContext2D,
+  at: { x: number; y: number; z: number },
+  cam: Camera,
+): void {
+  const c = project(at, cam);
+  const r = Math.max(4, MARK.spot * cam.zoom);
+  strokeEdged(ctx, COLOR.ghost, 1.5, () => ctx.ellipse(c.sx, c.sy, r, r * TILT, 0, 0, Math.PI * 2));
+  const a = r * 0.5;
+  strokeEdged(ctx, COLOR.ghost, 1.5, () => {
+    ctx.moveTo(c.sx - a, c.sy);
+    ctx.lineTo(c.sx + a, c.sy);
+    ctx.moveTo(c.sx, c.sy - a);
+    ctx.lineTo(c.sx, c.sy + a);
+  });
+}
+
+/** A broken piece's mark: a red cross at `(x, y, z)`. */
+function drawCross(
+  ctx: CanvasRenderingContext2D,
+  at: { x: number; y: number; z: number },
+  cam: Camera,
+): void {
+  const c = project(at, cam);
+  const a = Math.max(4, MARK.cross * cam.zoom);
+  ctx.setLineDash([]);
+  strokeEdged(ctx, COLOR.broken, Math.max(2, 2.5 * cam.zoom), () => {
+    ctx.moveTo(c.sx - a, c.sy - a);
+    ctx.lineTo(c.sx + a, c.sy + a);
+    ctx.moveTo(c.sx + a, c.sy - a);
+    ctx.lineTo(c.sx - a, c.sy + a);
+  });
+}
+
+/** A plot's footprint on the ground. */
+const plotFootprint = (p: Plot) => around(PLOT_AT[p.id], PLOT);
+
+/**
+ * The camp's ground pieces, behind every sprite: the fence's left and top runs, an
+ * unbuilt plot's ghost. Built buildings and the bottom fence go in the depth sort.
+ */
+function drawCampGround(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  camp: CampView,
+  cam: Camera,
+): void {
+  drawFence(ctx, art, FENCE_RUNS[0], camp.fence, cam);
+  drawFence(ctx, art, FENCE_RUNS[1], camp.fence, cam);
+  // The Workbench's plot is kept free (ID-034): a faint footprint, nothing to click.
+  drawGhost(ctx, around(PLOT_AT.workbench, PLOT), null, 0, cam);
+  for (const p of camp.plots) {
+    if (p.built) continue;
+    const at = PLOT_AT[p.id];
+    drawGhost(ctx, plotFootprint(p), { ...at, z: 0 }, 0, cam);
+    drawPlate(ctx, p.label, { x: at.x, y: at.y + PLOT.halfDepth, z: 0 }, cam);
+  }
+}
+
+/** The camp's sprites for the depth sort: the bottom fence run, each built building and hut. */
+function campSprites(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  camp: CampView,
+  cam: Camera,
+): Sprite[] {
+  const run = FENCE_RUNS[2];
+  const sprites: Sprite[] = [
+    { y: run.y1, x: run.x1, draw: () => drawFence(ctx, art, run, camp.fence, cam) },
+  ];
+  camp.plots.forEach((p, i) => {
+    if (!p.built) return;
+    const at = PLOT_AT[p.id];
+    if (p.kind === 'hut') {
+      const hut = art[BASE_ART.campProps[i % BASE_ART.campProps.length]!];
+      sprites.push({
+        y: at.y,
+        x: at.x,
+        draw: () => drawStanding(ctx, hut, project({ ...at, z: 0 }, cam), HUT_HEIGHT, cam),
+      });
+      return;
+    }
+    const size = BUILDING[p.kind];
+    const box = { ...around(at, size), z0: 0, height: size.height };
+    const look =
+      p.kind === 'lab'
+        ? { top: art['concrete-top'], front: art['concrete-front'] }
+        : { top: art['metal-top'], front: art['metal-front'] };
+    sprites.push({
+      y: at.y + size.halfDepth,
+      x: at.x,
+      draw: () => {
+        // A running generator glows round its block, as a lit turret does.
+        if (p.running) {
+          const c = project({ ...at, z: size.height / 2 }, cam);
+          const r = size.halfWidth * 1.8 * cam.zoom;
+          const glow = ctx.createRadialGradient(c.sx, c.sy, 0, c.sx, c.sy, r);
+          glow.addColorStop(0, COLOR.glow);
+          glow.addColorStop(1, 'rgba(255, 196, 70, 0)');
+          ctx.fillStyle = glow;
+          ctx.fillRect(c.sx - r, c.sy - r, 2 * r, 2 * r);
+        }
+        drawBox(ctx, box, look.top, look.front, cam);
+        const f = faces(box, cam);
+        // A dark roof edge, and the Lab's lit window, so neither reads as a bare slab.
+        ctx.strokeStyle = COLOR.edge;
+        ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+        ctx.strokeRect(f.top.sx, f.top.sy, f.top.w, f.top.h);
+        if (p.kind === 'lab') {
+          // Two small panes, so it reads as a window rather than a bar.
+          ctx.fillStyle = COLOR.window;
+          for (const left of [0.3, 0.55]) {
+            ctx.fillRect(
+              f.front.sx + f.front.w * left,
+              f.front.sy + f.front.h * 0.3,
+              f.front.w * 0.15,
+              f.front.h * 0.35,
+            );
+          }
+        }
+        // Under the block, clear of the fence above.
+        drawPlate(ctx, p.label, { x: at.x, y: at.y + size.halfDepth, z: 0 }, cam, true);
+      },
+    });
+  });
+  return sprites;
+}
+
+/** A segment's tier badge: its tier's letter on its colour, on the ground just in front of the wall. */
+function drawTierBadge(
+  ctx: CanvasRenderingContext2D,
+  tier: Tier,
+  at: { x: number; y: number },
+  cam: Camera,
+): void {
+  const badge = TIER_BADGE[tier];
+  const c = project(at, cam);
+  const s = Math.max(9, MARK.badge * cam.zoom);
+  ctx.fillStyle = badge.colour;
+  ctx.fillRect(c.sx - s / 2, c.sy - s / 2, s, s);
+  ctx.font = MARK.badgeFont;
+  ctx.fillStyle = COLOR.badgeText;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(badge.text, c.sx, c.sy);
+}
+
+/**
+ * The build scene's marks, over every sprite: a ghost line on each unbuilt column, a
+ * ghost "+" on each empty slot (or why it can't be built yet), each segment's tier
+ * badge, each damaged piece's bar and each broken one's cross, then the hovered target.
+ */
+function drawBuildMarks(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  build: BuildOverlay,
+  camp: CampView | null,
+  cam: Camera,
+): void {
+  ctx.setLineDash([...MARK.dash]);
+  for (const column of build.ghosts.lines) {
+    const wx = COLUMNS[column]!;
+    const band = { x0: wx, x1: wx + WALL.depth, y0: 0, y1: FIELD.height };
+    strokeEdged(ctx, COLOR.ghost, 1, () => rectPath(ctx, band, 0, cam));
+  }
+  ctx.setLineDash([]);
+  const hover = build.hover;
+  for (const g of build.ghosts.slots) {
+    if (g.what === 'walk') {
+      const seg = segmentOf(scene.layers, g.column, g.row);
+      drawSpotGhost(ctx, ghostAt(g, seg ? wallHeight(seg.hp, seg.maxHp) : 0), cam);
+    } else if ((g.what === 'tower' || g.what === 'ground') && g.needsWall) {
+      // Can't be built yet: a dimmed outline; why shows once on its column, and here on hover.
+      const slot: SlotHit = { column: g.column, row: g.row, what: g.what };
+      drawGhost(ctx, footprint(slot), null, 0, cam);
+    } else {
+      const slot: SlotHit =
+        g.what === 'trap'
+          ? { column: COLUMNS.length - 1, row: g.row, what: 'trap' }
+          : { column: g.column, row: g.row, what: g.what };
+      drawGhost(ctx, footprint(slot), ghostAt(g), 0, cam);
+    }
+  }
+  for (const layer of scene.layers) {
+    for (const seg of layer.segments) {
+      if (seg.kind === null || seg.tier === null) continue;
+      const y = (seg.index + 0.5) * SEGMENT_HEIGHT;
+      const top = { x: layer.x + WALL.depth / 2, y, z: wallHeight(seg.hp, seg.maxHp) };
+      drawTierBadge(ctx, seg.tier, { x: layer.x + WALL.depth + MARK.badge, y }, cam);
+      const condition = conditionOf(seg.hp, seg.maxHp);
+      if (condition === 'broken') drawCross(ctx, top, cam);
+      else if (condition === 'damaged') {
+        drawHpBar(ctx, { ...top, z: top.z + HP_BAR.gap }, seg.hp, seg.maxHp, cam);
+      }
+    }
+  }
+  // A turret always shows its condition bar (drawTurret); a jammed one is crossed too.
+  for (const t of scene.turrets) {
+    if (conditionOf(t.condition, MAX_CONDITION) !== 'broken') continue;
+    drawCross(ctx, { x: t.x, y: t.y, z: turretFloor(scene.layers, t) + PIECE.turret.height }, cam);
+  }
+  for (const t of scene.traps) {
+    const r = footprint({ column: COLUMNS.length - 1, row: t.row, what: 'trap' });
+    const at = { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2, z: 0 };
+    const condition = conditionOf(t.durability, TRAP_DURABILITY);
+    if (condition === 'broken') drawCross(ctx, at, cam);
+    else if (condition === 'damaged') {
+      drawHpBar(ctx, { ...at, z: HP_BAR.gap }, t.durability, TRAP_DURABILITY, cam, {
+        back: COLOR.conditionBack,
+        fill: COLOR.conditionFill,
+      });
+    }
+  }
+  for (const column of build.ghosts.lines) {
+    // Once per column, between its tower and ground-post lines; a hovered post slot there
+    // says it on itself instead.
+    const onPost =
+      hover && 'slot' in hover && (hover.slot.what === 'tower' || hover.slot.what === 'ground');
+    if (onPost && hover.slot.column === column) continue;
+    const x = COLUMNS[column]! + (POST_OFFSET.tower + POST_OFFSET.ground) / 2;
+    drawPlate(ctx, NEEDS_WALL, { x, y: FIELD.height / 2, z: 0 }, cam);
+  }
+  if (!hover) return;
+  ctx.strokeStyle = COLOR.hover;
+  ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
+  if ('plot' in hover) {
+    if (camp?.plots.some((p) => p.id === hover.plot.id))
+      outline(ctx, plotFootprint(hover.plot), 0, cam);
+    return;
+  }
+  const { slot, spot } = hover;
+  if (spot !== undefined) {
+    // A wall-walk spot: its ring, on the wall's top.
+    const seg = segmentOf(scene.layers, slot.column, slot.row);
+    const at = project(
+      ghostAt(
+        { what: 'walk', column: slot.column, row: slot.row, spot },
+        seg ? wallHeight(seg.hp, seg.maxHp) : 0,
+      ),
+      cam,
+    );
+    const r = Math.max(4, MARK.spot * cam.zoom) + 2;
+    ctx.beginPath();
+    ctx.ellipse(at.sx, at.sy, r, r * TILT, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    return;
+  }
+  outline(ctx, footprint(slot), 0, cam);
+  const blocked = build.ghosts.slots.some(
+    (g) =>
+      (g.what === 'tower' || g.what === 'ground') &&
+      g.needsWall &&
+      g.what === slot.what &&
+      g.column === slot.column &&
+      g.row === slot.row,
+  );
+  if (blocked && (slot.what === 'tower' || slot.what === 'ground')) {
+    const at = ghostAt({ what: slot.what, column: slot.column, row: slot.row, needsWall: true });
+    drawPlate(ctx, NEEDS_WALL, { ...at, y: at.y - PIECE[slot.what].halfDepth }, cam);
   }
 }
 
@@ -897,7 +1310,10 @@ function drawSpit(ctx: CanvasRenderingContext2D, k: Spit, time: number, cam: Cam
 /**
  * The horde view. With `anim` (a fight), sprites move (anim.ts): it is fed this frame's
  * fight first, and dead enemies fall there before they go. Without it (build mode)
- * everything stands still.
+ * everything stands still. `camp` draws the camp's fence and plots (the build scene,
+ * ID-065, and Start Horde's ease out of it). Everything but the surround is clipped
+ * left of screen x `clip`: by default the fight frame's left edge in a fight, nothing
+ * in build mode.
  */
 export function drawScene(
   ctx: CanvasRenderingContext2D,
@@ -909,6 +1325,8 @@ export function drawScene(
   selectedDefender: string | null = null,
   aim: Aim | null = null,
   anim: Animator | null = null,
+  camp: CampView | null = null,
+  clip: number | null = null,
 ): void {
   anim?.observe(scene);
   const defenderPoseOf = (d: Defender): Readonly<Pose> =>
@@ -918,37 +1336,22 @@ export function drawScene(
   ctx.fillStyle = COLOR.sky;
   ctx.fillRect(0, 0, view.w, view.h);
   drawSurround(ctx, art, cam, view);
-  // Nothing left of the frame shows (ID-064): the camp's yard and huts stay out of
+  // The build scene dims the land round the camp's plot, so the plot reads as the focus.
+  if (build) {
+    ctx.fillStyle = COLOR.outside;
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
+  // In a fight nothing left of the frame shows (ID-064): the camp's yard stays out of
   // view, and an enemy past the frame shows as a marker at its edge instead.
   // On a whole pixel, so the clip's edge doesn't smear a seam into the surround.
-  const left = Math.max(0, Math.round(project({ x: FRAME.left, y: 0 }, cam).sx));
+  const fightLeft = build ? 0 : project({ x: FRAME.left, y: 0 }, cam).sx;
+  const left = Math.max(0, Math.round(clip ?? fightLeft));
   ctx.save();
   ctx.beginPath();
   ctx.rect(left, 0, Math.max(0, view.w - left), view.h);
   ctx.clip();
   drawGround(ctx, art, cam);
-
-  // Build mode: every empty slot as a faint outline on the ground.
-  if (build) {
-    ctx.strokeStyle = COLOR.slot;
-    ctx.lineWidth = 1;
-    for (let row = 0; row < SEGMENTS; row++) {
-      COLUMNS.forEach((_, column) => {
-        if (!segmentOf(scene.layers, column, row)?.kind) {
-          outline(ctx, footprint({ column, row, what: 'segment' }), 0, cam);
-        }
-        for (const what of ['tower', 'ground'] as const) {
-          const taken =
-            scene.posts.some((p) => p.kind === what && p.column === column && p.row === row) ||
-            scene.turrets.some((t) => t.mount === what && t.column === column && t.row === row);
-          if (!taken) outline(ctx, footprint({ column, row, what }), 0, cam);
-        }
-      });
-      if (!scene.traps.some((t) => t.row === row)) {
-        outline(ctx, footprint({ column: COLUMNS.length - 1, row, what: 'trap' }), 0, cam);
-      }
-    }
-  }
+  if (camp) drawCampGround(ctx, art, camp, cam);
 
   // Traps lie flat on the ground, under every sprite.
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
@@ -964,7 +1367,7 @@ export function drawScene(
   // A miss's dust kick is on the ground too.
   for (const i of scene.impacts) if (!i.hit) drawImpact(ctx, i, scene.time, cam);
 
-  const sprites: Sprite[] = [];
+  const sprites: Sprite[] = camp ? campSprites(ctx, art, camp, cam) : [];
   for (const layer of scene.layers) {
     for (const seg of layer.segments) {
       if (seg.kind === null || seg.tier === null) continue; // unbuilt: an open gap
@@ -1064,6 +1467,7 @@ export function drawScene(
     sprites.push({ y: b.y, x: b.x, draw: () => drawBullet(ctx, scene, b, cam) });
   }
   for (const sprite of depthSort(sprites)) sprite.draw();
+  if (build) drawBuildMarks(ctx, scene, build, camp, cam);
 
   // The selected slot: its footprint on the ground, on top of everything.
   if (build?.selected) {
@@ -1109,6 +1513,7 @@ export function drawScene(
     }
   }
   ctx.restore();
+  if (build) return;
   for (const { row, count } of offFrame(scene.enemies)) drawOffFrame(ctx, row, count, left, cam);
 }
 

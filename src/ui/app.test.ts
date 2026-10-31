@@ -9,7 +9,10 @@ import { exportCode } from '../storage/code.ts';
 import { encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
 import { start } from './app.ts';
-import { frameCamera, type Camera } from './projection.ts';
+import { PANEL_SPACE } from './build.ts';
+import { buildCamera, EASE_MS, PLOT_AT } from './buildscene.ts';
+import { FRAME, frameCamera, project, type Camera } from './projection.ts';
+import { MOTION_KEY } from '../storage/settings.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
 
@@ -156,10 +159,17 @@ describe('the camera in the game (app.ts, ID-064)', () => {
     document.dispatchEvent(new KeyboardEvent(type, { key: k, bubbles: true }));
   const view = () => ({ w: window.innerWidth, h: window.innerHeight });
 
-  it('draws the fixed frame, and no key, wheel or Home moves it', () => {
+  /** The build scene's frame beside the panel (jsdom lays nothing out, so the panel's CSS width). */
+  const built = (v = view()) => buildCamera(v, v.w - PANEL_SPACE);
+  const start = (root: HTMLElement) =>
+    [...root.querySelectorAll('button')]
+      .find((b) => b.textContent?.startsWith('Start Horde'))!
+      .click();
+
+  it('draws the build scene’s fixed frame, and no key, wheel or Home moves it (ID-065)', () => {
     const { root } = boot();
     step(0);
-    const framed = frameCamera(view());
+    const framed = built();
     expect(drawnCam()).toEqual(framed);
     let t = 16;
     for (const k of ['ArrowRight', 'ArrowDown', 'd', 's', 'w', 'a', 'Home']) {
@@ -181,7 +191,133 @@ describe('the camera in the game (app.ts, ID-064)', () => {
     vi.stubGlobal('innerHeight', 720);
     window.dispatchEvent(new Event('resize'));
     step(16);
-    expect(drawnCam()).toEqual(frameCamera({ w: 1280, h: 720 }));
+    expect(drawnCam()).toEqual(built({ w: 1280, h: 720 }));
     expect(drawnCam()).not.toEqual(before);
+  });
+
+  it('draws the camp and every ghost in the build scene', () => {
+    boot();
+    step(0);
+    const call = vi.mocked(drawScene).mock.lastCall!;
+    expect(call[5]).toMatchObject({ selected: null, hover: null });
+    expect(call[5]!.ghosts.slots.length).toBeGreaterThan(0);
+    expect(call[9]).toMatchObject({ fence: 'wood' });
+    expect(call[9]!.plots.map((p) => p.id)).toEqual(['lab', 'generator', 'hut-0']);
+  });
+
+  it('Start Horde eases into the fight frame over EASE_MS, showing the camp until it lands', () => {
+    // A wide window, so the fight frame has spare ground left of its edge to slide the clip to.
+    vi.stubGlobal('innerWidth', 2560);
+    vi.stubGlobal('innerHeight', 1080);
+    const { root } = boot();
+    step(0);
+    const from = built();
+    start(root);
+    const to = frameCamera(view());
+    step(1000);
+    expect(drawnCam()).toEqual(from);
+    expect(vi.mocked(drawScene).mock.lastCall![9]).not.toBeNull();
+    expect(vi.mocked(drawScene).mock.lastCall![10]).toBe(0);
+    step(1000 + EASE_MS / 2);
+    const mid = drawnCam();
+    expect(mid.zoom).toBeGreaterThan(Math.min(from.zoom, to.zoom));
+    expect(mid.zoom).toBeLessThan(Math.max(from.zoom, to.zoom));
+    // The clip slides halfway to the fight frame's left edge.
+    const edge = project({ x: FRAME.left, y: 0 }, to).sx;
+    expect(edge).toBeGreaterThan(40);
+    expect(vi.mocked(drawScene).mock.lastCall![10]).toBeCloseTo(edge / 2, 9);
+    step(1000 + EASE_MS);
+    expect(drawnCam()).toEqual(to);
+    expect(vi.mocked(drawScene).mock.lastCall![9]).toBeNull();
+    expect(vi.mocked(drawScene).mock.lastCall![10]).toBeNull();
+  });
+
+  it('with Reduce motion on, Start Horde is a hard cut to the fight frame', () => {
+    localStorage.setItem(MOTION_KEY, '1');
+    const { root } = boot();
+    step(0);
+    start(root);
+    step(16);
+    expect(drawnCam()).toEqual(frameCamera(view()));
+    expect(vi.mocked(drawScene).mock.lastCall![9]).toBeNull();
+  });
+
+  it('hovering a plot shows a pointer and highlights it; a click opens its part of the panel', () => {
+    const { root } = boot();
+    step(0);
+    const canvas = root.querySelector('canvas')!;
+    const at = project({ ...PLOT_AT.generator }, built());
+    const pointer = (type: string) => {
+      const e = new MouseEvent(type, { bubbles: true, button: 0, clientX: at.sx, clientY: at.sy });
+      for (const [k, v] of Object.entries({
+        isPrimary: true,
+        pointerId: 1,
+        offsetX: at.sx,
+        offsetY: at.sy,
+      })) {
+        Object.defineProperty(e, k, { value: v });
+      }
+      canvas.dispatchEvent(e);
+    };
+    canvas.setPointerCapture = () => {};
+    pointer('pointermove');
+    step(16);
+    expect(canvas.style.cursor).toBe('pointer');
+    expect(vi.mocked(drawScene).mock.lastCall![5]!.hover).toMatchObject({
+      plot: { id: 'generator' },
+    });
+    // From the Camp tab, the generator's plot opens the Build tab.
+    root.querySelector<HTMLButtonElement>('#build-tab-camp')!.click();
+    pointer('pointerdown');
+    pointer('pointerup');
+    expect(root.querySelector('[aria-selected="true"]')!.textContent).toBe('Build');
+    expect(root.querySelector('.build-power')).not.toBeNull();
+  });
+
+  it('works the hovered target out each frame, so a resize under a still pointer never leaves it stale', () => {
+    const { root } = boot();
+    step(0);
+    const canvas = root.querySelector('canvas')!;
+    const at = project({ ...PLOT_AT.lab }, built());
+    const e = new MouseEvent('pointermove', { bubbles: true });
+    for (const [k, v] of Object.entries({ isPrimary: true, offsetX: at.sx, offsetY: at.sy })) {
+      Object.defineProperty(e, k, { value: v });
+    }
+    canvas.dispatchEvent(e);
+    step(16);
+    expect(vi.mocked(drawScene).mock.lastCall![5]!.hover).toMatchObject({ plot: { id: 'lab' } });
+    // A finger lifted hovers nothing; a mouse button let go still hovers.
+    const lift = (pointerType: string) => {
+      const up = new MouseEvent('pointerup', { bubbles: true });
+      for (const [k, v] of Object.entries({
+        isPrimary: true,
+        pointerType,
+        offsetX: 0,
+        offsetY: 0,
+      })) {
+        Object.defineProperty(up, k, { value: v });
+      }
+      canvas.dispatchEvent(up);
+      step(40);
+    };
+    canvas.dispatchEvent(e);
+    lift('mouse');
+    expect(vi.mocked(drawScene).mock.lastCall![5]!.hover).not.toBeNull();
+    lift('touch');
+    expect(vi.mocked(drawScene).mock.lastCall![5]!.hover).toBeNull();
+    canvas.dispatchEvent(e);
+    step(44);
+    // The frame moves under the pointer: what is under it now is worked out again.
+    vi.stubGlobal('innerWidth', 600);
+    vi.stubGlobal('innerHeight', 400);
+    window.dispatchEvent(new Event('resize'));
+    step(32);
+    expect(vi.mocked(drawScene).mock.lastCall![5]!.hover).not.toMatchObject({
+      plot: { id: 'lab' },
+    });
+    canvas.dispatchEvent(new MouseEvent('pointerleave'));
+    step(48);
+    expect(vi.mocked(drawScene).mock.lastCall![5]!.hover).toBeNull();
+    expect(canvas.style.cursor).toBe('');
   });
 });

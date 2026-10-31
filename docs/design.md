@@ -197,6 +197,29 @@ Defenders stand on **posts** the player builds and chooses between.
   the wall found a stand-off, now fixed: an enemy in the camp hunting up the
   wall line was pushed back for good by one pressed against the wall's
   front; enemies on opposite sides of the walls no longer push each other.
+- **As built (ID-065):** between hordes the base shows as the build scene
+  (§15): the camp as a walled plot. The right side is the real defence; a
+  decorative fence closes the camp's left side and runs along the top and
+  bottom of the field to the outermost column (x 1,040). It has no HP, no
+  slot and takes no click, and fights never draw it. Every empty slot the
+  core lets you build shows a dashed ghost with a "+": a segment slot (wall
+  or gate; the menu offers a gate only while the layer has none), a free
+  wall-walk spot on a built segment (a small ring with a "+" on the wall's
+  top), a free tower or ground post and an empty trap cell. A column with no
+  segment yet also shows a ghost line. A tower or ground-post slot whose
+  layer has no wall yet gets no "+": a dimmed outline, with "Needs a wall in
+  front" once on its column (a plate between the tower and ground-post
+  lines) and on the slot itself while hovered, so 40 copies never bury the
+  slots that can be built. This follows the core's rule (`buildPost`), not
+  the ticket's "on its row" wording: one segment anywhere in a layer lets
+  every row's posts be built, so a row with no wall of its own still gets a
+  "+", because showing the reason there would contradict what a click allows. Each
+  built segment has a tier badge in front of it (W, M, C, R on the tier's
+  colour); a damaged segment or trap shows a bar, and a broken segment, a
+  jammed turret or a broken trap a red cross (a turret's condition bar
+  always shows). Hovering a slot or plot outlines it and shows a pointer (a
+  free wall-walk spot rings just that spot); a click opens it in the panel
+  as before, a spot opening its segment's menu.
 
 ## 4. Horde defence (the active part)
 
@@ -1272,6 +1295,17 @@ Set before sending; they apply to any location, plaza or single building.
   turns them away, and an offer with no pick left (every one at the top rank)
   shows **Turn away** so it can always be answered. Save v9.
 
+- **As built (ID-065):** the camp's buildings stand on fixed plots in the
+  build scene (§15), between the camp line (x 120) and column 0's ground
+  posts, top to bottom: the **Research Lab** (a ghost "+" until built, then
+  its level), the **Generator** (a ghost until built, then running or
+  idle), a free plot kept for the **Workbench** (ID-034), then the **huts**:
+  one per camp upgrade bought, plus a ghost hut for the next while one is
+  left (3 at most). They replace the five fixed decorative huts. A click on
+  the Lab or the Generator opens the Build tab at its section; a hut opens
+  the Roster, whose camp section sells the upgrades. Everything is read
+  from the game as it stands: nothing new is saved.
+
 ### Camp level *(designer's call)*
 
 - **Camp XP** comes from winning hordes, and rises with the horde number
@@ -1591,8 +1625,8 @@ original outline.
   frame shows ID-057's ground fill: past the field's edges a seeded 4×4 block
   of the ground's tile variants repeats without end, on the field tiles'
   160-unit grid and with their shared seam border, so no bare background
-  shows. Effects keep the ID-045 minimum of 1 px at the frame's zoom. Until
-  ID-065 gives build mode its own scene, build mode shows the same frame.
+  shows. Effects keep the ID-045 minimum of 1 px at the frame's zoom. Build
+  mode has its own scene since ID-065.
 - **As built (ID-059):** the build panel has two tabs and a fixed footer.
   **Build** holds the picked slot's menu, Repair all, the generator and
   bank (decided each horde, so above research), then the Research Lab and
@@ -1624,6 +1658,30 @@ original outline.
   stay expanded across redraws and start collapsed on each visit. The list
   itself moves to the research screen in ID-036, which leaves this heading
   as its entry point. The backup section is left to ID-039.
+- **As built (ID-065):** between hordes the game shows its own **build
+  scene**, the camp as a walled plot (§3, §11). Its fixed frame runs from
+  x −20 (a thin margin of land outside the camp's fence) through the trap
+  strip to x 1,240, and takes in every row, the 80-unit strip above and the
+  bottom fence band. It is fitted left of the open build panel, under the
+  top bar: about 0.78× at 1280×720 and 0.91× at 1440×900, never under
+  0.5×. As with the fight frame, nothing pans or zooms, and it is worked out
+  again only on a resize. The fence is a low wall (16 units high, 8 thick)
+  in the most common tier of column 0's segments (a tie goes to the higher
+  tier; wood with none). The land outside the field is dimmed so the plot
+  reads as the focus. Ghosts are dashed outlines with a "+", each over a
+  dark edge so they stand out on the ground; the free Workbench plot is a
+  faint outline with no "+". Tier badges are the tier's letter on its
+  colour (wood brown, metal blue-grey, concrete sand, reinforced slate).
+  Name plates (fixed 11 px text on a see-through plate) name the Lab with
+  its level and the Generator with its state, under each block. The Lab and
+  the Generator are drawn as textured blocks (concrete with a lit window,
+  metal) with a dark roof edge, and a running generator glows like a lit
+  turret, until they get their own art. Built huts use the shack and tent
+  art the yard had. **Switching scenes:** "Back to build" is a hard cut to
+  the build scene as the result screen closes. Start Horde eases into the
+  fight frame over 0.4 s (camera eased in and out, the camp still drawn
+  while the fight frame's left clip slides in) and is a hard cut with
+  Reduce motion on.
 
 ## 16. Tech and platform
 
