@@ -297,15 +297,60 @@ body {
   right: 12px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-14);
   width: 280px;
-  max-height: calc(100% - 80px);
+  /* One height for every tab and view, so Start Horde in the footer never moves. */
+  height: calc(100% - 80px);
+  /* Only a window too short for the body's minimum scrolls the whole panel. */
   overflow-y: auto;
-  padding: var(--space-16);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-panel-bg);
   box-sizing: border-box;
+}
+
+/* The tabs and the footer keep their height; only the body between them scrolls (ID-059). */
+.build-tabs {
+  flex: none;
+}
+
+.build-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: var(--space-14);
+  min-height: 120px;
+  padding: var(--space-16);
+  overflow-y: auto;
+}
+
+/* The locked research row is a disclosure, not a purchase: no box, an arrow that turns. */
+.build-option.build-more {
+  /* The arrow stays beside the label; a long label wraps on its own. */
+  flex-wrap: nowrap;
+  border-style: dashed;
+  background: none;
+  color: var(--color-text-muted);
+}
+
+.build-more::before {
+  content: '▸';
+}
+
+.build-more[aria-expanded='true']::before {
+  content: '▾';
+}
+
+.build-foot {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  border-top: 1px solid var(--color-divider);
+}
+
+.build-start {
+  width: 100%;
 }
 
 .build-panel h2,
@@ -320,8 +365,7 @@ body {
 
 .build-slot,
 .build-lab,
-.build-perks,
-.build-start-section {
+.build-perks {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);

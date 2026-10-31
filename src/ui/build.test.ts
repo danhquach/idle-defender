@@ -5,11 +5,13 @@ import {
   GENERATOR,
   RESEARCH,
   RESEARCH_IDS,
+  RESEARCH_QUEUE,
   SEGMENTS,
   TRAPS,
   TURRET,
   stockOf,
 } from '../core/data.ts';
+import { QUEUE_FULL } from '../core/research.ts';
 import { researchNow } from '../core/testing.ts';
 import { durationText } from './perks.ts';
 import { newGame, type GameState } from '../core/game.ts';
@@ -23,7 +25,10 @@ import {
   pickStart,
   postKey,
   powerLines,
+  queueLines,
   relocateTargets,
+  researchLines,
+  researchList,
   stockBarText,
   trapLines,
   turretIndex,
@@ -31,6 +36,13 @@ import {
   type SlotLine,
 } from './build.ts';
 import { clockTime, postName } from './hud.ts';
+
+/** The Lab section's lines, the queue, then each research node's, as the panel lists them. */
+const labAndResearch = (g: GameState, now: number) => [
+  ...labLines(g),
+  ...queueLines(g, now),
+  ...researchLines(g, now),
+];
 
 describe('build panel', () => {
   it('shows the next horde, every building material, and the other resources the camp has', () => {
@@ -106,7 +118,7 @@ describe('build panel', () => {
 
   it('shows the Lab: not built, then each node to queue for Genes, locked with its reason', () => {
     const g = { ...newGame(), stock: stockOf({ scrap: 999, wood: 999, genes: 999 }) };
-    const lines = labLines(g, 0);
+    const lines = labAndResearch(g, 0);
     expect(lines.map((l) => (l.kind === 'action' ? l.label : l.text))).toEqual([
       'Research Lab: not built',
       'Build Research Lab',
@@ -128,7 +140,7 @@ describe('build panel', () => {
     const T = new Date(2026, 0, 1, 14, 0).getTime();
     let g: GameState = { ...newGame(), lab: 1, stock: stockOf({ genes: 100 }) };
     const queueLine = (id: string) =>
-      labLines(g, T).find((l) => l.kind === 'action' && l.label.startsWith(`Queue ${id}`));
+      labAndResearch(g, T).find((l) => l.kind === 'action' && l.label.startsWith(`Queue ${id}`));
     for (const name of ['Metal walls', 'Flashbang']) {
       const line = queueLine(name);
       if (line?.kind !== 'action') throw new Error(`no ${name}`);
@@ -136,7 +148,7 @@ describe('build panel', () => {
       if (!r.ok) throw new Error(r.reason);
       g = r.game;
     }
-    const lines = labLines(g, T);
+    const lines = labAndResearch(g, T);
     const shown = lines.map((l) => (l.kind === 'action' ? `[${l.label}]` : l.text));
     expect(shown.slice(2, 7)).toEqual([
       'Research queue',
@@ -163,13 +175,64 @@ describe('build panel', () => {
       if (!r.ok) throw new Error(r.reason);
       g = r.game;
     }
-    expect(labLines(g, 0)).toEqual([
+    expect(labAndResearch(g, 0)).toEqual([
       { kind: 'heading', text: 'Research Lab · level 2' },
       ...RESEARCH_IDS.map((id) => ({
         kind: 'note',
         text: `${RESEARCH[id].name} · ${id === 'fortify' ? 'owned' : 'researched'}`,
       })),
     ]);
+  });
+
+  it('collapses the locked research behind one row and counts what is available (ID-059)', () => {
+    const n = RESEARCH_IDS.length;
+    const none = researchList({ ...newGame(), stock: stockOf({ genes: 999 }) }, 0);
+    expect(none.heading).toBe('Research');
+    expect(none.shown).toEqual([]);
+    expect(none.locked).toHaveLength(n);
+    expect(none.more).toBe(`${n} more after the Research Lab`);
+    expect(none.less).toBe(`Hide ${n} locked`);
+    // Lab 1: the level-1 nodes open (short of Genes still shows), the rest stay locked.
+    const built: GameState = { ...newGame(), lab: 1, stock: stockOf({ genes: 999 }) };
+    const list = researchList(built, 0);
+    const poor = researchList({ ...built, stock: stockOf() }, 0);
+    const labels = (l: typeof list) => l.shown.map((x) => x.kind === 'action' && x.label);
+    expect(labels(list)).toEqual(labels(poor));
+    // Only what can be queued now counts as available; short ones show but don't count.
+    expect(list.heading).toBe(`Research · ${list.shown.length} available`);
+    expect(poor.heading).toBe('Research · 0 available');
+    expect(list.shown.length + list.locked.length).toBe(n);
+    expect(list.locked.length).toBeGreaterThan(0);
+    expect(list.locked.every((l) => l.kind === 'action' && !l.result.ok && !l.result.short)).toBe(
+      true,
+    );
+    expect(list.more).toBe(`${list.locked.length} more locked`);
+    // A queued node moves into the queue at the top, and isn't counted.
+    const first = list.shown[0]!;
+    if (first.kind !== 'action' || !first.result.ok) throw new Error('nothing to queue');
+    const after = researchList(first.result.game, 0);
+    expect(after.shown[0]).toEqual({ kind: 'heading', text: 'Research queue' });
+    expect(after.heading).toBe(`Research · ${list.shown.length - 1} available`);
+  });
+
+  it('keeps open nodes in view while the queue is full: it frees up (ID-059)', () => {
+    let g: GameState = { ...newGame(), lab: 2, stock: stockOf({ genes: 9999 }) };
+    for (let i = 0; i < RESEARCH_QUEUE.size; i++) {
+      const next = researchLines(g, 0).find((l) => l.kind === 'action' && l.result.ok);
+      if (next?.kind !== 'action' || !next.result.ok) throw new Error('nothing to queue');
+      g = next.result.game;
+    }
+    const list = researchList(g, 0);
+    expect(list.heading).toBe('Research · 0 available');
+    const full = list.shown.filter(
+      (l) => l.kind === 'action' && !l.result.ok && l.result.reason === QUEUE_FULL,
+    );
+    expect(full.length).toBeGreaterThan(0);
+    expect(
+      list.locked.some(
+        (l) => l.kind === 'action' && !l.result.ok && l.result.reason === QUEUE_FULL,
+      ),
+    ).toBe(false);
   });
 
   it('shows the generator to build, the Gas and the batteries in storage', () => {

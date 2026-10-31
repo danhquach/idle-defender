@@ -4,7 +4,7 @@
 // only as a tooltip.
 import { MATERIALS, type Stock } from '../core/data.ts';
 
-// Primary has no user yet: it is for the redesign tickets that follow (Start Horde, ID-059).
+// Primary is the build panel's Start Horde (ID-059).
 export const BUTTON_VARIANTS = ['primary', 'secondary', 'unaffordable', 'locked'] as const;
 export type ButtonVariant = (typeof BUTTON_VARIANTS)[number];
 
