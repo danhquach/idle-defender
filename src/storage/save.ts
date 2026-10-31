@@ -18,6 +18,7 @@ import {
 import {
   campLevelOf,
   campSlots,
+  carLimit,
   newCamp,
   NO_PICKS,
   type Camp,
@@ -34,7 +35,6 @@ import {
 import {
   AFFIXES,
   ARMOURY_CAP,
-  BANK_CAP,
   BATTERY_IDS,
   BUILDING_MATERIALS,
   CAMP_PICK_IDS,
@@ -43,6 +43,7 @@ import {
   CAMP_UPGRADES,
   CAR,
   COLUMNS,
+  HORROR,
   ITEMS,
   buildingsOf,
   FOCUS_IDS,
@@ -55,6 +56,7 @@ import {
   ORDER_IDS,
   PATROL,
   PERK_IDS,
+  PERK_LEVEL,
   PLACE_IDS,
   PLAZAS,
   START_PERK,
@@ -100,8 +102,15 @@ import {
   type ReportWeapon,
 } from '../core/patrol.ts';
 import { loadoutError, loadoutFrom, type Loadout } from '../core/loadout.ts';
-import { perkSlots, unlockedPerks } from '../core/perks.ts';
-import { loadBatteries, newPower, type Power } from '../core/power.ts';
+import { newPerkLevels, perkSlots, type PerkLevels } from '../core/perks.ts';
+import { bankCap, loadBatteries, newPower, type Power } from '../core/power.ts';
+import {
+  entryOf,
+  newQueue,
+  queueLock,
+  type QueueId,
+  type ResearchQueue,
+} from '../core/research.ts';
 import { earnedPoints, levelOf, NO_STATS, spentPoints, xpForLevel } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 
@@ -109,6 +118,9 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 11 since research in Genes (ID-035): a v10 save has no research queue, and owns the
+ * starting perk and each perk researched, at level 1.
+ *
  * 10 since the car (ID-030): a v9 save's camp has no car and its patrols went on foot.
  *
  * 9 since survivors (ID-032): a v8 save's reports have no survivors waiting and its camp
@@ -128,7 +140,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -162,6 +174,11 @@ const UID = new RegExp(
 );
 /** A survivor's id (design §10): `s`, the patrol and its try; or `c` and the camp level. */
 const SURVIVOR_ID = /^(?:s([1-9][0-9]{0,5})-([0-9])|c([1-9][0-9]{0,5}))$/;
+/** Every research queue entry: each node, and each perk's next level. */
+const QUEUE_IDS: readonly QueueId[] = [
+  ...RESEARCH_IDS,
+  ...PERK_IDS.map((p): QueueId => `level-${p}`),
+];
 /** Seeds are 32-bit. */
 const MAX_SEED = 0xffffffff;
 /** Only a free weapon is held by id; any other is an owned item with a uid. */
@@ -248,20 +265,21 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
+  if (![SAVE_VERSION, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
   const ver = o.v as number;
   const materials = ver >= 4 ? MATERIALS : BUILDING_MATERIALS;
   const patrols = ver >= 8 ? 'plazas' : ver >= 6 ? 'risk' : ver === 5 ? 'patrols' : null;
   const camp = ver >= 7 ? (ver >= 10 ? 'cars' : ver === 9 ? 'survivors' : 'camp') : null;
+  const queue = ver >= 11;
   if (ver === 1) {
     return {
-      game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp),
+      game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp, queue),
       savedAt,
       grew: true,
     };
   }
-  return { game: readGame(o.game, savedAt, GRID, materials, patrols, camp), savedAt };
+  return { game: readGame(o.game, savedAt, GRID, materials, patrols, camp, queue), savedAt };
 }
 
 function readGame(
@@ -273,6 +291,8 @@ function readGame(
   patrols: 'patrols' | 'risk' | 'plazas' | null,
   /** What the save's camp carries: none (v6 and older), no survivors yet (v7, v8), no car yet (v9), or all of it. */
   hasCamp: 'camp' | 'survivors' | 'cars' | null,
+  /** Whether the save has the research queue and perk levels (v11). */
+  hasQueue: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -299,11 +319,16 @@ function readGame(
     ...(patrols ? ['patrols', 'patrolsSent', 'reports'] : []),
     ...(patrols === 'risk' || patrols === 'plazas' ? ['leftBehind'] : []),
     ...(hasCamp ? ['camp'] : []),
+    ...(hasQueue ? ['queue', 'perkLevels'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
   const research = old.lab ? [] : readResearch(o.research, lab, tiers);
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
+  const perkLevels = hasQueue
+    ? readPerkLevels(o.perkLevels, research, hordeNumber)
+    : ownedLevels(research);
+  const queue = hasQueue ? readQueue(o.queue, savedAt, { lab, research, perkLevels }) : newQueue();
   const patrolsSent = patrols ? int(o.patrolsSent, 0, PATROL.max) : 0;
   const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent);
   const cars = hasCamp === 'cars';
@@ -324,15 +349,17 @@ function readGame(
       : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber, patrolsSent)),
     lab,
     research,
-    power: old.power ? newPower() : readPower(o.power, savedAt),
-    perks: old.perks ? [START_PERK] : readPerks(o.perks, research),
+    queue,
+    power: old.power ? newPower() : readPower(o.power, savedAt, bankCap({ research })),
+    perks: old.perks ? [START_PERK] : readPerks(o.perks, research, perkLevels),
+    perkLevels,
     patrols: out,
     patrolsSent,
     reports: patrols
       ? readReports(o.reports, savedAt, patrolsSent, out, risk, plazas, survivors)
       : [],
     leftBehind: risk ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent, plazas) : [],
-    camp: hasCamp ? readCamp(o.camp, savedAt, survivors, cars) : newCamp(),
+    camp: hasCamp ? readCamp(o.camp, savedAt, survivors, cars, carLimit({ research })) : newCamp(),
   };
   // Each car out is one the camp built, on one patrol at a time.
   const taken = out.flatMap((p) => (p.car === null ? [] : [p.car]));
@@ -387,7 +414,13 @@ function readGame(
  * still below the top. The floor's clock never runs past a recruit's wait from the save
  * (a clock set back is cut to that).
  */
-function readCamp(v: unknown, savedAt: number, survivors: boolean, cars: boolean): Camp {
+function readCamp(
+  v: unknown,
+  savedAt: number,
+  survivors: boolean,
+  cars: boolean,
+  maxCars: number,
+): Camp {
   const o = obj(v, [
     'upgrades',
     'xp',
@@ -428,7 +461,7 @@ function readCamp(v: unknown, savedAt: number, survivors: boolean, cars: boolean
         ? null
         : Math.min(int(o.recruitAt, 0, MAX_TIME), savedAt + CAMP_SIZE.recruitMs),
     recruits: int(o.recruits, 0, MAX_COUNT),
-    cars: cars ? int(o.cars, 0, CAR.limit) : 0,
+    cars: cars ? int(o.cars, 0, maxCars) : 0,
   };
 }
 
@@ -458,17 +491,73 @@ function readResearch(v: unknown, lab: number, tiers: readonly Tier[]): Research
   return done;
 }
 
-/** Equipped perks: known, once each, unlocked, and no more than the slots researched. */
-function readPerks(v: unknown, research: readonly ResearchId[]): PerkId[] {
-  const unlocked = unlockedPerks({ research });
+/** Equipped perks: known, once each, owned, and no more than the slots researched. */
+function readPerks(
+  v: unknown,
+  research: readonly ResearchId[],
+  levels: Readonly<PerkLevels>,
+): PerkId[] {
   const perks: PerkId[] = [];
   for (const x of arr(v, 0, perkSlots({ research }))) {
     const id = oneOf(x, PERK_IDS);
     if (perks.includes(id)) fail('perk twice');
-    if (!unlocked.includes(id)) fail('perk not unlocked');
+    if (levels[id] < 1) fail('perk not owned');
     perks.push(id);
   }
   return perks;
+}
+
+/** A v10 save's perk levels: the starting perk and each one researched, at level 1. */
+function ownedLevels(research: readonly ResearchId[]): PerkLevels {
+  const levels = newPerkLevels();
+  for (const id of PERK_IDS) if ((research as readonly string[]).includes(id)) levels[id] = 1;
+  return levels;
+}
+
+/**
+ * Each perk's level, 0 (not owned) to the top: the starting perk and each one researched
+ * owned, and no more owned besides than the boss hordes won could have given.
+ */
+function readPerkLevels(
+  v: unknown,
+  research: readonly ResearchId[],
+  hordeNumber: number,
+): PerkLevels {
+  const o = obj(v, PERK_IDS);
+  const levels = newPerkLevels();
+  for (const id of PERK_IDS) levels[id] = int(o[id], 0, PERK_LEVEL.top);
+  const base = ownedLevels(research);
+  if (PERK_IDS.some((id) => base[id] > levels[id])) fail('researched perk not owned');
+  const gifts = PERK_IDS.filter((id) => levels[id] > 0 && base[id] === 0).length;
+  if (gifts > Math.floor((hordeNumber - 1) / HORROR.every)) fail('perk from no boss');
+  return levels;
+}
+
+/**
+ * The research queue: known entries, once each, each one the game would let be queued
+ * behind the ones before it (Lab level, earlier node, perk owned, the queue's size). The
+ * running one ends no later than its full time after the save (a clock set back is cut
+ * to that, as rests are); an empty queue has no end.
+ */
+function readQueue(
+  v: unknown,
+  savedAt: number,
+  game: Pick<GameState, 'lab' | 'research' | 'perkLevels'>,
+): ResearchQueue {
+  const o = obj(v, ['ids', 'endsAt']);
+  const ids: QueueId[] = [];
+  for (const x of arr(o.ids, 0, QUEUE_IDS.length)) {
+    const id = oneOf(x, QUEUE_IDS);
+    if (queueLock({ ...game, queue: { ids, endsAt: null } }, id) !== null) fail('queue entry');
+    ids.push(id);
+  }
+  const head = ids[0];
+  if (head === undefined) {
+    if (o.endsAt !== null) fail('empty queue with an end');
+    return newQueue();
+  }
+  const full = entryOf(game, head).minutes * 60_000;
+  return { ids, endsAt: Math.min(int(o.endsAt, 0, MAX_TIME), savedAt + full) };
 }
 
 /** Exactly `materials`, each a whole count; any the save predates start at 0. */
@@ -483,7 +572,7 @@ function readStock(v: unknown, materials: readonly Material[]): Stock {
  * The bank (0 to the cap), whole counts of Gas and each battery, and the generator.
  * Its clock never runs past the save: a later one (a clock set back) is cut to it.
  */
-function readPower(v: unknown, savedAt: number): Power {
+function readPower(v: unknown, savedAt: number, cap: number): Power {
   const o = obj(v, ['bank', 'gas', 'batteries', 'generator']);
   const b = obj(o.batteries, BATTERY_IDS);
   const batteries = {} as Power['batteries'];
@@ -493,7 +582,7 @@ function readPower(v: unknown, savedAt: number): Power {
     const g = obj(o.generator, ['at']);
     generator = { at: g.at === null ? null : Math.min(int(g.at, 0, MAX_TIME), savedAt) };
   }
-  return { bank: num(o.bank, 0, BANK_CAP), gas: int(o.gas, 0, MAX_COUNT), batteries, generator };
+  return { bank: num(o.bank, 0, cap), gas: int(o.gas, 0, MAX_COUNT), batteries, generator };
 }
 
 function readBase(
@@ -809,7 +898,7 @@ function readPatrols(
       sentHorde,
       strength,
       seed: int(o.seed, 0, MAX_SEED),
-      car: !cars || o.car === null ? null : int(o.car, 0, CAR.limit - 1),
+      car: !cars || o.car === null ? null : int(o.car, 0, CAR.limit + CAR.more - 1),
     };
   });
   for (let i = 1; i < patrols.length; i++) {

@@ -1125,7 +1125,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 11, '1', '10', 1.5, null]) {
+    for (const v of [0, 12, '1', '11', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1306,6 +1306,7 @@ describe('save: commander perks (ID-020)', () => {
         ['overclock', 'steady-fire'],
       ),
       tiers: ['wood', 'metal'],
+      perkLevels: { ...newGame().perkLevels, overclock: 1 },
     };
     expect(raw(game)?.game).toEqual(game);
     expect(raw(lab2([], []))?.game.perks).toEqual([]); // an empty slot is fine
@@ -1374,7 +1375,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(10);
+    expect(SAVE_VERSION).toBe(11);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -2161,8 +2162,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 10 (survivors, then the car, came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(10);
+  it('is version 11 (survivors, the car, then the research queue came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(11);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {

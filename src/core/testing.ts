@@ -2,7 +2,9 @@
 import { newBase } from './base.ts';
 import { STEP } from './data.ts';
 import { tick, type Enemy, type HordeSetup, type HordeState } from './horde.ts';
+import type { GameState } from './game.ts';
 import type { Loadout } from './loadout.ts';
+import { advanceResearch, queueResearch, type GameResult, type QueueId } from './research.ts';
 
 /** A pistol and nothing else: a Gunner. */
 export const pistol = (): Loadout => ({ primary: 'pistol', secondary: null, item: null });
@@ -53,4 +55,15 @@ export function enemy(s: HordeState, e: Partial<Enemy>): Enemy {
   };
   s.enemies.push(made);
   return made;
+}
+
+/**
+ * Researches `id` at once, a test shortcut past real time: queued with the Genes it needs
+ * granted, then the queue run out. The stock's Genes are left as they were.
+ */
+export function researchNow(game: GameState, id: QueueId): GameResult {
+  const r = queueResearch({ ...game, stock: { ...game.stock, genes: 1e9 } }, id, 0);
+  if (!r.ok) return r;
+  const done = advanceResearch(r.game, 1e13);
+  return { ok: true, game: { ...done, stock: { ...done.stock, genes: game.stock.genes } } };
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Design §5, as built ID-021: the build panel opens the perk loadout and the roster in
 // its place; Equip and Unequip hand the new game on; Back returns focus to the opener.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildSegment, type Base } from '../core/base.ts';
 import { stockOf } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
@@ -32,6 +32,29 @@ function panelFor(game: GameState) {
   const title = (): string | null | undefined => root.querySelector('.build-title')?.textContent;
   return { panel, games, button, title };
 }
+
+describe('the research queue in the build panel (ID-035)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('queues at the click time, and a Cancel the clock has overtaken says why and hands on nothing', () => {
+    const T = Date.UTC(2026, 9, 31, 12, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(T);
+    const g: GameState = { ...newGame(), lab: 1, stock: stockOf({ genes: 50 }) };
+    const { button, games } = panelFor(g);
+    vi.setSystemTime(T + 60_000);
+    button('Queue Metal walls').click();
+    expect(games).toHaveLength(1);
+    expect(games[0]!.queue).toEqual({ ids: ['metal-walls'], endsAt: T + 16 * 60_000 });
+    // The node finishes before Cancel is clicked: refused in place, not refunded.
+    vi.setSystemTime(T + 60 * 60_000);
+    const cancel = button('Cancel Metal walls');
+    cancel.click();
+    expect(games).toHaveLength(1);
+    expect(cancel.textContent).toContain('Not in the queue');
+    expect(cancel.title).toBe('Not in the queue');
+  });
+});
 
 describe('perk loadout in the build panel', () => {
   it('Perks opens the loadout with Back focused; Back returns focus to Perks', () => {
@@ -64,7 +87,9 @@ describe('perk loadout in the build panel', () => {
   });
 
   it('a refused Equip is disabled with the reason and hands on nothing', () => {
-    const { button, games } = panelFor({ ...newGame(), research: ['fortify'] });
+    const g = { ...newGame(), research: ['fortify' as const] };
+    g.perkLevels.fortify = 1; // researched perks are owned
+    const { button, games } = panelFor(g);
     button('Perks').click();
     const equip = button('Equip Fortify');
     expect(equip.disabled).toBe(true);

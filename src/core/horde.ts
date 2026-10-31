@@ -9,7 +9,9 @@ import {
   type TurretMount,
 } from './base.ts';
 import { levelUp, masterGunner, postUsable } from './cards.ts';
+import { levelScale } from './perks.ts';
 import {
+  BANK_CAP,
   CAMP,
   CARD,
   COLUMNS,
@@ -35,6 +37,7 @@ import {
   MUZZLE_FLASH,
   MUTANTS,
   IMPACT_FLASH,
+  TRAP_RESEARCH,
   TRAP_STRIP,
   TRAPS,
   TURRET,
@@ -56,6 +59,7 @@ import {
   type EnemyKind,
   type HorrorAbility,
   type PerkId,
+  type ResearchId,
   type SkillId,
   type Stats,
   type Tracer,
@@ -101,7 +105,9 @@ export type UpgradeId =
   | 'spiked-walls'
   | 'slow-field'
   | 'recharge'
-  | 'power-surge';
+  | 'power-surge'
+  | 'hollow-points'
+  | 'field-repairs';
 
 export interface DefenderSpec {
   id: string;
@@ -132,6 +138,12 @@ export interface HordeSetup {
   skills: readonly SkillId[];
   /** The commander's equipped perks (design §5). */
   perks: readonly PerkId[];
+  /** Each perk's level (design §5, ID-035); an equipped perk missing here is level 1. */
+  perkLevels?: Readonly<Partial<Record<PerkId, number>>>;
+  /** Research done (ID-035): trap upgrades and research cards act in the fight. */
+  research?: readonly ResearchId[];
+  /** The battery bank's cap (design §7); `BANK_CAP` by default. */
+  bankCap?: number;
   /** Kill-cash factor and starting cash from camp-level picks (design §11); 1 and 0 by default. */
   cashRate?: number;
   startCash?: number;
@@ -399,6 +411,8 @@ export interface HordeState {
   traps: Trap[];
   /** Battery bank charge left (design §7). */
   energy: number;
+  /** The bank's cap, which the Recharge card fills up to (ID-035). */
+  bankCap: number;
   /** When the fight started (ms since the epoch). */
   startedAt: number;
   defenders: Defender[];
@@ -434,8 +448,14 @@ export interface HordeState {
   cooldowns: Record<SkillId, number>;
   /** The commander's perks, fixed for the fight (design §5). */
   perks: PerkId[];
-  /** The wave Second Look's reroll was used in; 0 = not yet. */
+  /** Each equipped perk's level, fixed for the fight (ID-035). */
+  perkLevels: Partial<Record<PerkId, number>>;
+  /** Research done when the fight started (ID-035). */
+  research: ResearchId[];
+  /** The wave Second Look's reroll was last used in; 0 = not yet. */
   rerolledWave: number;
+  /** Rerolls used in `rerolledWave`. */
+  rerolls: number;
   fires: Fire[];
   blasts: Blast[];
   incoming: Incoming[];
@@ -476,16 +496,22 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     startedAt,
     skills,
     perks,
+    perkLevels = {},
+    research = [],
+    bankCap = BANK_CAP,
     cashRate = 1,
     startCash = 0,
   } = setup;
+  const levels: Partial<Record<PerkId, number>> = {};
+  for (const id of perks) levels[id] = perkLevels[id] ?? 1;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
   const { layers, posts, turrets, traps } = layoutOf(base);
-  if (perks.includes('fortify')) {
+  const fortify = perkFactor({ perks: [...perks], perkLevels: levels }, 'fortify', PERK.fortify);
+  if (fortify !== 1) {
     for (const seg of layers.flatMap((l) => l.segments)) {
-      seg.hp *= PERK.fortify;
-      seg.maxHp *= PERK.fortify;
+      seg.hp *= fortify;
+      seg.maxHp *= fortify;
     }
   }
   const startPost = posts[startPostId];
@@ -510,6 +536,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     turrets,
     traps,
     energy: bank,
+    bankCap,
     startedAt,
     defenders: [standing(start, startPost, 0)],
     bench: roster.filter((d) => d !== start).map((d) => ({ ...d })),
@@ -531,7 +558,10 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     skills: [...skills],
     cooldowns: { flashbang: 0, molotov: 0, airstrike: 0 },
     perks: [...perks],
+    perkLevels: levels,
+    research: [...research],
     rerolledWave: 0,
+    rerolls: 0,
     fires: [],
     blasts: [],
     incoming: [],
@@ -682,6 +712,16 @@ export const took = (state: Pick<HordeState, 'taken'>, id: UpgradeId): boolean =
 export const perkOn = (state: Pick<HordeState, 'perks'>, id: PerkId): boolean =>
   state.perks.includes(id);
 
+type PerkView = Pick<HordeState, 'perks' | 'perkLevels'>;
+
+/** How much of its level-1 bonus perk `id` gives in this fight: 0 unequipped, else 1, 1.5, 2 by level. */
+export const perkScale = (state: PerkView, id: PerkId): number =>
+  perkOn(state, id) ? levelScale(state.perkLevels[id] ?? 1) : 0;
+
+/** Perk `id`'s factor, from its level-1 factor `base` (design §5, ID-035): 1 + (base − 1) × scale. */
+export const perkFactor = (state: PerkView, id: PerkId, base: number): number =>
+  1 + (base - 1) * perkScale(state, id);
+
 /**
  * Damage and fire-rate factor a turret gets from the best standing Engineer within
  * their tool's reach (never stacked): `ENGINEER_BUFF`, scaled by Tech and title.
@@ -752,7 +792,7 @@ export function baseAfter(base: Base, horde: HordeState): Base {
       // EPS: float noise from card maths (150 + 1e-12) must not round up a whole point.
       // Fortify's extra HP lasts the fight: the base keeps the same share of its own max.
       if (slot) {
-        const fortify = perkOn(horde, 'fortify') ? PERK.fortify : 1;
+        const fortify = perkFactor(horde, 'fortify', PERK.fortify);
         const hp = Math.ceil(horde.layers[i]!.segments[row]!.hp / fortify - EPS);
         slot.hp = Math.min(slot.maxHp, Math.max(0, hp));
       }
@@ -1318,7 +1358,7 @@ function fire(s: HordeState, rng: Rng): void {
           boost(s, 'fireRate') *
           engineerBuff(s, defender) *
           fireRateFactor(defender, id) *
-          (gun && perkOn(s, 'steady-fire') ? PERK.steadyFire : 1));
+          (gun ? perkFactor(s, 'steady-fire', PERK.steadyFire) : 1));
     if (gun) {
       defender.ammo[slot] -= 1;
       if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadTime(defender, id);
@@ -1353,7 +1393,7 @@ function fireTurrets(s: HordeState, rng: Rng): void {
         TURRET.damage *
         buff *
         boost(s, 'damage') *
-        (perkOn(s, 'overclock') ? PERK.overclock.damage : 1),
+        perkFactor(s, 'overclock', PERK.overclock.damage),
       pierce: 0,
       pellets: 1,
       tracer: TURRET.tracer,
@@ -1364,11 +1404,14 @@ function fireTurrets(s: HordeState, rng: Rng): void {
   }
 }
 
-/** Turret charge-draw factor from Overclock and Power Saver (design §5); they multiply. */
-export function drawFactor(s: Pick<HordeState, 'perks'>): number {
+/**
+ * Turret charge-draw factor from Overclock and Power Saver (design §5); they multiply.
+ * Overclock's extra draw is its cost and stays at its level-1 size.
+ */
+export function drawFactor(s: PerkView): number {
   return (
     (perkOn(s, 'overclock') ? PERK.overclock.draw : 1) *
-    (perkOn(s, 'power-saver') ? PERK.powerSaver : 1)
+    perkFactor(s, 'power-saver', PERK.powerSaver)
   );
 }
 
@@ -1389,7 +1432,8 @@ function hunger(s: HordeState, d: Defender, kills: number): void {
       }
     }
   }
-  if (best) best.hp = Math.min(best.maxHp, best.hp + PERK.butcherHeal * kills);
+  const heal = PERK.butcherHeal * perkScale(s, 'butchers-hunger') * kills;
+  if (best) best.hp = Math.min(best.maxHp, best.hp + heal);
 }
 
 /**
@@ -1450,7 +1494,7 @@ export function removeDead(s: HordeState): void {
       for (const o of around(s, e, CARD.burn.spread)) o.burnUntil = s.time + CARD.burn.seconds;
     }
     s.xp += ENEMIES[e.kind].xp;
-    s.cash += ENEMIES[e.kind].cash * (perkOn(s, 'scavengers-eye') ? PERK.cash : 1) * s.cashRate;
+    s.cash += ENEMIES[e.kind].cash * perkFactor(s, 'scavengers-eye', PERK.cash) * s.cashRate;
     if (MUTANTS.includes(e.kind)) s.mutantKills += 1;
     if (e.id === s.focusId) s.focusId = null;
   }
@@ -1692,7 +1736,7 @@ function springTraps(s: HordeState): void {
     if (!t || t.durability <= 0 || t.hit.includes(e.id)) continue;
     t.hit.push(e.id);
     t.durability -= 1;
-    e.hp = Math.max(0, e.hp - TRAPS[t.kind].damage);
+    e.hp = Math.max(0, e.hp - trapStats(s, t.kind).damage);
   }
 }
 
@@ -1703,7 +1747,24 @@ function springTraps(s: HordeState): void {
  */
 function trapSlow(s: HordeState, e: Enemy): number {
   const t = trapUnder(s, e);
-  return t?.hit.includes(e.id) ? TRAPS[t.kind].slow : 1;
+  return t?.hit.includes(e.id) ? trapStats(s, t.kind).slow : 1;
+}
+
+/** A basic trap's damage and slow in this fight, with its research upgrade (ID-035). */
+export function trapStats(
+  s: Pick<HordeState, 'research'>,
+  kind: TrapKind,
+): { damage: number; slow: number } {
+  const { damage, slow } = TRAPS[kind];
+  const spikes = TRAP_RESEARCH['sharpened-spikes'];
+  const wire = TRAP_RESEARCH['razor-wire'];
+  return {
+    damage:
+      kind === spikes.kind && s.research.includes('sharpened-spikes')
+        ? damage * spikes.damage
+        : damage,
+    slow: kind === wire.kind && s.research.includes('razor-wire') ? wire.slow : slow,
+  };
 }
 
 /**

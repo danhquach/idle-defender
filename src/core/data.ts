@@ -566,6 +566,8 @@ export const RARITY: Readonly<
  * damage; radii and ranges in px; times in s.
  */
 export const CARD = {
+  /** Hollow Points (a research card, ID-035): squad damage factor. */
+  hollowPoints: 1.4,
   ricochet: { range: 150, share: 0.25 },
   split: { angle: 10, share: 0.5 },
   burn: { dps: 3, seconds: 3, spread: 40 },
@@ -633,7 +635,10 @@ export const LAB_LEVELS: readonly Partial<Stock>[] = [
   { wood: 80, scrap: 60 },
 ];
 
-/** Active skills and commander perks are researched under their own ids (ID-019, ID-020). */
+/**
+ * Active skills, commander perks and research cards are researched under their own ids
+ * (ID-019, ID-020, ID-035).
+ */
 export type ResearchId =
   | 'metal-walls'
   | 'auto-turret'
@@ -641,64 +646,97 @@ export type ResearchId =
   | 'molotov'
   | 'airstrike'
   | Exclude<PerkId, typeof START_PERK>
-  | PerkSlotId;
+  | PerkSlotId
+  | 'high-capacity-batteries'
+  | 'military-batteries'
+  | 'sharpened-spikes'
+  | 'razor-wire'
+  | ChemicalTrap
+  | ResearchCard
+  | 'more-cars';
+/** A research node's branch, for grouping on the research screen (ID-036). */
+export type Branch = 'barriers' | 'skills' | 'perks' | 'power' | 'traps' | 'cards' | 'camp';
 /**
- * A research node: the Lab level and earlier node it needs, what it costs, and the
- * barrier tier it unlocks, if any. Completes at once (design §11, as built ID-014).
+ * A research node (design §11, as built ID-035): its branch, the Lab level and earlier
+ * node it needs, its price in Mutated Genes, the minutes it takes in the queue, and the
+ * barrier tier it unlocks, if any.
  */
-export const RESEARCH: Readonly<
-  Record<
-    ResearchId,
-    {
-      readonly name: string;
-      readonly lab: number;
-      readonly needs: ResearchId | null;
-      readonly cost: Partial<Stock>;
-      readonly tier: Tier | null;
-    }
-  >
-> = {
-  'metal-walls': {
-    name: 'Metal walls',
-    lab: 1,
-    needs: null,
-    cost: { scrap: 40, wood: 40 },
-    tier: 'metal',
-  },
-  'auto-turret': {
-    name: 'Auto-turret',
-    lab: 2,
-    needs: 'metal-walls',
-    cost: { scrap: 60, wood: 40 },
-    tier: null,
-  },
-  flashbang: { name: 'Flashbang', lab: 1, needs: null, cost: { scrap: 30, wood: 20 }, tier: null },
-  molotov: {
-    name: 'Molotov',
-    lab: 1,
-    needs: 'flashbang',
-    cost: { scrap: 30, wood: 30 },
-    tier: null,
-  },
-  airstrike: {
-    name: 'Airstrike',
-    lab: 2,
-    needs: 'molotov',
-    cost: { scrap: 60, wood: 40 },
-    tier: null,
-  },
-  'scavengers-eye': perkNode("Scavenger's Eye", 1, null, { scrap: 30, wood: 30 }),
-  fortify: perkNode('Fortify', 1, null, { scrap: 40, wood: 40 }),
-  'butchers-hunger': perkNode("Butcher's Hunger", 1, null, { scrap: 30, wood: 30 }),
-  'rally-call': perkNode('Rally Call', 1, null, { scrap: 30, wood: 20 }),
-  'second-look': perkNode('Second Look', 2, null, { scrap: 60, wood: 40 }),
-  overclock: perkNode('Overclock', 2, 'auto-turret', { scrap: 60, wood: 40 }),
-  'power-saver': perkNode('Power Saver', 2, 'auto-turret', { scrap: 60, wood: 40 }),
-  'perk-slot-2': perkNode('Perk slot 2', 1, null, { scrap: 50, wood: 50 }),
-  'perk-slot-3': perkNode('Perk slot 3', 2, 'perk-slot-2', { scrap: 80, wood: 80 }),
-  'perk-slot-4': perkNode('Perk slot 4', 2, 'perk-slot-3', { scrap: 120, wood: 120 }),
+export interface ResearchNode {
+  readonly name: string;
+  readonly branch: Branch;
+  readonly lab: number;
+  readonly needs: ResearchId | null;
+  readonly genes: number;
+  readonly minutes: number;
+  readonly tier: Tier | null;
+}
+const node = (
+  name: string,
+  branch: Branch,
+  lab: number,
+  needs: ResearchId | null,
+  genes: number,
+  minutes: number,
+  tier: Tier | null = null,
+): ResearchNode => ({ name, branch, lab, needs, genes, minutes, tier });
+/** The research tree (design §11, ID-035 starting points). */
+export const RESEARCH: Readonly<Record<ResearchId, ResearchNode>> = {
+  'metal-walls': node('Metal walls', 'barriers', 1, null, 10, 15, 'metal'),
+  'auto-turret': node('Auto-turret', 'power', 2, 'metal-walls', 40, 60),
+  flashbang: node('Flashbang', 'skills', 1, null, 10, 15),
+  molotov: node('Molotov', 'skills', 1, 'flashbang', 20, 30),
+  airstrike: node('Airstrike', 'skills', 2, 'molotov', 60, 60),
+  'scavengers-eye': node("Scavenger's Eye", 'perks', 1, null, 15, 30),
+  fortify: node('Fortify', 'perks', 1, null, 20, 30),
+  'butchers-hunger': node("Butcher's Hunger", 'perks', 1, null, 15, 30),
+  'rally-call': node('Rally Call', 'perks', 1, null, 15, 30),
+  'second-look': node('Second Look', 'perks', 2, null, 60, 60),
+  overclock: node('Overclock', 'perks', 2, 'auto-turret', 80, 90),
+  'power-saver': node('Power Saver', 'perks', 2, 'auto-turret', 80, 90),
+  'perk-slot-2': node('Perk slot 2', 'perks', 1, null, 15, 45),
+  'perk-slot-3': node('Perk slot 3', 'perks', 2, 'perk-slot-2', 120, 90),
+  'perk-slot-4': node('Perk slot 4', 'perks', 2, 'perk-slot-3', 300, 120),
+  'high-capacity-batteries': node('High-capacity batteries', 'power', 2, 'auto-turret', 60, 60),
+  'military-batteries': node('Military batteries', 'power', 2, 'high-capacity-batteries', 200, 120),
+  'sharpened-spikes': node('Sharpened spikes', 'traps', 1, null, 10, 15),
+  'razor-wire': node('Razor wire', 'traps', 1, null, 10, 15),
+  'glue-traps': node('Glue traps', 'traps', 1, null, 20, 30),
+  'incendiary-traps': node('Incendiary traps', 'traps', 2, 'glue-traps', 60, 60),
+  'corrosive-traps': node('Corrosive traps', 'traps', 2, 'glue-traps', 100, 90),
+  'paralyzing-traps': node('Paralyzing traps', 'traps', 2, 'glue-traps', 150, 120),
+  'hollow-points': node('Hollow Points card', 'cards', 1, null, 25, 45),
+  'field-repairs': node('Field Repairs card', 'cards', 2, null, 80, 90),
+  'more-cars': node('More cars', 'camp', 2, null, 150, 120),
 };
 export const RESEARCH_IDS = Object.keys(RESEARCH) as ResearchId[];
+
+/** Chemical trap kits, each unlocked by its own node and crafted at the workbench (ID-034). */
+export type ChemicalTrap =
+  'glue-traps' | 'incendiary-traps' | 'corrosive-traps' | 'paralyzing-traps';
+/** Upgrade cards that join the offer pool once researched (design §8, ID-035). */
+export type ResearchCard = 'hollow-points' | 'field-repairs';
+export const RESEARCH_CARDS: readonly ResearchCard[] = ['hollow-points', 'field-repairs'];
+/** Battery nodes: the battery each lets the workbench craft (ID-034), and the bank cap each adds. */
+export const BATTERY_RESEARCH: Readonly<
+  Record<'high-capacity-batteries' | 'military-batteries', { battery: Battery; bankCap: number }>
+> = {
+  'high-capacity-batteries': { battery: 'high-capacity', bankCap: 500 },
+  'military-batteries': { battery: 'military', bankCap: 500 },
+};
+/** Basic trap upgrades: Sharpened spikes multiply spike damage; Razor wire holds tighter. */
+export const TRAP_RESEARCH = {
+  'sharpened-spikes': { kind: 'spikes', damage: 1.5 },
+  'razor-wire': { kind: 'wire', slow: 0.35 },
+} as const;
+/**
+ * The research queue (ID-035): one node runs at a time, with up to `size − 1` waiting.
+ * Perk levels share it: owned perks go up to `top`, each level adding `step` of the perk's
+ * level-1 bonus; level L + 1 costs `genes[L − 1]` and takes `minutes[L − 1]`.
+ */
+export const RESEARCH_QUEUE = { size: 4 } as const;
+export const PERK_LEVEL = { top: 3, step: 0.5, genes: [75, 250], minutes: [60, 120] } as const;
+/** What a boss horde win pays in Genes instead of a perk, once every perk is owned. */
+export const BOSS_PERK_GENES = 10;
 
 /** A turret sits on a tower or a wall-walk spot of the grid (design §7). */
 export type TurretMount = Extract<PostKind, 'tower' | 'wall-walk'>;
@@ -747,7 +785,7 @@ export const BATTERIES: Readonly<
   military: { name: 'Military', charge: 250 },
 };
 export const BATTERY_IDS = Object.keys(BATTERIES) as Battery[];
-/** The bank holds at most this much charge: 10 Standard batteries' worth. */
+/** The bank holds at most this much charge: 10 Standard batteries' worth, more with research (ID-035). */
 export const BANK_CAP = 10 * BATTERIES.standard.charge;
 /**
  * The generator (design §7): built once for `cost`; burns 1 Gas every `gasMs` of real
@@ -911,15 +949,6 @@ export const PERK = {
   /** Power Saver: turret charge-draw factor. */
   powerSaver: 0.75,
 } as const;
-
-function perkNode(
-  name: string,
-  lab: number,
-  needs: ResearchId | null,
-  cost: Partial<Stock>,
-): (typeof RESEARCH)[ResearchId] {
-  return { name, lab, needs, cost, tier: null };
-}
 
 // --- World map and patrols (M7). Design §10, as built ID-026 (starting points). ---
 
@@ -1266,14 +1295,15 @@ export const PATROL = {
 };
 /**
  * The camp's car (design §10 Vehicle, ID-030, starting points): built for `cost`, at most
- * `limit` until research adds more (ID-035). A patrol that takes it travels each way in
+ * `limit`, and `more` more once More cars is researched (ID-035). A patrol that takes it travels each way in
  * half the time, rounded up; it burns 1 Gas per `gasPer` minutes of the round trip,
  * rounded up, and never less than the most Gas the trip could bring home.
  */
 export const CAR = {
   cost: { metal: 40, parts: 20, scrap: 30 },
   limit: 1,
+  more: 1,
   gasPer: 10,
-} as const satisfies { cost: Partial<Stock>; limit: number; gasPer: number };
+} as const satisfies { cost: Partial<Stock>; limit: number; more: number; gasPer: number };
 /** How a patrol's odds read before it leaves (design §10 Risk and reward). */
 export type RiskRating = (typeof PATROL.risk)[number]['rating'];

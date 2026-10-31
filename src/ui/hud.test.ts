@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { RECOVERY_MS, SKILL_IDS, type Stats, stockOf } from '../core/data.ts';
+import {
+  BOSS_PERK_GENES,
+  PERK_IDS,
+  PERKS,
+  RECOVERY_MS,
+  SKILL_IDS,
+  type Stats,
+  stockOf,
+} from '../core/data.ts';
+import { queueResearch, type QueueId } from '../core/research.ts';
 import {
   finishHorde,
+  hordeBossReward,
   hordeDrop,
   hordeFind,
   newGame,
@@ -242,6 +252,39 @@ describe('hud', () => {
       const { game, s } = ended('lost');
       s.breaches = [{ column: 0, row: 4, wave: 2, through: 'climbed' }];
       expect(resultScreen(game, s, NOW).lines).toContain('Layer 1 · row 5 · climbed over');
+    });
+
+    it('a boss win names its reward as finishHorde gives it: a perk, or Genes once all are owned (ID-035)', () => {
+      const { game, s } = ended('won');
+      s.boss = 'brood';
+      const line = (g: GameState) =>
+        resultScreen(g, s, NOW).lines.find((l) => l.startsWith('Boss reward'));
+      const reward = hordeBossReward(game, s);
+      if (!reward || !('perk' in reward)) throw new Error('no perk');
+      expect(line(game)).toBe(`Boss reward: ${PERKS[reward.perk].name} perk unlocked`);
+      expect(finishHorde(game, s, NOW).perkLevels[reward.perk]).toBe(1);
+      // That perk's node, queued, finishes during the fight: the screen and the finish both
+      // see it owned and agree on another perk.
+      const g: GameState = { ...game, lab: 2, stock: { ...game.stock, genes: 999 } };
+      const q = queueResearch(g, reward.perk as QueueId, NOW - 24 * 60 * 60_000);
+      if (!q.ok) throw new Error(q.reason);
+      const other = line(q.game)!;
+      expect(other).not.toContain(PERKS[reward.perk].name);
+      const done = finishHorde(q.game, s, NOW);
+      const gifted = PERK_IDS.filter(
+        (id) =>
+          done.perkLevels[id] === 1 && !done.research.includes(id as never) && id !== 'steady-fire',
+      );
+      expect(gifted).toHaveLength(1);
+      expect(other).toBe(`Boss reward: ${PERKS[gifted[0]!].name} perk unlocked`);
+      // Every perk owned: Genes instead.
+      const all = { ...game, perkLevels: { ...game.perkLevels } };
+      for (const id of PERK_IDS) all.perkLevels[id] = 1;
+      expect(line(all)).toBe(`Boss reward: ${BOSS_PERK_GENES} Genes (every perk owned)`);
+      // No boss, no line.
+      expect(resultScreen(game, { ...s, boss: null }, NOW).lines.join('\n')).not.toMatch(
+        /Boss reward/,
+      );
     });
 
     it('a boss horde names its Mutated Horror: dead on a win, still standing on a loss (ID-024)', () => {
