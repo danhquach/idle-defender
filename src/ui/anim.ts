@@ -174,6 +174,8 @@ interface Seen {
  * it afresh.
  */
 export class Animator {
+  /** Reduce motion (ID-039): sprites hold still, keeping only their hit flash and fade. */
+  reduced = false;
   private time = NEVER;
   private enemies = new Map<number, Seen & { enemy: Enemy }>();
   private defenders = new Map<string, Seen>();
@@ -245,6 +247,11 @@ export class Animator {
       hurtAt: hurt ? t : was.hurtAt,
       gait: { walked: was.gait.walked + moved, moving: dt > 0 ? moving : was.gait.moving },
     };
+  }
+
+  /** `pose` as drawn: with Reduce motion on, no bob, lean, lunge or fall, only flash and fade. */
+  shown(pose: Pose): Pose {
+    return this.reduced ? { ...STILL, alpha: pose.alpha, flash: pose.flash } : pose;
   }
 
   enemy(id: number): EnemyActs {

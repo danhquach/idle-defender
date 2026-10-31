@@ -15,7 +15,6 @@ function panelFor(game: GameState) {
     root,
     () => {},
     () => {},
-    () => {},
     (next) => {
       games.push(next);
       panel.show(next, null);
@@ -91,7 +90,6 @@ describe('gates in the build menu (ID-026)', () => {
     const panel = createBuildPanel(
       root,
       (base) => built.push(base),
-      () => {},
       () => {},
       () => {},
     );

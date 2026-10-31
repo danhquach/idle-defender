@@ -506,7 +506,8 @@ export function createHud(
     onChoose(index);
   }
   document.addEventListener('keydown', (e) => {
-    if (e.repeat) return;
+    // Not while the field is inert behind the open menu.
+    if (e.repeat || root.closest('[inert]')) return;
     const index = ['1', '2', '3'].indexOf(e.key);
     if (index >= 0) choose(index);
   });

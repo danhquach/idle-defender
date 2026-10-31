@@ -26,9 +26,11 @@ import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
 import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
+import { readReduceMotion, writeReduceMotion } from '../storage/settings.ts';
 import { Animator } from './anim.ts';
 import { createBuildPanel, FIELD_GREW } from './build.ts';
 import { createHud, defenderLabel, resultScreen } from './hud.ts';
+import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import {
   clampCamera,
@@ -66,6 +68,30 @@ const PAN_KEYS: Record<string, [number, number]> = {
   s: [0, 1],
 };
 
+/**
+ * What Esc does, first match wins: put an armed skill away, close the open slot, drop
+ * the picked defender; with none of those, open the menu.
+ */
+export function escapeAction(s: {
+  fighting: boolean;
+  armed: boolean;
+  slot: boolean;
+  defender: boolean;
+}): 'disarm' | 'slot' | 'defender' | 'menu' {
+  if (s.fighting && s.armed) return 'disarm';
+  if (!s.fighting && s.slot) return 'slot';
+  if (s.fighting && s.defender) return 'defender';
+  return 'menu';
+}
+
+/**
+ * Seconds the fight advances this frame: none on the first frame after a pause (a
+ * hidden tab, the open menu) or while paused, and never more than MAX_DT.
+ */
+export function frameStep(last: number | null, now: number, paused: boolean): number {
+  return last === null || paused ? 0 : Math.min(MAX_DT, (now - last) / 1000);
+}
+
 export function start(root: HTMLElement, art: Art): void {
   const canvas = document.createElement('canvas');
   canvas.className = 'view';
@@ -83,6 +109,10 @@ export function start(root: HTMLElement, art: Art): void {
   let horde: HordeState | null = null;
   // What the fight's animation remembers between frames (anim.ts); a new fight resets it.
   const animator = new Animator();
+  animator.reduced = readReduceMotion(
+    storage,
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+  );
   // When the fight ended (ms): read once, so the screen and the rest timers agree.
   let endedAt: number | null = null;
   // Stat points spent on the result screen, applied with "Back to build".
@@ -162,9 +192,8 @@ export function start(root: HTMLElement, art: Art): void {
   const panel = createBuildPanel(
     root,
     (base, stock) => {
-      // A build is the player moving on: an old line in the backup section goes,
-      // except the warning that nothing is saved.
-      if (storage) panel.notice('');
+      // A build is the player moving on: an old line at the foot of the panel goes.
+      panel.notice('');
       commit({ ...game, base, stock });
       panel.show(game, selected);
     },
@@ -179,27 +208,39 @@ export function start(root: HTMLElement, art: Art): void {
       selectedDefender = null;
       panel.hide();
       hud.show(true);
-    },
-    (loadedGame) => {
-      commit(loadedGame);
-      selected = null;
-      panel.show(game, selected);
+      menu.refresh();
     },
     (next) => {
       commit(next);
       panel.show(game, selected);
     },
   );
-  // Whether the last write was refused, so the next one that works can say so.
-  let saveRefused = false;
-  /** Takes `next` as the game and saves it; a refused write is said in the build panel. */
+  const held = new Set<string>();
+  /** Another camp from the menu (a loaded code, a new camp): saved and shown. */
+  function replaceCamp(next: GameState): void {
+    commit(next);
+    selected = null;
+    panel.forget();
+    panel.notice('');
+    panel.show(game, selected);
+  }
+  const menu = createMenu(root, {
+    state: () => ({ game, fighting: horde !== null }),
+    onLoad: replaceCamp,
+    onNewCamp: replaceCamp,
+    reduceMotion: animator.reduced,
+    onReduceMotion: (on) => {
+      animator.reduced = on;
+      writeReduceMotion(storage, on);
+    },
+    // Keys held as it opened would be stuck down: their release goes to the menu.
+    onOpen: () => held.clear(),
+  });
+  /** Takes `next` as the game and saves it; the menu's Save tab says how that went. */
   function commit(next: GameState): void {
     game = next;
-    if (!storage) return;
-    const ok = writeSave(storage, game, Date.now());
-    if (!ok) panel.notice("Couldn't save: this browser's storage is full or blocked.");
-    else if (saveRefused) panel.notice('Saved.');
-    saveRefused = !ok;
+    if (storage) menu.status(writeSave(storage, game, Date.now()) ? 'ok' : 'failed');
+    menu.refresh();
   }
   function toBuild(): void {
     horde = null;
@@ -208,11 +249,14 @@ export function start(root: HTMLElement, art: Art): void {
     armed = null;
     hud.show(false);
     panel.show(game, selected);
+    menu.refresh();
   }
   toBuild();
-  if (!storage) panel.notice('Saving is off: this browser blocks storage. Keep the backup code.');
+  if (!storage) menu.status('off');
   else if (loaded.rejected) {
-    panel.notice("Your save couldn't be read, so a new camp started. The old save is kept aside.");
+    // Said in the build panel too, so it is seen without opening the menu.
+    menu.status('rejected');
+    panel.notice(SAVE_STATUS.rejected.text);
   } else if (loaded.save?.grew) {
     panel.notice(FIELD_GREW);
   }
@@ -238,23 +282,27 @@ export function start(root: HTMLElement, art: Art): void {
     if (horde) e.preventDefault();
   });
 
-  const held = new Set<string>();
   const panKey = (e: KeyboardEvent): string | null => {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     return key in PAN_KEYS ? key : null;
   };
+  // Keys pressed inside the open menu stay in it (menu.ts); Esc opens it when it has
+  // nothing else to cancel.
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && horde && armed) {
-      armed = null;
-      return;
-    }
-    if (e.key === 'Escape' && !horde && selected) {
-      selected = null;
-      panel.show(game, selected);
-      return;
-    }
-    if (e.key === 'Escape' && horde && selectedDefender !== null) {
-      selectedDefender = null;
+    if (menu.isOpen()) return;
+    if (e.key === 'Escape') {
+      const act = escapeAction({
+        fighting: horde !== null,
+        armed: armed !== null,
+        slot: selected !== null,
+        defender: selectedDefender !== null,
+      });
+      if (act === 'disarm') armed = null;
+      else if (act === 'slot') {
+        selected = null;
+        panel.show(game, selected);
+      } else if (act === 'defender') selectedDefender = null;
+      else if (!e.repeat) menu.open();
       return;
     }
     const key = panKey(e);
@@ -362,15 +410,16 @@ export function start(root: HTMLElement, art: Art): void {
     { passive: false },
   );
 
-  // A hidden tab doesn't advance the fight; coming back resumes from where it was.
+  // A hidden tab or the open menu doesn't advance the fight; it resumes from where it was.
   let last: number | null = null;
   document.addEventListener('visibilitychange', () => {
     last = null;
   });
 
   function frame(now: number): void {
-    const dt = last === null || document.hidden ? 0 : Math.min(MAX_DT, (now - last) / 1000);
-    last = document.hidden ? null : now;
+    const paused = document.hidden || menu.isOpen();
+    const dt = frameStep(last, now, paused);
+    last = paused ? null : now;
     if (dt > 0) {
       if (horde) horde = tick(horde, dt);
       // A defender sent to the bench, or a finished fight, drops the selection.

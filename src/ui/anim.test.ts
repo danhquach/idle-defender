@@ -310,3 +310,14 @@ describe('Animator', () => {
     expect(a.enemy(1).hurtAt).toBe(-Infinity);
   });
 });
+
+describe('Reduce motion (ID-039)', () => {
+  it('holds sprites still but keeps the hit flash and the fade', () => {
+    const a = new Animator();
+    const moving = { ...STILL, dx: 3, lift: 2, rot: 0.4, sx: 1.1, sy: 0.9, alpha: 0.5, flash: 0.7 };
+    expect(a.shown(moving)).toBe(moving);
+    a.reduced = true;
+    expect(a.shown(moving)).toEqual({ ...STILL, alpha: 0.5, flash: 0.7 });
+    expect(a.shown(fallPose(0.2)).rot).toBe(0);
+  });
+});
