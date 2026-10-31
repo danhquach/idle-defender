@@ -13,7 +13,7 @@ describe('shop and skill icons (ID-041)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
-    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop);
+    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
     const s = newHorde(1, setup());
     hud.update(s);
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
@@ -36,7 +36,7 @@ describe('shop and skill icons (ID-041)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
-    createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop);
+    createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
     const rest = [...SHOP_ITEMS.map((i) => SHOP[i]), ...SKILL_IDS.map((k) => SKILLS[k])];
     buttons.forEach((button, i) => {

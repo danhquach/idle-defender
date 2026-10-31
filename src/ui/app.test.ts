@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 // ID-039 through the real wiring (app.ts): Esc opens the menu, the open menu holds the
 // fight, and a camp from the menu (a code, a new camp) is saved, with a refused write
-// marking the Menu button. The canvas and art are stand-ins: nothing here is drawn.
+// marking the Menu button. ID-062: Space pauses a fight and A S D set its speed. The canvas and art are stand-ins: nothing here is drawn.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newGame } from '../core/game.ts';
+import { rollOffer } from '../core/cards.ts';
 import { tick } from '../core/horde.ts';
+import { createRng } from '../core/rng.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
@@ -12,7 +14,7 @@ import { start } from './app.ts';
 import { PANEL_SPACE } from './build.ts';
 import { buildCamera, EASE_MS, PLOT_AT } from './buildscene.ts';
 import { FRAME, frameCamera, project, type Camera } from './projection.ts';
-import { MOTION_KEY } from '../storage/settings.ts';
+import { MOTION_KEY, SPEED_KEY } from '../storage/settings.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
 
@@ -319,5 +321,169 @@ describe('the camera in the game (app.ts, ID-064)', () => {
     step(48);
     expect(vi.mocked(drawScene).mock.lastCall![5]!.hover).toBeNull();
     expect(canvas.style.cursor).toBe('');
+  });
+});
+
+describe('pause and game speed in the game (app.ts, ID-062)', () => {
+  const press = (k: string, init: KeyboardEventInit = {}, target: EventTarget = document) => {
+    const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(e);
+    return e;
+  };
+  function fight() {
+    const booted = boot();
+    [...booted.root.querySelectorAll('button')]
+      .find((b) => b.textContent?.startsWith('Start Horde'))!
+      .click();
+    const chip = booted.root.querySelector<HTMLElement>('.hud-speed .menu-chip')!;
+    const speedButton = (n: number) =>
+      [...booted.root.querySelectorAll<HTMLButtonElement>('.hud-speed-button')].find((b) =>
+        b.textContent!.startsWith(`${n}×`),
+      )!;
+    const pressed = () =>
+      [...booted.root.querySelectorAll('.hud-speed-button[aria-pressed="true"]')].map(
+        (b) => b.textContent,
+      );
+    step(0);
+    vi.mocked(tick).mockClear();
+    return { ...booted, chip, speedButton, pressed };
+  }
+
+  it('Space holds the fight and shows Paused; the menu opening and closing keeps it held', () => {
+    const { chip, esc, dialogButton } = fight();
+    expect(chip.hidden).toBe(true);
+    const e = press(' ');
+    expect(e.defaultPrevented).toBe(true);
+    expect(chip.hidden).toBe(false);
+    expect(chip.textContent).toBe('PausedSpace');
+    step(16);
+    step(5000);
+    // A held key's repeats don't toggle it back.
+    press(' ', { repeat: true });
+    step(5016);
+    esc();
+    // Closing leaves it held, and the menu says so.
+    expect(document.querySelector('.menu-hint')!.textContent).toBe('Esc closes');
+    dialogButton('Close').click();
+    step(5032);
+    step(5048);
+    expect(tick).not.toHaveBeenCalled();
+    expect(chip.hidden).toBe(false);
+    press(' ');
+    expect(chip.hidden).toBe(true);
+    step(5064); // the first frame back counts no time
+    expect(tick).not.toHaveBeenCalled();
+    step(5080);
+    expect(vi.mocked(tick)).toHaveBeenCalledOnce();
+    expect(vi.mocked(tick).mock.calls[0]![1]).toBeCloseTo(0.016);
+  });
+
+  it('Space on a focused HUD button pauses instead of pressing it', () => {
+    const { chip, speedButton, pressed } = fight();
+    speedButton(3).focus();
+    const e = press(' ', {}, speedButton(3));
+    expect(e.defaultPrevented).toBe(true);
+    expect(chip.hidden).toBe(false);
+    expect(pressed()).toEqual(['1×A']);
+  });
+
+  it('a list or text field keeps Space and the speed keys; so do Ctrl, Cmd and Alt', () => {
+    const { root, chip, pressed } = fight();
+    const list = document.createElement('select');
+    root.append(list);
+    expect(press(' ', {}, list).defaultPrevented).toBe(false);
+    press('d', {}, list);
+    const text = document.createElement('textarea');
+    root.append(text);
+    press(' ', {}, text);
+    press('s', {}, text);
+    press('s', { ctrlKey: true });
+    press('d', { metaKey: true });
+    press(' ', { altKey: true });
+    expect(chip.hidden).toBe(true);
+    expect(pressed()).toEqual(['1×A']);
+  });
+
+  it('a fight starts running, whatever Space did between hordes', () => {
+    const { root } = boot();
+    press(' ');
+    [...root.querySelectorAll('button')]
+      .find((b) => b.textContent?.startsWith('Start Horde'))!
+      .click();
+    expect(root.querySelector<HTMLElement>('.hud-speed .menu-chip')!.hidden).toBe(true);
+    step(0);
+    step(16);
+    expect(tick).toHaveBeenCalled();
+  });
+
+  it('1× 2× 3× buttons and A S D run that many fixed steps a frame, and the choice is stored', () => {
+    const { speedButton, pressed } = fight();
+    expect(pressed()).toEqual(['1×A']);
+    speedButton(3).click();
+    expect(pressed()).toEqual(['3×D']);
+    expect(localStorage.getItem(SPEED_KEY)).toBe('3');
+    step(16);
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.048);
+    press('s');
+    expect(pressed()).toEqual(['2×S']);
+    expect(localStorage.getItem(SPEED_KEY)).toBe('2');
+    step(32);
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.032);
+    press('A');
+    expect(pressed()).toEqual(['1×A']);
+    // A frame stalls at MAX_DT (0.1 s), times the speed: never a skipped stretch.
+    press('d');
+    step(5000);
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.3);
+  });
+
+  it('Space stacks with a card offer: 1 still picks, the fight stays held, and resuming carries on', () => {
+    const { root, chip } = fight();
+    const real = vi.mocked(tick).getMockImplementation()!;
+    vi.mocked(tick).mockImplementationOnce((s, dt) => {
+      const next = real(s, dt);
+      return { ...next, offer: rollOffer(createRng(1), next) };
+    });
+    step(16);
+    step(32);
+    const cards = root.querySelector<HTMLElement>('.hud-cards')!;
+    expect(cards.hidden).toBe(false);
+    press(' ');
+    expect(chip.hidden).toBe(false);
+    press('1');
+    expect(cards.hidden).toBe(true);
+    vi.mocked(tick).mockClear();
+    step(48);
+    step(64);
+    expect(tick).not.toHaveBeenCalled();
+    press(' ');
+    step(80); // the first frame back counts no time, so the next covers 96 − 80 ms
+    step(96);
+    expect(vi.mocked(tick).mock.lastCall![0].offer).toBeNull();
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.016);
+  });
+
+  it('Space on the result screen holds nothing', () => {
+    const { chip } = fight();
+    const real = vi.mocked(tick).getMockImplementation()!;
+    vi.mocked(tick).mockImplementationOnce((s, dt) => ({ ...real(s, dt), outcome: 'won' }));
+    step(16);
+    step(32);
+    press(' ');
+    expect(chip.hidden).toBe(true);
+  });
+
+  it('the stored speed comes back on the next load; a bad one is 1×', () => {
+    localStorage.setItem(SPEED_KEY, '3');
+    expect(fight().pressed()).toEqual(['3×D']);
+    localStorage.setItem(SPEED_KEY, '9');
+    expect(fight().pressed()).toEqual(['1×A']);
+  });
+
+  it('the open menu keeps the speed keys', () => {
+    const { esc, pressed } = fight();
+    esc();
+    press('d', {}, document.activeElement!);
+    expect(pressed()).toEqual(['1×A']);
   });
 });

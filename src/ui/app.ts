@@ -27,7 +27,14 @@ import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
 import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
-import { readReduceMotion, writeReduceMotion } from '../storage/settings.ts';
+import {
+  readReduceMotion,
+  readSpeed,
+  SPEEDS,
+  writeReduceMotion,
+  writeSpeed,
+  type Speed,
+} from '../storage/settings.ts';
 import { Animator } from './anim.ts';
 import { createBuildPanel, FIELD_GREW } from './build.ts';
 import {
@@ -39,7 +46,7 @@ import {
   plotsOf,
   targetAt,
 } from './buildscene.ts';
-import { createHud, defenderLabel, resultScreen } from './hud.ts';
+import { createHud, defenderLabel, resultScreen, SPEED_KEYS } from './hud.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import {
@@ -77,8 +84,8 @@ export function escapeAction(s: {
 }
 
 /**
- * Seconds the fight advances this frame: none on the first frame after a pause (a
- * hidden tab, the open menu) or while paused, and never more than MAX_DT.
+ * Real seconds this frame covers: none on the first frame after a pause (a hidden tab,
+ * the open menu, Space) or while paused, and never more than MAX_DT.
  */
 export function frameStep(last: number | null, now: number, paused: boolean): number {
   return last === null || paused ? 0 : Math.min(MAX_DT, (now - last) / 1000);
@@ -118,6 +125,9 @@ export function start(root: HTMLElement, art: Art): void {
   let armed: SkillId | null = null;
   // Where the pointer is over the canvas (CSS px), for the armed skill's reach.
   let hover: { sx: number; sy: number } | null = null;
+  // Fight speed, kept between hordes, and the Space pause, which each fight starts without (ID-062).
+  let speed: Speed = readSpeed(storage);
+  let held = false;
 
   const hud = createHud(
     root,
@@ -186,7 +196,18 @@ export function start(root: HTMLElement, art: Art): void {
     (id) => {
       if (horde && endedAt !== null) campPicks.push(id);
     },
+    (next) => setSpeed(next),
   );
+  function setSpeed(next: Speed): void {
+    if (next !== speed) writeSpeed(storage, next);
+    speed = next;
+    hud.speed(speed, held);
+  }
+  function hold(on: boolean): void {
+    held = on;
+    hud.speed(speed, held);
+  }
+  hud.speed(speed, held);
   const panel = createBuildPanel(
     root,
     (base, stock) => {
@@ -205,6 +226,7 @@ export function start(root: HTMLElement, art: Art): void {
       selected = null;
       selectedDefender = null;
       canvas.style.cursor = '';
+      hold(false);
       // Into the fight frame: eased from the build frame, a hard cut with Reduce motion on.
       ease = animator.reduced ? null : { from: buildCam, at: null };
       panel.hide();
@@ -225,7 +247,7 @@ export function start(root: HTMLElement, art: Art): void {
     panel.show(game, selected);
   }
   const menu = createMenu(root, {
-    state: () => ({ game, fighting: horde !== null }),
+    state: () => ({ game, fighting: horde !== null, held }),
     onLoad: replaceCamp,
     onNewCamp: replaceCamp,
     reduceMotion: animator.reduced,
@@ -269,6 +291,7 @@ export function start(root: HTMLElement, art: Art): void {
     selectedDefender = null;
     armed = null;
     ease = null;
+    hold(false);
     hud.show(false);
     panel.show(game, selected);
     buildCam = buildCamera(view, panel.room(view));
@@ -307,6 +330,35 @@ export function start(root: HTMLElement, art: Art): void {
       panel.show(game, selected);
     } else if (act === 'defender') selectedDefender = null;
     else if (!e.repeat) menu.open();
+  });
+
+  // In a fight with the menu shut, Space holds or resumes it and A S D set its speed
+  // (ID-062). A typing field or a list keeps its keys; a focused button doesn't take
+  // Space from the pause (some browsers press it on keyup, so that is stopped too). The
+  // result screen's keys are its own.
+  const fightKey = (e: KeyboardEvent): boolean => {
+    if (horde?.outcome !== 'fighting' || menu.isOpen() || e.ctrlKey || e.metaKey || e.altKey) {
+      return false;
+    }
+    const t = e.target;
+    return !(
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLTextAreaElement ||
+      t instanceof HTMLSelectElement
+    );
+  };
+  document.addEventListener('keyup', (e) => {
+    if (e.key === ' ' && fightKey(e)) e.preventDefault();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!fightKey(e)) return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (!e.repeat) hold(!held);
+      return;
+    }
+    const next = SPEEDS.find((sp) => SPEED_KEYS[sp] === e.key.toUpperCase());
+    if (next && !e.repeat) setSpeed(next);
   });
 
   // One primary pointer clicks: right-click and a second finger are ignored, and a
@@ -391,18 +443,20 @@ export function start(root: HTMLElement, art: Art): void {
     hover = null;
   });
 
-  // A hidden tab or the open menu doesn't advance the fight; it resumes from where it was.
+  // A hidden tab, the open menu or Space doesn't advance the fight; it resumes from where it was.
   let last: number | null = null;
   document.addEventListener('visibilitychange', () => {
     last = null;
   });
 
   function frame(now: number): void {
-    const paused = document.hidden || menu.isOpen();
+    const paused = document.hidden || menu.isOpen() || held;
     const dt = frameStep(last, now, paused);
     last = paused ? null : now;
     if (dt > 0) {
-      if (horde) horde = tick(horde, dt);
+      // Speed runs more of the core's fixed steps per frame, never longer ones; a pick
+      // or replacement stops the rest of the frame's steps in the core.
+      if (horde) horde = tick(horde, dt * speed);
       // A defender sent to the bench, or a finished fight, drops the selection.
       if (
         horde &&

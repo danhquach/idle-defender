@@ -32,7 +32,7 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
   const fresh: GameState[] = [];
   const motion: boolean[] = [];
   const menu = createMenu(root, {
-    state: () => ({ game, fighting }),
+    state: () => ({ game, fighting, held: false }),
     onLoad: (g) => (loaded.push(g), (game = g)),
     onNewCamp: (g) => (fresh.push(g), (game = g)),
     reduceMotion: over.reduceMotion ?? false,

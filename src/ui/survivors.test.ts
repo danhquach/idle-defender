@@ -132,7 +132,7 @@ describe('a survivor in a patrol report', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
-    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop);
+    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
     const g = { ...newGame(), camp: { ...newGame().camp, xp: 25 } };
     const s = startHorde(g, 1, 'bob', 0, NOW);
     s.outcome = 'won';
@@ -163,8 +163,18 @@ describe('a survivor in a camp level-up offer', () => {
     const picked: CampChoice[] = [];
     const done = vi.fn();
     const noop = () => {};
-    const hud = createHud(root, noop, done, noop, noop, noop, noop, noop, noop, (c) =>
-      picked.push(c),
+    const hud = createHud(
+      root,
+      noop,
+      done,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      (c) => picked.push(c),
+      noop,
     );
     const { game, s } = won();
     const screen = resultScreen(game, s, NOW);
@@ -212,8 +222,18 @@ describe('a survivor in a camp level-up offer', () => {
     document.body.replaceChildren(root);
     const picked: CampChoice[] = [];
     const noop = () => {};
-    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, (c) =>
-      picked.push(c),
+    const hud = createHud(
+      root,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      (c) => picked.push(c),
+      noop,
     );
     const { game, s } = won();
     const screen = resultScreen(game, s, NOW);
