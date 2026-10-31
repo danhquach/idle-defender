@@ -564,17 +564,25 @@ export function createBuildPanel(
     choiceButton(label, cost, result.ok ? null : result, () => {
       if (result.ok) onChange(result.base, result.stock);
     });
-  const labOption = (
+  function labOption(
     label: string,
     cost: Partial<Stock> | null,
     result: GameResult,
     act?: (now: number) => GameResult,
-  ): HTMLElement =>
-    choiceButton(label, cost, result.ok ? null : result, () => {
+  ): HTMLElement {
+    const button = choiceButton(label, cost, result.ok ? null : result, () => {
       // A timed action is redone at the click, so the queue starts when it was clicked.
       const done = act ? act(Date.now()) : result;
-      if (done.ok) onGame(done.game);
+      if (done.ok) {
+        onGame(done.game);
+        return;
+      }
+      // Time moved on since the panel was drawn (the entry finished): say why, in place.
+      setVariant(button as HTMLButtonElement, 'locked', done.reason);
+      button.title = done.reason;
     });
+    return button;
+  }
 
   /** The bank meter: a `<meter>` labelled with its text. */
   function meter(text: string, value: number, max: number): HTMLElement {

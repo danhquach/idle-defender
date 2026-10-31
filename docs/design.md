@@ -1155,7 +1155,7 @@ Set before sending; they apply to any location, plaza or single building.
 - **As built (ID-035, starting points):** every research node costs
   **Mutated Genes**; materials only build and upgrade the Lab. Research
   runs in a **queue**: one entry at a time, up to 3 more waiting, each
-  10 minutes to 2 hours, also while the game is closed (each next entry
+  15 minutes to 2 hours, also while the game is closed (each next entry
   starts when the last one ended). Genes are paid when an entry is queued;
   removing a waiting entry, or cancelling the running one (the next then
   starts at once), refunds it in full. A node can be queued once its
