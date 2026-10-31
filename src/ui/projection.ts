@@ -64,10 +64,25 @@ export function clampCamera(cam: Camera, view: View): Camera {
   };
 }
 
-/** The opening view: the zoom that fits the whole field, width and height, centred. */
-export function fitCamera(view: View): Camera {
-  const zoom = Math.min(view.w / FIELD.right, view.h / ((FIELD.height + MARGIN_Y) * TILT));
-  return clampCamera({ x: 0, y: -MARGIN_Y, zoom }, view);
+/** The outer wall's `x`: the outermost layer's column `x` (the first column's for a base with none). */
+export function baseEdge(base: Pick<Base, 'layers'>): number {
+  const column = Math.max(0, ...base.layers.map((l) => l.column));
+  return COLUMNS[column] ?? COLUMNS[0]!;
+}
+
+/** Ground shown behind the outer wall's ground posts in the opening view. */
+const OPENING_GAP = 24;
+
+/**
+ * The opening view (ID-057): zoomed so the field fills the screen's height (with the
+ * strip above it, where the back row's tops show), panned so the outer wall at `edge`
+ * stands near the left with its ground posts behind it and the field runs on toward the
+ * spawn side. Panning reaches the rest.
+ */
+export function openingCamera(view: View, edge: number): Camera {
+  const behind = -POST_OFFSET.ground + PIECE.ground.halfWidth + OPENING_GAP;
+  const zoom = view.h / ((FIELD.height + MARGIN_Y) * TILT);
+  return clampCamera({ x: edge - behind, y: -MARGIN_Y, zoom }, view);
 }
 
 /** Zooms by `factor` keeping the world point under `anchor` in place, then clamps. */

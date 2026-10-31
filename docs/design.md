@@ -139,7 +139,7 @@ run top to bottom across the map, so they are easy to lay out and read.
   full wood wall now costs 100 Wood and 50 Scrap; build mode shows each
   segment's cost and the Repair all total. The balance targets held without
   a retune. The camera opens fitting the whole field, width and height, and
-  pans to every corner at 0.5–2× zoom. A save from before (5 rows, save v1)
+  pans to every corner at 0.5–2× zoom (ID-057 changed the opening view, §15). A save from before (5 rows, save v1)
   loads with its rows moved to rows 3–7, which puts the old start exactly
   where the new one stands; the new rows are empty ground (open gaps until
   built) and the build panel says so when it loads, from storage or a
@@ -1482,6 +1482,24 @@ original outline.
   liquid with a helix (kept saturated as a mutant thing). Each pick passed an
   art review; a test fails if any resource lacks its icon. The top bar
   (ID-058) puts them to use.
+- **As built (ID-057):** the field fills the screen. The opening view is
+  zoomed so the field fills the canvas height (with the 80-unit strip above
+  it, where the back row's tops show): about 1.7× at 1440×900 and 1.36× at
+  1280×720, against 0.9× and 0.8× for the old fit-the-width view, so units stand about
+  twice as tall (capped at 2×, so a tall, narrow window shows little width).
+  It is panned so the outer wall (the outermost built layer) stands near the
+  left with its ground posts and a little ground behind them, and the field
+  runs on toward the spawn side; panning reaches the rest, and **Home** (not
+  while a picker has focus) comes back to it. Wall first by choice: the
+  defence line and the way the horde comes matter most at a glance, so the
+  camp's yard and huts (left of the wall) and the spawn edge start off
+  screen, a pan away. Past the field's
+  edges a seeded 4×4 block of the ground's tile variants repeats without
+  end, on the field tiles' 160-unit grid and with their shared seam border,
+  drawn under the painted field: no bare background shows at any zoom (0.5–2×)
+  or pan, and the field's edge doesn't show. Zoom and pan limits, and the
+  screen-to-ground mapping that clicks, focus and skill aim use, are
+  unchanged.
 
 ## 16. Tech and platform
 

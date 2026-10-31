@@ -33,9 +33,10 @@ import { createHud, defenderLabel, resultScreen } from './hud.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import {
+  baseEdge,
   clampCamera,
-  fitCamera,
   fightHitAt,
+  openingCamera,
   slotAt,
   TILT,
   unproject,
@@ -278,8 +279,10 @@ export function start(root: HTMLElement, art: Art): void {
     cam = clampCamera(cam, view);
   }
   resize();
-  // Starts framed on the whole field, its full width and height.
-  cam = fitCamera(view);
+  // Starts on the opening view (ID-057): the field's full height, the outer wall and
+  // the field toward the spawn side; Home comes back to it.
+  const frameAll = (): Camera => openingCamera(view, baseEdge(game.base));
+  cam = frameAll();
   window.addEventListener('resize', resize);
 
   // A fight isn't saved, and neither is its payout until "Back to build": while one
@@ -311,9 +314,15 @@ export function start(root: HTMLElement, art: Art): void {
       else if (!e.repeat) menu.open();
       return;
     }
+    // A focused picker keeps its own arrow keys, Home and type-ahead.
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement) return;
+    if (e.key === 'Home') {
+      cam = frameAll();
+      e.preventDefault();
+      return;
+    }
     const key = panKey(e);
-    // A focused picker keeps its own arrow keys and type-ahead.
-    if (!key || e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement) return;
+    if (!key) return;
     held.add(key);
     e.preventDefault();
   });
