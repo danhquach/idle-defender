@@ -8,23 +8,32 @@ import {
   spotOf,
   type Base,
 } from '../core/base.ts';
-import { COLUMNS, FIELD, POST_OFFSET, SEGMENT_HEIGHT, START_STOCK, WALL } from '../core/data.ts';
+import {
+  CAMP,
+  COLUMNS,
+  FIELD,
+  POST_OFFSET,
+  SEGMENT_HEIGHT,
+  START_STOCK,
+  WALL,
+} from '../core/data.ts';
 import { layoutOf, newHorde, standing } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
 import {
-  baseEdge,
-  clampCamera,
   depthSort,
   fightHitAt,
+  FRAME,
+  frameCamera,
+  HUD_SPACE,
   MARGIN_Y,
+  MIN_ZOOM,
   mountDepth,
-  openingCamera,
   PIECE,
   project,
   slotAt,
+  TILT,
   unproject,
   wallHeight,
-  zoomAt,
   type Camera,
 } from './projection.ts';
 
@@ -44,153 +53,96 @@ describe('projection', () => {
     expect(p.y).toBeCloseTo(271.25);
   });
 
-  it('clamps zoom and pan', () => {
-    const view = { w: 800, h: 600 };
-    const low = clampCamera({ x: -50, y: 0, zoom: 5 }, view);
-    expect(low.zoom).toBe(2);
-    expect(low.x).toBe(0);
-    expect(clampCamera({ x: 5000, y: 0, zoom: 1 }, view).x).toBe(800);
-    expect(clampCamera({ x: 0, y: 0, zoom: 0.1 }, view).zoom).toBe(0.5);
-  });
+  describe('fixed frame (ID-064)', () => {
+    /** Where the frame lands on screen under `cam`. */
+    const box = (cam: Camera) => ({
+      left: project({ x: FRAME.left, y: 0 }, cam).sx,
+      right: project({ x: FRAME.right, y: 0 }, cam).sx,
+      top: project({ x: 0, y: FRAME.top }, cam).sy,
+      bottom: project({ x: 0, y: FRAME.bottom }, cam).sy,
+    });
 
-  it('clamps vertical pan to the field', () => {
-    // The pannable depth is -MARGIN_Y…800; a view 120 high at zoom 2 shows 100 world units.
-    const short = { w: 800, h: 120 };
-    expect(clampCamera({ x: 0, y: -500, zoom: 2 }, short).y).toBe(-80);
-    expect(clampCamera({ x: 0, y: 900, zoom: 2 }, short).y).toBe(700);
-  });
-
-  it('centres the field on an axis where it all fits', () => {
-    // 600 / 0.6 = 1000 world units deep, more than the 880 to show: centred at (-80 + 800 - 1000) / 2.
-    expect(clampCamera({ x: 0, y: 300, zoom: 1 }, { w: 800, h: 600 }).y).toBe(-140);
-    // 2000 wide at zoom 0.5 shows 4000 world units of a 1600 field: centred at -1200.
-    expect(clampCamera({ x: 300, y: 0, zoom: 0.5 }, { w: 2000, h: 600 }).x).toBe(-1200);
-  });
-
-  /** True when the world point shows inside `view` under `cam` (with a rounding hair). */
-  const shows = (p: { x: number; y: number }, cam: Camera, view: { w: number; h: number }) => {
-    const { sx, sy } = project(p, cam);
-    return sx >= -1e-9 && sx <= view.w + 1e-9 && sy >= -1e-9 && sy <= view.h + 1e-9;
-  };
-  const corners = [
-    { x: 0, y: -MARGIN_Y },
-    { x: FIELD.right, y: -MARGIN_Y },
-    { x: 0, y: FIELD.height },
-    { x: FIELD.right, y: FIELD.height },
-  ];
-
-  describe('opening view (ID-057)', () => {
-    const edge = baseEdge(newBase());
-    /** Screen y of the field's back edge, its front edge, and of the strip above it. */
-    const ys = (cam: Camera) => ({
-      strip: project({ x: 0, y: -MARGIN_Y }, cam).sy,
-      front: project({ x: 0, y: FIELD.height }, cam).sy,
+    it('runs from behind column 0’s ground posts to the spawn edge, every row and the strip above', () => {
+      // 500 − 160 − 16 − 24.
+      expect(FRAME.left).toBe(300);
+      expect(FRAME.left).toBe(COLUMNS[0]! + POST_OFFSET.ground - PIECE.ground.halfWidth - 24);
+      expect(FRAME.right).toBe(FIELD.right);
+      expect(FRAME.top).toBe(-MARGIN_Y);
+      expect(FRAME.bottom).toBe(FIELD.height);
+      // The camp's yard and huts are left of it.
+      expect(CAMP.x).toBeLessThan(FRAME.left);
     });
 
     it.each([
-      { w: 1440, h: 900 },
-      { w: 1280, h: 720 },
-    ])('fills the height at $w×$h with the field: no band above or below', (view) => {
-      const cam = openingCamera(view, edge);
-      expect(ys(cam).strip).toBeCloseTo(0);
-      expect(ys(cam).front).toBeCloseTo(view.h);
-      // Far more zoomed in than the old fit-the-width view (1440 / 1600 = 0.9).
-      expect(cam.zoom).toBeCloseTo(view.h / ((FIELD.height + MARGIN_Y) * 0.6));
+      { w: 1440, h: 900, zoom: 1.11 },
+      { w: 1280, h: 720, zoom: 0.98 },
+    ])('fits the width at $w×$h (about $zoom×), all of it between the HUD bands', (v) => {
+      const view = { w: v.w, h: v.h };
+      const cam = frameCamera(view);
+      expect(cam.zoom).toBeCloseTo(v.w / (FRAME.right - FRAME.left), 9);
+      expect(cam.zoom).toBeCloseTo(v.zoom, 2);
+      const b = box(cam);
+      expect(b.left).toBeCloseTo(0, 9);
+      expect(b.right).toBeCloseTo(view.w, 9);
+      expect(b.top).toBeGreaterThanOrEqual(HUD_SPACE.top);
+      expect(b.bottom).toBeLessThanOrEqual(view.h - HUD_SPACE.bottom);
+      // Centred in the band between the top bar and the bottom HUD.
+      expect(b.top - HUD_SPACE.top).toBeCloseTo(view.h - HUD_SPACE.bottom - b.bottom, 9);
     });
 
-    it.each([
-      { w: 1440, h: 900 },
-      { w: 1280, h: 720 },
-    ])(
-      'shows the outer wall, its ground posts and the field toward the spawn side at $w×$h',
-      (view) => {
-        const cam = openingCamera(view, edge);
-        const at = (x: number) => project({ x, y: 0 }, cam).sx;
-        expect(at(edge + POST_OFFSET.ground - PIECE.ground.halfWidth)).toBeGreaterThan(0);
-        // The wall sits in the left third; the rest of the screen looks toward the spawn.
-        expect(at(edge)).toBeLessThan(view.w / 3);
-        expect(at(edge + WALL.depth + 500)).toBeLessThan(view.w);
-      },
-    );
-
-    it('frames the outermost built layer', () => {
-      const base = newBase();
-      expect(baseEdge(base)).toBe(COLUMNS[0]);
-      const grown = { layers: [...base.layers, { column: 2, slots: [] }] };
-      expect(baseEdge(grown)).toBe(COLUMNS[2]);
-      // A base with no layer at all frames the first column.
-      expect(baseEdge({ layers: [] })).toBe(COLUMNS[0]);
-      // The camera follows: the outer wall stands at the same spot on screen.
-      const view = { w: 1440, h: 900 };
-      const near = project({ x: COLUMNS[0]!, y: 0 }, openingCamera(view, COLUMNS[0]!)).sx;
-      const far = project({ x: COLUMNS[1]!, y: 0 }, openingCamera(view, COLUMNS[1]!)).sx;
-      expect(far).toBeCloseTo(near);
+    it('keeps a taller bottom HUD (a wrapped shop bar) clear too, never less than its band', () => {
+      const view = { w: 1100, h: 600 };
+      const wrapped = 120;
+      const b = box(frameCamera(view, wrapped));
+      expect(b.bottom).toBeLessThanOrEqual(view.h - wrapped + 1e-9);
+      expect(b.top).toBeGreaterThanOrEqual(HUD_SPACE.top - 1e-9);
+      // A bar shorter than the band, or none measured, keeps the band.
+      expect(frameCamera(view, 10)).toEqual(frameCamera(view));
+      expect(frameCamera(view, 0)).toEqual(frameCamera(view, HUD_SPACE.bottom));
     });
 
-    it('fits the height on any screen, centring a field narrower than the view', () => {
-      // Portrait: the height decides, about 1.54×, with the wall still near the left.
-      const tall = { w: 375, h: 812 };
-      expect(openingCamera(tall, edge).zoom).toBeCloseTo(812 / ((FIELD.height + MARGIN_Y) * 0.6));
-      // Ultra-wide: 3440 / 1.136 ≈ 3027 units shows more than the field, so it is centred.
-      const wide = { w: 3440, h: 600 };
-      const w = openingCamera(wide, edge);
-      expect(w.x).toBeCloseTo((FIELD.right - wide.w / w.zoom) / 2);
-      // Too short to fill even at the 0.5 floor, or so tall it would pass 2×: clamped.
-      expect(openingCamera({ w: 400, h: 200 }, edge).zoom).toBe(0.5);
-      expect(openingCamera({ w: 1000, h: 3000 }, edge).zoom).toBe(2);
+    it('fits the height on a wide, short window, centring the frame across it', () => {
+      const view = { w: 3440, h: 600 };
+      const cam = frameCamera(view);
+      const band = view.h - HUD_SPACE.top - HUD_SPACE.bottom;
+      expect(cam.zoom).toBeCloseTo(band / ((FRAME.bottom - FRAME.top) * TILT), 9);
+      const b = box(cam);
+      expect(b.top).toBeCloseTo(HUD_SPACE.top, 9);
+      expect(b.bottom).toBeCloseTo(view.h - HUD_SPACE.bottom, 9);
+      expect(b.left).toBeGreaterThan(0);
+      expect(b.left).toBeCloseTo(view.w - b.right, 9);
     });
-  });
 
-  it('pans to every corner at any zoom', () => {
-    const view = { w: 1280, h: 720 };
-    for (const zoom of [0.5, 1, 2]) {
-      const topLeft = clampCamera({ x: -1e6, y: -1e6, zoom }, view);
-      const bottomRight = clampCamera({ x: 1e6, y: 1e6, zoom }, view);
-      expect(shows(corners[0]!, topLeft, view), `zoom ${zoom}`).toBe(true);
-      expect(shows(corners[3]!, bottomRight, view), `zoom ${zoom}`).toBe(true);
-    }
-  });
+    it('never zooms under 0.5×: a narrow window keeps the wall-side edge and the top', () => {
+      for (const view of [
+        { w: 375, h: 812 },
+        { w: 400, h: 200 },
+        { w: 0, h: 0 },
+      ]) {
+        const cam = frameCamera(view);
+        expect(cam.zoom).toBe(MIN_ZOOM);
+        expect(box(cam).left).toBeCloseTo(0, 9);
+        expect(Object.values(cam).every(Number.isFinite)).toBe(true);
+      }
+      // Too short for the frame even at 0.5×: its top stays just under the top bar.
+      expect(box(frameCamera({ w: 400, h: 200 })).top).toBeCloseTo(HUD_SPACE.top, 9);
+      // Tall and narrow: the frame is centred in the band's spare height.
+      const tall = box(frameCamera({ w: 375, h: 812 }));
+      expect(tall.top - HUD_SPACE.top).toBeCloseTo(812 - HUD_SPACE.bottom - tall.bottom, 9);
+    });
 
-  it('zooms around the cursor', () => {
-    const cam = zoomAt(
-      { x: 200, y: 0, zoom: 1 },
-      2,
-      { sx: 400, sy: 0 },
-      {
-        w: 800,
-        h: 600,
-      },
-    );
-    expect(cam.zoom).toBe(2);
-    expect(cam.x).toBe(400);
-  });
-
-  it('zooms around the cursor in depth too', () => {
-    // A short view, so the field doesn't fit vertically and y isn't centred.
-    const view = { w: 800, h: 120 };
-    const before = { x: 0, y: 100, zoom: 1 };
-    const anchor = { sx: 0, sy: 60 };
-    const cam = zoomAt(before, 1.5, anchor, view);
-    // World y under the cursor: 100 + 60 / (1 × 0.6) = 200 before and after.
-    expect(cam.y + anchor.sy / (cam.zoom * 0.6)).toBeCloseTo(200);
-    expect(cam.y).toBeCloseTo(200 - 60 / 0.9);
-  });
-
-  it('keeps the anchor when the zoom saturates', () => {
-    const cam = zoomAt({ x: 200, y: 0, zoom: 1.5 }, 4, { sx: 300, sy: 0 }, { w: 800, h: 600 });
-    expect(cam.zoom).toBe(2);
-    // World x under the cursor: 200 + 300 / 1.5 = 400; after: 400 - 300 / 2 = 250.
-    expect(cam.x).toBe(250);
-  });
-
-  it.each([
-    [NaN, { sx: 100, sy: 0 }],
-    [Infinity, { sx: 100, sy: 0 }],
-    [2, { sx: NaN, sy: 0 }],
-    [2, { sx: 0, sy: -Infinity }],
-  ])('ignores a non-finite zoom %s at %o', (factor, anchor) => {
-    const cam = { x: 200, y: -80, zoom: 1 };
-    expect(zoomAt(cam, factor, anchor, { w: 800, h: 120 })).toEqual(cam);
+    it('a click on the frame lands where it is drawn', () => {
+      const cam = frameCamera({ w: 1280, h: 720 });
+      for (const p of [
+        { x: FRAME.left, y: 0 },
+        { x: FRAME.right, y: FIELD.height },
+        { x: 913.5, y: 271.25 },
+      ]) {
+        const back = unproject(project(p, cam), cam);
+        expect(back.x).toBeCloseTo(p.x, 9);
+        expect(back.y).toBeCloseTo(p.y, 9);
+      }
+    });
   });
 
   it('sorts back to front', () => {

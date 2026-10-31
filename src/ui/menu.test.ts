@@ -31,14 +31,12 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
   const loaded: GameState[] = [];
   const fresh: GameState[] = [];
   const motion: boolean[] = [];
-  const opened = vi.fn();
   const menu = createMenu(root, {
     state: () => ({ game, fighting }),
     onLoad: (g) => (loaded.push(g), (game = g)),
     onNewCamp: (g) => (fresh.push(g), (game = g)),
     reduceMotion: over.reduceMotion ?? false,
     onReduceMotion: (on) => motion.push(on),
-    onOpen: opened,
   });
   const scrim = document.querySelector<HTMLElement>('.menu-scrim')!;
   const dialog = scrim.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -82,7 +80,6 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
     loaded,
     fresh,
     motion,
-    opened,
     fight,
   };
 }
@@ -144,13 +141,12 @@ describe('Esc and the frame step (app.ts)', () => {
 
 describe('the Menu', () => {
   it('the button opens a modal dialog; the field goes inert and focus lands on the tab', () => {
-    const { root, scrim, dialog, menuButton, menu, tab, opened } = setup();
+    const { root, scrim, dialog, menuButton, menu, tab } = setup();
     expect(menuButton.getAttribute('aria-haspopup')).toBe('dialog');
     expect(menuButton.title).toBe('Menu (Esc)');
     expect(scrim.hidden).toBe(true);
     menuButton.click();
     expect(menu.isOpen()).toBe(true);
-    expect(opened).toHaveBeenCalledOnce();
     expect(scrim.hidden).toBe(false);
     expect(root.hasAttribute('inert')).toBe(true);
     expect(root.contains(scrim)).toBe(false);
@@ -406,8 +402,13 @@ describe('the Menu', () => {
       for (const [k, what] of rows) expect(help.textContent).toContain(`${k}${what}`);
     }
     expect(help.querySelectorAll('ol li')).toHaveLength(HOW_TO_PLAY.length);
-    expect([...help.querySelectorAll('kbd')].map((k) => k.textContent)).toContain('W');
+    expect([...help.querySelectorAll('kbd')].map((k) => k.textContent)).toContain('1');
     expect([...help.querySelectorAll('kbd')].map((k) => k.textContent)).not.toContain('a');
+  });
+
+  it('Help lists no pan or zoom: the field is one fixed frame (ID-064)', () => {
+    const help = setup().panel('help').textContent ?? '';
+    expect(help).not.toMatch(/\b(pan|zoom|drag)\b|wheel|arrows/i);
   });
 
   it('a pasted payload is never parsed as page markup', () => {

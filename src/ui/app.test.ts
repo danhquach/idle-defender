@@ -9,7 +9,7 @@ import { exportCode } from '../storage/code.ts';
 import { encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
 import { start } from './app.ts';
-import { baseEdge, openingCamera, type Camera } from './projection.ts';
+import { frameCamera, type Camera } from './projection.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
 
@@ -149,46 +149,39 @@ describe('the Menu in the game (app.ts)', () => {
   });
 });
 
-describe('the camera in the game (app.ts, ID-057)', () => {
+describe('the camera in the game (app.ts, ID-064)', () => {
   /** The camera the last frame was drawn with. */
   const drawnCam = (): Camera => vi.mocked(drawScene).mock.lastCall![3];
   const key = (type: 'keydown' | 'keyup', k: string) =>
     document.dispatchEvent(new KeyboardEvent(type, { key: k, bubbles: true }));
+  const view = () => ({ w: window.innerWidth, h: window.innerHeight });
 
-  it('opens on the opening view, and Home comes back to it after panning and zooming', () => {
+  it('draws the fixed frame, and no key, wheel or Home moves it', () => {
     const { root } = boot();
     step(0);
-    const view = { w: window.innerWidth, h: window.innerHeight };
-    const opening = openingCamera(view, baseEdge(newGame().base));
-    expect(drawnCam()).toEqual(opening);
-    // Pan right for a second, then zoom out with the wheel.
-    key('keydown', 'ArrowRight');
-    step(16);
-    step(1016);
-    key('keyup', 'ArrowRight');
+    const framed = frameCamera(view());
+    expect(drawnCam()).toEqual(framed);
+    let t = 16;
+    for (const k of ['ArrowRight', 'ArrowDown', 'd', 's', 'w', 'a', 'Home']) {
+      key('keydown', k);
+      step(t);
+      step((t += 1000));
+      key('keyup', k);
+    }
     root.querySelector('canvas')!.dispatchEvent(new WheelEvent('wheel', { deltaY: 400 }));
-    step(1032);
-    expect(drawnCam()).not.toEqual(opening);
-    key('keydown', 'Home');
-    step(1048);
-    expect(drawnCam()).toEqual(opening);
+    step(t + 16);
+    expect(drawnCam()).toEqual(framed);
   });
 
-  it('leaves Home to a focused picker', () => {
-    const { root } = boot();
+  it('fits the frame again when the window is resized', () => {
+    boot();
     step(0);
-    key('keydown', 'ArrowRight');
+    const before = drawnCam();
+    vi.stubGlobal('innerWidth', 1280);
+    vi.stubGlobal('innerHeight', 720);
+    window.dispatchEvent(new Event('resize'));
     step(16);
-    step(1016);
-    key('keyup', 'ArrowRight');
-    step(1032);
-    const panned = drawnCam();
-    const view = { w: window.innerWidth, h: window.innerHeight };
-    expect(panned).not.toEqual(openingCamera(view, baseEdge(newGame().base)));
-    const select = document.createElement('select');
-    root.append(select);
-    select.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
-    step(1048);
-    expect(drawnCam()).toEqual(panned);
+    expect(drawnCam()).toEqual(frameCamera({ w: 1280, h: 720 }));
+    expect(drawnCam()).not.toEqual(before);
   });
 });

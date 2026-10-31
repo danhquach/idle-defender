@@ -504,6 +504,7 @@ export function createHud(
   showResult(screen: ResultScreen): void;
   show(visible: boolean): void;
   toast(text: string): void;
+  bottomSpace(): number;
 } {
   const hud = el('div', 'hud');
   const bar = el('div', 'hud-bar');
@@ -575,6 +576,15 @@ export function createHud(
   const skillItems = SKILL_IDS.map((skill) =>
     iconButton('hud-button hud-shop-item hud-skill', SKILL_ICON[skill], () => onArm(skill)),
   );
+  // Each button starts in its tallest look (name · cost, locked with its note), so the
+  // bar's measured height (`bottomSpace`) covers any fight's before the first update,
+  // which redraws every button. The HUD stays hidden until then.
+  const rest = [...SHOP_ITEMS.map((i) => SHOP[i]), ...SKILL_IDS.map((k) => SKILLS[k])];
+  [...shopItems, ...skillItems].forEach((item, i) => {
+    item.label.textContent = `${rest[i]!.name} · `;
+    item.cost.textContent = String(rest[i]!.cost);
+    setVariant(item.button, 'locked', LOCKED_NOTE);
+  });
   cards.hidden = true;
   result.hidden = true;
   hud.append(bar, boss, warning, toast, shop, cards, replace, result);
@@ -771,6 +781,18 @@ export function createHud(
     show(visible) {
       hud.hidden = !visible;
       if (!visible) toast.hidden = true;
+    },
+    /**
+     * Screen px from the shop bar's top to the page's bottom, laid out even while the
+     * HUD is hidden (no paint happens in between), or 0 where nothing is laid out.
+     */
+    bottomSpace() {
+      const was = hud.hidden;
+      hud.hidden = false;
+      const box = shop.getBoundingClientRect();
+      hud.hidden = was;
+      // The HUD overlays the whole window, as the canvas does.
+      return box.height > 0 ? window.innerHeight - box.top : 0;
     },
     toast(text) {
       toast.textContent = text;

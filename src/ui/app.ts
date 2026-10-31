@@ -1,4 +1,4 @@
-// Wires the game to the page: canvas, frame loop, camera and click input, the build
+// Wires the game to the page: canvas, frame loop, fixed camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
@@ -33,14 +33,11 @@ import { createHud, defenderLabel, resultScreen } from './hud.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import {
-  baseEdge,
-  clampCamera,
   fightHitAt,
-  openingCamera,
+  frameCamera,
+  FRAME,
   slotAt,
-  TILT,
   unproject,
-  zoomAt,
   type Camera,
   type SlotHit,
   type View,
@@ -50,24 +47,8 @@ import type { Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
 const MAX_DT = 0.1;
-/** Keyboard pan speed in screen pixels per second. */
-const PAN_SPEED = 600;
-const WHEEL_ZOOM = 0.0015;
-/** Pixels per wheel line, for wheels that report lines. */
-const LINE_PX = 16;
 /** A press that moves less than this (CSS px) before release is a click, not a drag. */
 const CLICK_SLOP = 5;
-
-const PAN_KEYS: Record<string, [number, number]> = {
-  ArrowLeft: [-1, 0],
-  ArrowRight: [1, 0],
-  ArrowUp: [0, -1],
-  ArrowDown: [0, 1],
-  a: [-1, 0],
-  d: [1, 0],
-  w: [0, -1],
-  s: [0, 1],
-};
 
 /**
  * What Esc does, first match wins: put an armed skill away, close the open slot, drop
@@ -222,7 +203,6 @@ export function start(root: HTMLElement, art: Art): void {
       panel.show(game, selected);
     },
   );
-  const held = new Set<string>();
   /** Another camp from the menu (a loaded code, a new camp): saved and shown. */
   function replaceCamp(next: GameState): void {
     commit(next);
@@ -240,8 +220,6 @@ export function start(root: HTMLElement, art: Art): void {
       animator.reduced = on;
       writeReduceMotion(storage, on);
     },
-    // Keys held as it opened would be stuck down: their release goes to the menu.
-    onOpen: () => held.clear(),
   });
   /** Takes `next` as the game and saves it; the menu's Save tab says how that went. */
   function commit(next: GameState): void {
@@ -268,6 +246,7 @@ export function start(root: HTMLElement, art: Art): void {
     panel.notice(FIELD_GREW);
   }
 
+  // One fixed frame in every mode (ID-064), fitted to the window: nothing pans or zooms.
   let view: View = { w: 0, h: 0 };
   let cam: Camera = { x: 0, y: 0, zoom: 1 };
   function resize(): void {
@@ -276,13 +255,9 @@ export function start(root: HTMLElement, art: Art): void {
     canvas.width = Math.round(view.w * dpr);
     canvas.height = Math.round(view.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cam = clampCamera(cam, view);
+    cam = frameCamera(view, hud.bottomSpace());
   }
   resize();
-  // Starts on the opening view (ID-057): the field's full height, the outer wall and
-  // the field toward the spawn side; Home comes back to it.
-  const frameAll = (): Camera => openingCamera(view, baseEdge(game.base));
-  cam = frameAll();
   window.addEventListener('resize', resize);
 
   // A fight isn't saved, and neither is its payout until "Back to build": while one
@@ -291,53 +266,29 @@ export function start(root: HTMLElement, art: Art): void {
     if (horde) e.preventDefault();
   });
 
-  const panKey = (e: KeyboardEvent): string | null => {
-    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    return key in PAN_KEYS ? key : null;
-  };
   // Keys pressed inside the open menu stay in it (menu.ts); Esc opens it when it has
   // nothing else to cancel.
   document.addEventListener('keydown', (e) => {
-    if (menu.isOpen()) return;
-    if (e.key === 'Escape') {
-      const act = escapeAction({
-        fighting: horde !== null,
-        armed: armed !== null,
-        slot: selected !== null,
-        defender: selectedDefender !== null,
-      });
-      if (act === 'disarm') armed = null;
-      else if (act === 'slot') {
-        selected = null;
-        panel.show(game, selected);
-      } else if (act === 'defender') selectedDefender = null;
-      else if (!e.repeat) menu.open();
-      return;
-    }
-    // A focused picker keeps its own arrow keys, Home and type-ahead.
-    if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement) return;
-    if (e.key === 'Home') {
-      cam = frameAll();
-      e.preventDefault();
-      return;
-    }
-    const key = panKey(e);
-    if (!key) return;
-    held.add(key);
-    e.preventDefault();
+    if (menu.isOpen() || e.key !== 'Escape') return;
+    const act = escapeAction({
+      fighting: horde !== null,
+      armed: armed !== null,
+      slot: selected !== null,
+      defender: selectedDefender !== null,
+    });
+    if (act === 'disarm') armed = null;
+    else if (act === 'slot') {
+      selected = null;
+      panel.show(game, selected);
+    } else if (act === 'defender') selectedDefender = null;
+    else if (!e.repeat) menu.open();
   });
-  document.addEventListener('keyup', (e) => {
-    const key = panKey(e);
-    if (key) held.delete(key);
-  });
-  window.addEventListener('blur', () => held.clear());
 
-  // One primary pointer pans or clicks: right-click and a second finger are ignored.
-  let drag: { x: number; y: number } | null = null;
+  // One primary pointer clicks: right-click and a second finger are ignored, and a
+  // press that moves off its spot is no click.
   let press: { x: number; y: number; click: boolean } | null = null;
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !e.isPrimary) return;
-    drag = { x: e.clientX, y: e.clientY };
     press = { x: e.clientX, y: e.clientY, click: true };
     canvas.setPointerCapture(e.pointerId);
   });
@@ -345,22 +296,11 @@ export function start(root: HTMLElement, art: Art): void {
     if (e.isPrimary && Number.isFinite(e.offsetX) && Number.isFinite(e.offsetY)) {
       hover = { sx: e.offsetX, sy: e.offsetY };
     }
-    if (!drag || !press || !e.isPrimary) return;
+    if (!press || !e.isPrimary) return;
     if (Math.hypot(e.clientX - press.x, e.clientY - press.y) >= CLICK_SLOP) press.click = false;
-    cam = clampCamera(
-      {
-        ...cam,
-        x: cam.x - (e.clientX - drag.x) / cam.zoom,
-        y: cam.y - (e.clientY - drag.y) / (cam.zoom * TILT),
-      },
-      view,
-    );
-    drag = { x: e.clientX, y: e.clientY };
   });
-  const endDrag = (e: PointerEvent): void => {
-    if (!e.isPrimary) return;
-    drag = null;
-    press = null;
+  const endPress = (e: PointerEvent): void => {
+    if (e.isPrimary) press = null;
   };
   // In a fight with a skill armed, a click aims it there (a refusal shows as a toast)
   // and puts it away. Otherwise a click on one of your defenders selects it; with one
@@ -369,12 +309,14 @@ export function start(root: HTMLElement, art: Art): void {
   // every defender, or clears focus and selection on empty ground. In build mode it
   // opens the slot under it (or closes the menu).
   // Only finite canvas coordinates reach the hit tests, and only in-range grid slots
-  // from `slotAt` reach the core.
+  // from `slotAt` reach the core. Left of the frame nothing is drawn, so a click there
+  // lands on nothing: an armed skill stays armed.
   canvas.addEventListener('pointerup', (e) => {
     const click = e.isPrimary && press?.click === true;
-    endDrag(e);
+    endPress(e);
     if (!click || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
     const ground = unproject({ sx: e.offsetX, sy: e.offsetY }, cam);
+    if (ground.x < FRAME.left) return;
     if (horde && armed) {
       const used = useSkill(horde, armed, ground.x, ground.y);
       if (used.ok) horde = used.state;
@@ -410,20 +352,10 @@ export function start(root: HTMLElement, art: Art): void {
       panel.show(game, selected);
     }
   });
-  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointercancel', endPress);
   canvas.addEventListener('pointerleave', () => {
     hover = null;
   });
-  canvas.addEventListener(
-    'wheel',
-    (e) => {
-      e.preventDefault();
-      // Some mouse wheels report lines, not pixels.
-      const dy = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * LINE_PX : e.deltaY;
-      cam = zoomAt(cam, Math.exp(-dy * WHEEL_ZOOM), { sx: e.offsetX, sy: e.offsetY }, view);
-    },
-    { passive: false },
-  );
 
   // A hidden tab or the open menu doesn't advance the fight; it resumes from where it was.
   let last: number | null = null;
@@ -444,22 +376,6 @@ export function start(root: HTMLElement, art: Art): void {
         (horde.outcome !== 'fighting' || !horde.defenders.some((d) => d.id === selectedDefender))
       ) {
         selectedDefender = null;
-      }
-      let dx = 0;
-      let dy = 0;
-      for (const key of held) {
-        dx += PAN_KEYS[key]![0];
-        dy += PAN_KEYS[key]![1];
-      }
-      if (dx || dy) {
-        cam = clampCamera(
-          {
-            ...cam,
-            x: cam.x + (dx * PAN_SPEED * dt) / cam.zoom,
-            y: cam.y + (dy * PAN_SPEED * dt) / (cam.zoom * TILT),
-          },
-          view,
-        );
       }
     }
     if (horde) {
