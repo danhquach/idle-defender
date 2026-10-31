@@ -1,7 +1,7 @@
 # Idle Defender
 
 [![CI](https://github.com/danhquach/idle-defender/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/danhquach/idle-defender/actions/workflows/ci.yml)
-[![GitHub Pages](https://github.com/danhquach/idle-defender/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/danhquach/idle-defender/actions/workflows/pages/pages-build-deployment)
+[![GitHub Pages](https://github.com/danhquach/idle-defender/actions/workflows/pages.yml/badge.svg)](https://github.com/danhquach/idle-defender/actions/workflows/pages.yml)
 
 **Play the test build:** <https://danhquach.github.io/idle-defender/>
 
