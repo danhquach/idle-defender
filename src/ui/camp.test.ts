@@ -7,7 +7,7 @@ import { MAX_COUNT, stockOf, type CampPickId } from '../core/data.ts';
 import { newGame, startHorde, type GameState } from '../core/game.ts';
 import { createBuildPanel } from './build.ts';
 import { campPickText, createHud, resultScreen } from './hud.ts';
-import { campLines, dismissQuestion, recruitNotice } from './roster.ts';
+import { campLines, dismissQuestion, recruitNotice, treatText } from './roster.ts';
 
 const NOW = 1_800_000_000_000;
 
@@ -102,6 +102,74 @@ describe('the camp in the roster view', () => {
     buttons('Field Medic 1/5')[0]!.click();
     expect(games.at(-1)!.camp.picks.medic).toBe(1);
     expect(games.at(-1)!.camp.offers).toEqual([]);
+  });
+});
+
+describe('recovery in the roster view (ID-031)', () => {
+  const HOUR = 60 * 60 * 1000;
+  /** Bob resting `rest` more (an hour), with `food` Food and no Medicine. */
+  const resting = (food: number, rest = HOUR): GameState => {
+    const g = newGame();
+    return {
+      ...g,
+      stock: stockOf({ food }),
+      roster: g.roster.map((d) => (d.id === 'bob' ? { ...d, injuredUntil: Date.now() + rest } : d)),
+    };
+  };
+
+  it('names the item, the cut and what is left', () => {
+    expect(treatText(resting(3), 'food')).toBe('Use Food · 30m less rest · 3 left');
+    expect(treatText(resting(3), 'medicine')).toBe('Use Medicine · 60m less rest · 0 left');
+  });
+
+  it('only a resting defender gets the buttons; Food cuts the rest and is used up', () => {
+    const g = resting(3);
+    const { games, buttons } = rosterFor(g);
+    expect(buttons('Use Food')).toHaveLength(1);
+    const until = g.roster[0]!.injuredUntil!;
+    buttons('Use Food')[0]!.click();
+    expect(games.at(-1)!.stock.food).toBe(2);
+    expect(games.at(-1)!.roster[0]!.injuredUntil).toBe(until - HOUR / 2);
+  });
+
+  it('with none left the button is disabled and says why', () => {
+    const { games, buttons } = rosterFor(resting(0));
+    const medicine = buttons('Use Medicine')[0]!;
+    expect(medicine.disabled).toBe(true);
+    expect(medicine.textContent).toContain('No medicine left');
+    medicine.click();
+    expect(games).toEqual([]);
+  });
+
+  it('Medicine cuts an hour and is used up', () => {
+    const g = { ...resting(0, 2 * HOUR), stock: stockOf({ medicine: 1 }) };
+    const { games, buttons } = rosterFor(g);
+    buttons('Use Medicine')[0]!.click();
+    expect(games.at(-1)!.stock.medicine).toBe(0);
+    expect(games.at(-1)!.roster[0]!.injuredUntil).toBe(g.roster[0]!.injuredUntil! - HOUR);
+  });
+
+  it('a defender out on patrol gets no recovery buttons', () => {
+    const g = resting(3);
+    const out: GameState = {
+      ...g,
+      patrols: [
+        {
+          no: 1,
+          location: 'gas-station',
+          members: ['bob'],
+          sentAt: Date.now(),
+          sentHorde: 3,
+          strength: 1,
+          seed: 1,
+        },
+      ],
+    };
+    expect(rosterFor(out).buttons('Use ')).toEqual([]);
+  });
+
+  it('a fit roster shows no recovery buttons', () => {
+    expect(rosterFor(newGame()).buttons('Use ')).toEqual([]);
   });
 });
 

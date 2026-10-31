@@ -1,7 +1,8 @@
 // The roster screen between hordes (design §6): the camp (§11: people and slots, the
 // camp upgrade, camp level and picks, the next free recruit), then each defender's
-// level, stats, titles and status, their stat-point picker, loadout pickers and Dismiss,
-// and the title badge (§15). Text only via textContent; the badge colour is a constant.
+// level, stats, titles and status, Food and Medicine for the resting (ID-031), their
+// stat-point picker, loadout pickers and Dismiss, and the title badge (§15). Text only
+// via textContent; the badge colour is a constant.
 import {
   campLevelOf,
   campSlots,
@@ -9,7 +10,9 @@ import {
   dismiss,
   dismissLock,
   takeCampPick,
+  treat,
   upgradeCamp,
+  type Treatment,
 } from '../core/camp.ts';
 import {
   CAMP_PICK_IDS,
@@ -22,6 +25,7 @@ import {
   STAT_NAMES,
   STATS,
   FREE_WEAPONS,
+  TREATMENT_MS,
   WEAPONS,
   type FreeWeaponId,
   type ItemId,
@@ -257,11 +261,8 @@ export function rosterSection(
   return [campSection(game, now, onChange), ...game.roster.map((d) => defenderCard(d))];
 
   function defenderCard(d: RosterDefender): HTMLElement {
-    const entry = rosterEntry(
-      d,
-      now,
-      game.patrols.find((p) => p.members.includes(d.id)),
-    );
+    const patrol = game.patrols.find((p) => p.members.includes(d.id));
+    const entry = rosterEntry(d, now, patrol);
     const card = el('section', 'roster-entry');
     const head = el('h3', 'build-slot-title', entry.label);
     const badge = badgeElement(d);
@@ -272,6 +273,11 @@ export function rosterSection(
       el('p', 'build-slot-note', entry.stats),
       el('p', 'build-slot-note', entry.titles),
     );
+    if (!patrol && !available(d, now)) {
+      const row = el('div', 'hud-pick-row');
+      for (const item of TREATMENTS) row.append(treatButton(game, d, item, now, onChange));
+      card.append(row);
+    }
     if (entry.points) {
       const row = el('div', 'hud-pick-row');
       for (const stat of STATS) row.append(statButton(game, d, stat, onChange));
@@ -346,6 +352,33 @@ function dismissButton(
     const r = dismiss(game, d.id);
     if (r.ok) onChange(r.game);
   });
+  return button;
+}
+
+const TREATMENTS: readonly Treatment[] = ['food', 'medicine'];
+const TREATMENT_NAMES: Readonly<Record<Treatment, string>> = { food: 'Food', medicine: 'Medicine' };
+
+/** "Use Food · 30m less rest · 3 left", for a resting defender (design §11 Recovery). */
+export const treatText = (game: Pick<GameState, 'stock'>, item: Treatment): string =>
+  `Use ${TREATMENT_NAMES[item]} · ${TREATMENT_MS[item] / 60_000}m less rest · ${game.stock[item]} left`;
+
+/** Uses one Food or Medicine on resting `d`; disabled with the core's reason when it can't. */
+function treatButton(
+  game: GameState,
+  d: RosterDefender,
+  item: Treatment,
+  now: number,
+  onChange: (next: GameState) => void,
+): HTMLElement {
+  const button = el('button', 'build-option');
+  button.type = 'button';
+  button.append(el('span', 'build-option-label', treatText(game, item)));
+  const r = treat(game, d.id, item, now);
+  if (r.ok) button.addEventListener('click', () => onChange(r.game));
+  else {
+    button.disabled = true;
+    button.append(el('span', 'build-option-reason', r.reason));
+  }
   return button;
 }
 

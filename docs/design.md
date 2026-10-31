@@ -1069,6 +1069,13 @@ Set before sending; they apply to any location, plaza or single building.
   **Food** used cuts 30 minutes; each **Medicine** cuts 60 *(designer's
   call, starting points)*, so 4 Food or 2 Medicine is a full recovery. Both
   are used up. Recovery runs while the game is closed.
+- **As built (ID-031):** each resting defender's roster card has **Use
+  Food** (30 min less rest) and **Use Medicine** (60 min less), with the
+  stock left; each use spends one. A cut longer than the rest left heals
+  them at once (the item is still used up). Field Medic shortens the rest,
+  not the cut. Refused, with the reason on the button, for someone not
+  injured or with none left; a defender out on patrol shows no buttons.
+  No save change.
 - **Roster floor** *(designer's call)*: if fewer than 3 defenders are
   alive, a free basic recruit (level 1, Rusty pistol) arrives every hour of
   real time (while camp slots allow), so a patrol wipe can never leave the
