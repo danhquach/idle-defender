@@ -54,7 +54,7 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
-import { CAMP_YARD, groundCanvas } from './ground.ts';
+import { CAMP_YARD, GROUND_TILE, groundCanvas, SURROUND_BLOCK, surroundCanvas } from './ground.ts';
 import { defenderPose, enemyPose, fallPose, STILL, type Animator, type Pose } from './anim.ts';
 import {
   BASE_ART,
@@ -236,14 +236,14 @@ function faces(b: Box, cam: Camera): { top: Rect; front: Rect } {
   };
 }
 
-const patterns = new WeakMap<HTMLImageElement, CanvasPattern>();
+const patterns = new WeakMap<HTMLImageElement | OffscreenCanvas, CanvasPattern>();
 /**
  * Fills `r` with a tiling texture fixed to the world, so it pans and zooms with the
  * field: `squash` is how much the face is flattened on screen (TILT for a top face).
  */
 function fillTexture(
   ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
+  img: HTMLImageElement | OffscreenCanvas,
   r: Rect,
   tile: number,
   squash: number,
@@ -626,8 +626,17 @@ function drawSegment(
   }
 }
 
-/** The ground with the camp's yard in it (ground.ts), then the huts, behind every sprite. */
-function drawGround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera): void {
+/**
+ * The ground with the camp's yard in it (ground.ts) over its block repeated past the
+ * field's edges, so none of the sky shows at any zoom or pan; then the huts, behind
+ * every sprite.
+ */
+function drawGround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera, view: View): void {
+  const surround = surroundCanvas(art);
+  if (surround) {
+    const all = { sx: 0, sy: 0, w: view.w, h: view.h };
+    fillTexture(ctx, surround, all, SURROUND_BLOCK * GROUND_TILE, TILT, cam);
+  }
   const field = faces({ x0: 0, x1: FIELD.right, y0: 0, y1: FIELD.height, z0: 0, height: 0 }, cam);
   const ground = groundCanvas(art);
   if (ground) ctx.drawImage(ground, field.top.sx, field.top.sy, field.top.w, field.top.h);
@@ -891,7 +900,7 @@ export function drawScene(
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = COLOR.sky;
   ctx.fillRect(0, 0, view.w, view.h);
-  drawGround(ctx, art, cam);
+  drawGround(ctx, art, cam, view);
 
   // Build mode: every empty slot as a faint outline on the ground.
   if (build) {

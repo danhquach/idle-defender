@@ -23,6 +23,7 @@ import type { Bullet, Enemy } from '../core/horde.ts';
 import { carpet } from '../core/skills.ts';
 import { ANIM, Animator } from './anim.ts';
 import { HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
+import { GROUND_TILE, SURROUND_BLOCK } from './ground.ts';
 import { drawScene, trapLook, turretLook, type Scene } from './render.ts';
 import { ART_IDS, ART_PX, GATE_POSTS, TIER_ART, type Art, type ArtId } from './sprites.ts';
 
@@ -179,7 +180,15 @@ function stubCanvas() {
   vi.stubGlobal(
     'OffscreenCanvas',
     class {
-      id = 'ground-canvas';
+      id: string = 'ground-canvas';
+      width: number;
+      height: number;
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+        // The block repeated past the field is square, SURROUND_BLOCK tiles a side.
+        if (width === SURROUND_BLOCK * ART_PX && height === width) this.id = 'surround-canvas';
+      }
       getContext() {
         return {
           drawImage: noop,
@@ -208,9 +217,49 @@ describe('drawScene with art', () => {
 
   it('draws the painted ground (field and yard) first, then the camp, and skips an unbuilt slot', () => {
     const r = draw(blank());
-    expect(r.textured).toEqual([]);
+    expect(r.textured).toEqual(['surround-canvas']);
     expect(r.drawn[0]).toBe('ground-canvas');
     expect(new Set(r.drawn.slice(1))).toEqual(new Set(['shack', 'tent']));
+  });
+
+  it('fills the whole view with the repeating ground before the field (ID-057)', () => {
+    const r = recorder();
+    const order: string[] = [];
+    const fills: number[][] = [];
+    const ctx = r.ctx as unknown as Record<string, unknown>;
+    let matrix: number[] = [];
+    // translate(e, f) then scale(a, d): all a texture's transform uses.
+    vi.stubGlobal(
+      'DOMMatrix',
+      class {
+        m = [1, 1, 0, 0];
+        translate(e: number, f: number) {
+          this.m = [this.m[0]!, this.m[1]!, e, f];
+          return this;
+        }
+        scale(a: number, d: number) {
+          this.m = [a, d, this.m[2]!, this.m[3]!];
+          return this;
+        }
+      },
+    );
+    Object.assign(ctx, {
+      createPattern: () => ({ setTransform: (t: { m: number[] }) => (matrix = t.m) }),
+      fillRect: (...args: number[]) => {
+        order.push('fill');
+        fills.push(args);
+      },
+      drawImage: (img: { id: string }) => order.push(img.id),
+    });
+    drawScene(r.ctx, r.art, blank(), CAM, VIEW);
+    // The sky, then the repeating block over the same whole view, then the painted field.
+    expect(order.slice(0, 3)).toEqual(['fill', 'fill', 'ground-canvas']);
+    expect(fills[1]).toEqual([0, 0, VIEW.w, VIEW.h]);
+    // Fixed to the world: its origin is the field's top left, a block of tiles at their
+    // own resolution per SURROUND_BLOCK tiles of ground.
+    const origin = project({ x: 0, y: 0 }, CAM);
+    const s = (SURROUND_BLOCK * GROUND_TILE * CAM.zoom) / (SURROUND_BLOCK * ART_PX);
+    expect(matrix).toEqual([s, s * TILT, origin.sx, origin.sy]);
   });
 
   it("draws a whole wall in its tier's textures, with no cracks", () => {
@@ -906,12 +955,15 @@ describe('sprite animation (ID-049)', () => {
   beforeEach(() => {
     stubCanvas();
     // A hit's white silhouette is a sprite-sized canvas; the ground's is field-sized.
-    const Ground = globalThis.OffscreenCanvas as unknown as new () => { id: string };
+    const Ground = globalThis.OffscreenCanvas as unknown as new (
+      w: number,
+      h: number,
+    ) => { id: string };
     vi.stubGlobal(
       'OffscreenCanvas',
       class extends Ground {
         constructor(w: number, h: number) {
-          super();
+          super(w, h);
           if (w === ART_PX && h === ART_PX) this.id = 'white';
         }
       },

@@ -8,16 +8,17 @@ import {
   spotOf,
   type Base,
 } from '../core/base.ts';
-import { FIELD, SEGMENT_HEIGHT, START_STOCK, WALL } from '../core/data.ts';
+import { COLUMNS, FIELD, POST_OFFSET, SEGMENT_HEIGHT, START_STOCK, WALL } from '../core/data.ts';
 import { layoutOf, newHorde, standing } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
 import {
+  baseEdge,
   clampCamera,
   depthSort,
   fightHitAt,
-  fitCamera,
   MARGIN_Y,
   mountDepth,
+  openingCamera,
   PIECE,
   project,
   slotAt,
@@ -78,19 +79,66 @@ describe('projection', () => {
     { x: FIELD.right, y: FIELD.height },
   ];
 
-  it('opens framed on the whole field, fitting the height as well as the width', () => {
-    // Wide screen: the width decides (1920 / 1600 = 1.2); the height has room and is centred.
-    const wide = { w: 1920, h: 1080 };
-    const w = fitCamera(wide);
-    expect(w.zoom).toBeCloseTo(1.2);
-    expect(corners.every((c) => shows(c, w, wide))).toBe(true);
-    // A short, very wide screen: the height decides (600 / (880 × 0.6) ≈ 1.136).
-    const strip = { w: 3440, h: 600 };
-    const s = fitCamera(strip);
-    expect(s.zoom).toBeCloseTo(600 / ((FIELD.height + MARGIN_Y) * 0.6));
-    expect(corners.every((c) => shows(c, s, strip))).toBe(true);
-    // Too small to fit even at the 0.5 floor: zoomed out as far as it goes.
-    expect(fitCamera({ w: 400, h: 200 }).zoom).toBe(0.5);
+  describe('opening view (ID-057)', () => {
+    const edge = baseEdge(newBase());
+    /** Screen y of the field's back edge, its front edge, and of the strip above it. */
+    const ys = (cam: Camera) => ({
+      strip: project({ x: 0, y: -MARGIN_Y }, cam).sy,
+      front: project({ x: 0, y: FIELD.height }, cam).sy,
+    });
+
+    it.each([
+      { w: 1440, h: 900 },
+      { w: 1280, h: 720 },
+    ])('fills the height at $w×$h with the field: no band above or below', (view) => {
+      const cam = openingCamera(view, edge);
+      expect(ys(cam).strip).toBeCloseTo(0);
+      expect(ys(cam).front).toBeCloseTo(view.h);
+      // Far more zoomed in than the old fit-the-width view (1440 / 1600 = 0.9).
+      expect(cam.zoom).toBeCloseTo(view.h / ((FIELD.height + MARGIN_Y) * 0.6));
+    });
+
+    it.each([
+      { w: 1440, h: 900 },
+      { w: 1280, h: 720 },
+    ])(
+      'shows the outer wall, its ground posts and the field toward the spawn side at $w×$h',
+      (view) => {
+        const cam = openingCamera(view, edge);
+        const at = (x: number) => project({ x, y: 0 }, cam).sx;
+        expect(at(edge + POST_OFFSET.ground - PIECE.ground.halfWidth)).toBeGreaterThan(0);
+        // The wall sits in the left third; the rest of the screen looks toward the spawn.
+        expect(at(edge)).toBeLessThan(view.w / 3);
+        expect(at(edge + WALL.depth + 500)).toBeLessThan(view.w);
+      },
+    );
+
+    it('frames the outermost built layer', () => {
+      const base = newBase();
+      expect(baseEdge(base)).toBe(COLUMNS[0]);
+      const grown = { layers: [...base.layers, { column: 2, slots: [] }] };
+      expect(baseEdge(grown)).toBe(COLUMNS[2]);
+      // A base with no layer at all frames the first column.
+      expect(baseEdge({ layers: [] })).toBe(COLUMNS[0]);
+      // The camera follows: the outer wall stands at the same spot on screen.
+      const view = { w: 1440, h: 900 };
+      const near = project({ x: COLUMNS[0]!, y: 0 }, openingCamera(view, COLUMNS[0]!)).sx;
+      const far = project({ x: COLUMNS[1]!, y: 0 }, openingCamera(view, COLUMNS[1]!)).sx;
+      expect(far).toBeCloseTo(near);
+    });
+
+    it('fits the height on any screen, centring a field narrower than the view', () => {
+      // Portrait: the height decides, about 1.54×, with the wall still near the left.
+      const tall = { w: 375, h: 812 };
+      expect(openingCamera(tall, edge).zoom).toBeCloseTo(812 / ((FIELD.height + MARGIN_Y) * 0.6));
+      // Ultra-wide: 3440 / 1.136 ≈ 3027 units shows more than the field, so it is centred.
+      const wide = { w: 3440, h: 600 };
+      const w = openingCamera(wide, edge);
+      expect(w.x).toBeCloseTo((FIELD.right - wide.w / w.zoom) / 2);
+      // Too short to fill even at the 0.5 floor, or so tall it would pass 2×: clamped.
+      expect(openingCamera({ w: 400, h: 200 }, edge).zoom).toBe(0.5);
+      expect(openingCamera({ w: 1000, h: 3000 }, edge).zoom).toBe(2);
+    });
   });
 
   it('pans to every corner at any zoom', () => {

@@ -2,7 +2,16 @@
 // load, painted whole so no tile edge shows.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FIELD } from '../core/data.ts';
-import { CAMP_YARD, GROUND_SEED, GROUND_TILE, groundCanvas, groundLayout } from './ground.ts';
+import {
+  CAMP_YARD,
+  GROUND_SEED,
+  GROUND_TILE,
+  groundCanvas,
+  groundLayout,
+  SURROUND_BLOCK,
+  surroundCanvas,
+  surroundLayout,
+} from './ground.ts';
 import { ART_IDS, BASE_ART, type Art, type ArtId } from './sprites.ts';
 
 describe('ground layout', () => {
@@ -27,6 +36,18 @@ describe('ground layout', () => {
       expect(d.y - d.size / 2).toBeGreaterThanOrEqual(0);
       expect(d.y + d.size / 2).toBeLessThanOrEqual(FIELD.height);
     }
+  });
+});
+
+describe('ground past the field (ID-057)', () => {
+  it('repeats a seeded block of the same tile variants, the same every load', () => {
+    const block = surroundLayout(GROUND_SEED);
+    expect(block).toEqual(surroundLayout(GROUND_SEED));
+    expect(block).toHaveLength(SURROUND_BLOCK);
+    for (const row of block) expect(row).toHaveLength(SURROUND_BLOCK);
+    for (const id of block.flat()) expect(BASE_ART.groundTiles).toContain(id);
+    // Mixed, so the repeat doesn't read as one tile stamped over and over.
+    expect(new Set(block.flat()).size).toBeGreaterThan(1);
   });
 });
 
@@ -140,6 +161,41 @@ describe('painting the ground', () => {
     const a = art();
     expect(groundCanvas(a)).toBeNull();
     expect(groundCanvas(a)).toBeNull();
+    expect(made).toBe(1);
+  });
+
+  it("paints the block past the field at its tiles' own size, once per set of art", () => {
+    const a = art();
+    const block = surroundCanvas(a);
+    expect(sizes[0]).toEqual({ w: SURROUND_BLOCK * 256, h: SURROUND_BLOCK * 256 });
+    const drawn = calls.filter((c) => c.canvas === 0 && c.op === 'drawImage');
+    surroundLayout(GROUND_SEED).forEach((row, r) =>
+      row.forEach((variant, c) => {
+        const call = drawn[r * SURROUND_BLOCK + c]!;
+        expect(id(call)).toBe(variant);
+        expect(call.args.slice(1)).toEqual([c * 256, r * 256, 256, 256]);
+      }),
+    );
+    expect(drawn).toHaveLength(SURROUND_BLOCK * SURROUND_BLOCK);
+    const n = calls.length;
+    expect(surroundCanvas(a)).toBe(block);
+    expect(calls.length).toBe(n);
+  });
+
+  it('leaves the block out, once, where the browser has no OffscreenCanvas', () => {
+    let made = 0;
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        constructor() {
+          made++;
+          throw new Error('unsupported');
+        }
+      },
+    );
+    const a = art();
+    expect(surroundCanvas(a)).toBeNull();
+    expect(surroundCanvas(a)).toBeNull();
     expect(made).toBe(1);
   });
 

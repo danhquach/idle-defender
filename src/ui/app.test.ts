@@ -9,11 +9,17 @@ import { exportCode } from '../storage/code.ts';
 import { encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
 import { start } from './app.ts';
+import { baseEdge, openingCamera, type Camera } from './projection.ts';
+import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
 
 vi.mock('../core/horde.ts', async (importOriginal) => {
   const real = await importOriginal<typeof import('../core/horde.ts')>();
   return { ...real, tick: vi.fn(real.tick) };
+});
+vi.mock('./render.ts', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./render.ts')>();
+  return { ...real, drawScene: vi.fn(real.drawScene) };
 });
 
 /** A 2D context that takes every call and property and draws nothing. */
@@ -65,6 +71,7 @@ beforeEach(() => {
     ctx as CanvasRenderingContext2D,
   );
   vi.mocked(tick).mockClear();
+  vi.mocked(drawScene).mockClear();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -139,5 +146,49 @@ describe('the Menu in the game (app.ts)', () => {
     dialogButton('New camp').click();
     dialogButton('Start new camp').click();
     expect(menuButton.getAttribute('aria-label')).toBe('Menu');
+  });
+});
+
+describe('the camera in the game (app.ts, ID-057)', () => {
+  /** The camera the last frame was drawn with. */
+  const drawnCam = (): Camera => vi.mocked(drawScene).mock.lastCall![3];
+  const key = (type: 'keydown' | 'keyup', k: string) =>
+    document.dispatchEvent(new KeyboardEvent(type, { key: k, bubbles: true }));
+
+  it('opens on the opening view, and Home comes back to it after panning and zooming', () => {
+    const { root } = boot();
+    step(0);
+    const view = { w: window.innerWidth, h: window.innerHeight };
+    const opening = openingCamera(view, baseEdge(newGame().base));
+    expect(drawnCam()).toEqual(opening);
+    // Pan right for a second, then zoom out with the wheel.
+    key('keydown', 'ArrowRight');
+    step(16);
+    step(1016);
+    key('keyup', 'ArrowRight');
+    root.querySelector('canvas')!.dispatchEvent(new WheelEvent('wheel', { deltaY: 400 }));
+    step(1032);
+    expect(drawnCam()).not.toEqual(opening);
+    key('keydown', 'Home');
+    step(1048);
+    expect(drawnCam()).toEqual(opening);
+  });
+
+  it('leaves Home to a focused picker', () => {
+    const { root } = boot();
+    step(0);
+    key('keydown', 'ArrowRight');
+    step(16);
+    step(1016);
+    key('keyup', 'ArrowRight');
+    step(1032);
+    const panned = drawnCam();
+    const view = { w: window.innerWidth, h: window.innerHeight };
+    expect(panned).not.toEqual(openingCamera(view, baseEdge(newGame().base)));
+    const select = document.createElement('select');
+    root.append(select);
+    select.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    step(1048);
+    expect(drawnCam()).toEqual(panned);
   });
 });
