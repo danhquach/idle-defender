@@ -20,7 +20,6 @@ function rosterFor(game: GameState) {
     root,
     () => {},
     () => {},
-    () => {},
     (next) => {
       games.push(next);
       panel.show(next, null);

@@ -1252,11 +1252,19 @@ offline progress works across sessions.
   is refused: a bad save starts a new camp and is kept aside, never
   overwritten; a bad code changes nothing and says why.
 - **Backup code:** the save as one line of text (a tag and base64) shown in
-  the build panel, to keep outside the browser and paste back in. Loading
+  the Menu's Save tab, to keep outside the browser and paste back in. Loading
   one asks first, since it replaces the camp.
 - **Storage refused:** where the browser blocks or fills storage the game
-  still plays, and the build panel says saving is off.
+  still plays; the Save tab says saving is off and the Menu button shows a
+  red dot.
 - **Several tabs:** each saves on its own changes; the last write wins.
+- **Menu** *(as built, ID-039)*: a "Menu" button top-right (or Esc, when it
+  has nothing else to cancel) opens a dialog with three tabs. **Settings:**
+  Reduce motion (sprites stop bobbing and leaning; it starts on when the
+  system asks for less motion), stored in its own key, outside the save and
+  the code. **Save:** whether saving works, the backup code, Load code and
+  New camp (each asks first, and both wait until no horde is on). **Help:**
+  the controls and a short how-to-play. In a fight, the open menu pauses it.
 
 ## 13. Out of scope (v1)
 

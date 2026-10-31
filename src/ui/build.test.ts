@@ -3,20 +3,12 @@ import { buildPost, buildSegment, buildTrap, buildTurret, lineWall } from '../co
 import { BANK_CAP, GENERATOR, SEGMENTS, TRAPS, TURRET, stockOf } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { sendPatrol } from '../core/patrol.ts';
-import { exportCode } from '../storage/code.ts';
-import { encodeSave } from '../storage/save.ts';
-import { oldStock, prePatrol } from '../storage/testing.ts';
 import {
   buildTurretLine,
   lineResult,
-  IMPORT_CONFIRM,
-  IMPORT_DONE,
-  FIELD_GREW,
-  IMPORT_REFUSAL,
   injuredLines,
   labLines,
   lineWallLine,
-  loadCode,
   pickStart,
   postKey,
   powerLines,
@@ -99,45 +91,6 @@ describe('build panel', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^Jack · injured, back at .*05/);
     expect(injuredLines(g, g.roster[1]!.injuredUntil)).toEqual([]);
-  });
-
-  it('Load code: says why a code is refused, without asking', () => {
-    const asked: string[] = [];
-    const ask = (q: string) => (asked.push(q), true);
-    const refused = { game: null, clearPaste: false };
-    expect(loadCode('', ask)).toEqual({ ...refused, message: IMPORT_REFUSAL.empty });
-    expect(loadCode('ID1:' + 'A'.repeat(200_000), ask)).toEqual({
-      ...refused,
-      message: IMPORT_REFUSAL.tooBig,
-    });
-    expect(loadCode('ID1:nope', ask)).toEqual({ ...refused, message: IMPORT_REFUSAL.bad });
-    expect(asked).toEqual([]);
-  });
-
-  it('Load code: asks first; a no changes nothing, a yes loads and clears the box', () => {
-    const g = { ...newGame(), hordeNumber: 5 };
-    const code = exportCode(encodeSave(g, 1_800_000_000_000));
-    const asked: string[] = [];
-    expect(loadCode(code, (q) => (asked.push(q), false))).toEqual({
-      game: null,
-      message: '',
-      clearPaste: false,
-    });
-    expect(asked).toEqual([IMPORT_CONFIRM]);
-    expect(loadCode(code, () => true)).toEqual({ game: g, message: IMPORT_DONE, clearPaste: true });
-    // A code from before the taller field (a v1 save, 5 rows) says the field grew.
-    const old = JSON.parse(encodeSave(g, 1_800_000_000_000));
-    old.v = 1;
-    old.game = prePatrol(g);
-    old.game.stock = oldStock(g);
-    old.game.base.layers[0].slots = old.game.base.layers[0].slots.slice(3, 8);
-    old.game.base.posts = old.game.base.posts.map((p: { row: number }) => ({
-      ...p,
-      row: p.row - 3,
-    }));
-    const loaded = loadCode(exportCode(JSON.stringify(old)), () => true);
-    expect(loaded.message).toBe(`${IMPORT_DONE} ${FIELD_GREW}`);
-    expect(loaded.game?.base.posts).toEqual(g.base.posts);
   });
 
   it('shows the Lab: not built, then each node locked with its reason', () => {

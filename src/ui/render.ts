@@ -886,7 +886,7 @@ export function drawScene(
 ): void {
   anim?.observe(scene);
   const defenderPoseOf = (d: Defender): Readonly<Pose> =>
-    anim ? defenderPose(d, scene.time, anim.acts(d.id, scene.strikes)) : STILL;
+    anim ? anim.shown(defenderPose(d, scene.time, anim.acts(d.id, scene.strikes))) : STILL;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = COLOR.sky;
@@ -1002,7 +1002,7 @@ export function drawScene(
           ctx.ellipse(ground.sx, ground.sy, r, r * 0.5, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-        const pose = anim ? enemyPose(e, scene.time, anim.enemy(e.id)) : STILL;
+        const pose = anim ? anim.shown(enemyPose(e, scene.time, anim.enemy(e.id))) : STILL;
         drawEnemy(ctx, art, e.kind, ground, cam, pose);
         if (burning(scene, e)) drawFlame(ctx, e.x, e.y, size, scene.time, cam);
         drawHpBar(ctx, { x: e.x, y: e.y, z: HP_BAR.z * size }, e.hp, e.maxHp, cam);
@@ -1019,7 +1019,7 @@ export function drawScene(
       x: e.x,
       draw: () => {
         const ground = project({ x: e.x, y: e.y }, cam);
-        const pose = fallPose(scene.time - c.at);
+        const pose = anim ? anim.shown(fallPose(scene.time - c.at)) : STILL;
         drawShadow(ctx, ground, pose.alpha, cam, ENEMIES[e.kind].radius / ENEMY_RADIUS);
         drawEnemy(ctx, art, e.kind, ground, cam, pose);
       },

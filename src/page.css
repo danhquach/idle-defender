@@ -33,6 +33,8 @@ body {
   left: 0;
   right: 0;
   padding: 8px 16px;
+  /* Clear of the Menu button on the right. */
+  padding-right: 112px;
   background: rgb(21 23 26 / 75%);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -318,12 +320,6 @@ body {
   background: #24262a;
   color: #d8d4cc;
   font: inherit;
-}
-
-.build-backup {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .build-code {
@@ -658,4 +654,368 @@ body {
 
 .worldmap-report h4 {
   margin: 0;
+}
+
+/* The Menu (ID-039): the button sits top-right in both modes, over the top bar. */
+.menu-button {
+  position: absolute;
+  top: 5px;
+  right: 12px;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid #c9b98f;
+  border-radius: 6px;
+  background: #2d3035;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.menu-button:hover,
+.menu-button:focus-visible {
+  border-color: #e8dcb8;
+  background: #363a40;
+}
+
+.menu-button:focus-visible,
+.menu button:focus-visible,
+.menu textarea:focus-visible,
+.menu input:focus-visible {
+  outline: 2px solid #e0d9c8;
+  outline-offset: 2px;
+}
+
+.menu-key {
+  padding: 0 4px;
+  border: 1px solid #5e5546;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 0.6875rem;
+  color: #8f8a80;
+}
+
+.menu-button .menu-key {
+  margin-left: 8px;
+}
+
+/* Saving is off or a write failed: a red dot, so the warning shows with the menu shut. */
+.menu-dot {
+  display: none;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #15171a;
+  border-radius: 50%;
+  background: #c43b3b;
+  box-sizing: border-box;
+}
+
+.menu-alert .menu-dot {
+  display: block;
+}
+
+/* Outside #app, so the field behind can go inert; a click on it does nothing. */
+.menu-scrim {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 55%);
+  color: #d8d4cc;
+}
+
+.menu-scrim[hidden] {
+  display: none;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  /* One height for every tab, so the tabs don't jump as they switch. */
+  height: min(560px, 100%);
+  border: 1px solid #4a4740;
+  border-radius: 8px;
+  background: rgb(21 23 26 / 97%);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 60%);
+  box-sizing: border-box;
+}
+
+.menu:focus {
+  outline: none;
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 0;
+}
+
+.menu-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.menu-chip {
+  padding: 1px 8px;
+  border: 1px solid #e0b84a;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  color: #e0b84a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.menu-chip[hidden] {
+  display: none;
+}
+
+.menu-close {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 1px solid #5e5546;
+  border-radius: 6px;
+  background: #24262a;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.menu-close:hover,
+.menu-close:focus-visible {
+  border-color: #c9b98f;
+  background: #2d3035;
+}
+
+.menu-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid #3a3733;
+}
+
+.menu-tab {
+  margin-bottom: -1px;
+  padding: 7px 16px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: none;
+  color: #b3ada2;
+  font: inherit;
+  cursor: pointer;
+}
+
+.menu-tab:hover {
+  color: #d8d4cc;
+  background: #24262a;
+}
+
+.menu-tab[aria-selected='true'] {
+  border-color: #3a3733;
+  border-bottom: 1px solid rgb(21 23 26);
+  background: rgb(21 23 26);
+  color: #d8d4cc;
+  font-weight: 600;
+}
+
+.menu-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.menu-body[hidden] {
+  display: none;
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menu-section + .menu-section {
+  padding-top: 14px;
+  border-top: 1px solid #3a3733;
+}
+
+.menu-body p,
+.menu-heading {
+  margin: 0;
+}
+
+.menu-heading {
+  font-size: 1rem;
+}
+
+.menu-note {
+  font-size: 0.875rem;
+  color: #b3ada2;
+}
+
+.menu-note[hidden],
+.menu-action[hidden],
+.build-option-reason[hidden],
+.build-notice[hidden] {
+  display: none;
+}
+
+.menu-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.menu-check-box {
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: #c9b98f;
+}
+
+.menu-check-title {
+  display: block;
+  font-weight: 600;
+}
+
+.menu-code {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.menu-action {
+  width: auto;
+  align-self: flex-start;
+}
+
+.menu-danger {
+  border-color: #c43b3b;
+  background: #3a1c1c;
+}
+
+.menu-danger:hover:not(:disabled),
+.menu-danger:focus-visible {
+  border-color: #e05555;
+  background: #4a2020;
+}
+
+.menu-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.menu-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #c43b3b;
+  border-radius: 6px;
+  background: #2a1717;
+}
+
+.menu-confirm[hidden] {
+  display: none;
+}
+
+.menu-status {
+  padding: 8px 10px;
+  border: 1px solid #3a3733;
+  border-radius: 6px;
+  background: #1b1d20;
+  font-size: 0.875rem;
+}
+
+.menu-status-ok {
+  border-color: #3d5a3d;
+  color: #b9d6b0;
+}
+
+.menu-status-warn {
+  border-color: #8a6d1f;
+  background: #2a2412;
+  color: #e0b84a;
+}
+
+.menu-status-bad {
+  border-color: #c43b3b;
+  background: #3a1c1c;
+  color: #f0b4b4;
+}
+
+.menu-keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.menu-keys dt {
+  white-space: nowrap;
+}
+
+.menu-keys kbd {
+  padding: 0 5px;
+  border: 1px solid #5e5546;
+  border-radius: 3px;
+  background: #24262a;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.menu-keys dd {
+  margin: 0;
+  color: #b3ada2;
+}
+
+.menu-keys .menu-group {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: #8f8a80;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.menu-how {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.875rem;
+  color: #b3ada2;
+}
+
+.menu-how b {
+  color: #d8d4cc;
+}
+
+.menu-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #3a3733;
+}
+
+.menu-hint {
+  font-size: 0.75rem;
+  color: #8f8a80;
 }

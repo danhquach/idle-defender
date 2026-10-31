@@ -14,8 +14,6 @@ import {
   stockOf,
 } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { exportCode } from '../storage/code.ts';
-import { encodeSave } from '../storage/save.ts';
 import {
   patrolRisk,
   sendPatrol,
@@ -269,7 +267,6 @@ describe('world map in the build panel (ID-028)', () => {
       root,
       () => {},
       () => {},
-      () => {},
       (next) => {
         games.push(next);
         panel.show(next, null);
@@ -426,7 +423,6 @@ describe('world map timers and picks (ID-028)', () => {
       root,
       () => {},
       () => {},
-      (g) => panel.show(g, null),
       () => {},
     );
     panel.show(game, null);
@@ -465,17 +461,13 @@ describe('world map timers and picks (ID-028)', () => {
 
   it('forgets the map picks when another camp is loaded', () => {
     const g = open();
-    const { root, button } = panelAt(g);
+    const { panel, root, button } = panelAt(g);
     button('World map').click();
     button('Gas station').click();
     [...root.querySelectorAll('label.worldmap-member')][0]!.querySelector('input')!.click();
     button('Back').click();
-    const paste = root.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Backup code to load"]',
-    )!;
-    paste.value = exportCode(encodeSave(g, NOW));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    button('Load code').click();
+    panel.forget();
+    panel.show(g, null);
     button('World map').click();
     expect(root.querySelector('.build-slot-note')!.textContent).toBe(
       'Pick a place on the map to send a patrol there.',
@@ -710,7 +702,6 @@ describe('plazas in the build panel (ID-029)', () => {
       root,
       () => {},
       () => {},
-      () => {},
       (next) => {
         games.push(next);
         panel.show(next, null);
@@ -864,7 +855,6 @@ describe('loot focus survives unticking every building (ID-029)', () => {
     const games: GameState[] = [];
     const panel = createBuildPanel(
       root,
-      () => {},
       () => {},
       () => {},
       (next) => {
