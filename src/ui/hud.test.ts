@@ -194,7 +194,7 @@ describe('hud', () => {
         ],
         button: 'Back to build',
         picks: [],
-        camp: { picks: game.camp.picks, offers: [] },
+        camp: { picks: game.camp.picks, offers: [], room: { people: 2, weapons: ARMOURY_CAP } },
       });
     });
 
@@ -411,7 +411,7 @@ describe('hud', () => {
         ],
         button: 'Back to build · retry Horde 1',
         picks: [],
-        camp: { picks: game.camp.picks, offers: [] },
+        camp: { picks: game.camp.picks, offers: [], room: { people: 2, weapons: ARMOURY_CAP } },
       });
     });
 

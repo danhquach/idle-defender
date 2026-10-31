@@ -575,6 +575,20 @@ body {
   object-fit: contain;
 }
 
+/* A plaza: its buildings' icons together in one ring. */
+.worldmap-icon.is-cluster {
+  flex-wrap: wrap;
+  align-content: center;
+  width: 60px;
+  height: 60px;
+  padding: 2px;
+}
+
+.worldmap-icon.is-cluster .worldmap-icon-art {
+  width: 20px;
+  height: 20px;
+}
+
 .worldmap-name {
   padding: 0 4px;
   border-radius: 3px;
@@ -612,7 +626,9 @@ body {
   white-space: nowrap;
 }
 
-.worldmap-party {
+.worldmap-party,
+.worldmap-buildings,
+.worldmap-orders {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -628,6 +644,10 @@ body {
 
 .worldmap-member input {
   margin-right: 6px;
+}
+
+.worldmap-member select {
+  max-width: 100%;
 }
 
 .worldmap-report {

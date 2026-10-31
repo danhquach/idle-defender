@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { buildTurret, lineWall, spotOf } from '../core/base.ts';
-import { newCamp, NO_PICKS, recruitArrivals } from '../core/camp.ts';
+import {
+  newCamp,
+  NO_PICKS,
+  recruitArrivals,
+  rollSurvivor,
+  survivorDefender,
+  type Survivor,
+} from '../core/camp.ts';
 import {
   ARMOURY_CAP,
   BANK_CAP,
@@ -17,6 +24,8 @@ import {
 } from '../core/data.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { tick } from '../core/horde.ts';
+import { createRng } from '../core/rng.ts';
+import { xpForLevel } from '../core/stats.ts';
 import { isGun, type Loadout } from '../core/loadout.ts';
 import {
   patrolLoot,
@@ -37,7 +46,16 @@ import {
   writeSave,
   type SaveStorage,
 } from './save.ts';
-import { NOW, oldStock, played, preCamp, prePatrol, preRisk } from './testing.ts';
+import {
+  NOW,
+  oldStock,
+  played,
+  preCamp,
+  prePatrol,
+  prePlazas,
+  preRisk,
+  preSurvivors,
+} from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1106,7 +1124,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 8, '1', '7', 1.5, null]) {
+    for (const v of [0, 10, '1', '9', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1355,7 +1373,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(7);
+    expect(SAVE_VERSION).toBe(9);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1420,7 +1438,8 @@ describe('save: patrols (ID-026)', () => {
     // The police station waits for research, so this patrol is placed by hand; it finds weapons.
     const police: Patrol = {
       ...g.patrols[0]!,
-      ...{ no: 2, location: 'police', members: ['bob'], sentAt: NOW - 2.5 * H },
+      ...{ no: 2, location: 'police', buildings: ['police'], members: ['bob'] },
+      ...{ sentAt: NOW - 2.5 * H, focus: 'anything', order: 'balanced' },
       ...{ sentHorde: 3, strength: 1, seed: 0 },
     };
     police.seed = seedFor(
@@ -1651,7 +1670,7 @@ describe('save: patrols (ID-026)', () => {
         'wiped but brought loot back',
         (g) => {
           const r = g.reports.at(-1);
-          Object.assign(r, { dead: ['Jack', 'John'], injured: [], wiped: true, xp: 0 });
+          Object.assign(r, { dead: ['Jack', 'John'], injured: [], wiped: true, xp: 0, gas: 1 });
         },
       ],
       [
@@ -1708,7 +1727,7 @@ describe('save: the camp (ID-033)', () => {
         upgrades: 1,
         xp: 90,
         picks: { ...NO_PICKS, medic: 1 },
-        offers: [['salvage', 'foraging', 'medic']],
+        offers: [{ picks: ['salvage', 'foraging', 'medic'], survivor: null }],
         recruitAt: NOW + 30 * 60 * 1000,
         recruits: 1,
       },
@@ -1833,9 +1852,534 @@ describe('save: the camp (ID-033)', () => {
       expect(json.includes(from)).toBe(true);
       expect(decodeSave(json.replace(from, `${from}"__proto__":{"polluted":1},`))).toBeNull();
     }
-    const offer = '"offers":[[';
+    const offer = '"offers":[{';
     expect(json.includes(offer)).toBe(true);
-    expect(decodeSave(json.replace(offer, `${offer}{"__proto__":{"polluted":1}},`))).toBeNull();
+    expect(decodeSave(json.replace(offer, `${offer}"__proto__":{"polluted":1},`))).toBeNull();
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });
+
+describe('save: survivors (ID-032)', () => {
+  const survivor = (id: string, level: number, seed = 3): Survivor =>
+    rollSurvivor(createRng(seed), id, level, level);
+  /**
+   * Patrol 7 back with two survivors waiting, camp level 3 with a survivor in its offer,
+   * and two who already joined: one from patrol 5, one from camp level 2.
+   */
+  function joined(): GameState {
+    const g = played();
+    return {
+      ...g,
+      hordeNumber: PATROL.unlock,
+      patrolsSent: 7,
+      roster: [
+        ...g.roster,
+        survivorDefender(survivor('s5-0', 3)),
+        survivorDefender(survivor('c2', 2)),
+      ],
+      reports: [
+        {
+          no: 7,
+          location: 'gas-station',
+          buildings: ['gas-station'],
+          searched: 1,
+          bigHorde: null,
+          order: 'balanced',
+          focus: 'anything',
+          lost: {
+            stock: stockOf(),
+            gas: 0,
+            batteries: { makeshift: 0, standard: 0, 'high-capacity': 0, military: 0 },
+            weapons: 0,
+          },
+          names: ['Bob'],
+          injured: [],
+          dead: [],
+          wiped: false,
+          returnedAt: NOW,
+          stock: stockOf(),
+          gas: 0,
+          batteries: { makeshift: 0, standard: 0, 'high-capacity': 0, military: 0 },
+          weapons: [],
+          recovered: [],
+          xp: 10,
+          survivors: [survivor('s7-0', 1, 4), survivor('s7-1', 1, 5)],
+        },
+      ],
+      camp: {
+        ...newCamp(),
+        xp: 90,
+        offers: [{ picks: ['salvage', 'foraging'], survivor: survivor('c3', 3, 6) }],
+      },
+    };
+  }
+  const changed = (change: (game: Loose) => void): unknown => {
+    const save = JSON.parse(encodeSave(joined(), NOW));
+    change(save.game);
+    return decodeSave(JSON.stringify(save));
+  };
+
+  it('round-trips survivors waiting and those who joined', () => {
+    expect(decodeSave(encodeSave(joined(), NOW))?.game).toEqual(joined());
+    // A survivor offer with no picks left still holds the survivor.
+    expect(changed((g) => (g.camp.offers[0].picks = []))).not.toBeNull();
+  });
+
+  it('loads a v8 save with no survivors and its offers as bare picks, and refuses mixed shapes', () => {
+    const g = { ...joined(), reports: [{ ...joined().reports[0]!, survivors: [] }] };
+    const plain = {
+      ...g,
+      camp: { ...g.camp, offers: [{ picks: g.camp.offers[0]!.picks, survivor: null }] },
+    };
+    const v8 = preSurvivors(plain);
+    const old = decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: v8 }))?.game;
+    expect(old).toEqual(plain);
+    // A v8 save never held survivors; a v9 one must.
+    expect(
+      decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: JSON.parse(encodeSave(g, NOW)).game })),
+    ).toBeNull();
+    expect(decodeSave(JSON.stringify({ v: SAVE_VERSION, savedAt: NOW, game: v8 }))).toBeNull();
+  });
+
+  it('refuses survivors the game could not have written', () => {
+    const report = (g: Loose) => g.reports[0].survivors[0];
+    const offer = (g: Loose) => g.camp.offers[0];
+    const cases: [string, (g: Loose) => void][] = [
+      [
+        'from another patrol',
+        (g) =>
+          Object.assign(
+            report(g),
+            { id: 's6-0' },
+            { weapon: { ...report(g).weapon, uid: 's6-0' } },
+          ),
+      ],
+      [
+        'a camp id in a report',
+        (g) => Object.assign(report(g), { id: 'c1', weapon: { ...report(g).weapon, uid: 'c1' } }),
+      ],
+      [
+        'a patrol id in an offer',
+        (g) =>
+          Object.assign(offer(g).survivor, {
+            id: 's7-9',
+            weapon: { ...offer(g).survivor.weapon, uid: 's7-9' },
+          }),
+      ],
+      ['weapon uid not theirs', (g) => (report(g).weapon.uid = 's7-1')],
+      ['XP between levels', (g) => (report(g).xp += 1)],
+      ['level above any tier', (g) => (report(g).xp = xpForLevel(6))],
+      ['points not earned', (g) => (report(g).stats.grit = 99)],
+      // Patrol 7 went to the gas station (tier 1).
+      [
+        'level above the tier',
+        (g) =>
+          Object.assign(report(g), {
+            xp: xpForLevel(2),
+            stats: { aim: 0, might: 0, tech: 0, grit: 0 },
+          }),
+      ],
+      ['bidi name', (g) => (report(g).name = '\u202eAva')],
+      ['zero-width name', (g) => (report(g).name = 'Ava\u200b')],
+      ['look-alike name', (g) => (report(g).name = '\u0410va')],
+      ['oversized name', (g) => (report(g).name = 'A'.repeat(25))],
+      ['extra key', (g) => (report(g).extra = 1)],
+      ['missing key', (g) => delete report(g).stats],
+      [
+        'three in a report',
+        (g) =>
+          g.reports[0].survivors.push({
+            ...report(g),
+            id: 's7-2',
+            weapon: { ...report(g).weapon, uid: 's7-2' },
+          }),
+      ],
+      ['twice in a report', (g) => (g.reports[0].survivors[1] = report(g))],
+      [
+        'an offer survivor already on the roster',
+        (g) => {
+          // Their weapon goes, so only the person is twice, not the weapon.
+          g.roster[4].loadout = { primary: 'pistol', secondary: null, item: null };
+          Object.assign(offer(g).survivor, {
+            id: 'c2',
+            weapon: { ...offer(g).survivor.weapon, uid: 'c2' },
+          });
+        },
+      ],
+      [
+        'a try past the last',
+        (g) =>
+          Object.assign(report(g), { id: 's7-2', weapon: { ...report(g).weapon, uid: 's7-2' } }),
+      ],
+      [
+        'an offer survivor beyond the camp level',
+        (g) =>
+          Object.assign(offer(g).survivor, {
+            id: 'c4',
+            weapon: { ...offer(g).survivor.weapon, uid: 'c4' },
+          }),
+      ],
+      ['a survivor offer with 3 picks', (g) => offer(g).picks.push('medic')],
+      [
+        'a camp survivor above the level they came with',
+        (g) => {
+          g.camp.xp = 400; // camp level 5
+          Object.assign(offer(g).survivor, {
+            id: 'c1',
+            weapon: { ...offer(g).survivor.weapon, uid: 'c1' },
+          });
+        },
+      ],
+      [
+        'an offer with neither',
+        (g) => {
+          offer(g).survivor = null;
+          offer(g).picks = [];
+        },
+      ],
+      [
+        'a joined survivor from a patrol not sent',
+        (g) => {
+          const { loadout } = g.roster[3];
+          g.roster[3].id = 's9-0';
+          (loadout.primary.uid === 's5-0' ? loadout.primary : loadout.secondary).uid = 's9-0';
+        },
+      ],
+      ['a joined survivor from a camp level not reached', (g) => (g.roster[4].id = 'c7')],
+      ['an offer as a bare list', (g) => (g.camp.offers[0] = ['salvage'])],
+      ['a survivor as text', (g) => (g.reports[0].survivors[0] = 's7-0')],
+    ];
+    for (const [why, change] of cases) expect(changed(change), why).toBeNull();
+  });
+
+  it('loads a survivor who joined and was dismissed, their weapon in the armoury', () => {
+    const g = joined();
+    const [s5, c2] = g.roster
+      .slice(-2)
+      .map(
+        (d) =>
+          [d.loadout.primary, d.loadout.secondary].find(
+            (w) => typeof w === 'object' && w !== null,
+          ) as OwnedWeapon,
+      );
+    const gone = { ...g, roster: g.roster.slice(0, -2), armoury: [...g.armoury, s5!, c2!] };
+    expect(decodeSave(encodeSave(gone, NOW))?.game).toEqual(gone);
+  });
+
+  it('refuses a polluted survivor and leaves Object.prototype alone', () => {
+    const json = encodeSave(joined(), NOW);
+    const at = '"survivors":[{';
+    expect(json.includes(at)).toBe(true);
+    expect(decodeSave(json.replace(at, `${at}"__proto__":{"polluted":1},`))).toBeNull();
+    const offer = '"survivor":{';
+    expect(json.includes(offer)).toBe(true);
+    expect(decodeSave(json.replace(offer, `${offer}"constructor":{"polluted":1},`))).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('save: plazas and orders (ID-029)', () => {
+  const H = 60 * 60 * 1000;
+  const ticked = ['gas-station', 'hardware'] as const;
+
+  /** Horde 6: Jack and John out at Riverside Plaza, searching the gas station and the hardware store. */
+  function plazaOut(): GameState {
+    const g: GameState = { ...newGame(), hordeNumber: 6 };
+    const r = sendPatrol(g, 'riverside', ['jack', 'john'], 7, NOW - H / 4, {
+      buildings: [...ticked],
+      focus: 'gas',
+      order: 'loot',
+    });
+    if (!r.ok) throw new Error(r.reason);
+    return r.game;
+  }
+
+  /** The same patrol back a while ago, fenced off by a big horde with nobody lost: its report holds a retreat. */
+  function fenced(): GameState {
+    const g: GameState = { ...newGame(), hordeNumber: 6 };
+    const r = sendPatrol(g, 'riverside', ['jack'], 0, NOW - 3 * H, {
+      buildings: [...ticked],
+      order: 'loot',
+    });
+    if (!r.ok) throw new Error(r.reason);
+    const p = r.game.patrols[0]!;
+    let seed = 0;
+    while (!(
+      patrolOutcome({ ...p, seed }).bigHorde === 'fence' && !patrolOutcome({ ...p, seed }).wiped
+    )) {
+      seed++;
+    }
+    return settlePatrols({ ...r.game, patrols: [{ ...p, seed }] }, NOW - H);
+  }
+
+  const raw = (game: Loose, v: unknown = SAVE_VERSION) =>
+    decodeSave(JSON.stringify({ v, savedAt: NOW, game }));
+  const poke = (make: () => GameState, change: (g: Loose) => void) => {
+    const g = JSON.parse(JSON.stringify(make()));
+    change(g);
+    return raw(g);
+  };
+
+  const gun = (uid: string) => ({ uid, base: 'pistol', rarity: 'rusty', affixes: [] });
+  const withUid = (uid: string) => ({
+    ...newGame(),
+    hordeNumber: 6,
+    patrolsSent: 1,
+    armoury: [gun(uid)],
+  });
+
+  it('reads a patrol weapon uid up to the most three buildings can find, and no other', () => {
+    expect(PATROL.rolls + PATROL.bonusRolls).toBe(5);
+    expect(raw(withUid('p1-0'))).not.toBeNull();
+    expect(raw(withUid('p1-9'))).not.toBeNull();
+    expect(raw(withUid('p1-14'))).not.toBeNull();
+    for (const uid of [
+      'p1-15',
+      'p1-010',
+      'p1-01',
+      'p1-1\u200b4',
+      'p1-\u202e14',
+      'p1-',
+      'p1--1',
+      `p1-${'1'.repeat(10_000)}`,
+    ]) {
+      expect(raw(withUid(uid)), uid.slice(0, 12)).toBeNull();
+    }
+  });
+
+  it('round-trips a three-building haul of more than ten weapons', () => {
+    const g: GameState = {
+      ...newGame(),
+      hordeNumber: 6,
+      patrolsSent: 1,
+      armoury: Array.from({ length: 13 }, (_, k) => gun(`p1-${k}`)) as GameState['armoury'],
+    };
+    const back = decodeSave(encodeSave(g, NOW))?.game;
+    expect(back).toEqual(g);
+    expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
+  });
+
+  it('is version 9 (survivors came after plazas, ID-032)', () => {
+    expect(SAVE_VERSION).toBe(9);
+  });
+
+  it('round-trips a plaza patrol out, with its buildings, focus and order', () => {
+    const g = plazaOut();
+    expect(g.patrols[0]).toMatchObject({
+      location: 'riverside',
+      buildings: ticked,
+      focus: 'gas',
+      order: 'loot',
+    });
+    expect(decodeSave(encodeSave(g, NOW))?.game).toEqual(g);
+  });
+
+  it('round-trips a report of a retreat, with what it lost', () => {
+    const g = fenced();
+    const r = g.reports.at(-1)!;
+    expect(r).toMatchObject({ location: 'riverside', bigHorde: 'fence', order: 'loot' });
+    expect(r.searched).toBeLessThan(2);
+    expect(decodeSave(encodeSave(g, NOW))?.game).toEqual(g);
+  });
+
+  it('loads a v7 save with single-building patrols, Anything and Balanced, and reports with defaults', () => {
+    let g: GameState = { ...newGame(), hordeNumber: 3 };
+    const r1 = sendPatrol(g, 'gas-station', ['bob'], 0, NOW - 3 * H);
+    if (!r1.ok) throw new Error(r1.reason);
+    g = settlePatrols(r1.game, NOW - 2 * H);
+    const r2 = sendPatrol(g, 'electronics', ['jack'], 0, NOW - H / 4);
+    if (!r2.ok) throw new Error(r2.reason);
+    g = r2.game;
+    const old = raw(prePlazas(g), 7)?.game;
+    expect(old?.patrols[0]).toMatchObject({
+      location: 'electronics',
+      buildings: ['electronics'],
+      focus: 'anything',
+      order: 'balanced',
+    });
+    expect(old?.reports[0]).toMatchObject({
+      location: 'gas-station',
+      buildings: ['gas-station'],
+      searched: 1,
+      bigHorde: null,
+      order: 'balanced',
+      focus: 'anything',
+    });
+    expect(old?.reports[0]!.lost.weapons).toBe(0);
+    expect(JSON.parse(encodeSave(old!, NOW)).v).toBe(SAVE_VERSION);
+    // A v8 save must carry the new fields; a v7 one cannot name a plaza.
+    expect(raw(prePlazas(g))).toBeNull();
+    expect(raw(g, 7)).toBeNull();
+    expect(raw(prePlazas(plazaOut()), 7)).toBeNull();
+  });
+
+  it('refuses patrols the game could not have sent', () => {
+    const cases: [string, (g: Loose) => void][] = [
+      ['unknown place', (g) => (g.patrols[0].location = 'mall')],
+      ['look-alike place', (g) => (g.patrols[0].location = 'riverside\u200b')],
+      ['bidi place', (g) => (g.patrols[0].location = '\u202eriverside')],
+      ['place __proto__', (g) => (g.patrols[0].location = '__proto__')],
+      ['place not a string', (g) => (g.patrols[0].location = 7)],
+      ['plaza not yet revealed when sent', (g) => (g.patrols[0].sentHorde = 5)],
+      ['no buildings', (g) => (g.patrols[0].buildings = [])],
+      ['buildings not an array', (g) => (g.patrols[0].buildings = 'hardware')],
+      ['buildings an object', (g) => (g.patrols[0].buildings = { 0: 'hardware' })],
+      ['building from another place', (g) => (g.patrols[0].buildings = ['supermarket'])],
+      ['building twice', (g) => (g.patrols[0].buildings = ['hardware', 'hardware'])],
+      ['buildings out of order', (g) => (g.patrols[0].buildings = ['hardware', 'gas-station'])],
+      ['unknown building', (g) => (g.patrols[0].buildings = ['bank'])],
+      ['look-alike building', (g) => (g.patrols[0].buildings = ['hardware\u200b'])],
+      ['bidi building', (g) => (g.patrols[0].buildings = ['\u202ehardware'])],
+      ['building __proto__', (g) => (g.patrols[0].buildings = ['__proto__'])],
+      ['building not a string', (g) => (g.patrols[0].buildings = [1])],
+      ['building an object', (g) => (g.patrols[0].buildings = [{ id: 'hardware' }])],
+      ['one building too many', (g) => (g.patrols[0].buildings = [...ALL_THREE, 'hardware'])],
+      ['oversized buildings', (g) => (g.patrols[0].buildings = Array(10_000).fill('hardware'))],
+      ['buildings missing', (g) => delete g.patrols[0].buildings],
+      ['unknown focus', (g) => (g.patrols[0].focus = 'gold')],
+      ['focus in capitals', (g) => (g.patrols[0].focus = 'GAS')],
+      ['focus not a string', (g) => (g.patrols[0].focus = ['gas'])],
+      ['focus __proto__', (g) => (g.patrols[0].focus = '__proto__')],
+      ['focus nothing ticked can drop', (g) => (g.patrols[0].focus = 'medicine')],
+      ['focus missing', (g) => delete g.patrols[0].focus],
+      ['unknown order', (g) => (g.patrols[0].order = 'run')],
+      ['order empty', (g) => (g.patrols[0].order = '')],
+      ['order null', (g) => (g.patrols[0].order = null)],
+      ['order __proto__', (g) => (g.patrols[0].order = '__proto__')],
+      ['order missing', (g) => delete g.patrols[0].order],
+      ['extra key', (g) => (g.patrols[0].extra = 1)],
+    ];
+    for (const [name, change] of cases) expect(poke(plazaOut, change), name).toBeNull();
+    // The patrol itself loads, so each case above fails on its own fault.
+    expect(poke(plazaOut, () => {})?.game.patrols).toHaveLength(1);
+    expect(poke(plazaOut, (g) => (g.patrols[0].buildings = ['gas-station']))).not.toBeNull();
+    expect(poke(plazaOut, (g) => (g.patrols[0].focus = 'weapons'))).not.toBeNull();
+  });
+
+  it('refuses a single-building patrol that names buildings it does not hold', () => {
+    const single = (): GameState => {
+      const r = sendPatrol(
+        { ...newGame(), hordeNumber: 3 },
+        'electronics',
+        ['jack'],
+        1,
+        NOW - H / 4,
+      );
+      if (!r.ok) throw new Error(r.reason);
+      return r.game;
+    };
+    expect(poke(single, () => {})).not.toBeNull();
+    expect(poke(single, (g) => (g.patrols[0].buildings = ['supermarket']))).toBeNull();
+    expect(
+      poke(single, (g) => (g.patrols[0].buildings = ['electronics', 'supermarket'])),
+    ).toBeNull();
+    expect(poke(single, (g) => (g.patrols[0].focus = 'gas'))).toBeNull();
+  });
+
+  it('refuses reports the game could not have written', () => {
+    const last = (g: Loose) => g.reports.at(-1);
+    const cases: [string, (g: Loose) => void][] = [
+      ['unknown place', (g) => (last(g).location = 'mall')],
+      ['bidi place', (g) => (last(g).location = '\u202eriverside')],
+      ['building from another place', (g) => (last(g).buildings = ['supermarket'])],
+      ['buildings out of order', (g) => (last(g).buildings = ['hardware', 'gas-station'])],
+      ['building twice', (g) => (last(g).buildings = ['hardware', 'hardware'])],
+      ['no buildings', (g) => (last(g).buildings = [])],
+      ['oversized buildings', (g) => (last(g).buildings = Array(10_000).fill('hardware'))],
+      ['searched past the buildings', (g) => (last(g).searched = 3)],
+      ['searched negative', (g) => (last(g).searched = -1)],
+      ['searched a fraction', (g) => (last(g).searched = 0.5)],
+      ['searched not a number', (g) => (last(g).searched = '1')],
+      ['unknown big horde', (g) => (last(g).bigHorde = 'win')],
+      ['big horde not a string', (g) => (last(g).bigHorde = 1)],
+      ['big horde __proto__', (g) => (last(g).bigHorde = '__proto__')],
+      [
+        'searched less without a retreat',
+        (g) => {
+          last(g).bigHorde = null;
+          last(g).searched = 0;
+        },
+      ],
+      [
+        'searched less after a beaten horde',
+        (g) => {
+          last(g).bigHorde = 'defeat';
+          last(g).searched = 0;
+        },
+      ],
+      ['unknown order', (g) => (last(g).order = 'run')],
+      ['unknown focus', (g) => (last(g).focus = 'gold')],
+      ['focus nothing searched can drop', (g) => (last(g).focus = 'medicine')],
+      ['lost missing', (g) => delete last(g).lost],
+      ['lost not an object', (g) => (last(g).lost = 5)],
+      ['lost extra key', (g) => (last(g).lost.extra = 1)],
+      ['lost gas negative', (g) => (last(g).lost.gas = -1)],
+      ['lost gas a string', (g) => (last(g).lost.gas = '1')],
+      ['lost weapons over the haul', (g) => (last(g).lost.weapons = 11)],
+      ['lost stock unknown material', (g) => (last(g).lost.stock.gold = 1)],
+      ['lost batteries missing', (g) => delete last(g).lost.batteries.standard],
+      ['lost an array', (g) => (last(g).lost = [])],
+      ['missing key', (g) => delete last(g).bigHorde],
+    ];
+    for (const [name, change] of cases) expect(poke(fenced, change), name).toBeNull();
+    expect(poke(fenced, () => {})).not.toBeNull();
+    // A single building never meets a big horde.
+    const single = (): GameState => {
+      let g: GameState = { ...newGame(), hordeNumber: 3 };
+      const r = sendPatrol(g, 'gas-station', ['bob'], 0, NOW - 3 * H);
+      if (!r.ok) throw new Error(r.reason);
+      g = settlePatrols(r.game, NOW - 2 * H);
+      return g;
+    };
+    expect(poke(single, () => {})).not.toBeNull();
+    expect(poke(single, (g) => (last(g).bigHorde = 'fence'))).toBeNull();
+  });
+
+  it('refuses polluted patrols and reports and leaves Object.prototype alone', () => {
+    const pollute = (json: string, from: string, to: string) => {
+      expect(json.includes(from), from).toBe(true);
+      expect(decodeSave(json.replace(from, to)), to).toBeNull();
+    };
+    const out = encodeSave(plazaOut(), NOW);
+    pollute(out, '"buildings":[', '"__proto__":{"polluted":1},"buildings":[');
+    pollute(out, '"focus":"gas"', '"focus":"gas","constructor":{"polluted":1}');
+    const back = encodeSave(fenced(), NOW);
+    pollute(back, '"searched":', '"__proto__":{"polluted":1},"searched":');
+    pollute(back, '"lost":{', '"lost":{"__proto__":{"polluted":1},');
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('keeps weapons the dead left at a plaza, and refuses one from a plaza not yet on the map', () => {
+    const gun = { uid: 'h1', base: 'pistol', rarity: 'rusty', affixes: [] };
+    const left = (g: Loose) => (g.leftBehind = [{ location: 'riverside', weapon: gun }]);
+    const game = (): GameState => ({ ...newGame(), hordeNumber: 6 });
+    expect(poke(game, left)?.game.leftBehind[0]!.location).toBe('riverside');
+    expect(
+      poke(game, (g) => {
+        left(g);
+        g.hordeNumber = 5;
+      }),
+    ).toBeNull();
+    const g = JSON.parse(JSON.stringify(game()));
+    left(g);
+    expect(raw(g, 7)).toBeNull();
+  });
+
+  it('refuses pollution aimed at a left-behind entry and the lost batteries of a report', () => {
+    const gun1 = { uid: 'h1', base: 'pistol', rarity: 'rusty', affixes: [] };
+    const base = { ...fenced(), leftBehind: [{ location: 'riverside' as const, weapon: gun1 }] };
+    const json = encodeSave(base as GameState, NOW);
+    expect(decodeSave(json)).not.toBeNull();
+    const lostBatteries = /("lost":\{"stock":\{[^}]*\},"gas":\d+,"batteries":\{)/;
+    expect(lostBatteries.test(json)).toBe(true);
+    for (const key of ['__proto__', 'constructor']) {
+      const evil = `"${key}":{"polluted":1},`;
+      expect(decodeSave(json.replace('"leftBehind":[{', `"leftBehind":[{${evil}`)), key).toBeNull();
+      expect(decodeSave(json.replace('"weapon":{', `"weapon":{${evil}`)), key).toBeNull();
+      expect(decodeSave(json.replace(lostBatteries, `$1${evil}`)), key).toBeNull();
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+const ALL_THREE = ['gas-station', 'pharmacy', 'hardware'];

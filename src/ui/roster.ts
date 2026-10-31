@@ -9,9 +9,11 @@ import {
   campUpgradeCost,
   dismiss,
   dismissLock,
+  joinLock,
   takeCampPick,
   treat,
   upgradeCamp,
+  type CampChoice,
   type Treatment,
 } from '../core/camp.ts';
 import {
@@ -19,7 +21,7 @@ import {
   CAMP_PICK_RANKS,
   CAMP_PICKS,
   ITEMS,
-  LOCATIONS,
+  placeName,
   PROFESSIONS,
   RARITY_ORDER,
   STAT_NAMES,
@@ -45,7 +47,7 @@ import {
 import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
 import { patrolDue, type Patrol } from '../core/patrol.ts';
 import { badgeOf, levelOf, titleIn, titleName, unspentPoints } from '../core/stats.ts';
-import { campPickText, defenderLabel, el, STAT_HINT, stockText } from './hud.ts';
+import { campPickText, defenderLabel, el, STAT_HINT, stockText, survivorText } from './hud.ts';
 import { BADGE_COLOUR } from './render.ts';
 
 /** "●●" for an Adept: one pip per rank. */
@@ -94,7 +96,7 @@ export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): Ro
     titles: titles.length ? titles.join(', ') : 'No titles yet',
     points: left > 0 ? `${left} stat point${left === 1 ? '' : 's'} to spend` : '',
     status: patrol
-      ? `On patrol · ${LOCATIONS[patrol.location].name} · ${restLeft(patrolDue(patrol), now)} left`
+      ? `On patrol · ${placeName(patrol.location)} · ${restLeft(patrolDue(patrol), now)} left`
       : available(d, now)
         ? 'Fit'
         : `Resting · ${restLeft(d.injuredUntil!, now)} left`,
@@ -150,16 +152,31 @@ export function campSection(
   const offer = game.camp.offers[0];
   if (offer) {
     const row = el('div', 'hud-pick-row');
-    for (const id of offer) {
-      const button = el('button', 'hud-button', campPickText(game.camp, id));
+    const choices: [CampChoice, string][] = offer.picks.map((id) => [
+      id,
+      campPickText(game.camp, id),
+    ]);
+    if (offer.survivor) choices.push(['join', `Let ${offer.survivor.name} join`]);
+    if (offer.survivor && offer.picks.length === 0) {
+      choices.push(['away', `Turn ${offer.survivor.name} away`]);
+    }
+    for (const [choice, label] of choices) {
+      const button = el('button', 'hud-button', label);
       button.type = 'button';
-      button.addEventListener('click', () => {
-        const taken = takeCampPick(game, id);
-        if (taken.ok) onChange(taken.game);
-      });
+      const taken = takeCampPick(game, choice);
+      if (taken.ok) button.addEventListener('click', () => onChange(taken.game));
+      else button.disabled = true;
       row.append(button);
     }
-    section.append(el('p', 'build-slot-note', 'Camp level up: pick one'), row);
+    section.append(el('p', 'build-slot-note', 'Camp level up: pick one'));
+    if (offer.survivor) {
+      section.append(
+        el('p', 'build-slot-note', `Survivor wants to join: ${survivorText(offer.survivor)}`),
+      );
+      const lock = joinLock(game);
+      if (lock !== null) section.append(el('p', 'build-slot-note', lock));
+    }
+    section.append(row);
   }
   return section;
 }

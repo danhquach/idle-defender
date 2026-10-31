@@ -1014,6 +1014,72 @@ Set before sending; they apply to any location, plaza or single building.
   panel, both moving every second (the timer stops when the map closes);
   the reports follow, newest first, with loot, XP and casualties. Loading
   another camp forgets the map's picks. No save change.
+- **As built (ID-029, starting points):** two plazas. **Riverside Plaza**
+  (gas station, pharmacy, hardware store) shows from Horde 6 and the **Strip
+  mall** (supermarket, electronics store) from Horde 3, each with its own
+  spot on the map and an icon made of its buildings' icons. The player
+  ticks 1 or more of a plaza's buildings; the **trip** is the longest
+  travel each way among them, the searches added up and the highest tier
+  (all of Riverside: 20 min each way, 45 searching, T2, 1 h 25 m; the
+  Strip mall 51 min; a single location is a place whose only building is
+  itself, so its numbers are unchanged). Danger, rating, loot rolls and
+  XP use the trip's tier and length. Each ticked building gets `3 + bonus`
+  rolls on its own table, in plaza order, from the one seed, at the trip's
+  tier for weapon rarity. **Loot focus:** "Anything" or one type a ticked
+  building can drop (each material, Gas, Batteries, Weapons; the crater's
+  "Anything" line is never focusable, and what it rolls elsewhere is
+  unfocused); its weight x2. A type none can drop is greyed out on the
+  map and refused by the core.
+  **Big horde** (plazas only): chance 10% + 5% per tier above 1 + 5% per
+  building after the first (Riverside, all three: 25%; the Strip mall,
+  both: 20%); party strength never changes it. It is rolled on a stream of
+  its own (seed xor a constant), so the loot and casualty streams never
+  shift and a late settle comes out the same; a hit also rolls the result,
+  the building (uniform over the ticked ones) it hit during, and 1-2 Genes.
+  The horde is 1.5 x the danger of the trip's tier, and party strength over
+  it gives the odds:
+
+  | Party vs. horde | Beaten | Fenced off | Overrun |
+  |---|---|---|---|
+  | 1 or more | 70% | 25% | 5% |
+  | 0.6 | 35% | 45% | 20% |
+  | 0.3 | 10% | 40% | 50% |
+  | below 0.3 | 0% | 25% | 75% |
+
+  **Beaten:** every building is searched, XP x1.5 and 1-2 Mutated Genes join
+  the haul; casualties at the trip's rating. **Fenced off:** only the
+  buildings before the one it hit during count; injury chance x2 (at most
+  1); deaths and wipe at the trip's rating. **Overrun:** the same loot rule;
+  deaths and wipe at the Deadly row (injury too). The trip's return time
+  never changes: a retreat cuts the loot, not the clock, so timers stay
+  simple.
+  **When things go wrong:** *Save the loot* keeps 80% of the loot and
+  scales deaths and wipes x1.25; *Balanced* (default) 40% and x1; *Save the
+  people* 0% and x0.5 (at most 1). It applies on a Dangerous or Deadly
+  trip and on any big horde. On an ordinary Dangerous or Deadly trip it is
+  "gone wrong" when someone died (no wipe): the loot is cut to the share.
+  On a fenced-off or overrun horde the share applies to the loot found
+  before it. Always: half the party or more dead, or a wipe, brings no
+  loot, whatever the order (a death on a Safe or Risky trip that is under
+  half the party costs nothing). Each count (each material, Gas, each
+  battery) is cut to the share and rounded down; the first weapons found
+  are the ones kept, rounded down too. Survivors still get XP and the camp
+  still picks up what the dead left at the place; a place's left-behind
+  weapons are kept per place, plazas included.
+  The risk screen adds, for a plaza, the big-horde chance and strength and
+  each result's odds with its casualties, for every place the order's share
+  and factor (written as not applying to a Safe or Risky single building),
+  all live as buildings, the loot focus and the order change; Send passes
+  them and shows the core's refusal (no building ticked). The report lists
+  the buildings searched, how the big horde ended, the orders and what the
+  retreat lost. The orders and the panel's picks are forgotten on loading
+  another camp; picking a place ticks all its buildings. **Save v8:** a
+  patrol stores its place, buildings, focus and order, a report its
+  buildings, how many were searched, the big horde, order, focus and what
+  was lost; every id is read through an allow-list (buildings must belong
+  to the place, each once, in its order; the focus one its buildings can
+  drop). A v7 save loads with single-building patrols, Anything and
+  Balanced, and reports with those defaults and nothing lost.
 
 ## 11. Resources and research
 
@@ -1103,6 +1169,21 @@ Set before sending; they apply to any location, plaza or single building.
   horde, **Salvage Crew** −10% on every repair, **Field Medic** −10% injury
   rest, **Foraging** +5% patrol materials and Gas (to the nearest whole).
   The survivor slot comes with ID-032.
+- **As built (ID-032, starting points):** a patrol back from a trip of tier T (a
+  plaza's is its highest ticked building) and not wiped out has 2 tries of 5% × T each to find a **survivor** (tier 1 about
+  10%, the crater about 44% for one or more), rolled from its seed on a stream of
+  their own, so loot and casualties don't move. Each is level 1 to T, with that
+  level's stat points rolled across the stats, a name from the recruits' list and
+  any weapon at the tier's patrol rarity; a gun is their primary, anything else
+  goes beside a free pistol. They wait in the report, taking no slot, with **Let
+  them join** and **Turn them away**; letting one in needs a free camp slot and armoury room
+  for their weapon, and a report dropped from the latest 20 takes its undecided
+  survivors with it. Each camp level-up offer has a 10% chance that a survivor
+  takes one of its 3 slots: level 1 to the new camp level, at most 5, weapon at
+  that level's tier. Letting them in takes no pick and needs the same room (the
+  result screen counts the slots and armoury room left after the win); a pick
+  turns them away, and an offer with no pick left (every one at the top rank)
+  shows **Turn away** so it can always be answered. Save v9.
 
 ### Camp level *(designer's call)*
 

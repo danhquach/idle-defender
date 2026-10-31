@@ -2,7 +2,7 @@
 // Design §11, as built ID-033: the camp in the roster view (slots, the camp upgrade,
 // level and picks, the next recruit, Dismiss) and the camp-level pick on the result screen.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NO_PICKS } from '../core/camp.ts';
+import { NO_PICKS, type CampChoice, type CampOffer } from '../core/camp.ts';
 import { MAX_COUNT, stockOf, type CampPickId } from '../core/data.ts';
 import { newGame, startHorde, type GameState } from '../core/game.ts';
 import { createBuildPanel } from './build.ts';
@@ -95,7 +95,11 @@ describe('the camp in the roster view', () => {
     const g = newGame();
     const waiting = {
       ...g,
-      camp: { ...g.camp, xp: 30, offers: [['medic', 'salvage'] as CampPickId[]] },
+      camp: {
+        ...g.camp,
+        xp: 30,
+        offers: [{ picks: ['medic', 'salvage'] as CampPickId[], survivor: null }],
+      },
     };
     const { games, buttons } = rosterFor(waiting);
     buttons('Field Medic 1/5')[0]!.click();
@@ -156,6 +160,9 @@ describe('recovery in the roster view (ID-031)', () => {
         {
           no: 1,
           location: 'gas-station',
+          buildings: ['gas-station'],
+          focus: 'anything',
+          order: 'balanced',
           members: ['bob'],
           sentAt: Date.now(),
           sentHorde: 3,
@@ -187,7 +194,7 @@ describe('the camp-level pick on the result screen', () => {
     const screen = resultScreen(game, s, NOW);
     expect(screen.lines).toContain('Camp +7 XP · level 2 (2/60) · level up!');
     expect(screen.camp.offers).toHaveLength(1);
-    expect(screen.camp.offers[0]).toHaveLength(3);
+    expect(screen.camp.offers[0]!.picks).toHaveLength(3);
   });
 
   it('a camp at the XP cap still shows its win', () => {
@@ -199,7 +206,7 @@ describe('the camp-level pick on the result screen', () => {
   it('holds "Back to build" until every offer is picked, each going out once', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
-    const picked: CampPickId[] = [];
+    const picked: CampChoice[] = [];
     const done = vi.fn();
     const noop = () => {};
     const hud = createHud(root, noop, done, noop, noop, noop, noop, noop, noop, (id) =>
@@ -207,15 +214,15 @@ describe('the camp-level pick on the result screen', () => {
     );
     const { game, s } = won();
     const screen = resultScreen(game, s, NOW);
-    const offers: CampPickId[][] = [screen.camp.offers[0]!, ['stockpile']];
-    hud.showResult({ ...screen, camp: { picks: NO_PICKS, offers } });
+    const offers: CampOffer[] = [screen.camp.offers[0]!, { picks: ['stockpile'], survivor: null }];
+    hud.showResult({ ...screen, camp: { picks: NO_PICKS, offers, room: screen.camp.room } });
     const back = [...root.querySelectorAll('button')].find(
       (b) => b.textContent === 'Back to build',
     )!;
     expect(back.disabled).toBe(true);
     back.click();
     expect(done).not.toHaveBeenCalled();
-    const first = offers[0]![1]!;
+    const first = offers[0]!.picks[1]!;
     const card = (text: string) =>
       [...root.querySelectorAll<HTMLButtonElement>('.hud-card-camp')].find(
         (b) => b.textContent === text,

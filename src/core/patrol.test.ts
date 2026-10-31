@@ -1,20 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
   ARMOURY_CAP,
+  buildingsOf,
   LOCATION_IDS,
   LOCATIONS,
   MATERIALS,
   MAX_COUNT,
+  ORDERS,
   PATROL,
+  PLACE_IDS,
+  PLAZAS,
   RARITY_ORDER,
+  stockOf,
   RECOVERY_MS,
   WEAPONS,
   type LocationId,
+  type PlaceId,
 } from './data.ts';
 import { equip, hordeXp, newGame, startHorde, type GameState } from './game.ts';
 import {
+  bigHordeChance,
   bonusRolls,
+  buildingLoots,
+  focusOptions,
   hasGate,
+  hordeCasualties,
+  hordeOdds,
+  hordeStrength,
   idle,
   locationDanger,
   memberStrength,
@@ -26,10 +38,13 @@ import {
   patrolXp,
   patrolsUnlocked,
   revealedLocations,
+  revealedPlaces,
   riskOf,
+  rollBigHorde,
   sendPatrol,
   settlePatrols,
   tripMinutes,
+  tripOf,
   type Patrol,
 } from './patrol.ts';
 
@@ -57,15 +72,18 @@ const withDan = (game: GameState): GameState => ({
   roster: [...game.roster, { ...game.roster[0]!, id: 'dan', name: 'Dan' }],
 });
 
-function sent(game: GameState, location: LocationId, ids: string[], seed = 1, now = NOW) {
+function sent(game: GameState, location: PlaceId, ids: string[], seed = 1, now = NOW) {
   const r = sendPatrol(game, location, ids, seed, now);
   if (!r.ok) throw new Error(r.reason);
   return r.game;
 }
 
-const patrolAt = (location: LocationId, patch: Partial<Patrol> = {}): Patrol => ({
+const patrolAt = (location: PlaceId, patch: Partial<Patrol> = {}): Patrol => ({
   no: 1,
   location,
+  buildings: [...buildingsOf(location)],
+  focus: 'anything',
+  order: 'balanced',
   members: ['bob'],
   sentAt: NOW,
   sentHorde: PATROL.unlock,
@@ -139,6 +157,9 @@ describe('sending a patrol', () => {
       {
         no: 1,
         location: 'gas-station',
+        buildings: ['gas-station'],
+        focus: 'anything',
+        order: 'balanced',
         members: ['bob', 'jack'],
         sentAt: NOW,
         sentHorde: PATROL.unlock,
@@ -521,9 +542,25 @@ describe('patrol risk (ID-027)', () => {
     }
   });
 
-  it('rolls casualties on their own stream: the survivors bring the loot of ID-026', () => {
-    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1 });
+  it("rolls casualties on their own stream: a light loss keeps the order's share of the ID-026 loot", () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack', 'john'], strength: 1 });
     const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 1);
+    const back = settlePatrols(
+      ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }),
+      NOW + 60 * MIN,
+    );
+    const haul = patrolLoot({ ...p, seed });
+    // Balanced keeps 40% of each count, rounded down; the first weapons found stay.
+    for (const m of MATERIALS) {
+      expect(back.reports[0]!.stock[m], m).toBe(Math.floor(haul.stock[m] * 0.4));
+    }
+    expect(back.reports[0]!.weapons).toHaveLength(Math.floor(haul.weapons.length * 0.4));
+    expect(patrolOutcome({ ...p, seed })).toEqual(patrolOutcome({ ...p, seed }));
+  });
+
+  it('brings the loot of a party that lost nobody whole, on a Dangerous trip too', () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1 });
+    const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 0);
     const back = settlePatrols(
       ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }),
       NOW + 60 * MIN,
@@ -533,7 +570,6 @@ describe('patrol risk (ID-027)', () => {
     expect(back.reports[0]!.weapons.map(({ base, rarity }) => ({ base, rarity }))).toEqual(
       haul.weapons,
     );
-    expect(patrolOutcome({ ...p, seed })).toEqual(patrolOutcome({ ...p, seed }));
   });
 
   it('sends the injured home to rest from the return, with their XP', () => {
@@ -674,5 +710,552 @@ describe('patrol risk (ID-027)', () => {
       wiped: false,
     });
     expect(back.reports[0]!.xp).toBe(patrolXp('electronics', PATROL.unlock));
+  });
+});
+
+const ALL = ['gas-station', 'pharmacy', 'hardware'] as const;
+const H = 60 * MIN;
+/** Whole counts kept of `n` under a share, as the core rounds them. */
+const kept = (n: number, keep: number) => Math.floor(n * keep + 1e-9);
+
+describe('plazas (ID-029)', () => {
+  it('has Riverside Plaza from Horde 6 and the Strip mall from Horde 3, of buildings that exist', () => {
+    expect(PLAZAS.riverside).toMatchObject({ reveal: 6, buildings: ALL });
+    expect(PLAZAS['strip-mall']).toMatchObject({
+      reveal: 3,
+      buildings: ['supermarket', 'electronics'],
+    });
+    for (const z of Object.values(PLAZAS))
+      for (const b of z.buildings) expect(LOCATIONS[b]).toBeDefined();
+    expect(revealedPlaces(newGame())).toEqual(['gas-station', 'supermarket', 'electronics']);
+    expect(revealedPlaces(ready())).toEqual([
+      'gas-station',
+      'supermarket',
+      'electronics',
+      'strip-mall',
+    ]);
+    expect(revealedPlaces(ready({ hordeNumber: 6 }))).toEqual([
+      ...revealedLocations(ready({ hordeNumber: 6 })),
+      'riverside',
+      'strip-mall',
+    ]);
+    // Locations alone are unchanged.
+    expect(revealedLocations(ready({ hordeNumber: 6 }))).toHaveLength(5);
+  });
+
+  it('works a trip out as the longest travel, the searches added up and the highest tier (D2)', () => {
+    expect(tripOf('riverside')).toEqual({ travel: 20, search: 45, tier: 2, minutes: 85 });
+    expect(tripOf('strip-mall')).toEqual({ travel: 15, search: 21, tier: 2, minutes: 51 });
+    expect(tripOf('riverside', ['gas-station'])).toEqual({
+      travel: 5,
+      search: 5,
+      tier: 1,
+      minutes: 15,
+    });
+    expect(tripOf('riverside', ['gas-station', 'pharmacy'])).toEqual({
+      travel: 20,
+      search: 25,
+      tier: 2,
+      minutes: 65,
+    });
+    // A single location is a place whose only building is itself.
+    for (const id of LOCATION_IDS) expect(tripOf(id)).toEqual(tripOf(id, [id]));
+    expect(tripMinutes('gas-station')).toBe(15);
+    expect(() => tripOf('riverside', [])).toThrow();
+    // The patrol is back at its ticked trip's time.
+    const p = patrolAt('riverside', { buildings: ['gas-station', 'pharmacy'] });
+    expect(patrolDue(p)).toBe(NOW + 65 * MIN);
+    expect(locationDanger('riverside')).toBe(12);
+  });
+
+  it('sends to a plaza with every building, in its order, and keeps the orders given', () => {
+    const g = ready({ hordeNumber: 6 });
+    const all = sent(g, 'riverside', ['bob']);
+    expect(all.patrols[0]).toMatchObject({
+      location: 'riverside',
+      buildings: ALL,
+      focus: 'anything',
+      order: 'balanced',
+    });
+    const some = sent(g, 'riverside', ['bob'], 1, NOW);
+    expect(some.patrols[0]!.buildings).toEqual(ALL);
+    const r = sendPatrol(g, 'riverside', ['bob'], 1, NOW, {
+      buildings: ['hardware', 'gas-station', 'hardware'],
+      focus: 'gas',
+      order: 'loot',
+    });
+    if (!r.ok) throw new Error(r.reason);
+    // Searched in the plaza's order, each once.
+    expect(r.game.patrols[0]).toMatchObject({
+      buildings: ['gas-station', 'hardware'],
+      focus: 'gas',
+      order: 'loot',
+    });
+  });
+
+  it('refuses no building, a building from elsewhere, a focus nothing ticked can drop and a hidden plaza', () => {
+    const g = ready({ hordeNumber: 6 });
+    const go = (options: Parameters<typeof sendPatrol>[5], place: PlaceId = 'riverside') =>
+      sendPatrol(g, place, ['bob'], 1, NOW, options);
+    expect(go({ buildings: [] })).toEqual({ ok: false, reason: 'Tick a building to search' });
+    expect(go({ buildings: ['supermarket'] }).ok).toBe(false);
+    expect(go({ buildings: ['gas-station', 'electronics'] }).ok).toBe(false);
+    // A single location's only building is itself.
+    expect(go({ buildings: ['pharmacy'] }, 'gas-station').ok).toBe(false);
+    expect(go({ buildings: ['gas-station'] }, 'gas-station').ok).toBe(true);
+    // No ticked building drops it: the hardware store has no Gas.
+    expect(go({ buildings: ['pharmacy'], focus: 'gas' }).ok).toBe(false);
+    expect(go({ buildings: ['pharmacy'], focus: 'medicine' }).ok).toBe(true);
+    expect(go({ focus: 'weapons' }).ok).toBe(true); // the hardware store's toolkit
+    expect(go({ focus: 'weapons' }, 'strip-mall').ok).toBe(false);
+    expect(go({ focus: 'gas' }, 'supermarket').ok).toBe(false);
+    expect(sendPatrol(ready(), 'riverside', ['bob'], 1, NOW)).toEqual({
+      ok: false,
+      reason: "Riverside Plaza isn't on the map yet",
+    });
+  });
+
+  it('throws for ids the game never offers', () => {
+    const g = ready({ hordeNumber: 6 });
+    const bad = (o: object, place = 'riverside') =>
+      expect(() => sendPatrol(g, place as PlaceId, ['bob'], 1, NOW, o)).toThrow(RangeError);
+    bad({ buildings: ['mall'] });
+    bad({ focus: 'gold' });
+    bad({ order: 'run' });
+    bad({}, 'plaza');
+    bad({ buildings: ['__proto__'] });
+  });
+});
+
+describe('big horde chance and odds (D3, D4)', () => {
+  it('is 10% + 5% per tier above 1 + 5% per building after the first, never for a single building', () => {
+    expect(bigHordeChance('riverside')).toBeCloseTo(0.25);
+    expect(bigHordeChance('strip-mall')).toBeCloseTo(0.2);
+    expect(bigHordeChance('strip-mall', ['supermarket'])).toBeCloseTo(0.1); // tier 1, one building
+    expect(bigHordeChance('strip-mall', ['electronics'])).toBeCloseTo(0.15);
+    expect(bigHordeChance('riverside', ['gas-station', 'pharmacy'])).toBeCloseTo(0.2);
+    for (const id of LOCATION_IDS) expect(bigHordeChance(id)).toBe(0);
+  });
+
+  it('never looks at the party: the same seeds hit whatever its strength', () => {
+    const hits = (strength: number) =>
+      Array.from(
+        { length: 4000 },
+        (_, seed) => rollBigHorde(patrolAt('riverside', { strength, seed })) !== null,
+      );
+    const weak = hits(0);
+    expect(hits(5)).toEqual(weak);
+    expect(hits(999)).toEqual(weak);
+    expect(weak.filter(Boolean).length / 4000).toBeCloseTo(0.25, 1);
+    // A single building rolls nothing, and its outcome never mentions one.
+    expect(rollBigHorde(patrolAt('hardware', { seed: 3 }))).toBeNull();
+    expect(patrolOutcome(patrolAt('hardware', { seed: 3 })).bigHorde).toBeNull();
+  });
+
+  it('rates the party against 1.5 x the trip danger and reads the odds off the table', () => {
+    expect(hordeStrength('riverside')).toBe(18);
+    expect(hordeStrength('riverside', ['gas-station'])).toBe(9);
+    const at = (ratio: number) => hordeOdds(ratio * 18, 'riverside');
+    expect(at(2)).toEqual({ defeat: 0.7, fence: 0.25, overrun: 0.05 });
+    expect(at(1)).toEqual({ defeat: 0.7, fence: 0.25, overrun: 0.05 });
+    expect(at(0.99)).toEqual({ defeat: 0.35, fence: 0.45, overrun: 0.2 });
+    expect(at(0.6)).toEqual({ defeat: 0.35, fence: 0.45, overrun: 0.2 });
+    expect(at(0.59)).toEqual({ defeat: 0.1, fence: 0.4, overrun: 0.5 });
+    expect(at(0.3)).toEqual({ defeat: 0.1, fence: 0.4, overrun: 0.5 });
+    expect(at(0.29)).toEqual({ defeat: 0, fence: 0.25, overrun: 0.75 });
+    expect(at(0)).toEqual({ defeat: 0, fence: 0.25, overrun: 0.75 });
+    for (const row of PATROL.horde.odds)
+      expect(row.defeat + row.fence + row.overrun).toBeCloseTo(1);
+  });
+
+  it('rolls the result at those odds', () => {
+    const N = 20_000;
+    for (const row of PATROL.horde.odds) {
+      const strength = row.from * hordeStrength('riverside');
+      const count = { defeat: 0, fence: 0, overrun: 0 };
+      let hits = 0;
+      for (let seed = 0; seed < N; seed++) {
+        const r = rollBigHorde(patrolAt('riverside', { strength, seed }));
+        if (!r) continue;
+        hits++;
+        count[r.result]++;
+        expect(r.at).toBeGreaterThanOrEqual(0);
+        expect(r.at).toBeLessThan(3);
+        expect(r.genes).toBeGreaterThanOrEqual(1);
+        expect(r.genes).toBeLessThanOrEqual(2);
+      }
+      for (const k of ['defeat', 'fence', 'overrun'] as const) {
+        expect(count[k] / hits, `${row.from} ${k}`).toBeCloseTo(row[k], 1);
+      }
+    }
+  });
+
+  it('never shifts the loot or the casualty streams, and a late settle comes out the same', () => {
+    // The plaza's hardware store rolls what the hardware store does from the same seed.
+    for (let seed = 0; seed < 50; seed++) {
+      expect(patrolLoot(patrolAt('riverside', { buildings: ['hardware'], seed }))).toEqual(
+        patrolLoot(patrolAt('hardware', { seed })),
+      );
+    }
+    // Several buildings roll one after the other from one seed.
+    const p = patrolAt('riverside', { seed: 9 });
+    const loots = buildingLoots(p);
+    expect(loots).toHaveLength(3);
+    expect(buildingLoots({ ...p, buildings: ['gas-station'] })[0]).toEqual(loots[0]);
+    const seed = seedWhere(p, (o) => o.bigHorde === 'fence' && !o.wiped);
+    const g = ready({
+      hordeNumber: 6,
+      patrols: [{ ...p, seed, members: ['bob', 'jack'] }],
+      patrolsSent: 1,
+    });
+    const due = patrolDue(g.patrols[0]!);
+    expect(settlePatrols(g, due + 9 * H)).toEqual(settlePatrols(g, due));
+  });
+});
+
+describe('loot focus (ID-029)', () => {
+  it('lists what the ticked buildings can drop, "Anything" first and the crater\'s "anything" never', () => {
+    expect(focusOptions(['gas-station'])).toEqual([
+      'anything',
+      'scrap',
+      'food',
+      'gas',
+      'batteries',
+    ]);
+    expect(focusOptions(ALL)).toEqual([
+      'anything',
+      'scrap',
+      'wood',
+      'metal',
+      'food',
+      'medicine',
+      'chemicals',
+      'gas',
+      'batteries',
+      'weapons',
+    ]);
+    expect(focusOptions(['crater'])).toEqual(['anything', 'genes', 'weapons']);
+    expect(focusOptions(['pharmacy'])).not.toContain('gas');
+  });
+
+  it('doubles the weight of the focused loot', () => {
+    // Gas is 30 of 90 at the gas station; favoured it is 60 of 120, so 1.5x the rolls.
+    const gas = (focus: Patrol['focus']) => {
+      let total = 0;
+      for (let seed = 0; seed < 4000; seed++) {
+        total += patrolLoot(patrolAt('gas-station', { seed, focus, strength: 0 })).gas;
+      }
+      return total;
+    };
+    expect(gas('gas') / gas('anything')).toBeCloseTo(1.5, 1);
+    // A focus with nothing to favour changes nothing.
+    for (let seed = 0; seed < 30; seed++) {
+      expect(patrolLoot(patrolAt('gas-station', { seed, focus: 'medicine' }))).toEqual(
+        patrolLoot(patrolAt('gas-station', { seed })),
+      );
+    }
+  });
+});
+
+describe('orders (D5)', () => {
+  it('keeps 80% / 40% / 0% of the loot and scales deaths and wipes x1.25 / x1 / x0.5 on a Deadly trip', () => {
+    expect(ORDERS.loot).toMatchObject({ keep: 0.8, risk: 1.25 });
+    expect(ORDERS.balanced).toMatchObject({ keep: 0.4, risk: 1 });
+    expect(ORDERS.people).toMatchObject({ keep: 0, risk: 0.5 });
+    expect(riskOf(0, 'hardware', undefined, 'loot')).toEqual({
+      rating: 'deadly',
+      injured: 0.4,
+      dead: 0.25,
+      wipe: 0.25,
+    });
+    expect(riskOf(0, 'hardware')).toEqual({ rating: 'deadly', injured: 0.4, dead: 0.2, wipe: 0.2 });
+    expect(riskOf(0, 'hardware', undefined, 'people')).toEqual({
+      rating: 'deadly',
+      injured: 0.4,
+      dead: 0.1,
+      wipe: 0.1,
+    });
+  });
+
+  it('scales a Dangerous trip too, and no Safe or Risky one', () => {
+    const dangerous = 0.3 * locationDanger('hardware');
+    expect(riskOf(dangerous, 'hardware', undefined, 'loot')).toMatchObject({
+      dead: 0.125,
+      wipe: 0.0625,
+    });
+    expect(riskOf(dangerous, 'hardware', undefined, 'people')).toMatchObject({
+      dead: 0.05,
+      wipe: 0.025,
+    });
+    for (const strength of [locationDanger('hardware'), 0.6 * locationDanger('hardware')]) {
+      for (const order of ['loot', 'balanced', 'people'] as const) {
+        expect(riskOf(strength, 'hardware', undefined, order)).toEqual(
+          riskOf(strength, 'hardware'),
+        );
+      }
+    }
+    expect(patrolRisk([], 'hardware', undefined, 'loot')).toEqual(
+      riskOf(0, 'hardware', undefined, 'loot'),
+    );
+  });
+
+  it("cuts the loot of a Dangerous trip that lost someone to the order's share, rounded down", () => {
+    for (const order of ['loot', 'balanced', 'people'] as const) {
+      const p = patrolAt('electronics', { members: ['bob', 'jack', 'john'], strength: 1, order });
+      const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 1);
+      const back = settlePatrols(ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }), NOW + H);
+      const haul = patrolLoot({ ...p, seed });
+      const r = back.reports[0]!;
+      for (const m of MATERIALS)
+        expect(r.stock[m], `${order} ${m}`).toBe(kept(haul.stock[m], ORDERS[order].keep));
+      expect(r.weapons).toHaveLength(kept(haul.weapons.length, ORDERS[order].keep));
+      // What the cut dropped is reported.
+      for (const m of MATERIALS) expect(r.lost.stock[m] + r.stock[m]).toBe(haul.stock[m]);
+      expect(r.lost.weapons + r.weapons.length).toBe(haul.weapons.length);
+    }
+  });
+
+  it('keeps all of the loot when nobody died, whatever the order', () => {
+    for (const order of ['loot', 'people'] as const) {
+      const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1, order });
+      const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 0);
+      const back = settlePatrols(ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }), NOW + H);
+      expect(back.reports[0]!.stock).toEqual(patrolLoot({ ...p, seed }).stock);
+      expect(back.reports[0]!.lost.weapons).toBe(0);
+    }
+  });
+
+  it('brings no loot when half the party or more is dead, or all of it, whatever the order', () => {
+    for (const order of ['loot', 'balanced', 'people'] as const) {
+      const two = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1, order });
+      const half = seedWhere(two, (o) => !o.wiped && o.dead.length === 1);
+      let back = settlePatrols(
+        ready({ patrols: [{ ...two, seed: half }], patrolsSent: 1 }),
+        NOW + H,
+      );
+      expect(back.reports[0]!.stock).toEqual(stockOf());
+      expect(back.reports[0]!.weapons).toEqual([]);
+      expect(back.reports[0]!.xp).toBeGreaterThan(0); // the survivor still earns it
+      const wipe = seedWhere(two, (o) => o.wiped);
+      back = settlePatrols(ready({ patrols: [{ ...two, seed: wipe }], patrolsSent: 1 }), NOW + H);
+      expect(back.reports[0]).toMatchObject({ wiped: true, xp: 0 });
+      expect(back.stock).toEqual(ready().stock);
+    }
+  });
+
+  it("does not cut a Risky trip's loot for a light loss, since only a Dangerous or Deadly one goes wrong", () => {
+    // A Risky death of one in three is light: no cut, since a Risky trip never goes wrong.
+    const p = patrolAt('gas-station', { members: ['bob', 'jack', 'john'], strength: 3.6 });
+    const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 1);
+    const back = settlePatrols(ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }), NOW + H);
+    expect(back.reports[0]!.stock).toEqual(patrolLoot({ ...p, seed }).stock);
+  });
+});
+
+describe('big horde results (D4)', () => {
+  /** A Safe trip to Riverside, so only the horde can hurt, with party strength `ratio` of the horde's. */
+  const plaza = (ratio: number, patch: Partial<Patrol> = {}): Patrol =>
+    patrolAt('riverside', {
+      members: ['bob', 'jack'],
+      strength: ratio * hordeStrength('riverside'),
+      sentHorde: 6,
+      ...patch,
+    });
+  const settle = (p: Patrol) =>
+    settlePatrols(ready({ hordeNumber: 6, patrols: [p], patrolsSent: 1 }), patrolDue(p));
+
+  it("works out each result's casualties from the trip rating, doubling injuries when fenced off, and the Deadly row when overrun", () => {
+    const strong = 999;
+    const c = (
+      r: 'defeat' | 'fence' | 'overrun',
+      order: 'loot' | 'balanced' | 'people' = 'balanced',
+    ) => hordeCasualties(r, strong, 'riverside', undefined, order);
+    expect(c('defeat')).toEqual({ injured: 0.05, dead: 0, wipe: 0 });
+    expect(c('fence')).toEqual({ injured: 0.1, dead: 0, wipe: 0 });
+    expect(c('overrun')).toEqual({ injured: 0.4, dead: 0.2, wipe: 0.2 });
+    // On any big horde the order applies, Safe trip or not.
+    expect(c('overrun', 'loot')).toEqual({ injured: 0.4, dead: 0.25, wipe: 0.25 });
+    expect(c('overrun', 'people')).toEqual({ injured: 0.4, dead: 0.1, wipe: 0.1 });
+    // A weaker party's beaten horde is rated as its trip is.
+    const deadly = hordeCasualties('defeat', 0, 'riverside', undefined, 'loot');
+    expect(deadly).toEqual({ injured: 0.4, dead: 0.25, wipe: 0.25 });
+    expect(hordeCasualties('fence', 0, 'riverside', undefined, 'balanced').injured).toBe(0.8);
+  });
+
+  it('beaten: searches every building, +50% XP and 1-2 Mutated Genes', () => {
+    const p = plaza(1);
+    const seed = seedWhere(p, (o) => o.bigHorde === 'defeat' && !o.wiped && o.dead.length === 0);
+    const back = settle({ ...p, seed });
+    const r = back.reports[0]!;
+    expect(r).toMatchObject({ bigHorde: 'defeat', searched: 3, buildings: ALL });
+    expect(r.stock.genes).toBeGreaterThanOrEqual(1);
+    expect(r.stock.genes).toBeLessThanOrEqual(2);
+    expect(r.xp).toBe(Math.floor(patrolXp('riverside', 6) * 1.5));
+    const haul = patrolLoot({ ...p, seed });
+    expect(r.stock).toEqual({ ...haul.stock, genes: r.stock.genes });
+    expect(back.stock.genes).toBe(r.stock.genes);
+    expect(r.lost.weapons).toBe(0);
+  });
+
+  it("fenced off: keeps the loot of the buildings before the horde, cut to the order's share, and the trip still ends on time", () => {
+    for (const order of ['loot', 'balanced', 'people'] as const) {
+      const p = plaza(0.8, { order });
+      const seed = seedWhere(
+        p,
+        (o) => o.bigHorde === 'fence' && o.searched === 2 && !o.wiped && o.dead.length === 0,
+      );
+      const r = settle({ ...p, seed }).reports[0]!;
+      expect(r).toMatchObject({ bigHorde: 'fence', searched: 2, order });
+      const loots = buildingLoots({ ...p, seed });
+      const before = loots.slice(0, 2);
+      for (const m of MATERIALS) {
+        const found = before.reduce((n, l) => n + l.stock[m], 0);
+        const all = loots.reduce((n, l) => n + l.stock[m], 0);
+        // Nobody died (the seed is pinned so), so this is the fence's cut alone.
+        expect(r.stock[m], `${order} ${m}`).toBe(kept(found, ORDERS[order].keep));
+        expect(r.lost.stock[m]).toBe(all - kept(found, ORDERS[order].keep));
+      }
+      expect(r.returnedAt).toBe(patrolDue(p));
+    }
+  });
+
+  it('fenced off before the first building: nothing found, nothing kept', () => {
+    const p = plaza(0.8);
+    const seed = seedWhere(p, (o) => o.bigHorde === 'fence' && o.searched === 0 && !o.wiped);
+    const r = settle({ ...p, seed }).reports[0]!;
+    expect(r.searched).toBe(0);
+    expect(r.stock).toEqual(stockOf());
+    expect(r.weapons).toEqual([]);
+    expect(r.xp).toBe(patrolXp('riverside', 6));
+  });
+
+  it('overrun: loot of the buildings before the horde, cut by the order, at the Deadly row', () => {
+    const p = plaza(0, { members: ['bob', 'jack', 'john'] });
+    const seed = seedWhere(
+      p,
+      (o) => o.bigHorde === 'overrun' && o.searched === 2 && !o.wiped && o.dead.length === 0,
+    );
+    const r = settle({ ...p, seed }).reports[0]!;
+    expect(r).toMatchObject({ bigHorde: 'overrun', searched: 2 });
+    const loots = buildingLoots({ ...p, seed });
+    for (const m of MATERIALS) {
+      const found = loots[0]!.stock[m] + loots[1]!.stock[m];
+      expect(r.stock[m], m).toBe(kept(found, 0.4));
+    }
+    // The wipe runs at the Deadly row's 20% over 6000 seeds.
+    let rolled = 0;
+    let wipes = 0;
+    const N = 6000;
+    for (let sd = 0; sd < N; sd++) {
+      const o = patrolOutcome({ ...p, seed: sd });
+      if (o.bigHorde !== 'overrun') continue;
+      rolled++;
+      if (o.wiped) wipes++;
+    }
+    expect(wipes / rolled).toBeCloseTo(0.2, 1);
+  });
+
+  it('a big horde that kills half the party or more brings no loot, the genes included', () => {
+    const p = plaza(0, { members: ['bob', 'jack'] });
+    const seed = seedWhere(p, (o) => o.bigHorde === 'overrun' && !o.wiped && o.dead.length === 1);
+    const r = settle({ ...p, seed }).reports[0]!;
+    expect(r.stock).toEqual(stockOf());
+    expect(r.weapons).toEqual([]);
+    const beaten = plaza(0.3, { members: ['bob', 'jack'] });
+    const s2 = seedWhere(beaten, (o) => o.bigHorde === 'defeat' && !o.wiped && o.dead.length === 1);
+    const r2 = settle({ ...beaten, seed: s2 }).reports[0]!;
+    expect(r2.stock.genes).toBe(0);
+    expect(r2.lost.stock.genes).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a wipe in a big horde brings nothing', () => {
+    const p = plaza(0, { members: ['bob', 'jack'] });
+    const seed = seedWhere(p, (o) => o.bigHorde !== null && o.wiped);
+    const r = settle({ ...p, seed }).reports[0]!;
+    expect(r).toMatchObject({ wiped: true, xp: 0, weapons: [] });
+    expect(r.stock).toEqual(stockOf());
+  });
+
+  it('is not a thing for a single building, whatever the party', () => {
+    for (let seed = 0; seed < 500; seed++) {
+      const o = patrolOutcome(
+        patrolAt('hardware', { seed, strength: 0, members: ['a', 'b', 'c'] }),
+      );
+      expect(o.bigHorde).toBeNull();
+      expect(o.searched).toBe(1);
+      expect(o.genes).toBe(0);
+    }
+  });
+
+  it('brings home what the fallen left at a plaza, with the next party there', () => {
+    const left = [{ location: 'riverside' as const, weapon: GUN }];
+    const p = plaza(2, { members: ['jack'] });
+    const seed = seedWhere(p, (o) => !o.wiped && o.dead.length === 0);
+    const back = settlePatrols(
+      ready({ hordeNumber: 6, patrols: [{ ...p, seed }], patrolsSent: 1, leftBehind: left }),
+      patrolDue(p),
+    );
+    expect(back.reports[0]!.recovered).toEqual([{ base: 'pistol', rarity: 'rusty', kept: true }]);
+    expect(back.leftBehind).toEqual([]);
+    expect(PLACE_IDS).toContain('riverside');
+  });
+});
+
+describe('single-building loot is the loot of before ID-029 (golden)', () => {
+  // Hauls worked out by origin/main's patrolLoot (0.4.36) for these seeds.
+  const zero = stockOf();
+  const none = { makeshift: 0, standard: 0, 'high-capacity': 0, military: 0 };
+  const cases: [PlaceId, number, number, object][] = [
+    [
+      'gas-station',
+      12345,
+      3.6,
+      {
+        stock: { ...zero, scrap: 4, food: 2 },
+        gas: 0,
+        batteries: { ...none, makeshift: 2 },
+        weapons: [],
+      },
+    ],
+    [
+      'hardware',
+      777,
+      9,
+      { stock: { ...zero, wood: 21, metal: 7 }, gas: 0, batteries: none, weapons: [] },
+    ],
+    [
+      'crater',
+      4242,
+      40,
+      {
+        stock: { ...zero, genes: 11 },
+        gas: 0,
+        batteries: none,
+        weapons: [
+          { base: 'smg', rarity: 'relic' },
+          { base: 'smg', rarity: 'prototype' },
+          { base: 'lmg', rarity: 'prototype' },
+        ],
+      },
+    ],
+    [
+      'police',
+      31,
+      12,
+      {
+        stock: zero,
+        gas: 0,
+        batteries: none,
+        weapons: [
+          { base: 'smg', rarity: 'prototype' },
+          { base: 'shotgun', rarity: 'rusty' },
+          { base: 'shotgun', rarity: 'common' },
+          { base: 'shotgun', rarity: 'prototype' },
+        ],
+      },
+    ],
+  ];
+  it.each(cases)('%s, seed %i, strength %f', (place, seed, strength, haul) => {
+    expect(patrolLoot(patrolAt(place, { seed, strength }))).toEqual(haul);
   });
 });

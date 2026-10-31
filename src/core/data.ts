@@ -181,6 +181,7 @@ export const WEAPONS = {
   },
 } as const satisfies Record<string, Weapon>;
 export type WeaponId = keyof typeof WEAPONS;
+export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 /** Free, unlimited Common weapons, held by id; every other weapon is an owned item (design §6 Gear). */
 export const FREE_WEAPONS = ['pistol', 'knife', 'toolkit'] as const satisfies readonly WeaponId[];
 export type FreeWeaponId = (typeof FREE_WEAPONS)[number];
@@ -536,6 +537,13 @@ export const RECRUIT_NAMES: readonly string[] = [
   'Owen',
   'Rosa',
 ];
+/**
+ * Survivors (design §10, §11, as built ID-032, starting points): a patrol back from a
+ * tier-T location has `tries` chances of `perTier × T` each to find one; a camp level-up
+ * offer has a `camp` chance that one of its slots is a survivor, of level 1 to the camp
+ * level, at most `campLevel`.
+ */
+export const SURVIVOR = { perTier: 0.05, tries: 2, camp: 0.1, campLevel: 5 } as const;
 
 /** Chance per card slot of a recruit; a squad of `largeFrom` or more uses `large`. */
 export const RECRUIT_CHANCE = { small: 0.3, large: 0.15, largeFrom: 3 } as const;
@@ -1073,12 +1081,83 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
 };
 export const LOCATION_IDS = Object.keys(LOCATIONS) as LocationId[];
 
+export type PlazaId = 'riverside' | 'strip-mall';
+/** A place a patrol can go: a single building or a plaza (design §10 Plazas, ID-029). */
+export type PlaceId = LocationId | PlazaId;
+
+export interface Plaza {
+  readonly name: string;
+  /** The buildings it holds, in the order they are searched. */
+  readonly buildings: readonly LocationId[];
+  /** The horde number from which it shows on the map. */
+  readonly reveal: number;
+}
+
+/** Several buildings in one trip, with a big-horde risk a single building never has (ID-029). */
+export const PLAZAS: Readonly<Record<PlazaId, Plaza>> = {
+  riverside: {
+    name: 'Riverside Plaza',
+    buildings: ['gas-station', 'pharmacy', 'hardware'],
+    reveal: 6,
+  },
+  'strip-mall': { name: 'Strip mall', buildings: ['supermarket', 'electronics'], reveal: 3 },
+};
+export const PLAZA_IDS = Object.keys(PLAZAS) as PlazaId[];
+export const PLACE_IDS: readonly PlaceId[] = [...LOCATION_IDS, ...PLAZA_IDS];
+
+export const isPlaza = (id: PlaceId): id is PlazaId => Object.hasOwn(PLAZAS, id);
+export const placeName = (id: PlaceId): string =>
+  isPlaza(id) ? PLAZAS[id].name : LOCATIONS[id].name;
+/** The buildings a trip to `id` can search: a plaza's, or the location itself. */
+export const buildingsOf = (id: PlaceId): readonly LocationId[] =>
+  isPlaza(id) ? PLAZAS[id].buildings : [id];
+/** The horde number from which `id` shows on the map; null until research reveals it. */
+export const revealOf = (id: PlaceId): number | null =>
+  isPlaza(id) ? PLAZAS[id].reveal : LOCATIONS[id].reveal;
+
+/** Loot focus (ID-029): one loot type to favour, or "anything". */
+export type Focus = 'anything' | Material | 'gas' | 'batteries' | 'weapons';
+export const FOCUS_IDS: readonly Focus[] = [
+  'anything',
+  ...MATERIALS,
+  'gas',
+  'batteries',
+  'weapons',
+];
+/** The focus a loot line answers to; the crater's "anything" is never focusable. */
+export function focusOf(e: LootEntry): Focus | null {
+  switch (e.kind) {
+    case 'material':
+      return e.id;
+    case 'gas':
+      return 'gas';
+    case 'battery':
+      return 'batteries';
+    case 'weapon':
+      return 'weapons';
+    case 'anything':
+      return null;
+  }
+}
+
+/**
+ * What the party protects when things go wrong (ID-029): the share of the loot kept, and
+ * the factor on the death and wipe odds.
+ */
+export const ORDERS = {
+  loot: { name: 'Save the loot', keep: 0.8, risk: 1.25 },
+  balanced: { name: 'Balanced', keep: 0.4, risk: 1 },
+  people: { name: 'Save the people', keep: 0, risk: 0.5 },
+} as const;
+export type Order = keyof typeof ORDERS;
+export const ORDER_IDS = Object.keys(ORDERS) as Order[];
+
 /**
  * Where each location and the camp sit on the world map (ID-028), as shares of the
  * map's width and height. A longer trip sits farther from the camp.
  */
 export const MAP_CAMP = { x: 0.08, y: 0.5 } as const;
-export const MAP_SPOTS: Readonly<Record<LocationId, { readonly x: number; readonly y: number }>> = {
+export const MAP_SPOTS: Readonly<Record<PlaceId, { readonly x: number; readonly y: number }>> = {
   'gas-station': { x: 0.22, y: 0.38 },
   supermarket: { x: 0.25, y: 0.66 },
   electronics: { x: 0.34, y: 0.28 },
@@ -1089,6 +1168,9 @@ export const MAP_SPOTS: Readonly<Record<LocationId, { readonly x: number; readon
   hospital: { x: 0.74, y: 0.2 },
   military: { x: 0.8, y: 0.76 },
   crater: { x: 0.92, y: 0.5 },
+  // Plazas (ID-029): a trip of 51 and 85 minutes, so between the places of that length.
+  'strip-mall': { x: 0.4, y: 0.65 },
+  riverside: { x: 0.48, y: 0.15 },
 };
 
 /**
@@ -1105,6 +1187,11 @@ export const MAP_SPOTS: Readonly<Record<LocationId, { readonly x: number; readon
  *   covers, with the chance each member is injured or killed and the party wiped out.
  * - `left`: weapons the dead may leave across the map; past that the oldest is lost,
  *   so a save stays small.
+ * - `focus`: weight factor on the loot type a patrol favours (ID-029).
+ * - `horde`: a plaza's big horde (ID-029): `chance` 10% + `perTier` per tier above 1 +
+ *   `perBuilding` per building after the first (never for a single building); its
+ *   strength is `strength` × the trip's danger; `odds` rows, best first, from the lowest
+ *   party-to-horde ratio each covers; `xp` factor, `genes` and `injured` factor.
  */
 export const PATROL = {
   unlock: 3,
@@ -1130,6 +1217,22 @@ export const PATROL = {
     { rating: 'deadly', from: 0, injured: 0.4, dead: 0.2, wipe: 0.2 },
   ],
   left: 40,
+  focus: 2,
+  horde: {
+    chance: 0.1,
+    perTier: 0.05,
+    perBuilding: 0.05,
+    strength: 1.5,
+    xp: 1.5,
+    genes: { min: 1, max: 2 },
+    injured: 2,
+    odds: [
+      { from: 1, defeat: 0.7, fence: 0.25, overrun: 0.05 },
+      { from: 0.6, defeat: 0.35, fence: 0.45, overrun: 0.2 },
+      { from: 0.3, defeat: 0.1, fence: 0.4, overrun: 0.5 },
+      { from: 0, defeat: 0, fence: 0.25, overrun: 0.75 },
+    ],
+  },
 } as const satisfies {
   unlock: number;
   rolls: number;
@@ -1149,6 +1252,17 @@ export const PATROL = {
     wipe: number;
   }[];
   left: number;
+  focus: number;
+  horde: {
+    chance: number;
+    perTier: number;
+    perBuilding: number;
+    strength: number;
+    xp: number;
+    genes: { min: number; max: number };
+    injured: number;
+    odds: readonly { from: number; defeat: number; fence: number; overrun: number }[];
+  };
 };
 /** How a patrol's odds read before it leaves (design §10 Risk and reward). */
 export type RiskRating = (typeof PATROL.risk)[number]['rating'];

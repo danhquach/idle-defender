@@ -1,9 +1,11 @@
 // The camp (design §11, as built ID-033): capacity and the material camp upgrades that
 // add slots, dismissing, the roster floor's free recruits, camp XP with its permanent
-// level-up picks, and Food and Medicine cutting an injury's rest (ID-031). Pure: each
+// level-up picks, and Food and Medicine cutting an injury's rest (ID-031). Survivors
+// (ID-032) ask to join from a patrol report or a camp level-up offer. Pure: each
 // action returns a new game or a refusal the UI shows as-is; real time comes in as `now`.
-import { isOwned } from './armoury.ts';
+import { isOwned, rollWeapon, tierRarity, type OwnedWeapon } from './armoury.ts';
 import {
+  ARMOURY_CAP,
   CAMP_SIZE,
   CAMP_PICK_IDS,
   CAMP_PICK_RANKS,
@@ -12,17 +14,48 @@ import {
   DEFENDER_XP,
   MATERIALS,
   MAX_COUNT,
+  POINTS_PER_LEVEL,
   RECOVERY_MS,
   RECRUIT_NAMES,
+  STATS,
+  SURVIVOR,
   TREATMENT_MS,
+  WEAPON_IDS,
   type CampPickId,
+  type Stats,
   type Stock,
 } from './data.ts';
-import type { GameState, RosterDefender } from './game.ts';
+import { ownedWeapons, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
+import { isGun } from './loadout.ts';
 import type { GameResult } from './research.ts';
-import { createRng, int, pick, type Rng } from './rng.ts';
-import { NO_STATS } from './stats.ts';
+import { chance, createRng, int, pick, type Rng } from './rng.ts';
+import { NO_STATS, xpForLevel } from './stats.ts';
+
+/**
+ * Someone who wants to join the camp (design §10 Survivors), rolled once and shown as
+ * is. Their id is their roster id once they join and their weapon's uid: `s<patrol>-<k>`
+ * from a patrol, `c<camp level>` from a camp level-up.
+ */
+export interface Survivor {
+  id: string;
+  name: string;
+  xp: number;
+  stats: Stats;
+  weapon: OwnedWeapon;
+}
+
+/** A camp level-up's offer: up to 3 picks, or 2 and a survivor (design §11 Camp level). */
+export interface CampOffer {
+  picks: CampPickId[];
+  survivor: Survivor | null;
+}
+
+/**
+ * What a camp level-up offer can be answered with: a pick, letting the survivor join, or
+ * turning them away (a pick does that too; on its own it answers an offer with no picks left).
+ */
+export type CampChoice = CampPickId | 'join' | 'away';
 
 export interface Camp {
   /** Material camp upgrades bought, each `CAMP_SIZE.perUpgrade` more slots. */
@@ -32,7 +65,7 @@ export interface Camp {
   /** The rank of each camp-level pick taken. */
   picks: Record<CampPickId, number>;
   /** Level-up offers still to pick from, oldest first. */
-  offers: CampPickId[][];
+  offers: CampOffer[];
   /** When the roster floor's next free recruit arrives (ms); null while it isn't running. */
   recruitAt: number | null;
   /** Free recruits so far; the next one is `recruit-<recruits + 1>`. */
@@ -136,45 +169,144 @@ function rollOffer(rng: Rng, ranks: Readonly<Record<CampPickId, number>>): CampP
 /**
  * The offers horde `h` adds for `game` (the game it was fought from): one per camp level
  * its camp XP gains, rolled from where the fight's RNG ended on a stream of their own,
- * so the result screen and `finishHorde` agree. An offer with nothing left is dropped.
+ * so the result screen and `finishHorde` agree. Each has a `SURVIVOR.camp` chance that a
+ * survivor takes one of its 3 slots, rolled on another stream so the picks never shift.
+ * An offer with nothing left is dropped.
  */
 export function hordeCampOffers(
   game: Pick<GameState, 'camp'>,
   h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'rng'>,
-): CampPickId[][] {
-  const before = game.camp.xp;
-  const after = campXpAfter(game, h);
-  const levels = campLevelOf(after).level - campLevelOf(before).level;
+): CampOffer[] {
+  const before = campLevelOf(game.camp.xp).level;
+  const levels = campLevelOf(campXpAfter(game, h)).level - before;
   const rng = createRng(h.rng.s ^ 0x5bd1e995);
-  return Array.from({ length: levels }, () => rollOffer(rng, game.camp.picks)).filter(
-    (o) => o.length > 0,
-  );
+  const join = createRng(h.rng.s ^ 0x27d4eb2f);
+  return Array.from({ length: levels }, (_, i): CampOffer => {
+    const picks = rollOffer(rng, game.camp.picks);
+    if (!chance(join, SURVIVOR.camp)) return { picks, survivor: null };
+    const level = before + i + 1;
+    const rank = int(join, 1, Math.min(level, SURVIVOR.campLevel));
+    return { picks: picks.slice(0, 2), survivor: rollSurvivor(join, `c${level}`, rank, rank) };
+  }).filter((o) => o.picks.length > 0 || o.survivor !== null);
 }
 
 /**
- * `camp` after taking `id` from its oldest offer: its rank goes up one and the offer is
- * gone. Later offers lose any pick now at the top rank, and one left empty is dropped.
- * Refused when `id` isn't in that offer.
+ * `camp` after answering its oldest offer with `choice`: a pick's rank goes up one, or
+ * the survivor is let in (`takeCampPick` adds them) or turned away, and the offer is
+ * gone; picking turns the survivor away too. Later offers lose any pick now at the top rank, and one left
+ * with nothing is dropped. Refused when `choice` isn't in that offer.
  */
 export function campAfterPick<T extends Pick<Camp, 'picks' | 'offers'>>(
   camp: T,
-  id: CampPickId,
+  choice: CampChoice,
 ): { ok: true; camp: T } | { ok: false; reason: string } {
   const offer = camp.offers[0];
   if (!offer) return { ok: false, reason: 'No camp pick waiting' };
-  if (!offer.includes(id)) return { ok: false, reason: `${String(id)} isn't on offer` };
-  const picks = { ...camp.picks, [id]: camp.picks[id] + 1 };
+  const answer = choice === 'join' || choice === 'away';
+  if (answer ? offer.survivor === null : !offer.picks.includes(choice)) {
+    return { ok: false, reason: `${String(choice)} isn't on offer` };
+  }
+  const picks = answer ? camp.picks : { ...camp.picks, [choice]: camp.picks[choice] + 1 };
   const offers = camp.offers
     .slice(1)
-    .map((o) => o.filter((x) => picks[x] < CAMP_PICK_RANKS))
-    .filter((o) => o.length > 0);
+    .map((o) => ({ ...o, picks: o.picks.filter((x) => picks[x] < CAMP_PICK_RANKS) }))
+    .filter((o) => o.picks.length > 0 || o.survivor !== null);
   return { ok: true, camp: { ...camp, picks, offers } };
 }
 
-/** Takes `id` from the oldest camp-level offer (`campAfterPick`). */
-export function takeCampPick(game: GameState, id: CampPickId): GameResult {
-  const r = campAfterPick(game.camp, id);
-  return r.ok ? { ok: true, game: { ...game, camp: r.camp } } : r;
+/**
+ * Answers the oldest camp-level offer (`campAfterPick`). Letting its survivor join needs
+ * room for them (`joinLock`).
+ */
+export function takeCampPick(game: GameState, choice: CampChoice): GameResult {
+  const survivor = game.camp.offers[0]?.survivor ?? null;
+  if (choice === 'join' && survivor !== null) {
+    const lock = joinLock(game);
+    if (lock !== null) return { ok: false, reason: lock };
+  }
+  const r = campAfterPick(game.camp, choice);
+  if (!r.ok) return r;
+  const roster = choice === 'join' ? [...game.roster, survivorDefender(survivor!)] : game.roster;
+  return { ok: true, game: { ...game, roster, camp: r.camp } };
+}
+
+/**
+ * Survivor `id` of `level` (design §10): a name, the XP of that level with its stat
+ * points rolled across the stats, and any weapon at a tier-`tier` place's rarity.
+ */
+export function rollSurvivor(rng: Rng, id: string, level: number, tier: number): Survivor {
+  const name = pick(rng, RECRUIT_NAMES);
+  const stats = { ...NO_STATS };
+  for (let n = POINTS_PER_LEVEL * (level - 1); n > 0; n--) stats[pick(rng, STATS)] += 1;
+  const base = pick(rng, WEAPON_IDS);
+  const weapon = rollWeapon(rng, id, base, tierRarity(rng, tier));
+  return { id, name, xp: xpForLevel(level), stats, weapon };
+}
+
+/** Survivor `s` on the roster: fit, carrying their weapon (a pistol too if it isn't a gun). */
+export function survivorDefender(s: Survivor): RosterDefender {
+  const w = s.weapon;
+  return {
+    id: s.id,
+    name: s.name,
+    loadout: isGun(w)
+      ? { primary: w, secondary: null, item: null }
+      : { primary: 'pistol', secondary: w, item: null },
+    xp: s.xp,
+    stats: { ...s.stats },
+    injuredUntil: null,
+  };
+}
+
+/** Room left for people: free camp slots, and armoury room for the weapons they carry. */
+export interface Room {
+  people: number;
+  weapons: number;
+}
+
+export const roomOf = (game: GameState): Room => ({
+  people: campSlots(game) - game.roster.length,
+  weapons: ARMOURY_CAP - ownedWeapons(game).length,
+});
+
+/** Why a survivor can't join with `room` left, or null when they can. */
+export function roomLock(room: Room): string | null {
+  if (room.people < 1) return 'The camp is full';
+  if (room.weapons < 1) return 'The armoury is full';
+  return null;
+}
+
+/** Why a survivor can't join now, or null when they can: a camp slot and armoury room for their weapon. */
+export const joinLock = (game: GameState): string | null => roomLock(roomOf(game));
+
+/** Report `no`'s undecided survivor `id`; unknown ones throw. */
+function waiting(game: GameState, no: number, id: string): Survivor {
+  const s = game.reports.find((r) => r.no === no)?.survivors.find((x) => x.id === id);
+  if (!s) throw new RangeError(`no survivor ${String(id)} in report ${String(no)}`);
+  return s;
+}
+
+/** `game` with survivor `id` gone from report `no`. */
+const withoutSurvivor = (game: GameState, no: number, id: string): GameState => ({
+  ...game,
+  reports: game.reports.map((r) =>
+    r.no === no ? { ...r, survivors: r.survivors.filter((x) => x.id !== id) } : r,
+  ),
+});
+
+/** Lets patrol report `no`'s survivor `id` join the camp (design §10); refused without room (`joinLock`). */
+export function acceptSurvivor(game: GameState, no: number, id: string): GameResult {
+  const s = waiting(game, no, id);
+  const lock = joinLock(game);
+  if (lock !== null) return { ok: false, reason: lock };
+  const g = withoutSurvivor(game, no, id);
+  return { ok: true, game: { ...g, roster: [...g.roster, survivorDefender(s)] } };
+}
+
+/** Turns patrol report `no`'s survivor `id` away: they are gone for good. */
+export function turnAway(game: GameState, no: number, id: string): GameResult {
+  waiting(game, no, id);
+  return { ok: true, game: withoutSurvivor(game, no, id) };
 }
 
 /** What the picks taken add up to (design §11 Camp level). */
