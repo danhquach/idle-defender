@@ -4,6 +4,7 @@
 import type {
   EnemyKind,
   LocationId,
+  PlaceId,
   Profession,
   ShopItem,
   SkillId,
@@ -12,6 +13,7 @@ import type {
   WeaponId,
   WEAPONS,
 } from '../core/data.ts';
+import { buildingsOf } from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
 
 export const ART_IDS = [
@@ -155,6 +157,9 @@ export const MAP_ART: Readonly<Record<LocationId, ArtId>> = {
   military: 'map-military',
   crater: 'map-crater',
 };
+
+/** A place's icons on the map (ID-029): a location's own, or a plaza's buildings' as a small cluster. */
+export const placeArt = (place: PlaceId): ArtId[] => buildingsOf(place).map((b) => MAP_ART[b]);
 
 /** Each horde cash shop item's icon on its button (design §15, ID-041). */
 export const SHOP_ICON: Readonly<Record<ShopItem, ArtId>> = {

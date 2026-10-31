@@ -161,6 +161,9 @@ describe('recovery in the roster view (ID-031)', () => {
         {
           no: 1,
           location: 'gas-station',
+          buildings: ['gas-station'],
+          focus: 'anything',
+          order: 'balanced',
           members: ['bob'],
           sentAt: Date.now(),
           sentHorde: 3,

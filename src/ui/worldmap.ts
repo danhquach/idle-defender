@@ -1,38 +1,52 @@
 // The world map between hordes (design §10, ID-028): the region with each revealed
 // location, its route from the camp and its risk colour; the patrols out on their
 // routes; and, in the build panel, the picked location, the party picker, the risk
-// screen and the patrol reports. Text only via textContent; colours are constants.
+// screen and the patrol reports. Plazas (ID-029) are places of several buildings, with
+// loot focus, orders and a big-horde risk. Text only via textContent; colours are constants.
 import {
   BATTERIES,
+  buildingsOf,
+  FOCUS_IDS,
+  isPlaza,
   LOCATIONS,
   MAP_CAMP,
   MAP_SPOTS,
+  ORDERS,
   PATROL,
+  placeName,
   RARITIES,
   WEAPONS,
+  type Focus,
   type LocationId,
   type LootEntry,
+  type Order,
+  type PlaceId,
   type RiskRating,
 } from '../core/data.ts';
 import { onPatrol, type GameState, type RosterDefender } from '../core/game.ts';
 import {
+  bigHordeChance,
   bonusRolls,
+  focusOptions,
+  hordeCasualties,
+  hordeOdds,
+  hordeStrength,
   idle,
-  locationDanger,
   memberStrength,
   partyStrength,
   patrolDue,
   patrolRisk,
   patrolsUnlocked,
-  revealedLocations,
-  tripMinutes,
+  revealedPlaces,
+  tierDanger,
+  tripOf,
   type Patrol,
   type PatrolReport,
   type ReportWeapon,
 } from '../core/patrol.ts';
 import { clockTime, defenderLabel, el, stockText } from './hud.ts';
 import { restLeft } from './roster.ts';
-import { ART_URLS, MAP_ART, MAP_PICTURE } from './sprites.ts';
+import { ART_URLS, MAP_PICTURE, placeArt } from './sprites.ts';
 
 export const RISK_NAME: Readonly<Record<RiskRating, string>> = {
   safe: 'Safe',
@@ -120,26 +134,86 @@ export function ratedParty(
   return party.length > 0 ? party : biggestParty(game, now);
 }
 
-/** `location`'s rating for `party`, or null with nobody to send. */
-export const mapRating = (
-  party: readonly RosterDefender[],
-  location: LocationId,
-): RiskRating | null => (party.length > 0 ? patrolRisk(party, location).rating : null);
+/** `place`'s rating for `party` (all its buildings), or null with nobody to send. */
+export const mapRating = (party: readonly RosterDefender[], place: PlaceId): RiskRating | null =>
+  party.length > 0 ? patrolRisk(party, place).rating : null;
 
 const strengthText = (s: number): string => (Math.round(s * 10) / 10).toString();
 
-/** The risk screen's lines for `party` at `location`. */
-export function riskLines(party: readonly RosterDefender[], location: LocationId): string[] {
+/** A focus's name in the Loot focus list: "Anything", "Food", "Gas", "Batteries", "Weapons". */
+export const focusName = (f: Focus): string =>
+  f === 'batteries' ? 'Batteries' : f === 'weapons' ? 'Weapons' : capital(f);
+
+/** What a plaza's big horde does, per result: its name and effect. */
+const HORDE_RESULT = {
+  defeat: ['Beaten', 'the patrol goes on, +50% XP and 1-2 Mutated Genes'],
+  fence: ['Fenced off', 'it ends early with the loot found before it, cut by the order'],
+  overrun: ['Overrun', 'it fails with the loot found before it, cut by the order'],
+} as const;
+
+/** What the order does to this trip, in words. */
+function orderLine(order: Order, applies: boolean): string {
+  const o = ORDERS[order];
+  const share = `keeps ${percent(o.keep)} of the loot, deaths and wipe x${o.risk}`;
+  return `When things go wrong: ${o.name} ${share}${applies ? '' : ' (only on a Dangerous or Deadly trip)'}`;
+}
+
+/** The ticks and orders a trip is rated with; all of a place's buildings and Balanced by default. */
+export interface TripPlan {
+  buildings?: readonly LocationId[];
+  order?: Order;
+}
+
+/** The risk screen's lines for `party` at `place`, with the ticked buildings and the order. */
+export function riskLines(
+  party: readonly RosterDefender[],
+  place: PlaceId,
+  plan: TripPlan = {},
+): string[] {
   if (party.length === 0) return ['Pick who goes to see the risk.'];
+  const buildings = plan.buildings ?? buildingsOf(place);
+  if (buildings.length === 0) return ['Tick a building to see the risk.'];
+  const order = plan.order ?? 'balanced';
   const strength = partyStrength(party);
-  const risk = patrolRisk(party, location);
-  return [
+  const trip = tripOf(place, buildings);
+  const risk = patrolRisk(party, place, buildings, order);
+  const lines = [
     `Risk: ${RISK_NAME[risk.rating]}`,
-    `Party strength ${strengthText(strength)} vs danger ${locationDanger(location)}`,
+    `Party strength ${strengthText(strength)} vs danger ${tierDanger(trip.tier)}`,
     `Each member: ${percent(risk.injured)} injured, ${percent(risk.dead)} killed`,
     `Whole party lost: ${percent(risk.wipe)}`,
-    `Loot rolls: ${PATROL.rolls} + ${bonusRolls(strength, location)}`,
+    `Loot rolls: ${PATROL.rolls} + ${bonusRolls(strength, place, buildings)}${buildings.length > 1 ? ' for each building' : ''}`,
   ];
+  const plaza = isPlaza(place);
+  lines.push(orderLine(order, plaza || risk.rating === 'dangerous' || risk.rating === 'deadly'));
+  const noLoot = 'Half the party lost or more, or all of it: no loot.';
+  if (!plaza) return [...lines, noLoot];
+  const odds = hordeOdds(strength, place, buildings);
+  lines.push(
+    `Big horde: ${percent(bigHordeChance(place, buildings))} chance, strength ${strengthText(hordeStrength(place, buildings))}`,
+  );
+  for (const result of ['defeat', 'fence', 'overrun'] as const) {
+    const c = hordeCasualties(result, strength, place, buildings, order);
+    const [name, effect] = HORDE_RESULT[result];
+    lines.push(
+      `${name} ${percent(odds[result])}: ${effect}; ${percent(c.injured)} injured, ${percent(c.dead)} killed, whole party lost ${percent(c.wipe)}`,
+    );
+  }
+  lines.push(noLoot);
+  return lines;
+}
+
+/** One loot focus choice: its name, and whether the ticked buildings can drop it. */
+export interface FocusRow {
+  id: Focus;
+  label: string;
+  free: boolean;
+}
+
+/** Every focus, those the ticked `buildings` can't drop marked not free (greyed out). */
+export function focusRows(buildings: readonly LocationId[]): FocusRow[] {
+  const can = focusOptions(buildings);
+  return FOCUS_IDS.map((id) => ({ id, label: focusName(id), free: can.includes(id) }));
 }
 
 /** One roster line in the party picker: free to send, or why not. */
@@ -171,27 +245,40 @@ export function partyRows(game: GameState, now: number): PartyRow[] {
   });
 }
 
-/** Weapons the dead left at `location`, waiting for the next patrol there. */
-export const waitingAt = (game: GameState, location: LocationId): number =>
-  game.leftBehind.filter((w) => w.location === location).length;
+/** Weapons the dead left at `place`, waiting for the next patrol there. */
+export const waitingAt = (game: GameState, place: PlaceId): number =>
+  game.leftBehind.filter((w) => w.location === place).length;
 
-/** The location panel's facts: tier, trip, loot and weapons waiting. */
-export function locationLines(game: GameState, location: LocationId): string[] {
-  const loot = lootLines(location);
-  const waiting = waitingAt(game, location);
+/** The place panel's facts: tier, trip, loot (of each ticked building in a plaza) and weapons waiting. */
+export function locationLines(
+  game: GameState,
+  place: PlaceId,
+  buildings: readonly LocationId[] = buildingsOf(place),
+): string[] {
+  if (buildings.length === 0) return ['Tick a building to search.'];
+  const trip = tripOf(place, buildings);
+  const waiting = waitingAt(game, place);
+  const loot = isPlaza(place)
+    ? buildings.map((b) => {
+        const l = lootLines(b);
+        return `${LOCATIONS[b].name}: mostly ${l.mostly}; sometimes ${l.sometimes}`;
+      })
+    : [
+        `Mostly: ${lootLines(place as LocationId).mostly}`,
+        `Sometimes: ${lootLines(place as LocationId).sometimes}`,
+      ];
   return [
-    `Tier ${LOCATIONS[location].tier} · round trip ${tripText(tripMinutes(location))}`,
-    `Mostly: ${loot.mostly}`,
-    `Sometimes: ${loot.sometimes}`,
+    `Tier ${trip.tier} · round trip ${tripText(trip.minutes)}`,
+    ...loot,
     ...(waiting > 0
       ? [`${waiting} weapon${waiting === 1 ? '' : 's'} left here by the fallen`]
       : []),
   ];
 }
 
-/** How far along its route `p` is at `now`: 0 at the camp, 1 at the location. */
+/** How far along its route `p` is at `now`: 0 at the camp, 1 at the place. */
 export function routeShare(p: Patrol, now: number): number {
-  const { travel, search } = LOCATIONS[p.location];
+  const { travel, search } = tripOf(p.location, p.buildings);
   const minutes = (now - p.sentAt) / 60_000;
   if (minutes <= 0) return 0;
   if (minutes < travel) return minutes / travel;
@@ -202,30 +289,50 @@ export function routeShare(p: Patrol, now: number): number {
 /** "Gas station · Bob, Ann · 12m left". */
 export function patrolLine(game: GameState, p: Patrol, now: number): string {
   const names = p.members.map((id) => game.roster.find((d) => d.id === id)?.name ?? '?');
-  return `${LOCATIONS[p.location].name} · ${names.join(', ')} · ${restLeft(patrolDue(p), now)} left`;
+  return `${placeName(p.location)} · ${names.join(', ')} · ${restLeft(patrolDue(p), now)} left`;
 }
 
 const weaponText = (w: ReportWeapon): string =>
   `${RARITIES[w.rarity].name} ${WEAPONS[w.base].name}${w.kept ? '' : ' (salvaged)'}`;
 
+const batteryList = (b: PatrolReport['batteries']): string[] =>
+  (Object.keys(b) as (keyof typeof b)[])
+    .filter((k) => b[k] > 0)
+    .map((k) => `${b[k]} ${BATTERIES[k].name.toLowerCase()} batter${b[k] === 1 ? 'y' : 'ies'}`);
+
 /** A report's heading and lines, newest first in the list. */
 export function reportLines(r: PatrolReport): { title: string; lines: string[] } {
-  const title = `${LOCATIONS[r.location].name} · back at ${clockTime(r.returnedAt)}`;
+  const title = `${placeName(r.location)} · back at ${clockTime(r.returnedAt)}`;
   const lines = [`Sent: ${r.names.join(', ')}`];
-  if (r.wiped) return { title, lines: [...lines, 'The whole party was lost. Nothing came back.'] };
-  const batteries = (Object.keys(r.batteries) as (keyof typeof r.batteries)[])
-    .filter((b) => r.batteries[b] > 0)
-    .map(
-      (b) =>
-        `${r.batteries[b]} ${BATTERIES[b].name.toLowerCase()} batter${r.batteries[b] === 1 ? 'y' : 'ies'}`,
+  const plaza = isPlaza(r.location);
+  if (plaza) {
+    const names = r.buildings.slice(0, r.searched).map((b) => LOCATIONS[b].name);
+    lines.push(`Searched: ${names.length > 0 ? names.join(', ') : 'nothing'}`);
+    if (r.bigHorde) {
+      const [name, effect] = HORDE_RESULT[r.bigHorde];
+      lines.push(`Big horde: ${name.toLowerCase()} (${effect})`);
+    }
+  }
+  if (plaza || r.order !== 'balanced' || r.focus !== 'anything') {
+    lines.push(
+      `Orders: ${ORDERS[r.order].name}${r.focus === 'anything' ? '' : `, favouring ${focusName(r.focus)}`}`,
     );
+  }
+  if (r.wiped) return { title, lines: [...lines, 'The whole party was lost. Nothing came back.'] };
   const found = [
     ...(stockText(r.stock) === 'nothing' ? [] : [stockText(r.stock)]),
     ...(r.gas > 0 ? [`${r.gas} gas`] : []),
-    ...batteries,
+    ...batteryList(r.batteries),
   ];
   lines.push(`Found: ${found.length > 0 ? found.join(', ') : 'no materials'}`);
   if (r.weapons.length > 0) lines.push(`Weapons: ${r.weapons.map(weaponText).join(', ')}`);
+  const lost = [
+    ...(stockText(r.lost.stock) === 'nothing' ? [] : [stockText(r.lost.stock)]),
+    ...(r.lost.gas > 0 ? [`${r.lost.gas} gas`] : []),
+    ...batteryList(r.lost.batteries),
+    ...(r.lost.weapons > 0 ? [`${r.lost.weapons} weapon${r.lost.weapons === 1 ? '' : 's'}`] : []),
+  ];
+  if (lost.length > 0) lines.push(`Lost to the retreat: ${lost.join(', ')}`);
   if (r.recovered.length > 0) lines.push(`Recovered: ${r.recovered.map(weaponText).join(', ')}`);
   lines.push(`${r.xp} XP each`);
   if (r.injured.length > 0) lines.push(`Injured: ${r.injured.join(', ')}`);
@@ -238,13 +345,15 @@ export function reportLines(r: PatrolReport): { title: string; lines: string[] }
 
 const SVG = 'http://www.w3.org/2000/svg';
 
-/** A place's icon inside its ring; empty alt text, so a screen reader reads the name. */
-function icon(src: string): HTMLElement {
-  const ring = el('span', 'worldmap-icon');
-  const img = el('img', 'worldmap-icon-art');
-  img.src = src;
-  img.alt = '';
-  ring.append(img);
+/** A place's icon inside its ring (a plaza's is its buildings' icons, small, together); empty alt text, so a screen reader reads the name. */
+function icon(srcs: readonly string[]): HTMLElement {
+  const ring = el('span', srcs.length > 1 ? 'worldmap-icon is-cluster' : 'worldmap-icon');
+  for (const src of srcs) {
+    const img = el('img', 'worldmap-icon-art');
+    img.src = src;
+    img.alt = '';
+    ring.append(img);
+  }
   return ring;
 }
 const pct = (share: number): string => `${share * 100}%`;
@@ -257,11 +366,11 @@ const pct = (share: number): string => `${share * 100}%`;
 export function mapContents(
   game: GameState,
   party: readonly RosterDefender[],
-  selected: LocationId | null,
+  selected: PlaceId | null,
   now: number,
-  onPick: (location: LocationId) => void,
+  onPick: (place: PlaceId) => void,
 ): Element[] {
-  const shown = revealedLocations(game);
+  const shown = revealedPlaces(game);
   // The region's art, decoration only: places and routes carry the meaning.
   const region = el('img', 'worldmap-region');
   region.src = ART_URLS[MAP_PICTURE] ?? '';
@@ -293,8 +402,8 @@ export function mapContents(
     button.setAttribute('aria-pressed', String(id === selected));
     button.dataset.location = id;
     button.append(
-      icon(ART_URLS[MAP_ART[id]] ?? ''),
-      el('span', 'worldmap-name', `${LOCATIONS[id].name} · T${LOCATIONS[id].tier}`),
+      icon(placeArt(id).map((a) => ART_URLS[a] ?? '')),
+      el('span', 'worldmap-name', `${placeName(id)} · T${tripOf(id).tier}`),
       el('span', 'worldmap-risk', rating ? RISK_NAME[rating] : 'Nobody can go'),
     );
     button.addEventListener('click', () => onPick(id));

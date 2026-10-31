@@ -26,6 +26,17 @@ const survivor = (id: string, name = 'Ava'): Survivor => ({
 const report = (survivors: Survivor[]): PatrolReport => ({
   no: 1,
   location: 'gas-station',
+  buildings: ['gas-station'],
+  searched: 1,
+  bigHorde: null,
+  order: 'balanced',
+  focus: 'anything',
+  lost: {
+    stock: stockOf(),
+    gas: 0,
+    batteries: { makeshift: 0, standard: 0, 'high-capacity': 0, military: 0 },
+    weapons: 0,
+  },
   names: ['Bob'],
   injured: [],
   dead: [],

@@ -20,6 +20,7 @@ import {
   LOCATION_IDS,
   LOCATIONS,
   PATROL,
+  PLAZAS,
   POINTS_PER_LEVEL,
   RECRUIT_NAMES,
   SURVIVOR,
@@ -44,6 +45,9 @@ const NOW = 1_800_000_000_000;
 const patrolAt = (location: LocationId, seed: number, patch: Partial<Patrol> = {}): Patrol => ({
   no: 7,
   location,
+  buildings: [location],
+  focus: 'anything',
+  order: 'balanced',
   members: ['bob'],
   sentAt: NOW,
   sentHorde: PATROL.unlock,
@@ -163,6 +167,22 @@ describe('survivors from patrols (design §10)', () => {
       expect(Math.min(...levels)).toBe(1);
       expect(Math.max(...levels)).toBe(tier);
     }
+  });
+
+  it("rolls at a plaza trip's tier: its highest ticked building", () => {
+    const levels = (buildings: LocationId[]): number[] => {
+      const seen: number[] = [];
+      for (let seed = 1; seed <= 600; seed++) {
+        const p = patrolAt('gas-station', seed, { location: 'riverside', buildings });
+        seen.push(...patrolSurvivors(p).map(level));
+      }
+      return seen;
+    };
+    const tier = (b: LocationId): number => LOCATIONS[b].tier;
+    const all = PLAZAS.riverside.buildings;
+    const top = Math.max(...all.map(tier));
+    expect(Math.max(...levels([...all]))).toBe(top);
+    expect(Math.max(...levels(['gas-station']))).toBe(tier('gas-station'));
   });
 
   it('waits in the report taking no slot, and never shifts the loot or the casualties', () => {

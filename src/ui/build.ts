@@ -54,13 +54,21 @@ import {
   TRAPS,
   TURRET,
   TURRET_MOUNTS,
+  buildingsOf,
+  isPlaza,
   LOCATIONS,
+  ORDER_IDS,
+  ORDERS,
+  placeName,
   WALK_SPOTS,
+  type Focus,
   type LocationId,
+  type Order,
+  type PlaceId,
   type Stock,
 } from '../core/data.ts';
 import { available, type GameState } from '../core/game.ts';
-import { idle, patrolDue, revealedLocations, sendPatrol } from '../core/patrol.ts';
+import { idle, patrolDue, revealedPlaces, sendPatrol } from '../core/patrol.ts';
 import { labCost, research, researched, upgradeLab, type GameResult } from '../core/research.ts';
 import { layoutOf, turretState, type TurretState } from '../core/horde.ts';
 import { buildGenerator, nextGasAt } from '../core/power.ts';
@@ -83,6 +91,7 @@ import {
 import type { SlotHit } from './projection.ts';
 import { perkLines, type PerkLine } from './perks.ts';
 import {
+  focusRows,
   locationLines,
   mapContents,
   mapRefusal,
@@ -461,9 +470,18 @@ export function createBuildPanel(
   panel.hidden = true;
   root.append(bar, panel);
 
-  // The world map's location and party picks, kept across redraws and visits.
-  let mapLocation: LocationId | null = null;
+  // The world map's place, buildings, loot focus, order and party picks, kept across redraws and visits.
+  let mapLocation: PlaceId | null = null;
+  let mapBuildings = new Set<LocationId>();
+  let mapFocus: Focus = 'anything';
+  let mapOrder: Order = 'balanced';
   const mapParty = new Set<string>();
+  /** Picks a place: all its buildings ticked, any focus. */
+  const pickPlace = (place: PlaceId | null): void => {
+    mapLocation = place;
+    mapBuildings = new Set(place === null ? [] : buildingsOf(place));
+    mapFocus = 'anything';
+  };
   // Built once, so a pasted code survives the redraws.
   const backup = el('section', 'build-backup');
   const code = el('textarea', 'build-code');
@@ -485,7 +503,8 @@ export function createBuildPanel(
     if (clearPaste) paste.value = '';
     if (game) {
       // Another camp: picks made on the world map belong to the old one.
-      mapLocation = null;
+      pickPlace(null);
+      mapOrder = 'balanced';
       mapParty.clear();
       onLoad(game);
     }
@@ -838,7 +857,7 @@ export function createBuildPanel(
    */
   function mapView(game: GameState): HTMLElement[] {
     const now = Date.now();
-    if (mapLocation !== null && !revealedLocations(game).includes(mapLocation)) mapLocation = null;
+    if (mapLocation !== null && !revealedPlaces(game).includes(mapLocation)) pickPlace(null);
     const where = el('section', 'build-slot');
     if (mapLocation === null) {
       where.append(el('p', 'build-slot-note', 'Pick a place on the map to send a patrol there.'));
@@ -846,6 +865,12 @@ export function createBuildPanel(
       const location = mapLocation;
       const party = pickedParty(game, mapParty, now);
       const ids = party.map((d) => d.id);
+      const buildings = buildingsOf(location).filter((b) => mapBuildings.has(b));
+      // The pick is kept; one the ticked buildings can't drop counts as Anything for now.
+      const focusNow: Focus = focusRows(buildings).some((r) => r.id === mapFocus && r.free)
+        ? mapFocus
+        : 'anything';
+      const redraw = (): void => api.show(game, shown?.selected ?? null);
       const picker = el('fieldset', 'worldmap-party');
       picker.append(el('legend', 'build-slot-title', 'Who goes'));
       for (const row of partyRows(game, now)) {
@@ -856,27 +881,88 @@ export function createBuildPanel(
         box.addEventListener('change', () => {
           if (box.checked) mapParty.add(row.id);
           else mapParty.delete(row.id);
-          api.show(game, shown?.selected ?? null);
+          redraw();
         });
         const label = el('label', 'worldmap-member');
         label.append(box, document.createTextNode(row.label));
         picker.append(label);
       }
+      // A plaza's buildings to search; a single building has nothing to tick.
+      const search = el('fieldset', 'worldmap-buildings');
+      if (isPlaza(location)) {
+        search.append(el('legend', 'build-slot-title', 'Buildings to search'));
+        for (const b of buildingsOf(location)) {
+          const box = el('input', '');
+          box.type = 'checkbox';
+          box.checked = mapBuildings.has(b);
+          box.dataset.building = b;
+          box.addEventListener('change', () => {
+            if (box.checked) mapBuildings.add(b);
+            else mapBuildings.delete(b);
+            redraw();
+          });
+          const label = el('label', 'worldmap-member');
+          label.append(
+            box,
+            document.createTextNode(`${LOCATIONS[b].name} · T${LOCATIONS[b].tier}`),
+          );
+          search.append(label);
+        }
+      }
+      const focus = el('select', 'worldmap-focus');
+      focus.setAttribute('aria-label', 'Loot focus');
+      for (const row of focusRows(buildings)) {
+        const option = el('option', '', row.free ? row.label : `${row.label} (not found here)`);
+        option.value = row.id;
+        option.disabled = !row.free;
+        option.selected = row.id === focusNow;
+        focus.append(option);
+      }
+      focus.addEventListener('change', () => {
+        mapFocus = focus.value as Focus;
+        redraw();
+      });
+      const order = el('select', 'worldmap-order');
+      order.setAttribute('aria-label', 'When things go wrong');
+      for (const id of ORDER_IDS) {
+        const option = el('option', '', ORDERS[id].name);
+        option.value = id;
+        option.selected = id === mapOrder;
+        order.append(option);
+      }
+      order.addEventListener('change', () => {
+        mapOrder = order.value as Order;
+        redraw();
+      });
+      const orders = el('section', 'worldmap-orders');
+      const labelled = (text: string, control: HTMLElement): HTMLElement => {
+        const label = el('label', 'worldmap-member', `${text} `);
+        label.append(control);
+        return label;
+      };
+      orders.append(labelled('Loot focus', focus), labelled('When things go wrong', order));
       const risk = el('section', 'worldmap-risk-screen');
       risk.setAttribute('aria-live', 'polite');
-      risk.append(...riskLines(party, location).map((t) => el('p', 'build-slot-note', t)));
-      const dry = sendPatrol(game, location, ids, 0, now);
+      risk.append(
+        ...riskLines(party, location, { buildings, order: mapOrder }).map((t) =>
+          el('p', 'build-slot-note', t),
+        ),
+      );
+      const options = { buildings, focus: focusNow, order: mapOrder };
+      const dry = sendPatrol(game, location, ids, 0, now, options);
       where.append(
-        el('h3', 'build-slot-title', LOCATIONS[location].name),
-        ...locationLines(game, location).map((t) => el('p', 'build-slot-note', t)),
+        el('h3', 'build-slot-title', placeName(location)),
+        ...locationLines(game, location, buildings).map((t) => el('p', 'build-slot-note', t)),
+        ...(isPlaza(location) ? [search] : []),
         picker,
+        orders,
         risk,
         choiceButton('Send patrol', null, dry.ok ? null : dry.reason, () => {
           // The send time is the patrol's seed: the only randomness from outside the core.
           const at = Date.now();
-          const sent = sendPatrol(game, location, ids, at, at);
+          const sent = sendPatrol(game, location, ids, at, at, options);
           // Refused since the redraw (someone back injured): redraw to show why.
-          if (!sent.ok) return api.show(game, shown?.selected ?? null);
+          if (!sent.ok) return redraw();
           for (const id of ids) mapParty.delete(id);
           onGame(sent.game);
         }),
@@ -923,7 +1009,7 @@ export function createBuildPanel(
       active instanceof HTMLElement && map.contains(active) ? active.dataset.location : undefined;
     map.replaceChildren(
       ...mapContents(game, ratedParty(game, mapParty, now), mapLocation, now, (location) => {
-        mapLocation = location;
+        pickPlace(location);
         api.show(game, shown?.selected ?? null);
       }),
     );

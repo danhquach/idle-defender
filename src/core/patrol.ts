@@ -4,23 +4,37 @@
 // the result never depends on when it is settled. Pure: real time comes in as `now`.
 // Risk (ID-027): party strength against the location's danger rates the trip, and the
 // same seed rolls who comes back injured, who dies and whether the party is wiped out.
+// Plazas and orders (ID-029): a trip searches the ticked buildings of a place; a plaza may
+// draw a big horde; the order says what the party protects when things go wrong.
 import { isOwned, rollWeapon, tierRarity, type OwnedWeapon } from './armoury.ts';
 import { lootBonus, recoveryMs, rollSurvivor, startFloor, type Survivor } from './camp.ts';
 import {
   ARMOURY_CAP,
   BATTERY_IDS,
+  buildingsOf,
+  FOCUS_IDS,
+  focusOf,
+  isPlaza,
   LOCATION_IDS,
   LOCATIONS,
   MATERIALS,
   MAX_COUNT,
+  ORDER_IDS,
+  ORDERS,
   PATROL,
+  PLACE_IDS,
+  placeName,
   RARITIES,
   RARITY_ORDER,
+  revealOf,
   stockOf,
   SURVIVOR,
   type Battery,
+  type Focus,
   type LocationId,
   type LootEntry,
+  type Order,
+  type PlaceId,
   type Rarity,
   type RiskRating,
   type Stock,
@@ -42,7 +56,12 @@ import { levelOf } from './stats.ts';
 export interface Patrol {
   /** 1 for the game's first patrol, then up by one; owned weapons it finds are `p<no>-<k>`. */
   no: number;
-  location: LocationId;
+  /** The place it went to: a location, or a plaza. */
+  location: PlaceId;
+  /** The buildings ticked, in the place's order (a single location's only building is itself). */
+  buildings: LocationId[];
+  focus: Focus;
+  order: Order;
   /** Roster ids, in the order sent. */
   members: string[];
   /** When it left (ms). */
@@ -56,7 +75,7 @@ export interface Patrol {
 
 /** An owned weapon a dead member left at `location`, waiting for the next patrol there. */
 export interface LeftWeapon {
-  location: LocationId;
+  location: PlaceId;
   weapon: OwnedWeapon;
 }
 
@@ -67,10 +86,29 @@ export interface ReportWeapon {
   kept: boolean;
 }
 
+/** How a plaza's big horde ended (ID-029): the patrol beat it, fenced it off, or was overrun. */
+export type BigHorde = 'defeat' | 'fence' | 'overrun';
+
+/** Loot the retreat dropped: what a big horde or a bad fight kept from the camp. */
+export interface Lost {
+  stock: Stock;
+  gas: number;
+  batteries: Record<Battery, number>;
+  weapons: number;
+}
+
 /** What a patrol brought back (design §10 "patrol report"), for the world map screen (ID-028). */
 export interface PatrolReport {
   no: number;
-  location: LocationId;
+  location: PlaceId;
+  /** The buildings ticked, and how many of them (from the first) were searched before a retreat. */
+  buildings: LocationId[];
+  searched: number;
+  bigHorde: BigHorde | null;
+  order: Order;
+  focus: Focus;
+  /** What the retreat dropped; all zero without one. */
+  lost: Lost;
   /** Every member sent, in the order sent. */
   names: string[];
   /** Members who came back injured, and who didn't come back, by name. */
@@ -107,18 +145,47 @@ export function revealedLocations(game: GameState): LocationId[] {
   });
 }
 
+/** Places on the map: the revealed locations, then the revealed plazas (ID-029). */
+export function revealedPlaces(game: GameState): PlaceId[] {
+  return PLACE_IDS.filter((id) => {
+    const at = revealOf(id);
+    return at !== null && game.hordeNumber >= at;
+  });
+}
+
 /** A patrol leaves by a gate: the base needs one standing (HP above 0). */
 export const hasGate = (game: GameState): boolean =>
   game.base.layers.some((l) => l.slots.some((s) => s?.kind === 'gate' && s.hp > 0));
 
-/** Total minutes out, searching and back. */
-export function tripMinutes(location: LocationId): number {
-  const l = LOCATIONS[location];
-  return 2 * l.travel + l.search;
+/** A trip to ticked buildings (design §10, ID-029): the longest travel, the searches added up, the highest tier. */
+export interface Trip {
+  /** Minutes each way, and minutes searching. */
+  travel: number;
+  search: number;
+  tier: number;
+  /** Total minutes out, searching and back. */
+  minutes: number;
 }
 
+/** The trip to `buildings` of `place` (all of them by default); a single location is a place whose only building is itself. */
+export function tripOf(
+  place: PlaceId,
+  buildings: readonly LocationId[] = buildingsOf(place),
+): Trip {
+  if (buildings.length === 0) throw new RangeError('tripOf: no building');
+  const ls = buildings.map((b) => LOCATIONS[b]);
+  const travel = Math.max(...ls.map((l) => l.travel));
+  const search = ls.reduce((sum, l) => sum + l.search, 0);
+  return { travel, search, tier: Math.max(...ls.map((l) => l.tier)), minutes: 2 * travel + search };
+}
+
+/** Total minutes out, searching and back. */
+export const tripMinutes = (place: PlaceId, buildings?: readonly LocationId[]): number =>
+  tripOf(place, buildings).minutes;
+
 /** When patrol `p` is back (ms). */
-export const patrolDue = (p: Patrol): number => p.sentAt + tripMinutes(p.location) * 60_000;
+export const patrolDue = (p: Patrol): number =>
+  p.sentAt + tripMinutes(p.location, p.buildings) * 60_000;
 
 /** One member's strength: level, the rarity power of the primary weapon, and Grit. */
 export function memberStrength(d: Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>): number {
@@ -132,9 +199,11 @@ export const partyStrength = (
   members: readonly Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>[],
 ): number => members.reduce((sum, d) => sum + memberStrength(d), 0);
 
-/** The party strength that matches `location`'s danger (design §10 Risk and reward). */
-export const locationDanger = (location: LocationId): number =>
-  PATROL.danger * PATROL.need * LOCATIONS[location].tier;
+/** The party strength that matches a trip of `tier` (design §10 Risk and reward). */
+export const tierDanger = (tier: number): number => PATROL.danger * PATROL.need * tier;
+
+/** The party strength that matches `place`'s danger: its highest tier. */
+export const locationDanger = (place: PlaceId): number => tierDanger(tripOf(place).tier);
 
 /** A trip's rating and odds: each member's chance to be injured or killed, and the party's to be wiped out. */
 export interface PatrolRisk {
@@ -144,51 +213,158 @@ export interface PatrolRisk {
   wipe: number;
 }
 
-/** The risk for a party of `strength` at `location`. */
-export function riskOf(strength: number, location: LocationId): PatrolRisk {
-  const ratio = strength / locationDanger(location);
-  // The last rating starts at 0, so every strength finds one (NaN rates the worst).
-  const { rating, injured, dead, wipe } =
-    PATROL.risk.find((r) => ratio >= r.from) ?? PATROL.risk.at(-1)!;
-  return { rating, injured, dead, wipe };
+/** Death and wipe odds under `order` (ID-029): scaled by its factor, at most 1. */
+function ordered(
+  r: { injured: number; dead: number; wipe: number },
+  order: Order,
+): { injured: number; dead: number; wipe: number } {
+  const f = ORDERS[order].risk;
+  return { injured: r.injured, dead: Math.min(1, r.dead * f), wipe: Math.min(1, r.wipe * f) };
 }
 
-/** The risk `members` would run at `location`, for the risk screen (ID-028). */
+/** The `PATROL.risk` row a party of `strength` falls in on a trip of `tier`. */
+function ratingRow(strength: number, tier: number): (typeof PATROL.risk)[number] {
+  const ratio = strength / tierDanger(tier);
+  // The last rating starts at 0, so every strength finds one (NaN rates the worst).
+  return PATROL.risk.find((r) => ratio >= r.from) ?? PATROL.risk.at(-1)!;
+}
+
+/** Whether the order applies to an ordinary trip: only Dangerous and Deadly ones go wrong. */
+const goesWrong = (rating: RiskRating): boolean => rating === 'dangerous' || rating === 'deadly';
+
+/**
+ * The risk for a party of `strength` at `place`'s `buildings`: on a Dangerous or Deadly
+ * trip the deaths and wipe are scaled by `order` (ID-029).
+ */
+export function riskOf(
+  strength: number,
+  place: PlaceId,
+  buildings?: readonly LocationId[],
+  order: Order = 'balanced',
+): PatrolRisk {
+  const row = ratingRow(strength, tripOf(place, buildings).tier);
+  const { injured, dead, wipe } = goesWrong(row.rating) ? ordered(row, order) : row;
+  return { rating: row.rating, injured, dead, wipe };
+}
+
+/** The risk `members` would run at `place`, for the risk screen (ID-028). */
 export const patrolRisk = (
   members: readonly Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>[],
-  location: LocationId,
-): PatrolRisk => riskOf(partyStrength(members), location);
+  place: PlaceId,
+  buildings?: readonly LocationId[],
+  order?: Order,
+): PatrolRisk => riskOf(partyStrength(members), place, buildings, order);
 
 /** Loot rolls past the base `PATROL.rolls`: one per `need × tier` of strength, at most `bonusRolls`. */
-export function bonusRolls(strength: number, location: LocationId): number {
-  const per = PATROL.need * LOCATIONS[location].tier;
+export function bonusRolls(
+  strength: number,
+  place: PlaceId,
+  buildings?: readonly LocationId[],
+): number {
+  const per = PATROL.need * tripOf(place, buildings).tier;
   return Math.min(PATROL.bonusRolls, Math.floor(strength / per));
 }
 
 /** XP each member gets (design §10): a horde win's, times hours out, times the danger. */
-export function patrolXp(location: LocationId, sentHorde: number): number {
-  const hours = tripMinutes(location) / 60;
-  const danger = 1 + PATROL.xpDanger * (LOCATIONS[location].tier - 1);
-  return Math.floor(hordeXp(sentHorde) * hours * danger);
+export function patrolXp(
+  place: PlaceId,
+  sentHorde: number,
+  buildings?: readonly LocationId[],
+): number {
+  const trip = tripOf(place, buildings);
+  const danger = 1 + PATROL.xpDanger * (trip.tier - 1);
+  return Math.floor(hordeXp(sentHorde) * (trip.minutes / 60) * danger);
+}
+
+/** A plaza's chance of a big horde (design §10, ID-029): a property of the place, never of the party; single buildings have none. */
+export function bigHordeChance(place: PlaceId, buildings?: readonly LocationId[]): number {
+  if (!isPlaza(place)) return 0;
+  const trip = tripOf(place, buildings);
+  const n = (buildings ?? buildingsOf(place)).length;
+  const h = PATROL.horde;
+  return Math.min(1, h.chance + h.perTier * (trip.tier - 1) + h.perBuilding * (n - 1));
+}
+
+/** The big horde's strength: 1.5 × the danger of the trip's tier. */
+export const hordeStrength = (place: PlaceId, buildings?: readonly LocationId[]): number =>
+  PATROL.horde.strength * tierDanger(tripOf(place, buildings).tier);
+
+/** The odds of each way a big horde can end, for a party of `strength` against it. */
+export function hordeOdds(
+  strength: number,
+  place: PlaceId,
+  buildings?: readonly LocationId[],
+): { defeat: number; fence: number; overrun: number } {
+  const ratio = strength / hordeStrength(place, buildings);
+  const { defeat, fence, overrun } =
+    PATROL.horde.odds.find((r) => ratio >= r.from) ?? PATROL.horde.odds.at(-1)!;
+  return { defeat, fence, overrun };
 }
 
 /**
- * Sends `memberIds` to `location` at `now`; refused when patrols are locked, the
- * location is hidden, the base has no standing gate, or a member isn't idle. There is
- * no limit on parties out at once. Unknown ids throw.
+ * The casualty odds when a big horde ends as `result` (ID-029), always scaled by `order`:
+ * beaten, the trip's rating; fenced off, that with injuries doubled; overrun, the Deadly row.
+ */
+export function hordeCasualties(
+  result: BigHorde,
+  strength: number,
+  place: PlaceId,
+  buildings: readonly LocationId[] | undefined,
+  order: Order,
+): { injured: number; dead: number; wipe: number } {
+  const row =
+    result === 'overrun' ? PATROL.risk.at(-1)! : ratingRow(strength, tripOf(place, buildings).tier);
+  const odds = ordered(row, order);
+  return result === 'fence'
+    ? { ...odds, injured: Math.min(1, odds.injured * PATROL.horde.injured) }
+    : odds;
+}
+
+/** The focus options `buildings` can drop (the rest are greyed out); "Anything" always can. */
+export function focusOptions(buildings: readonly LocationId[]): Focus[] {
+  const drops = new Set(buildings.flatMap((b) => LOCATIONS[b].loot.map(focusOf)));
+  return FOCUS_IDS.filter((f) => f === 'anything' || drops.has(f));
+}
+
+/** What a patrol is told to do (ID-029): the buildings to search, the loot to favour, and what to protect. */
+export interface PatrolOptions {
+  /** Default: all of a plaza's buildings, or the location itself. */
+  buildings?: readonly LocationId[];
+  /** Default: 'anything'. */
+  focus?: Focus;
+  /** Default: 'balanced'. */
+  order?: Order;
+}
+
+/**
+ * Sends `memberIds` to `place` at `now`; refused when patrols are locked, the place is
+ * hidden, no building is ticked, a ticked building isn't in the place, the focus can't
+ * drop there, the base has no standing gate, or a member isn't idle. There is no limit
+ * on parties out at once. Unknown ids throw.
  */
 export function sendPatrol(
   game: GameState,
-  location: LocationId,
+  location: PlaceId,
   memberIds: readonly string[],
   seed: number,
   now: number,
+  options: PatrolOptions = {},
 ): { ok: true; game: GameState } | { ok: false; reason: string } {
   if (!Number.isFinite(now)) throw new RangeError(`sendPatrol: bad time ${now}`);
   if (!Number.isInteger(seed)) throw new RangeError(`sendPatrol: bad seed ${seed}`);
-  if (!LOCATION_IDS.includes(location)) {
+  if (!PLACE_IDS.includes(location)) {
     throw new RangeError(`sendPatrol: unknown location ${String(location)}`);
   }
+  const { focus = 'anything', order = 'balanced' } = options;
+  const ticked = options.buildings ?? buildingsOf(location);
+  for (const b of ticked) {
+    if (!LOCATION_IDS.includes(b))
+      throw new RangeError(`sendPatrol: unknown building ${String(b)}`);
+  }
+  if (!FOCUS_IDS.includes(focus))
+    throw new RangeError(`sendPatrol: unknown focus ${String(focus)}`);
+  if (!ORDER_IDS.includes(order))
+    throw new RangeError(`sendPatrol: unknown order ${String(order)}`);
   const members = memberIds.map((id) => {
     const d = game.roster.find((r) => r.id === id);
     if (!d) throw new RangeError(`sendPatrol: no defender ${String(id)}`);
@@ -200,8 +376,17 @@ export function sendPatrol(
   }
   if (!patrolsUnlocked(game)) return { ok: false, reason: 'Patrols open after Horde 2' };
   if (game.patrolsSent >= PATROL.max) return { ok: false, reason: 'No more patrols can be sent' };
-  if (!revealedLocations(game).includes(location)) {
-    return { ok: false, reason: `${LOCATIONS[location].name} isn't on the map yet` };
+  if (!revealedPlaces(game).includes(location)) {
+    return { ok: false, reason: `${placeName(location)} isn't on the map yet` };
+  }
+  // Searched in the place's order, each building once.
+  const buildings = buildingsOf(location).filter((b) => ticked.includes(b));
+  if (ticked.some((b) => !buildings.includes(b))) {
+    return { ok: false, reason: `Not every building is part of ${placeName(location)}` };
+  }
+  if (buildings.length === 0) return { ok: false, reason: 'Tick a building to search' };
+  if (!focusOptions(buildings).includes(focus)) {
+    return { ok: false, reason: `Nothing to favour: ${focus} can't be found there` };
   }
   if (!hasGate(game)) return { ok: false, reason: 'Patrols leave by a gate: build or repair one' };
   for (const d of members) {
@@ -215,6 +400,9 @@ export function sendPatrol(
   const patrol: Patrol = {
     no: game.patrolsSent + 1,
     location,
+    buildings,
+    focus,
+    order,
     members: [...memberIds],
     sentAt: now,
     sentHorde: game.hordeNumber,
@@ -227,20 +415,25 @@ export function sendPatrol(
   };
 }
 
-/** One roll's worth of loot, before it reaches the camp. */
-interface Haul {
+/** Loot before it reaches the camp. */
+export interface Haul {
   stock: Stock;
   gas: number;
   batteries: Record<Battery, number>;
   weapons: { base: WeaponId; rarity: Rarity }[];
 }
 
-function pickEntry(rng: Rng, table: readonly LootEntry[]): LootEntry {
-  const total = table.reduce((sum, e) => sum + e.weight, 0);
+/** An entry's weight: doubled (`PATROL.focus`) when it is the loot the party favours. */
+const weightOf = (e: LootEntry, focus: Focus): number =>
+  focus !== 'anything' && focusOf(e) === focus ? e.weight * PATROL.focus : e.weight;
+
+function pickEntry(rng: Rng, table: readonly LootEntry[], focus: Focus): LootEntry {
+  const total = table.reduce((sum, e) => sum + weightOf(e, focus), 0);
   let roll = rng() * total;
   for (const e of table) {
-    if (roll < e.weight) return e;
-    roll -= e.weight;
+    const w = weightOf(e, focus);
+    if (roll < w) return e;
+    roll -= w;
   }
   // Only reached through float rounding at the very top.
   return table.at(-1)!;
@@ -255,9 +448,16 @@ function rollRarity(rng: Rng, tier: number, bonus: number): Rarity {
     : rarity;
 }
 
-/** One roll on `location`'s table; a weapon's rarity comes from `tier`, the tier of the place searched. */
-function rollEntry(rng: Rng, location: LocationId, tier: number, bonus: number, haul: Haul): void {
-  const e = pickEntry(rng, LOCATIONS[location].loot);
+/** One roll on `location`'s table; a weapon's rarity comes from `tier`, the tier of the trip. */
+function rollEntry(
+  rng: Rng,
+  location: LocationId,
+  tier: number,
+  bonus: number,
+  focus: Focus,
+  haul: Haul,
+): void {
+  const e = pickEntry(rng, LOCATIONS[location].loot, focus);
   switch (e.kind) {
     case 'material':
       haul.stock[e.id] += int(rng, e.min, e.max);
@@ -275,12 +475,12 @@ function rollEntry(rng: Rng, location: LocationId, tier: number, bonus: number, 
       });
       return;
     case 'anything': {
-      // A roll on another location's table; a weapon from it still comes at this tier.
+      // A roll on another location's table, unfocused; a weapon from it still comes at this tier.
       const other = pick(
         rng,
         LOCATION_IDS.filter((id) => id !== location),
       );
-      rollEntry(rng, other, tier, bonus, haul);
+      rollEntry(rng, other, tier, bonus, 'anything', haul);
       return;
     }
   }
@@ -293,14 +493,18 @@ const noHaul = (): Haul => ({
   weapons: [],
 });
 
-/** What patrol `p` finds: `PATROL.rolls` plus its bonus rolls, from its seed. */
-export function patrolLoot(p: Patrol): Haul {
+/** What each ticked building of patrol `p` yields, in search order: `PATROL.rolls` plus its bonus rolls on its own table, from the seed. */
+export function buildingLoots(p: Patrol): Haul[] {
   const rng = createRng(p.seed);
-  const bonus = bonusRolls(p.strength, p.location);
-  const haul = noHaul();
-  const tier = LOCATIONS[p.location].tier;
-  for (let n = PATROL.rolls + bonus; n > 0; n--) rollEntry(rng, p.location, tier, bonus, haul);
-  return haul;
+  const trip = tripOf(p.location, p.buildings);
+  const bonus = bonusRolls(p.strength, p.location, p.buildings);
+  return p.buildings.map((b) => {
+    const haul = noHaul();
+    for (let n = PATROL.rolls + bonus; n > 0; n--) {
+      rollEntry(rng, b, trip.tier, bonus, p.focus, haul);
+    }
+    return haul;
+  });
 }
 
 /**
@@ -309,8 +513,8 @@ export function patrolLoot(p: Patrol): Haul {
  * tier with a weapon at the tier's rarity. A wiped-out party brings none back.
  */
 export function patrolSurvivors(p: Patrol): Survivor[] {
-  const rng = createRng(p.seed ^ 0xc2b2ae35);
-  const tier = LOCATIONS[p.location].tier;
+  const rng = createRng(p.seed ^ 0x165667b1);
+  const tier = tripOf(p.location, p.buildings).tier;
   const found: Survivor[] = [];
   for (let k = 0; k < SURVIVOR.tries; k++) {
     if (chance(rng, SURVIVOR.perTier * tier)) {
@@ -320,29 +524,105 @@ export function patrolSurvivors(p: Patrol): Survivor[] {
   return found;
 }
 
-/** Who patrol `p` loses: member ids killed and injured, and whether all were killed. */
+/** The hauls added up. */
+function sumHauls(list: readonly Haul[]): Haul {
+  const sum = noHaul();
+  for (const h of list) {
+    for (const m of MATERIALS) sum.stock[m] += h.stock[m];
+    sum.gas += h.gas;
+    for (const b of BATTERY_IDS) sum.batteries[b] += h.batteries[b];
+    sum.weapons.push(...h.weapons);
+  }
+  return sum;
+}
+
+/** What patrol `p` finds in all its buildings, before any retreat. */
+export const patrolLoot = (p: Patrol): Haul => sumHauls(buildingLoots(p));
+
+/** How a big horde met patrol `p`: how it ended, the building (index) it hit during, and the genes a win brings. */
+export interface BigHordeRoll {
+  result: BigHorde;
+  at: number;
+  genes: number;
+}
+
+/**
+ * Whether a big horde hits patrol `p`, from a stream of its own so neither the loot nor
+ * the casualties shift. The chance never looks at the party; its strength only picks
+ * the result. A single building rolls nothing.
+ */
+export function rollBigHorde(p: Patrol): BigHordeRoll | null {
+  const odds = bigHordeChance(p.location, p.buildings);
+  if (odds <= 0) return null;
+  const rng = createRng(p.seed ^ 0xc2b2ae35);
+  if (!chance(rng, odds)) return null;
+  const { defeat, fence } = hordeOdds(p.strength, p.location, p.buildings);
+  const roll = rng();
+  const result: BigHorde = roll < defeat ? 'defeat' : roll < defeat + fence ? 'fence' : 'overrun';
+  return {
+    result,
+    at: int(rng, 0, p.buildings.length - 1),
+    genes: int(rng, PATROL.horde.genes.min, PATROL.horde.genes.max),
+  };
+}
+
+/** Who patrol `p` loses, and how much of its loot comes home. */
 export interface PatrolOutcome {
+  /** Member ids killed and injured, and whether all were killed. */
   wiped: boolean;
   dead: string[];
   injured: string[];
+  bigHorde: BigHorde | null;
+  /** Buildings searched, from the first, before a retreat. */
+  searched: number;
+  /** The share of the searched buildings' loot that comes home (0 to 1). */
+  keep: number;
+  /** Mutated Genes a won big horde adds to the haul. */
+  genes: number;
 }
 
 /**
  * Rolls patrol `p`'s casualties from its seed, on a stream of their own so its loot
  * never shifts: the wipe first, then each member's death, then injury. A party that
  * loses everyone one by one is wiped out too: nobody is left to carry the loot.
+ *
+ * Ordinary trips run at their rating's odds (the order scales a Dangerous or Deadly one).
+ * A big horde (ID-029) always scales by the order: beaten, the trip's rating; fenced off,
+ * that with injuries doubled; overrun, the Deadly row. When things go wrong (a retreat,
+ * or a death on a Dangerous or Deadly trip) the order's share of the loot comes home;
+ * half the party dead or more, or a wipe, brings none.
  */
 export function patrolOutcome(p: Patrol): PatrolOutcome {
+  const horde = rollBigHorde(p);
+  const row = ratingRow(p.strength, tripOf(p.location, p.buildings).tier);
+  let odds = goesWrong(row.rating) ? ordered(row, p.order) : row;
+  let searched = p.buildings.length;
+  if (horde) {
+    odds = hordeCasualties(horde.result, p.strength, p.location, p.buildings, p.order);
+    if (horde.result !== 'defeat') searched = horde.at;
+  }
   const rng = createRng(p.seed ^ 0x85ebca6b);
-  const risk = riskOf(p.strength, p.location);
-  if (chance(rng, risk.wipe)) return { wiped: true, dead: [...p.members], injured: [] };
+  const done = (wiped: boolean, dead: string[], injured: string[]): PatrolOutcome => {
+    const wrong = horde ? horde.result !== 'defeat' : goesWrong(row.rating) && dead.length > 0;
+    const heavy = wiped || dead.length * 2 >= p.members.length;
+    return {
+      wiped,
+      dead,
+      injured,
+      bigHorde: horde?.result ?? null,
+      searched,
+      keep: heavy ? 0 : wrong ? ORDERS[p.order].keep : 1,
+      genes: horde?.result === 'defeat' ? horde.genes : 0,
+    };
+  };
+  if (chance(rng, odds.wipe)) return done(true, [...p.members], []);
   const dead: string[] = [];
   const injured: string[] = [];
   for (const id of p.members) {
-    if (chance(rng, risk.dead)) dead.push(id);
-    else if (chance(rng, risk.injured)) injured.push(id);
+    if (chance(rng, odds.dead)) dead.push(id);
+    else if (chance(rng, odds.injured)) injured.push(id);
   }
-  return { wiped: dead.length === p.members.length, dead, injured };
+  return done(dead.length === p.members.length, dead, injured);
 }
 
 /**
@@ -354,7 +634,37 @@ function spareLast(outcome: PatrolOutcome, game: GameState): PatrolOutcome {
     return outcome;
   }
   const [spared, ...dead] = outcome.dead;
-  return { wiped: false, dead, injured: [...outcome.injured, spared!] };
+  return { ...outcome, wiped: false, dead, injured: [...outcome.injured, spared!] };
+}
+
+/** `n` × `share`, down to a whole number. */
+const share = (n: number, keep: number): number => Math.floor(n * keep + 1e-9);
+
+/**
+ * What comes home from `loots` under `outcome`: the buildings searched, plus a won
+ * horde's genes, cut to the order's share (counts rounded down; the first weapons
+ * found are the ones kept), and what the cut dropped.
+ */
+function cutHaul(loots: readonly Haul[], outcome: PatrolOutcome): { kept: Haul; lost: Lost } {
+  const full = sumHauls(loots);
+  const got = sumHauls(loots.slice(0, outcome.searched));
+  full.stock.genes += outcome.genes;
+  got.stock.genes += outcome.genes;
+  const kept = noHaul();
+  const lost: Lost = { stock: stockOf(), gas: 0, batteries: noHaul().batteries, weapons: 0 };
+  for (const m of MATERIALS) {
+    kept.stock[m] = share(got.stock[m], outcome.keep);
+    lost.stock[m] = full.stock[m] - kept.stock[m];
+  }
+  kept.gas = share(got.gas, outcome.keep);
+  lost.gas = full.gas - kept.gas;
+  for (const b of BATTERY_IDS) {
+    kept.batteries[b] = share(got.batteries[b], outcome.keep);
+    lost.batteries[b] = full.batteries[b] - kept.batteries[b];
+  }
+  kept.weapons = got.weapons.slice(0, share(got.weapons.length, outcome.keep));
+  lost.weapons = full.weapons.length - kept.weapons.length;
+  return { kept, lost };
 }
 
 /**
@@ -362,7 +672,8 @@ function spareLast(outcome: PatrolOutcome, game: GameState): PatrolOutcome {
  * brings its loot into the camp (capped at `MAX_COUNT`; a weapon with no room is
  * salvaged for Scrap), picks up the weapons left where it went, and its members who
  * come back get XP; the injured rest `recoveryMs` from its return. The dead leave the
- * roster and their owned weapons stay at the location. Each patrol leaves a report.
+ * roster and their owned weapons stay at the place. Each patrol leaves a report. A
+ * retreat cuts the loot but not the trip: it is back at its due time.
  * Returns `game` itself when none is due.
  */
 export function settlePatrols(game: GameState, now: number): GameState {
@@ -374,7 +685,9 @@ export function settlePatrols(game: GameState, now: number): GameState {
   const g = structuredClone(game);
   for (const p of due) {
     const outcome = spareLast(patrolOutcome(p), g);
-    const haul = outcome.wiped ? noHaul() : patrolLoot(p);
+    const { kept: haul, lost } = outcome.wiped
+      ? { kept: noHaul(), lost: { ...noHaul(), weapons: 0 } }
+      : cutHaul(buildingLoots(p), outcome);
     // Foraging (a camp-level pick, design §11): more materials and Gas, to the nearest whole.
     const more = (n: number): number => Math.round((n * (100 + lootBonus(g.camp))) / 100);
     for (const m of MATERIALS) haul.stock[m] = more(haul.stock[m]);
@@ -401,7 +714,12 @@ export function settlePatrols(game: GameState, now: number): GameState {
     for (const b of BATTERY_IDS) {
       g.power.batteries[b] = Math.min(MAX_COUNT, g.power.batteries[b] + haul.batteries[b]);
     }
-    const xp = outcome.wiped ? 0 : patrolXp(p.location, p.sentHorde);
+    const xp = outcome.wiped
+      ? 0
+      : Math.floor(
+          patrolXp(p.location, p.sentHorde, p.buildings) *
+            (outcome.bigHorde === 'defeat' ? PATROL.horde.xp : 1),
+        );
     const names: string[] = [];
     const injured: string[] = [];
     const dead: string[] = [];
@@ -427,6 +745,12 @@ export function settlePatrols(game: GameState, now: number): GameState {
     g.reports.push({
       no: p.no,
       location: p.location,
+      buildings: [...p.buildings],
+      searched: outcome.searched,
+      bigHorde: outcome.bigHorde,
+      order: p.order,
+      focus: p.focus,
+      lost,
       names,
       injured,
       dead,
