@@ -186,6 +186,20 @@ describe('survivors from patrols (design §10)', () => {
     expect(late.reports.at(-1)!.survivors).toEqual(onTime.reports.at(-1)!.survivors);
   });
 
+  it('leaves with their report once PATROL.reports newer ones are in', () => {
+    const p = finding('crater');
+    let g = backFrom(p);
+    const waiting = g.reports.at(-1)!.survivors;
+    for (let n = 1; n <= PATROL.reports; n++) {
+      const next = patrolAt('gas-station', 1, { no: p.no + n, sentAt: NOW + n });
+      g = settlePatrols({ ...g, patrols: [next], patrolsSent: next.no }, patrolDue(next));
+      const kept = g.reports.find((r) => r.no === p.no);
+      if (n < PATROL.reports) expect(kept?.survivors).toEqual(waiting);
+      else expect(kept).toBeUndefined();
+    }
+    expect(g.reports.flatMap((r) => r.survivors).map((s) => s.id)).not.toContain(waiting[0]!.id);
+  });
+
   it('brings none back from a wipe', () => {
     for (let seed = 1; seed < 3000; seed++) {
       const p = patrolAt('crater', seed, { strength: 0 });

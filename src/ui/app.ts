@@ -113,9 +113,12 @@ export function start(root: HTMLElement, art: Art): void {
       for (const id of campPicks) {
         const r = takeCampPick(next, id);
         // The HUD counts room as the core does, so a refusal is a bug: say so, and the
-        // offer stays for the roster.
-        if (r.ok) next = r.game;
-        else hud.toast(r.reason);
+        // offer and those after it stay for the roster.
+        if (!r.ok) {
+          hud.toast(r.reason);
+          break;
+        }
+        next = r.game;
       }
       campPicks = [];
       commit(next);
