@@ -14,9 +14,9 @@ import {
 } from './data.ts';
 import { newGame, startHorde } from './game.ts';
 import { newHorde, stunned, tick, type HordeState } from './horde.ts';
-import { research, researchLock, upgradeLab } from './research.ts';
+import { queueLock, upgradeLab } from './research.ts';
 import { carpet, skillLeft, skillLock, useSkill, wallFront } from './skills.ts';
-import { enemy, setup } from './testing.ts';
+import { enemy, researchNow, setup } from './testing.ts';
 
 /** A horde with every skill researched, no spawns left and `cash` in hand. */
 function fight(cash = 100): HordeState {
@@ -386,14 +386,14 @@ describe('research (PM decision D1)', () => {
   it('Flashbang needs a Lab, Molotov needs Flashbang, Airstrike needs Lab 2 and Molotov', () => {
     let g = newGame();
     g.stock = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
-    expect(researchLock(g, 'flashbang')).toBe('Needs a Research Lab');
+    expect(queueLock(g, 'flashbang')).toBe('Needs a Research Lab');
     g = ok(upgradeLab(g));
-    expect(researchLock(g, 'molotov')).toBe('Needs Flashbang');
-    g = ok(research(g, 'flashbang'));
-    g = ok(research(g, 'molotov'));
-    expect(researchLock(g, 'airstrike')).toBe('Needs Lab level 2');
+    expect(queueLock(g, 'molotov')).toBe('Needs Flashbang');
+    g = ok(researchNow(g, 'flashbang'));
+    g = ok(researchNow(g, 'molotov'));
+    expect(queueLock(g, 'airstrike')).toBe('Needs Lab level 2');
     g = ok(upgradeLab(g));
-    g = ok(research(g, 'airstrike'));
+    g = ok(researchNow(g, 'airstrike'));
     expect(g.research).toEqual(['flashbang', 'molotov', 'airstrike']);
   });
 

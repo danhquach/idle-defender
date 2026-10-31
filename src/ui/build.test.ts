@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, buildSegment, buildTrap, buildTurret, lineWall } from '../core/base.ts';
-import { BANK_CAP, GENERATOR, SEGMENTS, TRAPS, TURRET, stockOf } from '../core/data.ts';
+import {
+  BANK_CAP,
+  GENERATOR,
+  RESEARCH,
+  RESEARCH_IDS,
+  SEGMENTS,
+  TRAPS,
+  TURRET,
+  stockOf,
+} from '../core/data.ts';
+import { researchNow } from '../core/testing.ts';
+import { durationText } from './perks.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { sendPatrol } from '../core/patrol.ts';
 import {
@@ -93,79 +104,71 @@ describe('build panel', () => {
     expect(injuredLines(g, g.roster[1]!.injuredUntil)).toEqual([]);
   });
 
-  it('shows the Lab: not built, then each node locked with its reason', () => {
-    const g = { ...newGame(), stock: stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }) };
-    const lines = labLines(g);
+  it('shows the Lab: not built, then each node to queue for Genes, locked with its reason', () => {
+    const g = { ...newGame(), stock: stockOf({ scrap: 999, wood: 999, genes: 999 }) };
+    const lines = labLines(g, 0);
     expect(lines.map((l) => (l.kind === 'action' ? l.label : l.text))).toEqual([
       'Research Lab: not built',
       'Build Research Lab',
-      'Research Metal walls',
-      'Research Auto-turret',
-      'Research Flashbang',
-      'Research Molotov',
-      'Research Airstrike',
-      "Research Scavenger's Eye",
-      'Research Fortify',
-      "Research Butcher's Hunger",
-      'Research Rally Call',
-      'Research Second Look',
-      'Research Overclock',
-      'Research Power Saver',
-      'Research Perk slot 2',
-      'Research Perk slot 3',
-      'Research Perk slot 4',
+      ...RESEARCH_IDS.map(
+        (id) => `Queue ${RESEARCH[id].name} (${durationText(RESEARCH[id].minutes)})`,
+      ),
     ]);
-    const reasons = lines.map((l) =>
-      l.kind === 'action' && !l.result.ok ? l.result.reason : null,
+    expect(lines[2]).toMatchObject({ cost: { genes: 10 } });
+    expect(
+      lines.slice(2).map((l) => l.kind === 'action' && !l.result.ok && l.result.reason),
+    ).toEqual(
+      RESEARCH_IDS.map((id) =>
+        RESEARCH[id].lab === 1 ? 'Needs a Research Lab' : 'Needs Lab level 2',
+      ),
     );
-    expect(reasons).toEqual([
-      null,
-      null,
-      'Needs a Research Lab',
-      'Needs Lab level 2',
-      'Needs a Research Lab',
-      'Needs a Research Lab',
-      'Needs Lab level 2',
-      'Needs a Research Lab',
-      'Needs a Research Lab',
-      'Needs a Research Lab',
-      'Needs a Research Lab',
-      'Needs Lab level 2',
-      'Needs Lab level 2',
-      'Needs Lab level 2',
-      'Needs a Research Lab',
-      'Needs Lab level 2',
-      'Needs Lab level 2',
-    ]);
   });
 
-  it('shows a levelled Lab with researched nodes as done and no upgrade at the top', () => {
-    let g: GameState = {
-      ...newGame(),
-      stock: stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }),
-    };
-    for (let i = 0; i < 17; i++) {
-      const next = labLines(g).find((l) => l.kind === 'action' && l.result.ok);
-      if (next?.kind !== 'action' || !next.result.ok) throw new Error('nothing to do');
-      g = next.result.game;
+  it('shows the queue: the running node with its end and Cancel, the waiting ones with Remove', () => {
+    const T = new Date(2026, 0, 1, 14, 0).getTime();
+    let g: GameState = { ...newGame(), lab: 1, stock: stockOf({ genes: 100 }) };
+    const queueLine = (id: string) =>
+      labLines(g, T).find((l) => l.kind === 'action' && l.label.startsWith(`Queue ${id}`));
+    for (const name of ['Metal walls', 'Flashbang']) {
+      const line = queueLine(name);
+      if (line?.kind !== 'action') throw new Error(`no ${name}`);
+      const r = line.act!(T);
+      if (!r.ok) throw new Error(r.reason);
+      g = r.game;
     }
-    expect(labLines(g)).toEqual([
+    const lines = labLines(g, T);
+    const shown = lines.map((l) => (l.kind === 'action' ? `[${l.label}]` : l.text));
+    expect(shown.slice(2, 7)).toEqual([
+      'Research queue',
+      `Metal walls · running, done at ${clockTime(T + 15 * 60_000)}`,
+      '[Cancel Metal walls (refunds 10 Genes)]',
+      'Flashbang · waiting',
+      '[Remove Flashbang (refunds 10 Genes)]',
+    ]);
+    // Queued nodes aren't offered again below.
+    expect(shown.some((t) => t.startsWith('[Queue Metal walls'))).toBe(false);
+    const cancel = lines[4]!;
+    if (cancel.kind !== 'action') throw new Error('no cancel');
+    const after = cancel.act!(T + 60_000);
+    expect(after.ok && after.game.queue).toEqual({ ids: ['flashbang'], endsAt: T + 16 * 60_000 });
+    expect(after.ok && after.game.stock.genes).toBe(90);
+  });
+
+  it('shows a levelled Lab with every node researched as done, a boss perk as owned', () => {
+    let g: GameState = { ...newGame(), lab: 2 };
+    g.perkLevels.fortify = 1; // from a boss horde
+    for (const id of RESEARCH_IDS) {
+      if (id === 'fortify') continue;
+      const r = researchNow(g, id);
+      if (!r.ok) throw new Error(r.reason);
+      g = r.game;
+    }
+    expect(labLines(g, 0)).toEqual([
       { kind: 'heading', text: 'Research Lab · level 2' },
-      { kind: 'note', text: 'Metal walls · researched' },
-      { kind: 'note', text: 'Auto-turret · researched' },
-      { kind: 'note', text: 'Flashbang · researched' },
-      { kind: 'note', text: 'Molotov · researched' },
-      { kind: 'note', text: 'Airstrike · researched' },
-      { kind: 'note', text: "Scavenger's Eye · researched" },
-      { kind: 'note', text: 'Fortify · researched' },
-      { kind: 'note', text: "Butcher's Hunger · researched" },
-      { kind: 'note', text: 'Rally Call · researched' },
-      { kind: 'note', text: 'Second Look · researched' },
-      { kind: 'note', text: 'Overclock · researched' },
-      { kind: 'note', text: 'Power Saver · researched' },
-      { kind: 'note', text: 'Perk slot 2 · researched' },
-      { kind: 'note', text: 'Perk slot 3 · researched' },
-      { kind: 'note', text: 'Perk slot 4 · researched' },
+      ...RESEARCH_IDS.map((id) => ({
+        kind: 'note',
+        text: `${RESEARCH[id].name} · ${id === 'fortify' ? 'owned' : 'researched'}`,
+      })),
     ]);
   });
 

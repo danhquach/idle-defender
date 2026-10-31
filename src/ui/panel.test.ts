@@ -64,7 +64,9 @@ describe('perk loadout in the build panel', () => {
   });
 
   it('a refused Equip is disabled with the reason and hands on nothing', () => {
-    const { button, games } = panelFor({ ...newGame(), research: ['fortify'] });
+    const g = { ...newGame(), research: ['fortify' as const] };
+    g.perkLevels.fortify = 1; // researched perks are owned
+    const { button, games } = panelFor(g);
     button('Perks').click();
     const equip = button('Equip Fortify');
     expect(equip.disabled).toBe(true);

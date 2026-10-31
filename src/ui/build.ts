@@ -36,7 +36,6 @@ import {
 import { acceptSurvivor, repairOff, turnAway } from '../core/camp.ts';
 import { postUsable } from '../core/cards.ts';
 import {
-  BANK_CAP,
   BATTERIES,
   BATTERY_IDS,
   BUILDING_MATERIALS,
@@ -62,17 +61,27 @@ import {
   ORDERS,
   placeName,
   WALK_SPOTS,
+  PERKS,
   type Focus,
   type LocationId,
   type Order,
+  type PerkId,
   type PlaceId,
   type Stock,
 } from '../core/data.ts';
 import { available, type GameState } from '../core/game.ts';
 import { freeCar, idle, patrolDue, revealedPlaces, sendPatrol } from '../core/patrol.ts';
-import { labCost, research, researched, upgradeLab, type GameResult } from '../core/research.ts';
+import {
+  entryOf,
+  labCost,
+  queueResearch,
+  researched,
+  unqueue,
+  upgradeLab,
+  type GameResult,
+} from '../core/research.ts';
 import { layoutOf, turretState, type TurretState } from '../core/horde.ts';
-import { buildGenerator, nextGasAt } from '../core/power.ts';
+import { bankCap, buildGenerator, nextGasAt } from '../core/power.ts';
 import {
   bankText,
   clockTime,
@@ -88,7 +97,7 @@ import {
   wholeLeft,
 } from './hud.ts';
 import type { SlotHit } from './projection.ts';
-import { perkLines, type PerkLine } from './perks.ts';
+import { durationText, perkLines, type PerkLine } from './perks.ts';
 import {
   carLabel,
   focusRows,
@@ -156,14 +165,27 @@ export function pickStart(
   return { defenderId: defender.id, postId: game.base.posts.indexOf(post) };
 }
 
-/** One Lab or power line: a note, the bank meter, or an action with its cost and dry-run result. */
+/**
+ * One Lab or power line: a note, the bank meter, or an action with its cost and dry-run
+ * result. An action that depends on the time redoes itself with `act` at the click.
+ */
 export type LabLine =
   | { kind: 'heading' | 'note'; text: string }
   | { kind: 'meter'; text: string; value: number; max: number }
-  | { kind: 'action'; label: string; cost: Partial<Stock>; result: GameResult };
+  | {
+      kind: 'action';
+      label: string;
+      cost: Partial<Stock>;
+      result: GameResult;
+      act?: (now: number) => GameResult;
+    };
 
-/** The Research Lab section (design §11): its level, the next level, then each node. */
-export function labLines(game: GameState): LabLine[] {
+/**
+ * The Research Lab section (design §11): its level and the next level, the research
+ * queue (the running entry with its end, then the waiting ones, each with Cancel or
+ * Remove), then each node not queued: researched, or Queue with its Genes and time.
+ */
+export function labLines(game: GameState, now: number): LabLine[] {
   const cost = labCost(game);
   const lines: LabLine[] = [
     {
@@ -175,16 +197,36 @@ export function labLines(game: GameState): LabLine[] {
     const label = game.lab === 0 ? 'Build Research Lab' : `Upgrade Lab to level ${game.lab + 1}`;
     lines.push({ kind: 'action', label, cost, result: upgradeLab(game) });
   }
-  for (const id of RESEARCH_IDS) {
-    const node = RESEARCH[id];
+  const { ids, endsAt } = game.queue;
+  if (ids.length > 0) lines.push({ kind: 'heading', text: 'Research queue' });
+  ids.forEach((id, i) => {
+    const { name, genes } = entryOf(game, id);
+    const state = i === 0 ? `running, done at ${clockTime(endsAt!)}` : 'waiting';
     lines.push(
-      game.research.includes(id)
-        ? { kind: 'note', text: `${node.name} · researched` }
+      { kind: 'note', text: `${name} · ${state}` },
+      {
+        kind: 'action',
+        label: `${i === 0 ? 'Cancel' : 'Remove'} ${name} (refunds ${genes} Genes)`,
+        cost: {},
+        result: unqueue(game, id, now),
+        act: (at) => unqueue(game, id, at),
+      },
+    );
+  });
+  for (const id of RESEARCH_IDS) {
+    if (game.queue.ids.includes(id)) continue;
+    const node = RESEARCH[id];
+    const owned =
+      !game.research.includes(id) && Object.hasOwn(PERKS, id) && game.perkLevels[id as PerkId] > 0;
+    lines.push(
+      game.research.includes(id) || owned
+        ? { kind: 'note', text: `${node.name} · ${owned ? 'owned' : 'researched'}` }
         : {
             kind: 'action',
-            label: `Research ${node.name}`,
-            cost: node.cost,
-            result: research(game, id),
+            label: `Queue ${node.name} (${durationText(node.minutes)})`,
+            cost: { genes: node.genes },
+            result: queueResearch(game, id, now),
+            act: (at) => queueResearch(game, id, at),
           },
     );
   }
@@ -205,12 +247,17 @@ export function powerLines(game: GameState): LabLine[] {
         ? `Generator · running, next Gas at ${clockTime(next)}`
         : power.gas === 0
           ? 'Generator · idle: no Gas'
-          : power.bank >= BANK_CAP
+          : power.bank >= bankCap(game)
             ? 'Generator · idle: the bank is full'
             : 'Generator · starting';
   const lines: LabLine[] = [
     { kind: 'heading', text: state },
-    { kind: 'meter', text: bankText(power.bank), value: power.bank, max: BANK_CAP },
+    {
+      kind: 'meter',
+      text: bankText(power.bank, bankCap(game)),
+      value: power.bank,
+      max: bankCap(game),
+    },
   ];
   if (power.generator === null) {
     lines.push({
@@ -517,9 +564,16 @@ export function createBuildPanel(
     choiceButton(label, cost, result.ok ? null : result, () => {
       if (result.ok) onChange(result.base, result.stock);
     });
-  const labOption = (label: string, cost: Partial<Stock> | null, result: GameResult): HTMLElement =>
+  const labOption = (
+    label: string,
+    cost: Partial<Stock> | null,
+    result: GameResult,
+    act?: (now: number) => GameResult,
+  ): HTMLElement =>
     choiceButton(label, cost, result.ok ? null : result, () => {
-      if (result.ok) onGame(result.game);
+      // A timed action is redone at the click, so the queue starts when it was clicked.
+      const done = act ? act(Date.now()) : result;
+      if (done.ok) onGame(done.game);
     });
 
   /** The bank meter: a `<meter>` labelled with its text. */
@@ -539,7 +593,7 @@ export function createBuildPanel(
     section.append(
       ...lines.map((line) =>
         line.kind === 'action'
-          ? labOption(line.label, line.cost, line.result)
+          ? labOption(line.label, line.cost, line.result, line.act)
           : line.kind === 'meter'
             ? meter(line.text, line.value, line.max)
             : line.kind === 'heading'
@@ -758,7 +812,7 @@ export function createBuildPanel(
       el('h2', 'build-title', 'Build'),
       slot,
       all,
-      linesSection('build-lab', labLines(game)),
+      linesSection('build-lab', labLines(game, Date.now())),
       linesSection('build-power', powerLines(game)),
       start,
       notice,
@@ -788,7 +842,8 @@ export function createBuildPanel(
 
   /** One perk loadout line as a page element. */
   function perkLine(line: PerkLine): HTMLElement {
-    if (line.kind === 'action') return labOption(line.label, null, line.result);
+    if (line.kind === 'action')
+      return labOption(line.label, line.cost ?? null, line.result, line.act);
     return line.kind === 'heading'
       ? el('h3', 'build-slot-title', line.text)
       : el('p', 'build-slot-note', line.text);
@@ -797,7 +852,7 @@ export function createBuildPanel(
   /** The perk loadout in place of the build panel: a Back button, the slots, then each perk. */
   function perksView(game: GameState): HTMLElement[] {
     const section = el('section', 'build-perks');
-    section.append(...perkLines(game).map(perkLine));
+    section.append(...perkLines(game, Date.now()).map(perkLine));
     return [el('h2', 'build-title', 'Perks'), backButton('perks'), section];
   }
 

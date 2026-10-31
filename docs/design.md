@@ -344,6 +344,21 @@ which apply to the whole battlefield.
   Equip, Equipped, or where to research them (Lab level, cost and the node
   needed first). Equip is refused with the core's reason when every slot is
   full; swapping is Unequip, then Equip. Changes are saved at once.
+- **As built (ID-035, starting points):** perks are owned through their
+  research node (now paid in Mutated Genes, §11) or a **boss horde**: each
+  boss horde won also unlocks one perk not owned yet, rolled from where
+  the fight's RNG ended on a stream of its own (the weapon drop and find
+  don't move); a perk node already in the research queue is refunded. Once every
+  perk is owned, a boss win pays +10 Genes instead. The result screen names
+  the reward. **Perk levels:** each owned perk goes from level 1 to 3 in the
+  research queue (level 2: 75 Genes, 1 h; level 3: 250 Genes, 2 h); each
+  level adds half the perk's level-1 bonus (×1, ×1.5, ×2 of it): Steady
+  Fire +15/22.5/30% fire rate, Scavenger's Eye +25/37.5/50% cash, Fortify
+  +30/45/60% HP, Butcher's Hunger 3/4.5/6 HP, Rally Call ×2/2.5/3,
+  Overclock +20/30/40% damage (its +10% draw stays), Power Saver
+  −25/37.5/50% draw. **Second Look** gives 1 reroll a wave at level 1,
+  1 and 2 in turn at level 2, and 2 at level 3. The Perks view shows each
+  perk's level and an Upgrade button that queues the next level.
 
 ## 6. Defenders, weapons and professions
 
@@ -1137,6 +1152,51 @@ Set before sending; they apply to any location, plaza or single building.
   Scrap and 40 Wood) unlocks turrets. A new game starts with no Lab and
   Wood walls only. Real-time research, Mutated Genes and the rest of the
   tree come with ID-035.
+- **As built (ID-035, starting points):** every research node costs
+  **Mutated Genes**; materials only build and upgrade the Lab. Research
+  runs in a **queue**: one entry at a time, up to 3 more waiting, each
+  10 minutes to 2 hours, also while the game is closed (each next entry
+  starts when the last one ended). Genes are paid when an entry is queued;
+  removing a waiting entry, or cancelling the running one (the next then
+  starts at once), refunds it in full. A node can be queued once its
+  earlier node is done or ahead of it in the queue, and an entry another
+  queued one needs can't be removed. Saves keep everything already
+  researched. The tree (Genes, time):
+  - Barriers and power: Metal walls 10, 15 min (Metal tier); Auto-turret
+    40, 1 h (Lab 2, after Metal walls); **High-capacity batteries** 60,
+    1 h (Lab 2, after Auto-turret) and **Military batteries** 200, 2 h
+    (after High-capacity): each unlocks that battery for workbench
+    crafting (ID-034) and adds 500 to the bank cap (1,000 → 2,000).
+  - Skills: Flashbang 10, 15 min; Molotov 20, 30 min; Airstrike 60, 1 h
+    (Lab 2).
+  - Perks: Scavenger's Eye 15, Fortify 20, Butcher's Hunger 15, Rally
+    Call 15 (30 min each); Second Look 60, 1 h; Overclock and Power Saver
+    80, 1 h 30 min (Lab 2, after Auto-turret); Perk slot 2 15, 45 min;
+    slot 3 120, 1 h 30 min; slot 4 300, 2 h.
+  - Traps: **Sharpened spikes** 10, 15 min (spike damage ×1.5, 8 → 12);
+    **Razor wire** 10, 15 min (wire holds enemies to 35% speed, was 50%);
+    chemical trap kits for the workbench (ID-034): **Glue** 20, 30 min;
+    **Incendiary** 60, 1 h, **Corrosive** 100, 1 h 30 min and
+    **Paralyzing** 150, 2 h (Lab 2, after Glue).
+  - Cards (join the offer pool once researched): **Hollow Points** 25,
+    45 min (rare, once: +40% damage); **Field Repairs** 80, 1 h 30 min
+    (Lab 2; epic, once: every wall segment to full HP).
+  - Camp: **More cars** 150, 2 h (Lab 2): a second car.
+  - Perk levels share the queue (§5). The whole tree, levels included,
+    costs about 4,300 Genes: Horde 10's Genes buy Metal walls, Flashbang
+    and Perk slot 2 even with no mutant killed (about a dozen nodes when
+    the mutants die too), and winning every horde to 29 with every mutant
+    killed still falls short of the whole tree. Larger base area and new
+    map locations stay out of v1; the map keeps revealing by horde number.
+  - The build panel lists the queue (running entry with its end time and
+    Cancel, waiting ones with Remove, each naming its refund), then each
+    node to Queue with its Genes and time; the research screen comes with
+    ID-036. Save v11 stores the queue (entries in order, the running end)
+    and each perk's level, read back through the allow-list: at most 4
+    entries, no duplicates, known ids only, each one the game could have
+    queued behind the ones before it, and the running end cut to its full
+    time after the save (a clock set back, as rests are). Perks owned
+    without research can't outnumber the boss hordes won.
 - **As built (ID-025, starting points):** the camp stores Scrap, Wood,
   Metal, Concrete, Parts, Food, Medicine, Chemicals and Mutated Genes
   (Gas and batteries stay with the power, §7); a new game adds 3 Food.

@@ -46,6 +46,7 @@ import {
   type Stock,
 } from '../core/data.ts';
 import {
+  hordeBossReward,
   hordeDrop,
   hordeFind,
   hordePayout,
@@ -65,6 +66,7 @@ import {
   type Post,
 } from '../core/horde.ts';
 import { professionOf } from '../core/loadout.ts';
+import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
@@ -138,16 +140,16 @@ export function cardText(
 /** A level as a whole number, rounded down but never to 0 while any is left. */
 export const wholeLeft = (n: number): number => (n > 0 ? Math.max(1, Math.floor(n)) : 0);
 
-/** The battery bank as "Bank 420/1,000" (design §7). */
-export const bankText = (charge: number): string =>
-  `Bank ${wholeLeft(charge).toLocaleString('en-US')}/${BANK_CAP.toLocaleString('en-US')}`;
+/** The battery bank as "Bank 420/1,000" (design §7); `cap` grows with research (ID-035). */
+export const bankText = (charge: number, cap: number = BANK_CAP): string =>
+  `Bank ${wholeLeft(charge).toLocaleString('en-US')}/${cap.toLocaleString('en-US')}`;
 
 export function statusText(s: HordeState): string {
   return [
     s.boss ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
     `Wave ${s.wave}/${s.waveCount}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
-    bankText(s.energy),
+    bankText(s.energy, s.bankCap),
     // Scavenger's Eye pays fractions of cash; only whole ones are shown.
     `Cash ${Math.floor(s.cash)}`,
     ...(s.perks.length ? [`Perks: ${s.perks.map((p) => PERKS[p].name).join(', ')}`] : []),
@@ -399,6 +401,18 @@ function findLines(s: HordeState): string[] {
   return find ? [`Found: ${stockText({ [find.material]: find.amount })}`] : [];
 }
 
+/**
+ * A boss win's reward (design §5, ID-035): the perk it unlocks, or its Genes once every
+ * perk is owned; none otherwise. `game` is run to `now` first, as `finishHorde` does.
+ */
+function bossLines(game: GameState, s: HordeState, now: number): string[] {
+  const reward = hordeBossReward(advanceResearch(game, now), s);
+  if (!reward) return [];
+  return 'perk' in reward
+    ? [`Boss reward: ${PERKS[reward.perk].name} perk unlocked`]
+    : [`Boss reward: ${reward.genes} Genes (every perk owned)`];
+}
+
 /** A win's weapon drop (design §6 Gear): its name, then one line per affix; none without a drop. */
 function dropLines(game: GameState, s: HordeState): string[] {
   const drop = hordeDrop(game, s);
@@ -445,6 +459,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
           ? `All ${s.waveCount} waves cleared · the ${horrorName(s.boss)} is dead`
           : `All ${s.waveCount} waves cleared`,
         payoutText(s),
+        ...bossLines(game, s, now),
         ...findLines(s),
         ...dropLines(game, s),
         ...lines,
@@ -592,7 +607,7 @@ export function createHud(
 
   let shownOffer: Card[] | null = null;
   // Second Look's reroll can deal the same three cards; its button still has to grey out.
-  let shownRerolled = 0;
+  let shownRerolled = '';
   // Hide the panel at once: a second click or key before the next frame must not
   // pick from an offer the player hasn't seen yet.
   function choose(index: number): void {
@@ -837,10 +852,10 @@ export function createHud(
       // The sim clones its state each tick, so compare the offer by content.
       if (
         JSON.stringify(state.offer) !== JSON.stringify(shownOffer) ||
-        state.rerolledWave !== shownRerolled
+        `${state.rerolledWave}:${state.rerolls}` !== shownRerolled
       ) {
         shownOffer = state.offer;
-        shownRerolled = state.rerolledWave;
+        shownRerolled = `${state.rerolledWave}:${state.rerolls}`;
         cards.hidden = state.offer === null;
         if (state.offer) showOffer(state.offer, state);
         else cards.replaceChildren();

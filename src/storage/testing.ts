@@ -1,7 +1,8 @@
 // Fixtures shared by the storage tests; never imported by game code.
 import { buildPost, buildSegment, buildTrap, buildTurret, upgradeSegment } from '../core/base.ts';
 import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
-import { research, upgradeLab, type GameResult } from '../core/research.ts';
+import { upgradeLab, type GameResult } from '../core/research.ts';
+import { researchNow } from '../core/testing.ts';
 import { BUILDING_MATERIALS, stockOf } from '../core/data.ts';
 
 /** `game`'s stock as a save from before ID-025 (v3 and older) holds it: building materials only. */
@@ -32,9 +33,17 @@ export function preCamp(game: GameState): Record<string, unknown> {
   return json;
 }
 
+/** `game` as JSON from before ID-035 (v10 and older): no research queue or perk levels. */
+export function preQueue(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete json.queue;
+  delete json.perkLevels;
+  return json;
+}
+
 /** `game` as JSON from before ID-030 (v9 and older): no car in the camp, every patrol on foot. */
 export function preCars(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preQueue(game);
   delete (json.camp as Record<string, unknown>).cars;
   for (const p of json.patrols as Record<string, unknown>[]) delete p.car;
   return json;
@@ -77,9 +86,9 @@ export function played(): GameState {
   };
   const lab: ((x: GameState) => GameResult)[] = [
     upgradeLab,
-    (x) => research(x, 'metal-walls'),
+    (x) => researchNow(x, 'metal-walls'),
     upgradeLab,
-    (x) => research(x, 'auto-turret'),
+    (x) => researchNow(x, 'auto-turret'),
   ];
   for (const step of lab) {
     const r = step(g);

@@ -1,8 +1,10 @@
-// Commander perks (design §5, as built ID-020): perks unlocked at the Lab, equipped
-// in perk slots between hordes (the game state is only ever between hordes) and
-// fixed for the fight. Pure: each action returns a new game, or a refusal.
+// Commander perks (design §5, as built ID-020, ID-035): perks owned through research or a
+// boss horde, levelled in the research queue, equipped in perk slots between hordes (the
+// game state is only ever between hordes) and fixed for the fight. Pure: each action
+// returns a new game, or a refusal.
 import {
   PERK_IDS,
+  PERK_LEVEL,
   PERK_SLOT_IDS,
   PERKS,
   START_PERK,
@@ -12,26 +14,37 @@ import {
 import type { GameState } from './game.ts';
 import type { GameResult } from './research.ts';
 
-/** Only the research list matters for what is unlocked; a save reader passes just that. */
-type Researched = { readonly research: readonly ResearchId[] };
+/** Each perk's level: 0 = not owned, 1 … `PERK_LEVEL.top`. */
+export type PerkLevels = Record<PerkId, number>;
 
-/** The perks the commander can equip: the starting one and every one researched. */
-export function unlockedPerks(game: Researched): PerkId[] {
-  return PERK_IDS.filter(
-    (id) => id === START_PERK || (game.research as readonly string[]).includes(id),
-  );
+/** A new game's levels: the starting perk at level 1, the rest not owned. */
+export function newPerkLevels(): PerkLevels {
+  const levels = {} as PerkLevels;
+  for (const id of PERK_IDS) levels[id] = id === START_PERK ? 1 : 0;
+  return levels;
+}
+
+/** The perks the commander owns and can equip, in data order. */
+export function unlockedPerks(game: { readonly perkLevels: Readonly<PerkLevels> }): PerkId[] {
+  return PERK_IDS.filter((id) => game.perkLevels[id] >= 1);
 }
 
 /** Perk slots owned: 1, plus one per slot node researched. */
-export function perkSlots(game: Researched): number {
+export function perkSlots(game: { readonly research: readonly ResearchId[] }): number {
   return 1 + PERK_SLOT_IDS.filter((id) => game.research.includes(id)).length;
 }
 
+/** How much of its level-1 bonus a perk at `level` gives: 1, 1.5, 2 (design §5, ID-035). */
+export const levelScale = (level: number): number => 1 + PERK_LEVEL.step * (level - 1);
+
 /** Why `id` can't be equipped now, or null when it can. */
-export function perkLock(game: Researched & Pick<GameState, 'perks'>, id: PerkId): string | null {
+export function perkLock(
+  game: Pick<GameState, 'perks' | 'perkLevels' | 'research'>,
+  id: PerkId,
+): string | null {
   if (!Object.hasOwn(PERKS, id)) throw new RangeError(`perks: unknown perk ${String(id)}`);
   if (game.perks.includes(id)) return 'Already equipped';
-  if (!unlockedPerks(game).includes(id)) return 'Not researched';
+  if (game.perkLevels[id] < 1) return 'Not researched';
   if (game.perks.length >= perkSlots(game)) return 'All perk slots are full';
   return null;
 }

@@ -21,7 +21,8 @@ import {
   type HordeState,
 } from '../core/horde.ts';
 import { settlePatrols } from '../core/patrol.ts';
-import { runGenerator } from '../core/power.ts';
+import { loadBatteries, runGenerator } from '../core/power.ts';
+import { advanceResearch } from '../core/research.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
 import { skillLock, useSkill } from '../core/skills.ts';
@@ -394,7 +395,11 @@ export function start(root: HTMLElement, art: Art): void {
       // save and redraw.
       const now = Date.now();
       const settled = recruitArrivals(
-        settlePatrols(runGenerator(recover(game, now), now), now),
+        // Research done may raise the bank's cap: batteries waiting load into the room.
+        settlePatrols(
+          loadBatteries(runGenerator(advanceResearch(recover(game, now), now), now)),
+          now,
+        ),
         now,
       );
       if (settled !== game) {

@@ -14,7 +14,7 @@ import {
 } from './camp.ts';
 import {
   ARMOURY_CAP,
-  BANK_CAP,
+  BOSS_PERK_GENES,
   DEFENDER_XP,
   FIND,
   GAS_PER_WIN,
@@ -22,6 +22,7 @@ import {
   HORDE_PAYOUT,
   MATERIALS,
   MAX_COUNT,
+  PERK_IDS,
   RECOVERY_MS,
   SKILL_IDS,
   START_PERK,
@@ -40,8 +41,10 @@ import {
 import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
 import type { LeftWeapon, Patrol, PatrolReport } from './patrol.ts';
-import { loadBatteries, newPower, runGenerator, type Power } from './power.ts';
-import { chance, pick, rngFrom } from './rng.ts';
+import { newPerkLevels, type PerkLevels } from './perks.ts';
+import { bankCap, loadBatteries, newPower, runGenerator, type Power } from './power.ts';
+import { advanceResearch, dropEntry, newQueue, type ResearchQueue } from './research.ts';
+import { chance, createRng, pick, rngFrom } from './rng.ts';
 import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
 
 /** A defender on the camp's roster: lifetime XP (the level comes from it) and the stat points spent. */
@@ -65,10 +68,14 @@ export interface GameState {
   lab: number;
   /** Research nodes done, in the order researched. */
   research: ResearchId[];
+  /** Research and perk levels queued, paid for, the first one running (design §11). */
+  queue: ResearchQueue;
   /** The battery bank, batteries, Gas and generator (design §7). */
   power: Power;
   /** Commander perks equipped, one per perk slot (design §5). */
   perks: PerkId[];
+  /** Each perk's level; 0 = not owned (design §5). */
+  perkLevels: PerkLevels;
   /** Parties out on patrol (design §10), in the order sent. */
   patrols: Patrol[];
   /** Patrols sent so far; the next one is number `patrolsSent + 1`. */
@@ -104,8 +111,10 @@ export function newGame(): GameState {
     armoury: [],
     lab: 0,
     research: [],
+    queue: newQueue(),
     power: newPower(),
     perks: [START_PERK],
+    perkLevels: newPerkLevels(),
     patrols: [],
     patrolsSent: 0,
     reports: [],
@@ -185,6 +194,25 @@ export function hordeFind(h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'rng'>
     material: pick(rng, FIND.materials),
     amount: FIND.base + Math.floor(h.hordeNumber / FIND.every),
   };
+}
+
+/** What a boss horde win adds (design §5): a perk not owned yet, or Genes once every perk is. */
+export type BossReward = { perk: PerkId } | { genes: number };
+
+/**
+ * The reward for winning boss horde `h`, or null (no boss, or a loss): a perk `game` doesn't
+ * own, or `BOSS_PERK_GENES` Genes once it owns them all. Pass `game` with its research run
+ * to the horde's end. The perk is rolled from where the fight's RNG ended, on a stream of
+ * its own, so the drop and the find don't move.
+ */
+export function hordeBossReward(
+  game: Pick<GameState, 'perkLevels'>,
+  h: Pick<HordeState, 'outcome' | 'boss' | 'rng'>,
+): BossReward | null {
+  if (h.outcome !== 'won' || h.boss === null) return null;
+  const missing = PERK_IDS.filter((id) => game.perkLevels[id] < 1);
+  if (missing.length === 0) return { genes: BOSS_PERK_GENES };
+  return { perk: pick(createRng(h.rng.s ^ 0x85ebca6b), missing) };
 }
 
 /** Defender XP each defender who took part gets for winning horde `hordeNumber`. */
@@ -385,6 +413,9 @@ export function startHorde(
     startedAt: now,
     skills: SKILL_IDS.filter((id) => game.research.includes(id)),
     perks: game.perks,
+    perkLevels: game.perkLevels,
+    research: game.research,
+    bankCap: bankCap(game),
     cashRate: cashRate(game.camp),
     startCash: startCash(game.camp),
   });
@@ -403,13 +434,23 @@ export function finishHorde(game: GameState, horde: HordeState, now: number): Ga
     throw new RangeError(`finishHorde: horde ${horde.hordeNumber} is not this game's`);
   }
   const payout = hordePayout(horde);
-  const g = structuredClone(game);
+  // Research that finished during the fight takes effect first, so a boss perk never
+  // refunds a node that was already done.
+  let g = structuredClone(advanceResearch(game, now));
   g.base = baseAfter(game.base, horde);
   const drop = hordeDrop(game, horde);
   if (drop?.kept) g.armoury.push(drop.weapon);
   else if (drop) payout.scrap += drop.scrap;
   const find = hordeFind(horde);
   if (find) payout[find.material] += find.amount;
+  const reward = hordeBossReward(g, horde);
+  if (reward && 'genes' in reward) payout.genes += reward.genes;
+  if (reward && 'perk' in reward) {
+    // A perk node still queued is refunded: the boss gave the perk.
+    const queued = (g.queue.ids as readonly string[]).indexOf(reward.perk);
+    if (queued >= 0) g = dropEntry(g, queued, now);
+    g.perkLevels[reward.perk] = 1;
+  }
   // Capped where a save reads it, so a win never leaves a save that won't load.
   for (const m of MATERIALS) g.stock[m] = Math.min(MAX_COUNT, g.stock[m] + payout[m]);
   for (const gain of xpGains(horde)) {
@@ -427,7 +468,7 @@ export function finishHorde(game: GameState, horde: HordeState, now: number): Ga
     // Capped where a save reads it, so a win never leaves a save that won't load.
     g.power.gas = Math.min(MAX_COUNT, g.power.gas + GAS_PER_WIN);
   }
-  g.power.bank = Math.min(BANK_CAP, Math.max(0, horde.energy));
+  g.power.bank = Math.min(bankCap(g), Math.max(0, horde.energy));
   const gen = g.power.generator;
   if (gen && gen.at !== null) gen.at = Math.min(now, gen.at + Math.max(0, now - horde.startedAt));
   return loadBatteries(runGenerator(g, now));

@@ -25,6 +25,7 @@ import {
   type CampPickId,
   type Stats,
   type Stock,
+  type ResearchId,
 } from './data.ts';
 import { ownedWeapons, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
@@ -114,9 +115,20 @@ export function upgradeCamp(game: GameState): GameResult {
   };
 }
 
+/** Cars the camp may build: `CAR.limit`, and `CAR.more` more once More cars is researched (ID-035). */
+export const carLimit = (game: { readonly research: readonly ResearchId[] }): number =>
+  CAR.limit + (game.research.includes('more-cars') ? CAR.more : 0);
+
 /** Builds a car (design §10 Vehicle): the first needs no research; more come from it (ID-035). */
 export function buildCar(game: GameState): GameResult {
-  if (game.camp.cars >= CAR.limit) return { ok: false, reason: 'More cars come with research' };
+  if (game.camp.cars >= carLimit(game)) {
+    return {
+      ok: false,
+      reason: game.research.includes('more-cars')
+        ? 'The camp has all its cars'
+        : 'More cars come with research',
+    };
+  }
   return pay(game, CAR.cost, (g) => {
     g.camp.cars += 1;
   });

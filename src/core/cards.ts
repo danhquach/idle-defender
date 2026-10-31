@@ -1,8 +1,19 @@
-import { BANK_CAP, CARD, PERK, RARITY, RECRUIT_CHANCE, TITLES, type CardRarity } from './data.ts';
+import {
+  CARD,
+  PERK,
+  RARITY,
+  RECRUIT_CHANCE,
+  RESEARCH_CARDS,
+  TITLES,
+  type CardRarity,
+  type ResearchCard,
+} from './data.ts';
 import { professionOf } from './loadout.ts';
 import { titleIn } from './stats.ts';
 import {
+  perkFactor,
   perkOn,
+  perkScale,
   standing,
   type Card,
   type HordeState,
@@ -160,6 +171,21 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     once: false,
   },
+  // Research cards (ID-035): only in the pool once researched.
+  'hollow-points': {
+    name: 'Hollow Points',
+    text: '+40% damage',
+    category: 'stat',
+    rarity: 'rare',
+    once: true,
+  },
+  'field-repairs': {
+    name: 'Field Repairs',
+    text: 'Repair every wall segment to full',
+    category: 'barrier',
+    rarity: 'epic',
+    once: true,
+  },
 };
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
@@ -177,12 +203,19 @@ export function rarityOdds(wave: number): Record<CardRarity, number> {
   };
 }
 
-/** Whether `id` may show in an offer now: a `once` card not yet taken; power only with a turret. */
+/**
+ * Whether `id` may show in an offer now: a `once` card not yet taken; power only with a
+ * turret; a research card only once researched.
+ */
 export function eligible(state: HordeState, id: UpgradeId): boolean {
   const u = UPGRADES[id];
   if (u.once && state.taken.includes(id)) return false;
+  if (isResearchCard(id) && !state.research.includes(id)) return false;
   return u.category !== 'power' || state.turrets.length > 0;
 }
+
+const isResearchCard = (id: UpgradeId): id is ResearchCard =>
+  (RESEARCH_CARDS as readonly string[]).includes(id);
 
 /** Whether a Master (or better) Gunner is in the fight (design §8 synergy). */
 export function masterGunner(state: Pick<HordeState, 'defenders'>): boolean {
@@ -229,7 +262,7 @@ export function rollOffer(rng: Rng, state: HordeState): Card[] {
   const p =
     (state.defenders.length < RECRUIT_CHANCE.largeFrom
       ? RECRUIT_CHANCE.small
-      : RECRUIT_CHANCE.large) * (perkOn(state, 'rally-call') ? PERK.rally : 1);
+      : RECRUIT_CHANCE.large) * perkFactor(state, 'rally-call', PERK.rally);
   const pool = UPGRADE_IDS.filter((id) => eligible(state, id));
   const cards: Card[] = [];
   let recruited = false;
@@ -255,20 +288,41 @@ export function levelUp(s: HordeState, rng: Rng): void {
   s.offer = rollOffer(rng, s);
 }
 
+// Float noise in scale × wave must not lose a whole reroll.
+const EPS = 1e-9;
+
+/**
+ * Rerolls Second Look gives in the current wave (design §5, ID-035): 1 at level 1; a
+ * higher level's 1.5 or 2 per wave come as whole rerolls, the half one every other wave.
+ */
+export function rerollsThisWave(state: Pick<HordeState, 'perks' | 'perkLevels' | 'wave'>): number {
+  const scale = perkScale(state, 'second-look');
+  return Math.floor(scale * state.wave + EPS) - Math.floor(scale * (state.wave - 1) + EPS);
+}
+
+/** Rerolls of the current wave used so far. */
+const rerollsUsed = (state: Pick<HordeState, 'rerolledWave' | 'rerolls' | 'wave'>): number =>
+  state.rerolledWave === state.wave ? state.rerolls : 0;
+
+/** Rerolls left in the current wave. */
+export const rerollsLeft = (state: HordeState): number =>
+  Math.max(0, rerollsThisWave(state) - rerollsUsed(state));
+
 /** Why the open offer can't be rerolled, or null when it can (Second Look, design §5). */
 export function rerollLock(state: HordeState): string | null {
   if (!perkOn(state, 'second-look')) return 'Needs Second Look';
   if (state.offer === null) return 'No offer to reroll';
-  if (state.rerolledWave === state.wave) return 'Already rerolled this wave';
+  if (rerollsLeft(state) === 0) return 'Already rerolled this wave';
   return null;
 }
 
-/** Rolls the open offer again (seeded), once per wave; returns a new state. */
+/** Rolls the open offer again (seeded), as often as Second Look allows a wave; returns a new state. */
 export function rerollOffer(state: HordeState): HordeState {
   const lock = rerollLock(state);
   if (lock) throw new RangeError(`rerollOffer: ${lock}`);
   const s = structuredClone(state);
   s.offer = rollOffer(rngFrom(s.rng), s);
+  s.rerolls = rerollsUsed(s) + 1;
   s.rerolledWave = s.wave;
   return s;
 }
@@ -318,7 +372,13 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       }
       break;
     case 'recharge':
-      s.energy = Math.min(BANK_CAP, s.energy + CARD.recharge * BANK_CAP);
+      s.energy = Math.min(s.bankCap, s.energy + CARD.recharge * s.bankCap);
+      break;
+    case 'hollow-points':
+      s.mods.damage *= CARD.hollowPoints;
+      break;
+    case 'field-repairs':
+      for (const seg of segments) seg.hp = seg.maxHp;
       break;
     case 'power-surge':
       s.freeWave = s.wave;

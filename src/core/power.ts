@@ -2,12 +2,21 @@
 // it, and the generator burns Gas into it over real time. Pure: real time comes in as
 // `now` (ms since the epoch), and each function returns a new game, or `game` itself
 // when nothing changes.
-import { BANK_CAP, BATTERIES, BATTERY_IDS, GENERATOR, START_POWER, type Battery } from './data.ts';
+import {
+  BANK_CAP,
+  BATTERIES,
+  BATTERY_IDS,
+  BATTERY_RESEARCH,
+  GENERATOR,
+  START_POWER,
+  type Battery,
+  type ResearchId,
+} from './data.ts';
 import type { GameState } from './game.ts';
 import { pay, type GameResult } from './research.ts';
 
 export interface Power {
-  /** Charge in the bank, 0 … BANK_CAP; a fight draws it down. */
+  /** Charge in the bank, 0 … the bank cap; a fight draws it down. */
   bank: number;
   gas: number;
   /** Batteries waiting in storage, by quality. */
@@ -26,13 +35,23 @@ export function newPower(): Power {
   return { bank: 0, gas: START_POWER.gas, batteries, generator: null };
 }
 
+/** The bank's cap: `BANK_CAP`, plus what each battery node researched adds (ID-035). */
+export function bankCap(game: { readonly research: readonly ResearchId[] }): number {
+  let cap = BANK_CAP;
+  for (const [id, r] of Object.entries(BATTERY_RESEARCH)) {
+    if (game.research.includes(id as ResearchId)) cap += r.bankCap;
+  }
+  return cap;
+}
+
 /** Loads whole batteries into the bank, largest first, while each fits under the cap. */
 export function loadBatteries(game: GameState): GameState {
   const { bank, batteries } = game.power;
+  const cap = bankCap(game);
   let charge = bank;
   const left = { ...batteries };
   for (const b of [...BATTERY_IDS].reverse()) {
-    const fit = Math.floor((BANK_CAP - charge) / BATTERIES[b].charge);
+    const fit = Math.floor((cap - charge) / BATTERIES[b].charge);
     const n = Math.max(0, Math.min(left[b], fit));
     left[b] -= n;
     charge += n * BATTERIES[b].charge;
@@ -51,7 +70,8 @@ export function runGenerator(game: GameState, now: number): GameState {
   const gen = game.power.generator;
   if (!gen) return game;
   const { bank, gas } = game.power;
-  const room = gas > 0 && bank < BANK_CAP;
+  const cap = bankCap(game);
+  const room = gas > 0 && bank < cap;
   const set = (p: Partial<Power>, at: number | null): GameState => ({
     ...game,
     power: { ...game.power, ...p, generator: { at } },
@@ -62,11 +82,11 @@ export function runGenerator(game: GameState, now: number): GameState {
   const n = Math.min(
     gas,
     Math.floor((now - gen.at) / GENERATOR.gasMs),
-    Math.ceil((BANK_CAP - bank) / GENERATOR.gasCharge),
+    Math.ceil((cap - bank) / GENERATOR.gasCharge),
   );
   if (n === 0) return game;
-  const after = { bank: Math.min(BANK_CAP, bank + n * GENERATOR.gasCharge), gas: gas - n };
-  const idle = after.gas === 0 || after.bank >= BANK_CAP;
+  const after = { bank: Math.min(cap, bank + n * GENERATOR.gasCharge), gas: gas - n };
+  const idle = after.gas === 0 || after.bank >= cap;
   return set(after, idle ? null : gen.at + n * GENERATOR.gasMs);
 }
 

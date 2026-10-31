@@ -19,9 +19,9 @@ import {
 import { newGame, startHorde, type GameState } from './game.ts';
 import { baseAfter, drawFactor, newHorde, removeDead, tick, type HordeState } from './horde.ts';
 import { equipPerk, perkLock, perkSlots, unequipPerk, unlockedPerks } from './perks.ts';
-import { research, researchLock, upgradeLab } from './research.ts';
+import { queueLock, upgradeLab } from './research.ts';
 import { createRng } from './rng.ts';
-import { enemy, landed, setup } from './testing.ts';
+import { enemy, landed, researchNow, setup } from './testing.ts';
 
 const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 0, concrete: 0 });
 const tough = { hp: 1000, maxHp: 1000 };
@@ -33,7 +33,7 @@ function researchedGame(...ids: ResearchId[]): GameState {
   for (const step of [
     upgradeLab,
     upgradeLab,
-    ...ids.map((id) => (x: GameState) => research(x, id)),
+    ...ids.map((id) => (x: GameState) => researchNow(x, id)),
   ]) {
     const r = step(g);
     if (!r.ok) throw new Error(r.reason);
@@ -63,13 +63,9 @@ describe('perk data and slots', () => {
     ]);
     for (const id of PERK_IDS) expect(PERKS[id].name.length).toBeGreaterThan(0);
     expect(Object.hasOwn(RESEARCH, 'steady-fire')).toBe(false);
-    expect(RESEARCH['scavengers-eye']).toMatchObject({
-      lab: 1,
-      needs: null,
-      cost: { scrap: 30, wood: 30 },
-    });
-    expect(RESEARCH.fortify).toMatchObject({ lab: 1, cost: { scrap: 40, wood: 40 } });
-    expect(RESEARCH['rally-call']).toMatchObject({ lab: 1, cost: { scrap: 30, wood: 20 } });
+    expect(RESEARCH['scavengers-eye']).toMatchObject({ lab: 1, needs: null, genes: 15 });
+    expect(RESEARCH.fortify).toMatchObject({ lab: 1, genes: 20 });
+    expect(RESEARCH['rally-call']).toMatchObject({ lab: 1, genes: 15 });
     expect(RESEARCH['second-look']).toMatchObject({ lab: 2, needs: null });
     expect(RESEARCH.overclock).toMatchObject({ lab: 2, needs: 'auto-turret' });
     expect(RESEARCH['power-saver']).toMatchObject({ lab: 2, needs: 'auto-turret' });
@@ -84,18 +80,17 @@ describe('perk data and slots', () => {
 
   it('slots 2–4 are researched in order, each adding one', () => {
     const g = researchedGame();
-    expect(researchLock(g, 'perk-slot-3')).toBe('Needs Perk slot 2');
-    expect(researchLock(g, 'perk-slot-4')).toBe('Needs Perk slot 3');
-    expect(researchLock({ lab: 1, research: [] }, 'perk-slot-3')).toBe('Needs Lab level 2');
+    expect(queueLock(g, 'perk-slot-3')).toBe('Needs Perk slot 2');
+    expect(queueLock(g, 'perk-slot-4')).toBe('Needs Perk slot 3');
+    expect(queueLock({ ...newGame(), lab: 1 }, 'perk-slot-3')).toBe('Needs Lab level 2');
     expect(perkSlots(researchedGame('perk-slot-2'))).toBe(2);
     expect(perkSlots(researchedGame('perk-slot-2', 'perk-slot-3', 'perk-slot-4'))).toBe(4);
   });
 
-  it('researching a perk unlocks it; it costs its materials', () => {
+  it('researching a perk unlocks it at level 1', () => {
     const g = researchedGame('fortify');
     expect(unlockedPerks(g)).toEqual(['steady-fire', 'fortify']);
-    const before = researchedGame();
-    expect(before.stock.scrap - g.stock.scrap).toBe(40);
+    expect(g.perkLevels.fortify).toBe(1);
   });
 });
 
@@ -309,7 +304,10 @@ describe('perks in the horde', () => {
     expect(shot(['power-saver']).drawn).toBeCloseTo(plain.drawn * PERK.powerSaver, 9);
     expect(shot(['power-saver']).damage).toBe(TURRET.damage);
     expect(shot(['overclock', 'power-saver']).drawn).toBeCloseTo(plain.drawn * 1.1 * 0.75, 9);
-    expect(drawFactor({ perks: ['overclock', 'power-saver'] })).toBeCloseTo(0.825, 9);
+    expect(drawFactor({ perks: ['overclock', 'power-saver'], perkLevels: {} })).toBeCloseTo(
+      0.825,
+      9,
+    );
   });
 });
 

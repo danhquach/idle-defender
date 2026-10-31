@@ -14,6 +14,7 @@ import {
   takeCampPick,
   treat,
   upgradeCamp,
+  carLimit,
   type CampChoice,
   type Treatment,
 } from '../core/camp.ts';
@@ -162,8 +163,8 @@ export function campSection(
     upgrade.title = r.reason;
   }
   section.append(upgrade);
-  // The car (design §10 Vehicle): built once; more come from research (ID-035).
-  if (game.camp.cars < CAR.limit) {
+  // The car (design §10 Vehicle): one at first; More cars research adds another (ID-035).
+  if (game.camp.cars < carLimit(game)) {
     const build = el('button', 'build-option');
     build.type = 'button';
     build.append(
