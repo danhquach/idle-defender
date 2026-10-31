@@ -183,6 +183,8 @@ describe('the camera in the game (app.ts, ID-057)', () => {
     key('keyup', 'ArrowRight');
     step(1032);
     const panned = drawnCam();
+    const view = { w: window.innerWidth, h: window.innerHeight };
+    expect(panned).not.toEqual(openingCamera(view, baseEdge(newGame().base)));
     const select = document.createElement('select');
     root.append(select);
     select.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
