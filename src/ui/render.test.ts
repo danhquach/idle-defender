@@ -1,7 +1,7 @@
 // Design §15: a turret's and a trap's state reads from its sprite: lit, dark, jammed, worn, broken.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildTurret, newBase } from '../core/base.ts';
-import { newGame, startHorde } from '../core/game.ts';
+import { buildTurret, newBase, type Base } from '../core/base.ts';
+import { newGame, startHorde, type GameState } from '../core/game.ts';
 import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
 import {
   CAMP,
@@ -15,6 +15,7 @@ import {
   TURRET,
   WEAPONS,
   SEGMENT_HEIGHT,
+  SEGMENTS,
   WALL,
   type EnemyKind,
   type Tracer,
@@ -26,7 +27,15 @@ import { carpet } from '../core/skills.ts';
 import { ANIM, Animator } from './anim.ts';
 import { FRAME, frameCamera, HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK } from './ground.ts';
-import { drawScene, offFrame, trapLook, turretLook, type Scene } from './render.ts';
+import {
+  drawScene,
+  offFrame,
+  trapLook,
+  turretLook,
+  type BuildOverlay,
+  type Scene,
+} from './render.ts';
+import { ghostsOf, NEEDS_WALL, plotsOf } from './buildscene.ts';
 import { ART_IDS, ART_PX, GATE_POSTS, TIER_ART, type Art, type ArtId } from './sprites.ts';
 
 function scene(condition: number, energy: number, wallHp?: number) {
@@ -121,6 +130,7 @@ function recorder() {
     rect: noop,
     closePath: noop,
     clip: noop,
+    setLineDash: noop,
     fillText: noop,
     measureText: () => ({ width: 0 }),
     save: noop,
@@ -220,11 +230,10 @@ describe('drawScene with art', () => {
     return r;
   };
 
-  it('draws the painted ground (field and yard) first, then the camp, and skips an unbuilt slot', () => {
+  it('draws the painted ground (field and yard) first and skips an unbuilt slot; a fight draws no camp (ID-065)', () => {
     const r = draw(blank());
     expect(r.textured).toEqual(['surround-canvas']);
-    expect(r.drawn[0]).toBe('ground-canvas');
-    expect(new Set(r.drawn.slice(1))).toEqual(new Set(['shack', 'tent']));
+    expect(r.drawn).toEqual(['ground-canvas']);
   });
 
   it('fills the whole view with the repeating ground before the field (ID-057)', () => {
@@ -785,6 +794,193 @@ function geometry(cam: { x: number; y: number; zoom: number }, scene: Scene) {
 }
 
 const PUFF = { blood: '#8e1f1a', dust: '#a8987c', flash: '#fff2b0', slug: '#fffbe8' } as const;
+
+describe('the build scene (ID-065)', () => {
+  beforeEach(stubCanvas);
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The base laid out as build mode draws it. */
+  const laid = (base: Base): Scene => {
+    const { layers, posts, turrets, traps } = layoutOf(base);
+    return { ...blank(), layers, posts, turrets, traps };
+  };
+  /** A recorder that also keeps every text drawn, every stroke colour and every clip rect. */
+  function build(
+    base: Base,
+    game: GameState = newGame(),
+    hover: BuildOverlay['hover'] = null,
+    fence: Tier = 'wood',
+  ) {
+    const r = recorder();
+    const texts: string[] = [];
+    const strokes: string[] = [];
+    const rects: number[][] = [];
+    const ctx = r.ctx as unknown as Record<string, unknown>;
+    Object.defineProperty(ctx, 'strokeStyle', {
+      set: (v: string) => strokes.push(v),
+      get: () => '',
+    });
+    Object.assign(ctx, {
+      fillText: (t: string) => texts.push(t),
+      measureText: (t: string) => ({ width: t.length * 5 }),
+      rect: (...a: number[]) => rects.push(a),
+    });
+    const overlay: BuildOverlay = { selected: null, hover, ghosts: ghostsOf(base) };
+    const camp = { fence, plots: plotsOf(game) };
+    drawScene(r.ctx, r.art, laid(base), CAM, VIEW, overlay, null, null, null, camp);
+    return { ...r, texts, strokes, rects };
+  }
+
+  it('shows the whole camp: no clip, and no off-frame marker even with an enemy in the camp', () => {
+    const r = recorder();
+    const rects: number[][] = [];
+    const texts: string[] = [];
+    Object.assign(r.ctx, {
+      rect: (...a: number[]) => rects.push(a),
+      fillText: (t: string) => texts.push(t),
+    });
+    const base = newBase();
+    const scene = {
+      ...laid(base),
+      enemies: [
+        {
+          id: 1,
+          kind: 'shambler',
+          x: 50,
+          y: 50,
+          hp: 20,
+          maxHp: 20,
+          nextAttackAt: 0,
+          inCamp: true,
+          stunnedUntil: 0,
+          vx: 0,
+          vy: 0,
+          climbUntil: 0,
+          climbed: false,
+        } satisfies Enemy,
+      ],
+    };
+    const overlay = { selected: null, hover: null, ghosts: { slots: [], lines: [] } };
+    const cam = frameCamera({ w: 1280, h: 720 });
+    drawScene(r.ctx, r.art, scene, cam, VIEW, overlay);
+    expect(rects[0]).toEqual([0, 0, VIEW.w, VIEW.h]);
+    expect(texts).not.toContain('1');
+  });
+
+  it('draws the fence in its tier, built huts in their art, a built Lab and Generator; a fight draws none', () => {
+    const none = build(newBase(), newGame(), null, 'metal');
+    expect(none.textured).toEqual(expect.arrayContaining(['metal-top', 'metal-front']));
+    expect(none.drawn).not.toContain('shack');
+    expect(none.drawn).not.toContain('tent');
+    const g = newGame();
+    const grown: GameState = {
+      ...g,
+      lab: 2,
+      power: { ...g.power, generator: { at: 1 } },
+      camp: { ...g.camp, upgrades: 2 },
+    };
+    const r = build(newBase(), grown, null, 'concrete');
+    expect(r.textured).toEqual(expect.arrayContaining(['concrete-top', 'concrete-front']));
+    expect(r.drawn.filter((id) => id === 'shack' || id === 'tent')).toHaveLength(2);
+    expect(r.texts).toEqual(
+      expect.arrayContaining(['Research Lab · Lv 2', 'Generator · running', 'Hut']),
+    );
+    // A fight's scene with no camp: no fence textures past the wall's own.
+    const fight = recorder();
+    drawScene(fight.ctx, fight.art, laid(newBase()), CAM, VIEW);
+    expect(fight.textured).not.toContain('concrete-top');
+    expect(fight.drawn).not.toContain('shack');
+  });
+
+  it('a ghost "+" on every empty slot; a post slot with no wall is dimmed, its reason once per unbuilt column', () => {
+    const r = build(newBase());
+    // Columns 1 and 2 have no wall: one plate each, not one per post slot.
+    expect(r.texts.filter((t) => t === NEEDS_WALL)).toHaveLength(2);
+    const ghost = 'rgba(240, 236, 226, 0.85)';
+    const dim = 'rgba(232, 228, 218, 0.4)';
+    const slots = ghostsOf(newBase()).slots;
+    const blocked = slots.filter((g) => 'needsWall' in g && g.needsWall).length;
+    expect(blocked).toBe(40);
+    expect(r.strokes.filter((s) => s === dim)).toHaveLength(blocked + 1); // + the Workbench's plot
+    expect(r.strokes.filter((s) => s === ghost).length).toBeGreaterThan(slots.length - blocked);
+    // With no ghost there is no reason.
+    const full: Base = { ...newBase(), layers: [], posts: [], turrets: [], traps: [] };
+    expect(drawWith(full, { slots: [], lines: [] }).texts).not.toContain(NEEDS_WALL);
+  });
+
+  it('hovering a post slot with no wall shows why on it', () => {
+    // On the slot, in place of its column's plate.
+    const r = build(newBase(), newGame(), { slot: { column: 2, row: 5, what: 'tower' } });
+    expect(r.texts.filter((t) => t === NEEDS_WALL)).toHaveLength(2);
+    const open = build(newBase(), newGame(), { slot: { column: 0, row: 5, what: 'ground' } });
+    expect(open.texts.filter((t) => t === NEEDS_WALL)).toHaveLength(2);
+    // A trap cell sits in the outer column's area, but isn't a post slot: both plates stay.
+    const trap = build(newBase(), newGame(), { slot: { column: 2, row: 5, what: 'trap' } });
+    expect(trap.texts.filter((t) => t === NEEDS_WALL)).toHaveLength(2);
+  });
+
+  it('hovering a wall-walk spot rings that spot', () => {
+    const hoverColour = '#cfe3fa';
+    const r = recorder();
+    const strokes: string[] = [];
+    const ellipses: number[][] = [];
+    const ctx = r.ctx as unknown as Record<string, unknown>;
+    Object.defineProperty(ctx, 'strokeStyle', {
+      set: (v: string) => strokes.push(v),
+      get: () => '',
+    });
+    Object.assign(ctx, { ellipse: (...a: number[]) => ellipses.push(a) });
+    const hover = { slot: { column: 0, row: 2, what: 'segment' as const }, spot: 1 };
+    const overlay = { selected: null, hover, ghosts: { slots: [], lines: [] } };
+    drawScene(r.ctx, r.art, laid(newBase()), CAM, VIEW, overlay);
+    expect(strokes).toContain(hoverColour);
+    expect(ellipses).toHaveLength(1);
+  });
+
+  it('a tier badge per segment; a damaged one’s bar, a broken one’s cross', () => {
+    const base = newBase();
+    base.layers[0]!.slots[2] = { ...base.layers[0]!.slots[2]!, hp: 50 };
+    base.layers[0]!.slots[3] = { ...base.layers[0]!.slots[3]!, hp: 0 };
+    base.layers[0]!.slots[4] = { ...base.layers[0]!.slots[4]!, tier: 'metal', hp: 400, maxHp: 400 };
+    const r = build(base);
+    expect(r.texts.filter((t) => t === 'W')).toHaveLength(SEGMENTS - 1);
+    expect(r.texts.filter((t) => t === 'M')).toHaveLength(1);
+    expect(r.strokes.filter((s) => s === '#e0483e')).toHaveLength(1);
+    const whole = build(newBase());
+    expect(whole.strokes).not.toContain('#e0483e');
+  });
+
+  it('crosses a jammed turret and a broken trap', () => {
+    let base = newBase();
+    const t = buildTurret(base, stockOf({ scrap: 99, wood: 99 }), true, 'tower', 0, 0);
+    if (!t.ok) throw new Error(t.reason);
+    base = t.base;
+    base.turrets[0]!.condition = 0;
+    base.traps = [
+      { kind: 'spikes', row: 1, durability: 0 },
+      { kind: 'wire', row: 2, durability: 3 },
+    ];
+    expect(build(base).strokes.filter((s) => s === '#e0483e')).toHaveLength(2);
+  });
+
+  it('highlights the hovered slot or plot', () => {
+    const hoverColour = '#cfe3fa';
+    expect(build(newBase()).strokes).not.toContain(hoverColour);
+    const slot = build(newBase(), newGame(), { slot: { column: 1, row: 0, what: 'segment' } });
+    expect(slot.strokes).toContain(hoverColour);
+    const plot = build(newBase(), newGame(), { plot: plotsOf(newGame())[0]! });
+    expect(plot.strokes).toContain(hoverColour);
+  });
+
+  /** The build scene with `ghosts` and no camp. */
+  function drawWith(base: Base, ghosts: BuildOverlay['ghosts']) {
+    const r = recorder();
+    const texts: string[] = [];
+    Object.assign(r.ctx, { fillText: (t: string) => texts.push(t) });
+    drawScene(r.ctx, r.art, laid(base), CAM, VIEW, { selected: null, hover: null, ghosts });
+    return { texts };
+  }
+});
 
 describe('bullet visuals (ID-045)', () => {
   beforeEach(stubCanvas);

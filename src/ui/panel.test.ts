@@ -7,7 +7,7 @@ import { buildSegment, type Base } from '../core/base.ts';
 import { RESEARCH_IDS, stockOf } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { sendPatrol } from '../core/patrol.ts';
-import { createBuildPanel } from './build.ts';
+import { createBuildPanel, PANEL_SPACE } from './build.ts';
 
 /** A panel showing `game`; every game handed on is kept in `games` and shown again. */
 function panelFor(game: GameState) {
@@ -402,5 +402,31 @@ describe('Build and Camp tabs, the start footer (ID-059)', () => {
     tab('camp').click();
     expect(root.querySelector('img')).toBeNull();
     expect(root.textContent).toContain(`${hostile} · on patrol, back at`);
+  });
+});
+
+describe('a building’s plot opens its part of the panel (ID-065)', () => {
+  it('the Lab and the Generator open the Build tab at their section; a hut opens the roster', () => {
+    const { panel, title, button } = panelFor(newGame());
+    expect(title()).toBe('Camp');
+    panel.reveal(newGame(), 'lab');
+    expect(title()).toBe('Build');
+    expect(document.querySelector('.build-lab')?.textContent).toContain('Research Lab');
+    panel.reveal(newGame(), 'power');
+    expect(title()).toBe('Build');
+    expect(document.querySelector('.build-power')?.textContent).toContain('Generator');
+    panel.reveal(newGame(), 'camp');
+    expect(title()).toBe('Roster');
+    expect(document.body.textContent).toContain('Expand the camp');
+    // Back from the roster goes to the Camp tab, as from its own button.
+    button('Back').click();
+    expect(title()).toBe('Camp');
+  });
+
+  it('measures the room left of the panel, or counts its CSS width where nothing is laid out', () => {
+    const { panel } = panelFor(newGame());
+    expect(panel.room({ w: 1280 })).toBe(1280 - PANEL_SPACE);
+    panel.hide();
+    expect(panel.room({ w: 1440 })).toBe(1440 - PANEL_SPACE);
   });
 });

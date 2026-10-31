@@ -2,6 +2,7 @@
 // rule uses is defined, and the text colours meet WCAG AA on the surfaces they sit on.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { PANEL_SPACE } from './build.ts';
 
 const css = readFileSync(new URL('../page.css', import.meta.url), 'utf8');
 
@@ -140,5 +141,13 @@ describe('UI kit tokens (ID-056)', () => {
     expect(contrast('--color-text', '--color-bg')).toBeCloseTo(12.15, 1);
     // The old faint grey failed AA on the page background.
     expect(contrast('#6f6b64', '--color-bg')).toBeLessThan(4.5);
+  });
+});
+
+describe('the build panel’s size (ID-065)', () => {
+  it('PANEL_SPACE is its CSS width plus its right gap, so the build scene fits beside it', () => {
+    const rule = /\n\.build-panel \{([^}]*)\}/.exec(css)![1]!;
+    const px = (prop: string) => Number(new RegExp(`\\n\\s*${prop}:\\s*(\\d+)px`).exec(rule)![1]);
+    expect(PANEL_SPACE).toBe(px('width') + px('right'));
   });
 });

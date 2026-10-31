@@ -99,6 +99,7 @@ import {
   wholeLeft,
 } from './hud.ts';
 import type { SlotHit } from './projection.ts';
+import type { PlotSection } from './buildscene.ts';
 import { durationText, perkLines, type PerkLine } from './perks.ts';
 import {
   carLabel,
@@ -537,7 +538,17 @@ export interface BuildPanel {
   notice(text: string): void;
   /** Forgets the world map picks: the camp was replaced. */
   forget(): void;
+  /** Px from the window's left edge to the panel's: the room the build scene fits in. */
+  room(view: { w: number }): number;
+  /**
+   * Opens a building's part of the panel (ID-065): the Research Lab or power on the Build
+   * tab, scrolled to it, or the roster, whose camp section sells the camp upgrades.
+   */
+  reveal(game: GameState, section: PlotSection): void;
 }
+
+/** The panel's width and right gap in CSS px, for a window it isn't laid out in (hidden, or a test). */
+export const PANEL_SPACE = 280 + 12;
 
 export function createBuildPanel(
   root: HTMLElement,
@@ -1266,6 +1277,23 @@ export function createBuildPanel(
     notice(text) {
       notice.textContent = text;
       notice.hidden = text === '';
+    },
+    room(view) {
+      const r = panel.getBoundingClientRect();
+      return !panel.hidden && r.width > 0 ? r.left : view.w - PANEL_SPACE;
+    },
+    reveal(game, section) {
+      open = section === 'camp' ? 'roster' : 'build';
+      tab = 'build';
+      api.show(game, null);
+      const body = panel.querySelector<HTMLElement>('.build-body');
+      const target = panel.querySelector<HTMLElement>(
+        // The roster opens on its camp section (the upgrades), under its title.
+        section === 'lab' ? '.build-lab' : section === 'power' ? '.build-power' : '.build-title',
+      );
+      if (body && target) {
+        body.scrollTop += target.getBoundingClientRect().top - body.getBoundingClientRect().top;
+      }
     },
     forget() {
       // Another camp: picks made on the world map belong to the old one.
