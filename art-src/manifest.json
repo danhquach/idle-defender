@@ -169,6 +169,88 @@
       "prompt": "a game UI icon of a finned aerial bomb falling nose down, dark olive drab body, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
     },
     {
+      "id": "icon-scrap",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5604,
+      "size": "512x512",
+      "prompt": "a game UI icon of a small pile of rusty scrap metal pieces, a bent bolt and a light grey cog, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-wood",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5612,
+      "size": "512x512",
+      "prompt": "a game UI icon of a bundle of three cut wooden planks tied with a rope, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-metal",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5625,
+      "size": "512x512",
+      "prompt": "a game UI icon of a stack of two mid steel grey metal ingot bars with a slightly lighter grey top face, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-concrete",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5631,
+      "size": "512x512",
+      "prompt": "a game UI icon of a cracked grey concrete block with rusty rebar rods sticking out of it, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-food",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5643,
+      "size": "512x512",
+      "prompt": "a game UI icon of a dented tin can of food with a dull dirty beige paper label with one faded brown stripe, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-gas",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5652,
+      "size": "512x512",
+      "prompt": "a game UI icon of an olive green metal jerry can for fuel, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-cash",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5666,
+      "size": "512x512",
+      "prompt": "a game UI icon of a few thin muted gold coins in a small stepped stack with one coin lying flat in front showing its round face, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-bank",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5675,
+      "size": "512x512",
+      "prompt": "a game UI icon of a chunky mid grey car battery with a muted mustard yellow lightning bolt on its side, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "icon-genes",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 5684,
+      "size": "512x512",
+      "prompt": "a game UI icon of a stoppered smoky grey-green glass vial of glowing acid-green liquid with a twisted double helix strand inside, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, single object centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person",
+      "mutant": true
+    },
+    {
       "id": "molotov",
       "kind": "sprite",
       "style": "verbatim",

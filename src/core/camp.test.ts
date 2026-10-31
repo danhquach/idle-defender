@@ -100,7 +100,7 @@ describe('camp capacity and camp upgrades', () => {
 
   it('refuses an upgrade the stock cannot cover, and spends nothing', () => {
     const g = { ...newGame(), stock: stockOf({ wood: 59, scrap: 40 }) };
-    expect(upgradeCamp(g)).toEqual({ ok: false, reason: 'Not enough materials' });
+    expect(upgradeCamp(g)).toEqual({ ok: false, reason: 'Not enough materials', short: true });
     expect(g.stock).toEqual(stockOf({ wood: 59, scrap: 40 }));
   });
 });
@@ -515,7 +515,11 @@ describe('injury recovery with Food and Medicine (ID-031)', () => {
       ok: false,
       reason: "Bob isn't injured",
     });
-    expect(treat(g, 'bob', 'food', NOW)).toEqual({ ok: false, reason: 'No food left' });
+    expect(treat(g, 'bob', 'food', NOW)).toEqual({
+      ok: false,
+      reason: 'No food left',
+      short: true,
+    });
     expect(g.stock).toEqual(stockOf({ medicine: 1 }));
   });
 

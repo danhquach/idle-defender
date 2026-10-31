@@ -111,6 +111,7 @@ describe('generator (ID-015)', () => {
     expect(buildGenerator({ ...g, stock: { ...g.stock, scrap: 39 } })).toEqual({
       ok: false,
       reason: 'Not enough scrap',
+      short: true,
     });
     // Worked out long before the click (the panel's dry run): no time before the build counts.
     const clicked = T + 30 * G;

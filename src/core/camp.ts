@@ -93,7 +93,7 @@ export function upgradeCamp(game: GameState): GameResult {
   const cost = campUpgradeCost(game);
   if (!cost) return { ok: false, reason: 'The camp is as big as it gets' };
   if (MATERIALS.some((m) => game.stock[m] < (cost[m] ?? 0))) {
-    return { ok: false, reason: 'Not enough materials' };
+    return { ok: false, reason: 'Not enough materials', short: true };
   }
   const stock = { ...game.stock };
   for (const m of MATERIALS) stock[m] -= cost[m] ?? 0;
@@ -337,7 +337,7 @@ export function treat(game: GameState, id: string, item: Treatment, now: number)
   if (d.injuredUntil === null || now >= d.injuredUntil) {
     return { ok: false, reason: `${d.name} isn't injured` };
   }
-  if (game.stock[item] < 1) return { ok: false, reason: `No ${item} left` };
+  if (game.stock[item] < 1) return { ok: false, reason: `No ${item} left`, short: true };
   const until = d.injuredUntil - TREATMENT_MS[item];
   return {
     ok: true,

@@ -28,6 +28,8 @@ import {
   MAP_ART,
   MAP_PICTURE,
   placeArt,
+  RESOURCE_ICON,
+  RESOURCE_IDS,
   SHOP_ICON,
   SKILL_ART,
   SKILL_ICON,
@@ -126,6 +128,7 @@ describe('art coverage', () => {
       ...Object.values(SKILL_ART),
       ...Object.values(SHOP_ICON),
       ...Object.values(SKILL_ICON),
+      ...Object.values(RESOURCE_ICON),
       ...LOCATION_IDS.map((l) => MAP_ART[l]),
       MAP_PICTURE,
       ...states.map((s) => TURRET_ART[s]),
@@ -145,6 +148,26 @@ describe('art coverage', () => {
     }
     expect(placeArt('riverside')).toHaveLength(3);
     expect(placeArt('gas-station')).toEqual([MAP_ART['gas-station']]);
+  });
+
+  it('gives each of the nine resources its own bundled icon (ID-056)', () => {
+    expect([...RESOURCE_IDS]).toEqual([
+      'scrap',
+      'wood',
+      'metal',
+      'concrete',
+      'food',
+      'gas',
+      'cash',
+      'bank',
+      'genes',
+    ]);
+    const icons = RESOURCE_IDS.map((r) => RESOURCE_ICON[r]);
+    expect(new Set(icons).size).toBe(RESOURCE_IDS.length);
+    for (const icon of icons) {
+      expect(ART_URLS[icon], icon).toBeTruthy();
+      expect(ids.has(icon), icon).toBe(true);
+    }
   });
 
   it('gives every enemy kind its own art, the Horror included (ID-041)', () => {

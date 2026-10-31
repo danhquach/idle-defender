@@ -72,7 +72,10 @@ describe('the camp in the roster view', () => {
     expect(games.at(-1)!.camp.upgrades).toBe(1);
     const again = buttons('Expand the camp')[0]!;
     expect(again.disabled).toBe(true);
-    expect(again.textContent).toContain('Not enough materials');
+    // The red cost says why; the reason is the tooltip (ID-056).
+    expect(again.title).toBe('Not enough materials');
+    expect(again.classList.contains('btn-unaffordable')).toBe(true);
+    expect(again.querySelector('.btn-cost-short')).not.toBeNull();
   });
 
   it('Dismiss is disabled at 3 alive; with 4 it asks first and a no changes nothing', () => {

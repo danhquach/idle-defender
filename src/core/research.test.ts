@@ -40,7 +40,7 @@ describe('Research Lab', () => {
   it('refuses when materials are short, naming the first one, and changes nothing', () => {
     const g = { ...newGame(), stock: stockOf({ scrap: 20, wood: 29, metal: 0, concrete: 0 }) };
     const before = structuredClone(g);
-    expect(upgradeLab(g)).toEqual({ ok: false, reason: 'Not enough wood' });
+    expect(upgradeLab(g)).toEqual({ ok: false, reason: 'Not enough wood', short: true });
     expect(g).toEqual(before);
   });
 });
@@ -77,7 +77,11 @@ describe('research', () => {
     expect(research(g, 'metal-walls')).toEqual({ ok: false, reason: 'Already researched' });
     g = ok(upgradeLab(g));
     g = { ...g, stock: stockOf({ scrap: 59, wood: 99, metal: 0, concrete: 0 }) };
-    expect(research(g, 'auto-turret')).toEqual({ ok: false, reason: 'Not enough scrap' });
+    expect(research(g, 'auto-turret')).toEqual({
+      ok: false,
+      reason: 'Not enough scrap',
+      short: true,
+    });
     expect(g.research).toEqual(['metal-walls']);
   });
 

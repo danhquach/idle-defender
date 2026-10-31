@@ -78,6 +78,8 @@ import {
   type Title,
 } from '../core/stats.ts';
 import { horrorAbility, xpToNext } from '../core/waves.ts';
+import type { ButtonVariant } from './kit.ts';
+import { setVariant } from './kit.ts';
 import { ART_URLS, SHOP_ICON, SKILL_ICON, type ArtId } from './sprites.ts';
 
 /** How long a toast stays up. */
@@ -152,18 +154,45 @@ export function statusText(s: HordeState): string {
   ].join(' · ');
 }
 
+/**
+ * A shop or skill button's look (ID-056). Locked is kept for a gate opened outside the
+ * fight (a skill not yet researched), so it holds all fight; want of cash alone (the lock
+ * run again with unlimited cash passes) is unaffordable; a passing refusal (cooling down,
+ * already running, a pick open, nothing to patch or fix) leaves the plain button,
+ * disabled, so no button changes shape mid-fight.
+ */
+const variantOf = (
+  lock: string | null,
+  withCash: () => string | null,
+  gated = false,
+): ButtonVariant =>
+  gated ? 'locked' : lock !== null && withCash() === null ? 'unaffordable' : 'secondary';
+
+/** A locked HUD button's visible note; the full reason stays its tooltip. */
+export const LOCKED_NOTE = 'Needs research';
+
+/** A shop or skill button: its label, its cost ('' while it shows seconds left) and look. */
+export type HudButton = {
+  label: string;
+  cost: string;
+  variant: ButtonVariant;
+  disabled: boolean;
+  reason: string;
+};
+
 /** The shop row: a button per item, each a dry run of `buy` (a running buff shows its seconds left). */
-export function shopButtons(
-  s: HordeState,
-): { item: ShopItem; label: string; disabled: boolean; reason: string }[] {
+export function shopButtons(s: HordeState): (HudButton & { item: ShopItem })[] {
   return SHOP_ITEMS.map((item) => {
     const lock = shopLock(s, item);
     const left = isBuff(item) ? buffLeft(s, item) : 0;
-    const label =
-      left > 0
-        ? `${SHOP[item].name} ${Math.ceil(left)}s`
-        : `${SHOP[item].name} · ${SHOP[item].cost}`;
-    return { item, label, disabled: lock !== null, reason: lock ?? '' };
+    return {
+      item,
+      label: left > 0 ? `${SHOP[item].name} ${Math.ceil(left)}s` : SHOP[item].name,
+      cost: left > 0 ? '' : String(SHOP[item].cost),
+      variant: variantOf(lock, () => shopLock({ ...s, cash: Infinity }, item)),
+      disabled: lock !== null,
+      reason: lock ?? '',
+    };
   });
 }
 
@@ -180,15 +209,20 @@ const AIM_HINT = {
 export function skillButtons(
   s: HordeState,
   armed: SkillId | null,
-): { skill: SkillId; label: string; disabled: boolean; reason: string; armed: boolean }[] {
+): (HudButton & { skill: SkillId; armed: boolean })[] {
   return SKILL_IDS.map((skill) => {
     const lock = skillLock(s, skill);
     const left = skillLeft(s, skill);
     const { name, cost } = SKILLS[skill];
-    const label = left > 0 ? `${name} ${Math.ceil(left)}s` : `${name} · ${cost}`;
     return {
       skill,
-      label,
+      label: left > 0 ? `${name} ${Math.ceil(left)}s` : name,
+      cost: left > 0 ? '' : String(cost),
+      variant: variantOf(
+        lock,
+        () => skillLock({ ...s, cash: Infinity }, skill),
+        !s.skills.includes(skill),
+      ),
       disabled: lock !== null,
       reason: lock ?? AIM_HINT[SKILLS[skill].aim],
       armed: lock === null && skill === armed,
@@ -515,9 +549,25 @@ export function createHud(
     img.src = ART_URLS[icon] ?? '';
     img.alt = '';
     const label = el('span', 'hud-shop-label');
-    button.append(img, label);
+    // Cash is the only cost here, so it is the short one whenever the button is unaffordable;
+    // the class reds it only under `.btn-unaffordable`.
+    const cost = el('span', 'btn-cost btn-cost-short');
+    button.append(img, label, cost);
     shop.append(button);
-    return { button, label };
+    return { button, label, cost };
+  };
+  /** Shows `b` on its button: the label, the cost after a dot, and the kit look (ID-056). */
+  const showButton = (
+    item: { button: HTMLButtonElement; label: HTMLElement; cost: HTMLElement },
+    b: HudButton,
+  ): void => {
+    const label = b.cost ? `${b.label} · ` : b.label;
+    if (item.label.textContent !== label) item.label.textContent = label;
+    if (item.cost.textContent !== b.cost) item.cost.textContent = b.cost;
+    // Want of cash shows as the red cost, a missing research as a short note.
+    setVariant(item.button, b.variant, b.variant === 'locked' ? LOCKED_NOTE : '');
+    item.button.disabled = b.disabled;
+    item.button.title = b.reason;
   };
   const shopItems = SHOP_ITEMS.map((item) =>
     iconButton('hud-button hud-shop-item', SHOP_ICON[item], () => onBuy(item)),
@@ -743,18 +793,10 @@ export function createHud(
       const falling = fallingText(state);
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';
-      shopButtons(state).forEach((b, i) => {
-        const { button, label } = shopItems[i]!;
-        if (label.textContent !== b.label) label.textContent = b.label;
-        button.disabled = b.disabled;
-        button.title = b.reason;
-      });
+      shopButtons(state).forEach((b, i) => showButton(shopItems[i]!, b));
       skillButtons(state, armed).forEach((b, i) => {
-        const { button, label } = skillItems[i]!;
-        if (label.textContent !== b.label) label.textContent = b.label;
-        button.disabled = b.disabled;
-        button.title = b.reason;
-        button.setAttribute('aria-pressed', String(b.armed));
+        showButton(skillItems[i]!, b);
+        skillItems[i]!.button.setAttribute('aria-pressed', String(b.armed));
       });
 
       // Redraw only when the offer, bench or free posts change (the sim clones each tick).

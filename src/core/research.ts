@@ -3,8 +3,9 @@
 // Pure: each action returns a new game, or a refusal the UI shows as-is.
 import { LAB_LEVELS, MATERIALS, RESEARCH, type ResearchId, type Stock } from './data.ts';
 import type { GameState } from './game.ts';
+import type { Refusal } from './base.ts';
 
-export type GameResult = { ok: true; game: GameState } | { ok: false; reason: string };
+export type GameResult = { ok: true; game: GameState } | Refusal;
 
 /** What the next Lab level costs, or null at the top level. */
 export function labCost(game: Pick<GameState, 'lab'>): Partial<Stock> | null {
@@ -61,7 +62,7 @@ export function pay(
   change: (g: GameState) => void,
 ): GameResult {
   const short = MATERIALS.find((m) => game.stock[m] < (cost[m] ?? 0));
-  if (short) return { ok: false, reason: `Not enough ${short}` };
+  if (short) return { ok: false, reason: `Not enough ${short}`, short: true };
   const g = structuredClone(game);
   for (const m of MATERIALS) g.stock[m] -= cost[m] ?? 0;
   change(g);

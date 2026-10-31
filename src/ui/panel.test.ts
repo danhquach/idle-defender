@@ -3,6 +3,7 @@
 // its place; Equip and Unequip hand the new game on; Back returns focus to the opener.
 import { describe, expect, it } from 'vitest';
 import { buildSegment, type Base } from '../core/base.ts';
+import { stockOf } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createBuildPanel } from './build.ts';
 
@@ -105,8 +106,25 @@ describe('gates in the build menu (ID-026)', () => {
     expect(gate.disabled).toBe(false);
     gate.click();
     expect(built[0]!.layers.find((l) => l.column === 1)!.slots[2]!.kind).toBe('gate');
-    // Locked tiers say so, as walls do.
+    // Locked tiers say so, as walls do, with the kit's lock badge (ID-056).
     expect(button('Metal gate')!.disabled).toBe(true);
+    expect(button('Metal gate')!.classList.contains('btn-locked')).toBe(true);
+    expect(button('Metal gate')!.querySelector('.btn-lock')).not.toBeNull();
+  });
+
+  it('shows an option the stock can’t pay for as unaffordable, its cost in red (ID-056)', () => {
+    const { button } = slotPanel({ ...newGame(), stock: stockOf() }, 1, 2);
+    const gate = button('Wood gate')!;
+    expect(gate.disabled).toBe(true);
+    expect(gate.classList.contains('btn-unaffordable')).toBe(true);
+    expect(gate.querySelector('.btn-lock')).toBeNull();
+    // Only what the stock can't pay turns red; the reason moves to the tooltip.
+    const cost = gate.querySelector('.btn-cost')!;
+    expect([...cost.querySelectorAll('.btn-cost-short')].map((n) => n.textContent)).toEqual(
+      [...cost.querySelectorAll('span')].map((n) => n.textContent),
+    );
+    expect(gate.querySelector('.btn-reason')).toBeNull();
+    expect(gate.title).toMatch(/^Not enough /);
   });
 
   it('offers no gate on a layer that has one', () => {

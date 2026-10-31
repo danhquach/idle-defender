@@ -76,19 +76,50 @@ describe('hud', () => {
   it('shows a shop button per item as a dry run of buy, with a running buff counting down', () => {
     const s = horde();
     expect(shopButtons(s)).toEqual([
-      { item: 'adrenaline', label: 'Adrenaline · 30', disabled: true, reason: 'Not enough cash' },
-      { item: 'overdrive', label: 'Overdrive · 30', disabled: true, reason: 'Not enough cash' },
-      { item: 'patch', label: 'Patch wall · 20', disabled: true, reason: 'No wall to patch' },
-      { item: 'fix', label: 'Fix turret · 20', disabled: true, reason: 'No turret to fix' },
+      {
+        item: 'adrenaline',
+        label: 'Adrenaline',
+        cost: '30',
+        variant: 'unaffordable',
+        disabled: true,
+        reason: 'Not enough cash',
+      },
+      {
+        item: 'overdrive',
+        label: 'Overdrive',
+        cost: '30',
+        variant: 'unaffordable',
+        disabled: true,
+        reason: 'Not enough cash',
+      },
+      // Short of cash too, but the passing refusal keeps the plain look, disabled (ID-056).
+      {
+        item: 'patch',
+        label: 'Patch wall',
+        cost: '20',
+        variant: 'secondary',
+        disabled: true,
+        reason: 'No wall to patch',
+      },
+      {
+        item: 'fix',
+        label: 'Fix turret',
+        cost: '20',
+        variant: 'secondary',
+        disabled: true,
+        reason: 'No turret to fix',
+      },
     ]);
     s.cash = 30;
     s.buffs.overdrive = 12.2;
     s.time = 0.5;
     const [adrenaline, overdrive] = shopButtons(s);
-    expect(adrenaline).toMatchObject({ disabled: false, reason: '' });
+    expect(adrenaline).toMatchObject({ variant: 'secondary', disabled: false, reason: '' });
     expect(overdrive).toEqual({
       item: 'overdrive',
       label: 'Overdrive 12s',
+      cost: '',
+      variant: 'secondary',
       disabled: true,
       reason: 'Already active',
     });
@@ -96,10 +127,10 @@ describe('hud', () => {
 
   it('shows a skill button per skill as a dry run, cooling down and armed (ID-019)', () => {
     const s = horde();
-    expect(skillButtons(s, null).map((b) => [b.label, b.reason])).toEqual([
-      ['Flashbang · 20', 'Research Flashbang first'],
-      ['Molotov · 25', 'Research Molotov first'],
-      ['Airstrike · 40', 'Research Airstrike first'],
+    expect(skillButtons(s, null).map((b) => [b.label, b.cost, b.variant, b.reason])).toEqual([
+      ['Flashbang', '20', 'locked', 'Research Flashbang first'],
+      ['Molotov', '25', 'locked', 'Research Molotov first'],
+      ['Airstrike', '40', 'locked', 'Research Airstrike first'],
     ]);
     s.skills = ['flashbang', 'molotov'];
     s.cash = 30;
@@ -108,17 +139,26 @@ describe('hud', () => {
     const [flashbang, molotov, airstrike] = skillButtons(s, 'flashbang');
     expect(flashbang).toEqual({
       skill: 'flashbang',
-      label: 'Flashbang · 20',
+      label: 'Flashbang',
+      cost: '20',
+      variant: 'secondary',
       disabled: false,
       reason: 'Thrown across the field at once',
       armed: true,
     });
     expect(molotov).toMatchObject({
       label: 'Molotov 12s',
+      cost: '',
+      variant: 'secondary',
       disabled: true,
       reason: 'Not ready yet',
     });
-    expect(airstrike).toMatchObject({ disabled: true, armed: false });
+    expect(airstrike).toMatchObject({ variant: 'locked', disabled: true, armed: false });
+    // Researched and ready, short only of cash: unaffordable, not locked (ID-056).
+    expect(skillButtons({ ...s, skills: [...SKILL_IDS] }, null)[2]).toMatchObject({
+      variant: 'unaffordable',
+      reason: 'Not enough cash',
+    });
     const ready = {
       ...s,
       skills: [...SKILL_IDS],

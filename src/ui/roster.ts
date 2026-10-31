@@ -47,8 +47,9 @@ import {
 import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
 import { patrolDue, type Patrol } from '../core/patrol.ts';
 import { badgeOf, levelOf, titleIn, titleName, unspentPoints } from '../core/stats.ts';
-import { campPickText, defenderLabel, el, STAT_HINT, stockText, survivorText } from './hud.ts';
+import { campPickText, defenderLabel, el, STAT_HINT, survivorText } from './hud.ts';
 import { BADGE_COLOUR } from './render.ts';
+import { costLine, setVariant } from './kit.ts';
 
 /** "●●" for an Adept: one pip per rank. */
 export const pipText = (pips: number): string => '●'.repeat(pips);
@@ -141,12 +142,13 @@ export function campSection(
   upgrade.append(
     el('span', 'build-option-label', cost ? 'Expand the camp (+2 people)' : 'Expand the camp'),
   );
-  if (cost) upgrade.append(el('span', 'build-option-cost', `(${stockText(cost)})`));
+  if (cost) upgrade.append(costLine(cost, game.stock, 'build-option-cost btn-cost'));
   const r = upgradeCamp(game);
   if (r.ok) upgrade.addEventListener('click', () => onChange(r.game));
   else {
-    upgrade.disabled = true;
-    upgrade.append(el('span', 'build-option-reason', r.reason));
+    // As in the build panel: the red cost says why, the reason is the tooltip.
+    setVariant(upgrade, r.short ? 'unaffordable' : 'locked', r.short && cost ? '' : r.reason);
+    upgrade.title = r.reason;
   }
   section.append(upgrade);
   const offer = game.camp.offers[0];
@@ -360,8 +362,7 @@ function dismissButton(
   button.append(el('span', 'build-option-label', 'Dismiss'));
   const lock = dismissLock(game, d.id);
   if (lock !== null) {
-    button.disabled = true;
-    button.append(el('span', 'build-option-reason', lock));
+    setVariant(button, 'locked', lock);
     return button;
   }
   button.addEventListener('click', () => {
@@ -392,10 +393,7 @@ function treatButton(
   button.append(el('span', 'build-option-label', treatText(game, item)));
   const r = treat(game, d.id, item, now);
   if (r.ok) button.addEventListener('click', () => onChange(r.game));
-  else {
-    button.disabled = true;
-    button.append(el('span', 'build-option-reason', r.reason));
-  }
+  else setVariant(button, r.short ? 'unaffordable' : 'locked', r.reason);
   return button;
 }
 

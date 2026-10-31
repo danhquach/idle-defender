@@ -29,6 +29,7 @@ import {
   upgradeSegment,
   type Base,
   type BasePost,
+  type Refusal,
   type Result,
   type TurretMount,
 } from '../core/base.ts';
@@ -102,6 +103,7 @@ import {
   tickMap,
 } from './worldmap.ts';
 import { rosterSection } from './roster.ts';
+import { costLine, setVariant } from './kit.ts';
 
 /** Shown when a save from before the taller field (ID-047) is loaded. */
 export const FIELD_GREW =
@@ -486,31 +488,34 @@ export function createBuildPanel(
   // Build mode reads the clock for injuries; the core only ever gets it as `now`.
   const choice = (game: GameState) => pickStart(game, defenderId, startKey, Date.now());
 
-  /** One menu option: its label and cost, and the refusal reason when it isn't allowed. */
+  /** One menu option: its label and cost, and the refusal when it isn't allowed. */
   function choiceButton(
     label: string,
     cost: Partial<Stock> | null,
-    refused: string | null,
+    refused: Refusal | null,
     onClick: () => void,
   ): HTMLElement {
     const button = el('button', 'build-option');
     button.type = 'button';
     button.append(el('span', 'build-option-label', label));
-    if (cost) button.append(el('span', 'build-option-cost', `(${stockText(cost)})`));
+    if (cost)
+      button.append(costLine(cost, shown?.game.stock ?? null, 'build-option-cost btn-cost'));
     if (refused !== null) {
-      button.disabled = true;
-      button.append(el('span', 'build-option-reason', refused));
+      // An unaffordable cost names its shortfall in red, so the reason is only the tooltip.
+      const variant = refused.short ? 'unaffordable' : 'locked';
+      setVariant(button, variant, variant === 'unaffordable' && cost ? '' : refused.reason);
+      button.title = refused.reason;
     } else {
       button.addEventListener('click', onClick);
     }
     return button;
   }
   const option = (label: string, cost: Partial<Stock> | null, result: Result): HTMLElement =>
-    choiceButton(label, cost, result.ok ? null : result.reason, () => {
+    choiceButton(label, cost, result.ok ? null : result, () => {
       if (result.ok) onChange(result.base, result.stock);
     });
   const labOption = (label: string, cost: Partial<Stock> | null, result: GameResult): HTMLElement =>
-    choiceButton(label, cost, result.ok ? null : result.reason, () => {
+    choiceButton(label, cost, result.ok ? null : result, () => {
       if (result.ok) onGame(result.game);
     });
 
@@ -550,7 +555,7 @@ export function createBuildPanel(
         : el('p', 'build-slot-note', line.text);
     }
     const { result } = line;
-    return choiceButton(line.label, line.cost, result.ok ? null : result.reason, () => {
+    return choiceButton(line.label, line.cost, result.ok ? null : result, () => {
       const done = lineResult(line, (q) => window.confirm(q));
       if (done?.ok) onChange(done.base, done.stock);
     });
@@ -730,8 +735,7 @@ export function createBuildPanel(
       button.type = 'button';
       openers[view] = button;
       if (refused !== null) {
-        button.disabled = true;
-        button.append(el('span', 'build-option-reason', refused));
+        setVariant(button, 'locked', refused);
         return button;
       }
       button.addEventListener('click', () => {
@@ -900,7 +904,7 @@ export function createBuildPanel(
         picker,
         orders,
         risk,
-        choiceButton('Send patrol', null, dry.ok ? null : dry.reason, () => {
+        choiceButton('Send patrol', null, dry.ok ? null : dry, () => {
           // The send time is the patrol's seed: the only randomness from outside the core.
           const at = Date.now();
           const sent = sendPatrol(game, location, ids, at, at, options);
@@ -935,7 +939,7 @@ export function createBuildPanel(
         const accepted = acceptSurvivor(game, r.no, s.id);
         item.append(
           el('p', 'build-slot-note', `Survivor wants to join: ${survivorText(s)}`),
-          choiceButton(`Let ${s.name} join`, null, accepted.ok ? null : accepted.reason, () => {
+          choiceButton(`Let ${s.name} join`, null, accepted.ok ? null : accepted, () => {
             if (accepted.ok) onGame(accepted.game);
           }),
           choiceButton(`Turn ${s.name} away`, null, null, () => {
