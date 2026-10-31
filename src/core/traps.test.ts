@@ -81,6 +81,7 @@ describe('trap build actions', () => {
     expect(buildTrap(newBase(), poor, 'spikes', 0)).toEqual({
       ok: false,
       reason: 'Not enough scrap',
+      short: true,
     });
     expect(base.traps).toHaveLength(1);
   });
@@ -111,6 +112,7 @@ describe('trap build actions', () => {
     expect(repairTrap(base, stockOf({ scrap: 9, wood: 99, metal: 0, concrete: 0 }), 0)).toEqual({
       ok: false,
       reason: 'Not enough scrap',
+      short: true,
     });
   });
 

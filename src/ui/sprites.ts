@@ -35,6 +35,15 @@ export const ART_IDS = [
   'icon-flashbang',
   'icon-molotov',
   'icon-airstrike',
+  'icon-scrap',
+  'icon-wood',
+  'icon-metal',
+  'icon-concrete',
+  'icon-food',
+  'icon-gas',
+  'icon-cash',
+  'icon-bank',
+  'icon-genes',
   'gunner',
   'gunner-pistol',
   'gunner-smg',
@@ -173,6 +182,35 @@ export const SKILL_ICON: Readonly<Record<SkillId, ArtId>> = {
   flashbang: 'icon-flashbang',
   molotov: 'icon-molotov',
   airstrike: 'icon-airstrike',
+};
+
+/**
+ * The resources the UI shows by icon (design §15, ID-056): the camp's building materials,
+ * Food, Gas, horde cash, the battery bank and Mutated Genes.
+ */
+export const RESOURCE_IDS = [
+  'scrap',
+  'wood',
+  'metal',
+  'concrete',
+  'food',
+  'gas',
+  'cash',
+  'bank',
+  'genes',
+] as const;
+export type ResourceId = (typeof RESOURCE_IDS)[number];
+/** Each resource's icon (design §15, ID-056). */
+export const RESOURCE_ICON: Readonly<Record<ResourceId, ArtId>> = {
+  scrap: 'icon-scrap',
+  wood: 'icon-wood',
+  metal: 'icon-metal',
+  concrete: 'icon-concrete',
+  food: 'icon-food',
+  gas: 'icon-gas',
+  cash: 'icon-cash',
+  bank: 'icon-bank',
+  genes: 'icon-genes',
 };
 
 /** The weapon in the sprite's hands tells the profession (design §15). */

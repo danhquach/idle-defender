@@ -18,14 +18,17 @@ describe('shop and skill icons (ID-041)', () => {
     hud.update(s);
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
     const icons = [...SHOP_ITEMS.map((i) => SHOP_ICON[i]), ...SKILL_IDS.map((k) => SKILL_ICON[k])];
-    const labels = [...shopButtons(s), ...skillButtons(s, null)].map((b) => b.label);
+    const labels = [...shopButtons(s), ...skillButtons(s, null)].map(
+      (b) => `${b.label} · ${b.cost}`,
+    );
     expect(buttons).toHaveLength(icons.length);
     buttons.forEach((button, i) => {
       const img = button.querySelector('img')!;
       expect(img.getAttribute('src')).toBe(ART_URLS[icons[i]!]);
       expect(img.getAttribute('src')).toBeTruthy();
       expect(img.alt).toBe('');
-      expect(button.textContent).toBe(labels[i]);
+      const shown = button.querySelector('.hud-shop-label')!.textContent;
+      expect(`${shown}${button.querySelector('.btn-cost')!.textContent}`).toBe(labels[i]);
     });
   });
 });

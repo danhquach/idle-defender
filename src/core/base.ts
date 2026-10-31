@@ -73,7 +73,12 @@ export interface Base {
   turrets: BaseTurret[];
   traps: BaseTrap[];
 }
-export type Result = { ok: true; base: Base; stock: Stock } | { ok: false; reason: string };
+/**
+ * A refusal; `short` when only the cost stands in the way (the UI shows it unaffordable,
+ * ID-056). Set it only from the cost check, and keep that check last.
+ */
+export type Refusal = { ok: false; reason: string; short?: true };
+export type Result = { ok: true; base: Base; stock: Stock } | Refusal;
 
 export function segmentMaxHp(kind: SegmentKind, tier: Tier): number {
   checkKind(kind);
@@ -436,7 +441,7 @@ const stockFrom = (f: (m: Material) => number): Stock =>
 /** Charges `cost` and applies `change` to a copy, or refuses naming the first short material. */
 function pay(base: Base, stock: Stock, cost: Partial<Stock>, change: (b: Base) => void): Result {
   const short = MATERIALS.find((m) => stock[m] < (cost[m] ?? 0));
-  if (short) return refuse(`Not enough ${short}`);
+  if (short) return { ok: false, reason: `Not enough ${short}`, short: true };
   const b = structuredClone(base);
   change(b);
   return { ok: true, base: b, stock: stockFrom((m) => stock[m] - (cost[m] ?? 0)) };

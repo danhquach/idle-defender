@@ -96,6 +96,7 @@ describe('turret build actions', () => {
     expect(buildTurret(newBase(), poor, true, 'tower', 0, 5)).toEqual({
       ok: false,
       reason: 'Not enough scrap',
+      short: true,
     });
   });
 
@@ -134,7 +135,7 @@ describe('turret build actions', () => {
     expect(r.ok && r.base.turrets[0]!.condition).toBe(MAX_CONDITION);
     expect(r.ok && r.stock.scrap).toBe(999 - 8);
     const broke = repairTurret(base, { ...RICH, scrap: 7 }, 0);
-    expect(broke).toEqual({ ok: false, reason: 'Not enough scrap' });
+    expect(broke).toEqual({ ok: false, reason: 'Not enough scrap', short: true });
   });
 
   it('Repair all repairs turrets with the walls, all or nothing', () => {
@@ -150,6 +151,7 @@ describe('turret build actions', () => {
     expect(repairAll(base, { ...RICH, scrap: cost.scrap - 1 })).toEqual({
       ok: false,
       reason: 'Not enough scrap',
+      short: true,
     });
     const r = repairAll(base, RICH);
     expect(r.ok && r.base.turrets.map((t) => t.condition)).toEqual([100, 100]);

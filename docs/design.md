@@ -1448,6 +1448,40 @@ original outline.
   ring; the gas station's three seeds set the look, the others were picked
   from two. Each pick passed an art review before it was used. A test fails
   if any location lacks its icon.
+- **As built (ID-056):** a **UI kit** the rest of the redesign builds on.
+  Every colour, size, radius and gap is a custom property on `:root` in
+  `src/page.css`; component rules take colours only from those tokens (a
+  test fails on any colour literal outside `:root`, or on a token used but
+  never defined). The **type scale** has two display sizes (2.25 and
+  1.75 rem, for the top bar and build panel from ID-058 on) over title,
+  heading, body and four small sizes; the font stays
+  the system stack, so nothing is fetched and the CSP is unchanged. **Text
+  contrast** meets WCAG AA (4.5:1): a test checks every text colour on each
+  surface it sits on, a see-through panel taken over white as its worst
+  case. Three greys that failed were lightened (subtle, disabled and faint
+  text), and a disabled HUD button greys by colour, not opacity, so its
+  label keeps its contrast. **Buttons** come in four variants
+  (`src/ui/kit.ts`): primary (filled with the accent), secondary,
+  unaffordable (disabled, the materials it is short of in red, the reason
+  only as the tooltip) and locked (disabled, a padlock badge and the reason
+  as visible text under the label, kept as the tooltip too). The core marks
+  a refusal `short` when only the cost stands in the way (cost is always its
+  last check), and build, Lab and camp options show that as unaffordable and
+  any other refusal as locked. In a fight the horde shop and skills must not
+  change shape under the cursor: only a skill not yet researched is locked
+  (all fight, noted "Needs research"); want of cash alone (the lock run again
+  with unlimited cash passes) is unaffordable, its cost shown apart from the
+  label so it can turn red; a passing refusal (cooling down, already
+  running, a pick open, nothing to patch or fix) leaves the plain button,
+  disabled, its timer saying why. **Resource
+  icons**: one per resource (Scrap, Wood, Metal, Concrete, Food, Gas, Cash,
+  Bank, Mutated Genes) in the ID-041 icon look (FLUX.2 Klein 4B, prompt as
+  sent, picked from two seeds, two rounds): a junk pile with a cog, a tied
+  plank bundle, steel ingots, a cracked block with rebar, a tin can, an olive
+  jerry can, tarnished coins, a car battery with a bolt and a vial of green
+  liquid with a helix (kept saturated as a mutant thing). Each pick passed an
+  art review; a test fails if any resource lacks its icon. The top bar
+  (ID-058) puts them to use.
 
 ## 16. Tech and platform
 
