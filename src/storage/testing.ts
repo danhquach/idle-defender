@@ -32,9 +32,17 @@ export function preCamp(game: GameState): Record<string, unknown> {
   return json;
 }
 
+/** `game` as JSON from before ID-030 (v9 and older): no car in the camp, every patrol on foot. */
+export function preCars(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete (json.camp as Record<string, unknown>).cars;
+  for (const p of json.patrols as Record<string, unknown>[]) delete p.car;
+  return json;
+}
+
 /** `game` as JSON from ID-029 (v8): no survivors in its reports, and camp offers are bare lists of picks. */
 export function preSurvivors(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preCars(game);
   for (const r of json.reports as Record<string, unknown>[]) delete r.survivors;
   const camp = json.camp as { offers: unknown[] };
   camp.offers = (camp.offers as { picks: string[] }[]).map((o) => o.picks);

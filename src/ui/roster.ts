@@ -1,9 +1,10 @@
 // The roster screen between hordes (design §6): the camp (§11: people and slots, the
-// camp upgrade, camp level and picks, the next free recruit), then each defender's
+// camp upgrade, camp level and picks, the next free recruit, the car), then each defender's
 // level, stats, titles and status, Food and Medicine for the resting (ID-031), their
 // stat-point picker, loadout pickers and Dismiss, and the title badge (§15). Text only
 // via textContent; the badge colour is a constant.
 import {
+  buildCar,
   campLevelOf,
   campSlots,
   campUpgradeCost,
@@ -20,6 +21,7 @@ import {
   CAMP_PICK_IDS,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
+  CAR,
   ITEMS,
   placeName,
   PROFESSIONS,
@@ -45,7 +47,7 @@ import {
   type RosterDefender,
 } from '../core/game.ts';
 import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
-import { patrolDue, type Patrol } from '../core/patrol.ts';
+import { freeCar, patrolDue, type Patrol } from '../core/patrol.ts';
 import { badgeOf, levelOf, titleIn, titleName, unspentPoints } from '../core/stats.ts';
 import { campPickText, defenderLabel, el, STAT_HINT, survivorText } from './hud.ts';
 import { BADGE_COLOUR } from './render.ts';
@@ -106,7 +108,7 @@ export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): Ro
 
 /**
  * The camp's lines (design §11): people and slots, the camp level and its XP, the picks
- * taken, and when the roster floor's next free recruit arrives.
+ * taken, when the roster floor's next free recruit arrives, and the car (design §10).
  */
 export function campLines(game: GameState, now: number): string[] {
   const { level, into, next } = campLevelOf(game.camp.xp);
@@ -114,11 +116,20 @@ export function campLines(game: GameState, now: number): string[] {
     (id) => `${CAMP_PICKS[id].name} ${game.camp.picks[id]}/${CAMP_PICK_RANKS}`,
   );
   const at = game.camp.recruitAt;
+  const { cars } = game.camp;
+  const out = game.patrols.filter((p) => p.car !== null).length;
+  const car =
+    cars === 0
+      ? []
+      : cars === 1
+        ? [freeCar(game) === null ? 'Car: out on patrol' : 'Car: ready']
+        : [`Cars: ${cars - out} of ${cars} ready`];
   return [
     `Camp ${game.roster.length}/${campSlots(game)} people`,
     `Camp level ${level} · ${into}/${next} XP`,
     taken.length ? `Camp picks: ${taken.join(', ')}` : 'No camp picks yet',
     ...(at === null ? [] : [`A free recruit arrives in ${restLeft(at, now)}`]),
+    ...car,
   ];
 }
 
@@ -151,6 +162,22 @@ export function campSection(
     upgrade.title = r.reason;
   }
   section.append(upgrade);
+  // The car (design §10 Vehicle): built once; more come from research (ID-035).
+  if (game.camp.cars < CAR.limit) {
+    const build = el('button', 'build-option');
+    build.type = 'button';
+    build.append(
+      el('span', 'build-option-label', 'Build a car (faster patrols that burn Gas)'),
+      costLine(CAR.cost, game.stock, 'build-option-cost btn-cost'),
+    );
+    const built = buildCar(game);
+    if (built.ok) build.addEventListener('click', () => onChange(built.game));
+    else {
+      setVariant(build, built.short ? 'unaffordable' : 'locked', built.short ? '' : built.reason);
+      build.title = built.reason;
+    }
+    section.append(build);
+  }
   const offer = game.camp.offers[0];
   if (offer) {
     const row = el('div', 'hud-pick-row');

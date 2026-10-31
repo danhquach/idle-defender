@@ -89,6 +89,7 @@ const patrolAt = (location: PlaceId, patch: Partial<Patrol> = {}): Patrol => ({
   sentHorde: PATROL.unlock,
   strength: 1.8,
   seed: 1,
+  car: null,
   ...patch,
 });
 
@@ -165,6 +166,7 @@ describe('sending a patrol', () => {
         sentHorde: PATROL.unlock,
         strength: partyStrength(g.roster.slice(0, 2)),
         seed: 42,
+        car: null,
       },
     ]);
     expect(g.patrolsSent).toBe(1);

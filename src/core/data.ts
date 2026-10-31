@@ -1264,5 +1264,16 @@ export const PATROL = {
     odds: readonly { from: number; defeat: number; fence: number; overrun: number }[];
   };
 };
+/**
+ * The camp's car (design §10 Vehicle, ID-030, starting points): built for `cost`, at most
+ * `limit` until research adds more (ID-035). A patrol that takes it travels each way in
+ * half the time, rounded up; it burns 1 Gas per `gasPer` minutes of the round trip,
+ * rounded up, and never less than the most Gas the trip could bring home.
+ */
+export const CAR = {
+  cost: { metal: 40, parts: 20, scrap: 30 },
+  limit: 1,
+  gasPer: 10,
+} as const satisfies { cost: Partial<Stock>; limit: number; gasPer: number };
 /** How a patrol's odds read before it leaves (design §10 Risk and reward). */
 export type RiskRating = (typeof PATROL.risk)[number]['rating'];
