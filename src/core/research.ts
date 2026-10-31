@@ -93,6 +93,9 @@ export function entryOf(
 const willOwn = (game: Pick<GameState, 'perkLevels' | 'queue'>, perk: PerkId): boolean =>
   game.perkLevels[perk] >= 1 || (game.queue.ids as readonly string[]).includes(perk);
 
+/** The refusal while the queue has no room: it passes once an entry is done. */
+export const QUEUE_FULL = 'The research queue is full';
+
 /** Why `id` can't be queued now (cost aside), or null when it can. Unknown ids throw. */
 export function queueLock(
   game: Pick<GameState, 'lab' | 'research' | 'perkLevels' | 'queue'>,
@@ -115,7 +118,7 @@ export function queueLock(
     if (!willOwn(game, perk)) return `Needs ${PERKS[perk].name}`;
     if (game.perkLevels[perk] >= PERK_LEVEL.top) return `${PERKS[perk].name} is at the top level`;
   }
-  if (game.queue.ids.length >= RESEARCH_QUEUE.size) return 'The research queue is full';
+  if (game.queue.ids.length >= RESEARCH_QUEUE.size) return QUEUE_FULL;
   return null;
 }
 

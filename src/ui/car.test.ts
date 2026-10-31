@@ -27,6 +27,7 @@ function panelFor(game: GameState) {
     },
   );
   panel.show(game, null);
+  root.querySelector<HTMLButtonElement>('#build-tab-camp')!.click(); // the views open from the Camp tab (ID-059)
   const button = (label: string): HTMLButtonElement | undefined =>
     [...root.querySelectorAll('button')].find((b) => b.textContent?.startsWith(label));
   const box = (name: string): HTMLInputElement =>

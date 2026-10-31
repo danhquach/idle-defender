@@ -273,6 +273,7 @@ describe('world map in the build panel (ID-028)', () => {
       },
     );
     panel.show(game, null);
+    root.querySelector<HTMLButtonElement>('#build-tab-camp')!.click(); // the views open from the Camp tab (ID-059)
     const button = (label: string): HTMLButtonElement => {
       const found = [...root.querySelectorAll('button')].find((b) =>
         b.textContent?.startsWith(label),
@@ -426,6 +427,7 @@ describe('world map timers and picks (ID-028)', () => {
       () => {},
     );
     panel.show(game, null);
+    root.querySelector<HTMLButtonElement>('#build-tab-camp')!.click(); // the views open from the Camp tab (ID-059)
     const button = (label: string): HTMLButtonElement =>
       [...root.querySelectorAll('button')].find((b) => b.textContent?.startsWith(label))!;
     return { panel, root, button };
@@ -708,6 +710,7 @@ describe('plazas in the build panel (ID-029)', () => {
       },
     );
     panel.show(game, null);
+    root.querySelector<HTMLButtonElement>('#build-tab-camp')!.click(); // the views open from the Camp tab (ID-059)
     const button = (label: string): HTMLButtonElement =>
       [...root.querySelectorAll('button')].find((b) => b.textContent?.startsWith(label))!;
     const person = (name: string): HTMLInputElement =>
@@ -863,6 +866,7 @@ describe('loot focus survives unticking every building (ID-029)', () => {
       },
     );
     panel.show({ ...newGame(), hordeNumber: 6 }, null);
+    root.querySelector<HTMLButtonElement>('#build-tab-camp')!.click(); // the views open from the Camp tab (ID-059)
     const button = (label: string) =>
       [...root.querySelectorAll('button')].find((b) => b.textContent?.startsWith(label))!;
     const building = (id: string) =>

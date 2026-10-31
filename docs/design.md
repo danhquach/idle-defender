@@ -1593,6 +1593,37 @@ original outline.
   160-unit grid and with their shared seam border, so no bare background
   shows. Effects keep the ID-045 minimum of 1 px at the frame's zoom. Until
   ID-065 gives build mode its own scene, build mode shows the same frame.
+- **As built (ID-059):** the build panel has two tabs and a fixed footer.
+  **Build** holds the picked slot's menu, Repair all, the generator and
+  bank (decided each horde, so above research), then the Research Lab and
+  its research. **Camp** opens the Roster, Perks and the World map in the
+  panel's place (their Back returns to Camp), then lists who is injured or
+  out on patrol; while anyone is, the tab says so ("Camp · 2 away"). A
+  Workbench entry joins Camp once ID-034 adds the Workbench. Clicking a slot
+  on the field switches to Build. Arrow keys, Home and End move between the
+  tabs (modified keys, such as Alt+Left for Back, are left to the browser).
+  The **footer** holds the start defender, start post and **Start Horde**
+  (the kit's primary button) under every tab and view, so a horde can start
+  from the Roster or the map too. Its notes sit above the pickers: the
+  notice line (a recruit back, a lost save) and, when nobody is fit,
+  "Nobody can defend until someone is back." Start Horde stays the last
+  thing in the footer. The panel has one height for every tab and view, so
+  Start Horde never moves and shows without scrolling at 1280×720. The
+  trade-off is a mostly empty Camp tab that still covers the field's right
+  edge. Only the body between the tabs and the footer scrolls. A redraw (a
+  build, a research, a patrol back) keeps its scroll and the focused
+  control. A new tab or view, or a newly clicked slot (its menu is at the
+  top), starts at the top. **Research** has a
+  heading that counts the nodes that can be queued now ("Research · 3
+  available"; no count before the Lab is built). The queue follows, then
+  those nodes, the ones short of Genes and the ones already researched. A
+  full queue frees up as entries finish, so its nodes stay in view. Nodes
+  locked for any other reason (a Lab level, another node first) collapse
+  into one dashed row with an arrow: "26 more after the Research Lab" before
+  the Lab is built, "N more locked" after, and "Hide N locked" once expanded. They
+  stay expanded across redraws and start collapsed on each visit. The list
+  itself moves to the research screen in ID-036, which leaves this heading
+  as its entry point. The backup section is left to ID-039.
 
 ## 16. Tech and platform
 

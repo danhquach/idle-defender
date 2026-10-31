@@ -26,6 +26,7 @@ function rosterFor(game: GameState) {
     },
   );
   panel.show(game, null);
+  root.querySelector<HTMLButtonElement>('#build-tab-camp')!.click(); // the views open from the Camp tab (ID-059)
   const buttons = (label: string): HTMLButtonElement[] =>
     [...root.querySelectorAll('button')].filter((b) => b.textContent?.startsWith(label));
   buttons('Roster')[0]!.click();

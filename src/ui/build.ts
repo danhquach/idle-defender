@@ -1,6 +1,7 @@
-// Build mode panel between hordes: stock bar, the selected slot's menu (a turret's
-// included), Repair all, the Lab, power and the bank meter, and the start defender and
-// post; or, in its place, the roster, the perk loadout or the world map's panel. Every
+// Build mode panel between hordes: stock bar, then two tabs (ID-059). Build holds the
+// selected slot's menu (a turret's included), Repair all, power and the bank meter, then
+// the Lab and its research; Camp opens the roster, the perk loadout or the world map's panel in
+// its place. A fixed footer keeps the start defender, post and Start Horde in view. Every
 // option is a dry run of the core action, so a refused one shows disabled with the core's
 // own reason.
 // Text only via textContent.
@@ -74,6 +75,7 @@ import { freeCar, idle, patrolDue, revealedPlaces, sendPatrol } from '../core/pa
 import {
   entryOf,
   labCost,
+  QUEUE_FULL,
   queueResearch,
   researched,
   unqueue,
@@ -180,12 +182,8 @@ export type LabLine =
       act?: (now: number) => GameResult;
     };
 
-/**
- * The Research Lab section (design §11): its level and the next level, the research
- * queue (the running entry with its end, then the waiting ones, each with Cancel or
- * Remove), then each node not queued: researched, or Queue with its Genes and time.
- */
-export function labLines(game: GameState, now: number): LabLine[] {
+/** The Research Lab section (design §11): its level, then the next level. */
+export function labLines(game: GameState): LabLine[] {
   const cost = labCost(game);
   const lines: LabLine[] = [
     {
@@ -197,7 +195,16 @@ export function labLines(game: GameState, now: number): LabLine[] {
     const label = game.lab === 0 ? 'Build Research Lab' : `Upgrade Lab to level ${game.lab + 1}`;
     lines.push({ kind: 'action', label, cost, result: upgradeLab(game) });
   }
+  return lines;
+}
+
+/**
+ * The research queue (design §11): the running entry with its end, then the waiting ones,
+ * each with Cancel or Remove.
+ */
+export function queueLines(game: GameState, now: number): LabLine[] {
   const { ids, endsAt } = game.queue;
+  const lines: LabLine[] = [];
   if (ids.length > 0) lines.push({ kind: 'heading', text: 'Research queue' });
   ids.forEach((id, i) => {
     const { name, genes } = entryOf(game, id);
@@ -213,24 +220,68 @@ export function labLines(game: GameState, now: number): LabLine[] {
       },
     );
   });
-  for (const id of RESEARCH_IDS) {
-    if (game.queue.ids.includes(id)) continue;
+  return lines;
+}
+
+/** Each node not queued: researched (or a perk owned), or Queue with its Genes and time. */
+export function researchLines(game: GameState, now: number): LabLine[] {
+  return RESEARCH_IDS.filter((id) => !game.queue.ids.includes(id)).map((id): LabLine => {
     const node = RESEARCH[id];
     const owned =
       !game.research.includes(id) && Object.hasOwn(PERKS, id) && game.perkLevels[id as PerkId] > 0;
-    lines.push(
-      game.research.includes(id) || owned
-        ? { kind: 'note', text: `${node.name} · ${owned ? 'owned' : 'researched'}` }
-        : {
-            kind: 'action',
-            label: `Queue ${node.name} (${durationText(node.minutes)})`,
-            cost: { genes: node.genes },
-            result: queueResearch(game, id, now),
-            act: (at) => queueResearch(game, id, at),
-          },
-    );
-  }
-  return lines;
+    return game.research.includes(id) || owned
+      ? { kind: 'note', text: `${node.name} · ${owned ? 'owned' : 'researched'}` }
+      : {
+          kind: 'action',
+          label: `Queue ${node.name} (${durationText(node.minutes)})`,
+          cost: { genes: node.genes },
+          result: queueResearch(game, id, now),
+          act: (at) => queueResearch(game, id, at),
+        };
+  });
+}
+
+/**
+ * A node refused for more than its cost (a Lab level, another node first). A full queue
+ * doesn't count: it passes once an entry is done.
+ */
+const lockedLine = (line: LabLine): boolean =>
+  line.kind === 'action' &&
+  !line.result.ok &&
+  line.result.short !== true &&
+  line.result.reason !== QUEUE_FULL;
+
+/**
+ * The research list as the panel shows it (ID-059): a heading counting the nodes that can
+ * be queued now (no count before the Lab), the queue, those nodes, the ones short of Genes
+ * and the researched ones, then the locked ones behind one row that expands ("26 more
+ * after the Research Lab") and collapses again ("Hide 26 locked").
+ */
+export function researchList(
+  game: GameState,
+  now: number,
+): {
+  heading: string;
+  shown: LabLine[];
+  locked: LabLine[];
+  more: string;
+  less: string;
+} {
+  const lines = researchLines(game, now);
+  const open = lines.filter((l) => !lockedLine(l));
+  const locked = lines.filter(lockedLine);
+  const available = open.filter((l) => l.kind === 'action' && l.result.ok).length;
+  const shown = [...queueLines(game, now), ...open];
+  return {
+    heading: game.lab === 0 ? 'Research' : `Research · ${available} available`,
+    shown,
+    locked,
+    more:
+      game.lab === 0
+        ? `${locked.length} more after the Research Lab`
+        : `${locked.length} more locked`,
+    less: `Hide ${locked.length} locked`,
+  };
 }
 
 /**
@@ -469,6 +520,12 @@ export function relocateTargets(
 
 /** What may show in place of the build panel. */
 type View = 'roster' | 'perks' | 'map';
+/** The build panel's tabs (ID-059). */
+type Tab = 'build' | 'camp';
+const TABS: readonly (readonly [Tab, string])[] = [
+  ['build', 'Build'],
+  ['camp', 'Camp'],
+];
 
 export interface BuildPanel {
   /** Redraws the panel for `game` with `selected` open; call when either changes. */
@@ -520,6 +577,11 @@ export function createBuildPanel(
   let relocateKey: string | null = null;
   // The roster, the perk loadout or the world map shows in place of the build panel until "Back".
   let open: 'build' | View = 'build';
+  let tab: Tab = 'build';
+  // Whether the locked research rows are expanded; a new visit starts collapsed.
+  let lockedOpen = false;
+  // The tab or view drawn last: a redraw of the same one keeps the body's scroll.
+  let drawn: Tab | View | null = null;
   let shown: { game: GameState; selected: SlotHit | null } | null = null;
   // The buttons that open each view, from the last redraw, for "Back" to focus.
   const openers: Partial<Record<View, HTMLButtonElement>> = {};
@@ -595,20 +657,39 @@ export function createBuildPanel(
     return label;
   }
 
-  /** A section of headings, notes, the meter and dry-run actions (the Lab, power). */
+  /** A heading, note, the meter or a dry-run action (the Lab, research, power). */
+  const labLine = (line: LabLine): HTMLElement =>
+    line.kind === 'action'
+      ? labOption(line.label, line.cost, line.result, line.act)
+      : line.kind === 'meter'
+        ? meter(line.text, line.value, line.max)
+        : line.kind === 'heading'
+          ? el('h3', 'build-slot-title', line.text)
+          : el('p', 'build-slot-note', line.text);
+
+  /** A section of Lab or power lines. */
   function linesSection(className: string, lines: LabLine[]): HTMLElement {
     const section = el('section', className);
-    section.append(
-      ...lines.map((line) =>
-        line.kind === 'action'
-          ? labOption(line.label, line.cost, line.result, line.act)
-          : line.kind === 'meter'
-            ? meter(line.text, line.value, line.max)
-            : line.kind === 'heading'
-              ? el('h3', 'build-slot-title', line.text)
-              : el('p', 'build-slot-note', line.text),
-      ),
-    );
+    section.append(...lines.map(labLine));
+    return section;
+  }
+
+  /** The Lab, then its research: the open nodes, and the locked ones behind one row. */
+  function labSection(game: GameState): HTMLElement {
+    const section = linesSection('build-lab', labLines(game));
+    const list = researchList(game, Date.now());
+    section.append(el('h3', 'build-slot-title', list.heading), ...list.shown.map(labLine));
+    if (list.locked.length > 0) {
+      // A disclosure, not a purchase: the arrow (CSS) and the label say which way it goes.
+      const more = el('button', 'build-option build-more', lockedOpen ? list.less : list.more);
+      more.type = 'button';
+      more.setAttribute('aria-expanded', String(lockedOpen));
+      more.addEventListener('click', () => {
+        lockedOpen = !lockedOpen;
+        if (shown) api.show(shown.game, shown.selected);
+      });
+      section.append(more, ...(lockedOpen ? list.locked.map(labLine) : []));
+    }
     return section;
   }
 
@@ -767,22 +848,65 @@ export function createBuildPanel(
       l.append(control);
       return l;
     };
-    const go = el('button', 'hud-button build-start', startLabel(game.hordeNumber));
+    const go = el('button', 'btn build-start', startLabel(game.hordeNumber));
     go.type = 'button';
+    setVariant(go, 'primary');
     go.disabled = picked === null;
     go.addEventListener('click', () => {
       const c = choice(game);
       if (c) onStart(c.defenderId, c.postId);
     });
-    const injured = injuredLines(game, Date.now()).map((line) => el('p', 'build-slot-note', line));
-    if (!game.roster.some((d) => idle(game, d, Date.now()))) {
-      injured.unshift(el('p', 'build-slot-note', 'Nobody can defend until someone is back.'));
-    }
-    return [label('Start defender', defenders), label('Start post', posts), ...injured, go];
+    // Who is injured or out is listed on the Camp tab; the footer only says when nobody can go.
+    // Notes go above the pickers, so Start Horde keeps its place at the bottom.
+    const nobody = game.roster.some((d) => idle(game, d, Date.now()))
+      ? []
+      : [el('p', 'build-slot-note', 'Nobody can defend until someone is back.')];
+    return [...nobody, label('Start defender', defenders), label('Start post', posts), go];
   }
 
-  /** The build panel: the slot menu, Repair all, the start pick, Roster and Perks, the notice line. */
-  function buildView(game: GameState, selected: SlotHit | null): HTMLElement[] {
+  /** The Build and Camp tabs, Camp counting who is away; arrow keys, Home and End move between them. */
+  function tabList(game: GameState, selected: SlotHit | null): HTMLElement {
+    const list = el('div', 'menu-tabs build-tabs');
+    list.setAttribute('role', 'tablist');
+    const pick = (next: Tab): void => {
+      tab = next;
+      api.show(game, selected);
+      panel.querySelector<HTMLButtonElement>(`#build-tab-${next}`)?.focus();
+    };
+    const away = injuredLines(game, Date.now()).length;
+    for (const [id, label] of TABS) {
+      const t = el(
+        'button',
+        'menu-tab',
+        id === 'camp' && away > 0 ? `${label} · ${away} away` : label,
+      );
+      t.type = 'button';
+      t.id = `build-tab-${id}`;
+      t.setAttribute('role', 'tab');
+      t.setAttribute('aria-controls', 'build-tab-body');
+      t.setAttribute('aria-selected', String(id === tab));
+      t.tabIndex = id === tab ? 0 : -1;
+      t.addEventListener('click', () => pick(id));
+      list.append(t);
+    }
+    list.addEventListener('keydown', (e) => {
+      const index = TABS.findIndex(([id]) => id === tab);
+      const moves: Record<string, number> = {
+        ArrowLeft: index - 1,
+        ArrowRight: index + 1,
+        Home: 0,
+        End: TABS.length - 1,
+      };
+      // Alt+Arrow is the browser's Back: leave modified keys alone.
+      if (e.altKey || e.ctrlKey || e.metaKey || !Object.hasOwn(moves, e.key)) return;
+      e.preventDefault();
+      pick(TABS[(moves[e.key]! + TABS.length) % TABS.length]![0]);
+    });
+    return list;
+  }
+
+  /** The Build tab: the slot menu, Repair all, power (decided each horde), then the Lab and its research. */
+  function buildTab(game: GameState, selected: SlotHit | null): HTMLElement[] {
     const slot = el('section', 'build-slot');
     slot.append(
       ...(selected
@@ -794,7 +918,12 @@ export function createBuildPanel(
     all.append(
       option(`Repair all`, repairAllCost(game.base, off), repairAll(game.base, game.stock, off)),
     );
-    const start = el('section', 'build-start-section');
+    return [slot, all, linesSection('build-power', powerLines(game)), labSection(game)];
+  }
+
+  /** The Camp tab: Roster, Perks and the World map, then who is injured or out on patrol. */
+  function campTab(game: GameState, selected: SlotHit | null): HTMLElement[] {
+    const views = el('section', 'build-slot');
     const viewButton = (label: string, view: View, refused: string | null = null): HTMLElement => {
       const button = el('button', 'build-option', label);
       button.type = 'button';
@@ -810,29 +939,30 @@ export function createBuildPanel(
       });
       return button;
     };
-    start.append(
-      ...startSection(game),
+    // A Workbench entry joins these once the camp has one (ID-034).
+    views.append(
       viewButton('Roster', 'roster'),
       viewButton('Perks', 'perks'),
       viewButton('World map', 'map', mapRefusal(game)),
     );
-    return [
-      el('h2', 'build-title', 'Build'),
-      slot,
-      all,
-      linesSection('build-lab', labLines(game, Date.now())),
-      linesSection('build-power', powerLines(game)),
-      start,
-      notice,
-    ];
+    const away = el('section', 'build-slot');
+    const lines = injuredLines(game, Date.now());
+    away.append(
+      el('h3', 'build-slot-title', 'Away'),
+      ...(lines.length > 0 ? lines : ['Everyone is in camp.']).map((line) =>
+        el('p', 'build-slot-note', line),
+      ),
+    );
+    return [views, away];
   }
 
-  /** "Back" from the roster, the perk loadout or the world map to the build panel. */
+  /** "Back" from the roster, the perk loadout or the world map to the Camp tab. */
   function backButton(view: View): HTMLElement {
     const back = el('button', 'build-option', 'Back');
     back.type = 'button';
     back.addEventListener('click', () => {
       open = 'build';
+      tab = 'camp';
       if (shown) api.show(shown.game, shown.selected);
       openers[view]?.focus(); // back where the player came from
     });
@@ -1059,6 +1189,10 @@ export function createBuildPanel(
   const api: BuildPanel = {
     choice,
     show(game, selected) {
+      // A slot just clicked on the field opens its menu on the Build tab, scrolled to the top
+      // where the menu is.
+      const newSlot = selected !== null && selected !== shown?.selected;
+      if (newSlot) tab = 'build';
       shown = { game, selected };
       // Pin the pick (or its fallback) by slot, so building a post never moves it.
       const picked = choice(game);
@@ -1068,21 +1202,42 @@ export function createBuildPanel(
       }
       bar.textContent = stockBarText(game);
       // The redraw replaces every control: keep keyboard focus on the same place, or
-      // the next control that can take it (the one used may now be disabled).
+      // the next control that can take it (the one used may now be disabled). A footer
+      // control is found within the footer, so a body that grew or shrank can't move it.
       type Control = HTMLButtonElement | HTMLSelectElement | HTMLInputElement;
+      const inFoot = panel.querySelector('.build-foot')?.contains(document.activeElement) ?? false;
       const controls = (): Control[] => [
-        ...panel.querySelectorAll<Control>('button, select, input[type="checkbox"]'),
+        ...(inFoot ? panel.querySelector('.build-foot')! : panel).querySelectorAll<Control>(
+          'button, select, input[type="checkbox"]',
+        ),
       ];
       const focused = controls().indexOf(document.activeElement as Control);
-      panel.replaceChildren(
+      const place = open === 'build' ? tab : open;
+      const scroll =
+        place === drawn && !newSlot ? (panel.querySelector('.build-body')?.scrollTop ?? 0) : 0;
+      drawn = place;
+      // The tabs (or a view in their place) scroll; the footer stays put under them.
+      const body = el('div', 'build-body');
+      if (open === 'build') {
+        body.id = 'build-tab-body';
+        body.setAttribute('role', 'tabpanel');
+        body.setAttribute('aria-labelledby', `build-tab-${tab}`);
+      }
+      body.append(
         ...(open === 'roster'
           ? rosterView(game)
           : open === 'perks'
             ? perksView(game)
             : open === 'map'
               ? mapView(game)
-              : buildView(game, selected)),
+              : tab === 'build'
+                ? buildTab(game, selected)
+                : campTab(game, selected)),
       );
+      const foot = el('div', 'build-foot');
+      foot.append(notice, ...startSection(game));
+      panel.replaceChildren(...(open === 'build' ? [tabList(game, selected)] : []), body, foot);
+      body.scrollTop = scroll;
       backdrop.hidden = open !== 'map';
       if (open !== 'map') stopTicker();
       else
@@ -1098,8 +1253,11 @@ export function createBuildPanel(
       panel.hidden = false;
     },
     hide() {
-      // A horde starts from the build panel; the next visit opens on it again.
+      // A horde starts from the build panel; the next visit opens on its Build tab again.
       open = 'build';
+      tab = 'build';
+      lockedOpen = false;
+      drawn = null;
       bar.hidden = true;
       panel.hidden = true;
       backdrop.hidden = true;
