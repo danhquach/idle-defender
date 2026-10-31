@@ -322,12 +322,6 @@ body {
   font: inherit;
 }
 
-.build-backup {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .build-code {
   resize: vertical;
   font-family: ui-monospace, monospace;
