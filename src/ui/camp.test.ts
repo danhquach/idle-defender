@@ -214,8 +214,18 @@ describe('the camp-level pick on the result screen', () => {
     const picked: CampChoice[] = [];
     const done = vi.fn();
     const noop = () => {};
-    const hud = createHud(root, noop, done, noop, noop, noop, noop, noop, noop, (id) =>
-      picked.push(id),
+    const hud = createHud(
+      root,
+      noop,
+      done,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      (id) => picked.push(id),
+      noop,
     );
     const { game, s } = won();
     const screen = resultScreen(game, s, NOW);

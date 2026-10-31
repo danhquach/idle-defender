@@ -6,7 +6,7 @@ import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { FIELD_GREW } from './build.ts';
-import { el } from './hud.ts';
+import { el, SPEED_KEYS } from './hud.ts';
 
 /** What the Save tab says about a refused code. */
 export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
@@ -53,6 +53,8 @@ export const CONTROLS: readonly { group: string; rows: readonly (readonly [strin
         ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
         ['Click a skill', 'Use it; one that aims goes where you click next'],
         ['1 2 3', 'Pick a card when three are offered'],
+        ['Space', 'Pause or resume the fight'],
+        [Object.values(SPEED_KEYS).join(' '), 'Fight at 1×, 2× or 3× speed'],
         ['Esc', 'Cancel a skill or deselect a defender'],
       ],
     },
@@ -96,8 +98,8 @@ const TABS: readonly [Tab, string][] = [
 ];
 
 export interface MenuOptions {
-  /** The camp now, and whether a fight is on. */
-  state: () => { game: GameState; fighting: boolean };
+  /** The camp now, whether a fight is on, and whether Space holds it (ID-062). */
+  state: () => { game: GameState; fighting: boolean; held: boolean };
   /** A loaded code's camp, to take as the game. */
   onLoad: (game: GameState) => void;
   /** A new camp, to take as the game. */
@@ -453,13 +455,15 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     },
     refresh() {
       if (!opened) return;
-      const { game, fighting } = opts.state();
+      const { game, fighting, held } = opts.state();
       if (game !== coded) code.value = exportCode(encodeSave(game, Date.now()));
       coded = game;
       chip.hidden = !fighting;
       fightNote.hidden = !fighting;
-      hintText.textContent = fighting ? ' closes and resumes' : ' closes';
-      done.textContent = fighting ? 'Resume' : 'Close';
+      // Closing over a Space pause leaves the fight held.
+      const resumes = fighting && !held;
+      hintText.textContent = resumes ? ' closes and resumes' : ' closes';
+      done.textContent = resumes ? 'Resume' : 'Close';
       for (const c of confirms) {
         c.trigger.disabled = fighting;
         c.reason.hidden = !fighting;
@@ -476,12 +480,12 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   return api;
 }
 
-/** A control's keys as key caps (single letters, digits, Esc), the rest as text. */
+/** A control's keys as key caps (single letters, digits, Esc, Space), the rest as text. */
 function keyLabel(text: string): HTMLElement {
   const dt = el('dt', '');
   text.split(' ').forEach((word, i) => {
     if (i > 0) dt.append(' ');
-    dt.append(/^([A-Z0-9]|Esc)$/.test(word) ? el('kbd', '', word) : word);
+    dt.append(/^([A-Z0-9]|Esc|Space)$/.test(word) ? el('kbd', '', word) : word);
   });
   return dt;
 }

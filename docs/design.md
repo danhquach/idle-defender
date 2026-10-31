@@ -235,6 +235,29 @@ Defenders stand on **posts** the player builds and chooses between.
   empty ground clears the focus. While an active skill is armed, the click
   aims the skill instead.
 - **Length** *(designer's call)*: a horde takes about 3–5 minutes.
+- **Game speed:** 1×, 2×, 3×; Space pauses.
+  - **As built (ID-062):** three speed buttons sit in the fight's top bar,
+    left of the Menu button, keys A, S and D (clear of the card keys 1 2 3
+    and the action bar's). The choice is kept between hordes in this browser
+    under its own key, outside the save and the backup code, and read back
+    through an allow-list (anything but 1, 2 or 3 is 1×). A, S and D are
+    taken, so any keyboard camera control that ever comes uses the arrows,
+    not WASD.
+  - Space holds the fight, with the menu's "Paused" chip in the top bar,
+    tagged with the Space key.
+    Opening and closing the menu leaves a Space pause on. Each fight starts
+    unpaused. A typing field or a list keeps Space, and so does the result
+    screen.
+  - Speed runs more of the core's fixed 1/30 s steps per frame, never
+    longer ones, so a seed plays out the same at every speed (a test plays
+    Horde 1 at all three). A frame still covers at most 0.1 s, so 3× runs at
+    most 9 steps in a stalled frame: the fight slows, nothing is skipped.
+    About 1 ms of sim a frame at 3× with 300 enemies, so no lower cap was
+    needed.
+  - Picks and replacements stop the frame's remaining steps whatever the
+    speed, and stack with a Space pause: resuming never skips an offer.
+    Animations and effects run on fight time, so they speed up and freeze
+    with it.
 - **Start:** the commander's equipped perks are on (§5) and **1 defender**
   takes a post; the player picks which available defender and which post.
   Turrets and traps are whatever was built before the horde (§7); nothing

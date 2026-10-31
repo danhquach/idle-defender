@@ -137,6 +137,72 @@ body {
   pointer-events: none;
 }
 
+/* A fight's status line keeps clear of the speed buttons and Paused chip too. The top
+   bar's redesign (ID-058) should give the speed group its own slot instead. */
+.hud-fight-bar {
+  padding-right: 400px;
+}
+
+/* Fight speed and the Space pause (ID-062), beside the Menu button. */
+.hud-speed {
+  position: absolute;
+  top: 5px;
+  right: 124px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.hud-speed .menu-chip {
+  margin-right: var(--space-4);
+  background: var(--color-bar-bg);
+}
+
+.hud-speed .menu-chip .menu-key {
+  margin-left: var(--space-6);
+  border-color: currentcolor;
+  color: inherit;
+  text-transform: none;
+}
+
+.hud-speed-button {
+  height: 26px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hud-speed-button .menu-key {
+  margin-left: var(--space-6);
+}
+
+.hud-speed-button:hover {
+  background: var(--color-surface-hover);
+}
+
+.hud-speed-button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.hud-speed-button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+.hud-speed-button[aria-pressed='true'] .menu-key {
+  border-color: currentcolor;
+  color: inherit;
+}
+
 .hud-toast {
   position: absolute;
   top: 48px;

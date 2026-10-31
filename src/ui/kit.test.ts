@@ -76,7 +76,7 @@ describe('button variants (ID-056)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
-    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop);
+    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
     const s = newHorde(1, setup());
     s.skills = ['flashbang'];
     hud.update(s);

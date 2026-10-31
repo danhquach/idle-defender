@@ -80,9 +80,13 @@ import {
   type Title,
 } from '../core/stats.ts';
 import { horrorAbility, xpToNext } from '../core/waves.ts';
+import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
 import { ART_URLS, SHOP_ICON, SKILL_ICON, type ArtId } from './sprites.ts';
+
+/** The key for each fight speed (ID-062): clear of the card keys 1 2 3 and the action bar's. */
+export const SPEED_KEYS: Readonly<Record<Speed, string>> = { 1: 'A', 2: 'S', 3: 'D' };
 
 /** How long a toast stays up. */
 const TOAST_MS = 2000;
@@ -514,15 +518,17 @@ export function createHud(
   onArm: (skill: SkillId) => void,
   onReroll: () => void,
   onCampPick: (choice: CampChoice) => void,
+  onSpeed: (speed: Speed) => void,
 ): {
   update(state: HordeState, armed?: SkillId | null): void;
+  speed(speed: Speed, paused: boolean): void;
   showResult(screen: ResultScreen): void;
   show(visible: boolean): void;
   toast(text: string): void;
   bottomSpace(): number;
 } {
   const hud = el('div', 'hud');
-  const bar = el('div', 'hud-bar');
+  const bar = el('div', 'hud-bar hud-fight-bar');
   const boss = el('div', 'hud-boss');
   const bossLabel = el('span', 'hud-boss-label');
   bossLabel.id = 'hud-boss-label';
@@ -531,6 +537,24 @@ export function createHud(
   bossHp.setAttribute('aria-labelledby', bossLabel.id);
   boss.append(bossLabel, bossHp);
   boss.hidden = true;
+  // Fight speed and the Space pause (ID-062), top right beside the Menu button.
+  const speed = el('div', 'hud-speed');
+  speed.setAttribute('role', 'group');
+  speed.setAttribute('aria-label', 'Game speed');
+  // Its key tag says how to resume.
+  const pausedChip = el('span', 'menu-chip', 'Paused');
+  pausedChip.append(el('kbd', 'menu-key', 'Space'));
+  pausedChip.setAttribute('role', 'status');
+  pausedChip.hidden = true;
+  const speedButtons = SPEEDS.map((sp) => {
+    const button = el('button', 'hud-speed-button');
+    button.type = 'button';
+    button.append(`${sp}×`, el('kbd', 'menu-key', SPEED_KEYS[sp]));
+    button.setAttribute('aria-keyshortcuts', SPEED_KEYS[sp]);
+    button.addEventListener('click', () => onSpeed(sp));
+    return button;
+  });
+  speed.append(pausedChip, ...speedButtons);
   const warning = el('div', 'hud-warning');
   warning.setAttribute('role', 'alert');
   warning.hidden = true;
@@ -602,7 +626,7 @@ export function createHud(
   });
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, boss, warning, toast, shop, cards, replace, result);
+  hud.append(bar, speed, boss, warning, toast, shop, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -808,6 +832,10 @@ export function createHud(
       hud.hidden = was;
       // The HUD overlays the whole window, as the canvas does.
       return box.height > 0 ? window.innerHeight - box.top : 0;
+    },
+    speed(now, paused) {
+      speedButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(SPEEDS[i] === now)));
+      pausedChip.hidden = !paused;
     },
     toast(text) {
       toast.textContent = text;
