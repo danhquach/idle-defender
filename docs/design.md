@@ -1579,6 +1579,16 @@ offline progress works across sessions.
   the code. **Save:** whether saving works, the backup code, Load code and
   New camp (each asks first, and both wait until no horde is on). **Help:**
   the controls and a short how-to-play. In a fight, the open menu pauses it.
+- **Inventory** *(as built, ID-079)*: an "Inventory" button in the top bar, left
+  of the Menu (its own place, not a Menu tab), opens a view-only dialog of what
+  the camp holds now: the stash against its cap ("Stash 6/20"; from the cap on
+  "Stash 20/20 (full)", as the next drop throws the weakest away), strongest
+  first as in the gun picker (anything that is no gun, from an older save,
+  last); each squad survivor and the gun they fight with, in squad order (not
+  the reserve, which this version doesn't show, nor its guns); and the free
+  pistol. Each weapon shows its name in its rarity's colour, its affixes and its
+  dmg/s. Guns are still picked on the start and result screens. It opens between
+  hordes and in a fight, which it holds like the Menu; Esc or Close shuts it.
 
 - **As built (ID-066): save version 12** adds the reserve. A v11 save loads
   with its horde number and each survivor's level, stats and weapon; every
