@@ -61,7 +61,7 @@ import { recruitNotice } from './roster.ts';
 import {
   fightHitAt,
   frameCamera,
-  FRAME,
+  FIGHT_FRAME,
   project,
   unproject,
   type Camera,
@@ -476,7 +476,7 @@ export function start(root: HTMLElement, art: Art): void {
     endPress(e);
     if (!click || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
     const ground = unproject({ sx: e.offsetX, sy: e.offsetY }, cam);
-    if (horde && ground.x < FRAME.left) return;
+    if (horde && ground.x < FIGHT_FRAME.left) return;
     if (horde && armed) {
       const used = useSkill(horde, armed, ground.x, ground.y);
       if (used.ok) horde = used.state;
@@ -487,7 +487,11 @@ export function start(root: HTMLElement, art: Art): void {
       if (hit && 'defenderId' in hit) {
         // Name who was picked once, not on every click of the same defender.
         const d = horde.defenders.find((x) => x.id === hit.defenderId);
-        if (d && selectedDefender !== d.id) hud.toast(`${defenderLabel(d)} · click a post to move`);
+        // A survivor on the firing line holds their slot (ID-068): nothing to move to.
+        const fixed = d && horde.posts[d.postId]?.kind === 'line';
+        if (d && selectedDefender !== d.id) {
+          hud.toast(fixed ? defenderLabel(d) : `${defenderLabel(d)} · click a post to move`);
+        }
         selectedDefender = hit.defenderId;
         return;
       }
@@ -559,7 +563,7 @@ export function start(root: HTMLElement, art: Art): void {
       cam = ease ? easeCamera(ease.from, fightCam, t) : fightCam;
       const aim: Aim | null =
         armed === 'airstrike' && hover ? { skill: armed, ...unproject(hover, cam) } : null;
-      const edge = project({ x: FRAME.left, y: 0 }, fightCam).sx;
+      const edge = project({ x: FIGHT_FRAME.left, y: 0 }, fightCam).sx;
       drawScene(
         ctx,
         art,

@@ -12,15 +12,20 @@ import {
   CAMP,
   COLUMNS,
   FIELD,
+  HORDE_ONLY,
   POST_OFFSET,
+  SQUAD_SPAWN_X,
   SEGMENT_HEIGHT,
   START_STOCK,
   WALL,
 } from '../core/data.ts';
 import { layoutOf, newHorde, standing } from '../core/horde.ts';
+import { newGame } from '../core/game.ts';
+import { SQUAD_SLOTS, startSquadHorde } from '../core/hordeonly.ts';
 import { setup } from '../core/testing.ts';
 import {
   depthSort,
+  FIGHT_FRAME,
   fightHitAt,
   FRAME,
   frameCamera,
@@ -31,6 +36,7 @@ import {
   PIECE,
   project,
   slotAt,
+  SQUAD_FRAME,
   TILT,
   unproject,
   wallHeight,
@@ -53,7 +59,7 @@ describe('projection', () => {
     expect(p.y).toBeCloseTo(271.25);
   });
 
-  describe('fixed frame (ID-064)', () => {
+  describe('fixed frame (ID-064), the full game’s', () => {
     /** Where the frame lands on screen under `cam`. */
     const box = (cam: Camera) => ({
       left: project({ x: FRAME.left, y: 0 }, cam).sx,
@@ -78,7 +84,7 @@ describe('projection', () => {
       { w: 1280, h: 720, zoom: 0.98 },
     ])('fits the width at $w×$h (about $zoom×), all of it between the HUD bands', (v) => {
       const view = { w: v.w, h: v.h };
-      const cam = frameCamera(view);
+      const cam = frameCamera(view, 0, FRAME);
       expect(cam.zoom).toBeCloseTo(v.w / (FRAME.right - FRAME.left), 9);
       expect(cam.zoom).toBeCloseTo(v.zoom, 2);
       const b = box(cam);
@@ -93,17 +99,17 @@ describe('projection', () => {
     it('keeps a taller bottom HUD (a wrapped shop bar) clear too, never less than its band', () => {
       const view = { w: 1100, h: 600 };
       const wrapped = 120;
-      const b = box(frameCamera(view, wrapped));
+      const b = box(frameCamera(view, wrapped, FRAME));
       expect(b.bottom).toBeLessThanOrEqual(view.h - wrapped + 1e-9);
       expect(b.top).toBeGreaterThanOrEqual(HUD_SPACE.top - 1e-9);
       // A bar shorter than the band, or none measured, keeps the band.
-      expect(frameCamera(view, 10)).toEqual(frameCamera(view));
-      expect(frameCamera(view, 0)).toEqual(frameCamera(view, HUD_SPACE.bottom));
+      expect(frameCamera(view, 10, FRAME)).toEqual(frameCamera(view, 0, FRAME));
+      expect(frameCamera(view, 0, FRAME)).toEqual(frameCamera(view, HUD_SPACE.bottom, FRAME));
     });
 
     it('fits the height on a wide, short window, centring the frame across it', () => {
       const view = { w: 3440, h: 600 };
-      const cam = frameCamera(view);
+      const cam = frameCamera(view, 0, FRAME);
       const band = view.h - HUD_SPACE.top - HUD_SPACE.bottom;
       expect(cam.zoom).toBeCloseTo(band / ((FRAME.bottom - FRAME.top) * TILT), 9);
       const b = box(cam);
@@ -119,20 +125,20 @@ describe('projection', () => {
         { w: 400, h: 200 },
         { w: 0, h: 0 },
       ]) {
-        const cam = frameCamera(view);
+        const cam = frameCamera(view, 0, FRAME);
         expect(cam.zoom).toBe(MIN_ZOOM);
         expect(box(cam).left).toBeCloseTo(0, 9);
         expect(Object.values(cam).every(Number.isFinite)).toBe(true);
       }
       // Too short for the frame even at 0.5×: its top stays just under the top bar.
-      expect(box(frameCamera({ w: 400, h: 200 })).top).toBeCloseTo(HUD_SPACE.top, 9);
+      expect(box(frameCamera({ w: 400, h: 200 }, 0, FRAME)).top).toBeCloseTo(HUD_SPACE.top, 9);
       // Tall and narrow: the frame is centred in the band's spare height.
-      const tall = box(frameCamera({ w: 375, h: 812 }));
+      const tall = box(frameCamera({ w: 375, h: 812 }, 0, FRAME));
       expect(tall.top - HUD_SPACE.top).toBeCloseTo(812 - HUD_SPACE.bottom - tall.bottom, 9);
     });
 
     it('a click on the frame lands where it is drawn', () => {
-      const cam = frameCamera({ w: 1280, h: 720 });
+      const cam = frameCamera({ w: 1280, h: 720 }, 0, FRAME);
       for (const p of [
         { x: FRAME.left, y: 0 },
         { x: FRAME.right, y: FIELD.height },
@@ -142,6 +148,97 @@ describe('projection', () => {
         expect(back.x).toBeCloseTo(p.x, 9);
         expect(back.y).toBeCloseTo(p.y, 9);
       }
+    });
+  });
+
+  describe('the squad frame, zoomed in on the wall (ID-068)', () => {
+    const box = (cam: Camera) => ({
+      left: project({ x: SQUAD_FRAME.left, y: 0 }, cam).sx,
+      right: project({ x: SQUAD_FRAME.right, y: 0 }, cam).sx,
+      top: project({ x: 0, y: SQUAD_FRAME.top }, cam).sy,
+      bottom: project({ x: 0, y: SQUAD_FRAME.bottom }, cam).sy,
+    });
+
+    it('is the horde-only build’s fight frame: from just behind the firing line to the spawn edge, the whole wall', () => {
+      expect(HORDE_ONLY).toBe(true);
+      expect(FIGHT_FRAME).toBe(SQUAD_FRAME);
+      expect(frameCamera({ w: 1280, h: 720 })).toEqual(
+        frameCamera({ w: 1280, h: 720 }, 0, SQUAD_FRAME),
+      );
+      // 500 − 30 − 7 − 24: a survivor's half width and the gap behind the line.
+      expect(SQUAD_FRAME.left).toBe(439);
+      for (const p of SQUAD_SLOTS)
+        expect(p.x - PIECE.defender.halfWidth).toBeGreaterThan(SQUAD_FRAME.left);
+      expect(SQUAD_FRAME.right).toBe(SQUAD_SPAWN_X);
+      // Every row and the strip above, where the back row's tops show.
+      expect(SQUAD_FRAME.top).toBe(-MARGIN_Y);
+      expect(SQUAD_FRAME.bottom).toBe(FIELD.height);
+      // Tighter than the full game's: no ground posts or towers left of the wall.
+      expect(SQUAD_FRAME.left).toBeGreaterThan(FRAME.left);
+      expect(SQUAD_FRAME.right - SQUAD_FRAME.left).toBeLessThan(FRAME.right - FRAME.left);
+    });
+
+    it.each([
+      { w: 1280, h: 720, zoom: 1.15 },
+      { w: 1440, h: 900, zoom: 1.31 },
+      { w: 1600, h: 900, zoom: 1.45 },
+      { w: 1920, h: 1080, zoom: 1.74 },
+      { w: 2560, h: 1440, zoom: 2.33 },
+      { w: 1280, h: 1024, zoom: 1.16 },
+      { w: 3440, h: 1440, zoom: 2.52 },
+    ])(
+      'frames the whole wall and the spawn edge at $w×$h (about $zoom×), zoomed in over ID-064',
+      (v) => {
+        const view = { w: v.w, h: v.h };
+        const cam = frameCamera(view);
+        expect(cam.zoom).toBeCloseTo(v.zoom, 2);
+        // Never further out than ID-064's; a window too wide for the wall's height was already height-bound.
+        expect(cam.zoom).toBeGreaterThanOrEqual(frameCamera(view, 0, FRAME).zoom - 1e-9);
+        const b = box(cam);
+        const eps = 1e-9;
+        expect(b.left).toBeGreaterThanOrEqual(-eps);
+        expect(b.right).toBeLessThanOrEqual(view.w + eps);
+        expect(b.top).toBeGreaterThanOrEqual(HUD_SPACE.top - eps);
+        expect(b.bottom).toBeLessThanOrEqual(view.h - HUD_SPACE.bottom + eps);
+        // Filled edge to edge one way, centred the other.
+        const fullWidth = Math.abs(b.right - b.left - view.w) < 1e-6;
+        const fullHeight =
+          Math.abs(b.bottom - b.top - (view.h - HUD_SPACE.top - HUD_SPACE.bottom)) < 1e-6;
+        expect(fullWidth || fullHeight).toBe(true);
+        expect(b.left).toBeCloseTo(view.w - b.right, 9);
+        // The wall, from its top row to its bottom row, and the spawn edge are on screen.
+        const wallTop = project({ x: COLUMNS[0]!, y: 0, z: PIECE.wall.height }, cam);
+        const wallBottom = project({ x: COLUMNS[0]! + WALL.depth, y: FIELD.height }, cam);
+        expect(wallTop.sx).toBeGreaterThan(0);
+        expect(wallTop.sy).toBeGreaterThanOrEqual(HUD_SPACE.top - eps);
+        expect(wallBottom.sy).toBeLessThanOrEqual(view.h - HUD_SPACE.bottom + eps);
+        expect(project({ x: SQUAD_SPAWN_X, y: 0 }, cam).sx).toBeLessThanOrEqual(view.w + eps);
+      },
+    );
+
+    it('zooms in about 17% over ID-064 at 1280×720 and 1440×900 (0.98× → 1.15×, 1.11× → 1.31×)', () => {
+      for (const view of [
+        { w: 1280, h: 720 },
+        { w: 1440, h: 900 },
+      ]) {
+        expect(frameCamera(view).zoom / frameCamera(view, 0, FRAME).zoom).toBeGreaterThan(1.16);
+      }
+    });
+
+    it('a click on an empty firing-line slot lands on bare ground: the slot is fixed and undrawn', () => {
+      const s = startSquadHorde({ ...newGame('horde') }, 7, 0);
+      const free = s.posts.find((p) => p.defenderId === null)!;
+      expect(fightHitAt(free.x, free.y, s)).toBeNull();
+      // The survivor in a slot is still clicked.
+      const d = s.defenders[0]!;
+      expect(fightHitAt(d.x, d.y - 1, s)).toEqual({ defenderId: d.id });
+    });
+
+    it('is worked out again for each size: a resize changes the camera', () => {
+      const a = frameCamera({ w: 1280, h: 720 });
+      const b = frameCamera({ w: 1440, h: 900 });
+      expect(b).not.toEqual(a);
+      expect(frameCamera({ w: 1280, h: 720 })).toEqual(a);
     });
   });
 

@@ -4,7 +4,7 @@
 // reroll, and a short toast (refused moves).
 // Text reaches the page only through textContent.
 import { affixText, gunPower, heldLabel, heldName, isOwned, type Held } from '../core/armoury.ts';
-import { repairAllCost, type PostKind } from '../core/base.ts';
+import { repairAllCost } from '../core/base.ts';
 import {
   campAfterPick,
   campLevelOf,
@@ -68,6 +68,7 @@ import {
   type Breach,
   type Card,
   type DefenderSpec,
+  type FightPostKind,
   type HordeState,
   type Injury,
   type Post,
@@ -110,10 +111,11 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-export const POST_NAME: Readonly<Record<PostKind, string>> = {
+export const POST_NAME: Readonly<Record<FightPostKind, string>> = {
   tower: 'Tower',
   'wall-walk': 'Wall-walk post',
   ground: 'Ground post',
+  line: 'Firing line',
 };
 export const slotName = (column: number, row: number): string =>
   `Layer ${column + 1}, row ${row + 1}`;

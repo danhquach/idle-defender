@@ -5,9 +5,12 @@ import type { HordeState, Layer, Post } from '../core/horde.ts';
 import {
   COLUMNS,
   FIELD,
+  HORDE_ONLY,
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
+  SQUAD_LINE,
+  SQUAD_SPAWN_X,
   TRAP_STRIP,
   WALK_SPOTS,
   WALL,
@@ -77,6 +80,8 @@ export const PIECE = {
   defender: { halfWidth: 7, halfDepth: 10, height: 30 },
   /** A turret's head, on top of its tower or wall-walk mount. */
   turret: { halfWidth: 9, halfDepth: 9, height: 12 },
+  /** A firing-line slot (ID-068): bare ground, nothing drawn; its footprint is a defender's. */
+  line: { halfWidth: 7, halfDepth: 10, height: 0 },
 } as const;
 
 /** Ground shown behind column 0's ground posts at the frame's left edge. */
@@ -93,24 +98,42 @@ export const FRAME = {
   top: -MARGIN_Y,
   bottom: FIELD.height,
 } as const;
+export type Frame = { left: number; right: number; top: number; bottom: number };
+
+/**
+ * The horde-only fight's frame (ID-068), zoomed in on the wall: from just behind the
+ * firing line (a survivor's half width and the same gap) to the nearer spawn edge, the
+ * whole wall top to bottom and the strip above. No towers or ground posts stand left of
+ * the line, so nothing is cut off.
+ */
+export const SQUAD_FRAME: Frame = {
+  left: COLUMNS[0]! + SQUAD_LINE.offset - PIECE.defender.halfWidth - FRAME_GAP,
+  right: SQUAD_SPAWN_X,
+  top: -MARGIN_Y,
+  bottom: FIELD.height,
+};
+
+/** The frame this build's fights show: the squad's in the horde-only build. */
+export const FIGHT_FRAME: Frame = HORDE_ONLY ? SQUAD_FRAME : FRAME;
 
 /**
  * The camera on the frame for a `view`: zoomed to fit it (the smaller of width fit and
  * height fit, between the HUD's bands), never under MIN_ZOOM, centred in the spare
  * space. A frame wider or taller than the view keeps its left (wall-side) or top edge.
- * `bottom` is the bottom HUD's measured height; a wrapped shop bar takes more.
+ * `bottom` is the bottom HUD's measured height; a wrapped shop bar takes more. `frame`
+ * is this build's fight frame unless named.
  */
-export function frameCamera(view: View, bottom = 0): Camera {
-  const w = FRAME.right - FRAME.left;
-  const h = (FRAME.bottom - FRAME.top) * TILT;
+export function frameCamera(view: View, bottom = 0, frame: Frame = FIGHT_FRAME): Camera {
+  const w = frame.right - frame.left;
+  const h = (frame.bottom - frame.top) * TILT;
   const below = Math.max(HUD_SPACE.bottom, bottom);
   const band = Math.max(0, view.h - HUD_SPACE.top - below);
   const zoom = Math.max(MIN_ZOOM, Math.min(view.w / w, band / h));
   const spareX = Math.max(0, view.w - w * zoom) / 2;
   const spareY = Math.max(0, band - h * zoom) / 2;
   return {
-    x: FRAME.left - spareX / zoom,
-    y: FRAME.top - (HUD_SPACE.top + spareY) / (zoom * TILT),
+    x: frame.left - spareX / zoom,
+    y: frame.top - (HUD_SPACE.top + spareY) / (zoom * TILT),
     zoom,
   };
 }
@@ -229,6 +252,8 @@ export function fightHitAt(
   }
   if (best) return best.hit;
   for (const post of scene.posts) {
+    // A firing-line slot is bare, undrawn ground and fixed (ID-068): a click there is on the ground.
+    if (post.kind === 'line') continue;
     const p = post.kind === 'wall-walk' ? null : PIECE[post.kind];
     const box = p
       ? { cx: post.x, cy: post.y, hw: p.halfWidth, hd: p.halfDepth, z0: 0, z1: p.height }

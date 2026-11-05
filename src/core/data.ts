@@ -27,11 +27,18 @@ export const HORDE_ONLY = true;
 /** The most survivors in the squad; one more joins after each win until then. */
 export const SQUAD_CAP = 6;
 /**
- * The horde-only base's tower rows on its one layer, in the order survivors take them:
- * from the middle out, either side of the gate, a row apart so nobody stands in front of
- * the tower behind them (the sixth can't be: ten rows hold five such towers).
+ * The horde-only firing line (ID-068): one row of `SQUAD_CAP` fixed slots on the ground,
+ * `offset` behind the wall's `x` and spaced evenly top to bottom, where survivors stand
+ * and shoot over the wall with `range` × their gun's range (a tower's, as before). `order`
+ * is the slot each survivor takes, in join order: from the middle out, so a lone survivor
+ * with a pistol reaches an enemy anywhere along the wall's front.
  */
-export const SQUAD_TOWERS = [4, 6, 2, 8, 0, 9] as const;
+export const SQUAD_LINE = { offset: -30, range: 1.25, order: [2, 3, 1, 4, 0, 5] } as const;
+/**
+ * The horde-only spawn edge (ID-068): nearer the wall than `FIELD.right`, so the fight's
+ * frame (from the firing line to here) zooms in on the wall, all ten rows in view.
+ */
+export const SQUAD_SPAWN_X = 1540;
 /** The horde-only wall's tier (one layer, full HP every horde). */
 export const SQUAD_WALL: Tier = 'concrete';
 /**
