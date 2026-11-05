@@ -44,7 +44,7 @@ import {
 import { baseOf } from '../core/armoury.ts';
 import { professionOf } from '../core/loadout.ts';
 import { carpet } from '../core/skills.ts';
-import { badgeOf, nameTag } from '../core/stats.ts';
+import { badgeOf, nameTag, reloadTime } from '../core/stats.ts';
 import {
   depthSort,
   FIGHT_FRAME,
@@ -137,6 +137,10 @@ const COLOR = {
   offFrame: '#d2453c',
   plate: 'rgba(21, 23, 26, 0.6)',
   plateText: '#d8d4cc',
+  /** The share of a reload done, on a reload pie (ID-078). */
+  reload: '#ffc94d',
+  /** A reload pie's ring: the plate text's colour, see-through. */
+  reloadRing: 'rgba(216, 212, 204, 0.7)',
   hpBack: '#c43b3b',
   hpFill: '#5ec24a',
   /** A wall segment's flash as a blow lands (ID-072): warm, so it shows on a pale concrete top. */
@@ -303,9 +307,14 @@ export const SURVIVOR_BAR = { w: 30, h: 5, min: { w: 30, h: 5 }, edge: 1 } as co
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
 const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
 /** A name plate's height in screen px (its font is `MARK.plate`). */
-const PLATE_H = 14;
+export const PLATE_H = 14;
 /** The screen px between a defender's name tag (ID-074) and the bar or badge under it. */
 export const NAME_TAG_GAP = 2;
+/**
+ * The pie over a reloading defender's name tag (ID-078), in screen px: radius `r`, `gap`
+ * over the plate, with a dark `edge` round it.
+ */
+export const RELOAD_PIE = { r: 6, gap: 2, edge: 1 } as const;
 /** How much wider than its footprint a piece's sprite may draw. */
 const OVERSPILL = 1.6;
 
@@ -648,16 +657,79 @@ function drawNameTag(
   z0: number,
   cam: Camera,
 ): void {
+  const { at, lift } = tagSpot(d, z0, cam);
+  drawPlate(ctx, d.plain ? d.name : nameTag(d), at, cam, false, lift);
+}
+
+/** Where a defender's name plate sits: its anchor and how far its bottom is lifted over it. */
+function tagSpot(
+  d: Pick<Defender, 'x' | 'y' | 'plain'>,
+  z0: number,
+  cam: Camera,
+): { at: { x: number; y: number; z: number }; lift: number } {
   const at = { x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap / 2 };
   if (d.plain) {
     // The bar sits on `at` with its dark edge round it, above and below.
     const bar = Math.max(SURVIVOR_BAR.min.h, SURVIVOR_BAR.h * cam.zoom) + 2 * SURVIVOR_BAR.edge;
-    drawPlate(ctx, d.name, at, cam, false, bar + NAME_TAG_GAP);
-    return;
+    return { at, lift: bar + NAME_TAG_GAP };
   }
   const badge = ((BADGE.pip + 2 * BADGE.pad) * cam.zoom) / 2;
-  const top = { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z };
-  drawPlate(ctx, nameTag(d), top, cam, false, badge + NAME_TAG_GAP);
+  return { at: { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z }, lift: badge + NAME_TAG_GAP };
+}
+
+/**
+ * How far `d`'s primary is through its reload at `time` (ID-078), 0 to 1, or null while it
+ * has rounds or is ready. Only the primary counts: a Gunner's sidearm firing meanwhile
+ * doesn't change it. The length is today's reload time, so a stat change mid-reload
+ * moves the pie (the sim keeps only the reload's end).
+ */
+export function reloadShare(
+  d: Pick<Defender, 'ammo' | 'reloadedAt' | 'loadout' | 'stats' | 'plain'>,
+  time: number,
+): number | null {
+  const end = d.reloadedAt.primary;
+  if (d.ammo.primary > 0 || !(time < end)) return null;
+  const total = reloadTime(d, d.loadout.primary);
+  if (!(total > 0)) return null;
+  return Math.min(1, Math.max(0, 1 - (end - time) / total));
+}
+
+/**
+ * A reload pie (ID-078) just over a defender's name plate: a dark disc in a pale ring,
+ * whose wedge fills clockwise from the top as the reload runs.
+ */
+function drawReloadPie(
+  ctx: CanvasRenderingContext2D,
+  d: Pick<Defender, 'x' | 'y' | 'plain'>,
+  share: number,
+  z0: number,
+  cam: Camera,
+): void {
+  const { at, lift } = tagSpot(d, z0, cam);
+  const p = project(at, cam);
+  const { r, gap, edge } = RELOAD_PIE;
+  const cx = p.sx;
+  const cy = p.sy - lift - PLATE_H - gap - edge - r;
+  // A see-through disc, so what is behind it still shows.
+  ctx.fillStyle = COLOR.plate;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  if (share > 0) {
+    const start = -Math.PI / 2;
+    ctx.fillStyle = COLOR.reload;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, start + share * Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // A pale ring, so even an empty disc reads on the dark ground.
+  ctx.strokeStyle = COLOR.reloadRing;
+  ctx.lineWidth = edge;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + edge / 2, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 /**
@@ -2113,11 +2185,18 @@ export function drawScene(
   // Each defender's name on top of every sprite and effect, so none hides it (ID-074).
   // Only those the sprites above drew: a walker, or the one standing on their post.
   if (!build) {
-    for (const d of scene.defenders) {
+    const shown = scene.defenders.flatMap((d) => {
       const post = d.walking ? null : scene.posts.find((p) => p.id === d.postId);
-      if (post === undefined) continue; // not walking and on no post: not drawn
-      drawNameTag(ctx, d, post ? postFloor(scene.layers, post) : 0, cam);
+      if (post === undefined) return []; // not walking and on no post: not drawn
+      return [{ d, z0: post ? postFloor(scene.layers, post) : 0 }];
+    });
+    // Over each name, clear of it, while their gun reloads (ID-078). All before the
+    // names, so where two survivors crowd together a pie never hides a name.
+    for (const { d, z0 } of shown) {
+      const share = reloadShare(d, scene.time);
+      if (share !== null) drawReloadPie(ctx, d, share, z0, cam);
     }
+    for (const { d, z0 } of shown) drawNameTag(ctx, d, z0, cam);
   }
   ctx.restore();
   if (build) return;
