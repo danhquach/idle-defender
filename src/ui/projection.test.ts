@@ -39,7 +39,10 @@ import {
   SQUAD_FRAME,
   TILT,
   unproject,
+  WALL_HIT,
   wallHeight,
+  wallHitFade,
+  wallStage,
   type Camera,
 } from './projection.ts';
 
@@ -455,5 +458,39 @@ describe('wallHeight', () => {
     expect(wallHeight(100, 200)).toBe(30);
     expect(wallHeight(1, 200)).toBeCloseTo(20.1);
     expect(wallHeight(0, 200)).toBe(12);
+  });
+});
+
+describe('wallStage (ID-072)', () => {
+  it('steps from whole through cracked, chipped and breaking to broken', () => {
+    expect(wallStage(300, 300)).toBe(0);
+    expect(wallStage(299, 300)).toBe(1);
+    expect(wallStage(200, 300)).toBe(1);
+    expect(wallStage(199, 300)).toBe(2);
+    expect(wallStage(100, 300)).toBe(2);
+    expect(wallStage(99, 300)).toBe(3);
+    expect(wallStage(0.1, 300)).toBe(3);
+    expect(wallStage(0, 300)).toBe(4);
+  });
+
+  it('reads odd values safely: over max is whole, NaN or negative is broken', () => {
+    expect(wallStage(400, 300)).toBe(0);
+    expect(wallStage(-5, 300)).toBe(4);
+    expect(wallStage(NaN, 300)).toBe(4);
+  });
+});
+
+describe('wallHitFade (ID-072)', () => {
+  it('is full as the hit lands and fades to nothing over the hit time', () => {
+    expect(wallHitFade(5, 5)).toBe(1);
+    expect(wallHitFade(5 + WALL_HIT.time / 2, 5)).toBeCloseTo(0.5);
+    expect(wallHitFade(5 + WALL_HIT.time, 5)).toBe(0);
+    expect(wallHitFade(9, 5)).toBe(0);
+  });
+
+  it('shows nothing for a segment never hit, a hit in the future or a NaN time', () => {
+    expect(wallHitFade(5, undefined)).toBe(0);
+    expect(wallHitFade(4, 5)).toBe(0);
+    expect(wallHitFade(NaN, 5)).toBe(0);
   });
 });

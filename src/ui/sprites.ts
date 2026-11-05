@@ -105,6 +105,8 @@ export const ART_IDS = [
   'concrete-rubble',
   'reinforced-rubble',
   'cracks',
+  'wall-chips',
+  'wall-breach',
   'wood-gate',
   'metal-gate',
   'reinforced-gate',
@@ -373,6 +375,9 @@ export const BASE_ART = {
   groundPost: 'ground-post',
   walk: { top: 'wood-top', front: 'wood-front' },
   cracks: 'cracks',
+  /** Wall damage stages over the cracks (ID-072): pieces chipped out, then a section broken through. */
+  chips: 'wall-chips',
+  breach: 'wall-breach',
   shield: 'shield',
 } as const satisfies Record<string, ArtId | readonly ArtId[] | Record<string, ArtId>>;
 

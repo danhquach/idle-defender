@@ -34,6 +34,7 @@ import {
   HEIGHT_SCALE,
   project,
   TILT,
+  WALL_HIT,
   wallHeight,
   type Camera,
 } from './projection.ts';
@@ -459,7 +460,7 @@ describe('drawScene with art', () => {
   });
 
   it('shows damage as cracks, then puts the alpha back', () => {
-    const scene = withSegment(blank(), { kind: 'wall', tier: 'wood', hp: 40, maxHp: 100 });
+    const scene = withSegment(blank(), { kind: 'wall', tier: 'wood', hp: 80, maxHp: 100 });
     // An enemy in front of the wall draws after it, and must draw opaque.
     const enemy = { id: 1, kind: 'shambler' as const, x: 600, y: 300 };
     const r = draw({
@@ -482,8 +483,131 @@ describe('drawScene with art', () => {
     const i = r.drawn.indexOf('cracks');
     expect(r.drawn.indexOf('shambler-walk-b')).toBeGreaterThan(i);
     expect(i).toBeGreaterThanOrEqual(0);
+    // Cracked (ID-072): faint over its top and front, then full alpha for the rest.
+    const last = r.drawn.lastIndexOf('cracks');
+    expect(last).toBe(i + 1);
     expect(r.alphas[i]).toBeLessThan(1);
-    expect(r.alphas.slice(i + 1).every((a) => a === 1)).toBe(true);
+    expect(r.alphas[last]).toBeLessThan(1);
+    expect(r.alphas.slice(last + 1).every((a) => a === 1)).toBe(true);
+  });
+
+  it('a wall looks worse in stages: cracks, then edge chips, then a broken band (ID-072)', () => {
+    const at = (hp: number) =>
+      draw(withSegment(blank(), { kind: 'wall', tier: 'concrete', hp, maxHp: 300 })).drawn;
+    const count = (d: ArtId[], id: ArtId) => d.filter((x) => x === id).length;
+    const whole = at(300);
+    expect(['cracks', 'wall-chips', 'wall-breach'].some((id) => whole.includes(id as ArtId))).toBe(
+      false,
+    );
+    // Cracked: top and front, nothing more.
+    const cracked = at(200);
+    expect(count(cracked, 'cracks')).toBe(2);
+    expect(cracked).not.toContain('wall-chips');
+    // Chipped: a gouge on each long edge of the top.
+    const chipped = at(100);
+    expect(count(chipped, 'wall-chips')).toBe(2);
+    expect(chipped).not.toContain('wall-breach');
+    // Broken through: the band over the chips; then rubble alone at 0.
+    const breaking = at(99);
+    expect(breaking.indexOf('wall-breach')).toBeGreaterThan(breaking.lastIndexOf('wall-chips'));
+    const broken = at(0);
+    expect(broken).toContain('concrete-rubble');
+    expect(broken).not.toContain('cracks');
+  });
+
+  it('a gate segment shows the same stages over its gate art (ID-072)', () => {
+    const d = draw(withSegment(blank(), { kind: 'gate', tier: 'wood', hp: 10, maxHp: 150 })).drawn;
+    expect(d.indexOf('wall-breach')).toBeGreaterThan(d.indexOf('wood-gate'));
+  });
+
+  /** A fight's fills by colour, with the alpha each was drawn at. */
+  const fillsOf = (scene: Scene) => {
+    const r = recorder();
+    const fills: { style: string; alpha: number }[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string; globalAlpha: number };
+    Object.assign(r.ctx, {
+      fillRect: () => fills.push({ style: ctx.fillStyle, alpha: ctx.globalAlpha }),
+    });
+    drawScene(r.ctx, r.art, scene, CAM, VIEW);
+    return fills;
+  };
+
+  it('a wall segment’s HP bar shows in a fight only once it is hit, and not once broken (ID-072)', () => {
+    const bars = (hp: number) =>
+      fillsOf(withSegment(blank(), { kind: 'wall', tier: 'concrete', hp, maxHp: 300 })).filter(
+        (f) => f.style === '#c43b3b',
+      ).length;
+    expect(bars(300)).toBe(0);
+    expect(bars(299)).toBe(1);
+    expect(bars(1)).toBe(1);
+    expect(bars(0)).toBe(0);
+    // An unbuilt slot has none either.
+    expect(fillsOf(blank()).filter((f) => f.style === '#c43b3b')).toHaveLength(0);
+  });
+
+  it('a segment just hit flashes white, fading out, and then puts the alpha back (ID-072)', () => {
+    const scene = (hitAt: number | undefined) => ({
+      ...withSegment(blank(), { kind: 'wall', tier: 'concrete', hp: 250, maxHp: 300, hitAt }),
+      time: 10,
+    });
+    const flashes = (hitAt: number | undefined) =>
+      fillsOf(scene(hitAt)).filter((f) => f.style === '#ffb070');
+    // Top and front, at full strength as it lands.
+    const now = flashes(10);
+    expect(now).toHaveLength(2);
+    expect(now[0]!.alpha).toBeCloseTo(WALL_HIT.flash, 9);
+    expect(flashes(10 - WALL_HIT.time / 2)[0]!.alpha).toBeCloseTo(WALL_HIT.flash / 2, 9);
+    expect(flashes(10 - WALL_HIT.time)).toHaveLength(0);
+    expect(flashes(undefined)).toHaveLength(0);
+    // A broken segment (its last blow) is rubble, with no flash.
+    const rubble = fillsOf({
+      ...withSegment(blank(), { kind: 'wall', tier: 'concrete', hp: 0, maxHp: 300, hitAt: 10 }),
+      time: 10,
+    });
+    expect(rubble.filter((f) => f.style === '#ffb070')).toHaveLength(0);
+    const r = recorder();
+    drawScene(r.ctx, r.art, scene(10), CAM, VIEW);
+    expect(r.ctx.globalAlpha).toBe(1);
+  });
+
+  it('a segment just hit shakes sideways, then stops, its saves all restored (ID-072)', () => {
+    const shakes = (hitAt: number | undefined) => {
+      const r = recorder();
+      const moves: number[][] = [];
+      let depth = 0;
+      Object.assign(r.ctx, {
+        save: () => depth++,
+        restore: () => depth--,
+        translate: (x: number, y: number) => moves.push([x, y]),
+      });
+      const s = withSegment(blank(), {
+        kind: 'wall',
+        tier: 'concrete',
+        hp: 250,
+        maxHp: 300,
+        hitAt,
+      });
+      drawScene(r.ctx, r.art, { ...s, time: 10 }, CAM, VIEW);
+      expect(depth).toBe(0);
+      return moves.filter(([x, y]) => y === 0 && x !== 0);
+    };
+    // Mid-shake: a sideways move within WALL_HIT.shake.
+    const mid = shakes(10 - WALL_HIT.time / 12);
+    expect(mid).toHaveLength(1);
+    expect(Math.abs(mid[0]![0]!)).toBeLessThanOrEqual(WALL_HIT.shake);
+    expect(shakes(10 - WALL_HIT.time)).toHaveLength(0);
+    expect(shakes(undefined)).toHaveLength(0);
+  });
+
+  it('the build scene shows only its own bar for a damaged segment, not the fight’s too (ID-072)', () => {
+    const r = recorder();
+    const fills: string[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string };
+    Object.assign(r.ctx, { fillRect: () => fills.push(ctx.fillStyle) });
+    const scene = withSegment(blank(), { kind: 'wall', tier: 'concrete', hp: 150, maxHp: 300 });
+    const overlay = { selected: null, hover: null, ghosts: { slots: [], lines: [] } };
+    drawScene(r.ctx, r.art, scene, CAM, VIEW, overlay);
+    expect(fills.filter((f) => f === '#c43b3b')).toHaveLength(1);
   });
 
   it('draws every enemy kind’s art and a Spewer glob without a throw (ID-023)', () => {

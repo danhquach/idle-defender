@@ -1743,6 +1743,25 @@ original outline.
   and the tiles and decals keep their ID-050 places. None grows within 60
   units in front of the first wall or behind it, so the survivors' lane
   stays plain and they never sink into a patch.
+- **As built (ID-072):** a wall shows its damage, in a fight and in the build
+  scene. Each segment looks worse in stages by its HP share, on top of the
+  existing drop in height: whole at full HP; cracked from just below full to
+  two thirds (the crack art over its top and front, 70% opaque); chipped
+  below two thirds (cracks at full strength, plus a jagged gouge cut into
+  each long edge of its top, the right one mirrored and lower); broken
+  through below a third (plus a band of rubble and rebar across the top's
+  full width, its middle third); rubble at 0 HP as before. The damage art
+  follows the wall: its top is a long thin strip, so nothing is round. In a
+  fight a segment's HP bar (16 × 4, narrower than the 20-unit wall top; at
+  least 14 × 4 px; 1 px dark edge), 2 units below its middle, shows over its
+  top only once it is below full HP and while it stands, drawn over every
+  sprite so the enemies at the wall never hide it; the build scene keeps its
+  own bars. A blow that takes HP off a standing segment (an enemy's hit or a
+  Swollen's blast) flashes it pale orange (55% at the hit, so it shows on
+  pale concrete) and shakes it sideways (2 units) for 0.25 s of fight time,
+  so pause holds it and game speed shortens it. A crowd on one segment starts
+  a new flash at most every 0.4 s, so the segment never stays washed out over
+  its damage. Only the segment shakes; anything standing on it stays put.
 - **As built (ID-049):** sprites move, drawn from the still art (no frames):
   each is moved, turned and stretched about its feet (`src/ui/anim.ts`).
   Enemies bob once per 20 px of ground they actually cover (so slower over a
