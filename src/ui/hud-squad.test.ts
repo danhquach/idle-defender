@@ -21,6 +21,7 @@ import {
   startLabel,
   xpBar,
 } from './hud.ts';
+import { ART_URLS } from './sprites.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -180,7 +181,10 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     g.roster[0] = { ...g.roster[0]!, name: evil, xp: 0 };
     const screen = squadScreen(g, ended(g, 'won'));
     h.showResult(screen);
-    expect(root.querySelector('.hud-result img')).toBeNull();
+    // The only picture is the drop tile's own icon (ID-073), never one from a name.
+    const imgs = [...root.querySelectorAll<HTMLImageElement>('.hud-result img')];
+    expect(imgs.map((i) => i.parentElement!.className)).toEqual(['tile-icon']);
+    expect(imgs[0]!.getAttribute('src')).toBe(ART_URLS[screen.debrief!.drop!.icon]);
     // The debrief (ID-067): their card, and their points row's button names them too.
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
     expect(root.querySelector('.hud-pick-stat')!.getAttribute('aria-label')).toBe(

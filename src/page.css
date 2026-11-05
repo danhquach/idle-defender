@@ -844,6 +844,63 @@ body {
   font-size: var(--text-sm);
 }
 
+/* The drop's icon (ID-073): the gun's survivor sprite, cropped to hands and gun. */
+.tile-drop-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-10);
+}
+
+.tile-drop-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.tile-icon {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border: 1px solid var(--rarity-common);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-active);
+}
+
+/* Every idle sprite is 192 px tall with the gun held low on the right. */
+.tile-icon-img {
+  position: absolute;
+  top: -26px;
+  right: -8px;
+  width: auto;
+  height: 96px;
+}
+
+.tile[data-rarity='rusty'] .tile-icon {
+  border-color: var(--rarity-rusty);
+}
+
+.tile[data-rarity='military'] .tile-icon {
+  border-color: var(--rarity-military);
+}
+
+.tile[data-rarity='prototype'] .tile-icon {
+  border-color: var(--rarity-prototype);
+}
+
+.tile[data-rarity='relic'] .tile-icon {
+  border-color: var(--rarity-relic);
+}
+
+.tile-drop .tile-power {
+  white-space: nowrap;
+}
+
+.tile-drop-lost .tile-icon-img {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
 .debrief-squad-head {
   display: flex;
   flex-wrap: wrap;
