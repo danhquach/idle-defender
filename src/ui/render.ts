@@ -122,6 +122,8 @@ const COLOR = {
   conditionFill: '#a9c4d6',
   strike: '#f2f2f2',
   slug: '#fffbe8',
+  /** The white spark where a bullet hits a body (ID-070). */
+  hitSpark: '#ffffff',
   flash: '#fff2b0',
   flashEdge: 'rgba(255, 170, 60, 0.6)',
   blood: '#8e1f1a',
@@ -225,9 +227,31 @@ const STRIKE = 7;
 const MUZZLE = { defender: { dx: 12, z: 12 }, turret: { dx: 13, z: 2 } } as const;
 /**
  * Effect sizes in px at zoom 1, each kept at least `min` px on screen so they still read
- * at 0.5× zoom: a bullet's slug and streak width, a muzzle flash, an impact's puff.
+ * at 0.5× zoom: a muzzle flash's halo, an impact's puff and a hit's spark.
  */
-const EFFECT = { slug: 1.5, streak: 1.5, flash: 5, puff: 6, min: 1 } as const;
+const EFFECT = { flash: 5, puff: 6, spark: 4, min: 1.5 } as const;
+/**
+ * A bullet in flight (ID-070), in px at zoom 1: a white `head` capsule `len` long and `w`
+ * wide on a dark backing `edge` px wider each side, with a `glow` halo; a `tail` that thins
+ * from `w` to `end` and fades from white through its gun's colour to clear; and a `shadow`
+ * of the same shape on the ground under it, `w` wide at its head. Only the head has a rim.
+ */
+export const BULLET = {
+  head: { len: 6, w: 2.5, edge: 1, backing: 'rgba(20, 14, 6, 0.5)' },
+  glow: { r: 5, alpha: 0.35 },
+  tail: { end: 0.5, white: 0.2, alpha: 0.9 },
+  shadow: { w: 1.5, colour: 'rgba(0, 0, 0, 0.22)' },
+} as const;
+/**
+ * A bullet's tail is its gun's `tracer` length plus one 60 fps frame of its flight at the
+ * game speed, counted up to `pace` 2 (ID-070): about a frame's travel, so it reads as a
+ * bullet and not a beam. At 3× the bright head carries the eye over the small gap.
+ */
+export const TAIL = { frame: 1 / 60, pace: 2 } as const;
+/** A muzzle flash's core (ID-070): a teardrop `len` long and `w` wide along the barrel. */
+const FLASH = { len: 8, w: 4, edge: '#ffb347' } as const;
+/** The share of `IMPACT_FLASH` a hit's white spark shows for, shrinking and fading (ID-070). */
+const SPARK_SHARE = 0.4;
 /**
  * The marker at the frame's left edge for a row's enemies past it (ID-064), in screen
  * px: an arrow `arrow` tall pointing at the camp, then the count on a plate, all at `alpha`.
@@ -275,7 +299,11 @@ export type Scene = Pick<
   | 'outcome'
 > &
   // A Power Surge lights turrets on an empty bank (design §8); build mode has none.
-  Partial<Pick<HordeState, 'wave' | 'freeWave'>>;
+  // `acc`, the fight time since its last step, carries bullets on between steps (ID-070).
+  Partial<Pick<HordeState, 'wave' | 'freeWave' | 'acc'>> & {
+    /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
+    pace?: number;
+  };
 /** An armed skill's reach around the cursor, on the field. */
 export interface Aim {
   skill: 'airstrike';
@@ -1174,49 +1202,178 @@ function drawFlash(
   if (age === null) return;
   const c = project(muzzleAt(scene, x, y, owner), cam);
   const shooter = scene.defenders.find((d) => d.id === owner);
-  const r = sized(EFFECT.flash * (shooter ? (gunOf(shooter)?.flash ?? 1) : 1), cam);
+  const scale = shooter ? (gunOf(shooter)?.flash ?? 1) : 1;
+  const r = sized(EFFECT.flash * scale, cam);
   ctx.globalAlpha = 1 - age;
   ctx.fillStyle = COLOR.flashEdge;
   ctx.beginPath();
   ctx.arc(c.sx, c.sy, r * 1.6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = COLOR.flash;
+  // The core points along the shot (its newest bullet; ahead, into the field, with none):
+  // white at the muzzle, orange at its tip (ID-070).
+  let newest: Bullet | null = null;
+  let least = Infinity;
+  for (const b of scene.bullets) {
+    const flown = Math.hypot(b.x - b.fromX, b.y - b.fromY);
+    if (b.owner === owner && flown < least) [newest, least] = [b, flown];
+  }
+  const ahead = newest
+    ? project({ x: newest.fromX + newest.dx, y: newest.fromY + newest.dy }, cam)
+    : null;
+  const from = newest ? project({ x: newest.fromX, y: newest.fromY }, cam) : null;
+  const turn = ahead && from ? Math.atan2(ahead.sy - from.sy, ahead.sx - from.sx) : 0;
+  const len = sized(FLASH.len * scale, cam);
+  const core = ctx.createRadialGradient(c.sx, c.sy, 0, c.sx, c.sy, len);
+  core.addColorStop(0, COLOR.flash);
+  core.addColorStop(1, FLASH.edge);
+  ctx.fillStyle = core;
   ctx.beginPath();
-  ctx.arc(c.sx, c.sy, r, 0, Math.PI * 2);
+  ctx.ellipse(
+    c.sx + (Math.cos(turn) * len) / 2,
+    c.sy + (Math.sin(turn) * len) / 2,
+    len / 2,
+    sized(FLASH.w * scale, cam) / 2,
+    turn,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
   ctx.globalAlpha = 1;
 }
 
+/** `#rrggbb` at `alpha`, for a gradient stop. */
+const withAlpha = (hex: string, alpha: number): string =>
+  `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${alpha})`;
+
+type Point = { sx: number; sy: number };
+/** Where a bullet is drawn on screen (ID-070): its head and tail, and both on the ground. */
+export interface BulletShape {
+  head: Point;
+  tail: Point;
+  groundHead: Point;
+  groundTail: Point;
+  /** The tail's length in world px along the flight. */
+  length: number;
+}
+
 /**
- * A bullet at its simulated spot (design §15): a bright slug with its gun's streak behind
- * it, dropping from the muzzle to body height over the distance it was aimed. The streak
- * never reaches back past the muzzle, so nothing joins shooter and target.
+ * A bullet's shape on screen (design §15, ID-070). Its head is carried on from its last
+ * step by the fight's `acc` (the sim moves it in whole steps; drawn there, it would jump),
+ * never past the spot it was aimed at before it gets there, nor past the end of its
+ * flight. It drops from the muzzle to body height over the distance it was aimed. Its tail
+ * is its gun's tracer plus one frame of flight at the game speed (counted to `TAIL.pace`),
+ * and never reaches back past the muzzle.
  */
-function drawBullet(ctx: CanvasRenderingContext2D, scene: Scene, b: Bullet, cam: Camera): void {
+export function bulletShape(scene: Scene, b: Bullet, cam: Camera): BulletShape {
   const muzzle = muzzleAt(scene, b.fromX, b.fromY, b.owner).z;
   const flown = Math.hypot(b.x - b.fromX, b.y - b.fromY);
+  let lead = Math.max(0, Math.min(b.speed * (scene.acc ?? 0), b.left));
+  if (flown < b.aim) lead = Math.min(lead, b.aim - flown);
+  const at = flown + lead;
+  const pace = Math.min(Math.max(scene.pace ?? 1, 1), TAIL.pace);
+  const length = Math.min(b.tracer.length + b.speed * TAIL.frame * pace, at);
   const zAt = (d: number): number =>
     muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? d / b.aim : 1);
-  const tail = Math.min(b.tracer.length, flown);
-  const a = project({ x: b.x - b.dx * tail, y: b.y - b.dy * tail, z: zAt(flown - tail) }, cam);
-  const head = project({ x: b.x, y: b.y, z: zAt(flown) }, cam);
-  ctx.strokeStyle = b.tracer.colour;
-  ctx.lineWidth = sized(EFFECT.streak, cam);
-  ctx.globalAlpha = 0.7;
+  const hx = b.x + b.dx * lead;
+  const hy = b.y + b.dy * lead;
+  const tx = hx - b.dx * length;
+  const ty = hy - b.dy * length;
+  return {
+    head: project({ x: hx, y: hy, z: zAt(at) }, cam),
+    tail: project({ x: tx, y: ty, z: zAt(at - length) }, cam),
+    groundHead: project({ x: hx, y: hy }, cam),
+    groundTail: project({ x: tx, y: ty }, cam),
+    length,
+  };
+}
+
+/** A quad from `head` (`wHead` wide) thinning to `tail` (`wTail` wide), filled with `fill`. */
+function taper(
+  ctx: CanvasRenderingContext2D,
+  head: Point,
+  tail: Point,
+  wHead: number,
+  wTail: number,
+  fill: string | CanvasGradient,
+): void {
+  const len = Math.hypot(head.sx - tail.sx, head.sy - tail.sy);
+  if (len === 0) return;
+  // The unit normal to the flight on screen.
+  const nx = -(head.sy - tail.sy) / len;
+  const ny = (head.sx - tail.sx) / len;
+  ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.moveTo(a.sx, a.sy);
-  ctx.lineTo(head.sx, head.sy);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = COLOR.slug;
-  ctx.beginPath();
-  ctx.arc(head.sx, head.sy, sized(EFFECT.slug, cam), 0, Math.PI * 2);
+  ctx.moveTo(head.sx + (nx * wHead) / 2, head.sy + (ny * wHead) / 2);
+  ctx.lineTo(tail.sx + (nx * wTail) / 2, tail.sy + (ny * wTail) / 2);
+  ctx.lineTo(tail.sx - (nx * wTail) / 2, tail.sy - (ny * wTail) / 2);
+  ctx.lineTo(head.sx - (nx * wHead) / 2, head.sy - (ny * wHead) / 2);
+  ctx.closePath();
   ctx.fill();
+}
+
+/**
+ * Bullets in flight (design §15, ID-070), as bullets and not beams: a white head capsule on
+ * a dark backing with a soft glow in its gun's colour, a tail that thins and fades to clear,
+ * and a faint shadow on the ground under it. `bullets` share a muzzle (a shotgun's pellets):
+ * every shadow and backing goes down before any tail or head, so none darkens another.
+ */
+function drawBullets(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  bullets: readonly Bullet[],
+  cam: Camera,
+): void {
+  const shapes = bullets.map((b) => ({ ...bulletShape(scene, b, cam), colour: b.tracer.colour }));
+  const w = sized(BULLET.head.w, cam);
+  const end = BULLET.tail.end * cam.zoom;
+  const capsule = (s: (typeof shapes)[number], colour: string, width: number): void => {
+    const len = Math.hypot(s.head.sx - s.tail.sx, s.head.sy - s.tail.sy);
+    const reach = Math.min(Math.max(0, sized(BULLET.head.len, cam) - width), len);
+    const ux = len > 0 ? (s.head.sx - s.tail.sx) / len : 1;
+    const uy = len > 0 ? (s.head.sy - s.tail.sy) / len : 0;
+    ctx.save();
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(s.head.sx - ux * reach, s.head.sy - uy * reach);
+    ctx.lineTo(s.head.sx, s.head.sy);
+    ctx.stroke();
+    ctx.restore();
+  };
+  ctx.globalAlpha = 1;
+  for (const s of shapes) {
+    taper(ctx, s.groundHead, s.groundTail, sized(BULLET.shadow.w, cam), end, BULLET.shadow.colour);
+  }
+  for (const s of shapes) capsule(s, BULLET.head.backing, w + 2 * BULLET.head.edge);
+  for (const s of shapes) {
+    const glow = ctx.createRadialGradient(
+      s.head.sx,
+      s.head.sy,
+      0,
+      s.head.sx,
+      s.head.sy,
+      sized(BULLET.glow.r, cam),
+    );
+    glow.addColorStop(0, withAlpha(s.colour, BULLET.glow.alpha));
+    glow.addColorStop(1, withAlpha(s.colour, 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(s.head.sx, s.head.sy, sized(BULLET.glow.r, cam), 0, Math.PI * 2);
+    ctx.fill();
+    const fade = ctx.createLinearGradient(s.head.sx, s.head.sy, s.tail.sx, s.tail.sy);
+    fade.addColorStop(0, '#ffffff');
+    fade.addColorStop(BULLET.tail.white, withAlpha(s.colour, BULLET.tail.alpha));
+    fade.addColorStop(1, withAlpha(s.colour, 0));
+    taper(ctx, s.head, s.tail, w, end, fade);
+    capsule(s, COLOR.slug, w);
+  }
 }
 
 /**
  * Where a bullet ended, fading and spreading over `IMPACT_FLASH`: a blood puff at body
- * height on a hit, a dust kick on the ground where a miss fell.
+ * height on a hit, a dust kick on the ground where a miss fell. A hit also flashes a white
+ * spark on the body for its first `SPARK_SHARE`, shrinking and fading (ID-070).
  */
 function drawImpact(ctx: CanvasRenderingContext2D, i: Impact, time: number, cam: Camera): void {
   const age = (time - i.at) / IMPACT_FLASH;
@@ -1235,6 +1392,15 @@ function drawImpact(ctx: CanvasRenderingContext2D, i: Impact, time: number, cam:
     const c = project(at, cam);
     ctx.beginPath();
     ctx.arc(c.sx, c.sy, blob, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const spark = age / SPARK_SHARE;
+  if (i.hit && spark < 1) {
+    const c = project({ x: i.x, y: i.y, z: ENEMY.z }, cam);
+    ctx.globalAlpha = 1 - spark;
+    ctx.fillStyle = COLOR.hitSpark;
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, sized(EFFECT.spark * (1 - spark / 2), cam), 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -1539,8 +1705,19 @@ export function drawScene(
       },
     });
   }
+  // One shot's bullets (a shotgun's pellets: one muzzle, flown as far) draw together,
+  // shadows and backings under every tail and head; each later shot sorts on its own.
+  const volleys = new Map<string, Bullet[]>();
   for (const b of scene.bullets) {
-    sprites.push({ y: b.y, x: b.x, draw: () => drawBullet(ctx, scene, b, cam) });
+    const flown = Math.round(Math.hypot(b.x - b.fromX, b.y - b.fromY));
+    const key = `${b.owner}@${b.fromX},${b.fromY}:${flown}`;
+    const v = volleys.get(key);
+    if (v) v.push(b);
+    else volleys.set(key, [b]);
+  }
+  for (const v of volleys.values()) {
+    const b = v[0]!;
+    sprites.push({ y: b.y, x: b.x, draw: () => drawBullets(ctx, scene, v, cam) });
   }
   for (const sprite of depthSort(sprites)) sprite.draw();
   if (build) drawBuildMarks(ctx, scene, build, camp, cam);

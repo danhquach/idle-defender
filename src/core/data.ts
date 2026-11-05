@@ -394,8 +394,11 @@ export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;
 /** How long a blade or tool strike stays on screen, in seconds. */
 export const STRIKE_FLASH = 0.15;
-/** How long a gun's muzzle flash shows, in seconds (design §15). */
-export const MUZZLE_FLASH = 0.05;
+/**
+ * How long a gun's muzzle flash shows, in seconds (design §15): long enough to light at
+ * least one 60 fps frame at 3× (ID-070).
+ */
+export const MUZZLE_FLASH = 0.08;
 /** How long a bullet's impact (a puff on a hit, dust on a miss) shows, in seconds. */
 export const IMPACT_FLASH = 0.25;
 

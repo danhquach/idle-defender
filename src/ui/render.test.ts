@@ -28,12 +28,23 @@ import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
 import { carpet } from '../core/skills.ts';
 import { ANIM, Animator } from './anim.ts';
-import { FIGHT_FRAME, frameCamera, HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
+import {
+  FIGHT_FRAME,
+  frameCamera,
+  HEIGHT_SCALE,
+  project,
+  TILT,
+  wallHeight,
+  type Camera,
+} from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK } from './ground.ts';
 import {
+  BULLET,
+  bulletShape,
   drawScene,
   offFrame,
   SURVIVOR_BAR,
+  TAIL,
   trapLook,
   turretLook,
   type BuildOverlay,
@@ -133,6 +144,7 @@ function recorder() {
       return { setTransform: noop };
     },
     createRadialGradient: () => ({ addColorStop: noop }),
+    createLinearGradient: () => ({ addColorStop: noop }),
     fillRect: noop,
     strokeRect: noop,
     beginPath: noop,
@@ -813,7 +825,13 @@ function geometry(cam: { x: number; y: number; zoom: number }, scene: Scene) {
   return { marks, lines, dots, alpha: ctx.globalAlpha };
 }
 
-const PUFF = { blood: '#8e1f1a', dust: '#a8987c', flash: '#fff2b0', slug: '#fffbe8' } as const;
+const PUFF = {
+  blood: '#8e1f1a',
+  dust: '#a8987c',
+  // A muzzle flash's round halo, centred on the barrel tip (its core is an ellipse ahead).
+  flash: 'rgba(255, 170, 60, 0.6)',
+  slug: '#fffbe8',
+} as const;
 
 describe('the build scene (ID-065)', () => {
   beforeEach(stubCanvas);
@@ -1059,43 +1077,44 @@ describe('bullet visuals (ID-045)', () => {
   }
 
   it.each([0.5, 1, 2])(
-    'no laser at %s× zoom: every line is a short streak, none joins shooter and target',
+    'no laser at %s× zoom: every bullet is a short tail, none joins shooter and target',
     (zoom) => {
       const cam = { x: 0, y: 0, zoom };
       const { scene, post, target } = fight();
       // Just fired, midway, and about to land.
       const bullets = [5, 60, 200, 370].map((f) => flying(post, target, f));
-      const g = geometry(cam, { ...scene, bullets });
-      expect(g.lines).toHaveLength(bullets.length);
       const shooter = project(post, cam);
       const enemyAt = project(target, cam);
-      for (const l of g.lines) {
-        if (l.kind !== 'line') continue;
-        const len = Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]);
-        // The streak drops toward body height too, so a hair over its flat length.
-        expect(len).toBeLessThanOrEqual(WEAPONS.pistol.tracer.length * zoom * 1.1);
-        const near = (p: [number, number], q: { sx: number; sy: number }) =>
-          Math.hypot(p[0] - q.sx, p[1] - q.sy) < 1;
-        expect(near(l.a, shooter) && near(l.b, enemyAt)).toBe(false);
+      // The gun's tracer plus one 60 fps frame of flight at 1× (ID-070).
+      const tail = WEAPONS.pistol.tracer.length + 1800 * TAIL.frame;
+      for (const b of bullets) {
+        const s = bulletShape(scene, b, cam);
+        const len = Math.hypot(s.head.sx - s.tail.sx, s.head.sy - s.tail.sy);
+        // The tail drops toward body height too, so a hair over its flat length.
+        expect(len).toBeLessThanOrEqual(tail * zoom * 1.1);
+        const near = (p: { sx: number; sy: number }, q: { sx: number; sy: number }) =>
+          Math.hypot(p.sx - q.sx, p.sy - q.sy) < 1;
+        expect(near(s.tail, shooter) && near(s.head, enemyAt)).toBe(false);
       }
     },
   );
 
-  it('draws each bullet as a slug at its simulated position, through the depth sort', () => {
+  it('draws each bullet as a white head at its simulated position, through the depth sort', () => {
     const cam = { x: 37, y: 12, zoom: 1.5 };
     const { scene, post, target } = fight();
     const b = flying(post, target, 150);
     // An enemy in front of the bullet (lower on screen) draws over it.
     const front: Enemy = { ...target, id: 2, x: b.x + 5, y: b.y + 40 };
     const g = geometry(cam, { ...scene, enemies: [target, front], bullets: [b] });
-    const slugs = g.dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.slug);
-    expect(slugs).toHaveLength(1);
-    const slug = slugs[0]!;
-    if (slug.kind !== 'dot') throw new Error('not a dot');
-    expect(slug.x).toBeCloseTo((b.x - cam.x) * cam.zoom, 9);
+    const heads = g.lines.filter((m) => m.kind === 'line' && m.colour === PUFF.slug);
+    expect(heads).toHaveLength(1);
+    const slug = heads[0]!;
+    if (slug.kind !== 'line') throw new Error('not a line');
+    // The capsule ends at the bullet's spot (no time since the step: nothing to carry on).
+    expect(slug.b[0]).toBeCloseTo((b.x - cam.x) * cam.zoom, 9);
     // On screen it sits between the ground under it and the muzzle height.
     const ground = project({ x: b.x, y: b.y }, cam).sy;
-    expect(slug.y).toBeLessThan(ground);
+    expect(slug.b[1]).toBeLessThan(ground);
     const at = g.marks.indexOf(slug);
     const shamblers = g.marks.flatMap((m, i) =>
       m.kind === 'art' && m.id === 'shambler-walk-b' ? [i] : [],
@@ -1108,18 +1127,29 @@ describe('bullet visuals (ID-045)', () => {
     const cam = { x: 0, y: 0, zoom: 1 };
     const { scene, post, target } = fight();
     const long: Tracer = { length: 40, colour: '#123456' };
-    const g = geometry(cam, {
-      ...scene,
-      bullets: [
-        flying(post, { x: target.x, y: post.y }, 200),
-        flying(post, { x: target.x, y: post.y }, 200, long),
-      ],
-    });
-    const byColour = Object.fromEntries(
-      g.lines.map((l) => (l.kind === 'line' ? [l.colour, Math.abs(l.b[0] - l.a[0])] : [])),
+    const flat = { x: target.x, y: post.y };
+    const pistol = flying(post, flat, 200);
+    const other = flying(post, flat, 200, long);
+    // Each gun's tracer, plus the same frame of flight at its speed (ID-070).
+    const flight = 1800 * TAIL.frame;
+    expect(bulletShape(scene, pistol, cam).length).toBeCloseTo(
+      WEAPONS.pistol.tracer.length + flight,
+      6,
     );
-    expect(byColour[WEAPONS.pistol.tracer.colour]).toBeCloseTo(WEAPONS.pistol.tracer.length, 6);
-    expect(byColour[long.colour]).toBeCloseTo(40, 6);
+    expect(bulletShape(scene, other, cam).length).toBeCloseTo(40 + flight, 6);
+    // The tail fades from white through the gun's colour to clear.
+    const r = recorder();
+    const stops: string[][] = [];
+    Object.assign(r.ctx, {
+      createLinearGradient: () => {
+        const g: string[] = [];
+        stops.push(g);
+        return { addColorStop: (_at: number, c: string) => g.push(c) };
+      },
+    });
+    drawScene(r.ctx, r.art, { ...scene, bullets: [pistol, other] }, cam, VIEW);
+    expect(stops).toContainEqual(['#ffffff', 'rgba(255, 211, 106, 0.9)', 'rgba(255, 211, 106, 0)']);
+    expect(stops).toContainEqual(['#ffffff', 'rgba(18, 52, 86, 0.9)', 'rgba(18, 52, 86, 0)']);
     expect(TURRET.tracer).not.toEqual(WEAPONS.pistol.tracer);
   });
 
@@ -1221,9 +1251,13 @@ describe('bullet visuals (ID-045)', () => {
     // Up at the weapon, well under a tower's height.
     expect(feet - flash.y).toBeGreaterThan(5);
     expect(feet - flash.y).toBeLessThan(30);
-    const streak = g.lines[0]!;
-    if (streak.kind !== 'line') throw new Error('not a line');
-    expect(feet - streak.a[1]).toBeLessThan(30);
+    const s = bulletShape(
+      { ...scene, posts: [], defenders: [walker] },
+      flying(walker, target, 30),
+      cam,
+    );
+    expect(feet - s.tail.sy).toBeGreaterThan(5);
+    expect(feet - s.tail.sy).toBeLessThan(30);
   });
 
   it("flashes at a turret's barrel when it fires", () => {
@@ -1300,6 +1334,261 @@ describe('bullet visuals (ID-045)', () => {
     }
     const sizes = (g: typeof small) => g.dots.map((m) => (m.kind === 'dot' ? m.r : 0));
     sizes(big).forEach((r, i) => expect(r).toBeGreaterThan(sizes(small)[i]!));
+  });
+
+  describe('easy to see, bullets not beams (ID-070)', () => {
+    const SPARK = '#ffffff';
+    const FRAME = 1 / 60;
+    type Paint = {
+      op: 'fill' | 'stroke';
+      style: unknown;
+      width: number;
+      path: [number, number][];
+    };
+    /** Every fill and stroke `drawScene` makes, in order, with its style and path. */
+    function paints(scene: Scene, cam: Camera): Paint[] {
+      const r = recorder();
+      const out: Paint[] = [];
+      let path: [number, number][] = [];
+      const ctx = r.ctx as unknown as Record<string, unknown> & {
+        fillStyle: unknown;
+        strokeStyle: unknown;
+        lineWidth: number;
+      };
+      Object.assign(ctx, {
+        fillStyle: '',
+        strokeStyle: '',
+        lineWidth: 1,
+        beginPath: () => (path = []),
+        moveTo: (x: number, y: number) => path.push([x, y]),
+        lineTo: (x: number, y: number) => path.push([x, y]),
+        fill: () => out.push({ op: 'fill', style: ctx.fillStyle, width: 0, path }),
+        stroke: () =>
+          out.push({ op: 'stroke', style: ctx.strokeStyle, width: ctx.lineWidth, path }),
+      });
+      drawScene(r.ctx, r.art, scene, cam, VIEW);
+      return out;
+    }
+    const gap = (p: [number, number], q: [number, number]) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+
+    it('draws the head as a white capsule over a darker, wider backing, with no rim on the tail', () => {
+      const cam = frameCamera({ w: 1280, h: 720 });
+      const { scene, post, target } = fight();
+      const p = paints({ ...scene, bullets: [flying(post, target, 200)] }, cam);
+      const strokes = p.filter((x) => x.op === 'stroke');
+      const backing = strokes.findIndex((x) => x.style === BULLET.head.backing);
+      const head = strokes.findIndex((x) => x.style === PUFF.slug);
+      expect(backing).toBeGreaterThanOrEqual(0);
+      expect(head).toBeGreaterThan(backing);
+      const w = strokes[head]!.width;
+      expect(w).toBeCloseTo(Math.max(1.5, BULLET.head.w * cam.zoom), 9);
+      expect(strokes[backing]!.width).toBeCloseTo(w + 2 * BULLET.head.edge, 9);
+      // A capsule (round caps add half its width at each end) BULLET.head.len long.
+      const [a, b] = strokes[head]!.path;
+      expect(gap(a!, b!) + w).toBeCloseTo(BULLET.head.len * cam.zoom, 6);
+      // Those are the bullet's only strokes: nothing outlines the tail.
+      expect(strokes).toHaveLength(2);
+    });
+
+    it('thins the tail from the head to a point, with its shadow on the ground under it', () => {
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, post, target } = fight();
+      const b = flying(post, target, 200);
+      const p = paints({ ...scene, bullets: [b] }, cam);
+      const quads = p.filter((x) => x.op === 'fill' && x.path.length === 4);
+      const shadow = quads.find((x) => x.style === BULLET.shadow.colour);
+      const tail = quads.find((x) => typeof x.style !== 'string');
+      if (!shadow || !tail) throw new Error('no tail or shadow');
+      // Points: head side, tail side, tail other side, head other side.
+      const widths = (q: Paint) => [gap(q.path[0]!, q.path[3]!), gap(q.path[1]!, q.path[2]!)];
+      expect(widths(tail)[0]).toBeCloseTo(BULLET.head.w, 9);
+      expect(widths(tail)[1]).toBeCloseTo(BULLET.tail.end, 9);
+      expect(widths(shadow)[0]).toBeCloseTo(BULLET.shadow.w, 9);
+      expect(widths(shadow)[1]).toBeCloseTo(BULLET.tail.end, 9);
+      // The shadow lies on the ground, the tail up in the air above it.
+      const s = bulletShape(scene, b, cam);
+      // Its head end is centred on the ground under the bullet's head.
+      expect((shadow.path[0]![1] + shadow.path[3]![1]) / 2).toBeCloseTo(s.groundHead.sy, 9);
+      expect(s.groundHead.sy - s.head.sy).toBeGreaterThan(5);
+      expect(p.indexOf(shadow)).toBeLessThan(p.indexOf(tail));
+    });
+
+    it.each([
+      [undefined, 1],
+      [1, 1],
+      [2, 2],
+      [3, 2],
+    ])('at game speed %s the tail is the tracer plus %s frame(s) of flight', (pace, frames) => {
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, post, target } = fight();
+      const b = flying(post, target, 300);
+      const s = bulletShape({ ...scene, pace }, b, cam);
+      expect(s.length).toBeCloseTo(WEAPONS.pistol.tracer.length + 1800 * FRAME * frames, 9);
+    });
+
+    it.each([1, 3])(
+      'carries the head on smoothly between the fight steps at %s×, so it never jumps',
+      (pace) => {
+        const cam = { x: 0, y: 0, zoom: 1 };
+        const { scene } = fight();
+        const game = newGame();
+        const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+        const d = h.defenders[0]!;
+        const post = h.posts[d.postId]!;
+        h.toSpawn = 0;
+        // Straight across the field and far: every frame below is mid-flight.
+        h.enemies = [{ ...scene.enemies[0]!, x: post.x + 700, y: post.y }];
+        d.nextShotAt = 0;
+        let t = tick(h, STEP);
+        const heads: number[] = [];
+        for (let f = 0; f < 6; f++) {
+          t = tick(t, pace * FRAME);
+          const b = t.bullets[0]!;
+          heads.push(bulletShape({ ...t, pace }, b, cam).head.sx);
+        }
+        // The sim moves bullets a whole step at a time (0 or 2 frames' travel at 1×); drawn,
+        // each frame moves the head the same distance: its speed over one frame (across the
+        // screen, the share of it along x, as the gun's spread turns it a little).
+        const { speed, dx } = t.bullets[0]!;
+        for (let i = 1; i < heads.length; i++) {
+          expect(heads[i]! - heads[i - 1]!).toBeCloseTo(speed * dx * pace * FRAME * cam.zoom, 6);
+        }
+      },
+    );
+
+    it('never carries the head past the aimed spot before it gets there, nor past its flight', () => {
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, post, target } = fight();
+      const flat = { x: target.x, y: post.y };
+      const near = flying(post, flat, 395);
+      const at = (b: Bullet) => bulletShape({ ...scene, acc: STEP }, b, cam).head.sx;
+      // Aimed 400 px out: 5 px short, it is drawn at the aimed spot, not 60 px past it.
+      expect(at(near)).toBeCloseTo(project(flat, cam).sx, 9);
+      // A miss flies on past the aim, but no further than it has left to fly.
+      const last = { ...flying(post, flat, 450), left: 7 };
+      expect(at(last)).toBeCloseTo(project({ x: last.x + 7, y: last.y }, cam).sx, 9);
+    });
+
+    it('never trails back past the muzzle, so a fresh shot draws no line to the shooter', () => {
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, post, target } = fight();
+      const s = bulletShape(scene, flying(post, { x: target.x, y: post.y }, 5), cam);
+      expect(s.length).toBeCloseTo(5, 9);
+      expect(Math.abs(s.head.sx - s.tail.sx)).toBeCloseTo(5, 6);
+    });
+
+    it('joins shooter and a close target only while the bullet is still short of it', () => {
+      // An enemy at the wall, 60 px out: for the frame or two the bullet takes, its tail
+      // runs from the muzzle to the head (a point-blank flicker); once it lands it is gone.
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, post } = fight();
+      const close = { x: post.x + 60, y: post.y };
+      const s = bulletShape(scene, flying(post, close, 40), cam);
+      expect(s.length).toBeCloseTo(40, 9);
+      expect(s.head.sx).toBeLessThan(project(close, cam).sx);
+    });
+
+    it("lays every shadow and backing of a shotgun's pellets under every pellet's tail and head", () => {
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, post, target } = fight();
+      const fan = [-40, -20, 0, 20, 40].map((dy) =>
+        flying(post, { x: target.x, y: target.y + dy }, 60, WEAPONS.shotgun.tracer),
+      );
+      const p = paints({ ...scene, bullets: fan }, cam);
+      const under = p.flatMap((x, i) =>
+        x.style === BULLET.shadow.colour || x.style === BULLET.head.backing ? [i] : [],
+      );
+      const over = p.flatMap((x, i) =>
+        x.style === PUFF.slug ||
+        (x.op === 'fill' && x.path.length === 4 && typeof x.style !== 'string')
+          ? [i]
+          : [],
+      );
+      expect(under).toHaveLength(fan.length * 2);
+      expect(over).toHaveLength(fan.length * 2);
+      expect(Math.max(...under)).toBeLessThan(Math.min(...over));
+    });
+
+    it('points the muzzle flash along the barrel, lit for at least one 60 fps frame at 3×', () => {
+      expect(MUZZLE_FLASH).toBeGreaterThan(3 * FRAME);
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, d } = fight();
+      const r = recorder();
+      const cores: number[][] = [];
+      const halos: number[][] = [];
+      Object.assign(r.ctx, {
+        ellipse: (...a: number[]) => cores.push(a),
+        arc: (...a: number[]) => halos.push(a),
+      });
+      // No enemies: their ground shadows are ellipses too.
+      const shot = { ...scene, enemies: [], time: 1, shots: [{ owner: d.id, at: 1 }] };
+      drawScene(r.ctx, r.art, shot, cam, VIEW);
+      expect(cores).toHaveLength(1);
+      const [x, y, rx, ry] = cores[0]!;
+      const [hx, hy] = halos[0]!;
+      // A teardrop twice as long as it is wide, reaching out ahead of the barrel tip.
+      expect(rx! / ry!).toBeCloseTo(2, 9);
+      expect(x! - hx!).toBeCloseTo(rx!, 9);
+      expect(y).toBeCloseTo(hy!, 9);
+      // Aimed off to one side, it turns with the shot (its newest bullet).
+      const r2 = recorder();
+      const turned: number[][] = [];
+      Object.assign(r2.ctx, { ellipse: (...a: number[]) => turned.push(a) });
+      const post = scene.posts[d.postId]!;
+      const b = { ...flying(post, { x: post.x + 300, y: post.y + 300 }, 20), owner: d.id };
+      drawScene(r2.ctx, r2.art, { ...shot, bullets: [b] }, cam, VIEW);
+      expect(turned).toHaveLength(1);
+      const [tx, ty, trx, , turn] = turned[0]!;
+      const p0 = project(post, cam);
+      const p1 = project({ x: post.x + b.dx, y: post.y + b.dy }, cam);
+      const want = Math.atan2(p1.sy - p0.sy, p1.sx - p0.sx);
+      expect(want).toBeGreaterThan(0.2);
+      expect(turn).toBeCloseTo(want, 9);
+      expect(Math.atan2(ty! - hy!, tx! - hx!)).toBeCloseTo(want, 9);
+      expect(Math.hypot(tx! - hx!, ty! - hy!)).toBeCloseTo(trx!, 9);
+    });
+
+    it("sorts each of a shooter's shots on its own: only one shot's pellets draw together", () => {
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene, post, target } = fight();
+      // Two shots in the air from one gun: one just fired, one far out.
+      const shots = [60, 300].map((f) => flying(post, target, f));
+      const p = paints({ ...scene, bullets: shots }, cam);
+      const backings = p.flatMap((x, i) => (x.style === BULLET.head.backing ? [i] : []));
+      const heads = p.flatMap((x, i) => (x.style === PUFF.slug ? [i] : []));
+      expect(backings).toHaveLength(2);
+      expect(heads).toHaveLength(2);
+      // Each shot's backing then head, not both backings first.
+      expect(backings[1]).toBeGreaterThan(heads[0]!);
+    });
+
+    it('takes every tracer colour as #rrggbb, so its fade stops are real colours', () => {
+      const guns = [...Object.values(WEAPONS).flatMap((w) => ('tracer' in w ? [w] : [])), TURRET];
+      for (const g of guns) expect(g.tracer.colour).toMatch(/^#[0-9a-f]{6}$/i);
+    });
+
+    it('flashes a white spark on the body for a hit, not a miss, shrinking and fading', () => {
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const { scene } = fight();
+      const sparks = (time: number, hit: boolean) =>
+        geometry(cam, {
+          ...scene,
+          enemies: [],
+          time,
+          impacts: [{ x: 900, y: 300, hit, at: 1 }],
+        }).dots.flatMap((m) => (m.kind === 'dot' && m.colour === SPARK ? [m] : []));
+      const fresh = sparks(1, true);
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0]!.alpha).toBe(1);
+      // At body height, not on the ground.
+      expect(project({ x: 900, y: 300 }, cam).sy - fresh[0]!.y).toBeGreaterThan(5);
+      const later = sparks(1 + IMPACT_FLASH * 0.2, true);
+      expect(later).toHaveLength(1);
+      expect(later[0]!.alpha).toBeLessThan(1);
+      expect(later[0]!.r).toBeLessThan(fresh[0]!.r);
+      expect(sparks(1 + IMPACT_FLASH * 0.45, true)).toEqual([]);
+      expect(sparks(1, false)).toEqual([]);
+    });
   });
 });
 
