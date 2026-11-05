@@ -9,6 +9,7 @@ import {
   hordeCampOffers,
   newCamp,
   recoveryMs,
+  recruit,
   startCash,
   type Camp,
 } from './camp.ts';
@@ -86,6 +87,11 @@ export interface GameState {
   leftBehind: LeftWeapon[];
   /** Capacity, camp XP and level picks, and the roster floor (design §11). */
   camp: Camp;
+  /**
+   * Survivors past the horde-only squad's cap from an older save (ID-066), kept for when
+   * the full game comes back; this version doesn't show them.
+   */
+  reserve: RosterDefender[];
 }
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
@@ -95,7 +101,18 @@ const STARTER_ROSTER: readonly DefenderSpec[] = [
   { id: 'john', name: 'John', loadout: { primary: 'pistol', secondary: 'toolkit', item: null } },
 ];
 
-export function newGame(): GameState {
+/**
+ * A new game: the full game's (`'full'`), or the horde-only build's (`'horde'`, ID-066):
+ * Horde 1 with one survivor carrying a pistol, free recruit 1. The rest is the full
+ * game's, kept as it is (each horde-only fight is on a fresh `squadBase`).
+ */
+export function newGame(preset: 'full' | 'horde' = 'full'): GameState {
+  const game = fullGame();
+  if (preset === 'full') return game;
+  return { ...game, roster: [recruit(1)], camp: { ...game.camp, recruits: 1 } };
+}
+
+function fullGame(): GameState {
   return loadBatteries({
     hordeNumber: 1,
     base: newBase(),
@@ -120,6 +137,7 @@ export function newGame(): GameState {
     reports: [],
     leftBehind: [],
     camp: newCamp(),
+    reserve: [],
   });
 }
 
@@ -220,7 +238,10 @@ export function hordeXp(hordeNumber: number): number {
   return DEFENDER_XP.base + DEFENDER_XP.perHorde * hordeNumber;
 }
 
-/** XP per defender who took part, in join order, and whether they were injured; none on a loss. */
+/**
+ * XP per defender who took part, in join order, and whether they were injured; none on a
+ * loss. The fight's XP rate (ID-066) multiplies it, rounded down.
+ */
 export function xpGains(
   h: HordeState,
 ): { id: string; name: string; xp: number; injured: boolean }[] {
@@ -229,7 +250,7 @@ export function xpGains(
   return h.tookPart.map((id) => ({
     id,
     name: everyone.find((d) => d.id === id)!.name,
-    xp: hordeXp(h.hordeNumber),
+    xp: Math.floor(hordeXp(h.hordeNumber) * (h.xpRate ?? 1)),
     injured: h.injured.some((i) => i.defender.id === id),
   }));
 }

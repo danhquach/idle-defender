@@ -13,7 +13,15 @@ import {
   startHorde,
   type GameState,
 } from './game.ts';
-import { layoutOf, tick, type HordeState, type Outcome } from './horde.ts';
+import {
+  layoutOf,
+  tick,
+  type Card,
+  type HordeState,
+  type Outcome,
+  type UpgradeId,
+} from './horde.ts';
+import { finishSquadHorde, squadOf, startSquadHorde } from './hordeonly.ts';
 import { professionOf } from './loadout.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { unspentPoints } from './stats.ts';
@@ -152,6 +160,80 @@ export function playCampaign(seed: number, hordes: number): HordeRun[] {
     now += horde.time * 1000;
     runs.push(summarise(horde, seed + i));
     game = spendAll(finishHorde(game, horde, now));
+  }
+  return runs;
+}
+
+/**
+ * The horde-only scripted player's cards (ID-066), best first: damage, then shots that
+ * spread it, then reach, then the wall. Any card not listed comes last.
+ */
+const SQUAD_PICKS: readonly UpgradeId[] = [
+  'sharpshooter',
+  'rapid-fire',
+  'split-shot',
+  'piercing-rounds',
+  'chain-lightning',
+  'explode-on-kill',
+  'burning-rounds',
+  'ricochet',
+  'long-sight',
+  'reinforce',
+  'spiked-walls',
+  'slow-field',
+  'patch-up',
+];
+
+/** Which card of the open offer the horde-only scripted player takes: the best by `SQUAD_PICKS`. */
+export function squadPick(s: Pick<HordeState, 'offer'>): number {
+  const rank = (c: Card): number => {
+    const i = c.kind === 'upgrade' ? SQUAD_PICKS.indexOf(c.id) : -1;
+    return i < 0 ? SQUAD_PICKS.length : i;
+  };
+  const ranks = (s.offer ?? []).map(rank);
+  return ranks.indexOf(Math.min(...ranks));
+}
+
+/** Plays `game`'s next horde-only horde (ID-066) to the end with the scripted player. */
+export function playSquadHorde(game: GameState, seed: number, maxFight = MAX_FIGHT): HordeState {
+  let s = startSquadHorde(game, seed, 0);
+  while (s.outcome === 'fighting') {
+    if (s.time > maxFight)
+      throw new RangeError(`playSquadHorde: horde ${s.hordeNumber} never ended`);
+    s = s.offer ? chooseCard(s, squadPick(s)) : tick(s, 60);
+  }
+  return s;
+}
+
+/** The horde-only scripted player's stat points: every one into Aim. */
+export function spendSquad(game: GameState): GameState {
+  let g = game;
+  for (const d of game.roster) {
+    for (let n = unspentPoints(d); n > 0; n--) {
+      const r = spendPoint(g, d.id, 'aim');
+      if (r.ok) g = r.game;
+    }
+  }
+  return g;
+}
+
+/**
+ * A horde-only campaign (ID-066) from a new game until Horde `hordes` is won, as the
+ * player plays it: a loss replays the same horde, a win adds XP (all spent on Aim) and a
+ * survivor. Stops after `maxTries` fights in all. Fight `i` (from 0) uses seed `seed + i`.
+ * Returns every fight, in order, and the squad size it was fought with.
+ */
+export function playSquadCampaign(
+  seed: number,
+  hordes: number,
+  maxTries = hordes * 3,
+): (HordeRun & { squad: number })[] {
+  let game = newGame('horde');
+  const runs: (HordeRun & { squad: number })[] = [];
+  for (let i = 0; i < maxTries && game.hordeNumber <= hordes; i++) {
+    const horde = playSquadHorde(game, seed + i);
+    runs.push({ ...summarise(horde, seed + i), squad: squadOf(game).length });
+    game = spendSquad(finishSquadHorde(game, horde));
   }
   return runs;
 }

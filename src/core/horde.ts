@@ -115,13 +115,19 @@ export interface DefenderSpec {
   loadout: Loadout;
   /** Permanent stats from the roster (design §6); none means all 0. */
   stats?: Readonly<Stats>;
+  /** A horde-only survivor (ID-066): no profession, its bonuses, title or badge. */
+  plain?: true;
 }
 
 /** The spec a fight defender came from, stats and all. */
 export function specOf(d: DefenderSpec): DefenderSpec {
   const { id, name, stats } = d;
   const loadout = { ...d.loadout };
-  return stats ? { id, name, loadout, stats: { ...stats } } : { id, name, loadout };
+  const spec: DefenderSpec = stats
+    ? { id, name, loadout, stats: { ...stats } }
+    : { id, name, loadout };
+  if (d.plain) spec.plain = true;
+  return spec;
 }
 export interface HordeSetup {
   hordeNumber: number;
@@ -147,6 +153,12 @@ export interface HordeSetup {
   /** Kill-cash factor and starting cash from camp-level picks (design §11); 1 and 0 by default. */
   cashRate?: number;
   startCash?: number;
+  /** The only upgrade cards this fight may offer (ID-066); every card when absent. */
+  cards?: readonly UpgradeId[];
+  /** Enemy HP's factor for this horde (ID-066); `HP_GROWTH` per horde when absent. */
+  hpScale?: number;
+  /** Multiplies the defender XP a win gives (ID-066); 1 when absent. */
+  xpRate?: number;
 }
 export interface Enemy {
   id: number;
@@ -432,6 +444,12 @@ export interface HordeState {
   mods: Mods;
   /** Upgrade cards taken this horde, in pick order, each once (design §8). */
   taken: UpgradeId[];
+  /** The only upgrade cards offered (ID-066); every card when absent. */
+  cardPool?: UpgradeId[];
+  /** Enemy HP's factor for this horde (ID-066); `HP_GROWTH` per horde when absent. */
+  hpScale?: number;
+  /** Multiplies the defender XP a win gives (ID-066); 1 when absent. */
+  xpRate?: number;
   /** Power Surge: turrets draw no charge while `wave` is this one; 0 = none. */
   freeWave: number;
   /** Horde cash from kills (design §4); spent in the shop, never kept after the horde. */
@@ -501,6 +519,9 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     bankCap = BANK_CAP,
     cashRate = 1,
     startCash = 0,
+    cards,
+    hpScale,
+    xpRate,
   } = setup;
   const levels: Partial<Record<PerkId, number>> = {};
   for (const id of perks) levels[id] = perkLevels[id] ?? 1;
@@ -550,6 +571,9 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     offer: null,
     mods: { damage: 1, fireRate: 1, range: 1 },
     taken: [],
+    ...(cards ? { cardPool: [...cards] } : {}),
+    ...(hpScale === undefined ? {} : { hpScale }),
+    ...(xpRate === undefined ? {} : { xpRate }),
     freeWave: 0,
     cash: startCash,
     cashRate,
@@ -928,7 +952,7 @@ function spawn(s: HordeState, rng: Rng): void {
 
 /** A new enemy of `kind` at `(x, y)` with this wave's HP. */
 function place(s: HordeState, kind: EnemyKind, x: number, y: number): Enemy {
-  const hp = enemyHp(kind, s.hordeNumber, s.wave);
+  const hp = enemyHp(kind, s.hordeNumber, s.wave, s.hpScale);
   const e: Enemy = {
     id: s.nextEnemyId++,
     kind,

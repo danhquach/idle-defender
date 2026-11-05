@@ -25,7 +25,13 @@ export const NO_STATS: Readonly<Stats> = { aim: 0, might: 0, tech: 0, grit: 0 };
 export interface Statted {
   loadout: Loadout;
   stats?: Readonly<Stats>;
+  /** A horde-only survivor (ID-066): no profession, so no profession bonus or title bonus. */
+  plain?: true;
 }
+
+/** The profession `d` works by their loadout, or null for a plain survivor (ID-066). */
+export const professionFor = (d: Statted): Profession | null =>
+  d.plain ? null : professionOf(d.loadout);
 
 /** Lifetime XP needed to reach `level` (level 1 needs none). */
 export function xpForLevel(level: number): number {
@@ -114,13 +120,13 @@ function feed(d: Statted, profession: Profession): { points: number; bonus: numb
   const stats = d.stats ?? NO_STATS;
   return {
     points: stats[PROFESSION_STAT[profession]],
-    bonus: titleIn(stats, profession)?.bonus ?? 0,
+    bonus: d.plain ? 0 : (titleIn(stats, profession)?.bonus ?? 0),
   };
 }
 
 /** A specialised gun in a non-Gunner's hands (a sidearm suits everyone). */
 const offProfession = (d: Statted, weapon: Held): boolean =>
-  weaponOf(weapon).kind === 'gun' && professionOf(d.loadout) !== 'gunner';
+  !d.plain && weaponOf(weapon).kind === 'gun' && professionOf(d.loadout) !== 'gunner';
 
 /**
  * Damage multiplier for a hit with `weapon`, per weapon (design §6): Aim and the
@@ -137,20 +143,20 @@ export function damageFactor(d: Statted, weapon: Held): number {
 
 /** Repair multiplier for an Engineer: Tech, then the title bonus; 1 otherwise. */
 export function repairFactor(d: Statted): number {
-  if (professionOf(d.loadout) !== 'engineer') return 1;
+  if (professionFor(d) !== 'engineer') return 1;
   const f = feed(d, 'engineer');
   return (1 + STAT_EFFECT.repair * f.points) * (1 + f.bonus);
 }
 
 /** Crit chance of a gun shot: Aim, plus the Gunner's handling, capped. */
 export function critChance(d: Statted): number {
-  const gunner = professionOf(d.loadout) === 'gunner' ? GUNNER.crit : 0;
+  const gunner = professionFor(d) === 'gunner' ? GUNNER.crit : 0;
   return Math.min(STAT_EFFECT.critCap, STAT_EFFECT.crit * feed(d, 'gunner').points + gunner);
 }
 
 /** Degrees either way gun `weapon`'s bullets stray off the aim: a Gunner's cone is narrower. Aim only crits. */
 export function spreadOf(d: Statted, weapon: Held): number {
-  const gunner = professionOf(d.loadout) === 'gunner' ? GUNNER.spread : 1;
+  const gunner = professionFor(d) === 'gunner' ? GUNNER.spread : 1;
   return gunOf(weapon).spread * gunner;
 }
 
@@ -162,14 +168,14 @@ export function cleaveShare(d: Statted): number {
 /** Fire-rate factor for `weapon` from the loadout: a Gunner's guns faster, a shield's holder's guns slower. */
 export function fireRateFactor(d: Statted, weapon: Held): number {
   if (!isGun(weapon)) return 1;
-  const gunner = professionOf(d.loadout) === 'gunner' ? 1 + GUNNER.fireRate : 1;
+  const gunner = professionFor(d) === 'gunner' ? 1 + GUNNER.fireRate : 1;
   const shield = d.loadout.item === 'shield' ? 1 - SHIELD.fireRate : 1;
   return gunner * shield;
 }
 
 /** Seconds to reload gun `weapon`: a Gunner's 25% faster, an off-profession specialised gun's 50% slower. */
 export function reloadTime(d: Statted, weapon: Held): number {
-  const gunner = professionOf(d.loadout) === 'gunner' ? 1 - GUNNER.reload : 1;
+  const gunner = professionFor(d) === 'gunner' ? 1 - GUNNER.reload : 1;
   const off = offProfession(d, weapon) ? 1 + OFF_PROFESSION.reload : 1;
   return gunOf(weapon).reload * gunner * off;
 }

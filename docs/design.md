@@ -86,6 +86,23 @@ loot, and the further you push into danger, the more you can win — or lose.
   base can always be repaired even before patrols unlock, but losing on
   purpose never beats winning *(designer's call)*.
 
+- **As built (ID-066): the horde-only build.** One `HORDE_ONLY` flag in
+  `data.ts` cuts the game to one loop: fight a horde → result screen → next
+  horde. There is no build panel, so the world map, patrols, building,
+  research, the workbench, the camp level and the perk screen can't be
+  reached; their code and saved state stay, to come back later.
+  - Each horde-only fight is on its own fresh base: the one layer (Concrete,
+    gate at row 6) at full HP and a tower for each squad slot. No repair
+    step, and no damage carries over.
+  - The loss rule is the one above with one layer: an enemy through the wall
+    and every survivor down for 10 s.
+  - A loss pays nothing and costs nothing (no Scrap, Wood, Food, Medicine or
+    rest): the same horde is played again with every survivor and a full
+    wall. Injury and rest timers are hidden.
+  - The page opens on the next horde's start screen (the squad, Start
+    Horde N) over the squad standing on the wall; the result screen's button
+    starts the next horde (or the retry) at once.
+
 ## 3. The base (fake 3D, side-on layers)
 
 One large map viewed from above at an angle (2.5D: walls and towers have
@@ -338,6 +355,21 @@ Defenders stand on **posts** the player builds and chooses between.
   Defender XP goes in full to every defender who took part, injured or
   not, so a recruit never dilutes it *(designer's call)*. Defenders left on the bench get no horde XP; patrols are their other way to level (§10).
 
+- **As built (ID-066): the horde-only fight.**
+  - The whole squad starts on the wall, each on a tower in join order from
+    the middle out (rows 5, 7, 3, 9, 1, 10), a row apart so each one stands
+    clear of the tower behind (ten rows hold only five such towers, so the
+    sixth is next to the fifth's). Nobody waits on the bench, so no
+    recruit cards or replacements come.
+  - Horde cash, the shop row and active skills are hidden: kills pay no cash
+    and no skill is researched.
+  - Steady Fire is the one perk, always on at level 1; no perk screen.
+  - The top bar is minimal: the horde number, waves cleared and enemies left
+    in the wave (on the field and still to come), with the speed buttons; the
+    fight XP bar (its level and XP to the next) sits under it on the left.
+  - Enemy HP grows ×1.20 per horde up to Horde 6 (the squad grows by a
+    survivor a win until then), then ×1.03, instead of ×1.17 (§9).
+
 ## 5. Commander and perks
 
 The player is the **commander**: not a unit on the field and never bought.
@@ -411,6 +443,14 @@ which apply to the whole battlefield.
 Defenders are a **permanent roster**: levels, stats, titles and gear stay.
 **No fixed class:** any defender can use any weapon, and the equipped
 loadout decides which profession they are working as.
+
+- **As built (ID-066): no professions in the horde-only build.** Survivors
+  are plain: no profession, so no Gunner fire rate, reload, crit or spread,
+  no Ripper melee or shield, no Engineer repair or buff, no titles, title
+  bonuses or badges, and no off-profession penalty. A survivor fights with
+  their primary gun only (the pistol if they have none) and their §6 stats:
+  Aim (damage and crits) and Grit (HP). The stat picker offers only those
+  two. The roster keeps each loadout as it was.
 
 ### Loadout → profession
 
@@ -763,6 +803,12 @@ Offered 1 of 3 on each fight level. Lost when the horde ends.
   without building win Horde 5 and a full firing line win 60% of Horde 5;
   bold numbers above hold every balance target. The gun-role scenes (ID-046)
   now take only stat cards: behaviour cards favour fast guns.
+
+- **As built (ID-066): horde-only cards.** Stat, behaviour and barrier
+  cards only: no power cards (there are no turrets), no Cleave (no blades or
+  tools) and no recruit cards. Research cards never come (nothing is
+  researched). Five repeatable cards stay in the pool, so an offer never
+  runs dry.
 
 ## 9. Enemies
 
@@ -1329,6 +1375,10 @@ Set before sending; they apply to any location, plaza or single building.
   the Roster, whose camp section sells the upgrades. Everything is read
   from the game as it stands: nothing new is saved.
 
+- **As built (ID-066):** the horde-only build hides resources, research,
+  the camp, the camp level and Mutated Genes; their state stays in the save
+  untouched.
+
 ### Camp level *(designer's call)*
 
 - **Camp XP** comes from winning hordes, and rises with the horde number
@@ -1357,6 +1407,29 @@ Set before sending; they apply to any location, plaza or single building.
   - Patrols stay the main source of new defenders.
 
 ### Start and pacing *(designer's call, starting points)*
+
+As built (ID-066), the horde-only build:
+
+- **New game:** Horde 1 with one survivor (free recruit 1, a random name)
+  carrying a pistol. No named starters, no professions. The rest of a new
+  game's state is the full game's, kept untouched.
+- **Survivors:** each horde won adds one survivor, in the squad for the next
+  horde: no accept step, camp slot or recruit card. The squad cap is 6; at
+  the cap nobody new joins (ID-067 adds the weapon drop).
+- **Progression:** survivor XP and levels, at twice the full game's XP per
+  win (`SQUAD_XP_RATE`). One result screen shows the XP, level-ups (with the
+  stat picker) and the new survivor. Camp XP, the camp level and Mutated
+  Genes are hidden.
+- **Pacing:** a boss horde every 10th horde. Winning Horde 10 shows a soft
+  ending ("You held Horde 10", Continue) and play goes on; there is no win
+  state.
+- **Balance** (scripted player, 20 seeds, `balance.test.ts`): the expected
+  squad (a survivor more per win, every point in Aim, damage cards first)
+  wins each of Hordes 1–10 at the first try on at least 60% of seeds, and
+  every campaign beats Horde 10's boss; the lone starting survivor wins
+  Horde 1 on every seed and loses every horde from Horde 4.
+
+When the full game comes back, it starts as before:
 
 - **New game:** the commander with 1 perk slot (Steady Fire unlocked), 3
   defenders with Rusty weapons, one per profession (a pistol; a pistol and
@@ -1410,12 +1483,38 @@ offline progress works across sessions.
   New camp (each asks first, and both wait until no horde is on). **Help:**
   the controls and a short how-to-play. In a fight, the open menu pauses it.
 
+- **As built (ID-066): save version 12** adds the reserve. A v11 save loads
+  with its horde number and each survivor's level, stats and weapon; every
+  other field loads as it was, hidden or not. In the horde-only build the
+  6 survivors with the most XP (ties to roster order) form the squad and the
+  rest go to the reserve, which this version doesn't show and the full game
+  takes back. A survivor with no gun fights with the pistol. The reserve is
+  read through the same allow-list as the roster, and the roster and reserve
+  together never pass the camp's slots (at least the squad's 6).
+
 ## 13. Out of scope (v1)
 
 - Multiplayer, raids on other players' bases, leaderboards.
 - Story campaign beyond short location notes.
 - Real-money purchases.
 - Defender death in hordes (only patrols can kill).
+
+
+Cut for now (ID-066, the horde-only build; code and state kept, behind
+`HORDE_ONLY`):
+
+- The build panel and the build scene: walls, tiers, posts, turrets, traps,
+  repairs, batteries and the generator.
+- The world map, patrols, the car, survivors from patrols.
+- Research, the Research Lab, the workbench and crafting.
+- The camp: slots, upgrades, camp XP, the camp level and its picks, the
+  roster floor.
+- Commander perks and the perk screen (Steady Fire stays, always on).
+- Professions, titles and badges; the start defender and post pick.
+- Horde cash, the shop row, active skills, power and recruit cards,
+  replacements.
+- Payouts, materials, Mutated Genes, weapon drops (until ID-067),
+  injuries, rest, Food and Medicine.
 
 ## 14. Build order (draft)
 

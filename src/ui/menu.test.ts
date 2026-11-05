@@ -311,7 +311,7 @@ describe('the Menu', () => {
     expect(first).toMatch(/^ID1:/);
   });
 
-  it('New camp: asked first, then a new camp from Horde 1', () => {
+  it('New camp: asked first, then a new horde-only camp from Horde 1 (ID-066)', () => {
     const { menuButton, tab, button, dialog, fresh } = setup({
       game: { ...newGame(), hordeNumber: 12 },
     });
@@ -324,7 +324,7 @@ describe('the Menu', () => {
     button('New camp').click();
     button('Start new camp').click();
     expect(fresh).toHaveLength(1);
-    expect(fresh[0]).toEqual(newGame());
+    expect(fresh[0]).toEqual(newGame('horde'));
     expect(dialog.textContent).toContain(NEW_CAMP_DONE);
   });
 

@@ -8,8 +8,7 @@ import {
   type CardRarity,
   type ResearchCard,
 } from './data.ts';
-import { professionOf } from './loadout.ts';
-import { titleIn } from './stats.ts';
+import { professionFor, titleIn } from './stats.ts';
 import {
   perkFactor,
   perkOn,
@@ -204,11 +203,12 @@ export function rarityOdds(wave: number): Record<CardRarity, number> {
 }
 
 /**
- * Whether `id` may show in an offer now: a `once` card not yet taken; power only with a
- * turret; a research card only once researched.
+ * Whether `id` may show in an offer now: in the fight's card pool, if it has one; a `once`
+ * card not yet taken; power only with a turret; a research card only once researched.
  */
 export function eligible(state: HordeState, id: UpgradeId): boolean {
   const u = UPGRADES[id];
+  if (state.cardPool && !state.cardPool.includes(id)) return false;
   if (u.once && state.taken.includes(id)) return false;
   if (isResearchCard(id) && !state.research.includes(id)) return false;
   return u.category !== 'power' || state.turrets.length > 0;
@@ -220,7 +220,7 @@ const isResearchCard = (id: UpgradeId): id is ResearchCard =>
 /** Whether a Master (or better) Gunner is in the fight (design §8 synergy). */
 export function masterGunner(state: Pick<HordeState, 'defenders'>): boolean {
   return state.defenders.some((d) => {
-    if (professionOf(d.loadout) !== 'gunner' || !d.stats) return false;
+    if (professionFor(d) !== 'gunner' || !d.stats) return false;
     const t = titleIn(d.stats, 'gunner');
     return t !== null && t.at >= MASTER_AT;
   });
