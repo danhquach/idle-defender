@@ -6,18 +6,25 @@ import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
 import { masterGunner, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
 import {
+  COLUMNS,
   ENDING_HORDE,
+  ENEMY_RADIUS,
+  FIELD,
+  SQUAD_SPAWN_X,
+  STEP,
+  WALL,
+  WEAPONS,
   HORDE_ONLY,
   SQUAD_CAP,
   SQUAD_HP_GROWTH,
-  SQUAD_TOWERS,
+  SQUAD_LINE,
   SQUAD_WALL,
   SQUAD_XP_RATE,
   START_PERK,
   TITLES,
 } from './data.ts';
 import { hordeXp, newGame, type GameState, type RosterDefender } from './game.ts';
-import { tick } from './horde.ts';
+import { gunRange, moveDefender, tick } from './horde.ts';
 import {
   capSquad,
   finishSquadHorde,
@@ -27,10 +34,12 @@ import {
   squadOf,
   squadResult,
   squadSpec,
+  SQUAD_SLOTS,
   startSquadHorde,
 } from './hordeonly.ts';
-import type { Loadout } from './loadout.ts';
+import { gunOf, type Loadout } from './loadout.ts';
 import { createRng } from './rng.ts';
+import { enemy } from './testing.ts';
 import { playSquadHorde } from './sim.ts';
 import { critChance, damageFactor, fireRateFactor, reloadTime, spreadOf } from './stats.ts';
 
@@ -82,26 +91,24 @@ describe('the horde-only flag and new game (ID-066)', () => {
     expect(newGame()).toEqual(newGame('full'));
   });
 
-  it('the horde-only base: one wall of the squad tier and a tower for each squad slot', () => {
+  it('the horde-only base: one wall of the squad tier and nothing else (ID-068)', () => {
     const b = squadBase();
     expect(b.layers).toHaveLength(1);
     expect(b.layers[0]!.slots.every((s) => s !== null && s.tier === SQUAD_WALL)).toBe(true);
     expect(b.layers[0]!.slots.every((s) => s!.hp === s!.maxHp)).toBe(true);
-    expect(b.posts.map((p) => [p.kind, p.row])).toEqual(
-      [...SQUAD_TOWERS].sort((a, b) => a - b).map((r) => ['tower', r]),
-    );
-    expect(SQUAD_TOWERS).toHaveLength(SQUAD_CAP);
+    expect(b.posts).toEqual([]);
     expect(b.turrets).toEqual([]);
     expect(b.traps).toEqual([]);
   });
 });
 
 describe('the squad in a horde (ID-066)', () => {
-  it('every survivor starts on the wall, on their tower from the middle out; nobody on the bench', () => {
+  it('every survivor starts on the firing line, in their slot from the middle out; nobody on the bench', () => {
     const g = squadGame(SQUAD_CAP);
     const s = startSquadHorde(g, 7, NOW);
     expect(s.defenders.map((d) => d.id)).toEqual(g.roster.map((d) => d.id));
-    expect(s.defenders.map((d) => s.posts[d.postId]!.row)).toEqual([...SQUAD_TOWERS]);
+    expect(s.defenders.map((d) => s.posts[d.postId]!.kind)).toEqual(Array(SQUAD_CAP).fill('line'));
+    expect(s.defenders.map((d) => d.postId)).toEqual([...SQUAD_LINE.order]);
     for (const d of s.defenders) expect(s.posts[d.postId]!.defenderId).toBe(d.id);
     expect(s.bench).toEqual([]);
     expect(s.tookPart).toEqual(g.roster.map((d) => d.id));
@@ -311,5 +318,126 @@ describe('the squad cap on an older roster (ID-066)', () => {
     ]);
     const g = squadGame(SQUAD_CAP);
     expect(capSquad(g)).toBe(g);
+  });
+});
+
+describe('the firing line (ID-068)', () => {
+  const front = COLUMNS[0]! + WALL.depth;
+
+  it('six fixed slots in one row behind the wall, spaced evenly top to bottom', () => {
+    expect(SQUAD_SLOTS).toHaveLength(SQUAD_CAP);
+    for (const p of SQUAD_SLOTS) {
+      expect(p.x).toBe(COLUMNS[0]! + SQUAD_LINE.offset);
+      expect(p.x).toBeLessThan(COLUMNS[0]!);
+    }
+    const ys = SQUAD_SLOTS.map((p) => p.y);
+    const gap = FIELD.height / SQUAD_CAP;
+    expect(ys[0]).toBeCloseTo(gap / 2, 9);
+    ys.slice(1).forEach((y, i) => expect(y - ys[i]!).toBeCloseTo(gap, 9));
+    expect(FIELD.height - ys.at(-1)!).toBeCloseTo(gap / 2, 9);
+  });
+
+  it('every slot is a line post in the fight, in slot order, after the base’s (none)', () => {
+    const s = startSquadHorde(squadGame(1), 7, NOW);
+    expect(s.posts.map((p) => p.kind)).toEqual(Array(SQUAD_CAP).fill('line'));
+    expect(s.posts.map((p) => ({ x: p.x, y: p.y }))).toEqual(SQUAD_SLOTS);
+    expect(s.posts.map((p) => p.id)).toEqual(SQUAD_SLOTS.map((_, i) => i));
+  });
+
+  it('fills the slots in join order, from the middle out, each slot once', () => {
+    expect([...SQUAD_LINE.order].sort((a, b) => a - b)).toEqual(SQUAD_SLOTS.map((_, i) => i));
+    for (let n = 1; n <= SQUAD_CAP; n++) {
+      const g = squadGame(n);
+      const s = startSquadHorde(g, 7, NOW);
+      const byId = new Map(s.defenders.map((d) => [d.id, d.postId]));
+      expect(g.roster.map((d) => byId.get(d.id))).toEqual(SQUAD_LINE.order.slice(0, n));
+      // The rest of the line stays empty.
+      expect(s.posts.filter((p) => p.defenderId === null)).toHaveLength(SQUAD_CAP - n);
+    }
+    // The first two flank the middle; the last two are the ends.
+    const mid = FIELD.height / 2;
+    const at = (k: number) => SQUAD_SLOTS[SQUAD_LINE.order[k]!]!.y;
+    expect(Math.abs(at(0) - mid)).toBeCloseTo(Math.abs(at(1) - mid), 9);
+    expect(SQUAD_LINE.order.slice(-2).sort((a, b) => a - b)).toEqual([0, SQUAD_CAP - 1]);
+  });
+
+  it('no towers, turrets, ground or wall-walk posts or traps in the fight state', () => {
+    for (let n = 1; n <= SQUAD_CAP; n++) {
+      const s = startSquadHorde(squadGame(n), 7, NOW);
+      expect(s.turrets).toEqual([]);
+      expect(s.traps).toEqual([]);
+      expect(s.posts.every((p) => p.kind === 'line')).toBe(true);
+    }
+    // A full game base with towers in the save doesn't leak into the fight.
+    const g = squadGame(2);
+    expect(g.base.posts.some((p) => p.kind === 'tower')).toBe(true);
+    expect(startSquadHorde(g, 7, NOW).posts.some((p) => p.kind !== 'line')).toBe(false);
+  });
+
+  it('a slot shoots at a tower’s range: the starting pistol reaches the whole wall from the first slot', () => {
+    const s = startSquadHorde(squadGame(1), 7, NOW);
+    const first = s.posts[SQUAD_LINE.order[0]!]!;
+    expect(gunRange(s, first, 'pistol')).toBe(gunOf('pistol').range * SQUAD_LINE.range);
+    const r = ENEMY_RADIUS;
+    for (const y of [r, FIELD.height / 2, FIELD.height - r]) {
+      expect(Math.hypot(front + r - first.x, y - first.y)).toBeLessThanOrEqual(
+        gunRange(s, first, 'pistol'),
+      );
+    }
+  });
+
+  it('with the line full, every gun reaches the wall’s front from some slot', () => {
+    const s = startSquadHorde(squadGame(SQUAD_CAP), 7, NOW);
+    // The shortest-ranged gun there is, at the line's factor (no range cards yet).
+    const shortest = Math.min(
+      ...Object.values(WEAPONS)
+        .filter((w) => w.kind === 'gun' || w.kind === 'sidearm')
+        .map((w) => (w as { range: number }).range),
+    );
+    expect(gunRange(s, s.posts[0]!, 'pistol')).toBe(
+      (WEAPONS.pistol as { range: number }).range * SQUAD_LINE.range,
+    );
+    for (let y = ENEMY_RADIUS; y <= FIELD.height - ENEMY_RADIUS; y += 4) {
+      const near = Math.min(...s.posts.map((p) => Math.hypot(front + ENEMY_RADIUS - p.x, y - p.y)));
+      expect(near).toBeLessThanOrEqual(shortest * SQUAD_LINE.range);
+    }
+  });
+
+  it.each([
+    ['in front of the survivor', 0.5],
+    ['at the wall’s top end', 0],
+    ['at the wall’s bottom end', 1],
+  ])('an enemy pressed against the wall %s is shot over the wall', (_, share) => {
+    let s = startSquadHorde(squadGame(1), 7, NOW);
+    s.toSpawn = 0;
+    const y =
+      share === 0.5 ? s.defenders[0]!.y : ENEMY_RADIUS + share * (FIELD.height - 2 * ENEMY_RADIUS);
+    const e = enemy(s, { x: front + ENEMY_RADIUS, y, hp: 1e6, maxHp: 1e6 });
+    s = tick(s, 3);
+    const after = s.enemies.find((x) => x.id === e.id)!;
+    // Still held at the wall, and hit from behind it.
+    expect(after.x).toBeGreaterThanOrEqual(front);
+    expect(after.hp).toBeLessThan(1e6);
+    expect(s.layers[0]!.segments.every((seg) => seg.hp > 0)).toBe(true);
+  });
+
+  it('enemies spawn at the nearer squad spawn edge, inside the field', () => {
+    expect(SQUAD_SPAWN_X).toBeLessThan(FIELD.right);
+    expect(SQUAD_SPAWN_X).toBeGreaterThan(front);
+    let s = startSquadHorde(squadGame(1), 7, NOW);
+    expect(s.spawnX).toBe(SQUAD_SPAWN_X);
+    s = tick(s, STEP);
+    expect(s.enemies.length).toBeGreaterThan(0);
+    for (const e of s.enemies) expect(e.x).toBeLessThanOrEqual(SQUAD_SPAWN_X);
+    expect(s.enemies[0]!.x).toBeGreaterThan(SQUAD_SPAWN_X - 10);
+  });
+});
+
+describe('fixed slots (ID-068)', () => {
+  it('a survivor can’t move onto an empty slot or off their own', () => {
+    const s = startSquadHorde(squadGame(2), 7, NOW);
+    const free = s.posts.find((p) => p.defenderId === null)!;
+    const moved = moveDefender(s, s.defenders[0]!.id, free.id);
+    expect(moved).toEqual({ ok: false, reason: 'Survivors hold their slots' });
   });
 });

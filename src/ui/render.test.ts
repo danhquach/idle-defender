@@ -1,7 +1,9 @@
 // Design §15: a turret's and a trap's state reads from its sprite: lit, dark, jammed, worn, broken.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTurret, newBase, type Base } from '../core/base.ts';
+import { recruit } from '../core/camp.ts';
 import { newGame, startHorde, type GameState } from '../core/game.ts';
+import { startSquadHorde } from '../core/hordeonly.ts';
 import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
 import {
   CAMP,
@@ -16,6 +18,7 @@ import {
   WEAPONS,
   SEGMENT_HEIGHT,
   SEGMENTS,
+  SQUAD_CAP,
   WALL,
   type EnemyKind,
   type Tracer,
@@ -25,18 +28,27 @@ import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy } from '../core/horde.ts';
 import { carpet } from '../core/skills.ts';
 import { ANIM, Animator } from './anim.ts';
-import { FRAME, frameCamera, HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
+import { FIGHT_FRAME, frameCamera, HEIGHT_SCALE, project, TILT, wallHeight } from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK } from './ground.ts';
 import {
   drawScene,
   offFrame,
+  SURVIVOR_BAR,
   trapLook,
   turretLook,
   type BuildOverlay,
   type Scene,
 } from './render.ts';
 import { ghostsOf, NEEDS_WALL, plotsOf } from './buildscene.ts';
-import { ART_IDS, ART_PX, GATE_POSTS, TIER_ART, type Art, type ArtId } from './sprites.ts';
+import {
+  ART_IDS,
+  ART_PX,
+  BASE_ART,
+  GATE_POSTS,
+  TIER_ART,
+  type Art,
+  type ArtId,
+} from './sprites.ts';
 
 function scene(condition: number, energy: number, wallHp?: number) {
   const r = buildTurret(
@@ -292,7 +304,7 @@ describe('drawScene with art', () => {
     // Saved and clipped before the field's ground, the huts after it; restored at the end.
     expect(calls.slice(0, 3)).toEqual(['save', 'clip', 'ground-canvas']);
     expect(calls.at(-1)).toBe('restore');
-    const left = Math.round(project({ x: FRAME.left, y: 0 }, cam).sx);
+    const left = Math.round(project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx);
     expect(rects[0]).toEqual([left, 0, VIEW.w - left, VIEW.h]);
     // The huts stand left of the frame, so the clip hides them.
     expect(project({ x: CAMP.x, y: 0 }, cam).sx).toBeLessThan(left);
@@ -318,10 +330,10 @@ describe('drawScene with art', () => {
     it('counts them per row, top to bottom; none inside the frame', () => {
       const row = (r: number) => (r + 0.5) * SEGMENT_HEIGHT;
       const enemies = [
-        at(1, FRAME.left - 1, row(7)),
+        at(1, FIGHT_FRAME.left - 1, row(7)),
         at(2, CAMP.x, row(2)),
         at(3, 200, row(7)),
-        at(4, FRAME.left, row(3)),
+        at(4, FIGHT_FRAME.left, row(3)),
         at(5, 900, row(0)),
         // Off the field's depth: kept on its nearest row; a NaN spot is dropped.
         at(6, 100, -40),
@@ -360,7 +372,7 @@ describe('drawScene with art', () => {
       drawScene(r.ctx, r.art, scene, cam, VIEW);
       expect(texts).toHaveLength(1);
       expect(texts[0]!.text).toBe('2');
-      const left = project({ x: FRAME.left, y: 0 }, cam).sx;
+      const left = project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx;
       expect(texts[0]!.x).toBeGreaterThan(left);
       expect(texts[0]!.x).toBeLessThan(left + 40);
       expect(texts[0]!.y).toBeCloseTo(project({ x: 0, y: 4.5 * SEGMENT_HEIGHT }, cam).sy, 9);
@@ -1392,5 +1404,90 @@ describe('sprite animation (ID-049)', () => {
     drawScene(r.ctx, r.art, s, CAM, VIEW);
     // The frame's clip (ID-064) is the only save: no sprite is posed.
     expect(moved).toEqual(['save']);
+  });
+});
+
+describe('the horde-only fight (ID-068)', () => {
+  beforeEach(stubCanvas);
+  afterEach(() => vi.unstubAllGlobals());
+
+  const squadScene = (n: number): Scene => {
+    const g = newGame('horde');
+    const roster = Array.from({ length: n }, (_, i) => ({ ...recruit(i + 1), xp: 0 }));
+    return startSquadHorde({ ...g, roster, camp: { ...g.camp, recruits: n } }, 7, 0);
+  };
+
+  it('draws no tower, ground post or wall-walk platform: survivors stand on bare ground', () => {
+    const r = recorder();
+    drawScene(r.ctx, r.art, squadScene(SQUAD_CAP), frameCamera({ w: 1280, h: 720 }), {
+      w: 1280,
+      h: 720,
+    });
+    const all = [...r.drawn, ...r.textured];
+    for (const id of [
+      'tower',
+      'ground-post',
+      'turret-lit',
+      'turret-dark',
+      'turret-jammed',
+    ] as const) {
+      expect(all).not.toContain(id);
+    }
+    expect(r.textured).not.toContain(BASE_ART.walk.top);
+    // Each survivor's sprite is drawn.
+    expect(r.drawn.filter((id) => id === 'gunner-pistol')).toHaveLength(SQUAD_CAP);
+  });
+
+  it('each survivor’s HP bar always shows, at least its readable size on screen, with a dark edge', () => {
+    const r = recorder();
+    const fills: { style: string; w: number; h: number }[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string };
+    Object.assign(r.ctx, {
+      fillRect: (_x: number, _y: number, w: number, h: number) =>
+        fills.push({ style: ctx.fillStyle, w, h }),
+    });
+    const scene = squadScene(3);
+    // Full HP and a small zoom: the bar still shows at its minimum size.
+    drawScene(r.ctx, r.art, scene, { x: 0, y: 0, zoom: 0.5 }, VIEW);
+    const backs = fills.filter((f) => f.style === '#c43b3b');
+    expect(backs).toHaveLength(3);
+    for (const b of backs) {
+      expect(b.w).toBeGreaterThanOrEqual(SURVIVOR_BAR.min.w);
+      expect(b.h).toBeGreaterThanOrEqual(SURVIVOR_BAR.min.h);
+    }
+    expect(fills.filter((f) => f.style === '#1b1a18' && f.w > SURVIVOR_BAR.min.w)).toHaveLength(3);
+    // At the 1280×720 frame's zoom it is bigger than an enemy's bar.
+    fills.length = 0;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    drawScene(r.ctx, r.art, scene, cam, { w: 1280, h: 720 });
+    const bar = fills.find((f) => f.style === '#c43b3b')!;
+    expect(bar.w).toBeCloseTo(SURVIVOR_BAR.w * cam.zoom, 9);
+    expect(bar.h).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe('the field’s edges in a fight (ID-068)', () => {
+  beforeEach(stubCanvas);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('shades the ground above and below the field, not the field itself', () => {
+    const r = recorder();
+    const fills: { style: string; y: number; h: number }[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string };
+    Object.assign(r.ctx, {
+      fillRect: (_x: number, y: number, _w: number, h: number) =>
+        fills.push({ style: ctx.fillStyle, y, h }),
+    });
+    const view = { w: 1440, h: 900 };
+    const cam = frameCamera(view);
+    drawScene(r.ctx, r.art, blank(), cam, view);
+    const top = project({ x: 0, y: 0 }, cam).sy;
+    const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
+    const shades = fills.filter((f) => f.style === 'rgba(0, 0, 0, 0.3)');
+    expect(shades).toEqual([
+      { style: 'rgba(0, 0, 0, 0.3)', y: 0, h: top },
+      { style: 'rgba(0, 0, 0, 0.3)', y: bottom, h: view.h - bottom },
+    ]);
+    expect(bottom).toBeLessThan(view.h);
   });
 });

@@ -11,7 +11,6 @@ import {
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
-  SQUAD_TOWERS,
   SQUAD_WALL,
   START_BASE,
   TIER_ORDER,
@@ -126,18 +125,18 @@ export function newBase(): Base {
 }
 
 /**
- * The horde-only base (ID-066): the starting layer with a tower for each squad slot,
- * in row order. Every horde-only fight is on a fresh one, so the wall starts full.
+ * The horde-only base (ID-066): the starting layer at the squad tier, and nothing else:
+ * no towers, posts, turrets or traps (ID-068; the squad stands on the firing line). Every
+ * horde-only fight is on a fresh one, so the wall starts full.
  */
 export function squadBase(): Base {
-  const rows = [...SQUAD_TOWERS].sort((a, b) => a - b);
   const base = newBase();
   for (const seg of base.layers[0]!.slots) {
     if (!seg) continue;
     seg.tier = SQUAD_WALL;
     seg.hp = seg.maxHp = segmentMaxHp(seg.kind, SQUAD_WALL);
   }
-  return { ...base, posts: rows.map((row) => ({ kind: 'tower', column: 0, row })) };
+  return { ...base, posts: [] };
 }
 
 export function buildSegment(

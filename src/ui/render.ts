@@ -45,7 +45,7 @@ import { carpet } from '../core/skills.ts';
 import { badgeOf } from '../core/stats.ts';
 import {
   depthSort,
-  FRAME,
+  FIGHT_FRAME,
   mountDepth,
   HEIGHT_SCALE,
   PIECE,
@@ -106,6 +106,7 @@ const COLOR = {
   plateText: '#d8d4cc',
   hpBack: '#c43b3b',
   hpFill: '#5ec24a',
+  hpEdge: '#1b1a18',
   conditionBack: '#111110',
   conditionFill: '#a9c4d6',
   strike: '#f2f2f2',
@@ -222,6 +223,11 @@ const OFF_FRAME = {
 } as const;
 /** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
 const HP_BAR = { w: 24, h: 4, z: 36, gap: 6 } as const;
+/**
+ * A survivor's HP bar in the horde-only fight (ID-068): always shown, wider and taller
+ * than an enemy's, at least `min` px on screen, with a dark edge, so each reads at a glance.
+ */
+export const SURVIVOR_BAR = { w: 30, h: 5, min: { w: 30, h: 5 }, edge: 1 } as const;
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
 const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
 /** How much wider than its footprint a piece's sprite may draw. */
@@ -466,10 +472,20 @@ function drawHpBar(
   maxHp: number,
   cam: Camera,
   colour: { back: string; fill: string } = { back: COLOR.hpBack, fill: COLOR.hpFill },
+  size: { w: number; h: number; min?: { w: number; h: number }; edge?: number } = HP_BAR,
 ): void {
   const bar = project(at, cam);
-  const w = HP_BAR.w * cam.zoom;
-  const h = HP_BAR.h * cam.zoom;
+  const w = Math.max(size.min?.w ?? 0, size.w * cam.zoom);
+  const h = Math.max(size.min?.h ?? 0, size.h * cam.zoom);
+  if (size.edge) {
+    ctx.fillStyle = COLOR.hpEdge;
+    ctx.fillRect(
+      bar.sx - w / 2 - size.edge,
+      bar.sy - size.edge,
+      w + 2 * size.edge,
+      h + 2 * size.edge,
+    );
+  }
   ctx.fillStyle = colour.back;
   ctx.fillRect(bar.sx - w / 2, bar.sy, w, h);
   ctx.fillStyle = colour.fill;
@@ -533,9 +549,10 @@ function drawDefender(
     drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam, pose);
   }
   drawBadge(ctx, d, z0, cam);
-  if (d.hp < d.maxHp) {
-    drawHpBar(ctx, { x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap }, d.hp, d.maxHp, cam);
-  }
+  const bar = { x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap };
+  // A survivor's bar always shows (ID-068); a full-game defender's once hurt.
+  if (d.plain) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, SURVIVOR_BAR);
+  else if (d.hp < d.maxHp) drawHpBar(ctx, bar, d.hp, d.maxHp, cam);
 }
 
 type Sprite = { y: number; x: number; draw: () => void };
@@ -571,6 +588,8 @@ function drawMount(
   floor: number,
   cam: Camera,
 ): void {
+  // A firing-line slot is bare ground (ID-068): the survivor stands there with no mount.
+  if (kind === 'line') return;
   const p = kind === 'wall-walk' ? PIECE.walk : PIECE[kind];
   const box = { ...around(at, p), z0: floor - p.height, height: p.height };
   if (kind === 'wall-walk') {
@@ -1344,7 +1363,7 @@ export function drawScene(
   // In a fight nothing left of the frame shows (ID-064): the camp's yard stays out of
   // view, and an enemy past the frame shows as a marker at its edge instead.
   // On a whole pixel, so the clip's edge doesn't smear a seam into the surround.
-  const fightLeft = build ? 0 : project({ x: FRAME.left, y: 0 }, cam).sx;
+  const fightLeft = build ? 0 : project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx;
   const left = Math.max(0, Math.round(clip ?? fightLeft));
   ctx.save();
   ctx.beginPath();
@@ -1352,6 +1371,15 @@ export function drawScene(
   ctx.clip();
   drawGround(ctx, art, cam);
   if (camp) drawCampGround(ctx, art, camp, cam);
+  // In a fight the ground past the field's top and bottom edges is shaded (ID-068), so
+  // the wall's ends read as the map's edge, not a way round; sprites still draw over it.
+  if (!build) {
+    const top = project({ x: 0, y: 0 }, cam).sy;
+    const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
+    ctx.fillStyle = COLOR.outside;
+    if (top > 0) ctx.fillRect(0, 0, view.w, top);
+    if (bottom < view.h) ctx.fillRect(0, bottom, view.w, view.h - bottom);
+  }
 
   // Traps lie flat on the ground, under every sprite.
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
@@ -1523,7 +1551,7 @@ export function offFrame(
 ): { row: number; count: number }[] {
   const counts = new Array<number>(SEGMENTS).fill(0);
   for (const e of enemies) {
-    if (!(e.x < FRAME.left)) continue;
+    if (!(e.x < FIGHT_FRAME.left)) continue;
     const row = Math.min(SEGMENTS - 1, Math.max(0, Math.floor(e.y / SEGMENT_HEIGHT)));
     // A NaN `y` stays NaN through the clamp: no row to mark.
     if (Number.isFinite(row)) counts[row]!++;
@@ -1542,7 +1570,7 @@ function drawOffFrame(
   left: number,
   cam: Camera,
 ): void {
-  const { sy } = project({ x: FRAME.left, y: (row + 0.5) * SEGMENT_HEIGHT }, cam);
+  const { sy } = project({ x: FIGHT_FRAME.left, y: (row + 0.5) * SEGMENT_HEIGHT }, cam);
   const a = OFF_FRAME.arrow;
   const x = left + OFF_FRAME.pad;
   const label = String(count);

@@ -237,6 +237,15 @@ Defenders stand on **posts** the player builds and chooses between.
   always shows). Hovering a slot or plot outlines it and shows a pointer (a
   free wall-walk spot rings just that spot); a click opens it in the panel
   as before, a spot opening its segment's menu.
+- **As built (ID-068): the horde-only map.** A horde-only fight has one
+  concrete wall (column 0) and nothing else: no towers, turrets, ground or
+  wall-walk posts, and no traps, whatever the saved base holds. The squad
+  stands on a **firing line**: one row of 6 fixed slots on the ground 30
+  units behind the wall (x 470), spaced evenly top to bottom (each in the
+  middle of its sixth of the wall: y ≈ 67, 200, 333, 467, 600, 733). A slot
+  exists only in the fight (a `line` post), never in the base or a save.
+  Enemies spawn at x 1,540 instead of the field's 1,600, so they walk about
+  1,020 units to the wall instead of 1,080; the full game keeps its field.
 
 ## 4. Horde defence (the active part)
 
@@ -369,6 +378,22 @@ Defenders stand on **posts** the player builds and chooses between.
     fight XP bar (its level and XP to the next) sits under it on the left.
   - Enemy HP grows ×1.20 per horde up to Horde 6 (the squad grows by a
     survivor a win until then), then ×1.03, instead of ×1.17 (§9).
+- **As built (ID-068): shooting from behind the wall.**
+  - Survivors take the firing line's slots (§3) in the order they joined,
+    from the middle out: slots 3, 4, 2, 5, 1, 6 (top to bottom), so a lone
+    survivor stands near the middle and the last two hold the ends. The
+    rest of the line stays empty. The slots are fixed: nobody moves onto or
+    off one ("Survivors hold their slots"), an empty slot takes no click (a
+    click there is on the ground), and picking a survivor names them without
+    "click a post to move". No melee is used from the line.
+  - They shoot over the wall: the wall never blocks a shot, and a slot
+    keeps a tower's gun range (×1.25). The starting pistol (500) reaches an
+    enemy pressed against any part of the wall's front from the first slot,
+    and with the line full every gun there is reaches every point of it from
+    some slot (tests). Enemies in the camp still come for the nearest
+    survivor, as before.
+  - The balance tests passed unchanged (the squad stands 50 units nearer
+    the wall than the towers did, and the spawn edge is 60 nearer).
 
 ## 5. Commander and perks
 
@@ -1859,6 +1884,23 @@ original outline.
   fight frame over 0.4 s (camera eased in and out, the camp still drawn
   while the fight frame's left clip slides in) and is a hard cut with
   Reduce motion on.
+- **As built (ID-068): the horde-only frame zooms in on the wall.** PM
+  decision: the view stays side-on (wall top to bottom, horde from the
+  right) rather than turning the wall across the screen. The frame runs from
+  x 439 (the firing line, less a survivor's half width and the 24-unit gap)
+  to the spawn edge at 1,540, every row and the 80-unit strip above, so the
+  whole wall line, edge to edge, and the spawn edge are always in view. The
+  same rules fit it between the HUD bands as ID-064's and work it out again
+  on each resize: about 1.15× at 1280×720 (was 0.98×) and 1.31× at 1440×900
+  (was 1.11×), units about 17% bigger; a window too wide for the wall's height
+  was already height-bound and zooms as before (never further out). The full
+  game keeps ID-064's frame. No tower, ground post or wall-walk platform is
+  drawn; a survivor stands on bare ground. Each survivor's HP bar always
+  shows (not only once hurt), 30 × 5 units with a dark 1 px edge and never
+  under 30 × 5 px on screen (about 35 × 6 px at 1280×720), bigger than an
+  enemy's 24 × 4. In every fight the ground past the field's top and bottom
+  edges is shaded with the build scene's outside dim (sprites still draw over
+  it), so the wall's ends read as the map's edge, not a way round it.
 
 ## 16. Tech and platform
 

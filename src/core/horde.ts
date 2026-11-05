@@ -31,6 +31,7 @@ import {
   SHIELD,
   SIDEARM_CLOSE,
   SPAWN_INTERVAL,
+  SQUAD_LINE,
   STAT_EFFECT,
   STEP,
   STRIKE_FLASH,
@@ -159,6 +160,13 @@ export interface HordeSetup {
   hpScale?: number;
   /** Multiplies the defender XP a win gives (ID-066); 1 when absent. */
   xpRate?: number;
+  /**
+   * The horde-only firing line's slots (ID-068), after `base.posts` as `'line'` posts in
+   * this order: slot `i` is post `base.posts.length + i`, which `startPostId` may name.
+   */
+  line?: readonly { x: number; y: number }[];
+  /** Where enemies spawn along `x` (ID-068); `FIELD.right` when absent. */
+  spawnX?: number;
 }
 export interface Enemy {
   id: number;
@@ -211,9 +219,14 @@ export interface Layer {
   x: number;
   segments: Segment[];
 }
+/**
+ * A fight post's kind: a base post's, or a slot on the horde-only firing line (ID-068),
+ * on the ground behind the wall. A line slot exists only in a fight, never in a base.
+ */
+export type FightPostKind = PostKind | 'line';
 export interface Post {
   id: number;
-  kind: PostKind;
+  kind: FightPostKind;
   column: number;
   row: number;
   /** A wall-walk's spot on its segment; absent = 0. */
@@ -452,6 +465,8 @@ export interface HordeState {
   hpScale?: number;
   /** Multiplies the defender XP a win gives (ID-066); 1 when absent. */
   xpRate?: number;
+  /** Where enemies spawn along `x` (ID-068); `FIELD.right` when absent. */
+  spawnX?: number;
   /** Power Surge: turrets draw no charge while `wave` is this one; 0 = none. */
   freeWave: number;
   /** Horde cash from kills (design §4); spent in the shop, never kept after the horde. */
@@ -524,12 +539,32 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     cards,
     hpScale,
     xpRate,
+    line = [],
+    spawnX,
   } = setup;
   const levels: Partial<Record<PerkId, number>> = {};
   for (const id of perks) levels[id] = perkLevels[id] ?? 1;
   const start = roster.find((d) => d.id === startDefenderId);
   if (!start) throw new RangeError(`newHorde: unknown start defender ${startDefenderId}`);
   const { layers, posts, turrets, traps } = layoutOf(base);
+  for (const at of line) {
+    if (!Number.isFinite(at.x) || !Number.isFinite(at.y) || at.y < 0 || at.y >= FIELD.height) {
+      throw new RangeError(`newHorde: bad line slot (${at.x}, ${at.y})`);
+    }
+    const row = Math.floor(at.y / SEGMENT_HEIGHT);
+    posts.push({
+      id: posts.length,
+      kind: 'line',
+      column: 0,
+      row,
+      x: at.x,
+      y: at.y,
+      defenderId: null,
+    });
+  }
+  if (spawnX !== undefined && !(Number.isFinite(spawnX) && spawnX > 0 && spawnX <= FIELD.right)) {
+    throw new RangeError(`newHorde: bad spawn x ${spawnX}`);
+  }
   const fortify = perkFactor({ perks: [...perks], perkLevels: levels }, 'fortify', PERK.fortify);
   if (fortify !== 1) {
     for (const seg of layers.flatMap((l) => l.segments)) {
@@ -577,6 +612,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     ...(cards ? { cardPool: [...cards] } : {}),
     ...(hpScale === undefined ? {} : { hpScale }),
     ...(xpRate === undefined ? {} : { xpRate }),
+    ...(spawnX === undefined ? {} : { spawnX }),
     freeWave: 0,
     cash: startCash,
     cashRate,
@@ -681,7 +717,8 @@ export function tick(state: HordeState, dt: number): HordeState {
 
 /** How far `weapon` (a gun) reaches from `post`: its range × the post's × the cards'. */
 export function gunRange(state: HordeState, post: Pick<Post, 'kind'>, weapon: Held): number {
-  return gunOf(weapon).range * POST_RANGE[post.kind] * state.mods.range;
+  const factor = post.kind === 'line' ? SQUAD_LINE.range : POST_RANGE[post.kind];
+  return gunOf(weapon).range * factor * state.mods.range;
 }
 
 /** Whether the bought buff `id` is still running (fight time stops during picks, so it does too). */
@@ -854,6 +891,10 @@ export function moveDefender(state: HordeState, defenderId: string, postId: numb
   if (state.outcome !== 'fighting') return refuse('The fight is over');
   if (state.offer !== null) return refuse('Pick a card first');
   if (state.replace !== null) return refuse('Pick a replacement first');
+  // The firing line's slots are fixed (ID-068): nobody moves onto or off them.
+  if (target.kind === 'line' || state.posts[defender.postId]?.kind === 'line') {
+    return refuse('Survivors hold their slots');
+  }
   if (defender.postId === postId) {
     return refuse(defender.walking ? 'Already on the way' : 'Already there');
   }
@@ -932,7 +973,7 @@ function spawn(s: HordeState, rng: Rng): void {
   if (s.boss && !s.bossSpawned && s.wave === s.waveCount && due(s.time, s.breakUntil)) {
     s.bossSpawned = true;
     const r = ENEMIES.horror.radius;
-    const e = place(s, 'horror', FIELD.right, int(rng, r, FIELD.height - r));
+    const e = place(s, 'horror', s.spawnX ?? FIELD.right, int(rng, r, FIELD.height - r));
     e.horror = {
       ability: s.boss,
       // A Regenerator has no clock of its own; only its last hit counts.
@@ -947,7 +988,7 @@ function spawn(s: HordeState, rng: Rng): void {
     // Shamblers only (the tutorial) roll nothing, so its seeds play as before.
     const kind = waveMix(s.hordeNumber).length > 1 ? kindFor(s.hordeNumber, rng()) : 'shambler';
     const r = ENEMIES[kind].radius;
-    place(s, kind, FIELD.right, int(rng, r, FIELD.height - r));
+    place(s, kind, s.spawnX ?? FIELD.right, int(rng, r, FIELD.height - r));
     s.toSpawn -= 1;
     s.nextSpawnAt = s.time + SPAWN_INTERVAL;
   }
@@ -1100,7 +1141,8 @@ function choose(
     const target = targetFrom(s, d.x, d.y, gunRange(s, { kind: 'ground' }, d.loadout[slot]!));
     return target ? { slot, target, x: d.x, y: d.y } : null;
   }
-  if (secondary !== null && !isGun(secondary) && post.kind !== 'tower') {
+  // No melee from a tower or over the wall from the firing line.
+  if (secondary !== null && !isGun(secondary) && post.kind !== 'tower' && post.kind !== 'line') {
     const target = targetFrom(s, post.x, post.y, meleeOf(secondary).reach);
     if (target) return { slot: 'secondary', target, x: post.x, y: post.y };
   }

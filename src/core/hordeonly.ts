@@ -7,10 +7,13 @@ import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
 import { UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
 import {
+  COLUMNS,
+  FIELD,
   MAX_COUNT,
   SQUAD_CAP,
   SQUAD_HP_GROWTH,
-  SQUAD_TOWERS,
+  SQUAD_LINE,
+  SQUAD_SPAWN_X,
   SQUAD_XP_RATE,
   STASH_CAP,
   START_PERK,
@@ -72,9 +75,20 @@ export const squadOf = (game: Pick<GameState, 'roster'>): RosterDefender[] =>
   game.roster.slice(0, SQUAD_CAP);
 
 /**
- * Horde `game.hordeNumber` for the whole squad, each on their tower from the middle out,
- * on a fresh horde-only base (a full wall), at `now`. No injuries or patrols hold anyone
- * back, and no research, cash, skills or bank come in.
+ * The firing line's slots (ID-068), top to bottom: `SQUAD_CAP` of them on the ground
+ * `SQUAD_LINE.offset` behind the wall, each in the middle of its even share of the wall.
+ */
+export const SQUAD_SLOTS: readonly { x: number; y: number }[] = Array.from(
+  { length: SQUAD_CAP },
+  (_, i) => ({ x: COLUMNS[0]! + SQUAD_LINE.offset, y: ((i + 0.5) * FIELD.height) / SQUAD_CAP }),
+);
+
+/**
+ * Horde `game.hordeNumber` for the whole squad on the firing line behind a fresh
+ * horde-only wall (full HP), each survivor in their slot in join order
+ * (`SQUAD_LINE.order`), with enemies spawning at `SQUAD_SPAWN_X`, at `now`. No towers,
+ * turrets or traps; no injuries or patrols hold anyone back, and no research, cash,
+ * skills or bank come in.
  */
 export function startSquadHorde(game: GameState, seed: number, now: number): HordeState {
   if (!Number.isFinite(now)) throw new RangeError(`startSquadHorde: bad time ${now}`);
@@ -82,7 +96,7 @@ export function startSquadHorde(game: GameState, seed: number, now: number): Hor
   const first = squad[0];
   if (!first) throw new RangeError('startSquadHorde: nobody in the squad');
   const base = squadBase();
-  const postOf = (i: number): number => base.posts.findIndex((p) => p.row === SQUAD_TOWERS[i]);
+  const postOf = (i: number): number => base.posts.length + SQUAD_LINE.order[i]!;
   const s = newHorde(seed, {
     hordeNumber: game.hordeNumber,
     roster: squad,
@@ -100,8 +114,10 @@ export function startSquadHorde(game: GameState, seed: number, now: number): Hor
     cards: SQUAD_CARDS,
     hpScale: squadHpScale(game.hordeNumber),
     xpRate: SQUAD_XP_RATE,
+    line: SQUAD_SLOTS,
+    spawnX: SQUAD_SPAWN_X,
   });
-  // The rest of the squad take their towers too: nobody waits on the bench.
+  // The rest of the squad take their slots too: nobody waits on the bench.
   squad.slice(1).forEach((spec, k) => {
     const post = s.posts[postOf(k + 1)]!;
     post.defenderId = spec.id;
