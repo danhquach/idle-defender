@@ -42,7 +42,7 @@ import {
 import { baseOf } from '../core/armoury.ts';
 import { professionOf } from '../core/loadout.ts';
 import { carpet } from '../core/skills.ts';
-import { badgeOf } from '../core/stats.ts';
+import { badgeOf, nameTag } from '../core/stats.ts';
 import {
   depthSort,
   FIGHT_FRAME,
@@ -90,7 +90,8 @@ import {
   DEFENDER_ART,
   ENEMY_ART,
   GATE_POSTS,
-  GUNNER_ART,
+  GUNNER_LOOKS,
+  lookOf,
   SKILL_ART,
   TIER_ART,
   TRAP_ART,
@@ -283,6 +284,10 @@ const HP_BAR = { w: 24, h: 4, gap: 6 } as const;
 export const SURVIVOR_BAR = { w: 30, h: 5, min: { w: 30, h: 5 }, edge: 1 } as const;
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
 const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
+/** A name plate's height in screen px (its font is `MARK.plate`). */
+const PLATE_H = 14;
+/** The screen px between a defender's name tag (ID-074) and the bar or badge under it. */
+export const NAME_TAG_GAP = 2;
 /** How much wider than its footprint a piece's sprite may draw. */
 const OVERSPILL = 1.6;
 
@@ -583,7 +588,7 @@ function drawBadge(
 function drawDefender(
   ctx: CanvasRenderingContext2D,
   art: Art,
-  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'loadout' | 'stats' | 'plain'>,
+  d: Pick<Defender, 'id' | 'x' | 'y' | 'hp' | 'maxHp' | 'loadout' | 'stats' | 'plain'>,
   z0: number,
   selected: boolean,
   cam: Camera,
@@ -613,10 +618,37 @@ function drawDefender(
   else if (d.hp < d.maxHp) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, HP_BAR, true);
 }
 
-/** A Gunner's gun art (ID-046, ID-069): their primary's, or the rifle's for any other gun. */
-function gunOf(d: Pick<Defender, 'loadout'>): GunnerArt | null {
+/**
+ * A defender's name tag in a fight (ID-074), as the roster names them: a survivor by
+ * name, just over their HP bar; a full-game defender with their title (design §6, "Bob
+ * the Gunner"), over their title badge's spot. Either way clear of the head.
+ */
+function drawNameTag(
+  ctx: CanvasRenderingContext2D,
+  d: Pick<Defender, 'x' | 'y' | 'name' | 'plain' | 'stats'>,
+  z0: number,
+  cam: Camera,
+): void {
+  const at = { x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap / 2 };
+  if (d.plain) {
+    // The bar sits on `at` with its dark edge round it, above and below.
+    const bar = Math.max(SURVIVOR_BAR.min.h, SURVIVOR_BAR.h * cam.zoom) + 2 * SURVIVOR_BAR.edge;
+    drawPlate(ctx, d.name, at, cam, false, bar + NAME_TAG_GAP);
+    return;
+  }
+  const badge = ((BADGE.pip + 2 * BADGE.pad) * cam.zoom) / 2;
+  const top = { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z };
+  drawPlate(ctx, nameTag(d), top, cam, false, badge + NAME_TAG_GAP);
+}
+
+/**
+ * A Gunner's gun art (ID-046, ID-069) in their own look (ID-074): their primary's, or the
+ * rifle's for any other gun.
+ */
+function gunOf(d: Pick<Defender, 'id' | 'loadout'>): GunnerArt | null {
   if (professionOf(d.loadout) !== 'gunner') return null;
-  return GUNNER_ART[baseOf(d.loadout.primary) as GunId] ?? GUNNER_ART.rifle;
+  const look = GUNNER_LOOKS[lookOf(d.id)]!;
+  return look[baseOf(d.loadout.primary) as GunId] ?? look.rifle;
 }
 
 type Sprite = { y: number; x: number; draw: () => void };
@@ -904,7 +936,7 @@ function drawFence(
 
 /**
  * A name plate over `(x, y, z)` (or under it, `below`): fixed-size text on a see-through
- * plate, centred.
+ * plate, centred; `lift` screen px higher still.
  */
 function drawPlate(
   ctx: CanvasRenderingContext2D,
@@ -912,13 +944,14 @@ function drawPlate(
   at: { x: number; y: number; z: number },
   cam: Camera,
   below = false,
+  lift = 0,
 ): void {
   if (text === '') return;
   const p = project(at, cam);
   ctx.font = MARK.plate;
   const w = ctx.measureText(text).width + 2 * OFF_FRAME.pad;
-  const h = 14;
-  const top = below ? p.sy + 2 : p.sy - h;
+  const h = PLATE_H;
+  const top = below ? p.sy + 2 : p.sy - h - lift;
   ctx.fillStyle = COLOR.plate;
   ctx.fillRect(p.sx - w / 2, top, w, h);
   ctx.fillStyle = COLOR.plateText;
@@ -1880,6 +1913,15 @@ export function drawScene(
     for (const p of carpet(scene, aim.y)) {
       groundCircle(ctx, p.x, p.y, SKILLS.airstrike.radius, cam);
       ctx.stroke();
+    }
+  }
+  // Each defender's name on top of every sprite and effect, so none hides it (ID-074).
+  // Only those the sprites above drew: a walker, or the one standing on their post.
+  if (!build) {
+    for (const d of scene.defenders) {
+      const post = d.walking ? null : scene.posts.find((p) => p.id === d.postId);
+      if (post === undefined) continue; // not walking and on no post: not drawn
+      drawNameTag(ctx, d, post ? postFloor(scene.layers, post) : 0, cam);
     }
   }
   ctx.restore();

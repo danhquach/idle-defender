@@ -1701,6 +1701,20 @@ original outline.
   drawn from a weaponless Gunner body and that gun together (a `ref` list of
   `part` generations, which are never shipped themselves). Rippers and
   Engineers keep their own art whatever their primary.
+- **As built (ID-074): who is who in a fight.** Each defender has a name tag
+  over them, drawn on top of every sprite and effect: a survivor's name just
+  over their HP bar, a full-game defender's name with their title ("Bob the
+  Gunner", §6) over their badge's spot. The build scene shows none. Gunners
+  come in four looks: the soldier, then three others (beanie and navy
+  hoodie; cap and red plaid; brown leather jacket, tan trousers and
+  ponytail, light enough to read on the dark fight ground). Each other
+  look repaints the soldier's frames for every gun and pose (manifest `ref`
+  to that frame, FLUX.2 Klein 4B), so its pose, grip and gun are the
+  soldier's; generating a look from the puppets lost the grip (hands on top
+  of the gun) and was dropped. A survivor's look comes from their id, so it
+  never changes across fights or saves: a numbered id counts round the four
+  looks by its last number (recruit 1 is the soldier, recruits 2 to 4 the
+  others, recruit 5 the soldier again), any other id is hashed.
 - **As built (ID-045):** no line joins shooter and target (since ID-070, only
   a close shot's tail does, for the frame or two before it lands). Each bullet is drawn
   at its simulated spot, in the depth sort, as a bright slug with a streak

@@ -44,6 +44,7 @@ import {
   bulletShape,
   drawScene,
   DUSK,
+  NAME_TAG_GAP,
   offFrame,
   SURVIVOR_BAR,
   TAIL,
@@ -60,6 +61,9 @@ import {
   ENEMY_ART,
   GATE_POSTS,
   GUNNER_ART,
+  GUNNER_LOOKS,
+  LOOKS,
+  lookOf,
   TIER_ART,
   type Art,
   type ArtId,
@@ -836,12 +840,14 @@ describe('drawScene with art', () => {
     const d0 = startHorde(game, 1, game.roster[0]!.id, 0, 0).defenders[0]!;
     const at = (i: number, loadout: Defender['loadout']): Defender => ({
       ...d0,
-      id: `t${i}`,
+      // Ids in the soldier's look (ID-074), so a Gunner draws the soldier's sprites.
+      id: `t${LOOKS * i + 1}`,
       x: 200,
       y: 60 + i * 80,
       walking: true,
       loadout,
     });
+    for (const i of [0, 1, 2, 3, 4]) expect(lookOf(at(i, d0.loadout).id)).toBe(0);
     const r = draw({
       ...base,
       defenders: [
@@ -1947,8 +1953,11 @@ describe('the horde-only fight (ID-068)', () => {
       expect(all).not.toContain(id);
     }
     expect(r.textured).not.toContain(BASE_ART.walk.top);
-    // Each survivor's sprite is drawn.
-    expect(r.drawn.filter((id) => id === 'gunner-pistol-idle')).toHaveLength(SQUAD_CAP);
+    // Each survivor's sprite is drawn, in their own look (ID-074).
+    const scene = squadScene(SQUAD_CAP);
+    const own = scene.defenders.map((d) => GUNNER_LOOKS[lookOf(d.id)]!.pistol.idle);
+    expect(new Set(own).size).toBe(4);
+    expect(r.drawn.filter((id) => id.startsWith('gunner-')).sort()).toEqual(own.sort());
   });
 
   it("sits each HP bar wholly over its sprite's head, a survivor's and an enemy's (ID-069)", () => {
@@ -2015,14 +2024,15 @@ describe('the horde-only fight (ID-068)', () => {
       );
       return r.drawn.filter((id) => id.startsWith('gunner-'));
     };
+    // a and b, in two different looks (ID-074).
+    const [pa, pb] = [a!, b!].map((d) => GUNNER_LOOKS[lookOf(d.id)]!.pistol);
+    expect(pa!.idle).not.toBe(pb!.idle);
     // Survivor a fires at 1, their next shot due at 1.5; b never fires.
     a!.nextShotAt = 1.5;
-    expect(at(1, [{ owner: a!.id, at: 1 }]).sort()).toEqual(
-      ['gunner-pistol-aim', 'gunner-pistol-idle'].sort(),
-    );
-    expect(at(1.5 + ANIM.aim.hold)).toContain('gunner-pistol-aim');
+    expect(at(1, [{ owner: a!.id, at: 1 }]).sort()).toEqual([pa!.aim, pb!.idle].sort());
+    expect(at(1.5 + ANIM.aim.hold)).toContain(pa!.aim);
     // No shot when the gun was ready: nothing was in range, so the gun drops.
-    expect(at(1.5 + ANIM.aim.hold + 0.1)).toEqual(['gunner-pistol-idle', 'gunner-pistol-idle']);
+    expect(at(1.5 + ANIM.aim.hold + 0.1).sort()).toEqual([pa!.idle, pb!.idle].sort());
     expect(b!.id).not.toBe(a!.id);
   });
 
@@ -2051,6 +2061,90 @@ describe('the horde-only fight (ID-068)', () => {
     const bar = fills.find((f) => f.style === '#c43b3b')!;
     expect(bar.w).toBeCloseTo(SURVIVOR_BAR.w * cam.zoom, 9);
     expect(bar.h).toBeGreaterThanOrEqual(5);
+  });
+
+  describe('name tags (ID-074)', () => {
+    type Rect = { style: string; x: number; y: number; w: number; h: number };
+    /** Every rect filled, every text drawn with where, and the order of images and texts. */
+    const tagged = (scene: Scene, cam: Camera, build: BuildOverlay | null = null) => {
+      const r = recorder();
+      const rects: Rect[] = [];
+      const texts: { text: string; x: number; y: number }[] = [];
+      const order: string[] = [];
+      const ctx = r.ctx as unknown as { fillStyle: string };
+      Object.assign(r.ctx, {
+        fillRect: (x: number, y: number, w: number, h: number) =>
+          rects.push({ style: ctx.fillStyle, x, y, w, h }),
+        fillText: (text: string, x: number, y: number) => {
+          texts.push({ text, x, y });
+          order.push(`text:${text}`);
+        },
+        measureText: (t: string) => ({ width: t.length * 6 }),
+        drawImage: (img: { id: ArtId }) => order.push(img.id),
+      });
+      drawScene(r.ctx, r.art, scene, cam, { w: 1280, h: 720 }, build);
+      return { rects, texts, order };
+    };
+
+    it("shows each survivor's roster name once, centred over them and wholly above their HP bar", () => {
+      const scene = squadScene(SQUAD_CAP);
+      const cam = frameCamera({ w: 1280, h: 720 });
+      const { rects, texts } = tagged(scene, cam);
+      const names = scene.defenders.map((d) => d.name);
+      expect(names.every((n) => n.length > 0)).toBe(true);
+      expect(texts.map((t) => t.text).sort()).toEqual([...names].sort());
+      for (const d of scene.defenders) {
+        const feet = project(d, cam);
+        const text = texts.find((t) => t.text === d.name && Math.abs(t.x - feet.sx) < 1e-6);
+        expect(text, d.name).toBeDefined();
+        // Its plate holds the text; the bar's dark edge right under it, at the same x.
+        const plate = rects.find(
+          (p) => p.style === 'rgba(21, 23, 26, 0.6)' && p.y < text!.y && p.y + p.h > text!.y,
+        )!;
+        expect(plate, d.name).toBeDefined();
+        const edge = rects.find(
+          (b) => b.style === '#1b1a18' && b.x < feet.sx && b.x + b.w > feet.sx && b.y > plate.y,
+        )!;
+        expect(edge, d.name).toBeDefined();
+        expect(edge.y - (plate.y + plate.h)).toBeCloseTo(NAME_TAG_GAP, 9);
+      }
+    });
+
+    it('draws the tags after every sprite, so nothing covers a name', () => {
+      const { order } = tagged(squadScene(3), frameCamera({ w: 1280, h: 720 }));
+      const lastImage = order.findLastIndex((o) => !o.startsWith('text:'));
+      const firstText = order.findIndex((o) => o.startsWith('text:'));
+      expect(firstText).toBeGreaterThan(lastImage);
+    });
+
+    it('tags a full-game defender over their title badge spot too, and none in the build scene', () => {
+      const game = newGame();
+      const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+      const cam = frameCamera({ w: 1280, h: 720 });
+      const fight = tagged(h, cam);
+      const shown = h.defenders.filter((d) => h.posts.some((p) => p.id === d.postId) || d.walking);
+      expect(shown.length).toBeGreaterThan(0);
+      expect(fight.texts.map((t) => t.text).sort()).toEqual(shown.map((d) => d.name).sort());
+      const overlay: BuildOverlay = {
+        selected: null,
+        hover: null,
+        ghosts: { slots: [], lines: [] },
+      };
+      const build = tagged(h, cam, overlay);
+      for (const d of h.defenders) expect(build.texts.map((t) => t.text)).not.toContain(d.name);
+    });
+
+    it("names a titled full-game defender with their title, as the roster does; a survivor's never", () => {
+      const game = newGame();
+      const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+      const d = h.defenders.find((x) => h.posts.some((p) => p.id === x.postId))!;
+      const titled = { ...d, stats: { aim: 100, might: 0, tech: 0, grit: 0 } };
+      const cam = frameCamera({ w: 1280, h: 720 });
+      const full = tagged({ ...h, defenders: [titled] }, cam).texts.map((t) => t.text);
+      expect(full).toEqual([`${d.name} the Gunner`]);
+      const plain = tagged({ ...h, defenders: [{ ...titled, plain: true }] }, cam).texts;
+      expect(plain.map((t) => t.text)).toEqual([d.name]);
+    });
   });
 });
 

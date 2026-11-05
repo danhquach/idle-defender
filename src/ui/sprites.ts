@@ -80,6 +80,42 @@ export const ART_IDS = [
   'gunner-lmg-aim',
   'gunner-sniper-idle',
   'gunner-sniper-aim',
+  'gunner-pistol-idle-b',
+  'gunner-pistol-aim-b',
+  'gunner-smg-idle-b',
+  'gunner-smg-aim-b',
+  'gunner-rifle-idle-b',
+  'gunner-rifle-aim-b',
+  'gunner-shotgun-idle-b',
+  'gunner-shotgun-aim-b',
+  'gunner-lmg-idle-b',
+  'gunner-lmg-aim-b',
+  'gunner-sniper-idle-b',
+  'gunner-sniper-aim-b',
+  'gunner-pistol-idle-c',
+  'gunner-pistol-aim-c',
+  'gunner-smg-idle-c',
+  'gunner-smg-aim-c',
+  'gunner-rifle-idle-c',
+  'gunner-rifle-aim-c',
+  'gunner-shotgun-idle-c',
+  'gunner-shotgun-aim-c',
+  'gunner-lmg-idle-c',
+  'gunner-lmg-aim-c',
+  'gunner-sniper-idle-c',
+  'gunner-sniper-aim-c',
+  'gunner-pistol-idle-d',
+  'gunner-pistol-aim-d',
+  'gunner-smg-idle-d',
+  'gunner-smg-aim-d',
+  'gunner-rifle-idle-d',
+  'gunner-rifle-aim-d',
+  'gunner-shotgun-idle-d',
+  'gunner-shotgun-aim-d',
+  'gunner-lmg-idle-d',
+  'gunner-lmg-aim-d',
+  'gunner-sniper-idle-d',
+  'gunner-sniper-aim-d',
   'ripper',
   'engineer',
   'shield',
@@ -318,6 +354,67 @@ export const GUNNER_ART: Readonly<Record<GunId, GunnerArt>> = {
     flash: 1,
   },
 };
+
+/** The other survivor looks' letters (ID-074), after the soldier's `GUNNER_ART`. */
+const LOOK_LETTERS = ['b', 'c', 'd'] as const;
+/**
+ * The other looks' barrel tip per gun, in their aim sprite's px (as `GunnerArt.barrel`):
+ * each look repaints the soldier's frame, so all share it, but the repainted frames trim
+ * narrower, so it sits left of the soldier's.
+ */
+const LOOK_BARREL: Readonly<Record<GunId, { readonly x: number; readonly y: number }>> = {
+  pistol: { x: 78, y: 136 },
+  smg: { x: 88, y: 153 },
+  rifle: { x: 82, y: 128 },
+  shotgun: { x: 90, y: 149 },
+  lmg: { x: 92, y: 148 },
+  sniper: { x: 102, y: 140 },
+};
+/**
+ * A Gunner's art in each survivor look (ID-074): the soldier's `GUNNER_ART` first, then
+ * each other look's idle and aim sprites, `gunner-<gun>-<pose>-<letter>`: the soldier's
+ * frames repainted as someone else, same pose, grip and gun.
+ */
+export const GUNNER_LOOKS: readonly Readonly<Record<GunId, GunnerArt>>[] = [
+  GUNNER_ART,
+  ...LOOK_LETTERS.map(
+    (letter) =>
+      Object.fromEntries(
+        (Object.keys(GUNNER_ART) as GunId[]).map((gun) => {
+          const art: GunnerArt = {
+            idle: `gunner-${gun}-idle-${letter}` as ArtId,
+            aim: `gunner-${gun}-aim-${letter}` as ArtId,
+            barrel: LOOK_BARREL[gun],
+            flash: GUNNER_ART[gun].flash,
+          };
+          return [gun, art];
+        }),
+      ) as Record<GunId, GunnerArt>,
+  ),
+];
+/** How many survivor looks there are (ID-074): the soldier, then the others. */
+export const LOOKS = GUNNER_LOOKS.length;
+
+/**
+ * A survivor's look (ID-074), 0…LOOKS-1, kept for good since it comes from their id,
+ * which never changes. A numbered id (`recruit-<n>`, `s<patrol>-<k>`, `c<level>`) counts
+ * round the looks by its last number, so survivors who join one after another look
+ * different and the first recruit keeps the soldier; any other id is hashed.
+ */
+export function lookOf(id: string): number {
+  const digit = (i: number) => id.charCodeAt(i) >= 48 && id.charCodeAt(i) <= 57;
+  let start = id.length;
+  while (start > 0 && digit(start - 1)) start--;
+  if (start < id.length) {
+    // Only the number's value round the looks matters, so it never overflows.
+    let n = 0;
+    for (let i = start; i < id.length; i++) n = (n * 10 + id.charCodeAt(i) - 48) % LOOKS;
+    return (n + LOOKS - 1) % LOOKS;
+  }
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193);
+  return (h >>> 0) % LOOKS;
+}
 
 /** A turret with its wall broken (offline) shows dark, like one with no charge. */
 export const TURRET_ART: Readonly<Record<TurretState, ArtId>> = {
