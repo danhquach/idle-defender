@@ -47,7 +47,9 @@ Manifest asset keys (unknown keys stop the build):
   first image sent and any `ref` follows it, as what the figure takes on, such as a
   survivor's gun), frames (ID-069:
   the animation frame set it belongs to: a set is trimmed by one box round all
-  its frames and scaled by one factor, so its frames line up by the feet).
+  its frames and scaled by one factor, so its frames line up by the feet; a frame
+  is posed, or a repaint of a posed frame named by its single `ref`, ID-074: a
+  survivor look repaints the soldier's frame, keeping its pose and grip).
 
 A sprite has its magenta background keyed out to transparency, only its
 biggest shape kept (detached parts under KEEP of it are dropped), and is
@@ -375,6 +377,7 @@ def check(
     textures: set[str],
     variants: set[str],
     styles: set[str],
+    posed: set[str],
 ) -> None:
     unknown = set(asset) - KEYS
     name = asset.get("id", "?")
@@ -433,9 +436,12 @@ def check(
         or "group" in asset
         or "ajar" in asset
         or asset.get("part")
-        or pose is None
+        or (pose is None and not (isinstance(asset.get("ref"), str) and asset["ref"] in posed))
     ):
-        sys.exit(f"{name}: frames names a set, on a posed sprite with no group, ajar or part")
+        sys.exit(
+            f"{name}: frames names a set, on a posed sprite (or a repaint of one) "
+            "with no group, ajar or part"
+        )
 
 
 def main(only: list[str]) -> None:
@@ -444,9 +450,10 @@ def main(only: list[str]) -> None:
     ids = {a["id"] for a in assets}
     textures = {a["id"] for a in assets if a.get("kind") == "texture"}
     variants = {a["id"] for a in assets if "edge" in a}
+    posed = {a["id"] for a in assets if "pose" in a}
     models = allowed_models()
     for asset in assets:
-        check(asset, models, ids, textures, variants, set(manifest["style"]))
+        check(asset, models, ids, textures, variants, set(manifest["style"]), posed)
     unknown = set(only) - ids
     if unknown:
         sys.exit(f"not in the manifest: {sorted(unknown)}")

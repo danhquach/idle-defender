@@ -274,8 +274,8 @@ describe('save', () => {
         ).toBeNull();
       }
       expect(hostile((s) => (bob(s).name = '<img src=x onerror=alert(1)>'))).toBeNull();
-      expect(hostile((s) => (bob(s).name = 'Bob‮gnp.exe'))).toBeNull(); // bidi override
-      expect(hostile((s) => (bob(s).name = 'B​ob'))).toBeNull(); // zero-width space
+      expect(hostile((s) => (bob(s).name = 'Bob\u202egnp.exe'))).toBeNull(); // bidi override
+      expect(hostile((s) => (bob(s).name = 'B\u200bob'))).toBeNull(); // zero-width space
       expect(hostile((s) => (bob(s).name = 'Вob'))).toBeNull(); // Cyrillic B
       expect(hostile((s) => (bob(s).name = 'B'.repeat(25)))).toBeNull();
       expect(hostile((s) => (bob(s).name = ''))).toBeNull();
@@ -565,8 +565,8 @@ describe('save: the armoury (design §6 Gear)', () => {
       ['weapon missing key', (s) => delete w(s).affixes],
       ['uid from a horde not yet won', (s) => (w(s).uid = 'h10')],
       ['uid of another shape', (s) => (w(s).uid = 'pistol')],
-      ['uid with a zero-width space', (s) => (w(s).uid = 'h​7')],
-      ['uid with a bidi override', (s) => (w(s).uid = '‮h7')],
+      ['uid with a zero-width space', (s) => (w(s).uid = 'h\u200b7')],
+      ['uid with a bidi override', (s) => (w(s).uid = '\u202eh7')],
       ['uid oversized', (s) => (w(s).uid = 'h' + '1'.repeat(10_000))],
       ['the same uid in the armoury and in hands', (s) => (w(s).uid = 'h3')],
       ['the same uid in two pairs of hands', (s) => (s.game.roster[1].loadout.primary = held(s))],
@@ -673,7 +673,7 @@ describe('save: Research Lab, research and turrets (ID-014)', () => {
     expect(hostile((s) => (s.game.research = ['metal-walls', 'death-ray']))).toBeNull();
     expect(hostile((s) => (s.game.research = ['metal-walls', 'auto-turret ']))).toBeNull();
     expect(hostile((s) => (s.game.research = ['metal-walls', 'autо-turret']))).toBeNull(); // Cyrillic o
-    expect(hostile((s) => (s.game.research = ['metal-walls', 'auto​-turret']))).toBeNull();
+    expect(hostile((s) => (s.game.research = ['metal-walls', 'auto\u200b-turret']))).toBeNull();
     expect(hostile((s) => (s.game.research = ['metal-walls', '__proto__']))).toBeNull();
     expect(hostile((s) => (s.game.research = 'metal-walls'))).toBeNull();
     expect(hostile((s) => (s.game.research = { 0: 'metal-walls' }))).toBeNull();
@@ -1394,7 +1394,7 @@ describe('save: resource inventory (ID-025)', () => {
       expect(raw(SAVE_VERSION, withStock({ ...full, genes })), String(genes)).toBeNull();
     }
     expect(raw(SAVE_VERSION, withStock({ ...full, gold: 1 }))).toBeNull();
-    expect(raw(SAVE_VERSION, withStock({ ...full, 'genes​': 1 }))).toBeNull();
+    expect(raw(SAVE_VERSION, withStock({ ...full, 'genes\u200b': 1 }))).toBeNull();
     expect(raw(SAVE_VERSION, withStock({ ...full, '\u202egenes': 1 }))).toBeNull(); // bidi override
     expect(raw(SAVE_VERSION, withStock({ ...full, Genes: 1 }))).toBeNull();
     expect(raw(SAVE_VERSION, withStock({ ...full, constructor: 1 }))).toBeNull();
@@ -1494,8 +1494,8 @@ describe('save: patrols (ID-026)', () => {
       ['unknown location', (g) => (g.patrols[0].location = 'mall')],
       ['hidden location', (g) => (g.patrols[0].location = 'crater')],
       ['not yet revealed when sent', (g) => (g.patrols[0].location = 'hardware')],
-      ['look-alike location', (g) => (g.patrols[0].location = 'electronics​')],
-      ['bidi location', (g) => (g.patrols[0].location = '‮electronics')],
+      ['look-alike location', (g) => (g.patrols[0].location = 'electronics\u200b')],
+      ['bidi location', (g) => (g.patrols[0].location = '\u202eelectronics')],
       ['unknown member', (g) => (g.patrols[0].members = ['zed'])],
       ['member twice', (g) => (g.patrols[0].members = ['jack', 'jack'])],
       ['no members', (g) => (g.patrols[0].members = [])],
@@ -1556,8 +1556,8 @@ describe('save: patrols (ID-026)', () => {
       ['from a patrol never sent', (g) => (g.reports[0].no = 4)],
       ['twice', (g) => (g.reports[1].no = 1)],
       ['unknown location', (g) => (g.reports[0].location = 'mall')],
-      ['bidi name', (g) => (g.reports[0].names = ['‮Bob'])],
-      ['zero-width name', (g) => (g.reports[0].names = ['Bo​b'])],
+      ['bidi name', (g) => (g.reports[0].names = ['\u202eBob'])],
+      ['zero-width name', (g) => (g.reports[0].names = ['Bo\u200bb'])],
       ['markup name', (g) => (g.reports[0].names = ['<img src=x>'])],
       ['oversized name', (g) => (g.reports[0].names = ['B'.repeat(25)])],
       ['kept not a boolean', (g) => (g.reports[1].weapons[0].kept = 'yes')],
@@ -1817,8 +1817,8 @@ describe('save: the camp (ID-033)', () => {
       ['offer of four', (c) => (c.offers = [['salvage', 'foraging', 'medic', 'stockpile']])],
       ['pick twice in an offer', (c) => (c.offers = [['salvage', 'salvage']])],
       ['unknown offered pick', (c) => (c.offers = [['cheat']])],
-      ['bidi offered pick', (c) => (c.offers = [['‮medic']])],
-      ['zero-width offered pick', (c) => (c.offers = [['med​ic']])],
+      ['bidi offered pick', (c) => (c.offers = [['\u202emedic']])],
+      ['zero-width offered pick', (c) => (c.offers = [['med\u200bic']])],
       ['padded offered pick', (c) => (c.offers = [[' medic']])],
       ['offers not an array', (c) => (c.offers = 'salvage')],
       ['too many offers', (c) => (c.offers = Array(26).fill(['salvage']))],
