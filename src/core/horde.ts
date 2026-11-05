@@ -212,6 +212,8 @@ export interface Segment {
   tier: Tier | null;
   hp: number;
   maxHp: number;
+  /** When its latest hit flash began (ID-072): a blow that took HP, at most one per `HIT_MARK_GAP` s; absent = none this fight. */
+  hitAt?: number;
 }
 /** One wall layer: `SEGMENTS` segments, top to bottom. */
 export interface Layer {
@@ -1952,11 +1954,17 @@ function attack(s: HordeState, moves: Moves): void {
   s.enemies = s.enemies.filter((e) => !blown.has(e.id));
 }
 
+/** The least time between two hit marks on one segment (ID-072); its flash lasts 0.25 s. */
+export const HIT_MARK_GAP = 0.4;
+
 /** Takes `damage` off a standing segment; only the damage it actually takes wears its turret. */
 function hitSegment(s: HordeState, layer: Layer, segment: Segment, damage: number): void {
   if (segment.hp <= 0) return;
   wearMounted(s, layer.column, segment.index, Math.min(damage, segment.hp));
   segment.hp = Math.max(0, segment.hp - damage);
+  // A crowd hitting one segment starts a new flash at most every HIT_MARK_GAP s, so it
+  // never stays washed out over the damage it shows (ID-072).
+  if (damage > 0 && !(s.time - (segment.hitAt ?? -Infinity) < HIT_MARK_GAP)) segment.hitAt = s.time;
 }
 
 /** Design §9: a Swollen's blast on segment `row` of `layer`, and on its standing neighbours. */

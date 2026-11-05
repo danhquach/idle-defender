@@ -52,7 +52,10 @@ import {
   postFloor,
   project,
   TILT,
+  WALL_HIT,
   wallHeight,
+  wallHitFade,
+  wallStage,
   type Camera,
   type SlotHit,
   type View,
@@ -124,6 +127,8 @@ const COLOR = {
   plateText: '#d8d4cc',
   hpBack: '#c43b3b',
   hpFill: '#5ec24a',
+  /** A wall segment's flash as a blow lands (ID-072): warm, so it shows on a pale concrete top. */
+  wallHit: '#ffb070',
   hpEdge: '#1b1a18',
   conditionBack: '#111110',
   conditionFill: '#a9c4d6',
@@ -726,21 +731,101 @@ function drawTrap(ctx: CanvasRenderingContext2D, art: Art, t: Trap, cam: Camera)
   drawOnBox(ctx, art[trapLook(t).art], { ...r, z0: 0, height: 8 }, cam, true);
 }
 
+/** A wall segment's HP bar in a fight (ID-072): narrower than the wall's top, at least `min` px, with a dark edge. */
+export const WALL_BAR = { w: 16, h: 4, min: { w: 14, h: 4 }, edge: 1 } as const;
+/** How far down its segment a wall bar sits from the middle, clear of the seam above. */
+const WALL_BAR_DROP = 2;
+
 /**
- * A wall segment in its tier's textures, lower as it takes damage with cracks showing
- * through; a gate's top is its tier's gate, posts in line with the wall and the leaves
- * ajar toward the field; a broken one is its tier's rubble.
+ * Each standing segment's HP bar in a fight, over every sprite so the enemies at the wall
+ * never hide it: none at full HP, shown once it is hit (ID-072); a broken one shows rubble.
+ */
+function drawWallBars(ctx: CanvasRenderingContext2D, layers: readonly Layer[], cam: Camera) {
+  for (const layer of layers) {
+    for (const seg of layer.segments) {
+      if (seg.kind === null || conditionOf(seg.hp, seg.maxHp) !== 'damaged') continue;
+      const top = wallHeight(seg.hp, seg.maxHp) + HP_BAR.gap;
+      const at = {
+        x: layer.x + WALL.depth / 2,
+        y: (seg.index + 0.5) * SEGMENT_HEIGHT + WALL_BAR_DROP,
+        z: top,
+      };
+      drawHpBar(ctx, at, seg.hp, seg.maxHp, cam, undefined, WALL_BAR, true);
+    }
+  }
+}
+
+/**
+ * Where each damage overlay lies on a segment's top, as shares of it (ID-072). The top is
+ * a long thin strip along the wall, so the damage follows it: the chips are gouges down
+ * each long edge (the right one mirrored), hanging partly past it and clipped to the
+ * top so each reads as a cut in the edge; the breach is a band across the whole width.
+ */
+const WALL_DAMAGE = {
+  cracks: [0, 0.7, 1, 1],
+  chips: [
+    { x: -0.2, y: 0.06, w: 0.5, h: 0.42, flip: false },
+    { x: 0.7, y: 0.52, w: 0.5, h: 0.42, flip: true },
+  ],
+  breach: { x: 0, y: 1 / 3, w: 1, h: 1 / 3, flip: false },
+} as const;
+
+/** `img` stretched over the part `at` of `r`, mirrored left to right when `at.flip`. */
+function drawOnPart(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  r: Rect,
+  at: { x: number; y: number; w: number; h: number; flip: boolean },
+): void {
+  const w = r.w * at.w;
+  const x = r.sx + r.w * at.x;
+  const y = r.sy + r.h * at.y;
+  if (!at.flip) {
+    ctx.drawImage(img, x, y, w, r.h * at.h);
+    return;
+  }
+  ctx.save();
+  ctx.translate(x + w, y);
+  ctx.scale(-1, 1);
+  ctx.drawImage(img, 0, 0, w, r.h * at.h);
+  ctx.restore();
+}
+
+/**
+ * A wall segment in its tier's textures, lower as it takes damage, looking worse in
+ * stages (ID-072): cracks, then pieces chipped out, then a section broken through; a
+ * gate's top is its tier's gate, posts in line with the wall and the leaves ajar toward
+ * the field; a broken one is its tier's rubble. Just hit, it flashes pale orange and shakes.
  */
 function drawSegment(
   ctx: CanvasRenderingContext2D,
   art: Art,
   layer: Layer,
   seg: Layer['segments'][number],
+  time: number,
   cam: Camera,
 ): void {
-  const tier = TIER_ART[seg.tier!];
+  const hit = seg.hp > 0 ? wallHitFade(time, seg.hitAt) : 0;
+  if (hit > 0) {
+    ctx.save();
+    ctx.translate(Math.sin(hit * Math.PI * 6) * hit * WALL_HIT.shake * cam.zoom, 0);
+  }
+  drawSegmentBody(ctx, art, layer, seg, cam);
+  if (hit > 0) {
+    const f = faces(segmentBox(layer, seg), cam);
+    ctx.globalAlpha = WALL_HIT.flash * hit;
+    ctx.fillStyle = COLOR.wallHit;
+    ctx.fillRect(f.top.sx, f.top.sy, f.top.w, f.top.h);
+    ctx.fillRect(f.front.sx, f.front.sy, f.front.w, f.front.h);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+}
+
+/** A segment's box: its slot, as tall as its HP leaves it. */
+function segmentBox(layer: Layer, seg: Layer['segments'][number]) {
   const y0 = seg.index * SEGMENT_HEIGHT;
-  const box = {
+  return {
     x0: layer.x,
     x1: layer.x + WALL.depth,
     y0: y0 + SEGMENT_GAP,
@@ -748,7 +833,19 @@ function drawSegment(
     z0: 0,
     height: wallHeight(seg.hp, seg.maxHp),
   };
-  if (seg.hp <= 0) {
+}
+
+function drawSegmentBody(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  layer: Layer,
+  seg: Layer['segments'][number],
+  cam: Camera,
+): void {
+  const tier = TIER_ART[seg.tier!];
+  const box = segmentBox(layer, seg);
+  const stage = wallStage(seg.hp, seg.maxHp);
+  if (stage === 4) {
     drawOnBox(ctx, art[tier.rubble], box, cam);
     return;
   }
@@ -758,12 +855,21 @@ function drawSegment(
     const gate = art[tier.gate];
     ctx.drawImage(gate, f.top.sx, f.top.sy, f.top.w / GATE_POSTS, f.top.h);
   }
-  const damage = 1 - seg.hp / seg.maxHp;
-  if (damage > 0) {
-    ctx.globalAlpha = Math.min(1, 0.3 + damage);
-    drawCover(ctx, art[BASE_ART.cracks], f.front);
-    ctx.globalAlpha = 1;
+  if (stage === 0) return;
+  // The top is what the fight's camera sees most of; the cracks run down the front too.
+  ctx.globalAlpha = WALL_DAMAGE.cracks[stage];
+  drawCover(ctx, art[BASE_ART.cracks], f.top);
+  drawCover(ctx, art[BASE_ART.cracks], f.front);
+  ctx.globalAlpha = 1;
+  if (stage >= 2) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(f.top.sx, f.top.sy, f.top.w, f.top.h);
+    ctx.clip();
+    for (const at of WALL_DAMAGE.chips) drawOnPart(ctx, art[BASE_ART.chips], f.top, at);
+    ctx.restore();
   }
+  if (stage === 3) drawOnPart(ctx, art[BASE_ART.breach], f.top, WALL_DAMAGE.breach);
 }
 
 /** The ground's block (ground.ts) repeated over the whole view, so no sky shows round the frame. */
@@ -1621,7 +1727,7 @@ export function drawScene(
       sprites.push({
         y: seg.index * SEGMENT_HEIGHT + SEGMENT_HEIGHT / 2,
         x: layer.x + WALL.depth + 0.5,
-        draw: () => drawSegment(ctx, art, layer, seg, cam),
+        draw: () => drawSegment(ctx, art, layer, seg, scene.time, cam),
       });
     }
   }
@@ -1731,6 +1837,7 @@ export function drawScene(
   }
   for (const sprite of depthSort(sprites)) sprite.draw();
   if (build) drawBuildMarks(ctx, scene, build, camp, cam);
+  else drawWallBars(ctx, scene.layers, cam);
 
   // The selected slot: its footprint on the ground, on top of everything.
   if (build?.selected) {

@@ -17,6 +17,7 @@ import {
 import {
   baseAfter,
   gunRange,
+  HIT_MARK_GAP,
   enemyAt,
   moveDefender,
   newHorde,
@@ -162,6 +163,43 @@ describe('tick', () => {
     expect(after.enemies[0]?.y).toBe(rowY(GATE));
     // The gate row (150 HP) takes two hits of 5.
     expect(after.layers[0]?.segments.map((g) => g.hp)).toEqual(hpsWith({ [GATE]: 140 }));
+  });
+
+  it('marks when a segment was last hit, and only the segment hit (ID-072)', () => {
+    const s = still();
+    enemy(s, { x: 530, y: rowY(GATE) });
+    const after = tick(s, 1.5);
+    const segs = after.layers[0]!.segments;
+    const hitAt = segs[GATE]!.hitAt!;
+    // Its second blow lands within the 1.5 s, at a step's time.
+    expect(hitAt).toBeGreaterThan(0);
+    expect(hitAt).toBeLessThanOrEqual(after.time);
+    expect(segs.filter((g) => g.hitAt !== undefined)).toHaveLength(1);
+  });
+
+  it('a crowd on one segment marks a new hit at most every HIT_MARK_GAP s (ID-072)', () => {
+    const marked = (since: number) => {
+      const s = still();
+      s.time = 10;
+      s.layers[0]!.segments[GATE]!.hitAt = 10 - since;
+      enemy(s, { x: 520, y: rowY(GATE) });
+      return tick(s, 2 * STEP).layers[0]!.segments[GATE]!;
+    };
+    const recent = marked(HIT_MARK_GAP / 2);
+    // The blow lands and takes HP, but the flash already running is kept.
+    expect(recent.hp).toBeLessThan(150);
+    expect(recent.hitAt).toBe(10 - HIT_MARK_GAP / 2);
+    expect(marked(HIT_MARK_GAP).hitAt).toBeGreaterThanOrEqual(10);
+  });
+
+  it('a hit on a broken segment marks nothing (ID-072)', () => {
+    const s = still();
+    s.layers[0]!.segments[GATE]!.hp = 0;
+    s.layers[0]!.segments[GATE + 1]!.hp = 0;
+    s.layers[0]!.segments[GATE - 1]!.hp = 0;
+    enemy(s, { x: 530, y: rowY(GATE) });
+    const after = tick(s, 1.5);
+    expect(after.layers[0]!.segments.some((g) => g.hitAt !== undefined)).toBe(false);
   });
 
   it('a breach pulls nearby enemies through', () => {
