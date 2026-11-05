@@ -952,6 +952,24 @@
       "prompt": "thin dark grey jagged crack lines branching out like a spider web, a few small bullet holes, nothing else, no slab, no tile, no surface"
     },
     {
+      "id": "wall-chips",
+      "kind": "sprite",
+      "style": "object",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7282,
+      "size": "384x1024",
+      "prompt": "seen flat from directly above, a long narrow jagged dark gouge, like a strip of chunks bitten off a broken edge, dark grey hollow with small broken pebbles in it and a thin pale chipped rim, ragged uneven outline, much taller than wide, only the gouge itself with no block around it, no slab, no tile, no surface"
+    },
+    {
+      "id": "wall-breach",
+      "kind": "sprite",
+      "style": "object",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7262,
+      "size": "1024x512",
+      "prompt": "seen flat from directly above, a straight horizontal band of smashed concrete running from the left edge to the right edge: dark rubble and broken grey concrete chunks in a jagged gap, bent rusty rebar rods sticking out of both broken ends, ragged uneven top and bottom edges, much wider than tall, only the broken band with nothing around it, no slab, no tile, no surface"
+    },
+    {
       "id": "gate-angled",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",

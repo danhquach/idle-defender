@@ -143,6 +143,28 @@ export function wallHeight(hp: number, maxHp: number): number {
   return hp <= 0 ? PIECE.wall.height * 0.3 : PIECE.wall.height * (0.5 + 0.5 * (hp / maxHp));
 }
 
+/**
+ * A segment's damage stage by its HP share (ID-072): 0 whole, 1 cracked (at least two
+ * thirds left), 2 chipped (at least a third), 3 a section broken through, 4 broken (rubble).
+ */
+export type WallStage = 0 | 1 | 2 | 3 | 4;
+export function wallStage(hp: number, maxHp: number): WallStage {
+  if (!(hp > 0)) return 4;
+  if (!(hp < maxHp)) return 0;
+  const share = hp / maxHp;
+  return share >= 2 / 3 ? 1 : share >= 1 / 3 ? 2 : 3;
+}
+
+/** A hit on the wall (ID-072): a warm flash and a sideways shake of `shake` world units, gone in `time` s. */
+export const WALL_HIT = { time: 0.25, shake: 2, flash: 0.55 } as const;
+/** How much of a segment's hit still shows at fight time `time`: 1 as it lands, down to 0 after `WALL_HIT.time`. */
+export function wallHitFade(time: number, hitAt: number | undefined): number {
+  if (hitAt === undefined) return 0;
+  const age = time - hitAt;
+  if (!(age >= 0) || age >= WALL_HIT.time) return 0;
+  return 1 - age / WALL_HIT.time;
+}
+
 /** Height of a post's floor, where its defender stands. */
 export function postFloor(layers: readonly Layer[], post: Post): number {
   if (post.kind !== 'wall-walk') return PIECE[post.kind].height;
