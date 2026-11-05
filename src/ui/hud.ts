@@ -3,7 +3,7 @@
 // cash shop row with the active skills, the commander's perks and Second Look's
 // reroll, and a short toast (refused moves).
 // Text reaches the page only through textContent.
-import { affixText, heldName } from '../core/armoury.ts';
+import { affixText, gunPower, heldLabel, heldName, isOwned, type Held } from '../core/armoury.ts';
 import { repairAllCost, type PostKind } from '../core/base.ts';
 import {
   campAfterPick,
@@ -32,21 +32,25 @@ import {
   MATERIALS,
   PERKS,
   PROFESSIONS,
+  RARITIES,
   SHOP,
   SHOP_ITEMS,
   SKILL_IDS,
   SQUAD_CAP,
   SKILLS,
+  STASH_CAP,
   STAT_NAMES,
   STATS,
   type EnemyKind,
   type CampPickId,
   type HorrorAbility,
   type Profession,
+  type Rarity,
   type ShopItem,
   type SkillId,
   type Stat,
   type Stock,
+  WEAPONS,
 } from '../core/data.ts';
 import {
   hordeBossReward,
@@ -68,8 +72,8 @@ import {
   type Injury,
   type Post,
 } from '../core/horde.ts';
-import { squadOf, squadResult } from '../core/hordeonly.ts';
-import { professionOf } from '../core/loadout.ts';
+import { squadOf, squadResult, type SquadDrop } from '../core/hordeonly.ts';
+import { isGun, professionOf } from '../core/loadout.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
@@ -336,6 +340,8 @@ export interface ResultScreen {
   button: string;
   /** A horde-only screen (ID-066): plain names, and only the stats a gun survivor uses. */
   squad?: true;
+  /** The horde-only panel laid out (ID-067): chips, loot, one card per survivor; else `lines`. */
+  debrief?: Debrief;
   /** Defenders from a win with stat points to spend, XP added. */
   picks: RosterDefender[];
   /**
@@ -575,6 +581,166 @@ function squadXpLine(g: ReturnType<typeof levelGains>[number]): string {
   return `${g.name} +${g.xp} XP · level ${g.level} · ${g.into}/${g.next} XP to level ${g.level + 1}${up}`;
 }
 
+/** "Military Rifle (+7% damage) · 17.2 dmg/s": a gun's name and affixes, and how hard it hits over time. */
+export const gunLabel = (h: Held): string => `${heldLabel(h)} · ${gunPower(h).toFixed(1)} dmg/s`;
+
+/**
+ * A horde-only win's drop lines (ID-067), for the stash `game` had before it: the gun and
+ * where it went, and with the stash full, the weakest weapon thrown away for it.
+ */
+export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop): string[] {
+  const { weapon, thrown } = drop;
+  const got = `Weapon drop: ${gunLabel(weapon)}`;
+  if (thrown === weapon) {
+    return [
+      got,
+      `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${heldName(weapon)} was the weakest, so it was thrown away`,
+    ];
+  }
+  const count = game.armoury.length + (thrown ? 0 : 1);
+  return [
+    `${got} · into the stash (${count}/${STASH_CAP})`,
+    ...(thrown ? [`Stash full: the weakest, the ${heldLabel(thrown)}, was thrown away`] : []),
+  ];
+}
+
+/** "30.3 dmg/s · Prototype LMG (+12% damage)": a picker option, the number first so a closed select keeps it. */
+export const gunOption = (h: Held): string => `${gunPower(h).toFixed(1)} dmg/s · ${heldLabel(h)}`;
+
+/** One survivor's gun picker (ID-067): who, what they can hold, and what they hold now. */
+export interface GearRow {
+  id: string;
+  name: string;
+  /** The free pistol and every gun in the stash or their hands, strongest first. */
+  options: { value: string; label: string }[];
+  /** The option they hold now: `pistol` or a weapon's uid. */
+  value: string;
+  /** The rarity of the gun they hold (the free pistol is Common). */
+  rarity: Rarity;
+}
+
+export interface GearScreen {
+  heading: string;
+  rows: GearRow[];
+}
+
+/**
+ * The horde-only gun pickers between hordes (ID-067), one per survivor in the squad: the
+ * pistol, the stash's guns and the gun they hold, strongest first by `gunPower`.
+ */
+export function squadGear(game: GameState): GearScreen {
+  const stash = game.armoury.filter(isGun);
+  return {
+    heading: `Stash ${game.armoury.length}/${STASH_CAP}`,
+    rows: squadOf(game).map((d) => {
+      // What they fight with: a primary that is no gun fights as the pistol (squadSpec).
+      const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
+      const choices: Held[] = ['pistol', ...(isOwned(held) ? [held] : []), ...stash];
+      return {
+        id: d.id,
+        name: d.name,
+        options: choices
+          .map((h) => ({ h, power: gunPower(h) }))
+          .sort((a, b) => b.power - a.power)
+          .map(({ h }) => ({ value: isOwned(h) ? h.uid : 'pistol', label: gunOption(h) })),
+        value: isOwned(held) ? held.uid : 'pistol',
+        rarity: isOwned(held) ? held.rarity : 'common',
+      };
+    }),
+  };
+}
+
+/** A small labelled pill in the debrief's header: its text and colour. */
+export interface Chip {
+  text: string;
+  tone: 'ok' | 'boss' | 'warn';
+}
+
+/** A win's weapon drop as the debrief's loot tile (ID-067). */
+export interface DropTile {
+  rarity: Rarity;
+  /** "Military" */
+  rarityName: string;
+  /** "Rifle" */
+  name: string;
+  /** "+7% damage, +21% magazine"; '' with none. */
+  affixes: string;
+  /** "17.2 dmg/s" */
+  power: string;
+  /** "Stash 15/20", or "Stash full: thrown away" when the drop itself went. */
+  stash: string;
+  /** The drop was thrown away (the stash full of better guns). */
+  lost: boolean;
+  /** "Thrown away: Rusty Pistol", or null. */
+  thrown: string | null;
+}
+
+/** The survivor joining, or the squad full, as the debrief's second tile. */
+export interface RecruitTile {
+  label: string;
+  name: string;
+  sub: string;
+  /** The squad is full: nobody joins. */
+  full: boolean;
+}
+
+/** One survivor's card: who, their level, and on a win what it gave. */
+export interface SquadCard {
+  id: string;
+  name: string;
+  level: number;
+  /** XP this win gave; null off a win. */
+  xp: number | null;
+  levelUp: boolean;
+  /** XP into the level, as a share and as text; null off a win. */
+  bar: { pct: number; text: string } | null;
+  /** Joins for the next horde (a win's new survivor). */
+  joining: boolean;
+}
+
+/** The horde-only panel laid out (ID-067), for the start, win and loss screens. */
+export interface Debrief {
+  kind: 'start' | 'won' | 'lost';
+  chips: Chip[];
+  /** A loss: where they got in, and any horror still standing. */
+  callout: { head: string; sub: string | null } | null;
+  /** A plain line under the header (the ending, a loss's retry). */
+  note: string | null;
+  drop: DropTile | null;
+  recruit: RecruitTile | null;
+  cards: SquadCard[];
+  /** The footer's line beside the button ('' for none). */
+  foot: string;
+}
+
+/** A card for `d` off a win, or with no gain. */
+const plainCard = (d: RosterDefender, joining = false): SquadCard => ({
+  id: d.id,
+  name: d.name,
+  level: levelOf(d.xp).level,
+  xp: null,
+  levelUp: false,
+  bar: null,
+  joining,
+});
+
+/** The loot tile for `drop`, against the stash `game` had before it. */
+export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): DropTile {
+  const { weapon, thrown } = drop;
+  const lost = thrown === weapon;
+  const count = game.armoury.length + (thrown ? 0 : 1);
+  return {
+    rarity: weapon.rarity,
+    rarityName: RARITIES[weapon.rarity].name,
+    name: WEAPONS[weapon.base].name,
+    affixes: weapon.affixes.map(affixText).join(', '),
+    power: `${gunPower(weapon).toFixed(1)} dmg/s`,
+    stash: lost ? 'Stash full: thrown away' : `Stash ${count}/${STASH_CAP}`,
+    lost,
+    thrown: thrown && !lost ? `Thrown away: ${heldName(thrown)}` : null,
+  };
+}
+
 /** How a horde-only horde is lost (ID-066, design §2), for the start screen and Help. */
 export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivor is down.';
 
@@ -598,6 +764,20 @@ export function squadStart(game: GameState): ResultScreen {
     squad: true,
     picks: [],
     camp: noCamp(game),
+    debrief: {
+      kind: 'start',
+      chips: [
+        ...(horrorAbility(game.hordeNumber) ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
+        { text: `${waveCount(game.hordeNumber)} waves`, tone: 'ok' },
+        { text: `Squad ${squad.length}/${SQUAD_CAP}`, tone: 'ok' },
+      ],
+      callout: null,
+      note: null,
+      drop: null,
+      recruit: null,
+      cards: squad.map((d) => plainCard(d)),
+      foot: SQUAD_LOSS_RULE,
+    },
   };
 }
 
@@ -608,7 +788,7 @@ export function squadStart(game: GameState): ResultScreen {
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, joined } = squadResult(game, s);
+  const { gains, joined, drop } = squadResult(game, s);
   if (s.outcome === 'won') {
     const picks: RosterDefender[] = [];
     for (const g of gains) {
@@ -628,12 +808,49 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         joined
           ? `New survivor: ${joined.name} joins the squad for the next horde`
           : `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
+        ...(drop ? squadDropLines(game, drop) : []),
         ...(ending ? ['The end, for now. The hordes keep coming: play on from the next one.'] : []),
       ],
       button: ending ? 'Continue' : startLabel(s.hordeNumber + 1),
       squad: true,
       picks,
       camp: noCamp(game),
+      debrief: {
+        kind: 'won',
+        chips: [
+          { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
+          ...(s.boss ? [{ text: `${horrorName(s.boss)} dead`, tone: 'boss' as const }] : []),
+        ],
+        callout: null,
+        note: ending
+          ? 'The end, for now. The hordes keep coming: play on from the next one.'
+          : null,
+        drop: drop ? dropTile(game, drop) : null,
+        recruit: joined
+          ? { label: 'New survivor', name: joined.name, sub: 'Joins next horde', full: false }
+          : {
+              label: 'Squad',
+              name: `${SQUAD_CAP}/${SQUAD_CAP} full`,
+              sub: 'Nobody new joins',
+              full: true,
+            },
+        cards: [
+          ...gains.map((g): SquadCard => ({
+            id: g.id,
+            name: g.name,
+            level: g.level,
+            xp: g.xp,
+            levelUp: g.levels > 0,
+            bar: {
+              pct: g.next > 0 ? Math.min(100, (100 * g.into) / g.next) : 100,
+              text: `${g.into}/${g.next} XP to Lv ${g.level + 1}`,
+            },
+            joining: false,
+          })),
+          ...(joined ? [plainCard(joined, true)] : []),
+        ],
+        foot: picks.length > 0 ? SQUAD_POINTS_NOTE : '',
+      },
     };
   }
   const inner = [...s.breaches].sort((a, b) => b.column - a.column).at(-1);
@@ -651,6 +868,19 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     squad: true,
     picks: [],
     camp: noCamp(game),
+    debrief: {
+      kind: 'lost',
+      chips: [{ text: 'No XP on a loss', tone: 'warn' }],
+      callout: {
+        head: `${where} · nobody left standing`,
+        sub: horror ? `The ${horrorName(horror.ability)} still stood` : null,
+      },
+      note: `Horde ${s.hordeNumber} again: the whole squad back on their feet and the wall at full HP`,
+      drop: null,
+      recruit: null,
+      cards: squadOf(game).map((d) => plainCard(d)),
+      foot: '',
+    },
   };
 }
 
@@ -678,6 +908,8 @@ export function createHud(
   update(state: HordeState, armed?: SkillId | null): void;
   speed(speed: Speed, paused: boolean): void;
   showResult(screen: ResultScreen): void;
+  /** The horde-only gun pickers (ID-067) on the result or start screen; each pick goes to `onEquip`. */
+  showGear(gear: GearScreen, onEquip: (defenderId: string, choice: string) => void): void;
   show(visible: boolean): void;
   toast(text: string): void;
   bottomSpace(): number;
@@ -730,6 +962,7 @@ export function createHud(
   const resultList = el('ul', 'hud-result-list');
   const picker = el('div', 'hud-picker');
   const campPicker = el('div', 'hud-picker');
+  const gear = el('div', 'hud-picker hud-gear');
   const back = el('button', 'hud-button');
   back.type = 'button';
   back.addEventListener('click', () => {
@@ -738,7 +971,11 @@ export function createHud(
     result.hidden = true;
     onDone();
   });
-  result.append(resultTitle, resultList, picker, campPicker, back);
+  // The button sits in a footer: a horde-only panel pins it, with a line beside it (ID-067).
+  const foot = el('div', 'hud-result-foot');
+  const footNote = el('p', 'hud-result-foot-note');
+  foot.append(footNote, back);
+  result.append(resultTitle, resultList, picker, gear, campPicker, foot);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
@@ -857,7 +1094,7 @@ export function createHud(
 
   /** One defender's picker; each click spends a point here and through `onSpend`. */
   function pickerBlock(start: RosterDefender, squadPicks = false): HTMLElement {
-    const block = el('div', 'hud-pick');
+    const block = el('div', squadPicks ? 'hud-pick squad-pick' : 'hud-pick');
     let d = start;
     const draw = (): void => {
       const row = pickerRow(d, start.stats, squadPicks);
@@ -866,6 +1103,7 @@ export function createHud(
         const button = el('button', 'hud-button hud-pick-stat', b.label);
         button.type = 'button';
         button.disabled = b.disabled;
+        if (squadPicks) button.setAttribute('aria-label', `Add ${STAT_NAMES[b.stat]} to ${d.name}`);
         button.title = (squadPicks ? SQUAD_STAT_HINT : STAT_HINT)[b.stat];
         button.addEventListener('click', () => {
           if (result.hidden) return;
@@ -887,12 +1125,124 @@ export function createHud(
         });
         buttons.append(button);
       });
+      if (squadPicks) {
+        // A survivor card's points row (ID-067): the count, then the buttons.
+        const left = unspentPoints(d);
+        const count = el(
+          'p',
+          'squad-points',
+          left > 0 ? `${left} point${left === 1 ? '' : 's'}` : 'No points left',
+        );
+        count.classList.toggle('squad-points-none', left === 0);
+        block.replaceChildren(count, buttons);
+        return;
+      }
       const parts: HTMLElement[] = [el('p', 'hud-pick-heading', row.heading), buttons];
       if (row.note) parts.push(el('p', 'hud-pick-note', row.note));
       block.replaceChildren(...parts);
     };
     draw();
     return block;
+  }
+
+  /** The horde-only panel's body (ID-067): header chips, loot, then one card per survivor. */
+  function debriefBlock(d: Debrief, picks: readonly RosterDefender[]): HTMLElement[] {
+    const parts: HTMLElement[] = [];
+    if (d.chips.length > 0) {
+      const chips = el('div', 'debrief-chips');
+      for (const c of d.chips) {
+        const chip = el('span', 'chip', c.text);
+        chip.dataset.tone = c.tone;
+        chips.append(chip);
+      }
+      parts.push(chips);
+    }
+    if (d.callout) {
+      const callout = el('div', 'debrief-callout');
+      callout.append(el('p', 'debrief-callout-head', d.callout.head));
+      if (d.callout.sub) callout.append(el('p', 'debrief-callout-sub', d.callout.sub));
+      parts.push(callout);
+    }
+    if (d.note) parts.push(el('p', 'debrief-note', d.note));
+    if (d.drop || d.recruit) {
+      const spoils = el('div', 'debrief-spoils');
+      if (d.drop) {
+        const t = d.drop;
+        const tile = el('div', 'tile tile-drop');
+        tile.dataset.rarity = t.rarity;
+        const power = el('div', 'tile-row');
+        const stash = el('span', 'tile-stash', t.stash);
+        stash.classList.toggle('tile-stash-lost', t.lost);
+        power.append(el('span', 'tile-power', t.power), stash);
+        tile.append(
+          el('p', 'tile-label tile-rarity', `Weapon drop · ${t.rarityName}`),
+          el('p', 'tile-name', t.name),
+        );
+        if (t.affixes) tile.append(el('p', 'tile-sub', t.affixes));
+        tile.append(power);
+        if (t.thrown) tile.append(el('p', 'tile-thrown', t.thrown));
+        spoils.append(tile);
+      }
+      if (d.recruit) {
+        const tile = el('div', 'tile tile-recruit');
+        tile.classList.toggle('tile-recruit-full', d.recruit.full);
+        tile.append(
+          el('p', 'tile-label', d.recruit.label),
+          el('p', 'tile-name', d.recruit.name),
+          el('p', 'tile-sub', d.recruit.sub),
+        );
+        spoils.append(tile);
+      }
+      parts.push(spoils);
+    }
+    if (d.cards.length > 0) {
+      const section = el('section', 'debrief-squad');
+      const head = el('div', 'debrief-squad-head');
+      const heading = el('h3', 'debrief-squad-title', 'Squad');
+      heading.append(el('span', 'debrief-stash'));
+      head.append(heading);
+      if (picks.length > 0) {
+        head.append(
+          el(
+            'p',
+            'debrief-hint',
+            SQUAD_STATS.map((st) => `${STAT_NAMES[st]}: ${SQUAD_STAT_HINT[st]}`).join(' · '),
+          ),
+        );
+      }
+      const grid = el('div', 'squad-grid');
+      for (const c of d.cards) {
+        const card = el('div', 'squad-card');
+        card.dataset.defender = c.id;
+        card.classList.toggle('squad-card-up', c.levelUp);
+        const top = el('div', 'squad-card-head');
+        const who = el('span', 'squad-card-who');
+        who.append(
+          el('span', 'squad-card-name', c.name),
+          el('span', 'squad-card-level', `Lv ${c.level}`),
+        );
+        if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
+        if (c.joining) who.append(el('span', 'squad-badge squad-badge-new', 'New'));
+        top.append(who);
+        if (c.xp !== null) top.append(el('span', 'squad-card-xp', `+${c.xp} XP`));
+        card.append(top);
+        if (c.bar) {
+          const track = el('div', 'xp-track');
+          track.setAttribute('aria-hidden', 'true');
+          const fill = el('div', 'xp-fill');
+          fill.style.width = `${c.bar.pct}%`;
+          track.append(fill);
+          card.append(track, el('p', 'squad-card-xptext', c.bar.text));
+        }
+        card.append(el('div', 'squad-card-gear'));
+        const pick = picks.find((p) => p.id === c.id);
+        if (pick) card.append(pickerBlock(pick, true));
+        grid.append(card);
+      }
+      section.append(head, grid);
+      parts.push(section);
+    }
+    return parts;
   }
 
   /**
@@ -1062,35 +1412,105 @@ export function createHud(
       }
     },
     showResult(screen) {
+      const d = screen.debrief;
       resultTitle.textContent = screen.title;
-      resultList.replaceChildren(...screen.lines.map((line) => el('li', '', line)));
+      result.classList.toggle('hud-debrief', d !== undefined);
+      if (d) result.dataset.kind = d.kind;
+      else delete result.dataset.kind;
+      // A debrief lays its lines out itself; anything else is the plain list.
+      resultList.hidden = d !== undefined;
+      resultList.replaceChildren(...(d ? [] : screen.lines.map((line) => el('li', '', line))));
+      footNote.textContent = d?.foot ?? '';
+      back.classList.toggle('btn-primary', d !== undefined);
       const stats = screen.squad ? SQUAD_STATS : STATS;
       picker.replaceChildren(
-        ...(screen.picks.length
-          ? [
-              el(
-                'p',
-                'hud-result-body',
-                stats
-                  .map(
-                    (st) =>
-                      `${STAT_NAMES[st]}: ${(screen.squad ? SQUAD_STAT_HINT : STAT_HINT)[st]}`,
-                  )
-                  .join(' · '),
-              ),
-              ...screen.picks.map((d) => pickerBlock(d, screen.squad === true)),
-              ...(screen.squad ? [el('p', 'hud-pick-note', SQUAD_POINTS_NOTE)] : []),
-            ]
-          : []),
+        ...(d
+          ? debriefBlock(d, screen.picks)
+          : screen.picks.length
+            ? [
+                el(
+                  'p',
+                  'hud-result-body',
+                  stats
+                    .map(
+                      (st) =>
+                        `${STAT_NAMES[st]}: ${(screen.squad ? SQUAD_STAT_HINT : STAT_HINT)[st]}`,
+                    )
+                    .join(' · '),
+                ),
+                ...screen.picks.map((d) => pickerBlock(d, screen.squad === true)),
+                ...(screen.squad ? [el('p', 'hud-pick-note', SQUAD_POINTS_NOTE)] : []),
+              ]
+            : []),
       );
       back.textContent = screen.button;
+      gear.replaceChildren();
       campBlock(screen.camp);
       result.hidden = false;
+      // A new screen starts at its top, not where the last one was scrolled to.
+      result.scrollTop = 0;
       // A horde-only screen with points to spend starts on the picker, so Enter doesn't skip it.
       const firstStat = screen.squad
         ? picker.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')
         : null;
       (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? firstStat ?? back).focus();
+    },
+    showGear(screen, onEquip) {
+      // A redraw after a pick keeps the keyboard on the same survivor's picker.
+      const active = document.activeElement;
+      const focused =
+        active instanceof HTMLSelectElement && result.contains(active)
+          ? active.dataset.defender
+          : undefined;
+      // Each survivor's card has a slot for their gun; one without a card goes in a list.
+      const slots = new Map<string, HTMLElement>();
+      for (const card of picker.querySelectorAll<HTMLElement>('.squad-card')) {
+        const slot = card.querySelector<HTMLElement>('.squad-card-gear');
+        if (card.dataset.defender !== undefined && slot) slots.set(card.dataset.defender, slot);
+      }
+      const loose: HTMLElement[] = [];
+      screen.rows.forEach((row, i) => {
+        const select = el('select', 'build-select hud-gear-select');
+        select.id = `hud-gear-${i}`;
+        select.dataset.defender = row.id;
+        select.dataset.rarity = row.rarity;
+        for (const o of row.options) {
+          const option = el('option', '', o.label);
+          option.value = o.value;
+          select.append(option);
+        }
+        select.value = row.value;
+        // The full label on hover, for one a narrow select cuts short.
+        select.title = select.selectedOptions[0]?.textContent ?? '';
+        select.addEventListener('change', () => {
+          if (result.hidden) return;
+          onEquip(row.id, select.value);
+        });
+        const slot = slots.get(row.id);
+        if (slot) {
+          // The card names them already: the label is for screen readers.
+          const label = el('label', 'sr-only', `${row.name}'s gun`);
+          label.htmlFor = select.id;
+          slot.replaceChildren(label, select);
+          return;
+        }
+        const line = el('div', 'hud-gear-row');
+        const label = el('label', 'hud-gear-name', row.name);
+        label.htmlFor = select.id;
+        line.append(label, select);
+        loose.push(line);
+      });
+      const stash = picker.querySelector<HTMLElement>('.debrief-stash');
+      if (stash) stash.textContent = screen.heading;
+      gear.replaceChildren(
+        ...(loose.length > 0 || !stash ? [el('h3', 'hud-pick-heading', screen.heading)] : []),
+        ...loose,
+      );
+      if (focused !== undefined) {
+        [...result.querySelectorAll<HTMLSelectElement>('select')]
+          .find((x) => x.dataset.defender === focused)
+          ?.focus();
+      }
     },
   };
 }

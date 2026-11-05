@@ -643,6 +643,54 @@ Each defender level gives **stat points** (3 per level, starting point):
   together); a drop past that is salvaged for Scrap (Rusty 5, Common 10,
   Military 25, Prototype 50, Relic 100). Burning rounds and +damage vs.
   mutants wait for burning effects and mutants. Manual salvage is a follow-up.
+- **As built (ID-067): weapon drops, stash and equip in the horde-only build.**
+  Better guns are how the squad gets stronger.
+  - **Drop:** every horde won drops one specialised gun (SMG, rifle,
+    shotgun, LMG or sniper rifle, picked evenly). Never the pistol, which
+    every survivor has free, and never a blade or tool, which a survivor
+    doesn't use. Its
+    rarity comes from the horde's band *(starting points)*:
+
+    | Hordes | Rusty | Common | Military | Prototype | Relic |
+    |---|---|---|---|---|---|
+    | 1–3 | 50 | 50 | – | – | – |
+    | 4–6 | 25 | 45 | 25 | 5 | – |
+    | 7–9 | 10 | 35 | 35 | 15 | 5 |
+    | 10+ | – | 25 | 40 | 25 | 10 |
+
+    Affixes roll as above. Duplicates are allowed. The drop is rolled from the
+    horde's seed on a stream of its own, so the same seed drops the same gun at
+    1×, 2× and 3× and however the fight went. Nothing drops after a loss.
+  - **Stash:** the camp's armoury, shown as the stash. It holds 20 weapons.
+    With 20 in it, the weakest of the stash and the drop is thrown away (it may
+    be the drop itself); a tie throws away the later one. "Weakest" is the
+    lowest damage per second through a magazine and its reload (pellets,
+    rarity and affixes counted), the dmg/s figure the pickers show. An older
+    save's armoury past 20 is kept as it is and never grows.
+  - **Equip:** between hordes, on the start and result screens, each survivor
+    in the squad has a one-click gun picker (a select; the pick applies and
+    saves at once). It lists the free pistol, the stash's guns and the gun
+    they hold, strongest first, each led by its dmg/s ("30.3 dmg/s ·
+    Prototype LMG (+12% damage, +21% magazine)") so a closed select never
+    cuts the number off; the full label shows on hover. The gun they had goes to
+    the stash; the pistol is free and unlimited, so it just goes, and taking
+    the pistol is refused while the stash is full. Every survivor starts with
+    a pistol. The role (pistol, rifle, shotgun…) is the gun's: survivors have
+    no profession, so the same survivor fights as whatever they hold. Their
+    secondary and item stay as they were.
+  - **The panel between hordes (a debrief):** the start, win and loss
+    screens share one layout, 640 px wide, scrolling inside the window with
+    the button pinned in a footer. At the top are the title and chips (waves,
+    squad size, boss, "No XP on a loss"). A win then shows two tiles side by
+    side: the weapon drop (rarity in its colour — Rusty copper, Common grey,
+    Military blue, Prototype purple, Relic gold — the gun, its affixes, its
+    dmg/s, the stash count, and any weapon thrown away) and the survivor
+    joining (or "6/6 full"). A loss shows a red callout saying where they got
+    in. Below that is one card per survivor: name and level, on a win the XP
+    it gave with a bar and a "Level up" badge, their gun select (bordered in
+    the gun's rarity), and on a win their stat points with +Aim / +Grit
+    buttons. The loss screen keeps the cards, so guns can change before the
+    retry. The footer says why points can wait, or how a horde is lost.
 
 ## 7. Turrets, energy and traps
 
@@ -1491,6 +1539,13 @@ offline progress works across sessions.
   takes back. A survivor with no gun fights with the pistol. The reserve is
   read through the same allow-list as the roster, and the roster and reserve
   together never pass the camp's slots (at least the squad's 6).
+- **As built (ID-067): the stash and equipped guns** are saved as the armoury
+  and each survivor's loadout, so save version 12 is unchanged. Both are read
+  through the weapon allow-list: known base ids, rarities and affixes only,
+  whole affix values in range, a uid from a horde already won, each weapon
+  once, and no unknown or prototype keys. The stash is capped as it is read
+  (the camp's 30 owned weapons, stash and hands together; a full horde-only
+  stash and six armed survivors is 26), and the save's size check comes first.
 
 ## 13. Out of scope (v1)
 

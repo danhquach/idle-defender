@@ -181,11 +181,14 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const screen = squadScreen(g, ended(g, 'won'));
     h.showResult(screen);
     expect(root.querySelector('.hud-result img')).toBeNull();
-    expect(root.querySelector('.hud-result-list')!.textContent).toContain(evil);
-    expect(root.querySelector('.hud-picker')!.textContent).toContain(evil);
+    // The debrief (ID-067): their card, and their points row's button names them too.
+    expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
+    expect(root.querySelector('.hud-pick-stat')!.getAttribute('aria-label')).toBe(
+      `Add Aim to ${evil}`,
+    );
     h.showResult(squadStart(g));
     expect(root.querySelector('.hud-result img')).toBeNull();
-    expect(root.querySelector('.hud-result-list')!.textContent).toContain(evil);
+    expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
   });
 
   it('the result screen’s picker offers Aim and Grit only', () => {
@@ -195,10 +198,10 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const stats = [...root.querySelectorAll('.hud-pick-stat')].map((b) => b.textContent);
     expect(stats).toEqual(['+ Aim (0)', '+ Grit (0)']);
     expect(document.activeElement?.textContent).toBe('+ Aim (0)');
-    expect(root.querySelector('.hud-picker')!.textContent).toContain(SQUAD_POINTS_NOTE);
-    expect(root.querySelector('.hud-picker .hud-result-body')!.textContent).toBe(
+    expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe(SQUAD_POINTS_NOTE);
+    expect(root.querySelector('.debrief-hint')!.textContent).toBe(
       'Aim: Gun damage and crits · Grit: HP in hordes',
     );
-    expect(root.querySelector('.hud-result > .hud-button')!.textContent).toBe(startLabel(6));
+    expect(root.querySelector('.hud-result-foot > .hud-button')!.textContent).toBe(startLabel(6));
   });
 });

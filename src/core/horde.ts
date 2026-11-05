@@ -409,6 +409,8 @@ export interface HordeState {
   time: number;
   acc: number;
   rng: RngState;
+  /** The seed the fight started from (uint32): what a horde-only drop rolls from (ID-067). */
+  seed: number;
   hordeNumber: number;
   wave: number;
   waveCount: number;
@@ -544,6 +546,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     time: 0,
     acc: 0,
     rng: { s: seed >>> 0 },
+    seed: seed >>> 0,
     hordeNumber,
     wave: 1,
     waveCount: waveCount(hordeNumber),

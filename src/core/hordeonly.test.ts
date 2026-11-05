@@ -263,7 +263,7 @@ describe('after a horde (ID-066)', () => {
     const g = squadGame(3, 6);
     const lost = ended(g, 'lost');
     expect(finishSquadHorde(g, lost)).toBe(g);
-    expect(squadResult(g, lost)).toEqual({ gains: [], joined: null });
+    expect(squadResult(g, lost)).toEqual({ gains: [], joined: null, drop: null });
   });
 
   it('a real loss, then the retry: every survivor back at full HP and the wall full', () => {

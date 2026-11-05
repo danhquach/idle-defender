@@ -20,7 +20,7 @@ import {
   tick,
   type HordeState,
 } from '../core/horde.ts';
-import { finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
+import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
 import { advanceResearch } from '../core/research.ts';
@@ -52,6 +52,7 @@ import {
   defenderLabel,
   resultScreen,
   SPEED_KEYS,
+  squadGear,
   squadScreen,
   squadStart,
 } from './hud.ts';
@@ -232,6 +233,21 @@ export function start(root: HTMLElement, art: Art): void {
     const now = Date.now();
     startFight(startSquadHorde(game, now, now));
   }
+  /** The horde-only gun pickers (ID-067) for the game as it stands, between hordes only. */
+  function showGear(): void {
+    hud.showGear(squadGear(game), (defenderId, choice) => {
+      if (horde && endedAt === null) return;
+      const r = equipGun(game, defenderId, choice);
+      if (r.ok) {
+        commit(r.game);
+        // The start screen's squad on the wall holds the new gun too.
+        if (!horde) preview = startSquadHorde(game, 0, Date.now());
+      } else {
+        hud.toast(r.reason);
+      }
+      showGear();
+    });
+  }
   /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
   function startFight(next: HordeState): void {
     horde = next;
@@ -349,6 +365,7 @@ export function start(root: HTMLElement, art: Art): void {
       hud.show(true);
       hud.update(preview);
       hud.showResult(squadStart(game));
+      showGear();
       cam = buildCam = fightCam;
       menu.refresh();
       return;
@@ -562,7 +579,10 @@ export function start(root: HTMLElement, art: Art): void {
         hud.showResult(HORDE_ONLY ? squadScreen(game, horde) : resultScreen(game, horde, endedAt));
         // Horde-only (ID-066): XP and the new survivor are saved at once, so a reload on
         // the result screen never loses a win; stat points follow with its button.
-        if (HORDE_ONLY) commit(finishSquadHorde(game, horde));
+        if (HORDE_ONLY) {
+          commit(finishSquadHorde(game, horde));
+          showGear();
+        }
       }
     } else if (!panel) {
       // The horde-only build between hordes: the squad on a full wall, waiting to start.
