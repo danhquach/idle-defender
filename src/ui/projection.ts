@@ -159,10 +159,36 @@ export function wallStage(hp: number, maxHp: number): WallStage {
 export const WALL_HIT = { time: 0.25, shake: 2, flash: 0.55 } as const;
 /** How much of a segment's hit still shows at fight time `time`: 1 as it lands, down to 0 after `WALL_HIT.time`. */
 export function wallHitFade(time: number, hitAt: number | undefined): number {
-  if (hitAt === undefined) return 0;
-  const age = time - hitAt;
-  if (!(age >= 0) || age >= WALL_HIT.time) return 0;
-  return 1 - age / WALL_HIT.time;
+  return fadeAfter(time, hitAt, WALL_HIT.time);
+}
+
+/**
+ * How the barrier cards show on the wall (ID-075): a card's pick pulses every standing
+ * segment and a repair glows on each segment it healed, each for `time` s of real time
+ * (fight time times the game speed, so 3× never cuts them short); Spiked Walls' stakes
+ * flash as they bite, in fight time. `alpha` is each glow's peak; `rise` how far (world units) a
+ * repair's sparks float up; the stakes reach `out` past the wall's field face and sit
+ * `in` on its top; Reinforce's brace shows at `alpha` under the damage.
+ */
+export const WALL_CARD = {
+  pulse: { time: 0.9, alpha: 0.35 },
+  repair: { time: 0.9, alpha: 0.45, rise: 6 },
+  spike: { time: 0.25, alpha: 0.9, out: 10, in: 2 },
+  brace: { alpha: 0.4 },
+} as const;
+
+/** 1 at `at`, down to 0 `length` s later; 0 before it, after it or with none. */
+export function fadeAfter(time: number, at: number | undefined, length: number): number {
+  if (at === undefined) return 0;
+  const age = time - at;
+  if (!(age >= 0) || age >= length) return 0;
+  return 1 - age / length;
+}
+
+/** A pick's pulse (ID-075): it swells and fades back over `WALL_CARD.pulse.time` × `pace` fight s, 0 to 1. */
+export function wallPulse(time: number, at: number | undefined, pace = 1): number {
+  const left = fadeAfter(time, at, WALL_CARD.pulse.time * pace);
+  return left > 0 ? Math.sin(Math.PI * left) : 0;
 }
 
 /** Height of a post's floor, where its defender stands. */

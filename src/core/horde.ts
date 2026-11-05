@@ -214,6 +214,10 @@ export interface Segment {
   maxHp: number;
   /** When its latest hit flash began (ID-072): a blow that took HP, at most one per `HIT_MARK_GAP` s; absent = none this fight. */
   hitAt?: number;
+  /** When a repair card last healed it (ID-075); absent = none this fight. A segment already whole gets none. */
+  repairAt?: number;
+  /** When Spiked Walls last hurt an enemy striking it (ID-075), at most one per `HIT_MARK_GAP` s. */
+  spikeAt?: number;
 }
 /** One wall layer: `SEGMENTS` segments, top to bottom. */
 export interface Layer {
@@ -461,6 +465,8 @@ export interface HordeState {
   mods: Mods;
   /** Upgrade cards taken this horde, in pick order, each once (design §8). */
   taken: UpgradeId[];
+  /** When the latest barrier card was picked (ID-075), so the wall can pulse; absent = none this horde. */
+  barrierAt?: number;
   /** The only upgrade cards offered (ID-066); every card when absent. */
   cardPool?: UpgradeId[];
   /** Enemy HP's factor for this horde (ID-066); `HP_GROWTH` per horde when absent. */
@@ -1779,7 +1785,9 @@ function move(s: HordeState): Moves {
  * Slow Field (design §8): the strip `CARD.slowField.reach` px deep in front of the
  * outermost layer with a segment standing; null without the card or a standing layer.
  */
-function slowField(s: HordeState): { from: number; to: number } | null {
+export function slowField(
+  s: Pick<HordeState, 'taken' | 'layers'>,
+): { from: number; to: number } | null {
   if (!took(s, 'slow-field')) return null;
   let outer: Layer | undefined;
   for (const l of s.layers) {
@@ -1943,6 +1951,8 @@ function attack(s: HordeState, moves: Moves): void {
     } else if (took(s, 'spiked-walls')) {
       // Spiked Walls (design §8): a blow on the wall costs the one landing it.
       e.hp = Math.max(0, e.hp - CARD.spikes);
+      const seg = stop.segment;
+      if (!(s.time - (seg.spikeAt ?? -Infinity) < HIT_MARK_GAP)) seg.spikeAt = s.time;
     }
     e.nextAttackAt = s.time + enemy.attackInterval;
   }

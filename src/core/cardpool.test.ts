@@ -27,6 +27,7 @@ import {
   stockOf,
 } from './data.ts';
 import {
+  HIT_MARK_GAP,
   newHorde,
   standing,
   tick,
@@ -419,6 +420,52 @@ describe('barrier cards', () => {
     expect(seg.hp).toBe(seg.maxHp - ENEMIES.shambler.damage);
     expect(e.hp).toBe(1000 - CARD.spikes);
     expect(atWall().e.hp).toBe(1000);
+  });
+
+  it('Spiked Walls: marks the segment its stakes bite, at most once per hit-mark gap (ID-075)', () => {
+    // The blow lands at the step's start.
+    expect(atWall('spiked-walls').seg.spikeAt).toBe(0);
+    expect(atWall().seg.spikeAt).toBeUndefined();
+    // A crowd on one segment marks it again only once the gap has passed.
+    const bitten = (now: number) => {
+      const s = quiet('spiked-walls');
+      s.layers[0]!.segments[4]!.spikeAt = 0.2;
+      s.time = now;
+      for (let k = 0; k < 2; k++) enemy(s, { ...tough, x: s.layers[0]!.x + 20, y: ROW4 + k });
+      return tick(s, STEP).layers[0]!.segments[4]!.spikeAt;
+    };
+    expect(bitten(0.3)).toBe(0.2);
+    expect(bitten(0.2 + HIT_MARK_GAP)).toBe(0.2 + HIT_MARK_GAP);
+  });
+
+  it('marks the pick of a barrier card, and only a barrier card, for the wall to pulse (ID-075)', () => {
+    const pick = (id: UpgradeId) => {
+      const s = quiet();
+      s.time = 12.5;
+      s.offer = [{ kind: 'upgrade', id }];
+      return chooseCard(s, 0).barrierAt;
+    };
+    for (const id of UPGRADE_IDS) {
+      expect(pick(id), id).toBe(UPGRADES[id].category === 'barrier' ? 12.5 : undefined);
+    }
+  });
+
+  it('a repair card marks only the segments it heals (ID-075)', () => {
+    for (const id of ['patch-up', 'field-repairs'] as const) {
+      const s = quiet();
+      s.time = 7;
+      const segs = s.layers[0]!.segments;
+      segs[1]!.hp = segs[1]!.maxHp / 2;
+      segs[2]!.hp = 0;
+      s.offer = [{ kind: 'upgrade', id }];
+      const t = chooseCard(s, 0).layers[0]!.segments;
+      expect(t[1]!.repairAt, id).toBe(7);
+      expect(t[2]!.repairAt, id).toBe(7);
+      // Whole already, or never built: nothing to heal, nothing shown.
+      for (const seg of t.filter((g) => g.index !== 1 && g.index !== 2)) {
+        expect(seg.repairAt, `${id} ${seg.index}`).toBeUndefined();
+      }
+    }
   });
 
   it('Spiked Walls: a Spewer spitting from afar is not spiked', () => {

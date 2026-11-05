@@ -1674,8 +1674,8 @@ original outline.
   profession, turret state, trap (built and broken) and wall tier to its art,
   and a test fails if any is missing. Walls are boxes with their tier's tiling
   top and front textures (so they keep the exact projection): lower and
-  cracked as they take damage, the tier's rubble once broken, a door on a
-  gate's top (redrawn in ID-054). Defenders and the Shambler stand on
+  cracked as they take damage, the tier's rubble once broken, a sliding gate on a
+  gate's top (redrawn in ID-054, a sliding gate since ID-075). Defenders and the Shambler stand on
   their spot; posts and turret heads sit on their footprint; traps lie
   across their cell. A lit
   turret glows; sparks, smoke, HP and condition bars and the title badge are
@@ -1781,6 +1781,42 @@ original outline.
   so pause holds it and game speed shortens it. A crowd on one segment starts
   a new flash at most every 0.4 s, so the segment never stays washed out over
   its damage. Only the segment shakes; anything standing on it stays put.
+- **As built (ID-075): barrier cards show on the wall, and the gate slides.**
+  In a fight (never in the build scene) the barrier cards taken show on
+  every standing segment, the gate included. Picking any barrier card pulses
+  the wall a pale teal (swelling and fading over 0.9 s, at most 35%), so it
+  never reads as a hit. The pulse and the repair glow below last 0.9 s of
+  real time at any game speed (fight time times the speed, so 3× never cuts
+  them short, and pause holds them); the stake bites keep to fight time.
+  **Spiked Walls** lays a row of
+  stakes along each segment's field edge (their foot 2 units under its top,
+  reaching 10 over the ground in front, where the camera sees it), drawn
+  under every sprite so the enemies stopped at the wall stand over them; they
+  don't shake with a hit. When the stakes hurt an enemy
+  striking the wall, a small pale burst with an amber core shows for
+  0.25 s, at most once per 0.4 s per segment, like the hit flash; a
+  Spewer's spit doesn't set it off. **Reinforce** lays a steel X brace over
+  each segment's top and front at 40%, under the ID-072 damage, so every
+  damage stage still reads; it looks the same however often it's taken.
+  **Patch Up** and **Field Repairs** glow each segment they actually heal
+  green (45%, fading over 0.9 s) under three small green crosses that float
+  6 units up (they stay put with Reduce motion on); a segment already whole
+  shows nothing. **Slow Field** shows its strip (120 units in front of the
+  outermost layer with a segment standing, the field's full height, moving
+  in as that layer falls) as a flat see-through area under every sprite: a
+  faint pale tint (10%) with black tar splatters at 40%, in tiles 70% of the
+  strip deep, staggered and mirrored by a fixed seed, and its far 40% fades
+  out so no hard line crosses the field. It's painted once into its own
+  canvas (`src/ui/ground.ts`); where the browser can't paint one, the tint
+  alone shows. **The gate** is now a sliding gate: one closed panel on a
+  rail with roller wheels down its middle and a heavy end cap at each end,
+  drawn over the whole segment top, flush with the segments beside it, with
+  no posts sticking out and no passage. Each tier has its own (weathered
+  wood with iron bands, dented corrugated metal, slate blue-grey bolted
+  steel plates for reinforced, a pale concrete slab); the other three are
+  repaints of the wood gate, so all four share one outline. The art build's
+  `ajar` step and the old angled gate generation are gone. All the new art
+  (stakes, brace, tar and the four gates) passed the art reviewer.
 - **As built (ID-049):** sprites move, drawn from the still art (no frames):
   each is moved, turned and stretched about its feet (`src/ui/anim.ts`).
   Enemies bob once per 20 px of ground they actually cover (so slower over a
@@ -1814,18 +1850,8 @@ original outline.
 - **As built (ID-054):** the gate is part of the wall. The camera looks
   along the wall, so its outward face never shows; the gate is drawn where
   the wall shows, on its segment's top, in place of the tier's top texture:
-  a straight gate seen from above, a post at each end in line with the
-  segments beside it and two leaves standing a little open toward the
-  field over a dark passage. Each tier has its own gate (wood planks and
-  iron bands, corrugated metal, steel-plated reinforced concrete, concrete
-  slabs in steel frames), picked from three seeds each: the wood gate is an
-  edit of an angled gate generation (manifest `part`), the other three are
-  edits of the wood gate, so all four share one outline. The leaves are
-  generated closed and opened by the art build (manifest `ajar`: each leaf
-  turned about its post, a share of its length shown, the passage behind
-  it filled dark), the same amount on every tier; every gate is padded so
-  its posts fill 60% of its width and lie exactly across the wall's depth,
-  the leaves over the field beyond. The gate lowers with its wall, cracks
+  a closed sliding gate seen from above (redrawn in ID-075, which replaced
+  the two leaves left ajar over a dark passage). The gate lowers with its wall, cracks
   show over it, a broken one is its tier's rubble. Its wall-walk spots get
   no plank platform (it would cover the gate); a defender or turret there
   stands at the same height as on any segment, drawn over the gate. The old

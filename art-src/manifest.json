@@ -1366,77 +1366,70 @@
       "prompt": "seen flat from directly above, a straight horizontal band of smashed concrete running from the left edge to the right edge: dark rubble and broken grey concrete chunks in a jagged gap, bent rusty rebar rods sticking out of both broken ends, ragged uneven top and bottom edges, much wider than tall, only the broken band with nothing around it, no slab, no tile, no surface"
     },
     {
-      "id": "gate-angled",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4542,
-      "size": "512x512",
-      "prompt": "a closed heavy wooden double gate between two thick square wooden gateposts, salvaged planks with iron bands and a crossbar, a short piece of plank wall on each side, all the same height",
-      "part": true
-    },
-    {
       "id": "wood-gate",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4545,
+      "seed": 7513,
       "size": "512x1024",
-      "ref": "gate-angled",
       "style": "verbatim",
-      "prompt": "the same wooden gate turned so it runs straight from the top of the image to the bottom, seen from high above looking down, slightly from the right side so the right face of the closed double door and its iron bands show, one gatepost at the top and one at the bottom, a long narrow vertical shape, same planks, posts and iron bands, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "prompt": "a closed wooden sliding gate seen flat from directly above, one single wide solid rectangular panel about twice as tall as it is wide, filling most of the image, weathered grey brown salvaged wooden planks laid top to bottom with dark iron bands across them, a steel guide rail with small round roller wheels running down the middle along its whole length, a heavy iron end cap across the top edge and across the bottom edge, straight sides, no posts, no doors, no gap. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no person"
     },
     {
       "id": "metal-gate",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4564,
+      "seed": 7562,
       "size": "512x1024",
       "ref": "wood-gate",
       "style": "verbatim",
-      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to metal: the posts are riveted grey scrap steel, the leaves are dented grey corrugated sheet metal with rust streaks and bolts, steel bands. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same closed sliding gate seen flat from directly above, one wide rectangular panel with a guide rail and roller wheels down the middle and a heavy end cap across the top and the bottom. Only change the material to metal: the panel is dented grey corrugated sheet metal with rust streaks and bolts, the end caps are riveted grey scrap steel. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground"
     },
     {
       "id": "reinforced-gate",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4571,
+      "seed": 7572,
       "size": "512x1024",
       "ref": "wood-gate",
       "style": "verbatim",
-      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to reinforced concrete and steel: the posts are blue grey concrete capped with riveted steel plates, the leaves are heavy bolted steel armour plates on steel beams, blue grey and dark steel. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same closed sliding gate seen flat from directly above, one wide rectangular panel with a guide rail and roller wheels down the middle and a heavy end cap across the top and the bottom. Only change the material to reinforced concrete and steel: the panel is heavy bolted desaturated slate blue-grey steel armour plates on dark steel beams, the end caps are pale grey concrete capped with riveted dark steel plates. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground"
     },
     {
       "id": "concrete-gate",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4581,
+      "seed": 7582,
       "size": "512x1024",
       "ref": "wood-gate",
       "style": "verbatim",
-      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to concrete: the posts are cracked pale grey concrete blocks with chipped edges and stains, the leaves are heavy pale grey concrete slabs in plain grey steel frames. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": {
-        "hinges": [96, 898],
-        "seam": 509,
-        "swing": 0.11,
-        "length": 0.96
-      }
+      "prompt": "repaint this exact image keeping its shape, size, outline and position: the same closed sliding gate seen flat from directly above, one wide rectangular panel with a guide rail and roller wheels down the middle and a heavy end cap across the top and the bottom. Only change the material to concrete: the panel is a heavy pale grey concrete slab with cracks, chipped edges and stains, the end caps are plain grey steel frames. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground"
+    },
+    {
+      "id": "wall-spikes",
+      "kind": "sprite",
+      "style": "object",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7521,
+      "size": "384x1024",
+      "prompt": "seen flat from directly above, a long narrow vertical row of sharpened wooden stakes and rusty iron spikes all pointing straight to the right, their bases lashed with rope to a thin wooden beam running down the left side, the row runs from the top of the image to the bottom, much taller than wide"
+    },
+    {
+      "id": "wall-brace",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7531,
+      "size": "512x1024",
+      "prompt": "seen flat from directly above, a heavy dark steel X-shaped cross brace made of two thin riveted steel straps crossing in the middle, a bolted square steel plate at each of the four ends, the space between the straps is empty background, a tall rectangle shape about twice as tall as wide. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "slow-field",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7551,
+      "size": "512x512",
+      "prompt": "seen flat from directly above, many scattered irregular splatters and smears of thick black sticky tar of different sizes spread loosely across the whole image, glossy oily highlights, thin drips, the tar alone with no surface beneath it, no ground, no dirt. 2D game sprite, hand-painted style, soft shading, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no person"
     },
     {
       "id": "ground",

@@ -351,6 +351,15 @@ export function chooseCard(state: HordeState, index: number): HordeState {
 function applyUpgrade(s: HordeState, id: UpgradeId): void {
   const segments = s.layers.flatMap((l) => l.segments);
   if (!s.taken.includes(id)) s.taken.push(id);
+  if (UPGRADES[id].category === 'barrier') s.barrierAt = s.time;
+  // A repair card marks only the segments it actually heals (ID-075).
+  const repair = (heal: (seg: (typeof segments)[number]) => number): void => {
+    for (const seg of segments) {
+      const hp = heal(seg);
+      if (hp > seg.hp) seg.repairAt = s.time;
+      seg.hp = hp;
+    }
+  };
   switch (id) {
     case 'sharpshooter':
       s.mods.damage *= 1.2;
@@ -362,7 +371,7 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       s.mods.range *= 1.15;
       break;
     case 'patch-up':
-      for (const seg of segments) seg.hp = Math.min(seg.maxHp, seg.hp + 0.3 * seg.maxHp);
+      repair((seg) => Math.min(seg.maxHp, seg.hp + 0.3 * seg.maxHp));
       break;
     case 'reinforce':
       for (const seg of segments) {
@@ -378,7 +387,7 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       s.mods.damage *= CARD.hollowPoints;
       break;
     case 'field-repairs':
-      for (const seg of segments) seg.hp = seg.maxHp;
+      repair((seg) => seg.maxHp);
       break;
     case 'power-surge':
       s.freeWave = s.wave;
