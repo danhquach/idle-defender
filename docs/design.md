@@ -706,11 +706,16 @@ Each defender level gives **stat points** (3 per level, starting point):
   - **The panel between hordes (a debrief):** the start, win and loss
     screens share one layout, 640 px wide, scrolling inside the window with
     the button pinned in a footer. At the top are the title and chips (waves,
-    squad size, boss, "No XP on a loss"). A win then shows two tiles side by
-    side: the weapon drop (rarity in its colour — Rusty copper, Common grey,
-    Military blue, Prototype purple, Relic gold — the gun, its affixes, its
-    dmg/s, the stash count, and any weapon thrown away) and the survivor
-    joining (or "6/6 full"). A loss shows a red callout saying where they got
+    squad size, boss, "No XP on a loss", "No weapon drop on a loss"). A win
+    then shows two tiles side by side: the weapon drop (rarity in its colour —
+    Rusty copper, Common grey, Military blue, Prototype purple, Relic gold —
+    a 56 px icon framed in that colour, the gun, its affixes, its dmg/s, the
+    stash count, and any weapon thrown away) and the survivor joining (or
+    "6/6 full"). *(ID-073)* The icon is the gun's own survivor sprite cropped
+    to hands and gun, decorative (empty alt text), since there is no separate
+    gun art yet. When the full stash throws the drop itself away, the tile
+    says "Stash full: thrown away" and "No better than any gun in the stash",
+    and its icon goes grey. A loss shows a red callout saying where they got
     in. Below that is one card per survivor: name and level, on a win the XP
     it gave with a bar and a "Level up" badge, their gun select (bordered in
     the gun's rarity), and on a win their stat points with +Aim / +Grit

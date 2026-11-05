@@ -92,7 +92,7 @@ import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
-import { ART_URLS, SHOP_ICON, SKILL_ICON, type ArtId } from './sprites.ts';
+import { ART_URLS, GUNNER_ART, SHOP_ICON, SKILL_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** The key for each fight speed (ID-062): clear of the card keys 1 2 3 and the action bar's. */
 export const SPEED_KEYS: Readonly<Record<Speed, string>> = { 1: 'A', 2: 'S', 3: 'D' };
@@ -596,7 +596,7 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
   if (thrown === weapon) {
     return [
       got,
-      `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${heldName(weapon)} was the weakest, so it was thrown away`,
+      `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${heldName(weapon)} was no better than any gun in it, so it was thrown away`,
     ];
   }
   const count = game.armoury.length + (thrown ? 0 : 1);
@@ -665,6 +665,8 @@ export interface DropTile {
   rarityName: string;
   /** "Rifle" */
   name: string;
+  /** The gun's art for the tile's icon (ID-073): its survivor sprite, cropped to the gun. */
+  icon: ArtId;
   /** "+7% damage, +21% magazine"; '' with none. */
   affixes: string;
   /** "17.2 dmg/s" */
@@ -673,7 +675,7 @@ export interface DropTile {
   stash: string;
   /** The drop was thrown away (the stash full of better guns). */
   lost: boolean;
-  /** "Thrown away: Rusty Pistol", or null. */
+  /** "Thrown away: Rusty Pistol", `DROP_LOST_NOTE` when the drop itself went, or null. */
   thrown: string | null;
 }
 
@@ -731,17 +733,27 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
   const { weapon, thrown } = drop;
   const lost = thrown === weapon;
   const count = game.armoury.length + (thrown ? 0 : 1);
+  // First, so anything but a gun is refused with its own error.
+  const power = gunPower(weapon);
   return {
     rarity: weapon.rarity,
     rarityName: RARITIES[weapon.rarity].name,
     name: WEAPONS[weapon.base].name,
+    icon: GUNNER_ART[weapon.base as GunId].idle,
     affixes: weapon.affixes.map(affixText).join(', '),
-    power: `${gunPower(weapon).toFixed(1)} dmg/s`,
+    power: `${power.toFixed(1)} dmg/s`,
     stash: lost ? 'Stash full: thrown away' : `Stash ${count}/${STASH_CAP}`,
     lost,
-    thrown: thrown && !lost ? `Thrown away: ${heldName(thrown)}` : null,
+    // "No better", not "weaker": a tie throws the drop away too.
+    thrown: lost ? DROP_LOST_NOTE : thrown ? `Thrown away: ${heldName(thrown)}` : null,
   };
 }
+
+/** Under a drop the full stash threw away itself (ID-073). */
+export const DROP_LOST_NOTE = 'No better than any gun in the stash';
+
+/** A loss's chip and line (ID-073): nothing drops after a loss. */
+export const SQUAD_NO_DROP = 'No weapon drop on a loss';
 
 /** How a horde-only horde is lost (ID-066, design §2), for the start screen and Help. */
 export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivor is down.';
@@ -864,6 +876,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       `${where} · nobody left standing`,
       ...(horror ? [`The ${horrorName(horror.ability)} still stood`] : []),
       'No XP on a loss',
+      SQUAD_NO_DROP,
       `Horde ${s.hordeNumber} again: the whole squad back on their feet and the wall at full HP`,
     ],
     button: `Retry Horde ${s.hordeNumber}`,
@@ -872,7 +885,10 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     camp: noCamp(game),
     debrief: {
       kind: 'lost',
-      chips: [{ text: 'No XP on a loss', tone: 'warn' }],
+      chips: [
+        { text: 'No XP on a loss', tone: 'warn' },
+        { text: SQUAD_NO_DROP, tone: 'warn' },
+      ],
       callout: {
         head: `${where} · nobody left standing`,
         sub: horror ? `The ${horrorName(horror.ability)} still stood` : null,
@@ -1172,16 +1188,26 @@ export function createHud(
         const t = d.drop;
         const tile = el('div', 'tile tile-drop');
         tile.dataset.rarity = t.rarity;
+        tile.classList.toggle('tile-drop-lost', t.lost);
         const power = el('div', 'tile-row');
         const stash = el('span', 'tile-stash', t.stash);
         stash.classList.toggle('tile-stash-lost', t.lost);
         power.append(el('span', 'tile-power', t.power), stash);
-        tile.append(
+        // The gun's icon (ID-073), decoration only: its name is right beside it.
+        const icon = el('div', 'tile-icon');
+        const img = el('img', 'tile-icon-img');
+        img.alt = '';
+        img.src = ART_URLS[t.icon] ?? '';
+        icon.append(img);
+        const id = el('div', 'tile-drop-id');
+        id.append(
           el('p', 'tile-label tile-rarity', `Weapon drop · ${t.rarityName}`),
           el('p', 'tile-name', t.name),
         );
-        if (t.affixes) tile.append(el('p', 'tile-sub', t.affixes));
-        tile.append(power);
+        if (t.affixes) id.append(el('p', 'tile-sub', t.affixes));
+        const head = el('div', 'tile-drop-head');
+        head.append(icon, id);
+        tile.append(head, power);
         if (t.thrown) tile.append(el('p', 'tile-thrown', t.thrown));
         spoils.append(tile);
       }

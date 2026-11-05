@@ -3,14 +3,15 @@
 // new-survivor lines, and each survivor gets a one-click gun picker between hordes.
 // Text reaches the page only through textContent.
 import { describe, expect, it, vi } from 'vitest';
-import { gunPower, type OwnedWeapon } from '../core/armoury.ts';
+import { DROP_GUNS, gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { SQUAD_CAP, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
+import { SQUAD_CAP, STASH_CAP, WEAPONS, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { equipGun, squadDrop, startSquadHorde } from '../core/hordeonly.ts';
 import { waveCount } from '../core/waves.ts';
 import {
   createHud,
+  DROP_LOST_NOTE,
   dropTile,
   gunLabel,
   gunOption,
@@ -18,8 +19,10 @@ import {
   SQUAD_POINTS_NOTE,
   squadGear,
   squadScreen,
+  SQUAD_NO_DROP,
   squadStart,
 } from './hud.ts';
+import { ART_URLS, GUNNER_ART, type GunId } from './sprites.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -74,12 +77,16 @@ describe('the drop on the result screen (ID-067)', () => {
     const { weapon } = squadDrop(g, won)!;
     const lines = squadScreen(g, won).lines;
     expect(lines).toContain(`Weapon drop: ${gunLabel(weapon)}`);
-    expect(lines.some((l) => l.includes('was the weakest, so it was thrown away'))).toBe(true);
+    expect(
+      lines.some((l) => l.includes('was no better than any gun in it, so it was thrown away')),
+    ).toBe(true);
   });
 
-  it('a loss names no drop', () => {
+  it('a loss names no drop, and says plainly that nothing dropped (ID-073)', () => {
     const g = squadGame(2, 3);
-    expect(squadScreen(g, ended(g, 'lost')).lines.some((l) => l.includes('drop'))).toBe(false);
+    const lines = squadScreen(g, ended(g, 'lost')).lines;
+    expect(lines).toContain(SQUAD_NO_DROP);
+    expect(lines.filter((l) => l !== SQUAD_NO_DROP).some((l) => /drop|stash/i.test(l))).toBe(false);
   });
 });
 
@@ -257,8 +264,9 @@ describe('the debrief layout (ID-067)', () => {
     expect(dropTile({ armoury: relics }, { weapon: weak, thrown: weak })).toMatchObject({
       stash: 'Stash full: thrown away',
       lost: true,
-      thrown: null,
+      thrown: DROP_LOST_NOTE,
     });
+    expect(dropTile({ armoury: [] }, { weapon: weak, thrown: null }).thrown).toBeNull();
     const strong = gun('h2', 'lmg', 'relic');
     expect(dropTile({ armoury: relics }, { weapon: strong, thrown: weak })).toMatchObject({
       rarity: 'relic',
@@ -270,12 +278,62 @@ describe('the debrief layout (ID-067)', () => {
     });
   });
 
+  it('the loot tile’s icon is the dropped gun’s own sprite, for every gun a horde drops (ID-073)', () => {
+    for (const base of DROP_GUNS) {
+      const t = dropTile({ armoury: [] }, { weapon: gun('h1', base, 'common'), thrown: null });
+      expect(t.icon).toBe(GUNNER_ART[base as GunId].idle);
+      expect(ART_URLS[t.icon]).toBeTruthy();
+    }
+  });
+
+  it('on the page: the drop tile’s icon is decorative, beside the name; a lost drop greys out (ID-073)', () => {
+    const { root, h } = page();
+    const g = squadGame(1, 5);
+    const won = ended(g, 'won');
+    h.showResult(squadScreen(g, won));
+    const tile = root.querySelector<HTMLElement>('.tile-drop')!;
+    const img = tile.querySelector<HTMLImageElement>('.tile-drop-head > .tile-icon > img')!;
+    expect(img.alt).toBe('');
+    expect(img.getAttribute('src')).toBe(ART_URLS[squadScreen(g, won).debrief!.drop!.icon]);
+    expect(tile.querySelector('.tile-drop-id .tile-name')!.textContent).toBe(
+      WEAPONS[squadDrop(g, won)!.weapon.base].name,
+    );
+    // The power row and thrown line stay full width under the head.
+    expect(tile.querySelector(':scope > .tile-row')).not.toBeNull();
+    expect(tile.classList.contains('tile-drop-lost')).toBe(false);
+
+    const relics = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
+    const full = squadGame(1, 1, relics);
+    // Horde 1 drops only Rusty or Common: always weaker than a stash of Relic LMGs.
+    const drop = squadDrop(full, ended(full, 'won'))!;
+    expect(drop.thrown).toBe(drop.weapon);
+    h.showResult(squadScreen(full, ended(full, 'won')));
+    const lost = root.querySelector<HTMLElement>('.tile-drop')!;
+    expect(lost.classList.contains('tile-drop-lost')).toBe(true);
+    expect(lost.querySelector('.tile-thrown')!.textContent).toBe(DROP_LOST_NOTE);
+    expect(lost.querySelector('.tile-stash-lost')!.textContent).toBe('Stash full: thrown away');
+  });
+
+  it('a loss on the page: the no-drop chip, and no loot tile (ID-073)', () => {
+    const { root, h } = page();
+    const g = squadGame(2, 3);
+    h.showResult(squadScreen(g, ended(g, 'lost')));
+    const chips = [...root.querySelectorAll('.chip')].map((c) => c.textContent);
+    expect(chips).toEqual(['No XP on a loss', SQUAD_NO_DROP]);
+    expect(root.querySelector('.tile-drop')).toBeNull();
+  });
+
   it('a loss: a callout, the no-XP chip, and the squad’s cards to change guns before the retry', () => {
     const g = squadGame(3, 6);
     const d = squadScreen(g, ended(g, 'lost')).debrief!;
     expect(d.kind).toBe('lost');
     expect(d.callout!.head).toMatch(/nobody left standing$/);
-    expect(d.chips).toEqual([{ text: 'No XP on a loss', tone: 'warn' }]);
+    expect(d.chips).toEqual([
+      { text: 'No XP on a loss', tone: 'warn' },
+      { text: SQUAD_NO_DROP, tone: 'warn' },
+    ]);
+    expect(SQUAD_NO_DROP).toBe('No weapon drop on a loss');
+    expect(squadScreen(g, ended(g, 'lost')).lines).toContain(SQUAD_NO_DROP);
     expect(d.drop).toBeNull();
     expect(d.cards.map((c) => c.id)).toEqual(g.roster.map((x) => x.id));
     expect(d.cards.every((c) => c.xp === null && c.bar === null)).toBe(true);
