@@ -954,6 +954,25 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
   about three times as often as Shamblers (lead from last step's velocity).
   Art (§15): each kind has generated art of its own (ID-051), sized by its
   radius, mutants in acid green or flesh red, the Runner muted.
+- **As built (ID-069): every enemy walks and strikes in frames.** Each kind,
+  the Mutated Horror included, has three walk poses (a foot forward, the
+  legs passing, the other foot forward) played 1-2-3-2, and an attack pose:
+  the Shambler shambles with arms out, the Runner sprints, the Crawler
+  crawls on all fours, the Swollen waddles, the Spewer and the Horror lumber
+  hunched, the Brute stomps and the Screamer strides with its claws out. The
+  cycle runs two frames a stride of ground actually covered (20 px), so a
+  Runner's legs go about two and a half times as fast as a Shambler's, a
+  trap slows them with the walk, and they stop when it does. The cycle runs
+  whenever its velocity of late (eased over 0.15 s) is at least 1 px/s, under
+  the slowest walk there is (a Horror on razor wire in a slow field, about
+  3.7 px/s), so no enemy that moves stands on one frame; one only jostled by
+  the crowd, back and forth, drifts nowhere and stands on its passing frame,
+  and one that stops (at the wall) stands on it at once.
+  It shows its attack frame for 0.35 s after each blow, or half its time
+  between blows when that is shorter, so a fast attacker still moves between
+  hits. The Swollen's attack frame never shows in play: its blow at a wall or
+  defender is its blast, which removes it in the same step. How it was made
+  is in §15.
 - **As built (ID-024, starting points): boss hordes.** Every 10th horde is a
   boss horde: its waves are as usual, and one **Mutated Horror** comes with the
   first spawn of the last wave (the random mix never rolls one). The horde is
@@ -1901,6 +1920,44 @@ original outline.
   enemy's 24 × 4. In every fight the ground past the field's top and bottom
   edges is shaded with the build scene's outside dim (sprites still draw over
   it), so the wall's ends read as the map's edge, not a way round it.
+- **As built (ID-069): enemies walk and survivors aim, in frames.** Art made
+  frame by frame from prompts alone came out too random (the head turning
+  between frames, broken ankles), so each frame is painted over a pose drawn
+  first. `tools/art/puppets.py` draws a flat coloured puppet in each pose (the
+  kind's colours and build, side-on, on magenta, every frame of a kind
+  standing on the same spot), kept in `art-src/poses/`; each frame is a
+  FLUX.2 Klein 4B edit of its puppet alone, with one prompt and one seed for
+  every frame of a set, so the figure stays the same and only the pose
+  changes (manifest `pose`). Giving the model the old still and the puppet
+  together failed: the still won and the pose was ignored. The enemies'
+  single stills are replaced: three walk frames and an attack each (§9).
+  Enemies are side-on now, walking left, in the same colours (mutants
+  saturated, the Runner muted); the walk frames carry the stride, so they no
+  longer sway or lean into a lunge (the bob and the 6 px lunge stay).
+  **Survivors** have an idle pose, the gun held low and pointing down, and an
+  aim pose, the gun raised level at the horde, per gun (pistol, SMG, rifle,
+  shotgun, LMG, sniper rifle); the SMG, shotgun, LMG and sniper rifle are
+  painted from their approved gun image (manifest `ref`) as well as the
+  puppet, the rifle and pistol from the prompt. A survivor aims from a shot
+  until 0.3 s after their next shot or the end of their reload is due: they
+  fire whenever a target is in range, so the aim holds while one is and
+  drops once none is left. Each shot kicks them 3 px straight back for
+  0.12 s, or 80% of the gun's time between shots when shorter; the old lean
+  (the wiggle) is gone, and they breathe only at rest. The muzzle flash and
+  each bullet's start sit at the aimed gun's barrel tip, measured from its
+  sprite (a test checks the numbers against the pixels). A **frame set** (a
+  kind's four frames, a gun's two poses; manifest `frames`) is cut by one box
+  round all its frames and scaled by one factor, the box widened evenly about
+  the puppet's hip so the body stands over its spot, so frames swap with no
+  jump and a long aimed gun never shrinks the soldier. HP bars, and the full
+  game's title badges, now sit just over the sprite's head instead of across
+  it: a bar's bottom edge 3 units over the top of its sprite, at any zoom. Every clock is fight time: the walk follows ground covered and the aim
+  follows shots, so both keep pace at 1×, 2× and 3× and hold still while
+  paused. With Reduce motion on, enemies stand on their passing frame, but
+  the attack and aim poses still show, since they say what a sprite is doing.
+  Rippers and Engineers in the full game keep their ID-049 stills. Each pick
+  passed the art reviewer (the PM delegated the choice to it, passing a pose
+  that is about 80% right).
 
 ## 16. Tech and platform
 

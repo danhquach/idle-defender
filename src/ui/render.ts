@@ -71,7 +71,17 @@ import {
   type Plot,
   type Target,
 } from './buildscene.ts';
-import { defenderPose, enemyPose, fallPose, STILL, type Animator, type Pose } from './anim.ts';
+import {
+  aiming,
+  defenderPose,
+  enemyFrame,
+  enemyPose,
+  fallPose,
+  STILL,
+  type Animator,
+  type EnemyFrame,
+  type Pose,
+} from './anim.ts';
 import {
   BASE_ART,
   DEFENDER_ART,
@@ -83,6 +93,7 @@ import {
   TRAP_ART,
   TURRET_ART,
   type GunId,
+  type GunnerArt,
   ART_PX,
   type Art,
   type ArtId,
@@ -198,6 +209,12 @@ const DEFENDER = PIECE.defender;
  * group member smaller than the group's biggest) draws that much shorter.
  */
 const STAND = { defender: 40, enemy: 34, shield: 26 } as const;
+/**
+ * How high a defender's HP bar and title badge sit, above their feet: over the head of a
+ * full-height (`ART_PX`) sprite, so neither covers the face (ID-069's survivors stand the
+ * full height).
+ */
+const DEFENDER_TOP = STAND.defender / HEIGHT_SCALE;
 const ENEMY = { shadow: 10, z: 10 } as const;
 /** Half the length of a Ripper's strike mark across the enemy, in px. */
 const STRIKE = 7;
@@ -221,8 +238,8 @@ const OFF_FRAME = {
   font: 'bold 13px system-ui, sans-serif',
   alpha: 0.85,
 } as const;
-/** `z`: an enemy's bar height; `gap`: a defender's bar above its head. */
-const HP_BAR = { w: 24, h: 4, z: 36, gap: 6 } as const;
+/** `gap`: twice how far a bar's bottom sits over its sprite's head. */
+const HP_BAR = { w: 24, h: 4, gap: 6 } as const;
 /**
  * A survivor's HP bar in the horde-only fight (ID-068): always shown, wider and taller
  * than an enemy's, at least `min` px on screen, with a dark edge, so each reads at a glance.
@@ -473,10 +490,13 @@ function drawHpBar(
   cam: Camera,
   colour: { back: string; fill: string } = { back: COLOR.hpBack, fill: COLOR.hpFill },
   size: { w: number; h: number; min?: { w: number; h: number }; edge?: number } = HP_BAR,
+  over = false,
 ): void {
-  const bar = project(at, cam);
   const w = Math.max(size.min?.w ?? 0, size.w * cam.zoom);
   const h = Math.max(size.min?.h ?? 0, size.h * cam.zoom);
+  // `over`: `at` is the point the bar (and its edge) sits on, so it clears a head at any zoom.
+  const on = project(at, cam);
+  const bar = over ? { sx: on.sx, sy: on.sy - h - (size.edge ?? 0) } : on;
   if (size.edge) {
     ctx.fillStyle = COLOR.hpEdge;
     ctx.fillRect(
@@ -501,7 +521,7 @@ function drawBadge(
 ): void {
   const badge = d.stats && !d.plain ? badgeOf(d.stats) : null;
   if (!badge) return;
-  const at = project({ x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap + BADGE.z }, cam);
+  const at = project({ x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z }, cam);
   const pip = BADGE.pip * cam.zoom;
   const gap = BADGE.gap * cam.zoom;
   const pad = BADGE.pad * cam.zoom;
@@ -528,6 +548,7 @@ function drawDefender(
   selected: boolean,
   cam: Camera,
   pose: Readonly<Pose> = STILL,
+  aim = false,
 ): void {
   const feet = project({ x: d.x, y: d.y, z: z0 }, cam);
   if (selected) {
@@ -538,21 +559,24 @@ function drawDefender(
     ctx.ellipse(feet.sx, feet.sy, r, r * 0.5, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
-  const profession = professionOf(d.loadout);
-  const sprite =
-    profession === 'gunner'
-      ? (GUNNER_ART[baseOf(d.loadout.primary) as GunId] ?? DEFENDER_ART.gunner)
-      : DEFENDER_ART[profession];
+  const gun = gunOf(d);
+  const sprite = gun ? gun[aim ? 'aim' : 'idle'] : DEFENDER_ART[professionOf(d.loadout)];
   drawStanding(ctx, art[sprite], feet, STAND.defender, cam, pose);
   if (d.loadout.item === 'shield') {
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
     drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam, pose);
   }
   drawBadge(ctx, d, z0, cam);
-  const bar = { x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap };
+  const bar = { x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap / 2 };
   // A survivor's bar always shows (ID-068); a full-game defender's once hurt.
-  if (d.plain) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, SURVIVOR_BAR);
-  else if (d.hp < d.maxHp) drawHpBar(ctx, bar, d.hp, d.maxHp, cam);
+  if (d.plain) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, SURVIVOR_BAR, true);
+  else if (d.hp < d.maxHp) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, HP_BAR, true);
+}
+
+/** A Gunner's gun art (ID-046, ID-069): their primary's, or the rifle's for any other gun. */
+function gunOf(d: Pick<Defender, 'loadout'>): GunnerArt | null {
+  if (professionOf(d.loadout) !== 'gunner') return null;
+  return GUNNER_ART[baseOf(d.loadout.primary) as GunId] ?? GUNNER_ART.rifle;
 }
 
 type Sprite = { y: number; x: number; draw: () => void };
@@ -1105,7 +1129,12 @@ const sized = (px: number, cam: Camera): number => Math.max(EFFECT.min, px * cam
  * the post there (bullets leave their post's or turret's exact coordinates), else a
  * defender walking on the ground.
  */
-function muzzleAt(scene: Scene, x: number, y: number): { x: number; y: number; z: number } {
+function muzzleAt(
+  scene: Scene,
+  x: number,
+  y: number,
+  owner: string,
+): { x: number; y: number; z: number } {
   const turret = scene.turrets.find((t) => t.x === x && t.y === y);
   if (turret) {
     const floor = turretFloor(scene.layers, turret) + MUZZLE.turret.z;
@@ -1113,7 +1142,13 @@ function muzzleAt(scene: Scene, x: number, y: number): { x: number; y: number; z
   }
   const post = scene.posts.find((p) => p.x === x && p.y === y);
   const floor = post ? postFloor(scene.layers, post) : 0;
-  return { x: x + MUZZLE.defender.dx, y, z: floor + MUZZLE.defender.z };
+  // A Gunner fires with their gun aimed: its muzzle is where the aim sprite's barrel ends.
+  // Found by who fired, since a shooter walking between posts has moved on from `(x, y)`.
+  const shooter = scene.defenders.find((d) => d.id === owner);
+  const gun = shooter ? gunOf(shooter) : null;
+  if (!gun) return { x: x + MUZZLE.defender.dx, y, z: floor + MUZZLE.defender.z };
+  const px = STAND.defender / ART_PX;
+  return { x: x + gun.barrel.x * px, y, z: floor + (gun.barrel.y * px) / HEIGHT_SCALE };
 }
 
 /** How far into its `life` s the newest of `owner`'s shots is, 0…1; null with none showing. */
@@ -1137,8 +1172,9 @@ function drawFlash(
 ): void {
   const age = flashAge(scene, owner);
   if (age === null) return;
-  const c = project(muzzleAt(scene, x, y), cam);
-  const r = sized(EFFECT.flash, cam);
+  const c = project(muzzleAt(scene, x, y, owner), cam);
+  const shooter = scene.defenders.find((d) => d.id === owner);
+  const r = sized(EFFECT.flash * (shooter ? (gunOf(shooter)?.flash ?? 1) : 1), cam);
   ctx.globalAlpha = 1 - age;
   ctx.fillStyle = COLOR.flashEdge;
   ctx.beginPath();
@@ -1157,7 +1193,7 @@ function drawFlash(
  * never reaches back past the muzzle, so nothing joins shooter and target.
  */
 function drawBullet(ctx: CanvasRenderingContext2D, scene: Scene, b: Bullet, cam: Camera): void {
-  const muzzle = muzzleAt(scene, b.fromX, b.fromY).z;
+  const muzzle = muzzleAt(scene, b.fromX, b.fromY, b.owner).z;
   const flown = Math.hypot(b.x - b.fromX, b.y - b.fromY);
   const zAt = (d: number): number =>
     muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? d / b.aim : 1);
@@ -1229,12 +1265,15 @@ function drawEnemy(
   ctx: CanvasRenderingContext2D,
   art: Art,
   kind: EnemyKind,
+  frame: EnemyFrame,
   feet: { sx: number; sy: number },
   cam: Camera,
   pose: Readonly<Pose>,
 ): void {
   const size = ENEMIES[kind].radius / ENEMY_RADIUS;
-  drawStanding(ctx, art[ENEMY_ART[kind]], feet, STAND.enemy * size, cam, pose);
+  const frames = ENEMY_ART[kind];
+  const img = art[frame === 'attack' ? frames.attack : frames.walk[frame]];
+  drawStanding(ctx, img, feet, STAND.enemy * size, cam, pose);
 }
 
 /** A Swollen blowing up: an acid-green ring swelling and fading (design §9, ID-023). */
@@ -1350,6 +1389,9 @@ export function drawScene(
   anim?.observe(scene);
   const defenderPoseOf = (d: Defender): Readonly<Pose> =>
     anim ? anim.shown(defenderPose(d, scene.time, anim.acts(d.id, scene.strikes))) : STILL;
+  // A Gunner aims while firing (ID-069); out of a fight (no animator), at rest.
+  const aimOf = (d: Defender): boolean =>
+    anim ? aiming(d, scene.time, anim.acts(d.id, scene.strikes)) : false;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = COLOR.sky;
@@ -1425,7 +1467,8 @@ export function drawScene(
         }
         if (manned) {
           const pose = defenderPoseOf(manned);
-          drawDefender(ctx, art, manned, floor, manned.id === selectedDefender, cam, pose);
+          const selected = manned.id === selectedDefender;
+          drawDefender(ctx, art, manned, floor, selected, cam, pose, aimOf(manned));
           drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
         }
       },
@@ -1447,7 +1490,7 @@ export function drawScene(
       y: d.y,
       x: d.x,
       draw: () => {
-        drawDefender(ctx, art, d, 0, d.id === selectedDefender, cam, defenderPoseOf(d));
+        drawDefender(ctx, art, d, 0, d.id === selectedDefender, cam, defenderPoseOf(d), aimOf(d));
         drawFlash(ctx, scene, d.id, d.x, d.y, cam);
       },
     });
@@ -1468,10 +1511,15 @@ export function drawScene(
           ctx.ellipse(ground.sx, ground.sy, r, r * 0.5, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-        const pose = anim ? anim.shown(enemyPose(e, scene.time, anim.enemy(e.id))) : STILL;
-        drawEnemy(ctx, art, e.kind, ground, cam, pose);
+        const acts = anim?.enemy(e.id);
+        const pose = anim && acts ? anim.shown(enemyPose(e, scene.time, acts)) : STILL;
+        const frame = anim && acts ? anim.shownFrame(enemyFrame(e, scene.time, acts)) : 1;
+        drawEnemy(ctx, art, e.kind, frame, ground, cam, pose);
         if (burning(scene, e)) drawFlame(ctx, e.x, e.y, size, scene.time, cam);
-        drawHpBar(ctx, { x: e.x, y: e.y, z: HP_BAR.z * size }, e.hp, e.maxHp, cam);
+        // Just over its sprite's top (its frames share one height), so it never covers the head.
+        const top = (STAND.enemy * size * art[ENEMY_ART[e.kind].walk[1]].height) / ART_PX;
+        const at = { x: e.x, y: e.y, z: top / HEIGHT_SCALE + HP_BAR.gap / 2 };
+        drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
       },
     });
   }
@@ -1487,7 +1535,7 @@ export function drawScene(
         const ground = project({ x: e.x, y: e.y }, cam);
         const pose = anim ? anim.shown(fallPose(scene.time - c.at)) : STILL;
         drawShadow(ctx, ground, pose.alpha, cam, ENEMIES[e.kind].radius / ENEMY_RADIUS);
-        drawEnemy(ctx, art, e.kind, ground, cam, pose);
+        drawEnemy(ctx, art, e.kind, 1, ground, cam, pose);
       },
     });
   }

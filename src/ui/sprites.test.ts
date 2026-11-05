@@ -1,6 +1,6 @@
 // ID-043: every thing the horde view draws has bundled art, and the art is
 // reproducible from art-src/manifest.json with an allowed model.
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -48,6 +48,8 @@ const manifest = JSON.parse(readFileSync(new URL('art-src/manifest.json', root),
     ref?: string | string[];
     part?: true;
     mutant?: true;
+    pose?: string;
+    frames?: string;
   }[];
 };
 /** Generations used only as references of other sprites (ID-046), and the rest. */
@@ -122,9 +124,9 @@ describe('art coverage', () => {
   it('maps every enemy kind, profession, turret state, trap kind, wall tier and map location to art', () => {
     const states: TurretState[] = ['lit', 'dark', 'jammed', 'offline'];
     const used = [
-      ...Object.keys(ENEMIES).map((k) => ENEMY_ART[k as keyof typeof ENEMY_ART]),
+      ...Object.values(ENEMY_ART).flatMap((e) => [...e.walk, e.attack]),
       ...Object.keys(PROFESSIONS).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
-      ...Object.values(GUNNER_ART),
+      ...Object.values(GUNNER_ART).flatMap((g) => [g.idle, g.aim]),
       ...Object.values(SKILL_ART),
       ...Object.values(SHOP_ICON),
       ...Object.values(SKILL_ICON),
@@ -170,21 +172,70 @@ describe('art coverage', () => {
     }
   });
 
-  it('gives every enemy kind its own art, the Horror included (ID-041)', () => {
+  it('gives every enemy kind, the Horror included, three walk frames and an attack (ID-069)', () => {
     const kinds = Object.keys(ENEMIES) as (keyof typeof ENEMY_ART)[];
-    expect(kinds.map((k) => ENEMY_ART[k])).toEqual(kinds);
+    for (const k of kinds) {
+      const frames = [...ENEMY_ART[k].walk, ENEMY_ART[k].attack];
+      expect(frames, k).toEqual([`${k}-walk-a`, `${k}-walk-b`, `${k}-walk-c`, `${k}-attack`]);
+      expect(new Set(frames).size).toBe(4);
+    }
+  });
+
+  it('lines up each frame set: one size, posed from puppets, one set per kind and gun (ID-069)', () => {
+    const sets = [
+      ...Object.values(ENEMY_ART).map((e) => [...e.walk, e.attack]),
+      ...Object.values(GUNNER_ART).map((g) => [g.idle, g.aim]),
+    ];
+    for (const set of sets) {
+      const sizes = new Set(set.map((id) => `${pixels(id).w}x${pixels(id).h}`));
+      expect(sizes.size, set[0]).toBe(1);
+      const entries = set.map((id) => manifest.assets.find((a) => a.id === id));
+      expect(new Set(entries.map((a) => a?.frames)).size, set[0]).toBe(1);
+      for (const a of entries) {
+        expect(a?.pose, a?.id).toMatch(/^[a-z]+-[a-z0-9]+$/);
+        expect(existsSync(new URL(`art-src/poses/${a!.pose}.png`, root)), a?.pose).toBe(true);
+      }
+    }
+    // Every survivor stands the same height, whatever the reach of their aimed gun.
+    const heights = Object.values(GUNNER_ART).map((g) => pixels(g.idle).h);
+    expect(new Set(heights)).toEqual(new Set([192]));
+  });
+
+  it("puts each gun's barrel tip where its aim sprite's gun ends (ID-069)", () => {
+    for (const [gun, g] of Object.entries(GUNNER_ART)) {
+      const { w, h, px } = pixels(g.aim);
+      let right = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3]! > 128) right = Math.max(right, x);
+      }
+      const rows: number[] = [];
+      for (let y = 0; y < h; y++) {
+        for (let x = right - 2; x <= right; x++) if (px[(y * w + x) * 4 + 3]! > 128) rows.push(y);
+      }
+      rows.sort((a, b) => a - b);
+      const mid = rows[Math.floor(rows.length / 2)]!;
+      expect(Math.abs(right + 1 - w / 2 - g.barrel.x), gun).toBeLessThanOrEqual(2);
+      expect(Math.abs(h - mid - g.barrel.y), gun).toBeLessThanOrEqual(2);
+      // Aimed level, out in front: right of the body and about shoulder height.
+      expect(g.barrel.x, gun).toBeGreaterThan(60);
+      expect(g.barrel.y / h, gun).toBeGreaterThan(0.6);
+    }
   });
 
   it('keeps the mutants and the Horror saturated and mutes the Runner (ID-051, ID-041, §15)', () => {
     const mutant = (id: string): boolean =>
       manifest.assets.find((a) => a.id === id)?.mutant === true;
     for (const k of ['crawler', 'swollen', 'spewer', 'brute', 'screamer', 'horror']) {
-      expect(mutant(k), k).toBe(true);
-      // The Brute's grey armour makes it the least saturated mutant: about 0.38.
-      expect(saturatedShare(k), k).toBeGreaterThan(0.35);
+      for (const id of [...ENEMY_ART[k as keyof typeof ENEMY_ART].walk]) {
+        expect(mutant(id), id).toBe(true);
+        // The Brute's grey armour and rag trousers make it the least saturated: about 0.23.
+        expect(saturatedShare(id), id).toBeGreaterThan(0.2);
+      }
     }
-    expect(mutant('runner')).toBe(false);
-    expect(saturatedShare('runner')).toBeLessThan(0.2);
+    for (const id of ENEMY_ART.runner.walk) {
+      expect(mutant(id)).toBe(false);
+      expect(saturatedShare(id)).toBeLessThan(0.15);
+    }
   });
 
   it("fills each tier gate's width with its posts as the renderer expects (ID-054)", () => {
@@ -284,9 +335,9 @@ describe('loading the art', () => {
 
   it('rejects naming the sprites that failed', async () => {
     fakeImages((url) =>
-      url.includes('/gunner.') || url.includes('/wood-gate.') ? 'error' : 'load',
+      url.includes('/brute-attack.') || url.includes('/wood-gate.') ? 'error' : 'load',
     );
-    await expect(loadArt()).rejects.toThrow('art failed to load: gunner, wood-gate');
+    await expect(loadArt()).rejects.toThrow('art failed to load: brute-attack, wood-gate');
   });
 
   it('gives up on a sprite that never loads', async () => {

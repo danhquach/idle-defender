@@ -1,6 +1,7 @@
-// Sprite animation (design §15, ID-049): motion drawn from the still sprites (bob, lean,
-// lunge, recoil, swing, flinch, flash, fall). Cosmetic only: it reads the fight and never
-// changes it. Every clock is fight time, so a pause freezes it and game speed carries it.
+// Sprite animation (design §15, ID-049, ID-069): which frame a sprite shows (an enemy's
+// walk cycle and strike, a survivor's idle or aimed gun) and the motion drawn on top of it
+// (bob, lunge, recoil, swing, flinch, flash, fall). Cosmetic only: it reads the fight and
+// never changes it. Every clock is fight time, so a pause freezes it and game speed carries it.
 import { ENEMIES, STRIKE_FLASH } from '../core/data.ts';
 import type { Defender, Enemy, Shot, Strike } from '../core/horde.ts';
 
@@ -34,12 +35,32 @@ export const ANIM = {
   /** Seconds per breath, and how far it stretches the sprite. */
   breath: 2.5,
   breathe: 0.025,
-  /** An enemy's lunge at a wall or defender, forward (left). */
-  lunge: { time: 0.25, px: 6, lean: 0.18 },
+  /**
+   * An enemy's strike at a wall or defender: its attack frame for `time` s (at most half
+   * its attack interval, so a fast attacker still walks between blows), and a lunge `px`
+   * forward (left) over the first `lunge` s.
+   */
+  strike: { time: 0.35, lunge: 0.25, px: 6 },
   /** Knocked back from a hit, the first `flash` s showing white (enemies only). */
   flinch: { time: 0.2, px: 3, flash: 0.1 },
-  /** A gun's kick back, from the shot that lit its muzzle flash. */
-  recoil: { time: 0.12, px: 3, lean: 0.06 },
+  /**
+   * A gun's kick straight back, from the shot that lit its muzzle flash: `time` s, or
+   * `share` of the gun's time between shots when that is shorter, so a fast gun's kicks
+   * never run into each other.
+   */
+  recoil: { time: 0.12, share: 0.8, px: 3 },
+  /**
+   * A survivor aims (ID-069) from a shot until `hold` s after their next shot or the end of
+   * their reload is due; a target still in range keeps them firing, so the aim only drops
+   * once nothing is left to shoot at.
+   */
+  aim: { hold: 0.3 },
+  /**
+   * The pace (px/s of `drift`) from which an enemy's walk frames cycle (ID-069): slower than
+   * the slowest walk there is (a Horror on razor wire in a slow field, 15 × 0.35 × 0.7 ≈
+   * 3.7 px/s), so no enemy that moves stands on one frame; the crowd's jostle drifts nowhere.
+   */
+  cycles: 1,
   /** A blade or tool strike's swing, forward (right), over `STRIKE_FLASH`. */
   swing: { px: 2, lean: 0.35 },
   /** A dead enemy flashes from the killing blow, tips over backward, then fades over the last `fade` s. */
@@ -66,14 +87,60 @@ function decay(now: number, at: number, time: number): number {
 export interface Gait {
   walked: number;
   moving: number;
+  /**
+   * Its velocity of late (px/s, eased over `settle` s): a steady walk keeps it however slow,
+   * while the crowd's jostle back and forth cancels out.
+   */
+  drift: { x: number; y: number };
+  /** Its pace over the last frame (px/s), so it stands the moment it stops. */
+  pace: number;
 }
-export const STANDING: Readonly<Gait> = { walked: 0, moving: 0 };
+export const STANDING: Readonly<Gait> = { walked: 0, moving: 0, drift: { x: 0, y: 0 }, pace: 0 };
 
-/** A bob each stride walked, leaning left and right on alternate strides. */
-function walk(pose: Pose, gait: Gait, phase: number): void {
-  const step = Math.PI * (gait.walked / ANIM.stride + 2 * phase);
+/**
+ * Strides walked so far, from the sprite's own phase: a footfall on each whole number, the
+ * body highest half way between.
+ */
+const strides = (gait: Gait, phase: number): number => gait.walked / ANIM.stride + 2 * phase;
+
+/**
+ * A bob each stride walked; a sprite with no walk frames (a defender) also leans left and
+ * right on alternate strides.
+ */
+function walk(pose: Pose, gait: Gait, phase: number, sway: boolean): void {
+  const step = Math.PI * strides(gait, phase);
   pose.lift += ANIM.bob * gait.moving * Math.abs(Math.sin(step));
-  pose.rot += ANIM.sway * gait.moving * Math.sin(step);
+  if (sway) pose.rot += ANIM.sway * gait.moving * Math.sin(step);
+}
+
+/** Walk frames: one foot forward, the legs passing, the other foot forward, passing. */
+export type WalkFrame = 0 | 1 | 2;
+/** An enemy's frame (ID-069): one of its walk poses, or its strike. */
+export type EnemyFrame = WalkFrame | 'attack';
+const CYCLE: readonly WalkFrame[] = [0, 1, 2, 1];
+
+/** When an enemy last struck: the fight sets its next attack one interval after it. */
+const struckAt = (e: Pick<Enemy, 'kind' | 'nextAttackAt'>): number =>
+  e.nextAttackAt - ENEMIES[e.kind].attackInterval;
+
+/**
+ * Which frame an enemy shows (ID-069): its attack frame just after it strikes, else its walk
+ * cycle, two frames a stride so its feet land on the stride frames and keep pace with the
+ * ground it actually covers (slower on a trap, faster at 3×, held while paused). Standing,
+ * it stands on its passing frame. The fight sets a fresh enemy's first attack at 0, so it
+ * never starts in its attack frame.
+ */
+export function enemyFrame(
+  e: Pick<Enemy, 'id' | 'kind' | 'nextAttackAt'>,
+  time: number,
+  acts: EnemyActs,
+): EnemyFrame {
+  const hold = Math.min(ANIM.strike.time, ENEMIES[e.kind].attackInterval / 2);
+  if (e.nextAttackAt > 0 && decay(time, struckAt(e), hold) > 0) return 'attack';
+  const { drift, pace } = acts.gait;
+  if (pace < ANIM.cycles || Math.hypot(drift.x, drift.y) < ANIM.cycles) return 1;
+  const quarter = Math.round(2 * strides(acts.gait, phaseOf(e.id)));
+  return CYCLE[((quarter % 4) + 4) % 4]!;
 }
 
 /** A slow breath, a little taller and narrower at the top of it. */
@@ -96,16 +163,11 @@ export function enemyPose(
 ): Pose {
   const pose = { ...STILL };
   const phase = phaseOf(e.id);
-  const enemy = ENEMIES[e.kind];
-  walk(pose, acts.gait, phase);
+  walk(pose, acts.gait, phase, false);
   breathe(pose, time, phase);
-  // The fight sets the next attack one interval after the last.
-  const lunge = decay(time, e.nextAttackAt - enemy.attackInterval, ANIM.lunge.time);
-  if (lunge > 0) {
-    const k = Math.sin(Math.PI * (1 - lunge));
-    pose.dx -= ANIM.lunge.px * k;
-    pose.rot -= ANIM.lunge.lean * k;
-  }
+  // The attack frame leans into the blow; the lunge only carries it forward.
+  const lunge = decay(time, struckAt(e), ANIM.strike.lunge);
+  if (lunge > 0) pose.dx -= ANIM.strike.px * Math.sin(Math.PI * (1 - lunge));
   pose.dx += ANIM.flinch.px * decay(time, acts.hurtAt, ANIM.flinch.time);
   pose.flash = decay(time, acts.hurtAt, ANIM.flinch.flash);
   return pose;
@@ -131,14 +193,34 @@ export interface Acts extends EnemyActs {
   struckAt: number;
 }
 
-export function defenderPose(d: Pick<Defender, 'id'>, time: number, acts: Acts): Pose {
+/** A defender's gun clocks: when their next shot is due and when an empty gun is reloaded. */
+type GunClock = Partial<Pick<Defender, 'nextShotAt' | 'reloadedAt'>>;
+
+/** When `d`'s gun is next ready to fire: their next shot, or later, the end of their reload. */
+const readyAt = (d: GunClock): number =>
+  Math.max(d.nextShotAt ?? -Infinity, d.reloadedAt?.primary ?? -Infinity);
+
+/**
+ * Whether a survivor holds their gun raised and aimed (ID-069): from their last shot until
+ * `aim.hold` s after the gun is ready again. While a target is in range they fire as soon as
+ * it is, so the aim holds; with none left, the gun drops back to rest. One who has not
+ * fired yet this fight is at rest.
+ */
+export function aiming(d: GunClock, time: number, acts: Pick<Acts, 'shotAt'>): boolean {
+  if (!Number.isFinite(acts.shotAt) || time < acts.shotAt) return false;
+  return time <= Math.max(acts.shotAt, readyAt(d)) + ANIM.aim.hold;
+}
+
+export function defenderPose(d: Pick<Defender, 'id'> & GunClock, time: number, acts: Acts): Pose {
   const pose = { ...STILL };
   const phase = phaseOf(d.id);
-  walk(pose, acts.gait, phase);
-  breathe(pose, time, phase);
-  const recoil = decay(time, acts.shotAt, ANIM.recoil.time);
-  pose.dx -= ANIM.recoil.px * recoil;
-  pose.rot -= ANIM.recoil.lean * recoil;
+  walk(pose, acts.gait, phase, true);
+  // A survivor aiming holds still behind the gun; at rest they breathe.
+  if (!aiming(d, time, acts)) breathe(pose, time, phase);
+  const between = (d.nextShotAt ?? Infinity) - acts.shotAt;
+  const kick =
+    between > 0 ? Math.min(ANIM.recoil.time, ANIM.recoil.share * between) : ANIM.recoil.time;
+  pose.dx -= ANIM.recoil.px * decay(time, acts.shotAt, kick);
   const swing = decay(time, acts.struckAt, STRIKE_FLASH);
   if (swing > 0) {
     const k = Math.sin(Math.PI * (1 - swing));
@@ -169,9 +251,10 @@ interface Seen {
 /**
  * What animation needs from earlier frames, which the fight doesn't keep: how far each
  * enemy and defender has walked and when they last lost HP, each shooter's last shot (the
- * fight drops it with its muzzle flash), and the enemies that died, kept until they have
- * fallen. A Swollen that blew up (in `bursts`) didn't die: it leaves no body. Fed the fight each frame; a fight whose time runs back is a new one, and starts
- * it afresh.
+ * fight drops it with its muzzle flash; kept all fight, one per shooter, for the recoil and
+ * the aim), and the enemies that died, kept until they have fallen. A Swollen that blew up
+ * (in `bursts`) didn't die: it leaves no body. Fed the fight each frame; a fight whose time
+ * runs back is a new one, and starts it afresh.
  */
 export class Animator {
   /** Reduce motion (ID-039): sprites hold still, keeping only their hit flash and fade. */
@@ -215,7 +298,6 @@ export class Animator {
     for (const k of scene.shots) {
       if (k.at > (this.shots.get(k.owner) ?? NEVER)) this.shots.set(k.owner, k.at);
     }
-    for (const [owner, at] of this.shots) if (t - at >= ANIM.recoil.time) this.shots.delete(owner);
   }
 
   /**
@@ -230,7 +312,15 @@ export class Animator {
     t: number,
     dt: number,
   ): Seen {
-    if (!was) return { x: now.x, y: now.y, hp: now.hp, hurtAt: NEVER, gait: { ...STANDING } };
+    if (!was) {
+      return {
+        x: now.x,
+        y: now.y,
+        hp: now.hp,
+        hurtAt: NEVER,
+        gait: { ...STANDING, drift: { x: 0, y: 0 } },
+      };
+    }
     const moved = Math.hypot(now.x - was.x, now.y - was.y);
     const ease = Math.min(1, dt / ANIM.settle);
     const pace = dt > 0 ? moved / dt : 0;
@@ -240,18 +330,40 @@ export class Animator {
     );
     const moving = was.gait.moving + (walking - was.gait.moving) * ease;
     const hurt = now.hp < was.hp && t - was.hurtAt >= ANIM.flinch.time;
+    // Paused (no time passed), the gait holds as it was.
+    const d = was.gait.drift;
+    const drift =
+      dt > 0
+        ? {
+            x: d.x + ((now.x - was.x) / dt - d.x) * ease,
+            y: d.y + ((now.y - was.y) / dt - d.y) * ease,
+          }
+        : d;
     return {
       x: now.x,
       y: now.y,
       hp: now.hp,
       hurtAt: hurt ? t : was.hurtAt,
-      gait: { walked: was.gait.walked + moved, moving: dt > 0 ? moving : was.gait.moving },
+      gait: {
+        walked: was.gait.walked + moved,
+        moving: dt > 0 ? moving : was.gait.moving,
+        drift,
+        pace: dt > 0 ? pace : was.gait.pace,
+      },
     };
   }
 
   /** `pose` as drawn: with Reduce motion on, no bob, lean, lunge or fall, only flash and fade. */
   shown(pose: Pose): Pose {
     return this.reduced ? { ...STILL, alpha: pose.alpha, flash: pose.flash } : pose;
+  }
+
+  /**
+   * An enemy's frame as drawn: with Reduce motion on, the walk holds its passing frame; the
+   * attack frame still shows, since it says the enemy is striking, not just moving.
+   */
+  shownFrame(frame: EnemyFrame): EnemyFrame {
+    return this.reduced && frame !== 'attack' ? 1 : frame;
   }
 
   enemy(id: number): EnemyActs {

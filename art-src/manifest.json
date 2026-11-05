@@ -7,83 +7,524 @@
   },
   "assets": [
     {
-      "id": "shambler",
+      "id": "shambler-walk-a",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4301,
+      "seed": 6992,
       "size": "512x512",
-      "mutant": true,
-      "flip": true,
-      "prompt": "a shambling rotting zombie walking, torn grey clothes, sickly acid green skin, flesh red wounds, arms reaching forward"
+      "style": "verbatim",
+      "pose": "shambler-w1",
+      "frames": "shambler",
+      "prompt": "repaint this simple puppet figure as a detailed shambling rotting zombie, keeping its exact pose, limb angles, stride, position and size: a chunky stocky zombie with a big bald head, thick arms and legs, sickly muted acid green skin, a rotting face with sunken red eyes and bared teeth facing left, torn grey button shirt and torn grey trousers, bare green feet with toes, green clawed hands, flesh red wounds. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
     },
     {
-      "id": "runner",
+      "id": "shambler-walk-b",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4401,
+      "seed": 6992,
       "size": "512x512",
-      "flip": true,
-      "prompt": "a lean gaunt zombie sprinting forward, thin wiry body leaning into a fast run, torn grey clothes, pale grey-brown dead skin, mouth open, arms swinging"
+      "style": "verbatim",
+      "pose": "shambler-w2",
+      "frames": "shambler",
+      "prompt": "repaint this simple puppet figure as a detailed shambling rotting zombie, keeping its exact pose, limb angles, stride, position and size: a chunky stocky zombie with a big bald head, thick arms and legs, sickly muted acid green skin, a rotting face with sunken red eyes and bared teeth facing left, torn grey button shirt and torn grey trousers, bare green feet with toes, green clawed hands, flesh red wounds. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
     },
     {
-      "id": "crawler",
+      "id": "shambler-walk-c",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4414,
+      "seed": 6992,
       "size": "512x512",
-      "mutant": true,
-      "flip": true,
-      "prompt": "a mutant zombie crawling low on all fours, fleshy wiry body pressed close to the ground, long clawed arms and legs splayed wide ready to climb a wall, hunched spine, bright saturated acid green skin with darker green blotches, torn rags, open jaw with teeth"
+      "style": "verbatim",
+      "pose": "shambler-w3",
+      "frames": "shambler",
+      "prompt": "repaint this simple puppet figure as a detailed shambling rotting zombie, keeping its exact pose, limb angles, stride, position and size: a chunky stocky zombie with a big bald head, thick arms and legs, sickly muted acid green skin, a rotting face with sunken red eyes and bared teeth facing left, torn grey button shirt and torn grey trousers, bare green feet with toes, green clawed hands, flesh red wounds. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
     },
     {
-      "id": "swollen",
+      "id": "shambler-attack",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4422,
+      "seed": 6992,
       "size": "512x512",
-      "mutant": true,
-      "flip": true,
-      "prompt": "a grotesquely swollen bloated mutant zombie waddling forward, huge round inflated belly and body like a balloon about to burst, small head sunk into fat shoulders, stubby arms, stretched shiny skin with bulging pustules, bright saturated acid green skin, torn rags stretched over the belly"
+      "style": "verbatim",
+      "pose": "shambler-at",
+      "frames": "shambler",
+      "prompt": "repaint this simple puppet figure as a detailed shambling rotting zombie, keeping its exact pose, limb angles, stride, position and size: a chunky stocky zombie with a big bald head, thick arms and legs, sickly muted acid green skin, a rotting face with sunken red eyes and bared teeth facing left, torn grey button shirt and torn grey trousers, bare green feet with toes, green clawed hands, flesh red wounds. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
     },
     {
-      "id": "spewer",
+      "id": "runner-walk-a",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4437,
+      "seed": 7002,
       "size": "512x512",
-      "mutant": true,
-      "flip": true,
-      "prompt": "full body of a hunched mutant zombie walking on two bent legs with both legs and both feet clearly visible, two thin arms hanging down in front, a big swollen fleshy acid sac growing out of its upper back, green with pustules, part of its own skin, head thrust forward with lips closed and a small drip of green acid at the chin, bright saturated acid green skin, torn rag trousers, nothing coming out of its mouth"
+      "style": "verbatim",
+      "pose": "runner-w1",
+      "frames": "runner",
+      "prompt": "repaint this simple puppet figure as a detailed sprinting zombie, keeping its exact pose, limb angles, stride, position and size: a lean gaunt wiry running zombie with a big bald head, pale grey-brown dead skin, sunken eyes and a wide open mouth facing left, torn grey shirt and torn grey shorts, bare grey feet with toes, bony clawed hands. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
     },
     {
-      "id": "brute",
+      "id": "runner-walk-b",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4443,
+      "seed": 7002,
       "size": "512x512",
-      "mutant": true,
-      "flip": true,
-      "prompt": "full body of a huge hulking brute mutant zombie stomping forward on two thick legs, massive broad shoulders and huge fists, thick bony armour plates and scrap metal fused into its chest and shoulders, small head sunk between the shoulders, raw flesh red skin with exposed muscle, torn rag trousers"
+      "style": "verbatim",
+      "pose": "runner-w2",
+      "frames": "runner",
+      "prompt": "repaint this simple puppet figure as a detailed sprinting zombie, keeping its exact pose, limb angles, stride, position and size: a lean gaunt wiry running zombie with a big bald head, pale grey-brown dead skin, sunken eyes and a wide open mouth facing left, torn grey shirt and torn grey shorts, bare grey feet with toes, bony clawed hands. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
     },
     {
-      "id": "screamer",
+      "id": "runner-walk-c",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4451,
+      "seed": 7002,
       "size": "512x512",
-      "mutant": true,
-      "flip": true,
-      "prompt": "full body of a thin mutant zombie standing on two legs with both feet visible, head thrown back screaming with its jaw stretched impossibly wide open showing rows of teeth, jagged bony spikes jutting out of its skull, shoulders and spine, two clawed arms spread out to the sides, raw flesh red skin, torn rag trousers"
+      "style": "verbatim",
+      "pose": "runner-w3",
+      "frames": "runner",
+      "prompt": "repaint this simple puppet figure as a detailed sprinting zombie, keeping its exact pose, limb angles, stride, position and size: a lean gaunt wiry running zombie with a big bald head, pale grey-brown dead skin, sunken eyes and a wide open mouth facing left, torn grey shirt and torn grey shorts, bare grey feet with toes, bony clawed hands. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
     },
     {
-      "id": "horror",
+      "id": "runner-attack",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 5201,
+      "seed": 7002,
       "size": "512x512",
-      "mutant": true,
-      "flip": true,
-      "prompt": "full body of a colossal hulking mutated horror boss lumbering forward on two thick stumpy legs, enormous hunched back covered in swollen fleshy growths and tumours, very long heavy arms with huge clawed hands dragging near the ground, small sunken eyeless head with a wide toothy maw, raw flesh red skin with exposed muscle and bone, scraps of torn rags"
+      "style": "verbatim",
+      "pose": "runner-at",
+      "frames": "runner",
+      "prompt": "repaint this simple puppet figure as a detailed sprinting zombie, keeping its exact pose, limb angles, stride, position and size: a lean gaunt wiry running zombie with a big bald head, pale grey-brown dead skin, sunken eyes and a wide open mouth facing left, torn grey shirt and torn grey shorts, bare grey feet with toes, bony clawed hands. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
+    },
+    {
+      "id": "crawler-walk-a",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7601,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "crawler-w1",
+      "frames": "crawler",
+      "prompt": "repaint this simple puppet figure as a detailed mutant zombie crawling low on all fours, keeping its exact pose, limb angles, stride, position and size: a fleshy wiry body pressed close to the ground, long clawed arms and legs, hunched spine, head forward facing left with an open jaw full of teeth, bright saturated acid green skin with darker green blotches, torn rags. Seen from the side, crawling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "crawler-walk-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7601,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "crawler-w2",
+      "frames": "crawler",
+      "prompt": "repaint this simple puppet figure as a detailed mutant zombie crawling low on all fours, keeping its exact pose, limb angles, stride, position and size: a fleshy wiry body pressed close to the ground, long clawed arms and legs, hunched spine, head forward facing left with an open jaw full of teeth, bright saturated acid green skin with darker green blotches, torn rags. Seen from the side, crawling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "crawler-walk-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7601,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "crawler-w3",
+      "frames": "crawler",
+      "prompt": "repaint this simple puppet figure as a detailed mutant zombie crawling low on all fours, keeping its exact pose, limb angles, stride, position and size: a fleshy wiry body pressed close to the ground, long clawed arms and legs, hunched spine, head forward facing left with an open jaw full of teeth, bright saturated acid green skin with darker green blotches, torn rags. Seen from the side, crawling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "crawler-attack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7601,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "crawler-at",
+      "frames": "crawler",
+      "prompt": "repaint this simple puppet figure as a detailed mutant zombie crawling low on all fours, keeping its exact pose, limb angles, stride, position and size: a fleshy wiry body pressed close to the ground, long clawed arms and legs, hunched spine, head forward facing left with an open jaw full of teeth, bright saturated acid green skin with darker green blotches, torn rags. Seen from the side, crawling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "swollen-walk-a",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7201,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "swollen-w1",
+      "frames": "swollen",
+      "prompt": "repaint this simple puppet figure as a detailed grotesquely swollen bloated mutant zombie, keeping its exact pose, limb angles, stride, position and size: a huge round inflated belly and body like a balloon about to burst, a small head sunk into fat shoulders facing left, stubby arms, short stubby legs, stretched shiny skin with bulging pustules, bright saturated acid green skin, torn rags stretched over the belly, bare feet. Seen from the side, waddling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "swollen-walk-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7201,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "swollen-w2",
+      "frames": "swollen",
+      "prompt": "repaint this simple puppet figure as a detailed grotesquely swollen bloated mutant zombie, keeping its exact pose, limb angles, stride, position and size: a huge round inflated belly and body like a balloon about to burst, a small head sunk into fat shoulders facing left, stubby arms, short stubby legs, stretched shiny skin with bulging pustules, bright saturated acid green skin, torn rags stretched over the belly, bare feet. Seen from the side, waddling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "swollen-walk-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7201,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "swollen-w3",
+      "frames": "swollen",
+      "prompt": "repaint this simple puppet figure as a detailed grotesquely swollen bloated mutant zombie, keeping its exact pose, limb angles, stride, position and size: a huge round inflated belly and body like a balloon about to burst, a small head sunk into fat shoulders facing left, stubby arms, short stubby legs, stretched shiny skin with bulging pustules, bright saturated acid green skin, torn rags stretched over the belly, bare feet. Seen from the side, waddling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "swollen-attack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7201,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "swollen-at",
+      "frames": "swollen",
+      "prompt": "repaint this simple puppet figure as a detailed grotesquely swollen bloated mutant zombie, keeping its exact pose, limb angles, stride, position and size: a huge round inflated belly and body like a balloon about to burst, a small head sunk into fat shoulders facing left, stubby arms, short stubby legs, stretched shiny skin with bulging pustules, bright saturated acid green skin, torn rags stretched over the belly, bare feet. Seen from the side, waddling to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "spewer-walk-a",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7301,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "spewer-w1",
+      "frames": "spewer",
+      "prompt": "repaint this simple puppet figure as a detailed hunched mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two bent legs with both legs and both feet clearly visible, two thin arms hanging down in front, a big swollen fleshy acid sac growing out of its upper back, green with pustules, part of its own skin, head thrust forward facing left with lips closed and a small drip of green acid at the chin, bright saturated acid green skin, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "spewer-walk-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7301,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "spewer-w2",
+      "frames": "spewer",
+      "prompt": "repaint this simple puppet figure as a detailed hunched mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two bent legs with both legs and both feet clearly visible, two thin arms hanging down in front, a big swollen fleshy acid sac growing out of its upper back, green with pustules, part of its own skin, head thrust forward facing left with lips closed and a small drip of green acid at the chin, bright saturated acid green skin, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "spewer-walk-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7301,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "spewer-w3",
+      "frames": "spewer",
+      "prompt": "repaint this simple puppet figure as a detailed hunched mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two bent legs with both legs and both feet clearly visible, two thin arms hanging down in front, a big swollen fleshy acid sac growing out of its upper back, green with pustules, part of its own skin, head thrust forward facing left with lips closed and a small drip of green acid at the chin, bright saturated acid green skin, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "spewer-attack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7301,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "spewer-at",
+      "frames": "spewer",
+      "prompt": "repaint this simple puppet figure as a detailed hunched mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two bent legs with both legs and both feet clearly visible, two thin arms hanging down in front, a big swollen fleshy acid sac growing out of its upper back, green with pustules, part of its own skin, head thrust forward facing left with lips closed and a small drip of green acid at the chin, bright saturated acid green skin, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "brute-walk-a",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7103,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "brute-w1",
+      "frames": "brute",
+      "prompt": "repaint this simple puppet figure as a detailed huge hulking brute mutant zombie, keeping its exact pose, limb angles, stride, position and size: massive broad shoulders and huge fists, thick bony armour plates and scrap metal fused into its chest and shoulders, a small snarling head sunk between the shoulders facing left, raw flesh red skin with exposed muscle, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "brute-walk-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7103,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "brute-w2",
+      "frames": "brute",
+      "prompt": "repaint this simple puppet figure as a detailed huge hulking brute mutant zombie, keeping its exact pose, limb angles, stride, position and size: massive broad shoulders and huge fists, thick bony armour plates and scrap metal fused into its chest and shoulders, a small snarling head sunk between the shoulders facing left, raw flesh red skin with exposed muscle, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "brute-walk-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7103,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "brute-w3",
+      "frames": "brute",
+      "prompt": "repaint this simple puppet figure as a detailed huge hulking brute mutant zombie, keeping its exact pose, limb angles, stride, position and size: massive broad shoulders and huge fists, thick bony armour plates and scrap metal fused into its chest and shoulders, a small snarling head sunk between the shoulders facing left, raw flesh red skin with exposed muscle, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "brute-attack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7103,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "brute-at",
+      "frames": "brute",
+      "prompt": "repaint this simple puppet figure as a detailed huge hulking brute mutant zombie, keeping its exact pose, limb angles, stride, position and size: massive broad shoulders and huge fists, thick bony armour plates and scrap metal fused into its chest and shoulders, a small snarling head sunk between the shoulders facing left, raw flesh red skin with exposed muscle, torn rag trousers, bare feet. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "screamer-walk-a",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7402,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "screamer-w1",
+      "frames": "screamer",
+      "prompt": "repaint this simple puppet figure as a detailed thin mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two legs with both feet visible, head thrown back screaming with its jaw stretched impossibly wide open showing rows of teeth, jagged bony spikes jutting out of its skull, shoulders and spine, two clawed arms, raw flesh red skin, torn rag trousers, bare feet. Seen from the side, striding to the left, facing left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "screamer-walk-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7402,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "screamer-w2",
+      "frames": "screamer",
+      "prompt": "repaint this simple puppet figure as a detailed thin mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two legs with both feet visible, head thrown back screaming with its jaw stretched impossibly wide open showing rows of teeth, jagged bony spikes jutting out of its skull, shoulders and spine, two clawed arms, raw flesh red skin, torn rag trousers, bare feet. Seen from the side, striding to the left, facing left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "screamer-walk-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7402,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "screamer-w3",
+      "frames": "screamer",
+      "prompt": "repaint this simple puppet figure as a detailed thin mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two legs with both feet visible, head thrown back screaming with its jaw stretched impossibly wide open showing rows of teeth, jagged bony spikes jutting out of its skull, shoulders and spine, two clawed arms, raw flesh red skin, torn rag trousers, bare feet. Seen from the side, striding to the left, facing left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "screamer-attack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7403,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "screamer-at",
+      "frames": "screamer",
+      "prompt": "repaint this simple puppet figure as a detailed thin mutant zombie, keeping its exact pose, limb angles, stride, position and size: walking on two legs with both feet visible, head thrown back screaming with its jaw stretched impossibly wide open showing rows of teeth, jagged bony spikes jutting out of its skull, shoulders and spine, two clawed arms, raw flesh red skin, torn rag trousers, bare feet. Seen from the side, striding to the left, facing left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "horror-walk-a",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7501,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "horror-w1",
+      "frames": "horror",
+      "prompt": "repaint this simple puppet figure as a detailed colossal hulking mutated horror boss, keeping its exact pose, limb angles, stride, position and size: lumbering forward on two thick stumpy legs, an enormous hunched back covered in swollen fleshy growths and tumours, very long heavy arms with huge clawed hands swinging near the ground, a small sunken eyeless head with a wide toothy maw facing left, raw flesh red skin with exposed muscle and bone, scraps of torn rags. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "horror-walk-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7501,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "horror-w2",
+      "frames": "horror",
+      "prompt": "repaint this simple puppet figure as a detailed colossal hulking mutated horror boss, keeping its exact pose, limb angles, stride, position and size: lumbering forward on two thick stumpy legs, an enormous hunched back covered in swollen fleshy growths and tumours, very long heavy arms with huge clawed hands swinging near the ground, a small sunken eyeless head with a wide toothy maw facing left, raw flesh red skin with exposed muscle and bone, scraps of torn rags. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "horror-walk-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7501,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "horror-w3",
+      "frames": "horror",
+      "prompt": "repaint this simple puppet figure as a detailed colossal hulking mutated horror boss, keeping its exact pose, limb angles, stride, position and size: lumbering forward on two thick stumpy legs, an enormous hunched back covered in swollen fleshy growths and tumours, very long heavy arms with huge clawed hands swinging near the ground, a small sunken eyeless head with a wide toothy maw facing left, raw flesh red skin with exposed muscle and bone, scraps of torn rags. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "horror-attack",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7501,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "horror-at",
+      "frames": "horror",
+      "prompt": "repaint this simple puppet figure as a detailed colossal hulking mutated horror boss, keeping its exact pose, limb angles, stride, position and size: lumbering forward on two thick stumpy legs, an enormous hunched back covered in swollen fleshy growths and tumours, very long heavy arms with huge clawed hands swinging near the ground, a small sunken eyeless head with a wide toothy maw facing left, raw flesh red skin with exposed muscle and bone, scraps of torn rags. Seen from the side, walking to the left. 2D game sprite, hand-painted style, soft shading, thick bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "mutant": true
+    },
+    {
+      "id": "gunner-pistol-idle",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-pidle",
+      "frames": "gunner-pistol",
+      "prompt": "repaint this simple puppet figure as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding a small black handgun pistol in the right hand in place of the dark shape, the arm relaxed at the side with the pistol pointing down at the ground, the other hand empty. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
+    },
+    {
+      "id": "gunner-pistol-aim",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-paim",
+      "frames": "gunner-pistol",
+      "prompt": "repaint this simple puppet figure as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding a small black handgun pistol in both hands in place of the dark shape, both arms extended straight forward, aiming it level to the right, the finger on the trigger. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
+    },
+    {
+      "id": "gunner-smg-idle",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-idle",
+      "frames": "gunner-smg",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the submachine gun from the second image exactly as drawn there in place of the dark bar: held low in both hands across the body, pointing down and forward at the ground, at rest, never holding the magazine. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-smg"]
+    },
+    {
+      "id": "gunner-smg-aim",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-aim",
+      "frames": "gunner-smg",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the submachine gun from the second image exactly as drawn there in place of the dark bar: raised to the shoulder and aimed level to the right, the right hand on the pistol grip with the finger by the trigger, the left hand under the handguard, never holding the magazine. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-smg"]
+    },
+    {
+      "id": "gunner-rifle-idle",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-idle",
+      "frames": "gunner-rifle",
+      "prompt": "repaint this simple puppet figure as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding a long black assault rifle with a curved magazine in place of the dark bar: held low in both hands across the body, pointing down and forward at the ground, at rest. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
+    },
+    {
+      "id": "gunner-rifle-aim",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-aim",
+      "frames": "gunner-rifle",
+      "prompt": "repaint this simple puppet figure as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding a long black assault rifle with a curved magazine in place of the dark bar: raised to the shoulder and aimed level to the right, the right hand on the grip with the finger by the trigger, the left hand under the handguard. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
+    },
+    {
+      "id": "gunner-shotgun-idle",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-idle",
+      "frames": "gunner-shotgun",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the pump-action shotgun from the second image exactly as drawn there in place of the dark bar: held low in both hands across the body, pointing down and forward at the ground, at rest. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-shotgun"]
+    },
+    {
+      "id": "gunner-shotgun-aim",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-aim",
+      "frames": "gunner-shotgun",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the pump-action shotgun from the second image exactly as drawn there in place of the dark bar: raised to the shoulder and aimed level to the right, the right hand on the grip with the finger by the trigger, the left hand on the pump. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-shotgun"]
+    },
+    {
+      "id": "gunner-lmg-idle",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7802,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-idle",
+      "frames": "gunner-lmg",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the light machine gun from the second image exactly as drawn there, with the large square olive ammunition box hanging under its middle, its carry handle and folded bipod, in place of the dark bar: held low in both hands across the body, pointing down and forward at the ground, at rest. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-lmg"]
+    },
+    {
+      "id": "gunner-lmg-aim",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7802,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-aim",
+      "frames": "gunner-lmg",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the light machine gun from the second image exactly as drawn there, with the large square olive ammunition box hanging under its middle, its carry handle and folded bipod, in place of the dark bar: raised and aimed level to the right, the right hand on the pistol grip with the finger by the trigger, the left hand under the front of the gun. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-lmg"]
+    },
+    {
+      "id": "gunner-sniper-idle",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-idle",
+      "frames": "gunner-sniper",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the scoped sniper rifle from the second image exactly as drawn there in place of the dark bar: held low in both hands across the body, pointing down and forward at the ground, at rest. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-sniper"]
+    },
+    {
+      "id": "gunner-sniper-aim",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-aim",
+      "frames": "gunner-sniper",
+      "prompt": "repaint the simple puppet figure in the first image as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, holding the scoped sniper rifle from the second image exactly as drawn there in place of the dark bar: raised to the shoulder and aimed level to the right, the eye at the scope, the right hand on the pistol grip with the finger by the trigger, the left hand under the fore-end. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": ["weapon-sniper"]
     },
     {
       "id": "airstrike",
@@ -261,35 +702,6 @@
       "prompt": "a messy uneven spread of burning fire seen from directly above, irregular clumps of realistic orange and yellow flames of many sizes, thin wisps of flame and glowing embers scattered between them, a few broken glass shards, the fire alone with no surface beneath it, no puddle, no dirt patch. 2D game sprite, hand-painted style, soft shading, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
     },
     {
-      "id": "gunner",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4311,
-      "size": "512x512",
-      "prompt": "a lone survivor soldier standing facing right, full body, holding a long assault rifle in both hands pointed to the right, khaki jacket, dark trousers, boots, helmet, ammunition pouches",
-      "group": "defender"
-    },
-    {
-      "id": "gunner-pistol",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4319,
-      "size": "512x512",
-      "ref": "gunner",
-      "prompt": "the same soldier, now holding only a small handgun pistol in one hand pointed to the right instead of the rifle, the other hand empty at the side, same clothes and framing",
-      "group": "defender"
-    },
-    {
-      "id": "gunner-body",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4330,
-      "size": "512x512",
-      "ref": "gunner",
-      "prompt": "the same soldier with the rifle removed completely, both hands empty and held forward in front of the body at waist height in the same pose as if gripping a gun, no weapon anywhere, same clothes and framing",
-      "part": true
-    },
-    {
       "id": "weapon-smg",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",
@@ -332,47 +744,6 @@
       "prompt": "redraw the bolt-action sniper rifle from the reference photo as a game sprite, only the rifle, keeping its exact silhouette, side view, muzzle pointing right. From left to right: solid stock with a cheek rest, pistol grip with the trigger guard, bolt handle sticking out to the side, a long telescopic scope mounted on top over the receiver, a long thin heavy barrel, a small bipod folded under the fore-end. Dark green stock and black steel, no markings",
       "part": true,
       "photo": "commons-11317366"
-    },
-    {
-      "id": "gunner-smg",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4358,
-      "size": "512x512",
-      "ref": ["gunner-body", "weapon-smg"],
-      "prompt": "the soldier from the first image holding the submachine gun from the second image, the gun exactly as in the second image, held in front of the chest with both hands: the right hand on the pistol grip with a finger by the trigger, the left hand forward under the handguard, never on the magazine, the stock tucked against the shoulder, muzzle pointed to the right and slightly down, same soldier, same clothes, same framing",
-      "group": "defender"
-    },
-    {
-      "id": "gunner-shotgun",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4372,
-      "size": "512x512",
-      "ref": ["gunner-body", "weapon-shotgun"],
-      "style": "verbatim",
-      "prompt": "Helmeted soldier sprite, angled overhead three-quarter view, holding the exact black pump-action shotgun from the reference in a natural two-hand grip: right hand wrapping the grip with the finger resting beside the trigger guard, left hand gripping the pump under the barrel, barrel level and pointing right and slightly down, stock tucked with no protruding parts behind the body; keep the soldier’s clothes, body shape, framing, and hand-painted 2D game sprite art style unchanged, bold dark outline, plain flat magenta #FF00FF background, no text, no shadow, no ground.",
-      "group": "defender"
-    },
-    {
-      "id": "gunner-lmg",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4355,
-      "size": "512x512",
-      "ref": ["gunner-body", "weapon-lmg"],
-      "prompt": "the soldier from the first image carrying the light machine gun from the second image, the gun exactly as in the second image with its olive ammunition box, carry handle and bipod, held at the hip with both hands: the right hand on the pistol grip behind the trigger, the left hand under the front of the gun gripping the handguard, stock tucked under the arm against the side, muzzle pointed to the right and slightly down, same soldier, same clothes, same framing",
-      "group": "defender"
-    },
-    {
-      "id": "gunner-sniper",
-      "kind": "sprite",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 4384,
-      "size": "512x512",
-      "ref": ["gunner-body", "weapon-sniper"],
-      "prompt": "the soldier from the first image holding the scoped sniper rifle from the second image, the rifle exactly as in the second image, held in a natural two-hand grip at chest height: the right hand wrapping the pistol grip with the finger beside the trigger guard, the left hand under the fore-end, the stock tucked against the shoulder, the long barrel pointing to the right and slightly down, same soldier, same clothes, same framing",
-      "group": "defender"
     },
     {
       "id": "ripper",
@@ -598,7 +969,12 @@
       "ref": "gate-angled",
       "style": "verbatim",
       "prompt": "the same wooden gate turned so it runs straight from the top of the image to the bottom, seen from high above looking down, slightly from the right side so the right face of the closed double door and its iron bands show, one gatepost at the top and one at the bottom, a long narrow vertical shape, same planks, posts and iron bands, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
+      "ajar": {
+        "hinges": [96, 898],
+        "seam": 509,
+        "swing": 0.11,
+        "length": 0.96
+      }
     },
     {
       "id": "metal-gate",
@@ -609,7 +985,12 @@
       "ref": "wood-gate",
       "style": "verbatim",
       "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to metal: the posts are riveted grey scrap steel, the leaves are dented grey corrugated sheet metal with rust streaks and bolts, steel bands. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
+      "ajar": {
+        "hinges": [96, 898],
+        "seam": 509,
+        "swing": 0.11,
+        "length": 0.96
+      }
     },
     {
       "id": "reinforced-gate",
@@ -620,7 +1001,12 @@
       "ref": "wood-gate",
       "style": "verbatim",
       "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to reinforced concrete and steel: the posts are blue grey concrete capped with riveted steel plates, the leaves are heavy bolted steel armour plates on steel beams, blue grey and dark steel. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
+      "ajar": {
+        "hinges": [96, 898],
+        "seam": 509,
+        "swing": 0.11,
+        "length": 0.96
+      }
     },
     {
       "id": "concrete-gate",
@@ -631,7 +1017,12 @@
       "ref": "wood-gate",
       "style": "verbatim",
       "prompt": "repaint this exact image keeping its shape, size, outline and position: the same long narrow vertical gate seen from directly above, a square post at the top and at the bottom, two long thin closed door leaves between them. Only change the material to concrete: the posts are cracked pale grey concrete blocks with chipped edges and stains, the leaves are heavy pale grey concrete slabs in plain grey steel frames. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground",
-      "ajar": { "hinges": [96, 898], "seam": 509, "swing": 0.11, "length": 0.96 }
+      "ajar": {
+        "hinges": [96, 898],
+        "seam": 509,
+        "swing": 0.11,
+        "length": 0.96
+      }
     },
     {
       "id": "ground",

@@ -44,10 +44,13 @@ import {
   ART_IDS,
   ART_PX,
   BASE_ART,
+  ENEMY_ART,
   GATE_POSTS,
+  GUNNER_ART,
   TIER_ART,
   type Art,
   type ArtId,
+  type GunId,
 } from './sprites.ts';
 
 function scene(condition: number, energy: number, wallHp?: number) {
@@ -409,7 +412,7 @@ describe('drawScene with art', () => {
       ],
     });
     const i = r.drawn.indexOf('cracks');
-    expect(r.drawn.indexOf('shambler')).toBeGreaterThan(i);
+    expect(r.drawn.indexOf('shambler-walk-b')).toBeGreaterThan(i);
     expect(i).toBeGreaterThanOrEqual(0);
     expect(r.alphas[i]).toBeLessThan(1);
     expect(r.alphas.slice(i + 1).every((a) => a === 1)).toBe(true);
@@ -438,8 +441,13 @@ describe('drawScene with art', () => {
       })),
       spits: [{ fromX: 900, fromY: 300, x: 520, y: 300, at: 0.9 }],
     });
-    // Only the Shambler has art yet; the rest are drawn shapes.
-    expect(r.drawn.filter((id) => id === 'shambler')).toHaveLength(1);
+    // Each kind stands in its passing frame (no animator: nothing walks or strikes).
+    for (const kind of kinds) {
+      expect(
+        r.drawn.filter((id) => id === ENEMY_ART[kind].walk[1]),
+        kind,
+      ).toHaveLength(1);
+    }
   });
 
   it('draws a burning enemy, a Chain Lightning arc and an Explode on Kill ring (ID-022)', () => {
@@ -677,13 +685,13 @@ describe('drawScene with art', () => {
     });
     expect(r.drawn).toEqual(
       expect.arrayContaining([
-        'gunner-pistol',
-        'gunner',
-        'gunner-sniper',
+        'gunner-pistol-idle',
+        'gunner-rifle-idle',
+        'gunner-sniper-idle',
         'ripper',
         'engineer',
         'shield',
-        'shambler',
+        'shambler-walk-b',
       ]),
     );
   });
@@ -1090,7 +1098,7 @@ describe('bullet visuals (ID-045)', () => {
     expect(slug.y).toBeLessThan(ground);
     const at = g.marks.indexOf(slug);
     const shamblers = g.marks.flatMap((m, i) =>
-      m.kind === 'art' && m.id === 'shambler' ? [i] : [],
+      m.kind === 'art' && m.id === 'shambler-walk-b' ? [i] : [],
     );
     expect(shamblers).toHaveLength(2);
     expect(shamblers[1]).toBeGreaterThan(at); // the enemy in front
@@ -1135,6 +1143,42 @@ describe('bullet visuals (ID-045)', () => {
     expect(at(1 + MUZZLE_FLASH)).toEqual([]);
     // Someone else's shot flashes nothing here.
     expect(geometry(cam, { ...scene, time: 1, shots: [{ owner: 'zz', at: 1 }] }).dots).toEqual([]);
+  });
+
+  it("lights the flash at each gun's aimed barrel tip (ID-069)", () => {
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene, d, post } = fight();
+    const flashOf = (gun: GunId) => {
+      const primary = { uid: `g-${gun}`, base: gun, rarity: 'common' as const, affixes: [] };
+      const shooter = { ...d, loadout: { ...d.loadout, primary } };
+      const dots = geometry(cam, {
+        ...scene,
+        defenders: [shooter],
+        time: 1,
+        shots: [{ owner: d.id, at: 1 }],
+      }).dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.flash);
+      expect(dots, gun).toHaveLength(1);
+      const dot = dots[0]!;
+      if (dot.kind !== 'dot') throw new Error('not a dot');
+      return dot;
+    };
+    const guns = Object.keys(GUNNER_ART) as GunId[];
+    const spot = project(post, cam);
+    // One scale for every gun: the sprite's px to the screen's.
+    const scale = (flashOf('smg').x - spot.sx) / GUNNER_ART.smg.barrel.x;
+    expect(scale).toBeGreaterThan(0);
+    for (const gun of guns) {
+      const f = flashOf(gun);
+      expect(f.x - spot.sx, gun).toBeCloseTo(GUNNER_ART[gun].barrel.x * scale, 6);
+      // Higher on screen as the barrel is higher on the sprite, by the same scale.
+      const up = GUNNER_ART[gun].barrel.y - GUNNER_ART.smg.barrel.y;
+      expect(flashOf('smg').y - f.y, gun).toBeCloseTo(up * scale, 6);
+    }
+    // The sniper's long barrel reaches further than the pistol held out.
+    expect(flashOf('sniper').x).toBeGreaterThan(flashOf('pistol').x);
+    // And a pistol's flash is smaller than a rifle's, scaled to the gun.
+    expect(flashOf('pistol').r).toBeCloseTo(flashOf('sniper').r * GUNNER_ART.pistol.flash, 6);
+    expect(GUNNER_ART.pistol.flash).toBeLessThan(GUNNER_ART.sniper.flash);
   });
 
   it('shows a real shot at full flash on the first frame after the step that fired it', () => {
@@ -1302,7 +1346,7 @@ describe('sprite animation (ID-049)', () => {
     drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, null, anim);
     return {
       draws,
-      shambler: draws.filter((d) => d.id === 'shambler'),
+      shambler: draws.filter((d) => d.id.startsWith('shambler-')),
       flashes: draws.filter((d) => d.id === 'white'),
       balanced: stack.length === 0 && ctx.globalAlpha === 1,
     };
@@ -1435,7 +1479,82 @@ describe('the horde-only fight (ID-068)', () => {
     }
     expect(r.textured).not.toContain(BASE_ART.walk.top);
     // Each survivor's sprite is drawn.
-    expect(r.drawn.filter((id) => id === 'gunner-pistol')).toHaveLength(SQUAD_CAP);
+    expect(r.drawn.filter((id) => id === 'gunner-pistol-idle')).toHaveLength(SQUAD_CAP);
+  });
+
+  it("sits each HP bar wholly over its sprite's head, a survivor's and an enemy's (ID-069)", () => {
+    const scene = squadScene(1);
+    const survivor = scene.defenders[0]!;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const enemy: Enemy = {
+      id: 9,
+      kind: 'brute',
+      x: 1000,
+      y: survivor.y,
+      hp: 5,
+      maxHp: 20,
+      nextAttackAt: 0,
+      inCamp: false,
+      stunnedUntil: 0,
+      vx: 0,
+      vy: 0,
+      climbUntil: 0,
+      climbed: false,
+    };
+    const r = recorder();
+    const tops = new Map<string, number>();
+    const rects: { x: number; y: number; w: number; h: number }[] = [];
+    Object.assign(r.ctx as unknown as Record<string, unknown>, {
+      drawImage: (img: { id: ArtId }, _x: number, y: number) =>
+        tops.set(img.id, Math.min(tops.get(img.id) ?? Infinity, y)),
+      fillRect: (x: number, y: number, w: number, h: number) => rects.push({ x, y, w, h }),
+    });
+    drawScene(r.ctx, r.art, { ...scene, enemies: [enemy] }, cam, { w: 1280, h: 720 });
+    const barOver = (sx: number) =>
+      rects.filter((b) => b.x < sx && b.x + b.w > sx && b.w < 60 && b.h < 10);
+    for (const [id, who] of [
+      ['gunner-pistol-idle', survivor],
+      ['brute-walk-b', enemy],
+    ] as const) {
+      const top = tops.get(id);
+      expect(top, id).toBeDefined();
+      const bars = barOver(project(who, cam).sx);
+      expect(bars.length, id).toBeGreaterThan(0);
+      for (const b of bars) expect(b.y + b.h, id).toBeLessThanOrEqual(top! + 1e-6);
+    }
+  });
+
+  it('draws a survivor aiming while they fire and at rest once they stop (ID-069)', () => {
+    const scene = squadScene(2);
+    const [a, b] = scene.defenders;
+    const anim = new Animator();
+    const at = (time: number, shots: Scene['shots'] = []) => {
+      const r = recorder();
+      drawScene(
+        r.ctx,
+        r.art,
+        { ...scene, time, shots },
+        frameCamera({ w: 1280, h: 720 }),
+        {
+          w: 1280,
+          h: 720,
+        },
+        null,
+        null,
+        null,
+        anim,
+      );
+      return r.drawn.filter((id) => id.startsWith('gunner-'));
+    };
+    // Survivor a fires at 1, their next shot due at 1.5; b never fires.
+    a!.nextShotAt = 1.5;
+    expect(at(1, [{ owner: a!.id, at: 1 }]).sort()).toEqual(
+      ['gunner-pistol-aim', 'gunner-pistol-idle'].sort(),
+    );
+    expect(at(1.5 + ANIM.aim.hold)).toContain('gunner-pistol-aim');
+    // No shot when the gun was ready: nothing was in range, so the gun drops.
+    expect(at(1.5 + ANIM.aim.hold + 0.1)).toEqual(['gunner-pistol-idle', 'gunner-pistol-idle']);
+    expect(b!.id).not.toBe(a!.id);
   });
 
   it('each survivor’s HP bar always shows, at least its readable size on screen, with a dark edge', () => {
