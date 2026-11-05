@@ -43,6 +43,18 @@ export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.03 } as const;
 export const SQUAD_XP_RATE = 2;
 /** The horde whose win shows the soft ending screen (design §11); play goes on after it. */
 export const ENDING_HORDE = 10;
+/** The most weapons the horde-only stash holds (ID-067); past it the weakest is thrown away. */
+export const STASH_CAP = 20;
+/**
+ * A horde-only win's weapon (ID-067, design §6 Gear): one every win, a gun picked evenly,
+ * its rarity by the weights of the last band whose `from` the horde has reached.
+ */
+export const SQUAD_DROP: readonly { from: number; rarity: Record<Rarity, number> }[] = [
+  { from: 1, rarity: { rusty: 50, common: 50, military: 0, prototype: 0, relic: 0 } },
+  { from: 4, rarity: { rusty: 25, common: 45, military: 25, prototype: 5, relic: 0 } },
+  { from: 7, rarity: { rusty: 10, common: 35, military: 35, prototype: 15, relic: 5 } },
+  { from: 10, rarity: { rusty: 0, common: 25, military: 40, prototype: 25, relic: 10 } },
+];
 
 /** A Shambler's body radius, and a defender's: the default body size. */
 export const ENEMY_RADIUS = 12;

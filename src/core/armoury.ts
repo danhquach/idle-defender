@@ -6,6 +6,7 @@ import {
   PATROL,
   RARITIES,
   RARITY_ORDER,
+  SQUAD_DROP,
   WEAPON_DROP,
   WEAPONS,
   type AffixId,
@@ -114,8 +115,7 @@ export const pierceOf = (h: Held): number => {
 export const dropChance = (hordeNumber: number): number =>
   Math.min(WEAPON_DROP.cap, WEAPON_DROP.base + WEAPON_DROP.perHorde * hordeNumber);
 
-function rollRarity(rng: Rng): Rarity {
-  const weights = WEAPON_DROP.rarity;
+function rollRarity(rng: Rng, weights: Record<Rarity, number> = WEAPON_DROP.rarity): Rarity {
   const total = RARITY_ORDER.reduce((sum, r) => sum + weights[r], 0);
   let roll = rng() * total;
   for (const r of RARITY_ORDER) {
@@ -156,4 +156,40 @@ export function rollDrop(rng: Rng, hordeNumber: number): OwnedWeapon | null {
   if (!chance(rng, dropChance(hordeNumber))) return null;
   const base = pick(rng, Object.keys(WEAPONS) as WeaponId[]);
   return rollWeapon(rng, `h${hordeNumber}`, base, rollRarity(rng));
+}
+
+/**
+ * How hard gun `h` hits over time: damage per second through a magazine and its reload
+ * (pellets counted, rarity and affixes applied). What "the weakest" means for the stash.
+ */
+export function gunPower(h: Held): number {
+  const w = statsOf(h);
+  if (w.kind !== 'sidearm' && w.kind !== 'gun')
+    throw new RangeError(`gunPower: ${baseOf(h)} is no gun`);
+  return (w.damage * w.pellets * w.magazine) / (w.magazine * w.fireInterval + w.reload);
+}
+
+/**
+ * The guns a horde-only win can drop: every specialised gun, in `WEAPONS` order. Not the
+ * pistol: every survivor has a free one, so a dropped one would be no reward.
+ */
+export const DROP_GUNS = (Object.keys(WEAPONS) as WeaponId[]).filter(
+  (id) => WEAPONS[id].kind === 'gun',
+);
+
+/** The rarity weights horde-only Horde `hordeNumber` drops by (`SQUAD_DROP`, ID-067). */
+export function squadDropWeights(hordeNumber: number): Record<Rarity, number> {
+  if (!Number.isInteger(hordeNumber) || hordeNumber < 1) {
+    throw new RangeError(`squadDropWeights: bad horde ${hordeNumber}`);
+  }
+  return SQUAD_DROP.filter((b) => b.from <= hordeNumber).at(-1)!.rarity;
+}
+
+/**
+ * The gun winning horde-only Horde `hordeNumber` drops (ID-067): always one, a gun picked
+ * evenly, its rarity by the horde's band. Its uid is `h<n>`.
+ */
+export function rollSquadDrop(rng: Rng, hordeNumber: number): OwnedWeapon {
+  const base = pick(rng, DROP_GUNS);
+  return rollWeapon(rng, `h${hordeNumber}`, base, rollRarity(rng, squadDropWeights(hordeNumber)));
 }

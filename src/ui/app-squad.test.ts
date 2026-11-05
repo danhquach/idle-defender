@@ -57,7 +57,7 @@ function boot() {
   start(root, art);
   const result = () => root.querySelector<HTMLElement>('.hud-result')!;
   const title = () => result().querySelector('.hud-result-title')!.textContent;
-  const button = () => result().querySelector<HTMLButtonElement>(':scope > .hud-button')!;
+  const button = () => result().querySelector<HTMLButtonElement>('.hud-result-foot > .hud-button')!;
   const bar = () => root.querySelector('.hud-fight-bar')!.textContent;
   const saved = () => decodeSave(localStorage.getItem(SAVE_KEY))!.game;
   return { root, result, title, button, bar, saved };

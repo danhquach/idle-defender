@@ -101,6 +101,10 @@ const SQUAD_HOW_TO_PLAY: Steps = [
     'Win and grow.',
     'A win gives survivor XP and stat points, and a new survivor joins, up to a squad of 6.',
   ],
+  [
+    'Arm the squad.',
+    'Every win drops a gun into the stash (20 at most). Between hordes, pick each survivor’s gun.',
+  ],
   ['Lose and retry.', 'A loss costs nothing: the same horde comes again with everyone back.'],
   ['Beat the boss.', 'Every 10th horde ends with a boss.'],
 ];

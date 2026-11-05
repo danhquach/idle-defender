@@ -2,6 +2,7 @@
 // → next horde. The squad all start on the wall, a win adds XP and one survivor up to the
 // cap, a loss replays the same horde with everyone back and the wall full. The rest of
 // the game's state rides along untouched, so the full game can come back later.
+import { gunPower, isOwned, rollSquadDrop, type OwnedWeapon } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
 import { UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
@@ -11,9 +12,11 @@ import {
   SQUAD_HP_GROWTH,
   SQUAD_TOWERS,
   SQUAD_XP_RATE,
+  STASH_CAP,
   START_PERK,
 } from './data.ts';
 import {
+  equip,
   levelGains,
   xpGains,
   type GameState,
@@ -22,6 +25,7 @@ import {
 } from './game.ts';
 import { newHorde, standing, type DefenderSpec, type HordeState, type UpgradeId } from './horde.ts';
 import { isGun } from './loadout.ts';
+import { createRng } from './rng.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -115,10 +119,11 @@ export function joiner(game: Pick<GameState, 'roster' | 'camp'>): RosterDefender
 }
 
 /**
- * Back from horde `horde`: a win gives every survivor who fought the horde's XP, adds a
- * survivor while the squad is under the cap, and moves on to the next horde. A loss
- * gives nothing and changes nothing: the same horde is played again with everyone, and
- * every fight's wall starts full. No base damage, payout, drop, injury or camp XP.
+ * Back from horde `horde`: a win gives every survivor who fought the horde's XP, puts its
+ * weapon in the stash (ID-067; the weakest thrown away when full), adds a survivor while
+ * the squad is under the cap, and moves on to the next horde. A loss gives nothing and
+ * changes nothing: the same horde is played again with everyone, and every fight's wall
+ * starts full. No base damage, payout, injury or camp XP.
  */
 export function finishSquadHorde(game: GameState, horde: HordeState): GameState {
   if (horde.outcome === 'fighting') throw new RangeError('finishSquadHorde: the horde is still on');
@@ -132,6 +137,8 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
     // Capped where a save reads it, so a win never leaves a save that won't load.
     if (d) d.xp = Math.min(MAX_COUNT, d.xp + gain.xp);
   }
+  const drop = squadDrop(game, horde)!;
+  g.armoury = [...g.armoury, drop.weapon].filter((w) => w.uid !== drop.thrown?.uid);
   const joined = joiner(game);
   if (joined) {
     g.roster.push(joined);
@@ -146,12 +153,80 @@ export interface SquadResult {
   gains: LevelGain[];
   /** The survivor joining for the next horde; null on a loss or with the squad full. */
   joined: RosterDefender | null;
+  /** The weapon the win drops, and what the stash throws away for it; null on a loss. */
+  drop: SquadDrop | null;
 }
 
 export function squadResult(game: GameState, horde: HordeState): SquadResult {
   if (horde.outcome === 'fighting') throw new RangeError('squadResult: the horde is still on');
   const won = horde.outcome === 'won';
-  return { gains: won ? levelGains(game, horde) : [], joined: won ? joiner(game) : null };
+  return {
+    gains: won ? levelGains(game, horde) : [],
+    joined: won ? joiner(game) : null,
+    drop: squadDrop(game, horde),
+  };
+}
+
+/** A horde-only win's weapon (ID-067), and the stash's weakest it pushed out, if any. */
+export interface SquadDrop {
+  weapon: OwnedWeapon;
+  /** Thrown away for room: the weakest of the full stash and the drop (maybe the drop itself). */
+  thrown: OwnedWeapon | null;
+}
+
+/** The stream a horde's drop rolls from: its seed's own, so the fight never moves it. */
+const DROP_STREAM = 0x5bd1e995;
+
+/**
+ * The weapon horde `horde` drops into `game`'s stash (ID-067), or null on a loss. Rolled
+ * from the horde's seed alone, so the same seed drops the same weapon at any game speed
+ * and however the fight went. With the stash at `STASH_CAP` (or past it, from an older
+ * save) the weakest of the stash and the drop by `gunPower` is thrown away (a blade or
+ * tool an older save left there first); a tie throws the later one, so a duplicate drop
+ * goes rather than the one kept.
+ */
+export function squadDrop(
+  game: Pick<GameState, 'armoury'>,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber'>,
+): SquadDrop | null {
+  if (horde.outcome !== 'won') return null;
+  const weapon = rollSquadDrop(createRng(horde.seed ^ DROP_STREAM), horde.hordeNumber);
+  if (game.armoury.length < STASH_CAP) return { weapon, thrown: null };
+  // A blade or tool from an older save is no use to a survivor: it counts as the weakest.
+  const power = (w: OwnedWeapon): number => (isGun(w) ? gunPower(w) : 0);
+  let thrown = weapon;
+  for (const w of [...game.armoury, weapon]) if (power(w) <= power(thrown)) thrown = w;
+  return { weapon, thrown };
+}
+
+/** What a survivor's gun picker can choose: the free pistol, or a stash weapon's uid. */
+export type GunChoice = 'pistol' | string;
+
+/**
+ * Gives survivor `defenderId` gun `choice` as their primary (ID-067, between hordes): the
+ * free pistol or a stash weapon, by uid. The gun they had goes to the stash (a pistol,
+ * free and unlimited, just goes). Their secondary and item stay as they were. Refused when
+ * the stash has no such weapon, or when a gun would go into a full stash for the pistol.
+ */
+export function equipGun(
+  game: GameState,
+  defenderId: string,
+  choice: GunChoice,
+): { ok: true; game: GameState } | { ok: false; reason: string } {
+  const me = game.roster.find((d) => d.id === defenderId);
+  if (!me) return { ok: false, reason: 'No such survivor' };
+  const had = me.loadout.primary;
+  if (choice === 'pistol') {
+    if (!isOwned(had)) return { ok: true, game };
+    if (game.armoury.length >= STASH_CAP) {
+      return { ok: false, reason: `The stash is full (${STASH_CAP}/${STASH_CAP})` };
+    }
+    return equip(game, me.id, { ...me.loadout, primary: 'pistol' });
+  }
+  if (isOwned(had) && had.uid === choice) return { ok: true, game };
+  const gun = game.armoury.find((w) => w.uid === choice);
+  if (!gun || !isGun(gun)) return { ok: false, reason: 'That gun is not in the stash' };
+  return equip(game, me.id, { ...me.loadout, primary: gun });
 }
 
 /**
