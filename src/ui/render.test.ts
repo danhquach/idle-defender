@@ -42,6 +42,7 @@ import {
   BULLET,
   bulletShape,
   drawScene,
+  DUSK,
   offFrame,
   SURVIVOR_BAR,
   TAIL,
@@ -293,14 +294,69 @@ describe('drawScene with art', () => {
       drawImage: (img: { id: string }) => order.push(img.id),
     });
     drawScene(r.ctx, r.art, blank(), CAM, VIEW);
-    // The sky, then the repeating block over the same whole view, then the painted field.
-    expect(order.slice(0, 3)).toEqual(['fill', 'fill', 'ground-canvas']);
+    // The sky, then the repeating block over the same whole view, then the fight's dusk
+    // over it (ID-071), then the painted field.
+    expect(order.slice(0, 4)).toEqual(['fill', 'fill', 'fill', 'ground-canvas']);
     expect(fills[1]).toEqual([0, 0, VIEW.w, VIEW.h]);
     // Fixed to the world: its origin is the field's top left, a block of tiles at their
     // own resolution per SURROUND_BLOCK tiles of ground.
     const origin = project({ x: 0, y: 0 }, CAM);
     const s = (SURROUND_BLOCK * GROUND_TILE * CAM.zoom) / (SURROUND_BLOCK * ART_PX);
     expect(matrix).toEqual([s, s * TILT, origin.sx, origin.sy]);
+  });
+
+  describe('the fight’s dusk (ID-071)', () => {
+    type Step = { what: string; style?: unknown; alpha: number; rect?: number[] };
+    /** The scene's draws in order: images by id, whole-view fills with their style and alpha. */
+    function steps(scene: Scene, cam: Camera, build: BuildOverlay | null = null): Step[] {
+      const r = recorder();
+      const out: Step[] = [];
+      const ctx = r.ctx as unknown as Record<string, unknown> & {
+        fillStyle: unknown;
+        globalAlpha: number;
+      };
+      Object.assign(ctx, {
+        fillStyle: '',
+        fillRect: (...rect: number[]) =>
+          out.push({ what: 'fill', style: ctx.fillStyle, alpha: ctx.globalAlpha, rect }),
+        drawImage: (img: { id: string }) => out.push({ what: img.id, alpha: ctx.globalAlpha }),
+      });
+      drawScene(r.ctx, r.art, scene, cam, VIEW, build);
+      return out;
+    }
+    const dusks = (s: Step[]) => s.filter((x) => x.style === DUSK);
+    const whole = [0, 0, VIEW.w, VIEW.h];
+
+    it('is dark: well under half the ground’s light gets through', () => {
+      const [r, g, b, a] = DUSK.match(/[\d.]+/g)!.map(Number);
+      expect(Math.max(r!, g!, b!)).toBeLessThan(32);
+      expect(a).toBeGreaterThanOrEqual(0.5);
+      expect(a).toBeLessThan(0.8); // the ground's cracks and decals still show through
+    });
+
+    it('washes the surround and the field’s ground in a fight, under every sprite', () => {
+      const game = newGame();
+      const s = steps(startHorde(game, 1, game.roster[0]!.id, 0, 0), frameCamera(VIEW));
+      const d = dusks(s);
+      expect(d).toHaveLength(2);
+      for (const x of d) expect(x).toMatchObject({ alpha: 1, rect: whole });
+      const ground = s.findIndex((x) => x.what === 'ground-canvas');
+      // One over the surround before the field's ground, one over the field right after it.
+      expect(s.indexOf(d[0]!)).toBeLessThan(ground);
+      expect(s.indexOf(d[1]!)).toBe(ground + 1);
+      // Every sprite (wall, survivors, enemies) draws over it, at full brightness.
+      const sprites = s.filter((x, i) => i > ground + 1 && x.what !== 'fill');
+      expect(sprites.length).toBeGreaterThan(0);
+      for (const x of sprites) expect(x.alpha).toBe(1);
+      expect(s.slice(s.indexOf(d[1]!) + 1).some((x) => x.style === DUSK)).toBe(false);
+    });
+
+    it('stays out of the build scene', () => {
+      const { layers, posts, turrets, traps } = layoutOf(newBase());
+      const base = { ...blank(), layers, posts, turrets, traps };
+      const s = steps(base, CAM, { selected: null, hover: null, ghosts: ghostsOf(newBase()) });
+      expect(dusks(s)).toHaveLength(0);
+    });
   });
 
   it('clips everything but the surround at the frame’s left edge, so the yard and huts never show (ID-064)', () => {

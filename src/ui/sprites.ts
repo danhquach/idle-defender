@@ -366,6 +366,8 @@ export const BASE_ART = {
   camp: 'camp-ground',
   /** Scattered over the field and the yard. */
   decals: ['ground-crack', 'debris', 'dry-grass'],
+  /** Tinted green for the field's grass patches (ID-071). */
+  grass: 'dry-grass',
   campProps: ['shack', 'tent'],
   tower: 'tower',
   groundPost: 'ground-post',
