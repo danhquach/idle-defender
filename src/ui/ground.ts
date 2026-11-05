@@ -3,7 +3,7 @@
 // scattered over both, painted once into a field-sized canvas the renderer draws whole,
 // so no tile edge can show at any zoom. Past the field's edges a seeded block of the
 // same tiles repeats without end (ID-057), so no bare background shows at any zoom or pan.
-import { CAMP, FIELD } from '../core/data.ts';
+import { CAMP, COLUMNS, FIELD, WALL } from '../core/data.ts';
 import { createRng, int, pick } from '../core/rng.ts';
 import { BASE_ART, type Art, type ArtId } from './sprites.ts';
 
@@ -19,6 +19,20 @@ export const SURROUND_BLOCK = 4;
 const YARD_TILE = 96;
 /** `size`: a decal's longer side in world units. */
 const DECALS = { count: 64, size: { min: 22, max: 44 }, alpha: 0.85 } as const;
+/**
+ * Green grass (ID-071): patches of tufts scattered over the field, `tufts` each within
+ * `spread` of the patch's centre, drawn from the dry-grass art tinted `tint` over its
+ * own shading, so the grey ground reads as overgrown. None grows left of `from` (the
+ * first wall's front plus a margin), so the survivors' lane stays plain behind them.
+ */
+export const GRASS = {
+  from: COLUMNS[0]! + WALL.depth + 60,
+  patches: 40,
+  tufts: { min: 4, max: 8 },
+  spread: 44,
+  size: { min: 22, max: 44 },
+  tint: 'rgba(104, 168, 56, 0.9)',
+} as const;
 
 export interface Decal {
   art: ArtId;
@@ -32,6 +46,8 @@ export interface GroundLayout {
   /** The tile variant at each `[row][column]`, from the field's top left. */
   tiles: ArtId[][];
   decals: Decal[];
+  /** Green grass tufts, drawn after the decals (ID-071). */
+  grass: Decal[];
 }
 
 /** Which tile variant goes where, and the decals: the same for the same seed. */
@@ -53,7 +69,27 @@ export function groundLayout(seed: number): GroundLayout {
       flip: rng() < 0.5,
     };
   });
-  return { tiles, decals };
+  // Drawn from the rng after the decals, so the tiles and decals keep their old layout.
+  const grass: Decal[] = [];
+  for (let p = 0; p < GRASS.patches; p++) {
+    const cx = int(rng, GRASS.from, FIELD.right);
+    const cy = int(rng, 0, FIELD.height);
+    const tufts = int(rng, GRASS.tufts.min, GRASS.tufts.max);
+    for (let t = 0; t < tufts; t++) {
+      const size = int(rng, GRASS.size.min, GRASS.size.max);
+      const half = Math.ceil(size / 2);
+      const at = (c: number, min: number, max: number) =>
+        Math.max(min + half, Math.min(max - half, c + int(rng, -GRASS.spread, GRASS.spread)));
+      grass.push({
+        art: BASE_ART.grass,
+        x: at(cx, GRASS.from, FIELD.right),
+        y: at(cy, 0, FIELD.height),
+        size,
+        flip: rng() < 0.5,
+      });
+    }
+  }
+  return { tiles, decals, grass };
 }
 
 /** The variant at each `[row][column]` of the block repeated past the field: the same for the same seed. */
@@ -124,17 +160,31 @@ function paintGround(art: Art): OffscreenCanvas | null {
   );
   const yard = paintYard(art, px, canvas.height);
   if (yard) g.drawImage(yard, 0, 0);
-  g.globalAlpha = DECALS.alpha;
-  for (const d of layout.decals) {
-    const img = art[d.art];
+  const stamp = (d: Decal, img: CanvasImageSource & { width: number; height: number }) => {
     const scale = (d.size * px) / Math.max(img.width, img.height);
     g.save();
     g.translate(d.x * px, d.y * px);
     g.scale(d.flip ? -scale : scale, scale);
     g.drawImage(img, -img.width / 2, -img.height / 2);
     g.restore();
-  }
+  };
+  g.globalAlpha = DECALS.alpha;
+  for (const d of layout.decals) stamp(d, art[d.art]);
   g.globalAlpha = 1;
+  const green = tinted(art[BASE_ART.grass], GRASS.tint);
+  if (green) for (const d of layout.grass) stamp(d, green);
+  return canvas;
+}
+
+/** `img` with `tint` laid over its own pixels only, so its shading and outline stay. */
+function tinted(img: HTMLImageElement, tint: string): OffscreenCanvas | null {
+  const canvas = new OffscreenCanvas(img.width, img.height);
+  const g = canvas.getContext('2d');
+  if (!g) return null;
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'source-atop';
+  g.fillStyle = tint;
+  g.fillRect(0, 0, img.width, img.height);
   return canvas;
 }
 

@@ -106,6 +106,13 @@ export const BADGE_COLOUR: Readonly<Record<Profession, string>> = {
   engineer: '#c47f3c',
 };
 
+/**
+ * The fight's dusk (ID-071): a dark, slightly cool wash over the ground and the
+ * surround, under every sprite, so the bright ground stops tiring the eyes and the
+ * wall, survivors, enemies and bullets (drawn over it at full brightness) stand out.
+ */
+export const DUSK = 'rgba(8, 10, 16, 0.7)';
+
 const COLOR = {
   sky: '#15171a',
   selected: '#9cc4f0',
@@ -1563,22 +1570,25 @@ export function drawScene(
   ctx.fillStyle = COLOR.sky;
   ctx.fillRect(0, 0, view.w, view.h);
   drawSurround(ctx, art, cam, view);
-  // The build scene dims the land round the camp's plot, so the plot reads as the focus.
-  if (build) {
-    ctx.fillStyle = COLOR.outside;
-    ctx.fillRect(0, 0, view.w, view.h);
-  }
   // In a fight nothing left of the frame shows (ID-064): the camp's yard stays out of
   // view, and an enemy past the frame shows as a marker at its edge instead.
   // On a whole pixel, so the clip's edge doesn't smear a seam into the surround.
   const fightLeft = build ? 0 : project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx;
   const left = Math.max(0, Math.round(clip ?? fightLeft));
+  const dim = (style: string): void => {
+    ctx.fillStyle = style;
+    ctx.fillRect(0, 0, view.w, view.h);
+  };
+  // The build scene dims the land round the camp's plot, so the plot reads as the focus;
+  // a fight dims it all to dusk (ID-071).
+  dim(build ? COLOR.outside : DUSK);
   ctx.save();
   ctx.beginPath();
   ctx.rect(left, 0, Math.max(0, view.w - left), view.h);
   ctx.clip();
   drawGround(ctx, art, cam);
   if (camp) drawCampGround(ctx, art, camp, cam);
+  if (!build) dim(DUSK);
   // In a fight the ground past the field's top and bottom edges is shaded (ID-068), so
   // the wall's ends read as the map's edge, not a way round; sprites still draw over it.
   if (!build) {

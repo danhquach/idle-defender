@@ -1,9 +1,10 @@
 // ID-050: one seamless ground: seeded tile variants and decals, the same layout every
 // load, painted whole so no tile edge shows.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FIELD } from '../core/data.ts';
+import { COLUMNS, FIELD, WALL } from '../core/data.ts';
 import {
   CAMP_YARD,
+  GRASS,
   GROUND_SEED,
   GROUND_TILE,
   groundCanvas,
@@ -39,6 +40,42 @@ describe('ground layout', () => {
   });
 });
 
+describe('green grass (ID-071)', () => {
+  const { grass } = groundLayout(GROUND_SEED);
+
+  it('scatters patches of tufts over the field, each tuft whole inside it', () => {
+    expect(grass.length).toBeGreaterThanOrEqual(GRASS.patches * GRASS.tufts.min);
+    expect(grass.length).toBeLessThanOrEqual(GRASS.patches * GRASS.tufts.max);
+    for (const t of grass) {
+      expect(t.art).toBe(BASE_ART.grass);
+      expect(t.size).toBeGreaterThanOrEqual(GRASS.size.min);
+      expect(t.size).toBeLessThanOrEqual(GRASS.size.max);
+      expect(t.x - t.size / 2).toBeGreaterThanOrEqual(0);
+      expect(t.x + t.size / 2).toBeLessThanOrEqual(FIELD.right);
+      expect(t.y - t.size / 2).toBeGreaterThanOrEqual(0);
+      expect(t.y + t.size / 2).toBeLessThanOrEqual(FIELD.height);
+    }
+  });
+
+  it('keeps out of the survivors’ lane behind and just past the first wall', () => {
+    expect(GRASS.from).toBeGreaterThan(COLUMNS[0]! + WALL.depth);
+    for (const t of grass) expect(t.x - t.size / 2).toBeGreaterThanOrEqual(GRASS.from);
+  });
+
+  it('reaches across the whole field, not one corner', () => {
+    const xs = grass.map((t) => t.x);
+    const ys = grass.map((t) => t.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(FIELD.right / 2);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(FIELD.height / 2);
+  });
+
+  it('is tinted green: more green than red or blue', () => {
+    const [r, g, b] = GRASS.tint.match(/[\d.]+/g)!.map(Number);
+    expect(g).toBeGreaterThan(r!);
+    expect(g).toBeGreaterThan(b!);
+  });
+});
+
 describe('ground past the field (ID-057)', () => {
   it('repeats a seeded block of the same tile variants, the same every load', () => {
     const block = surroundLayout(GROUND_SEED);
@@ -52,7 +89,7 @@ describe('ground past the field (ID-057)', () => {
 });
 
 /** Everything the painted canvases were asked to do, in order. */
-type Call = { canvas: number; op: string; args: unknown[] };
+type Call = { canvas: number; op: string; args: unknown[]; comp?: unknown; style?: unknown };
 
 describe('painting the ground', () => {
   let calls: Call[];
@@ -81,10 +118,18 @@ describe('painting the ground', () => {
             (op: string) =>
             (...args: unknown[]) =>
               calls.push({ canvas, op, args });
-          this.ctx = {
+          const ctx: Record<string, unknown> = {
             globalAlpha: 1,
             drawImage: log('drawImage'),
-            fillRect: log('fillRect'),
+            // With the composite op and style it fills with.
+            fillRect: (...args: unknown[]) =>
+              calls.push({
+                canvas,
+                op: 'fillRect',
+                args,
+                comp: ctx.globalCompositeOperation,
+                style: ctx.fillStyle,
+              }),
             save: log('save'),
             restore: log('restore'),
             translate: log('translate'),
@@ -95,6 +140,7 @@ describe('painting the ground', () => {
               return { addColorStop: log('stop') };
             },
           };
+          this.ctx = ctx;
         }
         ctx: unknown;
         getContext() {
@@ -131,9 +177,10 @@ describe('painting the ground', () => {
     groundCanvas(art());
     const { tiles, decals } = groundLayout(GROUND_SEED);
     const drawn = calls.filter((c) => c.canvas === 0 && c.op === 'drawImage');
-    // Tiles, then the yard canvas, then every decal in order.
+    // Tiles, then the yard canvas, then every decal in order, then the green grass.
     expect(id(drawn[tiles.flat().length]!)).toBeUndefined();
-    expect(drawn.slice(tiles.flat().length + 1).map(id)).toEqual(decals.map((d) => d.art));
+    const after = drawn.slice(tiles.flat().length + 1);
+    expect(after.slice(0, decals.length).map(id)).toEqual(decals.map((d) => d.art));
     // The yard fades in before its strip and out after it.
     const stops = calls.filter((c) => c.canvas === 1 && c.op === 'stop').map((c) => c.args);
     expect(stops.map((s) => s[1])).toEqual([
@@ -145,6 +192,23 @@ describe('painting the ground', () => {
     const at = stops.map((s) => s[0] as number);
     expect(at).toEqual([...at].sort((a, b) => a - b));
     expect(sizes[1]!.w).toBeCloseTo(((CAMP_YARD.x1 + CAMP_YARD.feather) * 256) / GROUND_TILE);
+  });
+
+  it('lays the green grass last, from the dry-grass art tinted over its own pixels (ID-071)', () => {
+    const a = art();
+    groundCanvas(a);
+    const { tiles, decals, grass } = groundLayout(GROUND_SEED);
+    // Canvas 2 is the tinted tuft: the grass art at its own size, then the tint over it.
+    expect(sizes[2]).toEqual({ w: 256, h: 256 });
+    const tint = calls.filter((c) => c.canvas === 2);
+    expect(tint.map((c) => c.op)).toEqual(['drawImage', 'fillRect']);
+    expect(id(tint[0]!)).toBe(BASE_ART.grass);
+    // Over the art's own pixels only: without source-atop every tuft is a green square.
+    expect(tint[1]).toMatchObject({ comp: 'source-atop', style: GRASS.tint });
+    const drawn = calls.filter((c) => c.canvas === 0 && c.op === 'drawImage');
+    const tufts = drawn.slice(tiles.flat().length + 1 + decals.length);
+    expect(tufts).toHaveLength(grass.length);
+    for (const t of tufts) expect(id(t)).toBeUndefined(); // the tinted canvas, not raw art
   });
 
   it('gives up once, not every frame, where the browser has no OffscreenCanvas', () => {

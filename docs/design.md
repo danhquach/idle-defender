@@ -1729,6 +1729,20 @@ original outline.
   teardrop 8 × 4 px pointing along the shot (its newest bullet), white at the
   muzzle to orange at its tip. Every tracer colour is `#rrggbb`. A hit also flashes a white 4 px spark on the body for its first
   0.1 s, shrinking and fading. Every effect stays at least 1.5 px on screen.
+- **As built (ID-071):** the fight is at dusk, easier on the eyes over a long
+  session. A dark, slightly cool wash (`rgba(8, 10, 16, 0.7)`) lies over the
+  ground past the field and over the field's own ground, under every sprite,
+  so the wall, survivors, enemies, bars and bullets keep their full
+  brightness and stand out more than before. The horde-only view between
+  hordes is at dusk too, so starting a horde never flashes; the camp's build
+  scene keeps its daylight (with the camp, Start Horde's ease steps into the
+  dusk). The fight's XP plate has a 1 px edge so it reads on the dark ground.
+  Green grass grows over the field: 40 seeded patches of 4–8 tufts (22–44
+  units each), the dry-grass art tinted green over its own shading, painted
+  with the ground after the decals, so the layout is the same on every load
+  and the tiles and decals keep their ID-050 places. None grows within 60
+  units in front of the first wall or behind it, so the survivors' lane
+  stays plain and they never sink into a patch.
 - **As built (ID-049):** sprites move, drawn from the still art (no frames):
   each is moved, turned and stretched about its feet (`src/ui/anim.ts`).
   Enemies bob once per 20 px of ground they actually cover (so slower over a
