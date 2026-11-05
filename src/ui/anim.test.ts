@@ -1,12 +1,14 @@
 // Design §15 (ID-049): sprites move from fight state alone, and the animator remembers hits,
 // shots and deaths between frames.
 import { describe, expect, it } from 'vitest';
-import { ENEMIES, STRIKE_FLASH } from '../core/data.ts';
+import { CARD, ENEMIES, STRIKE_FLASH, TRAP_RESEARCH, TRAPS } from '../core/data.ts';
 import type { Enemy } from '../core/horde.ts';
 import {
+  aiming,
   ANIM,
   Animator,
   defenderPose,
+  enemyFrame,
   enemyPose,
   fallPose,
   phaseOf,
@@ -19,7 +21,10 @@ import {
 const NONE: Acts = { hurtAt: -Infinity, gait: STANDING, shotAt: -Infinity, struckAt: -Infinity };
 const IDLE: EnemyActs = { hurtAt: -Infinity, gait: STANDING };
 /** Walking at full stride, `walked` px in. */
-const striding = (walked: number): EnemyActs => ({ ...IDLE, gait: { walked, moving: 1 } });
+const striding = (walked: number): EnemyActs => ({
+  ...IDLE,
+  gait: { walked, moving: 1, drift: { x: -30, y: 0 }, pace: 30 },
+});
 
 function enemy(over: Partial<Enemy> = {}): Enemy {
   return {
@@ -52,15 +57,13 @@ const frame = (
 });
 
 describe('enemy pose', () => {
-  it('bobs once per stride walked and leans side to side, the lean swinging back each stride', () => {
+  it('bobs once per stride walked, upright: its walk frames carry the stride (ID-069)', () => {
     const e = enemy({ id: 0 });
     const at = (walked: number) => enemyPose(e, 0, striding(walked));
     const lifts = Array.from({ length: 41 }, (_, i) => at((ANIM.stride * i) / 40).lift);
     expect(Math.max(...lifts)).toBeCloseTo(ANIM.bob, 1);
     expect(lifts[0]).toBeCloseTo(lifts[40]!, 9);
-    const leans = Array.from({ length: 81 }, (_, i) => at((ANIM.stride * i) / 40).rot);
-    expect(Math.max(...leans)).toBeGreaterThan(ANIM.sway * 0.99);
-    expect(at(ANIM.stride * 0.5).rot).toBeCloseTo(-at(ANIM.stride * 1.5).rot, 9);
+    for (let i = 0; i <= 80; i++) expect(at((ANIM.stride * i) / 40).rot).toBe(0);
   });
 
   it('breathes in place, with no bob, while standing', () => {
@@ -73,10 +76,11 @@ describe('enemy pose', () => {
   it('lunges forward at the wall as it attacks, and is back by the end of the lunge', () => {
     const attackedAt = 10;
     const e = enemy({ vx: 0, nextAttackAt: attackedAt + ENEMIES.shambler.attackInterval });
-    const mid = enemyPose(e, attackedAt + ANIM.lunge.time / 2, IDLE);
-    expect(mid.dx).toBeCloseTo(-ANIM.lunge.px, 9);
-    expect(mid.rot).toBeLessThan(0);
-    expect(enemyPose(e, attackedAt + ANIM.lunge.time, IDLE).dx).toBe(0);
+    const mid = enemyPose(e, attackedAt + ANIM.strike.lunge / 2, IDLE);
+    expect(mid.dx).toBeCloseTo(-ANIM.strike.px, 9);
+    // The attack frame leans into the blow, so the sprite itself stays upright.
+    expect(mid.rot).toBe(0);
+    expect(enemyPose(e, attackedAt + ANIM.strike.lunge, IDLE).dx).toBe(0);
     expect(enemyPose(e, attackedAt - 0.01, IDLE).dx).toBe(0);
     // A fresh enemy (never attacked) doesn't lunge at the fight's start.
     expect(enemyPose(enemy({ vx: 0 }), 0, IDLE).dx).toBe(0);
@@ -106,6 +110,192 @@ describe('enemy pose', () => {
   });
 });
 
+describe('enemy frames (ID-069)', () => {
+  const at = (walked: number, over: Partial<Enemy> = {}) =>
+    enemyFrame(enemy({ id: 0, ...over }), 0, striding(walked));
+
+  it('walks 1-2-3-2, two frames a stride, a foot down on each stride frame', () => {
+    // Walked from where enemy 0's own phase puts its first footfall.
+    const start = -2 * phaseOf(0) * ANIM.stride;
+    const half = ANIM.stride / 2;
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => at(start + i * half))).toEqual([
+      0, 1, 2, 1, 0, 1, 2, 1, 0,
+    ]);
+    // Footfalls (the bob's low points) land on the stride frames, the top of it on passing.
+    const e = enemy({ id: 0 });
+    expect(enemyPose(e, 0, striding(start)).lift).toBeCloseTo(0, 9);
+    expect(enemyPose(e, 0, striding(start + ANIM.stride)).lift).toBeCloseTo(0, 9);
+    expect(enemyPose(e, 0, striding(start + half)).lift).toBeCloseTo(ANIM.bob, 9);
+  });
+
+  it('stands on its passing frame when not walking', () => {
+    expect(enemyFrame(enemy(), 3, IDLE)).toBe(1);
+    // Jostled by the crowd: it has covered ground back and forth, but drifts nowhere.
+    const jostled = { walked: 33, moving: 0.3, drift: { x: ANIM.cycles * 0.6, y: -0.5 }, pace: 3 };
+    expect(enemyFrame(enemy(), 3, { ...IDLE, gait: jostled })).toBe(1);
+  });
+
+  it('stands on its passing frame the moment it stops, not once its drift has faded', () => {
+    const a = new Animator();
+    let x = 900;
+    let t = 0;
+    for (; t < 2; t += 1 / 60) a.observe(frame(t, [enemy({ id: 0, x: (x -= 0.5) })]));
+    // Walking 30 px/s: it steps. Then it stops dead (at the wall, say).
+    a.observe(frame((t += 1 / 60), [enemy({ id: 0, x })]));
+    expect(enemyFrame(enemy({ id: 0, x }), t, a.enemy(0))).toBe(1);
+    // Paused on that frame, it holds.
+    a.observe(frame(t, [enemy({ id: 0, x })]));
+    expect(enemyFrame(enemy({ id: 0, x }), t, a.enemy(0))).toBe(1);
+  });
+
+  it('shows its attack frame just after it strikes, then walks or stands again', () => {
+    for (const kind of Object.keys(ENEMIES) as (keyof typeof ENEMIES)[]) {
+      const interval = ENEMIES[kind].attackInterval;
+      const hold = Math.min(ANIM.strike.time, interval / 2);
+      const e = enemy({ kind, nextAttackAt: 10 + interval });
+      expect(enemyFrame(e, 10, IDLE), kind).toBe('attack');
+      expect(enemyFrame(e, 10 + hold * 0.99, IDLE), kind).toBe('attack');
+      expect(enemyFrame(e, 10 + hold + 1e-6, IDLE), kind).toBe(1);
+      expect(enemyFrame(e, 9.99, IDLE), kind).toBe(1);
+      // Never more than half its time between blows, so a fast attacker still moves.
+      expect(hold, kind).toBeLessThanOrEqual(interval / 2);
+    }
+    // A fresh enemy, never yet attacking, walks from the start.
+    expect(enemyFrame(enemy(), 0, striding(0))).not.toBe('attack');
+  });
+
+  /** Frames of enemy 0 walking left at `pace` px/s, fight time moving `speed`× per 60 Hz frame. */
+  function walkFrames(pace: number, speed: number, seconds: number) {
+    const a = new Animator();
+    let x = 1400;
+    const frames: (string | number)[] = [];
+    for (let i = 0; i <= seconds * 60; i++) {
+      const t = (i * speed) / 60;
+      if (i > 0) x -= (pace * speed) / 60;
+      const e = enemy({ id: 0, x });
+      a.observe(frame(t, [e]));
+      frames.push(enemyFrame(e, t, a.enemy(0)));
+    }
+    return frames;
+  }
+  const changes = (f: unknown[]) => f.filter((v, i) => i > 0 && v !== f[i - 1]).length;
+
+  it('cycles at the pace it walks: twice as fast at twice the pace, half on a trap', () => {
+    // Ten seconds at 30 px/s: 15 strides, 30 frame changes (less the start-up).
+    const full = changes(walkFrames(30, 1, 10));
+    expect(full).toBeGreaterThanOrEqual(28);
+    expect(full).toBeLessThanOrEqual(31);
+    const slowed = changes(walkFrames(15, 1, 10));
+    expect(slowed).toBeGreaterThanOrEqual(13);
+    expect(slowed).toBeLessThanOrEqual(16);
+    const runner = changes(walkFrames(ENEMIES.runner.speed, 1, 10));
+    expect(runner).toBeGreaterThan(full * 2);
+  });
+
+  it('keeps pace with game speed and holds still while paused', () => {
+    // At 3× the same fight time covers the same ground in a third of the frames.
+    const one = changes(walkFrames(30, 1, 6));
+    const three = changes(walkFrames(30, 3, 2));
+    expect(Math.abs(three - one)).toBeLessThanOrEqual(2);
+    // Paused: the fight time stands, so the frame does too, however long the pause.
+    const a = new Animator();
+    let x = 900;
+    for (let i = 0; i <= 60; i++) a.observe(frame(i / 60, [enemy({ id: 0, x: (x -= 0.5) })]));
+    const e = enemy({ id: 0, x });
+    const held = enemyFrame(e, 1, a.enemy(0));
+    for (let i = 0; i < 120; i++) {
+      a.observe(frame(1, [e]));
+      expect(enemyFrame(e, 1, a.enemy(0))).toBe(held);
+    }
+  });
+
+  it('never walks on a frozen pose: even the slowest walk shows every walk frame', () => {
+    // The slowest walker (a Horror) at its slowest: on researched razor wire in a slow field.
+    const speeds = Object.values(ENEMIES).map((k) => k.speed);
+    const slowest =
+      Math.min(...speeds) * TRAP_RESEARCH['razor-wire'].slow * (1 - CARD.slowField.slow);
+    expect(slowest).toBeLessThan(TRAPS.wire.slow * Math.min(...speeds));
+    // About 3.7 px/s: a stride each 5.4 s, so over 12 s (after a second's start-up) it steps
+    // through every frame, at the pace its feet cover the ground.
+    const frames = walkFrames(slowest, 1, 12).slice(60);
+    expect(new Set(frames)).toEqual(new Set([0, 1, 2]));
+    expect(changes(frames)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('holds the passing frame under Reduce motion, but still shows the attack', () => {
+    const a = new Animator();
+    expect(a.shownFrame(2)).toBe(2);
+    a.reduced = true;
+    expect([0, 1, 2].map((f) => a.shownFrame(f as 0 | 1 | 2))).toEqual([1, 1, 1]);
+    expect(a.shownFrame('attack')).toBe('attack');
+  });
+});
+
+describe('aiming (ID-069)', () => {
+  const gun = (nextShotAt: number, reload = 0) => ({
+    nextShotAt,
+    reloadedAt: { primary: reload, secondary: 0 },
+  });
+
+  it('aims from a shot until shortly after the gun is ready again, else rests', () => {
+    expect(aiming(gun(6), 5, { shotAt: -Infinity })).toBe(false);
+    expect(aiming(gun(6), 5, { shotAt: 5 })).toBe(true);
+    expect(aiming(gun(6), 6 + ANIM.aim.hold, { shotAt: 5 })).toBe(true);
+    expect(aiming(gun(6), 6 + ANIM.aim.hold + 0.01, { shotAt: 5 })).toBe(false);
+    // A gun being reloaded stays up until the reload is done.
+    expect(aiming(gun(5.5, 8), 7.5, { shotAt: 5 })).toBe(true);
+    expect(aiming(gun(5.5, 8), 8 + ANIM.aim.hold + 0.01, { shotAt: 5 })).toBe(false);
+  });
+
+  /** A survivor firing every `interval` s of fight time while `inRange(t)`, at `speed`×. */
+  function squad(
+    interval: number,
+    inRange: (t: number) => boolean,
+    speed: number,
+    seconds: number,
+  ) {
+    const a = new Animator();
+    const d = { id: 'a', hp: 30, x: 0, y: 0, ...gun(0) };
+    const states: { t: number; aim: boolean }[] = [];
+    for (let i = 0; i <= seconds * 60; i++) {
+      const t = (i * speed) / 60;
+      const shots = [];
+      if (inRange(t) && t >= d.nextShotAt) {
+        shots.push({ owner: 'a', at: t });
+        d.nextShotAt = t + interval;
+      }
+      a.observe(frame(t, [], { defenders: [d], shots }));
+      states.push({ t, aim: aiming(d, t, a.acts('a', [])) });
+    }
+    return states;
+  }
+
+  it('holds the aim through a stream of shots and drops it once nothing is in range', () => {
+    const inRange = (t: number) => t >= 1 && t < 4;
+    for (const interval of [0.12, 0.5, 2]) {
+      const s = squad(interval, inRange, 1, 6);
+      expect(
+        s.filter((x) => x.t < 1).every((x) => !x.aim),
+        String(interval),
+      ).toBe(true);
+      expect(
+        s.filter((x) => x.t >= 1 && x.t < 4).every((x) => x.aim),
+        String(interval),
+      ).toBe(true);
+      expect(s.filter((x) => x.t > 4 + interval + ANIM.aim.hold).every((x) => !x.aim)).toBe(true);
+    }
+  });
+
+  it('changes pose on fight time alone, so game speed and pause change nothing but pace', () => {
+    const inRange = (t: number) => t >= 1 && t < 3;
+    const at = (states: { t: number; aim: boolean }[], t: number) =>
+      states.find((x) => Math.abs(x.t - t) < 1e-9)!.aim;
+    const one = squad(0.5, inRange, 1, 6);
+    const three = squad(0.5, inRange, 3, 2);
+    for (const t of [0.5, 1, 2, 3, 3.5, 4, 5, 6]) expect(at(three, t), String(t)).toBe(at(one, t));
+  });
+});
+
 describe('fall', () => {
   it('flashes from the killing blow, tips over, then fades out, gone by the end', () => {
     expect(fallPose(0)).toMatchObject({ rot: 0, alpha: 1, flash: 1 });
@@ -127,16 +317,39 @@ describe('defender pose', () => {
     for (const p of stand) expect(p.lift).toBe(0);
     const lifts = Array.from(
       { length: 20 },
-      (_, i) => defenderPose(d, 0, { ...NONE, gait: { walked: i, moving: 1 } }).lift,
+      (_, i) => defenderPose(d, 0, { ...NONE, gait: { ...STANDING, walked: i, moving: 1 } }).lift,
     );
     expect(Math.max(...lifts)).toBeCloseTo(ANIM.bob, 1);
   });
 
-  it('kicks back on a shot, from the frame its muzzle flash shows', () => {
+  it('kicks straight back on a shot, from the frame its muzzle flash shows, with no wiggle', () => {
     const kick = defenderPose(d, 5, { ...NONE, shotAt: 5 });
     expect(kick.dx).toBeCloseTo(-ANIM.recoil.px, 9);
-    expect(kick.rot).toBeLessThan(0);
+    for (const t of [5, 5.03, 5.06, 5.09]) {
+      expect(defenderPose(d, t, { ...NONE, shotAt: 5 }).rot).toBe(0);
+    }
     expect(defenderPose(d, 5 + ANIM.recoil.time, { ...NONE, shotAt: 5 }).dx).toBe(0);
+  });
+
+  it("times the kick to the gun's fire rate: a fast gun's kick ends before its next shot (ID-069)", () => {
+    const shot = { ...NONE, shotAt: 5 };
+    // A slow gun kicks for the full recoil time.
+    const slow = { ...d, nextShotAt: 6 };
+    expect(defenderPose(slow, 5 + ANIM.recoil.time * 0.9, shot).dx).toBeLessThan(0);
+    // One firing every 0.1 s kicks for 80% of that, done before the next shot.
+    const fast = { ...d, nextShotAt: 5.1 };
+    expect(defenderPose(fast, 5.04, shot).dx).toBeLessThan(0);
+    expect(defenderPose(fast, 5 + 0.1 * ANIM.recoil.share, shot).dx).toBe(0);
+    expect(defenderPose(fast, 5.099, shot).dx).toBe(0);
+  });
+
+  it('holds still while aiming and breathes at rest (ID-069)', () => {
+    const gun = { ...d, nextShotAt: 6, reloadedAt: { primary: 0, secondary: 0 } };
+    const firing = { ...NONE, shotAt: 5 };
+    const aimed = [5.3, 5.6, 5.9].map((t) => defenderPose(gun, t, firing).sy);
+    expect(new Set(aimed)).toEqual(new Set([1]));
+    const rest = [9, 9.6, 10.2].map((t) => defenderPose(gun, t, firing).sy);
+    expect(new Set(rest).size).toBe(3);
   });
 
   it('swings forward on a blade or tool strike, over the strike mark', () => {
@@ -203,12 +416,18 @@ describe('Animator', () => {
     expect(a.corpses).toEqual([]);
   });
 
-  it('remembers a shot for the recoil after the fight drops it with its flash', () => {
+  it("remembers each shooter's last shot after the fight drops it with its flash", () => {
     const a = new Animator();
     a.observe(frame(2, [], { shots: [{ owner: 'a', at: 2 }] }));
     a.observe(frame(2.1, []));
     expect(a.acts('a', []).shotAt).toBe(2);
-    a.observe(frame(2 + ANIM.recoil.time, []));
+    // Kept for the aim, long after the recoil is done; a later shot replaces it.
+    a.observe(frame(9, []));
+    expect(a.acts('a', []).shotAt).toBe(2);
+    a.observe(frame(9.5, [], { shots: [{ owner: 'a', at: 9.5 }] }));
+    expect(a.acts('a', []).shotAt).toBe(9.5);
+    // A new fight forgets it.
+    a.observe(frame(0, []));
     expect(a.acts('a', []).shotAt).toBe(-Infinity);
   });
 
@@ -277,6 +496,8 @@ describe('Animator', () => {
       a.observe(frame(t, [e]));
       expect(a.enemy(0).gait.moving).toBe(0);
       expect(enemyPose(e, t, a.enemy(0)).lift).toBe(0);
+      // Nor step: the jostle back and forth drifts nowhere (ID-069).
+      expect(enemyFrame(e, t, a.enemy(0))).toBe(1);
     }
   });
 

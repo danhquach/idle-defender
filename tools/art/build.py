@@ -41,7 +41,13 @@ Manifest asset keys (unknown keys stop the build):
   where the leaves meet their posts, `seam` the row where they meet each other,
   `swing` how far right a leaf's free end moves per row of its length, and
   `length` the share of its length a swung leaf still shows from above; the
-  passage the leaves leave behind is filled with PASSAGE).
+  passage the leaves leave behind is filled with PASSAGE), pose (ID-069: the
+  generation is an edit of a coloured puppet drawn by tools/art/puppets.py and
+  kept at art-src/poses/<pose>.png, which fixes the frame's pose; the puppet is the
+  first image sent and any `ref` follows it, as what the figure takes on, such as a
+  survivor's gun), frames (ID-069:
+  the animation frame set it belongs to: a set is trimmed by one box round all
+  its frames and scaled by one factor, so its frames line up by the feet).
 
 A sprite has its magenta background keyed out to transparency, only its
 biggest shape kept (detached parts under KEEP of it are dropped), and is
@@ -72,8 +78,12 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
-    "palette", "edge", "part", "style", "photo", "ajar", "white",
+    "palette", "edge", "part", "style", "photo", "ajar", "white", "pose", "frames",
 }
+POSES = ROOT / "art-src" / "poses"
+# The column each puppet family stands on in its 512 px canvas (tools/art/puppets.py:
+# HIP_X for the enemies, the soldier's hip for the survivors).
+POSE_HIP = {"enemy": 266, "soldier": 240}
 CONCEPTS = ROOT / "art-concepts"
 REQUIRED = {"id", "kind", "model", "seed", "size", "prompt"}
 SPRITE_PX = 192
@@ -221,7 +231,9 @@ def prepare(img: Image.Image, asset: dict) -> Image.Image:
     box = img.getbbox()
     if box is None:
         sys.exit(f"{asset['id']}: nothing left after keying out the background")
-    img = img.crop(box)
+    # A frame keeps its whole canvas here; its set is trimmed together (frames_trimmed).
+    if "frames" not in asset:
+        img = img.crop(box)
     if "ajar" in asset:
         img = gate_width(img, (asset["ajar"]["hinges"][0] - box[1]) // 2, asset["id"])
     if asset.get("flip"):
@@ -231,6 +243,25 @@ def prepare(img: Image.Image, asset: dict) -> Image.Image:
         img = ImageEnhance.Color(rgb).enhance(0 if asset.get("white") else MUTED)
         img.putalpha(alpha)
     return img
+
+
+def frames_trimmed(
+    frames: list[Image.Image], name: str, hip: int
+) -> tuple[list[Image.Image], int]:
+    """
+    A frame set trimmed by one box round all its frames, so they keep their places, and
+    widened with clear margin to sit evenly about column `hip` (where its puppets stand),
+    so the body, not its reach, is over the sprite's middle: the renderer stands a sprite
+    on its middle. Also the longer side of the box before it was widened, which sets the
+    set's scale, so a long reach (a raised gun) never shrinks the body.
+    """
+    if len({f.size for f in frames}) != 1:
+        sys.exit(f"{name}: a frame set's generations must all be the same size")
+    boxes = [f.getbbox() for f in frames]
+    x0, x1 = min(b[0] for b in boxes), max(b[2] for b in boxes)
+    y0, y1 = min(b[1] for b in boxes), max(b[3] for b in boxes)
+    half = max(hip - x0, x1 - hip)
+    return [f.crop((hip - half, y0, hip + half, y1)) for f in frames], max(x1 - x0, y1 - y0)
 
 
 def scaled(img: Image.Image, scale: float) -> Image.Image:
@@ -386,6 +417,25 @@ def check(
         sys.exit(f"{name}: ajar is hinges [top, bottom] with a seam between, swing and length")
     if not re.fullmatch(r"[a-z]+(-[a-z]+)*", name):
         sys.exit(f"{name}: ids are lower-case words joined by hyphens")
+    pose = asset.get("pose")
+    if pose is not None and (
+        asset["kind"] != "sprite"
+        or not isinstance(pose, str)
+        or not re.fullmatch(r"[a-z]+-[a-z0-9]+", pose)
+        or not (POSES / f"{pose}.png").is_file()
+    ):
+        sys.exit(f"{name}: pose is a puppet at art-src/poses/<pose>.png, on a sprite")
+    frames = asset.get("frames")
+    if frames is not None and (
+        asset["kind"] != "sprite"
+        or not isinstance(frames, str)
+        or not re.fullmatch(r"[a-z]+(-[a-z]+)*", frames)
+        or "group" in asset
+        or "ajar" in asset
+        or asset.get("part")
+        or pose is None
+    ):
+        sys.exit(f"{name}: frames names a set, on a posed sprite with no group, ajar or part")
 
 
 def main(only: list[str]) -> None:
@@ -434,18 +484,33 @@ def main(only: list[str]) -> None:
     for root in families:
         family = [built[a["id"]] for a in assets if a["id"] == root or a.get("edge") == root]
         check_seams(family, root)
-    # A group shares one scale; any other sprite is scaled on its own.
-    longest: dict[str, int] = {}
+    sets: dict[str, list[str]] = {}
     for asset in assets:
-        if asset["kind"] == "sprite" and not asset.get("part"):
-            key = asset.get("group", asset["id"])
+        if "frames" in asset:
+            sets.setdefault(asset["frames"], []).append(asset["id"])
+    by_id = {a["id"]: a for a in assets}
+    set_longest: dict[str, int] = {}
+    for name, members in sets.items():
+        poses = {by_id[i].get("pose", "").split("-")[0] for i in members}
+        hip = POSE_HIP.get(poses.pop(), POSE_HIP["enemy"]) if len(poses) == 1 else None
+        if hip is None:
+            sys.exit(f"{name}: a frame set's frames are posed from one puppet family")
+        trimmed, set_longest[name] = frames_trimmed([built[i] for i in members], name, hip)
+        for i, img in zip(members, trimmed):
+            built[i] = img
+    # A group or a frame set shares one scale; any other sprite is scaled on its own.
+    scale_key = lambda a: a.get("frames", a.get("group", a["id"]))  # noqa: E731
+    longest: dict[str, int] = dict(set_longest)
+    for asset in assets:
+        if asset["kind"] == "sprite" and not asset.get("part") and "frames" not in asset:
+            key = scale_key(asset)
             longest[key] = max(longest.get(key, 0), *built[asset["id"]].size)
     for asset in assets:
         if (only and asset["id"] not in only) or asset.get("part"):
             continue
         img = built[asset["id"]]
         if asset["kind"] == "sprite":
-            img = scaled(img, SPRITE_PX / longest[asset.get("group", asset["id"])])
+            img = scaled(img, SPRITE_PX / longest[scale_key(asset)])
         img.save(OUT / f"{asset['id']}.png", optimize=True)
         print(f"{asset['id']}: {img.width}x{img.height}")
 
