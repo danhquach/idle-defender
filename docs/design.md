@@ -1696,16 +1696,39 @@ original outline.
   drawn from a weaponless Gunner body and that gun together (a `ref` list of
   `part` generations, which are never shipped themselves). Rippers and
   Engineers keep their own art whatever their primary.
-- **As built (ID-045):** no line joins shooter and target. Each bullet is drawn
+- **As built (ID-045):** no line joins shooter and target (since ID-070, only
+  a close shot's tail does, for the frame or two before it lands). Each bullet is drawn
   at its simulated spot, in the depth sort, as a bright slug with a streak
   behind it whose length and colour are its gun's (`tracer` in the gun data:
   pistol 12 px, turret 14 px), dropping from the barrel to body height over
   the distance it was aimed. The fight records each shot (a 0.05 s muzzle
-  flash at the barrel end of the defender's or turret's sprite) and each
+  flash, 0.08 s since ID-070, at the barrel end of the defender's or turret's sprite) and each
   bullet's end (0.25 s: a blood puff on the body for a hit, a dust kick on the
   ground where a miss fell). Effects are drawn shapes, not sprites, so they
   need no art; each stays at least 1 px on screen at 0.5× zoom. Blade and
   tool strikes keep their slash.
+- **As built (ID-070):** bullets are easy to follow at 1×, 2× and 3×, and
+  read as bullets, not beams (a long even line with an outline looked like
+  a laser). Each is a white head capsule (6 px long, 2.5 px wide) on a dark
+  backing 1 px wider each side, with a soft 5 px glow in its gun's colour;
+  a tail that thins from 2.5 px to 0.5 px and fades from white through the
+  gun's colour to clear; and a faint shadow of the same shape on the ground
+  under it (1.5 px at its head), which gives contrast on light ground and
+  shows it flying. Only the head has a rim. The tail is the gun's tracer
+  plus one 60 fps frame of flight at the game speed, counted up to 2×
+  (pistol 12 + 30 px at 1×, 12 + 60 px at 2× and 3×); at 3× the bright head
+  carries the eye over the small gap. The fight moves bullets in whole
+  1/30 s steps, so the head is drawn carried on by the time since the last
+  step (never past the spot it was aimed at before it gets there, nor past
+  the end of its flight) and moves smoothly instead of jumping. The tail
+  never reaches back past the muzzle, so it joins shooter and target only on
+  a close shot, for the frame or two before it lands. One shot's pellets (one
+  muzzle, flown as far) lay every shadow and backing before any tail or head;
+  each of a shooter's other shots sorts on its own. The muzzle flash lasts
+  0.08 s (at least one frame at 3×): its round orange halo, and a core
+  teardrop 8 × 4 px pointing along the shot (its newest bullet), white at the
+  muzzle to orange at its tip. Every tracer colour is `#rrggbb`. A hit also flashes a white 4 px spark on the body for its first
+  0.1 s, shrinking and fading. Every effect stays at least 1.5 px on screen.
 - **As built (ID-049):** sprites move, drawn from the still art (no frames):
   each is moved, turned and stretched about its feet (`src/ui/anim.ts`).
   Enemies bob once per 20 px of ground they actually cover (so slower over a

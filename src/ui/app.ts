@@ -567,7 +567,8 @@ export function start(root: HTMLElement, art: Art): void {
       drawScene(
         ctx,
         art,
-        horde,
+        // Bullet tails grow with the game speed (ID-070).
+        { ...horde, pace: speed },
         cam,
         view,
         null,
