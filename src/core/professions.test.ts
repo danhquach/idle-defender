@@ -119,6 +119,22 @@ describe('Ripper (pistol + knife)', () => {
     expect(after.strikes).toEqual([]);
   });
 
+  it('on the firing line (ID-068), shoots even an enemy in reach of a knife', () => {
+    const s = newHorde(1, { ...setup(), base, line: [{ x: 470, y: 360 }] });
+    s.toSpawn = 0;
+    s.defenders = [];
+    s.bench = [];
+    for (const p of s.posts) p.defenderId = null;
+    const post = s.posts.find((p) => p.kind === 'line')!;
+    post.defenderId = 'j';
+    s.defenders.push(standing(spec('j', 'knife'), post, 0));
+    // 10 px away: well inside the knife's 50, yet the line never uses a blade or tool.
+    enemy(s, { ...tough, x: 480, y: 360, inCamp: true });
+    const after = tick(s, STEP);
+    expect(shot(after)).toBe(true);
+    expect(after.strikes).toEqual([]);
+  });
+
   it('fights an enemy that broke through, from a ground post', () => {
     const s = fight(base, [spec('j', 'knife'), 'ground', GATE]);
     enemy(s, { ...tough, x: 370, y: GATE_Y, inCamp: true });
