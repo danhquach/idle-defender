@@ -7,6 +7,7 @@ import { startSquadHorde } from '../core/hordeonly.ts';
 import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
 import {
   CAMP,
+  CARD,
   ENEMIES,
   FIELD,
   IMPACT_FLASH,
@@ -25,8 +26,9 @@ import {
   stockOf,
 } from '../core/data.ts';
 import type { Tier } from '../core/base.ts';
-import type { Bullet, Enemy } from '../core/horde.ts';
+import type { Bullet, Enemy, HordeState } from '../core/horde.ts';
 import { carpet } from '../core/skills.ts';
+import { enemy } from '../core/testing.ts';
 import { ANIM, Animator } from './anim.ts';
 import {
   FIGHT_FRAME,
@@ -34,11 +36,13 @@ import {
   HEIGHT_SCALE,
   project,
   TILT,
+  WALL_CARD,
   WALL_HIT,
   wallHeight,
+  wallPulse,
   type Camera,
 } from './projection.ts';
-import { GROUND_TILE, SURROUND_BLOCK } from './ground.ts';
+import { GROUND_TILE, SLOW_FIELD, SURROUND_BLOCK } from './ground.ts';
 import {
   BULLET,
   bulletShape,
@@ -59,7 +63,6 @@ import {
   ART_PX,
   BASE_ART,
   ENEMY_ART,
-  GATE_POSTS,
   GUNNER_ART,
   GUNNER_LOOKS,
   LOOKS,
@@ -716,7 +719,7 @@ describe('drawScene with art', () => {
     return { ...r, at };
   };
 
-  it("lays a standing gate over its segment's top in its tier: posts on the wall, leaves out over the field", () => {
+  it("lays a standing gate over its segment's top in its tier: a closed sliding gate, flush with the wall (ID-075)", () => {
     for (const zoom of [0.5, 1, 2]) {
       for (const tier of Object.keys(TIER_ART) as Tier[]) {
         const scene = withSegment(blank(), { kind: 'gate', tier, hp: 100, maxHp: 100 });
@@ -731,8 +734,8 @@ describe('drawScene with art', () => {
         expect(gate[0]!.x).toBeCloseTo(back.sx);
         expect(gate[0]!.y).toBeCloseTo(back.sy);
         expect(gate[0]!.h).toBeCloseTo(front.sy - back.sy);
-        // The posts fill the wall's depth; the rest of the art is the leaves swung out.
-        expect(gate[0]!.w * GATE_POSTS).toBeCloseTo(front.sx - back.sx);
+        // Closed and in line with the wall: exactly the top's width, nothing over the field.
+        expect(gate[0]!.w).toBeCloseTo(front.sx - back.sx);
         expect(r.textured).toEqual(expect.arrayContaining([TIER_ART[tier].front]));
         expect(r.drawn).not.toContain('cracks');
       }
@@ -2171,5 +2174,249 @@ describe('the field’s edges in a fight (ID-068)', () => {
       { style: 'rgba(0, 0, 0, 0.3)', y: bottom, h: view.h - bottom },
     ]);
     expect(bottom).toBeLessThan(view.h);
+  });
+});
+
+describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'DOMMatrix',
+      class {
+        translate() {
+          return this;
+        }
+        scale() {
+          return this;
+        }
+      },
+    );
+    // No painted canvases unless a test paints one.
+    vi.stubGlobal('OffscreenCanvas', undefined);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  type Seg = Partial<Layer['segments'][number]>;
+  const fight = (seg: Seg, more: Partial<Scene> = {}): Scene => ({
+    ...withSegment(blank(), { kind: 'wall', tier: 'concrete', hp: 300, maxHp: 300, ...seg }),
+    time: 10,
+    ...more,
+  });
+  /** Every image, fill and filled path drawn, in order, with its style and alpha. */
+  const trace = (scene: Scene, build: BuildOverlay | null = null) => {
+    const r = recorder();
+    const ops: { op: string; id?: string; style?: string; alpha: number; at?: number[] }[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string; globalAlpha: number };
+    Object.assign(r.ctx, {
+      drawImage: (img: { id: ArtId }, ...n: number[]) =>
+        ops.push({ op: 'image', id: img.id, alpha: ctx.globalAlpha, at: n }),
+      fillRect: (...n: number[]) =>
+        ops.push({ op: 'fill', style: ctx.fillStyle, alpha: ctx.globalAlpha, at: n }),
+      fill: () => ops.push({ op: 'path', style: ctx.fillStyle, alpha: ctx.globalAlpha }),
+    });
+    drawScene(r.ctx, r.art, scene, CAM, VIEW, build);
+    return { ops, ctx };
+  };
+  const images = (s: Scene, id: ArtId, build: BuildOverlay | null = null) =>
+    trace(s, build).ops.filter((o) => o.op === 'image' && o.id === id);
+  const fills = (s: Scene, style: string) =>
+    trace(s).ops.filter((o) => o.op === 'fill' && o.style === style);
+  const overlay = (): BuildOverlay => ({
+    selected: null,
+    hover: null,
+    ghosts: { slots: [], lines: [] },
+  });
+
+  it('Spiked Walls: stakes along each standing segment’s field edge, reaching over the ground', () => {
+    const on = fight({}, { taken: ['spiked-walls'] });
+    const stakes = images(on, BASE_ART.spikes);
+    expect(stakes).toHaveLength(1);
+    const x0 = on.layers[0]!.x;
+    const z = wallHeight(300, 300);
+    const a = project({ x: x0 + WALL.depth - WALL_CARD.spike.in, y: 2, z }, CAM);
+    const b = project({ x: x0 + WALL.depth + WALL_CARD.spike.out, y: SEGMENT_HEIGHT - 2, z }, CAM);
+    expect(stakes[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
+    // None without the card, on rubble, or in the build scene.
+    expect(images(fight({}), BASE_ART.spikes)).toHaveLength(0);
+    expect(images(fight({ hp: 0 }, { taken: ['spiked-walls'] }), BASE_ART.spikes)).toHaveLength(0);
+    expect(images(on, BASE_ART.spikes, overlay())).toHaveLength(0);
+  });
+
+  it('Spiked Walls: a bite flashes a pale burst with a warm core, gone after its time', () => {
+    const core = (spikeAt: number | undefined, taken: Scene['taken'] = ['spiked-walls']) =>
+      trace(fight({ spikeAt }, { taken })).ops.filter(
+        (o) => o.op === 'path' && o.style === '#e0a020',
+      );
+    expect(core(10)).toHaveLength(1);
+    expect(core(10)[0]!.alpha).toBeCloseTo(WALL_CARD.spike.alpha, 9);
+    expect(core(10 - WALL_CARD.spike.time)).toHaveLength(0);
+    expect(core(undefined)).toHaveLength(0);
+    expect(core(10, [])).toHaveLength(0);
+  });
+
+  it('Reinforce: a brace over the top and front, under the damage, at its alpha', () => {
+    const hurt = fight({ hp: 90 }, { taken: ['reinforce'] });
+    const ops = trace(hurt).ops.filter((o) => o.op === 'image');
+    const braces = ops.filter((o) => o.id === BASE_ART.brace);
+    expect(braces).toHaveLength(2);
+    expect(braces.every((o) => o.alpha === WALL_CARD.brace.alpha)).toBe(true);
+    const ids = ops.map((o) => o.id);
+    expect(ids.lastIndexOf(BASE_ART.brace)).toBeLessThan(ids.indexOf(BASE_ART.cracks));
+    expect(ids.lastIndexOf(BASE_ART.brace)).toBeLessThan(ids.indexOf(BASE_ART.breach));
+    expect(images(fight({ hp: 0 }, { taken: ['reinforce'] }), BASE_ART.brace)).toHaveLength(0);
+    expect(images(fight({}), BASE_ART.brace)).toHaveLength(0);
+    expect(images(fight({}, { taken: ['reinforce'] }), BASE_ART.brace, overlay())).toHaveLength(0);
+  });
+
+  it('a barrier card’s pick pulses every standing segment, swelling and fading back', () => {
+    const pulse = (barrierAt: number | undefined, seg: Seg = {}) =>
+      fills(fight(seg, { barrierAt }), '#b8f4ec');
+    // Top and front, at its peak halfway through.
+    const peak = pulse(10 - WALL_CARD.pulse.time / 2);
+    expect(peak).toHaveLength(2);
+    expect(peak[0]!.alpha).toBeCloseTo(WALL_CARD.pulse.alpha, 9);
+    expect(pulse(10 - WALL_CARD.pulse.time / 4)[0]!.alpha).toBeLessThan(WALL_CARD.pulse.alpha);
+    expect(pulse(10 - WALL_CARD.pulse.time - 1e-9)).toHaveLength(0);
+    expect(pulse(10.1)).toHaveLength(0);
+    expect(pulse(undefined)).toHaveLength(0);
+    expect(pulse(9.8, { hp: 0 })).toHaveLength(0);
+    expect(wallPulse(10, 10)).toBeCloseTo(0, 9);
+  });
+
+  it('at 3× the pick pulse and repair glow last as long in real time as at 1×', () => {
+    // Fight time runs 3× as fast, so 1.5 fight s is 0.5 real s: still glowing at 3×.
+    const at = 10 - 1.5;
+    const shown = (pace: number) =>
+      trace(fight({ repairAt: at }, { barrierAt: at, pace })).ops.filter(
+        (o) => o.op === 'fill' && (o.style === '#b8f4ec' || o.style === '#7fe08c'),
+      );
+    expect(shown(1)).toHaveLength(0);
+    expect(shown(3)).toHaveLength(4);
+    // The spike bite is combat feedback: it keeps to fight time at any speed.
+    const bite = (pace: number) =>
+      trace(fight({ spikeAt: 10 - 0.2 }, { taken: ['spiked-walls'], pace })).ops.filter(
+        (o) => o.op === 'path' && o.style === '#e0a020',
+      );
+    expect(bite(1)).toHaveLength(1);
+    expect(bite(3)).toHaveLength(1);
+    expect(
+      trace(fight({ spikeAt: 10 - 0.3 }, { taken: ['spiked-walls'], pace: 3 })).ops.filter(
+        (o) => o.op === 'path' && o.style === '#e0a020',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('a repair glows green on the segment it healed, fading, with its alpha put back', () => {
+    const glow = (repairAt: number | undefined) => fills(fight({ repairAt }), '#7fe08c');
+    expect(glow(10)).toHaveLength(2);
+    expect(glow(10)[0]!.alpha).toBeCloseTo(WALL_CARD.repair.alpha, 9);
+    expect(glow(10 - WALL_CARD.repair.time / 2)[0]!.alpha).toBeCloseTo(
+      WALL_CARD.repair.alpha / 2,
+      9,
+    );
+    expect(glow(10 - WALL_CARD.repair.time - 1e-9)).toHaveLength(0);
+    expect(glow(undefined)).toHaveLength(0);
+    expect(trace(fight({ repairAt: 10 }, { barrierAt: 9.8 })).ctx.globalAlpha).toBe(1);
+  });
+
+  it('Slow Field: a faint strip in front of the outermost standing layer, only with the card', () => {
+    // No OffscreenCanvas under test: the tint alone shows, across the strip's full height.
+    const tint = (s: Scene, build: BuildOverlay | null = null) =>
+      trace(s, build).ops.filter((o) => o.op === 'fill' && o.style === SLOW_FIELD.tint.colour);
+    const on = fight({}, { taken: ['slow-field'] });
+    const strip = tint(on);
+    expect(strip).toHaveLength(1);
+    const from = on.layers[0]!.x + WALL.depth;
+    const a = project({ x: from, y: 0 }, CAM);
+    const b = project({ x: from + CARD.slowField.reach, y: FIELD.height }, CAM);
+    expect(strip[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
+    expect(strip[0]!.alpha).toBeCloseTo(SLOW_FIELD.tint.alpha, 9);
+    expect(tint(fight({}))).toHaveLength(0);
+    expect(tint(fight({ hp: 0 }, { taken: ['slow-field'] }))).toHaveLength(0);
+    expect(tint(on, overlay())).toHaveLength(0);
+  });
+
+  it('Slow Field: drawn from its painted strip when the browser can paint one', () => {
+    const Painted = class {
+      width: number;
+      height: number;
+      constructor(w: number, h: number) {
+        this.width = w;
+        this.height = h;
+      }
+      getContext() {
+        const noop = () => {};
+        return {
+          fillRect: noop,
+          drawImage: noop,
+          save: noop,
+          restore: noop,
+          translate: noop,
+          scale: noop,
+          createLinearGradient: () => ({ addColorStop: noop }),
+        };
+      }
+    };
+    vi.stubGlobal('OffscreenCanvas', Painted);
+    {
+      const r = recorder();
+      const drawn: unknown[] = [];
+      Object.assign(r.ctx, { drawImage: (img: unknown) => drawn.push(img) });
+      drawScene(r.ctx, r.art, fight({}, { taken: ['slow-field'] }), CAM, VIEW);
+      const strip = drawn.find((d) => d instanceof Painted) as InstanceType<typeof Painted>;
+      expect(strip.width).toBe(CARD.slowField.reach * SLOW_FIELD.px);
+      expect(strip.height).toBe(FIELD.height * SLOW_FIELD.px);
+    }
+  });
+
+  it('an enemy at a spiked segment draws over the stakes, never under them', () => {
+    const s = fight({}, { taken: ['spiked-walls'] });
+    const h = { ...s, nextEnemyId: 1 } as unknown as HordeState;
+    const at = enemy(h, { x: s.layers[0]!.x + WALL.depth + 8, y: SEGMENT_HEIGHT / 2 });
+    const ops = trace({ ...s, enemies: [at] }).ops.filter((o) => o.op === 'image');
+    const stakes = ops.findIndex((o) => o.id === BASE_ART.spikes);
+    const walker = ops.findIndex((o) => ENEMY_ART.shambler.walk.includes(o.id as never));
+    expect(stakes).toBeGreaterThanOrEqual(0);
+    expect(walker).toBeGreaterThan(stakes);
+  });
+
+  it('a repair’s three crosses float up as they fade, and stay put with Reduce motion', () => {
+    /** Each cross's middle, from its horizontal stroke's two ends. */
+    const crosses = (repairAt: number, reduced: boolean) => {
+      const r = recorder();
+      const moves: { x: number; y: number; style: string }[] = [];
+      const ctx = r.ctx as unknown as { strokeStyle: string };
+      Object.assign(r.ctx, {
+        moveTo: (x: number, y: number) => moves.push({ x, y, style: ctx.strokeStyle }),
+      });
+      const anim = new Animator();
+      anim.reduced = reduced;
+      drawScene(r.ctx, r.art, fight({ hp: 200, repairAt }), CAM, VIEW, null, null, null, anim);
+      return moves.filter((m) => m.style === '#7fe08c').filter((_, k) => k % 2 === 0);
+    };
+    const fresh = crosses(10, false);
+    expect(fresh).toHaveLength(3);
+    const later = crosses(10 - WALL_CARD.repair.time / 2, false);
+    later.forEach((m, k) => expect(m.y).toBeLessThan(fresh[k]!.y));
+    // Reduce motion: the same spots at any age.
+    expect(crosses(10 - WALL_CARD.repair.time / 2, true)).toEqual(crosses(10, true));
+    expect(crosses(10, true)).toEqual(fresh);
+    expect(crosses(10 - WALL_CARD.repair.time - 1e-9, false)).toHaveLength(0);
+  });
+
+  it('a game speed under 1× never shortens the pulse below its real time', () => {
+    const pulse = (pace: number) =>
+      fills(fight({}, { barrierAt: 10 - WALL_CARD.pulse.time / 2, pace }), '#b8f4ec');
+    expect(pulse(0.5)).toEqual(pulse(1));
+    expect(pulse(0.5)[0]!.alpha).toBeCloseTo(WALL_CARD.pulse.alpha, 9);
+  });
+
+  it('the sliding gate shows the barrier cards like any segment', () => {
+    const gate = fight(
+      { kind: 'gate', tier: 'wood' },
+      { taken: ['spiked-walls', 'reinforce'], barrierAt: 9.7 },
+    );
+    expect(images(gate, TIER_ART.wood.gate)).toHaveLength(1);
+    expect(images(gate, BASE_ART.spikes)).toHaveLength(1);
+    expect(images(gate, BASE_ART.brace)).toHaveLength(2);
+    expect(fills(gate, '#b8f4ec')).toHaveLength(2);
   });
 });

@@ -20,7 +20,6 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
-  GATE_POSTS,
   GUNNER_ART,
   GUNNER_LOOKS,
   LOAD_TIMEOUT_MS,
@@ -245,15 +244,21 @@ describe('art coverage', () => {
     }
   });
 
-  it("fills each tier gate's width with its posts as the renderer expects (ID-054)", () => {
+  it('gives every tier one sliding gate outline, a solid panel as tall as two widths (ID-075)', () => {
+    const sizes = new Set<string>();
     for (const tier of Object.keys(TIERS) as (keyof typeof TIER_ART)[]) {
       const id = TIER_ART[tier].gate;
-      const { w, px } = pixels(id);
-      // The top post's rows: the posts' right edge, the leaves never reach that high.
-      let posts = 0;
-      for (let x = 0; x < w; x++) if (px[(2 * w + x) * 4 + 3]! > 128) posts = x + 1;
-      expect(Math.abs(posts / w - GATE_POSTS), id).toBeLessThan(1 / w + 0.01);
+      const { w, h, px } = pixels(id);
+      sizes.add(`${w}x${h}`);
+      expect(h / w, id).toBeGreaterThan(1.7);
+      expect(h / w, id).toBeLessThan(2.6);
+      // Closed: the panel fills its middle row (its end caps are a little wider), no gap onto a passage.
+      const mid = Math.floor(h / 2);
+      let solid = 0;
+      for (let x = 0; x < w; x++) if (px[(mid * w + x) * 4 + 3]! > 128) solid++;
+      expect(solid / w, id).toBeGreaterThan(0.85);
     }
+    expect(sizes.size).toBe(1);
   });
 
   it('gives every gun a Gunner sprite of its own (ID-046)', () => {

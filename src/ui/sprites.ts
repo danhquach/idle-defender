@@ -143,6 +143,9 @@ export const ART_IDS = [
   'cracks',
   'wall-chips',
   'wall-breach',
+  'wall-spikes',
+  'wall-brace',
+  'slow-field',
   'wood-gate',
   'metal-gate',
   'reinforced-gate',
@@ -451,13 +454,6 @@ export const TIER_ART: Readonly<
     rubble: 'reinforced-rubble',
   },
 };
-/**
- * The share of a gate's art width its posts fill: the wall's depth. The leaves swung
- * open stick out past it, over the field. tools/art/build.py pads every gate to its
- * own `GATE_POSTS`, which must be the same number.
- */
-export const GATE_POSTS = 0.6;
-
 /** Everything else the horde view draws. */
 export const BASE_ART = {
   /** Ground tile variants sharing one seam border (ID-050); the first sets the tile size. */
@@ -475,6 +471,10 @@ export const BASE_ART = {
   /** Wall damage stages over the cracks (ID-072): pieces chipped out, then a section broken through. */
   chips: 'wall-chips',
   breach: 'wall-breach',
+  /** Barrier cards on the wall (ID-075): Spiked Walls' stakes, Reinforce's brace, the Slow Field's tar. */
+  spikes: 'wall-spikes',
+  brace: 'wall-brace',
+  slowField: 'slow-field',
   shield: 'shield',
 } as const satisfies Record<string, ArtId | readonly ArtId[] | Record<string, ArtId>>;
 

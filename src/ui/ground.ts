@@ -3,7 +3,7 @@
 // scattered over both, painted once into a field-sized canvas the renderer draws whole,
 // so no tile edge can show at any zoom. Past the field's edges a seeded block of the
 // same tiles repeats without end (ID-057), so no bare background shows at any zoom or pan.
-import { CAMP, COLUMNS, FIELD, WALL } from '../core/data.ts';
+import { CAMP, CARD, COLUMNS, FIELD, WALL } from '../core/data.ts';
 import { createRng, int, pick } from '../core/rng.ts';
 import { BASE_ART, type Art, type ArtId } from './sprites.ts';
 
@@ -210,4 +210,59 @@ function paintYard(art: Art, px: number, height: number): OffscreenCanvas | null
   g.fillStyle = fade;
   g.fillRect(0, 0, yard.width, height);
   return yard;
+}
+
+/**
+ * The Slow Field's strip (ID-075), in world units: `CARD.slowField.reach` deep and the
+ * field's height, at `px` canvas pixels a unit. A faint pale `tint` with black tar
+ * splatters over it at `alpha`, each tile `tile` of the strip's depth wide, mirrored and
+ * staggered by a seed so the repeat doesn't show, the far `feather` share fading out.
+ */
+export const SLOW_FIELD = {
+  px: 2,
+  tint: { colour: '#c9b27a', alpha: 0.1 },
+  alpha: 0.4,
+  tile: 0.7,
+  feather: 0.4,
+} as const;
+const slowFields: Painted = new WeakMap();
+
+/** The Slow Field's strip painted once per set of art; null as `groundCanvas`. */
+export function slowFieldCanvas(art: Art): OffscreenCanvas | null {
+  return once(slowFields, art, paintSlowField);
+}
+
+function paintSlowField(art: Art): OffscreenCanvas | null {
+  const { px } = SLOW_FIELD;
+  const w = CARD.slowField.reach * px;
+  const h = FIELD.height * px;
+  const canvas = new OffscreenCanvas(w, h);
+  const g = canvas.getContext('2d');
+  if (!g) return null;
+  g.globalAlpha = SLOW_FIELD.tint.alpha;
+  g.fillStyle = SLOW_FIELD.tint.colour;
+  g.fillRect(0, 0, w, h);
+  const img = art[BASE_ART.slowField];
+  const tw = w * SLOW_FIELD.tile;
+  const th = (tw * img.height) / img.width;
+  const rng = createRng(GROUND_SEED + 75);
+  g.globalAlpha = SLOW_FIELD.alpha;
+  for (let r = 0, y = -th / 2; y < h; r++, y += th * 0.8) {
+    for (let x = (r % 2 ? -tw / 2 : 0) - int(rng, 0, Math.round(tw / 4)); x < w; x += tw) {
+      g.save();
+      g.translate(x + tw / 2, y + th / 2);
+      g.scale(int(rng, 0, 1) ? -1 : 1, int(rng, 0, 1) ? -1 : 1);
+      g.drawImage(img, -tw / 2, -th / 2, tw, th);
+      g.restore();
+    }
+  }
+  // The far edge fades out, so the strip has no hard line across the field.
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'destination-out';
+  const fade = g.createLinearGradient(w * (1 - SLOW_FIELD.feather), 0, w, 0);
+  fade.addColorStop(0, 'rgba(0,0,0,0)');
+  fade.addColorStop(1, 'rgba(0,0,0,1)');
+  g.fillStyle = fade;
+  g.fillRect(0, 0, w, h);
+  return canvas;
 }

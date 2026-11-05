@@ -35,13 +35,7 @@ Manifest asset keys (unknown keys stop the build):
   holding each gun is drawn from the weaponless body part and that weapon's part),
   style (the manifest style to use instead of its kind's: a
   weapon on its own is generated with the `object` style; the empty `verbatim`
-  style means the prompt was sent as it is, with no style added), ajar (a
-  gate generated closed and straight, top to bottom, has its two leaves swung
-  a little open toward the field, ID-054: `hinges` are the generation's rows
-  where the leaves meet their posts, `seam` the row where they meet each other,
-  `swing` how far right a leaf's free end moves per row of its length, and
-  `length` the share of its length a swung leaf still shows from above; the
-  passage the leaves leave behind is filled with PASSAGE), pose (ID-069: the
+  style means the prompt was sent as it is, with no style added), pose (ID-069: the
   generation is an edit of a coloured puppet drawn by tools/art/puppets.py and
   kept at art-src/poses/<pose>.png, which fixes the frame's pose; the puppet is the
   first image sent and any `ref` follows it, as what the figure takes on, such as a
@@ -80,7 +74,7 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
-    "palette", "edge", "part", "style", "photo", "ajar", "white", "pose", "frames",
+    "palette", "edge", "part", "style", "photo", "white", "pose", "frames",
 }
 POSES = ROOT / "art-src" / "poses"
 # The column each puppet family stands on in its 512 px canvas (tools/art/puppets.py:
@@ -102,11 +96,6 @@ MUTED = 0.7
 KEY_IN, KEY_OUT = 50, 110
 # Shapes smaller than this share of the biggest one are dropped as specks.
 KEEP = 0.04
-# The shadowed way through an ajar gate (ID-054), and the share of its sprite's width
-# its posts fill: the rest is room for the leaves. src/ui/sprites.ts `GATE_POSTS` must
-# be the same number.
-PASSAGE = (28, 22, 18)
-GATE_POSTS = 0.6
 # A variant family blends to its shared border over the outer 1 / NARROW of each
 # half tile; any other texture blends over the whole half.
 NARROW = 4
@@ -182,53 +171,8 @@ def strip_metadata(path: Path) -> None:
         path.write_bytes(out)
 
 
-def ajar(img: Image.Image, spec: dict) -> Image.Image:
-    """
-    A closed straight gate with each leaf swung out to the right about its post: a
-    leaf's rows shift right the further they are from its hinge, and it shows only
-    `length` of itself, so a gap opens between the leaves onto the passage.
-    """
-    a = np.asarray(img.convert("RGB")).astype(np.int16)
-    solid = (np.minimum(a[..., 0], a[..., 2]) - a[..., 1]) < KEY_IN
-    out = a.copy()
-    (top, bottom), seam = spec["hinges"], spec["seam"]
-    if bottom >= a.shape[0]:
-        sys.exit(f"ajar: bottom hinge {bottom} is past the generation's {a.shape[0]} rows")
-    out[top:bottom][solid[top:bottom]] = PASSAGE
-    for y in range(top, bottom):
-        upper = y < seam
-        hinge, span = (top, seam - top) if upper else (bottom, bottom - seam)
-        shown = abs(y - hinge)
-        if shown > spec["length"] * span:
-            continue
-        along = shown / spec["length"]
-        src = round(hinge + along if upper else hinge - along)
-        xs = np.nonzero(solid[src])[0]
-        to = xs + round(spec["swing"] * along)
-        fits = to < a.shape[1]
-        out[y, to[fits]] = a[src, xs[fits]]
-    return Image.fromarray(out.astype(np.uint8), "RGB")
-
-
-def gate_width(img: Image.Image, post_row: int, name: str) -> Image.Image:
-    """An ajar gate padded on the right so its posts fill exactly GATE_POSTS of its width."""
-    if not 0 <= post_row < img.height:
-        sys.exit(f"{name}: its top hinge is above the gate's posts")
-    solid = np.nonzero(np.asarray(img)[post_row, :, 3] > 128)[0]
-    if not len(solid):
-        sys.exit(f"{name}: no post at its top hinge")
-    width = round((int(solid.max()) + 1) / GATE_POSTS)
-    if img.width > width:
-        sys.exit(f"{name}: its leaves swing wider than its posts leave room for")
-    padded = Image.new("RGBA", (width, img.height))
-    padded.paste(img)
-    return padded
-
-
 def prepare(img: Image.Image, asset: dict) -> Image.Image:
-    """A sprite opened (if ajar), keyed out, cleaned, trimmed, flipped and muted, at source size."""
-    if "ajar" in asset:
-        img = ajar(img, asset["ajar"])
+    """A sprite keyed out, cleaned, trimmed, flipped and muted, at source size."""
     img = keep_biggest(key_out(img))
     box = img.getbbox()
     if box is None:
@@ -236,8 +180,6 @@ def prepare(img: Image.Image, asset: dict) -> Image.Image:
     # A frame keeps its whole canvas here; its set is trimmed together (frames_trimmed).
     if "frames" not in asset:
         img = img.crop(box)
-    if "ajar" in asset:
-        img = gate_width(img, (asset["ajar"]["hinges"][0] - box[1]) // 2, asset["id"])
     if asset.get("flip"):
         img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
     if asset.get("white") or not asset.get("mutant"):
@@ -350,26 +292,6 @@ def check_seams(tiles: list[Image.Image], name: str) -> None:
                 sys.exit(f"{name}: variants do not share their seam border")
 
 
-def ajar_ok(spec: object, asset: dict) -> bool:
-    """An unflipped sprite's ajar: whole-pixel hinges around the seam, swing and length."""
-    if asset["kind"] != "sprite" or asset.get("flip") or not isinstance(spec, dict):
-        return False
-    if set(spec) != {"hinges", "seam", "swing", "length"}:
-        return False
-    hinges, seam = spec["hinges"], spec["seam"]
-    if not (isinstance(hinges, list) and len(hinges) == 2):
-        return False
-    if not all(isinstance(v, int) and not isinstance(v, bool) for v in [*hinges, seam]):
-        return False
-    numbers = all(isinstance(spec[k], (int, float)) for k in ("swing", "length"))
-    return (
-        numbers
-        and 0 <= hinges[0] < seam < hinges[1]
-        and 0 < spec["length"] <= 1
-        and 0 <= spec["swing"] < 1
-    )
-
-
 def check(
     asset: dict,
     models: set[str],
@@ -415,9 +337,6 @@ def check(
             sys.exit(f"{name}: {key} must be a texture's, on a texture")
     if "edge" in asset and ("palette" in asset or asset["edge"] in variants):
         sys.exit(f"{name}: an edge takes its root's palette, and a root has no edge of its own")
-    spec = asset.get("ajar")
-    if spec is not None and not ajar_ok(spec, asset):
-        sys.exit(f"{name}: ajar is hinges [top, bottom] with a seam between, swing and length")
     if not re.fullmatch(r"[a-z]+(-[a-z]+)*", name):
         sys.exit(f"{name}: ids are lower-case words joined by hyphens")
     pose = asset.get("pose")
@@ -434,13 +353,12 @@ def check(
         or not isinstance(frames, str)
         or not re.fullmatch(r"[a-z]+(-[a-z]+)*", frames)
         or "group" in asset
-        or "ajar" in asset
         or asset.get("part")
         or (pose is None and not (isinstance(asset.get("ref"), str) and asset["ref"] in posed))
     ):
         sys.exit(
             f"{name}: frames names a set, on a posed sprite (or a repaint of one) "
-            "with no group, ajar or part"
+            "with no group or part"
         )
 
 

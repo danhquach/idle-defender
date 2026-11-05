@@ -25,6 +25,8 @@ import {
 } from '../core/data.ts';
 import {
   burning,
+  slowField,
+  took,
   turretState,
   type Arc,
   type Bullet,
@@ -52,7 +54,10 @@ import {
   postFloor,
   project,
   TILT,
+  WALL_CARD,
   WALL_HIT,
+  fadeAfter,
+  wallPulse,
   wallHeight,
   wallHitFade,
   wallStage,
@@ -60,7 +65,14 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
-import { GROUND_TILE, groundCanvas, SURROUND_BLOCK, surroundCanvas } from './ground.ts';
+import {
+  GROUND_TILE,
+  groundCanvas,
+  SLOW_FIELD,
+  slowFieldCanvas,
+  SURROUND_BLOCK,
+  surroundCanvas,
+} from './ground.ts';
 import {
   conditionOf,
   FENCE,
@@ -89,7 +101,6 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
-  GATE_POSTS,
   GUNNER_LOOKS,
   lookOf,
   SKILL_ART,
@@ -130,6 +141,13 @@ const COLOR = {
   hpFill: '#5ec24a',
   /** A wall segment's flash as a blow lands (ID-072): warm, so it shows on a pale concrete top. */
   wallHit: '#ffb070',
+  /** The wall's pulse as a barrier card is picked (ID-075): cool, so it never reads as a hit. */
+  wallPulse: '#b8f4ec',
+  /** A segment a repair card heals (ID-075). */
+  wallRepair: '#7fe08c',
+  /** Spiked Walls' stakes biting an enemy that strikes the wall (ID-075). */
+  spikeHit: '#fff0b8',
+  spikeCore: '#e0a020',
   hpEdge: '#1b1a18',
   conditionBack: '#111110',
   conditionFill: '#a9c4d6',
@@ -317,7 +335,8 @@ export type Scene = Pick<
 > &
   // A Power Surge lights turrets on an empty bank (design §8); build mode has none.
   // `acc`, the fight time since its last step, carries bullets on between steps (ID-070).
-  Partial<Pick<HordeState, 'wave' | 'freeWave' | 'acc'>> & {
+  // The barrier cards taken show on the wall (ID-075); build mode has none.
+  Partial<Pick<HordeState, 'wave' | 'freeWave' | 'acc' | 'taken' | 'barrierAt'>> & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
     pace?: number;
   };
@@ -823,11 +842,33 @@ function drawOnPart(
   ctx.restore();
 }
 
+/** The barrier cards a fight's wall shows (ID-075); none in the build scene. */
+interface WallCards {
+  spiked: boolean;
+  reinforced: boolean;
+  /** When the latest barrier card was picked. */
+  pickedAt: number | undefined;
+  /** The game speed shown: the pulse and repair glow last the same real time at any speed. */
+  pace: number;
+  /** Reduce motion: a repair's sparks stay put instead of floating up. */
+  still: boolean;
+}
+const NO_CARDS: WallCards = {
+  spiked: false,
+  reinforced: false,
+  pickedAt: undefined,
+  pace: 1,
+  still: true,
+};
+
 /**
  * A wall segment in its tier's textures, lower as it takes damage, looking worse in
  * stages (ID-072): cracks, then pieces chipped out, then a section broken through; a
- * gate's top is its tier's gate, posts in line with the wall and the leaves ajar toward
- * the field; a broken one is its tier's rubble. Just hit, it flashes pale orange and shakes.
+ * gate's top is its tier's sliding gate, closed and flush with the segments beside it
+ * (ID-075); a broken one is its tier's rubble. Just hit, it flashes pale orange and
+ * shakes. Standing, it shows the barrier cards taken (ID-075): Reinforce's brace under the
+ * damage, Spiked Walls' bite as its stakes (drawn under every sprite) hurt an enemy, a
+ * pulse as any barrier card is picked and a green glow as a repair card heals it.
  */
 function drawSegment(
   ctx: CanvasRenderingContext2D,
@@ -836,22 +877,156 @@ function drawSegment(
   seg: Layer['segments'][number],
   time: number,
   cam: Camera,
+  cards: WallCards = NO_CARDS,
 ): void {
-  const hit = seg.hp > 0 ? wallHitFade(time, seg.hitAt) : 0;
+  const standing = seg.hp > 0;
+  const hit = standing ? wallHitFade(time, seg.hitAt) : 0;
   if (hit > 0) {
     ctx.save();
     ctx.translate(Math.sin(hit * Math.PI * 6) * hit * WALL_HIT.shake * cam.zoom, 0);
   }
-  drawSegmentBody(ctx, art, layer, seg, cam);
-  if (hit > 0) {
-    const f = faces(segmentBox(layer, seg), cam);
-    ctx.globalAlpha = WALL_HIT.flash * hit;
-    ctx.fillStyle = COLOR.wallHit;
+  drawSegmentBody(ctx, art, layer, seg, cam, standing && cards.reinforced);
+  // Worked out only when a glow shows, so a quiet segment costs no more than before.
+  let f: ReturnType<typeof faces> | undefined;
+  const glow = (style: string, alpha: number): void => {
+    if (alpha <= 0) return;
+    f ??= faces(segmentBox(layer, seg), cam);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = style;
     ctx.fillRect(f.top.sx, f.top.sy, f.top.w, f.top.h);
     ctx.fillRect(f.front.sx, f.front.sy, f.front.w, f.front.h);
     ctx.globalAlpha = 1;
+  };
+  if (standing) {
+    if (cards.spiked) drawSpikeBite(ctx, layer, seg, time, cam);
+    glow(COLOR.wallPulse, WALL_CARD.pulse.alpha * wallPulse(time, cards.pickedAt, cards.pace));
+    const repair = fadeAfter(time, seg.repairAt, WALL_CARD.repair.time * cards.pace);
+    glow(COLOR.wallRepair, WALL_CARD.repair.alpha * repair);
+    if (repair > 0) drawRepairSparks(ctx, layer, seg, repair, cards.still, cam);
+  }
+  if (hit > 0) {
+    glow(COLOR.wallHit, WALL_HIT.flash * hit);
     ctx.restore();
   }
+}
+
+/**
+ * Spiked Walls (ID-075): a row of stakes along each standing segment's field edge, on its
+ * top and reaching over the ground in front, where the camera sees it. Drawn before every
+ * sprite, so the enemies stopped at the wall (inside the stakes' reach) stand over them;
+ * the segment drawn later covers the stakes' foot on its top.
+ */
+function drawStakes(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  layers: readonly Layer[],
+  cam: Camera,
+) {
+  for (const layer of layers) {
+    for (const seg of layer.segments) {
+      if (seg.kind === null || seg.tier === null || !(seg.hp > 0)) continue;
+      const box = segmentBox(layer, seg);
+      const face = layer.x + WALL.depth;
+      const a = project({ x: face - WALL_CARD.spike.in, y: box.y0, z: box.height }, cam);
+      const b = project({ x: face + WALL_CARD.spike.out, y: box.y1, z: box.height }, cam);
+      ctx.drawImage(art[BASE_ART.spikes], a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
+    }
+  }
+}
+
+/** As the stakes hurt an enemy striking the wall, a short pale burst with a warm core at their middle. */
+function drawSpikeBite(
+  ctx: CanvasRenderingContext2D,
+  layer: Layer,
+  seg: Layer['segments'][number],
+  time: number,
+  cam: Camera,
+): void {
+  const box = segmentBox(layer, seg);
+  const z = box.height;
+  const face = layer.x + WALL.depth;
+  const bite = fadeAfter(time, seg.spikeAt, WALL_CARD.spike.time);
+  if (bite <= 0) return;
+  const c = project({ x: face + WALL_CARD.spike.out / 2, y: (box.y0 + box.y1) / 2, z }, cam);
+  const reach = (2 + 4 * bite) * cam.zoom;
+  ctx.save();
+  ctx.globalAlpha = WALL_CARD.spike.alpha * bite;
+  ctx.strokeStyle = COLOR.spikeHit;
+  ctx.lineWidth = Math.max(1, cam.zoom);
+  ctx.beginPath();
+  for (let k = 0; k < 5; k++) {
+    const ang = -Math.PI / 2 + (k * Math.PI) / 4;
+    ctx.moveTo(c.sx, c.sy);
+    ctx.lineTo(c.sx + Math.cos(ang) * reach, c.sy + Math.sin(ang) * reach * TILT);
+  }
+  ctx.stroke();
+  // A warm core, so the bite shows on a pale concrete wall as well as a dark one.
+  ctx.fillStyle = COLOR.spikeCore;
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, Math.max(1.5, 1.6 * cam.zoom * bite), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** A repair's sparks (ID-075): three small pale-green crosses over the healed top, floating up as they fade. */
+function drawRepairSparks(
+  ctx: CanvasRenderingContext2D,
+  layer: Layer,
+  seg: Layer['segments'][number],
+  left: number,
+  still: boolean,
+  cam: Camera,
+): void {
+  const box = segmentBox(layer, seg);
+  const rise = still ? 0 : WALL_CARD.repair.rise * (1 - left);
+  const arm = 2.5 * cam.zoom;
+  ctx.save();
+  ctx.globalAlpha = left;
+  ctx.strokeStyle = COLOR.wallRepair;
+  ctx.lineWidth = Math.max(1, 1.2 * cam.zoom);
+  ctx.beginPath();
+  for (const [x, y] of [
+    [0.3, 0.25],
+    [0.7, 0.5],
+    [0.35, 0.78],
+  ] as const) {
+    const p = project(
+      {
+        x: layer.x + WALL.depth * x,
+        y: box.y0 + (box.y1 - box.y0) * y,
+        z: box.height + 2 + rise,
+      },
+      cam,
+    );
+    ctx.moveTo(p.sx - arm, p.sy);
+    ctx.lineTo(p.sx + arm, p.sy);
+    ctx.moveTo(p.sx, p.sy - arm);
+    ctx.lineTo(p.sx, p.sy + arm);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Slow Field (ID-075): the strip it slows, in front of the outermost layer with a segment
+ * standing, under every sprite: a faint tint with sticky tar, fading out at its far edge,
+ * painted once (ground.ts) and stretched over the strip. Where the browser can't paint
+ * it, the tint alone shows.
+ */
+function drawSlowField(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
+  const field = slowField({ taken: scene.taken ?? [], layers: scene.layers });
+  if (!field) return;
+  const a = project({ x: field.from, y: 0 }, cam);
+  const b = project({ x: field.to, y: FIELD.height }, cam);
+  const painted = slowFieldCanvas(art);
+  if (painted) {
+    ctx.drawImage(painted, a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
+    return;
+  }
+  ctx.globalAlpha = SLOW_FIELD.tint.alpha;
+  ctx.fillStyle = SLOW_FIELD.tint.colour;
+  ctx.fillRect(a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
+  ctx.globalAlpha = 1;
 }
 
 /** A segment's box: its slot, as tall as its HP leaves it. */
@@ -873,6 +1048,7 @@ function drawSegmentBody(
   layer: Layer,
   seg: Layer['segments'][number],
   cam: Camera,
+  reinforced: boolean,
 ): void {
   const tier = TIER_ART[seg.tier!];
   const box = segmentBox(layer, seg);
@@ -883,9 +1059,14 @@ function drawSegmentBody(
   }
   drawBox(ctx, box, art[tier.top], art[tier.front], cam);
   const f = faces(box, cam);
-  if (seg.kind === 'gate') {
-    const gate = art[tier.gate];
-    ctx.drawImage(gate, f.top.sx, f.top.sy, f.top.w / GATE_POSTS, f.top.h);
+  // The sliding gate fills the segment's top, closed and flush with its neighbours (ID-075).
+  if (seg.kind === 'gate') ctx.drawImage(art[tier.gate], f.top.sx, f.top.sy, f.top.w, f.top.h);
+  // Reinforce's brace lies under the damage, so the damage stages still show (ID-075).
+  if (reinforced) {
+    ctx.globalAlpha = WALL_CARD.brace.alpha;
+    ctx.drawImage(art[BASE_ART.brace], f.top.sx, f.top.sy, f.top.w, f.top.h);
+    ctx.drawImage(art[BASE_ART.brace], f.front.sx, f.front.sy, f.front.w, f.front.h);
+    ctx.globalAlpha = 1;
   }
   if (stage === 0) return;
   // The top is what the fight's camera sees most of; the cracks run down the front too.
@@ -1738,7 +1919,21 @@ export function drawScene(
     if (bottom < view.h) ctx.fillRect(0, bottom, view.w, view.h - bottom);
   }
 
-  // Traps lie flat on the ground, under every sprite.
+  // The barrier cards the wall shows (ID-075); none in the build scene.
+  const taken = { taken: scene.taken ?? [] };
+  const cards: WallCards = build
+    ? NO_CARDS
+    : {
+        spiked: took(taken, 'spiked-walls'),
+        reinforced: took(taken, 'reinforce'),
+        pickedAt: scene.barrierAt,
+        pace: Math.max(1, scene.pace ?? 1),
+        still: anim?.reduced ?? true,
+      };
+  // The Slow Field's strip (ID-075) and traps lie flat on the ground, under every sprite,
+  // and Spiked Walls' stakes go under them too, so the enemies at the wall stand over them.
+  if (!build) drawSlowField(ctx, art, scene, cam);
+  if (cards.spiked) drawStakes(ctx, art, scene.layers, cam);
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
   // Molotov fires burn on the ground too, see-through, flaring up and dying down.
   for (const f of scene.fires) {
@@ -1760,7 +1955,7 @@ export function drawScene(
       sprites.push({
         y: seg.index * SEGMENT_HEIGHT + SEGMENT_HEIGHT / 2,
         x: layer.x + WALL.depth + 0.5,
-        draw: () => drawSegment(ctx, art, layer, seg, scene.time, cam),
+        draw: () => drawSegment(ctx, art, layer, seg, scene.time, cam, cards),
       });
     }
   }
