@@ -538,7 +538,7 @@ close-quarter weapons come out only when an enemy is close.
   | Sniper rifle | 22 | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 1 |
 
   Balance (a lone Common-gun Gunner on the upper tower against 20-HP Shamblers
-  held in place; kills, mean of the seeds; `balance.test.ts`):
+  held in place; kills, mean of the seeds; `balance/guns.test.ts`):
 
   | Gun | Close crowd, 20 s | Far (530–830 px), 20 s | Lane, 20 s | Sustained, 60 s | Horde 4 wins (Bob's gun + pistol) |
   |---|---|---|---|---|---|
@@ -1520,7 +1520,7 @@ As built (ID-066), the horde-only build:
 - **Pacing:** a boss horde every 10th horde. Winning Horde 10 shows a soft
   ending ("You held Horde 10", Continue) and play goes on; there is no win
   state.
-- **Balance** (scripted player, 20 seeds, `balance.test.ts`): the expected
+- **Balance** (scripted player, 20 seeds, `balance/horde-only.test.ts`): the expected
   squad (a survivor more per win, every point in Aim, damage cards first)
   wins each of Hordes 1–10 at the first try on at least 60% of seeds, and
   every campaign beats Horde 10's boss; the lone starting survivor wins
@@ -2075,7 +2075,7 @@ original outline.
   for its Paths), so the starting points here can be tuned without code
   changes.
   The simulator (`src/core/sim.ts`) plays hordes headless with a fixed
-  scripted player; `src/core/balance.test.ts` holds the targets (Horde 1
+  scripted player; the tests in `src/core/balance/` hold the targets (Horde 1
   always won, Hordes 1–2 in 3–5 minutes, difficulty rising, a win paying
   for its repairs, a camp that doesn't build stalling by Horde 5), and
   `npm run balance` (Node 22.6 or later) prints the full table for tuning.

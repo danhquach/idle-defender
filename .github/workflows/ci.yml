@@ -16,13 +16,31 @@ jobs:
   build:
     name: Lint, unit, build
     runs-on: ubuntu-latest
+    # A normal run takes a few minutes; a hung simulation must not hold the runner for hours.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        id: node
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # node_modules as npm ci left it, for these dependencies and this Node version: a hit
+      # skips npm ci. The key leaves out the project's own version, which every PR raises;
+      # any dependency change in package.json or package-lock.json misses, so npm ci runs
+      # and still refuses a lockfile that doesn't match package.json.
+      - name: Dependency fingerprint
+        id: deps
+        run: |
+          hash=$(node tools/deps-hash.mjs)
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: modules
+        with:
+          path: node_modules
+          key: modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-${{ steps.deps.outputs.hash }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Version raised over main's
         # Each PR to main raises the game's version. Dependabot's PRs never bump it
         # and are let through.
