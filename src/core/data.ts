@@ -17,6 +17,33 @@ export const SEGMENT_HEIGHT = FIELD.height / SEGMENTS;
 /** The starting layer's gate row and tower rows (design §11): the gate near the middle. */
 export const START_BASE = { gate: 5, towers: [4, 6] } as const;
 
+// --- Horde-only build (ID-066): one loop, fight a horde → result → next horde. ---
+/**
+ * The one switch for the horde-only build: the world map, patrols, the build panel,
+ * research, the workbench, the camp level and the perk screen can't be reached, and a
+ * new game is the horde-only preset. Their code and state stay, to come back later.
+ */
+export const HORDE_ONLY = true;
+/** The most survivors in the squad; one more joins after each win until then. */
+export const SQUAD_CAP = 6;
+/**
+ * The horde-only base's tower rows on its one layer, in the order survivors take them:
+ * from the middle out, either side of the gate, a row apart so nobody stands in front of
+ * the tower behind them (the sixth can't be: ten rows hold five such towers).
+ */
+export const SQUAD_TOWERS = [4, 6, 2, 8, 0, 9] as const;
+/** The horde-only wall's tier (one layer, full HP every horde). */
+export const SQUAD_WALL: Tier = 'concrete';
+/**
+ * Enemy HP's growth per horde in the horde-only build: `early` up to the squad's cap (each
+ * win adds a survivor), then `late` (the squad grows only by levels until guns drop).
+ */
+export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.03 } as const;
+/** Survivor XP for a horde-only win, as a multiple of the full game's (`DEFENDER_XP`). */
+export const SQUAD_XP_RATE = 2;
+/** The horde whose win shows the soft ending screen (design §11); play goes on after it. */
+export const ENDING_HORDE = 10;
+
 /** A Shambler's body radius, and a defender's: the default body size. */
 export const ENEMY_RADIUS = 12;
 /** Most a crowded enemy is pushed aside per second. */

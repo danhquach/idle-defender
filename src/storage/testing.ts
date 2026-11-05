@@ -33,9 +33,16 @@ export function preCamp(game: GameState): Record<string, unknown> {
   return json;
 }
 
+/** `game` as JSON from before ID-066 (v11 and older): no reserve. */
+export function preReserve(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete json.reserve;
+  return json;
+}
+
 /** `game` as JSON from before ID-035 (v10 and older): no research queue or perk levels. */
 export function preQueue(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preReserve(game);
   delete json.queue;
   delete json.perkLevels;
   return json;

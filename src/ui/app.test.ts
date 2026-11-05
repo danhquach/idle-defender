@@ -18,6 +18,12 @@ import { MOTION_KEY, SPEED_KEY } from '../storage/settings.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
 
+// The full game's wiring (build panel, build scene), kept for when it comes back: these
+// run with the horde-only flag off. The horde-only build's wiring is in app-squad.test.ts.
+vi.mock('../core/data.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/data.ts')>()),
+  HORDE_ONLY: false,
+}));
 vi.mock('../core/horde.ts', async (importOriginal) => {
   const real = await importOriginal<typeof import('../core/horde.ts')>();
   return { ...real, tick: vi.fn(real.tick) };

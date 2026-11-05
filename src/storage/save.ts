@@ -43,6 +43,7 @@ import {
   CAMP_UPGRADES,
   CAR,
   COLUMNS,
+  HORDE_ONLY,
   HORROR,
   ITEMS,
   buildingsOf,
@@ -67,6 +68,7 @@ import {
   RESEARCH_IDS,
   revealOf,
   SEGMENTS,
+  SQUAD_CAP,
   STATS,
   SURVIVOR,
   TIER_ORDER,
@@ -90,6 +92,7 @@ import {
   type Tier,
 } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
+import { capSquad } from '../core/hordeonly.ts';
 import {
   focusOptions,
   partyStrength,
@@ -118,6 +121,10 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 12 since the horde-only build (ID-066): a v11 save has no reserve. Loaded into this
+ * build, survivors past the squad's cap move to the reserve; every other field loads as
+ * it was, hidden or not.
+ *
  * 11 since research in Genes (ID-035): a v10 save has no research queue, and owns the
  * starting perk and each perk researched, at level 1.
  *
@@ -140,7 +147,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -265,21 +272,25 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
+  if (![SAVE_VERSION, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
   const savedAt = int(o.savedAt, 0, MAX_TIME);
   const ver = o.v as number;
   const materials = ver >= 4 ? MATERIALS : BUILDING_MATERIALS;
   const patrols = ver >= 8 ? 'plazas' : ver >= 6 ? 'risk' : ver === 5 ? 'patrols' : null;
   const camp = ver >= 7 ? (ver >= 10 ? 'cars' : ver === 9 ? 'survivors' : 'camp') : null;
   const queue = ver >= 11;
+  const reserve = ver >= 12;
   if (ver === 1) {
     return {
-      game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp, queue),
+      game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp, queue, reserve),
       savedAt,
       grew: true,
     };
   }
-  return { game: readGame(o.game, savedAt, GRID, materials, patrols, camp, queue), savedAt };
+  return {
+    game: readGame(o.game, savedAt, GRID, materials, patrols, camp, queue, reserve),
+    savedAt,
+  };
 }
 
 function readGame(
@@ -293,6 +304,8 @@ function readGame(
   hasCamp: 'camp' | 'survivors' | 'cars' | null,
   /** Whether the save has the research queue and perk levels (v11). */
   hasQueue: boolean,
+  /** Whether the save has the reserve (v12). */
+  hasReserve: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -320,6 +333,7 @@ function readGame(
     ...(patrols === 'risk' || patrols === 'plazas' ? ['leftBehind'] : []),
     ...(hasCamp ? ['camp'] : []),
     ...(hasQueue ? ['queue', 'perkLevels'] : []),
+    ...(hasReserve ? ['reserve'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -330,20 +344,24 @@ function readGame(
     : ownedLevels(research);
   const queue = hasQueue ? readQueue(o.queue, savedAt, { lab, research, perkLevels }) : newQueue();
   const patrolsSent = patrols ? int(o.patrolsSent, 0, PATROL.max) : 0;
-  const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent);
+  const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent, 1);
+  const reserve = hasReserve ? readRoster(o.reserve, savedAt, hordeNumber, patrolsSent, 0) : [];
+  // The checks below treat the reserve as the roster it came from: one camp of people.
+  const everyone = [...roster, ...reserve];
+  if (new Set(everyone.map((d) => d.id)).size !== everyone.length) fail('id twice');
   const cars = hasCamp === 'cars';
   const survivors = hasCamp === 'survivors' || cars;
   const risk = patrols === 'risk' || patrols === 'plazas';
   const plazas = patrols === 'plazas';
   const out = patrols
-    ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, roster, plazas, cars)
+    ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, everyone, plazas, cars)
     : [];
   const game: GameState = {
     hordeNumber,
     base: readBase(o.base, tiers, research.includes('auto-turret'), grid),
     stock: readStock(o.stock, materials),
     tiers,
-    roster,
+    roster: everyone,
     armoury: old.armoury
       ? []
       : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber, patrolsSent)),
@@ -360,12 +378,16 @@ function readGame(
       : [],
     leftBehind: risk ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent, plazas) : [],
     camp: hasCamp ? readCamp(o.camp, savedAt, survivors, cars, carLimit({ research })) : newCamp(),
+    reserve: [],
   };
   // Each car out is one the camp built, on one patrol at a time.
   const taken = out.flatMap((p) => (p.car === null ? [] : [p.car]));
   if (taken.some((c) => c >= game.camp.cars)) fail('car not built');
   if (new Set(taken).size !== taken.length) fail('car on two patrols');
-  if (game.roster.length > campSlots(game)) fail('more people than camp slots');
+  // The horde-only squad grows to its cap whatever the camp's slots (ID-066), and such a
+  // save still loads once the full game is back.
+  const room = Math.max(campSlots(game), SQUAD_CAP);
+  if (game.roster.length > room) fail('more people than camp slots');
   // A free recruit's number comes from the camp's count, so the next one is always new.
   for (const d of game.roster) {
     const n = RECRUIT.exec(d.id)?.[1];
@@ -405,7 +427,10 @@ function readGame(
     if (m && Number(m[3] ?? 0) > level) fail('survivor from the future');
   }
   // Loading a save is between hordes: batteries waiting in storage go into the bank.
-  return loadBatteries(game);
+  // The horde-only build fights with a squad of at most SQUAD_CAP; the full game takes
+  // the reserve back onto the roster.
+  const loaded = loadBatteries(game);
+  return HORDE_ONLY ? capSquad({ ...loaded, roster, reserve }) : loaded;
 }
 
 /**
@@ -792,8 +817,10 @@ function readRoster(
   savedAt: number,
   hordeNumber: number,
   patrolsSent: number,
+  /** Fewest it may hold: 1 for the roster, 0 for the reserve. */
+  min: number,
 ): RosterDefender[] {
-  const list = arr(v, 1, MAX_ROSTER);
+  const list = arr(v, min, MAX_ROSTER);
   const lacks = (key: string): boolean =>
     list.every((d) => typeof d === 'object' && d !== null && !Object.hasOwn(d, key));
   // A save from before stats (0.4.1 and older) has none on any defender: all 0.

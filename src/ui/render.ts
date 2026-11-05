@@ -476,14 +476,14 @@ function drawHpBar(
   ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, hp / maxHp), h);
 }
 
-/** A titled defender's badge: their top title's colour, one dark pip per rank. */
+/** A titled defender's badge: their top title's colour, one dark pip per rank; none for a plain survivor (ID-066). */
 function drawBadge(
   ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y' | 'stats'>,
+  d: Pick<Defender, 'x' | 'y' | 'stats' | 'plain'>,
   z0: number,
   cam: Camera,
 ): void {
-  const badge = d.stats ? badgeOf(d.stats) : null;
+  const badge = d.stats && !d.plain ? badgeOf(d.stats) : null;
   if (!badge) return;
   const at = project({ x: d.x, y: d.y, z: z0 + DEFENDER.height + HP_BAR.gap + BADGE.z }, cam);
   const pip = BADGE.pip * cam.zoom;
@@ -507,7 +507,7 @@ function drawBadge(
 function drawDefender(
   ctx: CanvasRenderingContext2D,
   art: Art,
-  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'loadout' | 'stats'>,
+  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'loadout' | 'stats' | 'plain'>,
   z0: number,
   selected: boolean,
   cam: Camera,

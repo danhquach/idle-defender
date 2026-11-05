@@ -2,7 +2,7 @@
 // panel between hordes and the HUD in a fight.
 import { recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
-import { SKILLS, type SkillId, type Stat } from '../core/data.ts';
+import { HORDE_ONLY, SKILLS, type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -20,6 +20,7 @@ import {
   tick,
   type HordeState,
 } from '../core/horde.ts';
+import { finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
 import { advanceResearch } from '../core/research.ts';
@@ -46,7 +47,14 @@ import {
   plotsOf,
   targetAt,
 } from './buildscene.ts';
-import { createHud, defenderLabel, resultScreen, SPEED_KEYS } from './hud.ts';
+import {
+  createHud,
+  defenderLabel,
+  resultScreen,
+  SPEED_KEYS,
+  squadScreen,
+  squadStart,
+} from './hud.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import {
@@ -103,9 +111,12 @@ export function start(root: HTMLElement, art: Art): void {
   // reload mid-horde comes back to the camp as it was before it.
   const storage = browserStorage();
   const loaded = storage ? loadSave(storage) : { save: null, rejected: false };
-  let game: GameState = loaded.save?.game ?? newGame();
+  let game: GameState = loaded.save?.game ?? newGame(HORDE_ONLY ? 'horde' : 'full');
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
+  // The horde-only build between hordes (ID-066): the next horde, set up but not started,
+  // drawn behind its start screen.
+  let preview: HordeState | null = null;
   // What the fight's animation remembers between frames (anim.ts); a new fight resets it.
   const animator = new Animator();
   animator.reduced = readReduceMotion(
@@ -135,6 +146,10 @@ export function start(root: HTMLElement, art: Art): void {
       if (horde?.offer) horde = chooseCard(horde, index);
     },
     () => {
+      if (HORDE_ONLY) {
+        squadNext();
+        return;
+      }
       if (!horde || endedAt === null) return;
       let next = finishHorde(game, horde, endedAt);
       for (const [id, stat] of spends) {
@@ -198,6 +213,44 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (next) => setSpeed(next),
   );
+  /**
+   * The horde-only result or start screen's button (ID-066): the stat points spent on the
+   * result screen are saved (the horde itself was taken in when it ended), then the next
+   * horde starts at once, or the same one again after a loss.
+   */
+  function squadNext(): void {
+    if (horde) {
+      if (endedAt === null) return;
+      let next = game;
+      for (const [id, stat] of spends) {
+        const r = spendPoint(next, id, stat);
+        if (r.ok) next = r.game;
+      }
+      commit(next);
+    }
+    // The seed is the only randomness from outside the core.
+    const now = Date.now();
+    startFight(startSquadHorde(game, now, now));
+  }
+  /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
+  function startFight(next: HordeState): void {
+    horde = next;
+    preview = null;
+    endedAt = null;
+    spends = [];
+    campPicks = [];
+    selected = null;
+    selectedDefender = null;
+    canvas.style.cursor = '';
+    hold(false);
+    // Into the fight frame: eased from the build frame, a hard cut with Reduce motion on
+    // or with no build frame (the horde-only build).
+    ease = animator.reduced || HORDE_ONLY ? null : { from: buildCam, at: null };
+    cam = fightCam;
+    panel?.hide();
+    hud.show(true);
+    menu.refresh();
+  }
   function setSpeed(next: Speed): void {
     if (next !== speed) writeSpeed(storage, next);
     speed = next;
@@ -208,40 +261,37 @@ export function start(root: HTMLElement, art: Art): void {
     hud.speed(speed, held);
   }
   hud.speed(speed, held);
-  const panel = createBuildPanel(
-    root,
-    (base, stock) => {
-      // A build is the player moving on: an old line at the foot of the panel goes.
-      panel.notice('');
-      commit({ ...game, base, stock });
-      panel.show(game, selected);
-    },
-    (defenderId, postId) => {
-      // The seed is the only randomness from outside the core.
-      const now = Date.now();
-      horde = startHorde(game, now, defenderId, postId, now);
-      endedAt = null;
-      spends = [];
-      campPicks = [];
-      selected = null;
-      selectedDefender = null;
-      canvas.style.cursor = '';
-      hold(false);
-      // Into the fight frame: eased from the build frame, a hard cut with Reduce motion on.
-      ease = animator.reduced ? null : { from: buildCam, at: null };
-      panel.hide();
-      hud.show(true);
-      menu.refresh();
-    },
-    (next) => {
-      commit(next);
-      panel.show(game, selected);
-    },
-  );
+  // The horde-only build has no build panel at all (ID-066), so nothing it opens (the
+  // world map, patrols, research, the workbench, the camp, perks) can be reached.
+  const panel = HORDE_ONLY
+    ? null
+    : createBuildPanel(
+        root,
+        (base, stock) => {
+          // A build is the player moving on: an old line at the foot of the panel goes.
+          panel?.notice('');
+          commit({ ...game, base, stock });
+          panel?.show(game, selected);
+        },
+        (defenderId, postId) => {
+          // The seed is the only randomness from outside the core.
+          const now = Date.now();
+          startFight(startHorde(game, now, defenderId, postId, now));
+        },
+        (next) => {
+          commit(next);
+          panel?.show(game, selected);
+        },
+      );
   /** Another camp from the menu (a loaded code, a new camp): saved and shown. */
   function replaceCamp(next: GameState): void {
     commit(next);
     selected = null;
+    if (!panel) {
+      // The menu only loads a camp between hordes: its start screen is up.
+      toBuild();
+      return;
+    }
     panel.forget();
     panel.notice('');
     panel.show(game, selected);
@@ -278,7 +328,8 @@ export function start(root: HTMLElement, art: Art): void {
     canvas.height = Math.round(view.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     fightCam = frameCamera(view, hud.bottomSpace());
-    buildCam = buildCamera(view, panel.room(view));
+    // The horde-only build shows the fight frame between hordes too.
+    buildCam = panel ? buildCamera(view, panel.room(view)) : fightCam;
     cam = horde ? fightCam : buildCam;
   }
   resize();
@@ -292,6 +343,16 @@ export function start(root: HTMLElement, art: Art): void {
     armed = null;
     ease = null;
     hold(false);
+    if (!panel) {
+      // The horde-only build (ID-066): the next horde's start screen over the squad on the wall.
+      preview = startSquadHorde(game, 0, Date.now());
+      hud.show(true);
+      hud.update(preview);
+      hud.showResult(squadStart(game));
+      cam = buildCam = fightCam;
+      menu.refresh();
+      return;
+    }
     hud.show(false);
     panel.show(game, selected);
     buildCam = buildCamera(view, panel.room(view));
@@ -303,15 +364,17 @@ export function start(root: HTMLElement, art: Art): void {
   else if (loaded.rejected) {
     // Said in the build panel too, so it is seen without opening the menu.
     menu.status('rejected');
-    panel.notice(SAVE_STATUS.rejected.text);
+    panel?.notice(SAVE_STATUS.rejected.text);
+    if (!panel) hud.toast(SAVE_STATUS.rejected.text);
   } else if (loaded.save?.grew) {
-    panel.notice(FIELD_GREW);
+    panel?.notice(FIELD_GREW);
   }
 
   // A fight isn't saved, and neither is its payout until "Back to build": while one
   // is on (or its result is up), leaving the page asks first.
+  // The horde-only build saves a horde as soon as it ends: only a fight still on asks.
   window.addEventListener('beforeunload', (e) => {
-    if (horde) e.preventDefault();
+    if (horde && !(HORDE_ONLY && endedAt !== null)) e.preventDefault();
   });
 
   // Keys pressed inside the open menu stay in it (menu.ts); Esc opens it when it has
@@ -327,7 +390,7 @@ export function start(root: HTMLElement, art: Art): void {
     if (act === 'disarm') armed = null;
     else if (act === 'slot') {
       selected = null;
-      panel.show(game, selected);
+      panel?.show(game, selected);
     } else if (act === 'defender') selectedDefender = null;
     else if (!e.repeat) menu.open();
   });
@@ -427,7 +490,7 @@ export function start(root: HTMLElement, art: Art): void {
       }
       if (enemyId === null) selectedDefender = null;
       horde = setFocus(horde, enemyId);
-    } else {
+    } else if (panel) {
       const hit = targetAt(ground.x, ground.y, game.base, plotsOf(game));
       if (hit && 'plot' in hit) {
         selected = null;
@@ -496,7 +559,15 @@ export function start(root: HTMLElement, art: Art): void {
       hud.update(horde, armed);
       if (horde.outcome !== 'fighting' && endedAt === null) {
         endedAt = Date.now();
-        hud.showResult(resultScreen(game, horde, endedAt));
+        hud.showResult(HORDE_ONLY ? squadScreen(game, horde) : resultScreen(game, horde, endedAt));
+        // Horde-only (ID-066): XP and the new survivor are saved at once, so a reload on
+        // the result screen never loses a win; stat points follow with its button.
+        if (HORDE_ONLY) commit(finishSquadHorde(game, horde));
+      }
+    } else if (!panel) {
+      // The horde-only build between hordes: the squad on a full wall, waiting to start.
+      if (preview) {
+        drawScene(ctx, art, preview, fightCam, view, null, null, null, animator, null, null);
       }
     } else {
       // Someone back from rest or patrol, a free recruit, or the generator burnt a Gas:

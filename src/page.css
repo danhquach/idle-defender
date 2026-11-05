@@ -353,6 +353,8 @@ body {
 
 .hud[hidden],
 .hud-bar[hidden],
+.hud-xp[hidden],
+.hud-shop[hidden],
 .build-panel[hidden] {
   display: none;
 }
@@ -673,6 +675,31 @@ body {
 }
 
 .hud-boss-hp {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The fight XP bar (ID-066), top left under the horde-only top bar. */
+.hud-xp {
+  position: absolute;
+  top: 40px;
+  left: 16px;
+  display: flex;
+  gap: var(--space-10);
+  align-items: center;
+  width: min(300px, calc(100% - 32px));
+  padding: var(--space-6) var(--space-12);
+  border-radius: var(--radius-md);
+  background: var(--color-bar-bg);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.hud-xp-label {
+  white-space: nowrap;
+}
+
+.hud-xp-meter {
   flex: 1;
   min-width: 0;
 }

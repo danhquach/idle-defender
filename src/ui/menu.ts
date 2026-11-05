@@ -2,11 +2,12 @@
 // It opens from the top-right button or Esc (when Esc has nothing else to cancel); in a
 // fight the game loop holds the fight while it is open. The field behind is inert and
 // focus stays inside until it closes, then goes back to the Menu button.
+import { HORDE_ONLY } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { FIELD_GREW } from './build.ts';
-import { el, SPEED_KEYS } from './hud.ts';
+import { el, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 
 /** What the Save tab says about a refused code. */
 export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
@@ -36,36 +37,76 @@ export const SAVE_STATUS: Readonly<Record<SaveStatus, { text: string; tone: stri
   },
 };
 
-/** The Help tab's controls, grouped by when they apply. */
-export const CONTROLS: readonly { group: string; rows: readonly (readonly [string, string])[] }[] =
-  [
-    {
-      group: 'Between hordes',
-      rows: [
-        ['Click a slot', 'Open it to build or repair'],
-        ['Esc', 'Close the open slot'],
-      ],
-    },
-    {
-      group: 'In a horde',
-      rows: [
-        ['Click a defender, then a post', 'Move that defender'],
-        ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
-        ['Click a skill', 'Use it; one that aims goes where you click next'],
-        ['1 2 3', 'Pick a card when three are offered'],
-        ['Space', 'Pause or resume the fight'],
-        [Object.values(SPEED_KEYS).join(' '), 'Fight at 1×, 2× or 3× speed'],
-        ['Esc', 'Cancel a skill or deselect a defender'],
-      ],
-    },
-    {
-      group: 'Anywhere',
-      rows: [['Esc', 'Open or close this menu (when there is nothing to cancel)']],
-    },
-  ];
+type Controls = readonly { group: string; rows: readonly (readonly [string, string])[] }[];
 
-/** The Help tab's how-to-play, in order. */
-export const HOW_TO_PLAY: readonly (readonly [string, string])[] = [
+/** The full game's Help tab controls, grouped by when they apply. */
+const FULL_CONTROLS: Controls = [
+  {
+    group: 'Between hordes',
+    rows: [
+      ['Click a slot', 'Open it to build or repair'],
+      ['Esc', 'Close the open slot'],
+    ],
+  },
+  {
+    group: 'In a horde',
+    rows: [
+      ['Click a defender, then a post', 'Move that defender'],
+      ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
+      ['Click a skill', 'Use it; one that aims goes where you click next'],
+      ['1 2 3', 'Pick a card when three are offered'],
+      ['Space', 'Pause or resume the fight'],
+      [Object.values(SPEED_KEYS).join(' '), 'Fight at 1×, 2× or 3× speed'],
+      ['Esc', 'Cancel a skill or deselect a defender'],
+    ],
+  },
+  {
+    group: 'Anywhere',
+    rows: [['Esc', 'Open or close this menu (when there is nothing to cancel)']],
+  },
+];
+
+/** The horde-only build's controls (ID-066): no building, shop or skills. */
+const SQUAD_CONTROLS: Controls = [
+  {
+    group: 'In a horde',
+    rows: [
+      ['Click a survivor, then a post', 'Move that survivor'],
+      ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
+      ['1 2 3', 'Pick a card when three are offered'],
+      ['Space', 'Pause or resume the fight'],
+      [Object.values(SPEED_KEYS).join(' '), 'Fight at 1×, 2× or 3× speed'],
+      ['Esc', 'Deselect a survivor'],
+    ],
+  },
+  {
+    group: 'Anywhere',
+    rows: [['Esc', 'Open or close this menu (when there is nothing to cancel)']],
+  },
+];
+
+/** The Help tab's controls, grouped by when they apply. */
+export const CONTROLS: Controls = HORDE_ONLY ? SQUAD_CONTROLS : FULL_CONTROLS;
+
+type Steps = readonly (readonly [string, string])[];
+
+/** The horde-only build's how-to-play (ID-066). */
+const SQUAD_HOW_TO_PLAY: Steps = [
+  [
+    'Hold the wall.',
+    `Your survivors shoot on their own. Click an enemy to focus it. ${SQUAD_LOSS_RULE}`,
+  ],
+  ['Level up in the fight.', 'Kills give fight XP. Each fight level offers three cards.'],
+  [
+    'Win and grow.',
+    'A win gives survivor XP and stat points, and a new survivor joins, up to a squad of 6.',
+  ],
+  ['Lose and retry.', 'A loss costs nothing: the same horde comes again with everyone back.'],
+  ['Beat the boss.', 'Every 10th horde ends with a boss.'],
+];
+
+/** The full game's how-to-play, in order. */
+const FULL_HOW_TO_PLAY: Steps = [
   ['Build the camp.', 'Spend materials on walls, turrets and traps between hordes.'],
   ['Start a horde.', 'Pick a start defender and a post, then start the next horde.'],
   ['Hold the line.', 'Keep defenders up and walls standing. Each fight level offers cards.'],
@@ -78,6 +119,9 @@ export const HOW_TO_PLAY: readonly (readonly [string, string])[] = [
     'On the World map, patrols bring back loot in real time, even while the game is closed. Riskier places pay more.',
   ],
 ];
+
+/** The Help tab's how-to-play, in order. */
+export const HOW_TO_PLAY: Steps = HORDE_ONLY ? SQUAD_HOW_TO_PLAY : FULL_HOW_TO_PLAY;
 
 /**
  * What "Load code" makes of `pasted`: a readable code's camp and the line to show once
@@ -301,7 +345,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   });
   const fresh = confirmed('New camp', NEW_CAMP_CONFIRM, 'Start new camp', () => ({
     run: () => {
-      opts.onNewCamp(newGame());
+      opts.onNewCamp(newGame(HORDE_ONLY ? 'horde' : 'full'));
       return NEW_CAMP_DONE;
     },
   }));

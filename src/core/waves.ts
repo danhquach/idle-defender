@@ -25,11 +25,22 @@ export function waveSize(hordeNumber: number, wave: number): number {
   return Math.round((8 + 4 * (wave - 1)) * 1.1 ** (hordeNumber - 1));
 }
 
-/** Enemy HP: ×1.10 per wave, ×1.17 per horde (design §9; 1.15 before ID-020). */
-export function enemyHp(kind: EnemyKind, hordeNumber: number, wave: number): number {
+/** Enemy HP's growth per horde (design §9; 1.15 before ID-020). */
+export const HP_GROWTH = 1.17;
+
+/**
+ * Enemy HP: ×1.10 per wave, and ×`scale` for the horde: `HP_GROWTH` per horde by default
+ * (the horde-only build has its own curve, ID-066).
+ */
+export function enemyHp(
+  kind: EnemyKind,
+  hordeNumber: number,
+  wave: number,
+  scale: number = HP_GROWTH ** (hordeNumber - 1),
+): number {
   whole('enemyHp', hordeNumber);
   whole('enemyHp', wave);
-  return Math.round(ENEMIES[kind].hp * 1.1 ** (wave - 1) * 1.17 ** (hordeNumber - 1));
+  return Math.round(ENEMIES[kind].hp * 1.1 ** (wave - 1) * scale);
 }
 
 /** Each kind's share of a wave in Horde `hordeNumber` (design §9); Shamblers take the rest. */

@@ -25,14 +25,17 @@ import {
   BANK_CAP,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
+  ENDING_HORDE,
   FALL_WARNING,
   GAS_PER_WIN,
+  HORDE_ONLY,
   MATERIALS,
   PERKS,
   PROFESSIONS,
   SHOP,
   SHOP_ITEMS,
   SKILL_IDS,
+  SQUAD_CAP,
   SKILLS,
   STAT_NAMES,
   STATS,
@@ -65,6 +68,7 @@ import {
   type Injury,
   type Post,
 } from '../core/horde.ts';
+import { squadOf, squadResult } from '../core/hordeonly.ts';
 import { professionOf } from '../core/loadout.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
@@ -79,7 +83,7 @@ import {
   unspentPoints,
   type Title,
 } from '../core/stats.ts';
-import { horrorAbility, xpToNext } from '../core/waves.ts';
+import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
@@ -115,9 +119,13 @@ export const postName = (p: Pick<Post, 'kind' | 'column' | 'row' | 'spot'>): str
   `${POST_NAME[p.kind]} · ${slotName(p.column, p.row)}` +
   (p.kind === 'wall-walk' ? `, ${spotName(p.spot ?? 0)}` : '');
 
-/** A defender's name tag and the profession their loadout gives them: "Jack the Gunner — Ripper". */
-export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'loadout' | 'stats'>): string =>
-  `${nameTag(d)} — ${PROFESSIONS[professionOf(d.loadout)].name}`;
+/**
+ * A defender's name tag and the profession their loadout gives them: "Jack the Gunner —
+ * Ripper"; a plain survivor (ID-066) is their name alone.
+ */
+export const defenderLabel = (
+  d: Pick<DefenderSpec, 'name' | 'loadout' | 'stats' | 'plain'>,
+): string => (d.plain ? d.name : `${nameTag(d)} — ${PROFESSIONS[professionOf(d.loadout)].name}`);
 
 const capital = (w: string): string => w.charAt(0).toUpperCase() + w.slice(1);
 
@@ -158,6 +166,34 @@ export function statusText(s: HordeState): string {
     `Cash ${Math.floor(s.cash)}`,
     ...(s.perks.length ? [`Perks: ${s.perks.map((p) => PERKS[p].name).join(', ')}`] : []),
   ].join(' · ');
+}
+
+/** Enemies still to beat in the wave under way: on the field, and still to come. */
+export const enemiesLeft = (s: Pick<HordeState, 'enemies' | 'toSpawn'>): number =>
+  s.enemies.filter((e) => e.hp > 0).length + s.toSpawn;
+
+/** The horde-only top bar (ID-066): "Horde 3 · Waves cleared 1/5 · 12 left in this wave". */
+export function squadStatus(s: HordeState): string {
+  const cleared = s.outcome === 'won' ? s.waveCount : s.wave - 1;
+  const left = enemiesLeft(s);
+  return [
+    s.boss ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
+    `Waves cleared ${cleared}/${s.waveCount}`,
+    `${left} left in this wave`,
+  ].join(' · ');
+}
+
+/**
+ * The fight XP bar (ID-066): the fight's level (not a survivor's), and XP into it out of
+ * what the next one costs: "Fight Lv 2 · 7/14 XP".
+ */
+export function xpBar(s: Pick<HordeState, 'level' | 'xp'>): {
+  label: string;
+  value: number;
+  max: number;
+} {
+  const max = xpToNext(s.level);
+  return { label: `Fight Lv ${s.level} · ${s.xp}/${max} XP`, value: Math.min(s.xp, max), max };
 }
 
 /**
@@ -298,6 +334,8 @@ export interface ResultScreen {
   title: string;
   lines: string[];
   button: string;
+  /** A horde-only screen (ID-066): plain names, and only the stats a gun survivor uses. */
+  squad?: true;
   /** Defenders from a win with stat points to spend, XP added. */
   picks: RosterDefender[];
   /**
@@ -331,6 +369,16 @@ export const STAT_HINT: Readonly<Record<Stat, string>> = {
   grit: 'HP in hordes, any loadout',
 };
 
+/** What Aim and Grit do for a horde-only survivor (ID-066): no loadouts to tell apart. */
+export const SQUAD_STAT_HINT: Readonly<Record<Stat, string>> = {
+  ...STAT_HINT,
+  aim: 'Gun damage and crits',
+  grit: 'HP in hordes',
+};
+
+/** The stats a horde-only survivor's points go to (ID-066): no blades or tools, so no Might or Tech. */
+export const SQUAD_STATS: readonly Stat[] = ['aim', 'grit'];
+
 /** One defender's row in the stat picker. */
 export interface PickerRow {
   heading: string;
@@ -339,19 +387,32 @@ export interface PickerRow {
   buttons: { stat: Stat; label: string; disabled: boolean }[];
 }
 
-/** The picker row for `d` (with `was` its stats before this screen): name tag, points left, a button per stat. */
-export function pickerRow(d: RosterDefender, was: RosterDefender['stats']): PickerRow {
+/**
+ * The picker row for `d` (with `was` its stats before this screen): name tag, points left,
+ * a button per stat. A horde-only survivor (`squad`) has their name, no titles, and only
+ * `SQUAD_STATS`.
+ */
+export function pickerRow(
+  d: RosterDefender,
+  was: RosterDefender['stats'],
+  squad = false,
+): PickerRow {
   const left = unspentPoints(d);
-  const earned = (Object.keys(PROFESSIONS) as Profession[])
-    .map((p) => titleIn(d.stats, p))
-    .filter((t): t is Title => t !== null && titleIn(was, t.profession)?.at !== t.at)
-    .map(titleName);
+  const earned = squad
+    ? []
+    : (Object.keys(PROFESSIONS) as Profession[])
+        .map((p) => titleIn(d.stats, p))
+        .filter((t): t is Title => t !== null && titleIn(was, t.profession)?.at !== t.at)
+        .map(titleName);
   return {
-    heading: `${nameTag(d)} · ${left} stat point${left === 1 ? '' : 's'} to spend`,
+    heading: `${squad ? d.name : nameTag(d)} · ${left} stat point${left === 1 ? '' : 's'} to spend`,
     note: earned.length ? `New title: ${earned.join(', ')}` : '',
-    buttons: STATS.map((stat) => ({
+    buttons: (squad ? SQUAD_STATS : STATS).map((stat) => ({
       stat,
-      label: `${STAT_NAMES[stat]} ${d.stats[stat]}`,
+      // A horde-only button says it adds a point: "+ Aim (2)".
+      label: squad
+        ? `+ ${STAT_NAMES[stat]} (${d.stats[stat]})`
+        : `${STAT_NAMES[stat]} ${d.stats[stat]}`,
       disabled: left <= 0,
     })),
   };
@@ -501,6 +562,98 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
   };
 }
 
+/** The camp screen of a horde-only result: no camp-level offers ever come. */
+const noCamp = (game: GameState): CampScreen => ({
+  picks: game.camp.picks,
+  offers: [],
+  room: roomOf(game),
+});
+
+/** "Ava +30 XP · level 2 · 5/50 XP to level 3 · level up! +3 stat points". */
+function squadXpLine(g: ReturnType<typeof levelGains>[number]): string {
+  const up = g.levels > 0 ? ` · level up! +${g.points} stat point${g.points === 1 ? '' : 's'}` : '';
+  return `${g.name} +${g.xp} XP · level ${g.level} · ${g.into}/${g.next} XP to level ${g.level + 1}${up}`;
+}
+
+/** How a horde-only horde is lost (ID-066, design §2), for the start screen and Help. */
+export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivor is down.';
+
+/** Under the horde-only stat picker: points not spent now aren't lost. */
+export const SQUAD_POINTS_NOTE = 'Unspent points are kept for later.';
+
+/** The horde-only screen before a horde (ID-066): who fights it, and its start button. */
+export function squadStart(game: GameState): ResultScreen {
+  const squad = squadOf(game);
+  return {
+    title: horrorAbility(game.hordeNumber)
+      ? `Horde ${game.hordeNumber} · Boss horde`
+      : `Horde ${game.hordeNumber}`,
+    lines: [
+      `Squad ${squad.length}/${SQUAD_CAP}: ${squad
+        .map((d) => `${d.name} (level ${levelOf(d.xp).level})`)
+        .join(', ')}`,
+      `${waveCount(game.hordeNumber)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
+    ],
+    button: startLabel(game.hordeNumber),
+    squad: true,
+    picks: [],
+    camp: noCamp(game),
+  };
+}
+
+/**
+ * The horde-only result screen (ID-066) for horde `s`, fought from `game`: a win's XP,
+ * level-ups and the survivor joining (Horde 10's is the soft ending, with play going
+ * on); a loss says where they got in and that the same horde comes again in full.
+ */
+export function squadScreen(game: GameState, s: HordeState): ResultScreen {
+  if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
+  const { gains, joined } = squadResult(game, s);
+  if (s.outcome === 'won') {
+    const picks: RosterDefender[] = [];
+    for (const g of gains) {
+      const d = game.roster.find((r) => r.id === g.id);
+      if (!d) continue;
+      const after = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
+      if (unspentPoints(after) > 0) picks.push(after);
+    }
+    const ending = s.hordeNumber === ENDING_HORDE;
+    return {
+      title: ending ? `You held Horde ${s.hordeNumber}` : `Horde ${s.hordeNumber} held`,
+      lines: [
+        s.boss
+          ? `All ${s.waveCount} waves cleared · the ${horrorName(s.boss)} is dead`
+          : `All ${s.waveCount} waves cleared`,
+        ...gains.map(squadXpLine),
+        joined
+          ? `New survivor: ${joined.name} joins the squad for the next horde`
+          : `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
+        ...(ending ? ['The end, for now. The hordes keep coming: play on from the next one.'] : []),
+      ],
+      button: ending ? 'Continue' : startLabel(s.hordeNumber + 1),
+      squad: true,
+      picks,
+      camp: noCamp(game),
+    };
+  }
+  const inner = [...s.breaches].sort((a, b) => b.column - a.column).at(-1);
+  const where = inner ? `They got in during wave ${inner.wave} of ${s.waveCount}` : 'They got in';
+  const horror = s.enemies.find((e) => e.horror)?.horror;
+  return {
+    title: 'The wall fell',
+    lines: [
+      `${where} · nobody left standing`,
+      ...(horror ? [`The ${horrorName(horror.ability)} still stood`] : []),
+      'No XP on a loss',
+      `Horde ${s.hordeNumber} again: the whole squad back on their feet and the wall at full HP`,
+    ],
+    button: `Retry Horde ${s.hordeNumber}`,
+    squad: true,
+    picks: [],
+    camp: noCamp(game),
+  };
+}
+
 /** The countdown while the camp is falling, else ''. */
 export function fallingText(s: HordeState): string {
   if (s.fallingFor <= 0 || s.outcome !== 'fighting') return '';
@@ -519,6 +672,8 @@ export function createHud(
   onReroll: () => void,
   onCampPick: (choice: CampChoice) => void,
   onSpeed: (speed: Speed) => void,
+  /** The horde-only build's HUD (ID-066): the minimal top bar with the XP bar, no shop row. */
+  squad: boolean = HORDE_ONLY,
 ): {
   update(state: HordeState, armed?: SkillId | null): void;
   speed(speed: Speed, paused: boolean): void;
@@ -529,6 +684,15 @@ export function createHud(
 } {
   const hud = el('div', 'hud');
   const bar = el('div', 'hud-bar hud-fight-bar');
+  // The fight XP bar (ID-066), under the top bar in the horde-only build.
+  const xp = el('div', 'hud-xp');
+  const xpLabel = el('span', 'hud-xp-label');
+  xpLabel.id = 'hud-xp-label';
+  const xpMeter = el('meter', 'hud-xp-meter');
+  xpMeter.min = 0;
+  xpMeter.setAttribute('aria-labelledby', xpLabel.id);
+  xp.append(xpLabel, xpMeter);
+  xp.hidden = !squad;
   const boss = el('div', 'hud-boss');
   const bossLabel = el('span', 'hud-boss-label');
   bossLabel.id = 'hud-boss-label';
@@ -626,7 +790,9 @@ export function createHud(
   });
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, speed, boss, warning, toast, shop, cards, replace, result);
+  // No cash, shop or skills in the horde-only build (ID-066).
+  shop.hidden = squad;
+  hud.append(bar, xp, speed, boss, warning, toast, shop, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -690,17 +856,17 @@ export function createHud(
   }
 
   /** One defender's picker; each click spends a point here and through `onSpend`. */
-  function pickerBlock(start: RosterDefender): HTMLElement {
+  function pickerBlock(start: RosterDefender, squadPicks = false): HTMLElement {
     const block = el('div', 'hud-pick');
     let d = start;
     const draw = (): void => {
-      const row = pickerRow(d, start.stats);
+      const row = pickerRow(d, start.stats, squadPicks);
       const buttons = el('div', 'hud-pick-row');
       row.buttons.forEach((b, i) => {
         const button = el('button', 'hud-button hud-pick-stat', b.label);
         button.type = 'button';
         button.disabled = b.disabled;
-        button.title = STAT_HINT[b.stat];
+        button.title = (squadPicks ? SQUAD_STAT_HINT : STAT_HINT)[b.stat];
         button.addEventListener('click', () => {
           if (result.hidden) return;
           const r = spend(d, b.stat);
@@ -709,7 +875,7 @@ export function createHud(
           onSpend(d.id, b.stat);
           draw();
           // Keep the keyboard where it was; a spent-out row moves on to the next picker
-          // with points left (wrapping round), then to "Back to build".
+          // with points left (wrapping round), then to the screen's button.
           const again = block.querySelectorAll('button')[i];
           const open = [...picker.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')].filter(
             (x) => !x.disabled,
@@ -846,8 +1012,14 @@ export function createHud(
       }, TOAST_MS);
     },
     update(state, armed = null) {
-      const status = statusText(state);
+      const status = squad ? squadStatus(state) : statusText(state);
       if (bar.textContent !== status) bar.textContent = status;
+      if (squad) {
+        const x = xpBar(state);
+        if (xpLabel.textContent !== x.label) xpLabel.textContent = x.label;
+        xpMeter.max = x.max;
+        xpMeter.value = x.value;
+      }
       const horror = bossBar(state);
       boss.hidden = horror === null;
       if (horror) {
@@ -892,22 +1064,33 @@ export function createHud(
     showResult(screen) {
       resultTitle.textContent = screen.title;
       resultList.replaceChildren(...screen.lines.map((line) => el('li', '', line)));
+      const stats = screen.squad ? SQUAD_STATS : STATS;
       picker.replaceChildren(
         ...(screen.picks.length
           ? [
               el(
                 'p',
                 'hud-result-body',
-                STATS.map((st) => `${STAT_NAMES[st]}: ${STAT_HINT[st]}`).join(' · '),
+                stats
+                  .map(
+                    (st) =>
+                      `${STAT_NAMES[st]}: ${(screen.squad ? SQUAD_STAT_HINT : STAT_HINT)[st]}`,
+                  )
+                  .join(' · '),
               ),
-              ...screen.picks.map(pickerBlock),
+              ...screen.picks.map((d) => pickerBlock(d, screen.squad === true)),
+              ...(screen.squad ? [el('p', 'hud-pick-note', SQUAD_POINTS_NOTE)] : []),
             ]
           : []),
       );
       back.textContent = screen.button;
       campBlock(screen.camp);
       result.hidden = false;
-      (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus();
+      // A horde-only screen with points to spend starts on the picker, so Enter doesn't skip it.
+      const firstStat = screen.squad
+        ? picker.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')
+        : null;
+      (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? firstStat ?? back).focus();
     },
   };
 }
