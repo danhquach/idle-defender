@@ -1133,6 +1133,7 @@ body {
   display: flex;
   gap: var(--space-10);
   align-items: center;
+  box-sizing: border-box;
   width: min(300px, calc(100% - 32px));
   padding: var(--space-6) var(--space-12);
   /* Edged, so the plate still reads on the fight's dark ground (ID-071). */
