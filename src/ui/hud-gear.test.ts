@@ -371,14 +371,20 @@ describe('the debrief layout (ID-067)', () => {
     expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe(SQUAD_POINTS_NOTE);
   });
 
-  it('a spent-out card says so, and its buttons go grey', () => {
+  it('a spent-out card shows 0 in the muted style, and its buttons go grey', () => {
     const { root, h } = page();
     const g = squadGame(1, 5);
     h.showResult(squadScreen(g, ended(g, 'won')));
     const aim = () => root.querySelector<HTMLButtonElement>('.hud-pick-stat')!;
+    const points = () => root.querySelector('.squad-points')!;
+    expect(points().classList.contains('squad-points-none')).toBe(false);
     for (let n = 0; n < 1000 && !aim().disabled; n++) aim().click();
     expect(aim().disabled).toBe(true);
-    expect(root.querySelector('.squad-points')!.textContent).toBe('No points left');
+    // Shows a bare 0; screen readers get "0 points" from the hidden unit.
+    expect(points().firstChild!.textContent).toBe('0');
+    expect(points().querySelector('.sr-only')!.textContent).toBe(' points');
+    expect(points().textContent).toBe('0 points');
+    expect(points().classList.contains('squad-points-none')).toBe(true);
   });
 
   it('the full game’s result screen keeps its plain list and button', () => {

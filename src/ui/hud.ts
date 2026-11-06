@@ -1146,11 +1146,14 @@ export function createHud(
       if (squadPicks) {
         // A survivor card's points row (ID-067): the count, then the buttons.
         const left = unspentPoints(d);
+        // Spent out reads a bare "0" (ID-083): the card has no room for a sentence.
+        // A hidden " points" keeps the unit for screen readers.
         const count = el(
           'p',
           'squad-points',
-          left > 0 ? `${left} point${left === 1 ? '' : 's'}` : 'No points left',
+          left > 0 ? `${left} point${left === 1 ? '' : 's'}` : '0',
         );
+        if (left <= 0) count.append(el('span', 'sr-only', ' points'));
         count.classList.toggle('squad-points-none', left === 0);
         block.replaceChildren(count, buttons);
         return;
