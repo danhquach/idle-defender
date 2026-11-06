@@ -83,7 +83,7 @@ import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
-import { ART_URLS, GUNNER_ART, SHOP_ICON, SKILL_ICON, type ArtId, type GunId } from './sprites.ts';
+import { ART_URLS, GUN_ICON, SHOP_ICON, SKILL_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** The key for each fight speed (ID-062): clear of the card keys 1 2 3 and the action bar's. */
 export const SPEED_KEYS: Readonly<Record<Speed, string>> = { 1: 'A', 2: 'S', 3: 'D' };
@@ -655,7 +655,7 @@ export interface DropTile {
   rarityName: string;
   /** "Rifle" */
   name: string;
-  /** The gun's art for the tile's icon (ID-073): its survivor sprite, cropped to the gun. */
+  /** The gun's icon (ID-092), as the Inventory shows it. */
   icon: ArtId;
   /** "+7% damage, +21% magazine"; '' with none. */
   affixes: string;
@@ -729,7 +729,7 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
     rarity: weapon.rarity,
     rarityName: RARITIES[weapon.rarity].name,
     name: WEAPONS[weapon.base].name,
-    icon: GUNNER_ART[weapon.base as GunId].idle,
+    icon: GUN_ICON[weapon.base as GunId],
     affixes: weapon.affixes.map(affixText).join(', '),
     power: `${power.toFixed(1)} dmg/s`,
     stash: lost ? 'Stash full: thrown away' : `Stash ${count}/${STASH_CAP}`,
@@ -1203,10 +1203,11 @@ export function createHud(
         const stash = el('span', 'tile-stash', t.stash);
         stash.classList.toggle('tile-stash-lost', t.lost);
         power.append(el('span', 'tile-power', t.power), stash);
-        // The gun's icon (ID-073), decoration only: its name is right beside it.
+        // The gun's icon (ID-092), decoration only: its name is right beside it.
         const icon = el('div', 'tile-icon');
-        const img = el('img', 'tile-icon-img');
+        const img = el('img', 'tile-icon-img gun-icon');
         img.alt = '';
+        img.dataset.gun = t.icon.slice('weapon-'.length);
         img.src = ART_URLS[t.icon] ?? '';
         icon.append(img);
         const id = el('div', 'tile-drop-id');

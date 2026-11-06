@@ -1105,7 +1105,6 @@
       "size": "768x512",
       "style": "object",
       "prompt": "redraw the submachine gun from the reference photo as a game sprite, only the gun, side view, muzzle pointing right. From left to right: short folding stock, pistol grip with the trigger guard just in front of it, then a clear gap, then a slightly curved box magazine pointing straight down from the middle of the receiver, well forward of the trigger guard and never touching the grip, then a short handguard and barrel with a round front sight. Plain black steel, no markings",
-      "part": true,
       "photo": "150114-A-BD610-111"
     },
     {
@@ -1116,7 +1115,6 @@
       "size": "768x512",
       "style": "object",
       "prompt": "redraw the pump-action shotgun from the reference photo as a game sprite, only the gun, keeping its exact silhouette, side view, muzzle pointing right. From left to right: solid stock, receiver with the trigger guard under it, then the pump grip slid along under the barrel, a long tube magazine under the barrel reaching nearly to the muzzle, a single thick barrel with a bead sight. Dark matte steel and black synthetic stock and pump, no markings",
-      "part": true,
       "photo": "commons-199972340"
     },
     {
@@ -1127,7 +1125,6 @@
       "size": "768x512",
       "style": "object",
       "prompt": "redraw the machine gun from the reference photo as a game sprite, keeping its exact silhouette: a large square green ammunition box hanging under the middle of the gun, a feed cover on top of the receiver with a carrying handle, a bipod folded forward under the long heavy barrel, a fixed sloped stock, side view, muzzle pointing right, no curved rifle magazine, dark steel with olive ammunition box",
-      "part": true,
       "photo": "DA-SC-85-11586"
     },
     {
@@ -1138,8 +1135,27 @@
       "size": "768x512",
       "style": "object",
       "prompt": "redraw the bolt-action sniper rifle from the reference photo as a game sprite, only the rifle, keeping its exact silhouette, side view, muzzle pointing right. From left to right: solid stock with a cheek rest, pistol grip with the trigger guard, bolt handle sticking out to the side, a long telescopic scope mounted on top over the receiver, a long thin heavy barrel, a small bipod folded under the fore-end. Dark green stock and black steel, no markings",
-      "part": true,
       "photo": "commons-11317366"
+    },
+    {
+      "id": "weapon-rifle",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4401,
+      "size": "768x512",
+      "style": "object",
+      "prompt": "redraw the assault rifle from the reference photo as a game sprite, only the rifle, keeping its exact silhouette, side view, muzzle pointing right. From left to right: collapsible stock, pistol grip with the trigger guard just in front of it, a curved box magazine pointing down from the receiver just ahead of the trigger guard and never touching the grip, a flat top receiver with a small carry rail, a ribbed handguard, a triangular front sight post and a thin barrel with a flash hider. Plain black steel and black polymer, no markings",
+      "photo": "commons-11308991"
+    },
+    {
+      "id": "weapon-pistol",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 4411,
+      "size": "768x512",
+      "style": "object",
+      "prompt": "redraw the handgun from the reference photo as a game sprite, only the pistol, keeping its exact silhouette, side view, muzzle pointing right. A semi-automatic pistol: a long slide on top with rear and front sights, the short barrel tip showing at the front, the trigger guard under the slide, and the grip with its magazine base at the bottom on the left, angled slightly back. Plain black steel with dark grip panels, no markings",
+      "photo": "DA-SC-92-01299"
     },
     {
       "id": "ripper",

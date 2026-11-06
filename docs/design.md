@@ -739,21 +739,23 @@ profession's output).
     so above Military it is a slow route next to drops. Kept out for now:
     keeping one input's affixes, and mixed base weapons (any 3 Rusty guns →
     a random Common one).
-  - **Combine in the Inventory:** a Combine section under the stash lists each
-    base weapon and rarity below Relic in the stash, ready sets first: a set
+  - **Combine in the Inventory** *(in a gun's details since ID-092)*: a stash
+    gun's details name its set (its base weapon and rarity, below Relic): a set
     with 3 or more says "4 in stash" and "3 make a Common SMG", with a Combine
-    button; one short says "2/3" and "1 more for a Common SMG". A combine uses
+    button, and its slots carry a ▲ mark in the grid; one short says "2/3" and
+    "1 more for a Common SMG". A Relic says it combines no further, and a gun in
+    hand that it must go back to the stash first. A combine uses
     the 3 weakest of the set by dmg/s, so the best one stays. Combine asks
     first: it lists the 3 guns used up (rarity colour, affixes, dmg/s) and what
     comes out (rarity, "No affixes" or "1 random affix, rolled on combine", and its
     base dmg/s, before affixes), with Combine into … and Cancel (Esc cancels; focus
     starts on Cancel). After it, a status line names the new gun with its
     affixes and dmg/s ("Made: Common SMG, 14.2 dmg/s"), and the gun pickers
-    update; focus moves to that line (Cancel returns it to the set's button).
-    The result screen's drop tile stays a record of the win (its stash count
-    then), so a combine on that screen doesn't change it. In a fight the list
-    shows with no buttons and "Combine between
-    hordes, on the start or result screen."
+    update, and the new gun is selected; focus moves to that line (Cancel
+    returns it to the Combine button). The result screen's drop tile stays a
+    record of the win (its stash count then), so a combine on that screen
+    doesn't change it. In a fight the set's count shows with no button or ▲
+    marks, and "Combine between hordes, on the start or result screen."
   - **The panel between hordes (a debrief):** the start, win and loss
     screens share one layout, 640 px wide, scrolling inside the window with
     the button pinned in a footer. At the top are the title and chips (waves,
@@ -762,9 +764,9 @@ profession's output).
     Rusty copper, Common grey, Military blue, Prototype purple, Relic gold —
     a 56 px icon framed in that colour, the gun, its affixes, its dmg/s, the
     stash count, and any weapon thrown away) and the survivor joining (or
-    "6/6 full"). *(ID-073)* The icon is the gun's own survivor sprite cropped
-    to hands and gun, decorative (empty alt text), since there is no separate
-    gun art yet. When the full stash throws the drop itself away, the tile
+    "6/6 full"). *(ID-092)* The icon is the gun's own icon, as the
+    Inventory's slots show it (the model the survivors hold, on its rarity's
+    tint), decorative (empty alt text). When the full stash throws the drop itself away, the tile
     says "Stash full: thrown away" and "No better than any gun in the stash",
     and its icon goes grey. A loss shows a red callout saying where they got
     in. Below that is one card per survivor: name and level, on a win the XP
@@ -1684,6 +1686,20 @@ offline progress works across sessions.
   pistol. Each weapon shows its name in its rarity's colour, its affixes and its
   dmg/s. Guns are still picked on the start and result screens. It opens between
   hordes and in a fight, which it holds like the Menu; Esc or Close shuts it.
+  - **As a grid (ID-092):** the dialog has tabs (Weapons only for now; items and
+    materials can join later). The squad row (each survivor's gun with their
+    name under it, then the free pistol once) sits over the stash grid: one
+    64 px square slot per stash place up to the cap, empty places drawn empty.
+    A slot shows the gun's icon (one per base gun, the model the survivors
+    hold, long guns laid across the square) on its rarity's tint inside a frame
+    of its rarity's colour, with its dmg/s rounded in a corner badge. Selecting
+    a slot (click, tap, or the arrows, Home and End from its single Tab stop)
+    rings it and fills the details beside the grid (under it on a phone): the
+    name in its rarity's colour, "Military rarity · Rifle", each affix on its own
+    line, dmg/s, who holds it, and Combine. Hovering a slot shows its details
+    until the pointer leaves the grid. It opens on the strongest stash gun.
+    Each slot's screen-reader label names the gun, its rarity, dmg/s and affix
+    count. The result screen's drop tile shows the same icon and tint.
 
 - **As built (ID-066): save version 12** adds the reserve. A v11 save loads
   with its horde number and each survivor's level, stats and weapon; every

@@ -68,6 +68,12 @@ export const ART_IDS = [
   'icon-cash',
   'icon-bank',
   'icon-genes',
+  'weapon-pistol',
+  'weapon-smg',
+  'weapon-rifle',
+  'weapon-shotgun',
+  'weapon-lmg',
+  'weapon-sniper',
   'gunner-pistol-idle',
   'gunner-pistol-aim',
   'gunner-smg-idle',
@@ -349,6 +355,19 @@ export const GUNNER_ART: Readonly<Record<GunId, GunnerArt>> = {
     aim: 'gunner-sniper-aim',
     barrel: { x: 115, y: 141 },
   },
+};
+
+/**
+ * Each gun's icon (ID-092): the gun model alone, side view, muzzle right; the same model
+ * the survivors hold. The Inventory's slots and the debrief's drop tile show it.
+ */
+export const GUN_ICON: Readonly<Record<GunId, ArtId>> = {
+  pistol: 'weapon-pistol',
+  smg: 'weapon-smg',
+  rifle: 'weapon-rifle',
+  shotgun: 'weapon-shotgun',
+  lmg: 'weapon-lmg',
+  sniper: 'weapon-sniper',
 };
 
 /** The other survivor looks' letters (ID-074), after the soldier's `GUNNER_ART`. */

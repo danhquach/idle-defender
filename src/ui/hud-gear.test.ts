@@ -22,7 +22,7 @@ import {
   SQUAD_NO_DROP,
   squadStart,
 } from './hud.ts';
-import { ART_URLS, GUNNER_ART, type GunId } from './sprites.ts';
+import { ART_URLS, GUN_ICON, type GunId } from './sprites.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -278,10 +278,10 @@ describe('the debrief layout (ID-067)', () => {
     });
   });
 
-  it('the loot tile’s icon is the dropped gun’s own sprite, for every gun a horde drops (ID-073)', () => {
+  it('the loot tile’s icon is the dropped gun’s own icon, for every gun a horde drops (ID-092)', () => {
     for (const base of DROP_GUNS) {
       const t = dropTile({ armoury: [] }, { weapon: gun('h1', base, 'common'), thrown: null });
-      expect(t.icon).toBe(GUNNER_ART[base as GunId].idle);
+      expect(t.icon).toBe(GUN_ICON[base as GunId]);
       expect(ART_URLS[t.icon]).toBeTruthy();
     }
   });
