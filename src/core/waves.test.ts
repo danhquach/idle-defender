@@ -14,11 +14,14 @@ describe('wave plan', () => {
     expect(waveSize(2, 1)).toBe(9);
   });
 
-  it('enemyHp scales ×1.10 per wave and ×1.17 per horde (ID-020)', () => {
+  it('enemyHp scales ×1.10 per wave and ×1.17 per horde (ID-020), Hordes 2–3 eased (ID-097)', () => {
     expect(enemyHp('shambler', 1, 1)).toBe(20);
     expect(enemyHp('shambler', 1, 2)).toBe(22);
-    expect(enemyHp('shambler', 2, 1)).toBe(23);
-    expect(enemyHp('shambler', 3, 1)).toBe(27); // 26 at ×1.15
+    // ×0.9 and ×0.85 in Hordes 2 and 3 (23 and 27 before ID-097).
+    expect(enemyHp('shambler', 2, 1)).toBe(21);
+    expect(enemyHp('shambler', 3, 1)).toBe(23);
+    // Full growth from Horde 4.
+    expect(enemyHp('shambler', 4, 1)).toBe(32);
   });
 
   it('xpToNext follows the curve', () => {

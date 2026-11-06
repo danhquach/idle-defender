@@ -132,7 +132,7 @@ describe('damage numbers on enemies (ID-082)', () => {
 
   it('a burn ticks into a few merged numbers that add up to what it burned', () => {
     const s = holding();
-    s.taken = ['burning-rounds'];
+    s.taken = ['incendiary-rounds'];
     const e = enemy(s, tough);
     shoot(s, { damage: 10 });
     const t = steps(s, Math.round(1 / STEP));
@@ -140,7 +140,7 @@ describe('damage numbers on enemies (ID-082)', () => {
     const onIt = t.pops.filter((p) => p.key === `e${e.id}`);
     const total = onIt.reduce((n, p) => n + p.amount, 0);
     expect(total).toBeCloseTo(1000 - t.enemies[0]!.hp, 9);
-    expect(total).toBeGreaterThan(10 + CARD.burn.dps * 0.5);
+    expect(total).toBeGreaterThan(10 + CARD.burn.dps[2]! * 0.5);
     // About one number per merge window, not one per step.
     expect(onIt.length).toBeLessThanOrEqual(Math.ceil(1 / DAMAGE_POP.merge) + 1);
     expect(onIt.length).toBeGreaterThan(1);

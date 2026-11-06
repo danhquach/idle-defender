@@ -62,6 +62,8 @@ import {
   BURN,
   burnHeat,
   fireLook,
+  SHOCK,
+  twitch,
   bulletShape,
   drawScene,
   forgetBackdrop,
@@ -2594,14 +2596,17 @@ describe('the horde-only fight (ID-068)', () => {
       expect(reloadShare(refilled, scene.time)).toBeNull();
     });
 
-    it('with Speed Loaders, fills over the shorter reload: empty when it starts (ID-077)', () => {
+    it('with Speed Loaders, fills over the shorter reload at its level: empty when it starts (ID-077, ID-097)', () => {
       const scene = squadScene(1);
       const d = scene.defenders[0]!;
-      const total = reloadTime(d, d.loadout.primary) * CARD.loaders;
-      const at = (left: number) =>
-        reloadShare(reloading(scene, 0, left).defenders[0]!, scene.time, ['speed-loaders']);
-      expect(at(total)).toBeCloseTo(0, 9);
-      expect(at(total / 2)).toBeCloseTo(0.5, 9);
+      for (const level of [1, 2, 3]) {
+        const total = reloadTime(d, d.loadout.primary) * CARD.loaders[level - 1]!;
+        const cards = { taken: ['speed-loaders' as const], cardLevels: { 'speed-loaders': level } };
+        const at = (left: number) =>
+          reloadShare(reloading(scene, 0, left).defenders[0]!, scene.time, cards);
+        expect(at(total)).toBeCloseTo(0, 9);
+        expect(at(total / 2)).toBeCloseTo(0.5, 9);
+      }
     });
 
     it("tracks a Gunner's primary while their sidearm fires", () => {
@@ -2814,33 +2819,6 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     ghosts: { slots: [], lines: [] },
   });
 
-  it('Spiked Walls: stakes along each standing segment’s field edge, reaching over the ground', () => {
-    const on = fight({}, { taken: ['spiked-walls'] });
-    const stakes = images(on, BASE_ART.spikes);
-    expect(stakes).toHaveLength(1);
-    const x0 = on.layers[0]!.x;
-    const z = wallHeight(300, 300);
-    const a = project({ x: x0 + WALL.depth - WALL_CARD.spike.in, y: 2, z }, CAM);
-    const b = project({ x: x0 + WALL.depth + WALL_CARD.spike.out, y: SEGMENT_HEIGHT - 2, z }, CAM);
-    expect(stakes[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
-    // None without the card, on rubble, or in the build scene.
-    expect(images(fight({}), BASE_ART.spikes)).toHaveLength(0);
-    expect(images(fight({ hp: 0 }, { taken: ['spiked-walls'] }), BASE_ART.spikes)).toHaveLength(0);
-    expect(images(on, BASE_ART.spikes, overlay())).toHaveLength(0);
-  });
-
-  it('Spiked Walls: a bite flashes a pale burst with a warm core, gone after its time', () => {
-    const core = (spikeAt: number | undefined, taken: Scene['taken'] = ['spiked-walls']) =>
-      trace(fight({ spikeAt }, { taken })).ops.filter(
-        (o) => o.op === 'path' && o.style === '#e0a020',
-      );
-    expect(core(10)).toHaveLength(1);
-    expect(core(10)[0]!.alpha).toBeCloseTo(WALL_CARD.spike.alpha, 9);
-    expect(core(10 - WALL_CARD.spike.time)).toHaveLength(0);
-    expect(core(undefined)).toHaveLength(0);
-    expect(core(10, [])).toHaveLength(0);
-  });
-
   it('Reinforce: a brace over the top and front, under the damage, at its alpha', () => {
     const hurt = fight({ hp: 90 }, { taken: ['reinforce'] });
     const ops = trace(hurt).ops.filter((o) => o.op === 'image');
@@ -2879,18 +2857,6 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
       );
     expect(shown(1)).toHaveLength(0);
     expect(shown(3)).toHaveLength(4);
-    // The spike bite is combat feedback: it keeps to fight time at any speed.
-    const bite = (pace: number) =>
-      trace(fight({ spikeAt: 10 - 0.2 }, { taken: ['spiked-walls'], pace })).ops.filter(
-        (o) => o.op === 'path' && o.style === '#e0a020',
-      );
-    expect(bite(1)).toHaveLength(1);
-    expect(bite(3)).toHaveLength(1);
-    expect(
-      trace(fight({ spikeAt: 10 - 0.3 }, { taken: ['spiked-walls'], pace: 3 })).ops.filter(
-        (o) => o.op === 'path' && o.style === '#e0a020',
-      ),
-    ).toHaveLength(0);
   });
 
   it('a repair glows green on the segment it healed, fading, with its alpha put back', () => {
@@ -3174,17 +3140,6 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(xs).toEqual(WIRE.coils.map((share) => a.sx + (b.sx - a.sx) * share));
   });
 
-  it('an enemy at a spiked segment draws over the stakes, never under them', () => {
-    const s = fight({}, { taken: ['spiked-walls'] });
-    const h = { ...s, nextEnemyId: 1 } as unknown as HordeState;
-    const at = enemy(h, { x: s.layers[0]!.x + WALL.depth + 8, y: SEGMENT_HEIGHT / 2 });
-    const ops = trace({ ...s, enemies: [at] }).ops.filter((o) => o.op === 'image');
-    const stakes = ops.findIndex((o) => o.id === BASE_ART.spikes);
-    const walker = ops.findIndex((o) => ENEMY_ART.shambler.walk.includes(o.id as never));
-    expect(stakes).toBeGreaterThanOrEqual(0);
-    expect(walker).toBeGreaterThan(stakes);
-  });
-
   it('a repair’s three crosses float up as they fade, and stay put with Reduce motion', () => {
     /** Each cross's middle, from its horizontal stroke's two ends. */
     const crosses = (repairAt: number, reduced: boolean) => {
@@ -3217,12 +3172,8 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
   });
 
   it('the sliding gate shows the barrier cards like any segment', () => {
-    const gate = fight(
-      { kind: 'gate', tier: 'wood' },
-      { taken: ['spiked-walls', 'reinforce'], barrierAt: 9.7 },
-    );
+    const gate = fight({ kind: 'gate', tier: 'wood' }, { taken: ['reinforce'], barrierAt: 9.7 });
     expect(images(gate, TIER_ART.wood.gate)).toHaveLength(1);
-    expect(images(gate, BASE_ART.spikes)).toHaveLength(1);
     expect(images(gate, BASE_ART.brace)).toHaveLength(2);
     expect(fills(gate, '#b8f4ec')).toHaveLength(2);
   });
@@ -3898,6 +3849,36 @@ describe('a burning enemy’s fire (ID-089)', () => {
       const gone = 1.2 + ANIM.fall.time;
       drawScene(r.ctx, r.art, burningScene(gone, 3, false), CAM, VIEW, null, null, null, anim);
       expect(flameFills(fills)).toHaveLength(0);
+    });
+
+    it('a shocked enemy twitches with a small spark on its body, gone when it ends (ID-097)', () => {
+      const shockScene = (time: number, shockUntil?: number): Scene => {
+        const s = blank();
+        s.time = time;
+        enemy(s as unknown as HordeState, { id: 7, ...(shockUntil ? { shockUntil } : {}) });
+        return s;
+      };
+      const sparks = (scene: Scene, reduced = false) => {
+        const r = recorder();
+        const ctx = r.ctx as unknown as Record<string, unknown>;
+        const out: { style: unknown; comp: unknown }[] = [];
+        ctx.stroke = () => out.push({ style: ctx.strokeStyle, comp: ctx.globalCompositeOperation });
+        const anim = new Animator();
+        anim.reduced = reduced;
+        drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, null, anim);
+        return out.filter((o) => o.style === SHOCK.colour || o.style === SHOCK.glow);
+      };
+      const on = sparks(shockScene(1, 1.3));
+      expect(on.map((o) => o.style)).toEqual([SHOCK.glow, SHOCK.colour]);
+      expect(on.every((o) => o.comp === 'lighter')).toBe(true);
+      expect(sparks(shockScene(1.3, 1.3))).toHaveLength(0);
+      expect(sparks(shockScene(1))).toHaveLength(0);
+      // The twitch flips side each flicker, and holds still with Reduce motion.
+      const a = twitch(STILL, 7, 1);
+      const b = twitch(STILL, 7, 1 + SHOCK.every);
+      expect(Math.abs(a.dx)).toBe(SHOCK.dx);
+      expect(b.dx).toBe(-a.dx);
+      expect(twitch(STILL, 7, 0)).toEqual(STILL);
     });
 
     it('fades out after the burn ends rather than stopping at once', () => {

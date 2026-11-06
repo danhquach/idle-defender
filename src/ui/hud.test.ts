@@ -553,7 +553,7 @@ describe('hud', () => {
 describe('card text (ID-022)', () => {
   it("an upgrade names its rarity and category; a recruit doesn't", () => {
     const s = newHorde(1, setup());
-    expect(cardText({ kind: 'upgrade', id: 'frag-grenades' }, s)).toEqual({
+    expect(cardText({ kind: 'upgrade', id: 'frag-grenades' }, s)).toMatchObject({
       title: 'Frag Grenades',
       body: 'Each survivor throws a grenade every 8 s, into the thickest group',
       kind: 'Epic behaviour',

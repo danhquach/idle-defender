@@ -46,6 +46,11 @@ export const SQUAD_WALL: Tier = 'concrete';
  * win adds a survivor), then `late` (the squad grows only by levels until guns drop).
  */
 export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.03 } as const;
+/**
+ * Enemy HP's factor in horde-only Hordes 1, 2 and 3 on top of the growth (ID-097): the
+ * first hordes are sure wins while the player learns the cards; 1 from Horde 4 on.
+ */
+export const SQUAD_EARLY_HP: readonly number[] = [0.8, 0.9, 0.95];
 /** Survivor XP for a horde-only win, as a multiple of the full game's (`DEFENDER_XP`). */
 export const SQUAD_XP_RATE = 2;
 /** The horde whose win shows the soft ending screen (design §11); play goes on after it. */
@@ -192,10 +197,10 @@ export const WEAPONS = {
   lmg: {
     name: 'LMG',
     kind: 'gun',
-    damage: 6,
+    damage: 6.5,
     fireInterval: 0.22,
     range: 500,
-    magazine: 60,
+    magazine: 80,
     reload: 5,
     speed: 2000,
     spread: 4,
@@ -618,37 +623,59 @@ export const RARITY: Readonly<
   epic: { start: 5, per: 1, limit: 15 },
 };
 
+/** A levelled in-horde card's top level (ID-097): levels 1, 2 and 3 (max). */
+export const CARD_MAX_LEVEL = 3;
+
+/** The big enemies a card's push or paralysis does half to (design §8). */
+const HEAVY_KINDS: readonly EnemyKind[] = ['brute', 'swollen', 'horror'];
+
 /**
- * What the in-horde cards do (design §8, as built ID-022, reworked ID-077). Shares are of
- * the bullet's damage; radii and ranges in px; times in s.
+ * What the in-horde cards do (design §8, as built ID-022, reworked ID-077, levels ID-097).
+ * A levelled card's numbers are per level, from level 1 to its max; a repeatable card's
+ * `step` is added once per pick. Shares are of the bullet's damage; radii and ranges in px;
+ * times in s.
  */
 export const CARD = {
   /** Hollow Points (a research card, ID-035): squad damage factor. */
   hollowPoints: 1.4,
-  ricochet: { range: 150, share: 0.25 },
-  burn: { dps: 3, seconds: 3 },
-  /** Speed Loaders: squad reload time factor. */
-  loaders: 0.7,
-  /** Extended Mags: squad magazine size factor. */
-  mags: 2,
-  /** Stopping Power: px of knock-back per point of damage dealt; `heavy` of it for `heavyKinds`. */
-  stopping: {
-    perDamage: 1,
-    heavy: 0.5,
-    heavyKinds: ['brute', 'swollen', 'horror'] as readonly EnemyKind[],
-  },
+  /**
+   * The repeatable cards' step a pick (ID-097), added up then multiplied once with the
+   * rest: Sharpshooter's damage, Rapid Fire's fire rate, Long Sight's range, and
+   * Reinforce's share of each segment's max HP at the start of the horde.
+   */
+  step: { damage: 0.1, fireRate: 0.08, range: 0.06, reinforce: 0.1 },
+  /** Patch Up: share of each segment's max HP it repairs. */
+  patchUp: 0.3,
+  ricochet: { range: 150, share: [0.1, 0.18, 0.25] },
+  /** Piercing Rounds: chance a squad shot gets +1 pierce, per level (1 = no roll). */
+  pierce: [0.35, 0.7, 1],
+  /** Incendiary Rounds: burn per second, per level, for `seconds`. */
+  burn: { dps: [1, 2, 3], seconds: 3 },
+  /**
+   * Shock Rounds: s a hit paralyses for, per level (`heavy` of it for the big kinds); an
+   * enemy can't be paralysed again until `immune` s after its last paralysis ends.
+   */
+  shock: { seconds: [0.2, 0.3, 0.4], heavy: 0.5, immune: 1, heavyKinds: HEAVY_KINDS },
+  /** Speed Loaders: squad reload time factor, per level. */
+  loaders: [0.9, 0.8, 0.7],
+  /** Extended Mags: squad magazine size factor, per level. */
+  mags: [4 / 3, 5 / 3, 2],
+  /**
+   * Concussion Rounds (was Stopping Power): px of knock-back per point of damage dealt;
+   * `heavy` of it for the big kinds; none again until `gap` s after the last push.
+   */
+  concussion: { perDamage: 0.5, heavy: 0.5, gap: 0.5, heavyKinds: HEAVY_KINDS },
   /**
    * Frag Grenades: one every `every` s per survivor on the line, at an enemy within `range` of a survivor, landing
    * `flight` s later for `damage` flat within `radius`; its blast is drawn for `flash` s.
    */
   frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 0.4 },
-  /** Damage to an enemy each time it hits a standing segment. */
-  spikes: 3,
   /**
    * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
-   * slows; each row of it (one per segment) takes `durability` enemies before it breaks (ID-090).
+   * slows per level; each row of it (one per segment) takes `durability` enemies before it
+   * breaks (ID-090).
    */
-  wire: { from: 250, to: 400, slow: 0.35, durability: 30 },
+  wire: { from: 250, to: 400, slow: [0.15, 0.25, 0.35], durability: 30 },
   /** Share of `BANK_CAP` a Recharge adds. */
   recharge: 0.25,
 } as const;

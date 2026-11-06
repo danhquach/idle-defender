@@ -488,6 +488,63 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.016);
   });
 
+  it('an offer card spells out its pick as text: level step, before and after, and a swap warning (ID-097)', () => {
+    const { root } = fight();
+    const real = vi.mocked(tick).getMockImplementation()!;
+    vi.mocked(tick).mockImplementationOnce((s, dt) => {
+      const next = real(s, dt);
+      return {
+        ...next,
+        taken: ['incendiary-rounds', 'barbed-wire', 'sharpshooter'],
+        cardLevels: { 'incendiary-rounds': 2, 'barbed-wire': 1, sharpshooter: 3 },
+        offer: [
+          { kind: 'upgrade', id: 'barbed-wire' },
+          { kind: 'upgrade', id: 'shock-rounds' },
+          { kind: 'upgrade', id: 'sharpshooter' },
+        ],
+      };
+    });
+    step(16);
+    step(32);
+    const cards = [...root.querySelectorAll<HTMLButtonElement>('.hud-cards .hud-card')];
+    expect(cards).toHaveLength(3);
+    const text = (b: HTMLElement, sel: string) => b.querySelector(sel)?.textContent;
+    const [wire, shock, sharp] = cards as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
+    expect(text(wire, '.hud-card-tag')).toBe('Lv 1 → 2');
+    expect(text(wire, '.hud-card-body')).toBe(
+      'Enemies 15% → 25% slower in the wire strung across the field',
+    );
+    // The number that changes is highlighted.
+    expect(text(wire, '.hud-card-change')).toBe('15% → 25%');
+    expect(wire.querySelector('.hud-card-change')!.tagName).toBe('STRONG');
+    expect(text(shock, '.hud-card-tag')).toBe('New');
+    expect(text(shock, '.hud-card-warning')).toBe(
+      'Replaces Incendiary Rounds Lv 2. Its levels are lost.Incendiary Rounds Lv 2 → Shock Rounds Lv 1',
+    );
+    // The loss is read right after the tag, before the card's kind and effect.
+    expect([...shock.children].map((c) => c.className)).toEqual([
+      'hud-card-key',
+      'hud-card-title',
+      'hud-card-tag',
+      'hud-card-warning',
+      'hud-card-kind',
+      'hud-card-body',
+    ]);
+    expect(text(shock, '.hud-card-swap-line')).toBe('Incendiary Rounds Lv 2 → Shock Rounds Lv 1');
+    expect(shock.classList.contains('hud-card-swap')).toBe(true);
+    expect(text(sharp, '.hud-card-tag')).toBe('×3 → ×4');
+    expect(text(sharp, '.hud-card-body')).toBe('+30% → +40% damage');
+    // Screen readers hear the level or stack, both values and the warning, in words.
+    expect(wire.getAttribute('aria-label')).toContain('Level 1 to 2');
+    expect(wire.getAttribute('aria-label')).toContain('15% to 25%');
+    expect(shock.getAttribute('aria-label')).toContain(
+      'Replaces Incendiary Rounds Lv 2. Its levels are lost.',
+    );
+    expect(sharp.getAttribute('aria-label')).toContain('Stack 3 to 4');
+    // Text only: no markup from the card's words.
+    expect(wire.querySelectorAll('*').length).toBe(6);
+  });
+
   it('Space on the result screen holds nothing', () => {
     const { chip } = fight();
     const real = vi.mocked(tick).getMockImplementation()!;

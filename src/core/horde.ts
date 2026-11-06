@@ -14,6 +14,7 @@ import {
   BANK_CAP,
   CAMP,
   CARD,
+  CARD_MAX_LEVEL,
   COLUMNS,
   ENEMIES,
   ENGINEER_BUFF,
@@ -101,10 +102,10 @@ export type UpgradeId =
   | 'ricochet'
   | 'speed-loaders'
   | 'extended-mags'
-  | 'burning-rounds'
-  | 'stopping-power'
+  | 'incendiary-rounds'
+  | 'concussion-rounds'
   | 'frag-grenades'
-  | 'spiked-walls'
+  | 'shock-rounds'
   | 'barbed-wire'
   | 'recharge'
   | 'power-surge'
@@ -190,10 +191,16 @@ export interface Enemy {
   climbed: boolean;
   /** A Mutated Horror's ability clock (design §9, ID-024); only the Horror has one. */
   horror?: HorrorClock;
-  /** Burning Rounds (design §8): fight time it burns until; absent or 0 = not burning. */
+  /** Incendiary Rounds (design §8): fight time it burns until; absent or 0 = not burning. */
   burnUntil?: number;
+  /** Incendiary Rounds: what its burn deals a second, set by the hit that lit it (ID-097). */
+  burnDps?: number;
+  /** Shock Rounds (ID-097): fight time its latest paralysis ends; absent = never shocked. */
+  shockUntil?: number;
+  /** Concussion Rounds (ID-097): fight time it was last knocked back; absent = never. */
+  pushedAt?: number;
   /**
-   * All the HP fire has taken from it so far (Burning Rounds and molotov fires); absent = 0.
+   * All the HP fire has taken from it so far (Incendiary Rounds and molotov fires); absent = 0.
    * Cosmetic: the view (ID-089) flashes a hit only for HP lost beyond it, so a burning
    * enemy doesn't strobe white every step.
    */
@@ -223,8 +230,6 @@ export interface Segment {
   hitAt?: number;
   /** When a repair card last healed it (ID-075); absent = none this fight. A segment already whole gets none. */
   repairAt?: number;
-  /** When Spiked Walls last hurt an enemy striking it (ID-075), at most one per `HIT_MARK_GAP` s. */
-  spikeAt?: number;
 }
 /** One wall layer: `SEGMENTS` segments, top to bottom. */
 export interface Layer {
@@ -505,8 +510,14 @@ export interface HordeState {
   level: number;
   offer: Card[] | null;
   mods: Mods;
-  /** Upgrade cards taken this horde, in pick order, each once (design §8). */
+  /** Upgrade cards held this horde, in pick order, each once (design §8). */
   taken: UpgradeId[];
+  /**
+   * Each held card's level (ID-097): 1 to its max for a levelled card, 1 for a unique one,
+   * and how often it was picked for a repeatable one. Gone with the card when the other
+   * ammo card replaces it.
+   */
+  cardLevels: Partial<Record<UpgradeId, number>>;
   /** When the latest barrier card was picked (ID-075), so the wall can pulse; absent = none this horde. */
   barrierAt?: number;
   /** The only upgrade cards offered (ID-066); every card when absent. */
@@ -666,6 +677,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     offer: null,
     mods: { damage: 1, fireRate: 1, range: 1 },
     taken: [],
+    cardLevels: {},
     ...(cards ? { cardPool: [...cards] } : {}),
     ...(hpScale === undefined ? {} : { hpScale }),
     ...(xpRate === undefined ? {} : { xpRate }),
@@ -826,9 +838,25 @@ export function turretState(
 const freePower = (state: Partial<Pick<HordeState, 'wave' | 'freeWave'>>): boolean =>
   state.freeWave !== undefined && state.freeWave > 0 && state.freeWave === state.wave;
 
-/** Whether upgrade card `id` was taken this horde. */
+/** Whether upgrade card `id` is held this horde. */
 export const took = (state: Pick<HordeState, 'taken'>, id: UpgradeId): boolean =>
   state.taken.includes(id);
+
+/**
+ * Card `id`'s level this horde (ID-097): 0 when not held. A card held with no level
+ * recorded (a scene built by hand) counts at `CARD_MAX_LEVEL`.
+ */
+export const cardLevel = (
+  state: Pick<HordeState, 'taken'> & { readonly cardLevels?: HordeState['cardLevels'] },
+  id: UpgradeId,
+): number => (took(state, id) ? (state.cardLevels?.[id] ?? CARD_MAX_LEVEL) : 0);
+
+/** A per-level number of `levels` at card `id`'s level (held, so at least 1). */
+const atLevel = (
+  state: Parameters<typeof cardLevel>[0],
+  id: UpgradeId,
+  levels: readonly number[],
+): number => levels[Math.min(levels.length, cardLevel(state, id)) - 1]!;
 
 /** Whether the commander has perk `id` equipped in this fight. */
 export const perkOn = (state: Pick<HordeState, 'perks'>, id: PerkId): boolean =>
@@ -1170,16 +1198,29 @@ function reload(s: HordeState, d: Defender): void {
   }
 }
 
-/** Rounds a full magazine of gun `id` holds in this fight: doubled by Extended Mags (design §8). */
-export const magazineOf = (s: Pick<HordeState, 'taken'>, id: Held): number =>
-  Math.round(gunOf(id).magazine * (took(s, 'extended-mags') ? CARD.mags : 1));
+/** Rounds a full magazine of gun `id` holds in this fight: Extended Mags (design §8) adds to it. */
+export const magazineOf = (s: Parameters<typeof cardLevel>[0], id: Held): number =>
+  Math.round(
+    gunOf(id).magazine * (took(s, 'extended-mags') ? atLevel(s, 'extended-mags', CARD.mags) : 1),
+  );
 
 /** Seconds `d` takes to reload gun `id` in this fight: Speed Loaders (design §8) cut it. */
 export const reloadIn = (
-  s: { readonly taken: readonly UpgradeId[] },
+  s: Parameters<typeof cardLevel>[0],
   d: Parameters<typeof reloadTime>[0],
   id: Held,
-): number => reloadTime(d, id) * (s.taken.includes('speed-loaders') ? CARD.loaders : 1);
+): number =>
+  reloadTime(d, id) * (took(s, 'speed-loaders') ? atLevel(s, 'speed-loaders', CARD.loaders) : 1);
+
+/**
+ * Piercing Rounds (design §8, ID-097): the extra pierce of one squad shot. Below max it's
+ * a chance, rolled on the fight's RNG for the whole shot; at max it's always +1, no roll.
+ */
+export function extraPierce(s: Parameters<typeof cardLevel>[0], rng: Rng): number {
+  if (!took(s, 'piercing-rounds')) return 0;
+  const p = atLevel(s, 'piercing-rounds', CARD.pierce);
+  return p >= 1 || chance(rng, p) ? 1 : 0;
+}
 
 /** A gun in `slot` with a round in it. */
 function loaded(d: Defender, slot: Slot): boolean {
@@ -1373,10 +1414,10 @@ function around(s: HordeState, e: Enemy, radius: number): Enemy[] {
 }
 
 /**
- * Design §8: what the behaviour cards taken do when squad bullet `b` hits `e` for
- * `dealt` damage. Burning Rounds sets it alight; Stopping Power knocks it back if it
- * still stands; on the bullet's `first` hit, a Ricochet bounce heads for the nearest
- * other enemy (into `bounces`).
+ * Design §8: what the behaviour cards held do when squad bullet `b` hits `e` for
+ * `dealt` damage. Incendiary Rounds sets it alight at its level's rate; Shock Rounds
+ * paralyses it; Concussion Rounds knocks it back if it still stands; on the bullet's
+ * `first` hit, a Ricochet bounce heads for the nearest other enemy (into `bounces`).
  */
 function cardHit(
   s: HordeState,
@@ -1386,8 +1427,12 @@ function cardHit(
   dealt: number,
   bounces: Bullet[],
 ): void {
-  if (took(s, 'burning-rounds')) e.burnUntil = s.time + CARD.burn.seconds;
-  if (took(s, 'stopping-power')) knockBack(s, e, dealt);
+  if (took(s, 'incendiary-rounds')) {
+    e.burnUntil = s.time + CARD.burn.seconds;
+    e.burnDps = atLevel(s, 'incendiary-rounds', CARD.burn.dps);
+  }
+  if (took(s, 'shock-rounds')) shock(s, e);
+  if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
   if (!first || b.ricochet || !took(s, 'ricochet')) return;
   const next = around(s, e, CARD.ricochet.range).find((o) => !b.hit.includes(o.id));
   if (!next) return;
@@ -1397,7 +1442,7 @@ function cardHit(
     ...b,
     dx: (aim.x - b.x) / d,
     dy: (aim.y - b.y) / d,
-    damage: b.damage * CARD.ricochet.share,
+    damage: b.damage * atLevel(s, 'ricochet', CARD.ricochet.share),
     fromX: b.x,
     fromY: b.y,
     aim: d,
@@ -1410,16 +1455,38 @@ function cardHit(
 }
 
 /**
- * Stopping Power (design §8): `e`, still standing after a hit that dealt `dealt`, is
- * knocked back `CARD.stopping.perDamage` px a point (a heavy kind `CARD.stopping.heavy` of
- * that); never a Crawler on the wall, one inside the camp, or past the spawn edge.
+ * Concussion Rounds (design §8, was Stopping Power): `e`, still standing after a hit that
+ * dealt `dealt`, is knocked back `CARD.concussion.perDamage` px a point (a heavy kind
+ * `CARD.concussion.heavy` of that); never a Crawler on the wall, one inside the camp, or
+ * past the spawn edge, and never within `CARD.concussion.gap` s of its last push (ID-097).
  */
 function knockBack(s: HordeState, e: Enemy, dealt: number): void {
   if (e.hp <= 0 || e.inCamp || e.climbUntil !== 0) return;
-  const heavy = CARD.stopping.heavyKinds.includes(e.kind);
-  const push = CARD.stopping.perDamage * dealt * (heavy ? CARD.stopping.heavy : 1);
+  if (e.pushedAt !== undefined && s.time - e.pushedAt < CARD.concussion.gap - EPS) return;
+  const heavy = CARD.concussion.heavyKinds.includes(e.kind);
+  const push = CARD.concussion.perDamage * dealt * (heavy ? CARD.concussion.heavy : 1);
   e.x = Math.max(e.x, Math.min(s.spawnX ?? FIELD.right, e.x + push));
+  e.pushedAt = s.time;
 }
+
+/**
+ * Shock Rounds (design §8, ID-097): `e`, still standing, is paralysed for its level's
+ * time (a heavy kind `CARD.shock.heavy` of it): no moving, no attacking. Not while it is
+ * already held (a hit never extends one), nor within `CARD.shock.immune` s after its last
+ * paralysis ended.
+ */
+function shock(s: HordeState, e: Enemy): void {
+  if (e.hp <= 0 || stunned(s, e)) return;
+  if (e.shockUntil !== undefined && s.time < e.shockUntil + CARD.shock.immune - EPS) return;
+  const heavy = CARD.shock.heavyKinds.includes(e.kind);
+  const secs = atLevel(s, 'shock-rounds', CARD.shock.seconds) * (heavy ? CARD.shock.heavy : 1);
+  e.shockUntil = s.time + secs;
+  e.stunnedUntil = Math.max(e.stunnedUntil, e.shockUntil);
+}
+
+/** Whether Shock Rounds holds `e` paralysed now (ID-097). */
+export const shocked = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.shockUntil !== undefined && !due(s.time, e.shockUntil);
 
 /**
  * Frag Grenades (design §8): when due, the survivor on the line nearest the target throws
@@ -1524,7 +1591,7 @@ function fire(s: HordeState, rng: Rng): void {
         spread: spreadOf(defender, id),
         range: gunRange(s, defender.walking ? { kind: 'ground' } : post, id),
         damage: hit,
-        pierce: pierceOf(id) + (took(s, 'piercing-rounds') ? 1 : 0),
+        pierce: pierceOf(id) + extraPierce(s, rng),
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
@@ -1664,7 +1731,7 @@ function repair(s: HordeState): void {
   }
 }
 
-/** Whether Burning Rounds still has `e` alight. */
+/** Whether Incendiary Rounds still has `e` alight. */
 export const burning = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   e.burnUntil !== undefined && e.burnUntil > 0 && !due(s.time, e.burnUntil);
 
@@ -1715,14 +1782,15 @@ function land(s: HordeState): void {
 /**
  * Design §4, as built ID-019: each molotov fire burns every enemy inside it until it
  * goes out; the flash of a skill fades after `SKILL_FLASH`. Design §8: an enemy set
- * alight by Burning Rounds burns at `CARD.burn.dps`.
+ * alight by Incendiary Rounds burns at the rate the hit that lit it gave (`burnDps`).
  */
 function burn(s: HordeState): void {
   for (const e of s.enemies) {
     if (!burning(s, e)) continue;
-    popOn(s, e, CARD.burn.dps * STEP);
-    e.hp = Math.max(0, e.hp - CARD.burn.dps * STEP);
-    e.burnt = (e.burnt ?? 0) + CARD.burn.dps * STEP;
+    const dps = e.burnDps ?? CARD.burn.dps[CARD_MAX_LEVEL - 1]!;
+    popOn(s, e, dps * STEP);
+    e.hp = Math.max(0, e.hp - dps * STEP);
+    e.burnt = (e.burnt ?? 0) + dps * STEP;
   }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
@@ -1855,6 +1923,7 @@ function move(s: HordeState): Moves {
   const reached = new Map<number, Defender>();
   const screamers = s.enemies.filter((e) => e.kind === 'screamer' && e.hp > 0);
   const wire = barbedWire(s);
+  const wireSlow = wire === null ? 0 : atLevel(s, 'barbed-wire', CARD.wire.slow);
   for (const e of s.enemies) {
     if (stunned(s, e)) continue;
     const slowed =
@@ -1866,7 +1935,7 @@ function move(s: HordeState): Moves {
     const speed =
       ENEMIES[e.kind].speed *
       STEP *
-      (slowed ? 1 - CARD.wire.slow : 1) *
+      (slowed ? 1 - wireSlow : 1) *
       trapSlow(s, e) *
       screamed(screamers, e) *
       (charging(s, e) ? HORROR.charge.speed : 1);
@@ -2076,12 +2145,6 @@ function attack(s: HordeState, moves: Moves, rng: Rng): void {
     hitSegment(s, stop.layer, stop.segment, damage);
     if (e.kind === 'spewer') {
       s.spits.push({ fromX: e.x, fromY: e.y, x: stop.x, y: e.y, at: s.time + STEP });
-    } else if (took(s, 'spiked-walls')) {
-      // Spiked Walls (design §8): a blow on the wall costs the one landing it.
-      popOn(s, e, CARD.spikes);
-      e.hp = Math.max(0, e.hp - CARD.spikes);
-      const seg = stop.segment;
-      if (!(s.time - (seg.spikeAt ?? -Infinity) < HIT_MARK_GAP)) seg.spikeAt = s.time;
     }
     e.nextAttackAt = s.time + enemy.attackInterval;
   }

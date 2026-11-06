@@ -76,7 +76,7 @@ describe('cards', () => {
     after.offer = s.offer;
     after = chooseCard(after, 1);
     expect(after.layers[0]!.segments[4]).toMatchObject({ kind: null, hp: 0, maxHp: 0 });
-    expect(after.layers[0]!.segments[0]).toMatchObject({ hp: 250, maxHp: 250 });
+    expect(after.layers[0]!.segments[0]).toMatchObject({ hp: 220, maxHp: 220 });
   });
 
   it('recruit takes the free post furthest forward', () => {
@@ -126,16 +126,16 @@ describe('cards', () => {
       s.offer = [id, id, id];
       return chooseCard(s, 0);
     };
-    expect(pickUpgrade({ kind: 'upgrade', id: 'sharpshooter' }).mods.damage).toBe(1.2);
-    expect(pickUpgrade({ kind: 'upgrade', id: 'rapid-fire' }).mods.fireRate).toBe(1.15);
-    expect(pickUpgrade({ kind: 'upgrade', id: 'long-sight' }).mods.range).toBe(1.15);
+    expect(pickUpgrade({ kind: 'upgrade', id: 'sharpshooter' }).mods.damage).toBeCloseTo(1.1, 9);
+    expect(pickUpgrade({ kind: 'upgrade', id: 'rapid-fire' }).mods.fireRate).toBeCloseTo(1.08, 9);
+    expect(pickUpgrade({ kind: 'upgrade', id: 'long-sight' }).mods.range).toBeCloseTo(1.06, 9);
     const patched = pickUpgrade({ kind: 'upgrade', id: 'patch-up' }, (s) => {
       s.layers[0]!.segments[0]!.hp = 0;
     });
     expect(patched.layers[0]?.segments[0]?.hp).toBe(60);
     expect(patched.layers[0]?.segments[1]?.hp).toBe(200);
     const reinforced = pickUpgrade({ kind: 'upgrade', id: 'reinforce' });
-    expect(reinforced.layers[0]?.segments[0]).toMatchObject({ maxHp: 250, hp: 250 });
+    expect(reinforced.layers[0]?.segments[0]).toMatchObject({ maxHp: 220, hp: 220 });
   });
 
   it('queues a second level-up', () => {

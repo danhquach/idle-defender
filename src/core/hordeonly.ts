@@ -13,6 +13,7 @@ import {
   MAX_COUNT,
   RARITY_ORDER,
   SQUAD_CAP,
+  SQUAD_EARLY_HP,
   SQUAD_HP_GROWTH,
   SQUAD_LINE,
   SQUAD_SPAWN_X,
@@ -48,12 +49,13 @@ export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter((id) =>
 
 /**
  * Enemy HP's factor in horde-only Horde `n` (ID-066): `SQUAD_HP_GROWTH.early` per horde
- * until the squad reaches its cap, `late` after.
+ * until the squad reaches its cap, `late` after; Hordes 1–3 eased by `SQUAD_EARLY_HP` (ID-097).
  */
 export function squadHpScale(n: number): number {
   const early = Math.min(n, SQUAD_CAP) - 1;
   const late = Math.max(0, n - SQUAD_CAP);
-  return SQUAD_HP_GROWTH.early ** early * SQUAD_HP_GROWTH.late ** late;
+  const ease = SQUAD_EARLY_HP[n - 1] ?? 1;
+  return ease * SQUAD_HP_GROWTH.early ** early * SQUAD_HP_GROWTH.late ** late;
 }
 
 /** The one perk a horde-only fight runs, always on at level 1 (no perk screen). */

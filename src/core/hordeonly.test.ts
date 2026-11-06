@@ -173,7 +173,9 @@ describe('the squad in a horde (ID-066)', () => {
     for (const id of [
       'speed-loaders',
       'extended-mags',
-      'stopping-power',
+      'concussion-rounds',
+      'shock-rounds',
+      'incendiary-rounds',
       'frag-grenades',
       'barbed-wire',
     ] as const) {
@@ -185,6 +187,9 @@ describe('the squad in a horde (ID-066)', () => {
       'chain-lightning',
       'cleave',
       'slow-field',
+      'spiked-walls',
+      'burning-rounds',
+      'stopping-power',
     ]) {
       expect(UPGRADE_IDS as readonly string[]).not.toContain(gone);
     }
@@ -198,7 +203,11 @@ describe('the squad in a horde (ID-066)', () => {
   });
 
   it('enemy HP climbs SQUAD_HP_GROWTH.early per horde to the cap, then late', () => {
-    expect(squadHpScale(1)).toBe(1);
+    // Hordes 1–3 eased so they're sure wins (ID-097); full growth from Horde 4.
+    expect(squadHpScale(1)).toBe(0.8);
+    expect(squadHpScale(2)).toBeCloseTo(0.9 * SQUAD_HP_GROWTH.early, 9);
+    expect(squadHpScale(3)).toBeCloseTo(0.95 * SQUAD_HP_GROWTH.early ** 2, 9);
+    expect(squadHpScale(4)).toBeCloseTo(SQUAD_HP_GROWTH.early ** 3, 9);
     expect(squadHpScale(SQUAD_CAP)).toBeCloseTo(SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1), 9);
     expect(squadHpScale(SQUAD_CAP + 4)).toBeCloseTo(
       SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1) * SQUAD_HP_GROWTH.late ** 4,
