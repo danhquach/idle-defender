@@ -34,12 +34,11 @@ import { createRng } from './rng.ts';
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
 
 /**
- * The cards a horde-only fight offers: stat, behaviour and barrier cards, less Cleave (no
- * blades or tools). Power cards (no turrets) are out; recruit cards never come, as the
- * whole squad starts on the field.
+ * The cards a horde-only fight offers: stat, behaviour and barrier cards. Power cards (no
+ * turrets) are out; recruit cards never come, as the whole squad starts on the field.
  */
-export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter(
-  (id) => SQUAD_CARD_CATEGORIES.includes(UPGRADES[id].category) && id !== 'cleave',
+export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter((id) =>
+  SQUAD_CARD_CATEGORIES.includes(UPGRADES[id].category),
 );
 
 /**

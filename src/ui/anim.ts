@@ -57,8 +57,8 @@ export const ANIM = {
   aim: { hold: 0.3 },
   /**
    * The pace (px/s of `drift`) from which an enemy's walk frames cycle (ID-069): slower than
-   * the slowest walk there is (a Horror on razor wire in a slow field, 15 × 0.35 × 0.7 ≈
-   * 3.7 px/s), so no enemy that moves stands on one frame; the crowd's jostle drifts nowhere.
+   * the slowest walk there is (a Horror on razor wire in Barbed Wire's band, 15 × 0.35 × 0.65 ≈
+   * 3.4 px/s), so no enemy that moves stands on one frame; the crowd's jostle drifts nowhere.
    */
   cycles: 1,
   /** A blade or tool strike's swing, forward (right), over `STRIKE_FLASH`. */

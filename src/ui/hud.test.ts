@@ -554,11 +554,12 @@ describe('hud', () => {
 describe('card text (ID-022)', () => {
   it("an upgrade names its rarity and category; a recruit doesn't", () => {
     const s = newHorde(1, setup());
-    expect(cardText({ kind: 'upgrade', id: 'split-shot' }, s)).toEqual({
-      title: 'Split Shot',
-      body: 'Each shot also fires 2 bullets in a fan at half damage',
+    expect(cardText({ kind: 'upgrade', id: 'frag-grenades' }, s)).toEqual({
+      title: 'Frag Grenades',
+      body: 'Each survivor throws a grenade every 8 s, into the thickest group',
       kind: 'Epic behaviour',
     });
+    expect(cardText({ kind: 'upgrade', id: 'extended-mags' }, s).kind).toBe('Rare stat');
     expect(cardText({ kind: 'upgrade', id: 'sharpshooter' }, s).kind).toBe('Common stat');
     const recruit = cardText({ kind: 'recruit', defender: s.bench[0]! }, s);
     expect(recruit.kind).toBeUndefined();

@@ -11,7 +11,6 @@ import {
   UPGRADE_IDS,
   UPGRADES,
 } from './cards.ts';
-import { buildPost, newBase, type Base } from './base.ts';
 import {
   BANK_CAP,
   CARD,
@@ -23,8 +22,6 @@ import {
   WEAPONS,
   type CardRarity,
   type EnemyKind,
-  type Stock,
-  stockOf,
 } from './data.ts';
 import {
   HIT_MARK_GAP,
@@ -34,6 +31,7 @@ import {
   turretState,
   type Bullet,
   type Card,
+  type Enemy,
   type HordeState,
   type UpgradeId,
 } from './horde.ts';
@@ -128,7 +126,7 @@ describe('rarity', () => {
   });
 
   it('falls back to the next rarity down when none of the rolled one is left', () => {
-    const s = quiet('split-shot', 'chain-lightning');
+    const s = quiet('frag-grenades');
     s.bench = [];
     // 0.999 rolls epic every slot (and picks the last card of a list).
     const top = () => 0.999;
@@ -141,9 +139,10 @@ describe('rarity', () => {
       'piercing-rounds',
       'ricochet',
       'burning-rounds',
-      'explode-on-kill',
+      'stopping-power',
+      'extended-mags',
       'spiked-walls',
-      'slow-field',
+      'barbed-wire',
     );
     // No turret, so Power Surge (rare) is out too: down to common.
     expect(upgrades(rollOffer(top, s)).map((id) => UPGRADES[id].rarity)).toEqual([
@@ -166,12 +165,12 @@ describe('offers', () => {
     s.offer = [
       { kind: 'upgrade', id: 'ricochet' },
       { kind: 'upgrade', id: 'sharpshooter' },
-      { kind: 'upgrade', id: 'cleave' },
+      { kind: 'upgrade', id: 'speed-loaders' },
     ];
     s = chooseCard(s, 0);
     s.offer = [
       { kind: 'upgrade', id: 'sharpshooter' },
-      { kind: 'upgrade', id: 'cleave' },
+      { kind: 'upgrade', id: 'speed-loaders' },
       { kind: 'upgrade', id: 'reinforce' },
     ];
     s = chooseCard(s, 0);
@@ -260,18 +259,33 @@ describe('behaviour cards', () => {
     expect(t.enemies[1]!.hp).toBe(1000);
   });
 
-  it('Split Shot: each shot adds two bullets at ±10° and half damage', () => {
+  /** Defender a's pistol after one step at an enemy in range, starting with `ammo` rounds. */
+  function shotOnce(ammo: number, ...taken: UpgradeId[]) {
     const s = newHorde(1, setup());
     s.toSpawn = 0;
-    s.taken = ['split-shot'];
-    enemy(s, { ...tough, ...still, x: 900, y: ROW4 });
-    const t = tick(s, STEP);
-    expect(t.bullets).toHaveLength(3);
-    const [main, left, right] = t.bullets as [Bullet, Bullet, Bullet];
-    expect(left.damage).toBeCloseTo(main.damage * CARD.split.share, 9);
-    expect(right.damage).toBeCloseTo(main.damage * CARD.split.share, 9);
-    const deg = (b: Bullet) => (Math.atan2(b.dy, b.dx) * 180) / Math.PI;
-    expect(deg(right) - deg(left)).toBeCloseTo(2 * CARD.split.angle, 6);
+    s.taken = taken;
+    s.defenders[0]!.ammo.primary = ammo;
+    enemy(s, { ...tough, ...still, x: 700, y: ROW4 });
+    return { fired: s.time, d: tick(s, STEP).defenders[0]! };
+  }
+
+  it('Speed Loaders: a squad gun reloads in 70% of the time', () => {
+    const reload = (...taken: UpgradeId[]): number => {
+      const { fired, d } = shotOnce(1, ...taken);
+      expect(d.ammo.primary).toBe(0);
+      return d.reloadedAt.primary - fired;
+    };
+    expect(reload()).toBeGreaterThan(0);
+    expect(reload('speed-loaders')).toBeCloseTo(reload() * CARD.loaders, 9);
+  });
+
+  it('Extended Mags: a squad gun refills to twice its magazine from its next reload', () => {
+    expect(shotOnce(0).d.ammo.primary).toBe(WEAPONS.pistol.magazine - 1);
+    expect(shotOnce(0, 'extended-mags').d.ammo.primary).toBe(
+      WEAPONS.pistol.magazine * CARD.mags - 1,
+    );
+    // A magazine already in the gun keeps its rounds until it runs dry.
+    expect(shotOnce(3, 'extended-mags').d.ammo.primary).toBe(2);
   });
 
   it('Burning Rounds: the enemy hit burns 3 dmg/s for 3 s; a new hit resets, never stacks', () => {
@@ -294,102 +308,113 @@ describe('behaviour cards', () => {
     expect(u.enemies[0]!.hp).toBeCloseTo(1000 - CARD.burn.dps * (0.5 + CARD.burn.seconds), 6);
   });
 
-  it('Explode on Kill: a bullet kill bursts on enemies within reach; bursts never chain', () => {
-    const s = quiet('explode-on-kill');
-    const a = enemy(s, { ...still, hp: 1, x: 600, y: ROW4 });
-    const b = enemy(s, { ...still, hp: 10, x: 600, y: ROW4 + 30 });
-    const c = enemy(s, { ...still, hp: 20, x: 600, y: ROW4 + 60 });
-    const far = enemy(s, { ...tough, ...still, x: 600 + CARD.explode.radius + 5, y: ROW4 });
-    shoot(s, { x: 590, y: ROW4, damage: 5 });
+  /** Where an enemy (still, 1000 HP at x 600, `e` on top) ends up after a 10-damage bullet from `owner`. */
+  function knocked(e: Partial<Enemy>, taken: UpgradeId[], owner = 'a'): number {
+    const s = quiet(...taken);
+    const target = enemy(s, { ...tough, ...still, x: 600, y: ROW4, ...e });
+    shoot(s, { x: 590, y: ROW4, damage: 10, owner });
+    return tick(s, STEP).enemies.find((o) => o.id === target.id)!.x;
+  }
+
+  it('Stopping Power: a hit knocks its enemy back 1 px per point of damage dealt', () => {
+    expect(knocked({}, [])).toBe(600);
+    expect(knocked({}, ['stopping-power'], 'turret:0')).toBe(600);
+    expect(knocked({}, ['stopping-power'])).toBeCloseTo(600 + 10 * CARD.stopping.perDamage, 9);
+    // A Brute: its armour takes 3 off the 10, and it's heavy, so half of that again.
+    expect(knocked({ kind: 'brute' }, ['stopping-power'])).toBeCloseTo(
+      600 + (10 - 3) * CARD.stopping.perDamage * CARD.stopping.heavy,
+      9,
+    );
+    expect(knocked({ kind: 'swollen' }, ['stopping-power'])).toBeCloseTo(
+      600 + 10 * CARD.stopping.perDamage * CARD.stopping.heavy,
+      9,
+    );
+  });
+
+  it('Stopping Power: never a Crawler on the wall, an enemy in the camp, or past the spawn edge', () => {
+    expect(knocked({ kind: 'crawler', climbUntil: 1e9 }, ['stopping-power'])).toBe(600);
+    expect(knocked({ inCamp: true }, ['stopping-power'])).toBe(600);
+    const s = quiet('stopping-power');
+    s.spawnX = 602;
+    const e = enemy(s, { ...tough, ...still, x: 600, y: ROW4 });
+    shoot(s, { x: 590, y: ROW4, damage: 100 });
+    expect(tick(s, STEP).enemies.find((o) => o.id === e.id)!.x).toBe(602);
+  });
+
+  /** Frag Grenades picked at time 0 by defender a (420, 360): a group of 3 far off and one enemy near. */
+  function fragged(...extra: Partial<Enemy>[]) {
+    let s = quiet();
+    s.offer = [
+      { kind: 'upgrade', id: 'frag-grenades' },
+      { kind: 'upgrade', id: 'sharpshooter' },
+      { kind: 'upgrade', id: 'reinforce' },
+    ];
+    s = chooseCard(s, 0);
+    const group = [-30, 0, 30].map((dy) => enemy(s, { ...tough, ...still, x: 900, y: ROW4 + dy }));
+    const lone = enemy(s, { ...tough, ...still, x: 700, y: ROW4 + 200 });
+    for (const e of extra) enemy(s, { ...tough, ...still, ...e });
+    return { s, group, lone };
+  }
+
+  it('Frag Grenades: thrown on pick at the thickest group, it bursts 20 flat on all in reach', () => {
+    const { s, group, lone } = fragged({ kind: 'brute', x: 900, y: ROW4 + 60 });
+    expect(s.nextFragAt).toBe(s.time);
+    let t = tick(s, STEP);
+    expect(t.grenades).toHaveLength(1);
+    const g = t.grenades[0]!;
+    // The middle one and the one below it both have 3 others within 70 px; same x, so lowest id.
+    expect({ x: g.x, y: g.y }).toEqual({ x: 900, y: ROW4 });
+    expect(g.lands).toBeCloseTo(g.at + CARD.frag.flight, 9);
+    expect(t.nextFragAt).toBeCloseTo(g.at + CARD.frag.every, 9);
+    // Nothing is hurt while it's in the air.
+    expect(hpOf(t, group[1]!.id)).toBe(1000);
+    t = steps(t, Math.round(CARD.frag.flight / STEP) + 1);
+    // Within 70 px of (900, 390): the group of 3 and the Brute (armour doesn't count).
+    for (const e of group) expect(hpOf(t, e.id)).toBe(1000 - CARD.frag.damage);
+    expect(hpOf(t, t.enemies.at(-1)!.id)).toBe(1000 - CARD.frag.damage);
+    expect(hpOf(t, lone.id)).toBe(1000);
+    // One grenade every 8 s, no more.
+    t = steps(t, Math.round((CARD.frag.every - CARD.frag.flight) / STEP) - 3);
+    expect(t.grenades.filter((k) => !k.burst)).toHaveLength(0);
+    t = steps(t, 4);
+    expect(t.grenades.filter((k) => !k.burst)).toHaveLength(1);
+  });
+
+  it('Frag Grenades: waits for an enemy within reach of a survivor, then throws at once', () => {
+    let s = quiet();
+    s.offer = [
+      { kind: 'upgrade', id: 'frag-grenades' },
+      { kind: 'upgrade', id: 'sharpshooter' },
+      { kind: 'upgrade', id: 'reinforce' },
+    ];
+    s = chooseCard(s, 0);
+    const e = enemy(s, { ...tough, x: 420 + CARD.frag.range + 40, y: ROW4 });
+    let t = steps(s, 3);
+    expect(t.grenades).toHaveLength(0);
+    // Walked into reach: the next step throws.
+    t.enemies.find((o) => o.id === e.id)!.x = 420 + CARD.frag.range - 10;
+    t = tick(t, STEP);
+    expect(t.grenades).toHaveLength(1);
+    // Without the card, no grenade ever.
+    const none = quiet();
+    enemy(none, { ...tough, ...still, x: 700, y: ROW4 });
+    expect(steps(none, 10).grenades).toHaveLength(0);
+  });
+
+  it('Frag Grenades: every survivor on the line carries them, so two throw twice as often', () => {
+    const { s } = fragged();
+    const spec = {
+      id: 'b',
+      name: 'B',
+      loadout: { primary: 'pistol' as const, secondary: null, item: null },
+    };
+    const post = s.posts[1]!;
+    post.defenderId = 'b';
+    s.defenders.push(standing(spec, post, 1e9));
     const t = tick(s, STEP);
-    expect(hpOf(t, a.id)).toBeUndefined();
-    expect(hpOf(t, b.id)).toBeUndefined();
-    expect(hpOf(t, c.id)).toBe(20);
-    expect(hpOf(t, far.id)).toBe(1000);
-    expect(t.pops).toHaveLength(1);
-    // Not a kill: no burst.
-    const hurt = quiet('explode-on-kill');
-    enemy(hurt, { ...tough, ...still, x: 600, y: ROW4 });
-    const near = enemy(hurt, { ...tough, ...still, x: 600, y: ROW4 + 30 });
-    shoot(hurt, { x: 590, y: ROW4, damage: 5 });
-    expect(hpOf(tick(hurt, STEP), near.id)).toBe(1000);
+    expect(t.grenades).toHaveLength(1);
+    expect(t.nextFragAt).toBeCloseTo(t.grenades[0]!.at + CARD.frag.every / 2, 9);
   });
-
-  it('Chain Lightning: some hits arc to the 2 nearest within reach at half damage (seeded)', () => {
-    let arced = 0;
-    let not = 0;
-    for (let seed = 1; seed <= 100; seed++) {
-      const s = newHorde(seed, setup());
-      s.toSpawn = 0;
-      s.defenders[0]!.nextShotAt = 1e9;
-      s.taken = ['chain-lightning'];
-      const a = enemy(s, { ...tough, ...still, x: 600, y: ROW4 });
-      const b = enemy(s, { ...tough, ...still, x: 600, y: ROW4 + 60 });
-      const c = enemy(s, { ...tough, ...still, x: 600, y: ROW4 - 70 });
-      const d = enemy(s, { ...tough, ...still, x: 600, y: ROW4 + 90 });
-      const out = enemy(s, { ...tough, ...still, x: 600, y: ROW4 + CARD.chain.radius + 40 });
-      shoot(s, { x: 590, y: ROW4, damage: 10 });
-      const t = tick(s, STEP);
-      expect(hpOf(t, a.id)).toBe(990);
-      expect(hpOf(t, out.id)).toBe(1000);
-      if (t.arcs.length === 0) {
-        not += 1;
-        continue;
-      }
-      arced += 1;
-      expect(t.arcs).toHaveLength(CARD.chain.targets);
-      expect(hpOf(t, b.id)).toBeCloseTo(1000 - 10 * CARD.chain.share, 9);
-      expect(hpOf(t, c.id)).toBeCloseTo(1000 - 10 * CARD.chain.share, 9);
-      expect(hpOf(t, d.id)).toBe(1000);
-    }
-    expect(arced).toBeGreaterThan(0);
-    expect(not).toBeGreaterThan(arced);
-  });
-
-  it('Chain Lightning: a Brute’s armour takes its share off an arc too', () => {
-    for (let seed = 1; seed <= 200; seed++) {
-      const s = newHorde(seed, setup());
-      s.toSpawn = 0;
-      s.defenders[0]!.nextShotAt = 1e9;
-      s.taken = ['chain-lightning'];
-      enemy(s, { ...tough, ...still, x: 600, y: ROW4 });
-      const brute = enemy(s, { ...tough, ...still, kind: 'brute', x: 600, y: ROW4 + 50 });
-      shoot(s, { x: 590, y: ROW4, damage: 10 });
-      const t = tick(s, STEP);
-      if (t.arcs.length === 0) continue;
-      expect(hpOf(t, brute.id)).toBe(1000 - 2); // 5 − 3 armour
-      return;
-    }
-    throw new Error('no seed arced');
-  });
-
-  it.each(['knife', 'toolkit'] as const)(
-    'Cleave: a %s hit cleaves a fifth more to enemies close by',
-    (melee) => {
-      const cleaved = (...taken: UpgradeId[]): [number, number] => {
-        const { base, postId } = groundBase();
-        const s = newHorde(1, {
-          ...setup(),
-          roster: [
-            { id: 'a', name: 'A', loadout: { primary: 'pistol', secondary: melee, item: null } },
-          ],
-          base,
-          startPostId: postId,
-        });
-        s.toSpawn = 0;
-        s.taken = taken;
-        const post = s.posts[s.defenders[0]!.postId]!;
-        const target = enemy(s, { ...tough, ...still, x: post.x + 20, y: post.y });
-        const near = enemy(s, { ...tough, ...still, x: post.x + 20, y: post.y + 20 });
-        const t = tick(s, STEP);
-        return [1000 - hpOf(t, target.id)!, 1000 - hpOf(t, near.id)!];
-      };
-      const [hit, side] = cleaved('cleave');
-      expect(hit).toBeGreaterThan(0);
-      expect(side).toBeCloseTo(hit * CARD.cleave, 9);
-      expect(cleaved()[1]).toBe(0);
-    },
-  );
 
   it('turret bullets set off no behaviour card', () => {
     const all = UPGRADE_IDS.filter((id) => UPGRADES[id].category === 'behaviour');
@@ -401,7 +426,6 @@ describe('behaviour cards', () => {
     expect(hpOf(t, a.id)).toBeUndefined();
     expect(hpOf(t, near.id)).toBe(1000);
     expect(t.enemies[0]!.burnUntil).toBeUndefined();
-    expect(t.pops).toEqual([]);
     expect(t.bullets).toEqual([]);
   });
 });
@@ -476,26 +500,39 @@ describe('barrier cards', () => {
     expect(tick(s, STEP).enemies.find((x) => x.id === e.id)!.hp).toBe(1000);
   });
 
-  it('Slow Field: enemies just outside the outermost standing layer move 30% slower', () => {
-    const moved = (kind: EnemyKind, x: number, ...taken: UpgradeId[]): number => {
-      const s = quiet(...taken);
-      const e = enemy(s, { ...tough, kind, x, y: ROW4 });
-      return x - tick(s, STEP).enemies.find((o) => o.id === e.id)!.x;
-    };
+  /** The wall's front: the starting layer (x 500) and its depth. */
+  const FRONT = 520;
+  /** How far an enemy of `kind` at `x` on row 4 walks in one step, with `taken`. */
+  const moved = (kind: EnemyKind, x: number, ...taken: UpgradeId[]): number => {
+    const s = quiet(...taken);
+    const e = enemy(s, { ...tough, kind, x, y: ROW4 });
+    return x - tick(s, STEP).enemies.find((o) => o.id === e.id)!.x;
+  };
+
+  it('Barbed Wire: enemies in the band 250–400 px out move 35% slower; outside it, full speed', () => {
     const step = ENEMIES.shambler.speed * STEP;
-    expect(moved('shambler', 600, 'slow-field')).toBeCloseTo(step * (1 - CARD.slowField.slow), 9);
-    expect(moved('shambler', 600)).toBeCloseTo(step, 9);
-    // Past the field's reach: full speed.
-    expect(moved('shambler', 520 + CARD.slowField.reach + 30, 'slow-field')).toBeCloseTo(step, 9);
+    const slow = step * (1 - CARD.wire.slow);
+    expect(moved('shambler', FRONT + 300, 'barbed-wire')).toBeCloseTo(slow, 9);
+    expect(moved('shambler', FRONT + CARD.wire.from, 'barbed-wire')).toBeCloseTo(slow, 9);
+    expect(moved('shambler', FRONT + CARD.wire.to, 'barbed-wire')).toBeCloseTo(slow, 9);
+    expect(moved('shambler', FRONT + 300)).toBeCloseTo(step, 9);
+    // In front of the band and between it and the wall: full speed.
+    expect(moved('shambler', FRONT + CARD.wire.to + 30, 'barbed-wire')).toBeCloseTo(step, 9);
+    expect(moved('shambler', FRONT + CARD.wire.from - 30, 'barbed-wire')).toBeCloseTo(step, 9);
+    // It multiplies with a Runner's own speed like any slow.
+    expect(moved('runner', FRONT + 300, 'barbed-wire')).toBeCloseTo(
+      ENEMIES.runner.speed * STEP * (1 - CARD.wire.slow),
+      9,
+    );
   });
 
-  it('Slow Field: with the outer layer down it moves in to the next standing one, or is gone', () => {
-    const s = quiet('slow-field');
+  it('Barbed Wire: stays put when the wall in front of it falls', () => {
+    const s = quiet('barbed-wire');
     for (const seg of s.layers[0]!.segments) seg.hp = 0;
-    const e = enemy(s, { ...tough, x: 600, y: ROW4 });
+    const e = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 });
     const t = tick(s, STEP);
-    expect(600 - t.enemies.find((o) => o.id === e.id)!.x).toBeCloseTo(
-      ENEMIES.shambler.speed * STEP,
+    expect(FRONT + 300 - t.enemies.find((o) => o.id === e.id)!.x).toBeCloseTo(
+      ENEMIES.shambler.speed * STEP * (1 - CARD.wire.slow),
       9,
     );
   });
@@ -514,13 +551,6 @@ function tower() {
     nextShotAt: 0,
   };
 }
-/** The starting base with a ground post behind the wall, and that post's id. */
-function groundBase(): { base: Base; postId: number } {
-  const r = buildPost(newBase(), RICH, { kind: 'ground', column: 0, row: 4 });
-  if (!r.ok) throw new Error(r.reason);
-  return { base: r.base, postId: r.base.posts.findIndex((p) => p.kind === 'ground') };
-}
-const RICH: Stock = stockOf({ scrap: 999, wood: 999, metal: 999, concrete: 999 });
 
 describe('power cards', () => {
   it('Recharge: adds a quarter of the cap, never past it', () => {
@@ -619,17 +649,21 @@ describe('synergies', () => {
 describe('determinism and cost', () => {
   const ALL = UPGRADE_IDS.filter((id) => UPGRADES[id].category === 'behaviour');
 
-  it('the same seed with every behaviour card plays the same fight', () => {
+  it('the same seed with every card that acts in the fight plays the same fight', () => {
     const play = () => {
       const s = newHorde(7, { ...setup(), hordeNumber: 6 });
-      s.taken = [...ALL, 'slow-field', 'spiked-walls'];
+      s.taken = [...ALL, 'speed-loaders', 'extended-mags', 'barbed-wire', 'spiked-walls'];
+      s.nextFragAt = 0;
       return steps(s, Math.round(40 / STEP));
     };
-    expect(play()).toEqual(play());
+    const t = play();
+    expect(t.grenades.length + t.enemies.length).toBeGreaterThan(0);
+    expect(t).toEqual(play());
   });
 
-  it('300 enemies and 200 bullets with Split Shot, Ricochet and Chain Lightning cost well under the 33 ms step', () => {
+  it('300 enemies and 200 bullets with every behaviour card, a grenade thrown, cost well under the 33 ms step', () => {
     const s = quiet(...ALL);
+    s.nextFragAt = 2 * STEP;
     const kinds = Object.keys(ENEMIES) as EnemyKind[];
     for (let i = 0; i < 300; i++) {
       enemy(s, {

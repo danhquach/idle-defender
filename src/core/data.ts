@@ -611,23 +611,33 @@ export const RARITY: Readonly<
 };
 
 /**
- * What the in-horde cards do (design §8, as built ID-022). Shares are of the bullet's
- * damage; radii and ranges in px; times in s.
+ * What the in-horde cards do (design §8, as built ID-022, reworked ID-077). Shares are of
+ * the bullet's damage; radii and ranges in px; times in s.
  */
 export const CARD = {
   /** Hollow Points (a research card, ID-035): squad damage factor. */
   hollowPoints: 1.4,
   ricochet: { range: 150, share: 0.25 },
-  split: { angle: 10, share: 0.5 },
   burn: { dps: 3, seconds: 3, spread: 40 },
-  explode: { damage: 15, radius: 40, flash: 0.3 },
-  chain: { chance: 0.1, targets: 2, radius: 100, share: 0.5, flash: 0.2 },
-  /** Cleave share added to blade and tool hits (still capped at `STAT_EFFECT.cleaveCap`). */
-  cleave: 0.2,
+  /** Speed Loaders: squad reload time factor. */
+  loaders: 0.7,
+  /** Extended Mags: squad magazine size factor. */
+  mags: 2,
+  /** Stopping Power: px of knock-back per point of damage dealt; `heavy` of it for `heavyKinds`. */
+  stopping: {
+    perDamage: 1,
+    heavy: 0.5,
+    heavyKinds: ['brute', 'swollen', 'horror'] as readonly EnemyKind[],
+  },
+  /**
+   * Frag Grenades: one every `every` s per survivor on the line, at an enemy within `range` of a survivor, landing
+   * `flight` s later for `damage` flat within `radius`; its blast is drawn for `flash` s.
+   */
+  frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 0.4 },
   /** Damage to an enemy each time it hits a standing segment. */
   spikes: 3,
-  /** The field in front of the outermost standing layer, and how much it slows. */
-  slowField: { reach: 120, slow: 0.3 },
+  /** Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it slows. */
+  wire: { from: 250, to: 400, slow: 0.35 },
   /** Share of `BANK_CAP` a Recharge adds. */
   recharge: 0.25,
 } as const;

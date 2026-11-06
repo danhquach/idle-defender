@@ -248,14 +248,19 @@ describe('perks in the horde', () => {
     const s = newHorde(1, {
       ...setup(),
       roster: [
-        { id: 'a', name: 'A', loadout: { primary: 'pistol', secondary: 'knife', item: null } },
+        {
+          id: 'a',
+          name: 'A',
+          loadout: { primary: 'pistol', secondary: 'knife', item: null },
+          // Might cleaves a fifth of each knife strike (design §6).
+          stats: { aim: 0, might: 20, tech: 0, grit: 0 },
+        },
       ],
       base: r.base,
       startPostId: r.base.posts.findIndex((p) => p.kind === 'ground'),
       perks: ['butchers-hunger'],
     });
     s.toSpawn = 0;
-    s.taken = ['cleave'];
     const post = s.posts[s.defenders[0]!.postId]!;
     const seg = s.layers[0]!.segments[post.row]!;
     seg.hp = seg.maxHp - 20;

@@ -44,12 +44,14 @@ import {
   wallPulse,
   type Camera,
 } from './projection.ts';
-import { GROUND_TILE, SLOW_FIELD, SURROUND_BLOCK } from './ground.ts';
+import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
 import {
   BULLET,
   bulletShape,
   drawScene,
   DUSK,
+  GRENADE,
+  grenadeAt,
   NAME_TAG_GAP,
   offFrame,
   PLATE_H,
@@ -71,6 +73,7 @@ import {
   GUNNER_ART,
   GUNNER_LOOKS,
   LOOKS,
+  SKILL_ART,
   lookOf,
   TIER_ART,
   type Art,
@@ -654,7 +657,7 @@ describe('drawScene with art', () => {
     }
   });
 
-  it('draws a burning enemy, a Chain Lightning arc and an Explode on Kill ring (ID-022)', () => {
+  it('draws a burning enemy (ID-022) and a Frag Grenade in the air, then its blast (ID-077)', () => {
     const r = recorder();
     const strokes: unknown[] = [];
     const fills: unknown[] = [];
@@ -684,20 +687,35 @@ describe('drawScene with art', () => {
       ...blank(),
       time,
       enemies: [shambler(0, burnUntil)],
-      arcs: [{ fromX: 700, fromY: 300, x: 760, y: 320, at: 1 }],
-      pops: [{ x: 700, y: 300, at: 1 }],
+      grenades: [
+        { fromX: 420, fromY: 360, x: 760, y: 320, at: 0.8, lands: 1.4, burst: time >= 1.4 },
+      ],
     });
+    const blasts = () => r.drawn.filter((id) => id === SKILL_ART.airstrike).length;
+    // In the air: the grenade's dark olive ball; no blast yet.
     drawScene(r.ctx, r.art, scene(1, 2), CAM, VIEW);
-    expect(strokes).toContain('#cfe6ff');
-    expect(strokes).toContain('#ff9a3c');
+    expect(fills).toContain('#8a9a4a');
     expect(fills).toContain('#ff7a1a');
-    // Later: the arc and ring have faded, the burn is out.
-    strokes.length = 0;
+    expect(blasts()).toBe(0);
+    // Landed: the blast art, no ball.
+    fills.length = 0;
+    drawScene(r.ctx, r.art, scene(1.5, 2), CAM, VIEW);
+    expect(fills).not.toContain('#8a9a4a');
+    expect(blasts()).toBe(1);
+    // Later: the blast has faded, the burn is out.
     fills.length = 0;
     drawScene(r.ctx, r.art, scene(3, 2), CAM, VIEW);
-    expect(strokes).not.toContain('#cfe6ff');
-    expect(strokes).not.toContain('#ff9a3c');
+    expect(fills).not.toContain('#8a9a4a');
     expect(fills).not.toContain('#ff7a1a');
+    expect(blasts()).toBe(1);
+  });
+
+  it('a Frag Grenade flies from its thrower to where it lands, highest at the middle', () => {
+    const g = { fromX: 400, fromY: 300, x: 800, y: 500, at: 1, lands: 2, burst: false };
+    expect(grenadeAt(g, 1)).toEqual({ x: 400, y: 300, z: 0 });
+    expect(grenadeAt(g, 1.5)).toEqual({ x: 600, y: 400, z: GRENADE.arc });
+    expect(grenadeAt(g, 2)).toEqual({ x: 800, y: 500, z: 0 });
+    expect(grenadeAt(g, 5)).toEqual({ x: 800, y: 500, z: 0 });
   });
 
   it("draws a broken gate as its tier's rubble only, in every tier", () => {
@@ -2241,6 +2259,16 @@ describe('the horde-only fight (ID-068)', () => {
       expect(reloadShare(refilled, scene.time)).toBeNull();
     });
 
+    it('with Speed Loaders, fills over the shorter reload: empty when it starts (ID-077)', () => {
+      const scene = squadScene(1);
+      const d = scene.defenders[0]!;
+      const total = reloadTime(d, d.loadout.primary) * CARD.loaders;
+      const at = (left: number) =>
+        reloadShare(reloading(scene, 0, left).defenders[0]!, scene.time, ['speed-loaders']);
+      expect(at(total)).toBeCloseTo(0, 9);
+      expect(at(total / 2)).toBeCloseTo(0.5, 9);
+    });
+
     it("tracks a Gunner's primary while their sidearm fires", () => {
       const scene = squadScene(1);
       const d = reloading(scene, 0, 1).defenders[0]!;
@@ -2543,24 +2571,25 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(trace(fight({ repairAt: 10 }, { barrierAt: 9.8 })).ctx.globalAlpha).toBe(1);
   });
 
-  it('Slow Field: a faint strip in front of the outermost standing layer, only with the card', () => {
-    // No OffscreenCanvas under test: the tint alone shows, across the strip's full height.
+  it('Barbed Wire: a faint band 250–400 units in front of the outermost layer, only with the card', () => {
+    // No OffscreenCanvas under test: the tint alone shows, across the band's full height.
     const tint = (s: Scene, build: BuildOverlay | null = null) =>
-      trace(s, build).ops.filter((o) => o.op === 'fill' && o.style === SLOW_FIELD.tint.colour);
-    const on = fight({}, { taken: ['slow-field'] });
-    const strip = tint(on);
-    expect(strip).toHaveLength(1);
-    const from = on.layers[0]!.x + WALL.depth;
-    const a = project({ x: from, y: 0 }, CAM);
-    const b = project({ x: from + CARD.slowField.reach, y: FIELD.height }, CAM);
-    expect(strip[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
-    expect(strip[0]!.alpha).toBeCloseTo(SLOW_FIELD.tint.alpha, 9);
+      trace(s, build).ops.filter((o) => o.op === 'fill' && o.style === WIRE.tint.colour);
+    const on = fight({}, { taken: ['barbed-wire'] });
+    const band = tint(on);
+    expect(band).toHaveLength(1);
+    const front = on.layers[0]!.x + WALL.depth;
+    const a = project({ x: front + CARD.wire.from, y: 0 }, CAM);
+    const b = project({ x: front + CARD.wire.to, y: FIELD.height }, CAM);
+    expect(band[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
+    expect(band[0]!.alpha).toBeCloseTo(WIRE.tint.alpha, 9);
     expect(tint(fight({}))).toHaveLength(0);
-    expect(tint(fight({ hp: 0 }, { taken: ['slow-field'] }))).toHaveLength(0);
+    // The coils are out in the field: they stay when the wall falls.
+    expect(tint(fight({ hp: 0 }, { taken: ['barbed-wire'] }))).toHaveLength(1);
     expect(tint(on, overlay())).toHaveLength(0);
   });
 
-  it('Slow Field: drawn from its painted strip when the browser can paint one', () => {
+  it('Barbed Wire: drawn from its painted band when the browser can paint one', () => {
     const Painted = class {
       width: number;
       height: number;
@@ -2578,6 +2607,13 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
           translate: noop,
           scale: noop,
           createLinearGradient: () => ({ addColorStop: noop }),
+          beginPath: noop,
+          ellipse: noop,
+          moveTo: noop,
+          lineTo: noop,
+          stroke: noop,
+          fill: noop,
+          closePath: noop,
         };
       }
     };
@@ -2586,10 +2622,10 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
       const r = recorder();
       const drawn: unknown[] = [];
       Object.assign(r.ctx, { drawImage: (img: unknown) => drawn.push(img) });
-      drawScene(r.ctx, r.art, fight({}, { taken: ['slow-field'] }), CAM, VIEW);
-      const strip = drawn.find((d) => d instanceof Painted) as InstanceType<typeof Painted>;
-      expect(strip.width).toBe(CARD.slowField.reach * SLOW_FIELD.px);
-      expect(strip.height).toBe(FIELD.height * SLOW_FIELD.px);
+      drawScene(r.ctx, r.art, fight({}, { taken: ['barbed-wire'] }), CAM, VIEW);
+      const band = drawn.find((d) => d instanceof Painted) as InstanceType<typeof Painted>;
+      expect(band.width).toBe((CARD.wire.to - CARD.wire.from) * WIRE.px);
+      expect(band.height).toBe(FIELD.height * WIRE.px);
     }
   });
 

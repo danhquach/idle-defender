@@ -833,43 +833,52 @@ Each defender level gives **stat points** (3 per level, starting point):
 
 Offered 1 of 3 on each fight level. Lost when the horde ends.
 
-- **Stat cards:** +damage, +fire rate, +range for one defender or a whole
-  profession.
-- **Behaviour cards:** pierce, ricochet, burning rounds, split shot,
-  explode on kill, chain lightning, cleave.
-- **Barrier cards:** +layer HP, spikes on walls, slow field at the gate.
+Every card is grounded gear or tactics a group of survivors with guns could
+really use (ammo, scavenged kit, barricade work): no magic or energy effects.
+Every card changes the fight visibly within a wave of picking it, at the
+spacing real hordes have (see the ID-077 note below).
+
+- **Stat cards:** +damage, +fire rate, +range, bigger magazines, faster
+  reloads.
+- **Behaviour cards:** pierce, ricochet, burning rounds, stopping power,
+  frag grenades.
+- **Barrier cards:** +layer HP, repairs, spikes on walls, barbed wire out
+  in the field.
 - **Power cards:** refill some battery charge, turrets free to run for one
   wave.
 - **Synergies:** some cards upgrade when paired (e.g. burning rounds + a
   Master Gunner = burn spreads).
 - **Rarity:** common / rare / epic; rarer offers more often in later waves.
-- **As built (ID-022, starting points):** stat cards stay squad-wide (per-
-  profession stat cards and research-unlocked cards come later). Behaviour
-  cards act on the squad's gun bullets only (turrets never), and each is
-  taken once per horde:
+- **As built (ID-022, card set reworked by ID-077, starting points):** stat
+  cards stay squad-wide (per-profession stat cards come later). Sharpshooter
+  (+20% damage), Rapid Fire (+15% fire rate) and Long Sight (+15% range) are
+  common and repeatable. The squad's gun cards act on the squad's guns and
+  bullets only (turrets never), and each of the cards below is taken once
+  per horde:
 
-  | Card | Rarity | Effect |
-  |---|---|---|
-  | Piercing Rounds | rare | +1 pierce on every squad bullet |
-  | Ricochet | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **25%** damage; a bounce never bounces |
-  | Split Shot | epic | Each shot adds 2 bullets at ±10°, 50% damage each |
-  | Burning Rounds | rare | The enemy hit burns 3 dmg/s for 3 s; a new hit resets it, never stacks |
-  | Explode on Kill | rare | A bullet kill bursts 15 damage on enemies within 40 px; bursts don't chain |
-  | Chain Lightning | epic | **10%** of bullet hits (seeded) arc to the 2 nearest within 100 px at 50% damage (armour applies); the one beam drawn |
-  | Cleave | common | +20% cleave share on blade and tool hits, still capped at 50% |
+  | Card | Kind | Rarity | Effect |
+  |---|---|---|---|
+  | Speed Loaders | stat | common | Every squad gun reloads in **70%** of the time |
+  | Extended Mags | stat | rare | Every squad gun's magazine holds **2×** the rounds, from its next reload (a survivor who joins mid-fight, too: they come with a standard magazine loaded) |
+  | Piercing Rounds | behaviour | rare | +1 pierce on every squad bullet |
+  | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **25%** damage; a bounce never bounces |
+  | Burning Rounds | behaviour | rare | The enemy hit burns 3 dmg/s for 3 s; a new hit resets it, never stacks |
+  | Stopping Power | behaviour | rare | A squad bullet hit that leaves its enemy standing knocks it back **1 px per point of damage** dealt (after armour; about 6 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge |
+  | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **20** flat damage (armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked |
 
   Barrier: Spiked Walls (rare, once): an enemy hitting a standing segment
-  takes 3 damage per blow (a Spewer's spit from afar doesn't count); Slow
-  Field (rare, once): enemies within 120 px in front of the outermost layer
-  with a segment standing move 30% slower, multiplying with wire. Patch Up and
-  Reinforce stay common and repeatable. Power (repeatable, offered only when
-  the base has a turret, since the bank exists from the start): Recharge
-  (common) adds 25% of the bank cap, capped; **Power Surge** (rare; named so
-  it doesn't clash with the shop's Overdrive buff) runs turrets with no draw,
-  and lit on an empty bank, until the current wave ends (picked on a wave's
-  last kill, the break has begun, so it covers the next wave). Explode on
-  Kill's burst is flat damage that armour doesn't reduce; a Chain Lightning
-  arc is a hit and does. Each offer slot rolls a rarity from the wave:
+  takes 3 damage per blow (a Spewer's spit from afar doesn't count). **Barbed
+  Wire** (rare, once): coils strung across the field in the band **250–400
+  px** in front of the outermost layer, where most kills happen; enemies
+  inside move **35%** slower, multiplying with razor wire traps and
+  Screamers. Patch Up (repair every segment by 30% of its max HP) and
+  Reinforce (+25% wall max HP) stay common and repeatable. Power
+  (repeatable, offered only when the base has a turret, since the bank
+  exists from the start): Recharge (common) adds 25% of the bank cap,
+  capped; **Power Surge** (rare; named so it doesn't clash with the shop's
+  Overdrive buff) runs turrets with no draw, and lit on an empty bank, until
+  the current wave ends (picked on a wave's last kill, the break has begun,
+  so it covers the next wave). Each offer slot rolls a rarity from the wave:
   common 70 − 4(w − 1)% (min 40), rare 25 + 3(w − 1)% (max 45), epic
   5 + (w − 1)% (max 15), taken in proportion (from wave 8 they sum to 99);
   none of that rarity left → the next rarity down, then up (five repeatable
@@ -877,16 +886,36 @@ Offered 1 of 3 on each fight level. Lost when the horde ends.
   Legendary) Gunner in the fight spreads burn to enemies within 40 px of one
   that dies burning; Ricochet + Piercing Rounds bounces keep the pierce the
   bullet had left. A card shows a synergy line when it would turn one on.
-  Retune: the ticket's 50% Ricochet and 15% Chain Lightning let a campaign
-  without building win Horde 5 and a full firing line win 60% of Horde 5;
-  bold numbers above hold every balance target. The gun-role scenes (ID-046)
-  now take only stat cards: behaviour cards favour fast guns.
+  Retune (ID-022): the ticket's 50% Ricochet let a campaign without building
+  win Horde 5; the 25% above holds every balance target. The gun-role scenes
+  (ID-046) take only the repeatable stat cards: the rest favour some guns
+  over others.
+
+- **Reworked (ID-077).** Chain Lightning (an energy arc, out of place next
+  to real guns), Explode on Kill (a 40 px burst), Slow Field (120 px at the
+  wall), Split Shot (a fan of bullets from any gun) and Cleave (blade and tool
+  hits only) are gone, with their numbers and art. Measured over horde-only
+  Hordes 1–9 with the scripted squad, a kill happens a median **350–440 px**
+  in front of the wall (most 250–570 px). In won fights from Horde 3 on, none
+  happen within 60 px of it. The nearest other enemy is a median ~110 px
+  away: within 40 px for only 4–13% of kills, 80 px for ~30%, 150 px for
+  ~68%. So the new cards act out in the field (Barbed Wire's band, Stopping
+  Power), reach past one body (Frag Grenades' 70 px burst, aimed at the
+  thickest group), or act on every shot (Speed Loaders, Extended Mags). Each
+  has a balance test showing it makes a measurable difference: in Horde 4
+  with three survivors and no other card, each wins more fights than none
+  (2 of 20) and kills further out. Retune: Frag Grenades started at one
+  grenade every 5 s for 30. That let a lone starting survivor win Horde 4,
+  and at a flat 8 s the full squad's campaign fell to 40% at Horde 9 (Split
+  Shot had carried the late hordes). One every 8 s per survivor for 25 let
+  the full game's campaign without building reach Horde 6. One every 8 s per
+  survivor for 20 holds all three targets. Stopping Power started at 0.5 px a point; the proposal's ~6 px a
+  pistol hit (1 px a point) is the number above.
 
 - **As built (ID-066): horde-only cards.** Stat, behaviour and barrier
-  cards only: no power cards (there are no turrets), no Cleave (no blades or
-  tools) and no recruit cards. Research cards never come (nothing is
-  researched). Five repeatable cards stay in the pool, so an offer never
-  runs dry.
+  cards only: no power cards (there are no turrets) and no recruit cards.
+  Research cards never come (nothing is researched). Five repeatable cards
+  stay in the pool, so an offer never runs dry.
 
 ## 9. Enemies
 
@@ -969,8 +998,8 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
   Runner's legs go about two and a half times as fast as a Shambler's, a
   trap slows them with the walk, and they stop when it does. The cycle runs
   whenever its velocity of late (eased over 0.15 s) is at least 1 px/s, under
-  the slowest walk there is (a Horror on razor wire in a slow field, about
-  3.7 px/s), so no enemy that moves stands on one frame; one only jostled by
+  the slowest walk there is (a Horror on razor wire inside Barbed Wire's
+  band, about 3.4 px/s), so no enemy that moves stands on one frame; one only jostled by
   the crowd, back and forth, drifts nowhere and stands on its passing frame,
   and one that stops (at the wall) stands on it at once.
   It shows its attack frame for 0.35 s after each blow, or half its time
@@ -1811,14 +1840,27 @@ original outline.
   **Patch Up** and **Field Repairs** glow each segment they actually heal
   green (45%, fading over 0.9 s) under three small green crosses that float
   6 units up (they stay put with Reduce motion on); a segment already whole
-  shows nothing. **Slow Field** shows its strip (120 units in front of the
-  outermost layer with a segment standing, the field's full height, moving
-  in as that layer falls) as a flat see-through area under every sprite: a
-  faint pale tint (10%) with black tar splatters at 40%, in tiles 70% of the
-  strip deep, staggered and mirrored by a fixed seed, and its far 40% fades
-  out so no hard line crosses the field. It's painted once into its own
-  canvas (`src/ui/ground.ts`); where the browser can't paint one, the tint
-  alone shows. **The gate** is now a sliding gate: one closed panel on a
+  shows nothing. **Barbed Wire** (ID-077, replacing the Slow Field's tar
+  strip) shows its band (250–400 units in front of the outermost layer, the
+  field's full height) under every sprite: a faint dirt tint (12%), and
+  three coils of barbed wire running top to bottom near the band's near
+  edge, middle and far edge, each nudged off the even marks. Each coil is
+  a dense spiral of dark steel loops (9 units apart, 16 across) with a pale
+  highlight, wobbling 3 units side to side and tilting up to 15° along a
+  fixed curve, with a steel barb on every loop. A plain strand zig-zags
+  from the near coil to the far one every 60 units, and a pointed pale
+  wooden stake with a dark edge, 20 units tall, stands on a dirt mound just beside each coil every 80 units of
+  each coil. (The first version's straight, even coils read as a chain or
+  a ladder in the art review.) It's drawn in code (no art file) and painted
+  once into its own canvas (`src/ui/ground.ts`); where the browser can't
+  paint one, the tint alone shows. **Frag Grenades** (ID-077): the grenade
+  is an olive-drab ball 13 units across with a near-black edge and a pale
+  rim on its upper left, so it reads on the dark, mossy ground. It
+  flies from the thrower to where it lands on a low arc (40 units high at
+  the middle) with a shadow under it on the ground, then bursts with the
+  airstrike's blast art swelling over its 70-unit reach and fading out over
+  0.4 s. **Stopping Power** needs nothing of its own: the hit enemy visibly
+  jolts back. **The gate** is now a sliding gate: one closed panel on a
   rail with roller wheels down its middle and a heavy end cap at each end,
   drawn over the whole segment top, flush with the segments beside it, with
   no posts sticking out and no passage. Each tier has its own (weathered

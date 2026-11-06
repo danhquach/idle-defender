@@ -98,13 +98,13 @@ export type UpgradeId =
   | 'reinforce'
   | 'piercing-rounds'
   | 'ricochet'
-  | 'split-shot'
+  | 'speed-loaders'
+  | 'extended-mags'
   | 'burning-rounds'
-  | 'explode-on-kill'
-  | 'chain-lightning'
-  | 'cleave'
+  | 'stopping-power'
+  | 'frag-grenades'
   | 'spiked-walls'
-  | 'slow-field'
+  | 'barbed-wire'
   | 'recharge'
   | 'power-surge'
   | 'hollow-points'
@@ -395,19 +395,18 @@ export interface Incoming {
   y: number;
   at: number;
 }
-/** Chain Lightning arcing from `(fromX, fromY)` to `(x, y)` in the step ending at `at`, drawn for `CARD.chain.flash` s. */
-export interface Arc {
+/**
+ * A Frag Grenade (design §8): thrown from `(fromX, fromY)` at `at`, landing at `(x, y)`
+ * at `lands`, when it bursts (`burst`); its blast is drawn until `lands + CARD.frag.flash`.
+ */
+export interface Grenade {
   fromX: number;
   fromY: number;
   x: number;
   y: number;
   at: number;
-}
-/** An Explode on Kill burst at `(x, y)` in the step ending at `at`, drawn for `CARD.explode.flash` s. */
-export interface Pop {
-  x: number;
-  y: number;
-  at: number;
+  lands: number;
+  burst: boolean;
 }
 /** A bomb or flashbang going off at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
 export interface Blast {
@@ -512,8 +511,10 @@ export interface HordeState {
   impacts: Impact[];
   spits: Spit[];
   bursts: Burst[];
-  arcs: Arc[];
-  pops: Pop[];
+  /** Frag Grenades in the air or bursting (design §8); cleared when the horde ends. */
+  grenades: Grenade[];
+  /** When the next Frag Grenade may be thrown; absent until the card is picked. */
+  nextFragAt?: number;
   /** This horde's Mutated Horror's ability; null = no boss horde (design §9). */
   boss: HorrorAbility | null;
   /** Whether the Horror has come (with the first spawn of the last wave). */
@@ -643,8 +644,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     impacts: [],
     spits: [],
     bursts: [],
-    arcs: [],
-    pops: [],
+    grenades: [],
     boss: horrorAbility(hordeNumber),
     bossSpawned: false,
     outcome: 'fighting',
@@ -939,9 +939,11 @@ function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   walk(s);
   fire(s, rng);
+  throwFrag(s);
   fireTurrets(s, rng);
-  fly(s, rng);
+  fly(s);
   land(s);
+  blowFrags(s);
   burn(s);
   repair(s);
   repairTurrets(s);
@@ -968,8 +970,7 @@ function step(s: HordeState, rng: Rng): void {
     s.impacts = [];
     s.spits = [];
     s.bursts = [];
-    s.arcs = [];
-    s.pops = [];
+    s.grenades = [];
     s.incoming = [];
   }
   // A finished fight has no card to pick, so its XP stays banked.
@@ -1110,15 +1111,26 @@ function targetFrom(s: HordeState, x: number, y: number, range: number): Enemy |
   return target;
 }
 
-/** Refills every empty gun whose reload has ended. */
+/** Refills every empty gun whose reload has ended; Extended Mags (design §8) holds more. */
 function reload(s: HordeState, d: Defender): void {
   for (const slot of ['primary', 'secondary'] as const) {
     const id = d.loadout[slot];
     if (id !== null && isGun(id) && d.ammo[slot] === 0 && due(s.time, d.reloadedAt[slot])) {
-      d.ammo[slot] = gunOf(id).magazine;
+      d.ammo[slot] = magazineOf(s, id);
     }
   }
 }
+
+/** Rounds a full magazine of gun `id` holds in this fight: doubled by Extended Mags (design §8). */
+export const magazineOf = (s: Pick<HordeState, 'taken'>, id: Held): number =>
+  Math.round(gunOf(id).magazine * (took(s, 'extended-mags') ? CARD.mags : 1));
+
+/** Seconds `d` takes to reload gun `id` in this fight: Speed Loaders (design §8) cut it. */
+export const reloadIn = (
+  s: { readonly taken: readonly UpgradeId[] },
+  d: Parameters<typeof reloadTime>[0],
+  id: Held,
+): number => reloadTime(d, id) * (s.taken.includes('speed-loaders') ? CARD.loaders : 1);
 
 /** A gun in `slot` with a round in it. */
 function loaded(d: Defender, slot: Slot): boolean {
@@ -1183,9 +1195,7 @@ export function leadPoint(x: number, y: number, e: Enemy, speed: number): { x: n
 
 /**
  * Fires `pellets` bullets from `(x, y)` at where `target` will be, each turned off by up
- * to `spread`° on its own roll (seeded); one muzzle flash for the lot. With `split`
- * (Split Shot, design §8) two more fly at ±`CARD.split.angle`° off the aim, each at
- * `CARD.split.share` of the damage.
+ * to `spread`° on its own roll (seeded); one muzzle flash for the lot.
  */
 function launch(
   s: HordeState,
@@ -1197,16 +1207,14 @@ function launch(
     spread: number;
     range: number;
     pellets: number;
-    split?: boolean;
   },
 ): void {
-  const { x, y, target, spread, range, pellets, split, ...rest } = shot;
+  const { x, y, target, spread, range, pellets, ...rest } = shot;
   const aim = leadPoint(x, y, target, rest.speed);
   const heading = Math.atan2(aim.y - y, aim.x - x);
   const distance = Math.hypot(aim.x - x, aim.y - y);
-  const bullet = (angle: number, damage: number): Bullet => ({
+  const bullet = (angle: number): Bullet => ({
     ...rest,
-    damage,
     x,
     y,
     dx: Math.cos(angle),
@@ -1218,13 +1226,7 @@ function launch(
     hit: [],
   });
   for (let i = 0; i < pellets; i++) {
-    s.bullets.push(bullet(heading + ((rng() * 2 - 1) * spread * Math.PI) / 180, rest.damage));
-  }
-  if (split) {
-    for (const side of [-1, 1]) {
-      const angle = heading + (side * CARD.split.angle * Math.PI) / 180;
-      s.bullets.push(bullet(angle, rest.damage * CARD.split.share));
-    }
+    s.bullets.push(bullet(heading + ((rng() * 2 - 1) * spread * Math.PI) / 180));
   }
   s.shots.push({ owner: rest.owner, at: s.time + STEP });
 }
@@ -1272,21 +1274,21 @@ export const hitDamage = (e: Enemy, damage: number): number =>
  * the next within `PIERCE.reach`. Spent, or past its range, it is gone. A squad
  * bullet's hit also sets off the behaviour cards taken (design §8, `cardHit`).
  */
-function fly(s: HordeState, rng: Rng): void {
+function fly(s: HordeState): void {
   const bounces: Bullet[] = [];
   s.bullets = s.bullets.filter((b) => {
     let travel = Math.min(b.speed * STEP, b.left);
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
       const first = b.hit.length === 0;
-      const alive = hit.enemy.hp > 0;
-      hit.enemy.hp -= hitDamage(hit.enemy, b.damage);
+      const dealt = hitDamage(hit.enemy, b.damage);
+      hit.enemy.hp -= dealt;
       b.hit.push(hit.enemy.id);
       b.x += b.dx * hit.at;
       b.y += b.dy * hit.at;
       b.left -= hit.at;
       travel -= hit.at;
       s.impacts.push({ x: b.x, y: b.y, hit: true, at: s.time + STEP });
-      if (!b.owner.startsWith('turret:')) cardHit(s, rng, b, hit.enemy, first, alive, bounces);
+      if (!b.owner.startsWith('turret:')) cardHit(s, b, hit.enemy, first, dealt, bounces);
       if (b.pierce <= 0) return false;
       b.pierce -= 1;
       b.left = Math.min(b.left, PIERCE.reach);
@@ -1316,32 +1318,21 @@ function around(s: HordeState, e: Enemy, radius: number): Enemy[] {
 }
 
 /**
- * Design §8: what the behaviour cards taken do when squad bullet `b` hits `e` (`alive`
- * before the hit). Burning Rounds sets it alight; Explode on Kill bursts where the
- * bullet killed it; Chain Lightning may arc to the nearest others; on the bullet's
- * `first` hit, a Ricochet bounce heads for the nearest other enemy (into `bounces`).
+ * Design §8: what the behaviour cards taken do when squad bullet `b` hits `e` for
+ * `dealt` damage. Burning Rounds sets it alight; Stopping Power knocks it back if it
+ * still stands; on the bullet's `first` hit, a Ricochet bounce heads for the nearest
+ * other enemy (into `bounces`).
  */
 function cardHit(
   s: HordeState,
-  rng: Rng,
   b: Bullet,
   e: Enemy,
   first: boolean,
-  alive: boolean,
+  dealt: number,
   bounces: Bullet[],
 ): void {
   if (took(s, 'burning-rounds')) e.burnUntil = s.time + CARD.burn.seconds;
-  // A burst is flat damage, as a trap's: armour doesn't take it off (an arc is a hit and does).
-  if (took(s, 'explode-on-kill') && alive && e.hp <= 0) {
-    for (const o of around(s, e, CARD.explode.radius)) o.hp -= CARD.explode.damage;
-    s.pops.push({ x: e.x, y: e.y, at: s.time + STEP });
-  }
-  if (took(s, 'chain-lightning') && chance(rng, CARD.chain.chance)) {
-    for (const o of around(s, e, CARD.chain.radius).slice(0, CARD.chain.targets)) {
-      o.hp -= hitDamage(o, b.damage * CARD.chain.share);
-      s.arcs.push({ fromX: e.x, fromY: e.y, x: o.x, y: o.y, at: s.time + STEP });
-    }
-  }
+  if (took(s, 'stopping-power')) knockBack(s, e, dealt);
   if (!first || b.ricochet || !took(s, 'ricochet')) return;
   const next = around(s, e, CARD.ricochet.range).find((o) => !b.hit.includes(o.id));
   if (!next) return;
@@ -1363,14 +1354,86 @@ function cardHit(
   });
 }
 
+/**
+ * Stopping Power (design §8): `e`, still standing after a hit that dealt `dealt`, is
+ * knocked back `CARD.stopping.perDamage` px a point (a heavy kind `CARD.stopping.heavy` of
+ * that); never a Crawler on the wall, one inside the camp, or past the spawn edge.
+ */
+function knockBack(s: HordeState, e: Enemy, dealt: number): void {
+  if (e.hp <= 0 || e.inCamp || e.climbUntil !== 0) return;
+  const heavy = CARD.stopping.heavyKinds.includes(e.kind);
+  const push = CARD.stopping.perDamage * dealt * (heavy ? CARD.stopping.heavy : 1);
+  e.x = Math.max(e.x, Math.min(s.spawnX ?? FIELD.right, e.x + push));
+}
+
+/**
+ * Frag Grenades (design §8): when due, the survivor on the line nearest the target throws
+ * at the enemy outside the camp, within `CARD.frag.range` of a survivor, with the most
+ * others within `CARD.frag.radius` (ties → nearest the wall, then lowest id), aimed where it
+ * will be in `CARD.frag.flight` s; the next one comes `CARD.frag.every` ÷ the survivors on the
+ * line later. With nobody in reach it waits for the next step.
+ */
+function throwFrag(s: HordeState): void {
+  if (s.nextFragAt === undefined || !took(s, 'frag-grenades') || !due(s.time, s.nextFragAt)) {
+    return;
+  }
+  const throwers = s.posts.flatMap((p) => {
+    const d = s.defenders.find((x) => x.id === p.defenderId);
+    return d ? [d] : [];
+  });
+  let best: { e: Enemy; by: Defender; near: number } | undefined;
+  for (const e of s.enemies) {
+    if (e.hp <= 0 || e.inCamp) continue;
+    let by: Defender | undefined;
+    let byD = Infinity;
+    for (const d of throwers) {
+      const dist = Math.hypot(e.x - d.x, e.y - d.y);
+      if (dist <= CARD.frag.range + EPS && dist < byD) [by, byD] = [d, dist];
+    }
+    if (!by) continue;
+    const near = around(s, e, CARD.frag.radius).length;
+    const better =
+      !best ||
+      near > best.near ||
+      (near === best.near && (e.x < best.e.x || (e.x === best.e.x && e.id < best.e.id)));
+    if (better) best = { e, by, near };
+  }
+  if (!best) return;
+  const { e, by } = best;
+  const t = CARD.frag.flight;
+  s.grenades.push({
+    fromX: by.x,
+    fromY: by.y,
+    x: e.x + e.vx * t,
+    y: Math.min(FIELD.height, Math.max(0, e.y + e.vy * t)),
+    at: s.time,
+    lands: s.time + t,
+    burst: false,
+  });
+  // Every survivor on the line carries grenades: the squad throws one every `every` s each.
+  s.nextFragAt = s.time + CARD.frag.every / throwers.length;
+}
+
+/** Each Frag Grenade landing bursts for `CARD.frag.damage` flat on every enemy within its reach. */
+function blowFrags(s: HordeState): void {
+  s.grenades = s.grenades.filter((g) => s.time - g.lands < CARD.frag.flash);
+  for (const g of s.grenades) {
+    if (g.burst || !due(s.time, g.lands)) continue;
+    g.burst = true;
+    for (const e of s.enemies) {
+      if (e.hp > 0 && Math.hypot(e.x - g.x, e.y - g.y) <= CARD.frag.radius + EPS) {
+        e.hp = Math.max(0, e.hp - CARD.frag.damage);
+      }
+    }
+  }
+}
+
 function fire(s: HordeState, rng: Rng): void {
   s.strikes = s.strikes.filter((k) => s.time - k.at < STRIKE_FLASH);
   s.shots = s.shots.filter((k) => s.time - k.at < MUZZLE_FLASH);
   s.impacts = s.impacts.filter((k) => s.time - k.at < IMPACT_FLASH);
   s.spits = s.spits.filter((k) => s.time - k.at < SPEWER.splash);
   s.bursts = s.bursts.filter((k) => s.time - k.at < SWOLLEN.burst);
-  s.arcs = s.arcs.filter((k) => s.time - k.at < CARD.chain.flash);
-  s.pops = s.pops.filter((k) => s.time - k.at < CARD.explode.flash);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -1403,7 +1466,6 @@ function fire(s: HordeState, rng: Rng): void {
         pierce: pierceOf(id) + (took(s, 'piercing-rounds') ? 1 : 0),
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
-        split: took(s, 'split-shot'),
       });
     } else {
       target.hp -= hit;
@@ -1411,13 +1473,7 @@ function fire(s: HordeState, rng: Rng): void {
     }
     // Butcher's Hunger counts the blade or tool kills of this strike, cleave included.
     let kills = !gun && target.hp <= 0 ? 1 : 0;
-    const cleave = gun
-      ? 0
-      : Math.min(
-          STAT_EFFECT.cleaveCap,
-          (weapon.kind === 'blade' ? cleaveShare(defender) : 0) +
-            (took(s, 'cleave') ? CARD.cleave : 0),
-        );
+    const cleave = weapon.kind === 'blade' ? cleaveShare(defender) : 0;
     if (cleave > 0) {
       for (const e of s.enemies) {
         const near = Math.hypot(e.x - target.x, e.y - target.y) <= STAT_EFFECT.cleaveRadius + EPS;
@@ -1438,7 +1494,7 @@ function fire(s: HordeState, rng: Rng): void {
           (gun ? perkFactor(s, 'steady-fire', PERK.steadyFire) : 1));
     if (gun) {
       defender.ammo[slot] -= 1;
-      if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadTime(defender, id);
+      if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadIn(s, defender, id);
     }
   }
 }
@@ -1742,14 +1798,14 @@ function move(s: HordeState): Moves {
   const sliding = new Map<number, Slide>();
   const reached = new Map<number, Defender>();
   const screamers = s.enemies.filter((e) => e.kind === 'screamer' && e.hp > 0);
-  const field = slowField(s);
+  const wire = barbedWire(s);
   for (const e of s.enemies) {
     if (stunned(s, e)) continue;
-    const slowed = field !== null && !e.inCamp && e.x >= field.from && e.x <= field.to + EPS;
+    const slowed = wire !== null && !e.inCamp && e.x >= wire.from - EPS && e.x <= wire.to + EPS;
     const speed =
       ENEMIES[e.kind].speed *
       STEP *
-      (slowed ? 1 - CARD.slowField.slow : 1) *
+      (slowed ? 1 - CARD.wire.slow : 1) *
       trapSlow(s, e) *
       screamed(screamers, e) *
       (charging(s, e) ? HORROR.charge.speed : 1);
@@ -1782,20 +1838,18 @@ function move(s: HordeState): Moves {
 }
 
 /**
- * Slow Field (design §8): the strip `CARD.slowField.reach` px deep in front of the
- * outermost layer with a segment standing; null without the card or a standing layer.
+ * Barbed Wire (design §8): the band `CARD.wire.from`–`CARD.wire.to` px in front of the
+ * outermost layer with a segment built, standing or not (the coils are out in the field,
+ * so they stay put as it falls); null without the card or a built layer.
  */
-export function slowField(
+export function barbedWire(
   s: Pick<HordeState, 'taken' | 'layers'>,
 ): { from: number; to: number } | null {
-  if (!took(s, 'slow-field')) return null;
-  let outer: Layer | undefined;
-  for (const l of s.layers) {
-    if (l.segments.some((seg) => seg.hp > 0) && (!outer || l.x > outer.x)) outer = l;
-  }
-  if (!outer) return null;
-  const from = outer.x + WALL.depth;
-  return { from, to: from + CARD.slowField.reach };
+  if (!took(s, 'barbed-wire')) return null;
+  const built = s.layers.filter((l) => l.segments.some((seg) => seg.kind !== null));
+  if (built.length === 0) return null;
+  const front = Math.max(...built.map((l) => l.x)) + WALL.depth;
+  return { from: front + CARD.wire.from, to: front + CARD.wire.to };
 }
 
 /** The trap whose cell `e` stands in, if any. */

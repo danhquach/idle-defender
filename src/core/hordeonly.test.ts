@@ -163,14 +163,32 @@ describe('the squad in a horde (ID-066)', () => {
     );
   });
 
-  it('offers only stat, behaviour and barrier cards: no power, Cleave or recruit cards', () => {
+  it('offers only stat, behaviour and barrier cards: no power or recruit cards', () => {
     const allowed = ['stat', 'behaviour', 'barrier'];
     expect(SQUAD_CARDS.every((id) => allowed.includes(UPGRADES[id].category))).toBe(true);
-    expect(SQUAD_CARDS).not.toContain('cleave');
-    // Every allowed card but Cleave is in: the list is the categories, not a hand pick.
+    // Every allowed card is in: the list is the categories, not a hand pick.
     expect([...SQUAD_CARDS].sort()).toEqual(
-      UPGRADE_IDS.filter((id) => allowed.includes(UPGRADES[id].category) && id !== 'cleave').sort(),
+      UPGRADE_IDS.filter((id) => allowed.includes(UPGRADES[id].category)).sort(),
     );
+    // The ID-077 set, and none of the cards it replaced.
+    for (const id of [
+      'speed-loaders',
+      'extended-mags',
+      'stopping-power',
+      'frag-grenades',
+      'barbed-wire',
+    ] as const) {
+      expect(SQUAD_CARDS).toContain(id);
+    }
+    for (const gone of [
+      'split-shot',
+      'explode-on-kill',
+      'chain-lightning',
+      'cleave',
+      'slow-field',
+    ]) {
+      expect(UPGRADE_IDS as readonly string[]).not.toContain(gone);
+    }
     const s = startSquadHorde(squadGame(SQUAD_CAP), 3, NOW);
     for (let seed = 1; seed <= 300; seed++) {
       for (const card of rollOffer(createRng(seed), s)) {
