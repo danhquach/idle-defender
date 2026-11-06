@@ -397,6 +397,17 @@ export interface Pop {
   key: string;
   at: number;
 }
+/**
+ * Something a survivor did (ID-085), for their chatter: `by` killed an enemy with a bullet
+ * or a strike, landed a crit round, or threw a Frag Grenade, in the step starting at `at`.
+ */
+export interface Feat {
+  kind: 'kill' | 'crit' | 'throw';
+  by: string;
+  at: number;
+}
+/** How long a feat stays listed, fight s: longer than the most one frame runs at 3×. */
+export const FEAT_KEEP = 1;
 /** A molotov's fire on the ground, lit at `at`, burning enemies inside until `until` (fight time). */
 export interface Fire {
   x: number;
@@ -527,6 +538,8 @@ export interface HordeState {
   impacts: Impact[];
   /** Damage numbers (ID-082); cleared when the horde ends and never saved. */
   pops: Pop[];
+  /** Survivors' kills, crits and throws (ID-085); cleared when the horde ends and never saved. */
+  feats: Feat[];
   spits: Spit[];
   bursts: Burst[];
   /** Frag Grenades in the air or bursting (design §8); cleared when the horde ends. */
@@ -661,6 +674,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     shots: [],
     impacts: [],
     pops: [],
+    feats: [],
     spits: [],
     bursts: [],
     grenades: [],
@@ -988,6 +1002,7 @@ function step(s: HordeState, rng: Rng): void {
     s.shots = [];
     s.impacts = [];
     s.pops = [];
+    s.feats = [];
     s.spits = [];
     s.bursts = [];
     s.grenades = [];
@@ -1302,7 +1317,12 @@ function fly(s: HordeState): void {
       const first = b.hit.length === 0;
       const dealt = hitDamage(hit.enemy, b.damage);
       popOn(s, hit.enemy, dealt, b.crit === true);
+      const alive = hit.enemy.hp > 0;
       hit.enemy.hp -= dealt;
+      if (alive && !b.owner.startsWith('turret:')) {
+        if (b.crit) s.feats.push({ kind: 'crit', by: b.owner, at: s.time });
+        if (hit.enemy.hp <= 0) s.feats.push({ kind: 'kill', by: b.owner, at: s.time });
+      }
       b.hit.push(hit.enemy.id);
       b.x += b.dx * hit.at;
       b.y += b.dy * hit.at;
@@ -1431,6 +1451,7 @@ function throwFrag(s: HordeState): void {
     lands: s.time + t,
     burst: false,
   });
+  s.feats.push({ kind: 'throw', by: by.id, at: s.time });
   // Every survivor on the line carries grenades: the squad throws one every `every` s each.
   s.nextFragAt = s.time + CARD.frag.every / throwers.length;
 }
@@ -1457,6 +1478,7 @@ function fire(s: HordeState, rng: Rng): void {
   s.spits = s.spits.filter((k) => s.time - k.at < SPEWER.splash);
   s.bursts = s.bursts.filter((k) => s.time - k.at < SWOLLEN.burst);
   s.pops = s.pops.filter((k) => s.time - k.at < DAMAGE_POP.keep);
+  s.feats = s.feats.filter((k) => s.time - k.at < FEAT_KEEP);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -1510,6 +1532,7 @@ function fire(s: HordeState, rng: Rng): void {
         }
       }
     }
+    for (let k = 0; k < kills; k++) s.feats.push({ kind: 'kill', by: defender.id, at: s.time });
     if (kills > 0 && perkOn(s, 'butchers-hunger')) hunger(s, defender, kills);
     defender.nextShotAt =
       s.time +

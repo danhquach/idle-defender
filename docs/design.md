@@ -1604,7 +1604,9 @@ offline progress works across sessions.
 - **Menu** *(as built, ID-039)*: a "Menu" button top-right (or Esc, when it
   has nothing else to cancel) opens a dialog with three tabs. **Settings:**
   Reduce motion (sprites stop bobbing and leaning; it starts on when the
-  system asks for less motion), stored in its own key, outside the save and
+  system asks for less motion) and **Chatter** (ID-085: Off, Low or Full,
+  Full to start; read back through an allow-list of those three), each
+  stored in its own key, outside the save and
   the code; **Sound** (ID-080): Master volume, Music and Sound effects
   sliders (0–100 % in steps of 5; 80, 60 and 80 to start; letting go of the
   Master or Sound effects slider plays a sample shot) and Mute (the sliders
@@ -1782,6 +1784,43 @@ original outline.
   on a target standing still never stack on one another. They draw under
   every reload pie and name tag, so they never hide one. The build scene
   shows none.
+- **As built (ID-085): survivor chatter.** A survivor says a short line in a
+  speech bubble when something happens to them: a reload starting ("Reloading!"),
+  both of two guns empty at once ("Click… uh oh."; there is no ammo to run out
+  of otherwise), a Frag Grenade they throw, a kill with a bullet or a blade,
+  three kills within 3 fight seconds (a streak), a crit round landing, a hit
+  taken, dropping under 30% HP, and going down (said where they fell). The
+  squad's moments are said by one of them: a breach (the survivor nearest that
+  wall), a Horror or a Brute appearing (nearest it), the last enemy of a wave
+  with no more to come (nearest it), a wave cleared and the horde won (any of
+  them; the win has its own lines). Each event has 4–5 fixed lines; the same
+  line never plays twice in a row. Event rank, highest first (the ticket's
+  order, with the events it doesn't place fitted in by choice): down >
+  low HP > breach > boss > won = wave cleared > last enemy > crit = streak > dry >
+  reload > throw > kill > hit. A survivor says only their highest event of a
+  frame; a higher one replaces their bubble at once, a lower one never does.
+  Otherwise each survivor waits 4 real seconds between lines, except for a
+  boss or anything higher, which never waits (a kill line must not swallow a
+  down); and the routine events wait longer before the same survivor says them
+  again: a reload 15 s, a kill, a hit or a crit 10 s (a lone pistol survivor
+  reloads every few seconds); a boss or a breach is one call for the whole squad,
+  6 s before anyone calls the next. At most 3 bubbles show (a new one takes the lowest one's
+  place only if it outranks it). A bubble shows 1.5 real seconds at any game
+  speed, growing in over 0.12 s and fading over its last 0.25 s (with Reduce
+  motion it just shows and goes); it follows its survivor, sits over their
+  name tag and the reload pie's spot (kept clear whether or not a pie shows),
+  under the damage numbers, and slides in from the view's edge so it is never
+  cut off (its tail leans to reach the survivor). Two bubbles that would
+  overlap never do: the higher rank keeps its spot and the other rises clear
+  of it and of every survivor's name tag and reload pie (one pushed past the
+  view's top is not shown); a card grows about its own centre, so it never
+  overlaps another mid-grow. Lines are picked with the chat's own seeded random source (from the
+  fight's seed), so the fight's rolls never change. Survivor ids from a save
+  key the chat's state in Maps, and a saved id can never be `constructor`.
+  The Menu sets chatter to **Off**, **Low** (only the big moments — last enemy
+  and up — one bubble at a time, 8 s between a survivor's lines below boss
+  rank) or **Full** (everything; the default). Personalities (a different set
+  of lines per survivor) are not built.
 - **As built (ID-045):** no line joins shooter and target (since ID-070, only
   a close shot's tail does, for the frame or two before it lands). Each bullet is drawn
   at its simulated spot, in the depth sort, as a bright slug with a streak

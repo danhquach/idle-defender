@@ -1,16 +1,19 @@
-// ID-039, ID-062, ID-080: Reduce motion, the fight speed and sound are stored on their own
+// ID-039, ID-062, ID-080, ID-085: Reduce motion, the fight speed, sound and chatter are stored on their own
 // and read back through an allow-list.
 import { describe, expect, it } from 'vitest';
 import {
+  CHATTER_KEY,
   clampVolume,
   MOTION_KEY,
   MUTE_KEY,
+  readChatter,
   readReduceMotion,
   readSound,
   readSpeed,
   SPEED_KEY,
   VOLUME_DEFAULTS,
   VOLUME_KEYS,
+  writeChatter,
   writeMute,
   writeReduceMotion,
   writeSpeed,
@@ -238,5 +241,48 @@ describe('Sound settings (ID-080)', () => {
     expect(() => writeMute(throwing, true)).not.toThrow();
     expect(() => writeVolume(null, 'master', 10)).not.toThrow();
     expect(() => writeMute(null, true)).not.toThrow();
+  });
+});
+
+describe('Chatter setting (ID-085)', () => {
+  it('starts at Full and reads back what was written', () => {
+    const store = memory();
+    expect(readChatter(store)).toBe('full');
+    for (const level of ['off', 'low', 'full'] as const) {
+      writeChatter(store, level);
+      expect(store.data.get(CHATTER_KEY)).toBe(level);
+      expect(readChatter(store)).toBe(level);
+    }
+  });
+
+  it('reads anything but the exact strings it writes as Full', () => {
+    const hostile = [
+      '',
+      'OFF',
+      ' off',
+      'off ',
+      'of​f',
+      '‮off',
+      'оff', // Cyrillic о
+      'low\0',
+      '"off"',
+      '{"__proto__":{"polluted":1}}',
+      '<img src=x onerror=alert(1)>',
+      'off'.repeat(100_000),
+      'constructor',
+      '__proto__',
+      'toString',
+    ];
+    for (const raw of hostile) {
+      expect(readChatter(memory({ [CHATTER_KEY]: raw }))).toBe('full');
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('plays on where storage is blocked or full', () => {
+    expect(readChatter(throwing)).toBe('full');
+    expect(readChatter(null)).toBe('full');
+    expect(() => writeChatter(throwing, 'off')).not.toThrow();
+    expect(() => writeChatter(null, 'low')).not.toThrow();
   });
 });

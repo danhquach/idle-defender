@@ -2,6 +2,7 @@
 // It opens from the top-right button or Esc (when Esc has nothing else to cancel); in a
 // fight the game loop holds the fight while it is open. The field behind is inert and
 // focus stays inside until it closes, then goes back to the Menu button.
+import { CHATTER_LEVELS, type ChatterLevel } from '../core/chatter.ts';
 import { HORDE_ONLY } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
@@ -161,7 +162,17 @@ export interface MenuOptions {
   /** A slider let go: a sample sound at the new level. */
   onVolumeSet: (which: Volume) => void;
   onMute: (on: boolean) => void;
+  /** How much survivors say in a fight (ID-085); a change is applied and stored by the caller. */
+  chatter: ChatterLevel;
+  onChatter: (level: ChatterLevel) => void;
 }
+
+/** The chatter levels' names, in the order shown (ID-085). */
+export const CHATTER_LABEL: Readonly<Record<ChatterLevel, string>> = {
+  off: 'Off',
+  low: 'Low',
+  full: 'Full',
+};
 
 /** The volume sliders' labels, in the order shown (ID-080). */
 export const VOLUME_LABEL: Readonly<Record<Volume, string>> = {
@@ -269,10 +280,35 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     el(
       'span',
       'menu-note',
-      'Stops defenders and enemies bobbing and leaning. Starts on if your system asks for less motion.',
+      'Stops defenders and enemies bobbing and leaning, and speech bubbles popping in. Starts on if your system asks for less motion.',
     ),
   );
   motionLabel.append(motion, motionText);
+
+  // Chatter (ID-085): survivors' speech bubbles in a fight, Off, Low or Full.
+  const chatter = el('select', 'build-select menu-select');
+  chatter.id = 'menu-chatter';
+  for (const level of CHATTER_LEVELS) {
+    const option = el('option', '', CHATTER_LABEL[level]);
+    option.value = level;
+    chatter.append(option);
+  }
+  chatter.value = opts.chatter;
+  chatter.addEventListener('change', () => {
+    const level = CHATTER_LEVELS.find((l) => l === chatter.value);
+    if (level) opts.onChatter(level);
+  });
+  const chatterLabel = el('label', 'menu-check-title', 'Chatter');
+  chatterLabel.htmlFor = chatter.id;
+  const chatterRow = el('div', 'menu-choice');
+  chatterRow.append(chatterLabel, chatter);
+  const chatterNote = el(
+    'span',
+    'menu-note',
+    'Speech bubbles over survivors in a fight. Low: only big moments, one at a time. Full: everything.',
+  );
+  const chatterBox = el('div', 'menu-choice-box');
+  chatterBox.append(chatterRow, chatterNote);
 
   // Sound (ID-080): three sliders and a mute switch, applied as they move.
   const sliders = VOLUMES.map((which) => {
@@ -327,7 +363,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   panels
     .get('settings')!
     .append(
-      section(el('h3', 'menu-heading', 'Settings'), motionLabel),
+      section(el('h3', 'menu-heading', 'Settings'), motionLabel, chatterBox),
       section(el('h3', 'menu-heading', 'Sound'), ...sliders, muteLabel),
       el('p', 'menu-note', 'Settings stay in this browser. They are not part of the backup code.'),
     );
