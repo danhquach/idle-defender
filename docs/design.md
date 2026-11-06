@@ -1754,6 +1754,29 @@ original outline.
   never changes across fights or saves: a numbered id counts round the four
   looks by its last number (recruit 1 is the soldier, recruits 2 to 4 the
   others, recruit 5 the soldier again), any other id is hashed.
+- **As built (ID-082): damage numbers.** Every hit on an enemy (bullet,
+  blade, cleave, frag, airstrike, trap, Spiked Walls, burning) shows its
+  damage where it landed, over the enemy's HP bar at that moment (it stays
+  there as the enemy walks on), after a Brute's or the Horror's armour; a
+  killing hit shows in full, overkill and all. A Ricochet's bounce off a
+  crit round is a crit too. Every blow on a wall segment shows the HP it
+  lost ("−5", never more than it had left) in pale red just on
+  the camp side of the wall, right-aligned, so what the wall lost never
+  mixes with what the enemies at it took. A number rises 18 px and fades
+  over its last half, 0.9 real seconds at any game speed; with reduce
+  motion it fades in place. Plain hits are off-white, 11 px growing to 15 px
+  for a hit of 40 or more (a wall's loss at 25 or more); a crit is gold,
+  60% bigger, with a "!", and lands 40% bigger still, settling over its
+  first 0.15 s (no punch with reduce motion), drawn over every plain
+  number. Each has a dark edge so it
+  reads on any ground. To stay readable, hits on one target within 0.25
+  fight seconds add into one number (crits and plain hits apart), so a
+  shotgun round or a fire reads as one; at most 24 show, the newest. An
+  enemy's sits 9 px (a crit's 14 px) left, centred or right by its 0.25 s
+  window, so numbers
+  on a target standing still never stack on one another. They draw under
+  every reload pie and name tag, so they never hide one. The build scene
+  shows none.
 - **As built (ID-045):** no line joins shooter and target (since ID-070, only
   a close shot's tail does, for the frame or two before it lands). Each bullet is drawn
   at its simulated spot, in the depth sort, as a bright slug with a streak

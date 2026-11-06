@@ -7,6 +7,7 @@ import { startSquadHorde } from '../core/hordeonly.ts';
 import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
 import {
   CAMP,
+  DAMAGE_POP,
   CARD,
   ENEMIES,
   FIELD,
@@ -26,7 +27,8 @@ import {
   stockOf,
 } from '../core/data.ts';
 import type { Tier } from '../core/base.ts';
-import type { Bullet, Enemy, HordeState } from '../core/horde.ts';
+import type { Bullet, Enemy, HordeState, Pop } from '../core/horde.ts';
+import { SPEEDS } from '../storage/settings.ts';
 import { carpet } from '../core/skills.ts';
 import { reloadTime } from '../core/stats.ts';
 import { enemy } from '../core/testing.ts';
@@ -55,6 +57,9 @@ import {
   NAME_TAG_GAP,
   offFrame,
   PLATE_H,
+  POP,
+  popLook,
+  shownPops,
   RELOAD_PIE,
   reloadShare,
   SURVIVOR_BAR,
@@ -176,6 +181,7 @@ function recorder() {
     clip: noop,
     setLineDash: noop,
     fillText: noop,
+    strokeText: noop,
     measureText: () => ({ width: 0 }),
     save: noop,
     restore: noop,
@@ -2680,5 +2686,199 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(images(gate, BASE_ART.spikes)).toHaveLength(1);
     expect(images(gate, BASE_ART.brace)).toHaveLength(2);
     expect(fills(gate, '#b8f4ec')).toHaveLength(2);
+  });
+});
+
+describe('damage numbers (ID-082)', () => {
+  beforeEach(stubCanvas);
+  afterEach(() => vi.unstubAllGlobals());
+
+  const pop = (p: Partial<Pop> = {}): Pop => ({
+    x: 600,
+    y: 360,
+    amount: 6,
+    crit: false,
+    on: 'shambler',
+    key: 'e1',
+    at: 1,
+    ...p,
+  });
+
+  it('shows a hit rounded (at least 1), a crit bigger, gold and with "!", a blow on the wall as a loss', () => {
+    const plain = popLook(pop({ amount: 6.2 }), 1, 1, false)!;
+    expect(plain).toMatchObject({ text: '6', colour: '#f4f1ea', alpha: 1, rise: 0 });
+    expect(popLook(pop({ amount: 0.2 }), 1, 1, false)!.px).toBe(POP.size);
+    expect(popLook(pop({ amount: 0.2 }), 1, 1, false)!.text).toBe('1');
+    const crit = popLook(pop({ amount: 12, crit: true }), 1, 1, false)!;
+    expect(crit.text).toBe('12!');
+    expect(crit.colour).toBe('#ffd23f');
+    expect(crit.px).toBeGreaterThan(popLook(pop({ amount: 12 }), 1, 1, false)!.px);
+    const wall = popLook(pop({ amount: 5, on: 'wall', key: 'w0:5' }), 1, 1, false)!;
+    expect(wall).toMatchObject({ text: '−5', colour: '#ff8a7a' });
+  });
+
+  it('a bigger hit is a bigger number, up to POP.big at POP.bigAt', () => {
+    const px = (amount: number) => popLook(pop({ amount }), 1, 1, false)!.px;
+    expect(px(4)).toBeLessThanOrEqual(px(20));
+    expect(px(20)).toBeLessThan(px(POP.bigAt));
+    expect(px(POP.bigAt)).toBe(POP.big);
+    expect(px(10 * POP.bigAt)).toBe(POP.big);
+  });
+
+  it('rises and fades over POP.life real seconds at any game speed, then is gone', () => {
+    const at = (age: number, pace = 1) => popLook(pop({ at: 0 }), age, pace, false);
+    expect(at(-0.01)).toBeNull();
+    expect(at(POP.life / 4)!).toMatchObject({ alpha: 1, rise: POP.rise / 4 });
+    expect(at(POP.life * 0.75)!.alpha).toBeCloseTo(0.5, 9);
+    expect(at(POP.life)).toBeNull();
+    // At 3× the same look comes three times the fight time later.
+    expect(at((3 * POP.life) / 4, 3)).toEqual(at(POP.life / 4));
+    expect(at(3 * POP.life, 3)).toBeNull();
+  });
+
+  it('is kept by the sim at least as long as it shows at the top speed', () => {
+    expect(POP.life * Math.max(...SPEEDS)).toBeLessThanOrEqual(DAMAGE_POP.keep);
+  });
+
+  it('a crit is POP.crit times bigger, and lands bigger still, settling over POP.punch.time', () => {
+    const px = (crit: boolean, age: number, still = false) =>
+      popLook(pop({ amount: 12, crit, at: 0 }), age, 1, still)!.px;
+    const settled = px(true, POP.punch.time);
+    // Sizes are whole px, so each is within 1 of the exact scale.
+    expect(Math.abs(settled - px(false, POP.punch.time) * POP.crit)).toBeLessThanOrEqual(1);
+    expect(settled).toBeGreaterThanOrEqual(px(false, 0) * 1.5);
+    expect(Math.abs(px(true, 0) - settled * (1 + POP.punch.extra))).toBeLessThanOrEqual(1);
+    expect(px(true, POP.punch.time / 2)).toBeLessThan(px(true, 0));
+    expect(px(true, POP.punch.time / 2)).toBeGreaterThan(settled);
+    expect(px(true, POP.life / 2)).toBe(settled);
+    // Reduce motion: no punch, just the bigger size.
+    expect(px(true, 0, true)).toBe(settled);
+  });
+
+  it("a wall's loss grows to POP.big by POP.wallBigAt and never staggers", () => {
+    const wall = (amount: number, at = 1) =>
+      popLook(pop({ amount, on: 'wall', key: 'w0:1', at }), at, 1, false)!;
+    expect(wall(POP.wallBigAt).px).toBe(POP.big);
+    expect(wall(5).px).toBeLessThan(wall(POP.wallBigAt).px);
+    for (let k = 0; k < 3; k++) expect(wall(5, k * DAMAGE_POP.merge).dx).toBe(0);
+  });
+
+  it('numbers from one spot in the next merge windows sit apart: left, centre, right', () => {
+    const dx = (at: number) => popLook(pop({ at }), at, 1, false)!.dx;
+    const w = DAMAGE_POP.merge;
+    const xs = [0, 1, 2, 3].map((k) => dx(k * w));
+    expect(new Set(xs.slice(0, 3))).toEqual(new Set([-POP.stagger, 0, POP.stagger]));
+    expect(xs[3]).toBe(xs[0]);
+    // Anywhere in one window, the same place.
+    expect(dx(w * 1.01)).toBe(dx(w * 1.99));
+    // A crit, being bigger, sits further out.
+    const critDx = (at: number) => popLook(pop({ at, crit: true }), at, 1, false)!.dx;
+    expect(new Set([0, 1, 2].map((k) => critDx(k * w)))).toEqual(
+      new Set([-POP.critStagger, 0, POP.critStagger]),
+    );
+    expect(POP.critStagger).toBeGreaterThan(POP.stagger);
+  });
+
+  it('reduce motion: fades in place instead of rising', () => {
+    const look = popLook(pop({ at: 0 }), POP.life * 0.75, 1, true)!;
+    expect(look.rise).toBe(0);
+    expect(look.alpha).toBeCloseTo(0.5, 9);
+  });
+
+  it('shows at most POP.cap, the newest, and none gone', () => {
+    const many = Array.from({ length: POP.cap + 6 }, (_, i) => pop({ key: `e${i}`, at: 1 }));
+    const gone = pop({ key: 'old', at: 0 });
+    const shown = shownPops([gone, ...many], 0.5 + POP.life, 1);
+    expect(shown).toEqual(many.slice(6));
+  });
+
+  /** Every text drawn (filled or edged) with its y, in order, and the fill colour then set. */
+  const texts = (scene: Scene, anim: Animator | null = null) => {
+    const r = recorder();
+    type Drawn = { text: string; x: number; y: number; fill: string; how: string; align: string };
+    const drawn: Drawn[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string; textAlign: string };
+    Object.assign(r.ctx, {
+      fillText: (text: string, x: number, y: number) =>
+        drawn.push({ text, x, y, fill: ctx.fillStyle, how: 'fill', align: ctx.textAlign }),
+      strokeText: (text: string, x: number, y: number) =>
+        drawn.push({ text, x, y, fill: ctx.fillStyle, how: 'stroke', align: ctx.textAlign }),
+      measureText: (t: string) => ({ width: t.length * 6 }),
+    });
+    const cam = frameCamera({ w: 1280, h: 720 });
+    drawScene(r.ctx, r.art, scene, cam, { w: 1280, h: 720 }, null, null, null, anim);
+    return drawn;
+  };
+  const squad = (): Scene => {
+    const g = newGame('horde');
+    const roster = [{ ...recruit(1), xp: 0 }];
+    return startSquadHorde({ ...g, roster, camp: { ...g.camp, recruits: 1 } }, 7, 0);
+  };
+
+  it('draws each number on a dark edge, under every name tag so none is hidden', () => {
+    const base = squad();
+    const scene: Scene = {
+      ...base,
+      pops: [
+        pop({ amount: 7, at: base.time }),
+        pop({ amount: 9, on: 'wall', key: 'w0:3', at: base.time }),
+      ],
+    };
+    const drawn = texts(scene);
+    const name = base.defenders[0]!.name;
+    const order = drawn.map((d) => `${d.how}:${d.text}`);
+    expect(order).toEqual(['stroke:7', 'fill:7', 'stroke:−9', 'fill:−9', `fill:${name}`]);
+    expect(drawn[1]!.fill).toBe('#f4f1ea');
+    expect(drawn[3]!.fill).toBe('#ff8a7a');
+  });
+
+  it('draws every crit after the plain hits, so a newer plain number never paints over one', () => {
+    const base = squad();
+    const scene: Scene = {
+      ...base,
+      pops: [
+        pop({ amount: 6, key: 'e1', at: base.time - 0.3 }),
+        pop({ amount: 12, crit: true, key: 'e1', at: base.time - 0.2 }),
+        pop({ amount: 7, key: 'e1', at: base.time }),
+      ],
+    };
+    const fills = texts(scene).filter((d) => d.how === 'fill' && /^\d/.test(d.text));
+    expect(fills.map((d) => d.text)).toEqual(['6', '7', '12!']);
+  });
+
+  it("puts a wall's loss right-aligned just on the camp side of the wall, an enemy's centred", () => {
+    const base = squad();
+    const layer = base.layers[0]!;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const y = 3.5 * SEGMENT_HEIGHT;
+    const scene: Scene = {
+      ...base,
+      pops: [
+        pop({ amount: 9, on: 'wall', key: 'w0:3', x: layer.x, y, at: base.time }),
+        pop({ amount: 7, x: 600, y: 360, at: base.time }),
+      ],
+    };
+    const drawn = texts(scene).filter((d) => d.how === 'fill');
+    const wall = drawn.find((d) => d.text === '−9')!;
+    expect(wall.align).toBe('right');
+    const face = project({ x: layer.x, y, z: 0 }, cam).sx;
+    expect(wall.x).toBeCloseTo(face - POP.gap, 6);
+    expect(drawn.find((d) => d.text === '7')!.align).toBe('center');
+  });
+
+  it('none in the build scene or with no numbers', () => {
+    expect(texts(squad()).filter((d) => d.how === 'stroke')).toEqual([]);
+  });
+
+  it('floats up as it ages, but stays put with reduce motion on', () => {
+    const base = squad();
+    const yAt = (age: number, reduced: boolean) => {
+      const anim = new Animator();
+      anim.reduced = reduced;
+      const scene: Scene = { ...base, time: base.time + age, pops: [pop({ at: base.time })] };
+      return texts(scene, anim).find((d) => d.text === '6')!.y;
+    };
+    expect(yAt(POP.life / 2, false)).toBeCloseTo(yAt(0, false) - POP.rise / 2, 6);
+    expect(yAt(POP.life / 2, true)).toBeCloseTo(yAt(0, true), 6);
   });
 });
