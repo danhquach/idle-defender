@@ -34,7 +34,7 @@ import { SPEEDS } from '../storage/settings.ts';
 import { carpet } from '../core/skills.ts';
 import { reloadTime } from '../core/stats.ts';
 import { enemy } from '../core/testing.ts';
-import { ANIM, Animator } from './anim.ts';
+import { ANIM, Animator, STILL } from './anim.ts';
 import {
   FIGHT_FRAME,
   frameCamera,
@@ -56,6 +56,9 @@ import {
   bubbleShift,
   bubbleTip,
   BULLET,
+  BURN,
+  burnHeat,
+  fireLook,
   bulletShape,
   drawScene,
   forgetBackdrop,
@@ -182,6 +185,7 @@ function recorder() {
     strokeRect: noop,
     beginPath: noop,
     moveTo: noop,
+    bezierCurveTo: noop,
     lineTo: noop,
     stroke: noop,
     fill: noop,
@@ -3370,5 +3374,207 @@ describe('speech bubbles (ID-085)', () => {
     const old = draw({ ...base, chat: { bubbles: [bubble(d)], clock: CHAT.life } }, cam);
     expect(old.order).toEqual([d.name]);
     expect(draw({ ...base }, cam).order).toEqual([d.name]);
+  });
+});
+
+describe('a burning enemy’s fire (ID-089)', () => {
+  const feet = { sx: 400, sy: 300 };
+  const body = { h: 34, w: 30 };
+  const look = (over: Partial<{ id: number; size: number; heat: number; clock: number }> = {}) =>
+    fireLook(over.id ?? 3, over.size ?? 1, body, feet, STILL, over.heat ?? 1, over.clock ?? 2, CAM);
+  const flames = (f: ReturnType<typeof fireLook>) => f.licks;
+  const tall = (f: ReturnType<typeof fireLook>) => flames(f).reduce((n, k) => n + k.h, 0);
+
+  it('flares up as it catches fire, burns steady, then dies down instead of popping off', () => {
+    expect(burnHeat(5, {}, -Infinity)).toBe(0);
+    expect(burnHeat(5, { burnUntil: 0 }, -Infinity)).toBe(0);
+    // Alight with no known start (no animator): steady, no flare.
+    expect(burnHeat(5, { burnUntil: 8 }, -Infinity)).toBe(1);
+    // Just lit: it flares up over 1, then settles to 1.
+    expect(burnHeat(5, { burnUntil: 8 }, 5)).toBe(1 + BURN.boost);
+    const flare = burnHeat(5 + BURN.flare / 2, { burnUntil: 8 }, 5);
+    expect(flare).toBeGreaterThan(1);
+    expect(flare).toBeLessThan(1 + BURN.boost);
+    expect(burnHeat(5 + BURN.flare, { burnUntil: 8 }, 5)).toBe(1);
+    // Out: it fades over BURN.out.
+    expect(burnHeat(8 + BURN.out / 2, { burnUntil: 8 }, 5)).toBeCloseTo(0.5, 9);
+    expect(burnHeat(8 + BURN.out, { burnUntil: 8 }, 5)).toBe(0);
+    expect(burnHeat(20, { burnUntil: 8 }, 5)).toBe(0);
+    // Hit again while it dies down: it flares straight back up, never blinking out first.
+    const dying = burnHeat(8 + BURN.out / 2, { burnUntil: 8 }, 5);
+    const relit = 8 + BURN.out / 2;
+    expect(burnHeat(relit, { burnUntil: relit + 3 }, relit)).toBeGreaterThan(dying);
+  });
+
+  it('is the same on a replay, differs from enemy to enemy, and moves over time', () => {
+    expect(look()).toEqual(look());
+    expect(look({ id: 4 })).not.toEqual(look());
+    expect(look({ clock: 2.1 })).not.toEqual(look());
+  });
+
+  it('has more flames on a bigger body, from Crawler to Brute to the Horror', () => {
+    const count = (kind: keyof typeof ENEMIES) =>
+      flames(look({ size: ENEMIES[kind].radius / ENEMIES.shambler.radius })).length;
+    expect(count('crawler')).toBeGreaterThanOrEqual(BURN.licks.min);
+    expect(count('crawler')).toBeLessThan(count('shambler'));
+    expect(count('shambler')).toBeLessThan(count('brute'));
+    expect(count('brute')).toBeLessThanOrEqual(count('horror'));
+    expect(count('horror')).toBe(BURN.licks.max);
+  });
+
+  it('sits on the body: within its width, above its feet, rising straight up', () => {
+    for (let clock = 0; clock < 3; clock += 0.37) {
+      const f = look({ clock });
+      for (const k of flames(f)) {
+        expect(Math.abs(k.x - feet.sx)).toBeLessThanOrEqual(body.w * BURN.body);
+        expect(k.y).toBeLessThan(feet.sy);
+        expect(k.y).toBeGreaterThanOrEqual(feet.sy - body.h);
+        expect(k.h).toBeGreaterThanOrEqual(0);
+      }
+      expect(f.glow.y).toBeLessThan(feet.sy);
+    }
+  });
+
+  it('follows the sprite as it flinches, bobs and falls', () => {
+    const at = (pose: typeof STILL) => fireLook(3, 1, body, feet, pose, 1, 2, { ...CAM, zoom: 2 });
+    const still = at(STILL);
+    const moved = at({ ...STILL, dx: 3, lift: 2 });
+    flames(moved).forEach((k, i) => {
+      expect(k.x).toBeCloseTo(flames(still)[i]!.x + 6, 9);
+      expect(k.y).toBeCloseTo(flames(still)[i]!.y - 4, 9);
+    });
+    // Fallen over (a quarter turn): the flames lie along the body, still rising up.
+    const fallen = at({ ...STILL, rot: Math.PI / 2 });
+    for (const k of flames(fallen)) {
+      expect(Math.abs(k.y - feet.sy)).toBeLessThanOrEqual(body.w * BURN.body * 2);
+      expect(k.x).toBeGreaterThan(feet.sx);
+      expect(k.h).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('flares bigger as it catches fire and shrinks as it dies down', () => {
+    const steady = look();
+    expect(tall(look({ heat: 1.5 }))).toBeGreaterThan(tall(steady));
+    const dying = look({ heat: 0.4 });
+    expect(tall(dying)).toBeLessThan(tall(steady));
+    dying.layers.forEach((l, i) => expect(l.alpha).toBeCloseTo(steady.layers[i]!.alpha * 0.4, 9));
+  });
+
+  it('never fully covers the sprite: every layer is see-through, even in the flare-up', () => {
+    const f = look({ heat: 1 + BURN.boost });
+    for (const l of f.layers) expect(l.alpha).toBeLessThan(1);
+    expect(f.glow.alpha).toBeLessThan(1);
+    for (const s of f.smoke) expect(s.alpha).toBeLessThanOrEqual(BURN.smoke.alpha);
+  });
+
+  it('still shows at 0.5× zoom: every flame at least BURN.lick.least wide', () => {
+    const small = fireLook(3, 0.75, { h: 8, w: 9 }, feet, STILL, 1, 2, { ...CAM, zoom: 0.5 });
+    for (const k of flames(small)) expect(k.w).toBeGreaterThanOrEqual(BURN.lick.least);
+    // A squat body's fire is sized to its width, not its short height.
+    const squat = fireLook(3, 1, { h: 10, w: 40 }, feet, STILL, 1, 2, CAM);
+    expect(squat.glow.r).toBeCloseTo(40 * BURN.squat * BURN.glow.r, 9);
+  });
+
+  describe('in the fight', () => {
+    // A falling body's white flash needs a canvas.
+    beforeEach(stubCanvas);
+    afterEach(() => vi.unstubAllGlobals());
+    function record() {
+      const r = recorder();
+      const ctx = r.ctx as unknown as Record<string, unknown> & {
+        fillStyle: unknown;
+        globalCompositeOperation: string;
+      };
+      const fills: { style: unknown; comp: string; alpha: number }[] = [];
+      const curves: number[][] = [];
+      Object.assign(ctx, {
+        fillStyle: '',
+        globalCompositeOperation: 'source-over',
+        fill: () =>
+          fills.push({
+            style: ctx.fillStyle,
+            comp: ctx.globalCompositeOperation,
+            alpha: ctx.globalAlpha as number,
+          }),
+        bezierCurveTo: (...p: number[]) => curves.push(p),
+        fillRect: () =>
+          fills.push({
+            style: ctx.fillStyle,
+            comp: ctx.globalCompositeOperation,
+            alpha: ctx.globalAlpha as number,
+          }),
+      });
+      return { r, ctx, fills, curves };
+    }
+    const burningScene = (time: number, burnUntil: number, alive = true): Scene => {
+      const s = blank();
+      s.time = time;
+      if (alive) enemy(s as unknown as HordeState, { id: 7, burnUntil });
+      return s;
+    };
+    const flameFills = (fills: { style: unknown }[]) =>
+      fills.filter((x) => x.style === BURN.layers[1][0]);
+
+    it('draws its flames adding light, then puts the canvas back', () => {
+      const { r, ctx, fills } = record();
+      drawScene(r.ctx, r.art, burningScene(1, 3), CAM, VIEW);
+      const at = fills.findIndex((x) => x.style === BURN.layers[0][0]);
+      expect(at).toBeGreaterThan(0);
+      // Its glow (a gradient), its three flame layers and its embers add light; the smoke doesn't.
+      const fire = fills.slice(at - 1, at + 4);
+      expect(fire.map((x) => (typeof x.style === 'string' ? x.style : 'glow'))).toEqual([
+        'glow',
+        ...BURN.layers.map((l) => l[0]),
+        BURN.ember,
+      ]);
+      expect(fire.every((x) => x.comp === 'lighter')).toBe(true);
+      expect(
+        fills.filter((x) => x.style === BURN.smokeColour).every((x) => x.comp === 'source-over'),
+      ).toBe(true);
+      expect(ctx.globalCompositeOperation).toBe('source-over');
+      // Its HP bar, drawn next, is as solid as ever.
+      const bar = fills.slice(at).find((x) => x.style === '#c43b3b');
+      expect(bar?.alpha).toBe(1);
+    });
+
+    it('holds its flames still with Reduce motion', () => {
+      const flamesAt = (time: number, reduced: boolean) => {
+        const anim = new Animator();
+        anim.reduced = reduced;
+        const { r, curves } = record();
+        drawScene(r.ctx, r.art, burningScene(time, 9), CAM, VIEW, null, null, null, anim);
+        return curves;
+      };
+      expect(flamesAt(2.7, true)).toEqual(flamesAt(2, true));
+      expect(flamesAt(2.7, false)).not.toEqual(flamesAt(2, false));
+    });
+
+    it('keeps burning on a body as it falls, and is gone once it has', () => {
+      const anim = new Animator();
+      const { r, fills } = record();
+      // It caught fire this frame: it flares up at once.
+      drawScene(r.ctx, r.art, burningScene(1, 3), CAM, VIEW, null, null, null, anim);
+      expect(flameFills(fills)).toHaveLength(1);
+      fills.length = 0;
+      drawScene(r.ctx, r.art, burningScene(1.1, 3), CAM, VIEW, null, null, null, anim);
+      expect(flameFills(fills)).toHaveLength(1);
+      fills.length = 0;
+      drawScene(r.ctx, r.art, burningScene(1.2, 3, false), CAM, VIEW, null, null, null, anim);
+      expect(anim.corpses).toHaveLength(1);
+      expect(flameFills(fills)).toHaveLength(1);
+      fills.length = 0;
+      const gone = 1.2 + ANIM.fall.time;
+      drawScene(r.ctx, r.art, burningScene(gone, 3, false), CAM, VIEW, null, null, null, anim);
+      expect(flameFills(fills)).toHaveLength(0);
+    });
+
+    it('fades out after the burn ends rather than stopping at once', () => {
+      const { r, fills } = record();
+      drawScene(r.ctx, r.art, burningScene(3 + BURN.out / 2, 3), CAM, VIEW);
+      expect(flameFills(fills)).toHaveLength(1);
+      fills.length = 0;
+      drawScene(r.ctx, r.art, burningScene(3 + BURN.out, 3), CAM, VIEW);
+      expect(flameFills(fills)).toHaveLength(0);
+    });
   });
 });

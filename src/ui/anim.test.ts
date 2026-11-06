@@ -400,11 +400,61 @@ describe('Animator', () => {
     const e = enemy({ x: 321 });
     a.observe(frame(4, [e]));
     a.observe(frame(4.1, []));
-    expect(a.corpses).toEqual([{ enemy: e, at: 4.1 }]);
+    expect(a.corpses).toEqual([{ enemy: e, at: 4.1, litAt: -Infinity }]);
     a.observe(frame(4.1 + ANIM.fall.time - 0.01, []));
     expect(a.corpses).toHaveLength(1);
     a.observe(frame(4.1 + ANIM.fall.time, []));
     expect(a.corpses).toEqual([]);
+  });
+
+  it('a burning enemy neither flashes nor flinches from its fire, only from a hit (ID-089)', () => {
+    const a = new Animator();
+    let hp = 20;
+    let burnt = 0;
+    const at = (t: number) => a.observe(frame(t, [enemy({ hp, burnt, burnUntil: 9 })]));
+    at(1);
+    // A second of fire every step: no flash, no flinch.
+    for (let i = 1; i <= 30; i++) {
+      hp -= 0.1;
+      burnt += 0.1;
+      at(1 + i / 30);
+    }
+    expect(a.enemy(1).hurtAt).toBe(-Infinity);
+    // Healing while it burns (a Horror's regen) is no hit either.
+    hp += 3;
+    burnt += 0.1;
+    at(2.05);
+    expect(a.enemy(1).hurtAt).toBe(-Infinity);
+    // A bullet lands while it burns, in the same step as a tick of fire: it flinches.
+    hp -= 5.1;
+    burnt += 0.1;
+    at(2.1);
+    expect(a.enemy(1).hurtAt).toBe(2.1);
+    expect(enemyPose(enemy(), 2.1, a.enemy(1)).flash).toBe(1);
+  });
+
+  it('remembers when an enemy caught fire, not each hit that reset its burn (ID-089)', () => {
+    const a = new Animator();
+    a.observe(frame(1, [enemy()]));
+    expect(a.litAt(1)).toBe(-Infinity);
+    a.observe(frame(1.1, [enemy({ burnUntil: 4.1 })]));
+    expect(a.litAt(1)).toBe(1.1);
+    // A new hit resets the burn; it was alight all along, so no new flare-up.
+    a.observe(frame(2, [enemy({ burnUntil: 5 })]));
+    expect(a.litAt(1)).toBe(1.1);
+    // Out, then lit again: a new flare-up.
+    a.observe(frame(5.2, [enemy({ burnUntil: 5 })]));
+    expect(a.litAt(1)).toBe(-Infinity);
+    a.observe(frame(5.3, [enemy({ burnUntil: 8.3 })]));
+    expect(a.litAt(1)).toBe(5.3);
+    // Dying alight, its body keeps when it caught fire.
+    a.observe(frame(5.4, []));
+    expect(a.corpses).toEqual([{ enemy: enemy({ burnUntil: 8.3 }), at: 5.4, litAt: 5.3 }]);
+    expect(a.litAt(1)).toBe(-Infinity);
+    // A fight run back is a new one.
+    a.observe(frame(1, [enemy({ burnUntil: 4 })]));
+    a.observe(frame(0.5, [enemy({ burnUntil: 4 })]));
+    expect(a.litAt(1)).toBe(0.5);
   });
 
   it('leaves no body for a Swollen that blew up rather than died (ID-023)', () => {

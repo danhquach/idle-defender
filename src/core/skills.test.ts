@@ -176,6 +176,10 @@ describe('molotov (scattered throws, ID-041)', () => {
     s = tick(s, SKILLS.molotov.seconds + 1);
     expect(s.fires).toEqual([]);
     expect(hp(held.id)).toBeCloseTo(1000 - SKILLS.molotov.dps * SKILLS.molotov.seconds, 6);
+    // It counts the HP fire took (for the view's hit flash, ID-089); none outside.
+    const burnt = (id: number) => s.enemies.find((e) => e.id === id)!.burnt ?? 0;
+    expect(burnt(held.id)).toBeCloseTo(1000 - hp(held.id), 6);
+    expect(burnt(out.id)).toBe(0);
   });
 
   it('stops burning during a pick, and a burn kill pays cash', () => {

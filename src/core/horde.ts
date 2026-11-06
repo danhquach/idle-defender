@@ -192,6 +192,12 @@ export interface Enemy {
   horror?: HorrorClock;
   /** Burning Rounds (design §8): fight time it burns until; absent or 0 = not burning. */
   burnUntil?: number;
+  /**
+   * All the HP fire has taken from it so far (Burning Rounds and molotov fires); absent = 0.
+   * Cosmetic: the view (ID-089) flashes a hit only for HP lost beyond it, so a burning
+   * enemy doesn't strobe white every step.
+   */
+  burnt?: number;
 }
 /** Fight times are when, so they stop during picks; a stun pushes them back. */
 export interface HorrorClock {
@@ -1705,6 +1711,7 @@ function burn(s: HordeState): void {
     if (!burning(s, e)) continue;
     popOn(s, e, CARD.burn.dps * STEP);
     e.hp = Math.max(0, e.hp - CARD.burn.dps * STEP);
+    e.burnt = (e.burnt ?? 0) + CARD.burn.dps * STEP;
   }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
@@ -1713,6 +1720,7 @@ function burn(s: HordeState): void {
       if (Math.hypot(e.x - f.x, e.y - f.y) <= SKILLS.molotov.radius + EPS) {
         popOn(s, e, SKILLS.molotov.dps * STEP);
         e.hp = Math.max(0, e.hp - SKILLS.molotov.dps * STEP);
+        e.burnt = (e.burnt ?? 0) + SKILLS.molotov.dps * STEP;
       }
     }
   }
