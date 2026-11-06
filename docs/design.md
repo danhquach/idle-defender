@@ -2129,17 +2129,19 @@ original outline.
   (`src/ui/audio.ts`), and a shot uses its made-in-code version until its
   recording has loaded. Sources and licences: `docs/audio-credits.md`. Audio
   starts on the first click or key press, as browsers require, and pauses
-  while the tab is hidden. Two looping tracks: a slow one for the build, the camp and the
-  result screen, and a fast one while a horde is on, crossfaded over 1.5 s
+  while the tab is hidden. Two looping tracks: a slow one for the build, the
+  camp and the result screen, and a fast one while a horde is on, crossfaded
+  over 1.5 s
   (its drums rest every fourth bar). When a horde ends, the won or lost sting
   plays alone: the horde track drops in 0.3 s and the camp track waits 1.4 s.
   Effects: a shot per gun kind (and the turrets), reload, enemy hit and death,
   wall hit and break, card offer and pick, level-up, horde won and lost, and
   UI clicks. The cues are read by comparing each frame's fight with the last
   (`src/ui/sound.ts`), each named once a frame; a cue never plays more than 3
-  at once (for a recording, counting its first 40 %, before the fade-out) or
-  two within 0.04 s, and a compressor on the master output holds
-  cues that land together under clipping, so a heavy fight never crackles.
+  at once (for a recording, counting only its first 40 %; its fade-out takes
+  the last 40 %, so the 20 % between is the shot's ring) or two within
+  0.04 s, and a compressor on the master output holds cues that land together
+  under clipping, so a heavy fight never crackles.
 - **Stack:** same as Office Immortal so the repo scaffold can be copied
   from the Office Immortal repo: TypeScript, Vite, Vitest, ESLint +
   Prettier. The fake-3D base view may need a rendering library (a 2D canvas
