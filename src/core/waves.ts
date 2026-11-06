@@ -29,14 +29,20 @@ export function waveSize(hordeNumber: number, wave: number): number {
 export const HP_GROWTH = 1.17;
 
 /**
- * Enemy HP: ×1.10 per wave, and ×`scale` for the horde: `HP_GROWTH` per horde by default
- * (the horde-only build has its own curve, ID-066).
+ * Enemy HP's factor in the full game's Hordes 1, 2 and 3 on top of the growth (ID-097), so
+ * the first hordes are sure wins; 1 from Horde 4 on.
+ */
+export const EARLY_HP: readonly number[] = [1, 0.9, 0.85];
+
+/**
+ * Enemy HP: ×1.10 per wave, and ×`scale` for the horde: `HP_GROWTH` per horde by default,
+ * eased by `EARLY_HP` in Hordes 1–3 (the horde-only build has its own curve, ID-066).
  */
 export function enemyHp(
   kind: EnemyKind,
   hordeNumber: number,
   wave: number,
-  scale: number = HP_GROWTH ** (hordeNumber - 1),
+  scale: number = (EARLY_HP[hordeNumber - 1] ?? 1) * HP_GROWTH ** (hordeNumber - 1),
 ): number {
   whole('enemyHp', hordeNumber);
   whole('enemyHp', wave);

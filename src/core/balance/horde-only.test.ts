@@ -10,6 +10,8 @@ import { SEEDS, winRate } from './shared.ts';
 // than alone (37 s on a laptop, over 120 s on CI): 300 s each, under the job's 15-min limit.
 describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
   const LAST = 10;
+  /** The first horde that is a wall to farm past (ID-097; targets with ID-102). */
+  const WALLS_FROM = 8;
   /** Each seed's campaign: every fight in order, a loss replayed as the player would. */
   const campaigns: ReturnType<typeof playSquadCampaign>[] = [];
   beforeAll(() => {
@@ -18,28 +20,33 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
   /** Each seed's first fight at horde `n`: the expected squad's try at it. */
   const firstTry = (n: number) => campaigns.map((runs) => runs.find((r) => r.hordeNumber === n)!);
 
-  it('the expected squad wins each horde on most seeds, Horde 10’s boss included', () => {
-    for (let n = 1; n <= LAST; n++) {
-      const runs = firstTry(n);
+  // ID-097: Hordes 1–3 are sure wins while the player learns the cards; 4–7 are won on
+  // most seeds at the first try. From Horde 8 the hordes are walls the player farms past;
+  // their targets come with farming in the balance pass (ID-102).
+  it('the expected squad wins Hordes 1–3 on every seed, and 4–7 on most, at the first try', () => {
+    for (let n = 1; n <= WALLS_FROM; n++) {
       expect(
-        runs.every((r) => r !== undefined),
+        firstTry(n).every((r) => r !== undefined),
         `Horde ${n} reached`,
       ).toBe(true);
-      expect(winRate(runs), `Horde ${n}`).toBeGreaterThanOrEqual(0.6);
+    }
+    for (let n = 1; n <= 3; n++) expect(winRate(firstTry(n)), `Horde ${n}`).toBe(1);
+    for (let n = 4; n < WALLS_FROM; n++) {
+      expect(winRate(firstTry(n)), `Horde ${n}`).toBeGreaterThanOrEqual(0.6);
     }
   });
 
   it('the expected squad is one survivor more per horde won, up to 6', () => {
-    for (let n = 1; n <= LAST; n++) {
+    for (let n = 1; n <= WALLS_FROM; n++) {
       for (const r of firstTry(n)) expect(r.squad).toBe(Math.min(n, SQUAD_CAP));
     }
   });
 
-  it('every campaign gets past Horde 10, its boss beaten', () => {
+  // Until farming (ID-098) lets the scripted player grow past a wall, a campaign only
+  // retries; how far past Horde 7 it gets is the balance pass's target (ID-102).
+  it('every campaign gets past Horde 7 and reaches the walls', () => {
     for (const runs of campaigns) {
-      const last = runs.at(-1)!;
-      expect(last.hordeNumber).toBe(LAST);
-      expect(last.outcome).toBe('won');
+      expect(runs.some((r) => r.hordeNumber === WALLS_FROM)).toBe(true);
     }
     expect(horrorAbility(LAST)).not.toBeNull();
   });

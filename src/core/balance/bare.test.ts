@@ -29,8 +29,9 @@ describe('balance on the starting base, no building', () => {
     expect(runs.every((r) => r.outcome === 'won' && r.injured === 0)).toBe(true);
   });
 
-  it('Horde 2 is won on every seed', () => {
+  it('Hordes 2 and 3 are won on every seed: the first hordes are sure wins (ID-097)', () => {
     expect(winRate(byHorde.get(2)!)).toBe(1);
+    expect(winRate(byHorde.get(3)!)).toBe(1);
   });
 
   it('Hordes 1 and 2 last 3–5 minutes (design §4)', () => {

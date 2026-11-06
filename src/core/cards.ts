@@ -1,5 +1,6 @@
 import {
   CARD,
+  CARD_MAX_LEVEL,
   PERK,
   RARITY,
   RECRUIT_CHANCE,
@@ -8,10 +9,12 @@ import {
   type ResearchCard,
 } from './data.ts';
 import {
+  cardLevel,
   perkFactor,
   perkOn,
   perkScale,
   standing,
+  took,
   type Card,
   type HordeState,
   type Layer,
@@ -19,7 +22,11 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import { chance, pick, rngFrom, type Rng } from './rng.ts';
+
 import { xpToNext } from './waves.ts';
+
+// Float noise (scale × wave, HP sums) must not lose a whole reroll or invent a repair.
+const EPS = 1e-9;
 
 /** A wall-walk post over a broken or unbuilt segment can't be stood on. */
 export function postUsable(layers: readonly Layer[], post: Post): boolean {
@@ -43,7 +50,12 @@ export function recruitPost(state: HordeState): Post | undefined {
 
 export type CardCategory = 'stat' | 'behaviour' | 'barrier' | 'power';
 
-/** Design §8: the upgrade cards. A `once` card leaves the pool for the horde once taken. */
+/**
+ * Design §8: the upgrade cards. `levels` is how often a card can be picked in a horde:
+ * 3 for a levelled card (levels 1, 2 and max, ID-097), 1 for a unique (epic) or once-only
+ * card, and null for a repeatable, uncapped one. `text` is the card's effect in words; a
+ * card with an `effect` (below) shows that instead, with its numbers.
+ */
 export const UPGRADES: Readonly<
   Record<
     UpgradeId,
@@ -52,121 +64,121 @@ export const UPGRADES: Readonly<
       readonly text: string;
       readonly category: CardCategory;
       readonly rarity: CardRarity;
-      readonly once: boolean;
+      readonly levels: number | null;
     }
   >
 > = {
   sharpshooter: {
     name: 'Sharpshooter',
-    text: '+20% damage',
+    text: 'More damage',
     category: 'stat',
     rarity: 'common',
-    once: false,
+    levels: null,
   },
   'rapid-fire': {
     name: 'Rapid Fire',
-    text: '+15% fire rate',
+    text: 'Faster fire',
     category: 'stat',
     rarity: 'common',
-    once: false,
+    levels: null,
   },
   'long-sight': {
     name: 'Long Sight',
-    text: '+15% range',
+    text: 'More range',
     category: 'stat',
     rarity: 'common',
-    once: false,
+    levels: null,
   },
   'patch-up': {
     name: 'Patch Up',
     text: 'Repair every wall segment by 30% of its max HP',
     category: 'barrier',
     rarity: 'common',
-    once: false,
+    levels: null,
   },
   reinforce: {
     name: 'Reinforce',
-    text: '+25% wall max HP',
+    text: 'More wall max HP',
     category: 'barrier',
     rarity: 'common',
-    once: false,
+    levels: null,
   },
   'piercing-rounds': {
     name: 'Piercing Rounds',
     text: 'Squad bullets go through 1 more enemy',
     category: 'behaviour',
     rarity: 'rare',
-    once: true,
+    levels: CARD_MAX_LEVEL,
   },
   ricochet: {
     name: 'Ricochet',
-    text: 'A bullet’s first hit bounces to the nearest other enemy at a quarter damage',
+    text: 'A bullet’s first hit bounces to the nearest other enemy',
     category: 'behaviour',
     rarity: 'rare',
-    once: true,
+    levels: CARD_MAX_LEVEL,
   },
   'speed-loaders': {
     name: 'Speed Loaders',
-    text: 'Guns reload 30% faster',
+    text: 'Guns reload faster',
     category: 'stat',
     rarity: 'common',
-    once: true,
+    levels: CARD_MAX_LEVEL,
   },
   'extended-mags': {
     name: 'Extended Mags',
-    text: 'Gun magazines hold twice the rounds',
+    text: 'Gun magazines hold more rounds',
     category: 'stat',
     rarity: 'rare',
-    once: true,
+    levels: CARD_MAX_LEVEL,
   },
-  'burning-rounds': {
-    name: 'Burning Rounds',
+  'incendiary-rounds': {
+    name: 'Incendiary Rounds',
     text: 'Bullets set the enemy they hit on fire for 3 s',
     category: 'behaviour',
     rarity: 'rare',
-    once: true,
+    levels: CARD_MAX_LEVEL,
   },
-  'stopping-power': {
-    name: 'Stopping Power',
-    text: 'Bullet hits knock enemies back, harder the more damage they do',
+  'shock-rounds': {
+    name: 'Shock Rounds',
+    text: 'Bullet hits briefly paralyse the enemy',
     category: 'behaviour',
     rarity: 'rare',
-    once: true,
+    levels: CARD_MAX_LEVEL,
+  },
+  'concussion-rounds': {
+    name: 'Concussion Rounds',
+    text: 'Bullet hits knock enemies back, harder the more damage they do, at most twice a second',
+    category: 'behaviour',
+    rarity: 'epic',
+    levels: 1,
   },
   'frag-grenades': {
     name: 'Frag Grenades',
     text: 'Each survivor throws a grenade every 8 s, into the thickest group',
     category: 'behaviour',
     rarity: 'epic',
-    once: true,
-  },
-  'spiked-walls': {
-    name: 'Spiked Walls',
-    text: 'Enemies hitting a wall take 3 damage each blow',
-    category: 'barrier',
-    rarity: 'rare',
-    once: true,
+    levels: 1,
   },
   'barbed-wire': {
     name: 'Barbed Wire',
-    text: 'Wire strung out in the field slows enemies crossing it by 35%',
+    text: 'Wire strung out in the field slows enemies crossing it',
     category: 'barrier',
     rarity: 'rare',
-    once: true,
+    levels: CARD_MAX_LEVEL,
   },
   recharge: {
     name: 'Recharge',
     text: 'Add 25% of the bank’s cap to the battery bank',
     category: 'power',
     rarity: 'common',
-    once: false,
+    levels: null,
   },
   'power-surge': {
     name: 'Power Surge',
     text: 'Turrets draw no charge until this wave ends',
     category: 'power',
     rarity: 'rare',
-    once: false,
+    levels: null,
   },
   // Research cards (ID-035): only in the pool once researched.
   'hollow-points': {
@@ -174,16 +186,25 @@ export const UPGRADES: Readonly<
     text: '+40% damage',
     category: 'stat',
     rarity: 'rare',
-    once: true,
+    levels: 1,
   },
   'field-repairs': {
     name: 'Field Repairs',
     text: 'Repair every wall segment to full',
     category: 'barrier',
     rarity: 'epic',
-    once: true,
+    levels: 1,
   },
 };
+
+/** The squad's one ammo slot (ID-097): it holds at most one of these. */
+export const AMMO_CARDS: readonly UpgradeId[] = ['incendiary-rounds', 'shock-rounds'];
+
+/** The other ammo card held while `id` isn't (picking `id` would replace it), or null. */
+export function replaces(state: Pick<HordeState, 'taken'>, id: UpgradeId): UpgradeId | null {
+  if (!AMMO_CARDS.includes(id) || took(state, id)) return null;
+  return AMMO_CARDS.find((other) => other !== id && took(state, other)) ?? null;
+}
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
 const OFFER_SIZE = 3;
@@ -201,15 +222,33 @@ export function rarityOdds(wave: number): Record<CardRarity, number> {
 }
 
 /**
- * Whether `id` may show in an offer now: in the fight's card pool, if it has one; a `once`
- * card not yet taken; power only with a turret; a research card only once researched.
+ * Whether `id` may show in an offer now: in the fight's card pool, if it has one; a card
+ * with levels not yet at its max (ID-097); Patch Up only while some built segment is below
+ * its max HP; power only with a turret; a research card only once researched.
  */
 export function eligible(state: HordeState, id: UpgradeId): boolean {
   const u = UPGRADES[id];
   if (state.cardPool && !state.cardPool.includes(id)) return false;
-  if (u.once && state.taken.includes(id)) return false;
+  if (u.levels !== null && cardLevel(state, id) >= u.levels) return false;
   if (isResearchCard(id) && !state.research.includes(id)) return false;
+  if (id === 'patch-up' && patchUpGain(state).segments === 0) return false;
   return u.category !== 'power' || state.turrets.length > 0;
+}
+
+/**
+ * What a Patch Up would restore now (ID-097): the HP it adds across the built segments
+ * below their max HP (a broken one included), and how many segments that is.
+ */
+export function patchUpGain(state: Pick<HordeState, 'layers'>): { hp: number; segments: number } {
+  let hp = 0;
+  let segments = 0;
+  for (const seg of state.layers.flatMap((l) => l.segments)) {
+    const gain = Math.min(seg.maxHp, seg.hp + CARD.patchUp * seg.maxHp) - seg.hp;
+    if (seg.maxHp <= 0 || gain <= EPS) continue;
+    hp += gain;
+    segments += 1;
+  }
+  return { hp, segments };
 }
 
 const isResearchCard = (id: UpgradeId): id is ResearchCard =>
@@ -222,6 +261,133 @@ export function synergyOf(state: HordeState, id: UpgradeId): string | null {
   if (id === 'piercing-rounds' && state.taken.includes('ricochet'))
     return 'Ricochet: bounces pierce';
   return null;
+}
+
+const pct = (x: number): string => `${Math.round(x * 100)}%`;
+/** A factor with at most 2 decimals and no trailing zeros: 1.33, 1.67, 2. */
+const factor = (x: number): string => String(Number(x.toFixed(2)));
+
+/**
+ * A card's effect with its number at level or stack `n` (ID-097): `pre`, the number, then
+ * `post`. Null for a card whose words have no number that changes (its `text` stands).
+ */
+export function effectAt(
+  id: UpgradeId,
+  n: number,
+): { pre: string; value: string; post: string } | null {
+  const lv = (levels: readonly number[]): number => levels[Math.min(levels.length, n) - 1]!;
+  switch (id) {
+    case 'sharpshooter':
+      return { pre: '', value: `+${pct(CARD.step.damage * n)}`, post: ' damage' };
+    case 'rapid-fire':
+      return { pre: '', value: `+${pct(CARD.step.fireRate * n)}`, post: ' fire rate' };
+    case 'long-sight':
+      return { pre: '', value: `+${pct(CARD.step.range * n)}`, post: ' range' };
+    case 'reinforce':
+      return { pre: '', value: `+${pct(CARD.step.reinforce * n)}`, post: ' wall max HP' };
+    case 'speed-loaders':
+      return { pre: 'Guns reload in ', value: pct(lv(CARD.loaders)), post: ' of the time' };
+    case 'extended-mags':
+      return { pre: 'Magazines hold ', value: `×${factor(lv(CARD.mags))}`, post: ' the rounds' };
+    case 'piercing-rounds':
+      return {
+        pre: 'Bullets go through 1 more enemy ',
+        value: pct(lv(CARD.pierce)),
+        post: ' of the time',
+      };
+    case 'ricochet':
+      return {
+        pre: 'A bullet’s first hit bounces to the nearest other enemy at ',
+        value: pct(lv(CARD.ricochet.share)),
+        post: ' damage',
+      };
+    case 'incendiary-rounds':
+      return {
+        pre: 'Hits set enemies on fire: ',
+        value: `${lv(CARD.burn.dps)} dmg/s`,
+        post: ` for ${CARD.burn.seconds} s`,
+      };
+    case 'shock-rounds':
+      return {
+        pre: 'Hits paralyse enemies for ',
+        value: `${lv(CARD.shock.seconds)} s`,
+        post: ' (half on the big ones)',
+      };
+    case 'barbed-wire':
+      return {
+        pre: 'Enemies ',
+        value: pct(lv(CARD.wire.slow)),
+        post: ' slower in the wire strung across the field',
+      };
+    default:
+      return null;
+  }
+}
+
+/** What picking a card would give (ID-097), as its offer card spells it out. */
+export interface CardPitch {
+  /** "New", "Lv 1 → 2", "Lv 2 → Max", "Unique", "×3 → ×4" or "Repeatable". */
+  tag: string;
+  /** The tag in words, for a screen reader: "Level 1 to 2". */
+  tagSpoken: string;
+  /** The effect: `pre`, then `from` → `to` (the number that changes), then `post`. */
+  effect: { pre: string; from: string | null; to: string; post: string } | null;
+  /** The effect in plain words, when `effect` is null. */
+  text: string;
+  /** Picking it replaces the other ammo card (ID-097): the warning, and what you'd hold before and after. */
+  replace?: { warning: string; swap: string };
+}
+
+/** A level as shown: "Lv 2", or "Lv Max" at the top. */
+const levelName = (n: number, max: number): string => (n >= max ? 'Max' : String(n));
+
+/** What picking upgrade `id` would give now, from what the squad holds (ID-097). */
+export function pitch(state: HordeState, id: UpgradeId): CardPitch {
+  const u = UPGRADES[id];
+  const held = took(state, id) ? cardLevel(state, id) : 0;
+  const next = held + 1;
+  const at = effectAt(id, next);
+  const was = held > 0 ? effectAt(id, held) : null;
+  let effect: CardPitch['effect'] = at
+    ? { pre: at.pre, from: was ? was.value : null, to: at.value, post: at.post }
+    : null;
+  let text = u.text;
+  if (id === 'patch-up') {
+    // What it would restore, the HP in bold like any card's number.
+    const { hp, segments } = patchUpGain(state);
+    const across = ` across ${segments} segment${segments === 1 ? '' : 's'}`;
+    effect = { pre: 'Repairs ', from: null, to: `${Math.round(hp)} HP`, post: across };
+    text = `Repairs ${Math.round(hp)} HP${across}`;
+  }
+  let tag: string;
+  let tagSpoken: string;
+  if (u.levels === 1) {
+    tag = tagSpoken = 'Unique';
+  } else if (u.levels === null) {
+    if (at === null) tag = tagSpoken = 'Repeatable';
+    else if (held === 0) tag = tagSpoken = 'New';
+    else {
+      tag = `×${held} → ×${next}`;
+      tagSpoken = `Stack ${held} to ${next}`;
+    }
+  } else if (held === 0) {
+    tag = tagSpoken = 'New';
+  } else {
+    const to = levelName(next, u.levels);
+    tag = `Lv ${held} → ${to}`;
+    tagSpoken = `Level ${held} to ${to === 'Max' ? 'max' : to}`;
+  }
+  const other = replaces(state, id);
+  const out: CardPitch = { tag, tagSpoken, effect, text };
+  if (other) {
+    const o = UPGRADES[other];
+    const lvl = `Lv ${levelName(cardLevel(state, other), o.levels ?? CARD_MAX_LEVEL)}`;
+    out.replace = {
+      warning: `Replaces ${o.name} ${lvl}. Its levels are lost.`,
+      swap: `${o.name} ${lvl} → ${u.name} Lv 1`,
+    };
+  }
+  return out;
 }
 
 /** A rarity rolled from this wave's odds, then the next one down, then up, until one has a card. */
@@ -274,9 +440,6 @@ export function levelUp(s: HordeState, rng: Rng): void {
   s.level += 1;
   s.offer = rollOffer(rng, s);
 }
-
-// Float noise in scale × wave must not lose a whole reroll.
-const EPS = 1e-9;
 
 /**
  * Rerolls Second Look gives in the current wave (design §5, ID-035): 1 at level 1; a
@@ -335,9 +498,19 @@ export function chooseCard(state: HordeState, index: number): HordeState {
   return s;
 }
 
+/** How often repeatable card `id` was picked this horde (ID-097). */
+const stack = (s: Pick<HordeState, 'cardLevels'>, id: UpgradeId): number => s.cardLevels[id] ?? 0;
+
 function applyUpgrade(s: HordeState, id: UpgradeId): void {
   const segments = s.layers.flatMap((l) => l.segments);
+  // The one ammo slot (ID-097): the other ammo card and its levels are gone.
+  const other = replaces(s, id);
+  if (other) {
+    s.taken = s.taken.filter((t) => t !== other);
+    delete s.cardLevels[other];
+  }
   if (!s.taken.includes(id)) s.taken.push(id);
+  s.cardLevels[id] = stack(s, id) + 1;
   if (UPGRADES[id].category === 'barrier') s.barrierAt = s.time;
   // A repair card marks only the segments it actually heals (ID-075).
   const repair = (heal: (seg: (typeof segments)[number]) => number): void => {
@@ -347,31 +520,35 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       seg.hp = hp;
     }
   };
+  // The repeatable steps add up, then multiply once with the rest (ID-097).
   switch (id) {
     case 'sharpshooter':
-      s.mods.damage *= 1.2;
+    case 'hollow-points':
+      s.mods.damage =
+        (1 + CARD.step.damage * stack(s, 'sharpshooter')) *
+        (took(s, 'hollow-points') ? CARD.hollowPoints : 1);
       break;
     case 'rapid-fire':
-      s.mods.fireRate *= 1.15;
+      s.mods.fireRate = 1 + CARD.step.fireRate * stack(s, 'rapid-fire');
       break;
     case 'long-sight':
-      s.mods.range *= 1.15;
+      s.mods.range = 1 + CARD.step.range * stack(s, 'long-sight');
       break;
     case 'patch-up':
-      repair((seg) => Math.min(seg.maxHp, seg.hp + 0.3 * seg.maxHp));
+      repair((seg) => Math.min(seg.maxHp, seg.hp + CARD.patchUp * seg.maxHp));
       break;
-    case 'reinforce':
+    case 'reinforce': {
+      // Each pick adds a step of the max HP the segment started the horde with.
+      const before = 1 + CARD.step.reinforce * (stack(s, 'reinforce') - 1);
       for (const seg of segments) {
-        const gain = seg.maxHp * 0.25;
+        const gain = (seg.maxHp / before) * CARD.step.reinforce;
         seg.maxHp += gain;
         seg.hp += gain;
       }
       break;
+    }
     case 'recharge':
       s.energy = Math.min(s.bankCap, s.energy + CARD.recharge * s.bankCap);
-      break;
-    case 'hollow-points':
-      s.mods.damage *= CARD.hollowPoints;
       break;
     case 'field-repairs':
       repair((seg) => seg.maxHp);

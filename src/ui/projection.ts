@@ -165,15 +165,13 @@ export function wallHitFade(time: number, hitAt: number | undefined): number {
 /**
  * How the barrier cards show on the wall (ID-075): a card's pick pulses every standing
  * segment and a repair glows on each segment it healed, each for `time` s of real time
- * (fight time times the game speed, so 3× never cuts them short); Spiked Walls' stakes
- * flash as they bite, in fight time. `alpha` is each glow's peak; `rise` how far (world units) a
- * repair's sparks float up; the stakes reach `out` past the wall's field face and sit
- * `in` on its top; Reinforce's brace shows at `alpha` under the damage.
+ * (fight time times the game speed, so 3× never cuts them short). `alpha` is each glow's
+ * peak; `rise` how far (world units) a repair's sparks float up; Reinforce's brace shows at
+ * `alpha` under the damage.
  */
 export const WALL_CARD = {
   pulse: { time: 0.9, alpha: 0.35 },
   repair: { time: 0.9, alpha: 0.45, rise: 6 },
-  spike: { time: 0.25, alpha: 0.9, out: 10, in: 2 },
   brace: { alpha: 0.4 },
 } as const;
 

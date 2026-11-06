@@ -149,7 +149,6 @@ export const ART_IDS = [
   'cracks',
   'wall-chips',
   'wall-breach',
-  'wall-spikes',
   'wall-brace',
   'wood-gate',
   'metal-gate',
@@ -482,8 +481,7 @@ export const BASE_ART = {
   /** Wall damage stages over the cracks (ID-072): pieces chipped out, then a section broken through. */
   chips: 'wall-chips',
   breach: 'wall-breach',
-  /** Barrier cards on the wall (ID-075): Spiked Walls' stakes, Reinforce's brace. */
-  spikes: 'wall-spikes',
+  /** Barrier cards on the wall (ID-075): Reinforce's brace. */
   brace: 'wall-brace',
   shield: 'shield',
 } as const satisfies Record<string, ArtId | readonly ArtId[] | Record<string, ArtId>>;

@@ -1421,15 +1421,6 @@
       "prompt": "repaint this exact image keeping its shape, size, outline and position: the same closed sliding gate seen flat from directly above, one wide rectangular panel with a guide rail and roller wheels down the middle and a heavy end cap across the top and the bottom. Only change the material to concrete: the panel is a heavy pale grey concrete slab with cracks, chipped edges and stains, the end caps are plain grey steel frames. Same hand-painted 2D game sprite style with a bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground"
     },
     {
-      "id": "wall-spikes",
-      "kind": "sprite",
-      "style": "object",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 7521,
-      "size": "384x1024",
-      "prompt": "seen flat from directly above, a long narrow vertical row of sharpened wooden stakes and rusty iron spikes all pointing straight to the right, their bases lashed with rope to a thin wooden beam running down the left side, the row runs from the top of the image to the bottom, much taller than wide"
-    },
-    {
       "id": "wall-brace",
       "kind": "sprite",
       "style": "verbatim",

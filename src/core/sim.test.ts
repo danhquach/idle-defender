@@ -71,7 +71,7 @@ describe('answerOffer', () => {
       { kind: 'upgrade', id: 'rapid-fire' },
       { kind: 'upgrade', id: 'reinforce' },
     ];
-    expect(answerOffer(s).mods.damage).toBeCloseTo(1.2);
+    expect(answerOffer(s).mods.damage).toBeCloseTo(1.1);
   });
 
   it('sends the first bench defender in for an injured one', () => {

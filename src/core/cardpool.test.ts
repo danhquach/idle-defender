@@ -24,7 +24,6 @@ import {
   type EnemyKind,
 } from './data.ts';
 import {
-  HIT_MARK_GAP,
   newHorde,
   standing,
   tick,
@@ -88,10 +87,10 @@ describe('card data', () => {
       expect(['common', 'rare', 'epic']).toContain(UPGRADES[id].rarity);
     }
     for (const id of ['sharpshooter', 'rapid-fire', 'long-sight'] as const) {
-      expect(UPGRADES[id]).toMatchObject({ category: 'stat', rarity: 'common', once: false });
+      expect(UPGRADES[id]).toMatchObject({ category: 'stat', rarity: 'common', levels: null });
     }
     for (const id of ['patch-up', 'reinforce'] as const) {
-      expect(UPGRADES[id]).toMatchObject({ category: 'barrier', rarity: 'common', once: false });
+      expect(UPGRADES[id]).toMatchObject({ category: 'barrier', rarity: 'common', levels: null });
     }
   });
 });
@@ -126,7 +125,7 @@ describe('rarity', () => {
   });
 
   it('falls back to the next rarity down when none of the rolled one is left', () => {
-    const s = quiet('frag-grenades');
+    const s = quiet('frag-grenades', 'concussion-rounds');
     s.bench = [];
     // 0.999 rolls epic every slot (and picks the last card of a list).
     const top = () => 0.999;
@@ -138,10 +137,9 @@ describe('rarity', () => {
     s.taken.push(
       'piercing-rounds',
       'ricochet',
-      'burning-rounds',
-      'stopping-power',
+      'incendiary-rounds',
       'extended-mags',
-      'spiked-walls',
+      'shock-rounds',
       'barbed-wire',
     );
     // No turret, so Power Surge (rare) is out too: down to common.
@@ -160,10 +158,10 @@ describe('rarity', () => {
 });
 
 describe('offers', () => {
-  it('never offers a once-per-horde card again once taken', () => {
+  it('never offers a unique card again once taken', () => {
     let s = quiet();
     s.offer = [
-      { kind: 'upgrade', id: 'ricochet' },
+      { kind: 'upgrade', id: 'frag-grenades' },
       { kind: 'upgrade', id: 'sharpshooter' },
       { kind: 'upgrade', id: 'speed-loaders' },
     ];
@@ -174,12 +172,12 @@ describe('offers', () => {
       { kind: 'upgrade', id: 'reinforce' },
     ];
     s = chooseCard(s, 0);
-    expect(s.taken).toEqual(['ricochet', 'sharpshooter']);
-    expect(eligible(s, 'ricochet')).toBe(false);
+    expect(s.taken).toEqual(['frag-grenades', 'sharpshooter']);
+    expect(eligible(s, 'frag-grenades')).toBe(false);
     expect(eligible(s, 'sharpshooter')).toBe(true);
     s.bench = [];
     for (let seed = 0; seed < 300; seed++) {
-      expect(upgrades(rollOffer(createRng(seed), s))).not.toContain('ricochet');
+      expect(upgrades(rollOffer(createRng(seed), s))).not.toContain('frag-grenades');
     }
   });
 
@@ -198,8 +196,10 @@ describe('offers', () => {
   });
 
   it('never runs the pool dry: at least 3 repeatable cards need no turret', () => {
+    // Patch Up is left out while the wall is whole (ID-097), so it doesn't count.
     const always = UPGRADE_IDS.filter(
-      (id) => !UPGRADES[id].once && UPGRADES[id].category !== 'power',
+      (id) =>
+        UPGRADES[id].levels === null && UPGRADES[id].category !== 'power' && id !== 'patch-up',
     );
     expect(always.length).toBeGreaterThanOrEqual(3);
     expect(always.every((id) => UPGRADES[id].rarity === 'common')).toBe(true);
@@ -243,7 +243,7 @@ describe('behaviour cards', () => {
     shoot(s, { x: 500, y: ROW4, damage: 10 });
     const t = steps(s, 10);
     expect(hpOf(t, a.id)).toBe(990);
-    expect(hpOf(t, b.id)).toBeCloseTo(1000 - 10 * CARD.ricochet.share, 9);
+    expect(hpOf(t, b.id)).toBeCloseTo(1000 - 10 * CARD.ricochet.share[2]!, 9);
     // The bounce never bounces again.
     expect(hpOf(t, c.id)).toBe(1000);
     expect(t.bullets).toEqual([]);
@@ -276,30 +276,30 @@ describe('behaviour cards', () => {
       return d.reloadedAt.primary - fired;
     };
     expect(reload()).toBeGreaterThan(0);
-    expect(reload('speed-loaders')).toBeCloseTo(reload() * CARD.loaders, 9);
+    expect(reload('speed-loaders')).toBeCloseTo(reload() * CARD.loaders[2]!, 9);
   });
 
   it('Extended Mags: a squad gun refills to twice its magazine from its next reload', () => {
     expect(shotOnce(0).d.ammo.primary).toBe(WEAPONS.pistol.magazine - 1);
     expect(shotOnce(0, 'extended-mags').d.ammo.primary).toBe(
-      WEAPONS.pistol.magazine * CARD.mags - 1,
+      WEAPONS.pistol.magazine * CARD.mags[2]! - 1,
     );
     // A magazine already in the gun keeps its rounds until it runs dry.
     expect(shotOnce(3, 'extended-mags').d.ammo.primary).toBe(2);
   });
 
-  it('Burning Rounds: the enemy hit burns 3 dmg/s for 3 s; a new hit resets, never stacks', () => {
-    const s = quiet('burning-rounds');
+  it('Incendiary Rounds at max: the enemy hit burns 3 dmg/s for 3 s; a new hit resets, never stacks', () => {
+    const s = quiet('incendiary-rounds');
     const a = enemy(s, { ...tough, ...still, x: 600, y: ROW4 });
     shoot(s, { x: 590, y: ROW4, damage: 10 });
     let t = tick(s, STEP);
     expect(t.enemies[0]!.burnUntil).toBeCloseTo(CARD.burn.seconds, 9);
     t = steps(t, Math.round(4 / STEP));
-    expect(hpOf(t, a.id)).toBeCloseTo(990 - CARD.burn.dps * CARD.burn.seconds, 6);
+    expect(hpOf(t, a.id)).toBeCloseTo(990 - CARD.burn.dps[2]! * CARD.burn.seconds, 6);
     // It counts the HP fire took (for the view's hit flash, ID-089), not the bullet's.
-    expect(t.enemies[0]!.burnt).toBeCloseTo(CARD.burn.dps * CARD.burn.seconds, 6);
+    expect(t.enemies[0]!.burnt).toBeCloseTo(CARD.burn.dps[2]! * CARD.burn.seconds, 6);
     // Hit twice in a row: still one burn, timed from the last hit.
-    const twice = quiet('burning-rounds');
+    const twice = quiet('incendiary-rounds');
     enemy(twice, { ...tough, ...still, x: 600, y: ROW4 });
     shoot(twice, { x: 590, y: ROW4, damage: 0 });
     let u = steps(twice, 15);
@@ -307,7 +307,7 @@ describe('behaviour cards', () => {
     u = tick(u, STEP);
     expect(u.enemies[0]!.burnUntil).toBeCloseTo(u.time - STEP + CARD.burn.seconds, 9);
     u = steps(u, Math.round(4 / STEP));
-    expect(u.enemies[0]!.hp).toBeCloseTo(1000 - CARD.burn.dps * (0.5 + CARD.burn.seconds), 6);
+    expect(u.enemies[0]!.hp).toBeCloseTo(1000 - CARD.burn.dps[2]! * (0.5 + CARD.burn.seconds), 6);
   });
 
   /** Where an enemy (still, 1000 HP at x 600, `e` on top) ends up after a 10-damage bullet from `owner`. */
@@ -318,25 +318,25 @@ describe('behaviour cards', () => {
     return tick(s, STEP).enemies.find((o) => o.id === target.id)!.x;
   }
 
-  it('Stopping Power: a hit knocks its enemy back 1 px per point of damage dealt', () => {
+  it('Concussion Rounds: a hit knocks its enemy back its px per point of damage dealt', () => {
     expect(knocked({}, [])).toBe(600);
-    expect(knocked({}, ['stopping-power'], 'turret:0')).toBe(600);
-    expect(knocked({}, ['stopping-power'])).toBeCloseTo(600 + 10 * CARD.stopping.perDamage, 9);
+    expect(knocked({}, ['concussion-rounds'], 'turret:0')).toBe(600);
+    expect(knocked({}, ['concussion-rounds'])).toBeCloseTo(600 + 10 * CARD.concussion.perDamage, 9);
     // A Brute: its armour takes 3 off the 10, and it's heavy, so half of that again.
-    expect(knocked({ kind: 'brute' }, ['stopping-power'])).toBeCloseTo(
-      600 + (10 - 3) * CARD.stopping.perDamage * CARD.stopping.heavy,
+    expect(knocked({ kind: 'brute' }, ['concussion-rounds'])).toBeCloseTo(
+      600 + (10 - 3) * CARD.concussion.perDamage * CARD.concussion.heavy,
       9,
     );
-    expect(knocked({ kind: 'swollen' }, ['stopping-power'])).toBeCloseTo(
-      600 + 10 * CARD.stopping.perDamage * CARD.stopping.heavy,
+    expect(knocked({ kind: 'swollen' }, ['concussion-rounds'])).toBeCloseTo(
+      600 + 10 * CARD.concussion.perDamage * CARD.concussion.heavy,
       9,
     );
   });
 
-  it('Stopping Power: never a Crawler on the wall, an enemy in the camp, or past the spawn edge', () => {
-    expect(knocked({ kind: 'crawler', climbUntil: 1e9 }, ['stopping-power'])).toBe(600);
-    expect(knocked({ inCamp: true }, ['stopping-power'])).toBe(600);
-    const s = quiet('stopping-power');
+  it('Concussion Rounds: never a Crawler on the wall, an enemy in the camp, or past the spawn edge', () => {
+    expect(knocked({ kind: 'crawler', climbUntil: 1e9 }, ['concussion-rounds'])).toBe(600);
+    expect(knocked({ inCamp: true }, ['concussion-rounds'])).toBe(600);
+    const s = quiet('concussion-rounds');
     s.spawnX = 602;
     const e = enemy(s, { ...tough, ...still, x: 600, y: ROW4 });
     shoot(s, { x: 590, y: ROW4, damage: 100 });
@@ -433,37 +433,6 @@ describe('behaviour cards', () => {
 });
 
 describe('barrier cards', () => {
-  /** An enemy at the wall's stop line on row 4, hitting it from the first step. */
-  function atWall(...taken: UpgradeId[]) {
-    const s = quiet(...taken);
-    const e = enemy(s, { ...tough, x: s.layers[0]!.x + 20, y: ROW4 });
-    const t = tick(s, STEP);
-    return { e: t.enemies.find((x) => x.id === e.id)!, seg: t.layers[0]!.segments[4]! };
-  }
-
-  it('Spiked Walls: each blow on a wall costs the enemy 3 HP', () => {
-    const { e, seg } = atWall('spiked-walls');
-    expect(seg.hp).toBe(seg.maxHp - ENEMIES.shambler.damage);
-    expect(e.hp).toBe(1000 - CARD.spikes);
-    expect(atWall().e.hp).toBe(1000);
-  });
-
-  it('Spiked Walls: marks the segment its stakes bite, at most once per hit-mark gap (ID-075)', () => {
-    // The blow lands at the step's start.
-    expect(atWall('spiked-walls').seg.spikeAt).toBe(0);
-    expect(atWall().seg.spikeAt).toBeUndefined();
-    // A crowd on one segment marks it again only once the gap has passed.
-    const bitten = (now: number) => {
-      const s = quiet('spiked-walls');
-      s.layers[0]!.segments[4]!.spikeAt = 0.2;
-      s.time = now;
-      for (let k = 0; k < 2; k++) enemy(s, { ...tough, x: s.layers[0]!.x + 20, y: ROW4 + k });
-      return tick(s, STEP).layers[0]!.segments[4]!.spikeAt;
-    };
-    expect(bitten(0.3)).toBe(0.2);
-    expect(bitten(0.2 + HIT_MARK_GAP)).toBe(0.2 + HIT_MARK_GAP);
-  });
-
   it('marks the pick of a barrier card, and only a barrier card, for the wall to pulse (ID-075)', () => {
     const pick = (id: UpgradeId) => {
       const s = quiet();
@@ -494,14 +463,6 @@ describe('barrier cards', () => {
     }
   });
 
-  it('Spiked Walls: a Spewer spitting from afar is not spiked', () => {
-    const s = quiet('spiked-walls');
-    s.defenders = [];
-    s.posts.forEach((p) => (p.defenderId = null));
-    const e = enemy(s, { ...tough, kind: 'spewer', x: s.layers[0]!.x + 20 + 250, y: ROW4 });
-    expect(tick(s, STEP).enemies.find((x) => x.id === e.id)!.hp).toBe(1000);
-  });
-
   /** The wall's front: the starting layer (x 500) and its depth. */
   const FRONT = 520;
   /** How far an enemy of `kind` at `x` on row 4 walks in one step, with `taken`. */
@@ -513,7 +474,7 @@ describe('barrier cards', () => {
 
   it('Barbed Wire: enemies in the band 250–400 px out move 35% slower; outside it, full speed', () => {
     const step = ENEMIES.shambler.speed * STEP;
-    const slow = step * (1 - CARD.wire.slow);
+    const slow = step * (1 - CARD.wire.slow[2]!);
     expect(moved('shambler', FRONT + 300, 'barbed-wire')).toBeCloseTo(slow, 9);
     expect(moved('shambler', FRONT + CARD.wire.from, 'barbed-wire')).toBeCloseTo(slow, 9);
     expect(moved('shambler', FRONT + CARD.wire.to, 'barbed-wire')).toBeCloseTo(slow, 9);
@@ -523,7 +484,7 @@ describe('barrier cards', () => {
     expect(moved('shambler', FRONT + CARD.wire.from - 30, 'barbed-wire')).toBeCloseTo(step, 9);
     // It multiplies with a Runner's own speed like any slow.
     expect(moved('runner', FRONT + 300, 'barbed-wire')).toBeCloseTo(
-      ENEMIES.runner.speed * STEP * (1 - CARD.wire.slow),
+      ENEMIES.runner.speed * STEP * (1 - CARD.wire.slow[2]!),
       9,
     );
   });
@@ -564,7 +525,7 @@ describe('barrier cards', () => {
 
   it('Barbed Wire: a broken row slows no one, the enemy that broke it included; other rows still do', () => {
     const step = ENEMIES.shambler.speed * STEP;
-    const slow = step * (1 - CARD.wire.slow);
+    const slow = step * (1 - CARD.wire.slow[2]!);
     const s = quiet('barbed-wire');
     s.wire[ROW]!.durability = 1;
     const breaker = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 });
@@ -586,7 +547,7 @@ describe('barrier cards', () => {
     const e = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 });
     const t = tick(s, STEP);
     expect(FRONT + 300 - t.enemies.find((o) => o.id === e.id)!.x).toBeCloseTo(
-      ENEMIES.shambler.speed * STEP * (1 - CARD.wire.slow),
+      ENEMIES.shambler.speed * STEP * (1 - CARD.wire.slow[2]!),
       9,
     );
   });
@@ -645,8 +606,8 @@ describe('power cards', () => {
 });
 
 describe('synergies', () => {
-  it('Burning Rounds never spreads: a burning enemy that dies leaves its neighbour alone (ID-084)', () => {
-    const s = quiet('burning-rounds');
+  it('Incendiary Rounds never spreads: a burning enemy that dies leaves its neighbour alone (ID-084)', () => {
+    const s = quiet('incendiary-rounds');
     const spec = {
       id: 'g',
       name: 'G',
@@ -681,7 +642,7 @@ describe('synergies', () => {
     s.taken = ['ricochet'];
     expect(synergyOf(s, 'piercing-rounds')).toMatch(/Ricochet/);
     s.defenders[0]!.stats = { instinct: 50, agility: 50, mind: 50, tinker: 0 };
-    expect(synergyOf(s, 'burning-rounds')).toBeNull();
+    expect(synergyOf(s, 'incendiary-rounds')).toBeNull();
     expect(synergyOf(s, 'sharpshooter')).toBeNull();
   });
 });
@@ -692,7 +653,7 @@ describe('determinism and cost', () => {
   it('the same seed with every card that acts in the fight plays the same fight', () => {
     const play = () => {
       const s = newHorde(7, { ...setup(), hordeNumber: 6 });
-      s.taken = [...ALL, 'speed-loaders', 'extended-mags', 'barbed-wire', 'spiked-walls'];
+      s.taken = [...ALL, 'speed-loaders', 'extended-mags', 'barbed-wire', 'shock-rounds'];
       s.nextFragAt = 0;
       return steps(s, Math.round(40 / STEP));
     };

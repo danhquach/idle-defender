@@ -20,7 +20,7 @@ import {
   type Room,
   type Survivor,
 } from '../core/camp.ts';
-import { rerollLock, synergyOf, UPGRADES } from '../core/cards.ts';
+import { pitch, rerollLock, synergyOf, UPGRADES, type CardPitch } from '../core/cards.ts';
 import {
   BANK_CAP,
   CAMP_PICK_RANKS,
@@ -129,23 +129,66 @@ export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'loadout' | 'plain'
 const capital = (w: string): string => w.charAt(0).toUpperCase() + w.slice(1);
 
 /**
- * A card's words (design §8): an upgrade's rarity and category ("Rare behaviour"), and
- * the synergy it turns on, if any.
+ * A card's words (design §8): an upgrade's rarity and category ("Rare behaviour"), the
+ * synergy it turns on, if any, and what the pick gives (ID-097, `pitch`): its tag ("New",
+ * "Lv 1 → 2"), its effect before and after, and an ammo swap's warning. `spoken` is the
+ * whole card in words for a screen reader, arrows read as "to".
  */
 export function cardText(
   card: Card,
   state: HordeState,
-): { title: string; body: string; kind?: string; synergy?: string } {
-  if (card.kind === 'recruit')
-    return { title: `Recruit ${defenderLabel(card.defender)}`, body: 'Takes a free post' };
+): {
+  title: string;
+  body: string;
+  kind?: string;
+  synergy?: string;
+  pitch?: CardPitch;
+  spoken: string;
+} {
+  if (card.kind === 'recruit') {
+    const title = `Recruit ${defenderLabel(card.defender)}`;
+    return { title, body: 'Takes a free post', spoken: `${title}. Takes a free post` };
+  }
   const u = UPGRADES[card.id];
   const synergy = synergyOf(state, card.id);
+  const p = pitch(state, card.id);
+  const e = p.effect;
+  const body = e ? `${e.pre}${e.from === null ? '' : `${e.from} → `}${e.to}${e.post}` : p.text;
+  const kind = `${capital(u.rarity)} ${u.category}`;
+  const said = (s: string): string => s.replaceAll('→', 'to').replaceAll('×', 'times ');
+  const spoken = [
+    u.name,
+    p.tagSpoken,
+    said(body),
+    kind,
+    ...(p.replace ? [p.replace.warning, said(p.replace.swap)] : []),
+    ...(synergy ? [`Synergy: ${synergy}`] : []),
+  ].join('. ');
   return {
     title: u.name,
-    body: u.text,
-    kind: `${capital(u.rarity)} ${u.category}`,
+    body,
+    kind,
     ...(synergy ? { synergy: `Synergy — ${synergy}` } : {}),
+    pitch: p,
+    spoken,
   };
+}
+
+/**
+ * An offer card's effect line (ID-097): its words, with the number that changes
+ * highlighted ("Enemies <15% → 25%> slower"), all as text nodes; `body` when the card has
+ * no number.
+ */
+export function effectLine(p: CardPitch, body: string): HTMLElement {
+  const line = el('span', 'hud-card-body');
+  const e = p.effect;
+  if (!e) {
+    line.textContent = body;
+    return line;
+  }
+  const change = el('strong', 'hud-card-change', e.from === null ? e.to : `${e.from} → ${e.to}`);
+  line.append(e.pre, change, e.post);
+  return line;
 }
 
 /** A level as a whole number, rounded down but never to 0 while any is left. */
@@ -1378,13 +1421,22 @@ export function createHud(
     const heading = el('h2', 'hud-cards-title', 'Level up: pick one');
     const row = el('div', 'hud-card-row');
     offer.forEach((card, i) => {
-      const { title, body, kind, synergy } = cardText(card, state);
+      const { title, body, kind, synergy, pitch, spoken } = cardText(card, state);
       const rarity = card.kind === 'upgrade' ? ` hud-card-${UPGRADES[card.id].rarity}` : '';
-      const button = el('button', `hud-card hud-card-${card.kind}${rarity}`);
+      const swap = pitch?.replace ? ' hud-card-swap' : '';
+      const button = el('button', `hud-card hud-card-${card.kind}${rarity}${swap}`);
       button.type = 'button';
+      button.setAttribute('aria-label', `${i + 1}. ${spoken}`);
       button.append(el('span', 'hud-card-key', String(i + 1)), el('span', 'hud-card-title', title));
+      if (pitch) button.append(el('span', 'hud-card-tag', pitch.tag));
+      // An ammo swap's loss, read right after the tag, in one red box (ID-097).
+      if (pitch?.replace) {
+        const warning = el('span', 'hud-card-warning', pitch.replace.warning);
+        warning.append(el('span', 'hud-card-swap-line', pitch.replace.swap));
+        button.append(warning);
+      }
       if (kind) button.append(el('span', 'hud-card-kind', kind));
-      button.append(el('span', 'hud-card-body', body));
+      button.append(pitch ? effectLine(pitch, body) : el('span', 'hud-card-body', body));
       if (synergy) button.append(el('span', 'hud-card-synergy', synergy));
       button.addEventListener('click', () => choose(i));
       row.append(button);

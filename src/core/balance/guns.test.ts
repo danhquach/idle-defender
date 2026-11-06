@@ -33,7 +33,14 @@ describe('the specialised guns (ID-046)', () => {
   const SCENE_IDS = Object.keys(SCENES) as Scene[];
 
   function gunNeutral(t: HordeState): HordeState {
-    const i = t.offer!.findIndex((c) => c.kind === 'upgrade' && UPGRADES[c.id].category === 'stat');
+    // Only the repeatable stat cards (design §8): Speed Loaders and Extended Mags favour
+    // some guns over others, the more so with levels (ID-097).
+    const i = t.offer!.findIndex(
+      (c) =>
+        c.kind === 'upgrade' &&
+        UPGRADES[c.id].category === 'stat' &&
+        UPGRADES[c.id].levels === null,
+    );
     return i < 0 ? { ...t, offer: null } : chooseCard(t, i);
   }
 

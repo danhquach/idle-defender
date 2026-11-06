@@ -2,7 +2,7 @@
 // player, no page and no clock, so the starting numbers in `data.ts` can be checked
 // by the balance tests and the `npm run balance` report without playing by hand.
 import { repairSegment } from './base.ts';
-import { chooseCard, postUsable } from './cards.ts';
+import { chooseCard, postUsable, replaces } from './cards.ts';
 import {
   available,
   finishHorde,
@@ -222,21 +222,26 @@ const SQUAD_PICKS: readonly UpgradeId[] = [
   'rapid-fire',
   'frag-grenades',
   'piercing-rounds',
-  'stopping-power',
+  'concussion-rounds',
   'extended-mags',
-  'burning-rounds',
+  'incendiary-rounds',
+  'shock-rounds',
   'ricochet',
   'speed-loaders',
   'long-sight',
   'barbed-wire',
   'reinforce',
-  'spiked-walls',
   'patch-up',
 ];
 
-/** Which card of the open offer the horde-only scripted player takes: the best by `SQUAD_PICKS`. */
-export function squadPick(s: Pick<HordeState, 'offer'>): number {
+/**
+ * Which card of the open offer the horde-only scripted player takes: the best by
+ * `SQUAD_PICKS`. It keeps the ammo it loaded first (ID-097): a card that would replace it
+ * comes last.
+ */
+export function squadPick(s: Pick<HordeState, 'offer' | 'taken'>): number {
   const rank = (c: Card): number => {
+    if (c.kind === 'upgrade' && replaces(s, c.id)) return SQUAD_PICKS.length + 1;
     const i = c.kind === 'upgrade' ? SQUAD_PICKS.indexOf(c.id) : -1;
     return i < 0 ? SQUAD_PICKS.length : i;
   };

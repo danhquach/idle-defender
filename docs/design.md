@@ -378,7 +378,10 @@ Defenders stand on **posts** the player builds and chooses between.
     in the wave (on the field and still to come), with the speed buttons; the
     fight XP bar (its level and XP to the next) sits under it on the left.
   - Enemy HP grows ×1.20 per horde up to Horde 6 (the squad grows by a
-    survivor a win until then), then ×1.03, instead of ×1.17 (§9).
+    survivor a win until then), then ×1.03, instead of ×1.17 (§9). Hordes
+    1–3 are eased to ×0.8, ×0.9 and ×0.95 of that (ID-097,
+    `SQUAD_EARLY_HP`), so the first hordes are sure wins while the player
+    learns the cards.
 - **As built (ID-068): shooting from behind the wall.**
   - Survivors take the firing line's slots (§3) in the order they joined,
     from the middle out: slots 3, 4, 2, 5, 1, 6 (top to bottom), so a lone
@@ -535,7 +538,7 @@ close-quarter weapons come out only when an enemy is close.
   | SMG | 5 | 0.2 s | 400 | 30 | 2 s | 1,600 | ±5° | 1 | 0 |
   | Rifle | 7 | 0.4 s | 750 | 20 | 2 s | 2,200 | ±1.5° | 1 | 0 |
   | Shotgun | 4 per pellet | 0.75 s | 350 | 8 | 2.5 s | 1,400 | ±12° | 6 | 0 |
-  | LMG | 6 | 0.22 s | 500 | 60 | 5 s | 2,000 | ±4° | 1 | 0 |
+  | LMG | 6.5 | 0.22 s | 500 | 80 | 5 s | 2,000 | ±4° | 1 | 0 |
   | Sniper rifle | 22 | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 1 |
 
   Balance (a lone Common-gun Gunner on the upper tower against 20-HP Shamblers
@@ -556,6 +559,14 @@ close-quarter weapons come out only when an enemy is close.
   none, and the SMG and shotgun can't reach far. One specialised gun lifts
   Horde 4 from about 5% to 75–100% won, but Horde 6 stays at most a quarter won
   with any of them (the curve still needs the camp to grow).
+  Retune (ID-097): the LMG was damage 6 and a 60-round magazine. With the
+  repeatable cards adding instead of compounding, one Sharpshooter no longer
+  lifted its 6 to 7.2 (3 hits on a 20-HP Shambler instead of 4), and the
+  sniper out-shot it in sustained fire (63 to 56). At 6.5 and 80 rounds it
+  leads sustained fire again (64.6 to the sniper's 63) without leading up
+  close (21.4 to the shotgun's 25.2) or in a lane (20.0 to 21.0). The scenes
+  now pick only the repeatable stat cards, as written above (they took Speed
+  Loaders and Extended Mags too).
 - **Roster screen (as built, ID-012):** a Roster button on the build panel
   opens it in the panel's place: each defender's level and XP, stats
   (Tinker shown locked), unspent points (spent there) and rest time, and three pickers
@@ -734,7 +745,7 @@ profession's output).
 
 - Weapons come from patrols (main source), boss hordes and crafting.
 - **Rarity:** Rusty, Common, Military, Prototype, Relic, with rolled
-  affixes (e.g. +pierce, burning rounds, +damage vs. mutants).
+  affixes (e.g. +pierce, incendiary rounds, +damage vs. mutants).
 - A loadout per defender: primary, secondary and one item (§6 Loadout)
   *(guess: armour later, in the item slot)*.
 - **As built (ID-013, starting points):** the free Pistol, Knife and Toolkit
@@ -752,7 +763,7 @@ profession's output).
   Prototype 5 (Relic never from a horde). The result screen names it with one
   line per affix. The camp owns at most 30 weapons (armoury and hands
   together); a drop past that is salvaged for Scrap (Rusty 5, Common 10,
-  Military 25, Prototype 50, Relic 100). Burning rounds and +damage vs.
+  Military 25, Prototype 50, Relic 100). Incendiary rounds and +damage vs.
   mutants wait for burning effects and mutants. Manual salvage is a follow-up.
 - **As built (ID-067): weapon drops, stash and equip in the horde-only build.**
   Better guns are how the squad gets stronger.
@@ -953,49 +964,83 @@ Offered 1 of 3 on each fight level. Lost when the horde ends.
 
 Every card is grounded gear or tactics a group of survivors with guns could
 really use (ammo, scavenged kit, barricade work): no magic or energy effects.
-Every card changes the fight visibly within a wave of picking it, at the
+Incendiary Rounds and Shock Rounds are real-world special ammunition
+(incendiary and electroshock rounds), not magic. Every card changes the fight visibly within a wave of picking it, at the
 spacing real hordes have (see the ID-077 note below).
 
 - **Stat cards:** +damage, +fire rate, +range, bigger magazines, faster
   reloads.
-- **Behaviour cards:** pierce, ricochet, burning rounds, stopping power,
-  frag grenades.
-- **Barrier cards:** +layer HP, repairs, spikes on walls, barbed wire out
+- **Behaviour cards:** pierce, ricochet, incendiary rounds, shock rounds,
+  concussion rounds, frag grenades.
+- **Barrier cards:** +layer HP, repairs, barbed wire out
   in the field.
 - **Power cards:** refill some battery charge, turrets free to run for one
   wave.
 - **Synergies:** some cards upgrade when paired (e.g. ricochet + piercing
   rounds).
 - **Rarity:** common / rare / epic; rarer offers more often in later waves.
-- **As built (ID-022, card set reworked by ID-077, starting points):** stat
-  cards stay squad-wide (per-profession stat cards come later). Sharpshooter
-  (+20% damage), Rapid Fire (+15% fire rate) and Long Sight (+15% range) are
-  common and repeatable. The squad's gun cards act on the squad's guns and
-  bullets only (turrets never), and each of the cards below is taken once
-  per horde:
+- **As built (ID-022, card set reworked by ID-077, levels ID-097):** stat
+  cards stay squad-wide (per-profession stat cards come later). The squad's
+  gun cards act on the squad's guns and bullets only (turrets never).
+  **Levels (ID-097):** each card below has levels 1, 2 and 3 (max). The
+  first pick gives level 1, each later pick raises it by 1, and at max it
+  leaves the pool for the rest of the horde. An upgrade keeps the card's own
+  rules (Extended Mags from each gun's next reload, Barbed Wire's rows keep
+  their durability and stay broken). Levels last the horde, like every card.
+
+  | Card | Kind | Rarity | Lv 1 | Lv 2 | Lv 3 (max) |
+  |---|---|---|---|---|---|
+  | Speed Loaders | stat | common | Every squad gun reloads in **90%** of the time | 80% | 70% |
+  | Extended Mags | stat | rare | Every squad gun's magazine holds **×1.33** the rounds (rounded), from its next reload (a survivor who joins mid-fight, too: they come with a standard magazine loaded) | ×1.67 | ×2 |
+  | Piercing Rounds | behaviour | rare | Each squad shot has a **35%** chance of +1 pierce, rolled on the fight's seeded RNG as it's fired (every pellet of a shot alike) | 70% | always +1 pierce (no roll) |
+  | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
+  | Incendiary Rounds | behaviour | rare | The enemy hit burns **1** dmg/s for 3 s; a new hit resets it at the new hit's rate, never stacks | 2 dmg/s | 3 dmg/s |
+  | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
+  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower (more below) | 25% | 35% |
+
+  **Epic cards are unique:** one level, which is max, taken once per horde.
 
   | Card | Kind | Rarity | Effect |
   |---|---|---|---|
-  | Speed Loaders | stat | common | Every squad gun reloads in **70%** of the time |
-  | Extended Mags | stat | rare | Every squad gun's magazine holds **2×** the rounds, from its next reload (a survivor who joins mid-fight, too: they come with a standard magazine loaded) |
-  | Piercing Rounds | behaviour | rare | +1 pierce on every squad bullet |
-  | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **25%** damage; a bounce never bounces |
-  | Burning Rounds | behaviour | rare | The enemy hit burns 3 dmg/s for 3 s; a new hit resets it, never stacks |
-  | Stopping Power | behaviour | rare | A squad bullet hit that leaves its enemy standing knocks it back **1 px per point of damage** dealt (after armour; about 6 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge |
+  | Concussion Rounds | behaviour | epic | A squad bullet hit that leaves its enemy standing knocks it back **0.5 px per point of damage** dealt (after armour; about 3 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge. After a push the enemy can't be pushed again for **0.5 s** (hits in that window still deal their damage), so steady fire pushes it at most twice a second |
   | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **20** flat damage (armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked |
 
-  Barrier: Spiked Walls (rare, once): an enemy hitting a standing segment
-  takes 3 damage per blow (a Spewer's spit from afar doesn't count). **Barbed
-  Wire** (rare, once): coils strung across the field in the band **250–400
-  px** in front of the outermost layer, where most kills happen; enemies
-  inside move **35%** slower, multiplying with razor wire traps and
+  Field Repairs (a campaign research card) stays epic and unique, and
+  Hollow Points (research) stays once per horde with no levels.
+
+  **One ammo slot (ID-097):** the squad holds at most one of Incendiary
+  Rounds and Shock Rounds; both stay in the pool all horde. Picking the one
+  held levels it up; picking the other replaces it: the new card starts at
+  level 1 and the old card and its levels are gone (it can come back in a
+  later offer and replace the new one the same way, even when the held one
+  is at max). New hits use the new card from the next shot; burns and
+  paralyses already on enemies run out as they were.
+
+  **Repeatable cards (uncapped):** Sharpshooter (**+10%** damage a pick),
+  Rapid Fire (**+8%** fire rate), Long Sight (**+6%** range) and Reinforce
+  (**+10%** of each segment's max HP at the start of the horde; the segment
+  gains the same HP) are common and can be picked any number of times. The
+  steps add (five Sharpshooters are +50%), then multiply once with other
+  sources (Hollow Points, shop buffs, perks). They were ×1.2, ×1.15, ×1.15
+  and +25% of the current max each, compounding (ID-022): five Sharpshooters
+  were ×2.49.
+
+  **Barbed Wire** (ID-077):
+  enemies in its band move slower by its level's share, multiplying with razor wire traps and
   Screamers. Enemies wear it down (ID-090): the band is 10 rows, one per
   wall segment, each with **30** durability (`CARD.wire.durability`, the
   same as a trap). Each enemy that enters a working row's band takes 1
   durability off that row, only once per row. A row at 0 is broken for the
   rest of the horde: it slows no one, the enemy that broke it included,
-  while the other rows still slow. Patch Up (repair every segment by 30% of its max HP) and
-  Reinforce (+25% wall max HP) stay common and repeatable. Power
+  while the other rows still slow. **Patch Up** (common, repeatable, uncapped)
+  repairs every built segment by 30% of its max HP, a broken one included. It's
+  offered only while some built segment is below its max HP (broken
+  counts): with the whole wall at full HP that slot rolls another card, and
+  the four other repeatable commons still keep a slot from coming up empty.
+  Its card shows what it would restore ("Repairs 140 HP across 3 segments").
+  Spiked Walls (3 damage to an enemy per blow on the wall) is gone (ID-097):
+  enemies rarely reached the wall, so it almost never did anything; Shock
+  Rounds takes its place. Power
   (repeatable, offered only when the base has a turret, since the bank
   exists from the start): Recharge (common) adds 25% of the bank cap,
   capped; **Power Surge** (rare; named so it doesn't clash with the shop's
@@ -1004,13 +1049,43 @@ spacing real hordes have (see the ID-077 note below).
   so it covers the next wave). Each offer slot rolls a rarity from the wave:
   common 70 − 4(w − 1)% (min 40), rare 25 + 3(w − 1)% (max 45), epic
   5 + (w − 1)% (max 15), taken in proportion (from wave 8 they sum to 99);
-  none of that rarity left → the next rarity down, then up (five repeatable
-  commons are always eligible, so a slot never comes up empty). Synergies
+  none of that rarity left → the next rarity down, then up (four repeatable
+  commons are always eligible, so a slot never comes up empty). An upgrade
+  or a replacement is offered at its card's rarity, with no extra weight; a
+  maxed card never is. Synergies
   (the Master Gunner burn spread is parked with titles, ID-084):
   Ricochet + Piercing Rounds bounces keep the pierce the
-  bullet had left. A card shows a synergy line when it would turn one on.
+  bullet had left, at every level. A card shows a synergy line when it would turn one on.
+  **The offer (ID-097)** spells out each pick: a card not held shows "New"
+  and its level 1 effect; a card held shows "Lv 1 → 2" (or "Lv 2 → Max")
+  and the effect before and after with the changed number highlighted
+  ("Enemies 15% → 25% slower"); an epic shows "Unique"; a repeatable card
+  shows its stack and total ("Sharpshooter ×3 → ×4: +30% → +40% damage");
+  the other ammo card keeps "New" but shows, right under it, a red box: "Replaces
+  Incendiary Rounds Lv 2. Its levels are lost." over what you'd hold before
+  and after (red for a loss, gold for a synergy). Patch Up shows the HP it
+  would restore in bold like any card's number. On a phone (640 px or
+  narrower) the cards stack in an opaque panel. Picking it is the one
+  choice, with no extra dialog. Screen readers read the level or stack,
+  both values and any warning.
   Retune (ID-022): the ticket's 50% Ricochet let a campaign without building
-  win Horde 5; the 25% above holds every balance target. The gun-role scenes
+  win Horde 5; the 25% above holds every balance target.
+  **Balance with levels (ID-097).** Main before this change won every
+  horde-only Horde 1–10 at the first try on all 20 seeds. With levels and
+  flat steps the scripted squad won Horde 1 on 80% (the lone starting survivor
+  15 of 20), Hordes 2–7 on 90–100%, and Hordes 8–10 on only 20%, 10% and 10%:
+  compounding Sharpshooter and Rapid Fire had carried the late hordes (flat
+  steps at the old +20%/+15%/+15% still gave only 70%, 40%, 40%). Decided:
+  Hordes 1–3 are sure wins (enemy HP eased, §5 and §9), Hordes 4–7 are won
+  at the first try on most seeds, and from Horde 8 the hordes are walls the
+  player farms past; their targets, and the late-horde test (ID-096), come
+  back with farming in the balance pass (ID-102). Level by level, in Horde 4
+  with three survivors and that card alone (wins of 20; no card 2): Speed
+  Loaders 7, 12, 15; Extended Mags 10, 13, 15; Barbed Wire 9, 11, 12. Shock
+  Rounds kills 7–11 px further out than no card at every level, each level
+  further than the one below (163.5, 164.0 and 167.5 px against 156.1); its
+  wins (5, 7 and 5 of 20) are noise, as a paralysis only holds enemies back.
+  Concussion Rounds wins 8 and kills 7 px further out. The gun-role scenes
   (ID-046) take only the repeatable stat cards: the rest favour some guns
   over others.
 
@@ -1023,7 +1098,7 @@ spacing real hordes have (see the ID-077 note below).
   happen within 60 px of it. The nearest other enemy is a median ~110 px
   away: within 40 px for only 4–13% of kills, 80 px for ~30%, 150 px for
   ~68%. So the new cards act out in the field (Barbed Wire's band, Stopping
-  Power), reach past one body (Frag Grenades' 70 px burst, aimed at the
+  Power, now Concussion Rounds), reach past one body (Frag Grenades' 70 px burst, aimed at the
   thickest group), or act on every shot (Speed Loaders, Extended Mags). Each
   has a balance test showing it makes a measurable difference: in Horde 4
   with three survivors and no other card, each wins more fights than none
@@ -1033,12 +1108,14 @@ spacing real hordes have (see the ID-077 note below).
   Shot had carried the late hordes). One every 8 s per survivor for 25 let
   the full game's campaign without building reach Horde 6. One every 8 s per
   survivor for 20 holds all three targets. Stopping Power started at 0.5 px a point; the proposal's ~6 px a
-  pistol hit (1 px a point) is the number above.
+  pistol hit (1 px a point) held until ID-097 made it the epic Concussion
+  Rounds at 0.5 px a point with a 0.5 s gap between pushes (above).
 
 - **As built (ID-066): horde-only cards.** Stat, behaviour and barrier
   cards only: no power cards (there are no turrets) and no recruit cards.
-  Research cards never come (nothing is researched). Five repeatable cards
-  stay in the pool, so an offer never runs dry.
+  Research cards never come (nothing is researched). Four repeatable cards
+  always stay in the pool (Patch Up only while the wall is damaged), so an
+  offer never runs dry.
 
 ## 9. Enemies
 
@@ -1063,6 +1140,10 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
 - **Scaling:** enemy HP × 1.10 per wave, × 1.17 per horde number (starting
   points; × 1.15 until ID-020, raised so a new game's Steady Fire keeps the
   balance targets: a campaign without building still stalls before Horde 6).
+  Hordes 1–3 are eased to ×1, ×0.9 and ×0.85 of that (ID-097, `EARLY_HP`):
+  with the weaker cards, the bare base won Horde 2 on 19 of 20 seeds and Horde
+  3 on 10; eased, Hordes 1–3 win 20 of 20, Horde 4 stays at 2 of 20, and every
+  campaign without building still reaches Horde 4 and stalls before Horde 6.
 - **As built (ID-023, starting points):**
 
   | Enemy | HP | Speed px/s | Hit | Radius | XP / cash |
@@ -1943,7 +2024,7 @@ original outline.
   looks by its last number (recruit 1 is the soldier, recruits 2 to 4 the
   others, recruit 5 the soldier again), any other id is hashed.
 - **As built (ID-082): damage numbers.** Every hit on an enemy (bullet,
-  blade, cleave, frag, airstrike, trap, Spiked Walls, burning) shows its
+  blade, cleave, frag, airstrike, trap, burning) shows its
   damage where it landed, over the enemy's HP bar at that moment (it stays
   there as the enemy walks on), after a Brute's or the Horror's armour; a
   killing hit shows in full, overkill and all. A Ricochet's bounce off a
@@ -2100,15 +2181,8 @@ original outline.
   the wall a pale teal (swelling and fading over 0.9 s, at most 35%), so it
   never reads as a hit. The pulse and the repair glow below last 0.9 s of
   real time at any game speed (fight time times the speed, so 3× never cuts
-  them short, and pause holds them); the stake bites keep to fight time.
-  **Spiked Walls** lays a row of
-  stakes along each segment's field edge (their foot 2 units under its top,
-  reaching 10 over the ground in front, where the camera sees it), drawn
-  under every sprite so the enemies stopped at the wall stand over them; they
-  don't shake with a hit. When the stakes hurt an enemy
-  striking the wall, a small pale burst with an amber core shows for
-  0.25 s, at most once per 0.4 s per segment, like the hit flash; a
-  Spewer's spit doesn't set it off. **Reinforce** lays a steel X brace over
+  them short, and pause holds them). (Spiked Walls' stakes and their bites
+  went with the card, ID-097.) **Reinforce** lays a steel X brace over
   each segment's top and front at 40%, under the ID-072 damage, so every
   damage stage still reads; it looks the same however often it's taken.
   **Patch Up** and **Field Repairs** glow each segment they actually heal
@@ -2143,8 +2217,13 @@ original outline.
   flies from the thrower to where it lands on a low arc (40 units high at
   the middle) with a shadow under it on the ground, then bursts with the
   airstrike's blast art swelling over its 70-unit reach and fading out over
-  0.4 s. **Stopping Power** needs nothing of its own: the hit enemy visibly
-  jolts back. **The gate** is now a sliding gate: one closed panel on a
+  0.4 s. **Concussion Rounds** (was Stopping Power) needs nothing of its own: the hit enemy visibly
+  jolts back. **Shock Rounds** (ID-097): a paralysed enemy twitches side to
+  side (1.5 units and 0.05 rad, flipping every 0.06 s) while a small spark
+  crackles on its body: a short pale zigzag over a cool blue glow, about
+  two fifths of its height, jumping to a new spot on its torso each flicker. No
+  arcs between enemies. It's drawn in code (no art file); with Reduce motion
+  it holds still. **The gate** is now a sliding gate: one closed panel on a
   rail with roller wheels down its middle and a heavy end cap at each end,
   drawn over the whole segment top, flush with the segments beside it, with
   no posts sticking out and no passage. Each tier has its own (weathered

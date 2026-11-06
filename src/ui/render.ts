@@ -26,6 +26,7 @@ import {
 import {
   reloadIn,
   barbedWire,
+  shocked,
   took,
   turretState,
   type Bullet,
@@ -34,7 +35,6 @@ import {
   type Impact,
   type Layer,
   type Grenade,
-  type UpgradeId,
   type Post,
   type Burst,
   type Pop,
@@ -154,9 +154,6 @@ const COLOR = {
   bubbleEdge: 'rgba(17, 17, 16, 0.85)',
   /** A segment a repair card heals (ID-075). */
   wallRepair: '#7fe08c',
-  /** Spiked Walls' stakes biting an enemy that strikes the wall (ID-075). */
-  spikeHit: '#fff0b8',
-  spikeCore: '#e0a020',
   hpEdge: '#1b1a18',
   conditionBack: '#111110',
   conditionFill: '#a9c4d6',
@@ -516,7 +513,10 @@ export type Scene = Pick<
   // Damage numbers (ID-082); build mode has none.
   // Barbed Wire's rows (ID-090); build mode has none.
   Partial<
-    Pick<HordeState, 'wave' | 'freeWave' | 'acc' | 'taken' | 'barrierAt' | 'pops' | 'wire'>
+    Pick<
+      HordeState,
+      'wave' | 'freeWave' | 'acc' | 'taken' | 'cardLevels' | 'barrierAt' | 'pops' | 'wire'
+    >
   > & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
     pace?: number;
@@ -832,17 +832,17 @@ function tagSpot(
 /**
  * How far `d`'s primary is through its reload at `time` (ID-078), 0 to 1, or null while it
  * has rounds or is ready. Only the primary counts: a Gunner's sidearm firing meanwhile
- * doesn't change it. The length is today's reload time, Speed Loaders (`taken`, design §8)
+ * doesn't change it. The length is today's reload time, Speed Loaders (`cards`, design §8)
  * included, so a stat change mid-reload moves the pie (the sim keeps only the reload's end).
  */
 export function reloadShare(
   d: Pick<Defender, 'ammo' | 'reloadedAt' | 'loadout' | 'stats' | 'plain'>,
   time: number,
-  taken: readonly UpgradeId[] = [],
+  cards: Pick<HordeState, 'taken' | 'cardLevels'> = { taken: [], cardLevels: {} },
 ): number | null {
   const end = d.reloadedAt.primary;
   if (d.ammo.primary > 0 || !(time < end)) return null;
-  const total = reloadIn({ taken }, d, d.loadout.primary);
+  const total = reloadIn(cards, d, d.loadout.primary);
   if (!(total > 0)) return null;
   return Math.min(1, Math.max(0, 1 - (end - time) / total));
 }
@@ -1081,7 +1081,6 @@ function drawOnPart(
 
 /** The barrier cards a fight's wall shows (ID-075); none in the build scene. */
 interface WallCards {
-  spiked: boolean;
   reinforced: boolean;
   /** When the latest barrier card was picked. */
   pickedAt: number | undefined;
@@ -1091,7 +1090,6 @@ interface WallCards {
   still: boolean;
 }
 const NO_CARDS: WallCards = {
-  spiked: false,
   reinforced: false,
   pickedAt: undefined,
   pace: 1,
@@ -1104,8 +1102,7 @@ const NO_CARDS: WallCards = {
  * gate's top is its tier's sliding gate, closed and flush with the segments beside it
  * (ID-075); a broken one is its tier's rubble. Just hit, it flashes pale orange and
  * shakes. Standing, it shows the barrier cards taken (ID-075): Reinforce's brace under the
- * damage, Spiked Walls' bite as its stakes (drawn under every sprite) hurt an enemy, a
- * pulse as any barrier card is picked and a green glow as a repair card heals it.
+ * damage, a pulse as any barrier card is picked and a green glow as a repair card heals it.
  */
 function drawSegment(
   ctx: CanvasRenderingContext2D,
@@ -1135,7 +1132,6 @@ function drawSegment(
     ctx.globalAlpha = 1;
   };
   if (standing) {
-    if (cards.spiked) drawSpikeBite(ctx, layer, seg, time, cam);
     glow(COLOR.wallPulse, WALL_CARD.pulse.alpha * wallPulse(time, cards.pickedAt, cards.pace));
     const repair = fadeAfter(time, seg.repairAt, WALL_CARD.repair.time * cards.pace);
     glow(COLOR.wallRepair, WALL_CARD.repair.alpha * repair);
@@ -1145,64 +1141,6 @@ function drawSegment(
     glow(COLOR.wallHit, WALL_HIT.flash * hit);
     ctx.restore();
   }
-}
-
-/**
- * Spiked Walls (ID-075): a row of stakes along each standing segment's field edge, on its
- * top and reaching over the ground in front, where the camera sees it. Drawn before every
- * sprite, so the enemies stopped at the wall (inside the stakes' reach) stand over them;
- * the segment drawn later covers the stakes' foot on its top.
- */
-function drawStakes(
-  ctx: CanvasRenderingContext2D,
-  art: Art,
-  layers: readonly Layer[],
-  cam: Camera,
-) {
-  for (const layer of layers) {
-    for (const seg of layer.segments) {
-      if (seg.kind === null || seg.tier === null || !(seg.hp > 0)) continue;
-      const box = segmentBox(layer, seg);
-      const face = layer.x + WALL.depth;
-      const a = project({ x: face - WALL_CARD.spike.in, y: box.y0, z: box.height }, cam);
-      const b = project({ x: face + WALL_CARD.spike.out, y: box.y1, z: box.height }, cam);
-      ctx.drawImage(art[BASE_ART.spikes], a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
-    }
-  }
-}
-
-/** As the stakes hurt an enemy striking the wall, a short pale burst with a warm core at their middle. */
-function drawSpikeBite(
-  ctx: CanvasRenderingContext2D,
-  layer: Layer,
-  seg: Layer['segments'][number],
-  time: number,
-  cam: Camera,
-): void {
-  const box = segmentBox(layer, seg);
-  const z = box.height;
-  const face = layer.x + WALL.depth;
-  const bite = fadeAfter(time, seg.spikeAt, WALL_CARD.spike.time);
-  if (bite <= 0) return;
-  const c = project({ x: face + WALL_CARD.spike.out / 2, y: (box.y0 + box.y1) / 2, z }, cam);
-  const reach = (2 + 4 * bite) * cam.zoom;
-  ctx.save();
-  ctx.globalAlpha = WALL_CARD.spike.alpha * bite;
-  ctx.strokeStyle = COLOR.spikeHit;
-  ctx.lineWidth = Math.max(1, cam.zoom);
-  ctx.beginPath();
-  for (let k = 0; k < 5; k++) {
-    const ang = -Math.PI / 2 + (k * Math.PI) / 4;
-    ctx.moveTo(c.sx, c.sy);
-    ctx.lineTo(c.sx + Math.cos(ang) * reach, c.sy + Math.sin(ang) * reach * TILT);
-  }
-  ctx.stroke();
-  // A warm core, so the bite shows on a pale concrete wall as well as a dark one.
-  ctx.fillStyle = COLOR.spikeCore;
-  ctx.beginPath();
-  ctx.arc(c.sx, c.sy, Math.max(1.5, 1.6 * cam.zoom * bite), 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 }
 
 /** A repair's sparks (ID-075): three small pale-green crosses over the healed top, floating up as they fade. */
@@ -2604,7 +2542,7 @@ function drawGrenade(
 }
 
 /**
- * A burning enemy's fire (Burning Rounds, design §8; ID-089). Sizes are shares of the
+ * A burning enemy's fire (Incendiary Rounds, design §8; ID-089). Sizes are shares of the
  * enemy's body height on screen (at least `squat` × its width, so a low Crawler's fire
  * still shows); times are fight seconds.
  *
@@ -2837,6 +2775,80 @@ function fillLicks(ctx: CanvasRenderingContext2D, licks: readonly Lick[], share:
 }
 
 /**
+ * Shock Rounds' cue (ID-097): a paralysed enemy twitches side to side by `dx` px (at zoom 1)
+ * and `rot` radians, flipping every `every` s, while a small spark crackles on its body: a
+ * short zigzag `size` of the body's height, at a spot that jumps every `every` s, pale
+ * `colour` over a cool `glow`. No arcs between enemies. With Reduce motion it holds still.
+ */
+export const SHOCK = {
+  dx: 1.5,
+  rot: 0.05,
+  every: 0.06,
+  size: 0.4,
+  width: 2,
+  colour: '#f4fbff',
+  glow: '#5ab4ff',
+} as const;
+
+/** `pose` with a shocked twitch at `clock` (0 holds it still, as with Reduce motion). */
+export function twitch(pose: Readonly<Pose>, id: number, clock: number): Pose {
+  if (clock === 0) return { ...pose };
+  const side = (Math.floor(clock / SHOCK.every) + id) % 2 === 0 ? 1 : -1;
+  return { ...pose, dx: pose.dx + side * SHOCK.dx, rot: pose.rot + side * SHOCK.rot };
+}
+
+/** The spark of a shocked enemy (`SHOCK`) on its body, `kind` at `feet` in `pose`. */
+function drawShock(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  id: number,
+  kind: EnemyKind,
+  feet: Point,
+  pose: Readonly<Pose>,
+  clock: number,
+  cam: Camera,
+): void {
+  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
+  const img = art[ENEMY_ART[kind].walk[1]];
+  const h = ((STAND.enemy * size * img.height) / ART_PX) * cam.zoom;
+  const w = (img.width / img.height) * h;
+  // A spot on the torso that jumps each flicker; seeded by the enemy and the flicker.
+  const tick = Math.floor(clock / SHOCK.every);
+  const r = (n: number): number => {
+    const x = Math.sin((id * 12.9898 + tick * 78.233 + n * 37.719) * 0.5) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  const cx = feet.sx + pose.dx * cam.zoom + (r(1) - 0.5) * w * 0.4;
+  const cy = feet.sy - pose.lift * cam.zoom - h * (0.45 + r(2) * 0.3);
+  const len = SHOCK.size * h;
+  const ang = r(3) * Math.PI * 2;
+  const pts: Point[] = [];
+  for (let k = 0; k <= 3; k++) {
+    const along = (k / 3 - 0.5) * len;
+    const off = k % 3 === 0 ? 0 : (k % 2 === 0 ? 1 : -1) * len * 0.22;
+    pts.push({
+      sx: cx + Math.cos(ang) * along - Math.sin(ang) * off,
+      sy: cy + Math.sin(ang) * along + Math.cos(ang) * off,
+    });
+  }
+  ctx.save();
+  ctx.globalAlpha = pose.alpha;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const line = (colour: string, width: number): void => {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    pts.forEach((p, k) => (k === 0 ? ctx.moveTo(p.sx, p.sy) : ctx.lineTo(p.sx, p.sy)));
+    ctx.stroke();
+  };
+  line(SHOCK.glow, Math.max(3, SHOCK.width * 3 * cam.zoom));
+  line(SHOCK.colour, Math.max(1, SHOCK.width * cam.zoom));
+  ctx.restore();
+}
+
+/**
  * A burning enemy's fire (ID-089) over its sprite, `kind`'s body at `feet` in `pose`,
  * `heat` strong (see `burnHeat`), its flames `clock` s into their cycles (held at 0 with
  * Reduce motion, so they hold still).
@@ -2977,16 +2989,13 @@ export function drawScene(
   const cards: WallCards = build
     ? NO_CARDS
     : {
-        spiked: took(taken, 'spiked-walls'),
         reinforced: took(taken, 'reinforce'),
         pickedAt: scene.barrierAt,
         pace: Math.max(1, scene.pace ?? 1),
         still: anim?.reduced ?? true,
       };
-  // Barbed Wire's band (ID-077) and traps lie flat on the ground, under every sprite,
-  // and Spiked Walls' stakes go under them too, so the enemies at the wall stand over them.
+  // Barbed Wire's band (ID-077) and traps lie flat on the ground, under every sprite.
   if (!build) drawWire(ctx, art, scene, cam);
-  if (cards.spiked) drawStakes(ctx, art, scene.layers, cam);
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
   // Molotov fires burn on the ground too, see-through, flaring up and dying down.
   for (const f of scene.fires) {
@@ -3079,9 +3088,13 @@ export function drawScene(
         const acts = anim?.enemy(e.id);
         const pose = anim && acts ? anim.shown(enemyPose(e, scene.time, acts)) : STILL;
         const frame = anim && acts ? anim.shownFrame(enemyFrame(e, scene.time, acts)) : 1;
-        drawEnemy(ctx, art, e.kind, frame, ground, cam, pose);
+        // Shock Rounds (ID-097): a paralysed enemy twitches, a small spark on its body.
+        const zap = shocked(scene, e);
+        const body = zap ? twitch(pose, e.id, flameClock) : pose;
+        drawEnemy(ctx, art, e.kind, frame, ground, cam, body);
         const heat = burnHeat(scene.time, e, anim?.litAt(e.id) ?? -Infinity);
-        drawBurn(ctx, art, e.id, e.kind, ground, pose, heat, flameClock, cam);
+        drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
+        if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam);
         const at = enemyBarAt(art, e.kind, e.x, e.y);
         drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
       },
@@ -3181,7 +3194,10 @@ export function drawScene(
     // Over each name, clear of it, while their gun reloads (ID-078). All before the
     // names, so where two survivors crowd together a pie never hides a name.
     for (const { d, z0 } of shown) {
-      const share = reloadShare(d, scene.time, scene.taken);
+      const share = reloadShare(d, scene.time, {
+        taken: scene.taken ?? [],
+        cardLevels: scene.cardLevels ?? {},
+      });
       if (share !== null) drawReloadPie(ctx, d, share, z0, cam);
     }
     for (const { d, z0 } of shown) drawNameTag(ctx, d, z0, cam);
