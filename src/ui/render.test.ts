@@ -58,6 +58,7 @@ import {
   BULLET,
   bulletShape,
   drawScene,
+  forgetBackdrop,
   DUSK,
   FLASH,
   FLASH_STYLE,
@@ -280,6 +281,90 @@ function stubCanvas() {
     },
   );
 }
+
+describe('the backdrop on its own canvas (ID-087)', () => {
+  beforeEach(() => {
+    stubCanvas();
+    forgetBackdrop();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** A scene and an under context, each recording what it drew and cleared. */
+  const pair = () => {
+    const scene = recorder();
+    const under = recorder();
+    const cleared: number[][] = [];
+    Object.assign(scene.ctx, { clearRect: (...a: number[]) => cleared.push(a) });
+    Object.assign(under.ctx, { clearRect: () => {} });
+    return { scene, under, cleared };
+  };
+
+  it('paints the ground and surround under the scene, which is cleared see-through', () => {
+    const { scene, under, cleared } = pair();
+    drawScene(
+      scene.ctx,
+      scene.art,
+      blank(),
+      CAM,
+      VIEW,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      under.ctx,
+    );
+    expect(under.drawn).toEqual(['ground-canvas']);
+    expect(under.textured).toEqual(['surround-canvas']);
+    expect(scene.drawn).toEqual([]);
+    expect(scene.textured).toEqual([]);
+    expect(cleared).toEqual([[0, 0, VIEW.w, VIEW.h]]);
+  });
+
+  it('repaints the steady fight backdrop only when the camera or view changes, or after forgetBackdrop', () => {
+    const { scene, under } = pair();
+    const draw = (cam = CAM, view = VIEW) =>
+      drawScene(
+        scene.ctx,
+        scene.art,
+        blank(),
+        cam,
+        view,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        under.ctx,
+      );
+    draw();
+    draw();
+    expect(under.drawn).toEqual(['ground-canvas']);
+    draw({ ...CAM, x: 10 });
+    expect(under.drawn).toHaveLength(2);
+    draw({ ...CAM, x: 10 }, { w: 800, h: 600 });
+    expect(under.drawn).toHaveLength(3);
+    forgetBackdrop();
+    draw({ ...CAM, x: 10 }, { w: 800, h: 600 });
+    expect(under.drawn).toHaveLength(4);
+  });
+
+  it('repaints every frame while the camera eases in (a clip) or the camp shows', () => {
+    const { scene, under } = pair();
+    const s = blank();
+    const camp = { fence: 'wood' as const, plots: plotsOf(newGame()) };
+    for (let i = 0; i < 2; i++) {
+      drawScene(scene.ctx, scene.art, s, CAM, VIEW, null, null, null, null, null, 100, under.ctx);
+    }
+    expect(under.drawn).toHaveLength(2);
+    for (let i = 0; i < 2; i++) {
+      drawScene(scene.ctx, scene.art, s, CAM, VIEW, null, null, null, null, camp, null, under.ctx);
+    }
+    expect(under.drawn).toHaveLength(4);
+  });
+});
 
 describe('drawScene with art', () => {
   beforeEach(stubCanvas);
@@ -2189,8 +2274,9 @@ describe('sprite animation (ID-049)', () => {
     const moved: unknown[] = [];
     Object.assign(r.ctx, { save: () => moved.push('save') });
     drawScene(r.ctx, r.art, s, CAM, VIEW);
-    // The frame's clip (ID-064) is the only save: no sprite is posed.
-    expect(moved).toEqual(['save']);
+    // The frame's clips (ID-064), the backdrop's and the scene's, are the only saves: no
+    // sprite is posed.
+    expect(moved).toEqual(['save', 'save']);
   });
 });
 
