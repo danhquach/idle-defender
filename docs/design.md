@@ -922,7 +922,12 @@ spacing real hordes have (see the ID-077 note below).
   Wire** (rare, once): coils strung across the field in the band **250–400
   px** in front of the outermost layer, where most kills happen; enemies
   inside move **35%** slower, multiplying with razor wire traps and
-  Screamers. Patch Up (repair every segment by 30% of its max HP) and
+  Screamers. Enemies wear it down (ID-090): the band is 10 rows, one per
+  wall segment, each with **30** durability (`CARD.wire.durability`, the
+  same as a trap). Each enemy that enters a working row's band takes 1
+  durability off that row, only once per row. A row at 0 is broken for the
+  rest of the horde: it slows no one, the enemy that broke it included,
+  while the other rows still slow. Patch Up (repair every segment by 30% of its max HP) and
   Reinforce (+25% wall max HP) stay common and repeatable. Power
   (repeatable, offered only when the base has a turret, since the bank
   exists from the start): Recharge (common) adds 25% of the bank cap,
@@ -1997,18 +2002,28 @@ original outline.
   6 units up (they stay put with Reduce motion on); a segment already whole
   shows nothing. **Barbed Wire** (ID-077, replacing the Slow Field's tar
   strip) shows its band (250–400 units in front of the outermost layer, the
-  field's full height) under every sprite: a faint dirt tint (12%), and
-  three coils of barbed wire running top to bottom near the band's near
-  edge, middle and far edge, each nudged off the even marks. Each coil is
-  a dense spiral of dark steel loops (9 units apart, 16 across) with a pale
-  highlight, wobbling 3 units side to side and tilting up to 15° along a
-  fixed curve, with a steel barb on every loop. A plain strand zig-zags
-  from the near coil to the far one every 60 units, and a pointed pale
-  wooden stake with a dark edge, 20 units tall, stands on a dirt mound just beside each coil every 80 units of
-  each coil. (The first version's straight, even coils read as a chain or
-  a ladder in the art review.) It's drawn in code (no art file) and painted
-  once into its own canvas (`src/ui/ground.ts`); where the browser can't
-  paint one, the tint alone shows. **Frag Grenades** (ID-077): the grenade
+  field's full height) under every sprite, with no tint over the ground
+  (ID-090): three coils of concertina wire running top to bottom near the
+  band's near edge, middle and far edge, each nudged off the even marks.
+  Each coil is a helix lying down the field (24 units in diameter, a loop
+  every 11) seen from above, its far half dark steel and its near half lit pale,
+  each strand drawn thick over a near-black outline so it reads on the grey
+  ground from 0.5× to 2×, with a pair of crossed razor blades every half
+  loop. A steel picket 16 units tall stands in each coil every 80 units.
+  The only darkening is a light shadow (22% black) under the wire and the
+  pickets. (ID-077's first coils read as a chain or a ladder; its later
+  rings on a dirt tint read as grey rings over brown, ID-090.) The band is
+  painted as seen, short down the field by the view's tilt, so the loops
+  stay round on screen. A broken row (ID-090) shows torn: each coil cut
+  through twice within the row, the cut ends sagging, the wire dulled (no
+  bright highlight) and every other picket knocked flat; a whole row next
+  to it joins up where both are whole. It's drawn in code (no art file),
+  whole and torn each painted once into its own canvas
+  (`src/ui/ground.ts`), and each run of rows alike is drawn in one go;
+  where the browser can't paint them, a steel line down each coil of the
+  working rows shows where the slow applies. (The barbed wire trap keeps
+  its ID-043 sprite for now.)
+  **Frag Grenades** (ID-077): the grenade
   is an olive-drab ball 13 units across with a near-black edge and a pale
   rim on its upper left, so it reads on the dark, mossy ground. It
   flies from the thrower to where it lands on a low arc (40 units high at

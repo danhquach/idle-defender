@@ -16,6 +16,7 @@ import {
   ENEMIES,
   MAX_CONDITION,
   SEGMENT_HEIGHT,
+  SEGMENTS,
   STEP,
   TURRET,
   WEAPONS,
@@ -525,6 +526,58 @@ describe('barrier cards', () => {
       ENEMIES.runner.speed * STEP * (1 - CARD.wire.slow),
       9,
     );
+  });
+
+  /** The band's row index 4, where ROW4 lies. */
+  const ROW = 4;
+
+  it('Barbed Wire: each row starts whole, and each enemy wears its row by 1, only once (ID-090)', () => {
+    const s = quiet('barbed-wire');
+    expect(s.wire).toHaveLength(SEGMENTS);
+    expect(s.wire.every((r) => r.durability === CARD.wire.durability && r.hit.length === 0)).toBe(
+      true,
+    );
+    const e = enemy(s, { ...tough, x: FRONT + 380, y: ROW4 });
+    let t = tick(s, STEP);
+    for (let i = 0; i < 20; i++) t = tick(t, STEP);
+    expect(t.enemies.find((o) => o.id === e.id)!.x).toBeGreaterThan(FRONT + CARD.wire.from);
+    expect(t.wire[ROW]).toEqual({ durability: CARD.wire.durability - 1, hit: [e.id] });
+    // Only the row it walks in.
+    expect(t.wire.filter((r) => r.durability < CARD.wire.durability)).toHaveLength(1);
+    // A second enemy wears it again.
+    const f = enemy(t, { ...tough, x: FRONT + 300, y: ROW4 });
+    expect(tick(t, STEP).wire[ROW]).toEqual({
+      durability: CARD.wire.durability - 2,
+      hit: [e.id, f.id],
+    });
+  });
+
+  it('Barbed Wire: outside the band, or without the card, nothing wears', () => {
+    const out = quiet('barbed-wire');
+    enemy(out, { ...tough, x: FRONT + CARD.wire.to + 30, y: ROW4 });
+    enemy(out, { ...tough, x: FRONT + CARD.wire.from - 30, y: ROW4 });
+    expect(tick(out, STEP).wire[ROW]!.durability).toBe(CARD.wire.durability);
+    const none = quiet();
+    enemy(none, { ...tough, x: FRONT + 300, y: ROW4 });
+    expect(tick(none, STEP).wire[ROW]!.durability).toBe(CARD.wire.durability);
+  });
+
+  it('Barbed Wire: a broken row slows no one, the enemy that broke it included; other rows still do', () => {
+    const step = ENEMIES.shambler.speed * STEP;
+    const slow = step * (1 - CARD.wire.slow);
+    const s = quiet('barbed-wire');
+    s.wire[ROW]!.durability = 1;
+    const breaker = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 });
+    const above = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 - SEGMENT_HEIGHT });
+    let t = tick(s, STEP);
+    expect(t.wire[ROW]).toEqual({ durability: 0, hit: [breaker.id] });
+    expect(FRONT + 300 - t.enemies.find((o) => o.id === breaker.id)!.x).toBeCloseTo(step, 9);
+    expect(FRONT + 300 - t.enemies.find((o) => o.id === above.id)!.x).toBeCloseTo(slow, 9);
+    // Broken stays broken: a newcomer walks through at full speed and wears nothing.
+    const next = enemy(t, { ...tough, x: FRONT + 350, y: ROW4 });
+    t = tick(t, STEP);
+    expect(FRONT + 350 - t.enemies.find((o) => o.id === next.id)!.x).toBeCloseTo(step, 9);
+    expect(t.wire[ROW]).toEqual({ durability: 0, hit: [breaker.id] });
   });
 
   it('Barbed Wire: stays put when the wall in front of it falls', () => {

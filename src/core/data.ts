@@ -644,8 +644,11 @@ export const CARD = {
   frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 0.4 },
   /** Damage to an enemy each time it hits a standing segment. */
   spikes: 3,
-  /** Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it slows. */
-  wire: { from: 250, to: 400, slow: 0.35 },
+  /**
+   * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
+   * slows; each row of it (one per segment) takes `durability` enemies before it breaks (ID-090).
+   */
+  wire: { from: 250, to: 400, slow: 0.35, durability: 30 },
   /** Share of `BANK_CAP` a Recharge adds. */
   recharge: 0.25,
 } as const;
