@@ -401,6 +401,12 @@ export const STRIKE_FLASH = 0.15;
 export const MUZZLE_FLASH = 0.08;
 /** How long a bullet's impact (a puff on a hit, dust on a miss) shows, in seconds. */
 export const IMPACT_FLASH = 0.25;
+/**
+ * Damage numbers (ID-082), fight seconds: a hit lands in the newest number on its target
+ * younger than `merge` with the same crit (so a volley or a fire reads as one), and a
+ * number is kept `keep` s (long enough to show at 3×), at most `cap` at once (newest kept).
+ */
+export const DAMAGE_POP = { merge: 0.25, keep: 2.7, cap: 40 } as const;
 
 // --- The base (M2). Grid, tiers and costs; design §3 and §11. ---
 

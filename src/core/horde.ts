@@ -38,6 +38,7 @@ import {
   MUZZLE_FLASH,
   MUTANTS,
   IMPACT_FLASH,
+  DAMAGE_POP,
   TRAP_RESEARCH,
   TRAP_STRIP,
   TRAPS,
@@ -347,6 +348,8 @@ export interface Bullet {
   tracer: Tracer;
   /** A Ricochet's bounce (design §8): it never bounces again. */
   ricochet?: true;
+  /** Its damage is a crit's (ID-082: its damage number stands out). */
+  crit?: true;
 }
 /**
  * A gun going off: `owner` (as on its bullet) fired in the step ending at `at`, when it
@@ -379,6 +382,19 @@ export interface Burst {
   id: number;
   x: number;
   y: number;
+  at: number;
+}
+/**
+ * A damage number (ID-082) at `(x, y)` from `at`: what an enemy (`on` its kind) or a wall
+ * segment (`on` 'wall') took, hits merged per `DAMAGE_POP`; `key` names the target.
+ */
+export interface Pop {
+  x: number;
+  y: number;
+  amount: number;
+  crit: boolean;
+  on: EnemyKind | 'wall';
+  key: string;
   at: number;
 }
 /** A molotov's fire on the ground, lit at `at`, burning enemies inside until `until` (fight time). */
@@ -509,6 +525,8 @@ export interface HordeState {
   /** Recent muzzle flashes and bullet ends, for the renderer; cleared when the horde ends. */
   shots: Shot[];
   impacts: Impact[];
+  /** Damage numbers (ID-082); cleared when the horde ends and never saved. */
+  pops: Pop[];
   spits: Spit[];
   bursts: Burst[];
   /** Frag Grenades in the air or bursting (design §8); cleared when the horde ends. */
@@ -642,6 +660,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     bullets: [],
     shots: [],
     impacts: [],
+    pops: [],
     spits: [],
     bursts: [],
     grenades: [],
@@ -968,6 +987,7 @@ function step(s: HordeState, rng: Rng): void {
     s.bullets = [];
     s.shots = [];
     s.impacts = [];
+    s.pops = [];
     s.spits = [];
     s.bursts = [];
     s.grenades = [];
@@ -1281,6 +1301,7 @@ function fly(s: HordeState): void {
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
       const first = b.hit.length === 0;
       const dealt = hitDamage(hit.enemy, b.damage);
+      popOn(s, hit.enemy, dealt, b.crit === true);
       hit.enemy.hp -= dealt;
       b.hit.push(hit.enemy.id);
       b.x += b.dx * hit.at;
@@ -1422,6 +1443,7 @@ function blowFrags(s: HordeState): void {
     g.burst = true;
     for (const e of s.enemies) {
       if (e.hp > 0 && Math.hypot(e.x - g.x, e.y - g.y) <= CARD.frag.radius + EPS) {
+        popOn(s, e, CARD.frag.damage);
         e.hp = Math.max(0, e.hp - CARD.frag.damage);
       }
     }
@@ -1434,6 +1456,7 @@ function fire(s: HordeState, rng: Rng): void {
   s.impacts = s.impacts.filter((k) => s.time - k.at < IMPACT_FLASH);
   s.spits = s.spits.filter((k) => s.time - k.at < SPEWER.splash);
   s.bursts = s.bursts.filter((k) => s.time - k.at < SWOLLEN.burst);
+  s.pops = s.pops.filter((k) => s.time - k.at < DAMAGE_POP.keep);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -1447,12 +1470,13 @@ function fire(s: HordeState, rng: Rng): void {
     const gun = isGun(id);
     // Crits roll only when the chance is above 0, so a Ripper or Engineer without Aim leaves the RNG alone.
     const crit = gun ? critChance(defender) : 0;
+    const critHit = crit > 0 && chance(rng, crit);
     const hit =
       weapon.damage *
       s.mods.damage *
       boost(s, 'damage') *
       damageFactor(defender, id) *
-      (crit > 0 && chance(rng, crit) ? STAT_EFFECT.critDamage : 1);
+      (critHit ? STAT_EFFECT.critDamage : 1);
     if (gun) {
       launch(s, rng, {
         owner: defender.id,
@@ -1466,8 +1490,10 @@ function fire(s: HordeState, rng: Rng): void {
         pierce: pierceOf(id) + (took(s, 'piercing-rounds') ? 1 : 0),
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
+        ...(critHit ? { crit: true as const } : {}),
       });
     } else {
+      popOn(s, target, hit);
       target.hp -= hit;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
@@ -1478,6 +1504,7 @@ function fire(s: HordeState, rng: Rng): void {
       for (const e of s.enemies) {
         const near = Math.hypot(e.x - target.x, e.y - target.y) <= STAT_EFFECT.cleaveRadius + EPS;
         if (e !== target && e.hp > 0 && near) {
+          popOn(s, e, hit * cleave);
           e.hp -= hit * cleave;
           if (e.hp <= 0) kills += 1;
         }
@@ -1655,8 +1682,10 @@ function land(s: HordeState): void {
     s.blasts.push({ skill, x: i.x, y: i.y, at: s.time });
     for (const e of s.enemies) {
       if (e.hp <= 0 || Math.hypot(e.x - i.x, e.y - i.y) > SKILLS[skill].radius + EPS) continue;
-      if (skill === 'airstrike') e.hp = Math.max(0, e.hp - SKILLS.airstrike.damage);
-      else e.stunnedUntil = Math.max(e.stunnedUntil, s.time + SKILLS.flashbang.seconds);
+      if (skill === 'airstrike') {
+        popOn(s, e, SKILLS.airstrike.damage);
+        e.hp = Math.max(0, e.hp - SKILLS.airstrike.damage);
+      } else e.stunnedUntil = Math.max(e.stunnedUntil, s.time + SKILLS.flashbang.seconds);
     }
   }
 }
@@ -1668,13 +1697,16 @@ function land(s: HordeState): void {
  */
 function burn(s: HordeState): void {
   for (const e of s.enemies) {
-    if (burning(s, e)) e.hp = Math.max(0, e.hp - CARD.burn.dps * STEP);
+    if (!burning(s, e)) continue;
+    popOn(s, e, CARD.burn.dps * STEP);
+    e.hp = Math.max(0, e.hp - CARD.burn.dps * STEP);
   }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
   for (const f of s.fires) {
     for (const e of s.enemies) {
       if (Math.hypot(e.x - f.x, e.y - f.y) <= SKILLS.molotov.radius + EPS) {
+        popOn(s, e, SKILLS.molotov.dps * STEP);
         e.hp = Math.max(0, e.hp - SKILLS.molotov.dps * STEP);
       }
     }
@@ -1869,6 +1901,7 @@ function springTraps(s: HordeState): void {
     if (!t || t.durability <= 0 || t.hit.includes(e.id)) continue;
     t.hit.push(e.id);
     t.durability -= 1;
+    popOn(s, e, trapStats(s, t.kind).damage);
     e.hp = Math.max(0, e.hp - trapStats(s, t.kind).damage);
   }
 }
@@ -2004,6 +2037,7 @@ function attack(s: HordeState, moves: Moves): void {
       s.spits.push({ fromX: e.x, fromY: e.y, x: stop.x, y: e.y, at: s.time + STEP });
     } else if (took(s, 'spiked-walls')) {
       // Spiked Walls (design §8): a blow on the wall costs the one landing it.
+      popOn(s, e, CARD.spikes);
       e.hp = Math.max(0, e.hp - CARD.spikes);
       const seg = stop.segment;
       if (!(s.time - (seg.spikeAt ?? -Infinity) < HIT_MARK_GAP)) seg.spikeAt = s.time;
@@ -2018,12 +2052,48 @@ function attack(s: HordeState, moves: Moves): void {
   s.enemies = s.enemies.filter((e) => !blown.has(e.id));
 }
 
+/** A damage number (ID-082) for `amount` taken by `e`, while it is alive. */
+function popOn(s: HordeState, e: Enemy, amount: number, crit = false): void {
+  if (e.hp > 0) addPop(s, e.x, e.y, amount, crit, e.kind, `e${e.id}`);
+}
+
+/**
+ * Adds `amount` to the newest number on `key` with the same `crit` younger than
+ * `DAMAGE_POP.merge`, or starts one; past `DAMAGE_POP.cap` the oldest goes.
+ */
+function addPop(
+  s: HordeState,
+  x: number,
+  y: number,
+  amount: number,
+  crit: boolean,
+  on: Pop['on'],
+  key: string,
+): void {
+  if (!(amount > 0)) return;
+  // Newest last: none older than the merge window can take it.
+  for (let i = s.pops.length - 1; i >= 0; i--) {
+    const p = s.pops[i]!;
+    if (s.time - p.at >= DAMAGE_POP.merge) break;
+    if (p.key === key && p.crit === crit) {
+      p.amount += amount;
+      return;
+    }
+  }
+  s.pops.push({ x, y, amount, crit, on, key, at: s.time });
+  if (s.pops.length > DAMAGE_POP.cap) s.pops.shift();
+}
+
 /** The least time between two hit marks on one segment (ID-072); its flash lasts 0.25 s. */
 export const HIT_MARK_GAP = 0.4;
 
 /** Takes `damage` off a standing segment; only the damage it actually takes wears its turret. */
 function hitSegment(s: HordeState, layer: Layer, segment: Segment, damage: number): void {
   if (segment.hp <= 0) return;
+  // What it lost (ID-082), on its camp-side face, away from the enemies striking it.
+  const y = (segment.index + 0.5) * SEGMENT_HEIGHT;
+  const lost = Math.min(damage, segment.hp);
+  addPop(s, layer.x, y, lost, false, 'wall', `w${layer.column}:${segment.index}`);
   wearMounted(s, layer.column, segment.index, Math.min(damage, segment.hp));
   segment.hp = Math.max(0, segment.hp - damage);
   // A crowd hitting one segment starts a new flash at most every HIT_MARK_GAP s, so it

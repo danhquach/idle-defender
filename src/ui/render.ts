@@ -13,6 +13,7 @@ import {
   SEGMENTS,
   SKILL_FLASH,
   SKILLS,
+  DAMAGE_POP,
   SPEWER,
   SWOLLEN,
   CARD,
@@ -38,6 +39,7 @@ import {
   type UpgradeId,
   type Post,
   type Burst,
+  type Pop,
   type Spit,
   type Trap,
   type Turret,
@@ -148,6 +150,11 @@ const COLOR = {
   wallHit: '#ffb070',
   /** The wall's pulse as a barrier card is picked (ID-075): cool, so it never reads as a hit. */
   wallPulse: '#b8f4ec',
+  /** Damage numbers (ID-082): a hit on an enemy, a crit, a blow on the wall; all on a dark edge. */
+  popHit: '#f4f1ea',
+  popCrit: '#ffd23f',
+  popWall: '#ff8a7a',
+  popEdge: 'rgba(17, 17, 16, 0.85)',
   /** A segment a repair card heals (ID-075). */
   wallRepair: '#7fe08c',
   /** Spiked Walls' stakes biting an enemy that strikes the wall (ID-075). */
@@ -317,6 +324,33 @@ export const NAME_TAG_GAP = 2;
  * over the plate, with a dark `edge` round it.
  */
 export const RELOAD_PIE = { r: 6, gap: 2, edge: 1 } as const;
+/**
+ * Damage numbers (ID-082), screen px and real seconds: a `size` px number, growing to
+ * `big` px for a hit of `bigAt` or more (a wall's loss at `wallBigAt`), starts `gap` over
+ * the HP bar and rises `rise` px over `life` s, fading over the last `fade` share of it.
+ * A crit is `crit` times bigger, and lands `punch.extra` bigger still, settling over its
+ * first `punch.time` s, drawn over the plain ones. At most `cap` show, the newest. An
+ * enemy's sits `stagger` px (a crit's `critStagger`) left, centred or right by its merge
+ * window, so the numbers a target keeps taking where it stands never stack; a wall's sits
+ * `gap` px on the camp side of the wall, right-aligned, so what the wall lost never mixes
+ * with what the enemies at it took.
+ */
+export const POP = {
+  size: 11,
+  big: 15,
+  bigAt: 40,
+  wallBigAt: 25,
+  crit: 1.6,
+  punch: { time: 0.15, extra: 0.4 },
+  gap: 3,
+  rise: 18,
+  life: 0.9,
+  fade: 0.5,
+  cap: 24,
+  edge: 3,
+  stagger: 9,
+  critStagger: 14,
+} as const;
 /** How much wider than its footprint a piece's sprite may draw. */
 const OVERSPILL = 1.6;
 
@@ -346,7 +380,8 @@ export type Scene = Pick<
   // A Power Surge lights turrets on an empty bank (design §8); build mode has none.
   // `acc`, the fight time since its last step, carries bullets on between steps (ID-070).
   // The barrier cards taken show on the wall (ID-075); build mode has none.
-  Partial<Pick<HordeState, 'wave' | 'freeWave' | 'acc' | 'taken' | 'barrierAt'>> & {
+  // Damage numbers (ID-082); build mode has none.
+  Partial<Pick<HordeState, 'wave' | 'freeWave' | 'acc' | 'taken' | 'barrierAt' | 'pops'>> & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
     pace?: number;
   };
@@ -1854,6 +1889,103 @@ function drawBurst(ctx: CanvasRenderingContext2D, k: Burst, time: number, cam: C
   ctx.globalAlpha = 1;
 }
 
+/**
+ * Where an enemy's HP bar sits: just over its sprite's top (its frames share one height),
+ * so it never covers the head.
+ */
+function enemyBarAt(art: Art, kind: EnemyKind, x: number, y: number) {
+  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
+  const top = (STAND.enemy * size * art[ENEMY_ART[kind].walk[1]].height) / ART_PX;
+  return { x, y, z: top / HEIGHT_SCALE + HP_BAR.gap / 2 };
+}
+
+/** How a damage number shows (ID-082), or null once it is gone. */
+export interface PopLook {
+  text: string;
+  /** Font size, px. */
+  px: number;
+  colour: string;
+  alpha: number;
+  /** Screen px off its target's centre: left, none or right (a wall's: none). */
+  dx: number;
+  /** Screen px risen so far. */
+  rise: number;
+}
+
+/**
+ * Damage number `p` at fight time `time` shown at game speed `pace` (it lasts the same
+ * real time at any speed): its rounded amount (at least 1), a crit's with "!" and a
+ * blow on the wall's as a loss; reduce motion (`still`) fades it in place, with no punch.
+ */
+export function popLook(p: Pop, time: number, pace: number, still: boolean): PopLook | null {
+  const real = (time - p.at) / Math.max(1, pace);
+  const age = real / POP.life;
+  if (!(age >= 0 && age < 1)) return null;
+  const n = Math.max(1, Math.round(p.amount));
+  const wall = p.on === 'wall';
+  const grow = Math.min(1, p.amount / (wall ? POP.wallBigAt : POP.bigAt));
+  const punch = p.crit && !still ? 1 + POP.punch.extra * Math.max(0, 1 - real / POP.punch.time) : 1;
+  const px = (POP.size + (POP.big - POP.size) * grow) * (p.crit ? POP.crit * punch : 1);
+  return {
+    text: wall ? `−${n}` : p.crit ? `${n}!` : `${n}`,
+    px: Math.round(px),
+    colour: wall ? COLOR.popWall : p.crit ? COLOR.popCrit : COLOR.popHit,
+    alpha: age < 1 - POP.fade ? 1 : (1 - age) / POP.fade,
+    dx: wall
+      ? 0
+      : ((Math.floor(p.at / DAMAGE_POP.merge + 1e-9) % 3) - 1) *
+        (p.crit ? POP.critStagger : POP.stagger),
+    rise: still ? 0 : POP.rise * age,
+  };
+}
+
+/** The damage numbers still showing, oldest first: the newest `POP.cap` of them. */
+export function shownPops(pops: readonly Pop[], time: number, pace: number): Pop[] {
+  return pops.filter((p) => popLook(p, time, pace, true)).slice(-POP.cap);
+}
+
+/** Each damage number over what took the hit (ID-082), on a dark edge so it reads on any ground. */
+function drawPops(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  scene: Scene,
+  still: boolean,
+  cam: Camera,
+) {
+  const pace = scene.pace ?? 1;
+  const pops = shownPops(scene.pops ?? [], scene.time, pace);
+  if (pops.length === 0) return;
+  ctx.save();
+  ctx.textBaseline = 'bottom';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = POP.edge;
+  ctx.strokeStyle = COLOR.popEdge;
+  // Crits last, so a plain hit beside one never paints over it.
+  for (const p of [...pops.filter((k) => !k.crit), ...pops.filter((k) => k.crit)]) {
+    const look = popLook(p, scene.time, pace, still)!;
+    // Clear of the HP bar: over the enemy's, or over the whole wall's (a segment only gets lower).
+    const bar =
+      p.on === 'wall'
+        ? {
+            at: { x: p.x, y: p.y, z: PIECE.wall.height + HP_BAR.gap },
+            h: Math.max(WALL_BAR.min.h, WALL_BAR.h * cam.zoom),
+          }
+        : { at: enemyBarAt(art, p.on, p.x, p.y), h: HP_BAR.h * cam.zoom };
+    const at = project(bar.at, cam);
+    const h = bar.h;
+    ctx.globalAlpha = look.alpha;
+    ctx.font = `bold ${look.px}px system-ui, sans-serif`;
+    const y = at.sy - h - POP.gap - look.rise;
+    // A wall's loss on the camp side of its back face; an enemy's centred over it.
+    ctx.textAlign = p.on === 'wall' ? 'right' : 'center';
+    const x = p.on === 'wall' ? at.sx - POP.gap : at.sx + look.dx;
+    ctx.strokeText(look.text, x, y);
+    ctx.fillStyle = look.colour;
+    ctx.fillText(look.text, x, y);
+  }
+  ctx.restore();
+}
+
 /** A Frag Grenade's flight and burst (ID-077): the grenade's arc height and size, in world units. */
 export const GRENADE = { arc: 40, r: 6.5, edge: 2, shine: 1 } as const;
 
@@ -2112,9 +2244,7 @@ export function drawScene(
         const frame = anim && acts ? anim.shownFrame(enemyFrame(e, scene.time, acts)) : 1;
         drawEnemy(ctx, art, e.kind, frame, ground, cam, pose);
         if (burning(scene, e)) drawFlame(ctx, e.x, e.y, size, scene.time, cam);
-        // Just over its sprite's top (its frames share one height), so it never covers the head.
-        const top = (STAND.enemy * size * art[ENEMY_ART[e.kind].walk[1]].height) / ART_PX;
-        const at = { x: e.x, y: e.y, z: top / HEIGHT_SCALE + HP_BAR.gap / 2 };
+        const at = enemyBarAt(art, e.kind, e.x, e.y);
         drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
       },
     });
@@ -2198,6 +2328,8 @@ export function drawScene(
   // Each defender's name on top of every sprite and effect, so none hides it (ID-074).
   // Only those the sprites above drew: a walker, or the one standing on their post.
   if (!build) {
+    // Damage numbers (ID-082) under every name and reload pie, so they never hide one.
+    drawPops(ctx, art, scene, cards.still, cam);
     const shown = scene.defenders.flatMap((d) => {
       const post = d.walking ? null : scene.posts.find((p) => p.id === d.postId);
       if (post === undefined) return []; // not walking and on no post: not drawn
