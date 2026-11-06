@@ -271,6 +271,14 @@ export interface Trap {
   /** Ids of the enemies that triggered it: each one only once (design §7). */
   hit: number[];
 }
+/**
+ * One row of Barbed Wire's band (ID-090): `durability` left, 0 when broken; it slows no one
+ * once broken. `hit`: the enemies that wore it, each only once.
+ */
+export interface WireRow {
+  durability: number;
+  hit: number[];
+}
 /** How a turret looks and whether it fires: lit, dark (no charge), jammed (0 condition), or offline (its wall broke). */
 export type TurretState = 'lit' | 'dark' | 'jammed' | 'offline';
 export type Slot = 'primary' | 'secondary';
@@ -474,6 +482,8 @@ export interface HordeState {
   posts: Post[];
   turrets: Turret[];
   traps: Trap[];
+  /** Barbed Wire's band, row by row (one per segment, top to bottom), worn down as enemies cross it (ID-090). */
+  wire: WireRow[];
   /** Battery bank charge left (design §7). */
   energy: number;
   /** The bank's cap, which the Recharge card fills up to (ID-035). */
@@ -640,6 +650,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     posts,
     turrets,
     traps,
+    wire: Array.from({ length: SEGMENTS }, () => ({ durability: CARD.wire.durability, hit: [] })),
     energy: bank,
     bankCap,
     startedAt,
@@ -1846,7 +1857,12 @@ function move(s: HordeState): Moves {
   const wire = barbedWire(s);
   for (const e of s.enemies) {
     if (stunned(s, e)) continue;
-    const slowed = wire !== null && !e.inCamp && e.x >= wire.from - EPS && e.x <= wire.to + EPS;
+    const slowed =
+      wire !== null &&
+      !e.inCamp &&
+      e.x >= wire.from - EPS &&
+      e.x <= wire.to + EPS &&
+      wearWire(s, e);
     const speed =
       ENEMIES[e.kind].speed *
       STEP *
@@ -1895,6 +1911,20 @@ export function barbedWire(
   if (built.length === 0) return null;
   const front = Math.max(...built.map((l) => l.x)) + WALL.depth;
   return { from: front + CARD.wire.from, to: front + CARD.wire.to };
+}
+
+/**
+ * Barbed Wire's row under `e`, which stands in the band (ID-090): the first time `e` is in
+ * a working row, the row loses 1 durability. Whether that row still slows: a row the
+ * crossing broke slows no one, `e` included.
+ */
+function wearWire(s: HordeState, e: Enemy): boolean {
+  const row = s.wire[segmentAt(e.y)]!;
+  if (row.durability > 0 && !row.hit.includes(e.id)) {
+    row.hit.push(e.id);
+    row.durability -= 1;
+  }
+  return row.durability > 0;
 }
 
 /** The trap whose cell `e` stands in, if any. */

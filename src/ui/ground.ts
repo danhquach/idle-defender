@@ -3,8 +3,9 @@
 // scattered over both, painted once into a field-sized canvas the renderer draws whole,
 // so no tile edge can show at any zoom. Past the field's edges a seeded block of the
 // same tiles repeats without end (ID-057), so no bare background shows at any zoom or pan.
-import { CAMP, CARD, COLUMNS, FIELD, WALL } from '../core/data.ts';
+import { CAMP, CARD, COLUMNS, FIELD, SEGMENT_HEIGHT, SEGMENTS, WALL } from '../core/data.ts';
 import { createRng, int, pick } from '../core/rng.ts';
+import { TILT } from './projection.ts';
 import { BASE_ART, type Art, type ArtId } from './sprites.ts';
 
 /** World units one ground tile covers. */
@@ -213,119 +214,221 @@ function paintYard(art: Art, px: number, height: number): OffscreenCanvas | null
 }
 
 /**
- * Barbed Wire's band (ID-077), in world units: `CARD.wire.to − CARD.wire.from` deep and the
- * field's height, at `px` canvas pixels a unit, drawn in code (no art file). A faint dirt
- * `tint`; a coil at each share of the depth in `coils`, nudged by its `jitter` units: dense
- * overlapping loops `loop` units apart and `r` across that wobble `wobble` units side to side
- * and tilt up to `tilt`°, dark `steel` with a pale `shine`, a steel barb on every loop; a
- * plain `strand` zig-zagging between the near and far coils every `zig` units; and a pointed wooden
- * `stake` on a dirt `mound` every `stakeEvery` units. Wobble and tilt follow fixed sines,
- * so the band looks the same every fight.
+ * Barbed Wire's band (ID-077, redrawn in ID-090), drawn in code (no art file): coils of
+ * concertina wire with razor barbs on steel pickets, with only a light `shadow` under them so
+ * the ground shows through. In world units at `px` canvas pixels a unit, painted as seen:
+ * `TILT` short down the field, so the loops stay round on screen. A coil at each share of
+ * the band's depth in `coils`, nudged by its `jitter` units (kept clear of the band's edges),
+ * is a helix lying down the field, `r` across, one loop every `pitch`, seen from above
+ * at a tilt (`squash`): its far half dark `steel` lit `mid`, its near half `steel` lit
+ * `shine`, each stroke `w` thick over a dark `outline` so it stands out on grey ground; a pair
+ * of crossed blades `barb` long every `barbEvery` loop. A steel `post`, `h` tall with a lit
+ * cap, stands in each coil every `postEvery` units.
+ *
+ * A row the enemies broke (ID-090) is drawn `torn`: each coil cut through at `tears`
+ * (shares of the row, shifted 0–2 × `shift` down by row and coil so the coils' cuts don't
+ * line up), the cut ends
+ * sagging `droop` units over `fall` units (none within `calm` units of a row's edge, so a
+ * torn row meets a whole one cleanly), its near half lit `mid` (dulled), and every other
+ * picket knocked flat at `fallen` radians, toward the band's middle so none hangs past its edge.
  */
 export const WIRE = {
   px: 2,
-  tint: { colour: '#8a7350', alpha: 0.12 },
   coils: [0.1, 0.5, 0.9],
   jitter: [-5, 4, -3],
-  loop: 9,
-  r: 8,
-  wobble: 3,
-  tilt: 15,
-  steel: '#3f4245',
-  shine: '#a9adb0',
-  barb: 4,
-  strand: 1,
-  zig: 60,
-  stake: { colour: '#b08d5c', edge: '#4a3a22', w: 6, h: 20, aside: 5 },
-  mound: { colour: '#3a2f22', alpha: 0.25, r: 9 },
-  stakeEvery: 80,
+  r: 12,
+  pitch: 11,
+  squash: 0.85,
+  w: 1.35,
+  steel: '#2e3134',
+  mid: '#8d9297',
+  shine: '#eef1f4',
+  outline: '#111315',
+  shadow: 'rgba(0, 0, 0, 0.22)',
+  barb: 3.1,
+  barbEvery: 0.45,
+  post: { fill: '#55595d', edge: '#26292b', cap: '#8a8f94', w: 3, h: 16 },
+  postEvery: 80,
+  torn: {
+    tears: [
+      [0, 0.3],
+      [0.58, 0.8],
+    ],
+    shift: 0.04,
+    droop: 6,
+    fall: 20,
+    calm: 4,
+    fallen: 1.8,
+  },
 } as const;
-const wires: Painted = new WeakMap();
 
-/** Barbed Wire's band painted once per set of art (as every painted canvas); null as `groundCanvas`. */
-export function wireCanvas(art: Art): OffscreenCanvas | null {
-  return once(wires, art, paintWire);
+/** Segments a turn of a coil is drawn in. */
+const COIL_STEPS = 24;
+
+/**
+ * A torn coil: none drawn between each of `gaps`' ends, the cut ends sagging but not at the
+ * edge of a `row` (canvas pixels), dulled.
+ */
+interface Tears {
+  gaps: readonly (readonly [number, number])[];
+  row: number;
 }
 
-function paintWire(): OffscreenCanvas | null {
+/** A coil down the field at `x0` from `y0` to `y1`, `r` across (canvas pixels); `tears`, torn. */
+function coil(
+  g: OffscreenCanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  y1: number,
+  r: number,
+  tears: Tears | null = null,
+): void {
+  const { px, w, squash } = WIRE;
+  const pitch = WIRE.pitch * px;
+  const steps = Math.ceil(((y1 - y0) / pitch) * COIL_STEPS);
+  const gaps = tears?.gaps ?? [];
+  const cut = (y: number) => gaps.some(([a, b]) => y > a && y < b);
+  const fall = WIRE.torn.fall * px;
+  // How far the wire near a cut end sags: down, and away from the gap; none at a row's edge.
+  const sag = (y: number): [number, number] => {
+    if (!tears) return [0, 0];
+    let near = Infinity;
+    let side = 0;
+    for (const [a, b] of gaps) {
+      if (Math.abs(y - a) < near) [near, side] = [Math.abs(y - a), -1];
+      if (Math.abs(y - b) < near) [near, side] = [Math.abs(y - b), 1];
+    }
+    const inRow = ((y % tears.row) + tears.row) % tears.row;
+    const fromEdge = Math.min(inRow, tears.row - inRow);
+    const settle = Math.min(1, Math.max(0, fromEdge - WIRE.torn.calm * px) / fall);
+    const f = Math.max(0, 1 - near / fall) * settle * WIRE.torn.droop * px;
+    return [f * 0.6 * side, f];
+  };
+  const at = (s: number) => {
+    const t = (s / COIL_STEPS) * Math.PI * 2;
+    const y = y0 + (s / COIL_STEPS) * pitch + r * squash * Math.sin(t);
+    const [dx, dy] = sag(y);
+    return { x: x0 + r * Math.cos(t) + dx, y: y + dy, cut: cut(y), near: Math.sin(t) >= 0 };
+  };
+  const path = (keep: (s: number) => boolean, dx: number, dy: number) => {
+    g.beginPath();
+    let on = false;
+    for (let s = 0; s <= steps; s++) {
+      const p = at(s);
+      if (!keep(s) || p.cut) {
+        on = false;
+        continue;
+      }
+      if (on) g.lineTo(p.x + dx, p.y + dy);
+      else g.moveTo(p.x + dx, p.y + dy);
+      on = true;
+    }
+    g.stroke();
+  };
+  g.lineCap = 'round';
+  g.strokeStyle = WIRE.shadow;
+  g.lineWidth = 2.2 * px * w;
+  path(() => true, 2 * px, 3 * px);
+  for (const near of [false, true]) {
+    const width = (near ? 1.3 : 1.1) * px * w;
+    const strokes = [
+      [WIRE.outline, width + 1.2 * px, 0],
+      [WIRE.steel, width, 0],
+      [near && !tears ? WIRE.shine : WIRE.mid, (near ? 0.55 : 0.45) * px * w, -0.5 * px],
+    ] as const;
+    for (const [colour, lineWidth, dy] of strokes) {
+      g.strokeStyle = colour;
+      g.lineWidth = lineWidth;
+      path((s) => at(s).near === near, 0, dy);
+    }
+  }
+  // The razor barbs: a pair of crossed blades across the wire.
+  const b = WIRE.barb * px;
+  const every = Math.round(COIL_STEPS * WIRE.barbEvery);
+  g.lineCap = 'butt';
+  g.lineWidth = 0.7 * px * w;
+  for (let s = 3; s <= steps; s += every) {
+    const p = at(s);
+    if (p.cut) continue;
+    const q = at(s + 1);
+    const l = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    const [ux, uy] = [((q.x - p.x) / l) * b * 0.6, ((q.y - p.y) / l) * b * 0.6];
+    const [nx, ny] = [(-(q.y - p.y) / l) * b, ((q.x - p.x) / l) * b];
+    g.strokeStyle = p.near ? WIRE.steel : WIRE.mid;
+    g.beginPath();
+    g.moveTo(p.x - nx + ux, p.y - ny + uy);
+    g.lineTo(p.x + nx - ux, p.y + ny - uy);
+    g.moveTo(p.x - nx - ux, p.y - ny - uy);
+    g.lineTo(p.x + nx + ux, p.y + ny + uy);
+    g.stroke();
+  }
+}
+
+/** A steel picket standing at `x, y` (its foot), on a light shadow; knocked over `fallen` radians. */
+function picket(g: OffscreenCanvasRenderingContext2D, x: number, y: number, fallen = 0): void {
+  const { px } = WIRE;
+  const { fill, edge, cap } = WIRE.post;
+  const [w, h] = [WIRE.post.w * px, WIRE.post.h * px];
+  g.fillStyle = WIRE.shadow;
+  g.beginPath();
+  g.ellipse(x + 3 * px, y + px, (fallen ? 9 : 4) * px, 1.6 * px, 0, 0, Math.PI * 2);
+  g.fill();
+  g.save();
+  g.translate(x, y);
+  g.rotate(fallen);
+  g.fillStyle = fill;
+  g.fillRect(-w / 2, -h, w, h);
+  g.strokeStyle = edge;
+  g.lineWidth = 0.8 * px;
+  g.strokeRect(-w / 2, -h, w, h);
+  g.fillStyle = cap;
+  g.fillRect(-w / 2, -h, w, 1.6 * px);
+  g.restore();
+}
+
+const wires: Painted = new WeakMap();
+const tornWires: Painted = new WeakMap();
+
+/**
+ * Barbed Wire's band painted once per set of art (as every painted canvas), whole or with
+ * every row `torn`; the renderer takes each row from the one it needs. Null as `groundCanvas`.
+ */
+export function wireCanvas(art: Art, torn = false): OffscreenCanvas | null {
+  return once(torn ? tornWires : wires, art, () => paintWire(torn));
+}
+
+function paintWire(torn: boolean): OffscreenCanvas | null {
   const { px } = WIRE;
   const w = (CARD.wire.to - CARD.wire.from) * px;
-  const h = FIELD.height * px;
+  const h = FIELD.height * TILT * px;
   const canvas = new OffscreenCanvas(w, h);
   const g = canvas.getContext('2d');
   if (!g) return null;
-  g.globalAlpha = WIRE.tint.alpha;
-  g.fillStyle = WIRE.tint.colour;
-  g.fillRect(0, 0, w, h);
-  g.globalAlpha = 1;
   const r = WIRE.r * px;
-  const xs = WIRE.coils.map((share, c) => w * share + WIRE.jitter[c]! * px);
-  // The strand strung between the near and far coils, zig-zagging down the field.
-  g.strokeStyle = WIRE.steel;
-  g.lineWidth = WIRE.strand * px;
-  g.beginPath();
-  for (let i = 0, y = 0; y <= h; i++, y += WIRE.zig * px) {
-    const x = xs[i % 2 === 0 ? 0 : xs.length - 1]!;
-    if (i === 0) g.moveTo(x, y);
-    else g.lineTo(x, y);
+  // A coil's loops, outline and shadow stay inside the band.
+  const edge = r + 4 * px;
+  for (const [c, share] of WIRE.coils.entries()) {
+    const x = Math.min(w - edge, Math.max(edge, w * share + WIRE.jitter[c]! * px));
+    const row = SEGMENT_HEIGHT * TILT * px;
+    const tears: Tears | null = torn
+      ? {
+          row,
+          gaps: Array.from({ length: SEGMENTS }, (_, i) => {
+            // 0, 1 or 2 shifts: each coil of a row is cut a little lower than its neighbour,
+            // its first cut starting that far below the row's top (a short straight stub).
+            const o = ((i * 2 + c) % 3) * WIRE.torn.shift;
+            return WIRE.torn.tears.map(([a, b]) => [(i + a + o) * row, (i + b + o) * row] as const);
+          }).flat(),
+        }
+      : null;
+    // Past the band's ends, so no coil starts or stops in view.
+    coil(g, x, -r, h + r, r, tears);
+    const every = WIRE.postEvery * TILT * px;
+    for (let y = every / 2, i = 0; y <= h; y += every, i++) {
+      // Toward the band's middle: the near coil's to the right, the far one's to the left.
+      const toward = c === 0 ? 1 : c === WIRE.coils.length - 1 ? -1 : i % 2 ? 1 : -1;
+      picket(g, x, y, torn && (i + c) % 2 === 0 ? toward * WIRE.torn.fallen : 0);
+    }
   }
-  g.stroke();
-  xs.forEach((x0, c) => {
-    for (let i = 0, y = 0; y <= h + r; i++, y += WIRE.loop * px) {
-      const x = x0 + Math.sin(i * 0.9 + c * 2.1) * WIRE.wobble * px;
-      const tilt = (Math.sin(i * 1.7 + c) * WIRE.tilt * Math.PI) / 180;
-      for (const [colour, width, dx] of [
-        [WIRE.steel, 1.2 * px, 0],
-        [WIRE.shine, 0.5 * px, -0.6 * px],
-      ] as const) {
-        g.strokeStyle = colour;
-        g.lineWidth = width;
-        g.beginPath();
-        g.ellipse(x + dx, y, r, r * 0.8, tilt, 0, Math.PI * 2);
-        g.stroke();
-      }
-      // A barb on every loop, on alternate sides: a short steel cross, lit on one arm.
-      const b = (WIRE.barb * px) / 2;
-      const bx = x + (i % 2 === 0 ? r : -r);
-      const by = y + (WIRE.loop * px) / 2;
-      g.lineWidth = 0.8 * px;
-      g.strokeStyle = WIRE.steel;
-      g.beginPath();
-      g.moveTo(bx - b, by - b);
-      g.lineTo(bx + b, by + b);
-      g.stroke();
-      g.strokeStyle = WIRE.shine;
-      g.beginPath();
-      g.moveTo(bx - b, by + b);
-      g.lineTo(bx + b, by - b);
-      g.stroke();
-    }
-    // The stakes beside the coils, so they read as posts holding them up: pointed, on a dirt mound.
-    const { colour, edge, w: sw, h: sh } = WIRE.stake;
-    const { mound } = WIRE;
-    const sx = x0 + r + WIRE.stake.aside * px;
-    for (let y = 0; y <= h; y += WIRE.stakeEvery * px) {
-      g.globalAlpha = mound.alpha;
-      g.fillStyle = mound.colour;
-      g.beginPath();
-      g.ellipse(sx, y + (sh * px) / 2, mound.r * px, mound.r * px * 0.5, 0, 0, Math.PI * 2);
-      g.fill();
-      g.globalAlpha = 1;
-      const l = sx - (sw * px) / 2;
-      const top = y - (sh * px) / 2;
-      g.beginPath();
-      g.moveTo(l, top + (sw * px) / 2);
-      g.lineTo(sx, top);
-      g.lineTo(l + sw * px, top + (sw * px) / 2);
-      g.lineTo(l + sw * px, top + sh * px);
-      g.lineTo(l, top + sh * px);
-      g.closePath();
-      g.fillStyle = colour;
-      g.fill();
-      g.strokeStyle = edge;
-      g.lineWidth = px;
-      g.stroke();
-    }
-  });
   return canvas;
 }

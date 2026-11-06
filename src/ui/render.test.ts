@@ -2903,25 +2903,9 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(trace(fight({ repairAt: 10 }, { barrierAt: 9.8 })).ctx.globalAlpha).toBe(1);
   });
 
-  it('Barbed Wire: a faint band 250–400 units in front of the outermost layer, only with the card', () => {
-    // No OffscreenCanvas under test: the tint alone shows, across the band's full height.
-    const tint = (s: Scene, build: BuildOverlay | null = null) =>
-      trace(s, build).ops.filter((o) => o.op === 'fill' && o.style === WIRE.tint.colour);
-    const on = fight({}, { taken: ['barbed-wire'] });
-    const band = tint(on);
-    expect(band).toHaveLength(1);
-    const front = on.layers[0]!.x + WALL.depth;
-    const a = project({ x: front + CARD.wire.from, y: 0 }, CAM);
-    const b = project({ x: front + CARD.wire.to, y: FIELD.height }, CAM);
-    expect(band[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
-    expect(band[0]!.alpha).toBeCloseTo(WIRE.tint.alpha, 9);
-    expect(tint(fight({}))).toHaveLength(0);
-    // The coils are out in the field: they stay when the wall falls.
-    expect(tint(fight({ hp: 0 }, { taken: ['barbed-wire'] }))).toHaveLength(1);
-    expect(tint(on, overlay())).toHaveLength(0);
-  });
-
-  it('Barbed Wire: drawn from its painted band when the browser can paint one', () => {
+  /** An OffscreenCanvas stand-in that records every fill painted into it: its colour and, for a rect, its size. */
+  const paintable = () => {
+    const fills: { style: string; w?: number; h?: number }[] = [];
     const Painted = class {
       width: number;
       height: number;
@@ -2931,34 +2915,260 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
       }
       getContext() {
         const noop = () => {};
-        return {
-          fillRect: noop,
-          drawImage: noop,
-          save: noop,
-          restore: noop,
-          translate: noop,
-          scale: noop,
-          createLinearGradient: () => ({ addColorStop: noop }),
-          beginPath: noop,
-          ellipse: noop,
-          moveTo: noop,
-          lineTo: noop,
-          stroke: noop,
-          fill: noop,
-          closePath: noop,
+        const g = {
+          fillStyle: '',
+          strokeStyle: '',
+          lineWidth: 1,
+          lineCap: 'butt',
+          fillRect: (_x: number, _y: number, w: number, h: number) =>
+            fills.push({ style: g.fillStyle, w, h }),
+          fill: () => fills.push({ style: g.fillStyle }),
+          ...Object.fromEntries(
+            ['strokeRect', 'beginPath', 'ellipse', 'moveTo', 'lineTo', 'stroke']
+              .concat(['save', 'restore', 'translate', 'rotate'])
+              .map((k) => [k, noop]),
+          ),
         };
+        return g;
       }
     };
     vi.stubGlobal('OffscreenCanvas', Painted);
-    {
-      const r = recorder();
-      const drawn: unknown[] = [];
-      Object.assign(r.ctx, { drawImage: (img: unknown) => drawn.push(img) });
-      drawScene(r.ctx, r.art, fight({}, { taken: ['barbed-wire'] }), CAM, VIEW);
-      const band = drawn.find((d) => d instanceof Painted) as InstanceType<typeof Painted>;
-      expect(band.width).toBe((CARD.wire.to - CARD.wire.from) * WIRE.px);
-      expect(band.height).toBe(FIELD.height * WIRE.px);
+    return { Painted, fills };
+  };
+  /** Every painted canvas drawn, with where. */
+  const paintedDraws = (
+    s: Scene,
+    Painted: new (w: number, h: number) => object,
+    build: BuildOverlay | null = null,
+  ) => {
+    const r = recorder();
+    const drawn: { img: { width: number; height: number }; at: number[] }[] = [];
+    Object.assign(r.ctx, {
+      drawImage: (img: { width: number; height: number }, ...at: number[]) => {
+        if (img instanceof Painted) drawn.push({ img, at });
+      },
+    });
+    drawScene(r.ctx, r.art, s, CAM, VIEW, build);
+    return drawn;
+  };
+
+  it('Barbed Wire: its band 250–400 units in front of the outermost layer, only with the card', () => {
+    const { Painted } = paintable();
+    try {
+      const on = fight({}, { taken: ['barbed-wire'] });
+      const band = paintedDraws(on, Painted);
+      expect(band).toHaveLength(1);
+      // Painted as seen: the view's tilt short down the field.
+      expect(band[0]!.img.width).toBe((CARD.wire.to - CARD.wire.from) * WIRE.px);
+      expect(band[0]!.img.height).toBe(FIELD.height * TILT * WIRE.px);
+      const front = on.layers[0]!.x + WALL.depth;
+      const a = project({ x: front + CARD.wire.from, y: 0 }, CAM);
+      const b = project({ x: front + CARD.wire.to, y: FIELD.height }, CAM);
+      const { width, height } = band[0]!.img;
+      expect(band[0]!.at).toEqual([0, 0, width, height, a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
+      expect(paintedDraws(fight({}), Painted)).toHaveLength(0);
+      // The coils are out in the field: they stay when the wall falls; none in the build scene.
+      expect(paintedDraws(fight({ hp: 0 }, { taken: ['barbed-wire'] }), Painted)).toHaveLength(1);
+      expect(paintedDraws(on, Painted, overlay())).toHaveLength(0);
+    } finally {
+      vi.unstubAllGlobals();
     }
+  });
+
+  it('Barbed Wire: no tint over the ground, only the pickets and a light shadow are filled (ID-090)', () => {
+    const { Painted, fills } = paintable();
+    try {
+      paintedDraws(fight({}, { taken: ['barbed-wire'] }), Painted);
+      expect(fills.length).toBeGreaterThan(0);
+      const { fill, cap } = WIRE.post;
+      expect(new Set(fills.map((f) => f.style))).toEqual(new Set([WIRE.shadow, fill, cap]));
+      // No rect wider or taller than a picket: nothing lies over the band's ground.
+      for (const f of fills.filter((f) => f.w !== undefined)) {
+        expect(Math.abs(f.w!)).toBeLessThanOrEqual(WIRE.post.w * WIRE.px);
+        expect(Math.abs(f.h!)).toBeLessThanOrEqual(WIRE.post.h * WIRE.px);
+      }
+      // A light shadow: see-through black, no stronger than a quarter.
+      const alpha = Number(/rgba\(0, 0, 0, ([\d.]+)\)/.exec(WIRE.shadow)![1]);
+      expect(alpha).toBeLessThanOrEqual(0.25);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  /** Barbed Wire's rows, whole but for the `broken` ones. */
+  const rows = (...broken: number[]) =>
+    Array.from({ length: SEGMENTS }, (_, i) => ({
+      durability: broken.includes(i) ? 0 : CARD.wire.durability,
+      hit: [],
+    }));
+
+  it('Barbed Wire: a broken row is drawn from the torn band, each run of rows alike in one draw (ID-090)', () => {
+    const { Painted } = paintable();
+    try {
+      const on = fight({}, { taken: ['barbed-wire'], wire: rows(3, 4, 8) });
+      const band = paintedDraws(on, Painted);
+      const front = on.layers[0]!.x + WALL.depth;
+      const a = project({ x: front + CARD.wire.from, y: 0 }, CAM);
+      const b = project({ x: front + CARD.wire.to, y: FIELD.height }, CAM);
+      const rowH = (b.sy - a.sy) / SEGMENTS;
+      // Rows 0–2 whole, 3–4 torn, 5–7 whole, 8 torn, 9 whole.
+      const runs = [
+        [0, 3],
+        [3, 5],
+        [5, 8],
+        [8, 9],
+        [9, 10],
+      ];
+      expect(band).toHaveLength(runs.length);
+      const [whole, torn] = [band[0]!.img, band[1]!.img];
+      expect(torn).not.toBe(whole);
+      expect([torn.width, torn.height]).toEqual([whole.width, whole.height]);
+      const sh = whole.height / SEGMENTS;
+      // Seams between runs on whole pixels; the band's own top and bottom where it lies.
+      const edge = (row: number) =>
+        row === 0 ? a.sy : row === SEGMENTS ? b.sy : Math.round(a.sy + row * rowH);
+      runs.forEach(([from, to], i) => {
+        expect(band[i]!.img).toBe(i % 2 === 1 ? torn : whole);
+        expect(band[i]!.at).toEqual([
+          0,
+          from! * sh,
+          whole.width,
+          (to! - from!) * sh,
+          a.sx,
+          edge(from!),
+          b.sx - a.sx,
+          edge(to!) - edge(from!),
+        ]);
+        if (from! > 0) expect(Number.isInteger(edge(from!))).toBe(true);
+        // Each run starts where the one above it ends: no gap, no overlap.
+        if (i > 0) expect(band[i]!.at[5]).toBe(band[i - 1]!.at[5]! + band[i - 1]!.at[7]!);
+      });
+      // Every row broken: the torn band alone, whole.
+      const all = paintedDraws(
+        fight(
+          {},
+          { taken: ['barbed-wire'], wire: rows(...Array.from({ length: SEGMENTS }, (_, i) => i)) },
+        ),
+        Painted,
+      );
+      expect(all).toHaveLength(1);
+      expect(all[0]!.at.slice(4)).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('Barbed Wire: at every row edge the torn band’s wire lies where the whole band’s does', () => {
+    /** A canvas stand-in that keeps every point its wire is drawn through. */
+    const Traced = class {
+      width: number;
+      height: number;
+      points: [number, number][] = [];
+      constructor(w: number, h: number) {
+        this.width = w;
+        this.height = h;
+      }
+      getContext() {
+        const noop = () => {};
+        const at = (x: number, y: number) => this.points.push([x, y]);
+        return {
+          moveTo: at,
+          lineTo: at,
+          ...Object.fromEntries(
+            ['fillRect', 'strokeRect', 'fill', 'beginPath', 'ellipse', 'stroke']
+              .concat(['save', 'restore', 'translate', 'rotate'])
+              .map((k) => [k, noop]),
+          ),
+        };
+      }
+    };
+    vi.stubGlobal('OffscreenCanvas', Traced);
+    try {
+      const band = paintedDraws(
+        fight({}, { taken: ['barbed-wire'], wire: rows(1, 3, 5, 7) }),
+        Traced,
+      );
+      const whole = band[0]!.img as InstanceType<typeof Traced>;
+      const torn = band[1]!.img as InstanceType<typeof Traced>;
+      const row = whole.height / SEGMENTS;
+      // The torn wire's points in a torn row (the only part of it drawn), within half a
+      // pixel of its edge with a whole row...
+      const atEdges = torn.points.filter(([, y]) => {
+        const k = Math.round(y / row);
+        return [1, 3, 5, 7].includes(Math.floor(y / row)) && Math.abs(y - k * row) < 0.5;
+      });
+      expect(atEdges.length).toBeGreaterThan(0);
+      // ...each exactly where the whole wire is (a sagging cut end is pixels off).
+      for (const [x, y] of atEdges) {
+        const off = Math.min(...whole.points.map(([wx, wy]) => Math.hypot(wx - x, wy - y)));
+        expect(off, `${x},${y}`).toBeLessThan(1e-9);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('Barbed Wire: the torn band keeps to the same colours, with no tint', () => {
+    const { Painted, fills } = paintable();
+    try {
+      paintedDraws(fight({}, { taken: ['barbed-wire'], wire: rows(0) }), Painted);
+      const { fill, cap } = WIRE.post;
+      expect(new Set(fills.map((f) => f.style))).toEqual(new Set([WIRE.shadow, fill, cap]));
+      for (const f of fills.filter((f) => f.w !== undefined)) {
+        expect(Math.abs(f.w!)).toBeLessThanOrEqual(WIRE.post.w * WIRE.px);
+        expect(Math.abs(f.h!)).toBeLessThanOrEqual(WIRE.post.h * WIRE.px);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('Barbed Wire: where the browser can’t paint, broken rows show no line', () => {
+    const r = recorder();
+    const ys: number[][] = [];
+    const ctx = r.ctx as unknown as { strokeStyle: string };
+    let from = 0;
+    Object.assign(r.ctx, {
+      moveTo: (_x: number, y: number) => (from = y),
+      lineTo: (_x: number, y: number) => {
+        if (ctx.strokeStyle === WIRE.steel) ys.push([from, y]);
+      },
+    });
+    const on = fight({}, { taken: ['barbed-wire'], wire: rows(0, 1, 2, 3, 4) });
+    drawScene(r.ctx, r.art, on, CAM, VIEW);
+    const half = project({ x: 0, y: FIELD.height / 2 }, CAM).sy;
+    const bottom = project({ x: 0, y: FIELD.height }, CAM).sy;
+    // Only the lower, working half: one line per coil.
+    expect(ys).toHaveLength(WIRE.coils.length);
+    for (const [y0, y1] of ys) {
+      expect(y0).toBeCloseTo(half, 9);
+      expect(y1).toBeCloseTo(bottom, 9);
+    }
+  });
+
+  it('Barbed Wire: where the browser can’t paint, a steel line down each coil and no fill', () => {
+    const r = recorder();
+    const fills: unknown[] = [];
+    const xs: number[] = [];
+    const ctx = r.ctx as unknown as { strokeStyle: string };
+    Object.assign(r.ctx, {
+      fillRect: (...n: number[]) => fills.push(n),
+      moveTo: (x: number) => {
+        if (ctx.strokeStyle === WIRE.steel) xs.push(x);
+      },
+    });
+    const on = fight({}, { taken: ['barbed-wire'] });
+    const without = recorder();
+    const base: unknown[] = [];
+    Object.assign(without.ctx, { fillRect: (...n: number[]) => base.push(n) });
+    drawScene(without.ctx, without.art, fight({}), CAM, VIEW);
+    drawScene(r.ctx, r.art, on, CAM, VIEW);
+    // The card adds no fill at all, only the coils' lines.
+    expect(fills).toHaveLength(base.length);
+    const front = on.layers[0]!.x + WALL.depth;
+    const a = project({ x: front + CARD.wire.from, y: 0 }, CAM);
+    const b = project({ x: front + CARD.wire.to, y: 0 }, CAM);
+    expect(xs).toEqual(WIRE.coils.map((share) => a.sx + (b.sx - a.sx) * share));
   });
 
   it('an enemy at a spiked segment draws over the stakes, never under them', () => {
