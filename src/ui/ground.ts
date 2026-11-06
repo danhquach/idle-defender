@@ -218,7 +218,7 @@ function paintYard(art: Art, px: number, height: number): OffscreenCanvas | null
  * `tint`; a coil at each share of the depth in `coils`, nudged by its `jitter` units: dense
  * overlapping loops `loop` units apart and `r` across that wobble `wobble` units side to side
  * and tilt up to `tilt`°, dark `steel` with a pale `shine`, a steel barb on every loop; a
- * plain `strand` zig-zagging from coil to coil every `zig` units; and a pointed wooden
+ * plain `strand` zig-zagging between the near and far coils every `zig` units; and a pointed wooden
  * `stake` on a dirt `mound` every `stakeEvery` units. Wobble and tilt follow fixed sines,
  * so the band looks the same every fight.
  */
@@ -260,7 +260,7 @@ function paintWire(): OffscreenCanvas | null {
   g.globalAlpha = 1;
   const r = WIRE.r * px;
   const xs = WIRE.coils.map((share, c) => w * share + WIRE.jitter[c]! * px);
-  // The strand strung from coil to coil, zig-zagging down the field.
+  // The strand strung between the near and far coils, zig-zagging down the field.
   g.strokeStyle = WIRE.steel;
   g.lineWidth = WIRE.strand * px;
   g.beginPath();
