@@ -1650,6 +1650,24 @@ body {
   font-weight: 600;
 }
 
+/* A setting picked from a short list (ID-085): its name and the select, then a note. */
+.menu-choice-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.menu-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+}
+
+.menu-select {
+  min-width: 7em;
+  cursor: pointer;
+}
+
 .menu-range {
   display: grid;
   grid-template-columns: 8.5em 1fr 3.5em;

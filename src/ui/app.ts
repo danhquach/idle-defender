@@ -23,16 +23,19 @@ import {
 import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
+import { chatter, newChat } from '../core/chatter.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
 import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import {
+  readChatter,
   readReduceMotion,
   readSound,
   readSpeed,
   SPEEDS,
+  writeChatter,
   writeMute,
   writeReduceMotion,
   writeSpeed,
@@ -151,6 +154,10 @@ export function start(root: HTMLElement, art: Art): void {
   const soundSettings = readSound(storage);
   const sound = new SoundEngine(soundSettings);
   let heard: HordeState | null = null;
+  // Chatter (ID-085): speech bubbles from the same frame-to-frame comparison, timed in real
+  // seconds while the fight runs.
+  let chatterLevel = readChatter(storage);
+  let chat = newChat();
   const unlock = (): void => sound.unlock();
   document.addEventListener('pointerdown', unlock, true);
   document.addEventListener('keydown', unlock, true);
@@ -361,6 +368,11 @@ export function start(root: HTMLElement, art: Art): void {
     onMute: (on) => {
       sound.setMuted(on);
       writeMute(storage, on);
+    },
+    chatter: chatterLevel,
+    onChatter: (level) => {
+      chatterLevel = level;
+      writeChatter(storage, level);
     },
   });
   const dialogOpen = (): boolean => menu.isOpen() || inventory.isOpen();
@@ -601,6 +613,7 @@ export function start(root: HTMLElement, art: Art): void {
     // A won or lost sting plays alone: the horde track drops fast and the camp's waits for it.
     const cues = horde ? cuesBetween(heard, horde) : [];
     for (const cue of cues) sound.play(cue);
+    if (horde) chat = chatter(chat, heard, horde, dt, chatterLevel);
     heard = horde;
     const sting = cues.includes('won') || cues.includes('lost') ? STING : 0;
     sound.music(horde?.outcome === 'fighting' ? 'horde' : 'camp', sting);
@@ -623,7 +636,7 @@ export function start(root: HTMLElement, art: Art): void {
         ctx,
         art,
         // Bullet tails grow with the game speed (ID-070).
-        { ...horde, pace: speed },
+        { ...horde, pace: speed, chat },
         cam,
         view,
         null,

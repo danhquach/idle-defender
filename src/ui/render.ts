@@ -45,6 +45,7 @@ import {
   type Turret,
 } from '../core/horde.ts';
 import { baseOf } from '../core/armoury.ts';
+import { CHAT, CHAT_RANK, type Bubble } from '../core/chatter.ts';
 import { professionOf } from '../core/loadout.ts';
 import { carpet } from '../core/skills.ts';
 import { badgeOf, nameTag } from '../core/stats.ts';
@@ -155,6 +156,10 @@ const COLOR = {
   popCrit: '#ffd23f',
   popWall: '#ff8a7a',
   popEdge: 'rgba(17, 17, 16, 0.85)',
+  /** A survivor's speech bubble (ID-085): dark text on a pale card with a dark edge. */
+  bubble: '#f4f1ea',
+  bubbleText: '#1b1a18',
+  bubbleEdge: 'rgba(17, 17, 16, 0.85)',
   /** A segment a repair card heals (ID-075). */
   wallRepair: '#7fe08c',
   /** Spiked Walls' stakes biting an enemy that strikes the wall (ID-075). */
@@ -325,6 +330,26 @@ export const NAME_TAG_GAP = 2;
  */
 export const RELOAD_PIE = { r: 6, gap: 2, edge: 1 } as const;
 /**
+ * A survivor's speech bubble (ID-085), screen px and real seconds: `h` px high, its text
+ * `padX` px in from each side, corners `r` round, with a `tail` px point down to the
+ * survivor, `gap` px over the reload pie's spot (kept clear whether or not a pie shows, so
+ * it never jumps), on a dark `edge`. It grows from `from` of its size over its first
+ * `grow` s and fades over its last `fade` s; with reduce motion it just shows and goes.
+ * Near the view's edge its card slides in to stay `margin` px inside.
+ */
+export const BUBBLE = {
+  h: 18,
+  padX: 6,
+  r: 5,
+  tail: 5,
+  gap: 3,
+  edge: 1,
+  grow: 0.12,
+  from: 0.6,
+  fade: 0.25,
+  margin: 4,
+} as const;
+/**
  * Damage numbers (ID-082), screen px and real seconds: a `size` px number, growing to
  * `big` px for a hit of `bigAt` or more (a wall's loss at `wallBigAt`), starts `gap` over
  * the HP bar and rises `rise` px over `life` s, fading over the last `fade` share of it.
@@ -384,6 +409,8 @@ export type Scene = Pick<
   Partial<Pick<HordeState, 'wave' | 'freeWave' | 'acc' | 'taken' | 'barrierAt' | 'pops'>> & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
     pace?: number;
+    /** Survivors' speech bubbles (ID-085) and the chat clock they are timed on; build mode has none. */
+    chat?: { bubbles: readonly Bubble[]; clock: number };
   };
 /** An armed skill's reach around the cursor, on the field. */
 export interface Aim {
@@ -1986,6 +2013,186 @@ function drawPops(
   ctx.restore();
 }
 
+/** How a speech bubble shows (ID-085), or null once it is gone. */
+export interface BubbleLook {
+  /** Its size against full size, about the tail's point. */
+  scale: number;
+  alpha: number;
+}
+
+/**
+ * Speech bubble `b` at chat clock `clock` (real seconds): it grows in and fades out; with
+ * reduce motion (`still`) it is simply there for its life.
+ */
+export function bubbleLook(b: Bubble, clock: number, still: boolean): BubbleLook | null {
+  const age = clock - b.at;
+  if (!(age >= 0 && age < CHAT.life)) return null;
+  if (still) return { scale: 1, alpha: 1 };
+  const grown = Math.min(1, age / BUBBLE.grow);
+  const left = CHAT.life - age;
+  return {
+    scale: BUBBLE.from + (1 - BUBBLE.from) * grown,
+    alpha: left < BUBBLE.fade ? left / BUBBLE.fade : 1,
+  };
+}
+
+/**
+ * Where a bubble's tail points (screen px): over its survivor's name tag and the reload
+ * pie's spot, on the floor of their post (or the ground while walking).
+ */
+export function bubbleTip(
+  b: Bubble,
+  layers: readonly Layer[],
+  posts: readonly Post[],
+  cam: Camera,
+): { sx: number; sy: number } {
+  const post = b.postId === null ? undefined : posts.find((p) => p.id === b.postId);
+  const z0 = post ? postFloor(layers, post) : 0;
+  const { at, lift } = tagSpot({ x: b.x, y: b.y, plain: b.plain ? true : undefined }, z0, cam);
+  const p = project(at, cam);
+  const pie = RELOAD_PIE.gap + 2 * (RELOAD_PIE.r + RELOAD_PIE.edge);
+  return { sx: p.sx, sy: p.sy - lift - PLATE_H - pie - BUBBLE.gap };
+}
+
+/**
+ * How far (screen px) a `w` px wide bubble's card slides off its tail's point at `tipX`
+ * so it stays `BUBBLE.margin` px inside a `viewW` px view (the tail leans to reach it).
+ */
+export function bubbleShift(tipX: number, w: number, viewW: number): number {
+  const half = w / 2;
+  if (tipX - half < BUBBLE.margin) return BUBBLE.margin - (tipX - half);
+  if (tipX + half > viewW - BUBBLE.margin) return viewW - BUBBLE.margin - (tipX + half);
+  return 0;
+}
+
+/** A bubble to place: its tail's point (screen px), its card's width and its event's rank. */
+export interface BubbleSpot {
+  tipX: number;
+  tipY: number;
+  w: number;
+  rank: number;
+}
+
+/** A screen rect: left, right, top, bottom. */
+export interface ScreenBox {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+}
+
+/**
+ * Where each bubble's card goes, in the order given: `dx` its slide into the view and
+ * `lift` px it rises over its usual spot so it never overlaps another's card or a
+ * `blocked` box (the survivors' name tags and reload pies). Higher ranks (then earlier
+ * ones) keep their spot; the rest rise clear. One pushed past the view's top is `hidden`.
+ */
+export function bubbleLayout(
+  spots: readonly BubbleSpot[],
+  viewW: number,
+  blocked: readonly ScreenBox[] = [],
+): { dx: number; lift: number; hidden: boolean }[] {
+  const { h, tail, gap } = BUBBLE;
+  const out = spots.map((s) => ({ dx: bubbleShift(s.tipX, s.w, viewW), lift: 0, hidden: false }));
+  const order = spots.map((_, i) => i).sort((a, b) => spots[b]!.rank - spots[a]!.rank || a - b);
+  const placed: ScreenBox[] = [...blocked];
+  for (const i of order) {
+    const s = spots[i]!;
+    const x0 = s.tipX + out[i]!.dx - s.w / 2;
+    const x1 = x0 + s.w;
+    let y1 = s.tipY - tail;
+    // Rise past every card it would overlap until it overlaps none.
+    for (let moved = true; moved;) {
+      moved = false;
+      for (const p of placed) {
+        if (x0 < p.x1 + gap && x1 > p.x0 - gap && y1 - h < p.y1 + gap && y1 > p.y0 - gap) {
+          y1 = p.y0 - gap;
+          moved = true;
+        }
+      }
+    }
+    out[i]!.lift = s.tipY - tail - y1;
+    if (y1 - h < BUBBLE.margin) {
+      out[i]!.hidden = true;
+      continue;
+    }
+    placed.push({ x0, x1, y0: y1 - h, y1 });
+  }
+  return out;
+}
+
+/**
+ * Survivors' speech bubbles (ID-085): each line on a pale rounded card whose tail points
+ * down at its survivor, over their name tag and reload pie so it never hides either;
+ * one lifted clear of another bubble also keeps off every survivor's tag and pie.
+ */
+function drawBubbles(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  still: boolean,
+  cam: Camera,
+  view: View,
+  standing: readonly { d: Defender; z0: number }[],
+) {
+  const chat = scene.chat;
+  if (!chat || chat.bubbles.length === 0) return;
+  ctx.save();
+  ctx.font = MARK.plate;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  // Each drawn survivor's name plate and the reload pie's spot over it.
+  const pie = RELOAD_PIE.gap + 2 * (RELOAD_PIE.r + RELOAD_PIE.edge);
+  const tags: ScreenBox[] = standing.map(({ d, z0 }) => {
+    const { at, lift } = tagSpot(d, z0, cam);
+    const p = project(at, cam);
+    const w = ctx.measureText(d.plain ? d.name : nameTag(d)).width + 2 * OFF_FRAME.pad;
+    return { x0: p.sx - w / 2, x1: p.sx + w / 2, y0: p.sy - lift - PLATE_H - pie, y1: p.sy - lift };
+  });
+  const shown = chat.bubbles.flatMap((b) => {
+    const look = bubbleLook(b, chat.clock, still);
+    if (!look) return [];
+    const tip = bubbleTip(b, scene.layers, scene.posts, cam);
+    const w = ctx.measureText(b.line).width + 2 * BUBBLE.padX;
+    return [{ b, look, tip, w }];
+  });
+  const layout = bubbleLayout(
+    shown.map(({ b, tip, w }) => ({ tipX: tip.sx, tipY: tip.sy, w, rank: CHAT_RANK[b.event] })),
+    view.w,
+    tags,
+  );
+  shown.forEach(({ b, look, tip, w }, i) => {
+    const { dx, lift, hidden } = layout[i]!;
+    if (hidden) return;
+    const { h, r, tail } = BUBBLE;
+    ctx.save();
+    ctx.globalAlpha = look.alpha;
+    // About the card's own centre, so a growing card stays inside the spot laid out for it.
+    const cy = -tail - lift - h / 2;
+    ctx.translate(tip.sx + dx, tip.sy + cy);
+    ctx.scale(look.scale, look.scale);
+    // The card, slid into the view and lifted clear, and the tail from its foot down to
+    // the survivor (at `(-dx, -cy)` from here), kept clear of the rounded corners.
+    const x0 = -w / 2;
+    const y0 = -h / 2;
+    const foot = Math.min(x0 + w - r - tail, Math.max(x0 + r + tail, -dx));
+    ctx.beginPath();
+    ctx.roundRect(x0, y0, w, h, r);
+    ctx.moveTo(foot - tail, y0 + h);
+    ctx.lineTo(-dx, -cy);
+    ctx.lineTo(foot + tail, y0 + h);
+    ctx.fillStyle = COLOR.bubble;
+    ctx.strokeStyle = COLOR.bubbleEdge;
+    ctx.lineWidth = BUBBLE.edge * 2;
+    ctx.stroke();
+    ctx.fill();
+    ctx.fillStyle = COLOR.bubbleText;
+    ctx.fillText(b.line, 0, 0);
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
 /** A Frag Grenade's flight and burst (ID-077): the grenade's arc height and size, in world units. */
 export const GRENADE = { arc: 40, r: 6.5, edge: 2, shine: 1 } as const;
 
@@ -2328,13 +2535,15 @@ export function drawScene(
   // Each defender's name on top of every sprite and effect, so none hides it (ID-074).
   // Only those the sprites above drew: a walker, or the one standing on their post.
   if (!build) {
-    // Damage numbers (ID-082) under every name and reload pie, so they never hide one.
-    drawPops(ctx, art, scene, cards.still, cam);
     const shown = scene.defenders.flatMap((d) => {
       const post = d.walking ? null : scene.posts.find((p) => p.id === d.postId);
       if (post === undefined) return []; // not walking and on no post: not drawn
       return [{ d, z0: post ? postFloor(scene.layers, post) : 0 }];
     });
+    // Speech bubbles (ID-085) over each name and pie's spot, and under the damage numbers.
+    drawBubbles(ctx, scene, cards.still, cam, view, shown);
+    // Damage numbers (ID-082) under every name and reload pie, so they never hide one.
+    drawPops(ctx, art, scene, cards.still, cam);
     // Over each name, clear of it, while their gun reloads (ID-078). All before the
     // names, so where two survivors crowd together a pie never hides a name.
     for (const { d, z0 } of shown) {
