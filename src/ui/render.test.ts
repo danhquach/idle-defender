@@ -29,7 +29,7 @@ import {
 } from '../core/data.ts';
 import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy, HordeState, Pop } from '../core/horde.ts';
-import { CHAT, type Bubble } from '../core/chatter.ts';
+import { CHAT, CHAT_LINES, type Bubble } from '../core/chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
 import { carpet } from '../core/skills.ts';
 import { reloadTime } from '../core/stats.ts';
@@ -42,19 +42,22 @@ import {
   postFloor,
   project,
   TILT,
+  unproject,
   WALL_CARD,
   WALL_HIT,
   wallHeight,
   wallPulse,
   type Camera,
+  type View,
 } from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
 import {
   BUBBLE,
   bubbleLayout,
+  bubbleLines,
   bubbleLook,
-  bubbleShift,
-  bubbleTip,
+  bubbleSide,
+  bubbleTag,
   BULLET,
   BURN,
   burnHeat,
@@ -3458,7 +3461,12 @@ describe('speech bubbles (ID-085)', () => {
   });
 
   /** Every text drawn and every name plate rect, in draw order. */
-  const draw = (scene: Scene, cam: Camera) => {
+  const draw = (
+    scene: Scene,
+    cam: Camera,
+    view: View = { w: 1280, h: 720 },
+    clip: number | null = null,
+  ) => {
     const r = recorder();
     const order: string[] = [];
     const ys: Record<string, number> = {};
@@ -3479,11 +3487,65 @@ describe('speech bubbles (ID-085)', () => {
       },
       measureText: (t: string) => ({ width: t.length * 6 }),
     });
-    drawScene(r.ctx, r.art, scene, cam, { w: 1280, h: 720 });
+    drawScene(r.ctx, r.art, scene, cam, view, null, null, null, null, null, clip);
     return { order, ys, at, plates };
   };
 
-  it('draws each line over its survivor, above the name tag and the reload pie, under the damage numbers and names', () => {
+  it('on a wide view, a survivor at the wall still shows the whole line (ID-094)', () => {
+    const base = squad();
+    const d = base.defenders[0]!;
+    // Wider than the frame: nothing left of the frame's edge shows.
+    const view = { w: 2000, h: 600 };
+    const cam = frameCamera(view);
+    const edge = project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx;
+    expect(edge).toBeGreaterThan(100);
+    for (const line of Object.values(CHAT_LINES).flat()) {
+      const scene: Scene = { ...base, chat: { bubbles: [bubble(d, { line })], clock: 0.5 } };
+      const { order, at } = draw(scene, cam, view);
+      // Every word of the line is drawn, on one line or two.
+      const lines = bubbleLines(line, (t) => t.length * 6);
+      expect(order.slice(0, lines.length).join(' ')).toBe(line);
+      const x = at[lines[0]!]!.x;
+      const half = Math.max(...lines.map((t) => t.length * 6)) / 2 + BUBBLE.padX;
+      expect(x - half).toBeGreaterThanOrEqual(Math.round(edge) + BUBBLE.margin);
+      expect(x + half).toBeLessThanOrEqual(view.w - BUBBLE.margin);
+    }
+  });
+
+  it('a line wider than the wrap width goes onto two even lines in a taller card (ID-094)', () => {
+    const width = (t: string) => t.length * 6;
+    expect(bubbleLines('Reloading!', width)).toEqual(['Reloading!']);
+    // 23 chars, 138 px: split where the wider half is narrowest.
+    expect(bubbleLines('Right between the eyes!', width)).toEqual(['Right between', 'the eyes!']);
+    expect(bubbleLines("I can't take much more!", width)).toEqual(["I can't take", 'much more!']);
+    // One long word has nowhere to split.
+    expect(bubbleLines('Aaaaaaaaaaaaaaaaaaaaaaaaa!', width)).toEqual([
+      'Aaaaaaaaaaaaaaaaaaaaaaaaa!',
+    ]);
+    // At the wrap width exactly it stays on one line.
+    const fits = 'x'.repeat(BUBBLE.wrap / 6);
+    expect(bubbleLines(fits, width)).toEqual([fits]);
+    // Drawn: two lines one line-height apart about the card's centre.
+    const base = squad();
+    const d = base.defenders[0]!;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const line = 'Right between the eyes!';
+    const scene: Scene = { ...base, chat: { bubbles: [bubble(d, { line })], clock: 0.5 } };
+    const { order, ys } = draw(scene, cam);
+    expect(order.slice(0, 2)).toEqual(['Right between', 'the eyes!']);
+    expect(ys['Right between']).toBe(-BUBBLE.lineH / 2);
+    expect(ys['the eyes!']).toBe(BUBBLE.lineH / 2);
+    // A two-line card stacks by its own height: the one under it rises past all of it.
+    const tall = BUBBLE.h + BUBBLE.lineH;
+    const [low, high] = bubbleLayout([
+      { x0: 400, y0: 300 - BUBBLE.h, w: 80, h: BUBBLE.h, rank: 1 },
+      { x0: 400, y0: 300 - tall, w: 80, h: tall, rank: 9 },
+    ]);
+    expect(high!.lift).toBe(0);
+    expect(low!.lift).toBe(tall + BUBBLE.gap);
+  });
+
+  it("sits beside its speaker's name tag, level with it, its tail pointing back at the name (ID-094)", () => {
     const base = squad();
     const d = base.defenders[0]!;
     const cam = frameCamera({ w: 1280, h: 720 });
@@ -3503,61 +3565,121 @@ describe('speech bubbles (ID-085)', () => {
       ],
     };
     const { order, ys, at, plates } = draw(scene, cam);
+    // Under the damage numbers and the names.
     expect(order).toEqual(['Reloading!', '7', d.name]);
-    const tip = bubbleTip(bubble(d), base.layers, base.posts, cam);
-    // The text sits over the tail's point, and the point clears the plate and the pie's spot.
-    // Drawn about the card's centre: the tail's length over the tip, slid into the view.
+    // The tag it reads is the plate drawn for the name.
+    const tag = bubbleTag(bubble(d), base.layers, base.posts, cam, d.name.length * 6);
+    expect(plates.map((p) => p.y)).toContain(tag.y0);
+    expect(tag.y1 - tag.y0).toBe(PLATE_H);
+    // Card right of the plate, a gap and a tail's length off it, its middle on the plate's.
     const w = 'Reloading!'.length * 6 + 2 * BUBBLE.padX;
     expect(at['Reloading!']).toEqual({
-      x: tip.sx + bubbleShift(tip.sx, w, 1280),
-      y: tip.sy - BUBBLE.tail - BUBBLE.h / 2,
+      x: tag.x1 + BUBBLE.gap + BUBBLE.tail + w / 2,
+      y: (tag.y0 + tag.y1) / 2,
     });
     expect(ys['Reloading!']).toBe(0);
-    expect(plates.length).toBeGreaterThan(0);
-    const plateTop = Math.min(...plates.map((p) => p.y));
-    expect(tip.sy).toBeLessThanOrEqual(
-      plateTop - RELOAD_PIE.gap - 2 * (RELOAD_PIE.r + RELOAD_PIE.edge),
-    );
   });
 
-  it('slides into the view at its edges, its tail still joined to the card', () => {
-    expect(bubbleShift(640, 80, 1280)).toBe(0);
-    expect(bubbleShift(30, 80, 1280)).toBe(BUBBLE.margin + 40 - 30);
-    expect(bubbleShift(1260, 80, 1280)).toBe(1280 - BUBBLE.margin - 40 - 1260);
-    // Right at the edge it still slides all the way in (the tail leans to reach it).
-    expect(bubbleShift(2, 140, 1280)).toBe(BUBBLE.margin + 70 - 2);
-    expect(bubbleShift(1280, 80, 1280)).toBe(-(BUBBLE.margin + 40));
+  it('goes left of the tag when the right has no room, unless that leaves the frame (ID-094)', () => {
+    const tag = { x0: 500, x1: 540, y0: 300, y1: 314 };
+    const { gap, tail } = BUBBLE;
+    // Room on the right: right of it, level with it.
+    expect(bubbleSide(tag, 80, BUBBLE.h, 1280)).toEqual({
+      x0: 540 + gap + tail,
+      y0: 307 - BUBBLE.h / 2,
+      tipX: 540 + gap,
+      tipY: 307,
+    });
+    // At the view's right edge: left of it.
+    const flipped = bubbleSide(tag, 80, BUBBLE.h, 600);
+    expect(flipped.tipX).toBe(500 - gap);
+    expect(flipped.x0 + 80).toBe(500 - gap - tail);
+    // No room left either (the frame starts at 450): slides inside the frame, still aiming
+    // at the plate.
+    const squeezed = bubbleSide(tag, 80, BUBBLE.h, 600, 450);
+    expect(squeezed.x0).toBe(600 - BUBBLE.margin - 80);
+    expect(squeezed.x0).toBeGreaterThanOrEqual(450 + BUBBLE.margin);
+    expect(squeezed.tipX).toBe(540 + gap);
+    // Narrower than the card: never left of the frame.
+    expect(bubbleSide(tag, 200, BUBBLE.h, 600, 450).x0).toBe(450 + BUBBLE.margin);
+  });
+
+  it("near the view's right edge goes left of the tag, but never left of the fight's frame (ID-094)", () => {
+    const base = squad();
+    const d = base.defenders[0]!;
+    const view = { w: 1280, h: 720 };
+    const cam = frameCamera(view);
+    // Said near the right edge of the view: no room on the right.
+    const said = bubble(d, { x: unproject({ sx: 1260, sy: 0 }, cam).x });
+    const tag = bubbleTag(said, base.layers, base.posts, cam, d.name.length * 6);
+    expect(tag.x1).toBeGreaterThan(1200);
+    const half = 'Reloading!'.length * 3 + BUBBLE.padX;
+    const scene: Scene = { ...base, chat: { bubbles: [said], clock: 0.5 } };
+    const flipped = draw(scene, cam, view).at['Reloading!']!.x;
+    expect(flipped + half).toBe(tag.x0 - BUBBLE.gap - BUBBLE.tail);
+    // The frame's clip (as in Start Horde's ease) starts past where that card would go:
+    // it slides inside the frame instead of being cut.
+    const clip = Math.round(flipped);
+    const clipped = draw(scene, cam, view, clip).at['Reloading!']!.x;
+    expect(clipped - half).toBeGreaterThanOrEqual(clip + BUBBLE.margin);
+    expect(clipped + half).toBeLessThanOrEqual(view.w - BUBBLE.margin);
+  });
+
+  it('still draws a line whose speaker has left the fight', () => {
+    const base = squad();
+    const d = base.defenders[0]!;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const gone = bubble(d, { by: 'nobody' });
+    const { order } = draw({ ...base, chat: { bubbles: [gone], clock: 0.5 } }, cam);
+    expect(order).toContain('Reloading!');
+  });
+
+  it('in a crowded squad on a phone, every bubble stays on its own speaker (ID-094)', () => {
+    const g = newGame('horde');
+    const roster = [1, 2, 3].map((n) => ({ ...recruit(n), xp: 0 }));
+    const base = startSquadHorde({ ...g, roster, camp: { ...g.camp, recruits: 3 } }, 7, 0);
+    expect(base.defenders.length).toBe(3);
+    const view = { w: 375, h: 812 };
+    const cam = frameCamera(view);
+    // The three longest lines at once (the chat's cap), each on two lines.
+    const lines = ['Right between the eyes!', "I can't take much more!", 'Keep going without me!'];
+    const bubbles = base.defenders.map((d, i) => bubble(d, { line: lines[i]! }));
+    const { at } = draw({ ...base, chat: { bubbles, clock: 0.5 } }, cam, view);
+    base.defenders.forEach((d, i) => {
+      const first = bubbleLines(lines[i]!, (t) => t.length * 6)[0]!;
+      const tag = bubbleTag(bubbles[i]!, base.layers, base.posts, cam, d.name.length * 6);
+      // Level with its own speaker's name: nobody was pushed onto another's row.
+      expect(at[first]!.y).toBe((tag.y0 + tag.y1) / 2);
+      expect(at[first]!.x).toBeGreaterThan(tag.x1);
+    });
   });
 
   it('stacks bubbles that would overlap: the higher rank keeps its spot, the other rises clear', () => {
-    const spot = (tipX: number, tipY: number, rank: number) => ({ tipX, tipY, w: 80, rank });
-    // Two survivors one over the other, 20 px apart.
-    const [low, high] = bubbleLayout([spot(400, 300, 1), spot(410, 280, 9)], 1280);
-    expect(high).toEqual({ dx: 0, lift: 0, hidden: false });
+    const spot = (x0: number, y0: number, rank: number) => ({ x0, y0, w: 80, h: BUBBLE.h, rank });
+    // Two cards one over the other, 20 px apart.
+    const [low, high] = bubbleLayout([spot(400, 300, 1), spot(410, 280, 9)]);
+    expect(high).toEqual({ lift: 0, hidden: false });
     // The lower one's card ends a gap over the higher one's card top.
-    const highTop = 280 - BUBBLE.tail - BUBBLE.h;
-    expect(300 - BUBBLE.tail - low!.lift).toBe(highTop - BUBBLE.gap);
+    expect(300 + BUBBLE.h - low!.lift).toBe(280 - BUBBLE.gap);
     // Far apart: neither moves; a third pushed past both stacks over both.
-    expect(bubbleLayout([spot(100, 300, 1), spot(600, 300, 1)], 1280).map((l) => l.lift)).toEqual([
-      0, 0,
-    ]);
-    const three = bubbleLayout([spot(400, 300, 5), spot(400, 300, 5), spot(400, 300, 5)], 1280);
+    expect(bubbleLayout([spot(100, 300, 1), spot(600, 300, 1)]).map((l) => l.lift)).toEqual([0, 0]);
+    const three = bubbleLayout([spot(400, 300, 5), spot(400, 300, 5), spot(400, 300, 5)]);
     const step = BUBBLE.h + BUBBLE.gap;
     expect(three.map((l) => l.lift)).toEqual([0, step, 2 * step]);
   });
 
-  it("a lifted bubble keeps off other survivors' name tags; one pushed past the top hides", () => {
-    const spot = (tipX: number, tipY: number, rank: number) => ({ tipX, tipY, w: 80, rank });
-    // A name tag just over where the card would sit: the card rises clear of it.
-    const tag = { x0: 380, x1: 440, y0: 260, y1: 290 };
-    const [one] = bubbleLayout([spot(400, 300, 1)], 1280, [tag]);
-    expect(300 - BUBBLE.tail - one!.lift).toBe(tag.y0 - BUBBLE.gap);
+  it("a bubble keeps off other survivors' name tags; one pushed past the top hides", () => {
+    const spot = (x0: number, y0: number, rank: number) => ({ x0, y0, w: 80, h: BUBBLE.h, rank });
+    // A name tag over the card's lower half: the card rises clear of it.
+    const tag = { x0: 380, x1: 440, y0: 310, y1: 330 };
+    const [one] = bubbleLayout([spot(400, 300, 1)], [tag]);
+    expect(300 + BUBBLE.h - one!.lift).toBe(tag.y0 - BUBBLE.gap);
     expect(one!.hidden).toBe(false);
-    // Its own tag sits under its tip: no lift.
-    const own = { x0: 380, x1: 420, y0: 300 + BUBBLE.gap, y1: 330 };
-    expect(bubbleLayout([spot(400, 300, 1)], 1280, [own])[0]!.lift).toBe(0);
+    // Its own tag, beside it: no lift.
+    const own = { x0: 340, x1: 400 - BUBBLE.gap, y0: 302, y1: 316 };
+    expect(bubbleLayout([spot(400, 300, 1)], [own])[0]!.lift).toBe(0);
     // Near the top, a second card has nowhere to go: hidden, and the first keeps its spot.
-    const top = bubbleLayout([spot(400, 30, 9), spot(400, 30, 1)], 1280);
+    const top = bubbleLayout([spot(400, 10, 9), spot(400, 10, 1)]);
     expect(top.map((l) => l.hidden)).toEqual([false, true]);
   });
 
@@ -3568,9 +3690,9 @@ describe('speech bubbles (ID-085)', () => {
     const cam = frameCamera({ w: 1280, h: 720 });
     const raised = base.posts.find((p) => postFloor(base.layers, p) > 0);
     expect(raised).toBeDefined();
-    const onPost = bubbleTip(bubble(d, { postId: raised!.id }), base.layers, base.posts, cam);
-    const walking = bubbleTip(bubble(d, { postId: null }), base.layers, base.posts, cam);
-    expect(walking.sy - onPost.sy).toBeCloseTo(
+    const onPost = bubbleTag(bubble(d, { postId: raised!.id }), base.layers, base.posts, cam, 30);
+    const walking = bubbleTag(bubble(d, { postId: null }), base.layers, base.posts, cam, 30);
+    expect(walking.y0 - onPost.y0).toBeCloseTo(
       project({ x: 0, y: 0, z: 0 }, cam).sy -
         project({ x: 0, y: 0, z: postFloor(base.layers, raised!) }, cam).sy,
       9,
