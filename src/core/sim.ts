@@ -165,22 +165,24 @@ export function playCampaign(seed: number, hordes: number): HordeRun[] {
 }
 
 /**
- * The horde-only scripted player's cards (ID-066), best first: damage, then shots that
- * spread it, then reach, then the wall. Any card not listed comes last.
+ * The horde-only scripted player's cards (ID-066, ID-077), best first: damage, then
+ * shots that spread it or hold enemies back, then reach, then the wall. Any card not
+ * listed comes last.
  */
 const SQUAD_PICKS: readonly UpgradeId[] = [
   'sharpshooter',
   'rapid-fire',
-  'split-shot',
+  'frag-grenades',
   'piercing-rounds',
-  'chain-lightning',
-  'explode-on-kill',
+  'stopping-power',
+  'extended-mags',
   'burning-rounds',
   'ricochet',
+  'speed-loaders',
   'long-sight',
+  'barbed-wire',
   'reinforce',
   'spiked-walls',
-  'slow-field',
   'patch-up',
 ];
 

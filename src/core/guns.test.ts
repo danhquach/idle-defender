@@ -36,6 +36,16 @@ const deg = (dy: number, dx: number): number => (Math.atan2(dy, dx) * 180) / Mat
 const hpOf = (s: HordeState, id: number): number | undefined =>
   s.enemies.find((e) => e.id === id)?.hp;
 
+describe('magazines (ID-078)', () => {
+  it('every gun, the free pistol too, has a finite magazine and a reload', () => {
+    for (const id of ['pistol', ...GUNS] as const) {
+      const g = WEAPONS[id];
+      expect(Number.isInteger(g.magazine) && g.magazine > 0, id).toBe(true);
+      expect(Number.isFinite(g.reload) && g.reload > 0, id).toBe(true);
+    }
+  });
+});
+
 describe('the specialised guns', () => {
   it('are owned items only, never free, with the starting bullet profiles', () => {
     for (const id of GUNS) {

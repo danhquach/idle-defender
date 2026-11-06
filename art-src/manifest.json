@@ -1423,15 +1423,6 @@
       "prompt": "seen flat from directly above, a heavy dark steel X-shaped cross brace made of two thin riveted steel straps crossing in the middle, a bolted square steel plate at each of the four ends, the space between the straps is empty background, a tall rectangle shape about twice as tall as wide. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
     },
     {
-      "id": "slow-field",
-      "kind": "sprite",
-      "style": "verbatim",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 7551,
-      "size": "512x512",
-      "prompt": "seen flat from directly above, many scattered irregular splatters and smears of thick black sticky tar of different sizes spread loosely across the whole image, glossy oily highlights, thin drips, the tar alone with no surface beneath it, no ground, no dirt. 2D game sprite, hand-painted style, soft shading, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no person"
-    },
-    {
       "id": "ground",
       "kind": "texture",
       "model": "black-forest-labs/flux.2-klein-4b",

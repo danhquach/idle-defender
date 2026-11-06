@@ -213,56 +213,119 @@ function paintYard(art: Art, px: number, height: number): OffscreenCanvas | null
 }
 
 /**
- * The Slow Field's strip (ID-075), in world units: `CARD.slowField.reach` deep and the
- * field's height, at `px` canvas pixels a unit. A faint pale `tint` with black tar
- * splatters over it at `alpha`, each tile `tile` of the strip's depth wide, mirrored and
- * staggered by a seed so the repeat doesn't show, the far `feather` share fading out.
+ * Barbed Wire's band (ID-077), in world units: `CARD.wire.to − CARD.wire.from` deep and the
+ * field's height, at `px` canvas pixels a unit, drawn in code (no art file). A faint dirt
+ * `tint`; a coil at each share of the depth in `coils`, nudged by its `jitter` units: dense
+ * overlapping loops `loop` units apart and `r` across that wobble `wobble` units side to side
+ * and tilt up to `tilt`°, dark `steel` with a pale `shine`, a steel barb on every loop; a
+ * plain `strand` zig-zagging from coil to coil every `zig` units; and a pointed wooden
+ * `stake` on a dirt `mound` every `stakeEvery` units. Wobble and tilt follow fixed sines,
+ * so the band looks the same every fight.
  */
-export const SLOW_FIELD = {
+export const WIRE = {
   px: 2,
-  tint: { colour: '#c9b27a', alpha: 0.1 },
-  alpha: 0.4,
-  tile: 0.7,
-  feather: 0.4,
+  tint: { colour: '#8a7350', alpha: 0.12 },
+  coils: [0.1, 0.5, 0.9],
+  jitter: [-5, 4, -3],
+  loop: 9,
+  r: 8,
+  wobble: 3,
+  tilt: 15,
+  steel: '#3f4245',
+  shine: '#a9adb0',
+  barb: 4,
+  strand: 1,
+  zig: 60,
+  stake: { colour: '#b08d5c', edge: '#4a3a22', w: 6, h: 20, aside: 5 },
+  mound: { colour: '#3a2f22', alpha: 0.25, r: 9 },
+  stakeEvery: 80,
 } as const;
-const slowFields: Painted = new WeakMap();
+const wires: Painted = new WeakMap();
 
-/** The Slow Field's strip painted once per set of art; null as `groundCanvas`. */
-export function slowFieldCanvas(art: Art): OffscreenCanvas | null {
-  return once(slowFields, art, paintSlowField);
+/** Barbed Wire's band painted once per set of art (as every painted canvas); null as `groundCanvas`. */
+export function wireCanvas(art: Art): OffscreenCanvas | null {
+  return once(wires, art, paintWire);
 }
 
-function paintSlowField(art: Art): OffscreenCanvas | null {
-  const { px } = SLOW_FIELD;
-  const w = CARD.slowField.reach * px;
+function paintWire(): OffscreenCanvas | null {
+  const { px } = WIRE;
+  const w = (CARD.wire.to - CARD.wire.from) * px;
   const h = FIELD.height * px;
   const canvas = new OffscreenCanvas(w, h);
   const g = canvas.getContext('2d');
   if (!g) return null;
-  g.globalAlpha = SLOW_FIELD.tint.alpha;
-  g.fillStyle = SLOW_FIELD.tint.colour;
+  g.globalAlpha = WIRE.tint.alpha;
+  g.fillStyle = WIRE.tint.colour;
   g.fillRect(0, 0, w, h);
-  const img = art[BASE_ART.slowField];
-  const tw = w * SLOW_FIELD.tile;
-  const th = (tw * img.height) / img.width;
-  const rng = createRng(GROUND_SEED + 75);
-  g.globalAlpha = SLOW_FIELD.alpha;
-  for (let r = 0, y = -th / 2; y < h; r++, y += th * 0.8) {
-    for (let x = (r % 2 ? -tw / 2 : 0) - int(rng, 0, Math.round(tw / 4)); x < w; x += tw) {
-      g.save();
-      g.translate(x + tw / 2, y + th / 2);
-      g.scale(int(rng, 0, 1) ? -1 : 1, int(rng, 0, 1) ? -1 : 1);
-      g.drawImage(img, -tw / 2, -th / 2, tw, th);
-      g.restore();
-    }
-  }
-  // The far edge fades out, so the strip has no hard line across the field.
   g.globalAlpha = 1;
-  g.globalCompositeOperation = 'destination-out';
-  const fade = g.createLinearGradient(w * (1 - SLOW_FIELD.feather), 0, w, 0);
-  fade.addColorStop(0, 'rgba(0,0,0,0)');
-  fade.addColorStop(1, 'rgba(0,0,0,1)');
-  g.fillStyle = fade;
-  g.fillRect(0, 0, w, h);
+  const r = WIRE.r * px;
+  const xs = WIRE.coils.map((share, c) => w * share + WIRE.jitter[c]! * px);
+  // The strand strung from coil to coil, zig-zagging down the field.
+  g.strokeStyle = WIRE.steel;
+  g.lineWidth = WIRE.strand * px;
+  g.beginPath();
+  for (let i = 0, y = 0; y <= h; i++, y += WIRE.zig * px) {
+    const x = xs[i % 2 === 0 ? 0 : xs.length - 1]!;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+  g.stroke();
+  xs.forEach((x0, c) => {
+    for (let i = 0, y = 0; y <= h + r; i++, y += WIRE.loop * px) {
+      const x = x0 + Math.sin(i * 0.9 + c * 2.1) * WIRE.wobble * px;
+      const tilt = (Math.sin(i * 1.7 + c) * WIRE.tilt * Math.PI) / 180;
+      for (const [colour, width, dx] of [
+        [WIRE.steel, 1.2 * px, 0],
+        [WIRE.shine, 0.5 * px, -0.6 * px],
+      ] as const) {
+        g.strokeStyle = colour;
+        g.lineWidth = width;
+        g.beginPath();
+        g.ellipse(x + dx, y, r, r * 0.8, tilt, 0, Math.PI * 2);
+        g.stroke();
+      }
+      // A barb on every loop, on alternate sides: a short steel cross, lit on one arm.
+      const b = (WIRE.barb * px) / 2;
+      const bx = x + (i % 2 === 0 ? r : -r);
+      const by = y + (WIRE.loop * px) / 2;
+      g.lineWidth = 0.8 * px;
+      g.strokeStyle = WIRE.steel;
+      g.beginPath();
+      g.moveTo(bx - b, by - b);
+      g.lineTo(bx + b, by + b);
+      g.stroke();
+      g.strokeStyle = WIRE.shine;
+      g.beginPath();
+      g.moveTo(bx - b, by + b);
+      g.lineTo(bx + b, by - b);
+      g.stroke();
+    }
+    // The stakes beside the coils, so they read as posts holding them up: pointed, on a dirt mound.
+    const { colour, edge, w: sw, h: sh } = WIRE.stake;
+    const { mound } = WIRE;
+    const sx = x0 + r + WIRE.stake.aside * px;
+    for (let y = 0; y <= h; y += WIRE.stakeEvery * px) {
+      g.globalAlpha = mound.alpha;
+      g.fillStyle = mound.colour;
+      g.beginPath();
+      g.ellipse(sx, y + (sh * px) / 2, mound.r * px, mound.r * px * 0.5, 0, 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = 1;
+      const l = sx - (sw * px) / 2;
+      const top = y - (sh * px) / 2;
+      g.beginPath();
+      g.moveTo(l, top + (sw * px) / 2);
+      g.lineTo(sx, top);
+      g.lineTo(l + sw * px, top + (sw * px) / 2);
+      g.lineTo(l + sw * px, top + sh * px);
+      g.lineTo(l, top + sh * px);
+      g.closePath();
+      g.fillStyle = colour;
+      g.fill();
+      g.strokeStyle = edge;
+      g.lineWidth = px;
+      g.stroke();
+    }
+  });
   return canvas;
 }

@@ -107,11 +107,18 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     once: true,
   },
-  'split-shot': {
-    name: 'Split Shot',
-    text: 'Each shot also fires 2 bullets in a fan at half damage',
-    category: 'behaviour',
-    rarity: 'epic',
+  'speed-loaders': {
+    name: 'Speed Loaders',
+    text: 'Guns reload 30% faster',
+    category: 'stat',
+    rarity: 'common',
+    once: true,
+  },
+  'extended-mags': {
+    name: 'Extended Mags',
+    text: 'Gun magazines hold twice the rounds',
+    category: 'stat',
+    rarity: 'rare',
     once: true,
   },
   'burning-rounds': {
@@ -121,25 +128,18 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     once: true,
   },
-  'explode-on-kill': {
-    name: 'Explode on Kill',
-    text: 'A bullet kill bursts, hurting enemies close by',
+  'stopping-power': {
+    name: 'Stopping Power',
+    text: 'Bullet hits knock enemies back, harder the more damage they do',
     category: 'behaviour',
     rarity: 'rare',
     once: true,
   },
-  'chain-lightning': {
-    name: 'Chain Lightning',
-    text: 'Bullet hits sometimes arc to 2 enemies close by at half damage',
+  'frag-grenades': {
+    name: 'Frag Grenades',
+    text: 'Each survivor throws a grenade every 8 s, into the thickest group',
     category: 'behaviour',
     rarity: 'epic',
-    once: true,
-  },
-  cleave: {
-    name: 'Cleave',
-    text: 'Blade and tool hits cleave 20% more to enemies close by',
-    category: 'behaviour',
-    rarity: 'common',
     once: true,
   },
   'spiked-walls': {
@@ -149,9 +149,9 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     once: true,
   },
-  'slow-field': {
-    name: 'Slow Field',
-    text: 'Enemies close to the outer wall move 30% slower',
+  'barbed-wire': {
+    name: 'Barbed Wire',
+    text: 'Wire strung out in the field slows enemies crossing it by 35%',
     category: 'barrier',
     rarity: 'rare',
     once: true,
@@ -391,6 +391,9 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       break;
     case 'power-surge':
       s.freeWave = s.wave;
+      break;
+    case 'frag-grenades':
+      s.nextFragAt = s.time;
       break;
     // The rest act in the fight while taken.
   }

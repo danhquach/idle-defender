@@ -25,16 +25,17 @@ import {
 } from '../core/data.ts';
 import {
   burning,
-  slowField,
+  reloadIn,
+  barbedWire,
   took,
   turretState,
-  type Arc,
   type Bullet,
   type Defender,
   type HordeState,
   type Impact,
   type Layer,
-  type Pop,
+  type Grenade,
+  type UpgradeId,
   type Post,
   type Burst,
   type Spit,
@@ -68,8 +69,8 @@ import {
 import {
   GROUND_TILE,
   groundCanvas,
-  SLOW_FIELD,
-  slowFieldCanvas,
+  WIRE,
+  wireCanvas,
   SURROUND_BLOCK,
   surroundCanvas,
 } from './ground.ts';
@@ -137,6 +138,10 @@ const COLOR = {
   offFrame: '#d2453c',
   plate: 'rgba(21, 23, 26, 0.6)',
   plateText: '#d8d4cc',
+  /** The share of a reload done, on a reload pie (ID-078). */
+  reload: '#ffc94d',
+  /** A reload pie's ring: the plate text's colour, see-through. */
+  reloadRing: 'rgba(216, 212, 204, 0.7)',
   hpBack: '#c43b3b',
   hpFill: '#5ec24a',
   /** A wall segment's flash as a blow lands (ID-072): warm, so it shows on a pale concrete top. */
@@ -163,8 +168,9 @@ const COLOR = {
   glow: 'rgba(255, 196, 70, 0.45)',
   spark: '#ffd84a',
   smoke: 'rgba(150, 150, 150, 0.55)',
-  lightning: '#cfe6ff',
-  pop: '#ff9a3c',
+  grenade: '#8a9a4a',
+  grenadeShine: 'rgba(216, 220, 174, 0.6)',
+  grenadeEdge: '#0b0d06',
   flame: '#ff7a1a',
   ghost: 'rgba(240, 236, 226, 0.85)',
   ghostDim: 'rgba(232, 228, 218, 0.4)',
@@ -303,9 +309,14 @@ export const SURVIVOR_BAR = { w: 30, h: 5, min: { w: 30, h: 5 }, edge: 1 } as co
 /** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
 const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
 /** A name plate's height in screen px (its font is `MARK.plate`). */
-const PLATE_H = 14;
+export const PLATE_H = 14;
 /** The screen px between a defender's name tag (ID-074) and the bar or badge under it. */
 export const NAME_TAG_GAP = 2;
+/**
+ * The pie over a reloading defender's name tag (ID-078), in screen px: radius `r`, `gap`
+ * over the plate, with a dark `edge` round it.
+ */
+export const RELOAD_PIE = { r: 6, gap: 2, edge: 1 } as const;
 /** How much wider than its footprint a piece's sprite may draw. */
 const OVERSPILL = 1.6;
 
@@ -325,8 +336,7 @@ export type Scene = Pick<
   | 'impacts'
   | 'spits'
   | 'bursts'
-  | 'arcs'
-  | 'pops'
+  | 'grenades'
   | 'focusId'
   | 'time'
   | 'fires'
@@ -648,16 +658,80 @@ function drawNameTag(
   z0: number,
   cam: Camera,
 ): void {
+  const { at, lift } = tagSpot(d, z0, cam);
+  drawPlate(ctx, d.plain ? d.name : nameTag(d), at, cam, false, lift);
+}
+
+/** Where a defender's name plate sits: its anchor and how far its bottom is lifted over it. */
+function tagSpot(
+  d: Pick<Defender, 'x' | 'y' | 'plain'>,
+  z0: number,
+  cam: Camera,
+): { at: { x: number; y: number; z: number }; lift: number } {
   const at = { x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap / 2 };
   if (d.plain) {
     // The bar sits on `at` with its dark edge round it, above and below.
     const bar = Math.max(SURVIVOR_BAR.min.h, SURVIVOR_BAR.h * cam.zoom) + 2 * SURVIVOR_BAR.edge;
-    drawPlate(ctx, d.name, at, cam, false, bar + NAME_TAG_GAP);
-    return;
+    return { at, lift: bar + NAME_TAG_GAP };
   }
   const badge = ((BADGE.pip + 2 * BADGE.pad) * cam.zoom) / 2;
-  const top = { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z };
-  drawPlate(ctx, nameTag(d), top, cam, false, badge + NAME_TAG_GAP);
+  return { at: { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z }, lift: badge + NAME_TAG_GAP };
+}
+
+/**
+ * How far `d`'s primary is through its reload at `time` (ID-078), 0 to 1, or null while it
+ * has rounds or is ready. Only the primary counts: a Gunner's sidearm firing meanwhile
+ * doesn't change it. The length is today's reload time, Speed Loaders (`taken`, design §8)
+ * included, so a stat change mid-reload moves the pie (the sim keeps only the reload's end).
+ */
+export function reloadShare(
+  d: Pick<Defender, 'ammo' | 'reloadedAt' | 'loadout' | 'stats' | 'plain'>,
+  time: number,
+  taken: readonly UpgradeId[] = [],
+): number | null {
+  const end = d.reloadedAt.primary;
+  if (d.ammo.primary > 0 || !(time < end)) return null;
+  const total = reloadIn({ taken }, d, d.loadout.primary);
+  if (!(total > 0)) return null;
+  return Math.min(1, Math.max(0, 1 - (end - time) / total));
+}
+
+/**
+ * A reload pie (ID-078) just over a defender's name plate: a dark disc in a pale ring,
+ * whose wedge fills clockwise from the top as the reload runs.
+ */
+function drawReloadPie(
+  ctx: CanvasRenderingContext2D,
+  d: Pick<Defender, 'x' | 'y' | 'plain'>,
+  share: number,
+  z0: number,
+  cam: Camera,
+): void {
+  const { at, lift } = tagSpot(d, z0, cam);
+  const p = project(at, cam);
+  const { r, gap, edge } = RELOAD_PIE;
+  const cx = p.sx;
+  const cy = p.sy - lift - PLATE_H - gap - edge - r;
+  // A see-through disc, so what is behind it still shows.
+  ctx.fillStyle = COLOR.plate;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  if (share > 0) {
+    const start = -Math.PI / 2;
+    ctx.fillStyle = COLOR.reload;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, start + share * Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // A pale ring, so even an empty disc reads on the dark ground.
+  ctx.strokeStyle = COLOR.reloadRing;
+  ctx.lineWidth = edge;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + edge / 2, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 /**
@@ -1008,23 +1082,23 @@ function drawRepairSparks(
 }
 
 /**
- * Slow Field (ID-075): the strip it slows, in front of the outermost layer with a segment
- * standing, under every sprite: a faint tint with sticky tar, fading out at its far edge,
- * painted once (ground.ts) and stretched over the strip. Where the browser can't paint
- * it, the tint alone shows.
+ * Barbed Wire (ID-077): the band it slows, out in the field in front of the outermost
+ * layer, under every sprite: a faint dirt tint with coils of wire on stakes, painted once
+ * (ground.ts) and stretched over the band. Where the browser can't paint it, the tint
+ * alone shows.
  */
-function drawSlowField(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
-  const field = slowField({ taken: scene.taken ?? [], layers: scene.layers });
-  if (!field) return;
-  const a = project({ x: field.from, y: 0 }, cam);
-  const b = project({ x: field.to, y: FIELD.height }, cam);
-  const painted = slowFieldCanvas(art);
+function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
+  const band = barbedWire({ taken: scene.taken ?? [], layers: scene.layers });
+  if (!band) return;
+  const a = project({ x: band.from, y: 0 }, cam);
+  const b = project({ x: band.to, y: FIELD.height }, cam);
+  const painted = wireCanvas(art);
   if (painted) {
     ctx.drawImage(painted, a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
     return;
   }
-  ctx.globalAlpha = SLOW_FIELD.tint.alpha;
-  ctx.fillStyle = SLOW_FIELD.tint.colour;
+  ctx.globalAlpha = WIRE.tint.alpha;
+  ctx.fillStyle = WIRE.tint.colour;
   ctx.fillRect(a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
   ctx.globalAlpha = 1;
 }
@@ -1780,44 +1854,56 @@ function drawBurst(ctx: CanvasRenderingContext2D, k: Burst, time: number, cam: C
   ctx.globalAlpha = 1;
 }
 
-/** Explode on Kill (design §8): an orange ring spreading over the burst's reach. */
-function drawPop(ctx: CanvasRenderingContext2D, k: Pop, time: number, cam: Camera): void {
-  const age = (time - k.at) / CARD.explode.flash;
-  if (age < 0 || age >= 1) return;
-  groundCircle(ctx, k.x, k.y, CARD.explode.radius * (0.4 + 0.6 * age), cam);
-  ctx.globalAlpha = 0.9 * (1 - age);
-  ctx.strokeStyle = COLOR.pop;
-  ctx.lineWidth = sized(2, cam);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
+/** A Frag Grenade's flight and burst (ID-077): the grenade's arc height and size, in world units. */
+export const GRENADE = { arc: 40, r: 6.5, edge: 2, shine: 1 } as const;
+
+/** Where a Frag Grenade in the air is at `time`: along its throw, `GRENADE.arc` high at the middle. */
+export function grenadeAt(g: Grenade, time: number): { x: number; y: number; z: number } {
+  const p = Math.min(1, Math.max(0, (time - g.at) / (g.lands - g.at)));
+  return {
+    x: g.fromX + (g.x - g.fromX) * p,
+    y: g.fromY + (g.y - g.fromY) * p,
+    z: 4 * GRENADE.arc * p * (1 - p),
+  };
 }
 
 /**
- * Chain Lightning (design §8), the one card that draws a beam: a jagged bolt at body
- * height from the enemy hit to the one it arced to, fading out.
+ * Frag Grenades (design §8): in the air, an olive-drab ball with a dark edge on its arc over its own
+ * shadow; landed, the airstrike's blast art swells over its reach and fades out.
  */
-function drawArc(ctx: CanvasRenderingContext2D, k: Arc, time: number, cam: Camera): void {
-  const age = (time - k.at) / CARD.chain.flash;
-  if (age < 0 || age >= 1) return;
-  const a = project({ x: k.fromX, y: k.fromY, z: ENEMY.z }, cam);
-  const b = project({ x: k.x, y: k.y, z: ENEMY.z }, cam);
-  // Fixed kinks (no RNG in the renderer): alternate sides of the line, a fifth of the way each.
-  const nx = -(b.sy - a.sy) * 0.08;
-  const ny = (b.sx - a.sx) * 0.08;
-  ctx.globalAlpha = 1 - age;
-  ctx.strokeStyle = COLOR.lightning;
-  ctx.lineWidth = sized(1.5, cam);
-  ctx.beginPath();
-  ctx.moveTo(a.sx, a.sy);
-  for (let i = 1; i < 5; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    ctx.lineTo(
-      a.sx + ((b.sx - a.sx) * i) / 5 + side * nx,
-      a.sy + ((b.sy - a.sy) * i) / 5 + side * ny,
-    );
+function drawGrenade(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  g: Grenade,
+  time: number,
+  cam: Camera,
+): void {
+  if (time < g.lands) {
+    const at = grenadeAt(g, time);
+    groundCircle(ctx, at.x, at.y, GRENADE.r, cam);
+    ctx.fillStyle = COLOR.shadow;
+    ctx.fill();
+    const c = project(at, cam);
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, sized(GRENADE.r, cam), 0, Math.PI * 2);
+    ctx.fillStyle = COLOR.grenade;
+    ctx.fill();
+    ctx.strokeStyle = COLOR.grenadeEdge;
+    ctx.lineWidth = sized(GRENADE.edge, cam);
+    ctx.stroke();
+    // A pale rim on its upper left, so it reads over the mossy ground.
+    const rim = sized(GRENADE.r, cam) - sized(GRENADE.edge, cam);
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, rim, Math.PI, Math.PI * 1.5);
+    ctx.strokeStyle = COLOR.grenadeShine;
+    ctx.lineWidth = sized(GRENADE.shine, cam);
+    ctx.stroke();
+    return;
   }
-  ctx.lineTo(b.sx, b.sy);
-  ctx.stroke();
+  const age = (time - g.lands) / CARD.frag.flash;
+  if (age >= 1) return;
+  ctx.globalAlpha = 1 - age;
+  groundArt(ctx, art[SKILL_ART.airstrike], g.x, g.y, CARD.frag.radius * (0.85 + 0.15 * age), cam);
   ctx.globalAlpha = 1;
 }
 
@@ -1930,9 +2016,9 @@ export function drawScene(
         pace: Math.max(1, scene.pace ?? 1),
         still: anim?.reduced ?? true,
       };
-  // The Slow Field's strip (ID-075) and traps lie flat on the ground, under every sprite,
+  // Barbed Wire's band (ID-077) and traps lie flat on the ground, under every sprite,
   // and Spiked Walls' stakes go under them too, so the enemies at the wall stand over them.
-  if (!build) drawSlowField(ctx, art, scene, cam);
+  if (!build) drawWire(ctx, art, scene, cam);
   if (cards.spiked) drawStakes(ctx, art, scene.layers, cam);
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
   // Molotov fires burn on the ground too, see-through, flaring up and dying down.
@@ -2088,8 +2174,7 @@ export function drawScene(
   for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
   for (const k of scene.spits) drawSpit(ctx, k, scene.time, cam);
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
-  for (const k of scene.pops) drawPop(ctx, k, scene.time, cam);
-  for (const k of scene.arcs) drawArc(ctx, k, scene.time, cam);
+  for (const g of scene.grenades) drawGrenade(ctx, art, g, scene.time, cam);
 
   // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.
   for (const b of scene.blasts) {
@@ -2113,11 +2198,18 @@ export function drawScene(
   // Each defender's name on top of every sprite and effect, so none hides it (ID-074).
   // Only those the sprites above drew: a walker, or the one standing on their post.
   if (!build) {
-    for (const d of scene.defenders) {
+    const shown = scene.defenders.flatMap((d) => {
       const post = d.walking ? null : scene.posts.find((p) => p.id === d.postId);
-      if (post === undefined) continue; // not walking and on no post: not drawn
-      drawNameTag(ctx, d, post ? postFloor(scene.layers, post) : 0, cam);
+      if (post === undefined) return []; // not walking and on no post: not drawn
+      return [{ d, z0: post ? postFloor(scene.layers, post) : 0 }];
+    });
+    // Over each name, clear of it, while their gun reloads (ID-078). All before the
+    // names, so where two survivors crowd together a pie never hides a name.
+    for (const { d, z0 } of shown) {
+      const share = reloadShare(d, scene.time, scene.taken);
+      if (share !== null) drawReloadPie(ctx, d, share, z0, cam);
     }
+    for (const { d, z0 } of shown) drawNameTag(ctx, d, z0, cam);
   }
   ctx.restore();
   if (build) return;

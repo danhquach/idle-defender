@@ -210,12 +210,11 @@ describe('enemy frames (ID-069)', () => {
   });
 
   it('never walks on a frozen pose: even the slowest walk shows every walk frame', () => {
-    // The slowest walker (a Horror) at its slowest: on researched razor wire in a slow field.
+    // The slowest walker (a Horror) at its slowest: on researched razor wire in Barbed Wire's band.
     const speeds = Object.values(ENEMIES).map((k) => k.speed);
-    const slowest =
-      Math.min(...speeds) * TRAP_RESEARCH['razor-wire'].slow * (1 - CARD.slowField.slow);
+    const slowest = Math.min(...speeds) * TRAP_RESEARCH['razor-wire'].slow * (1 - CARD.wire.slow);
     expect(slowest).toBeLessThan(TRAPS.wire.slow * Math.min(...speeds));
-    // About 3.7 px/s: a stride each 5.4 s, so over 12 s (after a second's start-up) it steps
+    // About 3.4 px/s: a stride each 5.9 s, so over 12 s (after a second's start-up) it steps
     // through every frame, at the pace its feet cover the ground.
     const frames = walkFrames(slowest, 1, 12).slice(60);
     expect(new Set(frames)).toEqual(new Set([0, 1, 2]));

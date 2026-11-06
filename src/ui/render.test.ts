@@ -28,12 +28,14 @@ import {
 import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy, HordeState } from '../core/horde.ts';
 import { carpet } from '../core/skills.ts';
+import { reloadTime } from '../core/stats.ts';
 import { enemy } from '../core/testing.ts';
 import { ANIM, Animator } from './anim.ts';
 import {
   FIGHT_FRAME,
   frameCamera,
   HEIGHT_SCALE,
+  postFloor,
   project,
   TILT,
   WALL_CARD,
@@ -42,14 +44,19 @@ import {
   wallPulse,
   type Camera,
 } from './projection.ts';
-import { GROUND_TILE, SLOW_FIELD, SURROUND_BLOCK } from './ground.ts';
+import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
 import {
   BULLET,
   bulletShape,
   drawScene,
   DUSK,
+  GRENADE,
+  grenadeAt,
   NAME_TAG_GAP,
   offFrame,
+  PLATE_H,
+  RELOAD_PIE,
+  reloadShare,
   SURVIVOR_BAR,
   TAIL,
   trapLook,
@@ -66,6 +73,7 @@ import {
   GUNNER_ART,
   GUNNER_LOOKS,
   LOOKS,
+  SKILL_ART,
   lookOf,
   TIER_ART,
   type Art,
@@ -649,7 +657,7 @@ describe('drawScene with art', () => {
     }
   });
 
-  it('draws a burning enemy, a Chain Lightning arc and an Explode on Kill ring (ID-022)', () => {
+  it('draws a burning enemy (ID-022) and a Frag Grenade in the air, then its blast (ID-077)', () => {
     const r = recorder();
     const strokes: unknown[] = [];
     const fills: unknown[] = [];
@@ -679,20 +687,35 @@ describe('drawScene with art', () => {
       ...blank(),
       time,
       enemies: [shambler(0, burnUntil)],
-      arcs: [{ fromX: 700, fromY: 300, x: 760, y: 320, at: 1 }],
-      pops: [{ x: 700, y: 300, at: 1 }],
+      grenades: [
+        { fromX: 420, fromY: 360, x: 760, y: 320, at: 0.8, lands: 1.4, burst: time >= 1.4 },
+      ],
     });
+    const blasts = () => r.drawn.filter((id) => id === SKILL_ART.airstrike).length;
+    // In the air: the grenade's dark olive ball; no blast yet.
     drawScene(r.ctx, r.art, scene(1, 2), CAM, VIEW);
-    expect(strokes).toContain('#cfe6ff');
-    expect(strokes).toContain('#ff9a3c');
+    expect(fills).toContain('#8a9a4a');
     expect(fills).toContain('#ff7a1a');
-    // Later: the arc and ring have faded, the burn is out.
-    strokes.length = 0;
+    expect(blasts()).toBe(0);
+    // Landed: the blast art, no ball.
+    fills.length = 0;
+    drawScene(r.ctx, r.art, scene(1.5, 2), CAM, VIEW);
+    expect(fills).not.toContain('#8a9a4a');
+    expect(blasts()).toBe(1);
+    // Later: the blast has faded, the burn is out.
     fills.length = 0;
     drawScene(r.ctx, r.art, scene(3, 2), CAM, VIEW);
-    expect(strokes).not.toContain('#cfe6ff');
-    expect(strokes).not.toContain('#ff9a3c');
+    expect(fills).not.toContain('#8a9a4a');
     expect(fills).not.toContain('#ff7a1a');
+    expect(blasts()).toBe(1);
+  });
+
+  it('a Frag Grenade flies from its thrower to where it lands, highest at the middle', () => {
+    const g = { fromX: 400, fromY: 300, x: 800, y: 500, at: 1, lands: 2, burst: false };
+    expect(grenadeAt(g, 1)).toEqual({ x: 400, y: 300, z: 0 });
+    expect(grenadeAt(g, 1.5)).toEqual({ x: 600, y: 400, z: GRENADE.arc });
+    expect(grenadeAt(g, 2)).toEqual({ x: 800, y: 500, z: 0 });
+    expect(grenadeAt(g, 5)).toEqual({ x: 800, y: 500, z: 0 });
   });
 
   it("draws a broken gate as its tier's rubble only, in every tier", () => {
@@ -2149,6 +2172,237 @@ describe('the horde-only fight (ID-068)', () => {
       expect(plain.map((t) => t.text)).toEqual([d.name]);
     });
   });
+
+  describe('reload pie (ID-078)', () => {
+    /** `scene` with survivor `i` out of rounds, their reload ending `left` s after its time. */
+    const reloading = (scene: Scene, i: number, left: number): Scene => ({
+      ...scene,
+      defenders: scene.defenders.map((d, j) =>
+        j === i
+          ? {
+              ...d,
+              ammo: { ...d.ammo, primary: 0 },
+              reloadedAt: { ...d.reloadedAt, primary: scene.time + left },
+            }
+          : d,
+      ),
+    });
+    type Arc = { x: number; y: number; r: number; a0: number; a1: number; style: string };
+    /** Every arc traced with the fill or stroke style then set; plate rects; draw order. */
+    const pies = (scene: Scene, cam: Camera) => {
+      const r = recorder();
+      const arcs: Arc[] = [];
+      const plates: { x: number; y: number; w: number; h: number }[] = [];
+      const order: string[] = [];
+      const ctx = r.ctx as unknown as { fillStyle: string; strokeStyle: string };
+      Object.assign(r.ctx, {
+        arc: (x: number, y: number, rad: number, a0: number, a1: number) => {
+          arcs.push({ x, y, r: rad, a0, a1, style: `${ctx.fillStyle}|${ctx.strokeStyle}` });
+          order.push('arc');
+        },
+        fillRect: (x: number, y: number, w: number, h: number) => {
+          if (ctx.fillStyle === 'rgba(21, 23, 26, 0.6)') plates.push({ x, y, w, h });
+        },
+        fillText: (text: string) => order.push(`text:${text}`),
+        measureText: (t: string) => ({ width: t.length * 6 }),
+        drawImage: (img: { id: ArtId }) => order.push(img.id),
+      });
+      drawScene(r.ctx, r.art, scene, cam, { w: 1280, h: 720 });
+      return { arcs, plates, order };
+    };
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const fill = (a: Arc) => a.style.split('|')[0];
+    const stroke = (a: Arc) => a.style.split('|')[1];
+    // The wedge: filled in the reload colour at the disc's radius.
+    const wedges = (arcs: Arc[]) =>
+      arcs.filter((a) => fill(a) === '#ffc94d' && a.r === RELOAD_PIE.r);
+    /** A pie's arcs: its see-through disc, its wedge and its pale ring just outside. */
+    const pieArcs = (arcs: Arc[]) =>
+      arcs.filter(
+        (a) =>
+          (a.r === RELOAD_PIE.r && ['rgba(21, 23, 26, 0.6)', '#ffc94d'].includes(fill(a)!)) ||
+          (a.r === RELOAD_PIE.r + RELOAD_PIE.edge / 2 && stroke(a) === 'rgba(216, 212, 204, 0.7)'),
+      );
+    /** The name plate nearest over a point's feet: the defender's own. */
+    const plateOver = (
+      plates: { x: number; y: number; w: number; h: number }[],
+      feet: { sx: number; sy: number },
+    ) =>
+      plates
+        .filter((p) => p.x < feet.sx && p.x + p.w > feet.sx && p.h === PLATE_H && p.y < feet.sy)
+        .sort((a, b) => b.y - a.y)[0];
+
+    it('shows nothing while every survivor has rounds', () => {
+      const scene = squadScene(3);
+      for (const d of scene.defenders) expect(reloadShare(d, scene.time)).toBeNull();
+      const { arcs } = pies(scene, cam);
+      expect(pieArcs(arcs)).toEqual([]);
+    });
+
+    it('fills over the reload time, from empty to full, then goes once the gun is ready', () => {
+      const scene = squadScene(1);
+      const d = scene.defenders[0]!;
+      const total = reloadTime(d, d.loadout.primary);
+      expect(total).toBeGreaterThan(0);
+      const at = (left: number, t = scene.time) =>
+        reloadShare(reloading(scene, 0, left).defenders[0]!, t);
+      expect(at(total)).toBeCloseTo(0, 9);
+      expect(at(total / 2)).toBeCloseTo(0.5, 9);
+      expect(at(total / 4)).toBeCloseTo(0.75, 9);
+      expect(at(0)).toBeNull(); // ready now
+      expect(at(-1)).toBeNull(); // ready since
+      // Rounds back in: no pie, whatever the clock says.
+      const refilled = {
+        ...reloading(scene, 0, 1).defenders[0]!,
+        ammo: { primary: 1, secondary: 0 },
+      };
+      expect(reloadShare(refilled, scene.time)).toBeNull();
+    });
+
+    it('with Speed Loaders, fills over the shorter reload: empty when it starts (ID-077)', () => {
+      const scene = squadScene(1);
+      const d = scene.defenders[0]!;
+      const total = reloadTime(d, d.loadout.primary) * CARD.loaders;
+      const at = (left: number) =>
+        reloadShare(reloading(scene, 0, left).defenders[0]!, scene.time, ['speed-loaders']);
+      expect(at(total)).toBeCloseTo(0, 9);
+      expect(at(total / 2)).toBeCloseTo(0.5, 9);
+    });
+
+    it("tracks a Gunner's primary while their sidearm fires", () => {
+      const scene = squadScene(1);
+      const d = reloading(scene, 0, 1).defenders[0]!;
+      const share = reloadShare(d, scene.time);
+      expect(share).not.toBeNull();
+      for (const secondary of [0, 3, 12]) {
+        const firing = {
+          ...d,
+          ammo: { ...d.ammo, secondary },
+          reloadedAt: { ...d.reloadedAt, secondary: scene.time + 0.3 },
+        };
+        expect(reloadShare(firing, scene.time)).toBe(share);
+      }
+      // A loaded primary shows nothing even with the sidearm reloading.
+      const sidearmOnly = {
+        ...scene.defenders[0]!,
+        ammo: { ...scene.defenders[0]!.ammo, secondary: 0 },
+        reloadedAt: { ...scene.defenders[0]!.reloadedAt, secondary: scene.time + 1 },
+      };
+      expect(reloadShare(sidearmOnly, scene.time)).toBeNull();
+    });
+
+    it("draws one pie, over the reloading survivor's name and clear of it, after every sprite", () => {
+      const base = squadScene(3);
+      const d0 = base.defenders[1]!;
+      const total = reloadTime(d0, d0.loadout.primary);
+      const scene = reloading(base, 1, total / 2);
+      const { arcs, plates, order } = pies(scene, cam);
+      const feet = project(scene.defenders[1]!, cam);
+      // One wedge, half way round clockwise from the top.
+      const wedge = wedges(arcs);
+      expect(wedge).toHaveLength(1);
+      expect(wedge[0]!.x).toBeCloseTo(feet.sx, 9);
+      expect(wedge[0]!.a0).toBeCloseTo(-Math.PI / 2, 9);
+      expect(wedge[0]!.a1 - wedge[0]!.a0).toBeCloseTo(Math.PI, 9);
+      // Its disc, wedge and edge all on one spot: the only pie drawn.
+      const pie = pieArcs(arcs);
+      expect(pie).toHaveLength(3);
+      for (const a of pie) expect([a.x, a.y]).toEqual([wedge[0]!.x, wedge[0]!.y]);
+      // Its bottom edge `gap` over the top of this survivor's own name plate (the nearest
+      // over their feet), so it hides no name.
+      const plate = plateOver(plates, feet)!;
+      expect(plate).toBeDefined();
+      expect(wedge[0]!.y).toBeLessThan(plate.y);
+      const bottom = wedge[0]!.y + RELOAD_PIE.r + RELOAD_PIE.edge;
+      expect(plate.y - bottom).toBeCloseTo(RELOAD_PIE.gap, 9);
+      // After the last sprite, and before every name, so where survivors crowd together a
+      // name is never under a pie.
+      const lastImage = order.findLastIndex((o) => o !== 'arc' && !o.startsWith('text:'));
+      expect(order.lastIndexOf('arc')).toBeGreaterThan(lastImage);
+      expect(order.findIndex((o) => o.startsWith('text:'))).toBeGreaterThan(
+        order.lastIndexOf('arc'),
+      );
+    });
+
+    it("sits over a full-game defender's titled name plate the same way", () => {
+      const game = newGame();
+      const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+      const i = h.defenders.findIndex((x) => h.posts.some((p) => p.id === x.postId));
+      const d = h.defenders[i]!;
+      expect(d.plain).toBeFalsy();
+      const scene = reloading(h, i, reloadTime(d, d.loadout.primary) / 4);
+      const { arcs, plates } = pies({ ...scene, defenders: [scene.defenders[i]!] }, cam);
+      const wedge = wedges(arcs);
+      expect(wedge).toHaveLength(1);
+      expect(wedge[0]!.a1 - wedge[0]!.a0).toBeCloseTo(1.5 * Math.PI, 9);
+      const post = h.posts.find((p) => p.id === d.postId)!;
+      const feet = project({ x: d.x, y: d.y, z: postFloor(h.layers, post) }, cam);
+      const plate = plateOver(plates, feet)!;
+      expect(plate).toBeDefined();
+      const bottom = wedge[0]!.y + RELOAD_PIE.r + RELOAD_PIE.edge;
+      expect(plate.y - bottom).toBeCloseTo(RELOAD_PIE.gap, 9);
+    });
+
+    it('draws an empty disc at the start of a reload, and none in the build scene', () => {
+      const scene = squadScene(1);
+      const d = scene.defenders[0]!;
+      const start = reloading(scene, 0, reloadTime(d, d.loadout.primary));
+      const { arcs } = pies(start, cam);
+      expect(wedges(arcs)).toEqual([]);
+      expect(pieArcs(arcs)).toHaveLength(2);
+      const r = recorder();
+      const traced: Arc[] = [];
+      const c = r.ctx as unknown as { fillStyle: string; strokeStyle: string };
+      Object.assign(r.ctx, {
+        arc: (x: number, y: number, rad: number, a0: number, a1: number) =>
+          traced.push({ x, y, r: rad, a0, a1, style: `${c.fillStyle}|${c.strokeStyle}` }),
+      });
+      drawScene(
+        r.ctx,
+        r.art,
+        start,
+        cam,
+        { w: 1280, h: 720 },
+        {
+          selected: null,
+          hover: null,
+          ghosts: { slots: [], lines: [] },
+        },
+      );
+      expect(pieArcs(traced)).toEqual([]);
+    });
+
+    it('shows while a survivor really reloads in a fight, and goes when they are loaded again', () => {
+      let s: HordeState = squadScene(SQUAD_CAP) as HordeState;
+      const empty = () => s.defenders.find((d) => d.ammo.primary === 0);
+      while (!empty() && s.time < 120) s = tick(s, STEP);
+      const d = empty();
+      expect(d, 'a survivor emptied their magazine').toBeDefined();
+      const first = reloadShare(d!, s.time)!;
+      expect(first).not.toBeNull();
+      expect(first).toBeLessThan(0.1);
+      const id = d!.id;
+      let last = first;
+      // It grows every step until the gun is ready (the refill lands on the next step).
+      for (;;) {
+        s = tick(s, STEP);
+        const now = s.defenders.find((x) => x.id === id);
+        if (!now || now.ammo.primary > 0) break;
+        const share = reloadShare(now, s.time);
+        if (share === null) {
+          expect(s.time).toBeGreaterThanOrEqual(now.reloadedAt.primary - 1e-6);
+          break;
+        }
+        expect(share).toBeGreaterThan(last);
+        last = share;
+      }
+      expect(last).toBeGreaterThan(0.9);
+      // Loaded again: no pie.
+      while (s.defenders.find((x) => x.id === id)?.ammo.primary === 0) s = tick(s, STEP);
+      const after = s.defenders.find((x) => x.id === id);
+      if (after) expect(reloadShare(after, s.time)).toBeNull();
+    });
+  });
 });
 
 describe('the field’s edges in a fight (ID-068)', () => {
@@ -2317,24 +2571,25 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(trace(fight({ repairAt: 10 }, { barrierAt: 9.8 })).ctx.globalAlpha).toBe(1);
   });
 
-  it('Slow Field: a faint strip in front of the outermost standing layer, only with the card', () => {
-    // No OffscreenCanvas under test: the tint alone shows, across the strip's full height.
+  it('Barbed Wire: a faint band 250–400 units in front of the outermost layer, only with the card', () => {
+    // No OffscreenCanvas under test: the tint alone shows, across the band's full height.
     const tint = (s: Scene, build: BuildOverlay | null = null) =>
-      trace(s, build).ops.filter((o) => o.op === 'fill' && o.style === SLOW_FIELD.tint.colour);
-    const on = fight({}, { taken: ['slow-field'] });
-    const strip = tint(on);
-    expect(strip).toHaveLength(1);
-    const from = on.layers[0]!.x + WALL.depth;
-    const a = project({ x: from, y: 0 }, CAM);
-    const b = project({ x: from + CARD.slowField.reach, y: FIELD.height }, CAM);
-    expect(strip[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
-    expect(strip[0]!.alpha).toBeCloseTo(SLOW_FIELD.tint.alpha, 9);
+      trace(s, build).ops.filter((o) => o.op === 'fill' && o.style === WIRE.tint.colour);
+    const on = fight({}, { taken: ['barbed-wire'] });
+    const band = tint(on);
+    expect(band).toHaveLength(1);
+    const front = on.layers[0]!.x + WALL.depth;
+    const a = project({ x: front + CARD.wire.from, y: 0 }, CAM);
+    const b = project({ x: front + CARD.wire.to, y: FIELD.height }, CAM);
+    expect(band[0]!.at).toEqual([a.sx, a.sy, b.sx - a.sx, b.sy - a.sy]);
+    expect(band[0]!.alpha).toBeCloseTo(WIRE.tint.alpha, 9);
     expect(tint(fight({}))).toHaveLength(0);
-    expect(tint(fight({ hp: 0 }, { taken: ['slow-field'] }))).toHaveLength(0);
+    // The coils are out in the field: they stay when the wall falls.
+    expect(tint(fight({ hp: 0 }, { taken: ['barbed-wire'] }))).toHaveLength(1);
     expect(tint(on, overlay())).toHaveLength(0);
   });
 
-  it('Slow Field: drawn from its painted strip when the browser can paint one', () => {
+  it('Barbed Wire: drawn from its painted band when the browser can paint one', () => {
     const Painted = class {
       width: number;
       height: number;
@@ -2352,6 +2607,13 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
           translate: noop,
           scale: noop,
           createLinearGradient: () => ({ addColorStop: noop }),
+          beginPath: noop,
+          ellipse: noop,
+          moveTo: noop,
+          lineTo: noop,
+          stroke: noop,
+          fill: noop,
+          closePath: noop,
         };
       }
     };
@@ -2360,10 +2622,10 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
       const r = recorder();
       const drawn: unknown[] = [];
       Object.assign(r.ctx, { drawImage: (img: unknown) => drawn.push(img) });
-      drawScene(r.ctx, r.art, fight({}, { taken: ['slow-field'] }), CAM, VIEW);
-      const strip = drawn.find((d) => d instanceof Painted) as InstanceType<typeof Painted>;
-      expect(strip.width).toBe(CARD.slowField.reach * SLOW_FIELD.px);
-      expect(strip.height).toBe(FIELD.height * SLOW_FIELD.px);
+      drawScene(r.ctx, r.art, fight({}, { taken: ['barbed-wire'] }), CAM, VIEW);
+      const band = drawn.find((d) => d instanceof Painted) as InstanceType<typeof Painted>;
+      expect(band.width).toBe((CARD.wire.to - CARD.wire.from) * WIRE.px);
+      expect(band.height).toBe(FIELD.height * WIRE.px);
     }
   });
 
