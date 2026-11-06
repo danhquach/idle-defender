@@ -70,6 +70,15 @@
   --rarity-military: #7fb0ec;
   --rarity-prototype: #c19aec;
   --rarity-relic: #e9c46a;
+  /* An Inventory slot's fill (ID-092): its rarity mixed into a mid grey, light enough
+     that a dark gun with its pale rim reads on it. */
+  --slot-rusty: #8f7569;
+  --slot-common: #858582;
+  --slot-military: #6e86a3;
+  --slot-prototype: #8c7ca3;
+  --slot-relic: #ab9969;
+  --color-gun-rim: rgb(240 236 224 / 85%);
+  --slot-size: 64px;
 
   /* Type scale: display sizes for titles and big numbers (first used by the top bar and
      build panel, ID-058 on), body sizes for the rest. */
@@ -840,7 +849,7 @@ body {
   font-size: var(--text-sm);
 }
 
-/* The drop's icon (ID-073): the gun's survivor sprite, cropped to hands and gun. */
+/* The drop's icon (ID-092): the gun's own icon, on its rarity's tint like an Inventory slot. */
 .tile-drop-head {
   display: flex;
   align-items: flex-start;
@@ -853,39 +862,36 @@ body {
 }
 
 .tile-icon {
-  position: relative;
+  display: grid;
   flex: none;
+  place-items: center;
   width: 56px;
   height: 56px;
   overflow: hidden;
-  border: 1px solid var(--rarity-common);
+  border: 2px solid var(--rarity-common);
   border-radius: var(--radius-sm);
-  background: var(--color-surface-active);
-}
-
-/* Every idle sprite is 192 px tall with the gun held low on the right. */
-.tile-icon-img {
-  position: absolute;
-  top: -26px;
-  right: -8px;
-  width: auto;
-  height: 96px;
+  background: var(--slot-common);
+  box-sizing: border-box;
 }
 
 .tile[data-rarity='rusty'] .tile-icon {
   border-color: var(--rarity-rusty);
+  background: var(--slot-rusty);
 }
 
 .tile[data-rarity='military'] .tile-icon {
   border-color: var(--rarity-military);
+  background: var(--slot-military);
 }
 
 .tile[data-rarity='prototype'] .tile-icon {
   border-color: var(--rarity-prototype);
+  background: var(--slot-prototype);
 }
 
 .tile[data-rarity='relic'] .tile-icon {
   border-color: var(--rarity-relic);
+  background: var(--slot-relic);
 }
 
 .tile-drop .tile-power {
@@ -1917,17 +1923,278 @@ body {
   box-sizing: border-box;
 }
 
-/* The Inventory (ID-079): its button left of the Menu's, and its view-only list. */
+/* The Inventory (ID-079, a grid since ID-092): its button left of the Menu's; a Weapons
+   tab of square slots (squad row over the stash) with the details beside them. */
 .inv-button {
   right: 119px;
 }
 
+/* A dialog head over a list (the Roster's): a divider under the title. */
 .inv-head {
   padding-bottom: var(--space-12);
   border-bottom: 1px solid var(--color-divider);
 }
 
-.inv-list {
+.inv-dialog {
+  width: min(760px, 100%);
+  height: min(660px, 100%);
+}
+
+.inv-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.inv-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.inv-details {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 240px;
+  padding: var(--space-16);
+  overflow-y: auto;
+  border-left: 1px solid var(--color-divider);
+  box-sizing: border-box;
+}
+
+.inv-details p {
+  margin: 0;
+}
+
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--slot-size));
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inv-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* One square per stash place: the gun's icon on its rarity's tint, framed in its colour. */
+.inv-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--slot-size);
+  height: var(--slot-size);
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid var(--rarity-common);
+  border-radius: var(--radius-md);
+  background: var(--slot-common);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.inv-slot[data-rarity='rusty'] {
+  border-color: var(--rarity-rusty);
+  background: var(--slot-rusty);
+}
+
+.inv-slot[data-rarity='military'] {
+  border-color: var(--rarity-military);
+  background: var(--slot-military);
+}
+
+.inv-slot[data-rarity='prototype'] {
+  border-color: var(--rarity-prototype);
+  background: var(--slot-prototype);
+}
+
+.inv-slot[data-rarity='relic'] {
+  border-color: var(--rarity-relic);
+  background: var(--slot-relic);
+}
+
+.inv-slot-empty {
+  border: 1px dashed var(--color-divider);
+  background: var(--color-surface-sunken);
+  cursor: default;
+}
+
+/* The slot under the pointer, whose details show: a dashed ring, the selected one solid. */
+.inv-slot[data-key]:not([aria-pressed='true']):hover {
+  outline: 2px dashed var(--color-focus);
+  outline-offset: 2px;
+  filter: brightness(1.12);
+}
+
+/* The selected slot: a ring outside the frame, so its rarity colour still shows. */
+.inv-slot[aria-pressed='true'] {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.inv-slot:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.inv-slot-text {
+  padding: 0 var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* dmg/s, bottom right; the set-ready mark, top left. */
+.inv-slot-badge,
+.inv-slot-ready {
+  position: absolute;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-xs);
+  background: var(--color-label-bg);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.inv-slot-badge {
+  right: 2px;
+  bottom: 2px;
+  color: var(--color-text);
+}
+
+.inv-slot-ready {
+  top: 2px;
+  left: 2px;
+  color: var(--color-ok-text);
+}
+
+.inv-who {
+  max-width: var(--slot-size);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* A gun's icon (ID-092): long guns lie across the square, a pale rim lifts them off it. */
+.gun-icon {
+  width: 86%;
+  height: auto;
+  transform: rotate(-35deg);
+  filter: drop-shadow(0 0 1px var(--color-gun-rim)) drop-shadow(0 0 1px var(--color-gun-rim));
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The SMG is the lighter gun: a little smaller than the rifle, so the two tell apart. */
+.gun-icon[data-gun='smg'] {
+  width: 68%;
+}
+
+.gun-icon[data-gun='pistol'] {
+  width: 72%;
+  transform: none;
+}
+
+.inv-name {
+  font-size: var(--text-heading);
+  font-weight: 600;
+  color: var(--rarity-common);
+}
+
+.inv-rarity {
+  font-size: var(--text-sm);
+  color: var(--rarity-common);
+}
+
+.inv-name[data-rarity='rusty'],
+.inv-rarity[data-rarity='rusty'],
+.inv-combine-row[data-rarity='rusty'] .inv-name {
+  color: var(--rarity-rusty);
+}
+
+.inv-name[data-rarity='military'],
+.inv-rarity[data-rarity='military'],
+.inv-combine-row[data-rarity='military'] .inv-name {
+  color: var(--rarity-military);
+}
+
+.inv-name[data-rarity='prototype'],
+.inv-rarity[data-rarity='prototype'],
+.inv-combine-row[data-rarity='prototype'] .inv-name {
+  color: var(--rarity-prototype);
+}
+
+.inv-name[data-rarity='relic'],
+.inv-rarity[data-rarity='relic'],
+.inv-combine-row[data-rarity='relic'] .inv-name {
+  color: var(--rarity-relic);
+}
+
+.inv-affixes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-body-sm);
+}
+
+.inv-affixes-none,
+.inv-where {
+  color: var(--color-text-muted);
+}
+
+.inv-power {
+  font-size: var(--text-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Combine (ID-091), in a stash gun's details: its set's count, button and confirm. */
+.inv-combine {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-6);
+  padding-top: var(--space-10);
+  border-top: 1px solid var(--color-divider);
+}
+
+.inv-combine-label {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.inv-combine-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-10);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.inv-combine-confirm .menu-row {
+  flex-wrap: wrap;
+}
+
+.inv-combine-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -1936,105 +2203,18 @@ body {
   list-style: none;
 }
 
-.inv-row {
+.inv-combine-row {
   display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  padding: var(--space-6) var(--space-10);
-  border: 1px solid var(--color-divider);
-  border-left: 3px solid var(--rarity-common);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-.inv-who {
-  flex: none;
-  width: 88px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-.inv-what {
-  display: flex;
-  flex: 1;
   flex-direction: column;
-  min-width: 0;
-}
-
-.inv-name {
-  font-weight: 600;
-  color: var(--rarity-common);
-}
-
-.inv-affixes {
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
 }
 
-.inv-power {
-  flex: none;
+.inv-combine-row .inv-name {
   font-size: var(--text-body-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
 }
 
-.inv-row[data-rarity='rusty'] {
-  border-left-color: var(--rarity-rusty);
-}
-
-.inv-row[data-rarity='rusty'] .inv-name {
-  color: var(--rarity-rusty);
-}
-
-.inv-row[data-rarity='military'] {
-  border-left-color: var(--rarity-military);
-}
-
-.inv-row[data-rarity='military'] .inv-name {
-  color: var(--rarity-military);
-}
-
-.inv-row[data-rarity='prototype'] {
-  border-left-color: var(--rarity-prototype);
-}
-
-.inv-row[data-rarity='prototype'] .inv-name {
-  color: var(--rarity-prototype);
-}
-
-.inv-row[data-rarity='relic'] {
-  border-left-color: var(--rarity-relic);
-}
-
-.inv-row[data-rarity='relic'] .inv-name {
-  color: var(--rarity-relic);
-}
-
-.inv-dialog .menu-body:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-
-/* Combine (ID-091): a set's count and its button on the right; the confirm in a box. */
-.inv-combine-button {
-  flex: none;
-}
-
-.inv-combine-confirm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-12);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-}
-
-.inv-combine-label {
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
+.inv-combine-affixes,
+.inv-combine-power {
   color: var(--color-text-muted);
 }
 
@@ -2045,6 +2225,24 @@ body {
 /* Focused by code after a combine, to be read out; it is no control, so no ring. */
 .inv-combine-result:focus {
   outline: none;
+}
+
+/* A narrow window: the details go under the grid, with their own scroll. */
+@media (max-width: 640px) {
+  .inv-dialog {
+    height: 100%;
+  }
+
+  .inv-panel {
+    flex-direction: column;
+  }
+
+  .inv-details {
+    width: auto;
+    max-height: 40%;
+    border-top: 1px solid var(--color-divider);
+    border-left: 0;
+  }
 }
 
 /* The Roster (ID-086): its button left of the Inventory's; survivor tiles, then a card. */
