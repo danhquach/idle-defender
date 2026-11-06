@@ -939,8 +939,12 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     const zone = body.querySelector<HTMLElement>('.inv-stash-zone');
     const d = dropAction(view, press.key, 'stash');
     if (zone && d.kind !== 'none') zone.dataset.drop = droppable(d) ? 'ok' : 'no';
-    // Nowhere to go with the stash full (a survivor's gun, the pistol): said at once.
-    const full = view.free === 0 && (press.key === 'pistol' || press.key.startsWith('squad:'));
+    // Held back only by the stash being full (a survivor's gun, or the pistol while
+    // someone holds a gun to send there): said at once.
+    const full =
+      view.free === 0 &&
+      (press.key.startsWith('squad:') ||
+        (press.key === 'pistol' && view.squad.some((s) => s.uid !== null)));
     say(full ? STASH_FULL : '', full);
     press.scroller = setInterval(edgeScroll, 16);
     follow(x, y);

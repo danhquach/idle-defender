@@ -462,6 +462,18 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(status().dataset.tone).toBe('refused');
   });
 
+  it('picking up the pistol says "Stash full" only while someone holds a gun', () => {
+    const one = setup(camp(1, full(), [gun('x', 'rifle', 'common')]));
+    drag(one.slot('pistol'), null, false);
+    expect(one.status().textContent).toBe(STASH_FULL);
+    one.inv.close();
+    // Everyone on the pistol already: the stash is no reason, so nothing is said.
+    const none = setup(camp(1, full()));
+    drag(none.slot('pistol'), null, false);
+    expect(none.status().textContent).toBe('');
+    none.inv.close();
+  });
+
   it('a drag release does not select the slot it lands on', () => {
     const { slot } = setup(camp(1, [...rusty(2), gun('r', 'rifle', 'rusty')]));
     drag(slot('stash:h1'), slot('stash:r'));
