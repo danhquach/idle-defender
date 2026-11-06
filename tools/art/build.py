@@ -22,7 +22,8 @@ Manifest asset keys (unknown keys stop the build):
   ref (id of the generation it edits, or a list of ids it combines: the
   first is the subject, the others what it takes on, ID-046), photo (a public
   domain photograph the generation was drawn from, credited in
-  docs/art-credits.md under its id), flip (mirror left to right),
+  docs/art-credits.md under its id), flip (mirror left to right), upend (turn
+  upside down, ID-103: the model draws a V reliably but not a ^),
   mutant (keep its colours saturated; everything else is muted, §15),
   white (drain every colour, so a glow painted with coloured rays reads as plain
   white light and keeps no pink from the background it was keyed out of, ID-041),
@@ -43,7 +44,17 @@ Manifest asset keys (unknown keys stop the build):
   the animation frame set it belongs to: a set is trimmed by one box round all
   its frames and scaled by one factor, so its frames line up by the feet; a frame
   is posed, or a repaint of a posed frame named by its single `ref`, ID-074: a
-  survivor look repaints the soldier's frame, keeping its pose and grip).
+  survivor look repaints the soldier's frame, keeping its pose and grip),
+  overlay (ID-103: {"part": id, "at": [x, y], "size": s, "turn": degrees}: that
+  part, keyed and turned clockwise by `turn` (optional, default 0), is pasted on
+  top of this sprite after it is trimmed, centred at x, y (shares of its width and
+  height) with its longer side s of this sprite's longer side, so every card icon
+  with a bullet shows the one approved bullet), draw (ID-103: {"shapes": [{"points":
+  [[x, y], ...], "fill": "#rrggbb"}, ...], "outline": px}: a sprite with no
+  generation, drawn by the build as those polygons in order on a DRAW_PX canvas,
+  each filled flat with a dark outline, every shape kept however small, for a
+  plain shape the model would not draw as asked; besides id, kind and draw it takes
+  only overlay and group, never a generation's keys such as model or prompt).
 
 A sprite has its magenta background keyed out to transparency, only its
 biggest shape kept (detached parts under KEEP of it are dropped), and is
@@ -64,7 +75,7 @@ from collections import deque
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "art-src" / "manifest.json"
@@ -74,7 +85,8 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
-    "palette", "edge", "part", "style", "photo", "white", "pose", "frames",
+    "palette", "edge", "part", "style", "photo", "white", "pose", "frames", "overlay",
+    "upend", "draw",
 }
 POSES = ROOT / "art-src" / "poses"
 # The column each puppet family stands on in its 512 px canvas (tools/art/puppets.py:
@@ -82,6 +94,14 @@ POSES = ROOT / "art-src" / "poses"
 POSE_HIP = {"enemy": 266, "soldier": 240}
 CONCEPTS = ROOT / "art-concepts"
 REQUIRED = {"id", "kind", "model", "seed", "size", "prompt"}
+DRAWN_REQUIRED = {"id", "kind", "draw"}
+# A drawn sprite has no generation, so it takes none of a generation's keys.
+DRAWN_KEYS = DRAWN_REQUIRED | {"overlay", "group"}
+# A drawn sprite's canvas (its points are in these px) and how much finer it is drawn
+# before being scaled down, for smooth edges.
+DRAW_PX, DRAW_FINE = 512, 4
+# The dark outline of the generated icons, for drawn ones.
+OUTLINE = "#1a1a1a"
 SPRITE_PX = 192
 TEXTURE_PX = 256
 PICTURE_PX = 1152
@@ -182,11 +202,86 @@ def prepare(img: Image.Image, asset: dict) -> Image.Image:
         img = img.crop(box)
     if asset.get("flip"):
         img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if asset.get("upend"):
+        img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
     if asset.get("white") or not asset.get("mutant"):
         rgb, alpha = img.convert("RGB"), img.getchannel("A")
         img = ImageEnhance.Color(rgb).enhance(0 if asset.get("white") else MUTED)
         img.putalpha(alpha)
     return img
+
+
+def check_draw(asset: dict) -> None:
+    """A drawn sprite: polygons of 3+ points on the DRAW_PX canvas, each with a #rrggbb fill."""
+    d = asset["draw"]
+    shapes = d.get("shapes") if isinstance(d, dict) else None
+    point = lambda p: (  # noqa: E731
+        isinstance(p, list)
+        and len(p) == 2
+        and all(isinstance(v, (int, float)) and 0 <= v <= DRAW_PX for v in p)
+    )
+    shape = lambda s: (  # noqa: E731
+        isinstance(s, dict)
+        and set(s) == {"points", "fill"}
+        and isinstance(s["points"], list)
+        and len(s["points"]) >= 3
+        and all(map(point, s["points"]))
+        and isinstance(s["fill"], str)
+        and re.fullmatch(r"#[0-9a-f]{6}", s["fill"]) is not None
+    )
+    if not (
+        asset["kind"] == "sprite"
+        and isinstance(d, dict)
+        and set(d) == {"shapes", "outline"}
+        and isinstance(shapes, list)
+        and shapes
+        and all(map(shape, shapes))
+        and isinstance(d["outline"], (int, float))
+        and 0 < d["outline"] <= DRAW_PX / 8
+    ):
+        sys.exit(
+            f"{asset['id']}: draw is {{shapes: [{{points: [[x, y], ...] in 0..{DRAW_PX}, "
+            "fill: #rrggbb}, ...], outline: px}, on a sprite"
+        )
+
+
+def drawn(asset: dict) -> Image.Image:
+    """
+    A drawn sprite (ID-103: a shape the model would not draw as asked): each polygon
+    filled flat and edged with a dark outline of round joins, like the generated icons'.
+    """
+    d, k = asset["draw"], DRAW_FINE
+    img = Image.new("RGBA", (DRAW_PX * k, DRAW_PX * k))
+    pen = ImageDraw.Draw(img)
+    width = round(d["outline"] * k)
+    r = width / 2
+    for shape in d["shapes"]:
+        pts = [(x * k, y * k) for x, y in shape["points"]]
+        pen.polygon(pts, fill=shape["fill"])
+        pen.line([*pts, pts[0]], fill=OUTLINE, width=width, joint="curve")
+        for x, y in pts:
+            pen.ellipse((x - r, y - r, x + r, y + r), fill=OUTLINE)
+    img = img.resize((DRAW_PX, DRAW_PX), Image.Resampling.LANCZOS)
+    return img.crop(img.getbbox())
+
+
+def overlaid(
+    img: Image.Image, part: Image.Image, at: list[float], size: float, turn: float = 0
+) -> Image.Image:
+    """`part` pasted over trimmed sprite `img` (see `overlay`), the canvas grown if it pokes out."""
+    if turn:
+        part = part.rotate(-turn, Image.Resampling.BICUBIC, expand=True)
+        part = part.crop(part.getbbox())
+    part = scaled(part, size * max(img.size) / max(part.size))
+    x = round(at[0] * img.width - part.width / 2)
+    y = round(at[1] * img.height - part.height / 2)
+    left, top = max(0, -x), max(0, -y)
+    w = max(img.width, x + part.width) + left
+    h = max(img.height, y + part.height) + top
+    out = Image.new("RGBA", (w, h))
+    out.alpha_composite(img, (left, top))
+    out.alpha_composite(part, (x + left, y + top))
+    return out
 
 
 def frames_trimmed(
@@ -300,17 +395,23 @@ def check(
     variants: set[str],
     styles: set[str],
     posed: set[str],
+    parts: set[str] = frozenset(),
 ) -> None:
     unknown = set(asset) - KEYS
     name = asset.get("id", "?")
-    missing = REQUIRED - set(asset)
+    is_drawn = "draw" in asset
+    missing = (DRAWN_REQUIRED if is_drawn else REQUIRED) - set(asset)
+    if is_drawn:
+        unknown |= set(asset) - DRAWN_KEYS
     if unknown or missing:
         sys.exit(f"{name}: unknown keys {sorted(unknown)}, missing {sorted(missing)}")
-    if asset["model"] not in models:
+    if is_drawn:
+        check_draw(asset)
+    elif asset["model"] not in models:
         sys.exit(f"{name}: model {asset['model']} is not in the art-credits allow-list")
     if asset["kind"] not in ("sprite", "texture", "picture"):
         sys.exit(f"{name}: kind must be sprite, texture or picture")
-    if asset.get("style", asset["kind"]) not in styles:
+    if not is_drawn and asset.get("style", asset["kind"]) not in styles:
         sys.exit(f"{name}: no style {asset.get('style', asset['kind'])} in the manifest")
     if "part" in asset and (asset["part"] is not True or asset["kind"] != "sprite"):
         sys.exit(f"{name}: part is true, on a sprite")
@@ -360,6 +461,31 @@ def check(
             f"{name}: frames names a set, on a posed sprite (or a repaint of one) "
             "with no group or part"
         )
+    if "upend" in asset and (asset["upend"] is not True or asset["kind"] != "sprite"):
+        sys.exit(f"{name}: upend is true, on a sprite")
+    over = asset.get("overlay")
+    if over is not None:
+        at = over.get("at") if isinstance(over, dict) else None
+        size = over.get("size") if isinstance(over, dict) else None
+        turn = over.get("turn", 0) if isinstance(over, dict) else None
+        if not (
+            asset["kind"] == "sprite"
+            and not asset.get("part")
+            and "frames" not in asset
+            and {"part", "at", "size"} <= set(over) <= {"part", "at", "size", "turn"}
+            and isinstance(turn, (int, float))
+            and -360 <= turn <= 360
+            and over["part"] in parts
+            and isinstance(at, list)
+            and len(at) == 2
+            and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in at)
+            and isinstance(size, (int, float))
+            and 0 < size <= 1
+        ):
+            sys.exit(
+                f"{name}: overlay is {{part, at: [x, y] in 0..1, size in (0, 1], turn?}}, "
+                "naming a part, on a sprite that is not a part or a frame"
+            )
 
 
 def main(only: list[str]) -> None:
@@ -369,9 +495,10 @@ def main(only: list[str]) -> None:
     textures = {a["id"] for a in assets if a.get("kind") == "texture"}
     variants = {a["id"] for a in assets if "edge" in a}
     posed = {a["id"] for a in assets if "pose" in a}
+    parts_all = {a["id"] for a in assets if a.get("part") and a.get("kind") == "sprite"}
     models = allowed_models()
     for asset in assets:
-        check(asset, models, ids, textures, variants, set(manifest["style"]), posed)
+        check(asset, models, ids, textures, variants, set(manifest["style"]), posed, parts_all)
     unknown = set(only) - ids
     if unknown:
         sys.exit(f"not in the manifest: {sorted(unknown)}")
@@ -383,18 +510,27 @@ def main(only: list[str]) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     sources: dict[str, Image.Image] = {}
     for asset in assets:
+        if "draw" in asset:
+            continue
         src_path = GEN / f"{asset['id']}.jpg"
         if not src_path.exists():
             sys.exit(f"{asset['id']}: no generation at art-src/gen/{asset['id']}.jpg")
         sources[asset["id"]] = Image.open(src_path)
     families = {a["edge"] for a in assets if "edge" in a}
+    by_id = {a["id"]: a for a in assets}
     built: dict[str, Image.Image] = {}
     for asset in assets:
         if asset.get("part"):
             continue
-        src = sources[asset["id"]]
+        src = sources.get(asset["id"])
         if asset["kind"] == "sprite":
-            built[asset["id"]] = prepare(src, asset)
+            built[asset["id"]] = drawn(asset) if "draw" in asset else prepare(src, asset)
+            over = asset.get("overlay")
+            if over:
+                part = prepare(sources[over["part"]], by_id[over["part"]])
+                built[asset["id"]] = overlaid(
+                    built[asset["id"]], part, over["at"], over["size"], over.get("turn", 0)
+                )
             continue
         if asset["kind"] == "picture":
             built[asset["id"]] = picture(src)
@@ -413,7 +549,6 @@ def main(only: list[str]) -> None:
     for asset in assets:
         if "frames" in asset:
             sets.setdefault(asset["frames"], []).append(asset["id"])
-    by_id = {a["id"]: a for a in assets}
     set_longest: dict[str, int] = {}
     for name, members in sets.items():
         poses = {by_id[i].get("pose", "").split("-")[0] for i in members}
