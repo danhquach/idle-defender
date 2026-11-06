@@ -44,6 +44,8 @@ export interface Survivor {
   name: string;
   xp: number;
   stats: Stats;
+  /** Stat points banked from an older save's levels (ID-096); absent when none. */
+  banked?: number;
   weapon: OwnedWeapon;
 }
 
@@ -285,6 +287,7 @@ export function survivorDefender(s: Survivor): RosterDefender {
       : { primary: 'pistol', secondary: w, item: null },
     xp: s.xp,
     stats: { ...s.stats },
+    ...(s.banked ? { banked: s.banked } : {}),
     injuredUntil: null,
   };
 }

@@ -600,7 +600,8 @@ bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).
 
 ### Stats
 
-Each defender level gives **stat points** (3 per level, starting point):
+Each defender level gives **1 stat point** (ID-096; 3 before it), from a
+horde or a patrol alike, so every point is a choice:
 
 Four stats, each with one clear role, each working with any weapon and any
 loadout (ID-084):
@@ -618,21 +619,85 @@ loadout (ID-084):
   win reaches level 2 after Horde 2 and level 3 after Horde 4. Points are
   spent on the result screen after a win (or on the roster); unspent points
   carry over.
-- **Every bonus shrinks as points pile up** *(starting points, ID-084)*: a
-  bonus with cap C from P points is **C × P / (P + 20)**, so the first
-  points give about C/20 each, 20 points give half the cap and no number of
-  points reaches it. Stacking one stat can't break a fight.
+- **A point is split across its stat's active effects, and every bonus
+  shrinks as points pile up** *(starting points, ID-084, ID-096)*: with P
+  points in a stat that drives n **active** effects (the ones that work in
+  the build), each effect with cap C gives **C × P / (P + 10 × n)**. A stat
+  with one effect reaches half its cap at 10 points, one with three at 30;
+  no number of points reaches the cap, so stacking one stat can't break a
+  fight. Before the split, 1 new point is worth 2 old ones (ID-084's
+  C × P / (P + 20)).
+- **Active effects today** (`STAT_ACTIVE` in the core, the one place they
+  are listed): Instinct 3 (max HP, armour, injury dodge), Agility 1
+  (reload; move speed is planned, not built), Sharp Mind 3 (crit chance,
+  crit damage, spread), Tinker none (locked).
+- **An effect built later joins its stat's split:** listed in
+  `STAT_ACTIVE`, its stat's n goes up by 1, and every point already spent
+  in that stat is shared across the new set, so the existing effects'
+  bonuses go down. The ticket that builds it notes the change on the
+  survivor's stats. A planned effect gets no share and isn't shown as a
+  bonus until then.
+- The survivor card shows each active effect now and with the next point
+  ("Max HP 100 → 103"); each + button's hint, on the result screen and the
+  roster, says what the next point adds to each ("Next point: +3 max HP ·
+  +0.13 armour · +1.0% survive").
 
-  | Bonus | Cap | 1 point | 10 points | 20 points |
+  | Bonus | Cap | n | 1 point | 3 points | 5 points | 10 points |
+  |---|---|---|---|---|---|---|
+  | Instinct: max HP (over the base 100, rounded to whole HP) | +100 | 3 | +3 | +9 | +14 | +25 |
+  | Instinct: armour (flat off each hit; a hit keeps at least half its damage) | 4 | 3 | 0.13 | 0.36 | 0.57 | 1 |
+  | Instinct: injury dodge (a hit that would drop them to 0 HP leaves them at 1 HP instead) | 30% | 3 | 1.0% | 2.7% | 4.3% | 7.5% |
+  | Agility: reload time | −50% | 1 | −4.5% | −11.5% | −16.7% | −25% |
+  | Sharp Mind: spread | −50% | 3 | −1.6% | −4.5% | −7.1% | −12.5% |
+  | Sharp Mind: crit chance (added to the Gunner's +5% on gun shots; +35% before ID-096) | +50% | 3 | +1.6% | +4.5% | +7.1% | +12.5% |
+  | Sharp Mind: crit damage (over the base ×2) | +×2 | 3 | +×0.06 | +×0.18 | +×0.29 | +×0.5 |
+
+- **Hold to add (ID-096):** a click or tap on a + stat button adds 1 point;
+  held past 400 ms it adds 1 more every 333 ms (about 3 a second) until
+  release, the pointer or finger sliding off, a scroll, no points left or
+  the screen closing. Holding Enter or Space does the same. A long press
+  opens no touch menu and selects no text; the locked Tinker button ignores
+  it. On the result screen's survivor cards and on the roster.
+- **Old saves (v13 and older, ID-096):** the levels they reached gave 3
+  points each, so each defender and survivor waiting to join **banks** the
+  2 a level more than today's 1 (`banked`, kept from then on): no point
+  earned before, spent or not, is lost, and each new level gives 1.
+
+- **Balance (ID-096):** with 1 point a level the squad grows more slowly
+  and late hordes push to the wire and the wall again. The horde-only
+  scripted player now also equips the stash's strongest guns after each win
+  (`gearUp`), as a player does; without that, no stat tuning can say how a
+  real squad fares late. Measured over 10 seeds to Horde 22, first try at
+  each horde (enemies reaching the Barbed Wire band, 400 px from the wall,
+  in every fight on both):
+
+  | | Wins per horde | Wall hit, Hordes 8–22 | Nearest enemy, median of medians |
+  |---|---|---|---|
+  | Main (3 points a level) | 10/10 | 0–2 of 10 | about 170 px |
+  | ID-096 (1 point a level, as built) | 8–10 of 10 | 1–5 of 10 | about 60 px |
+
+  Survivors are level 12-ish at Hordes 18–19; a balance test plays 4 seeds
+  to Horde 18 and checks enemies reach the wire band in every fight from
+  Horde 15 and hit the wall in some. The horde-only enemy HP growth (×1.20
+  then ×1.03) stays as it was: this hits the target (enemies regularly reach
+  the wire and sometimes the wall from mid-game) without restoring the old
+  survivor power.
+
+  The full game's targets were grid-tuned (each row: Horde 10 firing line
+  wins against the brood / charge / regen Horror of 20 seeds; Horde a
+  campaign without building reaches, 10 seeds; target ≥1 win each and 4–5):
+
+  | | Brood | Charge | Regen | Campaign reaches |
   |---|---|---|---|---|
-  | Instinct: max HP (over the base 100, rounded to whole HP) | +100 | +5 | +33 | +50 |
-  | Instinct: armour (flat off each hit; a hit keeps at least half its damage) | 4 | 0.19 | 1.33 | 2 |
-  | Instinct: injury dodge (a hit that would drop them to 0 HP leaves them at 1 HP instead) | 30% | 1.4% | 10% | 15% |
-  | Agility: reload time | −50% | −2.4% | −16.7% | −25% |
-  | Sharp Mind: spread | −50% | −2.4% | −16.7% | −25% |
-  | Sharp Mind: crit chance (added to the Gunner's +5% on gun shots) | +35% | +1.7% | +11.7% | +17.5% |
-  | Sharp Mind: crit damage (over the base ×2) | +×2 | +×0.1 | +×0.67 | +×1 |
+  | Main (3 points a level) | 4 | 20 | 19 | 5 on every seed |
+  | 1 point a level, nothing retuned | 0 | 19 | 4 | 5, one seed 6 |
+  | + crit cap 0.35 → 0.5, Broodmother every 25 s → 35 s (built) | 4 | 19 | 8 | 5 on every seed |
 
+  What didn't work: Sharp Mind caps alone (crit 0.5–0.7, crit damage
+  +×3–4) never beat the brood; full-game HP growth ×1.15 beat the brood
+  (2 of 20) but let a full firing line on the bare wall win too much at
+  Hordes 5–7 (45% at Horde 5, the target is at most 25%); ×1.16 still lost
+  every brood fight. Every Broodmother 30 s: 0 wins; 40 s: 14.
 - **Balance (ID-084):** the scripted player puts every point into the stat
   that suits the job: Sharp Mind, the damage stat, for a Gunner or a Ripper
   (and every horde-only survivor), Agility for an Engineer. With these
@@ -1079,7 +1144,7 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
   smashes walls and gates and hunts defenders in the camp like any enemy. Each
   boss horde's Horror has one ability, in turn: Horde 10 a **Broodmother**,
   20 a **Rammer**, 30 a **Regenerator**, then again from 40.
-  - **Broodmother:** every 25 s, 2 Shamblers at the wave's HP beside it, on its
+  - **Broodmother:** every 35 s (25 s before ID-096), 2 Shamblers at the wave's HP beside it, on its
     side of every wall; they pay their kills like any Shambler.
   - **Rammer:** every 10 s it charges at 3× speed for 2 s; its first wall hit
     in a charge does 2×.

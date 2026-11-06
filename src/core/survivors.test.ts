@@ -108,7 +108,9 @@ describe('rolling a survivor', () => {
       expect(RECRUIT_NAMES).toContain(s.name);
       expect(s.xp).toBe(xpForLevel(lvl));
       expect(level(s)).toBe(lvl);
+      // 1 point a level (ID-096).
       expect(spentPoints(s.stats)).toBe(POINTS_PER_LEVEL * (lvl - 1));
+      expect(POINTS_PER_LEVEL).toBe(1);
       expect(s.weapon.uid).toBe('s3-1');
     }
     expect(rollSurvivor(createRng(9), 'c2', 2, 2)).toEqual(rollSurvivor(createRng(9), 'c2', 2, 2));

@@ -244,10 +244,12 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     expect(buttons[3]!.title).toMatch(/^Unlocks later/);
     expect(document.activeElement?.textContent).toBe('+ Instinct (0)');
     expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe(SQUAD_POINTS_NOTE);
-    expect(root.querySelector('.debrief-hint')!.textContent).toBe(
+    // No stat summary line (ID-096): each card lists what the next point adds instead.
+    expect([...root.querySelectorAll('.debrief-hint')].map((p) => p.textContent)).not.toContain(
       'Instinct: more HP and armour · Agility: faster reloads · ' +
         'Sharp Mind: accuracy and crits · Tinker: unlocks later',
     );
+    expect(root.querySelector('.hud-pick-gains')!.textContent).toMatch(/^Instinct: \+\d+ max HP/);
     expect(root.querySelector('.hud-result-foot > .hud-button')!.textContent).toBe(startLabel(6));
   });
 });

@@ -7,23 +7,14 @@
 // (ID-074). Like the Inventory, the field goes inert behind it and an open Roster holds a
 // fight. Text reaches the page only through textContent.
 import { baseOf, heldName, isOwned, type Held } from '../core/armoury.ts';
-import { STAT_EFFECT, STAT_NAMES, STATS, type Rarity, type Stat } from '../core/data.ts';
+import { STAT_NAMES, STATS, type Rarity, type Stat } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
 import { isGun } from '../core/loadout.ts';
-import {
-  critChance,
-  critDamage,
-  dodgeChance,
-  isLocked,
-  levelOf,
-  maxHpOf,
-  reloadTime,
-  soft,
-  spreadOf,
-  unspentPoints,
-} from '../core/stats.ts';
-import { el, STAT_HINT, STAT_LOCKED_NOTE } from './hud.ts';
+import { isLocked, levelOf, maxHpOf, unspentPoints } from '../core/stats.ts';
+import { el, STAT_LOCKED_NOTE, statHint } from './hud.ts';
+import { holdable, holdRepeat } from './hold.ts';
+import { effectSteps } from './statlines.ts';
 import { ART_URLS, GUNNER_LOOKS, lookOf, type ArtId, type GunId } from './sprites.ts';
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as squadGear). */
@@ -101,37 +92,12 @@ export interface StatRow {
   hint: string;
 }
 
-const pct = (x: number): string => `${(x * 100).toFixed(1)}%`;
-const step = (label: string, now: string, next: string): string => `${label} ${now} → ${next}`;
-
-/** What `stat` gives `d` now and with one more point, for `d`'s gun (design §6, ID-084). */
-export function statEffects(d: RosterDefender, stat: Stat): string[] {
-  if (isLocked(stat)) return [STAT_LOCKED_NOTE];
-  const gun = heldGun(d);
-  const next: RosterDefender = { ...d, stats: { ...d.stats, [stat]: d.stats[stat] + 1 } };
-  const both = (f: (x: RosterDefender) => string): [string, string] => [f(d), f(next)];
-  switch (stat) {
-    case 'instinct': {
-      const armour = (x: RosterDefender): string =>
-        soft(x.stats.instinct, STAT_EFFECT.armour).toFixed(1);
-      return [
-        step('Max HP', ...both((x) => String(maxHpOf(x)))),
-        step('Armour per hit', ...both(armour)),
-        step('Survive a downing hit', ...both((x) => pct(dodgeChance(x)))),
-      ];
-    }
-    case 'agility':
-      return [step('Reload', ...both((x) => `${reloadTime(x, gun).toFixed(2)} s`))];
-    case 'mind':
-      return [
-        step('Crit chance', ...both((x) => pct(critChance(x)))),
-        step('Crit damage', ...both((x) => `×${critDamage(x).toFixed(2)}`)),
-        step('Spread', ...both((x) => `${spreadOf(x, gun).toFixed(2)}°`)),
-      ];
-    default:
-      return [];
-  }
-}
+/**
+ * What `stat` gives `d` now and with one more point, for `d`'s gun, one line per active
+ * effect (design §6, ID-084, ID-096).
+ */
+export const statEffects = (d: RosterDefender, stat: Stat): string[] =>
+  isLocked(stat) ? [STAT_LOCKED_NOTE] : effectSteps(d, stat);
 
 /** A survivor's card, laid out. */
 export interface SurvivorCard {
@@ -172,7 +138,7 @@ export function survivorCard(d: RosterDefender): SurvivorCard {
       points: d.stats[stat],
       locked: isLocked(stat),
       effects: statEffects(d, stat),
-      hint: STAT_HINT[stat],
+      hint: statHint(d, stat),
     })),
   };
 }
@@ -282,6 +248,7 @@ export function cardBlock(
     plus.type = 'button';
     plus.dataset.key = `add:${c.id}:${s.stat}`;
     plus.title = s.hint;
+    holdable(plus, `add:${c.id}:${s.stat}`);
     plus.disabled = s.locked || !canSpend || c.points <= 0;
     plus.setAttribute(
       'aria-label',
@@ -355,6 +322,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   dialog.tabIndex = -1;
   scrim.append(dialog);
   doc.body.append(scrim);
+  // Holding a card's + keeps adding points (ID-096).
+  holdRepeat(dialog);
   scrim.addEventListener('mousedown', (e) => {
     if (e.target === scrim) e.preventDefault();
   });

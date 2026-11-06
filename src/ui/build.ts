@@ -116,6 +116,7 @@ import {
   riskLines,
   tickMap,
 } from './worldmap.ts';
+import { holdRepeat } from './hold.ts';
 import { rosterSection } from './roster.ts';
 import { costLine, setVariant } from './kit.ts';
 
@@ -567,6 +568,8 @@ export function createBuildPanel(
 ): BuildPanel {
   const bar = el('div', 'hud-bar build-bar');
   const panel = el('aside', 'build-panel');
+  // Holding a roster stat button keeps adding points (ID-096).
+  holdRepeat(panel);
   bar.hidden = true;
   panel.hidden = true;
   root.append(bar, panel);

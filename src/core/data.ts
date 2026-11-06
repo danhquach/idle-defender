@@ -387,7 +387,7 @@ export const HORROR = {
   every: 10,
   armour: 2,
   min: 1,
-  brood: { every: 25, count: 2 },
+  brood: { every: 35, count: 2 },
   charge: { every: 10, time: 2, speed: 3, hit: 2 },
   regen: { rate: 0.03, after: 0.3 },
 } as const;
@@ -670,12 +670,30 @@ export const LOCKED_STATS: readonly Stat[] = ['tinker'];
 export const OPEN_STATS: readonly Stat[] = STATS.filter((s) => !LOCKED_STATS.includes(s));
 /** XP from level L to L + 1 is `LEVEL_XP × L`. */
 export const LEVEL_XP = 25;
-export const POINTS_PER_LEVEL = 3;
+/** Stat points a defender level gives (ID-096; 3 before it). */
+export const POINTS_PER_LEVEL = 1;
+/** Stat points a level gave before ID-096: an older save banks the difference. */
+export const OLD_POINTS_PER_LEVEL = 3;
 /**
- * What stat points do (design §6, ID-084). Each bonus with cap C from P points is
- * `C × P / (P + STAT_HALF)`: it shrinks as points pile up and never reaches C.
+ * What stat points do (design §6, ID-084, ID-096). A stat's points are shared evenly across
+ * its active effects: with P points and n active effects, each bonus with cap C is
+ * `C × P / (P + STAT_SPLIT × n)`. It shrinks as points pile up and never reaches C.
  */
-export const STAT_HALF = 20;
+export const STAT_SPLIT = 10;
+/** A stat's effects: the bonuses in `STAT_EFFECT` its points drive. */
+export type StatEffectId = 'hp' | 'armour' | 'dodge' | 'reload' | 'spread' | 'crit' | 'critBonus';
+/**
+ * Each stat's active effects (ID-096), the ones that work in the build. The one place
+ * a stat's split comes from: an effect built later is added here, and its stat's
+ * points are then shared one way more (planned and not built yet: Agility's move speed,
+ * Instinct's patrol survival, every Tinker effect).
+ */
+export const STAT_ACTIVE: Readonly<Record<Stat, readonly StatEffectId[]>> = {
+  instinct: ['hp', 'armour', 'dodge'],
+  agility: ['reload'],
+  mind: ['crit', 'critBonus', 'spread'],
+  tinker: [],
+};
 export const STAT_EFFECT = {
   /** Instinct: max HP over `DEFENDER_HP`. */
   hp: 100,
@@ -690,7 +708,7 @@ export const STAT_EFFECT = {
   /** Sharp Mind: share off every gun's spread cone. */
   spread: 0.5,
   /** Sharp Mind: crit chance. */
-  crit: 0.35,
+  crit: 0.5,
   /** Sharp Mind: crit damage over `critDamage`. */
   critBonus: 2,
   /** A crit's damage multiplier with no Sharp Mind. */

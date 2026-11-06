@@ -39,11 +39,11 @@ describe('roster entry', () => {
   });
 
   it('shows level progress and unspent points; no titles any more (ID-084)', () => {
-    // Level 3 needs 75 XP; 95 is 20 into the 75 that level 4 costs. 6 points earned.
-    const e = rosterEntry(jack({ xp: 95 }, { agility: 5 }), NOW);
+    // Level 3 needs 75 XP; 95 is 20 into the 75 that level 4 costs. 2 points earned (ID-096).
+    const e = rosterEntry(jack({ xp: 95 }, { agility: 1 }), NOW);
     expect(e.level).toBe('level 3 · 20/75 XP');
     expect(e.points).toBe('1 stat point to spend');
-    expect(rosterEntry(jack({ xp: 95 }), NOW).points).toBe('6 stat points to spend');
+    expect(rosterEntry(jack({ xp: 95 }), NOW).points).toBe('2 stat points to spend');
     const lots = jack({ xp: 1e6 }, { instinct: 10, mind: 25 });
     expect(rosterEntry(lots, NOW)).toMatchObject({
       label: 'Jack — Ripper',
@@ -52,7 +52,7 @@ describe('roster entry', () => {
   });
 
   it('all points spent: no picker line', () => {
-    expect(rosterEntry(jack({ xp: 25 }, { instinct: 3 }), NOW).points).toBe('');
+    expect(rosterEntry(jack({ xp: 25 }, { instinct: 1 }), NOW).points).toBe('');
   });
 
   it('a defender on patrol says where and how long is left', () => {

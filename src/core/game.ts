@@ -52,6 +52,8 @@ import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
 export interface RosterDefender extends DefenderSpec {
   xp: number;
   stats: Stats;
+  /** Stat points banked from an older save's levels (ID-096); absent when none. */
+  banked?: number;
   /** Injured until this time (ms); null when fit. */
   injuredUntil: number | null;
 }

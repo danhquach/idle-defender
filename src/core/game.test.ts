@@ -184,7 +184,7 @@ describe('game', () => {
         into: 10,
         next: 50,
         levels: 1,
-        points: 3,
+        points: 1,
       },
       {
         id: 'john',
@@ -195,7 +195,7 @@ describe('game', () => {
         into: 10,
         next: 75,
         levels: 1,
-        points: 3,
+        points: 1,
       },
     ]);
     g.roster[0]!.xp = 0;
@@ -211,7 +211,7 @@ describe('game', () => {
 
   it('spendPoint puts a point in a stat, refuses with none left, leaves the game untouched', () => {
     const g = newGame();
-    g.roster[1]!.xp = 25;
+    g.roster[1]!.xp = 150; // level 4: 3 points
     let cur = g;
     for (let i = 0; i < 3; i++) {
       const r = spendPoint(cur, 'jack', 'agility');
@@ -281,11 +281,11 @@ describe('game', () => {
 
   it('a horde fights with the roster stats', () => {
     const g = newGame();
-    g.roster[0]!.xp = 25;
+    g.roster[0]!.xp = 150;
     g.roster[0]!.stats = { ...NO_STATS, instinct: 3 };
     const h = startHorde(g, 7, 'bob', 0, NOW);
-    // 100 × 3 / 23 = 13 HP more.
-    expect(h.defenders[0]).toMatchObject({ maxHp: 113, stats: { ...NO_STATS, instinct: 3 } });
+    // 100 × 3 / (3 + 30) = 9 HP more.
+    expect(h.defenders[0]).toMatchObject({ maxHp: 109, stats: { ...NO_STATS, instinct: 3 } });
     h.defenders[0]!.stats = { ...NO_STATS, mind: 99 };
     expect(g.roster[0]!.stats.mind).toBe(0);
   });
