@@ -3,7 +3,7 @@
 // (bob, lunge, recoil, swing, flinch, flash, fall). Cosmetic only: it reads the fight and
 // never changes it. Every clock is fight time, so a pause freezes it and game speed carries it.
 import { ENEMIES, STRIKE_FLASH } from '../core/data.ts';
-import type { Defender, Enemy, Shot, Strike } from '../core/horde.ts';
+import { burning, type Defender, type Enemy, type Shot, type Strike } from '../core/horde.ts';
 
 /** How a sprite is moved off its spot: px at zoom 1, radians clockwise about its feet. */
 export interface Pose {
@@ -231,19 +231,24 @@ export function defenderPose(d: Pick<Defender, 'id'> & GunClock, time: number, a
   return pose;
 }
 
-/** An enemy gone from the fight, still falling. */
+/** An enemy gone from the fight, still falling; `litAt` when it caught fire (−∞: never). */
 export interface Corpse {
   enemy: Enemy;
   at: number;
+  litAt: number;
 }
 
 const NEVER = -Infinity;
+/** HP lost beyond what fire took that counts as a hit: more than rounding. */
+const HIT = 1e-6;
 
 /** One sprite as last seen. */
 interface Seen {
   x: number;
   y: number;
   hp: number;
+  /** All the HP fire has taken from it (`Enemy.burnt`). */
+  burnt: number;
   hurtAt: number;
   gait: Gait;
 }
@@ -252,9 +257,10 @@ interface Seen {
  * What animation needs from earlier frames, which the fight doesn't keep: how far each
  * enemy and defender has walked and when they last lost HP, each shooter's last shot (the
  * fight drops it with its muzzle flash; kept all fight, one per shooter, for the recoil and
- * the aim), and the enemies that died, kept until they have fallen. A Swollen that blew up
- * (in `bursts`) didn't die: it leaves no body. Fed the fight each frame; a fight whose time
- * runs back is a new one, and starts it afresh.
+ * the aim), when each burning enemy caught fire (its fire's flare-up, ID-089: a new hit
+ * only resets its burn), and the enemies that died, kept until they have fallen. A
+ * Swollen that blew up (in `bursts`) didn't die: it leaves no body. Fed the fight each
+ * frame; a fight whose time runs back is a new one, and starts it afresh.
  */
 export class Animator {
   /** Reduce motion (ID-039): sprites hold still, keeping only their hit flash and fade. */
@@ -263,6 +269,8 @@ export class Animator {
   private enemies = new Map<number, Seen & { enemy: Enemy }>();
   private defenders = new Map<string, Seen>();
   private shots = new Map<string, number>();
+  /** Each enemy alight now, and when it caught fire. */
+  private lit = new Map<number, number>();
   corpses: Corpse[] = [];
 
   observe(scene: {
@@ -277,6 +285,7 @@ export class Animator {
       this.enemies.clear();
       this.defenders.clear();
       this.shots.clear();
+      this.lit.clear();
       this.corpses = [];
     }
     const dt = Number.isFinite(this.time) ? t - this.time : 0;
@@ -287,9 +296,15 @@ export class Animator {
     }
     const burst = new Set(scene.bursts?.map((b) => b.id));
     for (const [id, was] of this.enemies) {
-      if (!enemies.has(id) && !burst.has(id)) this.corpses.push({ enemy: was.enemy, at: t });
+      if (!enemies.has(id) && !burst.has(id)) {
+        this.corpses.push({ enemy: was.enemy, at: t, litAt: this.lit.get(id) ?? NEVER });
+      }
     }
     this.enemies = enemies;
+    // Alight now and not last frame: it just caught fire.
+    const lit = new Map<number, number>();
+    for (const e of scene.enemies) if (burning(scene, e)) lit.set(e.id, this.lit.get(e.id) ?? t);
+    this.lit = lit;
     this.corpses = this.corpses.filter((c) => t - c.at < ANIM.fall.time);
     const defenders = new Map<string, Seen>();
     for (const d of scene.defenders)
@@ -303,20 +318,24 @@ export class Animator {
   /**
    * A sprite `dt` s after it was last seen. The ground it covered adds to its walk, which
    * starts or settles over `settle` s toward how much its pace is a walk. A drop in HP
-   * starts a flinch, unless one is still playing: damage every step (a fire, a trap)
-   * twitches it each `flinch.time` instead of holding it back.
+   * starts a flinch, unless one is still playing: damage every step twitches it each
+   * `flinch.time` instead of holding it back. HP that fire took (ID-089) doesn't count:
+   * a burning enemy shows its fire, not a white flash and a twitch every step; a hit
+   * while it burns still does.
    */
   private seen(
     was: Seen | undefined,
-    now: { x: number; y: number; hp: number },
+    now: { x: number; y: number; hp: number; burnt?: number },
     t: number,
     dt: number,
   ): Seen {
+    const burnt = now.burnt ?? 0;
     if (!was) {
       return {
         x: now.x,
         y: now.y,
         hp: now.hp,
+        burnt,
         hurtAt: NEVER,
         gait: { ...STANDING, drift: { x: 0, y: 0 } },
       };
@@ -329,7 +348,8 @@ export class Animator {
       Math.max(0, (pace - ANIM.pace.still) / (ANIM.pace.full - ANIM.pace.still)),
     );
     const moving = was.gait.moving + (walking - was.gait.moving) * ease;
-    const hurt = now.hp < was.hp && t - was.hurtAt >= ANIM.flinch.time;
+    const hit = was.hp - now.hp - (burnt - was.burnt);
+    const hurt = hit > HIT && t - was.hurtAt >= ANIM.flinch.time;
     // Paused (no time passed), the gait holds as it was.
     const d = was.gait.drift;
     const drift =
@@ -343,6 +363,7 @@ export class Animator {
       x: now.x,
       y: now.y,
       hp: now.hp,
+      burnt,
       hurtAt: hurt ? t : was.hurtAt,
       gait: {
         walked: was.gait.walked + moved,
@@ -364,6 +385,11 @@ export class Animator {
    */
   shownFrame(frame: EnemyFrame): EnemyFrame {
     return this.reduced && frame !== 'attack' ? 1 : frame;
+  }
+
+  /** When enemy `id` caught fire, while it burns (−∞ otherwise). */
+  litAt(id: number): number {
+    return this.lit.get(id) ?? NEVER;
   }
 
   enemy(id: number): EnemyActs {

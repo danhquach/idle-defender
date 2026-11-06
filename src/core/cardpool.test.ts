@@ -295,6 +295,8 @@ describe('behaviour cards', () => {
     expect(t.enemies[0]!.burnUntil).toBeCloseTo(CARD.burn.seconds, 9);
     t = steps(t, Math.round(4 / STEP));
     expect(hpOf(t, a.id)).toBeCloseTo(990 - CARD.burn.dps * CARD.burn.seconds, 6);
+    // It counts the HP fire took (for the view's hit flash, ID-089), not the bullet's.
+    expect(t.enemies[0]!.burnt).toBeCloseTo(CARD.burn.dps * CARD.burn.seconds, 6);
     // Hit twice in a row: still one burn, timed from the last hit.
     const twice = quiet('burning-rounds');
     enemy(twice, { ...tough, ...still, x: 600, y: ROW4 });

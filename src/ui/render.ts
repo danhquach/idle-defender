@@ -24,7 +24,6 @@ import {
   type Tier,
 } from '../core/data.ts';
 import {
-  burning,
   reloadIn,
   barbedWire,
   took,
@@ -2505,21 +2504,293 @@ function drawGrenade(
   ctx.globalAlpha = 1;
 }
 
-/** Burning Rounds (design §8): a flickering flame on a burning enemy, scaled by its body. */
-function drawFlame(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
+/**
+ * A burning enemy's fire (Burning Rounds, design §8; ID-089). Sizes are shares of the
+ * enemy's body height on screen (at least `squat` × its width, so a low Crawler's fire
+ * still shows); times are fight seconds.
+ *
+ * - Catching fire (or again while still dying down) it flares up: × 1 + `boost` at first,
+ *   easing back over `flare`. When the burn ends it shrinks and fades over `out`.
+ * - `licks` flames (`per` × (1 + size), `min`…`max`) sit across the middle `body` share of
+ *   its width, `low`…`low + span` up its body. Each shoots up and dies away on its own
+ *   cycle (`period` × 0.7…1.3), curling by `curl` with a shared `wind`, and moves to a new
+ *   spot each cycle. Each is drawn in `layers` (colour, size, alpha): a red edge, an
+ *   orange flame, a pale hot centre.
+ * - A soft `glow` on the body, `embers` rising off it, and two puffs of light `smoke`
+ *   over its head.
+ *
+ * All of it but the smoke adds light (`lighter`), so the sprite always shows through: the
+ * hot layers stay dim enough that a big body (a Brute, the Horror) keeps its colour. Like
+ * the muzzle flash (ID-088) it has an edge colour, a pale centre and a halo, but no
+ * white-hot core: a fire lasts seconds, and a white core that long would wash the body out.
+ * Every flame's spot, size and timing comes from the enemy's id, so a replay matches.
+ */
+export const BURN = {
+  flare: 0.3,
+  boost: 0.45,
+  out: 0.5,
+  squat: 0.75,
+  licks: { per: 3, min: 4, max: 8 },
+  body: 0.3,
+  low: 0.18,
+  span: 0.42,
+  lick: { h: 0.4, w: 0.2, least: 2, period: 0.6, curl: 0.35, wind: 0.35 },
+  layers: [
+    ['#d8381a', 1, 0.45],
+    [COLOR.flame, 0.72, 0.55],
+    ['#fff2b0', 0.42, 0.45],
+  ],
+  glow: { at: 0.45, r: 0.7, alpha: 0.3, colour: '#ff9a3c' },
+  embers: { period: 0.9, rise: 0.7, drift: 0.06, r: 0.028, least: 0.8, alpha: 0.9 },
+  ember: '#ffd84a',
+  smoke: { puffs: 2, at: 0.85, period: 1.4, rise: 0.6, drift: 0.1, r: 0.22, alpha: 0.22 },
+  smokeColour: '#5a5650',
+} as const;
+
+/**
+ * How strongly an enemy burns at `time` (ID-089): 0 out, 1 alight, over 1 in the flare-up
+ * after it caught fire at `litAt` (−∞ when unknown: no flare), falling to 0 over
+ * `BURN.out` once its burn ends.
+ */
+export function burnHeat(time: number, e: { burnUntil?: number }, litAt: number): number {
+  const until = e.burnUntil ?? 0;
+  if (until <= 0) return 0;
+  const left = time < until ? 1 : 1 - (time - until) / BURN.out;
+  if (left <= 0) return 0;
+  const since = Math.max(0, time - litAt);
+  const flare = since < BURN.flare ? 1 + BURN.boost * (1 - since / BURN.flare) ** 2 : 1;
+  return flare * left;
+}
+
+/** One flame: its base on screen, width, height and how far its tip curls aside. */
+export interface Lick {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  curl: number;
+}
+
+/**
+ * A burning enemy's fire as drawn on screen (ID-089): see `BURN`. Its flames are drawn
+ * once per layer, each `share` of their size.
+ */
+export interface FireLook {
+  glow: { x: number; y: number; r: number; alpha: number };
+  licks: Lick[];
+  layers: { colour: string; share: number; alpha: number }[];
+  embers: { x: number; y: number; r: number }[];
+  emberAlpha: number;
+  smoke: { x: number; y: number; r: number; alpha: number }[];
+}
+
+/**
+ * Which roll `fireRoll` makes: fixed ones are negative; one a flame makes afresh each
+ * cycle is `cycle × ROLLS + its slot`, so no two rolls ever share a key.
+ */
+const ROLL = {
+  period: -1,
+  start: -2,
+  width: -3,
+  emberPeriod: -4,
+  emberStart: -5,
+  smokePeriod: -6,
+  smokeStart: -7,
+} as const;
+/** Per cycle: a flame's spot across, spot up and height; an ember's spot across. */
+const ROLLS = 4;
+
+/** A number in [0, 1) from an enemy's id and two indices: the same every replay. */
+function fireRoll(id: number, i: number, j: number): number {
+  let h =
+    Math.imul(id + 1, 0x9e3779b1) ^ Math.imul(i + 7, 0x85ebca6b) ^ Math.imul(j + 3, 0xc2b2ae35);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12;
+  return (h >>> 0) / 4294967296;
+}
+
+/**
+ * Enemy `id`'s fire at `heat` (`burnHeat`, already × its fade), on a body `h` × `w` screen
+ * px standing at `feet` in `pose`, its flames `clock` fight seconds into their cycles. The
+ * flames sit on the body as it moves (bob, flinch, fall) but always rise straight up.
+ */
+export function fireLook(
+  id: number,
   size: number,
-  time: number,
+  body: { h: number; w: number },
+  feet: Point,
+  pose: Readonly<Pose>,
+  heat: number,
+  clock: number,
+  cam: Camera,
+): FireLook {
+  const H = Math.max(body.h, body.w * BURN.squat);
+  const grow = Math.min(1 + BURN.boost, heat);
+  const fade = Math.min(1, heat);
+  const [cos, sin] = [Math.cos(pose.rot), Math.sin(pose.rot)];
+  const ox = feet.sx + pose.dx * cam.zoom;
+  const oy = feet.sy - pose.lift * cam.zoom;
+  // A spot on the body, `lx` px across and `ly` px down from its feet, moved with it.
+  const at = (lx: number, ly: number): { x: number; y: number } => {
+    const [x, y] = [lx * pose.sx, ly * pose.sy];
+    return { x: ox + x * cos - y * sin, y: oy + x * sin + y * cos };
+  };
+  const { per, min, max } = BURN.licks;
+  const n = Math.max(min, Math.min(max, Math.round(per * (1 + size))));
+  const across = body.w * BURN.body * 2;
+  const wind = Math.sin(clock * 1.7 + id) * BURN.lick.wind;
+  const licks: Lick[] = [];
+  for (let i = 0; i < n; i++) {
+    const period = BURN.lick.period * (0.7 + 0.6 * fireRoll(id, i, ROLL.period));
+    const cycle = clock / period + fireRoll(id, i, ROLL.start);
+    const u = cycle - Math.floor(cycle);
+    const round = Math.floor(cycle) * ROLLS;
+    const lx = (-0.5 + (i + 0.5 + 0.8 * (fireRoll(id, i, round) - 0.5)) / n) * across;
+    const ly = -H * (BURN.low + BURN.span * fireRoll(id, i, round + 1));
+    const base = at(lx, ly);
+    // It shoots up fast, then thins and shrinks away.
+    const life = u < 0.3 ? u / 0.3 : 1 - ((u - 0.3) / 0.7) ** 1.5;
+    const h = H * BURN.lick.h * (0.55 + 0.7 * fireRoll(id, i, round + 2)) * life * grow;
+    // Wide enough that neighbours merge into one sheet of fire.
+    const w = Math.max(
+      BURN.lick.least,
+      H * BURN.lick.w * (1 + 0.5 * fireRoll(id, i, ROLL.width)) * grow * (0.5 + 0.5 * life),
+    );
+    const sway = Math.sin((clock / period) * Math.PI * 2 + i * 1.9) * BURN.lick.curl;
+    licks.push({ x: base.x, y: base.y, w, h, curl: (sway + wind) * h * 0.5 });
+  }
+  const layers = BURN.layers.map(([colour, share, alpha]) => ({
+    colour,
+    share,
+    alpha: alpha * fade,
+  }));
+  const embers: FireLook['embers'] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const e = BURN.embers;
+    const cycle =
+      clock / (e.period * (0.8 + 0.4 * fireRoll(id, i, ROLL.emberPeriod))) +
+      fireRoll(id, i, ROLL.emberStart);
+    const u = cycle - Math.floor(cycle);
+    const spot = fireRoll(id, i, Math.floor(cycle) * ROLLS + 3);
+    const q = at((spot - 0.5) * across, -H * 0.5);
+    embers.push({
+      x: q.x + Math.sin(u * 6 + i) * H * e.drift,
+      y: q.y - u * H * e.rise,
+      r: Math.max(e.least, H * e.r * (1 - u)),
+    });
+  }
+  const smoke: FireLook['smoke'] = [];
+  for (let i = 0; i < BURN.smoke.puffs; i++) {
+    const s = BURN.smoke;
+    const cycle =
+      clock / (s.period * (0.85 + 0.3 * fireRoll(id, i, ROLL.smokePeriod))) +
+      fireRoll(id, i, ROLL.smokeStart);
+    const u = cycle - Math.floor(cycle);
+    const q = at(0, -H * s.at);
+    smoke.push({
+      x: q.x + Math.sin(u * 3 + id) * H * s.drift,
+      y: q.y - u * H * s.rise,
+      r: H * s.r * (0.4 + 0.6 * u),
+      alpha: s.alpha * fade * Math.sin(Math.PI * u),
+    });
+  }
+  const c = at(0, -H * BURN.glow.at);
+  return {
+    glow: { ...c, r: H * BURN.glow.r * grow, alpha: BURN.glow.alpha * fade },
+    licks,
+    layers,
+    embers,
+    emberAlpha: BURN.embers.alpha * fade,
+    smoke,
+  };
+}
+
+/**
+ * Fills each flame in `licks`, `share` of its size, as one path: an S-curved tongue on a
+ * round base.
+ */
+function fillLicks(ctx: CanvasRenderingContext2D, licks: readonly Lick[], share: number): void {
+  ctx.beginPath();
+  for (const k of licks) {
+    const [w, h, curl] = [k.w * share, k.h * share, k.curl * share];
+    const [tx, ty] = [k.x + curl, k.y - h];
+    ctx.moveTo(k.x - w / 2, k.y);
+    ctx.bezierCurveTo(
+      k.x - w * 0.7,
+      k.y - h * 0.4,
+      tx - curl * 0.9 - w * 0.2,
+      k.y - h * 0.7,
+      tx,
+      ty,
+    );
+    ctx.bezierCurveTo(
+      tx - curl * 0.7 + w * 0.25,
+      k.y - h * 0.65,
+      k.x + w * 0.7,
+      k.y - h * 0.35,
+      k.x + w / 2,
+      k.y,
+    );
+    ctx.arc(k.x, k.y, w / 2, 0, Math.PI);
+  }
+  ctx.fill();
+}
+
+/**
+ * A burning enemy's fire (ID-089) over its sprite, `kind`'s body at `feet` in `pose`,
+ * `heat` strong (see `burnHeat`), its flames `clock` s into their cycles (held at 0 with
+ * Reduce motion, so they hold still).
+ */
+function drawBurn(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  id: number,
+  kind: EnemyKind,
+  feet: Point,
+  pose: Readonly<Pose>,
+  heat: number,
+  clock: number,
   cam: Camera,
 ): void {
-  const c = project({ x, y, z: ENEMY.z * size * 1.6 }, cam);
-  ctx.globalAlpha = 0.6 + 0.3 * Math.sin(time * 25);
-  ctx.fillStyle = COLOR.flame;
+  const k = heat * pose.alpha;
+  if (k <= 0) return;
+  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
+  // Its frames share one height, so the walk's passing frame sizes every one.
+  const img = art[ENEMY_ART[kind].walk[1]];
+  const h = ((STAND.enemy * size * img.height) / ART_PX) * cam.zoom;
+  const f = fireLook(id, size, { h, w: (img.width / img.height) * h }, feet, pose, k, clock, cam);
+  ctx.globalCompositeOperation = 'lighter';
+  const g = f.glow;
+  const halo = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
+  halo.addColorStop(0, withAlpha(BURN.glow.colour, g.alpha));
+  halo.addColorStop(1, withAlpha(BURN.glow.colour, 0));
+  ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.arc(c.sx, c.sy, sized(EFFECT.puff * size * 0.7, cam), 0, Math.PI * 2);
+  ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
   ctx.fill();
+  for (const layer of f.layers) {
+    ctx.globalAlpha = layer.alpha;
+    ctx.fillStyle = layer.colour;
+    fillLicks(ctx, f.licks, layer.share);
+  }
+  ctx.globalAlpha = f.emberAlpha;
+  ctx.fillStyle = BURN.ember;
+  ctx.beginPath();
+  for (const e of f.embers) {
+    ctx.moveTo(e.x + e.r, e.y);
+    ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+  }
+  ctx.fill();
+  // The smoke darkens a touch instead; at its faint alpha it never hides the sprite.
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = BURN.smokeColour;
+  for (const s of f.smoke) {
+    ctx.globalAlpha = s.alpha;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.globalAlpha = 1;
 }
 
@@ -2688,6 +2959,8 @@ export function drawScene(
       },
     });
   }
+  // A burning enemy's flames (ID-089) run on fight time; with Reduce motion they hold still.
+  const flameClock = anim?.reduced ? 0 : scene.time;
   for (const e of scene.enemies) {
     sprites.push({
       y: e.y,
@@ -2708,7 +2981,8 @@ export function drawScene(
         const pose = anim && acts ? anim.shown(enemyPose(e, scene.time, acts)) : STILL;
         const frame = anim && acts ? anim.shownFrame(enemyFrame(e, scene.time, acts)) : 1;
         drawEnemy(ctx, art, e.kind, frame, ground, cam, pose);
-        if (burning(scene, e)) drawFlame(ctx, e.x, e.y, size, scene.time, cam);
+        const heat = burnHeat(scene.time, e, anim?.litAt(e.id) ?? -Infinity);
+        drawBurn(ctx, art, e.id, e.kind, ground, pose, heat, flameClock, cam);
         const at = enemyBarAt(art, e.kind, e.x, e.y);
         drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
       },
@@ -2727,6 +3001,9 @@ export function drawScene(
         const pose = anim ? anim.shown(fallPose(scene.time - c.at)) : STILL;
         drawShadow(ctx, ground, pose.alpha, cam, ENEMIES[e.kind].radius / ENEMY_RADIUS);
         drawEnemy(ctx, art, e.kind, 1, ground, cam, pose);
+        // A burning body keeps burning as it falls, fading with it.
+        const heat = burnHeat(scene.time, e, c.litAt);
+        drawBurn(ctx, art, e.id, e.kind, ground, pose, heat, flameClock, cam);
       },
     });
   }
