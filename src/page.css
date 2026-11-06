@@ -130,6 +130,14 @@ body {
   touch-action: none;
 }
 
+/* The backdrop's canvas (ID-087), under the scene's: clicks land on the scene's. */
+.view-under {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
 .hud-bar {
   position: absolute;
   top: 0;

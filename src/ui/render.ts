@@ -1318,6 +1318,62 @@ function drawSegmentBody(
   if (stage === 3) drawOnPart(ctx, art[BASE_ART.breach], f.top, WALL_DAMAGE.breach);
 }
 
+/**
+ * Everything under the scene's sprites that only the camera moves: the sky, the
+ * repeating surround, the dusk or the build's dimming, and within the frame (`left`
+ * on) the field's ground, the camp's yard (`yard`), the fight's dusk and its shaded top
+ * and bottom edges.
+ */
+function drawBackdrop(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  cam: Camera,
+  view: View,
+  build: boolean,
+  left: number,
+  yard: (() => void) | null,
+): void {
+  const dim = (style: string): void => {
+    ctx.fillStyle = style;
+    ctx.fillRect(0, 0, view.w, view.h);
+  };
+  ctx.fillStyle = COLOR.sky;
+  ctx.fillRect(0, 0, view.w, view.h);
+  drawSurround(ctx, art, cam, view);
+  // The build scene dims the land round the camp's plot, so the plot reads as the focus;
+  // a fight dims it all to dusk (ID-071).
+  dim(build ? COLOR.outside : DUSK);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, 0, Math.max(0, view.w - left), view.h);
+  ctx.clip();
+  drawGround(ctx, art, cam);
+  yard?.();
+  if (!build) dim(DUSK);
+  // In a fight the ground past the field's top and bottom edges is shaded (ID-068), so
+  // the wall's ends read as the map's edge, not a way round; sprites still draw over it.
+  if (!build) {
+    const top = project({ x: 0, y: 0 }, cam).sy;
+    const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
+    ctx.fillStyle = COLOR.outside;
+    if (top > 0) ctx.fillRect(0, 0, view.w, top);
+    if (bottom < view.h) ctx.fillRect(0, bottom, view.w, view.h - bottom);
+  }
+  ctx.restore();
+}
+
+/**
+ * The steady fight frame's backdrop as last painted on an `under` canvas (ID-087), and
+ * what for. Painting the full-view surround and ground textures every frame held Chrome
+ * near 10 fps in a busy horde on a 2× display.
+ */
+let painted: { under: CanvasRenderingContext2D; art: Art; key: string } | null = null;
+
+/** Repaints the backdrop on the next frame: call it after resizing the `under` canvas, which clears it. */
+export function forgetBackdrop(): void {
+  painted = null;
+}
+
 /** The ground's block (ground.ts) repeated over the whole view, so no sky shows round the frame. */
 function drawSurround(ctx: CanvasRenderingContext2D, art: Art, cam: Camera, view: View): void {
   const surround = surroundCanvas(art);
@@ -2493,6 +2549,11 @@ function drawSpit(ctx: CanvasRenderingContext2D, k: Spit, time: number, cam: Cam
  * ID-065, and Start Horde's ease out of it). Everything but the surround is clipped
  * left of screen x `clip`: by default the fight frame's left edge in a fight, nothing
  * in build mode.
+ *
+ * With `under` (ID-087), the backdrop (`drawBackdrop`) goes on that canvas, which the
+ * page shows beneath `ctx`'s, and `ctx` is cleared to see-through instead. In the steady
+ * fight frame the backdrop is only repainted when what it shows changes (see
+ * `forgetBackdrop`); the build scene and Start Horde's ease repaint it every frame.
  */
 export function drawScene(
   ctx: CanvasRenderingContext2D,
@@ -2506,6 +2567,7 @@ export function drawScene(
   anim: Animator | null = null,
   camp: CampView | null = null,
   clip: number | null = null,
+  under: CanvasRenderingContext2D | null = null,
 ): void {
   anim?.observe(scene);
   const defenderPoseOf = (d: Defender): Readonly<Pose> =>
@@ -2515,37 +2577,30 @@ export function drawScene(
     anim ? aiming(d, scene.time, anim.acts(d.id, scene.strikes)) : false;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.fillStyle = COLOR.sky;
-  ctx.fillRect(0, 0, view.w, view.h);
-  drawSurround(ctx, art, cam, view);
   // In a fight nothing left of the frame shows (ID-064): the camp's yard stays out of
   // view, and an enemy past the frame shows as a marker at its edge instead.
   // On a whole pixel, so the clip's edge doesn't smear a seam into the surround.
   const fightLeft = build ? 0 : project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx;
   const left = Math.max(0, Math.round(clip ?? fightLeft));
-  const dim = (style: string): void => {
-    ctx.fillStyle = style;
-    ctx.fillRect(0, 0, view.w, view.h);
-  };
-  // The build scene dims the land round the camp's plot, so the plot reads as the focus;
-  // a fight dims it all to dusk (ID-071).
-  dim(build ? COLOR.outside : DUSK);
+  if (under) {
+    ctx.clearRect(0, 0, view.w, view.h);
+    const steady = !build && !camp && clip === null;
+    const key = steady ? `${view.w}x${view.h} ${cam.x},${cam.y},${cam.zoom} ${left}` : null;
+    if (key === null || painted?.under !== under || painted.art !== art || painted.key !== key) {
+      under.imageSmoothingEnabled = true;
+      under.imageSmoothingQuality = 'high';
+      const yard = camp ? () => drawCampGround(under, art, camp, cam) : null;
+      drawBackdrop(under, art, cam, view, build !== null, left, yard);
+      painted = key === null ? null : { under, art, key };
+    }
+  } else {
+    const yard = camp ? () => drawCampGround(ctx, art, camp, cam) : null;
+    drawBackdrop(ctx, art, cam, view, build !== null, left, yard);
+  }
   ctx.save();
   ctx.beginPath();
   ctx.rect(left, 0, Math.max(0, view.w - left), view.h);
   ctx.clip();
-  drawGround(ctx, art, cam);
-  if (camp) drawCampGround(ctx, art, camp, cam);
-  if (!build) dim(DUSK);
-  // In a fight the ground past the field's top and bottom edges is shaded (ID-068), so
-  // the wall's ends read as the map's edge, not a way round; sprites still draw over it.
-  if (!build) {
-    const top = project({ x: 0, y: 0 }, cam).sy;
-    const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
-    ctx.fillStyle = COLOR.outside;
-    if (top > 0) ctx.fillRect(0, 0, view.w, top);
-    if (bottom < view.h) ctx.fillRect(0, bottom, view.w, view.h - bottom);
-  }
 
   // The barrier cards the wall shows (ID-075); none in the build scene.
   const taken = { taken: scene.taken ?? [] };

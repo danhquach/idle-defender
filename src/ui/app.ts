@@ -78,7 +78,7 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
-import { drawScene, type Aim, type CampView, type Scene } from './render.ts';
+import { drawScene, forgetBackdrop, type Aim, type CampView, type Scene } from './render.ts';
 import type { Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
@@ -119,6 +119,12 @@ export function start(root: HTMLElement, art: Art): void {
   const context = canvas.getContext('2d');
   if (!context) throw new Error('start: no 2D canvas context');
   const ctx: CanvasRenderingContext2D = context;
+  // The backdrop's own canvas, shown beneath the scene's (ID-087): in a fight it is only
+  // repainted when the camera or the window changes, not every frame.
+  const backdrop = document.createElement('canvas');
+  backdrop.className = 'view view-under';
+  root.append(backdrop);
+  const backdropCtx = backdrop.getContext('2d');
 
   // The game between hordes is saved after every change; a fight is not, so a
   // reload mid-horde comes back to the camp as it was before it.
@@ -443,9 +449,12 @@ export function start(root: HTMLElement, art: Art): void {
   function resize(): void {
     const dpr = window.devicePixelRatio || 1;
     view = { w: window.innerWidth, h: window.innerHeight };
-    canvas.width = Math.round(view.w * dpr);
-    canvas.height = Math.round(view.h * dpr);
+    canvas.width = backdrop.width = Math.round(view.w * dpr);
+    canvas.height = backdrop.height = Math.round(view.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    backdropCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Resizing cleared the backdrop's canvas.
+    forgetBackdrop();
     fightCam = frameCamera(view, hud.bottomSpace());
     // The horde-only build shows the fight frame between hordes too.
     buildCam = panel ? buildCamera(view, panel.room(view)) : fightCam;
@@ -697,6 +706,7 @@ export function start(root: HTMLElement, art: Art): void {
         animator,
         ease ? campView(game) : null,
         ease ? Math.max(0, t) * edge : null,
+        backdropCtx,
       );
       hud.update(horde, armed);
       if (horde.outcome !== 'fighting' && endedAt === null) {
@@ -712,7 +722,20 @@ export function start(root: HTMLElement, art: Art): void {
     } else if (!panel) {
       // The horde-only build between hordes: the squad on a full wall, waiting to start.
       if (preview) {
-        drawScene(ctx, art, preview, fightCam, view, null, null, null, animator, null, null);
+        drawScene(
+          ctx,
+          art,
+          preview,
+          fightCam,
+          view,
+          null,
+          null,
+          null,
+          animator,
+          null,
+          null,
+          backdropCtx,
+        );
       }
     } else {
       // Someone back from rest or patrol, a free recruit, or the generator burnt a Gas:
@@ -744,7 +767,7 @@ export function start(root: HTMLElement, art: Art): void {
       const overlay = { selected, hover: target, ghosts: ghostsOf(game.base) };
       const scene = buildScene(game, panel.choice(game));
       const camp = { fence: fenceTier(game.base), plots };
-      drawScene(ctx, art, scene, cam, view, overlay, null, null, null, camp);
+      drawScene(ctx, art, scene, cam, view, overlay, null, null, null, camp, null, backdropCtx);
     }
     requestAnimationFrame(frame);
   }
