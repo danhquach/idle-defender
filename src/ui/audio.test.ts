@@ -1,17 +1,20 @@
 // ID-080: the audio engine — nothing before the first click or key press, the overlap cap,
 // the volumes and mute, and the music's crossfade — against a stand-in AudioContext.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   COMPRESSOR,
   FADE,
   gainOf,
   LIMIT,
   rampAt,
+  SAMPLE,
+  SAMPLES,
   SONGS,
   SoundEngine,
   STING,
   STING_OUT,
   VoiceLimiter,
+  type EngineOptions,
 } from './audio.ts';
 
 class Param {
@@ -39,6 +42,7 @@ class Param {
 class Node {
   gain = new Param();
   frequency = new Param();
+  playbackRate = new Param();
   threshold = new Param();
   knee = new Param();
   ratio = new Param();
@@ -80,7 +84,9 @@ class FakeContext {
     return new Node(this);
   }
   createBufferSource() {
-    return new Node(this);
+    const n = new Node(this);
+    this.sources.push(n);
+    return n;
   }
   compressors: Node[] = [];
   createDynamicsCompressor() {
@@ -95,6 +101,14 @@ class FakeContext {
     const data = new Float32Array(length);
     return { getChannelData: () => data };
   }
+  /** Bytes "decode" to a buffer as long as the first byte says, in tenths of a second. */
+  decodeAudioData(bytes: ArrayBuffer) {
+    const first = new Uint8Array(bytes)[0];
+    return first === undefined
+      ? Promise.reject(new Error('not audio'))
+      : Promise.resolve({ duration: first / 10 });
+  }
+  sources: Node[] = [];
   resume() {
     this.state = 'running';
     return Promise.resolve();
@@ -106,15 +120,21 @@ class FakeContext {
 }
 
 const settings = () => ({ volumes: { master: 80, music: 60, effects: 80 }, muted: false });
-function engine(over = settings()) {
+/** An engine on the stand-in context; no recordings unless `samples` names some. */
+function engine(over = settings(), opts: EngineOptions = { samples: {} }) {
   const fake = new FakeContext();
   let made = 0;
-  const e = new SoundEngine(over, () => {
-    made += 1;
-    return fake as unknown as AudioContext;
+  const e = new SoundEngine(over, {
+    ...opts,
+    create: () => {
+      made += 1;
+      return fake as unknown as AudioContext;
+    },
   });
   return { e, fake, made: () => made };
 }
+/** Lets the recordings' fetch-and-decode promises settle. */
+const settle = () => new Promise((r) => setTimeout(r, 0));
 // The master, music and effects gains, made in that order on unlock.
 const buses = (fake: FakeContext) => fake.gains.slice(0, 3);
 
@@ -134,16 +154,174 @@ describe('Sound engine (ID-080)', () => {
   });
 
   it('a browser with no Web Audio, or one that refuses it, stays silent without breaking', () => {
-    const none = new SoundEngine(settings(), () => null);
+    const none = new SoundEngine(settings(), { create: () => null });
     none.unlock();
     expect(none.ready).toBe(false);
-    const refusing = new SoundEngine(settings(), () => {
-      throw new Error('not allowed');
+    const refusing = new SoundEngine(settings(), {
+      create: () => {
+        throw new Error('not allowed');
+      },
     });
     expect(() => refusing.unlock()).not.toThrow();
     expect(() => refusing.play('won')).not.toThrow();
     expect(() => refusing.music('horde')).not.toThrow();
     expect(() => refusing.pump()).not.toThrow();
+  });
+
+  it('a recorded shot plays its recording once loaded, with a little speed change each time', async () => {
+    const asked: string[] = [];
+    const { e, fake } = engine(settings(), {
+      samples: { 'shot-rifle': 'rifle.mp3' },
+      load: (url) => (asked.push(url), Promise.resolve(new Uint8Array([9]).buffer)),
+    });
+    e.unlock();
+    expect(asked).toEqual(['rifle.mp3']);
+    await settle();
+    const rates: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      fake.currentTime += 1;
+      e.play('shot-rifle');
+      const src = fake.sources.at(-1)!;
+      expect(src.buffer).toEqual({ duration: 0.9 });
+      rates.push(src.playbackRate.value);
+    }
+    expect(fake.sources.length).toBe(5);
+    for (const r of rates) {
+      expect(Math.abs(r - 1)).toBeLessThanOrEqual(SAMPLE.detune);
+    }
+    expect(new Set(rates).size).toBeGreaterThan(1);
+    // The recording's own length counts for the overlap cap: 3 at once, then none.
+    fake.currentTime += 1;
+    for (let i = 0; i < 6; i++) {
+      // Within the 0.36 s the cap counts (40 % of the 0.9 s clip): all three still on.
+      fake.currentTime += 0.045;
+      e.play('shot-rifle');
+    }
+    expect(fake.sources.length).toBe(5 + LIMIT.voices);
+  });
+
+  it('a shot whose recording is loading, missing or broken plays its made-in-code sound', async () => {
+    let finish: (b: ArrayBuffer) => void = () => undefined;
+    const { e, fake } = engine(settings(), {
+      samples: { 'shot-pistol': 'slow.mp3', 'shot-smg': 'gone.mp3', 'shot-lmg': 'bad.mp3' },
+      load: (url) =>
+        url === 'slow.mp3'
+          ? new Promise((r) => (finish = r))
+          : url === 'gone.mp3'
+            ? Promise.reject(new Error('404'))
+            : Promise.resolve(new ArrayBuffer(0)),
+    });
+    e.unlock();
+    await settle();
+    for (const cue of ['shot-pistol', 'shot-smg', 'shot-lmg'] as const) {
+      const before = fake.started.length;
+      e.play(cue);
+      expect(fake.started.length).toBeGreaterThan(before);
+      // Made in code: noise sources, never a decoded recording.
+      expect(
+        fake.sources.every(
+          (s) => typeof s.buffer === 'object' && s.buffer !== null && 'getChannelData' in s.buffer,
+        ),
+      ).toBe(true);
+    }
+    finish(new Uint8Array([4]).buffer);
+    await settle();
+    fake.currentTime += 1;
+    e.play('shot-pistol');
+    expect(fake.sources.at(-1)!.buffer).toEqual({ duration: 0.4 });
+  });
+
+  it('a recording plays through its own gain into the effects bus', async () => {
+    const { e, fake } = engine(settings(), {
+      samples: { 'shot-smg': 'smg.mp3' },
+      load: () => Promise.resolve(new Uint8Array([5]).buffer),
+    });
+    e.unlock();
+    await settle();
+    e.play('shot-smg');
+    const src = fake.sources.at(-1)!;
+    const g = src.links[0] as (typeof fake.gains)[number];
+    expect(g.gain.value).toBe(SAMPLE.gain);
+    expect(g.links).toEqual([buses(fake)[2]]);
+  });
+
+  it('the cap counts a recording only until its fade-out: an automatic gun keeps firing', async () => {
+    const { e, fake } = engine(settings(), {
+      samples: { 'shot-smg': 'smg.mp3' },
+      // A 0.5 s clip, as the SMG's: 0.2 s counted, so 3 voices allow 15 shots a second.
+      load: () => Promise.resolve(new Uint8Array([5]).buffer),
+    });
+    e.unlock();
+    await settle();
+    for (let i = 0; i < 30; i++) {
+      fake.currentTime += 1 / 15;
+      e.play('shot-smg');
+    }
+    expect(fake.sources.length).toBe(30);
+  });
+
+  it('decodes while audio is held (a hidden tab), and a failed recording is tried again later', async () => {
+    let fail = true;
+    const asked: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { e, fake } = engine(settings(), {
+      samples: { 'shot-lmg': 'lmg.mp3', 'shot-rifle': 'rifle.mp3' },
+      load: (url) => {
+        asked.push(url);
+        return url === 'lmg.mp3' && fail
+          ? Promise.reject(new Error('offline'))
+          : Promise.resolve(new Uint8Array([6]).buffer);
+      },
+    });
+    e.unlock();
+    e.hidden(true);
+    await settle();
+    expect(warn).toHaveBeenCalledWith('Sound: shot-lmg could not load; it plays made in code.');
+    // The next click asks only for what failed.
+    fail = false;
+    e.hidden(false);
+    e.unlock();
+    await settle();
+    // (Showing the tab again is that click here; the loading one isn't asked twice.)
+    expect(asked).toEqual(['lmg.mp3', 'rifle.mp3', 'lmg.mp3']);
+    e.unlock();
+    await settle();
+    expect(asked.length).toBe(3);
+    for (const cue of ['shot-lmg', 'shot-rifle'] as const) {
+      fake.currentTime += 1;
+      e.play(cue);
+      expect(fake.sources.at(-1)!.buffer).toEqual({ duration: 0.6 });
+    }
+    warn.mockRestore();
+  });
+
+  it('a recording that never loads is tried SAMPLE.tries times, however many keys are pressed', async () => {
+    let asked = 0;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { e } = engine(settings(), {
+      samples: { 'shot-pistol': 'gone.mp3' },
+      load: () => (asked++, Promise.reject(new Error('404'))),
+    });
+    for (let i = 0; i < 30; i++) {
+      e.unlock();
+      await settle();
+    }
+    expect(asked).toBe(SAMPLE.tries);
+    expect(warn).toHaveBeenCalledTimes(SAMPLE.tries);
+    warn.mockRestore();
+  });
+
+  it('the game ships a recording for every gun shot and the turret, as files, not data: URLs', () => {
+    for (const url of Object.values(SAMPLES)) expect(url).not.toMatch(/^data:/);
+    expect(Object.keys(SAMPLES).sort()).toEqual([
+      'shot-lmg',
+      'shot-pistol',
+      'shot-rifle',
+      'shot-shotgun',
+      'shot-smg',
+      'shot-sniper',
+      'shot-turret',
+    ]);
   });
 
   it('volumes and mute set the gains, squared; mute keeps the volumes', () => {

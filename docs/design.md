@@ -2122,11 +2122,14 @@ original outline.
 - **Platform** *(designer's call)*: desktop browser first, **landscape**,
   mouse and keyboard (clicks for picks, posts, focus and skill targets); itch.io
   web build. Touch/mobile later.
-- **Sound** *(as built, ID-080)*: all music and sound effects are made in
-  code with the Web Audio API (`src/ui/audio.ts`); there are no sound files,
-  so nothing to license (see `docs/audio-credits.md`). Audio starts on the
-  first click or key press, as browsers require, and pauses while the tab is
-  hidden. Two looping tracks: a slow one for the build, the camp and the
+- **Sound** *(as built, ID-080)*: the gun shots are short CC0 recordings
+  (`src/assets/sounds/`, cut by `tools/audio/cut.py`, each played a little
+  faster or slower, up to 4 %, so a burst never repeats one copy); the music
+  and every other effect are made in code with the Web Audio API
+  (`src/ui/audio.ts`), and a shot uses its made-in-code version until its
+  recording has loaded. Sources and licences: `docs/audio-credits.md`. Audio
+  starts on the first click or key press, as browsers require, and pauses
+  while the tab is hidden. Two looping tracks: a slow one for the build, the camp and the
   result screen, and a fast one while a horde is on, crossfaded over 1.5 s
   (its drums rest every fourth bar). When a horde ends, the won or lost sting
   plays alone: the horde track drops in 0.3 s and the camp track waits 1.4 s.
@@ -2134,7 +2137,8 @@ original outline.
   wall hit and break, card offer and pick, level-up, horde won and lost, and
   UI clicks. The cues are read by comparing each frame's fight with the last
   (`src/ui/sound.ts`), each named once a frame; a cue never plays more than 3
-  at once or two within 0.04 s, and a compressor on the master output holds
+  at once (for a recording, counting its first 40 %, before the fade-out) or
+  two within 0.04 s, and a compressor on the master output holds
   cues that land together under clipping, so a heavy fight never crackles.
 - **Stack:** same as Office Immortal so the repo scaffold can be copied
   from the Office Immortal repo: TypeScript, Vite, Vitest, ESLint +

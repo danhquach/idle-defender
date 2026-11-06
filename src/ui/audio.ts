@@ -1,11 +1,54 @@
-// The audio engine (ID-080): music and sound effects, all made in code with the Web Audio
-// API (no sound files, so nothing to license and nothing for the page's CSP to load).
+// The audio engine (ID-080): music and sound effects with the Web Audio API. The gun shots
+// are short CC0 recordings (src/assets/sounds, credited in docs/audio-credits.md), fetched
+// from the page's own origin; everything else is made in code. A shot falls back to its
+// made-in-code version while its recording loads, or if it can't be.
 // The browser lets audio start only after a click or key press, so nothing exists until
 // `unlock`; until then every call is a no-op. Volumes are 0–100; the gain is their square,
 // which sounds closer to even steps than a straight line.
-import { createRng } from '../core/rng.ts';
+import shotLmg from '../assets/sounds/shot-lmg.mp3';
+import shotPistol from '../assets/sounds/shot-pistol.mp3';
+import shotRifle from '../assets/sounds/shot-rifle.mp3';
+import shotShotgun from '../assets/sounds/shot-shotgun.mp3';
+import shotSmg from '../assets/sounds/shot-smg.mp3';
+import shotSniper from '../assets/sounds/shot-sniper.mp3';
+import shotTurret from '../assets/sounds/shot-turret.mp3';
+import { createRng, type Rng } from '../core/rng.ts';
 import type { SoundSettings, Volume } from '../storage/settings.ts';
 import type { Cue } from './sound.ts';
+
+/** The recorded cues and their files' URLs. */
+export const SAMPLES: Readonly<Partial<Record<Cue, string>>> = {
+  'shot-pistol': shotPistol,
+  'shot-smg': shotSmg,
+  'shot-rifle': shotRifle,
+  'shot-shotgun': shotShotgun,
+  'shot-lmg': shotLmg,
+  'shot-sniper': shotSniper,
+  'shot-turret': shotTurret,
+};
+/**
+ * A recording's level on the effects bus: half, since the clips are cut to peak at
+ * -1 dBFS and shots are the most frequent cue. `detune`: how far each play's speed may
+ * stray, so a burst of the same gun never sounds like one copy repeated. `tries`: loads
+ * a recording gets before it stays made in code for the session.
+ */
+export const SAMPLE = { gain: 0.5, detune: 0.04, heard: 0.4, tries: 3 } as const;
+// `heard`: the share of a clip the overlap cap counts. The rest is its fade-out tail, so
+// counting it all would cap an automatic gun at a few shots a second.
+
+export interface EngineOptions {
+  /** Makes the AudioContext; null where the browser has no Web Audio. */
+  create?: () => AudioContext | null;
+  samples?: Readonly<Partial<Record<Cue, string>>>;
+  /** Fetches a recording's bytes. */
+  load?: (url: string) => Promise<ArrayBuffer>;
+}
+
+const fetchBytes = async (url: string): Promise<ArrayBuffer> => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`sound ${res.status}`);
+  return res.arrayBuffer();
+};
 
 export type Track = 'camp' | 'horde';
 
@@ -316,16 +359,48 @@ export class SoundEngine {
   /** The tab is hidden: effects are dropped until it shows again. */
   private paused = false;
 
+  /** Recordings decoded so far. */
+  private buffers = new Map<Cue, AudioBuffer>();
+  /** Recordings being fetched or decoded now. */
+  private loading = new Set<Cue>();
+  /** Loads started per recording. */
+  private tries = new Map<Cue, number>();
+  /** Each recording's speed for a play, from the game's seeded RNG. */
+  private vary: Rng = createRng(0x5107);
+
   private settings: SoundSettings;
   private create: () => AudioContext | null;
+  private samples: Readonly<Partial<Record<Cue, string>>>;
+  private load: (url: string) => Promise<ArrayBuffer>;
 
-  constructor(
-    settings: SoundSettings,
-    create: () => AudioContext | null = () =>
-      typeof AudioContext === 'function' ? new AudioContext() : null,
-  ) {
+  constructor(settings: SoundSettings, opts: EngineOptions = {}) {
     this.settings = settings;
-    this.create = create;
+    this.create =
+      opts.create ?? (() => (typeof AudioContext === 'function' ? new AudioContext() : null));
+    this.samples = opts.samples ?? SAMPLES;
+    this.load = opts.load ?? fetchBytes;
+  }
+
+  /**
+   * Fetches and decodes the recordings not loaded or loading yet. One that fails keeps
+   * its made-in-code sound, says so in the console, and is tried again on a later click
+   * or key press, up to `SAMPLE.tries` loads in all (a held key repeats fast).
+   */
+  private fetchSamples(ctx: AudioContext): void {
+    for (const [cue, url] of Object.entries(this.samples) as [Cue, string][]) {
+      if (this.buffers.has(cue) || this.loading.has(cue)) continue;
+      const tried = this.tries.get(cue) ?? 0;
+      if (tried >= SAMPLE.tries) continue;
+      this.tries.set(cue, tried + 1);
+      this.loading.add(cue);
+      void this.load(url)
+        .then((bytes) => ctx.decodeAudioData(bytes))
+        .then((buf) => {
+          if (buf) this.buffers.set(cue, buf);
+        })
+        .catch(() => console.warn(`Sound: ${cue} could not load; it plays made in code.`))
+        .finally(() => this.loading.delete(cue));
+    }
   }
 
   /** Whether audio has started (after the first click or key press). */
@@ -367,6 +442,7 @@ export class SoundEngine {
       this.noise = buf;
       this.apply(true);
     }
+    this.fetchSamples(this.ctx);
     if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
   }
 
@@ -415,8 +491,20 @@ export class SoundEngine {
     if (!ctx || !out || !this.noise || this.paused) return;
     if (ctx.state !== 'running' && !(cue === 'click' && ctx.state === 'suspended')) return;
     const r = RECIPES[cue];
-    if (r.length <= 0 || !this.limiter.take(cue, ctx.currentTime, r.length)) return;
-    r.play({ ctx, out, at: ctx.currentTime, noise: this.noise });
+    const rec = this.buffers.get(cue);
+    const length = rec ? rec.duration * SAMPLE.heard : r.length;
+    if (length <= 0 || !this.limiter.take(cue, ctx.currentTime, length)) return;
+    if (!rec) {
+      r.play({ ctx, out, at: ctx.currentTime, noise: this.noise });
+      return;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = rec;
+    src.playbackRate.setValueAtTime(1 + (this.vary() * 2 - 1) * SAMPLE.detune, ctx.currentTime);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(SAMPLE.gain, ctx.currentTime);
+    src.connect(g).connect(out);
+    src.start(ctx.currentTime);
   }
 
   /**
