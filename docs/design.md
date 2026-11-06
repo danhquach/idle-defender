@@ -724,6 +724,36 @@ profession's output).
     a pistol. The role (pistol, rifle, shotgun…) is the gun's: survivors have
     no profession, so the same survivor fights as whatever they hold. Their
     secondary and item stay as they were.
+  - **Combine (as built, ID-091) *(starting points)*:** between hordes, 3
+    stash guns of the same base weapon and the same rarity make 1 gun of that
+    base weapon at the next rarity: Rusty → Common → Military → Prototype →
+    Relic. Relic combines no further. Only stash guns count: a survivor's gun
+    goes back to the stash first, and the free pistol never combines. The new
+    gun rolls its rarity's affixes as a drop does, seeded from the three
+    inputs alone, so the same save and picks give the same gun; the inputs
+    are used up (it keeps the first input's id, so saves need no change, and
+    save version 13 is unchanged). 3 in and 1 out, so a full stash never
+    refuses it. Free for now; a Scrap cost per combine (e.g. the inputs'
+    salvage value) is a tuning option if Relics come too easily. Expected
+    cost: 3 Rusty make a Common, 9 a Military, 27 a Prototype, 81 a Relic,
+    so above Military it is a slow route next to drops. Kept out for now:
+    keeping one input's affixes, and mixed base weapons (any 3 Rusty guns →
+    a random Common one).
+  - **Combine in the Inventory:** a Combine section under the stash lists each
+    base weapon and rarity below Relic in the stash, ready sets first: a set
+    with 3 or more says "4 in stash" and "3 make a Common SMG", with a Combine
+    button; one short says "2/3" and "1 more for a Common SMG". A combine uses
+    the 3 weakest of the set by dmg/s, so the best one stays. Combine asks
+    first: it lists the 3 guns used up (rarity colour, affixes, dmg/s) and what
+    comes out (rarity, "No affixes" or "1 random affix, rolled on combine", and its
+    base dmg/s, before affixes), with Combine into … and Cancel (Esc cancels; focus
+    starts on Cancel). After it, a status line names the new gun with its
+    affixes and dmg/s ("Made: Common SMG, 14.2 dmg/s"), and the gun pickers
+    update; focus moves to that line (Cancel returns it to the set's button).
+    The result screen's drop tile stays a record of the win (its stash count
+    then), so a combine on that screen doesn't change it. In a fight the list
+    shows with no buttons and "Combine between
+    hordes, on the start or result screen."
   - **The panel between hordes (a debrief):** the start, win and loss
     screens share one layout, 640 px wide, scrolling inside the window with
     the button pinned in a footer. At the top are the title and chips (waves,
@@ -1639,7 +1669,8 @@ offline progress works across sessions.
   no horde is on). **Help:**
   the controls and a short how-to-play. In a fight, the open menu pauses it.
 - **Inventory** *(as built, ID-079)*: an "Inventory" button in the top bar, left
-  of the Menu (its own place, not a Menu tab), opens a view-only dialog of what
+  of the Menu (its own place, not a Menu tab), opens a dialog (view-only but
+  for Combine, ID-091, §6 Gear) of what
   the camp holds now: the stash against its cap ("Stash 6/20"; from the cap on
   "Stash 20/20 (full)", as the next drop throws the weakest away), strongest
   first as in the gun picker (anything that is no gun, from an older save,

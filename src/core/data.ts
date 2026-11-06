@@ -52,6 +52,8 @@ export const SQUAD_XP_RATE = 2;
 export const ENDING_HORDE = 10;
 /** The most weapons the horde-only stash holds (ID-067); past it the weakest is thrown away. */
 export const STASH_CAP = 20;
+/** Stash guns of one base weapon and rarity that combine into one of the next rarity (ID-091). */
+export const COMBINE_COUNT = 3;
 /**
  * A horde-only win's weapon (ID-067, design §6 Gear): one every win, a gun picked evenly,
  * its rarity by the weights of the last band whose `from` the horde has reached.
