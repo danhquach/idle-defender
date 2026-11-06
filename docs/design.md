@@ -314,7 +314,7 @@ Defenders stand on **posts** the player builds and chooses between.
     post. Recruit cards show up by chance (starting point: 30% per offer
     slot, lower once the squad is large).
 - **Recruits come from your roster**, bringing their permanent level,
-  stats, title and weapon. Defenders out on patrol, crafting or injured
+  stats and weapon. Defenders out on patrol, crafting or injured
   can't be recruited. With none available (or no free post), no recruit
   cards are offered and that slot becomes an upgrade card *(designer's
   call)*.
@@ -433,7 +433,7 @@ which apply to the whole battlefield.
   kill cash ×1.25 (fractions kept, whole cash shown); **Fortify** every
   segment ×1.3 HP and max HP for the fight, and the base keeps the same
   share of its own max afterwards; **Butcher's Hunger** each blade or tool
-  kill (cleave included) heals the damaged standing segment nearest the
+  kill heals the damaged standing segment nearest the
   defender 3 HP, up to max; **Rally Call** recruit chance ×2, still one
   recruit per offer at most; **Second Look** one seeded reroll of the open
   offer per wave; **Overclock** turret damage ×1.2 and draw ×1.1; **Power
@@ -642,7 +642,7 @@ loadout (ID-084):
   seed; and a Horde 10 firing line beats the brood Horror on 4 seeds of 20.
   Spreading points evenly is weaker (40–80% at Hordes 8–10 in a test run),
   and Instinct for the Ripper leaves the brood Horror unbeaten: without
-  cleave, the wall's crowd needs damage.
+  a cleave stat, the crowd at the wall needs damage.
 
 - The injury dodge is rolled through the horde's seeded RNG, only for a
   survivor with Instinct above 1 HP, so a run stays deterministic and a
