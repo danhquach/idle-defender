@@ -234,6 +234,9 @@ describe('save', () => {
       expect(hostile((s) => (s.game.roster = []))).toBeNull();
       expect(hostile((s) => s.game.roster.push({ ...bob(s) }))).toBeNull(); // same id
       expect(hostile((s) => (bob(s).loadout.primary = 'railgun'))).toBeNull();
+      // An id naming an object built-in (ID-085: chat state is keyed by id).
+      expect(hostile((s) => (bob(s).id = 'constructor'))).toBeNull();
+      expect(hostile((s) => (bob(s).id = 'constructor-1'))).not.toBeNull();
       // Weapon and item ids match exactly: no case, padding, look-alikes or prototype names.
       for (const weapon of [
         'Knife',

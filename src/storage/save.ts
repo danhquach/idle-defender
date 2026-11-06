@@ -167,8 +167,8 @@ const MAX_HORDE = 100_000;
 const MAX_ROSTER = 100;
 /** Latest time a save may name, in ms since the epoch (the year 2286). */
 const MAX_TIME = 1e13;
-/** A defender id: lowercase, safe in an `<option value>` and a lookup key. */
-const ID = /^[a-z][a-z0-9-]{0,31}$/;
+/** A defender id: lowercase, safe in an `<option value>` and a lookup key (never `constructor`, the one built-in object key it could spell; ID-085). */
+const ID = /^(?!constructor$)[a-z][a-z0-9-]{0,31}$/;
 /** A free recruit's id and its number (design §11). */
 const RECRUIT = /^recruit-([0-9]+)$/;
 /** A defender name: plain letters, spaces, apostrophes and hyphens; no look-alikes or hidden marks. */

@@ -1,6 +1,7 @@
 // Player settings (ID-039, ID-062): kept in this browser under their own key, outside the save
 // and the backup code. A stored value is untrusted on the way back in: only the exact
 // strings written here count, and anything else falls back to the default.
+import type { ChatterLevel } from '../core/chatter.ts';
 import type { SaveStorage } from './save.ts';
 
 export const MOTION_KEY = 'idle-defender.reduce-motion';
@@ -106,6 +107,30 @@ export function writeVolume(storage: SaveStorage | null, which: Volume, level: n
 export function writeMute(storage: SaveStorage | null, on: boolean): void {
   try {
     storage?.setItem(MUTE_KEY, on ? '1' : '0');
+  } catch {
+    // Storage blocked or full.
+  }
+}
+
+// Chatter (ID-085): how much survivors say in a fight. Only the exact strings written here
+// count; anything else is Full.
+export const CHATTER_KEY = 'idle-defender.chatter';
+
+/** The stored chatter level, else Full. */
+export function readChatter(storage: SaveStorage | null): ChatterLevel {
+  let raw: string | null;
+  try {
+    raw = storage?.getItem(CHATTER_KEY) ?? null;
+  } catch {
+    return 'full';
+  }
+  return raw === 'off' ? 'off' : raw === 'low' ? 'low' : 'full';
+}
+
+/** Stores the level; where the browser refuses it, it still applies until reload. */
+export function writeChatter(storage: SaveStorage | null, level: ChatterLevel): void {
+  try {
+    storage?.setItem(CHATTER_KEY, level);
   } catch {
     // Storage blocked or full.
   }

@@ -28,6 +28,7 @@ import {
 } from '../core/data.ts';
 import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy, HordeState, Pop } from '../core/horde.ts';
+import { CHAT, type Bubble } from '../core/chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
 import { carpet } from '../core/skills.ts';
 import { reloadTime } from '../core/stats.ts';
@@ -48,6 +49,11 @@ import {
 } from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
 import {
+  BUBBLE,
+  bubbleLayout,
+  bubbleLook,
+  bubbleShift,
+  bubbleTip,
   BULLET,
   bulletShape,
   drawScene,
@@ -188,6 +194,7 @@ function recorder() {
     translate: noop,
     rotate: noop,
     scale: noop,
+    roundRect: noop,
   };
   // Fresh images each time, so the renderer's pattern cache never hides a texture.
   const art = Object.fromEntries(
@@ -2880,5 +2887,173 @@ describe('damage numbers (ID-082)', () => {
     };
     expect(yAt(POP.life / 2, false)).toBeCloseTo(yAt(0, false) - POP.rise / 2, 6);
     expect(yAt(POP.life / 2, true)).toBeCloseTo(yAt(0, true), 6);
+  });
+});
+
+describe('speech bubbles (ID-085)', () => {
+  beforeEach(stubCanvas);
+  afterEach(() => vi.unstubAllGlobals());
+  const squad = (): Scene => {
+    const g = newGame('horde');
+    const roster = [{ ...recruit(1), xp: 0 }];
+    return startSquadHorde({ ...g, roster, camp: { ...g.camp, recruits: 1 } }, 7, 0);
+  };
+  const bubble = (d: Defender, over: Partial<Bubble> = {}): Bubble => ({
+    by: d.id,
+    event: 'reload',
+    line: 'Reloading!',
+    at: 0,
+    x: d.x,
+    y: d.y,
+    postId: d.walking ? null : d.postId,
+    plain: d.plain === true,
+    ...over,
+  });
+
+  it('grows in, holds, then fades over its last moment, gone after 1.5 s', () => {
+    const b = { at: 1 } as Bubble;
+    expect(bubbleLook(b, 0.99, false)).toBeNull();
+    expect(bubbleLook(b, 1, false)).toEqual({ scale: BUBBLE.from, alpha: 1 });
+    expect(bubbleLook(b, 1 + BUBBLE.grow / 2, false)!.scale).toBeCloseTo((1 + BUBBLE.from) / 2, 9);
+    expect(bubbleLook(b, 1.7, false)).toEqual({ scale: 1, alpha: 1 });
+    expect(bubbleLook(b, 1 + CHAT.life - BUBBLE.fade / 2, false)!.alpha).toBeCloseTo(0.5, 9);
+    expect(bubbleLook(b, 1 + CHAT.life, false)).toBeNull();
+  });
+
+  it('with reduce motion it just shows for its life and goes', () => {
+    const b = { at: 1 } as Bubble;
+    for (const t of [1, 1.01, 2, 1 + CHAT.life - 0.01]) {
+      expect(bubbleLook(b, t, true)).toEqual({ scale: 1, alpha: 1 });
+    }
+    expect(bubbleLook(b, 1 + CHAT.life, true)).toBeNull();
+  });
+
+  /** Every text drawn and every name plate rect, in draw order. */
+  const draw = (scene: Scene, cam: Camera) => {
+    const r = recorder();
+    const order: string[] = [];
+    const ys: Record<string, number> = {};
+    const at: Record<string, { x: number; y: number }> = {};
+    const plates: { y: number; h: number }[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string };
+    // A bubble draws about its tail's point: the last translate before its text.
+    let moved = { x: 0, y: 0 };
+    Object.assign(r.ctx, {
+      translate: (x: number, y: number) => (moved = { x, y }),
+      fillText: (text: string, _x: number, y: number) => {
+        order.push(text);
+        ys[text] = y;
+        at[text] = moved;
+      },
+      fillRect: (_x: number, y: number, _w: number, h: number) => {
+        if (ctx.fillStyle === 'rgba(21, 23, 26, 0.6)' && h === PLATE_H) plates.push({ y, h });
+      },
+      measureText: (t: string) => ({ width: t.length * 6 }),
+    });
+    drawScene(r.ctx, r.art, scene, cam, { w: 1280, h: 720 });
+    return { order, ys, at, plates };
+  };
+
+  it('draws each line over its survivor, above the name tag and the reload pie, under the damage numbers and names', () => {
+    const base = squad();
+    const d = base.defenders[0]!;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const scene: Scene = {
+      ...base,
+      chat: { bubbles: [bubble(d)], clock: 0.5 },
+      pops: [
+        {
+          x: d.x + 100,
+          y: d.y,
+          amount: 7,
+          crit: false,
+          on: 'shambler',
+          key: 'e1',
+          at: base.time,
+        },
+      ],
+    };
+    const { order, ys, at, plates } = draw(scene, cam);
+    expect(order).toEqual(['Reloading!', '7', d.name]);
+    const tip = bubbleTip(bubble(d), base.layers, base.posts, cam);
+    // The text sits over the tail's point, and the point clears the plate and the pie's spot.
+    // Drawn about the card's centre: the tail's length over the tip, slid into the view.
+    const w = 'Reloading!'.length * 6 + 2 * BUBBLE.padX;
+    expect(at['Reloading!']).toEqual({
+      x: tip.sx + bubbleShift(tip.sx, w, 1280),
+      y: tip.sy - BUBBLE.tail - BUBBLE.h / 2,
+    });
+    expect(ys['Reloading!']).toBe(0);
+    expect(plates.length).toBeGreaterThan(0);
+    const plateTop = Math.min(...plates.map((p) => p.y));
+    expect(tip.sy).toBeLessThanOrEqual(
+      plateTop - RELOAD_PIE.gap - 2 * (RELOAD_PIE.r + RELOAD_PIE.edge),
+    );
+  });
+
+  it('slides into the view at its edges, its tail still joined to the card', () => {
+    expect(bubbleShift(640, 80, 1280)).toBe(0);
+    expect(bubbleShift(30, 80, 1280)).toBe(BUBBLE.margin + 40 - 30);
+    expect(bubbleShift(1260, 80, 1280)).toBe(1280 - BUBBLE.margin - 40 - 1260);
+    // Right at the edge it still slides all the way in (the tail leans to reach it).
+    expect(bubbleShift(2, 140, 1280)).toBe(BUBBLE.margin + 70 - 2);
+    expect(bubbleShift(1280, 80, 1280)).toBe(-(BUBBLE.margin + 40));
+  });
+
+  it('stacks bubbles that would overlap: the higher rank keeps its spot, the other rises clear', () => {
+    const spot = (tipX: number, tipY: number, rank: number) => ({ tipX, tipY, w: 80, rank });
+    // Two survivors one over the other, 20 px apart.
+    const [low, high] = bubbleLayout([spot(400, 300, 1), spot(410, 280, 9)], 1280);
+    expect(high).toEqual({ dx: 0, lift: 0, hidden: false });
+    // The lower one's card ends a gap over the higher one's card top.
+    const highTop = 280 - BUBBLE.tail - BUBBLE.h;
+    expect(300 - BUBBLE.tail - low!.lift).toBe(highTop - BUBBLE.gap);
+    // Far apart: neither moves; a third pushed past both stacks over both.
+    expect(bubbleLayout([spot(100, 300, 1), spot(600, 300, 1)], 1280).map((l) => l.lift)).toEqual([
+      0, 0,
+    ]);
+    const three = bubbleLayout([spot(400, 300, 5), spot(400, 300, 5), spot(400, 300, 5)], 1280);
+    const step = BUBBLE.h + BUBBLE.gap;
+    expect(three.map((l) => l.lift)).toEqual([0, step, 2 * step]);
+  });
+
+  it("a lifted bubble keeps off other survivors' name tags; one pushed past the top hides", () => {
+    const spot = (tipX: number, tipY: number, rank: number) => ({ tipX, tipY, w: 80, rank });
+    // A name tag just over where the card would sit: the card rises clear of it.
+    const tag = { x0: 380, x1: 440, y0: 260, y1: 290 };
+    const [one] = bubbleLayout([spot(400, 300, 1)], 1280, [tag]);
+    expect(300 - BUBBLE.tail - one!.lift).toBe(tag.y0 - BUBBLE.gap);
+    expect(one!.hidden).toBe(false);
+    // Its own tag sits under its tip: no lift.
+    const own = { x0: 380, x1: 420, y0: 300 + BUBBLE.gap, y1: 330 };
+    expect(bubbleLayout([spot(400, 300, 1)], 1280, [own])[0]!.lift).toBe(0);
+    // Near the top, a second card has nowhere to go: hidden, and the first keeps its spot.
+    const top = bubbleLayout([spot(400, 30, 9), spot(400, 30, 1)], 1280);
+    expect(top.map((l) => l.hidden)).toEqual([false, true]);
+  });
+
+  it('a bubble on a raised post sits higher than one on the ground', () => {
+    const game = newGame();
+    const base = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+    const d = base.defenders[0]!;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const raised = base.posts.find((p) => postFloor(base.layers, p) > 0);
+    expect(raised).toBeDefined();
+    const onPost = bubbleTip(bubble(d, { postId: raised!.id }), base.layers, base.posts, cam);
+    const walking = bubbleTip(bubble(d, { postId: null }), base.layers, base.posts, cam);
+    expect(walking.sy - onPost.sy).toBeCloseTo(
+      project({ x: 0, y: 0, z: 0 }, cam).sy -
+        project({ x: 0, y: 0, z: postFloor(base.layers, raised!) }, cam).sy,
+      9,
+    );
+  });
+
+  it('draws nothing for a bubble past its life, or with no chat (build mode)', () => {
+    const base = squad();
+    const d = base.defenders[0]!;
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const old = draw({ ...base, chat: { bubbles: [bubble(d)], clock: CHAT.life } }, cam);
+    expect(old.order).toEqual([d.name]);
+    expect(draw({ ...base }, cam).order).toEqual([d.name]);
   });
 });

@@ -34,6 +34,7 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
   const volumes: [string, number][] = [];
   const mutes: boolean[] = [];
   const samples: string[] = [];
+  const chatters: string[] = [];
   const menu = createMenu(root, {
     state: () => ({ game, fighting, held: false }),
     onLoad: (g) => (loaded.push(g), (game = g)),
@@ -44,6 +45,8 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
     onVolume: (which, level) => volumes.push([which, level]),
     onVolumeSet: (which) => samples.push(which),
     onMute: (on) => mutes.push(on),
+    chatter: over.chatter ?? 'full',
+    onChatter: (level) => chatters.push(level),
   });
   const scrim = document.querySelector<HTMLElement>('.menu-scrim')!;
   const dialog = scrim.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -90,6 +93,7 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
     volumes,
     mutes,
     samples,
+    chatters,
     fight,
   };
 }
@@ -412,6 +416,36 @@ describe('the Menu', () => {
     box.click();
     box.click();
     expect(motion).toEqual([false, true]);
+  });
+
+  it('Chatter shows the stored level and hands on each change (ID-085)', () => {
+    const { menuButton, dialog, chatters } = setup({ chatter: 'low' });
+    menuButton.click();
+    const select = dialog.querySelector<HTMLSelectElement>('#menu-chatter')!;
+    expect(select.value).toBe('low');
+    expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+      ['off', 'Off'],
+      ['low', 'Low'],
+      ['full', 'Full'],
+    ]);
+    expect(dialog.querySelector('label[for="menu-chatter"]')!.textContent).toBe('Chatter');
+    for (const level of ['off', 'full']) {
+      select.value = level;
+      select.dispatchEvent(new Event('change'));
+    }
+    expect(chatters).toEqual(['off', 'full']);
+  });
+
+  it('Chatter hands on nothing for a value that is not one of its levels (ID-085)', () => {
+    const { menuButton, dialog, chatters } = setup();
+    menuButton.click();
+    const select = dialog.querySelector<HTMLSelectElement>('#menu-chatter')!;
+    const forged = document.createElement('option');
+    forged.value = '__proto__';
+    select.append(forged);
+    select.value = '__proto__';
+    select.dispatchEvent(new Event('change'));
+    expect(chatters).toEqual([]);
   });
 
   it('Sound shows the stored volumes and mute, and hands on each change (ID-080)', () => {
