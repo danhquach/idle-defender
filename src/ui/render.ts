@@ -46,6 +46,7 @@ import {
 import { baseOf } from '../core/armoury.ts';
 import { CHAT, CHAT_RANK, type Bubble } from '../core/chatter.ts';
 import { professionOf } from '../core/loadout.ts';
+import { createRng } from '../core/rng.ts';
 import { carpet } from '../core/skills.ts';
 import {
   depthSort,
@@ -103,6 +104,7 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
+  GUNNER_ART,
   GUNNER_LOOKS,
   lookOf,
   SKILL_ART,
@@ -163,8 +165,6 @@ const COLOR = {
   slug: '#fffbe8',
   /** The white spark where a bullet hits a body (ID-070). */
   hitSpark: '#ffffff',
-  flash: '#fff2b0',
-  flashEdge: 'rgba(255, 170, 60, 0.6)',
   blood: '#8e1f1a',
   dust: '#a8987c',
   acid: '#a6e22e',
@@ -267,9 +267,9 @@ const STRIKE = 7;
 const MUZZLE = { defender: { dx: 12, z: 12 }, turret: { dx: 13, z: 2 } } as const;
 /**
  * Effect sizes in px at zoom 1, each kept at least `min` px on screen so they still read
- * at 0.5× zoom: a muzzle flash's halo, an impact's puff and a hit's spark.
+ * at 0.5× zoom: an impact's puff and a hit's spark.
  */
-const EFFECT = { flash: 5, puff: 6, spark: 4, min: 1.5 } as const;
+const EFFECT = { puff: 6, spark: 4, min: 1.5 } as const;
 /**
  * A bullet in flight (ID-070), in px at zoom 1: a white `head` capsule `len` long and `w`
  * wide on a dark backing `edge` px wider each side, with a `glow` halo; a `tail` that thins
@@ -288,8 +288,121 @@ export const BULLET = {
  * bullet and not a beam. At 3× the bright head carries the eye over the small gap.
  */
 export const TAIL = { frame: 1 / 60, pace: 2 } as const;
-/** A muzzle flash's core (ID-070): a teardrop `len` long and `w` wide along the barrel. */
-const FLASH = { len: 8, w: 4, edge: '#ffb347' } as const;
+/**
+ * A muzzle flash's look (ID-088), in px at zoom 1. Fire leaves the barrel end as `tongues`,
+ * each `[turn off the shot in rad, length, width]`: the long one along the shot, short ones
+ * flaring out to the sides. Each tongue is an `edge`-coloured flame with a hot pale centre,
+ * on a soft `halo` of that colour, with a white-hot dot at the muzzle. A pistol's is small,
+ * an SMG's thin and spiky (its flames' lengths vary more, `roll`), a rifle's long, a
+ * sniper's a long needle, a shotgun's a wide fan, an LMG's a big star; a turret's is a
+ * cold, electric cross, unlike any survivor's.
+ */
+export type FlashStyle = {
+  readonly tongues: readonly (readonly [number, number, number])[];
+  readonly halo: number;
+  readonly edge: string;
+  /** Each flame's length × 1 ± this per shot; `FLASH.tongue` when unset. */
+  readonly roll?: number;
+};
+const GUNFIRE = '#ff9a3c';
+export const FLASH_STYLE: Readonly<Record<GunId | 'turret', FlashStyle>> = {
+  pistol: {
+    tongues: [
+      [0, 6, 3],
+      [-1.1, 2.5, 1.5],
+      [1.1, 2.5, 1.5],
+    ],
+    halo: 3,
+    edge: GUNFIRE,
+  },
+  smg: {
+    tongues: [
+      [0, 8, 2.4],
+      [-0.9, 3, 1.5],
+      [0.9, 3, 1.5],
+    ],
+    halo: 3.5,
+    edge: GUNFIRE,
+    roll: 0.4,
+  },
+  rifle: {
+    tongues: [
+      [0, 10, 3],
+      [-0.9, 3.5, 1.5],
+      [0.9, 3.5, 1.5],
+    ],
+    halo: 4,
+    edge: GUNFIRE,
+  },
+  sniper: {
+    tongues: [
+      [0, 13, 2.5],
+      [-1.2, 2.8, 1.5],
+      [1.2, 2.8, 1.5],
+    ],
+    halo: 4.5,
+    edge: GUNFIRE,
+  },
+  shotgun: {
+    tongues: [
+      [0, 9, 4],
+      [-0.4, 7.5, 3.5],
+      [0.4, 7.5, 3.5],
+      [-1.2, 3, 1.5],
+      [1.2, 3, 1.5],
+    ],
+    halo: 5,
+    edge: GUNFIRE,
+  },
+  lmg: {
+    tongues: [
+      [0, 11, 4],
+      [-0.8, 5, 2],
+      [0.8, 5, 2],
+      [-2.2, 2.5, 1.5],
+      [2.2, 2.5, 1.5],
+    ],
+    halo: 5,
+    edge: GUNFIRE,
+  },
+  turret: {
+    tongues: [
+      [0, 9, 3],
+      [-Math.PI / 2, 4, 2],
+      [Math.PI / 2, 4, 2],
+      [Math.PI, 2.5, 1.5],
+    ],
+    halo: 4,
+    edge: '#8fd3ff',
+  },
+};
+/**
+ * A muzzle flash over its `MUZZLE_FLASH` (ID-088): it flares up from `from` of its size
+ * over the first `rise` of its life at full brightness, then shrinks by `shrink` and fades
+ * fast (squared) to nothing; its glow fades faster still (cubed), so the tail is a thin
+ * ember, not a smudge. Each shot rolls its own look (seeded by who fired and when, so a
+ * replay matches): the whole flash × 1 ± `size`, turned up to `spin` rad, and each
+ * tongue's length × 1 ± `tongue` (or its style's `roll`). The tongues' hot centre (`hot`)
+ * is that share of each; the `core` dot's radius is that share of the main tongue's
+ * width; the halo peaks at `halo`. The main flame reaches at least `reach` px on screen,
+ * so it still points at 0.5× zoom. All of it adds light (drawn `lighter`), so it never
+ * covers the sprites behind it.
+ */
+export const FLASH = {
+  rise: 0.15,
+  from: 0.6,
+  shrink: 0.3,
+  size: 0.15,
+  spin: 0.12,
+  tongue: 0.3,
+  hot: 0.55,
+  core: 0.6,
+  halo: 0.6,
+  reach: 2.5,
+  edgeAlpha: 0.8,
+  centre: '#fff2b0',
+  white: '#fffdf2',
+} as const;
 /** The share of `IMPACT_FLASH` a hit's white spark shows for, shrinking and fading (ID-070). */
 const SPARK_SHARE = 0.4;
 /**
@@ -773,10 +886,22 @@ function drawReloadPie(
  * rifle's for any other gun.
  */
 function gunOf(d: Pick<Defender, 'id' | 'loadout'>): GunnerArt | null {
-  if (professionOf(d.loadout) !== 'gunner') return null;
-  const look = GUNNER_LOOKS[lookOf(d.id)]!;
-  return look[baseOf(d.loadout.primary) as GunId] ?? look.rifle;
+  const gun = gunIdOf(d);
+  return gun ? GUNNER_LOOKS[lookOf(d.id)]![gun] : null;
 }
+
+/**
+ * The gun a Gunner's sprite holds: their primary, or the rifle for any other gun; null for
+ * anyone else.
+ */
+function gunIdOf(d: Pick<Defender, 'loadout'>): GunId | null {
+  if (professionOf(d.loadout) !== 'gunner') return null;
+  const base = baseOf(d.loadout.primary);
+  return Object.hasOwn(GUNNER_ART, base) ? (base as GunId) : 'rifle';
+}
+
+/** A turret's shots, bullets and flash name it `turret:<id>`. */
+const TURRET_OWNER = 'turret:';
 
 type Sprite = { y: number; x: number; draw: () => void };
 
@@ -1598,7 +1723,8 @@ function muzzleAt(
   y: number,
   owner: string,
 ): { x: number; y: number; z: number } {
-  const turret = scene.turrets.find((t) => t.x === x && t.y === y);
+  // Found by who fired (`turret:<id>`, as the shot and its sound name it), like its flash.
+  const turret = scene.turrets.find((t) => `${TURRET_OWNER}${t.id}` === owner);
   if (turret) {
     const floor = turretFloor(scene.layers, turret) + MUZZLE.turret.z;
     return { x: x + MUZZLE.turret.dx, y, z: floor };
@@ -1614,17 +1740,118 @@ function muzzleAt(
   return { x: x + gun.barrel.x * px, y, z: floor + (gun.barrel.y * px) / HEIGHT_SCALE };
 }
 
-/** How far into its `life` s the newest of `owner`'s shots is, 0…1; null with none showing. */
-function flashAge(scene: Scene, owner: string): number | null {
-  let age: number | null = null;
+/** The newest of `owner`'s shots still flashing and how far into `MUZZLE_FLASH` it is, 0…1. */
+function flashOf(scene: Scene, owner: string): { at: number; age: number } | null {
+  let shot: { at: number; age: number } | null = null;
   for (const k of scene.shots) {
     const a = (scene.time - k.at) / MUZZLE_FLASH;
-    if (k.owner === owner && a >= 0 && a < 1 && (age === null || a < age)) age = a;
+    if (k.owner === owner && a >= 0 && a < 1 && (shot === null || a < shot.age)) {
+      shot = { at: k.at, age: a };
+    }
   }
-  return age;
+  return shot;
 }
 
-/** A muzzle flash at the barrel end of whoever shoots from `(x, y)`, fading over `MUZZLE_FLASH`. */
+/**
+ * Whose flash look `owner` fires with (ID-088): a turret's own; a Gunner's primary's, as
+ * their sprite holds it (the rifle's for any other gun); anyone else's sidearm, a pistol's.
+ */
+function flashStyleOf(scene: Scene, owner: string): FlashStyle {
+  if (owner.startsWith(TURRET_OWNER)) return FLASH_STYLE.turret;
+  const d = scene.defenders.find((s) => s.id === owner);
+  const gun = d ? gunIdOf(d) : null;
+  return gun ? FLASH_STYLE[gun] : FLASH_STYLE.pistol;
+}
+
+/** A seed for one shot's flash from who fired it and when, so a replay draws it the same. */
+function flashSeed(owner: string, at: number): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < owner.length; i++) h = Math.imul(h ^ owner.charCodeAt(i), 0x01000193);
+  return (h ^ Math.round(at * 1000)) >>> 0;
+}
+
+/** A muzzle flash as drawn on screen (ID-088): see `FLASH`. */
+export interface FlashShape {
+  /** The barrel end. */
+  at: Point;
+  /** How bright its flames are now, 0…1, and its glow (fading faster). */
+  alpha: number;
+  glow: number;
+  halo: number;
+  /** Each tongue's outer flame and hot centre, as 4-point outlines. */
+  flames: Point[][];
+  centres: Point[][];
+  /** The white-hot dot's radius at the barrel end. */
+  core: number;
+  edge: string;
+}
+
+/**
+ * One shot's muzzle flash (design §15, ID-088) at the barrel end `at` on screen, pointing
+ * `turn` rad along the shot, `age` into its `MUZZLE_FLASH` (0…1), in `style` and with the
+ * look its `seed` rolls. Every size stays at least `EFFECT.min` px on screen.
+ */
+export function flashShape(
+  at: Point,
+  turn: number,
+  age: number,
+  style: FlashStyle,
+  seed: number,
+  cam: Camera,
+): FlashShape {
+  const rng = createRng(seed);
+  const roll = (spread: number): number => 1 + (rng() * 2 - 1) * spread;
+  const rising = age < FLASH.rise;
+  const fade = rising ? 0 : (age - FLASH.rise) / (1 - FLASH.rise);
+  const grow =
+    (rising ? FLASH.from + ((1 - FLASH.from) * age) / FLASH.rise : 1 - FLASH.shrink * fade) *
+    roll(FLASH.size);
+  const spin = turn + (rng() * 2 - 1) * FLASH.spin;
+  const tongue = (off: number, len: number, w: number, share: number, least: number): Point[] => {
+    const a = spin + off;
+    const [ux, uy, nx, ny] = [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a)];
+    const l = Math.max(least * share, sized(len * grow * share, cam));
+    const half = sized(w * grow * share, cam) / 2;
+    const along = (d: number, side: number): Point => ({
+      sx: at.sx + ux * d + nx * side,
+      sy: at.sy + uy * d + ny * side,
+    });
+    return [along(-half * 0.6, 0), along(l * 0.3, half), along(l, 0), along(l * 0.3, -half)];
+  };
+  const flames: Point[][] = [];
+  const centres: Point[][] = [];
+  style.tongues.forEach(([off, len, w], i) => {
+    const l = len * roll(style.roll ?? FLASH.tongue);
+    // The main flame keeps its point even at 0.5× zoom.
+    const least = i === 0 ? FLASH.reach : 0;
+    flames.push(tongue(off, l, w, 1, least));
+    centres.push(tongue(off, l, w, FLASH.hot, least));
+  });
+  const main = style.tongues[0]?.[2] ?? 0;
+  const left = 1 - fade;
+  return {
+    at,
+    alpha: rising ? 1 : left ** 2,
+    glow: rising ? 1 : left ** 3,
+    halo: sized(style.halo * grow, cam),
+    flames,
+    centres,
+    core: sized(main * FLASH.core * grow, cam),
+    edge: style.edge,
+  };
+}
+
+/** Fills each outline in `shapes` as one path. */
+function fillOutlines(ctx: CanvasRenderingContext2D, shapes: readonly Point[][]): void {
+  ctx.beginPath();
+  for (const s of shapes) {
+    s.forEach((p, i) => (i === 0 ? ctx.moveTo(p.sx, p.sy) : ctx.lineTo(p.sx, p.sy)));
+    ctx.closePath();
+  }
+  ctx.fill();
+}
+
+/** A muzzle flash at the barrel end of whoever shoots from `(x, y)`, over `MUZZLE_FLASH`. */
 function drawFlash(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
@@ -1633,19 +1860,10 @@ function drawFlash(
   y: number,
   cam: Camera,
 ): void {
-  const age = flashAge(scene, owner);
-  if (age === null) return;
+  const shot = flashOf(scene, owner);
+  if (shot === null) return;
   const c = project(muzzleAt(scene, x, y, owner), cam);
-  const shooter = scene.defenders.find((d) => d.id === owner);
-  const scale = shooter ? (gunOf(shooter)?.flash ?? 1) : 1;
-  const r = sized(EFFECT.flash * scale, cam);
-  ctx.globalAlpha = 1 - age;
-  ctx.fillStyle = COLOR.flashEdge;
-  ctx.beginPath();
-  ctx.arc(c.sx, c.sy, r * 1.6, 0, Math.PI * 2);
-  ctx.fill();
-  // The core points along the shot (its newest bullet; ahead, into the field, with none):
-  // white at the muzzle, orange at its tip (ID-070).
+  // It points along the shot (its newest bullet; ahead, into the field, with none).
   let newest: Bullet | null = null;
   let least = Infinity;
   for (const b of scene.bullets) {
@@ -1657,23 +1875,36 @@ function drawFlash(
     : null;
   const from = newest ? project({ x: newest.fromX, y: newest.fromY }, cam) : null;
   const turn = ahead && from ? Math.atan2(ahead.sy - from.sy, ahead.sx - from.sx) : 0;
-  const len = sized(FLASH.len * scale, cam);
-  const core = ctx.createRadialGradient(c.sx, c.sy, 0, c.sx, c.sy, len);
-  core.addColorStop(0, COLOR.flash);
-  core.addColorStop(1, FLASH.edge);
-  ctx.fillStyle = core;
-  ctx.beginPath();
-  ctx.ellipse(
-    c.sx + (Math.cos(turn) * len) / 2,
-    c.sy + (Math.sin(turn) * len) / 2,
-    len / 2,
-    sized(FLASH.w * scale, cam) / 2,
+  const f = flashShape(
+    c,
     turn,
-    0,
-    Math.PI * 2,
+    shot.age,
+    flashStyleOf(scene, owner),
+    flashSeed(owner, shot.at),
+    cam,
   );
+  // All of it adds light, so it never covers what's behind it.
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = f.glow;
+  const halo = ctx.createRadialGradient(f.at.sx, f.at.sy, 0, f.at.sx, f.at.sy, f.halo);
+  halo.addColorStop(0, withAlpha(f.edge, FLASH.halo));
+  halo.addColorStop(1, withAlpha(f.edge, 0));
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(f.at.sx, f.at.sy, f.halo, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = f.alpha * FLASH.edgeAlpha;
+  ctx.fillStyle = f.edge;
+  fillOutlines(ctx, f.flames);
+  ctx.globalAlpha = f.alpha;
+  ctx.fillStyle = FLASH.centre;
+  fillOutlines(ctx, f.centres);
+  ctx.fillStyle = FLASH.white;
+  ctx.beginPath();
+  ctx.arc(f.at.sx, f.at.sy, f.core, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 /** `#rrggbb` at `alpha`, for a gradient stop. */
@@ -2387,7 +2618,7 @@ export function drawScene(
       x: t.x,
       draw: () => {
         drawTurret(ctx, art, scene, t, cam);
-        drawFlash(ctx, scene, `turret:${t.id}`, t.x, t.y, cam);
+        drawFlash(ctx, scene, `${TURRET_OWNER}${t.id}`, t.x, t.y, cam);
       },
     });
   }

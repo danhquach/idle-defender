@@ -21,6 +21,7 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   SQUAD_CAP,
+  WALK_SPOTS,
   WALL,
   type EnemyKind,
   type Tracer,
@@ -58,6 +59,9 @@ import {
   bulletShape,
   drawScene,
   DUSK,
+  FLASH,
+  FLASH_STYLE,
+  flashShape,
   GRENADE,
   grenadeAt,
   NAME_TAG_GAP,
@@ -1053,8 +1057,8 @@ function geometry(cam: { x: number; y: number; zoom: number }, scene: Scene) {
 const PUFF = {
   blood: '#8e1f1a',
   dust: '#a8987c',
-  // A muzzle flash's round halo, centred on the barrel tip (its core is an ellipse ahead).
-  flash: 'rgba(255, 170, 60, 0.6)',
+  // A muzzle flash's white-hot dot at the barrel tip (ID-088; its flames reach ahead).
+  flash: '#fffdf2',
   slug: '#fffbe8',
 } as const;
 
@@ -1393,8 +1397,13 @@ describe('bullet visuals (ID-045)', () => {
     expect(flash.x).toBeGreaterThan(project(post, cam).sx);
     expect(flash.y).toBeLessThan(project(post, cam).sy);
     expect(flash.alpha).toBe(1);
+    // Full bright through its flare, then a fast fade (ID-088): under half by its middle.
+    const flare = at(1 + MUZZLE_FLASH * FLASH.rise * 0.9)[0]!;
+    expect(flare.kind === 'dot' && flare.alpha).toBe(1);
     const half = at(1 + MUZZLE_FLASH / 2)[0]!;
-    expect(half.kind === 'dot' && half.alpha).toBeCloseTo(0.5, 9);
+    if (half.kind !== 'dot') throw new Error('not a dot');
+    expect(half.alpha).toBeGreaterThan(0);
+    expect(half.alpha).toBeLessThan(0.5);
     expect(at(1 + MUZZLE_FLASH)).toEqual([]);
     // Someone else's shot flashes nothing here.
     expect(geometry(cam, { ...scene, time: 1, shots: [{ owner: 'zz', at: 1 }] }).dots).toEqual([]);
@@ -1403,13 +1412,13 @@ describe('bullet visuals (ID-045)', () => {
   it("lights the flash at each gun's aimed barrel tip (ID-069)", () => {
     const cam = { x: 0, y: 0, zoom: 1 };
     const { scene, d, post } = fight();
-    const flashOf = (gun: GunId) => {
+    const flashOf = (gun: GunId, age = 0) => {
       const primary = { uid: `g-${gun}`, base: gun, rarity: 'common' as const, affixes: [] };
       const shooter = { ...d, loadout: { ...d.loadout, primary } };
       const dots = geometry(cam, {
         ...scene,
         defenders: [shooter],
-        time: 1,
+        time: 1 + age * MUZZLE_FLASH,
         shots: [{ owner: d.id, at: 1 }],
       }).dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.flash);
       expect(dots, gun).toHaveLength(1);
@@ -1431,9 +1440,8 @@ describe('bullet visuals (ID-045)', () => {
     }
     // The sniper's long barrel reaches further than the pistol held out.
     expect(flashOf('sniper').x).toBeGreaterThan(flashOf('pistol').x);
-    // And a pistol's flash is smaller than a rifle's, scaled to the gun.
-    expect(flashOf('pistol').r).toBeCloseTo(flashOf('sniper').r * GUNNER_ART.pistol.flash, 6);
-    expect(GUNNER_ART.pistol.flash).toBeLessThan(GUNNER_ART.sniper.flash);
+    // And a pistol's flash is smaller than an LMG's, sized to the gun (ID-088), once flared.
+    expect(flashOf('pistol', FLASH.rise).r).toBeLessThan(flashOf('lmg', FLASH.rise).r);
   });
 
   it('shows a real shot at full flash on the first frame after the step that fired it', () => {
@@ -1734,43 +1742,264 @@ describe('bullet visuals (ID-045)', () => {
       expect(Math.max(...under)).toBeLessThan(Math.min(...over));
     });
 
-    it('points the muzzle flash along the barrel, lit for at least one 60 fps frame at 3×', () => {
+    it('points the muzzle flash along the shot, lit for at least one 60 fps frame at 3×', () => {
       expect(MUZZLE_FLASH).toBeGreaterThan(3 * FRAME);
       const cam = { x: 0, y: 0, zoom: 1 };
       const { scene, d } = fight();
-      const r = recorder();
-      const cores: number[][] = [];
-      const halos: number[][] = [];
-      Object.assign(r.ctx, {
-        ellipse: (...a: number[]) => cores.push(a),
-        arc: (...a: number[]) => halos.push(a),
-      });
-      // No enemies: their ground shadows are ellipses too.
       const shot = { ...scene, enemies: [], time: 1, shots: [{ owner: d.id, at: 1 }] };
-      drawScene(r.ctx, r.art, shot, cam, VIEW);
-      expect(cores).toHaveLength(1);
-      const [x, y, rx, ry] = cores[0]!;
-      const [hx, hy] = halos[0]!;
-      // A teardrop twice as long as it is wide, reaching out ahead of the barrel tip.
-      expect(rx! / ry!).toBeCloseTo(2, 9);
-      expect(x! - hx!).toBeCloseTo(rx!, 9);
-      expect(y).toBeCloseTo(hy!, 9);
+      /** Which way the flash's main flame points: from its back, at the barrel, to its tip. */
+      const pointing = (s: Scene) => {
+        const flames = paints(s, cam).filter((x) => x.style === FLASH_STYLE.pistol.edge);
+        expect(flames).toHaveLength(1);
+        const [back, , tip] = flames[0]!.path;
+        return Math.atan2(tip![1] - back![1], tip![0] - back![0]);
+      };
+      // Ahead, into the field, with no bullet; turned up to `FLASH.spin` per shot.
+      expect(Math.abs(pointing(shot))).toBeLessThanOrEqual(FLASH.spin + 1e-9);
       // Aimed off to one side, it turns with the shot (its newest bullet).
-      const r2 = recorder();
-      const turned: number[][] = [];
-      Object.assign(r2.ctx, { ellipse: (...a: number[]) => turned.push(a) });
       const post = scene.posts[d.postId]!;
       const b = { ...flying(post, { x: post.x + 300, y: post.y + 300 }, 20), owner: d.id };
-      drawScene(r2.ctx, r2.art, { ...shot, bullets: [b] }, cam, VIEW);
-      expect(turned).toHaveLength(1);
-      const [tx, ty, trx, , turn] = turned[0]!;
       const p0 = project(post, cam);
       const p1 = project({ x: post.x + b.dx, y: post.y + b.dy }, cam);
       const want = Math.atan2(p1.sy - p0.sy, p1.sx - p0.sx);
       expect(want).toBeGreaterThan(0.2);
-      expect(turn).toBeCloseTo(want, 9);
-      expect(Math.atan2(ty! - hy!, tx! - hx!)).toBeCloseTo(want, 9);
-      expect(Math.hypot(tx! - hx!, ty! - hy!)).toBeCloseTo(trx!, 9);
+      expect(Math.abs(pointing({ ...shot, bullets: [b] }) - want)).toBeLessThanOrEqual(
+        FLASH.spin + 1e-9,
+      );
+    });
+
+    describe('the muzzle flash (ID-088)', () => {
+      const at = { sx: 100, sy: 100 };
+      const CAM1 = { x: 0, y: 0, zoom: 1 };
+      const guns = Object.keys(FLASH_STYLE) as (keyof typeof FLASH_STYLE)[];
+      const tipOf = (f: ReturnType<typeof flashShape>) => f.flames[0]![2]!;
+      const reach = (f: ReturnType<typeof flashShape>) =>
+        Math.hypot(tipOf(f).sx - at.sx, tipOf(f).sy - at.sy);
+
+      it('adds light: every part of it is drawn lighter, and the canvas is put back after', () => {
+        const { scene, d } = fight();
+        const r = recorder();
+        const ctx = r.ctx as unknown as Record<string, unknown> & {
+          fillStyle: unknown;
+          globalCompositeOperation: string;
+        };
+        const fills: { style: unknown; comp: string }[] = [];
+        Object.assign(ctx, {
+          fillStyle: '',
+          globalCompositeOperation: 'source-over',
+          fill: () => fills.push({ style: ctx.fillStyle, comp: ctx.globalCompositeOperation }),
+        });
+        const shot = { ...scene, time: 1, shots: [{ owner: d.id, at: 1 }] };
+        drawScene(r.ctx, r.art, shot, CAM1, VIEW);
+        // Its halo (a gradient), then its flames, their hot centres and the white-hot dot.
+        const flames = fills.findIndex((x) => x.style === FLASH_STYLE.pistol.edge);
+        expect(flames).toBeGreaterThan(0);
+        const flash = fills.slice(flames - 1, flames + 3);
+        expect(flash.map((x) => (typeof x.style === 'string' ? x.style : 'glow'))).toEqual([
+          'glow',
+          FLASH_STYLE.pistol.edge,
+          FLASH.centre,
+          FLASH.white,
+        ]);
+        expect(flash.every((x) => x.comp === 'lighter')).toBe(true);
+        // Put back after: whatever is drawn next covers as usual.
+        expect(fills[flames + 3]?.comp ?? ctx.globalCompositeOperation).toBe('source-over');
+        expect(ctx.globalCompositeOperation).toBe('source-over');
+      });
+
+      it('rolls its own look each shot from the seeded RNG, the same on a replay', () => {
+        const look = (seed: number) => flashShape(at, 0, 0.1, FLASH_STYLE.rifle, seed, CAM1);
+        expect(look(7)).toEqual(look(7));
+        const tips = new Set(
+          Array.from({ length: 30 }, (_, i) => {
+            const t = tipOf(look(i));
+            return `${t.sx.toFixed(2)},${t.sy.toFixed(2)}`;
+          }),
+        );
+        expect(tips.size).toBe(30);
+        // Turned and sized only a little: it still points along the shot.
+        for (let i = 0; i < 30; i++) {
+          const t = tipOf(look(i));
+          expect(Math.abs(Math.atan2(t.sy - at.sy, t.sx - at.sx))).toBeLessThanOrEqual(
+            FLASH.spin + 1e-9,
+          );
+        }
+        // Each flame's length rolls within its range, with the whole flash's size: an SMG's
+        // spikier than the rest.
+        expect(FLASH_STYLE.smg.roll).toBeGreaterThan(FLASH.tongue);
+        for (const g of guns) {
+          const style = FLASH_STYLE[g];
+          const spread = style.roll ?? FLASH.tongue;
+          const len = style.tongues[0]![1];
+          const reaches = Array.from({ length: 200 }, (_, i) =>
+            reach(flashShape(at, 0, FLASH.rise, style, i, CAM1)),
+          );
+          expect(Math.max(...reaches), g).toBeLessThanOrEqual(
+            len * (1 + FLASH.size) * (1 + spread) + 1e-9,
+          );
+          expect(Math.min(...reaches), g).toBeGreaterThanOrEqual(
+            len * (1 - FLASH.size) * (1 - spread) - 1e-9,
+          );
+          // And it really varies: the longest well past the shortest.
+          expect(Math.max(...reaches) / Math.min(...reaches), g).toBeGreaterThan(1 + spread);
+        }
+        // In the fight: one scene draws the same twice; another shot draws another flash.
+        const { scene, d } = fight();
+        const flames = (s: Scene) =>
+          paints(s, CAM1)
+            .filter((x) => x.style === FLASH_STYLE.pistol.edge)
+            .map((x) => x.path);
+        const first = { ...scene, time: 1.02, shots: [{ owner: d.id, at: 1 }] };
+        const next = { ...scene, time: 1.52, shots: [{ owner: d.id, at: 1.5 }] };
+        expect(flames(first)).toEqual(flames(first));
+        expect(flames(first)).not.toEqual(flames(next));
+      });
+
+      it("fits each gun: sized and shaped for it, and a turret's unlike a survivor's", () => {
+        const len = (g: keyof typeof FLASH_STYLE) => FLASH_STYLE[g].tongues[0]![1];
+        expect(len('pistol')).toBeLessThan(len('smg'));
+        expect(len('smg')).toBeLessThan(len('rifle'));
+        expect(len('rifle')).toBeLessThan(len('sniper'));
+        // An SMG's thinner than a pistol's; a sniper's a needle, thinner than a rifle's.
+        const width = (g: keyof typeof FLASH_STYLE) => FLASH_STYLE[g].tongues[0]![2];
+        expect(width('smg')).toBeLessThan(width('pistol'));
+        expect(width('sniper')).toBeLessThan(width('rifle'));
+        const halo = (g: keyof typeof FLASH_STYLE) => FLASH_STYLE[g].halo;
+        for (const g of ['pistol', 'smg', 'rifle', 'sniper'] as const) {
+          expect(halo(g)).toBeLessThan(halo('lmg'));
+          expect(halo(g)).toBeLessThanOrEqual(halo('shotgun'));
+        }
+        // A shotgun's is a wide fan: three big flames forward, not one.
+        const forward = FLASH_STYLE.shotgun.tongues.filter(
+          ([off, l]) => Math.abs(off) < 0.5 && l > 5,
+        );
+        expect(forward).toHaveLength(3);
+        // An LMG's main flame is the broadest of any gun.
+        for (const g of guns) {
+          if (g !== 'lmg')
+            expect(FLASH_STYLE[g].tongues[0]![2]).toBeLessThanOrEqual(
+              FLASH_STYLE.lmg.tongues[0]![2],
+            );
+        }
+        // A turret's is a cold cross, with a flame out the back: no survivor's is.
+        for (const g of guns) {
+          if (g === 'turret') continue;
+          expect(FLASH_STYLE[g].edge).not.toBe(FLASH_STYLE.turret.edge);
+          expect(FLASH_STYLE[g].tongues.some(([off]) => Math.abs(off) > 3)).toBe(false);
+        }
+        expect(FLASH_STYLE.turret.tongues.some(([off]) => Math.abs(off) > 3)).toBe(true);
+        // The same roll draws a pistol's smaller than a shotgun's.
+        const pistol = flashShape(at, 0, 0.1, FLASH_STYLE.pistol, 3, CAM1);
+        const shotgun = flashShape(at, 0, 0.1, FLASH_STYLE.shotgun, 3, CAM1);
+        expect(pistol.halo).toBeLessThan(shotgun.halo);
+        expect(pistol.flames).toHaveLength(3);
+        expect(shotgun.flames).toHaveLength(5);
+      });
+
+      it("draws a turret's flash in its own colour", () => {
+        const built = buildTurret(
+          newBase(),
+          stockOf({ scrap: 99, wood: 99, metal: 0, concrete: 0 }),
+          true,
+          'tower',
+          0,
+          5,
+        );
+        if (!built.ok) throw new Error(built.reason);
+        const { turrets, layers } = layoutOf(built.base);
+        const { scene } = fight();
+        const p = paints(
+          {
+            ...scene,
+            layers,
+            turrets,
+            time: 2,
+            shots: [{ owner: `turret:${turrets[0]!.id}`, at: 2 }],
+          },
+          CAM1,
+        );
+        expect(p.filter((x) => x.style === FLASH_STYLE.turret.edge)).toHaveLength(1);
+        expect(p.filter((x) => x.style === FLASH_STYLE.pistol.edge)).toHaveLength(0);
+      });
+
+      it('flares up at full brightness, then shrinks and fades fast to nothing', () => {
+        const shape = (age: number) => flashShape(at, 0, age, FLASH_STYLE.rifle, 5, CAM1);
+        expect(shape(0).alpha).toBe(1);
+        expect(shape(FLASH.rise * 0.99).alpha).toBe(1);
+        expect(reach(shape(0))).toBeLessThan(reach(shape(FLASH.rise)));
+        expect(shape(0).halo).toBeLessThan(shape(FLASH.rise).halo);
+        const later = [0.3, 0.5, 0.7, 0.9].map(shape);
+        later.reduce((a, b) => {
+          expect(b.alpha).toBeLessThan(a.alpha);
+          expect(reach(b)).toBeLessThan(reach(a));
+          return b;
+        }, shape(FLASH.rise));
+        expect(shape(0.5).alpha).toBeLessThan(0.5);
+        expect(shape(0.999).alpha).toBeLessThan(0.001);
+        // Its glow is full through the flare, then goes before the flames: an ember, not a smudge.
+        expect(shape(0).glow).toBe(1);
+        for (const age of [0.3, 0.5, 0.7]) {
+          expect(shape(age).glow).toBeLessThan(shape(age).alpha);
+          expect(shape(age).glow).toBeCloseTo(shape(age).alpha ** 1.5, 9);
+        }
+      });
+
+      it('reads from 0.5× to 2× zoom: in proportion, never under the smallest effect size', () => {
+        for (const g of guns) {
+          const half = flashShape(at, 0, 0.5, FLASH_STYLE[g], 9, { ...CAM1, zoom: 0.5 });
+          const one = flashShape(at, 0, 0.5, FLASH_STYLE[g], 9, CAM1);
+          const two = flashShape(at, 0, 0.5, FLASH_STYLE[g], 9, { ...CAM1, zoom: 2 });
+          expect(reach(two) / reach(one), g).toBeCloseTo(2, 6);
+          expect(reach(half), g).toBeGreaterThanOrEqual(1.5);
+          expect(half.halo, g).toBeGreaterThanOrEqual(1.5);
+          expect(half.core, g).toBeGreaterThanOrEqual(1.5);
+          // Its main flame keeps a point, so it still shows which way the shot went.
+          expect(reach(half), g).toBeGreaterThanOrEqual(FLASH.reach - 1e-9);
+          for (const f of half.flames) {
+            // Every flame at least the smallest effect across.
+            expect(Math.hypot(f[1]!.sx - f[3]!.sx, f[1]!.sy - f[3]!.sy), g).toBeGreaterThanOrEqual(
+              1.5 - 1e-9,
+            );
+          }
+        }
+      });
+
+      it("stays clear of the next survivor's flash along the wall, for shots across the field", () => {
+        // The closest two posts survivors fire from: a wall walk's spots, side by side.
+        const step = SEGMENT_HEIGHT / WALK_SPOTS;
+        const gap = project({ x: 0, y: step }, CAM1).sy - project({ x: 0, y: 0 }, CAM1).sy;
+        expect(gap).toBeGreaterThan(0);
+        // Shots up to 0.4 rad off straight across on screen: an enemy up to 0.7× as far off
+        // the shooter's row as it is out in the field.
+        const aim = 0.4;
+        for (const g of guns) {
+          const style = FLASH_STYLE[g];
+          const roll = style.roll ?? FLASH.tongue;
+          // The most any flame can reach up or down: its longest roll, at its steepest turn,
+          // plus half its widest width.
+          const bound = Math.max(
+            ...style.tongues.map(([off, len, w]) => {
+              let steep = 0;
+              for (let a = -aim - FLASH.spin; a <= aim + FLASH.spin + 1e-9; a += 0.01) {
+                steep = Math.max(steep, Math.abs(Math.sin(a + off)));
+              }
+              const big = 1 + FLASH.size;
+              return len * big * (1 + roll) * steep + Math.max(w * big, 1.5) / 2;
+            }),
+          );
+          // One reaching down and the next reaching up still leave a gap between them.
+          expect(bound * 2, g).toBeLessThan(gap);
+          // And the bound holds for real flashes at their biggest (the end of the flare).
+          for (let seed = 0; seed < 60; seed++) {
+            for (const turn of [-aim, 0, aim]) {
+              const f = flashShape(at, turn, FLASH.rise, style, seed, CAM1);
+              for (const p of f.flames.flat()) {
+                expect(Math.abs(p.sy - at.sy), g).toBeLessThanOrEqual(bound + 1e-9);
+              }
+            }
+          }
+        }
+      });
     });
 
     it("sorts each of a shooter's shots on its own: only one shot's pellets draw together", () => {
