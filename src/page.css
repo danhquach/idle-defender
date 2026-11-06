@@ -1483,6 +1483,8 @@ body {
   position: fixed;
   inset: 0;
   display: grid;
+  /* One cell the window's size, so a dialog's 100% height is the window's, not its content's. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   padding: var(--space-16);
   background: var(--color-scrim);
@@ -2013,6 +2015,36 @@ body {
 .inv-dialog .menu-body:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
+}
+
+/* Combine (ID-091): a set's count and its button on the right; the confirm in a box. */
+.inv-combine-button {
+  flex: none;
+}
+
+.inv-combine-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.inv-combine-label {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.inv-combine-result {
+  color: inherit;
+}
+
+/* Focused by code after a combine, to be read out; it is no control, so no ring. */
+.inv-combine-result:focus {
+  outline: none;
 }
 
 /* The Roster (ID-086): its button left of the Inventory's; survivor tiles, then a card. */

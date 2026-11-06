@@ -2,14 +2,16 @@
 // → next horde. The squad all start on the wall, a win adds XP and one survivor up to the
 // cap, a loss replays the same horde with everyone back and the wall full. The rest of
 // the game's state rides along untouched, so the full game can come back later.
-import { gunPower, isOwned, rollSquadDrop, type OwnedWeapon } from './armoury.ts';
+import { gunPower, isOwned, rollSquadDrop, rollWeapon, type OwnedWeapon } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
 import { UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
 import {
   COLUMNS,
+  COMBINE_COUNT,
   FIELD,
   MAX_COUNT,
+  RARITY_ORDER,
   SQUAD_CAP,
   SQUAD_HP_GROWTH,
   SQUAD_LINE,
@@ -17,6 +19,9 @@ import {
   SQUAD_XP_RATE,
   STASH_CAP,
   START_PERK,
+  WEAPONS,
+  type Rarity,
+  type WeaponId,
 } from './data.ts';
 import {
   equip,
@@ -242,6 +247,102 @@ export function equipGun(
   const gun = game.armoury.find((w) => w.uid === choice);
   if (!gun || !isGun(gun)) return { ok: false, reason: 'That gun is not in the stash' };
   return equip(game, me.id, { ...me.loadout, primary: gun });
+}
+
+/** The rarity a combine of `rarity` guns makes (ID-091), or null for Relic, the top. */
+export const nextRarity = (rarity: Rarity): Rarity | null =>
+  RARITY_ORDER[RARITY_ORDER.indexOf(rarity) + 1] ?? null;
+
+/** One base weapon at one rarity in the stash, as the Combine list shows it (ID-091). */
+export interface CombineSet {
+  base: WeaponId;
+  rarity: Rarity;
+  /** Every stash gun of this kind, weakest first: a combine uses up the first `COMBINE_COUNT`. */
+  guns: OwnedWeapon[];
+  /** What a combine makes; null for Relic, which combines no further. */
+  next: Rarity | null;
+}
+
+/**
+ * The stash's guns by base weapon and rarity (ID-091), in `WEAPONS` then rarity order. Each
+ * set's guns are weakest first by `gunPower` (ties in stash order), so a combine keeps the
+ * best. A blade or tool an older save left in the stash is no gun and is left out.
+ */
+export function combineSets(game: Pick<GameState, 'armoury'>): CombineSet[] {
+  const sets: CombineSet[] = [];
+  for (const base of Object.keys(WEAPONS) as WeaponId[]) {
+    for (const rarity of RARITY_ORDER) {
+      const guns = game.armoury
+        .filter((w) => w.base === base && w.rarity === rarity && isGun(w))
+        .map((w) => ({ w, power: gunPower(w) }))
+        .sort((a, b) => a.power - b.power)
+        .map(({ w }) => w);
+      if (guns.length > 0) sets.push({ base, rarity, guns, next: nextRarity(rarity) });
+    }
+  }
+  return sets;
+}
+
+/** FNV-1a: a combine's seed from its inputs, so the same guns always roll the same affixes. */
+function hash(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return h >>> 0;
+}
+
+/**
+ * Combines the stash guns `uids` into one gun of the next rarity (ID-091, between hordes):
+ * exactly `COMBINE_COUNT` guns, all in the stash (a survivor's must go back first, and the
+ * free pistol never combines), of one base weapon and one rarity below Relic. The new gun
+ * rolls its rarity's affixes as a drop does, seeded from the inputs alone, so the same save
+ * and the same picks give the same gun. The inputs are used up, and the new gun takes the
+ * first input's uid (in sorted order), so it stays unique and a save reads it as before.
+ * Free; 3 in and 1 out, so a full stash never refuses it.
+ */
+export function combineGuns(
+  game: GameState,
+  uids: readonly string[],
+): { ok: true; game: GameState; weapon: OwnedWeapon } | { ok: false; reason: string } {
+  if (uids.includes('pistol')) return { ok: false, reason: 'The free pistol can’t be combined' };
+  if (uids.length !== COMBINE_COUNT || new Set(uids).size !== uids.length) {
+    return { ok: false, reason: `Combining takes ${COMBINE_COUNT} different guns` };
+  }
+  const guns: OwnedWeapon[] = [];
+  for (const uid of uids) {
+    const gun = game.armoury.find((w) => w.uid === uid);
+    if (gun) {
+      guns.push(gun);
+      continue;
+    }
+    const holder = [...game.roster, ...game.reserve].find((d) =>
+      [d.loadout.primary, d.loadout.secondary].some((h) => isOwned(h) && h.uid === uid),
+    );
+    return {
+      ok: false,
+      reason: holder
+        ? `${holder.name} holds that gun: put it back in the stash first`
+        : 'That gun is not in the stash',
+    };
+  }
+  const [first] = guns as [OwnedWeapon, ...OwnedWeapon[]];
+  if (!guns.every(isGun)) return { ok: false, reason: 'Only guns can be combined' };
+  if (guns.some((g) => g.base !== first.base)) {
+    return { ok: false, reason: 'Combining takes guns of one kind' };
+  }
+  if (guns.some((g) => g.rarity !== first.rarity)) {
+    return { ok: false, reason: 'Combining takes guns of one rarity' };
+  }
+  const next = nextRarity(first.rarity);
+  if (!next) return { ok: false, reason: 'A Relic gun is the best there is: it can’t be combined' };
+  const sorted = [...uids].sort();
+  const rng = createRng(hash(`${first.base}:${first.rarity}:${sorted.join(',')}`));
+  const weapon = rollWeapon(rng, sorted[0]!, first.base, next);
+  const used = new Set(uids);
+  return {
+    ok: true,
+    game: { ...game, armoury: [...game.armoury.filter((w) => !used.has(w.uid)), weapon] },
+    weapon,
+  };
 }
 
 /**

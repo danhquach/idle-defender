@@ -6,7 +6,7 @@ import type { OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { ARMOURY_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
+import { combineGuns, equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { decodeSave, encodeSave, MAX_SAVE_CHARS } from './save.ts';
 import { NOW } from './testing.ts';
 
@@ -129,6 +129,24 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       expect(decodeSave(raw)).toBeNull();
     }
     expect(({} as Record<string, unknown>).x).toBeUndefined();
+  });
+
+  it('round-trips a combined gun, which a survivor can take after a reload (ID-091)', () => {
+    const g = armed(4);
+    g.armoury = g.armoury.map((w) => ({
+      ...w,
+      base: 'smg',
+      rarity: 'military',
+      affixes: [{ id: 'damage', value: 10 }],
+    }));
+    const r = combineGuns(g, ['h2', 'h3', 'h4']);
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.weapon).toMatchObject({ uid: 'h2', base: 'smg', rarity: 'prototype' });
+    expect(r.weapon.affixes).toHaveLength(2);
+    const back = reread(r.game)?.game;
+    expect(back).toEqual(r.game);
+    // The combined gun is an ordinary stash gun once loaded: a survivor can take it.
+    expect(equipGun(back!, 'recruit-2', 'h2').ok).toBe(true);
   });
 
   it('a new survivor joins with the pistol, and loads back with it', () => {

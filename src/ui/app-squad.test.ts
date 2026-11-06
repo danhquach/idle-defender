@@ -231,6 +231,61 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
   });
 });
 
+describe('Combine in the game (app.ts, ID-091)', () => {
+  function seeded() {
+    const g = newGame('horde');
+    const rusty = (uid: string) => ({
+      uid,
+      base: 'smg' as const,
+      rarity: 'rusty' as const,
+      affixes: [],
+    });
+    const camp = {
+      ...g,
+      hordeNumber: 4,
+      roster: [recruit(1)],
+      camp: { ...g.camp, recruits: 1 },
+      armoury: [rusty('h1'), rusty('h2'), rusty('h3')],
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    const booted = boot();
+    step(0);
+    const invButton = booted.root.querySelector<HTMLButtonElement>('.inv-button')!;
+    const invScrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+    const combineButtons = () => invScrim.querySelectorAll('.inv-combine-button');
+    const close = () => invScrim.querySelector<HTMLButtonElement>('.menu-foot button')!.click();
+    return { ...booted, invButton, invScrim, combineButtons, close };
+  }
+
+  it('on the start screen combines, saves, and the gun picker lists the new gun', () => {
+    const { root, invButton, invScrim, saved } = seeded();
+    invButton.click();
+    invScrim.querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
+    invScrim.querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
+    expect(saved().armoury.map((w) => [w.uid, w.rarity, w.base])).toEqual([
+      ['h1', 'common', 'smg'],
+    ]);
+    const options = [...root.querySelectorAll<HTMLOptionElement>('.hud-gear-select option')];
+    expect(options.map((o) => o.value)).toContain('h1');
+    expect(options.find((o) => o.value === 'h1')!.textContent).toContain('Common SMG');
+    expect(invScrim.querySelector('.inv-combine-result')!.textContent).toMatch(/^Made: Common SMG/);
+  });
+
+  it('mid-fight shows no Combine button; on the result screen it is back', () => {
+    const { button, invButton, combineButtons, close, title } = seeded();
+    button().click();
+    step(16);
+    invButton.click();
+    expect(combineButtons()).toHaveLength(0);
+    close();
+    endNextTick('won');
+    step(32);
+    expect(title()).toMatch(/Horde 4/);
+    invButton.click();
+    expect(combineButtons()).toHaveLength(1);
+  });
+});
+
 describe('the Roster in the game (app.ts, ID-086)', () => {
   /** A camp at Horde 2 with survivor 1 at level 2 (3 points to spend) and survivor 2 fresh. */
   function seeded() {

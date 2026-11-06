@@ -20,7 +20,7 @@ import {
   tick,
   type HordeState,
 } from '../core/horde.ts';
-import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
+import { combineGuns, equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
 import { chatter, newChat } from '../core/chatter.ts';
@@ -63,7 +63,7 @@ import {
   squadScreen,
   squadStart,
 } from './hud.ts';
-import { createInventory } from './inventory.ts';
+import { COMBINE_WAIT, createInventory } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import { createRoster, type Roster } from './squadroster.ts';
@@ -348,8 +348,24 @@ export function start(root: HTMLElement, art: Art): void {
     panel.show(game, selected);
   }
   // The Inventory (ID-079) sits left of the Menu; either one open holds a fight.
+  // Its Combine (ID-091, horde-only) works between hordes, like the gun pickers.
   const inventory = createInventory(root, {
-    state: () => ({ game, resumes: horde?.outcome === 'fighting' && !held }),
+    state: () => ({
+      game,
+      resumes: horde?.outcome === 'fighting' && !held,
+      canCombine: !horde || endedAt !== null,
+    }),
+    onCombine: HORDE_ONLY
+      ? (uids) => {
+          if (horde && endedAt === null) return { ok: false, reason: COMBINE_WAIT };
+          const r = combineGuns(game, uids);
+          if (!r.ok) return r;
+          commit(r.game);
+          // The gun pickers list the stash: the new gun is there, the used ones gone.
+          showGear();
+          return { ok: true, weapon: r.weapon };
+        }
+      : undefined,
   });
   const menu = createMenu(root, {
     state: () => ({ game, fighting: horde !== null, held }),
