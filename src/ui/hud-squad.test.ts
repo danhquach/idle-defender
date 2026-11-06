@@ -2,9 +2,10 @@
 // The horde-only HUD (ID-066): the minimal top bar (horde, waves cleared, enemies left)
 // with the fight XP bar, no shop row, and the start, result and ending screens. Text
 // reaches the page only through textContent.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { ENDING_HORDE, SQUAD_CAP, TITLES } from '../core/data.ts';
+import { STATS_REFUNDED } from './build.ts';
+import { ENDING_HORDE, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { waveCount, xpToNext } from '../core/waves.ts';
@@ -126,18 +127,26 @@ describe('the horde-only screens (ID-066)', () => {
     expect(screen.lines.join(' ')).not.toMatch(/Food|Medicine|back at|Repair/);
   });
 
-  it('the stat picker: a plain name, Aim and Grit only, no titles', () => {
-    const top = TITLES[0]!.at;
+  it('the stat picker (ID-084): a plain name, every stat, Tinker greyed out', () => {
     const d: RosterDefender = {
       ...recruit(1),
       xp: 10_000,
-      stats: { aim: top, might: 0, tech: 0, grit: 0 },
+      stats: { instinct: 2, agility: 0, mind: 1, tinker: 0 },
     };
-    const row = pickerRow(d, { aim: 0, might: 0, tech: 0, grit: 0 }, true);
+    const row = pickerRow(d, true);
     expect(row.heading).toMatch(new RegExp(`^${d.name} · `));
-    expect(row.buttons.map((b) => b.stat)).toEqual(['aim', 'grit']);
-    expect(row.note).toBe('');
-    expect(pickerRow(d, { aim: 0, might: 0, tech: 0, grit: 0 }).note).not.toBe('');
+    expect(row.buttons).toEqual([
+      { stat: 'instinct', label: '+ Instinct (2)', disabled: false },
+      { stat: 'agility', label: '+ Agility (0)', disabled: false },
+      { stat: 'mind', label: '+ Sharp Mind (1)', disabled: false },
+      { stat: 'tinker', label: 'Tinker (locked)', disabled: true },
+    ]);
+    // With no points left, every button is off.
+    const none = pickerRow(
+      { ...d, xp: 0, stats: { instinct: 0, agility: 0, mind: 0, tinker: 0 } },
+      true,
+    );
+    expect(none.buttons.every((b) => b.disabled)).toBe(true);
   });
 
   it('a plain survivor is named alone, with no profession', () => {
@@ -153,6 +162,25 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, squad);
     return { root, h };
   }
+
+  it('a toast stays 2 s, or as long as asked (the stat refund note, ID-084)', () => {
+    vi.useFakeTimers();
+    try {
+      const { root, h } = hud(true);
+      const toast = root.querySelector<HTMLElement>('.hud-toast')!;
+      h.toast('short');
+      vi.advanceTimersByTime(2000);
+      expect(toast.hidden).toBe(true);
+      h.toast(STATS_REFUNDED, 8000);
+      expect(toast.textContent).toBe(STATS_REFUNDED);
+      vi.advanceTimersByTime(7999);
+      expect(toast.hidden).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(toast.hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('has no shop row, and shows the top bar and the XP bar', () => {
     const { root, h } = hud(true);
@@ -188,23 +216,32 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     // The debrief (ID-067): their card, and their points row's button names them too.
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
     expect(root.querySelector('.hud-pick-stat')!.getAttribute('aria-label')).toBe(
-      `Add Aim to ${evil}`,
+      `Add Instinct to ${evil}, now 0`,
     );
     h.showResult(squadStart(g));
     expect(root.querySelector('.hud-result img')).toBeNull();
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
   });
 
-  it('the result screen’s picker offers Aim and Grit only', () => {
+  it('the result screen’s picker offers every stat, Tinker greyed out and unnamed for adding (ID-084)', () => {
     const { root, h } = hud(true);
     const g = squadGame(1, 5);
     h.showResult(squadScreen(g, ended(g, 'won')));
-    const stats = [...root.querySelectorAll('.hud-pick-stat')].map((b) => b.textContent);
-    expect(stats).toEqual(['+ Aim (0)', '+ Grit (0)']);
-    expect(document.activeElement?.textContent).toBe('+ Aim (0)');
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')];
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      '+ Instinct (0)',
+      '+ Agility (0)',
+      '+ Sharp Mind (0)',
+      'Tinker (locked)',
+    ]);
+    expect(buttons.map((b) => b.disabled)).toEqual([false, false, false, true]);
+    expect(buttons[3]!.hasAttribute('aria-label')).toBe(false);
+    expect(buttons[3]!.title).toMatch(/^Unlocks later/);
+    expect(document.activeElement?.textContent).toBe('+ Instinct (0)');
     expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe(SQUAD_POINTS_NOTE);
     expect(root.querySelector('.debrief-hint')!.textContent).toBe(
-      'Aim: Gun damage and crits · Grit: HP in hordes',
+      'Instinct: more HP and armour · Agility: faster reloads · ' +
+        'Sharp Mind: accuracy and crits · Tinker: unlocks later',
     );
     expect(root.querySelector('.hud-result-foot > .hud-button')!.textContent).toBe(startLabel(6));
   });

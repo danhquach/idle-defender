@@ -242,7 +242,7 @@ describe('perks in the horde', () => {
     expect(kill(['butchers-hunger'], 10, null)).toEqual({ near: 0, far: 0 }); // a gun kill
   });
 
-  it("Butcher's Hunger: each cleave kill heals 3 HP more", () => {
+  it("Butcher's Hunger: a blade strike's kill heals; stats add no cleave (ID-084)", () => {
     const r = buildPost(newBase(), RICH, { kind: 'ground', column: 0, row: 4 });
     if (!r.ok) throw new Error(r.reason);
     const s = newHorde(1, {
@@ -252,8 +252,7 @@ describe('perks in the horde', () => {
           id: 'a',
           name: 'A',
           loadout: { primary: 'pistol', secondary: 'knife', item: null },
-          // Might cleaves a fifth of each knife strike (design §6).
-          stats: { aim: 0, might: 20, tech: 0, grit: 0 },
+          stats: { instinct: 20, agility: 20, mind: 20, tinker: 0 },
         },
       ],
       base: r.base,
@@ -265,10 +264,10 @@ describe('perks in the horde', () => {
     const seg = s.layers[0]!.segments[post.row]!;
     seg.hp = seg.maxHp - 20;
     enemy(s, { ...still, hp: 1, maxHp: 1, x: post.x + 20, y: post.y });
-    enemy(s, { ...still, hp: 0.1, maxHp: 1, x: post.x + 20, y: post.y + 20 });
+    const near = enemy(s, { ...still, hp: 0.1, maxHp: 1, x: post.x + 20, y: post.y + 20 });
     const t = tick(s, STEP);
-    expect(t.enemies).toEqual([]);
-    expect(t.layers[0]!.segments[post.row]!.hp - seg.hp).toBe(2 * PERK.butcherHeal);
+    expect(t.enemies.map((e) => e.id)).toEqual([near.id]);
+    expect(t.layers[0]!.segments[post.row]!.hp - seg.hp).toBe(PERK.butcherHeal);
   });
 
   it('Rally Call: recruit cards come twice as often, still one per offer at most', () => {

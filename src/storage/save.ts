@@ -114,13 +114,18 @@ import {
   type QueueId,
   type ResearchQueue,
 } from '../core/research.ts';
-import { earnedPoints, levelOf, NO_STATS, spentPoints, xpForLevel } from '../core/stats.ts';
+import { earnedPoints, isLocked, levelOf, NO_STATS, xpForLevel } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 13 since the stat rework (ID-084): a v12 save's stats are Aim, Might, Tech and Grit.
+ * Every point spent there (a defender's, or a survivor's waiting to join) is refunded as
+ * unspent points, with a one-time note (`Save.refunded`); a patrol out keeps a strength
+ * no higher than its party's today (stats no longer add to it).
+ *
  * 12 since the horde-only build (ID-066): a v11 save has no reserve. Loaded into this
  * build, survivors past the squad's cap move to the reserve; every other field loads as
  * it was, hidden or not.
@@ -147,7 +152,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -201,7 +206,21 @@ export interface Save {
   savedAt: number;
   /** Set when a 5-row (v1) base was moved onto today's taller field. */
   grew?: true;
+  /** Set when spent stat points were refunded: an old save's (ID-084), or any in a locked stat. */
+  refunded?: true;
 }
+
+/**
+ * How a save's stats read (ID-084): `legacy` for a v12 or older save (the old four stats,
+ * refunded); `refunded` is set by the readers when any spent point was given back.
+ */
+interface StatsRead {
+  legacy: boolean;
+  refunded: boolean;
+}
+
+/** The pre-ID-084 stats a v12 or older save holds. */
+const LEGACY_STATS = ['aim', 'might', 'tech', 'grit'] as const;
 
 /** The page's storage, or null where it is blocked (some private modes throw on access). */
 export function browserStorage(): SaveStorage | null {
@@ -272,7 +291,9 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) fail('version');
+  if (![SAVE_VERSION, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
+    fail('version');
+  }
   const savedAt = int(o.savedAt, 0, MAX_TIME);
   const ver = o.v as number;
   const materials = ver >= 4 ? MATERIALS : BUILDING_MATERIALS;
@@ -280,16 +301,14 @@ function readSave(v: unknown): Save {
   const camp = ver >= 7 ? (ver >= 10 ? 'cars' : ver === 9 ? 'survivors' : 'camp') : null;
   const queue = ver >= 11;
   const reserve = ver >= 12;
-  if (ver === 1) {
-    return {
-      game: readGame(o.game, savedAt, V1_GRID, materials, patrols, camp, queue, reserve),
-      savedAt,
-      grew: true,
-    };
-  }
+  const stats: StatsRead = { legacy: ver < 13, refunded: false };
+  const grid = ver === 1 ? V1_GRID : GRID;
+  const game = readGame(o.game, savedAt, grid, materials, patrols, camp, queue, reserve, stats);
   return {
-    game: readGame(o.game, savedAt, GRID, materials, patrols, camp, queue, reserve),
+    game,
     savedAt,
+    ...(ver === 1 ? { grew: true as const } : {}),
+    ...(stats.refunded ? { refunded: true as const } : {}),
   };
 }
 
@@ -306,6 +325,7 @@ function readGame(
   hasQueue: boolean,
   /** Whether the save has the reserve (v12). */
   hasReserve: boolean,
+  stats: StatsRead,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -344,8 +364,10 @@ function readGame(
     : ownedLevels(research);
   const queue = hasQueue ? readQueue(o.queue, savedAt, { lab, research, perkLevels }) : newQueue();
   const patrolsSent = patrols ? int(o.patrolsSent, 0, PATROL.max) : 0;
-  const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent, 1);
-  const reserve = hasReserve ? readRoster(o.reserve, savedAt, hordeNumber, patrolsSent, 0) : [];
+  const roster = readRoster(o.roster, savedAt, hordeNumber, patrolsSent, 1, stats);
+  const reserve = hasReserve
+    ? readRoster(o.reserve, savedAt, hordeNumber, patrolsSent, 0, stats)
+    : [];
   // The checks below treat the reserve as the roster it came from: one camp of people.
   const everyone = [...roster, ...reserve];
   if (new Set(everyone.map((d) => d.id)).size !== everyone.length) fail('id twice');
@@ -354,7 +376,7 @@ function readGame(
   const risk = patrols === 'risk' || patrols === 'plazas';
   const plazas = patrols === 'plazas';
   const out = patrols
-    ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, everyone, plazas, cars)
+    ? readPatrols(o.patrols, savedAt, hordeNumber, patrolsSent, everyone, plazas, cars, stats)
     : [];
   const game: GameState = {
     hordeNumber,
@@ -374,10 +396,12 @@ function readGame(
     patrols: out,
     patrolsSent,
     reports: patrols
-      ? readReports(o.reports, savedAt, patrolsSent, out, risk, plazas, survivors)
+      ? readReports(o.reports, savedAt, patrolsSent, out, risk, plazas, survivors, stats)
       : [],
     leftBehind: risk ? readLeftBehind(o.leftBehind, hordeNumber, patrolsSent, plazas) : [],
-    camp: hasCamp ? readCamp(o.camp, savedAt, survivors, cars, carLimit({ research })) : newCamp(),
+    camp: hasCamp
+      ? readCamp(o.camp, savedAt, survivors, cars, carLimit({ research }), stats)
+      : newCamp(),
     reserve: [],
   };
   // Each car out is one the camp built, on one patrol at a time.
@@ -445,6 +469,7 @@ function readCamp(
   survivors: boolean,
   cars: boolean,
   maxCars: number,
+  stats: StatsRead,
 ): Camp {
   const o = obj(v, [
     'upgrades',
@@ -462,7 +487,7 @@ function readCamp(
   const offers = arr(o.offers, 0, CAMP_PICK_IDS.length * CAMP_PICK_RANKS).map((x): CampOffer => {
     // A v7 offer is a bare list of picks.
     const c = survivors ? obj(x, ['picks', 'survivor']) : { picks: x, survivor: null };
-    const survivor = c.survivor === null ? null : readSurvivor(c.survivor, 'c');
+    const survivor = c.survivor === null ? null : readSurvivor(c.survivor, 'c', stats);
     // Level 1 to the camp level their offer came with (`c<level>`), at most 5.
     if (survivor && levelOf(survivor.xp).level > Number(survivor.id.slice(1))) {
       fail('survivor level');
@@ -740,12 +765,28 @@ function readPost(v: unknown, grid: Grid): BasePost {
   };
 }
 
-/** Points spent per stat: no more in all than lifetime `xp` has earned. */
-function readStats(v: unknown, xp: number): Stats {
-  const o = obj(v, STATS);
+/**
+ * Points spent per stat: no more in all than lifetime `xp` has earned. An old save's
+ * (`read.legacy`, the pre-ID-084 four) are checked the same way, then all refunded; a
+ * point in a locked stat (Tinker, which no build lets a player spend) is refunded too.
+ */
+function readStats(v: unknown, xp: number, read: StatsRead): Stats {
+  const keys: readonly string[] = read.legacy ? LEGACY_STATS : STATS;
+  const o = obj(v, keys);
+  let spent = 0;
+  for (const k of keys) spent += int(o[k], 0, MAX_COUNT);
+  if (spent > earnedPoints(xp)) fail('points not earned');
   const stats = { ...NO_STATS };
-  for (const s of STATS) stats[s] = int(o[s], 0, MAX_COUNT);
-  if (spentPoints(stats) > earnedPoints(xp)) fail('points not earned');
+  if (read.legacy) {
+    if (spent > 0) read.refunded = true;
+    return stats;
+  }
+  for (const s of STATS) {
+    const n = o[s] as number;
+    if (isLocked(s)) {
+      if (n > 0) read.refunded = true;
+    } else stats[s] = n;
+  }
   return stats;
 }
 
@@ -819,6 +860,7 @@ function readRoster(
   patrolsSent: number,
   /** Fewest it may hold: 1 for the roster, 0 for the reserve. */
   min: number,
+  stats: StatsRead,
 ): RosterDefender[] {
   const list = arr(v, min, MAX_ROSTER);
   const lacks = (key: string): boolean =>
@@ -826,7 +868,7 @@ function readRoster(
   // A save from before stats (0.4.1 and older) has none on any defender: all 0.
   // One from before loadouts (0.4.3 and older) has a single `weapon` on each instead.
   const old = { stats: lacks('stats'), loadout: lacks('loadout') };
-  const roster = list.map((d) => readDefender(d, savedAt, hordeNumber, patrolsSent, old));
+  const roster = list.map((d) => readDefender(d, savedAt, hordeNumber, patrolsSent, old, stats));
   if (new Set(roster.map((d) => d.id)).size !== roster.length) fail('id twice');
   return roster;
 }
@@ -839,6 +881,7 @@ function readDefender(
   hordeNumber: number,
   patrolsSent: number,
   old: { stats: boolean; loadout: boolean },
+  read: StatsRead,
 ): RosterDefender {
   const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout'];
   const o = obj(v, old.stats ? keys : [...keys, 'stats']);
@@ -850,7 +893,7 @@ function readDefender(
       ? loadoutFrom(oneOf(o.weapon, FREE_IDS))
       : readLoadout(o.loadout, hordeNumber, patrolsSent),
     xp,
-    stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp),
+    stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp, read),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
     // clock set back, a code from a device whose clock runs ahead) is cut to that.
     injuredUntil:
@@ -876,6 +919,7 @@ function readPatrols(
   plazas: boolean,
   /** Whether a patrol names the car it took (v10); an older one went on foot. */
   cars: boolean,
+  stats: StatsRead,
 ): Patrol[] {
   const seen = new Set<string>();
   const patrols = arr(v, 0, roster.length).map((x): Patrol => {
@@ -912,8 +956,12 @@ function readPatrols(
       seen.add(id);
       return d;
     });
-    const strength = num(o.strength, 0, MAX_COUNT);
-    if (strength > partyStrength(members)) fail('patrol stronger than its party');
+    const most = partyStrength(members);
+    // A v12 or older patrol's strength counted Grit, which no longer adds to it (ID-084).
+    const strength = stats.legacy
+      ? Math.min(num(o.strength, 0, MAX_COUNT), most)
+      : num(o.strength, 0, MAX_COUNT);
+    if (strength > most) fail('patrol stronger than its party');
     return {
       no,
       location,
@@ -977,7 +1025,7 @@ function readLeftBehind(
  * earns, and an owned weapon whose uid is their id. Where the id comes from is checked
  * with the rest of the game.
  */
-function readSurvivor(v: unknown, from: 's' | 'c'): Survivor {
+function readSurvivor(v: unknown, from: 's' | 'c', stats: StatsRead): Survivor {
   const o = obj(v, ['id', 'name', 'xp', 'stats', 'weapon']);
   const id = text(o.id, 9, SURVIVOR_ID);
   if (!id.startsWith(from)) fail('survivor id');
@@ -987,7 +1035,7 @@ function readSurvivor(v: unknown, from: 's' | 'c'): Survivor {
   // The weapon's uid is the survivor's own, so the future checks pass it through.
   const weapon = readOwned(o.weapon, MAX_HORDE, PATROL.max);
   if (weapon.uid !== id) fail('survivor weapon');
-  return { id, name: text(o.name, 24, NAME), xp, stats: readStats(o.stats, xp), weapon };
+  return { id, name: text(o.name, 24, NAME), xp, stats: readStats(o.stats, xp, stats), weapon };
 }
 
 /** How a big horde ended; only a plaza has one. */
@@ -1043,6 +1091,7 @@ function readReports(
   plazas: boolean,
   /** Whether reports list survivors waiting (v9). */
   survivors: boolean,
+  stats: StatsRead,
 ): PatrolReport[] {
   const reports = arr(v, 0, PATROL.reports).map((x): PatrolReport => {
     const o = obj(x, [
@@ -1116,7 +1165,7 @@ function readReports(
       xp: int(o.xp, 0, MAX_COUNT),
       survivors: survivors
         ? arr(o.survivors, 0, SURVIVOR.tries).map((x) => {
-            const s = readSurvivor(x, 's');
+            const s = readSurvivor(x, 's', stats);
             if (!s.id.startsWith(`s${no}-`)) fail('survivor from another patrol');
             if (levelOf(s.xp).level > tripOf(location, buildings).tier) fail('survivor level');
             return s;

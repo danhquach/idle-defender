@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
-import { masterGunner, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
+import { rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
 import {
   COLUMNS,
   ENDING_HORDE,
@@ -21,7 +21,6 @@ import {
   SQUAD_WALL,
   SQUAD_XP_RATE,
   START_PERK,
-  TITLES,
 } from './data.ts';
 import { hordeXp, newGame, type GameState, type RosterDefender } from './game.ts';
 import { gunRange, moveDefender, tick } from './horde.ts';
@@ -224,13 +223,11 @@ describe('no professions (ID-066)', () => {
     expect(spreadOf(plain, 'pistol')).toBeGreaterThan(spreadOf(gunner, 'pistol'));
   });
 
-  it('a plain survivor keeps Aim but gets no title bonus, and no off-profession penalty', () => {
-    const top = TITLES.at(-1)!.at;
-    const stats = { aim: top, might: 0, tech: 0, grit: 0 };
-    const titled = damageFactor({ ...gunner, stats }, 'pistol');
-    const bare = damageFactor({ ...plain, stats }, 'pistol');
-    expect(bare).toBeGreaterThan(1);
-    expect(bare).toBeLessThan(titled);
+  it('a plain survivor keeps their stats (ID-084), and gets no off-profession penalty', () => {
+    const stats = { instinct: 10, agility: 10, mind: 10, tinker: 0 };
+    expect(critChance({ ...plain, stats })).toBeGreaterThan(0);
+    expect(reloadTime({ ...plain, stats }, 'pistol')).toBeLessThan(reloadTime(plain, 'pistol'));
+    expect(spreadOf({ ...plain, stats }, 'pistol')).toBeLessThan(spreadOf(plain, 'pistol'));
     // A Ripper's loadout with a specialised gun: the penalty is a profession's, so none.
     const sniper: OwnedWeapon = { uid: 'h1', base: 'sniper', rarity: 'common', affixes: [] };
     const ripper: Loadout = { primary: sniper, secondary: 'knife', item: null };
@@ -239,19 +236,6 @@ describe('no professions (ID-066)', () => {
     expect(reloadTime({ loadout: ripper, plain: true }, sniper)).toBeLessThan(
       reloadTime({ loadout: ripper }, sniper),
     );
-  });
-
-  it('a plain survivor is never a Master Gunner', () => {
-    const top = TITLES.at(-1)!.at;
-    const d = { ...survivor(1), stats: { aim: top, might: 0, tech: 0, grit: 0 } };
-    const s = startSquadHorde({ ...squadGame(1), roster: [d] }, 1, NOW);
-    expect(masterGunner(s)).toBe(false);
-    const titled = s.defenders.map((x) => {
-      const copy = { ...x };
-      delete copy.plain;
-      return copy;
-    });
-    expect(masterGunner({ defenders: titled })).toBe(true);
   });
 });
 

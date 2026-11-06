@@ -256,17 +256,16 @@ export function freeCar(game: Pick<GameState, 'camp' | 'patrols'>): number | nul
   return null;
 }
 
-/** One member's strength: level, the rarity power of the primary weapon, and Grit. */
-export function memberStrength(d: Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>): number {
+/** One member's strength: level and the rarity power of the primary weapon (stats add none yet, ID-084). */
+export function memberStrength(d: Pick<RosterDefender, 'xp' | 'loadout'>): number {
   const w = d.loadout.primary;
   const rarity: Rarity = isOwned(w) ? w.rarity : 'rusty';
-  return levelOf(d.xp).level + RARITIES[rarity].power + d.stats.grit;
+  return levelOf(d.xp).level + RARITIES[rarity].power;
 }
 
 /** Party strength (design §10): the members' strengths added up. */
-export const partyStrength = (
-  members: readonly Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>[],
-): number => members.reduce((sum, d) => sum + memberStrength(d), 0);
+export const partyStrength = (members: readonly Pick<RosterDefender, 'xp' | 'loadout'>[]): number =>
+  members.reduce((sum, d) => sum + memberStrength(d), 0);
 
 /** The party strength that matches a trip of `tier` (design §10 Risk and reward). */
 export const tierDanger = (tier: number): number => PATROL.danger * PATROL.need * tier;
@@ -318,7 +317,7 @@ export function riskOf(
 
 /** The risk `members` would run at `place`, for the risk screen (ID-028). */
 export const patrolRisk = (
-  members: readonly Pick<RosterDefender, 'xp' | 'stats' | 'loadout'>[],
+  members: readonly Pick<RosterDefender, 'xp' | 'loadout'>[],
   place: PlaceId,
   buildings?: readonly LocationId[],
   order?: Order,

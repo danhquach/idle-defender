@@ -3,7 +3,6 @@
 // by the balance tests and the `npm run balance` report without playing by hand.
 import { repairSegment } from './base.ts';
 import { chooseCard, postUsable } from './cards.ts';
-import { PROFESSION_STAT } from './data.ts';
 import {
   available,
   finishHorde,
@@ -25,6 +24,14 @@ import { finishSquadHorde, squadOf, startSquadHorde } from './hordeonly.ts';
 import { professionOf } from './loadout.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { unspentPoints } from './stats.ts';
+import type { Profession, Stat } from './data.ts';
+
+/** The stat the scripted player puts a profession's points in. */
+const SPEND_STAT: Readonly<Record<Profession, Stat>> = {
+  gunner: 'mind',
+  ripper: 'mind',
+  engineer: 'agility',
+};
 
 /** Longest a simulated horde may run, in fight seconds, before it counts as stuck. */
 const MAX_FIGHT = 3600;
@@ -119,11 +126,15 @@ export function repairWhatYouCan(game: GameState): GameState {
   return { ...game, base, stock };
 }
 
-/** The scripted player's stat points: every one into the stat of the profession worked. */
+/**
+ * The scripted player's stat points (design §6): every one into the stat that suits the
+ * job their loadout gives them: Sharp Mind, the damage stat, for a Gunner or a Ripper (a
+ * horde-only survivor carries a gun, so theirs go there too), Agility for an Engineer.
+ */
 export function spendAll(game: GameState): GameState {
   let g = game;
   for (const d of game.roster) {
-    const stat = PROFESSION_STAT[professionOf(d.loadout)];
+    const stat = SPEND_STAT[professionOf(d.loadout)];
     for (let n = unspentPoints(d); n > 0; n--) {
       const r = spendPoint(g, d.id, stat);
       if (r.ok) g = r.game;
@@ -207,21 +218,9 @@ export function playSquadHorde(game: GameState, seed: number, maxFight = MAX_FIG
   return s;
 }
 
-/** The horde-only scripted player's stat points: every one into Aim. */
-export function spendSquad(game: GameState): GameState {
-  let g = game;
-  for (const d of game.roster) {
-    for (let n = unspentPoints(d); n > 0; n--) {
-      const r = spendPoint(g, d.id, 'aim');
-      if (r.ok) g = r.game;
-    }
-  }
-  return g;
-}
-
 /**
  * A horde-only campaign (ID-066) from a new game until Horde `hordes` is won, as the
- * player plays it: a loss replays the same horde, a win adds XP (all spent on Aim) and a
+ * player plays it: a loss replays the same horde, a win adds XP (spent by `spendAll`) and a
  * survivor. Stops after `maxTries` fights in all. Fight `i` (from 0) uses seed `seed + i`.
  * Returns every fight, in order, and the squad size it was fought with.
  */
@@ -235,7 +234,7 @@ export function playSquadCampaign(
   for (let i = 0; i < maxTries && game.hordeNumber <= hordes; i++) {
     const horde = playSquadHorde(game, seed + i);
     runs.push({ ...summarise(horde, seed + i), squad: squadOf(game).length });
-    game = spendSquad(finishSquadHorde(game, horde));
+    game = spendAll(finishSquadHorde(game, horde));
   }
   return runs;
 }

@@ -224,7 +224,7 @@ describe('Engineer (pistol + toolkit)', () => {
 
   it('strikes weakly with the toolkit up close, with no stat bonus', () => {
     const s = fight(base, [
-      { ...spec('e', 'toolkit'), stats: { aim: 0, might: 30, tech: 30, grit: 0 } },
+      { ...spec('e', 'toolkit'), stats: { instinct: 30, agility: 30, mind: 30, tinker: 0 } },
       'wall-walk',
       GATE,
     ]);

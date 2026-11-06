@@ -22,7 +22,7 @@ const person = (id: string, name: string, xp: number): RosterDefender => ({
   name,
   loadout: { primary: 'pistol', secondary: null, item: null },
   xp,
-  stats: { aim: 0, might: 0, tech: 0, grit: 0 },
+  stats: { instinct: 0, agility: 0, mind: 0, tinker: 0 },
   injuredUntil: null,
 });
 
@@ -63,8 +63,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 }
 
 describe('save: the horde-only build (ID-066)', () => {
-  it('is version 12', () => {
-    expect(SAVE_VERSION).toBe(12);
+  it('is version 13', () => {
+    expect(SAVE_VERSION).toBe(13);
   });
 
   it('round-trips a horde-only game, after a win adds a survivor', () => {

@@ -34,7 +34,6 @@
   --color-text-subtle: #a8a296;
   --color-text-disabled: #9d978c;
   --color-text-faint: #948f86;
-  --color-text-on-badge: #1b1a18;
   --color-text-on-accent: #1b1a18;
   --color-cost-short: #ff8a80;
 
@@ -456,18 +455,6 @@ body {
   gap: var(--space-6);
   padding-top: var(--space-8);
   border-top: 1px solid var(--color-divider);
-}
-
-/* The title badge: its colour is set per profession from the script. */
-.roster-badge {
-  display: inline-block;
-  margin-right: var(--space-6);
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-xs);
-  font-size: var(--text-2xs);
-  line-height: 1.4;
-  color: var(--color-text-on-badge);
-  vertical-align: middle;
 }
 
 .build-slot-hp,
@@ -1042,11 +1029,12 @@ body {
   border-left-color: var(--rarity-relic);
 }
 
+/* The points count over the stat buttons, two by two (ID-084: four stats, Tinker locked). */
 .squad-pick {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-8);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-6);
   margin: 0;
 }
 
@@ -1063,7 +1051,8 @@ body {
 }
 
 .squad-pick .hud-pick-row {
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .squad-pick .hud-pick-stat {

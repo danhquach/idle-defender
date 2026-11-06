@@ -214,15 +214,19 @@ describe('game', () => {
     g.roster[1]!.xp = 25;
     let cur = g;
     for (let i = 0; i < 3; i++) {
-      const r = spendPoint(cur, 'jack', 'might');
+      const r = spendPoint(cur, 'jack', 'agility');
       if (!r.ok) throw new Error(r.reason);
       cur = r.game;
     }
-    expect(cur.roster[1]!.stats).toEqual({ ...NO_STATS, might: 3 });
-    expect(spendPoint(cur, 'jack', 'grit')).toEqual({ ok: false, reason: 'No stat points left' });
-    expect(spendPoint(cur, 'bob', 'aim')).toEqual({ ok: false, reason: 'No stat points left' });
+    expect(cur.roster[1]!.stats).toEqual({ ...NO_STATS, agility: 3 });
+    expect(spendPoint(cur, 'jack', 'instinct')).toEqual({
+      ok: false,
+      reason: 'No stat points left',
+    });
+    expect(spendPoint(cur, 'bob', 'mind')).toEqual({ ok: false, reason: 'No stat points left' });
+    expect(spendPoint(g, 'jack', 'tinker')).toEqual({ ok: false, reason: 'Unlocks later' });
     expect(g.roster[1]!.stats).toEqual(NO_STATS);
-    expect(() => spendPoint(g, 'nobody', 'aim')).toThrow(RangeError);
+    expect(() => spendPoint(g, 'nobody', 'mind')).toThrow(RangeError);
   });
 
   it('equip swaps a loadout, injured or not, and leaves the game untouched', () => {
@@ -278,11 +282,12 @@ describe('game', () => {
   it('a horde fights with the roster stats', () => {
     const g = newGame();
     g.roster[0]!.xp = 25;
-    g.roster[0]!.stats = { ...NO_STATS, grit: 3 };
+    g.roster[0]!.stats = { ...NO_STATS, instinct: 3 };
     const h = startHorde(g, 7, 'bob', 0, NOW);
-    expect(h.defenders[0]).toMatchObject({ maxHp: 115, stats: { ...NO_STATS, grit: 3 } });
-    h.defenders[0]!.stats = { ...NO_STATS, aim: 99 };
-    expect(g.roster[0]!.stats.aim).toBe(0);
+    // 100 × 3 / 23 = 13 HP more.
+    expect(h.defenders[0]).toMatchObject({ maxHp: 113, stats: { ...NO_STATS, instinct: 3 } });
+    h.defenders[0]!.stats = { ...NO_STATS, mind: 99 };
+    expect(g.roster[0]!.stats.mind).toBe(0);
   });
 
   it('a loss keeps the horde number, pays by the wave reached and gives no XP', () => {

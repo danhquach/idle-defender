@@ -44,7 +44,6 @@ import {
   type EnemyKind,
   type CampPickId,
   type HorrorAbility,
-  type Profession,
   type Rarity,
   type ShopItem,
   type SkillId,
@@ -79,15 +78,7 @@ import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
-import {
-  levelOf,
-  nameTag,
-  spend,
-  titleIn,
-  titleName,
-  unspentPoints,
-  type Title,
-} from '../core/stats.ts';
+import { isLocked, levelOf, spend, unspentPoints } from '../core/stats.ts';
 import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
@@ -126,12 +117,11 @@ export const postName = (p: Pick<Post, 'kind' | 'column' | 'row' | 'spot'>): str
   (p.kind === 'wall-walk' ? `, ${spotName(p.spot ?? 0)}` : '');
 
 /**
- * A defender's name tag and the profession their loadout gives them: "Jack the Gunner —
- * Ripper"; a plain survivor (ID-066) is their name alone.
+ * A defender's name and the profession their loadout gives them: "Jack — Ripper"; a
+ * plain survivor (ID-066) is their name alone.
  */
-export const defenderLabel = (
-  d: Pick<DefenderSpec, 'name' | 'loadout' | 'stats' | 'plain'>,
-): string => (d.plain ? d.name : `${nameTag(d)} — ${PROFESSIONS[professionOf(d.loadout)].name}`);
+export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'loadout' | 'plain'>): string =>
+  d.plain ? d.name : `${d.name} — ${PROFESSIONS[professionOf(d.loadout)].name}`;
 
 const capital = (w: string): string => w.charAt(0).toUpperCase() + w.slice(1);
 
@@ -355,11 +345,9 @@ export interface ResultScreen {
 
 export type CampScreen = Pick<Camp, 'picks' | 'offers'> & { room: Room };
 
-/** A survivor (design §10) as "Ava · level 3 · Aim 2, Grit 4 · Military Rifle (+10% damage)". */
+/** A survivor (design §10) as "Ava · level 3 · Instinct 2, Agility 4 · Military Rifle (+10% damage)". */
 export function survivorText(s: Survivor): string {
-  const stats = STATS.filter((st) => s.stats[st] > 0).map(
-    (st) => `${STAT_NAMES[st]} ${s.stats[st]}`,
-  );
+  const stats = STATS.filter((st) => s.stats[st] > 0).map((st) => statText(st, s.stats[st]));
   const affixes = s.weapon.affixes.map(affixText);
   return [
     s.name,
@@ -369,59 +357,61 @@ export function survivorText(s: Survivor): string {
   ].join(' · ');
 }
 
-/** What each stat does, for the picker. */
+/** What each stat does in full, for a stat button's tooltip (design §6, ID-084). */
 export const STAT_HINT: Readonly<Record<Stat, string>> = {
-  aim: 'Gun damage and crits, any gun',
-  might: 'Blade damage and cleave',
-  tech: 'Engineer repair',
-  grit: 'HP in hordes, any loadout',
+  instinct: 'More HP and armour on every hit, and a chance to survive a downing hit at 1 HP',
+  agility: 'Faster reloads',
+  mind: 'Better gun accuracy, and more and harder crits with any weapon',
+  tinker: 'Unlocks later: repair, turrets, batteries and crafting',
 };
 
-/** What Aim and Grit do for a horde-only survivor (ID-066): no loadouts to tell apart. */
-export const SQUAD_STAT_HINT: Readonly<Record<Stat, string>> = {
-  ...STAT_HINT,
-  aim: 'Gun damage and crits',
-  grit: 'HP in hordes',
+/** What each stat does in a few words, for the picker's one-line hint. */
+export const STAT_SHORT: Readonly<Record<Stat, string>> = {
+  instinct: 'more HP and armour',
+  agility: 'faster reloads',
+  mind: 'accuracy and crits',
+  tinker: 'unlocks later',
 };
 
-/** The stats a horde-only survivor's points go to (ID-066): no blades or tools, so no Might or Tech. */
-export const SQUAD_STATS: readonly Stat[] = ['aim', 'grit'];
+/** What a locked stat (ID-084: Tinker) says in place of its points. */
+export const STAT_LOCKED_NOTE = 'Unlocks later';
+
+/** A locked stat's button: short, so it fits its cell like the others. */
+export const lockedLabel = (stat: Stat): string => `${STAT_NAMES[stat]} (locked)`;
+
+/** "Instinct 2"; a locked stat is "Tinker (unlocks later)". */
+export const statText = (stat: Stat, points: number): string =>
+  isLocked(stat)
+    ? `${STAT_NAMES[stat]} (${STAT_LOCKED_NOTE.toLowerCase()})`
+    : `${STAT_NAMES[stat]} ${points}`;
+
+/** The picker's line on what each stat does: "Instinct: more HP and armour · …". */
+export const statHints = (): string =>
+  STATS.map((st) => `${STAT_NAMES[st]}: ${STAT_SHORT[st]}`).join(' · ');
 
 /** One defender's row in the stat picker. */
 export interface PickerRow {
   heading: string;
-  /** Titles earned since `was`, e.g. "New title: Junior Gunner"; '' for none. */
-  note: string;
   buttons: { stat: Stat; label: string; disabled: boolean }[];
 }
 
 /**
- * The picker row for `d` (with `was` its stats before this screen): name tag, points left,
- * a button per stat. A horde-only survivor (`squad`) has their name, no titles, and only
- * `SQUAD_STATS`.
+ * The picker row for `d`: name, points left, a button per stat. A horde-only survivor's
+ * (`squad`) buttons say they add a point. A locked stat (ID-084: Tinker) shows greyed out.
  */
-export function pickerRow(
-  d: RosterDefender,
-  was: RosterDefender['stats'],
-  squad = false,
-): PickerRow {
+export function pickerRow(d: RosterDefender, squad = false): PickerRow {
   const left = unspentPoints(d);
-  const earned = squad
-    ? []
-    : (Object.keys(PROFESSIONS) as Profession[])
-        .map((p) => titleIn(d.stats, p))
-        .filter((t): t is Title => t !== null && titleIn(was, t.profession)?.at !== t.at)
-        .map(titleName);
   return {
-    heading: `${squad ? d.name : nameTag(d)} · ${left} stat point${left === 1 ? '' : 's'} to spend`,
-    note: earned.length ? `New title: ${earned.join(', ')}` : '',
-    buttons: (squad ? SQUAD_STATS : STATS).map((stat) => ({
+    heading: `${d.name} · ${left} stat point${left === 1 ? '' : 's'} to spend`,
+    buttons: STATS.map((stat) => ({
       stat,
-      // A horde-only button says it adds a point: "+ Aim (2)".
-      label: squad
-        ? `+ ${STAT_NAMES[stat]} (${d.stats[stat]})`
-        : `${STAT_NAMES[stat]} ${d.stats[stat]}`,
-      disabled: left <= 0,
+      // A horde-only button says it adds a point: "+ Instinct (2)".
+      label: isLocked(stat)
+        ? lockedLabel(stat)
+        : squad
+          ? `+ ${STAT_NAMES[stat]} (${d.stats[stat]})`
+          : `${STAT_NAMES[stat]} ${d.stats[stat]}`,
+      disabled: left <= 0 || isLocked(stat),
     })),
   };
 }
@@ -520,7 +510,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
     const picks: RosterDefender[] = [];
     for (const g of gains) {
       const d = game.roster.find((r) => r.id === g.id);
-      lines.push(xpLine(g, d ? nameTag(d) : g.name));
+      lines.push(xpLine(g, g.name));
       if (!d) continue;
       const after = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
       if (unspentPoints(after) > 0) picks.push(after);
@@ -929,7 +919,8 @@ export function createHud(
   /** The horde-only gun pickers (ID-067) on the result or start screen; each pick goes to `onEquip`. */
   showGear(gear: GearScreen, onEquip: (defenderId: string, choice: string) => void): void;
   show(visible: boolean): void;
-  toast(text: string): void;
+  /** Shows `text` for `ms` (2 s unless said). */
+  toast(text: string, ms?: number): void;
   bottomSpace(): number;
 } {
   const hud = el('div', 'hud');
@@ -1115,14 +1106,18 @@ export function createHud(
     const block = el('div', squadPicks ? 'hud-pick squad-pick' : 'hud-pick');
     let d = start;
     const draw = (): void => {
-      const row = pickerRow(d, start.stats, squadPicks);
+      const row = pickerRow(d, squadPicks);
       const buttons = el('div', 'hud-pick-row');
       row.buttons.forEach((b, i) => {
         const button = el('button', 'hud-button hud-pick-stat', b.label);
         button.type = 'button';
         button.disabled = b.disabled;
-        if (squadPicks) button.setAttribute('aria-label', `Add ${STAT_NAMES[b.stat]} to ${d.name}`);
-        button.title = (squadPicks ? SQUAD_STAT_HINT : STAT_HINT)[b.stat];
+        // A locked stat's label already says it unlocks later.
+        if (squadPicks && !isLocked(b.stat)) {
+          const now = d.stats[b.stat];
+          button.setAttribute('aria-label', `Add ${STAT_NAMES[b.stat]} to ${d.name}, now ${now}`);
+        }
+        button.title = STAT_HINT[b.stat];
         button.addEventListener('click', () => {
           if (result.hidden) return;
           const r = spend(d, b.stat);
@@ -1155,9 +1150,7 @@ export function createHud(
         block.replaceChildren(count, buttons);
         return;
       }
-      const parts: HTMLElement[] = [el('p', 'hud-pick-heading', row.heading), buttons];
-      if (row.note) parts.push(el('p', 'hud-pick-note', row.note));
-      block.replaceChildren(...parts);
+      block.replaceChildren(el('p', 'hud-pick-heading', row.heading), buttons);
     };
     draw();
     return block;
@@ -1230,13 +1223,7 @@ export function createHud(
       heading.append(el('span', 'debrief-stash'));
       head.append(heading);
       if (picks.length > 0) {
-        head.append(
-          el(
-            'p',
-            'debrief-hint',
-            SQUAD_STATS.map((st) => `${STAT_NAMES[st]}: ${SQUAD_STAT_HINT[st]}`).join(' · '),
-          ),
-        );
+        head.append(el('p', 'debrief-hint', statHints()));
       }
       const grid = el('div', 'squad-grid');
       for (const c of d.cards) {
@@ -1381,13 +1368,13 @@ export function createHud(
       speedButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(SPEEDS[i] === now)));
       pausedChip.hidden = !paused;
     },
-    toast(text) {
+    toast(text, ms = TOAST_MS) {
       toast.textContent = text;
       toast.hidden = false;
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => {
         toast.hidden = true;
-      }, TOAST_MS);
+      }, ms);
     },
     update(state, armed = null) {
       const status = squad ? squadStatus(state) : statusText(state);
@@ -1450,22 +1437,12 @@ export function createHud(
       resultList.replaceChildren(...(d ? [] : screen.lines.map((line) => el('li', '', line))));
       footNote.textContent = d?.foot ?? '';
       back.classList.toggle('btn-primary', d !== undefined);
-      const stats = screen.squad ? SQUAD_STATS : STATS;
       picker.replaceChildren(
         ...(d
           ? debriefBlock(d, screen.picks)
           : screen.picks.length
             ? [
-                el(
-                  'p',
-                  'hud-result-body',
-                  stats
-                    .map(
-                      (st) =>
-                        `${STAT_NAMES[st]}: ${(screen.squad ? SQUAD_STAT_HINT : STAT_HINT)[st]}`,
-                    )
-                    .join(' · '),
-                ),
+                el('p', 'hud-result-body', statHints()),
                 ...screen.picks.map((d) => pickerBlock(d, screen.squad === true)),
                 ...(screen.squad ? [el('p', 'hud-pick-note', SQUAD_POINTS_NOTE)] : []),
               ]

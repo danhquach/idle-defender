@@ -624,7 +624,7 @@ export const CARD = {
   /** Hollow Points (a research card, ID-035): squad damage factor. */
   hollowPoints: 1.4,
   ricochet: { range: 150, share: 0.25 },
-  burn: { dps: 3, seconds: 3, spread: 40 },
+  burn: { dps: 3, seconds: 3 },
   /** Speed Loaders: squad reload time factor. */
   loaders: 0.7,
   /** Extended Mags: squad magazine size factor. */
@@ -650,47 +650,47 @@ export const CARD = {
 
 // --- Defender levels, stats and titles (M4). Design §6. ---
 
-export type Stat = 'aim' | 'might' | 'tech' | 'grit';
+export type Stat = 'instinct' | 'agility' | 'mind' | 'tinker';
 export type Stats = Record<Stat, number>;
-export const STATS: readonly Stat[] = ['aim', 'might', 'tech', 'grit'];
+export const STATS: readonly Stat[] = ['instinct', 'agility', 'mind', 'tinker'];
 export const STAT_NAMES: Readonly<Record<Stat, string>> = {
-  aim: 'Aim',
-  might: 'Might',
-  tech: 'Tech',
-  grit: 'Grit',
+  instinct: 'Instinct',
+  agility: 'Agility',
+  mind: 'Sharp Mind',
+  tinker: 'Tinker',
 };
-/** The stat that feeds each profession; Grit feeds all. */
-export const PROFESSION_STAT: Readonly<Record<Profession, Stat>> = {
-  gunner: 'aim',
-  ripper: 'might',
-  engineer: 'tech',
-};
+/** Stats that take no points yet (ID-084): shown greyed out until the game expands. */
+export const LOCKED_STATS: readonly Stat[] = ['tinker'];
+/** The stats points can go in. */
+export const OPEN_STATS: readonly Stat[] = STATS.filter((s) => !LOCKED_STATS.includes(s));
 /** XP from level L to L + 1 is `LEVEL_XP × L`. */
 export const LEVEL_XP = 25;
 export const POINTS_PER_LEVEL = 3;
-/** Per point of the matching stat; crit and cleave are capped. Grit adds `gritHp` HP per point. */
+/**
+ * What stat points do (design §6, ID-084). Each bonus with cap C from P points is
+ * `C × P / (P + STAT_HALF)`: it shrinks as points pile up and never reaches C.
+ */
+export const STAT_HALF = 20;
 export const STAT_EFFECT = {
-  damage: 0.02,
-  repair: 0.02,
-  crit: 0.005,
-  critCap: 0.5,
+  /** Instinct: max HP over `DEFENDER_HP`. */
+  hp: 100,
+  /** Instinct: flat damage off each hit taken… */
+  armour: 4,
+  /** …but a hit keeps at least this share of its damage. */
+  armourFloor: 0.5,
+  /** Instinct: chance a hit that would drop them to 0 HP leaves them at 1 HP instead. */
+  dodge: 0.3,
+  /** Agility: share off every reload time. */
+  reload: 0.5,
+  /** Sharp Mind: share off every gun's spread cone. */
+  spread: 0.5,
+  /** Sharp Mind: crit chance. */
+  crit: 0.35,
+  /** Sharp Mind: crit damage over `critDamage`. */
+  critBonus: 2,
+  /** A crit's damage multiplier with no Sharp Mind. */
   critDamage: 2,
-  cleave: 0.01,
-  cleaveCap: 0.5,
-  cleaveRadius: 30,
-  gritHp: 5,
 } as const;
-/** Titles by profession level (points in the stat), lowest first; `bonus` multiplies the profession's output. */
-export const TITLES: readonly {
-  readonly at: number;
-  readonly rank: string;
-  readonly bonus: number;
-}[] = [
-  { at: 10, rank: 'Junior', bonus: 0.05 },
-  { at: 25, rank: 'Adept', bonus: 0.15 },
-  { at: 50, rank: 'Master', bonus: 0.3 },
-  { at: 100, rank: 'Legendary', bonus: 0.5 },
-];
 
 // --- Research Lab, turrets and energy (M5). Design §7 and §11. ---
 

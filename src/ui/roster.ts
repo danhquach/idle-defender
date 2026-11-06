@@ -1,8 +1,8 @@
 // The roster screen between hordes (design §6): the camp (§11: people and slots, the
 // camp upgrade, camp level and picks, the next free recruit, the car), then each defender's
-// level, stats, titles and status, Food and Medicine for the resting (ID-031), their
-// stat-point picker, loadout pickers and Dismiss, and the title badge (§15). Text only
-// via textContent; the badge colour is a constant.
+// level, stats and status, Food and Medicine for the resting (ID-031), their stat-point
+// picker (Tinker shown locked, ID-084), loadout pickers and Dismiss. Text only via
+// textContent.
 import {
   buildCar,
   campLevelOf,
@@ -25,7 +25,6 @@ import {
   CAR,
   ITEMS,
   placeName,
-  PROFESSIONS,
   RARITY_ORDER,
   STAT_NAMES,
   STATS,
@@ -34,7 +33,6 @@ import {
   WEAPONS,
   type FreeWeaponId,
   type ItemId,
-  type Profession,
   type Stat,
 } from '../core/data.ts';
 import { heldLabel, type Held } from '../core/armoury.ts';
@@ -49,13 +47,17 @@ import {
 } from '../core/game.ts';
 import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
 import { freeCar, patrolDue, type Patrol } from '../core/patrol.ts';
-import { badgeOf, levelOf, titleIn, titleName, unspentPoints } from '../core/stats.ts';
-import { campPickText, defenderLabel, el, STAT_HINT, survivorText } from './hud.ts';
-import { BADGE_COLOUR } from './render.ts';
+import { isLocked, levelOf, unspentPoints } from '../core/stats.ts';
+import {
+  campPickText,
+  defenderLabel,
+  el,
+  lockedLabel,
+  STAT_HINT,
+  statText,
+  survivorText,
+} from './hud.ts';
 import { costLine, setVariant } from './kit.ts';
-
-/** "●●" for an Adept: one pip per rank. */
-export const pipText = (pips: number): string => '●'.repeat(pips);
 
 /**
  * The free weapons each slot may hold (design §6): guns as primary; a sidearm, blade or
@@ -81,7 +83,6 @@ export interface RosterEntry {
   label: string;
   level: string;
   stats: string;
-  titles: string;
   points: string;
   status: string;
 }
@@ -89,15 +90,11 @@ export interface RosterEntry {
 /** `patrol` is the one `d` is out on, if any. */
 export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): RosterEntry {
   const { level, into, next } = levelOf(d.xp);
-  const titles = (Object.keys(PROFESSIONS) as Profession[])
-    .map((p) => titleIn(d.stats, p))
-    .flatMap((t) => (t ? [titleName(t)] : []));
   const left = unspentPoints(d);
   return {
     label: defenderLabel(d),
     level: `level ${level} · ${into}/${next} XP`,
-    stats: STATS.map((s) => `${STAT_NAMES[s]} ${d.stats[s]}`).join(' · '),
-    titles: titles.length ? titles.join(', ') : 'No titles yet',
+    stats: STATS.map((s) => statText(s, d.stats[s])).join(' · '),
     points: left > 0 ? `${left} stat point${left === 1 ? '' : 's'} to spend` : '',
     status: patrol
       ? `On patrol · ${placeName(patrol.location)} · ${restLeft(patrolDue(patrol), now)} left`
@@ -219,30 +216,6 @@ export function choiceFor<T>(choices: readonly Choice<T>[], raw: string): Choice
   return choices.find((c) => c.value === raw);
 }
 
-/** The title badge for `stats`: colour, pips and the title it stands for; null with no title. */
-export function badgeStyle(
-  stats: RosterDefender['stats'],
-): { colour: string; pips: string; title: string } | null {
-  const badge = badgeOf(stats);
-  if (!badge) return null;
-  return {
-    colour: BADGE_COLOUR[badge.profession],
-    pips: pipText(badge.pips),
-    title: titleName(titleIn(stats, badge.profession)!),
-  };
-}
-
-/** The title badge as a page element, or null with no title. */
-export function badgeElement(d: RosterDefender): HTMLElement | null {
-  const badge = badgeStyle(d.stats);
-  if (!badge) return null;
-  const span = el('span', 'roster-badge', badge.pips);
-  span.style.backgroundColor = badge.colour;
-  span.title = badge.title;
-  span.setAttribute('aria-label', badge.title);
-  return span;
-}
-
 /** One option of a picker: the value in the page, its text, and what choosing it gives. */
 export interface Choice<T> {
   value: string;
@@ -311,14 +284,10 @@ export function rosterSection(
     const patrol = game.patrols.find((p) => p.members.includes(d.id));
     const entry = rosterEntry(d, now, patrol);
     const card = el('section', 'roster-entry');
-    const head = el('h3', 'build-slot-title', entry.label);
-    const badge = badgeElement(d);
-    if (badge) head.prepend(badge);
     card.append(
-      head,
+      el('h3', 'build-slot-title', entry.label),
       el('p', 'build-slot-note', `${entry.level} · ${entry.status}`),
       el('p', 'build-slot-note', entry.stats),
-      el('p', 'build-slot-note', entry.titles),
     );
     if (!patrol && !available(d, now)) {
       const row = el('div', 'hud-pick-row');
@@ -443,9 +412,13 @@ function statButton(
   stat: Stat,
   onChange: (next: GameState) => void,
 ): HTMLElement {
-  const button = el('button', 'hud-button hud-pick-stat', `${STAT_NAMES[stat]} +1`);
+  const locked = isLocked(stat);
+  const label = locked ? lockedLabel(stat) : `${STAT_NAMES[stat]} +1`;
+  const button = el('button', 'hud-button hud-pick-stat', label);
   button.type = 'button';
   button.title = STAT_HINT[stat];
+  // A locked stat (ID-084: Tinker) stays in view, greyed out, and takes no points.
+  button.disabled = locked;
   button.addEventListener('click', () => {
     const r = spendPoint(game, d.id, stat);
     if (r.ok) onChange(r.game);

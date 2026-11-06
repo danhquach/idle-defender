@@ -7,7 +7,7 @@ import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
-import { FIELD_GREW } from './build.ts';
+import { FIELD_GREW, STATS_REFUNDED } from './build.ts';
 import { el, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 
 /** What the Save tab says about a refused code. */
@@ -135,7 +135,11 @@ export const HOW_TO_PLAY: Steps = HORDE_ONLY ? SQUAD_HOW_TO_PLAY : FULL_HOW_TO_P
 export function readCode(pasted: string): { game: GameState | null; message: string } {
   const result = importCode(pasted);
   if (!result.ok) return { game: null, message: IMPORT_REFUSAL[result.why] };
-  const message = result.save.grew ? `${IMPORT_DONE} ${FIELD_GREW}` : IMPORT_DONE;
+  const notes = [
+    ...(result.save.grew ? [FIELD_GREW] : []),
+    ...(result.save.refunded ? [STATS_REFUNDED] : []),
+  ];
+  const message = [IMPORT_DONE, ...notes].join(' ');
   return { game: result.save.game, message };
 }
 

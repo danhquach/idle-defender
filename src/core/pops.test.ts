@@ -98,10 +98,10 @@ describe('damage numbers on enemies (ID-082)', () => {
   });
 
   it('a crit from the trigger rides its bullet into a crit number', () => {
-    // An Aim of 100 puts a Gunner's crit chance at its 50% cap: some first rounds crit, some don't.
+    // A Sharp Mind of 100 puts a Gunner's crit chance at 30%: some first rounds crit, some don't.
     const seen = new Set<boolean>();
     for (let seed = 1; seed <= 30; seed++) {
-      const stats = { aim: 100, might: 0, tech: 0, grit: 0 };
+      const stats = { instinct: 0, agility: 0, mind: 100, tinker: 0 };
       const s = newHorde(seed, {
         ...setup(),
         roster: [{ id: 'a', name: 'A', loadout: loadoutFrom('pistol'), stats }],
