@@ -53,4 +53,9 @@ export default defineConfig({
   // Relative asset URLs so the same build works at the site root (local preview)
   // and under the repository sub-path on GitHub Pages.
   base: './',
+  build: {
+    // A sound clip is always its own file: inlined as a data: URL, the CSP's
+    // connect-src 'self' would refuse to fetch it (src/ui/audio.ts).
+    assetsInlineLimit: (file) => (file.endsWith('.mp3') ? false : undefined),
+  },
 });
