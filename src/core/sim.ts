@@ -20,11 +20,12 @@ import {
   type Outcome,
   type UpgradeId,
 } from './horde.ts';
-import { finishSquadHorde, squadOf, startSquadHorde } from './hordeonly.ts';
-import { professionOf } from './loadout.ts';
+import { gunPower, type OwnedWeapon } from './armoury.ts';
+import { equipGun, finishSquadHorde, squadOf, startSquadHorde } from './hordeonly.ts';
+import { isGun, professionOf } from './loadout.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
-import { unspentPoints } from './stats.ts';
-import type { Profession, Stat } from './data.ts';
+import { levelOf, unspentPoints } from './stats.ts';
+import { WALL, type Profession, type Stat } from './data.ts';
 
 /** The stat the scripted player puts a profession's points in. */
 const SPEND_STAT: Readonly<Record<Profession, Stat>> = {
@@ -51,6 +52,15 @@ export interface HordeRun {
   injured: number;
   /** Share of the base's wall and gate HP left at the end, 0…1. */
   wallLeft: number;
+}
+
+/** A horde-only campaign's fight (`playSquadCampaign`). */
+export interface SquadRun extends HordeRun {
+  /** Survivors in the fight, and their mean level going in. */
+  squad: number;
+  level: number;
+  /** How close enemies came to the wall, px (`nearestEnemy`); only when watched. */
+  nearest?: number;
 }
 
 /** The scripted player's start: the first fit defender on the usable post furthest forward. */
@@ -144,6 +154,33 @@ export function spendAll(game: GameState): GameState {
 }
 
 /**
+ * The horde-only scripted player's guns (ID-096), as a player equips their drops: while the
+ * stash's strongest gun hits harder (`gunPower`) than the weakest one in the squad's hands,
+ * it goes to that survivor (theirs goes to the stash).
+ */
+export function gearUp(game: GameState): GameState {
+  let g = game;
+  // Each swap raises the squad's total gun power, so this ends.
+  for (;;) {
+    const held = squadOf(g).filter((d) => isGun(d.loadout.primary));
+    const weakest = held.reduce<(typeof held)[number] | undefined>(
+      (a, d) => (!a || gunPower(d.loadout.primary) < gunPower(a.loadout.primary) ? d : a),
+      undefined,
+    );
+    const best = g.armoury
+      .filter(isGun)
+      .reduce<OwnedWeapon | undefined>(
+        (a, w) => (!a || gunPower(w) > gunPower(a) ? w : a),
+        undefined,
+      );
+    if (!weakest || !best || gunPower(best) <= gunPower(weakest.loadout.primary)) return g;
+    const r = equipGun(g, weakest.id, best.uid);
+    if (!r.ok) return g;
+    g = r.game;
+  }
+}
+
+/**
  * The scripted player between hordes: waits until the whole roster is fit, then
  * repairs what it can afford. Never builds. Returns the game and the clock it starts at.
  */
@@ -207,34 +244,69 @@ export function squadPick(s: Pick<HordeState, 'offer'>): number {
   return ranks.indexOf(Math.min(...ranks));
 }
 
-/** Plays `game`'s next horde-only horde (ID-066) to the end with the scripted player. */
-export function playSquadHorde(game: GameState, seed: number, maxFight = MAX_FIGHT): HordeState {
+/**
+ * How close to the wall any enemy standing in `s` is (ID-096): px in front of the
+ * outermost layer's face, 0 for one at it or past it; Infinity with none or no wall.
+ */
+export function nearestEnemy(s: Pick<HordeState, 'layers' | 'enemies'>): number {
+  const built = s.layers.filter((l) => l.segments.some((seg) => seg.kind !== null));
+  if (built.length === 0) return Infinity;
+  const front = Math.max(...built.map((l) => l.x)) + WALL.depth;
+  let near = Infinity;
+  for (const e of s.enemies) if (e.hp > 0) near = Math.min(near, e.inCamp ? 0 : e.x - front);
+  return Math.max(0, near);
+}
+
+/** How often (fight s) a watched horde is looked at: the fight is the same either way. */
+const WATCH_EVERY = 0.5;
+
+/**
+ * Plays `game`'s next horde-only horde (ID-066) to the end with the scripted player. With
+ * `watch`, also how close the enemies came to the wall (`nearestEnemy`, looked at every
+ * `WATCH_EVERY` s).
+ */
+export function playSquadHorde(
+  game: GameState,
+  seed: number,
+  maxFight = MAX_FIGHT,
+  watch?: { nearest: number },
+): HordeState {
   let s = startSquadHorde(game, seed, 0);
   while (s.outcome === 'fighting') {
     if (s.time > maxFight)
       throw new RangeError(`playSquadHorde: horde ${s.hordeNumber} never ended`);
-    s = s.offer ? chooseCard(s, squadPick(s)) : tick(s, 60);
+    s = s.offer ? chooseCard(s, squadPick(s)) : tick(s, watch ? WATCH_EVERY : 60);
+    if (watch) watch.nearest = Math.min(watch.nearest, nearestEnemy(s));
   }
   return s;
 }
 
 /**
  * A horde-only campaign (ID-066) from a new game until Horde `hordes` is won, as the
- * player plays it: a loss replays the same horde, a win adds XP (spent by `spendAll`) and a
- * survivor. Stops after `maxTries` fights in all. Fight `i` (from 0) uses seed `seed + i`.
- * Returns every fight, in order, and the squad size it was fought with.
+ * player plays it: a loss replays the same horde, a win adds XP (spent by `spendAll`), a
+ * survivor and a gun (equipped by `gearUp`). Stops after `maxTries` fights in all. Fight
+ * `i` (from 0) uses seed `seed + i`. Returns every fight, in order, the squad size it was
+ * fought with, the squad's mean level, and with `watch` how close enemies came to the wall.
  */
 export function playSquadCampaign(
   seed: number,
   hordes: number,
   maxTries = hordes * 3,
-): (HordeRun & { squad: number })[] {
+  watch = false,
+): SquadRun[] {
   let game = newGame('horde');
-  const runs: (HordeRun & { squad: number })[] = [];
+  const runs: SquadRun[] = [];
   for (let i = 0; i < maxTries && game.hordeNumber <= hordes; i++) {
-    const horde = playSquadHorde(game, seed + i);
-    runs.push({ ...summarise(horde, seed + i), squad: squadOf(game).length });
-    game = spendAll(finishSquadHorde(game, horde));
+    const seen = watch ? { nearest: Infinity } : undefined;
+    const horde = playSquadHorde(game, seed + i, MAX_FIGHT, seen);
+    const squad = squadOf(game);
+    runs.push({
+      ...summarise(horde, seed + i),
+      squad: squad.length,
+      level: squad.reduce((n, d) => n + levelOf(d.xp).level, 0) / squad.length,
+      ...(seen ? { nearest: seen.nearest } : {}),
+    });
+    game = gearUp(spendAll(finishSquadHorde(game, horde)));
   }
   return runs;
 }

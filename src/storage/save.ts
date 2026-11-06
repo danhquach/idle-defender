@@ -114,13 +114,25 @@ import {
   type QueueId,
   type ResearchQueue,
 } from '../core/research.ts';
-import { earnedPoints, isLocked, levelOf, NO_STATS, xpForLevel } from '../core/stats.ts';
+import {
+  bankedPoints,
+  earnedPoints,
+  isLocked,
+  levelOf,
+  NO_STATS,
+  xpForLevel,
+} from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 14 since 1 stat point per level (ID-096): a v13 or older save's levels gave 3 points
+ * each, so its defenders and survivors waiting to join bank the 2 more than today's 1
+ * per level they earned (`banked`, kept from then on), and no point earned is lost. A
+ * v14 save writes `banked` only when above 0.
+ *
  * 13 since the stat rework (ID-084): a v12 save's stats are Aim, Might, Tech and Grit.
  * Every point spent there (a defender's, or a survivor's waiting to join) is refunded as
  * unspent points, with a one-time note (`Save.refunded`); a patrol out keeps a strength
@@ -152,7 +164,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -212,10 +224,12 @@ export interface Save {
 
 /**
  * How a save's stats read (ID-084): `legacy` for a v12 or older save (the old four stats,
- * refunded); `refunded` is set by the readers when any spent point was given back.
+ * refunded); `bank` for a v13 or older save (3 points a level, ID-096); `refunded` is set
+ * by the readers when any spent point was given back.
  */
 interface StatsRead {
   legacy: boolean;
+  bank: boolean;
   refunded: boolean;
 }
 
@@ -291,7 +305,7 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
+  if (![SAVE_VERSION, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
     fail('version');
   }
   const savedAt = int(o.savedAt, 0, MAX_TIME);
@@ -301,7 +315,7 @@ function readSave(v: unknown): Save {
   const camp = ver >= 7 ? (ver >= 10 ? 'cars' : ver === 9 ? 'survivors' : 'camp') : null;
   const queue = ver >= 11;
   const reserve = ver >= 12;
-  const stats: StatsRead = { legacy: ver < 13, refunded: false };
+  const stats: StatsRead = { legacy: ver < 13, bank: ver < 14, refunded: false };
   const grid = ver === 1 ? V1_GRID : GRID;
   const game = readGame(o.game, savedAt, grid, materials, patrols, camp, queue, reserve, stats);
   return {
@@ -769,13 +783,14 @@ function readPost(v: unknown, grid: Grid): BasePost {
  * Points spent per stat: no more in all than lifetime `xp` has earned. An old save's
  * (`read.legacy`, the pre-ID-084 four) are checked the same way, then all refunded; a
  * point in a locked stat (Tinker, which no build lets a player spend) is refunded too.
+ * `banked` (ID-096) counts as earned.
  */
-function readStats(v: unknown, xp: number, read: StatsRead): Stats {
+function readStats(v: unknown, xp: number, banked: number, read: StatsRead): Stats {
   const keys: readonly string[] = read.legacy ? LEGACY_STATS : STATS;
   const o = obj(v, keys);
   let spent = 0;
   for (const k of keys) spent += int(o[k], 0, MAX_COUNT);
-  if (spent > earnedPoints(xp)) fail('points not earned');
+  if (spent > earnedPoints(xp, banked)) fail('points not earned');
   const stats = { ...NO_STATS };
   if (read.legacy) {
     if (spent > 0) read.refunded = true;
@@ -789,6 +804,26 @@ function readStats(v: unknown, xp: number, read: StatsRead): Stats {
   }
   return stats;
 }
+
+/** Whether `v` (a defender or survivor) carries a `banked` key; only a v14 save may (ID-096). */
+const hasBanked = (v: unknown, read: StatsRead): boolean =>
+  !read.bank && typeof v === 'object' && v !== null && Object.hasOwn(v, 'banked');
+
+/**
+ * Points banked by someone with lifetime `xp` (ID-096): a v13 or older save's banks what its
+ * 3 points a level gave over today's 1; a v14 save's `banked`, when there, is 1 or more and
+ * no more than the old rate could have given for the levels `xp` reaches.
+ */
+function readBanked(o: Obj, xp: number, read: StatsRead): number {
+  if (read.bank) return bankedPoints(xp);
+  if (!Object.hasOwn(o, 'banked')) return 0;
+  const most = bankedPoints(xp);
+  if (most < 1) fail('banked at level 1');
+  return int(o.banked, 1, most);
+}
+
+/** `banked` as a field, left out at 0 (the shape a v14 save writes). */
+const bankedField = (banked: number): { banked?: number } => (banked > 0 ? { banked } : {});
 
 /** The order buildPost keeps posts in: column, then kind, then row, then spot. */
 function postOrder(a: BasePost, b: BasePost): number {
@@ -884,8 +919,10 @@ function readDefender(
   read: StatsRead,
 ): RosterDefender {
   const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout'];
+  if (hasBanked(v, read)) keys.push('banked');
   const o = obj(v, old.stats ? keys : [...keys, 'stats']);
   const xp = int(o.xp, 0, MAX_COUNT);
+  const banked = readBanked(o, xp, read);
   return {
     id: text(o.id, 32, ID),
     name: text(o.name, 24, NAME),
@@ -893,7 +930,8 @@ function readDefender(
       ? loadoutFrom(oneOf(o.weapon, FREE_IDS))
       : readLoadout(o.loadout, hordeNumber, patrolsSent),
     xp,
-    stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp, read),
+    stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp, banked, read),
+    ...bankedField(banked),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
     // clock set back, a code from a device whose clock runs ahead) is cut to that.
     injuredUntil:
@@ -1026,7 +1064,9 @@ function readLeftBehind(
  * with the rest of the game.
  */
 function readSurvivor(v: unknown, from: 's' | 'c', stats: StatsRead): Survivor {
-  const o = obj(v, ['id', 'name', 'xp', 'stats', 'weapon']);
+  const keys = ['id', 'name', 'xp', 'stats', 'weapon'];
+  if (hasBanked(v, stats)) keys.push('banked');
+  const o = obj(v, keys);
   const id = text(o.id, 9, SURVIVOR_ID);
   if (!id.startsWith(from)) fail('survivor id');
   const xp = int(o.xp, 0, MAX_COUNT);
@@ -1035,7 +1075,15 @@ function readSurvivor(v: unknown, from: 's' | 'c', stats: StatsRead): Survivor {
   // The weapon's uid is the survivor's own, so the future checks pass it through.
   const weapon = readOwned(o.weapon, MAX_HORDE, PATROL.max);
   if (weapon.uid !== id) fail('survivor weapon');
-  return { id, name: text(o.name, 24, NAME), xp, stats: readStats(o.stats, xp, stats), weapon };
+  const banked = readBanked(o, xp, stats);
+  return {
+    id,
+    name: text(o.name, 24, NAME),
+    xp,
+    stats: readStats(o.stats, xp, banked, stats),
+    ...bankedField(banked),
+    weapon,
+  };
 }
 
 /** How a big horde ended; only a plaza has one. */

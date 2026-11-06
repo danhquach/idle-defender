@@ -39,6 +39,7 @@ import {
   SQUAD_CAP,
   SKILLS,
   STASH_CAP,
+  OPEN_STATS,
   STAT_NAMES,
   STATS,
   type EnemyKind,
@@ -83,6 +84,8 @@ import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
+import { holdable, holdRepeat } from './hold.ts';
+import { nextGains, nextPointText } from './statlines.ts';
 import { ART_URLS, GUN_ICON, SHOP_ICON, SKILL_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** The key for each fight speed (ID-062): clear of the card keys 1 2 3 and the action bar's. */
@@ -365,6 +368,38 @@ export const STAT_HINT: Readonly<Record<Stat, string>> = {
   tinker: 'Unlocks later: repair, turrets, batteries and crafting',
 };
 
+/** A stat button's tooltip for `d` (ID-096): what the stat does, then what the next point adds. */
+export const statHint = (d: RosterDefender, stat: Stat): string =>
+  isLocked(stat) ? STAT_HINT[stat] : `${STAT_HINT[stat]}. ${nextPointText(d, stat)}`;
+
+/**
+ * What the next point in each open stat adds for `d` (ID-096), one line per stat, shown
+ * under a picker's buttons while points are left: "Instinct: +3 max HP · +0.13 armour ·
+ * +1.0% survive". None once spent out.
+ */
+export function gainLines(d: RosterDefender): string[] {
+  if (unspentPoints(d) <= 0) return [];
+  return OPEN_STATS.map((s) => `${STAT_NAMES[s]}: ${nextGains(d, s).join(' · ')}`);
+}
+
+/** `gainLines` as a list, or nothing. */
+function gainList(d: RosterDefender): HTMLElement[] {
+  const lines = gainLines(d);
+  if (lines.length === 0) return [];
+  const list = el('ul', 'hud-pick-gains');
+  list.setAttribute('aria-label', 'Next point adds');
+  for (const line of lines) {
+    // Lines wrap only between gains, never inside one ("+1.0% survive" stays whole).
+    const li = el('li', '');
+    line.split(' · ').forEach((part, i) => {
+      if (i > 0) li.append(' · ');
+      li.append(el('span', 'hud-pick-gain', part));
+    });
+    list.append(li);
+  }
+  return [list];
+}
+
 /** What each stat does in a few words, for the picker's one-line hint. */
 export const STAT_SHORT: Readonly<Record<Stat, string>> = {
   instinct: 'more HP and armour',
@@ -418,7 +453,7 @@ export function pickerRow(d: RosterDefender, squad = false): PickerRow {
 
 /** "Bob +25 XP · level 2 (10/50) · +3 stat points". */
 function xpLine(g: ReturnType<typeof levelGains>[number], tag: string): string {
-  const points = g.points ? ` · +${g.points} stat points` : '';
+  const points = g.points ? ` · +${g.points} stat point${g.points === 1 ? '' : 's'}` : '';
   return `${tag} +${g.xp} XP · level ${g.level} (${g.into}/${g.next})${points}`;
 }
 
@@ -978,6 +1013,8 @@ export function createHud(
   const resultTitle = el('h2', 'hud-result-title');
   const resultList = el('ul', 'hud-result-list');
   const picker = el('div', 'hud-picker');
+  // Holding a + stat button keeps adding points (ID-096).
+  holdRepeat(picker);
   const campPicker = el('div', 'hud-picker');
   const gear = el('div', 'hud-picker hud-gear');
   const back = el('button', 'hud-button');
@@ -1131,7 +1168,8 @@ export function createHud(
           const now = d.stats[b.stat];
           button.setAttribute('aria-label', `Add ${STAT_NAMES[b.stat]} to ${d.name}, now ${now}`);
         }
-        button.title = STAT_HINT[b.stat];
+        button.title = statHint(d, b.stat);
+        holdable(button, `${d.id}:${b.stat}`);
         button.addEventListener('click', () => {
           if (result.hidden) return;
           const r = spend(d, b.stat);
@@ -1164,10 +1202,10 @@ export function createHud(
         );
         if (left <= 0) count.append(el('span', 'sr-only', ' points'));
         count.classList.toggle('squad-points-none', left === 0);
-        block.replaceChildren(count, buttons);
+        block.replaceChildren(count, buttons, ...gainList(d));
         return;
       }
-      block.replaceChildren(el('p', 'hud-pick-heading', row.heading), buttons);
+      block.replaceChildren(el('p', 'hud-pick-heading', row.heading), buttons, ...gainList(d));
     };
     draw();
     return block;
@@ -1240,9 +1278,6 @@ export function createHud(
       const heading = el('h3', 'debrief-squad-title', 'Squad');
       heading.append(el('span', 'debrief-stash'));
       head.append(heading);
-      if (picks.length > 0) {
-        head.append(el('p', 'debrief-hint', statHints()));
-      }
       head.append(el('p', 'debrief-hint', SQUAD_CARD_HINT));
       const grid = el('div', 'squad-grid');
       for (const c of d.cards) {

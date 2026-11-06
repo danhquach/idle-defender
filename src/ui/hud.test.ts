@@ -29,6 +29,7 @@ import {
   defenderLabel,
   fallingText,
   payoutText,
+  gainLines,
   pickerRow,
   resultScreen,
   shopButtons,
@@ -414,27 +415,38 @@ describe('hud', () => {
     it('a level-up: the XP line says so, and the picker offers its points (and older unspent ones)', () => {
       const { game, s } = ended('won');
       game.roster[0]!.xp = 20; // Bob: level 2 with this win
-      game.roster[1]!.xp = 30; // Jack: level 2 already, 1 of 3 points spent; no level-up
-      game.roster[1]!.stats = { ...NO_STATS, agility: 1 };
+      game.roster[1]!.xp = 30; // Jack: level 2 already, its 1 point unspent; no level-up
       game.roster[1]!.loadout = loadoutFrom('knife');
       game.roster[2]!.xp = 500; // John: points to spend, but not in this fight
       const r = resultScreen(game, s, NOW);
       expect(r.lines.slice(3, 5)).toEqual([
-        'Bob +15 XP · level 2 (10/50) · +3 stat points',
+        'Bob +15 XP · level 2 (10/50) · +1 stat point',
         'Jack +15 XP · level 2 (20/50)',
       ]);
       expect(r.picks.map((d) => [d.id, d.xp, d.stats])).toEqual([
         ['bob', 35, NO_STATS],
-        ['jack', 45, { ...NO_STATS, agility: 1 }],
+        ['jack', 45, NO_STATS],
       ]);
       // Building the screen leaves the game alone.
       expect(game.roster[0]!.xp).toBe(20);
     });
 
+    it('under the picker, what the next point adds per open stat; none once spent out (ID-096)', () => {
+      const bob = { ...newGame().roster[0]!, xp: 150 }; // level 4: 3 points
+      expect(gainLines(bob)).toEqual([
+        'Instinct: +3 max HP · +0.13 armour · +1.0% survive',
+        expect.stringMatching(/^Agility: \d\.\d\d s faster reload$/),
+        expect.stringMatching(
+          /^Sharp Mind: \+\d\.\d% crit chance · \+×0\.06 crit damage · \d\.\d\d° tighter spread$/,
+        ),
+      ]);
+      expect(gainLines({ ...bob, stats: { ...NO_STATS, mind: 3 } })).toEqual([]);
+    });
+
     it('the picker row: points left, a button per stat, Tinker greyed out (ID-084)', () => {
       const bob = { ...newGame().roster[0]!, xp: 1e6 };
       expect(pickerRow(bob)).toEqual({
-        heading: 'Bob · 846 stat points to spend',
+        heading: 'Bob · 282 stat points to spend',
         buttons: [
           { stat: 'instinct', label: 'Instinct 0', disabled: false },
           { stat: 'agility', label: 'Agility 0', disabled: false },
@@ -444,8 +456,8 @@ describe('hud', () => {
       });
       // No titles any more (ID-084): the heading is the name, however many points.
       const lots: Stats = { ...NO_STATS, instinct: 30, mind: 30 };
-      expect(pickerRow({ ...bob, stats: lots }).heading).toBe('Bob · 786 stat points to spend');
-      const none = pickerRow({ ...bob, xp: 25, stats: { ...NO_STATS, instinct: 3 } });
+      expect(pickerRow({ ...bob, stats: lots }).heading).toBe('Bob · 222 stat points to spend');
+      const none = pickerRow({ ...bob, xp: 25, stats: { ...NO_STATS, instinct: 1 } });
       expect(none.heading).toBe('Bob · 0 stat points to spend');
       expect(none.buttons.every((b) => b.disabled)).toBe(true);
     });

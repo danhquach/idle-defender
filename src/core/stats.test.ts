@@ -4,7 +4,10 @@ import { buildPost, newBase, type Base, type BasePost } from './base.ts';
 import {
   DEFENDER_HP,
   OPEN_STATS,
+  POINTS_PER_LEVEL,
+  STAT_ACTIVE,
   STAT_EFFECT,
+  STAT_SPLIT,
   STAT_NAMES,
   STATS,
   STEP,
@@ -17,6 +20,8 @@ import {
 import { hordeXp } from './game.ts';
 import { newHorde, specOf, standing, tick, type DefenderSpec, type HordeState } from './horde.ts';
 import {
+  activeEffects,
+  bankedPoints,
   critChance,
   critDamage,
   damageFactor,
@@ -29,9 +34,9 @@ import {
   maxHpOf,
   NO_STATS,
   reloadTime,
-  soft,
   spend,
   spreadOf,
+  statBonus,
   unspentPoints,
   xpForLevel,
 } from './stats.ts';
@@ -93,15 +98,27 @@ describe('levels', () => {
 });
 
 describe('stat points', () => {
-  it('3 per level gained; unspent is earned less spent', () => {
+  it('1 per level gained; unspent is earned less spent (ID-096)', () => {
+    expect(POINTS_PER_LEVEL).toBe(1);
     expect(earnedPoints(0)).toBe(0);
-    expect(earnedPoints(25)).toBe(3);
-    expect(earnedPoints(75)).toBe(6);
-    expect(unspentPoints({ xp: 75, stats: stats({ instinct: 2, mind: 1 }) })).toBe(3);
+    expect(earnedPoints(25)).toBe(1);
+    expect(earnedPoints(75)).toBe(2);
+    expect(unspentPoints({ xp: 150, stats: stats({ instinct: 1, mind: 1 }) })).toBe(1);
+  });
+
+  it('points banked from an older save count as earned, on top of new levels (ID-096)', () => {
+    // An old save's level-3 defender earned 3 × 2 = 6: 2 at today's rate, 4 banked.
+    expect(bankedPoints(0)).toBe(0);
+    expect(bankedPoints(xpForLevel(3))).toBe(4);
+    expect(earnedPoints(xpForLevel(3), 4)).toBe(6);
+    // Banked stays put; the next level adds 1.
+    expect(earnedPoints(xpForLevel(4), 4)).toBe(7);
+    expect(unspentPoints({ xp: xpForLevel(3), stats: stats({ mind: 5 }), banked: 4 })).toBe(1);
+    expect(unspentPoints({ xp: xpForLevel(3), stats: stats({ mind: 5 }) })).toBe(-3);
   });
 
   it('spends one point at a time, refuses with none left, and never touches its input', () => {
-    const d = { xp: 25, stats: stats({}) };
+    const d = { xp: xpForLevel(4), stats: stats({}) };
     let cur = d;
     for (const stat of ['instinct', 'agility', 'mind'] as const) {
       const r = spend(cur, stat);
@@ -128,13 +145,40 @@ describe('stat points', () => {
 });
 
 describe('every bonus shrinks as points pile up (ID-084)', () => {
-  it('cap × P / (P + 20): half the cap at 20 points, never the cap', () => {
-    expect(soft(0, 10)).toBe(0);
-    expect(soft(20, 10)).toBe(5);
-    expect(soft(1e9, 10)).toBeLessThan(10);
+  it('cap × P / (P + 10 × n), n the active effects: half the cap at 10n points, never the cap (ID-096)', () => {
+    expect(STAT_SPLIT).toBe(10);
+    // Agility drives 1 effect, Instinct and Sharp Mind 3 each, Tinker none yet.
+    expect(STATS.map(activeEffects)).toEqual([3, 1, 3, 0]);
+    expect(statBonus(0, 'agility', 'reload')).toBe(0);
+    expect(statBonus(10, 'agility', 'reload')).toBe(STAT_EFFECT.reload / 2);
+    expect(statBonus(30, 'instinct', 'hp')).toBe(STAT_EFFECT.hp / 2);
+    expect(statBonus(30, 'mind', 'crit')).toBeCloseTo(STAT_EFFECT.crit / 2);
+    expect(statBonus(1e9, 'agility', 'reload')).toBeLessThan(STAT_EFFECT.reload);
     // Each point adds less than the one before.
-    const gains = [1, 2, 10, 50].map((p) => soft(p, 1) - soft(p - 1, 1));
+    const gains = [1, 2, 10, 50].map(
+      (p) => statBonus(p, 'mind', 'spread') - statBonus(p - 1, 'mind', 'spread'),
+    );
     expect([...gains].sort((a, b) => b - a)).toEqual(gains);
+  });
+
+  it('1 new point is worth 2 old ones (P + 20) before the split, then shared n ways (ID-096)', () => {
+    const old = (p: number, cap: number) => (cap * p) / (p + 20);
+    // A stat with one effect: 1 point now gives what 2 gave before.
+    expect(statBonus(1, 'agility', 'reload')).toBeCloseTo(old(2, STAT_EFFECT.reload));
+    expect(statBonus(5, 'agility', 'reload')).toBeCloseTo(old(10, STAT_EFFECT.reload));
+    // With three effects, 3 points give each what 2 old points gave alone.
+    expect(statBonus(3, 'instinct', 'hp')).toBeCloseTo(old(2, STAT_EFFECT.hp));
+  });
+
+  it('only active effects get a share: one a stat does not drive gives nothing (ID-096)', () => {
+    expect(STAT_ACTIVE).toEqual({
+      instinct: ['hp', 'armour', 'dodge'],
+      agility: ['reload'],
+      mind: ['crit', 'critBonus', 'spread'],
+      tinker: [],
+    });
+    expect(statBonus(50, 'agility', 'hp')).toBe(0);
+    expect(statBonus(50, 'tinker', 'reload')).toBe(0);
   });
 
   it('no number of points breaks a fight: every bonus stays under its cap', () => {
@@ -164,45 +208,45 @@ describe('what each stat does, with any weapon (ID-084)', () => {
 
   it('Instinct: + max HP (whole), + armour off each hit (a hit keeps half), + injury dodge', () => {
     expect(maxHpOf(plain({}))).toBe(100);
-    expect(maxHpOf(plain({ instinct: 1 }))).toBe(105);
-    expect(maxHpOf(plain({ instinct: 10 }))).toBe(133);
-    expect(maxHpOf(plain({ instinct: 20 }))).toBe(150);
+    expect(maxHpOf(plain({ instinct: 1 }))).toBe(103);
+    expect(maxHpOf(plain({ instinct: 10 }))).toBe(125);
+    expect(maxHpOf(plain({ instinct: 30 }))).toBe(150);
     expect(damageTaken(plain({}), 5)).toBe(5);
-    expect(damageTaken(plain({ instinct: 20 }), 5)).toBe(3);
-    expect(damageTaken(plain({ instinct: 20 }), 3)).toBe(1.5);
-    expect(damageTaken(plain({ instinct: 20 }), 60)).toBe(58);
+    expect(damageTaken(plain({ instinct: 30 }), 5)).toBe(3);
+    expect(damageTaken(plain({ instinct: 30 }), 3)).toBe(1.5);
+    expect(damageTaken(plain({ instinct: 30 }), 60)).toBe(58);
     expect(dodgeChance(plain({}))).toBe(0);
-    expect(dodgeChance(plain({ instinct: 20 }))).toBeCloseTo(0.15);
+    expect(dodgeChance(plain({ instinct: 30 }))).toBeCloseTo(0.15);
     // Every loadout alike, a shield's share off first.
     for (const w of ['pistol', 'knife', 'toolkit'] as const) {
-      expect(maxHpOf(spec(w, { instinct: 20 }))).toBe(150);
+      expect(maxHpOf(spec(w, { instinct: 30 }))).toBe(150);
     }
     const shielded = {
       loadout: { primary: 'pistol', secondary: 'knife', item: 'shield' },
     } as const;
-    expect(damageTaken({ ...shielded, stats: stats({ instinct: 20 }) }, 10)).toBeCloseTo(5);
+    expect(damageTaken({ ...shielded, stats: stats({ instinct: 30 }) }, 10)).toBeCloseTo(5);
   });
 
   it('Agility: faster reloads on every gun, on top of a Gunner’s', () => {
     expect(reloadTime(plain({}), 'pistol')).toBe(WEAPONS.pistol.reload);
-    expect(reloadTime(plain({ agility: 20 }), 'pistol')).toBeCloseTo(WEAPONS.pistol.reload * 0.75);
-    expect(reloadTime(spec('pistol', { agility: 20 }), 'pistol')).toBeCloseTo(
+    expect(reloadTime(plain({ agility: 10 }), 'pistol')).toBeCloseTo(WEAPONS.pistol.reload * 0.75);
+    expect(reloadTime(spec('pistol', { agility: 10 }), 'pistol')).toBeCloseTo(
       WEAPONS.pistol.reload * 0.75 * 0.75,
     );
-    expect(reloadTime(spec('knife', { agility: 20 }), 'pistol')).toBeCloseTo(
+    expect(reloadTime(spec('knife', { agility: 10 }), 'pistol')).toBeCloseTo(
       WEAPONS.pistol.reload * 0.75,
     );
   });
 
   it('Sharp Mind: narrower cone, more crits, harder crits, whoever fires', () => {
     expect(spreadOf(plain({}), 'pistol')).toBe(WEAPONS.pistol.spread);
-    expect(spreadOf(plain({ mind: 20 }), 'pistol')).toBeCloseTo(WEAPONS.pistol.spread * 0.75);
+    expect(spreadOf(plain({ mind: 30 }), 'pistol')).toBeCloseTo(WEAPONS.pistol.spread * 0.75);
     expect(critChance(plain({}))).toBe(0);
-    expect(critChance(plain({ mind: 20 }))).toBeCloseTo(0.175);
-    expect(critChance(spec('pistol', { mind: 20 }))).toBeCloseTo(0.225);
-    expect(critChance(spec('knife', { mind: 20 }))).toBeCloseTo(0.175);
+    expect(critChance(plain({ mind: 30 }))).toBeCloseTo(0.25);
+    expect(critChance(spec('pistol', { mind: 30 }))).toBeCloseTo(0.3);
+    expect(critChance(spec('knife', { mind: 30 }))).toBeCloseTo(0.25);
     expect(critDamage(plain({}))).toBe(2);
-    expect(critDamage(plain({ mind: 20 }))).toBeCloseTo(3);
+    expect(critDamage(plain({ mind: 30 }))).toBeCloseTo(3);
   });
 
   it('no stat adds damage: only an off-profession specialised gun changes it', () => {
@@ -245,11 +289,11 @@ describe('stats in a fight', () => {
     const s = newHorde(1, {
       ...setup(),
       roster: [
-        { id: 'a', name: 'A', loadout: loadoutFrom('pistol'), stats: stats({ instinct: 20 }) },
+        { id: 'a', name: 'A', loadout: loadoutFrom('pistol'), stats: stats({ instinct: 30 }) },
         { id: 'b', name: 'B', loadout: loadoutFrom('knife'), stats: stats({ mind: 3 }) },
       ],
     });
-    expect(s.defenders[0]).toMatchObject({ hp: 150, maxHp: 150, stats: stats({ instinct: 20 }) });
+    expect(s.defenders[0]).toMatchObject({ hp: 150, maxHp: 150, stats: stats({ instinct: 30 }) });
     expect(s.bench).toEqual([
       { id: 'b', name: 'B', loadout: loadoutFrom('knife'), stats: stats({ mind: 3 }) },
     ]);
@@ -270,25 +314,25 @@ describe('stats in a fight', () => {
   it("Instinct's armour takes a flat share off each hit", () => {
     const bare = tick(spat(fight(newBase(), spec('pistol'), 'tower', 4)), STEP);
     expect(bare.defenders[0]!.hp).toBe(100 - 8);
-    const tough20 = tick(
-      spat(fight(newBase(), spec('pistol', { instinct: 20 }), 'tower', 4)),
+    const tough30 = tick(
+      spat(fight(newBase(), spec('pistol', { instinct: 30 }), 'tower', 4)),
       STEP,
     );
-    expect(tough20.defenders[0]!.hp).toBe(150 - 6);
+    expect(tough30.defenders[0]!.hp).toBe(150 - 6);
   });
 
   it('Instinct sometimes leaves a defender at 1 HP from a hit that would injure them', () => {
     let saved = 0;
     const tries = 400;
     for (let seed = 1; seed <= tries; seed++) {
-      const s = spat(fight(newBase(), spec('pistol', { instinct: 20 }), 'tower', 4));
+      const s = spat(fight(newBase(), spec('pistol', { instinct: 30 }), 'tower', 4));
       s.rng = { s: seed };
       s.defenders[0]!.hp = 5;
       const after = tick(s, STEP);
       if (after.defenders[0]?.hp === 1) saved += 1;
       else expect(after.injured).toHaveLength(1);
     }
-    // 15% at 20 points.
+    // 15% at 30 points.
     expect(saved / tries).toBeGreaterThan(0.1);
     expect(saved / tries).toBeLessThan(0.2);
   });
@@ -321,9 +365,9 @@ describe('stats in a fight', () => {
     }
     const crits = hits.filter((h) => Math.abs(h - critDamage(d) * base) < 1e-6).length;
     expect(hits.filter((h) => Math.abs(h - base) < 1e-6).length + crits).toBe(400);
-    // Just under 35% at a huge Sharp Mind.
-    expect(crits / 400).toBeGreaterThan(0.25);
-    expect(crits / 400).toBeLessThan(0.45);
+    // Just under 50% at a huge Sharp Mind.
+    expect(crits / 400).toBeGreaterThan(0.4);
+    expect(crits / 400).toBeLessThan(0.6);
   });
 
   it("with no crit chance no crit rolls: a Ripper's pistol without Sharp Mind rolls only its spread", () => {

@@ -5,6 +5,8 @@ import type { HordeState } from './horde.ts';
 import {
   answerOffer,
   balanceReport,
+  gearUp,
+  nearestEnemy,
   nextHorde,
   opening,
   playCampaign,
@@ -16,6 +18,11 @@ import {
 import { SEGMENTS, START_BASE, stockOf } from './data.ts';
 import { NO_STATS } from './stats.ts';
 import { loadoutFrom } from './loadout.ts';
+import { gunPower, rollWeapon } from './armoury.ts';
+import { recruit } from './camp.ts';
+import { createRng } from './rng.ts';
+import { newHorde } from './horde.ts';
+import { enemy, setup } from './testing.ts';
 
 /** Horde 1 on the starting base: bob on post 0, jack and john on the bench. */
 const fresh = (): HordeState => startHorde(newGame(), 1, 'bob', 0, 0);
@@ -183,10 +190,10 @@ describe('nextHorde', () => {
 describe('spendAll', () => {
   it("puts every point into the job's stat, and leaves a game with none alone", () => {
     const g = newGame();
-    g.roster[0]!.xp = 25; // Bob, a Gunner: 3 points
-    g.roster[1]!.xp = 75; // Jack, a Ripper: 6 points, 2 already in Instinct
+    g.roster[0]!.xp = 150; // Bob, a Gunner, level 4: 3 points
+    g.roster[1]!.xp = 525; // Jack, a Ripper, level 7: 6 points, 2 already in Instinct
     g.roster[1]!.stats = { ...NO_STATS, instinct: 2 };
-    g.roster[2]!.xp = 25; // John, an Engineer: 3 points
+    g.roster[2]!.xp = 150; // John, an Engineer, level 4: 3 points
     const after = spendAll(g);
     expect(after.roster.map((d) => d.stats)).toEqual([
       { ...NO_STATS, mind: 3 },
@@ -195,7 +202,7 @@ describe('spendAll', () => {
     ]);
     // A plain survivor (horde-only, ID-066) puts theirs in Sharp Mind.
     const squad = newGame('horde');
-    squad.roster[0]!.xp = 25;
+    squad.roster[0]!.xp = 150;
     expect(spendAll(squad).roster[0]!.stats).toEqual({ ...NO_STATS, mind: 3 });
     expect(g.roster[0]!.stats).toEqual(NO_STATS);
     expect(spendAll(newGame())).toEqual(newGame());
@@ -239,5 +246,45 @@ describe('balanceReport', () => {
       expect(() => balanceReport(n, 1)).toThrow(RangeError);
       expect(() => balanceReport(1, n)).toThrow(RangeError);
     }
+  });
+});
+
+describe('gearUp (ID-096)', () => {
+  it('hands the stash’s strongest guns to the weakest-armed survivors, while they are stronger', () => {
+    const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
+    const rusty = rollWeapon(createRng(2), 'h2', 'smg', 'rusty');
+    const g: GameState = {
+      ...newGame('horde'),
+      roster: [recruit(1), recruit(2)],
+      armoury: [rusty, relic],
+    };
+    expect(gunPower(relic)).toBeGreaterThan(gunPower(rusty));
+    const after = gearUp(g);
+    const held = after.roster.map((d) => d.loadout.primary);
+    expect(held).toContainEqual(relic);
+    // The rusty gun goes on only if it beats the pistol it would replace.
+    const rustyBetter = gunPower(rusty) > gunPower('pistol');
+    expect(held.some((h) => h === rusty || (typeof h === 'object' && h.uid === 'h2'))).toBe(
+      rustyBetter,
+    );
+    expect(g.roster.every((d) => d.loadout.primary === 'pistol')).toBe(true); // input untouched
+    // Nothing better in the stash: no change.
+    expect(gearUp(after)).toEqual(after);
+  });
+});
+
+describe('nearestEnemy (ID-096)', () => {
+  it('px from the wall’s face to the closest standing enemy; 0 at it, Infinity with none', () => {
+    const s = newHorde(1, setup());
+    expect(nearestEnemy(s)).toBe(Infinity);
+    const built = s.layers.filter((l) => l.segments.some((seg) => seg.kind !== null));
+    const face = Math.max(...built.map((l) => l.x)) + 20;
+    enemy(s, { x: face + 300, y: 200 });
+    enemy(s, { x: face + 500, y: 200 });
+    expect(nearestEnemy(s)).toBe(300);
+    enemy(s, { x: face + 10, y: 200, hp: 0 }); // dead: not counted
+    expect(nearestEnemy(s)).toBe(300);
+    enemy(s, { x: face - 5, y: 200 });
+    expect(nearestEnemy(s)).toBe(0);
   });
 });

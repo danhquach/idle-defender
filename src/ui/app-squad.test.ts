@@ -325,7 +325,7 @@ describe('the Roster in the game (app.ts, ID-086)', () => {
     const camp = {
       ...g,
       hordeNumber: 2,
-      roster: [{ ...recruit(1), xp: 25 }, recruit(2)],
+      roster: [{ ...recruit(1), xp: 150 }, recruit(2)], // level 4: 3 points (ID-096)
       camp: { ...g.camp, recruits: 2 },
     };
     localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
@@ -396,7 +396,7 @@ describe('the Roster and the result screen together (app.ts, ID-086)', () => {
     const camp = {
       ...g,
       hordeNumber: 2,
-      roster: [{ ...recruit(1), xp: 25 }, recruit(2)],
+      roster: [{ ...recruit(1), xp: 150 }, recruit(2)], // level 4: 3 points (ID-096)
       camp: { ...g.camp, recruits: 2 },
       armoury: [relic],
     };

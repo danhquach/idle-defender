@@ -53,10 +53,11 @@ import {
   defenderLabel,
   el,
   lockedLabel,
-  STAT_HINT,
+  statHint,
   statText,
   survivorText,
 } from './hud.ts';
+import { holdable } from './hold.ts';
 import { costLine, setVariant } from './kit.ts';
 
 /**
@@ -416,9 +417,10 @@ function statButton(
   const label = locked ? lockedLabel(stat) : `${STAT_NAMES[stat]} +1`;
   const button = el('button', 'hud-button hud-pick-stat', label);
   button.type = 'button';
-  button.title = STAT_HINT[stat];
+  button.title = statHint(d, stat);
   // A locked stat (ID-084: Tinker) stays in view, greyed out, and takes no points.
   button.disabled = locked;
+  holdable(button, `${d.id}:${stat}`);
   button.addEventListener('click', () => {
     const r = spendPoint(game, d.id, stat);
     if (r.ok) onChange(r.game);

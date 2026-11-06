@@ -8,7 +8,7 @@ import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { sendPatrol } from '../core/patrol.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
-import { NOW, preReserve } from './testing.ts';
+import { banked, NOW, preReserve } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,8 +63,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 }
 
 describe('save: the horde-only build (ID-066)', () => {
-  it('is version 13', () => {
-    expect(SAVE_VERSION).toBe(13);
+  it('is version 14', () => {
+    expect(SAVE_VERSION).toBe(14);
   });
 
   it('round-trips a horde-only game, after a win adds a survivor', () => {
@@ -98,7 +98,8 @@ describe('save: the horde-only build (ID-066)', () => {
     expect(back.roster.map((d) => d.id)).toEqual(['jack', 'ann', 'cal', 'dee', 'eve', 'fay']);
     expect(back.reserve.map((d) => d.id)).toEqual(['bob', 'john']);
     for (const d of [...back.roster, ...back.reserve]) {
-      expect(d).toEqual(was.roster.find((r) => r.id === d.id));
+      // A v13 or older save banks the old levels' extra points (ID-096).
+      expect(d).toEqual(banked(was).roster.find((r) => r.id === d.id));
     }
     const hidden = (x: GameState) => ({ ...x, roster: [], reserve: [] });
     expect(hidden(back)).toEqual(hidden(was));

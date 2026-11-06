@@ -427,6 +427,8 @@ describe('save', () => {
   it('round-trips stats, and loads a save from before stats with all 0', () => {
     const g = played();
     g.roster[1]!.xp = 75;
+    // Level 3: 2 points today, and 4 banked from an older save (ID-096).
+    g.roster[1]!.banked = 4;
     g.roster[1]!.stats = { instinct: 1, agility: 3, mind: 2, tinker: 0 };
     expect(decodeSave(encodeSave(g, NOW))).toEqual({ savedAt: NOW, game: g });
     const old = hostile((s) => {
@@ -444,8 +446,8 @@ describe('save', () => {
         change(s.game.roster[0].stats);
       });
     expect(at(() => {})).not.toBeNull();
-    expect(at((t) => (t.mind = 6))).not.toBeNull(); // level 3: exactly the 6 points earned
-    expect(at((t) => (t.mind = 7))).toBeNull(); // more than earned
+    expect(at((t) => (t.mind = 2))).not.toBeNull(); // level 3: exactly the 2 points earned
+    expect(at((t) => (t.mind = 3))).toBeNull(); // more than earned
     expect(at((t) => Object.assign(t, { mind: 2, agility: 2, tinker: 2, instinct: 1 }))).toBeNull();
     expect(at((t) => (t.mind = 1), 24)).toBeNull(); // level 1 has none
     expect(at((t) => (t.mind = -1))).toBeNull();
@@ -474,8 +476,8 @@ describe('save', () => {
     expect(oldRaw).not.toContain('"stats"');
     expect(decodeSave(oldRaw)).toBeNull();
     // Overspent at scale: the earned-points check, not the per-stat cap, refuses it.
-    expect(at((t) => (t.mind = 3 * 282_842 + 1), 1e12)).toBeNull();
-    expect(at((t) => (t.mind = 3 * 282_842), 1e12)).not.toBeNull();
+    expect(at((t) => (t.mind = 282_842 + 1), 1e12)).toBeNull();
+    expect(at((t) => (t.mind = 282_842), 1e12)).not.toBeNull();
     const raw = encodeSave(played(), NOW).replace('"mind"', '"__proto__":{"polluted":1},"mind"');
     expect(decodeSave(raw)).toBeNull();
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
@@ -1130,7 +1132,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 14, '1', '13', 1.5, null]) {
+    for (const v of [0, 15, '1', '14', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1380,7 +1382,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(13);
+    expect(SAVE_VERSION).toBe(14);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1930,6 +1932,27 @@ describe('save: survivors (ID-032)', () => {
     return decodeSave(JSON.stringify(save));
   };
 
+  it('a survivor waiting holds banked points only within what the old rate gave (ID-096)', () => {
+    const offer = (x: Loose) => x.camp.offers[0].survivor;
+    // The level-3 offer could have banked at most 4.
+    const ok = changed((x) => (offer(x).banked = 4)) as Loose;
+    expect(ok.game.camp.offers[0].survivor.banked).toBe(4);
+    for (const bad of [5, 0, -1, 1.5, 1e9, '4', null, [4], true]) {
+      expect(
+        changed((x) => (offer(x).banked = bad)),
+        String(bad),
+      ).toBeNull();
+    }
+    // A level-1 survivor from a patrol has nothing to bank.
+    expect(changed((x) => (x.reports[0].survivors[0].banked = 1))).toBeNull();
+    // A v13 save never held the key, on a survivor either.
+    const v13 = JSON.parse(encodeSave(joined(), NOW));
+    v13.v = 13;
+    expect(decodeSave(JSON.stringify(v13))).not.toBeNull();
+    offer(v13.game).banked = 4;
+    expect(decodeSave(JSON.stringify(v13))).toBeNull();
+  });
+
   it('round-trips survivors waiting and those who joined', () => {
     expect(decodeSave(encodeSave(joined(), NOW))?.game).toEqual(joined());
     // A survivor offer with no picks left still holds the survivor.
@@ -2213,8 +2236,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 13 (survivors, the car, the research queue, the reserve, then the stats came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(13);
+  it('is version 14 (survivors, the car, the research queue, the reserve, the stats, then 1 point a level came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(14);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {

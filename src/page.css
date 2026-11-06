@@ -1070,6 +1070,20 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* What the next point adds per stat (ID-096): small and quiet under the + buttons. */
+.hud-pick-gains {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+
+.hud-pick-gain {
+  white-space: nowrap;
+}
+
 .squad-pick .hud-pick-stat {
   min-height: 28px;
   padding: 4px 10px;
@@ -2563,6 +2577,15 @@ body {
   padding: 0;
   font-size: var(--text-body);
   font-weight: 600;
+}
+
+/* A + stat button held keeps adding points (ID-096): a long press opens no menu and selects
+   no text; a swipe that starts on it still scrolls the page. */
+.hold-repeat {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .roster-stat-effects {

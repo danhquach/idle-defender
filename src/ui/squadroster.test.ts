@@ -47,7 +47,7 @@ describe('the Roster tiles (ID-086)', () => {
   it('lists every survivor with avatar, name, level, full HP, gun and unspent points', () => {
     const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
     const ivan = {
-      ...at(1, 3, { instinct: 2 }),
+      ...at(1, 7, { instinct: 2 }),
       loadout: { ...recruit(1).loadout, primary: relic },
     };
     const tiles = rosterTiles(camp([ivan, at(2, 1)]), NOW, null);
@@ -55,7 +55,7 @@ describe('the Roster tiles (ID-086)', () => {
     expect(tiles[0]).toMatchObject({
       id: 'recruit-1',
       name: ivan.name,
-      level: 3,
+      level: 7,
       health: `HP ${maxHpOf(ivan)}/${maxHpOf(ivan)}`,
       down: false,
       gun: 'Relic Rifle',
@@ -101,10 +101,10 @@ describe('the survivor card (ID-086)', () => {
   it('level, XP bar and points left; a bare "0" when none are left (ID-083)', () => {
     const d = { ...at(1, 2), xp: xpForLevel(2) + 10 };
     const c = survivorCard(d);
-    expect(c).toMatchObject({ level: 2, points: 3, pointsText: '3 points' });
+    expect(c).toMatchObject({ level: 2, points: 1, pointsText: '1 point' });
     expect(c.xp).toEqual({ pct: 20, text: '10/50 XP to Lv 3' });
-    expect(survivorCard(at(1, 2, { agility: 3 })).pointsText).toBe('0');
-    expect(survivorCard(at(1, 2, { agility: 2 })).pointsText).toBe('1 point');
+    expect(survivorCard(at(1, 2, { agility: 1 })).pointsText).toBe('0');
+    expect(survivorCard(at(1, 4, { agility: 1 })).pointsText).toBe('2 points');
   });
 
   it('each stat with its points; Tinker locked', () => {
@@ -126,12 +126,15 @@ describe('the survivor card (ID-086)', () => {
     );
     expect(reloadTime(next, 'pistol')).toBeLessThan(reloadTime(d, 'pistol'));
     const instinct = statEffects(at(1, 1), 'instinct');
-    expect(instinct[0]).toBe('Max HP 100 → 105');
-    expect(instinct[1]).toBe('Armour per hit 0.0 → 0.2');
-    expect(instinct[2]).toBe('Survive a downing hit 0.0% → 1.4%');
+    // A point in Instinct is split 3 ways (ID-096): 100 × 1/31 HP, 4/31 armour, 30%/31.
+    expect(instinct).toEqual([
+      'Max HP 100 → 103',
+      'Armour per hit 0.00 → 0.13',
+      'Survive a downing hit 0.0% → 1.0%',
+    ]);
     expect(statEffects(at(1, 1), 'mind')).toEqual([
-      'Crit chance 5.0% → 6.7%',
-      'Crit damage ×2.00 → ×2.10',
+      'Crit chance 5.0% → 6.6%',
+      'Crit damage ×2.00 → ×2.06',
       expect.stringMatching(/^Spread \d+\.\d\d° → \d+\.\d\d°$/),
     ]);
     // Two decimals, so one point's change in spread shows (one rounded it away).
@@ -156,7 +159,7 @@ describe('the survivor card (ID-086)', () => {
     const fighting = cardBlock(survivorCard(at(1, 2)), false, onSpend);
     expect([...fighting.querySelectorAll('button')].every((b) => b.disabled)).toBe(true);
     expect(fighting.textContent).toContain(SPEND_LATER_NOTE);
-    const spent = cardBlock(survivorCard(at(1, 2, { mind: 3 })), true, onSpend);
+    const spent = cardBlock(survivorCard(at(1, 2, { mind: 1 })), true, onSpend);
     expect([...spent.querySelectorAll('button')].every((b) => b.disabled)).toBe(true);
     expect(spent.querySelector('.roster-card-points')!.textContent).toBe('0 points');
   });
@@ -197,7 +200,7 @@ describe('the Roster dialog (ID-086)', () => {
   }
 
   it('the button opens the list on the first tile; a tile opens that card on its first +', () => {
-    const { root, scrim, button } = mount(camp([at(1, 2), at(2, 1)]));
+    const { root, scrim, button } = mount(camp([at(1, 4), at(2, 1)]));
     expect(scrim.hidden).toBe(true);
     button.click();
     expect(scrim.hidden).toBe(false);
@@ -222,7 +225,7 @@ describe('the Roster dialog (ID-086)', () => {
   });
 
   it('a + spends through onSpend and the card redraws with the keyboard kept on it', () => {
-    const { roster, scrim, onSpend } = mount(camp([at(1, 2)]));
+    const { roster, scrim, onSpend } = mount(camp([at(1, 4)]));
     roster.open('recruit-1');
     const plus = () => scrim.querySelectorAll<HTMLButtonElement>('.roster-stat-add')[0]!;
     expect(document.activeElement).toBe(plus());
@@ -239,7 +242,7 @@ describe('the Roster dialog (ID-086)', () => {
   });
 
   it('Esc closes and gives the keyboard back to what opened it; Tab stays inside', () => {
-    const { root, scrim, button, press } = mount(camp([at(1, 2)]));
+    const { root, scrim, button, press } = mount(camp([at(1, 4)]));
     button.focus();
     button.click();
     press('Tab', true);
@@ -263,7 +266,7 @@ describe('the Roster dialog (ID-086)', () => {
   });
 
   it('mid-fight every + is disabled and says to spend between hordes', () => {
-    const { roster, scrim, onSpend } = mount(camp([at(1, 2)]), false);
+    const { roster, scrim, onSpend } = mount(camp([at(1, 4)]), false);
     roster.open('recruit-1');
     const adds = [...scrim.querySelectorAll<HTMLButtonElement>('.roster-stat-add')];
     expect(adds.every((b) => b.disabled)).toBe(true);
@@ -273,14 +276,14 @@ describe('the Roster dialog (ID-086)', () => {
   });
 
   it('an unknown id opens the list', () => {
-    const { roster, scrim } = mount(camp([at(1, 2)]));
+    const { roster, scrim } = mount(camp([at(1, 4)]));
     roster.open('nobody');
     expect(scrim.querySelectorAll('.roster-tile')).toHaveLength(1);
   });
 
   it('a hostile name from a save stays text everywhere (no HTML sink)', () => {
     const name = '<img src=x onerror=alert(1)>‮evil';
-    const { roster, scrim } = mount(camp([{ ...at(1, 2), name }]));
+    const { roster, scrim } = mount(camp([{ ...at(1, 4), name }]));
     roster.open();
     expect(scrim.querySelector('.roster-tile-name')!.textContent).toBe(name);
     expect(scrim.querySelectorAll('img')).toHaveLength(1);

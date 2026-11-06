@@ -4,6 +4,7 @@ import { finishHorde, newGame, startHorde, type GameState } from '../core/game.t
 import { upgradeLab, type GameResult } from '../core/research.ts';
 import { researchNow } from '../core/testing.ts';
 import { BUILDING_MATERIALS, stockOf } from '../core/data.ts';
+import { bankedPoints } from '../core/stats.ts';
 
 /** `game`'s stock as a save from before ID-025 (v3 and older) holds it: building materials only. */
 export const oldStock = (game: GameState): Record<string, number> =>
@@ -46,37 +47,64 @@ const oldStatsOf = (s: Record<string, number>): Record<string, number> => ({
  * and every survivor waiting to join.
  */
 export function preStats(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
-  const fix = (d: { stats?: Record<string, number> }): void => {
+  const json = preBank(game);
+  forEveryone(json, (d) => {
     if (d.stats) d.stats = oldStatsOf(d.stats);
-  };
-  for (const d of json.roster as { stats?: Record<string, number> }[]) fix(d);
-  for (const d of (json.reserve ?? []) as { stats?: Record<string, number> }[]) fix(d);
-  const camp = json.camp as { offers: { survivor: { stats: Record<string, number> } | null }[] };
-  for (const o of camp.offers) if (o.survivor) fix(o.survivor);
-  for (const r of json.reports as { survivors: { stats: Record<string, number> }[] }[]) {
-    for (const s of r.survivors) fix(s);
-  }
+  });
   return json;
 }
 
-/** `game` as an old save (v12 or older) loads it (ID-084): every spent stat point refunded. */
-export function refunded(game: GameState): GameState {
-  const zero = <T extends { stats: GameState['roster'][number]['stats'] }>(d: T): T => ({
-    ...d,
-    stats: { instinct: 0, agility: 0, mind: 0, tinker: 0 },
-  });
+type JsonPointed = { stats?: Record<string, number>; banked?: number };
+
+/** Runs `f` on every defender and survivor waiting to join in save JSON `json`. */
+function forEveryone(json: Record<string, unknown>, f: (d: JsonPointed) => void): void {
+  for (const d of json.roster as JsonPointed[]) f(d);
+  for (const d of (json.reserve ?? []) as JsonPointed[]) f(d);
+  const camp = json.camp as { offers: { survivor: JsonPointed | null }[] } | undefined;
+  for (const o of camp?.offers ?? []) if (o.survivor) f(o.survivor);
+  const reports = (json.reports ?? []) as { survivors?: JsonPointed[] }[];
+  for (const r of reports) for (const s of r.survivors ?? []) f(s);
+}
+
+/** `game` as JSON from before ID-096 (v13 and older): no banked points. */
+export function preBank(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  forEveryone(json, (d) => delete d.banked);
+  return json;
+}
+
+type Pointed = { xp: number; stats: GameState['roster'][number]['stats']; banked?: number };
+
+/** `game` with `f` applied to every defender and every survivor waiting to join. */
+function everyone(game: GameState, f: <T extends Pointed>(d: T) => T): GameState {
   return {
     ...game,
-    roster: game.roster.map(zero),
-    reserve: game.reserve.map(zero),
+    roster: game.roster.map(f),
+    reserve: game.reserve.map(f),
     camp: {
       ...game.camp,
-      offers: game.camp.offers.map((o) => ({ ...o, survivor: o.survivor && zero(o.survivor) })),
+      offers: game.camp.offers.map((o) => ({ ...o, survivor: o.survivor && f(o.survivor) })),
     },
-    reports: game.reports.map((r) => ({ ...r, survivors: r.survivors.map(zero) })),
+    reports: game.reports.map((r) => ({ ...r, survivors: r.survivors.map(f) })),
   };
 }
+
+/**
+ * `game` as a v13 or older save loads it (ID-096): everyone above level 1 banks the points
+ * the old 3 a level gave over today's 1.
+ */
+export const banked = (game: GameState): GameState =>
+  everyone(game, (d) => {
+    const b = bankedPoints(d.xp);
+    return b > 0 ? { ...d, banked: b } : d;
+  });
+
+/**
+ * `game` as an old save (v12 or older) loads it (ID-084): every spent stat point refunded,
+ * and the old levels' points banked (ID-096).
+ */
+export const refunded = (game: GameState): GameState =>
+  banked(everyone(game, (d) => ({ ...d, stats: { instinct: 0, agility: 0, mind: 0, tinker: 0 } })));
 
 /** `game` as JSON from before ID-066 (v11 and older): no reserve. */
 export function preReserve(game: GameState): Record<string, unknown> {
