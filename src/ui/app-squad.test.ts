@@ -230,3 +230,157 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     expect(squadGun()).toBe('Relic Rifle');
   });
 });
+
+describe('the Roster in the game (app.ts, ID-086)', () => {
+  /** A camp at Horde 2 with survivor 1 at level 2 (3 points to spend) and survivor 2 fresh. */
+  function seeded() {
+    const g = newGame('horde');
+    const camp = {
+      ...g,
+      hordeNumber: 2,
+      roster: [{ ...recruit(1), xp: 25 }, recruit(2)],
+      camp: { ...g.camp, recruits: 2 },
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    const booted = boot();
+    step(0);
+    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    const rosterButton = booted.root.querySelector<HTMLButtonElement>('.roster-button')!;
+    const plus = (i: number) => scrim.querySelectorAll<HTMLButtonElement>('.roster-stat-add')[i]!;
+    return { ...booted, scrim, rosterButton, plus };
+  }
+
+  it('on the start screen a + spends the point at once and saves it', () => {
+    const { scrim, rosterButton, plus, saved } = seeded();
+    rosterButton.click();
+    expect(scrim.hidden).toBe(false);
+    expect(scrim.querySelectorAll('.roster-tile')).toHaveLength(2);
+    scrim.querySelector<HTMLButtonElement>('.roster-tile')!.click();
+    plus(1).click();
+    expect(saved().roster[0]!.stats.agility).toBe(1);
+    expect(scrim.querySelector('.roster-card-points')!.textContent).toBe('2 points to spend');
+  });
+
+  it('mid-fight the card is view-only and holds the fight', () => {
+    const { scrim, rosterButton, button, plus, saved } = seeded();
+    button().click();
+    step(16);
+    rosterButton.click();
+    scrim.querySelector<HTMLButtonElement>('.roster-tile')!.click();
+    expect(plus(0).disabled).toBe(true);
+    plus(0).click();
+    expect(saved().roster[0]!.stats.instinct).toBe(0);
+    const ticks = vi.mocked(tick).mock.calls.length;
+    step(32);
+    step(48);
+    expect(vi.mocked(tick).mock.calls.length).toBe(ticks);
+  });
+
+  it('on the result screen a name opens the card; its + joins the screen’s picks and is saved with its button', () => {
+    const { root, result, button, scrim, plus, saved } = seeded();
+    button().click();
+    step(16);
+    endNextTick('won');
+    step(32);
+    const name = [...result().querySelectorAll<HTMLButtonElement>('.squad-card-open')][0]!;
+    expect(name.textContent).toBe(recruit(1).name);
+    const left = saved().roster[0]!;
+    name.click();
+    expect(scrim.hidden).toBe(false);
+    expect(scrim.querySelector('.roster-card-name')!.textContent).toBe(recruit(1).name);
+    const card = () => root.querySelector<HTMLElement>(`.squad-card[data-defender="recruit-1"]`)!;
+    const before = card().querySelector('.squad-points')!.textContent;
+    plus(2).click();
+    // The result screen's own picker counts the point spent in the card.
+    expect(card().querySelector('.squad-points')!.textContent).not.toBe(before);
+    // Not saved until the screen's button, like a point spent on the screen itself.
+    expect(saved().roster[0]!.stats.mind).toBe(left.stats.mind);
+    scrim.querySelector<HTMLButtonElement>('.menu-close')!.click();
+    expect(document.activeElement).toBe(name);
+    button().click();
+    expect(saved().roster[0]!.stats.mind).toBe(left.stats.mind + 1);
+  });
+});
+
+describe('the Roster and the result screen together (app.ts, ID-086)', () => {
+  function wonWithPoints() {
+    const g = newGame('horde');
+    const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
+    const camp = {
+      ...g,
+      hordeNumber: 2,
+      roster: [{ ...recruit(1), xp: 25 }, recruit(2)],
+      camp: { ...g.camp, recruits: 2 },
+      armoury: [relic],
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    const booted = boot();
+    step(0);
+    booted.button().click();
+    step(16);
+    endNextTick('won');
+    step(32);
+    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    const card = () =>
+      booted.root.querySelector<HTMLElement>('.squad-card[data-defender="recruit-1"]')!;
+    const pickerButtons = () => [...card().querySelectorAll<HTMLButtonElement>('.hud-pick-stat')];
+    const plus = () => [...scrim.querySelectorAll<HTMLButtonElement>('.roster-stat-add')];
+    const open = () => card().querySelector<HTMLButtonElement>('.squad-card-open')!.click();
+    const close = () => scrim.querySelector<HTMLButtonElement>('.menu-close')!.click();
+    return { ...booted, scrim, card, pickerButtons, plus, open, close };
+  }
+  const spent = (d: { stats: Record<string, number> }) =>
+    Object.values(d.stats).reduce((a, b) => a + b, 0);
+
+  it('points spent across the picker and the card never add up to more than were earned', () => {
+    const { button, saved, scrim, pickerButtons, plus, open, close } = wonWithPoints();
+    const start = saved().roster[0]!;
+    const earned = Number(
+      /^(\d+) point/.exec(
+        document.querySelector('.squad-card[data-defender="recruit-1"] .squad-points')!
+          .textContent!,
+      )![1],
+    );
+    expect(earned).toBeGreaterThan(1);
+    // One on the screen's picker first: the card opens one point down.
+    pickerButtons()[0]!.click();
+    open();
+    expect(scrim.querySelector('.roster-card-points')!.textContent).toBe(
+      `${earned - 1} point${earned - 1 === 1 ? '' : 's'} to spend`,
+    );
+    // The rest in the card: every + greys out.
+    for (let i = 1; i < earned; i++) plus()[1]!.click();
+    expect(plus().every((b) => b.disabled)).toBe(true);
+    close();
+    // The picker took the card's spends: nothing left to click.
+    expect(pickerButtons().every((b) => b.disabled)).toBe(true);
+    pickerButtons()[0]!.click();
+    button().click();
+    expect(spent(saved().roster[0]!)).toBe(spent(start) + earned);
+  });
+
+  it('follows the camp while open: a gun equipped on the result screen shows on the tile', () => {
+    const { root, scrim } = wonWithPoints();
+    root.querySelector<HTMLButtonElement>('.roster-button')!.click();
+    const gun = () => scrim.querySelector('.roster-tile-gun')!.textContent;
+    expect(gun()).toBe('Pistol');
+    // The field is inert behind the dialog in a browser; jsdom lets the change through.
+    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
+    select.value = 'h1';
+    select.dispatchEvent(new Event('change'));
+    expect(gun()).toBe('Relic Rifle');
+  });
+
+  it('an id the page was edited to (unknown, __proto__) opens the list, nothing else', () => {
+    const { card, scrim, open, close } = wonWithPoints();
+    const name = card().querySelector<HTMLButtonElement>('.squad-card-open')!;
+    for (const id of ['nobody', '__proto__', 'constructor']) {
+      name.dataset.openSurvivor = id;
+      open();
+      expect(scrim.hidden).toBe(false);
+      expect(scrim.querySelectorAll('.roster-tile')).toHaveLength(3);
+      expect(scrim.querySelector('.roster-card')).toBeNull();
+      close();
+    }
+  });
+});
