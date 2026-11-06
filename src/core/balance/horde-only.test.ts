@@ -6,13 +6,15 @@ import { playSquadCampaign, playSquadHorde } from '../sim.ts';
 import { horrorAbility } from '../waves.ts';
 import { SEEDS, winRate } from './shared.ts';
 
+// CI runs the balance files side by side (ID-076), so each runs several times slower
+// than alone (37 s on a laptop, over 120 s on CI): 300 s each, under the job's 15-min limit.
 describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
   const LAST = 10;
   /** Each seed's campaign: every fight in order, a loss replayed as the player would. */
   const campaigns: ReturnType<typeof playSquadCampaign>[] = [];
   beforeAll(() => {
     for (let i = 1; i <= SEEDS; i++) campaigns.push(playSquadCampaign(i * 1000, LAST));
-  }, 120_000);
+  }, 300_000);
   /** Each seed's first fight at horde `n`: the expected squad's try at it. */
   const firstTry = (n: number) => campaigns.map((runs) => runs.find((r) => r.hordeNumber === n)!);
 
@@ -49,7 +51,7 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
         expect(h.outcome, `Horde ${n}, seed ${seed}`).toBe('lost');
       }
     }
-  }, 120_000);
+  }, 300_000);
 
   it('the starting survivor wins Horde 1 (the first fight) on every seed', () => {
     for (let seed = 1; seed <= SEEDS; seed++) {
