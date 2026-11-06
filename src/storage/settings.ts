@@ -49,3 +49,64 @@ export function writeSpeed(storage: SaveStorage | null, speed: Speed): void {
     // Storage blocked or full.
   }
 }
+
+// Sound (ID-080): three volumes, 0–100 in steps of 5 (the slider's), and a mute switch.
+export type Volume = 'master' | 'music' | 'effects';
+export const VOLUMES: readonly Volume[] = ['master', 'music', 'effects'];
+export const VOLUME_KEYS: Readonly<Record<Volume, string>> = {
+  master: 'idle-defender.volume-master',
+  music: 'idle-defender.volume-music',
+  effects: 'idle-defender.volume-effects',
+};
+export const MUTE_KEY = 'idle-defender.mute';
+export const VOLUME_DEFAULTS: Readonly<Record<Volume, number>> = {
+  master: 80,
+  music: 60,
+  effects: 80,
+};
+export interface SoundSettings {
+  volumes: Record<Volume, number>;
+  muted: boolean;
+}
+// "0", "5" … "100": no sign, space, leading zero, other digit forms or off-step value.
+const VOLUME_TEXT = /^(?:100|[1-9]?[05])$/;
+
+/** The stored volumes and mute; anything but the exact strings written here is the default. */
+export function readSound(storage: SaveStorage | null): SoundSettings {
+  const read = (key: string): string | null => {
+    try {
+      return storage?.getItem(key) ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const volumes = { ...VOLUME_DEFAULTS };
+  for (const v of VOLUMES) {
+    const raw = read(VOLUME_KEYS[v]);
+    if (raw !== null && raw.length <= 3 && VOLUME_TEXT.test(raw)) volumes[v] = Number(raw);
+  }
+  return { volumes, muted: read(MUTE_KEY) === '1' };
+}
+
+/** A volume as stored: 0–100 to the nearest 5 (anything else is clamped, NaN is 0). */
+export function clampVolume(n: number): number {
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n / 5) * 5)) : 0;
+}
+
+/** Stores one volume; where the browser refuses it, it still applies until reload. */
+export function writeVolume(storage: SaveStorage | null, which: Volume, level: number): void {
+  try {
+    storage?.setItem(VOLUME_KEYS[which], String(clampVolume(level)));
+  } catch {
+    // Storage blocked or full.
+  }
+}
+
+/** Stores the mute switch; where the browser refuses it, it still applies until reload. */
+export function writeMute(storage: SaveStorage | null, on: boolean): void {
+  try {
+    storage?.setItem(MUTE_KEY, on ? '1' : '0');
+  } catch {
+    // Storage blocked or full.
+  }
+}

@@ -6,6 +6,7 @@ import { HORDE_ONLY } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
+import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW } from './build.ts';
 import { el, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 
@@ -154,7 +155,20 @@ export interface MenuOptions {
   onNewCamp: (game: GameState) => void;
   reduceMotion: boolean;
   onReduceMotion: (on: boolean) => void;
+  /** The sound settings at load (ID-080); a change is applied and stored by the caller. */
+  sound: SoundSettings;
+  onVolume: (which: Volume, level: number) => void;
+  /** A slider let go: a sample sound at the new level. */
+  onVolumeSet: (which: Volume) => void;
+  onMute: (on: boolean) => void;
 }
+
+/** The volume sliders' labels, in the order shown (ID-080). */
+export const VOLUME_LABEL: Readonly<Record<Volume, string>> = {
+  master: 'Master volume',
+  music: 'Music',
+  effects: 'Sound effects',
+};
 
 export interface Menu {
   isOpen(): boolean;
@@ -259,10 +273,62 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     ),
   );
   motionLabel.append(motion, motionText);
+
+  // Sound (ID-080): three sliders and a mute switch, applied as they move.
+  const sliders = VOLUMES.map((which) => {
+    const input = el('input', 'menu-range-input');
+    input.type = 'range';
+    input.id = `menu-volume-${which}`;
+    input.min = '0';
+    input.max = '100';
+    input.step = '5';
+    input.value = String(clampVolume(opts.sound.volumes[which]));
+    const value = el('output', 'menu-range-value', `${input.value}%`);
+    value.htmlFor.add(input.id);
+    // The slider says its own value; the readout mustn't say it again.
+    value.setAttribute('aria-hidden', 'true');
+    input.setAttribute('aria-valuetext', `${input.value}%`);
+    input.addEventListener('input', () => {
+      const level = clampVolume(Number(input.value));
+      value.textContent = `${level}%`;
+      input.setAttribute('aria-valuetext', `${level}%`);
+      opts.onVolume(which, level);
+    });
+    // Let go of the slider: one sample sound at the new level.
+    input.addEventListener('change', () => opts.onVolumeSet(which));
+    const label = el('label', 'menu-range-label', VOLUME_LABEL[which]);
+    label.htmlFor = input.id;
+    const row = el('div', 'menu-range');
+    row.append(label, input, value);
+    return row;
+  });
+  const mute = el('input', 'menu-check-box');
+  mute.type = 'checkbox';
+  mute.id = 'menu-mute';
+  mute.checked = opts.sound.muted;
+  // Muted, the sliders dim (they still move, and their levels come back on unmute).
+  const dim = (): void => {
+    for (const row of sliders) row.classList.toggle('menu-range-muted', mute.checked);
+  };
+  dim();
+  mute.addEventListener('change', () => {
+    dim();
+    opts.onMute(mute.checked);
+  });
+  const muteLabel = el('label', 'menu-check');
+  muteLabel.htmlFor = mute.id;
+  const muteText = el('span', '');
+  muteText.append(
+    el('b', 'menu-check-title', 'Mute'),
+    el('span', 'menu-note', 'Silences music and sound effects. The volumes are kept.'),
+  );
+  muteLabel.append(mute, muteText);
+
   panels
     .get('settings')!
     .append(
       section(el('h3', 'menu-heading', 'Settings'), motionLabel),
+      section(el('h3', 'menu-heading', 'Sound'), ...sliders, muteLabel),
       el('p', 'menu-note', 'Settings stay in this browser. They are not part of the backup code.'),
     );
 
