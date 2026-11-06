@@ -66,6 +66,8 @@ Wikimedia Commons page id where it has none.
 | 150114-A-BD610-111 | US Army photograph of a submachine gun, side view (for `weapon-smg`) | Wikimedia Commons | Public domain (US federal government work) |
 | commons-199972340 | US Army (PEO Soldier) photograph of a pump-action shotgun, side view (for `weapon-shotgun`) | Wikimedia Commons | Public domain (US federal government work) |
 | commons-11317366 | US Army (PEO Soldier) photograph of a bolt-action sniper rifle, side view (for `weapon-sniper`) | Wikimedia Commons | Public domain (US federal government work) |
+| commons-11308991 | US Army (PEO Soldier) photograph of a carbine, side view (for `weapon-rifle`) | Wikimedia Commons | Public domain (US federal government work) |
+| DA-SC-92-01299 | US Department of Defense photograph of a 9 mm pistol, right side view (for `weapon-pistol`) | Wikimedia Commons | Public domain (US federal government work) |
 
 ## Credits
 

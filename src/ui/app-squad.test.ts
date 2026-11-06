@@ -218,8 +218,13 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
   it('follows the camp while open: a gun equipped moves from the stash to the squad', () => {
     const { root, invButton, invScrim } = seeded();
     invButton.click();
-    const heading = () => invScrim.querySelector('.menu-heading')!.textContent;
-    const squadGun = () => invScrim.querySelector('[aria-label="Squad"] .inv-name')!.textContent;
+    const heading = () => invScrim.querySelector('.inv-stash-heading')!.textContent;
+    // The first survivor's slot is named for the gun they hold.
+    const squadGun = () =>
+      invScrim
+        .querySelector('[aria-label="Squad"] .inv-slot')!
+        .getAttribute('aria-label')!
+        .split(',')[0];
     expect(heading()).toBe('Stash 1/20');
     expect(squadGun()).toBe('Pistol');
     // The field is inert behind the dialog in a browser; jsdom lets the change through.
@@ -272,7 +277,7 @@ describe('Combine in the game (app.ts, ID-091)', () => {
   });
 
   it('mid-fight shows no Combine button; on the result screen it is back', () => {
-    const { button, invButton, combineButtons, close, title } = seeded();
+    const { button, invButton, invScrim, combineButtons, close, title } = seeded();
     button().click();
     step(16);
     invButton.click();
@@ -282,6 +287,8 @@ describe('Combine in the game (app.ts, ID-091)', () => {
     step(32);
     expect(title()).toMatch(/Horde 4/);
     invButton.click();
+    // The win's drop may be the strongest gun, selected first: pick an SMG of the set.
+    invScrim.querySelector<HTMLButtonElement>('.inv-slot[data-key="stash:h1"]')!.click();
     expect(combineButtons()).toHaveLength(1);
   });
 });
