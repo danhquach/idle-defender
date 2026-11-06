@@ -56,6 +56,7 @@ import {
   squadScreen,
   squadStart,
 } from './hud.ts';
+import { createInventory } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import {
@@ -265,7 +266,7 @@ export function start(root: HTMLElement, art: Art): void {
     cam = fightCam;
     panel?.hide();
     hud.show(true);
-    menu.refresh();
+    refreshDialogs();
   }
   function setSpeed(next: Speed): void {
     if (next !== speed) writeSpeed(storage, next);
@@ -312,6 +313,10 @@ export function start(root: HTMLElement, art: Art): void {
     panel.notice('');
     panel.show(game, selected);
   }
+  // The Inventory (ID-079) sits left of the Menu; either one open holds a fight.
+  const inventory = createInventory(root, {
+    state: () => ({ game, resumes: horde?.outcome === 'fighting' && !held }),
+  });
   const menu = createMenu(root, {
     state: () => ({ game, fighting: horde !== null, held }),
     onLoad: replaceCamp,
@@ -322,11 +327,16 @@ export function start(root: HTMLElement, art: Art): void {
       writeReduceMotion(storage, on);
     },
   });
+  const dialogOpen = (): boolean => menu.isOpen() || inventory.isOpen();
+  function refreshDialogs(): void {
+    menu.refresh();
+    inventory.refresh();
+  }
   /** Takes `next` as the game and saves it; the menu's Save tab says how that went. */
   function commit(next: GameState): void {
     game = next;
     if (storage) menu.status(writeSave(storage, game, Date.now()) ? 'ok' : 'failed');
-    menu.refresh();
+    refreshDialogs();
   }
   // Two fixed frames (ID-064, ID-065), fitted to the window: nothing pans or zooms. The
   // build scene fits left of the build panel; a fight shows the fight frame.
@@ -367,14 +377,14 @@ export function start(root: HTMLElement, art: Art): void {
       hud.showResult(squadStart(game));
       showGear();
       cam = buildCam = fightCam;
-      menu.refresh();
+      refreshDialogs();
       return;
     }
     hud.show(false);
     panel.show(game, selected);
     buildCam = buildCamera(view, panel.room(view));
     cam = buildCam;
-    menu.refresh();
+    refreshDialogs();
   }
   toBuild();
   if (!storage) menu.status('off');
@@ -397,7 +407,7 @@ export function start(root: HTMLElement, art: Art): void {
   // Keys pressed inside the open menu stay in it (menu.ts); Esc opens it when it has
   // nothing else to cancel.
   document.addEventListener('keydown', (e) => {
-    if (menu.isOpen() || e.key !== 'Escape') return;
+    if (dialogOpen() || e.key !== 'Escape') return;
     const act = escapeAction({
       fighting: horde !== null,
       armed: armed !== null,
@@ -417,7 +427,7 @@ export function start(root: HTMLElement, art: Art): void {
   // Space from the pause (some browsers press it on keyup, so that is stopped too). The
   // result screen's keys are its own.
   const fightKey = (e: KeyboardEvent): boolean => {
-    if (horde?.outcome !== 'fighting' || menu.isOpen() || e.ctrlKey || e.metaKey || e.altKey) {
+    if (horde?.outcome !== 'fighting' || dialogOpen() || e.ctrlKey || e.metaKey || e.altKey) {
       return false;
     }
     const t = e.target;
@@ -534,7 +544,7 @@ export function start(root: HTMLElement, art: Art): void {
   });
 
   function frame(now: number): void {
-    const paused = document.hidden || menu.isOpen() || held;
+    const paused = document.hidden || dialogOpen() || held;
     const dt = frameStep(last, now, paused);
     last = paused ? null : now;
     if (dt > 0) {

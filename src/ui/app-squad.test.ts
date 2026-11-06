@@ -5,7 +5,10 @@
 // research, workbench, camp, perks) are never on the page. Canvas and art are stand-ins.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HORDE_ONLY } from '../core/data.ts';
+import { rollWeapon } from '../core/armoury.ts';
+import { recruit } from '../core/camp.ts';
 import { newGame } from '../core/game.ts';
+import { createRng } from '../core/rng.ts';
 import { tick, type HordeState } from '../core/horde.ts';
 import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
@@ -171,5 +174,59 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     const { result } = boot();
     step(0);
     expect(result().textContent).toContain('Squad 6/6');
+  });
+});
+
+describe('the Inventory in the game (app.ts, ID-079)', () => {
+  function seeded() {
+    const g = newGame('horde');
+    const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
+    const camp = {
+      ...g,
+      hordeNumber: 2,
+      roster: [recruit(1)],
+      camp: { ...g.camp, recruits: 1 },
+      armoury: [relic],
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    const booted = boot();
+    step(0);
+    const invButton = booted.root.querySelector<HTMLButtonElement>('.inv-button')!;
+    const invScrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+    const menuScrim = document.querySelector<HTMLElement>('.menu-scrim')!;
+    return { ...booted, invButton, invScrim, menuScrim };
+  }
+  const press = (k: string) =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+
+  it('while open, Esc and the speed keys on the page reach neither the Menu nor the fight', () => {
+    const { root, button, invButton, invScrim, menuScrim } = seeded();
+    button().click();
+    step(16);
+    const pressed = () => root.querySelector('.hud-speed-button[aria-pressed="true"]')!.textContent;
+    const before = pressed();
+    invButton.click();
+    press('Escape');
+    expect(menuScrim.hidden).toBe(true);
+    expect(invScrim.hidden).toBe(false);
+    press('d');
+    press(' ');
+    expect(pressed()).toBe(before);
+    expect(root.querySelector<HTMLElement>('.hud-speed .menu-chip')!.hidden).toBe(true);
+  });
+
+  it('follows the camp while open: a gun equipped moves from the stash to the squad', () => {
+    const { root, invButton, invScrim } = seeded();
+    invButton.click();
+    const heading = () => invScrim.querySelector('.menu-heading')!.textContent;
+    const squadGun = () => invScrim.querySelector('[aria-label="Squad"] .inv-name')!.textContent;
+    expect(heading()).toBe('Stash 1/20');
+    expect(squadGun()).toBe('Pistol');
+    // The field is inert behind the dialog in a browser; jsdom lets the change through.
+    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
+    select.value = 'h1';
+    select.dispatchEvent(new Event('change'));
+    expect(heading()).toBe('Stash 0/20');
+    expect(squadGun()).toBe('Relic Rifle');
   });
 });

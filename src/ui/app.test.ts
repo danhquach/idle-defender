@@ -355,6 +355,25 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     return { ...booted, chip, speedButton, pressed };
   }
 
+  it('the open Inventory (ID-079) holds the fight and keeps its keys; closing resumes it', () => {
+    const { root, chip } = fight();
+    root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const dialog = document.querySelector<HTMLElement>('.inv-scrim [role="dialog"]')!;
+    expect(dialog.querySelector('.inv-hint')!.textContent).toBe('Esc closes and resumes');
+    // Space in the dialog doesn't reach the fight's pause.
+    press(' ', {}, document.activeElement!);
+    expect(chip.hidden).toBe(true);
+    step(16);
+    step(5000);
+    expect(tick).not.toHaveBeenCalled();
+    press('Escape', {}, document.activeElement!);
+    // Esc closed the Inventory only: the Menu stays shut.
+    expect(document.querySelector<HTMLElement>('.menu-scrim')!.hidden).toBe(true);
+    step(5016); // the first frame back counts no time
+    step(5032);
+    expect(vi.mocked(tick)).toHaveBeenCalledOnce();
+  });
+
   it('Space holds the fight and shows Paused; the menu opening and closing keeps it held', () => {
     const { chip, esc, dialogButton } = fight();
     expect(chip.hidden).toBe(true);

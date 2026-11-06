@@ -137,8 +137,8 @@ body {
   left: 0;
   right: 0;
   padding: var(--space-8) var(--space-16);
-  /* Clear of the Menu button on the right. */
-  padding-right: 112px;
+  /* Clear of the Inventory and Menu buttons on the right. */
+  padding-right: 214px;
   background: var(--color-bar-bg);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -147,14 +147,14 @@ body {
 /* A fight's status line keeps clear of the speed buttons and Paused chip too. The top
    bar's redesign (ID-058) should give the speed group its own slot instead. */
 .hud-fight-bar {
-  padding-right: 400px;
+  padding-right: 496px;
 }
 
 /* Fight speed and the Space pause (ID-062), beside the Menu button. */
 .hud-speed {
   position: absolute;
   top: 5px;
-  right: 124px;
+  right: 220px;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -1409,7 +1409,8 @@ body {
 }
 
 /* The Menu (ID-039): the button sits top-right in both modes, over the top bar. */
-.menu-button {
+.menu-button,
+.inv-button {
   position: absolute;
   top: 5px;
   right: 12px;
@@ -1426,12 +1427,15 @@ body {
 }
 
 .menu-button:hover,
-.menu-button:focus-visible {
+.inv-button:hover,
+.menu-button:focus-visible,
+.inv-button:focus-visible {
   border-color: var(--color-accent-hover);
   background: var(--color-surface-active);
 }
 
 .menu-button:focus-visible,
+.inv-button:focus-visible,
 .menu button:focus-visible,
 .menu textarea:focus-visible,
 .menu input:focus-visible {
@@ -1471,7 +1475,8 @@ body {
 }
 
 /* Outside #app, so the field behind can go inert; a click on it does nothing. */
-.menu-scrim {
+.menu-scrim,
+.inv-scrim {
   position: fixed;
   inset: 0;
   display: grid;
@@ -1481,7 +1486,8 @@ body {
   color: var(--color-text);
 }
 
-.menu-scrim[hidden] {
+.menu-scrim[hidden],
+.inv-scrim[hidden] {
   display: none;
 }
 
@@ -1767,7 +1773,8 @@ body {
   border-top: 1px solid var(--color-divider);
 }
 
-.menu-hint {
+.menu-hint,
+.inv-hint {
   font-size: var(--text-sm);
   color: var(--color-text-subtle);
 }
@@ -1856,4 +1863,104 @@ body {
   border-bottom: 0;
   border-radius: 3px 3px 0 0;
   box-sizing: border-box;
+}
+
+/* The Inventory (ID-079): its button left of the Menu's, and its view-only list. */
+.inv-button {
+  right: 119px;
+}
+
+.inv-head {
+  padding-bottom: var(--space-12);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.inv-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inv-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-6) var(--space-10);
+  border: 1px solid var(--color-divider);
+  border-left: 3px solid var(--rarity-common);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.inv-who {
+  flex: none;
+  width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.inv-what {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inv-name {
+  font-weight: 600;
+  color: var(--rarity-common);
+}
+
+.inv-affixes {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.inv-power {
+  flex: none;
+  font-size: var(--text-body-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.inv-row[data-rarity='rusty'] {
+  border-left-color: var(--rarity-rusty);
+}
+
+.inv-row[data-rarity='rusty'] .inv-name {
+  color: var(--rarity-rusty);
+}
+
+.inv-row[data-rarity='military'] {
+  border-left-color: var(--rarity-military);
+}
+
+.inv-row[data-rarity='military'] .inv-name {
+  color: var(--rarity-military);
+}
+
+.inv-row[data-rarity='prototype'] {
+  border-left-color: var(--rarity-prototype);
+}
+
+.inv-row[data-rarity='prototype'] .inv-name {
+  color: var(--rarity-prototype);
+}
+
+.inv-row[data-rarity='relic'] {
+  border-left-color: var(--rarity-relic);
+}
+
+.inv-row[data-rarity='relic'] .inv-name {
+  color: var(--rarity-relic);
+}
+
+.inv-dialog .menu-body:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
