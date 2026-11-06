@@ -2046,6 +2046,91 @@ body {
   outline-offset: 2px;
 }
 
+/* Drag and drop (ID-095): a slot that can be picked up; a long-press opens no menu on it. */
+.inv-slot[data-drag] {
+  cursor: grab;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.inv-dragging,
+.inv-dragging * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* While dragging: the gun's own place faded, valid drops lit, invalid ones dimmed. */
+.inv-slot[data-drag-from] {
+  opacity: 0.35;
+}
+
+.inv-slot[data-drop='ok'] {
+  outline: 2px dashed var(--color-ok-border);
+  outline-offset: 2px;
+}
+
+.inv-slot[data-drop='no'] {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.inv-slot[data-drop='ok'][data-over] {
+  outline: 3px solid var(--color-ok-border);
+  filter: brightness(1.2);
+}
+
+.inv-slot[data-drop='no'][data-over] {
+  outline: 3px solid var(--color-danger);
+  outline-offset: 2px;
+}
+
+.inv-stash-zone {
+  border-radius: var(--radius-md);
+}
+
+.inv-stash-zone[data-drop='ok'][data-over] {
+  outline: 2px dashed var(--color-ok-border);
+  outline-offset: var(--space-4);
+}
+
+.inv-stash-zone[data-drop='no'][data-over] {
+  outline: 2px dashed var(--color-danger);
+  outline-offset: var(--space-4);
+}
+
+/* The gun under the pointer: its slot's face in its rarity frame, centred on the pointer. */
+.inv-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  margin: calc(var(--slot-size) / -2) 0 0 calc(var(--slot-size) / -2);
+  pointer-events: none;
+  box-shadow: 0 6px 16px var(--color-shadow);
+  opacity: 0.92;
+}
+
+/* Dragged by touch: a slot above the finger, so the finger hides neither gun nor target. */
+.inv-ghost[data-touch] {
+  margin-top: calc(var(--slot-size) * -1.5);
+}
+
+/* What the last move did, in the foot so the grid never shifts; kept in the page while
+   empty, so a screen reader hears it fill. */
+.inv-status {
+  flex: 1;
+  min-width: 0;
+  margin: 0 var(--space-12);
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: right;
+}
+
+/* A refused move reads as a no at a glance. */
+.inv-status[data-tone='refused'] {
+  color: var(--color-danger-text);
+}
+
 .inv-slot-text {
   padding: 0 var(--space-4);
   font-size: var(--text-xs);
@@ -2519,9 +2604,16 @@ body {
 }
 
 @media (max-width: 480px) {
-  /* No Esc key on a phone: the foot keeps room for its two buttons. */
-  .roster-dialog .inv-hint {
+  /* No Esc key on a phone: the foot keeps room for its two buttons, or for the
+     Inventory's status line (ID-095). */
+  .roster-dialog .inv-hint,
+  .inv-dialog .inv-hint {
     display: none;
+  }
+
+  .inv-status {
+    margin-left: 0;
+    text-align: left;
   }
 
   .roster-avatar-lg {

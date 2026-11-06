@@ -1676,15 +1676,16 @@ offline progress works across sessions.
   no horde is on). **Help:**
   the controls and a short how-to-play. In a fight, the open menu pauses it.
 - **Inventory** *(as built, ID-079)*: an "Inventory" button in the top bar, left
-  of the Menu (its own place, not a Menu tab), opens a dialog (view-only but
-  for Combine, ID-091, §6 Gear) of what
+  of the Menu (its own place, not a Menu tab), opens a dialog (between hordes
+  guns are equipped and combined there too: Combine, ID-091, §6 Gear; drag and
+  drop, ID-095) of what
   the camp holds now: the stash against its cap ("Stash 6/20"; from the cap on
   "Stash 20/20 (full)", as the next drop throws the weakest away), strongest
   first as in the gun picker (anything that is no gun, from an older save,
   last); each squad survivor and the gun they fight with, in squad order (not
   the reserve, which this version doesn't show, nor its guns); and the free
   pistol. Each weapon shows its name in its rarity's colour, its affixes and its
-  dmg/s. Guns are still picked on the start and result screens. It opens between
+  dmg/s. The start and result screens keep their gun pickers. It opens between
   hordes and in a fight, which it holds like the Menu; Esc or Close shuts it.
   - **As a grid (ID-092):** the dialog has tabs (Weapons only for now; items and
     materials can join later). The squad row (each survivor's gun with their
@@ -1700,6 +1701,38 @@ offline progress works across sessions.
     until the pointer leaves the grid. It opens on the strongest stash gun.
     Each slot's screen-reader label names the gun, its rarity, dmg/s and affix
     count. The result screen's drop tile shows the same icon and tint.
+  - **Drag and drop (ID-095), between hordes:** a stash gun dropped on a
+    survivor's slot is theirs, the gun they held going to the stash (nothing
+    for the free pistol); the free pistol dropped on a survivor with a gun sends
+    that gun to the stash; a survivor's gun dropped anywhere in the stash
+    section (a gun, an empty place, its heading) goes there and they fall back
+    to the pistol. A full stash refuses the last two with "Stash full", so the
+    stash never passes its cap and no gun is thrown away. A stash gun dropped
+    on another of its set (same base gun and rarity, below Relic) with 3 or
+    more opens that set's Combine confirm (the weakest 3, as ever); a short set,
+    a Relic or a blade is refused with the details' wording ("1 more for a
+    Common SMG"), another kind with both names first ("Rusty SMG and Common
+    LMG don't combine.", the rule staying in the dragged gun's details); a gun in hand never combines.
+    While dragging, the gun follows the pointer in its rarity frame (by touch,
+    a slot above the finger, with a short buzz where the phone has one), its
+    own slot fades, valid drops get a green ring and invalid ones grey out (red
+    under the pointer); picking up a survivor's gun or the pistol with the
+    stash full says "Stash full" at once. Dropping on nothing, Esc, or a release
+    the page never sees (the window lost it) puts it back. A mouse drag starts
+    after 6 px; a touch drag after a 350 ms still press, so a finger that
+    moves first still scrolls the grid, and the grid note on a touch screen
+    says "Hold a gun, then drag it…". Held near the grid's top or bottom edge,
+    a drag scrolls the grid. Without dragging, a gun's details do the same: a
+    stash gun or the free pistol has "Equip on…" with a button per survivor
+    (the pistol only those holding a gun), a survivor's gun Unequip, beside
+    Combine. Each move or refusal is said in a status line in the dialog's
+    foot, beside Close (read out: "Mara now holds Military Rifle; Rusty SMG is
+    back in the stash"; a refusal in the danger colour; cleared when another
+    gun is selected), saved at once, and the gun pickers follow. On a phone
+    the foot drops the Esc hint to make room. In a fight nothing drags, the
+    details have no Equip, and the grid says "Change guns between hordes, on
+    the start or result screen." Kept out: reordering the stash, survivor to
+    survivor swaps, and the reserve.
 
 - **As built (ID-066): save version 12** adds the reserve. A v11 save loads
   with its horde number and each survivor's level, stats and weapon; every

@@ -6,8 +6,11 @@
 // hovering it shows its details beside the grid: name, rarity, each affix and dmg/s.
 // Between hordes a stash gun's details hold its set's Combine (ID-091): three of one kind
 // and rarity make one of the next rarity, after a confirm. Like the Menu, the field goes
-// inert behind it and an open Inventory holds a fight. Text reaches the page only
-// through textContent.
+// inert behind it and an open Inventory holds a fight. Between hordes guns move by drag
+// and drop (ID-095): a stash gun or the free pistol onto a survivor equips it, a
+// survivor's gun into the stash takes it off them, and a stash gun onto one of its set
+// opens that set's Combine; a gun's details have buttons that do the same. Text reaches
+// the page only through textContent.
 import {
   affixCount,
   affixText,
@@ -28,7 +31,13 @@ import {
   type WeaponId,
 } from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
-import { combineSets, nextRarity, squadOf, type CombineSet } from '../core/hordeonly.ts';
+import {
+  combineSets,
+  nextRarity,
+  squadOf,
+  type CombineSet,
+  type GunChoice,
+} from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
 import { el } from './hud.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
@@ -64,8 +73,11 @@ export interface InventoryView {
   stash: InventoryItem[];
   /** Empty places left under the cap (0 when full, or past it from an older save). */
   free: number;
-  /** Each survivor in the squad and the gun they fight with, in squad order. */
-  squad: { id: string; name: string; gun: InventoryItem }[];
+  /**
+   * Each survivor in the squad and the gun they fight with, in squad order; `uid` is the
+   * stash gun they hold, null on the free pistol.
+   */
+  squad: { id: string; name: string; gun: InventoryItem; uid: string | null }[];
   pistol: InventoryItem;
   /** Every stash set below Relic (ID-091): ready ones first, then by base weapon and rarity. */
   combine: CombineRow[];
@@ -101,6 +113,12 @@ export const COMBINE_TOP = 'Relic is the top rarity: it combines no further.';
 export const COMBINE_WAIT = 'Combine between hordes, on the start or result screen.';
 export const NO_AFFIXES = 'No affixes';
 export const COMBINE_NOT_GUN = 'Only guns combine.';
+export const DRAG_NOTE =
+  'Drag a gun onto a survivor to equip it, into the stash to take it off them, or onto a gun like it to combine.';
+export const DRAG_NOTE_TOUCH =
+  'Hold a gun, then drag it onto a survivor to equip it, into the stash to take it off them, or onto a gun like it to combine.';
+export const GUNS_WAIT = 'Change guns between hordes, on the start or result screen.';
+export const STASH_FULL = 'Stash full';
 
 const powerOf = (h: Held): number => (isGun(h) ? gunPower(h) : -1);
 
@@ -136,17 +154,16 @@ export function inventoryView(game: Pick<GameState, 'armoury' | 'roster'>): Inve
       .sort((a, b) => b.power - a.power)
       .map(({ h }) => item(h, `stash:${h.uid}`, IN_STASH)),
     free: Math.max(0, STASH_CAP - n),
-    squad: squadOf(game).map((d) => ({
-      id: d.id,
-      name: d.name,
+    squad: squadOf(game).map((d) => {
       // What they fight with: a primary that is no gun fights as the pistol (as squadGear).
-      gun: item(
-        isGun(d.loadout.primary) ? d.loadout.primary : 'pistol',
-        `squad:${d.id}`,
-        `Held by ${d.name}.`,
-        d.name,
-      ),
-    })),
+      const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
+      return {
+        id: d.id,
+        name: d.name,
+        gun: item(held, `squad:${d.id}`, `Held by ${d.name}.`, d.name),
+        uid: isOwned(held) ? held.uid : null,
+      };
+    }),
     pistol: item('pistol', 'pistol', PISTOL_NOTE),
     combine: combineRows(game),
   };
@@ -182,6 +199,69 @@ function combineRows(game: Pick<GameState, 'armoury'>): CombineRow[] {
 /** The set `w` belongs to, or null at Relic (no set: it combines no further). */
 const rowOf = (rows: readonly CombineRow[], w: OwnedWeapon): CombineRow | null =>
   rows.find((r) => r.base === w.base && r.rarity === w.rarity) ?? null;
+
+/** What dropping one slot on another does (ID-095); `refused` says why, `none` puts it back. */
+export type Drop =
+  | { kind: 'equip'; defender: string; choice: GunChoice }
+  | { kind: 'combine'; uses: OwnedWeapon[] }
+  | { kind: 'refused'; reason: string }
+  | { kind: 'none' };
+
+/** Whether slot `key` can be picked up: a stash gun, the free pistol, or a survivor's stash gun. */
+export function canDrag(view: InventoryView, key: string): boolean {
+  if (key === 'pistol') return true;
+  if (view.squad.some((s) => s.gun.key === key && s.uid !== null)) return true;
+  return view.stash.some((it) => it.key === key && it.power !== null);
+}
+
+/**
+ * Dropping slot `from` on `to`: a slot's key, `stash` (the stash grid itself, an empty
+ * place or its heading) or null (nothing). A stash gun or the free pistol on a survivor
+ * equips it; a survivor's gun anywhere in the stash takes it off them; a stash gun on
+ * another of its set opens that set's Combine (the weakest 3, as its button does).
+ */
+export function dropAction(view: InventoryView, from: string, to: string | null): Drop {
+  if (to === null || to === from || !canDrag(view, from)) return { kind: 'none' };
+  const onto = view.squad.find((s) => s.gun.key === to);
+  const mine = view.squad.find((s) => s.gun.key === from);
+  if (mine) {
+    // Into the stash, onto a stash gun too: a gun in hand never combines.
+    if (to !== 'stash' && !to.startsWith('stash:')) return { kind: 'none' };
+    if (view.free === 0) return { kind: 'refused', reason: STASH_FULL };
+    return { kind: 'equip', defender: mine.id, choice: 'pistol' };
+  }
+  if (from === 'pistol') {
+    if (!onto || onto.uid === null) return { kind: 'none' };
+    if (view.free === 0) return { kind: 'refused', reason: STASH_FULL };
+    return { kind: 'equip', defender: onto.id, choice: 'pistol' };
+  }
+  const gun = view.stash.find((it) => it.key === from)!.owned!;
+  if (onto) return { kind: 'equip', defender: onto.id, choice: gun.uid };
+  const other = view.stash.find((it) => it.key === to)?.owned;
+  if (!other) return { kind: 'none' };
+  if (!isGun(other)) return { kind: 'refused', reason: COMBINE_NOT_GUN };
+  if (other.base !== gun.base || other.rarity !== gun.rarity) {
+    const name = (k: string): string => view.stash.find((it) => it.key === k)!.name;
+    return {
+      kind: 'refused',
+      reason: `${name(from)} and ${name(to)} don't combine.`,
+    };
+  }
+  const row = rowOf(view.combine, other);
+  if (!row) return { kind: 'refused', reason: COMBINE_TOP };
+  if (!row.uses) return { kind: 'refused', reason: row.note };
+  return { kind: 'combine', uses: row.uses };
+}
+
+/** The line read out after equip `d` from `view` (the camp before it): "Mara now holds …". */
+export function equipMessage(view: InventoryView, d: Extract<Drop, { kind: 'equip' }>): string {
+  const s = view.squad.find((x) => x.id === d.defender);
+  if (!s) return '';
+  const back = s.uid === null ? '' : `; ${s.gun.name} is back in the stash`;
+  if (d.choice === 'pistol') return `${s.name} now holds the free pistol${back}`;
+  const it = view.stash.find((x) => x.owned?.uid === d.choice);
+  return `${s.name} now holds ${it?.name ?? 'it'}${back}`;
+}
 
 /**
  * The confirm for combining `uses` (ID-091): the guns used up, and what comes out — its
@@ -287,32 +367,50 @@ const button = (text: string, onClick: () => void, extra = ''): HTMLButtonElemen
   return b;
 };
 
-/** The squad row and the stash grid for `view`; slots in a set ready to combine marked. */
-export function inventoryGrid(view: InventoryView, canCombine = false): HTMLElement[] {
+/**
+ * The squad row and the stash grid for `view`, under `note`; with `canCombine` (between
+ * hordes) slots in a set ready to combine are marked, and with `drag` too the slots that
+ * can be picked up.
+ */
+export function inventoryGrid(
+  view: InventoryView,
+  canCombine = false,
+  note = INVENTORY_NOTE,
+  drag = false,
+): HTMLElement[] {
   const ready = (it: InventoryItem): boolean =>
     canCombine && !!it.owned && !!rowOf(view.combine, it.owned)?.uses;
+  const mark = (li: HTMLElement): HTMLElement => {
+    const b = li.querySelector<HTMLElement>('.inv-slot')!;
+    if (drag && canCombine && canDrag(view, b.dataset.key!)) b.dataset.drag = 'true';
+    return li;
+  };
   const empty = Array.from({ length: view.free }, () => {
     const li = el('li', 'inv-cell');
     li.setAttribute('aria-hidden', 'true');
     li.append(el('div', 'inv-slot inv-slot-empty'));
     return li;
   });
+  // The whole stash section is one drop place for a survivor's gun.
+  const stash = section(
+    el('h3', 'menu-heading inv-stash-heading', view.stashHeading),
+    ...(view.stash.length > 0 ? [] : [el('p', 'menu-note', STASH_EMPTY)]),
+    el('p', 'menu-note inv-note', note),
+    list('Stash', 'inv-grid inv-stash', [
+      ...view.stash.map((it) => mark(slot(it, ready(it)))),
+      ...empty,
+    ]),
+  );
+  stash.classList.add('inv-stash-zone');
   return [
     section(
       el('h3', 'menu-heading', 'Squad'),
       list('Squad', 'inv-grid inv-squad', [
-        ...view.squad.map((s) => slot(s.gun, false, s.name)),
-        slot(view.pistol, false, 'Free pistol', PISTOL_NOTE),
+        ...view.squad.map((s) => mark(slot(s.gun, false, s.name))),
+        mark(slot(view.pistol, false, 'Free pistol', PISTOL_NOTE)),
       ]),
     ),
-    section(
-      el('h3', 'menu-heading inv-stash-heading', view.stashHeading),
-      el('p', 'menu-note', view.stash.length > 0 ? INVENTORY_NOTE : STASH_EMPTY),
-      list('Stash', 'inv-grid inv-stash', [
-        ...view.stash.map((it) => slot(it, ready(it))),
-        ...empty,
-      ]),
-    ),
+    stash,
   ];
 }
 
@@ -438,13 +536,58 @@ function combineBlock(it: InventoryItem, rows: readonly CombineRow[], ui: Combin
   return block;
 }
 
-/** The details beside the grid for `it`; with its Combine when `combine` is given. */
+/** What the Equip part of the details shows, between hordes, and what its buttons call. */
+export interface GearUi {
+  view: InventoryView;
+  /** Does what dropping slot `from` on `to` does (`dropAction`). */
+  move(from: string, to: string): void;
+}
+
+/**
+ * The buttons that move a gun without dragging (ID-095): a stash gun or the free pistol
+ * has Equip on, one button per survivor it could go to; a survivor's stash gun Unequip.
+ */
+function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement | null {
+  const mine = ui.view.squad.find((s) => s.gun.key === it.key);
+  if (mine) {
+    if (mine.uid === null) return null;
+    const b = button('Unequip', () => ui.move(it.key, 'stash'), 'inv-unequip');
+    b.setAttribute('aria-label', `Unequip ${it.name} from ${mine.name}`);
+    const block = el('div', 'inv-gear menu-row');
+    block.append(b);
+    return block;
+  }
+  if (!canDrag(ui.view, it.key)) return null;
+  // The pistol goes only to a survivor holding a stash gun; a stash gun to anyone.
+  const who = ui.view.squad.filter((s) => it.key !== 'pistol' || s.uid !== null);
+  if (who.length === 0) return null;
+  const block = el('div', 'inv-gear');
+  block.setAttribute('role', 'group');
+  block.setAttribute('aria-label', `Equip ${it.name} on`);
+  const row = el('div', 'menu-row inv-equip');
+  for (const s of who) {
+    const b = button(s.name, () => ui.move(it.key, s.gun.key), 'inv-equip-on');
+    b.setAttribute('aria-label', `Equip ${it.name} on ${s.name}`);
+    b.dataset.defender = s.id;
+    row.append(b);
+  }
+  block.append(el('h4', 'inv-combine-label', 'Equip on…'), row);
+  return block;
+}
+
+/**
+ * The details beside the grid for `it`; with its Combine when `combine` is given, and its
+ * Equip on or Unequip when `gear` is (between hordes).
+ */
 export function detailsPanel(
   it: InventoryItem | null,
   combine?: { rows: readonly CombineRow[]; ui: CombineUi },
+  gear?: GearUi,
 ): HTMLElement[] {
   if (!it) return [el('p', 'menu-note', STASH_EMPTY)];
   const out = [...facts(it), el('p', 'menu-note inv-where', it.where)];
+  const g = gear ? gearBlock(it, gear) : null;
+  if (g) out.push(g);
   if (combine) out.push(combineBlock(it, combine.rows, combine.ui));
   return out;
 }
@@ -461,7 +604,23 @@ export interface InventoryOptions {
   };
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
   onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
+  /**
+   * Gives survivor `defenderId` gun `choice` (ID-095, between hordes), their gun going to
+   * the stash; without it guns can't be dragged and the details have no Equip.
+   */
+  onEquip?: (defenderId: string, choice: GunChoice) => { ok: true } | { ok: false; reason: string };
 }
+
+/** A mouse press becomes a drag once it moves this far (px). */
+export const DRAG_SLOP = 6;
+/** A touch held this still for this long starts a drag (ms); one that moves first scrolls. */
+export const LONG_PRESS = 350;
+/** How far a touch may wander before its long-press is a scroll instead (px). */
+export const TOUCH_SLOP = 10;
+/** A drag this near the grid's top or bottom edge scrolls it (px)... */
+export const EDGE = 40;
+/** ...by at most this much a tick (px, about 60 ticks a second). */
+export const EDGE_SPEED = 12;
 
 export interface Inventory {
   isOpen(): boolean;
@@ -531,6 +690,23 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   panel.setAttribute('role', 'tabpanel');
   panel.setAttribute('aria-labelledby', tab.id);
   const body = el('div', 'menu-body inv-body');
+  // What the last move did, or why it was refused (ID-095): shown, and read out.
+  const status = el('p', 'menu-note inv-status');
+  status.setAttribute('role', 'status');
+  let sayTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Shows `text` in the status line; `refused` marks it as a no. */
+  const say = (text: string, refused = false): void => {
+    clearTimeout(sayTimer);
+    if (refused) status.dataset.tone = 'refused';
+    else delete status.dataset.tone;
+    if (text !== '' && status.textContent === text) {
+      // The same line again (a second refusal): emptied, then refilled, so it is read again.
+      status.textContent = '';
+      sayTimer = setTimeout(() => (status.textContent = text), 50);
+      return;
+    }
+    status.textContent = text;
+  };
   const details = el('div', 'inv-details');
   details.setAttribute('role', 'region');
   // No live region: the focused slot's label already says what it is; the Combine
@@ -544,7 +720,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   done.type = 'button';
   done.addEventListener('click', () => api.close());
   const foot = el('div', 'menu-foot');
-  foot.append(hint, done);
+  foot.append(hint, status, done);
   dialog.append(head, tablist, panel, foot);
 
   const slots = (): HTMLButtonElement[] => [
@@ -562,7 +738,11 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
       e.preventDefault();
       // A held-down Esc repeats: only a fresh press acts. An open Combine confirm goes first.
       if (e.repeat) return;
-      if (confirming) cancel();
+      // A drag goes first: the gun goes back where it was (and its release is no click).
+      if (press) {
+        if (press.ghost) swallowClick = true;
+        stopDrag();
+      } else if (confirming) cancel();
       else api.close();
       return;
     }
@@ -620,6 +800,11 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   }
 
   body.addEventListener('click', (e) => {
+    // The click a drag's release makes is no selection (a key's click has no detail).
+    if (swallowClick && e.detail !== 0) {
+      swallowClick = false;
+      return;
+    }
     const b =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
     if (b) select(b.dataset.key!, true);
@@ -628,22 +813,256 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     const b =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
     const key = b?.dataset.key ?? null;
-    // A confirm stays up while the pointer wanders over the grid.
-    if (key === hovered || confirming) return;
+    // A confirm stays up while the pointer wanders over the grid; a drag keeps its gun's.
+    if (key === hovered || confirming || press?.ghost) return;
     hovered = key;
     drawDetails();
   });
   body.addEventListener('mouseleave', () => {
-    if (hovered === null) return;
+    if (hovered === null || press?.ghost) return;
     hovered = null;
     drawDetails();
   });
+
+  // Drag and drop (ID-095), between hordes: a press on a slot that can be picked up
+  // becomes a drag once a mouse moves DRAG_SLOP, or a touch is held LONG_PRESS still (a
+  // touch that moves first scrolls the grid). `ghost` is the gun under the pointer.
+  let press: {
+    key: string;
+    id: number;
+    x: number;
+    y: number;
+    touch: boolean;
+    timer: ReturnType<typeof setTimeout> | undefined;
+    ghost: HTMLElement | null;
+    scroller?: ReturnType<typeof setInterval>;
+  } | null = null;
+  let swallowClick = false;
+
+  body.addEventListener('pointerdown', (e) => {
+    swallowClick = false;
+    // A press whose release never came (the window lost it): dropped, not a dead end. A
+    // second finger or a palm (not primary) leaves a drag under way alone.
+    if (e.isPrimary) stopDrag();
+    if (!view || !opts.onEquip || !listedCombine) return;
+    if (e.button !== 0 || !e.isPrimary) return;
+    const b =
+      e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
+    const key = b?.dataset.key;
+    if (!key || !canDrag(view, key)) return;
+    const touch = e.pointerType === 'touch';
+    press = {
+      key,
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      touch,
+      timer: undefined,
+      ghost: null,
+    };
+    if (touch) press.timer = setTimeout(() => press && lift(press.x, press.y), LONG_PRESS);
+    doc.addEventListener('pointermove', onMove);
+    doc.addEventListener('pointerup', onUp);
+    doc.addEventListener('pointercancel', onCancel);
+    doc.defaultView?.addEventListener('blur', stopDrag);
+    doc.addEventListener('touchmove', holdStill, { passive: false });
+  });
+  // A long-press on a phone opens no menu over a slot.
+  body.addEventListener('contextmenu', (e) => {
+    if (press) e.preventDefault();
+  });
+
+  /** While a touch drags, the page does not scroll under it. */
+  function holdStill(e: TouchEvent): void {
+    if (press?.ghost) e.preventDefault();
+  }
+
+  function onMove(e: PointerEvent): void {
+    if (!press || e.pointerId !== press.id) return;
+    // A mouse moving with no button down: its release was lost (outside the window).
+    if (!press.touch && e.buttons === 0) {
+      stopDrag();
+      return;
+    }
+    if (!press.ghost) {
+      const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+      if (press.touch) {
+        // Moved before the long-press: a scroll, not a drag.
+        if (moved > TOUCH_SLOP) stopDrag();
+        return;
+      }
+      if (moved < DRAG_SLOP) return;
+      lift(e.clientX, e.clientY);
+    }
+    e.preventDefault();
+    follow(e.clientX, e.clientY);
+  }
+
+  /** A cancel of the drag's own pointer ends it; another finger's does not. */
+  function onCancel(e: PointerEvent): void {
+    if (press && e.pointerId === press.id) stopDrag();
+  }
+
+  function onUp(e: PointerEvent): void {
+    if (!press || e.pointerId !== press.id) return;
+    const from = press.ghost ? press.key : null;
+    stopDrag();
+    if (from === null || !view) return;
+    swallowClick = true;
+    const to = targetAt(e.clientX, e.clientY);
+    act(dropAction(view, from, to), from, to);
+  }
+
+  /** The press becomes a drag: its gun follows the pointer and the drop places light up. */
+  function lift(x: number, y: number): void {
+    if (!press || !view) return;
+    const it = items().find((i) => i.key === press!.key);
+    if (!it) return;
+    select(press.key, false);
+    const ghost = el('div', 'inv-slot inv-ghost');
+    ghost.dataset.rarity = it.rarity;
+    // On touch it rides above the finger, so the finger hides neither it nor the target.
+    if (press.touch) {
+      ghost.dataset.touch = 'true';
+      doc.defaultView?.navigator.vibrate?.(10);
+    }
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.append(...slotFace(it));
+    scrim.append(ghost);
+    press.ghost = ghost;
+    dialog.classList.add('inv-dragging');
+    for (const b of slots()) {
+      const key = b.dataset.key!;
+      if (key === press.key) b.dataset.dragFrom = 'true';
+      else b.dataset.drop = droppable(dropAction(view, press.key, key)) ? 'ok' : 'no';
+    }
+    const zone = body.querySelector<HTMLElement>('.inv-stash-zone');
+    const d = dropAction(view, press.key, 'stash');
+    if (zone && d.kind !== 'none') zone.dataset.drop = droppable(d) ? 'ok' : 'no';
+    // Held back only by the stash being full (a survivor's gun, or the pistol while
+    // someone holds a gun to send there): said at once.
+    const full =
+      view.free === 0 &&
+      (press.key.startsWith('squad:') ||
+        (press.key === 'pistol' && view.squad.some((s) => s.uid !== null)));
+    say(full ? STASH_FULL : '', full);
+    press.scroller = setInterval(edgeScroll, 16);
+    follow(x, y);
+  }
+
+  const droppable = (d: Drop): boolean =>
+    d.kind === 'equip' || (d.kind === 'combine' && !!opts.onCombine);
+
+  /**
+   * Near the grid's top or bottom edge a drag scrolls it, faster the closer it gets, so a
+   * slot scrolled out of sight (on a phone, the squad row or the stash's last rows) is in
+   * reach. Runs on a timer, so a pointer held still at the edge keeps scrolling.
+   */
+  function edgeScroll(): void {
+    if (!press?.ghost) return;
+    const r = body.getBoundingClientRect();
+    if (r.height === 0) return;
+    const into =
+      press.y < r.top + EDGE ? press.y - r.top - EDGE : Math.max(0, press.y - r.bottom + EDGE);
+    if (into === 0) return;
+    const step = Math.sign(into) * Math.min(EDGE_SPEED, Math.max(2, Math.abs(into) / 3));
+    const was = body.scrollTop;
+    body.scrollTop = was + step;
+    if (body.scrollTop !== was) follow(press.x, press.y);
+  }
+
+  /** Moves the gun to the pointer, and marks the place under it. */
+  function follow(x: number, y: number): void {
+    if (!press?.ghost) return;
+    // Where the pointer is now, for the edge scroll.
+    press.x = x;
+    press.y = y;
+    press.ghost.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    const to = targetAt(x, y);
+    for (const n of dialog.querySelectorAll<HTMLElement>('[data-over]')) delete n.dataset.over;
+    const over =
+      to === 'stash'
+        ? body.querySelector<HTMLElement>('.inv-stash-zone')
+        : to === null
+          ? null
+          : (slotOf(to) ?? null);
+    if (over) over.dataset.over = 'true';
+  }
+
+  /** The drop place at (x, y): a slot's key, `stash` (the stash section) or null. */
+  function targetAt(x: number, y: number): string | null {
+    const at = doc.elementFromPoint?.(x, y);
+    if (!at || !body.contains(at)) return null;
+    const b = at.closest<HTMLElement>('.inv-slot[data-key]');
+    if (b) return b.dataset.key!;
+    return at.closest('.inv-stash-zone') ? 'stash' : null;
+  }
+
+  /** Ends a press or drag with nothing moved: the gun is back where it was. */
+  function stopDrag(): void {
+    if (!press) return;
+    clearTimeout(press.timer);
+    clearInterval(press.scroller);
+    press.ghost?.remove();
+    press = null;
+    doc.removeEventListener('pointermove', onMove);
+    doc.removeEventListener('pointerup', onUp);
+    doc.removeEventListener('pointercancel', onCancel);
+    doc.defaultView?.removeEventListener('blur', stopDrag);
+    doc.removeEventListener('touchmove', holdStill);
+    dialog.classList.remove('inv-dragging');
+    for (const n of dialog.querySelectorAll<HTMLElement>(
+      '[data-drop], [data-drag-from], [data-over]',
+    )) {
+      delete n.dataset.drop;
+      delete n.dataset.dragFrom;
+      delete n.dataset.over;
+    }
+  }
+
+  /** Does `d`, the drop of slot `from` on `to` (or its button), and says what it did. */
+  function act(d: Drop, from: string, to: string | null): void {
+    if (!view || d.kind === 'none') return;
+    if (d.kind === 'refused') {
+      say(d.reason, true);
+      return;
+    }
+    if (d.kind === 'combine') {
+      if (!opts.onCombine || to === null) return;
+      say('');
+      select(to, true);
+      ask(d.uses);
+      return;
+    }
+    if (!opts.onEquip) return;
+    const before = view;
+    const r = opts.onEquip(d.defender, d.choice);
+    if (!r.ok) {
+      say(r.reason, true);
+      return;
+    }
+    // The gun is selected where it went: a survivor's back in the stash, else in their hands.
+    const mine = before.squad.find((s) => s.gun.key === from);
+    selected = mine?.uid ? `stash:${mine.uid}` : `squad:${d.defender}`;
+    hovered = null;
+    confirming = null;
+    result = null;
+    // onEquip's save has usually redrawn the grid already; drawn again for the new selection.
+    const { game, canCombine = false } = opts.state();
+    draw(game, canCombine);
+    say(equipMessage(before, d));
+    const b = slotOf(selected);
+    b?.focus();
+    b?.scrollIntoView?.({ block: 'nearest' });
+  }
 
   /** Selects the slot `key`; `focus` moves the keyboard there too. */
   function select(key: string, focus: boolean): void {
     if (key !== selected) {
       confirming = null;
       result = null;
+      // The last move's line is about another gun now.
+      say('');
     }
     selected = key;
     hovered = null;
@@ -675,27 +1094,36 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
               canCombine: listedCombine,
               confirming: hovered ? null : confirming,
               result: hovered ? null : result,
-              ask(uses: readonly OwnedWeapon[]) {
-                // Asked from a hovered gun's details: that gun becomes the selected one,
-                // so the confirm stays up for it when the pointer moves on.
-                if (hovered !== null) selected = hovered;
-                hovered = null;
-                markSelected();
-                confirming = uses;
-                result = null;
-                drawDetails();
-                details.querySelector<HTMLElement>('.inv-combine-no')?.focus();
-              },
+              ask,
               confirm,
               cancel,
             },
           }
         : undefined;
-    details.replaceChildren(...detailsPanel(it, combine));
+    const gear =
+      opts.onEquip && view && listedCombine
+        ? { view, move: (from: string, to: string) => act(dropAction(view!, from, to), from, to) }
+        : undefined;
+    details.replaceChildren(...detailsPanel(it, combine, gear));
+  }
+
+  /** Puts up the Combine confirm for `uses`. */
+  function ask(uses: readonly OwnedWeapon[]): void {
+    // Asked from a hovered gun's details: that gun becomes the selected one, so the
+    // confirm stays up for it when the pointer moves on.
+    if (hovered !== null) selected = hovered;
+    hovered = null;
+    markSelected();
+    confirming = uses;
+    result = null;
+    drawDetails();
+    details.querySelector<HTMLElement>('.inv-combine-no')?.focus();
   }
 
   /** Draws the grid for `game`; a confirm whose guns have left the stash is dropped. */
   function draw(game: Pick<GameState, 'armoury' | 'roster'>, canCombine: boolean): void {
+    // The slots are redrawn: a drag under way goes back.
+    stopDrag();
     listed = game;
     listedCombine = canCombine;
     if (confirming && !(canCombine && confirming.every((w) => game.armoury.includes(w)))) {
@@ -704,7 +1132,16 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     // Focus in the grid or the details: both are redrawn, so it comes back to the slot.
     const hadFocus = body.contains(doc.activeElement) || details.contains(doc.activeElement);
     view = inventoryView(game);
-    body.replaceChildren(...inventoryGrid(view, canCombine));
+    // On a touch screen a plain drag scrolls: the note says to hold first.
+    const touch = !!doc.defaultView?.matchMedia?.('(pointer: coarse)').matches;
+    const note = opts.onEquip
+      ? canCombine
+        ? touch
+          ? DRAG_NOTE_TOUCH
+          : DRAG_NOTE
+        : GUNS_WAIT
+      : INVENTORY_NOTE;
+    body.replaceChildren(...inventoryGrid(view, canCombine, note, !!opts.onEquip));
     const keys = items().map((x) => x.key);
     if (selected === null || !keys.includes(selected)) {
       // The strongest stash gun first; with an empty stash, the first survivor's gun.
@@ -720,6 +1157,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     const uses = confirming;
     if (!uses || !opts.onCombine) return;
     confirming = null;
+    say('');
     const r = opts.onCombine(uses.map((w) => w.uid));
     result = r.ok ? combineResult(r.weapon) : r.reason;
     // The new gun takes a used gun's place: select it, so its details say what was made.
@@ -747,6 +1185,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
       result = null;
       selected = null;
       hovered = null;
+      say('');
       // Drawn afresh: the details start on the strongest gun, with no confirm or result.
       listed = null;
       scrim.hidden = false;
@@ -758,6 +1197,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     close() {
       if (!opened) return;
       opened = false;
+      stopDrag();
       scrim.hidden = true;
       root.removeAttribute('inert');
       openButton.focus();
