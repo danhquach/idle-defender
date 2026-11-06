@@ -319,41 +319,35 @@ export type GunId = {
  * A Gunner's sprite holds their primary, so the gun reads at a glance (design §15, ID-046):
  * held low at rest, or raised and aimed while they fire (ID-069). Both poses of a gun
  * share one box and scale, so the swap keeps the feet and body still. `barrel` is where
- * the aimed gun's muzzle is, in the aim sprite's px: right of its middle, up from its feet;
- * `flash` scales its muzzle flash to the gun (a pistol's is small).
+ * the aimed gun's muzzle is, in the aim sprite's px: right of its middle, up from its feet.
  */
 export interface GunnerArt {
   idle: ArtId;
   aim: ArtId;
   barrel: { readonly x: number; readonly y: number };
-  flash: number;
 }
 export const GUNNER_ART: Readonly<Record<GunId, GunnerArt>> = {
   pistol: {
     idle: 'gunner-pistol-idle',
     aim: 'gunner-pistol-aim',
     barrel: { x: 90, y: 136 },
-    flash: 0.6,
   },
-  smg: { idle: 'gunner-smg-idle', aim: 'gunner-smg-aim', barrel: { x: 100, y: 154 }, flash: 0.75 },
+  smg: { idle: 'gunner-smg-idle', aim: 'gunner-smg-aim', barrel: { x: 100, y: 154 } },
   rifle: {
     idle: 'gunner-rifle-idle',
     aim: 'gunner-rifle-aim',
     barrel: { x: 94, y: 128 },
-    flash: 0.9,
   },
   shotgun: {
     idle: 'gunner-shotgun-idle',
     aim: 'gunner-shotgun-aim',
     barrel: { x: 102, y: 151 },
-    flash: 1,
   },
-  lmg: { idle: 'gunner-lmg-idle', aim: 'gunner-lmg-aim', barrel: { x: 104, y: 151 }, flash: 1 },
+  lmg: { idle: 'gunner-lmg-idle', aim: 'gunner-lmg-aim', barrel: { x: 104, y: 151 } },
   sniper: {
     idle: 'gunner-sniper-idle',
     aim: 'gunner-sniper-aim',
     barrel: { x: 115, y: 141 },
-    flash: 1,
   },
 };
 
@@ -387,7 +381,6 @@ export const GUNNER_LOOKS: readonly Readonly<Record<GunId, GunnerArt>>[] = [
             idle: `gunner-${gun}-idle-${letter}` as ArtId,
             aim: `gunner-${gun}-aim-${letter}` as ArtId,
             barrel: LOOK_BARREL[gun],
-            flash: GUNNER_ART[gun].flash,
           };
           return [gun, art];
         }),

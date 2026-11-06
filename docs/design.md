@@ -1882,9 +1882,35 @@ original outline.
   muzzle, flown as far) lay every shadow and backing before any tail or head;
   each of a shooter's other shots sorts on its own. The muzzle flash lasts
   0.08 s (at least one frame at 3×): its round orange halo, and a core
-  teardrop 8 × 4 px pointing along the shot (its newest bullet), white at the
-  muzzle to orange at its tip. Every tracer colour is `#rrggbb`. A hit also flashes a white 4 px spark on the body for its first
-  0.1 s, shrinking and fading. Every effect stays at least 1.5 px on screen.
+  teardrop 8 × 4 px pointing along the shot (its newest bullet), white at
+  the muzzle to orange at its tip (both replaced by ID-088). Every tracer
+  colour is `#rrggbb`. A hit also flashes a white 4 px spark on the body
+  for its first 0.1 s, shrinking and fading. Every effect stays at least
+  1.5 px on screen.
+- **As built (ID-088):** the muzzle flash reads as a gunshot. Drawn in code
+  (no art), all of it adds light (`lighter`), so it brightens the sprites
+  behind it and never covers them. From the barrel end, flames (thin
+  4-point tongues) point along the shot: a long one forward and short ones
+  flaring to the sides, each orange with a pale yellow centre, on a soft
+  orange glow, with a white-hot dot at the muzzle. Each gun has its own:
+  pistol small (6 px forward), SMG thin and spiky (8 px, its flames'
+  lengths ±40%), rifle 10 px, sniper a 13 px needle with short side flares; a shotgun's a wide
+  fan of three big flames; an LMG's a broad five-flame star with the
+  biggest glow; a turret's a cold blue cross with a short flame out the
+  back, unlike any survivor's (anyone but a Gunner fires a sidearm, so a
+  pistol's). A turret's flash and bullets are found by who fired
+  (`turret:<id>`), as its sound is. Each shot rolls its look from the
+  seeded RNG (seeded by who fired and when, so a replay matches): size
+  ±15%, turned up to 0.12 rad, each flame's length ±30%. Over its 0.08 s
+  it flares from 60% to full size in the first 15% at full brightness,
+  then shrinks by 30% and fades fast (squared) to nothing; its glow fades
+  faster (cubed), so its tail is an ember, not a smudge on the dark
+  ground. Its main flame stays at least 2.5 px long, so it still points at
+  0.5× zoom. For shots up to 0.4 rad off straight across on screen (an
+  enemy up to 0.7× as far off the shooter's row as it is out), no flame
+  reaches more than half the gap between two survivors on one wall walk,
+  so busy flashes stay apart; steeper shots cross as thin streaks. It costs
+  one gradient and four fills a shot (one gradient and two fills before).
 - **As built (ID-071):** the fight is at dusk, easier on the eyes over a long
   session. A dark, slightly cool wash (`rgba(8, 10, 16, 0.7)`) lies over the
   ground past the field and over the field's own ground, under every sprite,
