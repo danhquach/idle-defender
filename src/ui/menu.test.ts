@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // ID-039: the Menu — its button and Esc, focus kept inside, the Save tab's code, load and
-// new camp (asked first, off in a fight), the save-problem dot, Reduce motion and Help.
+// new camp (asked first, off in a fight), the save-problem dot, Reduce motion, Sound and Help.
 import { describe, expect, it, vi } from 'vitest';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
@@ -31,12 +31,19 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
   const loaded: GameState[] = [];
   const fresh: GameState[] = [];
   const motion: boolean[] = [];
+  const volumes: [string, number][] = [];
+  const mutes: boolean[] = [];
+  const samples: string[] = [];
   const menu = createMenu(root, {
     state: () => ({ game, fighting, held: false }),
     onLoad: (g) => (loaded.push(g), (game = g)),
     onNewCamp: (g) => (fresh.push(g), (game = g)),
     reduceMotion: over.reduceMotion ?? false,
     onReduceMotion: (on) => motion.push(on),
+    sound: over.sound ?? { volumes: { master: 80, music: 60, effects: 80 }, muted: false },
+    onVolume: (which, level) => volumes.push([which, level]),
+    onVolumeSet: (which) => samples.push(which),
+    onMute: (on) => mutes.push(on),
   });
   const scrim = document.querySelector<HTMLElement>('.menu-scrim')!;
   const dialog = scrim.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -80,6 +87,9 @@ function setup(over: Partial<MenuOptions> & { fighting?: boolean; game?: GameSta
     loaded,
     fresh,
     motion,
+    volumes,
+    mutes,
+    samples,
     fight,
   };
 }
@@ -392,6 +402,51 @@ describe('the Menu', () => {
     box.click();
     box.click();
     expect(motion).toEqual([false, true]);
+  });
+
+  it('Sound shows the stored volumes and mute, and hands on each change (ID-080)', () => {
+    const { menuButton, dialog, volumes, mutes, samples, key } = setup({
+      sound: { volumes: { master: 35, music: 0, effects: 100 }, muted: true },
+    });
+    menuButton.click();
+    const slider = (w: string) => dialog.querySelector<HTMLInputElement>(`#menu-volume-${w}`)!;
+    const label = (w: string) => dialog.querySelector(`label[for="menu-volume-${w}"]`)!.textContent;
+    expect([slider('master').value, slider('music').value, slider('effects').value]).toEqual([
+      '35',
+      '0',
+      '100',
+    ]);
+    expect([label('master'), label('music'), label('effects')]).toEqual([
+      'Master volume',
+      'Music',
+      'Sound effects',
+    ]);
+    expect(slider('master').type).toBe('range');
+    const value = slider('master').parentElement!.querySelector('output')!;
+    expect(value.textContent).toBe('35%');
+    slider('master').value = '50';
+    slider('master').dispatchEvent(new Event('input', { bubbles: true }));
+    expect(volumes).toEqual([['master', 50]]);
+    expect(value.textContent).toBe('50%');
+    expect(slider('master').getAttribute('aria-valuetext')).toBe('50%');
+    // The readout is for the eye: the slider's own value is what a screen reader says.
+    expect(value.getAttribute('aria-hidden')).toBe('true');
+    // Dragging gives no sample; letting go gives one.
+    expect(samples).toEqual([]);
+    slider('master').dispatchEvent(new Event('change', { bubbles: true }));
+    expect(samples).toEqual(['master']);
+    const mute = dialog.querySelector<HTMLInputElement>('#menu-mute')!;
+    const rows = () => [...dialog.querySelectorAll('.menu-range')];
+    expect(mute.checked).toBe(true);
+    expect(rows().every((r) => r.classList.contains('menu-range-muted'))).toBe(true);
+    expect(dialog.querySelector('label[for="menu-mute"]')!.textContent).toContain('Mute');
+    mute.click();
+    expect(mutes).toEqual([false]);
+    expect(rows().some((r) => r.classList.contains('menu-range-muted'))).toBe(false);
+    // Arrow keys on a slider stay with the slider: the dialog moves tabs only from a tab.
+    const e = key(slider('music'), 'ArrowRight');
+    expect(e.defaultPrevented).toBe(false);
+    expect(dialog.querySelector('#menu-tab-settings')!.getAttribute('aria-selected')).toBe('true');
   });
 
   it('Help lists every control and the how-to-play steps', () => {

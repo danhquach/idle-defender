@@ -30,13 +30,17 @@ import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import {
   readReduceMotion,
+  readSound,
   readSpeed,
   SPEEDS,
+  writeMute,
   writeReduceMotion,
   writeSpeed,
+  writeVolume,
   type Speed,
 } from '../storage/settings.ts';
 import { Animator } from './anim.ts';
+import { SoundEngine, STING } from './audio.ts';
 import { createBuildPanel, FIELD_GREW } from './build.ts';
 import {
   buildCamera,
@@ -59,6 +63,7 @@ import {
 import { createInventory } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
+import { cuesBetween } from './sound.ts';
 import {
   fightHitAt,
   frameCamera,
@@ -141,6 +146,24 @@ export function start(root: HTMLElement, art: Art): void {
   // Fight speed, kept between hordes, and the Space pause, which each fight starts without (ID-062).
   let speed: Speed = readSpeed(storage);
   let held = false;
+  // Sound (ID-080): it starts on the first click or key press, as browsers require; the
+  // fight's cues come from comparing each frame's state with the last one heard.
+  const soundSettings = readSound(storage);
+  const sound = new SoundEngine(soundSettings);
+  let heard: HordeState | null = null;
+  const unlock = (): void => sound.unlock();
+  document.addEventListener('pointerdown', unlock, true);
+  document.addEventListener('keydown', unlock, true);
+  document.addEventListener(
+    'click',
+    (e) => {
+      const t = e.target;
+      if (t instanceof Element && t.closest('button, [role="tab"], input[type="checkbox"]')) {
+        sound.play('click');
+      }
+    },
+    true,
+  );
 
   const hud = createHud(
     root,
@@ -325,6 +348,19 @@ export function start(root: HTMLElement, art: Art): void {
     onReduceMotion: (on) => {
       animator.reduced = on;
       writeReduceMotion(storage, on);
+    },
+    sound: soundSettings,
+    onVolume: (which, level) => {
+      sound.setVolume(which, level);
+      writeVolume(storage, which, level);
+    },
+    // A sample shot to hear the effects level by (the music is already playing).
+    onVolumeSet: (which) => {
+      if (which !== 'music') sound.play('shot-pistol');
+    },
+    onMute: (on) => {
+      sound.setMuted(on);
+      writeMute(storage, on);
     },
   });
   const dialogOpen = (): boolean => menu.isOpen() || inventory.isOpen();
@@ -541,6 +577,7 @@ export function start(root: HTMLElement, art: Art): void {
   let last: number | null = null;
   document.addEventListener('visibilitychange', () => {
     last = null;
+    sound.hidden(document.hidden);
   });
 
   function frame(now: number): void {
@@ -560,6 +597,14 @@ export function start(root: HTMLElement, art: Art): void {
         selectedDefender = null;
       }
     }
+    // The horde track while a fight is on; the camp's at the build and the result screen.
+    // A won or lost sting plays alone: the horde track drops fast and the camp's waits for it.
+    const cues = horde ? cuesBetween(heard, horde) : [];
+    for (const cue of cues) sound.play(cue);
+    heard = horde;
+    const sting = cues.includes('won') || cues.includes('lost') ? STING : 0;
+    sound.music(horde?.outcome === 'fighting' ? 'horde' : 'camp', sting);
+    sound.pump();
     if (horde) {
       // A pick, the end of the fight or a cooldown puts an armed skill away.
       if (armed && skillLock(horde, armed) !== null) armed = null;

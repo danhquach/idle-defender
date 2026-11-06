@@ -1,13 +1,20 @@
-// ID-039, ID-062: Reduce motion and the fight speed are stored on their own and read back
-// through an allow-list.
+// ID-039, ID-062, ID-080: Reduce motion, the fight speed and sound are stored on their own
+// and read back through an allow-list.
 import { describe, expect, it } from 'vitest';
 import {
+  clampVolume,
   MOTION_KEY,
+  MUTE_KEY,
   readReduceMotion,
+  readSound,
   readSpeed,
   SPEED_KEY,
+  VOLUME_DEFAULTS,
+  VOLUME_KEYS,
+  writeMute,
   writeReduceMotion,
   writeSpeed,
+  writeVolume,
 } from './settings.ts';
 
 function memory(initial: Record<string, string> = {}) {
@@ -126,5 +133,110 @@ describe('Game speed setting (ID-062)', () => {
     expect(readSpeed(throwing)).toBe(1);
     expect(() => writeSpeed(throwing, 3)).not.toThrow();
     expect(() => writeSpeed(null, 3)).not.toThrow();
+  });
+});
+
+describe('Sound settings (ID-080)', () => {
+  const defaults = { volumes: { ...VOLUME_DEFAULTS }, muted: false };
+
+  it('starts at the defaults, unmuted, until the player chooses', () => {
+    expect(readSound(memory())).toEqual(defaults);
+    expect(readSound(null)).toEqual(defaults);
+    expect(VOLUME_DEFAULTS).toEqual({ master: 80, music: 60, effects: 80 });
+  });
+
+  it('round-trips every volume and the mute through storage', () => {
+    const s = memory();
+    for (const [which, level] of [
+      ['master', 0],
+      ['music', 100],
+      ['effects', 45],
+    ] as const) {
+      writeVolume(s, which, level);
+      expect(s.data.get(VOLUME_KEYS[which])).toBe(String(level));
+    }
+    writeMute(s, true);
+    expect(s.data.get(MUTE_KEY)).toBe('1');
+    expect(readSound(s)).toEqual({ volumes: { master: 0, music: 100, effects: 45 }, muted: true });
+    writeMute(s, false);
+    expect(readSound(s).muted).toBe(false);
+  });
+
+  it('writes only 0–100 in steps of 5', () => {
+    const s = memory();
+    for (const [level, stored] of [
+      [-5, '0'],
+      [150, '100'],
+      [33.6, '35'],
+      [62, '60'],
+      [Number.NaN, '0'],
+      [Number.POSITIVE_INFINITY, '0'],
+    ] as const) {
+      writeVolume(s, 'music', level);
+      expect(s.data.get(VOLUME_KEYS.music)).toBe(stored);
+    }
+    expect(clampVolume(Number.NEGATIVE_INFINITY)).toBe(0);
+  });
+
+  it('anything but the exact stored strings falls back to the default', () => {
+    const hostile = [
+      '-1',
+      '101',
+      '1000',
+      '007',
+      '62',
+      '3',
+      '99',
+      '00',
+      '5.5',
+      '50.0',
+      ' 50',
+      '50 ',
+      '+50',
+      '5e1',
+      '0x32',
+      'Infinity',
+      'NaN',
+      '５０',
+      '٥٠',
+      '50\u200b',
+      '\u202e50',
+      '"50"',
+      '[50]',
+      '{"__proto__":{"volume":50}}',
+      'constructor',
+      'null',
+      '',
+      '5'.repeat(100_000),
+    ];
+    for (const v of hostile) {
+      const s = memory({
+        [VOLUME_KEYS.master]: v,
+        [VOLUME_KEYS.music]: v,
+        [VOLUME_KEYS.effects]: v,
+        [MUTE_KEY]: v,
+      });
+      expect(readSound(s)).toEqual(defaults);
+    }
+    for (const v of ['true', ' 1', '1 ', '01', '１', '1\u200b', 'yes']) {
+      expect(readSound(memory({ [MUTE_KEY]: v })).muted).toBe(false);
+    }
+    expect(({} as Record<string, unknown>).volume).toBeUndefined();
+  });
+
+  it('a bad value spoils only its own setting', () => {
+    const s = memory({ [VOLUME_KEYS.master]: 'x', [VOLUME_KEYS.music]: '15', [MUTE_KEY]: '1' });
+    expect(readSound(s)).toEqual({
+      volumes: { master: 80, music: 15, effects: 80 },
+      muted: true,
+    });
+  });
+
+  it('storage that throws or is missing never breaks it', () => {
+    expect(readSound(throwing)).toEqual(defaults);
+    expect(() => writeVolume(throwing, 'master', 10)).not.toThrow();
+    expect(() => writeMute(throwing, true)).not.toThrow();
+    expect(() => writeVolume(null, 'master', 10)).not.toThrow();
+    expect(() => writeMute(null, true)).not.toThrow();
   });
 });
