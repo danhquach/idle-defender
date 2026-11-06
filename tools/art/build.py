@@ -1,7 +1,8 @@
 """Cleans generated art into the game's sprites (design §15, ID-043).
 
 Inputs: art-src/manifest.json (prompt, model, seed, size and reference of every
-asset) and art-src/gen/<id>.jpg (the generations it records). Outputs:
+asset) and art-src/gen/<id>.jpg (the generations it records; a drawn sprite has
+none). Outputs:
 src/assets/art/<id>.png, bundled with the build.
 
   python3 tools/art/build.py          # build everything
@@ -22,8 +23,7 @@ Manifest asset keys (unknown keys stop the build):
   ref (id of the generation it edits, or a list of ids it combines: the
   first is the subject, the others what it takes on, ID-046), photo (a public
   domain photograph the generation was drawn from, credited in
-  docs/art-credits.md under its id), flip (mirror left to right), upend (turn
-  upside down, ID-103: the model draws a V reliably but not a ^),
+  docs/art-credits.md under its id), flip (mirror left to right),
   mutant (keep its colours saturated; everything else is muted, §15),
   white (drain every colour, so a glow painted with coloured rays reads as plain
   white light and keeps no pink from the background it was keyed out of, ID-041),
@@ -32,7 +32,7 @@ Manifest asset keys (unknown keys stop the build):
   on, so two surfaces read as one ground), edge (id of a texture this one is a
   variant of: it takes on that texture's colours and shares its seam border,
   so any variant tiles next to any other, ID-050), part (a generation used only
-  inside other sprites as a reference, never written out itself; ID-046: a Gunner
+  inside other sprites, as a reference or an overlay, never written out itself; ID-046: a Gunner
   holding each gun is drawn from the weaponless body part and that weapon's part),
   style (the manifest style to use instead of its kind's: a
   weapon on its own is generated with the `object` style; the empty `verbatim`
@@ -86,7 +86,7 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
     "palette", "edge", "part", "style", "photo", "white", "pose", "frames", "overlay",
-    "upend", "draw",
+    "draw",
 }
 POSES = ROOT / "art-src" / "poses"
 # The column each puppet family stands on in its 512 px canvas (tools/art/puppets.py:
@@ -202,8 +202,6 @@ def prepare(img: Image.Image, asset: dict) -> Image.Image:
         img = img.crop(box)
     if asset.get("flip"):
         img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    if asset.get("upend"):
-        img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
     if asset.get("white") or not asset.get("mutant"):
         rgb, alpha = img.convert("RGB"), img.getchannel("A")
         img = ImageEnhance.Color(rgb).enhance(0 if asset.get("white") else MUTED)
@@ -211,14 +209,24 @@ def prepare(img: Image.Image, asset: dict) -> Image.Image:
     return img
 
 
+def number(v: object) -> bool:
+    """An int or float from the manifest; JSON true and false are not numbers."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def check_draw(asset: dict) -> None:
-    """A drawn sprite: polygons of 3+ points on the DRAW_PX canvas, each with a #rrggbb fill."""
+    """
+    A drawn sprite: polygons of 3+ points, each with a #rrggbb fill, every point far
+    enough inside the DRAW_PX canvas that its outline is not cut off.
+    """
     d = asset["draw"]
     shapes = d.get("shapes") if isinstance(d, dict) else None
+    outline = d.get("outline") if isinstance(d, dict) else None
+    edge = outline / 2 if number(outline) else 0
     point = lambda p: (  # noqa: E731
         isinstance(p, list)
         and len(p) == 2
-        and all(isinstance(v, (int, float)) and 0 <= v <= DRAW_PX for v in p)
+        and all(number(v) and edge <= v <= DRAW_PX - edge for v in p)
     )
     shape = lambda s: (  # noqa: E731
         isinstance(s, dict)
@@ -235,13 +243,13 @@ def check_draw(asset: dict) -> None:
         and set(d) == {"shapes", "outline"}
         and isinstance(shapes, list)
         and shapes
+        and number(outline)
+        and 0 < outline <= DRAW_PX / 8
         and all(map(shape, shapes))
-        and isinstance(d["outline"], (int, float))
-        and 0 < d["outline"] <= DRAW_PX / 8
     ):
         sys.exit(
-            f"{asset['id']}: draw is {{shapes: [{{points: [[x, y], ...] in 0..{DRAW_PX}, "
-            "fill: #rrggbb}, ...], outline: px}, on a sprite"
+            f"{asset['id']}: draw is {{shapes: [{{points: [[x, y], ...] at least half the "
+            f"outline inside 0..{DRAW_PX}, fill: #rrggbb}}, ...], outline: px}}, on a sprite"
         )
 
 
@@ -270,7 +278,9 @@ def overlaid(
 ) -> Image.Image:
     """`part` pasted over trimmed sprite `img` (see `overlay`), the canvas grown if it pokes out."""
     if turn:
-        part = part.rotate(-turn, Image.Resampling.BICUBIC, expand=True)
+        # Turned premultiplied, so its see-through edge picks up no dark fringe.
+        part = part.convert("RGBa").rotate(-turn, Image.Resampling.BICUBIC, expand=True)
+        part = part.convert("RGBA")
         part = part.crop(part.getbbox())
     part = scaled(part, size * max(img.size) / max(part.size))
     x = round(at[0] * img.width - part.width / 2)
@@ -461,8 +471,6 @@ def check(
             f"{name}: frames names a set, on a posed sprite (or a repaint of one) "
             "with no group or part"
         )
-    if "upend" in asset and (asset["upend"] is not True or asset["kind"] != "sprite"):
-        sys.exit(f"{name}: upend is true, on a sprite")
     over = asset.get("overlay")
     if over is not None:
         at = over.get("at") if isinstance(over, dict) else None
@@ -473,13 +481,13 @@ def check(
             and not asset.get("part")
             and "frames" not in asset
             and {"part", "at", "size"} <= set(over) <= {"part", "at", "size", "turn"}
-            and isinstance(turn, (int, float))
+            and number(turn)
             and -360 <= turn <= 360
             and over["part"] in parts
             and isinstance(at, list)
             and len(at) == 2
-            and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in at)
-            and isinstance(size, (int, float))
+            and all(number(v) and 0 <= v <= 1 for v in at)
+            and number(size)
             and 0 < size <= 1
         ):
             sys.exit(
@@ -495,6 +503,7 @@ def main(only: list[str]) -> None:
     textures = {a["id"] for a in assets if a.get("kind") == "texture"}
     variants = {a["id"] for a in assets if "edge" in a}
     posed = {a["id"] for a in assets if "pose" in a}
+    # Overlay parts; a part is never a frame (see the frames check), so it is trimmed.
     parts_all = {a["id"] for a in assets if a.get("part") and a.get("kind") == "sprite"}
     models = allowed_models()
     for asset in assets:
@@ -504,7 +513,7 @@ def main(only: list[str]) -> None:
         sys.exit(f"not in the manifest: {sorted(unknown)}")
     parts = sorted({a["id"] for a in assets if a.get("part")} & set(only))
     if parts:
-        print(f"parts are never written out, only used as references: {parts}")
+        print(f"parts are never written out, only used as references or overlays: {parts}")
     for jpg in [*GEN.glob("*.jpg"), *CONCEPTS.glob("*.jpg")]:
         strip_metadata(jpg)
     OUT.mkdir(parents=True, exist_ok=True)
