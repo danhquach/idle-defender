@@ -4,11 +4,9 @@ import {
   RARITY,
   RECRUIT_CHANCE,
   RESEARCH_CARDS,
-  TITLES,
   type CardRarity,
   type ResearchCard,
 } from './data.ts';
-import { professionFor, titleIn } from './stats.ts';
 import {
   perkFactor,
   perkOn,
@@ -217,19 +215,8 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
 const isResearchCard = (id: UpgradeId): id is ResearchCard =>
   (RESEARCH_CARDS as readonly string[]).includes(id);
 
-/** Whether a Master (or better) Gunner is in the fight (design §8 synergy). */
-export function masterGunner(state: Pick<HordeState, 'defenders'>): boolean {
-  return state.defenders.some((d) => {
-    if (professionFor(d) !== 'gunner' || !d.stats) return false;
-    const t = titleIn(d.stats, 'gunner');
-    return t !== null && t.at >= MASTER_AT;
-  });
-}
-const MASTER_AT = TITLES.find((t) => t.rank === 'Master')!.at;
-
 /** The synergy taking `id` would turn on (or has on), as a line for its card; null if none. */
 export function synergyOf(state: HordeState, id: UpgradeId): string | null {
-  if (id === 'burning-rounds' && masterGunner(state)) return 'Master Gunner: burn spreads';
   if (id === 'ricochet' && state.taken.includes('piercing-rounds'))
     return 'Piercing Rounds: bounces pierce';
   if (id === 'piercing-rounds' && state.taken.includes('ricochet'))

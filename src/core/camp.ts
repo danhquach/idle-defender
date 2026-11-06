@@ -15,10 +15,10 @@ import {
   DEFENDER_XP,
   MATERIALS,
   MAX_COUNT,
+  OPEN_STATS,
   POINTS_PER_LEVEL,
   RECOVERY_MS,
   RECRUIT_NAMES,
-  STATS,
   SURVIVOR,
   TREATMENT_MS,
   WEAPON_IDS,
@@ -268,7 +268,7 @@ export function takeCampPick(game: GameState, choice: CampChoice): GameResult {
 export function rollSurvivor(rng: Rng, id: string, level: number, tier: number): Survivor {
   const name = pick(rng, RECRUIT_NAMES);
   const stats = { ...NO_STATS };
-  for (let n = POINTS_PER_LEVEL * (level - 1); n > 0; n--) stats[pick(rng, STATS)] += 1;
+  for (let n = POINTS_PER_LEVEL * (level - 1); n > 0; n--) stats[pick(rng, OPEN_STATS)] += 1;
   const base = pick(rng, WEAPON_IDS);
   const weapon = rollWeapon(rng, id, base, tierRarity(rng, tier));
   return { id, name, xp: xpForLevel(level), stats, weapon };

@@ -40,6 +40,7 @@ import {
   BATTERIES,
   BATTERY_IDS,
   BUILDING_MATERIALS,
+  HORDE_ONLY,
   COLUMNS,
   GENERATOR,
   MATERIALS,
@@ -121,6 +122,14 @@ import { costLine, setVariant } from './kit.ts';
 /** Shown when a save from before the taller field (ID-047) is loaded. */
 export const FIELD_GREW =
   'The field grew: your walls now hold the middle rows. Build the new rows top and bottom.';
+
+/**
+ * Shown once when a save's spent stat points were refunded (ID-084), saying where to spend
+ * them: the horde-only build after a win, the full game on the roster too.
+ */
+export const STATS_REFUNDED = HORDE_ONLY
+  ? 'Survivor stats were reworked: every point spent is back, to spend after your next win.'
+  : 'Survivor stats were reworked: every point spent is back, to spend on the roster.';
 
 export function stockBarText(game: GameState): string {
   const shown = MATERIALS.filter((m) => BUILDING_MATERIALS.includes(m) || game.stock[m] > 0);

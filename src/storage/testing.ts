@@ -33,9 +33,54 @@ export function preCamp(game: GameState): Record<string, unknown> {
   return json;
 }
 
+/** A stats object in the shape before ID-084: Grit for Instinct, Might for Agility, Aim for Sharp Mind, Tech for Tinker. */
+const oldStatsOf = (s: Record<string, number>): Record<string, number> => ({
+  aim: s.mind!,
+  might: s.agility!,
+  tech: s.tinker!,
+  grit: s.instinct!,
+});
+
+/**
+ * `game` as JSON from before ID-084 (v12 and older): the old four stats on every defender
+ * and every survivor waiting to join.
+ */
+export function preStats(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const fix = (d: { stats?: Record<string, number> }): void => {
+    if (d.stats) d.stats = oldStatsOf(d.stats);
+  };
+  for (const d of json.roster as { stats?: Record<string, number> }[]) fix(d);
+  for (const d of (json.reserve ?? []) as { stats?: Record<string, number> }[]) fix(d);
+  const camp = json.camp as { offers: { survivor: { stats: Record<string, number> } | null }[] };
+  for (const o of camp.offers) if (o.survivor) fix(o.survivor);
+  for (const r of json.reports as { survivors: { stats: Record<string, number> }[] }[]) {
+    for (const s of r.survivors) fix(s);
+  }
+  return json;
+}
+
+/** `game` as an old save (v12 or older) loads it (ID-084): every spent stat point refunded. */
+export function refunded(game: GameState): GameState {
+  const zero = <T extends { stats: GameState['roster'][number]['stats'] }>(d: T): T => ({
+    ...d,
+    stats: { instinct: 0, agility: 0, mind: 0, tinker: 0 },
+  });
+  return {
+    ...game,
+    roster: game.roster.map(zero),
+    reserve: game.reserve.map(zero),
+    camp: {
+      ...game.camp,
+      offers: game.camp.offers.map((o) => ({ ...o, survivor: o.survivor && zero(o.survivor) })),
+    },
+    reports: game.reports.map((r) => ({ ...r, survivors: r.survivors.map(zero) })),
+  };
+}
+
 /** `game` as JSON from before ID-066 (v11 and older): no reserve. */
 export function preReserve(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preStats(game);
   delete json.reserve;
   return json;
 }

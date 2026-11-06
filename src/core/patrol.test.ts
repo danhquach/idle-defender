@@ -47,6 +47,7 @@ import {
   tripOf,
   type Patrol,
 } from './patrol.ts';
+import { xpForLevel } from './stats.ts';
 
 const NOW = 1_800_000_000_000;
 const MIN = 60_000;
@@ -58,12 +59,13 @@ const ready = (patch: Partial<GameState> = {}): GameState => ({
   ...patch,
 });
 
-/** `game` with `ids` given enough Grit to rate Safe anywhere, so loot tests lose no one. */
+/**
+ * `game` with `ids` at level 41, strong enough to rate Safe anywhere, so loot tests lose no
+ * one (stats add no strength since ID-084; 40 Grit did this before).
+ */
 const tough = (game: GameState, ...ids: string[]): GameState => ({
   ...game,
-  roster: game.roster.map((d) =>
-    ids.includes(d.id) ? { ...d, stats: { ...d.stats, grit: 40 } } : d,
-  ),
+  roster: game.roster.map((d) => (ids.includes(d.id) ? { ...d, xp: xpForLevel(41) } : d)),
 });
 
 /** `game` with a fourth defender, Dan, so three can be out with one left at the camp. */
@@ -389,10 +391,11 @@ describe('loot', () => {
     expect(mean(99)).toBeGreaterThan(mean(0) + 0.2);
   });
 
-  it('works out strength from level, weapon rarity and Grit', () => {
+  it('works out strength from level and weapon rarity; stats add none (ID-084)', () => {
     const bob = newGame().roster[0]!;
     expect(memberStrength(bob)).toBeCloseTo(1.8); // level 1, a Rusty pistol
-    expect(memberStrength({ ...bob, stats: { ...bob.stats, grit: 2 } })).toBeCloseTo(3.8);
+    const statted = { ...bob, stats: { instinct: 9, agility: 9, mind: 9, tinker: 0 } };
+    expect(memberStrength(statted)).toBeCloseTo(1.8);
     const relic = {
       ...bob,
       loadout: {

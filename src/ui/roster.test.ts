@@ -5,13 +5,10 @@ import type { OwnedWeapon } from '../core/armoury.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { patrolOutcome, sendPatrol, settlePatrols } from '../core/patrol.ts';
 import { NO_STATS } from '../core/stats.ts';
-import { BADGE_COLOUR } from './render.ts';
 import {
-  badgeStyle,
   choiceFor,
   ITEM_CHOICES,
   ITEM_OPTIONS,
-  pipText,
   PRIMARY_OPTIONS,
   restLeft,
   rosterEntry,
@@ -31,32 +28,31 @@ const isHurt = (o: { wiped: boolean; dead: string[]; injured: string[] }): boole
   !o.wiped && o.dead.join() === 'john' && o.injured.join() === 'jack';
 
 describe('roster entry', () => {
-  it('a new defender: level 1, no stats, no titles, no points, fit', () => {
+  it('a new defender: level 1, no stats, Tinker locked, no points, fit', () => {
     expect(rosterEntry(jack(), NOW)).toEqual({
       label: 'Jack — Ripper',
       level: 'level 1 · 0/25 XP',
-      stats: 'Aim 0 · Might 0 · Tech 0 · Grit 0',
-      titles: 'No titles yet',
+      stats: 'Instinct 0 · Agility 0 · Sharp Mind 0 · Tinker (unlocks later)',
       points: '',
       status: 'Fit',
     });
   });
 
-  it('shows level progress, unspent points and every title held', () => {
+  it('shows level progress and unspent points; no titles any more (ID-084)', () => {
     // Level 3 needs 75 XP; 95 is 20 into the 75 that level 4 costs. 6 points earned.
-    const e = rosterEntry(jack({ xp: 95 }, { might: 5 }), NOW);
+    const e = rosterEntry(jack({ xp: 95 }, { agility: 5 }), NOW);
     expect(e.level).toBe('level 3 · 20/75 XP');
     expect(e.points).toBe('1 stat point to spend');
     expect(rosterEntry(jack({ xp: 95 }), NOW).points).toBe('6 stat points to spend');
-    const titled = jack({ xp: 1e6 }, { aim: 10, might: 25 });
-    expect(rosterEntry(titled, NOW)).toMatchObject({
-      label: 'Jack the Ripper — Ripper',
-      titles: 'Junior Gunner, Adept Ripper',
+    const lots = jack({ xp: 1e6 }, { instinct: 10, mind: 25 });
+    expect(rosterEntry(lots, NOW)).toMatchObject({
+      label: 'Jack — Ripper',
+      stats: 'Instinct 10 · Agility 0 · Sharp Mind 25 · Tinker (unlocks later)',
     });
   });
 
   it('all points spent: no picker line', () => {
-    expect(rosterEntry(jack({ xp: 25 }, { grit: 3 }), NOW).points).toBe('');
+    expect(rosterEntry(jack({ xp: 25 }, { instinct: 3 }), NOW).points).toBe('');
   });
 
   it('a defender on patrol says where and how long is left', () => {
@@ -99,10 +95,6 @@ describe('loadout options', () => {
     expect(PRIMARY_OPTIONS).toEqual(['pistol']);
     expect(SECONDARY_OPTIONS).toEqual([null, 'pistol', 'knife', 'toolkit']);
     expect(ITEM_OPTIONS).toEqual([null, 'shield']);
-  });
-
-  it('one pip per rank', () => {
-    expect([1, 2, 3, 4].map(pipText)).toEqual(['●', '●●', '●●●', '●●●●']);
   });
 
   it('a picker value maps back to one of our options, or to nothing', () => {
@@ -193,23 +185,5 @@ describe('owned weapons in the pickers (design §6 Gear)', () => {
     expect(choiceFor(weaponChoices(game, jack!, 'primary'), 'h3')?.label).toBe(
       'Military Pistol (+12% damage)',
     );
-  });
-});
-
-describe('title badge', () => {
-  it("the top title's colour, its pips and its name; none without a title", () => {
-    expect(badgeStyle({ ...NO_STATS })).toBeNull();
-    expect(badgeStyle({ ...NO_STATS, grit: 300, aim: 9 })).toBeNull();
-    expect(badgeStyle({ ...NO_STATS, aim: 25 })).toEqual({
-      colour: BADGE_COLOUR.gunner,
-      pips: '●●',
-      title: 'Adept Gunner',
-    });
-    expect(badgeStyle({ ...NO_STATS, might: 100, tech: 50 })).toEqual({
-      colour: BADGE_COLOUR.ripper,
-      pips: '●●●●',
-      title: 'Legendary Ripper',
-    });
-    expect(badgeStyle({ ...NO_STATS, tech: 10 })?.title).toBe('Junior Engineer');
   });
 });

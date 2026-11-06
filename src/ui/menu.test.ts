@@ -5,9 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
-import { NOW, oldStock, prePatrol } from '../storage/testing.ts';
+import { NOW, oldStock, prePatrol, preStats } from '../storage/testing.ts';
 import { escapeAction, frameStep } from './app.ts';
-import { FIELD_GREW } from './build.ts';
+import { FIELD_GREW, STATS_REFUNDED } from './build.ts';
 import {
   CONTROLS,
   createMenu,
@@ -128,6 +128,16 @@ describe('readCode', () => {
     const loaded = readCode(exportCode(JSON.stringify(old)));
     expect(loaded.message).toBe(`${IMPORT_DONE} ${FIELD_GREW}`);
     expect(loaded.game?.base.posts).toEqual(g.base.posts);
+  });
+
+  it('a code from before the stat rework says its points came back (ID-084)', () => {
+    const g = newGame();
+    g.roster[0]!.xp = 25;
+    g.roster[0]!.stats = { instinct: 1, agility: 1, mind: 1, tinker: 0 };
+    const old = { v: 12, savedAt: NOW, game: preStats(g) };
+    const loaded = readCode(exportCode(JSON.stringify(old)));
+    expect(loaded.message).toBe(`${IMPORT_DONE} ${STATS_REFUNDED}`);
+    expect(loaded.game?.roster[0]!.stats).toEqual({ instinct: 0, agility: 0, mind: 0, tinker: 0 });
   });
 });
 

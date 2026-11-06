@@ -288,7 +288,8 @@ Defenders stand on **posts** the player builds and chooses between.
   takes a post; the player picks which available defender and which post.
   Turrets and traps are whatever was built before the horde (§7); nothing
   is built mid-fight.
-- **Defender HP and injury:** defenders have HP: 100 + 5 per Grit point
+- **Defender HP and injury:** defenders have HP: 100 plus Instinct's
+  bonus (§6 Stats), and Instinct's armour and injury dodge soften hits
   *(designer's call, starting point)*. Every recovered defender starts a
   horde at full HP and doesn't regain HP mid-horde. They are hit by ranged
   enemies (Spewers) and by enemies that broke into the camp. At 0 HP a
@@ -313,7 +314,7 @@ Defenders stand on **posts** the player builds and chooses between.
     post. Recruit cards show up by chance (starting point: 30% per offer
     slot, lower once the squad is large).
 - **Recruits come from your roster**, bringing their permanent level,
-  stats, title and weapon. Defenders out on patrol, crafting or injured
+  stats and weapon. Defenders out on patrol, crafting or injured
   can't be recruited. With none available (or no free post), no recruit
   cards are offered and that slot becomes an upgrade card *(designer's
   call)*.
@@ -432,7 +433,7 @@ which apply to the whole battlefield.
   kill cash ×1.25 (fractions kept, whole cash shown); **Fortify** every
   segment ×1.3 HP and max HP for the fight, and the base keeps the same
   share of its own max afterwards; **Butcher's Hunger** each blade or tool
-  kill (cleave included) heals the damaged standing segment nearest the
+  kill heals the damaged standing segment nearest the
   defender 3 HP, up to max; **Rally Call** recruit chance ×2, still one
   recruit per offer at most; **Second Look** one seeded reroll of the open
   offer per wave; **Overclock** turret damage ×1.2 and draw ×1.1; **Power
@@ -473,9 +474,9 @@ loadout decides which profession they are working as.
   are plain: no profession, so no Gunner fire rate, reload, crit or spread,
   no Ripper melee or shield, no Engineer repair or buff, no titles, title
   bonuses or badges, and no off-profession penalty. A survivor fights with
-  their primary gun only (the pistol if they have none) and their §6 stats:
-  Aim (damage and crits) and Grit (HP). The stat picker offers only those
-  two. The roster keeps each loadout as it was.
+  their primary gun only (the pistol if they have none) and their §6 stats
+  (Instinct, Agility, Sharp Mind; Tinker is locked). The roster keeps each
+  loadout as it was.
 
 ### Loadout → profession
 
@@ -497,7 +498,7 @@ close-quarter weapons come out only when an enemy is close.
   knife; Engineer pistol + toolkit.
 - **Gunner handling** *(starting points)*: a Gunner is better with every
   gun, sidearm included: fires 15% faster, reloads 25% faster and aims
-  better (+5% crit chance, on top of Aim). A non-Gunner firing a
+  better (+5% crit chance, on top of Sharp Mind). A non-Gunner firing a
   specialised gun deals −30% damage and reloads 50% slower; a sidearm in
   anyone else's hands has no penalty and no bonus.
 - **Reload:** every gun has a magazine and a reload time.
@@ -556,8 +557,8 @@ close-quarter weapons come out only when an enemy is close.
   Horde 4 from about 5% to 75–100% won, but Horde 6 stays at most a quarter won
   with any of them (the curve still needs the camp to grow).
 - **Roster screen (as built, ID-012):** a Roster button on the build panel
-  opens it in the panel's place: each defender's level and XP, stats,
-  titles, unspent points (spent there) and rest time, and three pickers
+  opens it in the panel's place: each defender's level and XP, stats
+  (Tinker shown locked), unspent points (spent there) and rest time, and three pickers
   (primary, secondary, item). Swaps are free between hordes, injured or
   not; a loadout the rules refuse says why and changes nothing.
 
@@ -579,8 +580,9 @@ strikes stay instant.
   arrives, from its velocity over the last step. A Shambler walking
   straight is hit; one that changes lane after the shot can be missed.
 - **Spread:** each gun has a cone *(starting points: pistol ±2.5°,
-  turret ±1°)*; a Gunner's is halved. The angle is rolled through the
-  seeded RNG, so a run stays deterministic. Aim only adds crit chance.
+  turret ±1°)*; a Gunner's is halved, and Sharp Mind narrows it further
+  (§6 Stats). The angle is rolled through the seeded RNG, so a run stays
+  deterministic.
 - **Pierce:** a bullet with pierce N goes through N enemies, each time
   hitting the next one it crosses within 200 px, then stops (ID-046: the
   sniper rifle has 1 by default; a pierce affix adds 1).
@@ -600,49 +602,68 @@ bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).
 
 Each defender level gives **stat points** (3 per level, starting point):
 
-| Stat | Feeds profession | Effect |
-|---|---|---|
-| Aim | Gunner | +gun damage, +crit (any gun, whoever fires it) |
-| Might | Ripper | +blade damage, +cleave |
-| Tech | Engineer | +repair rate, +turret buff, +battery quality |
-| Grit | All | +defender HP in hordes; patrol survival and power |
+Four stats, each with one clear role, each working with any weapon and any
+loadout (ID-084):
 
-- A stat applies per weapon: Aim to every gun shot, Might to every blade
-  strike; tool strikes get no stat bonus. Jack with 50 Might gets nothing
-  from it on his pistol shots. Crafting uses Tech regardless of weapon
-  *(guess)*.
+| Stat | Now | Later (when the game expands) |
+|---|---|---|
+| **Instinct** | + max HP, + armour (flat damage off each hit taken), − chance of injury | + patrol survival |
+| **Agility** | + reload speed | + move speed |
+| **Sharp Mind** | + gun accuracy (narrower cone), + crit chance and + crit damage on every hit, gun shot or blade or tool strike | — |
+| **Tinker** | **Locked:** its button greyed out, "Tinker (locked)", and "unlocks later" in the stats line and hint; no points can go in | + repair rate, + turret damage, + battery quality, + crafting |
+
 - Defender XP comes from hordes and from patrols (§10); both are full sources, so a defender can level by patrolling alone.
 - No stat respec in v1: points are permanent (loadout swaps are free).
-- **As built (ID-011, starting points):** level L → L+1 costs 25 × L
-  defender XP, so a defender in every win reaches level 2 after Horde 2 and
-  level 3 after Horde 4. Per point: Aim +2% Gunner damage and +0.5% crit
-  chance (a crit deals ×2, chance capped at 50%); Might +2% Ripper damage
-  and a cleave of 1% of each strike to enemies within 30 px of the target
-  (capped at 50%); Tech +2% Engineer repair; Grit +5 HP in hordes over
-  the base 100. Points are spent on the result screen after a win; unspent
-  points carry over.
+- Level L → L+1 costs 25 × L defender XP (ID-011), so a defender in every
+  win reaches level 2 after Horde 2 and level 3 after Horde 4. Points are
+  spent on the result screen after a win (or on the roster); unspent points
+  carry over.
+- **Every bonus shrinks as points pile up** *(starting points, ID-084)*: a
+  bonus with cap C from P points is **C × P / (P + 20)**, so the first
+  points give about C/20 each, 20 points give half the cap and no number of
+  points reaches it. Stacking one stat can't break a fight.
 
-### Profession level and titles
+  | Bonus | Cap | 1 point | 10 points | 20 points |
+  |---|---|---|---|---|
+  | Instinct: max HP (over the base 100, rounded to whole HP) | +100 | +5 | +33 | +50 |
+  | Instinct: armour (flat off each hit; a hit keeps at least half its damage) | 4 | 0.19 | 1.33 | 2 |
+  | Instinct: injury dodge (a hit that would drop them to 0 HP leaves them at 1 HP instead) | 30% | 1.4% | 10% | 15% |
+  | Agility: reload time | −50% | −2.4% | −16.7% | −25% |
+  | Sharp Mind: spread | −50% | −2.4% | −16.7% | −25% |
+  | Sharp Mind: crit chance (added to the Gunner's +5% on gun shots) | +35% | +1.7% | +11.7% | +17.5% |
+  | Sharp Mind: crit damage (over the base ×2) | +×2 | +×0.1 | +×0.67 | +×1 |
 
-- **Profession level** = points in that profession's stat.
-- At checkpoints the defender earns a **title**, which adds a flat
-  profession bonus on top of the stat:
+- **Balance (ID-084):** the scripted player puts every point into the stat
+  that suits the job: Sharp Mind, the damage stat, for a Gunner or a Ripper
+  (and every horde-only survivor), Agility for an Engineer. With these
+  numbers the horde-only squad wins Hordes 8, 9 and 10 at the first try on
+  95%, 70% and 65% of seeds (80%, 80% and 85% with Aim before; the target
+  is 60%); a campaign without building still stalls at Horde 5 on every
+  seed; and a Horde 10 firing line beats the brood Horror on 4 seeds of 20.
+  Spreading points evenly is weaker (40–80% at Hordes 8–10 in a test run),
+  and Instinct for the Ripper leaves the brood Horror unbeaten: without
+  a cleave stat, the crowd at the wall needs damage.
 
-| Profession level | Title | Bonus *(starting point)* |
-|---|---|---|
-| 10 | Junior Gunner / Ripper / Engineer | +5% |
-| 25 | Adept … | +15% |
-| 50 | Master … | +30% |
-| 100 *(guess)* | Legendary … | +50% |
+- The injury dodge is rolled through the horde's seeded RNG, only for a
+  survivor with Instinct above 1 HP, so a run stays deterministic and a
+  survivor already at 1 HP gets no second save from the next hit.
+- **Tinker** stays locked until repair, turrets or crafting expand: its row
+  is visible so players know it's coming, and repair runs at its base rate.
+  A save edited to put points in Tinker loads with those points refunded.
+- **Old saves (v12 and older):** every spent point is refunded as unspent
+  points, with a one-time note on load. A patrol out keeps a strength no
+  higher than its party's today.
+- Patrol strength (§10) counts level and weapon only; Instinct's patrol
+  survival comes later.
 
-- The title bonus multiplies on top of the stat, per weapon like the
-  stats: a Gunner title boosts gun shots, a Ripper title blade strikes,
-  an Engineer title repair.
+### Profession titles
 
-- The highest title becomes the defender's name tag: "Bob the Gunner",
-  "Jack the Ripper", "John the Engineer". A defender can hold titles in
-  more than one profession. A tie goes to more points, then Gunner, Ripper,
-  Engineer *(designer's call)*.
+Parked (ID-084): titles stopped coming from stat points and are hidden
+until a later redesign; no name tags ("Bob the Gunner"), badges, title
+bonuses or the Master Gunner burn synergy (§8) for now. Before ID-084 a
+title came from points in a profession's stat (Junior at 10, Adept at 25,
+Master at 50, Legendary at 100, +5% / +15% / +30% / +50% to that
+profession's output).
 
 ### Gear
 
@@ -718,8 +739,8 @@ Each defender level gives **stat points** (3 per level, starting point):
     and its icon goes grey. A loss shows a red callout saying where they got
     in. Below that is one card per survivor: name and level, on a win the XP
     it gave with a bar and a "Level up" badge, their gun select (bordered in
-    the gun's rarity), and on a win their stat points with +Aim / +Grit
-    buttons. The loss screen keeps the cards, so guns can change before the
+    the gun's rarity), and on a win their stat points with + Instinct /
+    + Agility / + Sharp Mind buttons and a greyed-out Tinker (ID-084). The loss screen keeps the cards, so guns can change before the
     retry. The footer says why points can wait, or how a horde is lost.
 
 ## 7. Turrets, energy and traps
@@ -731,7 +752,7 @@ Each defender level gives **stat points** (3 per level, starting point):
   destroyed, so a loss can't delete your build *(designer's call)*. They
   can't be built or bought during a horde.
 - Fire automatically from mounts on walls and towers; an adjacent Engineer
-  adds damage and fire rate (Tech and title scale it).
+  adds damage and fire rate (Tinker will scale it once unlocked, §6).
 - **Energy:** a turret only fires while powered. Each turret draws energy
   per second of firing (idle turrets draw nothing) from the base's
   **battery bank**.
@@ -754,7 +775,7 @@ Each defender level gives **stat points** (3 per level, starting point):
   segment breaks stops firing until the
   segment is repaired. A full repair costs 20 Scrap, in proportion to the
   missing condition (Parts join later). A standing Engineer within 100 px
-  gives +15% damage and fire rate (scaled by Tech and title, not stacked)
+  gives +15% damage and fire rate (not stacked; Tinker scales it later)
   and repairs the most worn turret in reach 0.5 condition/s, never a
   jammed one. Between hordes a turret can be **salvaged** (50% of its
   cost × its condition share back, rounded down; the only way one is
@@ -768,8 +789,8 @@ Each defender level gives **stat points** (3 per level, starting point):
     depots).
   - **Crafted** by a defender at the workbench from Scrap and Parts. A
     crafting job takes real time and keeps
-    running while the game is closed. Higher Tech = faster crafting and better batteries (more
-    charge); an Engineer title adds a quality bonus.
+    running while the game is closed. Tinker (§6, locked for now) will
+    give faster crafting and better batteries (more charge).
 - **Battery quality:** Makeshift, Standard, High-capacity, Military
   *(starting points)* — more charge per battery.
 - **Loading and cap** *(designer's call)*: batteries are loaded into the
@@ -846,8 +867,8 @@ spacing real hordes have (see the ID-077 note below).
   in the field.
 - **Power cards:** refill some battery charge, turrets free to run for one
   wave.
-- **Synergies:** some cards upgrade when paired (e.g. burning rounds + a
-  Master Gunner = burn spreads).
+- **Synergies:** some cards upgrade when paired (e.g. ricochet + piercing
+  rounds).
 - **Rarity:** common / rare / epic; rarer offers more often in later waves.
 - **As built (ID-022, card set reworked by ID-077, starting points):** stat
   cards stay squad-wide (per-profession stat cards come later). Sharpshooter
@@ -882,9 +903,9 @@ spacing real hordes have (see the ID-077 note below).
   common 70 − 4(w − 1)% (min 40), rare 25 + 3(w − 1)% (max 45), epic
   5 + (w − 1)% (max 15), taken in proportion (from wave 8 they sum to 99);
   none of that rarity left → the next rarity down, then up (five repeatable
-  commons are always eligible, so a slot never comes up empty). Synergies: Burning Rounds with a Master (or
-  Legendary) Gunner in the fight spreads burn to enemies within 40 px of one
-  that dies burning; Ricochet + Piercing Rounds bounces keep the pierce the
+  commons are always eligible, so a slot never comes up empty). Synergies
+  (the Master Gunner burn spread is parked with titles, ID-084):
+  Ricochet + Piercing Rounds bounces keep the pierce the
   bullet had left. A card shows a synergy line when it would turn one on.
   Retune (ID-022): the ticket's 50% Ricochet let a campaign without building
   win Horde 5; the 25% above holds every balance target. The gun-role scenes
@@ -1119,7 +1140,8 @@ station + pharmacy + hardware store.
 - **Loot chance:** each search rolls on the location's loot table. **Party
   strength** vs. the location's danger raises the number of rolls and the
   chance of rarer results.
-- **Party strength** = defender levels + weapons + Grit, plus profession
+- **Party strength** = defender levels + weapons (Instinct adds patrol
+  survival later, §6), plus profession
   bonuses where they fit (e.g. an Engineer finds more Parts at an
   electronics store *(guess)*).
 
@@ -1187,7 +1209,7 @@ Set before sending; they apply to any location, plaza or single building.
   throws, as an unknown id does when equipping.
   A party out can't defend, and its weapons can't be changed. Each search
   makes **3 rolls**, +1 per 3 × tier of **party strength** (each member's
-  level + primary weapon's rarity power + Grit), +2 at most; each extra
+  level + primary weapon's rarity power; stats add none since ID-084), +2 at most; each extra
   roll also gives a found weapon a 25% chance of one rarity up. Found
   weapons' rarity rises with the tier (the crater never drops Rusty);
   Gas and batteries go to the power, weapons to the armoury (salvaged for
@@ -1550,7 +1572,8 @@ As built (ID-066), the horde-only build:
   ending ("You held Horde 10", Continue) and play goes on; there is no win
   state.
 - **Balance** (scripted player, 20 seeds, `balance/horde-only.test.ts`): the expected
-  squad (a survivor more per win, every point in Aim, damage cards first)
+  squad (a survivor more per win, every point in Sharp Mind, damage cards
+  first)
   wins each of Hordes 1–10 at the first try on at least 60% of seeds, and
   every campaign beats Horde 10's boss; the lone starting survivor wins
   Horde 1 on every seed and loses every horde from Horde 4.
@@ -1641,6 +1664,17 @@ offline progress works across sessions.
   once, and no unknown or prototype keys. The stash is capped as it is read
   (the camp's 30 owned weapons, stash and hands together; a full horde-only
   stash and six armed survivors is 26), and the save's size check comes first.
+- **As built (ID-084): save version 13** holds the new stats (Instinct,
+  Agility, Sharp Mind, Tinker). A v12 or older save's stats (Aim, Might,
+  Tech, Grit) are checked as before (whole numbers, no more than the XP
+  earned), then every point is refunded as unspent points, on the roster
+  and on survivors waiting to join, and the game says so once, naming
+  where to spend them ("after your next win"; "on the roster" in the full
+  game): an 8-second toast in the
+  horde-only build, the build panel's notice in the full game, and the
+  Load code message). A v13 save with points in Tinker loads with them
+  refunded too. A patrol out in an old save keeps a strength no higher than
+  its party's today.
 
 ## 13. Out of scope (v1)
 
@@ -1690,10 +1724,7 @@ original outline.
   and large mutants; sprites sorted by depth. Base on the left, horde from
   the right.
 - Weapon visible on each defender sprite so the profession reads at a
-  glance; title shown as a small badge. *As built (ID-012, placeholder):* a
-  plate above the defender in their top title's profession colour, one pip
-  per rank (Junior 1 … Legendary 4); the same badge sits by the name on the
-  roster.
+  glance. Title badges are parked with titles (§6, ID-084).
 - Turrets show power (lit / dark) and condition (sparks, smoke) at a
   glance. *As built (ID-014, ID-016, placeholder):* the head is lit when
   powered, dark with no charge or its wall broken, red-brown with a cross
@@ -1749,8 +1780,8 @@ original outline.
   Engineers keep their own art whatever their primary.
 - **As built (ID-074): who is who in a fight.** Each defender has a name tag
   over them, drawn on top of every sprite and effect: a survivor's name just
-  over their HP bar, a full-game defender's name with their title ("Bob the
-  Gunner", §6) over their badge's spot. The build scene shows none. Gunners
+  over their HP bar, a full-game defender's name a little higher, where the
+  title badge sat before titles were parked (§6). The build scene shows none. Gunners
   come in four looks: the soldier, then three others (beanie and navy
   hoodie; cap and red plaid; brown leather jacket, tan trousers and
   ponytail, light enough to read on the dark fight ground). Each other

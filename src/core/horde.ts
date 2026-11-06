@@ -8,7 +8,7 @@ import {
   type TrapKind,
   type TurretMount,
 } from './base.ts';
-import { levelUp, masterGunner, postUsable } from './cards.ts';
+import { levelUp, postUsable } from './cards.ts';
 import { levelScale } from './perks.ts';
 import {
   BANK_CAP,
@@ -32,7 +32,6 @@ import {
   SIDEARM_CLOSE,
   SPAWN_INTERVAL,
   SQUAD_LINE,
-  STAT_EFFECT,
   STEP,
   STRIKE_FLASH,
   MUZZLE_FLASH,
@@ -80,13 +79,14 @@ import {
 import { openReplace } from './replace.ts';
 import { chance, int, rngFrom, type Rng, type RngState } from './rng.ts';
 import {
-  cleaveShare,
   critChance,
+  critDamage,
   damageFactor,
+  damageTaken,
+  dodgeChance,
   fireRateFactor,
   maxHpOf,
   reloadTime,
-  repairFactor,
   spreadOf,
 } from './stats.ts';
 import { enemyHp, horrorAbility, kindFor, waveCount, waveMix, waveSize } from './waves.ts';
@@ -829,13 +829,10 @@ export const perkFactor = (state: PerkView, id: PerkId, base: number): number =>
 
 /**
  * Damage and fire-rate factor a turret gets from the best standing Engineer within
- * their tool's reach (never stacked): `ENGINEER_BUFF`, scaled by Tech and title.
+ * their tool's reach (never stacked): `ENGINEER_BUFF`.
  */
 export function turretBuff(state: HordeState, t: Turret): number {
-  let best = 1;
-  for (const e of engineersNear(state, t))
-    best = Math.max(best, 1 + ENGINEER_BUFF * repairFactor(e));
-  return best;
+  return engineersNear(state, t).length > 0 ? 1 + ENGINEER_BUFF : 1;
 }
 
 /** Standing Engineers whose tool reaches `t`. */
@@ -992,7 +989,7 @@ function step(s: HordeState, rng: Rng): void {
     e.vx = (e.x - wasX[i]!) / STEP;
     e.vy = (e.y - wasY[i]!) / STEP;
   });
-  attack(s, moved);
+  attack(s, moved, rng);
   injure(s);
   drop(s);
   advanceWave(s);
@@ -1490,15 +1487,16 @@ function fire(s: HordeState, rng: Rng): void {
     const id = defender.loadout[slot]!;
     const weapon = weaponOf(id);
     const gun = isGun(id);
-    // Crits roll only when the chance is above 0, so a Ripper or Engineer without Aim leaves the RNG alone.
-    const crit = gun ? critChance(defender) : 0;
+    // Any weapon can crit with Sharp Mind (ID-084). Crits roll only when the chance is
+    // above 0, so a defender without it (or a Gunner's handling) leaves the RNG alone.
+    const crit = critChance(defender, gun);
     const critHit = crit > 0 && chance(rng, crit);
     const hit =
       weapon.damage *
       s.mods.damage *
       boost(s, 'damage') *
       damageFactor(defender, id) *
-      (critHit ? STAT_EFFECT.critDamage : 1);
+      (critHit ? critDamage(defender) : 1);
     if (gun) {
       launch(s, rng, {
         owner: defender.id,
@@ -1515,23 +1513,12 @@ function fire(s: HordeState, rng: Rng): void {
         ...(critHit ? { crit: true as const } : {}),
       });
     } else {
-      popOn(s, target, hit);
+      popOn(s, target, hit, critHit);
       target.hp -= hit;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
-    // Butcher's Hunger counts the blade or tool kills of this strike, cleave included.
-    let kills = !gun && target.hp <= 0 ? 1 : 0;
-    const cleave = weapon.kind === 'blade' ? cleaveShare(defender) : 0;
-    if (cleave > 0) {
-      for (const e of s.enemies) {
-        const near = Math.hypot(e.x - target.x, e.y - target.y) <= STAT_EFFECT.cleaveRadius + EPS;
-        if (e !== target && e.hp > 0 && near) {
-          popOn(s, e, hit * cleave);
-          e.hp -= hit * cleave;
-          if (e.hp <= 0) kills += 1;
-        }
-      }
-    }
+    // Butcher's Hunger counts the blade or tool kill of this strike.
+    const kills = !gun && target.hp <= 0 ? 1 : 0;
     for (let k = 0; k < kills; k++) s.feats.push({ kind: 'kill', by: defender.id, at: s.time });
     if (kills > 0 && perkOn(s, 'butchers-hunger')) hunger(s, defender, kills);
     defender.nextShotAt =
@@ -1634,7 +1621,7 @@ function repairTurrets(s: HordeState): void {
       if (!worst || t.condition < worst.condition) worst = t;
     }
     if (worst) {
-      const gain = TURRET.engineerRepair * repairFactor(d) * STEP;
+      const gain = TURRET.engineerRepair * STEP;
       worst.condition = Math.min(MAX_CONDITION, worst.condition + gain);
     }
   }
@@ -1656,7 +1643,7 @@ function repair(s: HordeState): void {
       if (Math.abs(seg.index - post.row) > 1 || seg.hp <= 0 || seg.hp >= seg.maxHp) continue;
       if (!worst || seg.hp / seg.maxHp < worst.hp / worst.maxHp) worst = seg;
     }
-    if (worst) worst.hp = Math.min(worst.maxHp, worst.hp + w.repair * repairFactor(d) * STEP);
+    if (worst) worst.hp = Math.min(worst.maxHp, worst.hp + w.repair * STEP);
   }
 }
 
@@ -1666,16 +1653,11 @@ export const burning = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
 
 /**
  * Pays XP and cash for every enemy at 0 HP, counts the mutants among them (ID-025), and
- * takes it off the field. Design §8: with Burning Rounds and a Master Gunner in the fight,
- * one that dies burning sets the living enemies within `CARD.burn.spread` alight.
+ * takes it off the field.
  */
 export function removeDead(s: HordeState): void {
-  const spreads = took(s, 'burning-rounds') && masterGunner(s);
   for (const e of s.enemies) {
     if (e.hp > 0) continue;
-    if (spreads && burning(s, e)) {
-      for (const o of around(s, e, CARD.burn.spread)) o.burnUntil = s.time + CARD.burn.seconds;
-    }
     s.xp += ENEMIES[e.kind].xp;
     s.cash += ENEMIES[e.kind].cash * perkFactor(s, 'scavengers-eye', PERK.cash) * s.cashRate;
     if (MUTANTS.includes(e.kind)) s.mutantKills += 1;
@@ -2021,7 +2003,7 @@ function separate(s: HordeState): void {
  * Design §9: a climbing Crawler doesn't attack; a Spewer spits from its stand-off; a
  * Swollen's hit is its blast, which takes it off the field with no kill paid.
  */
-function attack(s: HordeState, moves: Moves): void {
+function attack(s: HordeState, moves: Moves, rng: Rng): void {
   const blown = new Set<number>();
   for (const e of s.enemies) {
     if (stunned(s, e) || e.climbUntil > 0 || !due(s.time, e.nextAttackAt)) continue;
@@ -2030,16 +2012,14 @@ function attack(s: HordeState, moves: Moves): void {
       const defender = moves.reached.get(e.id);
       if (!defender) continue;
       defender.hitBy = e.kind;
-      const damage =
-        enemy.damage * (defender.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
-      defender.hp = Math.max(0, defender.hp - damage);
+      hurt(defender, enemy.damage, rng);
       if (e.kind === 'swollen') blown.add(e.id);
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
     const slide = moves.sliding.get(e.id);
     if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
-    if (e.kind === 'spewer' && spit(s, e)) {
+    if (e.kind === 'spewer' && spit(s, e, rng)) {
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
@@ -2137,10 +2117,10 @@ function blast(s: HordeState, layer: Layer, row: number): void {
 /**
  * Design §9: a Spewer spits at the nearest defender or working turret (not jammed,
  * its wall standing) within `SPEWER.range` (ties → defenders first, then lower
- * index): HP off a defender (a shield blocks its share), condition off a turret.
+ * index): HP off a defender (as any hit, `hurt`), condition off a turret.
  * Returns false when there is none.
  */
-function spit(s: HordeState, e: Enemy): boolean {
+function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
   let best: { x: number; y: number; hit: () => void } | null = null;
   let bestD = Infinity;
   const damage = ENEMIES.spewer.damage;
@@ -2153,8 +2133,7 @@ function spit(s: HordeState, e: Enemy): boolean {
       y: d.y,
       hit: () => {
         d.hitBy = 'spewer';
-        const taken = damage * (d.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
-        d.hp = Math.max(0, d.hp - taken);
+        hurt(d, damage, rng);
       },
     };
   }
@@ -2170,6 +2149,21 @@ function spit(s: HordeState, e: Enemy): boolean {
   best.hit();
   s.spits.push({ fromX: e.x, fromY: e.y, x: best.x, y: best.y, at: s.time + STEP });
   return true;
+}
+
+/**
+ * A hit of `damage` on defender `d` (design §6): a shield's share and Instinct's armour
+ * off. One that would drop them to 0 HP leaves them at 1 instead on an Instinct roll,
+ * rolled only for a survivor with Instinct so the RNG is left alone otherwise.
+ */
+function hurt(d: Defender, damage: number, rng: Rng): void {
+  const hp = d.hp - damageTaken(d, damage);
+  if (hp > 0) {
+    d.hp = hp;
+    return;
+  }
+  const dodge = dodgeChance(d);
+  d.hp = dodge > 0 && d.hp > 1 && chance(rng, dodge) ? 1 : 0;
 }
 
 /** Takes `amount` off `t`'s condition; float noise near 0 (1 − 5 × 0.2) jams it rather than leaving a sliver. */

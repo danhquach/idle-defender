@@ -44,7 +44,7 @@ import {
 } from '../storage/settings.ts';
 import { Animator } from './anim.ts';
 import { SoundEngine, STING } from './audio.ts';
-import { createBuildPanel, FIELD_GREW } from './build.ts';
+import { createBuildPanel, FIELD_GREW, STATS_REFUNDED } from './build.ts';
 import {
   buildCamera,
   EASE_MS,
@@ -84,6 +84,8 @@ import type { Art } from './sprites.ts';
 const MAX_DT = 0.1;
 /** A press that moves less than this (CSS px) before release is a click, not a drag. */
 const CLICK_SLOP = 5;
+/** How long the one-time stat refund note stays up, in ms (ID-084). */
+const REFUND_TOAST_MS = 8000;
 
 /**
  * What Esc does, first match wins: put an armed skill away, close the open slot, drop
@@ -441,8 +443,15 @@ export function start(root: HTMLElement, art: Art): void {
     menu.status('rejected');
     panel?.notice(SAVE_STATUS.rejected.text);
     if (!panel) hud.toast(SAVE_STATUS.rejected.text);
-  } else if (loaded.save?.grew) {
-    panel?.notice(FIELD_GREW);
+  } else if (loaded.save) {
+    // Said once: the next save is the new version, the field grown and the points refunded.
+    const notes = [
+      ...(loaded.save.grew ? [FIELD_GREW] : []),
+      ...(loaded.save.refunded ? [STATS_REFUNDED] : []),
+    ].join(' ');
+    if (panel && notes) panel.notice(notes);
+    // A one-time note: up long enough to read (ID-084).
+    else if (!panel && loaded.save.refunded) hud.toast(STATS_REFUNDED, REFUND_TOAST_MS);
   }
 
   // A fight isn't saved, and neither is its payout until "Back to build": while one

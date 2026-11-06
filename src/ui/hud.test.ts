@@ -190,11 +190,8 @@ describe('hud', () => {
       'Jack — Ripper',
       'John — Engineer',
     ]);
-    // The name tag is the top title, whatever weapon they hold now.
-    const stats: Stats = { ...NO_STATS, aim: 10 };
-    expect(defenderLabel({ name: 'Jack', loadout: loadoutFrom('knife'), stats })).toBe(
-      'Jack the Gunner — Ripper',
-    );
+    // Titles are parked (ID-084): the name alone, whatever weapon they hold now.
+    expect(defenderLabel({ name: 'Jack', loadout: loadoutFrom('pistol') })).toBe('Jack — Gunner');
   });
 
   it('lists amounts in material order, skipping zeros', () => {
@@ -418,7 +415,7 @@ describe('hud', () => {
       const { game, s } = ended('won');
       game.roster[0]!.xp = 20; // Bob: level 2 with this win
       game.roster[1]!.xp = 30; // Jack: level 2 already, 1 of 3 points spent; no level-up
-      game.roster[1]!.stats = { ...NO_STATS, might: 1 };
+      game.roster[1]!.stats = { ...NO_STATS, agility: 1 };
       game.roster[1]!.loadout = loadoutFrom('knife');
       game.roster[2]!.xp = 500; // John: points to spend, but not in this fight
       const r = resultScreen(game, s, NOW);
@@ -428,37 +425,27 @@ describe('hud', () => {
       ]);
       expect(r.picks.map((d) => [d.id, d.xp, d.stats])).toEqual([
         ['bob', 35, NO_STATS],
-        ['jack', 45, { ...NO_STATS, might: 1 }],
+        ['jack', 45, { ...NO_STATS, agility: 1 }],
       ]);
       // Building the screen leaves the game alone.
       expect(game.roster[0]!.xp).toBe(20);
     });
 
-    it('the picker row: points left, a button per stat, new titles', () => {
+    it('the picker row: points left, a button per stat, Tinker greyed out (ID-084)', () => {
       const bob = { ...newGame().roster[0]!, xp: 1e6 };
-      expect(pickerRow(bob, NO_STATS)).toEqual({
+      expect(pickerRow(bob)).toEqual({
         heading: 'Bob · 846 stat points to spend',
-        note: '',
         buttons: [
-          { stat: 'aim', label: 'Aim 0', disabled: false },
-          { stat: 'might', label: 'Might 0', disabled: false },
-          { stat: 'tech', label: 'Tech 0', disabled: false },
-          { stat: 'grit', label: 'Grit 0', disabled: false },
+          { stat: 'instinct', label: 'Instinct 0', disabled: false },
+          { stat: 'agility', label: 'Agility 0', disabled: false },
+          { stat: 'mind', label: 'Sharp Mind 0', disabled: false },
+          { stat: 'tinker', label: 'Tinker (locked)', disabled: true },
         ],
       });
-      const was: Stats = { ...NO_STATS, aim: 9, might: 24 };
-      const now: Stats = { ...NO_STATS, aim: 10, might: 25 };
-      // Level 13 earns 36 points; 33 spent before, 38 after would be too many, so 36.
-      const xp = 25 * ((13 * 12) / 2);
-      expect(pickerRow({ ...bob, xp, stats: { ...was } }, was)).toMatchObject({
-        heading: 'Bob the Ripper · 3 stat points to spend',
-        note: '',
-      });
-      expect(pickerRow({ ...bob, xp, stats: { ...now, tech: 1 } }, was)).toMatchObject({
-        heading: 'Bob the Ripper · 0 stat points to spend',
-        note: 'New title: Junior Gunner, Adept Ripper',
-      });
-      const none = pickerRow({ ...bob, xp: 25, stats: { ...NO_STATS, grit: 3 } }, NO_STATS);
+      // No titles any more (ID-084): the heading is the name, however many points.
+      const lots: Stats = { ...NO_STATS, instinct: 30, mind: 30 };
+      expect(pickerRow({ ...bob, stats: lots }).heading).toBe('Bob · 786 stat points to spend');
+      const none = pickerRow({ ...bob, xp: 25, stats: { ...NO_STATS, instinct: 3 } });
       expect(none.heading).toBe('Bob · 0 stat points to spend');
       expect(none.buttons.every((b) => b.disabled)).toBe(true);
     });

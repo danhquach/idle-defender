@@ -181,17 +181,22 @@ describe('nextHorde', () => {
 });
 
 describe('spendAll', () => {
-  it("puts every point into the held weapon's stat, and leaves a game with none alone", () => {
+  it("puts every point into the job's stat, and leaves a game with none alone", () => {
     const g = newGame();
-    g.roster[0]!.xp = 25; // Bob, pistol: 3 points
-    g.roster[1]!.xp = 75; // Jack, knife: 6 points, 1 already in Grit
-    g.roster[1]!.stats = { ...NO_STATS, grit: 1 };
+    g.roster[0]!.xp = 25; // Bob, a Gunner: 3 points
+    g.roster[1]!.xp = 75; // Jack, a Ripper: 6 points, 2 already in Instinct
+    g.roster[1]!.stats = { ...NO_STATS, instinct: 2 };
+    g.roster[2]!.xp = 25; // John, an Engineer: 3 points
     const after = spendAll(g);
     expect(after.roster.map((d) => d.stats)).toEqual([
-      { ...NO_STATS, aim: 3 },
-      { ...NO_STATS, might: 5, grit: 1 },
-      NO_STATS,
+      { ...NO_STATS, mind: 3 },
+      { ...NO_STATS, instinct: 2, mind: 4 },
+      { ...NO_STATS, agility: 3 },
     ]);
+    // A plain survivor (horde-only, ID-066) puts theirs in Sharp Mind.
+    const squad = newGame('horde');
+    squad.roster[0]!.xp = 25;
+    expect(spendAll(squad).roster[0]!.stats).toEqual({ ...NO_STATS, mind: 3 });
     expect(g.roster[0]!.stats).toEqual(NO_STATS);
     expect(spendAll(newGame())).toEqual(newGame());
   });

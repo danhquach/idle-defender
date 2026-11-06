@@ -1,10 +1,9 @@
 // Design §8, as built ID-022: the card pool — behaviour, barrier and power cards on
-// real bullets, rarity by wave, and the two synergies.
+// real bullets, rarity by wave, and the synergy (the Master Gunner one is parked, ID-084).
 import { describe, expect, it } from 'vitest';
 import {
   chooseCard,
   eligible,
-  masterGunner,
   rarityOdds,
   rollOffer,
   synergyOf,
@@ -591,32 +590,19 @@ describe('power cards', () => {
 });
 
 describe('synergies', () => {
-  /** Burning Rounds taken; a burning enemy about to die and a neighbour not burning. */
-  function dying(stats: { aim: number }) {
+  it('Burning Rounds never spreads: a burning enemy that dies leaves its neighbour alone (ID-084)', () => {
     const s = quiet('burning-rounds');
     const spec = {
       id: 'g',
       name: 'G',
       loadout: { primary: 'pistol' as const, secondary: null, item: null },
-      stats: { aim: stats.aim, might: 0, tech: 0, grit: 0 },
+      stats: { instinct: 50, agility: 50, mind: 50, tinker: 0 },
     };
     s.defenders.push(standing(spec, { ...s.posts[1]!, id: 1 }, 1e9));
     enemy(s, { ...still, hp: 0.01, x: 900, y: ROW4, burnUntil: 2 });
-    const near = enemy(s, { ...tough, ...still, x: 900, y: ROW4 + CARD.burn.spread - 5 });
-    const far = enemy(s, { ...tough, ...still, x: 900, y: ROW4 + CARD.burn.spread + 20 });
+    const near = enemy(s, { ...tough, ...still, x: 900, y: ROW4 + 5 });
     const t = tick(s, STEP);
-    const burn = (id: number) => t.enemies.find((e) => e.id === id)!.burnUntil ?? 0;
-    return { s, near: burn(near.id), far: burn(far.id) };
-  }
-
-  it('Burning Rounds + a Master Gunner: a burning enemy that dies sets those near it alight', () => {
-    const master = dying({ aim: 50 });
-    expect(masterGunner(master.s)).toBe(true);
-    expect(master.near).toBeCloseTo(CARD.burn.seconds, 9);
-    expect(master.far).toBe(0);
-    const adept = dying({ aim: 49 });
-    expect(masterGunner(adept.s)).toBe(false);
-    expect(adept.near).toBe(0);
+    expect(t.enemies.find((e) => e.id === near.id)!.burnUntil ?? 0).toBe(0);
   });
 
   it('Ricochet + Piercing Rounds: the bounce keeps the pierce the bullet had before the hit', () => {
@@ -639,9 +625,8 @@ describe('synergies', () => {
     expect(synergyOf(s, 'ricochet')).toMatch(/Piercing Rounds/);
     s.taken = ['ricochet'];
     expect(synergyOf(s, 'piercing-rounds')).toMatch(/Ricochet/);
+    s.defenders[0]!.stats = { instinct: 50, agility: 50, mind: 50, tinker: 0 };
     expect(synergyOf(s, 'burning-rounds')).toBeNull();
-    s.defenders[0]!.stats = { aim: 50, might: 0, tech: 0, grit: 0 };
-    expect(synergyOf(s, 'burning-rounds')).toMatch(/Master Gunner/);
     expect(synergyOf(s, 'sharpshooter')).toBeNull();
   });
 });

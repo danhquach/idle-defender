@@ -2173,15 +2173,15 @@ describe('the horde-only fight (ID-068)', () => {
       for (const d of h.defenders) expect(build.texts.map((t) => t.text)).not.toContain(d.name);
     });
 
-    it("names a titled full-game defender with their title, as the roster does; a survivor's never", () => {
+    it('names every defender by name alone, whatever their stats: titles are parked (ID-084)', () => {
       const game = newGame();
       const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
       const d = h.defenders.find((x) => h.posts.some((p) => p.id === x.postId))!;
-      const titled = { ...d, stats: { aim: 100, might: 0, tech: 0, grit: 0 } };
+      const statted = { ...d, stats: { instinct: 100, agility: 100, mind: 100, tinker: 0 } };
       const cam = frameCamera({ w: 1280, h: 720 });
-      const full = tagged({ ...h, defenders: [titled] }, cam).texts.map((t) => t.text);
-      expect(full).toEqual([`${d.name} the Gunner`]);
-      const plain = tagged({ ...h, defenders: [{ ...titled, plain: true }] }, cam).texts;
+      const full = tagged({ ...h, defenders: [statted] }, cam).texts.map((t) => t.text);
+      expect(full).toEqual([d.name]);
+      const plain = tagged({ ...h, defenders: [{ ...statted, plain: true }] }, cam).texts;
       expect(plain.map((t) => t.text)).toEqual([d.name]);
     });
   });

@@ -55,7 +55,9 @@ import {
   prePlazas,
   preRisk,
   preCars,
+  preStats,
   preSurvivors,
+  refunded,
 } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
@@ -425,13 +427,13 @@ describe('save', () => {
   it('round-trips stats, and loads a save from before stats with all 0', () => {
     const g = played();
     g.roster[1]!.xp = 75;
-    g.roster[1]!.stats = { aim: 1, might: 3, tech: 0, grit: 2 };
+    g.roster[1]!.stats = { instinct: 1, agility: 3, mind: 2, tinker: 0 };
     expect(decodeSave(encodeSave(g, NOW))).toEqual({ savedAt: NOW, game: g });
     const old = hostile((s) => {
       for (const d of s.game.roster) delete d.stats;
     }) as Loose;
     expect(old.game.roster.map((d: Loose) => d.stats)).toEqual(
-      played().roster.map(() => ({ aim: 0, might: 0, tech: 0, grit: 0 })),
+      played().roster.map(() => ({ instinct: 0, agility: 0, mind: 0, tinker: 0 })),
     );
   });
 
@@ -442,16 +444,16 @@ describe('save', () => {
         change(s.game.roster[0].stats);
       });
     expect(at(() => {})).not.toBeNull();
-    expect(at((t) => (t.aim = 6))).not.toBeNull(); // level 3: exactly the 6 points earned
-    expect(at((t) => (t.aim = 7))).toBeNull(); // more than earned
-    expect(at((t) => Object.assign(t, { aim: 2, might: 2, tech: 2, grit: 1 }))).toBeNull();
-    expect(at((t) => (t.aim = 1), 24)).toBeNull(); // level 1 has none
-    expect(at((t) => (t.aim = -1))).toBeNull();
-    expect(at((t) => (t.aim = 0.5))).toBeNull();
-    expect(at((t) => (t.aim = '1'))).toBeNull();
-    expect(at((t) => (t.aim = 1e13), 1e12)).toBeNull();
+    expect(at((t) => (t.mind = 6))).not.toBeNull(); // level 3: exactly the 6 points earned
+    expect(at((t) => (t.mind = 7))).toBeNull(); // more than earned
+    expect(at((t) => Object.assign(t, { mind: 2, agility: 2, tinker: 2, instinct: 1 }))).toBeNull();
+    expect(at((t) => (t.mind = 1), 24)).toBeNull(); // level 1 has none
+    expect(at((t) => (t.mind = -1))).toBeNull();
+    expect(at((t) => (t.mind = 0.5))).toBeNull();
+    expect(at((t) => (t.mind = '1'))).toBeNull();
+    expect(at((t) => (t.mind = 1e13), 1e12)).toBeNull();
     expect(at((t) => (t.luck = 1))).toBeNull();
-    expect(at((t) => delete t.grit)).toBeNull();
+    expect(at((t) => delete t.instinct)).toBeNull();
     expect(hostile((s) => (s.game.roster[0].stats = null))).toBeNull();
     expect(hostile((s) => (s.game.roster[0].stats = [0, 0, 0, 0]))).toBeNull();
     expect(hostile((s) => (s.game.roster[0].stats = 'aim'))).toBeNull();
@@ -472,9 +474,9 @@ describe('save', () => {
     expect(oldRaw).not.toContain('"stats"');
     expect(decodeSave(oldRaw)).toBeNull();
     // Overspent at scale: the earned-points check, not the per-stat cap, refuses it.
-    expect(at((t) => (t.aim = 3 * 282_842 + 1), 1e12)).toBeNull();
-    expect(at((t) => (t.aim = 3 * 282_842), 1e12)).not.toBeNull();
-    const raw = encodeSave(played(), NOW).replace('"aim"', '"__proto__":{"polluted":1},"aim"');
+    expect(at((t) => (t.mind = 3 * 282_842 + 1), 1e12)).toBeNull();
+    expect(at((t) => (t.mind = 3 * 282_842), 1e12)).not.toBeNull();
+    const raw = encodeSave(played(), NOW).replace('"mind"', '"__proto__":{"polluted":1},"mind"');
     expect(decodeSave(raw)).toBeNull();
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
@@ -1128,7 +1130,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 13, '1', '12', 1.5, null]) {
+    for (const v of [0, 14, '1', '13', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1378,7 +1380,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(12);
+    expect(SAVE_VERSION).toBe(13);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1934,6 +1936,49 @@ describe('save: survivors (ID-032)', () => {
     expect(changed((g) => (g.camp.offers[0].picks = []))).not.toBeNull();
   });
 
+  it('a v12 save refunds survivors waiting too, and checks their old stats (ID-084)', () => {
+    const g = joined();
+    expect(g.camp.offers[0]!.survivor!.stats).not.toEqual(
+      refunded(g).camp.offers[0]!.survivor!.stats,
+    );
+    const v12 = (change: (game: Loose) => void = () => {}) => {
+      const game = preStats(g) as Loose;
+      change(game);
+      return decodeSave(JSON.stringify({ v: 12, savedAt: NOW, game }));
+    };
+    expect(v12()).toEqual({ game: refunded(g), savedAt: NOW, refunded: true });
+    // Overspent, new keys, or a prototype key on a camp-offer or report survivor: refused.
+    expect(v12((x) => (x.camp.offers[0].survivor.stats.aim = 99))).toBeNull();
+    expect(v12((x) => (x.reports[0].survivors[0].stats.grit = 1))).toBeNull(); // level 1 has none
+    expect(
+      v12(
+        (x) => (x.reports[0].survivors[0].stats = { instinct: 0, agility: 0, mind: 0, tinker: 0 }),
+      ),
+    ).toBeNull();
+    const proto = JSON.stringify({ v: 12, savedAt: NOW, game: preStats(g) }).replace(
+      /("survivor":\{[^}]*?"stats":)\{"aim"/,
+      '$1{"__proto__":{"polluted":1},"aim"',
+    );
+    expect(proto).toContain('"__proto__"');
+    expect(decodeSave(proto)).toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('points in Tinker on a survivor waiting are refunded, never past what they earned (ID-084)', () => {
+    const offer = changed(
+      (x) => (x.camp.offers[0].survivor.stats = { instinct: 0, agility: 0, mind: 0, tinker: 1 }),
+    ) as Loose;
+    expect(offer.refunded).toBe(true);
+    expect(offer.game.camp.offers[0].survivor.stats).toEqual({
+      instinct: 0,
+      agility: 0,
+      mind: 0,
+      tinker: 0,
+    });
+    // A level-1 survivor from a patrol has earned none, so even one in Tinker is refused.
+    expect(changed((x) => (x.reports[0].survivors[0].stats.tinker = 1))).toBeNull();
+  });
+
   it('loads a v8 save with no survivors and its offers as bare picks, and refuses mixed shapes', () => {
     const g = { ...joined(), reports: [{ ...joined().reports[0]!, survivors: [] }] };
     const plain = {
@@ -1942,7 +1987,7 @@ describe('save: survivors (ID-032)', () => {
     };
     const v8 = preSurvivors(plain);
     const old = decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: v8 }))?.game;
-    expect(old).toEqual(plain);
+    expect(old).toEqual(refunded(plain));
     // A v8 save never held survivors; a v9 one must.
     expect(
       decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: JSON.parse(encodeSave(g, NOW)).game })),
@@ -2168,8 +2213,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 12 (survivors, the car, the research queue, then the reserve came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(12);
+  it('is version 13 (survivors, the car, the research queue, the reserve, then the stats came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(13);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {

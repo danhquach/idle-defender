@@ -21,7 +21,6 @@ import {
   TRAP_DURABILITY,
   WALL,
   type EnemyKind,
-  type Profession,
   type Tier,
 } from '../core/data.ts';
 import {
@@ -48,7 +47,6 @@ import { baseOf } from '../core/armoury.ts';
 import { CHAT, CHAT_RANK, type Bubble } from '../core/chatter.ts';
 import { professionOf } from '../core/loadout.ts';
 import { carpet } from '../core/skills.ts';
-import { badgeOf, nameTag } from '../core/stats.ts';
 import {
   depthSort,
   FIGHT_FRAME,
@@ -117,13 +115,6 @@ import {
   type Art,
   type ArtId,
 } from './sprites.ts';
-
-/** Title badge colour per profession: muted, so the horde keeps the saturated colours. */
-export const BADGE_COLOUR: Readonly<Record<Profession, string>> = {
-  gunner: '#b9a35c',
-  ripper: '#a8615c',
-  engineer: '#c47f3c',
-};
 
 /**
  * The fight's dusk (ID-071): a dark, slightly cool wash over the ground and the
@@ -261,7 +252,7 @@ const DEFENDER = PIECE.defender;
  */
 const STAND = { defender: 40, enemy: 34, shield: 26 } as const;
 /**
- * How high a defender's HP bar and title badge sit, above their feet: over the head of a
+ * How high a defender's HP bar sits, above their feet: over the head of a
  * full-height (`ART_PX`) sprite, so neither covers the face (ID-069's survivors stand the
  * full height).
  */
@@ -318,8 +309,11 @@ const HP_BAR = { w: 24, h: 4, gap: 6 } as const;
  * than an enemy's, at least `min` px on screen, with a dark edge, so each reads at a glance.
  */
 export const SURVIVOR_BAR = { w: 30, h: 5, min: { w: 30, h: 5 }, edge: 1 } as const;
-/** The title badge over a defender (design §15): a plate of `pip`-wide pips, above the HP bar. */
-const BADGE = { pip: 4, gap: 2, pad: 2, z: 14, pipColour: '#1b1a18' } as const;
+/**
+ * A full-game defender's name tag spot over their HP bar: `z` px higher, lifted half a
+ * `h`-px plate (where the title badge sat before titles were parked, ID-084).
+ */
+const TAG_SPOT = { h: 8, z: 14 } as const;
 /** A name plate's height in screen px (its font is `MARK.plate`). */
 export const PLATE_H = 14;
 /** The screen px between a defender's name tag (ID-074) and the bar or badge under it. */
@@ -648,38 +642,15 @@ function drawHpBar(
   ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, hp / maxHp), h);
 }
 
-/** A titled defender's badge: their top title's colour, one dark pip per rank; none for a plain survivor (ID-066). */
-function drawBadge(
-  ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y' | 'stats' | 'plain'>,
-  z0: number,
-  cam: Camera,
-): void {
-  const badge = d.stats && !d.plain ? badgeOf(d.stats) : null;
-  if (!badge) return;
-  const at = project({ x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z }, cam);
-  const pip = BADGE.pip * cam.zoom;
-  const gap = BADGE.gap * cam.zoom;
-  const pad = BADGE.pad * cam.zoom;
-  const w = badge.pips * pip + (badge.pips - 1) * gap + 2 * pad;
-  const h = pip + 2 * pad;
-  ctx.fillStyle = BADGE_COLOUR[badge.profession];
-  ctx.fillRect(at.sx - w / 2, at.sy - h / 2, w, h);
-  ctx.fillStyle = BADGE.pipColour;
-  for (let i = 0; i < badge.pips; i++) {
-    ctx.fillRect(at.sx - w / 2 + pad + i * (pip + gap), at.sy - pip / 2, pip, pip);
-  }
-}
-
 /**
  * A defender standing `z0` up at `(x, y)`: their profession's sprite (the weapon tells
  * it, design §15; a Gunner's shows their primary) in `pose`, a shield in front if they
- * carry one, a ring at their feet when selected, their title badge and an HP bar once hurt.
+ * carry one, a ring at their feet when selected, and an HP bar once hurt.
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
   art: Art,
-  d: Pick<Defender, 'id' | 'x' | 'y' | 'hp' | 'maxHp' | 'loadout' | 'stats' | 'plain'>,
+  d: Pick<Defender, 'id' | 'x' | 'y' | 'hp' | 'maxHp' | 'loadout' | 'plain'>,
   z0: number,
   selected: boolean,
   cam: Camera,
@@ -702,7 +673,6 @@ function drawDefender(
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
     drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam, pose);
   }
-  drawBadge(ctx, d, z0, cam);
   const bar = { x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap / 2 };
   // A survivor's bar always shows (ID-068); a full-game defender's once hurt.
   if (d.plain) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, SURVIVOR_BAR, true);
@@ -710,18 +680,17 @@ function drawDefender(
 }
 
 /**
- * A defender's name tag in a fight (ID-074), as the roster names them: a survivor by
- * name, just over their HP bar; a full-game defender with their title (design §6, "Bob
- * the Gunner"), over their title badge's spot. Either way clear of the head.
+ * A defender's name tag in a fight (ID-074), by name: a survivor's just over their HP
+ * bar; a full-game defender's a little higher (`TAG_SPOT`). Either way clear of the head.
  */
 function drawNameTag(
   ctx: CanvasRenderingContext2D,
-  d: Pick<Defender, 'x' | 'y' | 'name' | 'plain' | 'stats'>,
+  d: Pick<Defender, 'x' | 'y' | 'name' | 'plain'>,
   z0: number,
   cam: Camera,
 ): void {
   const { at, lift } = tagSpot(d, z0, cam);
-  drawPlate(ctx, d.plain ? d.name : nameTag(d), at, cam, false, lift);
+  drawPlate(ctx, d.name, at, cam, false, lift);
 }
 
 /** Where a defender's name plate sits: its anchor and how far its bottom is lifted over it. */
@@ -736,8 +705,11 @@ function tagSpot(
     const bar = Math.max(SURVIVOR_BAR.min.h, SURVIVOR_BAR.h * cam.zoom) + 2 * SURVIVOR_BAR.edge;
     return { at, lift: bar + NAME_TAG_GAP };
   }
-  const badge = ((BADGE.pip + 2 * BADGE.pad) * cam.zoom) / 2;
-  return { at: { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + BADGE.z }, lift: badge + NAME_TAG_GAP };
+  const half = (TAG_SPOT.h * cam.zoom) / 2;
+  return {
+    at: { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + TAG_SPOT.z },
+    lift: half + NAME_TAG_GAP,
+  };
 }
 
 /**
@@ -2146,7 +2118,7 @@ function drawBubbles(
   const tags: ScreenBox[] = standing.map(({ d, z0 }) => {
     const { at, lift } = tagSpot(d, z0, cam);
     const p = project(at, cam);
-    const w = ctx.measureText(d.plain ? d.name : nameTag(d)).width + 2 * OFF_FRAME.pad;
+    const w = ctx.measureText(d.name).width + 2 * OFF_FRAME.pad;
     return { x0: p.sx - w / 2, x1: p.sx + w / 2, y0: p.sy - lift - PLATE_H - pie, y1: p.sy - lift };
   });
   const shown = chat.bubbles.flatMap((b) => {
