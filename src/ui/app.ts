@@ -20,7 +20,13 @@ import {
   tick,
   type HordeState,
 } from '../core/horde.ts';
-import { combineGuns, equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
+import {
+  combineGuns,
+  equipGun,
+  finishSquadHorde,
+  startSquadHorde,
+  type GunChoice,
+} from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
 import { chatter, newChat } from '../core/chatter.ts';
@@ -63,7 +69,7 @@ import {
   squadScreen,
   squadStart,
 } from './hud.ts';
-import { COMBINE_WAIT, createInventory } from './inventory.ts';
+import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
 import { createRoster, type Roster } from './squadroster.ts';
@@ -272,16 +278,29 @@ export function start(root: HTMLElement, art: Art): void {
   function showGear(): void {
     hud.showGear(squadGear(game), (defenderId, choice) => {
       if (horde && endedAt === null) return;
-      const r = equipGun(game, defenderId, choice);
-      if (r.ok) {
-        commit(r.game);
-        // The start screen's squad on the wall holds the new gun too.
-        if (!horde) preview = startSquadHorde(game, 0, Date.now());
-      } else {
+      const r = changeGun(defenderId, choice);
+      if (!r.ok) {
         hud.toast(r.reason);
+        showGear();
       }
-      showGear();
     });
+  }
+  /**
+   * Gives survivor `defenderId` gun `choice` between hordes (the gun pickers, and the
+   * Inventory's drag and drop, ID-095): saved at once, and the pickers redrawn.
+   */
+  function changeGun(
+    defenderId: string,
+    choice: GunChoice,
+  ): { ok: true } | { ok: false; reason: string } {
+    if (horde && endedAt === null) return { ok: false, reason: GUNS_WAIT };
+    const r = equipGun(game, defenderId, choice);
+    if (!r.ok) return r;
+    commit(r.game);
+    // The start screen's squad on the wall holds the new gun too.
+    if (!horde) preview = startSquadHorde(game, 0, Date.now());
+    showGear();
+    return { ok: true };
   }
   /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
   function startFight(next: HordeState): void {
@@ -366,6 +385,8 @@ export function start(root: HTMLElement, art: Art): void {
           return { ok: true, weapon: r.weapon };
         }
       : undefined,
+    // Drag and drop (ID-095), horde-only and between hordes, as the gun pickers.
+    onEquip: HORDE_ONLY ? changeGun : undefined,
   });
   const menu = createMenu(root, {
     state: () => ({ game, fighting: horde !== null, held }),

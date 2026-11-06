@@ -13,6 +13,7 @@ import { tick, type HordeState } from '../core/horde.ts';
 import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
 import { start } from './app.ts';
+import { GUNS_WAIT } from './inventory.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
 
@@ -233,6 +234,30 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     select.dispatchEvent(new Event('change'));
     expect(heading()).toBe('Stash 0/20');
     expect(squadGun()).toBe('Relic Rifle');
+  });
+
+  it('equips from the Inventory (ID-095): saved at once, and the gun picker follows', () => {
+    const { root, invButton, invScrim, saved } = seeded();
+    invButton.click();
+    invScrim.querySelector<HTMLButtonElement>('.inv-slot[data-key="stash:h1"]')!.click();
+    invScrim.querySelector<HTMLButtonElement>('.inv-equip-on')!.click();
+    expect(saved().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
+    expect(saved().armoury).toHaveLength(0);
+    expect(root.querySelector<HTMLSelectElement>('.hud-gear-select')!.value).toBe('h1');
+    expect(invScrim.querySelector('.inv-status')!.textContent).toMatch(/now holds Relic Rifle$/);
+    // And back: Unequip puts it in the stash.
+    invScrim.querySelector<HTMLButtonElement>('.inv-unequip')!.click();
+    expect(saved().roster[0]!.loadout.primary).toBe('pistol');
+    expect(root.querySelector<HTMLSelectElement>('.hud-gear-select')!.value).toBe('pistol');
+  });
+
+  it('mid-fight the Inventory moves no guns and says when they change (ID-095)', () => {
+    const { button, invButton, invScrim } = seeded();
+    button().click();
+    step(16);
+    invButton.click();
+    expect(invScrim.textContent).toContain(GUNS_WAIT);
+    expect(invScrim.querySelectorAll('.inv-equip-on, .inv-unequip, [data-drag]')).toHaveLength(0);
   });
 });
 
