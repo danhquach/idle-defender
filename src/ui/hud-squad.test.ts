@@ -215,6 +215,11 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     expect(imgs[0]!.getAttribute('src')).toBe(ART_URLS[screen.debrief!.drop!.icon]);
     // The debrief (ID-067): their card, and their points row's button names them too.
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
+    // The name is the button that opens their card (ID-086): text, label and id stay plain.
+    const open = root.querySelector<HTMLButtonElement>('.squad-card-open')!;
+    expect(open.textContent).toBe(evil);
+    expect(open.getAttribute('aria-label')).toBe(`${evil}: open survivor card`);
+    expect(open.dataset.openSurvivor).toBe(g.roster[0]!.id);
     expect(root.querySelector('.hud-pick-stat')!.getAttribute('aria-label')).toBe(
       `Add Instinct to ${evil}, now 0`,
     );

@@ -66,6 +66,7 @@ import {
 import { createInventory } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
+import { createRoster, type Roster } from './squadroster.ts';
 import { cuesBetween } from './sound.ts';
 import {
   fightHitAt,
@@ -255,12 +256,7 @@ export function start(root: HTMLElement, art: Art): void {
   function squadNext(): void {
     if (horde) {
       if (endedAt === null) return;
-      let next = game;
-      for (const [id, stat] of spends) {
-        const r = spendPoint(next, id, stat);
-        if (r.ok) next = r.game;
-      }
-      commit(next);
+      commit(pending());
     }
     // The seed is the only randomness from outside the core.
     const now = Date.now();
@@ -377,10 +373,57 @@ export function start(root: HTMLElement, art: Art): void {
       writeChatter(storage, level);
     },
   });
-  const dialogOpen = (): boolean => menu.isOpen() || inventory.isOpen();
+  /** The game with the points spent on the result screen so far (saved with its button). */
+  function pending(): GameState {
+    let next = game;
+    for (const [id, stat] of spends) {
+      const r = spendPoint(next, id, stat);
+      if (r.ok) next = r.game;
+    }
+    return next;
+  }
+  // The Roster (ID-086), left of the Inventory, in the horde-only build: every survivor,
+  // and each one's card. Its + spends a point between hordes: on the result screen with
+  // the screen's own picks, on the start screen at once.
+  const roster: Roster | null = HORDE_ONLY
+    ? createRoster(root, {
+        state: () => ({
+          game: pending(),
+          fight: horde?.outcome === 'fighting' ? horde : null,
+          canSpend: !horde || endedAt !== null,
+          resumes: horde?.outcome === 'fighting' && !held,
+        }),
+        onSpend: (id, stat) => {
+          if (horde && endedAt === null) return;
+          const r = spendPoint(pending(), id, stat);
+          if (!r.ok) {
+            hud.toast(r.reason);
+            return;
+          }
+          if (horde) {
+            spends.push([id, stat]);
+            hud.syncPicks(r.game.roster);
+            refreshDialogs();
+            return;
+          }
+          commit(r.game);
+          // The start screen's squad on the wall stands with the new HP too.
+          preview = startSquadHorde(game, 0, Date.now());
+        },
+      })
+    : null;
+  // A survivor's name on the squad screen opens their card.
+  root.addEventListener('click', (e) => {
+    const t =
+      e.target instanceof Element ? e.target.closest<HTMLElement>('[data-open-survivor]') : null;
+    const id = t?.dataset.openSurvivor;
+    if (roster && t && id !== undefined) roster.open(id, t);
+  });
+  const dialogOpen = (): boolean => menu.isOpen() || inventory.isOpen() || !!roster?.isOpen();
   function refreshDialogs(): void {
     menu.refresh();
     inventory.refresh();
+    roster?.refresh();
   }
   /** Takes `next` as the game and saves it; the menu's Save tab says how that went. */
   function commit(next: GameState): void {

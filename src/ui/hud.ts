@@ -748,6 +748,9 @@ export const SQUAD_NO_DROP = 'No weapon drop on a loss';
 /** How a horde-only horde is lost (ID-066, design §2), for the start screen and Help. */
 export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivor is down.';
 
+/** Over the squad's cards (ID-086): a name opens that survivor's card in the Roster. */
+export const SQUAD_CARD_HINT = 'Tap a name to see their card and what each point adds.';
+
 /** Under the horde-only stat picker: points not spent now aren't lost. */
 export const SQUAD_POINTS_NOTE = 'Unspent points are kept for later.';
 
@@ -918,6 +921,11 @@ export function createHud(
   showResult(screen: ResultScreen): void;
   /** The horde-only gun pickers (ID-067) on the result or start screen; each pick goes to `onEquip`. */
   showGear(gear: GearScreen, onEquip: (defenderId: string, choice: string) => void): void;
+  /**
+   * The result screen's pickers redrawn for `picks` (ID-086): points spent on a survivor's
+   * card in the Roster count here too.
+   */
+  syncPicks(picks: readonly RosterDefender[]): void;
   show(visible: boolean): void;
   /** Shows `text` for `ms` (2 s unless said). */
   toast(text: string, ms?: number): void;
@@ -1042,6 +1050,8 @@ export function createHud(
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
+  // Each result-screen picker's way to take a survivor spent elsewhere (ID-086), by id.
+  const pickSync = new Map<string, (d: RosterDefender) => void>();
   // Second Look's reroll can deal the same three cards; its button still has to grey out.
   let shownRerolled = '';
   // Hide the panel at once: a second click or key before the next frame must not
@@ -1105,6 +1115,10 @@ export function createHud(
   function pickerBlock(start: RosterDefender, squadPicks = false): HTMLElement {
     const block = el('div', squadPicks ? 'hud-pick squad-pick' : 'hud-pick');
     let d = start;
+    pickSync.set(start.id, (next) => {
+      d = next;
+      draw();
+    });
     const draw = (): void => {
       const row = pickerRow(d, squadPicks);
       const buttons = el('div', 'hud-pick-row');
@@ -1228,6 +1242,7 @@ export function createHud(
       if (picks.length > 0) {
         head.append(el('p', 'debrief-hint', statHints()));
       }
+      head.append(el('p', 'debrief-hint', SQUAD_CARD_HINT));
       const grid = el('div', 'squad-grid');
       for (const c of d.cards) {
         const card = el('div', 'squad-card');
@@ -1235,10 +1250,12 @@ export function createHud(
         card.classList.toggle('squad-card-up', c.levelUp);
         const top = el('div', 'squad-card-head');
         const who = el('span', 'squad-card-who');
-        who.append(
-          el('span', 'squad-card-name', c.name),
-          el('span', 'squad-card-level', `Lv ${c.level}`),
-        );
+        // The name opens their card in the Roster (ID-086): the app listens for it.
+        const name = el('button', 'squad-card-name squad-card-open', c.name);
+        name.type = 'button';
+        name.dataset.openSurvivor = c.id;
+        name.setAttribute('aria-label', `${c.name}: open survivor card`);
+        who.append(name, el('span', 'squad-card-level', `Lv ${c.level}`));
         if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
         if (c.joining) who.append(el('span', 'squad-badge squad-badge-new', 'New'));
         top.append(who);
@@ -1440,6 +1457,7 @@ export function createHud(
       resultList.replaceChildren(...(d ? [] : screen.lines.map((line) => el('li', '', line))));
       footNote.textContent = d?.foot ?? '';
       back.classList.toggle('btn-primary', d !== undefined);
+      pickSync.clear();
       picker.replaceChildren(
         ...(d
           ? debriefBlock(d, screen.picks)
@@ -1462,6 +1480,9 @@ export function createHud(
         ? picker.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')
         : null;
       (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? firstStat ?? back).focus();
+    },
+    syncPicks(picks) {
+      for (const p of picks) pickSync.get(p.id)?.(p);
     },
     showGear(screen, onEquip) {
       // A redraw after a pick keeps the keyboard on the same survivor's picker.
