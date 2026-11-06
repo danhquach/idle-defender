@@ -512,7 +512,10 @@ export type Scene = Pick<
   // `acc`, the fight time since its last step, carries bullets on between steps (ID-070).
   // The barrier cards taken show on the wall (ID-075); build mode has none.
   // Damage numbers (ID-082); build mode has none.
-  Partial<Pick<HordeState, 'wave' | 'freeWave' | 'acc' | 'taken' | 'barrierAt' | 'pops'>> & {
+  // Barbed Wire's rows (ID-090); build mode has none.
+  Partial<
+    Pick<HordeState, 'wave' | 'freeWave' | 'acc' | 'taken' | 'barrierAt' | 'pops' | 'wire'>
+  > & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
     pace?: number;
     /** Survivors' speech bubbles (ID-085) and the chat clock they are timed on; build mode has none. */
@@ -1241,24 +1244,68 @@ function drawRepairSparks(
 
 /**
  * Barbed Wire (ID-077): the band it slows, out in the field in front of the outermost
- * layer, under every sprite: a faint dirt tint with coils of wire on stakes, painted once
- * (ground.ts) and stretched over the band. Where the browser can't paint it, the tint
- * alone shows.
+ * layer, under every sprite: coils of barbed wire on pickets with no tint (ID-090), painted
+ * once (ground.ts) and stretched over the band. A row the enemies broke (ID-090) is
+ * taken from the torn band instead, each run of rows alike in one draw. Where the browser
+ * can't paint it, a steel line down each coil of the working rows shows where the slow applies.
  */
 function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
   const band = barbedWire({ taken: scene.taken ?? [], layers: scene.layers });
   if (!band) return;
   const a = project({ x: band.from, y: 0 }, cam);
   const b = project({ x: band.to, y: FIELD.height }, cam);
-  const painted = wireCanvas(art);
-  if (painted) {
-    ctx.drawImage(painted, a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
+  const broken = (row: number) => (scene.wire?.[row]?.durability ?? 1) <= 0;
+  // Runs of rows alike, top to bottom: [first row, end row, broken].
+  const runs: [number, number, boolean][] = [];
+  for (let row = 0; row < SEGMENTS; row++) {
+    const last = runs[runs.length - 1];
+    if (last && last[2] === broken(row)) last[1] = row + 1;
+    else runs.push([row, row + 1, broken(row)]);
+  }
+  const whole = wireCanvas(art);
+  const torn = runs.some((r) => r[2]) ? wireCanvas(art, true) : whole;
+  if (whole && torn) {
+    // A seam between runs on a whole pixel, so the two never blend into a hairline.
+    const edge = (row: number) =>
+      row === 0
+        ? a.sy
+        : row === SEGMENTS
+          ? b.sy
+          : Math.round(a.sy + ((b.sy - a.sy) * row) / SEGMENTS);
+    for (const [from, to, isBroken] of runs) {
+      const src = isBroken ? torn : whole;
+      const sh = src.height / SEGMENTS;
+      const dy = edge(from);
+      ctx.drawImage(
+        src,
+        0,
+        from * sh,
+        src.width,
+        (to - from) * sh,
+        a.sx,
+        dy,
+        b.sx - a.sx,
+        edge(to) - dy,
+      );
+    }
     return;
   }
-  ctx.globalAlpha = WIRE.tint.alpha;
-  ctx.fillStyle = WIRE.tint.colour;
-  ctx.fillRect(a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
-  ctx.globalAlpha = 1;
+  ctx.strokeStyle = WIRE.steel;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (const [from, to, isBroken] of runs) {
+    if (isBroken) continue;
+    const [y0, y1] = [
+      a.sy + ((b.sy - a.sy) * from) / SEGMENTS,
+      a.sy + ((b.sy - a.sy) * to) / SEGMENTS,
+    ];
+    for (const share of WIRE.coils) {
+      const x = a.sx + (b.sx - a.sx) * share;
+      ctx.moveTo(x, y0);
+      ctx.lineTo(x, y1);
+    }
+  }
+  ctx.stroke();
 }
 
 /** A segment's box: its slot, as tall as its HP leaves it. */
