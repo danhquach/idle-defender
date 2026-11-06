@@ -98,6 +98,12 @@ const TEXT_ON: Record<string, string[]> = {
   '--color-synergy': ['--color-surface', '--color-surface-hover'],
   '--color-rare-text': ['--color-surface', '--color-surface-hover'],
   '--color-epic-text': ['--color-surface', '--color-surface-hover'],
+  // Weapon names in the Inventory's rows (ID-079).
+  '--rarity-rusty': ['--color-surface'],
+  '--rarity-common': ['--color-surface'],
+  '--rarity-military': ['--color-surface'],
+  '--rarity-prototype': ['--color-surface'],
+  '--rarity-relic': ['--color-surface'],
 };
 
 describe('UI kit tokens (ID-056)', () => {
