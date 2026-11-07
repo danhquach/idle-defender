@@ -681,6 +681,28 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     expect(root.querySelector(HIDDEN)).toBeNull();
   });
 
+  it('one press is one key on any layout: the key at Q’s place is a skill, never also 1× (AZERTY)', () => {
+    const { root, button } = boot();
+    step(0);
+    button().click();
+    step(16);
+    const speed = () =>
+      root.querySelector('.hud-speed-button[aria-pressed="true"]')!.textContent!.slice(0, 2);
+    key('s');
+    step(32);
+    expect(speed()).toBe('2×');
+    // AZERTY's "a" sits at Q's place: Flashbang goes, the speed stays.
+    key('a', 'KeyQ');
+    step(48);
+    expect(speed()).toBe('2×');
+    expect(labels(root)[0]).toBe(`Flashbang ${SKILLS.flashbang.cooldown}s`);
+    // Its "q" sits at A's place: 1×, and no skill.
+    key('q', 'KeyA');
+    step(64);
+    expect(speed()).toBe('1×');
+    expect(labels(root)[1]).toBe('Molotov');
+  });
+
   it('arming Airstrike says over the skill row how to aim it until it is put away', () => {
     const { root, button } = boot();
     step(0);

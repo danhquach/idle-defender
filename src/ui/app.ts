@@ -68,6 +68,7 @@ import {
   hordePicker,
   powerLine,
   resultScreen,
+  fightKeyName,
   SKILL_KEYS,
   skillPicker,
   skillSlots,
@@ -638,11 +639,12 @@ export function start(root: HTMLElement, art: Art): void {
       if (!e.repeat) hold(!held);
       return;
     }
-    const next = SPEEDS.find((sp) => SPEED_KEYS[sp] === e.key.toUpperCase());
+    // Every fight key by its place (ID-100), so one press is one key on any layout.
+    const name = fightKeyName(e);
+    const next = SPEEDS.find((sp) => SPEED_KEYS[sp] === name);
     if (next && !e.repeat) setSpeed(next);
     // Horde-only (ID-100): Q and W use the picked skills, left to right as their buttons stand.
-    // By the key's place, so Q and W work on any layout (ID-100).
-    const slot = SKILL_KEYS.findIndex((k) => e.code === `Key${k}` || e.key.toUpperCase() === k);
+    const slot = SKILL_KEYS.indexOf(name);
     const skill = horde?.freeSkills ? skillSlots(horde)[slot] : undefined;
     if (slot >= 0 && skill && !e.repeat) arm(skill);
   });

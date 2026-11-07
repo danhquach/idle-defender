@@ -383,6 +383,13 @@ export function skillButtons(
  */
 export const AIM_PROMPT = 'Tap a row to bomb it · tap Airstrike again to cancel';
 
+/**
+ * A fight key's name (ID-100): a letter key by its place (`KeyQ` is Q on any layout), so
+ * the speed and skill keys never both fire from one press; anything else by what it types.
+ */
+export const fightKeyName = (e: Pick<KeyboardEvent, 'code' | 'key'>): string =>
+  /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : e.key.toUpperCase();
+
 /** The fight's skill keys in the horde-only build (ID-100), left to right: clear of A S D, Space and the card keys. */
 export const SKILL_KEYS: readonly string[] = ['Q', 'W'];
 
@@ -2155,7 +2162,9 @@ export function createHud(
       const was = hud.hidden;
       hud.hidden = false;
       // Horde-only (ID-100): measured with the most skills a pick holds showing, so the
-      // fight frame is the same whatever is picked and whether or not a screen is up.
+      // fight frame is the same whatever is picked and whether or not a screen is up. The
+      // cash shop's buttons stay hidden (never shown in this build), and the aim caption
+      // shows only while a skill is armed; everything is put back as it was.
       const shopWas = shop.hidden;
       const skillsWere = skillItems.map((s) => s.button.hidden);
       if (squad) {
@@ -2222,7 +2231,8 @@ export function createHud(
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';
       shopButtons(state).forEach((b, i) => showButton(shopItems[i]!, b));
-      skillButtons(state, armed).forEach((b, i) => {
+      const skills = skillButtons(state, armed);
+      skills.forEach((b, i) => {
         const item = skillItems[i]!;
         showButton(item, b);
         item.button.setAttribute('aria-pressed', String(b.armed));
@@ -2239,9 +2249,7 @@ export function createHud(
         }
         item.cooling = b.cooling;
       });
-      const aiming = skillButtons(state, armed).some(
-        (b) => b.armed && SKILLS[b.skill].aim === 'row',
-      );
+      const aiming = skills.some((b) => b.armed && SKILLS[b.skill].aim === 'row');
       aimCaption.hidden = !aiming;
       // Horde-only (ID-100): the skill row waits under the start or result screen.
       if (squad) shop.hidden = !result.hidden;
@@ -2305,6 +2313,8 @@ export function createHud(
       campBlock(screen.camp);
       result.hidden = false;
       if (squad) shop.hidden = true;
+      // The next fight starts with every skill ready: no pulse carried over from this one.
+      for (const item of skillItems) item.cooling = false;
       // A new screen starts at its top, not where the last one was scrolled to.
       result.scrollTop = 0;
       // A horde-only screen with points to spend starts on the picker, so Enter doesn't skip it.

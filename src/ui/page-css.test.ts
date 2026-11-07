@@ -174,3 +174,22 @@ describe('the build panel’s size (ID-065)', () => {
     expect(PANEL_SPACE).toBe(px('width') + px('right'));
   });
 });
+
+describe('the horde-only skill row on a phone (ID-100)', () => {
+  it('hides the key tags and the version label while the skill row is up', () => {
+    // Each rule sits in a phone-width block: the nearest @media above it is 640px.
+    const inPhone = (rule: RegExp): void => {
+      const at = css.search(rule);
+      expect(at, String(rule)).toBeGreaterThan(0);
+      const media = css
+        .slice(0, at)
+        .match(/@media [^{]*/g)!
+        .at(-1);
+      expect(media).toBe('@media (max-width: 640px) ');
+    };
+    inPhone(/\.hud-skill \.menu-key,[^{]*\{\s*display: none;/);
+    inPhone(
+      /body:has\(\.hud:not\(\[hidden\]\) \.hud-shop:not\(\[hidden\]\) \.hud-skill:not\(\[hidden\]\)\) \.version \{\s*display: none;/,
+    );
+  });
+});
