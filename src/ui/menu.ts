@@ -9,7 +9,7 @@ import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW, STATS_REFUNDED } from './build.ts';
-import { el, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
+import { el, SKILL_KEYS, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 
 /** What the Save tab says about a refused code. */
 export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
@@ -68,17 +68,21 @@ const FULL_CONTROLS: Controls = [
   },
 ];
 
-/** The horde-only build's controls (ID-066): no building, shop or skills. */
+/** The horde-only build's controls (ID-066): no building or shop; the picked skills (ID-100). */
 const SQUAD_CONTROLS: Controls = [
   {
     group: 'In a horde',
     rows: [
       ['Click a survivor, then a post', 'Move that survivor'],
       ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
+      [
+        `Click a skill, or ${SKILL_KEYS.join(' ')}`,
+        'Use a picked skill; Airstrike bombs the row you click next',
+      ],
       ['1 2 3', 'Pick a card when three are offered'],
       ['Space', 'Pause or resume the fight'],
       [Object.values(SPEED_KEYS).join(' '), 'Fight at 1×, 2× or 3× speed'],
-      ['Esc', 'Deselect a survivor'],
+      ['Esc', 'Cancel a skill or deselect a survivor'],
     ],
   },
   {
@@ -99,6 +103,10 @@ const SQUAD_HOW_TO_PLAY: Steps = [
     `Your survivors shoot on their own. Click an enemy to focus it. ${SQUAD_LOSS_RULE}`,
   ],
   ['Level up in the fight.', 'Kills give fight XP. Each fight level offers three cards.'],
+  [
+    'Pick your skills.',
+    'Before each horde, pick up to 2 skills to use on cooldown. Pick just 1 and it works twice as hard.',
+  ],
   [
     'Win and grow.',
     'A win gives survivor XP and stat points, and a new survivor joins, up to a squad of 6.',

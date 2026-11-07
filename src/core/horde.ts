@@ -186,6 +186,12 @@ export interface HordeSetup {
    * skills each, mini-bosses and a growing brood. The full game's rules when absent.
    */
   harder?: boolean;
+  /**
+   * The horde-only build's skills (ID-100): no cash, so they run on cooldown only, and
+   * each use works `power` times as hard (`SQUAD_SKILLS.solo` for one picked alone). The
+   * full game's paid skills, at 1×, when absent.
+   */
+  freeSkills?: { power: number };
 }
 export interface Enemy {
   id: number;
@@ -629,6 +635,8 @@ export interface HordeState {
   bosses: (BossSpec & { id: number | null })[];
   /** The harder hordes' rules (ID-099, `HordeSetup.harder`). */
   harder?: true;
+  /** Skills on cooldown only, at `power`× (ID-100, `HordeSetup.freeSkills`). */
+  freeSkills?: { power: number };
   /** The wave under way is a swarm wave (ID-099). */
   swarm: boolean;
   /** Boss slabs in flight or just landed (ID-099); cleared when the horde ends. */
@@ -665,7 +673,11 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     line = [],
     spawnX,
     harder = false,
+    freeSkills,
   } = setup;
+  if (freeSkills && !(Number.isInteger(freeSkills.power) && freeSkills.power >= 1)) {
+    throw new RangeError(`newHorde: bad skill power ${freeSkills.power}`);
+  }
   const levels: Partial<Record<PerkId, number>> = {};
   for (const id of perks) levels[id] = perkLevels[id] ?? 1;
   const start = roster.find((d) => d.id === startDefenderId);
@@ -770,6 +782,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     grenades: [],
     bosses: hordeBosses(hordeNumber, harder).map((b) => ({ ...b, id: null })),
     ...(harder ? { harder: true as const } : {}),
+    ...(freeSkills ? { freeSkills: { power: freeSkills.power } } : {}),
     swarm: harder && swarmWave(hordeNumber, 1),
     slabs: [],
     outcome: 'fighting',
@@ -1960,6 +1973,9 @@ export function removeDead(s: HordeState): void {
   s.enemies = s.enemies.filter((e) => e.hp > 0);
 }
 
+/** How many times as hard each skill use works this fight (ID-100): 1 unless picked alone. */
+export const skillPower = (s: Pick<HordeState, 'freeSkills'>): number => s.freeSkills?.power ?? 1;
+
 /** Whether a flashbang still holds `e` (fight time, so it waits out picks too). */
 export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   !due(s.time, e.stunnedUntil);
@@ -1982,8 +1998,9 @@ function land(s: HordeState): void {
     for (const e of s.enemies) {
       if (e.hp <= 0 || Math.hypot(e.x - i.x, e.y - i.y) > SKILLS[skill].radius + EPS) continue;
       if (skill === 'airstrike') {
-        popOn(s, e, SKILLS.airstrike.damage);
-        e.hp = Math.max(0, e.hp - SKILLS.airstrike.damage);
+        const damage = SKILLS.airstrike.damage * skillPower(s);
+        popOn(s, e, damage);
+        e.hp = Math.max(0, e.hp - damage);
       } else e.stunnedUntil = Math.max(e.stunnedUntil, s.time + SKILLS.flashbang.seconds);
     }
   }
@@ -2004,12 +2021,13 @@ function burn(s: HordeState): void {
   }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
+  const fireHit = SKILLS.molotov.dps * skillPower(s) * STEP;
   for (const f of s.fires) {
     for (const e of s.enemies) {
       if (Math.hypot(e.x - f.x, e.y - f.y) <= SKILLS.molotov.radius + EPS) {
-        popOn(s, e, SKILLS.molotov.dps * STEP);
-        e.hp = Math.max(0, e.hp - SKILLS.molotov.dps * STEP);
-        e.burnt = (e.burnt ?? 0) + SKILLS.molotov.dps * STEP;
+        popOn(s, e, fireHit);
+        e.hp = Math.max(0, e.hp - fireHit);
+        e.burnt = (e.burnt ?? 0) + fireHit;
       }
     }
   }

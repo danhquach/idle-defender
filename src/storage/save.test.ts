@@ -1132,7 +1132,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 16, '1', '15', 1.5, null]) {
+    for (const v of [0, 17, '1', '16', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1382,7 +1382,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(15);
+    expect(SAVE_VERSION).toBe(16);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1964,6 +1964,7 @@ describe('save: survivors (ID-032)', () => {
     const v13 = JSON.parse(encodeSave(joined(), NOW));
     v13.v = 13;
     delete v13.game.farm;
+    delete v13.game.skillPick;
     expect(decodeSave(JSON.stringify(v13))).not.toBeNull();
     offer(v13.game).banked = 4;
     expect(decodeSave(JSON.stringify(v13))).toBeNull();
@@ -2252,8 +2253,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 15 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, then farming came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(15);
+  it('is version 16 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, then the skill pick came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(16);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {

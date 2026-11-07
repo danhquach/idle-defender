@@ -2,7 +2,7 @@
 // the Lab, paid with horde cash and then cooling down for a while. They hit enemies
 // only. Pure: `useSkill` returns a new state, or a refusal the UI shows as-is.
 import { CAMP, FIELD, SKILLS, WALL, type SkillId } from './data.ts';
-import type { HordeState, MoveResult } from './horde.ts';
+import { skillPower, type HordeState, type MoveResult } from './horde.ts';
 import { rngFrom } from './rng.ts';
 
 // Accumulated float time can land a hair before a due time; count it as ready.
@@ -21,7 +21,7 @@ export function skillLock(s: HordeState, id: SkillId): string | null {
   if (s.outcome !== 'fighting') return 'The horde is over';
   if (s.offer !== null || s.replace !== null) return 'Pick first';
   if (skillLeft(s, id) > 0) return 'Not ready yet';
-  if (s.cash < SKILLS[id].cost) return 'Not enough cash';
+  if (!s.freeSkills && s.cash < SKILLS[id].cost) return 'Not enough cash';
   return null;
 }
 
@@ -57,14 +57,17 @@ export function useSkill(state: HordeState, id: SkillId, x: number, y: number): 
   }
   const s = structuredClone(state);
   const skill = SKILLS[id];
-  s.cash -= skill.cost;
+  // The horde-only build's skills cost nothing (ID-100).
+  if (!s.freeSkills) s.cash -= skill.cost;
   s.cooldowns[id] = s.time + skill.cooldown;
   if (id === 'airstrike') {
     carpet(s, y).forEach((p, i) => {
       s.incoming.push({ skill: id, ...p, at: s.time + i * SKILLS.airstrike.every });
     });
   } else {
-    const { radius: r, count, every } = SKILLS[id];
+    const { radius: r, every } = SKILLS[id];
+    // A flashbang picked alone throws more bursts (ID-100); a molotov's fires burn harder instead.
+    const count = SKILLS[id].count * (id === 'flashbang' ? skillPower(s) : 1);
     const front = wallFront(s);
     const rng = rngFrom(s.rng);
     for (let i = 0; i < count; i++) {

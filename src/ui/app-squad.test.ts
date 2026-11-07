@@ -4,7 +4,7 @@
 // replays the same horde. The build panel and all it opens (world map, patrols,
 // research, workbench, camp, perks) are never on the page. Canvas and art are stand-ins.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HORDE_ONLY } from '../core/data.ts';
+import { HORDE_ONLY, SKILLS } from '../core/data.ts';
 import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame } from '../core/game.ts';
@@ -14,6 +14,7 @@ import { tick, type HordeState } from '../core/horde.ts';
 import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
 import { start } from './app.ts';
+import { AIM_PROMPT } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
@@ -52,7 +53,8 @@ const HIDDEN = [
   '.build-panel',
   '.build-bar',
   '.worldmap-backdrop',
-  '.hud-shop:not([hidden])',
+  // The cash shop; the picked skills (ID-100) show in the same row.
+  '.hud-shop-item:not(.hud-skill):not([hidden])',
   '.hud-card-camp',
 ].join(', ');
 
@@ -608,5 +610,116 @@ describe('farming in the game (app.ts, ID-098)', () => {
     root.querySelector<HTMLButtonElement>('.inv-button')!.click();
     const line = document.querySelector('.inv-power-line')!.textContent;
     expect(line).toContain(`rec ${recommendedPower(3).toLocaleString('en-US')}`);
+  });
+});
+
+describe('skills in the horde-only build, through the app (ID-100)', () => {
+  const options = (root: HTMLElement) => [
+    ...root.querySelectorAll<HTMLButtonElement>('.hud-result .hud-skill-option'),
+  ];
+  const option = (root: HTMLElement, skill: string) =>
+    options(root).find((b) => b.dataset.skill === skill)!;
+  const pressed = (root: HTMLElement) =>
+    options(root)
+      .filter((b) => b.getAttribute('aria-pressed') === 'true')
+      .map((b) => b.dataset.skill);
+  const shown = (root: HTMLElement) => [
+    ...root.querySelectorAll<HTMLButtonElement>('.hud-skill:not([hidden])'),
+  ];
+  const labels = (root: HTMLElement) =>
+    shown(root).map((b) => b.querySelector('.hud-shop-label')!.textContent);
+  const key = (k: string, code = `Key${k.toUpperCase()}`) =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: k, code, bubbles: true }));
+
+  it('a new game starts with Flashbang and Molotov picked; a toggle is saved at once', () => {
+    const { root, saved } = boot();
+    step(0);
+    expect(options(root).map((b) => b.dataset.skill)).toEqual([
+      'flashbang',
+      'molotov',
+      'airstrike',
+    ]);
+    expect(pressed(root)).toEqual(['flashbang', 'molotov']);
+    expect(option(root, 'airstrike').disabled).toBe(true);
+    expect(root.querySelector('.hud-skill-note')!.textContent).toBe(
+      '2 picked. Drop one for ×2 power',
+    );
+    option(root, 'molotov').click();
+    expect(saved().skillPick).toEqual(['flashbang']);
+    expect(pressed(root)).toEqual(['flashbang']);
+    expect(root.querySelector('.hud-skill-note')!.textContent).toContain('×2 power');
+    expect(option(root, 'flashbang').querySelector('.hud-skill-option-boost')!.textContent).toBe(
+      '×2: 8 bursts',
+    );
+    expect(option(root, 'airstrike').disabled).toBe(false);
+    // The skill row waits under the screen, and its keys do nothing there.
+    expect(root.querySelector<HTMLElement>('.hud-shop')!.hidden).toBe(true);
+    key('q');
+    expect(saved().skillPick).toEqual(['flashbang']);
+  });
+
+  it('the fight shows the picked skills, free, on Q and W left to right, whatever the layout', () => {
+    const { root, button, saved } = boot();
+    step(0);
+    option(root, 'flashbang').click();
+    option(root, 'flashbang').click();
+    expect(saved().skillPick).toEqual(['molotov', 'flashbang']);
+    button().click();
+    step(16);
+    expect(shown(root).map((b) => b.querySelector('.hud-skill-key')!.textContent)).toEqual([
+      'Q',
+      'W',
+    ]);
+    expect(labels(root)).toEqual(['Flashbang', 'Molotov']);
+    expect(shown(root).map((b) => b.querySelector('.btn-cost')!.textContent)).toEqual(['', '']);
+    // W on a layout that types another letter there still throws the molotov.
+    key('ц', 'KeyW');
+    step(32);
+    expect(labels(root)).toEqual(['Flashbang', `Molotov ${SKILLS.molotov.cooldown}s`]);
+    // A key no skill holds does nothing.
+    key('e');
+    expect(root.querySelector(HIDDEN)).toBeNull();
+  });
+
+  it('arming Airstrike says over the skill row how to aim it until it is put away', () => {
+    const { root, button } = boot();
+    step(0);
+    option(root, 'flashbang').click();
+    option(root, 'molotov').click();
+    option(root, 'airstrike').click();
+    button().click();
+    step(16);
+    expect(labels(root)).toEqual(['Airstrike ×2']);
+    const airstrike = shown(root)[0]!;
+    airstrike.click();
+    step(32);
+    // A caption over the skill row says how to aim, until it is used or put away.
+    const caption = root.querySelector<HTMLElement>('.hud-aim-caption')!;
+    expect(caption.hidden).toBe(false);
+    expect(caption.textContent).toBe(AIM_PROMPT);
+    expect(airstrike.getAttribute('aria-pressed')).toBe('true');
+    step(5000);
+    expect(caption.hidden).toBe(false);
+    key('q');
+    step(5016);
+    expect(airstrike.getAttribute('aria-pressed')).toBe('false');
+    expect(caption.hidden).toBe(true);
+  });
+
+  it('the pick is pre-selected after a horde, and after a reload', () => {
+    const { root, button, saved } = boot();
+    step(0);
+    option(root, 'flashbang').click();
+    option(root, 'molotov').click();
+    option(root, 'airstrike').click();
+    button().click();
+    step(16);
+    endNextTick('lost');
+    step(32);
+    expect(pressed(root)).toEqual(['airstrike']);
+    expect(saved().skillPick).toEqual(['airstrike']);
+    const again = boot();
+    step(0);
+    expect(pressed(again.root)).toEqual(['airstrike']);
   });
 });

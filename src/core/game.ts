@@ -27,6 +27,7 @@ import {
   RECOVERY_MS,
   SKILL_IDS,
   START_PERK,
+  START_SKILLS,
   START_STOCK,
   START_TIERS,
   ITEMS,
@@ -34,6 +35,7 @@ import {
   FREE_WEAPONS,
   type PerkId,
   type ResearchId,
+  type SkillId,
   type Stat,
   type Stats,
   type Stock,
@@ -103,6 +105,11 @@ export interface GameState {
   reserve: RosterDefender[];
   /** Farming beaten hordes (ID-098): replay wins so far, and the bad-luck count. */
   farm: Farm;
+  /**
+   * The skills picked for the next horde-only fight (ID-100): up to `SQUAD_SKILLS.max`, in
+   * pick order, each once. Kept between hordes, so the last pick is pre-selected.
+   */
+  skillPick: SkillId[];
 }
 
 /** Farming beaten hordes (ID-098, horde-only). */
@@ -161,6 +168,7 @@ function fullGame(): GameState {
     camp: newCamp(),
     reserve: [],
     farm: newFarm(),
+    skillPick: [...START_SKILLS],
   });
 }
 

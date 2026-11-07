@@ -28,13 +28,16 @@ import {
   SQUAD_CAP,
   SQUAD_EARLY_HP,
   SQUAD_HP_GROWTH,
+  SKILL_IDS,
   SQUAD_LINE,
+  SQUAD_SKILLS,
   SQUAD_SPAWN_X,
   SQUAD_XP_RATE,
   STASH_CAP,
   START_PERK,
   WEAPONS,
   type Rarity,
+  type SkillId,
   type WeaponId,
 } from './data.ts';
 import {
@@ -90,6 +93,28 @@ export function squadSpec(d: RosterDefender): DefenderSpec {
   };
 }
 
+/** How hard each picked skill works (ID-100): `SQUAD_SKILLS.solo`× when only 1 is picked. */
+export const skillPickPower = (pick: readonly SkillId[]): number =>
+  pick.length === 1 ? SQUAD_SKILLS.solo : 1;
+
+/**
+ * Picks or drops skill `id` for the next horde (ID-100): a picked one is dropped; else it
+ * is added, unless `SQUAD_SKILLS.max` are picked already (refused). Between hordes only.
+ */
+export function toggleSkill(
+  game: GameState,
+  id: SkillId,
+): { ok: true; game: GameState } | { ok: false; reason: string } {
+  if (!SKILL_IDS.includes(id)) throw new RangeError(`toggleSkill: unknown skill ${String(id)}`);
+  const pick = game.skillPick.includes(id)
+    ? game.skillPick.filter((k) => k !== id)
+    : [...game.skillPick, id];
+  if (pick.length > SQUAD_SKILLS.max) {
+    return { ok: false, reason: `Pick up to ${SQUAD_SKILLS.max}: drop one first` };
+  }
+  return { ok: true, game: { ...game, skillPick: pick } };
+}
+
 /** The squad that fights the next horde: the roster, at most `SQUAD_CAP`, in join order. */
 export const squadOf = (game: Pick<GameState, 'roster'>): RosterDefender[] =>
   game.roster.slice(0, SQUAD_CAP);
@@ -107,8 +132,8 @@ export const SQUAD_SLOTS: readonly { x: number; y: number }[] = Array.from(
  * Horde `game.hordeNumber` for the whole squad on the firing line behind a fresh
  * horde-only wall (full HP), each survivor in their slot in join order
  * (`SQUAD_LINE.order`), with enemies spawning at `SQUAD_SPAWN_X`, at `now`. No towers,
- * turrets or traps; no injuries or patrols hold anyone back, and no research, cash,
- * skills or bank come in.
+ * turrets or traps; no injuries or patrols hold anyone back, and no research, cash or
+ * bank come in. The skills picked (ID-100) come in on cooldown only.
  */
 export function startSquadHorde(
   game: GameState,
@@ -134,7 +159,6 @@ export function startSquadHorde(
     startPostId: postOf(0),
     bank: 0,
     startedAt: now,
-    skills: [],
     perks: SQUAD_PERKS,
     perkLevels: { [START_PERK]: 1 },
     research: [],
@@ -146,6 +170,8 @@ export function startSquadHorde(
     line: SQUAD_SLOTS,
     spawnX: SQUAD_SPAWN_X,
     harder: true,
+    skills: [...game.skillPick],
+    freeSkills: { power: skillPickPower(game.skillPick) },
   });
   // The rest of the squad take their slots too: nobody waits on the bench.
   squad.slice(1).forEach((spec, k) => {

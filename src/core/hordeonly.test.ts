@@ -21,6 +21,7 @@ import {
   SQUAD_WALL,
   SQUAD_XP_RATE,
   START_PERK,
+  START_SKILLS,
 } from './data.ts';
 import { hordeXp, newGame, type GameState, type RosterDefender } from './game.ts';
 import { gunRange, moveDefender, tick } from './horde.ts';
@@ -132,11 +133,12 @@ describe('the squad in a horde (ID-066)', () => {
     expect(startSquadHorde(g, 7, NOW).defenders).toHaveLength(3);
   });
 
-  it('no cash, shop, skills or research, and Steady Fire always on at level 1', () => {
+  it('no cash, shop or research; the new game’s skills, free (ID-100); Steady Fire always on at level 1', () => {
     const s = startSquadHorde(squadGame(1), 7, NOW);
     expect(s.cash).toBe(0);
     expect(s.cashRate).toBe(0);
-    expect(s.skills).toEqual([]);
+    expect(s.skills).toEqual([...START_SKILLS]);
+    expect(s.freeSkills).toEqual({ power: 1 });
     expect(s.research).toEqual([]);
     expect(s.perks).toEqual([START_PERK]);
     expect(s.perkLevels).toEqual({ [START_PERK]: 1 });

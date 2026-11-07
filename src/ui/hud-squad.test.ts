@@ -186,11 +186,13 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     }
   });
 
-  it('has no shop row, and shows the horde corner: badge, wave line and the fight XP bar (ID-098)', () => {
+  it('has no cash shop, and shows the horde corner: badge, wave line and the fight XP bar (ID-098)', () => {
     const { root, h } = hud(true);
-    const s = startSquadHorde(squadGame(2, 2), 1, NOW);
+    const s = startSquadHorde({ ...squadGame(2, 2), skillPick: [] }, 1, NOW);
     h.update(s);
-    expect(root.querySelector<HTMLElement>('.hud-shop')!.hidden).toBe(true);
+    // Nothing picked (ID-100): the bottom row shows no button at all.
+    const shown = root.querySelectorAll('.hud-shop-item:not([hidden])');
+    expect(shown).toHaveLength(0);
     const corner = root.querySelector<HTMLElement>('.hud-corner')!;
     expect(corner.hidden).toBe(false);
     expect(corner.title).toBe(squadStatus(s));
@@ -268,8 +270,10 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     g.roster[0] = { ...g.roster[0]!, name: evil, xp: 0 };
     const screen = squadScreen(g, ended(g, 'won'));
     h.showResult(screen);
-    // The only picture is the drop tile's own icon (ID-073), never one from a name.
-    const imgs = [...root.querySelectorAll<HTMLImageElement>('.hud-result img')];
+    // The only pictures are the drop tile's own icon (ID-073) and the skill pick's (ID-100).
+    const imgs = [
+      ...root.querySelectorAll<HTMLImageElement>('.hud-result img:not(.hud-skill-option img)'),
+    ];
     expect(imgs.map((i) => i.parentElement!.className)).toEqual(['tile-icon']);
     expect(imgs[0]!.getAttribute('src')).toBe(ART_URLS[screen.debrief!.drop!.icon]);
     // The debrief (ID-067): their card, and their points row's button names them too.
@@ -283,7 +287,7 @@ describe('the horde-only HUD on the page (ID-066)', () => {
       `Add Instinct to ${evil}, now 0`,
     );
     h.showResult(squadStart(g));
-    expect(root.querySelector('.hud-result img')).toBeNull();
+    expect(root.querySelector('.hud-result img:not(.hud-skill-option img)')).toBeNull();
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
   });
 

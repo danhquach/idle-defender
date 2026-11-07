@@ -371,8 +371,23 @@ Defenders stand on **posts** the player builds and chooses between.
     clear of the tower behind (ten rows hold only five such towers, so the
     sixth is next to the fifth's). Nobody waits on the bench, so no
     recruit cards or replacements come.
-  - Horde cash, the shop row and active skills are hidden: kills pay no cash
-    and no skill is researched.
+  - Horde cash and the shop row are hidden: kills pay no cash and no skill
+    is researched.
+  - **As built (ID-100): skills.** Before every horde the start or result
+    screen picks up to 2 of Flashbang, Molotov and Airstrike
+    (`SQUAD_SKILLS.max`); the last pick is saved and pre-selected. A new
+    game (and an older save) starts with Flashbang and Molotov picked
+    (`START_SKILLS`, neither needs aiming), so a player who skips the pick
+    still fights with skills. No cash, so they run on cooldown only, on fight time.
+    One picked alone works ×2 (`SQUAD_SKILLS.solo`) with the same cooldown:
+    a Flashbang throws 8 bursts instead of 4, a Molotov's fires burn at
+    2× DPS, an Airstrike's bombs hit for 2× damage. The picked skills sit in
+    the fight's bottom row, left to right in Flashbang, Molotov, Airstrike
+    order, on keys Q and W (by key position, so any layout works); each
+    pulses once when it is ready again, and arming Airstrike says on
+    screen to tap a row. The pick cards always say what each skill does;
+    the one picked alone adds its ×2 line. Their numbers are checked in the balance pass
+    (ID-102).
   - Steady Fire is the one perk, always on at level 1; no perk screen.
   - The top bar is minimal: the horde number, waves cleared and enemies left
     in the wave (on the field and still to come), with the speed buttons; the

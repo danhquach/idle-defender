@@ -26,8 +26,8 @@ function spent(): GameState {
 }
 
 describe('save: the stat rework (ID-084)', () => {
-  it('is version 15', () => {
-    expect(SAVE_VERSION).toBe(15);
+  it('is version 16', () => {
+    expect(SAVE_VERSION).toBe(16);
   });
 
   it('a v12 save loads with every spent point refunded, and says so once', () => {

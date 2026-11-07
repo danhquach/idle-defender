@@ -13,7 +13,7 @@ describe('shop and skill icons (ID-041)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
-    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
+    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, false);
     const s = newHorde(1, setup());
     hud.update(s);
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
@@ -36,7 +36,7 @@ describe('shop and skill icons (ID-041)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
-    createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
+    createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, false);
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
     const rest = [...SHOP_ITEMS.map((i) => SHOP[i]), ...SKILL_IDS.map((k) => SKILLS[k])];
     buttons.forEach((button, i) => {
@@ -44,5 +44,25 @@ describe('shop and skill icons (ID-041)', () => {
       expect(button.querySelector('.btn-cost')!.textContent).toBe(String(rest[i]!.cost));
       expect(button.querySelector('.btn-reason')!.textContent).toBe(LOCKED_NOTE);
     });
+  });
+
+  it('starts the horde-only skills in their tallest look: ×2 and a key, no cost or lock (ID-100)', () => {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const noop = () => {};
+    createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const skills = [...root.querySelectorAll<HTMLButtonElement>('.hud-skill')];
+    expect(skills).toHaveLength(SKILL_IDS.length);
+    skills.forEach((button, i) => {
+      expect(button.querySelector('.hud-shop-label')!.textContent).toBe(
+        `${SKILLS[SKILL_IDS[i]!].name} ×2`,
+      );
+      expect(button.querySelector('.btn-cost')!.textContent).toBe('');
+      expect(button.querySelector('.hud-skill-key')!.textContent).toBe('Q');
+      expect(button.querySelector('.btn-reason')?.textContent ?? '').toBe('');
+    });
+    // The cash shop never shows in this build.
+    const shop = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item:not(.hud-skill)')];
+    expect(shop.every((b) => b.hidden)).toBe(true);
   });
 });

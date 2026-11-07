@@ -218,7 +218,9 @@ describe('the gun pickers (ID-067)', () => {
     gear.rows[0]!.options[0]!.label = evil;
     h.showResult(squadStart(g));
     h.showGear(gear, noop);
-    expect(root.querySelector('.hud-result img')).toBeNull();
+    // The only pictures are the skill pick's own icons (ID-100), never one from a name.
+    const imgs = [...root.querySelectorAll('.hud-result img')];
+    expect(imgs.every((i) => i.closest('.hud-skill-option'))).toBe(true);
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
     expect(root.querySelector('.squad-card-gear label')!.textContent).toBe(`${evil}'s gun`);
     expect(root.querySelector('.squad-card-gear option')!.textContent).toBe(evil);
