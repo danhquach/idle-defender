@@ -13,7 +13,9 @@ import {
   createHud,
   defenderLabel,
   enemiesLeft,
+  lossXpText,
   pickerRow,
+  powerLine,
   SQUAD_LOSS_RULE,
   SQUAD_POINTS_NOTE,
   squadScreen,
@@ -66,6 +68,7 @@ describe('the horde-only top bar (ID-066)', () => {
   it('the XP bar: the fight level and the XP into it', () => {
     expect(xpBar({ level: 2, xp: 7 })).toEqual({
       label: `Fight Lv 2 · 7/${xpToNext(2)} XP`,
+      text: `Lv 2 · 7/${xpToNext(2)}`,
       value: 7,
       max: xpToNext(2),
     });
@@ -121,7 +124,8 @@ describe('the horde-only screens (ID-066)', () => {
     const g = squadGame(3, 6);
     const screen = squadScreen(g, ended(g, 'lost'));
     expect(screen.title).toBe('The wall fell');
-    expect(screen.lines).toContain('No XP on a loss');
+    // No wave cleared: no XP (ID-098).
+    expect(screen.lines).toContain(lossXpText(0));
     expect(screen.button).toBe('Retry Horde 6');
     expect(screen.picks).toEqual([]);
     expect(screen.lines.join(' ')).not.toMatch(/Food|Medicine|back at|Repair/);
@@ -182,24 +186,79 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     }
   });
 
-  it('has no shop row, and shows the top bar and the XP bar', () => {
+  it('has no shop row, and shows the horde corner: badge, wave line and the fight XP bar (ID-098)', () => {
     const { root, h } = hud(true);
     const s = startSquadHorde(squadGame(2, 2), 1, NOW);
     h.update(s);
     expect(root.querySelector<HTMLElement>('.hud-shop')!.hidden).toBe(true);
-    expect(root.querySelector<HTMLElement>('.hud-xp')!.hidden).toBe(false);
-    expect(root.querySelector('.hud-fight-bar')!.textContent).toBe(squadStatus(s));
-    expect(root.querySelector('.hud-xp-label')!.textContent).toBe(xpBar(s).label);
+    const corner = root.querySelector<HTMLElement>('.hud-corner')!;
+    expect(corner.hidden).toBe(false);
+    expect(corner.title).toBe(squadStatus(s));
+    expect(root.querySelector('.hud-badge-label')!.textContent).toBe('Horde');
+    expect(root.querySelector('.hud-badge-num')!.textContent).toBe('2');
+    expect(root.querySelector('.hud-badge')!.classList.contains('hud-badge-boss-on')).toBe(false);
+    expect(root.querySelector('.hud-corner-wave')!.textContent).toBe(
+      `Wave 1/${s.waveCount} · ${enemiesLeft(s).toLocaleString('en-US')} left`,
+    );
+    expect(root.querySelector('.hud-xp-label')!.textContent).toBe(xpBar(s).text);
     const meter = root.querySelector<HTMLMeterElement>('.hud-xp-meter')!;
     expect(meter.max).toBe(xpBar(s).max);
-    expect(root.querySelector('#hud-xp-label')).not.toBeNull();
-    expect(meter.getAttribute('aria-labelledby')).toBe('hud-xp-label');
+    expect(meter.getAttribute('aria-label')).toBe(xpBar(s).label);
   });
 
-  it('the full game’s HUD keeps its shop row and has no XP bar', () => {
-    const { root } = hud(false);
+  it('a boss horde marks its badge; the wave line caps at the last wave and follows the fight', () => {
+    const { root, h } = hud(true);
+    const s = startSquadHorde(squadGame(1, ENDING_HORDE), 1, NOW);
+    h.update({ ...s, wave: s.waveCount, toSpawn: 3, enemies: [] });
+    expect(root.querySelector('.hud-badge')!.classList.contains('hud-badge-boss-on')).toBe(true);
+    expect(root.querySelector('.hud-badge')!.getAttribute('aria-label')).toBe(
+      `Horde ${ENDING_HORDE}, boss horde`,
+    );
+    expect(root.querySelector('.hud-corner-wave')!.textContent).toBe(
+      `Wave ${s.waveCount}/${s.waveCount} · 3 left`,
+    );
+    h.update({ ...s, wave: s.waveCount, toSpawn: 674248, enemies: [] });
+    expect(root.querySelector('.hud-corner-wave')!.textContent).toMatch(/ · 674,248 left$/);
+    h.update({ ...s, wave: s.waveCount, outcome: 'won', toSpawn: 0, enemies: [] });
+    expect(root.querySelector('.hud-corner-wave')!.textContent).toMatch(/ · 0 left$/);
+  });
+
+  it('the power row: Squad Power against Recommended, a meter in its band and a tick at Recommended', () => {
+    const { root, h } = hud(true);
+    h.update(startSquadHorde(squadGame(2, 2), 1, NOW));
+    const row = root.querySelector<HTMLElement>('.hud-power')!;
+    // Hidden until the app says what the fight's numbers are.
+    expect(row.hidden).toBe(true);
+    h.fightPower(powerLine(1240, 1400));
+    expect(row.hidden).toBe(false);
+    expect(root.querySelector('.hud-power-label')!.textContent).toBe('Power 1,240 · rec 1,400');
+    expect(row.dataset.band).toBe('close');
+    const meter = root.querySelector<HTMLElement>('.hud-power-meter')!;
+    expect(meter.getAttribute('role')).toBe('meter');
+    expect(meter.getAttribute('aria-label')).toBe('Squad Power against Recommended Power');
+    expect(meter.getAttribute('aria-valuemax')).toBe('1680');
+    expect(meter.getAttribute('aria-valuenow')).toBe('1240');
+    expect(meter.getAttribute('aria-valuetext')).toContain('close');
+    // Filled to 1,240 of 1,680 (1.2 × rec); the tick at Recommended, 1,400 of 1,680.
+    expect(root.querySelector<HTMLElement>('.hud-power-fill')!.style.width).toBe('73.8%');
+    expect(root.querySelector<HTMLElement>('.hud-power-tick')!.style.left).toBe('83.3%');
+    h.fightPower(powerLine(2000, 1400));
+    expect(row.dataset.band).toBe('ok');
+    expect(root.querySelector<HTMLElement>('.hud-power-fill')!.style.width).toBe('100%');
+    expect(meter.getAttribute('aria-valuenow')).toBe('1680');
+    h.fightPower(powerLine(500, 1400));
+    expect(row.dataset.band).toBe('short');
+    h.fightPower(null);
+    expect(row.hidden).toBe(true);
+  });
+
+  it('the full game’s HUD keeps its shop row and its plain status line, with no corner', () => {
+    const { root, h } = hud(false);
     expect(root.querySelector<HTMLElement>('.hud-shop')!.hidden).toBe(false);
-    expect(root.querySelector<HTMLElement>('.hud-xp')!.hidden).toBe(true);
+    expect(root.querySelector('.hud-corner')).toBeNull();
+    expect(root.querySelector('.hud-corner-bar')).toBeNull();
+    h.update(startSquadHorde(squadGame(2, 2), 1, NOW));
+    expect(root.querySelector('.hud-fight-bar')!.textContent).toMatch(/^Horde 2 · Wave 1\//);
   });
 
   it('puts every line and name on the page as text, never as markup', () => {

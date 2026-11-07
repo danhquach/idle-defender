@@ -1813,6 +1813,63 @@ When the full game comes back, it starts as before:
 - **Hordes:** about 3–5 minutes each; a returning player plays a few
   hordes, collects patrols, sends new ones and leaves.
 
+### Farming *(as built, ID-098; numbers are starting points for ID-102)*
+
+From the farming and harder hordes design (2026-11-06), Part 1. A stuck
+player replays beaten hordes for XP and guns, sees how far short they are,
+and comes back stronger.
+
+- **Beaten hordes:** the save keeps the next new horde (`hordeNumber`); every
+  horde below it counts as beaten, so the highest beaten is `hordeNumber − 1`
+  and an older save's beaten hordes count too. Between hordes a horde picker
+  offers the next new horde or any beaten one. A replay is a normal horde of
+  that number (same waves, enemies and HP); a replay win adds no survivor
+  and doesn't move the next new horde on.
+- **First clear:** the drop rolls the horde's band (§6 Gear) moved up one
+  rarity (Rusty → Common … Prototype → Relic; Relic stays). Uid `h<n>`.
+  Older saves get no first-clear drops for hordes already beaten.
+- **Replay:** the band with its top rarity's share halved, the half moved to
+  the rarity below. Uid `r<k>`, the k-th replay win.
+- **Bad-luck guarantee (replays only):** "an upgrade" is a drop with more
+  dmg/s than the weakest gun a squad survivor holds (the free pistol
+  included). Each replay win whose drop is no upgrade adds 1 to a saved
+  count (at most 5); each count moves 5 points of rarity weight up one band,
+  taken from the lowest rarity with weight left. At 5 the next replay drop is
+  a sure upgrade: a gun and rarity (at or above the weakest held gun's where
+  the band has one) that can beat it, picked evenly, its affixes rerolled up
+  to 64 times and then its best roll, so it always ends. Any upgrade resets
+  the count. When no gun the horde can drop could beat the weakest held gun
+  (every affix maxed), the count doesn't move, there is no reroll, and the
+  result screen says "Farm a higher horde for upgrades". First clears
+  neither count nor reset it.
+- **Gun level:** every dropped gun's level is its horde number; each level
+  above 1 adds 5% of base damage, before rarity and affixes (a Horde 20 drop
+  hits ×1.95 a Horde 1 drop of the same gun). Combine takes 3 of a gun and
+  rarity at any levels; the new gun has the highest. The free pistol and
+  older saves' guns are level 1. dmg/s everywhere includes it.
+- **XP:** a replay pays that horde's survivor XP; more than 3 hordes below
+  the highest beaten, half. A loss pays 25% of that horde's win XP (halved far
+  down too) × waves cleared ÷ its waves (0 cleared → 0), rounded down. Still no
+  drop on a loss.
+- **Squad Power:** per squad survivor, their gun's sustained dmg/s (rarity,
+  level, affixes; Sharp Mind's crit chance and damage; Agility's reload)
+  × (1 + 0.5 × Sharp Mind's spread cut) × (1 + 0.5 × Instinct's extra HP
+  share) × 10, summed over the squad and rounded. Cards and skills don't
+  count. (Gun role traits join it with ID-101.)
+- **Recommended Power:** 7.1 × √(the horde's expected enemy HP: each wave's
+  size × its mix's mean HP, plus a boss horde's Horror). Swarm waves and
+  more bosses join it with ID-099. Hordes 1 and 2 take ×0.25 and ×0.5 of it:
+  sure wins for a squad of one or two (a new game's lone pistol has 83 power
+  against Horde 1's 71); from Horde 3 the scripted player's squad sits near
+  it (Horde 3: 341–562 against 486; Horde 5: 791–1,236 against 814) and wins
+  with its cards. Fitted (`balance/squad-power.test.ts`,
+  10 seeds, Military Rifles at the expected squad's size and level, no cards
+  or skills) so a squad at it wins about half the time: Horde 9 60%, 12 30%,
+  15 60%, 20 60% (mean 53%); at 70% of it a squad loses Hordes 10 and 15
+  on at least 4 of 5 seeds, at 130% wins on at least 4 of 5.
+- **Bands:** green at or above Recommended, amber within 15% below, red
+  further. The numbers are always shown; it never blocks a start.
+
 ## 12. Save
 
 Local save (browser storage) with a backup save code, same approach as
@@ -1929,6 +1986,13 @@ offline progress works across sessions.
   once, and no unknown or prototype keys. The stash is capped as it is read
   (the camp's 30 owned weapons, stash and hands together; a full horde-only
   stash and six armed survivors is 26), and the save's size check comes first.
+- **As built (ID-098): save version 15** holds farming: `farm` (replay wins,
+  whole, at most 999,999, the most an `r<k>` uid names: past it a replay pays
+  XP and drops nothing; and the bad-luck count, 0–5) and each owned gun's
+  `level` (whole, 1 to the highest horde beaten, in every slot; only in a v15
+  save). A replay's drop (`r<k>`) must come from a replay already won. Both go
+  through the allow-list (exact keys, no prototype keys). A v14 or older save
+  loads with no farming and its guns at level 1.
 - **As built (ID-084): save version 13** holds the new stats (Instinct,
   Agility, Sharp Mind, Tinker). A v12 or older save's stats (Aim, Might,
   Tech, Grit) are checked as before (whole numbers, no more than the XP

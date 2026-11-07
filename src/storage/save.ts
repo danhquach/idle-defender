@@ -35,6 +35,7 @@ import {
 import {
   AFFIXES,
   ARMOURY_CAP,
+  FARM,
   BATTERY_IDS,
   BUILDING_MATERIALS,
   CAMP_PICK_IDS,
@@ -91,7 +92,7 @@ import {
   type Stock,
   type Tier,
 } from '../core/data.ts';
-import type { GameState, RosterDefender } from '../core/game.ts';
+import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad } from '../core/hordeonly.ts';
 import {
   focusOptions,
@@ -128,6 +129,12 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 15 since farming (ID-098): a v14 save has no `farm` (no replays, no bad-luck count) and
+ * its guns have no `level` (level 1). The highest horde beaten is `hordeNumber − 1`, so an
+ * older save's beaten hordes count as beaten, and get no first-clear drops again. A
+ * replay's drop has uid `r<k>`, k at most `farm.replays`; a gun's level is 1 to the
+ * highest horde beaten.
+ *
  * 14 since 1 stat point per level (ID-096): a v13 or older save's levels gave 3 points
  * each, so its defenders and survivors waiting to join bank the 2 more than today's 1
  * per level they earned (`banked`, kept from then on), and no point earned is lost. A
@@ -164,7 +171,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -190,11 +197,12 @@ const MAX_BUILDINGS = Math.max(1, ...Object.values(PLAZAS).map((z) => z.building
 /** Weapons one patrol can find: a haul's rolls for each building. */
 const MAX_FOUND = (PATROL.rolls + PATROL.bonusRolls) * MAX_BUILDINGS;
 /**
- * An owned weapon's uid: `h` and the horde number that dropped it; `p`, the patrol number
- * that found it and its place in the haul; or a survivor's (`SURVIVOR_ID`).
+ * An owned weapon's uid: `h` and the horde number that dropped it; `r` and the replay win
+ * that dropped it (ID-098); `p`, the patrol number that found it and its place in the
+ * haul; or a survivor's (`SURVIVOR_ID`).
  */
 const UID = new RegExp(
-  `^(?:h[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5})$`,
+  `^(?:h[1-9][0-9]{0,5}|r[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5})$`,
 );
 /** A survivor's id (design §10): `s`, the patrol and its try; or `c` and the camp level. */
 const SURVIVOR_ID = /^(?:s([1-9][0-9]{0,5})-([0-9])|c([1-9][0-9]{0,5}))$/;
@@ -305,7 +313,7 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
+  if (![SAVE_VERSION, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
     fail('version');
   }
   const savedAt = int(o.savedAt, 0, MAX_TIME);
@@ -315,9 +323,21 @@ function readSave(v: unknown): Save {
   const camp = ver >= 7 ? (ver >= 10 ? 'cars' : ver === 9 ? 'survivors' : 'camp') : null;
   const queue = ver >= 11;
   const reserve = ver >= 12;
+  const farm = ver >= 15;
   const stats: StatsRead = { legacy: ver < 13, bank: ver < 14, refunded: false };
   const grid = ver === 1 ? V1_GRID : GRID;
-  const game = readGame(o.game, savedAt, grid, materials, patrols, camp, queue, reserve, stats);
+  const game = readGame(
+    o.game,
+    savedAt,
+    grid,
+    materials,
+    patrols,
+    camp,
+    queue,
+    reserve,
+    farm,
+    stats,
+  );
   return {
     game,
     savedAt,
@@ -339,6 +359,8 @@ function readGame(
   hasQueue: boolean,
   /** Whether the save has the reserve (v12). */
   hasReserve: boolean,
+  /** Whether the save has farming (v15). */
+  hasFarm: boolean,
   stats: StatsRead,
 ): GameState {
   const lacks = (key: string): boolean =>
@@ -368,6 +390,7 @@ function readGame(
     ...(hasCamp ? ['camp'] : []),
     ...(hasQueue ? ['queue', 'perkLevels'] : []),
     ...(hasReserve ? ['reserve'] : []),
+    ...(hasFarm ? ['farm'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -417,6 +440,7 @@ function readGame(
       ? readCamp(o.camp, savedAt, survivors, cars, carLimit({ research }), stats)
       : newCamp(),
     reserve: [],
+    farm: hasFarm ? readFarm(o.farm) : newFarm(),
   };
   // Each car out is one the camp built, on one patrol at a time.
   const taken = out.flatMap((p) => (p.car === null ? [] : [p.car]));
@@ -449,6 +473,16 @@ function readGame(
     ...waiting.map((s) => s.weapon),
   ];
   if (new Set(every.map((w) => w.uid)).size !== every.length) fail('weapon twice');
+  // A replay's drop (`r<k>`) comes from a replay already won (ID-098).
+  if (every.some((w) => w.uid.startsWith('r') && Number(w.uid.slice(1)) > game.farm.replays)) {
+    fail('replay drop from the future');
+  }
+  // A gun level (ID-098) only in a v15 save, and from a horde beaten, in every slot: a
+  // survivor waiting is read with no horde bound, so this is the check that holds for all.
+  const top = Math.max(1, game.hordeNumber - 1);
+  for (const w of every) {
+    if (w.level !== undefined && (!hasFarm || w.level > top)) fail('gun level');
+  }
   const people = [...game.roster.map((d) => d.id), ...waiting.map((s) => s.id)];
   if (new Set(people).size !== people.length) fail('survivor twice');
   // A patrol's weapons reach the camp when it comes back, not before.
@@ -868,11 +902,14 @@ function readHeld(v: unknown, hordeNumber: number, patrolsSent: number): Held {
  * weapon, once, in range.
  */
 function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedWeapon {
-  const o = obj(v, ['uid', 'base', 'rarity', 'affixes']);
+  // A gun level (ID-098) is written only by v15 saves; absent, it is 1.
+  const levelled = typeof v === 'object' && v !== null && Object.hasOwn(v, 'level');
+  const o = obj(v, ['uid', 'base', 'rarity', 'affixes', ...(levelled ? ['level'] : [])]);
   const uid = text(o.uid, 8 + String(MAX_FOUND - 1).length, UID);
   const from = Number(uid.slice(1).split('-')[0]);
-  // A survivor's camp-level weapon (`c`) is checked against the camp, once it is read.
-  if (!uid.startsWith('c') && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
+  // A survivor's camp-level weapon (`c`) is checked against the camp, and a replay's (`r`)
+  // against the replays won, once they are read.
+  if (!/^[cr]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
     fail('weapon from the future');
   }
   const base = oneOf(o.base, WEAPON_IDS);
@@ -885,7 +922,19 @@ function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedW
     return { id, value: int(x.value, AFFIXES[id].min, AFFIXES[id].max) };
   });
   if (new Set(affixes.map((a) => a.id)).size !== affixes.length) fail('affix twice');
-  return { uid, base, rarity, affixes };
+  if (!levelled) return { uid, base, rarity, affixes };
+  // From a horde beaten: 1 to the highest (`hordeNumber − 1`), at least 1.
+  return { uid, base, rarity, affixes, level: int(o.level, 1, Math.max(1, hordeNumber - 1)) };
+}
+
+/** Farming (ID-098): replay wins, and the bad-luck count up to its guarantee. */
+function readFarm(v: unknown): Farm {
+  const o = obj(v, ['replays', 'badLuck']);
+  // No more than a replay drop's uid can name (past it a replay drops nothing).
+  return {
+    replays: int(o.replays, 0, FARM.maxReplays),
+    badLuck: int(o.badLuck, 0, FARM.guarantee),
+  };
 }
 
 function readRoster(

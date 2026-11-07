@@ -53,6 +53,12 @@
   --color-warn-bg: #2a2412;
   --color-ok-border: #3d5a3d;
   --color-ok-text: #b9d6b0;
+  /* Squad Power against Recommended (ID-098): at or above, within 15% below, further below. */
+  --color-band-ok: #7cc47f;
+  --color-band-close: #e0b84a;
+  --color-band-short: #e86a6a;
+  /* The band colour in use: set by [data-band] on a power line or meter. */
+  --power-color: var(--color-text-muted);
   --color-synergy: #e9c46a;
   --color-reason: #c98a6a;
   --color-armed: #ffe066;
@@ -592,7 +598,6 @@ body {
 
 .hud[hidden],
 .hud-bar[hidden],
-.hud-xp[hidden],
 .hud-shop[hidden],
 .build-panel[hidden] {
   display: none;
@@ -1035,6 +1040,39 @@ body {
   font-size: var(--text-body-sm);
 }
 
+/* Which kind of drop it was, and the level in front of the gun's name (ID-098). */
+.tile-kind {
+  display: inline-block;
+  font-weight: 600;
+}
+
+/* A guaranteed upgrade stands out from a plain replay (chip tones: ok, warn). */
+.tile-kind[data-tone='warn'] {
+  font-weight: 700;
+}
+
+.hud-horde-hint {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.hud-horde-hint[hidden] {
+  display: none;
+}
+
+.tile-level {
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-farm {
+  margin-top: var(--space-4) !important;
+  color: var(--color-warn);
+  font-size: var(--text-sm);
+}
+
 .tile-row {
   display: flex;
   align-items: baseline;
@@ -1310,6 +1348,7 @@ body {
   position: sticky;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-12);
@@ -1328,8 +1367,8 @@ body {
   display: none;
 }
 
-/* The fight XP bar has nothing to say between hordes, and would show over the panel. */
-.hud:has(.hud-debrief:not([hidden])) .hud-xp {
+/* The fight corner has nothing to say between hordes, and would show over the panel. */
+.hud:has(.hud-debrief:not([hidden])) .hud-corner {
   visibility: hidden;
 }
 
@@ -1415,32 +1454,204 @@ body {
   min-width: 0;
 }
 
-/* The fight XP bar (ID-066), top left under the horde-only top bar. */
-.hud-xp {
-  position: absolute;
-  top: 40px;
-  left: 16px;
+/* The horde-only fight corner (ID-098, layout B), top left in the 48px band: a square
+   horde badge, and beside it one panel of wave, fight level and XP, and Squad Power. */
+.hud-corner-bar {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.hud-corner {
   display: flex;
-  gap: var(--space-10);
-  align-items: center;
+  gap: var(--space-8);
+  align-items: stretch;
+  height: 40px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-corner[hidden] {
+  display: none;
+}
+
+.hud-badge {
+  position: relative;
   box-sizing: border-box;
-  width: min(300px, calc(100% - 32px));
-  padding: var(--space-6) var(--space-12);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* A three-digit horde still fits: the badge only widens. */
+  min-width: 40px;
+  height: 40px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-accent);
+  line-height: 1;
+}
+
+.hud-badge-label {
+  color: var(--color-text-muted);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hud-badge-num {
+  margin-top: var(--space-2);
+  font-size: var(--text-title);
+  font-weight: 700;
+}
+
+.hud-badge-boss {
+  display: none;
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  padding: 0 2px;
+  border: 1px solid var(--color-boss);
+  border-radius: var(--radius-pill);
+  background: var(--color-boss-bg);
+  color: var(--color-danger-text);
+  font-size: 10px;
+}
+
+.hud-badge-boss-on {
+  border-color: var(--color-boss);
+  background: var(--color-boss-bg);
+  color: var(--color-danger-text);
+}
+
+.hud-badge-boss-on .hud-badge-boss {
+  display: block;
+}
+
+.hud-corner-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: min(300px, calc(100vw - 84px));
+  padding: 1px var(--space-8);
   /* Edged, so the plate still reads on the fight's dark ground (ID-071). */
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-bar-bg);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
+  font-size: var(--text-xs);
+  line-height: 12px;
 }
 
-.hud-xp-label {
+.hud-corner-wave {
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hud-corner-row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  height: 12px;
+}
+
+.hud-corner-row[hidden] {
+  display: none;
+}
+
+.hud-xp-label,
+.hud-power-label {
+  flex: 0 0 12.5em;
   white-space: nowrap;
 }
 
 .hud-xp-meter {
   flex: 1;
   min-width: 0;
+  height: 6px;
+}
+
+.hud-power-meter {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-surface-sunken);
+}
+
+.hud-power-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--power-color);
+}
+
+/* Where Recommended Power sits: the fill passing it is green. */
+.hud-power-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--color-text);
+}
+
+[data-band='ok'] {
+  --power-color: var(--color-band-ok);
+}
+
+[data-band='close'] {
+  --power-color: var(--color-band-close);
+}
+
+[data-band='short'] {
+  --power-color: var(--color-band-short);
+}
+
+.hud-power .hud-power-label {
+  color: var(--power-color);
+}
+
+/* The horde picker beside the start button (ID-098) and its Squad Power line. */
+.hud-horde-pick {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-10);
+  align-items: center;
+}
+
+.hud-horde-pick[hidden] {
+  display: none;
+}
+
+.hud-horde-label {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.hud-horde-select {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.hud-horde-power,
+.menu-note.inv-power-line {
+  margin: 0;
+  color: var(--power-color);
+  font-size: var(--text-body-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-horde-band,
+.inv-power-band {
+  padding: 0 var(--space-6);
+  border: 1px solid currentcolor;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
 }
 
 .hud-boss:not([hidden]) ~ .hud-warning {
@@ -2369,6 +2580,7 @@ body {
 
 /* dmg/s, bottom right; the set-ready mark, top left. */
 .inv-slot-badge,
+.inv-slot-level,
 .inv-slot-ready {
   position: absolute;
   padding: 0 var(--space-4);
@@ -2385,6 +2597,12 @@ body {
   right: 2px;
   bottom: 2px;
   color: var(--color-text);
+}
+
+.inv-slot-level {
+  bottom: 2px;
+  left: 2px;
+  color: var(--color-accent);
 }
 
 .inv-slot-ready {
@@ -2911,16 +3129,12 @@ body {
     right: 156px;
   }
 
-  .hud-xp {
-    top: 104px;
-  }
-
   .hud-boss {
-    top: 144px;
+    top: 108px;
   }
 
   .hud-boss:not([hidden]) ~ .hud-warning {
-    top: 188px;
+    top: 152px;
   }
 }
 

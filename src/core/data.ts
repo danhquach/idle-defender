@@ -69,6 +69,42 @@ export const SQUAD_DROP: readonly { from: number; rarity: Record<Rarity, number>
   { from: 7, rarity: { rusty: 10, common: 35, military: 35, prototype: 15, relic: 5 } },
   { from: 10, rarity: { rusty: 0, common: 25, military: 40, prototype: 25, relic: 10 } },
 ];
+/** A gun's level (ID-098): each level above 1 adds this share of its base damage. */
+export const GUN_LEVEL_DAMAGE = 0.05;
+/**
+ * Squad Power and Recommended Power (ID-098). A survivor's power is their gun's sustained
+ * dmg/s × (1 + `aim` × Sharp Mind's spread cut) × (1 + `tough` × Instinct's extra HP
+ * share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP ^ `rec.e`,
+ * fitted so a squad at it wins about half the time with no cards or skills; × `rec.early`
+ * in Hordes 1 and 2, sure wins for a squad of one or two (`SQUAD_EARLY_HP`). Amber is
+ * within `close` below it.
+ */
+export const POWER = {
+  aim: 0.5,
+  tough: 0.5,
+  scale: 10,
+  rec: { k: 7.1, e: 0.5, early: [0.25, 0.5] },
+  close: 0.15,
+} as const;
+/**
+ * Farming beaten hordes (ID-098, design §11 Farming): a replay more than `farOff` hordes
+ * below the highest beaten pays `farXp` of the XP; a loss pays `lossXp` of what a win of
+ * that horde would, for each share of the waves cleared. Each replay win whose drop is no
+ * upgrade adds 1 to the bad-luck count, and each count moves `badLuckStep` points of
+ * rarity weight up one band; at `guarantee` the next replay drop is a sure upgrade.
+ */
+export const FARM = {
+  farOff: 3,
+  farXp: 0.5,
+  lossXp: 0.25,
+  badLuckStep: 5,
+  guarantee: 5,
+  // The most replay wins kept (a replay drop's uid is `r` and up to 6 digits): past it, a
+  // replay pays XP and drops nothing.
+  maxReplays: 999_999,
+  // How many hordes above a replay "Farm Horde N+" looks through.
+  search: 50,
+} as const;
 
 /** A Shambler's body radius, and a defender's: the default body size. */
 export const ENEMY_RADIUS = 12;

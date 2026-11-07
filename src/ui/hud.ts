@@ -3,7 +3,15 @@
 // cash shop row with the active skills, the commander's perks and Second Look's
 // reroll, and a short toast (refused moves).
 // Text reaches the page only through textContent.
-import { affixText, gunPower, heldLabel, heldName, isOwned, type Held } from '../core/armoury.ts';
+import {
+  affixText,
+  gunLevel,
+  gunPower,
+  heldName,
+  isOwned,
+  levelName,
+  type Held,
+} from '../core/armoury.ts';
 import { repairAllCost } from '../core/base.ts';
 import {
   campAfterPick,
@@ -73,12 +81,13 @@ import {
   type Injury,
   type Post,
 } from '../core/horde.ts';
-import { squadOf, squadResult, type SquadDrop } from '../core/hordeonly.ts';
+import { isReplay, squadOf, squadResult, type SquadDrop } from '../core/hordeonly.ts';
 import { isGun, professionOf } from '../core/loadout.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
+import { powerBand, recommendedPower, squadPower, type PowerBand } from '../core/squadpower.ts';
 import { isLocked, levelOf, spend, unspentPoints } from '../core/stats.ts';
 import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
@@ -255,11 +264,18 @@ export function squadStatus(s: HordeState): string {
  */
 export function xpBar(s: Pick<HordeState, 'level' | 'xp'>): {
   label: string;
+  /** The corner panel's short form (ID-098): "Lv 5 · 62/100". */
+  text: string;
   value: number;
   max: number;
 } {
   const max = xpToNext(s.level);
-  return { label: `Fight Lv ${s.level} · ${s.xp}/${max} XP`, value: Math.min(s.xp, max), max };
+  return {
+    label: `Fight Lv ${s.level} · ${s.xp}/${max} XP`,
+    text: `Lv ${s.level} · ${s.xp}/${max}`,
+    value: Math.min(s.xp, max),
+    max,
+  };
 }
 
 /**
@@ -378,6 +394,146 @@ const horrorName = (ability: HorrorAbility): string =>
 export const startLabel = (hordeNumber: number): string =>
   `Start Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
 
+/** A beaten horde's button (ID-098): "Replay Horde 5", with the boss suffix as `startLabel`. */
+export const replayLabel = (hordeNumber: number): string =>
+  `Replay Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
+
+/** A lost horde's button: "Retry Horde 5", with the boss suffix as `startLabel`. */
+export const retryLabel = (hordeNumber: number): string =>
+  `Retry Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
+
+const thousands = (n: number): string => Math.round(n).toLocaleString('en-US');
+
+/** The word for a band, shown beside the colour so colour is never the only cue (ID-098). */
+export const BAND_WORD: Readonly<Record<PowerBand, string>> = {
+  ok: 'ok',
+  close: 'close',
+  short: 'short',
+};
+
+/** The meter's end, as a share of Recommended Power (ID-098): the tick sits at 1 / this. */
+export const POWER_METER_END = 1.2;
+
+/** Squad Power against a horde's Recommended Power (ID-098), as the screens show it. */
+export interface PowerLine {
+  power: number;
+  rec: number;
+  band: PowerBand;
+  /** "Power 1,240 · rec 1,400" */
+  text: string;
+  /** The meter's fill, 0 to 1 of its length (Squad Power over `POWER_METER_END` × rec). */
+  fill: number;
+  /** Where the Recommended tick sits, 0 to 1 of the meter's length. */
+  tick: number;
+}
+
+export function powerLine(power: number, rec: number): PowerLine {
+  return {
+    power,
+    rec,
+    band: powerBand(power, rec),
+    text: `Power ${thousands(power)} · rec ${thousands(rec)}`,
+    fill: rec > 0 ? Math.min(1, power / (POWER_METER_END * rec)) : 1,
+    tick: 1 / POWER_METER_END,
+  };
+}
+
+/** One entry of the horde picker (ID-098). */
+export interface HordeChoice {
+  horde: number;
+  /** The next new horde, not yet beaten. */
+  isNew: boolean;
+  /** The option's text: "Horde 7 (new) · Boss · rec 1,400 · short". */
+  label: string;
+  /** The screen's button once this is picked: "Start Horde 7", "Replay Horde 5". */
+  button: string;
+  power: PowerLine;
+  /** "Try Horde 8 to farm" when this horde is not at Squad Power's reach; null when it is. */
+  hint: string | null;
+  /** The start screen's title and chips for this horde, so they follow the pick. */
+  start: { title: string; chips: Chip[] };
+}
+
+/** The horde picker (ID-098) between hordes: the next new horde first, then beaten ones, highest first. */
+export interface HordePicker {
+  options: HordeChoice[];
+  /** The horde picked now. */
+  value: number;
+  /** The best horde to farm: the highest beaten one at 'ok', unless the new horde is; else null. */
+  farm: number | null;
+  /** Whether the title and chips follow the pick (the start screen's). */
+  retitle: boolean;
+}
+
+/**
+ * Hordes the picker lists (ID-098): the next new one and the highest beaten below it. A
+ * replay far down pays half the XP and weaker guns, and a save's horde can be very high,
+ * so the list stays short.
+ */
+export const PICKER_HORDES = 50;
+
+/**
+ * The picker for `game`, `picked` selected (the next new horde when it isn't listed): the
+ * next new horde first, labelled new, then the beaten ones, highest first, `PICKER_HORDES`
+ * in all. `retry` is the horde just lost, whose button says "Retry". Advice only: every
+ * listed horde is pickable.
+ */
+export function hordePicker(
+  game: Pick<GameState, 'roster' | 'hordeNumber'>,
+  picked: number = game.hordeNumber,
+  retry: number | null = null,
+  retitle = false,
+): HordePicker {
+  const squad = squadPower(game);
+  const options: HordeChoice[] = [];
+  const lowest = Math.max(1, game.hordeNumber - PICKER_HORDES + 1);
+  // The best place to farm (ID-098): the highest beaten horde the squad already holds.
+  let farm: number | null = null;
+  if (powerBand(squad, recommendedPower(game.hordeNumber)) !== 'ok') {
+    for (let n = game.hordeNumber - 1; n >= lowest; n--) {
+      if (powerBand(squad, recommendedPower(n)) === 'ok') {
+        farm = n;
+        break;
+      }
+    }
+  }
+  for (let n = game.hordeNumber; n >= lowest; n--) {
+    const isNew = n === game.hordeNumber;
+    const power = powerLine(squad, recommendedPower(n));
+    const boss = horrorAbility(n) !== null;
+    options.push({
+      horde: n,
+      isNew,
+      label: [
+        `Horde ${n}${isNew ? ' (new)' : ''}`,
+        ...(boss ? ['Boss'] : []),
+        `rec ${thousands(power.rec)}`,
+        BAND_WORD[power.band],
+        ...(n === farm ? ['best to farm'] : []),
+      ].join(' · '),
+      button: n === retry ? retryLabel(n) : isNew ? startLabel(n) : replayLabel(n),
+      power,
+      hint:
+        power.band === 'ok'
+          ? null
+          : farm !== null
+            ? `Try Horde ${farm} to farm`
+            : 'No beaten horde is at your power yet',
+      start: {
+        title: `Horde ${n}${boss ? ' · Boss horde' : ''}${isNew ? '' : ' · Replay'}`,
+        chips: [
+          ...(boss ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
+          ...(isNew ? [] : [{ text: 'Replay', tone: 'ok' as const }]),
+          { text: `${waveCount(n)} waves`, tone: 'ok' as const },
+          { text: `Squad ${squadOf(game).length}/${SQUAD_CAP}`, tone: 'ok' as const },
+        ],
+      },
+    });
+  }
+  const open = Number.isInteger(picked) && picked >= lowest && picked <= game.hordeNumber;
+  return { options, value: open ? picked : game.hordeNumber, farm, retitle };
+}
+
 /** The boss bar while a Mutated Horror is on the field, else null. */
 export function bossBar(s: HordeState): { label: string; hp: number; maxHp: number } | null {
   const e = s.enemies.find((x) => x.horror);
@@ -404,6 +560,8 @@ export interface ResultScreen {
   squad?: true;
   /** The horde-only panel laid out (ID-067): chips, loot, one card per survivor; else `lines`. */
   debrief?: Debrief;
+  /** The horde picker beside the button (ID-098); the button's label follows the pick. */
+  picker?: HordePicker;
   /** Defenders from a win with stat points to spend, XP added. */
   picks: RosterDefender[];
   /**
@@ -675,8 +833,14 @@ function squadXpLine(g: ReturnType<typeof levelGains>[number]): string {
   return `${g.name} +${g.xp} XP · level ${g.level} · ${g.into}/${g.next} XP to level ${g.level + 1}${up}`;
 }
 
-/** "Military Rifle (+7% damage) · 17.2 dmg/s": a gun's name and affixes, and how hard it hits over time. */
-export const gunLabel = (h: Held): string => `${heldLabel(h)} · ${gunPower(h).toFixed(1)} dmg/s`;
+/** "Lv 12 Military Rifle (+7% damage)": a gun's level, name and affixes (ID-098). */
+export const levelLabel = (h: Held): string =>
+  isOwned(h) && h.affixes.length
+    ? `${levelName(h)} (${h.affixes.map(affixText).join(', ')})`
+    : levelName(h);
+
+/** "Lv 12 Military Rifle (+7% damage) · 17.2 dmg/s": a gun's name and affixes, and how hard it hits over time. */
+export const gunLabel = (h: Held): string => `${levelLabel(h)} · ${gunPower(h).toFixed(1)} dmg/s`;
 
 /**
  * A horde-only win's drop lines (ID-067), for the stash `game` had before it: the gun and
@@ -684,22 +848,25 @@ export const gunLabel = (h: Held): string => `${heldLabel(h)} · ${gunPower(h).t
  */
 export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop): string[] {
   const { weapon, thrown } = drop;
-  const got = `Weapon drop: ${gunLabel(weapon)}`;
+  const got = `Weapon drop (${DROP_KIND[drop.kind]}): ${gunLabel(weapon)}`;
+  const farm = drop.noUpgrades ? [farmText(drop.farmFrom)] : [];
   if (thrown === weapon) {
     return [
       got,
-      `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${heldName(weapon)} was no better than any gun in it, so it was thrown away`,
+      `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${levelName(weapon)} was no better than any gun in it, so it was thrown away`,
+      ...farm,
     ];
   }
   const count = game.armoury.length + (thrown ? 0 : 1);
   return [
     `${got} · into the stash (${count}/${STASH_CAP})`,
-    ...(thrown ? [`Stash full: the weakest, the ${heldLabel(thrown)}, was thrown away`] : []),
+    ...(thrown ? [`Stash full: the weakest, the ${levelLabel(thrown)}, was thrown away`] : []),
+    ...farm,
   ];
 }
 
-/** "30.3 dmg/s · Prototype LMG (+12% damage)": a picker option, the number first so a closed select keeps it. */
-export const gunOption = (h: Held): string => `${gunPower(h).toFixed(1)} dmg/s · ${heldLabel(h)}`;
+/** "30.3 dmg/s · Lv 4 Prototype LMG (+12% damage)": a picker option, the number first so a closed select keeps it. */
+export const gunOption = (h: Held): string => `${gunPower(h).toFixed(1)} dmg/s · ${levelLabel(h)}`;
 
 /** One survivor's gun picker (ID-067): who, what they can hold, and what they hold now. */
 export interface GearRow {
@@ -757,6 +924,14 @@ export interface DropTile {
   rarityName: string;
   /** "Rifle" */
   name: string;
+  /** "Lv 12" (ID-098) */
+  level: string;
+  /** Which kind of drop it was (ID-098): "First clear", "Replay" or "Guaranteed upgrade". */
+  kind: string;
+  /** The kind chip's tone: a guaranteed upgrade stands out, a first clear is milder. */
+  kindTone: 'ok' | 'warn' | 'plain';
+  /** Where to go for upgrades when no gun this horde drops would beat the weakest held; else null. */
+  farmNote: string | null;
   /** The gun's icon (ID-092), as the Inventory shows it. */
   icon: ArtId;
   /** "+7% damage, +21% magazine"; '' with none. */
@@ -831,15 +1006,36 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
     rarity: weapon.rarity,
     rarityName: RARITIES[weapon.rarity].name,
     name: WEAPONS[weapon.base].name,
+    level: `Lv ${gunLevel(weapon)}`,
+    kind: DROP_KIND[drop.kind],
+    kindTone: KIND_TONE[drop.kind],
+    farmNote: drop.noUpgrades ? farmText(drop.farmFrom) : null,
     icon: GUN_ICON[weapon.base as GunId],
     affixes: weapon.affixes.map(affixText).join(', '),
     power: `${power.toFixed(1)} dmg/s`,
     stash: lost ? 'Stash full: thrown away' : `Stash ${count}/${STASH_CAP}`,
     lost,
     // "No better", not "weaker": a tie throws the drop away too.
-    thrown: lost ? DROP_LOST_NOTE : thrown ? `Thrown away: ${heldName(thrown)}` : null,
+    thrown: lost ? DROP_LOST_NOTE : thrown ? `Thrown away: ${levelName(thrown)}` : null,
   };
 }
+
+/** What a drop tile says about its kind (ID-098). */
+export const DROP_KIND: Readonly<Record<SquadDrop['kind'], string>> = {
+  first: 'First clear',
+  replay: 'Replay',
+  guaranteed: 'Guaranteed upgrade',
+};
+
+const KIND_TONE: Readonly<Record<SquadDrop['kind'], 'ok' | 'warn' | 'plain'>> = {
+  first: 'ok',
+  replay: 'plain',
+  guaranteed: 'warn',
+};
+
+/** A replay where nothing the horde drops could beat the weakest held gun: where to go (ID-098). */
+export const farmText = (farmFrom: number | null): string =>
+  farmFrom === null ? 'Beat a new horde for upgrades' : `Farm Horde ${farmFrom}+ for upgrades`;
 
 /** Under a drop the full stash threw away itself (ID-073). */
 export const DROP_LOST_NOTE = 'No better than any gun in the stash';
@@ -856,30 +1052,30 @@ export const SQUAD_CARD_HINT = 'Tap a name to see their card and what each point
 /** Under the horde-only stat picker: points not spent now aren't lost. */
 export const SQUAD_POINTS_NOTE = 'Unspent points are kept for later.';
 
-/** The horde-only screen before a horde (ID-066): who fights it, and its start button. */
-export function squadStart(game: GameState): ResultScreen {
+/**
+ * The horde-only screen before a horde (ID-066): who fights it, its start button, and the
+ * horde picker (ID-098) with `picked` selected (the next new horde by default).
+ */
+export function squadStart(game: GameState, picked: number = game.hordeNumber): ResultScreen {
   const squad = squadOf(game);
+  const picker = hordePicker(game, picked, null, true);
+  const now = picker.options.find((o) => o.horde === picker.value)!;
   return {
-    title: horrorAbility(game.hordeNumber)
-      ? `Horde ${game.hordeNumber} · Boss horde`
-      : `Horde ${game.hordeNumber}`,
+    title: now.start.title,
     lines: [
       `Squad ${squad.length}/${SQUAD_CAP}: ${squad
         .map((d) => `${d.name} (level ${levelOf(d.xp).level})`)
         .join(', ')}`,
-      `${waveCount(game.hordeNumber)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
+      `${waveCount(now.horde)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
     ],
-    button: startLabel(game.hordeNumber),
+    button: now.button,
     squad: true,
+    picker,
     picks: [],
     camp: noCamp(game),
     debrief: {
       kind: 'start',
-      chips: [
-        ...(horrorAbility(game.hordeNumber) ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
-        { text: `${waveCount(game.hordeNumber)} waves`, tone: 'ok' },
-        { text: `Squad ${squad.length}/${SQUAD_CAP}`, tone: 'ok' },
-      ],
+      chips: now.start.chips,
       callout: null,
       note: null,
       drop: null,
@@ -890,38 +1086,78 @@ export function squadStart(game: GameState): ResultScreen {
   };
 }
 
+/** A loss's XP, as its chip and line say it (ID-098). */
+export const lossXpText = (xp: number): string =>
+  xp > 0 ? `+${xp} XP each` : 'No XP: no wave cleared';
+
 /**
  * The horde-only result screen (ID-066) for horde `s`, fought from `game`: a win's XP,
- * level-ups and the survivor joining (Horde 10's is the soft ending, with play going
- * on); a loss says where they got in and that the same horde comes again in full.
+ * level-ups and the survivor joining (a first clear only; Horde 10's is the soft ending,
+ * with play going on); a replay's win says so and adds nobody. A loss says where they got
+ * in, the small XP it paid (ID-098) and that the horde comes again in full. The picker
+ * (ID-098) starts on the next new horde after a first clear, else on the same horde; its
+ * bands read the squad as `game` holds it, so the app redraws it once the win is saved.
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
   const { gains, joined, drop } = squadResult(game, s);
-  if (s.outcome === 'won') {
-    const picks: RosterDefender[] = [];
-    for (const g of gains) {
-      const d = game.roster.find((r) => r.id === g.id);
-      if (!d) continue;
-      const after = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
-      if (unspentPoints(after) > 0) picks.push(after);
-    }
-    const ending = s.hordeNumber === ENDING_HORDE;
+  const won = s.outcome === 'won';
+  const replay = isReplay(game, s.hordeNumber);
+  const first = won && !replay;
+  // The picker as it stands once a first clear has moved on to the next horde.
+  const after = first ? { ...game, hordeNumber: game.hordeNumber + 1 } : game;
+  const picker = hordePicker(
+    after,
+    first ? after.hordeNumber : s.hordeNumber,
+    won ? null : s.hordeNumber,
+  );
+  const goOn = picker.options.find((o) => o.horde === picker.value)!.button;
+  const picks: RosterDefender[] = [];
+  for (const g of gains) {
+    const d = game.roster.find((r) => r.id === g.id);
+    if (!d) continue;
+    const next = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
+    if (unspentPoints(next) > 0) picks.push(next);
+  }
+  const xpCards = (): SquadCard[] =>
+    gains.map((g): SquadCard => ({
+      id: g.id,
+      name: g.name,
+      level: g.level,
+      xp: g.xp,
+      levelUp: g.levels > 0,
+      bar: {
+        pct: g.next > 0 ? Math.min(100, (100 * g.into) / g.next) : 100,
+        text: `${g.into}/${g.next} XP to Lv ${g.level + 1}`,
+      },
+      joining: false,
+    }));
+  if (won) {
+    const ending = first && s.hordeNumber === ENDING_HORDE;
     return {
-      title: ending ? `You held Horde ${s.hordeNumber}` : `Horde ${s.hordeNumber} held`,
+      title: ending
+        ? `You held Horde ${s.hordeNumber}`
+        : replay
+          ? `Horde ${s.hordeNumber} held (replay)`
+          : `Horde ${s.hordeNumber} held`,
       lines: [
         s.boss
           ? `All ${s.waveCount} waves cleared · the ${horrorName(s.boss)} is dead`
           : `All ${s.waveCount} waves cleared`,
         ...gains.map(squadXpLine),
-        joined
-          ? `New survivor: ${joined.name} joins the squad for the next horde`
-          : `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
+        ...(replay
+          ? []
+          : [
+              joined
+                ? `New survivor: ${joined.name} joins the squad for the next horde`
+                : `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
+            ]),
         ...(drop ? squadDropLines(game, drop) : []),
         ...(ending ? ['The end, for now. The hordes keep coming: play on from the next one.'] : []),
       ],
-      button: ending ? 'Continue' : startLabel(s.hordeNumber + 1),
+      button: ending ? 'Continue' : goOn,
       squad: true,
+      picker,
       picks,
       camp: noCamp(game),
       debrief: {
@@ -935,29 +1171,18 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           ? 'The end, for now. The hordes keep coming: play on from the next one.'
           : null,
         drop: drop ? dropTile(game, drop) : null,
-        recruit: joined
-          ? { label: 'New survivor', name: joined.name, sub: 'Joins next horde', full: false }
-          : {
-              label: 'Squad',
-              name: `${SQUAD_CAP}/${SQUAD_CAP} full`,
-              sub: 'Nobody new joins',
-              full: true,
-            },
-        cards: [
-          ...gains.map((g): SquadCard => ({
-            id: g.id,
-            name: g.name,
-            level: g.level,
-            xp: g.xp,
-            levelUp: g.levels > 0,
-            bar: {
-              pct: g.next > 0 ? Math.min(100, (100 * g.into) / g.next) : 100,
-              text: `${g.into}/${g.next} XP to Lv ${g.level + 1}`,
-            },
-            joining: false,
-          })),
-          ...(joined ? [plainCard(joined, true)] : []),
-        ],
+        // A replay brings nobody: only a first clear's tile says who joins.
+        recruit: replay
+          ? null
+          : joined
+            ? { label: 'New survivor', name: joined.name, sub: 'Joins next horde', full: false }
+            : {
+                label: 'Squad',
+                name: `${SQUAD_CAP}/${SQUAD_CAP} full`,
+                sub: 'Nobody new joins',
+                full: true,
+              },
+        cards: [...xpCards(), ...(joined && !replay ? [plainCard(joined, true)] : [])],
         foot: picks.length > 0 ? SQUAD_POINTS_NOTE : '',
       },
     };
@@ -965,34 +1190,38 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   const inner = [...s.breaches].sort((a, b) => b.column - a.column).at(-1);
   const where = inner ? `They got in during wave ${inner.wave} of ${s.waveCount}` : 'They got in';
   const horror = s.enemies.find((e) => e.horror)?.horror;
+  const xp = gains[0]?.xp ?? 0;
+  const again = `Horde ${s.hordeNumber} again, or an easier horde to farm XP and guns: the squad is back on their feet and the wall at full HP`;
   return {
     title: 'The wall fell',
     lines: [
       `${where} · nobody left standing`,
       ...(horror ? [`The ${horrorName(horror.ability)} still stood`] : []),
-      'No XP on a loss',
+      lossXpText(xp),
+      ...(xp > 0 ? gains.map(squadXpLine) : []),
       SQUAD_NO_DROP,
-      `Horde ${s.hordeNumber} again: the whole squad back on their feet and the wall at full HP`,
+      again,
     ],
-    button: `Retry Horde ${s.hordeNumber}`,
+    button: goOn,
     squad: true,
-    picks: [],
+    picker,
+    picks,
     camp: noCamp(game),
     debrief: {
       kind: 'lost',
       chips: [
-        { text: 'No XP on a loss', tone: 'warn' },
+        { text: lossXpText(xp), tone: 'warn' },
         { text: SQUAD_NO_DROP, tone: 'warn' },
       ],
       callout: {
         head: `${where} · nobody left standing`,
         sub: horror ? `The ${horrorName(horror.ability)} still stood` : null,
       },
-      note: `Horde ${s.hordeNumber} again: the whole squad back on their feet and the wall at full HP`,
+      note: again,
       drop: null,
       recruit: null,
-      cards: squadOf(game).map((d) => plainCard(d)),
-      foot: '',
+      cards: xp > 0 ? xpCards() : squadOf(game).map((d) => plainCard(d)),
+      foot: picks.length > 0 ? SQUAD_POINTS_NOTE : '',
     },
   };
 }
@@ -1028,22 +1257,70 @@ export function createHud(
    * card in the Roster count here too.
    */
   syncPicks(picks: readonly RosterDefender[]): void;
+  /** Where a horde picked from the picker goes (ID-098); the app sets it once. */
+  onHordePick(handler: (horde: number) => void): void;
+  /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
+  showPicker(picker: HordePicker): void;
+  /** Squad Power against Recommended Power for the fight's corner (ID-098); null hides it. */
+  fightPower(line: PowerLine | null): void;
   show(visible: boolean): void;
   /** Shows `text` for `ms` (2 s unless said). */
   toast(text: string, ms?: number): void;
   bottomSpace(): number;
 } {
   const hud = el('div', 'hud');
-  const bar = el('div', 'hud-bar hud-fight-bar');
-  // The fight XP bar (ID-066), under the top bar in the horde-only build.
-  const xp = el('div', 'hud-xp');
+  const bar = el('div', squad ? 'hud-bar hud-fight-bar hud-corner-bar' : 'hud-bar hud-fight-bar');
+  // The horde-only fight corner (ID-098, layout B): a square horde badge, and beside it one
+  // panel with the wave, the fight's level and XP bar, and Squad Power against Recommended.
+  const corner = el('div', 'hud-corner');
+  const badge = el('div', 'hud-badge');
+  const badgeNum = el('span', 'hud-badge-num');
+  const badgeBoss = el('span', 'hud-badge-boss', '☠');
+  badgeBoss.setAttribute('aria-hidden', 'true');
+  badge.append(el('span', 'hud-badge-label', 'Horde'), badgeNum, badgeBoss);
+  const cornerPanel = el('div', 'hud-corner-panel');
+  cornerPanel.setAttribute('role', 'group');
+  cornerPanel.setAttribute('aria-label', 'Horde status');
+  const waveLine = el('p', 'hud-corner-wave');
+  const xpRow = el('div', 'hud-corner-row hud-xp');
   const xpLabel = el('span', 'hud-xp-label');
-  xpLabel.id = 'hud-xp-label';
   const xpMeter = el('meter', 'hud-xp-meter');
   xpMeter.min = 0;
-  xpMeter.setAttribute('aria-labelledby', xpLabel.id);
-  xp.append(xpLabel, xpMeter);
-  xp.hidden = !squad;
+  xpRow.append(xpLabel, xpMeter);
+  const powerRow = el('div', 'hud-corner-row hud-power');
+  const powerLabel = el('span', 'hud-power-label');
+  // Squad Power's fill in its band's colour, a tick at Recommended; the number is always shown.
+  const powerMeter = el('div', 'hud-power-meter');
+  powerMeter.setAttribute('role', 'meter');
+  powerMeter.setAttribute('aria-valuemin', '0');
+  const powerFill = el('div', 'hud-power-fill');
+  const powerTick = el('div', 'hud-power-tick');
+  powerMeter.append(powerFill, powerTick);
+  powerRow.append(powerLabel, powerMeter);
+  powerRow.hidden = true;
+  cornerPanel.append(waveLine, xpRow, powerRow);
+  corner.append(badge, cornerPanel);
+  corner.hidden = !squad;
+  bar.append(...(squad ? [corner] : []));
+  // Squad Power and Recommended Power for the fight under way, set by the app at its start.
+  let fightLine: PowerLine | null = null;
+  const showFightPower = (): void => {
+    powerRow.hidden = fightLine === null;
+    if (!fightLine) return;
+    const l = fightLine;
+    if (powerLabel.textContent !== l.text) powerLabel.textContent = l.text;
+    powerRow.dataset.band = l.band;
+    powerFill.style.width = `${(100 * l.fill).toFixed(1)}%`;
+    powerTick.style.left = `${(100 * l.tick).toFixed(1)}%`;
+    const end = Math.round(POWER_METER_END * l.rec);
+    powerMeter.setAttribute('aria-valuemax', String(end));
+    powerMeter.setAttribute('aria-valuenow', String(Math.min(l.power, end)));
+    powerMeter.setAttribute(
+      'aria-valuetext',
+      `${l.text} (${BAND_WORD[l.band]}; the mark is Recommended Power)`,
+    );
+    powerMeter.setAttribute('aria-label', 'Squad Power against Recommended Power');
+  };
   const boss = el('div', 'hud-boss');
   const bossLabel = el('span', 'hud-boss-label');
   bossLabel.id = 'hud-boss-label';
@@ -1095,7 +1372,11 @@ export function createHud(
   // The button sits in a footer: a horde-only panel pins it, with a line beside it (ID-067).
   const foot = el('div', 'hud-result-foot');
   const footNote = el('p', 'hud-result-foot-note');
-  foot.append(footNote, back);
+  // The horde picker (ID-098), above the button it labels.
+  const pickBlock = el('div', 'hud-horde-pick');
+  pickBlock.hidden = true;
+  foot.append(pickBlock, footNote, back);
+  let onPickHorde: (horde: number) => void = () => {};
   result.append(resultTitle, resultList, picker, gear, campPicker, foot);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
@@ -1150,7 +1431,7 @@ export function createHud(
   result.hidden = true;
   // No cash, shop or skills in the horde-only build (ID-066).
   shop.hidden = squad;
-  hud.append(bar, xp, speed, boss, warning, toast, shop, cards, replace, result);
+  hud.append(bar, speed, boss, warning, toast, shop, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -1305,16 +1586,72 @@ export function createHud(
     return block;
   }
 
+  const chipNodes = (list: readonly Chip[]): HTMLElement[] =>
+    list.map((c) => {
+      const chip = el('span', 'chip', c.text);
+      chip.dataset.tone = c.tone;
+      return chip;
+    });
+
+  /**
+   * The horde picker (ID-098) beside the button: a select, then Squad Power against that
+   * horde's Recommended Power. A pick relabels the button (and, on the start screen, the
+   * title and chips) and goes to `onPickHorde`; it never blocks a start.
+   */
+  function drawPicker(p: HordePicker | undefined): void {
+    const had = document.activeElement?.id === 'hud-horde-select';
+    pickBlock.hidden = p === undefined;
+    if (!p) {
+      pickBlock.replaceChildren();
+      return;
+    }
+    const select = el('select', 'build-select hud-horde-select');
+    select.id = 'hud-horde-select';
+    for (const o of p.options) {
+      const option = el('option', '', o.label);
+      option.value = String(o.horde);
+      select.append(option);
+    }
+    select.value = String(p.value);
+    const label = el('label', 'hud-horde-label', 'Horde to fight');
+    label.htmlFor = select.id;
+    const line = el('p', 'hud-horde-power');
+    const lineText = el('span', 'hud-horde-power-text');
+    const band = el('span', 'hud-horde-band');
+    line.append(lineText, ' ', band);
+    const hint = el('p', 'hud-horde-hint');
+    const choice = (): HordeChoice => p.options.find((o) => String(o.horde) === select.value)!;
+    const sync = (): void => {
+      const o = choice();
+      lineText.textContent = o.power.text;
+      band.textContent = BAND_WORD[o.power.band];
+      line.dataset.band = o.power.band;
+      hint.textContent = o.hint ?? '';
+      hint.hidden = o.hint === null;
+      select.title = select.selectedOptions[0]?.textContent ?? '';
+    };
+    sync();
+    select.addEventListener('change', () => {
+      if (result.hidden) return;
+      const o = choice();
+      sync();
+      back.textContent = o.button;
+      if (p.retitle) {
+        resultTitle.textContent = o.start.title;
+        picker.querySelector('.debrief-chips')?.replaceChildren(...chipNodes(o.start.chips));
+      }
+      onPickHorde(o.horde);
+    });
+    pickBlock.replaceChildren(label, select, line, hint);
+    if (had) select.focus();
+  }
+
   /** The horde-only panel's body (ID-067): header chips, loot, then one card per survivor. */
   function debriefBlock(d: Debrief, picks: readonly RosterDefender[]): HTMLElement[] {
     const parts: HTMLElement[] = [];
     if (d.chips.length > 0) {
       const chips = el('div', 'debrief-chips');
-      for (const c of d.chips) {
-        const chip = el('span', 'chip', c.text);
-        chip.dataset.tone = c.tone;
-        chips.append(chip);
-      }
+      chips.append(...chipNodes(d.chips));
       parts.push(chips);
     }
     if (d.callout) {
@@ -1343,15 +1680,17 @@ export function createHud(
         img.src = ART_URLS[t.icon] ?? '';
         icon.append(img);
         const id = el('div', 'tile-drop-id');
-        id.append(
-          el('p', 'tile-label tile-rarity', `Weapon drop · ${t.rarityName}`),
-          el('p', 'tile-name', t.name),
-        );
+        const name = el('p', 'tile-name');
+        name.append(el('span', 'tile-level', t.level), ` ${t.name}`);
+        const kind = el('span', 'chip tile-kind', t.kind);
+        kind.dataset.tone = t.kindTone;
+        id.append(kind, el('p', 'tile-label tile-rarity', `Weapon drop · ${t.rarityName}`), name);
         if (t.affixes) id.append(el('p', 'tile-sub', t.affixes));
         const head = el('div', 'tile-drop-head');
         head.append(icon, id);
         tile.append(head, power);
         if (t.thrown) tile.append(el('p', 'tile-thrown', t.thrown));
+        if (t.farmNote) tile.append(el('p', 'tile-farm', t.farmNote));
         spoils.append(tile);
       }
       if (d.recruit) {
@@ -1434,7 +1773,9 @@ export function createHud(
             ? { people: camp.room.people - 1, weapons: camp.room.weapons - 1 }
             : camp.room;
         campBlock({ ...r.camp, room });
-        (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus();
+        (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus({
+          preventScroll: true,
+        });
       });
       row.append(button);
     };
@@ -1548,13 +1889,26 @@ export function createHud(
       }, ms);
     },
     update(state, armed = null) {
-      const status = squad ? squadStatus(state) : statusText(state);
-      if (bar.textContent !== status) bar.textContent = status;
       if (squad) {
+        const status = squadStatus(state);
+        if (corner.title !== status) corner.title = status;
+        const num = String(state.hordeNumber);
+        if (badgeNum.textContent !== num) badgeNum.textContent = num;
+        badge.classList.toggle('hud-badge-boss-on', state.boss !== null);
+        badge.setAttribute(
+          'aria-label',
+          `Horde ${state.hordeNumber}${state.boss !== null ? ', boss horde' : ''}`,
+        );
+        const wave = `Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
+        if (waveLine.textContent !== wave) waveLine.textContent = wave;
         const x = xpBar(state);
-        if (xpLabel.textContent !== x.label) xpLabel.textContent = x.label;
+        if (xpLabel.textContent !== x.text) xpLabel.textContent = x.text;
         xpMeter.max = x.max;
         xpMeter.value = x.value;
+        xpMeter.setAttribute('aria-label', x.label);
+      } else {
+        const status = statusText(state);
+        if (bar.textContent !== status) bar.textContent = status;
       }
       const horror = bossBar(state);
       boss.hidden = horror === null;
@@ -1625,6 +1979,7 @@ export function createHud(
             : []),
       );
       back.textContent = screen.button;
+      drawPicker(screen.picker);
       gear.replaceChildren();
       campBlock(screen.camp);
       result.hidden = false;
@@ -1634,10 +1989,23 @@ export function createHud(
       const firstStat = screen.squad
         ? picker.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')
         : null;
-      (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? firstStat ?? back).focus();
+      // Without scrolling: the sticky footer's button would pull the panel past the drop tile.
+      (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? firstStat ?? back).focus({
+        preventScroll: true,
+      });
     },
     syncPicks(picks) {
       for (const p of picks) pickSync.get(p.id)?.(p);
+    },
+    onHordePick(handler) {
+      onPickHorde = handler;
+    },
+    showPicker(next) {
+      if (!result.hidden) drawPicker(next);
+    },
+    fightPower(line) {
+      fightLine = line;
+      showFightPower();
     },
     showGear(screen, onEquip) {
       // A redraw after a pick keeps the keyboard on the same survivor's picker.

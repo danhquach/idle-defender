@@ -31,10 +31,14 @@ function armed(wins: number): GameState {
   let g = newGame('horde');
   for (let i = 0; i < wins; i++) {
     g = finishSquadHorde(g, { ...startSquadHorde(g, 100 + i, NOW), outcome: 'won' });
+    // In hand at once, so a full stash never throws it away.
+    if (i === 0) {
+      const r = equipGun(g, 'recruit-1', 'h1');
+      if (!r.ok) throw new Error(r.reason);
+      g = r.game;
+    }
   }
-  const r = equipGun(g, 'recruit-1', 'h1');
-  if (!r.ok) throw new Error(r.reason);
-  return r.game;
+  return g;
 }
 
 describe('save: the stash and equipped guns (ID-067)', () => {
@@ -53,9 +57,9 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       if (!r.ok) throw new Error(r.reason);
       next = r.game;
     }
-    expect(next.armoury).toHaveLength(STASH_CAP - 6);
-    // Six more wins fill it back up.
-    for (let i = 0; i < 6; i++) {
+    expect(next.armoury).toHaveLength(STASH_CAP - 5);
+    // Five more wins fill it back up.
+    for (let i = 0; i < 5; i++) {
       next = finishSquadHorde(next, { ...startSquadHorde(next, 900 + i, NOW), outcome: 'won' });
     }
     expect(next.armoury).toHaveLength(STASH_CAP);

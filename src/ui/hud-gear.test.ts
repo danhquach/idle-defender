@@ -7,7 +7,7 @@ import { DROP_GUNS, gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { SQUAD_CAP, STASH_CAP, WEAPONS, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { equipGun, squadDrop, startSquadHorde } from '../core/hordeonly.ts';
+import { equipGun, squadDrop, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
 import { waveCount } from '../core/waves.ts';
 import {
   createHud,
@@ -15,6 +15,7 @@ import {
   dropTile,
   gunLabel,
   gunOption,
+  lossXpText,
   SQUAD_LOSS_RULE,
   SQUAD_POINTS_NOTE,
   squadGear,
@@ -41,6 +42,20 @@ const ended = (g: GameState, outcome: 'won' | 'lost', seed = 1) => ({
   ...startSquadHorde(g, seed, NOW),
   outcome,
 });
+/** A first-clear drop of `weapon`, `thrown` pushed out of a full stash (ID-098's fields filled). */
+const dropOf = (
+  weapon: OwnedWeapon,
+  thrown: OwnedWeapon | null = null,
+  extra: Partial<SquadDrop> = {},
+): SquadDrop => ({
+  weapon,
+  thrown,
+  kind: 'first',
+  upgrade: true,
+  noUpgrades: false,
+  farmFrom: null,
+  ...extra,
+});
 const gun = (uid: string, base: WeaponId, rarity: Rarity): OwnedWeapon => ({
   uid,
   base,
@@ -54,7 +69,9 @@ describe('the drop on the result screen (ID-067)', () => {
     const won = ended(g, 'won');
     const { weapon } = squadDrop(g, won)!;
     const lines = squadScreen(g, won).lines;
-    const at = lines.indexOf(`Weapon drop: ${gunLabel(weapon)} · into the stash (1/${STASH_CAP})`);
+    const at = lines.indexOf(
+      `Weapon drop (First clear): ${gunLabel(weapon)} · into the stash (1/${STASH_CAP})`,
+    );
     expect(at).toBeGreaterThan(lines.findIndex((l) => l.startsWith('New survivor')));
   });
 
@@ -67,7 +84,7 @@ describe('the drop on the result screen (ID-067)', () => {
     let seed = 1;
     while (squadDrop(g, ended(g, 'won', seed))!.thrown!.uid !== 'p1') seed++;
     const lines = squadScreen(g, ended(g, 'won', seed)).lines;
-    expect(lines).toContain('Stash full: the weakest, the Rusty Pistol, was thrown away');
+    expect(lines).toContain('Stash full: the weakest, the Lv 1 Rusty Pistol, was thrown away');
   });
 
   it('a drop weaker than the whole full stash is the one thrown away, and says so', () => {
@@ -76,7 +93,7 @@ describe('the drop on the result screen (ID-067)', () => {
     const won = ended(g, 'won');
     const { weapon } = squadDrop(g, won)!;
     const lines = squadScreen(g, won).lines;
-    expect(lines).toContain(`Weapon drop: ${gunLabel(weapon)}`);
+    expect(lines).toContain(`Weapon drop (First clear): ${gunLabel(weapon)}`);
     expect(
       lines.some((l) => l.includes('was no better than any gun in it, so it was thrown away')),
     ).toBe(true);
@@ -117,8 +134,8 @@ describe('the gun pickers (ID-067)', () => {
     }
     expect(gear.rows[1]!.options.find((o) => o.value === 'h1')!.label).toBe(gunOption(rifle));
     // The number first in a picker, so a closed select never cuts it off; last on the drop line.
-    expect(gunOption('pistol')).toBe('8.3 dmg/s · Pistol');
-    expect(gunLabel('pistol')).toBe('Pistol · 8.3 dmg/s');
+    expect(gunOption('pistol')).toBe('8.3 dmg/s · Lv 1 Pistol');
+    expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 dmg/s');
   });
 
   function page() {
@@ -236,7 +253,7 @@ describe('the debrief layout (ID-067)', () => {
     const d = squadScreen(g, won).debrief!;
     expect(d.kind).toBe('won');
     expect(d.chips[0]).toEqual({ text: `${won.waveCount}/${won.waveCount} waves`, tone: 'ok' });
-    expect(d.drop).toEqual(dropTile(g, { weapon, thrown: null }));
+    expect(d.drop).toEqual(dropTile(g, dropOf(weapon)));
     expect(d.drop!.stash).toBe(`Stash 1/${STASH_CAP}`);
     expect(d.recruit).toEqual({
       label: 'New survivor',
@@ -261,26 +278,26 @@ describe('the debrief layout (ID-067)', () => {
   it('the loot tile names what a full stash threw away, or that the drop itself went', () => {
     const relics = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
     const weak = gun('h1', 'smg', 'rusty');
-    expect(dropTile({ armoury: relics }, { weapon: weak, thrown: weak })).toMatchObject({
+    expect(dropTile({ armoury: relics }, dropOf(weak, weak))).toMatchObject({
       stash: 'Stash full: thrown away',
       lost: true,
       thrown: DROP_LOST_NOTE,
     });
-    expect(dropTile({ armoury: [] }, { weapon: weak, thrown: null }).thrown).toBeNull();
+    expect(dropTile({ armoury: [] }, dropOf(weak, null)).thrown).toBeNull();
     const strong = gun('h2', 'lmg', 'relic');
-    expect(dropTile({ armoury: relics }, { weapon: strong, thrown: weak })).toMatchObject({
+    expect(dropTile({ armoury: relics }, dropOf(strong, weak))).toMatchObject({
       rarity: 'relic',
       rarityName: 'Relic',
       name: 'LMG',
       stash: `Stash ${STASH_CAP}/${STASH_CAP}`,
       lost: false,
-      thrown: 'Thrown away: Rusty SMG',
+      thrown: 'Thrown away: Lv 1 Rusty SMG',
     });
   });
 
   it('the loot tile’s icon is the dropped gun’s own icon, for every gun a horde drops (ID-092)', () => {
     for (const base of DROP_GUNS) {
-      const t = dropTile({ armoury: [] }, { weapon: gun('h1', base, 'common'), thrown: null });
+      const t = dropTile({ armoury: [] }, dropOf(gun('h1', base, 'common')));
       expect(t.icon).toBe(GUN_ICON[base as GunId]);
       expect(ART_URLS[t.icon]).toBeTruthy();
     }
@@ -295,9 +312,16 @@ describe('the debrief layout (ID-067)', () => {
     const img = tile.querySelector<HTMLImageElement>('.tile-drop-head > .tile-icon > img')!;
     expect(img.alt).toBe('');
     expect(img.getAttribute('src')).toBe(ART_URLS[squadScreen(g, won).debrief!.drop!.icon]);
+    const dropped = squadDrop(g, won)!.weapon;
+    // The level sits in front of the name (ID-098), and the kind of drop above it.
     expect(tile.querySelector('.tile-drop-id .tile-name')!.textContent).toBe(
-      WEAPONS[squadDrop(g, won)!.weapon.base].name,
+      `Lv ${dropped.level} ${WEAPONS[dropped.base].name}`,
     );
+    expect(tile.querySelector('.tile-drop-id .tile-level')!.textContent).toBe(
+      `Lv ${dropped.level}`,
+    );
+    expect(tile.querySelector('.tile-drop-id .tile-kind')!.textContent).toBe('First clear');
+    expect(tile.querySelector('.tile-farm')).toBeNull();
     // The power row and thrown line stay full width under the head.
     expect(tile.querySelector(':scope > .tile-row')).not.toBeNull();
     expect(tile.classList.contains('tile-drop-lost')).toBe(false);
@@ -319,7 +343,7 @@ describe('the debrief layout (ID-067)', () => {
     const g = squadGame(2, 3);
     h.showResult(squadScreen(g, ended(g, 'lost')));
     const chips = [...root.querySelectorAll('.chip')].map((c) => c.textContent);
-    expect(chips).toEqual(['No XP on a loss', SQUAD_NO_DROP]);
+    expect(chips).toEqual([lossXpText(0), SQUAD_NO_DROP]);
     expect(root.querySelector('.tile-drop')).toBeNull();
   });
 
@@ -329,7 +353,7 @@ describe('the debrief layout (ID-067)', () => {
     expect(d.kind).toBe('lost');
     expect(d.callout!.head).toMatch(/nobody left standing$/);
     expect(d.chips).toEqual([
-      { text: 'No XP on a loss', tone: 'warn' },
+      { text: 'No XP: no wave cleared', tone: 'warn' },
       { text: SQUAD_NO_DROP, tone: 'warn' },
     ]);
     expect(SQUAD_NO_DROP).toBe('No weapon drop on a loss');

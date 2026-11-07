@@ -15,8 +15,8 @@ import {
   affixCount,
   affixText,
   baseOf,
+  gunLevel,
   gunPower,
-  heldLabel,
   heldName,
   isOwned,
   type Held,
@@ -39,7 +39,8 @@ import {
   type GunChoice,
 } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
-import { el } from './hud.ts';
+import { recommendedPower, squadPower } from '../core/squadpower.ts';
+import { BAND_WORD, el, levelLabel, powerLine, type PowerLine } from './hud.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** One weapon as the Inventory shows it. */
@@ -56,6 +57,10 @@ export interface InventoryItem {
   power: string | null;
   /** The slot's badge: dmg/s rounded ("17"); null for no gun. */
   badge: string | null;
+  /** Gun level (ID-098); the free pistol and older saves' guns are 1. */
+  level: number;
+  /** The slot's level badge (ID-098): "Lv 12"; null for no gun. */
+  levelBadge: string | null;
   /** The gun's icon; null for a weapon that is no gun. */
   icon: ArtId | null;
   /** Who fights with it ("Held by Ana"), the free pistol's note, or "In the stash". */
@@ -79,6 +84,13 @@ export interface InventoryView {
    */
   squad: { id: string; name: string; gun: InventoryItem; uid: string | null }[];
   pistol: InventoryItem;
+  /**
+   * Squad Power against the Recommended Power of the horde the next fight is (ID-098);
+   * null where there is no horde to compare with.
+   */
+  power: PowerLine | null;
+  /** The horde `power` compares with; null with no power line. */
+  powerHorde: number | null;
   /** Every stash set below Relic (ID-091): ready ones first, then by base weapon and rarity. */
   combine: CombineRow[];
 }
@@ -135,6 +147,8 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
     affixes: isOwned(h) ? h.affixes.map(affixText) : [],
     power: gun ? `${power.toFixed(1)} dmg/s` : null,
     badge: gun ? String(Math.round(power)) : null,
+    level: gunLevel(h),
+    levelBadge: gun ? `Lv ${gunLevel(h)}` : null,
     icon: gun ? GUN_ICON[base as GunId] : null,
     where,
     holder,
@@ -142,8 +156,15 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
   };
 }
 
-/** What the Inventory shows for `game`. */
-export function inventoryView(game: Pick<GameState, 'armoury' | 'roster'>): InventoryView {
+/**
+ * What the Inventory shows for `game`; with `horde` (the horde the next fight is: the one
+ * picked on the start screen, or the one under way) it also shows Squad Power against that
+ * horde's Recommended Power (ID-098).
+ */
+export function inventoryView(
+  game: Pick<GameState, 'armoury' | 'roster'>,
+  horde: number | null = null,
+): InventoryView {
   const n = game.armoury.length;
   return {
     // An older save's stash past the cap is kept as it is (design §6), and is full too.
@@ -165,6 +186,8 @@ export function inventoryView(game: Pick<GameState, 'armoury' | 'roster'>): Inve
       };
     }),
     pistol: item('pistol', 'pistol', PISTOL_NOTE),
+    power: horde === null ? null : powerLine(squadPower(game), recommendedPower(horde)),
+    powerHorde: horde,
     combine: combineRows(game),
   };
 }
@@ -271,11 +294,14 @@ export function combinePreview(uses: readonly OwnedWeapon[]): CombinePreview {
   const first = uses[0]!;
   const next = nextRarity(first.rarity)!;
   const n = affixCount(first.base, next);
-  const bare = gunPower({ uid: '', base: first.base, rarity: next, affixes: [] });
+  // The result takes the highest level of the guns used (ID-098).
+  const level = Math.max(...uses.map(gunLevel));
+  const made: OwnedWeapon = { uid: '', base: first.base, rarity: next, affixes: [], level };
+  const bare = gunPower(made);
   return {
     used: uses.map((w) => item(w, `stash:${w.uid}`, IN_STASH)),
     makes: {
-      ...item({ uid: '', base: first.base, rarity: next, affixes: [] }, 'makes', ''),
+      ...item(made, 'makes', ''),
       affixes: [
         n === 0 ? NO_AFFIXES : `${n} random ${n === 1 ? 'affix' : 'affixes'}, rolled on combine`,
       ],
@@ -287,11 +313,16 @@ export function combinePreview(uses: readonly OwnedWeapon[]): CombinePreview {
 
 /** The line after a combine: "Made: Common SMG, 14.2 dmg/s"; with its affixes in brackets. */
 export const combineResult = (w: OwnedWeapon): string =>
-  `Made: ${heldLabel(w)}, ${gunPower(w).toFixed(1)} dmg/s`;
+  `Made: ${levelLabel(w)}, ${gunPower(w).toFixed(1)} dmg/s`;
+
+/** "Lv 12 Military Rifle" (ID-098): the level in front of the name, for a gun. */
+const levelled = (it: InventoryItem): string =>
+  it.levelBadge ? `${it.levelBadge} ${it.name}` : it.name;
 
 /** A slot's screen-reader name: "Military Rifle, Military rarity, 17.2 dmg/s, 2 affixes". */
 export function slotLabel(it: InventoryItem, ready = false): string {
   const parts = [it.name, `${RARITIES[it.rarity].name} rarity`];
+  if (it.levelBadge) parts.push(`level ${it.level}`);
   if (it.power) parts.push(it.power);
   parts.push(
     it.affixes.length === 0
@@ -319,6 +350,7 @@ function slotFace(it: InventoryItem): HTMLElement[] {
     face.push(el('span', 'inv-slot-text', WEAPONS[it.base].name));
   }
   if (it.badge) face.push(el('span', 'inv-slot-badge', it.badge));
+  if (it.levelBadge) face.push(el('span', 'inv-slot-level', it.levelBadge));
   return face;
 }
 
@@ -343,6 +375,18 @@ function slot(it: InventoryItem, ready: boolean, caption?: string, tip = caption
     li.append(who);
   }
   return li;
+}
+
+/** "Power 1,240 · rec 1,400 short", coloured by its band; the words say it too (ID-098). */
+function powerNote(p: PowerLine, horde: number | null): HTMLElement {
+  const line = el(
+    'p',
+    'menu-note inv-power-line',
+    horde === null ? p.text : `${p.text} (Horde ${horde})`,
+  );
+  line.dataset.band = p.band;
+  line.append(' ', el('span', 'inv-power-band', BAND_WORD[p.band]));
+  return line;
 }
 
 function list(label: string, className: string, cells: HTMLElement[]): HTMLElement {
@@ -405,6 +449,7 @@ export function inventoryGrid(
   return [
     section(
       el('h3', 'menu-heading', 'Squad'),
+      ...(view.power ? [powerNote(view.power, view.powerHorde)] : []),
       list('Squad', 'inv-grid inv-squad', [
         ...view.squad.map((s) => mark(slot(s.gun, false, s.name))),
         mark(slot(view.pistol, false, 'Free pistol', PISTOL_NOTE)),
@@ -429,7 +474,7 @@ export interface CombineUi {
 
 /** A gun's lines in the details: rarity, then each affix, then dmg/s. */
 function facts(it: InventoryItem): HTMLElement[] {
-  const name = el('p', 'inv-name', it.name);
+  const name = el('p', 'inv-name', levelled(it));
   name.dataset.rarity = it.rarity;
   const rarity = el(
     'p',
@@ -454,7 +499,10 @@ function facts(it: InventoryItem): HTMLElement[] {
 function groups(items: readonly InventoryItem[]): { item: InventoryItem; n: number }[] {
   const out: { item: InventoryItem; n: number }[] = [];
   const same = (a: InventoryItem, b: InventoryItem): boolean =>
-    a.name === b.name && a.power === b.power && a.affixes.join('\n') === b.affixes.join('\n');
+    a.name === b.name &&
+    a.level === b.level &&
+    a.power === b.power &&
+    a.affixes.join('\n') === b.affixes.join('\n');
   for (const it of items) {
     const last = out.at(-1);
     if (last && same(last.item, it)) last.n++;
@@ -501,7 +549,7 @@ function combineBlock(it: InventoryItem, rows: readonly CombineRow[], ui: Combin
           const li = el('li', 'inv-combine-row');
           li.dataset.rarity = u.rarity;
           // Identical guns as one line: "3 × Rusty SMG".
-          li.append(el('span', 'inv-name', n > 1 ? `${n} × ${u.name}` : u.name));
+          li.append(el('span', 'inv-name', n > 1 ? `${n} × ${levelled(u)}` : levelled(u)));
           li.append(el('span', 'inv-combine-affixes', u.affixes.join(', ') || NO_AFFIXES));
           if (u.power) li.append(el('span', 'inv-combine-power', u.power));
           return li;
@@ -601,6 +649,8 @@ export interface InventoryOptions {
     game: Pick<GameState, 'armoury' | 'roster'>;
     resumes: boolean;
     canCombine?: boolean;
+    /** The horde the next fight is, for the Squad Power line (ID-098); omitted for none. */
+    horde?: number;
   };
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
   onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
@@ -637,6 +687,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   // The camp drawn last: a redraw only when it changes, so the grid keeps its scroll.
   let listed: Pick<GameState, 'armoury' | 'roster'> | null = null;
   let listedCombine = false;
+  let listedHorde: number | null = null;
   let view: InventoryView | null = null;
   // The slot selected (its key), and the one under the pointer, whose details show first.
   let selected: string | null = null;
@@ -1048,8 +1099,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     confirming = null;
     result = null;
     // onEquip's save has usually redrawn the grid already; drawn again for the new selection.
-    const { game, canCombine = false } = opts.state();
-    draw(game, canCombine);
+    const { game, canCombine = false, horde = null } = opts.state();
+    draw(game, canCombine, horde);
     say(equipMessage(before, d));
     const b = slotOf(selected);
     b?.focus();
@@ -1121,17 +1172,22 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   }
 
   /** Draws the grid for `game`; a confirm whose guns have left the stash is dropped. */
-  function draw(game: Pick<GameState, 'armoury' | 'roster'>, canCombine: boolean): void {
+  function draw(
+    game: Pick<GameState, 'armoury' | 'roster'>,
+    canCombine: boolean,
+    horde: number | null,
+  ): void {
     // The slots are redrawn: a drag under way goes back.
     stopDrag();
     listed = game;
     listedCombine = canCombine;
+    listedHorde = horde;
     if (confirming && !(canCombine && confirming.every((w) => game.armoury.includes(w)))) {
       confirming = null;
     }
     // Focus in the grid or the details: both are redrawn, so it comes back to the slot.
     const hadFocus = body.contains(doc.activeElement) || details.contains(doc.activeElement);
-    view = inventoryView(game);
+    view = inventoryView(game, horde);
     // On a touch screen a plain drag scrolls: the note says to hold first.
     const touch = !!doc.defaultView?.matchMedia?.('(pointer: coarse)').matches;
     const note = opts.onEquip
@@ -1162,8 +1218,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     result = r.ok ? combineResult(r.weapon) : r.reason;
     // The new gun takes a used gun's place: select it, so its details say what was made.
     if (r.ok) selected = `stash:${r.weapon.uid}`;
-    const { game, canCombine = false } = opts.state();
-    draw(game, canCombine);
+    const { game, canCombine = false, horde = null } = opts.state();
+    draw(game, canCombine, horde);
     // Focus on the line saying what it made: a screen reader reads it.
     (details.querySelector<HTMLElement>('.inv-combine-result') ?? slotOf(selected))?.focus();
   }
@@ -1204,11 +1260,11 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     },
     refresh() {
       if (!opened) return;
-      const { game, resumes, canCombine = false } = opts.state();
+      const { game, resumes, canCombine = false, horde = null } = opts.state();
       hintText.textContent = resumes ? ' closes and resumes' : ' closes';
       done.textContent = resumes ? 'Resume' : 'Close';
-      if (game === listed && canCombine === listedCombine) return;
-      draw(game, canCombine);
+      if (game === listed && canCombine === listedCombine && horde === listedHorde) return;
+      draw(game, canCombine, horde);
     },
   };
   return api;

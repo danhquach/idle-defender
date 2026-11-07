@@ -2,13 +2,26 @@
 // → next horde. The squad all start on the wall, a win adds XP and one survivor up to the
 // cap, a loss replays the same horde with everyone back and the wall full. The rest of
 // the game's state rides along untouched, so the full game can come back later.
-import { gunPower, isOwned, rollSquadDrop, rollWeapon, type OwnedWeapon } from './armoury.ts';
+import {
+  bestDrop,
+  firstClearWeights,
+  gunLevel,
+  gunPower,
+  isOwned,
+  replayWeights,
+  rollSquadGun,
+  rollUpgrade,
+  rollWeapon,
+  type Held,
+  type OwnedWeapon,
+} from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
 import { UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
 import {
   COLUMNS,
   COMBINE_COUNT,
+  FARM,
   FIELD,
   MAX_COUNT,
   RARITY_ORDER,
@@ -26,6 +39,7 @@ import {
 } from './data.ts';
 import {
   equip,
+  hordeXp,
   levelGains,
   xpGains,
   type GameState,
@@ -96,15 +110,24 @@ export const SQUAD_SLOTS: readonly { x: number; y: number }[] = Array.from(
  * turrets or traps; no injuries or patrols hold anyone back, and no research, cash,
  * skills or bank come in.
  */
-export function startSquadHorde(game: GameState, seed: number, now: number): HordeState {
+export function startSquadHorde(
+  game: GameState,
+  seed: number,
+  now: number,
+  /** The horde to fight (ID-098): the next new one, or any already beaten. */
+  hordeNumber: number = game.hordeNumber,
+): HordeState {
   if (!Number.isFinite(now)) throw new RangeError(`startSquadHorde: bad time ${now}`);
+  if (!Number.isInteger(hordeNumber) || hordeNumber < 1 || hordeNumber > game.hordeNumber) {
+    throw new RangeError(`startSquadHorde: horde ${hordeNumber} is not open`);
+  }
   const squad = squadOf(game).map(squadSpec);
   const first = squad[0];
   if (!first) throw new RangeError('startSquadHorde: nobody in the squad');
   const base = squadBase();
   const postOf = (i: number): number => base.posts.length + SQUAD_LINE.order[i]!;
   const s = newHorde(seed, {
-    hordeNumber: game.hordeNumber,
+    hordeNumber,
     roster: squad,
     startDefenderId: first.id,
     base,
@@ -118,7 +141,7 @@ export function startSquadHorde(game: GameState, seed: number, now: number): Hor
     cashRate: 0,
     startCash: 0,
     cards: SQUAD_CARDS,
-    hpScale: squadHpScale(game.hordeNumber),
+    hpScale: squadHpScale(hordeNumber),
     xpRate: SQUAD_XP_RATE,
     line: SQUAD_SLOTS,
     spawnX: SQUAD_SPAWN_X,
@@ -140,85 +163,206 @@ export function joiner(game: Pick<GameState, 'roster' | 'camp'>): RosterDefender
   return recruit(game.camp.recruits + 1);
 }
 
+/** The highest horde beaten (ID-098): every horde up to it counts as beaten, 0 for none. */
+export const highestBeaten = (game: Pick<GameState, 'hordeNumber'>): number => game.hordeNumber - 1;
+
+/** Whether horde `n` is a replay of one already beaten (ID-098), not the next new one. */
+export const isReplay = (game: Pick<GameState, 'hordeNumber'>, n: number): boolean =>
+  n < game.hordeNumber;
+
+function checkFinished(name: string, game: GameState, horde: HordeState): void {
+  if (horde.outcome === 'fighting') throw new RangeError(`${name}: the horde is still on`);
+  if (horde.hordeNumber < 1 || horde.hordeNumber > game.hordeNumber) {
+    throw new RangeError(`${name}: horde ${horde.hordeNumber} is not this game's`);
+  }
+}
+
 /**
- * Back from horde `horde`: a win gives every survivor who fought the horde's XP, puts its
- * weapon in the stash (ID-067; the weakest thrown away when full), adds a survivor while
- * the squad is under the cap, and moves on to the next horde. A loss gives nothing and
- * changes nothing: the same horde is played again with everyone, and every fight's wall
- * starts full. No base damage, payout, injury or camp XP.
+ * Each survivor's XP from horde `horde` (ID-066, ID-098): a win's full, half for a replay
+ * more than `FARM.farOff` hordes below the highest beaten; a loss `FARM.lossXp` of a win's
+ * for each share of the waves cleared (0 cleared → 0). Rounded down.
+ */
+export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typeof xpGains> {
+  const full = xpGains({ ...horde, outcome: 'won' });
+  const far = highestBeaten(game) - horde.hordeNumber > FARM.farOff;
+  // A loss pays its share of what a win of this horde would (halved far down too).
+  const win = far ? FARM.farXp : 1;
+  const share =
+    horde.outcome === 'won' ? win : (win * FARM.lossXp * (horde.wave - 1)) / horde.waveCount;
+  // From the unrounded XP, so a share never rounds twice.
+  const each = Math.floor(hordeXp(horde.hordeNumber) * (horde.xpRate ?? 1) * share);
+  return full.map((g) => ({ ...g, xp: each }));
+}
+
+/**
+ * Back from horde `horde` (ID-066, ID-098): every survivor who fought gets its XP
+ * (`squadXpGains`, a loss's too). A win puts its drop in the stash (the weakest thrown away
+ * when full). A first clear also adds a survivor while the squad is under the cap and
+ * moves on to the next horde; a replay counts toward the bad-luck guarantee. A loss
+ * changes nothing else, and every fight's wall starts full. No base damage, payout,
+ * injury or camp XP.
  */
 export function finishSquadHorde(game: GameState, horde: HordeState): GameState {
-  if (horde.outcome === 'fighting') throw new RangeError('finishSquadHorde: the horde is still on');
-  if (horde.hordeNumber !== game.hordeNumber) {
-    throw new RangeError(`finishSquadHorde: horde ${horde.hordeNumber} is not this game's`);
-  }
-  if (horde.outcome !== 'won') return game;
+  checkFinished('finishSquadHorde', game, horde);
+  const gains = squadXpGains(game, horde);
+  if (horde.outcome !== 'won' && gains.every((x) => x.xp === 0)) return game;
   const g = structuredClone(game);
-  for (const gain of xpGains(horde)) {
+  for (const gain of gains) {
     const d = g.roster.find((r) => r.id === gain.id);
     // Capped where a save reads it, so a win never leaves a save that won't load.
     if (d) d.xp = Math.min(MAX_COUNT, d.xp + gain.xp);
   }
-  const drop = squadDrop(game, horde)!;
+  if (horde.outcome !== 'won') return g;
+  const drop = squadDrop(game, horde);
+  // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
+  if (!drop) return g;
   g.armoury = [...g.armoury, drop.weapon].filter((w) => w.uid !== drop.thrown?.uid);
-  const joined = joiner(game);
-  if (joined) {
-    g.roster.push(joined);
-    g.camp.recruits += 1;
+  if (drop.kind === 'first') {
+    const joined = joiner(game);
+    if (joined) {
+      g.roster.push(joined);
+      g.camp.recruits += 1;
+    }
+    g.hordeNumber += 1;
+    return g;
   }
-  g.hordeNumber += 1;
+  g.farm = {
+    replays: game.farm.replays + 1,
+    badLuck: drop.upgrade
+      ? 0
+      : drop.noUpgrades
+        ? game.farm.badLuck
+        : Math.min(FARM.guarantee, game.farm.badLuck + 1),
+  };
   return g;
 }
 
 /** What a horde-only result screen reads off a finished horde. */
 export interface SquadResult {
+  /** Each survivor's XP and levels; a loss's small share too (ID-098). */
   gains: LevelGain[];
-  /** The survivor joining for the next horde; null on a loss or with the squad full. */
+  /** The survivor joining for the next horde; null on a loss, a replay or with the squad full. */
   joined: RosterDefender | null;
   /** The weapon the win drops, and what the stash throws away for it; null on a loss. */
   drop: SquadDrop | null;
 }
 
 export function squadResult(game: GameState, horde: HordeState): SquadResult {
-  if (horde.outcome === 'fighting') throw new RangeError('squadResult: the horde is still on');
+  checkFinished('squadResult', game, horde);
   const won = horde.outcome === 'won';
   return {
-    gains: won ? levelGains(game, horde) : [],
-    joined: won ? joiner(game) : null,
+    gains: levelGains(game, horde, squadXpGains(game, horde)),
+    joined: won && !isReplay(game, horde.hordeNumber) ? joiner(game) : null,
     drop: squadDrop(game, horde),
   };
 }
 
-/** A horde-only win's weapon (ID-067), and the stash's weakest it pushed out, if any. */
+/** Which kind of drop a win gave (ID-098), as its tile says. */
+export type DropKind = 'first' | 'replay' | 'guaranteed';
+
+/** A horde-only win's weapon (ID-067, ID-098), and the stash's weakest it pushed out, if any. */
 export interface SquadDrop {
   weapon: OwnedWeapon;
   /** Thrown away for room: the weakest of the full stash and the drop (maybe the drop itself). */
   thrown: OwnedWeapon | null;
+  kind: DropKind;
+  /** It hits harder than the weakest gun a squad survivor holds (`weakestHeld`). */
+  upgrade: boolean;
+  /** A replay where no gun this horde can drop beats the weakest held: farm a higher horde. */
+  noUpgrades: boolean;
+  /**
+   * With `noUpgrades`: the lowest horde above this one whose drop could beat the weakest
+   * held (a replay's band, or the next new horde's first clear) within `FARM.search`
+   * hordes, or null if none can.
+   */
+  farmFrom: number | null;
+}
+
+/**
+ * The weakest gun a squad survivor holds (ID-098), by `gunPower`: their one gun, the free
+ * pistol included (a survivor with no gun fights with the pistol).
+ */
+export function weakestHeld(game: Pick<GameState, 'roster'>): Held {
+  return (
+    squadOf(game)
+      .map((d) => squadSpec(d).loadout.primary)
+      .reduce<Held | null>((a, b) => (a === null || gunPower(b) < gunPower(a) ? b : a), null) ??
+    'pistol'
+  );
+}
+
+/**
+ * The lowest horde from `from` up to the next new one whose drop could beat `beat` dmg/s
+ * (ID-098): a beaten horde's replay band with the bad-luck count, the new one's first
+ * clear. Null when none can.
+ */
+function upgradeFrom(
+  game: Pick<GameState, 'hordeNumber' | 'farm'>,
+  from: number,
+  beat: number,
+): number | null {
+  for (let n = from; n <= Math.min(game.hordeNumber, from + FARM.search - 1); n++) {
+    const weights = isReplay(game, n) ? replayWeights(n, game.farm.badLuck) : firstClearWeights(n);
+    if (bestDrop(weights, n) > beat) return n;
+  }
+  return null;
 }
 
 /** The stream a horde's drop rolls from: its seed's own, so the fight never moves it. */
 const DROP_STREAM = 0x5bd1e995;
 
 /**
- * The weapon horde `horde` drops into `game`'s stash (ID-067), or null on a loss. Rolled
- * from the horde's seed alone, so the same seed drops the same weapon at any game speed
- * and however the fight went. With the stash at `STASH_CAP` (or past it, from an older
- * save) the weakest of the stash and the drop by `gunPower` is thrown away (a blade or
- * tool an older save left there first); a tie throws the later one, so a duplicate drop
- * goes rather than the one kept.
+ * The weapon horde `horde` drops into `game`'s stash (ID-067, ID-098), or null on a loss.
+ * Rolled from the horde's seed alone, so the same seed drops the same weapon at any game
+ * speed and however the fight went. Its gun level is the horde number.
+ *
+ * A first clear (uid `h<n>`) rolls `firstClearWeights`. A replay (uid `r<k>`, the k-th
+ * replay win) rolls `replayWeights` with the bad-luck count, or, with the count at
+ * `FARM.guarantee`, a sure upgrade (`rollUpgrade`) unless no gun here could be one.
+ *
+ * With the stash at `STASH_CAP` (or past it, from an older save) the weakest of the stash
+ * and the drop by `gunPower` is thrown away (a blade or tool an older save left there
+ * first); a tie throws the later one, so a duplicate drop goes rather than the one kept.
  */
 export function squadDrop(
-  game: Pick<GameState, 'armoury'>,
+  game: Pick<GameState, 'armoury' | 'roster' | 'hordeNumber' | 'farm'>,
   horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber'>,
 ): SquadDrop | null {
   if (horde.outcome !== 'won') return null;
-  const weapon = rollSquadDrop(createRng(horde.seed ^ DROP_STREAM), horde.hordeNumber);
-  if (game.armoury.length < STASH_CAP) return { weapon, thrown: null };
+  if (isReplay(game, horde.hordeNumber) && game.farm.replays >= FARM.maxReplays) return null;
+  const n = horde.hordeNumber;
+  const rng = createRng(horde.seed ^ DROP_STREAM);
+  const weakest = weakestHeld(game);
+  const beat = gunPower(weakest);
+  let weapon: OwnedWeapon;
+  let kind: DropKind = 'first';
+  let noUpgrades = false;
+  if (!isReplay(game, n)) {
+    weapon = rollSquadGun(rng, `h${n}`, firstClearWeights(n), n);
+  } else {
+    const uid = `r${game.farm.replays + 1}`;
+    const weights = replayWeights(n, game.farm.badLuck);
+    noUpgrades = bestDrop(weights, n) <= beat;
+    const sure =
+      game.farm.badLuck >= FARM.guarantee && !noUpgrades
+        ? rollUpgrade(rng, uid, weights, n, beat, isOwned(weakest) ? weakest.rarity : 'common')
+        : null;
+    kind = sure ? 'guaranteed' : 'replay';
+    weapon = sure ?? rollSquadGun(rng, uid, weights, n);
+  }
+  const drop = {
+    weapon,
+    kind,
+    upgrade: gunPower(weapon) > beat,
+    noUpgrades,
+    farmFrom: noUpgrades ? upgradeFrom(game, n + 1, beat) : null,
+  };
+  if (game.armoury.length < STASH_CAP) return { ...drop, thrown: null };
   // A blade or tool from an older save is no use to a survivor: it counts as the weakest.
   const power = (w: OwnedWeapon): number => (isGun(w) ? gunPower(w) : 0);
   let thrown = weapon;
   for (const w of [...game.armoury, weapon]) if (power(w) <= power(thrown)) thrown = w;
-  return { weapon, thrown };
+  return { ...drop, thrown };
 }
 
 /** What a survivor's gun picker can choose: the free pistol, or a stash weapon's uid. */
@@ -338,7 +482,9 @@ export function combineGuns(
   if (!next) return { ok: false, reason: 'A Relic gun is the best there is: it can’t be combined' };
   const sorted = [...uids].sort();
   const rng = createRng(hash(`${first.base}:${first.rarity}:${sorted.join(',')}`));
-  const weapon = rollWeapon(rng, sorted[0]!, first.base, next);
+  // The new gun takes the highest level of the three (ID-098).
+  const level = Math.max(...guns.map(gunLevel));
+  const weapon = rollWeapon(rng, sorted[0]!, first.base, next, level > 1 ? level : undefined);
   const used = new Set(uids);
   return {
     ok: true,

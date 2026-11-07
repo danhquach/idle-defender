@@ -10,6 +10,7 @@ import { recruit } from '../core/camp.ts';
 import { STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { combineGuns, equipGun } from '../core/hordeonly.ts';
+import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import {
   COMBINE_HELD,
   COMBINE_NOT_GUN,
@@ -139,11 +140,11 @@ describe('inventoryView', () => {
     };
     const v = inventoryView(camp(1, [w]));
     expect(slotLabel(v.stash[0]!)).toBe(
-      `Military Rifle, Military rarity, ${gunPower(w).toFixed(1)} dmg/s, 1 affix`,
+      `Military Rifle, Military rarity, level 1, ${gunPower(w).toFixed(1)} dmg/s, 1 affix`,
     );
     expect(slotLabel(v.stash[0]!, true)).toMatch(/, can combine$/);
     expect(slotLabel(v.squad[0]!.gun)).toBe(
-      `Pistol, Common rarity, ${gunPower('pistol').toFixed(1)} dmg/s, no affixes, held by ${v.squad[0]!.name}`,
+      `Pistol, Common rarity, level 1, ${gunPower('pistol').toFixed(1)} dmg/s, no affixes, held by ${v.squad[0]!.name}`,
     );
   });
 });
@@ -272,7 +273,7 @@ describe('the Inventory dialog', () => {
     const first = slots('Squad')[0]!;
     expect(first.getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).toBe(first);
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Pistol');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Pistol');
   });
 
   it('opens on the strongest stash gun, its details beside the grid', () => {
@@ -291,7 +292,7 @@ describe('the Inventory dialog', () => {
     expect(document.activeElement).toBe(first);
     const d = details();
     const name = d.querySelector<HTMLElement>('.inv-name')!;
-    expect(name.textContent).toBe('Military Rifle');
+    expect(name.textContent).toBe('Lv 1 Military Rifle');
     expect(name.dataset.rarity).toBe('military');
     // Colour is not the only cue: the rarity is named.
     expect(d.querySelector('.inv-rarity')!.textContent).toBe('Military rarity · Rifle');
@@ -314,7 +315,7 @@ describe('the Inventory dialog', () => {
     b!.click();
     expect(b!.getAttribute('aria-pressed')).toBe('true');
     expect(a!.getAttribute('aria-pressed')).toBe('false');
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Rusty SMG');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Rusty SMG');
     expect(details().querySelector('.inv-affixes')!.textContent).toBe(NO_AFFIXES);
   });
 
@@ -335,11 +336,11 @@ describe('the Inventory dialog', () => {
     button.click();
     const b = slots('Stash')[1]!;
     b.querySelector('img')!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Rusty SMG');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Rusty SMG');
     // Hover shows, it doesn't select.
     expect(b.getAttribute('aria-pressed')).toBe('false');
     dialog.querySelector('.inv-body')!.dispatchEvent(new MouseEvent('mouseleave'));
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Prototype LMG');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Prototype LMG');
   });
 
   it('the keyboard moves through every slot with the arrows, Home and End', () => {
@@ -353,7 +354,7 @@ describe('the Inventory dialog', () => {
     key(document.activeElement!, 'ArrowRight');
     expect(document.activeElement).toBe(all[3]);
     expect(all[3]!.getAttribute('aria-pressed')).toBe('true');
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Rusty SMG');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Rusty SMG');
     // At the end it stays put.
     expect(key(document.activeElement!, 'ArrowRight').defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(all[3]);
@@ -398,10 +399,10 @@ describe('the Inventory dialog', () => {
     expect(slots('Stash').find((s) => s.getAttribute('aria-pressed') === 'true')!.dataset.key).toBe(
       'stash:a',
     );
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Rusty SMG');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Rusty SMG');
     // The selected gun gone: back to the strongest.
     set({ game: camp(1, [gun('b', 'sniper', 'relic')]) });
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Relic Sniper rifle');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Relic Sniper rifle');
   });
 
   it('says Resume in a fight it holds, and Close otherwise', () => {
@@ -559,8 +560,10 @@ describe('Combine in the details (ID-091)', () => {
     // Three identical guns, one line.
     const used = box.querySelectorAll('[aria-label="Uses up"] li');
     expect(used).toHaveLength(1);
-    expect(used[0]!.querySelector('.inv-name')!.textContent).toBe('3 × Rusty SMG');
-    expect(box.querySelector('[aria-label="Makes"] .inv-name')!.textContent).toBe('Common SMG');
+    expect(used[0]!.querySelector('.inv-name')!.textContent).toBe('3 × Lv 1 Rusty SMG');
+    expect(box.querySelector('[aria-label="Makes"] .inv-name')!.textContent).toBe(
+      'Lv 1 Common SMG',
+    );
     expect(box.querySelector<HTMLElement>('[aria-label="Makes"] li')!.dataset.rarity).toBe(
       'common',
     );
@@ -571,12 +574,12 @@ describe('Combine in the details (ID-091)', () => {
     expect(calls[0]).toHaveLength(3);
     const made = game().armoury.find((w) => w.rarity === 'common')!;
     expect(details().querySelector('.inv-combine-result')!.textContent).toBe(
-      `Made: Common SMG, ${gunPower(made).toFixed(1)} dmg/s`,
+      `Made: Lv 1 Common SMG, ${gunPower(made).toFixed(1)} dmg/s`,
     );
     expect(details().querySelector('.inv-combine-confirm')).toBeNull();
     // The new gun is selected: its details are up.
     expect(slot(`stash:${made.uid}`).getAttribute('aria-pressed')).toBe('true');
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Common SMG');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Common SMG');
     // Equal guns: the stash's first three go, in stash order; the new gun takes h1's uid.
     expect(
       game()
@@ -630,7 +633,7 @@ describe('Combine in the details (ID-091)', () => {
     dialog.querySelector('.inv-body')!.dispatchEvent(new MouseEvent('mouseleave'));
     slot('stash:x').click();
     expect(details().querySelector('.inv-combine-confirm')).toBeNull();
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Common Rifle');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Common Rifle');
   });
 
   it('after a combine, focus is on the result line, which names the new affixes', () => {
@@ -647,7 +650,7 @@ describe('Combine in the details (ID-091)', () => {
     expect(document.activeElement).toBe(line);
     expect(line.getAttribute('role')).toBe('status');
     expect(line.textContent).toBe(
-      `Made: Prototype SMG (${made.affixes.map(affixText).join(', ')}), ${gunPower(made).toFixed(1)} dmg/s`,
+      `Made: Lv 1 Prototype SMG (${made.affixes.map(affixText).join(', ')}), ${gunPower(made).toFixed(1)} dmg/s`,
     );
     // Tab from the line goes on through the dialog, not back to the top.
     const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
@@ -731,5 +734,91 @@ describe('Combine in the details (ID-091)', () => {
     expect(details().querySelector('.inv-combine-confirm')).toBeNull();
     expect(dialog.contains(document.activeElement)).toBe(true);
     expect(document.activeElement).toBe(slot('stash:h1'));
+  });
+});
+
+describe('gun level and Squad Power in the Inventory (ID-098)', () => {
+  const lv = (uid: string, base: WeaponId, rarity: Rarity, level: number): OwnedWeapon => ({
+    ...gun(uid, base, rarity),
+    level,
+  });
+
+  it('every gun carries its level: a badge, the details’ name, and the screen-reader label', () => {
+    const w = lv('a', 'rifle', 'military', 12);
+    const v = inventoryView(camp(1, [w]));
+    expect(v.stash[0]).toMatchObject({ level: 12, levelBadge: 'Lv 12' });
+    // The free pistol, and a gun from an older save with no level, are Lv 1.
+    expect(v.pistol).toMatchObject({ level: 1, levelBadge: 'Lv 1' });
+    expect(inventoryView(camp(1, [gun('b', 'smg', 'rusty')])).stash[0]!.level).toBe(1);
+    expect(slotLabel(v.stash[0]!)).toContain('level 12');
+    // What is no gun has no level badge.
+    expect(inventoryView(camp(1, [gun('k', 'knife', 'military')])).stash[0]!.levelBadge).toBeNull();
+  });
+
+  it('dmg/s in the badge and sorting include the level', () => {
+    const low = lv('l', 'rifle', 'military', 1);
+    const high = lv('h', 'rifle', 'military', 20);
+    const v = inventoryView(camp(1, [low, high]));
+    expect(v.stash.map((i) => i.key)).toEqual(['stash:h', 'stash:l']);
+    expect(v.stash[0]!.power).toBe(`${gunPower(high).toFixed(1)} dmg/s`);
+    expect(gunPower(high)).toBeGreaterThan(gunPower(low));
+  });
+
+  it('on the page: a level badge on each slot beside the dmg/s badge, and the level in the details', () => {
+    const w = lv('a', 'rifle', 'military', 12);
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    createInventory(root, { state: () => ({ game: camp(1, [w]), resumes: false }) });
+    root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const slot = document.querySelector<HTMLElement>('.inv-slot[data-key="stash:a"]')!;
+    expect(slot.querySelector('.inv-slot-level')!.textContent).toBe('Lv 12');
+    expect(slot.querySelector('.inv-slot-badge')!.textContent).toBe(
+      String(Math.round(gunPower(w))),
+    );
+    expect(document.querySelector('.inv-name')!.textContent).toBe('Lv 12 Military Rifle');
+    const pistol = document.querySelector<HTMLElement>('.inv-slot[data-key="pistol"]')!;
+    expect(pistol.querySelector('.inv-slot-level')!.textContent).toBe('Lv 1');
+  });
+
+  it('a combine preview takes the highest level of the three and prices it in', () => {
+    const uses = [
+      lv('a', 'smg', 'rusty', 3),
+      lv('b', 'smg', 'rusty', 9),
+      lv('c', 'smg', 'rusty', 5),
+    ];
+    const p = combinePreview(uses);
+    expect(p.makes.level).toBe(9);
+    expect(p.makes.levelBadge).toBe('Lv 9');
+    expect(p.used.map((u) => u.level)).toEqual([3, 9, 5]);
+  });
+
+  it('shows Squad Power against the next fight’s Recommended Power, in its band, with the word', () => {
+    const g = camp(1);
+    expect(inventoryView(g).power).toBeNull();
+    const v = inventoryView(g, 3);
+    expect(v.power).toMatchObject({ power: squadPower(g), rec: recommendedPower(3) });
+    expect(v.power!.text).toBe(
+      `Power ${squadPower(g).toLocaleString('en-US')} · rec ${recommendedPower(3).toLocaleString('en-US')}`,
+    );
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    let horde: number | undefined = 3;
+    const inv = createInventory(root, {
+      state: () => ({ game: g, resumes: false, ...(horde ? { horde } : {}) }),
+    });
+    root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const line = document.querySelector<HTMLElement>('.inv-power-line')!;
+    expect(line.textContent).toBe(`${v.power!.text} (Horde 3) ${v.power!.band}`);
+    expect(line.dataset.band).toBe(v.power!.band);
+    // Following the pick: another horde, another Recommended Power.
+    horde = 30;
+    inv.refresh();
+    expect(document.querySelector('.inv-power-line')!.textContent).toContain(
+      `rec ${recommendedPower(30).toLocaleString('en-US')}`,
+    );
+    // With no horde (the full game), no line.
+    horde = undefined;
+    inv.refresh();
+    expect(document.querySelector('.inv-power-line')).toBeNull();
   });
 });
