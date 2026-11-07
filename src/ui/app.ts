@@ -28,6 +28,7 @@ import {
   type GunChoice,
 } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
+import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
 import { chatter, newChat } from '../core/chatter.ts';
 import { advanceResearch } from '../core/research.ts';
@@ -63,6 +64,8 @@ import {
 import {
   createHud,
   defenderLabel,
+  hordePicker,
+  powerLine,
   resultScreen,
   SPEED_KEYS,
   squadGear,
@@ -139,6 +142,9 @@ export function start(root: HTMLElement, art: Art): void {
   let game: GameState = loaded.save?.game ?? newGame(HORDE_ONLY ? 'horde' : 'full');
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
+  // The horde the horde-only start or result screen has picked (ID-098): the next new horde,
+  // or one already beaten; the next fight is this one.
+  let picked = game.hordeNumber;
   // The horde-only build between hordes (ID-066): the next horde, set up but not started,
   // drawn behind its start screen.
   let preview: HordeState | null = null;
@@ -228,7 +234,9 @@ export function start(root: HTMLElement, art: Art): void {
       if (horde?.replace) horde = skipReplace(horde);
     },
     (defenderId, stat) => {
-      if (horde && endedAt !== null) spends.push([defenderId, stat]);
+      if (!horde || endedAt === null) return;
+      spends.push([defenderId, stat]);
+      showPicker();
     },
     (item) => {
       if (!horde) return;
@@ -260,6 +268,11 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (next) => setSpeed(next),
   );
+  hud.onHordePick((n) => {
+    picked = n;
+    // The Inventory's Squad Power line compares with the horde picked.
+    inventory.refresh();
+  });
   /**
    * The horde-only result or start screen's button (ID-066): the stat points spent on the
    * result screen are saved (the horde itself was taken in when it ended), then the next
@@ -272,7 +285,14 @@ export function start(root: HTMLElement, art: Art): void {
     }
     // The seed is the only randomness from outside the core.
     const now = Date.now();
-    startFight(startSquadHorde(game, now, now));
+    // Whatever is picked starts: one that isn't open (a stale pick) falls back to the new horde.
+    const open = Number.isInteger(picked) && picked >= 1 && picked <= game.hordeNumber;
+    startFight(startSquadHorde(game, now, now, open ? picked : game.hordeNumber));
+  }
+  /** The horde picker redrawn off the squad as it stands, the pick kept (ID-098). */
+  function showPicker(): void {
+    const retry = horde && endedAt !== null && horde.outcome === 'lost' ? horde.hordeNumber : null;
+    hud.showPicker(hordePicker(pending(), picked, retry, !horde));
   }
   /** The horde-only gun pickers (ID-067) for the game as it stands, between hordes only. */
   function showGear(): void {
@@ -284,6 +304,8 @@ export function start(root: HTMLElement, art: Art): void {
         showGear();
       }
     });
+    // A new gun or a spent point moves Squad Power, so the picker's bands follow.
+    showPicker();
   }
   /**
    * Gives survivor `defenderId` gun `choice` between hordes (the gun pickers, and the
@@ -318,6 +340,9 @@ export function start(root: HTMLElement, art: Art): void {
     ease = animator.reduced || HORDE_ONLY ? null : { from: buildCam, at: null };
     cam = fightCam;
     panel?.hide();
+    if (HORDE_ONLY) {
+      hud.fightPower(powerLine(squadPower(game), recommendedPower(next.hordeNumber)));
+    }
     hud.show(true);
     refreshDialogs();
   }
@@ -356,6 +381,7 @@ export function start(root: HTMLElement, art: Art): void {
   /** Another camp from the menu (a loaded code, a new camp): saved and shown. */
   function replaceCamp(next: GameState): void {
     commit(next);
+    picked = game.hordeNumber;
     selected = null;
     if (!panel) {
       // The menu only loads a camp between hordes: its start screen is up.
@@ -373,6 +399,8 @@ export function start(root: HTMLElement, art: Art): void {
       game,
       resumes: horde?.outcome === 'fighting' && !held,
       canCombine: !horde || endedAt !== null,
+      // Squad Power against the horde under way, or the one picked (ID-098).
+      ...(HORDE_ONLY ? { horde: horde && endedAt === null ? horde.hordeNumber : picked } : {}),
     }),
     onCombine: HORDE_ONLY
       ? (uids) => {
@@ -446,12 +474,14 @@ export function start(root: HTMLElement, art: Art): void {
           if (horde) {
             spends.push([id, stat]);
             hud.syncPicks(r.game.roster);
+            showPicker();
             refreshDialogs();
             return;
           }
           commit(r.game);
           // The start screen's squad on the wall stands with the new HP too.
           preview = startSquadHorde(game, 0, Date.now());
+          showPicker();
         },
       })
     : null;
@@ -513,7 +543,8 @@ export function start(root: HTMLElement, art: Art): void {
       preview = startSquadHorde(game, 0, Date.now());
       hud.show(true);
       hud.update(preview);
-      hud.showResult(squadStart(game));
+      picked = picked >= 1 && picked <= game.hordeNumber ? picked : game.hordeNumber;
+      hud.showResult(squadStart(game, picked));
       showGear();
       cam = buildCam = fightCam;
       refreshDialogs();
@@ -748,7 +779,10 @@ export function start(root: HTMLElement, art: Art): void {
       hud.update(horde, armed);
       if (horde.outcome !== 'fighting' && endedAt === null) {
         endedAt = Date.now();
-        hud.showResult(HORDE_ONLY ? squadScreen(game, horde) : resultScreen(game, horde, endedAt));
+        const screen = HORDE_ONLY ? squadScreen(game, horde) : resultScreen(game, horde, endedAt);
+        // After a first clear the next new horde is picked; else the same horde again.
+        if (screen.picker) picked = screen.picker.value;
+        hud.showResult(screen);
         // Horde-only (ID-066): XP and the new survivor are saved at once, so a reload on
         // the result screen never loses a win; stat points follow with its button.
         if (HORDE_ONLY) {

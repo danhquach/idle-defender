@@ -66,9 +66,27 @@ function forEveryone(json: Record<string, unknown>, f: (d: JsonPointed) => void)
   for (const r of reports) for (const s of r.survivors ?? []) f(s);
 }
 
+/** Drops `level` from every owned weapon (anything with a uid) in `v`, in place. */
+function dropLevels(v: unknown): void {
+  if (Array.isArray(v)) v.forEach(dropLevels);
+  else if (typeof v === 'object' && v !== null) {
+    const o = v as Record<string, unknown>;
+    if (typeof o.uid === 'string') delete o.level;
+    Object.values(o).forEach(dropLevels);
+  }
+}
+
+/** `game` as JSON from before ID-098 (v14 and older): no farm, and no gun levels. */
+export function preFarm(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete json.farm;
+  dropLevels(json);
+  return json;
+}
+
 /** `game` as JSON from before ID-096 (v13 and older): no banked points. */
 export function preBank(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preFarm(game);
   forEveryone(json, (d) => delete d.banked);
   return json;
 }

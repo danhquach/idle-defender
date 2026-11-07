@@ -43,8 +43,8 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
     }
   });
 
-  // Until farming (ID-098) lets the scripted player grow past a wall, a campaign only
-  // retries; how far past Horde 7 it gets is the balance pass's target (ID-102).
+  // The game can farm since ID-098, but the scripted player still only retries (gaining a
+  // loss's XP); its farming and how far past Horde 7 it gets are the balance pass's (ID-102).
   it('every campaign gets past Horde 7 and reaches the walls', () => {
     for (const runs of campaigns) {
       expect(runs.some((r) => r.hordeNumber === WALLS_FROM)).toBe(true);

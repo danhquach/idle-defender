@@ -277,11 +277,13 @@ describe('after a horde (ID-066)', () => {
     expect(squadResult(g, ended(g, 'won')).joined).toBeNull();
   });
 
-  it('a loss gives nothing and changes nothing: the same horde again', () => {
+  it('a loss with no wave cleared gives nothing and changes nothing: the same horde again', () => {
     const g = squadGame(3, 6);
     const lost = ended(g, 'lost');
     expect(finishSquadHorde(g, lost)).toBe(g);
-    expect(squadResult(g, lost)).toEqual({ gains: [], joined: null, drop: null });
+    const r = squadResult(g, lost);
+    expect(r.gains.map((x) => x.xp)).toEqual([0, 0, 0]);
+    expect(r).toMatchObject({ joined: null, drop: null });
   });
 
   it('a real loss, then the retry: every survivor back at full HP and the wall full', () => {
@@ -303,7 +305,7 @@ describe('after a horde (ID-066)', () => {
   it('refuses a horde still on, or another game’s', () => {
     const g = squadGame(1, 3);
     expect(() => finishSquadHorde(g, startSquadHorde(g, 1, NOW))).toThrow(RangeError);
-    expect(() => finishSquadHorde({ ...g, hordeNumber: 4 }, ended(g, 'won'))).toThrow(RangeError);
+    expect(() => finishSquadHorde({ ...g, hordeNumber: 2 }, ended(g, 'won'))).toThrow(RangeError);
     expect(() => squadResult(g, startSquadHorde(g, 1, NOW))).toThrow(RangeError);
   });
 

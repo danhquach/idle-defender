@@ -94,7 +94,20 @@ export interface GameState {
    * the full game comes back; this version doesn't show them.
    */
   reserve: RosterDefender[];
+  /** Farming beaten hordes (ID-098): replay wins so far, and the bad-luck count. */
+  farm: Farm;
 }
+
+/** Farming beaten hordes (ID-098, horde-only). */
+export interface Farm {
+  /** Replay wins so far; replay drop `n` has uid `r<n>`. */
+  replays: number;
+  /** Replay wins in a row whose drop was no upgrade, at most `FARM.guarantee`. */
+  badLuck: number;
+}
+
+/** A new game's farming: nothing replayed. */
+export const newFarm = (): Farm => ({ replays: 0, badLuck: 0 });
 
 // The starter roster: one per profession, each with a pistol (design §6, §11).
 const STARTER_ROSTER: readonly DefenderSpec[] = [
@@ -140,6 +153,7 @@ function fullGame(): GameState {
     leftBehind: [],
     camp: newCamp(),
     reserve: [],
+    farm: newFarm(),
   });
 }
 
@@ -273,8 +287,12 @@ export interface LevelGain {
 }
 
 /** `xpGains` against the roster of `game` (the game the horde was fought from): the levels each gain brings. */
-export function levelGains(game: GameState, h: HordeState): LevelGain[] {
-  return xpGains(h).map((g) => {
+export function levelGains(
+  game: GameState,
+  h: HordeState,
+  gains: ReturnType<typeof xpGains> = xpGains(h),
+): LevelGain[] {
+  return gains.map((g) => {
     const before = game.roster.find((d) => d.id === g.id)?.xp ?? 0;
     const was = levelOf(before).level;
     const now = levelOf(before + g.xp);

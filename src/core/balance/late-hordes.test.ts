@@ -7,7 +7,8 @@ import { playSquadCampaign, type SquadRun } from '../sim.ts';
 import { winRate } from './shared.ts';
 
 // Skipped until the balance pass (ID-102): from Horde 8 the hordes are walls the scripted
-// player can't yet farm past (farming is ID-098), so it never reaches Hordes 15–18.
+// player only retries (farming is in the game since ID-098, not yet in the scripted
+// player), so it never reaches Hordes 15–18.
 describe.skip('late horde-only hordes (ID-096)', () => {
   const SEEDS = 4;
   const FROM = 15;

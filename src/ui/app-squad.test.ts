@@ -9,6 +9,7 @@ import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
+import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
 import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
@@ -62,7 +63,8 @@ function boot() {
   const result = () => root.querySelector<HTMLElement>('.hud-result')!;
   const title = () => result().querySelector('.hud-result-title')!.textContent;
   const button = () => result().querySelector<HTMLButtonElement>('.hud-result-foot > .hud-button')!;
-  const bar = () => root.querySelector('.hud-fight-bar')!.textContent;
+  // The corner's tooltip carries the status line the old top bar showed.
+  const bar = () => root.querySelector<HTMLElement>('.hud-corner')!.title;
   const saved = () => decodeSave(localStorage.getItem(SAVE_KEY))!.game;
   return { root, result, title, button, bar, saved };
 }
@@ -298,7 +300,9 @@ describe('Combine in the game (app.ts, ID-091)', () => {
     const options = [...root.querySelectorAll<HTMLOptionElement>('.hud-gear-select option')];
     expect(options.map((o) => o.value)).toContain('h1');
     expect(options.find((o) => o.value === 'h1')!.textContent).toContain('Common SMG');
-    expect(invScrim.querySelector('.inv-combine-result')!.textContent).toMatch(/^Made: Common SMG/);
+    expect(invScrim.querySelector('.inv-combine-result')!.textContent).toMatch(
+      /^Made: Lv 1 Common SMG/,
+    );
   });
 
   it('mid-fight shows no Combine button; on the result screen it is back', () => {
@@ -469,5 +473,140 @@ describe('the Roster and the result screen together (app.ts, ID-086)', () => {
       expect(scrim.querySelector('.roster-card')).toBeNull();
       close();
     }
+  });
+});
+
+describe('farming in the game (app.ts, ID-098)', () => {
+  /** A saved game at Horde `n` with `recruits` survivors, booted onto its start screen. */
+  function at(n: number, recruits = 2) {
+    const g = newGame('horde');
+    const saved = {
+      ...g,
+      hordeNumber: n,
+      roster: Array.from({ length: recruits }, (_, i) => recruit(i + 1)),
+      camp: { ...g.camp, recruits },
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(saved, NOW));
+    const booted = boot();
+    step(0);
+    const select = () => booted.root.querySelector<HTMLSelectElement>('#hud-horde-select')!;
+    const pick = (horde: number) => {
+      select().value = String(horde);
+      select().dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const badge = () => booted.root.querySelector('.hud-badge-num')!.textContent;
+    let t = 0;
+    const frame = () => step((t += 16));
+    return { ...booted, select, pick, badge, frame, start: saved };
+  }
+
+  it('the start screen opens on the next new horde with the picker; picking a beaten horde starts that one', () => {
+    const { button, select, pick, badge, frame, title } = at(5);
+    expect(select().value).toBe('5');
+    expect([...select().options].map((o) => o.value)).toEqual(['5', '4', '3', '2', '1']);
+    expect(button().textContent).toMatch(/^Start Horde 5/);
+    pick(2);
+    expect(title()).toContain('Horde 2');
+    expect(button().textContent).toBe('Replay Horde 2');
+    button().click();
+    frame();
+    frame();
+    expect(badge()).toBe('2');
+  });
+
+  it('a replay win: saved as a replay, the same horde stays picked, nobody joins, the XP is kept', () => {
+    const { button, select, pick, title, frame, saved, result, badge } = at(5);
+    pick(3);
+    button().click();
+    frame();
+    endNextTick('won');
+    frame();
+    expect(title()).toBe('Horde 3 held (replay)');
+    expect(result().textContent).not.toContain('New survivor');
+    // The next new horde has not moved; the roster has not grown; the XP is paid.
+    expect(saved().hordeNumber).toBe(5);
+    expect(saved().roster).toHaveLength(2);
+    expect(saved().roster[0]!.xp).toBeGreaterThan(0);
+    expect(select().value).toBe('3');
+    expect(button().textContent).toBe('Replay Horde 3');
+    // The picker's list is the saved game's: five hordes, the new one first.
+    expect([...select().options].map((o) => o.value)).toEqual(['5', '4', '3', '2', '1']);
+    expect(result().textContent).toContain('Replay');
+    button().click();
+    frame();
+    frame();
+    expect(badge()).toBe('3');
+  });
+
+  it('a first clear moves the pick to the next new horde, now in the list', () => {
+    const { button, select, title, frame, saved, badge } = at(5);
+    button().click();
+    frame();
+    endNextTick('won');
+    frame();
+    expect(title()).toBe('Horde 5 held');
+    expect(saved().hordeNumber).toBe(6);
+    expect(select().value).toBe('6');
+    expect([...select().options].map((o) => o.value)).toEqual(['6', '5', '4', '3', '2', '1']);
+    expect(button().textContent).toMatch(/^Start Horde 6/);
+    button().click();
+    frame();
+    frame();
+    expect(badge()).toBe('6');
+  });
+
+  it('a loss retries the same horde, or any easier one picked instead', () => {
+    const { button, select, pick, frame, badge, saved } = at(4);
+    button().click();
+    frame();
+    endNextTick('lost');
+    frame();
+    expect(select().value).toBe('4');
+    expect(button().textContent).toMatch(/^Retry Horde 4/);
+    pick(1);
+    expect(button().textContent).toBe('Replay Horde 1');
+    button().click();
+    frame();
+    frame();
+    expect(badge()).toBe('1');
+    expect(saved().hordeNumber).toBe(4);
+  });
+
+  it('the fight’s corner shows Squad Power against the horde’s Recommended Power', () => {
+    const { button, pick, frame, root, start } = at(5);
+    pick(3);
+    button().click();
+    frame();
+    frame();
+    const label = root.querySelector('.hud-power-label')!.textContent;
+    const power = squadPower(start);
+    expect(label).toBe(
+      `Power ${power.toLocaleString('en-US')} · rec ${recommendedPower(3).toLocaleString('en-US')}`,
+    );
+    expect(root.querySelector<HTMLElement>('.hud-power')!.hidden).toBe(false);
+    expect(root.querySelector('.hud-xp-label')!.textContent).toMatch(/^Lv 1 · 0\/\d+$/);
+  });
+
+  it('the Inventory’s Squad Power line follows the horde picked', () => {
+    const { pick, root } = at(8);
+    root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const line = () => document.querySelector('.inv-power-line')!.textContent;
+    expect(line()).toContain(`rec ${recommendedPower(8).toLocaleString('en-US')}`);
+    document.querySelector<HTMLButtonElement>('.inv-done, .inv-close')?.click();
+    pick(2);
+    root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    expect(line()).toContain(`rec ${recommendedPower(2).toLocaleString('en-US')}`);
+  });
+
+  it('on a loss screen the Inventory’s line follows a new pick, not the horde lost', () => {
+    const { button, pick, frame, root } = at(8);
+    button().click();
+    frame();
+    endNextTick('lost');
+    frame();
+    pick(3);
+    root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const line = document.querySelector('.inv-power-line')!.textContent;
+    expect(line).toContain(`rec ${recommendedPower(3).toLocaleString('en-US')}`);
   });
 });

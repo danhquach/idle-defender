@@ -50,12 +50,16 @@ const gun = (uid: string, base: keyof typeof WEAPONS, rarity: Rarity): OwnedWeap
 const smgs = (n: number): OwnedWeapon[] =>
   Array.from({ length: n }, (_, i) => gun(`c${i + 1}`, 'smg', 'common'));
 
-/** The rarities horde `n` dropped over `seeds` wins. */
+/**
+ * The rarities horde `n` dropped over `seeds` replay wins: a replay rolls the band itself,
+ * less half its top share (ID-098); a first clear moves it up one rarity (farm.test.ts).
+ */
 function rarities(n: number, seeds = 400): Set<Rarity> {
-  const g = squadGame(1, n);
+  const g = squadGame(1, n + 1);
   const seen = new Set<Rarity>();
-  for (let seed = 1; seed <= seeds; seed++)
-    seen.add(squadDrop(g, ended(g, 'won', seed))!.weapon.rarity);
+  for (let seed = 1; seed <= seeds; seed++) {
+    seen.add(squadDrop(g, { ...startSquadHorde(g, seed, NOW, n), outcome: 'won' })!.weapon.rarity);
+  }
   return seen;
 }
 
@@ -146,7 +150,11 @@ describe('a win, a loss and the stash (ID-067)', () => {
     const won = ended(g, 'won');
     const next = finishSquadHorde(g, won);
     expect(next.armoury).toEqual([squadDrop(g, won)!.weapon]);
-    expect(squadResult(g, won).drop).toEqual({ weapon: next.armoury[0], thrown: null });
+    expect(squadResult(g, won).drop).toMatchObject({
+      weapon: next.armoury[0],
+      thrown: null,
+      kind: 'first',
+    });
   });
 
   it('nothing drops after a loss', () => {

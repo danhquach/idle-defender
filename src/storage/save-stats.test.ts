@@ -26,8 +26,8 @@ function spent(): GameState {
 }
 
 describe('save: the stat rework (ID-084)', () => {
-  it('is version 14', () => {
-    expect(SAVE_VERSION).toBe(14);
+  it('is version 15', () => {
+    expect(SAVE_VERSION).toBe(15);
   });
 
   it('a v12 save loads with every spent point refunded, and says so once', () => {
@@ -150,9 +150,9 @@ describe('save: 1 stat point a level (ID-096)', () => {
     expect(again.game.roster[0]).toEqual(up);
   });
 
-  it('a v14 save writes banked only above 0, and reads it back exactly', () => {
+  it('a current save writes banked only above 0, and reads it back exactly', () => {
     const json = JSON.parse(encodeSave(spent(), NOW));
-    expect(json.v).toBe(14);
+    expect(json.v).toBe(SAVE_VERSION);
     expect(json.game.roster[0].banked).toBe(4);
     expect(Object.hasOwn(json.game.roster[1], 'banked')).toBe(false);
     expect(decodeSave(encodeSave(spent(), NOW))!.game).toEqual(spent());
