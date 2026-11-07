@@ -315,6 +315,26 @@ describe('the bad-luck guarantee (ID-098)', () => {
     expect(squadDrop(full, ended(full, 2, 'won'))!.kind).toBe('replay');
   });
 
+  it('names no horde to farm when no horde up to the next new one could beat the weakest', () => {
+    const held = gun('h40', 'shotgun', 'relic', 1000);
+    const g = holding(held, 41, 0);
+    const d = squadDrop(g, ended(g, 2, 'won'))!;
+    expect(d.noUpgrades).toBe(true);
+    expect(d.farmFrom).toBeNull();
+  });
+
+  it('past the most replays a save holds, a replay pays XP but drops nothing and counts nothing', () => {
+    const g = { ...farmGame(1, 9), farm: { replays: FARM.maxReplays, badLuck: 2 } };
+    const s = ended(g, 6, 'won');
+    expect(squadDrop(g, s)).toBeNull();
+    const after = finishSquadHorde(g, s);
+    expect(after.armoury).toEqual(g.armoury);
+    expect(after.farm).toEqual(g.farm);
+    expect(after.roster[0]!.xp).toBeGreaterThan(g.roster[0]!.xp);
+    // A first clear still drops as ever.
+    expect(squadDrop(g, ended(g, 9, 'won'))!.kind).toBe('first');
+  });
+
   it('first clears neither count toward nor reset it', () => {
     const g = holding(gun('h1', 'rifle', 'relic', 1), 3, 2);
     expect(finishSquadHorde(g, ended(g, 3, 'won')).farm.badLuck).toBe(2);
