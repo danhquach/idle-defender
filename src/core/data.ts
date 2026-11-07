@@ -672,10 +672,25 @@ export const CARD = {
   frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 0.4 },
   /**
    * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
-   * slows per level; each row of it (one per segment) takes `durability` enemies before it
-   * breaks (ID-090).
+   * slows per level. Each row of it (one per segment) has `durability` per level (ID-104);
+   * an enemy entering a working row takes its kind's `wear` off it (ID-090, ID-104).
    */
-  wire: { from: 250, to: 400, slow: [0.15, 0.25, 0.35], durability: 30 },
+  wire: {
+    from: 250,
+    to: 400,
+    slow: [0.15, 0.25, 0.35],
+    durability: [10, 20, 30],
+    wear: {
+      shambler: 1,
+      runner: 1,
+      crawler: 1,
+      spewer: 1,
+      screamer: 1,
+      swollen: 3,
+      brute: 4,
+      horror: 10,
+    } satisfies Record<EnemyKind, number>,
+  },
   /** Share of `BANK_CAP` a Recharge adds. */
   recharge: 0.25,
 } as const;

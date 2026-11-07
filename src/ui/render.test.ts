@@ -2967,7 +2967,7 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
   /** Barbed Wire's rows, whole but for the `broken` ones. */
   const rows = (...broken: number[]) =>
     Array.from({ length: SEGMENTS }, (_, i) => ({
-      durability: broken.includes(i) ? 0 : CARD.wire.durability,
+      durability: broken.includes(i) ? 0 : CARD.wire.durability[0],
       hit: [],
     }));
 
