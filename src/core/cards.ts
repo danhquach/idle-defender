@@ -182,7 +182,7 @@ export const UPGRADES: Readonly<
   },
   // Research cards (ID-035): only in the pool once researched.
   'hollow-points': {
-    name: 'Hollow Points',
+    name: 'Heavy Rounds',
     text: '+40% damage',
     category: 'stat',
     rarity: 'rare',

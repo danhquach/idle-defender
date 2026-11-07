@@ -43,6 +43,7 @@ import {
 } from './sprites.ts';
 
 const root = new URL('../../', import.meta.url);
+type Overlay = { part: string; at: [number, number]; size: number; turn?: number };
 const manifest = JSON.parse(readFileSync(new URL('art-src/manifest.json', root), 'utf8')) as {
   assets: {
     id: string;
@@ -54,8 +55,11 @@ const manifest = JSON.parse(readFileSync(new URL('art-src/manifest.json', root),
     mutant?: true;
     pose?: string;
     frames?: string;
-    overlay?: { part: string };
+    overlay?: Overlay | Overlay[];
     draw?: unknown;
+    outside?: unknown;
+    seed?: number;
+    photo?: string;
   }[];
 };
 /** Generations used only as references of other sprites (ID-046), and the rest. */
@@ -291,7 +295,7 @@ describe('art sources', () => {
     const used = new Set(
       shipped.flatMap((a) => [
         ...(a.ref === undefined ? [] : [a.ref].flat()),
-        ...(a.overlay ? [a.overlay.part] : []),
+        ...(a.overlay ? [a.overlay].flat().map((o) => o.part) : []),
       ]),
     );
     for (const a of parts) expect(used.has(a.id), a.id).toBe(true);
@@ -312,8 +316,42 @@ describe('art sources', () => {
     for (const dir of ['art-src/gen/', 'art-concepts/']) {
       for (const name of readdirSync(new URL(dir, root)).filter((n) => n.endsWith('.jpg'))) {
         const bytes = readFileSync(new URL(dir + name, root)).toString('latin1');
-        expect(bytes, dir + name).not.toMatch(/https?:|pollinations/i);
+        // ID-103: an app's own metadata (XMP, its AI-made tag) is stripped too.
+        expect(bytes, dir + name).not.toMatch(/https?:|pollinations|xmpmeta|algorithmicmedia/i);
       }
+    }
+  });
+
+  it('keeps every overlay a part placed beside or on its sprite at a sane size', () => {
+    // ID-103: overlay is one {part, at, size, turn?} or a non-empty list of them.
+    const partIds = new Set(parts.map((p) => p.id));
+    for (const a of manifest.assets.filter((x) => x.overlay !== undefined)) {
+      const list = [a.overlay!].flat();
+      expect(list.length, a.id).toBeGreaterThan(0);
+      for (const o of list) {
+        expect(partIds.has(o.part), a.id).toBe(true);
+        expect(
+          o.at.every((v) => v >= -1 && v <= 2),
+          a.id,
+        ).toBe(true);
+        expect(o.size > 0 && o.size <= 1, a.id).toBe(true);
+      }
+    }
+  });
+
+  it('marks art made outside the build as such: a sprite with a prompt, no seed, its source kept', () => {
+    // ID-103: the owner generated some card icons in an app, so there is no seed to replay.
+    const outside = manifest.assets.filter((a) => a.outside !== undefined);
+    expect(outside.length).toBeGreaterThan(0);
+    for (const a of outside) {
+      expect([a.outside, a.kind, a.model], a.id).toEqual([true, 'sprite', 'meta-ai']);
+      expect(a.prompt, a.id).toBeTruthy();
+      const extra = [a.seed, a.ref, a.pose, a.photo, a.draw, a.frames, a.part];
+      expect(
+        extra.every((v) => v === undefined),
+        a.id,
+      ).toBe(true);
+      expect(existsSync(new URL(`art-src/gen/${a.id}.jpg`, root)), a.id).toBe(true);
     }
   });
 

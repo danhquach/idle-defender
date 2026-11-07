@@ -1006,7 +1006,7 @@ spacing real hordes have (see the ID-077 note below).
   | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **20** flat damage (armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked |
 
   Field Repairs (a campaign research card) stays epic and unique, and
-  Hollow Points (research) stays once per horde with no levels.
+  Heavy Rounds (research) stays once per horde with no levels.
 
   **One ammo slot (ID-097):** the squad holds at most one of Incendiary
   Rounds and Shock Rounds; both stay in the pool all horde. Picking the one
@@ -1021,7 +1021,7 @@ spacing real hordes have (see the ID-077 note below).
   (**+10%** of each segment's max HP at the start of the horde; the segment
   gains the same HP) are common and can be picked any number of times. The
   steps add (five Sharpshooters are +50%), then multiply once with other
-  sources (Hollow Points, shop buffs, perks). They were ×1.2, ×1.15, ×1.15
+  sources (Heavy Rounds, shop buffs, perks). They were ×1.2, ×1.15, ×1.15
   and +25% of the current max each, compounding (ID-022): five Sharpshooters
   were ×2.49.
 
@@ -1601,7 +1601,7 @@ Set before sending; they apply to any location, plaza or single building.
     chemical trap kits for the workbench (ID-034): **Glue** 20, 30 min;
     **Incendiary** 60, 1 h, **Corrosive** 100, 1 h 30 min and
     **Paralyzing** 150, 2 h (Lab 2, after Glue).
-  - Cards (join the offer pool once researched): **Hollow Points** 25,
+  - Cards (join the offer pool once researched): **Heavy Rounds** 25,
     45 min (rare, once: +40% damage); **Field Repairs** 80, 1 h 30 min
     (Lab 2; epic, once: every wall segment to full HP).
   - Camp: **More cars** 150, 2 h (Lab 2): a second car.
