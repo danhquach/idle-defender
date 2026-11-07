@@ -22,9 +22,12 @@ import { ARMOURY_CAP } from '../core/data.ts';
 import { newHorde, type HordeState } from '../core/horde.ts';
 import { buildTurret } from '../core/base.ts';
 import { NO_STATS } from '../core/stats.ts';
-import { enemy, setup } from '../core/testing.ts';
+import { BROOD_BOSS, enemy, horror, setup } from '../core/testing.ts';
 import {
-  bossBar,
+  bossBars,
+  bossCue,
+  bossFates,
+  bossName,
   clockTime,
   defenderLabel,
   fallingText,
@@ -37,6 +40,8 @@ import {
   startLabel,
   statusText,
   stockText,
+  swarmCue,
+  SWARM_CUE,
 } from './hud.ts';
 import { loadoutFrom } from '../core/loadout.ts';
 import { cardText } from './hud.ts';
@@ -70,18 +75,88 @@ describe('hud', () => {
     expect(statusText(s)).toMatch(/^Horde 10 \(boss\) · Wave 1\//);
   });
 
+  it('one boss bar per boss on the field, in order, naming skills and the wind-up (ID-099)', () => {
+    const s = newHorde(1, { ...setup(), hordeNumber: 20, harder: true });
+    const [a, b] = s.bosses;
+    const second = horror(s, b!.skills, { hp: 500, maxHp: 4000 }, { boss: 1, nextAt: 100 });
+    const first = horror(s, a!.skills, { hp: 4000, maxHp: 4000 }, { boss: 0, nextAt: 1 });
+    a!.id = first.id;
+    b!.id = second.id;
+    expect(bossBars(s).map((x) => x.label)).toEqual([
+      'Mutated Horror (Slab Throw, Roar) · Slab Throw! · 4,000/4,000',
+      'Mutated Horror (Charge, Armour Plates) · 500/4,000',
+    ]);
+    expect(bossName({ kind: 'swollen', skills: ['plates'], elite: true })).toBe(
+      'Elite Swollen (Armour Plates)',
+    );
+    s.enemies = s.enemies.filter((e) => e.id !== second.id);
+    expect(bossFates(s)).toEqual([
+      { name: 'Mutated Horror (Slab Throw, Roar)', dead: false },
+      { name: 'Mutated Horror (Charge, Armour Plates)', dead: true },
+    ]);
+  });
+
+  it('a boss bar keeps naming a skill through its effect, not just the wind-up (ID-099)', () => {
+    const s = newHorde(1, { ...setup(), hordeNumber: 10, harder: true });
+    s.toSpawn = 0;
+    const e = horror(s, ['brood', 'roar'], {}, { nextAt: 100 });
+    s.bosses[0]!.id = e.id;
+    expect(bossCue(s, e)).toBeNull();
+    e.horror!.fired.roar = 0;
+    expect(bossCue({ time: 3.9 }, e)).toBe('roar');
+    expect(bossCue({ time: 4 }, e)).toBeNull();
+    const [bar] = bossBars({ ...s, time: 1 });
+    expect(bar).toMatchObject({
+      name: 'Mutated Horror (Brood, Roar)',
+      cue: 'Roar!',
+      winding: false,
+      hpText: '1,000/1,000',
+    });
+    e.horror!.next.brood = 1.5;
+    expect(bossBars({ ...s, time: 1 })[0]).toMatchObject({ cue: 'Brood!', winding: true });
+  });
+
+  it('shows "Swarm!" for the first seconds of a swarm wave (ID-099)', () => {
+    const s = newHorde(1, setup());
+    expect(swarmCue(s)).toBe(false);
+    s.swarm = true;
+    s.breakUntil = 10;
+    expect(swarmCue({ ...s, time: 9.9 })).toBe(false);
+    expect(swarmCue({ ...s, time: 10 })).toBe(true);
+    expect(swarmCue({ ...s, time: 10 + SWARM_CUE - 0.1 })).toBe(true);
+    expect(swarmCue({ ...s, time: 10 + SWARM_CUE })).toBe(false);
+    expect(swarmCue({ ...s, time: 10, outcome: 'lost' })).toBe(false);
+  });
+
   it('shows the boss bar only while a Mutated Horror is on the field (ID-024)', () => {
     const s = newHorde(1, { ...setup(), hordeNumber: 10 });
-    expect(bossBar(s)).toBeNull();
+    expect(bossBars(s)).toEqual([]);
     enemy(s, { kind: 'runner' });
-    expect(bossBar(s)).toBeNull();
+    expect(bossBars(s)).toEqual([]);
     const e = enemy(s, { kind: 'horror', hp: 1234.4, maxHp: 2000 });
-    e.horror = { ability: 'brood', nextAt: 0, chargeUntil: 0, charged: false, hitAt: 0, seenHp: 0 };
-    expect(bossBar(s)).toEqual({
-      label: 'Mutated Horror: Broodmother · 1,234/2,000',
-      hp: 1234,
-      maxHp: 2000,
-    });
+    e.horror = {
+      boss: 0,
+      skills: ['brood'],
+      next: { brood: 100 },
+      fired: {},
+      chargeUntil: 0,
+      charged: false,
+      hitAt: 0,
+      seenHp: 0,
+      broods: 0,
+      platesOff: false,
+    };
+    expect(bossBars(s)).toEqual([
+      {
+        name: 'Mutated Horror (Brood)',
+        cue: null,
+        winding: false,
+        hpText: '1,234/2,000',
+        label: 'Mutated Horror (Brood) · 1,234/2,000',
+        hp: 1234,
+        maxHp: 2000,
+      },
+    ]);
   });
 
   it('shows a shop button per item as a dry run of buy, with a running buff counting down', () => {
@@ -254,7 +329,7 @@ describe('hud', () => {
 
     it('a boss win names its reward as finishHorde gives it: a perk, or Genes once all are owned (ID-035)', () => {
       const { game, s } = ended('won');
-      s.boss = 'brood';
+      s.bosses = BROOD_BOSS;
       const line = (g: GameState) =>
         resultScreen(g, s, NOW).lines.find((l) => l.startsWith('Boss reward'));
       const reward = hordeBossReward(game, s);
@@ -280,22 +355,26 @@ describe('hud', () => {
       for (const id of PERK_IDS) all.perkLevels[id] = 1;
       expect(line(all)).toBe(`Boss reward: ${BOSS_PERK_GENES} Genes (every perk owned)`);
       // No boss, no line.
-      expect(resultScreen(game, { ...s, boss: null }, NOW).lines.join('\n')).not.toMatch(
+      expect(resultScreen(game, { ...s, bosses: [] }, NOW).lines.join('\n')).not.toMatch(
         /Boss reward/,
       );
     });
 
     it('a boss horde names its Mutated Horror: dead on a win, still standing on a loss (ID-024)', () => {
       const { game, s } = ended('won');
-      s.boss = 'charge';
+      s.bosses = [{ kind: 'horror', skills: ['charge'], wave: 10, hp: 1, elite: false, id: 7 }];
       s.injured[0]!.by = 'horror';
       const won = resultScreen(game, s, NOW).lines;
-      expect(won[0]).toBe(`All ${s.waveCount} waves cleared · the Mutated Horror: Rammer is dead`);
+      expect(won[0]).toBe(`All ${s.waveCount} waves cleared · the Mutated Horror (Charge) is dead`);
       expect(won).toContain(`Jack · injured by the Mutated Horror · back at ${jackBack}`);
 
       const lost = ended('lost');
-      lost.s.boss = 'regen';
+      // Not come yet: not named.
+      lost.s.bosses = [
+        { kind: 'horror', skills: ['regen'], wave: 10, hp: 1, elite: false, id: null },
+      ];
       expect(resultScreen(lost.game, lost.s, NOW).lines.join('\n')).not.toMatch(/Horror/);
+      lost.s.bosses[0]!.id = 99;
       lost.s.enemies.push({
         id: 99,
         kind: 'horror',
@@ -311,16 +390,20 @@ describe('hud', () => {
         climbUntil: 0,
         climbed: false,
         horror: {
-          ability: 'regen',
-          nextAt: 0,
+          boss: 0,
+          skills: ['regen'],
+          next: {},
+          fired: {},
           chargeUntil: 0,
           charged: false,
           hitAt: 0,
           seenHp: 10,
+          broods: 0,
+          platesOff: false,
         },
       });
       expect(resultScreen(lost.game, lost.s, NOW).lines[1]).toBe(
-        'The Mutated Horror: Regenerator still stood',
+        'Mutated Horror (Regen): still stood',
       );
     });
 

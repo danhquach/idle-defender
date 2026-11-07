@@ -31,6 +31,9 @@ import {
 import { pitch, rerollLock, synergyOf, UPGRADES, type CardPitch } from '../core/cards.ts';
 import {
   BANK_CAP,
+  BOSS_SKILL,
+  BOSSES,
+  HORROR,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
   ENDING_HORDE,
@@ -52,7 +55,7 @@ import {
   STATS,
   type EnemyKind,
   type CampPickId,
-  type HorrorAbility,
+  type BossSkill,
   type Rarity,
   type ShopItem,
   type SkillId,
@@ -72,7 +75,10 @@ import {
 } from '../core/game.ts';
 import {
   baseAfter,
+  bossHorde,
   perkOn,
+  windingUp,
+  type Enemy,
   type Breach,
   type Card,
   type DefenderSpec,
@@ -89,7 +95,7 @@ import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
 import { powerBand, recommendedPower, squadPower, type PowerBand } from '../core/squadpower.ts';
 import { isLocked, levelOf, spend, unspentPoints } from '../core/stats.ts';
-import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
+import { horrorAbility, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
@@ -233,7 +239,7 @@ export const bankText = (charge: number, cap: number = BANK_CAP): string =>
 
 export function statusText(s: HordeState): string {
   return [
-    s.boss ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
+    bossHorde(s) ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
     `Wave ${s.wave}/${s.waveCount}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
     bankText(s.energy, s.bankCap),
@@ -252,7 +258,7 @@ export function squadStatus(s: HordeState): string {
   const cleared = s.outcome === 'won' ? s.waveCount : s.wave - 1;
   const left = enemiesLeft(s);
   return [
-    s.boss ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
+    bossHorde(s) ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
     `Waves cleared ${cleared}/${s.waveCount}`,
     `${left} left in this wave`,
   ].join(' · ');
@@ -380,15 +386,37 @@ const ENEMY_NAME: Readonly<Record<EnemyKind, string>> = {
   screamer: 'Screamer',
   horror: 'Mutated Horror',
 };
-/** Each Mutated Horror goes by its ability (design §9, ID-024). */
-const HORROR_NAME: Readonly<Record<HorrorAbility, string>> = {
-  brood: 'Broodmother',
-  charge: 'Rammer',
-  regen: 'Regenerator',
+/** Each boss skill's name (design §9, ID-024, ID-099). */
+export const SKILL_NAME: Readonly<Record<BossSkill, string>> = {
+  brood: 'Brood',
+  charge: 'Charge',
+  regen: 'Regen',
+  roar: 'Roar',
+  slab: 'Slab Throw',
+  plates: 'Armour Plates',
 };
-/** "Mutated Horror: Broodmother". */
-const horrorName = (ability: HorrorAbility): string =>
-  `${ENEMY_NAME.horror}: ${HORROR_NAME[ability]}`;
+/** A boss or mini-boss by its kind and skills: "Mutated Horror (Brood, Roar)", "Elite Brute (Roar)". */
+export const bossName = (b: Pick<BossSpec, 'kind' | 'skills' | 'elite'>): string =>
+  `${b.elite ? 'Elite ' : ''}${ENEMY_NAME[b.kind]} (${b.skills.map((k) => SKILL_NAME[k]).join(', ')})`;
+
+/** The bosses and mini-boss that came this horde, in order, each with whether it died (ID-099). */
+export function bossFates(
+  s: Pick<HordeState, 'bosses' | 'enemies'>,
+): { name: string; dead: boolean }[] {
+  return s.bosses
+    .filter((b) => b.id !== null)
+    .map((b) => ({ name: bossName(b), dead: !s.enemies.some((e) => e.id === b.id) }));
+}
+
+/** A win's first line: "All 10 waves cleared · the Mutated Horror (Brood, Roar) is dead". */
+const clearedLine = (s: HordeState): string =>
+  [`All ${s.waveCount} waves cleared`, ...bossFates(s).map((f) => `the ${f.name} is dead`)].join(
+    ' · ',
+  );
+
+/** A loss's boss lines: "The Mutated Horror (Brood, Roar) still stood", or "… died". */
+const lostBossLines = (s: HordeState): string[] =>
+  bossFates(s).map((f) => `${f.name}: ${f.dead ? 'dead' : 'still stood'}`);
 
 /** The start button: "Start Horde 10 · Boss horde" for a boss horde. */
 export const startLabel = (hordeNumber: number): string =>
@@ -534,17 +562,79 @@ export function hordePicker(
   return { options, value: open ? picked : game.hordeNumber, farm, retitle };
 }
 
-/** The boss bar while a Mutated Horror is on the field, else null. */
-export function bossBar(s: HordeState): { label: string; hp: number; maxHp: number } | null {
-  const e = s.enemies.find((x) => x.horror);
-  if (!e?.horror) return null;
-  const hp = wholeLeft(e.hp);
-  return {
-    label: `${horrorName(e.horror.ability)} · ${hp.toLocaleString('en-US')}/${e.maxHp.toLocaleString('en-US')}`,
-    hp,
-    maxHp: e.maxHp,
-  };
+/**
+ * One boss bar per boss or mini-boss on the field, in the horde's order (ID-099): its name
+ * and skills, the skill it is winding up ("Roar!"), and its HP.
+ */
+export function bossBars(s: HordeState): BossBar[] {
+  return s.enemies
+    .filter((e) => e.horror && s.bosses[e.horror.boss])
+    .sort((a, b) => a.horror!.boss - b.horror!.boss)
+    .map((e) => {
+      const hp = wholeLeft(e.hp);
+      const name = bossName(s.bosses[e.horror!.boss]!);
+      const skill = bossCue(s, e);
+      const cue = skill ? `${SKILL_NAME[skill]}!` : null;
+      const hpText = `${hp.toLocaleString('en-US')}/${e.maxHp.toLocaleString('en-US')}`;
+      return {
+        name,
+        cue,
+        winding: skill !== null && windingUp(s, e) === skill,
+        hpText,
+        label: [name, ...(cue ? [cue] : []), hpText].join(' · '),
+        hp,
+        maxHp: e.maxHp,
+      };
+    });
 }
+
+/** One boss bar: its name and skills, the skill it is using (a tag), its HP; `label` says it all. */
+export interface BossBar {
+  name: string;
+  cue: string | null;
+  /** The cue is a wind-up (about to happen), not an effect under way. */
+  winding: boolean;
+  hpText: string;
+  label: string;
+  hp: number;
+  maxHp: number;
+}
+
+/**
+ * How long a boss bar keeps naming a skill once it went off, in fight s (ID-099): through
+ * its effect, so a glance at 3× still catches it. A Roar while its enemies are fast, a
+ * slab until it lands and its dust settles, a charge while it runs, a brood a moment.
+ */
+const CUE_HOLD: Readonly<Partial<Record<BossSkill, number>>> = {
+  roar: BOSS_SKILL.roar.time,
+  slab: 2 * BOSS_SKILL.slab.flight,
+  charge: HORROR.charge.time,
+  brood: 1,
+};
+
+/** The skill a boss bar names now: the one winding up, else the latest still in effect. */
+export function bossCue(s: Pick<HordeState, 'time'>, e: Enemy): BossSkill | null {
+  const wind = windingUp(s, e);
+  if (wind || !e.horror) return wind;
+  let best: BossSkill | null = null;
+  for (const k of e.horror.skills) {
+    const at = e.horror.fired[k];
+    if (at === undefined || s.time - at >= (CUE_HOLD[k] ?? 0)) continue;
+    if (best === null || at > e.horror.fired[best]!) best = k;
+  }
+  return best;
+}
+
+/** How long "Swarm!" shows once a swarm wave's enemies start coming (ID-099), in s. */
+export const SWARM_CUE = 3;
+/** Whether the "Swarm!" cue shows: a swarm wave's first `SWARM_CUE` s of spawning. */
+export const swarmCue = (
+  s: Pick<HordeState, 'swarm' | 'outcome' | 'time' | 'breakUntil'>,
+): boolean =>
+  s.swarm &&
+  s.outcome === 'fighting' &&
+  s.time >= s.breakUntil &&
+  s.time < s.breakUntil + SWARM_CUE;
 const THROUGH: Readonly<Record<Breach['through'], string>> = {
   wall: 'broken wall',
   gate: 'broken gate',
@@ -778,9 +868,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
     return {
       title: `Horde ${s.hordeNumber} held`,
       lines: [
-        s.boss
-          ? `All ${s.waveCount} waves cleared · the ${horrorName(s.boss)} is dead`
-          : `All ${s.waveCount} waves cleared`,
+        clearedLine(s),
         payoutText(s),
         ...bossLines(game, s, now),
         ...findLines(s),
@@ -802,12 +890,11 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
     ? `Broke in at ${slotName(inner.column, inner.row)}, in wave ${inner.wave} of ${s.waveCount}`
     : 'Broke in';
   const why = `${where} · nobody left to hold them for ${FALL_WARNING} s`;
-  const horror = s.enemies.find((e) => e.horror)?.horror;
   return {
     title: 'The camp fell',
     lines: [
       why,
-      ...(horror ? [`The ${horrorName(horror.ability)} still stood`] : []),
+      ...lostBossLines(s),
       ...path.map((b) => `Layer ${b.column + 1} · row ${b.row + 1} · ${THROUGH[b.through]}`),
       payoutText(s),
       'No XP on a loss',
@@ -1141,9 +1228,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           ? `Horde ${s.hordeNumber} held (replay)`
           : `Horde ${s.hordeNumber} held`,
       lines: [
-        s.boss
-          ? `All ${s.waveCount} waves cleared · the ${horrorName(s.boss)} is dead`
-          : `All ${s.waveCount} waves cleared`,
+        clearedLine(s),
         ...gains.map(squadXpLine),
         ...(replay
           ? []
@@ -1164,7 +1249,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         kind: 'won',
         chips: [
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
-          ...(s.boss ? [{ text: `${horrorName(s.boss)} dead`, tone: 'boss' as const }] : []),
+          ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'boss' as const })),
         ],
         callout: null,
         note: ending
@@ -1189,14 +1274,14 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   }
   const inner = [...s.breaches].sort((a, b) => b.column - a.column).at(-1);
   const where = inner ? `They got in during wave ${inner.wave} of ${s.waveCount}` : 'They got in';
-  const horror = s.enemies.find((e) => e.horror)?.horror;
+  const bossLost = lostBossLines(s);
   const xp = gains[0]?.xp ?? 0;
   const again = `Horde ${s.hordeNumber} again, or an easier horde to farm XP and guns: the squad is back on their feet and the wall at full HP`;
   return {
     title: 'The wall fell',
     lines: [
       `${where} · nobody left standing`,
-      ...(horror ? [`The ${horrorName(horror.ability)} still stood`] : []),
+      ...bossLost,
       lossXpText(xp),
       ...(xp > 0 ? gains.map(squadXpLine) : []),
       SQUAD_NO_DROP,
@@ -1215,7 +1300,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       ],
       callout: {
         head: `${where} · nobody left standing`,
-        sub: horror ? `The ${horrorName(horror.ability)} still stood` : null,
+        // One line per boss (pre-line in page.css).
+        sub: bossLost.length > 0 ? bossLost.join('\n') : null,
       },
       note: again,
       drop: null,
@@ -1321,14 +1407,30 @@ export function createHud(
     );
     powerMeter.setAttribute('aria-label', 'Squad Power against Recommended Power');
   };
+  // One row per boss on the field (ID-099): never more than BOSSES.max at once.
   const boss = el('div', 'hud-boss');
-  const bossLabel = el('span', 'hud-boss-label');
-  bossLabel.id = 'hud-boss-label';
-  const bossHp = el('meter', 'hud-boss-hp');
-  bossHp.min = 0;
-  bossHp.setAttribute('aria-labelledby', bossLabel.id);
-  boss.append(bossLabel, bossHp);
+  const bossRows = Array.from({ length: BOSSES.max }, (_, i) => {
+    const row = el('div', 'hud-boss-row');
+    // Name, skill tag and HP in their own spans, so a tag never pushes the HP out.
+    const label = el('div', 'hud-boss-label');
+    label.id = `hud-boss-label-${i}`;
+    const name = el('span', 'hud-boss-name');
+    const cue = el('span', 'hud-boss-cue');
+    cue.hidden = true;
+    const hpText = el('span', 'hud-boss-hptext');
+    label.append(name, cue, hpText);
+    const meter = el('meter', 'hud-boss-hp');
+    meter.min = 0;
+    meter.setAttribute('aria-labelledby', label.id);
+    row.append(label, meter);
+    row.hidden = true;
+    boss.append(row);
+    return { row, name, cue, hpText, meter };
+  });
   boss.hidden = true;
+  const swarm = el('div', 'hud-swarm', 'Swarm!');
+  swarm.setAttribute('role', 'status');
+  swarm.hidden = true;
   // Fight speed and the Space pause (ID-062), top right beside the Menu button.
   const speed = el('div', 'hud-speed');
   speed.setAttribute('role', 'group');
@@ -1431,7 +1533,7 @@ export function createHud(
   result.hidden = true;
   // No cash, shop or skills in the horde-only build (ID-066).
   shop.hidden = squad;
-  hud.append(bar, speed, boss, warning, toast, shop, cards, replace, result);
+  hud.append(bar, speed, boss, swarm, warning, toast, shop, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -1894,10 +1996,10 @@ export function createHud(
         if (corner.title !== status) corner.title = status;
         const num = String(state.hordeNumber);
         if (badgeNum.textContent !== num) badgeNum.textContent = num;
-        badge.classList.toggle('hud-badge-boss-on', state.boss !== null);
+        badge.classList.toggle('hud-badge-boss-on', bossHorde(state));
         badge.setAttribute(
           'aria-label',
-          `Horde ${state.hordeNumber}${state.boss !== null ? ', boss horde' : ''}`,
+          `Horde ${state.hordeNumber}${bossHorde(state) ? ', boss horde' : ''}`,
         );
         const wave = `Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
         if (waveLine.textContent !== wave) waveLine.textContent = wave;
@@ -1910,13 +2012,21 @@ export function createHud(
         const status = statusText(state);
         if (bar.textContent !== status) bar.textContent = status;
       }
-      const horror = bossBar(state);
-      boss.hidden = horror === null;
-      if (horror) {
-        if (bossLabel.textContent !== horror.label) bossLabel.textContent = horror.label;
-        bossHp.max = horror.maxHp;
-        bossHp.value = horror.hp;
-      }
+      const bars = bossBars(state);
+      boss.hidden = bars.length === 0;
+      bossRows.forEach((r, i) => {
+        const b = bars[i];
+        r.row.hidden = !b;
+        if (!b) return;
+        if (r.name.textContent !== b.name) r.name.textContent = b.name;
+        if (r.cue.textContent !== (b.cue ?? '')) r.cue.textContent = b.cue ?? '';
+        r.cue.hidden = b.cue === null;
+        r.cue.classList.toggle('hud-boss-cue-winding', b.winding);
+        if (r.hpText.textContent !== b.hpText) r.hpText.textContent = b.hpText;
+        r.meter.max = b.maxHp;
+        r.meter.value = b.hp;
+      });
+      swarm.hidden = !swarmCue(state);
       const falling = fallingText(state);
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';

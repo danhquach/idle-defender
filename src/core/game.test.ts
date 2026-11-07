@@ -83,7 +83,7 @@ describe('game', () => {
     const won = (hordeNumber: number, waveCount: number) =>
       hordePayout({
         mutantKills: 0,
-        boss: null,
+        bosses: [],
         hordeNumber,
         outcome: 'won',
         wave: waveCount,
@@ -97,7 +97,7 @@ describe('game', () => {
     const lost = (wave: number) =>
       hordePayout({
         mutantKills: 0,
-        boss: null,
+        bosses: [],
         hordeNumber: 1,
         outcome: 'lost',
         wave,
@@ -110,7 +110,7 @@ describe('game', () => {
     for (let n = 1; n <= 30; n++) {
       const win = hordePayout({
         mutantKills: 0,
-        boss: null,
+        bosses: [],
         hordeNumber: n,
         outcome: 'won',
         wave: 1,
@@ -119,7 +119,7 @@ describe('game', () => {
       for (let wave = 1; wave <= 10; wave++) {
         const loss = hordePayout({
           mutantKills: 0,
-          boss: null,
+          bosses: [],
           hordeNumber: n,
           outcome: 'lost',
           wave,
@@ -132,7 +132,7 @@ describe('game', () => {
     expect(() =>
       hordePayout({
         mutantKills: 0,
-        boss: null,
+        bosses: [],
         hordeNumber: 1,
         outcome: 'fighting',
         wave: 1,

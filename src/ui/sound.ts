@@ -3,7 +3,7 @@
 // changes it, and holds no clock of its own.
 import { baseOf } from '../core/armoury.ts';
 import { WEAPONS, type WeaponId } from '../core/data.ts';
-import type { Defender, HordeState, Slot } from '../core/horde.ts';
+import { windingUp, type Defender, type HordeState, type Slot } from '../core/horde.ts';
 
 /** A gun's shot sound: one per gun kind, and the turrets'. */
 export type ShotSound = `shot-${WeaponId | 'turret'}`;
@@ -17,6 +17,8 @@ export type Cue =
   | 'card-offer'
   | 'card-pick'
   | 'level-up'
+  | 'boss-windup'
+  | 'swarm'
   | 'won'
   | 'lost'
   | 'click';
@@ -119,6 +121,18 @@ export function cuesBetween(prev: HordeState | null, next: HordeState): Cue[] {
     cues.add('card-offer');
   }
   if (prev.offer !== null && next.offer === null) cues.add('card-pick');
+
+  // A boss skill winding up (ID-099): a skill starts its wind-up, or another takes over.
+  const winding = new Map(prev.enemies.map((e) => [e.id, windingUp(prev, e)]));
+  if (
+    next.enemies.some(
+      (e) => e.horror && windingUp(next, e) !== null && winding.get(e.id) !== windingUp(next, e),
+    )
+  ) {
+    cues.add('boss-windup');
+  }
+  // A swarm wave's enemies start coming (ID-099).
+  if (next.swarm && prev.time < next.breakUntil && next.time >= next.breakUntil) cues.add('swarm');
 
   if (prev.outcome === 'fighting' && next.outcome !== 'fighting') {
     cues.add(next.outcome === 'won' ? 'won' : 'lost');

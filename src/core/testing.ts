@@ -1,7 +1,7 @@
 // Fixtures shared by the core tests; never imported by game code.
 import { newBase } from './base.ts';
-import { STEP } from './data.ts';
-import { tick, type Enemy, type HordeSetup, type HordeState } from './horde.ts';
+import { STEP, TIMED_SKILLS, type BossSkill } from './data.ts';
+import { tick, type Enemy, type HordeSetup, type HordeState, type HorrorClock } from './horde.ts';
 import type { GameState } from './game.ts';
 import type { Loadout } from './loadout.ts';
 import { advanceResearch, queueResearch, type GameResult, type QueueId } from './research.ts';
@@ -66,4 +66,38 @@ export function researchNow(game: GameState, id: QueueId): GameResult {
   if (!r.ok) return r;
   const done = advanceResearch(r.game, 1e13);
   return { ok: true, game: { ...done, stock: { ...done.stock, genes: game.stock.genes } } };
+}
+
+/** A full-game boss horde's one Broodmother (ID-024), as `HordeState.bosses` holds it once it came. */
+export const BROOD_BOSS: HordeState['bosses'] = [
+  { kind: 'horror', skills: ['brood'], wave: 10, hp: 1, elite: false, id: 0 },
+];
+
+/**
+ * Adds a 1000 HP Mutated Horror far out in the field with `skills`, its clock as given:
+ * `nextAt` is when each timed skill first goes off.
+ */
+export function horror(
+  s: HordeState,
+  skills: BossSkill | BossSkill[],
+  e: Partial<Enemy> = {},
+  clock: Partial<HorrorClock> & { nextAt?: number } = {},
+): Enemy {
+  const list = Array.isArray(skills) ? skills : [skills];
+  const { nextAt = 1, ...rest } = clock;
+  const made = enemy(s, { kind: 'horror', x: 1400, y: 400, hp: 1000, maxHp: 1000, ...e });
+  made.horror = {
+    boss: 0,
+    skills: list,
+    next: Object.fromEntries(list.filter((k) => TIMED_SKILLS.includes(k)).map((k) => [k, nextAt])),
+    fired: {},
+    chargeUntil: 0,
+    charged: false,
+    hitAt: 0,
+    seenHp: made.hp,
+    broods: 0,
+    platesOff: false,
+    ...rest,
+  };
+  return made;
 }

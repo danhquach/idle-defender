@@ -54,19 +54,22 @@ import {
   BRUTE,
   CRAWLER,
   HORROR,
+  BOSS_SKILL,
+  ELITE,
   SCREAMER,
   SPEWER,
-  meleeReach,
+  SWARM,
+  TIMED_SKILLS,
+  type BossSkill,
   type BuffId,
   type EnemyKind,
-  type HorrorAbility,
   type PerkId,
   type ResearchId,
   type SkillId,
   type Stats,
   type Tracer,
 } from './data.ts';
-import { pierceOf, type Held } from './armoury.ts';
+import { baseOf, pierceOf, type Held } from './armoury.ts';
 import {
   gunOf,
   isGun,
@@ -90,7 +93,16 @@ import {
   reloadTime,
   spreadOf,
 } from './stats.ts';
-import { enemyHp, horrorAbility, kindFor, waveCount, waveMix, waveSize } from './waves.ts';
+import {
+  enemyHp,
+  hordeBosses,
+  kindFor,
+  swarmWave,
+  waveCount,
+  waveMix,
+  waveSize,
+  type BossSpec,
+} from './waves.ts';
 
 export type UpgradeId =
   | 'sharpshooter'
@@ -169,6 +181,11 @@ export interface HordeSetup {
   line?: readonly { x: number; y: number }[];
   /** Where enemies spawn along `x` (ID-068); `FIELD.right` when absent. */
   spawnX?: number;
+  /**
+   * The horde-only build's harder hordes (ID-099): swarm waves, several bosses with two
+   * skills each, mini-bosses and a growing brood. The full game's rules when absent.
+   */
+  harder?: boolean;
 }
 export interface Enemy {
   id: number;
@@ -189,8 +206,12 @@ export interface Enemy {
   climbUntil: number;
   /** A Crawler that has climbed a wall: it climbs only once (design §9). */
   climbed: boolean;
-  /** A Mutated Horror's ability clock (design §9, ID-024); only the Horror has one. */
+  /** A boss's or mini-boss's skill clocks (design §9, ID-024, ID-099); no one else has one. */
   horror?: HorrorClock;
+  /** A mini-boss (ID-099): drawn `ELITE.size` times as big, its body too. */
+  elite?: true;
+  /** A boss's Roar (ID-099): fight time it moves faster until; absent = never roared at. */
+  roarUntil?: number;
   /** Incendiary Rounds (design §8): fight time it burns until; absent or 0 = not burning. */
   burnUntil?: number;
   /** Incendiary Rounds: what its burn deals a second, set by the hit that lit it (ID-097). */
@@ -208,9 +229,14 @@ export interface Enemy {
 }
 /** Fight times are when, so they stop during picks; a stun pushes them back. */
 export interface HorrorClock {
-  ability: HorrorAbility;
-  /** When its brood or charge comes next. */
-  nextAt: number;
+  /** Which of the horde's `bosses` it is. */
+  boss: number;
+  /** Its skills, in the boss bar's order. */
+  skills: BossSkill[];
+  /** When each of its timed skills (`TIMED_SKILLS`) goes off next; it winds up before. */
+  next: Partial<Record<BossSkill, number>>;
+  /** When each timed skill last went off (the boss bar keeps naming it a while). */
+  fired: Partial<Record<BossSkill, number>>;
   /** A charge runs until then; 0 = not charging. */
   chargeUntil: number;
   /** Its first wall hit in this charge is done. */
@@ -218,6 +244,27 @@ export interface HorrorClock {
   /** When it last lost HP, and its HP after the last step, to tell a hit. */
   hitAt: number;
   seenHp: number;
+  /** Broods it has spawned: a horde-only brood grows with each (ID-099). */
+  broods: number;
+  /** Armour plates: broken once `BOSS_SKILL.plates.share` of its HP is gone, for good. */
+  platesOff: boolean;
+}
+/**
+ * A boss's thrown slab (ID-099), from `(fromX, fromY)` at `at` to `(x, y)`, landing at
+ * `lands`: on Barbed Wire's row `row` (`column` null) or on that row of layer `column`'s
+ * wall (the nearest standing segment when it lands). Drawn until `BOSS_SKILL.slab.flight`
+ * after it lands; it hits once.
+ */
+export interface Slab {
+  fromX: number;
+  fromY: number;
+  x: number;
+  y: number;
+  at: number;
+  lands: number;
+  row: number;
+  column: number | null;
+  landed: boolean;
 }
 /** An unbuilt slot is `{ kind: null, tier: null, hp: 0, maxHp: 0 }`: an open gap. */
 export interface Segment {
@@ -369,6 +416,8 @@ export interface Bullet {
   ricochet?: true;
   /** Its damage is a crit's (ID-082: its damage number stands out). */
   crit?: true;
+  /** A Sniper rifle's round: it goes through a boss's armour plates (ID-099). */
+  ap?: true;
 }
 /**
  * A gun going off: `owner` (as on its bullet) fired in the step ending at `at`, when it
@@ -573,10 +622,17 @@ export interface HordeState {
   grenades: Grenade[];
   /** When the next Frag Grenade may be thrown; absent until the card is picked. */
   nextFragAt?: number;
-  /** This horde's Mutated Horror's ability; null = no boss horde (design §9). */
-  boss: HorrorAbility | null;
-  /** Whether the Horror has come (with the first spawn of the last wave). */
-  bossSpawned: boolean;
+  /**
+   * This horde's bosses and mini-boss (design §9, ID-099), fixed by its number; `id` is the
+   * enemy's once it has come (with the first spawn of its wave), null before.
+   */
+  bosses: (BossSpec & { id: number | null })[];
+  /** The harder hordes' rules (ID-099, `HordeSetup.harder`). */
+  harder?: true;
+  /** The wave under way is a swarm wave (ID-099). */
+  swarm: boolean;
+  /** Boss slabs in flight or just landed (ID-099); cleared when the horde ends. */
+  slabs: Slab[];
   outcome: Outcome;
 }
 
@@ -608,6 +664,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     xpRate,
     line = [],
     spawnX,
+    harder = false,
   } = setup;
   const levels: Partial<Record<PerkId, number>> = {};
   for (const id of perks) levels[id] = perkLevels[id] ?? 1;
@@ -652,7 +709,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     hordeNumber,
     wave: 1,
     waveCount: waveCount(hordeNumber),
-    toSpawn: waveSize(hordeNumber, 1),
+    toSpawn: waveSize(hordeNumber, 1) * (harder && swarmWave(hordeNumber, 1) ? SWARM.size : 1),
     nextSpawnAt: 0,
     breakUntil: 0,
     enemies: [],
@@ -711,8 +768,10 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     spits: [],
     bursts: [],
     grenades: [],
-    boss: horrorAbility(hordeNumber),
-    bossSpawned: false,
+    bosses: hordeBosses(hordeNumber, harder).map((b) => ({ ...b, id: null })),
+    ...(harder ? { harder: true as const } : {}),
+    swarm: harder && swarmWave(hordeNumber, 1),
+    slabs: [],
     outcome: 'fighting',
   };
 }
@@ -1006,7 +1065,7 @@ export function enemyAt(state: HordeState, x: number, y: number): number | null 
   let bestD = Infinity;
   for (const e of state.enemies) {
     const d = Math.hypot(e.x - x, e.y - y);
-    if (e.hp <= 0 || d > ENEMIES[e.kind].radius + ENEMY_RADIUS) continue;
+    if (e.hp <= 0 || d > radiusOf(e) + ENEMY_RADIUS) continue;
     if (d > bestD || (d === bestD && best && e.id > best.id)) continue;
     best = e;
     bestD = d;
@@ -1022,6 +1081,7 @@ function step(s: HordeState, rng: Rng): void {
   fireTurrets(s, rng);
   fly(s);
   land(s);
+  landSlabs(s);
   blowFrags(s);
   burn(s);
   repair(s);
@@ -1053,36 +1113,65 @@ function step(s: HordeState, rng: Rng): void {
     s.bursts = [];
     s.grenades = [];
     s.incoming = [];
+    s.slabs = [];
   }
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
   s.time += STEP;
 }
 
+/** How often each timed boss skill goes off, in s. */
+const SKILL_EVERY: Readonly<Partial<Record<BossSkill, number>>> = {
+  brood: HORROR.brood.every,
+  charge: HORROR.charge.every,
+  roar: BOSS_SKILL.roar.every,
+  slab: BOSS_SKILL.slab.every,
+};
+
 function spawn(s: HordeState, rng: Rng): void {
-  if (s.boss && !s.bossSpawned && s.wave === s.waveCount && due(s.time, s.breakUntil)) {
-    s.bossSpawned = true;
-    const r = ENEMIES.horror.radius;
-    const e = place(s, 'horror', s.spawnX ?? FIELD.right, int(rng, r, FIELD.height - r));
-    e.horror = {
-      ability: s.boss,
-      // A Regenerator has no clock of its own; only its last hit counts.
-      nextAt: s.boss === 'regen' ? 0 : s.time + HORROR[s.boss].every,
-      chargeUntil: 0,
-      charged: false,
-      hitAt: s.time,
-      seenHp: e.hp,
-    };
+  if (due(s.time, s.breakUntil)) {
+    s.bosses.forEach((b, i) => {
+      if (b.id !== null || b.wave !== s.wave) return;
+      const e = place(s, b.kind, s.spawnX ?? FIELD.right, 0);
+      if (b.elite) e.elite = true;
+      const r = radiusOf(e);
+      e.y = int(rng, Math.ceil(r), Math.floor(FIELD.height - r));
+      e.hp = e.maxHp = Math.round(e.hp * b.hp);
+      b.id = e.id;
+      const next: Partial<Record<BossSkill, number>> = {};
+      for (const k of b.skills) if (TIMED_SKILLS.includes(k)) next[k] = s.time + SKILL_EVERY[k]!;
+      e.horror = {
+        boss: i,
+        skills: [...b.skills],
+        next,
+        fired: {},
+        chargeUntil: 0,
+        charged: false,
+        hitAt: s.time,
+        seenHp: e.hp,
+        broods: 0,
+        platesOff: false,
+      };
+    });
   }
+  const gap = s.swarm ? SPAWN_INTERVAL / SWARM.size : SPAWN_INTERVAL;
   while (s.toSpawn > 0 && due(s.time, s.nextSpawnAt) && due(s.time, s.breakUntil)) {
     // Shamblers only (the tutorial) roll nothing, so its seeds play as before.
-    const kind = waveMix(s.hordeNumber).length > 1 ? kindFor(s.hordeNumber, rng()) : 'shambler';
+    const kind =
+      waveMix(s.hordeNumber).length > 1 ? kindFor(s.hordeNumber, rng(), s.swarm) : 'shambler';
     const r = ENEMIES[kind].radius;
     place(s, kind, s.spawnX ?? FIELD.right, int(rng, r, FIELD.height - r));
     s.toSpawn -= 1;
-    s.nextSpawnAt = s.time + SPAWN_INTERVAL;
+    s.nextSpawnAt = s.time + gap;
   }
 }
+
+/** Whether the horde is a boss horde: a Mutated Horror comes, not just a mini-boss (ID-099). */
+export const bossHorde = (s: Pick<HordeState, 'bosses'>): boolean => s.bosses.some((b) => !b.elite);
+
+/** An enemy's body radius: its kind's, `ELITE.size` times that for a mini-boss (ID-099). */
+export const radiusOf = (e: Pick<Enemy, 'kind' | 'elite'>): number =>
+  ENEMIES[e.kind].radius * (e.elite ? ELITE.size : 1);
 
 /** A new enemy of `kind` at `(x, y)` with this wave's HP. */
 function place(s: HordeState, kind: EnemyKind, x: number, y: number): Enemy {
@@ -1107,10 +1196,11 @@ function place(s: HordeState, kind: EnemyKind, x: number, y: number): Enemy {
 }
 
 /**
- * Design §9, as built ID-024: each Mutated Horror's ability. A Broodmother spawns
- * Shamblers beside itself, on its side of every wall; a Rammer starts a charge; a
- * Regenerator heals once it has gone `HORROR.regen.after` s without losing HP.
- * Stunned, its clocks wait.
+ * Design §9, as built ID-024 and ID-099: each boss's and mini-boss's skills. Brood spawns
+ * Shamblers beside it, on its side of every wall; Charge starts a charge; Roar speeds up
+ * the enemies around it; Slab throw lobs a slab at the Barbed Wire or the wall; Regen heals
+ * once it has gone `HORROR.regen.after` s without losing HP; Armour plates break once
+ * `BOSS_SKILL.plates.share` of its HP is gone. Stunned, its clocks wait.
  */
 function mutate(s: HordeState, rng: Rng): void {
   // Up to today's length: a brood joins the end and has no clock.
@@ -1119,32 +1209,142 @@ function mutate(s: HordeState, rng: Rng): void {
     const h = e.horror;
     if (!h) continue;
     if (e.hp < h.seenHp) h.hitAt = s.time;
+    if (h.skills.includes('plates') && e.hp <= e.maxHp * (1 - BOSS_SKILL.plates.share) + EPS) {
+      h.platesOff = true;
+    }
     if (stunned(s, e)) {
-      h.nextAt += STEP;
+      for (const k of Object.keys(h.next) as BossSkill[]) h.next[k]! += STEP;
       if (h.chargeUntil > 0) h.chargeUntil += STEP;
       h.hitAt += STEP;
-    } else if (h.ability === 'regen') {
-      if (due(s.time, h.hitAt + HORROR.regen.after)) {
-        e.hp = Math.min(e.maxHp, e.hp + HORROR.regen.rate * e.maxHp * STEP);
+      h.seenHp = e.hp;
+      continue;
+    }
+    if (h.skills.includes('regen') && due(s.time, h.hitAt + HORROR.regen.after)) {
+      e.hp = Math.min(e.maxHp, e.hp + HORROR.regen.rate * e.maxHp * STEP);
+    }
+    // A charge's end takes its step: no skill goes off in it.
+    if (h.chargeUntil > 0 && due(s.time, h.chargeUntil)) h.chargeUntil = 0;
+    else {
+      for (const k of h.skills) {
+        const at = h.next[k];
+        if (at === undefined || !due(s.time, at)) continue;
+        h.next[k] = s.time + SKILL_EVERY[k]!;
+        h.fired[k] = s.time;
+        if (k === 'charge') {
+          h.chargeUntil = s.time + HORROR.charge.time;
+          h.charged = false;
+        } else if (k === 'brood') brood(s, e, rng);
+        else if (k === 'roar') roar(s, e);
+        else throwSlab(s, e);
       }
-    } else if (h.chargeUntil > 0 && due(s.time, h.chargeUntil)) {
-      h.chargeUntil = 0;
-    } else if (due(s.time, h.nextAt)) {
-      h.nextAt = s.time + HORROR[h.ability].every;
-      if (h.ability === 'charge') {
-        h.chargeUntil = s.time + HORROR.charge.time;
-        h.charged = false;
-      } else brood(s, e, rng);
     }
     h.seenHp = e.hp;
   }
 }
 
-/** `HORROR.brood.count` Shamblers in a column through the Horror, spread by the RNG. */
+/**
+ * The timed skill `e` is winding up (ID-099): the one due within `BOSS_SKILL.windUp` s,
+ * soonest first; null when none is, or it is stunned. The view's glow, pose and sound.
+ */
+export function windingUp(s: Pick<HordeState, 'time'>, e: Enemy): BossSkill | null {
+  const h = e.horror;
+  if (!h || stunned(s, e)) return null;
+  let best: BossSkill | null = null;
+  for (const k of h.skills) {
+    const at = h.next[k];
+    if (at === undefined || at - s.time > BOSS_SKILL.windUp + EPS) continue;
+    if (best === null || at < h.next[best]!) best = k;
+  }
+  return best;
+}
+
+/** Whether `e`'s armour plates still hold (ID-099). */
+export const plated = (e: Pick<Enemy, 'horror'>): boolean =>
+  e.horror !== undefined && e.horror.skills.includes('plates') && !e.horror.platesOff;
+
+/** Whether a boss's Roar still speeds `e` up (ID-099). */
+export const roared = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.roarUntil !== undefined && !due(s.time, e.roarUntil);
+
+/** Roar (ID-099): the other living enemies within `BOSS_SKILL.roar.radius` speed up. */
+function roar(s: HordeState, e: Enemy): void {
+  for (const o of around(s, e, BOSS_SKILL.roar.radius)) {
+    o.roarUntil = s.time + BOSS_SKILL.roar.time;
+  }
+}
+
+/**
+ * Slab throw (ID-099): from at least `BOSS_SKILL.slab.range` px out, a slab at the working
+ * Barbed Wire row nearest `e`'s row (with the card), else at the outermost wall's standing
+ * segment nearest it (ties → the upper one). Nothing to aim at, or too close: no throw.
+ */
+function throwSlab(s: HordeState, e: Enemy): void {
+  if (e.inCamp) return;
+  const row = segmentAt(e.y);
+  const nearest = (rows: number[]): number | undefined =>
+    rows.sort((a, b) => Math.abs(a - row) - Math.abs(b - row) || a - b)[0];
+  let target: { x: number; row: number; column: number | null } | null = null;
+  const wire = barbedWire(s);
+  if (wire) {
+    const r = nearest(s.wire.flatMap((w, i) => (w.durability > 0 ? [i] : [])));
+    if (r !== undefined) target = { x: (wire.from + wire.to) / 2, row: r, column: null };
+  }
+  if (!target) {
+    const layer = [...s.layers]
+      .sort((a, b) => b.x - a.x)
+      .find((l) => l.segments.some((seg) => seg.hp > 0));
+    const r = layer && nearest(layer.segments.flatMap((seg) => (seg.hp > 0 ? [seg.index] : [])));
+    if (layer && r !== undefined)
+      target = { x: layer.x + WALL.depth, row: r, column: layer.column };
+  }
+  if (!target || e.x - target.x < BOSS_SKILL.slab.range - EPS) return;
+  s.slabs.push({
+    fromX: e.x,
+    fromY: e.y,
+    x: target.x,
+    y: (target.row + 0.5) * SEGMENT_HEIGHT,
+    at: s.time,
+    lands: s.time + BOSS_SKILL.slab.flight,
+    row: target.row,
+    column: target.column,
+    landed: false,
+  });
+}
+
+/**
+ * Slabs that land this step (ID-099): a wire row breaks; a wall slab hits its row's
+ * segment, or the nearest standing one of that layer if it fell meanwhile. Landed slabs
+ * are drawn for `BOSS_SKILL.slab.flight` s more, then gone.
+ */
+function landSlabs(s: HordeState): void {
+  for (const slab of s.slabs) {
+    if (slab.landed || !due(s.time, slab.lands)) continue;
+    slab.landed = true;
+    if (slab.column === null) {
+      s.wire[slab.row]!.durability = 0;
+      continue;
+    }
+    const layer = s.layers.find((l) => l.column === slab.column);
+    const seg = layer?.segments
+      .filter((g) => g.hp > 0)
+      .sort(
+        (a, b) => Math.abs(a.index - slab.row) - Math.abs(b.index - slab.row) || a.index - b.index,
+      )[0];
+    if (layer && seg) hitSegment(s, layer, seg, BOSS_SKILL.slab.damage);
+  }
+  s.slabs = s.slabs.filter((slab) => !due(s.time, slab.lands + BOSS_SKILL.slab.flight));
+}
+
+/**
+ * Brood: `HORROR.brood.count` Shamblers in a column through the boss, spread by the RNG;
+ * in the harder hordes `BOSS_SKILL.broodGrow` more for each brood before (ID-099).
+ */
 function brood(s: HordeState, e: Enemy, rng: Rng): void {
   const r = ENEMIES.shambler.radius;
-  const reach = ENEMIES.horror.radius + r;
-  for (let i = 0; i < HORROR.brood.count; i++) {
+  const reach = radiusOf(e) + r;
+  const count = HORROR.brood.count + (s.harder ? BOSS_SKILL.broodGrow * e.horror!.broods : 0);
+  e.horror!.broods += 1;
+  for (let i = 0; i < count; i++) {
     const side = i % 2 === 0 ? -1 : 1;
     const y = e.y + side * (reach + Math.floor(i / 2) * 2 * r) + int(rng, -4, 4);
     const child = place(s, 'shambler', e.x, Math.min(FIELD.height - r, Math.max(r, y)));
@@ -1338,7 +1538,7 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
     const wx = b.x - e.x;
     const wy = b.y - e.y;
     const along = b.dx * wx + b.dy * wy;
-    const r = ENEMIES[e.kind].radius;
+    const r = radiusOf(e);
     const gap = wx * wx + wy * wy - r * r;
     let at: number;
     if (gap <= 0) at = 0;
@@ -1354,13 +1554,18 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
   return best;
 }
 
-/** What a bullet of `damage` does to `e`: a Brute's armour takes some off (design §9). */
-export const hitDamage = (e: Enemy, damage: number): number =>
-  e.kind === 'brute'
-    ? Math.max(BRUTE.min, damage - BRUTE.armour)
+/**
+ * What a bullet of `damage` does to `e`: a boss's armour plates halve it unless the round
+ * is armour-piercing, `ap` (ID-099); then a Brute's or Horror's armour takes some off (design §9).
+ */
+export function hitDamage(e: Enemy, damage: number, ap = false): number {
+  const d = plated(e) && !ap ? damage * BOSS_SKILL.plates.factor : damage;
+  return e.kind === 'brute'
+    ? Math.max(BRUTE.min, d - BRUTE.armour)
     : e.kind === 'horror'
-      ? Math.max(HORROR.min, damage - HORROR.armour)
-      : damage;
+      ? Math.max(HORROR.min, d - HORROR.armour)
+      : d;
+}
 
 /**
  * Design §6 Ballistics: each bullet flies one step along its swept path (so a fast one
@@ -1374,7 +1579,7 @@ function fly(s: HordeState): void {
     let travel = Math.min(b.speed * STEP, b.left);
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
       const first = b.hit.length === 0;
-      const dealt = hitDamage(hit.enemy, b.damage);
+      const dealt = hitDamage(hit.enemy, b.damage, b.ap === true);
       popOn(s, hit.enemy, dealt, b.crit === true);
       const alive = hit.enemy.hp > 0;
       hit.enemy.hp -= dealt;
@@ -1599,6 +1804,7 @@ function fire(s: HordeState, rng: Rng): void {
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
+        ...(baseOf(id) === 'sniper' ? { ap: true as const } : {}),
       });
     } else {
       popOn(s, target, hit, critHit);
@@ -1874,7 +2080,7 @@ function hunt(s: HordeState, e: Enemy, speed: number, reached: Map<number, Defen
     return;
   }
   const dist = Math.hypot(target.x - e.x, target.y - e.y);
-  const reach = meleeReach(e.kind);
+  const reach = radiusOf(e) + ENEMY_RADIUS;
   const stride = Math.min(speed, dist - reach);
   if (stride > 0) {
     e.x += ((target.x - e.x) / dist) * stride;
@@ -1942,6 +2148,7 @@ function move(s: HordeState): Moves {
       (slowed ? 1 - wireSlow : 1) *
       trapSlow(s, e) *
       screamed(screamers, e) *
+      (roared(s, e) ? 1 + BOSS_SKILL.roar.speed : 1) *
       (charging(s, e) ? HORROR.charge.speed : 1);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
@@ -2079,7 +2286,7 @@ function separate(s: HordeState): void {
   const push = new Map<number, number>();
   const cap = SEPARATION_SPEED * STEP;
   const es = s.enemies;
-  const radius = es.map((e) => ENEMIES[e.kind].radius);
+  const radius = es.map(radiusOf);
   for (let i = 0; i < es.length; i++) {
     for (let j = i + 1; j < es.length; j++) {
       const a = es[i]!;
@@ -2137,7 +2344,7 @@ function attack(s: HordeState, moves: Moves, rng: Rng): void {
     const stop = stopLine(s, e);
     if (!stop.segment || !stop.layer || e.x > stop.x + standOff(e) + EPS) continue;
     if (e.kind === 'swollen') {
-      blast(s, stop.layer, stop.segment.index);
+      blast(s, stop.layer, stop.segment.index, e.elite ? ELITE.blast : 1);
       blown.add(e.id);
       continue;
     }
@@ -2210,12 +2417,12 @@ function hitSegment(s: HordeState, layer: Layer, segment: Segment, damage: numbe
 }
 
 /** Design §9: a Swollen's blast on segment `row` of `layer`, and on its standing neighbours. */
-function blast(s: HordeState, layer: Layer, row: number): void {
+function blast(s: HordeState, layer: Layer, row: number, scale = 1): void {
   const centre = layer.segments[row]!;
-  hitSegment(s, layer, centre, SWOLLEN.wall);
+  hitSegment(s, layer, centre, SWOLLEN.wall * scale);
   for (const n of [row - 1, row + 1]) {
     const seg = layer.segments[n];
-    if (seg) hitSegment(s, layer, seg, SWOLLEN.splash);
+    if (seg) hitSegment(s, layer, seg, SWOLLEN.splash * scale);
   }
 }
 
@@ -2355,13 +2562,16 @@ function drop(s: HordeState): void {
 function advanceWave(s: HordeState): void {
   if (s.toSpawn > 0 || s.enemies.length > 0) return;
   if (s.wave >= s.waveCount) {
-    // A boss horde is won once its Horror has come and gone (design §2).
-    if (s.boss && !s.bossSpawned) return;
+    // A boss horde is won once its bosses have come and gone (design §2).
+    if (s.bosses.some((b) => b.id === null)) return;
     s.outcome = 'won';
     return;
   }
+  // A mini-boss's wave waits for it (ID-099).
+  if (s.bosses.some((b) => b.id === null && b.wave <= s.wave)) return;
   s.wave += 1;
-  s.toSpawn = waveSize(s.hordeNumber, s.wave);
+  s.swarm = s.harder === true && swarmWave(s.hordeNumber, s.wave);
+  s.toSpawn = waveSize(s.hordeNumber, s.wave) * (s.swarm ? SWARM.size : 1);
   s.breakUntil = s.time + WAVE_BREAK;
   openReplace(s);
 }

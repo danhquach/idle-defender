@@ -145,6 +145,7 @@ export function startSquadHorde(
     xpRate: SQUAD_XP_RATE,
     line: SQUAD_SLOTS,
     spawnX: SQUAD_SPAWN_X,
+    harder: true,
   });
   // The rest of the squad take their slots too: nobody waits on the bench.
   squad.slice(1).forEach((spec, k) => {

@@ -39,7 +39,14 @@ import {
   type Stock,
   stockOf,
 } from './data.ts';
-import { baseAfter, newHorde, type DefenderSpec, type HordeState, type Injury } from './horde.ts';
+import {
+  baseAfter,
+  bossHorde,
+  newHorde,
+  type DefenderSpec,
+  type HordeState,
+  type Injury,
+} from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
 import type { LeftWeapon, Patrol, PatrolReport } from './patrol.ts';
 import { newPerkLevels, type PerkLevels } from './perks.ts';
@@ -185,7 +192,7 @@ export function recover(game: GameState, now: number): GameState {
  * never beats winning, and no Genes (§2).
  */
 export function hordePayout(
-  h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'wave' | 'waveCount' | 'mutantKills' | 'boss'>,
+  h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'wave' | 'waveCount' | 'mutantKills' | 'bosses'>,
 ): Stock {
   if (h.outcome === 'fighting') throw new RangeError('hordePayout: the horde is still on');
   const { win, lossShare } = HORDE_PAYOUT;
@@ -197,14 +204,14 @@ export function hordePayout(
 
 /** Mutated Genes horde `h` pays (design §4, §11): a win only, more for mutants and a boss. */
 export function hordeGenes(
-  h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'mutantKills' | 'boss'>,
+  h: Pick<HordeState, 'hordeNumber' | 'outcome' | 'mutantKills' | 'bosses'>,
 ): number {
   if (h.outcome !== 'won') return 0;
   return (
     GENES.base +
     Math.floor(h.hordeNumber / GENES.every) +
     Math.floor(h.mutantKills / GENES.perMutants) +
-    (h.boss ? GENES.boss : 0)
+    (bossHorde(h) ? GENES.boss : 0)
   );
 }
 
@@ -241,9 +248,9 @@ export type BossReward = { perk: PerkId } | { genes: number };
  */
 export function hordeBossReward(
   game: Pick<GameState, 'perkLevels'>,
-  h: Pick<HordeState, 'outcome' | 'boss' | 'rng'>,
+  h: Pick<HordeState, 'outcome' | 'bosses' | 'rng'>,
 ): BossReward | null {
-  if (h.outcome !== 'won' || h.boss === null) return null;
+  if (h.outcome !== 'won' || !bossHorde(h)) return null;
   const missing = PERK_IDS.filter((id) => game.perkLevels[id] < 1);
   if (missing.length === 0) return { genes: BOSS_PERK_GENES };
   return { perk: pick(createRng(h.rng.s ^ 0x85ebca6b), missing) };

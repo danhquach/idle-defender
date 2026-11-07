@@ -378,7 +378,8 @@ Defenders stand on **posts** the player builds and chooses between.
     in the wave (on the field and still to come), with the speed buttons; the
     fight XP bar (its level and XP to the next) sits under it on the left.
   - Enemy HP grows ×1.20 per horde up to Horde 6 (the squad grows by a
-    survivor a win until then), then ×1.03, instead of ×1.17 (§9). Hordes
+    survivor a win until then), then ×1.06 (×1.03 before ID-099),
+    instead of ×1.17 (§9). Hordes
     1–3 are eased to ×0.8, ×0.9 and ×0.95 of that (ID-097,
     `SQUAD_EARLY_HP`), so the first hordes are sure wins while the player
     learns the cards.
@@ -1286,6 +1287,58 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
   more wall than with no ability) and the Regenerator on 14, against 20 of 20
   with no ability. A lone pistol Gunner never wins. Horde 10 played in full is
   ID-052; rewards for a boss win come with the Mutated Genes tickets.
+- **As built (ID-099, starting points for ID-102): harder hordes, horde-only.**
+  From the farming and harder hordes design (2026-11-06), Part 2. The full game
+  keeps the ID-024 rules above; `HordeSetup.harder` turns these on for the
+  horde-only build. Everything is fixed by the horde number (a replay meets the
+  same waves and bosses) and rolled from the fight's seed.
+  - **Late growth:** enemy HP grows ×1.06 a horde past the squad cap
+    (×1.03 before), one knob (`SQUAD_HP_GROWTH.late`), so Recommended Power
+    rises every horde. ×1.10 was tried first: Horde 20 then beat even a squad
+    of level-200 Military Rifles with no cards, so no Recommended Power could
+    be fitted to it.
+  - **Swarm waves:** from Horde 5, 25% of a horde's waves, +1% a horde, at most
+    50%, spread evenly (Horde 5: wave 4; Horde 9: waves 4 and 7; Horde 15: 3 of
+    10). A swarm wave spawns 2× the enemies at twice the rate (the same time),
+    with Runners at 2× their share (Shamblers give way). "Swarm!" shows big in
+    the field's upper middle for its first 3 s, with two alarm blares.
+  - **Bosses:** still every 10th horde, now Horde n brings n/10 Mutated Horrors
+    (at most 3), each at 4× a Horror's HP with two skills; a horde's bosses never
+    share a skill. Sets in turn by boss horde: Horde 10 Brood + Roar; 20 Slab
+    Throw + Roar and Charge + Armour Plates; 30 Plates + Roar, Brood + Slab
+    Throw and Charge + Regen; 40 Charge + Roar, Regen + Slab Throw, Brood +
+    Plates; then again. They come with the first spawn of the last wave; the
+    horde is won once all are dead.
+  - **Mini-bosses:** every odd horde from Horde 5 brings one elite with the
+    first spawn of its middle wave: a Brute or a Swollen in turn, 4× its HP,
+    drawn and hit 1.4× as big, with one skill (Roar, Plates, Slab Throw,
+    Charge, Regen in turn). Horde 5: an elite Brute with Roar; 7: an elite
+    Swollen with Armour Plates. An elite Swollen still bursts at the wall, 2× as
+    hard (its HP and skill are what get it there), so it must die on the way in.
+  - **Skills.** Each timed one winds up for 1.2 s first: the boss glows in the
+    skill's colour, leans back and swells, a low growl rises, and its boss bar
+    says "Roar!". A stun hides the wind-up and holds every clock.
+    - **Roar:** every 14 s, the other enemies within 300 px move 40% faster for
+      4 s (an amber ring under each).
+    - **Slab Throw:** every 16 s, from at least 150 px out, a concrete slab
+      that lands 0.6 s later: with Barbed Wire it breaks the working wire row
+      nearest the boss's row (ties: the upper one), else 300 damage to the
+      outermost wall's standing segment nearest it.
+    - **Armour Plates:** steel plates on its body; bullets do half damage until
+      25% of its HP is gone, then they're gone for good (regen doesn't bring them
+      back). A Sniper rifle's rounds go through them (the hook ID-101's
+      armour-piercing builds on).
+    - **Brood:** today's Broodmother, +1 Shambler with each brood (2, 3, 4…).
+    - **Charge** and **Regen:** as above.
+  - **HUD:** one boss bar per boss or mini-boss on the field (up to 3), each
+    naming its skills, e.g. "Mutated Horror (Brood, Roar) · Roar! · 4,520/4,520"
+    or "Elite Brute (Roar)". The result screen names each boss that came and
+    whether it died ("the Mutated Horror (Brood, Roar) is dead", "The Elite
+    Swollen (Armour Plates) still stood"). The full game's one Horror
+    reads the same way now ("Mutated Horror (Charge)", not "Mutated Horror:
+    Rammer").
+  - **Recommended Power** counts it all: swarm waves' HP (twice a calm wave's) weighted 2× again (they come
+    twice as fast), bosses and mini-bosses at their HP, refitted (§11 Farming).
 
 ## 10. World map and patrols (the idle part)
 
@@ -1856,17 +1909,19 @@ and comes back stronger.
   × (1 + 0.5 × Sharp Mind's spread cut) × (1 + 0.5 × Instinct's extra HP
   share) × 10, summed over the squad and rounded. Cards and skills don't
   count. (Gun role traits join it with ID-101.)
-- **Recommended Power:** 7.1 × √(the horde's expected enemy HP: each wave's
-  size × its mix's mean HP, plus a boss horde's Horror). Swarm waves and
-  more bosses join it with ID-099. Hordes 1 and 2 take ×0.25 and ×0.5 of it:
-  sure wins for a squad of one or two (a new game's lone pistol has 83 power
-  against Horde 1's 71); from Horde 3 the scripted player's squad sits near
-  it (Horde 3: 341–562 against 486; Horde 5: 791–1,236 against 814) and wins
-  with its cards. Fitted (`balance/squad-power.test.ts`,
-  10 seeds, Military Rifles at the expected squad's size and level, no cards
-  or skills) so a squad at it wins about half the time: Horde 9 60%, 12 30%,
-  15 60%, 20 60% (mean 53%); at 70% of it a squad loses Hordes 10 and 15
-  on at least 4 of 5 seeds, at 130% wins on at least 4 of 5.
+- **Recommended Power:** 3.19 × (the horde's expected enemy HP)^0.59: each
+  wave's size × its mix's mean HP, a swarm wave's (ID-099) weighted 2× on top of its doubled size
+  (it comes twice as fast), plus its bosses and mini-boss at their HP. ID-098
+  had 7.1 × √HP; ID-099's steeper late growth and swarms broke that fit
+  (Horde 9 won 10 of 10 at it, 15 and 20 none), so it was refitted on each
+  horde's measured 50%-win power (Hordes 6–20). Hordes 1 and 2 take ×0.25 and
+  ×0.5 of it: sure wins for a squad of one or two (a new game's lone pistol has
+  83 power against Horde 1's 62). Horde 3 asks 467, 5 asks 1,089, 10 asks
+  4,038, 20 asks 14,399. Fitted (`balance/squad-power.test.ts`, 10 seeds,
+  Military Rifles at the expected squad's size and level, no cards or skills)
+  so a squad at it wins about half the time: Horde 9 50%, 12 30%, 15 30%,
+  20 50% (mean 40%); at 70% of it a squad loses Hordes 10 and 15 on 5 of 5
+  seeds, at 130% wins on 5 of 5.
 - **Bands:** green at or above Recommended, amber within 15% below, red
   further. The numbers are always shown; it never blocks a start.
 

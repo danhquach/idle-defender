@@ -21,15 +21,15 @@ import {
 import { newHorde, removeDead, type HordeState } from './horde.ts';
 import { rollDrop } from './armoury.ts';
 import { chance, pick, rngFrom } from './rng.ts';
-import { enemy, setup } from './testing.ts';
+import { BROOD_BOSS, enemy, setup } from './testing.ts';
 
 const NOW = 1_800_000_000_000;
-type Ended = Pick<HordeState, 'hordeNumber' | 'outcome' | 'mutantKills' | 'boss'>;
+type Ended = Pick<HordeState, 'hordeNumber' | 'outcome' | 'mutantKills' | 'bosses'>;
 const won = (hordeNumber: number, more: Partial<Ended> = {}): Ended => ({
   hordeNumber,
   outcome: 'won',
   mutantKills: 0,
-  boss: null,
+  bosses: [],
   ...more,
 });
 
@@ -54,12 +54,14 @@ describe('Mutated Genes (ID-025)', () => {
     expect(hordeGenes(won(1, { mutantKills: 4 }))).toBe(2);
     expect(hordeGenes(won(1, { mutantKills: 5 }))).toBe(3);
     expect(hordeGenes(won(1, { mutantKills: 23 }))).toBe(6);
-    expect(hordeGenes(won(10, { boss: 'brood' }))).toBe(2 + 2 + GENES.boss);
-    expect(hordeGenes(won(10, { boss: 'brood', mutantKills: 10 }))).toBe(16);
+    expect(hordeGenes(won(10, { bosses: BROOD_BOSS }))).toBe(2 + 2 + GENES.boss);
+    expect(hordeGenes(won(10, { bosses: BROOD_BOSS, mutantKills: 10 }))).toBe(16);
   });
 
   it('a loss pays none, whatever was killed', () => {
-    expect(hordeGenes({ ...won(10, { boss: 'brood', mutantKills: 50 }), outcome: 'lost' })).toBe(0);
+    expect(
+      hordeGenes({ ...won(10, { bosses: BROOD_BOSS, mutantKills: 50 }), outcome: 'lost' }),
+    ).toBe(0);
     const lost = hordePayout({
       ...won(9, { mutantKills: 50 }),
       outcome: 'lost',

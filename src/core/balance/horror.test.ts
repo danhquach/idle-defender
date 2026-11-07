@@ -39,7 +39,9 @@ describe('the Mutated Horror (ID-024)', () => {
     let s = startHorde(game, seed, defenderId, postId, 0);
     s.wave = s.waveCount;
     s.toSpawn = 0;
-    s.boss = ability;
+    s.bosses = [
+      { kind: 'horror', skills: [ability], wave: s.waveCount, hp: 1, elite: false, id: null },
+    ];
     for (const spec of s.bench) {
       const post = s.posts.find(
         (p) => p.defenderId === null && p.kind !== 'ground' && postUsable(s.layers, p),

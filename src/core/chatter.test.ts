@@ -477,7 +477,7 @@ describe('feats the fight records for chatter (ID-085)', () => {
     const end = structuredClone(s);
     end.enemies = [];
     end.wave = end.waveCount;
-    end.boss = null;
+    end.bosses = [];
     const won = tick(end, STEP);
     expect(won.outcome).toBe('won');
     expect(won.feats).toEqual([]);

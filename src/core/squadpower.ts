@@ -2,11 +2,11 @@
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
 import { statsOf } from './armoury.ts';
-import { DEFENDER_HP, POWER, type EnemyKind } from './data.ts';
+import { DEFENDER_HP, POWER, SWARM, type EnemyKind } from './data.ts';
 import type { GameState, RosterDefender } from './game.ts';
 import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
 import { critChance, critDamage, maxHpOf, reloadTime, statBonus } from './stats.ts';
-import { enemyHp, horrorAbility, waveCount, waveMix, waveSize } from './waves.ts';
+import { enemyHp, hordeBosses, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
 
 /**
  * One survivor's share of Squad Power: their gun's sustained dmg/s (rarity, level and
@@ -33,20 +33,22 @@ export const squadPower = (game: Pick<GameState, 'roster'>): number =>
 
 /**
  * The enemy HP horde-only Horde `n` brings, as expected: each wave's size times its mix's
- * mean HP, plus a boss horde's Horror. Swarm waves and more bosses come with ID-099.
+ * mean HP (a swarm wave's doubled size and Runner-heavy mix, weighted `POWER.rec.swarm`,
+ * ID-099), plus its bosses and mini-boss at their HP.
  */
 export function hordeHp(n: number): number {
   const scale = squadHpScale(n);
   const waves = waveCount(n);
   let total = 0;
   for (let w = 1; w <= waves; w++) {
-    const mean = waveMix(n).reduce(
+    const swarm = swarmWave(n, w);
+    const mean = waveMix(n, swarm).reduce(
       (sum, [kind, share]: [EnemyKind, number]) => sum + share * enemyHp(kind, n, w, scale),
       0,
     );
-    total += waveSize(n, w) * mean;
+    total += waveSize(n, w) * (swarm ? SWARM.size * POWER.rec.swarm : 1) * mean;
   }
-  if (horrorAbility(n)) total += enemyHp('horror', n, waves, scale);
+  for (const b of hordeBosses(n, true)) total += b.hp * enemyHp(b.kind, n, b.wave, scale);
   return total;
 }
 
