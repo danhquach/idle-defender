@@ -24,6 +24,7 @@ import {
   FALL_WARNING,
   FIELD,
   GAP_SENSE,
+  HEAVY_KINDS,
   MAX_CONDITION,
   POST_RANGE,
   SEGMENT_HEIGHT,
@@ -60,6 +61,7 @@ import {
   SPEWER,
   SWARM,
   TIMED_SKILLS,
+  TRAIT,
   type BossSkill,
   type BuffId,
   type EnemyKind,
@@ -69,7 +71,7 @@ import {
   type Stats,
   type Tracer,
 } from './data.ts';
-import { baseOf, pierceOf, type Held } from './armoury.ts';
+import { affixShare, baseOf, gunCrit, gunCritDamage, pierceOf, type Held } from './armoury.ts';
 import {
   gunOf,
   isGun,
@@ -226,6 +228,12 @@ export interface Enemy {
   shockUntil?: number;
   /** Concussion Rounds (ID-097): fight time it was last knocked back; absent = never. */
   pushedAt?: number;
+  /** A Shotgun's stagger (ID-101): fight time the latest one began, and ends; absent = never. */
+  staggerAt?: number;
+  staggerUntil?: number;
+  /** An LMG's slow (ID-101): fight time it ends, and its share off speed; absent = never. */
+  slowUntil?: number;
+  slowBy?: number;
   /**
    * All the HP fire has taken from it so far (Incendiary Rounds and molotov fires); absent = 0.
    * Cosmetic: the view (ID-089) flashes a hit only for HP lost beyond it, so a burning
@@ -422,8 +430,16 @@ export interface Bullet {
   ricochet?: true;
   /** Its damage is a crit's (ID-082: its damage number stands out). */
   crit?: true;
-  /** A Sniper rifle's round: it goes through a boss's armour plates (ID-099). */
+  /** A Sniper rifle's round: it ignores armour, a boss's plates too (ID-099, ID-101). */
   ap?: true;
+  /** Gun traits and role affixes (ID-101), as shares: an SMG's extra damage near the wall, */
+  close?: number;
+  /** a Sniper rifle's extra damage to bosses and heavies, */
+  heavy?: number;
+  /** an LMG's slow on hit, */
+  slow?: number;
+  /** and a Shotgun pellet's stagger. */
+  stagger?: true;
 }
 /**
  * A gun going off: `owner` (as on its bullet) fired in the step ending at `at`, when it
@@ -1568,11 +1584,13 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
 }
 
 /**
- * What a bullet of `damage` does to `e`: a boss's armour plates halve it unless the round
- * is armour-piercing, `ap` (ID-099); then a Brute's or Horror's armour takes some off (design §9).
+ * What a bullet of `damage` does to `e`: a boss's armour plates halve it, then a Brute's or
+ * Horror's armour takes some off (design §9); an armour-piercing round, `ap` (a Sniper
+ * rifle's, ID-099, ID-101), ignores both.
  */
 export function hitDamage(e: Enemy, damage: number, ap = false): number {
-  const d = plated(e) && !ap ? damage * BOSS_SKILL.plates.factor : damage;
+  if (ap) return damage;
+  const d = plated(e) ? damage * BOSS_SKILL.plates.factor : damage;
   return e.kind === 'brute'
     ? Math.max(BRUTE.min, d - BRUTE.armour)
     : e.kind === 'horror'
@@ -1588,11 +1606,17 @@ export function hitDamage(e: Enemy, damage: number, ap = false): number {
  */
 function fly(s: HordeState): void {
   const bounces: Bullet[] = [];
+  // Worked out once a step: an SMG's trait asks for it on every hit (ID-101).
+  const front = wallFront(s);
   s.bullets = s.bullets.filter((b) => {
     let travel = Math.min(b.speed * STEP, b.left);
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
       const first = b.hit.length === 0;
-      const dealt = hitDamage(hit.enemy, b.damage, b.ap === true);
+      const dealt = hitDamage(
+        hit.enemy,
+        b.damage * traitFactor(front, b, hit.enemy),
+        b.ap === true,
+      );
       popOn(s, hit.enemy, dealt, b.crit === true);
       const alive = hit.enemy.hp > 0;
       hit.enemy.hp -= dealt;
@@ -1606,6 +1630,7 @@ function fly(s: HordeState): void {
       b.left -= hit.at;
       travel -= hit.at;
       s.impacts.push({ x: b.x, y: b.y, hit: true, at: s.time + STEP });
+      traitHit(s, b, hit.enemy);
       if (!b.owner.startsWith('turret:')) cardHit(s, b, hit.enemy, first, dealt, bounces);
       if (b.pierce <= 0) return false;
       b.pierce -= 1;
@@ -1622,6 +1647,54 @@ function fly(s: HordeState): void {
   // Bounces fly from the next step, so one never hits twice in the step it was born.
   s.bullets.push(...bounces);
 }
+
+/** The x of the wall's front (ID-101): the outermost built layer's face; with none built, the outermost layer's. */
+export function wallFront(s: Pick<HordeState, 'layers'>): number {
+  const built = s.layers.filter((l) => l.segments.some((seg) => seg.kind !== null));
+  const ls = built.length > 0 ? built : s.layers;
+  return ls.length > 0 ? Math.max(...ls.map((l) => l.x)) + WALL.depth : 0;
+}
+
+/** Whether `e` is a boss, a mini-boss or a heavy kind: a Sniper rifle's boss-damage affix counts (ID-101). */
+const bossOrHeavy = (e: Enemy): boolean => e.horror !== undefined || HEAVY_KINDS.includes(e.kind);
+
+/**
+ * Gun traits' and role affixes' damage factor for bullet `b` hitting `e`, the wall's front at `front` (ID-101): an SMG's
+ * `close` share more within `TRAIT.close.range` px of it, a Sniper rifle's
+ * `heavy` share more on a boss, mini-boss or heavy kind.
+ */
+function traitFactor(front: number, b: Bullet, e: Enemy): number {
+  const close = b.close !== undefined && e.x <= front + TRAIT.close.range + EPS;
+  return (close ? 1 + b.close! : 1) * (b.heavy !== undefined && bossOrHeavy(e) ? 1 + b.heavy : 1);
+}
+
+/**
+ * Gun traits on a hit (ID-101), on `e` still standing: a Shotgun pellet staggers it (no
+ * moving) for `TRAIT.stagger.seconds`, never while it is held already nor within
+ * `TRAIT.stagger.gap` s of its last stagger's start; an LMG hit slows it for
+ * `TRAIT.slow.seconds`, a new hit renewing the time with the larger slow, never stacking.
+ */
+function traitHit(s: HordeState, b: Bullet, e: Enemy): void {
+  if (e.hp <= 0) return;
+  if (b.stagger && !stunned(s, e) && !staggered(s, e)) {
+    if (e.staggerAt === undefined || s.time - e.staggerAt >= TRAIT.stagger.gap - EPS) {
+      e.staggerAt = s.time;
+      e.staggerUntil = s.time + TRAIT.stagger.seconds;
+    }
+  }
+  if (b.slow !== undefined) {
+    e.slowBy = Math.max(slowedBy(s, e), b.slow);
+    e.slowUntil = s.time + TRAIT.slow.seconds;
+  }
+}
+
+/** Whether a Shotgun's stagger stops `e` now (ID-101). */
+export const staggered = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.staggerUntil !== undefined && !due(s.time, e.staggerUntil);
+
+/** The share an LMG's slow takes off `e`'s speed now (ID-101); 0 when none holds. */
+export const slowedBy = (s: Pick<HordeState, 'time'>, e: Enemy): number =>
+  e.slowUntil !== undefined && !due(s.time, e.slowUntil) ? (e.slowBy ?? 0) : 0;
 
 /** The living enemies other than `e` within `radius` of it, nearest first (ties → lowest id). */
 function around(s: HordeState, e: Enemy, radius: number): Enemy[] {
@@ -1661,6 +1734,7 @@ function cardHit(
   const aim = leadPoint(b.x, b.y, next, b.speed);
   const d = Math.hypot(aim.x - b.x, aim.y - b.y) || 1;
   bounces.push({
+    // The same gun's bullet: it keeps its trait marks (ID-101), applied at its own hit.
     ...b,
     dx: (aim.x - b.x) / d,
     dy: (aim.y - b.y) / d,
@@ -1774,6 +1848,24 @@ function blowFrags(s: HordeState): void {
   }
 }
 
+/** The trait and role-affix marks a bullet from gun `h` carries (ID-101; `TRAIT`, `GUN_ROLES`). */
+function traitsOf(h: Held): Pick<Bullet, 'ap' | 'close' | 'heavy' | 'slow' | 'stagger'> {
+  switch (baseOf(h)) {
+    case 'smg':
+      return { close: TRAIT.close.bonus + affixShare(h, 'closeDamage') };
+    case 'shotgun':
+      return { stagger: true };
+    case 'lmg':
+      return { slow: Math.min(TRAIT.slow.max, TRAIT.slow.by + affixShare(h, 'slow')) };
+    case 'sniper': {
+      const heavy = affixShare(h, 'bossDamage');
+      return heavy > 0 ? { ap: true, heavy } : { ap: true };
+    }
+    default:
+      return {};
+  }
+}
+
 function fire(s: HordeState, rng: Rng): void {
   s.strikes = s.strikes.filter((k) => s.time - k.at < STRIKE_FLASH);
   s.shots = s.shots.filter((k) => s.time - k.at < MUZZLE_FLASH);
@@ -1795,14 +1887,15 @@ function fire(s: HordeState, rng: Rng): void {
     const gun = isGun(id);
     // Any weapon can crit with Sharp Mind (ID-084). Crits roll only when the chance is
     // above 0, so a defender without it (or a Gunner's handling) leaves the RNG alone.
-    const crit = critChance(defender, gun);
+    // A gun adds its own crit (ID-101): the Rifle's trait, a crit or crit damage affix.
+    const crit = critChance(defender, gun) + (gun ? gunCrit(id) : 0);
     const critHit = crit > 0 && chance(rng, crit);
     const hit =
       weapon.damage *
       s.mods.damage *
       boost(s, 'damage') *
       damageFactor(defender, id) *
-      (critHit ? critDamage(defender) : 1);
+      (critHit ? critDamage(defender) + gunCritDamage(id) : 1);
     if (gun) {
       launch(s, rng, {
         owner: defender.id,
@@ -1817,7 +1910,7 @@ function fire(s: HordeState, rng: Rng): void {
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
-        ...(baseOf(id) === 'sniper' ? { ap: true as const } : {}),
+        ...traitsOf(id),
       });
     } else {
       popOn(s, target, hit, critHit);
@@ -2153,7 +2246,7 @@ function move(s: HordeState): Moves {
   const wire = barbedWire(s);
   const wireSlow = wire === null ? 0 : atLevel(s, 'barbed-wire', CARD.wire.slow);
   for (const e of s.enemies) {
-    if (stunned(s, e)) continue;
+    if (stunned(s, e) || staggered(s, e)) continue;
     const slowed =
       wire !== null &&
       !e.inCamp &&
@@ -2164,6 +2257,7 @@ function move(s: HordeState): Moves {
       ENEMIES[e.kind].speed *
       STEP *
       (slowed ? 1 - wireSlow : 1) *
+      (1 - slowedBy(s, e)) *
       trapSlow(s, e) *
       screamed(screamers, e) *
       (roared(s, e) ? 1 + BOSS_SKILL.roar.speed : 1) *

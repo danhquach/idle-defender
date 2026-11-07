@@ -5,7 +5,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DROP_GUNS, gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { SQUAD_CAP, STASH_CAP, WEAPONS, type Rarity, type WeaponId } from '../core/data.ts';
+import {
+  GUN_ROLES,
+  SQUAD_CAP,
+  STASH_CAP,
+  WEAPONS,
+  type Rarity,
+  type WeaponId,
+} from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { equipGun, squadDrop, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
 import { waveCount } from '../core/waves.ts';
@@ -134,7 +141,7 @@ describe('the gun pickers (ID-067)', () => {
     }
     expect(gear.rows[1]!.options.find((o) => o.value === 'h1')!.label).toBe(gunOption(rifle));
     // The number first in a picker, so a closed select never cuts it off; last on the drop line.
-    expect(gunOption('pistol')).toBe('8.3 dmg/s · Lv 1 Pistol');
+    expect(gunOption('pistol')).toBe('8.3 dmg/s · Lv 1 Pistol · Backup');
     expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 dmg/s');
   });
 
@@ -295,6 +302,43 @@ describe('the debrief layout (ID-067)', () => {
       lost: false,
       thrown: 'Thrown away: Lv 1 Rusty SMG',
     });
+  });
+
+  it('the loot tile and the gun pickers name the gun’s role and trait, read with the picker (ID-101)', () => {
+    for (const base of DROP_GUNS) {
+      const t = dropTile({ armoury: [] }, dropOf(gun('h1', base, 'rusty')));
+      expect(t.role).toBe(`${GUN_ROLES[base as 'smg'].role}: ${GUN_ROLES[base as 'smg'].trait}`);
+    }
+    const rifle: OwnedWeapon = {
+      ...gun('h1', 'rifle', 'military'),
+      affixes: [{ id: 'critDamage', value: 30 }],
+    };
+    expect(dropTile({ armoury: [] }, dropOf(rifle)).affixes).toBe('+30% crit damage (role)');
+    expect(gunOption(rifle)).toMatch(
+      / · Lv 1 Military Rifle · Marksman \(role \+30% crit damage\)$/,
+    );
+
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const g = squadGame(1, 3, [rifle]);
+    const r = equipGun(g, 'recruit-1', 'h1');
+    if (!r.ok) throw new Error(r.reason);
+    expect(squadGear(r.game).rows[0]!.role).toBe(`Marksman: ${GUN_ROLES.rifle.trait}`);
+    h.showResult(squadStart(r.game));
+    h.showGear(squadGear(r.game), noop);
+    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
+    const role = document.getElementById(select.getAttribute('aria-describedby')!)!;
+    expect(role.classList.contains('hud-gear-role')).toBe(true);
+    expect(role.textContent).toBe(`Marksman: ${GUN_ROLES.rifle.trait}`);
+
+    const won = ended(squadGame(1, 5), 'won');
+    h.showResult(squadScreen(squadGame(1, 5), won));
+    const tile = root.querySelector<HTMLElement>('.tile-drop')!;
+    const dropped = squadDrop(squadGame(1, 5), won)!.weapon;
+    expect(tile.querySelector('.tile-role')!.textContent).toBe(
+      `${GUN_ROLES[dropped.base as 'smg'].role}: ${GUN_ROLES[dropped.base as 'smg'].trait}`,
+    );
   });
 
   it('the loot tile’s icon is the dropped gun’s own icon, for every gun a horde drops (ID-092)', () => {

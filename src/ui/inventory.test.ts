@@ -5,9 +5,9 @@
 // details beside the grid. Combine (ID-091) sits in a stash gun's details. Text reaches
 // the page only through textContent.
 import { describe, expect, it } from 'vitest';
-import { affixText, gunPower, type OwnedWeapon } from '../core/armoury.ts';
+import { affixLines, gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
+import { GUN_ROLES, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { combineGuns, equipGun } from '../core/hordeonly.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
@@ -66,7 +66,9 @@ describe('inventoryView', () => {
       key: 'stash:a',
       base: 'lmg',
       rarity: 'prototype',
-      affixes: ['+12% damage', '+30% magazine'],
+      // The LMG's magazine is its role affix (ID-101).
+      affixes: ['+12% damage', '+30% magazine (role)'],
+      role: GUN_ROLES.lmg,
       icon: 'weapon-lmg',
       owned: lmg,
     });
@@ -140,11 +142,11 @@ describe('inventoryView', () => {
     };
     const v = inventoryView(camp(1, [w]));
     expect(slotLabel(v.stash[0]!)).toBe(
-      `Military Rifle, Military rarity, level 1, ${gunPower(w).toFixed(1)} dmg/s, 1 affix`,
+      `Military Rifle, Military rarity, Marksman: +10% crit chance, level 1, ${gunPower(w).toFixed(1)} dmg/s, 1 affix`,
     );
     expect(slotLabel(v.stash[0]!, true)).toMatch(/, can combine$/);
     expect(slotLabel(v.squad[0]!.gun)).toBe(
-      `Pistol, Common rarity, level 1, ${gunPower('pistol').toFixed(1)} dmg/s, no affixes, held by ${v.squad[0]!.name}`,
+      `Pistol, Common rarity, Backup: Fastest reload of any gun, level 1, ${gunPower('pistol').toFixed(1)} dmg/s, no affixes, held by ${v.squad[0]!.name}`,
     );
   });
 });
@@ -304,6 +306,38 @@ describe('the Inventory dialog', () => {
     // View only: no way to equip from here.
     expect(d.querySelector('select')).toBeNull();
     expect(d.textContent).not.toMatch(/equip/i);
+  });
+
+  it('names every gun’s role and trait in its details and its screen-reader label; role affixes are marked (ID-101)', () => {
+    const w: OwnedWeapon = {
+      ...gun('a', 'rifle', 'military'),
+      affixes: [{ id: 'crit', value: 5 }],
+    };
+    const { button, slots, details } = setup(camp(1, [w, gun('b', 'shotgun', 'rusty')]));
+    button.click();
+    // The Rusty Shotgun out-shoots the Rifle, so it opens first.
+    const at = (k: string) => slots('Stash').find((x) => x.dataset.key === k)!;
+    const rifle = at('stash:a');
+    const shotgun = at('stash:b');
+    rifle.click();
+    const d = details();
+    expect(d.querySelector('.inv-role')!.textContent).toBe('Marksman: +10% crit chance');
+    expect([...d.querySelectorAll('[aria-label="Affixes"] li')].map((n) => n.textContent)).toEqual([
+      '+5% crit chance (role)',
+    ]);
+    expect(rifle.getAttribute('aria-label')).toContain('Marksman: +10% crit chance');
+    // Even a Rusty gun with no affixes has its role.
+    shotgun.click();
+    expect(details().querySelector('.inv-role')!.textContent).toBe(
+      `${GUN_ROLES.shotgun.role}: ${GUN_ROLES.shotgun.trait}`,
+    );
+    expect(shotgun.getAttribute('aria-label')).toContain(GUN_ROLES.shotgun.role);
+    // The free pistol too.
+    const pistol = slots('Squad').at(-1)!;
+    pistol.click();
+    expect(details().querySelector('.inv-role')!.textContent).toBe(
+      `${GUN_ROLES.pistol.role}: ${GUN_ROLES.pistol.trait}`,
+    );
   });
 
   it('selects a slot on click; its details show; one slot is selected at a time', () => {
@@ -650,7 +684,7 @@ describe('Combine in the details (ID-091)', () => {
     expect(document.activeElement).toBe(line);
     expect(line.getAttribute('role')).toBe('status');
     expect(line.textContent).toBe(
-      `Made: Lv 1 Prototype SMG (${made.affixes.map(affixText).join(', ')}), ${gunPower(made).toFixed(1)} dmg/s`,
+      `Made: Lv 1 Prototype SMG (${affixLines(made, true).join(', ')}), ${gunPower(made).toFixed(1)} dmg/s`,
     );
     // Tab from the line goes on through the dialog, not back to the top.
     const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });

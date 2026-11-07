@@ -26,6 +26,7 @@ import {
   type Survivor,
 } from '../core/camp.ts';
 import {
+  affixBounds,
   affixCount,
   affixesFor,
   type Affix,
@@ -33,7 +34,6 @@ import {
   type OwnedWeapon,
 } from '../core/armoury.ts';
 import {
-  AFFIXES,
   ARMOURY_CAP,
   FARM,
   BATTERY_IDS,
@@ -932,7 +932,8 @@ function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedW
   const affixes = arr(o.affixes, count, count).map((a): Affix => {
     const x = obj(a, ['id', 'value']);
     const id = oneOf(x.id, fits);
-    return { id, value: int(x.value, AFFIXES[id].min, AFFIXES[id].max) };
+    const { min, max } = affixBounds(id, base);
+    return { id, value: int(x.value, min, max) };
   });
   if (new Set(affixes.map((a) => a.id)).size !== affixes.length) fail('affix twice');
   if (!levelled) return { uid, base, rarity, affixes };

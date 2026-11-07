@@ -313,22 +313,91 @@ export const RARITY_ORDER: readonly Rarity[] = [
   'relic',
 ];
 
-export type AffixId = 'damage' | 'fireRate' | 'magazine' | 'reload' | 'pierce' | 'repair';
+export type AffixId =
+  | 'damage'
+  | 'fireRate'
+  | 'magazine'
+  | 'reload'
+  | 'pierce'
+  | 'repair'
+  | 'crit'
+  | 'critDamage'
+  | 'closeDamage'
+  | 'cone'
+  | 'pellets'
+  | 'slow'
+  | 'bossDamage';
 type WeaponKind = Weapon['kind'];
 const GUNS: readonly WeaponKind[] = ['sidearm', 'gun'];
+/** The weapons that shoot: the free pistol and the five specialised guns. */
+export type GunBase = 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'lmg' | 'sniper';
+/** An affix's roll range, [min, max]. */
+interface Range {
+  readonly min: number;
+  readonly max: number;
+}
 /**
- * Each affix rolls a whole number in [min, max]: a percent, or for pierce the extra
- * enemies a shot hits. `kinds` are the weapons it fits.
+ * Each affix rolls a whole number in [min, max]: a percent, or for pierce and pellets
+ * the extra enemies or pellets. `kinds` are the weapons it fits. A role affix (ID-101)
+ * also names the only `bases` that roll it; a general affix that is also a gun's role
+ * affix rolls that gun's `role` range instead.
  */
 export const AFFIXES = {
   damage: { min: 5, max: 15, kinds: ['sidearm', 'gun', 'blade', 'tool'] },
   fireRate: { min: 5, max: 15, kinds: ['sidearm', 'gun', 'blade', 'tool'] },
-  magazine: { min: 20, max: 50, kinds: GUNS },
+  magazine: { min: 20, max: 50, kinds: GUNS, role: { lmg: { min: 40, max: 80 } } },
   reload: { min: 10, max: 25, kinds: GUNS },
-  pierce: { min: 1, max: 1, kinds: GUNS },
+  pierce: { min: 1, max: 1, kinds: GUNS, role: { sniper: { min: 1, max: 2 } } },
   repair: { min: 10, max: 25, kinds: ['tool'] },
-} as const satisfies Record<AffixId, { min: number; max: number; kinds: readonly WeaponKind[] }>;
+  // Role affixes (ID-101): percent points of crit chance; crit damage's share added to ×2.
+  crit: { min: 3, max: 8, kinds: GUNS, bases: ['pistol', 'rifle'] },
+  critDamage: { min: 20, max: 50, kinds: GUNS, bases: ['rifle'] },
+  closeDamage: { min: 10, max: 25, kinds: GUNS, bases: ['smg'] },
+  cone: { min: 20, max: 40, kinds: GUNS, bases: ['shotgun'] },
+  pellets: { min: 1, max: 2, kinds: GUNS, bases: ['shotgun'] },
+  slow: { min: 5, max: 15, kinds: GUNS, bases: ['lmg'] },
+  bossDamage: { min: 15, max: 35, kinds: GUNS, bases: ['sniper'] },
+} as const satisfies Record<
+  AffixId,
+  Range & {
+    kinds: readonly WeaponKind[];
+    bases?: readonly GunBase[];
+    role?: Partial<Record<GunBase, Range>>;
+  }
+>;
 export const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
+
+/**
+ * Gun roles (ID-101, design Part 4): each gun's role and the built-in trait every one of
+ * it has, Rusty or Relic. The trait numbers are `TRAIT`'s.
+ */
+export const GUN_ROLES = {
+  pistol: { role: 'Backup', trait: 'Fastest reload of any gun' },
+  smg: { role: 'Swarm shredder', trait: '+25% damage to enemies near the wall' },
+  rifle: { role: 'Marksman', trait: '+10% crit chance' },
+  shotgun: { role: 'Wall stopper', trait: 'Each pellet hit briefly stops the enemy' },
+  lmg: { role: 'Suppression', trait: 'Hits slow the enemy 20% for 1 s (not stacking)' },
+  sniper: {
+    role: 'Boss and heavy killer',
+    trait: 'Ignores armour; each shot goes through 1 more enemy',
+  },
+} as const satisfies Record<GunBase, { role: string; trait: string }>;
+
+/**
+ * The built-in traits' numbers (ID-101; starting points for the balance pass, ID-102).
+ * SMG: `close.bonus` more damage to an enemy within `close.range` px of the wall's front.
+ * Rifle: `crit` more crit chance. Shotgun: a hit stops the enemy for `stagger.seconds`,
+ * never again until `stagger.gap` s after the last one began. LMG: a hit slows it by
+ * `slow.by` for `slow.seconds` (a new hit only renews it); the slow affix adds to it,
+ * never past `slow.max`. Sniper rifle: ignores Brute, Horror and boss-plate armour; the
+ * heavy kinds (`HEAVY_KINDS`) and any boss or mini-boss take its boss-damage affix.
+ */
+export const TRAIT = {
+  close: { range: 250, bonus: 0.25 },
+  crit: 0.1,
+  stagger: { seconds: 0.15, gap: 0.6 },
+  slow: { by: 0.2, seconds: 1, max: 0.35 },
+} as const;
 
 /**
  * A horde win's weapon drop (design §4): `base + perHorde × n` chance, capped; the
@@ -766,7 +835,7 @@ export const RARITY: Readonly<
 export const CARD_MAX_LEVEL = 3;
 
 /** The big enemies a card's push or paralysis does half to (design §8). */
-const HEAVY_KINDS: readonly EnemyKind[] = ['brute', 'swollen', 'horror'];
+export const HEAVY_KINDS: readonly EnemyKind[] = ['brute', 'swollen', 'horror'];
 
 /**
  * What the in-horde cards do (design §8, as built ID-022, reworked ID-077, levels ID-097).

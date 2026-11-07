@@ -13,12 +13,13 @@
 // the page only through textContent.
 import {
   affixCount,
-  affixText,
+  affixLines,
   baseOf,
   gunLevel,
   gunPower,
   heldName,
   isOwned,
+  roleOf,
   type Held,
   type OwnedWeapon,
 } from '../core/armoury.ts';
@@ -51,8 +52,10 @@ export interface InventoryItem {
   name: string;
   base: WeaponId;
   rarity: Rarity;
-  /** Each affix as a line: "+7% damage". */
+  /** Each affix as a line: "+7% damage"; a role affix marked "(role)" (ID-101). */
   affixes: string[];
+  /** The gun's role and built-in trait (ID-101); null for a weapon that is no gun. */
+  role: { role: string; trait: string } | null;
   /** "17.2 dmg/s"; null for a weapon that is no gun (an older save's blade or tool). */
   power: string | null;
   /** The slot's badge: dmg/s rounded ("17"); null for no gun. */
@@ -144,7 +147,8 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
     name: heldName(h),
     base,
     rarity: isOwned(h) ? h.rarity : 'common',
-    affixes: isOwned(h) ? h.affixes.map(affixText) : [],
+    affixes: affixLines(h),
+    role: roleOf(base),
     power: gun ? `${power.toFixed(1)} dmg/s` : null,
     badge: gun ? String(Math.round(power)) : null,
     level: gunLevel(h),
@@ -319,9 +323,13 @@ export const combineResult = (w: OwnedWeapon): string =>
 const levelled = (it: InventoryItem): string =>
   it.levelBadge ? `${it.levelBadge} ${it.name}` : it.name;
 
-/** A slot's screen-reader name: "Military Rifle, Military rarity, 17.2 dmg/s, 2 affixes". */
+/**
+ * A slot's screen-reader name: "Military Rifle, Military rarity, Marksman: +10% crit chance,
+ * 17.2 dmg/s, 2 affixes".
+ */
 export function slotLabel(it: InventoryItem, ready = false): string {
   const parts = [it.name, `${RARITIES[it.rarity].name} rarity`];
+  if (it.role) parts.push(`${it.role.role}: ${it.role.trait}`);
   if (it.levelBadge) parts.push(`level ${it.level}`);
   if (it.power) parts.push(it.power);
   parts.push(
@@ -472,7 +480,7 @@ export interface CombineUi {
   cancel(): void;
 }
 
-/** A gun's lines in the details: rarity, then each affix, then dmg/s. */
+/** A gun's lines in the details: rarity, its role and trait (ID-101), each affix, then dmg/s. */
 function facts(it: InventoryItem): HTMLElement[] {
   const name = el('p', 'inv-name', levelled(it));
   name.dataset.rarity = it.rarity;
@@ -482,6 +490,8 @@ function facts(it: InventoryItem): HTMLElement[] {
     `${RARITIES[it.rarity].name} rarity · ${WEAPONS[it.base].name}`,
   );
   rarity.dataset.rarity = it.rarity;
+  // The gun's role and the trait every one of it has (ID-101), read as one line.
+  const role = it.role ? [el('p', 'inv-role', `${it.role.role}: ${it.role.trait}`)] : [];
   const affixes =
     it.affixes.length > 0
       ? list(
@@ -490,7 +500,7 @@ function facts(it: InventoryItem): HTMLElement[] {
           it.affixes.map((a) => el('li', '', a)),
         )
       : el('p', 'inv-affixes inv-affixes-none', NO_AFFIXES);
-  const out = [name, rarity, affixes];
+  const out = [name, rarity, ...role, affixes];
   if (it.power) out.push(el('p', 'inv-power', it.power));
   return out;
 }
