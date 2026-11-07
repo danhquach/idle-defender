@@ -661,7 +661,11 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     posts,
     turrets,
     traps,
-    wire: Array.from({ length: SEGMENTS }, () => ({ durability: CARD.wire.durability, hit: [] })),
+    // At level 1's durability: the card's first pick (ID-104).
+    wire: Array.from({ length: SEGMENTS }, () => ({
+      durability: CARD.wire.durability[0],
+      hit: [],
+    })),
     energy: bank,
     bankCap,
     startedAt,
@@ -1984,14 +1988,14 @@ export function barbedWire(
 
 /**
  * Barbed Wire's row under `e`, which stands in the band (ID-090): the first time `e` is in
- * a working row, the row loses 1 durability. Whether that row still slows: a row the
- * crossing broke slows no one, `e` included.
+ * a working row, the row loses its kind's wear (ID-104), never below 0. Whether that row
+ * still slows: a row the crossing broke slows no one, `e` included.
  */
 function wearWire(s: HordeState, e: Enemy): boolean {
   const row = s.wire[segmentAt(e.y)]!;
   if (row.durability > 0 && !row.hit.includes(e.id)) {
     row.hit.push(e.id);
-    row.durability -= 1;
+    row.durability = Math.max(0, row.durability - CARD.wire.wear[e.kind]);
   }
   return row.durability > 0;
 }

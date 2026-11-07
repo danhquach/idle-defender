@@ -154,14 +154,32 @@ describe('levels (ID-097)', () => {
     }
   });
 
-  it('Barbed Wire: an upgrade keeps each row’s durability, and a broken row stays broken', () => {
+  it('Barbed Wire: each row has 10, 20 and 30 durability at levels 1, 2 and 3 (ID-104)', () => {
+    expect(CARD.wire.durability).toEqual([10, 20, 30]);
+    for (let lv = 1; lv <= 3; lv++) {
+      const s = at('barbed-wire', lv);
+      expect(
+        s.wire.every((r) => r.durability === CARD.wire.durability[lv - 1]),
+        `Lv ${lv}`,
+      ).toBe(true);
+    }
+    // A new horde: the card is gone, and every row is whole again at level 1's.
+    expect(quiet().wire.every((r) => r.durability === CARD.wire.durability[0])).toBe(true);
+  });
+
+  it('Barbed Wire: an upgrade adds 10 to each working row, and a broken row stays broken (ID-104)', () => {
     let s = at('barbed-wire', 1);
     s.wire[2]!.durability = 0;
-    s.wire[3]!.durability = 12;
+    s.wire[3]!.durability = 4;
     s = picked(s, 'barbed-wire');
     expect(cardLevel(s, 'barbed-wire')).toBe(2);
     expect(s.wire[2]!.durability).toBe(0);
-    expect(s.wire[3]!.durability).toBe(12);
+    expect(s.wire[3]!.durability).toBe(14);
+    expect(s.wire[4]!.durability).toBe(20);
+    s = picked(s, 'barbed-wire');
+    expect(s.wire[2]!.durability).toBe(0);
+    expect(s.wire[3]!.durability).toBe(24);
+    expect(s.wire[4]!.durability).toBe(30);
   });
 
   it('Extended Mags: an upgrade applies from each gun’s next reload', () => {

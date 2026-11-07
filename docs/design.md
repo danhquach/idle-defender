@@ -985,8 +985,9 @@ spacing real hordes have (see the ID-077 note below).
   **Levels (ID-097):** each card below has levels 1, 2 and 3 (max). The
   first pick gives level 1, each later pick raises it by 1, and at max it
   leaves the pool for the rest of the horde. An upgrade keeps the card's own
-  rules (Extended Mags from each gun's next reload, Barbed Wire's rows keep
-  their durability and stay broken). Levels last the horde, like every card.
+  rules (Extended Mags from each gun's next reload, Barbed Wire's working
+  rows gain the level's extra durability and broken ones stay broken).
+  Levels last the horde, like every card.
 
   | Card | Kind | Rarity | Lv 1 | Lv 2 | Lv 3 (max) |
   |---|---|---|---|---|---|
@@ -996,7 +997,7 @@ spacing real hordes have (see the ID-077 note below).
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
   | Incendiary Rounds | behaviour | rare | The enemy hit burns **1** dmg/s for 3 s; a new hit resets it at the new hit's rate, never stacks | 2 dmg/s | 3 dmg/s |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
-  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower (more below) | 25% | 35% |
+  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability (more below) | 25%; 20 durability | 35%; 30 durability |
 
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
@@ -1028,11 +1029,42 @@ spacing real hordes have (see the ID-077 note below).
   **Barbed Wire** (ID-077):
   enemies in its band move slower by its level's share, multiplying with razor wire traps and
   Screamers. Enemies wear it down (ID-090): the band is 10 rows, one per
-  wall segment, each with **30** durability (`CARD.wire.durability`, the
-  same as a trap). Each enemy that enters a working row's band takes 1
-  durability off that row, only once per row. A row at 0 is broken for the
-  rest of the horde: it slows no one, the enemy that broke it included,
-  while the other rows still slow. **Patch Up** (common, repeatable, uncapped)
+  wall segment. Each row's durability goes with the card's level (ID-104,
+  `CARD.wire.durability`): **10** at level 1, **20** at level 2, **30** at
+  level 3. Picking the card again adds 10 to each working row's durability
+  and max; a broken row stays broken. Every horde starts the rows whole.
+  Each enemy that enters a working row's band takes its kind's wear off that
+  row (`CARD.wire.wear`), only once per row and never below 0: **1** for a
+  Shambler, Runner, Crawler, Spewer or Screamer, **3** for a Swollen, **4**
+  for a Brute and **10** for the Horror (a level 1 row on its own). A row at
+  0 is broken for the rest of the horde: it slows no one, the enemy that
+  broke it included, while the other rows still slow. (It was 30 at every
+  level and 1 for every kind, ID-090.)
+
+  Measured (ID-104), horde-only campaigns as the scripted squad plays them,
+  10 seeds, with Barbed Wire picked at the start of each first try at Hordes
+  4–10: the share of the fight its rows were working (time-weighted), before
+  (30 at every level, 1 per enemy) → after.
+
+  | Horde | Lv 1 | Lv 3 (max) |
+  |---|---|---|
+  | 4 | 100% → 91% | 100% → 100% |
+  | 5 | 100% → 73% | 100% → 100% |
+  | 6 | 100% → 71% | 100% → 100% |
+  | 7 | 99% → 56% | 98% → 95% |
+  | 8 | 96% → 36% | 99% → 77% |
+  | 9 | 91% → 35% | 92% → 74% |
+  | 10 | 84% → 31% | 81% → 63% |
+
+  Level 2 after: 100%, 99%, 96%, 79%, 63%, 57%, 48%. So the wire holds
+  most of each mid-game horde (4–7) at every level and is worth levelling
+  for the walls from Horde 8; the starting wear values needed no retune.
+  In the Horde 4 card test (three survivors, wins of 20) levels 1, 2 and 3
+  win 11, 11 and 12 (were 9, 11, 12) and kill a mean 158.5, 162.5 and
+  173.4 px out (were 163.1, 162.5, 173.4; no card 156.1). The horde-only
+  and Horror balance tests pass before and after.
+
+  **Patch Up** (common, repeatable, uncapped)
   repairs every built segment by 30% of its max HP, a broken one included. It's
   offered only while some built segment is below its max HP (broken
   counts): with the whole wall at full HP that slot rolls another card, and
@@ -1081,7 +1113,9 @@ spacing real hordes have (see the ID-077 note below).
   player farms past; their targets, and the late-horde test (ID-096), come
   back with farming in the balance pass (ID-102). Level by level, in Horde 4
   with three survivors and that card alone (wins of 20; no card 2): Speed
-  Loaders 7, 12, 15; Extended Mags 10, 13, 15; Barbed Wire 9, 11, 12. Shock
+  Loaders 7, 12, 15; Extended Mags 10, 13, 15; Barbed Wire 11, 11, 12
+  (9, 11, 12 before ID-104; with durability by level its levels are judged
+  by wins at least as many and kills further out, 158.5, 162.5 and 173.4 px). Shock
   Rounds kills 7–11 px further out than no card at every level, each level
   further than the one below (163.5, 164.0 and 167.5 px against 156.1); its
   wins (5, 7 and 5 of 20) are noise, as a paralysis only holds enemies back.

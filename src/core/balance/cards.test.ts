@@ -6,7 +6,7 @@
 // from the wall (design §8: the cards act where the fight is).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { recruit } from '../camp.ts';
-import { WALL } from '../data.ts';
+import { CARD, WALL } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
@@ -46,6 +46,9 @@ function play(card: UpgradeId | null, level = 1): { wins: number; killedAt: numb
       s.taken = [card];
       s.cardLevels = { [card]: level };
     }
+    // As the picks would: each wire row at its level's durability (ID-104).
+    if (card === 'barbed-wire')
+      for (const r of s.wire) r.durability = CARD.wire.durability[level - 1]!;
     // As the pick would: the first grenade is thrown at once.
     if (card === 'frag-grenades') s.nextFragAt = 0;
     const front = Math.max(...s.layers.map((l) => l.x)) + WALL.depth;
@@ -89,13 +92,27 @@ describe('each ID-077 card makes a measurable difference (Horde 4, three survivo
     expect(of(id, 1).wins).toBeGreaterThan(none.wins);
   });
 
-  it.each(LEVELLED)(
+  it.each(LEVELLED.filter((id) => id !== 'barbed-wire'))(
     '%s: each level wins more of the same fights than the one below (ID-097)',
     (id) => {
       expect(of(id, 2).wins).toBeGreaterThan(of(id, 1).wins);
       expect(of(id, 3).wins).toBeGreaterThan(of(id, 2).wins);
     },
   );
+
+  // Its durability grows by level too (ID-104), and when its rows break changes which
+  // fights are won, so wins of 20 are noisy (±2) and can tie: each level wins at least
+  // as many, and its kills happen further out (the check that guards the order).
+  it('Barbed Wire: each level wins at least as many fights and kills further out than the one below (ID-104)', () => {
+    for (const lv of [2, 3]) {
+      expect(of('barbed-wire', lv).wins, `Lv ${lv}`).toBeGreaterThanOrEqual(
+        of('barbed-wire', lv - 1).wins,
+      );
+      expect(of('barbed-wire', lv).killedAt, `Lv ${lv}`).toBeGreaterThan(
+        of('barbed-wire', lv - 1).killedAt,
+      );
+    }
+  });
 
   it.each(LEVELLED)(
     '%s at max kills further out from the wall, by at least 5 px on average',

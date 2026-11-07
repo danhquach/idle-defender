@@ -559,6 +559,15 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
     case 'frag-grenades':
       s.nextFragAt = s.time;
       break;
+    case 'barbed-wire': {
+      // The rows start at level 1's durability; a level-up adds its step to each working
+      // row, and a broken one stays broken (ID-104).
+      const lv = s.cardLevels[id]!;
+      if (lv < 2) break;
+      const gain = CARD.wire.durability[lv - 1]! - CARD.wire.durability[lv - 2]!;
+      for (const row of s.wire) if (row.durability > 0) row.durability += gain;
+      break;
+    }
     // The rest act in the fight while taken.
   }
 }
