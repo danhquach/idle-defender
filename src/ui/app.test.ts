@@ -524,6 +524,7 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     // The loss is read right after the tag, before the card's kind and effect.
     expect([...shock.children].map((c) => c.className)).toEqual([
       'hud-card-key',
+      'hud-card-art',
       'hud-card-title',
       'hud-card-tag',
       'hud-card-warning',
@@ -542,7 +543,8 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     );
     expect(sharp.getAttribute('aria-label')).toContain('Stack 3 to 4');
     // Text only: no markup from the card's words.
-    expect(wire.querySelectorAll('*').length).toBe(6);
+    // (6 text parts, plus the icon's plate and image, ID-103.)
+    expect(wire.querySelectorAll('*').length).toBe(8);
   });
 
   it('Space on the result screen holds nothing', () => {

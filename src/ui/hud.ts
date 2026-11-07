@@ -86,13 +86,31 @@ import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
 import { holdable, holdRepeat } from './hold.ts';
 import { nextGains, nextPointText } from './statlines.ts';
-import { ART_URLS, GUN_ICON, SHOP_ICON, SKILL_ICON, type ArtId, type GunId } from './sprites.ts';
+import {
+  ART_URLS,
+  avatarOf,
+  CARD_ICON,
+  GUN_ICON,
+  SHOP_ICON,
+  SKILL_ICON,
+  type ArtId,
+  type GunId,
+} from './sprites.ts';
 
 /** The key for each fight speed (ID-062): clear of the card keys 1 2 3 and the action bar's. */
 export const SPEED_KEYS: Readonly<Record<Speed, string>> = { 1: 'A', 2: 'S', 3: 'D' };
 
 /** How long a toast stays up. */
 const TOAST_MS = 2000;
+/**
+ * How long a picked card's confirm effect plays before the offer closes (ID-103); the
+ * fight resumes at once. Matches `hud-card-pick` in page.css.
+ */
+export const PICK_MS = 240;
+/** Whether the player's system asks for less motion; no `matchMedia` counts as yes. */
+export const reducedMotion = (): boolean =>
+  typeof window.matchMedia !== 'function' ||
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -147,7 +165,13 @@ export function cardText(
 } {
   if (card.kind === 'recruit') {
     const title = `Recruit ${defenderLabel(card.defender)}`;
-    return { title, body: 'Takes a free post', spoken: `${title}. Takes a free post` };
+    // Its kind line says "Recruit" (ID-103), so it never reads as a rare card.
+    return {
+      title,
+      body: 'Takes a free post',
+      kind: 'Recruit',
+      spoken: `${title}. Takes a free post`,
+    };
   }
   const u = UPGRADES[card.id];
   const synergy = synergyOf(state, card.id);
@@ -1134,13 +1158,40 @@ export function createHud(
   const pickSync = new Map<string, (d: RosterDefender) => void>();
   // Second Look's reroll can deal the same three cards; its button still has to grey out.
   let shownRerolled = '';
-  // Hide the panel at once: a second click or key before the next frame must not
-  // pick from an offer the player hasn't seen yet.
+  // While a pick's confirm effect plays (ID-103): the panel takes no input and closes after.
+  let picking: ReturnType<typeof setTimeout> | undefined;
+  function endPick(): void {
+    clearTimeout(picking);
+    picking = undefined;
+    cards.classList.remove('hud-cards-picking');
+  }
+  // The pick goes out at once and the offer is forgotten, so a second click or key can't
+  // pick from it, or from one the player hasn't seen yet. With motion, the picked card
+  // flashes and the others fade before the panel closes; without, it closes at once.
   function choose(index: number): void {
-    if (cards.hidden || !shownOffer?.[index]) return;
-    cards.hidden = true;
+    if (cards.hidden || picking !== undefined || !shownOffer?.[index]) return;
     shownOffer = null;
-    onChoose(index);
+    if (reducedMotion()) {
+      cards.hidden = true;
+    } else {
+      cards.classList.add('hud-cards-picking');
+      cards.querySelectorAll('.hud-card')[index]?.classList.add('hud-card-picked');
+      picking = setTimeout(() => {
+        endPick();
+        if (shownOffer === null) {
+          cards.hidden = true;
+          cards.replaceChildren();
+        }
+      }, PICK_MS);
+    }
+    try {
+      onChoose(index);
+    } catch (e) {
+      // A failed pick must not leave the panel locked behind its effect.
+      endPick();
+      cards.hidden = true;
+      throw e;
+    }
   }
   document.addEventListener('keydown', (e) => {
     // Not while the field is inert behind the open menu.
@@ -1424,10 +1475,22 @@ export function createHud(
       const { title, body, kind, synergy, pitch, spoken } = cardText(card, state);
       const rarity = card.kind === 'upgrade' ? ` hud-card-${UPGRADES[card.id].rarity}` : '';
       const swap = pitch?.replace ? ' hud-card-swap' : '';
-      const button = el('button', `hud-card hud-card-${card.kind}${rarity}${swap}`);
+      const button = el(
+        'button',
+        `hud-card hud-card-${card.kind}${rarity}${swap} hud-card-has-art`,
+      );
       button.type = 'button';
       button.setAttribute('aria-label', `${i + 1}. ${spoken}`);
-      button.append(el('span', 'hud-card-key', String(i + 1)), el('span', 'hud-card-title', title));
+      // The card's icon (ID-103), or a recruit's own avatar, on a plate tinted by its
+      // rarity; decoration only, as the label already names the card.
+      const plate = el('span', 'hud-card-art');
+      const img = el('img', 'hud-card-icon');
+      img.src =
+        ART_URLS[card.kind === 'upgrade' ? CARD_ICON[card.id] : avatarOf(card.defender)] ?? '';
+      img.alt = '';
+      plate.append(img);
+      button.append(el('span', 'hud-card-key', String(i + 1)), plate);
+      button.append(el('span', 'hud-card-title', title));
       if (pitch) button.append(el('span', 'hud-card-tag', pitch.tag));
       // An ammo swap's loss, read right after the tag, in one red box (ID-097).
       if (pitch?.replace) {
@@ -1449,7 +1512,7 @@ export function createHud(
       reroll.disabled = lock !== null;
       reroll.title = lock ?? '';
       reroll.addEventListener('click', () => {
-        if (!cards.hidden && rerollLock(state) === null) onReroll();
+        if (!cards.hidden && picking === undefined && rerollLock(state) === null) onReroll();
       });
       cards.append(reroll);
     }
@@ -1529,9 +1592,13 @@ export function createHud(
       ) {
         shownOffer = state.offer;
         shownRerolled = `${state.rerolledWave}:${state.rerolls}`;
-        cards.hidden = state.offer === null;
-        if (state.offer) showOffer(state.offer, state);
-        else cards.replaceChildren();
+        // A new offer cuts a pick's confirm effect short; a closing one waits for it.
+        if (state.offer) endPick();
+        if (picking === undefined) {
+          cards.hidden = state.offer === null;
+          if (state.offer) showOffer(state.offer, state);
+          else cards.replaceChildren();
+        }
       }
     },
     showResult(screen) {

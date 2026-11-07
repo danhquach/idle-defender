@@ -11,9 +11,8 @@ import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
 import { maxHpOf, reloadTime, xpForLevel } from '../core/stats.ts';
-import { ART_URLS, GUNNER_LOOKS, lookOf } from './sprites.ts';
+import { ART_URLS, avatarOf, GUNNER_LOOKS, lookOf } from './sprites.ts';
 import {
-  avatarOf,
   cardBlock,
   createRoster,
   rosterTiles,

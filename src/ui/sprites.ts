@@ -13,8 +13,10 @@ import type {
   WeaponId,
   WEAPONS,
 } from '../core/data.ts';
+import { baseOf } from '../core/armoury.ts';
 import { buildingsOf } from '../core/data.ts';
-import type { TurretState, UpgradeId } from '../core/horde.ts';
+import type { DefenderSpec, TurretState, UpgradeId } from '../core/horde.ts';
+import { isGun } from '../core/loadout.ts';
 
 export const ART_IDS = [
   'shambler-walk-a',
@@ -467,6 +469,17 @@ export function lookOf(id: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193);
   return (h >>> 0) % LOOKS;
+}
+
+/**
+ * A survivor's avatar: their own look (ID-074) holding the gun they fight with (a primary
+ * that is no gun fights as the pistol), as the fight draws them. The Roster (ID-086) and a
+ * recruit's offer card (ID-103) show it.
+ */
+export function avatarOf(d: Pick<DefenderSpec, 'id' | 'loadout'>): ArtId {
+  const look = GUNNER_LOOKS[lookOf(d.id)]!;
+  const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
+  return (look[baseOf(held) as GunId] ?? look.rifle).idle;
 }
 
 /** A turret with its wall broken (offline) shows dark, like one with no charge. */

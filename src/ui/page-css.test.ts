@@ -106,6 +106,23 @@ const TEXT_ON: Record<string, string[]> = {
   '--rarity-relic': ['--color-surface'],
 };
 
+describe('offer card motion (ID-103)', () => {
+  it('turns every offer animation and transition off when the system asks for less motion', () => {
+    const block = /@media \(prefers-reduced-motion: reduce\) {([\s\S]*?)\n}/.exec(css)?.[1] ?? '';
+    // Each selector that sets a card animation elsewhere is matched here at least as strongly.
+    for (const sel of [
+      '.hud-card,',
+      '.hud-card:not(.hud-card-picked)',
+      '.hud-card-picked',
+      '.hud-card-epic::after',
+    ]) {
+      expect(block, sel).toContain(sel);
+    }
+    expect(block).toMatch(/animation: none;\s*transition: none;/);
+    expect(block).toMatch(/\.hud-card-epic::after {\s*display: none;/);
+  });
+});
+
 describe('UI kit tokens (ID-056)', () => {
   it('keeps colour literals out of the component rules', () => {
     expect(rules).not.toMatch(/#[0-9a-f]{3,8}\b/i);

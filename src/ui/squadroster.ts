@@ -6,7 +6,7 @@
 // and the points left ("0" when none, ID-083). The avatar is the survivor's fight sprite
 // (ID-074). Like the Inventory, the field goes inert behind it and an open Roster holds a
 // fight. Text reaches the page only through textContent.
-import { baseOf, heldName, isOwned, type Held } from '../core/armoury.ts';
+import { heldName, isOwned, type Held } from '../core/armoury.ts';
 import { STAT_NAMES, STATS, type Rarity, type Stat } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
@@ -15,17 +15,11 @@ import { isLocked, levelOf, maxHpOf, unspentPoints } from '../core/stats.ts';
 import { el, STAT_LOCKED_NOTE, statHint } from './hud.ts';
 import { holdable, holdRepeat } from './hold.ts';
 import { effectSteps } from './statlines.ts';
-import { ART_URLS, GUNNER_LOOKS, lookOf, type ArtId, type GunId } from './sprites.ts';
+import { ART_URLS, avatarOf, type ArtId } from './sprites.ts';
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as squadGear). */
 const heldGun = (d: RosterDefender): Held =>
   isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
-
-/** `d`'s avatar: their own look (ID-074) holding their gun, as the fight draws them. */
-export function avatarOf(d: RosterDefender): ArtId {
-  const look = GUNNER_LOOKS[lookOf(d.id)]!;
-  return (look[baseOf(heldGun(d)) as GunId] ?? look.rifle).idle;
-}
 
 /** "3 points", "1 point". */
 const pointsText = (n: number): string => `${n} point${n === 1 ? '' : 's'}`;
