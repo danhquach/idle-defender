@@ -561,7 +561,7 @@ describe('card text (ID-022)', () => {
     expect(cardText({ kind: 'upgrade', id: 'extended-mags' }, s).kind).toBe('Rare stat');
     expect(cardText({ kind: 'upgrade', id: 'sharpshooter' }, s).kind).toBe('Common stat');
     const recruit = cardText({ kind: 'recruit', defender: s.bench[0]! }, s);
-    expect(recruit.kind).toBeUndefined();
+    expect(recruit.kind).toBe('Recruit');
     expect(recruit.synergy).toBeUndefined();
   });
 

@@ -64,6 +64,15 @@
   --color-epic: #9a5ad6;
   --color-epic-text: #c19aec;
   --color-recruit: #4f6f94;
+  /* Offer card plates and the epic shine (ID-103): rarity light behind the icon. */
+  --color-rare-glow: rgb(63 127 208 / 30%);
+  --color-epic-glow: rgb(154 90 214 / 38%);
+  /* Stronger on a phone, where the plate is small (ID-103). */
+  --color-rare-glow-strong: rgb(63 127 208 / 48%);
+  --color-epic-glow-strong: rgb(154 90 214 / 56%);
+  --color-epic-shine: rgb(255 240 255 / 14%);
+  /* A recruit's offer card: olive drab, apart from every rarity's colour. */
+  --color-recruit-card: #7a8648;
 
   /* Weapon rarity (ID-067), each AA on the panel and on a surface. */
   --rarity-rusty: #c98a6a;
@@ -274,32 +283,119 @@ body {
   margin-top: var(--space-12);
 }
 
+/* ID-103: each card is dealt in, one after another; it lifts on hover or focus. */
 .hud-card {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
   width: 170px;
   padding: var(--space-12);
-  border: 1px solid var(--color-border-strong);
+  border: 2px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    transform 120ms ease-out,
+    box-shadow 120ms ease-out,
+    border-color 120ms ease-out,
+    opacity 150ms ease-out;
+  animation: hud-card-deal 200ms ease-out backwards;
 }
 
-.hud-card:hover,
+.hud-card-row > .hud-card:nth-child(2) {
+  animation-delay: 70ms;
+}
+
+.hud-card-row > .hud-card:nth-child(3) {
+  animation-delay: 140ms;
+}
+
+@keyframes hud-card-deal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes hud-card-deal-in-place {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
 .hud-card:focus-visible {
   border-color: var(--color-accent);
   background: var(--color-surface-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 18px var(--color-shadow);
+}
+
+/* Focus keeps an epic card's inner glow. */
+.hud-card-epic:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--color-epic-glow),
+    0 8px 18px var(--color-shadow);
+}
+
+/* Only where a pointer really hovers: a tap on a touch screen leaves no card lifted. */
+@media (hover: hover) {
+  .hud-card:hover:enabled {
+    border-color: var(--color-accent);
+    background: var(--color-surface-hover);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 18px var(--color-shadow);
+  }
+
+  .hud-card-epic:hover:enabled {
+    box-shadow:
+      inset 0 0 0 1px var(--color-epic-glow),
+      0 8px 18px var(--color-shadow);
+  }
+}
+
+.hud-card:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* The pick (ID-103): the chosen card flashes, the others fade, then the panel closes
+   (PICK_MS in hud.ts); the panel takes no input meanwhile. */
+.hud-cards-picking {
+  pointer-events: none;
+}
+
+.hud-cards-picking .hud-card:not(.hud-card-picked) {
+  opacity: 0;
+}
+
+.hud-card-picked {
+  border-color: var(--color-accent-hover);
+  animation: hud-card-pick 240ms ease-out;
+}
+
+@keyframes hud-card-pick {
+  40% {
+    transform: scale(1.06);
+    filter: brightness(1.4);
+  }
+
+  100% {
+    transform: scale(1.02);
+  }
 }
 
 .hud-card-recruit {
-  border-color: var(--color-recruit);
+  border-color: var(--color-recruit-card);
 }
 
-/* Card rarity (design §8): common grey, rare blue, epic purple. */
+/* Card rarity (design §8): common grey, rare blue, epic purple, as the frame and the
+   light on the icon's plate; the kind line names the rarity too, for colour blindness. */
 .hud-card-common {
   border-color: var(--color-common);
 }
@@ -310,6 +406,87 @@ body {
 
 .hud-card-epic {
   border-color: var(--color-epic);
+  box-shadow: inset 0 0 0 1px var(--color-epic-glow);
+}
+
+.hud-card-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 76px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.hud-card-rare .hud-card-art {
+  background: radial-gradient(circle, var(--color-rare-glow), transparent 70%)
+    var(--color-surface-sunken);
+}
+
+.hud-card-epic .hud-card-art {
+  background: radial-gradient(circle, var(--color-epic-glow), transparent 72%)
+    var(--color-surface-sunken);
+}
+
+.hud-card-icon {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+/* A recruit's avatar is a tall, thin figure: it fills the plate's height instead. */
+.hud-card-recruit .hud-card-icon {
+  width: 100%;
+  height: 100%;
+}
+
+/* An epic card's slow shine: a soft band crosses its frame every few seconds. */
+.hud-card-epic::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    var(--color-epic-shine) 50%,
+    transparent 65%
+  );
+  transform: translateX(-100%);
+  animation: hud-card-shine 3.6s ease-in-out 600ms infinite;
+  pointer-events: none;
+  /* Brightens what it crosses, so the text under it never washes out. */
+  mix-blend-mode: screen;
+}
+
+@keyframes hud-card-shine {
+  30%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* The number key sits in the plate's corner, out of the text's way. */
+.hud-card-has-art .hud-card-key {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-6);
+  z-index: 1;
+}
+
+/* On a wide screen the cards grow, so a choice that holds the fight reads easily. */
+@media (min-width: 1200px) {
+  .hud-card {
+    width: 210px;
+  }
+
+  .hud-card-art {
+    height: 92px;
+  }
+
+  .hud-card-icon {
+    width: 80px;
+    height: 80px;
+  }
 }
 
 .hud-card-kind {
@@ -360,7 +537,7 @@ body {
 
 .hud-card-change {
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--color-accent-hover);
 }
 
 .hud-card-swap {
@@ -2755,6 +2932,7 @@ body {
     background: var(--color-panel-solid);
     width: calc(100vw - 2 * var(--space-16));
     max-height: calc(100vh - 2 * var(--space-16));
+    overflow-x: hidden;
     overflow-y: auto;
     padding: var(--space-16);
   }
@@ -2765,5 +2943,88 @@ body {
 
   .hud-card {
     width: auto;
+  }
+
+  /* Dealt in place: rising from below would grow the scrolling panel for a moment. */
+  .hud-card:not(.hud-card-picked) {
+    animation-name: hud-card-deal-in-place;
+  }
+
+  /* A short lift and shadow, so the scrolling panel never clips them (ID-103). */
+  .hud-card:focus-visible {
+    box-shadow: 0 2px 8px var(--color-shadow);
+  }
+
+  .hud-card-epic:focus-visible {
+    box-shadow:
+      inset 0 0 0 1px var(--color-epic-glow),
+      0 2px 8px var(--color-shadow);
+  }
+
+  /* Stacked, a card's icon sits at its left (ID-103), so three cards still fit the height. */
+  .hud-card-has-art {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    column-gap: var(--space-12);
+    row-gap: 0;
+    align-content: start;
+  }
+
+  .hud-card-has-art > * {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  /* Spaced by margin, not row gaps, so the plate's spare rows add no height. */
+  .hud-card-has-art > .hud-card-title ~ * {
+    margin-top: var(--space-6);
+  }
+
+  /* Placed by the card's corner, not by a grid column. */
+  .hud-card-has-art > .hud-card-key {
+    grid-column: auto;
+  }
+
+  .hud-card-has-art > .hud-card-art {
+    grid-column: 1;
+    grid-row: 1 / span 6;
+    align-self: start;
+    height: 64px;
+  }
+
+  .hud-card-has-art .hud-card-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .hud-card-rare .hud-card-art {
+    background: radial-gradient(circle, var(--color-rare-glow-strong), transparent 80%)
+      var(--color-surface-sunken);
+  }
+
+  .hud-card-epic .hud-card-art {
+    background: radial-gradient(circle, var(--color-epic-glow-strong), transparent 80%)
+      var(--color-surface-sunken);
+  }
+}
+
+/* The player's system asks for less motion: no deal, lift, flash or shine (ID-103); the
+   icons and frames stay, and a pick closes the offer at once (hud.ts). */
+@media (prefers-reduced-motion: reduce) {
+  .hud-card,
+  .hud-card:not(.hud-card-picked),
+  .hud-card-picked,
+  .hud-card-epic::after {
+    animation: none;
+    transition: none;
+  }
+
+  .hud-card:hover:enabled,
+  .hud-card:focus-visible {
+    transform: none;
+  }
+
+  .hud-card-epic::after {
+    display: none;
   }
 }
