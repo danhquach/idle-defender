@@ -636,7 +636,7 @@ const HEAVY_KINDS: readonly EnemyKind[] = ['brute', 'swollen', 'horror'];
  * times in s.
  */
 export const CARD = {
-  /** Hollow Points (a research card, ID-035): squad damage factor. */
+  /** Heavy Rounds (id hollow-points; a research card, ID-035, renamed in ID-103): squad damage factor. */
   hollowPoints: 1.4,
   /**
    * The repeatable cards' step a pick (ID-097), added up then multiplied once with the
@@ -819,7 +819,7 @@ export const RESEARCH: Readonly<Record<ResearchId, ResearchNode>> = {
   'incendiary-traps': node('Incendiary traps', 'traps', 2, 'glue-traps', 60, 60),
   'corrosive-traps': node('Corrosive traps', 'traps', 2, 'glue-traps', 100, 90),
   'paralyzing-traps': node('Paralyzing traps', 'traps', 2, 'glue-traps', 150, 120),
-  'hollow-points': node('Hollow Points card', 'cards', 1, null, 25, 45),
+  'hollow-points': node('Heavy Rounds card', 'cards', 1, null, 25, 45),
   'field-repairs': node('Field Repairs card', 'cards', 2, null, 80, 90),
   'more-cars': node('More cars', 'camp', 2, null, 150, 120),
 };

@@ -19,7 +19,8 @@ art-concepts/*.jpg in place, so none of it is committed.
 
 Manifest asset keys (unknown keys stop the build):
 
-  id*, kind* ("sprite", "texture" or "picture"), model*, seed*, size*, prompt*,
+  id*, kind* ("sprite", "texture" or "picture"), model*, seed* (not with outside),
+  size*, prompt*,
   ref (id of the generation it edits, or a list of ids it combines: the
   first is the subject, the others what it takes on, ID-046), photo (a public
   domain photograph the generation was drawn from, credited in
@@ -48,13 +49,18 @@ Manifest asset keys (unknown keys stop the build):
   overlay (ID-103: {"part": id, "at": [x, y], "size": s, "turn": degrees}: that
   part, keyed and turned clockwise by `turn` (optional, default 0), is pasted on
   top of this sprite after it is trimmed, centred at x, y (shares of its width and
-  height) with its longer side s of this sprite's longer side, so every card icon
-  with a bullet shows the one approved bullet), draw (ID-103: {"shapes": [{"points":
+  height, -1..2: a part may sit beside the sprite, which grows to fit) with its
+  longer side s of this sprite's longer side, so every card icon
+  with a bullet shows the one approved bullet; or a list of them, pasted in order,
+  each placed by the trimmed sprite alone), draw (ID-103: {"shapes": [{"points":
   [[x, y], ...], "fill": "#rrggbb"}, ...], "outline": px}: a sprite with no
   generation, drawn by the build as those polygons in order on a DRAW_PX canvas,
   each filled flat with a dark outline, every shape kept however small, for a
   plain shape the model would not draw as asked; besides id, kind and draw it takes
-  only overlay and group, never a generation's keys such as model or prompt).
+  only overlay and group, never a generation's keys such as model or prompt),
+  outside (ID-103: true on a sprite the project owner generated outside this build,
+  in the app `model` names (a row of the art-credits table), from `prompt`; it has
+  no seed, ref, pose or photo, and its source is kept in art-src/gen like any other).
 
 A sprite has its magenta background keyed out to transparency, only its
 biggest shape kept (detached parts under KEEP of it are dropped), and is
@@ -86,7 +92,7 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
     "palette", "edge", "part", "style", "photo", "white", "pose", "frames", "overlay",
-    "draw",
+    "draw", "outside",
 }
 POSES = ROOT / "art-src" / "poses"
 # The column each puppet family stands on in its 512 px canvas (tools/art/puppets.py:
@@ -274,23 +280,31 @@ def drawn(asset: dict) -> Image.Image:
 
 
 def overlaid(
-    img: Image.Image, part: Image.Image, at: list[float], size: float, turn: float = 0
+    img: Image.Image, pastes: list[tuple[Image.Image, list[float], float, float]]
 ) -> Image.Image:
-    """`part` pasted over trimmed sprite `img` (see `overlay`), the canvas grown if it pokes out."""
-    if turn:
-        # Turned premultiplied, so its see-through edge picks up no dark fringe.
-        part = part.convert("RGBa").rotate(-turn, Image.Resampling.BICUBIC, expand=True)
-        part = part.convert("RGBA")
-        part = part.crop(part.getbbox())
-    part = scaled(part, size * max(img.size) / max(part.size))
-    x = round(at[0] * img.width - part.width / 2)
-    y = round(at[1] * img.height - part.height / 2)
-    left, top = max(0, -x), max(0, -y)
-    w = max(img.width, x + part.width) + left
-    h = max(img.height, y + part.height) + top
+    """
+    Each (part, at, size, turn) pasted in order over trimmed sprite `img` (see `overlay`),
+    every one placed and sized by `img` alone, the canvas grown if any pokes out.
+    """
+    placed = []
+    for part, at, size, turn in pastes:
+        if turn:
+            # Turned premultiplied, so its see-through edge picks up no dark fringe.
+            part = part.convert("RGBa").rotate(-turn, Image.Resampling.BICUBIC, expand=True)
+            part = part.convert("RGBA")
+            part = part.crop(part.getbbox())
+        part = scaled(part, size * max(img.size) / max(part.size))
+        x = round(at[0] * img.width - part.width / 2)
+        y = round(at[1] * img.height - part.height / 2)
+        placed.append((part, x, y))
+    left = max([0] + [-x for _, x, _ in placed])
+    top = max([0] + [-y for _, _, y in placed])
+    w = max([img.width] + [x + p.width for p, x, _ in placed]) + left
+    h = max([img.height] + [y + p.height for p, _, y in placed]) + top
     out = Image.new("RGBA", (w, h))
     out.alpha_composite(img, (left, top))
-    out.alpha_composite(part, (x + left, y + top))
+    for part, x, y in placed:
+        out.alpha_composite(part, (x + left, y + top))
     return out
 
 
@@ -410,9 +424,14 @@ def check(
     unknown = set(asset) - KEYS
     name = asset.get("id", "?")
     is_drawn = "draw" in asset
-    missing = (DRAWN_REQUIRED if is_drawn else REQUIRED) - set(asset)
+    outside = "outside" in asset
+    # Art made outside the build has no seed.
+    required = DRAWN_REQUIRED if is_drawn else REQUIRED - {"seed"} if outside else REQUIRED
+    missing = required - set(asset)
     if is_drawn:
         unknown |= set(asset) - DRAWN_KEYS
+    if outside:
+        unknown |= set(asset) & {"seed", "ref", "pose", "photo", "draw", "frames", "part"}
     if unknown or missing:
         sys.exit(f"{name}: unknown keys {sorted(unknown)}, missing {sorted(missing)}")
     if is_drawn:
@@ -421,6 +440,8 @@ def check(
         sys.exit(f"{name}: model {asset['model']} is not in the art-credits allow-list")
     if asset["kind"] not in ("sprite", "texture", "picture"):
         sys.exit(f"{name}: kind must be sprite, texture or picture")
+    if outside and (asset["outside"] is not True or asset["kind"] != "sprite"):
+        sys.exit(f"{name}: outside is true, on a sprite")
     if not is_drawn and asset.get("style", asset["kind"]) not in styles:
         sys.exit(f"{name}: no style {asset.get('style', asset['kind'])} in the manifest")
     if "part" in asset and (asset["part"] is not True or asset["kind"] != "sprite"):
@@ -472,27 +493,31 @@ def check(
             "with no group or part"
         )
     over = asset.get("overlay")
-    if over is not None:
+    # One overlay or a non-empty list of them; anything else (null, [], [5]) is refused.
+    overs = over if isinstance(over, list) and over else [over]
+    for over in overs if "overlay" in asset else []:
         at = over.get("at") if isinstance(over, dict) else None
         size = over.get("size") if isinstance(over, dict) else None
         turn = over.get("turn", 0) if isinstance(over, dict) else None
         if not (
-            asset["kind"] == "sprite"
+            isinstance(over, dict)
+            and asset["kind"] == "sprite"
             and not asset.get("part")
             and "frames" not in asset
             and {"part", "at", "size"} <= set(over) <= {"part", "at", "size", "turn"}
             and number(turn)
             and -360 <= turn <= 360
+            and isinstance(over["part"], str)
             and over["part"] in parts
             and isinstance(at, list)
             and len(at) == 2
-            and all(number(v) and 0 <= v <= 1 for v in at)
+            and all(number(v) and -1 <= v <= 2 for v in at)
             and number(size)
             and 0 < size <= 1
         ):
             sys.exit(
-                f"{name}: overlay is {{part, at: [x, y] in 0..1, size in (0, 1], turn?}}, "
-                "naming a part, on a sprite that is not a part or a frame"
+                f"{name}: overlay is {{part, at: [x, y] in -1..2, size in (0, 1], turn?}} "
+                "or a list of them, naming a part, on a sprite that is not a part or a frame"
             )
 
 
@@ -536,10 +561,16 @@ def main(only: list[str]) -> None:
             built[asset["id"]] = drawn(asset) if "draw" in asset else prepare(src, asset)
             over = asset.get("overlay")
             if over:
-                part = prepare(sources[over["part"]], by_id[over["part"]])
-                built[asset["id"]] = overlaid(
-                    built[asset["id"]], part, over["at"], over["size"], over.get("turn", 0)
-                )
+                pastes = [
+                    (
+                        prepare(sources[o["part"]], by_id[o["part"]]),
+                        o["at"],
+                        o["size"],
+                        o.get("turn", 0),
+                    )
+                    for o in (over if isinstance(over, list) else [over])
+                ]
+                built[asset["id"]] = overlaid(built[asset["id"]], pastes)
             continue
         if asset["kind"] == "picture":
             built[asset["id"]] = picture(src)

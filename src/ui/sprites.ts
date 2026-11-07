@@ -75,6 +75,18 @@ export const ART_IDS = [
   'card-shock-rounds',
   'card-piercing-rounds',
   'card-ricochet',
+  'card-rapid-fire',
+  'card-long-sight',
+  'card-patch-up',
+  'card-speed-loaders',
+  'card-extended-mags',
+  'card-concussion-rounds',
+  'card-frag-grenades',
+  'card-barbed-wire',
+  'card-recharge',
+  'card-power-surge',
+  'card-hollow-points',
+  'card-field-repairs',
   'weapon-pistol',
   'weapon-smg',
   'weapon-rifle',
@@ -280,17 +292,26 @@ export const SHOP_ICON: Readonly<Record<ShopItem, ArtId>> = {
   patch: 'icon-patch',
   fix: 'icon-fix',
 };
-/**
- * Each upgrade card's icon on its offer card (ID-103). Every card in the pool gets one;
- * the cards drawn so far are listed, and the rest follow in the same ticket.
- */
-export const CARD_ICON: Readonly<Partial<Record<UpgradeId, ArtId>>> = {
+/** Each upgrade card's icon on its offer card (ID-103): every card in the pool has one. */
+export const CARD_ICON: Readonly<Record<UpgradeId, ArtId>> = {
   'incendiary-rounds': 'card-incendiary-rounds',
   sharpshooter: 'card-sharpshooter',
   reinforce: 'card-reinforce',
   'shock-rounds': 'card-shock-rounds',
   'piercing-rounds': 'card-piercing-rounds',
   ricochet: 'card-ricochet',
+  'rapid-fire': 'card-rapid-fire',
+  'long-sight': 'card-long-sight',
+  'patch-up': 'card-patch-up',
+  'speed-loaders': 'card-speed-loaders',
+  'extended-mags': 'card-extended-mags',
+  'concussion-rounds': 'card-concussion-rounds',
+  'frag-grenades': 'card-frag-grenades',
+  'barbed-wire': 'card-barbed-wire',
+  recharge: 'card-recharge',
+  'power-surge': 'card-power-surge',
+  'hollow-points': 'card-hollow-points',
+  'field-repairs': 'card-field-repairs',
 };
 /** Each skill's icon on its button (design §15, ID-041). */
 export const SKILL_ICON: Readonly<Record<SkillId, ArtId>> = {

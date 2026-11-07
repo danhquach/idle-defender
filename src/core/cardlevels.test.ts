@@ -268,7 +268,7 @@ describe('repeatable cards (ID-097)', () => {
     expect(picked(quiet(), 'sharpshooter', 5).mods.damage).toBeCloseTo(1.5, 9);
   });
 
-  it('the summed steps multiply once with other sources (Hollow Points)', () => {
+  it('the summed steps multiply once with other sources (Heavy Rounds)', () => {
     let s = quiet();
     s.research = ['hollow-points'];
     s = picked(s, 'sharpshooter', 2);
