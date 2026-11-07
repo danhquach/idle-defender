@@ -39,7 +39,7 @@ import {
   upgradeLab,
   type QueueId,
 } from './research.ts';
-import { researchNow, setup } from './testing.ts';
+import { BROOD_BOSS, researchNow, setup } from './testing.ts';
 
 const MIN = 60_000;
 const T = 1_700_000_000_000;
@@ -385,7 +385,7 @@ describe('boss horde unlocks (AC5)', () => {
   const bossWin = (s: number): HordeState => ({
     ...newHorde(1, { ...setup(), hordeNumber: 10 }),
     outcome: 'won',
-    boss: 'brood',
+    bosses: BROOD_BOSS,
     rng: { s },
   });
 
@@ -408,7 +408,7 @@ describe('boss horde unlocks (AC5)', () => {
     const all = { ...newGame(), hordeNumber: 10 };
     for (const id of PERK_IDS) all.perkLevels[id] = 1;
     expect(hordeBossReward(all, bossWin(1))).toEqual({ genes: BOSS_PERK_GENES });
-    expect(hordeBossReward(newGame(), { ...bossWin(1), boss: null })).toBeNull();
+    expect(hordeBossReward(newGame(), { ...bossWin(1), bosses: [] })).toBeNull();
     expect(hordeBossReward(newGame(), { ...bossWin(1), outcome: 'lost' })).toBeNull();
   });
 
@@ -460,7 +460,7 @@ describe('Genes against the tree (AC7)', () => {
         hordeNumber: h,
         outcome: 'won',
         mutantKills: kills ? Math.floor(mutants(h)) : 0,
-        boss: h % HORROR.every === 0 ? 'brood' : null,
+        bosses: h % HORROR.every === 0 ? BROOD_BOSS : [],
       });
     }
     return genes;

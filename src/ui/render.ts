@@ -1,7 +1,9 @@
 // The horde view (design §15): generated sprites and tiling textures (sprites.ts) on
 // the shared projection and depth sort. Canvas 2D, no rendering library.
 import {
+  BOSS_SKILL,
   COLUMNS,
+  ELITE,
   ENEMIES,
   ENEMY_RADIUS,
   FIELD,
@@ -20,13 +22,18 @@ import {
   TRAP_STRIP,
   TRAP_DURABILITY,
   WALL,
+  type BossSkill,
   type EnemyKind,
   type Tier,
 } from '../core/data.ts';
 import {
   reloadIn,
   barbedWire,
+  plated,
+  radiusOf,
+  roared,
   shocked,
+  windingUp,
   took,
   turretState,
   type Bullet,
@@ -37,7 +44,9 @@ import {
   type Grenade,
   type Post,
   type Burst,
+  type Enemy,
   type Pop,
+  type Slab,
   type Spit,
   type Trap,
   type Turret,
@@ -515,7 +524,7 @@ export type Scene = Pick<
   Partial<
     Pick<
       HordeState,
-      'wave' | 'freeWave' | 'acc' | 'taken' | 'cardLevels' | 'barrierAt' | 'pops' | 'wire'
+      'wave' | 'freeWave' | 'acc' | 'taken' | 'cardLevels' | 'barrierAt' | 'pops' | 'wire' | 'slabs'
     >
   > & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
@@ -2165,8 +2174,8 @@ function drawBurst(ctx: CanvasRenderingContext2D, k: Burst, time: number, cam: C
  * Where an enemy's HP bar sits: just over its sprite's top (its frames share one height),
  * so it never covers the head.
  */
-function enemyBarAt(art: Art, kind: EnemyKind, x: number, y: number) {
-  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
+function enemyBarAt(art: Art, kind: EnemyKind, x: number, y: number, scale = 1) {
+  const size = (scale * ENEMIES[kind].radius) / ENEMY_RADIUS;
   const top = (STAND.enemy * size * art[ENEMY_ART[kind].walk[1]].height) / ART_PX;
   return { x, y, z: top / HEIGHT_SCALE + HP_BAR.gap / 2 };
 }
@@ -2905,6 +2914,177 @@ function drawBurn(
   ctx.globalAlpha = 1;
 }
 
+/** Each timed boss skill's wind-up glow (ID-099): read at a glance, apart from fire's orange. */
+const WIND_COLOUR: Readonly<Record<BossSkill, string>> = {
+  brood: '#8fd14f',
+  charge: '#e8473c',
+  roar: '#ffb020',
+  slab: '#dfe6ee',
+  regen: '#8fd14f',
+  plates: '#dfe6ee',
+};
+/** Boss cue looks (ID-099): px at zoom 1; `lean` radians back, `swell` share taller at full wind-up. */
+const BOSS_LOOK = {
+  lean: 0.14,
+  swell: 0.1,
+  roar: 'rgba(255, 176, 32, 0.55)',
+  plate: '#4c535a',
+  plateLight: '#b8c0c7',
+  plateEdge: '#1e2226',
+  slab: '#8f897e',
+  slabEdge: '#3f3a33',
+  slabSize: { w: 36, h: 24 },
+  slabArc: 120,
+  dust: 'rgba(185, 178, 166, 0.6)',
+} as const;
+
+/** The skill `e` winds up and how far along, 0…1 (ID-099); null when none. */
+function windCue(
+  scene: Pick<HordeState, 'time'>,
+  e: Enemy,
+): { skill: BossSkill; k: number } | null {
+  const skill = windingUp(scene, e);
+  const at = skill === null ? undefined : e.horror?.next[skill];
+  if (skill === null || at === undefined) return null;
+  return { skill, k: Math.min(1, Math.max(0, 1 - (at - scene.time) / BOSS_SKILL.windUp)) };
+}
+
+/** A boss's body (ID-099): a mini-boss drawn `ELITE.size` big; a wind-up leans it back and swells it. */
+function bossPose(pose: Readonly<Pose>, e: Enemy, wind: { k: number } | null): Readonly<Pose> {
+  const big = e.elite ? ELITE.size : 1;
+  const k = wind?.k ?? 0;
+  if (big === 1 && k === 0) return pose;
+  return {
+    ...pose,
+    rot: pose.rot + BOSS_LOOK.lean * k,
+    sx: pose.sx * big * (1 + (BOSS_LOOK.swell / 2) * k),
+    sy: pose.sy * big * (1 + BOSS_LOOK.swell * k),
+  };
+}
+
+/** A wind-up's glow (ID-099): the skill's colour swelling round the body as it nears. */
+function drawWindUp(
+  ctx: CanvasRenderingContext2D,
+  wind: { skill: BossSkill; k: number },
+  feet: Point,
+  size: number,
+  clock: number,
+  cam: Camera,
+): void {
+  const r = ENEMY.shadow * size * (1.6 + 0.8 * wind.k) * cam.zoom;
+  const cy = feet.sy - r * 1.3;
+  const pulse = 0.85 + 0.15 * Math.sin(clock * 18);
+  const glow = ctx.createRadialGradient(feet.sx, cy, 0, feet.sx, cy, r);
+  glow.addColorStop(0, withAlpha(WIND_COLOUR[wind.skill], (0.35 + 0.55 * wind.k) * pulse));
+  glow.addColorStop(1, withAlpha(WIND_COLOUR[wind.skill], 0));
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(feet.sx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** A roared enemy (ID-099): an amber ring on the ground under it. */
+function drawRoared(ctx: CanvasRenderingContext2D, e: Enemy, cam: Camera): void {
+  groundCircle(ctx, e.x, e.y, radiusOf(e) * 1.3, cam);
+  ctx.strokeStyle = BOSS_LOOK.roar;
+  ctx.lineWidth = Math.max(1.5, 2.5 * cam.zoom);
+  ctx.stroke();
+}
+
+/**
+ * Armour plates (ID-099) until they break: riveted gunmetal shingles over its back and
+ * shoulder and one on its chest. `PLATES`: each plate's centre (shares of the sprite's
+ * width from its middle, of its height from the feet), size and tilt.
+ */
+const PLATES: readonly { x: number; y: number; w: number; h: number; rot: number }[] = [
+  { x: 0.0, y: 0.8, w: 0.26, h: 0.14, rot: -0.25 },
+  { x: 0.12, y: 0.76, w: 0.22, h: 0.14, rot: 0.35 },
+  { x: 0.16, y: 0.6, w: 0.13, h: 0.17, rot: 0.15 },
+  { x: -0.1, y: 0.58, w: 0.18, h: 0.15, rot: -0.1 },
+];
+function drawPlates(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  kind: EnemyKind,
+  feet: Point,
+  pose: Readonly<Pose>,
+  cam: Camera,
+): void {
+  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
+  const img = art[ENEMY_ART[kind].walk[1]];
+  const h = ((STAND.enemy * size * img.height) / ART_PX) * cam.zoom;
+  const w = (img.width / img.height) * h;
+  ctx.save();
+  ctx.translate(feet.sx + pose.dx * cam.zoom, feet.sy - pose.lift * cam.zoom);
+  ctx.rotate(pose.rot);
+  ctx.scale(pose.sx, pose.sy);
+  ctx.globalAlpha *= pose.alpha;
+  const line = Math.max(1, 1.5 * cam.zoom);
+  for (const p of PLATES) {
+    const pw = p.w * w;
+    const ph = p.h * h;
+    ctx.save();
+    ctx.translate(p.x * w, -p.y * h);
+    ctx.rotate(p.rot);
+    const r = Math.min(pw, ph) * 0.3;
+    const metal = ctx.createLinearGradient(0, -ph / 2, 0, ph / 2);
+    metal.addColorStop(0, BOSS_LOOK.plateLight);
+    metal.addColorStop(0.35, BOSS_LOOK.plate);
+    metal.addColorStop(1, BOSS_LOOK.plateEdge);
+    ctx.fillStyle = metal;
+    ctx.strokeStyle = BOSS_LOOK.plateEdge;
+    ctx.lineWidth = line;
+    ctx.beginPath();
+    ctx.roundRect(-pw / 2, -ph / 2, pw, ph, r);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = BOSS_LOOK.plateLight;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(side * pw * 0.32, 0, Math.max(0.8, line * 0.7), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/** A boss's slab (ID-099): a concrete block arcing to where it lands, then a dust cloud there. */
+function drawSlab(ctx: CanvasRenderingContext2D, k: Slab, time: number, cam: Camera): void {
+  if (!k.landed) {
+    const t = Math.min(1, Math.max(0, (time - k.at) / (k.lands - k.at)));
+    const x = k.fromX + (k.x - k.fromX) * t;
+    const y = k.fromY + (k.y - k.fromY) * t;
+    const shadow = project({ x, y }, cam);
+    ctx.fillStyle = COLOR.shadow;
+    ctx.beginPath();
+    ctx.ellipse(shadow.sx, shadow.sy, 12 * cam.zoom, 5 * cam.zoom, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const c = project({ x, y, z: ENEMY.z + 4 * BOSS_LOOK.slabArc * t * (1 - t) }, cam);
+    const { w, h } = BOSS_LOOK.slabSize;
+    ctx.save();
+    ctx.translate(c.sx, c.sy);
+    ctx.rotate(-t * Math.PI * 1.5);
+    ctx.fillStyle = BOSS_LOOK.slab;
+    ctx.strokeStyle = BOSS_LOOK.slabEdge;
+    ctx.lineWidth = Math.max(1.5, 3 * cam.zoom);
+    ctx.fillRect((-w / 2) * cam.zoom, (-h / 2) * cam.zoom, w * cam.zoom, h * cam.zoom);
+    ctx.strokeRect((-w / 2) * cam.zoom, (-h / 2) * cam.zoom, w * cam.zoom, h * cam.zoom);
+    ctx.restore();
+    return;
+  }
+  const age = (time - k.lands) / BOSS_SKILL.slab.flight;
+  if (age < 0 || age >= 1) return;
+  groundCircle(ctx, k.x, k.y, 20 + 40 * age, cam);
+  ctx.globalAlpha = 1 - age;
+  ctx.fillStyle = BOSS_LOOK.dust;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
 /** A Spewer's glob arcing to where it lands, then a splash there (design §9, ID-023). */
 function drawSpit(ctx: CanvasRenderingContext2D, k: Spit, time: number, cam: Camera): void {
   const age = (time - k.at) / SPEWER.splash;
@@ -3075,8 +3255,9 @@ export function drawScene(
       x: e.x,
       draw: () => {
         const ground = project({ x: e.x, y: e.y }, cam);
-        const size = ENEMIES[e.kind].radius / ENEMY_RADIUS;
+        const size = radiusOf(e) / ENEMY_RADIUS;
         drawShadow(ctx, ground, 1, cam, size);
+        if (roared(scene, e)) drawRoared(ctx, e, cam);
         if (e.id === scene.focusId) {
           const r = ENEMY.shadow * 1.8 * cam.zoom;
           ctx.strokeStyle = COLOR.focus;
@@ -3090,12 +3271,15 @@ export function drawScene(
         const frame = anim && acts ? anim.shownFrame(enemyFrame(e, scene.time, acts)) : 1;
         // Shock Rounds (ID-097): a paralysed enemy twitches, a small spark on its body.
         const zap = shocked(scene, e);
-        const body = zap ? twitch(pose, e.id, flameClock) : pose;
+        const wind = windCue(scene, e);
+        const body = bossPose(zap ? twitch(pose, e.id, flameClock) : pose, e, wind);
+        if (wind) drawWindUp(ctx, wind, ground, size, flameClock, cam);
         drawEnemy(ctx, art, e.kind, frame, ground, cam, body);
+        if (plated(e)) drawPlates(ctx, art, e.kind, ground, body, cam);
         const heat = burnHeat(scene.time, e, anim?.litAt(e.id) ?? -Infinity);
         drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
         if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam);
-        const at = enemyBarAt(art, e.kind, e.x, e.y);
+        const at = enemyBarAt(art, e.kind, e.x, e.y, e.elite ? ELITE.size : 1);
         drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
       },
     });
@@ -3111,8 +3295,13 @@ export function drawScene(
       draw: () => {
         const ground = project({ x: e.x, y: e.y }, cam);
         const pose = anim ? anim.shown(fallPose(scene.time - c.at)) : STILL;
-        drawShadow(ctx, ground, pose.alpha, cam, ENEMIES[e.kind].radius / ENEMY_RADIUS);
-        drawEnemy(ctx, art, e.kind, 1, ground, cam, pose);
+        drawShadow(ctx, ground, pose.alpha, cam, radiusOf(e) / ENEMY_RADIUS);
+        const big = e.elite ? ELITE.size : 1;
+        drawEnemy(ctx, art, e.kind, 1, ground, cam, {
+          ...pose,
+          sx: pose.sx * big,
+          sy: pose.sy * big,
+        });
         // A burning body keeps burning as it falls, fading with it.
         const heat = burnHeat(scene.time, e, c.litAt);
         drawBurn(ctx, art, e.id, e.kind, ground, pose, heat, flameClock, cam);
@@ -3158,6 +3347,7 @@ export function drawScene(
   for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
   for (const k of scene.spits) drawSpit(ctx, k, scene.time, cam);
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
+  for (const k of scene.slabs ?? []) drawSlab(ctx, k, scene.time, cam);
   for (const g of scene.grenades) drawGrenade(ctx, art, g, scene.time, cam);
 
   // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.

@@ -8,21 +8,12 @@ import {
   START_BASE,
   STEP,
   WEAPONS,
-  type HorrorAbility,
   type Stock,
   stockOf,
 } from './data.ts';
-import {
-  hitDamage,
-  newHorde,
-  standing,
-  tick,
-  type Enemy,
-  type HorrorClock,
-  type HordeState,
-} from './horde.ts';
+import { hitDamage, newHorde, standing, tick, type HordeState } from './horde.ts';
 import { loadoutFrom } from './loadout.ts';
-import { enemy, setup } from './testing.ts';
+import { horror, setup } from './testing.ts';
 import { enemyHp, horrorAbility, kindFor, waveCount, waveSize } from './waves.ts';
 
 const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
@@ -41,25 +32,6 @@ function run(s: HordeState, seconds: number): HordeState {
   let t = s;
   for (let i = 0; i < Math.round(seconds / STEP); i++) t = tick(t, STEP);
   return t;
-}
-/** Adds a 1000 HP Mutated Horror far out in the field, its clock as given. */
-function horror(
-  s: HordeState,
-  ability: HorrorAbility,
-  e: Partial<Enemy> = {},
-  clock: Partial<HorrorClock> = {},
-): Enemy {
-  const made = enemy(s, { kind: 'horror', x: 1400, y: 400, hp: 1000, maxHp: 1000, ...e });
-  made.horror = {
-    ability,
-    nextAt: 1,
-    chargeUntil: 0,
-    charged: false,
-    hitAt: 0,
-    seenHp: made.hp,
-    ...clock,
-  };
-  return made;
 }
 const one = (s: HordeState, id: number) => s.enemies.find((e) => e.id === id);
 /** Horde `n` at the start of its last wave. */
@@ -83,8 +55,10 @@ describe('boss hordes', () => {
       'regen',
     ]);
     expect(() => horrorAbility(0)).toThrow(RangeError);
-    expect(newHorde(1, { ...setup(), hordeNumber: 20 }).boss).toBe('charge');
-    expect(newHorde(1, { ...setup(), hordeNumber: 9 }).boss).toBeNull();
+    expect(newHorde(1, { ...setup(), hordeNumber: 20 }).bosses.map((b) => b.skills)).toEqual([
+      ['charge'],
+    ]);
+    expect(newHorde(1, { ...setup(), hordeNumber: 9 }).bosses).toEqual([]);
   });
 
   it('the Horror comes with the first spawn of the last wave, once, at that wave’s HP', () => {
@@ -97,8 +71,8 @@ describe('boss hordes', () => {
     const horrors = first.enemies.filter((e) => e.kind === 'horror');
     expect(horrors).toHaveLength(1);
     expect(horrors[0]!.maxHp).toBe(enemyHp('horror', 10, waveCount(10)));
-    expect(horrors[0]!.horror?.ability).toBe('brood');
-    expect(first.bossSpawned).toBe(true);
+    expect(horrors[0]!.horror?.skills).toEqual(['brood']);
+    expect(first.bosses[0]!.id).toBe(horrors[0]!.id);
     expect(run(first, 10).enemies.filter((e) => e.kind === 'horror')).toHaveLength(1);
 
     expect(run(lastWave(9), 10).enemies.some((e) => e.kind === 'horror')).toBe(false);
@@ -197,7 +171,7 @@ describe('Rammer', () => {
     const after = x(t);
     t = run(t, 1);
     expect(after - x(t)).toBeCloseTo(speed, 0);
-    expect(one(t, h.id)!.horror!.nextAt).toBeCloseTo(1 + HORROR.charge.every, 5);
+    expect(one(t, h.id)!.horror!.next.charge).toBeCloseTo(1 + HORROR.charge.every, 5);
   });
 
   it('a stun holds a charge: it stands still, then charges out the rest', () => {
@@ -291,7 +265,7 @@ describe('a boss horde', () => {
     const s = lastWave(10);
     Object.assign(s.defenders[0]!, { hp: 1e9, maxHp: 1e9, nextShotAt: 1e9 });
     let t = run(s, 80);
-    for (const e of t.enemies.filter((x) => x.horror)) e.horror!.nextAt = t.time;
+    for (const e of t.enemies.filter((x) => x.horror)) e.horror!.next.brood = t.time;
     t = tick(t, STEP);
     expect(t.outcome).toBe('fighting');
     expect(t.enemies.length).toBeGreaterThan(waveSize(10, waveCount(10)));

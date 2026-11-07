@@ -267,6 +267,19 @@ const RECIPES: Record<Cue, { length: number; play: (v: Voice) => void }> = {
         tone(v, 'triangle', note(m), note(m), i * 0.08, 0.3, 0.25),
       ),
   },
+  // A boss winding up a skill (ID-099): a low growl that rises, so it reads before it lands.
+  'boss-windup': {
+    length: 1.1,
+    play: (v) => (tone(v, 'sawtooth', 55, 110, 0, 1, 0.3), hiss(v, 'lowpass', 300, 0, 0.9, 0.3)),
+  },
+  // A swarm wave starting (ID-099): two quick alarm blares.
+  swarm: {
+    length: 0.7,
+    play: (v) => (
+      tone(v, 'square', note(70), note(66), 0, 0.28, 0.18),
+      tone(v, 'square', note(70), note(66), 0.35, 0.28, 0.18)
+    ),
+  },
   won: {
     length: 1.4,
     play: (v) => {

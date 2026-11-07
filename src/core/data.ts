@@ -43,9 +43,11 @@ export const SQUAD_SPAWN_X = 1540;
 export const SQUAD_WALL: Tier = 'concrete';
 /**
  * Enemy HP's growth per horde in the horde-only build: `early` up to the squad's cap (each
- * win adds a survivor), then `late` (the squad grows only by levels until guns drop).
+ * win adds a survivor), then `late`: steep enough that every new horde asks for more Squad
+ * Power than the last (ID-099; 1.03 before). `late` is the one knob the balance pass
+ * (ID-102) tunes.
  */
-export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.03 } as const;
+export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.06 } as const;
 /**
  * Enemy HP's factor in horde-only Hordes 1, 2 and 3 on top of the growth (ID-097): the
  * first hordes are sure wins while the player learns the cards; 1 from Horde 4 on.
@@ -76,14 +78,15 @@ export const GUN_LEVEL_DAMAGE = 0.05;
  * dmg/s × (1 + `aim` × Sharp Mind's spread cut) × (1 + `tough` × Instinct's extra HP
  * share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP ^ `rec.e`,
  * fitted so a squad at it wins about half the time with no cards or skills; × `rec.early`
- * in Hordes 1 and 2, sure wins for a squad of one or two (`SQUAD_EARLY_HP`). Amber is
- * within `close` below it.
+ * in Hordes 1 and 2, sure wins for a squad of one or two (`SQUAD_EARLY_HP`). A swarm
+ * wave's HP (already `SWARM.size` times a calm wave's) is weighted `rec.swarm` more
+ * (ID-099): it comes twice as fast, so it asks for more dmg/s than its HP alone says. Amber is within `close` below it.
  */
 export const POWER = {
   aim: 0.5,
   tough: 0.5,
   scale: 10,
-  rec: { k: 7.1, e: 0.5, early: [0.25, 0.5] },
+  rec: { k: 3.19, e: 0.59, early: [0.25, 0.5], swarm: 2 },
   close: 0.15,
 } as const;
 /**
@@ -432,6 +435,97 @@ export const HORROR = {
   charge: { every: 10, time: 2, speed: 3, hit: 2 },
   regen: { rate: 0.03, after: 0.3 },
 } as const;
+
+/**
+ * A boss's skill (ID-099): one of the Mutated Horror's old abilities (Brood, Charge, Regen)
+ * or a new one. A full-game Horror has one (`HORROR_ABILITIES`); a horde-only boss two, and
+ * a mini-boss one.
+ */
+export type BossSkill = HorrorAbility | 'roar' | 'slab' | 'plates';
+/** The skills that go off on a clock (each winds up first); Regen and Armour plates don't. */
+export const TIMED_SKILLS: readonly BossSkill[] = ['brood', 'charge', 'roar', 'slab'];
+/**
+ * The new boss skills (ID-099; starting points for the balance pass, ID-102). Each timed
+ * skill winds up for `windUp` s before it goes off (a glow, a pose and a sound), so it can
+ * be read and answered. Roar: every `roar.every` s, the other enemies within `roar.radius`
+ * px move `roar.speed` faster for `roar.time` s. Slab throw: every `slab.every` s, from at
+ * least `slab.range` px out, a slab that lands `slab.flight` s later and breaks the working
+ * Barbed Wire row nearest its row (with the card), or else deals `slab.damage` to the
+ * nearest standing wall segment. Armour plates: bullets do `plates.factor` of their damage
+ * until `plates.share` of its HP is gone (a Sniper rifle's rounds go through). A horde-only
+ * Brood grows by `broodGrow` Shamblers each time.
+ */
+export const BOSS_SKILL = {
+  windUp: 1.2,
+  roar: { every: 14, radius: 300, speed: 0.4, time: 4 },
+  slab: { every: 16, range: 150, flight: 0.6, damage: 300 },
+  plates: { share: 0.25, factor: 0.5 },
+  broodGrow: 1,
+} as const;
+/**
+ * Horde-only boss hordes (ID-099): still every `HORROR.every`th horde, with Horde n's
+ * `n / HORROR.every` Mutated Horrors (at most `max`), each `hp` times a Horror's HP and with
+ * its own two skills. Boss hordes take `sets` in turn: the k-th boss of a horde gets pair k
+ * of its set, so no two of a horde's bosses share a skill.
+ */
+export const BOSSES: {
+  readonly max: number;
+  readonly hp: number;
+  readonly sets: readonly (readonly (readonly [BossSkill, BossSkill])[])[];
+} = {
+  max: 3,
+  hp: 4,
+  sets: [
+    [
+      ['brood', 'roar'],
+      ['slab', 'plates'],
+      ['charge', 'regen'],
+    ],
+    [
+      ['slab', 'roar'],
+      ['charge', 'plates'],
+      ['brood', 'regen'],
+    ],
+    [
+      ['plates', 'roar'],
+      ['brood', 'slab'],
+      ['charge', 'regen'],
+    ],
+    [
+      ['charge', 'roar'],
+      ['regen', 'slab'],
+      ['brood', 'plates'],
+    ],
+  ],
+};
+/**
+ * Horde-only mini-bosses (ID-099): from Horde `from`, every odd horde (never a boss horde)
+ * brings one elite with the first spawn of its middle wave: `kinds` and `skills` taken in
+ * turn by horde, `hp` times its kind's HP and drawn `size` times as big. An elite Swollen
+ * still bursts at the wall, `blast` times as hard: its skill and HP are what get it there.
+ */
+export const ELITE: {
+  readonly from: number;
+  readonly hp: number;
+  readonly size: number;
+  readonly blast: number;
+  readonly kinds: readonly EnemyKind[];
+  readonly skills: readonly BossSkill[];
+} = {
+  from: 5,
+  hp: 4,
+  size: 1.4,
+  blast: 2,
+  kinds: ['brute', 'swollen'],
+  skills: ['roar', 'plates', 'slab', 'charge', 'regen'],
+};
+/**
+ * Horde-only swarm waves (ID-099): from Horde `from`, a `share` of a horde's waves, growing
+ * `growth` a horde up to `cap`, spread evenly (one in four at first: waves 4 and 8). A swarm
+ * wave spawns `size` times the enemies over the same time, with Runners at `runners` times
+ * their share.
+ */
+export const SWARM = { from: 5, share: 0.25, growth: 0.01, cap: 0.5, size: 2, runners: 2 } as const;
 
 export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;

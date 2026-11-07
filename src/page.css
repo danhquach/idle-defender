@@ -958,6 +958,8 @@ body {
 
 .debrief-callout-sub {
   margin-top: var(--space-4) !important;
+  /* A boss horde's loss: one line per boss (ID-099). */
+  white-space: pre-line;
   color: var(--color-text-muted);
 }
 
@@ -1423,13 +1425,14 @@ body {
   outline-offset: 1px;
 }
 
+/* One row per boss on the field (ID-099): its name, skills and wind-up over its HP. */
 .hud-boss {
   position: absolute;
   top: 40px;
   left: 50%;
   display: flex;
-  gap: var(--space-10);
-  align-items: center;
+  flex-direction: column;
+  gap: var(--space-6);
   width: min(480px, calc(100% - 32px));
   padding: var(--space-6) var(--space-12);
   transform: translateX(-50%);
@@ -1445,13 +1448,103 @@ body {
   display: none;
 }
 
+.hud-boss-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hud-boss-row[hidden] {
+  display: none;
+}
+
 .hud-boss-label {
+  display: flex;
+  gap: var(--space-6);
+  align-items: center;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
-.hud-boss-hp {
+.hud-boss-name {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The skill it is using (ID-099): a pill that never pushes the HP out. */
+.hud-boss-cue {
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-pill);
+  background: var(--color-boss);
+  color: var(--color-boss-bg);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.hud-boss-cue[hidden] {
+  display: none;
+}
+
+/* Winding up: an outlined, pulsing pill; solid once the skill goes off. */
+.hud-boss-cue-winding {
+  outline: 1px solid var(--color-boss);
+  background: transparent;
+  color: var(--color-boss);
+  animation: hud-swarm-pulse-pill 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes hud-swarm-pulse-pill {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.55;
+  }
+}
+
+.hud-boss-hptext {
+  flex: none;
+}
+
+.hud-boss-hp {
+  width: 100%;
+  min-width: 0;
+}
+
+/* A swarm wave's cue (ID-099): big, in the field's upper middle, for its first seconds. */
+.hud-swarm {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  padding: var(--space-6) var(--space-18);
+  transform: translateX(-50%);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+  color: var(--color-danger);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+  animation: hud-swarm-pulse 0.5s ease-in-out infinite alternate;
+}
+
+.hud-swarm[hidden] {
+  display: none;
+}
+
+@keyframes hud-swarm-pulse {
+  from {
+    transform: translateX(-50%) scale(1);
+  }
+
+  to {
+    transform: translateX(-50%) scale(1.08);
+  }
 }
 
 /* The horde-only fight corner (ID-098, layout B), top left in the 48px band: a square
@@ -1655,7 +1748,15 @@ body {
 }
 
 .hud-boss:not([hidden]) ~ .hud-warning {
-  top: 84px;
+  top: 92px;
+}
+
+.hud-boss:not([hidden]):has(.hud-boss-row:nth-child(2):not([hidden])) ~ .hud-warning {
+  top: 132px;
+}
+
+.hud-boss:not([hidden]):has(.hud-boss-row:nth-child(3):not([hidden])) ~ .hud-warning {
+  top: 172px;
 }
 
 /* The world map (ID-028): fills the screen left of the build panel. Places sit at
@@ -3133,8 +3234,21 @@ body {
     top: 108px;
   }
 
+  /* Below a full stack of three boss bars (ID-099). */
+  .hud-swarm {
+    top: max(30%, 260px);
+  }
+
   .hud-boss:not([hidden]) ~ .hud-warning {
-    top: 152px;
+    top: 160px;
+  }
+
+  .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(2):not([hidden])) ~ .hud-warning {
+    top: 200px;
+  }
+
+  .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(3):not([hidden])) ~ .hud-warning {
+    top: 240px;
   }
 }
 
@@ -3240,5 +3354,11 @@ body {
 
   .hud-card-epic::after {
     display: none;
+  }
+
+  /* The swarm cue and a boss's wind-up pill (ID-099) hold still. */
+  .hud-swarm,
+  .hud-boss-cue-winding {
+    animation: none;
   }
 }

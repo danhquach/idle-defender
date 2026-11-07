@@ -282,12 +282,16 @@ describe('flashbang (scattered throws, ID-041)', () => {
     s.incoming = s.incoming.slice(0, 1);
     const h = enemy(s, { kind: 'horror', ...spot, hp: 1e6, maxHp: 1e6 });
     h.horror = {
-      ability: 'charge',
-      nextAt: 9,
+      boss: 0,
+      skills: ['charge'],
+      next: { charge: 9 },
+      fired: {},
       chargeUntil: 2,
       charged: false,
       hitAt: 0,
       seenHp: 1e6,
+      broods: 0,
+      platesOff: false,
     };
     s = tick(s, STEP);
     const clock = () => s.enemies.find((e) => e.id === h.id)!.horror!;
@@ -298,10 +302,10 @@ describe('flashbang (scattered throws, ID-041)', () => {
       ),
     ).toBe(true);
     // Stunned on the bang's own step: its clocks move on with the time it loses.
-    expect(clock().nextAt).toBeCloseTo(9 + STEP, 9);
+    expect(clock().next.charge).toBeCloseTo(9 + STEP, 9);
     expect(clock().chargeUntil).toBeCloseTo(2 + STEP, 9);
     s = tick(s, 1);
-    expect(clock().nextAt).toBeCloseTo(9 + STEP + 1, 6);
+    expect(clock().next.charge).toBeCloseTo(9 + STEP + 1, 6);
     expect(clock().chargeUntil).toBeCloseTo(2 + STEP + 1, 6);
   });
 

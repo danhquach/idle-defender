@@ -1,7 +1,7 @@
 // ID-080: a fight's sound cues, read from two frames of it.
 import { describe, expect, it } from 'vitest';
 import { newHorde, tick, type HordeState } from '../core/horde.ts';
-import { enemy, setup } from '../core/testing.ts';
+import { enemy, horror, setup } from '../core/testing.ts';
 import { cuesBetween } from './sound.ts';
 
 const fight = (): HordeState => newHorde(7, setup());
@@ -174,6 +174,29 @@ describe('Sound cues (ID-080)', () => {
     next.outcome = 'lost';
     expect(cuesBetween(prev, next)).toEqual(['lost']);
     const after = structuredClone(next);
+    expect(cuesBetween(next, after)).toEqual([]);
+  });
+  it('a boss skill winding up, once as it starts (ID-099)', () => {
+    const s = fight();
+    s.toSpawn = 0;
+    horror(s, 'roar', {}, { nextAt: 5 });
+    const [prev, next] = frames(s);
+    expect(cuesBetween(prev, next)).toEqual([]);
+    prev.time = 3.7;
+    next.time = 3.9;
+    expect(cuesBetween(prev, next)).toEqual(['boss-windup']);
+    const later = structuredClone(next);
+    later.time = 4.2;
+    expect(cuesBetween(next, later)).toEqual([]);
+  });
+
+  it('a swarm wave starting (ID-099)', () => {
+    const [prev, next] = frames();
+    next.swarm = true;
+    next.breakUntil = 0.05;
+    expect(cuesBetween(prev, next)).toEqual(['swarm']);
+    const after = structuredClone(next);
+    after.time += 0.1;
     expect(cuesBetween(next, after)).toEqual([]);
   });
 });
