@@ -7,7 +7,8 @@ import { horrorAbility } from '../waves.ts';
 import { SEEDS, winRate } from './shared.ts';
 
 // CI runs the balance files side by side (ID-076), so each runs several times slower
-// than alone (37 s on a laptop, over 120 s on CI): 300 s each, under the job's 15-min limit.
+// than alone (37 s on a laptop, 234 s to over 300 s on CI): 600 s for the campaigns,
+// still under the job's 15-min limit.
 describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
   const LAST = 10;
   /** The first horde that is a wall to farm past (ID-097; targets with ID-102). */
@@ -16,7 +17,7 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
   const campaigns: ReturnType<typeof playSquadCampaign>[] = [];
   beforeAll(() => {
     for (let i = 1; i <= SEEDS; i++) campaigns.push(playSquadCampaign(i * 1000, LAST));
-  }, 300_000);
+  }, 600_000);
   /** Each seed's first fight at horde `n`: the expected squad's try at it. */
   const firstTry = (n: number) => campaigns.map((runs) => runs.find((r) => r.hordeNumber === n)!);
 

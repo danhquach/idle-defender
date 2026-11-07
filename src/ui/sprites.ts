@@ -14,7 +14,7 @@ import type {
   WEAPONS,
 } from '../core/data.ts';
 import { buildingsOf } from '../core/data.ts';
-import type { TurretState } from '../core/horde.ts';
+import type { TurretState, UpgradeId } from '../core/horde.ts';
 
 export const ART_IDS = [
   'shambler-walk-a',
@@ -68,6 +68,13 @@ export const ART_IDS = [
   'icon-cash',
   'icon-bank',
   'icon-genes',
+  // Upgrade card icons (ID-103).
+  'card-incendiary-rounds',
+  'card-sharpshooter',
+  'card-reinforce',
+  'card-shock-rounds',
+  'card-piercing-rounds',
+  'card-ricochet',
   'weapon-pistol',
   'weapon-smg',
   'weapon-rifle',
@@ -272,6 +279,18 @@ export const SHOP_ICON: Readonly<Record<ShopItem, ArtId>> = {
   overdrive: 'icon-overdrive',
   patch: 'icon-patch',
   fix: 'icon-fix',
+};
+/**
+ * Each upgrade card's icon on its offer card (ID-103). Every card in the pool gets one;
+ * the cards drawn so far are listed, and the rest follow in the same ticket.
+ */
+export const CARD_ICON: Readonly<Partial<Record<UpgradeId, ArtId>>> = {
+  'incendiary-rounds': 'card-incendiary-rounds',
+  sharpshooter: 'card-sharpshooter',
+  reinforce: 'card-reinforce',
+  'shock-rounds': 'card-shock-rounds',
+  'piercing-rounds': 'card-piercing-rounds',
+  ricochet: 'card-ricochet',
 };
 /** Each skill's icon on its button (design §15, ID-041). */
 export const SKILL_ICON: Readonly<Record<SkillId, ArtId>> = {

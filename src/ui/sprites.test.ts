@@ -18,6 +18,7 @@ import {
   ART_IDS,
   ART_URLS,
   BASE_ART,
+  CARD_ICON,
   DEFENDER_ART,
   ENEMY_ART,
   GUN_ICON,
@@ -53,6 +54,8 @@ const manifest = JSON.parse(readFileSync(new URL('art-src/manifest.json', root),
     mutant?: true;
     pose?: string;
     frames?: string;
+    overlay?: { part: string };
+    draw?: unknown;
   }[];
 };
 /** Generations used only as references of other sprites (ID-046), and the rest. */
@@ -133,6 +136,7 @@ describe('art coverage', () => {
       ...Object.values(SKILL_ART),
       ...Object.values(SHOP_ICON),
       ...Object.values(SKILL_ICON),
+      ...Object.values(CARD_ICON),
       ...Object.values(RESOURCE_ICON),
       ...Object.values(GUN_ICON),
       ...LOCATION_IDS.map((l) => MAP_ART[l]),
@@ -282,15 +286,25 @@ describe('art sources', () => {
     expect(shipped.map((a) => a.id).sort()).toEqual([...ART_IDS].sort());
   });
 
-  it('uses every part as a reference of a shipped sprite', () => {
-    const refs = new Set(shipped.flatMap((a) => (a.ref === undefined ? [] : [a.ref].flat())));
-    for (const a of parts) expect(refs.has(a.id), a.id).toBe(true);
+  it('uses every part as a reference or overlay of a shipped sprite', () => {
+    // ID-103: the card bullet is pasted onto card icons as an overlay, not edited.
+    const used = new Set(
+      shipped.flatMap((a) => [
+        ...(a.ref === undefined ? [] : [a.ref].flat()),
+        ...(a.overlay ? [a.overlay.part] : []),
+      ]),
+    );
+    for (const a of parts) expect(used.has(a.id), a.id).toBe(true);
   });
 
   it('uses only allow-listed models, never a service URL', () => {
     const allowed = [...credits.matchAll(/^\|\s*`([^`]+)`\s*\|/gm)].map((m) => m[1]);
     expect(allowed.length).toBeGreaterThan(0);
-    for (const a of manifest.assets) expect(allowed, a.id).toContain(a.model);
+    for (const a of manifest.assets) {
+      // A drawn sprite (ID-103) is a polygon the build draws: no model, no prompt.
+      if (a.draw !== undefined) expect([a.model, a.prompt], a.id).toEqual([undefined, undefined]);
+      else expect(allowed, a.id).toContain(a.model);
+    }
     expect(JSON.stringify(manifest)).not.toMatch(/https?:|\.ai\b/);
   });
 

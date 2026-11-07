@@ -1088,6 +1088,221 @@
       "mutant": true
     },
     {
+      "id": "card-bullet",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7602,
+      "size": "512x512",
+      "prompt": "a game UI icon of a single rifle cartridge lying diagonally at exactly 45 degrees with its pointed tip to the upper right and its base to the lower left, a long polished brass casing with a narrow shoulder near the top, a rim and a groove at the base, a dull copper pointed bullet tip, clean symmetric shape, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading with one light highlight stripe along its length, thick dark outline, single object centred with empty space around it, plain flat solid magenta background #FF00FF, no text, no letters, no numbers, no cast shadow, no ground, no hands, no person",
+      "part": true
+    },
+    {
+      "id": "card-incendiary-rounds-draft",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7504,
+      "size": "512x512",
+      "prompt": "a game UI icon of a big solid flame shape in orange and yellow filling the background, an all-brass rifle bullet lying diagonally inside the middle of the flame, tilted at 45 degrees with its tip pointing to the upper right, the flame wrapping around the bullet, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, a single connected shape where every part overlaps or touches, no detached parts, no floating particles, centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no numbers, no cast shadow, no ground, no hands, no red, no pink, no purple, no glow",
+      "part": true
+    },
+    {
+      "id": "card-incendiary-rounds",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7701,
+      "size": "512x512",
+      "ref": "card-incendiary-rounds-draft",
+      "prompt": "repaint this exact image keeping the flame's shape, size, outline, colours and position. Only remove the bullet: the flame alone, the space where the bullet was filled with the same yellow and orange flame colours. Same hand-painted 2D game icon style, flat shading, thick dark outline, plain flat solid magenta background #FF00FF, no bullet, no object, no text",
+      "overlay": { "part": "card-bullet", "at": [0.5, 0.6], "size": 0.6 }
+    },
+    {
+      "id": "card-sharpshooter-draft",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7514,
+      "size": "512x512",
+      "prompt": "a game UI icon of a round bullseye target seen face on filling the background, concentric rings alternating dark gunmetal grey and muted cream with a dark grey centre, an all-brass rifle bullet lying diagonally across the centre of the bullseye, tilted at 45 degrees with its tip pointing to the upper right, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, a single connected shape where every part overlaps or touches, no detached parts, no floating particles, centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no numbers, no cast shadow, no ground, no hands, no red, no pink, no purple",
+      "part": true
+    },
+    {
+      "id": "card-sharpshooter",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7711,
+      "size": "512x512",
+      "ref": "card-sharpshooter-draft",
+      "prompt": "repaint this exact image keeping the bullseye target's shape, size, rings, outline, colours and position. Only remove the bullet: the bullseye target alone, its rings complete where the bullet was. Same hand-painted 2D game icon style, flat shading, thick dark outline, plain flat solid magenta background #FF00FF, no bullet, no object, no text",
+      "overlay": { "part": "card-bullet", "at": [0.5, 0.5], "size": 0.62 }
+    },
+    {
+      "id": "card-shock-rounds",
+      "kind": "sprite",
+      "draw": {
+        "shapes": [
+          {
+            "points": [
+              [180, 28],
+              [358, 28],
+              [290, 168],
+              [400, 158],
+              [314, 284],
+              [404, 276],
+              [204, 488],
+              [264, 340],
+              [156, 350],
+              [214, 232],
+              [108, 242]
+            ],
+            "fill": "#f6b93b"
+          }
+        ],
+        "outline": 22
+      },
+      "overlay": { "part": "card-bullet", "at": [0.52, 0.56], "size": 0.58 }
+    },
+    {
+      "id": "card-piercing-rounds",
+      "kind": "sprite",
+      "draw": {
+        "shapes": [
+          {
+            "points": [
+              [232, 10],
+              [280, 10],
+              [280, 188],
+              [250, 176],
+              [222, 170],
+              [230, 160],
+              [184, 148],
+              [232, 126]
+            ],
+            "fill": "#a3a8ad"
+          },
+          {
+            "points": [
+              [232, 502],
+              [280, 502],
+              [280, 324],
+              [250, 336],
+              [222, 342],
+              [230, 352],
+              [184, 364],
+              [232, 386]
+            ],
+            "fill": "#a3a8ad"
+          },
+          {
+            "points": [
+              [294, 198],
+              [322, 172],
+              [318, 216]
+            ],
+            "fill": "#a3a8ad"
+          },
+          {
+            "points": [
+              [302, 230],
+              [320, 222],
+              [310, 244]
+            ],
+            "fill": "#a3a8ad"
+          },
+          {
+            "points": [
+              [294, 314],
+              [322, 340],
+              [318, 296]
+            ],
+            "fill": "#a3a8ad"
+          },
+          {
+            "points": [
+              [302, 282],
+              [320, 290],
+              [310, 268]
+            ],
+            "fill": "#a3a8ad"
+          }
+        ],
+        "outline": 14
+      },
+      "overlay": { "part": "card-bullet", "at": [0.6, 0.5], "size": 0.65, "turn": 45 }
+    },
+    {
+      "id": "card-ricochet",
+      "kind": "sprite",
+      "draw": {
+        "shapes": [
+          {
+            "points": [
+              [404, 40],
+              [456, 40],
+              [456, 472],
+              [404, 472]
+            ],
+            "fill": "#a3a8ad"
+          },
+          {
+            "points": [
+              [16, 456],
+              [392, 250],
+              [394, 268],
+              [36, 494]
+            ],
+            "fill": "#f2d9a0"
+          },
+          {
+            "points": [
+              [392, 254],
+              [176, 132],
+              [160, 162],
+              [390, 264]
+            ],
+            "fill": "#f2d9a0"
+          },
+          {
+            "points": [
+              [392, 180],
+              [402, 230],
+              [432, 210],
+              [418, 243],
+              [463, 246],
+              [422, 263],
+              [441, 286],
+              [411, 281],
+              [419, 331],
+              [392, 288],
+              [371, 317],
+              [373, 281],
+              [330, 294],
+              [362, 263],
+              [337, 248],
+              [366, 243],
+              [342, 198],
+              [382, 230]
+            ],
+            "fill": "#fff3d6"
+          }
+        ],
+        "outline": 14
+      },
+      "overlay": { "part": "card-bullet", "at": [0.2, 0.16], "size": 0.32, "turn": -109 }
+    },
+    {
+      "id": "card-reinforce",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7322,
+      "size": "512x512",
+      "prompt": "a game UI icon of a short pyramid of stacked khaki sandbags in three rows, a thick riveted grey steel plate leaning against its front, simple bold shape that reads at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, a single connected shape where every part overlaps or touches, no detached parts, no floating particles, centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no numbers, no cast shadow, no ground, no hands, no red, no pink, no purple"
+    },
+    {
       "id": "molotov",
       "kind": "sprite",
       "style": "verbatim",

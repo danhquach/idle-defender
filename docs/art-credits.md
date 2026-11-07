@@ -52,6 +52,10 @@ No prompt names an existing game, studio or artist, and no asset copies one.
 Prompts describe the subject and a shared house style only
 (`art-src/manifest.json`, `style`).
 
+A few card icons are drawn shapes rather than generations (manifest `draw`):
+plain polygons with our own points, drawn by `tools/art/build.py`, made with
+no model and copying no existing artwork.
+
 ## Reference photographs
 
 A weapon may be drawn from a public-domain photograph, given to the model as a
