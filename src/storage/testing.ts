@@ -76,9 +76,16 @@ function dropLevels(v: unknown): void {
   }
 }
 
+/** `game` as JSON from before ID-100 (v15 and older): no skill pick. */
+export function prePick(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete json.skillPick;
+  return json;
+}
+
 /** `game` as JSON from before ID-098 (v14 and older): no farm, and no gun levels. */
 export function preFarm(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = prePick(game);
   delete json.farm;
   dropLevels(json);
   return json;

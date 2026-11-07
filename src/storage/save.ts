@@ -62,6 +62,7 @@ import {
   PLACE_IDS,
   PLAZAS,
   START_PERK,
+  START_SKILLS,
   POST_KINDS,
   RARITY_ORDER,
   RECOVERY_MS,
@@ -69,7 +70,9 @@ import {
   RESEARCH_IDS,
   revealOf,
   SEGMENTS,
+  SKILL_IDS,
   SQUAD_CAP,
+  SQUAD_SKILLS,
   STATS,
   SURVIVOR,
   TIER_ORDER,
@@ -88,6 +91,7 @@ import {
   type PlaceId,
   type PerkId,
   type ResearchId,
+  type SkillId,
   type Stats,
   type Stock,
   type Tier,
@@ -129,6 +133,9 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 16 since skills in the horde-only build (ID-100): a v15 save has no `skillPick`, so it
+ * loads with a new game's pick (`START_SKILLS`).
+ *
  * 15 since farming (ID-098): a v14 save has no `farm` (no replays, no bad-luck count) and
  * its guns have no `level` (level 1). The highest horde beaten is `hordeNumber − 1`, so an
  * older save's beaten hordes count as beaten, and get no first-clear drops again. A
@@ -171,7 +178,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -313,7 +320,7 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
+  if (![SAVE_VERSION, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
     fail('version');
   }
   const savedAt = int(o.savedAt, 0, MAX_TIME);
@@ -324,6 +331,7 @@ function readSave(v: unknown): Save {
   const queue = ver >= 11;
   const reserve = ver >= 12;
   const farm = ver >= 15;
+  const pick = ver >= 16;
   const stats: StatsRead = { legacy: ver < 13, bank: ver < 14, refunded: false };
   const grid = ver === 1 ? V1_GRID : GRID;
   const game = readGame(
@@ -336,6 +344,7 @@ function readSave(v: unknown): Save {
     queue,
     reserve,
     farm,
+    pick,
     stats,
   );
   return {
@@ -361,6 +370,8 @@ function readGame(
   hasReserve: boolean,
   /** Whether the save has farming (v15). */
   hasFarm: boolean,
+  /** Whether the save has the horde-only skill pick (v16). */
+  hasPick: boolean,
   stats: StatsRead,
 ): GameState {
   const lacks = (key: string): boolean =>
@@ -391,6 +402,7 @@ function readGame(
     ...(hasQueue ? ['queue', 'perkLevels'] : []),
     ...(hasReserve ? ['reserve'] : []),
     ...(hasFarm ? ['farm'] : []),
+    ...(hasPick ? ['skillPick'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -441,6 +453,7 @@ function readGame(
       : newCamp(),
     reserve: [],
     farm: hasFarm ? readFarm(o.farm) : newFarm(),
+    skillPick: hasPick ? readSkillPick(o.skillPick) : [...START_SKILLS],
   };
   // Each car out is one the camp built, on one patrol at a time.
   const taken = out.flatMap((p) => (p.car === null ? [] : [p.car]));
@@ -935,6 +948,13 @@ function readFarm(v: unknown): Farm {
     replays: int(o.replays, 0, FARM.maxReplays),
     badLuck: int(o.badLuck, 0, FARM.guarantee),
   };
+}
+
+/** The horde-only skill pick (ID-100): up to `SQUAD_SKILLS.max` known skills, each once. */
+function readSkillPick(v: unknown): SkillId[] {
+  const pick = arr(v, 0, SQUAD_SKILLS.max).map((k) => oneOf(k, SKILL_IDS));
+  if (new Set(pick).size !== pick.length) fail('skill twice');
+  return pick;
 }
 
 function readRoster(

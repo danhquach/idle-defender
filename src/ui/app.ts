@@ -25,6 +25,7 @@ import {
   equipGun,
   finishSquadHorde,
   startSquadHorde,
+  toggleSkill,
   type GunChoice,
 } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
@@ -67,6 +68,10 @@ import {
   hordePicker,
   powerLine,
   resultScreen,
+  fightKeyName,
+  SKILL_KEYS,
+  skillPicker,
+  skillSlots,
   SPEED_KEYS,
   squadGear,
   squadScreen,
@@ -244,22 +249,7 @@ export function start(root: HTMLElement, art: Art): void {
       if (r.ok) horde = r.state;
       else hud.toast(r.reason);
     },
-    (skill) => {
-      if (!horde) return;
-      // A skill with nothing to aim goes off at once (its aim point is ignored).
-      if (SKILLS[skill].aim === 'none') {
-        const used = useSkill(horde, skill, 0, 0);
-        if (used.ok) horde = used.state;
-        else hud.toast(used.reason);
-        armed = null;
-        return;
-      }
-      // A second click on the armed skill puts it away.
-      const lock = skillLock(horde, skill);
-      if (lock) hud.toast(lock);
-      armed = lock || armed === skill ? null : skill;
-      if (armed) selectedDefender = null;
-    },
+    (skill) => arm(skill),
     () => {
       if (horde && rerollLock(horde) === null) horde = rerollOffer(horde);
     },
@@ -268,6 +258,31 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (next) => setSpeed(next),
   );
+  /** A skill's button or key (ID-100): one with nothing to aim goes off, else it is armed. */
+  function arm(skill: SkillId): void {
+    if (!horde) return;
+    // A skill with nothing to aim goes off at once (its aim point is ignored).
+    if (SKILLS[skill].aim === 'none') {
+      const used = useSkill(horde, skill, 0, 0);
+      if (used.ok) horde = used.state;
+      else hud.toast(used.reason);
+      armed = null;
+      return;
+    }
+    // A second click on the armed skill puts it away.
+    const lock = skillLock(horde, skill);
+    if (lock) hud.toast(lock);
+    armed = lock || armed === skill ? null : skill;
+    if (armed) selectedDefender = null;
+  }
+  // The skill pick (ID-100), between hordes only: saved at once, so it is there next time.
+  hud.onSkillPick((skill) => {
+    if (horde && endedAt === null) return;
+    const r = toggleSkill(game, skill);
+    if (!r.ok) hud.toast(r.reason);
+    else commit(r.game);
+    hud.showSkills(skillPicker(game.skillPick));
+  });
   hud.onHordePick((n) => {
     picked = n;
     // The Inventory's Squad Power line compares with the horde picked.
@@ -624,8 +639,14 @@ export function start(root: HTMLElement, art: Art): void {
       if (!e.repeat) hold(!held);
       return;
     }
-    const next = SPEEDS.find((sp) => SPEED_KEYS[sp] === e.key.toUpperCase());
+    // Every fight key by its place (ID-100), so one press is one key on any layout.
+    const name = fightKeyName(e);
+    const next = SPEEDS.find((sp) => SPEED_KEYS[sp] === name);
     if (next && !e.repeat) setSpeed(next);
+    // Horde-only (ID-100): Q and W use the picked skills, left to right as their buttons stand.
+    const slot = SKILL_KEYS.indexOf(name);
+    const skill = horde?.freeSkills ? skillSlots(horde)[slot] : undefined;
+    if (slot >= 0 && skill && !e.repeat) arm(skill);
   });
 
   // One primary pointer clicks: right-click and a second finger are ignored, and a

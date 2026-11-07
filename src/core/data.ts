@@ -90,6 +90,15 @@ export const POWER = {
   close: 0.15,
 } as const;
 /**
+ * Active skills in the horde-only build (ID-100, farming design Part 3): up to `max`
+ * picked before each horde; one picked alone works `solo` times as hard (same cooldown).
+ */
+export const SQUAD_SKILLS = { max: 2, solo: 2 } as const;
+
+/** The skills a new game starts with picked (ID-100): neither needs aiming. */
+export const START_SKILLS: readonly SkillId[] = ['flashbang', 'molotov'];
+
+/**
  * Farming beaten hordes (ID-098, design §11 Farming): a replay more than `farOff` hordes
  * below the highest beaten pays `farXp` of the XP; a loss pays `lossXp` of what a win of
  * that horde would, for each share of the waves cleared. Each replay win whose drop is no

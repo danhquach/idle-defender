@@ -48,6 +48,7 @@ import {
   SHOP_ITEMS,
   SKILL_IDS,
   SQUAD_CAP,
+  SQUAD_SKILLS,
   SKILLS,
   STASH_CAP,
   OPEN_STATS,
@@ -77,6 +78,7 @@ import {
   baseAfter,
   bossHorde,
   perkOn,
+  skillPower,
   windingUp,
   type Enemy,
   type Breach,
@@ -339,25 +341,120 @@ const AIM_HINT = {
 export function skillButtons(
   s: HordeState,
   armed: SkillId | null,
-): (HudButton & { skill: SkillId; armed: boolean })[] {
+): (HudButton & {
+  skill: SkillId;
+  armed: boolean;
+  hidden: boolean;
+  key: string | null;
+  /** Counting down its cooldown. */
+  cooling: boolean;
+})[] {
   return SKILL_IDS.map((skill) => {
     const lock = skillLock(s, skill);
     const left = skillLeft(s, skill);
     const { name, cost } = SKILLS[skill];
+    // The horde-only build (ID-100): only the picked skills show, free, each with its key.
+    const free = s.freeSkills !== undefined;
+    const slot = skillSlots(s).indexOf(skill);
+    const key = free ? (SKILL_KEYS[slot] ?? null) : null;
+    const power = skillPower(s) > 1 ? ` ×${skillPower(s)}` : '';
     return {
       skill,
-      label: left > 0 ? `${name} ${Math.ceil(left)}s` : name,
-      cost: left > 0 ? '' : String(cost),
+      label: left > 0 ? `${name}${power} ${Math.ceil(left)}s` : `${name}${power}`,
+      cost: left > 0 || free ? '' : String(cost),
       variant: variantOf(
         lock,
         () => skillLock({ ...s, cash: Infinity }, skill),
         !s.skills.includes(skill),
       ),
       disabled: lock !== null,
-      reason: lock ?? AIM_HINT[SKILLS[skill].aim],
+      reason: lock ?? `${AIM_HINT[SKILLS[skill].aim]}${key ? ` (key ${key})` : ''}`,
       armed: lock === null && skill === armed,
+      hidden: free && slot < 0,
+      key,
+      cooling: left > 0,
     };
   });
+}
+
+/**
+ * Over the skill row while a row skill is armed (ID-100), until it is used or put away:
+ * touch screens show no tooltip.
+ */
+export const AIM_PROMPT = 'Tap a row to bomb it · tap Airstrike again to cancel';
+
+/**
+ * A fight key's name (ID-100): a letter key by its place (`KeyQ` is Q on any layout), so
+ * the speed and skill keys never both fire from one press; anything else by what it types.
+ */
+export const fightKeyName = (e: Pick<KeyboardEvent, 'code' | 'key'>): string =>
+  /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : e.key.toUpperCase();
+
+/** The fight's skill keys in the horde-only build (ID-100), left to right: clear of A S D, Space and the card keys. */
+export const SKILL_KEYS: readonly string[] = ['Q', 'W'];
+
+/** The fight's skills as their buttons stand, left to right (ID-100): `SKILL_KEYS` follow it. */
+export const skillSlots = (s: Pick<HordeState, 'skills'>): SkillId[] =>
+  SKILL_IDS.filter((k) => s.skills.includes(k));
+
+/** What each skill does, for the pick before a horde (ID-100); `boost` is its ×2 line, picked alone. */
+const SKILL_BLURB: Readonly<Record<SkillId, { does: string; boost: string }>> = {
+  flashbang: {
+    does: `Stuns, ${SKILLS.flashbang.count} bursts`,
+    boost: `×${SQUAD_SKILLS.solo}: ${SKILLS.flashbang.count * SQUAD_SKILLS.solo} bursts`,
+  },
+  molotov: { does: 'Fire on the ground', boost: `×${SQUAD_SKILLS.solo}: burns twice as hard` },
+  airstrike: { does: 'Bombs a row you pick', boost: `×${SQUAD_SKILLS.solo}: hits twice as hard` },
+};
+
+/** One skill in the pick before a horde (ID-100). */
+export interface SkillChoice {
+  skill: SkillId;
+  name: string;
+  picked: boolean;
+  /** Two are picked and this isn't one: drop one first. */
+  full: boolean;
+  /** "Stuns, 4 bursts": what it does, whatever is picked. */
+  detail: string;
+  /** "×2: 8 bursts" on the one skill picked alone; null otherwise. */
+  boost: string | null;
+  /** "25s cooldown" */
+  cooldown: string;
+}
+
+/** The skill pick before a horde (ID-100): each skill, and a line on the pick's power. */
+export interface SkillPick {
+  options: SkillChoice[];
+  /** "×2 power: Molotov alone works twice as hard", or how many more may be picked. */
+  note: string;
+  /** Exactly one is picked: it works ×2. */
+  solo: boolean;
+}
+
+export function skillPicker(pick: readonly SkillId[]): SkillPick {
+  const solo = pick.length === 1;
+  const full = pick.length >= SQUAD_SKILLS.max;
+  return {
+    options: SKILL_IDS.map((skill) => {
+      const picked = pick.includes(skill);
+      const blurb = SKILL_BLURB[skill];
+      return {
+        skill,
+        name: SKILLS[skill].name,
+        picked,
+        full: full && !picked,
+        detail: blurb.does,
+        boost: picked && solo ? blurb.boost : null,
+        cooldown: `${SKILLS[skill].cooldown}s cooldown`,
+      };
+    }),
+    note: solo
+      ? `×${SQUAD_SKILLS.solo} power: ${SKILLS[pick[0]!].name} alone works twice as hard`
+      : pick.length === 0
+        ? `Pick up to ${SQUAD_SKILLS.max}. Just 1 works twice as hard`
+        : `${SQUAD_SKILLS.max} picked. Drop one for ×${SQUAD_SKILLS.solo} power`,
+    solo,
+  };
 }
 
 /** Amounts as "5 scrap, 10 wood" in material order, skipping zeros; "nothing" if all are. */
@@ -652,6 +749,8 @@ export interface ResultScreen {
   debrief?: Debrief;
   /** The horde picker beside the button (ID-098); the button's label follows the pick. */
   picker?: HordePicker;
+  /** The skill pick for the next horde (ID-100), horde-only. */
+  skills?: SkillPick;
   /** Defenders from a win with stat points to spend, XP added. */
   picks: RosterDefender[];
   /**
@@ -1158,6 +1257,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
     button: now.button,
     squad: true,
     picker,
+    skills: skillPicker(game.skillPick),
     picks: [],
     camp: noCamp(game),
     debrief: {
@@ -1243,6 +1343,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       button: ending ? 'Continue' : goOn,
       squad: true,
       picker,
+      skills: skillPicker(game.skillPick),
       picks,
       camp: noCamp(game),
       debrief: {
@@ -1290,6 +1391,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     button: goOn,
     squad: true,
     picker,
+    skills: skillPicker(game.skillPick),
     picks,
     camp: noCamp(game),
     debrief: {
@@ -1347,6 +1449,10 @@ export function createHud(
   onHordePick(handler: (horde: number) => void): void;
   /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
   showPicker(picker: HordePicker): void;
+  /** Where a skill toggled in the skill pick goes (ID-100); the app sets it once. */
+  onSkillPick(handler: (skill: SkillId) => void): void;
+  /** The skill pick redrawn (ID-100) once the app has saved a toggle. */
+  showSkills(pick: SkillPick): void;
   /** Squad Power against Recommended Power for the fight's corner (ID-098); null hides it. */
   fightPower(line: PowerLine | null): void;
   show(visible: boolean): void;
@@ -1477,7 +1583,12 @@ export function createHud(
   // The horde picker (ID-098), above the button it labels.
   const pickBlock = el('div', 'hud-horde-pick');
   pickBlock.hidden = true;
-  foot.append(pickBlock, footNote, back);
+  // The skill pick for the next horde (ID-100), above the horde picker.
+  const skillBlock = el('div', 'hud-skill-pick');
+  skillBlock.setAttribute('role', 'group');
+  skillBlock.hidden = true;
+  let onPickSkill: (skill: SkillId) => void = () => {};
+  foot.append(skillBlock, pickBlock, footNote, back);
   let onPickHorde: (horde: number) => void = () => {};
   result.append(resultTitle, resultList, picker, gear, campPicker, foot);
   const toast = el('div', 'hud-toast');
@@ -1485,6 +1596,11 @@ export function createHud(
   toast.hidden = true;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   const shop = el('div', 'hud-shop');
+  // The armed row skill's caption (ID-100), on its own line above the buttons.
+  const aimCaption = el('p', 'hud-aim-caption', AIM_PROMPT);
+  aimCaption.setAttribute('role', 'status');
+  aimCaption.hidden = true;
+  shop.append(aimCaption);
   // Each button: its icon (decoration only, so a screen reader reads the label) and its label.
   const iconButton = (className: string, icon: ArtId, onClick: () => void) => {
     const button = el('button', className);
@@ -1517,9 +1633,21 @@ export function createHud(
   const shopItems = SHOP_ITEMS.map((item) =>
     iconButton('hud-button hud-shop-item', SHOP_ICON[item], () => onBuy(item)),
   );
-  const skillItems = SKILL_IDS.map((skill) =>
-    iconButton('hud-button hud-shop-item hud-skill', SKILL_ICON[skill], () => onArm(skill)),
-  );
+  const skillItems = SKILL_IDS.map((skill) => {
+    const item = iconButton('hud-button hud-shop-item hud-skill', SKILL_ICON[skill], () =>
+      onArm(skill),
+    );
+    // The horde-only build's key for it (ID-100); empty, and so hidden, in the full game.
+    const key = el('kbd', 'menu-key hud-skill-key');
+    key.hidden = true;
+    item.button.append(key);
+    item.button.addEventListener('animationend', () =>
+      item.button.classList.remove('hud-skill-ready'),
+    );
+    return { ...item, key, cooling: false };
+  });
+  // In the horde-only build only the picked skills show, and no cash shop (ID-066, ID-100).
+  if (squad) for (const item of shopItems) item.button.hidden = true;
   // Each button starts in its tallest look (name · cost, locked with its note), so the
   // bar's measured height (`bottomSpace`) covers any fight's before the first update,
   // which redraws every button. The HUD stays hidden until then.
@@ -1529,10 +1657,19 @@ export function createHud(
     item.cost.textContent = String(rest[i]!.cost);
     setVariant(item.button, 'locked', LOCKED_NOTE);
   });
+  // The horde-only build's skills are never locked or paid for: their tallest look is
+  // the name with ×2 and a key (ID-100).
+  if (squad) {
+    for (const item of skillItems) {
+      item.label.textContent = `${item.label.textContent!.replace(' · ', '')} ×${SQUAD_SKILLS.solo}`;
+      item.cost.textContent = '';
+      item.key.textContent = SKILL_KEYS[0]!;
+      item.key.hidden = false;
+      setVariant(item.button, 'secondary', '');
+    }
+  }
   cards.hidden = true;
   result.hidden = true;
-  // No cash, shop or skills in the horde-only build (ID-066).
-  shop.hidden = squad;
   hud.append(bar, speed, boss, swarm, warning, toast, shop, cards, replace, result);
   root.append(hud);
 
@@ -1694,6 +1831,57 @@ export function createHud(
       chip.dataset.tone = c.tone;
       return chip;
     });
+
+  /**
+   * The skill pick (ID-100): a toggle per skill, pressed when picked, and a line on the
+   * pick's power. A third skill can't be added while two are picked. A toggle goes to
+   * `onPickSkill`; the app redraws it with the pick it saved.
+   */
+  function drawSkills(p: SkillPick | undefined): void {
+    const had = document.activeElement?.closest('.hud-skill-pick')
+      ? (document.activeElement as HTMLElement).dataset.skill
+      : undefined;
+    skillBlock.hidden = p === undefined;
+    if (!p) {
+      skillBlock.replaceChildren();
+      return;
+    }
+    const label = el('span', 'hud-horde-label', `Skills (up to ${SQUAD_SKILLS.max})`);
+    label.id = 'hud-skill-label';
+    skillBlock.setAttribute('aria-labelledby', label.id);
+    const row = el('div', 'hud-skill-options');
+    for (const o of p.options) {
+      const button = el('button', 'hud-skill-option');
+      button.type = 'button';
+      button.dataset.skill = o.skill;
+      button.setAttribute('aria-pressed', String(o.picked));
+      button.disabled = o.full;
+      button.title = o.full
+        ? `Pick up to ${SQUAD_SKILLS.max}: drop one first`
+        : [o.detail, o.cooldown, ...(o.boost ? [o.boost] : [])].join(' · ');
+      const img = el('img', 'hud-icon');
+      img.src = ART_URLS[SKILL_ICON[o.skill]] ?? '';
+      img.alt = '';
+      const head = el('span', 'hud-skill-option-head');
+      head.append(img, el('span', 'hud-skill-option-name', o.name));
+      button.append(
+        head,
+        el('span', 'hud-skill-option-detail', o.detail),
+        el('span', 'hud-skill-option-detail', o.cooldown),
+        ...(o.boost ? [el('span', 'hud-skill-option-boost', o.boost)] : []),
+      );
+      button.addEventListener('click', () => {
+        if (result.hidden) return;
+        onPickSkill(o.skill);
+      });
+      row.append(button);
+    }
+    const note = el('p', 'hud-skill-note', p.note);
+    note.classList.toggle('hud-skill-note-solo', p.solo);
+    note.setAttribute('role', 'status');
+    skillBlock.replaceChildren(label, row, note);
+    if (had) [...row.querySelectorAll('button')].find((b) => b.dataset.skill === had)?.focus();
+  }
 
   /**
    * The horde picker (ID-098) beside the button: a select, then Squad Power against that
@@ -1973,7 +2161,19 @@ export function createHud(
     bottomSpace() {
       const was = hud.hidden;
       hud.hidden = false;
+      // Horde-only (ID-100): measured with the most skills a pick holds showing, so the
+      // fight frame is the same whatever is picked and whether or not a screen is up. The
+      // cash shop's buttons stay hidden (never shown in this build), and the aim caption
+      // shows only while a skill is armed; everything is put back as it was.
+      const shopWas = shop.hidden;
+      const skillsWere = skillItems.map((s) => s.button.hidden);
+      if (squad) {
+        shop.hidden = false;
+        skillItems.forEach((s, i) => (s.button.hidden = i >= SQUAD_SKILLS.max));
+      }
       const box = shop.getBoundingClientRect();
+      shop.hidden = shopWas;
+      skillItems.forEach((s, i) => (s.button.hidden = skillsWere[i]!));
       hud.hidden = was;
       // The HUD overlays the whole window, as the canvas does.
       return box.height > 0 ? window.innerHeight - box.top : 0;
@@ -2031,10 +2231,28 @@ export function createHud(
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';
       shopButtons(state).forEach((b, i) => showButton(shopItems[i]!, b));
-      skillButtons(state, armed).forEach((b, i) => {
-        showButton(skillItems[i]!, b);
-        skillItems[i]!.button.setAttribute('aria-pressed', String(b.armed));
+      const skills = skillButtons(state, armed);
+      skills.forEach((b, i) => {
+        const item = skillItems[i]!;
+        showButton(item, b);
+        item.button.setAttribute('aria-pressed', String(b.armed));
+        item.button.hidden = b.hidden;
+        if (item.key.textContent !== (b.key ?? '')) item.key.textContent = b.key ?? '';
+        item.key.hidden = b.key === null;
+        if (b.key) item.button.setAttribute('aria-keyshortcuts', b.key);
+        else item.button.removeAttribute('aria-keyshortcuts');
+        // A brief pulse the moment it is ready again (ID-100), on fight time.
+        if (item.cooling && !b.cooling && !b.hidden && !reducedMotion()) {
+          item.button.classList.remove('hud-skill-ready');
+          void item.button.offsetWidth;
+          item.button.classList.add('hud-skill-ready');
+        }
+        item.cooling = b.cooling;
       });
+      const aiming = skills.some((b) => b.armed && SKILLS[b.skill].aim === 'row');
+      aimCaption.hidden = !aiming;
+      // Horde-only (ID-100): the skill row waits under the start or result screen.
+      if (squad) shop.hidden = !result.hidden;
 
       // Redraw only when the offer, bench or free posts change (the sim clones each tick).
       const replaceKey = state.replace
@@ -2090,9 +2308,13 @@ export function createHud(
       );
       back.textContent = screen.button;
       drawPicker(screen.picker);
+      drawSkills(screen.skills);
       gear.replaceChildren();
       campBlock(screen.camp);
       result.hidden = false;
+      if (squad) shop.hidden = true;
+      // The next fight starts with every skill ready: no pulse carried over from this one.
+      for (const item of skillItems) item.cooling = false;
       // A new screen starts at its top, not where the last one was scrolled to.
       result.scrollTop = 0;
       // A horde-only screen with points to spend starts on the picker, so Enter doesn't skip it.
@@ -2112,6 +2334,12 @@ export function createHud(
     },
     showPicker(next) {
       if (!result.hidden) drawPicker(next);
+    },
+    onSkillPick(handler) {
+      onPickSkill = handler;
+    },
+    showSkills(next) {
+      if (!result.hidden) drawSkills(next);
     },
     fightPower(line) {
       fightLine = line;

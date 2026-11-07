@@ -231,6 +231,9 @@ describe('hud', () => {
       disabled: false,
       reason: 'Thrown across the field at once',
       armed: true,
+      hidden: false,
+      key: null,
+      cooling: false,
     });
     expect(molotov).toMatchObject({
       label: 'Molotov 12s',
