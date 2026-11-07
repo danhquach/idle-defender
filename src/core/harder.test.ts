@@ -334,12 +334,13 @@ describe('boss skills (ID-099)', () => {
     expect(run(s, 1 + STEP).slabs).toEqual([]);
   });
 
-  it('Armour plates halve bullets until a quarter of its HP is gone, for good; sniper rounds go through', () => {
+  it('Armour plates halve bullets until a quarter of its HP is gone, for good; sniper rounds go through (and its armour, ID-101)', () => {
     const s = quiet();
     const h = horror(s, ['plates', 'regen'], { hp: 1000, maxHp: 1000 });
     expect(plated(h)).toBe(true);
     expect(hitDamage(h, 40)).toBe(40 * BOSS_SKILL.plates.factor - HORROR.armour);
-    expect(hitDamage(h, 40, true)).toBe(40 - HORROR.armour);
+    // ID-101: a Sniper rifle's round ignores the Horror's own armour too.
+    expect(hitDamage(h, 40, true)).toBe(40);
     one(s, h.id).hp = 740;
     let t = tick(s, STEP);
     expect(plated(one(t, h.id))).toBe(false);

@@ -5,14 +5,18 @@ import {
   AFFIXES,
   FARM,
   GUN_LEVEL_DAMAGE,
+  GUN_ROLES,
   PATROL,
   RARITIES,
   RARITY_ORDER,
   SQUAD_DROP,
+  STAT_EFFECT,
+  TRAIT,
   WEAPON_DROP,
   WEAPONS,
   type AffixId,
   type FreeWeaponId,
+  type GunBase,
   type Rarity,
   type Weapon,
   type WeaponId,
@@ -40,11 +44,49 @@ export type Held = FreeWeaponId | OwnedWeapon;
 export const isOwned = (h: Held | null): h is OwnedWeapon => typeof h === 'object' && h !== null;
 export const baseOf = (h: Held): WeaponId => (isOwned(h) ? h.base : h);
 
-/** The affixes base weapon `base` can roll. */
+/** An affix's definition, as any affix: role affixes name `bases`, some general ones a `role` range. */
+const affixDef = (
+  id: AffixId,
+): {
+  min: number;
+  max: number;
+  kinds: readonly string[];
+  bases?: readonly string[];
+  role?: Partial<Record<string, { min: number; max: number }>>;
+} => AFFIXES[id];
+
+/** The affixes base weapon `base` can roll: the general ones its kind fits, and its role affixes (ID-101). */
 export const affixesFor = (base: WeaponId): AffixId[] =>
-  (Object.keys(AFFIXES) as AffixId[]).filter((a) =>
-    (AFFIXES[a].kinds as readonly string[]).includes(WEAPONS[base].kind),
-  );
+  (Object.keys(AFFIXES) as AffixId[]).filter((a) => {
+    const d = affixDef(a);
+    return d.kinds.includes(WEAPONS[base].kind) && (!d.bases || d.bases.includes(base));
+  });
+
+/** Whether affix `id` is one of `base`'s role affixes (ID-101): only it rolls it, or at its own range. */
+export const isRoleAffix = (base: WeaponId, id: AffixId): boolean => {
+  const d = affixDef(id);
+  return d.bases?.includes(base) === true || d.role?.[base] !== undefined;
+};
+
+/** The [min, max] affix `id` rolls on base weapon `base`: its role range there, else its own. */
+export const affixRange = (id: AffixId, base: WeaponId): { min: number; max: number } => {
+  const d = affixDef(id);
+  return d.role?.[base] ?? { min: d.min, max: d.max };
+};
+
+/**
+ * The values affix `id` may hold on base weapon `base` in a save: its range there, widened to
+ * its general range, so a gun rolled before its role range (ID-101) still reads.
+ */
+export const affixBounds = (id: AffixId, base: WeaponId): { min: number; max: number } => {
+  const d = affixDef(id);
+  const r = affixRange(id, base);
+  return { min: Math.min(d.min, r.min), max: Math.max(d.max, r.max) };
+};
+
+/** Gun `base`'s role and built-in trait (ID-101); null for a blade or tool. */
+export const roleOf = (base: WeaponId): { role: string; trait: string } | null =>
+  Object.hasOwn(GUN_ROLES, base) ? GUN_ROLES[base as GunBase] : null;
 
 /** How many affixes a `rarity` `base` weapon carries: its rarity's count, or as many as fit. */
 export const affixCount = (base: WeaponId, rarity: Rarity): number =>
@@ -68,19 +110,55 @@ const AFFIX_TEXT: Readonly<Record<AffixId, (v: number) => string>> = {
   fireRate: (v) => `+${v}% fire rate`,
   magazine: (v) => `+${v}% magazine`,
   reload: (v) => `−${v}% reload time`,
-  pierce: () => 'Pierce: goes through one more enemy in line',
+  pierce: (v) =>
+    v === 1
+      ? 'Pierce: goes through one more enemy in line'
+      : `Pierce: goes through ${v} more enemies in line`,
   repair: (v) => `+${v}% repair`,
+  crit: (v) => `+${v}% crit chance`,
+  critDamage: (v) => `+${v}% crit damage`,
+  closeDamage: (v) => `+${v}% damage to enemies near the wall`,
+  cone: (v) => `+${v}% wider cone`,
+  pellets: (v) => `+${v} ${v === 1 ? 'pellet' : 'pellets'}`,
+  slow: (v) => `+${v}% slow on hit`,
+  bossDamage: (v) => `+${v}% damage to bosses and heavies`,
 };
 export const affixText = (a: Affix): string => AFFIX_TEXT[a.id](a.value);
+
+/** Affix `a` on base weapon `base` as a line: "+5% crit chance (role)" for a role affix (ID-101). */
+export const affixLabel = (base: WeaponId, a: Affix): string =>
+  isRoleAffix(base, a.id) ? `${affixText(a)} (role)` : affixText(a);
+
+/**
+ * `h`'s affixes as lines, role affixes marked "(role)" (ID-101); none for a free weapon.
+ * `compact`, for a label that brackets the list, marks them "role +5% crit chance" instead.
+ */
+export const affixLines = (h: Held, compact = false): string[] =>
+  isOwned(h)
+    ? h.affixes.map((a) =>
+        compact && isRoleAffix(h.base, a.id) ? `role ${affixText(a)}` : affixLabel(h.base, a),
+      )
+    : [];
+
+/** "Marksman: +10% crit chance": gun `base`'s role and trait (ID-101); null for a blade or tool. */
+export const roleLine = (base: WeaponId): string | null => {
+  const r = roleOf(base);
+  return r ? `${r.role}: ${r.trait}` : null;
+};
 
 /** "Military Pistol (+12% damage)": the name, then the affixes. */
 export const heldLabel = (h: Held): string =>
   isOwned(h) && h.affixes.length
-    ? `${heldName(h)} (${h.affixes.map(affixText).join(', ')})`
+    ? `${heldName(h)} (${affixLines(h, true).join(', ')})`
     : heldName(h);
 
-const share = (h: OwnedWeapon, id: AffixId): number =>
-  (h.affixes.find((a) => a.id === id)?.value ?? 0) / 100;
+/** The value `h` rolled for affix `id`; 0 when it has none (a free weapon never does). */
+export const affixValue = (h: Held, id: AffixId): number =>
+  isOwned(h) ? (h.affixes.find((a) => a.id === id)?.value ?? 0) : 0;
+
+/** Affix `id`'s percent on `h` as a share (12 → 0.12). */
+export const affixShare = (h: Held, id: AffixId): number => affixValue(h, id) / 100;
+const share = affixShare;
 
 // Worked out once per weapon object: a fight asks for them several times a shot.
 const worked = new WeakMap<OwnedWeapon, Weapon>();
@@ -109,6 +187,9 @@ function work(h: OwnedWeapon): Weapon {
         ...common,
         magazine: Math.round(w.magazine * (1 + share(h, 'magazine'))),
         reload: w.reload * (1 - share(h, 'reload')),
+        // The Shotgun's role affixes (ID-101): a wider cone, more pellets a round.
+        spread: w.spread * (1 + share(h, 'cone')),
+        pellets: w.pellets + affixValue(h, 'pellets'),
       };
     case 'tool':
       return { ...w, ...common, repair: w.repair * power * (1 + share(h, 'repair')) };
@@ -117,11 +198,18 @@ function work(h: OwnedWeapon): Weapon {
   }
 }
 
+/** Crit chance gun `h` adds on its own (ID-101): the Rifle's trait, plus a crit affix. */
+export const gunCrit = (h: Held): number =>
+  (baseOf(h) === 'rifle' ? TRAIT.crit : 0) + affixShare(h, 'crit');
+
+/** What gun `h` adds to a crit's damage multiplier (ID-101): its crit damage affix. */
+export const gunCritDamage = (h: Held): number => affixShare(h, 'critDamage');
+
 /** How many enemies a bullet from gun `h` goes through: its base gun's, plus a pierce affix's. */
 export const pierceOf = (h: Held): number => {
   const w: Weapon = WEAPONS[baseOf(h)];
   const base = w.kind === 'sidearm' || w.kind === 'gun' ? w.pierce : 0;
-  return base + (isOwned(h) ? (h.affixes.find((a) => a.id === 'pierce')?.value ?? 0) : 0);
+  return base + affixValue(h, 'pierce');
 };
 
 /** Chance that winning horde `hordeNumber` drops a weapon. */
@@ -168,7 +256,8 @@ export function rollWeapon(
   const affixes: Affix[] = [];
   for (let n = affixCount(base, rarity); n > 0; n--) {
     const id = pool.splice(int(rng, 0, pool.length - 1), 1)[0]!;
-    affixes.push({ id, value: int(rng, AFFIXES[id].min, AFFIXES[id].max) });
+    const { min, max } = affixRange(id, base);
+    affixes.push({ id, value: int(rng, min, max) });
   }
   return level === undefined
     ? { uid, base, rarity, affixes }
@@ -190,7 +279,9 @@ export function gunPower(h: Held): number {
   const w = statsOf(h);
   if (w.kind !== 'sidearm' && w.kind !== 'gun')
     throw new RangeError(`gunPower: ${baseOf(h)} is no gun`);
-  return (w.damage * w.pellets * w.magazine) / (w.magazine * w.fireInterval + w.reload);
+  // A gun's own crit counts (ID-101): the Rifle's trait, crit and crit damage affixes.
+  const crit = 1 + gunCrit(h) * (STAT_EFFECT.critDamage + gunCritDamage(h) - 1);
+  return (w.damage * w.pellets * crit * w.magazine) / (w.magazine * w.fireInterval + w.reload);
 }
 
 /**
@@ -264,12 +355,12 @@ export function rollSquadGun(
   return rollWeapon(rng, uid, base, rollRarity(rng, weights), level);
 }
 
-/** Every way `count` affixes can come from `pool`, each at its max. */
-function bestAffixSets(pool: readonly AffixId[], count: number): Affix[][] {
+/** Every way `count` affixes can come from `pool`, each at its max on `base`. */
+function bestAffixSets(base: WeaponId, pool: readonly AffixId[], count: number): Affix[][] {
   if (count === 0) return [[]];
   return pool.flatMap((id, i) =>
-    bestAffixSets(pool.slice(i + 1), count - 1).map((rest) => [
-      { id, value: AFFIXES[id].max },
+    bestAffixSets(base, pool.slice(i + 1), count - 1).map((rest) => [
+      { id, value: affixRange(id, base).max },
       ...rest,
     ]),
   );
@@ -278,7 +369,7 @@ function bestAffixSets(pool: readonly AffixId[], count: number): Affix[][] {
 /** The most dmg/s a `rarity` `base` gun at `level` can roll (`gunPower`, every affix maxed). */
 export function bestRoll(base: WeaponId, rarity: Rarity, level: number): number {
   return Math.max(
-    ...bestAffixSets(affixesFor(base), affixCount(base, rarity)).map((affixes) =>
+    ...bestAffixSets(base, affixesFor(base), affixCount(base, rarity)).map((affixes) =>
       gunPower({ uid: 'best', base, rarity, affixes, level }),
     ),
   );
@@ -321,7 +412,7 @@ export function rollUpgrade(
     const w = rollWeapon(rng, uid, base, rarity, level);
     if (gunPower(w) > beat) return w;
   }
-  const best = bestAffixSets(affixesFor(base), affixCount(base, rarity))
+  const best = bestAffixSets(base, affixesFor(base), affixCount(base, rarity))
     .map((affixes): OwnedWeapon => ({ uid, base, rarity, affixes, level }))
     .reduce((a, b) => (gunPower(b) > gunPower(a) ? b : a));
   return best;

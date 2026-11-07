@@ -4,12 +4,15 @@
 // reroll, and a short toast (refused moves).
 // Text reaches the page only through textContent.
 import {
-  affixText,
+  affixLines,
+  baseOf,
   gunLevel,
   gunPower,
   heldName,
   isOwned,
   levelName,
+  roleLine,
+  roleOf,
   type Held,
 } from '../core/armoury.ts';
 import { repairAllCost } from '../core/base.ts';
@@ -765,7 +768,7 @@ export type CampScreen = Pick<Camp, 'picks' | 'offers'> & { room: Room };
 /** A survivor (design §10) as "Ava · level 3 · Instinct 2, Agility 4 · Military Rifle (+10% damage)". */
 export function survivorText(s: Survivor): string {
   const stats = STATS.filter((st) => s.stats[st] > 0).map((st) => statText(st, s.stats[st]));
-  const affixes = s.weapon.affixes.map(affixText);
+  const affixes = affixLines(s.weapon, true);
   return [
     s.name,
     `level ${levelOf(s.xp).level}`,
@@ -932,7 +935,7 @@ function dropLines(game: GameState, s: HordeState): string[] {
   const found = drop.kept
     ? `Found: ${heldName(drop.weapon)}`
     : `Found: ${heldName(drop.weapon)} · armoury full, salvaged for ${drop.scrap} Scrap`;
-  return [found, ...drop.weapon.affixes.map(affixText)];
+  return [found, ...affixLines(drop.weapon)];
 }
 
 /**
@@ -1022,7 +1025,7 @@ function squadXpLine(g: ReturnType<typeof levelGains>[number]): string {
 /** "Lv 12 Military Rifle (+7% damage)": a gun's level, name and affixes (ID-098). */
 export const levelLabel = (h: Held): string =>
   isOwned(h) && h.affixes.length
-    ? `${levelName(h)} (${h.affixes.map(affixText).join(', ')})`
+    ? `${levelName(h)} (${affixLines(h, true).join(', ')})`
     : levelName(h);
 
 /** "Lv 12 Military Rifle (+7% damage) · 17.2 dmg/s": a gun's name and affixes, and how hard it hits over time. */
@@ -1051,8 +1054,17 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
   ];
 }
 
-/** "30.3 dmg/s · Lv 4 Prototype LMG (+12% damage)": a picker option, the number first so a closed select keeps it. */
-export const gunOption = (h: Held): string => `${gunPower(h).toFixed(1)} dmg/s · ${levelLabel(h)}`;
+/**
+ * "30.3 dmg/s · Lv 4 Prototype LMG · Suppression (+12% damage)": a picker option, the number
+ * first so a closed select keeps it, then the gun and its role (ID-101), then its affixes.
+ */
+export const gunOption = (h: Held): string => {
+  const role = roleOf(baseOf(h));
+  const affixes = affixLines(h, true);
+  return `${gunPower(h).toFixed(1)} dmg/s · ${levelName(h)}${role ? ` · ${role.role}` : ''}${
+    affixes.length > 0 ? ` (${affixes.join(', ')})` : ''
+  }`;
+};
 
 /** One survivor's gun picker (ID-067): who, what they can hold, and what they hold now. */
 export interface GearRow {
@@ -1064,6 +1076,8 @@ export interface GearRow {
   value: string;
   /** The rarity of the gun they hold (the free pistol is Common). */
   rarity: Rarity;
+  /** "Marksman: +10% crit chance": the held gun's role and trait (ID-101). */
+  role: string;
 }
 
 export interface GearScreen {
@@ -1092,6 +1106,7 @@ export function squadGear(game: GameState): GearScreen {
           .map(({ h }) => ({ value: isOwned(h) ? h.uid : 'pistol', label: gunOption(h) })),
         value: isOwned(held) ? held.uid : 'pistol',
         rarity: isOwned(held) ? held.rarity : 'common',
+        role: roleLine(baseOf(held)) ?? '',
       };
     }),
   };
@@ -1120,8 +1135,10 @@ export interface DropTile {
   farmNote: string | null;
   /** The gun's icon (ID-092), as the Inventory shows it. */
   icon: ArtId;
-  /** "+7% damage, +21% magazine"; '' with none. */
+  /** "+7% damage, +21% magazine"; '' with none. A role affix is marked "(role)" (ID-101). */
   affixes: string;
+  /** "Marksman: +10% crit chance": the gun's role and built-in trait (ID-101). */
+  role: string;
   /** "17.2 dmg/s" */
   power: string;
   /** "Stash 15/20", or "Stash full: thrown away" when the drop itself went. */
@@ -1197,7 +1214,8 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
     kindTone: KIND_TONE[drop.kind],
     farmNote: drop.noUpgrades ? farmText(drop.farmFrom) : null,
     icon: GUN_ICON[weapon.base as GunId],
-    affixes: weapon.affixes.map(affixText).join(', '),
+    affixes: affixLines(weapon).join(', '),
+    role: roleLine(weapon.base) ?? '',
     power: `${power.toFixed(1)} dmg/s`,
     stash: lost ? 'Stash full: thrown away' : `Stash ${count}/${STASH_CAP}`,
     lost,
@@ -1975,6 +1993,7 @@ export function createHud(
         const kind = el('span', 'chip tile-kind', t.kind);
         kind.dataset.tone = t.kindTone;
         id.append(kind, el('p', 'tile-label tile-rarity', `Weapon drop · ${t.rarityName}`), name);
+        if (t.role) id.append(el('p', 'tile-sub tile-role', t.role));
         if (t.affixes) id.append(el('p', 'tile-sub', t.affixes));
         const head = el('div', 'tile-drop-head');
         head.append(icon, id);
@@ -2376,18 +2395,22 @@ export function createHud(
           if (result.hidden) return;
           onEquip(row.id, select.value);
         });
+        // The held gun's role and trait (ID-101), under the picker and read with it.
+        const role = el('p', 'hud-gear-role', row.role);
+        role.id = `hud-gear-role-${i}`;
+        if (row.role) select.setAttribute('aria-describedby', role.id);
         const slot = slots.get(row.id);
         if (slot) {
           // The card names them already: the label is for screen readers.
           const label = el('label', 'sr-only', `${row.name}'s gun`);
           label.htmlFor = select.id;
-          slot.replaceChildren(label, select);
+          slot.replaceChildren(label, select, role);
           return;
         }
         const line = el('div', 'hud-gear-row');
         const label = el('label', 'hud-gear-name', row.name);
         label.htmlFor = select.id;
-        line.append(label, select);
+        line.append(label, select, role);
         loose.push(line);
       });
       const stash = picker.querySelector<HTMLElement>('.debrief-stash');

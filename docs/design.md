@@ -562,12 +562,16 @@ close-quarter weapons come out only when an enemy is close.
 
   | Gun | Close crowd, 20 s | Far (530–830 px), 20 s | Lane, 20 s | Sustained, 60 s | Horde 4 wins (Bob's gun + pistol) |
   |---|---|---|---|---|---|
-  | Pistol | 8.3 | 8.0 | 8.3 | 25.8 | 5% |
-  | SMG | 22.0 | 0 | 16.8 | 60.0 | 100% |
-  | Rifle | 16.7 | 16.2 | 16.3 | 50.8 | 95% |
-  | Shotgun | **26.2** | 0 | 12.0 | 51.8 | 95% |
-  | LMG | 21.5 | 13.6 | 20.3 | **66.2** | 100% |
-  | Sniper rifle | 21.7 | **21.4** | **21.0** | 62.2 | 75% |
+  | Pistol | 8.3 | 8.0 | 8.3 | 27.8 | 5% |
+  | SMG | 23.0 | 0 | 15.8 | 59.2 | 100% |
+  | Rifle | 17.4 | 17.0 | 17.0 | 52.2 | 95% |
+  | Shotgun | **25.2** | 0 | 11.6 | 48.4 | 95% |
+  | LMG | 21.4 | 11.7 | 20.0 | **64.6** | 100% |
+  | Sniper rifle | 21.0 | **21.0** | **21.0** | 63.0 | 75% |
+
+  (With the gun traits, ID-101; on main before them the SMG was 22.6 close and
+  the Rifle 16.5 / 16.4 / 16.4 / 50.2. The rest held still: the enemies stand
+  still here, so stagger and slow change nothing.)
 
   Each beats the pistol in its role at least twice over (the rifle, the
   all-rounder, 1.5× everywhere); the shotgun leads up close, the sniper far and
@@ -583,6 +587,54 @@ close-quarter weapons come out only when an enemy is close.
   close (21.4 to the shotgun's 25.2) or in a lane (20.0 to 21.0). The scenes
   now pick only the repeatable stat cards, as written above (they took Speed
   Loaders and Extended Mags too).
+- **Gun roles (as built, ID-101, starting points for the balance pass, ID-102):**
+  each gun has a role and a built-in trait every one of it carries, Rusty or
+  Relic, plus role affixes only it rolls (below, in Gear). The Inventory, the
+  drop tile and the gun picker name the role and trait ("Marksman: +10% crit
+  chance"); the slot's screen-reader label and the picker's description read it.
+  A picker option reads "30.3 dmg/s · Lv 4 Prototype LMG · Suppression (role +12%
+  slow on hit)": the role right after the name, and in such a bracketed list a
+  role affix is "role …"; listed one a line (Inventory, drop tile) it is "… (role)".
+  dmg/s counts the gun's own crit (the Rifle's trait, crit and crit damage
+  affixes), so ranking, stash-full discards and guaranteed upgrades see it; the
+  situational effects (near-wall damage, stagger, slow, boss damage, cone) are
+  not in dmg/s.
+
+  | Gun | Role | Built-in trait | Role affixes |
+  |---|---|---|---|
+  | Pistol | Backup | Fastest reload of any gun (1.5 s, data) | +3–8% crit chance |
+  | SMG | Swarm shredder | +25% damage to an enemy within 250 px of the wall's front (the outermost built layer's face; the player reads "near the wall") | +10–25% close-range damage, added to the 25% |
+  | Rifle | Marksman | +10% crit chance | +3–8% crit chance, +20–50% crit damage (added to ×2) |
+  | Shotgun | Wall stopper | Each pellet hit briefly stops the enemy: no moving for 0.15 s, never again until 0.6 s after the last one began, nor while it is stunned or paralysed | +20–40% wider cone, +1–2 pellets |
+  | LMG | Suppression | A hit slows the enemy 20% for 1 s; a new hit renews the time with the larger slow, never stacking | +5–15% slow (capped at 35% in all), +40–80% magazine (its own range of the general magazine affix) |
+  | Sniper rifle | Boss and heavy killer | Ignores armour (a Brute's, a Horror's, a boss's plates); each shot goes through 1 more enemy | +15–35% damage to bosses, mini-bosses and the heavy kinds (Brute, Swollen, Horror), +1–2 pierce (its own range of the general pierce affix) |
+
+  Slow, stagger and Shock Rounds' paralysis stack (and multiply with Barbed
+  Wire and traps, untested here), but stay small: a Shambler hit every step by a
+  staggering pellet and a 35% slow, with Shock Rounds at max, still walks at
+  about 30% of its pace (`roles.test.ts`). Squad Power counts the gun's crit (the Rifle's
+  trait and crit affixes). An older save's guns keep their affixes (an LMG
+  magazine roll below the new 40% still reads) and gain their trait, which
+  comes from the base gun, not the save.
+
+  Role scenes (`balance/guns.test.ts`, the lone Common-gun Gunner, 5 seeds;
+  before → after the traits):
+
+  | Gun | Boss with plates, 20 s (damage) | Six held Brutes, 20 s (damage) | Twelve walking Shamblers, mean x after 5 s |
+  |---|---|---|---|
+  | Pistol | 41 | 116 | 619.0 |
+  | SMG | 96 → 112 | 196 → 310 | 619.0 |
+  | Rifle | 79 → 92 | 207 → 232 | 619.0 |
+  | Shotgun | 160 | 188 | 619.0 → **628.3** |
+  | LMG | 116 | 313 | 619.0 → **623.3** |
+  | Sniper rifle | 220 → **242** | 334 → **387** | 619.0 |
+
+  The swarm guns (SMG, LMG, Shotgun) out-kill the others in a close crowd, the
+  marksmen (Rifle, Sniper rifle) out-kill the swarm guns far, the Sniper rifle
+  out-damages every gun by a fifth or more on a boss and on heavies (before,
+  only 1.07× the LMG on heavies), and the Shotgun and LMG hold a walking crowd
+  farther out than any other gun (a small margin from one Gunner: tuned in
+  ID-102).
 - **Roster screen (as built, ID-012):** a Roster button on the build panel
   opens it in the panel's place: each defender's level and XP, stats
   (Tinker shown locked), unspent points (spent there) and rest time, and three pickers
@@ -773,7 +825,9 @@ profession's output).
   (a Relic blade has 2). Affixes, each at most once, rolled as whole numbers:
   +5–15% damage, +5–15% fire rate (any weapon), +20–50% magazine, −10–25%
   reload, pierce (guns: the bullet goes through one more enemy, hitting the
-  next it crosses within 200 px; §6 Ballistics), +10–25% repair (tools). A horde win
+  next it crosses within 200 px; §6 Ballistics), +10–25% repair (tools); and
+  each gun's role affixes, only it rolling them (ID-101, §6 Specialised guns:
+  Gun roles), marked "(role)" wherever affixes are listed. A horde win
   drops a weapon with chance 10% + 1% per horde number, capped at 30%: an
   even pick of base weapon, rarity Rusty 30 / Common 45 / Military 20 /
   Prototype 5 (Relic never from a horde). The result screen names it with one
@@ -2003,11 +2057,12 @@ offline progress works across sessions.
     of its rarity's colour, with its dmg/s rounded in a corner badge. Selecting
     a slot (click, tap, or the arrows, Home and End from its single Tab stop)
     rings it and fills the details beside the grid (under it on a phone): the
-    name in its rarity's colour, "Military rarity · Rifle", each affix on its own
-    line, dmg/s, who holds it, and Combine. Hovering a slot shows its details
-    until the pointer leaves the grid. It opens on the strongest stash gun.
-    Each slot's screen-reader label names the gun, its rarity, dmg/s and affix
-    count. The result screen's drop tile shows the same icon and tint.
+    name in its rarity's colour, "Military rarity · Rifle", its role and trait
+    (ID-101), each affix on its own line, dmg/s, who holds it, and Combine.
+    Hovering a slot shows its details until the pointer leaves the grid. It
+    opens on the strongest stash gun. Each slot's screen-reader label names the
+    gun, its rarity, role and trait, dmg/s and affix count. The result screen's
+    drop tile shows the same icon and tint.
   - **Drag and drop (ID-095), between hordes:** a stash gun dropped on a
     survivor's slot is theirs, the gun they held going to the stash (nothing
     for the free pistol); the free pistol dropped on a survivor with a gun sends

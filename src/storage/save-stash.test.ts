@@ -2,7 +2,7 @@
 // back through the allow-list: known weapon ids only, the stash's length capped, and
 // prototype keys, oversized and look-alike values refused.
 import { describe, expect, it } from 'vitest';
-import type { OwnedWeapon } from '../core/armoury.ts';
+import { roleOf, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { ARMOURY_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
@@ -67,6 +67,49 @@ describe('save: the stash and equipped guns (ID-067)', () => {
     const raw = encodeSave(next, NOW);
     expect(raw.length).toBeLessThan(MAX_SAVE_CHARS / 2);
     expect(decodeSave(raw)?.game).toEqual(next);
+  });
+
+  it('gun roles (ID-101): older guns keep their affixes and gain their trait; role affixes are checked per gun', () => {
+    const g = armed(4);
+    const as = (base: string, affix: Loose) => (x: Loose) => {
+      x.armoury[0].base = base;
+      military(x.armoury[0], affix);
+    };
+    // An older LMG's magazine roll, below the LMG's role range, still reads, unchanged.
+    const old = reread(g, as('lmg', { id: 'magazine', value: 25 }));
+    expect(old?.game.armoury[0]).toMatchObject({
+      base: 'lmg',
+      affixes: [{ id: 'magazine', value: 25 }],
+    });
+    expect(roleOf('lmg')?.trait).toMatch(/slow/);
+    // Role affixes read on their own gun.
+    for (const [base, affix] of [
+      ['lmg', { id: 'magazine', value: 80 }],
+      ['sniper', { id: 'pierce', value: 2 }],
+      ['rifle', { id: 'critDamage', value: 50 }],
+      ['shotgun', { id: 'pellets', value: 2 }],
+      ['smg', { id: 'closeDamage', value: 10 }],
+      ['sniper', { id: 'bossDamage', value: 35 }],
+    ] as const) {
+      expect(reread(g, as(base, affix)), `${base} ${affix.id}`).not.toBeNull();
+    }
+    // Another gun's role affix, or a value past the gun's range, is refused.
+    for (const [base, affix] of [
+      ['smg', { id: 'pellets', value: 1 }],
+      ['rifle', { id: 'slow', value: 10 }],
+      ['shotgun', { id: 'crit', value: 5 }],
+      ['smg', { id: 'magazine', value: 80 }],
+      ['rifle', { id: 'pierce', value: 2 }],
+      ['shotgun', { id: 'pellets', value: 3 }],
+      // Pellets drive bullets per shot: no zero, fraction, text or negative count.
+      ['shotgun', { id: 'pellets', value: 0 }],
+      ['shotgun', { id: 'pellets', value: 1.5 }],
+      ['shotgun', { id: 'pellets', value: '2' }],
+      ['shotgun', { id: 'pellets', value: -1 }],
+      ['lmg', { id: 'slow', value: 1e9 }],
+    ] as const) {
+      expect(reread(g, as(base, affix)), `${base} ${affix.id} ${affix.value}`).toBeNull();
+    }
   });
 
   it('refuses hostile stash and gun values', () => {

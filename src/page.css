@@ -855,10 +855,23 @@ body {
 /* One survivor's gun picker, when no card holds it: their name, then the select (ID-067). */
 .hud-gear-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-12);
   margin-bottom: var(--space-6);
+}
+
+/* The held gun's role and trait, under its picker (ID-101). */
+.hud-gear-role {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+}
+
+.hud-gear-row .hud-gear-role {
+  flex-basis: 100%;
+  margin-top: 0;
 }
 
 .hud-gear-name {
@@ -1040,6 +1053,11 @@ body {
 .tile-sub {
   color: var(--color-text-muted);
   font-size: var(--text-body-sm);
+}
+
+/* The dropped gun's role and trait (ID-101): what it is good against. */
+.tile-role {
+  color: var(--color-text);
 }
 
 /* Which kind of drop it was, and the level in front of the gun's name (ID-098). */
@@ -2925,6 +2943,15 @@ body {
 .inv-rarity[data-rarity='relic'],
 .inv-combine-row[data-rarity='relic'] .inv-name {
   color: var(--rarity-relic);
+}
+
+/* The gun's role and built-in trait (ID-101). */
+.inv-role {
+  margin: 0;
+  padding-left: var(--space-6);
+  border-left: 2px solid var(--color-accent);
+  color: var(--color-text);
+  font-size: var(--text-body-sm);
 }
 
 .inv-affixes {

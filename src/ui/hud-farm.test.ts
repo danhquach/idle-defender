@@ -465,7 +465,9 @@ describe('gun level wherever the gun shows (ID-098)', () => {
     expect(levelName(w)).toBe('Lv 12 Military Rifle');
     expect(levelLabel(w)).toBe('Lv 12 Military Rifle (+7% damage)');
     expect(gunLabel(w)).toMatch(/^Lv 12 Military Rifle \(\+7% damage\) · [\d.]+ dmg\/s$/);
-    expect(gunOption(w)).toMatch(/^[\d.]+ dmg\/s · Lv 12 Military Rifle \(\+7% damage\)$/);
+    expect(gunOption(w)).toMatch(
+      /^[\d.]+ dmg\/s · Lv 12 Military Rifle · Marksman \(\+7% damage\)$/,
+    );
     expect(levelLabel('pistol')).toBe('Lv 1 Pistol');
     expect(levelLabel(gun('b'))).toBe('Lv 1 Military Rifle (+7% damage)');
   });
