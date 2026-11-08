@@ -67,22 +67,31 @@ describe('hold to add, on each screen (ID-096)', () => {
     expect(spent).toEqual(['instinct', 'instinct']);
   });
 
-  it('the Roster’s survivor card', () => {
+  it('the Roster’s + and − draft points, held; Confirm spends them', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const g0 = newGame('horde');
     let g: GameState = { ...g0, roster: [vet(1)], camp: { ...g0.camp, recruits: 1 } };
     const roster = createRoster(root, {
-      state: () => ({ game: g, fight: null, canSpend: true, resumes: false }),
+      state: () => ({ game: g, fight: null, canSpend: true, canGear: true, resumes: false }),
       onSpend: (id, stat) => {
         g = spend(g, id, stat);
         roster.refresh();
       },
+      onEquip: () => ({ ok: true }),
+      onBestGuns: () => ({ ok: true, moves: [] }),
     });
     roster.open('recruit-1');
-    const plus = () => document.querySelector<HTMLButtonElement>(`.roster-stat-add[${HOLD_ATTR}]`)!;
+    const plus = () => document.querySelector<HTMLButtonElement>(`[${HOLD_ATTR}^="add:"]`)!;
+    const minus = () => document.querySelector<HTMLButtonElement>(`[${HOLD_ATTR}^="sub:"]`)!;
     holdDown(plus, HOLD.delay + 2 * HOLD.every + 10);
-    expect(g.roster[0]!.stats.instinct).toBe(3);
+    // Drafted, not spent: the camp still has them to spend.
+    expect(g.roster[0]!.stats.instinct).toBe(0);
+    expect(document.querySelector('.rv-pend')!.textContent).toBe('+3');
+    holdDown(minus, HOLD.delay + HOLD.every + 10);
+    expect(document.querySelector('.rv-pend')!.textContent).toBe('+1');
+    document.querySelector<HTMLButtonElement>('[data-key="confirm"]')!.click();
+    expect(g.roster[0]!.stats.instinct).toBe(1);
   });
 
   it('the full game’s roster in the build panel', () => {

@@ -21,6 +21,7 @@ import {
   type HordeState,
 } from '../core/horde.ts';
 import {
+  bestGuns,
   combineGuns,
   equipGun,
   finishSquadHorde,
@@ -164,8 +165,9 @@ export function start(root: HTMLElement, art: Art): void {
   );
   // When the fight ended (ms): read once, so the screen and the rest timers agree.
   let endedAt: number | null = null;
-  // Stat points spent on the result screen, applied with "Back to build".
-  let spends: [string, Stat][] = [];
+  // Stat points spent on the result screen, applied with "Back to build". `card`: spent on a
+  // survivor's card there, which its Undo takes back; `roster`: confirmed in the Roster, locked.
+  let spends: [string, Stat, 'card' | 'roster'][] = [];
   // Camp-level picks (or a survivor let in) on the result screen, applied in order with "Back to build".
   let campPicks: CampChoice[] = [];
   let selected: SlotHit | null = null;
@@ -250,8 +252,9 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (defenderId, stat) => {
       if (!horde || endedAt === null) return;
-      spends.push([defenderId, stat]);
+      spends.push([defenderId, stat, 'card']);
       showPicker();
+      refreshDialogs();
     },
     (item) => {
       if (!horde) return;
@@ -285,6 +288,15 @@ export function start(root: HTMLElement, art: Art): void {
     else commit(r.game);
     hud.showSkills(skillPicker(game.skillPick));
   });
+  // A survivor card's Undo on the result screen (ID-108): takes back the points spent on that
+  // card, not the ones confirmed in the Roster.
+  hud.onUnspend((id) => {
+    if (!horde || endedAt === null) return;
+    spends = spends.filter(([who, , from]) => !(who === id && from === 'card'));
+    hud.syncPicks(pending().roster);
+    showPicker();
+    refreshDialogs();
+  });
   hud.onHordePick((n) => {
     picked = n;
     // The Inventory's Squad Power line compares with the horde picked.
@@ -298,7 +310,11 @@ export function start(root: HTMLElement, art: Art): void {
   function squadNext(): void {
     if (horde) {
       if (endedAt === null) return;
-      commit(pending());
+      // The picks are in the game once saved: cleared first, so the redraw `commit` makes
+      // doesn't count them twice (the Roster badge reads pending()).
+      const next = pending();
+      spends = [];
+      commit(next);
     }
     // The seed is the only randomness from outside the core.
     const now = Date.now();
@@ -475,17 +491,31 @@ export function start(root: HTMLElement, art: Art): void {
     }
     return next;
   }
-  // The Roster (ID-086), left of the Inventory, in the horde-only build: every survivor,
-  // and each one's card. Its + spends a point between hordes: on the result screen with
-  // the screen's own picks, on the start screen at once.
+  // The Roster (ID-086, ID-108), left of the Inventory, in the horde-only build: every
+  // survivor's stats and gun. Confirming drafted points spends them between hordes: on the
+  // result screen with the screen's own picks, on the start screen at once. Guns change as
+  // on the gun pickers.
   const roster: Roster | null = HORDE_ONLY
     ? createRoster(root, {
         state: () => ({
           game: pending(),
           fight: horde?.outcome === 'fighting' ? horde : null,
           canSpend: !horde || endedAt !== null,
+          canGear: !horde || endedAt !== null,
           resumes: horde?.outcome === 'fighting' && !held,
         }),
+        onEquip: changeGun,
+        onBestGuns: () => {
+          if (horde && endedAt === null) return { ok: false, reason: GUNS_WAIT };
+          const r = bestGuns(game);
+          if (r.moves.length > 0) {
+            commit(r.game);
+            // The start screen's squad on the wall holds the new guns too.
+            if (!horde) preview = startSquadHorde(game, 0, Date.now());
+            showGear();
+          }
+          return { ok: true, moves: r.moves };
+        },
         onSpend: (id, stat) => {
           if (horde && endedAt === null) return;
           const r = spendPoint(pending(), id, stat);
@@ -494,7 +524,7 @@ export function start(root: HTMLElement, art: Art): void {
             return;
           }
           if (horde) {
-            spends.push([id, stat]);
+            spends.push([id, stat, 'roster']);
             hud.syncPicks(r.game.roster);
             showPicker();
             refreshDialogs();

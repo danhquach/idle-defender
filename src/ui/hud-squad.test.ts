@@ -286,6 +286,12 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     expect(root.querySelector('.hud-pick-stat')!.getAttribute('aria-label')).toBe(
       `Add Instinct to ${evil}, now 0`,
     );
+    // The card's Undo (ID-108) names them as plain text too.
+    h.onUnspend(noop);
+    root.querySelector<HTMLButtonElement>('.hud-pick-stat')!.click();
+    const undo = root.querySelector<HTMLButtonElement>('.squad-undo')!;
+    expect(undo.hidden).toBe(false);
+    expect(undo.getAttribute('aria-label')).toBe(`Undo the points spent on ${evil} here`);
     h.showResult(squadStart(g));
     expect(root.querySelector('.hud-result img:not(.hud-skill-option img)')).toBeNull();
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);

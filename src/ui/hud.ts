@@ -1470,6 +1470,11 @@ export function createHud(
    * card in the Roster count here too.
    */
   syncPicks(picks: readonly RosterDefender[]): void;
+  /**
+   * Where a survivor card's Undo goes (ID-108): take back the points spent on that card on
+   * this screen, not the ones confirmed in the Roster; the app sets it once.
+   */
+  onUnspend(handler: (defenderId: string) => void): void;
   /** Where a horde picked from the picker goes (ID-098); the app sets it once. */
   onHordePick(handler: (horde: number) => void): void;
   /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
@@ -1615,6 +1620,9 @@ export function createHud(
   let onPickSkill: (skill: SkillId) => void = () => {};
   foot.append(skillBlock, pickBlock, footNote, back);
   let onPickHorde: (horde: number) => void = () => {};
+  let onUnspend: ((defenderId: string) => void) | null = null;
+  // Points spent on each survivor's card on this result screen, which its Undo takes back.
+  const cardSpent = new Map<string, number>();
   result.append(resultTitle, resultList, picker, gear, campPicker, foot);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
@@ -1814,6 +1822,7 @@ export function createHud(
           const r = spend(d, b.stat);
           if (!r.ok) return;
           d = r.defender;
+          if (squadPicks) cardSpent.set(d.id, (cardSpent.get(d.id) ?? 0) + 1);
           onSpend(d.id, b.stat);
           draw();
           // Keep the keyboard where it was; a spent-out row moves on to the next picker
@@ -1841,7 +1850,17 @@ export function createHud(
         );
         if (left <= 0) count.append(el('span', 'sr-only', ' points'));
         count.classList.toggle('squad-points-none', left === 0);
-        block.replaceChildren(count, buttons, ...gainList(d));
+        const undo = el('button', 'hud-button squad-undo', 'Undo');
+        undo.type = 'button';
+        undo.hidden = !onUnspend || !cardSpent.get(d.id);
+        undo.setAttribute('aria-label', `Undo the points spent on ${d.name} here`);
+        undo.addEventListener('click', () => {
+          if (result.hidden || !onUnspend) return;
+          cardSpent.delete(d.id);
+          onUnspend(d.id);
+          block.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')?.focus();
+        });
+        block.replaceChildren(count, buttons, undo, ...gainList(d));
         return;
       }
       block.replaceChildren(el('p', 'hud-pick-heading', row.heading), buttons, ...gainList(d));
@@ -2323,6 +2342,7 @@ export function createHud(
       footNote.textContent = d?.foot ?? '';
       back.classList.toggle('btn-primary', d !== undefined);
       pickSync.clear();
+      cardSpent.clear();
       picker.replaceChildren(
         ...(d
           ? debriefBlock(d, screen.picks)
@@ -2356,6 +2376,9 @@ export function createHud(
     },
     syncPicks(picks) {
       for (const p of picks) pickSync.get(p.id)?.(p);
+    },
+    onUnspend(handler) {
+      onUnspend = handler;
     },
     onHordePick(handler) {
       onPickHorde = handler;
