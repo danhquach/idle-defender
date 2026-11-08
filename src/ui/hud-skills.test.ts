@@ -28,7 +28,7 @@ describe('the skill pick (ID-100)', () => {
     expect(p.note).toBe('Pick up to 2. Just 1 works twice as hard');
     expect(rows([])).toEqual([
       ['flashbang', false, false, 'Stuns an area you pick, 4 bursts', null, '25s cooldown'],
-      ['molotov', false, false, 'Sets an area you pick on fire', null, '20s cooldown'],
+      ['molotov', false, false, 'Sets an area you pick on fire', null, '30s cooldown'],
       ['airstrike', false, false, 'Bombs a row you pick', null, '40s cooldown'],
     ]);
     expect(p.options.map((o) => o.name)).toEqual(['Flashbang', 'Molotov', 'Airstrike']);
@@ -47,7 +47,7 @@ describe('the skill pick (ID-100)', () => {
         '×2: 8 bursts',
         '25s cooldown',
       ],
-      ['molotov', false, false, 'Sets an area you pick on fire', null, '20s cooldown'],
+      ['molotov', false, false, 'Sets an area you pick on fire', null, '30s cooldown'],
       ['airstrike', false, false, 'Bombs a row you pick', null, '40s cooldown'],
     ]);
     expect(skillPicker(['molotov']).options[1]!.boost).toBe('×2: burns twice as hard');
@@ -60,7 +60,7 @@ describe('the skill pick (ID-100)', () => {
     expect(p.note).toBe('2 picked. Drop one for ×2 power');
     expect(rows(['airstrike', 'molotov'])).toEqual([
       ['flashbang', false, true, 'Stuns an area you pick, 4 bursts', null, '25s cooldown'],
-      ['molotov', true, false, 'Sets an area you pick on fire', null, '20s cooldown'],
+      ['molotov', true, false, 'Sets an area you pick on fire', null, '30s cooldown'],
       ['airstrike', true, false, 'Bombs a row you pick', null, '40s cooldown'],
     ]);
   });

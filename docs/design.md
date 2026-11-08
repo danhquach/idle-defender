@@ -377,6 +377,24 @@ Defenders stand on **posts** the player builds and chooses between.
   0.5 s first (PM), so the whole carpet lands 0.5 s later, still from the
   wall outward. The scripted player (ID-102) aims
   at the enemy nearest the wall, as before.
+- **As built (ID-114): Molotov fires keep up with the hordes.** A fire no
+  longer burns a flat 5 damage/s: each second it burns 40% of this wave's
+  Shambler HP (`SKILLS.molotov.burn`, `fireDps`), on whichever HP curve the
+  fight uses (the full game's or the horde-only build's), so it grows with
+  the horde and the wave instead of falling behind. A Shambler crosses a
+  fire's width in about 3.3 s, so one that walks right through dies; one
+  held in a fire (at a wall, or stunned) dies in 2.5 s. Tougher kinds
+  take the same damage, so they last longer. Picked alone it still burns
+  ×2. To pay for the harder throw its cooldown goes from 20 s to 30 s
+  (between the Flashbang's 25 s and the Airstrike's 40 s). The horde-only
+  balance pulls both ways here: at 20 s the lone starting survivor won
+  Horde 4 on a seed, while 25–26 s left Horde 10 at 55% first-try wins;
+  a grid over burn 0.3–0.45 and 20–30 s found 0.4 at 28–30 s (and 0.45
+  at 30 s) passing both with room. Count, radius, area, 6 s burn time
+  and cost are unchanged.
+  Measured at Horde 7's last wave (a crowd of 40 Shamblers walking in, the
+  squad not shooting, 6 seeds): one throw kills at least 30% of the
+  Shamblers its fires touch, and at least half when picked alone.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or

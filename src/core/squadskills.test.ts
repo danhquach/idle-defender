@@ -16,6 +16,7 @@ import { skillPower, tick, type HordeState } from './horde.ts';
 import { skillPickPower, startSquadHorde, toggleSkill } from './hordeonly.ts';
 import { skillLeft, skillLock, useSkill } from './skills.ts';
 import { enemy } from './testing.ts';
+import { enemyHp } from './waves.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -173,11 +174,13 @@ describe('skills in a horde-only fight (ID-100)', () => {
       expect(f.until - f.at).toBeCloseTo(SKILLS.molotov.seconds, 9);
       const e = enemy(t, { x: f.x, y: f.y, ...hold });
       t = tick(t, 1);
-      // What the fire took (the squad shoots it too).
-      return t.enemies.find((x) => x.id === e.id)!.burnt ?? 0;
+      // What the fire took (the squad shoots it too), as a share of this wave's Shambler
+      // HP on the horde-only HP curve (ID-114).
+      const shambler = enemyHp('shambler', t.hordeNumber, t.wave, t.hpScale);
+      return (t.enemies.find((x) => x.id === e.id)!.burnt ?? 0) / shambler;
     };
-    expect(burn(fight('molotov', 'flashbang'))).toBeCloseTo(SKILLS.molotov.dps, 6);
-    expect(burn(fight('molotov'))).toBeCloseTo(2 * SKILLS.molotov.dps, 6);
+    expect(burn(fight('molotov', 'flashbang'))).toBeCloseTo(SKILLS.molotov.burn, 6);
+    expect(burn(fight('molotov'))).toBeCloseTo(2 * SKILLS.molotov.burn, 6);
   });
 
   it('the clocks run on fight time: they stop while a card pick is open', () => {
