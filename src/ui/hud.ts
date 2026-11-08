@@ -864,11 +864,12 @@ export function pickerRow(d: RosterDefender, squad = false): PickerRow {
     heading: `${d.name} · ${left} stat point${left === 1 ? '' : 's'} to spend`,
     buttons: STATS.map((stat) => ({
       stat,
-      // A horde-only button says it adds a point: "+ Instinct (2)".
+      // A horde-only button says it adds a point: "+ Instinct (2)"; spent out, it reads as
+      // the stat as it stands, "Instinct (2)" (ID-111).
       label: isLocked(stat)
         ? lockedLabel(stat)
         : squad
-          ? `+ ${STAT_NAMES[stat]} (${d.stats[stat]})`
+          ? `${left > 0 ? '+ ' : ''}${STAT_NAMES[stat]} (${d.stats[stat]})`
           : `${STAT_NAMES[stat]} ${d.stats[stat]}`,
       disabled: left <= 0 || isLocked(stat),
     })),
@@ -1177,6 +1178,12 @@ export interface SquadCard {
   bar: { pct: number; text: string } | null;
   /** Joins for the next horde (a win's new survivor). */
   joining: boolean;
+  /**
+   * The survivor as the card's stat block reads them (ID-111), this result's XP in: every
+   * result card has the block, spent out or not, so a level-up doesn't change its size.
+   * Null only for one the roster doesn't hold.
+   */
+  survivor: RosterDefender | null;
 }
 
 /** The horde-only panel laid out (ID-067), for the start, win and loss screens. */
@@ -1203,6 +1210,7 @@ const plainCard = (d: RosterDefender, joining = false): SquadCard => ({
   levelUp: false,
   bar: null,
   joining,
+  survivor: d,
 });
 
 /** The loot tile for `drop`, against the stash `game` had before it. */
@@ -1325,10 +1333,13 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   );
   const goOn = picker.options.find((o) => o.horde === picker.value)!.button;
   const picks: RosterDefender[] = [];
+  // Each survivor with this result's XP in, for their card's stat block (ID-111).
+  const grown = new Map<string, RosterDefender>();
   for (const g of gains) {
     const d = game.roster.find((r) => r.id === g.id);
     if (!d) continue;
     const next = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
+    grown.set(d.id, next);
     if (unspentPoints(next) > 0) picks.push(next);
   }
   const xpCards = (): SquadCard[] =>
@@ -1343,6 +1354,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         text: `${g.into}/${g.next} XP to Lv ${g.level + 1}`,
       },
       joining: false,
+      survivor: grown.get(g.id) ?? null,
     }));
   if (won) {
     const ending = first && s.hordeNumber === ENDING_HORDE;
@@ -1807,11 +1819,23 @@ export function createHud(
       const row = pickerRow(d, squadPicks);
       const buttons = el('div', 'hud-pick-row');
       row.buttons.forEach((b, i) => {
-        const button = el('button', 'hud-button hud-pick-stat', b.label);
+        const button = el('button', 'hud-button hud-pick-stat', squadPicks ? '' : b.label);
         button.type = 'button';
         button.disabled = b.disabled;
-        // A locked stat's label already says it unlocks later.
-        if (squadPicks && !isLocked(b.stat)) {
+        if (squadPicks) {
+          // The stat, then what its next point adds, in short (ID-111), breaking only
+          // between gains. It shows spent out too, so the card never changes size.
+          const next = el('span', 'hud-pick-next');
+          nextGains(d, b.stat, true).forEach((gain, k) => {
+            if (k > 0) next.append(' · ');
+            next.append(el('span', 'hud-pick-gain', gain));
+          });
+          // The space keeps the two apart in the button's name ("Instinct (2) +3 HP …").
+          button.append(el('span', 'hud-pick-label', b.label), ' ', next);
+        }
+        // A locked stat's label already says it unlocks later; spent out, the button only
+        // shows the stat as it stands.
+        if (squadPicks && !isLocked(b.stat) && !b.disabled) {
           const now = d.stats[b.stat];
           button.setAttribute('aria-label', `Add ${STAT_NAMES[b.stat]} to ${d.name}, now ${now}`);
         }
@@ -1827,7 +1851,7 @@ export function createHud(
           draw();
           // Keep the keyboard where it was; a spent-out row moves on to the next picker
           // with points left (wrapping round), then to the screen's button.
-          const again = block.querySelectorAll('button')[i];
+          const again = block.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')[i];
           const open = [...picker.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')].filter(
             (x) => !x.disabled,
           );
@@ -1860,7 +1884,11 @@ export function createHud(
           onUnspend(d.id);
           block.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')?.focus();
         });
-        block.replaceChildren(count, buttons, undo, ...gainList(d));
+        // Undo shares the count's row and keeps its room while hidden: spending never
+        // changes the card's size (ID-111). Each button carries its gains, so no list.
+        const head = el('div', 'squad-points-row');
+        head.append(count, undo);
+        block.replaceChildren(head, buttons);
         return;
       }
       block.replaceChildren(el('p', 'hud-pick-heading', row.heading), buttons, ...gainList(d));
@@ -2058,6 +2086,8 @@ export function createHud(
         const name = el('button', 'squad-card-name squad-card-open', c.name);
         name.type = 'button';
         name.dataset.openSurvivor = c.id;
+        // The whole name on hover, as one line can end it in "…" (ID-111).
+        name.title = c.name;
         name.setAttribute('aria-label', `${c.name}: open survivor card`);
         who.append(name, el('span', 'squad-card-level', `Lv ${c.level}`));
         if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
@@ -2074,7 +2104,9 @@ export function createHud(
           card.append(track, el('p', 'squad-card-xptext', c.bar.text));
         }
         card.append(el('div', 'squad-card-gear'));
-        const pick = picks.find((p) => p.id === c.id);
+        // Every result card has its stat block, points or none (ID-111): a level-up, or
+        // spending out, never changes the card's size. The start screen has none.
+        const pick = picks.find((p) => p.id === c.id) ?? (d.kind === 'start' ? null : c.survivor);
         if (pick) card.append(pickerBlock(pick, true));
         grid.append(card);
       }

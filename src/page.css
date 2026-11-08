@@ -1367,16 +1367,25 @@ body {
   gap: var(--space-8);
 }
 
+/* One line (ID-111): a badge never wraps the row taller; a long name ends in "…" (the
+   name button's aria-label and the Roster still give it whole). */
 .squad-card-who {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-6);
   min-width: 0;
 }
 
-.squad-card-name {
-  overflow-wrap: anywhere;
+.squad-card-who > * {
+  flex-shrink: 0;
+}
+
+.squad-card-who > .squad-card-name {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
 }
 
@@ -1462,6 +1471,26 @@ body {
   margin: 0;
 }
 
+/* The count with Undo at its right (ID-111): Undo keeps its room while hidden, so the
+   card never changes size as points are spent or taken back. */
+.squad-points-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.squad-points-row .squad-undo {
+  min-height: 22px;
+  padding: 0 var(--space-10);
+  font-size: var(--text-sm);
+}
+
+.squad-points-row .squad-undo[hidden] {
+  display: inline-block;
+  visibility: hidden;
+}
+
 .squad-points {
   margin: 0;
   color: var(--color-warn);
@@ -1493,10 +1522,33 @@ body {
   white-space: nowrap;
 }
 
+/* The stat, then what its next point adds, small (ID-111). The gains get a fixed height
+   per row of the 2x2 (two lines for Instinct and Agility, three for Sharp Mind and
+   Tinker), so a button, and its card, is one size whatever it says. The worst case is
+   Sharp Mind's three gains ("+1.6% crit · +0.06× crit dmg · −0.02° spread"), one per
+   line on a 375 px phone; a longer gain or a new effect needs this budget checked. */
 .squad-pick .hud-pick-stat {
-  min-height: 28px;
-  padding: 4px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 3px 6px;
   font-size: var(--text-body-sm);
+  line-height: 1.25;
+}
+
+.hud-pick-next {
+  height: 3.75em;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.25;
+}
+
+.squad-pick .hud-pick-stat:nth-child(-n + 2) .hud-pick-next {
+  height: 2.5em;
 }
 
 /* The footer stays at the foot of the scrolling panel, so the button is always in reach. */
