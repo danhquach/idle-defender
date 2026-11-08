@@ -14,7 +14,7 @@ import {
   type OwnedWeapon,
 } from './armoury.ts';
 import { recruit } from './camp.ts';
-import { FARM, POWER, RARITY_ORDER, SQUAD_CAP, WEAPONS, type Rarity } from './data.ts';
+import { FARM, HORROR, POWER, RARITY_ORDER, SQUAD_CAP, WEAPONS, type Rarity } from './data.ts';
 import { hordeXp, newGame, type GameState } from './game.ts';
 import type { HordeState } from './horde.ts';
 import {
@@ -29,7 +29,14 @@ import {
   weakestHeld,
 } from './hordeonly.ts';
 import { createRng } from './rng.ts';
-import { hordeHp, powerBand, recommendedPower, squadPower, survivorPower } from './squadpower.ts';
+import {
+  hordeHp,
+  hordeSeconds,
+  powerBand,
+  recommendedPower,
+  squadPower,
+  survivorPower,
+} from './squadpower.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -67,10 +74,12 @@ const gun = (
 const total = (w: Record<Rarity, number>): number => RARITY_ORDER.reduce((s, r) => s + w[r], 0);
 
 describe('gun level (ID-098)', () => {
-  it('adds 5% of base damage a level above 1, before rarity and affixes', () => {
+  it('multiplies base damage by 1.06 a level above 1, before rarity and affixes (ID-102)', () => {
     const one = gun('h1', 'rifle', 'military');
+    const two = gun('h2', 'rifle', 'military', 2);
     const twenty = gun('h20', 'rifle', 'military', 20);
-    expect(statsOf(twenty).damage / statsOf(one).damage).toBeCloseTo(1.95);
+    expect(statsOf(two).damage / statsOf(one).damage).toBeCloseTo(1.06);
+    expect(statsOf(twenty).damage / statsOf(one).damage).toBeCloseTo(1.06 ** 19);
     expect(gunPower(twenty)).toBeGreaterThan(gunPower(one));
   });
 
@@ -434,12 +443,18 @@ describe('Squad Power and Recommended Power (ID-098)', () => {
     expect(squadPower(more)).toBe(squadPower(g));
   });
 
-  it("Recommended Power grows with the horde's enemy HP", () => {
-    for (let n = 1; n < 30; n++) {
-      expect(hordeHp(n + 1)).toBeGreaterThan(hordeHp(n));
-      expect(recommendedPower(n + 1)).toBeGreaterThanOrEqual(recommendedPower(n));
+  it("Recommended Power grows with the horde's enemy HP; a boss horde is a spike (ID-102)", () => {
+    for (let n = 1; n < 45; n++) {
+      expect(hordeHp(n + 1), `Horde ${n + 1}`).toBeGreaterThan(hordeHp(n));
+      const boss = n % HORROR.every === 0;
+      // Past a boss horde, the next may ask for less than it, but more than the one before it.
+      const before = boss ? recommendedPower(n - 1) : recommendedPower(n);
+      expect(recommendedPower(n + 1), `Horde ${n + 1}`).toBeGreaterThan(before);
     }
-    expect(recommendedPower(9)).toBe(Math.round(POWER.rec.k * hordeHp(9) ** POWER.rec.e));
+    expect(recommendedPower(12)).toBe(Math.round((POWER.rec.k * hordeHp(12)) / hordeSeconds(12)));
+    expect(recommendedPower(20)).toBe(
+      Math.round((POWER.rec.boss * POWER.rec.k * hordeHp(20)) / hordeSeconds(20)),
+    );
   });
 
   it('a new game (one survivor, a pistol) is green at Horde 1, which it always wins', () => {

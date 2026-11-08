@@ -66,7 +66,7 @@ export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter((id) =>
 
 /**
  * Enemy HP's factor in horde-only Horde `n` (ID-066): `SQUAD_HP_GROWTH.early` per horde
- * until the squad reaches its cap, `late` after; Hordes 1–3 eased by `SQUAD_EARLY_HP` (ID-097).
+ * until the squad reaches its cap, `late` after; Hordes 1–3 (ID-097) and 8–10 (ID-102) eased by `SQUAD_EARLY_HP`.
  */
 export function squadHpScale(n: number): number {
   const early = Math.min(n, SQUAD_CAP) - 1;

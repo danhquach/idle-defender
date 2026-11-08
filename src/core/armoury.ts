@@ -102,8 +102,8 @@ export const gunLevel = (h: Held): number => (isOwned(h) ? (h.level ?? 1) : 1);
 /** "Lv 12 Military Rifle" (ID-098): the level, then the name. */
 export const levelName = (h: Held): string => `Lv ${gunLevel(h)} ${heldName(h)}`;
 
-/** Gun level `level`'s base damage factor (ID-098): +`GUN_LEVEL_DAMAGE` a level above 1. */
-export const levelFactor = (level: number): number => 1 + GUN_LEVEL_DAMAGE * (level - 1);
+/** Gun level `level`'s base damage factor (ID-098, ID-102): ×(1 + `GUN_LEVEL_DAMAGE`) a level above 1. */
+export const levelFactor = (level: number): number => (1 + GUN_LEVEL_DAMAGE) ** (level - 1);
 
 const AFFIX_TEXT: Readonly<Record<AffixId, (v: number) => string>> = {
   damage: (v) => `+${v}% damage`,

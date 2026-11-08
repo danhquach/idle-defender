@@ -737,7 +737,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     hordeNumber,
     wave: 1,
     waveCount: waveCount(hordeNumber),
-    toSpawn: waveSize(hordeNumber, 1) * (harder && swarmWave(hordeNumber, 1) ? SWARM.size : 1),
+    toSpawn:
+      waveSize(hordeNumber, 1, harder) * (harder && swarmWave(hordeNumber, 1) ? SWARM.size : 1),
     nextSpawnAt: 0,
     breakUntil: 0,
     enemies: [],
@@ -2683,7 +2684,7 @@ function advanceWave(s: HordeState): void {
   if (s.bosses.some((b) => b.id === null && b.wave <= s.wave)) return;
   s.wave += 1;
   s.swarm = s.harder === true && swarmWave(s.hordeNumber, s.wave);
-  s.toSpawn = waveSize(s.hordeNumber, s.wave) * (s.swarm ? SWARM.size : 1);
+  s.toSpawn = waveSize(s.hordeNumber, s.wave, s.harder === true) * (s.swarm ? SWARM.size : 1);
   s.breakUntil = s.time + WAVE_BREAK;
   openReplace(s);
 }

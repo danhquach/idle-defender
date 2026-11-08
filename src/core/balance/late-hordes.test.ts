@@ -1,44 +1,69 @@
-// Balance: late horde-only hordes (ID-096, see shared.ts). With 1 stat point a level,
-// level-12-ish survivors with the guns the wins dropped still win, but enemies reach the
-// Barbed Wire's band in every fight and sometimes hit the wall.
+// Balance: mid-game horde-only hordes (ID-096, ID-102; see shared.ts). Past the first boss
+// the hordes are walls: enemies reach the Barbed Wire's band in most fights and hit the
+// wall in some, the scripted player loses some new hordes at the first try, and it farms
+// past each one within a bounded number of replays, with average luck.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CARD } from '../data.ts';
 import { playSquadCampaign, type SquadRun } from '../sim.ts';
-import { winRate } from './shared.ts';
 
-// Skipped until the balance pass (ID-102): from Horde 8 the hordes are walls the scripted
-// player only retries (farming is in the game since ID-098, not yet in the scripted
-// player), so it never reaches Hordes 15–18.
-describe.skip('late horde-only hordes (ID-096)', () => {
+// Each campaign to Horde 18 is 40–70 fights; CI runs the balance files side by side.
+describe('mid-game horde-only hordes (ID-102)', () => {
   const SEEDS = 4;
-  const FROM = 15;
+  const FROM = 11;
   const LAST = 18;
-  /** Each seed's first fight at Hordes FROM…LAST, watched. */
-  const late: SquadRun[] = [];
+  /** Fewest losses at the first try across Hordes FROM…LAST, on every seed. */
+  const MIN_WALLS = 1;
+  /** Most replays a seed spends farming past any one horde, with average luck. */
+  const MAX_REPLAYS = 30;
+  const campaigns: SquadRun[][] = [];
+  /** Every fight at Hordes FROM…LAST that was a new horde, not a replay, watched. */
+  const tries: SquadRun[] = [];
   beforeAll(() => {
     for (let i = 1; i <= SEEDS; i++) {
-      const runs = playSquadCampaign(i * 1000, LAST, LAST * 3, true);
-      for (let n = FROM; n <= LAST; n++) late.push(runs.find((r) => r.hordeNumber === n)!);
+      const runs = playSquadCampaign(i * 1000, LAST, { watch: true, maxFights: LAST * 12 });
+      campaigns.push(runs);
+      tries.push(...runs.filter((r) => !r.replay && r.hordeNumber >= FROM));
     }
-  }, 300_000);
+  }, 900_000);
 
-  it('is played by level-10-to-12 survivors, every horde reached', () => {
-    expect(late.every((r) => r !== undefined)).toBe(true);
-    expect(late.length).toBe(SEEDS * (LAST - FROM + 1));
-    for (const r of late) expect(r.level, `Horde ${r.hordeNumber}`).toBeGreaterThanOrEqual(9.5);
-    expect(Math.max(...late.map((r) => r.level))).toBeGreaterThanOrEqual(11.5);
-  });
-
-  it('enemies reach the Barbed Wire’s band in every fight', () => {
-    for (const r of late) {
-      expect(r.nearest, `Horde ${r.hordeNumber}, seed ${r.seed}`).toBeLessThanOrEqual(CARD.wire.to);
+  it('every campaign beats Horde 18', () => {
+    for (const runs of campaigns) {
+      const last = runs.at(-1)!;
+      expect([last.hordeNumber, last.outcome, last.replay]).toEqual([LAST, 'won', false]);
     }
   });
 
-  it('enemies hit the wall in some fights, not every one, and the squad still mostly wins', () => {
-    const hit = late.filter((r) => r.wallLeft < 1).length / late.length;
+  it('enemies reach the Barbed Wire’s band in most fights, and hit the wall in some, not every one', () => {
+    const wire = tries.filter((r) => r.nearest! <= CARD.wire.to).length / tries.length;
+    const hit = tries.filter((r) => r.wallLeft < 1).length / tries.length;
+    expect(wire).toBeGreaterThanOrEqual(0.75);
     expect(hit).toBeGreaterThanOrEqual(0.15);
-    expect(hit).toBeLessThan(0.9);
-    expect(winRate(late)).toBeGreaterThanOrEqual(0.6);
+    expect(hit).toBeLessThan(0.95);
+  });
+
+  it('they are walls: every seed loses at least one new horde at the first try', () => {
+    for (const [i, runs] of campaigns.entries()) {
+      const first = new Map<number, SquadRun>();
+      for (const r of runs) {
+        if (!r.replay && r.hordeNumber >= FROM && !first.has(r.hordeNumber)) {
+          first.set(r.hordeNumber, r);
+        }
+      }
+      const lost = [...first.values()].filter((r) => r.outcome === 'lost').length;
+      expect(lost, `seed ${i + 1}`).toBeGreaterThanOrEqual(MIN_WALLS);
+    }
+  });
+
+  it('with average luck, farming gets past each wall within a bounded number of replays', () => {
+    for (const [i, runs] of campaigns.entries()) {
+      // Replays spent at each new horde: the scripted player farms after each loss there.
+      const spent = new Map<number, number>();
+      for (const r of runs) {
+        if (r.replay) spent.set(r.hordeNumber + 1, (spent.get(r.hordeNumber + 1) ?? 0) + 1);
+      }
+      for (const [n, k] of spent) {
+        expect(k, `seed ${i + 1}, Horde ${n}`).toBeLessThanOrEqual(MAX_REPLAYS);
+      }
+    }
   });
 });
