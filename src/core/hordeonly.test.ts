@@ -33,6 +33,7 @@ import {
   squadHpScale,
   squadOf,
   squadResult,
+  spendInFight,
   squadSpec,
   SQUAD_SLOTS,
   startSquadHorde,
@@ -465,5 +466,97 @@ describe('fixed slots (ID-068)', () => {
     const free = s.posts.find((p) => p.defenderId === null)!;
     const moved = moveDefender(s, s.defenders[0]!.id, free.id);
     expect(moved).toEqual({ ok: false, reason: 'Survivors hold their slots' });
+  });
+});
+
+describe('stat points spent mid-fight (ID-116)', () => {
+  /** Two survivors, the first at level 4 (3 points), in a fight with the first down to 40 HP. */
+  function fight() {
+    const g = squadGame(2);
+    const game = { ...g, roster: [survivor(1, 150), g.roster[1]!] };
+    const s = startSquadHorde(game, 1, NOW);
+    s.defenders[0]!.hp = 40;
+    return { game, s };
+  }
+
+  it('spends in the camp and on the survivor in the fight at once; nothing it was given changes', () => {
+    const { game, s } = fight();
+    const before = structuredClone({ game, s });
+    const r = spendInFight(game, s, 'recruit-1', 'instinct');
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.game.roster[0]!.stats.instinct).toBe(1);
+    const d = r.horde.defenders[0]!;
+    expect(d.stats!.instinct).toBe(1);
+    // The extra max HP is added to the HP they have, not a full heal.
+    const gain = d.maxHp - s.defenders[0]!.maxHp;
+    expect(gain).toBeGreaterThan(0);
+    expect(d.hp).toBe(40 + gain);
+    expect(r.horde.defenders[1]).toBe(s.defenders[1]);
+    expect({ game, s }).toEqual(before);
+  });
+
+  it('a Sharp Mind point raises crit in the fight at once', () => {
+    const { game, s } = fight();
+    const r = spendInFight(game, s, 'recruit-1', 'mind');
+    if (!r.ok) throw new Error(r.reason);
+    expect(critChance(r.horde.defenders[0]!)).toBeGreaterThan(critChance(s.defenders[0]!));
+  });
+
+  it('a survivor down in the fight keeps the point for later; the fight is untouched', () => {
+    const { game, s } = fight();
+    const [down] = s.defenders.splice(0, 1);
+    s.injured.push({
+      defender: squadSpec(game.roster[0]!),
+      postId: down!.postId,
+      at: 1,
+      offered: false,
+      by: null,
+    });
+    const r = spendInFight(game, s, 'recruit-1', 'agility');
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.game.roster[0]!.stats.agility).toBe(1);
+    expect(r.horde.defenders).toEqual(s.defenders);
+    expect(r.horde.injured).toHaveLength(1);
+    expect(r.horde.injured[0]!.defender.stats!.agility).toBe(1);
+    expect(s.injured[0]!.defender.stats!.agility).toBe(0);
+  });
+
+  it('no point left, or a locked stat, is refused and changes nothing', () => {
+    const { game, s } = fight();
+    expect(spendInFight(game, s, 'recruit-2', 'mind')).toEqual({
+      ok: false,
+      reason: 'No stat points left',
+    });
+    expect(spendInFight(game, s, 'recruit-1', 'tinker')).toEqual({
+      ok: false,
+      reason: 'Unlocks later',
+    });
+    // The same point can't be spent twice: 3 points, then refused.
+    let g = game;
+    let h = s;
+    for (let i = 0; i < 3; i++) {
+      const r = spendInFight(g, h, 'recruit-1', 'mind');
+      if (!r.ok) throw new Error(r.reason);
+      ({ game: g, horde: h } = r);
+    }
+    expect(spendInFight(g, h, 'recruit-1', 'mind').ok).toBe(false);
+    expect(h.defenders[0]!.stats!.mind).toBe(3);
+  });
+
+  it('a finished horde is refused', () => {
+    const { game, s } = fight();
+    expect(() => spendInFight(game, { ...s, outcome: 'won' }, 'recruit-1', 'mind')).toThrow(
+      RangeError,
+    );
+  });
+
+  it('the XP a horde pays adds to the spend; the next fight has the stats', () => {
+    const { game, s } = fight();
+    const r = spendInFight(game, s, 'recruit-1', 'instinct');
+    if (!r.ok) throw new Error(r.reason);
+    const after = finishSquadHorde(r.game, { ...r.horde, outcome: 'won' });
+    expect(after.roster[0]!.stats.instinct).toBe(1);
+    expect(after.roster[0]!.xp).toBeGreaterThan(150);
+    expect(startSquadHorde(after, 2, NOW, 1).defenders[0]!.stats!.instinct).toBe(1);
   });
 });

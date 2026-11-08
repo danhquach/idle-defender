@@ -678,7 +678,11 @@ close-quarter weapons come out only when an enemy is close.
     spends them, Discard drops them, Esc or Keep editing goes back. On the
     start screen Confirm spends and saves at once; on the result screen the
     points join the screen's own picks and are saved with its button. In a
-    fight the buttons are disabled and say to spend points between hordes.
+    fight (ID-116) Confirm also spends and saves at once, and the survivor
+    fights with the new stat straight away (an Instinct point's extra max HP
+    is added to the HP they have); a survivor down in the fight keeps the
+    points for later fights. The horde's XP adds to them when it ends, and a
+    retry fights with them.
   - **Choose a gun** (between hordes): tiles for the free pistol and every
     stash gun except the one held, strongest first by dmg/s, each with its
     base gun, a rarity frame and a change badge against the held gun ("▲ +4.2",

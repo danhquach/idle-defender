@@ -398,21 +398,57 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
     );
   });
 
-  it('mid-fight the Roster is view-only (points and guns) and holds the fight', () => {
-    const { scrim, rosterButton, button, plus, key, saved } = seeded();
+  it('mid-fight the Roster holds the fight; guns stay locked', () => {
+    const { scrim, rosterButton, button, key } = seeded();
     button().click();
     step(16);
     rosterButton.click();
-    expect(plus('instinct').disabled).toBe(true);
-    plus('instinct').click();
-    expect(saved().roster[0]!.stats.instinct).toBe(0);
     expect(key('slot').textContent).toContain(GUNS_WAIT);
     expect(key('best').disabled).toBe(true);
-    expect(scrim.textContent).toContain('Spend points between hordes.');
+    expect(scrim.textContent).not.toContain('Spend points between hordes.');
     const ticks = vi.mocked(tick).mock.calls.length;
     step(32);
     step(48);
     expect(vi.mocked(tick).mock.calls.length).toBe(ticks);
+  });
+
+  it('mid-fight Confirm spends at once (ID-116): saved, fought with now, kept after the horde and on its retry', () => {
+    const { scrim, rosterButton, button, plus, key, saved } = seeded();
+    button().click();
+    step(16);
+    const fighter = () =>
+      vi.mocked(drawScene).mock.lastCall![2].defenders.find((d) => d.id === 'recruit-1')!;
+    const before = fighter();
+    rosterButton.click();
+    expect(key('confirm').disabled).toBe(true);
+    plus('instinct').click();
+    plus('instinct').click();
+    plus('mind').click();
+    // Drafted only: nothing spent yet, in the camp or the fight.
+    expect(saved().roster[0]!.stats.instinct).toBe(0);
+    key('confirm').click();
+    // Saved at once, so a reload keeps it.
+    expect(saved().roster[0]!.stats).toMatchObject({ instinct: 2, mind: 1 });
+    expect(scrim.querySelector('.rv-left')!.textContent).toBe('0 to spend');
+    expect(plus('agility').disabled).toBe(true);
+    expect(key('confirm').disabled).toBe(true);
+    scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
+    step(32);
+    // The fight's survivor has the points now, and the extra max HP on top of their HP.
+    const now = fighter();
+    expect(now.stats).toMatchObject({ instinct: 2, mind: 1 });
+    expect(now.maxHp).toBeGreaterThan(before.maxHp);
+    expect(now.maxHp - now.hp).toBe(before.maxHp - before.hp);
+    const xp = saved().roster[0]!.xp;
+    endNextTick('lost');
+    step(48);
+    // The horde's XP adds to the spend; it never overwrites it.
+    expect(saved().roster[0]!.stats).toMatchObject({ instinct: 2, mind: 1 });
+    expect(saved().roster[0]!.xp).toBeGreaterThanOrEqual(xp);
+    // The retry fights with the spent stats.
+    button().click();
+    step(64);
+    expect(fighter().stats).toMatchObject({ instinct: 2, mind: 1 });
   });
 
   it('on the result screen a name opens the survivor; Confirm joins the screen’s picks and is saved with its button', () => {
@@ -533,10 +569,11 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     pickerButtons()[0]!.click();
     open();
     scrim.querySelector<HTMLButtonElement>('.rv-best')!.click();
-    // The relic, and the gun the win dropped, both go to survivors holding the pistol.
-    expect(scrim.querySelector('.rv-status')!.textContent).toMatch(
-      /^Equipped: .+ → Relic Rifle · .+ → .+$/,
-    );
+    // The relic, and the gun the win dropped, both go to survivors holding the pistol (the
+    // drop is rolled from the clock and may be the stronger, so either can come first).
+    const status = scrim.querySelector('.rv-status')!.textContent!;
+    expect(status).toMatch(/^Equipped: .+ → .+ · .+ → .+$/);
+    expect(status).toContain(' → Relic Rifle');
     close();
     button().click();
     const after = saved();
