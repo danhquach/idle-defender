@@ -31,6 +31,7 @@ import {
 import {
   reloadIn,
   barbedWire,
+  atLevel,
   plated,
   radiusOf,
   roared,
@@ -98,6 +99,7 @@ import {
   groundCanvas,
   WIRE,
   wireCanvas,
+  type WireLook,
   SURROUND_BLOCK,
   surroundCanvas,
 } from './ground.ts';
@@ -1262,28 +1264,39 @@ function drawRepairSparks(
 }
 
 /**
+ * How a Barbed Wire row with `durability` left of `max` looks (ID-115): torn at 0, worn at
+ * `WIRE.worn.at` of `max` or less, whole above. A share, as `max` grows with the card's level.
+ */
+export function wireLook(durability: number, max: number): WireLook {
+  if (durability <= 0) return 'torn';
+  return durability <= WIRE.worn.at * max ? 'worn' : 'whole';
+}
+
+/**
  * Barbed Wire (ID-077): the band it slows, out in the field in front of the outermost
  * layer, under every sprite: coils of barbed wire on pickets with no tint (ID-090), painted
  * once (ground.ts) and stretched over the band. A row the enemies broke (ID-090) is
- * taken from the torn band instead, each run of rows alike in one draw. Where the browser
- * can't paint it, a steel line down each coil of the working rows shows where the slow applies.
+ * taken from the torn band instead, and one worn partway from the worn band (ID-115), each
+ * run of rows alike in one draw. Where the browser can't paint it, a steel line down each
+ * coil of the working rows shows where the slow applies.
  */
 function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
   const band = barbedWire({ taken: scene.taken ?? [], layers: scene.layers });
   if (!band) return;
   const a = project({ x: band.from, y: 0 }, cam);
   const b = project({ x: band.to, y: FIELD.height }, cam);
-  const broken = (row: number) => (scene.wire?.[row]?.durability ?? 1) <= 0;
-  // Runs of rows alike, top to bottom: [first row, end row, broken].
-  const runs: [number, number, boolean][] = [];
+  const cards = { taken: scene.taken ?? [], cardLevels: scene.cardLevels };
+  const max = atLevel(cards, 'barbed-wire', CARD.wire.durability);
+  const look = (row: number) => wireLook(scene.wire?.[row]?.durability ?? max, max);
+  // Runs of rows alike, top to bottom: [first row, end row, look].
+  const runs: [number, number, WireLook][] = [];
   for (let row = 0; row < SEGMENTS; row++) {
     const last = runs[runs.length - 1];
-    if (last && last[2] === broken(row)) last[1] = row + 1;
-    else runs.push([row, row + 1, broken(row)]);
+    if (last && last[2] === look(row)) last[1] = row + 1;
+    else runs.push([row, row + 1, look(row)]);
   }
-  const whole = wireCanvas(art);
-  const torn = runs.some((r) => r[2]) ? wireCanvas(art, true) : whole;
-  if (whole && torn) {
+  const painted = new Map(runs.map(([, , l]) => [l, wireCanvas(art, l)] as const));
+  if ([...painted.values()].every((c) => c)) {
     // A seam between runs on a whole pixel, so the two never blend into a hairline.
     const edge = (row: number) =>
       row === 0
@@ -1291,8 +1304,8 @@ function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Ca
         : row === SEGMENTS
           ? b.sy
           : Math.round(a.sy + ((b.sy - a.sy) * row) / SEGMENTS);
-    for (const [from, to, isBroken] of runs) {
-      const src = isBroken ? torn : whole;
+    for (const [from, to, l] of runs) {
+      const src = painted.get(l)!;
       const sh = src.height / SEGMENTS;
       const dy = edge(from);
       ctx.drawImage(
@@ -1312,8 +1325,8 @@ function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Ca
   ctx.strokeStyle = WIRE.steel;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  for (const [from, to, isBroken] of runs) {
-    if (isBroken) continue;
+  for (const [from, to, l] of runs) {
+    if (l === 'torn') continue;
     const [y0, y1] = [
       a.sy + ((b.sy - a.sy) * from) / SEGMENTS,
       a.sy + ((b.sy - a.sy) * to) / SEGMENTS,

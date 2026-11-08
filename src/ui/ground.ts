@@ -231,6 +231,12 @@ function paintYard(art: Art, px: number, height: number): OffscreenCanvas | null
  * sagging `droop` units over `fall` units (none within `calm` units of a row's edge, so a
  * torn row meets a whole one cleanly), its near half lit `mid` (dulled), and every other
  * picket knocked flat at `fallen` radians, toward the band's middle so none hangs past its edge.
+ *
+ * A row worn to `worn.at` of its durability or less (ID-115) is drawn `worn`, between the two:
+ * every coil slack, sagging `slack` units at the row's middle (none within `calm` units of
+ * its edges, so it meets a whole or torn row cleanly), and one coil a row, a different one
+ * each row, cut once at `tears` (its ends drooping `droop`) with its picket leaning `lean`
+ * radians toward the band's middle. The wire keeps its shine: a worn row still holds.
  */
 export const WIRE = {
   px: 2,
@@ -260,18 +266,32 @@ export const WIRE = {
     calm: 4,
     fallen: 1.8,
   },
+  worn: {
+    at: 0.5,
+    tears: [[0.34, 0.62]],
+    droop: 6,
+    slack: 4.5,
+    lean: 0.65,
+  },
 } as const;
+
+/** A row of Barbed Wire's band as it looks: whole, worn partway (ID-115), or torn (ID-090). */
+export type WireLook = 'whole' | 'worn' | 'torn';
 
 /** Segments a turn of a coil is drawn in. */
 const COIL_STEPS = 24;
 
 /**
- * A torn coil: none drawn between each of `gaps`' ends, the cut ends sagging but not at the
- * edge of a `row` (canvas pixels), dulled.
+ * A damaged coil: none drawn between each of `gaps`' ends, the cut ends drooping `droop`
+ * units and the wire `slack` units at each `row`'s middle (canvas pixels), but neither at a
+ * row's edge; `dull`, its near half not lit.
  */
 interface Tears {
   gaps: readonly (readonly [number, number])[];
   row: number;
+  droop: number;
+  slack: number;
+  dull: boolean;
 }
 
 /** A coil down the field at `x0` from `y0` to `y1`, `r` across (canvas pixels); `tears`, torn. */
@@ -289,7 +309,8 @@ function coil(
   const gaps = tears?.gaps ?? [];
   const cut = (y: number) => gaps.some(([a, b]) => y > a && y < b);
   const fall = WIRE.torn.fall * px;
-  // How far the wire near a cut end sags: down, and away from the gap; none at a row's edge.
+  // How far the wire sags: slack toward the row's middle, and near a cut end down and away
+  // from the gap; none at a row's edge.
   const sag = (y: number): [number, number] => {
     if (!tears) return [0, 0];
     let near = Infinity;
@@ -299,10 +320,13 @@ function coil(
       if (Math.abs(y - b) < near) [near, side] = [Math.abs(y - b), 1];
     }
     const inRow = ((y % tears.row) + tears.row) % tears.row;
-    const fromEdge = Math.min(inRow, tears.row - inRow);
-    const settle = Math.min(1, Math.max(0, fromEdge - WIRE.torn.calm * px) / fall);
-    const f = Math.max(0, 1 - near / fall) * settle * WIRE.torn.droop * px;
-    return [f * 0.6 * side, f];
+    const fromEdge = Math.max(0, Math.min(inRow, tears.row - inRow) - WIRE.torn.calm * px);
+    const settle = Math.min(1, fromEdge / fall);
+    const f = Math.max(0, 1 - near / fall) * settle * tears.droop * px;
+    // Eased from 0 at the calm edge to 1 at the row's middle.
+    const mid = Math.min(1, fromEdge / (tears.row / 2 - WIRE.torn.calm * px));
+    const slack = ((1 - Math.cos(Math.PI * mid)) / 2) * tears.slack * px;
+    return [f * 0.6 * side, f + slack];
   };
   const at = (s: number) => {
     const t = (s / COIL_STEPS) * Math.PI * 2;
@@ -334,7 +358,7 @@ function coil(
     const strokes = [
       [WIRE.outline, width + 1.2 * px, 0],
       [WIRE.steel, width, 0],
-      [near && !tears ? WIRE.shine : WIRE.mid, (near ? 0.55 : 0.45) * px * w, -0.5 * px],
+      [near && !tears?.dull ? WIRE.shine : WIRE.mid, (near ? 0.55 : 0.45) * px * w, -0.5 * px],
     ] as const;
     for (const [colour, lineWidth, dy] of strokes) {
       g.strokeStyle = colour;
@@ -386,18 +410,21 @@ function picket(g: OffscreenCanvasRenderingContext2D, x: number, y: number, fall
   g.restore();
 }
 
-const wires: Painted = new WeakMap();
-const tornWires: Painted = new WeakMap();
+const wires: Readonly<Record<WireLook, Painted>> = {
+  whole: new WeakMap(),
+  worn: new WeakMap(),
+  torn: new WeakMap(),
+};
 
 /**
- * Barbed Wire's band painted once per set of art (as every painted canvas), whole or with
- * every row `torn`; the renderer takes each row from the one it needs. Null as `groundCanvas`.
+ * Barbed Wire's band painted once per set of art (as every painted canvas), every row with
+ * one `look`; the renderer takes each row from the one it needs. Null as `groundCanvas`.
  */
-export function wireCanvas(art: Art, torn = false): OffscreenCanvas | null {
-  return once(torn ? tornWires : wires, art, () => paintWire(torn));
+export function wireCanvas(art: Art, look: WireLook = 'whole'): OffscreenCanvas | null {
+  return once(wires[look], art, () => paintWire(look));
 }
 
-function paintWire(torn: boolean): OffscreenCanvas | null {
+function paintWire(look: WireLook): OffscreenCanvas | null {
   const { px } = WIRE;
   const w = (CARD.wire.to - CARD.wire.from) * px;
   const h = FIELD.height * TILT * px;
@@ -410,24 +437,50 @@ function paintWire(torn: boolean): OffscreenCanvas | null {
   for (const [c, share] of WIRE.coils.entries()) {
     const x = Math.min(w - edge, Math.max(edge, w * share + WIRE.jitter[c]! * px));
     const row = SEGMENT_HEIGHT * TILT * px;
-    const tears: Tears | null = torn
-      ? {
-          row,
-          gaps: Array.from({ length: SEGMENTS }, (_, i) => {
-            // 0, 1 or 2 shifts: each coil of a row is cut a little lower than its neighbour,
-            // its first cut starting that far below the row's top (a short straight stub).
-            const o = ((i * 2 + c) % 3) * WIRE.torn.shift;
-            return WIRE.torn.tears.map(([a, b]) => [(i + a + o) * row, (i + b + o) * row] as const);
-          }).flat(),
-        }
-      : null;
+    // A worn row has one coil cut: the near one in row 0, the middle in row 1, and so on.
+    const wornCut = (i: number) => (i + WIRE.coils.length - c) % WIRE.coils.length === 0;
+    const tears: Tears | null =
+      look === 'torn'
+        ? {
+            row,
+            droop: WIRE.torn.droop,
+            slack: 0,
+            dull: true,
+            gaps: Array.from({ length: SEGMENTS }, (_, i) => {
+              // 0, 1 or 2 shifts: each coil of a row is cut a little lower than its neighbour,
+              // its first cut starting that far below the row's top (a short straight stub).
+              const o = ((i * 2 + c) % 3) * WIRE.torn.shift;
+              return WIRE.torn.tears.map(
+                ([a, b]) => [(i + a + o) * row, (i + b + o) * row] as const,
+              );
+            }).flat(),
+          }
+        : look === 'worn'
+          ? {
+              row,
+              droop: WIRE.worn.droop,
+              slack: WIRE.worn.slack,
+              dull: false,
+              gaps: Array.from({ length: SEGMENTS }, (_, i) =>
+                wornCut(i)
+                  ? WIRE.worn.tears.map(([a, b]) => [(i + a) * row, (i + b) * row] as const)
+                  : [],
+              ).flat(),
+            }
+          : null;
     // Past the band's ends, so no coil starts or stops in view.
     coil(g, x, -r, h + r, r, tears);
     const every = WIRE.postEvery * TILT * px;
     for (let y = every / 2, i = 0; y <= h; y += every, i++) {
       // Toward the band's middle: the near coil's to the right, the far one's to the left.
       const toward = c === 0 ? 1 : c === WIRE.coils.length - 1 ? -1 : i % 2 ? 1 : -1;
-      picket(g, x, y, torn && (i + c) % 2 === 0 ? toward * WIRE.torn.fallen : 0);
+      const tilt =
+        look === 'torn' && (i + c) % 2 === 0
+          ? WIRE.torn.fallen
+          : look === 'worn' && wornCut(i)
+            ? WIRE.worn.lean
+            : 0;
+      picket(g, x, y, toward * tilt);
     }
   }
   return canvas;
