@@ -11,6 +11,7 @@ import { newGame } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
+import { enemy } from '../core/testing.ts';
 import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { MUTE_KEY } from '../storage/settings.ts';
 import { NOW } from '../storage/testing.ts';
@@ -156,6 +157,65 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     expect(bar()).toMatch(/^Horde 2 /);
     expect(vi.mocked(drawScene).mock.lastCall![2].defenders).toHaveLength(2);
     expect(root.querySelector(HIDDEN)).toBeNull();
+  });
+
+  it('a win whose last kill is still dying shows its result once it has died, saved at once (ID-110)', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW);
+    // The killing blow's white flash is painted on a canvas of its own.
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        width: number;
+        height: number;
+        constructor(w: number, h: number) {
+          this.width = w;
+          this.height = h;
+        }
+        getContext() {
+          return ctx;
+        }
+      },
+    );
+    const { result, title, button, saved } = boot();
+    step(0);
+    button().click();
+    step(16);
+    const real = vi.mocked(tick).getMockImplementation()!;
+    // One enemy on the field, killed by the step that wins the fight.
+    vi.mocked(tick).mockImplementationOnce((s: HordeState, dt: number) => {
+      const next = real(s, dt);
+      return { ...next, enemies: [...next.enemies, enemy(next, { x: 900, y: 60 })] };
+    });
+    step(32);
+    vi.mocked(tick).mockImplementationOnce((s: HordeState, dt: number) => ({
+      ...real(s, dt),
+      enemies: [],
+      outcome: 'won',
+    }));
+    step(48);
+    expect(result().hidden).toBe(true);
+    // The win is saved as the fight ends all the same.
+    expect(saved().hordeNumber).toBe(2);
+    // The scene still draws its last kill dying: real seconds since the end.
+    expect(vi.mocked(drawScene).mock.lastCall![2].ended).toBe(0);
+    clock.mockReturnValue(NOW + 500);
+    step(64);
+    expect(result().hidden).toBe(true);
+    clock.mockReturnValue(NOW + 1000);
+    step(80);
+    expect(result().hidden).toBe(false);
+    expect(title()).toBe('Horde 1 held');
+  });
+
+  it('a loss shows its result at once (ID-110)', () => {
+    const { result, title, button } = boot();
+    step(0);
+    button().click();
+    step(16);
+    endNextTick('lost');
+    step(32);
+    expect(result().hidden).toBe(false);
+    expect(title()).not.toBe('Horde 1 held');
   });
 
   it('a loss: nothing gained, and the same horde again with everyone', () => {

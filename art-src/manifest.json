@@ -2192,6 +2192,49 @@
       "ref": "acid-splash"
     },
     {
+      "id": "gore-spray",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 21801,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "gore-spray",
+      "prompt": "2D game sprite of a cartoon burst of dark red blood spraying upward and outward, seen from the side: a wet glossy splash of deep crimson blood erupting from a single point at the bottom centre, fanning upward into six thick curving streaks, each streak ending in a round droplet still attached to it, small chunks of dark red gore inside, white shine highlights, all one connected shape with no separate droplets. Hand-painted cartoon style, bold dark maroon outline, soft shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture. No text."
+    },
+    {
+      "id": "gore-spray-b",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 21811,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "gore-spray",
+      "prompt": "Edit this blood splash to show it a moment later, breaking apart in the air: the same splash in the same place, same overall size, same style with the same bold dark maroon outline and the same deep crimson, but the streaks have thinned and broken off near the bottom so they float free, their droplets are rounder and spread further apart, and several separate round drops fly outward, all well inside the frame. Keep the same flat uniform pure magenta background #FF00FF filling the whole image. No smoke, no text.",
+      "ref": "gore-spray"
+    },
+    {
+      "id": "gore-stump",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 21831,
+      "size": "1024x1024",
+      "mutant": true,
+      "prompt": "Edit this blood splash into a small low splat of the same blood: the same deep crimson, the same glossy white shine highlights and the same bold dark maroon outline, but now only a short flat ragged blob, about three times wider than it is tall, its top edge jagged with many small short spikes, three short round drips hanging from its bottom edge, no tall streaks, centred with lots of empty space around it. Keep the same flat uniform pure magenta background #FF00FF filling the whole image. No eyes, no face, no text.",
+      "ref": "gore-spray"
+    },
+    {
+      "id": "dust-puff",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 21841,
+      "size": "1024x1024",
+      "prompt": "2D game sprite of a cartoon puff of grey-brown dust kicked up from the ground, seen from the side: a low wide cloud of soft round dust billows, about three times wider than it is tall, flat along its bottom edge, a few small pebbles and specks of dirt flying out at its sides, light dusty beige-grey with soft darker shading, no fire, no sparks, no embers. Hand-painted cartoon style, bold dark brown-grey outline, soft shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture. No text."
+    },
+    {
       "id": "weapon-smg",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",

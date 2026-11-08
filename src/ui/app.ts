@@ -55,6 +55,7 @@ import {
   type Speed,
 } from '../storage/settings.ts';
 import { Animator } from './anim.ts';
+import { dyingLeft } from './death.ts';
 import { SoundEngine, STING } from './audio.ts';
 import { createBuildPanel, FIELD_GREW, STATS_REFUNDED } from './build.ts';
 import {
@@ -79,6 +80,7 @@ import {
   SPEED_KEYS,
   squadGear,
   squadScreen,
+  type ResultScreen,
   squadStart,
 } from './hud.ts';
 import { createIntro } from './intro.ts';
@@ -166,6 +168,11 @@ export function start(root: HTMLElement, art: Art): void {
   );
   // When the fight ended (ms): read once, so the screen and the rest timers agree.
   let endedAt: number | null = null;
+  // The result screen made when the fight ended, waiting to show until `at` (ms): a win's
+  // waits while its last kills finish dying (ID-110).
+  let pendingResult: { screen: ResultScreen; at: number } | null = null;
+  /** Whether the fight is over and its result screen up, so camp actions are open again. */
+  const resultUp = (): boolean => endedAt !== null && pendingResult === null;
   // Stat points spent on the result screen, applied with "Back to build". `card`: spent on a
   // survivor's card there, which its Undo takes back; `roster`: confirmed in the Roster, locked.
   let spends: [string, Stat, 'card' | 'roster'][] = [];
@@ -283,7 +290,7 @@ export function start(root: HTMLElement, art: Art): void {
   }
   // The skill pick (ID-100), between hordes only: saved at once, so it is there next time.
   hud.onSkillPick((skill) => {
-    if (horde && endedAt === null) return;
+    if (horde && !resultUp()) return;
     const r = toggleSkill(game, skill);
     if (!r.ok) hud.toast(r.reason);
     else commit(r.game);
@@ -349,7 +356,7 @@ export function start(root: HTMLElement, art: Art): void {
     defenderId: string,
     choice: GunChoice,
   ): { ok: true } | { ok: false; reason: string } {
-    if (horde && endedAt === null) return { ok: false, reason: GUNS_WAIT };
+    if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
     const r = equipGun(game, defenderId, choice);
     if (!r.ok) return r;
     commit(r.game);
@@ -363,6 +370,7 @@ export function start(root: HTMLElement, art: Art): void {
     horde = next;
     preview = null;
     endedAt = null;
+    pendingResult = null;
     spends = [];
     campPicks = [];
     selected = null;
@@ -432,13 +440,13 @@ export function start(root: HTMLElement, art: Art): void {
     state: () => ({
       game,
       resumes: horde?.outcome === 'fighting' && !held,
-      canCombine: !horde || endedAt !== null,
+      canCombine: !horde || resultUp(),
       // Squad Power against the horde under way, or the one picked (ID-098).
       ...(HORDE_ONLY ? { horde: horde && endedAt === null ? horde.hordeNumber : picked } : {}),
     }),
     onCombine: HORDE_ONLY
       ? (uids) => {
-          if (horde && endedAt === null) return { ok: false, reason: COMBINE_WAIT };
+          if (horde && !resultUp()) return { ok: false, reason: COMBINE_WAIT };
           const r = combineGuns(game, uids);
           if (!r.ok) return r;
           commit(r.game);
@@ -502,13 +510,13 @@ export function start(root: HTMLElement, art: Art): void {
         state: () => ({
           game: pending(),
           fight: horde?.outcome === 'fighting' ? horde : null,
-          canSpend: !horde || endedAt !== null || horde.outcome === 'fighting',
-          canGear: !horde || endedAt !== null,
+          canSpend: !horde || resultUp() || horde.outcome === 'fighting',
+          canGear: !horde || resultUp(),
           resumes: horde?.outcome === 'fighting' && !held,
         }),
         onEquip: changeGun,
         onBestGuns: () => {
-          if (horde && endedAt === null) return { ok: false, reason: GUNS_WAIT };
+          if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
           const r = bestGuns(game);
           if (r.moves.length > 0) {
             commit(r.game);
@@ -519,8 +527,9 @@ export function start(root: HTMLElement, art: Art): void {
           return { ok: true, moves: r.moves };
         },
         onSpend: (id, stat) => {
-          if (horde && endedAt === null) {
-            // Over, its screen not up yet (one frame): nothing to spend into.
+          if (horde && !resultUp()) {
+            // Over, its screen not up yet (while its last kills die, ID-110): nothing to
+            // spend into.
             if (horde.outcome !== 'fighting') return;
             // Mid-fight (ID-116): saved at once, so a reload keeps it, and fought with now.
             const f = spendInFight(game, horde, id, stat);
@@ -880,7 +889,16 @@ export function start(root: HTMLElement, art: Art): void {
         ctx,
         art,
         // Bullet tails grow with the game speed (ID-070).
-        { ...horde, pace: speed, chat },
+        {
+          ...horde,
+          pace: speed,
+          chat,
+          // Once it is over, the real seconds since, for its last kills to finish dying
+          // (ID-110): 0 on the frame it ends, before `endedAt` is read below.
+          ...(horde.outcome === 'fighting'
+            ? {}
+            : { ended: endedAt === null ? 0 : (Date.now() - endedAt) / 1000 }),
+        },
         cam,
         view,
         null,
@@ -900,13 +918,20 @@ export function start(root: HTMLElement, art: Art): void {
         const screen = HORDE_ONLY ? squadScreen(game, horde) : resultScreen(game, horde, endedAt);
         // After a first clear the next new horde is picked; else the same horde again.
         if (screen.picker) picked = screen.picker.value;
-        hud.showResult(screen);
+        // A win's last kill ends the fight mid-death: its result waits until they have died.
+        const left =
+          horde.outcome === 'won'
+            ? dyingLeft(horde.seed, horde.time, animator.corpses, animator.reduced)
+            : 0;
+        pendingResult = { screen, at: endedAt + left * 1000 };
         // Horde-only (ID-066): XP and the new survivor are saved at once, so a reload on
         // the result screen never loses a win; stat points follow with its button.
-        if (HORDE_ONLY) {
-          commit(finishSquadHorde(game, horde));
-          showGear();
-        }
+        if (HORDE_ONLY) commit(finishSquadHorde(game, horde));
+      }
+      if (pendingResult && Date.now() >= pendingResult.at) {
+        hud.showResult(pendingResult.screen);
+        pendingResult = null;
+        if (HORDE_ONLY) showGear();
       }
     } else if (!panel) {
       // The horde-only build between hordes: the squad on a full wall, waiting to start.
