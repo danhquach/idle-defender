@@ -286,7 +286,7 @@ export function effectAt(
     case 'reinforce':
       return { pre: '', value: `+${pct(CARD.step.reinforce * n)}`, post: ' wall max HP' };
     case 'speed-loaders':
-      return { pre: 'Guns reload in ', value: pct(lv(CARD.loaders)), post: ' of the time' };
+      return { pre: 'Reload time ', value: `−${pct(1 - lv(CARD.loaders))}`, post: '' };
     case 'extended-mags':
       return { pre: 'Magazines hold ', value: `×${factor(lv(CARD.mags))}`, post: ' the rounds' };
     case 'piercing-rounds':

@@ -121,19 +121,21 @@ export const FIGHT_FRAME: Frame = HORDE_ONLY ? SQUAD_FRAME : FRAME;
  * height fit, between the HUD's bands), never under MIN_ZOOM, centred in the spare
  * space. A frame wider or taller than the view keeps its left (wall-side) or top edge.
  * `bottom` is the bottom HUD's measured height; a wrapped shop bar takes more. `frame`
- * is this build's fight frame unless named.
+ * is this build's fight frame unless named. `top` is the top HUD's measured height,
+ * when it reaches past the bar (the held cards' strip, ID-113).
  */
-export function frameCamera(view: View, bottom = 0, frame: Frame = FIGHT_FRAME): Camera {
+export function frameCamera(view: View, bottom = 0, frame: Frame = FIGHT_FRAME, top = 0): Camera {
   const w = frame.right - frame.left;
   const h = (frame.bottom - frame.top) * TILT;
+  const above = Math.max(HUD_SPACE.top, top);
   const below = Math.max(HUD_SPACE.bottom, bottom);
-  const band = Math.max(0, view.h - HUD_SPACE.top - below);
+  const band = Math.max(0, view.h - above - below);
   const zoom = Math.max(MIN_ZOOM, Math.min(view.w / w, band / h));
   const spareX = Math.max(0, view.w - w * zoom) / 2;
   const spareY = Math.max(0, band - h * zoom) / 2;
   return {
     x: frame.left - spareX / zoom,
-    y: frame.top - (HUD_SPACE.top + spareY) / (zoom * TILT),
+    y: frame.top - (above + spareY) / (zoom * TILT),
     zoom,
   };
 }

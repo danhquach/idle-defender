@@ -590,7 +590,7 @@ export function start(root: HTMLElement, art: Art): void {
     backdropCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
     // Resizing cleared the backdrop's canvas.
     forgetBackdrop();
-    fightCam = frameCamera(view, hud.bottomSpace());
+    fightCam = frameCamera(view, hud.bottomSpace(), FIGHT_FRAME, hud.topSpace());
     // The horde-only build shows the fight frame between hordes too.
     buildCam = panel ? buildCamera(view, panel.room(view)) : fightCam;
     cam = horde ? fightCam : buildCam;
