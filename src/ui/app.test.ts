@@ -11,6 +11,7 @@ import { exportCode } from '../storage/code.ts';
 import { encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { NOW } from '../storage/testing.ts';
 import { start } from './app.ts';
+import { skipIntro } from './testing.ts';
 import { PANEL_SPACE } from './build.ts';
 import { buildCamera, EASE_MS, PLOT_AT } from './buildscene.ts';
 import { FRAME, frameCamera, project, type Camera } from './projection.ts';
@@ -58,6 +59,7 @@ function boot() {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   start(root, art);
+  skipIntro();
   const menuButton = root.querySelector<HTMLButtonElement>('.menu-button')!;
   const scrim = () => document.querySelector<HTMLElement>('.menu-scrim')!;
   const dialogButton = (label: string) =>

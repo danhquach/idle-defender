@@ -17,6 +17,10 @@
   --color-panel-solid: rgb(21 23 26);
   --color-menu-bg: rgb(21 23 26 / 97%);
   --color-scrim: rgb(0 0 0 / 55%);
+  --color-intro-dim: rgb(0 0 0 / 70%);
+  --color-intro-shade-top: rgb(0 0 0 / 45%);
+  --color-intro-shade-bottom: rgb(21 23 26 / 90%);
+  --color-intro-title-edge: rgb(0 0 0 / 85%);
   --color-shadow: rgb(0 0 0 / 60%);
 
   /* Lines */
@@ -3544,5 +3548,232 @@ body {
   .hud-swarm,
   .hud-boss-cue-winding {
     animation: none;
+  }
+}
+
+/* The intro (ID-106): a title screen over the camp at launch, then a first-launch card.
+   The title art fills the window (cover, kept centred on the survivors); a shade darkens
+   the sky under the title and the ground under the buttons. */
+.intro-scrim {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.intro-scrim[hidden],
+.intro-page[hidden],
+.intro-action[hidden] {
+  display: none;
+}
+
+.intro-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 60%;
+  opacity: 0;
+  transition: opacity 0.6s ease-out;
+}
+
+.intro-art-on {
+  opacity: 1;
+}
+
+.intro-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(var(--color-intro-dim), var(--color-intro-dim)),
+    linear-gradient(
+      to bottom,
+      var(--color-intro-shade-top) 0%,
+      transparent 30%,
+      transparent 62%,
+      var(--color-intro-shade-bottom) 92%
+    );
+}
+
+.intro {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-16);
+  box-sizing: border-box;
+}
+
+.intro:focus {
+  outline: none;
+}
+
+.intro-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+/* The title screen: no box, the title up in the sky and the buttons at the foot. */
+.intro-title-page {
+  justify-content: space-between;
+  align-items: center;
+  width: min(640px, 100%);
+  height: 100%;
+}
+
+.intro-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  padding-top: clamp(var(--space-16), 7vh, 96px);
+}
+
+.intro-foot {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  /* Clear of a phone's home bar. */
+  padding-bottom: calc(clamp(var(--space-8), 4vh, 48px) + env(safe-area-inset-bottom, 0px));
+}
+
+/* The confirm and the card stay boxed, so their text reads over the art. */
+.intro-panel {
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--space-24);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-menu-bg);
+  box-shadow: 0 8px 32px var(--color-shadow);
+  box-sizing: border-box;
+}
+
+.intro-title {
+  margin: 0;
+  font-size: clamp(2.5rem, 10vw, 4.5rem);
+  line-height: 1.05;
+  text-align: center;
+  color: var(--color-accent);
+  letter-spacing: 0.03em;
+  text-shadow:
+    0 3px 0 var(--color-intro-title-edge),
+    0 0 28px var(--color-shadow);
+}
+
+.intro-tagline,
+.intro-question {
+  margin: 0;
+  font-size: var(--text-heading);
+  text-align: center;
+}
+
+.intro-tagline {
+  color: var(--color-text);
+  text-shadow: 0 1px 6px var(--color-intro-title-edge);
+}
+
+.intro-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.intro-action {
+  min-height: 44px;
+  font-size: var(--text-heading);
+}
+
+.intro-mute {
+  text-shadow: 0 1px 4px var(--color-intro-title-edge);
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: var(--space-8);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.intro-mute .menu-check-box {
+  margin: 0;
+}
+
+.intro-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  text-align: center;
+  color: var(--color-text-subtle);
+}
+
+.intro-hint .menu-key {
+  margin-right: var(--space-2);
+}
+
+.intro-card-head {
+  display: flex;
+  align-items: center;
+}
+
+.intro-card-title {
+  margin: 0;
+  font-size: var(--text-title);
+}
+
+.intro-skip {
+  width: 44px;
+  height: 44px;
+}
+
+.intro-how {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  font-size: var(--text-body);
+}
+
+.intro-how dt {
+  margin-top: var(--space-6);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.intro-how dd {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.intro button:focus-visible,
+.intro input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.intro-danger {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.intro-danger:hover,
+.intro-danger:focus-visible {
+  border-color: var(--color-danger-hover);
+  background: var(--color-danger-bg-hover);
+}
+
+/* A touch screen has no keys to hint at. */
+@media (hover: none) and (pointer: coarse) {
+  .intro-keys {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-art {
+    transition: none;
   }
 }

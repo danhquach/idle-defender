@@ -135,3 +135,24 @@ export function writeChatter(storage: SaveStorage | null, level: ChatterLevel): 
     // Storage blocked or full.
   }
 }
+
+// The how-to-play card (ID-106): shown once, on a first launch. Only "1" counts as seen.
+export const HOW_TO_SEEN_KEY = 'idle-defender.how-to-seen';
+
+/** Whether the first-launch card has been shown in this browser. */
+export function readHowToSeen(storage: SaveStorage | null): boolean {
+  try {
+    return storage?.getItem(HOW_TO_SEEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Marks the card shown; where the browser refuses it, it shows again next launch. */
+export function writeHowToSeen(storage: SaveStorage | null): void {
+  try {
+    storage?.setItem(HOW_TO_SEEN_KEY, '1');
+  } catch {
+    // Storage blocked or full.
+  }
+}

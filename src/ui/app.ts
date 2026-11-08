@@ -39,11 +39,13 @@ import { skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import {
   readChatter,
+  readHowToSeen,
   readReduceMotion,
   readSound,
   readSpeed,
   SPEEDS,
   writeChatter,
+  writeHowToSeen,
   writeMute,
   writeReduceMotion,
   writeSpeed,
@@ -77,6 +79,7 @@ import {
   squadScreen,
   squadStart,
 } from './hud.ts';
+import { createIntro } from './intro.ts';
 import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
@@ -93,7 +96,7 @@ import {
   type View,
 } from './projection.ts';
 import { drawScene, forgetBackdrop, type Aim, type CampView, type Scene } from './render.ts';
-import type { Art } from './sprites.ts';
+import { TITLE_PICTURE, type Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
 const MAX_DT = 0.1;
@@ -191,7 +194,14 @@ export function start(root: HTMLElement, art: Art): void {
     'click',
     (e) => {
       const t = e.target;
-      if (t instanceof Element && t.closest('button, [role="tab"], input[type="checkbox"]')) {
+      // Switching Mute on is silent (the box is ticked before this runs; ID-106).
+      const muting =
+        t instanceof HTMLInputElement && t.matches('#intro-mute, #menu-mute') && t.checked;
+      if (
+        !muting &&
+        t instanceof Element &&
+        t.closest('button, [role="tab"], input[type="checkbox"]')
+      ) {
         sound.play('click');
       }
     },
@@ -450,15 +460,20 @@ export function start(root: HTMLElement, art: Art): void {
       if (which !== 'music') sound.play('shot-pistol');
     },
     onMute: (on) => {
-      sound.setMuted(on);
-      writeMute(storage, on);
+      setMuted(on);
+      intro.setMuted(on);
     },
     chatter: chatterLevel,
     onChatter: (level) => {
       chatterLevel = level;
       writeChatter(storage, level);
     },
+    onHowToCard: () => intro.showCard(),
   });
+  function setMuted(on: boolean): void {
+    sound.setMuted(on);
+    writeMute(storage, on);
+  }
   /** The game with the points spent on the result screen so far (saved with its button). */
   function pending(): GameState {
     let next = game;
@@ -507,7 +522,8 @@ export function start(root: HTMLElement, art: Art): void {
     const id = t?.dataset.openSurvivor;
     if (roster && t && id !== undefined) roster.open(id, t);
   });
-  const dialogOpen = (): boolean => menu.isOpen() || inventory.isOpen() || !!roster?.isOpen();
+  const dialogOpen = (): boolean =>
+    intro.isOpen() || menu.isOpen() || inventory.isOpen() || !!roster?.isOpen();
   function refreshDialogs(): void {
     menu.refresh();
     inventory.refresh();
@@ -573,20 +589,52 @@ export function start(root: HTMLElement, art: Art): void {
   }
   toBuild();
   if (!storage) menu.status('off');
-  else if (loaded.rejected) {
-    // Said in the build panel too, so it is seen without opening the menu.
-    menu.status('rejected');
-    panel?.notice(SAVE_STATUS.rejected.text);
-    if (!panel) hud.toast(SAVE_STATUS.rejected.text);
-  } else if (loaded.save) {
-    // Said once: the next save is the new version, the field grown and the points refunded.
-    const notes = [
-      ...(loaded.save.grew ? [FIELD_GREW] : []),
-      ...(loaded.save.refunded ? [STATS_REFUNDED] : []),
-    ].join(' ');
-    if (panel && notes) panel.notice(notes);
-    // A one-time note: up long enough to read (ID-084).
-    else if (!panel && loaded.save.refunded) hud.toast(STATS_REFUNDED, REFUND_TOAST_MS);
+  else if (loaded.rejected) menu.status('rejected');
+  // The intro (ID-106) covers the camp at launch; the load's notes wait until it is gone,
+  // and a new game started from it has none.
+  let startedFresh = false;
+  const intro = createIntro(root, {
+    hasSave: loaded.save !== null,
+    firstLaunch: loaded.save === null && !readHowToSeen(storage),
+    muted: soundSettings.muted,
+    onMute: (on) => {
+      setMuted(on);
+      menu.setMuted(on);
+    },
+    // Without a save the camp shown is already new: it is saved now, so the next launch
+    // offers Continue (an unreadable save was kept aside on load, and its note still shows).
+    onNewGame: () => {
+      if (!loaded.save) {
+        // The Save tab keeps saying an unreadable save was set aside, unless this write failed.
+        if (!storage) return;
+        const ok = writeSave(storage, game, Date.now());
+        menu.status(!ok ? 'failed' : loaded.rejected ? 'rejected' : 'ok');
+        return;
+      }
+      startedFresh = true;
+      replaceCamp(newGame(HORDE_ONLY ? 'horde' : 'full'));
+    },
+    onCardSeen: () => writeHowToSeen(storage),
+    backdrop: art[TITLE_PICTURE],
+    onDone: () => {
+      if (!startedFresh) loadNotes();
+    },
+  });
+  function loadNotes(): void {
+    if (loaded.rejected) {
+      // Said in the build panel too, so it is seen without opening the menu.
+      panel?.notice(SAVE_STATUS.rejected.text);
+      if (!panel) hud.toast(SAVE_STATUS.rejected.text);
+    } else if (loaded.save) {
+      // Said once: the next save is the new version, the field grown and the points refunded.
+      const notes = [
+        ...(loaded.save.grew ? [FIELD_GREW] : []),
+        ...(loaded.save.refunded ? [STATS_REFUNDED] : []),
+      ].join(' ');
+      if (panel && notes) panel.notice(notes);
+      // A one-time note: up long enough to read (ID-084).
+      else if (!panel && loaded.save.refunded) hud.toast(STATS_REFUNDED, REFUND_TOAST_MS);
+    }
   }
 
   // A fight isn't saved, and neither is its payout until "Back to build": while one

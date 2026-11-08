@@ -2542,6 +2542,15 @@
       "prompt": "a patched canvas survivor tent beside a rusty oil barrel with a small fire, supply crates"
     },
     {
+      "id": "title-dusk",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 1101,
+      "size": "1536x1024",
+      "prompt": "wide video game title screen key art, hand-painted 2D illustration with soft shading and bold dark outlines, gritty post-apocalyptic ruins. Seen from just behind exactly three survivors grouped close together in the centre of the image, standing side by side on top of a rough cracked concrete wall with sandbags, all three seen from behind facing away from the viewer toward the horde, holding rifles ready at the shoulder. Beyond the wall a ruined dusty field where a large horde of shambling zombies in dark silhouette walks toward the wall through haze. Far behind them a broken ruined city skyline with rising smoke against a burnt-orange dusk sky with a low hazy sun glow and a few soft drifting clouds. The survivors stand in the lower middle; the upper third is calm open sky. Muted desaturated colours, warm orange light, cinematic. No text, no letters, no logo, no frame, no border"
+    },
+    {
       "id": "world-map",
       "kind": "picture",
       "style": "verbatim",

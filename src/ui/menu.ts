@@ -177,6 +177,8 @@ export interface MenuOptions {
   /** How much survivors say in a fight (ID-085); a change is applied and stored by the caller. */
   chatter: ChatterLevel;
   onChatter: (level: ChatterLevel) => void;
+  /** The Help tab's button (ID-106): the menu closes and the how-to-play card opens. */
+  onHowToCard?: () => void;
 }
 
 /** The chatter levels' names, in the order shown (ID-085). */
@@ -201,6 +203,8 @@ export interface Menu {
   refresh(): void;
   /** Sets the Save tab's status line; saving off or refused also marks the Menu button. */
   status(status: SaveStatus): void;
+  /** Mute changed elsewhere (the intro, ID-106): the switch follows, the caller applies it. */
+  setMuted(on: boolean): void;
 }
 
 export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
@@ -509,12 +513,18 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     li.append(el('b', '', step), ` ${text}`);
     how.append(li);
   }
-  panels
-    .get('help')!
-    .append(
-      section(el('h3', 'menu-heading', 'Controls'), keys),
-      section(el('h3', 'menu-heading', 'How to play'), how),
-    );
+  const howSection = section(el('h3', 'menu-heading', 'How to play'), how);
+  if (opts.onHowToCard) {
+    const onCard = opts.onHowToCard;
+    const cardButton = el('button', 'build-option menu-action', 'Show the how-to-play card');
+    cardButton.type = 'button';
+    cardButton.addEventListener('click', () => {
+      api.close();
+      onCard();
+    });
+    howSection.append(cardButton);
+  }
+  panels.get('help')!.append(section(el('h3', 'menu-heading', 'Controls'), keys), howSection);
 
   function select(next: Tab, focus: boolean): void {
     // A confirm left open on a hidden tab would catch the next Esc unseen.
@@ -635,6 +645,10 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     status(next) {
       saveStatus = next;
       showStatus();
+    },
+    setMuted(on) {
+      mute.checked = on;
+      dim();
     },
   };
   select(tab, false);
