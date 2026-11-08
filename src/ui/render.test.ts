@@ -3450,7 +3450,7 @@ describe('speech bubbles (ID-085)', () => {
     const cam = frameCamera(view);
     const edge = project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx;
     expect(edge).toBeGreaterThan(100);
-    for (const line of Object.values(CHAT_LINES).flat()) {
+    for (const line of Object.values(CHAT_LINES).flatMap((p) => Object.values(p).flat())) {
       const scene: Scene = { ...base, chat: { bubbles: [bubble(d, { line })], clock: 0.5 } };
       const { order, at } = draw(scene, cam, view);
       // Every word of the line is drawn, on one line or two.

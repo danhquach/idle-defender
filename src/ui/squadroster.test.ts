@@ -106,6 +106,15 @@ describe('the survivor card (ID-086)', () => {
     expect(survivorCard(at(1, 4, { agility: 1 })).pointsText).toBe('2 points');
   });
 
+  it("shows the survivor's personality as one word, from who they are (ID-093)", () => {
+    const words = [1, 2, 3].map((n) => survivorCard(at(n, 1)).personality);
+    expect(words).toEqual(['Calm', 'Cocky', 'Nervous']);
+    // Levels, stats and the save never change it.
+    expect(survivorCard(at(2, 9, { agility: 3 })).personality).toBe('Cocky');
+    const card = cardBlock(survivorCard(at(3, 2)), true, () => {});
+    expect(card.querySelector('.roster-card-personality')!.textContent).toBe('Nervous');
+  });
+
   it('each stat with its points; Tinker locked', () => {
     const c = survivorCard(at(1, 4, { instinct: 2, mind: 1 }));
     expect(c.stats.map((s) => [s.name, s.points, s.locked])).toEqual([

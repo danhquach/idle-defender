@@ -2387,8 +2387,20 @@ original outline.
   key the chat's state in Maps, and a saved id can never be `constructor`.
   The Menu sets chatter to **Off**, **Low** (only the big moments — last enemy
   and up — one bubble at a time, 8 s between a survivor's lines below boss
-  rank) or **Full** (everything; the default). Personalities (a different set
-  of lines per survivor) are not built.
+  rank) or **Full** (everything; the default).
+- **As built (ID-093): chatter personalities.** Each survivor is **Calm**,
+  **Cocky** or **Nervous**, and says only that personality's lines: 3 fixed
+  lines per event each, none shared between personalities (a calm reload is
+  "Reloading." or "Changing mags.", a cocky one "Reload, then more of you!", a
+  nervous one "Reloading — hurry, hurry!"). The personality comes from the
+  survivor's id, the way their look does (ID-074): a numbered id counts round
+  Calm, Cocky, Nervous by its last number, so the first recruit is Calm and
+  survivors who join one after another differ; any other id is hashed. It is
+  never stored, typed or picked, so it never changes between fights, saves or
+  backup codes. The survivor card shows it as one word under their level.
+  It sets only which lines they say: event rank, the waits, the 3-bubble cap,
+  the Off / Low / Full setting and the seeded pick all stay as ID-085 built
+  them; the same line never plays twice in a row for an event.
 - **As built (ID-045):** no line joins shooter and target (since ID-070, only
   a close shot's tail does, for the frame or two before it lands). Each bullet is drawn
   at its simulated spot, in the depth sort, as a bright slug with a streak
