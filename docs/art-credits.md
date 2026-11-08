@@ -63,7 +63,9 @@ script refuses a model that is not listed here.
   express prohibitions; the output clause could not be confirmed on BFL's own
   page, so check it again before release. The host's model card says prompts and
   outputs are logged into its own datasets (never sold or used for training);
-  our prompts hold nothing private. It is free, 8 requests a minute.
+  our prompts hold nothing private. It is free, 8 requests a minute. It also made
+  the Spewer's acid spit (ID-118: `acid-glob`, `acid-splash`, `acid-stain`), to
+  match the explosions' cartoon style; the same points apply.
 - MAI Image 2.6 (`microsoft/mai-image-2.6`, ID-117, 2026-11-08): the project
   owner chose it for the title art (`title-dusk`) after a side-by-side test
   against FLUX 1.1 Pro, Z-Image Turbo and FLUX.2 Klein 4B, knowing the points

@@ -15,6 +15,7 @@ import {
 } from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
 import { FIREBALL } from './explosion.ts';
+import { SPIT } from './spit.ts';
 import {
   ART_IDS,
   ART_URLS,
@@ -143,6 +144,7 @@ describe('art coverage', () => {
       SCORCH_ART,
       BOMB_ART,
       ...Object.values(FIREBALL.art),
+      ...Object.values(SPIT.art),
       ...Object.values(SHOP_ICON),
       ...Object.values(SKILL_ICON),
       ...Object.values(CARD_ICON),

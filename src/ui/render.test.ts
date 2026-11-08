@@ -15,6 +15,7 @@ import {
   MUZZLE_FLASH,
   SKILL_FLASH,
   SKILLS,
+  SPEWER,
   STEP,
   THROW_FALL,
   TURRET,
@@ -29,7 +30,7 @@ import {
   stockOf,
 } from '../core/data.ts';
 import type { Tier } from '../core/base.ts';
-import type { Bullet, Enemy, HordeState, Pop } from '../core/horde.ts';
+import type { Bullet, Enemy, HordeState, Pop, Spit } from '../core/horde.ts';
 import { CHAT, CHAT_LINES, type Bubble } from '../core/chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
 import { carpet, throwArea, wallFront } from '../core/skills.ts';
@@ -54,6 +55,7 @@ import {
 } from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
 import { BLAST, FIREBALL } from './explosion.ts';
+import { SPIT } from './spit.ts';
 import {
   BUBBLE,
   bubbleLayout,
@@ -1269,6 +1271,90 @@ describe('drawScene with art', () => {
     expect(boxes).toHaveLength(1);
     drawScene(r.ctx, r.art, { ...blank(), time: SKILL_FLASH, blasts: [bomb, pop] }, CAM, VIEW);
     expect(boxes).toHaveLength(1);
+  });
+
+  it('a Spewer’s spit flies as the acid glob, splashes where it lands, stains and is gone (ID-118)', () => {
+    const spit = { fromX: 900, fromY: 300, x: 520, y: 300, at: 1 };
+    const at = (u: number, zoom = 1, reduced = false) => {
+      const r = recorder();
+      const boxes: { id: ArtId; w: number; cx: number; cy: number }[] = [];
+      Object.assign(r.ctx, {
+        drawImage: (img: { id: ArtId }, x: number, y: number, w: number, h: number) => {
+          if (Object.values(SPIT.art).includes(img.id as never))
+            boxes.push({ id: img.id, w, cx: x + w / 2, cy: y + h / 2 });
+        },
+      });
+      const anim = new Animator();
+      anim.reduced = reduced;
+      const time = spit.at + u * SPEWER.splash;
+      const scene = { ...blank(), time, spits: [spit] };
+      drawScene(r.ctx, r.art, scene, { ...CAM, zoom }, VIEW, null, null, null, anim);
+      return boxes;
+    };
+    // In flight: only the glob, no flat dot, sized with the zoom.
+    expect(at(0.25).map((b) => b.id)).toEqual([SPIT.art.glob]);
+    expect(at(0.25)[0]!.w).toBeCloseTo(SPIT.glob, 6);
+    expect(at(0.25, 2)[0]!.w).toBeCloseTo(SPIT.glob * 2, 6);
+    // Landed: the splash on the spot it hit, then the stain, then nothing.
+    const land = at(0.51);
+    expect(land.map((b) => b.id)).toEqual([SPIT.art.splash]);
+    // On the spot it hit, at body height (above the ground point).
+    const ground = project({ x: spit.x, y: spit.y }, CAM);
+    expect(land[0]!.cx).toBeCloseTo(ground.sx, 6);
+    expect(land[0]!.cy).toBeLessThan(ground.sy);
+    expect(at(0.95).map((b) => b.id)).toEqual([SPIT.art.stain]);
+    expect(at(1)).toEqual([]);
+    // The glob points along its path on screen, drips down: flying left the art (which
+    // flies left) turns by the path's angle less a half turn; flying right it is turned by
+    // the angle and mirrored; with no path at all it is drawn as it is.
+    const turns = (fromX: number, x: number, u: number) => {
+      const calls: string[] = [];
+      const run = (spits: Spit[]) => {
+        const r = recorder();
+        const out: string[] = [];
+        Object.assign(r.ctx, {
+          rotate: (a: number) => out.push(`rotate ${a.toFixed(4)}`),
+          scale: (sx: number, sy: number) => out.push(`scale ${sx} ${sy}`),
+        });
+        drawScene(
+          r.ctx,
+          r.art,
+          { ...blank(), time: spit.at + u * SPEWER.splash, spits },
+          CAM,
+          VIEW,
+        );
+        return out;
+      };
+      const without = run([]);
+      const all = run([{ ...spit, fromX, x }]);
+      // Only the calls the spit added (the rest of the scene draws the same either way).
+      for (const c of all) {
+        const i = without.indexOf(c);
+        if (i >= 0) without.splice(i, 1);
+        else calls.push(c);
+      }
+      return calls;
+    };
+    // The path's on-screen angle `fly` along a spit's arc from fromX to x (z offset cancels).
+    const pathAngle = (fromX: number, x: number, fly: number) => {
+      const at = (f: number) =>
+        project({ x: fromX + (x - fromX) * f, y: spit.y, z: Math.sin(Math.PI * f) * 40 }, CAM);
+      const [a, b] = [at(fly + 0.02), at(fly - 0.02)];
+      return Math.atan2(a.sy - b.sy, a.sx - b.sx);
+    };
+    // u 0.1 is fly 0.2: still rising, so the path is sloped.
+    const left = pathAngle(900, 520, 0.2);
+    expect(left).toBeLessThan(-Math.PI / 2); // up and to the left
+    expect(turns(900, 520, 0.1)).toEqual([`rotate ${(left - Math.PI).toFixed(4)}`]);
+    const right = pathAngle(520, 900, 0.2);
+    expect(right).toBeLessThan(0); // up and to the right
+    expect(turns(520, 900, 0.1)).toEqual([`rotate ${right.toFixed(4)}`, 'scale -1 1']);
+    // From and to the same spot, at the top of its arc: no path, no turn.
+    expect(turns(520, 520, 0.25)).toEqual([]);
+    // Reduce motion: the splash holds full size, no stain.
+    const still = at(0.95, 1, true);
+    expect(still.map((b) => b.id)).toEqual([SPIT.art.splash]);
+    expect(still[0]!.w).toBeCloseTo(SPIT.splash, 6);
   });
 });
 
