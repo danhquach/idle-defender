@@ -1,12 +1,14 @@
-// ID-039, ID-062, ID-080, ID-085: Reduce motion, the fight speed, sound and chatter are stored on their own
+// ID-039, ID-062, ID-080, ID-085, ID-106: Reduce motion, the fight speed, sound, chatter and the how-to card are stored on their own
 // and read back through an allow-list.
 import { describe, expect, it } from 'vitest';
 import {
   CHATTER_KEY,
   clampVolume,
+  HOW_TO_SEEN_KEY,
   MOTION_KEY,
   MUTE_KEY,
   readChatter,
+  readHowToSeen,
   readReduceMotion,
   readSound,
   readSpeed,
@@ -14,6 +16,7 @@ import {
   VOLUME_DEFAULTS,
   VOLUME_KEYS,
   writeChatter,
+  writeHowToSeen,
   writeMute,
   writeReduceMotion,
   writeSpeed,
@@ -284,5 +287,44 @@ describe('Chatter setting (ID-085)', () => {
     expect(readChatter(null)).toBe('full');
     expect(() => writeChatter(throwing, 'off')).not.toThrow();
     expect(() => writeChatter(null, 'low')).not.toThrow();
+  });
+});
+
+describe('How-to-play card seen (ID-106)', () => {
+  it('starts unseen and reads back as seen once written', () => {
+    const store = memory();
+    expect(readHowToSeen(store)).toBe(false);
+    writeHowToSeen(store);
+    expect(store.data.get(HOW_TO_SEEN_KEY)).toBe('1');
+    expect(readHowToSeen(store)).toBe(true);
+  });
+
+  it('reads anything but the exact "1" as unseen', () => {
+    const hostile = [
+      '',
+      '0',
+      'true',
+      ' 1',
+      '1 ',
+      '1​',
+      '‮1',
+      '١', // Arabic-Indic one
+      '"1"',
+      '{"__proto__":{"polluted":1}}',
+      '<img src=x onerror=alert(1)>',
+      '1'.repeat(100_000),
+      '__proto__',
+    ];
+    for (const raw of hostile) {
+      expect(readHowToSeen(memory({ [HOW_TO_SEEN_KEY]: raw }))).toBe(false);
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('plays on where storage is blocked or full', () => {
+    expect(readHowToSeen(throwing)).toBe(false);
+    expect(readHowToSeen(null)).toBe(false);
+    expect(() => writeHowToSeen(throwing)).not.toThrow();
+    expect(() => writeHowToSeen(null)).not.toThrow();
   });
 });
