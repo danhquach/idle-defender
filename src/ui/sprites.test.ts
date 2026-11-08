@@ -32,6 +32,7 @@ import {
   LAZY_ART,
   MAP_ART,
   MAP_PICTURE,
+  TITLE_PICTURE,
   placeArt,
   RESOURCE_ICON,
   RESOURCE_IDS,
@@ -133,7 +134,7 @@ describe('art coverage', () => {
     expect(Object.keys(ART_URLS).sort()).toEqual([...ART_IDS].sort());
   });
 
-  it('maps every enemy kind, profession, turret state, trap kind, wall tier and map location to art', () => {
+  it('maps every enemy kind, profession, turret state, trap kind, wall tier, map location and the title to art', () => {
     const states: TurretState[] = ['lit', 'dark', 'jammed', 'offline'];
     const used = [
       ...Object.values(ENEMY_ART).flatMap((e) => [...e.walk, e.attack]),
@@ -149,6 +150,7 @@ describe('art coverage', () => {
       ...Object.values(GUN_ICON),
       ...LOCATION_IDS.map((l) => MAP_ART[l]),
       MAP_PICTURE,
+      TITLE_PICTURE,
       ...states.map((s) => TURRET_ART[s]),
       ...TRAP_KINDS.flatMap((k) => [TRAP_ART[k].built, TRAP_ART[k].broken]),
       ...Object.keys(TIERS).flatMap((t) => Object.values(TIER_ART[t as keyof typeof TIER_ART])),
@@ -393,11 +395,11 @@ describe('loading the art', () => {
   });
 
   it('never waits for, or fails on, the lazy art', async () => {
-    expect(LAZY_ART).toEqual(['world-map']);
-    fakeImages((url) => (url.includes('/world-map') ? 'error' : 'load'));
+    expect(LAZY_ART).toEqual(['world-map', 'title-dusk']);
+    fakeImages((url) => (/\/(world-map|title-dusk)/.test(url) ? 'error' : 'load'));
     expect(Object.keys(await loadArt()).sort()).toEqual([...ART_IDS].sort());
     vi.useFakeTimers();
-    fakeImages((url) => (url.includes('/world-map') ? 'hang' : 'load'));
+    fakeImages((url) => (/\/(world-map|title-dusk)/.test(url) ? 'hang' : 'load'));
     const art = loadArt();
     await vi.advanceTimersByTimeAsync(0);
     await expect(art).resolves.toBeDefined();

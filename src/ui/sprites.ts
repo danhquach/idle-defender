@@ -187,6 +187,7 @@ export const ART_IDS = [
   'shack',
   'tent',
   'world-map',
+  'title-dusk',
   'map-gas-station',
   'map-supermarket',
   'map-electronics',
@@ -201,10 +202,10 @@ export const ART_IDS = [
 export type ArtId = (typeof ART_IDS)[number];
 
 /**
- * Art the game doesn't wait for: the world map's region (ID-028) is the biggest file and
- * only shows behind a button after Horde 2, so it loads in the background.
+ * Art the game doesn't wait for, loaded in the background: the world map's region (ID-028)
+ * only shows behind a button after Horde 2; the title art (ID-106) fades in when it lands.
  */
-export const LAZY_ART: readonly ArtId[] = ['world-map'];
+export const LAZY_ART: readonly ArtId[] = ['world-map', 'title-dusk'];
 const PRELOAD = ART_IDS.filter((id) => !LAZY_ART.includes(id));
 
 /**
@@ -270,6 +271,9 @@ export const BOMB_ART: ArtId = 'airstrike-bomb';
 
 /** The world map's region (ID-028), drawn under the routes and places. */
 export const MAP_PICTURE: ArtId = 'world-map';
+
+/** The intro's backdrop (ID-106): survivors on the wall at dusk, the horde coming. */
+export const TITLE_PICTURE: ArtId = 'title-dusk';
 
 /** Each location's icon on the world map (ID-028), inside its risk ring. */
 export const MAP_ART: Readonly<Record<LocationId, ArtId>> = {

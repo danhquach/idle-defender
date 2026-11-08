@@ -12,8 +12,12 @@ import { createRng } from '../core/rng.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
 import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
+import { MUTE_KEY } from '../storage/settings.ts';
 import { NOW } from '../storage/testing.ts';
+import { SoundEngine } from './audio.ts';
+import { SAVE_STATUS } from './menu.ts';
 import { start } from './app.ts';
+import { skipIntro } from './testing.ts';
 import { AIM_PROMPT } from './hud.ts';
 import { project } from './projection.ts';
 import { GUNS_WAIT } from './inventory.ts';
@@ -63,6 +67,7 @@ function boot() {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   start(root, art);
+  skipIntro();
   const result = () => root.querySelector<HTMLElement>('.hud-result')!;
   const title = () => result().querySelector('.hud-result-title')!.textContent;
   const button = () => result().querySelector<HTMLButtonElement>('.hud-result-foot > .hud-button')!;
@@ -886,5 +891,121 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     const again = boot();
     step(0);
     expect(pressed(again.root)).toEqual(['airstrike']);
+  });
+});
+
+describe('the intro in the game (app.ts, ID-106)', () => {
+  function launch() {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    start(root, art);
+    const intro = () => document.querySelector<HTMLElement>('.intro-scrim')!;
+    const shown = (scope: ParentNode, label: string) =>
+      [...scope.querySelectorAll('button')].find(
+        (b) => b.textContent === label && !b.hidden && !b.closest('[hidden]'),
+      );
+    const menuScrim = () => document.querySelector<HTMLElement>('.menu-scrim')!;
+    const esc = () =>
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return { root, intro, shown, menuScrim, esc };
+  }
+
+  it('covers the start screen at launch; Esc does not open the Menu behind it', () => {
+    const { root, intro, menuScrim, esc } = launch();
+    step(0);
+    expect(intro().hidden).toBe(false);
+    expect(root.hasAttribute('inert')).toBe(true);
+    esc();
+    expect(menuScrim().hidden).toBe(true);
+  });
+
+  it('first launch: New game saves at once, then the card once; the next launch continues', () => {
+    const first = launch();
+    expect(first.shown(first.intro(), 'Continue')).toBeUndefined();
+    first.shown(first.intro(), 'New game')!.click();
+    expect(decodeSave(localStorage.getItem(SAVE_KEY))!.game.hordeNumber).toBe(1);
+    expect(first.shown(first.intro(), 'Got it')).toBeDefined();
+    first.shown(first.intro(), 'Got it')!.click();
+    expect(first.intro().hidden).toBe(true);
+    expect(first.root.hasAttribute('inert')).toBe(false);
+    const again = launch();
+    again.shown(again.intro(), 'Continue')!.click();
+    expect(again.intro().hidden).toBe(true);
+  });
+
+  it('the title art fills the intro behind its pages', () => {
+    const { intro } = launch();
+    const art = intro().querySelector<HTMLImageElement>('img.intro-art')!;
+    expect(art).not.toBeNull();
+    expect(art.alt).toBe('');
+    expect(intro().querySelector('.intro-shade')).not.toBeNull();
+  });
+
+  it('with a save: Continue keeps it; New game asks, then starts over from Horde 1', () => {
+    localStorage.setItem(SAVE_KEY, encodeSave({ ...newGame('horde'), hordeNumber: 4 }, NOW));
+    const kept = launch();
+    kept.shown(kept.intro(), 'Continue')!.click();
+    expect(decodeSave(localStorage.getItem(SAVE_KEY))!.game.hordeNumber).toBe(4);
+    const fresh = launch();
+    fresh.shown(fresh.intro(), 'New game')!.click();
+    expect(decodeSave(localStorage.getItem(SAVE_KEY))!.game.hordeNumber).toBe(4);
+    fresh.shown(fresh.intro(), 'Start new game')!.click();
+    expect(fresh.intro().hidden).toBe(true);
+    expect(decodeSave(localStorage.getItem(SAVE_KEY))!.game.hordeNumber).toBe(1);
+    step(0);
+    expect(fresh.root.querySelector('.hud-result-title')!.textContent).toBe('Horde 1');
+  });
+
+  it('Mute on the intro is stored and the Menu shows it; the Menu reopens the card', () => {
+    const { root, intro, shown, menuScrim } = launch();
+    intro().querySelector<HTMLInputElement>('#intro-mute')!.click();
+    expect(localStorage.getItem(MUTE_KEY)).toBe('1');
+    skipIntro();
+    expect(document.querySelector<HTMLInputElement>('#menu-mute')!.checked).toBe(true);
+    root.querySelector<HTMLButtonElement>('.menu-button')!.click();
+    menuScrim().querySelector<HTMLButtonElement>('#menu-tab-help')!.click();
+    shown(menuScrim(), 'Show the how-to-play card')!.click();
+    expect(menuScrim().hidden).toBe(true);
+    expect(intro().hidden).toBe(false);
+    expect(shown(intro(), 'Got it')).toBeDefined();
+    shown(intro(), 'Got it')!.click();
+    expect(intro().hidden).toBe(true);
+    expect(document.activeElement).toBe(root.querySelector('.menu-button'));
+  });
+});
+
+describe('the intro and an unreadable save (app.ts, ID-106)', () => {
+  it('no Continue, no confirm; the rejected note shows once the intro is gone', () => {
+    localStorage.setItem(SAVE_KEY, 'not a save');
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    start(root, art);
+    const intro = document.querySelector<HTMLElement>('.intro-scrim')!;
+    expect(intro.querySelector('.btn-primary')!.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector('.hud-toast')?.textContent ?? '').not.toContain(
+      SAVE_STATUS.rejected.text,
+    );
+    skipIntro();
+    expect(intro.hidden).toBe(true);
+    expect(root.querySelector('.hud-toast')!.textContent).toBe(SAVE_STATUS.rejected.text);
+    // New game saved the fresh camp, and the Save tab still says the old one was set aside.
+    expect(decodeSave(localStorage.getItem(SAVE_KEY))!.game.hordeNumber).toBe(1);
+    root.querySelector<HTMLButtonElement>('.menu-button')!.click();
+    expect(document.querySelector('.menu-status')!.textContent).toBe(SAVE_STATUS.rejected.text);
+  });
+});
+
+describe('the Mute switch is silent when it mutes (app.ts, ID-106)', () => {
+  it('no click sound switching Mute on; one switching it off', () => {
+    const play = vi.spyOn(SoundEngine.prototype, 'play');
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    start(root, art);
+    const mute = document.querySelector<HTMLInputElement>('#intro-mute')!;
+    mute.click();
+    expect(mute.checked).toBe(true);
+    expect(play).not.toHaveBeenCalledWith('click');
+    mute.click();
+    expect(play).toHaveBeenCalledWith('click');
   });
 });

@@ -2123,6 +2123,18 @@ offline progress works across sessions.
   still plays; the Save tab says saving is off and the Menu button shows a
   red dot.
 - **Several tabs:** each saves on its own changes; the last write wins.
+- **Intro** *(as built, ID-106)*: at launch a title screen covers the camp: the
+  title art (survivors from behind on the wall at dusk, the horde coming; lazy
+  art that fades in, under a 70 % dim) with the title and a one-line tagline in
+  the sky and, at the foot, **Continue** (only with a save, the main action),
+  **New game** (asks first over a save; without one the new camp is saved at
+  once, so the next launch continues) and Mute (kept in step with the Menu's).
+  Enter is the main action, Esc goes back. On a first launch (no save, never
+  shown) New game opens a short how-to-play card (the wall, survivors, skills,
+  between hordes) that can be skipped; the Menu's Help tab opens it again. The
+  "seen" flag is its own key, read back as seen only for the exact value written.
+  Sound still starts only with the first click or key, and ticking Mute on
+  plays no click.
 - **Menu** *(as built, ID-039)*: a "Menu" button top-right (or Esc, when it
   has nothing else to cancel) opens a dialog with three tabs. **Settings:**
   Reduce motion (sprites stop bobbing and leaning; it starts on when the
