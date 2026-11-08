@@ -21,10 +21,14 @@ interface EffectLine {
   label: string;
   /** The gain's short name: "+3 max HP". */
   short: string;
+  /** Shorter still, for a stat button's second line (ID-111): "+3 HP". */
+  tiny: string;
   value: (d: RosterDefender) => number;
   show: (v: number) => string;
   /** A gain (next − now), signed. */
   gain: (dv: number) => string;
+  /** The gain for `tiny`, where `gain` is too long: "−0.05 s reload", not "0.05 s faster". */
+  tinyGain?: (dv: number) => string;
 }
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as squadGear). */
@@ -38,6 +42,7 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
   hp: {
     label: 'Max HP',
     short: 'max HP',
+    tiny: 'HP',
     value: maxHpOf,
     show: String,
     gain: (dv) => signed(dv, 0),
@@ -45,6 +50,7 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
   armour: {
     label: 'Armour per hit',
     short: 'armour',
+    tiny: 'arm',
     value: (d) => statBonus(d.stats.instinct, 'instinct', 'armour'),
     show: (v) => v.toFixed(2),
     gain: (dv) => signed(dv, 2),
@@ -52,6 +58,7 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
   dodge: {
     label: 'Survive a downing hit',
     short: 'survive',
+    tiny: 'surv',
     value: dodgeChance,
     show: pct,
     gain: (dv) => `${signed(dv * 100, 1)}%`,
@@ -59,14 +66,17 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
   reload: {
     label: 'Reload',
     short: 'reload',
+    tiny: 'reload',
     value: (d) => reloadTime(d, heldGun(d)),
     show: (v) => `${v.toFixed(2)} s`,
     // Faster reads as a gain: "0.04 s faster reload".
     gain: (dv) => `${Math.abs(dv).toFixed(2)} s ${dv <= 0 ? 'faster' : 'slower'}`,
+    tinyGain: (dv) => `${signed(dv, 2)} s`,
   },
   crit: {
     label: 'Crit chance',
     short: 'crit chance',
+    tiny: 'crit',
     value: (d) => critChance(d),
     show: pct,
     gain: (dv) => `${signed(dv * 100, 1)}%`,
@@ -74,17 +84,22 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
   critBonus: {
     label: 'Crit damage',
     short: 'crit damage',
+    tiny: 'crit dmg',
     value: critDamage,
     show: (v) => `×${v.toFixed(2)}`,
     // "+×0.06 crit damage": the multiplier grows, as the card's "×2.00 → ×2.06".
     gain: (dv) => `${dv < 0 ? '−' : '+'}×${Math.abs(dv).toFixed(2)}`,
+    // One sign on a small button: "+0.06× crit dmg".
+    tinyGain: (dv) => `${signed(dv, 2)}×`,
   },
   spread: {
     label: 'Spread',
     short: 'spread',
+    tiny: 'spread',
     value: (d) => spreadOf(d, heldGun(d)),
     show: (v) => `${v.toFixed(2)}°`,
     gain: (dv) => `${Math.abs(dv).toFixed(2)}° ${dv <= 0 ? 'tighter' : 'wider'}`,
+    tinyGain: (dv) => `${signed(dv, 2)}°`,
   },
 };
 
@@ -115,13 +130,17 @@ export function effectChange(d: RosterDefender, stat: Stat, by = 1): EffectChang
   });
 }
 
-/** What the next point in `stat` adds to each active effect for `d`: ["+3 max HP", "+0.13 armour", …]. */
-export function nextGains(d: RosterDefender, stat: Stat): string[] {
+/**
+ * What the next point in `stat` adds to each active effect for `d`: ["+3 max HP",
+ * "+0.13 armour", …]; `tiny` for a stat button's short line (ID-111): ["+3 HP", "+0.13 arm", …].
+ */
+export function nextGains(d: RosterDefender, stat: Stat, tiny = false): string[] {
   if (isLocked(stat)) return [];
   const next = plusOne(d, stat);
   return STAT_ACTIVE[stat].map((id) => {
     const l = LINES[id];
-    return `${l.gain(l.value(next) - l.value(d))} ${l.short}`;
+    const dv = l.value(next) - l.value(d);
+    return tiny ? `${(l.tinyGain ?? l.gain)(dv)} ${l.tiny}` : `${l.gain(dv)} ${l.short}`;
   });
 }
 

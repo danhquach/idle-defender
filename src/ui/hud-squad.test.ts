@@ -8,6 +8,7 @@ import { STATS_REFUNDED } from './build.ts';
 import { ENDING_HORDE, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
+import { xpForLevel } from '../core/stats.ts';
 import { waveCount, xpToNext } from '../core/waves.ts';
 import {
   createHud,
@@ -282,6 +283,8 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const open = root.querySelector<HTMLButtonElement>('.squad-card-open')!;
     expect(open.textContent).toBe(evil);
     expect(open.getAttribute('aria-label')).toBe(`${evil}: open survivor card`);
+    // Its hover title (ID-111) is the plain name too.
+    expect(open.title).toBe(evil);
     expect(open.dataset.openSurvivor).toBe(g.roster[0]!.id);
     expect(root.querySelector('.hud-pick-stat')!.getAttribute('aria-label')).toBe(
       `Add Instinct to ${evil}, now 0`,
@@ -301,8 +304,12 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const { root, h } = hud(true);
     const g = squadGame(1, 5);
     h.showResult(squadScreen(g, ended(g, 'won')));
-    const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')];
-    expect(buttons.map((b) => b.textContent)).toEqual([
+    // Their card's buttons: the new survivor's card has its own (ID-111).
+    const buttons = [
+      ...root.querySelectorAll<HTMLButtonElement>('.squad-card:first-child .hud-pick-stat'),
+    ];
+    const label = (b: Element | null) => b!.querySelector('.hud-pick-label')!.textContent;
+    expect(buttons.map(label)).toEqual([
       '+ Instinct (0)',
       '+ Agility (0)',
       '+ Sharp Mind (0)',
@@ -311,14 +318,116 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     expect(buttons.map((b) => b.disabled)).toEqual([false, false, false, true]);
     expect(buttons[3]!.hasAttribute('aria-label')).toBe(false);
     expect(buttons[3]!.title).toMatch(/^Unlocks later/);
-    expect(document.activeElement?.textContent).toBe('+ Instinct (0)');
+    expect(label(document.activeElement)).toBe('+ Instinct (0)');
     expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe(SQUAD_POINTS_NOTE);
     // No stat summary line (ID-096): each card lists what the next point adds instead.
     expect([...root.querySelectorAll('.debrief-hint')].map((p) => p.textContent)).not.toContain(
       'Instinct: more HP and armour · Agility: faster reloads · ' +
         'Sharp Mind: accuracy and crits · Tinker: unlocks later',
     );
-    expect(root.querySelector('.hud-pick-gains')!.textContent).toMatch(/^Instinct: \+\d+ max HP/);
+    // ID-111: on the button itself, in short; no list under the buttons.
+    const next = buttons.map((b) => b.querySelector('.hud-pick-next')!.textContent);
+    expect(next[0]).toMatch(/^\+\d+ HP · \+\d\.\d\d arm · \+\d\.\d% surv$/);
+    expect(next[1]).toMatch(/^−\d\.\d\d s reload$/);
+    expect(next[2]).toMatch(/^\+\d\.\d% crit · \+\d\.\d\d× crit dmg · −\d\.\d\d° spread$/);
+    expect(next[3]).toBe('');
+    expect(root.querySelector('.squad-card .hud-pick-gains')).toBeNull();
     expect(root.querySelector('.hud-result-foot > .hud-button')!.textContent).toBe(startLabel(6));
+  });
+});
+
+describe('the result cards keep one size (ID-111)', () => {
+  function hud() {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    h.onUnspend(noop);
+    return { root, h };
+  }
+  /** Each card's parts in order (tag and base class, no screen-reader text): its shape. */
+  const shapes = (root: HTMLElement): string[] =>
+    [...root.querySelectorAll('.squad-card')].map((c) =>
+      [...c.querySelectorAll('*')]
+        .filter((e) => !e.closest('.squad-card-who') && !e.matches('.sr-only'))
+        .map((e) => `${e.tagName}.${e.classList[0] ?? ''}`)
+        .join(' '),
+    );
+  /** A squad of `n` at level 2, its point spent; those in `up` level on a win. */
+  function levelling(n: number, up: number[]): GameState {
+    const g = squadGame(n);
+    return {
+      ...g,
+      roster: g.roster.map((d, i) => ({
+        ...d,
+        stats: { ...d.stats, instinct: 1 },
+        xp: up.includes(i) ? xpForLevel(3) - 1 : xpForLevel(2),
+      })),
+    };
+  }
+
+  it('a level-up adds no part to any card: every result card has its stat block', () => {
+    const { root, h } = hud();
+    for (const outcome of ['won', 'lost'] as const) {
+      const none = levelling(3, []);
+      h.showResult(squadScreen(none, ended(none, outcome)));
+      const plain = shapes(root);
+      expect(root.querySelectorAll('.squad-card .squad-pick')).toHaveLength(plain.length);
+      expect(root.querySelector('.squad-card .hud-pick-stat:enabled')).toBeNull();
+      // A win's new survivor is a fresh recruit: their block has nothing to spend.
+      if (outcome === 'won') {
+        const joining = root.querySelector('.squad-badge-new')!.closest('.squad-card')!;
+        expect(joining.querySelectorAll('.hud-pick-stat')).toHaveLength(4);
+        expect(joining.querySelector('.squad-points')!.textContent).toBe('0 points');
+      }
+      if (outcome === 'lost') continue;
+      const one = levelling(3, [1]);
+      h.showResult(squadScreen(one, ended(one, 'won')));
+      expect(root.querySelector('.squad-card-up')).not.toBeNull();
+      expect(shapes(root)).toEqual(plain);
+    }
+  });
+
+  it('spending out, and Undo, keep every part in place: Undo only hides', () => {
+    const { root, h } = hud();
+    const g = levelling(2, [0]);
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    const before = shapes(root);
+    const card = root.querySelector<HTMLElement>('.squad-card')!;
+    const undo = card.querySelector<HTMLButtonElement>('.squad-undo')!;
+    expect(undo.hidden).toBe(true);
+    let plus: HTMLButtonElement | null;
+    while ((plus = card.querySelector('.hud-pick-stat:enabled'))) plus.click();
+    expect(card.querySelector('.squad-points')!.textContent).toBe('0 points');
+    expect(card.querySelector('.squad-undo')!.hasAttribute('hidden')).toBe(false);
+    expect(shapes(root)).toEqual(before);
+    // Spent out, the button shows the stat as it stands, its gains still there.
+    const first = card.querySelector<HTMLButtonElement>('.hud-pick-stat')!;
+    expect(first.querySelector('.hud-pick-label')!.textContent).toBe('Instinct (2)');
+    expect(first.querySelector('.hud-pick-next')!.textContent).toMatch(/^\+\d+ HP/);
+    // Its name, with no aria-label, reads the two apart.
+    expect(first.hasAttribute('aria-label')).toBe(false);
+    expect(first.textContent).toMatch(/^Instinct \(2\) \+\d+ HP/);
+  });
+
+  it('Undo shares the count’s row, and the start screen has no stat block', () => {
+    const { root, h } = hud();
+    const g = levelling(2, [0]);
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    const row = root.querySelector('.squad-points-row')!;
+    const part = (e: Element) =>
+      ['squad-points', 'squad-undo'].find((c) => e.classList.contains(c));
+    expect([...row.children].map(part)).toEqual(['squad-points', 'squad-undo']);
+    h.showResult(squadStart(g));
+    expect(root.querySelector('.squad-card')).not.toBeNull();
+    expect(root.querySelector('.squad-card .squad-pick')).toBeNull();
+  });
+
+  it('keeps the keyboard on the stat just pressed, not on the row’s Undo', () => {
+    const { root, h } = hud();
+    const g = { ...levelling(1, []), roster: [{ ...recruit(1), xp: xpForLevel(5) }] };
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    const agility = root.querySelectorAll<HTMLButtonElement>('.squad-card .hud-pick-stat')[1]!;
+    agility.click();
+    expect(document.activeElement).toBe(root.querySelectorAll('.squad-card .hud-pick-stat')[1]);
   });
 });
