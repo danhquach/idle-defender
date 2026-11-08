@@ -8,6 +8,7 @@ import { RARITY_ORDER, SQUAD_DROP, STASH_CAP, WEAPONS, type Rarity } from './dat
 import { newGame, type GameState } from './game.ts';
 import { tick, type HordeState } from './horde.ts';
 import {
+  bestGuns,
   equipGun,
   finishSquadHorde,
   squadDrop,
@@ -315,5 +316,63 @@ describe('equip and swap (ID-067)', () => {
     if (!r.ok) throw new Error(r.reason);
     const s = startSquadHorde(r.game, 1, NOW);
     expect(s.defenders[0]!.loadout.primary).toMatchObject({ base: 'shotgun' });
+  });
+});
+
+describe('best gun for everyone (ID-108)', () => {
+  const weak = gun('a', 'smg', 'rusty');
+  const mid = gun('b', 'smg', 'military');
+  const top = gun('c', 'rifle', 'relic');
+
+  it('hands the strongest stash guns to the weakest hands, the pistol included', () => {
+    const g = squadGame(3, 3, [weak, mid, top]);
+    const r = bestGuns(g);
+    expect(r.moves.map((m) => [m.id, m.from, m.to.uid])).toEqual([
+      ['recruit-1', 'pistol', 'c'],
+      ['recruit-2', 'pistol', 'b'],
+      ['recruit-3', 'pistol', 'a'],
+    ]);
+    expect(r.game.armoury).toEqual([]);
+    for (const m of r.moves) {
+      expect(r.game.roster.find((d) => d.id === m.id)!.loadout.primary).toMatchObject({
+        uid: m.to.uid,
+      });
+    }
+  });
+
+  it('a better stash gun swaps with a held one, which goes to the stash', () => {
+    const g0 = squadGame(2, 3, [weak, mid, top]);
+    const a = equipGun(g0, 'recruit-1', 'a');
+    if (!a.ok) throw new Error(a.reason);
+    const r = bestGuns(a.game);
+    // Both survivors end with the two strongest; the Rusty SMG is left in the stash.
+    const holds = r.game.roster.map((d) => (d.loadout.primary as OwnedWeapon).uid).sort();
+    expect(holds).toEqual(['b', 'c']);
+    expect(r.game.armoury.map((w) => w.uid)).toEqual(['a']);
+  });
+
+  it('is idempotent: a second call moves nothing', () => {
+    const once = bestGuns(squadGame(3, 3, [weak, mid, top]));
+    const twice = bestGuns(once.game);
+    expect(twice.moves).toEqual([]);
+    expect(twice.game).toEqual(once.game);
+  });
+
+  it('never gives a gun for the pistol, so a full stash stays within the cap', () => {
+    const full = Array.from({ length: STASH_CAP }, (_, i) => gun(`s${i}`, 'smg', 'common'));
+    const g = squadGame(2, 3, [...full, top]);
+    const r = bestGuns(g);
+    expect(r.game.armoury.length).toBeLessThanOrEqual(g.armoury.length);
+    expect(r.moves.length).toBeGreaterThan(0);
+    for (const d of r.game.roster) expect(d.loadout.primary).not.toBe('pistol');
+  });
+
+  it('nothing to hand out: an empty stash, or guns no better than the pistol', () => {
+    expect(bestGuns(squadGame(2, 3)).moves).toEqual([]);
+    const g = squadGame(1, 3, [top]);
+    const held = equipGun(g, 'recruit-1', 'c');
+    if (!held.ok) throw new Error(held.reason);
+    expect(gunPower(top)).toBeGreaterThan(gunPower(weak));
+    expect(bestGuns(held.game).moves).toEqual([]);
   });
 });

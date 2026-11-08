@@ -6,7 +6,7 @@ import { STAT_ACTIVE, STAT_EFFECT, type Stats } from '../core/data.ts';
 import type { RosterDefender } from '../core/game.ts';
 import { xpForLevel } from '../core/stats.ts';
 import { statHint, STAT_HINT } from './hud.ts';
-import { effectSteps, nextGains, nextPointText } from './statlines.ts';
+import { effectChange, nextGains, nextPointText } from './statlines.ts';
 
 const at = (s: Partial<Stats> = {}): RosterDefender => ({
   ...recruit(1),
@@ -18,7 +18,7 @@ describe('the next point, per active effect (ID-096)', () => {
   it('one gain per active effect, in STAT_ACTIVE order', () => {
     for (const stat of ['instinct', 'agility', 'mind'] as const) {
       expect(nextGains(at(), stat)).toHaveLength(STAT_ACTIVE[stat].length);
-      expect(effectSteps(at(), stat)).toHaveLength(STAT_ACTIVE[stat].length);
+      expect(effectChange(at(), stat)).toHaveLength(STAT_ACTIVE[stat].length);
     }
     expect(nextGains(at(), 'instinct')).toEqual(['+3 max HP', '+0.13 armour', '+1.0% survive']);
     // Crit chance: the cap over 31 (one point, three effects).
@@ -39,7 +39,7 @@ describe('the next point, per active effect (ID-096)', () => {
 
   it('Tinker, locked, has no effect lines and no next point', () => {
     expect(nextGains(at(), 'tinker')).toEqual([]);
-    expect(effectSteps(at(), 'tinker')).toEqual([]);
+    expect(effectChange(at(), 'tinker')).toEqual([]);
     expect(nextPointText(at(), 'tinker')).toBe('');
     expect(statHint(at(), 'tinker')).toBe(STAT_HINT.tinker);
   });
@@ -51,5 +51,20 @@ describe('the next point, per active effect (ID-096)', () => {
     expect(statHint(at(), 'agility')).toMatch(
       /^Faster reloads\. Next point: \d\.\d\d s faster reload$/,
     );
+  });
+});
+
+describe('effects with drafted points (ID-108)', () => {
+  it('now → with n more points; by default one more', () => {
+    const d = at({ agility: 1 });
+    const [one] = effectChange(d, 'agility');
+    expect(`${one!.label} ${one!.from} → ${one!.to}`).toMatch(/^Reload \d\.\d\d s → \d\.\d\d s$/);
+    expect(effectChange(d, 'agility', 1)).toEqual(effectChange(d, 'agility'));
+    const [three] = effectChange(d, 'agility', 3);
+    expect(three!.from).toBe(one!.from);
+    // More points, a faster reload: the printed number falls.
+    expect(parseFloat(three!.to)).toBeLessThan(parseFloat(one!.to));
+    expect(effectChange(d, 'tinker', 2)).toEqual([]);
+    expect(effectChange(d, 'instinct', 2)).toHaveLength(STAT_ACTIVE.instinct.length);
   });
 });

@@ -661,6 +661,46 @@ close-quarter weapons come out only when an enemy is close.
   (Tinker shown locked), unspent points (spent there) and rest time, and three pickers
   (primary, secondary, item). Swaps are free between hordes, injured or
   not; a loadout the rules refuse says why and changes nothing.
+- **As built (ID-108), the horde-only Roster:** one compact dialog, a bottom
+  sheet on a phone, as tall as what it shows. The Roster button carries a
+  badge with the number of survivors who have points to spend. The dialog has
+  a header (title, "Best gun for everyone", close), one row of squad tabs
+  (portrait, name, level, a badge with their points left), the selected
+  survivor beside their gun slot, and one panel that is either **Stats** or
+  **Choose a gun**. A survivor's name on the result screen still opens that
+  survivor here.
+  - **Stats:** each stat is one row with its points ("1 +2" while two are
+    drafted), its effects as "now → with the drafted points" (grey for the
+    next point, green once drafted), and − and + (40 px, hold to repeat).
+    Points are drafted per survivor and kept while the dialog is open; they
+    are spent only on **Confirm** (no respec), and **Undo** clears the
+    draft. Closing with a draft asks "Spend N points?" in the dialog (the keyboard on Keep editing): Confirm
+    spends them, Discard drops them, Esc or Keep editing goes back. On the
+    start screen Confirm spends and saves at once; on the result screen the
+    points join the screen's own picks and are saved with its button. In a
+    fight the buttons are disabled and say to spend points between hordes.
+  - **Choose a gun** (between hordes): tiles for the free pistol and every
+    stash gun except the one held, strongest first by dmg/s, each with its
+    base gun, a rarity frame and a change badge against the held gun ("▲ +4.2",
+    "▼ 1.1", "= same"; the symbol and number carry the meaning, colour is
+    second). It opens on the best upgrade. Above the tiles, the chosen gun is
+    compared with the held one: a verdict in words ("Stronger: +8.9 dmg/s
+    (+72%)" or "Weaker: …") with one Equip button, then Now, New and Change
+    for dmg/s, damage a shot (pellets shown as "4.0 × 6"), fire rate, reload,
+    range, role and affixes, the change written out ("0.50 s slower",
+    "200 px shorter", "new role"). Equip follows the same rules as the gun
+    pickers: the stash holds 20, the pistol is free and unlimited, and a gun
+    is not given back for the pistol into a full stash (the reason is shown
+    in the status line). In a fight the slot says guns change between
+    hordes.
+  - **Best gun for everyone** acts at once: while the stash's strongest gun
+    beats the weakest gun in the squad's hands, the free pistol included, it
+    goes to that survivor and theirs goes to the stash. The status line says
+    what moved ("Equipped: Mara → Military SMG · …") or that everyone already
+    holds the best gun they can get. A gun never goes into the stash for the
+    pistol, so the stash never grows.
+  - On the result screen each survivor card's **Undo** takes back the points
+    spent on that card on that screen; points confirmed in the Roster stay.
 
 ### Ballistics
 
@@ -718,7 +758,10 @@ loadout (ID-084):
 - Level L → L+1 costs 25 × L defender XP (ID-011), so a defender in every
   win reaches level 2 after Horde 2 and level 3 after Horde 4. Points are
   spent on the result screen after a win (or on the roster); unspent points
-  carry over.
+  carry over. *As built (ID-108):* the Roster drafts points with + and − and
+  spends them on Confirm; a result-screen card can take back what was spent on
+  that card with Undo, until the next horde starts (see the Roster screen
+  under §6).
 - **A point is split across its stat's active effects, and every bonus
   shrinks as points pile up** *(starting points, ID-084, ID-096)*: with P
   points in a stat that drives n **active** effects (the ones that work in

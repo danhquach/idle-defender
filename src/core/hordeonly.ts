@@ -422,6 +422,50 @@ export function equipGun(
   return equip(game, me.id, { ...me.loadout, primary: gun });
 }
 
+/** One survivor's change in `bestGuns` (ID-108): the gun they had and the stash gun they got. */
+export interface GunMove {
+  id: string;
+  name: string;
+  from: Held;
+  to: OwnedWeapon;
+}
+
+/**
+ * Hands the stash's best guns to the squad (ID-108, between hordes): while the strongest
+ * gun in the stash hits harder (`gunPower`) than the weakest in the squad's hands, the free
+ * pistol included, it goes to that survivor and theirs goes to the stash. Each swap raises
+ * the squad's total gun power, so it ends; a second call moves nothing. A gun never goes
+ * into the stash for the pistol, so the stash never grows past what it was. Returns the new
+ * game and one move per survivor who changed gun, in the order they changed.
+ */
+export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] } {
+  let g = game;
+  const moves: GunMove[] = [];
+  for (;;) {
+    const held = squadOf(g).map((d) => ({
+      d,
+      gun: isGun(d.loadout.primary) ? d.loadout.primary : ('pistol' as Held),
+    }));
+    const weakest = held.reduce<(typeof held)[number] | undefined>(
+      (a, h) => (!a || gunPower(h.gun) < gunPower(a.gun) ? h : a),
+      undefined,
+    );
+    const best = g.armoury
+      .filter(isGun)
+      .reduce<OwnedWeapon | undefined>(
+        (a, w) => (!a || gunPower(w) > gunPower(a) ? w : a),
+        undefined,
+      );
+    if (!weakest || !best || gunPower(best) <= gunPower(weakest.gun)) return { game: g, moves };
+    const r = equipGun(g, weakest.d.id, best.uid);
+    if (!r.ok) return { game: g, moves };
+    g = r.game;
+    // One move per survivor: after taking the stash's best, what is left in the stash is
+    // no stronger than their new gun, so they are never the one upgraded again.
+    moves.push({ id: weakest.d.id, name: weakest.d.name, from: weakest.gun, to: best });
+  }
+}
+
 /** The rarity a combine of `rarity` guns makes (ID-091), or null for Relic, the top. */
 export const nextRarity = (rarity: Rarity): Rarity | null =>
   RARITY_ORDER[RARITY_ORDER.indexOf(rarity) + 1] ?? null;

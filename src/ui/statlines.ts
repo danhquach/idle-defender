@@ -88,19 +88,30 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
   },
 };
 
-/** `d` with one more point in `stat`. */
-const plusOne = (d: RosterDefender, stat: Stat): RosterDefender => ({
+/** `d` with `by` more points in `stat`. */
+const plusN = (d: RosterDefender, stat: Stat, by: number): RosterDefender => ({
   ...d,
-  stats: { ...d.stats, [stat]: d.stats[stat] + 1 },
+  stats: { ...d.stats, [stat]: d.stats[stat] + by },
 });
+const plusOne = (d: RosterDefender, stat: Stat): RosterDefender => plusN(d, stat, 1);
 
-/** Each active effect of `stat` for `d` now and with one more point: "Reload 2.00 s → 1.95 s". */
-export function effectSteps(d: RosterDefender, stat: Stat): string[] {
+/** One effect now and with more points: the name, and the two values as they print. */
+export interface EffectChange {
+  label: string;
+  from: string;
+  to: string;
+}
+
+/**
+ * Each active effect of `stat` for `d` now and with `by` more points (ID-108): the Roster's
+ * stat row reads "Reload 1.53 s → 1.47 s" for the points drafted, or one more point.
+ */
+export function effectChange(d: RosterDefender, stat: Stat, by = 1): EffectChange[] {
   if (isLocked(stat)) return [];
-  const next = plusOne(d, stat);
+  const next = plusN(d, stat, by);
   return STAT_ACTIVE[stat].map((id) => {
     const l = LINES[id];
-    return `${l.label} ${l.show(l.value(d))} → ${l.show(l.value(next))}`;
+    return { label: l.label, from: l.show(l.value(d)), to: l.show(l.value(next)) };
   });
 }
 

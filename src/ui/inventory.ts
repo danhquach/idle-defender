@@ -121,7 +121,8 @@ export interface CombinePreview {
 export const STASH_EMPTY = 'Empty. Every horde won drops a gun here.';
 export const PISTOL_NOTE = 'Free and unlimited: every survivor has one.';
 export const IN_STASH = 'In the stash.';
-export const INVENTORY_NOTE = 'Pick each survivor’s gun on the start and result screens.';
+export const INVENTORY_NOTE =
+  'Pick each survivor’s gun in the Roster, or on the start and result screens.';
 export const COMBINE_NOTE = `${COMBINE_COUNT} stash guns of one kind and rarity make 1 of the next rarity.`;
 export const COMBINE_HELD = 'Only stash guns combine: put it back in the stash first.';
 export const COMBINE_TOP = 'Relic is the top rarity: it combines no further.';
