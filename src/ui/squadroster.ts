@@ -77,7 +77,7 @@ export function rosterTiles(
 export const pointsBadge = (game: Pick<GameState, 'roster'>): number =>
   game.roster.filter((d) => unspentPoints(d) > 0).length;
 
-/** Under a survivor's stats in a fight: points wait for the screen between hordes. */
+/** Under a survivor's stats while points can't be spent (`canSpend` off): they wait for the screen between hordes. */
 export const SPEND_LATER_NOTE = 'Spend points between hordes.';
 
 /** The spendable stats, in display order (Tinker is locked, shown apart). */

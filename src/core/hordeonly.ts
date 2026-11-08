@@ -38,12 +38,14 @@ import {
   WEAPONS,
   type Rarity,
   type SkillId,
+  type Stat,
   type WeaponId,
 } from './data.ts';
 import {
   equip,
   hordeXp,
   levelGains,
+  spendPoint,
   xpGains,
   type GameState,
   type LevelGain,
@@ -52,6 +54,7 @@ import {
 import { newHorde, standing, type DefenderSpec, type HordeState, type UpgradeId } from './horde.ts';
 import { isGun } from './loadout.ts';
 import { createRng } from './rng.ts';
+import { maxHpOf } from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -196,6 +199,35 @@ export const highestBeaten = (game: Pick<GameState, 'hordeNumber'>): number => g
 /** Whether horde `n` is a replay of one already beaten (ID-098), not the next new one. */
 export const isReplay = (game: Pick<GameState, 'hordeNumber'>, n: number): boolean =>
   n < game.hordeNumber;
+
+/**
+ * One of survivor `id`'s points into `stat` mid-fight (ID-116): spent in the camp for good,
+ * and at once on them in fight `horde`. Someone standing fights with it now (an Instinct
+ * point's extra max HP is added to the HP they have); someone down keeps it for later fights.
+ */
+export function spendInFight(
+  game: GameState,
+  horde: HordeState,
+  id: string,
+  stat: Stat,
+): { ok: true; game: GameState; horde: HordeState } | { ok: false; reason: string } {
+  if (horde.outcome !== 'fighting') throw new RangeError('spendInFight: the horde is over');
+  const r = spendPoint(game, id, stat);
+  if (!r.ok) return r;
+  const stats = r.game.roster.find((d) => d.id === id)!.stats;
+  const defenders = horde.defenders.map((d) => {
+    if (d.id !== id) return d;
+    const maxHp = maxHpOf({ ...d, stats });
+    const hp = d.hp > 0 ? d.hp + maxHp - d.maxHp : d.hp;
+    return { ...d, stats: { ...stats }, maxHp, hp };
+  });
+  const bench = horde.bench.map((b) => (b.id === id ? { ...b, stats: { ...stats } } : b));
+  // Someone down never comes back this fight; their spec follows the camp all the same.
+  const injured = horde.injured.map((i) =>
+    i.defender.id === id ? { ...i, defender: { ...i.defender, stats: { ...stats } } } : i,
+  );
+  return { ok: true, game: r.game, horde: { ...horde, defenders, bench, injured } };
+}
 
 function checkFinished(name: string, game: GameState, horde: HordeState): void {
   if (horde.outcome === 'fighting') throw new RangeError(`${name}: the horde is still on`);

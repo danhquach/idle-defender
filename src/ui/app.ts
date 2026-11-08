@@ -25,6 +25,7 @@ import {
   combineGuns,
   equipGun,
   finishSquadHorde,
+  spendInFight,
   startSquadHorde,
   toggleSkill,
   type GunChoice,
@@ -492,15 +493,16 @@ export function start(root: HTMLElement, art: Art): void {
     return next;
   }
   // The Roster (ID-086, ID-108), left of the Inventory, in the horde-only build: every
-  // survivor's stats and gun. Confirming drafted points spends them between hordes: on the
-  // result screen with the screen's own picks, on the start screen at once. Guns change as
-  // on the gun pickers.
+  // survivor's stats and gun. Confirming drafted points spends them: on the result screen
+  // with the screen's own picks, on the start screen at once, and in a fight (ID-116) at
+  // once, saved and on that survivor in the fight too. Guns change as on the gun pickers,
+  // between hordes only.
   const roster: Roster | null = HORDE_ONLY
     ? createRoster(root, {
         state: () => ({
           game: pending(),
           fight: horde?.outcome === 'fighting' ? horde : null,
-          canSpend: !horde || endedAt !== null,
+          canSpend: !horde || endedAt !== null || horde.outcome === 'fighting',
           canGear: !horde || endedAt !== null,
           resumes: horde?.outcome === 'fighting' && !held,
         }),
@@ -517,7 +519,20 @@ export function start(root: HTMLElement, art: Art): void {
           return { ok: true, moves: r.moves };
         },
         onSpend: (id, stat) => {
-          if (horde && endedAt === null) return;
+          if (horde && endedAt === null) {
+            // Over, its screen not up yet (one frame): nothing to spend into.
+            if (horde.outcome !== 'fighting') return;
+            // Mid-fight (ID-116): saved at once, so a reload keeps it, and fought with now.
+            const f = spendInFight(game, horde, id, stat);
+            if (!f.ok) {
+              hud.toast(f.reason);
+              return;
+            }
+            horde = f.horde;
+            commit(f.game);
+            hud.fightPower(powerLine(squadPower(game), recommendedPower(horde.hordeNumber)));
+            return;
+          }
           const r = spendPoint(pending(), id, stat);
           if (!r.ok) {
             hud.toast(r.reason);
