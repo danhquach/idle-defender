@@ -2159,6 +2159,39 @@
       "ref": "explosion"
     },
     {
+      "id": "acid-glob",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 11801,
+      "size": "1024x1024",
+      "mutant": true,
+      "prompt": "2D game sprite of a single flying glob of bright toxic acid-green slime seen from the side, moving to the left: a round wet glossy blob at the left end with a white shine highlight and a glowing yellow-green core, stretching back into a short tapering dripping tail to the right, two small drips hanging under the tail, all one connected shape with no separate droplets. Hand-painted cartoon style, bold dark green outline, soft shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture. No text."
+    },
+    {
+      "id": "acid-splash",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 11812,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "acid-splash",
+      "prompt": "2D game sprite of a cartoon splat of bright toxic acid-green slime bursting on impact, seen from the front: a wet glossy central splat with a glowing yellow-green core, with eight thick splashing streaks shooting outward in every direction like a star, each streak ending in a round droplet still attached to it, a few drips running down from the bottom, white shine highlights, all one connected shape with no separate droplets. Hand-painted cartoon style, bold dark green outline, soft shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture. No text."
+    },
+    {
+      "id": "acid-stain",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 11824,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "acid-splash",
+      "prompt": "Edit this acid splat to show it a moment later, settling into a stain: the same splat in the same place, same size, same style with the same bold dark green outline and the same bright acid green, but the glowing yellow centre has faded to plain green, the outer streaks are shorter and rounder, a few small round bubbles sit on its surface, and three short drips hang from its bottom edge, all well inside the frame. Keep the same flat uniform pure magenta background #FF00FF filling the whole image. No smoke, no steam, no text.",
+      "ref": "acid-splash"
+    },
+    {
       "id": "weapon-smg",
       "kind": "sprite",
       "model": "black-forest-labs/flux.2-klein-4b",

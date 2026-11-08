@@ -1367,7 +1367,7 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     reach, and spits every 2 s at the nearest defender or working turret (not
     jammed, its wall standing) within 250 px (HP off a defender, a shield blocking its share; condition
     off a turret), else at the segment in front. A spit lands at once; a
-    green glob arcs to it for 0.3 s.
+    green glob arcs to it and splashes there, 0.3 s in all (art: ID-118).
   - **Brute:** each bullet does 3 less damage (at least 1); each pierce pass
     pays it again; blades, tools, traps and skills ignore it.
   - **Screamer:** other enemies within 150 px move 30% faster; several don't
@@ -2675,7 +2675,8 @@ original outline.
   face the way the Shambler does and drawn by its radius like the
   Shambler's art, so it moves in the ID-049 poses with no new frames. The
   Spewer's art has no spit of its own: the glob and the Swollen's burst
-  stay drawn effects. The Mutated Horror got its art in ID-041.
+  stay drawn effects (the spit got generated art in ID-118). The Mutated
+  Horror got its art in ID-041.
 - **As built (ID-054):** the gate is part of the wall. The camera looks
   along the wall, so its outward face never shows; the gate is drawn where
   the wall shows, on its segment's top, in place of the tier's top texture:
@@ -2754,6 +2755,18 @@ original outline.
     a soft pale ring along the ground and thin pale smoke, with no scorch;
     its sizes never drop under 1.5 px. An earlier explosion drawn entirely
     in code (banded puffs, sparks, debris) was rejected by the PM.
+  - **A Spewer's spit** (ID-118, `SPIT` in `src/ui/spit.ts`) is generated art
+    in place of the drawn dots, on the same arc and timings (0.3 s in all,
+    `SPEWER.splash`): an acid glob (a glossy green blob with a dripping tail,
+    16 units long) flies the first half, pointing along its path with its drips
+    hanging down; then a splash (a green splat with eight streaks, 28 units
+    across) bursts on the spot it hit from 60% to full size within a quarter
+    of the splash, cross-fades into a settling stain (the same splat, its glow
+    gone, shorter streaks, short drips) and fades out. With Reduce motion the
+    splash holds full size and only fades. FLUX.2 [dev] (community-hosted, as
+    for the explosions) seeds 11801 (glob) and 11812 (splash); the stain
+    (11824) is an edit of the splash (manifest group `acid-splash`). A first
+    stain edit that turned olive with long drips was set aside.
   - A **dazed** enemy (stunned by a Flashbang, `dazedUntil`) shows 4 pale
     yellow stars with a dark edge circling its head under its HP bar, the
     near ones bigger and brighter, until the stun ends; sizes scale with

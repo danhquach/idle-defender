@@ -72,6 +72,7 @@ import {
   type BlastKind,
   type BlastLook,
 } from './explosion.ts';
+import { SPIT, spitFly, spitFrames } from './spit.ts';
 import {
   depthSort,
   FIGHT_FRAME,
@@ -3500,22 +3501,64 @@ function drawSlab(ctx: CanvasRenderingContext2D, k: Slab, time: number, cam: Cam
   ctx.globalAlpha = 1;
 }
 
-/** A Spewer's glob arcing to where it lands, then a splash there (design §9, ID-023). */
-function drawSpit(ctx: CanvasRenderingContext2D, k: Spit, time: number, cam: Camera): void {
-  const age = (time - k.at) / SPEWER.splash;
-  if (age < 0 || age >= 1) return;
-  const fly = Math.min(1, age * 2);
-  const at = {
+/** Where a Spewer's glob is `fly` of the way along its arc (design §9, ID-023). */
+function spitAt(k: Spit, fly: number): { x: number; y: number; z: number } {
+  return {
     x: k.fromX + (k.x - k.fromX) * fly,
     y: k.fromY + (k.y - k.fromY) * fly,
     z: ENEMY.z + Math.sin(Math.PI * fly) * 40,
   };
-  const c = project(at, cam);
-  ctx.fillStyle = COLOR.acid;
-  ctx.globalAlpha = fly < 1 ? 1 : 0.8 * (1 - (age - 0.5) * 2);
-  ctx.beginPath();
-  ctx.arc(c.sx, c.sy, sized(fly < 1 ? EFFECT.puff / 2 : EFFECT.puff, cam), 0, Math.PI * 2);
-  ctx.fill();
+}
+
+/**
+ * A Spewer's acid glob arcing to where it lands, then its splash there (design §9, ID-023;
+ * art ID-118): the glob points along its path on screen, drips hanging down; the splash
+ * bursts on the spot and settles into a stain that fades (held still with Reduce motion).
+ */
+function drawSpit(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  k: Spit,
+  time: number,
+  cam: Camera,
+  still: boolean,
+): void {
+  const u = (time - k.at) / SPEWER.splash;
+  const frames = spitFrames(u, still);
+  if (frames.length === 0) return;
+  const fly = spitFly(u);
+  const c = project(spitAt(k, fly), cam);
+  if (frames[0]!.art === SPIT.art.glob) {
+    const ahead = project(spitAt(k, Math.min(1, fly + 0.02)), cam);
+    const back = project(spitAt(k, Math.max(0, fly - 0.02)), cam);
+    const [dx, dy] = [ahead.sx - back.sx, ahead.sy - back.sy];
+    const img = art[SPIT.art.glob];
+    const w = sized(SPIT.glob, cam);
+    const h = (img.height / img.width) * w;
+    ctx.save();
+    ctx.translate(c.sx, c.sy);
+    // The art flies to the left; flying right it is mirrored, so its drips stay below.
+    // A spit with no path on screen keeps the art as drawn.
+    const moving = Math.abs(dx) >= 1e-6 || Math.abs(dy) >= 1e-6;
+    if (moving && dx <= 0) ctx.rotate(Math.atan2(dy, dx) - Math.PI);
+    else if (moving) {
+      ctx.rotate(Math.atan2(dy, dx));
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    return;
+  }
+  // The splash and its stain share one scale (one art group): sized by the splash.
+  const base = art[SPIT.art.splash];
+  for (const f of frames) {
+    if (f.alpha <= 0) continue;
+    const img = art[f.art];
+    const s = (sized(SPIT.splash, cam) * f.grow) / base.width;
+    const [w, h] = [img.width * s, img.height * s];
+    ctx.globalAlpha = Math.min(1, f.alpha);
+    ctx.drawImage(img, c.sx - w / 2, c.sy - h / 2, w, h);
+  }
   ctx.globalAlpha = 1;
 }
 
@@ -3768,6 +3811,8 @@ export function drawScene(
     sprites.push({ y: b.y, x: b.x, draw: () => drawBullets(ctx, scene, v, cam) });
   }
   for (const sprite of depthSort(sprites)) sprite.draw();
+  // A Spewer's spit over the sprites but under the wall's HP bars (ID-118).
+  for (const k of scene.spits) drawSpit(ctx, art, k, scene.time, cam, anim?.reduced ?? false);
   if (build) drawBuildMarks(ctx, scene, build, camp, cam);
   else drawWallBars(ctx, scene.layers, cam);
 
@@ -3790,7 +3835,6 @@ export function drawScene(
     ctx.stroke();
   }
   for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
-  for (const k of scene.spits) drawSpit(ctx, k, scene.time, cam);
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
   for (const k of scene.slabs ?? []) drawSlab(ctx, k, scene.time, cam);
   for (const g of scene.grenades) drawGrenade(ctx, g, scene.time, cam);
