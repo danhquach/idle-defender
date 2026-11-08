@@ -31,7 +31,16 @@ import {
   type Room,
   type Survivor,
 } from '../core/camp.ts';
-import { pitch, rerollLock, synergyOf, UPGRADES, type CardPitch } from '../core/cards.ts';
+import {
+  AMMO_CARDS,
+  effectAt,
+  pitch,
+  rerollLock,
+  synergyOf,
+  UPGRADE_IDS,
+  UPGRADES,
+  type CardPitch,
+} from '../core/cards.ts';
 import {
   BANK_CAP,
   BOSS_SKILL,
@@ -80,6 +89,7 @@ import {
 import {
   baseAfter,
   bossHorde,
+  cardLevel,
   perkOn,
   skillPower,
   windingUp,
@@ -91,6 +101,7 @@ import {
   type HordeState,
   type Injury,
   type Post,
+  type UpgradeId,
 } from '../core/horde.ts';
 import { isReplay, squadOf, squadResult, type SquadDrop } from '../core/hordeonly.ts';
 import { isGun, professionOf } from '../core/loadout.ts';
@@ -233,6 +244,53 @@ export function effectLine(p: CardPitch, body: string): HTMLElement {
   const change = el('strong', 'hud-card-change', e.from === null ? e.to : `${e.from} → ${e.to}`);
   line.append(e.pre, change, e.post);
   return line;
+}
+
+/** An upgrade card held this horde, as the fight's card strip shows it (ID-113). */
+export interface HeldCard {
+  id: UpgradeId;
+  /** The level on its chip: "Lv 2", "Max", "×3" for a repeatable card, "" for a unique one. */
+  badge: string;
+  /** Its name and level: "Ricochet · Lv 2", "Sharpshooter · ×3", "Frag Grenades · Unique". */
+  title: string;
+  /** What it does at the level held, with its numbers. */
+  effect: string;
+  /** Its rarity and category: "Rare behaviour". */
+  kind: string;
+  /** The whole entry in words, for a screen reader. */
+  spoken: string;
+}
+
+/** Screen px kept clear under the held cards' strip (ID-113), past its chips' level badges. */
+const HELD_GAP = 8;
+
+/** The upgrade cards held this horde, in pick order (ID-113); a replaced ammo card is gone. */
+export function heldCards(s: Pick<HordeState, 'taken' | 'cardLevels'>): HeldCard[] {
+  return s.taken.map((id) => {
+    const u = UPGRADES[id];
+    const n = cardLevel(s, id);
+    const max = u.levels !== null && n >= u.levels;
+    const level =
+      u.levels === 1 ? 'Unique' : u.levels === null ? `×${n}` : `Lv ${n}${max ? ' · Max' : ''}`;
+    const badge = u.levels === 1 ? '' : max ? 'Max' : level;
+    const e = effectAt(id, n);
+    const effect = e ? `${e.pre}${e.value}${e.post}` : u.text;
+    const kind = `${capital(u.rarity)} ${u.category}`;
+    const spokenLevel =
+      u.levels === 1
+        ? 'unique'
+        : u.levels === null
+          ? `taken ${n} times`
+          : `level ${max ? 'max' : n}`;
+    return {
+      id,
+      badge,
+      title: `${u.name} · ${level}`,
+      effect,
+      kind,
+      spoken: `${u.name}, ${spokenLevel}. ${effect.replaceAll('×', 'times ')}. ${kind}`,
+    };
+  });
 }
 
 /** A level as a whole number, rounded down but never to 0 while any is left. */
@@ -1501,6 +1559,12 @@ export function createHud(
   /** Shows `text` for `ms` (2 s unless said). */
   toast(text: string, ms?: number): void;
   bottomSpace(): number;
+  /**
+   * Screen px from the page's top to the held cards' strip's bottom (ID-113), measured
+   * with the most cards a horde can hold, so the field never moves as cards come; 0 where
+   * the strip never shows.
+   */
+  topSpace(): number;
 } {
   const hud = el('div', 'hud');
   const bar = el('div', squad ? 'hud-bar hud-fight-bar hud-corner-bar' : 'hud-bar hud-fight-bar');
@@ -1713,9 +1777,105 @@ export function createHud(
       setVariant(item.button, 'secondary', '');
     }
   }
+  // The upgrade cards held this horde (ID-113), under the corner: one chip each, its
+  // level on it; hovering, focusing or tapping one shows its name and effect below.
+  const held = el('div', 'hud-held');
+  held.setAttribute('role', 'group');
+  held.setAttribute('aria-label', 'Upgrade cards held');
+  held.hidden = true;
+  const heldRow = el('div', 'hud-held-row');
+  // The chip's own label reads it out; the tip is for the eyes.
+  const heldTip = el('div', 'hud-held-tip');
+  heldTip.setAttribute('aria-hidden', 'true');
+  heldTip.hidden = true;
+  held.append(heldRow, heldTip);
+  let heldShown = '';
+  let heldSpaceFor: boolean | null = null;
+  let heldCardsNow: HeldCard[] = [];
+  // The card whose tip shows, and whether a click or tap pinned it open.
+  let tipFor: UpgradeId | null = null;
+  let tipPinned = false;
+  const chipOf = (id: UpgradeId): HTMLButtonElement | undefined =>
+    [...heldRow.querySelectorAll<HTMLButtonElement>('.hud-held-card')].find(
+      (b) => b.dataset.card === id,
+    );
+  function showTip(id: UpgradeId | null, pinned = false): void {
+    const card = heldCardsNow.find((c) => c.id === id);
+    tipFor = card ? card.id : null;
+    tipPinned = card !== undefined && pinned;
+    for (const b of heldRow.querySelectorAll<HTMLButtonElement>('.hud-held-card'))
+      b.setAttribute('aria-expanded', String(b.dataset.card === tipFor));
+    heldTip.hidden = !card;
+    if (!card) return heldTip.replaceChildren();
+    heldTip.replaceChildren(
+      el('strong', 'hud-held-tip-title', card.title),
+      el('span', 'hud-held-tip-effect', card.effect),
+      el('span', 'hud-held-tip-kind', card.kind),
+    );
+    // Under its chip, kept inside the window.
+    const chip = chipOf(card.id);
+    const room = Math.max(0, window.innerWidth - held.getBoundingClientRect().left - 16);
+    heldTip.style.left = `${Math.max(0, Math.min(chip?.offsetLeft ?? 0, room - heldTip.offsetWidth))}px`;
+  }
+  // Where the strip ends (its rows wrap with the window's width), so the boss bars,
+  // warning and toast sit under it, not on it; 0 while it is hidden or not laid out.
+  const heldSpace = (): void => {
+    const bottom =
+      held.hidden || held.offsetHeight === 0 ? 0 : held.offsetTop + held.offsetHeight + HELD_GAP;
+    hud.style.setProperty('--hud-held-bottom', `${bottom}px`);
+  };
+  window.addEventListener('resize', () => {
+    heldSpace();
+    // The chips may have moved to another row: the open tip goes under its chip again.
+    if (tipFor !== null) showTip(tipFor, tipPinned);
+  });
+  // A tap anywhere else puts a pinned tip away.
+  document.addEventListener('pointerdown', (e) => {
+    if (tipFor !== null && !(e.target instanceof Node && held.contains(e.target))) showTip(null);
+  });
+  function drawHeld(list: HeldCard[]): void {
+    heldCardsNow = list;
+    heldRow.replaceChildren(
+      ...list.map((c) => {
+        const chip = el('button', `hud-held-card hud-held-${UPGRADES[c.id].rarity}`);
+        chip.type = 'button';
+        chip.dataset.card = c.id;
+        chip.setAttribute('aria-label', c.spoken);
+        chip.setAttribute('aria-expanded', 'false');
+        const img = el('img', 'hud-held-icon');
+        img.src = ART_URLS[CARD_ICON[c.id]] ?? '';
+        img.alt = '';
+        chip.append(img);
+        if (c.badge) chip.append(el('span', 'hud-held-badge', c.badge));
+        chip.addEventListener('pointerenter', (e) => {
+          if (e.pointerType === 'mouse' && !tipPinned) showTip(c.id);
+        });
+        chip.addEventListener('pointerleave', (e) => {
+          if (e.pointerType === 'mouse' && !tipPinned && tipFor === c.id) showTip(null);
+        });
+        chip.addEventListener('focus', () => {
+          if (!tipPinned) showTip(c.id);
+        });
+        // Focus leaving the strip puts even a pinned tip away, so the keyboard can close it.
+        chip.addEventListener('blur', (e) => {
+          const out = !(e.relatedTarget instanceof Node && held.contains(e.relatedTarget));
+          if (tipFor === c.id && (!tipPinned || out)) showTip(null);
+        });
+        // A click or tap pins its tip open; a second one on the same chip closes it.
+        chip.addEventListener('click', () => {
+          if (tipPinned && tipFor === c.id) showTip(null);
+          else showTip(c.id, true);
+        });
+        return chip;
+      }),
+    );
+    // The open tip follows its card's new level, or closes with a replaced card.
+    showTip(tipFor, tipPinned);
+  }
+
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, speed, boss, swarm, warning, toast, shop, cards, replace, result);
+  hud.append(bar, speed, boss, swarm, warning, toast, shop, held, cards, replace, result);
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -2255,6 +2415,29 @@ export function createHud(
       // The HUD overlays the whole window, as the canvas does.
       return box.height > 0 ? window.innerHeight - box.top : 0;
     },
+    topSpace() {
+      if (!squad) return 0;
+      // A chip for each card one horde can hold (one ammo card), laid out but never
+      // painted, then the strip is put back as it was.
+      const was = hud.hidden;
+      const heldWas = held.hidden;
+      const chips = [...heldRow.children];
+      const focused = document.activeElement;
+      hud.hidden = false;
+      held.hidden = false;
+      heldRow.replaceChildren(
+        ...UPGRADE_IDS.filter((id) => !AMMO_CARDS.slice(1).includes(id)).map(() =>
+          el('span', 'hud-held-card'),
+        ),
+      );
+      const box = held.getBoundingClientRect();
+      heldRow.replaceChildren(...chips);
+      // A chip taken out of the page loses the keyboard: it goes back to it.
+      if (focused instanceof HTMLElement && heldRow.contains(focused)) focused.focus();
+      held.hidden = heldWas;
+      hud.hidden = was;
+      return box.height > 0 ? box.bottom + HELD_GAP : 0;
+    },
     speed(now, paused) {
       speedButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(SPEEDS[i] === now)));
       pausedChip.hidden = !paused;
@@ -2332,6 +2515,26 @@ export function createHud(
       aimCaption.hidden = !aiming;
       // Horde-only (ID-100): the skill row waits under the start or result screen.
       if (squad) shop.hidden = !result.hidden;
+      // The cards held (ID-113): redrawn the moment a pick or an ammo swap changes them;
+      // never built in the full game, which doesn't show them.
+      const heldKey = squad
+        ? JSON.stringify(state.taken.map((id) => [id, state.cardLevels[id]]))
+        : '';
+      const heldHidden = !squad || state.taken.length === 0 || !result.hidden;
+      const heldRedraw = heldKey !== heldShown;
+      if (heldRedraw) {
+        heldShown = heldKey;
+        drawHeld(heldCards(state));
+      }
+      if (held.hidden !== heldHidden) {
+        held.hidden = heldHidden;
+        if (heldHidden) showTip(null);
+      }
+      // Its height changes with a redraw, showing or hiding, or the window's width.
+      if (heldRedraw || heldSpaceFor !== heldHidden) {
+        heldSpaceFor = heldHidden;
+        heldSpace();
+      }
 
       // Redraw only when the offer, bench or free posts change (the sim clones each tick).
       const replaceKey = state.replace
@@ -2354,7 +2557,11 @@ export function createHud(
         shownOffer = state.offer;
         shownRerolled = `${state.rerolledWave}:${state.rerolls}`;
         // A new offer cuts a pick's confirm effect short; a closing one waits for it.
-        if (state.offer) endPick();
+        if (state.offer) {
+          endPick();
+          // The offer takes the eye: an open card tip goes away (ID-113).
+          showTip(null);
+        }
         if (picking === undefined) {
           cards.hidden = state.offer === null;
           if (state.offer) showOffer(state.offer, state);

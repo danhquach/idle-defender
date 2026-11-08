@@ -1147,7 +1147,7 @@ spacing real hordes have (see the ID-077 note below).
 
   | Card | Kind | Rarity | Lv 1 | Lv 2 | Lv 3 (max) |
   |---|---|---|---|---|---|
-  | Speed Loaders | stat | common | Every squad gun reloads in **90%** of the time | 80% | 70% |
+  | Speed Loaders | stat | common | Every squad gun's reload time **−10%** (it reloads in 90% of the time) | −20% | −30% |
   | Extended Mags | stat | rare | Every squad gun's magazine holds **×1.33** the rounds (rounded), from its next reload (a survivor who joins mid-fight, too: they come with a standard magazine loaded) | ×1.67 | ×2 |
   | Piercing Rounds | behaviour | rare | Each squad shot has a **35%** chance of +1 pierce, rolled on the fight's seeded RNG as it's fired (every pellet of a shot alike) | 70% | always +1 pierce (no roll) |
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |

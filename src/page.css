@@ -136,6 +136,11 @@
   --space-20: 20px;
   --space-24: 24px;
 
+  /* Where the fight's held cards strip ends (ID-113): set on the HUD by its script, 0
+     while it is hidden; and how far that pushes a phone's boss bars down. */
+  --hud-held-bottom: 0px;
+  --hud-held-push: 0px;
+
   color-scheme: dark;
   font-family: var(--font-body);
   background: var(--color-bg);
@@ -249,7 +254,7 @@ body {
 
 .hud-toast {
   position: absolute;
-  top: 48px;
+  top: max(48px, var(--hud-held-bottom));
   left: 50%;
   transform: translateX(-50%);
   padding: var(--space-6) var(--space-14);
@@ -792,7 +797,7 @@ body {
 
 .hud-warning {
   position: absolute;
-  top: 48px;
+  top: max(48px, var(--hud-held-bottom));
   left: 50%;
   transform: translateX(-50%);
   padding: var(--space-8) var(--space-18);
@@ -1653,7 +1658,8 @@ body {
 /* One row per boss on the field (ID-099): its name, skills and wind-up over its HP. */
 .hud-boss {
   position: absolute;
-  top: 40px;
+  /* Under the held cards' strip (ID-113) while it shows. */
+  top: calc(40px + var(--hud-held-push));
   left: 50%;
   display: flex;
   flex-direction: column;
@@ -1742,7 +1748,8 @@ body {
 /* A swarm wave's cue (ID-099): big, in the field's upper middle, for its first seconds. */
 .hud-swarm {
   position: absolute;
-  top: 30%;
+  /* Moved down with the boss bars under the held cards' strip (ID-113). */
+  top: calc(30% + var(--hud-held-push));
   left: 50%;
   padding: var(--space-6) var(--space-18);
   transform: translateX(-50%);
@@ -1770,6 +1777,118 @@ body {
   to {
     transform: translateX(-50%) scale(1.08);
   }
+}
+
+/* The upgrade cards held this horde (ID-113), under the fight corner: a chip per card in
+   its rarity's frame with its level on it, wrapping; a tip under the strip names one. */
+.hud-held {
+  position: absolute;
+  top: 48px;
+  left: 16px;
+  /* Room for every card in one row on a desktop window. */
+  max-width: min(640px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+/* The boss bars and what stacks under them move down by as much as the strip reaches
+   past their own top. */
+.hud {
+  --hud-held-push: max(0px, var(--hud-held-bottom) - 40px);
+}
+
+.hud-held[hidden] {
+  display: none;
+}
+
+.hud-held-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hud-held-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-common);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hud-held-rare {
+  border-color: var(--color-rare);
+  background: radial-gradient(circle, var(--color-rare-glow), transparent 70%)
+    var(--color-surface-sunken);
+}
+
+.hud-held-epic {
+  border-color: var(--color-epic);
+  background: radial-gradient(circle, var(--color-epic-glow), transparent 72%)
+    var(--color-surface-sunken);
+}
+
+.hud-held-card:focus-visible,
+.hud-held-card[aria-expanded='true'] {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.hud-held-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+/* The level, on the chip's lower right corner. */
+.hud-held-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -5px;
+  padding: 0 3px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-bar-bg);
+  color: var(--color-text);
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 11px;
+  white-space: nowrap;
+}
+
+.hud-held-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: var(--space-6) var(--space-10);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-panel-bg);
+  font-size: var(--text-sm);
+  text-align: left;
+  pointer-events: none;
+}
+
+.hud-held-tip[hidden] {
+  display: none;
+}
+
+.hud-held-tip-kind {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 /* The horde-only fight corner (ID-098, layout B), top left in the 48px band: a square
@@ -1973,15 +2092,15 @@ body {
 }
 
 .hud-boss:not([hidden]) ~ .hud-warning {
-  top: 92px;
+  top: calc(92px + var(--hud-held-push));
 }
 
 .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(2):not([hidden])) ~ .hud-warning {
-  top: 132px;
+  top: calc(132px + var(--hud-held-push));
 }
 
 .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(3):not([hidden])) ~ .hud-warning {
-  top: 172px;
+  top: calc(172px + var(--hud-held-push));
 }
 
 /* The world map (ID-028): fills the screen left of the build panel. Places sit at
@@ -4101,25 +4220,47 @@ body {
     right: 156px;
   }
 
+  /* Under the held cards' strip (ID-113), which sits under the corner here: the boss bars
+     and what stacks under them move down by as much as the strip reaches past 108px. */
+  .hud {
+    --hud-held-push: max(0px, var(--hud-held-bottom) - 108px);
+  }
+
+  .hud-held {
+    top: 98px;
+    left: 12px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .hud-held-card {
+    width: 36px;
+    height: 36px;
+  }
+
+  .hud-held-icon {
+    width: 30px;
+    height: 30px;
+  }
+
   .hud-boss {
-    top: 108px;
+    top: calc(108px + var(--hud-held-push));
   }
 
   /* Below a full stack of three boss bars (ID-099). */
   .hud-swarm {
-    top: max(30%, 260px);
+    top: max(30%, calc(260px + var(--hud-held-push)));
   }
 
   .hud-boss:not([hidden]) ~ .hud-warning {
-    top: 160px;
+    top: calc(160px + var(--hud-held-push));
   }
 
   .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(2):not([hidden])) ~ .hud-warning {
-    top: 200px;
+    top: calc(200px + var(--hud-held-push));
   }
 
   .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(3):not([hidden])) ~ .hud-warning {
-    top: 240px;
+    top: calc(240px + var(--hud-held-push));
   }
 }
 
