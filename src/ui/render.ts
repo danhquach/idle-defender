@@ -22,7 +22,9 @@ import {
   TRAP_STRIP,
   TRAP_DURABILITY,
   WALL,
+  THROW_FALL,
   type BossSkill,
+  type SkillId,
   type EnemyKind,
   type Tier,
 } from '../core/data.ts';
@@ -33,6 +35,7 @@ import {
   radiusOf,
   roared,
   shocked,
+  dazed,
   windingUp,
   took,
   turretState,
@@ -45,6 +48,8 @@ import {
   type Post,
   type Burst,
   type Enemy,
+  type Fire,
+  type Incoming,
   type Pop,
   type Slab,
   type Spit,
@@ -55,7 +60,18 @@ import { baseOf } from '../core/armoury.ts';
 import { CHAT, CHAT_RANK, type Bubble } from '../core/chatter.ts';
 import { professionOf } from '../core/loadout.ts';
 import { createRng } from '../core/rng.ts';
-import { carpet } from '../core/skills.ts';
+import { carpet, throwArea } from '../core/skills.ts';
+import {
+  BLAST,
+  blastLook,
+  blastSeed,
+  FIREBALL,
+  fireFrames,
+  paintDiscs,
+  paintRing,
+  type BlastKind,
+  type BlastLook,
+} from './explosion.ts';
 import {
   depthSort,
   FIGHT_FRAME,
@@ -115,7 +131,9 @@ import {
   GUNNER_ART,
   GUNNER_LOOKS,
   lookOf,
-  SKILL_ART,
+  SCORCH_ART,
+  BOMB_ART,
+  SKILL_ICON,
   TIER_ART,
   TRAP_ART,
   TURRET_ART,
@@ -150,6 +168,9 @@ const COLOR = {
   reserved: 'rgba(156, 196, 240, 0.7)',
   shadow: 'rgba(0, 0, 0, 0.35)',
   focus: '#ffe066',
+  aimFill: 'rgba(255, 224, 102, 0.18)',
+  aimFire: '#ff9a3c',
+  aimFireFill: 'rgba(255, 154, 60, 0.18)',
   offFrame: '#d2453c',
   plate: 'rgba(21, 23, 26, 0.6)',
   plateText: '#d8d4cc',
@@ -201,10 +222,46 @@ const COLOR = {
   badgeText: '#111110',
 } as const;
 /**
- * A molotov fire's art (ID-041): see-through at `alpha`, flaring up over `in` s once lit
- * and dying down over its last `out` s, its size wavering by `flicker`.
+ * A thrown flashbang or molotov bottle (ID-107): it drops from `height` (world units) over
+ * `THROW_FALL`, falling faster as it goes, spinning `spin` turns a second, `size` across;
+ * its shadow (`shadow` radius, darkening to `shadowAlpha`) grows under it as it nears the
+ * ground. A flashbang is a grey canister, a bottle its icon's art; an airstrike bomb the
+ * Heavy Rounds shell, `bomb` long, arcing in from `carry` behind (`fallAt`).
  */
-const FIRE = { alpha: 0.7, in: 0.15, out: 0.5, flicker: 0.03 } as const;
+export const THROWN = {
+  height: 420,
+  spin: 2.5,
+  size: 26,
+  shadow: 12,
+  shadowAlpha: 0.9,
+  can: '#8a9097',
+  canEdge: '#1d1f22',
+  canShine: '#c9ced4',
+  bomb: 50,
+  bombShadow: 18,
+  /** How far an airstrike bomb still travels forward (+x, the plane's way) as it falls. */
+  carry: 280,
+} as const;
+
+/**
+ * Where thrown burst `i` is `fall` of the way down (ID-107). A flashbang or bottle drops
+ * straight onto its spot; an airstrike bomb keeps the plane's forward speed (left to
+ * right, +x), so it arcs in from `carry` behind its spot: steady along x while gravity
+ * speeds its drop, landing nose first.
+ */
+export function fallAt(i: Incoming, fall: number): { x: number; y: number; z: number } {
+  const carry = i.skill === 'airstrike' ? THROWN.carry * (1 - fall) : 0;
+  return { x: i.x - carry, y: i.y, z: THROWN.height * (1 - fall * fall) };
+}
+
+/**
+ * How far thrown burst or airstrike bomb `i` has fallen at `time` (ID-107): 0 just
+ * dropped, 1 landing; null before it drops or once it has landed.
+ */
+export function thrownFall(i: Incoming, time: number): number | null {
+  const u = 1 - (i.at - time) / THROW_FALL;
+  return u >= 0 && u <= 1 ? u : null;
+}
 /** How a trap shows (design §7, §15): its kind's sprite, or its broken one. */
 export function trapLook(t: Pick<Trap, 'kind' | 'durability'>): { art: ArtId; broken: boolean } {
   const broken = t.durability <= 0;
@@ -524,6 +581,7 @@ export type Scene = Pick<
   | 'focusId'
   | 'time'
   | 'fires'
+  | 'incoming'
   | 'blasts'
   | 'outcome'
 > &
@@ -545,7 +603,7 @@ export type Scene = Pick<
   };
 /** An armed skill's reach around the cursor, on the field. */
 export interface Aim {
-  skill: 'airstrike';
+  skill: SkillId;
   x: number;
   y: number;
 }
@@ -2537,15 +2595,9 @@ export function grenadeAt(g: Grenade, time: number): { x: number; y: number; z: 
 
 /**
  * Frag Grenades (design §8): in the air, an olive-drab ball with a dark edge on its arc over its own
- * shadow; landed, the airstrike's blast art swells over its reach and fades out.
+ * shadow; landed, its explosion is drawn with the others (`explosions`, ID-107).
  */
-function drawGrenade(
-  ctx: CanvasRenderingContext2D,
-  art: Art,
-  g: Grenade,
-  time: number,
-  cam: Camera,
-): void {
+function drawGrenade(ctx: CanvasRenderingContext2D, g: Grenade, time: number, cam: Camera): void {
   if (time < g.lands) {
     const at = grenadeAt(g, time);
     groundCircle(ctx, at.x, at.y, GRENADE.r, cam);
@@ -2568,11 +2620,224 @@ function drawGrenade(
     ctx.stroke();
     return;
   }
-  const age = (time - g.lands) / CARD.frag.flash;
-  if (age >= 1) return;
-  ctx.globalAlpha = 1 - age;
-  groundArt(ctx, art[SKILL_ART.airstrike], g.x, g.y, CARD.frag.radius * (0.85 + 0.15 * age), cam);
+  // Landed: its explosion is drawn with the others (`explosions`).
+}
+
+/**
+ * How wide a fireball stands on screen (ID-107), world units at zoom 1: an Airstrike bomb's,
+ * and a Frag Grenade's, the same blast smaller (PM).
+ */
+export const FIREBALL_WIDTH = { airstrike: 150, frag: 95 } as const;
+
+/**
+ * One explosion on screen (ID-107): its kind, where, its fireball width, life share, and
+ * its look this frame (`blastLook`), worked out once for both the ground and air layers.
+ */
+interface Explosion {
+  kind: BlastKind;
+  x: number;
+  y: number;
+  width: number;
+  u: number;
+  look: BlastLook;
+}
+
+/**
+ * Every explosion going off in `scene` (ID-107), as `cam` sees it (held still with Reduce
+ * motion): each Airstrike bomb's and landed Frag Grenade's fireball, each Flashbang's
+ * white pop.
+ */
+function explosions(
+  scene: Pick<Scene, 'blasts' | 'grenades' | 'time'>,
+  cam: Camera,
+  still: boolean,
+): Explosion[] {
+  const out: Explosion[] = [];
+  const add = (
+    kind: BlastKind,
+    x: number,
+    y: number,
+    r: number,
+    width: number,
+    u: number,
+    at: number,
+  ) => {
+    const look = blastLook(kind, x, y, r, u, blastSeed(x, y, at), cam, still);
+    if (look) out.push({ kind, x, y, width, u, look });
+  };
+  for (const b of scene.blasts) {
+    const kind = b.skill === 'flashbang' ? 'white' : 'fire';
+    const u = (scene.time - b.at) / SKILL_FLASH;
+    add(kind, b.x, b.y, SKILLS[b.skill].radius, FIREBALL_WIDTH.airstrike, u, b.at);
+  }
+  for (const g of scene.grenades) {
+    if (scene.time < g.lands) continue;
+    const u = (scene.time - g.lands) / CARD.frag.flash;
+    add('fire', g.x, g.y, CARD.frag.radius, FIREBALL_WIDTH.frag, u, g.lands);
+  }
+  return out;
+}
+
+/** Explosions' ground layer (ID-107): scorch, dust and shockwave, under every sprite. */
+function drawBlastGround(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  all: readonly Explosion[],
+  cam: Camera,
+): void {
+  for (const { look, x, y } of all) {
+    if (look.scorch && look.scorch.alpha > 0) {
+      ctx.globalAlpha = look.scorch.alpha;
+      groundArt(ctx, art[SCORCH_ART], x, y, look.scorch.r, cam);
+      ctx.globalAlpha = 1;
+    }
+    if (look.ring) paintRing(ctx, look.ring);
+  }
+}
+
+/**
+ * Explosions' air layer (ID-107), over every sprite: a fireball's flip-book frames standing
+ * on its spot (each frame at its own size in the set, the fireball `width` across), a
+ * flashbang's white pop.
+ */
+function drawBlastAir(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  all: readonly Explosion[],
+  cam: Camera,
+  still: boolean,
+): void {
+  for (const e of all) {
+    if (e.kind === 'white') {
+      paintDiscs(ctx, e.look.air, BLAST.white.flash[1]);
+      continue;
+    }
+    const base = art[FIREBALL.art.ball];
+    const c = project({ x: e.x, y: e.y }, cam);
+    for (const f of fireFrames(e.u, still)) {
+      if (f.alpha <= 0) continue;
+      const img = art[f.art];
+      // The smoke takes over at the fireball's width, so the two read as one blast.
+      const fit = f.art === FIREBALL.art.smoke ? base.width / img.width : 1;
+      const k = (e.width * cam.zoom * f.grow * fit) / base.width;
+      const [w, h] = [img.width * k, img.height * k];
+      ctx.globalAlpha = Math.min(1, f.alpha);
+      // Standing on its spot, its base a little in front so it sits on the ground.
+      const foot = c.sy + h * 0.04 - f.rise * e.width * cam.zoom;
+      ctx.drawImage(img, c.sx - w / 2, foot - h, w, h);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+/** Draws thrown burst `i` `fall` of the way down (`thrownFall`): spinning as it drops. */
+function drawThrown(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  i: Incoming,
+  fall: number,
+  time: number,
+  cam: Camera,
+): void {
+  // It speeds up as it falls.
+  const c = project(fallAt(i, fall), cam);
+  const size = sized(THROWN.size, cam);
+  ctx.save();
+  ctx.translate(c.sx, c.sy);
+  if (i.skill === 'airstrike') {
+    // A bomb points its nose along its path on screen: near level as it leaves the plane,
+    // steep as it lands. The art lies at 45°, nose to the upper right.
+    const ahead = project(fallAt(i, Math.min(1, fall + 0.02)), cam);
+    const back = project(fallAt(i, Math.max(0, fall - 0.02)), cam);
+    ctx.rotate(Math.atan2(ahead.sy - back.sy, ahead.sx - back.sx) + Math.PI / 4);
+    const img = art[BOMB_ART];
+    const h = sized(THROWN.bomb, cam);
+    const w = (img.width / img.height) * h;
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    return;
+  }
+  ctx.rotate((time + i.x) * THROWN.spin * Math.PI * 2);
+  if (i.skill === 'molotov') {
+    const img = art[SKILL_ICON.molotov];
+    const h = size;
+    const w = (img.width / img.height) * h;
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  } else {
+    // A stun grenade: a short grey canister with a pale shine down one side.
+    const [w, h] = [size * 0.45, size * 0.8];
+    ctx.fillStyle = THROWN.can;
+    ctx.strokeStyle = THROWN.canEdge;
+    ctx.lineWidth = Math.max(1, size * 0.08);
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, w * 0.3);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = THROWN.canShine;
+    ctx.fillRect(-w * 0.28, -h * 0.35, w * 0.16, h * 0.7);
+    ctx.fillStyle = THROWN.canEdge;
+    ctx.fillRect(-w * 0.15, -h / 2 - h * 0.15, w * 0.3, h * 0.15);
+  }
+  ctx.restore();
+}
+
+/**
+ * A flashbang's daze (ID-107): `count` stars circle a dazed enemy's head, `spin` turns a
+ * second, on a flat ring `rx` × `rx · ry` round a spot `drop` under its HP bar; sizes are
+ * at zoom 1, never under `min` px, so they read zoomed out and in a crowd. Pale yellow
+ * with a dark edge; the ring's far stars drawn smaller and dimmer.
+ */
+export const STARS = {
+  count: 4,
+  spin: 0.7,
+  rx: 15,
+  ry: 0.35,
+  r: 5,
+  drop: 6,
+  min: { rx: 10, r: 3.5 },
+  fill: '#ffe14d',
+  edge: '#3a2c00',
+} as const;
+
+/** Draws the ring of stars over dazed enemy `e`, whose HP bar sits at `bar`. */
+function drawStars(
+  ctx: CanvasRenderingContext2D,
+  e: Enemy,
+  bar: { x: number; y: number; z: number },
+  clock: number,
+  cam: Camera,
+): void {
+  const c = project({ x: bar.x, y: bar.y, z: bar.z }, cam);
+  const big = e.elite ? ELITE.size : 1;
+  const rx = Math.max(STARS.min.rx, STARS.rx * big * cam.zoom);
+  const cy = c.sy + Math.max(STARS.min.r, STARS.drop * cam.zoom);
+  const r0 = Math.max(STARS.min.r, STARS.r * cam.zoom);
+  ctx.lineWidth = Math.max(1, r0 * 0.3);
+  ctx.strokeStyle = STARS.edge;
+  ctx.fillStyle = STARS.fill;
+  for (let k = 0; k < STARS.count; k++) {
+    const a = (clock * STARS.spin + k / STARS.count + e.id * 0.13) * Math.PI * 2;
+    // Nearer the camera (sin > 0) is bigger and brighter.
+    const near = (1 + Math.sin(a)) / 2;
+    const r = r0 * (0.75 + 0.25 * near);
+    ctx.globalAlpha = 0.65 + 0.35 * near;
+    starPath(ctx, c.sx + Math.cos(a) * rx, cy + Math.sin(a) * rx * STARS.ry, r);
+    ctx.stroke();
+    ctx.fill();
+  }
   ctx.globalAlpha = 1;
+}
+
+/** Starts a path round a five-point star of outer radius `r` centred on `(x, y)`. */
+function starPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const d = i % 2 === 0 ? r : r * 0.45;
+    if (i === 0) ctx.moveTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+    else ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+  }
+  ctx.closePath();
 }
 
 /**
@@ -2778,6 +3043,124 @@ export function fireLook(
 }
 
 /**
+ * A molotov fire (ID-107). Its scorch (`SCORCH_ART`) lies flat on the ground under
+ * every sprite, across `scorch` × its radius at `scorchAlpha`, darkening in over `in` s and
+ * fading over the fire's last `out` s. Over it burn `licks` upright flames (`BURN`'s shape
+ * and colours), spread over the fire's circle on the ground: each shoots up to `lick.h` ×
+ * the radius on screen and dies away on its own cycle (`lick.period` × 0.7…1.3), moving to
+ * a new spot each cycle, the fire flaring by `BURN.boost` as it catches and shrinking as it
+ * dies. A ground `glow`, `embers` rising and `smoke` puffs above. Spots and timings come
+ * from where the fire lies, so a replay matches.
+ */
+export const MOLOTOV_FIRE = {
+  in: 0.15,
+  out: 0.5,
+  scorch: 1.15,
+  scorchAlpha: 0.8,
+  licks: 13,
+  lick: { h: 0.95, w: 0.3, period: 0.75, curl: 0.3, least: 2 },
+  glow: { r: 1.2, alpha: 0.35 },
+  embers: 7,
+  ember: { rise: 1.2, r: 0.04, period: 1.1 },
+  smoke: { puffs: 3, at: 0.9, rise: 0.9, r: 0.35, alpha: 0.2, period: 1.6 },
+} as const;
+
+/** How far a molotov fire is lit at `time`: 0 to 1 as it lights, 1, then down to 0 as it dies. */
+export function molotovFade(time: number, f: Pick<Fire, 'at' | 'until'>): number {
+  const fade = Math.min((time - f.at) / MOLOTOV_FIRE.in, (f.until - time) / MOLOTOV_FIRE.out, 1);
+  return Math.max(0, fade);
+}
+
+/** How strongly a molotov fire's flames burn at `time`: its fade, over 1 in the flare as it catches. */
+export function molotovHeat(time: number, f: Pick<Fire, 'at' | 'until'>): number {
+  const since = time - f.at;
+  const flare = since < BURN.flare ? 1 + BURN.boost * (1 - since / BURN.flare) ** 2 : 1;
+  return molotovFade(time, f) * flare;
+}
+
+/**
+ * Molotov fire `f`'s flames at `time` (see `MOLOTOV_FIRE`), as a `FireLook` for
+ * `paintFire`; null once it is out. `clock` runs its flames (0 holds them still).
+ */
+export function molotovLook(
+  f: Pick<Fire, 'x' | 'y' | 'at' | 'until'>,
+  time: number,
+  clock: number,
+  cam: Camera,
+): FireLook | null {
+  const heat = molotovHeat(time, f);
+  if (heat <= 0) return null;
+  const M = MOLOTOV_FIRE;
+  const id = Math.round(f.x * 7 + f.y * 13);
+  const R = SKILLS.molotov.radius;
+  const H = R * cam.zoom;
+  const grow = Math.min(1 + BURN.boost, heat);
+  const fade = Math.min(1, heat);
+  // A spot on the fire's ground circle from two rolls, on screen.
+  const spot = (a: number, b: number, share = 0.85) => {
+    const d = R * share * Math.sqrt(a);
+    const t = 2 * Math.PI * b;
+    return project({ x: f.x + d * Math.cos(t), y: f.y + d * Math.sin(t) }, cam);
+  };
+  const licks: Lick[] = [];
+  for (let i = 0; i < M.licks; i++) {
+    const period = M.lick.period * (0.7 + 0.6 * fireRoll(id, i, ROLL.period));
+    const cycle = clock / period + fireRoll(id, i, ROLL.start);
+    const u = cycle - Math.floor(cycle);
+    const round = Math.floor(cycle) * ROLLS;
+    const base = spot(fireRoll(id, i, round), fireRoll(id, i, round + 1));
+    const life = u < 0.3 ? u / 0.3 : 1 - ((u - 0.3) / 0.7) ** 1.5;
+    // Those near the middle burn taller.
+    const h = H * M.lick.h * (0.5 + 0.7 * fireRoll(id, i, round + 2)) * life * grow;
+    const w = Math.max(
+      M.lick.least,
+      H * M.lick.w * (1 + 0.5 * fireRoll(id, i, ROLL.width)) * grow * (0.5 + 0.5 * life),
+    );
+    const sway = Math.sin((clock / period) * Math.PI * 2 + i * 1.9) * M.lick.curl;
+    licks.push({ x: base.sx, y: base.sy, w, h, curl: sway * h * 0.5 });
+  }
+  // The nearer flames drawn last, over those behind.
+  licks.sort((a, b) => a.y - b.y);
+  const embers: FireLook['embers'] = [];
+  for (let i = 0; i < M.embers; i++) {
+    const cycle =
+      clock / (M.ember.period * (0.8 + 0.4 * fireRoll(id, i, ROLL.emberPeriod))) +
+      fireRoll(id, i, ROLL.emberStart);
+    const u = cycle - Math.floor(cycle);
+    const round = Math.floor(cycle) * ROLLS;
+    const q = spot(fireRoll(id, i, round + 3), fireRoll(id, i, round + 2), 0.7);
+    embers.push({
+      x: q.sx + Math.sin(u * 6 + i) * H * 0.08,
+      y: q.sy - u * H * M.ember.rise,
+      r: Math.max(0.8, H * M.ember.r * (1 - u)),
+    });
+  }
+  const smoke: FireLook['smoke'] = [];
+  const c = project({ x: f.x, y: f.y }, cam);
+  for (let i = 0; i < M.smoke.puffs; i++) {
+    const s = M.smoke;
+    const cycle =
+      clock / (s.period * (0.85 + 0.3 * fireRoll(id, i, ROLL.smokePeriod))) +
+      fireRoll(id, i, ROLL.smokeStart);
+    const u = cycle - Math.floor(cycle);
+    smoke.push({
+      x: c.sx + (fireRoll(id, i, ROLL.smokeStart) - 0.5) * H * 0.8 + Math.sin(u * 3 + id) * H * 0.1,
+      y: c.sy - H * s.at - u * H * s.rise,
+      r: H * s.r * (0.4 + 0.6 * u),
+      alpha: s.alpha * fade * Math.sin(Math.PI * u),
+    });
+  }
+  return {
+    glow: { x: c.sx, y: c.sy - H * 0.2, r: H * M.glow.r * grow, alpha: M.glow.alpha * fade },
+    licks,
+    layers: BURN.layers.map(([colour, share, alpha]) => ({ colour, share, alpha: alpha * fade })),
+    embers,
+    emberAlpha: BURN.embers.alpha * fade,
+    smoke,
+  };
+}
+
+/**
  * Fills each flame in `licks`, `share` of its size, as one path: an S-curved tongue on a
  * round base.
  */
@@ -2904,7 +3287,14 @@ function drawBurn(
   // Its frames share one height, so the walk's passing frame sizes every one.
   const img = art[ENEMY_ART[kind].walk[1]];
   const h = ((STAND.enemy * size * img.height) / ART_PX) * cam.zoom;
-  const f = fireLook(id, size, { h, w: (img.width / img.height) * h }, feet, pose, k, clock, cam);
+  paintFire(
+    ctx,
+    fireLook(id, size, { h, w: (img.width / img.height) * h }, feet, pose, k, clock, cam),
+  );
+}
+
+/** Paints a fire (ID-089, ID-107): its glow, its flames layer by layer, embers, then smoke. */
+function paintFire(ctx: CanvasRenderingContext2D, f: FireLook): void {
   ctx.globalCompositeOperation = 'lighter';
   const g = f.glow;
   const halo = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
@@ -3202,13 +3592,28 @@ export function drawScene(
   // Barbed Wire's band (ID-077) and traps lie flat on the ground, under every sprite.
   if (!build) drawWire(ctx, art, scene, cam);
   for (const t of scene.traps) drawTrap(ctx, art, t, cam);
-  // Molotov fires burn on the ground too, see-through, flaring up and dying down.
+  // A molotov fire's scorch lies on the ground (ID-107), its flames sorted with the sprites.
   for (const f of scene.fires) {
-    const fade = Math.min((scene.time - f.at) / FIRE.in, (f.until - scene.time) / FIRE.out, 1);
-    if (fade <= 0) continue;
-    ctx.globalAlpha = FIRE.alpha * fade;
-    const flicker = 1 + FIRE.flicker * Math.sin(scene.time * 12 + f.x);
-    groundArt(ctx, art[SKILL_ART.molotov], f.x, f.y, SKILLS.molotov.radius * flicker, cam);
+    const heat = molotovFade(scene.time, f);
+    if (heat <= 0) continue;
+    ctx.globalAlpha = MOLOTOV_FIRE.scorchAlpha * heat;
+    const r = SKILLS.molotov.radius * MOLOTOV_FIRE.scorch;
+    groundArt(ctx, art[SCORCH_ART], f.x, f.y, r, cam);
+    ctx.globalAlpha = 1;
+  }
+  // Explosions' scorch, dust and shockwave lie on the ground (ID-107).
+  const booms = explosions(scene, cam, anim?.reduced ?? false);
+  drawBlastGround(ctx, art, booms, cam);
+  // Each thrown flashbang or bottle's shadow grows under it as it falls (ID-107).
+  for (const i of scene.incoming) {
+    const fall = thrownFall(i, scene.time);
+    if (fall === null) continue;
+    ctx.globalAlpha = THROWN.shadowAlpha * fall;
+    const shadow = i.skill === 'airstrike' ? THROWN.bombShadow : THROWN.shadow;
+    const under = fallAt(i, fall);
+    groundCircle(ctx, under.x, under.y, shadow * (0.4 + 0.6 * fall), cam);
+    ctx.fillStyle = COLOR.shadow;
+    ctx.fill();
     ctx.globalAlpha = 1;
   }
   // A miss's dust kick is on the ground too.
@@ -3274,6 +3679,8 @@ export function drawScene(
   }
   // A burning enemy's flames (ID-089) run on fight time; with Reduce motion they hold still.
   const flameClock = anim?.reduced ? 0 : scene.time;
+  // Dazed enemies' stars, drawn over the explosions so a pop never hides them (ID-107).
+  const starred: { e: Enemy; at: { x: number; y: number; z: number } }[] = [];
   for (const e of scene.enemies) {
     sprites.push({
       y: e.y,
@@ -3306,6 +3713,8 @@ export function drawScene(
         if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam);
         const at = enemyBarAt(art, e.kind, e.x, e.y, e.elite ? ELITE.size : 1);
         drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
+        // A flashbang's daze (ID-107): stars circle its head until the stun ends.
+        if (dazed(scene, e)) starred.push({ e, at });
       },
     });
   }
@@ -3330,6 +3739,17 @@ export function drawScene(
         // A burning body keeps burning as it falls, fading with it.
         const heat = burnHeat(scene.time, e, c.litAt);
         drawBurn(ctx, art, e.id, e.kind, ground, pose, heat, flameClock, cam);
+      },
+    });
+  }
+  // A molotov fire's flames stand among the sprites, behind those in front of it (ID-107).
+  for (const f of scene.fires) {
+    sprites.push({
+      y: f.y,
+      x: f.x,
+      draw: () => {
+        const look = molotovLook(f, scene.time, flameClock, cam);
+        if (look) paintFire(ctx, look);
       },
     });
   }
@@ -3373,25 +3793,42 @@ export function drawScene(
   for (const k of scene.spits) drawSpit(ctx, k, scene.time, cam);
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
   for (const k of scene.slabs ?? []) drawSlab(ctx, k, scene.time, cam);
-  for (const g of scene.grenades) drawGrenade(ctx, art, g, scene.time, cam);
+  for (const g of scene.grenades) drawGrenade(ctx, g, scene.time, cam);
 
-  // A skill's flash fades out over its reach; an armed skill shows its reach at the cursor.
-  for (const b of scene.blasts) {
-    const age = Math.max(0, (scene.time - b.at) / SKILL_FLASH);
-    if (age >= 1) continue;
-    // Its art swells to fill the reach as it fades.
-    ctx.globalAlpha = 1 - age;
-    const r = SKILLS[b.skill].radius * (0.85 + 0.15 * age);
-    groundArt(ctx, art[SKILL_ART[b.skill]], b.x, b.y, r, cam);
-    ctx.globalAlpha = 1;
+  // Explosions' fireballs, smoke and flashes over every sprite (ID-107); an armed skill
+  // shows its reach at the cursor.
+  drawBlastAir(ctx, art, booms, cam, anim?.reduced ?? false);
+  for (const { e, at } of starred) drawStars(ctx, e, at, flameClock, cam);
+  // Thrown flashbangs and bottles fall from the sky over everything (ID-107).
+  for (const i of scene.incoming) {
+    const fall = thrownFall(i, scene.time);
+    if (fall !== null) drawThrown(ctx, art, i, fall, scene.time, cam);
   }
   if (aim) {
-    // An airstrike shows every bomb along its row.
     ctx.strokeStyle = COLOR.focus;
     ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
-    for (const p of carpet(scene, aim.y)) {
-      groundCircle(ctx, p.x, p.y, SKILLS.airstrike.radius, cam);
+    if (aim.skill === 'airstrike') {
+      // An airstrike shows every bomb along its row.
+      for (const p of carpet(scene, aim.y)) {
+        groundCircle(ctx, p.x, p.y, SKILLS.airstrike.radius, cam);
+        ctx.stroke();
+      }
+    } else {
+      // A flashbang or molotov shows the area its bursts land in (ID-107), and one burst's reach.
+      // A molotov's area is fire orange, a flashbang's the focus yellow.
+      const a = throwArea(scene, aim.skill, aim.x, aim.y);
+      const fire = aim.skill === 'molotov';
+      if (fire) ctx.strokeStyle = COLOR.aimFire;
+      groundCircle(ctx, a.x, a.y, a.r, cam);
+      ctx.fillStyle = fire ? COLOR.aimFireFill : COLOR.aimFill;
+      ctx.fill();
+      ctx.setLineDash([8, 6]);
       ctx.stroke();
+      ctx.setLineDash([]);
+      groundCircle(ctx, a.x, a.y, SKILLS[aim.skill].radius, cam);
+      ctx.globalAlpha = 0.6;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
   }
   // Each defender's name on top of every sprite and effect, so none hides it (ID-074).

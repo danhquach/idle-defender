@@ -2,7 +2,7 @@
 // panel between hordes and the HUD in a fight.
 import { recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
-import { HORDE_ONLY, SKILLS, type SkillId, type Stat } from '../core/data.ts';
+import { FIELD, HORDE_ONLY, type SkillId, type Stat } from '../core/data.ts';
 import {
   finishHorde,
   newGame,
@@ -268,17 +268,9 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (next) => setSpeed(next),
   );
-  /** A skill's button or key (ID-100): one with nothing to aim goes off, else it is armed. */
+  /** A skill's button or key (ID-100): it is armed, waiting for an aim (ID-107). */
   function arm(skill: SkillId): void {
     if (!horde) return;
-    // A skill with nothing to aim goes off at once (its aim point is ignored).
-    if (SKILLS[skill].aim === 'none') {
-      const used = useSkill(horde, skill, 0, 0);
-      if (used.ok) horde = used.state;
-      else hud.toast(used.reason);
-      armed = null;
-      return;
-    }
     // A second click on the armed skill puts it away.
     const lock = skillLock(horde, skill);
     if (lock) hud.toast(lock);
@@ -704,6 +696,10 @@ export function start(root: HTMLElement, art: Art): void {
     if (e.button !== 0 || !e.isPrimary) return;
     press = { x: e.clientX, y: e.clientY, click: true };
     canvas.setPointerCapture(e.pointerId);
+    // With a skill armed, its area shows under a finger at once, as under a mouse (ID-107).
+    if (horde && armed && Number.isFinite(e.offsetX) && Number.isFinite(e.offsetY)) {
+      hover = { sx: e.offsetX, sy: e.offsetY };
+    }
   });
   canvas.addEventListener('pointermove', (e) => {
     if (e.isPrimary && Number.isFinite(e.offsetX) && Number.isFinite(e.offsetY)) {
@@ -726,14 +722,20 @@ export function start(root: HTMLElement, art: Art): void {
   // opens the slot under it (or closes the menu), or the part of the panel for the plot
   // under it. Only finite canvas coordinates reach the hit tests, and only in-range grid
   // slots from `slotAt` reach the core. In a fight nothing is drawn left of the frame, so
-  // a click there lands on nothing: an armed skill stays armed.
+  // a click there lands on nothing: an armed skill stays armed. With a skill armed, a
+  // press dragged across the field aims it where it lifts (ID-107): a finger sees the area
+  // first, slides it onto the crowd, and lets go; a cancelled press keeps it armed.
   canvas.addEventListener('pointerup', (e) => {
-    const click = e.isPrimary && press?.click === true;
+    const pressed = e.isPrimary && press !== null;
+    const click = pressed && press?.click === true;
     endPress(e);
-    if (!click || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
+    const aiming = pressed && horde !== null && armed !== null;
+    if (!(click || aiming) || !Number.isFinite(e.offsetX) || !Number.isFinite(e.offsetY)) return;
     const ground = unproject({ sx: e.offsetX, sy: e.offsetY }, cam);
     if (horde && ground.x < FIGHT_FRAME.left) return;
     if (horde && armed) {
+      // A drag let go off the field keeps the skill armed (ID-107): aim again.
+      if (!click && (ground.x > FIELD.right || ground.y < 0 || ground.y > FIELD.height)) return;
       const used = useSkill(horde, armed, ground.x, ground.y);
       if (used.ok) horde = used.state;
       else hud.toast(used.reason);
@@ -827,8 +829,7 @@ export function start(root: HTMLElement, art: Art): void {
         if (t >= 1) ease = null;
       }
       cam = ease ? easeCamera(ease.from, fightCam, t) : fightCam;
-      const aim: Aim | null =
-        armed === 'airstrike' && hover ? { skill: armed, ...unproject(hover, cam) } : null;
+      const aim: Aim | null = armed && hover ? { skill: armed, ...unproject(hover, cam) } : null;
       const edge = project({ x: FIGHT_FRAME.left, y: 0 }, fightCam).sx;
       drawScene(
         ctx,
@@ -846,6 +847,9 @@ export function start(root: HTMLElement, art: Art): void {
         backdropCtx,
       );
       hud.update(horde, armed);
+      // An armed skill shows at the pointer too (ID-107).
+      const cursor = armed ? 'crosshair' : '';
+      if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
       if (horde.outcome !== 'fighting' && endedAt === null) {
         endedAt = Date.now();
         const screen = HORDE_ONLY ? squadScreen(game, horde) : resultScreen(game, horde, endedAt);
@@ -947,5 +951,6 @@ function buildScene(game: GameState, choice: { defenderId: string; postId: numbe
     outcome: 'fighting',
     fires: [],
     blasts: [],
+    incoming: [],
   };
 }

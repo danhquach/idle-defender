@@ -4,7 +4,7 @@
 // replays the same horde. The build panel and all it opens (world map, patrols,
 // research, workbench, camp, perks) are never on the page. Canvas and art are stand-ins.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HORDE_ONLY, SKILLS } from '../core/data.ts';
+import { FIELD, HORDE_ONLY, SKILLS } from '../core/data.ts';
 import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame } from '../core/game.ts';
@@ -19,6 +19,7 @@ import { SAVE_STATUS } from './menu.ts';
 import { start } from './app.ts';
 import { skipIntro } from './testing.ts';
 import { AIM_PROMPT } from './hud.ts';
+import { project } from './projection.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
@@ -635,6 +636,17 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     shown(root).map((b) => b.querySelector('.hud-shop-label')!.textContent);
   const key = (k: string, code = `Key${k.toUpperCase()}`) =>
     document.dispatchEvent(new KeyboardEvent('keydown', { key: k, code, bubbles: true }));
+  /** A click (or tap) on the field at `(x, y)`, where the last frame's camera shows it. */
+  const clickField = (root: HTMLElement, x: number, y: number) => {
+    const canvas = root.querySelector('canvas')!;
+    canvas.setPointerCapture = () => {};
+    const at = project({ x, y }, vi.mocked(drawScene).mock.lastCall![3]);
+    for (const type of ['pointerdown', 'pointerup']) {
+      const e = new PointerEvent(type, { isPrimary: true, button: 0 });
+      Object.defineProperties(e, { offsetX: { value: at.sx }, offsetY: { value: at.sy } });
+      canvas.dispatchEvent(e);
+    }
+  };
 
   it('a new game starts with Flashbang and Molotov picked; a toggle is saved at once', () => {
     const { root, saved } = boot();
@@ -677,10 +689,18 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     ]);
     expect(labels(root)).toEqual(['Flashbang', 'Molotov']);
     expect(shown(root).map((b) => b.querySelector('.btn-cost')!.textContent)).toEqual(['', '']);
-    // W on a layout that types another letter there still throws the molotov.
+    // W on a layout that types another letter there still arms the molotov (ID-107),
+    // and a click on the field throws it there.
     key('ц', 'KeyW');
     step(32);
+    expect(shown(root)[1]!.getAttribute('aria-pressed')).toBe('true');
+    expect(labels(root)).toEqual(['Flashbang', 'Molotov']);
+    clickField(root, 1000, 400);
+    step(48);
     expect(labels(root)).toEqual(['Flashbang', `Molotov ${SKILLS.molotov.cooldown}s`]);
+    expect(vi.mocked(drawScene).mock.lastCall![2].incoming.map((i) => i.skill)).toEqual(
+      Array(SKILLS.molotov.count).fill('molotov'),
+    );
     // A key no skill holds does nothing.
     key('e');
     expect(root.querySelector(HIDDEN)).toBeNull();
@@ -696,11 +716,12 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     key('s');
     step(32);
     expect(speed()).toBe('2×');
-    // AZERTY's "a" sits at Q's place: Flashbang goes, the speed stays.
+    // AZERTY's "a" sits at Q's place: Flashbang is armed, the speed stays.
     key('a', 'KeyQ');
     step(48);
     expect(speed()).toBe('2×');
-    expect(labels(root)[0]).toBe(`Flashbang ${SKILLS.flashbang.cooldown}s`);
+    expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('true');
+    expect(labels(root)[0]).toBe('Flashbang');
     // Its "q" sits at A's place: 1×, and no skill.
     key('q', 'KeyA');
     step(64);
@@ -723,7 +744,7 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     // A caption over the skill row says how to aim, until it is used or put away.
     const caption = root.querySelector<HTMLElement>('.hud-aim-caption')!;
     expect(caption.hidden).toBe(false);
-    expect(caption.textContent).toBe(AIM_PROMPT);
+    expect(caption.textContent).toBe(AIM_PROMPT.airstrike);
     expect(airstrike.getAttribute('aria-pressed')).toBe('true');
     step(5000);
     expect(caption.hidden).toBe(false);
@@ -731,6 +752,128 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     step(5016);
     expect(airstrike.getAttribute('aria-pressed')).toBe('false');
     expect(caption.hidden).toBe(true);
+  });
+
+  it('Flashbang and Molotov arm with a caption, the area shows at the pointer, Esc or a second press cancels (ID-107)', () => {
+    const { root, button } = boot();
+    step(0);
+    button().click();
+    step(16);
+    const caption = root.querySelector<HTMLElement>('.hud-aim-caption')!;
+    const [flash, molotov] = shown(root);
+    expect(caption.hidden).toBe(true);
+    flash!.click();
+    step(32);
+    expect(flash!.getAttribute('aria-pressed')).toBe('true');
+    expect(caption.hidden).toBe(false);
+    expect(caption.textContent).toBe(AIM_PROMPT.flashbang);
+    // Nothing is thrown on the press.
+    expect(vi.mocked(drawScene).mock.lastCall![2].incoming).toEqual([]);
+    // A second press puts it away.
+    flash!.click();
+    step(48);
+    expect(flash!.getAttribute('aria-pressed')).toBe('false');
+    expect(caption.hidden).toBe(true);
+    // Esc puts it away too.
+    molotov!.click();
+    step(64);
+    expect(caption.textContent).toBe(AIM_PROMPT.molotov);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    step(80);
+    expect(molotov!.getAttribute('aria-pressed')).toBe('false');
+    expect(caption.hidden).toBe(true);
+    // Armed, the hovered spot is the aim drawn; a click throws every burst into the area.
+    key('q');
+    step(96);
+    const canvas = root.querySelector('canvas')!;
+    const cam = vi.mocked(drawScene).mock.lastCall![3];
+    const at = project({ x: 1100, y: 300 }, cam);
+    const move = new PointerEvent('pointermove', { isPrimary: true });
+    Object.defineProperties(move, { offsetX: { value: at.sx }, offsetY: { value: at.sy } });
+    canvas.dispatchEvent(move);
+    step(112);
+    const aim = vi.mocked(drawScene).mock.lastCall![7]!;
+    expect(aim.skill).toBe('flashbang');
+    expect(aim.x).toBeCloseTo(1100, 6);
+    expect(aim.y).toBeCloseTo(300, 6);
+    clickField(root, 1100, 300);
+    step(128);
+    const thrown = vi.mocked(drawScene).mock.lastCall![2].incoming;
+    expect(thrown).toHaveLength(SKILLS.flashbang.count);
+    for (const i of thrown) {
+      expect(Math.hypot(i.x - 1100, i.y - 300)).toBeLessThanOrEqual(SKILLS.flashbang.area + 1e-6);
+    }
+    expect(flash!.getAttribute('aria-pressed')).toBe('false');
+    expect(caption.hidden).toBe(true);
+  });
+
+  it('on touch, an armed skill shows its area under the finger and throws where a drag lets go (ID-107)', () => {
+    const { root, button } = boot();
+    step(0);
+    button().click();
+    step(16);
+    const canvas = root.querySelector('canvas')!;
+    canvas.setPointerCapture = () => {};
+    const cam = () => vi.mocked(drawScene).mock.lastCall![3];
+    const touch = (type: string, x: number, y: number, client: number) => {
+      const at = project({ x, y }, cam());
+      const e = new PointerEvent(type, {
+        isPrimary: true,
+        button: 0,
+        pointerType: 'touch',
+        clientX: client,
+        clientY: client,
+      });
+      Object.defineProperties(e, { offsetX: { value: at.sx }, offsetY: { value: at.sy } });
+      canvas.dispatchEvent(e);
+    };
+    key('q');
+    step(32);
+    // The press shows the area under the finger at once, before any move.
+    touch('pointerdown', 1000, 300, 100);
+    step(48);
+    const aim = vi.mocked(drawScene).mock.lastCall![7]!;
+    expect([aim.skill, Math.round(aim.x), Math.round(aim.y)]).toEqual(['flashbang', 1000, 300]);
+    // A drag well past the click slop, then the finger lifts: thrown where it let go.
+    touch('pointermove', 1200, 450, 160);
+    touch('pointerup', 1200, 450, 160);
+    step(64);
+    const thrown = vi.mocked(drawScene).mock.lastCall![2].incoming;
+    expect(thrown).toHaveLength(SKILLS.flashbang.count);
+    for (const i of thrown) {
+      expect(Math.hypot(i.x - 1200, i.y - 450)).toBeLessThanOrEqual(SKILLS.flashbang.area + 1e-6);
+    }
+    expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('a drag with nothing armed throws nothing; a cancelled press keeps the skill armed (ID-107)', () => {
+    const { root, button } = boot();
+    step(0);
+    button().click();
+    step(16);
+    const canvas = root.querySelector('canvas')!;
+    canvas.setPointerCapture = () => {};
+    key('w');
+    step(32);
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { isPrimary: true, button: 0 }));
+    canvas.dispatchEvent(new PointerEvent('pointercancel', { isPrimary: true }));
+    step(48);
+    expect(shown(root)[1]!.getAttribute('aria-pressed')).toBe('true');
+    expect(vi.mocked(drawScene).mock.lastCall![2].incoming).toEqual([]);
+    // A drag let go off the field's far edge keeps it armed too: nothing thrown.
+    const cam = vi.mocked(drawScene).mock.lastCall![3];
+    const press = (type: string, x: number, client: number) => {
+      const at = project({ x, y: 300 }, cam);
+      const e = new PointerEvent(type, { isPrimary: true, button: 0, clientX: client });
+      Object.defineProperties(e, { offsetX: { value: at.sx }, offsetY: { value: at.sy } });
+      canvas.dispatchEvent(e);
+    };
+    press('pointerdown', 1400, 0);
+    press('pointermove', FIELD.right + 300, 200);
+    press('pointerup', FIELD.right + 300, 200);
+    step(64);
+    expect(shown(root)[1]!.getAttribute('aria-pressed')).toBe('true');
+    expect(vi.mocked(drawScene).mock.lastCall![2].incoming).toEqual([]);
   });
 
   it('the pick is pre-selected after a horde, and after a reload', () => {

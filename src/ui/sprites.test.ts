@@ -14,6 +14,7 @@ import {
   WEAPONS,
 } from '../core/data.ts';
 import type { TurretState } from '../core/horde.ts';
+import { FIREBALL } from './explosion.ts';
 import {
   ART_IDS,
   ART_URLS,
@@ -36,7 +37,8 @@ import {
   RESOURCE_ICON,
   RESOURCE_IDS,
   SHOP_ICON,
-  SKILL_ART,
+  SCORCH_ART,
+  BOMB_ART,
   SKILL_ICON,
   TIER_ART,
   TRAP_ART,
@@ -138,7 +140,9 @@ describe('art coverage', () => {
       ...Object.values(ENEMY_ART).flatMap((e) => [...e.walk, e.attack]),
       ...Object.keys(PROFESSIONS).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
       ...GUNNER_LOOKS.flatMap((look) => Object.values(look).flatMap((g) => [g.idle, g.aim])),
-      ...Object.values(SKILL_ART),
+      SCORCH_ART,
+      BOMB_ART,
+      ...Object.values(FIREBALL.art),
       ...Object.values(SHOP_ICON),
       ...Object.values(SKILL_ICON),
       ...Object.values(CARD_ICON),

@@ -360,6 +360,23 @@ Defenders stand on **posts** the player builds and chooses between.
   seeded randomness, past the outermost wall and inside the field. Costs and
   cooldowns are as before. Bombs and bottles in the air wait out picks like
   everything on fight time, and are dropped when the fight ends.
+- **As built (ID-107): Flashbang and Molotov aimed at an area.** Pressing
+  either (or its key) arms it, as the Airstrike is armed; the next tap or
+  click on the field throws it at the area round that spot, a circle of
+  radius 260 for the Flashbang and 180 for the Molotov (`SKILLS.*.area`,
+  well over twice a burst's radius). Esc or a second press puts it away.
+  An aim behind the walls is moved onto the field just past the outermost
+  wall. Each burst lands at a spot from the fight's seeded randomness, even
+  over the circle, kept past the outermost wall and inside the field (so
+  always inside the circle). Each one is thrown: it falls from the sky for
+  0.5 s (`THROW_FALL`) before it lands, the first 0.5 s after the throw and
+  the rest 0.15 s apart as before, and only then stuns or lights its fire.
+  Counts, radii, damage, stun time, costs and cooldowns are unchanged, and
+  so is the ×2 solo rule (8 Flashbang bursts, 2× Molotov damage a second).
+  The Airstrike's carpet is unchanged except that each bomb also falls for
+  0.5 s first (PM), so the whole carpet lands 0.5 s later, still from the
+  wall outward. The scripted player (ID-102) aims
+  at the enemy nearest the wall, as before.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or
@@ -377,15 +394,16 @@ Defenders stand on **posts** the player builds and chooses between.
     screen picks up to 2 of Flashbang, Molotov and Airstrike
     (`SQUAD_SKILLS.max`); the last pick is saved and pre-selected. A new
     game (and an older save) starts with Flashbang and Molotov picked
-    (`START_SKILLS`, neither needs aiming), so a player who skips the pick
+    (`START_SKILLS`), so a player who skips the pick
     still fights with skills. No cash, so they run on cooldown only, on fight time.
     One picked alone works ×2 (`SQUAD_SKILLS.solo`) with the same cooldown:
     a Flashbang throws 8 bursts instead of 4, a Molotov's fires burn at
     2× DPS, an Airstrike's bombs hit for 2× damage. The picked skills sit in
     the fight's bottom row, left to right in Flashbang, Molotov, Airstrike
     order, on keys Q and W (by key position, so any layout works); each
-    pulses once when it is ready again, and arming Airstrike says on
-    screen to tap a row. The pick cards always say what each skill does;
+    pulses once when it is ready again, and arming a skill says on
+    screen how to aim it (tap a row for the Airstrike, an area for the
+    others, ID-107). The pick cards always say what each skill does;
     the one picked alone adds its ×2 line. The balance pass (ID-102) kept
     their numbers; its scripted player picks and uses Flashbang and Molotov.
   - Steady Fire is the one perk, always on at level 1; no perk screen.
@@ -2545,9 +2563,8 @@ original outline.
   is an olive-drab ball 13 units across with a near-black edge and a pale
   rim on its upper left, so it reads on the dark, mossy ground. It
   flies from the thrower to where it lands on a low arc (40 units high at
-  the middle) with a shadow under it on the ground, then bursts with the
-  airstrike's blast art swelling over its 70-unit reach and fading out over
-  0.4 s. **Concussion Rounds** (was Stopping Power) needs nothing of its own: the hit enemy visibly
+  the middle) with a shadow under it on the ground, then bursts in the
+  shared explosion over its 70-unit reach (ID-107, below). **Concussion Rounds** (was Stopping Power) needs nothing of its own: the hit enemy visibly
   jolts back. **Shock Rounds** (ID-097): a paralysed enemy twitches side to
   side (1.5 units and 0.05 rad, flipping every 0.06 s) while a small spark
   crackles on its body: a short pale zigzag over a cool blue glow, about
@@ -2608,9 +2625,8 @@ original outline.
   its radius in the ID-049 poses. Each skill lies flat on the ground across
   its radius, squashed by the camera's tilt: an **airstrike** bomb's blast
   and a **flashbang**'s white burst swell from 85% to full size while fading
-  over 0.4 s; a **molotov** fire is drawn at 70% opacity under every sprite,
-  flaring up over its first 0.15 s, dying down over its last 0.5 s and
-  wavering 3% in size. The skills use the `object` style (or their prompt
+  over 0.4 s. *(ID-107 replaced all three with live effects, and dropped
+  the airstrike and flashbang art: see below.)* The skills use the `object` style (or their prompt
   as sent) rather than the angled sprite style, since they lie on the
   ground; the flashbang's soft glow kept pink from the magenta it was keyed
   out of, so the build drains all its colour (manifest `white`). The four
@@ -2620,6 +2636,63 @@ original outline.
   their button's label; the icon has empty alt text, so a screen reader
   reads only the label. The armed airstrike's aim shows every bomb's ring
   along the row. No drawn placeholder remains.
+- **As built (ID-107): thrown skills, molotov fire and stun stars.**
+  - An armed Flashbang or Molotov shows its area at the pointer as a pale
+    yellow dashed ring with a faint fill, and one burst's reach inside it
+    (on touch, where nothing hovers, the tap throws it at once).
+  - Each burst drops from the sky over its 0.5 s fall, speeding up and
+    spinning, while its shadow grows on the ground under it: a Molotov
+    bottle is its button icon's art, a Flashbang a small grey canister.
+    An **Airstrike bomb** is the Heavy Rounds shell without its starburst
+    (manifest `airstrike-bomb`, a Klein 4B edit of the card icon, seed 7203),
+    50 units long. It keeps the plane's forward speed: it arcs in from 280
+    units to the left of its spot (the plane flies left to right), nose along
+    its path (near level when dropped, steep when it lands), its shadow
+    sliding under it (`fallAt`).
+  - A **molotov fire** is now a scorch on the ground plus live flames. The
+    scorch (Klein 4B seed 7101, picked from three, colour
+    drained by the build's `white` so the magenta key leaves no pink edge;
+    manifest `scorch`, shared with the explosions below)
+    lies flat under every sprite across 1.15 × the fire's radius at 80%,
+    darkening in over 0.15 s and fading over the last 0.5 s. Over it, 13
+    upright flames drawn like a burning enemy's (ID-089: red edge, orange,
+    pale centre, added light) spread over the fire's circle, each shooting
+    up to about 0.95 × the radius and dying away on its own cycle, moving
+    to a new spot each time, with a ground glow, rising embers and three
+    smoke puffs; the fire flares as it catches and shrinks as it dies. Its
+    flames sort with the sprites by the fire's row. With Reduce motion they
+    hold still.
+  - **Explosions** (added mid-ticket by the PM). A Frag Grenade's blast and
+    each Airstrike bomb's share one generated explosion, played as a flip-book
+    over 1.2 s (`SKILL_FLASH`, `CARD.frag.flash`: how long a blast stays on
+    screen; damage still lands at once, `FIREBALL` in `src/ui/explosion.ts`):
+    a white-hot pop for the first 5%, cross-fading into the fireball by 12%
+    (a dome of yellow-orange lumps outlined in dark red, red flame spikes
+    behind, grey smoke), held to 40% while it grows 8%, cross-fading into
+    charcoal smoke with embers (drawn as wide as the fireball) by 65%, which
+    rises and fades out by the end.
+    The frames stand upright on the blast's spot over every sprite, the
+    Airstrike's 150 units wide and the Frag's the same blast at 95
+    (`FIREBALL_WIDTH`, PM: Frag reuses it, smaller); the scorch art lies
+    under it at 85%, fading over the last 45%. With Reduce motion it holds
+    the fireball and only fades. The art: the PM's reference was a cartoon
+    ground burst (dome, spikes, smoke behind), used only as a guide in the
+    prompt. Rounds in FLUX.2 Klein 4B and Z-Image Turbo were set aside; the
+    PM picked FLUX.2 [dev] (community-hosted, see the art credits) seed 7511,
+    and the pop (7601) and smoke (7621) are edits of it (manifest group
+    `explosion`, `ref` `explosion`). A cooling frame came out with a purple
+    fringe from the magenta key and the model was unreachable to remake it,
+    so the PM dropped it. A Flashbang's pop is drawn live: a soft white
+    flash at 60% (dimmed by the PM) reaching at most 0.95 × its stun reach,
+    a soft pale ring along the ground and thin pale smoke, with no scorch;
+    its sizes never drop under 1.5 px. An earlier explosion drawn entirely
+    in code (banded puffs, sparks, debris) was rejected by the PM.
+  - A **dazed** enemy (stunned by a Flashbang, `dazedUntil`) shows 4 pale
+    yellow stars with a dark edge circling its head under its HP bar, the
+    near ones bigger and brighter, until the stun ends; sizes scale with
+    zoom but never under 10 px across the ring and 3.5 px a star, so they
+    read zoomed out and in a crowd. Shock Rounds' paralysis keeps its own
+    spark, not stars.
 - **As built (ID-028):** the world map has generated art (FLUX.2 Klein 4B,
   prompts sent as they are, one manifest entry each). The **region** is one
   hand-drawn ink-and-watercolour map of ruins, fields, a river and roads,

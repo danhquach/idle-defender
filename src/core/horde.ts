@@ -224,6 +224,8 @@ export interface Enemy {
   burnUntil?: number;
   /** Incendiary Rounds: what its burn deals a second, set by the hit that lit it (ID-097). */
   burnDps?: number;
+  /** A flashbang (ID-107): fight time its daze ends, for the view's stars; absent = never. */
+  dazedUntil?: number;
   /** Shock Rounds (ID-097): fight time its latest paralysis ends; absent = never shocked. */
   shockUntil?: number;
   /** Concussion Rounds (ID-097): fight time it was last knocked back; absent = never. */
@@ -2083,6 +2085,10 @@ export const skillPower = (s: Pick<HordeState, 'freeSkills'>): number => s.freeS
 export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   !due(s.time, e.stunnedUntil);
 
+/** Whether a flashbang's daze still holds `e` (ID-107): the view's ring of stars. */
+export const dazed = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.dazedUntil !== undefined && !due(s.time, e.dazedUntil);
+
 /**
  * Design §4, ID-041: each airstrike bomb that lands hits every enemy within its radius
  * at once, and each flashbang stuns them, both flashing; each molotov bottle lights a fire.
@@ -2104,7 +2110,10 @@ function land(s: HordeState): void {
         const damage = SKILLS.airstrike.damage * skillPower(s);
         popOn(s, e, damage);
         e.hp = Math.max(0, e.hp - damage);
-      } else e.stunnedUntil = Math.max(e.stunnedUntil, s.time + SKILLS.flashbang.seconds);
+      } else {
+        e.dazedUntil = Math.max(e.dazedUntil ?? 0, s.time + SKILLS.flashbang.seconds);
+        e.stunnedUntil = Math.max(e.stunnedUntil, e.dazedUntil);
+      }
     }
   }
 }

@@ -16,6 +16,7 @@ import {
   SKILL_FLASH,
   SKILLS,
   STEP,
+  THROW_FALL,
   TURRET,
   WEAPONS,
   SEGMENT_HEIGHT,
@@ -31,7 +32,7 @@ import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy, HordeState, Pop } from '../core/horde.ts';
 import { CHAT, CHAT_LINES, type Bubble } from '../core/chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
-import { carpet } from '../core/skills.ts';
+import { carpet, throwArea, wallFront } from '../core/skills.ts';
 import { reloadTime } from '../core/stats.ts';
 import { enemy } from '../core/testing.ts';
 import { ANIM, Animator, STILL } from './anim.ts';
@@ -52,6 +53,7 @@ import {
   type View,
 } from './projection.ts';
 import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
+import { BLAST, FIREBALL } from './explosion.ts';
 import {
   BUBBLE,
   bubbleLayout,
@@ -63,6 +65,15 @@ import {
   BURN,
   burnHeat,
   fireLook,
+  MOLOTOV_FIRE,
+  molotovFade,
+  molotovHeat,
+  molotovLook,
+  STARS,
+  thrownFall,
+  fallAt,
+  THROWN,
+  FIREBALL_WIDTH,
   SHOCK,
   twitch,
   bulletShape,
@@ -99,7 +110,8 @@ import {
   GUNNER_ART,
   GUNNER_LOOKS,
   LOOKS,
-  SKILL_ART,
+  SCORCH_ART,
+  BOMB_ART,
   lookOf,
   TIER_ART,
   type Art,
@@ -809,13 +821,14 @@ describe('drawScene with art', () => {
         { fromX: 420, fromY: 360, x: 760, y: 320, at: 0.8, lands: 1.4, burst: time >= 1.4 },
       ],
     });
-    const blasts = () => r.drawn.filter((id) => id === SKILL_ART.airstrike).length;
+    // A fireball leaves its scorch (ID-107): one per explosion drawn.
+    const blasts = () => r.drawn.filter((id) => id === SCORCH_ART).length;
     // In the air: the grenade's dark olive ball; no blast yet.
     drawScene(r.ctx, r.art, scene(1, 2), CAM, VIEW);
     expect(fills).toContain('#8a9a4a');
     expect(fills).toContain('#ff7a1a');
     expect(blasts()).toBe(0);
-    // Landed: the blast art, no ball.
+    // Landed: its explosion, no ball.
     fills.length = 0;
     drawScene(r.ctx, r.art, scene(1.5, 2), CAM, VIEW);
     expect(fills).not.toContain('#8a9a4a');
@@ -1038,10 +1051,8 @@ describe('drawScene with art', () => {
     );
   });
 
-  it('draws a molotov fire and a fading skill flash from their art, no flat circles (ID-019, ID-041)', () => {
+  it('draws a molotov fire’s scorch and an explosion’s scorch from the scorch art (ID-107)', () => {
     const r = recorder();
-    const rings: number[] = [];
-    Object.assign(r.ctx, { ellipse: (_x: number, _y: number, rx: number) => rings.push(rx) });
     const scene: Scene = {
       ...blank(),
       time: 0.3,
@@ -1049,27 +1060,180 @@ describe('drawScene with art', () => {
       blasts: [{ skill: 'airstrike', x: 700, y: 100, at: 0.1 }],
     };
     drawScene(r.ctx, r.art, scene, CAM, VIEW);
-    expect(rings).toEqual([]);
-    // The fire is its art, see-through; the airstrike's flash is its art, fading.
-    expect(r.alphas[r.drawn.indexOf('molotov')]).toBeCloseTo(0.7, 9);
-    expect(r.drawn.indexOf('molotov')).toBeLessThan(r.drawn.indexOf('airstrike'));
-    expect(r.alphas[r.drawn.indexOf('airstrike')]).toBeCloseTo(1 - 0.2 / SKILL_FLASH, 9);
+    const scorches = r.drawn.flatMap((id, i) => (id === SCORCH_ART ? [r.alphas[i]!] : []));
+    expect(scorches).toHaveLength(2);
+    expect(scorches[0]).toBeCloseTo(MOLOTOV_FIRE.scorchAlpha, 9);
+    expect(scorches[1]).toBeCloseTo(BLAST.scorch.alpha, 9);
     expect(r.ctx.globalAlpha).toBe(1);
   });
 
-  it('fades a fire in as it lights and out as it dies, and not at all once out (ID-041)', () => {
+  it('fades a fire in as it lights and out as it dies, and not at all once out (ID-041, ID-107)', () => {
     const alphaAt = (time: number): number | undefined => {
       const r = recorder();
       const fires = [{ x: 900, y: 200, at: 1, until: 7 }];
       drawScene(r.ctx, r.art, { ...blank(), time, fires }, CAM, VIEW);
-      const i = r.drawn.indexOf('molotov');
+      const i = r.drawn.indexOf(SCORCH_ART);
       return i < 0 ? undefined : r.alphas[i];
     };
     expect(alphaAt(1)).toBeUndefined(); // just lit: nothing yet
-    expect(alphaAt(1.075)).toBeCloseTo(0.35, 6);
-    expect(alphaAt(4)).toBeCloseTo(0.7, 6);
-    expect(alphaAt(6.75)).toBeCloseTo(0.35, 6);
+    expect(alphaAt(1.075)).toBeCloseTo(MOLOTOV_FIRE.scorchAlpha / 2, 6);
+    expect(alphaAt(4)).toBeCloseTo(MOLOTOV_FIRE.scorchAlpha, 6);
+    expect(alphaAt(6.75)).toBeCloseTo(MOLOTOV_FIRE.scorchAlpha / 2, 6);
     expect(alphaAt(7)).toBeUndefined();
+  });
+
+  it('shows an armed flashbang or molotov as its area round the hover, and one burst’s reach (ID-107)', () => {
+    for (const skill of ['flashbang', 'molotov'] as const) {
+      const r = recorder();
+      const rings: number[][] = [];
+      Object.assign(r.ctx, {
+        ellipse: (x: number, y: number, rx: number) => rings.push([x, y, rx]),
+      });
+      const scene = blank();
+      drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill, x: 1000, y: 400 });
+      const c = project({ x: 1000, y: 400 }, CAM);
+      expect(rings).toEqual([
+        [c.sx, c.sy, SKILLS[skill].area],
+        [c.sx, c.sy, SKILLS[skill].radius],
+      ]);
+      // Aimed behind the wall, it shows where it will really land: just past it.
+      rings.length = 0;
+      drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill, x: 0, y: 400 });
+      const a = throwArea(scene, skill, 0, 400);
+      expect(a.x).toBe(wallFront(scene));
+      expect(rings[0]).toEqual([project(a, CAM).sx, project(a, CAM).sy, SKILLS[skill].area]);
+    }
+  });
+
+  it('a thrown burst falls from the sky with a growing shadow; none once landed (ID-107)', () => {
+    const fallShare = (u: number) =>
+      thrownFall({ skill: 'molotov', x: 1, y: 1, at: 2 }, 2 - (1 - u) * THROW_FALL);
+    expect(fallShare(0)).toBeCloseTo(0, 9);
+    expect(fallShare(0.5)).toBeCloseTo(0.5, 9);
+    expect(fallShare(1)).toBeCloseTo(1, 9);
+    expect(thrownFall({ skill: 'molotov', x: 1, y: 1, at: 2 }, 2 - THROW_FALL - 0.1)).toBeNull();
+    expect(thrownFall({ skill: 'molotov', x: 1, y: 1, at: 2 }, 2.01)).toBeNull();
+    expect(thrownFall({ skill: 'airstrike', x: 1, y: 1, at: 2 }, 2 - THROW_FALL / 2)).toBeCloseTo(
+      0.5,
+      9,
+    );
+    // The bottle is drawn from its icon, high up; the shadow grows on the ground under it.
+    const r = recorder();
+    const shadows: number[] = [];
+    Object.assign(r.ctx, { ellipse: (_x: number, _y: number, rx: number) => shadows.push(rx) });
+    const incoming = [{ skill: 'molotov' as const, x: 1000, y: 400, at: 1 }];
+    for (const time of [1 - THROW_FALL * 0.9, 1 - THROW_FALL * 0.1]) {
+      drawScene(r.ctx, r.art, { ...blank(), time, incoming }, CAM, VIEW);
+    }
+    expect(r.drawn.filter((id) => id === 'icon-molotov')).toHaveLength(2);
+    expect(shadows).toHaveLength(2);
+    expect(shadows[1]!).toBeGreaterThan(shadows[0]!);
+  });
+
+  it('an airstrike bomb arcs in from the left, nose along its path, landing on its spot (ID-107)', () => {
+    const bomb = { skill: 'airstrike' as const, x: 1000, y: 300, at: 2 };
+    const start = fallAt(bomb, 0);
+    const end = fallAt(bomb, 1);
+    expect(start.x).toBeCloseTo(1000 - THROWN.carry, 9);
+    expect(end).toEqual({ x: 1000, y: 300, z: 0 });
+    // Moving right all the way down, dropping faster as it goes.
+    expect(fallAt(bomb, 0.5).x).toBeGreaterThan(start.x);
+    expect(start.z - fallAt(bomb, 0.5).z).toBeLessThan(fallAt(bomb, 0.5).z - end.z);
+    // A flashbang or bottle drops straight down.
+    expect(fallAt({ ...bomb, skill: 'molotov' }, 0).x).toBe(1000);
+    // Drawn with the bomb art, nose turned from near level at the top to steep at the bottom.
+    const angles: number[] = [];
+    for (const u of [0.05, 0.95]) {
+      const r = recorder();
+      Object.assign(r.ctx, { rotate: (a: number) => angles.push(a) });
+      drawScene(
+        r.ctx,
+        r.art,
+        { ...blank(), time: 2 - (1 - u) * THROW_FALL, incoming: [bomb] },
+        CAM,
+        VIEW,
+      );
+      expect(r.drawn).toContain(BOMB_ART);
+    }
+    // The art's nose points up-right (−45°): the path's angle is the turn less 45°.
+    const path = angles.map((a) => a - Math.PI / 4);
+    expect(path[0]!).toBeGreaterThan(0); // already heading down a little
+    expect(path[0]!).toBeLessThan(Math.PI / 4);
+    expect(path[1]!).toBeGreaterThan(Math.PI / 4); // steep
+    expect(path[1]!).toBeLessThan(Math.PI / 2);
+  });
+
+  it('draws a fireball as its flip-book frames standing on its spot, a frag smaller (ID-107)', () => {
+    const sizes = (blast: Partial<Scene>) => {
+      const r = recorder();
+      const boxes: { id: ArtId; w: number; cx: number; bottom: number }[] = [];
+      Object.assign(r.ctx, {
+        drawImage: (img: { id: ArtId }, x: number, y: number, w: number, h: number) =>
+          boxes.push({ id: img.id, w, cx: x + w / 2, bottom: y + h }),
+      });
+      drawScene(r.ctx, r.art, { ...blank(), ...blast }, CAM, VIEW);
+      return boxes.filter((b) => (Object.values(FIREBALL.art) as ArtId[]).includes(b.id));
+    };
+    const air = sizes({ time: 0.3, blasts: [{ skill: 'airstrike', x: 900, y: 300, at: 0 }] });
+    expect(air.map((b) => b.id)).toEqual([FIREBALL.art.ball]);
+    const c = project({ x: 900, y: 300 }, CAM);
+    expect(air[0]!.cx).toBeCloseTo(c.sx, 6);
+    expect(air[0]!.bottom).toBeGreaterThanOrEqual(c.sy); // standing on the spot
+    expect(air[0]!.w).toBeGreaterThan(FIREBALL_WIDTH.airstrike * CAM.zoom);
+    const frag = sizes({
+      time: 1.4 + 0.3 * CARD.frag.flash,
+      grenades: [{ fromX: 420, fromY: 300, x: 900, y: 300, at: 0.8, lands: 1.4, burst: true }],
+    });
+    expect(frag.map((b) => b.id)).toEqual([FIREBALL.art.ball]);
+    expect(frag[0]!.w / air[0]!.w).toBeCloseTo(FIREBALL_WIDTH.frag / FIREBALL_WIDTH.airstrike, 1);
+    expect(FIREBALL_WIDTH.frag).toBeLessThan(FIREBALL_WIDTH.airstrike);
+  });
+
+  it('a molotov fire burns as upright flames over its scorch, lit and dying with it (ID-107)', () => {
+    const f = { x: 900, y: 300, at: 1, until: 7 };
+    expect(molotovLook(f, 1, 0, CAM)).toBeNull();
+    expect(molotovLook(f, 7, 0, CAM)).toBeNull();
+    const look = molotovLook(f, 3, 3, CAM)!;
+    expect(look.licks).toHaveLength(MOLOTOV_FIRE.licks);
+    const c = project(f, CAM);
+    const R = SKILLS.molotov.radius;
+    for (const k of look.licks) {
+      // Every flame stands inside the fire's circle on the ground, rising up.
+      expect(Math.abs(k.x - c.sx)).toBeLessThanOrEqual(R + 1e-6);
+      expect(k.h).toBeGreaterThanOrEqual(0);
+      expect(k.h).toBeLessThanOrEqual(R * MOLOTOV_FIRE.lick.h * 1.2 * (1 + BURN.boost));
+    }
+    // Back to front, so nearer flames cover farther ones.
+    expect(look.licks.map((k) => k.y)).toEqual(
+      [...look.licks.map((k) => k.y)].sort((a, b) => a - b),
+    );
+    // The same moment looks the same; the next moment the flames have moved.
+    expect(molotovLook(f, 3, 3, CAM)).toEqual(look);
+    expect(molotovLook(f, 3, 3.2, CAM)!.licks).not.toEqual(look.licks);
+    // Dying down, it is dimmer.
+    expect(molotovLook(f, 6.75, 3, CAM)!.layers[0]!.alpha).toBeLessThan(look.layers[0]!.alpha);
+    expect(molotovHeat(1.05, f)).toBeGreaterThan(molotovFade(1.05, f));
+  });
+
+  it('rings a dazed enemy’s head with stars, never too small to read; none once the daze ends (ID-107)', () => {
+    const starsAt = (time: number, zoom: number, dazedUntil?: number): number => {
+      const r = recorder();
+      let stars = 0;
+      const ctx = r.ctx as unknown as { fillStyle: unknown; fill: () => void };
+      ctx.fill = () => {
+        if (ctx.fillStyle === STARS.fill) stars++;
+      };
+      const scene = blank();
+      const e = enemy(scene as unknown as HordeState, { x: 1000, y: 400 });
+      if (dazedUntil !== undefined) e.dazedUntil = dazedUntil;
+      e.stunnedUntil = dazedUntil ?? 0;
+      drawScene(r.ctx, r.art, { ...scene, time }, { ...CAM, zoom }, VIEW);
+      return stars;
+    };
+    for (const zoom of [0.5, 1, 2]) expect(starsAt(1, zoom, 3)).toBe(STARS.count);
+    expect(starsAt(3, 1, 3)).toBe(0);
+    // A stun with no daze (Shock Rounds' paralysis) shows its own spark, not stars.
+    expect(starsAt(1, 1)).toBe(0);
   });
 
   it('shows an armed airstrike as every bomb along the hovered row (ID-041)', () => {
@@ -1085,35 +1249,26 @@ describe('drawScene with art', () => {
     expect(centres).toEqual(bombs.map((b) => [b.sx, b.sy, SKILLS.airstrike.radius]));
   });
 
-  it('lays a skill flash’s art flat across its reach, swelling as it fades (ID-041)', () => {
+  it('an explosion lays its scorch flat across its reach; a flashbang’s white pop leaves none; both gone after SKILL_FLASH (ID-107)', () => {
     const r = recorder();
-    const boxes: { w: number; h: number; cx: number; cy: number }[] = [];
+    const boxes: { w: number; cx: number; cy: number }[] = [];
     Object.assign(r.ctx, {
-      drawImage: (
-        img: { id: ArtId; width: number; height: number },
-        x: number,
-        y: number,
-        w: number,
-        h: number,
-      ) => {
-        if (img.id === 'airstrike')
-          boxes.push({ w, h: (h / w) * (img.width / img.height), cx: x + w / 2, cy: y + h / 2 });
+      drawImage: (img: { id: ArtId }, x: number, y: number, w: number, h: number) => {
+        if (img.id === SCORCH_ART) boxes.push({ w, cx: x + w / 2, cy: y + h / 2 });
       },
     });
-    const blast = { skill: 'airstrike' as const, x: 700, y: 100, at: 0 };
-    for (const time of [0, SKILL_FLASH / 2]) {
-      drawScene(r.ctx, r.art, { ...blank(), time, blasts: [blast] }, CAM, VIEW);
-    }
-    const reach = 2 * SKILLS.airstrike.radius * CAM.zoom;
-    expect(boxes[0]!.w).toBeCloseTo(reach * 0.85, 6);
-    expect(boxes[1]!.w).toBeCloseTo(reach * 0.925, 6);
-    for (const b of boxes) expect(b.h).toBeCloseTo(TILT, 6); // squashed like the ground
-    const c = project(blast, CAM);
+    const bomb = { skill: 'airstrike' as const, x: 700, y: 100, at: 0 };
+    drawScene(r.ctx, r.art, { ...blank(), time: 0.2, blasts: [bomb] }, CAM, VIEW);
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]!.w).toBeCloseTo(2 * SKILLS.airstrike.radius * BLAST.scorch.r * CAM.zoom, 6);
+    const c = project(bomb, CAM);
     expect(boxes[0]!.cx).toBeCloseTo(c.sx, 6);
     expect(boxes[0]!.cy).toBeCloseTo(c.sy, 6);
-    // Gone once the flash is over.
-    drawScene(r.ctx, r.art, { ...blank(), time: SKILL_FLASH, blasts: [blast] }, CAM, VIEW);
-    expect(boxes).toHaveLength(2);
+    const pop = { skill: 'flashbang' as const, x: 700, y: 100, at: 0 };
+    drawScene(r.ctx, r.art, { ...blank(), time: 0.2, blasts: [pop] }, CAM, VIEW);
+    expect(boxes).toHaveLength(1);
+    drawScene(r.ctx, r.art, { ...blank(), time: SKILL_FLASH, blasts: [bomb, pop] }, CAM, VIEW);
+    expect(boxes).toHaveLength(1);
   });
 });
 

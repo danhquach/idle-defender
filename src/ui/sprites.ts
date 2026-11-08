@@ -51,9 +51,11 @@ export const ART_IDS = [
   'horror-walk-b',
   'horror-walk-c',
   'horror-attack',
-  'airstrike',
-  'molotov',
-  'flashbang',
+  'scorch',
+  'airstrike-bomb',
+  'explosion',
+  'explosion-pop',
+  'explosion-smoke',
   'icon-adrenaline',
   'icon-overdrive',
   'icon-patch',
@@ -259,14 +261,13 @@ export const ENEMY_ART: Readonly<Record<EnemyKind, EnemyArt>> = {
 };
 
 /**
- * Each skill's art, lying on the ground across its reach (design §15, ID-041): a bomb's
- * or a flashbang's flash where it goes off, a molotov's fire for as long as it burns.
+ * The char a molotov fire or a fireball leaves on the ground (ID-107), lying flat across
+ * its reach: under a molotov's flames, and fading after a Frag Grenade or Airstrike bomb.
  */
-export const SKILL_ART: Readonly<Record<SkillId, ArtId>> = {
-  airstrike: 'airstrike',
-  flashbang: 'flashbang',
-  molotov: 'molotov',
-};
+export const SCORCH_ART: ArtId = 'scorch';
+
+/** An Airstrike's bomb as it falls (ID-107): the Heavy Rounds shell, larger, nose down. */
+export const BOMB_ART: ArtId = 'airstrike-bomb';
 
 /** The world map's region (ID-028), drawn under the routes and places. */
 export const MAP_PICTURE: ArtId = 'world-map';

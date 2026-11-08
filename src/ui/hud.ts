@@ -334,7 +334,7 @@ export function shopButtons(s: HordeState): (HudButton & { item: ShopItem })[] {
 /** What a ready skill's button says it does next (design §4, ID-041). */
 const AIM_HINT = {
   row: 'Then click a row to carpet bomb (Esc to cancel)',
-  none: 'Thrown across the field at once',
+  area: 'Then click an area to throw it at (Esc to cancel)',
 } as const;
 
 /**
@@ -381,10 +381,14 @@ export function skillButtons(
 }
 
 /**
- * Over the skill row while a row skill is armed (ID-100), until it is used or put away:
- * touch screens show no tooltip.
+ * Over the skill row while a skill is armed (ID-100, ID-107), until it is used or put
+ * away: touch screens show no tooltip.
  */
-export const AIM_PROMPT = 'Tap a row to bomb it · tap Airstrike again to cancel';
+export const AIM_PROMPT: Readonly<Record<SkillId, string>> = {
+  airstrike: 'Tap a row to bomb it · tap Airstrike again to cancel',
+  flashbang: 'Tap or drag to an area · tap Flashbang again to cancel',
+  molotov: 'Tap or drag to an area · tap Molotov again to cancel',
+};
 
 /**
  * A fight key's name (ID-100): a letter key by its place (`KeyQ` is Q on any layout), so
@@ -403,10 +407,13 @@ export const skillSlots = (s: Pick<HordeState, 'skills'>): SkillId[] =>
 /** What each skill does, for the pick before a horde (ID-100); `boost` is its ×2 line, picked alone. */
 const SKILL_BLURB: Readonly<Record<SkillId, { does: string; boost: string }>> = {
   flashbang: {
-    does: `Stuns, ${SKILLS.flashbang.count} bursts`,
+    does: `Stuns an area you pick, ${SKILLS.flashbang.count} bursts`,
     boost: `×${SQUAD_SKILLS.solo}: ${SKILLS.flashbang.count * SQUAD_SKILLS.solo} bursts`,
   },
-  molotov: { does: 'Fire on the ground', boost: `×${SQUAD_SKILLS.solo}: burns twice as hard` },
+  molotov: {
+    does: 'Sets an area you pick on fire',
+    boost: `×${SQUAD_SKILLS.solo}: burns twice as hard`,
+  },
   airstrike: { does: 'Bombs a row you pick', boost: `×${SQUAD_SKILLS.solo}: hits twice as hard` },
 };
 
@@ -1614,8 +1621,8 @@ export function createHud(
   toast.hidden = true;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   const shop = el('div', 'hud-shop');
-  // The armed row skill's caption (ID-100), on its own line above the buttons.
-  const aimCaption = el('p', 'hud-aim-caption', AIM_PROMPT);
+  // The armed skill's caption (ID-100, ID-107), on its own line above the buttons.
+  const aimCaption = el('p', 'hud-aim-caption', '');
   aimCaption.setAttribute('role', 'status');
   aimCaption.hidden = true;
   shop.append(aimCaption);
@@ -2268,7 +2275,9 @@ export function createHud(
         }
         item.cooling = b.cooling;
       });
-      const aiming = skills.some((b) => b.armed && SKILLS[b.skill].aim === 'row');
+      const aiming = skills.find((b) => b.armed);
+      const prompt = aiming ? AIM_PROMPT[aiming.skill] : '';
+      if (aimCaption.textContent !== prompt) aimCaption.textContent = prompt;
       aimCaption.hidden = !aiming;
       // Horde-only (ID-100): the skill row waits under the start or result screen.
       if (squad) shop.hidden = !result.hidden;

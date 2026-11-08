@@ -27,7 +27,7 @@ again before adding a model or when the terms below change.
 ## Models
 
 Only the models in this allow-list are used. Community-hosted models are not
-used. Every entry in `art-src/manifest.json` names its model, and the build
+used, except the one the project owner approved by name below (ID-107). Every entry in `art-src/manifest.json` names its model, and the build
 script refuses a model that is not listed here.
 
 | Model (Pollinations name, or app)  | Publisher         | Licence    | Commercial use of output |
@@ -35,6 +35,7 @@ script refuses a model that is not listed here.
 | `black-forest-labs/flux.1-schnell` | Black Forest Labs | Apache-2.0 | Allowed                  |
 | `black-forest-labs/flux.2-klein-4b` | Black Forest Labs | Apache-2.0 | Allowed                  |
 | `meta-ai`                          | Meta              | Meta AI terms | Owned by the user (see below) |
+| `community/scriptsnsenses-sys/flux-2-dev-free` | Black Forest Labs (FLUX.2 [dev]), community-hosted | FLUX [dev] Non-Commercial License | Outputs: see below (not confirmed on BFL's site) |
 
 - FLUX.1 [schnell]: the model card on Hugging Face
   (`black-forest-labs/FLUX.1-schnell`) states it is "released under the
@@ -51,6 +52,17 @@ script refuses a model that is not listed here.
   ownership; Meta may use them to improve its services, and outputs may not be
   used to train a competing model, which we don't do. The app's own metadata is
   dropped when the source is saved to `art-src/gen`, and the build strips it again.
+- FLUX.2 [dev], community-hosted (`community/scriptsnsenses-sys/flux-2-dev-free`,
+  ID-107, 2026-11-08): the project owner chose it for the explosion art after a
+  side-by-side test against Z-Image Turbo and FLUX.2 Klein 4B, knowing the points
+  here. The weights are under the FLUX [dev] Non-Commercial License, which limits
+  running the model to non-commercial use; we don't run it, a community host does.
+  A copy of that licence (v2.1, Hugging Face mirror) says outputs are not
+  derivatives and may be used for any purpose, commercial included, outside its
+  express prohibitions; the output clause could not be confirmed on BFL's own
+  page, so check it again before release. The host's model card says prompts and
+  outputs are logged into its own datasets (never sold or used for training);
+  our prompts hold nothing private. It is free, 8 requests a minute.
 - The FLUX names are Black Forest Labs trademarks; we name the models only to
   credit them, never to suggest endorsement.
 
