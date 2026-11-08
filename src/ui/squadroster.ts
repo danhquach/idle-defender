@@ -7,6 +7,7 @@
 // (ID-074). Like the Inventory, the field goes inert behind it and an open Roster holds a
 // fight. Text reaches the page only through textContent.
 import { heldName, isOwned, type Held } from '../core/armoury.ts';
+import { PERSONALITY_NAMES, personalityOf } from '../core/chatter.ts';
 import { STAT_NAMES, STATS, type Rarity, type Stat } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
@@ -97,6 +98,8 @@ export const statEffects = (d: RosterDefender, stat: Stat): string[] =>
 export interface SurvivorCard {
   id: string;
   name: string;
+  /** How they talk in a fight, one word (ID-093): "Calm", "Cocky" or "Nervous". */
+  personality: string;
   level: number;
   /** XP into the level: a share for the bar, and "5/50 XP to Lv 3". */
   xp: { pct: number; text: string };
@@ -116,6 +119,7 @@ export function survivorCard(d: RosterDefender): SurvivorCard {
   return {
     id: d.id,
     name: d.name,
+    personality: PERSONALITY_NAMES[personalityOf(d.id)],
     level,
     xp: {
       pct: next > 0 ? Math.min(100, (100 * into) / next) : 100,
@@ -218,6 +222,7 @@ export function cardBlock(
   who.append(
     title,
     el('p', 'roster-card-level', `Level ${c.level}`),
+    el('p', 'roster-card-level roster-card-personality', c.personality),
     gun,
     track,
     el('p', 'squad-card-xptext', c.xp.text),

@@ -22,22 +22,93 @@ export type ChatEvent =
   | 'kill'
   | 'hit';
 
-/** Each event's lines: fixed text, never typed by the player. */
-export const CHAT_LINES: Readonly<Record<ChatEvent, readonly string[]>> = {
-  down: ["Argh, I'm hit!", 'Keep going without me!', "I'm down!", 'Leave me!'],
-  lowHp: ['I need a medic!', 'Not looking good…', "I can't take much more!", 'Patch me up!'],
-  breach: ["They're through!", 'Plug that gap!', "They're inside!", 'Breach!'],
-  boss: ['What is THAT?!', 'Big one incoming!', 'Oh no…', "That's a big one!"],
-  won: ['We made it!', "Ha! We're alive!", 'The camp holds!', 'We did it!'],
-  cleared: ['Is that all you got?', 'Clear!', 'Catch your breath!', 'Reload while you can!'],
-  lastEnemy: ['One left!', 'Finish it!', 'Last one!', 'Almost there!'],
-  crit: ['Bullseye!', 'Right between the eyes!', 'Clean shot!', 'Perfect!'],
-  streak: ["I'm on fire!", "Who's next?!", 'Keep them coming!', 'Unstoppable!'],
-  dry: ['Click… uh oh.', 'Both empty!', 'Out! Out!', 'Nothing left!'],
-  reload: ['Reloading!', 'Cover me!', 'Changing mags!', 'New mag!', 'Hold on!'],
-  throw: ['Fire in the hole!', 'Grenade out!', 'Duck!', 'Heads down!'],
-  kill: ['Take that!', 'Down you go!', 'Next!', 'Got one!', 'Stay down!'],
-  hit: ['Ow!', 'That stung!', 'Hey!', 'Ugh!'],
+/** How a survivor talks (ID-093): it sets the lines they say, nothing else. */
+export type Personality = 'calm' | 'cocky' | 'nervous';
+export const PERSONALITIES: readonly Personality[] = ['calm', 'cocky', 'nervous'];
+/** The one word a survivor card shows. */
+export const PERSONALITY_NAMES: Readonly<Record<Personality, string>> = {
+  calm: 'Calm',
+  cocky: 'Cocky',
+  nervous: 'Nervous',
+};
+
+/**
+ * A survivor's personality (ID-093), kept for good since it comes from their id, which
+ * never changes (the way their look does). A numbered id (`recruit-<n>`, `s<patrol>-<k>`,
+ * `c<level>`) counts round the personalities by its last number, so survivors who join one
+ * after another differ; any other id is hashed.
+ */
+export function personalityOf(id: string): Personality {
+  const n = PERSONALITIES.length;
+  const digit = (i: number): boolean => id.charCodeAt(i) >= 48 && id.charCodeAt(i) <= 57;
+  let start = id.length;
+  while (start > 0 && digit(start - 1)) start--;
+  let k: number;
+  if (start < id.length) {
+    // Only the number's value round the personalities matters, so it never overflows.
+    let v = 0;
+    for (let i = start; i < id.length; i++) v = (v * 10 + id.charCodeAt(i) - 48) % n;
+    k = (v + n - 1) % n;
+  } else {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193);
+    k = (h >>> 0) % n;
+  }
+  return PERSONALITIES[k]!;
+}
+
+/** Each personality's lines for each event (3–5): fixed text, never typed by the player. */
+export const CHAT_LINES: Readonly<
+  Record<Personality, Readonly<Record<ChatEvent, readonly string[]>>>
+> = {
+  calm: {
+    down: ["I'm down. Keep firing.", 'Going down. Hold the line.', 'Hit bad. Stay sharp.'],
+    lowHp: ["I'm hit. Still in it.", 'Bleeding. Need a patch.', 'Hurt. Cover me.'],
+    breach: ['Breach. Plug that gap.', "They're through. Watch it.", "Wall's open."],
+    boss: ['Big one. Focus fire.', 'Heavy contact.', 'Big target. Steady.'],
+    won: ['The camp holds.', 'That was the horde.', 'All clear. Good work.'],
+    cleared: ['Wave clear. Reload.', 'Clear. Reset.', 'Catch your breath.'],
+    lastEnemy: ['One left.', 'Last contact.', 'Finish it.'],
+    crit: ['Clean shot.', 'Centre mass.', 'Good hit.'],
+    streak: ['Three down.', 'Keep it steady.', 'Good rhythm.'],
+    dry: ['Both dry.', 'Out of rounds.', 'Empty. Stand by.'],
+    reload: ['Reloading.', 'Changing mags.', 'Mag out, mag in.'],
+    throw: ['Frag out.', 'Grenade. Heads down.', 'Throwing.'],
+    kill: ['Target down.', 'Next.', 'Got it.'],
+    hit: ['Took one.', 'Hit. Fine.', 'Minor.'],
+  },
+  cocky: {
+    down: ['Lucky shot!', "This isn't over!", 'Cheap shot!'],
+    lowHp: ['Just a scratch!', "I've had worse!", 'That all you got?'],
+    breach: ['Oh, you want in?!', 'Get back out there!', "Let 'em in, I dare you!"],
+    boss: ['Finally, a real fight!', 'Ooh, a big one!', 'The bigger they are…'],
+    won: ['Never in doubt!', "Told you we'd win!", "Who's the best? Us!"],
+    cleared: ['Bring the next lot!', "That's it?", 'More! I want more!'],
+    lastEnemy: ["Last one's mine!", 'Save that one for me!', 'Run while you can!'],
+    crit: ['Called it!', 'Right in the face!', 'Did you see that?!'],
+    streak: ["I'm unstoppable!", "Count 'em!", "Keep 'em coming!"],
+    dry: ['Out? Already?!', "I'll punch them then!", 'Empty! Who cares!'],
+    reload: ['Reload, then more of you!', 'Hold still, reloading!', 'Fresh mag, fresh pain!'],
+    throw: ['Catch!', 'Special delivery!', 'Here, a present!'],
+    kill: ['Too easy!', "Who's next?!", 'Another one!'],
+    hit: ['Is that it?', 'Tickles!', 'Missed me! Mostly.'],
+  },
+  nervous: {
+    down: ['Help! Help me!', "Don't leave me!", 'I knew it!'],
+    lowHp: ["I don't want to die here!", 'So much blood!', 'Medic! Please!'],
+    breach: ["They're in! They're in!", "The wall's gone!", "We're done for!"],
+    boss: ['What is THAT?!', 'Nope. Nope. Nope.', "We're gonna die!"],
+    won: ['We… we made it?', "I'm alive! I'm alive!", 'Is it over?'],
+    cleared: ['Is that all of them?', 'Please be all of them…', 'Quick, reload!'],
+    lastEnemy: ['Just one more…', 'Get it, get it!', 'Last one, please!'],
+    crit: ['I hit it?!', 'Whoa, did you see?!', 'Lucky! So lucky!'],
+    streak: ['They keep coming!', 'Is this good?!', 'How many is that?!'],
+    dry: ['Click?! No no no!', "I'm out! I'm out!", "I've got nothing!"],
+    reload: ['Reloading — hurry, hurry!', 'Come on, come on!', "Don't jam, don't jam!"],
+    throw: ['Grenade! Duck!', 'Get down!', 'Please work!'],
+    kill: ['Did I get it?!', 'Stay down, please!', "It's down! I think!"],
+    hit: ['Ow! Ow!', 'It bit me!', 'Get it off!'],
+  },
 };
 
 /** Which event wins, highest first: a higher one replaces a lower one already showing. */
@@ -108,7 +179,7 @@ export interface ChatState {
   spoke: Map<string, number>;
   /** When each survivor last said each routine event (key: id, a NUL, the event). */
   again: Map<string, number>;
-  /** The line each event said last, so it never says it twice in a row. */
+  /** The line each event said last (by anyone), so it never says it twice in a row. */
   said: Partial<Record<ChatEvent, string>>;
   /** Each survivor's recent kill times (fight s), for streaks. */
   kills: Map<string, number[]>;
@@ -284,7 +355,7 @@ function say(c: ChatState, d: Defender, event: ChatEvent, level: ChatterLevel): 
       c.bubbles = c.bubbles.filter((b) => b !== lowest);
     }
   }
-  const pool = CHAT_LINES[event];
+  const pool = CHAT_LINES[personalityOf(d.id)][event];
   const fresh = pool.length > 1 ? pool.filter((l) => l !== c.said[event]) : pool;
   const line = pick(rngFrom(c.rng), fresh);
   c.said[event] = line;

@@ -6,6 +6,8 @@ import {
   CHAT_RANK,
   chatter,
   newChat,
+  PERSONALITIES,
+  personalityOf,
   type ChatEvent,
   type ChatState,
   type ChatterLevel,
@@ -39,6 +41,85 @@ const hurt = (t: HordeState, id: string, by = 1): void => {
 const begun = (s: HordeState, level: ChatterLevel = 'full'): ChatState =>
   chatter(newChat(), null, s, 0, level);
 const events = (c: ChatState): [string, ChatEvent][] => c.bubbles.map((b) => [b.by, b.event]);
+/** The lines survivor `id` says, by their personality. */
+const linesOf = (id: string) => CHAT_LINES[personalityOf(id)];
+
+describe('survivor personalities (ID-093)', () => {
+  it('comes from who they are: survivors who join one after another differ', () => {
+    expect(['recruit-1', 'recruit-2', 'recruit-3'].map(personalityOf)).toEqual([
+      'calm',
+      'cocky',
+      'nervous',
+    ]);
+    expect(personalityOf('recruit-4')).toBe('calm');
+    expect(personalityOf('s3-2')).toBe(personalityOf('recruit-2'));
+    expect(personalityOf('c7')).toBe(personalityOf('c7'));
+    // A number too long for a float still counts round by its value.
+    expect(personalityOf(`r${'9'.repeat(400)}`)).toBe(personalityOf('r9'));
+  });
+
+  it('any id a save can carry is only an id: always one of the three', () => {
+    // A right-to-left override, built from its code point so the source holds no hidden char.
+    const rlo = String.fromCharCode(0x202e);
+    const odd = ['', 'a', 'constructor', '__proto__', 'toString', `${rlo}1`, 'x'.repeat(10_000)];
+    for (const id of odd) expect(PERSONALITIES).toContain(personalityOf(id));
+  });
+
+  it("a hashed id's personality is pinned, so an existing save's survivors keep theirs", () => {
+    expect(['bob', 'jack', 'john'].map(personalityOf)).toEqual(['nervous', 'cocky', 'nervous']);
+  });
+
+  it('every event has 3–5 fixed lines per personality, no two personalities sharing one', () => {
+    const events = Object.keys(CHAT_RANK) as ChatEvent[];
+    for (const p of PERSONALITIES) {
+      expect(Object.keys(CHAT_LINES[p]).sort()).toEqual([...events].sort());
+      for (const e of events) {
+        const pool = CHAT_LINES[p][e];
+        expect(pool.length).toBeGreaterThanOrEqual(3);
+        expect(pool.length).toBeLessThanOrEqual(5);
+        expect(new Set(pool).size).toBe(pool.length);
+      }
+    }
+    for (const e of events) {
+      const all = PERSONALITIES.flatMap((p) => CHAT_LINES[p][e]);
+      expect(new Set(all).size).toBe(all.length);
+    }
+  });
+
+  it("carries the ticket's lines", () => {
+    expect(CHAT_LINES.calm.reload).toEqual(
+      expect.arrayContaining(['Reloading.', 'Changing mags.']),
+    );
+    expect(CHAT_LINES.calm.kill).toEqual(expect.arrayContaining(['Target down.', 'Next.']));
+    expect(CHAT_LINES.calm.lowHp).toContain("I'm hit. Still in it.");
+    expect(CHAT_LINES.cocky.reload).toContain('Reload, then more of you!');
+    expect(CHAT_LINES.cocky.kill).toEqual(expect.arrayContaining(['Too easy!', "Who's next?!"]));
+    expect(CHAT_LINES.cocky.lowHp).toContain('Just a scratch!');
+    expect(CHAT_LINES.nervous.reload).toContain('Reloading — hurry, hurry!');
+    expect(CHAT_LINES.nervous.kill).toEqual(
+      expect.arrayContaining(['Did I get it?!', 'Stay down, please!']),
+    );
+    expect(CHAT_LINES.nervous.lowHp).toContain("I don't want to die here!");
+  });
+
+  it('each survivor speaks from their own lines, in every fight', () => {
+    // d1, d2, d3: calm, cocky, nervous.
+    for (const seed of [1, 2, 3]) {
+      const s = fight(4);
+      s.seed = seed;
+      s.defenders = s.defenders.slice(1);
+      const t = later(s, (x) => ['d1', 'd2', 'd3'].forEach((id) => hurt(x, id)));
+      const c = chatter(begun(s), s, t, 0.03, 'full');
+      expect(c.bubbles.map((b) => b.by).sort()).toEqual(['d1', 'd2', 'd3']);
+      for (const b of c.bubbles) expect(linesOf(b.by).hit).toContain(b.line);
+      expect(c.bubbles.map((b) => personalityOf(b.by)).sort()).toEqual([
+        'calm',
+        'cocky',
+        'nervous',
+      ]);
+    }
+  });
+});
 
 describe('what a survivor speaks up about (ID-085)', () => {
   it('says nothing on the first frame of a fight', () => {
@@ -53,7 +134,7 @@ describe('what a survivor speaks up about (ID-085)', () => {
     expect(c.bubbles).toHaveLength(1);
     const b = c.bubbles[0]!;
     expect(b).toMatchObject({ by: 'a', event: 'hit', x: t.defenders[0]!.x, y: t.defenders[0]!.y });
-    expect(CHAT_LINES.hit).toContain(b.line);
+    expect(linesOf('a').hit).toContain(b.line);
     expect(b.postId).toBe(t.defenders[0]!.postId);
   });
 
@@ -97,7 +178,7 @@ describe('what a survivor speaks up about (ID-085)', () => {
     expect(c.bubbles).toEqual([
       expect.objectContaining({ by: 'a', event: 'down', x: a.x, y: a.y }),
     ]);
-    expect(CHAT_LINES.down).toContain(c.bubbles[0]!.line);
+    expect(linesOf('a').down).toContain(c.bubbles[0]!.line);
     const u = later(t);
     expect(chatter(c, t, u, 0.5, 'full').bubbles[0]).toMatchObject({ x: a.x, y: a.y });
   });
@@ -339,7 +420,7 @@ describe('who gets to speak (ID-085)', () => {
       s = t;
     }
     for (let i = 1; i < lines.length; i++) expect(lines[i]).not.toBe(lines[i - 1]);
-    expect(new Set(lines)).toEqual(new Set(CHAT_LINES.hit));
+    expect(new Set(lines)).toEqual(new Set(linesOf('a').hit));
   });
 
   it('picks lines from its own seeded source: the same fight says the same, the fight’s rolls untouched', () => {
