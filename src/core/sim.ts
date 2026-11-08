@@ -15,6 +15,7 @@ import {
 import {
   layoutOf,
   tick,
+  tickInPlace,
   type Card,
   type HordeState,
   type Outcome,
@@ -276,7 +277,10 @@ export function nearestEnemy(s: Pick<HordeState, 'layers' | 'enemies'>): number 
   return Math.max(0, near);
 }
 
-/** How often (fight s) a watched horde is looked at: the fight is the same either way. */
+/**
+ * How often (fight s) a watched horde is looked at. Watching only slices the ticks, and a
+ * fight ticked in slices plays the same, so a watched fight is the same as one not watched.
+ */
 const WATCH_EVERY = 0.5;
 
 /**
@@ -316,12 +320,33 @@ export function playSquadHorde(
   hordeNumber = game.hordeNumber,
 ): HordeState {
   let s = startSquadHorde(game, seed, 0, hordeNumber);
-  const step = Math.min(watch ? WATCH_EVERY : 60, s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60);
+  const step = s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60;
+  // Watching ticks each look in slices (ID-105): the player still looks to use its skills
+  // every `step`, so watching never changes how it plays.
+  const slices = watch ? Math.ceil(step / WATCH_EVERY) : 1;
+  const look = (): void => {
+    if (watch) watch.nearest = Math.min(watch.nearest, nearestEnemy(s));
+  };
+  // Whether `s` came from our own tick, so nothing else holds it and the next tick can
+  // skip the copy (`tickInPlace`). A card pick or a skill makes a state that may share
+  // parts with others, so the tick after one copies as usual.
+  let owned = false;
   while (s.outcome === 'fighting') {
     if (s.time > maxFight)
       throw new RangeError(`playSquadHorde: horde ${s.hordeNumber} never ended`);
-    s = s.offer ? chooseCard(s, squadPick(s)) : tick(useSkills(s), step);
-    if (watch) watch.nearest = Math.min(watch.nearest, nearestEnemy(s));
+    if (s.offer) {
+      s = chooseCard(s, squadPick(s));
+      owned = false;
+    } else {
+      const next = useSkills(s);
+      s = owned && next === s ? tickInPlace(s, step / slices) : tick(next, step / slices);
+      owned = true;
+      for (let k = 1; k < slices && !s.offer && !s.replace && s.outcome === 'fighting'; k++) {
+        look();
+        s = tickInPlace(s, step / slices);
+      }
+    }
+    look();
   }
   return s;
 }

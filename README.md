@@ -38,6 +38,11 @@ npm run build      # production build in dist/
 Every PR to `main` raises the version in `package.json`; CI and the pre-push
 hook check it.
 
+CI splits the unit tests across three jobs that run at once, because the
+balance tests (`src/core/balance/`) play many full fights and take most of
+the time. A new test file runs in the last job unless you add it to another
+group in `.github/workflows/ci.yml`.
+
 ## License
 
 [MIT](LICENSE)
