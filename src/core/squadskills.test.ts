@@ -46,7 +46,7 @@ function landed(s: HordeState): HordeState {
 const hold = { hp: 10_000, maxHp: 10_000, stunnedUntil: 1e9 };
 
 describe('the skill pick (ID-100)', () => {
-  it('a new game starts with Flashbang and Molotov picked: neither needs aiming', () => {
+  it('a new game starts with Flashbang and Molotov picked', () => {
     expect(START_SKILLS).toEqual(['flashbang', 'molotov']);
     expect(newGame().skillPick).toEqual(['flashbang', 'molotov']);
     // Its own copy: a game never shares the constant.
@@ -153,6 +153,8 @@ describe('skills in a horde-only fight (ID-100)', () => {
     const hit = (s: HordeState): number => {
       const bombs = used(s, 'airstrike', 0, 300);
       bombs.incoming = bombs.incoming.slice(0, 1);
+      // Only the bomb hits: it falls for THROW_FALL (ID-107), time the squad would shoot in.
+      for (const d of bombs.defenders) d.nextShotAt = 1e9;
       const b = bombs.incoming[0]!;
       const e = enemy(bombs, { x: b.x, y: b.y, ...hold });
       const after = landed(bombs);

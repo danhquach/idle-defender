@@ -104,7 +104,7 @@ export const POWER = {
  */
 export const SQUAD_SKILLS = { max: 2, solo: 2 } as const;
 
-/** The skills a new game starts with picked (ID-100): neither needs aiming. */
+/** The skills a new game starts with picked (ID-100). */
 export const START_SKILLS: readonly SkillId[] = ['flashbang', 'molotov'];
 
 /**
@@ -891,7 +891,7 @@ export const CARD = {
    * Frag Grenades: one every `every` s per survivor on the line, at an enemy within `range` of a survivor, landing
    * `flight` s later for `damage` flat within `radius`; its blast is drawn for `flash` s.
    */
-  frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 0.4 },
+  frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 1.2 },
   /**
    * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
    * slows per level. Each row of it (one per segment) has `durability` per level (ID-104);
@@ -1212,15 +1212,17 @@ export type SkillId = 'flashbang' | 'molotov' | 'airstrike';
  * Skills bought with horde cash, each researched at the Lab first and hitting enemies
  * only, within `radius` of where each lands. `aim` is what the player picks: an airstrike
  * a row, carpet bombed from the outer wall's front to the field's end, a bomb dealing
- * `damage` every `every` s, `2 × radius` apart; a flashbang or a molotov nothing: `count`
- * land at random on the field past the outer wall, one every `every` s, a flashbang
- * stunning (no moving, no attacking) for `seconds`, a molotov's fire dealing `dps` for
- * `seconds` (ID-041). `cooldown` is fight seconds after a use.
+ * `damage` every `every` s, `2 × radius` apart; a flashbang or a molotov an area (ID-107):
+ * `count` drop from the sky at random spots within `area` of the aim (and past the outer
+ * wall, inside the field), one every `every` s, each landing `THROW_FALL` s after it is
+ * thrown, a flashbang stunning (no moving, no attacking) for `seconds`, a molotov's fire
+ * dealing `dps` for `seconds` (ID-041). `cooldown` is fight seconds after a use.
  */
 export const SKILLS = {
   flashbang: {
     name: 'Flashbang',
-    aim: 'none',
+    aim: 'area',
+    area: 260,
     cost: 20,
     cooldown: 25,
     radius: 100,
@@ -1230,7 +1232,8 @@ export const SKILLS = {
   },
   molotov: {
     name: 'Molotov',
-    aim: 'none',
+    aim: 'area',
+    area: 180,
     cost: 25,
     cooldown: 20,
     radius: 50,
@@ -1250,8 +1253,10 @@ export const SKILLS = {
   },
 } as const;
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
-/** How long a skill's flash stays on screen, in seconds. */
-export const SKILL_FLASH = 0.4;
+/** Fight seconds a thrown flashbang or molotov, or an airstrike bomb, falls from the sky before it lands (ID-107). */
+export const THROW_FALL = 0.5;
+/** How long a skill's explosion stays on screen, in seconds (ID-107: its fireball, smoke and scorch). */
+export const SKILL_FLASH = 1.2;
 
 // --- Commander perks (ID-020). Design §5. ---
 

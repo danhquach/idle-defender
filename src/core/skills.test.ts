@@ -7,15 +7,25 @@ import {
   SKILL_FLASH,
   SKILL_IDS,
   SKILLS,
+  SQUAD_SKILLS,
   STEP,
+  THROW_FALL,
   type SkillId,
   stockOf,
   WALL,
 } from './data.ts';
 import { newGame, startHorde } from './game.ts';
-import { newHorde, stunned, tick, type HordeState } from './horde.ts';
+import { dazed, newHorde, stunned, tick, type HordeState } from './horde.ts';
 import { queueLock, upgradeLab } from './research.ts';
-import { carpet, skillLeft, skillLock, useSkill, wallFront } from './skills.ts';
+import {
+  carpet,
+  skillLeft,
+  skillLock,
+  throwArea,
+  useSkill,
+  wallFront,
+  type AreaSkill,
+} from './skills.ts';
 import { enemy, researchNow, setup } from './testing.ts';
 
 /** A horde with every skill researched, no spawns left and `cash` in hand. */
@@ -52,7 +62,7 @@ describe('airstrike (carpet bombing, ID-041)', () => {
     const after = used(s, 'airstrike', 300, 250);
     const bombs = after.incoming;
     expect(bombs).toEqual(
-      carpet(s, 250).map((p, i) => ({ skill: 'airstrike', ...p, at: i * every })),
+      carpet(s, 250).map((p, i) => ({ skill: 'airstrike', ...p, at: THROW_FALL + i * every })),
     );
     expect(bombs[0]!.x).toBeCloseTo(front + r, 9);
     for (let i = 1; i < bombs.length; i++)
@@ -73,7 +83,10 @@ describe('airstrike (carpet bombing, ID-041)', () => {
     const first = enemy(s, { x: b0.x, y: 200, ...hold });
     const edge = enemy(s, { x: b3.x, y: 200 + r, ...hold });
     const past = enemy(s, { x: b3.x, y: 200 - r - 1, ...hold });
-    let t = tick(used(s, 'airstrike', 0, 200), STEP);
+    // Nothing lands while the bombs fall (ID-107); then the first one hits.
+    let t = tick(used(s, 'airstrike', 0, 200), THROW_FALL - STEP);
+    expect(t.blasts).toEqual([]);
+    t = tick(t, 2 * STEP);
     const hp = (id: number) => t.enemies.find((e) => e.id === id)!.hp;
     expect(hp(first.id)).toBe(100 - SKILLS.airstrike.damage);
     expect(hp(edge.id)).toBe(100); // its bomb is still in the air
@@ -121,31 +134,117 @@ describe('airstrike (carpet bombing, ID-041)', () => {
   });
 });
 
-describe('molotov (scattered throws, ID-041)', () => {
-  it('throws its bottles at random spots past the outer wall, one at a time, ignoring the aim', () => {
-    const s = fight();
-    const { radius: r, count, every } = SKILLS.molotov;
-    const a = used(s, 'molotov', 0, 0);
-    const b = used(s, 'molotov', 900, 700);
-    expect(a.incoming).toEqual(b.incoming); // the aim makes no difference
-    expect(a.incoming).toHaveLength(count);
-    a.incoming.forEach((m, i) => {
-      expect(m.skill).toBe('molotov');
-      expect(m.at).toBeCloseTo(i * every, 9);
-      expect(m.x).toBeGreaterThanOrEqual(wallFront(s) + r);
-      expect(m.x).toBeLessThanOrEqual(FIELD.right - r);
-      expect(m.y).toBeGreaterThanOrEqual(r);
-      expect(m.y).toBeLessThanOrEqual(FIELD.height - r);
-    });
-    expect(new Set(a.incoming.map((m) => m.x)).size).toBe(count);
-    // Seeded: the same fight throws the same way; the next throw lands elsewhere.
-    expect(a.rng).not.toEqual(s.rng);
-    expect(used(s, 'molotov').incoming).toEqual(a.incoming);
-    expect(used({ ...a, cooldowns: s.cooldowns }, 'molotov').incoming.slice(count)).not.toEqual(
-      a.incoming,
-    );
+describe('aimed throws (area, ID-107)', () => {
+  const AREA: readonly AreaSkill[] = ['flashbang', 'molotov'];
+
+  it('the area is much larger than one burst', () => {
+    for (const id of AREA) expect(SKILLS[id].area).toBeGreaterThanOrEqual(2.5 * SKILLS[id].radius);
   });
 
+  it.each(AREA)(
+    '%s: every burst lands inside the aimed area, one at a time, after a fall',
+    (id) => {
+      const s = fight();
+      const { count, every, area } = SKILLS[id];
+      const a = used(s, id, 1000, 400);
+      expect(a.incoming).toHaveLength(count);
+      a.incoming.forEach((m, i) => {
+        expect(m.skill).toBe(id);
+        expect(m.at).toBeCloseTo(THROW_FALL + i * every, 9);
+        expect(Math.hypot(m.x - 1000, m.y - 400)).toBeLessThanOrEqual(area + 1e-9);
+      });
+      expect(new Set(a.incoming.map((m) => m.x)).size).toBe(count);
+      // Aimed elsewhere, it lands elsewhere.
+      const b = used(s, id, 1400, 150);
+      b.incoming.forEach((m) =>
+        expect(Math.hypot(m.x - 1400, m.y - 150)).toBeLessThanOrEqual(area),
+      );
+      // Seeded: the same fight throws the same way; the next throw lands elsewhere.
+      expect(a.rng).not.toEqual(s.rng);
+      expect(used(s, id, 1000, 400).incoming).toEqual(a.incoming);
+      const next = used({ ...a, cooldowns: s.cooldowns }, id, 1000, 400).incoming.slice(count);
+      expect(next.map((m) => [m.x, m.y])).not.toEqual(a.incoming.map((m) => [m.x, m.y]));
+    },
+  );
+
+  it.each(AREA)('%s: spreads over the whole area, not just its middle', (id) => {
+    let s = fight();
+    const { area } = SKILLS[id];
+    const spots: number[] = [];
+    for (let i = 0; i < 40; i++) {
+      s = used({ ...s, cash: 100, cooldowns: fight().cooldowns }, id, 1000, 400);
+      spots.push(...s.incoming.splice(0).map((m) => Math.hypot(m.x - 1000, m.y - 400)));
+    }
+    expect(Math.max(...spots)).toBeGreaterThan(0.9 * area);
+    expect(Math.min(...spots)).toBeLessThan(0.3 * area);
+  });
+
+  it.each(AREA)(
+    '%s: near a field edge or behind the wall, bursts stay on the field past the wall, inside the area',
+    (id) => {
+      for (const [x, y] of [
+        [0, 0],
+        [FIELD.right, FIELD.height],
+        [wallFront(fight()) - 50, 30],
+      ] as const) {
+        let s = fight();
+        for (let k = 0; k < 10; k++) {
+          s = used({ ...s, cash: 100, cooldowns: fight().cooldowns }, id, x, y);
+          const c = throwArea(s, id, x, y);
+          expect(c.x).toBeGreaterThanOrEqual(wallFront(s));
+          for (const m of s.incoming.splice(0)) {
+            expect(m.x).toBeGreaterThanOrEqual(wallFront(s));
+            expect(m.x).toBeLessThanOrEqual(FIELD.right);
+            expect(m.y).toBeGreaterThanOrEqual(0);
+            expect(m.y).toBeLessThanOrEqual(FIELD.height);
+            expect(Math.hypot(m.x - c.x, m.y - c.y)).toBeLessThanOrEqual(c.r + 1e-9);
+          }
+        }
+      }
+    },
+  );
+
+  it('nothing happens on the press: a burst takes effect only when it lands', () => {
+    let s = fight();
+    for (const d of s.defenders) d.nextShotAt = 1e9;
+    s = used(s, 'flashbang', 1000, 400);
+    const first = s.incoming[0]!;
+    const e = enemy(s, { x: first.x, y: first.y, hp: 1e6, maxHp: 1e6 });
+    s = tick(s, THROW_FALL - 2 * STEP);
+    expect(
+      stunned(
+        s,
+        s.enemies.find((x) => x.id === e.id)!,
+      ),
+    ).toBe(false);
+    expect(s.blasts).toEqual([]);
+    s = tick(s, 3 * STEP);
+    expect(s.blasts.length).toBeGreaterThan(0);
+    const after = s.enemies.find((x) => x.id === e.id)!;
+    expect(stunned(s, after)).toBe(true);
+    expect(dazed(s, after)).toBe(true);
+  });
+
+  it('×2 solo rule unchanged: a lone flashbang throws 8 bursts, all inside the area', () => {
+    const s = { ...fight(), freeSkills: { power: SQUAD_SKILLS.solo } } as HordeState;
+    const a = used(s, 'flashbang', 1000, 400);
+    expect(a.incoming).toHaveLength(SKILLS.flashbang.count * SQUAD_SKILLS.solo);
+    expect(a.incoming).toHaveLength(8);
+    a.incoming.forEach((m) =>
+      expect(Math.hypot(m.x - 1000, m.y - 400)).toBeLessThanOrEqual(SKILLS.flashbang.area),
+    );
+    expect(used(s, 'molotov', 1000, 400).incoming).toHaveLength(SKILLS.molotov.count);
+  });
+
+  it('airstrike bombs fall too: the carpet lands THROW_FALL later, still along the row', () => {
+    const s = fight();
+    const bombs = used(s, 'airstrike', 300, 250).incoming;
+    expect(bombs.map((b) => [b.x, b.y])).toEqual(carpet(s, 250).map((p) => [p.x, p.y]));
+    bombs.forEach((b, i) => expect(b.at).toBeCloseTo(THROW_FALL + i * SKILLS.airstrike.every, 9));
+  });
+});
+
+describe('molotov (ID-041)', () => {
   it('each bottle lights a fire where it lands; every one of them lands', () => {
     const s = used(fight(), 'molotov');
     const fires = landed(s).fires;
@@ -160,8 +259,8 @@ describe('molotov (scattered throws, ID-041)', () => {
 
   it('a fire burns enemies inside for its seconds of fight time, then goes out', () => {
     let s = used(fight(), 'molotov');
-    // One bottle only, so no other fire overlaps.
-    s.incoming = s.incoming.slice(0, 1);
+    // One bottle only, so no other fire overlaps, landing now.
+    s.incoming = s.incoming.slice(0, 1).map((m) => ({ ...m, at: 0 }));
     const spot = s.incoming[0]!;
     // Held in place so they stay put, out of the defender's reach.
     const hold = { hp: 1000, maxHp: 1000, stunnedUntil: 1e9 };
@@ -197,27 +296,33 @@ describe('molotov (scattered throws, ID-041)', () => {
   });
 });
 
-describe('flashbang (scattered throws, ID-041)', () => {
-  /** A fight with one flashbang thrown (none landed yet) and where its first one lands. */
+describe('flashbang (ID-041)', () => {
+  /**
+   * A fight with one flashbang thrown (none landed yet) and where its first one lands; its
+   * fall cut short, so the first one lands on the next step.
+   */
   function thrown(): { s: HordeState; spot: { x: number; y: number } } {
-    const s = used(fight(), 'flashbang', 0, 0);
-    return { s, spot: s.incoming[0]! };
+    const s = used(fight(), 'flashbang', 1000, 400);
+    s.incoming = s.incoming.map((m) => ({ ...m, at: m.at - THROW_FALL }));
+    return { s, spot: { x: s.incoming[0]!.x, y: s.incoming[0]!.y } };
   }
 
-  it('throws its bangs at random spots past the outer wall, one at a time, ignoring the aim', () => {
-    const s = fight();
-    const { radius: r, count, every } = SKILLS.flashbang;
-    const a = used(s, 'flashbang', 0, 0);
-    expect(used(s, 'flashbang', 900, 700).incoming).toEqual(a.incoming);
-    expect(a.incoming).toHaveLength(count);
-    a.incoming.forEach((m, i) => {
-      expect(m.skill).toBe('flashbang');
-      expect(m.at).toBeCloseTo(i * every, 9);
-      expect(m.x).toBeGreaterThanOrEqual(wallFront(s) + r);
-      expect(m.x).toBeLessThanOrEqual(FIELD.right - r);
-      expect(m.y).toBeGreaterThanOrEqual(r);
-      expect(m.y).toBeLessThanOrEqual(FIELD.height - r);
-    });
+  it('a dazed enemy is marked for the view’s stars until its stun ends', () => {
+    const t = thrown();
+    let s = t.s;
+    const spot = t.spot;
+    s.incoming = s.incoming.slice(0, 1);
+    const e = enemy(s, { ...spot, hp: 1e6, maxHp: 1e6 });
+    const other = enemy(s, { x: spot.x, y: spot.y - SKILLS.flashbang.radius - 5, hp: 1e6 });
+    s = tick(s, STEP);
+    const at = (id: number) => s.enemies.find((x) => x.id === id)!;
+    expect(dazed(s, at(e.id))).toBe(true);
+    expect(dazed(s, at(other.id))).toBe(false);
+    s = tick(s, SKILLS.flashbang.seconds - 0.2);
+    expect(dazed(s, at(e.id))).toBe(true);
+    s = tick(s, 0.3);
+    expect(dazed(s, at(e.id))).toBe(false);
+    expect(stunned(s, at(e.id))).toBe(false);
   });
 
   it('each bang stuns enemies in its radius from moving until it wears off', () => {

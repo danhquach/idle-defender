@@ -923,26 +923,6 @@
       "ref": "gunner-sniper-aim"
     },
     {
-      "id": "airstrike",
-      "kind": "sprite",
-      "style": "object",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 5215,
-      "size": "512x512",
-      "mutant": true,
-      "prompt": "a round explosion blast seen from directly above, a bright orange and yellow fireball in the centre with licking flames, a few thin wispy see-through puffs of pale grey smoke drifting around it with wide gaps between them, small bits of flying rubble, the whole blast a circle"
-    },
-    {
-      "id": "flashbang",
-      "kind": "sprite",
-      "style": "verbatim",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 5242,
-      "size": "512x512",
-      "white": true,
-      "prompt": "a round blinding flash of a stun grenade going off seen from directly above, a burst of brilliant white light with pale yellow and blue tinged rays radiating out, a thin bright shockwave ring around it, a small spent metal grenade canister in the centre, the whole burst a circle. 2D game sprite, hand-painted style, soft shading, single object centred with empty space around it, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
-    },
-    {
       "id": "icon-adrenaline",
       "kind": "sprite",
       "style": "verbatim",
@@ -2098,6 +2078,16 @@
       "prompt": "a game UI icon of a single big heavy magnum cartridge lying diagonally at exactly 45 degrees with its tip to the upper right, a short thick polished brass casing with a wide rim at its base, a fat rounded solid copper bullet nose with no hollow and no point, the whole round chunky and heavy-looking, in front of a big jagged dark grey starburst impact shape filling the background, no blood, simple bold shapes that read at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, a single connected shape where every part overlaps or touches, no detached parts, no floating particles, centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no numbers, no cast shadow, no ground, no hands, no red, no pink, no purple"
     },
     {
+      "id": "airstrike-bomb",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7203,
+      "size": "512x512",
+      "prompt": "keep this exact heavy round shape, colours, outline and shading, the fat rounded dark grey nose and the short brass casing with its rim, but remove the jagged grey starburst behind it completely so the round stands alone, made a little longer like an aerial bomb shell, still lying diagonally at 45 degrees with its nose to the upper right. Same hand-painted 2D game sprite style with a thick dark outline, plain flat solid magenta background #FF00FF, no starburst, no text, no cast shadow, no ground",
+      "ref": "card-hollow-points"
+    },
+    {
       "id": "card-field-repairs",
       "kind": "sprite",
       "style": "verbatim",
@@ -2125,14 +2115,48 @@
       "prompt": "a game UI icon of a claw hammer and a steel wrench crossed in a big X shape, the hammer with a dark grey steel head and a brown wooden handle running from upper left to lower right, the open-end wrench in light grey steel running from upper right to lower left, both the same length crossing at their middles, simple bold shapes that read at a tiny size, few details. 2D game icon, hand-painted style, flat shading, thick dark outline, a single connected shape where every part overlaps or touches, no detached parts, no nails, no planks, no floating particles, centred filling most of the frame, plain flat solid magenta background #FF00FF, no text, no letters, no numbers, no cast shadow, no ground, no hands, no red, no pink, no purple"
     },
     {
-      "id": "molotov",
+      "id": "scorch",
       "kind": "sprite",
       "style": "verbatim",
       "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 5232,
+      "seed": 7101,
+      "white": true,
       "size": "512x512",
+      "prompt": "a scorched burnt patch of ground seen from directly above, an irregular blackened char mark with soft ragged edges fading out, dark ash and soot in the middle, a few glowing orange embers and small charred bits, a few broken green glass shards, natural and realistic, no flames. 2D game sprite, hand-painted style, soft shading, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no hands, no person"
+    },
+    {
+      "id": "explosion",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 7511,
+      "size": "1024x1024",
       "mutant": true,
-      "prompt": "a messy uneven spread of burning fire seen from directly above, irregular clumps of realistic orange and yellow flames of many sizes, thin wisps of flame and glowing embers scattered between them, a few broken glass shards, the fire alone with no surface beneath it, no puddle, no dirt patch. 2D game sprite, hand-painted style, soft shading, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+      "group": "explosion",
+      "prompt": "2D game sprite of a cartoon explosion: a wide low dome of puffy billowing round fire lumps in bright yellow and orange, each lump outlined in dark red, a glowing pale yellow hot centre, and behind the dome six long pointed dark red flame spikes radiating outward like the points of a star, with a soft grey smoke cloud peeking out behind the fire. The dome's bottom edge is straight and level. Nothing under the explosion: no ground, no shadow, no flames at the base. Hand-painted cartoon style, bold dark outline, soft shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture. No text."
+    },
+    {
+      "id": "explosion-pop",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 7601,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "explosion",
+      "prompt": "Edit this explosion to show its very first instant: the same explosion in the same place and the same style, but only half as big, a small tight ball of white-hot pale yellow fire with a white centre, its spikes short and stubby, no grey smoke yet. Keep it centred at the same spot with the dome's bottom edge on the same line. Keep the same flat uniform pure magenta background #FF00FF filling the whole image. No text.",
+      "ref": "explosion"
+    },
+    {
+      "id": "explosion-smoke",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 7621,
+      "size": "1024x1024",
+      "group": "explosion",
+      "prompt": "Edit this explosion to show it after the fire has burned out: the same shape in the same place and same size and style, now mostly billowing dark grey and charcoal smoke lumps with a few small orange embers glowing deep inside, no red spikes, no bright yellow. Keep the bottom edge on the same line. Keep the same flat uniform pure magenta background #FF00FF filling the whole image. No text.",
+      "ref": "explosion"
     },
     {
       "id": "weapon-smg",

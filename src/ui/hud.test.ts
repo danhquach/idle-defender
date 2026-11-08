@@ -229,7 +229,7 @@ describe('hud', () => {
       cost: '20',
       variant: 'secondary',
       disabled: false,
-      reason: 'Thrown across the field at once',
+      reason: 'Then click an area to throw it at (Esc to cancel)',
       armed: true,
       hidden: false,
       key: null,
@@ -255,8 +255,8 @@ describe('hud', () => {
       cash: 100,
     };
     expect(skillButtons(ready, null).map((b) => b.reason)).toEqual([
-      'Thrown across the field at once',
-      'Thrown across the field at once',
+      'Then click an area to throw it at (Esc to cancel)',
+      'Then click an area to throw it at (Esc to cancel)',
       'Then click a row to carpet bomb (Esc to cancel)',
     ]);
     // A skill that can't be used never shows as armed.
