@@ -133,6 +133,17 @@ import {
  */
 export const DUSK = 'rgba(8, 10, 16, 0.7)';
 
+/**
+ * The dark lip at the field's top and bottom edges in a fight (ID-081): `color` at the
+ * edge, fading to `clear` (the same colour, see-through) `depth` units out, over the dim
+ * ground past the field.
+ */
+export const EDGE_LIP = {
+  depth: 24,
+  color: 'rgba(0, 0, 0, 0.45)',
+  clear: 'rgba(0, 0, 0, 0)',
+} as const;
+
 const COLOR = {
   sky: '#15171a',
   selected: '#9cc4f0',
@@ -1344,15 +1355,29 @@ function drawBackdrop(
   ctx.clip();
   drawGround(ctx, art, cam);
   yard?.();
-  if (!build) dim(DUSK);
   // In a fight the ground past the field's top and bottom edges is shaded (ID-068), so
   // the wall's ends read as the map's edge, not a way round; sprites still draw over it.
+  // The field's rows take the dusk a second time; the ground past them keeps one dusk
+  // and the shade, so a window taller than the frame shows dim ground there, not black
+  // bands (ID-081). A dark lip fades out from each edge, so the edge still reads.
   if (!build) {
     const top = project({ x: 0, y: 0 }, cam).sy;
     const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
+    const lip = project({ x: 0, y: EDGE_LIP.depth }, cam).sy - top;
+    ctx.fillStyle = DUSK;
+    ctx.fillRect(0, top, view.w, bottom - top);
     ctx.fillStyle = COLOR.outside;
     if (top > 0) ctx.fillRect(0, 0, view.w, top);
     if (bottom < view.h) ctx.fillRect(0, bottom, view.w, view.h - bottom);
+    const edge = (at: number, to: number): void => {
+      const fade = ctx.createLinearGradient(0, at, 0, to);
+      fade.addColorStop(0, EDGE_LIP.color);
+      fade.addColorStop(1, EDGE_LIP.clear);
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, Math.min(at, to), view.w, lip);
+    };
+    if (top > 0) edge(top, top - lip);
+    if (bottom < view.h) edge(bottom, bottom + lip);
   }
   ctx.restore();
 }
