@@ -2170,8 +2170,10 @@ offline progress works across sessions.
   still plays; the Save tab says saving is off and the Menu button shows a
   red dot.
 - **Several tabs:** each saves on its own changes; the last write wins.
-- **Intro** *(as built, ID-106)*: at launch a title screen covers the camp: the
-  title art (survivors from behind on the wall at dusk, the horde coming; lazy
+- **Intro** *(as built, ID-106; art redone in ID-117)*: at launch a title screen covers the camp: the
+  title art (three unarmed survivors from behind, at the near side of the wall,
+  looking over it at the horde coming at dusk, kept between the title and the
+  buttons on a phone, a desktop and a 16:9 window; lazy
   art that fades in, under a 70 % dim) with the title and a one-line tagline in
   the sky and, at the foot, **Continue** (only with a save, the main action),
   **New game** (asks first over a save; without one the new camp is saved at

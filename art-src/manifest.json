@@ -2569,10 +2569,10 @@
       "id": "title-dusk",
       "kind": "picture",
       "style": "verbatim",
-      "model": "black-forest-labs/flux.2-klein-4b",
-      "seed": 1101,
+      "model": "microsoft/mai-image-2.6",
+      "seed": 1216,
       "size": "1536x1024",
-      "prompt": "wide video game title screen key art, hand-painted 2D illustration with soft shading and bold dark outlines, gritty post-apocalyptic ruins. Seen from just behind exactly three survivors grouped close together in the centre of the image, standing side by side on top of a rough cracked concrete wall with sandbags, all three seen from behind facing away from the viewer toward the horde, holding rifles ready at the shoulder. Beyond the wall a ruined dusty field where a large horde of shambling zombies in dark silhouette walks toward the wall through haze. Far behind them a broken ruined city skyline with rising smoke against a burnt-orange dusk sky with a low hazy sun glow and a few soft drifting clouds. The survivors stand in the lower middle; the upper third is calm open sky. Muted desaturated colours, warm orange light, cinematic. No text, no letters, no logo, no frame, no border"
+      "prompt": "wide video game title screen key art, hand-painted 2D illustration with soft shading and bold dark outlines, gritty post-apocalyptic ruins, seen from a distance. A long rough cracked concrete wall topped with sandbags runs across the whole image. On the near side of the wall, exactly three survivors stand shoulder to shoulder, seen from behind with their backs to the viewer and their faces hidden, looking over the wall at the horde outside. The wall is in front of them and reaches their chests. The three survivors are small figures far from the viewer, full bodies visible from head to boots, packed tightly together in the very centre of the image, all three inside the middle fifth of the image width. Their heads are just above the horizontal centre line of the image and their boots are only a third of the image height lower. The top third of the image is the sky, the far city and the horde; the bottom third is open empty dark rubble-strewn ground in front of them. Their arms hang calmly at their sides, no weapons, nothing on their backs. Beyond the wall a ruined dusty field where a large horde of shambling zombies in dark silhouette walks toward the wall through haze. Far behind a broken ruined city skyline with rising smoke against a burnt-orange dusk sky with a low hazy sun glow. Muted desaturated colours, warm orange light, cinematic. No text, no letters, no logo, no frame, no border"
     },
     {
       "id": "world-map",
