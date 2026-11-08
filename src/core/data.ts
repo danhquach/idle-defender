@@ -1216,7 +1216,8 @@ export type SkillId = 'flashbang' | 'molotov' | 'airstrike';
  * `count` drop from the sky at random spots within `area` of the aim (and past the outer
  * wall, inside the field), one every `every` s, each landing `THROW_FALL` s after it is
  * thrown, a flashbang stunning (no moving, no attacking) for `seconds`, a molotov's fire
- * dealing `dps` for `seconds` (ID-041). `cooldown` is fight seconds after a use.
+ * burning for `seconds` (ID-041), each second `burn` of this wave's Shambler HP (ID-114,
+ * `fireDps`). `cooldown` is fight seconds after a use.
  */
 export const SKILLS = {
   flashbang: {
@@ -1235,9 +1236,9 @@ export const SKILLS = {
     aim: 'area',
     area: 180,
     cost: 25,
-    cooldown: 20,
+    cooldown: 30,
     radius: 50,
-    dps: 5,
+    burn: 0.4,
     seconds: 6,
     count: 5,
     every: 0.15,

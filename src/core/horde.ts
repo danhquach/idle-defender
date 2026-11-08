@@ -2081,6 +2081,15 @@ export function removeDead(s: HordeState): void {
 /** How many times as hard each skill use works this fight (ID-100): 1 unless picked alone. */
 export const skillPower = (s: Pick<HordeState, 'freeSkills'>): number => s.freeSkills?.power ?? 1;
 
+/**
+ * A molotov fire's damage a second (ID-114): `SKILLS.molotov.burn` of this wave's Shambler
+ * HP, so it keeps up with enemy HP as hordes go up, at the skill's power.
+ */
+export const fireDps = (
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'freeSkills'>,
+): number =>
+  SKILLS.molotov.burn * enemyHp('shambler', s.hordeNumber, s.wave, s.hpScale) * skillPower(s);
+
 /** Whether a flashbang still holds `e` (fight time, so it waits out picks too). */
 export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   !due(s.time, e.stunnedUntil);
@@ -2119,8 +2128,8 @@ function land(s: HordeState): void {
 }
 
 /**
- * Design §4, as built ID-019: each molotov fire burns every enemy inside it until it
- * goes out; the flash of a skill fades after `SKILL_FLASH`. Design §8: an enemy set
+ * Design §4, as built ID-019: each molotov fire burns every enemy inside it at `fireDps`
+ * (ID-114) until it goes out; the flash of a skill fades after `SKILL_FLASH`. Design §8: an enemy set
  * alight by Incendiary Rounds burns at the rate the hit that lit it gave (`burnDps`).
  */
 function burn(s: HordeState): void {
@@ -2133,7 +2142,7 @@ function burn(s: HordeState): void {
   }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
-  const fireHit = SKILLS.molotov.dps * skillPower(s) * STEP;
+  const fireHit = fireDps(s) * STEP;
   for (const f of s.fires) {
     for (const e of s.enemies) {
       if (Math.hypot(e.x - f.x, e.y - f.y) <= SKILLS.molotov.radius + EPS) {

@@ -15,7 +15,7 @@ import {
   WALL,
 } from './data.ts';
 import { newGame, startHorde } from './game.ts';
-import { dazed, newHorde, stunned, tick, type HordeState } from './horde.ts';
+import { dazed, fireDps, newHorde, stunned, tick, type HordeState } from './horde.ts';
 import { queueLock, upgradeLab } from './research.ts';
 import {
   carpet,
@@ -27,6 +27,7 @@ import {
   type AreaSkill,
 } from './skills.ts';
 import { enemy, researchNow, setup } from './testing.ts';
+import { enemyHp } from './waves.ts';
 
 /** A horde with every skill researched, no spawns left and `cash` in hand. */
 function fight(cash = 100): HordeState {
@@ -270,11 +271,12 @@ describe('molotov (ID-041)', () => {
     const out = enemy(s, { x: spot.x, y: spot.y + side * (SKILLS.molotov.radius + 1), ...hold });
     s = tick(s, 1);
     const hp = (id: number) => s.enemies.find((e) => e.id === id)!.hp;
-    expect(hp(held.id)).toBeCloseTo(1000 - SKILLS.molotov.dps, 6);
+    const dps = SKILLS.molotov.burn * ENEMIES.shambler.hp; // Horde 1 wave 1: base HP (ID-114).
+    expect(hp(held.id)).toBeCloseTo(1000 - dps, 6);
     expect(hp(out.id)).toBe(1000);
     s = tick(s, SKILLS.molotov.seconds + 1);
     expect(s.fires).toEqual([]);
-    expect(hp(held.id)).toBeCloseTo(1000 - SKILLS.molotov.dps * SKILLS.molotov.seconds, 6);
+    expect(hp(held.id)).toBeCloseTo(1000 - dps * SKILLS.molotov.seconds, 6);
     // It counts the HP fire took (for the view's hit flash, ID-089); none outside.
     const burnt = (id: number) => s.enemies.find((e) => e.id === id)!.burnt ?? 0;
     expect(burnt(held.id)).toBeCloseTo(1000 - hp(held.id), 6);
@@ -293,6 +295,77 @@ describe('molotov (ID-041)', () => {
     s = tick(s, 1);
     expect(s.enemies.some((x) => x.id === e.id)).toBe(false);
     expect(s.cash).toBe(cash + ENEMIES.shambler.cash);
+  });
+});
+
+describe('molotov keeps up with the hordes (ID-114)', () => {
+  /** A fight at Horde `n`'s last wave, nothing left to spawn, the squad not shooting. */
+  function late(n: number, power = 1, seed = 1): HordeState {
+    const s = newHorde(seed, {
+      ...setup(),
+      hordeNumber: n,
+      skills: ['molotov', 'flashbang'],
+      freeSkills: { power },
+    });
+    s.wave = s.waveCount;
+    s.toSpawn = 0;
+    s.enemies = [];
+    for (const d of s.defenders) d.nextShotAt = 1e9;
+    return s;
+  }
+
+  it('a fire burns a share of this wave’s Shambler HP a second, at every horde and wave', () => {
+    for (const n of [1, 4, 7, 12, 20]) {
+      const s = late(n);
+      const shambler = enemyHp('shambler', n, s.wave);
+      expect(fireDps(s)).toBeCloseTo(SKILLS.molotov.burn * shambler, 9);
+      expect(fireDps({ ...s, wave: 1 })).toBeCloseTo(
+        SKILLS.molotov.burn * enemyHp('shambler', n, 1),
+        9,
+      );
+      expect(fireDps(late(n, 2))).toBeCloseTo(2 * fireDps(s), 9);
+    }
+    // The horde-only build's own HP curve (`hpScale`) is followed too.
+    const squad = { ...late(7), hpScale: 3 };
+    expect(fireDps(squad)).toBeCloseTo(
+      SKILLS.molotov.burn * enemyHp('shambler', 7, squad.wave, 3),
+      9,
+    );
+    // A Shambler that walks across a whole fire (its width at walking speed) burns to death.
+    const across = (2 * SKILLS.molotov.radius) / ENEMIES.shambler.speed;
+    expect(SKILLS.molotov.burn * across).toBeGreaterThanOrEqual(1);
+  });
+
+  /**
+   * One throw into a walking crowd of 40 Shamblers at Horde 7's last wave, with only the
+   * fires doing damage, over 6 fights: the Shamblers killed of those the fires touched.
+   */
+  function killShare(power: number): number {
+    let touched = 0;
+    let killed = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = late(7, power, seed);
+      const hp = enemyHp('shambler', 7, s.wave);
+      for (let i = 0; i < 40; i++) {
+        enemy(s, { x: 950 + (i % 8) * 40, y: 250 + Math.floor(i / 8) * 75, hp, maxHp: hp });
+      }
+      let t = used(s, 'molotov', 1100, 400);
+      const ids = new Set(t.enemies.map((e) => e.id));
+      const hit = new Set<number>();
+      for (let i = 0; i < 9 / STEP; i++) {
+        t = tick(t, STEP);
+        for (const e of t.enemies) if ((e.burnt ?? 0) > 0) hit.add(e.id);
+      }
+      const alive = new Set(t.enemies.map((e) => e.id));
+      touched += hit.size;
+      killed += [...ids].filter((id) => !alive.has(id)).length;
+    }
+    return killed / touched;
+  }
+
+  it('one throw at a Horde 7 crowd kills at least 30% of the Shamblers it burns, half alone', () => {
+    expect(killShare(1)).toBeGreaterThanOrEqual(0.3);
+    expect(killShare(SQUAD_SKILLS.solo)).toBeGreaterThanOrEqual(0.5);
   });
 });
 
