@@ -75,6 +75,18 @@ import {
 } from './explosion.ts';
 import { SPIT, spitFly, spitFrames } from './spit.ts';
 import {
+  CUTS,
+  DEATH,
+  deathOf,
+  deathPose,
+  dustOf,
+  limbFlight,
+  sprayOf,
+  type Cut,
+  type Death,
+  type SpritePoint,
+} from './death.ts';
+import {
   depthSort,
   FIGHT_FRAME,
   mountDepth,
@@ -118,10 +130,10 @@ import {
 } from './buildscene.ts';
 import {
   aiming,
+  ANIM,
   defenderPose,
   enemyFrame,
   enemyPose,
-  fallPose,
   STILL,
   type Animator,
   type EnemyFrame,
@@ -593,16 +605,28 @@ export type Scene = Pick<
   // The barrier cards taken show on the wall (ID-075); build mode has none.
   // Damage numbers (ID-082); build mode has none.
   // Barbed Wire's rows (ID-090); build mode has none.
+  // The fight's seed picks each kill's death (ID-110); build mode has none.
   Partial<
     Pick<
       HordeState,
-      'wave' | 'freeWave' | 'acc' | 'taken' | 'cardLevels' | 'barrierAt' | 'pops' | 'wire' | 'slabs'
+      | 'wave'
+      | 'freeWave'
+      | 'acc'
+      | 'taken'
+      | 'cardLevels'
+      | 'barrierAt'
+      | 'pops'
+      | 'wire'
+      | 'slabs'
+      | 'seed'
     >
   > & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
     pace?: number;
     /** Survivors' speech bubbles (ID-085) and the chat clock they are timed on; build mode has none. */
     chat?: { bubbles: readonly Bubble[]; clock: number };
+    /** Real seconds since the fight ended, for its last kills to finish dying (ID-110). */
+    ended?: number;
   };
 /** An armed skill's reach around the cursor, on the field. */
 export interface Aim {
@@ -713,9 +737,12 @@ function drawOnBox(
   ctx.drawImage(img, f.top.sx + (w - dw) / 2, f.top.sy + h - dh, dw, dh);
 }
 
-const flashes = new WeakMap<HTMLImageElement, OffscreenCanvas>();
+/** A drawable picture: a loaded sprite, or one cut or painted from it. */
+type Picture = HTMLImageElement | OffscreenCanvas;
+
+const flashes = new WeakMap<Picture, OffscreenCanvas>();
 /** `img`'s shape in plain white, made once per image, for a hit's flash. */
-function whiteOf(img: HTMLImageElement): OffscreenCanvas {
+function whiteOf(img: Picture): OffscreenCanvas {
   let white = flashes.get(img);
   if (!white) {
     white = new OffscreenCanvas(img.width, img.height);
@@ -735,7 +762,7 @@ function whiteOf(img: HTMLImageElement): OffscreenCanvas {
  */
 function drawStanding(
   ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
+  img: Picture,
   feet: { sx: number; sy: number },
   height: number,
   cam: Camera,
@@ -2256,6 +2283,236 @@ function drawEnemy(
   drawStanding(ctx, img, feet, STAND.enemy * size, cam, pose);
 }
 
+/** The share of the dust puff's art, from its top, that is cloud (ID-110). */
+const DUST_CLOUD = 0.8;
+
+/** A corpse frame cut along one `Cut` (ID-110): the body without the piece, and the piece alone. */
+interface Pieces {
+  body: Picture;
+  piece: Picture;
+}
+
+const cutCache = new WeakMap<Picture, Map<Cut, Pieces | null>>();
+/**
+ * `img` cut along `cut`, made once per image and cut; null where the browser has no
+ * `OffscreenCanvas`, and the death that needs it falls back to a plain fall. The cut
+ * canvases serve at once and are swapped for plain images once those load: a canvas can
+ * draw many times slower than a decoded image, which a crowd of deaths would feel.
+ */
+function piecesOf(img: Picture, cut: Cut): Pieces | null {
+  let byCut = cutCache.get(img);
+  if (!byCut) cutCache.set(img, (byCut = new Map()));
+  const known = byCut.get(cut);
+  if (known !== undefined) return known;
+  const paint = (op: 'destination-out' | 'destination-in'): OffscreenCanvas | null => {
+    const canvas = new OffscreenCanvas(img.width, img.height);
+    const g = canvas.getContext('2d');
+    if (!g) return null;
+    g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = op;
+    g.beginPath();
+    for (const [x, y] of cut.poly) g.lineTo(x, y);
+    g.closePath();
+    g.fill();
+    return canvas;
+  };
+  let made: Pieces | null = null;
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const body = paint('destination-out');
+    const piece = paint('destination-in');
+    if (body && piece) {
+      made = { body, piece };
+      const cache = byCut;
+      void Promise.all([asImage(body), asImage(piece)]).then(([b, p]) => {
+        if (b && p) cache.set(cut, { body: b, piece: p });
+      });
+    }
+  }
+  byCut.set(cut, made);
+  return made;
+}
+
+/** `canvas` as a loaded image (a `data:` URL, which the page's CSP allows), or null if it can't be. */
+async function asImage(canvas: OffscreenCanvas): Promise<HTMLImageElement | null> {
+  try {
+    if (typeof canvas.convertToBlob !== 'function') return null;
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    const url = await new Promise<string>((ok, fail) => {
+      const reader = new FileReader();
+      reader.onload = () => (typeof reader.result === 'string' ? ok(reader.result) : fail());
+      reader.onerror = () => fail();
+      reader.readAsDataURL(blob);
+    });
+    const image = new Image();
+    await new Promise<void>((ok, fail) => {
+      image.onload = () => ok();
+      image.onerror = () => fail();
+      image.src = url;
+    });
+    return image;
+  } catch {
+    return null;
+  }
+}
+
+/** A cut's bounding box on its sprite: left, top, right, bottom. */
+function boxOf(poly: readonly SpritePoint[]): [number, number, number, number] {
+  const xs = poly.map((p) => p[0]);
+  const ys = poly.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+/**
+ * Gore `gore` on a dying body posed `pose` (its frame `img`, `height` as `drawStanding`),
+ * at the wound `at` (sprite px) facing `turn` (degrees clockwise from up), `scale` sprite
+ * px per gore px, see-through `alpha`. With `rising` its bottom sits on the wound (a spray
+ * out of it); otherwise its centre does (a stump over it).
+ */
+function drawOnBody(
+  ctx: CanvasRenderingContext2D,
+  img: Picture,
+  gore: Picture,
+  feet: { sx: number; sy: number },
+  height: number,
+  cam: Camera,
+  pose: Readonly<Pose>,
+  at: SpritePoint,
+  turn: number,
+  scale: number,
+  alpha: number,
+  rising: boolean,
+): void {
+  const k = (height / ART_PX) * cam.zoom;
+  const w = gore.width * scale * k;
+  const h = gore.height * scale * k;
+  ctx.save();
+  ctx.translate(feet.sx + pose.dx * cam.zoom, feet.sy - pose.lift * cam.zoom);
+  ctx.rotate(pose.rot);
+  ctx.scale(pose.sx, pose.sy);
+  ctx.globalAlpha *= pose.alpha * alpha;
+  ctx.translate((at[0] - img.width / 2) * k, (at[1] - img.height) * k);
+  ctx.rotate((turn * Math.PI) / 180);
+  ctx.drawImage(gore, -w / 2, rising ? -h : -h / 2, w, h);
+  ctx.restore();
+}
+
+/**
+ * Where a thrown limb is drawn (ID-110): it spins about its own middle as it arcs out
+ * from the body's side and drops to lie on the ground, as a pose about the body's feet for
+ * `drawStanding` (`k` px at zoom 1 per sprite px of `img`, `big` its elite size).
+ */
+export function limbPose(
+  cut: Cut,
+  img: Picture,
+  k: number,
+  big: number,
+  since: number,
+  body: Readonly<Pose>,
+): Pose {
+  const { u, spin } = limbFlight(since);
+  const [x0, y0, x1, y1] = boxOf(cut.poly);
+  const cx = ((x0 + x1) / 2 - img.width / 2) * k;
+  const cy = ((y0 + y1) / 2 - img.height) * k;
+  // Its middle comes to rest a little over the ground, as high as it lies thick.
+  const rest = -0.4 * Math.min(x1 - x0, y1 - y0) * k;
+  const tx = cx + Math.sign(cx || 1) * DEATH.limb.throw * u;
+  const ty = cy + (rest - cy) * u * u - DEATH.limb.pop * 4 * u * (1 - u);
+  const rx = cx * Math.cos(spin) - cy * Math.sin(spin);
+  const ry = cx * Math.sin(spin) + cy * Math.cos(spin);
+  return {
+    ...STILL,
+    dx: tx - rx,
+    lift: ry - ty,
+    rot: spin,
+    sx: big,
+    sy: big,
+    alpha: body.alpha,
+    flash: body.flash,
+  };
+}
+
+/**
+ * An enemy `since` s dead (ID-110), in the death the fight's `seed` picked for it, and its
+ * body's pose (for its fire). Reduce motion keeps one plain death, with no limbs, spray
+ * or dust; a death whose pieces can't be cut falls back to a plain fall.
+ */
+function drawDeath(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  e: Enemy,
+  since: number,
+  seed: number,
+  feet: { sx: number; sy: number },
+  cam: Camera,
+  anim: Animator,
+): Readonly<Pose> {
+  const img = art[ENEMY_ART[e.kind].walk[1]];
+  let death: Death = anim.reduced ? 'back' : deathOf(seed, e);
+  const cut =
+    death === 'head' ? CUTS[e.kind]?.head : death === 'limb' ? CUTS[e.kind]?.limb : undefined;
+  const pieces = cut ? piecesOf(img, cut) : null;
+  // Without its pieces it falls whole; `cut` then goes unused (the `!pieces` check below).
+  if (!pieces && (death === 'head' || death === 'limb')) death = 'back';
+  const pose = anim.shown(deathPose(death, since));
+  const big = e.elite ? ELITE.size : 1;
+  const body = { ...pose, sx: pose.sx * big, sy: pose.sy * big };
+  const height = STAND.enemy * (ENEMIES[e.kind].radius / ENEMY_RADIUS);
+  drawShadow(ctx, feet, pose.alpha, cam, radiusOf(e) / ENEMY_RADIUS);
+  if (!cut || !pieces) {
+    // The boss's dust rises behind it, so its outline stays clear through the cloud.
+    const dust = death === 'boss' ? dustOf(since) : null;
+    if (dust) {
+      const puff = art[dust.art];
+      const k = (height / ART_PX) * big * cam.zoom;
+      // The cloud only: the flat streak of ground the art has under it is left off.
+      const sh = puff.height * DUST_CLOUD;
+      const w = img.width * k * DEATH.boss.dust * dust.grow;
+      const h = (w * sh) / puff.width;
+      // It rises where the body lands: half its height in front of its feet.
+      const x = feet.sx - (img.height * k) / 2;
+      ctx.globalAlpha = dust.alpha;
+      ctx.drawImage(puff, 0, 0, puff.width, sh, x - w / 2, feet.sy - h * 0.9, w, h);
+      ctx.globalAlpha = 1;
+    }
+    drawStanding(ctx, img, feet, height, cam, body);
+    return body;
+  }
+  drawStanding(ctx, pieces.body, feet, height, cam, body);
+  const [x0, y0, x1, y1] = boxOf(cut.poly);
+  const stump = art[DEATH.art.stump];
+  const stumpScale = (DEATH.stump * Math.min(x1 - x0, y1 - y0)) / stump.width;
+  drawOnBody(ctx, img, stump, feet, height, cam, body, cut.at, cut.turn, stumpScale, 1, false);
+  if (death === 'limb') {
+    const k = (height * big) / ART_PX;
+    const flying = limbPose(cut, img, k, big, since, pose);
+    drawStanding(ctx, pieces.piece, feet, height, cam, flying);
+    // Its own bloody end, so even a small limb reads as one, not debris.
+    const end = cut.turn + 180;
+    drawOnBody(ctx, img, stump, feet, height, cam, flying, cut.at, end, stumpScale, 1, false);
+  } else {
+    const spray = sprayOf(since);
+    if (spray) {
+      const gore = art[spray.art];
+      const scale = (DEATH.head.size * (y1 - y0) * spray.grow) / gore.height;
+      drawOnBody(
+        ctx,
+        img,
+        gore,
+        feet,
+        height,
+        cam,
+        body,
+        cut.at,
+        cut.turn,
+        scale,
+        spray.alpha,
+        true,
+      );
+    }
+  }
+  return body;
+}
+
 /** A Swollen blowing up: an acid-green ring swelling and fading (design §9, ID-023). */
 function drawBurst(ctx: CanvasRenderingContext2D, k: Burst, time: number, cam: Camera): void {
   const age = (time - k.at) / SWOLLEN.burst;
@@ -3774,27 +4031,23 @@ export function drawScene(
       },
     });
   }
-  // The dead fall where they stood, with no HP bar, then are gone. A fight's last kill
-  // ends it and stops its clock mid-fall, so the result screen shows none.
-  const corpses = scene.outcome === 'fighting' ? (anim?.corpses ?? []) : [];
-  for (const c of corpses) {
+  // The dead die where they stood (ID-110), with no HP bar, then are gone. A fight's last
+  // kill ends it and stops its clock mid-death: those finish on the real seconds since it
+  // ended (`ended`), while a win's result waits for them; given none, they are gone.
+  const after = scene.outcome === 'fighting' ? 0 : (scene.ended ?? Infinity);
+  for (const c of anim?.corpses ?? []) {
     const e = c.enemy;
+    const since = scene.time - c.at + after;
+    if (!anim || since >= ANIM.fall.time) continue;
     sprites.push({
       y: e.y,
       x: e.x,
       draw: () => {
         const ground = project({ x: e.x, y: e.y }, cam);
-        const pose = anim ? anim.shown(fallPose(scene.time - c.at)) : STILL;
-        drawShadow(ctx, ground, pose.alpha, cam, radiusOf(e) / ENEMY_RADIUS);
-        const big = e.elite ? ELITE.size : 1;
-        drawEnemy(ctx, art, e.kind, 1, ground, cam, {
-          ...pose,
-          sx: pose.sx * big,
-          sy: pose.sy * big,
-        });
-        // A burning body keeps burning as it falls, fading with it.
+        const body = drawDeath(ctx, art, e, since, scene.seed ?? 0, ground, cam, anim);
+        // A burning body keeps burning as it dies, fading with it.
         const heat = burnHeat(scene.time, e, c.litAt);
-        drawBurn(ctx, art, e.id, e.kind, ground, pose, heat, flameClock, cam);
+        drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
       },
     });
   }

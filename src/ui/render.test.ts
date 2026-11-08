@@ -57,6 +57,7 @@ import {
 import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
 import { BLAST, FIREBALL } from './explosion.ts';
 import { SPIT } from './spit.ts';
+import { CUTS, DEATH, deathOf, type Cut, type Death } from './death.ts';
 import {
   BUBBLE,
   bubbleLayout,
@@ -81,6 +82,7 @@ import {
   twitch,
   bulletShape,
   drawScene,
+  limbPose,
   forgetBackdrop,
   DUSK,
   EDGE_LIP,
@@ -2491,7 +2493,7 @@ describe('sprite animation (ID-049)', () => {
     expect(gone(STEP + ANIM.fall.time).shambler).toHaveLength(0);
   });
 
-  it("the fight's last kill ends it mid-fall, so the result screen shows no corpse", () => {
+  it("given no real clock after the fight's last kill, its corpse is gone", () => {
     const anim = new Animator();
     const s = walking();
     poses(s, anim);
@@ -4310,5 +4312,278 @@ describe('a burning enemy’s fire (ID-089)', () => {
       drawScene(r.ctx, r.art, burningScene(3 + BURN.out, 3), CAM, VIEW);
       expect(flameFills(fills)).toHaveLength(0);
     });
+  });
+});
+
+describe('death animations (ID-110)', () => {
+  /** Sprite-sized canvases named by what was painted into them: a cut body, a cut-off piece or a flash. */
+  function stubCuts() {
+    stubCanvas();
+    const Ground = globalThis.OffscreenCanvas as unknown as new (
+      w: number,
+      h: number,
+    ) => { id: string; width: number; getContext(): Record<string, unknown> };
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class extends Ground {
+        override getContext() {
+          if (this.width !== ART_PX) return super.getContext();
+          const noop = () => {};
+          const name = (op: string) =>
+            (this.id =
+              op === 'destination-out'
+                ? 'cut-body'
+                : op === 'destination-in'
+                  ? 'cut-piece'
+                  : 'white');
+          return {
+            drawImage: noop,
+            fillRect: noop,
+            beginPath: noop,
+            lineTo: noop,
+            closePath: noop,
+            fill: noop,
+            fillStyle: '',
+            set globalCompositeOperation(op: string) {
+              name(op);
+            },
+          };
+        }
+      },
+    );
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SEED = 4242;
+  /** The first enemy id of `kind` the seed gives `death`. */
+  const idFor = (death: Death, kind: EnemyKind = 'shambler'): number => {
+    for (let id = 0; ; id++) if (deathOf(SEED, { id, kind }) === death) return id;
+  };
+
+  /** What is drawn `since` s after enemy `id` died (alive at 2, gone at 2.1). */
+  function died(
+    id: number,
+    since: number,
+    opts: { kind?: EnemyKind; reduced?: boolean; won?: number } = {},
+  ) {
+    const anim = new Animator();
+    anim.reduced = opts.reduced ?? false;
+    const base = blank();
+    const e = enemy(base as HordeState, { id, kind: opts.kind ?? 'shambler', x: 900, y: 60 });
+    const at = (time: number, enemies: Enemy[]) => ({ ...base, seed: SEED, time, enemies });
+    if (opts.won !== undefined) {
+      // The kill that ends the fight: its clock stops; `won` real seconds pass after.
+      drawScene(recorder().ctx, recorder().art, at(2, [e]), CAM, VIEW, null, null, null, anim);
+      const r = recorder();
+      const over = { ...at(2.1, []), outcome: 'won' as const, ended: opts.won };
+      drawScene(r.ctx, r.art, over, CAM, VIEW, null, null, null, anim);
+      return r.drawn as string[];
+    }
+    drawScene(recorder().ctx, recorder().art, at(2, [e]), CAM, VIEW, null, null, null, anim);
+    const r = recorder();
+    // Later frames only need the animator to see the kill, not the killing blow's flash.
+    if (since > 0) anim.observe(at(2.1, []));
+    else drawScene(r.ctx, r.art, at(2.1, []), CAM, VIEW, null, null, null, anim);
+    if (since > 0) {
+      const later = recorder();
+      drawScene(later.ctx, later.art, at(2.1 + since, []), CAM, VIEW, null, null, null, anim);
+      return later.drawn as string[];
+    }
+    return r.drawn as string[];
+  }
+
+  it('bursts the head: the body cut, a stump at the neck and the spray, never the whole sprite', () => {
+    stubCuts();
+    const drawn = died(idFor('head'), 0.05);
+    expect(drawn).toContain('cut-body');
+    expect(drawn).toContain(DEATH.art.stump);
+    expect(drawn).toContain(DEATH.art.spray);
+    expect(drawn).not.toContain('cut-piece');
+    expect(drawn.filter((d) => d.startsWith('shambler-'))).toEqual([]);
+    expect(died(idFor('head'), DEATH.head.spray + 0.05)).not.toContain(DEATH.art.breakup);
+  });
+
+  it('throws off a limb: the body cut, its stump, and the limb drawn on its own', () => {
+    stubCuts();
+    const drawn = died(idFor('limb'), 0.2);
+    expect(drawn).toEqual(expect.arrayContaining(['cut-body', 'cut-piece', DEATH.art.stump]));
+    expect(drawn).not.toContain(DEATH.art.spray);
+  });
+
+  it('falls whole, backward or face down, with no gore', () => {
+    stubCuts();
+    for (const d of ['back', 'face'] as const) {
+      const drawn = died(idFor(d), 0.2);
+      expect(drawn, d).toContain(ENEMY_ART.shambler.walk[1]);
+      expect(
+        drawn.filter((x) => x.startsWith('cut-') || x.startsWith('gore-')),
+        d,
+      ).toEqual([]);
+    }
+  });
+
+  it('with Reduce motion, keeps one plain death: no limbs, spray or cut', () => {
+    stubCuts();
+    for (const d of ['head', 'limb'] as const) {
+      const drawn = died(idFor(d), 0.05, { reduced: true });
+      expect(drawn, d).toContain(ENEMY_ART.shambler.walk[1]);
+      expect(
+        drawn.filter((x) => x.startsWith('cut-') || x.startsWith('gore-')),
+        d,
+      ).toEqual([]);
+    }
+  });
+
+  it('gives the boss its heavy fall, raising dust as it lands', () => {
+    stubCuts();
+    const lands = DEATH.time.boss - DEATH.fade + 0.05;
+    const drawn = died(1, lands, { kind: 'horror' });
+    expect(drawn).toContain(ENEMY_ART.horror.walk[1]);
+    expect(drawn).toContain(DEATH.art.dust);
+    expect(died(1, 0.2, { kind: 'horror' })).not.toContain(DEATH.art.dust);
+  });
+
+  it("lets the fight's last kill finish dying after the win, then is gone", () => {
+    stubCuts();
+    const lands = DEATH.time.boss - DEATH.fade + 0.05;
+    const boss = died(1, 0, { kind: 'horror', won: lands });
+    expect(boss).toContain(ENEMY_ART.horror.walk[1]);
+    expect(boss).toContain(DEATH.art.dust);
+    expect(died(1, 0, { kind: 'horror', won: ANIM.fall.time })).not.toContain(
+      ENEMY_ART.horror.walk[1],
+    );
+  });
+
+  it('gives the thrown limb its own bloody end', () => {
+    stubCuts();
+    const drawn = died(idFor('limb'), 0.2);
+    expect(drawn.filter((x) => x === DEATH.art.stump)).toHaveLength(2);
+  });
+
+  it('draws the last kill on the very frame the fight ends, flash and all', () => {
+    stubCuts();
+    const drawn = died(idFor('back'), 0, { won: 0 });
+    expect(drawn).toContain(ENEMY_ART.shambler.walk[1]);
+    expect(drawn).toContain('white');
+  });
+
+  it("falls back to a plain fall where the browser can't cut the sprite", () => {
+    stubCanvas();
+    vi.stubGlobal('OffscreenCanvas', undefined);
+    const drawn = died(idFor('head'), ANIM.flinch.flash + 0.05);
+    expect(drawn).toContain(ENEMY_ART.shambler.walk[1]);
+    expect(drawn.filter((x) => x.startsWith('gore-'))).toEqual([]);
+  });
+
+  it('keeps a burning body burning through every death', () => {
+    stubCuts();
+    for (const d of ['back', 'face', 'limb', 'head'] as const) {
+      const anim = new Animator();
+      const base = blank();
+      const e = enemy(base as HordeState, { id: idFor(d), x: 900, y: 60, burnUntil: 9 });
+      const at = (time: number, enemies: Enemy[]) => ({ ...base, seed: SEED, time, enemies });
+      drawScene(recorder().ctx, recorder().art, at(2, [e]), CAM, VIEW, null, null, null, anim);
+      anim.observe(at(2.1, []));
+      const r = recorder();
+      const fills: unknown[] = [];
+      const ctx = r.ctx as unknown as { fill: () => void; fillStyle: unknown };
+      ctx.fill = () => fills.push(ctx.fillStyle);
+      drawScene(r.ctx, r.art, at(2.4, []), CAM, VIEW, null, null, null, anim);
+      expect(fills, d).toContain(BURN.layers[1][0]);
+    }
+  });
+
+  it('swaps the cut canvases for loaded images once they are ready', async () => {
+    stubCuts();
+    const Cuts = globalThis.OffscreenCanvas as unknown as new (w: number, h: number) => object;
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class extends Cuts {
+        convertToBlob = () => Promise.resolve(new Blob());
+      },
+    );
+    vi.stubGlobal(
+      'FileReader',
+      class {
+        result: string | null = null;
+        onload: (() => void) | null = null;
+        readAsDataURL() {
+          this.result = 'data:image/png;base64,AA==';
+          setTimeout(() => this.onload?.());
+        }
+      },
+    );
+    vi.stubGlobal(
+      'Image',
+      class {
+        id = 'loaded';
+        width = ART_PX;
+        height = ART_PX;
+        onload: (() => void) | null = null;
+        set src(_: string) {
+          setTimeout(() => this.onload?.());
+        }
+      },
+    );
+    const anim = new Animator();
+    const base = blank();
+    const e = enemy(base as HordeState, { id: idFor('limb'), x: 900, y: 60 });
+    const at = (time: number, enemies: Enemy[]) => ({ ...base, seed: SEED, time, enemies });
+    const art = recorder().art;
+    const draw = (time: number) => {
+      const r = recorder();
+      drawScene(r.ctx, art, at(time, []), CAM, VIEW, null, null, null, anim);
+      return r.drawn as string[];
+    };
+    drawScene(recorder().ctx, art, at(2, [e]), CAM, VIEW, null, null, null, anim);
+    anim.observe(at(2.1, []));
+    expect(draw(2.2)).toEqual(expect.arrayContaining(['cut-body', 'cut-piece']));
+    await new Promise((ok) => setTimeout(ok, 10));
+    const later = draw(2.25);
+    expect(later.filter((x) => x === 'loaded')).toHaveLength(2);
+    expect(later.filter((x) => x.startsWith('cut-'))).toEqual([]);
+  });
+
+  it('spins a thrown limb about its own middle, out from its side, to rest by the feet', () => {
+    const img = { width: 200, height: 192 } as unknown as HTMLImageElement;
+    const body = { ...STILL, alpha: 0.6, flash: 0.3 };
+    // Where the limb's middle is drawn: the pose's move plus its turn of the middle.
+    const middle = (cut: Cut, k: number, big: number, since: number) => {
+      const xs = cut.poly.map((p) => p[0]);
+      const ys = cut.poly.map((p) => p[1]);
+      const cx = ((Math.min(...xs) + Math.max(...xs)) / 2 - img.width / 2) * k;
+      const cy = ((Math.min(...ys) + Math.max(...ys)) / 2 - img.height) * k;
+      const p = limbPose(cut, img, k, big, since, body);
+      return {
+        x: p.dx + cx * Math.cos(p.rot) - cy * Math.sin(p.rot),
+        y: -p.lift + cx * Math.sin(p.rot) + cy * Math.cos(p.rot),
+        cx,
+        cy,
+        p,
+      };
+    };
+    for (const [cut, side] of [
+      [CUTS.shambler!.limb, -1],
+      [CUTS.runner!.limb, 1],
+    ] as const) {
+      for (const big of [1, 1.5]) {
+        const k = 0.2 * big;
+        const start = middle(cut, k, big, 0);
+        expect(start.x).toBeCloseTo(start.cx, 9);
+        expect(start.y).toBeCloseTo(start.cy, 9);
+        const landed = middle(cut, k, big, DEATH.limb.fly);
+        expect(landed.x).toBeCloseTo(start.cx + side * DEATH.limb.throw, 9);
+        // It lies on the ground, just over the feet.
+        expect(landed.y).toBeLessThan(0);
+        expect(landed.y).toBeGreaterThan(start.cy);
+        expect(landed.p).toMatchObject({ sx: big, sy: big, alpha: 0.6, flash: 0.3 });
+      }
+    }
+  });
+
+  it('is gone once its death is over', () => {
+    stubCuts();
+    const drawn = died(idFor('limb'), ANIM.fall.time);
+    expect(drawn.filter((x) => x.startsWith('cut-') || x.startsWith('shambler-'))).toEqual([]);
   });
 });

@@ -10,13 +10,13 @@ import {
   defenderPose,
   enemyFrame,
   enemyPose,
-  fallPose,
   phaseOf,
   STANDING,
   STILL,
   type Acts,
   type EnemyActs,
 } from './anim.ts';
+import { deathPose } from './death.ts';
 
 const NONE: Acts = { hurtAt: -Infinity, gait: STANDING, shotAt: -Infinity, struckAt: -Infinity };
 const IDLE: EnemyActs = { hurtAt: -Infinity, gait: STANDING };
@@ -293,18 +293,6 @@ describe('aiming (ID-069)', () => {
     const one = squad(0.5, inRange, 1, 6);
     const three = squad(0.5, inRange, 3, 2);
     for (const t of [0.5, 1, 2, 3, 3.5, 4, 5, 6]) expect(at(three, t), String(t)).toBe(at(one, t));
-  });
-});
-
-describe('fall', () => {
-  it('flashes from the killing blow, tips over, then fades out, gone by the end', () => {
-    expect(fallPose(0)).toMatchObject({ rot: 0, alpha: 1, flash: 1 });
-    expect(fallPose(ANIM.flinch.flash).flash).toBe(0);
-    const tipped = fallPose(ANIM.fall.time - ANIM.fall.fade);
-    expect(tipped.rot).toBeCloseTo(Math.PI / 2, 9);
-    expect(tipped.alpha).toBeCloseTo(1, 9);
-    expect(fallPose(ANIM.fall.time - ANIM.fall.fade / 2).alpha).toBeCloseTo(0.5, 9);
-    expect(fallPose(ANIM.fall.time).alpha).toBe(0);
   });
 });
 
@@ -589,6 +577,6 @@ describe('Reduce motion (ID-039)', () => {
     expect(a.shown(moving)).toBe(moving);
     a.reduced = true;
     expect(a.shown(moving)).toEqual({ ...STILL, alpha: 0.5, flash: 0.7 });
-    expect(a.shown(fallPose(0.2)).rot).toBe(0);
+    expect(a.shown(deathPose('back', 0.2)).rot).toBe(0);
   });
 });

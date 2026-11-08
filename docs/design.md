@@ -2655,8 +2655,21 @@ original outline.
   over 0.25 s as they hit a wall or defender, flinch 3 px back from a hit
   with a 0.1 s white flash (damage every step, such as a fire, twitches them
   every 0.2 s rather than holding them back), and on death flash from the
-  killing blow, tip over backward and fade over 0.7 s where they fell (not
-  after the fight's last kill, which ends it). Defenders breathe at their
+  killing blow and die where they fell in one of several ways (ID-110,
+  `src/ui/death.ts`), fading over their last 0.35 s, each 1 s at most: tip
+  over backward or pitch forward onto their front (0.7 s); lose an arm or leg,
+  which arcs out from that side and lands beside them while they stagger and
+  fall forward (0.9 s); or have their head burst in a spray of blood, standing
+  a moment before dropping back (0.85 s). The lost piece is cut from the
+  enemy's own sprite, a generated stump covers the wound and the spray is
+  generated art. The boss (the Horror) instead sinks to its knees, buckling
+  forward, and slams down on its front, raising dust where it lands (1 s);
+  elites die at their size, and a burning body keeps burning. Each kill's
+  death is picked from the fight's seed and the enemy, apart from the fight's
+  own random stream, so a replay shows the same deaths. With Reduce motion
+  every death is the plain one, faded in place (no limbs, spray or dust). The
+  fight's last kill ends it mid-death: a win's result waits until the last
+  body has died (at most 1 s, played on real time). Defenders breathe at their
   post, bob the same way walking between posts, kick back 3 px from each
   shot (starting with its muzzle flash), swing forward over a blade or tool
   strike's slash, and flinch when hit. Each sprite's cycle starts at its own

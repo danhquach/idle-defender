@@ -45,6 +45,7 @@ import {
   TRAP_ART,
   TURRET_ART,
 } from './sprites.ts';
+import { DEATH } from './death.ts';
 
 const root = new URL('../../', import.meta.url);
 type Overlay = { part: string; at: [number, number]; size: number; turn?: number };
@@ -145,6 +146,7 @@ describe('art coverage', () => {
       BOMB_ART,
       ...Object.values(FIREBALL.art),
       ...Object.values(SPIT.art),
+      ...Object.values(DEATH.art),
       ...Object.values(SHOP_ICON),
       ...Object.values(SKILL_ICON),
       ...Object.values(CARD_ICON),

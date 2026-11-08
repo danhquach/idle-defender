@@ -1,7 +1,8 @@
 // Sprite animation (design §15, ID-049, ID-069): which frame a sprite shows (an enemy's
 // walk cycle and strike, a survivor's idle or aimed gun) and the motion drawn on top of it
-// (bob, lunge, recoil, swing, flinch, flash, fall). Cosmetic only: it reads the fight and
-// never changes it. Every clock is fight time, so a pause freezes it and game speed carries it.
+// (bob, lunge, recoil, swing, flinch, flash; how the dead die is death.ts). Cosmetic only:
+// it reads the fight and never changes it. Every clock is fight time, so a pause freezes it
+// and game speed carries it.
 import { ENEMIES, STRIKE_FLASH } from '../core/data.ts';
 import { burning, type Defender, type Enemy, type Shot, type Strike } from '../core/horde.ts';
 
@@ -63,8 +64,11 @@ export const ANIM = {
   cycles: 1,
   /** A blade or tool strike's swing, forward (right), over `STRIKE_FLASH`. */
   swing: { px: 2, lean: 0.35 },
-  /** A dead enemy flashes from the killing blow, tips over backward, then fades over the last `fade` s. */
-  fall: { time: 0.7, fade: 0.35 },
+  /**
+   * A dead enemy is kept `time` s, the longest of its deaths (death.ts, ID-110): it flashes
+   * from the killing blow, falls one of several ways, then fades.
+   */
+  fall: { time: 1 },
 } as const;
 
 /** Where in its cycle a sprite starts, 0…1, so a crowd never moves in lockstep. */
@@ -173,20 +177,6 @@ export function enemyPose(
   return pose;
 }
 
-/**
- * An enemy `since` s dead: white from the killing blow (it leaves the fight in the step
- * it took it, so it never flinched), tipping over backward, then fading.
- */
-export function fallPose(since: number): Pose {
-  const a = Math.min(1, Math.max(0, since / (ANIM.fall.time - ANIM.fall.fade)));
-  return {
-    ...STILL,
-    rot: (Math.PI / 2) * a * a,
-    alpha: Math.min(1, Math.max(0, (ANIM.fall.time - since) / ANIM.fall.fade)),
-    flash: decay(since, 0, ANIM.flinch.flash),
-  };
-}
-
 /** What a defender is doing besides walking, as fight times (−∞ for never). */
 export interface Acts extends EnemyActs {
   shotAt: number;
@@ -231,7 +221,7 @@ export function defenderPose(d: Pick<Defender, 'id'> & GunClock, time: number, a
   return pose;
 }
 
-/** An enemy gone from the fight, still falling; `litAt` when it caught fire (−∞: never). */
+/** An enemy gone from the fight, still dying (death.ts); `litAt` when it caught fire (−∞: never). */
 export interface Corpse {
   enemy: Enemy;
   at: number;
