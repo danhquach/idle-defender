@@ -956,7 +956,7 @@ export const cardLevel = (
 ): number => (took(state, id) ? (state.cardLevels?.[id] ?? CARD_MAX_LEVEL) : 0);
 
 /** A per-level number of `levels` at card `id`'s level (held, so at least 1). */
-const atLevel = (
+export const atLevel = (
   state: Parameters<typeof cardLevel>[0],
   id: UpgradeId,
   levels: readonly number[],
