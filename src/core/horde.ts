@@ -860,7 +860,16 @@ export function layoutOf(base: Base): {
 /** Advances the fight by `dt` seconds in fixed steps; returns a new state. */
 export function tick(state: HordeState, dt: number): HordeState {
   if (!Number.isFinite(dt) || dt < 0) throw new RangeError(`tick: bad dt ${dt}`);
-  const s = structuredClone(state);
+  return tickInPlace(structuredClone(state), dt);
+}
+
+/**
+ * `tick` without the copy (ID-105): advances `s` itself and returns it. Only for a state
+ * nothing else holds, such as one `tick` just returned; the scripted player's fights look
+ * at the state every second, and copying it each time was a fifth of their cost.
+ */
+export function tickInPlace(s: HordeState, dt: number): HordeState {
+  if (!Number.isFinite(dt) || dt < 0) throw new RangeError(`tick: bad dt ${dt}`);
   if (paused(s)) {
     s.acc = 0;
     return s;
@@ -2395,13 +2404,26 @@ function breach(s: HordeState, e: Enemy, fromX: number, over = false): void {
  * the camp and one still outside never push each other: a wall stands between them,
  * so one pressed against it can't hold a hunter off for good.
  */
-function separate(s: HordeState): void {
-  const push = new Map<number, number>();
+export function separate(s: Pick<HordeState, 'enemies'>): void {
   const cap = SEPARATION_SPEED * STEP;
   const es = s.enemies;
+  const n = es.length;
   const radius = es.map(radiusOf);
-  for (let i = 0; i < es.length; i++) {
-    for (let j = i + 1; j < es.length; j++) {
+  const widest = radius.reduce((a, r) => Math.max(a, r), 0);
+  // Sweep along x (ID-105): only bodies within `radius + widest` in x can overlap, so a
+  // swarm costs about n log n, not every pair. Pairs that overlap are then applied in
+  // index order (i, then j), as the all-pairs loop did, so each body's pushes add up in
+  // the same order and every fight plays the same.
+  const byX = es.map((_, i) => i).sort((p, q) => es[p]!.x - es[q]!.x);
+  const pairs: { i: number; j: number; d: number }[] = [];
+  for (let p = 0; p < n; p++) {
+    const k = byX[p]!;
+    const far = radius[k]! + widest;
+    for (let q = p + 1; q < n; q++) {
+      const m = byX[q]!;
+      if (es[m]!.x - es[k]!.x >= far) break;
+      const i = Math.min(k, m);
+      const j = Math.max(k, m);
       const a = es[i]!;
       const b = es[j]!;
       if (a.inCamp !== b.inCamp) continue;
@@ -2414,15 +2436,21 @@ function separate(s: HordeState): void {
       if (overlap <= 0) continue;
       const aUp = a.y < b.y || (a.y === b.y && a.id < b.id);
       const d = Math.min(overlap / 2, cap);
-      push.set(a.id, (push.get(a.id) ?? 0) + (aUp ? -d : d));
-      push.set(b.id, (push.get(b.id) ?? 0) + (aUp ? d : -d));
+      pairs.push({ i, j, d: aUp ? -d : d });
     }
   }
+  pairs.sort((u, v) => u.i - v.i || u.j - v.j);
+  const push = new Float64Array(n);
+  const pushed = new Uint8Array(n);
+  for (const { i, j, d } of pairs) {
+    push[i] = push[i]! + d;
+    push[j] = push[j]! - d;
+    pushed[i] = pushed[j] = 1;
+  }
   es.forEach((e, i) => {
-    const d = push.get(e.id);
-    if (d === undefined) return;
+    if (!pushed[i]) return;
     const r = radius[i]!;
-    e.y = Math.min(FIELD.height - r, Math.max(r, e.y + d));
+    e.y = Math.min(FIELD.height - r, Math.max(r, e.y + push[i]!));
   });
 }
 

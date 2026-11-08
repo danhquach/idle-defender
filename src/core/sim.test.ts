@@ -11,6 +11,7 @@ import {
   opening,
   playCampaign,
   playHorde,
+  playSquadHorde,
   repairWhatYouCan,
   spendAll,
   summarise,
@@ -270,6 +271,18 @@ describe('gearUp (ID-096)', () => {
     expect(g.roster.every((d) => d.loadout.primary === 'pistol')).toBe(true); // input untouched
     // Nothing better in the stash: no change.
     expect(gearUp(after)).toEqual(after);
+  });
+});
+
+describe('playSquadHorde (ID-105)', () => {
+  // The starting game picks two skills, so the scripted player looks every second to use them.
+  it('watching only looks: the fight is the same as one not watched', () => {
+    const game = newGame('horde');
+    expect(game.skillPick.length).toBeGreaterThan(0);
+    const seen = { nearest: Infinity };
+    const watched = playSquadHorde(game, 1000, undefined, seen);
+    expect(watched).toEqual(playSquadHorde(game, 1000));
+    expect(seen.nearest).toBeLessThan(Infinity);
   });
 });
 

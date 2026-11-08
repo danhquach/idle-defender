@@ -7,6 +7,7 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   START_BASE,
+  SEPARATION_SPEED,
   STEP,
   WALK_SPEED,
   WEAPONS,
@@ -21,11 +22,15 @@ import {
   enemyAt,
   moveDefender,
   newHorde,
+  radiusOf,
+  separate,
   setFocus,
   standing,
   tick,
+  tickInPlace,
   type HordeState,
 } from './horde.ts';
+import { createRng } from './rng.ts';
 import { enemy, landed, setup } from './testing.ts';
 import { loadoutFrom } from './loadout.ts';
 
@@ -123,6 +128,14 @@ describe('tick', () => {
     const before = structuredClone(s);
     tick(s, 1);
     expect(s).toEqual(before);
+  });
+
+  it('tickInPlace (ID-105): advances the state itself, to what tick returns', () => {
+    const s = tick(newHorde(1, setup()), 4);
+    const copied = tick(s, 6);
+    expect(tickInPlace(s, 6)).toBe(s);
+    expect(s).toEqual(copied);
+    expect(() => tickInPlace(s, NaN)).toThrow(RangeError);
   });
 
   it('same result for one big tick and many small ticks', () => {
@@ -323,6 +336,57 @@ describe('tick', () => {
       return tick(s, STEP).enemies.sort((a, b) => a.id - b.id);
     };
     expect(make(true)).toEqual(make(false));
+  });
+
+  // ID-105: the sweep must push every body to the same place as the all-pairs loop it replaced.
+  it('separate pushes every crowd exactly as checking every pair does', () => {
+    function allPairs(es: HordeState['enemies']): void {
+      const push = new Map<number, number>();
+      const cap = SEPARATION_SPEED * STEP;
+      const radius = es.map(radiusOf);
+      for (let i = 0; i < es.length; i++) {
+        for (let j = i + 1; j < es.length; j++) {
+          const a = es[i]!;
+          const b = es[j]!;
+          if (a.inCamp !== b.inCamp) continue;
+          const reach = radius[i]! + radius[j]!;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          if (dx >= reach || -dx >= reach || dy >= reach || -dy >= reach) continue;
+          const overlap = reach - Math.hypot(dx, dy);
+          if (overlap <= 0) continue;
+          const aUp = a.y < b.y || (a.y === b.y && a.id < b.id);
+          const d = Math.min(overlap / 2, cap);
+          push.set(a.id, (push.get(a.id) ?? 0) + (aUp ? -d : d));
+          push.set(b.id, (push.get(b.id) ?? 0) + (aUp ? d : -d));
+        }
+      }
+      es.forEach((e, i) => {
+        const d = push.get(e.id);
+        if (d !== undefined)
+          e.y = Math.min(FIELD.height - radius[i]!, Math.max(radius[i]!, e.y + d));
+      });
+    }
+    const kinds = ['shambler', 'runner', 'brute', 'horror'] as const;
+    for (let seed = 1; seed <= 30; seed++) {
+      const rng = createRng(seed);
+      const s = newHorde(1, setup());
+      // Half on a 4 px grid (equal x, equal y, exact touches), half anywhere (sums that round).
+      for (let k = 0; k < 160; k++) {
+        const grid = k % 2 === 0;
+        enemy(s, {
+          kind: kinds[Math.floor(rng() * kinds.length)]!,
+          elite: rng() < 0.1 ? true : undefined,
+          inCamp: rng() < 0.2,
+          x: grid ? 400 + 4 * Math.floor(rng() * 10) : 400 + rng() * 40,
+          y: grid ? 4 * Math.floor(rng() * (FIELD.height / 4)) : rng() * FIELD.height,
+        });
+      }
+      const ref = structuredClone(s.enemies);
+      allPairs(ref);
+      separate(s);
+      expect(s.enemies, `seed ${seed}`).toEqual(ref);
+    }
   });
 
   it('a segment repaired behind an enemy never pulls it back', () => {

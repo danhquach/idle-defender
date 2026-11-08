@@ -14,10 +14,30 @@ concurrency:
 
 jobs:
   build:
-    name: Lint, unit, build
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     # A normal run takes a few minutes; a hung simulation must not hold the runner for hours.
     timeout-minutes: 15
+    # The unit tests run in three jobs at once (ID-105): a test file runs on one worker, so
+    # the slowest balance files set the time; each of the two slowest gets a job of its own.
+    # The last job runs every other file, so a new test file always runs somewhere; a file
+    # named here that no longer exists fails its job ("No test files found").
+    strategy:
+      # Every job runs to the end, so one failure never hides another.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Unit (late hordes, guns)
+            tests: src/core/balance/late-hordes.test.ts src/core/balance/guns.test.ts
+          - name: Unit (horde-only, Squad Power)
+            tests: src/core/balance/horde-only.test.ts src/core/balance/squad-power.test.ts
+          - name: Lint, build, other unit
+            checks: true
+            tests: >-
+              --exclude src/core/balance/late-hordes.test.ts
+              --exclude src/core/balance/guns.test.ts
+              --exclude src/core/balance/horde-only.test.ts
+              --exclude src/core/balance/squad-power.test.ts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -45,6 +65,7 @@ jobs:
         # Each PR to main raises the game's version. Dependabot's PRs never bump it
         # and are let through.
         if: >-
+          matrix.checks &&
           github.event_name == 'pull_request' &&
           github.event.pull_request.user.login != 'dependabot[bot]'
         env:
@@ -52,9 +73,15 @@ jobs:
         run: |
           git fetch --depth=1 --no-tags origin "$BASE_REF"
           node tools/version-check.mjs bump FETCH_HEAD
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+      - if: matrix.checks
+        run: npm run lint
+      - name: Unit tests
+        env:
+          TESTS: ${{ matrix.tests }}
+        # $TESTS unquoted: one argument per file or flag.
+        run: npx vitest run $TESTS
+      - if: matrix.checks
+        run: npm run build
 
   check:
     # The required status check on main: green only when every job above is.
