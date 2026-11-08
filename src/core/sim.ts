@@ -21,11 +21,21 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import { gunPower, type OwnedWeapon } from './armoury.ts';
-import { equipGun, finishSquadHorde, squadOf, startSquadHorde } from './hordeonly.ts';
+import {
+  equipGun,
+  finishSquadHorde,
+  highestBeaten,
+  squadDrop,
+  squadOf,
+  startSquadHorde,
+  type SquadDrop,
+} from './hordeonly.ts';
+import { skillLock, useSkill } from './skills.ts';
+import { squadPower } from './squadpower.ts';
 import { isGun, professionOf } from './loadout.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { levelOf, unspentPoints } from './stats.ts';
-import { WALL, type Profession, type Stat } from './data.ts';
+import { FARM, FIELD, WALL, type Profession, type Stat } from './data.ts';
 
 /** The stat the scripted player puts a profession's points in. */
 const SPEND_STAT: Readonly<Record<Profession, Stat>> = {
@@ -59,6 +69,10 @@ export interface SquadRun extends HordeRun {
   /** Survivors in the fight, and their mean level going in. */
   squad: number;
   level: number;
+  /** Whether it was a replay of a beaten horde, farmed (ID-102). */
+  replay: boolean;
+  /** The squad's Squad Power going in (ID-102). */
+  power: number;
   /** How close enemies came to the wall, px (`nearestEnemy`); only when watched. */
   nearest?: number;
 }
@@ -266,52 +280,124 @@ export function nearestEnemy(s: Pick<HordeState, 'layers' | 'enemies'>): number 
 const WATCH_EVERY = 0.5;
 
 /**
- * Plays `game`'s next horde-only horde (ID-066) to the end with the scripted player. With
- * `watch`, also how close the enemies came to the wall (`nearestEnemy`, looked at every
- * `WATCH_EVERY` s).
+ * The horde-only scripted player's skills (ID-102): it looks every `look` fight s and uses
+ * each picked skill that is ready once `crowd` enemies stand on the field, aimed at the one
+ * nearest the wall.
+ */
+const SQUAD_SKILL_USE = { look: 1, crowd: 6 } as const;
+
+/** The scripted player's skills (`SQUAD_SKILL_USE`): `s` with every ready skill used, or as it was. */
+export function useSkills(s: HordeState): HordeState {
+  const live = s.enemies.filter((e) => e.hp > 0 && !e.inCamp);
+  if (live.length < SQUAD_SKILL_USE.crowd) return s;
+  const near = live.reduce((a, e) => (e.x < a.x ? e : a));
+  const x = Math.min(FIELD.right, Math.max(0, near.x));
+  const y = Math.min(FIELD.height, Math.max(0, near.y));
+  let out = s;
+  for (const id of s.skills) {
+    if (skillLock(out, id) !== null) continue;
+    const r = useSkill(out, id, x, y);
+    if (r.ok) out = r.state;
+  }
+  return out;
+}
+
+/**
+ * Plays horde-only Horde `hordeNumber` (the next new one by default, or a beaten one to
+ * farm, ID-098) to the end with the scripted player (ID-066): it takes cards by
+ * `squadPick` and uses its picked skills (`useSkills`, ID-102). With `watch`, also how
+ * close the enemies came to the wall (`nearestEnemy`, looked at every `WATCH_EVERY` s).
  */
 export function playSquadHorde(
   game: GameState,
   seed: number,
   maxFight = MAX_FIGHT,
   watch?: { nearest: number },
+  hordeNumber = game.hordeNumber,
 ): HordeState {
-  let s = startSquadHorde(game, seed, 0);
+  let s = startSquadHorde(game, seed, 0, hordeNumber);
+  const step = Math.min(watch ? WATCH_EVERY : 60, s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60);
   while (s.outcome === 'fighting') {
     if (s.time > maxFight)
       throw new RangeError(`playSquadHorde: horde ${s.hordeNumber} never ended`);
-    s = s.offer ? chooseCard(s, squadPick(s)) : tick(s, watch ? WATCH_EVERY : 60);
+    s = s.offer ? chooseCard(s, squadPick(s)) : tick(useSkills(s), step);
     if (watch) watch.nearest = Math.min(watch.nearest, nearestEnemy(s));
   }
   return s;
 }
 
 /**
- * A horde-only campaign (ID-066) from a new game until Horde `hordes` is won, as the
- * player plays it: a loss replays the same horde, a win adds XP (spent by `spendAll`), a
- * survivor and a gun (equipped by `gearUp`). Stops after `maxTries` fights in all. Fight
- * `i` (from 0) uses seed `seed + i`. Returns every fight, in order, the squad size it was
- * fought with, the squad's mean level, and with `watch` how close enemies came to the wall.
+ * How the horde-only scripted player farms (ID-102): after each loss at a new horde, it
+ * replays the highest horde beaten `replays` times, then tries the new one again.
  */
-export function playSquadCampaign(
-  seed: number,
-  hordes: number,
-  maxTries = hordes * 3,
-  watch = false,
-): SquadRun[] {
+export const SQUAD_FARM = { replays: 3 } as const;
+
+/** How a scripted horde-only campaign is played (`playSquadCampaign`). */
+export interface SquadPlay {
+  /** Most fights in all, replays included. */
+  maxFights?: number;
+  /** Watch how close enemies come to the wall (`SquadRun.nearest`). */
+  watch?: boolean;
+  /**
+   * The worst luck (ID-102): every replay drop but a guaranteed upgrade is thrown away and
+   * counts toward the bad-luck guarantee, as if it were no upgrade for anyone.
+   */
+  worstLuck?: boolean;
+}
+
+/**
+ * A replay's result at the worst luck (`SquadPlay.worstLuck`): `next` (the game after
+ * `finishSquadHorde`) without `drop` unless it was a guaranteed upgrade, the gun it pushed
+ * out kept, and the bad-luck count up by 1 as for a drop that is no upgrade.
+ */
+function unlucky(game: GameState, next: GameState, drop: SquadDrop): GameState {
+  if (drop.kind === 'guaranteed') return next;
+  const thrown = drop.thrown && drop.thrown.uid !== drop.weapon.uid ? [drop.thrown] : [];
+  return {
+    ...next,
+    armoury: [...next.armoury.filter((w) => w.uid !== drop.weapon.uid), ...thrown],
+    farm: {
+      ...next.farm,
+      badLuck: drop.noUpgrades
+        ? game.farm.badLuck
+        : Math.min(FARM.guarantee, game.farm.badLuck + 1),
+    },
+  };
+}
+
+/**
+ * A horde-only campaign (ID-066, ID-102) from a new game until Horde `hordes` is won, as
+ * the player plays it: a win adds XP (spent by `spendAll`), a survivor and a gun (equipped
+ * by `gearUp`); a loss pays its little XP, then the player farms (`SQUAD_FARM`) and tries
+ * again. Stops after `maxFights` fights in all (`hordes × 10` by default). Fight `i` (from
+ * 0) uses seed `seed + i`. Returns every fight, in order: the horde, whether it was a
+ * replay, the squad size it was fought with, the squad's mean level and Squad Power, and
+ * with `watch` how close enemies came to the wall.
+ */
+export function playSquadCampaign(seed: number, hordes: number, play: SquadPlay = {}): SquadRun[] {
+  const maxFights = play.maxFights ?? hordes * 10;
   let game = newGame('horde');
   const runs: SquadRun[] = [];
-  for (let i = 0; i < maxTries && game.hordeNumber <= hordes; i++) {
-    const seen = watch ? { nearest: Infinity } : undefined;
-    const horde = playSquadHorde(game, seed + i, MAX_FIGHT, seen);
+  let farm = 0;
+  for (let i = 0; i < maxFights && game.hordeNumber <= hordes; i++) {
+    const n = farm > 0 ? highestBeaten(game) : game.hordeNumber;
+    const seen = play.watch ? { nearest: Infinity } : undefined;
+    const horde = playSquadHorde(game, seed + i, MAX_FIGHT, seen, n);
     const squad = squadOf(game);
     runs.push({
       ...summarise(horde, seed + i),
+      replay: farm > 0,
       squad: squad.length,
-      level: squad.reduce((n, d) => n + levelOf(d.xp).level, 0) / squad.length,
+      level: squad.reduce((t, d) => t + levelOf(d.xp).level, 0) / squad.length,
+      power: squadPower(game),
       ...(seen ? { nearest: seen.nearest } : {}),
     });
-    game = gearUp(spendAll(finishSquadHorde(game, horde)));
+    const drop = farm > 0 && play.worstLuck ? squadDrop(game, horde) : null;
+    let next = finishSquadHorde(game, horde);
+    if (drop) next = unlucky(game, next, drop);
+    game = gearUp(spendAll(next));
+    if (farm > 0) farm--;
+    else if (horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
   }
   return runs;
 }

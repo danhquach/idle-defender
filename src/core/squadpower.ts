@@ -2,7 +2,7 @@
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
 import { gunCrit, gunCritDamage, statsOf } from './armoury.ts';
-import { DEFENDER_HP, POWER, SWARM, type EnemyKind } from './data.ts';
+import { DEFENDER_HP, POWER, SPAWN_INTERVAL, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
 import type { GameState, RosterDefender } from './game.ts';
 import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
 import { critChance, critDamage, maxHpOf, reloadTime, statBonus } from './stats.ts';
@@ -46,18 +46,35 @@ export function hordeHp(n: number): number {
       (sum, [kind, share]: [EnemyKind, number]) => sum + share * enemyHp(kind, n, w, scale),
       0,
     );
-    total += waveSize(n, w) * (swarm ? SWARM.size * POWER.rec.swarm : 1) * mean;
+    total += waveSize(n, w, true) * (swarm ? SWARM.size * POWER.rec.swarm : 1) * mean;
   }
   for (const b of hordeBosses(n, true)) total += b.hp * enemyHp(b.kind, n, b.wave, scale);
   return total;
 }
 
 /**
- * Recommended Power for horde-only Horde `n` (ID-098): `POWER.rec` fitted so a squad at
- * it wins about half the time with no cards or skills (the balance test shows it).
+ * How long horde-only Horde `n`'s waves take to spawn, in fight seconds (ID-102): each
+ * wave's enemies `SPAWN_INTERVAL` apart (a swarm wave's twice as many in the same time),
+ * and the break after it.
  */
-export const recommendedPower = (n: number): number =>
-  Math.round((POWER.rec.early[n - 1] ?? 1) * POWER.rec.k * hordeHp(n) ** POWER.rec.e);
+export function hordeSeconds(n: number): number {
+  let total = 0;
+  for (let w = 1; w <= waveCount(n); w++)
+    total += waveSize(n, w, true) * SPAWN_INTERVAL + WAVE_BREAK;
+  return total;
+}
+
+/**
+ * Recommended Power for horde-only Horde `n` (ID-098, ID-102): the dmg/s it asks for, its
+ * `hordeHp` over `hordeSeconds`, × `POWER.rec` (more for a boss horde), fitted so a squad at it wins about half
+ * the time with no cards or skills (the balance test shows it).
+ */
+export function recommendedPower(n: number): number {
+  const boss = hordeBosses(n, true).some((b) => !b.elite) ? POWER.rec.boss : 1;
+  return Math.round(
+    (POWER.rec.early[n - 1] ?? 1) * boss * POWER.rec.k * (hordeHp(n) / hordeSeconds(n)),
+  );
+}
 
 /** How Squad Power stands against a horde's Recommended Power (ID-098). */
 export type PowerBand = 'ok' | 'close' | 'short';

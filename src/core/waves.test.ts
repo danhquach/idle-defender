@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { WAVE_GROWTH } from './data.ts';
 import { enemyHp, waveCount, waveSize, xpToNext } from './waves.ts';
 
 describe('wave plan', () => {
@@ -12,6 +13,10 @@ describe('wave plan', () => {
     expect(waveSize(1, 1)).toBe(8);
     expect(waveSize(1, 5)).toBe(24);
     expect(waveSize(2, 1)).toBe(9);
+    // Horde-only (`harder`) waves stop growing at WAVE_GROWTH.until (ID-102); the full game's don't.
+    expect(waveSize(WAVE_GROWTH.until + 5, 3, true)).toBe(waveSize(WAVE_GROWTH.until, 3, true));
+    expect(waveSize(WAVE_GROWTH.until, 3, true)).toBe(waveSize(WAVE_GROWTH.until, 3));
+    expect(waveSize(WAVE_GROWTH.until + 5, 3)).toBeGreaterThan(waveSize(WAVE_GROWTH.until, 3));
   });
 
   it('enemyHp scales ×1.10 per wave and ×1.17 per horde (ID-020), Hordes 2–3 eased (ID-097)', () => {

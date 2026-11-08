@@ -44,15 +44,18 @@ export const SQUAD_WALL: Tier = 'concrete';
 /**
  * Enemy HP's growth per horde in the horde-only build: `early` up to the squad's cap (each
  * win adds a survivor), then `late`: steep enough that every new horde asks for more Squad
- * Power than the last (ID-099; 1.03 before). `late` is the one knob the balance pass
- * (ID-102) tunes.
+ * Power than the last (ID-099; 1.03 before). The balance pass (ID-102) kept `late` at 1.06
+ * and matched the gun level's step to it (`GUN_LEVEL_DAMAGE`), so farming can always
+ * close the gap.
  */
 export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.06 } as const;
 /**
- * Enemy HP's factor in horde-only Hordes 1, 2 and 3 on top of the growth (ID-097): the
- * first hordes are sure wins while the player learns the cards; 1 from Horde 4 on.
+ * Enemy HP's factor in horde-only Hordes 1 to 10 on top of the growth (ID-097, ID-102): the
+ * first three are sure wins while the player learns the cards; Hordes 8 and 9 soften the
+ * step where Brutes join the mix, and Horde 10 the first boss, so the expected squad wins
+ * them at the first try on most seeds. 1 from Horde 11 on.
  */
-export const SQUAD_EARLY_HP: readonly number[] = [0.8, 0.9, 0.95];
+export const SQUAD_EARLY_HP: readonly number[] = [0.8, 0.9, 0.95, 1, 1, 1, 1, 0.85, 0.75, 0.75];
 /** Survivor XP for a horde-only win, as a multiple of the full game's (`DEFENDER_XP`). */
 export const SQUAD_XP_RATE = 2;
 /** The horde whose win shows the soft ending screen (design §11); play goes on after it. */
@@ -71,22 +74,28 @@ export const SQUAD_DROP: readonly { from: number; rarity: Record<Rarity, number>
   { from: 7, rarity: { rusty: 10, common: 35, military: 35, prototype: 15, relic: 5 } },
   { from: 10, rarity: { rusty: 0, common: 25, military: 40, prototype: 25, relic: 10 } },
 ];
-/** A gun's level (ID-098): each level above 1 adds this share of its base damage. */
-export const GUN_LEVEL_DAMAGE = 0.05;
+/**
+ * A gun's level (ID-098): each level above 1 multiplies its base damage by 1 + this
+ * (ID-102: compounding, matched to `SQUAD_HP_GROWTH.late`; 5% added a level before).
+ */
+export const GUN_LEVEL_DAMAGE = 0.06;
 /**
  * Squad Power and Recommended Power (ID-098). A survivor's power is their gun's sustained
  * dmg/s × (1 + `aim` × Sharp Mind's spread cut) × (1 + `tough` × Instinct's extra HP
- * share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP ^ `rec.e`,
+ * share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP for each
+ * second its waves take to spawn (ID-102: the dmg/s it asks for; HP ^ 0.59 × 3.19 before),
  * fitted so a squad at it wins about half the time with no cards or skills; × `rec.early`
- * in Hordes 1 and 2, sure wins for a squad of one or two (`SQUAD_EARLY_HP`). A swarm
- * wave's HP (already `SWARM.size` times a calm wave's) is weighted `rec.swarm` more
- * (ID-099): it comes twice as fast, so it asks for more dmg/s than its HP alone says. Amber is within `close` below it.
+ * in Hordes 1 to 8 (sure wins for a squad of one or two in Hordes 1 and 2; a smaller
+ * squad's fit after). A swarm wave's HP (already `SWARM.size` times a calm wave's) is
+ * weighted `rec.swarm` more (ID-099): it comes twice as fast, so it asks for more dmg/s
+ * than its HP alone says. A boss horde's is × `rec.boss` (ID-102): its bosses' skills
+ * ask for more than their HP says. Amber is within `close` below it.
  */
 export const POWER = {
   aim: 0.5,
   tough: 0.5,
   scale: 10,
-  rec: { k: 3.19, e: 0.59, early: [0.25, 0.5], swarm: 2 },
+  rec: { k: 10.3, early: [0.3, 0.6, 1, 1, 1, 1, 0.8, 0.8], swarm: 2, boss: 1.12 },
   close: 0.15,
 } as const;
 /**
@@ -384,7 +393,7 @@ export const GUN_ROLES = {
 } as const satisfies Record<GunBase, { role: string; trait: string }>;
 
 /**
- * The built-in traits' numbers (ID-101; starting points for the balance pass, ID-102).
+ * The built-in traits' numbers (ID-101; kept by the balance pass, ID-102).
  * SMG: `close.bonus` more damage to an enemy within `close.range` px of the wall's front.
  * Rifle: `crit` more crit chance. Shotgun: a hit stops the enemy for `stagger.seconds`,
  * never again until `stagger.gap` s after the last one began. LMG: a hit slows it by
@@ -523,7 +532,7 @@ export type BossSkill = HorrorAbility | 'roar' | 'slab' | 'plates';
 /** The skills that go off on a clock (each winds up first); Regen and Armour plates don't. */
 export const TIMED_SKILLS: readonly BossSkill[] = ['brood', 'charge', 'roar', 'slab'];
 /**
- * The new boss skills (ID-099; starting points for the balance pass, ID-102). Each timed
+ * The new boss skills (ID-099; kept by the balance pass, ID-102). Each timed
  * skill winds up for `windUp` s before it goes off (a glow, a pose and a sound), so it can
  * be read and answered. Roar: every `roar.every` s, the other enemies within `roar.radius`
  * px move `roar.speed` faster for `roar.time` s. Slab throw: every `slab.every` s, from at
@@ -605,6 +614,11 @@ export const ELITE: {
  */
 export const SWARM = { from: 5, share: 0.25, growth: 0.01, cap: 0.5, size: 2, runners: 2 } as const;
 
+/**
+ * Enemies in a wave grow ×`rate` a horde up to Horde `until`, then hold (ID-102; no cap
+ * before): past it, HP growth makes a horde harder, so a fight's length stops growing.
+ */
+export const WAVE_GROWTH = { rate: 1.1, until: 10 } as const;
 export const SPAWN_INTERVAL = 0.8;
 export const WAVE_BREAK = 3;
 /** How long a blade or tool strike stays on screen, in seconds. */

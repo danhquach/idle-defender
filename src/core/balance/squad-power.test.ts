@@ -1,5 +1,6 @@
-// Balance: Recommended Power (ID-098). A squad at a horde's Recommended Power, with no
-// cards or skills, wins about half its fights there (see shared.ts for the seeds).
+// Balance: Recommended Power (ID-098, ID-102). A squad at a horde's Recommended Power, with
+// no cards or skills, wins about half its fights there, and most of them with the cards
+// and skills the scripted player picks (see shared.ts for the seeds).
 import { describe, expect, it } from 'vitest';
 import { rollWeapon } from '../armoury.ts';
 import { recruit } from '../camp.ts';
@@ -8,7 +9,7 @@ import { newGame, type GameState } from '../game.ts';
 import { startSquadHorde } from '../hordeonly.ts';
 import { tick } from '../horde.ts';
 import { createRng } from '../rng.ts';
-import { spendAll } from '../sim.ts';
+import { playSquadHorde, spendAll } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { xpForLevel } from '../stats.ts';
 
@@ -69,6 +70,22 @@ describe('Recommended Power (ID-098)', () => {
     const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
     expect(mean, rates.join(' ')).toBeGreaterThanOrEqual(0.3);
     expect(mean, rates.join(' ')).toBeLessThanOrEqual(0.7);
+  }, 600_000);
+
+  it('the same squad, with cards and skills, wins most of the time (ID-102)', () => {
+    const rates = HORDES.map((n) => {
+      const g = squadAtRecommended(n);
+      let won = 0;
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        if (playSquadHorde(g, seed * 101, undefined, undefined, n).outcome === 'won') won++;
+      }
+      return won / SEEDS;
+    });
+    for (const [i, rate] of rates.entries()) {
+      expect(rate, `Horde ${HORDES[i]}`).toBeGreaterThanOrEqual(0.5);
+    }
+    const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
+    expect(mean, rates.join(' ')).toBeGreaterThanOrEqual(0.7);
   }, 600_000);
 
   it('a squad well under Recommended Power loses, and one well over wins', () => {

@@ -52,20 +52,23 @@ function atWave(n: number, wave: number, seed = 1): HordeState {
   Object.assign(s.defenders[0]!, { hp: 1e9, maxHp: 1e9 });
   s.wave = wave;
   s.swarm = swarmWave(n, wave);
-  s.toSpawn = waveSize(n, wave) * (s.swarm ? SWARM.size : 1);
+  s.toSpawn = waveSize(n, wave, true) * (s.swarm ? SWARM.size : 1);
   return s;
 }
 
 describe('late HP growth (ID-099)', () => {
   it('is one knob, steeper than the old ×1.03, past the squad cap', () => {
     expect(SQUAD_HP_GROWTH.late).toBeGreaterThan(1.03);
-    expect(squadHpScale(8) / squadHpScale(7)).toBeCloseTo(SQUAD_HP_GROWTH.late, 9);
+    // From Horde 11 (Hordes 8–10 are eased, ID-102).
+    expect(squadHpScale(12) / squadHpScale(11)).toBeCloseTo(SQUAD_HP_GROWTH.late, 9);
     expect(squadHpScale(30) / squadHpScale(29)).toBeCloseTo(SQUAD_HP_GROWTH.late, 9);
   });
 
-  it('makes Recommended Power rise every horde, Horde 1 to 60', () => {
+  it('makes Recommended Power rise every horde, Horde 1 to 60, a boss horde a spike (ID-102)', () => {
     for (let n = 2; n <= 60; n++) {
-      expect(recommendedPower(n), `Horde ${n}`).toBeGreaterThan(recommendedPower(n - 1));
+      // Past a boss horde, the next may ask for less than it, but more than the one before.
+      const before = (n - 1) % HORROR.every === 0 ? n - 2 : n - 1;
+      expect(recommendedPower(n), `Horde ${n}`).toBeGreaterThan(recommendedPower(before));
     }
   });
 });
@@ -76,15 +79,19 @@ describe('swarm waves (ID-099)', () => {
 
   it('none before Horde 5, then one wave in four, more in later hordes, at most half', () => {
     for (let n = 1; n < SWARM.from; n++) expect(swarms(n), `Horde ${n}`).toEqual([]);
-    expect(swarms(5)).toEqual([4]);
-    expect(swarms(9)).toEqual([4, 7]);
-    expect(swarms(10)).toEqual([4, 7]);
+    // Spread back from the last wave, which always swarms (ID-102).
+    expect(swarms(5)).toEqual([7]);
+    expect(swarms(9)).toEqual([4, 9]);
+    expect(swarms(10)).toEqual([4, 9]);
+    expect(swarms(13)).toEqual([3, 7, 10]);
+    expect(swarms(14)).toEqual([3, 7, 10]);
     expect(swarms(15).length).toBe(3);
     expect(swarms(40).length).toBe(5);
     for (let n = 5; n <= 60; n++) {
       expect(swarms(n).length).toBeGreaterThanOrEqual(swarms(n - 1).length > 0 ? 1 : 0);
       expect(swarms(n).length).toBeLessThanOrEqual(waveCount(n) * SWARM.cap);
       expect(swarms(n)).not.toContain(1);
+      expect(swarms(n)).toContain(waveCount(n));
     }
   });
 
@@ -111,18 +118,19 @@ describe('swarm waves (ID-099)', () => {
   });
 
   it('starts with the wave: the wave before a swarm sets it, the full game never has one', () => {
-    let s = atWave(5, 3);
+    // Horde 6: its last wave, 7, swarms (Horde 5's mini-boss would hold wave 4 open).
+    let s = atWave(6, 6);
     s.toSpawn = 0;
     s = tick(s, STEP);
-    expect(s.wave).toBe(4);
+    expect(s.wave).toBe(7);
     expect(s.swarm).toBe(true);
-    expect(s.toSpawn).toBe(2 * waveSize(5, 4));
-    const full = newHorde(1, { ...setup(), hordeNumber: 5 });
-    full.wave = 3;
+    expect(s.toSpawn).toBe(2 * waveSize(6, 7));
+    const full = newHorde(1, { ...setup(), hordeNumber: 6 });
+    full.wave = 6;
     full.toSpawn = 0;
     const next = tick(full, STEP);
     expect(next.swarm).toBe(false);
-    expect(next.toSpawn).toBe(waveSize(5, 4));
+    expect(next.toSpawn).toBe(waveSize(6, 7));
   });
 
   it('a Runner-heavy swarm spawns more Runners than a calm wave of the same horde', () => {
@@ -260,7 +268,7 @@ describe('bosses and mini-bosses, fixed by horde number (ID-099)', () => {
         (sum, [k, share]) => sum + share * enemyHp(k, 20, w, scale),
         0,
       );
-      calm += waveSize(20, w) * mean;
+      calm += waveSize(20, w, true) * mean;
     }
     expect(hordeHp(20)).toBeGreaterThan(calm + 2 * BOSSES.hp * enemyHp('horror', 20, 10, scale));
   });

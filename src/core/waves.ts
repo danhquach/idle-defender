@@ -6,6 +6,7 @@ import {
   HORROR,
   HORROR_ABILITIES,
   SWARM,
+  WAVE_GROWTH,
   type BossSkill,
   type EnemyKind,
   type HorrorAbility,
@@ -22,11 +23,15 @@ export function waveCount(hordeNumber: number): number {
   return Math.min(10, 5 + Math.floor((hordeNumber - 1) / 2));
 }
 
-/** Enemies in a wave: +4 per wave, ×1.1 per horde. */
-export function waveSize(hordeNumber: number, wave: number): number {
+/**
+ * Enemies in a wave: +4 per wave, ×`WAVE_GROWTH.rate` per horde; under the horde-only
+ * build's `harder` rules only up to Horde `WAVE_GROWTH.until` (ID-102).
+ */
+export function waveSize(hordeNumber: number, wave: number, harder = false): number {
   whole('waveSize', hordeNumber);
   whole('waveSize', wave);
-  return Math.round((8 + 4 * (wave - 1)) * 1.1 ** (hordeNumber - 1));
+  const grown = (harder ? Math.min(hordeNumber, WAVE_GROWTH.until) : hordeNumber) - 1;
+  return Math.round((8 + 4 * (wave - 1)) * WAVE_GROWTH.rate ** grown);
 }
 
 /** Enemy HP's growth per horde (design §9; 1.15 before ID-020). */
@@ -143,14 +148,21 @@ export function hordeBosses(hordeNumber: number, harder: boolean): BossSpec[] {
   ];
 }
 
-/** Whether wave `wave` of horde-only Horde `hordeNumber` is a swarm wave (ID-099, `SWARM`). */
+/**
+ * Whether wave `wave` of horde-only Horde `hordeNumber` is a swarm wave (ID-099, `SWARM`):
+ * its share of the waves (at least one), spread evenly back from the last wave, which is
+ * always one (ID-102: counted from wave 1 before, so a growing share slid them onto
+ * smaller waves and a horde could bring less than the one before).
+ */
 export function swarmWave(hordeNumber: number, wave: number): boolean {
   whole('swarmWave', hordeNumber);
   whole('swarmWave', wave);
   if (hordeNumber < SWARM.from) return false;
+  const waves = waveCount(hordeNumber);
   const share = Math.min(SWARM.cap, SWARM.share + SWARM.growth * (hordeNumber - SWARM.from));
-  // Evenly spread: the waves where the running count of swarms ticks up.
-  return Math.floor(wave * share + 1e-9) > Math.floor((wave - 1) * share + 1e-9);
+  const count = Math.max(1, Math.floor(waves * share + 1e-9));
+  for (let i = 0; i < count; i++) if (wave === waves - Math.round((i * waves) / count)) return true;
+  return false;
 }
 
 /** Fight XP needed to go from `level` to the next. */

@@ -211,8 +211,19 @@ describe('the squad in a horde (ID-066)', () => {
     expect(squadHpScale(3)).toBeCloseTo(0.95 * SQUAD_HP_GROWTH.early ** 2, 9);
     expect(squadHpScale(4)).toBeCloseTo(SQUAD_HP_GROWTH.early ** 3, 9);
     expect(squadHpScale(SQUAD_CAP)).toBeCloseTo(SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1), 9);
-    expect(squadHpScale(SQUAD_CAP + 4)).toBeCloseTo(
-      SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1) * SQUAD_HP_GROWTH.late ** 4,
+    // Hordes 8–10 eased (ID-102): Brutes join at 8, the first boss at 10. Full growth from 11.
+    for (const [n, ease] of [
+      [8, 0.85],
+      [9, 0.75],
+      [10, 0.75],
+    ] as const) {
+      expect(squadHpScale(n)).toBeCloseTo(
+        ease * SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1) * SQUAD_HP_GROWTH.late ** (n - SQUAD_CAP),
+        9,
+      );
+    }
+    expect(squadHpScale(SQUAD_CAP + 5)).toBeCloseTo(
+      SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1) * SQUAD_HP_GROWTH.late ** 5,
       9,
     );
     let s = startSquadHorde(squadGame(1, 3), 2, NOW);

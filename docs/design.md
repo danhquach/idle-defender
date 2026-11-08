@@ -386,8 +386,8 @@ Defenders stand on **posts** the player builds and chooses between.
     order, on keys Q and W (by key position, so any layout works); each
     pulses once when it is ready again, and arming Airstrike says on
     screen to tap a row. The pick cards always say what each skill does;
-    the one picked alone adds its ×2 line. Their numbers are checked in the balance pass
-    (ID-102).
+    the one picked alone adds its ×2 line. The balance pass (ID-102) kept
+    their numbers; its scripted player picks and uses Flashbang and Molotov.
   - Steady Fire is the one perk, always on at level 1; no perk screen.
   - The top bar is minimal: the horde number, waves cleared and enemies left
     in the wave (on the field and still to come), with the speed buttons; the
@@ -397,7 +397,10 @@ Defenders stand on **posts** the player builds and chooses between.
     instead of ×1.17 (§9). Hordes
     1–3 are eased to ×0.8, ×0.9 and ×0.95 of that (ID-097,
     `SQUAD_EARLY_HP`), so the first hordes are sure wins while the player
-    learns the cards.
+    learns the cards; Hordes 8, 9 and 10 to ×0.85, ×0.75 and ×0.75 (ID-102:
+    Brutes join at 8, the first boss comes at 10), so the expected squad wins
+    them at the first try on most seeds. Waves stop growing ×1.1 a horde at
+    Horde 10 (ID-102, §11 Balance pass).
 - **As built (ID-068): shooting from behind the wall.**
   - Survivors take the firing line's slots (§3) in the order they joined,
     from the middle out: slots 3, 4, 2, 5, 1, 6 (top to bottom), so a lone
@@ -587,7 +590,7 @@ close-quarter weapons come out only when an enemy is close.
   close (21.4 to the shotgun's 25.2) or in a lane (20.0 to 21.0). The scenes
   now pick only the repeatable stat cards, as written above (they took Speed
   Loaders and Extended Mags too).
-- **Gun roles (as built, ID-101, starting points for the balance pass, ID-102):**
+- **Gun roles (as built, ID-101; kept by the balance pass, ID-102):**
   each gun has a role and a built-in trait every one of it carries, Rusty or
   Relic, plus role affixes only it rolls (below, in Gear). The Inventory, the
   drop tile and the gun picker name the role and trait ("Marksman: +10% crit
@@ -633,8 +636,8 @@ close-quarter weapons come out only when an enemy is close.
   marksmen (Rifle, Sniper rifle) out-kill the swarm guns far, the Sniper rifle
   out-damages every gun by a fifth or more on a boss and on heavies (before,
   only 1.07× the LMG on heavies), and the Shotgun and LMG hold a walking crowd
-  farther out than any other gun (a small margin from one Gunner: tuned in
-  ID-102).
+  farther out than any other gun (a small margin from one Gunner; the balance
+  pass, ID-102, kept these numbers).
 - **Roster screen (as built, ID-012):** a Roster button on the build panel
   opens it in the panel's place: each defender's level and XP, stats
   (Tinker shown locked), unspent points (spent there) and rest time, and three pickers
@@ -1180,8 +1183,9 @@ spacing real hordes have (see the ID-077 note below).
   steps at the old +20%/+15%/+15% still gave only 70%, 40%, 40%). Decided:
   Hordes 1–3 are sure wins (enemy HP eased, §5 and §9), Hordes 4–7 are won
   at the first try on most seeds, and from Horde 8 the hordes are walls the
-  player farms past; their targets, and the late-horde test (ID-096), come
-  back with farming in the balance pass (ID-102). Level by level, in Horde 4
+  player farms past. The balance pass (ID-102) brought back Hordes 8–10's
+  first-try target (at least 60%) and the late-horde test, with farming (§11
+  Balance pass). Level by level, in Horde 4
   with three survivors and that card alone (wins of 20; no card 2): Speed
   Loaders 7, 12, 15; Extended Mags 10, 13, 15; Barbed Wire 11, 11, 12
   (9, 11, 12 before ID-104; with durability by level its levels are judged
@@ -1356,19 +1360,25 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
   more wall than with no ability) and the Regenerator on 14, against 20 of 20
   with no ability. A lone pistol Gunner never wins. Horde 10 played in full is
   ID-052; rewards for a boss win come with the Mutated Genes tickets.
-- **As built (ID-099, starting points for ID-102): harder hordes, horde-only.**
+- **As built (ID-099, tuned in ID-102): harder hordes, horde-only.**
   From the farming and harder hordes design (2026-11-06), Part 2. The full game
   keeps the ID-024 rules above; `HordeSetup.harder` turns these on for the
   horde-only build. Everything is fixed by the horde number (a replay meets the
   same waves and bosses) and rolled from the fight's seed.
   - **Late growth:** enemy HP grows ×1.06 a horde past the squad cap
     (×1.03 before), one knob (`SQUAD_HP_GROWTH.late`), so Recommended Power
-    rises every horde. ×1.10 was tried first: Horde 20 then beat even a squad
+    rises every horde (past a boss horde, the next asks less than the boss
+    horde but more than the one before it). ID-102 kept ×1.06 and matched the
+    gun level's step to it (§11 Balance pass). ×1.10 was tried first: Horde 20 then beat even a squad
     of level-200 Military Rifles with no cards, so no Recommended Power could
     be fitted to it.
-  - **Swarm waves:** from Horde 5, 25% of a horde's waves, +1% a horde, at most
-    50%, spread evenly (Horde 5: wave 4; Horde 9: waves 4 and 7; Horde 15: 3 of
-    10). A swarm wave spawns 2× the enemies at twice the rate (the same time),
+  - **Swarm waves:** from Horde 5, 25% of a horde's waves (at least one), +1% a
+    horde, at most 50%, spread evenly back from the last wave, which always
+    swarms (Horde 5: wave 7; Horde 9: waves 4 and 9; Hordes 11–19: 3, 7 and 10;
+    Horde 30: 2, 4, 6, 8 and 10). ID-102: counted from wave 1 before (Horde 5:
+    wave 4; Horde 9: 4 and 7), so with wave sizes held from Horde 10 a growing
+    share slid the swarms onto smaller waves and Horde 14 brought less HP than
+    Horde 13. A swarm wave spawns 2× the enemies at twice the rate (the same time),
     with Runners at 2× their share (Shamblers give way). "Swarm!" shows big in
     the field's upper middle for its first 3 s, with two alarm blares.
   - **Bosses:** still every 10th horde, now Horde n brings n/10 Mutated Horrors
@@ -1407,7 +1417,8 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     reads the same way now ("Mutated Horror (Charge)", not "Mutated Horror:
     Rammer").
   - **Recommended Power** counts it all: swarm waves' HP (twice a calm wave's) weighted 2× again (they come
-    twice as fast), bosses and mini-bosses at their HP, refitted (§11 Farming).
+    twice as fast), bosses and mini-bosses at their HP, and a boss horde ×1.12
+    (ID-102), refitted (§11 Farming).
 
 ## 10. World map and patrols (the idle part)
 
@@ -1935,7 +1946,7 @@ When the full game comes back, it starts as before:
 - **Hordes:** about 3–5 minutes each; a returning player plays a few
   hordes, collects patrols, sends new ones and leaves.
 
-### Farming *(as built, ID-098; numbers are starting points for ID-102)*
+### Farming *(as built, ID-098; tuned in ID-102, see Balance pass below)*
 
 From the farming and harder hordes design (2026-11-06), Part 1. A stuck
 player replays beaten hordes for XP and guns, sees how far short they are,
@@ -1965,8 +1976,9 @@ and comes back stronger.
   result screen says "Farm a higher horde for upgrades". First clears
   neither count nor reset it.
 - **Gun level:** every dropped gun's level is its horde number; each level
-  above 1 adds 5% of base damage, before rarity and affixes (a Horde 20 drop
-  hits ×1.95 a Horde 1 drop of the same gun). Combine takes 3 of a gun and
+  above 1 multiplies base damage by 1.06, before rarity and affixes (a Horde 20
+  drop hits ×3.03 a Horde 1 drop of the same gun). ID-102: +5% of base damage
+  a level, added, before (×1.95 at Horde 20). Combine takes 3 of a gun and
   rarity at any levels; the new gun has the highest. The free pistol and
   older saves' guns are level 1. dmg/s everywhere includes it.
 - **XP:** a replay pays that horde's survivor XP; more than 3 hordes below
@@ -1978,21 +1990,92 @@ and comes back stronger.
   × (1 + 0.5 × Sharp Mind's spread cut) × (1 + 0.5 × Instinct's extra HP
   share) × 10, summed over the squad and rounded. Cards and skills don't
   count. (Gun role traits join it with ID-101.)
-- **Recommended Power:** 3.19 × (the horde's expected enemy HP)^0.59: each
-  wave's size × its mix's mean HP, a swarm wave's (ID-099) weighted 2× on top of its doubled size
-  (it comes twice as fast), plus its bosses and mini-boss at their HP. ID-098
-  had 7.1 × √HP; ID-099's steeper late growth and swarms broke that fit
-  (Horde 9 won 10 of 10 at it, 15 and 20 none), so it was refitted on each
-  horde's measured 50%-win power (Hordes 6–20). Hordes 1 and 2 take ×0.25 and
-  ×0.5 of it: sure wins for a squad of one or two (a new game's lone pistol has
-  83 power against Horde 1's 62). Horde 3 asks 467, 5 asks 1,089, 10 asks
-  4,038, 20 asks 14,399. Fitted (`balance/squad-power.test.ts`, 10 seeds,
-  Military Rifles at the expected squad's size and level, no cards or skills)
-  so a squad at it wins about half the time: Horde 9 50%, 12 30%, 15 30%,
-  20 50% (mean 40%); at 70% of it a squad loses Hordes 10 and 15 on 5 of 5
-  seeds, at 130% wins on 5 of 5.
+- **Recommended Power (ID-102):** 10.3 × the dmg/s a horde asks for: its
+  expected enemy HP over the seconds its waves take to spawn (each wave's size
+  × 0.8 s, plus the 3 s break). The HP is each wave's size × its mix's mean HP,
+  a swarm wave's (ID-099) weighted 2× on top of its doubled size (it comes
+  twice as fast), plus its bosses and mini-boss at their HP. A boss horde asks
+  ×1.12 more (its bosses' skills ask for more than their HP says). Hordes 1 to
+  8 take ×0.3, ×0.6, 1, 1, 1, 1, ×0.8 and ×0.8 of it: sure wins for a squad of
+  one or two, then a smaller squad's fit. Horde 1 asks 63, 3 asks 393, 5 asks
+  1,406, 10 asks 4,113, 15 asks 7,748, 20 asks 12,911, 30 asks 26,505.
+  - Before: 3.19 × HP^0.59 (ID-099; 7.1 × √HP in ID-098), fitted only on
+    Hordes 6–20. With waves growing ×1.1 a horde, a horde's length grew as
+    fast as its HP, so HP alone over-counted: at Horde 30 it asked about half
+    of what a squad needed. Over HP a second, one fit holds from Horde 9 to
+    Horde 30 within ±10% of each horde's measured 50%-win power.
+  - Fitted (`balance/squad-power.test.ts`, 10 seeds, Military Rifles at the
+    expected squad's size and level, no cards or skills) so a squad at it wins
+    about half the time: Horde 9 60%, 12 50%, 15 60%, 20 60% (mean 58%;
+    before: 50/30/30/50%, mean 40%). With the scripted player's cards and
+    skills the same squads win 10 of 10 at each. At 70% of it a squad loses
+    Hordes 10 and 15 on at least 4 of 5 seeds; at 130% wins on at least 4 of 5.
 - **Bands:** green at or above Recommended, amber within 15% below, red
   further. The numbers are always shown; it never blocks a start.
+
+### Balance pass *(ID-102)*
+
+One pass over farming, harder hordes, horde-only skills, gun roles, stat
+points and horde cards together (ID-096 to ID-101), baselined on main first,
+then grid-tuned with the scripted player (`src/core/sim.ts`).
+
+- **The scripted player now plays like a stuck player.** After a loss at a
+  new horde it replays the highest beaten horde 3 times (`SQUAD_FARM`), then
+  tries again; it uses its picked skills (Flashbang and Molotov) once 6 enemies
+  stand on the field, aimed at the one nearest the wall. A worst-luck mode
+  throws every replay drop away except a guaranteed upgrade, and counts each
+  toward the bad-luck guarantee.
+- **Baseline (main, before):** every balance file passed, with the late-horde
+  file skipped and Hordes 8–10 relaxed (ID-097). Played with the same farming
+  player, 3 seeds to Horde 18: 12, 24 and 29 losses (36, 72 and 87 replays);
+  the worst wall took 10 losses (30 replays); 31% of Hordes 11–18 fights won;
+  enemies hit the wall in 92%; Horde 15's fight lasted 1,058 s and grew ×1.1 a
+  horde (Horde 30's would last about 78 minutes). First-try wins at Hordes 8,
+  9 and 10: 33%, 0% and 33%. Past some horde no gun level could catch up:
+  enemy demand compounded while a gun level added a flat 5%.
+- **After:** 3 seeds to Horde 18: 6, 8 and 4 losses (18, 24 and 12 replays);
+  the worst wall took 5 losses (15 replays); 65% of Hordes 11–18 fights won;
+  enemies reach the wire band in every one and hit the wall in 84%; Horde 15's
+  fight lasts 842 s, and fights stop growing past Horde 11.
+
+| Value | Before | After | Why |
+|---|---|---|---|
+| Horde-only wave size growth (`WAVE_GROWTH`) | ×1.1 a horde, no end | ×1.1 a horde up to Horde 10, then held (the full game keeps ×1.1) | Fight length grew with it (17 min at Horde 14); HP growth carries the difficulty past it |
+| Late HP growth (`SQUAD_HP_GROWTH.late`) | ×1.06 | ×1.06 (kept) | Grid 1.06–1.14 with gun steps of 5% and 8%: the gun step must match it, or players get stuck (1.10 with 5%: 27 losses at one horde) |
+| Gun level (`GUN_LEVEL_DAMAGE`) | +5% of base damage a level, added | ×1.06 a level, compounding | Matched to late HP growth, so farming can always close the gap; 8% let the squad run away (Squad Power 1.64× Recommended by Horde 25) |
+| Horde-only HP ease (`SQUAD_EARLY_HP`) | Hordes 1–3: ×0.8, ×0.9, ×0.95 | Also Hordes 8–10: ×0.85, ×0.75, ×0.75 | Brutes join at Horde 8 (mean enemy HP +55%), the first boss at 10. 20 seeds, first try: 85%, 70%, 65% (target at least 60%) |
+| Swarm wave placement (`swarmWave`) | Counted from wave 1 | Counted back from the last wave, which always swarms | With wave size held, a growing share slid swarms onto smaller waves and Horde 14 had less HP than Horde 13 |
+| Recommended Power (`POWER.rec`) | 3.19 × HP^0.59 | 10.3 × HP ÷ spawn seconds; ×1.12 on boss hordes; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | Refitted on each horde's measured 50%-win power, Hordes 3–30 (above) |
+| Swarm share (`SWARM.share`) | 0.25 | 0.25 (kept) | 0.20 and 0.30 both made walls shallower (first-try losses at Hordes 11+: 25% and 29% against 46%) |
+| Boss count and HP (`BOSSES`) | n ÷ 10 up to 3, 4× HP | Kept | HP 3 and at most 2 bosses: no change to Horde 18; HP 5: a little easier (fewer replays) |
+| Mini-boss HP (`ELITE.hp`) | 4× | 4× (kept) | 3× and 5×: 29% and 50% first-try losses against 46% |
+| Boss skills (`BOSS_SKILL`) | Roar +40%, Slab 300 | Kept | Roar +60% changed no fight to Horde 18; Slab 450 about the same |
+| Drop odds (`SQUAD_DROP`, Horde 10+ band) | Relic 10% | Kept | Relic 15%: walls take at most 6 replays (drops feel free); 5%: a little harder |
+| Bad-luck ramp (`FARM`) | 5 points a count, sure at 5 | Kept | At the worst luck a sure upgrade at 8 slowed campaigns to Horde 13 (94 fights against 70); 3 didn't speed them up |
+| Skill ×2 (`SQUAD_SKILLS.solo`) | ×2 | Kept | The scripted player picks two skills; ID-100's tests cover ×2 |
+| Gun traits and role affixes (`TRAIT`, `AFFIXES`) | SMG +25% close, … | Kept | SMG +15% and +35% didn't move the targets; the gun balance tests still pass |
+| Stat caps (`STAT_EFFECT`) | Sharp Mind crit 0.5 | 0.5 (kept) | The most sensitive horde-only knob (0.4: 54% first-try losses, 0.6: 17%), and the band the full game's Horror test needs (ID-096) |
+
+Targets, each with a balance test:
+
+- **Hordes 1–10** (`balance/horde-only.test.ts`, 20 seeds): Hordes 1–3 won
+  at the first try on every seed, 4–10 on at least 60% (restored from
+  ID-097's relaxed targets); every campaign beats Horde 10 (farming where it
+  lost).
+- **Mid-game walls** (`balance/late-hordes.test.ts`, 4 seeds to Horde 18,
+  re-enabled): every campaign beats Horde 18; in new-horde fights from Horde
+  11, enemies reach the Barbed Wire's band in at least 75% and hit the wall in
+  15–95%; every seed loses at least one new horde at the first try; farming
+  past any one horde takes at most 30 replays with average luck.
+- **Recommended Power** (`balance/squad-power.test.ts`): about half the
+  fights won with no cards or skills, most with them (above).
+- **Worst luck** (`balance/farming.test.ts`, 2 seeds): with every replay
+  drop but the guaranteed ones thrown away, every campaign still beats Horde
+  13, at most 45 replays at any one horde (12 measured).
+- **Farming far down is never faster** (`balance/farming.test.ts`): a full
+  squad stuck at Horde 16 gains about twice the Squad Power and 1.4–1.9× the
+  XP per fight minute replaying Horde 15 as replaying Horde 11, on each of 3
+  seeds.
 
 ## 12. Save
 

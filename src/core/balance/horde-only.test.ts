@@ -11,43 +11,43 @@ import { SEEDS, winRate } from './shared.ts';
 // still under the job's 15-min limit.
 describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
   const LAST = 10;
-  /** The first horde that is a wall to farm past (ID-097; targets with ID-102). */
-  const WALLS_FROM = 8;
-  /** Each seed's campaign: every fight in order, a loss replayed as the player would. */
+  /** Each seed's campaign: every fight in order, a loss farmed past as the player would. */
   const campaigns: ReturnType<typeof playSquadCampaign>[] = [];
   beforeAll(() => {
     for (let i = 1; i <= SEEDS; i++) campaigns.push(playSquadCampaign(i * 1000, LAST));
   }, 600_000);
   /** Each seed's first fight at horde `n`: the expected squad's try at it. */
-  const firstTry = (n: number) => campaigns.map((runs) => runs.find((r) => r.hordeNumber === n)!);
+  const firstTry = (n: number) =>
+    campaigns.map((runs) => runs.find((r) => r.hordeNumber === n && !r.replay)!);
 
-  // ID-097: Hordes 1–3 are sure wins while the player learns the cards; 4–7 are won on
-  // most seeds at the first try. From Horde 8 the hordes are walls the player farms past;
-  // their targets come with farming in the balance pass (ID-102).
-  it('the expected squad wins Hordes 1–3 on every seed, and 4–7 on most, at the first try', () => {
-    for (let n = 1; n <= WALLS_FROM; n++) {
+  // ID-097: Hordes 1–3 are sure wins while the player learns the cards. ID-102 restores the
+  // rest: the expected squad wins Hordes 4–10 at the first try on most seeds; the walls the
+  // player farms past come after the first boss.
+  it('the expected squad wins Hordes 1–3 on every seed, and 4–10 on most, at the first try', () => {
+    for (let n = 1; n <= LAST; n++) {
       expect(
         firstTry(n).every((r) => r !== undefined),
         `Horde ${n} reached`,
       ).toBe(true);
     }
     for (let n = 1; n <= 3; n++) expect(winRate(firstTry(n)), `Horde ${n}`).toBe(1);
-    for (let n = 4; n < WALLS_FROM; n++) {
+    for (let n = 4; n <= LAST; n++) {
       expect(winRate(firstTry(n)), `Horde ${n}`).toBeGreaterThanOrEqual(0.6);
     }
   });
 
   it('the expected squad is one survivor more per horde won, up to 6', () => {
-    for (let n = 1; n <= WALLS_FROM; n++) {
+    for (let n = 1; n <= LAST; n++) {
       for (const r of firstTry(n)) expect(r.squad).toBe(Math.min(n, SQUAD_CAP));
     }
   });
 
-  // The game can farm since ID-098, but the scripted player still only retries (gaining a
-  // loss's XP); its farming and how far past Horde 7 it gets are the balance pass's (ID-102).
-  it('every campaign gets past Horde 7 and reaches the walls', () => {
+  it('every campaign gets past Horde 10, its boss beaten, farming where it lost', () => {
     for (const runs of campaigns) {
-      expect(runs.some((r) => r.hordeNumber === WALLS_FROM)).toBe(true);
+      const last = runs.at(-1)!;
+      expect(last.hordeNumber).toBe(LAST);
+      expect(last.outcome).toBe('won');
+      expect(last.replay).toBe(false);
     }
     expect(horrorAbility(LAST)).not.toBeNull();
   });
