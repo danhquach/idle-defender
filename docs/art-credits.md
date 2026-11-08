@@ -36,6 +36,7 @@ script refuses a model that is not listed here.
 | `black-forest-labs/flux.2-klein-4b` | Black Forest Labs | Apache-2.0 | Allowed                  |
 | `meta-ai`                          | Meta              | Meta AI terms | Owned by the user (see below) |
 | `community/scriptsnsenses-sys/flux-2-dev-free` | Black Forest Labs (FLUX.2 [dev]), community-hosted | FLUX [dev] Non-Commercial License | Outputs: see below (not confirmed on BFL's site) |
+| `microsoft/mai-image-2.6` | Microsoft | Microsoft service terms (hosted model) | Not confirmed (see below) |
 
 - FLUX.1 [schnell]: the model card on Hugging Face
   (`black-forest-labs/FLUX.1-schnell`) states it is "released under the
@@ -63,6 +64,15 @@ script refuses a model that is not listed here.
   page, so check it again before release. The host's model card says prompts and
   outputs are logged into its own datasets (never sold or used for training);
   our prompts hold nothing private. It is free, 8 requests a minute.
+- MAI Image 2.6 (`microsoft/mai-image-2.6`, ID-117, 2026-11-08): the project
+  owner chose it for the title art (`title-dusk`) after a side-by-side test
+  against FLUX 1.1 Pro, Z-Image Turbo and FLUX.2 Klein 4B, knowing the points
+  here. It is a hosted model with no open weights or licence file. Microsoft's
+  Foundry documentation lists commercial creative work among its uses and asks
+  that use of generated images follow Microsoft's terms of service; no statement
+  of who owns the output, or of commercial use, was found, and the model is a
+  preview in Foundry, whose preview terms may limit production use. Check these
+  terms again before release.
 - The FLUX names are Black Forest Labs trademarks; we name the models only to
   credit them, never to suggest endorsement.
 
@@ -97,4 +107,4 @@ Wikimedia Commons page id where it has none.
 
 - Image generation: Pollinations; six card icons in the Meta AI app (`outside`).
 - Models: FLUX.1 [schnell] and FLUX.2 [klein] 4B by Black Forest Labs,
-  Apache-2.0.
+  Apache-2.0; MAI Image 2.6 by Microsoft (the title art).
