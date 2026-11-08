@@ -61,9 +61,10 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
     }
   }, 300_000);
 
+  // The scripted player looks every second to use its skills (ID-102): 5.5 s on CI.
   it('the starting survivor wins Horde 1 (the first fight) on every seed', () => {
     for (let seed = 1; seed <= SEEDS; seed++) {
       expect(playSquadHorde(newGame('horde'), seed).outcome).toBe('won');
     }
-  });
+  }, 60_000);
 });
