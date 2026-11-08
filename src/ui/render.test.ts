@@ -39,6 +39,7 @@ import {
   FIGHT_FRAME,
   frameCamera,
   HEIGHT_SCALE,
+  HUD_SPACE,
   postFloor,
   project,
   TILT,
@@ -68,6 +69,7 @@ import {
   drawScene,
   forgetBackdrop,
   DUSK,
+  EDGE_LIP,
   FLASH,
   FLASH_STYLE,
   flashShape,
@@ -466,7 +468,12 @@ describe('drawScene with art', () => {
       const s = steps(startHorde(game, 1, game.roster[0]!.id, 0, 0), frameCamera(VIEW));
       const d = dusks(s);
       expect(d).toHaveLength(2);
-      for (const x of d) expect(x).toMatchObject({ alpha: 1, rect: whole });
+      const cam = frameCamera(VIEW);
+      const top = project({ x: 0, y: 0 }, cam).sy;
+      const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
+      // The surround's over the whole view; the field's over its rows only (ID-081).
+      expect(d[0]).toMatchObject({ alpha: 1, rect: whole });
+      expect(d[1]).toMatchObject({ alpha: 1, rect: [0, top, VIEW.w, bottom - top] });
       const ground = s.findIndex((x) => x.what === 'ground-canvas');
       // One over the surround before the field's ground, one over the field right after it.
       expect(s.indexOf(d[0]!)).toBeLessThan(ground);
@@ -2768,6 +2775,97 @@ describe('the field’s edges in a fight (ID-068)', () => {
       { style: 'rgba(0, 0, 0, 0.3)', y: bottom, h: view.h - bottom },
     ]);
     expect(bottom).toBeLessThan(view.h);
+  });
+
+  // A window taller than the frame (ID-081): Firefox's shorter toolbars gave 1440×900
+  // a width-bound fit, and the spare rows showed as near-black bands.
+  it('shows dim ground past the field on a tall window, with a dark lip fading out from each edge', () => {
+    const r = recorder();
+    const fills: { style: unknown; y: number; h: number }[] = [];
+    const grads: { y0: number; y1: number; stops: [number, string][] }[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: unknown };
+    Object.assign(r.ctx, {
+      fillRect: (_x: number, y: number, _w: number, h: number) =>
+        fills.push({ style: ctx.fillStyle, y, h }),
+      createLinearGradient: (_x0: number, y0: number, _x1: number, y1: number) => {
+        const g = { y0, y1, stops: [] as [number, string][] };
+        grads.push(g);
+        // The gradient itself stands in for the fill style, so a fill can be traced to it.
+        return Object.defineProperty(g, 'addColorStop', {
+          value: (at: number, c: string) => g.stops.push([at, c]),
+        });
+      },
+    });
+    const view = { w: 1440, h: 900 };
+    const cam = frameCamera(view);
+    drawScene(r.ctx, r.art, blank(), cam, view);
+    const top = project({ x: 0, y: 0 }, cam).sy;
+    const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
+    const lip = project({ x: 0, y: EDGE_LIP.depth }, cam).sy - top;
+    // Width-bound: spare rows above the strip and below the field.
+    expect(view.h - bottom).toBeGreaterThan(HUD_SPACE.bottom + 20);
+    // Past the field the ground takes one dusk, not two: the second covers the field's rows.
+    const dusks = fills.filter((f) => f.style === DUSK);
+    expect(dusks.map((f) => [f.y, f.h])).toEqual([
+      [0, view.h],
+      [top, bottom - top],
+    ]);
+    // A lip at each edge: dark at the edge, clear `lip` px out, filled over just that strip.
+    expect(lip).toBeGreaterThan(0);
+    const isLip = (g: unknown) => grads.some((x) => x === g && x.stops[0]?.[1] === EDGE_LIP.color);
+    expect(grads.filter(isLip)).toEqual([
+      {
+        y0: top,
+        y1: top - lip,
+        stops: [
+          [0, EDGE_LIP.color],
+          [1, EDGE_LIP.clear],
+        ],
+      },
+      {
+        y0: bottom,
+        y1: bottom + lip,
+        stops: [
+          [0, EDGE_LIP.color],
+          [1, EDGE_LIP.clear],
+        ],
+      },
+    ]);
+    expect(fills.filter((f) => isLip(f.style)).map((f) => [f.y, f.h])).toEqual([
+      [top - lip, lip],
+      [bottom, lip],
+    ]);
+  });
+
+  it('draws no lip where an edge is off the view', () => {
+    const r = recorder();
+    let grads = 0;
+    const dusks: number[][] = [];
+    const ctx = r.ctx as unknown as { fillStyle: unknown };
+    Object.assign(r.ctx, {
+      createLinearGradient: () => ({
+        addColorStop: (_at: number, c: string) => {
+          if (c === EDGE_LIP.color) grads++;
+        },
+      }),
+      fillRect: (...rect: number[]) => {
+        if (ctx.fillStyle === DUSK) dusks.push(rect);
+      },
+    });
+    // Zoomed in on the field's middle: neither edge shows.
+    const cam = { x: 600, y: 300, zoom: 2 };
+    const view = { w: 800, h: 400 };
+    drawScene(r.ctx, r.art, blank(), cam, view);
+    const top = project({ x: 0, y: 0 }, cam).sy;
+    const bottom = project({ x: 0, y: FIELD.height }, cam).sy;
+    expect(top).toBeLessThan(0);
+    expect(bottom).toBeGreaterThan(view.h);
+    expect(grads).toBe(0);
+    // The field's dusk still covers its rows, past both ends of the view.
+    expect(dusks).toEqual([
+      [0, 0, view.w, view.h],
+      [0, top, view.w, bottom - top],
+    ]);
   });
 });
 

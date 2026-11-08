@@ -2753,7 +2753,17 @@ original outline.
   under 30 × 5 px on screen (about 35 × 6 px at 1280×720), bigger than an
   enemy's 24 × 4. In every fight the ground past the field's top and bottom
   edges is shaded with the build scene's outside dim (sprites still draw over
-  it), so the wall's ends read as the map's edge, not a way round it.
+  it), so the wall's ends read as the map's edge, not a way round it (plus
+  a dark lip at each edge since ID-081).
+- **As built (ID-081): no black bands on a tall window.** A window taller
+  than about 0.48 × its width + 112 px fits the frame by width, so spare rows
+  show above and below the field. Firefox's shorter toolbars put a 1440×900
+  screen past that line, and the spare rows were near-black: the surround
+  took the dusk twice and the shade on top. Both browsers draw the same. Only
+  the field's rows take the second dusk now, so the ground past the field
+  shows one dusk and the shade, as dim ground. A dark lip (black at 0.45)
+  fades out 24 units from each edge, so the edge still reads. The frame and
+  zoom are unchanged.
 - **As built (ID-069): enemies walk and survivors aim, in frames.** Art made
   frame by frame from prompts alone came out too random (the head turning
   between frames, broken ankles), so each frame is painted over a pose drawn
