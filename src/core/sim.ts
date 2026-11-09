@@ -29,6 +29,7 @@ import {
   squadDrop,
   squadOf,
   startSquadHorde,
+  stashWith,
   type SquadDrop,
 } from './hordeonly.ts';
 import { skillLock, useSkill } from './skills.ts';
@@ -364,23 +365,26 @@ export interface SquadPlay {
   /** Watch how close enemies come to the wall (`SquadRun.nearest`). */
   watch?: boolean;
   /**
-   * The worst luck (ID-102): every replay drop but a guaranteed upgrade is thrown away and
-   * counts toward the bad-luck guarantee, as if it were no upgrade for anyone.
+   * The worst luck (ID-102): every replay drop but a guaranteed upgrade (bonus guns too,
+   * ID-122) is thrown away and counts toward the bad-luck guarantee, as if it were no
+   * upgrade for anyone.
    */
   worstLuck?: boolean;
 }
 
 /**
  * A replay's result at the worst luck (`SquadPlay.worstLuck`): `next` (the game after
- * `finishSquadHorde`) without `drop` unless it was a guaranteed upgrade, the gun it pushed
- * out kept, and the bad-luck count up by 1 as for a drop that is no upgrade.
+ * `finishSquadHorde`) with the stash as it was, plus `drop`'s gun only if it was a
+ * guaranteed upgrade; with no guaranteed upgrade, the bad-luck count up by 1 as for a drop
+ * that is no upgrade.
  */
-function unlucky(game: GameState, next: GameState, drop: SquadDrop): GameState {
-  if (drop.kind === 'guaranteed') return next;
-  const thrown = drop.thrown && drop.thrown.uid !== drop.weapon.uid ? [drop.thrown] : [];
+export function unlucky(game: GameState, next: GameState, drop: SquadDrop): GameState {
+  if (drop.kind === 'guaranteed') {
+    return { ...next, armoury: stashWith(game.armoury, [drop.weapon]).armoury };
+  }
   return {
     ...next,
-    armoury: [...next.armoury.filter((w) => w.uid !== drop.weapon.uid), ...thrown],
+    armoury: game.armoury,
     farm: {
       ...next.farm,
       badLuck: drop.noUpgrades

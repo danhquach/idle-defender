@@ -14,6 +14,7 @@ import {
   roleLine,
   roleOf,
   type Held,
+  type OwnedWeapon,
 } from '../core/armoury.ts';
 import { repairAllCost } from '../core/base.ts';
 import {
@@ -1098,26 +1099,39 @@ export const levelLabel = (h: Held): string =>
 export const gunLabel = (h: Held): string => `${levelLabel(h)} · ${gunPower(h).toFixed(1)} dmg/s`;
 
 /**
- * A horde-only win's drop lines (ID-067), for the stash `game` had before it: the gun and
- * where it went, and with the stash full, the weakest weapon thrown away for it.
+ * A horde-only win's drop lines (ID-067, ID-122), for the stash `game` had before it: the
+ * drop, then each bonus gun, and where it went; with the stash full, the weakest weapon
+ * thrown away for it.
  */
 export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop): string[] {
-  const { weapon, thrown } = drop;
-  const got = `Weapon drop (${DROP_KIND[drop.kind]}): ${gunLabel(weapon)}`;
-  const farm = drop.noUpgrades ? [farmText(drop.farmFrom)] : [];
-  if (thrown === weapon) {
-    return [
-      got,
-      `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${levelName(weapon)} was no better than any gun in it, so it was thrown away`,
-      ...farm,
-    ];
+  const lines: string[] = [];
+  let count = game.armoury.length;
+  const thrown = [...drop.thrown];
+  for (const [i, w] of [drop.weapon, ...drop.bonus].entries()) {
+    const got =
+      i === 0
+        ? `Weapon drop (${DROP_KIND[drop.kind]}): ${gunLabel(w)}`
+        : `Bonus gun: ${gunLabel(w)}`;
+    // As `stashWith` puts them in: under the cap it goes in, else one is thrown away.
+    if (count < STASH_CAP) {
+      count += 1;
+      lines.push(`${got} · into the stash (${count}/${STASH_CAP})`);
+      continue;
+    }
+    const out = thrown.shift()!;
+    lines.push(
+      ...(out === w
+        ? [
+            got,
+            `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${levelName(w)} was no better than any gun in it, so it was thrown away`,
+          ]
+        : [
+            `${got} · into the stash (${count}/${STASH_CAP})`,
+            `Stash full: the weakest, the ${levelLabel(out)}, was thrown away`,
+          ]),
+    );
   }
-  const count = game.armoury.length + (thrown ? 0 : 1);
-  return [
-    `${got} · into the stash (${count}/${STASH_CAP})`,
-    ...(thrown ? [`Stash full: the weakest, the ${levelLabel(thrown)}, was thrown away`] : []),
-    ...farm,
-  ];
+  return [...lines, ...(drop.noUpgrades ? [farmText(drop.farmFrom)] : [])];
 }
 
 /**
@@ -1207,11 +1221,21 @@ export interface DropTile {
   role: string;
   /** "17.2 dmg/s" */
   power: string;
-  /** "Stash 15/20", or "Stash full: thrown away" when the drop itself went. */
+  /**
+   * "Stash 15/40" after the win's guns are in (bonus ones too), with " · thrown away"
+   * when the drop itself went.
+   */
   stash: string;
   /** The drop was thrown away (the stash full of better guns). */
   lost: boolean;
-  /** "Thrown away: Rusty Pistol", `DROP_LOST_NOTE` when the drop itself went, or null. */
+  /** The win's bonus guns (ID-122), one compact row each, in the order they went in. */
+  bonus: BonusRow[];
+  /**
+   * "Thrown away: Rusty Pistol" (every stash weapon thrown for this win's guns, comma
+   * separated), `DROP_LOST_NOTE` when the drop itself went into a stash of better guns
+   * ("Replaced by the stronger bonus gun …" when a bonus gun of the same win pushed it
+   * out, ID-122), or null.
+   */
   thrown: string | null;
 }
 
@@ -1273,9 +1297,23 @@ const plainCard = (d: RosterDefender, joining = false): SquadCard => ({
 
 /** The loot tile for `drop`, against the stash `game` had before it. */
 export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): DropTile {
-  const { weapon, thrown } = drop;
-  const lost = thrown === weapon;
-  const count = game.armoury.length + (thrown ? 0 : 1);
+  const { weapon, bonus, thrown } = drop;
+  const lost = thrown.includes(weapon);
+  const count = game.armoury.length + 1 + bonus.length - thrown.length;
+  // Stash weapons thrown for room, not this win's own guns.
+  const old = thrown.filter((w) => w !== weapon && !bonus.includes(w));
+  // Which gun's going in threw the drop away (as `stashWith` puts them in): the drop's own
+  // (the stash already full of better guns), or a stronger bonus gun's after it.
+  let by: OwnedWeapon | null = null;
+  let room = STASH_CAP - game.armoury.length;
+  let next = 0;
+  for (const w of [weapon, ...bonus]) {
+    if (room > 0) {
+      room -= 1;
+      continue;
+    }
+    if (thrown[next++] === weapon) by = w;
+  }
   // First, so anything but a gun is refused with its own error.
   const power = gunPower(weapon);
   return {
@@ -1290,11 +1328,40 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
     affixes: affixLines(weapon).join(', '),
     role: roleLine(weapon.base) ?? '',
     power: `${power.toFixed(1)} dmg/s`,
-    stash: lost ? 'Stash full: thrown away' : `Stash ${count}/${STASH_CAP}`,
+    stash: `Stash ${count}/${STASH_CAP}${lost ? ' · thrown away' : ''}`,
     lost,
+    bonus: bonus.map((w) => ({
+      rarity: w.rarity,
+      name: levelName(w),
+      power: `${gunPower(w).toFixed(1)} dmg/s`,
+      icon: GUN_ICON[w.base as GunId],
+      lost: thrown.includes(w),
+    })),
     // "No better", not "weaker": a tie throws the drop away too.
-    thrown: lost ? DROP_LOST_NOTE : thrown ? `Thrown away: ${levelName(thrown)}` : null,
+    thrown:
+      [
+        ...(lost
+          ? [
+              by && by !== weapon
+                ? `Replaced by the stronger bonus gun ${levelName(by)}`
+                : DROP_LOST_NOTE,
+            ]
+          : []),
+        ...(old.length > 0 ? [`Thrown away: ${old.map((w) => levelName(w)).join(', ')}`] : []),
+      ].join(' · ') || null,
   };
+}
+
+/** A bonus gun's compact row in the loot tile (ID-122). */
+export interface BonusRow {
+  rarity: Rarity;
+  /** "Lv 5 Rusty SMG" */
+  name: string;
+  /** "9.1 dmg/s" */
+  power: string;
+  icon: ArtId;
+  /** Thrown away: the stash full of better guns. */
+  lost: boolean;
 }
 
 /** What a drop tile says about its kind (ID-098). */
@@ -2212,6 +2279,30 @@ export function createHud(
         const head = el('div', 'tile-drop-head');
         head.append(icon, id);
         tile.append(head, power);
+        // Bonus guns (ID-122): one compact row each, the icon on its rarity's tint.
+        if (t.bonus.length > 0) {
+          tile.append(el('p', 'tile-label tile-bonus-label', 'Bonus guns'));
+          const list = el('ul', 'tile-bonus');
+          list.setAttribute('aria-label', 'Bonus guns');
+          for (const b of t.bonus) {
+            const row = el('li', 'tile-bonus-row');
+            row.dataset.rarity = b.rarity;
+            row.classList.toggle('tile-bonus-lost', b.lost);
+            const icon = el('span', 'tile-bonus-icon');
+            const img = el('img', 'tile-icon-img gun-icon');
+            img.alt = '';
+            img.dataset.gun = b.icon.slice('weapon-'.length);
+            img.src = ART_URLS[b.icon] ?? '';
+            icon.append(img);
+            row.append(
+              icon,
+              el('span', 'tile-bonus-name', b.name),
+              el('span', 'tile-bonus-power', b.lost ? 'Thrown away' : b.power),
+            );
+            list.append(row);
+          }
+          tile.append(list);
+        }
         if (t.thrown) tile.append(el('p', 'tile-thrown', t.thrown));
         if (t.farmNote) tile.append(el('p', 'tile-farm', t.farmNote));
         spoils.append(tile);

@@ -6,7 +6,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { DEFENDER_HP, type Rarity, type Stat, type Stats, type WeaponId } from '../core/data.ts';
+import {
+  DEFENDER_HP,
+  STASH_CAP,
+  type Rarity,
+  type Stat,
+  type Stats,
+  type WeaponId,
+} from '../core/data.ts';
 import { newGame, spendPoint, type GameState, type RosterDefender } from '../core/game.ts';
 import { bestGuns, equipGun, startSquadHorde } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
@@ -514,7 +521,7 @@ describe('Choose a gun (ID-108)', () => {
     slot.click();
     expect(m.key('slot').getAttribute('aria-expanded')).toBe('true');
     expect(m.q('.rv-ttl').textContent).toBe('Choose a gun');
-    expect(m.q('.rv-left').textContent).toBe('By dmg/s · stash 3/20');
+    expect(m.q('.rv-left').textContent).toBe(`By dmg/s · stash 3/${STASH_CAP}`);
     const t = tiles(m);
     expect(t).toHaveLength(3);
     const dps = t.map((x) => Number(x.querySelector('.rv-dps')!.textContent));
@@ -624,20 +631,20 @@ describe('Choose a gun (ID-108)', () => {
   });
 
   it('a full stash refuses a gun for the pistol: the core’s reason in the status line, in danger colour', () => {
-    const full = Array.from({ length: 20 }, (_, i) => gun(`f${i}`, 'smg', 'common'));
+    const full = Array.from({ length: STASH_CAP }, (_, i) => gun(`f${i}`, 'smg', 'common'));
     const m = mount(camp([at(1, 2)], [rifle]));
     m.roster.open('recruit-1');
     // Take the rifle, then try to give it back for the pistol while the stash is full.
     m.key('slot').click();
     m.key('equip').click();
     m.set({ ...m.game(), armoury: full });
-    expect(m.game().armoury).toHaveLength(20);
+    expect(m.game().armoury).toHaveLength(STASH_CAP);
     m.key('slot').click();
     tiles(m)
       .find((x) => x.dataset.choice === 'pistol')!
       .click();
     m.key('equip').click();
-    expect(m.status()).toBe('The stash is full (20/20)');
+    expect(m.status()).toBe(`The stash is full (${STASH_CAP}/${STASH_CAP})`);
     expect(m.q<HTMLElement>('.rv-status').dataset.tone).toBe('danger');
     // Still in the picker, the gun still held.
     expect(m.q('.rv-ttl').textContent).toBe('Choose a gun');

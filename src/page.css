@@ -1317,6 +1317,89 @@ body {
   opacity: 0.5;
 }
 
+/* Bonus guns (ID-122): compact rows under the drop, each icon on its rarity's tint. */
+.tile-bonus-label {
+  margin-top: var(--space-6) !important;
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+}
+
+.tile-bonus {
+  display: grid;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tile-bonus-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--text-sm);
+}
+
+.tile-bonus-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--rarity-common);
+  border-radius: var(--radius-sm);
+  background: var(--slot-common);
+  box-sizing: border-box;
+}
+
+.tile-bonus-row[data-rarity='rusty'] .tile-bonus-icon {
+  border-color: var(--rarity-rusty);
+  background: var(--slot-rusty);
+}
+
+.tile-bonus-row[data-rarity='military'] .tile-bonus-icon {
+  border-color: var(--rarity-military);
+  background: var(--slot-military);
+}
+
+.tile-bonus-row[data-rarity='prototype'] .tile-bonus-icon {
+  border-color: var(--rarity-prototype);
+  background: var(--slot-prototype);
+}
+
+.tile-bonus-row[data-rarity='relic'] .tile-bonus-icon {
+  border-color: var(--rarity-relic);
+  background: var(--slot-relic);
+}
+
+.tile-bonus-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-bonus-power {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tile-bonus-lost .tile-icon-img {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+.tile-bonus-lost .tile-bonus-name {
+  color: var(--color-text-subtle);
+  text-decoration: line-through;
+}
+
+.tile-bonus-lost .tile-bonus-power {
+  color: var(--color-warn);
+}
+
 .debrief-squad-head {
   display: flex;
   flex-wrap: wrap;
