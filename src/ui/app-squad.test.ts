@@ -4,7 +4,7 @@
 // replays the same horde. The build panel and all it opens (world map, patrols,
 // research, workbench, camp, perks) are never on the page. Canvas and art are stand-ins.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FIELD, HORDE_ONLY, SKILLS } from '../core/data.ts';
+import { FIELD, HORDE_ONLY, SKILLS, STASH_CAP } from '../core/data.ts';
 import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame } from '../core/game.ts';
@@ -296,13 +296,13 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
         .querySelector('[aria-label="Squad"] .inv-slot')!
         .getAttribute('aria-label')!
         .split(',')[0];
-    expect(heading()).toBe('Stash 1/20');
+    expect(heading()).toBe(`Stash 1/${STASH_CAP}`);
     expect(squadGun()).toBe('Pistol');
     // The field is inert behind the dialog in a browser; jsdom lets the change through.
     const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
     select.value = 'h1';
     select.dispatchEvent(new Event('change'));
-    expect(heading()).toBe('Stash 0/20');
+    expect(heading()).toBe(`Stash 0/${STASH_CAP}`);
     expect(squadGun()).toBe('Relic Rifle');
   });
 

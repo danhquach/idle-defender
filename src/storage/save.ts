@@ -71,7 +71,9 @@ import {
   revealOf,
   SEGMENTS,
   SKILL_IDS,
+  SQUAD_BONUS,
   SQUAD_CAP,
+  STASH_CAP,
   SQUAD_SKILLS,
   STATS,
   SURVIVOR,
@@ -204,13 +206,22 @@ const MAX_BUILDINGS = Math.max(1, ...Object.values(PLAZAS).map((z) => z.building
 /** Weapons one patrol can find: a haul's rolls for each building. */
 const MAX_FOUND = (PATROL.rolls + PATROL.bonusRolls) * MAX_BUILDINGS;
 /**
+ * A horde win's bonus gun (ID-122): its drop's uid and `-1` up to `-SQUAD_BONUS.rolls`.
+ */
+const BONUS = `(?:-(?:${Array.from({ length: SQUAD_BONUS.rolls }, (_, k) => k + 1).join('|')}))?`;
+/**
  * An owned weapon's uid: `h` and the horde number that dropped it; `r` and the replay win
- * that dropped it (ID-098); `p`, the patrol number that found it and its place in the
- * haul; or a survivor's (`SURVIVOR_ID`).
+ * that dropped it (ID-098), either with a bonus gun's `BONUS` (ID-122); `p`, the patrol
+ * number that found it and its place in the haul; or a survivor's (`SURVIVOR_ID`).
  */
 const UID = new RegExp(
-  `^(?:h[1-9][0-9]{0,5}|r[1-9][0-9]{0,5}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5})$`,
+  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5})$`,
 );
+/**
+ * The most owned weapons a save holds: the full game's armoury, or the horde-only stash
+ * (ID-122: 40) and a primary and secondary in each squad survivor's hands.
+ */
+export const MAX_OWNED = Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_CAP);
 /** A survivor's id (design §10): `s`, the patrol and its try; or `c` and the camp level. */
 const SURVIVOR_ID = /^(?:s([1-9][0-9]{0,5})-([0-9])|c([1-9][0-9]{0,5}))$/;
 /** Every research queue entry: each node, and each perk's next level. */
@@ -435,7 +446,7 @@ function readGame(
     roster: everyone,
     armoury: old.armoury
       ? []
-      : arr(o.armoury, 0, ARMOURY_CAP).map((w) => readOwned(w, hordeNumber, patrolsSent)),
+      : arr(o.armoury, 0, MAX_OWNED).map((w) => readOwned(w, hordeNumber, patrolsSent)),
     lab,
     research,
     queue,
@@ -469,12 +480,12 @@ function readGame(
     if (n !== undefined && Number(n) > game.camp.recruits) fail('recruit not counted');
   }
   // Each owned weapon is one item, in the armoury, in one pair of hands or left on the
-  // map, and the camp keeps at most ARMOURY_CAP.
+  // map: the camp keeps at most ARMOURY_CAP, the horde-only stash `STASH_CAP` and the squad's hands.
   const owned = [
     ...game.armoury,
     ...game.roster.flatMap((d) => [d.loadout.primary, d.loadout.secondary]),
   ].filter((h): h is OwnedWeapon => typeof h === 'object' && h !== null);
-  if (owned.length > ARMOURY_CAP) fail('too many weapons');
+  if (owned.length > MAX_OWNED) fail('too many weapons');
   // Survivors waiting to join, in patrol reports and camp offers (design §10, §11).
   const waiting = [
     ...game.reports.flatMap((r) => r.survivors),
@@ -487,7 +498,11 @@ function readGame(
   ];
   if (new Set(every.map((w) => w.uid)).size !== every.length) fail('weapon twice');
   // A replay's drop (`r<k>`) comes from a replay already won (ID-098).
-  if (every.some((w) => w.uid.startsWith('r') && Number(w.uid.slice(1)) > game.farm.replays)) {
+  if (
+    every.some(
+      (w) => w.uid.startsWith('r') && Number(w.uid.slice(1).split('-')[0]) > game.farm.replays,
+    )
+  ) {
     fail('replay drop from the future');
   }
   // A gun level (ID-098) only in a v15 save, and from a horde beaten, in every slot: a

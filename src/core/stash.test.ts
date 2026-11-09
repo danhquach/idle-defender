@@ -15,6 +15,7 @@ import {
   squadResult,
   squadSpec,
   startSquadHorde,
+  type SquadDrop,
 } from './hordeonly.ts';
 import { createRng } from './rng.ts';
 import { answerOffer } from './sim.ts';
@@ -146,14 +147,15 @@ describe('seeded from the horde seed (ID-067)', () => {
 });
 
 describe('a win, a loss and the stash (ID-067)', () => {
-  it('one weapon per win goes into the stash', () => {
+  it('a win’s drop, then its bonus guns, go into the stash', () => {
     const g = squadGame(2, 3);
     const won = ended(g, 'won');
     const next = finishSquadHorde(g, won);
-    expect(next.armoury).toEqual([squadDrop(g, won)!.weapon]);
+    const drop = squadDrop(g, won)!;
+    expect(next.armoury).toEqual([drop.weapon, ...drop.bonus]);
     expect(squadResult(g, won).drop).toMatchObject({
       weapon: next.armoury[0],
-      thrown: null,
+      thrown: [],
       kind: 'first',
     });
   });
@@ -169,12 +171,14 @@ describe('a win, a loss and the stash (ID-067)', () => {
   it('at the cap the weakest stash weapon is thrown away for a stronger drop', () => {
     const stash = [...smgs(STASH_CAP - 1), gun('p1', 'pistol', 'rusty')];
     const g = squadGame(1, 9, stash);
-    // Find a seed whose drop beats a Rusty Pistol.
     let seed = 1;
-    while (gunPower(squadDrop(g, ended(g, 'won', seed))!.weapon) <= gunPower(stash.at(-1)!)) seed++;
+    // Find a seed whose drop beats a Rusty Pistol, with no bonus gun.
+    const fits = (d: SquadDrop): boolean =>
+      d.bonus.length === 0 && gunPower(d.weapon) > gunPower(stash.at(-1)!);
+    while (!fits(squadDrop(g, ended(g, 'won', seed))!)) seed++;
     const won = ended(g, 'won', seed);
     const { weapon, thrown } = squadDrop(g, won)!;
-    expect(thrown).toEqual(stash.at(-1));
+    expect(thrown).toEqual([stash.at(-1)]);
     const next = finishSquadHorde(g, won);
     expect(next.armoury).toHaveLength(STASH_CAP);
     expect(next.armoury.map((w) => w.uid)).not.toContain('p1');
@@ -185,8 +189,8 @@ describe('a win, a loss and the stash (ID-067)', () => {
     const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
     const g = squadGame(1, 2, stash);
     const won = ended(g, 'won');
-    const { weapon, thrown } = squadDrop(g, won)!;
-    expect(thrown).toBe(weapon);
+    const { weapon, bonus, thrown } = squadDrop(g, won)!;
+    expect(thrown).toEqual([weapon, ...bonus]);
     expect(finishSquadHorde(g, won).armoury).toEqual(stash);
   });
 
@@ -199,7 +203,7 @@ describe('a win, a loss and the stash (ID-067)', () => {
       ...Array.from({ length: STASH_CAP - 1 }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic')),
     ];
     const g = squadGame(1, 2, stash);
-    expect(squadDrop(g, ended(g, 'won'))!.thrown!.uid).toBe('h2');
+    expect(squadDrop(g, ended(g, 'won'))!.thrown[0]!.uid).toBe('h2');
   });
 
   it('a blade or tool an older save left in a full stash is thrown away first', () => {
@@ -215,8 +219,8 @@ describe('a win, a loss and the stash (ID-067)', () => {
     ];
     const g = squadGame(1, 2, stash);
     const won = ended(g, 'won');
-    expect(squadDrop(g, won)!.thrown!.uid).toBe('p2-0');
-    expect(squadResult(g, won).drop!.thrown!.uid).toBe('p2-0');
+    expect(squadDrop(g, won)!.thrown[0]!.uid).toBe('p2-0');
+    expect(squadResult(g, won).drop!.thrown[0]!.uid).toBe('p2-0');
     const next = finishSquadHorde(g, won);
     expect(next.armoury).toHaveLength(STASH_CAP);
     expect(next.armoury.map((w) => w.uid)).not.toContain('p2-0');
@@ -228,7 +232,7 @@ describe('a win, a loss and the stash (ID-067)', () => {
     ]);
     expect(knifed.armoury).toHaveLength(STASH_CAP);
     expect(knifed.armoury.at(-1)!.base).toBe('knife');
-    expect(squadDrop(knifed, ended(knifed, 'won'))!.thrown!.base).toBe('knife');
+    expect(squadDrop(knifed, ended(knifed, 'won'))!.thrown[0]!.base).toBe('knife');
   });
 
   it('an older stash past the cap never grows: one in, one out', () => {

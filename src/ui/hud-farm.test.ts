@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { levelName, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { ENDING_HORDE, SQUAD_CAP } from '../core/data.ts';
+import { ENDING_HORDE, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
 import { powerBand, recommendedPower, squadPower } from '../core/squadpower.ts';
@@ -58,7 +58,8 @@ const gun = (uid: string, level?: number): OwnedWeapon => ({
 });
 const dropOf = (weapon: OwnedWeapon, extra: Partial<SquadDrop> = {}): SquadDrop => ({
   weapon,
-  thrown: null,
+  bonus: [],
+  thrown: [],
   kind: 'first',
   upgrade: true,
   noUpgrades: false,
@@ -485,9 +486,10 @@ describe('gun level wherever the gun shows (ID-098)', () => {
   it('a thrown-away gun is named with its level', () => {
     const w = gun('a', 7);
     const thrown = gun('t', 3);
-    const t = dropTile({ armoury: [] }, dropOf(w, { thrown }));
+    const full = { armoury: [thrown, ...Array.from({ length: STASH_CAP - 1 }, () => w)] };
+    const t = dropTile(full, dropOf(w, { thrown: [thrown] }));
     expect(t.thrown).toBe('Thrown away: Lv 3 Military Rifle');
-    const lines = squadDropLines({ armoury: [thrown] }, dropOf(w, { thrown }));
+    const lines = squadDropLines(full, dropOf(w, { thrown: [thrown] }));
     expect(lines.some((l) => l.includes('Lv 3 Military Rifle (+7% damage)'))).toBe(true);
   });
 });

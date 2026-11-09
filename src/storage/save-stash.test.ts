@@ -4,10 +4,10 @@
 import { describe, expect, it } from 'vitest';
 import { roleOf, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { ARMOURY_CAP, STASH_CAP } from '../core/data.ts';
+import { ARMOURY_CAP, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { combineGuns, equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
-import { decodeSave, encodeSave, MAX_SAVE_CHARS } from './save.ts';
+import { decodeSave, encodeSave, MAX_OWNED, MAX_SAVE_CHARS } from './save.ts';
 import { NOW } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
@@ -44,7 +44,8 @@ function armed(wins: number): GameState {
 describe('save: the stash and equipped guns (ID-067)', () => {
   it('round-trips the stash and each survivor’s gun', () => {
     const g = armed(4);
-    expect(g.armoury.map((w) => w.uid)).toEqual(['h2', 'h3', 'h4']);
+    expect(g.armoury.map((w) => w.uid).filter((u) => !u.includes('-'))).toEqual(['h2', 'h3', 'h4']);
+    expect(g.armoury.some((w) => w.uid.includes('-'))).toBe(true);
     expect(g.roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
     expect(reread(g)?.game).toEqual(g);
   });
@@ -141,7 +142,7 @@ describe('save: the stash and equipped guns (ID-067)', () => {
     for (const [name, change] of cases) expect(reread(g, change), name).toBeNull();
   });
 
-  it('caps the stash as it is read: the camp’s 30 owned weapons load, one more is refused', () => {
+  it('caps the stash as it is read: MAX_OWNED weapons load (a full stash and armed squad), one more is refused', () => {
     // A camp at Horde 60 with nobody holding an owned gun: every uid is a horde already won.
     const many = (n: number): OwnedWeapon[] =>
       Array.from({ length: n }, (_, i) => ({
@@ -151,9 +152,15 @@ describe('save: the stash and equipped guns (ID-067)', () => {
         affixes: [],
       }));
     const g = { ...newGame('horde'), hordeNumber: 60 };
-    const at = { ...g, armoury: many(ARMOURY_CAP) };
+    expect(MAX_OWNED).toBe(Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_CAP));
+    const at = { ...g, armoury: many(MAX_OWNED) };
     expect(reread(at)?.game).toEqual(at);
     expect(reread(at, (x) => x.armoury.push({ ...x.armoury[0], uid: 'h59' }))).toBeNull();
+    // Within the stash's bound, but a gun in hand takes the total owned past it.
+    const held = { uid: 'h59', base: 'rifle', rarity: 'common', affixes: [] };
+    expect(reread(at, (x) => (x.roster[0].loadout.primary = held))).toBeNull();
+    const fewer = { ...g, armoury: many(MAX_OWNED - 1) };
+    expect(reread(fewer, (x) => (x.roster[0].loadout.primary = held))).not.toBeNull();
     // Far past the size check: refused before it is parsed.
     const huge = encodeSave({ ...g, armoury: many(59) }, NOW).replace(
       /"armoury":\[[^\]]*\]/,

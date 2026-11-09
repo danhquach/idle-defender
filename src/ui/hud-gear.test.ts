@@ -56,7 +56,8 @@ const dropOf = (
   extra: Partial<SquadDrop> = {},
 ): SquadDrop => ({
   weapon,
-  thrown,
+  bonus: [],
+  thrown: thrown ? [thrown] : [],
   kind: 'first',
   upgrade: true,
   noUpgrades: false,
@@ -89,7 +90,7 @@ describe('the drop on the result screen (ID-067)', () => {
     ];
     const g = squadGame(1, 9, stash);
     let seed = 1;
-    while (squadDrop(g, ended(g, 'won', seed))!.thrown!.uid !== 'p1') seed++;
+    while (squadDrop(g, ended(g, 'won', seed))!.thrown[0]?.uid !== 'p1') seed++;
     const lines = squadScreen(g, ended(g, 'won', seed)).lines;
     expect(lines).toContain('Stash full: the weakest, the Lv 1 Rusty Pistol, was thrown away');
   });
@@ -288,7 +289,7 @@ describe('the debrief layout (ID-067)', () => {
     const relics = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
     const weak = gun('h1', 'smg', 'rusty');
     expect(dropTile({ armoury: relics }, dropOf(weak, weak))).toMatchObject({
-      stash: 'Stash full: thrown away',
+      stash: `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
       lost: true,
       thrown: DROP_LOST_NOTE,
     });
@@ -376,12 +377,14 @@ describe('the debrief layout (ID-067)', () => {
     const full = squadGame(1, 1, relics);
     // Horde 1 drops only Rusty or Common: always weaker than a stash of Relic LMGs.
     const drop = squadDrop(full, ended(full, 'won'))!;
-    expect(drop.thrown).toBe(drop.weapon);
+    expect(drop.thrown[0]).toBe(drop.weapon);
     h.showResult(squadScreen(full, ended(full, 'won')));
     const lost = root.querySelector<HTMLElement>('.tile-drop')!;
     expect(lost.classList.contains('tile-drop-lost')).toBe(true);
     expect(lost.querySelector('.tile-thrown')!.textContent).toBe(DROP_LOST_NOTE);
-    expect(lost.querySelector('.tile-stash-lost')!.textContent).toBe('Stash full: thrown away');
+    expect(lost.querySelector('.tile-stash-lost')!.textContent).toBe(
+      `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
+    );
   });
 
   it('a loss on the page: the no-drop chip, and no loot tile (ID-073)', () => {
@@ -481,5 +484,113 @@ describe('the debrief panel scrolls (ID-067)', () => {
     panel.scrollTop = 300;
     h.showResult(squadStart(g));
     expect(panel.scrollTop).toBe(0);
+  });
+});
+
+describe('bonus guns on the result screen (ID-122)', () => {
+  function page() {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    return { root, h };
+  }
+
+  /** A seed whose win at Horde `horde` of `g` drops `n` bonus guns. */
+  const seedWith = (g: GameState, n: number): number => {
+    let seed = 1;
+    while (squadDrop(g, ended(g, 'won', seed))!.bonus.length !== n) seed++;
+    return seed;
+  };
+
+  it('lists each bonus gun after the drop, with the stash count as each goes in', () => {
+    const g = squadGame(2, 6);
+    const won = ended(g, 'won', seedWith(g, 2));
+    const { weapon, bonus } = squadDrop(g, won)!;
+    const lines = squadScreen(g, won).lines;
+    const at = lines.indexOf(
+      `Weapon drop (First clear): ${gunLabel(weapon)} · into the stash (1/${STASH_CAP})`,
+    );
+    expect(at).toBeGreaterThan(-1);
+    expect(lines.slice(at + 1, at + 3)).toEqual([
+      `Bonus gun: ${gunLabel(bonus[0]!)} · into the stash (2/${STASH_CAP})`,
+      `Bonus gun: ${gunLabel(bonus[1]!)} · into the stash (3/${STASH_CAP})`,
+    ]);
+    const t = dropTile(g, squadDrop(g, won)!);
+    expect(t.stash).toBe(`Stash 3/${STASH_CAP}`);
+    expect(t.bonus.map((b) => b.lost)).toEqual([false, false]);
+  });
+
+  it('a win with no bonus gun shows no bonus list', () => {
+    const { root, h } = page();
+    const g = squadGame(1, 6);
+    h.showResult(squadScreen(g, ended(g, 'won', seedWith(g, 0))));
+    expect(root.querySelector('.tile-drop')).not.toBeNull();
+    expect(root.querySelector('.tile-bonus')).toBeNull();
+  });
+
+  it('on the page: a compact row per bonus gun, icon decorative, a thrown one greyed', () => {
+    const { root, h } = page();
+    const stash = Array.from({ length: STASH_CAP - 1 }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
+    const g = squadGame(1, 6, stash);
+    const won = ended(g, 'won', seedWith(g, 2));
+    const drop = squadDrop(g, won)!;
+    h.showResult(squadScreen(g, won));
+    const list = root.querySelector<HTMLElement>('.tile-drop .tile-bonus')!;
+    expect(list.getAttribute('aria-label')).toBe('Bonus guns');
+    const rows = [...list.querySelectorAll<HTMLElement>('.tile-bonus-row')];
+    expect(rows).toHaveLength(2);
+    for (const [i, row] of rows.entries()) {
+      const b = drop.bonus[i]!;
+      expect(row.dataset.rarity).toBe(b.rarity);
+      expect(row.querySelector('img')!.alt).toBe('');
+      expect(row.querySelector('.tile-bonus-name')!.textContent).toBe(
+        `Lv 6 ${b.rarity[0]!.toUpperCase()}${b.rarity.slice(1)} ${WEAPONS[b.base].name}`,
+      );
+    }
+    // One slot left: the drop takes it, then each bonus gun throws away the weaker of the
+    // win's own guns (all weaker than a Relic LMG), so two of the three go.
+    expect(drop.thrown).toHaveLength(2);
+    expect(drop.thrown.every((w) => w.uid.startsWith('h6'))).toBe(true);
+    for (const [i, row] of rows.entries()) {
+      const lost = drop.thrown.includes(drop.bonus[i]!);
+      expect(row.classList.contains('tile-bonus-lost')).toBe(lost);
+      expect(row.querySelector('.tile-bonus-power')!.textContent).toBe(
+        lost ? 'Thrown away' : `${gunPower(drop.bonus[i]!).toFixed(1)} dmg/s`,
+      );
+    }
+    expect(rows.some((r) => r.classList.contains('tile-bonus-lost'))).toBe(true);
+    expect(root.querySelector('.tile-drop .tile-stash')!.textContent).toBe(
+      drop.thrown.includes(drop.weapon)
+        ? `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`
+        : `Stash ${STASH_CAP}/${STASH_CAP}`,
+    );
+    // Text only: a gun's name never reaches the page as markup.
+    expect(list.querySelector('b, script')).toBeNull();
+  });
+
+  it('names the stronger bonus gun that pushed the drop out, apart from a drop no better than the stash', () => {
+    const lmg = (uid: string, rarity: Rarity): OwnedWeapon => ({
+      ...gun(uid, 'lmg', rarity),
+      level: 9,
+    });
+    const relics = Array.from({ length: STASH_CAP - 1 }, (_, i) =>
+      gun(`c${i + 1}`, 'lmg', 'relic'),
+    );
+    const weak = gun('h9', 'smg', 'rusty');
+    const strong = lmg('h9-1', 'common');
+    // One slot left: the drop takes it, then the stronger bonus gun throws the drop out.
+    const pushed = dropOf(weak, null, { bonus: [strong], thrown: [weak] });
+    expect(dropTile({ armoury: relics }, pushed)).toMatchObject({
+      lost: true,
+      stash: `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
+      thrown: 'Replaced by the stronger bonus gun Lv 9 Common LMG',
+    });
+    // Already full: the drop itself was no better than the stash.
+    const full = [...relics, gun('c99', 'lmg', 'relic')];
+    const own = dropOf(weak, null, { bonus: [strong], thrown: [weak, relics.at(-1)!] });
+    expect(dropTile({ armoury: full }, own)).toMatchObject({
+      lost: true,
+      thrown: `${DROP_LOST_NOTE} · Thrown away: Lv 1 Relic LMG`,
+    });
   });
 });
