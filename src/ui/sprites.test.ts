@@ -26,6 +26,7 @@ import {
   GUN_ICON,
   GUNNER_ART,
   GUNNER_LOOKS,
+  THROW_LOOKS,
   LOAD_TIMEOUT_MS,
   LOOKS,
   lookOf,
@@ -142,6 +143,7 @@ describe('art coverage', () => {
       ...Object.values(ENEMY_ART).flatMap((e) => [...e.walk, e.attack]),
       ...Object.keys(PROFESSIONS).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
       ...GUNNER_LOOKS.flatMap((look) => Object.values(look).flatMap((g) => [g.idle, g.aim])),
+      ...THROW_LOOKS.flatMap((t) => [t.wind, t.release]),
       SCORCH_ART,
       BOMB_ART,
       ...Object.values(FIREBALL.art),
@@ -207,6 +209,7 @@ describe('art coverage', () => {
     const sets = [
       ...Object.values(ENEMY_ART).map((e) => [...e.walk, e.attack]),
       ...GUNNER_LOOKS.flatMap((look) => Object.values(look).map((g) => [g.idle, g.aim])),
+      ...THROW_LOOKS.map((t) => [t.wind, t.release]),
     ];
     for (const set of sets) {
       const sizes = new Set(set.map((id) => `${pixels(id).w}x${pixels(id).h}`));
@@ -225,6 +228,29 @@ describe('art coverage', () => {
       Object.values(look).map((g) => pixels(g.idle).h),
     );
     expect(new Set(heights)).toEqual(new Set([192]));
+    // The throw stands the same height too (ID-119), so swapping to it doesn't resize anyone.
+    const throws = THROW_LOOKS.flatMap((t) => [pixels(t.wind).h, pixels(t.release).h]);
+    expect(new Set(throws)).toEqual(new Set([192]));
+  });
+
+  it('puts the release hand where the release sprite reaches furthest (ID-119)', () => {
+    for (const t of THROW_LOOKS) {
+      const { w, h, px } = pixels(t.release);
+      let right = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3]! > 128) right = Math.max(right, x);
+      }
+      const rows: number[] = [];
+      for (let y = 0; y < h; y++) if (px[(y * w + right) * 4 + 3]! > 128) rows.push(y);
+      const mid = rows.reduce((a, b) => a + b, 0) / rows.length;
+      expect(Math.abs(right - w / 2 - t.hand.x), t.release).toBeLessThanOrEqual(2);
+      expect(Math.abs(h - mid - t.hand.y), t.release).toBeLessThanOrEqual(2);
+      // Ahead of the body and up above the shoulder; the held grenade behind the head.
+      expect(t.hand.x, t.release).toBeGreaterThan(50);
+      expect(t.hand.y / h, t.release).toBeGreaterThan(0.75);
+      expect(t.held.x, t.wind).toBeLessThan(0);
+      expect(t.held.y / h, t.wind).toBeGreaterThan(0.75);
+    }
   });
 
   it("puts each gun's barrel tip where its aim sprite's gun ends (ID-069)", () => {

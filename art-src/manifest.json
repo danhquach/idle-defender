@@ -923,6 +923,94 @@
       "ref": "gunner-sniper-aim"
     },
     {
+      "id": "gunner-throw-wind",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-twind",
+      "frames": "gunner-throw",
+      "prompt": "repaint this simple puppet figure as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, no gun in his hands, winding up to throw: the right arm drawn back over the shoulder holding a small olive green hand grenade, the left arm stretched forward pointing at the target. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
+    },
+    {
+      "id": "gunner-throw-release",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "pose": "soldier-trel",
+      "frames": "gunner-throw",
+      "prompt": "repaint this simple puppet figure as a detailed survivor soldier, keeping its exact pose, limb angles, stance, position and size: a helmet, khaki jacket with ammunition pouches, dark trousers, boots, facing right, no gun in his hands, just after throwing a grenade: the right arm swung through, stretched forward and up to the right with the hand open and empty, the left arm down behind the body. 2D game sprite, hand-painted style, soft shading, bold dark outline, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text"
+    },
+    {
+      "id": "gunner-throw-wind-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "frames": "gunner-throw-b",
+      "prompt": "repaint this exact image keeping its shape, size, outline, position, pose, both hands and the grenade exactly as they are. Only change the person's clothes, head and face to: a dark red knitted beanie hat, a short dark beard, a navy blue hooded jacket, faded blue jeans, brown work boots, no helmet, no pouches. Same hand-painted 2D game sprite style with a bold dark outline, soft shading, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": "gunner-throw-wind"
+    },
+    {
+      "id": "gunner-throw-release-b",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "frames": "gunner-throw-b",
+      "prompt": "repaint this exact image keeping its shape, size, outline, position, pose, both hands and the grenade exactly as they are. Only change the person's clothes, head and face to: a dark red knitted beanie hat, a short dark beard, a navy blue hooded jacket, faded blue jeans, brown work boots, no helmet, no pouches. Same hand-painted 2D game sprite style with a bold dark outline, soft shading, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": "gunner-throw-release"
+    },
+    {
+      "id": "gunner-throw-wind-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "frames": "gunner-throw-c",
+      "prompt": "repaint this exact image keeping its shape, size, outline, position, pose, both hands and the grenade exactly as they are. Only change the person's clothes, head and face to: a tan baseball cap, short blond hair, a red and black plaid flannel shirt with rolled sleeves, olive green cargo trousers, black boots, no helmet, no pouches. Same hand-painted 2D game sprite style with a bold dark outline, soft shading, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": "gunner-throw-wind"
+    },
+    {
+      "id": "gunner-throw-release-c",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "frames": "gunner-throw-c",
+      "prompt": "repaint this exact image keeping its shape, size, outline, position, pose, both hands and the grenade exactly as they are. Only change the person's clothes, head and face to: a tan baseball cap, short blond hair, a red and black plaid flannel shirt with rolled sleeves, olive green cargo trousers, black boots, no helmet, no pouches. Same hand-painted 2D game sprite style with a bold dark outline, soft shading, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": "gunner-throw-release"
+    },
+    {
+      "id": "gunner-throw-wind-d",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "frames": "gunner-throw-d",
+      "prompt": "repaint this exact image keeping its shape, size, outline, position, pose, both hands and the grenade exactly as they are. Only change the person's clothes, head and face to: a woman with dark skin and black hair tied in a ponytail, no hat, a mid-brown leather jacket, light tan trousers, dark brown boots, no helmet, no pouches. Same hand-painted 2D game sprite style with a bold dark outline, soft shading, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": "gunner-throw-wind"
+    },
+    {
+      "id": "gunner-throw-release-d",
+      "kind": "sprite",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7801,
+      "size": "512x512",
+      "style": "verbatim",
+      "frames": "gunner-throw-d",
+      "prompt": "repaint this exact image keeping its shape, size, outline, position, pose, both hands and the grenade exactly as they are. Only change the person's clothes, head and face to: a woman with dark skin and black hair tied in a ponytail, no hat, a mid-brown leather jacket, light tan trousers, dark brown boots, no helmet, no pouches. Same hand-painted 2D game sprite style with a bold dark outline, soft shading, plain flat solid magenta background #FF00FF, no cast shadow, no ground, no text",
+      "ref": "gunner-throw-release"
+    },
+    {
       "id": "icon-adrenaline",
       "kind": "sprite",
       "style": "verbatim",

@@ -152,6 +152,14 @@ export const ART_IDS = [
   'gunner-lmg-aim-d',
   'gunner-sniper-idle-d',
   'gunner-sniper-aim-d',
+  'gunner-throw-wind',
+  'gunner-throw-release',
+  'gunner-throw-wind-b',
+  'gunner-throw-release-b',
+  'gunner-throw-wind-c',
+  'gunner-throw-release-c',
+  'gunner-throw-wind-d',
+  'gunner-throw-release-d',
   'ripper',
   'engineer',
   'shield',
@@ -461,6 +469,34 @@ export const GUNNER_LOOKS: readonly Readonly<Record<GunId, GunnerArt>>[] = [
 ];
 /** How many survivor looks there are (ID-074): the soldier, then the others. */
 export const LOOKS = GUNNER_LOOKS.length;
+
+/**
+ * A survivor's Frag Grenade throw in each look (ID-119), in `GUNNER_LOOKS` order: the
+ * wind-up (grenade drawn back over the shoulder) and the release (arm through, hand open),
+ * no gun in hand. `held` is where the grenade is on the wind-up sprite and `hand` where the
+ * open hand is on the release sprite, in their px like `GunnerArt.barrel`; the other looks'
+ * frames trim narrower, as theirs do.
+ */
+export interface ThrowArt {
+  wind: ArtId;
+  release: ArtId;
+  held: { readonly x: number; readonly y: number };
+  hand: { readonly x: number; readonly y: number };
+}
+export const THROW_LOOKS: readonly Readonly<ThrowArt>[] = [
+  {
+    wind: 'gunner-throw-wind',
+    release: 'gunner-throw-release',
+    held: { x: -25, y: 160 },
+    hand: { x: 81, y: 159 },
+  },
+  ...LOOK_LETTERS.map((letter): ThrowArt => ({
+    wind: `gunner-throw-wind-${letter}`,
+    release: `gunner-throw-release-${letter}`,
+    held: { x: -37, y: 159 },
+    hand: { x: 69, y: 158 },
+  })),
+];
 
 /**
  * A survivor's look (ID-074), 0…LOOKS-1, kept for good since it comes from their id,
