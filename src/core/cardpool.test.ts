@@ -368,6 +368,9 @@ describe('behaviour cards', () => {
     expect({ x: g.x, y: g.y }).toEqual({ x: 900, y: ROW4 });
     expect(g.lands).toBeCloseTo(g.at + CARD.frag.flight, 9);
     expect(t.nextFragAt).toBeCloseTo(g.at + CARD.frag.every, 9);
+    // It names its thrower (ID-119), who stands where it was thrown from.
+    const by = t.defenders.find((d) => d.id === g.by)!;
+    expect({ x: by.x, y: by.y }).toEqual({ x: g.fromX, y: g.fromY });
     // Nothing is hurt while it's in the air.
     expect(hpOf(t, group[1]!.id)).toBe(1000);
     t = steps(t, Math.round(CARD.frag.flight / STEP) + 1);

@@ -91,6 +91,9 @@ import {
   flashShape,
   GRENADE,
   grenadeAt,
+  THROW,
+  throwFrame,
+  launchOf,
   NAME_TAG_GAP,
   offFrame,
   PLATE_H,
@@ -115,6 +118,7 @@ import {
   ENEMY_ART,
   GUNNER_ART,
   GUNNER_LOOKS,
+  THROW_LOOKS,
   LOOKS,
   SCORCH_ART,
   BOMB_ART,
@@ -824,7 +828,17 @@ describe('drawScene with art', () => {
       time,
       enemies: [shambler(0, burnUntil)],
       grenades: [
-        { fromX: 420, fromY: 360, x: 760, y: 320, at: 0.8, lands: 1.4, burst: time >= 1.4 },
+        {
+          // No such defender here: it flies from the feet at the throw (ID-119's fallback).
+          by: 's1',
+          fromX: 420,
+          fromY: 360,
+          x: 760,
+          y: 320,
+          at: 0.8,
+          lands: 1.4,
+          burst: time >= 1.4,
+        },
       ],
     });
     // A fireball leaves its scorch (ID-107): one per explosion drawn.
@@ -848,11 +862,19 @@ describe('drawScene with art', () => {
   });
 
   it('a Frag Grenade flies from its thrower to where it lands, highest at the middle', () => {
-    const g = { fromX: 400, fromY: 300, x: 800, y: 500, at: 1, lands: 2, burst: false };
+    const g = { by: 's1', fromX: 400, fromY: 300, x: 800, y: 500, at: 1, lands: 2, burst: false };
     expect(grenadeAt(g, 1)).toEqual({ x: 400, y: 300, z: 0 });
     expect(grenadeAt(g, 1.5)).toEqual({ x: 600, y: 400, z: GRENADE.arc });
     expect(grenadeAt(g, 2)).toEqual({ x: 800, y: 500, z: 0 });
     expect(grenadeAt(g, 5)).toEqual({ x: 800, y: 500, z: 0 });
+    // From the thrower's hand at the release (ID-119): ahead and up, still landing on time.
+    const hand = { dx: 20, z: 40, at: 1.2 };
+    expect(grenadeAt(g, 1, hand)).toEqual({ x: 420, y: 300, z: 40 });
+    expect(grenadeAt(g, 1.2, hand)).toEqual({ x: 420, y: 300, z: 40 });
+    const mid = grenadeAt(g, 1.6, hand);
+    expect(mid.x).toBeCloseTo(610, 9);
+    expect(mid.z).toBeCloseTo(20 + GRENADE.arc, 9);
+    expect(grenadeAt(g, 2, hand)).toEqual({ x: 800, y: 500, z: 0 });
   });
 
   it("draws a broken gate as its tier's rubble only, in every tier", () => {
@@ -1188,7 +1210,9 @@ describe('drawScene with art', () => {
     expect(air[0]!.w).toBeGreaterThan(FIREBALL_WIDTH.airstrike * CAM.zoom);
     const frag = sizes({
       time: 1.4 + 0.3 * CARD.frag.flash,
-      grenades: [{ fromX: 420, fromY: 300, x: 900, y: 300, at: 0.8, lands: 1.4, burst: true }],
+      grenades: [
+        { by: 's1', fromX: 420, fromY: 300, x: 900, y: 300, at: 0.8, lands: 1.4, burst: true },
+      ],
     });
     expect(frag.map((b) => b.id)).toEqual([FIREBALL.art.ball]);
     expect(frag[0]!.w / air[0]!.w).toBeCloseTo(FIREBALL_WIDTH.frag / FIREBALL_WIDTH.airstrike, 1);
@@ -1363,7 +1387,11 @@ describe('drawScene with art', () => {
 });
 
 /** Lines and dots the renderer drew, with their colour and alpha, and the sprites between them. */
-function geometry(cam: { x: number; y: number; zoom: number }, scene: Scene) {
+function geometry(
+  cam: { x: number; y: number; zoom: number },
+  scene: Scene,
+  anim: Animator | null = null,
+) {
   const r = recorder();
   type Mark =
     | { kind: 'line'; a: [number, number]; b: [number, number]; colour: string; width: number }
@@ -1394,7 +1422,7 @@ function geometry(cam: { x: number; y: number; zoom: number }, scene: Scene) {
     arc: (x: number, y: number, rad: number) =>
       marks.push({ kind: 'dot', x, y, r: rad, colour: ctx.fillStyle, alpha: ctx.globalAlpha }),
   });
-  drawScene(r.ctx, r.art, scene, cam, VIEW);
+  drawScene(r.ctx, r.art, scene, cam, VIEW, null, null, null, anim);
   const lines = marks.filter((m) => m.kind === 'line');
   const dots = marks.filter((m) => m.kind === 'dot');
   return { marks, lines, dots, alpha: ctx.globalAlpha };
@@ -1726,6 +1754,38 @@ describe('bullet visuals (ID-045)', () => {
     expect(stops).toContainEqual(['#ffffff', 'rgba(255, 211, 106, 0.9)', 'rgba(255, 211, 106, 0)']);
     expect(stops).toContainEqual(['#ffffff', 'rgba(18, 52, 86, 0.9)', 'rgba(18, 52, 86, 0)']);
     expect(TURRET.tracer).not.toEqual(WEAPONS.pistol.tracer);
+  });
+
+  it('a Frag Grenade leaves a Gunner’s open hand at the release, from their post (ID-119)', () => {
+    const { scene, d, post } = fight();
+    const floor = postFloor(scene.layers, post);
+    expect(floor).toBeGreaterThan(0); // up on the tower
+    const g = { by: d.id, fromX: post.x, fromY: post.y, x: 900, y: 300, at: 1, lands: 1.6 };
+    // A Gunner: their look's release hand, ahead and up from the post, once the wind-up is over.
+    const gunner = { ...d, loadout: recruit(1).loadout };
+    const s = { ...scene, defenders: [gunner] };
+    const { hand } = THROW_LOOKS[lookOf(d.id)]!;
+    const l = launchOf(s, { ...g, burst: false }, true);
+    expect(l.at).toBe(1 + THROW.wind);
+    expect(l.dx).toBeGreaterThan(0);
+    expect(l.z).toBeGreaterThan(floor);
+    // Both offsets are the hand's sprite px at one scale (z is a height, so over HEIGHT_SCALE).
+    expect(((l.z - floor) * HEIGHT_SCALE) / l.dx).toBeCloseTo(hand.y / hand.x, 9);
+    // Its arc starts there and still lands on time.
+    expect(grenadeAt({ ...g, burst: false }, l.at, l)).toEqual({
+      x: post.x + l.dx,
+      y: post.y,
+      z: l.z,
+    });
+    expect(grenadeAt({ ...g, burst: false }, 1.6, l)).toEqual({ x: 900, y: 300, z: 0 });
+    // Out of a fight, a thrower gone, or one with no throw art: from their feet on the post, at once.
+    const feet = { dx: 0, z: floor, at: 1 };
+    expect(launchOf(s, { ...g, burst: false }, false)).toEqual(feet);
+    expect(launchOf({ ...s, defenders: [] }, { ...g, burst: false }, true)).toEqual(feet);
+    const engineer = { ...d, loadout: { ...d.loadout, secondary: 'toolkit' as const } };
+    expect(launchOf({ ...s, defenders: [engineer] }, { ...g, burst: false }, true)).toEqual(feet);
+    // Thrown from somewhere that is no post: from the ground.
+    expect(launchOf(s, { ...g, fromX: -5, burst: false }, false)).toEqual({ ...feet, z: 0 });
   });
 
   it('flashes at the barrel for MUZZLE_FLASH s after a shot, fading', () => {
@@ -2649,6 +2709,88 @@ describe('the horde-only fight (ID-068)', () => {
     // No shot when the gun was ready: nothing was in range, so the gun drops.
     expect(at(1.5 + ANIM.aim.hold + 0.1).sort()).toEqual([pa!.idle, pb!.idle].sort());
     expect(b!.id).not.toBe(a!.id);
+  });
+
+  it('only the survivor who throws a Frag Grenade plays the throw, then goes back (ID-119)', () => {
+    const scene = squadScene(2);
+    const [a, b] = scene.defenders;
+    const anim = new Animator();
+    const grenade = { by: a!.id, fromX: a!.x, fromY: a!.y, x: 900, y: 300, at: 1, lands: 1.6 };
+    const cam = frameCamera({ w: 1280, h: 720 });
+    const feet = project({ x: a!.x, y: a!.y }, cam);
+    const at = (time: number, shots: Scene['shots'] = []) => {
+      const g = { ...grenade, burst: time >= grenade.lands };
+      const { marks, dots } = geometry(cam, { ...scene, time, shots, grenades: [g] }, anim);
+      return {
+        sprites: marks
+          .flatMap((m) => (m.kind === 'art' && m.id.startsWith('gunner-') ? [m.id] : []))
+          .sort(),
+        balls: dots.flatMap((m) => (m.kind === 'dot' && m.colour === '#8a9a4a' ? [m] : [])),
+        flashes: dots.filter((m) => m.kind === 'dot' && m.colour === PUFF.flash).length,
+      };
+    };
+    const [ta, tb] = [a!, b!].map((d) => THROW_LOOKS[lookOf(d.id)]!);
+    const pb = GUNNER_LOOKS[lookOf(b!.id)]!.pistol;
+    const pa = GUNNER_LOOKS[lookOf(a!.id)]!.pistol;
+    expect(ta!.wind).not.toBe(tb!.wind);
+    // The wind-up: the grenade is in the drawn-back hand, behind the head, not yet flying.
+    const wind = at(1.05);
+    expect(wind.sprites).toEqual([ta!.wind, pb.idle].sort());
+    expect(wind.balls).toHaveLength(1);
+    expect(wind.balls[0]!.x).toBeLessThan(feet.sx);
+    expect(wind.balls[0]!.y).toBeLessThan(feet.sy - 20 * cam.zoom);
+    // The release: the grenade leaves the open hand, ahead and up, not the feet.
+    const release = at(1 + THROW.wind + 1e-6);
+    expect(release.sprites).toEqual([ta!.release, pb.idle].sort());
+    expect(release.balls).toHaveLength(1);
+    expect(release.balls[0]!.x).toBeGreaterThan(feet.sx + 5 * cam.zoom);
+    expect(release.balls[0]!.y).toBeLessThan(feet.sy - 20 * cam.zoom);
+    // Only one ball at a time: the held one is the smaller, and gone once it flies.
+    expect(wind.balls[0]!.r).toBeLessThan(release.balls[0]!.r);
+    // Over: back to their own pose.
+    expect(at(1 + THROW.total + 1e-6).sprites).toEqual([pa.idle, pb.idle].sort());
+    // Firing mid-throw keeps the throw, with no muzzle flash (no gun in hand); b's still shows.
+    const firing = at(1.3, [{ owner: a!.id, at: 1.3 }]);
+    expect(firing.sprites).toContain(ta!.release);
+    expect(firing.flashes).toBe(0);
+    expect(at(1.3, [{ owner: b!.id, at: 1.3 }]).flashes).toBe(1);
+    // Out of a fight (no animator) nobody poses.
+    const r = recorder();
+    drawScene(
+      r.ctx,
+      r.art,
+      { ...scene, time: 1.05, grenades: [{ ...grenade, burst: false }] },
+      CAM,
+      VIEW,
+    );
+    expect(r.drawn).not.toContain(ta!.wind);
+  });
+
+  it('a throw shows the wind-up, then the release, for its newest grenade only (ID-119)', () => {
+    const g = (by: string, at: number) => ({ by, at });
+    expect(throwFrame({ id: 's1' }, [], 1)).toBeNull();
+    expect(throwFrame({ id: 's1' }, [g('s1', 1)], 0.99)).toBeNull();
+    expect(throwFrame({ id: 's1' }, [g('s1', 1)], 1)).toBe('wind');
+    expect(throwFrame({ id: 's1' }, [g('s1', 1)], 1 + THROW.wind - 1e-6)).toBe('wind');
+    expect(throwFrame({ id: 's1' }, [g('s1', 1)], 1 + THROW.wind + 1e-6)).toBe('release');
+    expect(throwFrame({ id: 's1' }, [g('s1', 1)], 1 + THROW.total - 1e-6)).toBe('release');
+    expect(throwFrame({ id: 's1' }, [g('s1', 1)], 1 + THROW.total + 1e-6)).toBeNull();
+    // Someone else's grenade is not theirs.
+    expect(throwFrame({ id: 's2' }, [g('s1', 1)], 1.1)).toBeNull();
+    // A new throw before the last one ends restarts it from the wind-up, never stuck.
+    const many = [g('s1', 1), g('s1', 1.3)];
+    expect(throwFrame({ id: 's1' }, many, 1.35)).toBe('wind');
+    expect(throwFrame({ id: 's1' }, many, 1.5)).toBe('release');
+    expect(throwFrame({ id: 's1' }, many, 1.3 + THROW.total + 1e-6)).toBeNull();
+    // Six on the line share one grenade every `every` ÷ 6 s (the sim's pace): each throw poses
+    // only its own thrower, and each throw is over before the next.
+    const gap = CARD.frag.every / 6;
+    expect(THROW.total).toBeLessThan(gap);
+    const squad = ['s1', 's2', 's3', 's4', 's5', 's6'].map((id, i) => g(id, 1 + gap * i));
+    const posing = (t: number) => squad.filter((x) => throwFrame({ id: x.by }, squad, t));
+    for (let t = 0.9; t < 9; t += 0.05) expect(posing(t).length).toBeLessThanOrEqual(1);
+    expect(THROW.wind).toBeLessThan(THROW.total);
+    expect(THROW.total).toBeLessThan(CARD.frag.flight);
   });
 
   it('each survivor’s HP bar always shows, at least its readable size on screen, with a dark edge', () => {

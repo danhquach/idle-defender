@@ -152,6 +152,7 @@ import {
   TIER_ART,
   TRAP_ART,
   TURRET_ART,
+  THROW_LOOKS,
   type GunId,
   type GunnerArt,
   ART_PX,
@@ -869,8 +870,9 @@ function drawHpBar(
 
 /**
  * A defender standing `z0` up at `(x, y)`: their profession's sprite (the weapon tells
- * it, design §15; a Gunner's shows their primary) in `pose`, a shield in front if they
- * carry one, a ring at their feet when selected, and an HP bar once hurt.
+ * it, design §15; a Gunner's shows their primary, or their throw frame mid-throw, ID-119)
+ * in `pose`, a shield in front if they carry one, a ring at their feet when selected, and
+ * an HP bar once hurt.
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
@@ -881,6 +883,7 @@ function drawDefender(
   cam: Camera,
   pose: Readonly<Pose> = STILL,
   aim = false,
+  throwing: ThrowFrame | null = null,
 ): void {
   const feet = project({ x: d.x, y: d.y, z: z0 }, cam);
   if (selected) {
@@ -892,8 +895,23 @@ function drawDefender(
     ctx.stroke();
   }
   const gun = gunOf(d);
-  const sprite = gun ? gun[aim ? 'aim' : 'idle'] : DEFENDER_ART[professionOf(d.loadout)];
+  const sprite = !gun
+    ? DEFENDER_ART[professionOf(d.loadout)]
+    : throwing
+      ? THROW_LOOKS[lookOf(d.id)]![throwing]
+      : gun[aim ? 'aim' : 'idle'];
   drawStanding(ctx, art[sprite], feet, STAND.defender, cam, pose);
+  if (gun && throwing === 'wind') {
+    // The grenade in the drawn-back hand (ID-119), the ball it flies as, so it reads at any zoom.
+    // It follows the pose's shift and lift only; a tilt or fade lasts a few frames at most.
+    const { held } = THROW_LOOKS[lookOf(d.id)]!;
+    const px = (STAND.defender / ART_PX) * cam.zoom;
+    const c = {
+      sx: feet.sx + held.x * px + pose.dx * cam.zoom,
+      sy: feet.sy - held.y * px - pose.lift * cam.zoom,
+    };
+    drawGrenadeBall(ctx, c, cam, GRENADE.held);
+  }
   if (d.loadout.item === 'shield') {
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
     drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam, pose);
@@ -2851,47 +2869,124 @@ function drawBubbles(
   ctx.restore();
 }
 
-/** A Frag Grenade's flight and burst (ID-077): the grenade's arc height and size, in world units. */
-export const GRENADE = { arc: 40, r: 6.5, edge: 2, shine: 1 } as const;
+/**
+ * A Frag Grenade's flight and burst (ID-077): the grenade's arc height and size, in world
+ * units; `held`, its smaller size in the thrower's hand through the wind-up (ID-119).
+ */
+export const GRENADE = { arc: 40, r: 6.5, held: 3.5, edge: 2, shine: 1 } as const;
 
-/** Where a Frag Grenade in the air is at `time`: along its throw, `GRENADE.arc` high at the middle. */
-export function grenadeAt(g: Grenade, time: number): { x: number; y: number; z: number } {
-  const p = Math.min(1, Math.max(0, (time - g.at) / (g.lands - g.at)));
+/**
+ * A survivor's Frag Grenade throw (ID-119), in s from the throw: the wind-up shows until
+ * `wind`, when the grenade leaves the hand, then the release until `total`. Drawn on fight
+ * time only; the grenade still lands when the sim says.
+ */
+export const THROW = { wind: 0.15, total: 0.4 } as const;
+export type ThrowFrame = 'wind' | 'release';
+
+/** Which throw frame `d` shows at `time` (ID-119): their newest Frag Grenade's while it lasts, else null. */
+export function throwFrame(
+  d: Pick<Defender, 'id'>,
+  grenades: readonly Pick<Grenade, 'by' | 'at'>[],
+  time: number,
+): ThrowFrame | null {
+  let newest = -Infinity;
+  for (const g of grenades) if (g.by === d.id && g.at <= time && g.at > newest) newest = g.at;
+  const t = time - newest;
+  if (!(t < THROW.total)) return null;
+  return t < THROW.wind ? 'wind' : 'release';
+}
+
+/**
+ * Where and when a Frag Grenade leaves its thrower (ID-119): `dx` ahead of where they stand
+ * and `z` up, at `at`. A Gunner throws from the release sprite's open hand once the wind-up
+ * is over; anyone else (or anyone gone, or out of a fight) from their feet, at the throw.
+ */
+export interface Launch {
+  readonly dx: number;
+  readonly z: number;
+  readonly at: number;
+}
+export function launchOf(
+  scene: Pick<Scene, 'defenders' | 'posts' | 'layers'>,
+  g: Grenade,
+  posed: boolean,
+): Launch {
+  const post = scene.posts.find((p) => p.x === g.fromX && p.y === g.fromY);
+  const floor = post ? postFloor(scene.layers, post) : 0;
+  const d = scene.defenders.find((x) => x.id === g.by);
+  if (!posed || !d || !gunOf(d)) return { dx: 0, z: floor, at: g.at };
+  const { hand } = THROW_LOOKS[lookOf(d.id)]!;
+  const px = STAND.defender / ART_PX;
+  return { dx: hand.x * px, z: floor + (hand.y * px) / HEIGHT_SCALE, at: g.at + THROW.wind };
+}
+
+/**
+ * Where a Frag Grenade in the air is at `time`: from its launch (`from`, by default its
+ * thrower's feet at the throw) to where it lands, `GRENADE.arc` over that line at the middle.
+ */
+export function grenadeAt(
+  g: Grenade,
+  time: number,
+  from: Launch = { dx: 0, z: 0, at: g.at },
+): { x: number; y: number; z: number } {
+  const p = Math.min(1, Math.max(0, (time - from.at) / (g.lands - from.at)));
+  const x0 = g.fromX + from.dx;
   return {
-    x: g.fromX + (g.x - g.fromX) * p,
+    x: x0 + (g.x - x0) * p,
     y: g.fromY + (g.y - g.fromY) * p,
-    z: 4 * GRENADE.arc * p * (1 - p),
+    z: from.z * (1 - p) + 4 * GRENADE.arc * p * (1 - p),
   };
 }
 
 /**
  * Frag Grenades (design §8): in the air, an olive-drab ball with a dark edge on its arc over its own
- * shadow; landed, its explosion is drawn with the others (`explosions`, ID-107).
+ * shadow (not yet while still in the thrower's hand, ID-119); landed, its explosion is drawn
+ * with the others (`explosions`, ID-107).
  */
-function drawGrenade(ctx: CanvasRenderingContext2D, g: Grenade, time: number, cam: Camera): void {
+function drawGrenade(
+  ctx: CanvasRenderingContext2D,
+  g: Grenade,
+  time: number,
+  cam: Camera,
+  from: Launch,
+): void {
+  if (time < from.at) return;
   if (time < g.lands) {
-    const at = grenadeAt(g, time);
+    const at = grenadeAt(g, time, from);
     groundCircle(ctx, at.x, at.y, GRENADE.r, cam);
     ctx.fillStyle = COLOR.shadow;
     ctx.fill();
-    const c = project(at, cam);
-    ctx.beginPath();
-    ctx.arc(c.sx, c.sy, sized(GRENADE.r, cam), 0, Math.PI * 2);
-    ctx.fillStyle = COLOR.grenade;
-    ctx.fill();
-    ctx.strokeStyle = COLOR.grenadeEdge;
-    ctx.lineWidth = sized(GRENADE.edge, cam);
-    ctx.stroke();
-    // A pale rim on its upper left, so it reads over the mossy ground.
-    const rim = sized(GRENADE.r, cam) - sized(GRENADE.edge, cam);
-    ctx.beginPath();
-    ctx.arc(c.sx, c.sy, rim, Math.PI, Math.PI * 1.5);
-    ctx.strokeStyle = COLOR.grenadeShine;
-    ctx.lineWidth = sized(GRENADE.shine, cam);
-    ctx.stroke();
+    drawGrenadeBall(ctx, project(at, cam), cam);
     return;
   }
   // Landed: its explosion is drawn with the others (`explosions`).
+}
+
+/**
+ * A Frag Grenade's ball centred on screen point `c`, `r` world units round: olive drab, a dark
+ * edge, a pale rim, the edge and rim scaled with it.
+ */
+function drawGrenadeBall(
+  ctx: CanvasRenderingContext2D,
+  c: { sx: number; sy: number },
+  cam: Camera,
+  r: number = GRENADE.r,
+): void {
+  const k = r / GRENADE.r;
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, sized(r, cam), 0, Math.PI * 2);
+  ctx.fillStyle = COLOR.grenade;
+  ctx.fill();
+  ctx.strokeStyle = COLOR.grenadeEdge;
+  ctx.lineWidth = sized(GRENADE.edge * k, cam);
+  ctx.stroke();
+  // A pale rim on its upper left, so it reads over the mossy ground.
+  const rim = sized(r, cam) - sized(GRENADE.edge * k, cam);
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, rim, Math.PI, Math.PI * 1.5);
+  ctx.strokeStyle = COLOR.grenadeShine;
+  ctx.lineWidth = sized(GRENADE.shine * k, cam);
+  ctx.stroke();
 }
 
 /**
@@ -3865,6 +3960,9 @@ export function drawScene(
   // A Gunner aims while firing (ID-069); out of a fight (no animator), at rest.
   const aimOf = (d: Defender): boolean =>
     anim ? aiming(d, scene.time, anim.acts(d.id, scene.strikes)) : false;
+  // A Gunner mid-throw shows the throw, gun out of hand, so no muzzle flash (ID-119).
+  const throwOf = (d: Defender): ThrowFrame | null =>
+    anim && gunOf(d) ? throwFrame(d, scene.grenades, scene.time) : null;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   // In a fight nothing left of the frame shows (ID-064): the camp's yard stays out of
@@ -3963,8 +4061,9 @@ export function drawScene(
         if (manned) {
           const pose = defenderPoseOf(manned);
           const selected = manned.id === selectedDefender;
-          drawDefender(ctx, art, manned, floor, selected, cam, pose, aimOf(manned));
-          drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
+          const throwing = throwOf(manned);
+          drawDefender(ctx, art, manned, floor, selected, cam, pose, aimOf(manned), throwing);
+          if (!throwing) drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
         }
       },
     });
@@ -3985,8 +4084,10 @@ export function drawScene(
       y: d.y,
       x: d.x,
       draw: () => {
-        drawDefender(ctx, art, d, 0, d.id === selectedDefender, cam, defenderPoseOf(d), aimOf(d));
-        drawFlash(ctx, scene, d.id, d.x, d.y, cam);
+        const throwing = throwOf(d);
+        const selected = d.id === selectedDefender;
+        drawDefender(ctx, art, d, 0, selected, cam, defenderPoseOf(d), aimOf(d), throwing);
+        if (!throwing) drawFlash(ctx, scene, d.id, d.x, d.y, cam);
       },
     });
   }
@@ -4103,7 +4204,9 @@ export function drawScene(
   for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
   for (const k of scene.slabs ?? []) drawSlab(ctx, k, scene.time, cam);
-  for (const g of scene.grenades) drawGrenade(ctx, g, scene.time, cam);
+  for (const g of scene.grenades) {
+    drawGrenade(ctx, g, scene.time, cam, launchOf(scene, g, anim !== null));
+  }
 
   // Explosions' fireballs, smoke and flashes over every sprite (ID-107); an armed skill
   // shows its reach at the cursor.

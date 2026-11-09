@@ -197,7 +197,13 @@ SOLDIER = {
     'aim': dict(gun=(0, 172), gun_len=165, hand_r=(70, 95), hand_l=(85, 100)),
     'pidle': dict(gun=None, gun_len=40, hand_r=(10, 25), hand_l=(-5, 10), gun_ang=45),
     'paim': dict(gun=None, gun_len=40, hand_r=(88, 92), hand_l=(84, 90), gun_ang=0),
+    # A Frag Grenade throw (ID-119), no gun in hand: the wind-up, grenade drawn back over
+    # the shoulder, the far hand pointing at the target; then the release, arm swung
+    # through forward and up, hand open.
+    'twind': dict(gun=None, gun_len=0, hand_r=(-105, -150), hand_l=(80, 95), grenade=True),
+    'trel': dict(gun=None, gun_len=0, hand_r=(100, 112), hand_l=(-25, 5)),
 }
+S_GRENADE = (95, 115, 55)
 
 
 def draw_soldier(name):
@@ -238,7 +244,9 @@ def draw_soldier(name):
     hd = fwd(el, p['hand_r'][1], 54)
     bone(sh, el, S_JACKET, 24)
     bone(el, hd, S_SKIN, 16)
-    if p['gun'] is None:  # the pistol in the near hand
+    if p.get('grenade'):
+        d.ellipse([hd[0] - 15, hd[1] - 17, hd[0] + 15, hd[1] + 17], fill=S_GRENADE, outline=EDGE, width=3)
+    if p['gun'] is None and p['gun_len']:  # the pistol in the near hand
         a = math.radians(p['gun_ang'])
         bone(hd, (hd[0] + p['gun_len'] * math.cos(a), hd[1] + p['gun_len'] * math.sin(a)), S_GUN, 14)
         bone(hd, (hd[0] + 4, hd[1] + 18), S_GUN, 12)

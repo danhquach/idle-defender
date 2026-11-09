@@ -2647,8 +2647,8 @@ original outline.
   **Frag Grenades** (ID-077): the grenade
   is an olive-drab ball 13 units across with a near-black edge and a pale
   rim on its upper left, so it reads on the dark, mossy ground. It
-  flies from the thrower to where it lands on a low arc (40 units high at
-  the middle) with a shadow under it on the ground, then bursts in the
+  flies from the thrower's hand (ID-119, §15) to where it lands on a low arc
+  (40 units high at the middle) with a shadow under it on the ground, then bursts in the
   shared explosion over its 70-unit reach (ID-107, below). **Concussion Rounds** (was Stopping Power) needs nothing of its own: the hit enemy visibly
   jolts back. **Shock Rounds** (ID-097): a paralysed enemy twitches side to
   side (1.5 units and 0.05 rad, flipping every 0.06 s) while a small spark
@@ -2998,6 +2998,25 @@ original outline.
   Rippers and Engineers in the full game keep their ID-049 stills. Each pick
   passed the art reviewer (the PM delegated the choice to it, passing a pose
   that is about 80% right).
+- **As built (ID-119): a survivor throws their Frag Grenade.** The survivor
+  who throws (§8) plays a 0.4 s overhand throw instead of their idle or aim
+  pose: the **wind-up** (the grenade drawn back over the shoulder, the other
+  hand pointing at the target) for 0.15 s, then the **release** (the arm
+  swung through, the hand open). Their newest grenade sets it, so a fresh
+  throw starts again from the wind-up, and nobody else on the line moves.
+  There is one throw per survivor look, the same for every gun, and no gun
+  shows in the throwing hands, so that survivor's muzzle flash is hidden
+  for those 0.4 s (they keep firing as before). The frames are painted over
+  two soldier puppets (`soldier-twind`, `soldier-trel`) in the soldier's
+  look, and each other look is a repaint of them, as their guns are (manifest
+  `gunner-throw-*`). Through the wind-up the grenade is drawn in the
+  drawn-back hand as the same olive ball it flies as, at about half its size
+  (3.5 units round against 6.5; the painted one is too
+  small to read at fight zoom; art review), placed from the wind-up sprite. At
+  the release it leaves the open hand (measured on the release sprite, as a
+  barrel tip is) from the post's height, and it still lands when the sim
+  says. Only the drawing changes: the grenade records its thrower (`by`),
+  and the timing and damage stay as they were. Out of a fight nobody poses.
 
 ## 16. Tech and platform
 

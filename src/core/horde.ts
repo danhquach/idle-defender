@@ -515,10 +515,12 @@ export interface Incoming {
   at: number;
 }
 /**
- * A Frag Grenade (design §8): thrown from `(fromX, fromY)` at `at`, landing at `(x, y)`
- * at `lands`, when it bursts (`burst`); its blast is drawn until `lands + CARD.frag.flash`.
+ * A Frag Grenade (design §8): thrown by defender `by` from `(fromX, fromY)` at `at`, landing
+ * at `(x, y)` at `lands`, when it bursts (`burst`); its blast is drawn until
+ * `lands + CARD.frag.flash`.
  */
 export interface Grenade {
+  by: string;
   fromX: number;
   fromY: number;
   x: number;
@@ -1832,6 +1834,7 @@ function throwFrag(s: HordeState): void {
   const { e, by } = best;
   const t = CARD.frag.flight;
   s.grenades.push({
+    by: by.id,
     fromX: by.x,
     fromY: by.y,
     x: e.x + e.vx * t,
