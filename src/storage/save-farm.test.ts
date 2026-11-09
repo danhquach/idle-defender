@@ -5,7 +5,7 @@
 // farming and level-1 guns.
 import { describe, expect, it } from 'vitest';
 import { gunLevel, type OwnedWeapon } from '../core/armoury.ts';
-import { FARM } from '../core/data.ts';
+import { FARM, SQUAD_BONUS } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
@@ -39,14 +39,33 @@ describe('save: farming (ID-098)', () => {
   it('round-trips the farm, replay drops and gun levels', () => {
     const g = farmed();
     expect(g.farm.replays).toBe(2);
-    expect(g.armoury.map((w) => w.uid)).toEqual(['h1', 'h2', 'h3', 'h4', 'r1', 'r2']);
-    expect(g.armoury.map(gunLevel)).toEqual([1, 2, 3, 4, 3, 3]);
+    // Each win's drop, then its bonus guns (ID-122), at the horde's level.
+    expect(g.armoury.map((w) => w.uid)).toEqual([
+      'h1',
+      'h1-1',
+      'h2',
+      'h2-1',
+      'h2-2',
+      'h3',
+      'h3-1',
+      'h4',
+      'h4-1',
+      'r1',
+      'r1-1',
+      'r1-2',
+      'r2',
+    ]);
+    expect(g.armoury.map(gunLevel)).toEqual([1, 1, 2, 2, 2, 3, 3, 4, 4, 3, 3, 3, 3]);
     expect(reread(g)?.game).toEqual(g);
   });
 
   it('a v14 save loads with no farming and every gun at level 1', () => {
     const g = farmed();
-    const old = { v: 14, savedAt: NOW, game: preFarm({ ...g, armoury: g.armoury.slice(0, 4) }) };
+    const old = {
+      v: 14,
+      savedAt: NOW,
+      game: preFarm({ ...g, armoury: g.armoury.filter((w) => /^h[0-9]+$/.test(w.uid)) }),
+    };
     const save = decodeSave(JSON.stringify(old));
     expect(save?.game.farm).toEqual({ replays: 0, badLuck: 0 });
     expect(save?.game.armoury.map(gunLevel)).toEqual([1, 1, 1, 1]);
@@ -131,6 +150,45 @@ describe('save: farming (ID-098)', () => {
         JSON.stringify(uid),
       ).toBeNull();
     }
+  });
+
+  it('reads a bonus gun’s uid (ID-122): its drop’s, then -1 up to -SQUAD_BONUS.rolls', () => {
+    const g = farmed();
+    const bonus = (x: Loose): Loose => x.armoury.find((w: Loose) => w.uid === 'r1-1');
+    // The control: every uid a win can give loads.
+    expect(reread(g)?.game).toEqual(g);
+    expect(reread(g, (x) => (bonus(x).uid = 'r2-2'))).not.toBeNull();
+    expect(reread(g, (x) => (bonus(x).uid = 'h3-2'))).not.toBeNull();
+    // From a replay or horde not won yet, past the rolls, or any other shape.
+    expect(reread(g, (x) => (x.farm.replays = 1))).toBeNull();
+    for (const uid of [
+      'r3-1',
+      'h5-1',
+      'h9-2',
+      `r1-${SQUAD_BONUS.rolls + 1}`,
+      'r1-0',
+      'r1-01',
+      'r1-',
+      'r1--1',
+      'r1-1-1',
+      'p1-1-1',
+      'c1-1',
+      'r1-1 ',
+      'r1-​1',
+      'r1‮-1',
+      'r1-１',
+      'r1–1',
+      'r1-' + '1'.repeat(10_000),
+    ]) {
+      expect(
+        reread(g, (x) => (bonus(x).uid = uid)),
+        JSON.stringify(uid),
+      ).toBeNull();
+    }
+    // A bonus gun's uid is still one item: never twice, with its drop or alone.
+    expect(
+      reread(g, (x) => (x.armoury.find((w: Loose) => w.uid === 'h3-1').uid = 'r1-1')),
+    ).toBeNull();
   });
 
   it('refuses hostile gun levels: whole, 1 to the highest horde beaten', () => {

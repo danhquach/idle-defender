@@ -75,7 +75,7 @@ export interface InventoryItem {
 }
 
 export interface InventoryView {
-  /** "Stash 12/20"; "Stash 20/20 (full)" once the next drop would throw the weakest away. */
+  /** "Stash 12/40"; "Stash 40/40 (full)" once the next drop would throw the weakest away. */
   stashHeading: string;
   /** The stash, strongest first; anything that is no gun after the guns. */
   stash: InventoryItem[];

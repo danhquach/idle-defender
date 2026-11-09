@@ -4,6 +4,7 @@
 // the game's state rides along untouched, so the full game can come back later.
 import {
   bestDrop,
+  bonusWeights,
   firstClearWeights,
   gunLevel,
   gunPower,
@@ -25,6 +26,7 @@ import {
   FIELD,
   MAX_COUNT,
   RARITY_ORDER,
+  SQUAD_BONUS,
   SQUAD_CAP,
   SQUAD_EARLY_HP,
   SQUAD_HP_GROWTH,
@@ -53,7 +55,7 @@ import {
 } from './game.ts';
 import { newHorde, standing, type DefenderSpec, type HordeState, type UpgradeId } from './horde.ts';
 import { isGun } from './loadout.ts';
-import { createRng } from './rng.ts';
+import { chance, createRng } from './rng.ts';
 import { maxHpOf } from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
@@ -275,7 +277,7 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   const drop = squadDrop(game, horde);
   // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
   if (!drop) return g;
-  g.armoury = [...g.armoury, drop.weapon].filter((w) => w.uid !== drop.thrown?.uid);
+  g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus]).armoury;
   if (drop.kind === 'first') {
     const joined = joiner(game);
     if (joined) {
@@ -319,13 +321,21 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
 /** Which kind of drop a win gave (ID-098), as its tile says. */
 export type DropKind = 'first' | 'replay' | 'guaranteed';
 
-/** A horde-only win's weapon (ID-067, ID-098), and the stash's weakest it pushed out, if any. */
+/**
+ * A horde-only win's weapons (ID-067, ID-098, ID-122): its drop, any bonus guns, and the
+ * weakest each pushed out of a full stash.
+ */
 export interface SquadDrop {
   weapon: OwnedWeapon;
-  /** Thrown away for room: the weakest of the full stash and the drop (maybe the drop itself). */
-  thrown: OwnedWeapon | null;
+  /** Bonus guns (ID-122), lower grades most (`SQUAD_BONUS`), in the order they go in. */
+  bonus: OwnedWeapon[];
+  /**
+   * Thrown away for room, in order: each time a gun goes into the full stash, the weakest
+   * of the stash and that gun (maybe one of this win's own).
+   */
+  thrown: OwnedWeapon[];
   kind: DropKind;
-  /** It hits harder than the weakest gun a squad survivor holds (`weakestHeld`). */
+  /** One of the win's guns hits harder than the weakest gun a squad survivor holds (`weakestHeld`). */
   upgrade: boolean;
   /** A replay where no gun this horde can drop beats the weakest held: farm a higher horde. */
   noUpgrades: boolean;
@@ -378,10 +388,10 @@ const DROP_STREAM = 0x5bd1e995;
  * A first clear (uid `h<n>`) rolls `firstClearWeights`. A replay (uid `r<k>`, the k-th
  * replay win) rolls `replayWeights` with the bad-luck count, or, with the count at
  * `FARM.guarantee`, a sure upgrade (`rollUpgrade`) unless no gun here could be one.
+ * Then up to `SQUAD_BONUS.rolls` bonus guns (ID-122, uids `<drop uid>-1`, `-2`), each
+ * by `bonusWeights`.
  *
- * With the stash at `STASH_CAP` (or past it, from an older save) the weakest of the stash
- * and the drop by `gunPower` is thrown away (a blade or tool an older save left there
- * first); a tie throws the later one, so a duplicate drop goes rather than the one kept.
+ * The drop, then each bonus gun, goes into the stash as `stashWith` says.
  */
 export function squadDrop(
   game: Pick<GameState, 'armoury' | 'roster' | 'hordeNumber' | 'farm'>,
@@ -396,10 +406,10 @@ export function squadDrop(
   let weapon: OwnedWeapon;
   let kind: DropKind = 'first';
   let noUpgrades = false;
+  const uid = isReplay(game, n) ? `r${game.farm.replays + 1}` : `h${n}`;
   if (!isReplay(game, n)) {
-    weapon = rollSquadGun(rng, `h${n}`, firstClearWeights(n), n);
+    weapon = rollSquadGun(rng, uid, firstClearWeights(n), n);
   } else {
-    const uid = `r${game.farm.replays + 1}`;
     const weights = replayWeights(n, game.farm.badLuck);
     noUpgrades = bestDrop(weights, n) <= beat;
     const sure =
@@ -409,19 +419,50 @@ export function squadDrop(
     kind = sure ? 'guaranteed' : 'replay';
     weapon = sure ?? rollSquadGun(rng, uid, weights, n);
   }
-  const drop = {
+  // Rolled after the drop, so the drop itself is the same gun it was before ID-122.
+  const bonus: OwnedWeapon[] = [];
+  for (let k = 0; k < SQUAD_BONUS.rolls; k++) {
+    if (chance(rng, SQUAD_BONUS.chance)) {
+      bonus.push(rollSquadGun(rng, `${uid}-${bonus.length + 1}`, bonusWeights(n), n));
+    }
+  }
+  return {
     weapon,
+    bonus,
+    thrown: stashWith(game.armoury, [weapon, ...bonus]).thrown,
     kind,
-    upgrade: gunPower(weapon) > beat,
+    upgrade: [weapon, ...bonus].some((w) => gunPower(w) > beat),
     noUpgrades,
     farmFrom: noUpgrades ? upgradeFrom(game, n + 1, beat) : null,
   };
-  if (game.armoury.length < STASH_CAP) return { ...drop, thrown: null };
+}
+
+/**
+ * `armoury` with `guns` put in one by one (ID-067, ID-122), and what was thrown away for
+ * room. With the stash at `STASH_CAP` (or past it, from an older save) each gun put in
+ * throws away the weakest of the stash and that gun by `gunPower` (a blade or tool an
+ * older save left there first); a tie throws the later one, so a duplicate goes rather
+ * than the one kept.
+ */
+export function stashWith(
+  armoury: readonly OwnedWeapon[],
+  guns: readonly OwnedWeapon[],
+): { armoury: OwnedWeapon[]; thrown: OwnedWeapon[] } {
   // A blade or tool from an older save is no use to a survivor: it counts as the weakest.
   const power = (w: OwnedWeapon): number => (isGun(w) ? gunPower(w) : 0);
-  let thrown = weapon;
-  for (const w of [...game.armoury, weapon]) if (power(w) <= power(thrown)) thrown = w;
-  return { ...drop, thrown };
+  let stash = [...armoury];
+  const thrown: OwnedWeapon[] = [];
+  for (const gun of guns) {
+    if (stash.length < STASH_CAP) {
+      stash.push(gun);
+      continue;
+    }
+    let out = gun;
+    for (const w of [...stash, gun]) if (power(w) <= power(out)) out = w;
+    stash = [...stash, gun].filter((w) => w !== out);
+    thrown.push(out);
+  }
+  return { armoury: stash, thrown };
 }
 
 /** What a survivor's gun picker can choose: the free pistol, or a stash weapon's uid. */

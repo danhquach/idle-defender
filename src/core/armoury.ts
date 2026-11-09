@@ -318,6 +318,19 @@ export function firstClearWeights(hordeNumber: number): Record<Rarity, number> {
 }
 
 /**
+ * A bonus gun's rarity weights (ID-122): the horde's band, each rarity's share moved down
+ * one rarity (Rusty stays Rusty), so the lower grades drop most.
+ */
+export function bonusWeights(hordeNumber: number): Record<Rarity, number> {
+  const band = squadDropWeights(hordeNumber);
+  const out = { rusty: 0, common: 0, military: 0, prototype: 0, relic: 0 };
+  RARITY_ORDER.forEach((r, i) => {
+    out[RARITY_ORDER[Math.max(i - 1, 0)]!] += band[r];
+  });
+  return out;
+}
+
+/**
  * A replay's rarity weights (ID-098): the horde's band with its top rarity's share halved,
  * the rest moved to the rarity below; then `FARM.badLuckStep` points a bad-luck count
  * moved up one band, each from the lowest rarity left with weight.

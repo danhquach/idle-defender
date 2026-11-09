@@ -60,8 +60,17 @@ export const SQUAD_EARLY_HP: readonly number[] = [0.8, 0.9, 0.95, 1, 1, 1, 1, 0.
 export const SQUAD_XP_RATE = 2;
 /** The horde whose win shows the soft ending screen (design §11); play goes on after it. */
 export const ENDING_HORDE = 10;
-/** The most weapons the horde-only stash holds (ID-067); past it the weakest is thrown away. */
-export const STASH_CAP = 20;
+/**
+ * The most weapons the horde-only stash holds (ID-067; 20 before ID-122); past it the
+ * weakest is thrown away.
+ */
+export const STASH_CAP = 40;
+/**
+ * Bonus guns on a horde-only win (ID-122), first clear or replay: after the win's drop,
+ * `rolls` more tries, each `chance` to drop one more gun, its rarity by the horde's band
+ * moved down one rarity (`bonusWeights`), so low grades come most.
+ */
+export const SQUAD_BONUS = { rolls: 2, chance: 0.5 } as const;
 /** Stash guns of one base weapon and rarity that combine into one of the next rarity (ID-091). */
 export const COMBINE_COUNT = 3;
 /**

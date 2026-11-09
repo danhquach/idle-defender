@@ -711,7 +711,7 @@ close-quarter weapons come out only when an enemy is close.
     for dmg/s, damage a shot (pellets shown as "4.0 × 6"), fire rate, reload,
     range, role and affixes, the change written out ("0.50 s slower",
     "200 px shorter", "new role"). Equip follows the same rules as the gun
-    pickers: the stash holds 20, the pistol is free and unlimited, and a gun
+    pickers: the stash holds 40 (20 before ID-122), the pistol is free and unlimited, and a gun
     is not given back for the pistol into a full stash (the reason is shown
     in the status line). In a fight the slot says guns change between
     hordes.
@@ -939,12 +939,28 @@ profession's output).
     Affixes roll as above. Duplicates are allowed. The drop is rolled from the
     horde's seed on a stream of its own, so the same seed drops the same gun at
     1×, 2× and 3× and however the fight went. Nothing drops after a loss.
-  - **Stash:** the camp's armoury, shown as the stash. It holds 20 weapons.
-    With 20 in it, the weakest of the stash and the drop is thrown away (it may
-    be the drop itself); a tie throws away the later one. "Weakest" is the
+  - **Bonus guns (as built, ID-122) *(starting points)*:** to soften the
+    grind, every win, first clear or replay, then tries 2 more times, each at
+    50%, to drop one more gun (about 1 more a win): a specialised gun picked
+    evenly, at the horde's gun level, its rarity by the horde's band moved
+    *down* one rarity (Rusty stays Rusty, so a band's Relic share becomes
+    Prototype), so the lower grades come most and feed Combine. Their uids
+    are the drop's with `-1` and `-2`. They roll after the drop on the same
+    stream, so the drop itself is the gun it was before. Any of the win's
+    guns that beats the weakest held counts as the upgrade that resets the
+    bad-luck count (§11 Farming). The result screen lists them under the
+    drop, one compact row each (icon on its rarity's tint, level, rarity,
+    gun, dmg/s, or "Thrown away"). At the worst luck the scripted player
+    throws them away too.
+  - **Stash:** the camp's armoury, shown as the stash. It holds 40 weapons
+    (20 before ID-122; more slots for a currency is a later idea). Each gun
+    a win drops goes in in turn, the drop first: with 40 in it, the weakest
+    of the stash and that gun is thrown away (it may be one of the win's own
+    guns); a tie throws away the later one. "Weakest" is the
     lowest damage per second through a magazine and its reload (pellets,
     rarity and affixes counted), the dmg/s figure the pickers show. An older
-    save's armoury past 20 is kept as it is and never grows.
+    save's armoury past 40 is kept as it is and never grows. A save holds at
+    most 52 owned weapons (40 in the stash, a gun in each hand of 6 survivors).
   - **Equip:** between hordes, on the start and result screens, each survivor
     in the squad has a one-click gun picker (a select; the pick applies and
     saves at once). It lists the free pistol, the stash's guns and the gun
@@ -2046,6 +2062,8 @@ and comes back stronger.
   Older saves get no first-clear drops for hordes already beaten.
 - **Replay:** the band with its top rarity's share halved, the half moved to
   the rarity below. Uid `r<k>`, the k-th replay win.
+- **Bonus guns (ID-122):** first clears and replays alike may drop up to 2
+  more, lower-grade guns (§6 Gear, Bonus guns).
 - **Bad-luck guarantee (replays only):** "an upgrade" is a drop with more
   dmg/s than the weakest gun a squad survivor holds (the free pistol
   included). Each replay win whose drop is no upgrade adds 1 to a saved
@@ -2220,8 +2238,8 @@ offline progress works across sessions.
   of the Menu (its own place, not a Menu tab), opens a dialog (between hordes
   guns are equipped and combined there too: Combine, ID-091, §6 Gear; drag and
   drop, ID-095) of what
-  the camp holds now: the stash against its cap ("Stash 6/20"; from the cap on
-  "Stash 20/20 (full)", as the next drop throws the weakest away), strongest
+  the camp holds now: the stash against its cap ("Stash 6/40"; from the cap on
+  "Stash 40/40 (full)", as the next drop throws the weakest away), strongest
   first as in the gun picker (anything that is no gun, from an older save,
   last); each squad survivor and the gun they fight with, in squad order (not
   the reserve, which this version doesn't show, nor its guns); and the free
