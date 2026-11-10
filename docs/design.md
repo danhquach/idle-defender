@@ -2651,11 +2651,11 @@ original outline.
   (40 units high at the middle) with a shadow under it on the ground, then bursts in the
   shared explosion over its 70-unit reach (ID-107, below). **Concussion Rounds** (was Stopping Power) needs nothing of its own: the hit enemy visibly
   jolts back. **Shock Rounds** (ID-097): a paralysed enemy twitches side to
-  side (1.5 units and 0.05 rad, flipping every 0.06 s) while a small spark
-  crackles on its body: a short pale zigzag over a cool blue glow, about
-  two fifths of its height, jumping to a new spot on its torso each flicker. No
-  arcs between enemies. It's drawn in code (no art file); with Reduce motion
-  it holds still. **The gate** is now a sliding gate: one closed panel on a
+  side (1.5 units and 0.05 rad, flipping every 0.06 s) while electricity
+  crackles over its body (generated art, ID-120, below): two crackles of forked
+  bolts over a cool blue glow, each about half its height, jumping
+  to new spots on its torso each flicker. No arcs between enemies. With Reduce
+  motion it holds still. **The gate** is now a sliding gate: one closed panel on a
   rail with roller wheels down its middle and a heavy end cap at each end,
   drawn over the whole segment top, flush with the segments beside it, with
   no posts sticking out and no passage. Each tier has its own (weathered
@@ -2798,6 +2798,30 @@ original outline.
     for the explosions) seeds 11801 (glob) and 11812 (splash); the stain
     (11824) is an edit of the splash (manifest group `acid-splash`). A first
     stain edit that turned olive with long drips was set aside.
+  - **A paralysed enemy's shock** (ID-120, `SHOCK` in `src/ui/render.ts`) is
+    generated art in place of the drawn zigzag, for exactly as long as the
+    paralysis (`shockUntil`); paralysis time, immunity and the twitch are
+    unchanged. Each 0.06 s flicker draws two crackles (one on a body under
+    24 px tall on screen, so a small or far-off enemy isn't buried; forked white-and-cyan
+    bolts of uneven lengths with a dark navy outline and a star spark at the
+    tip of the longest) at seeded spots on the torso, each turned and mirrored
+    at random and picked from three frames (all at one scale), over a soft
+    blue glow (radius 55% of the body's height, 40% strong, flickering by up
+    to 30%). A crackle is half the body's height (a low Crawler counts as
+    three quarters of its width tall, as for fire), so it fits every kind and
+    grows on the heavy ones, and the smallest frame is never under 12 px (16
+    px on a burning body, so the flames don't swamp it), so it reads at 0.5×
+    zoom. In a bench A/B (60 enemies all shocked at once, 300 drawn frames)
+    0, 1 or 2 crackles and the glow on or off all drew in the same time
+    (25.6–26.0 ms a frame in a hidden browser); the unchanged twitch is what
+    a shocked crowd adds (about 2.5 ms). The crackles keep their
+    outline (drawn normally, not as added light), so they read on pale bodies
+    and over a burning enemy's flames, which they are drawn over. With Reduce
+    motion the spots, frames and glow hold still. FLUX.2 [dev]
+    (community-hosted, as for the spit) seeds 12031–12033 from one prompt
+    (manifest group `shock`). Earlier probes were set aside: a round starburst
+    (read as a hit flash and hid the body), long single bolts (ran off the
+    frame and read as slashes) and a web of arcs (read as a net or shield).
   - A **dazed** enemy (stunned by a Flashbang, `dazedUntil`) shows 4 pale
     yellow stars with a dark edge circling its head under its HP bar, the
     near ones bigger and brighter, until the stun ends; sizes scale with

@@ -3558,19 +3558,29 @@ function fillLicks(ctx: CanvasRenderingContext2D, licks: readonly Lick[], share:
 }
 
 /**
- * Shock Rounds' cue (ID-097): a paralysed enemy twitches side to side by `dx` px (at zoom 1)
- * and `rot` radians, flipping every `every` s, while a small spark crackles on its body: a
- * short zigzag `size` of the body's height, at a spot that jumps every `every` s, pale
- * `colour` over a cool `glow`. No arcs between enemies. With Reduce motion it holds still.
+ * Shock Rounds' cue (ID-097; art ID-120): a paralysed enemy twitches side to side by `dx` px
+ * (at zoom 1) and `rot` radians, flipping every `every` s, while electricity crackles over
+ * its body: `crackles` of the `art` (forked bolts; one on a body under `smallBody` px tall),
+ * each `size` of the body's height (at least `BURN.squat` of its width, as for fire), the
+ * smallest frame never under `least` px (`burningLeast` on a burning body, so the flames
+ * don't swamp it), at spots on its torso that jump every `every` s, each turned and
+ * mirrored at random, over a cool `glow` of radius `glowR` of its height at `glowAlpha`,
+ * flickering by `glowFlicker`. No arcs between enemies. With Reduce motion it holds still.
  */
 export const SHOCK = {
   dx: 1.5,
   rot: 0.05,
   every: 0.06,
-  size: 0.4,
-  width: 2,
-  colour: '#f4fbff',
+  art: ['shock-a', 'shock-b', 'shock-c'] as const satisfies readonly ArtId[],
+  crackles: 2,
+  smallBody: 24,
+  size: 0.5,
+  least: 12,
+  burningLeast: 16,
   glow: '#5ab4ff',
+  glowR: 0.55,
+  glowAlpha: 0.4,
+  glowFlicker: 0.3,
 } as const;
 
 /** `pose` with a shocked twitch at `clock` (0 holds it still, as with Reduce motion). */
@@ -3580,7 +3590,10 @@ export function twitch(pose: Readonly<Pose>, id: number, clock: number): Pose {
   return { ...pose, dx: pose.dx + side * SHOCK.dx, rot: pose.rot + side * SHOCK.rot };
 }
 
-/** The spark of a shocked enemy (`SHOCK`) on its body, `kind` at `feet` in `pose`. */
+/**
+ * The crackle of a shocked enemy (`SHOCK`) over its body, `kind` at `feet` in `pose`,
+ * `burning` or not.
+ */
 function drawShock(
   ctx: CanvasRenderingContext2D,
   art: Art,
@@ -3590,44 +3603,55 @@ function drawShock(
   pose: Readonly<Pose>,
   clock: number,
   cam: Camera,
+  burning: boolean,
 ): void {
   const size = ENEMIES[kind].radius / ENEMY_RADIUS;
   const img = art[ENEMY_ART[kind].walk[1]];
   const h = ((STAND.enemy * size * img.height) / ART_PX) * cam.zoom;
   const w = (img.width / img.height) * h;
-  // A spot on the torso that jumps each flicker; seeded by the enemy and the flicker.
+  // Spots on the torso that jump each flicker; seeded by the enemy and the flicker.
   const tick = Math.floor(clock / SHOCK.every);
   const r = (n: number): number => {
     const x = Math.sin((id * 12.9898 + tick * 78.233 + n * 37.719) * 0.5) * 43758.5453;
     return x - Math.floor(x);
   };
-  const cx = feet.sx + pose.dx * cam.zoom + (r(1) - 0.5) * w * 0.4;
-  const cy = feet.sy - pose.lift * cam.zoom - h * (0.45 + r(2) * 0.3);
-  const len = SHOCK.size * h;
-  const ang = r(3) * Math.PI * 2;
-  const pts: Point[] = [];
-  for (let k = 0; k <= 3; k++) {
-    const along = (k / 3 - 0.5) * len;
-    const off = k % 3 === 0 ? 0 : (k % 2 === 0 ? 1 : -1) * len * 0.22;
-    pts.push({
-      sx: cx + Math.cos(ang) * along - Math.sin(ang) * off,
-      sy: cy + Math.sin(ang) * along + Math.cos(ang) * off,
-    });
-  }
+  const mx = feet.sx + pose.dx * cam.zoom;
+  const my = feet.sy - pose.lift * cam.zoom - h * 0.55;
+  // Sized like a fire: a low, wide Crawler counts as at least `squat` of its width tall.
+  const H = Math.max(h, w * BURN.squat);
   ctx.save();
+  // A cool glow over the body, flickering a little (steady with Reduce motion).
+  const gr = SHOCK.glowR * H;
+  const glow = ctx.createRadialGradient(mx, my, 0, mx, my, gr);
+  const flick = clock === 0 ? 1 : 1 - SHOCK.glowFlicker * r(0);
+  glow.addColorStop(0, withAlpha(SHOCK.glow, SHOCK.glowAlpha * flick));
+  glow.addColorStop(1, withAlpha(SHOCK.glow, 0));
   ctx.globalAlpha = pose.alpha;
   ctx.globalCompositeOperation = 'lighter';
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  const line = (colour: string, width: number): void => {
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    pts.forEach((p, k) => (k === 0 ? ctx.moveTo(p.sx, p.sy) : ctx.lineTo(p.sx, p.sy)));
-    ctx.stroke();
-  };
-  line(SHOCK.glow, Math.max(3, SHOCK.width * 3 * cam.zoom));
-  line(SHOCK.colour, Math.max(1, SHOCK.width * cam.zoom));
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(mx, my, gr, 0, Math.PI * 2);
+  ctx.fill();
+  // The crackles keep their dark outline, so they read on pale bodies and over fire too.
+  ctx.globalCompositeOperation = 'source-over';
+  // One art group: every frame shares one scale, set by its biggest, with even the
+  // smallest at least `least` px.
+  const sides = SHOCK.art.map((a) => Math.max(art[a].width, art[a].height));
+  const least = burning ? SHOCK.burningLeast : SHOCK.least;
+  const scale = Math.max(least / Math.min(...sides), (SHOCK.size * H) / Math.max(...sides));
+  // A small body on screen gets one, so the crackles never bury it.
+  const crackles = H < SHOCK.smallBody ? 1 : SHOCK.crackles;
+  for (let k = 0; k < crackles; k++) {
+    const n = 1 + k * 5;
+    const crackle = art[SHOCK.art[Math.floor(r(n) * SHOCK.art.length) % SHOCK.art.length]!];
+    const [iw, ih] = [crackle.width * scale, crackle.height * scale];
+    ctx.save();
+    ctx.translate(mx + (r(n + 1) - 0.5) * w * 0.45, my + (r(n + 2) - 0.5) * h * 0.4);
+    ctx.rotate(r(n + 3) * Math.PI * 2);
+    if (r(n + 4) < 0.5) ctx.scale(-1, 1);
+    ctx.drawImage(crackle, -iw / 2, -ih / 2, iw, ih);
+    ctx.restore();
+  }
   ctx.restore();
 }
 
@@ -4115,7 +4139,7 @@ export function drawScene(
         const acts = anim?.enemy(e.id);
         const pose = anim && acts ? anim.shown(enemyPose(e, scene.time, acts)) : STILL;
         const frame = anim && acts ? anim.shownFrame(enemyFrame(e, scene.time, acts)) : 1;
-        // Shock Rounds (ID-097): a paralysed enemy twitches, a small spark on its body.
+        // Shock Rounds (ID-097): a paralysed enemy twitches, crackling with electricity (ID-120).
         const zap = shocked(scene, e);
         const wind = windCue(scene, e);
         const body = bossPose(zap ? twitch(pose, e.id, flameClock) : pose, e, wind);
@@ -4124,7 +4148,7 @@ export function drawScene(
         if (plated(e)) drawPlates(ctx, art, e.kind, ground, body, cam);
         const heat = burnHeat(scene.time, e, anim?.litAt(e.id) ?? -Infinity);
         drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
-        if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam);
+        if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam, heat > 0);
         const at = enemyBarAt(art, e.kind, e.x, e.y, e.elite ? ELITE.size : 1);
         drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
         // A flashbang's daze (ID-107): stars circle its head until the stun ends.
