@@ -4416,34 +4416,114 @@ describe('a burning enemy’s fire (ID-089)', () => {
       expect(flameFills(fills)).toHaveLength(0);
     });
 
-    it('a shocked enemy twitches with a small spark on its body, gone when it ends (ID-097)', () => {
-      const shockScene = (time: number, shockUntil?: number): Scene => {
+    describe('a shocked enemy (ID-097, art ID-120)', () => {
+      const shockScene = (time: number, shockUntil?: number, e: Partial<Enemy> = {}): Scene => {
         const s = blank();
         s.time = time;
-        enemy(s as unknown as HordeState, { id: 7, ...(shockUntil ? { shockUntil } : {}) });
+        enemy(s as unknown as HordeState, {
+          id: 7,
+          ...(shockUntil ? { shockUntil } : {}),
+          ...e,
+        });
         return s;
       };
-      const sparks = (scene: Scene, reduced = false) => {
+      /** Every draw of shock art (with its size, place and turn) and everything drawn, in order. */
+      const zaps = (
+        scene: Scene,
+        reduced = false,
+        cam = CAM,
+        sizes: Partial<Record<string, readonly [number, number]>> = {},
+      ) => {
         const r = recorder();
+        for (const [id, [width, height]] of Object.entries(sizes) as [ArtId, [number, number]][])
+          Object.assign(r.art[id], { width, height });
         const ctx = r.ctx as unknown as Record<string, unknown>;
-        const out: { style: unknown; comp: unknown }[] = [];
-        ctx.stroke = () => out.push({ style: ctx.strokeStyle, comp: ctx.globalCompositeOperation });
+        const order: string[] = [];
+        const out: { id: string; w: number; h: number; at: number[]; turn: number }[] = [];
+        let at = [0, 0];
+        let turn = 0;
+        ctx.save = () => {};
+        ctx.translate = (x: number, y: number) => (at = [x, y]);
+        ctx.rotate = (a: number) => (turn = a);
+        ctx.drawImage = (img: { id: string }, _x: number, _y: number, w: number, h: number) => {
+          order.push(img.id);
+          if ((SHOCK.art as readonly string[]).includes(img.id))
+            out.push({ id: img.id, w, h, at, turn });
+        };
         const anim = new Animator();
         anim.reduced = reduced;
-        drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, null, anim);
-        return out.filter((o) => o.style === SHOCK.colour || o.style === SHOCK.glow);
+        drawScene(r.ctx, r.art, scene, cam, VIEW, null, null, null, anim);
+        return { out, order };
       };
-      const on = sparks(shockScene(1, 1.3));
-      expect(on.map((o) => o.style)).toEqual([SHOCK.glow, SHOCK.colour]);
-      expect(on.every((o) => o.comp === 'lighter')).toBe(true);
-      expect(sparks(shockScene(1.3, 1.3))).toHaveLength(0);
-      expect(sparks(shockScene(1))).toHaveLength(0);
-      // The twitch flips side each flicker, and holds still with Reduce motion.
-      const a = twitch(STILL, 7, 1);
-      const b = twitch(STILL, 7, 1 + SHOCK.every);
-      expect(Math.abs(a.dx)).toBe(SHOCK.dx);
-      expect(b.dx).toBe(-a.dx);
-      expect(twitch(STILL, 7, 0)).toEqual(STILL);
+
+      it('crackles with the shock art only while paralysed', () => {
+        const on = zaps(shockScene(1, 1.3)).out;
+        expect(on).toHaveLength(SHOCK.crackles);
+        expect(zaps(shockScene(1.3, 1.3)).out).toHaveLength(0);
+        expect(zaps(shockScene(1)).out).toHaveLength(0);
+      });
+
+      it('jumps to new spots each flicker, and holds still with Reduce motion', () => {
+        const a = zaps(shockScene(1, 2)).out;
+        const b = zaps(shockScene(1 + SHOCK.every, 2)).out;
+        expect(b).not.toEqual(a);
+        const still = zaps(shockScene(1, 2), true).out;
+        expect(zaps(shockScene(1 + SHOCK.every * 3, 2), true).out).toEqual(still);
+      });
+
+      it('sizes to the body: bigger on a heavy kind, never too small to see', () => {
+        const small = zaps(shockScene(1, 2, { kind: 'runner' })).out[0]!;
+        const heavy = zaps(shockScene(1, 2, { kind: 'brute' })).out[0]!;
+        const scale = (z: { id: string; w: number }) => z.w / ART_PX;
+        expect(scale(heavy)).toBeGreaterThan(scale(small));
+        const far = zaps(shockScene(1, 2, { kind: 'crawler' }), false, { ...CAM, zoom: 0.25 }).out;
+        for (const z of far) expect(Math.max(z.w, z.h)).toBeGreaterThanOrEqual(SHOCK.least - 1e-9);
+        // A body that small on screen gets one crackle, not two, so it isn't buried.
+        expect(far).toHaveLength(1);
+      });
+
+      it('draws its frames at one scale, the smallest frame never under the floor', () => {
+        // Frames of different trimmed sizes, as the built art is.
+        const sizes = {
+          'shock-a': [142, 158],
+          'shock-b': [158, 192],
+          'shock-c': [145, 148],
+        } as const;
+        const seen = new Map<string, number>();
+        for (let t = 0; t < 40; t++) {
+          const scene = shockScene(1 + t * SHOCK.every, 9, { kind: 'crawler' });
+          for (const z of zaps(scene, false, { ...CAM, zoom: 0.25 }, sizes).out)
+            seen.set(z.id, z.w / sizes[z.id as keyof typeof sizes][0]);
+        }
+        expect(seen.size).toBe(SHOCK.art.length);
+        const scales = [...seen.values()];
+        for (const s of scales) expect(s).toBeCloseTo(scales[0]!, 9);
+        expect(Math.max(...sizes['shock-c']) * scales[0]!).toBeCloseTo(SHOCK.least, 6);
+        // On a burning body the floor is higher, so the flames don't swamp it.
+        const lit = zaps(
+          shockScene(1, 9, { kind: 'crawler', burnUntil: 9 }),
+          false,
+          { ...CAM, zoom: 0.25 },
+          { 'shock-a': [100, 100], 'shock-b': [100, 100], 'shock-c': [100, 100] },
+        ).out;
+        for (const z of lit) expect(z.w).toBeCloseTo(SHOCK.burningLeast, 6);
+      });
+
+      it('draws over a burning body, after its sprite', () => {
+        const { order } = zaps(shockScene(1, 2, { burnUntil: 3 }));
+        const body = order.indexOf(ENEMY_ART.shambler.walk[1]);
+        const zap = order.findIndex((id) => (SHOCK.art as readonly string[]).includes(id));
+        expect(body).toBeGreaterThanOrEqual(0);
+        expect(zap).toBeGreaterThan(body);
+      });
+
+      it('still twitches side to side each flicker, held still with Reduce motion', () => {
+        const a = twitch(STILL, 7, 1);
+        const b = twitch(STILL, 7, 1 + SHOCK.every);
+        expect(Math.abs(a.dx)).toBe(SHOCK.dx);
+        expect(b.dx).toBe(-a.dx);
+        expect(twitch(STILL, 7, 0)).toEqual(STILL);
+      });
     });
 
     it('fades out after the burn ends rather than stopping at once', () => {

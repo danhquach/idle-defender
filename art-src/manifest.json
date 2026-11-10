@@ -2280,6 +2280,39 @@
       "ref": "acid-splash"
     },
     {
+      "id": "shock-a",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 12032,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "shock",
+      "prompt": "2D game sprite of a small crackle of electricity: five crooked forked lightning bolts of uneven lengths spreading out lopsidedly from one bright point, some long, some short, each bolt a thick jagged zigzag with a bright white core and an electric cyan-blue edge, forking into a few smaller branches, one tiny bright white star spark at the tip of the longest bolt, all bolts joined at the point as one connected shape with no separate pieces, the whole shape well inside the frame. Hand-painted cartoon style, bold dark navy blue outline, flat shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture, no glow haze. No text."
+    },
+    {
+      "id": "shock-b",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 12031,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "shock",
+      "prompt": "2D game sprite of a small crackle of electricity: five crooked forked lightning bolts of uneven lengths spreading out lopsidedly from one bright point, some long, some short, each bolt a thick jagged zigzag with a bright white core and an electric cyan-blue edge, forking into a few smaller branches, one tiny bright white star spark at the tip of the longest bolt, all bolts joined at the point as one connected shape with no separate pieces, the whole shape well inside the frame. Hand-painted cartoon style, bold dark navy blue outline, flat shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture, no glow haze. No text."
+    },
+    {
+      "id": "shock-c",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "community/scriptsnsenses-sys/flux-2-dev-free",
+      "seed": 12033,
+      "size": "1024x1024",
+      "mutant": true,
+      "group": "shock",
+      "prompt": "2D game sprite of a small crackle of electricity: five crooked forked lightning bolts of uneven lengths spreading out lopsidedly from one bright point, some long, some short, each bolt a thick jagged zigzag with a bright white core and an electric cyan-blue edge, forking into a few smaller branches, one tiny bright white star spark at the tip of the longest bolt, all bolts joined at the point as one connected shape with no separate pieces, the whole shape well inside the frame. Hand-painted cartoon style, bold dark navy blue outline, flat shading, centred with empty space around it. The background is one flat uniform pure magenta colour #FF00FF (RGB 255, 0, 255) filling the whole image edge to edge, no gradient, no vignette, no texture, no glow haze. No text."
+    },
+    {
       "id": "gore-spray",
       "kind": "sprite",
       "style": "verbatim",

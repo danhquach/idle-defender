@@ -66,7 +66,8 @@ script refuses a model that is not listed here.
   our prompts hold nothing private. It is free, 8 requests a minute. It also made
   the Spewer's acid spit (ID-118: `acid-glob`, `acid-splash`, `acid-stain`), to
   match the explosions' cartoon style, and the death gore (ID-110: `gore-spray`,
-  `gore-spray-b`, `gore-stump`, `dust-puff`); the same points apply.
+  `gore-spray-b`, `gore-stump`, `dust-puff`) and the shock on a paralysed
+  enemy (ID-120: `shock-a`, `shock-b`, `shock-c`); the same points apply.
 - MAI Image 2.6 (`microsoft/mai-image-2.6`, ID-117, 2026-11-08): the project
   owner chose it for the title art (`title-dusk`) after a side-by-side test
   against FLUX 1.1 Pro, Z-Image Turbo and FLUX.2 Klein 4B, knowing the points
