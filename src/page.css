@@ -1,3 +1,11 @@
+/* The title logo's font: Rubik Dirt (SIL OFL 1.1, assets/fonts/OFL-rubik-dirt.txt), cut
+   down to the logo's letters. Served from the game itself (CSP font-src 'self'). */
+@font-face {
+  font-family: 'Long Hold Title';
+  src: url('./assets/fonts/rubik-dirt-title.woff') format('woff');
+  font-display: block;
+}
+
 /* The UI kit (design §15, ID-056): every colour, size, radius and gap the rules below use.
    Component rules take colours only from these tokens; a test holds text pairs to WCAG AA. */
 :root {
@@ -104,6 +112,7 @@
      build panel, ID-058 on), body sizes for the rest. */
   --font-body: system-ui, sans-serif;
   --font-display: system-ui, sans-serif;
+  --font-title: 'Long Hold Title', var(--font-display);
   --font-mono: ui-monospace, monospace;
   --text-display-lg: 2.25rem;
   --text-display: 1.75rem;
@@ -4561,16 +4570,20 @@ body {
   box-sizing: border-box;
 }
 
+/* The logo (src/ui/introTitle.ts): an SVG as wide as the title page, in its own title
+   font. The font holds only the logo's letters. */
 .intro-title {
   margin: 0;
-  font-size: clamp(2.5rem, 10vw, 4.5rem);
-  line-height: 1.05;
-  text-align: center;
-  color: var(--color-accent);
-  letter-spacing: 0.03em;
-  text-shadow:
-    0 3px 0 var(--color-intro-title-edge),
-    0 0 28px var(--color-shadow);
+  width: 100%;
+}
+
+.intro-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* A landscape phone: the logo shrinks (centred) so the buttons still fit. */
+  max-height: 32vh;
+  font-family: var(--font-title);
 }
 
 .intro-tagline,

@@ -50,7 +50,18 @@ function setup(over: Partial<IntroOptions> = {}) {
 describe('the intro title screen', () => {
   it('shows the title, tagline and Mute over an inert field, focus on the main button', () => {
     const { root, dialog, intro, mute, button } = setup();
-    expect(dialog.querySelector('h1')!.textContent).toBe(INTRO_TITLE);
+    const h1 = dialog.querySelector('h1')!;
+    expect(h1.querySelector('.sr-only')!.textContent).toBe(INTRO_TITLE);
+    // The drawn logo is decoration: hidden from screen readers, so the name is the span's.
+    const logo = h1.querySelector('svg')!;
+    expect(logo.getAttribute('aria-hidden')).toBe('true');
+    // Two lines, drawn twice: the shadow, then the face.
+    expect([...logo.querySelectorAll('text')].map((t) => t.textContent)).toEqual([
+      'THE LONG',
+      'HOLD',
+      'THE LONG',
+      'HOLD',
+    ]);
     expect(dialog.textContent).toContain(INTRO_TAGLINE);
     expect(mute.checked).toBe(false);
     expect(root.hasAttribute('inert')).toBe(true);
