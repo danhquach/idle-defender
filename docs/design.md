@@ -1,4 +1,4 @@
-# Idle Defender — Design
+# The Long Hold — Design
 
 Status: approved concept. Working title. Every number below is a starting
 point for balancing, not a final value. Genre: zombie-survival base defence

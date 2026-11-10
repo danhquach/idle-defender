@@ -15,6 +15,7 @@ export function buildCsp(): string {
     "script-src 'self'",
     "style-src 'self'",
     "img-src 'self' data:",
+    "font-src 'self'",
     "connect-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",

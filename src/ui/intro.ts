@@ -4,8 +4,9 @@
 // Like the Menu it sits outside `root`, which goes inert behind it, and its keys stay in it:
 // Enter is the main action, Esc goes back.
 import { el, SKILL_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
+import { createTitleLogo } from './introTitle.ts';
 
-export const INTRO_TITLE = 'Idle Defender';
+export const INTRO_TITLE = 'The Long Hold';
 export const INTRO_TAGLINE =
   'The last survivors hold a wall against the hordes. Keep them standing.';
 export const NEW_GAME_CONFIRM =
@@ -91,8 +92,10 @@ export function createIntro(root: HTMLElement, opts: IntroOptions): Intro {
   });
 
   // The title screen.
-  const title = el('h1', 'intro-title', INTRO_TITLE);
+  // The logo is drawn; the heading's text (its accessible name) is a hidden span.
+  const title = el('h1', 'intro-title');
   title.id = 'intro-title';
+  title.append(el('span', 'sr-only', INTRO_TITLE), createTitleLogo(doc));
   const tagline = el('p', 'intro-tagline', INTRO_TAGLINE);
   const cont = el('button', 'btn btn-primary intro-action', 'Continue');
   cont.type = 'button';

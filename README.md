@@ -1,4 +1,4 @@
-# Idle Defender
+# The Long Hold
 
 [![CI](https://github.com/danhquach/idle-defender/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/danhquach/idle-defender/actions/workflows/ci.yml)
 [![GitHub Pages](https://github.com/danhquach/idle-defender/actions/workflows/pages.yml/badge.svg)](https://github.com/danhquach/idle-defender/actions/workflows/pages.yml)
