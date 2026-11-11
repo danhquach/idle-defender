@@ -57,6 +57,11 @@ loot, and the further you push into danger, the more you can win — or lose.
   **horde number**: Horde 1, 2, 3 … each harder than the last; every 10th
   horde is a boss horde. (The in-fight level that triggers card picks is
   the **fight level**, §4.)
+- **The goal: call the evacuation** *(ID-127)*. Each of the boss hordes
+  10, 20 and 30 yields a **radio part** on its first clear; three parts
+  call the evacuation, and Horde 30 is the finale. After it play goes on as
+  **Endless**, with the best horde reached as the record to beat. Details
+  in §11 Start and pacing.
 - **The player starts a horde** when ready; there is no forced timer. At
   least one defender must be available (not injured, on patrol or
   crafting) *(designer's call)*. Repairs are optional; a horde can be
@@ -1981,7 +1986,8 @@ Set before sending; they apply to any location, plaza or single building.
     **Paralyzing** 150, 2 h (Lab 2, after Glue).
   - Cards (join the offer pool once researched): **Heavy Rounds** 25,
     45 min (rare, once: +40% damage); **Field Repairs** 80, 1 h 30 min
-    (Lab 2; epic, once: every wall segment to full HP).
+    (Lab 2; epic, once: every wall segment to full HP). In the horde-only
+    build they come from the boss hordes instead (ID-127, Start and pacing).
   - Camp: **More cars** 150, 2 h (Lab 2): a second car.
   - Perk levels share the queue (§5). The whole tree, levels included,
     costs about 4,300 Genes: Horde 10's Genes buy Metal walls, Flashbang
@@ -2129,9 +2135,27 @@ As built (ID-066), the horde-only build:
   win (`SQUAD_XP_RATE`). One result screen shows the XP, level-ups (with the
   stat picker) and the new survivor. Camp XP, the camp level and Mutated
   Genes are hidden.
-- **Pacing:** a boss horde every 10th horde. Winning Horde 10 shows a soft
-  ending ("You held Horde 10", Continue) and play goes on; there is no win
-  state.
+- **Pacing:** a boss horde every 10th horde.
+- **Goal (ID-127, `RADIO_HORDES`, `BOSS_UNLOCKS` in `data.ts`):** the boss
+  hordes 10, 20 and 30 each yield a radio part on their first clear; the
+  third calls the evacuation and Horde 30 is the finale.
+  - The start screen shows the radio's progress as a chip ("Radio 1/3") and
+    a line naming the next part's boss horde. Parts are counted from the
+    boss hordes beaten (the horde number), so an older save gets its parts
+    and the save stores nothing new.
+  - A boss horde's first clear adds a "Radio part N/3" chip and a line to
+    its result screen; this replaces Horde 10's old soft ending.
+  - Each boss's first clear also unlocks a card for good: **Heavy Rounds**
+    joins the card pool from Horde 10's, **Field Repairs** from Horde 20's
+    (in every fight after, replays included). These are the full game's
+    research cards; the horde-only build has no research, so the bosses
+    unlock them instead.
+  - Horde 30's first clear is the ending screen (title "The evacuation is
+    called", a "Horde 30 held" chip, Continue), and Continue goes on into
+    Horde 31: **Endless**.
+    From then the start screen's chip reads "Endless · best N", the
+    highest horde beaten, and its line asks for the next one.
+  - Replays of a boss horde give no part, no unlock and no ending.
 - **Balance** (scripted player, 20 seeds, `balance/horde-only.test.ts`): the expected
   squad (a survivor more per win, every point in Sharp Mind, damage cards
   first)
@@ -2279,8 +2303,10 @@ Targets, each with a balance test:
 - **Mid-game walls** (`balance/late-hordes.test.ts`, 4 seeds to Horde 18,
   re-enabled): every campaign beats Horde 18; in new-horde fights from Horde
   11, enemies reach the Barbed Wire's band in at least 75% and hit the wall in
-  15–95%; every seed loses at least one new horde at the first try; farming
-  past any one horde takes at most 30 replays with average luck.
+  15–95%; most seeds (3 of 4) lose at least one new horde at the first try
+  (every seed before ID-127: Heavy Rounds, unlocked by Horde 10's boss, makes
+  the squad stronger past it, by design); farming past any one horde takes at
+  most 30 replays with average luck.
 - **Recommended Power** (`balance/squad-power.test.ts`): about half the
   fights won with no cards or skills, most with them (above).
 - **Worst luck** (`balance/farming.test.ts`, 2 seeds): with every replay

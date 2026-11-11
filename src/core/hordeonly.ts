@@ -38,6 +38,10 @@ import {
   STASH_CAP,
   START_PERK,
   WEAPONS,
+  BOSS_UNLOCKS,
+  FINALE_HORDE,
+  RADIO_HORDES,
+  type ResearchCard,
   type Rarity,
   type SkillId,
   type Stat,
@@ -137,8 +141,9 @@ export const SQUAD_SLOTS: readonly { x: number; y: number }[] = Array.from(
  * Horde `game.hordeNumber` for the whole squad on the firing line behind a fresh
  * horde-only wall (full HP), each survivor in their slot in join order
  * (`SQUAD_LINE.order`), with enemies spawning at `SQUAD_SPAWN_X`, at `now`. No towers,
- * turrets or traps; no injuries or patrols hold anyone back, and no research, cash or
- * bank come in. The skills picked (ID-100) come in on cooldown only.
+ * turrets or traps; no injuries or patrols hold anyone back, and no cash or bank come in.
+ * The only research is the cards beaten boss hordes unlocked (ID-127). The skills picked
+ * (ID-100) come in on cooldown only.
  */
 export function startSquadHorde(
   game: GameState,
@@ -166,7 +171,7 @@ export function startSquadHorde(
     startedAt: now,
     perks: SQUAD_PERKS,
     perkLevels: { [START_PERK]: 1 },
-    research: [],
+    research: squadUnlocks(game),
     cashRate: 0,
     startCash: 0,
     cards: SQUAD_CARDS,
@@ -201,6 +206,37 @@ export const highestBeaten = (game: Pick<GameState, 'hordeNumber'>): number => g
 /** Whether horde `n` is a replay of one already beaten (ID-098), not the next new one. */
 export const isReplay = (game: Pick<GameState, 'hordeNumber'>, n: number): boolean =>
   n < game.hordeNumber;
+
+/**
+ * The radio parts found (ID-127): one per boss horde in `RADIO_HORDES` beaten. Read from the
+ * horde number, so an older save gets its parts and the save stores nothing new.
+ */
+export const radioParts = (game: Pick<GameState, 'hordeNumber'>): number =>
+  RADIO_HORDES.filter((n) => n <= highestBeaten(game)).length;
+
+/** Whether the finale is beaten (ID-127): play goes on as Endless. */
+export const isEndless = (game: Pick<GameState, 'hordeNumber'>): boolean =>
+  highestBeaten(game) >= FINALE_HORDE;
+
+/** The cards the beaten boss hordes have added to the card pool for good (ID-127). */
+export const squadUnlocks = (game: Pick<GameState, 'hordeNumber'>): ResearchCard[] =>
+  Object.entries(BOSS_UNLOCKS)
+    .filter(([n]) => Number(n) <= highestBeaten(game))
+    .map(([, card]) => card);
+
+/**
+ * What a win of horde `n` brings toward the goal (ID-127), with `game` as it stood before
+ * the win: the radio part (1-based) and any card unlocked on a boss horde's first clear, and
+ * whether it was the finale; null for any other win, a replay included.
+ */
+export function bossReward(
+  game: Pick<GameState, 'hordeNumber'>,
+  n: number,
+): { part: number; unlock: ResearchCard | null; finale: boolean } | null {
+  const i = RADIO_HORDES.indexOf(n);
+  if (i < 0 || isReplay(game, n)) return null;
+  return { part: i + 1, unlock: BOSS_UNLOCKS[n] ?? null, finale: n === FINALE_HORDE };
+}
 
 /**
  * One of survivor `id`'s points into `stat` mid-fight (ID-116): spent in the camp for good,

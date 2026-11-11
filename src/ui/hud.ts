@@ -49,7 +49,7 @@ import {
   HORROR,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
-  ENDING_HORDE,
+  RADIO_HORDES,
   FALL_WARNING,
   GAS_PER_WIN,
   HORDE_ONLY,
@@ -104,7 +104,16 @@ import {
   type Post,
   type UpgradeId,
 } from '../core/horde.ts';
-import { isReplay, squadOf, squadResult, type SquadDrop } from '../core/hordeonly.ts';
+import {
+  bossReward,
+  highestBeaten,
+  isEndless,
+  isReplay,
+  radioParts,
+  squadOf,
+  squadResult,
+  type SquadDrop,
+} from '../core/hordeonly.ts';
 import { isGun, professionOf } from '../core/loadout.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
@@ -715,7 +724,9 @@ export function hordePicker(
             : 'No beaten horde is at your power yet',
       start: {
         title: `Horde ${n}${boss ? ' · Boss horde' : ''}${isNew ? '' : ' · Replay'}`,
+        // The goal (ID-127) leads, whichever horde is picked.
         chips: [
+          goalChip(game).chip,
           ...(boss ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
           ...(isNew ? [] : [{ text: 'Replay', tone: 'ok' as const }]),
           { text: `${waveCount(n)} waves`, tone: 'ok' as const },
@@ -1404,13 +1415,34 @@ const pointsLeft = (d: RosterDefender): string => {
 export const SQUAD_POINTS_NOTE = 'Unspent points are kept for later.';
 
 /**
- * The horde-only screen before a horde (ID-066): who fights it, its start button, and the
- * horde picker (ID-098) with `picked` selected (the next new horde by default).
+ * The campaign's goal on the start screen (ID-127): the radio's progress and where the next
+ * part is, or, past the finale, Endless and the best horde reached.
+ */
+export function goalChip(game: Pick<GameState, 'hordeNumber'>): { chip: Chip; note: string } {
+  if (isEndless(game)) {
+    const best = highestBeaten(game);
+    return {
+      chip: { text: `Endless · best ${best}`, tone: 'warn' },
+      note: `Evacuation called. Hold Horde ${best + 1} for a new best.`,
+    };
+  }
+  const parts = radioParts(game);
+  return {
+    chip: { text: `Radio ${parts}/${RADIO_HORDES.length}`, tone: 'warn' },
+    note: `Beat boss Horde ${RADIO_HORDES[parts]} for radio part ${parts + 1} of ${RADIO_HORDES.length}.`,
+  };
+}
+
+/**
+ * The horde-only screen before a horde (ID-066): who fights it, its start button, the
+ * campaign's goal (ID-127), and the horde picker (ID-098) with `picked` selected (the next
+ * new horde by default).
  */
 export function squadStart(game: GameState, picked: number = game.hordeNumber): ResultScreen {
   const squad = squadOf(game);
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
+  const goal = goalChip(game);
   return {
     title: now.start.title,
     lines: [
@@ -1418,6 +1450,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
         .map((d) => `${d.name} (level ${levelOf(d.xp).level})`)
         .join(', ')}`,
       `${waveCount(now.horde)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
+      goal.note,
     ],
     button: now.button,
     squad: true,
@@ -1429,7 +1462,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       kind: 'start',
       chips: now.start.chips,
       callout: null,
-      note: null,
+      note: goal.note,
       drop: null,
       recruit: null,
       cards: squad.map((d) => plainCard(d)),
@@ -1442,11 +1475,27 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
 export const lossXpText = (xp: number): string =>
   xp > 0 ? `+${xp} XP each` : 'No XP: no wave cleared';
 
+/** The finale's result title (ID-127): the ending screen before Endless. */
+export const EVACUATION_TITLE = 'The evacuation is called';
+
+/**
+ * What a boss horde's first clear says (ID-127): the radio part found and the card it
+ * unlocked, or, for the finale, the ending and Endless after it.
+ */
+export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>>): string {
+  if (reward.finale) {
+    return 'The radio works. You held the camp. Play on in Endless for a best horde.';
+  }
+  const unlock = reward.unlock ? ` New card unlocked: ${UPGRADES[reward.unlock].name}.` : '';
+  return `Radio part found.${unlock}`;
+}
+
 /**
  * The horde-only result screen (ID-066) for horde `s`, fought from `game`: a win's XP,
- * level-ups and the survivor joining (a first clear only; Horde 10's is the soft ending,
- * with play going on); a replay's win says so and adds nobody. A loss says where they got
- * in, the small XP it paid (ID-098) and that the horde comes again in full. The picker
+ * level-ups and the survivor joining (a first clear only; a boss horde's also finds a radio
+ * part and may unlock a card, and the finale's is the ending screen, ID-127); a replay's win
+ * says so and adds nobody. A loss says where they got in, the small XP it paid (ID-098)
+ * and that the horde comes again in full. The picker
  * (ID-098) starts on the next new horde after a first clear, else on the same horde; its
  * bands read the squad as `game` holds it, so the app redraws it once the win is saved.
  */
@@ -1489,10 +1538,12 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       survivor: grown.get(g.id) ?? null,
     }));
   if (won) {
-    const ending = first && s.hordeNumber === ENDING_HORDE;
+    const reward = bossReward(game, s.hordeNumber);
+    const ending = reward?.finale === true;
+    const rewardNote = reward ? bossRewardNote(reward) : null;
     return {
       title: ending
-        ? `You held Horde ${s.hordeNumber}`
+        ? EVACUATION_TITLE
         : replay
           ? `Horde ${s.hordeNumber} held (replay)`
           : `Horde ${s.hordeNumber} held`,
@@ -1507,7 +1558,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
                 : `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
             ]),
         ...(drop ? squadDropLines(game, drop) : []),
-        ...(ending ? ['The end, for now. The hordes keep coming: play on from the next one.'] : []),
+        ...(rewardNote ? [rewardNote] : []),
       ],
       button: ending ? 'Continue' : goOn,
       squad: true,
@@ -1518,13 +1569,16 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       debrief: {
         kind: 'won',
         chips: [
+          // The ending names the horde its title doesn't (ID-127).
+          ...(ending ? [{ text: `Horde ${s.hordeNumber} held`, tone: 'ok' as const }] : []),
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
           ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'boss' as const })),
+          ...(reward
+            ? [{ text: `Radio part ${reward.part}/${RADIO_HORDES.length}`, tone: 'warn' as const }]
+            : []),
         ],
         callout: null,
-        note: ending
-          ? 'The end, for now. The hordes keep coming: play on from the next one.'
-          : null,
+        note: rewardNote,
         drop: drop ? dropTile(game, drop) : null,
         // A replay brings nobody: only a first clear's tile says who joins.
         recruit: replay

@@ -235,6 +235,7 @@ export function playCampaign(seed: number, hordes: number): HordeRun[] {
  * listed comes last.
  */
 const SQUAD_PICKS: readonly UpgradeId[] = [
+  'hollow-points',
   'sharpshooter',
   'rapid-fire',
   'frag-grenades',
@@ -248,6 +249,7 @@ const SQUAD_PICKS: readonly UpgradeId[] = [
   'long-sight',
   'barbed-wire',
   'reinforce',
+  'field-repairs',
   'patch-up',
 ];
 

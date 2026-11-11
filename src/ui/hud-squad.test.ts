@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { STATS_REFUNDED } from './build.ts';
-import { ENDING_HORDE, SQUAD_CAP } from '../core/data.ts';
+import { RADIO_HORDES, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
@@ -14,6 +14,7 @@ import {
   createHud,
   defenderLabel,
   enemiesLeft,
+  EVACUATION_TITLE,
   lossXpText,
   pickerRow,
   powerLine,
@@ -113,12 +114,58 @@ describe('the horde-only screens (ID-066)', () => {
     );
   });
 
-  it('Horde 10’s win is the soft ending: Continue, and play goes on', () => {
-    const g = squadGame(SQUAD_CAP, ENDING_HORDE);
+  it('a boss horde’s first clear finds a radio part and names its card unlock (ID-127)', () => {
+    const at10 = squadGame(SQUAD_CAP, 10);
+    const a = squadScreen(at10, ended(at10, 'won'));
+    expect(a.title).toBe('Horde 10 held');
+    expect(a.button).toBe(startLabel(11));
+    expect(a.lines.at(-1)).toBe('Radio part found. New card unlocked: Heavy Rounds.');
+    expect(a.debrief!.note).toBe(a.lines.at(-1));
+    expect(a.debrief!.chips.map((c) => c.text)).toContain('Radio part 1/3');
+    const at20 = squadGame(SQUAD_CAP, 20);
+    const b = squadScreen(at20, ended(at20, 'won'));
+    expect(b.debrief!.note).toBe('Radio part found. New card unlocked: Field Repairs.');
+    // No other horde finds a part.
+    const at11 = squadGame(SQUAD_CAP, 11);
+    const c = squadScreen(at11, ended(at11, 'won'));
+    expect(c.debrief!.note).toBeNull();
+    expect(c.debrief!.chips.map((x) => x.text).join(' ')).not.toMatch(/Radio/);
+  });
+
+  it('the finale’s first clear is the ending screen: Continue into Endless (ID-127)', () => {
+    const g = squadGame(SQUAD_CAP, 30);
     const screen = squadScreen(g, ended(g, 'won'));
-    expect(screen.title).toBe(`You held Horde ${ENDING_HORDE}`);
+    expect(screen.title).toBe(EVACUATION_TITLE);
     expect(screen.button).toBe('Continue');
-    expect(screen.lines.at(-1)).toMatch(/^The end, for now/);
+    expect(screen.debrief!.note).toBe(
+      'The radio works. You held the camp. Play on in Endless for a best horde.',
+    );
+    expect(screen.debrief!.chips[0]!.text).toBe('Horde 30 held');
+    expect(screen.debrief!.chips.map((c) => c.text)).toContain('Radio part 3/3');
+    // Continue starts the first Endless horde.
+    expect(screen.picker!.value).toBe(31);
+  });
+
+  it('the start screen shows the radio’s progress, then Endless and the best horde (ID-127)', () => {
+    const chip = (horde: number): string => squadStart(squadGame(1, horde)).debrief!.chips[0]!.text;
+    expect(chip(1)).toBe('Radio 0/3');
+    expect(chip(10)).toBe('Radio 0/3');
+    expect(chip(11)).toBe('Radio 1/3');
+    expect(chip(21)).toBe('Radio 2/3');
+    expect(chip(30)).toBe('Radio 2/3');
+    expect(chip(31)).toBe('Endless · best 30');
+    expect(chip(45)).toBe('Endless · best 44');
+    expect(squadStart(squadGame(1, 11)).debrief!.note).toBe(
+      'Beat boss Horde 20 for radio part 2 of 3.',
+    );
+    expect(squadStart(squadGame(1, 45)).debrief!.note).toBe(
+      'Evacuation called. Hold Horde 45 for a new best.',
+    );
+    // The goal says the same whichever horde the picker is on.
+    expect(squadStart(squadGame(1, 21), 5).debrief!.chips[0]!.text).toBe('Radio 2/3');
+    expect(squadStart(squadGame(1, 21)).lines.at(-1)).toBe(
+      squadStart(squadGame(1, 21)).debrief!.note,
+    );
   });
 
   it('a loss: no XP, the same horde again with everyone back and a full wall', () => {
@@ -211,11 +258,11 @@ describe('the horde-only HUD on the page (ID-066)', () => {
 
   it('a boss horde marks its badge; the wave line caps at the last wave and follows the fight', () => {
     const { root, h } = hud(true);
-    const s = startSquadHorde(squadGame(1, ENDING_HORDE), 1, NOW);
+    const s = startSquadHorde(squadGame(1, RADIO_HORDES[0]), 1, NOW);
     h.update({ ...s, wave: s.waveCount, toSpawn: 3, enemies: [] });
     expect(root.querySelector('.hud-badge')!.classList.contains('hud-badge-boss-on')).toBe(true);
     expect(root.querySelector('.hud-badge')!.getAttribute('aria-label')).toBe(
-      `Horde ${ENDING_HORDE}, boss horde`,
+      `Horde ${RADIO_HORDES[0]}, boss horde`,
     );
     expect(root.querySelector('.hud-corner-wave')!.textContent).toBe(
       `Wave ${s.waveCount}/${s.waveCount} · 3 left`,

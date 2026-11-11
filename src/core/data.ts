@@ -58,8 +58,19 @@ export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.06 } as const;
 export const SQUAD_EARLY_HP: readonly number[] = [0.8, 0.9, 0.95, 1, 1, 1, 1, 0.85, 0.75, 0.75];
 /** Survivor XP for a horde-only win, as a multiple of the full game's (`DEFENDER_XP`). */
 export const SQUAD_XP_RATE = 2;
-/** The horde whose win shows the soft ending screen (design §11); play goes on after it. */
-export const ENDING_HORDE = 10;
+/**
+ * The campaign's goal (ID-127, design §11): each boss horde's first clear yields a radio
+ * part, in this order; the last is the finale, whose win calls the evacuation, and play goes
+ * on after it as Endless.
+ */
+export const RADIO_HORDES: readonly number[] = [10, 20, 30];
+/** The finale (ID-127): the last radio part's boss horde. */
+export const FINALE_HORDE = RADIO_HORDES.at(-1)!;
+/** A card a boss horde's first clear adds to the horde-only card pool for good (ID-127). */
+export const BOSS_UNLOCKS: Readonly<Record<number, ResearchCard>> = {
+  10: 'hollow-points',
+  20: 'field-repairs',
+};
 /**
  * The most weapons the horde-only stash holds (ID-067; 20 before ID-122); past it the
  * weakest is thrown away.

@@ -4,10 +4,12 @@ import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
-import { rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
+import { eligible, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
 import {
+  BOSS_UNLOCKS,
   COLUMNS,
-  ENDING_HORDE,
+  FINALE_HORDE,
+  RADIO_HORDES,
   ENEMY_RADIUS,
   FIELD,
   SQUAD_SPAWN_X,
@@ -26,8 +28,12 @@ import {
 import { hordeXp, newGame, type GameState, type RosterDefender } from './game.ts';
 import { gunRange, moveDefender, tick } from './horde.ts';
 import {
+  bossReward,
   capSquad,
   finishSquadHorde,
+  isEndless,
+  radioParts,
+  squadUnlocks,
   joiner,
   SQUAD_CARDS,
   squadHpScale,
@@ -42,6 +48,7 @@ import { gunOf, type Loadout } from './loadout.ts';
 import { createRng } from './rng.ts';
 import { enemy } from './testing.ts';
 import { playSquadHorde } from './sim.ts';
+import { horrorAbility } from './waves.ts';
 import { critChance, damageFactor, fireRateFactor, reloadTime, spreadOf } from './stats.ts';
 
 const NOW = 1_700_000_000_000;
@@ -144,6 +151,22 @@ describe('the squad in a horde (ID-066)', () => {
     expect(s.perks).toEqual([START_PERK]);
     expect(s.perkLevels).toEqual({ [START_PERK]: 1 });
     expect(s.turrets).toEqual([]);
+  });
+
+  it('beaten boss hordes add their cards to the pool for good, replays included (ID-127)', () => {
+    const at = (horde: number, fight = horde) =>
+      startSquadHorde(squadGame(1, horde), 7, NOW, fight).research;
+    expect(at(10)).toEqual([]);
+    expect(at(11)).toEqual(['hollow-points']);
+    expect(at(11, 3)).toEqual(['hollow-points']);
+    expect(at(20)).toEqual(['hollow-points']);
+    expect(at(21)).toEqual(['hollow-points', 'field-repairs']);
+    expect(at(40)).toEqual(['hollow-points', 'field-repairs']);
+    // Both are cards the squad's pool can offer, once unlocked.
+    const s = startSquadHorde(squadGame(1, 21), 7, NOW);
+    expect(eligible(s, 'hollow-points')).toBe(true);
+    expect(eligible({ ...s, research: [] }, 'hollow-points')).toBe(false);
+    expect(eligible(s, 'field-repairs')).toBe(true);
   });
 
   it('a survivor carries only their primary, with no profession; a non-gun primary becomes the pistol', () => {
@@ -323,9 +346,47 @@ describe('after a horde (ID-066)', () => {
     expect(() => squadResult(g, startSquadHorde(g, 1, NOW))).toThrow(RangeError);
   });
 
-  it('the ending horde is a win like any other: play goes on', () => {
-    const g = squadGame(SQUAD_CAP, ENDING_HORDE);
-    expect(finishSquadHorde(g, ended(g, 'won')).hordeNumber).toBe(ENDING_HORDE + 1);
+  it('the finale is a win like any other: play goes on as Endless', () => {
+    const g = squadGame(SQUAD_CAP, FINALE_HORDE);
+    const next = finishSquadHorde(g, ended(g, 'won'));
+    expect(next.hordeNumber).toBe(FINALE_HORDE + 1);
+    expect(isEndless(g)).toBe(false);
+    expect(isEndless(next)).toBe(true);
+  });
+});
+
+describe('the evacuation goal (ID-127)', () => {
+  it('the radio parts are the boss hordes 10, 20 and 30, the last the finale', () => {
+    expect(RADIO_HORDES).toEqual([10, 20, 30]);
+    expect(FINALE_HORDE).toBe(30);
+    for (const n of RADIO_HORDES) expect(horrorAbility(n)).not.toBeNull();
+    for (const n of Object.keys(BOSS_UNLOCKS)) expect(RADIO_HORDES).toContain(Number(n));
+  });
+
+  it('counts parts from the hordes beaten, so a save needs nothing new', () => {
+    const parts = (horde: number): number => radioParts({ hordeNumber: horde });
+    expect([1, 10, 11, 20, 21, 30, 31, 99].map(parts)).toEqual([0, 0, 1, 1, 2, 2, 3, 3]);
+    expect(isEndless({ hordeNumber: 30 })).toBe(false);
+    expect(isEndless({ hordeNumber: 31 })).toBe(true);
+    expect(squadUnlocks({ hordeNumber: 1 })).toEqual([]);
+  });
+
+  it('a boss horde’s first clear gives its part and unlock; replays and other hordes nothing', () => {
+    expect(bossReward({ hordeNumber: 10 }, 10)).toEqual({
+      part: 1,
+      unlock: 'hollow-points',
+      finale: false,
+    });
+    expect(bossReward({ hordeNumber: 20 }, 20)).toEqual({
+      part: 2,
+      unlock: 'field-repairs',
+      finale: false,
+    });
+    expect(bossReward({ hordeNumber: 30 }, 30)).toEqual({ part: 3, unlock: null, finale: true });
+    expect(bossReward({ hordeNumber: 11 }, 10)).toBeNull();
+    expect(bossReward({ hordeNumber: 31 }, 30)).toBeNull();
+    expect(bossReward({ hordeNumber: 40 }, 40)).toBeNull();
+    expect(bossReward({ hordeNumber: 5 }, 5)).toBeNull();
   });
 });
 
