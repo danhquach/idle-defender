@@ -94,7 +94,9 @@ const TEXT_ON: Record<string, string[]> = {
   ],
   '--color-warn': ['--color-bg', '--color-warn-bg', '--color-menu-bg'],
   '--color-ok-text': ['--color-surface-sunken'],
-  '--color-danger-text': ['--color-danger-bg'],
+  // The swarm banner, its countdown disc and the red wave line (ID-121).
+  '--color-on-danger': ['--color-danger'],
+  '--color-danger-text': ['--color-danger-bg', '--color-warning-bg', '--color-bar-bg'],
   '--color-synergy': ['--color-surface', '--color-surface-hover'],
   '--color-rare-text': ['--color-surface', '--color-surface-hover'],
   '--color-epic-text': ['--color-surface', '--color-surface-hover'],
@@ -120,6 +122,27 @@ describe('offer card motion (ID-103)', () => {
     }
     expect(block).toMatch(/animation: none;\s*transition: none;/);
     expect(block).toMatch(/\.hud-card-epic::after {\s*display: none;/);
+  });
+});
+
+describe('swarm alarm motion (ID-121)', () => {
+  it('holds the swarm banner and glow still with the system setting or the game’s own', () => {
+    // Every swarm rule that animates is one of these two.
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const animated = [
+      ...bare.matchAll(/([^{}]*){[^}]*animation: hud-swarm-(?:pulse|glow) [^}]*}/g),
+    ].map((m) => m[1]!.trim());
+    expect(animated).toEqual(['.hud-swarm-hit', '.hud-swarm-edge']);
+    const system = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) {([\s\S]*?)\n}/g)]
+      .map((m) => m[1]!)
+      .join('\n');
+    expect(system).toMatch(/\.hud-swarm,\s*\.hud-swarm-edge,[^{]*{\s*animation: none;/);
+    expect(css).toMatch(
+      /:root\[data-reduce-motion\] \.hud-swarm,\s*:root\[data-reduce-motion\] \.hud-swarm-edge {\s*animation: none;/,
+    );
+    // Each beats the rule it stills: `.hud-swarm` (0,1,0) after `.hud-swarm-hit` (0,1,0),
+    // and the attribute rules (0,3,0) on specificity.
+    expect(css.lastIndexOf('animation: none')).toBeGreaterThan(css.indexOf('.hud-swarm-hit {'));
   });
 });
 

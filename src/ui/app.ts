@@ -167,6 +167,8 @@ export function start(root: HTMLElement, art: Art): void {
     storage,
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
   );
+  // The page's CSS motion follows the setting too (ID-121).
+  document.documentElement.toggleAttribute('data-reduce-motion', animator.reduced);
   // When the fight ended (ms): read once, so the screen and the rest timers agree.
   let endedAt: number | null = null;
   // The result screen made when the fight ended, waiting to show until `at` (ms): a win's
@@ -496,6 +498,7 @@ export function start(root: HTMLElement, art: Art): void {
     reduceMotion: animator.reduced,
     onReduceMotion: (on) => {
       animator.reduced = on;
+      document.documentElement.toggleAttribute('data-reduce-motion', on);
       writeReduceMotion(storage, on);
     },
     sound: soundSettings,
