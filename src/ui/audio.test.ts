@@ -539,3 +539,25 @@ describe('Sound engine (ID-080)', () => {
     }
   });
 });
+
+describe('the swarm alarm (ID-121)', () => {
+  it('is a siren: louder and longer than the two blares it replaced', async () => {
+    const { e, fake } = engine();
+    e.unlock();
+    await settle();
+    const gains = fake.gains.length;
+    const started = fake.started.length;
+    const at = fake.currentTime;
+    e.play('swarm');
+    // Three whoops of two tones each, over one drone.
+    const starts = fake.started.slice(started).map((t) => t - at);
+    expect(starts).toHaveLength(7);
+    expect(Math.max(...starts)).toBeCloseTo(0.9, 5);
+    // Its tones' peaks and where they die away (the old blares: 0.18 at most, gone by 0.63 s).
+    const ramps = fake.gains
+      .slice(gains)
+      .flatMap((g) => g.gain.calls.filter((c) => c[0] === 'exp'));
+    expect(Math.max(...ramps.map((c) => c[1]))).toBeGreaterThanOrEqual(0.26);
+    expect(Math.max(...ramps.map((c) => c[2])) - at).toBeGreaterThanOrEqual(1.3);
+  });
+});

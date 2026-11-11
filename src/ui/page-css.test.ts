@@ -125,6 +125,27 @@ describe('offer card motion (ID-103)', () => {
   });
 });
 
+describe('swarm alarm motion (ID-121)', () => {
+  it('holds the swarm banner and glow still with the system setting or the game’s own', () => {
+    // Every swarm rule that animates is one of these two.
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const animated = [
+      ...bare.matchAll(/([^{}]*){[^}]*animation: hud-swarm-(?:pulse|glow) [^}]*}/g),
+    ].map((m) => m[1]!.trim());
+    expect(animated).toEqual(['.hud-swarm-hit', '.hud-swarm-edge']);
+    const system = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) {([\s\S]*?)\n}/g)]
+      .map((m) => m[1]!)
+      .join('\n');
+    expect(system).toMatch(/\.hud-swarm,\s*\.hud-swarm-edge,[^{]*{\s*animation: none;/);
+    expect(css).toMatch(
+      /:root\[data-reduce-motion\] \.hud-swarm,\s*:root\[data-reduce-motion\] \.hud-swarm-edge {\s*animation: none;/,
+    );
+    // Each beats the rule it stills: `.hud-swarm` (0,1,0) after `.hud-swarm-hit` (0,1,0),
+    // and the attribute rules (0,3,0) on specificity.
+    expect(css.lastIndexOf('animation: none')).toBeGreaterThan(css.indexOf('.hud-swarm-hit {'));
+  });
+});
+
 describe('UI kit tokens (ID-056)', () => {
   it('keeps colour literals out of the component rules', () => {
     expect(rules).not.toMatch(/#[0-9a-f]{3,8}\b/i);
