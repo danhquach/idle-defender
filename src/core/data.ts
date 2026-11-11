@@ -878,10 +878,13 @@ export const CARD = {
   /** Patch Up: share of each segment's max HP it repairs. */
   patchUp: 0.3,
   ricochet: { range: 150, share: [0.1, 0.18, 0.25] },
-  /** Piercing Rounds: chance a squad shot gets +1 pierce, per level (1 = no roll). */
-  pierce: [0.35, 0.7, 1],
-  /** Incendiary Rounds: burn per second, per level, for `seconds`. */
-  burn: { dps: [1, 2, 3], seconds: 3 },
+  /** Piercing Rounds: chance a squad shot gets +1 pierce, per level (ID-124: 75% at max). */
+  pierce: [0.25, 0.5, 0.75],
+  /**
+   * Incendiary Rounds: burn per second, per level, for `seconds`, as a share of this wave's
+   * Shambler HP (ID-124), so it keeps up with the hordes as Molotov's fire does.
+   */
+  burn: { share: [0.03, 0.06, 0.09], seconds: 3 },
   /**
    * Shock Rounds: s a hit paralyses for, per level (`heavy` of it for the big kinds); an
    * enemy can't be paralysed again until `immune` s after its last paralysis ends.
@@ -893,14 +896,16 @@ export const CARD = {
   mags: [4 / 3, 5 / 3, 2],
   /**
    * Concussion Rounds (was Stopping Power): px of knock-back per point of damage dealt;
-   * `heavy` of it for the big kinds; none again until `gap` s after the last push.
+   * `heavy` of it for the big kinds; none again until `gap` s after the last push, and at
+   * most `cap` px in all for each enemy (ID-124).
    */
-  concussion: { perDamage: 0.5, heavy: 0.5, gap: 0.5, heavyKinds: HEAVY_KINDS },
+  concussion: { perDamage: 0.5, heavy: 0.5, gap: 0.5, cap: 100, heavyKinds: HEAVY_KINDS },
   /**
    * Frag Grenades: one every `every` s per survivor on the line, at an enemy within `range` of a survivor, landing
-   * `flight` s later for `damage` flat within `radius`; its blast is drawn for `flash` s.
+   * `flight` s later within `radius` for `share` of this wave's Shambler HP (ID-124; was a
+   * flat 20); its blast is drawn for `flash` s.
    */
-  frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 1.2 },
+  frag: { every: 8, range: 600, flight: 0.6, share: 0.35, radius: 70, flash: 1.2 },
   /**
    * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
    * slows per level. Each row of it (one per segment) has `durability` per level (ID-104),

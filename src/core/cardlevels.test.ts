@@ -13,13 +13,15 @@ import {
   UPGRADES,
 } from './cards.ts';
 import { CARD, CARD_MAX_LEVEL, ENEMIES, SEGMENT_HEIGHT, STEP, SWARM, WEAPONS } from './data.ts';
-import { waveCount, waveSize } from './waves.ts';
+import { enemyHp, waveCount, waveSize } from './waves.ts';
 import {
   cardLevel,
   extraPierce,
+  fragDamage,
   magazineOf,
   newHorde,
   rebuildWire,
+  shamblerHp,
   shocked,
   stunned,
   tick,
@@ -139,9 +141,9 @@ describe('levels (ID-097)', () => {
     }
     expect(CARD.loaders).toEqual([0.9, 0.8, 0.7]);
     expect(CARD.mags.map((m) => Math.round(m * 100) / 100)).toEqual([1.33, 1.67, 2]);
-    expect(CARD.pierce).toEqual([0.35, 0.7, 1]);
+    expect(CARD.pierce).toEqual([0.25, 0.5, 0.75]);
     expect(CARD.ricochet.share).toEqual([0.1, 0.18, 0.25]);
-    expect(CARD.burn.dps).toEqual([1, 2, 3]);
+    expect(CARD.burn.share).toEqual([0.03, 0.06, 0.09]);
     expect(CARD.shock.seconds).toEqual([0.2, 0.3, 0.4]);
     expect(CARD.wire.slow).toEqual([0.15, 0.25, 0.35]);
   });
@@ -275,17 +277,16 @@ describe('levels (ID-097)', () => {
     for (let lv = 1; lv <= 3; lv++) {
       const seen = bounces(lv);
       expect(seen.length, `Lv ${lv}`).toBeGreaterThan(5);
-      // Some bounces keep a pierce from their shot's roll; below max, some shots rolled none.
+      // Some bounces keep a pierce from their shot's roll; at every level (max is 75%,
+      // ID-124) some shots rolled none.
       expect(
         seen.some((p) => p > 0),
         `Lv ${lv}`,
       ).toBe(true);
-      if (lv < 3)
-        expect(
-          seen.some((p) => p === 0),
-          `Lv ${lv}`,
-        ).toBe(true);
-      else expect(seen.every((p) => p > 0)).toBe(true);
+      expect(
+        seen.some((p) => p === 0),
+        `Lv ${lv}`,
+      ).toBe(true);
     }
   });
 });
@@ -304,29 +305,37 @@ describe('Piercing Rounds levels (ID-097)', () => {
     return { out, draws };
   }
 
-  it('below max, a shot pierces by chance on the seeded RNG: the same seed, the same shots', () => {
+  it('at every level a shot pierces by chance on the seeded RNG (25%, 50%, 75%, ID-124): the same seed, the same shots', () => {
     expect(rolls(1, 7).out).toEqual(rolls(1, 7).out);
+    expect(rolls(3, 7).out).toEqual(rolls(3, 7).out);
     const share = (lv: number) => rolls(lv, 3).out.filter((p) => p === 1).length / 2000;
     expect(share(0)).toBe(0);
-    expect(share(1)).toBeCloseTo(0.35, 1);
-    expect(share(2)).toBeCloseTo(0.7, 1);
-    expect(share(3)).toBe(1);
+    // 2000 rolls: within 0.03 of the level's chance (about 3 standard deviations).
+    for (const [lv, p] of [
+      [1, 0.25],
+      [2, 0.5],
+      [3, 0.75],
+    ] as const) {
+      expect(Math.abs(share(lv) - p), `Lv ${lv}`).toBeLessThan(0.03);
+    }
   });
 
-  it('at max (or without the card), no roll: the fight’s RNG is left alone', () => {
-    expect(rolls(3, 11).draws).toBe(0);
+  it('without the card, no roll: the fight’s RNG is left alone; with it, one roll a shot at every level', () => {
     expect(rolls(0, 11).draws).toBe(0);
-    expect(rolls(1, 11).draws).toBe(2000);
+    for (const lv of [1, 2, 3]) expect(rolls(lv, 11).draws, `Lv ${lv}`).toBe(2000);
   });
 
-  it('a squad bullet fired at max carries the +1 pierce', () => {
+  it('squad bullets fired at max carry +1 pierce on some shots, not all (ID-124)', () => {
     let s = newHorde(1, setup());
     s.toSpawn = 0;
     s = at('piercing-rounds', 3, s);
     enemy(s, { ...tough, stunnedUntil: 1e9, x: 700, y: 360 });
-    s = tick(s, STEP);
-    expect(s.bullets.length).toBeGreaterThan(0);
-    expect(s.bullets.every((b) => b.pierce === WEAPONS.pistol.pierce + 1)).toBe(true);
+    const seen = new Set<number>();
+    for (let i = 0; i < Math.round(10 / STEP); i++) {
+      s = tick(s, STEP);
+      for (const b of s.bullets) seen.add(b.pierce);
+    }
+    expect([...seen].sort()).toEqual([WEAPONS.pistol.pierce, WEAPONS.pistol.pierce + 1]);
   });
 });
 
@@ -451,6 +460,30 @@ describe('Concussion Rounds (ID-097)', () => {
     t = tick(t, STEP);
     expect(find(t, e.id).x).toBeCloseTo(605, 9);
     expect(find(t, e.id).hp).toBe(980);
+  });
+
+  it(`pushes one enemy at most ${CARD.concussion.cap} px in all, so steady fire can’t hold it in place (ID-124)`, () => {
+    let s = at('concussion-rounds', 1);
+    // Each hit would push 50 px; after the cap is spent the hits only deal damage.
+    const e = enemy(s, { ...tough, hp: 1e6, maxHp: 1e6, stunnedUntil: 1e9, x: 600, y: ROW4 });
+    let pushes = 0;
+    let x = 600;
+    for (let i = 0; i < Math.round(10 / STEP); i++) {
+      shoot(s, { x: find(s, e.id).x - 10, y: ROW4, damage: 100 });
+      s = tick(s, STEP);
+      const now = find(s, e.id).x;
+      if (now > x + 1e-9) pushes += 1;
+      x = now;
+    }
+    expect(find(s, e.id).x - 600).toBeCloseTo(CARD.concussion.cap, 9);
+    expect(find(s, e.id).pushed).toBeCloseTo(CARD.concussion.cap, 9);
+    expect(pushes).toBe(Math.ceil(CARD.concussion.cap / 50));
+    expect(find(s, e.id).hp).toBeLessThan(1e6 - 100 * 10);
+    // Another enemy still has its whole cap.
+    const o = enemy(s, { ...tough, stunnedUntil: 1e9, x: 600, y: ROW4 + 200 });
+    shoot(s, { x: 590, y: ROW4 + 200, damage: 10 });
+    s = tick(s, STEP);
+    expect(find(s, o.id).x).toBeCloseTo(605, 9);
   });
 
   it('a steady stream of fire pushes an enemy at most twice a second', () => {
@@ -615,7 +648,8 @@ describe('one ammo slot: Incendiary or Shock Rounds (ID-097)', () => {
     const a = enemy(s, { ...tough, x: 700, y: ROW4 });
     shoot(s, { x: 690, y: ROW4, damage: 10 });
     s = tick(s, STEP);
-    expect(find(s, a.id).burnDps).toBe(3);
+    const max = CARD.burn.share[2]! * shamblerHp(s);
+    expect(find(s, a.id).burnDps).toBeCloseTo(max, 9);
     s = picked(s, 'shock-rounds');
     const b = enemy(s, { ...tough, x: 700, y: ROW4 + 200 });
     shoot(s, { x: 690, y: ROW4 + 200, damage: 10 });
@@ -625,7 +659,32 @@ describe('one ammo slot: Incendiary or Shock Rounds (ID-097)', () => {
     // The first enemy keeps burning at the rate it was lit with.
     const hp = find(s, a.id).hp;
     s = tick(s, STEP);
-    expect(hp - find(s, a.id).hp).toBeCloseTo(3 * STEP, 9);
+    expect(hp - find(s, a.id).hp).toBeCloseTo(max * STEP, 9);
+  });
+
+  it('Incendiary Rounds and Frag Grenades keep up with the hordes: a share of the wave’s Shambler HP (ID-124)', () => {
+    /** Horde `n`'s quiet fight, an enemy lit by a max Incendiary hit: its burn and that wave's Shambler HP. */
+    const lit = (n: number) => {
+      const q = newHorde(1, { ...setup(), hordeNumber: n });
+      q.toSpawn = 0;
+      q.defenders[0]!.nextShotAt = 1e9;
+      let s = at('incendiary-rounds', 3, q);
+      const e = enemy(s, { ...tough, stunnedUntil: 1e9, x: 600, y: ROW4 });
+      shoot(s, { x: 590, y: ROW4, damage: 10 });
+      s = tick(s, STEP);
+      expect(s.hordeNumber).toBe(n);
+      const hp = enemyHp('shambler', n, s.wave, s.hpScale);
+      return { burn: find(s, e.id).burnDps!, frag: fragDamage(s), hp };
+    };
+    const early = lit(1);
+    const late = lit(15);
+    for (const h of [early, late]) {
+      expect(h.burn).toBeCloseTo(CARD.burn.share[2]! * h.hp, 9);
+      expect(h.frag).toBeCloseTo(CARD.frag.share * h.hp, 9);
+    }
+    expect(late.hp).toBeGreaterThan(early.hp * 2);
+    expect(late.burn).toBeGreaterThan(early.burn * 2);
+    expect(late.frag).toBeGreaterThan(early.frag * 2);
   });
 
   it('Incendiary Rounds: each level burns at its rate', () => {
@@ -634,7 +693,8 @@ describe('one ammo slot: Incendiary or Shock Rounds (ID-097)', () => {
       const e = enemy(s, { ...tough, stunnedUntil: 1e9, x: 600, y: ROW4 });
       shoot(s, { x: 590, y: ROW4, damage: 10 });
       s = steps(s, Math.round(4 / STEP));
-      expect(find(s, e.id).hp).toBeCloseTo(990 - CARD.burn.dps[lv - 1]! * CARD.burn.seconds, 6);
+      const dps = CARD.burn.share[lv - 1]! * shamblerHp(s);
+      expect(find(s, e.id).hp).toBeCloseTo(990 - dps * CARD.burn.seconds, 6);
     }
   });
 });
