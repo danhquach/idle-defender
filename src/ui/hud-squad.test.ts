@@ -48,15 +48,13 @@ const ended = (g: GameState, outcome: 'won' | 'lost') => ({
 describe('the horde-only top bar (ID-066)', () => {
   it('shows the horde, waves cleared and enemies left, and nothing of cash, bank or perks', () => {
     const s = startSquadHorde(squadGame(1, 3), 1, NOW);
-    expect(squadStatus(s)).toBe(
-      `Horde 3 · Waves cleared 0/${s.waveCount} · ${s.toSpawn} left in this wave`,
-    );
+    expect(squadStatus(s)).toBe(`Horde 3 · Waves cleared 0/${s.waveCount} · ${s.toSpawn} left`);
     expect(squadStatus(s)).not.toMatch(/Cash|Bank|Perks/);
     expect(squadStatus({ ...s, wave: 3 })).toContain(`Waves cleared 2/${s.waveCount}`);
     expect(squadStatus({ ...s, outcome: 'won' })).toContain(
       `Waves cleared ${s.waveCount}/${s.waveCount}`,
     );
-    expect(squadStatus({ ...s, toSpawn: 1 })).toContain('1 left in this wave');
+    expect(squadStatus({ ...s, toSpawn: 1 })).toMatch(/ · 1 left$/);
     expect(squadStatus(startSquadHorde(squadGame(1, 10), 1, NOW))).toMatch(/^Horde 10 \(boss\)/);
   });
 

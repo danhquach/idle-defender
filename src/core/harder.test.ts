@@ -10,9 +10,12 @@ import {
   HORROR,
   SPAWN_INTERVAL,
   SQUAD_HP_GROWTH,
+  SQUAD_WAVES,
   STEP,
   SWARM,
   WALL,
+  WAVE_BREAK,
+  WAVE_GROWTH,
   type BossSkill,
 } from './data.ts';
 import { hordeBossReward, hordeGenes, newGame } from './game.ts';
@@ -24,6 +27,7 @@ import {
   radiusOf,
   roared,
   tick,
+  wavesCleared,
   windingUp,
   type HordeState,
 } from './horde.ts';
@@ -38,10 +42,14 @@ function run(s: HordeState, seconds: number): HordeState {
   for (let i = 0; i < Math.round(seconds / STEP); i++) t = tick(t, STEP);
   return t;
 }
-/** Horde 1 with nothing left to spawn, under the harder rules; its defender never fires. */
+/**
+ * Horde 1 under the harder rules with nothing spawning, its wave held open (one spawn left,
+ * never due: horde-only waves move on once all spawned, ID-128); its defender never fires.
+ */
 function quiet(): HordeState {
   const s = newHorde(1, { ...setup(), harder: true });
-  s.toSpawn = 0;
+  s.toSpawn = 1;
+  s.nextSpawnAt = 1e9;
   s.defenders[0]!.nextShotAt = 1e9;
   return s;
 }
@@ -71,6 +79,80 @@ describe('late HP growth (ID-099)', () => {
       const before = (n - 1) % HORROR.every === 0 ? n - 2 : n - 1;
       expect(recommendedPower(n), `Horde ${n}`).toBeGreaterThan(recommendedPower(before));
     }
+  });
+});
+
+describe('shorter fights (ID-128)', () => {
+  it('waves stop growing at WAVE_GROWTH.until, the full game’s keep growing', () => {
+    expect(WAVE_GROWTH.until).toBe(6);
+    expect(waveSize(7, 1, true)).toBe(waveSize(6, 1, true));
+    expect(waveSize(30, 5, true)).toBe(waveSize(6, 5, true));
+    expect(waveSize(6, 1, true)).toBeGreaterThan(waveSize(5, 1, true));
+    expect(waveSize(7, 1)).toBeGreaterThan(waveSize(6, 1));
+  });
+
+  it('enemies come SQUAD_WAVES.interval apart, faster than the full game’s', () => {
+    expect(SQUAD_WAVES.interval).toBeLessThan(SPAWN_INTERVAL);
+    const s = atWave(12, 1);
+    expect(s.swarm).toBe(false);
+    expect(run(s, SQUAD_WAVES.interval * 10 - STEP / 2).enemies).toHaveLength(10);
+  });
+
+  it('the next wave comes once this one has all spawned, its enemies still standing', () => {
+    let s = atWave(12, 1);
+    s.toSpawn = 1;
+    s = tick(s, STEP);
+    expect(s.enemies.length).toBeGreaterThan(0);
+    expect(s.wave).toBe(2);
+    expect(s.toSpawn).toBe(waveSize(12, 2, true) * (s.swarm ? SWARM.size : 1));
+    expect(s.enemies.every((e) => e.wave === 1)).toBe(true);
+    // The new wave's first comes after its break, marked with its wave.
+    s = run(s, WAVE_BREAK + STEP);
+    expect(s.enemies.some((e) => e.wave === 2)).toBe(true);
+  });
+
+  it('before Horde SQUAD_WAVES.from, waves wait for a clear and spawn as the full game’s', () => {
+    expect(SQUAD_WAVES.from).toBe(6);
+    const s = atWave(SQUAD_WAVES.from - 1, 1);
+    expect(run(s, SPAWN_INTERVAL * 10 - STEP / 2).enemies).toHaveLength(10);
+    s.toSpawn = 0;
+    enemy(s, { x: 1400 });
+    expect(tick(s, STEP).wave).toBe(1);
+    const at = atWave(SQUAD_WAVES.from, 1);
+    at.toSpawn = 0;
+    enemy(at, { x: 1400 });
+    expect(tick(at, STEP).wave).toBe(2);
+  });
+
+  it('the last wave still has to be cleared to win; the full game’s waves wait for a clear', () => {
+    const s = atWave(12, waveCount(12));
+    s.toSpawn = 0;
+    s.bosses = [];
+    enemy(s, { x: 1400 });
+    expect(tick(s, STEP)).toMatchObject({ outcome: 'fighting', wave: waveCount(12) });
+    const full = newHorde(1, { ...setup(), hordeNumber: 12 });
+    full.toSpawn = 0;
+    enemy(full, { x: 1400 });
+    expect(tick(full, STEP).wave).toBe(1);
+  });
+
+  it('waves cleared counts only waves with none of their enemies left (loss XP)', () => {
+    const s = atWave(12, 4);
+    s.bosses = [];
+    expect(wavesCleared(s)).toBe(3);
+    enemy(s, { wave: 2 });
+    expect(wavesCleared(s)).toBe(1);
+    s.enemies[0]!.hp = 0;
+    expect(wavesCleared(s)).toBe(3);
+    s.toSpawn = 0;
+    expect(wavesCleared(s)).toBe(4);
+    enemy(s, {});
+    expect(wavesCleared(s)).toBe(3);
+    expect(wavesCleared({ ...s, outcome: 'won' })).toBe(s.waveCount);
+    // A mini-boss still to come holds its wave open.
+    const held = atWave(13, Math.ceil(waveCount(13) / 2));
+    held.toSpawn = 0;
+    expect(wavesCleared(held)).toBe(held.wave - 1);
   });
 });
 
@@ -110,11 +192,11 @@ describe('swarm waves (ID-099)', () => {
     // Horde 9: wave 4 swarms, wave 3 doesn't (its mini-boss comes in wave 5).
     const s = atWave(9, 4);
     expect(s.swarm).toBe(true);
-    expect(s.toSpawn).toBe(2 * waveSize(9, 4));
-    const t = run(s, SPAWN_INTERVAL * 10 - STEP / 2);
+    expect(s.toSpawn).toBe(2 * waveSize(9, 4, true));
+    const t = run(s, SQUAD_WAVES.interval * 10 - STEP / 2);
     expect(t.enemies.length).toBe(20);
     // The calm wave before spawns half as fast.
-    expect(run(atWave(9, 3), SPAWN_INTERVAL * 10 - STEP / 2).enemies.length).toBe(10);
+    expect(run(atWave(9, 3), SQUAD_WAVES.interval * 10 - STEP / 2).enemies.length).toBe(10);
     expect(run(atWave(9, 4, 3), 20)).toEqual(run(atWave(9, 4, 3), 20));
   });
 
@@ -137,10 +219,11 @@ describe('swarm waves (ID-099)', () => {
   it('a Runner-heavy swarm spawns more Runners than a calm wave of the same horde', () => {
     const runners = (swarm: boolean) => {
       // The same seed and wave, 80 spawns: well before any reach the wall.
-      const s = atWave(9, 8);
+      // The last wave, so no next wave comes once all spawned (ID-128).
+      const s = atWave(9, waveCount(9));
       s.swarm = swarm;
       s.toSpawn = 80;
-      const gap = swarm ? SPAWN_INTERVAL / SWARM.size : SPAWN_INTERVAL;
+      const gap = swarm ? SQUAD_WAVES.interval / SWARM.size : SQUAD_WAVES.interval;
       const t = run(s, 80 * gap);
       expect(t.toSpawn).toBe(0);
       return t.enemies.filter((e) => e.kind === 'runner').length;
@@ -185,7 +268,7 @@ describe('bosses and mini-bosses, fixed by horde number (ID-099)', () => {
 
   it('a mini-boss on every odd horde from Horde 5: an elite Brute or Swollen with one skill', () => {
     for (let n = 1; n < ELITE.from; n++) expect(hordeBosses(n, true), `Horde ${n}`).toEqual([]);
-    for (const n of [6, 8, 12, 14]) expect(hordeBosses(n, true), `Horde ${n}`).toEqual([]);
+    for (const n of [6, 8]) expect(hordeBosses(n, true), `Horde ${n}`).toEqual([]);
     expect(hordeBosses(5, true)).toEqual([
       {
         kind: 'brute',
@@ -199,9 +282,41 @@ describe('bosses and mini-bosses, fixed by horde number (ID-099)', () => {
     for (let n = 5; n <= 49; n += 2) {
       const [b] = hordeBosses(n, true);
       expect(b?.elite, `Horde ${n}`).toBe(true);
+      expect(b!.wave, `Horde ${n}`).toBe(Math.ceil(waveCount(n) / 2));
       expect(ELITE.kinds).toContain(b!.kind);
       expect(b!.skills).toHaveLength(1);
     }
+  });
+
+  it('from Horde 11, every horde but a boss horde brings one more, with its last wave (ID-128)', () => {
+    expect(ELITE.more).toBe(11);
+    for (let n = ELITE.from; n < ELITE.more; n++) {
+      expect(hordeBosses(n, true).filter((b) => b.elite).length, `Horde ${n}`).toBe(n % 2);
+    }
+    for (let n = ELITE.more; n <= 49; n++) {
+      const bosses = hordeBosses(n, true);
+      if (n % HORROR.every === 0) {
+        expect(
+          bosses.every((b) => !b.elite),
+          `Horde ${n}`,
+        ).toBe(true);
+        continue;
+      }
+      expect(bosses, `Horde ${n}`).toHaveLength(1 + (n % 2));
+      const last = bosses.at(-1)!;
+      expect([last.elite, last.wave, last.hp], `Horde ${n}`).toEqual([
+        true,
+        waveCount(n),
+        ELITE.hp,
+      ]);
+      expect(ELITE.kinds).toContain(last.kind);
+      expect(last.skills).toHaveLength(1);
+      // An odd horde's two differ in kind.
+      if (n % 2 === 1) expect(bosses[0]!.kind, `Horde ${n}`).not.toBe(last.kind);
+    }
+    expect(hordeBosses(12, true)).toEqual([
+      { kind: 'brute', skills: ['regen'], wave: waveCount(12), hp: ELITE.hp, elite: true },
+    ]);
   });
 
   it('the full game keeps one Horror with one ability, and no mini-bosses', () => {
@@ -346,6 +461,7 @@ describe('boss skills (ID-099)', () => {
     const wave = t.wave;
     // The boss and its wave gone: the next step starts the break, which rebuilds the row.
     t.enemies = t.enemies.filter((e) => e.id !== h.id);
+    t.toSpawn = 0;
     expect(t.enemies).toEqual([]);
     t = tick(t, STEP);
     expect(t.wave).toBe(wave + 1);
@@ -363,6 +479,7 @@ describe('boss skills (ID-099)', () => {
     const row = t.slabs[0]!.row;
     // The boss dies with its slab in flight: the wave ends and the break rebuilds the wire.
     t.enemies = t.enemies.filter((e) => e.id !== h.id);
+    t.toSpawn = 0;
     const wave = t.wave;
     t = tick(t, STEP);
     expect(t.wave).toBe(wave + 1);

@@ -26,16 +26,23 @@ const CARDS: readonly [UpgradeId, number][] = [
   ['sharpshooter', 5],
 ];
 
-/** The strongest squad for Horde `n` at or under 70% of its Recommended Power. */
+/**
+ * The strongest squad for Horde `n` at or under 70% of its Recommended Power: Military
+ * Rifles, or Common ones where even level 1 Military is over it (ID-128: Recommended Power
+ * fitted to the card build).
+ */
 function squadUnder(n: number): GameState {
   const cap = 0.7 * recommendedPower(n);
-  let low = squadAt(n, 1);
-  // Power rises with the gun's level, so the first squad over the cap ends the search.
-  for (let lv = 2; lv <= 200; lv++) {
-    const g = squadAt(n, lv);
-    if (squadPower(g) > cap) break;
-    low = g;
+  let low: GameState | null = null;
+  for (const rarity of ['military', 'common'] as const) {
+    // Power rises with the gun's level, so the first squad over the cap ends the search.
+    for (let lv = 1; lv <= 200; lv++) {
+      const g = squadAt(n, lv, undefined, rarity);
+      if (squadPower(g) > cap) break;
+      if (!low || squadPower(g) > squadPower(low)) low = g;
+    }
   }
+  if (!low) throw new RangeError(`no squad under 70% of Horde ${n}'s Recommended Power`);
   return low;
 }
 

@@ -50,12 +50,15 @@ export const SQUAD_WALL: Tier = 'concrete';
  */
 export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.06 } as const;
 /**
- * Enemy HP's factor in horde-only Hordes 1 to 10 on top of the growth (ID-097, ID-102): the
- * first three are sure wins while the player learns the cards; Hordes 8 and 9 soften the
- * step where Brutes join the mix, and Horde 10 the first boss, so the expected squad wins
- * them at the first try on most seeds. 1 from Horde 11 on.
+ * Enemy HP's factor in horde-only Hordes 1, 2, … on top of the growth, the last one from
+ * there on (ID-097, ID-102, ID-128): the first three are sure wins while the player learns
+ * the cards; Hordes 8 and 9 soften the step where Brutes join the mix, and Horde 10 the
+ * first boss, so the expected squad wins them at the first try on most seeds. From Horde 7
+ * on, waves no longer grow (`WAVE_GROWTH.until`), so their size moves into HP.
  */
-export const SQUAD_EARLY_HP: readonly number[] = [0.8, 0.9, 0.95, 1, 1, 1, 1, 0.85, 0.75, 0.75];
+export const SQUAD_EARLY_HP: readonly number[] = [
+  0.8, 0.9, 0.95, 1, 1, 1, 1, 0.85, 0.75, 0.75, 1.15,
+];
 /** Survivor XP for a horde-only win, as a multiple of the full game's (`DEFENDER_XP`). */
 export const SQUAD_XP_RATE = 2;
 /**
@@ -105,9 +108,10 @@ export const GUN_LEVEL_DAMAGE = 0.06;
  * wall, ID-125: about the share of a fight's damage dealt there) × (1 + `tough` × Instinct's
  * extra HP share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP for each
  * second its waves take to spawn (ID-102: the dmg/s it asks for; HP ^ 0.59 × 3.19 before),
- * fitted so a squad at it wins about half the time with no cards or skills; × `rec.early`
- * in Hordes 1 to 8 (sure wins for a squad of one or two in Hordes 1 and 2; a smaller
- * squad's fit after). A swarm wave's HP (already `SWARM.size` times a calm wave's) is
+ * fitted so a squad at it wins about half the time with the scripted player's cards and
+ * skills (ID-128: an average build; with no cards before); × `rec.early` in Hordes 1 to 10
+ * (sure wins in Hordes 1 to 4; Hordes 5 to 10 fitted so the scripted campaign's squad
+ * stands at about 1.5× it). A swarm wave's HP (already `SWARM.size` times a calm wave's) is
  * weighted `rec.swarm` more (ID-099): it comes twice as fast, so it asks for more dmg/s
  * than its HP alone says. A boss horde's is × `rec.boss` (ID-102): its bosses' skills
  * ask for more than their HP says. Amber is within `close` below it.
@@ -117,7 +121,7 @@ export const POWER = {
   wall: 0.5,
   tough: 0.5,
   scale: 10,
-  rec: { k: 9.7, early: [0.3, 0.6, 1, 1, 1, 1, 0.8, 0.8], swarm: 2, boss: 1.12 },
+  rec: { k: 3, early: [0.3, 0.6, 1, 1, 1.9, 1.7, 1.25, 1.1, 1.33, 1.25], swarm: 2, boss: 1.12 },
   close: 0.15,
 } as const;
 /**
@@ -614,11 +618,14 @@ export const BOSSES: {
 /**
  * Horde-only mini-bosses (ID-099): from Horde `from`, every odd horde (never a boss horde)
  * brings one elite with the first spawn of its middle wave: `kinds` and `skills` taken in
- * turn by horde, `hp` times its kind's HP and drawn `size` times as big. An elite Swollen
- * still bursts at the wall, `blast` times as hard: its skill and HP are what get it there.
+ * turn by horde, `hp` times its kind's HP and drawn `size` times as big. From Horde `more`
+ * (ID-128), every horde that is no boss horde brings one more, with its last wave. An elite
+ * Swollen still bursts at the wall, `blast` times as hard: its skill and HP are what get it
+ * there.
  */
 export const ELITE: {
   readonly from: number;
+  readonly more: number;
   readonly hp: number;
   readonly size: number;
   readonly blast: number;
@@ -626,6 +633,7 @@ export const ELITE: {
   readonly skills: readonly BossSkill[];
 } = {
   from: 5,
+  more: 11,
   hp: 4,
   size: 1.4,
   blast: 2,
@@ -641,11 +649,19 @@ export const ELITE: {
 export const SWARM = { from: 5, share: 0.25, growth: 0.01, cap: 0.5, size: 2, runners: 2 } as const;
 
 /**
- * Enemies in a wave grow ×`rate` a horde up to Horde `until`, then hold (ID-102; no cap
- * before): past it, HP growth makes a horde harder, so a fight's length stops growing.
+ * Enemies in a wave grow ×`rate` a horde up to Horde `until`, then hold in the horde-only
+ * build (ID-102: Horde 10, no cap before; ID-128: earlier): past it, HP growth makes a horde
+ * harder, so a fight's length stops growing.
  */
-export const WAVE_GROWTH = { rate: 1.1, until: 10 } as const;
+export const WAVE_GROWTH = { rate: 1.1, until: 6 } as const;
 export const SPAWN_INTERVAL = 0.8;
+/**
+ * Horde-only waves from Horde `from` (ID-128): enemies `interval` s apart (`SPAWN_INTERVAL`
+ * before it and in the full game), and the next wave comes once the current one has all
+ * spawned, after its break, without waiting for the field to clear (the last wave still has
+ * to be cleared to win). Before it a small squad would be buried, so waves wait as before.
+ */
+export const SQUAD_WAVES = { from: 6, interval: 0.6 } as const;
 export const WAVE_BREAK = 3;
 /** How long a blade or tool strike stays on screen, in seconds. */
 export const STRIKE_FLASH = 0.15;
@@ -1013,7 +1029,7 @@ export const STAT_EFFECT = {
    * Instinct (ID-125): extra damage, as a share, to an enemy near the wall (within the
    * SMG's `TRAIT.close.range` of its front), from any weapon: the last-line stat.
    */
-  wallDamage: 1.75,
+  wallDamage: 2,
   /** Agility: share off every reload time. */
   reload: 0.5,
   /** Agility (ID-125): share more fire rate on every gun: the sustained-fire stat. */

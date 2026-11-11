@@ -239,6 +239,32 @@ describe('what a survivor speaks up about (ID-085)', () => {
     expect(events(chatter(begun(one), one, none, 0.03, 'full'))).toEqual([['a', 'cleared']]);
   });
 
+  it('a wave cleared while the next is already on its way still says so (ID-128)', () => {
+    const s = fight();
+    enemy(s, {});
+    const next = later(s, (x) => {
+      x.enemies = [];
+      x.wave = 2;
+      x.toSpawn = 12;
+    });
+    expect(events(chatter(begun(s), s, next, 0.03, 'full'))).toEqual([['a', 'cleared']]);
+    // A wave cleared under the next one's enemies (horde-only overlap) waits for an empty field.
+    const busy = fight();
+    busy.wave = 2;
+    enemy(busy, { wave: 1 });
+    enemy(busy, { wave: 2 });
+    const left = later(busy, (x) => x.enemies.shift());
+    const said = events(chatter(begun(busy), busy, left, 0.03, 'full')).map(([, e]) => e);
+    expect(said).not.toContain('cleared');
+    // An empty field mid-wave, more still to spawn: no wave was cleared.
+    const spawning = fight();
+    spawning.toSpawn = 5;
+    enemy(spawning, {});
+    const empty = later(spawning, (x) => (x.enemies = []));
+    const none = events(chatter(begun(spawning), spawning, empty, 0.03, 'full')).map(([, e]) => e);
+    expect(none).not.toContain('cleared');
+  });
+
   it('nothing is said on the last enemy while more are still to come', () => {
     const s = fight();
     s.toSpawn = 3;

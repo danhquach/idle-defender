@@ -2,11 +2,19 @@
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
 import { gunCrit, gunCritDamage, statsOf } from './armoury.ts';
-import { DEFENDER_HP, POWER, SPAWN_INTERVAL, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
+import { DEFENDER_HP, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
 import type { GameState, RosterDefender } from './game.ts';
 import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
 import { critChance, critDamage, maxHpOf, reloadTime, statBonus, wallDamage } from './stats.ts';
-import { enemyHp, hordeBosses, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
+import {
+  enemyHp,
+  hordeBosses,
+  spawnInterval,
+  swarmWave,
+  waveCount,
+  waveMix,
+  waveSize,
+} from './waves.ts';
 
 /**
  * One survivor's share of Squad Power: their gun's sustained dmg/s (rarity, level and
@@ -57,20 +65,21 @@ export function hordeHp(n: number): number {
 
 /**
  * How long horde-only Horde `n`'s waves take to spawn, in fight seconds (ID-102): each
- * wave's enemies `SPAWN_INTERVAL` apart (a swarm wave's twice as many in the same time),
- * and the break after it.
+ * wave's enemies `spawnInterval` apart (a swarm wave's twice as many in the same time), and
+ * the break before it. With waves overlapping (ID-128), about a fight's length.
  */
 export function hordeSeconds(n: number): number {
   let total = 0;
   for (let w = 1; w <= waveCount(n); w++)
-    total += waveSize(n, w, true) * SPAWN_INTERVAL + WAVE_BREAK;
+    total += waveSize(n, w, true) * spawnInterval(n, true) + WAVE_BREAK;
   return total;
 }
 
 /**
  * Recommended Power for horde-only Horde `n` (ID-098, ID-102): the dmg/s it asks for, its
- * `hordeHp` over `hordeSeconds`, × `POWER.rec` (more for a boss horde), fitted so a squad at it wins about half
- * the time with no cards or skills (the balance test shows it).
+ * `hordeHp` over `hordeSeconds`, × `POWER.rec` (more for a boss horde), fitted so a squad at
+ * it wins about half the time with the scripted player's cards and skills, an average build
+ * (ID-128; with no cards before; the balance test shows it).
  */
 export function recommendedPower(n: number): number {
   const boss = hordeBosses(n, true).some((b) => !b.elite) ? POWER.rec.boss : 1;

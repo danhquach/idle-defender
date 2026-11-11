@@ -221,7 +221,7 @@ describe('levels (ID-097)', () => {
     for (const lv of [1, 2, 3]) {
       const h10 = waveSize(10, waveCount(10));
       const h15 = waveSize(15, waveCount(15), true) * SWARM.size;
-      expect(h15).toBeGreaterThan(2 * h10);
+      expect(h15).toBeGreaterThan(1.4 * h10);
       expect(wireMax(lv, h15) / h15).toBeCloseTo(wireMax(lv, h10) / h10, 2);
     }
     // A horde's rows start at level 1's full for its first wave's size; a big wave's rows,
@@ -238,6 +238,30 @@ describe('levels (ID-097)', () => {
       true,
     );
     expect(wireMax(1, last)).toBeGreaterThan(CARD.wire.durability[0]);
+    // ID-128: a rebuild with enemies still standing (horde-only waves overlap) is sized for
+    // them too, never under the wave's own size.
+    const hard = newHorde(1, { ...setup(), hordeNumber: 15, harder: true });
+    hard.wave = waveCount(15) - 1;
+    hard.taken = ['barbed-wire'];
+    hard.cardLevels = { 'barbed-wire': 1 };
+    const wave = waveSize(15, hard.wave, true) * (hard.swarm ? SWARM.size : 1);
+    hard.toSpawn = wave;
+    for (let i = 0; i < 40; i++) enemy(hard, { x: 1200 });
+    enemy(hard, { x: 1200, hp: 0 });
+    rebuildWire(hard);
+    expect(hard.wire.every((r) => r.max === wireMax(1, wave + 40))).toBe(true);
+    hard.toSpawn = 0;
+    rebuildWire(hard);
+    expect(hard.wire.every((r) => r.max === wireMax(1, wave))).toBe(true);
+    // Only there: the full game's rows (a pick mid-wave) stay sized for the wave.
+    const full = newHorde(1, { ...setup(), hordeNumber: 15 });
+    full.wave = waveCount(15);
+    full.taken = ['barbed-wire'];
+    full.cardLevels = { 'barbed-wire': 1 };
+    full.toSpawn = 10;
+    for (let i = 0; i < 80; i++) enemy(full, { x: 1200 });
+    rebuildWire(full);
+    expect(full.wire.every((r) => r.max === wireMax(1, last))).toBe(true);
   });
 
   it('Extended Mags: an upgrade applies from each gun’s next reload', () => {

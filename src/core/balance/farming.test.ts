@@ -33,14 +33,19 @@ describe('farming (ID-102)', () => {
     }
   }, 900_000);
 
-  /** A full squad stuck at Horde `wall` (all below it beaten): level 15, Lv `wall - 1` Military Rifles. */
+  /**
+   * A full squad stuck at Horde `wall` (all below it beaten): level 15, Lv `wall + 1` Military
+   * Rifles. ID-128: Lv `wall - 1` before, but with Recommended Power fitted to the card build
+   * that squad stands only at Horde 16's, short of the ~1.4× the campaigns reach it with, and
+   * lost half its replays of the horde below.
+   */
   function stuckAt(wall: number): GameState {
     const g = newGame('horde');
     g.roster = Array.from({ length: SQUAD_CAP }, (_, i) => ({
       ...recruit(i + 1),
       xp: xpForLevel(15),
       loadout: {
-        primary: rollWeapon(createRng(i + 7), `h${i + 1}`, 'rifle', 'military', wall - 1),
+        primary: rollWeapon(createRng(i + 7), `h${i + 1}`, 'rifle', 'military', wall + 1),
         secondary: null,
         item: null,
       },

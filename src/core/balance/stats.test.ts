@@ -4,9 +4,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Stat } from '../data.ts';
 import type { GameState } from '../game.ts';
-import { startSquadHorde } from '../hordeonly.ts';
-import { tick } from '../horde.ts';
-import { playSquadCampaign } from '../sim.ts';
+import { playSquadCampaign, playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { SEEDS, squadAt, winRate } from './shared.ts';
 
@@ -44,20 +42,15 @@ describe('the stats are each as strong a choice (ID-125)', () => {
 
   // Hordes 4–10 at the first try are mostly won whatever the points (a squad with none
   // wins about 86%), so the close fights show the difference: the same squad, its gun
-  // at the level where a Sharp Mind squad meets Recommended Power, no cards. As built the
-  // stats win 39%, 46% and 43% of these 70 seeded fights (7 points apart): a later balance
-  // change that moves a few fights can flip it, so re-measure the stats when it does.
-  it('the same squad at Recommended Power, no cards: wins within 10 points, all above none', () => {
+  // at the level where a Sharp Mind squad meets Recommended Power, with the scripted
+  // player's cards and skills (ID-128: Recommended Power is fitted to that build; no cards
+  // before). A later balance change that moves a few fights can flip it, so re-measure the
+  // stats when it does.
+  it('the same squad at Recommended Power: wins within 10 points, all above none', () => {
     const HORDES = [9, 10, 11, 12, 13, 14, 15];
     const CLOSE_SEEDS = 10;
-    const won = (game: GameState, n: number, seed: number): boolean => {
-      let s = startSquadHorde(game, seed, 0, n);
-      while (s.outcome === 'fighting') {
-        if (s.time > 3600) throw new RangeError(`Horde ${n} never ended`);
-        s = s.offer ? { ...s, offer: null } : tick(s, 60);
-      }
-      return s.outcome === 'won';
-    };
+    const won = (game: GameState, n: number, seed: number): boolean =>
+      playSquadHorde(game, seed, undefined, undefined, n).outcome === 'won';
     const wins = new Map<Stat, number>();
     for (const n of HORDES) {
       const rec = recommendedPower(n);

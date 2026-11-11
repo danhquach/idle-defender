@@ -5,6 +5,8 @@ import {
   ENEMY_MIX,
   HORROR,
   HORROR_ABILITIES,
+  SPAWN_INTERVAL,
+  SQUAD_WAVES,
   SWARM,
   WAVE_GROWTH,
   type BossSkill,
@@ -16,6 +18,17 @@ function whole(name: string, n: number): void {
   if (!Number.isInteger(n) || n < 1)
     throw new RangeError(`${name}: expected a whole number >= 1, got ${n}`);
 }
+
+/**
+ * Whether horde `hordeNumber`'s waves overlap and spawn `SQUAD_WAVES.interval` apart: the
+ * horde-only build's (`harder`) from Horde `SQUAD_WAVES.from` (ID-128).
+ */
+export const fastWaves = (hordeNumber: number, harder: boolean): boolean =>
+  harder && hordeNumber >= SQUAD_WAVES.from;
+
+/** The s between spawns in horde `hordeNumber` (a calm wave's; `fastWaves`, ID-128). */
+export const spawnInterval = (hordeNumber: number, harder: boolean): number =>
+  fastWaves(hordeNumber, harder) ? SQUAD_WAVES.interval : SPAWN_INTERVAL;
 
 /** Waves in a horde: 5, one more every second horde, at most 10. */
 export function waveCount(hordeNumber: number): number {
@@ -115,7 +128,8 @@ export interface BossSpec {
  * The bosses and mini-boss Horde `hordeNumber` brings, fixed by its number so a replay
  * meets the same ones. The full game: a boss horde's one Horror with its one ability
  * (ID-024). `harder` (the horde-only build, ID-099): `BOSSES` Horrors with two skills each,
- * or on an odd horde from `ELITE.from` one elite in the middle wave.
+ * or on an odd horde from `ELITE.from` one elite in the middle wave, and from `ELITE.more`
+ * one more in the last wave (ID-128).
  */
 export function hordeBosses(hordeNumber: number, harder: boolean): BossSpec[] {
   whole('hordeBosses', hordeNumber);
@@ -135,17 +149,22 @@ export function hordeBosses(hordeNumber: number, harder: boolean): BossSpec[] {
       elite: false,
     }));
   }
-  if (hordeNumber < ELITE.from || hordeNumber % 2 === 0) return [];
-  const i = (hordeNumber - ELITE.from) / 2;
-  return [
-    {
-      kind: ELITE.kinds[i % ELITE.kinds.length]!,
-      skills: [ELITE.skills[i % ELITE.skills.length]!],
-      wave: Math.ceil(last / 2),
-      hp: ELITE.hp,
-      elite: true,
-    },
-  ];
+  const elite = (i: number, wave: number): BossSpec => ({
+    kind: ELITE.kinds[i % ELITE.kinds.length]!,
+    skills: [ELITE.skills[i % ELITE.skills.length]!],
+    wave,
+    hp: ELITE.hp,
+    elite: true,
+  });
+  const out: BossSpec[] = [];
+  if (hordeNumber >= ELITE.from && hordeNumber % 2 === 1) {
+    out.push(elite((hordeNumber - ELITE.from) / 2, Math.ceil(last / 2)));
+  }
+  // ID-128: one more with the last wave, its kind and skill the next in turn after the
+  // middle wave's, so an odd horde's two differ in kind.
+  if (hordeNumber >= ELITE.more)
+    out.push(elite(Math.floor((hordeNumber - ELITE.from) / 2) + 1, last));
+  return out;
 }
 
 /**

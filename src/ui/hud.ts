@@ -93,6 +93,7 @@ import {
   cardLevel,
   perkOn,
   skillPower,
+  wavesCleared,
   windingUp,
   type Enemy,
   type Breach,
@@ -326,14 +327,16 @@ export function statusText(s: HordeState): string {
 export const enemiesLeft = (s: Pick<HordeState, 'enemies' | 'toSpawn'>): number =>
   s.enemies.filter((e) => e.hp > 0).length + s.toSpawn;
 
-/** The horde-only top bar (ID-066): "Horde 3 · Waves cleared 1/5 · 12 left in this wave". */
+/**
+ * The horde-only top bar (ID-066): "Horde 3 · Waves cleared 1/5 · 12 left". Waves overlap
+ * (ID-128), so "left" is every enemy standing or still to come in the wave under way.
+ */
 export function squadStatus(s: HordeState): string {
-  const cleared = s.outcome === 'won' ? s.waveCount : s.wave - 1;
   const left = enemiesLeft(s);
   return [
     bossHorde(s) ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
-    `Waves cleared ${cleared}/${s.waveCount}`,
-    `${left} left in this wave`,
+    `Waves cleared ${wavesCleared(s)}/${s.waveCount}`,
+    `${left} left`,
   ].join(' · ');
 }
 
