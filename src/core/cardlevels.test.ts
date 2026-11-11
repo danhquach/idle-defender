@@ -190,7 +190,7 @@ describe('levels (ID-097)', () => {
     }
   });
 
-  it('Barbed Wire: each wave break rebuilds every row at the level’s full, a slab’s break included (ID-123)', () => {
+  it('Barbed Wire: a wave break keeps every row’s wear, broken rows broken; only a level-up rebuilds (ID-133)', () => {
     let s = at('barbed-wire', 2);
     s.wire[1]!.durability = 0;
     s.wire[5]!.durability = 3;
@@ -199,25 +199,55 @@ describe('levels (ID-097)', () => {
     // Nothing left to spawn and no enemy standing: the next step starts the break.
     s = tick(s, STEP);
     expect(s.wave).toBe(2);
-    expect(s.wire.every((r) => r.durability === 20 && r.max === 20 && r.hit.length === 0)).toBe(
-      true,
-    );
+    expect(s.wire.map((r) => r.durability)).toEqual([20, 0, 20, 20, 20, 3, 20, 20, 20, 20]);
+    expect(s.wire.every((r) => r.max === 20 && r.hit.length === 0)).toBe(true);
+    // The level-up rebuilds them all at its full.
+    s = picked(s, 'barbed-wire');
+    expect(s.wire.every((r) => r.durability === 30 && r.max === 30)).toBe(true);
+  });
+
+  it('Barbed Wire: at a wave break a row’s full follows the wave’s size, its worn share kept (ID-133)', () => {
+    let s = at('barbed-wire', 2);
+    // As if the last wave had been half the size: rows sized at 10.
+    for (const row of s.wire) [row.durability, row.max] = [10, 10];
+    s.wire[0]!.durability = 0;
+    s.wire[1]!.durability = 5;
+    s.wire[2]!.durability = 1;
+    s.wire[3]!.durability = 0.2;
+    s = tick(s, STEP);
+    expect(s.wave).toBe(2);
+    expect(s.wire.every((r) => r.max === 20)).toBe(true);
+    // Broken stays broken, half stays half, and a worn row never rounds down to broken.
+    expect(s.wire.slice(0, 5).map((r) => r.durability)).toEqual([0, 10, 2, 1, 20]);
+    // And a shrinking wave shrinks the full the same way.
+    for (const row of s.wire) [row.durability, row.max] = [row.durability * 2, 40];
+    s.toSpawn = 0;
+    s.enemies = [];
+    s = tick(s, STEP);
+    expect(s.wire.slice(0, 5).map((r) => [r.durability, r.max])).toEqual([
+      [0, 20],
+      [10, 20],
+      [2, 20],
+      [1, 20],
+      [20, 20],
+    ]);
   });
 
   it('Barbed Wire: a row’s full durability grows with the wave’s size, never below its level’s (ID-123)', () => {
-    expect(CARD.wire.perWave).toBe(60);
+    // 30 since ID-133 (was 60).
+    expect(CARD.wire.perWave).toBe(30);
     expect(wireMax(1, 8)).toBe(10);
-    expect(wireMax(1, 60)).toBe(10);
-    expect(wireMax(1, 90)).toBe(15);
-    expect(wireMax(2, 120)).toBe(40);
-    expect(wireMax(3, 208)).toBe(104);
+    expect(wireMax(1, 30)).toBe(10);
+    expect(wireMax(1, 45)).toBe(15);
+    expect(wireMax(2, 60)).toBe(40);
+    expect(wireMax(3, 208)).toBe(208);
     // Not held counts as level 1; past max as max.
-    expect(wireMax(0, 120)).toBe(20);
-    expect(wireMax(4, 60)).toBe(30);
+    expect(wireMax(0, 60)).toBe(20);
+    expect(wireMax(4, 30)).toBe(30);
     // Above the floor each enemy in the wave brings the same durability, so a row lasts about
-    // the same share of a Horde 15 swarm wave as of a Horde 10 last wave (Horde 5's waves are
-    // under the floor, and the rebuild at each break alone holds them).
-    expect(waveSize(5, waveCount(5))).toBeLessThan(CARD.wire.perWave);
+    // the same share of a Horde 15 swarm wave as of a Horde 10 last wave (at 30, Horde 5's last
+    // wave is over the floor too, ID-133).
+    expect(waveSize(5, waveCount(5))).toBeGreaterThan(CARD.wire.perWave);
     for (const lv of [1, 2, 3]) {
       const h10 = waveSize(10, waveCount(10));
       const h15 = waveSize(15, waveCount(15), true) * SWARM.size;

@@ -1390,8 +1390,8 @@ function landSlabs(s: HordeState): void {
     if (slab.landed || !due(s.time, slab.lands)) continue;
     slab.landed = true;
     if (slab.column === null) {
-      // One thrown before this wave's break lands on wire the break rebuilt: it holds (ID-123).
-      if (slab.at >= s.breakUntil - WAVE_BREAK) s.wire[slab.row]!.durability = 0;
+      // Broken until the card's next level-up (ID-133).
+      s.wire[slab.row]!.durability = 0;
       continue;
     }
     const layer = s.layers.find((l) => l.column === slab.column);
@@ -2822,9 +2822,8 @@ function advanceWave(s: HordeState): void {
   s.swarm = s.harder === true && swarmWave(s.hordeNumber, s.wave);
   s.toSpawn = waveEnemies(s);
   s.breakUntil = s.time + WAVE_BREAK;
-  // The break rebuilds every wire row for the new wave (ID-123), even under enemies still
-  // standing from the last one in the horde-only build (ID-128).
-  rebuildWire(s);
+  // The break resizes every wire row for the new wave, wear kept (ID-133).
+  resizeWire(s);
   for (const row of s.wire) row.hit = [];
   openReplace(s);
 }
@@ -2848,17 +2847,39 @@ export function wireMax(level: number, enemies: number): number {
 }
 
 /**
- * Puts every Barbed Wire row, broken or worn, at its full durability for the current wave
- * and the card's level (ID-123): at each wave break and each pick of the card. Sized for the
- * wave, or for every enemy still to face when more: horde-only waves overlap (ID-128), so a
- * new wave's wire also meets the last one's still standing.
+ * A Barbed Wire row's full durability now: for the current wave and the card's level (ID-123),
+ * or for every enemy still to face when more: horde-only waves overlap (ID-128), so a new
+ * wave's wire also meets the last one's still standing.
  */
-export function rebuildWire(s: HordeState): void {
+function wireFull(s: HordeState): number {
   const overlap = fastWaves(s.hordeNumber, s.harder === true);
   const facing = overlap ? s.toSpawn + s.enemies.filter((e) => e.hp > 0).length : 0;
-  const max = wireMax(cardLevel(s, 'barbed-wire'), Math.max(waveEnemies(s), facing));
+  return wireMax(cardLevel(s, 'barbed-wire'), Math.max(waveEnemies(s), facing));
+}
+
+/**
+ * Puts every Barbed Wire row, broken or worn, at its full durability (`wireFull`): at each
+ * pick of the card only (ID-133; each wave break too before it, ID-123).
+ */
+export function rebuildWire(s: HordeState): void {
+  const max = wireFull(s);
   for (const row of s.wire) {
     row.durability = max;
+    row.max = max;
+  }
+}
+
+/**
+ * At a wave break (ID-133): every row's full follows the new wave's size (`wireFull`) and the
+ * row keeps its wear as a share of its full, rounded; a broken row stays broken and a worn one
+ * never rounds down to broken.
+ */
+function resizeWire(s: HordeState): void {
+  const max = wireFull(s);
+  for (const row of s.wire) {
+    if (row.durability > 0) {
+      row.durability = Math.max(1, Math.round((row.durability / row.max) * max));
+    }
     row.max = max;
   }
 }
