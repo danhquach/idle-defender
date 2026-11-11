@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { levelName, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { ENDING_HORDE, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
+import { FINALE_HORDE, RADIO_HORDES, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
 import { powerBand, recommendedPower, squadPower } from '../core/squadpower.ts';
@@ -13,6 +13,7 @@ import { horrorAbility, waveCount } from '../core/waves.ts';
 import {
   BAND_WORD,
   createHud,
+  EVACUATION_TITLE,
   DROP_KIND,
   dropTile,
   farmText,
@@ -215,6 +216,8 @@ describe('the start screen (ID-098)', () => {
     expect(title()).toContain('Horde 2');
     expect(title()).toContain('Replay');
     expect(root.querySelector('.debrief-chips')!.textContent).toContain('Replay');
+    // The goal chip (ID-127) stays first whichever horde is picked.
+    expect(root.querySelector('.debrief-chips')!.firstElementChild!.textContent).toBe('Radio 0/3');
     expect(line().querySelector('.hud-horde-power-text')!.textContent).toBe(
       powerLine(power, recommendedPower(2)).text,
     );
@@ -287,17 +290,20 @@ describe('result screens and the picker (ID-098)', () => {
     expect(s.debrief!.drop!.kind).toBe('Replay');
   });
 
-  it('the ending screen is only for the first clear of the ending horde, not its replays', () => {
-    const first = squadGame(SQUAD_CAP, ENDING_HORDE);
-    const a = squadScreen(first, fought(first, ENDING_HORDE, 'won'));
-    expect(a.title).toBe(`You held Horde ${ENDING_HORDE}`);
+  it('the ending screen and radio parts are only for first clears, not replays (ID-127)', () => {
+    const first = squadGame(SQUAD_CAP, FINALE_HORDE);
+    const a = squadScreen(first, fought(first, FINALE_HORDE, 'won'));
+    expect(a.title).toBe(EVACUATION_TITLE);
     expect(a.button).toBe('Continue');
-    const later = squadGame(SQUAD_CAP, ENDING_HORDE + 3);
-    const b = squadScreen(later, fought(later, ENDING_HORDE, 'won'));
-    expect(b.title).toBe(`Horde ${ENDING_HORDE} held (replay)`);
-    expect(b.button).not.toBe('Continue');
-    expect(b.lines.join(' ')).not.toMatch(/The end, for now/);
-    expect(b.debrief!.note).toBeNull();
+    for (const n of RADIO_HORDES) {
+      const later = squadGame(SQUAD_CAP, FINALE_HORDE + 3);
+      const b = squadScreen(later, fought(later, n, 'won'));
+      expect(b.title).toBe(`Horde ${n} held (replay)`);
+      expect(b.button).not.toBe('Continue');
+      expect(b.lines.join(' ')).not.toMatch(/Radio|evacuation|New card/);
+      expect(b.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
+      expect(b.debrief!.note).toBeNull();
+    }
   });
 
   it('a loss: the same horde is picked, the button says Retry, and the loss pays its small XP', () => {

@@ -412,10 +412,14 @@ describe('the debrief layout (ID-067)', () => {
     expect(d.cards.every((c) => c.xp === null && c.bar === null)).toBe(true);
   });
 
-  it('the start screen: wave and squad chips, plain cards, the loss rule by the button', () => {
+  it('the start screen: goal, wave and squad chips, plain cards, the loss rule by the button', () => {
     const g = squadGame(2, 4);
     const d = squadStart(g).debrief!;
-    expect(d.chips.map((c) => c.text)).toEqual([`${waveCount(4)} waves`, `Squad 2/${SQUAD_CAP}`]);
+    expect(d.chips.map((c) => c.text)).toEqual([
+      'Radio 0/3',
+      `${waveCount(4)} waves`,
+      `Squad 2/${SQUAD_CAP}`,
+    ]);
     expect(d.foot).toBe(SQUAD_LOSS_RULE);
     expect(d.cards.map((c) => c.name)).toEqual(g.roster.map((x) => x.name));
   });
