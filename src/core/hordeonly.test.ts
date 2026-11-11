@@ -246,10 +246,13 @@ describe('the squad in a horde (ID-066)', () => {
         9,
       );
     }
-    expect(squadHpScale(SQUAD_CAP + 5)).toBeCloseTo(
-      SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1) * SQUAD_HP_GROWTH.late ** 5,
-      9,
-    );
+    // From Horde 11 the last factor holds (ID-128: the size held waves no longer bring).
+    for (const n of [SQUAD_CAP + 5, 20, 40]) {
+      expect(squadHpScale(n)).toBeCloseTo(
+        1.15 * SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1) * SQUAD_HP_GROWTH.late ** (n - SQUAD_CAP),
+        9,
+      );
+    }
     let s = startSquadHorde(squadGame(1, 3), 2, NOW);
     while (s.enemies.length === 0) s = tick(s, 1);
     expect(s.hpScale).toBeCloseTo(squadHpScale(3), 9);

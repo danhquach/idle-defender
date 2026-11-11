@@ -429,6 +429,12 @@ describe('breaches', () => {
     wall.layers[0]!.segments[1]!.hp = 0;
     enemy(wall, { x: 530, y: 120 });
     expect(tick(wall, 1).breaches).toEqual([{ column: 0, row: 1, wave: 3, through: 'wall' }]);
+    // ID-128: an enemy names the wave it came with, though a later one is under way.
+    const late = empty();
+    late.wave = 3;
+    late.layers[0]!.segments[1]!.hp = 0;
+    enemy(late, { x: 530, y: 120, wave: 2 });
+    expect(tick(late, 1).breaches).toEqual([{ column: 0, row: 1, wave: 2, through: 'wall' }]);
 
     const gap = empty();
     gap.layers[0]!.segments[4] = { index: 4, kind: null, tier: null, hp: 0, maxHp: 0 };

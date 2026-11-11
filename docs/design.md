@@ -907,12 +907,17 @@ loadout (ID-084):
   |---|---|---|---|---|
   | Scripted campaign, first-try wins over Hordes 4–10 (20 seeds) | 96% | 96% | 98% | 86% |
   | Same squad at Recommended Power, no cards, Hordes 9–15 (70 fights) | 39% | 46% | 43% | 0% |
+  | ID-128: the same, with the scripted player's cards and skills | 61% | 57% | 61% | 4% |
 
   The first is the ticket's measure, but Hordes 4–10 are won about 86% of the
   time with no points at all, so it can hardly tell the stats apart; the
   second (each squad's gun at the level where a Sharp Mind squad meets
   Recommended Power) is where they show. The balance test checks both
-  within 10 points, and every stat well above none.
+  within 10 points, and every stat well above none. ID-128 fits Recommended
+  Power to the card build, so the second measure plays with cards: at
+  Instinct's damage near the wall ×1.75 Instinct won 50% (Sharp Mind 61%, 11
+  points apart; with overlapping waves more of the fight is at the wall, but
+  cards scale the gun stats more), so `STAT_EFFECT.wallDamage` is now ×2.
 - **Shots at their true rate (ID-125):** a shot went off on the first 1/30 s
   tick at or after it fell due, and the next was timed from that tick, so
   every fire rate was rounded down to whole ticks (a Gunner's pistol at
@@ -1608,6 +1613,26 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     Charge, Regen in turn). Horde 5: an elite Brute with Roar; 7: an elite
     Swollen with Armour Plates. An elite Swollen still bursts at the wall, 2× as
     hard (its HP and skill are what get it there), so it must die on the way in.
+    From Horde 11 (ID-128, `ELITE.more`) every horde but a boss horde brings
+    one more with the first spawn of its last wave, its kind and skill the next
+    in turn after the middle one's (an odd horde's two always differ in kind):
+    Horde 11 brings two, Horde 12 one (an elite Brute with Regen).
+  - **Shorter fights (ID-128).** From Horde 6 (`SQUAD_WAVES.from`, when the
+    squad is full) enemies spawn 0.6 s apart (0.8 s in the full game and
+    before Horde 6), and the next wave comes once the current one has all
+    spawned, after its 3 s break, without waiting for the field to clear; the
+    last wave still has to be cleared to win, and a mini-boss's wave still waits
+    for it. Before, each of 10 waves waited about 28 s for its last enemy to
+    walk in and die, about 310 s of a Horde 15 fight. Before Horde 6 waves wait
+    for a clear as before: with overlap a lone pistol was buried at Horde 1
+    whatever its HP (0–30 of 60 seeds won with first-card picks; 60 of 60 on
+    main and now).
+    - Enemies carry the wave they came with. Waves cleared (the top bar's
+      "Waves cleared", a loss's XP share) counts only waves that have all come
+      with none of their enemies left; the top bar's count reads "N left" (all
+      standing and still to come), not "N left in this wave".
+    - The wire rebuilt at a wave break is sized for every enemy still to face
+      when that is more than the wave (the last wave's still standing too).
   - **Skills.** Each timed one winds up for 1.2 s first: the boss glows in the
     skill's colour, leans back and swells, a low growl rises, and its boss bar
     says "Roar!". A stun hides the wind-up and holds every clock.
@@ -2161,7 +2186,8 @@ As built (ID-066), the horde-only build:
   first)
   wins each of Hordes 1–10 at the first try on at least 60% of seeds, and
   every campaign beats Horde 10's boss; the lone starting survivor wins
-  Horde 1 on every seed and loses every horde from Horde 4.
+  Horde 1 on every seed and loses every horde from Horde 4. A fight from
+  Horde 10 on lasts about 5 minutes at normal speed (ID-128, §11 Balance pass).
 
 When the full game comes back, it starts as before:
 
@@ -2227,27 +2253,38 @@ and comes back stronger.
   fire rate) × (1 + 0.5 × Sharp Mind's spread cut) × (1 + 0.5 × Instinct's
   damage near the wall, ID-125) × (1 + 0.5 × Instinct's extra HP share) × 10, summed over the squad and rounded. Cards and skills don't
   count. (Gun role traits join it with ID-101.)
-- **Recommended Power (ID-102):** 9.7 × the dmg/s (10.3 before ID-125's
-  true-rate shots) a horde asks for: its
+- **Recommended Power (ID-102, refitted ID-128):** 3 × the dmg/s a horde
+  asks for (9.7 before ID-128, 10.3 before ID-125's true-rate shots): its
   expected enemy HP over the seconds its waves take to spawn (each wave's size
-  × 0.8 s, plus the 3 s break). The HP is each wave's size × its mix's mean HP,
+  × its spawn gap, 0.6 s from Horde 6 and 0.8 s before, plus the 3 s break). The HP is each wave's size × its mix's mean HP,
   a swarm wave's (ID-099) weighted 2× on top of its doubled size (it comes
-  twice as fast), plus its bosses and mini-boss at their HP. A boss horde asks
+  twice as fast), plus its bosses and mini-bosses at their HP. A boss horde asks
   ×1.12 more (its bosses' skills ask for more than their HP says). Hordes 1 to
-  8 take ×0.3, ×0.6, 1, 1, 1, 1, ×0.8 and ×0.8 of it: sure wins for a squad of
-  one or two, then a smaller squad's fit. Horde 1 asks 60, 3 asks 370, 5 asks
-  1,324, 10 asks 3,874, 15 asks 7,297, 20 asks 12,159, 30 asks 24,961.
+  10 take ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.33 and ×1.25 of it:
+  Hordes 1–4 sure wins (the expected squad stands at 4–7× it), Hordes 5–10
+  fitted so the scripted campaign's squad stands at about 1.5× it, where it
+  wins 75–95% at the first try (at Hordes 9 and 10 a squad at it wins about
+  half). Horde 1 asks 18, 3 asks 115, 5 asks 778, 10 asks 1,899, 15 asks
+  3,365, 20 asks 5,544, 30 asks 11,394.
+  - ID-128: fitted to the scripted player's cards and skills, an average
+    build, since no player fights without cards. Before it was fitted with no
+    cards, and with cards a squad at 70% of it still won Hordes 10 and 15 on 5
+    of 5 seeds; the scripted campaigns stood at 0.51–0.65× it past Horde 10
+    and won (a player beat Horde 12 at 3,669 against 6,102). Now they stand at
+    1.2–1.6× it.
   - Before: 3.19 × HP^0.59 (ID-099; 7.1 × √HP in ID-098), fitted only on
     Hordes 6–20. With waves growing ×1.1 a horde, a horde's length grew as
     fast as its HP, so HP alone over-counted: at Horde 30 it asked about half
     of what a squad needed. Over HP a second, one fit holds from Horde 9 to
     Horde 30 within ±10% of each horde's measured 50%-win power.
   - Fitted (`balance/squad-power.test.ts`, 10 seeds, Military Rifles at the
-    expected squad's size and level, no cards or skills) so a squad at it wins
-    about half the time: Horde 9 60%, 12 50%, 15 60%, 20 60% (mean 58%;
-    before: 50/30/30/50%, mean 40%). With the scripted player's cards and
-    skills the same squads win 10 of 10 at each. At 70% of it a squad loses
-    Hordes 10 and 15 on at least 4 of 5 seeds; at 130% wins on at least 4 of 5.
+    expected squad's size and level, the scripted player's cards and skills)
+    so a squad at it wins about half the time: Horde 9 50%, 12 60%, 15 60%,
+    20 50% (25: 70%). Each horde's 50% point, Hordes 11–20, lies at 2.7–3.3 ×
+    the dmg/s (mean 3.0); Horde 9's at 4.0, Horde 10's at 3.7 (hence their
+    factors). At 70% of it a squad loses Hordes 10 and 15 on 5 of 5 seeds; at
+    130% wins on 5 of 5. (ID-102's no-card fit: Horde 9 60%, 12 50%, 15 60%,
+    20 60%.)
 - **Bands:** green at or above Recommended, amber within 15% below, red
   further. The numbers are always shown; it never blocks a start.
 
@@ -2316,6 +2353,70 @@ Targets, each with a balance test:
   squad stuck at Horde 16 gains about twice the Squad Power and 1.4–1.9× the
   XP per fight minute replaying Horde 15 as replaying Horde 11, on each of 3
   seeds.
+
+### Balance pass *(ID-128)*
+
+Late fights ran far too long (Horde 15 about 13 minutes at normal speed
+against a 3–5 minute target), and Recommended Power assumed no cards, so any
+card build beat it easily. Baselined on main first, then grid-tuned with the
+scripted player; the PM picked overlapping waves after a probe showed the
+ticket's own levers (wave size held earlier, faster spawns) could only reach
+about 9 minutes: each wave waited about 28 s for its last enemy to walk in.
+
+Measured with the scripted campaign (`playSquadCampaign`), 4 seeds to Horde 20
+unless named:
+
+| Measure | Before (main) | After |
+|---|---|---|
+| Fight length, new hordes 10–20 (mean per horde) | 706–840 s (Horde 15: 803 s) | 282–324 s (Horde 15: 319 s) |
+| Fight length, Hordes 6–9 | 406–664 s | 182–274 s |
+| First-try wins, Hordes 1–5 (20 seeds) | 100% | 100% (played as before) |
+| First-try wins, Hordes 6–10 (20 seeds) | 100, 100, 95, 90, 90% | 95, 90, 80, 75, 75% |
+| First-try losses, new Hordes 11–20 | 4 of 40 (10%) | 10 of 40 (25%) |
+| Seeds with a first-try loss past Horde 10 | 3 of 4 | 4 of 4 |
+| Most replays at any one wall | 6 | 9 |
+| Enemies hit the wall, new hordes 11–20 | 51% | 85% |
+| Campaign Squad Power ÷ Recommended, Hordes 11–20 | 0.51–0.65 | 1.17–1.55 |
+| Squad at Recommended, with cards: wins at Hordes 9/12/15/20/25 | 100% at each | 50/60/60/50/70% |
+| …at 70% / 130% of it, Hordes 10 and 15 | 5/5 and 5/5 | 0/5 and 5/5 |
+| Enemies a calm Horde 15 brings (spawn seconds) | 613 (520 s) | 419 (281 s), each with 1.15× the HP |
+
+| Value | Before | After | Why |
+|---|---|---|---|
+| Wave size growth (`WAVE_GROWTH.until`) | Held from Horde 10 | Held from Horde 6 (the full game keeps ×1.1) | The ticket's starting point; the squad is full at Horde 6 |
+| Horde-only waves (`SQUAD_WAVES`) | 0.8 s apart, the next wave waits for a clear | From Horde 6: 0.6 s apart, the next wave comes once this one has all spawned | Only overlap reaches ~5 minutes (§9 Shorter fights); before Horde 6 a lone survivor was buried, so early hordes play as before |
+| Late HP (`SQUAD_EARLY_HP`, last entry) | 1 from Horde 11 | ×1.15 from Horde 11 | The held waves' size moved into HP. Grid: 1 kept every target but made walls shallow (3 of 4 seeds walled, at most 3 replays a wall, wall hit 74%); 1.15: 4 of 4, at most 9, 85% |
+| Mini-bosses (`ELITE.more`) | One on odd hordes from Horde 5 | Plus one with the last wave of every non-boss horde from Horde 11 | The ticket's ask: more mini-bosses past Horde 10 |
+| Recommended Power (`POWER.rec`) | 9.7 × HP ÷ spawn seconds, no cards; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | 3 ×, with cards; early ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.33, ×1.25 | Refitted to the card build (§11 Farming); k grid 2.2–4.0 per horde, Hordes 6–20 |
+| Instinct's damage near the wall (`STAT_EFFECT.wallDamage`) | ×1.75 | ×2 | With cards Instinct trailed Sharp Mind by 11 points at Recommended Power (§6 Stats) |
+| Wire rebuild (`rebuildWire`) | Sized for the new wave | For every enemy still to face when more | With overlap a level 1 row held 71% of Horde 15's last wave (target 75%) |
+| Loss XP's waves cleared (`wavesCleared`) | The wave reached − 1 | Waves with all their enemies gone | With overlap the wave reached runs ahead of the fight |
+
+Targets, each with a balance test (as in ID-102 unless named):
+
+- **Hordes 1–10** (`balance/horde-only.test.ts`, 20 seeds): unchanged, met
+  as above; a lone starting survivor still wins Horde 1 on every seed and
+  loses every horde from Horde 4.
+- **Mid-game walls** (`balance/late-hordes.test.ts`): every campaign beats
+  Horde 18; ID-128 adds a fight lasting 240–360 s on average (none over
+  420 s) in new hordes from Horde 11.
+- **Recommended Power** (`balance/squad-power.test.ts`): with the scripted
+  player's cards and skills, each of Hordes 9, 12, 15 and 20 won 20–80%,
+  35–65% on average; at 70% of it at most 1 of 5 won at Hordes 10 and 15, at
+  130% at least 4 of 5. The no-card test is gone (no player fights without
+  cards); `balance/cards-under-power.test.ts` builds its 70% squad from Common
+  Rifles where level 1 Military ones are already over it.
+- **Every horde past Horde 10 asks for more Squad Power than the last**
+  (`farm.test.ts`, `harder.test.ts`; past a boss horde, more than the one
+  before it).
+- **Farming far down is never faster** (`balance/farming.test.ts`): the
+  stuck squad now holds Lv 17 Military Rifles (Lv 15 before: with the card
+  fit it stood at Horde 16's Recommended Power, short of the ~1.4× the
+  campaigns reach it with, and lost half its replays). Near the wall it gains
+  2.5–7× the Squad Power and 2.2–2.5× the XP a fight minute of farming Horde
+  11, on each of 3 seeds.
+- **Stats** (`balance/stats.test.ts`): the close-fight measure plays with
+  cards (§6 Stats).
 
 ## 12. Save
 
@@ -2615,7 +2716,11 @@ original outline.
   squad's moments are said by one of them: a breach (the survivor nearest that
   wall), a Horror or a Brute appearing (nearest it), the last enemy of a wave
   with no more to come (nearest it), a wave cleared and the horde won (any of
-  them; the win has its own lines). Each event has 4–5 fixed lines; the same
+  them; the win has its own lines). A wave counts as cleared once the field is
+  empty and the waves cleared (`wavesCleared`) went up (ID-128). Before, it
+  needed nothing left to spawn, but the next wave is set going in the same
+  step the field empties, so the line never played between waves, in the full
+  game either. Each event has 4–5 fixed lines; the same
   line never plays twice in a row. Event rank, highest first (the ticket's
   order, with the events it doesn't place fitted in by choice): down >
   low HP > breach > boss > won = wave cleared > last enemy > crit = streak > dry >

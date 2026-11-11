@@ -57,7 +57,14 @@ import {
   type LevelGain,
   type RosterDefender,
 } from './game.ts';
-import { newHorde, standing, type DefenderSpec, type HordeState, type UpgradeId } from './horde.ts';
+import {
+  newHorde,
+  standing,
+  wavesCleared,
+  type DefenderSpec,
+  type HordeState,
+  type UpgradeId,
+} from './horde.ts';
 import { isGun } from './loadout.ts';
 import { chance, createRng } from './rng.ts';
 import { maxHpOf } from './stats.ts';
@@ -75,12 +82,13 @@ export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter((id) =>
 
 /**
  * Enemy HP's factor in horde-only Horde `n` (ID-066): `SQUAD_HP_GROWTH.early` per horde
- * until the squad reaches its cap, `late` after; Hordes 1–3 (ID-097) and 8–10 (ID-102) eased by `SQUAD_EARLY_HP`.
+ * until the squad reaches its cap, `late` after; × `SQUAD_EARLY_HP`'s factor for the horde,
+ * its last one from there on (ID-097, ID-102, ID-128).
  */
 export function squadHpScale(n: number): number {
   const early = Math.min(n, SQUAD_CAP) - 1;
   const late = Math.max(0, n - SQUAD_CAP);
-  const ease = SQUAD_EARLY_HP[n - 1] ?? 1;
+  const ease = SQUAD_EARLY_HP[Math.min(n, SQUAD_EARLY_HP.length) - 1]!;
   return ease * SQUAD_HP_GROWTH.early ** early * SQUAD_HP_GROWTH.late ** late;
 }
 
@@ -285,7 +293,7 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
   // A loss pays its share of what a win of this horde would (halved far down too).
   const win = far ? FARM.farXp : 1;
   const share =
-    horde.outcome === 'won' ? win : (win * FARM.lossXp * (horde.wave - 1)) / horde.waveCount;
+    horde.outcome === 'won' ? win : (win * FARM.lossXp * wavesCleared(horde)) / horde.waveCount;
   // From the unrounded XP, so a share never rounds twice.
   const each = Math.floor(hordeXp(horde.hordeNumber) * (horde.xpRate ?? 1) * share);
   return full.map((g) => ({ ...g, xp: each }));

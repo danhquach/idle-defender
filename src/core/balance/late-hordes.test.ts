@@ -1,4 +1,4 @@
-// Balance: mid-game horde-only hordes (ID-096, ID-102; see shared.ts). Past the first boss
+// Balance: mid-game horde-only hordes (ID-096, ID-102, ID-128; see shared.ts). Past the first boss
 // the hordes are walls: enemies reach the Barbed Wire's band in most fights and hit the
 // wall in some, the scripted player loses some new hordes at the first try on most seeds,
 // and it farms past each one within a bounded number of replays, with average luck.
@@ -43,6 +43,16 @@ describe('mid-game horde-only hordes (ID-102)', () => {
     expect(wire).toBeGreaterThanOrEqual(0.75);
     expect(hit).toBeGreaterThanOrEqual(0.15);
     expect(hit).toBeLessThan(0.95);
+  });
+
+  // ID-128: waves held from Horde 6, spawning faster and overlapping. About 5 minutes at
+  // normal speed (14 before, at Horde 15).
+  it('a fight lasts about 5 minutes', () => {
+    const secs = tries.map((r) => r.seconds);
+    const mean = secs.reduce((a, b) => a + b, 0) / secs.length;
+    expect(mean).toBeGreaterThanOrEqual(240);
+    expect(mean).toBeLessThanOrEqual(360);
+    expect(Math.max(...secs)).toBeLessThanOrEqual(420);
   });
 
   it('they are walls: most seeds lose at least one new horde at the first try', () => {

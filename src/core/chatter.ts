@@ -2,7 +2,7 @@
 // watches the fight from one frame to the next and never changes it; its lines are fixed
 // text written here, picked with its own seeded random source, so the fight's rolls
 // (and its replay from a seed) are untouched.
-import type { Defender, HordeState } from './horde.ts';
+import { wavesCleared, type Defender, type HordeState } from './horde.ts';
 import { pick, rngFrom, type RngState } from './rng.ts';
 
 /** What a survivor can speak up about. */
@@ -311,7 +311,10 @@ function events(c: ChatState, prev: HordeState, next: HordeState): [Defender, Ch
     if (!seen.has(e.id) && (e.kind === 'horror' || e.kind === 'brute'))
       note(nearest(e.x, e.y), 'boss');
   }
-  const cleared = prev.enemies.length > 0 && next.enemies.length === 0 && next.toSpawn === 0;
+  // A wave just cleared with the field empty (ID-128: by `wavesCleared`, since the next
+  // wave is already on its way in the same step, and horde-only waves overlap).
+  const cleared =
+    prev.enemies.length > 0 && next.enemies.length === 0 && wavesCleared(next) > wavesCleared(prev);
   if (
     (prev.outcome === 'fighting' && next.outcome === 'won') ||
     (cleared && next.outcome !== 'lost')

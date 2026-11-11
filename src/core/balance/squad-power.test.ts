@@ -1,89 +1,51 @@
-// Balance: Recommended Power (ID-098, ID-102). A squad at a horde's Recommended Power, with
-// no cards or skills, wins about half its fights there, and most of them with the cards
-// and skills the scripted player picks (see shared.ts for the seeds).
+// Balance: Recommended Power (ID-098, ID-102, ID-128). A squad at a horde's Recommended
+// Power, with the scripted player's cards and skills (an average build; no player fights
+// without cards), wins about half its fights there (see shared.ts for the seeds).
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
-import { startSquadHorde } from '../hordeonly.ts';
-import { tick } from '../horde.ts';
 import { playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { squadAt } from './shared.ts';
 
 const SEEDS = 10;
 
-/** The squad whose Squad Power is nearest horde `n`'s Recommended Power. */
-function squadAtRecommended(n: number): GameState {
-  const rec = recommendedPower(n);
+/** Horde `n`'s expected squad whose Squad Power is nearest `target`. */
+function squadNear(n: number, target: number): GameState {
   let best = squadAt(n, 1);
   for (let lv = 2; lv <= 200; lv++) {
     const g = squadAt(n, lv);
-    if (Math.abs(squadPower(g) - rec) < Math.abs(squadPower(best) - rec)) best = g;
+    if (Math.abs(squadPower(g) - target) < Math.abs(squadPower(best) - target)) best = g;
   }
   return best;
 }
 
-/** A fight at horde `n` with every card offer turned down. */
-function wonWithNoCards(game: GameState, n: number, seed: number): boolean {
-  let s = startSquadHorde(game, seed, 0, n);
-  while (s.outcome === 'fighting') {
-    if (s.time > 3600) throw new RangeError(`horde ${n} never ended`);
-    s = s.offer ? { ...s, offer: null } : tick(s, 60);
+/** Fights won at horde `n` over `seeds` seeds, played with the scripted player's cards and skills. */
+function wins(game: GameState, n: number, seeds: number): number {
+  let won = 0;
+  for (let seed = 1; seed <= seeds; seed++) {
+    if (playSquadHorde(game, seed * 101, undefined, undefined, n).outcome === 'won') won++;
   }
-  return s.outcome === 'won';
+  return won;
 }
 
-describe('Recommended Power (ID-098)', () => {
+describe('Recommended Power (ID-098, ID-128)', () => {
   const HORDES = [9, 12, 15, 20];
-  it('a squad at Recommended Power, with no cards, wins about half the time', () => {
-    const rates = HORDES.map((n) => {
-      const g = squadAtRecommended(n);
-      let won = 0;
-      for (let seed = 1; seed <= SEEDS; seed++) if (wonWithNoCards(g, n, seed * 101)) won++;
-      return won / SEEDS;
-    });
+  it('a squad at Recommended Power, with the scripted player’s cards, wins about half the time', () => {
+    const rates = HORDES.map((n) => wins(squadNear(n, recommendedPower(n)), n, SEEDS) / SEEDS);
     for (const [i, rate] of rates.entries()) {
-      expect(rate, `Horde ${HORDES[i]}`).toBeGreaterThanOrEqual(0.1);
-      expect(rate, `Horde ${HORDES[i]}`).toBeLessThanOrEqual(0.9);
+      expect(rate, `Horde ${HORDES[i]}`).toBeGreaterThanOrEqual(0.2);
+      expect(rate, `Horde ${HORDES[i]}`).toBeLessThanOrEqual(0.8);
     }
     const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
-    expect(mean, rates.join(' ')).toBeGreaterThanOrEqual(0.3);
-    expect(mean, rates.join(' ')).toBeLessThanOrEqual(0.7);
-  }, 600_000);
-
-  it('the same squad, with cards and skills, wins most of the time (ID-102)', () => {
-    const rates = HORDES.map((n) => {
-      const g = squadAtRecommended(n);
-      let won = 0;
-      for (let seed = 1; seed <= SEEDS; seed++) {
-        if (playSquadHorde(g, seed * 101, undefined, undefined, n).outcome === 'won') won++;
-      }
-      return won / SEEDS;
-    });
-    for (const [i, rate] of rates.entries()) {
-      expect(rate, `Horde ${HORDES[i]}`).toBeGreaterThanOrEqual(0.5);
-    }
-    const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
-    expect(mean, rates.join(' ')).toBeGreaterThanOrEqual(0.7);
+    expect(mean, rates.join(' ')).toBeGreaterThanOrEqual(0.35);
+    expect(mean, rates.join(' ')).toBeLessThanOrEqual(0.65);
   }, 600_000);
 
   it('a squad well under Recommended Power loses, and one well over wins', () => {
     for (const n of [10, 15]) {
       const rec = recommendedPower(n);
-      let low = squadAt(n, 1);
-      let high = squadAt(n, 1);
-      for (let lv = 2; lv <= 200; lv++) {
-        const g = squadAt(n, lv);
-        if (squadPower(g) <= rec * 0.7) low = g;
-        if (squadPower(high) < rec * 1.3) high = g;
-      }
-      let lowWins = 0;
-      let highWins = 0;
-      for (let seed = 1; seed <= 5; seed++) {
-        if (wonWithNoCards(low, n, seed * 101)) lowWins++;
-        if (wonWithNoCards(high, n, seed * 101)) highWins++;
-      }
-      expect(lowWins, `Horde ${n} at 70%`).toBeLessThanOrEqual(1);
-      expect(highWins, `Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
+      expect(wins(squadNear(n, rec * 0.7), n, 5), `Horde ${n} at 70%`).toBeLessThanOrEqual(1);
+      expect(wins(squadNear(n, rec * 1.3), n, 5), `Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
     }
   }, 600_000);
 });
