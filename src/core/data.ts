@@ -903,14 +903,16 @@ export const CARD = {
   frag: { every: 8, range: 600, flight: 0.6, damage: 20, radius: 70, flash: 1.2 },
   /**
    * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
-   * slows per level. Each row of it (one per segment) has `durability` per level (ID-104);
-   * an enemy entering a working row takes its kind's `wear` off it (ID-090, ID-104).
+   * slows per level. Each row of it (one per segment) has `durability` per level (ID-104),
+   * × the wave's enemies over `perWave` when that's more (ID-123); an enemy entering a
+   * working row takes its kind's `wear` off it (ID-090, ID-104).
    */
   wire: {
     from: 250,
     to: 400,
     slow: [0.15, 0.25, 0.35],
     durability: [10, 20, 30],
+    perWave: 60,
     wear: {
       shambler: 1,
       runner: 1,

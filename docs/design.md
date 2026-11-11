@@ -1157,8 +1157,8 @@ spacing real hordes have (see the ID-077 note below).
   **Levels (ID-097):** each card below has levels 1, 2 and 3 (max). The
   first pick gives level 1, each later pick raises it by 1, and at max it
   leaves the pool for the rest of the horde. An upgrade keeps the card's own
-  rules (Extended Mags from each gun's next reload, Barbed Wire's working
-  rows gain the level's extra durability and broken ones stay broken).
+  rules (Extended Mags from each gun's next reload; Barbed Wire's rows,
+  broken or worn, are rebuilt at the new level's full durability, ID-123).
   Levels last the horde, like every card.
 
   | Card | Kind | Rarity | Lv 1 | Lv 2 | Lv 3 (max) |
@@ -1169,7 +1169,7 @@ spacing real hordes have (see the ID-077 note below).
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
   | Incendiary Rounds | behaviour | rare | The enemy hit burns **1** dmg/s for 3 s; a new hit resets it at the new hit's rate, never stacks | 2 dmg/s | 3 dmg/s |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
-  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability (more below) | 25%; 20 durability | 35%; 30 durability |
+  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each wave break and level-up (more below) | 25%; 20 durability | 35%; 30 durability |
 
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
@@ -1201,19 +1201,31 @@ spacing real hordes have (see the ID-077 note below).
   **Barbed Wire** (ID-077):
   enemies in its band move slower by its level's share, multiplying with razor wire traps and
   Screamers. Enemies wear it down (ID-090): the band is 10 rows, one per
-  wall segment. Each row's durability goes with the card's level (ID-104,
+  wall segment. Each row's full durability goes with the card's level (ID-104,
   `CARD.wire.durability`): **10** at level 1, **20** at level 2, **30** at
-  level 3. Picking the card again adds 10 to each working row's durability
-  and max; a broken row stays broken. Every horde starts the rows whole.
+  level 3, and with the wave's size (ID-123): × the wave's enemies (a swarm
+  wave's doubled count included) over **60** (`CARD.wire.perWave`) when
+  that's more than 1, rounded. So a Horde 15 swarm wave of 208 gives a
+  level 1 row 35, and each enemy of a big wave meets the same share of a
+  row as one of a 60-enemy wave; smaller waves
+  keep the level's number. The rows are rebuilt (ID-123): every row, broken
+  or worn, goes back to its full at each wave break (as the break starts,
+  for the new wave's size) and at each pick of the card (for the new
+  level). An enemy that already wore a row before a level-up still doesn't
+  wear it again. Every horde starts the rows at level 1's full for its
+  first wave. (Before ID-123 a level-up added 10 to each working row, a
+  broken row stayed broken for the rest of the horde, and nothing scaled
+  with the wave.)
   Each enemy that enters a working row's band takes its kind's wear off that
   row (`CARD.wire.wear`), only once per row and never below 0: **1** for a
   Shambler, Runner, Crawler, Spewer or Screamer, **3** for a Swollen, **4**
   for a Brute and **10** for the Horror (a level 1 row on its own). A row at
-  0 is broken for the rest of the horde: it slows no one, the enemy that
-  broke it included, while the other rows still slow. (It was 30 at every
-  level and 1 for every kind, ID-090.)
+  0 is broken until the next wave break or pick: it slows no one, the enemy
+  that broke it included, while the other rows still slow. (It was 30 at
+  every level and 1 for every kind, ID-090.)
 
-  Measured (ID-104), horde-only campaigns as the scripted squad plays them,
+  Measured (ID-104, under its rules, before ID-123's rebuilds and wave
+  scaling), horde-only campaigns as the scripted squad plays them,
   10 seeds, with Barbed Wire picked at the start of each first try at Hordes
   4–10: the share of the fight its rows were working (time-weighted), before
   (30 at every level, 1 per enemy) → after.
@@ -1235,6 +1247,32 @@ spacing real hordes have (see the ID-077 note below).
   win 11, 11 and 12 (were 9, 11, 12) and kill a mean 158.5, 162.5 and
   173.4 px out (were 163.1, 162.5, 173.4; no card 156.1). The horde-only
   and Horror balance tests pass before and after.
+
+  Measured (ID-123), the same campaigns, 2 seeds, with Barbed Wire held from
+  the start of each first try at Hordes 5, 10 and 15 (other offers of it
+  turned down): the share of the **last wave fought** (the horde's last, or
+  the one a lost first try fell in) its rows were working
+  (time-weighted), with the rebuilds alone (no wave scaling) → with
+  `perWave` 60.
+
+  | Horde | Lv 1 | Lv 3 (max) |
+  |---|---|---|
+  | 5 | 92% → 100% | 100% → 100% |
+  | 10 | 47% → 85% | 77% → 100% |
+  | 15 | 43% → 94% | 86% → 100% |
+
+  The rebuilds alone keep the wire whole through Horde 5 but not late
+  waves; with the scaling a level 1 row holds a comparable share of the last
+  wave from Horde 5 to 15, and level 3 holds all of it. A `perWave` of 20 or
+  40 kept the rows nearly whole at every level (99–100% of the last wave),
+  leaving nothing to level up for. The balance test `balance/wire.test.ts` checks level 1's
+  last-wave share at Hordes 5 and 15 (at least 75% each, within 20 points of
+  each other). In the Horde 4 card test levels 1, 2 and 3 now win 9, 11 and
+  12 of 20 (no card 2) and kill a mean 163.1, 162.5 and 173.4 px out (no
+  card 156.1): no row breaks there any more, so levels 1 and 2 differ only
+  in slow and their kill distances are within noise; the test now checks
+  that each level kills further out than no card and max further than
+  level 1, with wins never falling by level.
 
   **Patch Up** (common, repeatable, uncapped)
   repairs every built segment by 30% of its max HP, a broken one included. It's
@@ -1500,7 +1538,8 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
       4 s (an amber ring under each).
     - **Slab Throw:** every 16 s, from at least 150 px out, a concrete slab
       that lands 0.6 s later: with Barbed Wire it breaks the working wire row
-      nearest the boss's row (ties: the upper one), else 300 damage to the
+      nearest the boss's row (ties: the upper one; it's rebuilt at the next
+      wave break or pick of the card, ID-123), else 300 damage to the
       outermost wall's standing segment nearest it.
     - **Armour Plates:** steel plates on its body; bullets do half damage until
       25% of its HP is gone, then they're gone for good (regen doesn't bring them
@@ -2638,7 +2677,10 @@ original outline.
   stay round on screen. A broken row (ID-090) shows torn: each coil cut
   through twice within the row, the cut ends sagging, the wire dulled (no
   bright highlight) and every other picket knocked flat; a whole row next
-  to it joins up where both are whole. It's drawn in code (no art file),
+  to it joins up where both are whole. A row at half its full durability or
+  less shows worn (ID-115): cut partway, sagging, its pickets leaning; the
+  share is of the row's own full, as this wave and level set it (ID-123),
+  so a rebuilt row looks whole again. It's drawn in code (no art file),
   whole and torn each painted once into its own canvas
   (`src/ui/ground.ts`), and each run of rows alike is drawn in one go;
   where the browser can't paint them, a steel line down each coil of the

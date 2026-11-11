@@ -6,9 +6,9 @@
 // from the wall (design §8: the cards act where the fight is).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { recruit } from '../camp.ts';
-import { CARD, WALL } from '../data.ts';
+import { WALL } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
-import { tick, type HordeState, type UpgradeId } from '../horde.ts';
+import { rebuildWire, tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
 import { SEEDS } from './shared.ts';
 
@@ -46,9 +46,8 @@ function play(card: UpgradeId | null, level = 1): { wins: number; killedAt: numb
       s.taken = [card];
       s.cardLevels = { [card]: level };
     }
-    // As the picks would: each wire row at its level's durability (ID-104).
-    if (card === 'barbed-wire')
-      for (const r of s.wire) r.durability = CARD.wire.durability[level - 1]!;
+    // As the picks would: each wire row at its level's full (ID-104, ID-123).
+    if (card === 'barbed-wire') rebuildWire(s);
     // As the pick would: the first grenade is thrown at once.
     if (card === 'frag-grenades') s.nextFragAt = 0;
     const front = Math.max(...s.layers.map((l) => l.x)) + WALL.depth;
@@ -100,18 +99,21 @@ describe('each ID-077 card makes a measurable difference (Horde 4, three survivo
     },
   );
 
-  // Its durability grows by level too (ID-104), and when its rows break changes which
-  // fights are won, so wins of 20 are noisy (±2) and can tie: each level wins at least
-  // as many, and its kills happen further out (the check that guards the order).
-  it('Barbed Wire: each level wins at least as many fights and kills further out than the one below (ID-104)', () => {
+  // Wins of 20 are noisy (±2) and can tie: each level wins at least as many as the one
+  // below. Since ID-123 rebuilds the rows each wave, no level's rows break in this
+  // Horde 4 fight, so levels 1 and 2 differ only in slow and their mean kill distance is
+  // within noise (163.1 and 162.5 px, as before ID-104); every level kills further out
+  // than no card, and max further out than level 1 (the check that guards the order).
+  it('Barbed Wire: each level wins at least as many fights as the one below, and kills further out than no card (ID-104, ID-123)', () => {
     for (const lv of [2, 3]) {
       expect(of('barbed-wire', lv).wins, `Lv ${lv}`).toBeGreaterThanOrEqual(
         of('barbed-wire', lv - 1).wins,
       );
-      expect(of('barbed-wire', lv).killedAt, `Lv ${lv}`).toBeGreaterThan(
-        of('barbed-wire', lv - 1).killedAt,
-      );
     }
+    for (const lv of LEVELS) {
+      expect(of('barbed-wire', lv).killedAt, `Lv ${lv}`).toBeGreaterThan(none.killedAt);
+    }
+    expect(of('barbed-wire', 3).killedAt).toBeGreaterThan(of('barbed-wire', 1).killedAt);
   });
 
   it.each(LEVELLED)(

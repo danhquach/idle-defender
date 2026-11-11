@@ -13,6 +13,7 @@ import {
   perkFactor,
   perkOn,
   perkScale,
+  rebuildWire,
   standing,
   took,
   type Card,
@@ -161,7 +162,7 @@ export const UPGRADES: Readonly<
   },
   'barbed-wire': {
     name: 'Barbed Wire',
-    text: 'Wire strung out in the field slows enemies crossing it',
+    text: 'Wire strung out in the field slows enemies crossing it, rebuilt at each wave break and level-up',
     category: 'barrier',
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
@@ -317,7 +318,7 @@ export function effectAt(
       return {
         pre: 'Enemies ',
         value: pct(lv(CARD.wire.slow)),
-        post: ' slower in the wire strung across the field',
+        post: ' slower in the field wire, rebuilt each wave break and level-up',
       };
     default:
       return null;
@@ -559,15 +560,10 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
     case 'frag-grenades':
       s.nextFragAt = s.time;
       break;
-    case 'barbed-wire': {
-      // The rows start at level 1's durability; a level-up adds its step to each working
-      // row, and a broken one stays broken (ID-104).
-      const lv = s.cardLevels[id]!;
-      if (lv < 2) break;
-      const gain = CARD.wire.durability[lv - 1]! - CARD.wire.durability[lv - 2]!;
-      for (const row of s.wire) if (row.durability > 0) row.durability += gain;
+    case 'barbed-wire':
+      // Every pick rebuilds every row, broken or worn, at the new level's full (ID-123).
+      rebuildWire(s);
       break;
-    }
     // The rest act in the fight while taken.
   }
 }

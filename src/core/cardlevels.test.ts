@@ -12,15 +12,18 @@ import {
   UPGRADE_IDS,
   UPGRADES,
 } from './cards.ts';
-import { CARD, CARD_MAX_LEVEL, ENEMIES, SEGMENT_HEIGHT, STEP, WEAPONS } from './data.ts';
+import { CARD, CARD_MAX_LEVEL, ENEMIES, SEGMENT_HEIGHT, STEP, SWARM, WEAPONS } from './data.ts';
+import { waveCount, waveSize } from './waves.ts';
 import {
   cardLevel,
   extraPierce,
   magazineOf,
   newHorde,
+  rebuildWire,
   shocked,
   stunned,
   tick,
+  wireMax,
   type Bullet,
   type HordeState,
   type UpgradeId,
@@ -167,19 +170,71 @@ describe('levels (ID-097)', () => {
     expect(quiet().wire.every((r) => r.durability === CARD.wire.durability[0])).toBe(true);
   });
 
-  it('Barbed Wire: an upgrade adds 10 to each working row, and a broken row stays broken (ID-104)', () => {
+  it('Barbed Wire: a level-up rebuilds every row, broken or worn, at the new level’s full (ID-123)', () => {
     let s = at('barbed-wire', 1);
-    s.wire[2]!.durability = 0;
-    s.wire[3]!.durability = 4;
-    s = picked(s, 'barbed-wire');
-    expect(cardLevel(s, 'barbed-wire')).toBe(2);
-    expect(s.wire[2]!.durability).toBe(0);
-    expect(s.wire[3]!.durability).toBe(14);
-    expect(s.wire[4]!.durability).toBe(20);
-    s = picked(s, 'barbed-wire');
-    expect(s.wire[2]!.durability).toBe(0);
-    expect(s.wire[3]!.durability).toBe(24);
-    expect(s.wire[4]!.durability).toBe(30);
+    for (let lv = 2; lv <= CARD_MAX_LEVEL; lv++) {
+      s.wire[2]!.durability = 0;
+      s.wire[3]!.durability = 4;
+      s.wire[3]!.hit = [7];
+      s = picked(s, 'barbed-wire');
+      expect(cardLevel(s, 'barbed-wire')).toBe(lv);
+      const full = CARD.wire.durability[lv - 1]!;
+      expect(s.wire.map((r) => [r.durability, r.max])).toEqual(
+        Array.from({ length: s.wire.length }, () => [full, full]),
+      );
+      // An enemy that already wore a row still doesn't wear it twice.
+      expect(s.wire[3]!.hit).toEqual([7]);
+    }
+  });
+
+  it('Barbed Wire: each wave break rebuilds every row at the level’s full, a slab’s break included (ID-123)', () => {
+    let s = at('barbed-wire', 2);
+    s.wire[1]!.durability = 0;
+    s.wire[5]!.durability = 3;
+    s.wire[5]!.hit = [1, 2];
+    expect(s.wave).toBe(1);
+    // Nothing left to spawn and no enemy standing: the next step starts the break.
+    s = tick(s, STEP);
+    expect(s.wave).toBe(2);
+    expect(s.wire.every((r) => r.durability === 20 && r.max === 20 && r.hit.length === 0)).toBe(
+      true,
+    );
+  });
+
+  it('Barbed Wire: a row’s full durability grows with the wave’s size, never below its level’s (ID-123)', () => {
+    expect(CARD.wire.perWave).toBe(60);
+    expect(wireMax(1, 8)).toBe(10);
+    expect(wireMax(1, 60)).toBe(10);
+    expect(wireMax(1, 90)).toBe(15);
+    expect(wireMax(2, 120)).toBe(40);
+    expect(wireMax(3, 208)).toBe(104);
+    // Not held counts as level 1; past max as max.
+    expect(wireMax(0, 120)).toBe(20);
+    expect(wireMax(4, 60)).toBe(30);
+    // Above the floor each enemy in the wave brings the same durability, so a row lasts about
+    // the same share of a Horde 15 swarm wave as of a Horde 10 last wave (Horde 5's waves are
+    // under the floor, and the rebuild at each break alone holds them).
+    expect(waveSize(5, waveCount(5))).toBeLessThan(CARD.wire.perWave);
+    for (const lv of [1, 2, 3]) {
+      const h10 = waveSize(10, waveCount(10));
+      const h15 = waveSize(15, waveCount(15), true) * SWARM.size;
+      expect(h15).toBeGreaterThan(2 * h10);
+      expect(wireMax(lv, h15) / h15).toBeCloseTo(wireMax(lv, h10) / h10, 2);
+    }
+    // A horde's rows start at level 1's full for its first wave's size; a big wave's rows,
+    // rebuilt, at its size.
+    const big = newHorde(1, { ...setup(), hordeNumber: 15 });
+    expect(big.wire.every((r) => r.durability === 10 && r.max === 10)).toBe(true);
+    big.wave = waveCount(15);
+    big.taken = ['barbed-wire'];
+    big.cardLevels = { 'barbed-wire': 1 };
+    rebuildWire(big);
+    const last = waveSize(15, waveCount(15));
+    expect(last).toBeGreaterThan(CARD.wire.perWave);
+    expect(big.wire.every((r) => r.durability === wireMax(1, last) && r.max === r.durability)).toBe(
+      true,
+    );
+    expect(wireMax(1, last)).toBeGreaterThan(CARD.wire.durability[0]);
   });
 
   it('Extended Mags: an upgrade applies from each gun’s next reload', () => {

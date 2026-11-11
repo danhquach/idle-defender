@@ -505,12 +505,12 @@ describe('barrier cards', () => {
     let t = tick(s, STEP);
     for (let i = 0; i < 20; i++) t = tick(t, STEP);
     expect(t.enemies.find((o) => o.id === e.id)!.x).toBeGreaterThan(FRONT + CARD.wire.from);
-    expect(t.wire[ROW]).toEqual({ durability: WHOLE - 1, hit: [e.id] });
+    expect(t.wire[ROW]).toMatchObject({ durability: WHOLE - 1, max: WHOLE, hit: [e.id] });
     // Only the row it walks in.
     expect(t.wire.filter((r) => r.durability < WHOLE)).toHaveLength(1);
     // A second enemy wears it again.
     const f = enemy(t, { ...tough, x: FRONT + 300, y: ROW4 });
-    expect(tick(t, STEP).wire[ROW]).toEqual({
+    expect(tick(t, STEP).wire[ROW]).toMatchObject({
       durability: WHOLE - 2,
       hit: [e.id, f.id],
     });
@@ -534,7 +534,10 @@ describe('barrier cards', () => {
       const e = enemy(s, { ...tough, kind, x: FRONT + 300, y: ROW4 });
       let t = tick(s, STEP);
       t = tick(tick(t, STEP), STEP);
-      expect(t.wire[ROW], kind).toEqual({ durability: 30 - CARD.wire.wear[kind], hit: [e.id] });
+      expect(t.wire[ROW], kind).toMatchObject({
+        durability: 30 - CARD.wire.wear[kind],
+        hit: [e.id],
+      });
     }
   });
 
@@ -544,7 +547,7 @@ describe('barrier cards', () => {
     s.wire[ROW]!.durability = 2;
     const brute = enemy(s, { ...tough, kind: 'brute', x: FRONT + 300, y: ROW4 });
     const t = tick(s, STEP);
-    expect(t.wire[ROW]).toEqual({ durability: 0, hit: [brute.id] });
+    expect(t.wire[ROW]).toMatchObject({ durability: 0, hit: [brute.id] });
     expect(FRONT + 300 - t.enemies.find((o) => o.id === brute.id)!.x).toBeCloseTo(step, 9);
   });
 
@@ -566,14 +569,14 @@ describe('barrier cards', () => {
     const breaker = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 });
     const above = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 - SEGMENT_HEIGHT });
     let t = tick(s, STEP);
-    expect(t.wire[ROW]).toEqual({ durability: 0, hit: [breaker.id] });
+    expect(t.wire[ROW]).toMatchObject({ durability: 0, hit: [breaker.id] });
     expect(FRONT + 300 - t.enemies.find((o) => o.id === breaker.id)!.x).toBeCloseTo(step, 9);
     expect(FRONT + 300 - t.enemies.find((o) => o.id === above.id)!.x).toBeCloseTo(slow, 9);
     // Broken stays broken: a newcomer walks through at full speed and wears nothing.
     const next = enemy(t, { ...tough, x: FRONT + 350, y: ROW4 });
     t = tick(t, STEP);
     expect(FRONT + 350 - t.enemies.find((o) => o.id === next.id)!.x).toBeCloseTo(step, 9);
-    expect(t.wire[ROW]).toEqual({ durability: 0, hit: [breaker.id] });
+    expect(t.wire[ROW]).toMatchObject({ durability: 0, hit: [breaker.id] });
   });
 
   it('Barbed Wire: stays put when the wall in front of it falls', () => {

@@ -3450,14 +3450,15 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
   });
 
   /**
-   * Barbed Wire's rows, whole (full at the card's top level, a scene's level when it
-   * records none) but for the `broken` ones, and the `worn` ones at half.
+   * Barbed Wire's rows, whole (full at the card's top level) but for the `broken` ones, and
+   * the `worn` ones at half.
    */
   const full = CARD.wire.durability[CARD_MAX_LEVEL - 1]!;
   const rows = (...broken: number[]) => wornRows(broken, []);
-  const wornRows = (broken: number[], worn: number[]) =>
+  const wornRows = (broken: number[], worn: number[], max = full) =>
     Array.from({ length: SEGMENTS }, (_, i) => ({
-      durability: broken.includes(i) ? 0 : worn.includes(i) ? full / 2 : full,
+      durability: broken.includes(i) ? 0 : worn.includes(i) ? max / 2 : max,
+      max,
       hit: [],
     }));
 
@@ -3473,18 +3474,20 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(WIRE.worn.at).toBe(0.5);
   });
 
-  it('Barbed Wire: the scene’s card level sets each row’s look (ID-115)', () => {
+  it('Barbed Wire: each row’s look follows its own full durability, by level and wave size (ID-115, ID-123)', () => {
     const { Painted } = paintable();
     try {
-      for (const [i, max] of CARD.wire.durability.entries()) {
-        // Full and just over half whole, half and 1 worn, the rest torn: of this level's max.
+      // Each level's, and a big wave's (ID-123); the scene's card level plays no part.
+      for (const max of [...CARD.wire.durability, 64]) {
+        // Full and just over half whole, half and 1 worn, the rest torn: of the row's max.
         const left = [max, max / 2 + 1, max / 2, 1];
         const wire = Array.from({ length: SEGMENTS }, (_, row) => ({
           durability: left[row] ?? 0,
+          max,
           hit: [],
         }));
         const band = paintedDraws(
-          fight({}, { taken: ['barbed-wire'], cardLevels: { 'barbed-wire': i + 1 }, wire }),
+          fight({}, { taken: ['barbed-wire'], cardLevels: { 'barbed-wire': 1 }, wire }),
           Painted,
         );
         const sh = band[0]!.img.height / SEGMENTS;
