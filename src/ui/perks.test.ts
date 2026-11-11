@@ -25,7 +25,7 @@ describe('perk loadout lines', () => {
     expect(MAX_PERK_SLOTS).toBe(4);
     expect(texts(perkLines(newGame(), 0)).slice(0, 6)).toEqual([
       'Perk slots: 1 of 4',
-      'Slot 1 · Steady Fire: Guns fire 15% faster',
+      'Slot 1 · Steady Fire: Guns fire 12.5% faster',
       '[Unequip Steady Fire]',
       'Slot 2 · locked · Lab 1, 15 Genes, 45 min',
       'Slot 3 · locked · Lab 2, 120 Genes, 1 h 30 min, after Perk slot 2',
@@ -37,7 +37,7 @@ describe('perk loadout lines', () => {
     const lines = texts(perkLines(newGame(), 0));
     const perks = lines.slice(lines.indexOf('Perks') + 1);
     expect(perks).toEqual([
-      'Steady Fire: Guns fire 15% faster · level 1 of 3 · Equipped',
+      'Steady Fire: Guns fire 12.5% faster · level 1 of 3 · Equipped',
       '[Upgrade Steady Fire to level 2 (1 h)]',
       ...PERK_IDS.slice(1).map(
         (id) =>
@@ -53,7 +53,7 @@ describe('perk loadout lines', () => {
     const lines = texts(perkLines(game(['perk-slot-2', 'perk-slot-3', 'perk-slot-4']), 0));
     expect(lines.slice(0, 6)).toEqual([
       'Perk slots: 4 of 4',
-      'Slot 1 · Steady Fire: Guns fire 15% faster',
+      'Slot 1 · Steady Fire: Guns fire 12.5% faster',
       '[Unequip Steady Fire]',
       'Slot 2 · Empty',
       'Slot 3 · Empty',
@@ -96,7 +96,7 @@ describe('perk loadout lines', () => {
   it('one slot node researched: slot 2 empty, slot 3 locked after it', () => {
     expect(texts(perkLines(game(['perk-slot-2']), 0)).slice(0, 6)).toEqual([
       'Perk slots: 2 of 4',
-      'Slot 1 · Steady Fire: Guns fire 15% faster',
+      'Slot 1 · Steady Fire: Guns fire 12.5% faster',
       '[Unequip Steady Fire]',
       'Slot 2 · Empty',
       'Slot 3 · locked · Lab 2, 120 Genes, 1 h 30 min, after Perk slot 2',
@@ -144,7 +144,7 @@ describe('perk loadout lines', () => {
     const top = { ...g, perkLevels: { ...g.perkLevels, 'steady-fire': 3 } };
     expect(texts(perkLines(top, 0)).some((t) => t.includes('Upgrade Steady Fire'))).toBe(false);
     expect(texts(perkLines(top, 0))).toContain(
-      'Steady Fire: Guns fire 15% faster · level 3 of 3 · Equipped',
+      'Steady Fire: Guns fire 12.5% faster · level 3 of 3 · Equipped',
     );
   });
 

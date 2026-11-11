@@ -274,9 +274,9 @@ describe('perk levels (AC4)', () => {
         'steady-fire',
         PERK.steadyFire,
       );
-    expect(at(1)).toBeCloseTo(1.15, 9);
-    expect(at(2)).toBeCloseTo(1.225, 9);
-    expect(at(3)).toBeCloseTo(1.3, 9);
+    expect(at(1)).toBeCloseTo(1.125, 9);
+    expect(at(2)).toBeCloseTo(1.1875, 9);
+    expect(at(3)).toBeCloseTo(1.25, 9);
     // Power Saver's saving grows the same way: 25%, 37.5%, 50% less.
     const saver = (level: number): number =>
       perkFactor(

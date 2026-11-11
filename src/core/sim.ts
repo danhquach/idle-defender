@@ -155,12 +155,13 @@ export function repairWhatYouCan(game: GameState): GameState {
 /**
  * The scripted player's stat points (design §6): every one into the stat that suits the
  * job their loadout gives them: Sharp Mind, the damage stat, for a Gunner or a Ripper (a
- * horde-only survivor carries a gun, so theirs go there too), Agility for an Engineer.
+ * horde-only survivor carries a gun, so theirs go there too), Agility for an Engineer;
+ * every one into `only` when given (ID-125: the stats' balance test).
  */
-export function spendAll(game: GameState): GameState {
+export function spendAll(game: GameState, only?: Stat): GameState {
   let g = game;
   for (const d of game.roster) {
-    const stat = SPEND_STAT[professionOf(d.loadout)];
+    const stat = only ?? SPEND_STAT[professionOf(d.loadout)];
     for (let n = unspentPoints(d); n > 0; n--) {
       const r = spendPoint(g, d.id, stat);
       if (r.ok) g = r.game;
@@ -370,6 +371,8 @@ export interface SquadPlay {
    * upgrade for anyone.
    */
   worstLuck?: boolean;
+  /** Every stat point into this stat (ID-125), not the job's (`spendAll`). */
+  stat?: Stat;
 }
 
 /**
@@ -424,7 +427,7 @@ export function playSquadCampaign(seed: number, hordes: number, play: SquadPlay 
     const drop = farm > 0 && play.worstLuck ? squadDrop(game, horde) : null;
     let next = finishSquadHorde(game, horde);
     if (drop) next = unlucky(game, next, drop);
-    game = gearUp(spendAll(next));
+    game = gearUp(spendAll(next, play.stat));
     if (farm > 0) farm--;
     else if (horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
   }

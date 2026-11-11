@@ -264,7 +264,8 @@ export function synergyOf(state: HordeState, id: UpgradeId): string | null {
   return null;
 }
 
-const pct = (x: number): string => `${Math.round(x * 100)}%`;
+/** A share as a percent, to one decimal when not whole: 25%, 7.5%. */
+const pct = (x: number): string => `${Number((x * 100).toFixed(1))}%`;
 /** A factor with at most 2 decimals and no trailing zeros: 1.33, 1.67, 2. */
 const factor = (x: number): string => String(Number(x.toFixed(2)));
 

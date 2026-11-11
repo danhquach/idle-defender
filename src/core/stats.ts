@@ -140,12 +140,20 @@ export function spreadOf(d: Statted, weapon: Held): number {
   return gunOf(weapon).spread * gunner * (1 - bonusOf(d, 'mind', 'spread'));
 }
 
-/** Fire-rate factor for `weapon` from the loadout: a Gunner's guns faster, a shield's holder's guns slower. */
+/**
+ * Fire-rate factor for `weapon`: a Gunner's guns faster, a shield's holder's guns slower,
+ * and Agility's guns faster (ID-125).
+ */
 export function fireRateFactor(d: Statted, weapon: Held): number {
   if (!isGun(weapon)) return 1;
   const gunner = professionFor(d) === 'gunner' ? 1 + GUNNER.fireRate : 1;
   const shield = d.loadout.item === 'shield' ? 1 - SHIELD.fireRate : 1;
-  return gunner * shield;
+  return gunner * shield * (1 + bonusOf(d, 'agility', 'fireRate'));
+}
+
+/** Instinct's extra damage (a share) to an enemy near the wall, from any weapon (ID-125). */
+export function wallDamage(d: Statted): number {
+  return bonusOf(d, 'instinct', 'wallDamage');
 }
 
 /**

@@ -283,7 +283,9 @@ describe('Stats: points drafted, spent on Confirm (ID-108)', () => {
     const m = mount(camp([at(1, 4)]));
     m.roster.open('recruit-1');
     const fx = () => m.plus('agility').closest('.rv-stat')!.querySelector('.rv-fx')!;
-    expect(fx().textContent).toMatch(/^Reload \d\.\d\d s → \d\.\d\d s$/);
+    expect(fx().textContent).toMatch(
+      /^Reload \d\.\d\d s → \d\.\d\d sFire rate \+\d+\.\d% → \+\d+\.\d%$/,
+    );
     expect(fx().querySelector('.rv-fx-up')).toBeNull();
     const one = fx().textContent;
     m.plus('agility').click();
@@ -300,7 +302,7 @@ describe('Stats: points drafted, spent on Confirm (ID-108)', () => {
     const m = mount(camp([at(1, 2, { agility: 1 })]));
     m.roster.open('recruit-1');
     const fx = m.plus('agility').closest('.rv-stat')!.querySelector('.rv-fx')!;
-    expect(fx.textContent).toMatch(/^Reload \d\.\d\d s$/);
+    expect(fx.textContent).toMatch(/^Reload \d\.\d\d sFire rate \+\d+\.\d%$/);
     expect(fx.querySelector('.rv-fx-to')).toBeNull();
   });
 

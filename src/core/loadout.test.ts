@@ -58,10 +58,10 @@ describe('loadout and profession', () => {
 });
 
 describe('specialised guns suit Gunners', () => {
-  it('a Gunner: full damage, 15% faster fire, 25% quicker reload', () => {
+  it('a Gunner: full damage, 12.5% faster fire, 25% quicker reload', () => {
     const g = who(L(rifle, 'pistol'));
     expect(damageFactor(g, rifle)).toBe(1);
-    expect(fireRateFactor(g, rifle)).toBeCloseTo(1.15);
+    expect(fireRateFactor(g, rifle)).toBeCloseTo(1.125);
     expect(reloadTime(g, rifle)).toBeCloseTo(RIFLE.reload * 0.75);
   });
 

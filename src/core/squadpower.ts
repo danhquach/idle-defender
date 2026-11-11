@@ -5,13 +5,14 @@ import { gunCrit, gunCritDamage, statsOf } from './armoury.ts';
 import { DEFENDER_HP, POWER, SPAWN_INTERVAL, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
 import type { GameState, RosterDefender } from './game.ts';
 import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
-import { critChance, critDamage, maxHpOf, reloadTime, statBonus } from './stats.ts';
+import { critChance, critDamage, maxHpOf, reloadTime, statBonus, wallDamage } from './stats.ts';
 import { enemyHp, hordeBosses, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
 
 /**
  * One survivor's share of Squad Power: their gun's sustained dmg/s (rarity, level and
- * affixes; Sharp Mind's crit and the gun's own, ID-101; tighter aim; Agility's reload), times a toughness
- * factor from Instinct's extra HP. Cards and skills don't count.
+ * affixes; Sharp Mind's crit and the gun's own, ID-101; tighter aim; Agility's reload and fire
+ * rate, ID-125; Instinct's damage near the wall, ID-125), times a toughness factor from
+ * Instinct's extra HP. Cards and skills don't count.
  */
 export function survivorPower(d: RosterDefender): number {
   const spec = squadSpec(d);
@@ -20,9 +21,11 @@ export function survivorPower(d: RosterDefender): number {
   if (w.kind !== 'sidearm' && w.kind !== 'gun') return 0;
   const crit = 1 + (critChance(spec) + gunCrit(gun)) * (critDamage(spec) + gunCritDamage(gun) - 1);
   const aim = 1 + POWER.aim * statBonus(spec.stats?.mind ?? 0, 'mind', 'spread');
+  const wall = 1 + POWER.wall * wallDamage(spec);
+  const rate = 1 + statBonus(spec.stats?.agility ?? 0, 'agility', 'fireRate');
   const dps =
-    (w.damage * w.pellets * crit * aim * w.magazine) /
-    (w.magazine * w.fireInterval + reloadTime(spec, gun));
+    (w.damage * w.pellets * crit * aim * wall * w.magazine) /
+    ((w.magazine * w.fireInterval) / rate + reloadTime(spec, gun));
   const tough = 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
   return dps * tough * POWER.scale;
 }

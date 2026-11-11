@@ -845,8 +845,9 @@ export function survivorText(s: Survivor): string {
 
 /** What each stat does in full, for a stat button's tooltip (design §6, ID-084). */
 export const STAT_HINT: Readonly<Record<Stat, string>> = {
-  instinct: 'More HP and armour on every hit, and a chance to survive a downing hit at 1 HP',
-  agility: 'Faster reloads',
+  instinct:
+    'More HP and armour on every hit, a chance to survive a downing hit at 1 HP, and more damage to enemies near the wall',
+  agility: 'Faster reloads and faster fire with every gun',
   mind: 'Better gun accuracy, and more and harder crits with any weapon',
   tinker: 'Unlocks later: repair, turrets, batteries and crafting',
 };
@@ -857,8 +858,8 @@ export const statHint = (d: RosterDefender, stat: Stat): string =>
 
 /**
  * What the next point in each open stat adds for `d` (ID-096), one line per stat, shown
- * under a picker's buttons while points are left: "Instinct: +3 max HP · +0.13 armour ·
- * +1.0% survive". None once spent out.
+ * under a picker's buttons while points are left: "Instinct: +2 max HP · +0.10 armour ·
+ * +0.7% survive · +4.3% damage near the wall". None once spent out.
  */
 export function gainLines(d: RosterDefender): string[] {
   if (unspentPoints(d) <= 0) return [];
@@ -885,8 +886,8 @@ function gainList(d: RosterDefender): HTMLElement[] {
 
 /** What each stat does in a few words, for the picker's one-line hint. */
 export const STAT_SHORT: Readonly<Record<Stat, string>> = {
-  instinct: 'more HP and armour',
-  agility: 'faster reloads',
+  instinct: 'HP, armour, wall damage',
+  agility: 'reloads and fire rate',
   mind: 'accuracy and crits',
   tinker: 'unlocks later',
 };
@@ -903,7 +904,7 @@ export const statText = (stat: Stat, points: number): string =>
     ? `${STAT_NAMES[stat]} (${STAT_LOCKED_NOTE.toLowerCase()})`
     : `${STAT_NAMES[stat]} ${points}`;
 
-/** The picker's line on what each stat does: "Instinct: more HP and armour · …". */
+/** The picker's line on what each stat does: "Instinct: HP, armour, wall damage · …". */
 export const statHints = (): string =>
   STATS.map((st) => `${STAT_NAMES[st]}: ${STAT_SHORT[st]}`).join(' · ');
 

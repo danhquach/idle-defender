@@ -127,7 +127,7 @@ describe('cards', () => {
       return chooseCard(s, 0);
     };
     expect(pickUpgrade({ kind: 'upgrade', id: 'sharpshooter' }).mods.damage).toBeCloseTo(1.1, 9);
-    expect(pickUpgrade({ kind: 'upgrade', id: 'rapid-fire' }).mods.fireRate).toBeCloseTo(1.08, 9);
+    expect(pickUpgrade({ kind: 'upgrade', id: 'rapid-fire' }).mods.fireRate).toBeCloseTo(1.075, 9);
     expect(pickUpgrade({ kind: 'upgrade', id: 'long-sight' }).mods.range).toBeCloseTo(1.06, 9);
     const patched = pickUpgrade({ kind: 'upgrade', id: 'patch-up' }, (s) => {
       s.layers[0]!.segments[0]!.hp = 0;

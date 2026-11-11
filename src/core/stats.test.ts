@@ -11,6 +11,7 @@ import {
   STAT_NAMES,
   STATS,
   STEP,
+  TRAIT,
   WEAPONS,
   type Stats,
   type Stock,
@@ -18,7 +19,15 @@ import {
   stockOf,
 } from './data.ts';
 import { hordeXp } from './game.ts';
-import { newHorde, specOf, standing, tick, type DefenderSpec, type HordeState } from './horde.ts';
+import {
+  newHorde,
+  specOf,
+  standing,
+  tick,
+  wallFront,
+  type DefenderSpec,
+  type HordeState,
+} from './horde.ts';
 import {
   activeEffects,
   bankedPoints,
@@ -38,6 +47,7 @@ import {
   spreadOf,
   statBonus,
   unspentPoints,
+  wallDamage,
   xpForLevel,
 } from './stats.ts';
 import { rngFrom } from './rng.ts';
@@ -147,11 +157,11 @@ describe('stat points', () => {
 describe('every bonus shrinks as points pile up (ID-084)', () => {
   it('cap × P / (P + 10 × n), n the active effects: half the cap at 10n points, never the cap (ID-096)', () => {
     expect(STAT_SPLIT).toBe(10);
-    // Agility drives 1 effect, Instinct and Sharp Mind 3 each, Tinker none yet.
-    expect(STATS.map(activeEffects)).toEqual([3, 1, 3, 0]);
+    // Instinct drives 4 effects, Agility 2, Sharp Mind 3, Tinker none yet (ID-125).
+    expect(STATS.map(activeEffects)).toEqual([4, 2, 3, 0]);
     expect(statBonus(0, 'agility', 'reload')).toBe(0);
-    expect(statBonus(10, 'agility', 'reload')).toBe(STAT_EFFECT.reload / 2);
-    expect(statBonus(30, 'instinct', 'hp')).toBe(STAT_EFFECT.hp / 2);
+    expect(statBonus(20, 'agility', 'reload')).toBe(STAT_EFFECT.reload / 2);
+    expect(statBonus(40, 'instinct', 'hp')).toBe(STAT_EFFECT.hp / 2);
     expect(statBonus(30, 'mind', 'crit')).toBeCloseTo(STAT_EFFECT.crit / 2);
     expect(statBonus(1e9, 'agility', 'reload')).toBeLessThan(STAT_EFFECT.reload);
     // Each point adds less than the one before.
@@ -163,17 +173,18 @@ describe('every bonus shrinks as points pile up (ID-084)', () => {
 
   it('1 new point is worth 2 old ones (P + 20) before the split, then shared n ways (ID-096)', () => {
     const old = (p: number, cap: number) => (cap * p) / (p + 20);
-    // A stat with one effect: 1 point now gives what 2 gave before.
-    expect(statBonus(1, 'agility', 'reload')).toBeCloseTo(old(2, STAT_EFFECT.reload));
-    expect(statBonus(5, 'agility', 'reload')).toBeCloseTo(old(10, STAT_EFFECT.reload));
-    // With three effects, 3 points give each what 2 old points gave alone.
-    expect(statBonus(3, 'instinct', 'hp')).toBeCloseTo(old(2, STAT_EFFECT.hp));
+    // With two effects, 2 points give each what 2 old points gave alone.
+    expect(statBonus(2, 'agility', 'reload')).toBeCloseTo(old(2, STAT_EFFECT.reload));
+    expect(statBonus(10, 'agility', 'reload')).toBeCloseTo(old(10, STAT_EFFECT.reload));
+    // With three effects, 3 points; with four, 4.
+    expect(statBonus(3, 'mind', 'crit')).toBeCloseTo(old(2, STAT_EFFECT.crit));
+    expect(statBonus(4, 'instinct', 'hp')).toBeCloseTo(old(2, STAT_EFFECT.hp));
   });
 
   it('only active effects get a share: one a stat does not drive gives nothing (ID-096)', () => {
     expect(STAT_ACTIVE).toEqual({
-      instinct: ['hp', 'armour', 'dodge'],
-      agility: ['reload'],
+      instinct: ['hp', 'armour', 'dodge', 'wallDamage'],
+      agility: ['reload', 'fireRate'],
       mind: ['crit', 'critBonus', 'spread'],
       tinker: [],
     });
@@ -206,34 +217,35 @@ describe('what each stat does, with any weapon (ID-084)', () => {
     stats: stats(s),
   });
 
+  // Instinct's points are shared 4 ways (ID-125), Agility's 2: half each cap at 40 and 20.
   it('Instinct: + max HP (whole), + armour off each hit (a hit keeps half), + injury dodge', () => {
     expect(maxHpOf(plain({}))).toBe(100);
-    expect(maxHpOf(plain({ instinct: 1 }))).toBe(103);
-    expect(maxHpOf(plain({ instinct: 10 }))).toBe(125);
-    expect(maxHpOf(plain({ instinct: 30 }))).toBe(150);
+    expect(maxHpOf(plain({ instinct: 1 }))).toBe(102);
+    expect(maxHpOf(plain({ instinct: 10 }))).toBe(120);
+    expect(maxHpOf(plain({ instinct: 40 }))).toBe(150);
     expect(damageTaken(plain({}), 5)).toBe(5);
-    expect(damageTaken(plain({ instinct: 30 }), 5)).toBe(3);
-    expect(damageTaken(plain({ instinct: 30 }), 3)).toBe(1.5);
-    expect(damageTaken(plain({ instinct: 30 }), 60)).toBe(58);
+    expect(damageTaken(plain({ instinct: 40 }), 5)).toBe(3);
+    expect(damageTaken(plain({ instinct: 40 }), 3)).toBe(1.5);
+    expect(damageTaken(plain({ instinct: 40 }), 60)).toBe(58);
     expect(dodgeChance(plain({}))).toBe(0);
-    expect(dodgeChance(plain({ instinct: 30 }))).toBeCloseTo(0.15);
+    expect(dodgeChance(plain({ instinct: 40 }))).toBeCloseTo(0.15);
     // Every loadout alike, a shield's share off first.
     for (const w of ['pistol', 'knife', 'toolkit'] as const) {
-      expect(maxHpOf(spec(w, { instinct: 30 }))).toBe(150);
+      expect(maxHpOf(spec(w, { instinct: 40 }))).toBe(150);
     }
     const shielded = {
       loadout: { primary: 'pistol', secondary: 'knife', item: 'shield' },
     } as const;
-    expect(damageTaken({ ...shielded, stats: stats({ instinct: 30 }) }, 10)).toBeCloseTo(5);
+    expect(damageTaken({ ...shielded, stats: stats({ instinct: 40 }) }, 10)).toBeCloseTo(5);
   });
 
   it('Agility: faster reloads on every gun, on top of a Gunner’s', () => {
     expect(reloadTime(plain({}), 'pistol')).toBe(WEAPONS.pistol.reload);
-    expect(reloadTime(plain({ agility: 10 }), 'pistol')).toBeCloseTo(WEAPONS.pistol.reload * 0.75);
-    expect(reloadTime(spec('pistol', { agility: 10 }), 'pistol')).toBeCloseTo(
+    expect(reloadTime(plain({ agility: 20 }), 'pistol')).toBeCloseTo(WEAPONS.pistol.reload * 0.75);
+    expect(reloadTime(spec('pistol', { agility: 20 }), 'pistol')).toBeCloseTo(
       WEAPONS.pistol.reload * 0.75 * 0.75,
     );
-    expect(reloadTime(spec('knife', { agility: 10 }), 'pistol')).toBeCloseTo(
+    expect(reloadTime(spec('knife', { agility: 20 }), 'pistol')).toBeCloseTo(
       WEAPONS.pistol.reload * 0.75,
     );
   });
@@ -256,8 +268,8 @@ describe('what each stat does, with any weapon (ID-084)', () => {
     expect(damageFactor({ loadout: loadoutFrom('pistol') }, 'pistol')).toBe(1);
   });
 
-  it('fire rate and reload: a Gunner 15% faster and 25% quicker; a sidearm is plain for anyone else', () => {
-    expect(fireRateFactor(spec('pistol'), 'pistol')).toBeCloseTo(1.15);
+  it('fire rate and reload: a Gunner 12.5% faster and 25% quicker; a sidearm is plain for anyone else', () => {
+    expect(fireRateFactor(spec('pistol'), 'pistol')).toBeCloseTo(1.125);
     expect(fireRateFactor(spec('knife'), 'pistol')).toBe(1);
     expect(fireRateFactor(spec('toolkit'), 'pistol')).toBe(1);
     expect(fireRateFactor(spec('knife'), 'knife')).toBe(1);
@@ -289,11 +301,11 @@ describe('stats in a fight', () => {
     const s = newHorde(1, {
       ...setup(),
       roster: [
-        { id: 'a', name: 'A', loadout: loadoutFrom('pistol'), stats: stats({ instinct: 30 }) },
+        { id: 'a', name: 'A', loadout: loadoutFrom('pistol'), stats: stats({ instinct: 40 }) },
         { id: 'b', name: 'B', loadout: loadoutFrom('knife'), stats: stats({ mind: 3 }) },
       ],
     });
-    expect(s.defenders[0]).toMatchObject({ hp: 150, maxHp: 150, stats: stats({ instinct: 30 }) });
+    expect(s.defenders[0]).toMatchObject({ hp: 150, maxHp: 150, stats: stats({ instinct: 40 }) });
     expect(s.bench).toEqual([
       { id: 'b', name: 'B', loadout: loadoutFrom('knife'), stats: stats({ mind: 3 }) },
     ]);
@@ -314,11 +326,11 @@ describe('stats in a fight', () => {
   it("Instinct's armour takes a flat share off each hit", () => {
     const bare = tick(spat(fight(newBase(), spec('pistol'), 'tower', 4)), STEP);
     expect(bare.defenders[0]!.hp).toBe(100 - 8);
-    const tough30 = tick(
-      spat(fight(newBase(), spec('pistol', { instinct: 30 }), 'tower', 4)),
+    const tough40 = tick(
+      spat(fight(newBase(), spec('pistol', { instinct: 40 }), 'tower', 4)),
       STEP,
     );
-    expect(tough30.defenders[0]!.hp).toBe(150 - 6);
+    expect(tough40.defenders[0]!.hp).toBe(150 - 6);
   });
 
   it('Instinct sometimes leaves a defender at 1 HP from a hit that would injure them', () => {
@@ -407,6 +419,90 @@ describe('stats in a fight', () => {
       10,
       Math.round(10 * critDamage(d) * 1e6) / 1e6,
     ]);
+  });
+
+  it("Instinct: a gun shot carries its damage near the wall, added to an SMG's (ID-125)", () => {
+    const shot = (d: DefenderSpec) => {
+      const s = fight(newBase(), d, 'tower', 4);
+      enemy(s, { ...tough, x: 900, y: 360 });
+      return tick(s, STEP).bullets[0]!;
+    };
+    expect(shot(spec('pistol')).close).toBeUndefined();
+    expect(shot(spec('pistol', { instinct: 40 })).close).toBeCloseTo(STAT_EFFECT.wallDamage / 2);
+    expect(wallDamage(spec('pistol', { instinct: 40 }))).toBeCloseTo(STAT_EFFECT.wallDamage / 2);
+    const smg: DefenderSpec = {
+      ...spec('pistol', { instinct: 40 }),
+      loadout: {
+        primary: { uid: 'h1', base: 'smg', rarity: 'common', affixes: [] },
+        secondary: null,
+        item: null,
+      },
+    };
+    expect(shot(smg).close).toBeCloseTo(TRAIT.close.bonus + STAT_EFFECT.wallDamage / 2);
+  });
+
+  it("Instinct: a blade strike hits harder near the wall's front (ID-125)", () => {
+    const wallWalk = (() => {
+      const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
+      const r = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: 2 });
+      if (!r.ok) throw new Error(r.reason);
+      return r.base;
+    })();
+    const strike = (instinct: number, x: number): number => {
+      const s = fight(wallWalk, spec('knife', { instinct }), 'wall-walk', 2);
+      enemy(s, { ...tough, x, y: 200 });
+      return 1000 - tick(s, STEP).enemies[0]!.hp;
+    };
+    // 520 px stands within the near-wall band in front of the wall's face.
+    expect(520).toBeLessThanOrEqual(
+      wallFront(fight(wallWalk, spec('knife'), 'wall-walk', 2)) + TRAIT.close.range,
+    );
+    expect(strike(0, 520)).toBe(10);
+    expect(strike(40, 520)).toBeCloseTo(10 * (1 + STAT_EFFECT.wallDamage / 2));
+  });
+
+  it('Agility: guns fire faster, blades and tools do not (ID-125)', () => {
+    const plain = (s: Partial<Stats>, weapon: FreeWeaponId = 'pistol') => ({
+      loadout: loadoutFrom(weapon),
+      plain: true as const,
+      stats: stats(s),
+    });
+    expect(fireRateFactor(plain({}), 'pistol')).toBe(1);
+    expect(fireRateFactor(plain({ agility: 20 }), 'pistol')).toBeCloseTo(
+      1 + STAT_EFFECT.fireRate / 2,
+    );
+    expect(fireRateFactor(spec('pistol', { agility: 20 }), 'pistol')).toBeCloseTo(
+      1.125 * (1 + STAT_EFFECT.fireRate / 2),
+    );
+    expect(fireRateFactor(plain({ agility: 20 }, 'knife'), 'knife')).toBe(1);
+    expect(fireRateFactor(plain({ agility: 1e9 }), 'pistol')).toBeLessThan(
+      1 + STAT_EFFECT.fireRate,
+    );
+  });
+
+  it('a gun fires at its true rate, not rounded up to whole ticks (ID-125)', () => {
+    // A Gunner's pistol with 20 Agility: 0.6 s / (1.125 × 1.35) ≈ 0.395 s, 11.85 ticks;
+    // rounded up to 12 (0.4 s) before.
+    const d = spec('pistol', { agility: 20 });
+    const interval = WEAPONS.pistol.fireInterval / fireRateFactor(d, 'pistol');
+    expect((interval / STEP) % 1).toBeGreaterThan(0.5);
+    const s = fight(newBase(), d, 'tower', 4);
+    enemy(s, { hp: 1e9, maxHp: 1e9, x: 900, y: 360 });
+    const times: number[] = [];
+    let cur = s;
+    for (let i = 0; i < 300 && times.length < WEAPONS.pistol.magazine; i++) {
+      if (cur.shots.some((k) => Math.abs(k.at - cur.time) < 1e-9)) times.push(cur.time);
+      cur = tick(cur, STEP);
+      cur.enemies[0]!.x = 900;
+    }
+    // A magazine with no reload between: the mean gap is the true interval, give or take
+    // a tick over the whole run (STEP / 9 ≈ 0.0037 s), not a whole tick longer each shot
+    // (0.400 s a gap before, 0.0049 s off). The fraction check above keeps that gap.
+    const gaps = times.length - 1;
+    expect(gaps).toBe(WEAPONS.pistol.magazine - 1);
+    expect(Math.abs((times.at(-1)! - times[0]!) / gaps - interval)).toBeLessThanOrEqual(
+      STEP / gaps + 1e-9,
+    );
   });
 
   it('repair runs at its base rate until Tinker unlocks', () => {

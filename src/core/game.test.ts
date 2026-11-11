@@ -285,7 +285,7 @@ describe('game', () => {
     g.roster[0]!.stats = { ...NO_STATS, instinct: 3 };
     const h = startHorde(g, 7, 'bob', 0, NOW);
     // 100 × 3 / (3 + 30) = 9 HP more.
-    expect(h.defenders[0]).toMatchObject({ maxHp: 109, stats: { ...NO_STATS, instinct: 3 } });
+    expect(h.defenders[0]).toMatchObject({ maxHp: 107, stats: { ...NO_STATS, instinct: 3 } });
     h.defenders[0]!.stats = { ...NO_STATS, mind: 99 };
     expect(g.roster[0]!.stats.mind).toBe(0);
   });
