@@ -514,7 +514,7 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     const [wire, shock, sharp] = cards as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
     expect(text(wire, '.hud-card-tag')).toBe('Lv 1 → 2');
     expect(text(wire, '.hud-card-body')).toBe(
-      'Enemies 15% → 25% slower in the field wire, rebuilt each wave break and level-up',
+      'Enemies 15% → 25% slower in the field wire, rebuilt at each level-up',
     );
     // The number that changes is highlighted.
     expect(text(wire, '.hud-card-change')).toBe('15% → 25%');

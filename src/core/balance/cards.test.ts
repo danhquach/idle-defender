@@ -100,10 +100,10 @@ describe('each ID-077 card makes a measurable difference (Horde 4, three survivo
   );
 
   // Wins of 20 are noisy (±2) and can tie: each level wins at least as many as the one
-  // below. Since ID-123 rebuilds the rows each wave, no level's rows break in this
-  // Horde 4 fight, so levels 1 and 2 differ only in slow and their mean kill distance is
-  // within noise (163.1 and 162.5 px, as before ID-104); every level kills further out
-  // than no card, and max further out than level 1 (the check that guards the order).
+  // below. In this short Horde 4 fight levels 1 and 2 can kill about as far out (163.1 and
+  // 162.5 px under ID-123's rebuild at each wave; since ID-133 rows keep their wear between
+  // waves and are rebuilt only at a level-up); every level kills further out than no card,
+  // and max further out than level 1 (the check that guards the order).
   it('Barbed Wire: each level wins at least as many fights as the one below, and kills further out than no card (ID-104, ID-123)', () => {
     for (const lv of [2, 3]) {
       expect(of('barbed-wire', lv).wins, `Lv ${lv}`).toBeGreaterThanOrEqual(

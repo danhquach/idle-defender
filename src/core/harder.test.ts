@@ -18,6 +18,7 @@ import {
   WAVE_GROWTH,
   type BossSkill,
 } from './data.ts';
+import { chooseCard } from './cards.ts';
 import { hordeBossReward, hordeGenes, newGame } from './game.ts';
 import {
   bossHorde,
@@ -451,7 +452,7 @@ describe('boss skills (ID-099)', () => {
     expect(t.layers[0]!.segments[4]!.hp).toBe(hp);
   });
 
-  it('Slab throw: the wire row it breaks comes back at the next wave break (ID-123)', () => {
+  it('Slab throw: the wire row it breaks stays broken through the wave break, back at a level-up (ID-133)', () => {
     const s = quiet();
     s.taken.push('barbed-wire');
     s.cardLevels['barbed-wire'] = 1;
@@ -459,17 +460,21 @@ describe('boss skills (ID-099)', () => {
     let t = run(s, 1 + BOSS_SKILL.slab.flight + 2 * STEP);
     expect(t.wire[4]!.durability).toBe(0);
     const wave = t.wave;
-    // The boss and its wave gone: the next step starts the break, which rebuilds the row.
+    // The boss and its wave gone: the next step starts the break, which keeps the row broken.
     t.enemies = t.enemies.filter((e) => e.id !== h.id);
     t.toSpawn = 0;
     expect(t.enemies).toEqual([]);
     t = tick(t, STEP);
     expect(t.wave).toBe(wave + 1);
-    expect(t.wire[4]!.durability).toBe(t.wire[4]!.max);
-    expect(t.wire[4]!.max).toBeGreaterThanOrEqual(CARD.wire.durability[0]);
+    expect(t.wire[4]!.durability).toBe(0);
+    expect(t.wire[3]!.durability).toBe(t.wire[3]!.max);
+    // A level-up rebuilds it.
+    t = chooseCard({ ...t, offer: [{ kind: 'upgrade', id: 'barbed-wire' }] }, 0);
+    expect(t.wire[4]!.durability).toBe(CARD.wire.durability[1]);
+    expect(t.wire[4]!.max).toBe(t.wire[4]!.durability);
   });
 
-  it('Slab throw: one still in the air at a wave break doesn’t break the rebuilt row (ID-123)', () => {
+  it('Slab throw: one still in the air at a wave break still breaks its row (ID-133)', () => {
     const s = quiet();
     s.taken.push('barbed-wire');
     s.cardLevels['barbed-wire'] = 1;
@@ -477,15 +482,16 @@ describe('boss skills (ID-099)', () => {
     let t = run(s, 1 + STEP);
     expect(t.slabs).toHaveLength(1);
     const row = t.slabs[0]!.row;
-    // The boss dies with its slab in flight: the wave ends and the break rebuilds the wire.
+    // The boss dies with its slab in flight: the wave ends and the break starts.
     t.enemies = t.enemies.filter((e) => e.id !== h.id);
     t.toSpawn = 0;
     const wave = t.wave;
     t = tick(t, STEP);
     expect(t.wave).toBe(wave + 1);
+    expect(t.wire[row]!.durability).toBeGreaterThan(0);
     t = run(t, BOSS_SKILL.slab.flight + STEP);
     expect(t.slabs[0]!.landed).toBe(true);
-    expect(t.wire[row]!.durability).toBe(t.wire[row]!.max);
+    expect(t.wire[row]!.durability).toBe(0);
   });
 
   it('Slab throw: never from up close', () => {

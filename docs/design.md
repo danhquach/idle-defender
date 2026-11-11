@@ -1231,7 +1231,7 @@ spacing real hordes have (see the ID-077 note below).
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
   | Incendiary Rounds | behaviour | rare | The enemy hit burns **3%** of this wave's Shambler HP a second for 3 s (ID-124; was a flat 1 dmg/s); a new hit resets it at the new hit's rate, never stacks | 6% | 9% (was 3 dmg/s) |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
-  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each wave break and level-up (more below) | 25%; 20 durability | 35%; 30 durability |
+  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each level-up (more below) | 25%; 20 durability | 35%; 30 durability |
 
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
@@ -1286,23 +1286,27 @@ spacing real hordes have (see the ID-077 note below).
   wall segment. Each row's full durability goes with the card's level (ID-104,
   `CARD.wire.durability`): **10** at level 1, **20** at level 2, **30** at
   level 3, and with the wave's size (ID-123): × the wave's enemies (a swarm
-  wave's doubled count included) over **60** (`CARD.wire.perWave`) when
-  that's more than 1, rounded. So a Horde 15 swarm wave of 208 gives a
-  level 1 row 35, and each enemy of a big wave meets the same share of a
-  row as one of a 60-enemy wave; smaller waves
-  keep the level's number. The rows are rebuilt (ID-123): every row, broken
-  or worn, goes back to its full at each wave break (as the break starts,
-  for the new wave's size) and at each pick of the card (for the new
-  level). An enemy that already wore a row before a level-up still doesn't
-  wear it again. Every horde starts the rows at level 1's full for its
-  first wave. (Before ID-123 a level-up added 10 to each working row, a
-  broken row stayed broken for the rest of the horde, and nothing scaled
-  with the wave.)
+  wave's doubled count included) over **30** (`CARD.wire.perWave`; 60
+  before ID-133) when that's more than 1, rounded. So a Horde 15 swarm wave
+  of 208 gives a level 1 row 69, and each enemy of a big wave meets the same
+  share of a row as one of a 30-enemy wave; smaller waves
+  keep the level's number. The rows are rebuilt only at a pick of the card
+  (ID-133): every row, broken or worn, goes back to its full for the new
+  level and the current wave's size. At a wave break (as it starts) each
+  row's full follows the new wave's size and the row keeps its wear as a
+  share of its full, rounded: a broken row stays broken, a half-worn one
+  stays half-worn, and a worn one never rounds down to broken. An enemy that
+  already wore a row before a level-up still doesn't wear it again. Every
+  horde starts the rows at level 1's full for its first wave. (Before ID-133
+  each wave break also rebuilt every row to its full, ID-123; before ID-123
+  a level-up added 10 to each working row, a broken row stayed broken for
+  the rest of the horde, and nothing scaled with the wave.)
   Each enemy that enters a working row's band takes its kind's wear off that
   row (`CARD.wire.wear`), only once per row and never below 0: **1** for a
   Shambler, Runner, Crawler, Spewer or Screamer, **3** for a Swollen, **4**
   for a Brute and **10** for the Horror (a level 1 row on its own). A row at
-  0 is broken until the next wave break or pick: it slows no one, the enemy
+  0 is broken until the next pick of the card (until the next wave break
+  or pick before ID-133): it slows no one, the enemy
   that broke it included, while the other rows still slow. (It was 30 at
   every level and 1 for every kind, ID-090.)
 
@@ -1347,14 +1351,44 @@ spacing real hordes have (see the ID-077 note below).
   waves; with the scaling a level 1 row holds a comparable share of the last
   wave from Horde 5 to 15, and level 3 holds all of it. A `perWave` of 20 or
   40 kept the rows nearly whole at every level (99–100% of the last wave),
-  leaving nothing to level up for. The balance test `balance/wire.test.ts` checks level 1's
+  leaving nothing to level up for. The balance test `balance/wire.test.ts` checked level 1's
   last-wave share at Hordes 5 and 15 (at least 75% each, within 20 points of
-  each other). In the Horde 4 card test levels 1, 2 and 3 now win 9, 11 and
+  each other; replaced in ID-133, below). In the Horde 4 card test levels 1, 2 and 3 now win 9, 11 and
   12 of 20 (no card 2) and kill a mean 163.1, 162.5 and 173.4 px out (no
-  card 156.1): no row breaks there any more, so levels 1 and 2 differ only
-  in slow and their kill distances are within noise; the test now checks
+  card 156.1): no row broke there under ID-123, so levels 1 and 2 differed only
+  in slow and their kill distances were within noise; the test checks
   that each level kills further out than no card and max further than
   level 1, with wins never falling by level.
+
+  Measured (ID-133), the same campaigns and seeds, with Barbed Wire held at
+  one level for the whole first try at Hordes 5, 10 and 15 (offers of it
+  turned down, so the rows are never rebuilt): the share of the last wave
+  fought / of the whole fight its rows were working (time-weighted).
+  Before ID-133 (rebuilt at every wave break, `perWave` 60) level 1 held
+  71–100% of the last wave (ID-123, ID-128), so levelling added little.
+
+  | `perWave` | Horde | Lv 1 | Lv 2 | Lv 3 (max) |
+  |---|---|---|---|---|
+  | 60 | 5 | 55% / 87% | 96% / 99% | 100% / 100% |
+  | 60 | 10 | 0% / 32% | 9% / 55% | 29% / 72% |
+  | 60 | 15 | 0% / 23% | 2% / 51% | 10% / 60% |
+  | **30** | 5 | 65% / 89% | 99% / 100% | 100% / 100% |
+  | **30** | 10 | 11% / 52% | 70% / 90% | 96% / 99% |
+  | **30** | 15 | 0% / 38% | 59% / 88% | 97% / 99% |
+  | 20 | 5 | 85% / 96% | 100% / 100% | 100% / 100% |
+  | 20 | 10 | 45% / 76% | 100% / 100% | 100% / 100% |
+  | 20 | 15 | 3% / 54% | 96% / 99% | 100% / 100% |
+
+  Without the break rebuilds, 60 left even a max-level row gone before the
+  last wave from Horde 10; 20 made levels 2 and 3 alike. At **30** each
+  level holds clearly more than the one below: level 1 wears out over a
+  late horde, level 2 holds most of it and level 3 nearly all, and a
+  level-up mid-horde rebuilds the rows on top. `balance/wire.test.ts` now
+  checks: level 3 holds at least 85% of the last wave fought at Hordes 5,
+  10 and 15; level 1 at least 75% of the whole Horde 5 fight; at Hordes 10
+  and 15 each level at least 5 points more of the whole fight than the one
+  below; and level 1 under 50% of the last wave there. The Horde 4 card
+  test passes unchanged.
 
   **Patch Up** (common, repeatable, uncapped)
   repairs every built segment by 30% of its max HP, a broken one included. It's
@@ -1631,8 +1665,9 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
       "Waves cleared", a loss's XP share) counts only waves that have all come
       with none of their enemies left; the top bar's count reads "N left" (all
       standing and still to come), not "N left in this wave".
-    - The wire rebuilt at a wave break is sized for every enemy still to face
-      when that is more than the wave (the last wave's still standing too).
+    - The wire's full at a wave break (resized, wear kept, since ID-133; rebuilt
+      before it) and at a level-up is sized for every enemy still to face when
+      that is more than the wave (the last wave's still standing too).
   - **Skills.** Each timed one winds up for 1.2 s first: the boss glows in the
     skill's colour, leans back and swells, a low growl rises, and its boss bar
     says "Roar!". A stun hides the wind-up and holds every clock.
@@ -1641,8 +1676,9 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     - **Slab Throw:** every 16 s, from at least 150 px out, a concrete slab
       that lands 0.6 s later: with Barbed Wire it breaks the working wire row
       nearest the boss's row (ties: the upper one; it's rebuilt at the next
-      wave break or pick of the card, and a slab still in the air when a wave
-      ends lands on the rebuilt wire without breaking it, ID-123), else 300 damage to the
+      pick of the card, ID-133, and a slab still in the air when a wave ends
+      breaks its row too; before ID-133 the next wave break rebuilt it and such
+      a slab landed without breaking it, ID-123), else 300 damage to the
       outermost wall's standing segment nearest it.
     - **Armour Plates:** steel plates on its body; bullets do half damage until
       25% of its HP is gone, then they're gone for good (regen doesn't bring them
@@ -2389,7 +2425,7 @@ unless named:
 | Mini-bosses (`ELITE.more`) | One on odd hordes from Horde 5 | Plus one with the last wave of every non-boss horde from Horde 11 | The ticket's ask: more mini-bosses past Horde 10 |
 | Recommended Power (`POWER.rec`) | 9.7 × HP ÷ spawn seconds, no cards; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | 3 ×, with cards; early ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.33, ×1.25 | Refitted to the card build (§11 Farming); k grid 2.2–4.0 per horde, Hordes 6–20 |
 | Instinct's damage near the wall (`STAT_EFFECT.wallDamage`) | ×1.75 | ×2 | With cards Instinct trailed Sharp Mind by 11 points at Recommended Power (§6 Stats) |
-| Wire rebuild (`rebuildWire`) | Sized for the new wave | For every enemy still to face when more | With overlap a level 1 row held 71% of Horde 15's last wave (target 75%) |
+| Wire full (`wireFull`; `rebuildWire` before ID-133) | Sized for the new wave | For every enemy still to face when more | With overlap a level 1 row held 71% of Horde 15's last wave (target 75%, measured with the rebuild at every wave break; ID-133 replaced the target, §8 Barbed Wire) |
 | Loss XP's waves cleared (`wavesCleared`) | The wave reached − 1 | Waves with all their enemies gone | With overlap the wave reached runs ahead of the fight |
 
 Targets, each with a balance test (as in ID-102 unless named):
@@ -2885,7 +2921,8 @@ original outline.
   to it joins up where both are whole. A row at half its full durability or
   less shows worn (ID-115): cut partway, sagging, its pickets leaning; the
   share is of the row's own full, as this wave and level set it (ID-123),
-  so a rebuilt row looks whole again. It's drawn in code (no art file),
+  so a rebuilt row looks whole again, and a wave break keeps the look
+  (ID-133). It's drawn in code (no art file),
   whole and torn each painted once into its own canvas
   (`src/ui/ground.ts`), and each run of rows alike is drawn in one go;
   where the browser can't paint them, a steel line down each coil of the
