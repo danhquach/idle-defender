@@ -94,6 +94,7 @@ import {
   maxHpOf,
   reloadTime,
   spreadOf,
+  wallDamage,
 } from './stats.ts';
 import {
   enemyHp,
@@ -438,7 +439,10 @@ export interface Bullet {
   crit?: true;
   /** A Sniper rifle's round: it ignores armour, a boss's plates too (ID-099, ID-101). */
   ap?: true;
-  /** Gun traits and role affixes (ID-101), as shares: an SMG's extra damage near the wall, */
+  /**
+   * Gun traits and role affixes (ID-101), as shares: extra damage near the wall (an SMG's,
+   * plus the shooter's Instinct, ID-125),
+   */
   close?: number;
   /** a Sniper rifle's extra damage to bosses and heavies, */
   heavy?: number;
@@ -671,6 +675,14 @@ export interface HordeState {
 // Accumulated float time can land a hair before a due time; count it as due.
 const EPS = 1e-9;
 const due = (time: number, at: number): boolean => time >= at - EPS;
+/**
+ * When the shot after one that fell due `at` and went off at `now` is due: `interval` after
+ * `at` if it went off in the tick it fell due, so a fire rate is not rounded up to whole
+ * ticks (ID-125); else (it waited on a target or a reload) `interval` after `now`. At most
+ * one shot a tick, so a rate faster than the tick can't build up a backlog.
+ */
+const nextShot = (now: number, at: number, interval: number): number =>
+  (now - at < STEP ? at : now) + interval;
 /** Waiting on the player: a card pick or a replacement. */
 const paused = (s: HordeState): boolean =>
   s.offer !== null || s.replace !== null || s.outcome !== 'fighting';
@@ -1934,7 +1946,11 @@ function fire(s: HordeState, rng: Rng): void {
       boost(s, 'damage') *
       damageFactor(defender, id) *
       (critHit ? critDamage(defender) + gunCritDamage(id) : 1);
+    // Instinct's last-line damage (ID-125): on a bullet it adds to the SMG's near-wall share.
+    const wall = wallDamage(defender);
     if (gun) {
+      const traits = traitsOf(id);
+      const close = (traits.close ?? 0) + wall;
       launch(s, rng, {
         owner: defender.id,
         x: use.x,
@@ -1948,25 +1964,30 @@ function fire(s: HordeState, rng: Rng): void {
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
-        ...traitsOf(id),
+        ...traits,
+        ...(close > 0 ? { close } : {}),
       });
     } else {
-      popOn(s, target, hit, critHit);
-      target.hp -= hit;
+      const near = wall > 0 && target.x <= wallFront(s) + TRAIT.close.range + EPS;
+      const dealt = near ? hit * (1 + wall) : hit;
+      popOn(s, target, dealt, critHit);
+      target.hp -= dealt;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
     // Butcher's Hunger counts the blade or tool kill of this strike.
     const kills = !gun && target.hp <= 0 ? 1 : 0;
     for (let k = 0; k < kills; k++) s.feats.push({ kind: 'kill', by: defender.id, at: s.time });
     if (kills > 0 && perkOn(s, 'butchers-hunger')) hunger(s, defender, kills);
-    defender.nextShotAt =
-      s.time +
+    defender.nextShotAt = nextShot(
+      s.time,
+      defender.nextShotAt,
       weapon.fireInterval /
         (s.mods.fireRate *
           boost(s, 'fireRate') *
           engineerBuff(s, defender) *
           fireRateFactor(defender, id) *
-          (gun ? perkFactor(s, 'steady-fire', PERK.steadyFire) : 1));
+          (gun ? perkFactor(s, 'steady-fire', PERK.steadyFire) : 1)),
+    );
     if (gun) {
       defender.ammo[slot] -= 1;
       if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadIn(s, defender, id);
@@ -2007,7 +2028,11 @@ function fireTurrets(s: HordeState, rng: Rng): void {
       tracer: TURRET.tracer,
     });
     const slow = Math.min(1, 0.5 + (0.5 * t.condition) / TURRET.slowBelow);
-    t.nextShotAt = s.time + TURRET.fireInterval / (buff * slow * boost(s, 'fireRate'));
+    t.nextShotAt = nextShot(
+      s.time,
+      t.nextShotAt,
+      TURRET.fireInterval / (buff * slow * boost(s, 'fireRate')),
+    );
     wear(t, TURRET.shotWear);
   }
 }

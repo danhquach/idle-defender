@@ -34,7 +34,7 @@ export type PerkLine =
       act?: (now: number) => GameResult;
     };
 
-/** "Steady Fire: Guns fire 15% faster". */
+/** "Steady Fire: Guns fire 12.5% faster". */
 export const perkText = (id: PerkId): string => `${PERKS[id].name}: ${PERKS[id].text}`;
 
 /** A research time as "15 min", "1 h" or "1 h 30 min". */

@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   chooseCard,
+  effectAt,
   eligible,
   patchUpGain,
   pitch,
@@ -343,7 +344,7 @@ describe('repeatable cards (ID-097)', () => {
   it('N picks add N flat steps, not compounded', () => {
     for (const n of [1, 3, 5]) {
       expect(picked(quiet(), 'sharpshooter', n).mods.damage).toBeCloseTo(1 + 0.1 * n, 9);
-      expect(picked(quiet(), 'rapid-fire', n).mods.fireRate).toBeCloseTo(1 + 0.08 * n, 9);
+      expect(picked(quiet(), 'rapid-fire', n).mods.fireRate).toBeCloseTo(1 + 0.075 * n, 9);
       expect(picked(quiet(), 'long-sight', n).mods.range).toBeCloseTo(1 + 0.06 * n, 9);
     }
     // Five Sharpshooters were ×2.49; now +50%.
@@ -748,5 +749,14 @@ describe('the offer spells out each pick (ID-097)', () => {
       'Replaces Incendiary Rounds Lv Max. Its levels are lost.',
     );
     expect(pitch(quiet(), 'shock-rounds').replace).toBeUndefined();
+  });
+});
+
+describe('a card states its number as the data has it (ID-125)', () => {
+  it('Rapid Fire reads +7.5% a pick, not rounded to +8%', () => {
+    expect(CARD.step.fireRate).toBe(0.075);
+    expect(effectAt('rapid-fire', 1)).toEqual({ pre: '', value: '+7.5%', post: ' fire rate' });
+    expect(effectAt('rapid-fire', 2)!.value).toBe('+15%');
+    expect(effectAt('sharpshooter', 1)!.value).toBe('+10%');
   });
 });

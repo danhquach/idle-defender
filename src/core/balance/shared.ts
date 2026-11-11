@@ -5,7 +5,7 @@
 // Fixtures shared by those files; never imported by game code.
 import { rollWeapon } from '../armoury.ts';
 import { recruit } from '../camp.ts';
-import { SQUAD_CAP } from '../data.ts';
+import { SQUAD_CAP, type Stat } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
 import { createRng } from '../rng.ts';
 import { spendAll, type HordeRun } from '../sim.ts';
@@ -19,8 +19,11 @@ export const bareGame = (n: number) => ({ ...newGame(), hordeNumber: n });
 export const winRate = (runs: HordeRun[]): number =>
   runs.filter((r) => r.outcome === 'won').length / runs.length;
 
-/** Horde `n`'s expected squad (size and levels), each with a Military Rifle at `gunLevel` (ID-098). */
-export function squadAt(n: number, gunLevel: number): GameState {
+/**
+ * Horde `n`'s expected squad (size and levels), each with a Military Rifle at `gunLevel`
+ * (ID-098); every stat point in `stat` when given (ID-125), else the scripted player's.
+ */
+export function squadAt(n: number, gunLevel: number, stat?: Stat): GameState {
   const size = Math.min(n, SQUAD_CAP);
   const g = newGame('horde');
   g.roster = Array.from({ length: size }, (_, i) => ({
@@ -34,5 +37,5 @@ export function squadAt(n: number, gunLevel: number): GameState {
   }));
   g.camp.recruits = size;
   g.hordeNumber = n;
-  return spendAll(g);
+  return spendAll(g, stat);
 }

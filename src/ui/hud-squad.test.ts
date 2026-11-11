@@ -322,13 +322,13 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe(SQUAD_POINTS_NOTE);
     // No stat summary line (ID-096): each card lists what the next point adds instead.
     expect([...root.querySelectorAll('.debrief-hint')].map((p) => p.textContent)).not.toContain(
-      'Instinct: more HP and armour · Agility: faster reloads · ' +
+      'Instinct: HP, armour, wall damage · Agility: reloads and fire rate · ' +
         'Sharp Mind: accuracy and crits · Tinker: unlocks later',
     );
     // ID-111: on the button itself, in short; no list under the buttons.
     const next = buttons.map((b) => b.querySelector('.hud-pick-next')!.textContent);
-    expect(next[0]).toMatch(/^\+\d+ HP · \+\d\.\d\d arm · \+\d\.\d% surv$/);
-    expect(next[1]).toMatch(/^−\d\.\d\d s reload$/);
+    expect(next[0]).toMatch(/^\+\d+ HP · \+\d\.\d\d arm · \+\d\.\d% surv · \+\d\.\d% wall dmg$/);
+    expect(next[1]).toMatch(/^−\d\.\d\d s reload · \+\d\.\d% rate$/);
     expect(next[2]).toMatch(/^\+\d\.\d% crit · \+\d\.\d\d× crit dmg · −\d\.\d\d° spread$/);
     expect(next[3]).toBe('');
     expect(root.querySelector('.squad-card .hud-pick-gains')).toBeNull();

@@ -469,7 +469,7 @@ which apply to the whole battlefield.
 
 | Perk (examples) | Effect |
 |---|---|
-| Steady Fire | Ranged weapons +15% fire rate |
+| Steady Fire | Ranged weapons +12.5% fire rate (15% before ID-125, §6 Stats) |
 | Butcher's Hunger | Melee kills heal the nearest wall a little |
 | Overclock | Turrets +20% damage, +10% energy use |
 | Scavenger's Eye | +25% horde cash |
@@ -487,7 +487,7 @@ which apply to the whole battlefield.
   60/40 each); Perk slot 2 (Lab 1, 50/50), 3 (Lab 2, 80/80, after slot 2)
   and 4 (Lab 2, 120/120, after slot 3). Perks are equipped between hordes
   only, each once, and are copied into the fight. Effects: **Steady Fire**
-  guns (not blades, tools or turrets) ×1.15 fire rate; **Scavenger's Eye**
+  guns (not blades, tools or turrets) ×1.125 fire rate (×1.15 before ID-125); **Scavenger's Eye**
   kill cash ×1.25 (fractions kept, whole cash shown); **Fortify** every
   segment ×1.3 HP and max HP for the fight, and the base keeps the same
   share of its own max afterwards; **Butcher's Hunger** each blade or tool
@@ -555,7 +555,7 @@ close-quarter weapons come out only when an enemy is close.
   a Gunner. Typical loadouts: Gunner rifle + pistol; Ripper pistol +
   knife; Engineer pistol + toolkit.
 - **Gunner handling** *(starting points)*: a Gunner is better with every
-  gun, sidearm included: fires 15% faster, reloads 25% faster and aims
+  gun, sidearm included: fires 12.5% faster (15% before ID-125), reloads 25% faster and aims
   better (+5% crit chance, on top of Sharp Mind). A non-Gunner firing a
   specialised gun deals −30% damage and reloads 50% slower; a sidearm in
   anyone else's hands has no penalty and no bonus.
@@ -770,8 +770,8 @@ loadout (ID-084):
 
 | Stat | Now | Later (when the game expands) |
 |---|---|---|
-| **Instinct** | + max HP, + armour (flat damage off each hit taken), − chance of injury | + patrol survival |
-| **Agility** | + reload speed | + move speed |
+| **Instinct** | + max HP, + armour (flat damage off each hit taken), − chance of injury, + damage to enemies near the wall (ID-125): the last-line stat | + patrol survival |
+| **Agility** | + reload speed, + fire rate on every gun (ID-125): the sustained-fire stat | + move speed |
 | **Sharp Mind** | + gun accuracy (narrower cone), + crit chance and + crit damage on every hit, gun shot or blade or tool strike | — |
 | **Tinker** | **Locked:** its button greyed out, "Tinker (locked)", and "unlocks later" in the stats line and hint; no points can go in | + repair rate, + turret damage, + battery quality, + crafting |
 
@@ -793,9 +793,12 @@ loadout (ID-084):
   fight. Before the split, 1 new point is worth 2 old ones (ID-084's
   C × P / (P + 20)).
 - **Active effects today** (`STAT_ACTIVE` in the core, the one place they
-  are listed): Instinct 3 (max HP, armour, injury dodge), Agility 1
-  (reload; move speed is planned, not built), Sharp Mind 3 (crit chance,
-  crit damage, spread), Tinker none (locked).
+  are listed): Instinct 4 (max HP, armour, injury dodge, damage near the
+  wall), Agility 2 (reload, fire rate; move speed is planned, not built),
+  Sharp Mind 3 (crit chance, crit damage, spread), Tinker none (locked).
+  ID-125 added Instinct's and Agility's newest effect, so points already in
+  them are shared one way more (an Instinct point's max HP, armour and dodge,
+  and an Agility point's reload, are smaller than before).
 - **An effect built later joins its stat's split:** listed in
   `STAT_ACTIVE`, its stat's n goes up by 1, and every point already spent
   in that stat is shared across the new set, so the existing effects'
@@ -809,10 +812,12 @@ loadout (ID-084):
 
   | Bonus | Cap | n | 1 point | 3 points | 5 points | 10 points |
   |---|---|---|---|---|---|---|
-  | Instinct: max HP (over the base 100, rounded to whole HP) | +100 | 3 | +3 | +9 | +14 | +25 |
-  | Instinct: armour (flat off each hit; a hit keeps at least half its damage) | 4 | 3 | 0.13 | 0.36 | 0.57 | 1 |
-  | Instinct: injury dodge (a hit that would drop them to 0 HP leaves them at 1 HP instead) | 30% | 3 | 1.0% | 2.7% | 4.3% | 7.5% |
-  | Agility: reload time | −50% | 1 | −4.5% | −11.5% | −16.7% | −25% |
+  | Instinct: max HP (over the base 100, rounded to whole HP) | +100 | 4 | +2 | +7 | +11 | +20 |
+  | Instinct: armour (flat off each hit; a hit keeps at least half its damage) | 4 | 4 | 0.10 | 0.28 | 0.44 | 0.8 |
+  | Instinct: injury dodge (a hit that would drop them to 0 HP leaves them at 1 HP instead) | 30% | 4 | 0.7% | 2.1% | 3.3% | 6% |
+  | Instinct: damage near the wall (within 250 px of its front, the SMG's band; any weapon; on a gun shot it adds to the SMG's +25%) | +175% | 4 | +4.3% | +12.2% | +19.4% | +35% |
+  | Agility: reload time | −50% | 2 | −2.4% | −6.5% | −10% | −16.7% |
+  | Agility: fire rate (every gun, sidearm included; not blades or tools) | +70% | 2 | +3.3% | +9.1% | +14% | +23.3% |
   | Sharp Mind: spread | −50% | 3 | −1.6% | −4.5% | −7.1% | −12.5% |
   | Sharp Mind: crit chance (added to the Gunner's +5% on gun shots; +35% before ID-096) | +50% | 3 | +1.6% | +4.5% | +7.1% | +12.5% |
   | Sharp Mind: crit damage (over the base ×2) | +×2 | 3 | +×0.06 | +×0.18 | +×0.29 | +×0.5 |
@@ -874,6 +879,39 @@ loadout (ID-084):
   and Instinct for the Ripper leaves the brood Horror unbeaten: without
   a cleave stat, the crowd at the wall needs damage.
 
+- **Balance (ID-125): Agility and Instinct as strong a choice as Sharp Mind.**
+  Before it, Sharp Mind was the only stat worth points. Agility now also
+  raises fire rate, Instinct also adds damage near the wall; caps were
+  grid-tuned so each stat plays alike. Two measures, every point in one stat:
+
+  | | Sharp Mind | Agility | Instinct | No points |
+  |---|---|---|---|---|
+  | Scripted campaign, first-try wins over Hordes 4–10 (20 seeds) | 96% | 96% | 98% | 86% |
+  | Same squad at Recommended Power, no cards, Hordes 9–15 (70 fights) | 39% | 46% | 43% | 0% |
+
+  The first is the ticket's measure, but Hordes 4–10 are won about 86% of the
+  time with no points at all, so it can hardly tell the stats apart; the
+  second (each squad's gun at the level where a Sharp Mind squad meets
+  Recommended Power) is where they show. The balance test checks both
+  within 10 points, and every stat well above none.
+- **Shots at their true rate (ID-125):** a shot went off on the first 1/30 s
+  tick at or after it fell due, and the next was timed from that tick, so
+  every fire rate was rounded down to whole ticks (a Gunner's pistol at
+  +15% really fired 12.5% faster; an SMG's +15% gave nothing), and Agility's
+  fire rate paid only when it crossed a tick. The next shot is now timed
+  from when the last fell due (from the tick only after a wait for a target
+  or a reload; at most one shot a tick), turrets alike. To keep the balance
+  this rounding had set, the Gunner's fire rate and Steady Fire go to what a
+  pistol really got (+12.5%, ×1.125), Rapid Fire's step 8% → 7.5% (with
+  Steady Fire it gave ×1.20 a pick; at ×1.215 a lone starting survivor won
+  Horde 4 on one seed, at 7% the bare base lost Horde 2 or 3 on one and a
+  mid-game campaign never hit a wall), and Recommended Power's fit 10.3 →
+  9.7 (fire-rate affixes, which Squad Power counted in full, now land in
+  full). Blades, tools and turrets get the true rate too: their own
+  intervals are whole ticks, so only Rapid Fire, an Engineer's buff and a
+  turret's buffs and wear change what they deliver (a knife with one Rapid
+  Fire got nothing from it before). Left as is: the full-game balance tests
+  (campaign without building, firing line, Horror) stay green with it.
 - The injury dodge is rolled through the horde's seeded RNG, only for a
   survivor with Instinct above 1 HP, so a run stays deterministic and a
   survivor already at 1 HP gets no second save from the next hit.
@@ -1210,7 +1248,7 @@ spacing real hordes have (see the ID-077 note below).
   paralyses already on enemies run out as they were.
 
   **Repeatable cards (uncapped):** Sharpshooter (**+10%** damage a pick),
-  Rapid Fire (**+8%** fire rate), Long Sight (**+6%** range) and Reinforce
+  Rapid Fire (**+7.5%** fire rate; +8% before ID-125), Long Sight (**+6%** range) and Reinforce
   (**+10%** of each segment's max HP at the start of the horde; the segment
   gains the same HP) are common and can be picked any number of times. The
   steps add (five Sharpshooters are +50%), then multiply once with other
@@ -2147,19 +2185,20 @@ and comes back stronger.
   down too) × waves cleared ÷ its waves (0 cleared → 0), rounded down. Still no
   drop on a loss.
 - **Squad Power:** per squad survivor, their gun's sustained dmg/s (rarity,
-  level, affixes; Sharp Mind's crit chance and damage; Agility's reload)
-  × (1 + 0.5 × Sharp Mind's spread cut) × (1 + 0.5 × Instinct's extra HP
-  share) × 10, summed over the squad and rounded. Cards and skills don't
+  level, affixes; Sharp Mind's crit chance and damage; Agility's reload and
+  fire rate) × (1 + 0.5 × Sharp Mind's spread cut) × (1 + 0.5 × Instinct's
+  damage near the wall, ID-125) × (1 + 0.5 × Instinct's extra HP share) × 10, summed over the squad and rounded. Cards and skills don't
   count. (Gun role traits join it with ID-101.)
-- **Recommended Power (ID-102):** 10.3 × the dmg/s a horde asks for: its
+- **Recommended Power (ID-102):** 9.7 × the dmg/s (10.3 before ID-125's
+  true-rate shots) a horde asks for: its
   expected enemy HP over the seconds its waves take to spawn (each wave's size
   × 0.8 s, plus the 3 s break). The HP is each wave's size × its mix's mean HP,
   a swarm wave's (ID-099) weighted 2× on top of its doubled size (it comes
   twice as fast), plus its bosses and mini-boss at their HP. A boss horde asks
   ×1.12 more (its bosses' skills ask for more than their HP says). Hordes 1 to
   8 take ×0.3, ×0.6, 1, 1, 1, 1, ×0.8 and ×0.8 of it: sure wins for a squad of
-  one or two, then a smaller squad's fit. Horde 1 asks 63, 3 asks 393, 5 asks
-  1,406, 10 asks 4,113, 15 asks 7,748, 20 asks 12,911, 30 asks 26,505.
+  one or two, then a smaller squad's fit. Horde 1 asks 60, 3 asks 370, 5 asks
+  1,324, 10 asks 3,874, 15 asks 7,297, 20 asks 12,159, 30 asks 24,961.
   - Before: 3.19 × HP^0.59 (ID-099; 7.1 × √HP in ID-098), fitted only on
     Hordes 6–20. With waves growing ×1.1 a horde, a horde's length grew as
     fast as its HP, so HP alone over-counted: at Horde 30 it asked about half
@@ -2206,7 +2245,7 @@ then grid-tuned with the scripted player (`src/core/sim.ts`).
 | Gun level (`GUN_LEVEL_DAMAGE`) | +5% of base damage a level, added | ×1.06 a level, compounding | Matched to late HP growth, so farming can always close the gap; 8% let the squad run away (Squad Power 1.64× Recommended by Horde 25) |
 | Horde-only HP ease (`SQUAD_EARLY_HP`) | Hordes 1–3: ×0.8, ×0.9, ×0.95 | Also Hordes 8–10: ×0.85, ×0.75, ×0.75 | Brutes join at Horde 8 (mean enemy HP +55%), the first boss at 10. 20 seeds, first try: 85%, 70%, 65% (target at least 60%) |
 | Swarm wave placement (`swarmWave`) | Counted from wave 1 | Counted back from the last wave, which always swarms | With wave size held, a growing share slid swarms onto smaller waves and Horde 14 had less HP than Horde 13 |
-| Recommended Power (`POWER.rec`) | 3.19 × HP^0.59 | 10.3 × HP ÷ spawn seconds; ×1.12 on boss hordes; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | Refitted on each horde's measured 50%-win power, Hordes 3–30 (above) |
+| Recommended Power (`POWER.rec`) | 3.19 × HP^0.59 | 9.7 × HP ÷ spawn seconds (10.3 until ID-125); ×1.12 on boss hordes; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | Refitted on each horde's measured 50%-win power, Hordes 3–30 (above) |
 | Swarm share (`SWARM.share`) | 0.25 | 0.25 (kept) | 0.20 and 0.30 both made walls shallower (first-try losses at Hordes 11+: 25% and 29% against 46%) |
 | Boss count and HP (`BOSSES`) | n ÷ 10 up to 3, 4× HP | Kept | HP 3 and at most 2 bosses: no change to Horde 18; HP 5: a little easier (fewer replays) |
 | Mini-boss HP (`ELITE.hp`) | 4× | 4× (kept) | 3× and 5×: 29% and 50% first-try losses against 46% |

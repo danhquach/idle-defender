@@ -90,8 +90,9 @@ export const SQUAD_DROP: readonly { from: number; rarity: Record<Rarity, number>
 export const GUN_LEVEL_DAMAGE = 0.06;
 /**
  * Squad Power and Recommended Power (ID-098). A survivor's power is their gun's sustained
- * dmg/s × (1 + `aim` × Sharp Mind's spread cut) × (1 + `tough` × Instinct's extra HP
- * share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP for each
+ * dmg/s × (1 + `aim` × Sharp Mind's spread cut) × (1 + `wall` × Instinct's damage near the
+ * wall, ID-125: about the share of a fight's damage dealt there) × (1 + `tough` × Instinct's
+ * extra HP share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP for each
  * second its waves take to spawn (ID-102: the dmg/s it asks for; HP ^ 0.59 × 3.19 before),
  * fitted so a squad at it wins about half the time with no cards or skills; × `rec.early`
  * in Hordes 1 to 8 (sure wins for a squad of one or two in Hordes 1 and 2; a smaller
@@ -102,9 +103,10 @@ export const GUN_LEVEL_DAMAGE = 0.06;
  */
 export const POWER = {
   aim: 0.5,
+  wall: 0.5,
   tough: 0.5,
   scale: 10,
-  rec: { k: 10.3, early: [0.3, 0.6, 1, 1, 1, 1, 0.8, 0.8], swarm: 2, boss: 1.12 },
+  rec: { k: 9.7, early: [0.3, 0.6, 1, 1, 1, 1, 0.8, 0.8], swarm: 2, boss: 1.12 },
   close: 0.15,
 } as const;
 /**
@@ -442,8 +444,12 @@ export const ITEMS: Readonly<Record<ItemId, { readonly name: string }>> = {
   shield: { name: 'Shield' },
 };
 
-/** A Gunner with any gun: fire rate and reload speed up, crit chance on top of Aim's, spread cone × `spread`. */
-export const GUNNER = { fireRate: 0.15, reload: 0.25, crit: 0.05, spread: 0.5 } as const;
+/**
+ * A Gunner with any gun: fire rate and reload speed up, crit chance on top of Aim's, spread
+ * cone × `spread`. Fire rate 12.5% since ID-125 (15% before): shots then went off on whole
+ * ticks, so 15% gave a pistol 12.5%; true-rate shots keep what it really gave.
+ */
+export const GUNNER = { fireRate: 0.125, reload: 0.25, crit: 0.05, spread: 0.5 } as const;
 /** A non-Gunner with a specialised gun: damage down, reload time up. */
 export const OFF_PROFESSION = { damage: 0.3, reload: 0.5 } as const;
 /** A Gunner's sidearm fires while the primary reloads, at enemies within this many px. */
@@ -874,7 +880,7 @@ export const CARD = {
    * rest: Sharpshooter's damage, Rapid Fire's fire rate, Long Sight's range, and
    * Reinforce's share of each segment's max HP at the start of the horde.
    */
-  step: { damage: 0.1, fireRate: 0.08, range: 0.06, reinforce: 0.1 },
+  step: { damage: 0.1, fireRate: 0.075, range: 0.06, reinforce: 0.1 },
   /** Patch Up: share of each segment's max HP it repairs. */
   patchUp: 0.3,
   ricochet: { range: 150, share: [0.1, 0.18, 0.25] },
@@ -961,7 +967,16 @@ export const OLD_POINTS_PER_LEVEL = 3;
  */
 export const STAT_SPLIT = 10;
 /** A stat's effects: the bonuses in `STAT_EFFECT` its points drive. */
-export type StatEffectId = 'hp' | 'armour' | 'dodge' | 'reload' | 'spread' | 'crit' | 'critBonus';
+export type StatEffectId =
+  | 'hp'
+  | 'armour'
+  | 'dodge'
+  | 'wallDamage'
+  | 'reload'
+  | 'fireRate'
+  | 'spread'
+  | 'crit'
+  | 'critBonus';
 /**
  * Each stat's active effects (ID-096), the ones that work in the build. The one place
  * a stat's split comes from: an effect built later is added here, and its stat's
@@ -969,8 +984,8 @@ export type StatEffectId = 'hp' | 'armour' | 'dodge' | 'reload' | 'spread' | 'cr
  * Instinct's patrol survival, every Tinker effect).
  */
 export const STAT_ACTIVE: Readonly<Record<Stat, readonly StatEffectId[]>> = {
-  instinct: ['hp', 'armour', 'dodge'],
-  agility: ['reload'],
+  instinct: ['hp', 'armour', 'dodge', 'wallDamage'],
+  agility: ['reload', 'fireRate'],
   mind: ['crit', 'critBonus', 'spread'],
   tinker: [],
 };
@@ -983,8 +998,15 @@ export const STAT_EFFECT = {
   armourFloor: 0.5,
   /** Instinct: chance a hit that would drop them to 0 HP leaves them at 1 HP instead. */
   dodge: 0.3,
+  /**
+   * Instinct (ID-125): extra damage, as a share, to an enemy near the wall (within the
+   * SMG's `TRAIT.close.range` of its front), from any weapon: the last-line stat.
+   */
+  wallDamage: 1.75,
   /** Agility: share off every reload time. */
   reload: 0.5,
+  /** Agility (ID-125): share more fire rate on every gun: the sustained-fire stat. */
+  fireRate: 0.7,
   /** Sharp Mind: share off every gun's spread cone. */
   spread: 0.5,
   /** Sharp Mind: crit chance. */
@@ -1288,7 +1310,7 @@ export type PerkId =
   | 'power-saver';
 /** Battlefield-wide effects the commander equips between hordes, one per perk slot. */
 export const PERKS: Readonly<Record<PerkId, { readonly name: string; readonly text: string }>> = {
-  'steady-fire': { name: 'Steady Fire', text: 'Guns fire 15% faster' },
+  'steady-fire': { name: 'Steady Fire', text: 'Guns fire 12.5% faster' },
   'scavengers-eye': { name: "Scavenger's Eye", text: '+25% horde cash' },
   fortify: { name: 'Fortify', text: 'Barrier segments +30% max HP' },
   'butchers-hunger': {
@@ -1308,8 +1330,8 @@ export type PerkSlotId = 'perk-slot-2' | 'perk-slot-3' | 'perk-slot-4';
 export const PERK_SLOT_IDS: readonly PerkSlotId[] = ['perk-slot-2', 'perk-slot-3', 'perk-slot-4'];
 /** Perk effect sizes (design §5, starting points; as built ID-020). */
 export const PERK = {
-  /** Steady Fire: gun fire-rate factor. */
-  steadyFire: 1.15,
+  /** Steady Fire: gun fire-rate factor (×1.15 before ID-125's true-rate shots; see `GUNNER`). */
+  steadyFire: 1.125,
   /** Scavenger's Eye: kill-cash factor. */
   cash: 1.25,
   /** Fortify: segment max-HP factor for the fight. */

@@ -1620,10 +1620,10 @@ body {
 }
 
 /* The stat, then what its next point adds, small (ID-111). The gains get a fixed height
-   per row of the 2x2 (two lines for Instinct and Agility, three for Sharp Mind and
-   Tinker), so a button, and its card, is one size whatever it says. The worst case is
-   Sharp Mind's three gains ("+1.6% crit · +0.06× crit dmg · −0.02° spread"), one per
-   line on a 375 px phone; a longer gain or a new effect needs this budget checked. */
+   of three lines on every button, so a button, and its card, is one size whatever it
+   says. The worst cases are Instinct's four gains ("+2 HP · +0.10 arm · +0.7% surv ·
+   +4.3% wall dmg", ID-125) and Sharp Mind's three, three lines each on a 375 px phone;
+   a longer gain or a new effect needs this budget checked. */
 .squad-pick .hud-pick-stat {
   display: flex;
   flex-direction: column;
@@ -1642,10 +1642,6 @@ body {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   line-height: 1.25;
-}
-
-.squad-pick .hud-pick-stat:nth-child(-n + 2) .hud-pick-next {
-  height: 2.5em;
 }
 
 /* The footer stays at the foot of the scrolling panel, so the button is always in reach. */

@@ -20,7 +20,15 @@ describe('the next point, per active effect (ID-096)', () => {
       expect(nextGains(at(), stat)).toHaveLength(STAT_ACTIVE[stat].length);
       expect(effectChange(at(), stat)).toHaveLength(STAT_ACTIVE[stat].length);
     }
-    expect(nextGains(at(), 'instinct')).toEqual(['+3 max HP', '+0.13 armour', '+1.0% survive']);
+    expect(nextGains(at(), 'instinct')).toEqual([
+      '+2 max HP',
+      '+0.10 armour',
+      '+0.7% survive',
+      `+${((100 * STAT_EFFECT.wallDamage) / 41).toFixed(1)}% damage near the wall`,
+    ]);
+    expect(nextGains(at(), 'agility')[1]).toBe(
+      `+${((100 * STAT_EFFECT.fireRate) / 21).toFixed(1)}% fire rate`,
+    );
     // Crit chance: the cap over 31 (one point, three effects).
     expect(nextGains(at(), 'mind')[0]).toBe(
       `+${((100 * STAT_EFFECT.crit) / 31).toFixed(1)}% crit chance`,
@@ -45,11 +53,11 @@ describe('the next point, per active effect (ID-096)', () => {
   });
 
   it('a + button’s hint: what the stat does, then what the next point adds', () => {
-    expect(nextPointText(at(), 'instinct')).toBe(
-      'Next point: +3 max HP · +0.13 armour · +1.0% survive',
+    expect(nextPointText(at(), 'instinct')).toMatch(
+      /^Next point: \+2 max HP · \+0\.10 armour · \+0\.7% survive · \+\d\.\d% damage near the wall$/,
     );
     expect(statHint(at(), 'agility')).toMatch(
-      /^Faster reloads\. Next point: \d\.\d\d s faster reload$/,
+      /^Faster reloads and faster fire with every gun\. Next point: \d\.\d\d s faster reload · \+\d\.\d% fire rate$/,
     );
   });
 });

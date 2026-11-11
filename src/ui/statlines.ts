@@ -14,6 +14,7 @@ import {
   reloadTime,
   spreadOf,
   statBonus,
+  wallDamage,
 } from '../core/stats.ts';
 
 /** How one effect reads: its name, its value for a defender, and how a value and a gain print. */
@@ -63,6 +64,14 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
     show: pct,
     gain: (dv) => `${signed(dv * 100, 1)}%`,
   },
+  wallDamage: {
+    label: 'Damage near the wall',
+    short: 'damage near the wall',
+    tiny: 'wall dmg',
+    value: wallDamage,
+    show: (v) => `+${pct(v)}`,
+    gain: (dv) => `${signed(dv * 100, 1)}%`,
+  },
   reload: {
     label: 'Reload',
     short: 'reload',
@@ -72,6 +81,15 @@ const LINES: Readonly<Record<StatEffectId, EffectLine>> = {
     // Faster reads as a gain: "0.04 s faster reload".
     gain: (dv) => `${Math.abs(dv).toFixed(2)} s ${dv <= 0 ? 'faster' : 'slower'}`,
     tinyGain: (dv) => `${signed(dv, 2)} s`,
+  },
+  fireRate: {
+    label: 'Fire rate',
+    short: 'fire rate',
+    tiny: 'rate',
+    // Agility's share alone: a Gunner's and a shield's factors are on the card already.
+    value: (d) => statBonus(d.stats.agility, 'agility', 'fireRate'),
+    show: (v) => `+${pct(v)}`,
+    gain: (dv) => `${signed(dv * 100, 1)}%`,
   },
   crit: {
     label: 'Crit chance',

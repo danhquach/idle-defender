@@ -520,8 +520,10 @@ describe('hud', () => {
     it('under the picker, what the next point adds per open stat; none once spent out (ID-096)', () => {
       const bob = { ...newGame().roster[0]!, xp: 150 }; // level 4: 3 points
       expect(gainLines(bob)).toEqual([
-        'Instinct: +3 max HP · +0.13 armour · +1.0% survive',
-        expect.stringMatching(/^Agility: \d\.\d\d s faster reload$/),
+        expect.stringMatching(
+          /^Instinct: \+2 max HP · \+0\.10 armour · \+0\.7% survive · \+\d\.\d% damage near the wall$/,
+        ),
+        expect.stringMatching(/^Agility: \d\.\d\d s faster reload · \+\d\.\d% fire rate$/),
         expect.stringMatching(
           /^Sharp Mind: \+\d\.\d% crit chance · \+×0\.06 crit damage · \d\.\d\d° tighter spread$/,
         ),

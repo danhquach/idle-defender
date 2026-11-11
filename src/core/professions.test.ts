@@ -8,6 +8,7 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   START_BASE,
+  STAT_EFFECT,
   STEP,
   WALK_SPEED,
   WEAPONS,
@@ -174,11 +175,11 @@ describe('Ripper (pistol + knife)', () => {
 });
 
 describe('Gunner (pistol)', () => {
-  it('fires 15% faster', () => {
+  it('fires 12.5% faster', () => {
     const s = fight(newBase(), [spec('g', 'pistol'), 'tower', 4]);
     enemy(s, { ...tough, x: 900, y: 360 });
     const g = tick(s, STEP).defenders[0]!;
-    expect(g.nextShotAt).toBeCloseTo(0.6 / 1.15);
+    expect(g.nextShotAt).toBeCloseTo(0.6 / 1.125);
   });
 
   it('starts with a full magazine; the last round starts a 25% quicker reload', () => {
@@ -222,7 +223,7 @@ describe('Gunner (pistol)', () => {
 describe('Engineer (pistol + toolkit)', () => {
   const base = baseWith({ kind: 'wall-walk', column: 0, row: GATE });
 
-  it('strikes weakly with the toolkit up close, with no stat bonus', () => {
+  it('strikes weakly with the toolkit up close; of the stats only Instinct adds, near the wall (ID-125)', () => {
     const s = fight(base, [
       { ...spec('e', 'toolkit'), stats: { instinct: 30, agility: 30, mind: 30, tinker: 0 } },
       'wall-walk',
@@ -230,7 +231,9 @@ describe('Engineer (pistol + toolkit)', () => {
     ]);
     enemy(s, { ...tough, x: 520, y: GATE_Y });
     const after = tick(s, STEP);
-    expect(after.enemies[0]!.hp).toBe(1000 - WEAPONS.toolkit.damage);
+    expect(after.enemies[0]!.hp).toBeCloseTo(
+      1000 - WEAPONS.toolkit.damage * (1 + (STAT_EFFECT.wallDamage * 30) / (30 + 40)),
+    );
     expect(struck(after)).toBe(true);
   });
 
@@ -338,7 +341,7 @@ describe('Engineer (pistol + toolkit)', () => {
       const s = pair(80);
       enemy(s, { ...tough, x: 900, y: 360 });
       const g = tick(s, STEP).defenders.find((d) => d.id === 'g')!;
-      expect(g.nextShotAt).toBeCloseTo(0.6 / (1 + ENGINEER_BUFF) / 1.15);
+      expect(g.nextShotAt).toBeCloseTo(0.6 / (1 + ENGINEER_BUFF) / 1.125);
     });
 
     it("doesn't stack, skips the Engineer, and needs them standing", () => {
