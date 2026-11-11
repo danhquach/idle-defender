@@ -19,7 +19,7 @@ import {
   type GameState,
 } from '../core/game.ts';
 import { ARMOURY_CAP } from '../core/data.ts';
-import { newHorde, type HordeState } from '../core/horde.ts';
+import { newHorde, tick, type HordeState } from '../core/horde.ts';
 import { buildTurret } from '../core/base.ts';
 import { NO_STATS } from '../core/stats.ts';
 import { BROOD_BOSS, enemy, horror, setup } from '../core/testing.ts';
@@ -41,6 +41,7 @@ import {
   statusText,
   stockText,
   swarmCue,
+  swarmMarker,
   SWARM_CUE,
 } from './hud.ts';
 import { loadoutFrom } from '../core/loadout.ts';
@@ -116,16 +117,81 @@ describe('hud', () => {
     expect(bossBars({ ...s, time: 1 })[0]).toMatchObject({ cue: 'Brood!', winding: true });
   });
 
-  it('shows "Swarm!" for the first seconds of a swarm wave (ID-099)', () => {
+  it('warns of a swarm wave with a countdown, then shows "Swarm!" as it hits (ID-099, ID-121)', () => {
     const s = newHorde(1, setup());
-    expect(swarmCue(s)).toBe(false);
+    expect(swarmCue(s)).toBeNull();
     s.swarm = true;
     s.breakUntil = 10;
-    expect(swarmCue({ ...s, time: 9.9 })).toBe(false);
-    expect(swarmCue({ ...s, time: 10 })).toBe(true);
-    expect(swarmCue({ ...s, time: 10 + SWARM_CUE - 0.1 })).toBe(true);
-    expect(swarmCue({ ...s, time: 10 + SWARM_CUE })).toBe(false);
-    expect(swarmCue({ ...s, time: 10, outcome: 'lost' })).toBe(false);
+    const incoming = (count: string) => ({ phase: 'incoming', title: 'Swarm incoming', count });
+    // The whole break before it (WAVE_BREAK = 3 s) counts down 3, 2, 1.
+    expect(swarmCue({ ...s, time: 7 })).toEqual(incoming('3'));
+    expect(swarmCue({ ...s, time: 7.5 })).toEqual(incoming('3'));
+    expect(swarmCue({ ...s, time: 8 })).toEqual(incoming('2'));
+    expect(swarmCue({ ...s, time: 9.99 })).toEqual(incoming('1'));
+    const hit = { phase: 'hit', title: 'Swarm!', count: '' };
+    expect(swarmCue({ ...s, time: 10 })).toEqual(hit);
+    expect(swarmCue({ ...s, time: 10 + SWARM_CUE - 0.1 })).toEqual(hit);
+    expect(swarmCue({ ...s, time: 10 + SWARM_CUE })).toBeNull();
+    expect(swarmCue({ ...s, time: 9, outcome: 'lost' })).toBeNull();
+    expect(swarmCue({ ...s, time: 10, outcome: 'won' })).toBeNull();
+  });
+
+  it('marks a swarm wave from its break to its end (ID-121)', () => {
+    const s = newHorde(1, setup());
+    expect(swarmMarker(s)).toBe(false);
+    s.swarm = true;
+    s.breakUntil = 10;
+    // Through the break, the hit and the rest of the wave alike.
+    for (const time of [8, 10, 12, 999])
+      expect(swarmMarker({ ...s, time } as HordeState)).toBe(true);
+    expect(swarmMarker({ ...s, outcome: 'lost' })).toBe(false);
+    expect(swarmMarker({ ...s, outcome: 'won' })).toBe(false);
+  });
+
+  it('keeps the swarm marker while the swarm wave’s enemies stand, after the counter moves on (ID-121)', () => {
+    // Horde 5: wave 7 is a swarm, wave 8 isn't; horde-only waves overlap.
+    const s = newHorde(1, { ...setup(), hordeNumber: 5, harder: true });
+    Object.assign(s, { wave: 8, swarm: false, enemies: [] });
+    expect(swarmMarker(s)).toBe(false);
+    const calm = enemy(s, { wave: 8 });
+    expect(swarmMarker(s)).toBe(false);
+    const straggler = enemy(s, { wave: 7 });
+    expect(swarmMarker(s)).toBe(true);
+    // Its last enemy down: the swarm wave has ended.
+    straggler.hp = 0;
+    expect(swarmMarker(s)).toBe(false);
+    s.enemies = s.enemies.filter((e) => e !== straggler);
+    expect(swarmMarker(s)).toBe(false);
+    expect(calm.wave).toBe(8);
+    // The full game has no swarms.
+    expect(swarmMarker({ ...s, harder: undefined, enemies: [{ ...straggler, hp: 5 }] })).toBe(
+      false,
+    );
+  });
+
+  it('warns through the real break before a horde-only swarm wave (ID-121)', () => {
+    // Horde 5's wave 6 sends its last enemy and is cleared (taken off the field here); wave
+    // 7, a swarm, then has its break.
+    let s = newHorde(1, { ...setup(), hordeNumber: 5, harder: true });
+    Object.assign(s.defenders[0]!, { hp: 1e9, maxHp: 1e9, nextShotAt: 1e9 });
+    Object.assign(s, { wave: 6, swarm: false, toSpawn: 1, bosses: [], offer: null });
+    expect(swarmCue(s)).toBeNull();
+    for (let i = 0; i < 200 && s.wave === 6; i++) {
+      s.enemies = [];
+      s = tick(s, 0.05);
+      if (s.wave === 6) expect(swarmCue(s)).toBeNull();
+    }
+    expect(s.wave).toBe(7);
+    expect(s.swarm).toBe(true);
+    const seen: string[] = [];
+    while (s.time < s.breakUntil + SWARM_CUE + 0.5) {
+      const cue = swarmCue(s);
+      const now = cue ? `${cue.phase}${cue.count}` : 'none';
+      if (seen.at(-1) !== now) seen.push(now);
+      expect(swarmMarker(s)).toBe(true);
+      s = tick(s, 0.05);
+    }
+    expect(seen).toEqual(['incoming3', 'incoming2', 'incoming1', 'hit', 'none']);
   });
 
   it('shows the boss bar only while a Mutated Horror is on the field (ID-024)', () => {

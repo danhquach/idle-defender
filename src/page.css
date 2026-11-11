@@ -57,6 +57,13 @@
   --color-danger-bg-hover: #4a2020;
   --color-danger-surface: #2a1717;
   --color-danger-text: #f0b4b4;
+  /* Text on solid danger red, and the swarm alarm's glows (ID-121). */
+  --color-on-danger: #ffffff;
+  --color-swarm-glow: rgb(196 59 59 / 80%);
+  --color-swarm-edge: rgb(196 59 59 / 32%);
+  --color-swarm-edge-soft: rgb(196 59 59 / 45%);
+  /* A mask's opaque stop. */
+  --color-mask: #000000;
   --color-warning-bg: rgb(60 18 18 / 90%);
   --color-boss: #d2453c;
   --color-boss-bg: rgb(40 16 16 / 85%);
@@ -1882,28 +1889,87 @@ body {
   min-width: 0;
 }
 
-/* A swarm wave's cue (ID-099): big, in the field's upper middle, for its first seconds. */
+/* A swarm wave's banner (ID-099, ID-121), in the field's upper middle: through the break
+   before it, "Swarm incoming" and a countdown, held still; when it hits, "Swarm!" bigger,
+   solid red and pulsing, for its first seconds. */
 .hud-swarm {
   position: absolute;
   /* Moved down with the boss bars under the held cards' strip (ID-113). */
   top: calc(30% + var(--hud-held-push));
   left: 50%;
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
   padding: var(--space-6) var(--space-18);
   transform: translateX(-50%);
   border: 2px solid var(--color-danger);
   border-radius: var(--radius-md);
   background: var(--color-warning-bg);
-  color: var(--color-danger);
-  font-size: 1.75rem;
+  color: var(--color-danger-text);
+  font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: 0.08em;
+  white-space: nowrap;
   text-transform: uppercase;
   pointer-events: none;
+}
+
+.hud-swarm[hidden],
+.hud-swarm-count[hidden] {
+  display: none;
+}
+
+/* The seconds to go, in a red disc beside the title. */
+.hud-swarm-count {
+  display: grid;
+  place-items: center;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+  letter-spacing: 0;
+}
+
+.hud-swarm-hit {
+  padding: var(--space-8) var(--space-24);
+  border-color: var(--color-on-danger);
+  background: var(--color-danger);
+  box-shadow: 0 0 24px var(--color-swarm-glow);
+  color: var(--color-on-danger);
+  font-size: 2.25rem;
+  letter-spacing: 0.12em;
   animation: hud-swarm-pulse 0.5s ease-in-out infinite alternate;
 }
 
-.hud-swarm[hidden] {
+/* The alarm at the field's edges while a swarm hits (ID-121): a red glow from the right,
+   where the horde comes in, and along the top and bottom; faded out over the left third,
+   so the wall and the defenders on it stay clear. */
+.hud-swarm-edge {
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(to left, var(--color-swarm-edge), transparent 9%),
+    linear-gradient(to bottom, var(--color-swarm-edge-soft), transparent 12%),
+    linear-gradient(to top, var(--color-swarm-edge-soft), transparent 12%);
+  mask-image: linear-gradient(to right, transparent 25%, var(--color-mask) 55%);
+  -webkit-mask-image: linear-gradient(to right, transparent 25%, var(--color-mask) 55%);
+  pointer-events: none;
+  animation: hud-swarm-glow 0.5s ease-in-out infinite alternate;
+}
+
+.hud-swarm-edge[hidden] {
   display: none;
+}
+
+@keyframes hud-swarm-glow {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.45;
+  }
 }
 
 @keyframes hud-swarm-pulse {
@@ -2122,6 +2188,12 @@ body {
   margin: 0;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* A swarm wave's marker (ID-121): the wave line in red for as long as it lasts. */
+.hud-corner-wave-swarm {
+  color: var(--color-danger-text);
+  font-weight: 800;
 }
 
 .hud-corner-row {
@@ -4355,6 +4427,15 @@ body {
   /* Below a full stack of three boss bars (ID-099). */
   .hud-swarm {
     top: max(30%, calc(260px + var(--hud-held-push)));
+    /* Smaller and tighter, so "Swarm incoming" and its count fit a 320 px phone (ID-121). */
+    padding: var(--space-4) var(--space-12);
+    font-size: 1.15rem;
+    letter-spacing: 0.04em;
+  }
+
+  .hud-swarm-hit {
+    padding: var(--space-4) var(--space-16);
+    font-size: 1.75rem;
   }
 
   .hud-boss:not([hidden]) ~ .hud-warning {
@@ -4367,6 +4448,14 @@ body {
 
   .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(3):not([hidden])) ~ .hud-warning {
     top: calc(240px + var(--hud-held-push));
+  }
+}
+
+/* The narrowest phones (ID-121): "Swarm incoming" a step smaller again, so it stays clear
+   of the wall's top at the field's left edge. */
+@media (max-width: 360px) {
+  .hud-swarm:not(.hud-swarm-hit) {
+    font-size: 1rem;
   }
 }
 
@@ -4476,9 +4565,16 @@ body {
 
   /* The swarm cue and a boss's wind-up pill (ID-099) hold still. */
   .hud-swarm,
+  .hud-swarm-edge,
   .hud-boss-cue-winding {
     animation: none;
   }
+}
+
+/* The game's own Reduce motion setting (ID-121): the swarm banner and glow hold still too. */
+:root[data-reduce-motion] .hud-swarm,
+:root[data-reduce-motion] .hud-swarm-edge {
+  animation: none;
 }
 
 /* The intro (ID-106): a title screen over the camp at launch, then a first-launch card.

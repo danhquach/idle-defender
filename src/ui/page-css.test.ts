@@ -94,7 +94,9 @@ const TEXT_ON: Record<string, string[]> = {
   ],
   '--color-warn': ['--color-bg', '--color-warn-bg', '--color-menu-bg'],
   '--color-ok-text': ['--color-surface-sunken'],
-  '--color-danger-text': ['--color-danger-bg'],
+  // The swarm banner, its countdown disc and the red wave line (ID-121).
+  '--color-on-danger': ['--color-danger'],
+  '--color-danger-text': ['--color-danger-bg', '--color-warning-bg', '--color-bar-bg'],
   '--color-synergy': ['--color-surface', '--color-surface-hover'],
   '--color-rare-text': ['--color-surface', '--color-surface-hover'],
   '--color-epic-text': ['--color-surface', '--color-surface-hover'],

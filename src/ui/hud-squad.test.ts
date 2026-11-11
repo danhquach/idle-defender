@@ -27,6 +27,7 @@ import {
   xpBar,
 } from './hud.ts';
 import { ART_URLS } from './sprites.ts';
+import { enemy } from '../core/testing.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -230,6 +231,59 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('warns of a swarm wave: countdown, then the alarm, and the red wave line throughout (ID-121)', () => {
+    const { root, h } = hud(true);
+    const s = startSquadHorde({ ...squadGame(1, 5), skillPick: [] }, 1, NOW);
+    const banner = root.querySelector<HTMLElement>('.hud-swarm')!;
+    const count = root.querySelector<HTMLElement>('.hud-swarm-count')!;
+    const edge = root.querySelector<HTMLElement>('.hud-swarm-edge')!;
+    const line = root.querySelector<HTMLElement>('.hud-corner-wave')!;
+    const calm = { ...s, swarm: false, wave: 6, enemies: [] };
+    h.update(calm);
+    expect([banner.hidden, edge.hidden]).toEqual([true, true]);
+    expect(line.textContent).toMatch(/^Wave 6\//);
+    expect(line.classList.contains('hud-corner-wave-swarm')).toBe(false);
+    // The break before wave 7, a swarm.
+    const swarm = { ...calm, wave: 7, swarm: true, time: 10, breakUntil: 12.5 };
+    h.update(swarm);
+    expect(banner.hidden).toBe(false);
+    expect(banner.textContent).toBe('Swarm incoming3');
+    expect(banner.getAttribute('role')).toBe('status');
+    expect(count.getAttribute('aria-hidden')).toBe('true');
+    expect([count.hidden, edge.hidden]).toEqual([false, true]);
+    expect(banner.classList.contains('hud-swarm-hit')).toBe(false);
+    expect(line.textContent).toMatch(/^Swarm · Wave 7\//);
+    expect(line.classList.contains('hud-corner-wave-swarm')).toBe(true);
+    // It hits: bigger banner, edge glow, no count.
+    h.update({ ...swarm, time: 12.5 });
+    expect(banner.textContent).toBe('Swarm!');
+    expect([banner.hidden, count.hidden, edge.hidden]).toEqual([false, true, false]);
+    expect(banner.classList.contains('hud-swarm-hit')).toBe(true);
+    // Past its first seconds: only the marker stays.
+    h.update({ ...swarm, time: 20 });
+    expect([banner.hidden, edge.hidden]).toEqual([true, true]);
+    expect(line.classList.contains('hud-corner-wave-swarm')).toBe(true);
+    // The next break, a swarm again: back to the steady warning.
+    h.update({ ...swarm, time: 30, breakUntil: 31 });
+    expect(banner.classList.contains('hud-swarm-hit')).toBe(false);
+    expect(banner.textContent).toBe('Swarm incoming1');
+    // Horde 9 (swarms on waves 4 and 9): the counter on to wave 5 with a wave-4 enemy still
+    // standing, so the marker stays.
+    const next = { ...calm, hordeNumber: 9, waveCount: waveCount(9), wave: 5, enemies: [] };
+    const straggler = enemy(next, { wave: 4 });
+    h.update(next);
+    expect(line.textContent).toMatch(/^Swarm · Wave 5\//);
+    expect(line.classList.contains('hud-corner-wave-swarm')).toBe(true);
+    // The wave over, its last enemy down: the marker clears.
+    straggler.hp = 0;
+    h.update(next);
+    expect(line.classList.contains('hud-corner-wave-swarm')).toBe(false);
+    h.update(calm);
+    expect([banner.hidden, edge.hidden]).toEqual([true, true]);
+    expect(line.classList.contains('hud-corner-wave-swarm')).toBe(false);
+    expect(line.textContent).not.toContain('Swarm');
   });
 
   it('has no cash shop, and shows the horde corner: badge, wave line and the fight XP bar (ID-098)', () => {

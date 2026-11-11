@@ -272,13 +272,17 @@ const RECIPES: Record<Cue, { length: number; play: (v: Voice) => void }> = {
     length: 1.1,
     play: (v) => (tone(v, 'sawtooth', 55, 110, 0, 1, 0.3), hiss(v, 'lowpass', 300, 0, 0.9, 0.3)),
   },
-  // A swarm wave starting (ID-099): two quick alarm blares.
+  // A swarm wave starting (ID-099, ID-121): a siren, three rising whoops over a low drone,
+  // louder and longer than the two blares it replaced.
   swarm: {
-    length: 0.7,
-    play: (v) => (
-      tone(v, 'square', note(70), note(66), 0, 0.28, 0.18),
-      tone(v, 'square', note(70), note(66), 0.35, 0.28, 0.18)
-    ),
+    length: 1.5,
+    play: (v) => {
+      for (let i = 0; i < 3; i++) {
+        tone(v, 'sawtooth', note(62), note(74), i * 0.45, 0.4, 0.26);
+        tone(v, 'square', note(50), note(62), i * 0.45, 0.4, 0.14);
+      }
+      tone(v, 'sawtooth', note(38), note(36), 0, 1.4, 0.18);
+    },
   },
   won: {
     length: 1.4,

@@ -1643,8 +1643,16 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     wave 4; Horde 9: 4 and 7), so with wave sizes held from Horde 10 a growing
     share slid the swarms onto smaller waves and Horde 14 brought less HP than
     Horde 13. A swarm wave spawns 2× the enemies at twice the rate (the same time),
-    with Runners at 2× their share (Shamblers give way). "Swarm!" shows big in
-    the field's upper middle for its first 3 s, with two alarm blares.
+    with Runners at 2× their share (Shamblers give way). The warning (ID-121), in
+    the field's upper middle: through the 3 s break before it, "Swarm incoming"
+    with a 3-2-1 countdown, held still; when it hits, "Swarm!" bigger and solid
+    red for its first 3 s, a red glow at the field's top and side edges (clear of
+    the wall and kept faint at the spawn edge so incoming enemies stay readable),
+    and a siren (three rising whoops over a drone; two blares before ID-121). The
+    fight corner's wave line reads "Swarm · Wave n/m" in red from the break until
+    the swarm wave ends: its last enemy down, even after the counter has moved on
+    to the next wave (waves overlap). With Reduce motion (the game's setting or
+    the system's) the banner and glow hold still.
   - **Bosses:** still every 10th horde, now Horde n brings n/10 Mutated Horrors
     (at most 3), each at 4× a Horror's HP with two skills; a horde's bosses never
     share a skill. Sets in turn by boss horde: Horde 10 Brood + Roar; 20 Slab

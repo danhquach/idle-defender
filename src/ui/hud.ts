@@ -122,7 +122,7 @@ import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
 import { powerBand, recommendedPower, squadPower, type PowerBand } from '../core/squadpower.ts';
 import { isLocked, levelOf, spend, unspentPoints } from '../core/stats.ts';
-import { horrorAbility, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
+import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
@@ -807,14 +807,42 @@ export function bossCue(s: Pick<HordeState, 'time'>, e: Enemy): BossSkill | null
 
 /** How long "Swarm!" shows once a swarm wave's enemies start coming (ID-099), in s. */
 export const SWARM_CUE = 3;
-/** Whether the "Swarm!" cue shows: a swarm wave's first `SWARM_CUE` s of spawning. */
-export const swarmCue = (
+export interface SwarmCue {
+  /** `'incoming'` in the break before the wave, `'hit'` once its enemies start coming. */
+  phase: 'incoming' | 'hit';
+  title: string;
+  /** The whole seconds left to the wave while it is incoming, else ''. */
+  count: string;
+}
+/**
+ * The swarm banner (ID-121): through the break before a swarm wave, "Swarm incoming" with
+ * the seconds to go; then "Swarm!" for the wave's first `SWARM_CUE` s; else none.
+ */
+export function swarmCue(
   s: Pick<HordeState, 'swarm' | 'outcome' | 'time' | 'breakUntil'>,
-): boolean =>
-  s.swarm &&
-  s.outcome === 'fighting' &&
-  s.time >= s.breakUntil &&
-  s.time < s.breakUntil + SWARM_CUE;
+): SwarmCue | null {
+  if (!s.swarm || s.outcome !== 'fighting') return null;
+  if (s.time < s.breakUntil) {
+    const count = String(Math.max(1, Math.ceil(s.breakUntil - s.time - 1e-9)));
+    return { phase: 'incoming', title: 'Swarm incoming', count };
+  }
+  return s.time < s.breakUntil + SWARM_CUE ? { phase: 'hit', title: 'Swarm!', count: '' } : null;
+}
+/**
+ * The swarm marker (ID-121): from the break before a swarm wave until it ends, that is
+ * until the last of its enemies is down. Horde-only waves overlap, so the counter can move
+ * on to the next wave while a swarm's enemies still stand: the marker stays for them.
+ */
+export function swarmMarker(
+  s: Pick<HordeState, 'swarm' | 'outcome' | 'harder' | 'hordeNumber' | 'enemies'>,
+): boolean {
+  if (s.outcome !== 'fighting') return false;
+  if (s.swarm) return true;
+  if (s.harder !== true) return false;
+  return s.enemies.some(
+    (e) => e.hp > 0 && e.wave !== undefined && swarmWave(s.hordeNumber, e.wave),
+  );
+}
 const THROUGH: Readonly<Record<Breach['through'], string>> = {
   wall: 'broken wall',
   gate: 'broken gate',
@@ -1787,9 +1815,18 @@ export function createHud(
     return { row, name, cue, hpText, meter };
   });
   boss.hidden = true;
-  const swarm = el('div', 'hud-swarm', 'Swarm!');
+  // The swarm banner (ID-121): its title, and the countdown while the wave is incoming.
+  const swarm = el('div', 'hud-swarm');
   swarm.setAttribute('role', 'status');
+  const swarmTitle = el('span', 'hud-swarm-title');
+  const swarmCount = el('span', 'hud-swarm-count');
+  // The title speaks; a number read out every second would only be noise.
+  swarmCount.setAttribute('aria-hidden', 'true');
+  swarm.append(swarmTitle, swarmCount);
   swarm.hidden = true;
+  // A red glow at the field's edges while a swarm hits (ID-121).
+  const swarmEdge = el('div', 'hud-swarm-edge');
+  swarmEdge.hidden = true;
   // Fight speed and the Space pause (ID-062), top right beside the Menu button.
   const speed = el('div', 'hud-speed');
   speed.setAttribute('role', 'group');
@@ -2025,7 +2062,20 @@ export function createHud(
 
   cards.hidden = true;
   result.hidden = true;
-  hud.append(bar, speed, boss, swarm, warning, toast, shop, held, cards, replace, result);
+  hud.append(
+    swarmEdge,
+    bar,
+    speed,
+    boss,
+    swarm,
+    warning,
+    toast,
+    shop,
+    held,
+    cards,
+    replace,
+    result,
+  );
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
@@ -2724,8 +2774,11 @@ export function createHud(
           'aria-label',
           `Horde ${state.hordeNumber}${bossHorde(state) ? ', boss horde' : ''}`,
         );
-        const wave = `Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
+        // A swarm wave reads "Swarm" in red, in words too so it's never colour alone (ID-121).
+        const swarmOn = swarmMarker(state);
+        const wave = `${swarmOn ? 'Swarm · ' : ''}Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
         if (waveLine.textContent !== wave) waveLine.textContent = wave;
+        waveLine.classList.toggle('hud-corner-wave-swarm', swarmOn);
         const x = xpBar(state);
         if (xpLabel.textContent !== x.text) xpLabel.textContent = x.text;
         xpMeter.max = x.max;
@@ -2749,7 +2802,15 @@ export function createHud(
         r.meter.max = b.maxHp;
         r.meter.value = b.hp;
       });
-      swarm.hidden = !swarmCue(state);
+      const cue = swarmCue(state);
+      swarm.hidden = cue === null;
+      swarmEdge.hidden = cue?.phase !== 'hit';
+      if (cue) {
+        swarm.classList.toggle('hud-swarm-hit', cue.phase === 'hit');
+        if (swarmTitle.textContent !== cue.title) swarmTitle.textContent = cue.title;
+        if (swarmCount.textContent !== cue.count) swarmCount.textContent = cue.count;
+        swarmCount.hidden = cue.count === '';
+      }
       const falling = fallingText(state);
       if (warning.textContent !== falling) warning.textContent = falling;
       warning.hidden = falling === '';
