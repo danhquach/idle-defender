@@ -14,6 +14,7 @@ import {
   type WeaponId,
 } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
+import { xpForLevel } from '../core/stats.ts';
 import { equipGun, squadDrop, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
 import { waveCount } from '../core/waves.ts';
 import {
@@ -24,6 +25,7 @@ import {
   gunOption,
   lossXpText,
   SQUAD_LOSS_RULE,
+  SQUAD_NO_LEVEL_UPS,
   SQUAD_POINTS_NOTE,
   squadGear,
   squadScreen,
@@ -256,7 +258,7 @@ describe('the debrief layout (ID-067)', () => {
     return { root, h };
   }
 
-  it('a win: waves chip, the drop as a loot tile, the recruit tile, a card per survivor', () => {
+  it('a win: waves chip, the drop as a loot tile, the recruit tile, a card per level-up', () => {
     const g = squadGame(2, 3);
     const won = ended(g, 'won');
     const { weapon } = squadDrop(g, won)!;
@@ -273,16 +275,66 @@ describe('the debrief layout (ID-067)', () => {
     });
     const full = squadGame(SQUAD_CAP, 3);
     expect(squadScreen(full, ended(full, 'won')).debrief!.recruit!.full).toBe(true);
-    expect(d.cards.map((c) => [c.id, c.joining])).toEqual([
-      ['recruit-1', false],
-      ['recruit-2', false],
-      ['recruit-3', true],
+    // Both fresh survivors level up; the new one is on the recruit tile, not a card (ID-134).
+    expect(d.cards.map((c) => [c.id, c.levelUp])).toEqual([
+      ['recruit-1', true],
+      ['recruit-2', true],
     ]);
+    expect(d.empty).toBeNull();
     const card = d.cards[0]!;
     expect(card.xp).toBeGreaterThan(0);
     expect(card.bar!.pct).toBeGreaterThanOrEqual(0);
     expect(card.bar!.pct).toBeLessThanOrEqual(100);
     expect(card.bar!.text).toMatch(/^\d+\/\d+ XP to Lv \d+$/);
+  });
+
+  describe('a win shows only who levelled up in it (ID-134)', () => {
+    // Just into level 30: 29 points from earlier hordes, and a level needs 750 more XP.
+    const veteran = (n: number) => ({ ...recruit(n), xp: xpForLevel(30) });
+
+    it('a survivor whose only news is points from earlier hordes gets no card', () => {
+      const g = { ...squadGame(2, 3), roster: [recruit(1), veteran(2)] };
+      const screen = squadScreen(g, ended(g, 'won'));
+      expect(screen.debrief!.cards.map((c) => c.id)).toEqual(['recruit-1']);
+      expect(screen.picks.map((p) => p.id)).toEqual(['recruit-1']);
+    });
+
+    it('nobody levelled up: one line in place of the cards, no points note', () => {
+      const g = { ...squadGame(2, 3), roster: [veteran(1), veteran(2)] };
+      const screen = squadScreen(g, ended(g, 'won'));
+      expect(screen.debrief!.cards).toEqual([]);
+      expect(screen.debrief!.empty).toBe(SQUAD_NO_LEVEL_UPS);
+      expect(screen.picks).toEqual([]);
+      expect(screen.debrief!.foot).toBe('');
+      const { root, h } = page();
+      h.showResult(screen);
+      h.showGear(squadGear(g), noop);
+      expect(root.querySelector('.debrief-empty')!.textContent).toBe(SQUAD_NO_LEVEL_UPS);
+      expect(root.querySelectorAll('.squad-card')).toHaveLength(0);
+      // No loose gun rows either: guns change in the Roster; the stash count stays.
+      expect(root.querySelectorAll('.hud-gear-select')).toHaveLength(0);
+      expect(root.querySelector('.debrief-stash')!.textContent).toBe(`Stash 0/${STASH_CAP}`);
+    });
+
+    it('only the cards shown get a gun picker on a win', () => {
+      const g = { ...squadGame(2, 3), roster: [recruit(1), veteran(2)] };
+      const { root, h } = page();
+      h.showResult(squadScreen(g, ended(g, 'won')));
+      h.showGear(squadGear(g), noop);
+      expect(
+        [...root.querySelectorAll<HTMLSelectElement>('.hud-gear-select')].map(
+          (s) => s.dataset.defender,
+        ),
+      ).toEqual(['recruit-1']);
+      expect(root.querySelectorAll('.hud-gear-name')).toHaveLength(0);
+    });
+
+    it('a loss keeps every card, with or without a level-up', () => {
+      const g = { ...squadGame(2, 3), roster: [recruit(1), veteran(2)] };
+      const d = squadScreen(g, ended(g, 'lost')).debrief!;
+      expect(d.cards.map((c) => c.id)).toEqual(['recruit-1', 'recruit-2']);
+      expect(d.empty).toBeNull();
+    });
   });
 
   it('the loot tile names what a full stash threw away, or that the drop itself went', () => {

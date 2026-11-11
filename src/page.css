@@ -1436,6 +1436,13 @@ body {
   font-size: var(--text-xs);
 }
 
+/* A win with no level-up (ID-134): one line where the cards would be. */
+.debrief-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .squad-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1506,11 +1513,6 @@ body {
   border-color: var(--color-warn-border);
   background: var(--color-warn-bg);
   color: var(--color-warn);
-}
-
-.squad-badge-new {
-  border-color: var(--color-recruit);
-  color: var(--color-text);
 }
 
 .squad-card-xp {

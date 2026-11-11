@@ -1079,11 +1079,22 @@ profession's output).
     tint), decorative (empty alt text). When the full stash throws the drop itself away, the tile
     says "Stash full: thrown away" and "No better than any gun in the stash",
     and its icon goes grey. A loss shows a red callout saying where they got
-    in. Below that is one card per survivor: name and level, on a win the XP
+    in. Below that is one card per survivor (on a win only those who
+    levelled up, see below): name and level, on a win the XP
     it gave with a bar and a "Level up" badge, their gun select (bordered in
     the gun's rarity), and on a win their stat points with + Instinct /
     + Agility / + Sharp Mind buttons and a greyed-out Tinker (ID-084). The loss screen keeps the cards, so guns can change before the
     retry. The footer says why points can wait, or how a horde is lost.
+  - **A win shows only who levelled up** *(ID-134)*: the result screen has a
+    card only for each survivor who gained a level in that horde, so the
+    level-ups stand out. Nobody else gets one, not a survivor whose only news
+    is points left over from earlier hordes, nor the new survivor (the
+    recruit tile names them). With no level-up, the Squad heading (and its
+    stash count) has one line under it, "No level-ups this horde. Change guns
+    in the Roster.", so the win's dropped gun still has a way in. Survivors
+    without a card change guns and spend points from the Roster; a win's gun
+    pickers are on its cards only, with no list for the rest. The loss
+    screen is unchanged and keeps every card.
 
 ## 7. Turrets, energy and traps
 

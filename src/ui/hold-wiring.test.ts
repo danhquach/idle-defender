@@ -61,7 +61,9 @@ describe('hold to add, on each screen (ID-096)', () => {
       true,
     );
     const g0 = newGame('horde');
-    const g: GameState = { ...g0, roster: [vet(1)], camp: { ...g0.camp, recruits: 1 } };
+    // One XP short of level 5: the win levels them up, so they have a card (ID-134).
+    const almost = { ...vet(1), xp: xpForLevel(5) - 1 };
+    const g: GameState = { ...g0, roster: [almost], camp: { ...g0.camp, recruits: 1 } };
     h.showResult(squadScreen(g, { ...startSquadHorde(g, 1, NOW), outcome: 'won' }));
     // The card's "+N" opens its stat block (ID-126): a closed block's buttons don't repeat.
     root.querySelector<HTMLButtonElement>('.squad-plus')!.click();

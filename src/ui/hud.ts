@@ -828,7 +828,10 @@ export interface ResultScreen {
   button: string;
   /** A horde-only screen (ID-066): plain names, and only the stats a gun survivor uses. */
   squad?: true;
-  /** The horde-only panel laid out (ID-067): chips, loot, one card per survivor; else `lines`. */
+  /**
+   * The horde-only panel laid out (ID-067): chips, loot, one card per survivor (a win: only
+   * who levelled up, ID-134); else `lines`.
+   */
   debrief?: Debrief;
   /** The horde picker beside the button (ID-098); the button's label follows the pick. */
   picker?: HordePicker;
@@ -1273,8 +1276,6 @@ export interface SquadCard {
   levelUp: boolean;
   /** XP into the level, as a share and as text; null off a win. */
   bar: { pct: number; text: string } | null;
-  /** Joins for the next horde (a win's new survivor). */
-  joining: boolean;
   /**
    * The survivor as the card's stat block reads them (ID-111), this result's XP in. With
    * points to spend the card shows a "+N" badge that opens the block in place (ID-126), on
@@ -1294,19 +1295,20 @@ export interface Debrief {
   drop: DropTile | null;
   recruit: RecruitTile | null;
   cards: SquadCard[];
+  /** The line shown in place of no cards (a win with no level-up, ID-134), else null. */
+  empty: string | null;
   /** The footer's line beside the button ('' for none). */
   foot: string;
 }
 
 /** A card for `d` off a win, or with no gain. */
-const plainCard = (d: RosterDefender, joining = false): SquadCard => ({
+const plainCard = (d: RosterDefender): SquadCard => ({
   id: d.id,
   name: d.name,
   level: levelOf(d.xp).level,
   xp: null,
   levelUp: false,
   bar: null,
-  joining,
   survivor: d,
 });
 
@@ -1414,6 +1416,12 @@ const pointsLeft = (d: RosterDefender): string => {
   return n > 0 ? `${n} point${n === 1 ? '' : 's'} left` : 'No points left';
 };
 
+/**
+ * In place of a win's cards when nobody levelled up in it (ID-134); it points at the Roster,
+ * the only place left on this screen to equip the gun the win dropped.
+ */
+export const SQUAD_NO_LEVEL_UPS = 'No level-ups this horde. Change guns in the Roster.';
+
 /** Under the horde-only stat picker: points not spent now aren't lost. */
 export const SQUAD_POINTS_NOTE = 'Unspent points are kept for later.';
 
@@ -1469,6 +1477,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       drop: null,
       recruit: null,
       cards: squad.map((d) => plainCard(d)),
+      empty: null,
       foot: SQUAD_LOSS_RULE,
     },
   };
@@ -1497,7 +1506,8 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
  * The horde-only result screen (ID-066) for horde `s`, fought from `game`: a win's XP,
  * level-ups and the survivor joining (a first clear only; a boss horde's also finds a radio
  * part and may unlock a card, and the finale's is the ending screen, ID-127); a replay's win
- * says so and adds nobody. A loss says where they got in, the small XP it paid (ID-098)
+ * says so and adds nobody. A win's cards are only who levelled up in it (ID-134); a loss
+ * keeps every card. A loss says where they got in, the small XP it paid (ID-098)
  * and that the horde comes again in full. The picker
  * (ID-098) starts on the next new horde after a first clear, else on the same horde; its
  * bands read the squad as `game` holds it, so the app redraws it once the win is saved.
@@ -1537,10 +1547,13 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         pct: g.next > 0 ? Math.min(100, (100 * g.into) / g.next) : 100,
         text: `${g.into}/${g.next} XP to Lv ${g.level + 1}`,
       },
-      joining: false,
       survivor: grown.get(g.id) ?? null,
     }));
   if (won) {
+    // A win shows only who levelled up in it (ID-134): the rest, and anyone whose points are
+    // left over from earlier hordes, spend and change guns from the Roster.
+    const ups = xpCards().filter((c) => c.levelUp);
+    const upPicks = picks.filter((p) => ups.some((c) => c.id === p.id));
     const reward = bossReward(game, s.hordeNumber);
     const ending = reward?.finale === true;
     const rewardNote = reward ? bossRewardNote(reward) : null;
@@ -1567,7 +1580,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       squad: true,
       picker,
       skills: skillPicker(game.skillPick),
-      picks,
+      picks: upPicks,
       camp: noCamp(game),
       debrief: {
         kind: 'won',
@@ -1594,8 +1607,9 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
                 sub: 'Nobody new joins',
                 full: true,
               },
-        cards: [...xpCards(), ...(joined && !replay ? [plainCard(joined, true)] : [])],
-        foot: picks.length > 0 ? SQUAD_POINTS_NOTE : '',
+        cards: ups,
+        empty: ups.length > 0 ? null : SQUAD_NO_LEVEL_UPS,
+        foot: upPicks.length > 0 ? SQUAD_POINTS_NOTE : '',
       },
     };
   }
@@ -1635,6 +1649,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       drop: null,
       recruit: null,
       cards: xp > 0 ? xpCards() : squadOf(game).map((d) => plainCard(d)),
+      empty: null,
       foot: picks.length > 0 ? SQUAD_POINTS_NOTE : '',
     },
   };
@@ -2326,7 +2341,10 @@ export function createHud(
     if (had) select.focus();
   }
 
-  /** The horde-only panel's body (ID-067): header chips, loot, then one card per survivor. */
+  /**
+   * The horde-only panel's body (ID-067): header chips, loot, then the cards (a win's only
+   * for who levelled up, or one line with none, ID-134).
+   */
   function debriefBlock(d: Debrief, picks: readonly RosterDefender[]): HTMLElement[] {
     const parts: HTMLElement[] = [];
     if (d.chips.length > 0) {
@@ -2433,7 +2451,6 @@ export function createHud(
         name.setAttribute('aria-label', `${c.name}: open survivor card`);
         who.append(name, el('span', 'squad-card-level', `Lv ${c.level}`));
         if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
-        if (c.joining) who.append(el('span', 'squad-badge squad-badge-new', 'New'));
         top.append(who);
         if (c.xp !== null) top.append(el('span', 'squad-card-xp', `+${c.xp} XP`));
         card.append(top);
@@ -2457,6 +2474,13 @@ export function createHud(
         grid.append(card);
       }
       section.append(head, grid);
+      parts.push(section);
+    } else if (d.empty) {
+      const section = el('section', 'debrief-squad');
+      // The stash count (ID-067) stays beside the heading with no cards under it.
+      const heading = el('h3', 'debrief-squad-title', 'Squad');
+      heading.append(el('span', 'debrief-stash'));
+      section.append(heading, el('p', 'debrief-empty', d.empty));
       parts.push(section);
     }
     return parts;
@@ -2890,7 +2914,10 @@ export function createHud(
         if (card.dataset.defender !== undefined && slot) slots.set(card.dataset.defender, slot);
       }
       const loose: HTMLElement[] = [];
+      // A win's cards are only who levelled up (ID-134): the rest change guns in the Roster.
+      const cardsOnly = result.dataset.kind === 'won';
       screen.rows.forEach((row, i) => {
+        if (cardsOnly && !slots.has(row.id)) return;
         const select = el('select', 'build-select hud-gear-select');
         select.id = `hud-gear-${i}`;
         select.dataset.defender = row.id;
@@ -2925,6 +2952,8 @@ export function createHud(
         line.append(label, select, role);
         loose.push(line);
       });
+      // A win always has the stash count (beside its cards or its no-level-up line), and
+      // never loose rows, so this heading only shows off a debrief or on the start screen.
       const stash = picker.querySelector<HTMLElement>('.debrief-stash');
       if (stash) stash.textContent = screen.heading;
       gear.replaceChildren(
