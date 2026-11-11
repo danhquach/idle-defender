@@ -341,10 +341,12 @@ export interface Trap {
 }
 /**
  * One row of Barbed Wire's band (ID-090): `durability` left, 0 when broken; it slows no one
- * once broken. `hit`: the enemies that wore it, each only once.
+ * once broken. `max`: its full durability this wave at the card's level (ID-123). `hit`: the
+ * enemies that wore it, each only once.
  */
 export interface WireRow {
   durability: number;
+  max: number;
   hit: number[];
 }
 /** How a turret looks and whether it fires: lit, dark (no charge), jammed (0 condition), or offline (its wall broke). */
@@ -733,6 +735,12 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
   }
   startPost.defenderId = start.id;
+  const toSpawn = waveEnemies({
+    hordeNumber,
+    wave: 1,
+    harder,
+    swarm: harder && swarmWave(hordeNumber, 1),
+  });
   return {
     time: 0,
     acc: 0,
@@ -741,8 +749,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     hordeNumber,
     wave: 1,
     waveCount: waveCount(hordeNumber),
-    toSpawn:
-      waveSize(hordeNumber, 1, harder) * (harder && swarmWave(hordeNumber, 1) ? SWARM.size : 1),
+    toSpawn,
     nextSpawnAt: 0,
     breakUntil: 0,
     enemies: [],
@@ -751,11 +758,11 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     posts,
     turrets,
     traps,
-    // At level 1's durability: the card's first pick (ID-104).
-    wire: Array.from({ length: SEGMENTS }, () => ({
-      durability: CARD.wire.durability[0],
-      hit: [],
-    })),
+    // At level 1's full durability for the first wave: the card's first pick (ID-104, ID-123).
+    wire: Array.from({ length: SEGMENTS }, () => {
+      const max = wireMax(1, toSpawn);
+      return { durability: max, max, hit: [] };
+    }),
     energy: bank,
     bankCap,
     startedAt,
@@ -1364,7 +1371,8 @@ function landSlabs(s: HordeState): void {
     if (slab.landed || !due(s.time, slab.lands)) continue;
     slab.landed = true;
     if (slab.column === null) {
-      s.wire[slab.row]!.durability = 0;
+      // One thrown before this wave's break lands on wire the break rebuilt: it holds (ID-123).
+      if (slab.at >= s.breakUntil - WAVE_BREAK) s.wire[slab.row]!.durability = 0;
       continue;
     }
     const layer = s.layers.find((l) => l.column === slab.column);
@@ -2733,7 +2741,40 @@ function advanceWave(s: HordeState): void {
   if (s.bosses.some((b) => b.id === null && b.wave <= s.wave)) return;
   s.wave += 1;
   s.swarm = s.harder === true && swarmWave(s.hordeNumber, s.wave);
-  s.toSpawn = waveSize(s.hordeNumber, s.wave, s.harder === true) * (s.swarm ? SWARM.size : 1);
+  s.toSpawn = waveEnemies(s);
   s.breakUntil = s.time + WAVE_BREAK;
+  // The break rebuilds every wire row for the new wave (ID-123); no enemy is left to have worn it.
+  rebuildWire(s);
+  for (const row of s.wire) row.hit = [];
   openReplace(s);
+}
+
+/** Enemies the current wave sends: twice as many in a swarm wave (ID-102). */
+function waveEnemies(
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'swarm'> & { harder?: boolean },
+): number {
+  return waveSize(s.hordeNumber, s.wave, s.harder === true) * (s.swarm ? SWARM.size : 1);
+}
+
+/**
+ * A Barbed Wire row's full durability (ID-123): its `level`'s `CARD.wire.durability` (level 1
+ * when the card isn't held), × the wave's `enemies` over `CARD.wire.perWave` but never less
+ * than ×1, rounded. So a row lasts about the same share of a big wave as of a small one.
+ */
+export function wireMax(level: number, enemies: number): number {
+  const { durability, perWave } = CARD.wire;
+  const base = durability[Math.min(durability.length, Math.max(1, level)) - 1]!;
+  return Math.round(base * Math.max(1, enemies / perWave));
+}
+
+/**
+ * Puts every Barbed Wire row, broken or worn, at its full durability for the current wave
+ * and the card's level (ID-123): at each wave break and each pick of the card.
+ */
+export function rebuildWire(s: HordeState): void {
+  const max = wireMax(cardLevel(s, 'barbed-wire'), waveEnemies(s));
+  for (const row of s.wire) {
+    row.durability = max;
+    row.max = max;
+  }
 }

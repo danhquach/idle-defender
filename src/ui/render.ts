@@ -31,7 +31,6 @@ import {
 import {
   reloadIn,
   barbedWire,
-  atLevel,
   plated,
   radiusOf,
   roared,
@@ -1310,7 +1309,8 @@ function drawRepairSparks(
 
 /**
  * How a Barbed Wire row with `durability` left of `max` looks (ID-115): torn at 0, worn at
- * `WIRE.worn.at` of `max` or less, whole above. A share, as `max` grows with the card's level.
+ * `WIRE.worn.at` of `max` or less, whole above. A share, as `max` grows with the card's level
+ * and the wave's size (ID-123).
  */
 export function wireLook(durability: number, max: number): WireLook {
   if (durability <= 0) return 'torn';
@@ -1330,9 +1330,11 @@ function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Ca
   if (!band) return;
   const a = project({ x: band.from, y: 0 }, cam);
   const b = project({ x: band.to, y: FIELD.height }, cam);
-  const cards = { taken: scene.taken ?? [], cardLevels: scene.cardLevels };
-  const max = atLevel(cards, 'barbed-wire', CARD.wire.durability);
-  const look = (row: number) => wireLook(scene.wire?.[row]?.durability ?? max, max);
+  // Each row against its own full durability, which grows with the level and the wave (ID-123).
+  const look = (row: number): WireLook => {
+    const r = scene.wire?.[row];
+    return r ? wireLook(r.durability, r.max) : 'whole';
+  };
   // Runs of rows alike, top to bottom: [first row, end row, look].
   const runs: [number, number, WireLook][] = [];
   for (let row = 0; row < SEGMENTS; row++) {

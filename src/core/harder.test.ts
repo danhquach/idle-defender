@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOSS_SKILL,
+  CARD,
   BOSSES,
   ELITE,
   ENEMIES,
@@ -333,6 +334,41 @@ describe('boss skills (ID-099)', () => {
     expect(t.wire[3]!.durability).toBe(0);
     expect(t.wire[5]!.durability).toBeGreaterThan(0);
     expect(t.layers[0]!.segments[4]!.hp).toBe(hp);
+  });
+
+  it('Slab throw: the wire row it breaks comes back at the next wave break (ID-123)', () => {
+    const s = quiet();
+    s.taken.push('barbed-wire');
+    s.cardLevels['barbed-wire'] = 1;
+    const h = horror(s, 'slab', { x: 1400, y: 4.5 * 80 });
+    let t = run(s, 1 + BOSS_SKILL.slab.flight + 2 * STEP);
+    expect(t.wire[4]!.durability).toBe(0);
+    const wave = t.wave;
+    // The boss and its wave gone: the next step starts the break, which rebuilds the row.
+    t.enemies = t.enemies.filter((e) => e.id !== h.id);
+    expect(t.enemies).toEqual([]);
+    t = tick(t, STEP);
+    expect(t.wave).toBe(wave + 1);
+    expect(t.wire[4]!.durability).toBe(t.wire[4]!.max);
+    expect(t.wire[4]!.max).toBeGreaterThanOrEqual(CARD.wire.durability[0]);
+  });
+
+  it('Slab throw: one still in the air at a wave break doesn’t break the rebuilt row (ID-123)', () => {
+    const s = quiet();
+    s.taken.push('barbed-wire');
+    s.cardLevels['barbed-wire'] = 1;
+    const h = horror(s, 'slab', { x: 1400, y: 4.5 * 80 });
+    let t = run(s, 1 + STEP);
+    expect(t.slabs).toHaveLength(1);
+    const row = t.slabs[0]!.row;
+    // The boss dies with its slab in flight: the wave ends and the break rebuilds the wire.
+    t.enemies = t.enemies.filter((e) => e.id !== h.id);
+    const wave = t.wave;
+    t = tick(t, STEP);
+    expect(t.wave).toBe(wave + 1);
+    t = run(t, BOSS_SKILL.slab.flight + STEP);
+    expect(t.slabs[0]!.landed).toBe(true);
+    expect(t.wire[row]!.durability).toBe(t.wire[row]!.max);
   });
 
   it('Slab throw: never from up close', () => {
