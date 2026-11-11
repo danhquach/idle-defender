@@ -24,7 +24,9 @@ import {
   type EnemyKind,
 } from './data.ts';
 import {
+  fragDamage,
   newHorde,
+  shamblerHp,
   standing,
   tick,
   turretState,
@@ -288,16 +290,18 @@ describe('behaviour cards', () => {
     expect(shotOnce(3, 'extended-mags').d.ammo.primary).toBe(2);
   });
 
-  it('Incendiary Rounds at max: the enemy hit burns 3 dmg/s for 3 s; a new hit resets, never stacks', () => {
+  it('Incendiary Rounds at max: the enemy hit burns 9% of a Shambler’s HP a second for 3 s; a new hit resets, never stacks', () => {
     const s = quiet('incendiary-rounds');
+    const dps = CARD.burn.share[2]! * shamblerHp(s);
+    expect(dps).toBeGreaterThan(0);
     const a = enemy(s, { ...tough, ...still, x: 600, y: ROW4 });
     shoot(s, { x: 590, y: ROW4, damage: 10 });
     let t = tick(s, STEP);
     expect(t.enemies[0]!.burnUntil).toBeCloseTo(CARD.burn.seconds, 9);
     t = steps(t, Math.round(4 / STEP));
-    expect(hpOf(t, a.id)).toBeCloseTo(990 - CARD.burn.dps[2]! * CARD.burn.seconds, 6);
+    expect(hpOf(t, a.id)).toBeCloseTo(990 - dps * CARD.burn.seconds, 6);
     // It counts the HP fire took (for the view's hit flash, ID-089), not the bullet's.
-    expect(t.enemies[0]!.burnt).toBeCloseTo(CARD.burn.dps[2]! * CARD.burn.seconds, 6);
+    expect(t.enemies[0]!.burnt).toBeCloseTo(dps * CARD.burn.seconds, 6);
     // Hit twice in a row: still one burn, timed from the last hit.
     const twice = quiet('incendiary-rounds');
     enemy(twice, { ...tough, ...still, x: 600, y: ROW4 });
@@ -307,7 +311,7 @@ describe('behaviour cards', () => {
     u = tick(u, STEP);
     expect(u.enemies[0]!.burnUntil).toBeCloseTo(u.time - STEP + CARD.burn.seconds, 9);
     u = steps(u, Math.round(4 / STEP));
-    expect(u.enemies[0]!.hp).toBeCloseTo(1000 - CARD.burn.dps[2]! * (0.5 + CARD.burn.seconds), 6);
+    expect(u.enemies[0]!.hp).toBeCloseTo(1000 - dps * (0.5 + CARD.burn.seconds), 6);
   });
 
   /** Where an enemy (still, 1000 HP at x 600, `e` on top) ends up after a 10-damage bullet from `owner`. */
@@ -358,7 +362,7 @@ describe('behaviour cards', () => {
     return { s, group, lone };
   }
 
-  it('Frag Grenades: thrown on pick at the thickest group, it bursts 20 flat on all in reach', () => {
+  it('Frag Grenades: thrown on pick at the thickest group, it bursts for a share of the wave’s Shambler HP on all in reach', () => {
     const { s, group, lone } = fragged({ kind: 'brute', x: 900, y: ROW4 + 60 });
     expect(s.nextFragAt).toBe(s.time);
     let t = tick(s, STEP);
@@ -375,8 +379,11 @@ describe('behaviour cards', () => {
     expect(hpOf(t, group[1]!.id)).toBe(1000);
     t = steps(t, Math.round(CARD.frag.flight / STEP) + 1);
     // Within 70 px of (900, 390): the group of 3 and the Brute (armour doesn't count).
-    for (const e of group) expect(hpOf(t, e.id)).toBe(1000 - CARD.frag.damage);
-    expect(hpOf(t, t.enemies.at(-1)!.id)).toBe(1000 - CARD.frag.damage);
+    const burst = fragDamage(t);
+    expect(burst).toBeCloseTo(CARD.frag.share * shamblerHp(t), 9);
+    expect(burst).toBeGreaterThan(0);
+    for (const e of group) expect(hpOf(t, e.id)).toBeCloseTo(1000 - burst, 9);
+    expect(hpOf(t, t.enemies.at(-1)!.id)).toBeCloseTo(1000 - burst, 9);
     expect(hpOf(t, lone.id)).toBe(1000);
     // One grenade every 8 s, no more.
     t = steps(t, Math.round((CARD.frag.every - CARD.frag.flight) / STEP) - 3);

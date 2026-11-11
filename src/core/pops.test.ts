@@ -1,7 +1,7 @@
 // Damage numbers (ID-082): what each hit on an enemy or the wall did, merged per target.
 import { describe, expect, it } from 'vitest';
 import { BRUTE, CARD, DAMAGE_POP, SEGMENT_HEIGHT, START_BASE, STEP, WEAPONS } from './data.ts';
-import { newHorde, tick, type Bullet, type HordeState } from './horde.ts';
+import { newHorde, shamblerHp, tick, type Bullet, type HordeState } from './horde.ts';
 import { loadoutFrom } from './loadout.ts';
 import { enemy, setup } from './testing.ts';
 
@@ -140,7 +140,7 @@ describe('damage numbers on enemies (ID-082)', () => {
     const onIt = t.pops.filter((p) => p.key === `e${e.id}`);
     const total = onIt.reduce((n, p) => n + p.amount, 0);
     expect(total).toBeCloseTo(1000 - t.enemies[0]!.hp, 9);
-    expect(total).toBeGreaterThan(10 + CARD.burn.dps[2]! * 0.5);
+    expect(total).toBeGreaterThan(10 + CARD.burn.share[2]! * shamblerHp(t) * 0.5);
     // About one number per merge window, not one per step.
     expect(onIt.length).toBeLessThanOrEqual(Math.ceil(1 / DAMAGE_POP.merge) + 1);
     expect(onIt.length).toBeGreaterThan(1);

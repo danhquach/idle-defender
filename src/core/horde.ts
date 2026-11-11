@@ -230,6 +230,8 @@ export interface Enemy {
   shockUntil?: number;
   /** Concussion Rounds (ID-097): fight time it was last knocked back; absent = never. */
   pushedAt?: number;
+  /** Concussion Rounds (ID-124): px it has been knocked back in all; absent = 0. */
+  pushed?: number;
   /** A Shotgun's stagger (ID-101): fight time the latest one began, and ends; absent = never. */
   staggerAt?: number;
   staggerUntil?: number;
@@ -1468,13 +1470,13 @@ export const reloadIn = (
   reloadTime(d, id) * (took(s, 'speed-loaders') ? atLevel(s, 'speed-loaders', CARD.loaders) : 1);
 
 /**
- * Piercing Rounds (design §8, ID-097): the extra pierce of one squad shot. Below max it's
- * a chance, rolled on the fight's RNG for the whole shot; at max it's always +1, no roll.
+ * Piercing Rounds (design §8, ID-097): the extra pierce of one squad shot, a chance at
+ * every level (ID-124: max is 75%, no longer always), rolled on the fight's RNG for the
+ * whole shot.
  */
 export function extraPierce(s: Parameters<typeof cardLevel>[0], rng: Rng): number {
   if (!took(s, 'piercing-rounds')) return 0;
-  const p = atLevel(s, 'piercing-rounds', CARD.pierce);
-  return p >= 1 || chance(rng, p) ? 1 : 0;
+  return chance(rng, atLevel(s, 'piercing-rounds', CARD.pierce)) ? 1 : 0;
 }
 
 /** A gun in `slot` with a round in it. */
@@ -1746,7 +1748,7 @@ function cardHit(
 ): void {
   if (took(s, 'incendiary-rounds')) {
     e.burnUntil = s.time + CARD.burn.seconds;
-    e.burnDps = atLevel(s, 'incendiary-rounds', CARD.burn.dps);
+    e.burnDps = burnDpsOf(s);
   }
   if (took(s, 'shock-rounds')) shock(s, e);
   if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
@@ -1777,13 +1779,22 @@ function cardHit(
  * dealt `dealt`, is knocked back `CARD.concussion.perDamage` px a point (a heavy kind
  * `CARD.concussion.heavy` of that); never a Crawler on the wall, one inside the camp, or
  * past the spawn edge, and never within `CARD.concussion.gap` s of its last push (ID-097).
+ * Each enemy is pushed at most `CARD.concussion.cap` px in all (ID-124), so steady fire
+ * can't hold it in place.
  */
 function knockBack(s: HordeState, e: Enemy, dealt: number): void {
   if (e.hp <= 0 || e.inCamp || e.climbUntil !== 0) return;
   if (e.pushedAt !== undefined && s.time - e.pushedAt < CARD.concussion.gap - EPS) return;
+  const left = CARD.concussion.cap - (e.pushed ?? 0);
+  if (left <= EPS) return;
   const heavy = CARD.concussion.heavyKinds.includes(e.kind);
-  const push = CARD.concussion.perDamage * dealt * (heavy ? CARD.concussion.heavy : 1);
-  e.x = Math.max(e.x, Math.min(s.spawnX ?? FIELD.right, e.x + push));
+  const push = Math.min(
+    left,
+    CARD.concussion.perDamage * dealt * (heavy ? CARD.concussion.heavy : 1),
+  );
+  const x = Math.max(e.x, Math.min(s.spawnX ?? FIELD.right, e.x + push));
+  e.pushed = (e.pushed ?? 0) + (x - e.x);
+  e.x = x;
   e.pushedAt = s.time;
 }
 
@@ -1856,16 +1867,20 @@ function throwFrag(s: HordeState): void {
   s.nextFragAt = s.time + CARD.frag.every / throwers.length;
 }
 
-/** Each Frag Grenade landing bursts for `CARD.frag.damage` flat on every enemy within its reach. */
+/**
+ * Each Frag Grenade landing bursts for `fragDamage` (a share of this wave's Shambler HP,
+ * ID-124; armour doesn't reduce it) on every enemy within its reach.
+ */
 function blowFrags(s: HordeState): void {
   s.grenades = s.grenades.filter((g) => s.time - g.lands < CARD.frag.flash);
+  const damage = fragDamage(s);
   for (const g of s.grenades) {
     if (g.burst || !due(s.time, g.lands)) continue;
     g.burst = true;
     for (const e of s.enemies) {
       if (e.hp > 0 && Math.hypot(e.x - g.x, e.y - g.y) <= CARD.frag.radius + EPS) {
-        popOn(s, e, CARD.frag.damage);
-        e.hp = Math.max(0, e.hp - CARD.frag.damage);
+        popOn(s, e, damage);
+        e.hp = Math.max(0, e.hp - damage);
       }
     }
   }
@@ -2093,13 +2108,28 @@ export function removeDead(s: HordeState): void {
 export const skillPower = (s: Pick<HordeState, 'freeSkills'>): number => s.freeSkills?.power ?? 1;
 
 /**
+ * This wave's Shambler HP, on the fight's HP curve: what the skills and cards that keep up
+ * with the hordes deal a share of (ID-114, ID-124).
+ */
+export const shamblerHp = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
+  enemyHp('shambler', s.hordeNumber, s.wave, s.hpScale);
+
+/**
  * A molotov fire's damage a second (ID-114): `SKILLS.molotov.burn` of this wave's Shambler
  * HP, so it keeps up with enemy HP as hordes go up, at the skill's power.
  */
 export const fireDps = (
   s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'freeSkills'>,
-): number =>
-  SKILLS.molotov.burn * enemyHp('shambler', s.hordeNumber, s.wave, s.hpScale) * skillPower(s);
+): number => SKILLS.molotov.burn * shamblerHp(s) * skillPower(s);
+
+/** An Incendiary Rounds burn's damage a second at the card's level (ID-124): its share of this wave's Shambler HP. */
+export const burnDpsOf = (
+  s: Parameters<typeof cardLevel>[0] & Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>,
+): number => atLevel(s, 'incendiary-rounds', CARD.burn.share) * shamblerHp(s);
+
+/** A Frag Grenade's burst (ID-124): `CARD.frag.share` of this wave's Shambler HP. */
+export const fragDamage = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
+  CARD.frag.share * shamblerHp(s);
 
 /** Whether a flashbang still holds `e` (fight time, so it waits out picks too). */
 export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
@@ -2146,7 +2176,7 @@ function land(s: HordeState): void {
 function burn(s: HordeState): void {
   for (const e of s.enemies) {
     if (!burning(s, e)) continue;
-    const dps = e.burnDps ?? CARD.burn.dps[CARD_MAX_LEVEL - 1]!;
+    const dps = e.burnDps ?? CARD.burn.share[CARD_MAX_LEVEL - 1]! * shamblerHp(s);
     popOn(s, e, dps * STEP);
     e.hp = Math.max(0, e.hp - dps * STEP);
     e.burnt = (e.burnt ?? 0) + dps * STEP;

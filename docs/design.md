@@ -1165,9 +1165,9 @@ spacing real hordes have (see the ID-077 note below).
   |---|---|---|---|---|---|
   | Speed Loaders | stat | common | Every squad gun's reload time **−10%** (it reloads in 90% of the time) | −20% | −30% |
   | Extended Mags | stat | rare | Every squad gun's magazine holds **×1.33** the rounds (rounded), from its next reload (a survivor who joins mid-fight, too: they come with a standard magazine loaded) | ×1.67 | ×2 |
-  | Piercing Rounds | behaviour | rare | Each squad shot has a **35%** chance of +1 pierce, rolled on the fight's seeded RNG as it's fired (every pellet of a shot alike) | 70% | always +1 pierce (no roll) |
+  | Piercing Rounds | behaviour | rare | Each squad shot has a **25%** chance of +1 pierce, rolled on the fight's seeded RNG as it's fired (every pellet of a shot alike) | 50% | 75% (ID-124; was 35%, 70%, always) |
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
-  | Incendiary Rounds | behaviour | rare | The enemy hit burns **1** dmg/s for 3 s; a new hit resets it at the new hit's rate, never stacks | 2 dmg/s | 3 dmg/s |
+  | Incendiary Rounds | behaviour | rare | The enemy hit burns **3%** of this wave's Shambler HP a second for 3 s (ID-124; was a flat 1 dmg/s); a new hit resets it at the new hit's rate, never stacks | 6% | 9% (was 3 dmg/s) |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
   | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each wave break and level-up (more below) | 25%; 20 durability | 35%; 30 durability |
 
@@ -1175,8 +1175,28 @@ spacing real hordes have (see the ID-077 note below).
 
   | Card | Kind | Rarity | Effect |
   |---|---|---|---|
-  | Concussion Rounds | behaviour | epic | A squad bullet hit that leaves its enemy standing knocks it back **0.5 px per point of damage** dealt (after armour; about 3 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge. After a push the enemy can't be pushed again for **0.5 s** (hits in that window still deal their damage), so steady fire pushes it at most twice a second |
-  | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **20** flat damage (armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked |
+  | Concussion Rounds | behaviour | epic | A squad bullet hit that leaves its enemy standing knocks it back **0.5 px per point of damage** dealt (after armour; about 3 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge. After a push the enemy can't be pushed again for **0.5 s** (hits in that window still deal their damage), so steady fire pushes it at most twice a second, and each enemy is pushed at most **100 px** in all (ID-124), so steady fire can't hold it in place |
+  | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **35%** of this wave's Shambler HP (ID-124; was a flat 20; armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked |
+
+  **Steady across hordes (ID-124).** Frag Grenades' burst and Incendiary
+  Rounds' burn were flat (20 damage; 1, 2, 3 dmg/s), more than a whole
+  Shambler early (16 HP at horde-only Horde 1) and a quarter of one late
+  (84 HP at Horde 15). Like Molotov's fire (ID-114) they are now a share of
+  this wave's Shambler HP on the fight's HP curve (`CARD.frag.share`,
+  `CARD.burn.share`, `shamblerHp`): **35%** a burst, and **3%, 6%, 9%** a
+  second. Piercing Rounds is a chance at every level, **25%, 50%, 75%**, and
+  Concussion Rounds pushes each enemy at most **100 px** in all
+  (`CARD.concussion.cap`). Measured with a squad at 70% of Recommended
+  Power (the strongest at or under it), one card at max held from the start
+  and no other, using its skills as the scripted player does, wins at
+  Hordes 10 and 15 of 10 seeds: Frag Grenades at 50% won 8 and 5, at 35%
+  2 and 3, at 20% 0 and 1. Over 20 seeds: Incendiary Rounds at max 1 and 4,
+  Piercing Rounds at 75% 4 and 7, Ricochet at max 3 and 8; Sharpshooter
+  (five picks), Concussion Rounds, Shock Rounds and no card won none of 10.
+  Ricochet and Sharpshooter lose most seeds alone, so they are unchanged.
+  The balance test `balance/cards-under-power.test.ts` checks each of these
+  cards at max loses Hordes 10 and 15 on most seeds (at most 4 won of 10 seeds: the same seeds as the 10-seed runs above, the first 10 of the 20);
+  the Horde 4 card test still passes with every card.
 
   Field Repairs (a campaign research card) stays epic and unique, and
   Heavy Rounds (research) stays once per horde with no levels.

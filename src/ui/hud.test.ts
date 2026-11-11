@@ -641,7 +641,7 @@ describe('card text (ID-022)', () => {
     const s = newHorde(1, setup());
     expect(cardText({ kind: 'upgrade', id: 'frag-grenades' }, s)).toMatchObject({
       title: 'Frag Grenades',
-      body: 'Each survivor throws a grenade every 8 s, into the thickest group',
+      body: 'Each survivor throws a grenade every 8 s into the thickest group, for 35% of a Shambler’s HP',
       kind: 'Epic behaviour',
     });
     expect(cardText({ kind: 'upgrade', id: 'extended-mags' }, s).kind).toBe('Rare stat');

@@ -148,14 +148,14 @@ export const UPGRADES: Readonly<
   },
   'concussion-rounds': {
     name: 'Concussion Rounds',
-    text: 'Bullet hits knock enemies back, harder the more damage they do, at most twice a second',
+    text: `Hits knock enemies back by damage dealt, at most twice a second and ${CARD.concussion.cap} px each`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
   },
   'frag-grenades': {
     name: 'Frag Grenades',
-    text: 'Each survivor throws a grenade every 8 s, into the thickest group',
+    text: `Each survivor throws a grenade every ${CARD.frag.every} s into the thickest group, for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
@@ -305,8 +305,8 @@ export function effectAt(
     case 'incendiary-rounds':
       return {
         pre: 'Hits set enemies on fire: ',
-        value: `${lv(CARD.burn.dps)} dmg/s`,
-        post: ` for ${CARD.burn.seconds} s`,
+        value: pct(lv(CARD.burn.share)),
+        post: ` of a Shambler’s HP a second for ${CARD.burn.seconds} s`,
       };
     case 'shock-rounds':
       return {

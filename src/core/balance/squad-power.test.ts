@@ -2,36 +2,14 @@
 // no cards or skills, wins about half its fights there, and most of them with the cards
 // and skills the scripted player picks (see shared.ts for the seeds).
 import { describe, expect, it } from 'vitest';
-import { rollWeapon } from '../armoury.ts';
-import { recruit } from '../camp.ts';
-import { SQUAD_CAP } from '../data.ts';
-import { newGame, type GameState } from '../game.ts';
+import type { GameState } from '../game.ts';
 import { startSquadHorde } from '../hordeonly.ts';
 import { tick } from '../horde.ts';
-import { createRng } from '../rng.ts';
-import { playSquadHorde, spendAll } from '../sim.ts';
+import { playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
-import { xpForLevel } from '../stats.ts';
+import { squadAt } from './shared.ts';
 
 const SEEDS = 10;
-
-/** Horde `n`'s expected squad (size and levels), each with a Military Rifle at `gunLevel`. */
-function squadAt(n: number, gunLevel: number): GameState {
-  const size = Math.min(n, SQUAD_CAP);
-  const g = newGame('horde');
-  g.roster = Array.from({ length: size }, (_, i) => ({
-    ...recruit(i + 1),
-    xp: xpForLevel(Math.min(25, 1 + n)),
-    loadout: {
-      primary: rollWeapon(createRng(i + 7), `h${i + 1}`, 'rifle', 'military', gunLevel),
-      secondary: null,
-      item: null,
-    },
-  }));
-  g.camp.recruits = size;
-  g.hordeNumber = n;
-  return spendAll(g);
-}
 
 /** The squad whose Squad Power is nearest horde `n`'s Recommended Power. */
 function squadAtRecommended(n: number): GameState {
