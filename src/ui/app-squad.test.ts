@@ -391,13 +391,16 @@ describe('Combine in the game (app.ts, ID-091)', () => {
 });
 
 describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
-  /** A camp at Horde 2 with survivor 1 at level 4 (3 points to spend) and survivor 2 fresh. */
-  function seeded(armoury: ReturnType<typeof rollWeapon>[] = []) {
+  /**
+   * A camp at Horde 2 with survivor 1 at level 4 (3 points to spend) and survivor 2 fresh;
+   * `xp` 149 puts survivor 1 one XP short of level 4, so a win levels them up (ID-134).
+   */
+  function seeded(armoury: ReturnType<typeof rollWeapon>[] = [], xp = 150) {
     const g = newGame('horde');
     const camp = {
       ...g,
       hordeNumber: 2,
-      roster: [{ ...recruit(1), xp: 150 }, recruit(2)], // level 4: 3 points (ID-096)
+      roster: [{ ...recruit(1), xp }, recruit(2)], // level 4: 3 points (ID-096)
       camp: { ...g.camp, recruits: 2 },
       armoury,
     };
@@ -563,7 +566,8 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
   });
 
   it('on the result screen a name opens the survivor; a + tap joins the screen’s picks and is saved with its button', () => {
-    const { root, result, button, scrim, plus, saved } = seeded();
+    // Survivor 1 levels up in the win, so the result screen has their card (ID-134).
+    const { root, result, button, scrim, plus, saved } = seeded([], 149);
     button().click();
     step(16);
     endNextTick('won');
@@ -589,13 +593,17 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
 });
 
 describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', () => {
-  function wonWithPoints() {
+  /**
+   * A won Horde 2. `xp` 149 is one short of level 4: the win levels survivor 1 up, so they
+   * have a card (ID-134); at 150 (level 4, 3 points from earlier) the win doesn't, so no card.
+   */
+  function wonWithPoints(xp = 149) {
     const g = newGame('horde');
     const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
     const camp = {
       ...g,
       hordeNumber: 2,
-      roster: [{ ...recruit(1), xp: 150 }, recruit(2)], // level 4: 3 points (ID-096)
+      roster: [{ ...recruit(1), xp }, recruit(2)],
       camp: { ...g.camp, recruits: 2 },
       armoury: [relic],
     };
@@ -733,6 +741,27 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     select.value = 'h1';
     select.dispatchEvent(new Event('change'));
     expect(slot()).toContain('Relic Rifle');
+  });
+
+  it('a survivor with no card on a win spends and changes guns from the Roster (ID-134)', () => {
+    const { root, button, saved, scrim, plus, close } = wonWithPoints(150);
+    const start = saved().roster[0]!;
+    expect(root.querySelector('.squad-card[data-defender="recruit-1"]')).toBeNull();
+    const rosterButton = root.querySelector<HTMLButtonElement>('.roster-button')!;
+    expect(rosterButton.hidden).toBe(false);
+    rosterButton.click();
+    expect(scrim.hidden).toBe(false);
+    plus('mind').click();
+    scrim.querySelector<HTMLButtonElement>('.rv-best')!.click();
+    close();
+    button().click();
+    const after = saved();
+    expect(spent(after.roster[0]!)).toBe(spent(start) + 1);
+    expect(
+      after.roster.some(
+        (d) => typeof d.loadout.primary === 'object' && d.loadout.primary.uid === 'h1',
+      ),
+    ).toBe(true);
   });
 
   it('an id the page was edited to (unknown, __proto__) opens the first survivor, nothing else', () => {

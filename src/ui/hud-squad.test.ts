@@ -467,24 +467,24 @@ describe('the result cards keep one size (ID-111)', () => {
 
   it('a level-up adds no part to any card: every result card has its stat block', () => {
     const { root, h } = hud();
-    for (const outcome of ['won', 'lost'] as const) {
-      const none = levelling(3, []);
-      h.showResult(squadScreen(none, ended(none, outcome)));
-      const plain = shapes(root);
-      expect(root.querySelectorAll('.squad-card .squad-pick')).toHaveLength(plain.length);
-      expect(root.querySelector('.squad-card .hud-pick-stat:enabled')).toBeNull();
-      // A win's new survivor is a fresh recruit: their block has nothing to spend.
-      if (outcome === 'won') {
-        const joining = root.querySelector('.squad-badge-new')!.closest('.squad-card')!;
-        expect(joining.querySelectorAll('.hud-pick-stat')).toHaveLength(4);
-        expect(joining.querySelector('.squad-points')!.textContent).toBe('0 points');
-      }
-      if (outcome === 'lost') continue;
-      const one = levelling(3, [1]);
-      h.showResult(squadScreen(one, ended(one, 'won')));
-      expect(root.querySelector('.squad-card-up')).not.toBeNull();
-      expect(shapes(root)).toEqual(plain);
-    }
+    // A loss shows every card (ID-134), none levelled: the plain shape.
+    const none = levelling(3, []);
+    h.showResult(squadScreen(none, ended(none, 'lost')));
+    const plain = shapes(root);
+    expect(plain).toHaveLength(3);
+    expect(root.querySelectorAll('.squad-card .squad-pick')).toHaveLength(plain.length);
+    expect(root.querySelector('.squad-card .hud-pick-stat:enabled')).toBeNull();
+    // A win shows only who levelled up; one card or three, every card has the same parts.
+    const all = levelling(3, [0, 1, 2]);
+    h.showResult(squadScreen(all, ended(all, 'won')));
+    const up = shapes(root);
+    expect(up).toHaveLength(3);
+    expect(new Set(up).size).toBe(1);
+    expect(root.querySelectorAll('.squad-card .squad-pick')).toHaveLength(3);
+    const one = levelling(3, [1]);
+    h.showResult(squadScreen(one, ended(one, 'won')));
+    expect(root.querySelector('.squad-card-up')).not.toBeNull();
+    expect(shapes(root)).toEqual([up[0]]);
   });
 
   it('spending out, and Undo, keep every part in place: Undo only hides', () => {
@@ -526,7 +526,8 @@ describe('the result cards keep one size (ID-111)', () => {
 
   it('keeps the keyboard on the stat just pressed, not on the row’s Undo', () => {
     const { root, h } = hud();
-    const g = { ...levelling(1, []), roster: [{ ...recruit(1), xp: xpForLevel(5) }] };
+    // One XP short of level 5: the win levels them up, so they have a card (ID-134).
+    const g = { ...levelling(1, []), roster: [{ ...recruit(1), xp: xpForLevel(5) - 1 }] };
     h.showResult(squadScreen(g, ended(g, 'won')));
     root.querySelector<HTMLButtonElement>('.squad-card .squad-plus')!.click();
     const agility = root.querySelectorAll<HTMLButtonElement>('.squad-card .hud-pick-stat')[1]!;

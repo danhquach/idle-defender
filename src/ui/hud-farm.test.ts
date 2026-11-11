@@ -282,7 +282,6 @@ describe('result screens and the picker (ID-098)', () => {
     expect(s.button).toBe('Replay Horde 3');
     expect(s.lines.join('\n')).not.toMatch(/New survivor|nobody new joins|Squad full/);
     expect(s.debrief!.recruit).toBeNull();
-    expect(s.debrief!.cards.some((c) => c.joining)).toBe(false);
     expect(s.debrief!.cards).toHaveLength(2);
     // "Replay" is said by the title and the tile's kind chip, not a third time.
     expect(s.debrief!.chips.map((c) => c.text)).not.toContain('Replay');
