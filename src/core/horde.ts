@@ -735,8 +735,12 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
   }
   startPost.defenderId = start.id;
-  const toSpawn =
-    waveSize(hordeNumber, 1, harder) * (harder && swarmWave(hordeNumber, 1) ? SWARM.size : 1);
+  const toSpawn = waveEnemies({
+    hordeNumber,
+    wave: 1,
+    harder,
+    swarm: harder && swarmWave(hordeNumber, 1),
+  });
   return {
     time: 0,
     acc: 0,
@@ -1367,7 +1371,8 @@ function landSlabs(s: HordeState): void {
     if (slab.landed || !due(s.time, slab.lands)) continue;
     slab.landed = true;
     if (slab.column === null) {
-      s.wire[slab.row]!.durability = 0;
+      // One thrown before this wave's break lands on wire the break rebuilt: it holds (ID-123).
+      if (slab.at >= s.breakUntil - WAVE_BREAK) s.wire[slab.row]!.durability = 0;
       continue;
     }
     const layer = s.layers.find((l) => l.column === slab.column);
@@ -2745,7 +2750,9 @@ function advanceWave(s: HordeState): void {
 }
 
 /** Enemies the current wave sends: twice as many in a swarm wave (ID-102). */
-function waveEnemies(s: Pick<HordeState, 'hordeNumber' | 'wave' | 'harder' | 'swarm'>): number {
+function waveEnemies(
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'swarm'> & { harder?: boolean },
+): number {
   return waveSize(s.hordeNumber, s.wave, s.harder === true) * (s.swarm ? SWARM.size : 1);
 }
 

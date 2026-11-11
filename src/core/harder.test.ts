@@ -353,6 +353,24 @@ describe('boss skills (ID-099)', () => {
     expect(t.wire[4]!.max).toBeGreaterThanOrEqual(CARD.wire.durability[0]);
   });
 
+  it('Slab throw: one still in the air at a wave break doesn’t break the rebuilt row (ID-123)', () => {
+    const s = quiet();
+    s.taken.push('barbed-wire');
+    s.cardLevels['barbed-wire'] = 1;
+    const h = horror(s, 'slab', { x: 1400, y: 4.5 * 80 });
+    let t = run(s, 1 + STEP);
+    expect(t.slabs).toHaveLength(1);
+    const row = t.slabs[0]!.row;
+    // The boss dies with its slab in flight: the wave ends and the break rebuilds the wire.
+    t.enemies = t.enemies.filter((e) => e.id !== h.id);
+    const wave = t.wave;
+    t = tick(t, STEP);
+    expect(t.wave).toBe(wave + 1);
+    t = run(t, BOSS_SKILL.slab.flight + STEP);
+    expect(t.slabs[0]!.landed).toBe(true);
+    expect(t.wire[row]!.durability).toBe(t.wire[row]!.max);
+  });
+
   it('Slab throw: never from up close', () => {
     const s = quiet();
     const front = s.layers[0]!.x + WALL.depth;

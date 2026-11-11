@@ -1539,7 +1539,8 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     - **Slab Throw:** every 16 s, from at least 150 px out, a concrete slab
       that lands 0.6 s later: with Barbed Wire it breaks the working wire row
       nearest the boss's row (ties: the upper one; it's rebuilt at the next
-      wave break or pick of the card, ID-123), else 300 damage to the
+      wave break or pick of the card, and a slab still in the air when a wave
+      ends lands on the rebuilt wire without breaking it, ID-123), else 300 damage to the
       outermost wall's standing segment nearest it.
     - **Armour Plates:** steel plates on its body; bullets do half damage until
       25% of its HP is gone, then they're gone for good (regen doesn't bring them
