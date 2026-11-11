@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // ID-086, ID-108: the Roster — a top-bar button (badge = survivors with points to spend)
 // opens one dialog: squad tabs, the selected survivor with their gun slot, and one panel,
-// Stats (points drafted with + and −, spent on Confirm) or Choose a gun (tiles, a comparison
-// with the gun held, one Equip). Keyboard and touch alike.
+// Stats (a + tap spends at once, ID-126; Undo takes back what this opening spent) or Choose
+// a gun (tiles, a comparison with the gun held, one Equip). Keyboard and touch alike.
 import { describe, expect, it, vi } from 'vitest';
 import { rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
@@ -14,7 +14,13 @@ import {
   type Stats,
   type WeaponId,
 } from '../core/data.ts';
-import { newGame, spendPoint, type GameState, type RosterDefender } from '../core/game.ts';
+import {
+  newGame,
+  spendPoint,
+  unspendPoint,
+  type GameState,
+  type RosterDefender,
+} from '../core/game.ts';
 import { bestGuns, equipGun, startSquadHorde } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
 import { maxHpOf, xpForLevel } from '../core/stats.ts';
@@ -125,6 +131,11 @@ function mount(game: GameState, over: { canSpend?: boolean; canGear?: boolean } 
     if (r.ok) g = r.game;
     roster.refresh();
   });
+  const onUnspend = vi.fn((id: string, stat: Stat) => {
+    const r = unspendPoint(g, id, stat);
+    if (r.ok) g = r.game;
+    roster.refresh();
+  });
   const onEquip = vi.fn((id: string, choice: string) => {
     const r = equipGun(g, id, choice);
     if (!r.ok) return r;
@@ -141,6 +152,7 @@ function mount(game: GameState, over: { canSpend?: boolean; canGear?: boolean } 
   const opts: RosterOptions = {
     state: () => ({ game: g, fight: null, canSpend, canGear, resumes: false }),
     onSpend,
+    onUnspend,
     onEquip,
     onBestGuns,
   };
@@ -154,19 +166,18 @@ function mount(game: GameState, over: { canSpend?: boolean; canGear?: boolean } 
     scrim.querySelector<T>(sel)!;
   const key = (k: string) => q(`[data-key="${k}"]`);
   const plus = (stat: Stat, id = 'recruit-1') => key(`add:${id}:${stat}`);
-  const minus = (stat: Stat, id = 'recruit-1') => key(`sub:${id}:${stat}`);
   return {
     root,
     roster,
     scrim,
     onSpend,
+    onUnspend,
     onEquip,
     onBestGuns,
     press,
     q,
     key,
     plus,
-    minus,
     game: () => g,
     set: (next: GameState) => {
       g = next;
@@ -237,11 +248,10 @@ describe('the Roster button and tabs (ID-108)', () => {
     expect(m.q('.rv-tab').getAttribute('aria-label')!.startsWith(`${name}, level`)).toBe(true);
     expect(m.q('.rv-who-name').textContent).toBe(name);
     expect(m.plus('instinct').getAttribute('aria-label')).toContain(name);
-    // The status line after Best gun and after a Confirm: the name as text, nothing parsed.
+    // The status line after Best gun and after a spend: the name as text, nothing parsed.
     m.q('.rv-best').click();
     expect(m.status()).toBe(`Equipped: ${name} → Military Rifle`);
     m.plus('instinct').click();
-    m.key('confirm').click();
     expect(m.status()).toContain(name);
     expect(m.scrim.querySelector('.rv-status')!.children).toHaveLength(0);
     // The avatar and the gun icon: nothing the name made.
@@ -252,45 +262,61 @@ describe('the Roster button and tabs (ID-108)', () => {
   });
 });
 
-describe('Stats: points drafted, spent on Confirm (ID-108)', () => {
-  it('+ and − only change a draft: nothing is spent until Confirm', () => {
+describe('Stats: a tap spends at once (ID-126)', () => {
+  it('+ spends the point now, through onSpend, and reads it out', () => {
     const m = mount(camp([at(1, 4)]));
     m.roster.open('recruit-1');
     expect(m.q('.rv-left').textContent).toBe('3 to spend');
     m.plus('agility').click();
-    m.plus('agility').click();
-    m.plus('mind').focus();
-    m.plus('mind').click();
-    expect(m.onSpend).not.toHaveBeenCalled();
-    expect(m.game().roster[0]!.stats.agility).toBe(0);
-    // "0 +2": the points held, then the pending ones.
+    expect(m.onSpend.mock.calls).toEqual([['recruit-1', 'agility']]);
+    expect(m.game().roster[0]!.stats.agility).toBe(1);
+    expect(m.q('.rv-left').textContent).toBe('2 to spend');
     const row = m.plus('agility').closest('.rv-stat')!;
-    expect(row.querySelector('.rv-stat-ct')!.textContent).toBe('0 +2');
-    expect(m.q('.rv-left').textContent).toBe('0 to spend');
-    // Spent out: every + greys out, and the keyboard follows to a button still live.
-    for (const s of ['instinct', 'agility', 'mind'] as const) expect(m.plus(s).disabled).toBe(true);
-    expect(document.activeElement!.getAttribute('data-key')).toMatch(/^sub:/);
-    // The tab's badge counts what is left: none, so none shown.
-    expect(m.scrim.querySelector('.rv-tab .rv-badge')).toBeNull();
-    m.minus('agility').click();
-    expect(m.plus('agility').closest('.rv-stat')!.querySelector('.rv-stat-ct')!.textContent).toBe(
-      '0 +1',
-    );
-    expect(m.q('.rv-left').textContent).toBe('1 to spend');
+    expect(row.querySelector('.rv-stat-ct')!.textContent).toBe('1');
+    expect(m.status()).toBe(`Agility 1 for ${recruit(1).name}. 2 points left.`);
+    expect(m.q('.rv-status').getAttribute('role')).toBe('status');
+    // The tab's badge counts what is left.
+    expect(m.q('.rv-tab .rv-badge').textContent).toBe('2');
   });
 
-  it('the effects read now → with the drafted points (green), or one more (grey)', () => {
+  it('there is no draft, no Confirm, no −, and closing asks nothing', () => {
+    const m = mount(camp([at(1, 4)]));
+    m.roster.open('recruit-1');
+    m.plus('mind').click();
+    expect(m.scrim.querySelector('[data-key="confirm"]')).toBeNull();
+    expect(m.scrim.querySelector('[data-key^="sub:"]')).toBeNull();
+    expect(m.scrim.querySelector('.rv-prompt')).toBeNull();
+    expect(m.scrim.textContent).not.toContain('Confirm');
+    m.press('Escape');
+    expect(m.scrim.hidden).toBe(true);
+    expect(m.game().roster[0]!.stats.mind).toBe(1);
+    m.roster.open('recruit-1');
+    m.plus('mind').click();
+    m.q('.rv-close').click();
+    expect(m.scrim.hidden).toBe(true);
+    expect(m.game().roster[0]!.stats.mind).toBe(2);
+  });
+
+  it('spent out: every + greys out, the keyboard goes to Undo, the status says none left', () => {
+    const m = mount(camp([at(1, 2)]));
+    m.roster.open('recruit-1');
+    m.plus('mind').focus();
+    m.plus('mind').click();
+    for (const s of ['instinct', 'agility', 'mind'] as const) expect(m.plus(s).disabled).toBe(true);
+    expect(document.activeElement).toBe(m.key('undo'));
+    expect(m.status()).toBe(`Sharp Mind 1 for ${recruit(1).name}. No points left.`);
+    expect(m.scrim.querySelector('.rv-tab .rv-badge')).toBeNull();
+  });
+
+  it('the effects read now → with one more point (grey)', () => {
     const m = mount(camp([at(1, 4)]));
     m.roster.open('recruit-1');
     const fx = () => m.plus('agility').closest('.rv-stat')!.querySelector('.rv-fx')!;
     expect(fx().textContent).toMatch(
       /^Reload \d\.\d\d s → \d\.\d\d sFire rate \+\d+\.\d% → \+\d+\.\d%$/,
     );
-    expect(fx().querySelector('.rv-fx-up')).toBeNull();
     const one = fx().textContent;
     m.plus('agility').click();
-    m.plus('agility').click();
-    expect(fx().querySelector('.rv-fx-up')).not.toBeNull();
     expect(fx().textContent).not.toBe(one);
     // Tinker stays a locked row, with no buttons.
     const locked = m.q('.rv-stat-locked');
@@ -306,90 +332,31 @@ describe('Stats: points drafted, spent on Confirm (ID-108)', () => {
     expect(fx.querySelector('.rv-fx-to')).toBeNull();
   });
 
-  it('Undo clears the survivor’s draft', () => {
+  it('a spend the camp refuses is neither read out nor undoable', () => {
     const m = mount(camp([at(1, 4)]));
     m.roster.open('recruit-1');
-    const undo = () => m.key('undo');
-    expect(undo().disabled).toBe(true);
-    expect(m.key('confirm').disabled).toBe(true);
-    m.plus('instinct').click();
+    m.onSpend.mockImplementationOnce(() => {});
     m.plus('mind').click();
-    expect(m.key('confirm').textContent).toBe('Confirm 2');
-    undo().click();
-    expect(m.q('.rv-left').textContent).toBe('3 to spend');
-    expect(m.key('confirm').disabled).toBe(true);
-    expect(m.onSpend).not.toHaveBeenCalled();
+    expect(m.game().roster[0]!.stats.mind).toBe(0);
+    expect(m.status()).toBe('');
+    expect(m.key('undo').disabled).toBe(true);
   });
 
-  it('Confirm sends each drafted point through onSpend, and says so', () => {
-    const m = mount(camp([at(1, 4)]));
-    m.roster.open('recruit-1');
-    m.plus('mind').click();
-    m.plus('instinct').click();
-    m.plus('mind').click();
-    m.key('confirm').click();
-    expect(m.onSpend.mock.calls).toEqual([
-      ['recruit-1', 'instinct'],
-      ['recruit-1', 'mind'],
-      ['recruit-1', 'mind'],
-    ]);
-    expect(m.game().roster[0]!.stats).toMatchObject({ instinct: 1, mind: 2 });
-    expect(m.status()).toBe(`Spent 3 points on ${recruit(1).name}.`);
-    // The draft is gone and the count is the camp's.
-    expect(m.q('.rv-left').textContent).toBe('0 to spend');
-    expect(m.scrim.querySelector('.rv-pend')).toBeNull();
-  });
-
-  it('drafts stay with each survivor while you switch tabs', () => {
-    const m = mount(camp([at(1, 4), at(2, 3)]));
-    m.roster.open('recruit-1');
-    m.plus('agility').click();
-    m.q('.rv-tab[data-defender="recruit-2"]').click();
-    expect(m.scrim.querySelector('.rv-pend')).toBeNull();
-    m.plus('mind', 'recruit-2').click();
-    m.q('.rv-tab[data-defender="recruit-1"]').click();
-    expect(m.plus('agility').closest('.rv-stat')!.querySelector('.rv-pend')!.textContent).toBe(
-      '+1',
-    );
-    // The other tab's badge shows what is left after its draft.
-    expect(m.q('.rv-tab[data-defender="recruit-2"] .rv-badge').textContent).toBe('1');
-    expect(m.onSpend).not.toHaveBeenCalled();
-  });
-
-  it('a draft the camp no longer covers is trimmed (points spent elsewhere)', () => {
-    const m = mount(camp([at(1, 4)]));
-    m.roster.open('recruit-1');
-    m.plus('mind').click();
-    m.plus('mind').click();
-    m.plus('mind').click();
-    // Two points went into the result screen's own picker meanwhile.
-    m.set(camp([at(1, 4, { agility: 2 })]));
-    expect(m.q('.rv-left').textContent).toBe('0 to spend');
-    expect(m.plus('mind').closest('.rv-stat')!.querySelector('.rv-pend')!.textContent).toBe('+1');
-  });
-
-  it('every + and − reads its stat and survivor', () => {
+  it('every + reads its stat and survivor', () => {
     const m = mount(camp([at(1, 4)]));
     m.roster.open('recruit-1');
     expect(m.plus('agility').getAttribute('aria-label')).toBe(
-      `Add a point to Agility for ${recruit(1).name}, now 0`,
-    );
-    expect(m.minus('agility').getAttribute('aria-label')).toBe(
-      `Take back a point from Agility for ${recruit(1).name}`,
+      `Spend a point on Agility for ${recruit(1).name}, now 0`,
     );
   });
 
-  it('mid-fight every + and − is disabled and says to spend between hordes', () => {
+  it('while points can’t be spent every + is disabled and says to spend between hordes', () => {
     const m = mount(camp([at(1, 4)]), { canSpend: false });
     m.roster.open('recruit-1');
-    for (const s of ['instinct', 'agility', 'mind'] as const) {
-      expect(m.plus(s).disabled).toBe(true);
-      expect(m.minus(s).disabled).toBe(true);
-    }
+    for (const s of ['instinct', 'agility', 'mind'] as const) expect(m.plus(s).disabled).toBe(true);
     m.plus('agility').click();
     expect(m.onSpend).not.toHaveBeenCalled();
     expect(m.scrim.textContent).toContain(SPEND_LATER_NOTE);
-    expect(m.key('confirm').disabled).toBe(true);
   });
 
   it('spent out: no note, and 0 to spend', () => {
@@ -400,81 +367,54 @@ describe('Stats: points drafted, spent on Confirm (ID-108)', () => {
   });
 });
 
-describe('closing with drafted points (ID-108)', () => {
-  function drafted() {
+describe('Undo: points spent since it opened, between hordes (ID-126)', () => {
+  it('takes back this survivor’s points spent here, newest first, and says so', () => {
     const m = mount(camp([at(1, 4), at(2, 3)]));
-    m.button.focus();
-    m.button.click();
+    m.roster.open('recruit-1');
+    expect(m.key('undo').disabled).toBe(true);
+    m.plus('mind').click();
+    m.plus('instinct').click();
+    m.q('.rv-tab[data-defender="recruit-2"]').click();
+    m.plus('agility', 'recruit-2').click();
+    m.q('.rv-tab[data-defender="recruit-1"]').click();
+    expect(m.key('undo').textContent).toBe('Undo 2');
+    m.key('undo').click();
+    expect(m.onUnspend.mock.calls).toEqual([
+      ['recruit-1', 'instinct'],
+      ['recruit-1', 'mind'],
+    ]);
+    expect(m.game().roster[0]!.stats).toMatchObject({ instinct: 0, mind: 0 });
+    // The other survivor's point stays.
+    expect(m.game().roster[1]!.stats.agility).toBe(1);
+    expect(m.status()).toBe(`Took back 2 points from ${recruit(1).name}. 3 points left.`);
+    expect(m.q('.rv-left').textContent).toBe('3 to spend');
+    expect(m.key('undo').disabled).toBe(true);
+  });
+
+  it('points spent before it opened stay: Undo only knows this opening', () => {
+    const m = mount(camp([at(1, 4)]));
     m.roster.open('recruit-1');
     m.plus('mind').click();
-    m.plus('mind').click();
-    return m;
-  }
-
-  it('Esc or × with a draft asks "Spend 2 points?" and does not close', () => {
-    const m = drafted();
-    m.press('Escape');
-    expect(m.scrim.hidden).toBe(false);
-    const prompt = m.q<HTMLElement>('.rv-prompt');
-    expect(prompt.hidden).toBe(false);
-    expect(prompt.textContent).toContain('Spend 2 points?');
-    expect([...prompt.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
-      'Confirm',
-      'Discard',
-      'Keep editing',
-    ]);
-    // The keyboard starts on the safe choice: Esc then Enter keeps editing, spends nothing.
-    expect(document.activeElement!.textContent).toBe('Keep editing');
-    (document.activeElement as HTMLButtonElement).click();
-    expect(m.onSpend).not.toHaveBeenCalled();
-    expect(m.q<HTMLElement>('.rv-prompt').hidden).toBe(true);
-    m.press('Escape');
-    // Esc again steps back out of the question.
-    m.press('Escape');
-    expect(m.q<HTMLElement>('.rv-prompt').hidden).toBe(true);
-    expect(m.scrim.hidden).toBe(false);
-    m.q('.rv-close').click();
-    expect(m.q<HTMLElement>('.rv-prompt').hidden).toBe(false);
-    expect(m.onSpend).not.toHaveBeenCalled();
-  });
-
-  it('Confirm spends the draft and closes; Discard drops it and closes', () => {
-    const a = drafted();
-    a.q('.rv-close').click();
-    a.q('.rv-prompt button').click();
-    expect(a.onSpend.mock.calls).toEqual([
-      ['recruit-1', 'mind'],
-      ['recruit-1', 'mind'],
-    ]);
-    expect(a.scrim.hidden).toBe(true);
-    expect(a.root.hasAttribute('inert')).toBe(false);
-
-    const b = drafted();
-    b.q('.rv-close').click();
-    b.q<HTMLButtonElement>('.rv-prompt button:nth-of-type(2)').click();
-    expect(b.onSpend).not.toHaveBeenCalled();
-    expect(b.scrim.hidden).toBe(true);
-    // Reopened: no draft is kept.
-    b.roster.open('recruit-1');
-    expect(b.scrim.querySelector('.rv-pend')).toBeNull();
-    expect(b.q('.rv-left').textContent).toBe('3 to spend');
-  });
-
-  it('"Keep editing" goes back to the dialog; undoing the draft takes the question away', () => {
-    const m = drafted();
-    m.q('.rv-close').click();
-    m.q<HTMLButtonElement>('.rv-prompt button:nth-of-type(3)').click();
-    expect(m.q<HTMLElement>('.rv-prompt').hidden).toBe(true);
-    expect(m.scrim.hidden).toBe(false);
-    m.q('.rv-close').click();
+    m.roster.close();
+    m.roster.open('recruit-1');
+    expect(m.key('undo').disabled).toBe(true);
     m.key('undo').click();
-    expect(m.q<HTMLElement>('.rv-prompt').hidden).toBe(true);
-    // No draft left: closing is plain.
-    m.q('.rv-close').click();
-    expect(m.scrim.hidden).toBe(true);
+    expect(m.onUnspend).not.toHaveBeenCalled();
+    expect(m.game().roster[0]!.stats.mind).toBe(1);
   });
 
-  it('closes plainly with no draft and gives the keyboard back to what opened it', () => {
+  it('in a fight there is no Undo: a point spent there stays spent', () => {
+    const m = mount(camp([at(1, 4)]), { canGear: false });
+    m.roster.open('recruit-1');
+    m.plus('mind').click();
+    expect(m.game().roster[0]!.stats.mind).toBe(1);
+    expect(m.scrim.querySelector('[data-key="undo"]')).toBeNull();
+    expect(m.q('.rv-hint').textContent).toContain('stays spent');
+  });
+});
+
+describe('closing (ID-126)', () => {
+  it('closes plainly and gives the keyboard back to what opened it', () => {
     const m = mount(camp([at(1, 4)]));
     m.button.focus();
     m.button.click();
@@ -726,6 +666,7 @@ describe('Best gun for everyone (ID-108)', () => {
         resumes: false,
       }),
       onSpend: () => {},
+      onUnspend: () => {},
       onEquip: () => ({ ok: true }),
       onBestGuns: () => ({ ok: false, reason: GUNS_WAIT }),
     });

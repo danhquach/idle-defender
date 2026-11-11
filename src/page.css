@@ -1439,6 +1439,8 @@ body {
 .squad-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* A card opened for its stats (ID-126) grows alone, not its row's other card. */
+  align-items: start;
   gap: var(--space-8);
 }
 
@@ -1559,13 +1561,58 @@ body {
   border-left-color: var(--rarity-relic);
 }
 
-/* The points count over the stat buttons, two by two (ID-084: four stats, Tinker locked). */
+/* The points count over the stat buttons, two by two (ID-084: four stats, Tinker locked).
+   Closed until its card's "+N" opens it (ID-126). */
 .squad-pick {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-6);
   margin: 0;
+}
+
+.squad-pick[hidden] {
+  display: none;
+}
+
+/* A card's "+N" (ID-126): points to spend, and the button that opens the stat block in
+   place. A pill in the warn colour like the Level up badge. */
+.squad-plus {
+  position: relative;
+  min-width: 32px;
+  min-height: 26px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--color-warn-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The pill stays one line high in the card's head; the tap area reaches 44 px around it. */
+.squad-plus::before {
+  content: '';
+  position: absolute;
+  inset: -9px -6px;
+}
+
+.squad-plus:hover {
+  border-color: var(--color-warn);
+}
+
+.squad-plus-open {
+  border-color: var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.squad-plus[hidden] {
+  display: none;
 }
 
 /* The count with Undo at its right (ID-111): Undo keeps its room while hidden, so the
@@ -3784,11 +3831,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.rv-pend {
-  color: var(--color-warn);
-  font-weight: 700;
-}
-
 .rv-fx {
   display: flex;
   flex-wrap: wrap;
@@ -3808,11 +3850,6 @@ body {
 
 .rv-fx-to {
   color: var(--color-text-faint);
-}
-
-.rv-fx-up {
-  color: var(--color-ok-text);
-  font-weight: 600;
 }
 
 .rv-pm {
@@ -4041,27 +4078,6 @@ body {
   color: var(--color-text-subtle);
 }
 
-/* "Keep N points?" before a close with a draft. */
-.rv-prompt {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-6) var(--space-8);
-  border: 1px solid var(--color-warn-border);
-  border-radius: var(--radius-md);
-  background: var(--color-warn-bg);
-}
-
-.rv-prompt[hidden] {
-  display: none;
-}
-
-.rv-prompt-text {
-  flex: 1;
-  font-weight: 600;
-}
-
 .rv-status {
   margin: 0;
   color: var(--color-ok-text);
@@ -4176,7 +4192,7 @@ body {
   }
 }
 
-/* A stat + or − held keeps changing the draft (ID-096): a long press opens no menu and
+/* A stat + held keeps spending (ID-096, ID-126): a long press opens no menu and
    selects no text; a swipe that starts on it still scrolls the page. */
 .hold-repeat {
   -webkit-touch-callout: none;

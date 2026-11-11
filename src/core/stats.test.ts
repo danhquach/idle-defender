@@ -44,6 +44,7 @@ import {
   NO_STATS,
   reloadTime,
   spend,
+  unspend,
   spreadOf,
   statBonus,
   unspentPoints,
@@ -139,6 +140,20 @@ describe('stat points', () => {
     expect(spend(cur, 'mind')).toEqual({ ok: false, reason: 'No stat points left' });
     expect(d.stats).toEqual(NO_STATS);
     expect(() => spend(d, 'aim' as never)).toThrow(RangeError);
+  });
+
+  it('unspend takes one point back out, refuses an empty stat, and never touches its input (ID-126)', () => {
+    const d = { xp: xpForLevel(4), stats: stats({ agility: 2 }) };
+    const r = unspend(d, 'agility');
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.defender.stats).toEqual(stats({ agility: 1 }));
+    expect(d.stats).toEqual(stats({ agility: 2 }));
+    // Never below zero, so no Undo can make points out of nothing.
+    expect(unspend(d, 'mind')).toEqual({ ok: false, reason: 'No point in that stat' });
+    expect(unspend(d, 'tinker')).toEqual({ ok: false, reason: 'No point in that stat' });
+    for (const bad of ['aim', '__proto__', 'constructor']) {
+      expect(() => unspend(d, bad as never)).toThrow(RangeError);
+    }
   });
 
   it('Tinker is locked: no point goes in, with points to spend or not (ID-084)', () => {

@@ -2,11 +2,11 @@
 // survivors who have stat points to spend, opens one compact dialog: a header (the title,
 // "Best gun for everyone", close), one row of squad tabs (portrait, name, level, a badge
 // with their unspent points), the selected survivor beside their gun slot, and one panel
-// that is either their Stats or "Choose a gun". Points are drafted with + and − and only
-// spent on Confirm (no respec: design §6); closing with a draft asks to keep it. A gun is
-// compared with the one held before it is equipped. Like the Inventory, the field goes
-// inert behind it and an open Roster holds a fight. Text reaches the page only through
-// textContent.
+// that is either their Stats or "Choose a gun". A tap on a stat's + spends the point at
+// once (ID-126); Undo takes back what was spent since the dialog opened, between hordes
+// only (no respec otherwise: design §6), and each spend is read out. A gun is compared with
+// the one held before it is equipped. Like the Inventory, the field goes inert behind it
+// and an open Roster holds a fight. Text reaches the page only through textContent.
 import { baseOf, gunPower, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
 import { STAT_NAMES, STASH_CAP, STATS, WEAPONS, type Rarity, type Stat } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
@@ -80,14 +80,6 @@ export const pointsBadge = (game: Pick<GameState, 'roster'>): number =>
 /** Under a survivor's stats while points can't be spent (`canSpend` off): they wait for the screen between hordes. */
 export const SPEND_LATER_NOTE = 'Spend points between hordes.';
 
-/** The spendable stats, in display order (Tinker is locked, shown apart). */
-const SPENDABLE = STATS.filter((s) => !isLocked(s));
-
-/** Points drafted per stat. */
-type Draft = Partial<Record<Stat, number>>;
-const draftTotal = (d: Draft | undefined): number =>
-  d ? SPENDABLE.reduce((n, s) => n + (d[s] ?? 0), 0) : 0;
-
 function avatar(art: ArtId, className: string): HTMLElement {
   // Decoration only: the name is right beside it.
   const frame = el('div', className);
@@ -113,8 +105,10 @@ export interface RosterOptions {
     canGear: boolean;
     resumes: boolean;
   };
-  /** Confirm: spend one point of `stat` on survivor `id`; called once per drafted point. */
+  /** A + tap: spend one point of `stat` on survivor `id` now. */
   onSpend: (id: string, stat: Stat) => void;
+  /** Undo, between hordes only: take back one point of `stat` that this dialog spent on `id`. */
+  onUnspend: (id: string, stat: Stat) => void;
   /** Equip: give survivor `id` the free pistol ('pistol') or the stash gun with uid `choice`. */
   onEquip: (id: string, choice: string) => { ok: true } | { ok: false; reason: string };
   /** "Best gun for everyone": the guns handed out, or why not. */
@@ -128,7 +122,7 @@ export interface Roster {
    * one); closing gives the keyboard back to `from` (what was clicked), else to what had it.
    */
   open(id?: string, from?: HTMLElement): void;
-  /** Closes at once; any points still drafted are dropped. */
+  /** Closes at once. */
   close(): void;
   /** Re-reads the camp: call when it changes. */
   refresh(): void;
@@ -142,10 +136,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   let current: string | null = null;
   let picking = false;
   let picked: string | null = null;
-  // Points drafted with + and −, per survivor: spent only on Confirm.
-  const drafts = new Map<string, Draft>();
-  // The inline "Keep N points?" question, up while a close waits on it.
-  let asking = false;
+  // The points spent between hordes since it opened, oldest first: what Undo can take back.
+  let spentHere: [string, Stat][] = [];
   let status = { text: '', tone: 'ok' as 'ok' | 'danger' };
   // What had the keyboard before it opened (the button, or a name on the squad screen).
   let opener: HTMLElement | null = null;
@@ -171,7 +163,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   dialog.tabIndex = -1;
   scrim.append(dialog);
   doc.body.append(scrim);
-  // Holding a + or − keeps changing the draft (ID-096).
+  // Holding a + keeps spending (ID-096).
   holdRepeat(dialog);
   scrim.addEventListener('mousedown', (e) => {
     if (e.target === scrim) e.preventDefault();
@@ -193,12 +185,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   tabs.setAttribute('aria-label', 'Squad');
   const top = el('div', 'rv-top');
   const panel = el('div', 'rv-panel');
-  const prompt = el('div', 'rv-prompt');
-  prompt.setAttribute('role', 'group');
-  prompt.setAttribute('aria-label', 'Unconfirmed points');
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
-  dialog.append(grab, head, tabs, top, panel, prompt, statusLine);
+  dialog.append(grab, head, tabs, top, panel, statusLine);
 
   bestButton.addEventListener('click', () => {
     const r = opts.onBestGuns();
@@ -212,7 +201,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     }
     draw('best');
   });
-  closeX.addEventListener('click', () => tryClose());
+  closeX.addEventListener('click', () => api.close());
 
   // Keys stay in the dialog (the field's keys never see them); Esc steps back, then closes;
   // Tab cycles.
@@ -221,15 +210,12 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     if (e.key === 'Escape') {
       e.preventDefault();
       if (e.repeat) return;
-      // Esc steps back one layer: the question, the gun picker, then the dialog.
-      if (asking) {
-        asking = false;
-        draw('close');
-      } else if (picking) {
+      // Esc steps back one layer: the gun picker, then the dialog.
+      if (picking) {
         picking = false;
         picked = null;
         draw('slot');
-      } else tryClose();
+      } else api.close();
       return;
     }
     if (e.key !== 'Tab') return;
@@ -250,52 +236,41 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     status = { text, tone };
   }
 
-  const totalDrafted = (): number => [...drafts.values()].reduce((n, d) => n + draftTotal(d), 0);
-
   /** Points survivor `id` has left in the camp now. */
   const leftNow = (id: string): number => {
     const d = opts.state().game.roster.find((r) => r.id === id);
     return d ? unspentPoints(d) : 0;
   };
 
-  /** Spends survivor `id`'s drafted points through `onSpend`; how many the camp took. */
-  function confirm(id: string): number {
-    const draft = drafts.get(id);
-    // Drop the draft first: each spend redraws from the camp, which now holds the point.
-    drafts.delete(id);
-    const before = leftNow(id);
-    for (const stat of SPENDABLE) {
-      for (let i = draft?.[stat] ?? 0; i > 0; i--) opts.onSpend(id, stat);
-    }
-    // Counted off the camp, so a spend the app refused is not reported as made.
-    return before - leftNow(id);
+  /** Stat `stat` of survivor `id` in the camp now. */
+  const statNow = (id: string, stat: Stat): number =>
+    opts.state().game.roster.find((r) => r.id === id)?.stats[stat] ?? 0;
+
+  /** Spends one point of `stat` on `d` now; reads out what it did, or that the camp refused. */
+  function spendOne(d: RosterDefender, stat: Stat): void {
+    const { canGear } = opts.state();
+    const before = leftNow(d.id);
+    opts.onSpend(d.id, stat);
+    const left = leftNow(d.id);
+    // Counted off the camp, so a spend the app refused is not reported or undone.
+    if (left >= before) return;
+    // In a fight a point stays spent: only one spent between hordes can be undone.
+    if (canGear) spentHere.push([d.id, stat]);
+    setStatus(
+      `${STAT_NAMES[stat]} ${statNow(d.id, stat)} for ${d.name}. ${left > 0 ? `${pointsText(left)} left` : 'No points left'}.`,
+    );
   }
 
-  /** Closes, asking first what to do with points still drafted. */
-  function tryClose(): void {
-    if (totalDrafted() === 0) {
-      api.close();
-      return;
-    }
-    asking = true;
-    draw();
-    // The safe choice takes the keyboard: Esc then Enter must not spend points for good.
-    prompt.querySelector<HTMLButtonElement>('[data-key="stay"]')?.focus();
-  }
-
-  /** Trims drafts the camp no longer covers (points spent elsewhere, a survivor gone). */
-  function settle(roster: readonly RosterDefender[]): void {
-    for (const [id, draft] of drafts) {
-      const d = roster.find((r) => r.id === id);
-      if (!d) {
-        drafts.delete(id);
-        continue;
-      }
-      for (const stat of [...SPENDABLE].reverse()) {
-        while (draftTotal(draft) > unspentPoints(d) && (draft[stat] ?? 0) > 0) draft[stat]!--;
-      }
-      if (draftTotal(draft) === 0) drafts.delete(id);
-    }
+  /** Takes back every point spent on `d` since the dialog opened, newest first. */
+  function undoSpends(d: RosterDefender): void {
+    const mine = spentHere.filter(([id]) => id === d.id);
+    spentHere = spentHere.filter(([id]) => id !== d.id);
+    const before = leftNow(d.id);
+    for (const [, stat] of mine.reverse()) opts.onUnspend(d.id, stat);
+    const left = leftNow(d.id);
+    const n = left - before;
+    // The points left keep two Undos in a row from reading the same (and going unread).
+    setStatus(n > 0 ? `Took back ${pointsText(n)} from ${d.name}. ${pointsText(left)} left.` : '');
   }
 
   const keyOf = (): string | undefined =>
@@ -314,7 +289,6 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     updateBadge(game);
     if (!opened) return;
     const want = focus ?? keyOf();
-    settle(game.roster);
     let d = game.roster.find((r) => r.id === current);
     if (!d) {
       d = game.roster.find((r) => unspentPoints(r) > 0) ?? game.roster[0];
@@ -326,13 +300,12 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       picking = false;
       picked = null;
     }
-    asking = asking && totalDrafted() > 0;
     closeX.setAttribute('aria-label', resumes ? 'Close roster and resume' : 'Close roster');
     bestButton.disabled = !canGear;
     bestButton.title = canGear ? '' : GUNS_WAIT;
 
     const marks = rosterTiles(game, Date.now(), fight);
-    tabs.replaceChildren(...marks.map((t) => tabItem(t, t.id === current, drafts.get(t.id))));
+    tabs.replaceChildren(...marks.map((t) => tabItem(t, t.id === current)));
     if (d) {
       top.replaceChildren(
         ...survivorRow(
@@ -341,50 +314,16 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
           canGear,
         ),
       );
-      panel.replaceChildren(...(picking ? pickerPanel(d, game, canGear) : statsPanel(d, canSpend)));
+      panel.replaceChildren(
+        ...(picking ? pickerPanel(d, game, canGear) : statsPanel(d, canSpend, canGear)),
+      );
     } else {
       top.replaceChildren();
       panel.replaceChildren();
     }
-    drawPrompt();
     statusLine.textContent = status.text;
     statusLine.dataset.tone = status.tone;
     focusKey(want);
-  }
-
-  function drawPrompt(): void {
-    prompt.hidden = !asking;
-    if (!asking) {
-      prompt.replaceChildren();
-      return;
-    }
-    const n = totalDrafted();
-    const keep = el('button', 'hud-button rv-btn primary', 'Confirm');
-    keep.type = 'button';
-    keep.setAttribute('aria-label', `Confirm ${pointsText(n)} and close`);
-    keep.addEventListener('click', () => {
-      for (const id of [...drafts.keys()]) confirm(id);
-      api.close();
-    });
-    const drop = el('button', 'hud-button rv-btn', 'Discard');
-    drop.type = 'button';
-    drop.addEventListener('click', () => {
-      drafts.clear();
-      api.close();
-    });
-    const stay = el('button', 'hud-button rv-btn', 'Keep editing');
-    stay.type = 'button';
-    stay.dataset.key = 'stay';
-    stay.addEventListener('click', () => {
-      asking = false;
-      draw('slot');
-    });
-    prompt.replaceChildren(
-      el('span', 'rv-prompt-text', `Spend ${pointsText(n)}?`),
-      keep,
-      drop,
-      stay,
-    );
   }
 
   /** Puts the keyboard on the control named `key`, else the nearest thing that is left. */
@@ -394,18 +333,12 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       [...dialog.querySelectorAll<HTMLButtonElement>('[data-key]')].find(
         (b) => b.dataset.key === k && !b.disabled && !b.hidden,
       );
-    // A spent-out + moves to its −; a − that hit 0 to its +; then Confirm, the tab, the close.
-    const sibling = key.startsWith('add:')
-      ? `sub:${key.slice(4)}`
-      : key.startsWith('sub:')
-        ? `add:${key.slice(4)}`
-        : '';
-    const target =
-      find(key) ?? find(sibling) ?? find('confirm') ?? find(`tab:${current}`) ?? find('close');
+    // A spent-out + moves to Undo, then the tab, then the close.
+    const target = find(key) ?? find('undo') ?? find(`tab:${current}`) ?? find('close');
     target?.focus();
   }
 
-  function tabItem(t: RosterTile, selected: boolean, draft: Draft | undefined): HTMLElement {
+  function tabItem(t: RosterTile, selected: boolean): HTMLElement {
     const li = el('li', 'rv-cell');
     const tab = el('button', 'rv-tab');
     tab.type = 'button';
@@ -413,7 +346,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     tab.dataset.defender = t.id;
     // One state, announced once: the survivor shown is the current one.
     if (selected) tab.setAttribute('aria-current', 'true');
-    const left = t.points - draftTotal(draft);
+    const left = t.points;
     tab.title = `${t.name}, level ${t.level}, ${t.health}`;
     tab.setAttribute(
       'aria-label',
@@ -514,59 +447,50 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     return [who, slot];
   }
 
-  function statsPanel(d: RosterDefender, canSpend: boolean): HTMLElement[] {
-    const draft = drafts.get(d.id);
-    const total = draftTotal(draft);
-    const left = unspentPoints(d) - total;
+  function statsPanel(d: RosterDefender, canSpend: boolean, canGear: boolean): HTMLElement[] {
+    const left = unspentPoints(d);
+    const undone = spentHere.filter(([id]) => id === d.id).length;
     const headRow = el('div', 'rv-phead');
     const lefts = el('span', 'rv-left');
     lefts.append(el('b', '', String(left)), ' to spend');
-    const undo = el('button', 'hud-button rv-btn', 'Undo');
-    undo.type = 'button';
-    undo.dataset.key = 'undo';
-    undo.disabled = total === 0;
-    undo.addEventListener('click', () => {
-      drafts.delete(d.id);
-      draw();
-    });
-    const ok = el(
-      'button',
-      'hud-button rv-btn primary',
-      total > 0 ? `Confirm ${total}` : 'Confirm',
-    );
-    ok.type = 'button';
-    ok.dataset.key = 'confirm';
-    ok.disabled = total === 0 || !canSpend;
-    ok.addEventListener('click', () => {
-      const n = confirm(d.id);
-      setStatus(n > 0 ? `Spent ${pointsText(n)} on ${d.name}.` : '');
-      draw();
-    });
-    headRow.append(el('span', 'rv-ttl', 'Stats'), lefts, undo, ok);
+    headRow.append(el('span', 'rv-ttl', 'Stats'), lefts);
+    // Between hordes only: a point spent in a fight stays spent.
+    if (canGear) {
+      const undo = el('button', 'hud-button rv-btn', undone > 0 ? `Undo ${undone}` : 'Undo');
+      undo.type = 'button';
+      undo.dataset.key = 'undo';
+      undo.disabled = undone === 0;
+      undo.setAttribute(
+        'aria-label',
+        undone > 0
+          ? `Undo ${pointsText(undone)} spent on ${d.name}`
+          : 'Undo: nothing spent here yet',
+      );
+      undo.addEventListener('click', () => {
+        if (undo.disabled) return;
+        undoSpends(d);
+        draw();
+      });
+      headRow.append(undo);
+    }
     const out: HTMLElement[] = [headRow];
-    if (!canSpend && unspentPoints(d) > 0) out.push(el('p', 'menu-note', SPEND_LATER_NOTE));
+    if (!canSpend && left > 0) out.push(el('p', 'menu-note', SPEND_LATER_NOTE));
     const list = el('ul', 'rv-stats');
-    for (const stat of STATS) list.append(statRow(d, stat, draft, left, canSpend));
+    for (const stat of STATS) list.append(statRow(d, stat, left, canSpend));
     out.push(list);
     out.push(
       el(
         'p',
         'rv-hint',
-        total > 0
-          ? 'Green = after Confirm. Points are spent on Confirm; Undo before that.'
-          : 'Grey arrow = with one more point. Nothing is spent until Confirm.',
+        canGear
+          ? 'Tap + to spend a point now. → shows the next point. Undo takes back what you spent here.'
+          : 'Tap + to spend a point now. → shows the next point. In a fight it stays spent.',
       ),
     );
     return out;
   }
 
-  function statRow(
-    d: RosterDefender,
-    stat: Stat,
-    draft: Draft | undefined,
-    left: number,
-    canSpend: boolean,
-  ): HTMLElement {
+  function statRow(d: RosterDefender, stat: Stat, left: number, canSpend: boolean): HTMLElement {
     const label = STAT_NAMES[stat];
     const li = el('li', 'rv-stat');
     if (isLocked(stat)) {
@@ -574,36 +498,16 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       li.append(el('span', 'rv-stat-name', label), el('span', 'rv-fx', STAT_LOCKED_NOTE));
       return li;
     }
-    const q = draft?.[stat] ?? 0;
     const name = el('span', 'rv-stat-name', label);
-    const count = el('span', 'rv-stat-ct', String(d.stats[stat]));
-    if (q > 0) count.append(' ', el('span', 'rv-pend', `+${q}`));
-    name.append(count);
+    name.append(el('span', 'rv-stat-ct', String(d.stats[stat])));
     const fx = el('span', 'rv-fx');
-    // With no point to spend and none drafted, only what the stat gives now: no "→ next"
-    // a survivor can't buy.
-    const preview = q > 0 || left > 0;
-    for (const c of effectChange(d, stat, Math.max(1, q))) {
+    // With no point to spend, only what the stat gives now: no "→ next" a survivor can't buy.
+    for (const c of effectChange(d, stat, 1)) {
       const item = el('span', 'rv-fx-item');
       item.append(el('span', 'rv-fx-k', `${c.label} `), c.from);
-      if (preview) {
-        item.append(el('span', q > 0 ? 'rv-fx-to rv-fx-up' : 'rv-fx-to', ` → ${c.to}`));
-      }
+      if (left > 0) item.append(el('span', 'rv-fx-to', ` → ${c.to}`));
       fx.append(item);
     }
-    const minus = el('button', 'hud-button rv-sb', '−');
-    minus.type = 'button';
-    minus.dataset.key = `sub:${d.id}:${stat}`;
-    holdable(minus, `sub:${d.id}:${stat}`);
-    minus.disabled = q === 0 || !canSpend;
-    minus.setAttribute('aria-label', `Take back a point from ${label} for ${d.name}`);
-    minus.addEventListener('click', () => {
-      if (minus.disabled) return;
-      const mine = drafts.get(d.id) ?? {};
-      mine[stat] = Math.max(0, (mine[stat] ?? 0) - 1);
-      drafts.set(d.id, mine);
-      draw();
-    });
     const plus = el('button', 'hud-button rv-sb rv-sb-plus', '+');
     plus.type = 'button';
     plus.dataset.key = `add:${d.id}:${stat}`;
@@ -611,17 +515,17 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     plus.disabled = left <= 0 || !canSpend;
     plus.setAttribute(
       'aria-label',
-      `Add a point to ${label} for ${d.name}, now ${d.stats[stat] + q}`,
+      `Spend a point on ${label} for ${d.name}, now ${d.stats[stat]}`,
     );
     plus.addEventListener('click', () => {
       if (plus.disabled) return;
-      const mine = drafts.get(d.id) ?? {};
-      mine[stat] = (mine[stat] ?? 0) + 1;
-      drafts.set(d.id, mine);
-      draw();
+      // The camp's redraw during the spend can't move the keyboard on before Undo is live.
+      const at = keyOf();
+      spendOne(d, stat);
+      draw(at);
     });
     const pm = el('span', 'rv-pm');
-    pm.append(minus, plus);
+    pm.append(plus);
     li.append(name, fx, pm);
     return li;
   }
@@ -762,8 +666,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
         opened = true;
         const at = from ?? doc.activeElement;
         opener = at instanceof HTMLElement && root.contains(at) ? at : null;
-        drafts.clear();
-        asking = false;
+        spentHere = [];
         status = { text: '', tone: 'ok' };
         scrim.hidden = false;
         root.setAttribute('inert', '');
@@ -782,8 +685,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     close() {
       if (!opened) return;
       opened = false;
-      drafts.clear();
-      asking = false;
+      spentHere = [];
       scrim.hidden = true;
       root.removeAttribute('inert');
       (opener?.isConnected ? opener : button).focus();

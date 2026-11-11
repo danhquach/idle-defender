@@ -137,7 +137,7 @@ export interface EffectChange {
 
 /**
  * Each active effect of `stat` for `d` now and with `by` more points (ID-108): the Roster's
- * stat row reads "Reload 1.53 s → 1.47 s" for the points drafted, or one more point.
+ * stat row reads "Reload 1.53 s → 1.47 s" with one more point (or `by` more).
  */
 export function effectChange(d: RosterDefender, stat: Stat, by = 1): EffectChange[] {
   if (isLocked(stat)) return [];

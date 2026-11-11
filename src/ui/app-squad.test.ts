@@ -416,27 +416,81 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
     expect(rosterButton.querySelector<HTMLElement>('.roster-dot')!.textContent).toBe('1');
   });
 
-  it('on the start screen Confirm spends the drafted point at once and saves it', () => {
-    const { scrim, rosterButton, plus, key, saved } = seeded();
+  it('on the start screen a + tap spends the point at once and saves it (ID-126)', () => {
+    const { scrim, rosterButton, plus, saved } = seeded();
     rosterButton.click();
     expect(scrim.hidden).toBe(false);
     expect(scrim.querySelectorAll('.rv-tab')).toHaveLength(2);
     plus('agility').click();
-    // Drafted only: nothing is saved yet.
-    expect(saved().roster[0]!.stats.agility).toBe(0);
-    key('confirm').click();
     expect(saved().roster[0]!.stats.agility).toBe(1);
     expect(scrim.querySelector('.rv-left')!.textContent).toBe('2 to spend');
     expect(rosterButton.querySelector<HTMLElement>('.roster-dot')!.textContent).toBe('1');
   });
 
   it('on the start screen the badge goes once the points are spent', () => {
-    const { scrim, rosterButton, plus, key } = seeded();
+    const { scrim, rosterButton, plus } = seeded();
     rosterButton.click();
     for (let i = 0; i < 3; i++) plus('mind').click();
-    key('confirm').click();
     expect(rosterButton.querySelector<HTMLElement>('.roster-dot')!.hidden).toBe(true);
     expect(scrim.querySelector('.rv-left')!.textContent).toBe('0 to spend');
+  });
+
+  it('on the start screen the Roster’s Undo takes its points back out, saved (ID-126)', () => {
+    const { rosterButton, plus, key, saved } = seeded();
+    rosterButton.click();
+    plus('mind').click();
+    plus('agility').click();
+    expect(saved().roster[0]!.stats).toMatchObject({ mind: 1, agility: 1 });
+    key('undo').click();
+    expect(saved().roster[0]!.stats).toMatchObject({ mind: 0, agility: 0 });
+    expect(rosterButton.querySelector<HTMLElement>('.roster-dot')!.textContent).toBe('1');
+  });
+
+  it('on the start screen a card’s "+N" opens its stat picker in place; a tap saves, Undo takes it back (ID-126)', () => {
+    const { root, scrim, saved } = seeded();
+    const card = (id: string) =>
+      root.querySelector<HTMLElement>(`.squad-card[data-defender="${id}"]`)!;
+    const badge = card('recruit-1').querySelector<HTMLButtonElement>('.squad-plus')!;
+    expect(badge.hidden).toBe(false);
+    expect(badge.textContent).toBe('+3');
+    expect(badge.getAttribute('aria-label')).toBe(`+3: spend 3 points on ${recruit(1).name}`);
+    expect(badge.getAttribute('aria-expanded')).toBe('false');
+    // A survivor with no points has no badge.
+    expect(card('recruit-2').querySelector<HTMLButtonElement>('.squad-plus')!.hidden).toBe(true);
+    const block = card('recruit-1').querySelector<HTMLElement>('.squad-pick')!;
+    expect(block.hidden).toBe(true);
+    expect(badge.getAttribute('aria-controls')).toBe(block.id);
+    badge.click();
+    // In place: the Roster stays shut, and the keyboard is on the first stat.
+    expect(scrim.hidden).toBe(true);
+    expect(block.hidden).toBe(false);
+    expect(badge.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(block.querySelector('.hud-pick-stat'));
+    const stat = block.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')[1]!;
+    stat.click();
+    expect(saved().roster[0]!.stats.agility).toBe(1);
+    // Open, the badge is its close (the block heads the count); its name says so.
+    expect(badge.textContent).toBe('✕');
+    expect(badge.getAttribute('aria-label')).toBe(`Close ${recruit(1).name}'s stats`);
+    expect(block.querySelector('.squad-points')!.textContent).toBe('2 points');
+    const said = root.querySelector('.hud-result [role="status"].sr-only');
+    expect(said!.textContent).toBe(`Agility 1 for ${recruit(1).name}. 2 points left.`);
+    // The Roster's badge follows the camp.
+    expect(root.querySelector<HTMLElement>('.roster-button .roster-dot')!.textContent).toBe('1');
+    block.querySelector<HTMLButtonElement>('.squad-undo')!.click();
+    expect(saved().roster[0]!.stats.agility).toBe(0);
+    expect(block.querySelector('.squad-points')!.textContent).toBe('3 points');
+    expect(said!.textContent).toBe(`Took back 1 point from ${recruit(1).name}. 3 points left.`);
+    // Closed again by the same badge.
+    badge.click();
+    expect(block.hidden).toBe(true);
+    expect(badge.textContent).toBe('+3');
+  });
+
+  it('on the start screen Enter still starts the horde: the keyboard is not on a badge', () => {
+    const { root } = seeded();
+    expect(document.activeElement?.classList.contains('squad-plus')).toBe(false);
+    expect(root.querySelector('.squad-plus')).not.toBeNull();
   });
 
   it('a gun picked in the Roster is equipped and saved; Best gun for everyone hands out the stash', () => {
@@ -472,7 +526,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
     expect(vi.mocked(tick).mock.calls.length).toBe(ticks);
   });
 
-  it('mid-fight Confirm spends at once (ID-116): saved, fought with now, kept after the horde and on its retry', () => {
+  it('mid-fight a + tap spends at once (ID-116, ID-126): saved, fought with now, kept after the horde and on its retry', () => {
     const { scrim, rosterButton, button, plus, key, saved } = seeded();
     button().click();
     step(16);
@@ -480,18 +534,15 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
       vi.mocked(drawScene).mock.lastCall![2].defenders.find((d) => d.id === 'recruit-1')!;
     const before = fighter();
     rosterButton.click();
-    expect(key('confirm').disabled).toBe(true);
     plus('instinct').click();
     plus('instinct').click();
     plus('mind').click();
-    // Drafted only: nothing spent yet, in the camp or the fight.
-    expect(saved().roster[0]!.stats.instinct).toBe(0);
-    key('confirm').click();
     // Saved at once, so a reload keeps it.
     expect(saved().roster[0]!.stats).toMatchObject({ instinct: 2, mind: 1 });
     expect(scrim.querySelector('.rv-left')!.textContent).toBe('0 to spend');
     expect(plus('agility').disabled).toBe(true);
-    expect(key('confirm').disabled).toBe(true);
+    // A point spent in a fight stays spent: no Undo there.
+    expect(key('undo')).toBeNull();
     scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
     step(32);
     // The fight's survivor has the points now, and the extra max HP on top of their HP.
@@ -511,8 +562,8 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
     expect(fighter().stats).toMatchObject({ instinct: 2, mind: 1 });
   });
 
-  it('on the result screen a name opens the survivor; Confirm joins the screen’s picks and is saved with its button', () => {
-    const { root, result, button, scrim, plus, key, saved } = seeded();
+  it('on the result screen a name opens the survivor; a + tap joins the screen’s picks and is saved with its button', () => {
+    const { root, result, button, scrim, plus, saved } = seeded();
     button().click();
     step(16);
     endNextTick('won');
@@ -526,8 +577,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108)', () => {
     const card = () => root.querySelector<HTMLElement>(`.squad-card[data-defender="recruit-1"]`)!;
     const before = card().querySelector('.squad-points')!.textContent;
     plus('mind').click();
-    key('confirm').click();
-    // The result screen's own picker counts the point confirmed in the Roster.
+    // The result screen's own picker counts the point spent in the Roster.
     expect(card().querySelector('.squad-points')!.textContent).not.toBe(before);
     // Not saved until the screen's button, like a point spent on the screen itself.
     expect(saved().roster[0]!.stats.mind).toBe(left.stats.mind);
@@ -571,7 +621,7 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     Object.values(d.stats).reduce((a, b) => a + b, 0);
 
   it('points spent across the picker and the Roster never add up to more than were earned', () => {
-    const { button, saved, scrim, pickerButtons, plus, key, open, close } = wonWithPoints();
+    const { button, saved, scrim, pickerButtons, plus, open, close } = wonWithPoints();
     const start = saved().roster[0]!;
     const earned = Number(
       /^(\d+) point/.exec(
@@ -584,10 +634,9 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     pickerButtons()[0]!.click();
     open();
     expect(scrim.querySelector('.rv-left')!.textContent).toBe(`${earned - 1} to spend`);
-    // The rest drafted in the Roster: every + greys out. Confirm them.
+    // The rest spent in the Roster: every + greys out.
     for (let i = 1; i < earned; i++) plus('agility').click();
     expect(plus('agility').disabled).toBe(true);
-    key('confirm').click();
     close();
     // The picker took the Roster's spends: nothing left to click.
     expect(pickerButtons().every((b) => b.disabled)).toBe(true);
@@ -596,20 +645,19 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     expect(spent(saved().roster[0]!)).toBe(spent(start) + earned);
   });
 
-  it('a card’s Undo takes back the points spent on that card, not the ones confirmed in the Roster', () => {
-    const { button, saved, pickerButtons, plus, key, undo, open, close, card } = wonWithPoints();
+  it('a card’s Undo takes back the points spent on that card, not the ones spent in the Roster', () => {
+    const { button, saved, pickerButtons, plus, undo, open, close, card } = wonWithPoints();
     const start = saved().roster[0]!;
     const total = () =>
       Number(/^(\d+) point/.exec(card().querySelector('.squad-points')!.textContent!)![1]);
     const earned = total();
     expect(undo().hidden).toBe(true);
-    // Two points on the card, then one confirmed in the Roster.
+    // Two points on the card, then one spent in the Roster.
     pickerButtons()[0]!.click();
     pickerButtons()[0]!.click();
     expect(undo().hidden).toBe(false);
     open();
     plus('mind').click();
-    key('confirm').click();
     close();
     expect(card().querySelector('.squad-points')!.textContent).toBe(
       earned - 3 > 0 ? `${earned - 3} point${earned - 3 === 1 ? '' : 's'}` : '0 points',
@@ -621,6 +669,34 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     button().click();
     expect(spent(saved().roster[0]!)).toBe(spent(start) + 1);
     expect(saved().roster[0]!.stats.mind).toBe(start.stats.mind + 1);
+  });
+
+  it('the Roster’s Undo takes its points out of the screen’s picks, not the card’s (ID-126)', () => {
+    const { button, saved, pickerButtons, plus, key, open, close, card } = wonWithPoints();
+    const start = saved().roster[0]!;
+    const total = () =>
+      Number(/^(\d+) point/.exec(card().querySelector('.squad-points')!.textContent!)![1]);
+    const earned = total();
+    pickerButtons()[0]!.click();
+    open();
+    plus('mind').click();
+    plus('mind').click();
+    key('undo').click();
+    close();
+    expect(total()).toBe(earned - 1);
+    button().click();
+    expect(spent(saved().roster[0]!)).toBe(spent(start) + 1);
+    expect(saved().roster[0]!.stats.mind).toBe(start.stats.mind);
+  });
+
+  it('a result card shows "+N" and its stat block opens in place; the first badge has the keyboard', () => {
+    const { card } = wonWithPoints();
+    const badge = card().querySelector<HTMLButtonElement>('.squad-plus')!;
+    expect(badge.textContent).toMatch(/^\+\d+$/);
+    expect(card().querySelector<HTMLElement>('.squad-pick')!.hidden).toBe(true);
+    expect(document.activeElement).toBe(badge);
+    badge.click();
+    expect(card().querySelector<HTMLElement>('.squad-pick')!.hidden).toBe(false);
   });
 
   it('Best gun on the result screen: the new guns and a card’s point are both saved by the button', () => {

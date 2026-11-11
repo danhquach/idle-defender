@@ -50,7 +50,9 @@ describe('hold to add, on each screen (ID-096)', () => {
       noop,
       noop,
       noop,
-      (_, s) => spent.push(s),
+      (_, s) => {
+        spent.push(s);
+      },
       noop,
       noop,
       noop,
@@ -61,13 +63,15 @@ describe('hold to add, on each screen (ID-096)', () => {
     const g0 = newGame('horde');
     const g: GameState = { ...g0, roster: [vet(1)], camp: { ...g0.camp, recruits: 1 } };
     h.showResult(squadScreen(g, { ...startSquadHorde(g, 1, NOW), outcome: 'won' }));
+    // The card's "+N" opens its stat block (ID-126): a closed block's buttons don't repeat.
+    root.querySelector<HTMLButtonElement>('.squad-plus')!.click();
     const plus = () => root.querySelector<HTMLButtonElement>(`.hud-pick-stat[${HOLD_ATTR}]`)!;
     expect(plus().getAttribute(HOLD_ATTR)).toBe('recruit-1:instinct');
     holdDown(plus, HOLD.delay + HOLD.every + 10);
     expect(spent).toEqual(['instinct', 'instinct']);
   });
 
-  it('the Roster’s + and − draft points, held; Confirm spends them', () => {
+  it('the Roster’s + spends a point at each repeat, held (ID-126)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const g0 = newGame('horde');
@@ -78,20 +82,16 @@ describe('hold to add, on each screen (ID-096)', () => {
         g = spend(g, id, stat);
         roster.refresh();
       },
+      onUnspend: () => {},
       onEquip: () => ({ ok: true }),
       onBestGuns: () => ({ ok: true, moves: [] }),
     });
     roster.open('recruit-1');
     const plus = () => document.querySelector<HTMLButtonElement>(`[${HOLD_ATTR}^="add:"]`)!;
-    const minus = () => document.querySelector<HTMLButtonElement>(`[${HOLD_ATTR}^="sub:"]`)!;
     holdDown(plus, HOLD.delay + 2 * HOLD.every + 10);
-    // Drafted, not spent: the camp still has them to spend.
-    expect(g.roster[0]!.stats.instinct).toBe(0);
-    expect(document.querySelector('.rv-pend')!.textContent).toBe('+3');
-    holdDown(minus, HOLD.delay + HOLD.every + 10);
-    expect(document.querySelector('.rv-pend')!.textContent).toBe('+1');
-    document.querySelector<HTMLButtonElement>('[data-key="confirm"]')!.click();
-    expect(g.roster[0]!.stats.instinct).toBe(1);
+    // Spent at once, one point a repeat: no draft to confirm.
+    expect(g.roster[0]!.stats.instinct).toBe(3);
+    expect(document.querySelector(`[${HOLD_ATTR}^="sub:"]`)).toBeNull();
   });
 
   it('the full game’s roster in the build panel', () => {
