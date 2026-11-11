@@ -687,20 +687,21 @@ close-quarter weapons come out only when an enemy is close.
   survivor beside their gun slot, and one panel that is either **Stats** or
   **Choose a gun**. A survivor's name on the result screen still opens that
   survivor here.
-  - **Stats:** each stat is one row with its points ("1 +2" while two are
-    drafted), its effects as "now → with the drafted points" (grey for the
-    next point, green once drafted), and − and + (40 px, hold to repeat).
-    Points are drafted per survivor and kept while the dialog is open; they
-    are spent only on **Confirm** (no respec), and **Undo** clears the
-    draft. Closing with a draft asks "Spend N points?" in the dialog (the keyboard on Keep editing): Confirm
-    spends them, Discard drops them, Esc or Keep editing goes back. On the
-    start screen Confirm spends and saves at once; on the result screen the
-    points join the screen's own picks and are saved with its button. In a
-    fight (ID-116) Confirm also spends and saves at once, and the survivor
-    fights with the new stat straight away (an Instinct point's extra max HP
-    is added to the HP they have); a survivor down in the fight keeps the
-    points for later fights. The horde's XP adds to them when it ends, and a
-    retry fights with them.
+  - **Stats** *(ID-126; drafts and Confirm before it, ID-108)*: each stat is one
+    row with its points, its effects as "now → with one more point" (the arrow
+    only while a point is left), and one + (40 px, hold to repeat). A tap on +
+    spends the point at once: there is no draft, no Confirm and no question on
+    close. The status line reads each spend out ("Agility 3 for Mara. 2 points
+    left."). **Undo** ("Undo 2") takes back, newest first, the points spent on
+    that survivor since the dialog opened, between hordes only; closing forgets
+    them, so points stay permanent (no respec). On the start screen a spend is
+    saved at once and Undo takes it back out of the save; on the result screen
+    the points join the screen's own picks and are saved with its button. In a
+    fight (ID-116) a spend is saved at once and the survivor fights with the new
+    stat straight away (an Instinct point's extra max HP is added to the HP they
+    have); there is no Undo there, so a point spent in a fight stays spent. A
+    survivor down in the fight keeps the points for later fights. The horde's XP
+    adds to them when it ends, and a retry fights with them.
   - **Choose a gun** (between hordes): tiles for the free pistol and every
     stash gun except the one held, strongest first by dmg/s, each with its
     base gun, a rarity frame and a change badge against the held gun ("▲ +4.2",
@@ -722,7 +723,20 @@ close-quarter weapons come out only when an enemy is close.
     holds the best gun they can get. A gun never goes into the stash for the
     pistol, so the stash never grows.
   - On the result screen each survivor card's **Undo** takes back the points
-    spent on that card on that screen; points confirmed in the Roster stay.
+    spent on that card on that screen; points spent in the Roster stay (the
+    Roster's own Undo takes those back while it is open).
+- **Spending from the start and result screens (ID-126):** a survivor card
+  with points to spend shows a **"+N"** badge beside the name (N = points
+  left). A tap opens that card's stat block in place, without the Roster: the
+  points count with the card's Undo, and one button per stat with what its
+  next point adds; a tap spends at once, read out to screen readers. The badge
+  closes it again (✕ while open, ↺ while closed with an Undo pending; its
+  spoken name starts with what it shows, "+2: spend 2 points on Mara"). The
+  hint over the cards reads "Tap + to spend points. Tap a name for their card." On
+  the start screen each spend, and each Undo, is saved at once; on the result
+  screen they are saved with its button, as before. A result screen with
+  points starts the keyboard on the first badge; the start screen keeps it on
+  its start button, so Enter still starts the horde.
 
 ### Ballistics
 
@@ -780,10 +794,10 @@ loadout (ID-084):
 - Level L → L+1 costs 25 × L defender XP (ID-011), so a defender in every
   win reaches level 2 after Horde 2 and level 3 after Horde 4. Points are
   spent on the result screen after a win (or on the roster); unspent points
-  carry over. *As built (ID-108):* the Roster drafts points with + and − and
-  spends them on Confirm; a result-screen card can take back what was spent on
-  that card with Undo, until the next horde starts (see the Roster screen
-  under §6).
+  carry over. *As built (ID-126):* a tap on a stat spends the point at once,
+  in the Roster or on a start or result screen card ("+N" opens it in place);
+  Undo takes back what was spent since that panel opened, between hordes only
+  (see the Roster screen under §6).
 - **A point is split across its stat's active effects, and every bonus
   shrinks as points pile up** *(starting points, ID-084, ID-096)*: with P
   points in a stat that drives n **active** effects (the ones that work in

@@ -8,6 +8,7 @@ import {
   newGame,
   recover,
   spendPoint,
+  unspendPoint,
   startHorde,
   type GameState,
 } from '../core/game.ts';
@@ -174,7 +175,8 @@ export function start(root: HTMLElement, art: Art): void {
   /** Whether the fight is over and its result screen up, so camp actions are open again. */
   const resultUp = (): boolean => endedAt !== null && pendingResult === null;
   // Stat points spent on the result screen, applied with "Back to build". `card`: spent on a
-  // survivor's card there, which its Undo takes back; `roster`: confirmed in the Roster, locked.
+  // survivor's card there, which its Undo takes back; `roster`: spent in the Roster, which the
+  // Roster's own Undo takes back while it is open.
   let spends: [string, Stat, 'card' | 'roster'][] = [];
   // Camp-level picks (or a survivor let in) on the result screen, applied in order with "Back to build".
   let campPicks: CampChoice[] = [];
@@ -259,10 +261,13 @@ export function start(root: HTMLElement, art: Art): void {
       if (horde?.replace) horde = skipReplace(horde);
     },
     (defenderId, stat) => {
-      if (!horde || endedAt === null) return;
+      // The start screen's cards (ID-126): saved at once, as the Roster does there.
+      if (!horde) return startScreenSpend(defenderId, stat, spendPoint);
+      if (endedAt === null) return false;
       spends.push([defenderId, stat, 'card']);
       showPicker();
       refreshDialogs();
+      return true;
     },
     (item) => {
       if (!horde) return;
@@ -296,14 +301,20 @@ export function start(root: HTMLElement, art: Art): void {
     else commit(r.game);
     hud.showSkills(skillPicker(game.skillPick));
   });
-  // A survivor card's Undo on the result screen (ID-108): takes back the points spent on that
-  // card, not the ones confirmed in the Roster.
-  hud.onUnspend((id) => {
-    if (!horde || endedAt === null) return;
+  // A survivor card's Undo (ID-108): takes back the points spent on that card, not the ones
+  // spent in the Roster. On the start screen (ID-126) they were saved, so they come back out.
+  hud.onUnspend((id, stats) => {
+    if (!horde) {
+      // Newest first, each one the card spent; counted as the camp took them back.
+      return [...stats].reverse().filter((stat) => startScreenSpend(id, stat, unspendPoint)).length;
+    }
+    if (endedAt === null) return 0;
+    const before = spends.length;
     spends = spends.filter(([who, , from]) => !(who === id && from === 'card'));
     hud.syncPicks(pending().roster);
     showPicker();
     refreshDialogs();
+    return before - spends.length;
   });
   hud.onHordePick((n) => {
     picked = n;
@@ -329,6 +340,26 @@ export function start(root: HTMLElement, art: Art): void {
     // Whatever is picked starts: one that isn't open (a stale pick) falls back to the new horde.
     const open = Number.isInteger(picked) && picked >= 1 && picked <= game.hordeNumber;
     startFight(startSquadHorde(game, now, now, open ? picked : game.hordeNumber));
+  }
+  /**
+   * A point spent (or taken back) on the start screen (ID-126): saved at once, the squad on
+   * the wall stands with it, and the cards, the picker and the Roster follow. False when
+   * refused (the cards are put back to the camp).
+   */
+  function startScreenSpend(id: string, stat: Stat, act: typeof spendPoint): boolean {
+    if (!game.roster.some((d) => d.id === id)) return false;
+    const r = act(game, id, stat);
+    if (!r.ok) {
+      hud.toast(r.reason);
+      hud.syncPicks(game.roster);
+      return false;
+    }
+    commit(r.game);
+    preview = startSquadHorde(game, 0, Date.now());
+    hud.syncPicks(game.roster);
+    showPicker();
+    refreshDialogs();
+    return true;
   }
   /** The horde picker redrawn off the squad as it stands, the pick kept (ID-098). */
   function showPicker(): void {
@@ -501,10 +532,10 @@ export function start(root: HTMLElement, art: Art): void {
     return next;
   }
   // The Roster (ID-086, ID-108), left of the Inventory, in the horde-only build: every
-  // survivor's stats and gun. Confirming drafted points spends them: on the result screen
-  // with the screen's own picks, on the start screen at once, and in a fight (ID-116) at
-  // once, saved and on that survivor in the fight too. Guns change as on the gun pickers,
-  // between hordes only.
+  // survivor's stats and gun. A + tap spends the point at once (ID-126): on the result screen
+  // with the screen's own picks, on the start screen saved, and in a fight (ID-116) saved and
+  // on that survivor in the fight too. Its Undo takes back, between hordes only, what it spent
+  // since it opened. Guns change as on the gun pickers, between hordes only.
   const roster: Roster | null = HORDE_ONLY
     ? createRoster(root, {
         state: () => ({
@@ -542,22 +573,35 @@ export function start(root: HTMLElement, art: Art): void {
             hud.fightPower(powerLine(squadPower(game), recommendedPower(horde.hordeNumber)));
             return;
           }
+          if (!horde) {
+            startScreenSpend(id, stat, spendPoint);
+            return;
+          }
           const r = spendPoint(pending(), id, stat);
           if (!r.ok) {
             hud.toast(r.reason);
             return;
           }
-          if (horde) {
-            spends.push([id, stat, 'roster']);
-            hud.syncPicks(r.game.roster);
-            showPicker();
-            refreshDialogs();
+          spends.push([id, stat, 'roster']);
+          hud.syncPicks(r.game.roster);
+          showPicker();
+          refreshDialogs();
+        },
+        onUnspend: (id, stat) => {
+          if (horde && !resultUp()) return;
+          if (!horde) {
+            startScreenSpend(id, stat, unspendPoint);
             return;
           }
-          commit(r.game);
-          // The start screen's squad on the wall stands with the new HP too.
-          preview = startSquadHorde(game, 0, Date.now());
+          // The newest Roster spend of that stat on that survivor comes out of the screen's picks.
+          const i = spends.findLastIndex(
+            ([who, s, from]) => who === id && s === stat && from === 'roster',
+          );
+          if (i < 0) return;
+          spends.splice(i, 1);
+          hud.syncPicks(pending().roster);
           showPicker();
+          refreshDialogs();
         },
       })
     : null;

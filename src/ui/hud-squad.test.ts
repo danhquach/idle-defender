@@ -295,15 +295,70 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const undo = root.querySelector<HTMLButtonElement>('.squad-undo')!;
     expect(undo.hidden).toBe(false);
     expect(undo.getAttribute('aria-label')).toBe(`Undo the points spent on ${evil} here`);
+    // ID-126: the "+N" badge and the spend read-out name them as plain text.
+    const badge = root.querySelector<HTMLButtonElement>('.squad-plus')!;
+    // Spent out with an Undo pending, it reopens the stats.
+    expect(badge.getAttribute('aria-label')).toBe(`Open ${evil}'s stats`);
+    expect(badge.title).toBe(`Open ${evil}'s stats`);
+    const said = root.querySelector<HTMLElement>('.hud-result [role="status"].sr-only')!;
+    expect(said.textContent).toBe(`Instinct 1 for ${evil}. No points left.`);
+    expect(said.children).toHaveLength(0);
+    expect(root.querySelectorAll('.hud-result img:not(.hud-skill-option img)')).toHaveLength(1);
+    // The start screen's card (ID-126) too, with a point to spend.
+    g.roster[0] = { ...g.roster[0]!, xp: xpForLevel(2) };
     h.showResult(squadStart(g));
     expect(root.querySelector('.hud-result img:not(.hud-skill-option img)')).toBeNull();
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
+    const start = root.querySelector<HTMLButtonElement>('.squad-plus:not([hidden])')!;
+    expect(start.getAttribute('aria-label')).toBe(`+1: spend 1 point on ${evil}`);
+    start.click();
+    root.querySelector<HTMLButtonElement>('.squad-pick:not([hidden]) .hud-pick-stat')!.click();
+    expect(said.textContent).toBe(`Instinct 1 for ${evil}. No points left.`);
+    expect(root.querySelector('.hud-result img:not(.hud-skill-option img)')).toBeNull();
+  });
+
+  it('a spend the app refuses puts the card back and leaves nothing for its Undo (ID-126)', () => {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const undone: string[][] = [];
+    const h = createHud(
+      root,
+      noop,
+      noop,
+      noop,
+      noop,
+      () => false,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      true,
+    );
+    h.onUnspend((_, stats) => {
+      undone.push(stats);
+      return stats.length;
+    });
+    const g = squadGame(1, 3);
+    h.showResult(squadStart(g));
+    root.querySelector<HTMLButtonElement>('.squad-plus')!.click();
+    const card = root.querySelector<HTMLElement>('.squad-card')!;
+    const before = card.querySelector('.squad-points')!.textContent;
+    card.querySelector<HTMLButtonElement>('.hud-pick-stat')!.click();
+    expect(card.querySelector('.squad-points')!.textContent).toBe(before);
+    expect(card.querySelector<HTMLButtonElement>('.squad-undo')!.hidden).toBe(true);
+    expect(root.querySelector('.hud-result [role="status"].sr-only')!.textContent).toBe('');
+    expect(undone).toEqual([]);
   });
 
   it('the result screen’s picker offers every stat, Tinker greyed out and unnamed for adding (ID-084)', () => {
     const { root, h } = hud(true);
     const g = squadGame(1, 5);
     h.showResult(squadScreen(g, ended(g, 'won')));
+    // The first card's "+N" has the keyboard; it opens the stat block in place (ID-126).
+    const badge = root.querySelector<HTMLButtonElement>('.squad-card:first-child .squad-plus')!;
+    expect(document.activeElement).toBe(badge);
+    badge.click();
     // Their card's buttons: the new survivor's card has its own (ID-111).
     const buttons = [
       ...root.querySelectorAll<HTMLButtonElement>('.squad-card:first-child .hud-pick-stat'),
@@ -409,7 +464,7 @@ describe('the result cards keep one size (ID-111)', () => {
     expect(first.textContent).toMatch(/^Instinct \(2\) \+\d+ HP/);
   });
 
-  it('Undo shares the count’s row, and the start screen has no stat block', () => {
+  it('Undo shares the count’s row; the start screen’s block is closed with no badge when spent out', () => {
     const { root, h } = hud();
     const g = levelling(2, [0]);
     h.showResult(squadScreen(g, ended(g, 'won')));
@@ -419,13 +474,16 @@ describe('the result cards keep one size (ID-111)', () => {
     expect([...row.children].map(part)).toEqual(['squad-points', 'squad-undo']);
     h.showResult(squadStart(g));
     expect(root.querySelector('.squad-card')).not.toBeNull();
-    expect(root.querySelector('.squad-card .squad-pick')).toBeNull();
+    // ID-126: the start screen has the block too, closed; nobody here has a point, so no badge.
+    expect(root.querySelector<HTMLElement>('.squad-card .squad-pick')!.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>('.squad-card .squad-plus')!.hidden).toBe(true);
   });
 
   it('keeps the keyboard on the stat just pressed, not on the row’s Undo', () => {
     const { root, h } = hud();
     const g = { ...levelling(1, []), roster: [{ ...recruit(1), xp: xpForLevel(5) }] };
     h.showResult(squadScreen(g, ended(g, 'won')));
+    root.querySelector<HTMLButtonElement>('.squad-card .squad-plus')!.click();
     const agility = root.querySelectorAll<HTMLButtonElement>('.squad-card .hud-pick-stat')[1]!;
     agility.click();
     expect(document.activeElement).toBe(root.querySelectorAll('.squad-card .hud-pick-stat')[1]);

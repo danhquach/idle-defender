@@ -62,7 +62,7 @@ describe('the next point, per active effect (ID-096)', () => {
   });
 });
 
-describe('effects with drafted points (ID-108)', () => {
+describe('effects with more points (ID-108)', () => {
   it('now → with n more points; by default one more', () => {
     const d = at({ agility: 1 });
     const [one] = effectChange(d, 'agility');

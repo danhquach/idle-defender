@@ -91,6 +91,16 @@ export function spend<T extends Pointed>(
   return { ok: true, defender: { ...d, stats: { ...d.stats, [stat]: d.stats[stat] + 1 } } };
 }
 
+/** `d` with one point taken back out of `stat` (an Undo, ID-126); refused with none in it. */
+export function unspend<T extends Pointed>(
+  d: T,
+  stat: Stat,
+): { ok: true; defender: T } | { ok: false; reason: string } {
+  if (!STATS.includes(stat)) throw new RangeError(`unspend: unknown stat ${String(stat)}`);
+  if (d.stats[stat] <= 0) return { ok: false, reason: 'No point in that stat' };
+  return { ok: true, defender: { ...d, stats: { ...d.stats, [stat]: d.stats[stat] - 1 } } };
+}
+
 /** How many effects `stat`'s points are shared across (ID-096): its active ones. */
 export const activeEffects = (stat: Stat): number => STAT_ACTIVE[stat].length;
 

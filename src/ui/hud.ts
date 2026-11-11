@@ -1262,9 +1262,9 @@ export interface SquadCard {
   /** Joins for the next horde (a win's new survivor). */
   joining: boolean;
   /**
-   * The survivor as the card's stat block reads them (ID-111), this result's XP in: every
-   * result card has the block, spent out or not, so a level-up doesn't change its size.
-   * Null only for one the roster doesn't hold.
+   * The survivor as the card's stat block reads them (ID-111), this result's XP in. With
+   * points to spend the card shows a "+N" badge that opens the block in place (ID-126), on
+   * the start screen too. Null only for one the roster doesn't hold.
    */
   survivor: RosterDefender | null;
 }
@@ -1392,7 +1392,13 @@ export const SQUAD_NO_DROP = 'No weapon drop on a loss';
 export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivor is down.';
 
 /** Over the squad's cards (ID-086): a name opens that survivor's card in the Roster. */
-export const SQUAD_CARD_HINT = 'Tap a name to see their card and what each point adds.';
+export const SQUAD_CARD_HINT = 'Tap + to spend points. Tap a name for their card.';
+
+/** "2 points left", "No points left": a card's spend and Undo read-outs (ID-126). */
+const pointsLeft = (d: RosterDefender): string => {
+  const n = unspentPoints(d);
+  return n > 0 ? `${n} point${n === 1 ? '' : 's'} left` : 'No points left';
+};
 
 /** Under the horde-only stat picker: points not spent now aren't lost. */
 export const SQUAD_POINTS_NOTE = 'Unspent points are kept for later.';
@@ -1589,7 +1595,8 @@ export function createHud(
   onDone: () => void,
   onReplace: (defenderId: string, postId: number) => void,
   onSkip: () => void,
-  onSpend: (defenderId: string, stat: Stat) => void,
+  /** A card's spend; returning false says the camp refused it (the card takes it back). */
+  onSpend: (defenderId: string, stat: Stat) => boolean | void,
   onBuy: (item: ShopItem) => void,
   onArm: (skill: SkillId) => void,
   onReroll: () => void,
@@ -1610,9 +1617,9 @@ export function createHud(
   syncPicks(picks: readonly RosterDefender[]): void;
   /**
    * Where a survivor card's Undo goes (ID-108): take back the points spent on that card on
-   * this screen, not the ones confirmed in the Roster; the app sets it once.
+   * this screen (`stats`, oldest first), not the ones spent in the Roster; the app sets it once.
    */
-  onUnspend(handler: (defenderId: string) => void): void;
+  onUnspend(handler: (defenderId: string, stats: Stat[]) => number | void): void;
   /** Where a horde picked from the picker goes (ID-098); the app sets it once. */
   onHordePick(handler: (horde: number) => void): void;
   /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
@@ -1764,10 +1771,13 @@ export function createHud(
   let onPickSkill: (skill: SkillId) => void = () => {};
   foot.append(skillBlock, pickBlock, footNote, back);
   let onPickHorde: (horde: number) => void = () => {};
-  let onUnspend: ((defenderId: string) => void) | null = null;
-  // Points spent on each survivor's card on this result screen, which its Undo takes back.
-  const cardSpent = new Map<string, number>();
-  result.append(resultTitle, resultList, picker, gear, campPicker, foot);
+  let onUnspend: ((defenderId: string, stats: Stat[]) => number | void) | null = null;
+  // Points spent on each survivor's card on this screen, oldest first, which its Undo takes back.
+  const cardSpent = new Map<string, Stat[]>();
+  // Each card spend and Undo read out (ID-126): the buttons alone change silently.
+  const said = el('p', 'sr-only');
+  said.setAttribute('role', 'status');
+  result.append(resultTitle, resultList, picker, gear, campPicker, foot, said);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
@@ -2035,8 +2045,15 @@ export function createHud(
     replace.replaceChildren(...parts, row, skip);
   }
 
-  /** One defender's picker; each click spends a point here and through `onSpend`. */
-  function pickerBlock(start: RosterDefender, squadPicks = false): HTMLElement {
+  /**
+   * One defender's picker; each click spends a point here and through `onSpend`. `drawn`
+   * hears the survivor each time it redraws (the card's "+N" badge follows it).
+   */
+  function pickerBlock(
+    start: RosterDefender,
+    squadPicks = false,
+    drawn?: (d: RosterDefender) => void,
+  ): HTMLElement {
     const block = el('div', squadPicks ? 'hud-pick squad-pick' : 'hud-pick');
     let d = start;
     pickSync.set(start.id, (next) => {
@@ -2073,20 +2090,30 @@ export function createHud(
           if (result.hidden) return;
           const r = spend(d, b.stat);
           if (!r.ok) return;
+          const was = d;
           d = r.defender;
-          if (squadPicks) cardSpent.set(d.id, (cardSpent.get(d.id) ?? 0) + 1);
-          onSpend(d.id, b.stat);
+          // Refused by the camp: the card goes back, and nothing is kept for its Undo.
+          if (onSpend(d.id, b.stat) === false) {
+            d = was;
+            draw();
+            return;
+          }
+          if (squadPicks) {
+            cardSpent.set(d.id, [...(cardSpent.get(d.id) ?? []), b.stat]);
+            said.textContent = `${STAT_NAMES[b.stat]} ${d.stats[b.stat]} for ${d.name}. ${pointsLeft(d)}.`;
+          }
           draw();
-          // Keep the keyboard where it was; a spent-out row moves on to the next picker
-          // with points left (wrapping round), then to the screen's button.
+          // Keep the keyboard where it was; spent out, a card's goes to its Undo, else the
+          // next picker with points left (wrapping round), then the screen's button.
           const again = block.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')[i];
+          const undo = block.querySelector<HTMLButtonElement>('.squad-undo:not([hidden])');
           const open = [...picker.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')].filter(
-            (x) => !x.disabled,
+            (x) => !x.disabled && !x.closest('[hidden]'),
           );
           const after = open.find(
             (x) => block.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING,
           );
-          (again && !again.disabled ? again : (after ?? open[0] ?? back)).focus();
+          (again && !again.disabled ? again : (undo ?? after ?? open[0] ?? back)).focus();
         });
         buttons.append(button);
       });
@@ -2104,12 +2131,16 @@ export function createHud(
         count.classList.toggle('squad-points-none', left === 0);
         const undo = el('button', 'hud-button squad-undo', 'Undo');
         undo.type = 'button';
-        undo.hidden = !onUnspend || !cardSpent.get(d.id);
+        undo.hidden = !onUnspend || !cardSpent.get(d.id)?.length;
         undo.setAttribute('aria-label', `Undo the points spent on ${d.name} here`);
         undo.addEventListener('click', () => {
           if (result.hidden || !onUnspend) return;
+          const stats = cardSpent.get(d.id) ?? [];
           cardSpent.delete(d.id);
-          onUnspend(d.id);
+          // What the camp took back, not what was asked (the app syncs `d` meanwhile).
+          const n = onUnspend(d.id, stats) ?? stats.length;
+          // The points left keep two Undos in a row from reading the same (and going unread).
+          said.textContent = `Took back ${n} point${n === 1 ? '' : 's'} from ${d.name}. ${pointsLeft(d)}.`;
           block.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')?.focus();
         });
         // Undo shares the count's row and keeps its room while hidden: spending never
@@ -2117,9 +2148,11 @@ export function createHud(
         const head = el('div', 'squad-points-row');
         head.append(count, undo);
         block.replaceChildren(head, buttons);
+        drawn?.(d);
         return;
       }
       block.replaceChildren(el('p', 'hud-pick-heading', row.heading), buttons, ...gainList(d));
+      drawn?.(d);
     };
     draw();
     return block;
@@ -2356,16 +2389,73 @@ export function createHud(
           card.append(track, el('p', 'squad-card-xptext', c.bar.text));
         }
         card.append(el('div', 'squad-card-gear'));
-        // Every result card has its stat block, points or none (ID-111): a level-up, or
-        // spending out, never changes the card's size. The start screen has none.
-        const pick = picks.find((p) => p.id === c.id) ?? (d.kind === 'start' ? null : c.survivor);
-        if (pick) card.append(pickerBlock(pick, true));
+        // A survivor with points shows "+N" (ID-126), on the start screen too: it opens the
+        // stat block in place, under the gun; spending never changes the card's size again.
+        const pick = picks.find((p) => p.id === c.id) ?? c.survivor;
+        if (pick) {
+          const slot = statSlot(pick);
+          who.append(slot.plus);
+          card.append(slot.block);
+        }
         grid.append(card);
       }
       section.append(head, grid);
       parts.push(section);
     }
     return parts;
+  }
+
+  // Numbers the cards' stat blocks for their badges' aria-controls (ids never come from a save).
+  let slotCount = 0;
+  /** A card's "+N" badge and the stat block it opens and closes in place (ID-126). */
+  function statSlot(start: RosterDefender): { plus: HTMLButtonElement; block: HTMLElement } {
+    const plus = el('button', 'squad-plus');
+    plus.type = 'button';
+    plus.setAttribute('aria-expanded', 'false');
+    const syncPlus = (d: RosterDefender): void => {
+      const left = unspentPoints(d);
+      const open = !block.hidden;
+      // Shown while there is a point to spend, or the block is open (to close it, or reach
+      // its Undo); a closed block with an Undo keeps it too. Open, it reads as a close (the
+      // block heads its own count); closed, its name starts with what it shows (WCAG 2.5.3).
+      plus.hidden = left <= 0 && !open && !cardSpent.get(d.id)?.length;
+      plus.textContent = open ? '✕' : left > 0 ? `+${left}` : '↺';
+      plus.setAttribute(
+        'aria-label',
+        open
+          ? `Close ${d.name}'s stats`
+          : left > 0
+            ? `+${left}: spend ${left} point${left === 1 ? '' : 's'} on ${d.name}`
+            : `Open ${d.name}'s stats`,
+      );
+      plus.title = plus.getAttribute('aria-label')!;
+      plus.classList.toggle('squad-plus-open', open);
+    };
+    let last = start;
+    // The block draws once while it is made, before `block` holds it.
+    let made = false;
+    const block = pickerBlock(start, true, (d) => {
+      last = d;
+      if (made) syncPlus(d);
+    });
+    made = true;
+    block.hidden = true;
+    block.id = `squad-pick-${++slotCount}`;
+    plus.setAttribute('aria-controls', block.id);
+    plus.addEventListener('click', () => {
+      if (result.hidden) return;
+      block.hidden = !block.hidden;
+      plus.setAttribute('aria-expanded', String(!block.hidden));
+      syncPlus(last);
+      if (block.hidden) return;
+      block
+        .querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')
+        ?.focus({ preventScroll: true });
+      // The whole block into the screen's scroller, not only its first button (jsdom has none).
+      block.scrollIntoView?.({ block: 'nearest' });
+    });
+    syncPlus(start);
+    return { plus, block };
   }
 
   /**
@@ -2696,10 +2786,12 @@ export function createHud(
       for (const item of skillItems) item.cooling = false;
       // A new screen starts at its top, not where the last one was scrolled to.
       result.scrollTop = 0;
-      // A horde-only screen with points to spend starts on the picker, so Enter doesn't skip it.
-      const firstStat = screen.squad
-        ? picker.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')
-        : null;
+      // A horde-only result with points to spend starts on the first "+N" (ID-126), so Enter
+      // doesn't skip it; the start screen's Enter still starts the horde.
+      const firstStat =
+        screen.squad && d?.kind !== 'start'
+          ? picker.querySelector<HTMLButtonElement>('.squad-plus:not([hidden])')
+          : null;
       // Without scrolling: the sticky footer's button would pull the panel past the drop tile.
       (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? firstStat ?? back).focus({
         preventScroll: true,

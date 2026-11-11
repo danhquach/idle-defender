@@ -11,6 +11,7 @@ import {
   newGame,
   recover,
   spendPoint,
+  unspendPoint,
   equip,
   startHorde,
   xpGains,
@@ -227,6 +228,25 @@ describe('game', () => {
     expect(spendPoint(g, 'jack', 'tinker')).toEqual({ ok: false, reason: 'Unlocks later' });
     expect(g.roster[1]!.stats).toEqual(NO_STATS);
     expect(() => spendPoint(g, 'nobody', 'mind')).toThrow(RangeError);
+  });
+
+  it('unspendPoint takes one point back out, refuses an empty stat, leaves the game untouched', () => {
+    const g = newGame();
+    g.roster[1]!.xp = 150; // level 4: 3 points
+    const spent = spendPoint(g, 'jack', 'agility');
+    if (!spent.ok) throw new Error(spent.reason);
+    const r = unspendPoint(spent.game, 'jack', 'agility');
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.game.roster[1]!.stats).toEqual(NO_STATS);
+    expect(spent.game.roster[1]!.stats).toEqual({ ...NO_STATS, agility: 1 });
+    expect(unspendPoint(r.game, 'jack', 'agility')).toEqual({
+      ok: false,
+      reason: 'No point in that stat',
+    });
+    for (const id of ['nobody', '__proto__', 'constructor']) {
+      expect(() => unspendPoint(g, id, 'mind')).toThrow(RangeError);
+    }
+    expect(() => unspendPoint(spent.game, 'jack', 'nope' as never)).toThrow(RangeError);
   });
 
   it('equip swaps a loadout, injured or not, and leaves the game untouched', () => {

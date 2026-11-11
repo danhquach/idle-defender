@@ -55,7 +55,7 @@ import { newPerkLevels, type PerkLevels } from './perks.ts';
 import { bankCap, loadBatteries, newPower, runGenerator, type Power } from './power.ts';
 import { advanceResearch, dropEntry, newQueue, type ResearchQueue } from './research.ts';
 import { chance, createRng, pick, rngFrom } from './rng.ts';
-import { earnedPoints, levelOf, NO_STATS, spend } from './stats.ts';
+import { earnedPoints, levelOf, NO_STATS, spend, unspend } from './stats.ts';
 
 /** A defender on the camp's roster: lifetime XP (the level comes from it) and the stat points spent. */
 export interface RosterDefender extends DefenderSpec {
@@ -331,6 +331,24 @@ export function spendPoint(
   const i = game.roster.findIndex((d) => d.id === defenderId);
   if (i < 0) throw new RangeError(`spendPoint: no defender ${String(defenderId)}`);
   const r = spend(game.roster[i]!, stat);
+  if (!r.ok) return r;
+  const roster = [...game.roster];
+  roster[i] = r.defender;
+  return { ok: true, game: { ...game, roster } };
+}
+
+/**
+ * Takes one point of `defenderId` back out of `stat` (ID-126): only for the UI's Undo of a
+ * point it spent itself between hordes, so points stay permanent otherwise (no respec).
+ */
+export function unspendPoint(
+  game: GameState,
+  defenderId: string,
+  stat: Stat,
+): { ok: true; game: GameState } | { ok: false; reason: string } {
+  const i = game.roster.findIndex((d) => d.id === defenderId);
+  if (i < 0) throw new RangeError(`unspendPoint: no defender ${String(defenderId)}`);
+  const r = unspend(game.roster[i]!, stat);
   if (!r.ok) return r;
   const roster = [...game.roster];
   roster[i] = r.defender;
