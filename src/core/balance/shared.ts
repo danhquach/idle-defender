@@ -16,6 +16,13 @@ export const SEEDS = 20;
 /** Horde `n` on the starting base with a fresh roster. */
 export const bareGame = (n: number) => ({ ...newGame(), hordeNumber: n });
 
+/** The stats a player can put every point in (ID-125); Tinker is locked. */
+export const STAT_PICKS: readonly Stat[] = ['mind', 'agility', 'instinct'];
+/** Most one stat's win rate may trail or lead another's (ID-125). */
+export const STAT_WITHIN = 0.1;
+/** Widest gap between any two of `rates`. */
+export const spread = (rates: number[]): number => Math.max(...rates) - Math.min(...rates);
+
 export const winRate = (runs: HordeRun[]): number =>
   runs.filter((r) => r.outcome === 'won').length / runs.length;
 
