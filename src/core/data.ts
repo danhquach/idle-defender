@@ -947,6 +947,13 @@ export const CARD = {
    */
   critDamage: [0.25, 0.5, 0.75],
   /**
+   * Kevlar Vests (ID-131): flat damage off each hit a survivor on the line takes, per level,
+   * added to Instinct's armour; a hit still keeps `STAT_EFFECT.armourFloor` of its damage.
+   */
+  armour: [1, 2, 3],
+  /** First Aid Kits (ID-131): share of max HP a survivor on the line recovers a second, per level. */
+  firstAid: [0.005, 0.01, 0.015],
+  /**
    * Concussion Rounds (was Stopping Power): px of knock-back per point of damage dealt;
    * `heavy` of it for the big kinds; none again until `gap` s after the last push, and at
    * most `cap` px in all for each enemy (ID-124). Each such hit also dazes the enemy for

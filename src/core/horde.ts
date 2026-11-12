@@ -125,6 +125,8 @@ export type UpgradeId =
   | 'barbed-wire'
   | 'aim-for-the-head'
   | 'hollow-point-rounds'
+  | 'kevlar-vests'
+  | 'first-aid-kits'
   | 'recharge'
   | 'power-surge'
   | 'hollow-points'
@@ -1159,6 +1161,7 @@ function step(s: HordeState, rng: Rng): void {
   blowFrags(s);
   burn(s);
   repair(s);
+  treat(s);
   repairTurrets(s);
   springTraps(s);
   removeDead(s);
@@ -1517,6 +1520,14 @@ export const cardCrit = (s: Parameters<typeof cardLevel>[0]): number =>
 /** Hollow Points (ID-130): squad crit damage it adds to the ×2 in this fight, 0 when not held. */
 export const cardCritDamage = (s: Parameters<typeof cardLevel>[0]): number =>
   took(s, 'hollow-point-rounds') ? atLevel(s, 'hollow-point-rounds', CARD.critDamage) : 0;
+
+/** Kevlar Vests (ID-131): armour it adds to each survivor on the line, 0 when not held. */
+export const cardArmour = (s: Parameters<typeof cardLevel>[0]): number =>
+  took(s, 'kevlar-vests') ? atLevel(s, 'kevlar-vests', CARD.armour) : 0;
+
+/** First Aid Kits (ID-131): share of max HP each survivor on the line recovers a second, 0 when not held. */
+export const cardFirstAid = (s: Parameters<typeof cardLevel>[0]): number =>
+  took(s, 'first-aid-kits') ? atLevel(s, 'first-aid-kits', CARD.firstAid) : 0;
 
 /**
  * Whether any survivor on the field can crit (ID-130): Aim for the Head held, or a weapon
@@ -2630,7 +2641,7 @@ function attack(s: HordeState, moves: Moves, rng: Rng): void {
       const defender = moves.reached.get(e.id);
       if (!defender) continue;
       defender.hitBy = e.kind;
-      hurt(defender, enemy.damage, rng);
+      hurt(s, defender, enemy.damage, rng);
       if (e.kind === 'swollen') blown.add(e.id);
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
@@ -2745,7 +2756,7 @@ function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
       y: d.y,
       hit: () => {
         d.hitBy = 'spewer';
-        hurt(d, damage, rng);
+        hurt(s, d, damage, rng);
       },
     };
   }
@@ -2764,18 +2775,26 @@ function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
 }
 
 /**
- * A hit of `damage` on defender `d` (design §6): a shield's share and Instinct's armour
- * off. One that would drop them to 0 HP leaves them at 1 instead on an Instinct roll,
- * rolled only for a survivor with Instinct so the RNG is left alone otherwise.
+ * A hit of `damage` on defender `d` (design §6): a shield's share and Instinct's and
+ * Kevlar Vests' armour (ID-131) off. One that would drop them to 0 HP leaves them at 1
+ * instead on an Instinct roll, rolled only for a survivor with Instinct so the RNG is left
+ * alone otherwise.
  */
-function hurt(d: Defender, damage: number, rng: Rng): void {
-  const hp = d.hp - damageTaken(d, damage);
+function hurt(s: HordeState, d: Defender, damage: number, rng: Rng): void {
+  const hp = d.hp - damageTaken(d, damage, cardArmour(s));
   if (hp > 0) {
     d.hp = hp;
     return;
   }
   const dodge = dodgeChance(d);
   d.hp = dodge > 0 && d.hp > 1 && chance(rng, dodge) ? 1 : 0;
+}
+
+/** First Aid Kits (ID-131): each survivor on the line recovers its share of max HP a second, up to max. */
+function treat(s: HordeState): void {
+  const rate = cardFirstAid(s);
+  if (rate === 0) return;
+  for (const d of s.defenders) d.hp = Math.min(d.maxHp, d.hp + rate * d.maxHp * STEP);
 }
 
 /** Takes `amount` off `t`'s condition; float noise near 0 (1 − 5 × 0.2) jams it rather than leaving a sliver. */

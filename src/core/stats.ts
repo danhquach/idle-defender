@@ -182,10 +182,13 @@ export function maxHpOf(d: Statted): number {
   return DEFENDER_HP + Math.round(bonusOf(d, 'instinct', 'hp'));
 }
 
-/** HP a hit of `damage` takes off `d`: a shield's share off, then Instinct's armour, never under half. */
-export function damageTaken(d: Statted, damage: number): number {
+/**
+ * HP a hit of `damage` takes off `d`: a shield's share off, then Instinct's armour plus
+ * `extra` (Kevlar Vests, ID-131), never under half.
+ */
+export function damageTaken(d: Statted, damage: number, extra = 0): number {
   const shielded = damage * (d.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
-  const armour = bonusOf(d, 'instinct', 'armour');
+  const armour = bonusOf(d, 'instinct', 'armour') + extra;
   return Math.max(shielded * STAT_EFFECT.armourFloor, shielded - armour);
 }
 

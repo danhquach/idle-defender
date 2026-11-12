@@ -27,6 +27,8 @@ const CARDS: readonly [UpgradeId, number][] = [
   ['sharpshooter', 5],
   ['aim-for-the-head', 3],
   ['hollow-point-rounds', 3],
+  ['kevlar-vests', 3],
+  ['first-aid-kits', 3],
 ];
 
 /** Cards tuned together (ID-130): the crit pair at max, crit chance × crit damage. */
