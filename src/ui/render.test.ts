@@ -4,7 +4,7 @@ import { buildTurret, newBase, type Base } from '../core/base.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame, startHorde, type GameState } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
-import { layoutOf, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
+import { layoutOf, SAVE_CUE, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
 import {
   CAMP,
   DAMAGE_POP,
@@ -107,6 +107,10 @@ import {
   trapLook,
   turretLook,
   wireLook,
+  SLICK,
+  SAVE_LOOK,
+  saveLook,
+  slickLook,
   type BuildOverlay,
   type Scene,
 } from './render.ts';
@@ -3316,6 +3320,58 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(images(fight({ hp: 0 }, { taken: ['reinforce'] }), BASE_ART.brace)).toHaveLength(0);
     expect(images(fight({}), BASE_ART.brace)).toHaveLength(0);
     expect(images(fight({}, { taken: ['reinforce'] }), BASE_ART.brace, overlay())).toHaveLength(0);
+  });
+
+  it('Sandbags (ID-132): a low layer of bags in front of each standing outer segment', () => {
+    /** The front texture filled, then each bag laid on top, for one scene. */
+    const bags = (scene: Scene, build: BuildOverlay | null = null): string[] => {
+      const r = recorder();
+      drawScene(r.ctx, r.art, scene, CAM, VIEW, build);
+      return [
+        ...r.textured.filter((id) => id === BASE_ART.sandbags.front),
+        ...r.drawn.filter((id) => id === BASE_ART.sandbags.bag),
+      ];
+    };
+    // One segment: its front, and whole bags lying flat along its top.
+    const one = [BASE_ART.sandbags.front, ...Array(WALL_CARD.sandbags.bags).fill('sandbag')];
+    expect(bags(fight({}, { taken: ['sandbags'] }))).toEqual(one);
+    // A worn segment keeps its bags; a fallen one, no card or the build scene has none.
+    expect(bags(fight({ hp: 90 }, { taken: ['sandbags'] }))).toEqual(one);
+    expect(bags(fight({ hp: 0 }, { taken: ['sandbags'] }))).toHaveLength(0);
+    expect(bags(fight({}))).toHaveLength(0);
+    expect(bags(fight({}, { taken: ['sandbags'] }), overlay())).toHaveLength(0);
+  });
+
+  it('Oil Bomb (ID-132): tar on the ground, fading in and out; a lit slick burns away to a scorch', () => {
+    const k = { at: 10, until: 20 };
+    expect(slickLook(9.9, k)).toEqual({ tar: 0, scorch: 0 });
+    expect(slickLook(10 + SLICK.in / 2, k).tar).toBeCloseTo(SLICK.alpha / 2, 9);
+    expect(slickLook(15, k)).toEqual({ tar: SLICK.alpha, scorch: 0 });
+    expect(slickLook(20 - SLICK.out / 2, k).tar).toBeCloseTo(SLICK.alpha / 2, 9);
+    expect(slickLook(20, k)).toEqual({ tar: 0, scorch: 0 });
+    const lit = { at: 10, litAt: 12, until: 15 };
+    const early = slickLook(12.3, lit);
+    const late = slickLook(14.4, lit);
+    expect(early.tar).toBeGreaterThan(late.tar);
+    expect(early.scorch).toBeGreaterThan(0);
+    expect(slickLook(15, lit)).toEqual({ tar: 0, scorch: 0 });
+    // Drawn: the tar art, and with it lit, the scorch under it.
+    const slicks = [{ x: 700, y: 300, at: 5, until: 15 }];
+    expect(images(fight({}, { slicks }), BASE_ART.slick)).toHaveLength(1);
+    expect(images(fight({}, { slicks }), SCORCH_ART)).toHaveLength(0);
+    const burning = [{ ...slicks[0]!, litAt: 9.5, until: 12 }];
+    expect(images(fight({}, { slicks: burning }), BASE_ART.slick)).toHaveLength(1);
+    expect(images(fight({}, { slicks: burning }), SCORCH_ART)).toHaveLength(1);
+  });
+
+  it('Scavenged Ammo’s saved round (ID-132): a brass +1 that rises and fades, held still with Reduce motion', () => {
+    expect(saveLook(-0.1, false)).toBeNull();
+    expect(saveLook(0, false)).toEqual({ alpha: 1, rise: 0 });
+    const mid = saveLook(0.7 * SAVE_CUE.keep, false)!;
+    expect(mid.alpha).toBeLessThan(1);
+    expect(mid.rise).toBeCloseTo(0.7 * SAVE_LOOK.rise, 9);
+    expect(saveLook(0.7 * SAVE_CUE.keep, true)!.rise).toBe(0);
+    expect(saveLook(SAVE_CUE.keep, false)).toBeNull();
   });
 
   it('a barrier card’s pick pulses every standing segment, swelling and fading back', () => {

@@ -72,9 +72,9 @@ function shotsIn(s: HordeState, n: number): { shots: number; after: HordeState }
 const EPIC = UPGRADE_IDS.filter((id) => UPGRADES[id].rarity === 'epic');
 
 describe('every epic card names its gain and a cost (ID-137)', () => {
-  it('the epic cards are Heavy Rounds, Concussion Rounds, Frag Grenades and Field Repairs', () => {
+  it('the epic cards are Heavy Rounds, Concussion Rounds, Frag Grenades, Field Repairs and Oil Bomb', () => {
     expect([...EPIC].sort()).toEqual(
-      ['concussion-rounds', 'field-repairs', 'frag-grenades', 'hollow-points'].sort(),
+      ['concussion-rounds', 'field-repairs', 'frag-grenades', 'hollow-points', 'oil-bomb'].sort(),
     );
   });
 
@@ -89,6 +89,10 @@ describe('every epic card names its gain and a cost (ID-137)', () => {
       'Repair every wall segment to full; −25% fire rate for 5 s',
     );
     expect(UPGRADES['hollow-points'].text).toBe('+38% damage, +25% reload time');
+    // ID-132: its cost is the slow throw and a lit slick burning out.
+    expect(UPGRADES['oil-bomb'].text).toBe(
+      'Two wall mortars lob a tar bomb into the thickest group every 20 s. Its slick slows enemies 60% for 10 s, and Incendiary hits set it alight (20% of a Shambler’s HP a second); but the bomb takes 1.5 s to land, and a lit slick burns out in 3 s',
+    );
   });
 
   it('no two epic cards share a cost', () => {

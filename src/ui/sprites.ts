@@ -52,6 +52,7 @@ export const ART_IDS = [
   'horror-walk-c',
   'horror-attack',
   'scorch',
+  'tar-slick',
   'airstrike-bomb',
   'explosion',
   'explosion-pop',
@@ -101,6 +102,9 @@ export const ART_IDS = [
   'card-hollow-point-rounds',
   'card-kevlar-vests',
   'card-first-aid-kits',
+  'card-sandbags',
+  'card-scavenged-ammo',
+  'card-oil-bomb',
   'card-recharge',
   'card-power-surge',
   'card-hollow-points',
@@ -195,6 +199,9 @@ export const ART_IDS = [
   'wall-chips',
   'wall-breach',
   'wall-brace',
+  'sandbag',
+  'mortar',
+  'sandbags-front',
   'wood-gate',
   'metal-gate',
   'reinforced-gate',
@@ -341,6 +348,9 @@ export const CARD_ICON: Readonly<Record<UpgradeId, ArtId>> = {
   'hollow-point-rounds': 'card-hollow-point-rounds',
   'kevlar-vests': 'card-kevlar-vests',
   'first-aid-kits': 'card-first-aid-kits',
+  sandbags: 'card-sandbags',
+  'scavenged-ammo': 'card-scavenged-ammo',
+  'oil-bomb': 'card-oil-bomb',
   recharge: 'card-recharge',
   'power-surge': 'card-power-surge',
   'hollow-points': 'card-hollow-points',
@@ -595,6 +605,12 @@ export const BASE_ART = {
   breach: 'wall-breach',
   /** Barrier cards on the wall (ID-075): Reinforce's brace. */
   brace: 'wall-brace',
+  /** Sandbags' low layer of bags in front of the outer layer (ID-132). */
+  sandbags: { bag: 'sandbag', front: 'sandbags-front' },
+  /** Oil Bomb's mortars at the wall's ends (ID-132). */
+  mortar: 'mortar',
+  /** Oil Bomb's tar on the ground (ID-132). */
+  slick: 'tar-slick',
   shield: 'shield',
 } as const satisfies Record<string, ArtId | readonly ArtId[] | Record<string, ArtId>>;
 

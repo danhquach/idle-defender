@@ -953,6 +953,29 @@ export const CARD = {
   armour: [1, 2, 3],
   /** First Aid Kits (ID-131): share of max HP a survivor on the line recovers a second, per level. */
   firstAid: [0.005, 0.01, 0.015],
+  /** Sandbags (ID-132): share of each hit the outermost built layer doesn't take, per level. */
+  sandbags: [0.1, 0.2, 0.3],
+  /** Scavenged Ammo (ID-132): chance a squad gun's shot uses no round, per level. */
+  scavenge: [0.2, 0.3, 0.4],
+  /**
+   * Oil Bomb (ID-132): two mortars, `mortar.back` px behind the outermost layer and
+   * `mortar.end` px in from each end of the wall, lob a tar bomb every `every` s between
+   * them at the thickest group within `range` of one (as Frag Grenades picks), landing
+   * `flight` s later; it leaves a slick of `radius` px for `seconds` s, in which enemies move
+   * `slow` slower. An Incendiary Rounds hit on an enemy inside lights it: it burns everyone
+   * inside for `burn` of this wave's Shambler HP a second for `burnFor` s, then it is gone.
+   */
+  oil: {
+    every: 20,
+    range: 600,
+    mortar: { back: 36, end: 22 },
+    flight: 1.5,
+    radius: 90,
+    slow: 0.6,
+    seconds: 10,
+    burn: 0.2,
+    burnFor: 3,
+  },
   /**
    * Concussion Rounds (was Stopping Power): px of knock-back per point of damage dealt;
    * `heavy` of it for the big kinds; none again until `gap` s after the last push, and at

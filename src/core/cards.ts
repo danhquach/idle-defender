@@ -5,6 +5,7 @@ import {
   RARITY,
   RECRUIT_CHANCE,
   RESEARCH_CARDS,
+  WALL,
   type CardRarity,
   type ResearchCard,
 } from './data.ts';
@@ -17,6 +18,7 @@ import {
   squadCanCrit,
   standing,
   took,
+  wallFront,
   type Card,
   type HordeState,
   type Layer,
@@ -198,6 +200,28 @@ export const UPGRADES: Readonly<
     rarity: 'common',
     levels: CARD_MAX_LEVEL,
   },
+  sandbags: {
+    name: 'Sandbags',
+    text: 'The outer wall takes less damage from each hit',
+    category: 'barrier',
+    rarity: 'rare',
+    levels: CARD_MAX_LEVEL,
+  },
+  'scavenged-ammo': {
+    name: 'Scavenged Ammo',
+    text: 'Each gun shot has a chance not to use a round',
+    category: 'stat',
+    rarity: 'rare',
+    levels: CARD_MAX_LEVEL,
+  },
+  'oil-bomb': {
+    name: 'Oil Bomb',
+    // The gain and its cost (ID-137): a slow shell, a long wait, and a lit slick burns out.
+    text: `Two wall mortars lob a tar bomb into the thickest group every ${CARD.oil.every} s. Its slick slows enemies ${Math.round(CARD.oil.slow * 100)}% for ${CARD.oil.seconds} s, and Incendiary hits set it alight (${Math.round(CARD.oil.burn * 100)}% of a Shambler’s HP a second); but the bomb takes ${CARD.oil.flight} s to land, and a lit slick burns out in ${CARD.oil.burnFor} s`,
+    category: 'behaviour',
+    rarity: 'epic',
+    levels: 1,
+  },
   recharge: {
     name: 'Recharge',
     text: 'Add 25% of the bank’s cap to the battery bank',
@@ -272,6 +296,9 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
   // Survivors are hit only once enemies reach them (ID-131): until then these do nothing,
   // and as commons they would crowd the offers the squad needs.
   if ((id === 'kevlar-vests' || id === 'first-aid-kits') && !survivorHurt(state)) return false;
+  // Sandbags guard the outer wall, and Oil Bomb holds enemies off it (ID-132): offered once
+  // enemies have reached it; before, they would crowd the offers the squad needs.
+  if ((id === 'sandbags' || id === 'oil-bomb') && !outerWallHit(state)) return false;
   return u.category !== 'power' || state.turrets.length > 0;
 }
 
@@ -282,6 +309,17 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
  */
 export const survivorHurt = (s: Pick<HordeState, 'defenders' | 'injured'>): boolean =>
   s.injured.length > 0 || s.defenders.some((d) => d.hp < d.maxHp / 2);
+
+/**
+ * Whether enemies have reached the outer wall this fight (ID-132): a built segment of the
+ * outermost built layer below its max HP, or broken. Until then Sandbags does nothing.
+ */
+export const outerWallHit = (s: Pick<HordeState, 'layers'>): boolean =>
+  s.layers.some(
+    (l) =>
+      l.x + WALL.depth >= wallFront(s) - EPS &&
+      l.segments.some((g) => g.kind !== null && g.hp < g.maxHp - EPS),
+  );
 
 /**
  * What a Patch Up would restore now (ID-097): the HP it adds across the built segments
@@ -308,6 +346,11 @@ export function synergyOf(state: HordeState, id: UpgradeId): string | null {
     return 'Piercing Rounds: bounces pierce';
   if (id === 'piercing-rounds' && state.taken.includes('ricochet'))
     return 'Ricochet: bounces pierce';
+  // Oil Bomb + Incendiary Rounds (ID-132): its text names the pairing; the line says it is on.
+  if (id === 'oil-bomb' && state.taken.includes('incendiary-rounds'))
+    return 'Incendiary Rounds: hits light the slick';
+  if (id === 'incendiary-rounds' && state.taken.includes('oil-bomb'))
+    return 'Oil Bomb: hits light the slick';
   return null;
 }
 
@@ -353,6 +396,14 @@ export function effectAt(
         pre: 'Survivors recover ',
         value: pct(lv(CARD.firstAid)),
         post: ' of max HP a second',
+      };
+    case 'sandbags':
+      return { pre: 'The outer wall takes ', value: `−${pct(lv(CARD.sandbags))}`, post: ' damage' };
+    case 'scavenged-ammo':
+      return {
+        pre: 'Each gun shot has a ',
+        value: pct(lv(CARD.scavenge)),
+        post: ' chance not to use a round',
       };
     case 'piercing-rounds':
       return {
@@ -625,6 +676,10 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       break;
     case 'frag-grenades':
       s.nextFragAt = s.time;
+      break;
+    case 'oil-bomb':
+      // The first tar bomb goes as soon as it is picked, as Frag Grenades' first throw.
+      s.nextTarAt = s.time;
       break;
     case 'barbed-wire':
       // Every pick rebuilds every row, broken or worn, at the new level's full (ID-123, ID-133).

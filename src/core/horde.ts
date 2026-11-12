@@ -127,6 +127,9 @@ export type UpgradeId =
   | 'hollow-point-rounds'
   | 'kevlar-vests'
   | 'first-aid-kits'
+  | 'sandbags'
+  | 'scavenged-ammo'
+  | 'oil-bomb'
   | 'recharge'
   | 'power-surge'
   | 'hollow-points'
@@ -518,6 +521,11 @@ export interface Feat {
 }
 /** How long a feat stays listed, fight s: longer than the most one frame runs at 3×. */
 export const FEAT_KEEP = 1;
+/**
+ * Scavenged Ammo's cue (ID-132): a saved round shows over its survivor for `keep` s, at most
+ * one every `gap` s each, so steady fire doesn't turn it into noise.
+ */
+export const SAVE_CUE = { keep: 0.8, gap: 1.5 } as const;
 /** A molotov's fire on the ground, lit at `at`, burning enemies inside until `until` (fight time). */
 export interface Fire {
   x: number;
@@ -546,6 +554,18 @@ export interface Grenade {
   at: number;
   lands: number;
   burst: boolean;
+}
+/**
+ * Oil Bomb's tar on the ground (ID-132): landed at `at`, centred on `(x, y)`, slowing the
+ * enemies inside until `until`; once an Incendiary Rounds hit lights it (`litAt`), it burns
+ * them and `until` is when it has burnt out.
+ */
+export interface Slick {
+  x: number;
+  y: number;
+  at: number;
+  until: number;
+  litAt?: number;
 }
 /** A bomb or flashbang going off at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
 export interface Blast {
@@ -660,12 +680,20 @@ export interface HordeState {
   pops: Pop[];
   /** Survivors' kills, crits and throws (ID-085); cleared when the horde ends and never saved. */
   feats: Feat[];
+  /** Scavenged Ammo's saved rounds (ID-132), for the view's cue; cleared when the horde ends and never saved. */
+  saves: { by: string; at: number }[];
   spits: Spit[];
   bursts: Burst[];
   /** Frag Grenades in the air or bursting (design §8); cleared when the horde ends. */
   grenades: Grenade[];
   /** When the next Frag Grenade may be thrown; absent until the card is picked. */
   nextFragAt?: number;
+  /** Oil Bomb's tar bombs in the air (ID-132; `burst` once landed); cleared when the horde ends. */
+  tarBombs: Grenade[];
+  /** Oil Bomb's slicks on the ground (ID-132); cleared when the horde ends. */
+  slicks: Slick[];
+  /** When the next tar bomb may be thrown; absent until Oil Bomb is picked. */
+  nextTarAt?: number;
   /** Field Repairs' cost (ID-137): the squad fires slower until this fight time; absent before. */
   repairsUntil?: number;
   /**
@@ -831,9 +859,12 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     impacts: [],
     pops: [],
     feats: [],
+    saves: [],
     spits: [],
     bursts: [],
     grenades: [],
+    tarBombs: [],
+    slicks: [],
     bosses: hordeBosses(hordeNumber, harder).map((b) => ({ ...b, id: null })),
     ...(harder ? { harder: true as const } : {}),
     ...(freeSkills ? { freeSkills: { power: freeSkills.power } } : {}),
@@ -1154,11 +1185,13 @@ function step(s: HordeState, rng: Rng): void {
   walk(s);
   fire(s, rng);
   throwFrag(s);
+  throwTar(s);
   fireTurrets(s, rng);
   fly(s);
   land(s);
   landSlabs(s);
   blowFrags(s);
+  landTar(s);
   burn(s);
   repair(s);
   treat(s);
@@ -1186,9 +1219,12 @@ function step(s: HordeState, rng: Rng): void {
     s.impacts = [];
     s.pops = [];
     s.feats = [];
+    s.saves = [];
     s.spits = [];
     s.bursts = [];
     s.grenades = [];
+    s.tarBombs = [];
+    s.slicks = [];
     s.incoming = [];
     s.slabs = [];
   }
@@ -1480,6 +1516,17 @@ function reload(s: HordeState, d: Defender): void {
       d.ammo[slot] = magazineOf(s, id);
     }
   }
+}
+
+/** Scavenged Ammo's chance (ID-132) that a squad gun's shot uses no round, at its level. */
+export const scavengeOf = (s: Parameters<typeof cardLevel>[0]): number =>
+  atLevel(s, 'scavenged-ammo', CARD.scavenge);
+
+/** Marks a round Scavenged Ammo saved `by` a survivor (ID-132), unless one did within `SAVE_CUE.gap` s. */
+function savedRound(s: HordeState, by: string): void {
+  const last = s.saves.findLast((k) => k.by === by);
+  if (last && s.time - last.at < SAVE_CUE.gap) return;
+  s.saves.push({ by, at: s.time });
 }
 
 /** Rounds a full magazine of gun `id` holds in this fight: Extended Mags (design §8) adds to it. */
@@ -1832,6 +1879,12 @@ function cardHit(
   if (took(s, 'incendiary-rounds')) {
     e.burnUntil = s.time + CARD.burn.seconds;
     e.burnDps = burnDpsOf(s);
+    // The synergy (ID-132): a hit on an enemy in an unlit slick sets the slick alight.
+    for (const slick of slicksUnder(s, e)) {
+      if (slickLit(slick)) continue;
+      slick.litAt = s.time;
+      slick.until = Math.min(slick.until, s.time + CARD.oil.burnFor);
+    }
   }
   if (took(s, 'shock-rounds')) shock(s, e);
   if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
@@ -1920,47 +1973,129 @@ function throwFrag(s: HordeState): void {
   if (s.nextFragAt === undefined || !took(s, 'frag-grenades') || !due(s.time, s.nextFragAt)) {
     return;
   }
-  const throwers = s.posts.flatMap((p) => {
+  const throwers = onTheLine(s);
+  const aim = throwAt(s, throwers, CARD.frag.range, CARD.frag.radius, CARD.frag.flight);
+  if (!aim) return;
+  s.grenades.push(aim);
+  s.feats.push({ kind: 'throw', by: aim.by, at: s.time });
+  // Its cost (ID-137): the throw takes the thrower's hands for `pause` s, so no shot comes
+  // before then, and the shot that was due waits that long too.
+  const thrower = throwers.find((d) => d.id === aim.by)!;
+  thrower.nextShotAt = Math.max(thrower.nextShotAt, s.time) + CARD.frag.pause;
+  // Every survivor on the line carries grenades: the squad throws one every `every` s each.
+  s.nextFragAt = s.time + CARD.frag.every / throwers.length;
+}
+
+/** The survivors standing at a post (on the line), in post order. */
+function onTheLine(s: HordeState): Defender[] {
+  return s.posts.flatMap((p) => {
     const d = s.defenders.find((x) => x.id === p.defenderId);
     return d ? [d] : [];
   });
-  let best: { e: Enemy; by: Defender; near: number } | undefined;
+}
+
+/** Who throws (ID-132): a survivor on the line, or an Oil Bomb mortar. */
+type Thrower = Pick<Defender, 'id' | 'x' | 'y'>;
+
+/**
+ * A throw from one of `throwers` (Frag Grenades, Oil Bomb): at the enemy outside the camp,
+ * within `range` of a thrower, with the most others within `radius` (ties → nearest the
+ * wall, then lowest id), by the thrower nearest it, aimed where it will be in `flight` s.
+ * Undefined with nobody in reach.
+ */
+function throwAt(
+  s: HordeState,
+  throwers: readonly Thrower[],
+  range: number,
+  radius: number,
+  flight: number,
+): Grenade | undefined {
+  let best: { e: Enemy; by: Thrower; near: number } | undefined;
   for (const e of s.enemies) {
     if (e.hp <= 0 || e.inCamp) continue;
-    let by: Defender | undefined;
+    let by: Thrower | undefined;
     let byD = Infinity;
     for (const d of throwers) {
       const dist = Math.hypot(e.x - d.x, e.y - d.y);
-      if (dist <= CARD.frag.range + EPS && dist < byD) [by, byD] = [d, dist];
+      if (dist <= range + EPS && dist < byD) [by, byD] = [d, dist];
     }
     if (!by) continue;
-    const near = around(s, e, CARD.frag.radius).length;
+    const near = around(s, e, radius).length;
     const better =
       !best ||
       near > best.near ||
       (near === best.near && (e.x < best.e.x || (e.x === best.e.x && e.id < best.e.id)));
     if (better) best = { e, by, near };
   }
-  if (!best) return;
+  if (!best) return undefined;
   const { e, by } = best;
-  const t = CARD.frag.flight;
-  s.grenades.push({
+  return {
     by: by.id,
     fromX: by.x,
     fromY: by.y,
-    x: e.x + e.vx * t,
-    y: Math.min(FIELD.height, Math.max(0, e.y + e.vy * t)),
+    x: e.x + e.vx * flight,
+    y: Math.min(FIELD.height, Math.max(0, e.y + e.vy * flight)),
     at: s.time,
-    lands: s.time + t,
+    lands: s.time + flight,
     burst: false,
-  });
-  s.feats.push({ kind: 'throw', by: by.id, at: s.time });
-  // Its cost (ID-137): the throw takes the thrower's hands for `pause` s, so no shot comes
-  // before then, and the shot that was due waits that long too.
-  by.nextShotAt = Math.max(by.nextShotAt, s.time) + CARD.frag.pause;
-  // Every survivor on the line carries grenades: the squad throws one every `every` s each.
-  s.nextFragAt = s.time + CARD.frag.every / throwers.length;
+  };
 }
+
+/**
+ * Oil Bomb (ID-132, PM): two mortars stand just behind the outermost built layer, one at
+ * each end of the wall (`CARD.oil.mortar`); none without a built layer. Survivors don't
+ * throw it, so it takes no one's hands.
+ */
+export function mortars(
+  s: Pick<HordeState, 'layers'>,
+): { id: 'mortar:top' | 'mortar:bottom'; x: number; y: number }[] {
+  if (!s.layers.some((l) => l.segments.some((seg) => seg.kind !== null))) return [];
+  const { back, end } = CARD.oil.mortar;
+  const x = wallFront(s) - WALL.depth - back;
+  return [
+    { id: 'mortar:top', x, y: end },
+    { id: 'mortar:bottom', x, y: FIELD.height - end },
+  ];
+}
+
+/**
+ * Oil Bomb (ID-132): when due, the mortar nearer the thickest group lobs a tar bomb at it,
+ * aimed as a Frag Grenade is (`throwAt`) but slower to land; the next comes
+ * `CARD.oil.every` s later, from either. With nobody in reach it waits for the next step.
+ */
+function throwTar(s: HordeState): void {
+  if (s.nextTarAt === undefined || !took(s, 'oil-bomb') || !due(s.time, s.nextTarAt)) return;
+  const { range, radius, flight, every } = CARD.oil;
+  const aim = throwAt(s, mortars(s), range, radius, flight);
+  if (!aim) return;
+  s.tarBombs.push(aim);
+  s.nextTarAt = s.time + every;
+}
+
+/** Each tar bomb landing leaves a slick where it lands (ID-132). */
+function landTar(s: HordeState): void {
+  for (const b of s.tarBombs) {
+    if (b.burst || !due(s.time, b.lands)) continue;
+    b.burst = true;
+    s.slicks.push({ x: b.x, y: b.y, at: s.time, until: s.time + CARD.oil.seconds });
+  }
+  s.tarBombs = s.tarBombs.filter((b) => !b.burst);
+}
+
+/** The slicks `e` stands in (ID-132): outside the camp only; slicks can overlap. */
+export function slicksUnder(s: Pick<HordeState, 'slicks' | 'time'>, e: Enemy): Slick[] {
+  if (e.inCamp) return [];
+  return s.slicks.filter(
+    (k) => !due(s.time, k.until) && Math.hypot(e.x - k.x, e.y - k.y) <= CARD.oil.radius + EPS,
+  );
+}
+
+/** Whether `k` is alight now (ID-132). */
+export const slickLit = (k: Slick): boolean => k.litAt !== undefined;
+
+/** An Oil Bomb burn's damage a second (ID-132): its share of this wave's Shambler HP. */
+export const slickDps = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
+  CARD.oil.burn * shamblerHp(s);
 
 /**
  * Each Frag Grenade landing bursts for `fragDamage` (a share of this wave's Shambler HP,
@@ -2007,6 +2142,8 @@ function fire(s: HordeState, rng: Rng): void {
   s.bursts = s.bursts.filter((k) => s.time - k.at < SWOLLEN.burst);
   s.pops = s.pops.filter((k) => s.time - k.at < DAMAGE_POP.keep);
   s.feats = s.feats.filter((k) => s.time - k.at < FEAT_KEEP);
+  // Kept for the throttle's window; the view shows each for `keep` s only.
+  s.saves = s.saves.filter((k) => s.time - k.at < SAVE_CUE.gap);
   for (const post of s.posts) {
     const defender = s.defenders.find((d) => d.id === post.defenderId);
     if (!defender) continue;
@@ -2073,7 +2210,10 @@ function fire(s: HordeState, rng: Rng): void {
           fireRateFactor(defender, id) *
           (gun ? perkFactor(s, 'steady-fire', PERK.steadyFire) : 1)),
     );
-    if (gun) {
+    // Scavenged Ammo (ID-132): a shot may use no round, rolled only while the card is held.
+    const saved = gun && took(s, 'scavenged-ammo') && chance(rng, scavengeOf(s));
+    if (saved) savedRound(s, defender.id);
+    if (gun && !saved) {
       defender.ammo[slot] -= 1;
       if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadIn(s, defender, id);
     }
@@ -2293,6 +2433,17 @@ function burn(s: HordeState): void {
   }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
+  // Oil Bomb (ID-132): a lit slick burns everyone inside until it burns out.
+  s.slicks = s.slicks.filter((k) => !due(s.time, k.until));
+  const slickHit = slickDps(s) * STEP;
+  // With no lit slick (the card not held, most steps), no enemy is looked at.
+  for (const e of s.slicks.some(slickLit) ? s.enemies : []) {
+    // Overlapping lit slicks burn as one fire.
+    if (e.hp <= 0 || !slicksUnder(s, e).some(slickLit)) continue;
+    popOn(s, e, slickHit);
+    e.hp = Math.max(0, e.hp - slickHit);
+    e.burnt = (e.burnt ?? 0) + slickHit;
+  }
   const fireHit = fireDps(s) * STEP;
   for (const f of s.fires) {
     for (const e of s.enemies) {
@@ -2436,6 +2587,7 @@ function move(s: HordeState): Moves {
       ENEMIES[e.kind].speed *
       STEP *
       (slowed ? 1 - wireSlow : 1) *
+      (s.slicks.length > 0 && slicksUnder(s, e).length > 0 ? 1 - CARD.oil.slow : 1) *
       (1 - slowedBy(s, e)) *
       trapSlow(s, e) *
       screamed(screamers, e) *
@@ -2714,8 +2866,10 @@ function addPop(
 export const HIT_MARK_GAP = 0.4;
 
 /** Takes `damage` off a standing segment; only the damage it actually takes wears its turret. */
-function hitSegment(s: HordeState, layer: Layer, segment: Segment, damage: number): void {
+function hitSegment(s: HordeState, layer: Layer, segment: Segment, hit: number): void {
   if (segment.hp <= 0) return;
+  // Sandbags (ID-132): the outermost built layer takes less of every hit.
+  const damage = sandbagged(s, layer) ? hit * (1 - atLevel(s, 'sandbags', CARD.sandbags)) : hit;
   // What it lost (ID-082), on its camp-side face, away from the enemies striking it.
   const y = (segment.index + 0.5) * SEGMENT_HEIGHT;
   const lost = Math.min(damage, segment.hp);
@@ -2726,6 +2880,10 @@ function hitSegment(s: HordeState, layer: Layer, segment: Segment, damage: numbe
   // never stays washed out over the damage it shows (ID-072).
   if (damage > 0 && !(s.time - (segment.hitAt ?? -Infinity) < HIT_MARK_GAP)) segment.hitAt = s.time;
 }
+
+/** Whether Sandbags (ID-132) shields `layer`: held, and `layer` is the outermost built one. */
+export const sandbagged = (s: Pick<HordeState, 'taken' | 'layers'>, layer: Layer): boolean =>
+  took(s, 'sandbags') && layer.x + WALL.depth >= wallFront(s) - EPS;
 
 /** Design §9: a Swollen's blast on segment `row` of `layer`, and on its standing neighbours. */
 function blast(s: HordeState, layer: Layer, row: number, scale = 1): void {
