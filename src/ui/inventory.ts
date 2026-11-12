@@ -132,7 +132,7 @@ export const COMBINE_NOT_GUN = 'Only guns combine.';
 export const DRAG_NOTE =
   'Drag a gun onto a survivor to equip it, into the stash to take it off them, or onto a gun like it to combine.';
 export const DRAG_NOTE_TOUCH =
-  'Hold a gun, then drag it onto a survivor to equip it, into the stash to take it off them, or onto a gun like it to combine.';
+  'Tap a gun for its buttons, or hold and drag it onto a survivor to equip, into the stash to unequip, or onto a gun like it to combine.';
 export const GUNS_WAIT = 'Change guns between hordes, on the start or result screen.';
 export const STASH_FULL = 'Stash full';
 
@@ -678,6 +678,8 @@ export const DRAG_SLOP = 6;
 export const LONG_PRESS = 350;
 /** How far a touch may wander before its long-press is a scroll instead (px). */
 export const TOUCH_SLOP = 10;
+/** A touch drop in the gap between slots goes to a slot this near the gun's centre (px). */
+export const GAP_SNAP = 16;
 /** A drag this near the grid's top or bottom edge scrolls it (px)... */
 export const EDGE = 40;
 /** ...by at most this much a tick (px, about 60 ticks a second). */
@@ -871,7 +873,12 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
     if (b) select(b.dataset.key!, true);
   });
-  body.addEventListener('mouseover', (e) => {
+  // Hover is a mouse's only. A tap on a touch screen sends compatibility mouseover and
+  // mouseleave events too; a redraw on those makes iOS Safari treat the tap as a hover and
+  // drop its click (the slot is not selected, the Combine button under the finger is
+  // replaced), so touch and pen pointers are ignored here.
+  body.addEventListener('pointerover', (e) => {
+    if (e.pointerType !== 'mouse') return;
     const b =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
     const key = b?.dataset.key ?? null;
@@ -880,8 +887,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     hovered = key;
     drawDetails();
   });
-  body.addEventListener('mouseleave', () => {
-    if (hovered === null || press?.ghost) return;
+  body.addEventListener('pointerleave', (e) => {
+    if (e.pointerType !== 'mouse' || hovered === null || press?.ghost) return;
     hovered = null;
     drawDetails();
   });
@@ -927,17 +934,26 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     doc.addEventListener('pointerup', onUp);
     doc.addEventListener('pointercancel', onCancel);
     doc.defaultView?.addEventListener('blur', stopDrag);
-    doc.addEventListener('touchmove', holdStill, { passive: false });
   });
   // A long-press on a phone opens no menu over a slot.
   body.addEventListener('contextmenu', (e) => {
     if (press) e.preventDefault();
   });
-
-  /** While a touch drags, the page does not scroll under it. */
-  function holdStill(e: TouchEvent): void {
-    if (press?.ghost) e.preventDefault();
-  }
+  // While a touch drags, the page does not scroll under it. Listened for on the grid from
+  // the start, not added once a touch is down: iOS Safari decides when a touch starts
+  // whether its moves can be held back, and a pan it starts anyway cancels the drag
+  // (#272). A touch's moves all go to the element it started on, inside the grid.
+  body.addEventListener(
+    'touchmove',
+    (e) => {
+      if (press?.ghost && e.cancelable) e.preventDefault();
+    },
+    { passive: false },
+  );
+  // iOS can end a touch with touchcancel alone (a system gesture, an alert): the drag ends.
+  body.addEventListener('touchcancel', () => {
+    if (press?.touch) stopDrag();
+  });
 
   function onMove(e: PointerEvent): void {
     if (!press || e.pointerId !== press.id) return;
@@ -968,10 +984,11 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   function onUp(e: PointerEvent): void {
     if (!press || e.pointerId !== press.id) return;
     const from = press.ghost ? press.key : null;
+    // Read before the gun is put away: on touch it is the gun, not the finger, that aims.
+    const to = from === null ? null : dropTarget(e.clientX, e.clientY);
     stopDrag();
     if (from === null || !view) return;
     swallowClick = true;
-    const to = targetAt(e.clientX, e.clientY);
     act(dropAction(view, from, to), from, to);
   }
 
@@ -1039,8 +1056,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     // Where the pointer is now, for the edge scroll.
     press.x = x;
     press.y = y;
-    press.ghost.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-    const to = targetAt(x, y);
+    const to = dropTarget(x, y);
     for (const n of dialog.querySelectorAll<HTMLElement>('[data-over]')) delete n.dataset.over;
     const over =
       to === 'stash'
@@ -1051,13 +1067,54 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     if (over) over.dataset.over = 'true';
   }
 
-  /** The drop place at (x, y): a slot's key, `stash` (the stash section) or null. */
-  function targetAt(x: number, y: number): string | null {
+  /**
+   * Puts the dragged gun at the pointer (x, y) and gives the drop place it aims at. A
+   * mouse aims with the pointer; on touch the gun rides above the finger, so the place
+   * under the gun's centre is the one meant, and a gun let go over the gap between
+   * slots goes to the nearest slot.
+   */
+  function dropTarget(x: number, y: number): string | null {
+    if (!press?.ghost) return null;
+    press.ghost.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    if (!press.touch) return targetAt(x, y, false);
+    const r = press.ghost.getBoundingClientRect();
+    // No layout (a hidden page, or jsdom in the tests): the finger, as a mouse.
+    if (r.height === 0) return targetAt(x, y, true);
+    return targetAt(r.left + r.width / 2, r.top + r.height / 2, true);
+  }
+
+  /**
+   * The drop place at (x, y): a slot's key, `stash` (the stash section) or null. With
+   * `snap`, a point in the grid's gaps finds a slot within GAP_SNAP of it: in the stash
+   * section only a stash slot (else the stash itself), outside it only a squad slot, and
+   * never the gun being dragged.
+   */
+  function targetAt(x: number, y: number, snap: boolean): string | null {
     const at = doc.elementFromPoint?.(x, y);
     if (!at || !body.contains(at)) return null;
     const b = at.closest<HTMLElement>('.inv-slot[data-key]');
     if (b) return b.dataset.key!;
-    return at.closest('.inv-stash-zone') ? 'stash' : null;
+    const inStash = !!at.closest('.inv-stash-zone');
+    if (snap) {
+      let best: string | null = null;
+      let bestD = GAP_SNAP;
+      for (const s of slots()) {
+        const key = s.dataset.key!;
+        if (key === press?.key || key.startsWith('stash:') !== inStash) continue;
+        const r = s.getBoundingClientRect();
+        if (r.height === 0) continue;
+        const d = Math.hypot(
+          Math.max(r.left - x, 0, x - r.right),
+          Math.max(r.top - y, 0, y - r.bottom),
+        );
+        if (d <= bestD) {
+          best = key;
+          bestD = d;
+        }
+      }
+      if (best !== null) return best;
+    }
+    return inStash ? 'stash' : null;
   }
 
   /** Ends a press or drag with nothing moved: the gun is back where it was. */
@@ -1071,7 +1128,6 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     doc.removeEventListener('pointerup', onUp);
     doc.removeEventListener('pointercancel', onCancel);
     doc.defaultView?.removeEventListener('blur', stopDrag);
-    doc.removeEventListener('touchmove', holdStill);
     dialog.classList.remove('inv-dragging');
     for (const n of dialog.querySelectorAll<HTMLElement>(
       '[data-drop], [data-drag-from], [data-over]',

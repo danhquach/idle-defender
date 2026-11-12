@@ -28,6 +28,13 @@ import {
 } from './inventory.ts';
 import { ART_URLS, GUN_ICON } from './sprites.ts';
 
+/** A pointer coming over `t` (it bubbles), a mouse unless `pointerType` says otherwise. */
+const over = (t: Element, pointerType = 'mouse') =>
+  t.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType }));
+/** A pointer leaving `t` (it doesn't bubble). */
+const leave = (t: Element, pointerType = 'mouse') =>
+  t.dispatchEvent(new PointerEvent('pointerleave', { pointerType }));
+
 const gun = (uid: string, base: WeaponId, rarity: Rarity, affixes = []): OwnedWeapon => ({
   uid,
   base,
@@ -369,12 +376,32 @@ describe('the Inventory dialog', () => {
     );
     button.click();
     const b = slots('Stash')[1]!;
-    b.querySelector('img')!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    over(b.querySelector('img')!);
     expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Rusty SMG');
     // Hover shows, it doesn't select.
     expect(b.getAttribute('aria-pressed')).toBe('false');
-    dialog.querySelector('.inv-body')!.dispatchEvent(new MouseEvent('mouseleave'));
+    leave(dialog.querySelector('.inv-body')!);
     expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Prototype LMG');
+  });
+
+  it('only a mouse hovers: a touch or pen over a slot, and the mouse events a tap makes, show nothing (#272)', () => {
+    const { button, dialog, slots, details } = setup(
+      camp(1, [gun('a', 'lmg', 'prototype'), gun('b', 'smg', 'rusty')]),
+    );
+    button.click();
+    const b = slots('Stash')[1]!;
+    const shown = details().firstElementChild;
+    over(b, 'touch');
+    over(b, 'pen');
+    // iOS Safari's compatibility events for a tap: a redraw on these drops the tap's click.
+    b.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    dialog.querySelector('.inv-body')!.dispatchEvent(new MouseEvent('mouseleave'));
+    leave(dialog.querySelector('.inv-body')!, 'touch');
+    expect(details().firstElementChild).toBe(shown);
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Prototype LMG');
+    // A mouse on the same screen (a laptop with a touch screen) still hovers.
+    over(b);
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Rusty SMG');
   });
 
   it('the keyboard moves through every slot with the arrows, Home and End', () => {
@@ -662,12 +689,37 @@ describe('Combine in the details (ID-091)', () => {
     const { dialog, details, slot } = combining([...rusty(3), gun('x', 'rifle', 'common')]);
     slot('stash:h1').click();
     details().querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
-    slot('stash:x').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    over(slot('stash:x'));
     expect(details().querySelector('.inv-combine-confirm')).not.toBeNull();
-    dialog.querySelector('.inv-body')!.dispatchEvent(new MouseEvent('mouseleave'));
+    leave(dialog.querySelector('.inv-body')!);
     slot('stash:x').click();
     expect(details().querySelector('.inv-combine-confirm')).toBeNull();
     expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Common Rifle');
+  });
+
+  it('on a touch screen a tap on a gun, then on Combine 3, opens the confirm first time (#272)', () => {
+    const { dialog, details, slot } = combining([gun('x', 'rifle', 'common'), ...rusty(3)]);
+    const grid = dialog.querySelector('.inv-body')!;
+    // The events a tap sends in iOS Safari: pointer, then compatibility mouse; Safari
+    // drops the click when those redrew the page (it takes the tap for a hover).
+    const tap = (t: HTMLElement) => {
+      const shown = details().firstElementChild;
+      over(t, 'touch');
+      t.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      if (details().firstElementChild === shown && t.isConnected) t.click();
+    };
+    tap(slot('stash:h2'));
+    expect(slot('stash:h2').getAttribute('aria-pressed')).toBe('true');
+    const combine = details().querySelector<HTMLButtonElement>('.inv-combine-button')!;
+    // The finger moves to the details: the grid's leave events must not redraw the button.
+    leave(grid, 'touch');
+    grid.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(details().querySelector('.inv-combine-button')).toBe(combine);
+    tap(combine);
+    const box = details().querySelector<HTMLElement>('.inv-combine-confirm')!;
+    expect(box.getAttribute('aria-label')).toBe('Combine into a Common SMG');
+    box.querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Common SMG');
   });
 
   it('after a combine, focus is on the result line, which names the new affixes', () => {
@@ -749,14 +801,14 @@ describe('Combine in the details (ID-091)', () => {
     const { details, slot } = combining([...rusty(3), ...rifles]);
     slot('stash:h1').click();
     // The pointer rests on a rifle while the keyboard reaches its Combine.
-    slot('stash:p1-1').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    over(slot('stash:p1-1'));
     details().querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
     const box = details().querySelector<HTMLElement>('.inv-combine-confirm')!;
     expect(box.getAttribute('aria-label')).toBe('Combine into a Common Rifle');
     expect(slot('stash:p1-1').getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).toBe(box.querySelector('.inv-combine-no'));
     // Moving the pointer over another slot leaves the confirm up.
-    slot('stash:h1').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    over(slot('stash:h1'));
     expect(details().querySelector('.inv-combine-confirm')).not.toBeNull();
   });
 
