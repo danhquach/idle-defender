@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPost, newBase, type Base, type BasePost } from './base.ts';
 import {
+  CARD,
   DEFENDER_HP,
   OPEN_STATS,
   POINTS_PER_LEVEL,
@@ -27,6 +28,7 @@ import {
   wallFront,
   type DefenderSpec,
   type HordeState,
+  type UpgradeId,
 } from './horde.ts';
 import {
   activeEffects,
@@ -433,6 +435,48 @@ describe('stats in a fight', () => {
     expect([...seen].sort((a, b) => a - b)).toEqual([
       10,
       Math.round(10 * critDamage(d) * 1e6) / 1e6,
+    ]);
+  });
+
+  it('Aim for the Head and Hollow Points act on a blade too, adding to Sharp Mind (ID-130)', () => {
+    const wallWalk = (() => {
+      const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
+      const r = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: 2 });
+      if (!r.ok) throw new Error(r.reason);
+      return r.base;
+    })();
+    const holding = (d: DefenderSpec, cards: Partial<Record<UpgradeId, number>>, seed: number) => {
+      const s = fight(wallWalk, d, 'wall-walk', 2);
+      s.taken = Object.keys(cards) as UpgradeId[];
+      s.cardLevels = { ...cards };
+      s.rng = { s: seed };
+      enemy(s, { ...tough, x: 520, y: 200 });
+      return s;
+    };
+    const dealt = (d: DefenderSpec, cards: Partial<Record<UpgradeId, number>>) => {
+      const seen = new Set<number>();
+      for (let seed = 1; seed <= 80; seed++)
+        seen.add(
+          Math.round((1000 - tick(holding(d, cards, seed), STEP).enemies[0]!.hp) * 1e6) / 1e6,
+        );
+      return [...seen].sort((a, b) => a - b);
+    };
+    const r = (x: number) => Math.round(x * 1e6) / 1e6;
+    // Hollow Points alone on a squad that can't crit: a plain 10 and no roll.
+    const bare = holding(spec('knife'), { 'hollow-point-rounds': 3 }, 1);
+    const plain = tick(bare, STEP);
+    expect(plain.enemies[0]!.hp).toBe(990);
+    expect(plain.rng).toEqual(bare.rng);
+    // Aim for the Head makes a blade crit with no Sharp Mind, at ×2; Hollow Points adds to it.
+    expect(dealt(spec('knife'), { 'aim-for-the-head': 3 })).toEqual([10, 20]);
+    expect(dealt(spec('knife'), { 'aim-for-the-head': 3, 'hollow-point-rounds': 3 })).toEqual([
+      10, 27.5,
+    ]);
+    // With Sharp Mind, Hollow Points adds to its bigger multiplier (not the larger of the two).
+    const mind = spec('knife', { mind: 30 });
+    expect(dealt(mind, { 'hollow-point-rounds': 2 })).toEqual([
+      10,
+      r(10 * (critDamage(mind) + CARD.critDamage[1]!)),
     ]);
   });
 

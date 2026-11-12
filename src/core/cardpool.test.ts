@@ -143,6 +143,8 @@ describe('rarity', () => {
       'extended-mags',
       'shock-rounds',
       'barbed-wire',
+      'aim-for-the-head',
+      'hollow-point-rounds',
     );
     // No turret, so Power Surge (rare) is out too: down to common.
     expect(upgrades(rollOffer(top, s)).map((id) => UPGRADES[id].rarity)).toEqual([

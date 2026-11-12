@@ -87,8 +87,10 @@ describe('levels (ID-097)', () => {
   it('every once-per-horde card that isn’t epic has levels 1, 2 and max; epics are unique', () => {
     expect(LEVELLED.sort()).toEqual(
       [
+        'aim-for-the-head',
         'barbed-wire',
         'extended-mags',
+        'hollow-point-rounds',
         'incendiary-rounds',
         'piercing-rounds',
         'ricochet',
