@@ -16,6 +16,7 @@ import {
   layoutOf,
   tick,
   tickInPlace,
+  took,
   type Card,
   type HordeState,
   type Outcome,
@@ -90,11 +91,19 @@ export function opening(game: GameState, now: number): { defenderId: string; pos
   return { defenderId: fit.id, postId: best.id };
 }
 
-/** The scripted player's answer to an open offer: a recruit if offered, else the first card; every replacement taken. */
+/**
+ * The scripted player's answer to an open offer: a recruit if offered, else the first card,
+ * passing over Hollow Points until Aim for the Head is held (ID-130: with only a Gunner's
+ * crit it does next to nothing, so a real player wouldn't take it); every replacement taken.
+ */
 export function answerOffer(s: HordeState): HordeState {
   if (s.offer) {
     const recruit = s.offer.findIndex((c) => c.kind === 'recruit');
-    return chooseCard(s, Math.max(0, recruit));
+    if (recruit >= 0) return chooseCard(s, recruit);
+    const useful = s.offer.findIndex(
+      (c) => c.kind !== 'upgrade' || c.id !== 'hollow-point-rounds' || took(s, 'aim-for-the-head'),
+    );
+    return chooseCard(s, Math.max(0, useful));
   }
   const post = replacePosts(s)[0];
   const r = post ? replaceInjured(s, s.bench[0]!.id, post.id) : undefined;

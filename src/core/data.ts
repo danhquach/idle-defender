@@ -927,6 +927,13 @@ export const CARD = {
   loaders: [0.9, 0.8, 0.7],
   /** Extended Mags: squad magazine size factor, per level. */
   mags: [4 / 3, 5 / 3, 2],
+  /** Aim for the Head (ID-130): squad crit chance added, per level, on top of guns and Sharp Mind. */
+  crit: [0.05, 0.1, 0.15],
+  /**
+   * Hollow Points (ID-130; id hollow-point-rounds, as hollow-points is Heavy Rounds): squad
+   * crit damage added to the ×2, per level.
+   */
+  critDamage: [0.25, 0.5, 0.75],
   /**
    * Concussion Rounds (was Stopping Power): px of knock-back per point of damage dealt;
    * `heavy` of it for the big kinds; none again until `gap` s after the last push, and at

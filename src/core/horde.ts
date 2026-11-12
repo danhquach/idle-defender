@@ -123,6 +123,8 @@ export type UpgradeId =
   | 'frag-grenades'
   | 'shock-rounds'
   | 'barbed-wire'
+  | 'aim-for-the-head'
+  | 'hollow-point-rounds'
   | 'recharge'
   | 'power-surge'
   | 'hollow-points'
@@ -1486,6 +1488,32 @@ export const reloadIn = (
 ): number =>
   reloadTime(d, id) * (took(s, 'speed-loaders') ? atLevel(s, 'speed-loaders', CARD.loaders) : 1);
 
+/** Aim for the Head (ID-130): squad crit chance it adds in this fight, 0 when not held. */
+export const cardCrit = (s: Parameters<typeof cardLevel>[0]): number =>
+  took(s, 'aim-for-the-head') ? atLevel(s, 'aim-for-the-head', CARD.crit) : 0;
+
+/** Hollow Points (ID-130): squad crit damage it adds to the ×2 in this fight, 0 when not held. */
+export const cardCritDamage = (s: Parameters<typeof cardLevel>[0]): number =>
+  took(s, 'hollow-point-rounds') ? atLevel(s, 'hollow-point-rounds', CARD.critDamage) : 0;
+
+/**
+ * Whether any survivor on the field can crit (ID-130): Aim for the Head held, or a weapon
+ * with crit chance from Sharp Mind, the Gunner's handling or the gun itself.
+ */
+export function squadCanCrit(
+  s: Pick<HordeState, 'defenders'> & Parameters<typeof cardLevel>[0],
+): boolean {
+  if (cardCrit(s) > 0) return true;
+  return s.defenders.some((d) =>
+    (['primary', 'secondary'] as const).some((slot) => {
+      const id = d.loadout[slot];
+      if (id === null) return false;
+      const gun = isGun(id);
+      return critChance(d, gun) + (gun ? gunCrit(id) : 0) > 0;
+    }),
+  );
+}
+
 /**
  * Piercing Rounds (design §8, ID-097): the extra pierce of one squad shot, a chance at
  * every level (ID-124: max is 75%, no longer always), rolled on the fight's RNG for the
@@ -1943,14 +1971,15 @@ function fire(s: HordeState, rng: Rng): void {
     // Any weapon can crit with Sharp Mind (ID-084). Crits roll only when the chance is
     // above 0, so a defender without it (or a Gunner's handling) leaves the RNG alone.
     // A gun adds its own crit (ID-101): the Rifle's trait, a crit or crit damage affix.
-    const crit = critChance(defender, gun) + (gun ? gunCrit(id) : 0);
+    // Aim for the Head and Hollow Points (ID-130) add theirs on any weapon.
+    const crit = critChance(defender, gun) + (gun ? gunCrit(id) : 0) + cardCrit(s);
     const critHit = crit > 0 && chance(rng, crit);
     const hit =
       weapon.damage *
       s.mods.damage *
       boost(s, 'damage') *
       damageFactor(defender, id) *
-      (critHit ? critDamage(defender) + gunCritDamage(id) : 1);
+      (critHit ? critDamage(defender) + gunCritDamage(id) + cardCritDamage(s) : 1);
     // Instinct's last-line damage (ID-125): on a bullet it adds to the SMG's near-wall share.
     const wall = wallDamage(defender);
     if (gun) {

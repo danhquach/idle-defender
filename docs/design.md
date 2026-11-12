@@ -1214,7 +1214,7 @@ Incendiary Rounds and Shock Rounds are real-world special ammunition
 spacing real hordes have (see the ID-077 note below).
 
 - **Stat cards:** +damage, +fire rate, +range, bigger magazines, faster
-  reloads.
+  reloads, +crit chance, +crit damage (ID-130).
 - **Behaviour cards:** pierce, ricochet, incendiary rounds, shock rounds,
   concussion rounds, frag grenades.
 - **Barrier cards:** +layer HP, repairs, barbed wire out
@@ -1243,6 +1243,8 @@ spacing real hordes have (see the ID-077 note below).
   | Incendiary Rounds | behaviour | rare | The enemy hit burns **3%** of this wave's Shambler HP a second for 3 s (ID-124; was a flat 1 dmg/s); a new hit resets it at the new hit's rate, never stacks | 6% | 9% (was 3 dmg/s) |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
   | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each level-up (more below) | 25%; 20 durability | 35%; 30 durability |
+  | Aim for the Head (ID-130) | stat | rare | Every squad hit, any weapon, has **+5%** crit chance, added to the gun's own (the Rifle's trait, crit affixes), Sharp Mind's and the Gunner's | +10% | +15% |
+  | Hollow Points (ID-130; id `hollow-point-rounds`, as `hollow-points` is Heavy Rounds) | stat | rare | Every squad crit deals **+25%** of the hit more, added to the ×2 (and to Sharp Mind's and a crit damage affix's share): ×2.25 with nothing else | +50% (×2.5) | +75% (×2.75) |
 
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
@@ -1270,6 +1272,23 @@ spacing real hordes have (see the ID-077 note below).
   The balance test `balance/cards-under-power.test.ts` checks each of these
   cards at max loses Hordes 10 and 15 on most seeds (at most 4 won of 10 seeds: the same seeds as the 10-seed runs above, the first 10 of the 20);
   the Horde 4 card test still passes with every card.
+
+  **Crit cards (ID-130).** Aim for the Head and Hollow Points add to every
+  other crit source: a hit crits at the gun's crit (the Rifle's trait, a
+  crit affix) + Sharp Mind's + the Gunner's + Aim for the Head's, and a crit
+  deals ×(2 + Sharp Mind's + a crit damage affix's + Hollow Points'). So
+  the pair multiply with each other and with Sharp Mind and the Rifle.
+  Hollow Points is offered only while some survivor on the field can crit
+  (`squadCanCrit`: Aim for the Head held, Sharp Mind, the Gunner, or a gun
+  with crit), as a power card needs a turret: a fresh squad of pistols
+  never crits, so the card would do nothing. Measured: in the Horde 4 card
+  test (20 seeds, none wins 2) Aim for the Head wins 10, 14 and 20 at levels
+  1–3 and kills further out each level; on top of Aim for the Head Lv 1,
+  Hollow Points wins 14, 14 and 16. At 70% of Recommended Power each alone
+  at max, and the pair both at max, win none of 10 seeds at Hordes 10 and
+  15 (ID-128's harder late hordes: every card above also wins none now, and
+  the balance test now applies Sharpshooter's +50% damage, which it held
+  without its damage before).
 
   Field Repairs (a campaign research card) stays epic and unique, and
   Heavy Rounds (research) stays once per horde with no levels.

@@ -14,6 +14,7 @@ import {
   perkOn,
   perkScale,
   rebuildWire,
+  squadCanCrit,
   standing,
   took,
   type Card,
@@ -167,6 +168,21 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
   },
+  'aim-for-the-head': {
+    name: 'Aim for the Head',
+    text: 'Squad hits crit more often',
+    category: 'stat',
+    rarity: 'rare',
+    levels: CARD_MAX_LEVEL,
+  },
+  // Not `hollow-points`: that id is Heavy Rounds (ID-103 renamed it), kept for saves.
+  'hollow-point-rounds': {
+    name: 'Hollow Points',
+    text: 'Squad crits hit harder',
+    category: 'stat',
+    rarity: 'rare',
+    levels: CARD_MAX_LEVEL,
+  },
   recharge: {
     name: 'Recharge',
     text: 'Add 25% of the bank’s cap to the battery bank',
@@ -225,7 +241,8 @@ export function rarityOdds(wave: number): Record<CardRarity, number> {
 /**
  * Whether `id` may show in an offer now: in the fight's card pool, if it has one; a card
  * with levels not yet at its max (ID-097); Patch Up only while some built segment is below
- * its max HP; power only with a turret; a research card only once researched.
+ * its max HP; Hollow Points only while the squad can crit (ID-130); power only with a
+ * turret; a research card only once researched.
  */
 export function eligible(state: HordeState, id: UpgradeId): boolean {
   const u = UPGRADES[id];
@@ -233,6 +250,8 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
   if (u.levels !== null && cardLevel(state, id) >= u.levels) return false;
   if (isResearchCard(id) && !state.research.includes(id)) return false;
   if (id === 'patch-up' && patchUpGain(state).segments === 0) return false;
+  // Hollow Points does nothing for a squad that never crits (ID-130).
+  if (id === 'hollow-point-rounds' && !squadCanCrit(state)) return false;
   return u.category !== 'power' || state.turrets.length > 0;
 }
 
@@ -291,6 +310,14 @@ export function effectAt(
       return { pre: 'Reload time ', value: `−${pct(1 - lv(CARD.loaders))}`, post: '' };
     case 'extended-mags':
       return { pre: 'Magazines hold ', value: `×${factor(lv(CARD.mags))}`, post: ' the rounds' };
+    case 'aim-for-the-head':
+      return { pre: 'Squad crit chance ', value: `+${pct(lv(CARD.crit))}`, post: '' };
+    case 'hollow-point-rounds':
+      return {
+        pre: 'Squad crit damage ',
+        value: `+${pct(lv(CARD.critDamage))}`,
+        post: ', added to the ×2',
+      };
     case 'piercing-rounds':
       return {
         pre: 'Bullets go through 1 more enemy ',
