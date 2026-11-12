@@ -114,14 +114,22 @@ export const GUN_LEVEL_DAMAGE = 0.06;
  * stands at about 1.5× it). A swarm wave's HP (already `SWARM.size` times a calm wave's) is
  * weighted `rec.swarm` more (ID-099): it comes twice as fast, so it asks for more dmg/s
  * than its HP alone says. A boss horde's is × `rec.boss` (ID-102): its bosses' skills
- * ask for more than their HP says. Amber is within `close` below it.
+ * ask for more than their HP says. Past Horde 10 it is × `rec.late` (ID-136): Heavy Rounds,
+ * unlocked by Horde 10's boss, became an epic trade-off, so the card build there is weaker.
+ * Amber is within `close` below it.
  */
 export const POWER = {
   aim: 0.5,
   wall: 0.5,
   tough: 0.5,
   scale: 10,
-  rec: { k: 3, early: [0.3, 0.6, 1, 1, 1.9, 1.7, 1.25, 1.1, 1.33, 1.25], swarm: 2, boss: 1.12 },
+  rec: {
+    k: 3,
+    early: [0.3, 0.6, 1, 1, 1.9, 1.7, 1.25, 1.1, 1.33, 1.25],
+    late: 1.05,
+    swarm: 2,
+    boss: 1.12,
+  },
   close: 0.15,
 } as const;
 /**
@@ -900,8 +908,11 @@ export const HEAVY_KINDS: readonly EnemyKind[] = ['brute', 'swollen', 'horror'];
  * times in s.
  */
 export const CARD = {
-  /** Heavy Rounds (id hollow-points; a research card, ID-035, renamed in ID-103): squad damage factor. */
-  hollowPoints: 1.4,
+  /**
+   * Heavy Rounds (id hollow-points; a research card, ID-035, renamed in ID-103): squad
+   * damage factor, and the squad reload time factor it costs (ID-136; ×1.4 and no cost before).
+   */
+  heavyRounds: { damage: 1.38, reload: 1.25 },
   /**
    * The repeatable cards' step a pick (ID-097), added up then multiplied once with the
    * rest: Sharpshooter's damage, Rapid Fire's fire rate, Long Sight's range, and

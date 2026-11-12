@@ -1480,13 +1480,18 @@ export const magazineOf = (s: Parameters<typeof cardLevel>[0], id: Held): number
     gunOf(id).magazine * (took(s, 'extended-mags') ? atLevel(s, 'extended-mags', CARD.mags) : 1),
   );
 
-/** Seconds `d` takes to reload gun `id` in this fight: Speed Loaders (design §8) cut it. */
+/**
+ * Seconds `d` takes to reload gun `id` in this fight: Speed Loaders (design §8) cut it,
+ * Heavy Rounds (ID-136) add to it.
+ */
 export const reloadIn = (
   s: Parameters<typeof cardLevel>[0],
   d: Parameters<typeof reloadTime>[0],
   id: Held,
 ): number =>
-  reloadTime(d, id) * (took(s, 'speed-loaders') ? atLevel(s, 'speed-loaders', CARD.loaders) : 1);
+  reloadTime(d, id) *
+  (took(s, 'speed-loaders') ? atLevel(s, 'speed-loaders', CARD.loaders) : 1) *
+  (took(s, 'hollow-points') ? CARD.heavyRounds.reload : 1);
 
 /** Aim for the Head (ID-130): squad crit chance it adds in this fight, 0 when not held. */
 export const cardCrit = (s: Parameters<typeof cardLevel>[0]): number =>

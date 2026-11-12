@@ -22,6 +22,7 @@ import {
   magazineOf,
   newHorde,
   rebuildWire,
+  reloadIn,
   shamblerHp,
   shocked,
   stunned,
@@ -412,9 +413,25 @@ describe('repeatable cards (ID-097)', () => {
     s.research = ['hollow-points'];
     s = picked(s, 'sharpshooter', 2);
     s = picked(s, 'hollow-points');
-    expect(s.mods.damage).toBeCloseTo(1.2 * CARD.hollowPoints, 9);
+    expect(s.mods.damage).toBeCloseTo(1.2 * CARD.heavyRounds.damage, 9);
     s = picked(s, 'sharpshooter');
-    expect(s.mods.damage).toBeCloseTo(1.3 * CARD.hollowPoints, 9);
+    expect(s.mods.damage).toBeCloseTo(1.3 * CARD.heavyRounds.damage, 9);
+  });
+
+  it('Heavy Rounds (ID-136): epic and unique, +38% damage for +25% reload time, named on the card', () => {
+    expect(UPGRADES['hollow-points']).toMatchObject({ rarity: 'epic', levels: 1 });
+    expect(UPGRADES['hollow-points'].text).toBe('+38% damage, +25% reload time');
+    expect(CARD.heavyRounds).toEqual({ damage: 1.38, reload: 1.25 });
+    let s = quiet();
+    s.research = ['hollow-points'];
+    const d = s.defenders[0]!;
+    const plain = reloadIn(s, d, 'pistol');
+    s = picked(s, 'hollow-points');
+    expect(s.mods.damage).toBeCloseTo(1.38, 9);
+    expect(reloadIn(s, d, 'pistol')).toBeCloseTo(plain * 1.25, 9);
+    // It multiplies with Speed Loaders: max (×0.7) and Heavy Rounds reload in ×0.875.
+    s = picked(s, 'speed-loaders', 3);
+    expect(reloadIn(s, d, 'pistol')).toBeCloseTo(plain * 0.7 * 1.25, 9);
   });
 
   it('Reinforce: each pick adds 10% of the segment’s starting max HP, and the same HP', () => {

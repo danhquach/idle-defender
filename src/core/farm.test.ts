@@ -451,9 +451,14 @@ describe('Squad Power and Recommended Power (ID-098)', () => {
       const before = boss ? recommendedPower(n - 1) : recommendedPower(n);
       expect(recommendedPower(n + 1), `Horde ${n + 1}`).toBeGreaterThan(before);
     }
-    expect(recommendedPower(12)).toBe(Math.round((POWER.rec.k * hordeHp(12)) / hordeSeconds(12)));
+    // Past Horde 10, × `late` (ID-136); Horde 10 itself by `early`.
+    const { k, late, boss } = POWER.rec;
+    expect(recommendedPower(12)).toBe(Math.round((late * k * hordeHp(12)) / hordeSeconds(12)));
     expect(recommendedPower(20)).toBe(
-      Math.round((POWER.rec.boss * POWER.rec.k * hordeHp(20)) / hordeSeconds(20)),
+      Math.round((late * boss * k * hordeHp(20)) / hordeSeconds(20)),
+    );
+    expect(recommendedPower(10)).toBe(
+      Math.round((POWER.rec.early[9]! * boss * k * hordeHp(10)) / hordeSeconds(10)),
     );
   });
 

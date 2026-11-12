@@ -1293,6 +1293,22 @@ spacing real hordes have (see the ID-077 note below).
   Field Repairs (a campaign research card) stays epic and unique, and
   Heavy Rounds (research) stays once per horde with no levels.
 
+  **Heavy Rounds (ID-136): a trade-off, epic.** Squad damage **×1.38**,
+  and every squad gun's reload time **+25%** (it multiplies with Speed
+  Loaders and the survivor's own reload; the Pistol, 1.875 s, still
+  reloads faster than any other gun, with or without it). The card reads
+  "+38% damage, +25% reload time". It is **epic** and unique, like the
+  other one-pick cards (Concussion Rounds, Frag Grenades, Field Repairs).
+  Before ID-136 it was rare, ×1.4 with no cost: four Sharpshooter picks,
+  multiplying on top of any held, so it beat every other damage pick.
+  Measured (a lone survivor, one Common gun, 90 s of fire at held
+  Shamblers, damage over no card): Heavy Rounds ×1.29 (shotgun), ×1.30
+  (sniper rifle), ×1.31–1.32 (pistol, SMG, rifle, LMG), against ×1.30 for
+  three Sharpshooter picks: about three picks on average, and three
+  Sharpshooters beat it with the shotgun and sniper rifle, whose reloads
+  are the biggest share of their fire. The steps still multiply with it
+  (below). It is still unlocked by Horde 10's boss.
+
   **One ammo slot (ID-097):** the squad holds at most one of Incendiary
   Rounds and Shock Rounds; both stay in the pool all horde. Picking the one
   held levels it up; picking the other replaces it: the new card starts at
@@ -2084,7 +2100,8 @@ Set before sending; they apply to any location, plaza or single building.
     **Incendiary** 60, 1 h, **Corrosive** 100, 1 h 30 min and
     **Paralyzing** 150, 2 h (Lab 2, after Glue).
   - Cards (join the offer pool once researched): **Heavy Rounds** 25,
-    45 min (rare, once: +40% damage); **Field Repairs** 80, 1 h 30 min
+    45 min (epic, once: +38% damage, +25% reload time, §8; before ID-136
+    it was rare, +40% damage with no cost); **Field Repairs** 80, 1 h 30 min
     (Lab 2; epic, once: every wall segment to full HP). In the horde-only
     build they come from the boss hordes instead (ID-127, Start and pacing).
   - Camp: **More cars** 150, 2 h (Lab 2): a second car.
@@ -2338,8 +2355,20 @@ and comes back stronger.
   Hordes 1–4 sure wins (the expected squad stands at 4–7× it), Hordes 5–10
   fitted so the scripted campaign's squad stands at about 1.5× it, where it
   wins 75–95% at the first try (at Hordes 9 and 10 a squad at it wins about
-  half). Horde 1 asks 18, 3 asks 115, 5 asks 778, 10 asks 1,899, 15 asks
-  3,365, 20 asks 5,544, 30 asks 11,394.
+  half). Past Horde 10 it takes ×1.05 (ID-136: Heavy Rounds, unlocked by
+  Horde 10's boss, became an epic trade-off, so the card build there is
+  weaker). Horde 1 asks 18, 3 asks 115, 5 asks 778, 10 asks 1,899, 15 asks
+  3,534, 20 asks 5,821, 30 asks 11,963 (3,365, 5,544 and 11,394 before
+  ID-136).
+  - ID-136 refit: with Heavy Rounds weaker and rarer and no `late` factor, a
+    squad at Recommended Power won 3, 1 and 5 of 10 at Hordes 12, 15 and 20
+    (4, 3 and 7 before ID-136), and the stats' spread at it was 11 points.
+    A grid of the factor (1, 1.03, 1.05, 1.07, 1.1, 1.15) found ×1.05 the one
+    passing both: 3, 5 and 8 of 10, and Sharp Mind 50%, Agility 43%,
+    Instinct 49% (7 points; ×1.07 and ×1.1 spread 13–14 points). A knife
+    edge: a few fights move it. The late-hordes test now lets enemies hit
+    the wall in up to 97% of new hordes' first tries (95% before ID-136;
+    measured 96%, 88% before).
   - ID-128: fitted to the scripted player's cards and skills, an average
     build, since no player fights without cards. Before it was fitted with no
     cards, and with cards a squad at 70% of it still won Hordes 10 and 15 on 5

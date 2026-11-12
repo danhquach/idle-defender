@@ -200,9 +200,10 @@ export const UPGRADES: Readonly<
   // Research cards (ID-035): only in the pool once researched.
   'hollow-points': {
     name: 'Heavy Rounds',
-    text: '+40% damage',
+    // The gain and its cost (ID-136): "+38% damage, +25% reload time".
+    text: `+${Math.round((CARD.heavyRounds.damage - 1) * 100)}% damage, +${Math.round((CARD.heavyRounds.reload - 1) * 100)}% reload time`,
     category: 'stat',
-    rarity: 'rare',
+    rarity: 'epic',
     levels: 1,
   },
   'field-repairs': {
@@ -555,7 +556,7 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
     case 'hollow-points':
       s.mods.damage =
         (1 + CARD.step.damage * stack(s, 'sharpshooter')) *
-        (took(s, 'hollow-points') ? CARD.hollowPoints : 1);
+        (took(s, 'hollow-points') ? CARD.heavyRounds.damage : 1);
       break;
     case 'rapid-fire':
       s.mods.fireRate = 1 + CARD.step.fireRate * stack(s, 'rapid-fire');
