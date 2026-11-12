@@ -87,8 +87,9 @@ Prompts describe the subject and a shared house style only
 (`art-src/manifest.json`, `style`).
 
 A few card icons are drawn shapes rather than generations (manifest `draw`):
-plain polygons with our own points, drawn by `tools/art/build.py`, made with
-no model and copying no existing artwork.
+plain polygons drawn by `tools/art/build.py` with no model. Their points are
+our own and copy no existing artwork, except `card-kevlar-vests`, whose
+outline is traced from a CC BY 3.0 icon (credited below) and recoloured.
 
 ## Reference photographs
 
@@ -112,3 +113,8 @@ Wikimedia Commons page id where it has none.
 - Image generation: Pollinations; six card icons in the Meta AI app (`outside`).
 - Models: FLUX.1 [schnell] and FLUX.2 [klein] 4B by Black Forest Labs,
   Apache-2.0; MAI Image 2.6 by Microsoft (the title art).
+- `card-kevlar-vests` (ID-131): adapted from "Kevlar vest" by Skoll,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: the outline
+  traced to polygons, recoloured olive with darker straps, and a dark outline
+  added.

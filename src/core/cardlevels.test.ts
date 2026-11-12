@@ -91,8 +91,10 @@ describe('levels (ID-097)', () => {
         'aim-for-the-head',
         'barbed-wire',
         'extended-mags',
+        'first-aid-kits',
         'hollow-point-rounds',
         'incendiary-rounds',
+        'kevlar-vests',
         'piercing-rounds',
         'ricochet',
         'shock-rounds',
@@ -108,6 +110,8 @@ describe('levels (ID-097)', () => {
 
   it.each(LEVELLED)('%s: each pick raises it by 1; at max it leaves the pool', (id) => {
     let s = quiet();
+    // The survivor cards are offered only while the line is in trouble (ID-131).
+    s.defenders[0]!.hp = 1;
     for (let lv = 1; lv <= CARD_MAX_LEVEL; lv++) {
       expect(eligible(s, id)).toBe(true);
       s = picked(s, id);

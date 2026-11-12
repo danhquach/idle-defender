@@ -1214,7 +1214,8 @@ Incendiary Rounds and Shock Rounds are real-world special ammunition
 spacing real hordes have (see the ID-077 note below).
 
 - **Stat cards:** +damage, +fire rate, +range, bigger magazines, faster
-  reloads, +crit chance, +crit damage (ID-130).
+  reloads, +crit chance, +crit damage (ID-130), survivor armour and HP
+  recovery (ID-131).
 - **Behaviour cards:** pierce, ricochet, incendiary rounds, shock rounds,
   concussion rounds, frag grenades.
 - **Barrier cards:** +layer HP, repairs, barbed wire out
@@ -1245,6 +1246,8 @@ spacing real hordes have (see the ID-077 note below).
   | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each level-up (more below) | 25%; 20 durability | 35%; 30 durability |
   | Aim for the Head (ID-130) | stat | rare | Every squad hit, any weapon, has **+5%** crit chance, added to the gun's own (the Rifle's trait, crit affixes), Sharp Mind's and the Gunner's | +10% | +15% |
   | Hollow Points (ID-130; id `hollow-point-rounds`, as `hollow-points` is Heavy Rounds) | stat | rare | Every squad crit deals **+25%** of the hit more, added to the ×2 (and to Sharp Mind's and a crit damage affix's share): ×2.25 with nothing else | +50% (×2.5) | +75% (×2.75) |
+  | Kevlar Vests (ID-131) | stat | common | Every hit on a survivor on the line takes **1 HP** off, added to Instinct's armour; a hit still keeps half its damage (a Shambler's 5 is never under 2.5) | 2 HP | 3 HP |
+  | First Aid Kits (ID-131) | stat | common | Every survivor on the line recovers **0.5%** of their max HP a second, up to max | 1% | 1.5% |
 
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
@@ -1290,6 +1293,38 @@ spacing real hordes have (see the ID-077 note below).
   15 (ID-128's harder late hordes: every card above also wins none now, and
   the balance test now applies Sharpshooter's +50% damage, which it held
   without its damage before).
+
+  **Survivor cards (ID-131).** Kevlar Vests and First Aid Kits act only on
+  survivors on the field (the bench neither heals nor is hit). Survivors are
+  hit only by an enemy in the camp and by a Spewer's spit, so in a fight the
+  squad wins cleanly they take nothing: measured once when the cards were
+  built (ID-131; the numbers below can drift with later tuning, only the
+  Horde 15 max-level comparison is a test), with the horde-only scripted
+  player over 20 seeds, no survivor lost any HP at Hordes 4, 6 and 10; at
+  Horde 15 with its expected squad (level 20 Military Rifles) the wall breaks
+  late on most seeds, 240 of the squad's 600 HP is lost a fight and 14 of 20
+  are won; at Horde 20 the squad is overrun (5 won). The pair are the last
+  stand's cards: in that Horde 15 fight, held from the start at max, Kevlar
+  Vests cut the survivors injured from 51 to 27 and won 19; First Aid Kits
+  29 and 17; both together won 20. Levels 1 and 2 shave the injuries (Lv 1:
+  47 and 50) but barely move the wins, and a fight already lost (Horde 20)
+  isn't saved. At 70% of Recommended Power each alone at max still loses
+  Hordes 10 and 15 on most seeds. The balance test
+  `balance/survivor-cards.test.ts` checks the Horde 15 fight.
+
+  **Offered only when the line is in trouble.** As commons that do nothing
+  until enemies reach the survivors, the pair would crowd the cards a
+  fight needs out of the offers: offered always, the horde-only build fell
+  under its targets (Horde 8 won 55%, Horde 15 at Recommended Power 10%);
+  offered once any survivor was scratched, Horde 9 still won 55% (main:
+  65%). So each is offered only while a survivor on the line is **below
+  half their max HP**, or one has been injured this fight (`survivorHurt`),
+  as Patch Up waits for a damaged segment. Measured then: Hordes 4–10 won
+  100, 100, 95, 80, 65, 60 and 85% at the first try (main: 100, 100, 95,
+  80, 65, 65, 80). Once held, a card's next level is offered under the same
+  rule. An injury counts for the rest of the fight, so after one the pair
+  stay on offer even with the line back at full HP. The cost: a player
+  can't take Kevlar Vests ahead of trouble.
 
   Field Repairs (a campaign research card) stays epic and unique, and
   Heavy Rounds (research) stays once per horde with no levels.

@@ -184,6 +184,20 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
   },
+  'kevlar-vests': {
+    name: 'Kevlar Vests',
+    text: 'Survivors on the line take less damage from each hit',
+    category: 'stat',
+    rarity: 'common',
+    levels: CARD_MAX_LEVEL,
+  },
+  'first-aid-kits': {
+    name: 'First Aid Kits',
+    text: 'Survivors on the line recover HP over time',
+    category: 'stat',
+    rarity: 'common',
+    levels: CARD_MAX_LEVEL,
+  },
   recharge: {
     name: 'Recharge',
     text: 'Add 25% of the bank’s cap to the battery bank',
@@ -243,8 +257,9 @@ export function rarityOdds(wave: number): Record<CardRarity, number> {
 /**
  * Whether `id` may show in an offer now: in the fight's card pool, if it has one; a card
  * with levels not yet at its max (ID-097); Patch Up only while some built segment is below
- * its max HP; Hollow Points only while the squad can crit (ID-130); power only with a
- * turret; a research card only once researched.
+ * its max HP; Hollow Points only while the squad can crit (ID-130); Kevlar Vests and
+ * First Aid Kits only once the line is in trouble (`survivorHurt`, ID-131); power only with
+ * a turret; a research card only once researched.
  */
 export function eligible(state: HordeState, id: UpgradeId): boolean {
   const u = UPGRADES[id];
@@ -254,8 +269,19 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
   if (id === 'patch-up' && patchUpGain(state).segments === 0) return false;
   // Hollow Points does nothing for a squad that never crits (ID-130).
   if (id === 'hollow-point-rounds' && !squadCanCrit(state)) return false;
+  // Survivors are hit only once enemies reach them (ID-131): until then these do nothing,
+  // and as commons they would crowd the offers the squad needs.
+  if ((id === 'kevlar-vests' || id === 'first-aid-kits') && !survivorHurt(state)) return false;
   return u.category !== 'power' || state.turrets.length > 0;
 }
+
+/**
+ * Whether the line is in trouble this fight (ID-131): a survivor on it below half their max
+ * HP, or one injured. Any scratch was tried first; it offered the cards so often that the
+ * horde-only build fell under its Horde 9 target.
+ */
+export const survivorHurt = (s: Pick<HordeState, 'defenders' | 'injured'>): boolean =>
+  s.injured.length > 0 || s.defenders.some((d) => d.hp < d.maxHp / 2);
 
 /**
  * What a Patch Up would restore now (ID-097): the HP it adds across the built segments
@@ -319,6 +345,14 @@ export function effectAt(
         pre: 'Squad crit damage ',
         value: `+${pct(lv(CARD.critDamage))}`,
         post: ', added to the ×2',
+      };
+    case 'kevlar-vests':
+      return { pre: 'Each hit on a survivor ', value: `−${lv(CARD.armour)} HP`, post: '' };
+    case 'first-aid-kits':
+      return {
+        pre: 'Survivors recover ',
+        value: pct(lv(CARD.firstAid)),
+        post: ' of max HP a second',
       };
     case 'piercing-rounds':
       return {
