@@ -2665,11 +2665,16 @@ offline progress works across sessions.
     the page never sees (the window lost it) puts it back. A mouse drag starts
     after 6 px; a touch drag after a 350 ms still press, so a finger that
     moves first still scrolls the grid, and the grid note on a touch screen
-    says "Hold a gun, then drag it…". Held near the grid's top or bottom edge,
-    a drag scrolls the grid. Without dragging, a gun's details do the same: a
+    says "Tap a gun for its buttons, or hold and drag it…". By touch the drop
+    goes where the gun is drawn, above the finger, and a gun let go over the
+    gap between slots goes to the nearest slot; a long-press in the grid
+    selects no text (#272). Held near the grid's top or bottom edge, a drag
+    scrolls the grid. Without dragging, a gun's details do the same: a
     stash gun or the free pistol has "Equip on…" with a button per survivor
     (the pistol only those holding a gun), a survivor's gun Unequip, beside
-    Combine. Each move or refusal is said in a status line in the dialog's
+    Combine. Hovering a slot shows its details with a mouse only: a tap on a
+    touch screen selects the gun at once, so its buttons work on the first tap
+    (#272). Each move or refusal is said in a status line in the dialog's
     foot, beside Close (read out: "Mara now holds Military Rifle; Rusty SMG is
     back in the stash"; a refusal in the danger colour; cleared when another
     gun is selected), saved at once, and the gun pickers follow. On a phone

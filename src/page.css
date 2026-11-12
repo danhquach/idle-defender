@@ -3052,9 +3052,12 @@ body {
   min-height: 0;
 }
 
+/* The grid: a long-press on its note or names selects no text either (see drag below). */
 .inv-body {
   flex: 1;
   min-width: 0;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .inv-details {
@@ -3152,16 +3155,21 @@ body {
   outline-offset: 2px;
 }
 
-/* Drag and drop (ID-095): a slot that can be picked up; a long-press opens no menu on it. */
+/* Drag and drop (ID-095): a slot that can be picked up; a long-press opens no menu on it.
+   Safari needs the -webkit- user-select: without it a long-press on iOS selects the grid's
+   text and opens the Copy menu instead of lifting the gun (#272). A swipe still scrolls. */
 .inv-slot[data-drag] {
   cursor: grab;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
+  touch-action: manipulation;
 }
 
 .inv-dragging,
 .inv-dragging * {
   cursor: grabbing;
+  -webkit-user-select: none;
   user-select: none;
 }
 

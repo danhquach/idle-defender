@@ -208,7 +208,11 @@ function setup(game: GameState, fight = false) {
   const details = () => dialog.querySelector<HTMLElement>('.inv-details')!;
   const ghost = () => scrim.querySelector<HTMLElement>('.inv-ghost');
   const now = () => state.game;
-  return { root, inv, scrim, dialog, slot, status, details, ghost, now, equips };
+  /** The camp changes from outside the dialog (another screen saved). */
+  const set = (g: GameState) => {
+    state = { ...state, game: g };
+  };
+  return { root, inv, scrim, dialog, slot, status, details, ghost, now, set, equips };
 }
 
 /** A pointer event (jsdom has no PointerEvent): a MouseEvent with the pointer fields. */
@@ -501,9 +505,9 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(ghost()).not.toBeNull();
     // It rides above the finger.
     expect(ghost()!.dataset.touch).toBe('true');
-    // Now the page holds still under the finger.
+    // Now the page holds still under the finger (a touch's moves go to where it started).
     const tm = new Event('touchmove', { bubbles: true, cancelable: true });
-    document.dispatchEvent(tm);
+    slot('stash:h1').dispatchEvent(tm);
     expect(tm.defaultPrevented).toBe(true);
     // No long-press menu over the slot.
     const cm = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
@@ -515,8 +519,151 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(now().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
     // Done: a touchmove scrolls again.
     const after = new Event('touchmove', { bubbles: true, cancelable: true });
-    document.dispatchEvent(after);
+    slot('squad:recruit-1').dispatchEvent(after);
     expect(after.defaultPrevented).toBe(false);
+  });
+
+  it('the grid can hold back a touch’s scroll from the touch’s start (#272)', () => {
+    // iOS Safari decides at touchstart whether moves can be held back: the listener must
+    // already be on the grid, non-passive, before any press, not added once one starts.
+    const added: [EventTarget, string, unknown][] = [];
+    const real = EventTarget.prototype.addEventListener;
+    const spy = vi.spyOn(EventTarget.prototype, 'addEventListener').mockImplementation(function (
+      this: EventTarget,
+      type,
+      fn,
+      o,
+    ) {
+      added.push([this, type, o]);
+      return real.call(this, type, fn, o);
+    });
+    try {
+      const { dialog, slot } = setup(camp(1, rusty(1)));
+      const body = dialog.querySelector('.inv-body')!;
+      expect(
+        added.some(
+          ([t, type, o]) =>
+            t === body && type === 'touchmove' && (o as AddEventListenerOptions)?.passive === false,
+        ),
+      ).toBe(true);
+      added.length = 0;
+      under = slot('stash:h1');
+      pointer(slot('stash:h1'), 'pointerdown', 10, 10, 'touch');
+      expect(added.some(([, type]) => type === 'touchmove')).toBe(false);
+      pointer(slot('stash:h1'), 'pointerup', 10, 10, 'touch');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a cancel on touch, while held or while dragging, ends it and leaves nothing stuck (#272)', () => {
+    vi.useFakeTimers();
+    const { slot, ghost, dialog, now } = setup(camp(1, rusty(1)));
+    const h1 = slot('stash:h1');
+    under = h1;
+    // A pointercancel during the long-press (the browser began a scroll): no drag later.
+    pointer(h1, 'pointerdown', 10, 10, 'touch');
+    pointer(h1, 'pointercancel', 10, 10, 'touch');
+    vi.advanceTimersByTime(LONG_PRESS + 50);
+    expect(ghost()).toBeNull();
+    // A touchcancel alone, during the long-press and during the drag.
+    for (const lifted of [false, true]) {
+      pointer(h1, 'pointerdown', 10, 10, 'touch');
+      if (lifted) vi.advanceTimersByTime(LONG_PRESS + 50);
+      expect(ghost() !== null).toBe(lifted);
+      h1.dispatchEvent(new Event('touchcancel', { bubbles: true }));
+      vi.advanceTimersByTime(LONG_PRESS + 50);
+      expect(ghost()).toBeNull();
+      expect(dialog.classList.contains('inv-dragging')).toBe(false);
+      // The page scrolls again, and the finger's late release does nothing.
+      const tm = new Event('touchmove', { bubbles: true, cancelable: true });
+      h1.dispatchEvent(tm);
+      expect(tm.defaultPrevented).toBe(false);
+      under = slot('squad:recruit-1');
+      pointer(h1, 'pointerup', 100, 100, 'touch');
+      expect(now().roster[0]!.loadout.primary).toBe('pistol');
+      under = h1;
+    }
+    // The next long-press drags and lands.
+    pointer(h1, 'pointerdown', 10, 10, 'touch');
+    vi.advanceTimersByTime(LONG_PRESS + 50);
+    under = slot('squad:recruit-1');
+    pointer(h1, 'pointermove', 100, 100, 'touch');
+    pointer(h1, 'pointerup', 100, 100, 'touch');
+    expect(now().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
+  });
+
+  it('a redraw mid-drag puts the gun back cleanly, and the next drag works (#272)', () => {
+    const { slot, ghost, dialog, inv, now, set } = setup(camp(1, rusty(2)));
+    drag(slot('stash:h1'), slot('squad:recruit-1'), false);
+    expect(ghost()).not.toBeNull();
+    // The camp changes under the drag (a save from elsewhere): the slots are redrawn.
+    set({ ...now() });
+    inv.refresh();
+    expect(ghost()).toBeNull();
+    expect(dialog.classList.contains('inv-dragging')).toBe(false);
+    expect(dialog.querySelector('[data-drop]')).toBeNull();
+    pointer(document.body, 'pointerup', 200, 200);
+    expect(now().roster[0]!.loadout.primary).toBe('pistol');
+    drag(slot('stash:h2'), slot('squad:recruit-1'));
+    expect(now().roster[0]!.loadout.primary).toMatchObject({ uid: 'h2' });
+  });
+
+  it('on touch the drop goes where the gun is, above the finger; a gap finds the nearest slot (#272)', () => {
+    vi.useFakeTimers();
+    const { slot, dialog, scrim, now } = setup(camp(1, rusty(1)));
+    const h1 = slot('stash:h1');
+    const squad = slot('squad:recruit-1');
+    // The gap below the squad row: in the grid, outside the stash section.
+    const grid = dialog.querySelector('.inv-body')!;
+    // A laid-out screen: the survivor's slot is 0..60 down, the stash gun's 100..160; the
+    // gun drawn 60 px above the finger. Under the finger is h1; under the gun, the squad.
+    const box = (top: number) =>
+      ({ left: 0, right: 60, top, bottom: top + 60, width: 60, height: 60 }) as DOMRect;
+    squad.getBoundingClientRect = () => box(0);
+    h1.getBoundingClientRect = () => box(100);
+    const at = (y: number) => (y < 60 ? squad : y < 100 ? grid : h1);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: (_x: number, y: number) => at(y),
+    });
+    const ghostBox = (fingerY: number) => () => box(fingerY - 90);
+    pointer(h1, 'pointerdown', 30, 130, 'touch');
+    vi.advanceTimersByTime(LONG_PRESS + 50);
+    const ghost = scrim.querySelector<HTMLElement>('.inv-ghost')!;
+    // Finger at 130 (over h1 itself); the gun's centre at 70: the gap, 10 px below the squad.
+    ghost.getBoundingClientRect = ghostBox(130);
+    pointer(h1, 'pointermove', 30, 130, 'touch');
+    expect(squad.dataset.over).toBe('true');
+    pointer(h1, 'pointerup', 30, 130, 'touch');
+    expect(now().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
+  });
+
+  it('a touch drop in the stash section’s gaps stays in the stash, not on a squad slot near it (#272)', () => {
+    vi.useFakeTimers();
+    const { slot, dialog, scrim, now } = setup(camp(1, rusty(1)));
+    const h1 = slot('stash:h1');
+    const squad = slot('squad:recruit-1');
+    const zone = dialog.querySelector('.inv-stash-zone')!;
+    const box = (top: number) =>
+      ({ left: 0, right: 60, top, bottom: top + 60, width: 60, height: 60 }) as DOMRect;
+    squad.getBoundingClientRect = () => box(0);
+    h1.getBoundingClientRect = () => box(100);
+    // 60..100 is the stash section's own space (its heading), 10 px below the squad slot.
+    const at = (y: number) => (y < 60 ? squad : y < 100 ? zone : h1);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: (_x: number, y: number) => at(y),
+    });
+    pointer(h1, 'pointerdown', 30, 130, 'touch');
+    vi.advanceTimersByTime(LONG_PRESS + 50);
+    scrim.querySelector<HTMLElement>('.inv-ghost')!.getBoundingClientRect = () => box(40);
+    pointer(h1, 'pointermove', 30, 130, 'touch');
+    expect(squad.dataset.over).toBeUndefined();
+    pointer(h1, 'pointerup', 30, 130, 'touch');
+    // A stash gun let go in the stash: nothing changes, the survivor keeps the pistol.
+    expect(now().roster[0]!.loadout.primary).toBe('pistol');
+    expect(now().armoury.map((w) => w.uid)).toEqual(['h1']);
   });
 
   it('in a fight nothing drags, there is no Equip, and the Inventory says when guns change', () => {
