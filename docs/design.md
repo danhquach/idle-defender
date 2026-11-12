@@ -2559,7 +2559,7 @@ Targets, each with a balance test (as in ID-102 unless named):
   campaigns reach it with, and lost half its replays). Near the wall it gains
   2.5–7× the Squad Power and 2.2–2.5× the XP a fight minute of farming Horde
   11, on each of 3 seeds.
-- **Stats** (`balance/stats.test.ts`): the close-fight measure plays with
+- **Stats** (`balance/stats-close.test.ts`): the close-fight measure plays with
   cards (§6 Stats).
 
 ## 12. Save
