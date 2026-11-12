@@ -149,14 +149,15 @@ export const UPGRADES: Readonly<
   },
   'concussion-rounds': {
     name: 'Concussion Rounds',
-    text: `Hits knock enemies back by damage dealt, at most twice a second and ${CARD.concussion.cap} px each`,
+    // The gain and its cost (ID-137), as every epic card names both.
+    text: `Hits knock enemies back (up to ${CARD.concussion.cap} px each) and daze them: +${Math.round(CARD.concussion.daze * 100)}% damage taken for ${CARD.concussion.dazeFor} s after each hit; −${Math.round((1 - CARD.concussion.fireRate) * 100)}% fire rate`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
   },
   'frag-grenades': {
     name: 'Frag Grenades',
-    text: `Each survivor throws a grenade every ${CARD.frag.every} s into the thickest group, for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP`,
+    text: `Each survivor throws a grenade every ${CARD.frag.every} s into the thickest group, for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP; a throw stops its thrower firing for ${CARD.frag.pause} s`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
@@ -208,7 +209,7 @@ export const UPGRADES: Readonly<
   },
   'field-repairs': {
     name: 'Field Repairs',
-    text: 'Repair every wall segment to full',
+    text: `Repair every wall segment to full; −${Math.round((1 - CARD.fieldRepairs.fireRate) * 100)}% fire rate for ${CARD.fieldRepairs.seconds} s`,
     category: 'barrier',
     rarity: 'epic',
     levels: 1,
@@ -582,6 +583,8 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       break;
     case 'field-repairs':
       repair((seg) => seg.maxHp);
+      // Its cost (ID-137): the squad fires slower while the wall is repaired.
+      s.repairsUntil = s.time + CARD.fieldRepairs.seconds;
       break;
     case 'power-surge':
       s.freeWave = s.wave;

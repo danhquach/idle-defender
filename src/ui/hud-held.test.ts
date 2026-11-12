@@ -283,3 +283,46 @@ describe('the fight frame under the held cards strip (ID-113)', () => {
     expect(frameCamera(view, 0, undefined, HUD_SPACE.top - 10)).toEqual(plain);
   });
 });
+
+describe('Field Repairs’ fire-rate cost on the strip (ID-137)', () => {
+  /** Holding Field Repairs (and Sharpshooter), its cost running until `until`, at fight time `time`. */
+  const repairing = (time: number, until: number): HordeState => ({
+    ...holding({ sharpshooter: 1, 'field-repairs': 1 }),
+    time,
+    repairsUntil: until,
+  });
+
+  it('counts down on its chip, its cost spelt out in the tip and read out, while it runs', () => {
+    const [, repairs] = heldCards(repairing(10, 14.2));
+    expect(repairs!.badge).toBe('5s');
+    expect(repairs!.cost).toBe('Fire rate −25%, 5 s left');
+    expect(repairs!.spoken).toContain('Fire rate minus 25%, 5 s left.');
+    expect(heldCards(repairing(13.5, 14.2))[1]!.badge).toBe('1s');
+  });
+
+  it('goes back to a plain unique chip the moment it ends', () => {
+    const [sharp, repairs] = heldCards(repairing(14.2, 14.2));
+    expect(repairs!.badge).toBe('');
+    expect(repairs!.cost).toBeUndefined();
+    expect(sharp!.cost).toBeUndefined();
+  });
+
+  it('the chip shows the countdown in the warning style, redrawn each second, then none', () => {
+    const { hud, chips, tip } = mount();
+    hud.update(repairing(10, 15));
+    const badge = () => chips()[1]!.querySelector('.hud-held-badge');
+    expect(badge()!.textContent).toBe('5s');
+    expect(badge()!.classList.contains('hud-held-badge-cost')).toBe(true);
+    chips()[1]!.focus();
+    expect(tip.querySelector('.hud-held-tip-cost')!.textContent).toBe('Fire rate −25%, 5 s left');
+    hud.update(repairing(11.5, 15));
+    expect(badge()!.textContent).toBe('4s');
+    // The open tip follows the countdown.
+    expect(tip.querySelector('.hud-held-tip-cost')!.textContent).toBe('Fire rate −25%, 4 s left');
+    hud.update(repairing(15, 15));
+    expect(badge()).toBeNull();
+    expect(tip.querySelector('.hud-held-tip-cost')).toBeNull();
+    // Sharpshooter's own badge never takes the warning style.
+    expect(chips()[0]!.querySelector('.hud-held-badge-cost')).toBeNull();
+  });
+});

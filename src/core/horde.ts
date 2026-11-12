@@ -234,7 +234,10 @@ export interface Enemy {
   dazedUntil?: number;
   /** Shock Rounds (ID-097): fight time its latest paralysis ends; absent = never shocked. */
   shockUntil?: number;
-  /** Concussion Rounds (ID-097): fight time it was last knocked back; absent = never. */
+  /**
+   * Concussion Rounds (ID-097): fight time of its last hit that could push it (it may have
+   * been at its push cap); a daze runs from it (ID-137); absent = never.
+   */
   pushedAt?: number;
   /** Concussion Rounds (ID-124): px it has been knocked back in all; absent = 0. */
   pushed?: number;
@@ -661,6 +664,8 @@ export interface HordeState {
   grenades: Grenade[];
   /** When the next Frag Grenade may be thrown; absent until the card is picked. */
   nextFragAt?: number;
+  /** Field Repairs' cost (ID-137): the squad fires slower until this fight time; absent before. */
+  repairsUntil?: number;
   /**
    * This horde's bosses and mini-boss (design §9, ID-099), fixed by its number; `id` is the
    * enemy's once it has come (with the first spawn of its wave), null before.
@@ -1493,6 +1498,18 @@ export const reloadIn = (
   (took(s, 'speed-loaders') ? atLevel(s, 'speed-loaders', CARD.loaders) : 1) *
   (took(s, 'hollow-points') ? CARD.heavyRounds.reload : 1);
 
+/** Seconds of Field Repairs' fire-rate cost still to run (ID-137), 0 when none is running. */
+export const repairsLeft = (s: Pick<HordeState, 'time' | 'repairsUntil'>): number =>
+  s.repairsUntil !== undefined && !due(s.time, s.repairsUntil) ? s.repairsUntil - s.time : 0;
+
+/**
+ * The squad's fire-rate factor from the epic cards' costs (ID-137): Concussion Rounds while
+ * held, and Field Repairs for a few seconds after its pick; they multiply.
+ */
+export const cardFireRate = (s: Pick<HordeState, 'taken' | 'time' | 'repairsUntil'>): number =>
+  (took(s, 'concussion-rounds') ? CARD.concussion.fireRate : 1) *
+  (repairsLeft(s) > 0 ? CARD.fieldRepairs.fireRate : 1);
+
 /** Aim for the Head (ID-130): squad crit chance it adds in this fight, 0 when not held. */
 export const cardCrit = (s: Parameters<typeof cardLevel>[0]): number =>
   took(s, 'aim-for-the-head') ? atLevel(s, 'aim-for-the-head', CARD.crit) : 0;
@@ -1688,7 +1705,12 @@ function fly(s: HordeState): void {
       const first = b.hit.length === 0;
       const dealt = hitDamage(
         hit.enemy,
-        b.damage * traitFactor(front, b, hit.enemy),
+        b.damage *
+          traitFactor(front, b, hit.enemy) *
+          // Concussion Rounds (ID-137): a dazed enemy takes more from the squad's bullets.
+          (!b.owner.startsWith('turret:') && took(s, 'concussion-rounds') && concussed(s, hit.enemy)
+            ? 1 + CARD.concussion.daze
+            : 1),
         b.ap === true,
       );
       popOn(s, hit.enemy, dealt, b.crit === true);
@@ -1830,11 +1852,13 @@ function cardHit(
  * `CARD.concussion.heavy` of that); never a Crawler on the wall, one inside the camp, or
  * past the spawn edge, and never within `CARD.concussion.gap` s of its last push (ID-097).
  * Each enemy is pushed at most `CARD.concussion.cap` px in all (ID-124), so steady fire
- * can't hold it in place.
+ * can't hold it in place. Each such hit also dazes it (ID-137): for `CARD.concussion.dazeFor` s
+ * the squad's bullets deal it `CARD.concussion.daze` more, even once its push is used up.
  */
 function knockBack(s: HordeState, e: Enemy, dealt: number): void {
   if (e.hp <= 0 || e.inCamp || e.climbUntil !== 0) return;
   if (e.pushedAt !== undefined && s.time - e.pushedAt < CARD.concussion.gap - EPS) return;
+  e.pushedAt = s.time;
   const left = CARD.concussion.cap - (e.pushed ?? 0);
   if (left <= EPS) return;
   const heavy = CARD.concussion.heavyKinds.includes(e.kind);
@@ -1845,8 +1869,15 @@ function knockBack(s: HordeState, e: Enemy, dealt: number): void {
   const x = Math.max(e.x, Math.min(s.spawnX ?? FIELD.right, e.x + push));
   e.pushed = (e.pushed ?? 0) + (x - e.x);
   e.x = x;
-  e.pushedAt = s.time;
 }
+
+/**
+ * Whether a Concussion Rounds hit still dazes `e` now (ID-137), until
+ * `CARD.concussion.dazeFor` s after it. The bullet that dazes deals its plain damage; any
+ * landing after it, the rest of a shotgun's pellets in the same step too, gains.
+ */
+export const concussed = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.pushedAt !== undefined && s.time - e.pushedAt < CARD.concussion.dazeFor - EPS;
 
 /**
  * Shock Rounds (design §8, ID-097): `e`, still standing, is paralysed for its level's
@@ -1913,6 +1944,9 @@ function throwFrag(s: HordeState): void {
     burst: false,
   });
   s.feats.push({ kind: 'throw', by: by.id, at: s.time });
+  // Its cost (ID-137): the throw takes the thrower's hands for `pause` s, so no shot comes
+  // before then, and the shot that was due waits that long too.
+  by.nextShotAt = Math.max(by.nextShotAt, s.time) + CARD.frag.pause;
   // Every survivor on the line carries grenades: the squad throws one every `every` s each.
   s.nextFragAt = s.time + CARD.frag.every / throwers.length;
 }
@@ -2022,6 +2056,7 @@ function fire(s: HordeState, rng: Rng): void {
       defender.nextShotAt,
       weapon.fireInterval /
         (s.mods.fireRate *
+          cardFireRate(s) *
           boost(s, 'fireRate') *
           engineerBuff(s, defender) *
           fireRateFactor(defender, id) *
