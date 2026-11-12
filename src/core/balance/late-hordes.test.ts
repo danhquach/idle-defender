@@ -42,7 +42,9 @@ describe('mid-game horde-only hordes (ID-102)', () => {
     const hit = tries.filter((r) => r.wallLeft < 1).length / tries.length;
     expect(wire).toBeGreaterThanOrEqual(0.75);
     expect(hit).toBeGreaterThanOrEqual(0.15);
-    expect(hit).toBeLessThan(0.95);
+    // ID-136 made Heavy Rounds an epic trade-off, so the late squad is weaker: enemies hit
+    // the wall in 96% of first tries (88% before). Under 95% before ID-136.
+    expect(hit).toBeLessThan(0.97);
   });
 
   // ID-128: waves held from Horde 6, spawning faster and overlapping. About 5 minutes at

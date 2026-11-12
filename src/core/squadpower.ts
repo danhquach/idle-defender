@@ -83,9 +83,9 @@ export function hordeSeconds(n: number): number {
  */
 export function recommendedPower(n: number): number {
   const boss = hordeBosses(n, true).some((b) => !b.elite) ? POWER.rec.boss : 1;
-  return Math.round(
-    (POWER.rec.early[n - 1] ?? 1) * boss * POWER.rec.k * (hordeHp(n) / hordeSeconds(n)),
-  );
+  // Hordes 1 to 10 by `early`, past Horde 10 by `late` (ID-136).
+  const stage = POWER.rec.early[n - 1] ?? POWER.rec.late;
+  return Math.round(stage * boss * POWER.rec.k * (hordeHp(n) / hordeSeconds(n)));
 }
 
 /** How Squad Power stands against a horde's Recommended Power (ID-098). */

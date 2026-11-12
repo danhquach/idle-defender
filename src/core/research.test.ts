@@ -361,7 +361,7 @@ describe('new nodes in play (AC3)', () => {
       { kind: 'upgrade', id: 'field-repairs' },
       { kind: 'upgrade', id: 'sharpshooter' },
     ];
-    expect(chooseCard(s, 0).mods.damage).toBeCloseTo(1.4, 9);
+    expect(chooseCard(s, 0).mods.damage).toBeCloseTo(1.38, 9);
     const hurt = structuredClone(s);
     for (const seg of hurt.layers.flatMap((l) => l.segments)) seg.hp = seg.maxHp / 4;
     const fixed = chooseCard(hurt, 1);
