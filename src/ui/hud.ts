@@ -46,6 +46,7 @@ import {
   BANK_CAP,
   BOSS_SKILL,
   BOSSES,
+  CARD,
   HORROR,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
@@ -92,6 +93,7 @@ import {
   bossHorde,
   cardLevel,
   perkOn,
+  repairsLeft,
   skillPower,
   wavesCleared,
   windingUp,
@@ -270,13 +272,20 @@ export interface HeldCard {
   kind: string;
   /** The whole entry in words, for a screen reader. */
   spoken: string;
+  /** A timed cost still running (ID-137): "Fire rate −25%, 4 s left"; absent when none. */
+  cost?: string;
 }
 
 /** Screen px kept clear under the held cards' strip (ID-113), past its chips' level badges. */
 const HELD_GAP = 8;
 
 /** The upgrade cards held this horde, in pick order (ID-113); a replaced ammo card is gone. */
-export function heldCards(s: Pick<HordeState, 'taken' | 'cardLevels'>): HeldCard[] {
+export function heldCards(
+  s: Pick<HordeState, 'taken' | 'cardLevels'> & Partial<Pick<HordeState, 'time' | 'repairsUntil'>>,
+): HeldCard[] {
+  // Field Repairs' fire-rate cost while it runs (ID-137): its seconds left on the chip.
+  const left =
+    s.time === undefined ? 0 : repairsLeft({ time: s.time, repairsUntil: s.repairsUntil });
   return s.taken.map((id) => {
     const u = UPGRADES[id];
     const n = cardLevel(s, id);
@@ -293,13 +302,18 @@ export function heldCards(s: Pick<HordeState, 'taken' | 'cardLevels'>): HeldCard
         : u.levels === null
           ? `taken ${n} times`
           : `level ${max ? 'max' : n}`;
+    const secs = id === 'field-repairs' && left > 0 ? Math.ceil(left) : 0;
+    const cost = secs
+      ? `Fire rate −${Math.round((1 - CARD.fieldRepairs.fireRate) * 100)}%, ${secs} s left`
+      : undefined;
     return {
       id,
-      badge,
+      badge: secs ? `${secs}s` : badge,
       title: `${u.name} · ${level}`,
       effect,
       kind,
-      spoken: `${u.name}, ${spokenLevel}. ${effect.replaceAll('×', 'times ')}. ${kind}`,
+      spoken: `${u.name}, ${spokenLevel}. ${effect.replaceAll('×', 'times ')}. ${cost ? `${cost.replace('−', 'minus ')}. ` : ''}${kind}`,
+      ...(cost ? { cost } : {}),
     };
   });
 }
@@ -1997,6 +2011,7 @@ export function createHud(
     heldTip.replaceChildren(
       el('strong', 'hud-held-tip-title', card.title),
       el('span', 'hud-held-tip-effect', card.effect),
+      ...(card.cost ? [el('span', 'hud-held-tip-cost', card.cost)] : []),
       el('span', 'hud-held-tip-kind', card.kind),
     );
     // Under its chip, kept inside the window.
@@ -2033,7 +2048,12 @@ export function createHud(
         img.src = ART_URLS[CARD_ICON[c.id]] ?? '';
         img.alt = '';
         chip.append(img);
-        if (c.badge) chip.append(el('span', 'hud-held-badge', c.badge));
+        // A running cost's countdown (ID-137) takes the badge's place, in the warning colour.
+        if (c.badge) {
+          chip.append(
+            el('span', c.cost ? 'hud-held-badge hud-held-badge-cost' : 'hud-held-badge', c.badge),
+          );
+        }
         chip.addEventListener('pointerenter', (e) => {
           if (e.pointerType === 'mouse' && !tipPinned) showTip(c.id);
         });
@@ -2841,8 +2861,12 @@ export function createHud(
       if (squad) shop.hidden = !result.hidden;
       // The cards held (ID-113): redrawn the moment a pick or an ammo swap changes them;
       // never built in the full game, which doesn't show them.
+      // A running Field Repairs cost (ID-137) redraws it each second of its countdown.
       const heldKey = squad
-        ? JSON.stringify(state.taken.map((id) => [id, state.cardLevels[id]]))
+        ? JSON.stringify([
+            state.taken.map((id) => [id, state.cardLevels[id]]),
+            Math.ceil(repairsLeft(state)),
+          ])
         : '';
       const heldHidden = !squad || state.taken.length === 0 || !result.hidden;
       const heldRedraw = heldKey !== heldShown;

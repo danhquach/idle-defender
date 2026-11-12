@@ -2066,6 +2066,13 @@ body {
   white-space: nowrap;
 }
 
+/* A timed cost still running (ID-137): its countdown, in the warning colour. */
+.hud-held-badge-cost {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+}
+
 .hud-held-tip {
   position: absolute;
   top: calc(100% + 8px);
@@ -2092,6 +2099,11 @@ body {
 .hud-held-tip-kind {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+}
+
+.hud-held-tip-cost {
+  color: var(--color-danger-text);
+  font-weight: 600;
 }
 
 /* The horde-only fight corner (ID-098, layout B), top left in the 48px band: a square

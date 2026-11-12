@@ -115,7 +115,8 @@ export const GUN_LEVEL_DAMAGE = 0.06;
  * weighted `rec.swarm` more (ID-099): it comes twice as fast, so it asks for more dmg/s
  * than its HP alone says. A boss horde's is × `rec.boss` (ID-102): its bosses' skills
  * ask for more than their HP says. Past Horde 10 it is × `rec.late` (ID-136): Heavy Rounds,
- * unlocked by Horde 10's boss, became an epic trade-off, so the card build there is weaker.
+ * unlocked by Horde 10's boss, became an epic trade-off, so the card build there is weaker;
+ * ID-137 gave the other epic cards costs too (Horde 9 1.33 → 1.4, `late` 1.05 → 1.2).
  * Amber is within `close` below it.
  */
 export const POWER = {
@@ -125,8 +126,8 @@ export const POWER = {
   scale: 10,
   rec: {
     k: 3,
-    early: [0.3, 0.6, 1, 1, 1.9, 1.7, 1.25, 1.1, 1.33, 1.25],
-    late: 1.05,
+    early: [0.3, 0.6, 1, 1, 1.9, 1.7, 1.25, 1.1, 1.4, 1.25],
+    late: 1.2,
     swarm: 2,
     boss: 1.12,
   },
@@ -948,15 +949,32 @@ export const CARD = {
   /**
    * Concussion Rounds (was Stopping Power): px of knock-back per point of damage dealt;
    * `heavy` of it for the big kinds; none again until `gap` s after the last push, and at
-   * most `cap` px in all for each enemy (ID-124).
+   * most `cap` px in all for each enemy (ID-124). Each such hit also dazes the enemy for
+   * `dazeFor` s, even once its push is used up: the squad's bullets deal it `daze` more
+   * (ID-137). Its cost (ID-137): the squad's fire rate × `fireRate` while it is held.
    */
-  concussion: { perDamage: 0.5, heavy: 0.5, gap: 0.5, cap: 100, heavyKinds: HEAVY_KINDS },
+  concussion: {
+    perDamage: 0.5,
+    heavy: 0.5,
+    gap: 0.5,
+    cap: 100,
+    heavyKinds: HEAVY_KINDS,
+    daze: 0.3,
+    dazeFor: 1,
+    fireRate: 0.9,
+  },
   /**
    * Frag Grenades: one every `every` s per survivor on the line, at an enemy within `range` of a survivor, landing
    * `flight` s later within `radius` for `share` of this wave's Shambler HP (ID-124; was a
-   * flat 20); its blast is drawn for `flash` s.
+   * flat 20); its blast is drawn for `flash` s. Its cost (ID-137): the thrower fires no
+   * shot for `pause` s after each throw.
    */
-  frag: { every: 8, range: 600, flight: 0.6, share: 0.35, radius: 70, flash: 1.2 },
+  frag: { every: 8, range: 600, flight: 0.6, share: 0.25, radius: 70, flash: 1.2, pause: 1.5 },
+  /**
+   * Field Repairs (a research card): every wall segment to full. Its cost (ID-137): the
+   * squad's fire rate × `fireRate` for `seconds` of fight time after the pick.
+   */
+  fieldRepairs: { fireRate: 0.75, seconds: 5 },
   /**
    * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
    * slows per level. Each row of it (one per segment) has `durability` per level (ID-104),

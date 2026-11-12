@@ -523,7 +523,7 @@ describe('Concussion Rounds (ID-097)', () => {
     expect(push('swollen')).toBeCloseTo(10 * 0.5 * 0.5, 9);
   });
 
-  it('no push again within 0.5 s of the last, but the hit still deals its damage', () => {
+  it('no push again within 0.5 s of the last, but the hit still deals its damage (dazed: ×1.3, ID-137)', () => {
     const s = at('concussion-rounds', 1);
     const e = enemy(s, { ...tough, stunnedUntil: 1e9, x: 600, y: ROW4 });
     shoot(s, { x: 590, y: ROW4, damage: 10 });
@@ -533,7 +533,7 @@ describe('Concussion Rounds (ID-097)', () => {
     shoot(t, { x: first.x - 10, y: ROW4, damage: 10 });
     t = tick(t, STEP);
     expect(find(t, e.id).x).toBeCloseTo(605, 9);
-    expect(find(t, e.id).hp).toBe(980);
+    expect(find(t, e.id).hp).toBeCloseTo(1000 - 10 - 10 * (1 + CARD.concussion.daze), 9);
   });
 
   it(`pushes one enemy at most ${CARD.concussion.cap} px in all, so steady fire can’t hold it in place (ID-124)`, () => {

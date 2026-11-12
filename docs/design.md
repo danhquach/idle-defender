@@ -1250,15 +1250,16 @@ spacing real hordes have (see the ID-077 note below).
 
   | Card | Kind | Rarity | Effect |
   |---|---|---|---|
-  | Concussion Rounds | behaviour | epic | A squad bullet hit that leaves its enemy standing knocks it back **0.5 px per point of damage** dealt (after armour; about 3 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge. After a push the enemy can't be pushed again for **0.5 s** (hits in that window still deal their damage), so steady fire pushes it at most twice a second, and each enemy is pushed at most **100 px** in all (ID-124), so steady fire can't hold it in place |
-  | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **35%** of this wave's Shambler HP (ID-124; was a flat 20; armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked |
+  | Concussion Rounds | behaviour | epic | A squad bullet hit that leaves its enemy standing knocks it back **0.5 px per point of damage** dealt (after armour; about 3 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge. After a push the enemy can't be pushed again for **0.5 s** (hits in that window still deal their damage), so steady fire pushes it at most twice a second, and each enemy is pushed at most **100 px** in all (ID-124), so steady fire can't hold it in place. Each hit that could push it (outside the 0.5 s gap, even once its push is used up) also **dazes** it for **1 s**: the squad's bullets deal it **+30%** (ID-137). The bullet that dazes deals its plain damage and any landing after it gains, the rest of a shotgun's pellets in the same volley too (with the daze starting a step later, the farming balance test fell off its knife edge); each such hit renews it, so steady fire keeps an enemy dazed. Turret bullets neither daze nor gain, and burns and blasts don't gain. **Cost (ID-137):** the squad's fire rate **−10%** while held (a blade or tool swings slower too) |
+  | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **25%** of this wave's Shambler HP (ID-137; 35% before, ID-124; a flat 20 before that; armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked. **Cost (ID-137):** a throw takes its thrower's hands for **1.5 s**: no shot before then, and the shot that was due waits that long too |
+  | Field Repairs (research) | barrier | epic | Every wall segment to full HP. **Cost (ID-137):** the squad's fire rate **−25%** for **5 s** of fight time after the pick (the clock stops while an offer is open); it multiplies with Concussion Rounds'. The held cards strip counts it down on the card's chip, in the warning colour, and the chip goes back to plain when it ends |
 
   **Steady across hordes (ID-124).** Frag Grenades' burst and Incendiary
   Rounds' burn were flat (20 damage; 1, 2, 3 dmg/s), more than a whole
   Shambler early (16 HP at horde-only Horde 1) and a quarter of one late
   (84 HP at Horde 15). Like Molotov's fire (ID-114) they are now a share of
   this wave's Shambler HP on the fight's HP curve (`CARD.frag.share`,
-  `CARD.burn.share`, `shamblerHp`): **35%** a burst, and **3%, 6%, 9%** a
+  `CARD.burn.share`, `shamblerHp`): **35%** a burst (25% since ID-137), and **3%, 6%, 9%** a
   second. Piercing Rounds is a chance at every level, **25%, 50%, 75%**, and
   Concussion Rounds pushes each enemy at most **100 px** in all
   (`CARD.concussion.cap`). Measured with a squad at 70% of Recommended
@@ -1292,6 +1293,37 @@ spacing real hordes have (see the ID-077 note below).
 
   Field Repairs (a campaign research card) stays epic and unique, and
   Heavy Rounds (research) stays once per horde with no levels.
+
+  **Every epic card has a cost (ID-137).** Each epic card names its gain
+  and its cost on the card, and no two share a cost: Heavy Rounds' reload
+  time (ID-136), Concussion Rounds' fire rate while held, Frag Grenades'
+  thrower pause, and Field Repairs' 5 s fire-rate dip (the table above).
+  Before ID-137 Concussion Rounds, Frag Grenades and Field Repairs had no
+  cost, Concussion Rounds had no daze, and Frag Grenades burst for 35%.
+  Measured (wins of 20, one card picked and no other; `balance/epic-cards.test.ts`):
+  - Horde 4, three fresh survivors with Pistols, the pick at the start: Frag
+    Grenades 20 (the best pick), Incendiary Rounds 19, Sharpshooter 17,
+    Concussion Rounds 16, Ricochet 15, Piercing Rounds 14, no card 2.
+  - Horde 2, one survivor (40 seeds): Frag Grenades 7, Incendiary Rounds 6,
+    Sharpshooter 5: its pause costs a lone survivor all its fire for a
+    while, so its lead there is small (19 of 20 with no cost, against
+    Sharpshooter's 5 of 20). A 2 s pause made it 2 of 40, not the best, but
+    dropped the horde-only build's Horde 8 first-try wins to 40% (target
+    60%) and failed four more balance targets, so the pause stays 1.5 s.
+  - Horde 4, three survivors, the pick the moment the weakest wall segment
+    falls to 30%: Field Repairs 20 (the best pick, with Frag Grenades 20),
+    Incendiary Rounds 13, Patch Up 12. At 60%: Frag Grenades 20, Incendiary
+    Rounds 17, Field Repairs 13, so it is not.
+  - The starting points failed: at −10% fire rate Concussion Rounds won 1
+    (8 with no cost; even −3% won 1), and pushing harder (2× push, 200 px
+    cap) or slowing the dazed enemy 30% or 50% won 0–2: holding enemies back
+    doesn't win these damage races. With the 0.5 s pause Frag Grenades won
+    19–20 in every scene, a lone survivor 19 against Sharpshooter's 5.
+  - Frag Grenades is still the best pick in every scene measured, and
+    Concussion Rounds, a fair pick, the best in none, as Frag Grenades wins
+    every squad fight; the PM accepted both (ID-137). The balance test
+    checks Frag's lead for a lone survivor stays within 2 wins of 40, and
+    Concussion Rounds wins at least 10 more than no card.
 
   **Heavy Rounds (ID-136): a trade-off, epic.** Squad damage **×1.38**,
   and every squad gun's reload time **+25%** (it multiplies with Speed
@@ -2102,7 +2134,8 @@ Set before sending; they apply to any location, plaza or single building.
   - Cards (join the offer pool once researched): **Heavy Rounds** 25,
     45 min (epic, once: +38% damage, +25% reload time, §8; before ID-136
     it was rare, +40% damage with no cost); **Field Repairs** 80, 1 h 30 min
-    (Lab 2; epic, once: every wall segment to full HP). In the horde-only
+    (Lab 2; epic, once: every wall segment to full HP, −25% fire rate for
+    5 s, §8; before ID-137 with no cost). In the horde-only
     build they come from the boss hordes instead (ID-127, Start and pacing).
   - Camp: **More cars** 150, 2 h (Lab 2): a second car.
   - Perk levels share the queue (§5). The whole tree, levels included,
@@ -2351,15 +2384,23 @@ and comes back stronger.
   a swarm wave's (ID-099) weighted 2× on top of its doubled size (it comes
   twice as fast), plus its bosses and mini-bosses at their HP. A boss horde asks
   ×1.12 more (its bosses' skills ask for more than their HP says). Hordes 1 to
-  10 take ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.33 and ×1.25 of it:
+  10 take ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.4 (×1.33 before ID-137) and ×1.25 of it:
   Hordes 1–4 sure wins (the expected squad stands at 4–7× it), Hordes 5–10
   fitted so the scripted campaign's squad stands at about 1.5× it, where it
   wins 75–95% at the first try (at Hordes 9 and 10 a squad at it wins about
-  half). Past Horde 10 it takes ×1.05 (ID-136: Heavy Rounds, unlocked by
+  half). Past Horde 10 it takes ×1.2 (ID-136: Heavy Rounds, unlocked by
   Horde 10's boss, became an epic trade-off, so the card build there is
-  weaker). Horde 1 asks 18, 3 asks 115, 5 asks 778, 10 asks 1,899, 15 asks
-  3,534, 20 asks 5,821, 30 asks 11,963 (3,365, 5,544 and 11,394 before
-  ID-136).
+  weaker; ID-137 gave the other epic cards costs; ×1.05 before ID-137).
+  Horde 1 asks 18, 3 asks 115, 5 asks 778, 9 asks 1,774, 10 asks 1,899, 15
+  asks 4,038, 20 asks 6,653, 30 asks 13,673 (before ID-137: 1,685, 3,534,
+  5,821 and 11,963; before ID-136: 3,365, 5,544 and 11,394 past Horde 10).
+  - ID-137 refit: with the epic cards' costs, a squad at Recommended Power
+    won 1, 0, 1 and 5 of 10 at Hordes 9, 12, 15 and 20, and a squad at 130%
+    won 3 of 5 at Horde 15. Horde 9's factor goes 1.33 → 1.4 and `late`
+    1.05 → 1.2 (a grid of 1.33–1.5 and 0.97–1.25): 4, 4, 5 and 7 of 10, and
+    130% wins 5 and 4 of 5 at Hordes 10 and 15 (×1.17 gave 4, 2, 4, 7, at
+    the floor at Horde 12; ×1.25 with 1.5 won 10 of 10 at Horde 9). The
+    stats test still passes at it.
   - ID-136 refit: with Heavy Rounds weaker and rarer and no `late` factor, a
     squad at Recommended Power won 3, 1 and 5 of 10 at Hordes 12, 15 and 20
     (4, 3 and 7 before ID-136), and the stats' spread at it was 11 points.
@@ -2490,7 +2531,7 @@ unless named:
 | Horde-only waves (`SQUAD_WAVES`) | 0.8 s apart, the next wave waits for a clear | From Horde 6: 0.6 s apart, the next wave comes once this one has all spawned | Only overlap reaches ~5 minutes (§9 Shorter fights); before Horde 6 a lone survivor was buried, so early hordes play as before |
 | Late HP (`SQUAD_EARLY_HP`, last entry) | 1 from Horde 11 | ×1.15 from Horde 11 | The held waves' size moved into HP. Grid: 1 kept every target but made walls shallow (3 of 4 seeds walled, at most 3 replays a wall, wall hit 74%); 1.15: 4 of 4, at most 9, 85% |
 | Mini-bosses (`ELITE.more`) | One on odd hordes from Horde 5 | Plus one with the last wave of every non-boss horde from Horde 11 | The ticket's ask: more mini-bosses past Horde 10 |
-| Recommended Power (`POWER.rec`) | 9.7 × HP ÷ spawn seconds, no cards; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | 3 ×, with cards; early ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.33, ×1.25 | Refitted to the card build (§11 Farming); k grid 2.2–4.0 per horde, Hordes 6–20 |
+| Recommended Power (`POWER.rec`) | 9.7 × HP ÷ spawn seconds, no cards; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | 3 ×, with cards; early ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.4, ×1.25; past Horde 10 ×1.2 (ID-136, ID-137) | Refitted to the card build (§11 Farming); k grid 2.2–4.0 per horde, Hordes 6–20 |
 | Instinct's damage near the wall (`STAT_EFFECT.wallDamage`) | ×1.75 | ×2 | With cards Instinct trailed Sharp Mind by 11 points at Recommended Power (§6 Stats) |
 | Wire full (`wireFull`; `rebuildWire` before ID-133) | Sized for the new wave | For every enemy still to face when more | With overlap a level 1 row held 71% of Horde 15's last wave (target 75%, measured with the rebuild at every wave break; ID-133 replaced the target, §8 Barbed Wire) |
 | Loss XP's waves cleared (`wavesCleared`) | The wave reached − 1 | Waves with all their enemies gone | With overlap the wave reached runs ahead of the fight |
