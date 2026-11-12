@@ -97,6 +97,8 @@ describe('levels (ID-097)', () => {
         'kevlar-vests',
         'piercing-rounds',
         'ricochet',
+        'sandbags',
+        'scavenged-ammo',
         'shock-rounds',
         'speed-loaders',
       ].sort(),
@@ -112,6 +114,8 @@ describe('levels (ID-097)', () => {
     let s = quiet();
     // The survivor cards are offered only while the line is in trouble (ID-131).
     s.defenders[0]!.hp = 1;
+    // Sandbags is offered only once enemies have reached the outer wall (ID-132).
+    s.layers[0]!.segments[0]!.hp -= 1;
     for (let lv = 1; lv <= CARD_MAX_LEVEL; lv++) {
       expect(eligible(s, id)).toBe(true);
       s = picked(s, id);

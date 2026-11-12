@@ -1215,11 +1215,11 @@ spacing real hordes have (see the ID-077 note below).
 
 - **Stat cards:** +damage, +fire rate, +range, bigger magazines, faster
   reloads, +crit chance, +crit damage (ID-130), survivor armour and HP
-  recovery (ID-131).
+  recovery (ID-131), scavenged ammo (ID-132).
 - **Behaviour cards:** pierce, ricochet, incendiary rounds, shock rounds,
-  concussion rounds, frag grenades.
+  concussion rounds, frag grenades, oil bombs from wall mortars (ID-132).
 - **Barrier cards:** +layer HP, repairs, barbed wire out
-  in the field.
+  in the field, sandbags in front of the outer layer (ID-132).
 - **Power cards:** refill some battery charge, turrets free to run for one
   wave.
 - **Synergies:** some cards upgrade when paired (e.g. ricochet + piercing
@@ -1248,6 +1248,8 @@ spacing real hordes have (see the ID-077 note below).
   | Hollow Points (ID-130; id `hollow-point-rounds`, as `hollow-points` is Heavy Rounds) | stat | rare | Every squad crit deals **+25%** of the hit more, added to the ×2 (and to Sharp Mind's and a crit damage affix's share): ×2.25 with nothing else | +50% (×2.5) | +75% (×2.75) |
   | Kevlar Vests (ID-131) | stat | common | Every hit on a survivor on the line takes **1 HP** off, added to Instinct's armour; a hit still keeps half its damage (a Shambler's 5 is never under 2.5) | 2 HP | 3 HP |
   | First Aid Kits (ID-131) | stat | common | Every survivor on the line recovers **0.5%** of their max HP a second, up to max | 1% | 1.5% |
+  | Sandbags (ID-132) | barrier | rare | The outermost built layer takes **10%** less of every hit (an enemy's blow, a Swollen's blast, a slab), shown as a low layer of bags on the ground in front of each standing segment of it | 20% | 30% |
+  | Scavenged Ammo (ID-132) | stat | rare | Each squad gun shot has a **20%** chance not to use a round, rolled on the fight's seeded RNG (a whole shot: every pellet of a shotgun's) | 30% | 40% |
 
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
@@ -1256,6 +1258,7 @@ spacing real hordes have (see the ID-077 note below).
   | Concussion Rounds | behaviour | epic | A squad bullet hit that leaves its enemy standing knocks it back **0.5 px per point of damage** dealt (after armour; about 3 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge. After a push the enemy can't be pushed again for **0.5 s** (hits in that window still deal their damage), so steady fire pushes it at most twice a second, and each enemy is pushed at most **100 px** in all (ID-124), so steady fire can't hold it in place. Each hit that could push it (outside the 0.5 s gap, even once its push is used up) also **dazes** it for **1 s**: the squad's bullets deal it **+30%** (ID-137). The bullet that dazes deals its plain damage and any landing after it gains, the rest of a shotgun's pellets in the same volley too (with the daze starting a step later, the farming balance test fell off its knife edge); each such hit renews it, so steady fire keeps an enemy dazed. Turret bullets neither daze nor gain, and burns and blasts don't gain. **Cost (ID-137):** the squad's fire rate **−10%** while held (a blade or tool swings slower too) |
   | Frag Grenades | behaviour | epic | Every survivor on the line carries grenades: the squad throws one every **8 s ÷ the survivors on the line** (8 s alone, 1.3 s with six), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **25%** of this wave's Shambler HP (ID-137; 35% before, ID-124; a flat 20 before that; armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked. **Cost (ID-137):** a throw takes its thrower's hands for **1.5 s**: no shot before then, and the shot that was due waits that long too |
   | Field Repairs (research) | barrier | epic | Every wall segment to full HP. **Cost (ID-137):** the squad's fire rate **−25%** for **5 s** of fight time after the pick (the clock stops while an offer is open); it multiplies with Concussion Rounds'. The held cards strip counts it down on the card's chip, in the warning colour, and the chip goes back to plain when it ends |
+  | Oil Bomb (ID-132) | behaviour | epic | Two mortars stand just behind the outermost built layer, one at each end of the wall (**36 px** back, **22 px** in from each end). Every **20 s** the one nearer the target fires a tar bomb at the enemy outside the camp with the most others within **90 px** (as Frag Grenades picks, within **600 px** of a mortar), aimed where it will be when the bomb lands **1.5 s** later. It leaves a tar slick of radius **90 px** for **10 s**: every enemy inside moves **60%** slower (multiplying with Barbed Wire, traps and the rest). **Synergy:** an Incendiary Rounds hit on an enemy in an unlit slick lights it: it burns everyone inside for **20%** of this wave's Shambler HP a second, and burns out **3 s** later (gone, no slow). The first bomb comes as soon as the card is picked and an enemy is in reach. **Cost:** the slow shell and the long wait between bombs, and a lit slick burns out (PM, ID-132). Survivors don't fire it, so it is not a throwable and takes no one's hands |
 
   **Steady across hordes (ID-124).** Frag Grenades' burst and Incendiary
   Rounds' burn were flat (20 damage; 1, 2, 3 dmg/s), more than a whole
@@ -1325,6 +1328,37 @@ spacing real hordes have (see the ID-077 note below).
   rule. An injury counts for the rest of the fight, so after one the pair
   stay on offer even with the line back at full HP. The cost: a player
   can't take Kevlar Vests ahead of trouble.
+
+  **Wall and ammo cards (ID-132).** Sandbags, Scavenged Ammo and Oil Bomb
+  bring the horde pool from 20 to 23 cards. Oil Bomb was first a survivor's
+  thrown tar bomb (Oil Slick); the PM made it a pair of wall mortars, so it
+  stays out of the throwable cards and slows enemies much more than Barbed
+  Wire, kept fair by its 20 s wait. Measured with the horde-only scripted
+  player over 20 seeds (first-try wins, Hordes 4–10; main: 100, 100, 95,
+  80, 65, 60, 85): with all three always on offer Horde 8 fell to **30%**.
+  Taking each card out in turn showed Oil Bomb alone did it (65% without
+  it), and ranking it low or not at all still left 40–45%: as an epic it
+  takes offer rolls from Frag Grenades, not because it plays badly. So
+  **Sandbags and Oil Bomb are offered only once enemies have reached the
+  outer wall** (`outerWallHit`: a built segment of the outermost built
+  layer below its max HP or broken), as Patch Up waits for a damaged
+  segment: before that neither does anything. With the gate: 100, 100, 90,
+  70, 70, 75 and 75%. Scavenged Ammo, a rare that works in every fight, is
+  always on offer. The scripted player ranks Scavenged Ammo after Speed
+  Loaders (ranked after Extended Mags, it was taken over better picks), and
+  Oil Bomb and Sandbags after Barbed Wire.
+
+  A half offer weight for Scavenged Ammo was tried and dropped: over 40
+  seeds the horde-only squad won Horde 8 at the first try 55% with it at full
+  weight and 38% at half (main: 48%; Horde 9 main 55%, so main's own mid
+  hordes sit under the 60% target past the test's 20 seeds, ID-142). Any
+  pool change re-rolls the scripted fights, and three balance tests moved
+  with notes: the survivor cards' test plays 60 seeds and asks 10% fewer
+  injured (25% over 20 before; Kevlar now −18%, First Aid −12%), the late
+  hordes' "not every fight hits the wall" bar is under 98% (97%) and their
+  longest fight may run 480 s (420 s; one close Horde 13 win runs 463 s), and the
+  farming test compares Squad Power a minute over its three seeds together,
+  as one lucky gun drop decides a seed.
 
   Field Repairs (a campaign research card) stays epic and unique, and
   Heavy Rounds (research) stays once per horde with no levels.

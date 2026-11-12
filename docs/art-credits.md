@@ -89,7 +89,9 @@ Prompts describe the subject and a shared house style only
 A few card icons are drawn shapes rather than generations (manifest `draw`):
 plain polygons drawn by `tools/art/build.py` with no model. Their points are
 our own and copy no existing artwork, except `card-kevlar-vests`, whose
-outline is traced from a CC BY 3.0 icon (credited below) and recoloured.
+outline is traced from a CC BY 3.0 icon (credited below) and recoloured, and
+`card-scavenged-ammo` and `card-oil-bomb`, whose layouts follow CC BY 3.0
+icons (credited below) with our own shapes and colours.
 
 ## Reference photographs
 
@@ -118,3 +120,13 @@ Wikimedia Commons page id where it has none.
   (<https://creativecommons.org/licenses/by/3.0/>). Changes: the outline
   traced to polygons, recoloured olive with darker straps, and a dark outline
   added.
+- `card-scavenged-ammo` (ID-132): adapted from "Ammo box" by sbed,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our
+  own polygons after its layout (a box with a top handle and rounds inside),
+  coloured olive with brass rounds, and a dark outline added.
+- `card-oil-bomb` (ID-132): adapted from "Fire bomb" by Lorc,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our
+  own polygons after its layout (a round bomb with a fuse and a flame on it),
+  coloured tar black, sitting in a tar puddle, and a dark outline added.

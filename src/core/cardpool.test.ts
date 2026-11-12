@@ -127,7 +127,7 @@ describe('rarity', () => {
   });
 
   it('falls back to the next rarity down when none of the rolled one is left', () => {
-    const s = quiet('frag-grenades', 'concussion-rounds');
+    const s = quiet('frag-grenades', 'concussion-rounds', 'oil-bomb');
     s.bench = [];
     // 0.999 rolls epic every slot (and picks the last card of a list).
     const top = () => 0.999;
@@ -145,6 +145,8 @@ describe('rarity', () => {
       'barbed-wire',
       'aim-for-the-head',
       'hollow-point-rounds',
+      'sandbags',
+      'scavenged-ammo',
     );
     // No turret, so Power Surge (rare) is out too: down to common.
     expect(upgrades(rollOffer(top, s)).map((id) => UPGRADES[id].rarity)).toEqual([

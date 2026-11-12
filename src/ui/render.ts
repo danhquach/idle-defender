@@ -37,6 +37,9 @@ import {
   shocked,
   dazed,
   windingUp,
+  sandbagged,
+  SAVE_CUE,
+  mortars,
   took,
   turretState,
   type Bullet,
@@ -52,6 +55,7 @@ import {
   type Incoming,
   type Pop,
   type Slab,
+  type Slick,
   type Spit,
   type Trap,
   type Turret,
@@ -606,6 +610,7 @@ export type Scene = Pick<
   // Damage numbers (ID-082); build mode has none.
   // Barbed Wire's rows (ID-090); build mode has none.
   // The fight's seed picks each kill's death (ID-110); build mode has none.
+  // Oil Bomb's tar bombs and slicks, Scavenged Ammo's saved rounds (ID-132); build mode has none.
   Partial<
     Pick<
       HordeState,
@@ -619,6 +624,9 @@ export type Scene = Pick<
       | 'wire'
       | 'slabs'
       | 'seed'
+      | 'tarBombs'
+      | 'saves'
+      | 'slicks'
     >
   > & {
     /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
@@ -935,6 +943,19 @@ function drawNameTag(
   drawPlate(ctx, d.name, at, cam, false, lift);
 }
 
+/**
+ * Scavenged Ammo's cue (ID-132): `text` in brass, `gap` px over the name plate, rising
+ * `rise` world px as it fades over `SAVE_CUE.keep` s (held still with Reduce motion).
+ */
+export const SAVE_LOOK = { text: '+1', colour: '#e8c25a', gap: 2, rise: 10 } as const;
+
+/** How a saved round's cue shows `age` s after it: alpha and rise; null once gone. */
+export function saveLook(age: number, still: boolean): { alpha: number; rise: number } | null {
+  const u = age / SAVE_CUE.keep;
+  if (!(u >= 0 && u < 1)) return null;
+  return { alpha: u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4, rise: still ? 0 : SAVE_LOOK.rise * u };
+}
+
 /** Where a defender's name plate sits: its anchor and how far its bottom is lifted over it. */
 function tagSpot(
   d: Pick<Defender, 'x' | 'y' | 'plain'>,
@@ -1207,6 +1228,8 @@ function drawOnPart(
 /** The barrier cards a fight's wall shows (ID-075); none in the build scene. */
 interface WallCards {
   reinforced: boolean;
+  /** Sandbags (ID-132) against this layer: held, and it is the outermost built layer. */
+  sandbags: boolean;
   /** When the latest barrier card was picked. */
   pickedAt: number | undefined;
   /** The game speed shown: the pulse and repair glow last the same real time at any speed. */
@@ -1216,6 +1239,7 @@ interface WallCards {
 }
 const NO_CARDS: WallCards = {
   reinforced: false,
+  sandbags: false,
   pickedAt: undefined,
   pace: 1,
   still: true,
@@ -1245,6 +1269,8 @@ function drawSegment(
     ctx.translate(Math.sin(hit * Math.PI * 6) * hit * WALL_HIT.shake * cam.zoom, 0);
   }
   drawSegmentBody(ctx, art, layer, seg, cam, standing && cards.reinforced);
+  // Sandbags (ID-132): a low layer of bags on the ground in front of it; gone when it falls.
+  if (standing && cards.sandbags) drawSandbags(ctx, art, layer, seg, cam);
   // Worked out only when a glow shows, so a quiet segment costs no more than before.
   let f: ReturnType<typeof faces> | undefined;
   const glow = (style: string, alpha: number): void => {
@@ -1398,6 +1424,41 @@ function segmentBox(layer: Layer, seg: Layer['segments'][number]) {
     z0: 0,
     height: wallHeight(seg.hp, seg.maxHp),
   };
+}
+
+/**
+ * Sandbags' layer in front of segment `seg` (ID-132): `gap` px out from the wall's face,
+ * `depth` px deep, as long as the segment, `height` of a full wall's height (it keeps its
+ * height as the wall behind it wears down).
+ */
+export function sandbagBox(layer: Layer, seg: Layer['segments'][number]) {
+  const { gap, depth, height } = WALL_CARD.sandbags;
+  const wall = segmentBox(layer, seg);
+  const x0 = wall.x1 + gap;
+  return { ...wall, x0, x1: x0 + depth, height: wallHeight(seg.maxHp, seg.maxHp) * height };
+}
+
+/**
+ * Sandbags' layer (ID-132): its front face in the stacked-bags texture, and on top
+ * `WALL_CARD.sandbags.bags` whole bags lying flat end to end along the segment, as laid bags
+ * are seen from above (no tie shows), each just overlapping the next so no gap shows.
+ */
+function drawSandbags(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  layer: Layer,
+  seg: Layer['segments'][number],
+  cam: Camera,
+): void {
+  const f = faces(sandbagBox(layer, seg), cam);
+  fillTexture(ctx, art[BASE_ART.sandbags.front], f.front, TILE.wall, HEIGHT_SCALE, cam);
+  const { bags, overlap } = WALL_CARD.sandbags;
+  const step = f.top.h / bags;
+  const over = step * overlap;
+  for (let i = 0; i < bags; i++) {
+    const y = f.top.sy + i * step - over;
+    ctx.drawImage(art[BASE_ART.sandbags.bag], f.top.sx, y, f.top.w, step + 2 * over);
+  }
 }
 
 function drawSegmentBody(
@@ -2930,15 +2991,23 @@ export function grenadeAt(
   g: Grenade,
   time: number,
   from: Launch = { dx: 0, z: 0, at: g.at },
+  arc: number = GRENADE.arc,
 ): { x: number; y: number; z: number } {
   const p = Math.min(1, Math.max(0, (time - from.at) / (g.lands - from.at)));
   const x0 = g.fromX + from.dx;
   return {
     x: x0 + (g.x - x0) * p,
     y: g.fromY + (g.y - g.fromY) * p,
-    z: from.z * (1 - p) + 4 * GRENADE.arc * p * (1 - p),
+    z: from.z * (1 - p) + 4 * arc * p * (1 - p),
   };
 }
+
+/**
+ * Oil Bomb's mortars (ID-132): drawn `height` px tall (for an `ART_PX`-tall sprite) at
+ * each end of the wall; a tar bomb leaves the muzzle `release` px up and lobs `arc` px
+ * over its line at the middle, higher than a grenade.
+ */
+export const MORTAR = { height: 46, release: 22, arc: 140 } as const;
 
 /**
  * Frag Grenades (design §8): in the air, an olive-drab ball with a dark edge on its arc over its own
@@ -2951,44 +3020,96 @@ function drawGrenade(
   time: number,
   cam: Camera,
   from: Launch,
+  look: BallLook = FRAG_BALL,
 ): void {
   if (time < from.at) return;
   if (time < g.lands) {
-    const at = grenadeAt(g, time, from);
-    groundCircle(ctx, at.x, at.y, GRENADE.r, cam);
+    const at = grenadeAt(g, time, from, look.arc);
+    groundCircle(ctx, at.x, at.y, look.r, cam);
     ctx.fillStyle = COLOR.shadow;
     ctx.fill();
-    drawGrenadeBall(ctx, project(at, cam), cam);
+    drawGrenadeBall(ctx, project(at, cam), cam, look.r, look);
     return;
   }
   // Landed: its explosion is drawn with the others (`explosions`).
 }
 
+/** A thrown ball's look: its radius in world units, fill, dark edge and pale rim. */
+interface BallLook {
+  readonly r: number;
+  /** Its arc over the line it flies, px at the middle. */
+  readonly arc: number;
+  readonly fill: string;
+  readonly edge: string;
+  readonly shine: string;
+}
+const FRAG_BALL: BallLook = {
+  r: GRENADE.r,
+  arc: GRENADE.arc,
+  fill: COLOR.grenade,
+  edge: COLOR.grenadeEdge,
+  shine: COLOR.grenadeShine,
+};
+/** Oil Bomb's tar bomb in the air (ID-132): bigger than a grenade, tar black with a brown sheen. */
+export const TAR_BOMB: BallLook = {
+  arc: MORTAR.arc,
+  r: 9,
+  fill: '#1c1712',
+  edge: '#050403',
+  // A bright amber rim so the dark shell reads over the dark ground (art review).
+  shine: 'rgba(255, 196, 120, 0.95)',
+};
+
 /**
- * A Frag Grenade's ball centred on screen point `c`, `r` world units round: olive drab, a dark
- * edge, a pale rim, the edge and rim scaled with it.
+ * A Frag Grenade's ball (or a tar bomb's, `look`) centred on screen point `c`, `r` world units
+ * round: olive drab, a dark edge, a pale rim, the edge and rim scaled with it.
  */
 function drawGrenadeBall(
   ctx: CanvasRenderingContext2D,
   c: { sx: number; sy: number },
   cam: Camera,
   r: number = GRENADE.r,
+  look: BallLook = FRAG_BALL,
 ): void {
   const k = r / GRENADE.r;
   ctx.beginPath();
   ctx.arc(c.sx, c.sy, sized(r, cam), 0, Math.PI * 2);
-  ctx.fillStyle = COLOR.grenade;
+  ctx.fillStyle = look.fill;
   ctx.fill();
-  ctx.strokeStyle = COLOR.grenadeEdge;
+  ctx.strokeStyle = look.edge;
   ctx.lineWidth = sized(GRENADE.edge * k, cam);
   ctx.stroke();
   // A pale rim on its upper left, so it reads over the mossy ground.
   const rim = sized(r, cam) - sized(GRENADE.edge * k, cam);
   ctx.beginPath();
   ctx.arc(c.sx, c.sy, rim, Math.PI, Math.PI * 1.5);
-  ctx.strokeStyle = COLOR.grenadeShine;
+  ctx.strokeStyle = look.shine;
   ctx.lineWidth = sized(GRENADE.shine * k, cam);
   ctx.stroke();
+}
+
+/**
+ * Oil Bomb's slick on the ground (ID-132): the tar art spans `art` × its radius, fading in
+ * over `in` s as it lands and out over the last `out` s; a lit one burns away across its
+ * burn, leaving a scorch at `scorch` alpha that goes with it.
+ */
+export const SLICK = { in: 0.3, out: 1, art: 1.1, alpha: 0.95, scorch: 0.7 } as const;
+
+/** How the slick `k` shows at `time` (ID-132): its tar's alpha and its scorch's, each 0 to 1. */
+export function slickLook(
+  time: number,
+  k: Pick<Slick, 'at' | 'until' | 'litAt'>,
+): { tar: number; scorch: number } {
+  const left = k.until - time;
+  if (!(time >= k.at) || !(left > 0)) return { tar: 0, scorch: 0 };
+  const fade = Math.min(1, (time - k.at) / SLICK.in, left / SLICK.out);
+  if (k.litAt === undefined) return { tar: SLICK.alpha * fade, scorch: 0 };
+  // Burning: the tar goes as the fire eats it, the scorch shows through.
+  const burnt = Math.min(1, Math.max(0, (time - k.litAt) / (k.until - k.litAt)));
+  return {
+    tar: SLICK.alpha * fade * (1 - burnt),
+    scorch: SLICK.scorch * Math.min(1, left / SLICK.out) * Math.min(1, burnt * 3),
+  };
 }
 
 /**
@@ -3448,19 +3569,20 @@ export function molotovHeat(time: number, f: Pick<Fire, 'at' | 'until'>): number
 
 /**
  * Molotov fire `f`'s flames at `time` (see `MOLOTOV_FIRE`), as a `FireLook` for
- * `paintFire`; null once it is out. `clock` runs its flames (0 holds them still).
+ * `paintFire`; null once it is out. `clock` runs its flames (0 holds them still). `R` is
+ * the fire's radius: a molotov's, or a lit Oil Bomb's (ID-132).
  */
 export function molotovLook(
   f: Pick<Fire, 'x' | 'y' | 'at' | 'until'>,
   time: number,
   clock: number,
   cam: Camera,
+  R: number = SKILLS.molotov.radius,
 ): FireLook | null {
   const heat = molotovHeat(time, f);
   if (heat <= 0) return null;
   const M = MOLOTOV_FIRE;
   const id = Math.round(f.x * 7 + f.y * 13);
-  const R = SKILLS.molotov.radius;
   const H = R * cam.zoom;
   const grow = Math.min(1 + BURN.boost, heat);
   const fade = Math.min(1, heat);
@@ -4022,6 +4144,7 @@ export function drawScene(
     ? NO_CARDS
     : {
         reinforced: took(taken, 'reinforce'),
+        sandbags: false,
         pickedAt: scene.barrierAt,
         pace: Math.max(1, scene.pace ?? 1),
         still: anim?.reduced ?? true,
@@ -4036,6 +4159,19 @@ export function drawScene(
     ctx.globalAlpha = MOLOTOV_FIRE.scorchAlpha * heat;
     const r = SKILLS.molotov.radius * MOLOTOV_FIRE.scorch;
     groundArt(ctx, art[SCORCH_ART], f.x, f.y, r, cam);
+    ctx.globalAlpha = 1;
+  }
+  // Oil Bomb's tar lies flat on the ground (ID-132); a lit one burns away to a scorch.
+  for (const k of scene.slicks ?? []) {
+    const { tar, scorch } = slickLook(scene.time, k);
+    if (scorch > 0) {
+      ctx.globalAlpha = scorch;
+      groundArt(ctx, art[SCORCH_ART], k.x, k.y, CARD.oil.radius, cam);
+    }
+    if (tar > 0) {
+      ctx.globalAlpha = tar;
+      groundArt(ctx, art[BASE_ART.slick], k.x, k.y, CARD.oil.radius * SLICK.art, cam);
+    }
     ctx.globalAlpha = 1;
   }
   // Explosions' scorch, dust and shockwave lie on the ground (ID-107).
@@ -4058,13 +4194,16 @@ export function drawScene(
 
   const sprites: Sprite[] = camp ? campSprites(ctx, art, camp, cam) : [];
   for (const layer of scene.layers) {
+    // Sandbags (ID-132) stand only against the outermost built layer.
+    const bagged = build ? false : sandbagged({ ...taken, layers: scene.layers }, layer);
+    const layerCards = bagged ? { ...cards, sandbags: true } : cards;
     for (const seg of layer.segments) {
       if (seg.kind === null || seg.tier === null) continue; // unbuilt: an open gap
       // Keyed just past the wall's front edge so enemies stopped at it draw on top.
       sprites.push({
         y: seg.index * SEGMENT_HEIGHT + SEGMENT_HEIGHT / 2,
         x: layer.x + WALL.depth + 0.5,
-        draw: () => drawSegment(ctx, art, layer, seg, scene.time, cam, cards),
+        draw: () => drawSegment(ctx, art, layer, seg, scene.time, cam, layerCards),
       });
     }
   }
@@ -4189,6 +4328,30 @@ export function drawScene(
       },
     });
   }
+  // Oil Bomb's mortars stand at the wall's ends once the card is held (ID-132).
+  if (!build && took(taken, 'oil-bomb')) {
+    for (const c of mortars(scene)) {
+      sprites.push({
+        y: c.y,
+        x: c.x,
+        draw: () =>
+          drawStanding(ctx, art[BASE_ART.mortar], project({ ...c, z: 0 }, cam), MORTAR.height, cam),
+      });
+    }
+  }
+  // A lit slick burns with the molotov's flames, across the slick (ID-132).
+  for (const k of scene.slicks ?? []) {
+    if (k.litAt === undefined) continue;
+    const fire = { x: k.x, y: k.y, at: k.litAt, until: k.until };
+    sprites.push({
+      y: k.y,
+      x: k.x,
+      draw: () => {
+        const look = molotovLook(fire, scene.time, flameClock, cam, CARD.oil.radius);
+        if (look) paintFire(ctx, look);
+      },
+    });
+  }
   // One shot's bullets (a shotgun's pellets: one muzzle, flown as far) draw together,
   // shadows and backings under every tail and head; each later shot sorts on its own.
   const volleys = new Map<string, Bullet[]>();
@@ -4232,6 +4395,10 @@ export function drawScene(
   for (const k of scene.slabs ?? []) drawSlab(ctx, k, scene.time, cam);
   for (const g of scene.grenades) {
     drawGrenade(ctx, g, scene.time, cam, launchOf(scene, g, anim !== null));
+  }
+  // Oil Bomb's tar bombs lob high from their mortar's bucket (ID-132).
+  for (const g of scene.tarBombs ?? []) {
+    drawGrenade(ctx, g, scene.time, cam, { dx: 0, z: MORTAR.release, at: g.at }, TAR_BOMB);
   }
 
   // Explosions' fireballs, smoke and flashes over every sprite (ID-107); an armed skill
@@ -4292,6 +4459,25 @@ export function drawScene(
       if (share !== null) drawReloadPie(ctx, d, share, z0, cam);
     }
     for (const { d, z0 } of shown) drawNameTag(ctx, d, z0, cam);
+    // Scavenged Ammo's saved rounds (ID-132): a brass "+1" rises over the name and fades.
+    for (const k of scene.saves ?? []) {
+      const at = shown.find((v) => v.d.id === k.by);
+      const look = at ? saveLook(scene.time - k.at, cards.still) : null;
+      if (!at || !look) continue;
+      const { at: spot, lift } = tagSpot(at.d, at.z0, cam);
+      const p = project(spot, cam);
+      ctx.globalAlpha = look.alpha;
+      ctx.font = MARK.plate;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = COLOR.plate;
+      const y = p.sy - lift - PLATE_H - SAVE_LOOK.gap - look.rise * cam.zoom;
+      ctx.strokeText(SAVE_LOOK.text, p.sx, y);
+      ctx.fillStyle = SAVE_LOOK.colour;
+      ctx.fillText(SAVE_LOOK.text, p.sx, y);
+      ctx.globalAlpha = 1;
+    }
   }
   ctx.restore();
   if (build) return;

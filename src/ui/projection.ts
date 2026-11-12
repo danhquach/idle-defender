@@ -175,6 +175,12 @@ export const WALL_CARD = {
   pulse: { time: 0.9, alpha: 0.35 },
   repair: { time: 0.9, alpha: 0.45, rise: 6 },
   brace: { alpha: 0.4 },
+  /**
+   * Sandbags (ID-132): a low layer of bags `gap` px in front of the outer layer, `depth` px
+   * deep and `height` of a full wall's height; its top shows `bags` whole bags a segment,
+   * each overlapping the next by `overlap` of its length.
+   */
+  sandbags: { gap: 2, depth: 16, height: 0.45, bags: 3, overlap: 0.06 },
 } as const;
 
 /** 1 at `at`, down to 0 `length` s later; 0 before it, after it or with none. */
