@@ -203,10 +203,10 @@ describe('the level panel (ID-146)', () => {
   it('shows the survivor’s level and what it gives, in one line', () => {
     const m = mount(camp([at(1, 7)]));
     m.roster.open('recruit-1');
-    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.q('.rv-ttl').textContent).toBe('Level 7');
     expect(m.q('.rv-level').textContent).toBe(levelText(7));
     expect(m.q('.rv-level').textContent).toMatch(/^\+\d+\u00a0HP\u00a0· /);
-    expect(m.q('.rv-left').textContent).toMatch(/^\d+\/\d+ XP$/);
+    expect(m.q('.rv-left').textContent).toMatch(/^\d+\/175 XP$/);
   });
 
   it('a level 1 survivor has no bonus yet', () => {

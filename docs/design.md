@@ -862,7 +862,8 @@ close-quarter weapons come out only when an enemy is close.
   sheet on a phone, as tall as what it shows. The Roster button carries no
   badge (ID-146: the number of survivors with points to spend before). The dialog has
   a header (title, "Best gun for everyone", close), one row of squad tabs
-  (portrait, name, level, HP), the selected survivor beside their gun slot,
+  (portrait, name, level; HP on hover and for screen readers), the selected
+  survivor beside their gun slot,
   and one panel that is either **Level** or
   **Choose a gun**. A survivor's name on the result screen still opens that
   survivor here.

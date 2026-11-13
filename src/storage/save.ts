@@ -147,8 +147,8 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  *
  * 13 since the stat rework (ID-084): a v12 save's stats are Aim, Might, Tech and Grit.
  * Every point spent there (a defender's, or a survivor's waiting to join) is refunded as
- * unspent points, with a one-time note (`Save.refunded`, now `reworked`); a patrol out keeps a strength
- * no higher than its party's today (stats no longer add to it).
+ * unspent points, with a one-time note (`Save.refunded`; `reworked` since ID-146); a
+ * patrol out keeps a strength no higher than its party's today (stats no longer add to it).
  *
  * 12 since the horde-only build (ID-066): a v11 save has no reserve. Loaded into this
  * build, survivors past the squad's cap move to the reserve; every other field loads as

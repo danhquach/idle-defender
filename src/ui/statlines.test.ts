@@ -43,6 +43,16 @@ describe('the level line (ID-146)', () => {
     expect(levelText(1, true)).toBe(LEVEL_ONE_SHORT);
   });
 
+  it('pins the real numbers: level 7 as in the design table (§6 Stats)', () => {
+    const n = (s: string) => s.replaceAll('\u00a0', ' ');
+    expect(n(levelText(7))).toBe(
+      '+14 HP · +0.5 armour · +6.9% fire rate · +6.9% reload speed · +6.9% accuracy · +4.6% crit',
+    );
+    expect(n(levelText(7, true))).toBe(
+      '+14 HP · +0.5 arm · +6.9% fire · +6.9% reload · +6.9% aim · +4.6% crit',
+    );
+  });
+
   it('every bonus grows with level', () => {
     const low = levelGains(3);
     const high = levelGains(20);
