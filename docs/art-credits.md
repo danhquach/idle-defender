@@ -109,6 +109,8 @@ Wikimedia Commons page id where it has none.
 | commons-11317366 | US Army (PEO Soldier) photograph of a bolt-action sniper rifle, side view (for `weapon-sniper`) | Wikimedia Commons | Public domain (US federal government work) |
 | commons-11308991 | US Army (PEO Soldier) photograph of a carbine, side view (for `weapon-rifle`) | Wikimedia Commons | Public domain (US federal government work) |
 | DA-SC-92-01299 | US Department of Defense photograph of a 9 mm pistol, right side view (for `weapon-pistol`) | Wikimedia Commons | Public domain (US federal government work) |
+| commons-70365041 | US Department of Justice (ATF) photograph of a .357 revolver, side view (for `weapon-handcannon`) | Wikimedia Commons | Public domain (US federal government work) |
+| commons-70347865 | US Department of Justice (ATF) photograph of a 7.62 mm assault rifle, side view (for `weapon-assault`) | Wikimedia Commons | Public domain (US federal government work) |
 
 ## Credits
 

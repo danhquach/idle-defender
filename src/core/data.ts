@@ -204,6 +204,16 @@ export interface Gun {
   readonly pellets: number;
   readonly pierce: number;
   readonly tracer: Tracer;
+  /**
+   * Burst fire (ID-135, the Carbine): `rounds` shots `gap` s apart, then a pause, so the
+   * average time a shot stays `fireInterval` (every dmg/s figure holds).
+   */
+  readonly burst?: { readonly rounds: number; readonly gap: number };
+  /**
+   * Loaded shell by shell (ID-135, the Pump Shotgun): `reload` is a full magazine's time,
+   * one shell at a time; it fires mid-load only at an enemy near the wall.
+   */
+  readonly shells?: true;
 }
 /** A blade (secondary) strikes within `reach` of its holder's post; never from a tower. */
 export interface Blade {
@@ -247,44 +257,48 @@ export const WEAPONS = {
   smg: {
     name: 'SMG',
     kind: 'gun',
-    damage: 5,
-    fireInterval: 0.2,
-    range: 400,
+    damage: 4.5,
+    fireInterval: 0.17,
+    range: 480,
     magazine: 30,
-    reload: 2,
+    reload: 1.6,
     speed: 1600,
-    spread: 5,
+    spread: 3.5,
     pellets: 1,
     pierce: 0,
     tracer: { length: 10, colour: '#ffd36a' },
   },
+  // Shown as the Carbine since ID-135 (the id stays, so saves load).
   rifle: {
-    name: 'Rifle',
+    name: 'Carbine',
     kind: 'gun',
     damage: 7,
     fireInterval: 0.4,
     range: 750,
-    magazine: 20,
+    magazine: 21,
     reload: 2,
     speed: 2200,
-    spread: 1.5,
+    spread: 1,
     pellets: 1,
     pierce: 0,
     tracer: { length: 16, colour: '#ffe08a' },
+    burst: { rounds: 3, gap: 0.08 },
   },
+  // Shown as the Pump Shotgun since ID-135.
   shotgun: {
-    name: 'Shotgun',
+    name: 'Pump Shotgun',
     kind: 'gun',
-    damage: 4,
-    fireInterval: 0.75,
+    damage: 7,
+    fireInterval: 0.8,
     range: 350,
-    magazine: 8,
-    reload: 2.5,
+    magazine: 6,
+    reload: 3.6,
     speed: 1400,
     spread: 12,
     pellets: 6,
     pierce: 0,
     tracer: { length: 8, colour: '#ffc04a' },
+    shells: true,
   },
   lmg: {
     name: 'LMG',
@@ -295,7 +309,7 @@ export const WEAPONS = {
     magazine: 80,
     reload: 5,
     speed: 2000,
-    spread: 4,
+    spread: 6,
     pellets: 1,
     pierce: 0,
     tracer: { length: 14, colour: '#ffb347' },
@@ -303,7 +317,7 @@ export const WEAPONS = {
   sniper: {
     name: 'Sniper rifle',
     kind: 'gun',
-    damage: 22,
+    damage: 35,
     fireInterval: 2,
     range: 1100,
     magazine: 5,
@@ -311,8 +325,65 @@ export const WEAPONS = {
     speed: 3000,
     spread: 0.5,
     pellets: 1,
-    pierce: 1,
+    pierce: 0,
     tracer: { length: 24, colour: '#fff3c4' },
+  },
+  // ID-135: two owned sidearms (never free like the pistol) and two more specialised guns.
+  handcannon: {
+    name: 'Hand Cannon',
+    kind: 'sidearm',
+    damage: 20,
+    fireInterval: 1,
+    range: 500,
+    magazine: 6,
+    reload: 2.5,
+    speed: 2000,
+    spread: 0.75,
+    pellets: 1,
+    pierce: 0,
+    tracer: { length: 16, colour: '#ffc04a' },
+  },
+  machinepistol: {
+    name: 'Machine Pistol',
+    kind: 'sidearm',
+    damage: 3.5,
+    fireInterval: 0.08,
+    range: 380,
+    magazine: 16,
+    reload: 1.6,
+    speed: 1600,
+    spread: 9,
+    pellets: 1,
+    pierce: 0,
+    tracer: { length: 8, colour: '#ffd36a' },
+  },
+  assault: {
+    name: 'Assault Rifle',
+    kind: 'gun',
+    damage: 8,
+    fireInterval: 0.35,
+    range: 500,
+    magazine: 30,
+    reload: 2.2,
+    speed: 2100,
+    spread: 2,
+    pellets: 1,
+    pierce: 0,
+    tracer: { length: 14, colour: '#ffe08a' },
+  },
+  cartridge: {
+    name: 'Drum Shotgun',
+    kind: 'gun',
+    damage: 3.5,
+    fireInterval: 0.6,
+    range: 380,
+    magazine: 8,
+    reload: 2.5,
+    speed: 1400,
+    spread: 12,
+    pellets: 6,
+    pierce: 0,
+    tracer: { length: 8, colour: '#ffc04a' },
   },
   knife: { name: 'Knife', kind: 'blade', damage: 10, fireInterval: 0.5, reach: 50 },
   toolkit: {
@@ -356,6 +427,11 @@ export const RARITY_ORDER: readonly Rarity[] = [
   'prototype',
   'relic',
 ];
+/**
+ * A horde-only Pistol drop's lowest rarity (ID-135): every survivor has a free Common one,
+ * so a dropped one is at least Military.
+ */
+export const PISTOL_DROP_FLOOR: Rarity = 'military';
 
 export type AffixId =
   | 'damage'
@@ -369,12 +445,21 @@ export type AffixId =
   | 'closeDamage'
   | 'cone'
   | 'pellets'
-  | 'slow'
   | 'bossDamage';
 type WeaponKind = Weapon['kind'];
 const GUNS: readonly WeaponKind[] = ['sidearm', 'gun'];
-/** The weapons that shoot: the free pistol and the five specialised guns. */
-export type GunBase = 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'lmg' | 'sniper';
+/** The weapons that shoot: the sidearms (the free pistol, ID-135's two) and the specialised guns. */
+export type GunBase =
+  | 'pistol'
+  | 'smg'
+  | 'rifle'
+  | 'shotgun'
+  | 'lmg'
+  | 'sniper'
+  | 'handcannon'
+  | 'machinepistol'
+  | 'assault'
+  | 'cartridge';
 /** An affix's roll range, [min, max]. */
 interface Range {
   readonly min: number;
@@ -389,18 +474,22 @@ interface Range {
 export const AFFIXES = {
   damage: { min: 5, max: 15, kinds: ['sidearm', 'gun', 'blade', 'tool'] },
   fireRate: { min: 5, max: 15, kinds: ['sidearm', 'gun', 'blade', 'tool'] },
-  magazine: { min: 20, max: 50, kinds: GUNS, role: { lmg: { min: 40, max: 80 } } },
+  magazine: {
+    min: 20,
+    max: 50,
+    kinds: GUNS,
+    role: { lmg: { min: 40, max: 80 }, machinepistol: { min: 50, max: 100 } },
+  },
   reload: { min: 10, max: 25, kinds: GUNS },
   pierce: { min: 1, max: 1, kinds: GUNS, role: { sniper: { min: 1, max: 2 } } },
   repair: { min: 10, max: 25, kinds: ['tool'] },
   // Role affixes (ID-101): percent points of crit chance; crit damage's share added to ×2.
-  crit: { min: 3, max: 8, kinds: GUNS, bases: ['pistol', 'rifle'] },
+  crit: { min: 3, max: 8, kinds: GUNS, bases: ['pistol', 'rifle', 'assault', 'lmg'] },
   critDamage: { min: 20, max: 50, kinds: GUNS, bases: ['rifle'] },
   closeDamage: { min: 10, max: 25, kinds: GUNS, bases: ['smg'] },
-  cone: { min: 20, max: 40, kinds: GUNS, bases: ['shotgun'] },
-  pellets: { min: 1, max: 2, kinds: GUNS, bases: ['shotgun'] },
-  slow: { min: 5, max: 15, kinds: GUNS, bases: ['lmg'] },
-  bossDamage: { min: 15, max: 35, kinds: GUNS, bases: ['sniper'] },
+  cone: { min: 20, max: 40, kinds: GUNS, bases: ['shotgun', 'cartridge'] },
+  pellets: { min: 1, max: 2, kinds: GUNS, bases: ['shotgun', 'cartridge'] },
+  bossDamage: { min: 15, max: 35, kinds: GUNS, bases: ['sniper', 'handcannon'] },
 } as const satisfies Record<
   AffixId,
   Range & {
@@ -416,31 +505,40 @@ export const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
  * it has, Rusty or Relic. The trait numbers are `TRAIT`'s.
  */
 export const GUN_ROLES = {
-  pistol: { role: 'Backup', trait: 'Fastest reload of any gun' },
+  pistol: { role: 'All-rounder', trait: 'Fastest reload of any gun' },
   smg: { role: 'Swarm shredder', trait: '+25% damage to enemies near the wall' },
-  rifle: { role: 'Marksman', trait: '+10% crit chance' },
-  shotgun: { role: 'Wall stopper', trait: 'Each pellet hit briefly stops the enemy' },
-  lmg: { role: 'Suppression', trait: 'Hits slow the enemy 20% for 1 s (not stacking)' },
+  rifle: { role: 'Marksman', trait: 'Fires 3-round bursts; +10% crit chance' },
+  shotgun: {
+    role: 'Wall stopper',
+    trait: 'Loads shell by shell; a hit knocks an enemy near the wall back',
+  },
+  lmg: { role: 'Shredder', trait: '+8% crit chance' },
   sniper: {
     role: 'Boss and heavy killer',
-    trait: 'Ignores armour; each shot goes through 1 more enemy',
+    trait: '+20% crit chance, +50% crit damage; crits ignore armour; 10% chance to pierce',
   },
+  handcannon: { role: 'Heavy sidearm', trait: 'Each hit knocks the enemy back a little' },
+  machinepistol: { role: 'Close backup', trait: 'Fastest fire of any gun' },
+  assault: { role: 'Assault', trait: '+5% crit chance' },
+  cartridge: { role: 'Crowd stopper', trait: 'A hit knocks an enemy near the wall back' },
 } as const satisfies Record<GunBase, { role: string; trait: string }>;
 
 /**
- * The built-in traits' numbers (ID-101; kept by the balance pass, ID-102).
+ * The built-in traits' numbers (ID-101, reworked in ID-135).
  * SMG: `close.bonus` more damage to an enemy within `close.range` px of the wall's front.
- * Rifle: `crit` more crit chance. Shotgun: a hit stops the enemy for `stagger.seconds`,
- * never again until `stagger.gap` s after the last one began. LMG: a hit slows it by
- * `slow.by` for `slow.seconds` (a new hit only renews it); the slow affix adds to it,
- * never past `slow.max`. Sniper rifle: ignores Brute, Horror and boss-plate armour; the
- * heavy kinds (`HEAVY_KINDS`) and any boss or mini-boss take its boss-damage affix.
+ * Crit chance a gun adds: `crit` by base (the Carbine, the Assault Rifle, the LMG, the Sniper rifle);
+ * the Sniper rifle also adds `sniper.critDamage` to a crit's multiplier, its crits ignore
+ * armour, and each shot has `sniper.pierce` chance to go through 1 more enemy.
+ * Knockback: a Hand Cannon hit pushes an enemy `knock.hand` px back at any range; a
+ * shotgun shot pushes one near the wall (`close.range`) `knock.shotgun` px, once a shot
+ * however many of its pellets land, in any step; a heavy kind `knock.heavy` of it; each enemy at most
+ * `knock.cap` px in all.
  */
 export const TRAIT = {
   close: { range: 250, bonus: 0.25 },
-  crit: 0.1,
-  stagger: { seconds: 0.15, gap: 0.6 },
-  slow: { by: 0.2, seconds: 1, max: 0.35 },
+  crit: { rifle: 0.1, assault: 0.05, lmg: 0.08, sniper: 0.2 },
+  sniper: { critDamage: 0.5, pierce: 0.1 },
+  knock: { hand: 12, shotgun: 25, heavy: 0.5, cap: 100 },
 } as const;
 
 /**

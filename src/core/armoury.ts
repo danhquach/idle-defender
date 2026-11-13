@@ -4,6 +4,8 @@
 import {
   AFFIXES,
   FARM,
+  FREE_WEAPONS,
+  PISTOL_DROP_FLOOR,
   GUN_LEVEL_DAMAGE,
   GUN_ROLES,
   PATROL,
@@ -120,7 +122,6 @@ const AFFIX_TEXT: Readonly<Record<AffixId, (v: number) => string>> = {
   closeDamage: (v) => `+${v}% damage to enemies near the wall`,
   cone: (v) => `+${v}% wider cone`,
   pellets: (v) => `+${v} ${v === 1 ? 'pellet' : 'pellets'}`,
-  slow: (v) => `+${v}% slow on hit`,
   bossDamage: (v) => `+${v}% damage to bosses and heavies`,
 };
 export const affixText = (a: Affix): string => AFFIX_TEXT[a.id](a.value);
@@ -198,12 +199,24 @@ function work(h: OwnedWeapon): Weapon {
   }
 }
 
-/** Crit chance gun `h` adds on its own (ID-101): the Rifle's trait, plus a crit affix. */
-export const gunCrit = (h: Held): number =>
-  (baseOf(h) === 'rifle' ? TRAIT.crit : 0) + affixShare(h, 'crit');
+/**
+ * Crit chance gun `h` adds on its own (ID-101, ID-135): its base's trait (the Assault Rifle,
+ * the LMG, the Sniper rifle; `TRAIT.crit`), plus a crit affix.
+ */
+export const gunCrit = (h: Held): number => {
+  const base = baseOf(h);
+  return (
+    (Object.hasOwn(TRAIT.crit, base) ? TRAIT.crit[base as keyof typeof TRAIT.crit] : 0) +
+    affixShare(h, 'crit')
+  );
+};
 
-/** What gun `h` adds to a crit's damage multiplier (ID-101): its crit damage affix. */
-export const gunCritDamage = (h: Held): number => affixShare(h, 'critDamage');
+/**
+ * What gun `h` adds to a crit's damage multiplier (ID-101): its crit damage affix, and the
+ * Sniper rifle's trait (ID-135).
+ */
+export const gunCritDamage = (h: Held): number =>
+  (baseOf(h) === 'sniper' ? TRAIT.sniper.critDamage : 0) + affixShare(h, 'critDamage');
 
 /** How many enemies a bullet from gun `h` goes through: its base gun's, plus a pierce affix's. */
 export const pierceOf = (h: Held): number => {
@@ -285,12 +298,20 @@ export function gunPower(h: Held): number {
 }
 
 /**
- * The guns a horde-only win can drop: every specialised gun, in `WEAPONS` order. Not the
- * pistol: every survivor has a free one, so a dropped one would be no reward.
+ * The guns a horde-only win can drop: every gun, in `WEAPONS` order (ID-135: the sidearms
+ * too, the Pistol included). Every survivor has a free Common Pistol, so a dropped one is
+ * never below `PISTOL_DROP_FLOOR` (`dropRarity`).
  */
 export const DROP_GUNS = (Object.keys(WEAPONS) as WeaponId[]).filter(
-  (id) => WEAPONS[id].kind === 'gun',
+  (id) => WEAPONS[id].kind === 'gun' || WEAPONS[id].kind === 'sidearm',
 );
+
+/** A dropped `base` gun's rarity (ID-135): `rarity`, or for the Pistol at least `PISTOL_DROP_FLOOR`. */
+export const dropRarity = (base: WeaponId, rarity: Rarity): Rarity =>
+  (FREE_WEAPONS as readonly WeaponId[]).includes(base) &&
+  RARITY_ORDER.indexOf(rarity) < RARITY_ORDER.indexOf(PISTOL_DROP_FLOOR)
+    ? PISTOL_DROP_FLOOR
+    : rarity;
 
 /** The rarity weights horde-only Horde `hordeNumber` drops by (`SQUAD_DROP`, ID-067). */
 export function squadDropWeights(hordeNumber: number): Record<Rarity, number> {
@@ -365,7 +386,7 @@ export function rollSquadGun(
   level: number,
 ): OwnedWeapon {
   const base = pick(rng, DROP_GUNS);
-  return rollWeapon(rng, uid, base, rollRarity(rng, weights), level);
+  return rollWeapon(rng, uid, base, dropRarity(base, rollRarity(rng, weights)), level);
 }
 
 /** Every way `count` affixes can come from `pool`, each at its max on `base`. */
@@ -390,7 +411,9 @@ export function bestRoll(base: WeaponId, rarity: Rarity, level: number): number 
 
 /** The most dmg/s any gun `weights` can drop at `level` can have (ID-098). */
 export const bestDrop = (weights: Record<Rarity, number>, level: number): number =>
-  Math.max(...weighted(weights).flatMap((r) => DROP_GUNS.map((b) => bestRoll(b, r, level))));
+  Math.max(
+    ...weighted(weights).flatMap((r) => DROP_GUNS.map((b) => bestRoll(b, dropRarity(b, r), level))),
+  );
 
 /** How many rolls a guaranteed upgrade tries before it takes the best roll there is. */
 const UPGRADE_TRIES = 64;
@@ -413,10 +436,9 @@ export function rollUpgrade(
   const atFloor = rarities.filter((r) => RARITY_ORDER.indexOf(r) >= RARITY_ORDER.indexOf(floor));
   const can = (rs: Rarity[]) =>
     rs.flatMap((rarity) =>
-      DROP_GUNS.filter((base) => bestRoll(base, rarity, level) > beat).map((base) => ({
-        base,
-        rarity,
-      })),
+      DROP_GUNS.filter((base) => bestRoll(base, dropRarity(base, rarity), level) > beat).map(
+        (base) => ({ base, rarity: dropRarity(base, rarity) }),
+      ),
     );
   const options = can(atFloor).length > 0 ? can(atFloor) : can(rarities);
   if (options.length === 0) return null;

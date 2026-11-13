@@ -313,8 +313,15 @@ describe('Sound engine (ID-080)', () => {
 
   it('the game ships a recording for every gun shot and the turret, as files, not data: URLs', () => {
     for (const url of Object.values(SAMPLES)) expect(url).not.toMatch(/^data:/);
+    // ID-135's guns reuse the closest recording.
+    expect(SAMPLES['shot-cartridge']).toBe(SAMPLES['shot-shotgun']);
+    expect(SAMPLES['shot-assault']).toBe(SAMPLES['shot-lmg']);
     expect(Object.keys(SAMPLES).sort()).toEqual([
+      'shot-assault',
+      'shot-cartridge',
+      'shot-handcannon',
       'shot-lmg',
+      'shot-machinepistol',
       'shot-pistol',
       'shot-rifle',
       'shot-shotgun',

@@ -86,7 +86,7 @@ describe('gun level (ID-098)', () => {
   it('is 1 for the free pistol and a gun with none, and shows as "Lv n Name"', () => {
     expect(gunLevel('pistol')).toBe(1);
     expect(gunLevel(gun('h3', 'smg', 'common'))).toBe(1);
-    expect(levelName(gun('h12', 'rifle', 'military', 12))).toBe('Lv 12 Military Rifle');
+    expect(levelName(gun('h12', 'rifle', 'military', 12))).toBe('Lv 12 Military Carbine');
     expect(levelName('pistol')).toBe('Lv 1 Pistol');
   });
 
@@ -262,8 +262,9 @@ describe('the bad-luck guarantee (ID-098)', () => {
   });
 
   it('a replay drop that is no upgrade adds 1; an upgrade resets it', () => {
-    // A Military Rifle at level 5: Horde 3 replays can beat it at times, not always.
-    const held = gun('h9', 'rifle', 'military', 5);
+    // A Military LMG at level 5: Horde 3 replays can beat it at times, not always (ID-135: the
+    // Carbine lost its crit, so every drop beat a Military Rifle).
+    const held = gun('h9', 'lmg', 'military', 5);
     let saw = { up: false, down: false };
     for (let seed = 1; seed <= 200 && !(saw.up && saw.down); seed++) {
       const g = holding(held, 9, 2);
@@ -282,10 +283,11 @@ describe('the bad-luck guarantee (ID-098)', () => {
   });
 
   it('one short of the guarantee, a drop that is no upgrade reaches it', () => {
-    const held = gun('h9', 'rifle', 'military', 5);
+    const held = gun('h9', 'lmg', 'military', 5);
     let seed = 1;
     const g = holding(held, 9, FARM.guarantee - 1);
-    while (squadDrop(g, ended(g, 8, 'won', seed))!.upgrade) seed++;
+    while (squadDrop(g, ended(g, 8, 'won', seed))!.upgrade && seed < 500) seed++;
+    expect(seed).toBeLessThan(500);
     expect(finishSquadHorde(g, ended(g, 8, 'won', seed)).farm.badLuck).toBe(FARM.guarantee);
   });
 

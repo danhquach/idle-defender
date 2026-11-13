@@ -925,6 +925,17 @@ function readHeld(v: unknown, hordeNumber: number, patrolsSent: number): Held {
 }
 
 /**
+ * An LMG's slow affix from before ID-135 (5–15%, the LMG's slow is gone) read as the crit
+ * affix it rolls now: 5 → 3% … 15 → 8%. Anything else, or a value out of range, as it is
+ * (the range check that follows refuses a bad one).
+ */
+function lmgSlow(base: string, x: Obj): Obj {
+  if (base !== 'lmg' || x.id !== 'slow' || typeof x.value !== 'number') return x;
+  if (!Number.isInteger(x.value) || x.value < 5 || x.value > 15) return x;
+  return { id: 'crit', value: 3 + Math.round((x.value - 5) / 2) };
+}
+
+/**
  * An owned weapon the game could have dropped: a uid from a horde already won or a
  * patrol already sent, and exactly its rarity's affixes, each one that fits the
  * weapon, once, in range.
@@ -945,7 +956,7 @@ function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedW
   const count = affixCount(base, rarity);
   const fits = affixesFor(base);
   const affixes = arr(o.affixes, count, count).map((a): Affix => {
-    const x = obj(a, ['id', 'value']);
+    const x = lmgSlow(base, obj(a, ['id', 'value']));
     const id = oneOf(x.id, fits);
     const { min, max } = affixBounds(id, base);
     return { id, value: int(x.value, min, max) };

@@ -116,7 +116,7 @@ describe('world map rules (ID-028)', () => {
       sometimes: 'Scrap',
     });
     expect(lootLines('police')).toEqual({
-      mostly: 'Pistol or Shotgun or SMG',
+      mostly: 'Pistol or Pump Shotgun or SMG',
       sometimes: 'nothing else',
     });
   });

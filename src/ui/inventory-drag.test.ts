@@ -127,7 +127,7 @@ describe('dropAction', () => {
     });
     expect(dropAction(v, 'stash:h1', 'stash:r1')).toEqual({
       kind: 'refused',
-      reason: `Rusty SMG and Rusty Rifle don't combine.`,
+      reason: `Rusty SMG and Rusty Carbine don't combine.`,
     });
     expect(dropAction(v, 'stash:z1', 'stash:z2')).toEqual({ kind: 'refused', reason: COMBINE_TOP });
     expect(dropAction(v, 'stash:h1', 'stash:k1')).toEqual({
@@ -168,9 +168,9 @@ describe('dropAction', () => {
     const [one, two] = g.roster.map((d) => d.name);
     const eq = (defender: string, choice: string) =>
       equipMessage(v, { kind: 'equip', defender, choice });
-    expect(eq('recruit-2', 'a')).toBe(`${two} now holds Military Rifle`);
+    expect(eq('recruit-2', 'a')).toBe(`${two} now holds Military Carbine`);
     expect(eq('recruit-1', 'a')).toBe(
-      `${one} now holds Military Rifle; Rusty SMG is back in the stash`,
+      `${one} now holds Military Carbine; Rusty SMG is back in the stash`,
     );
     expect(eq('recruit-1', 'pistol')).toBe(
       `${one} now holds the free pistol; Rusty SMG is back in the stash`,
@@ -276,7 +276,7 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(now().roster[0]!.loadout.primary).toMatchObject({ uid: 'a' });
     expect(now().armoury.map((w) => w.uid)).toEqual(['x']);
     expect(status().textContent).toBe(
-      `${name} now holds Military Rifle; Rusty SMG is back in the stash`,
+      `${name} now holds Military Carbine; Rusty SMG is back in the stash`,
     );
     expect(status().getAttribute('role')).toBe('status');
     expect(ghost()).toBeNull();
@@ -349,7 +349,7 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(now().roster[0]!.loadout.primary).toBe('pistol');
     expect(now().armoury.map((w) => w.uid)).toContain('x');
     expect(status().textContent).toMatch(
-      /now holds the free pistol; Common Rifle is back in the stash$/,
+      /now holds the free pistol; Common Carbine is back in the stash$/,
     );
     expect(slot('stash:x').getAttribute('aria-pressed')).toBe('true');
   });
@@ -394,7 +394,7 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     // A refusal reads as a no.
     expect(status().dataset.tone).toBe('refused');
     drag(slot('stash:h1'), slot('stash:r'));
-    expect(status().textContent).toBe(`Rusty SMG and Rusty Rifle don't combine.`);
+    expect(status().textContent).toBe(`Rusty SMG and Rusty Carbine don't combine.`);
     expect(now()).toBe(before);
   });
 
@@ -414,7 +414,7 @@ describe('drag and drop in the Inventory (ID-095)', () => {
   it('selecting another gun clears the last move’s line; a success is no refusal', () => {
     const { slot, status } = setup(camp(1, [gun('a', 'rifle', 'military'), ...rusty(1)]));
     drag(slot('stash:a'), slot('squad:recruit-1'));
-    expect(status().textContent).toMatch(/now holds Military Rifle$/);
+    expect(status().textContent).toMatch(/now holds Military Carbine$/);
     expect(status().dataset.tone).toBeUndefined();
     slot('stash:h1').click();
     expect(status().textContent).toBe('');
@@ -755,10 +755,10 @@ describe('moving guns without dragging (ID-095)', () => {
     expect(group.getAttribute('role')).toBe('group');
     const buttons = [...group.querySelectorAll<HTMLButtonElement>('.inv-equip-on')];
     expect(buttons.map((b) => b.textContent)).toEqual(names);
-    expect(buttons[1]!.getAttribute('aria-label')).toBe(`Equip Military Rifle on ${names[1]}`);
+    expect(buttons[1]!.getAttribute('aria-label')).toBe(`Equip Military Carbine on ${names[1]}`);
     buttons[1]!.click();
     expect(now().roster[1]!.loadout.primary).toMatchObject({ uid: 'a' });
-    expect(status().textContent).toBe(`${names[1]} now holds Military Rifle`);
+    expect(status().textContent).toBe(`${names[1]} now holds Military Carbine`);
     expect(document.activeElement).toBe(slot('squad:recruit-2'));
   });
 
@@ -772,11 +772,11 @@ describe('moving guns without dragging (ID-095)', () => {
     slot('squad:recruit-1').click();
     const off = details().querySelector<HTMLButtonElement>('.inv-unequip')!;
     expect(off.getAttribute('aria-label')).toBe(
-      `Unequip Common Rifle from ${now().roster[0]!.name}`,
+      `Unequip Common Carbine from ${now().roster[0]!.name}`,
     );
     off.click();
     expect(now().roster[0]!.loadout.primary).toBe('pistol');
-    expect(status().textContent).toMatch(/Common Rifle is back in the stash$/);
+    expect(status().textContent).toMatch(/Common Carbine is back in the stash$/);
   });
 
   it('Unequip into a full stash is refused with "Stash full"', () => {
@@ -796,9 +796,9 @@ describe('moving guns without dragging (ID-095)', () => {
     slot('stash:a').click();
     const on = details().querySelector<HTMLButtonElement>('.inv-equip-on')!;
     expect(on.textContent).toBe(evil);
-    expect(on.getAttribute('aria-label')).toBe(`Equip Military Rifle on ${evil}`);
+    expect(on.getAttribute('aria-label')).toBe(`Equip Military Carbine on ${evil}`);
     on.click();
-    expect(status().textContent).toBe(`${evil} now holds Military Rifle`);
+    expect(status().textContent).toBe(`${evil} now holds Military Carbine`);
     expect(dialog.querySelector('img:not(.gun-icon)')).toBeNull();
   });
 });

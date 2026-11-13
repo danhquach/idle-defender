@@ -41,7 +41,7 @@ describe('the gun tiles (ID-108)', () => {
     expect(tiles.map((t) => t.power)).toEqual([...tiles.map((t) => t.power)].sort((a, b) => b - a));
     expect(tiles.some((t) => t.free)).toBe(false);
     expect(tiles.find((t) => t.choice === 'r1')).toMatchObject({
-      type: 'Rifle',
+      type: 'Carbine',
       rarity: 'military',
       free: false,
     });
@@ -61,8 +61,9 @@ describe('the gun tiles (ID-108)', () => {
   });
 
   it('each change reads as a symbol and a number, ▲ stronger, ▼ weaker, = same', () => {
-    const held = gun('h', 'rifle', 'common');
-    const stronger = gun('a', 'rifle', 'relic');
+    // An LMG held: the Carbine's dmg/s is below a Rusty SMG's now, so it can't be the "weaker" one.
+    const held = gun('h', 'lmg', 'common');
+    const stronger = gun('a', 'lmg', 'relic');
     const weaker = gun('b', 'smg', 'rusty');
     const up = deltaOf(held, stronger);
     expect(up.kind).toBe('up');
@@ -82,7 +83,7 @@ describe('the gun tiles (ID-108)', () => {
   it('every tile names the gun, rarity, dmg/s and the change for a screen reader', () => {
     const [t] = gunTiles(camp([rifle]), 'recruit-1').filter((x) => x.choice === 'r1');
     expect(t!.label).toBe(
-      `Lv 1 Military Rifle, Military rarity, ${t!.dps} dmg/s, ${t!.delta.words} than Pistol`,
+      `Lv 1 Military Carbine, Military rarity, ${t!.dps} dmg/s, ${t!.delta.words} than Pistol`,
     );
     const pistol = gunTiles(camp([rifle], 'r1'), 'recruit-1').find((x) => x.free)!;
     expect(pistol.label.endsWith(', free')).toBe(true);
@@ -107,7 +108,7 @@ describe('the comparison (ID-108)', () => {
     const down = gunCompare(relic, rifle);
     expect(down.verdict).toMatch(/^▼ Weaker: −\d+\.\d dmg\/s \(−\d+%\)$/);
     expect(gunCompare(rifle, { ...rifle, uid: 'twin' }).verdict).toBe('= Same dmg/s');
-    expect(up.newName).toBe('Lv 1 Relic Rifle');
+    expect(up.newName).toBe('Lv 1 Relic Carbine');
     expect(up.kind).toBe('up');
   });
 
@@ -115,15 +116,15 @@ describe('the comparison (ID-108)', () => {
     const rows = Object.fromEntries(
       gunCompare('pistol', gun('s', 'smg', 'common')).rows.map((r) => [r.label, r]),
     );
-    // SMG against the pistol: faster fire, 200 px shorter range, a new role, a reload 0.5 s slower.
-    expect(rows['Fire rate']).toMatchObject({ now: '1.7/s', next: '5.0/s', tone: 'better' });
-    expect(rows['Fire rate']!.change).toBe('3.3/s faster');
-    expect(rows['Reload']).toMatchObject({ now: '1.50 s', next: '2.00 s', tone: 'worse' });
-    expect(rows['Reload']!.change).toBe('0.50 s slower');
-    expect(rows['Range']).toMatchObject({ now: '600 px', next: '400 px', tone: 'worse' });
-    expect(rows['Range']!.change).toBe('200 px shorter');
+    // SMG against the pistol: faster fire, 120 px shorter range, a new role, a reload 0.1 s slower.
+    expect(rows['Fire rate']).toMatchObject({ now: '1.7/s', next: '5.9/s', tone: 'better' });
+    expect(rows['Fire rate']!.change).toBe('4.2/s faster');
+    expect(rows['Reload']).toMatchObject({ now: '1.50 s', next: '1.60 s', tone: 'worse' });
+    expect(rows['Reload']!.change).toBe('0.10 s slower');
+    expect(rows['Range']).toMatchObject({ now: '600 px', next: '480 px', tone: 'worse' });
+    expect(rows['Range']!.change).toBe('120 px shorter');
     expect(rows['Role']).toMatchObject({
-      now: 'Backup',
+      now: 'All-rounder',
       next: 'Swarm shredder',
       change: 'new role',
     });
@@ -131,11 +132,11 @@ describe('the comparison (ID-108)', () => {
     expect(rows['Affixes']).toBeUndefined();
   });
 
-  it('shows pellets like "4.0 × 6", and affixes written out', () => {
+  it('shows pellets like "7.0 × 6", and affixes written out', () => {
     const rifle = gun('r', 'rifle', 'prototype', [{ id: 'damage', value: 10 }]);
     const shotgun = gun('g', 'shotgun', 'common');
     const rows = Object.fromEntries(gunCompare(rifle, shotgun).rows.map((r) => [r.label, r]));
-    expect(rows['Damage']!.next).toBe('4.0 × 6');
+    expect(rows['Damage']!.next).toBe('7.0 × 6');
     expect(rows['Affixes']).toMatchObject({
       now: '1',
       next: 'none',
@@ -157,6 +158,6 @@ describe('the comparison (ID-108)', () => {
 
   it('a gun’s name carries its level; the free pistol has none', () => {
     expect(gunName('pistol')).toBe('Pistol');
-    expect(gunName({ ...gun('r', 'rifle', 'common'), level: 12 })).toBe('Lv 12 Common Rifle');
+    expect(gunName({ ...gun('r', 'rifle', 'common'), level: 12 })).toBe('Lv 12 Common Carbine');
   });
 });

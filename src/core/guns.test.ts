@@ -56,11 +56,12 @@ describe('the specialised guns', () => {
       const g = WEAPONS[id];
       return [g.speed, g.spread, g.pellets, g.pierce];
     };
-    expect(profile('smg')).toEqual([1600, 5, 1, 0]);
-    expect(profile('rifle')).toEqual([2200, 1.5, 1, 0]);
+    expect(profile('smg')).toEqual([1600, 3.5, 1, 0]);
+    expect(profile('rifle')).toEqual([2200, 1, 1, 0]);
     expect(profile('shotgun')).toEqual([1400, 12, 6, 0]);
-    expect(profile('lmg')).toEqual([2000, 4, 1, 0]);
-    expect(profile('sniper')).toEqual([3000, 0.5, 1, 1]);
+    expect(profile('lmg')).toEqual([2000, 6, 1, 0]);
+    // ID-135: no base pierce; a shot's 10% chance of one more is the trait (TRAIT.sniper.pierce).
+    expect(profile('sniper')).toEqual([3000, 0.5, 1, 0]);
   });
 
   it('cannot be equipped by id, only as an owned weapon', () => {
@@ -136,41 +137,85 @@ describe('the specialised guns', () => {
     expect(fire(7)).not.toEqual(fire(8));
   });
 
-  it('the sniper pierces one enemy by default; a pierce affix adds one more', () => {
-    expect(pierceOf(owned('sniper'))).toBe(1);
-    expect(pierceOf(owned('sniper', [{ id: 'pierce', value: 1 }]))).toBe(2);
+  it('the sniper rifle has no base pierce, but 10% of its shots go through one more enemy (ID-135); a pierce affix adds one', () => {
+    expect(pierceOf(owned('sniper'))).toBe(0);
+    expect(pierceOf(owned('sniper', [{ id: 'pierce', value: 1 }]))).toBe(1);
     expect(pierceOf(owned('rifle'))).toBe(0);
     expect(pierceOf('pistol')).toBe(0);
 
-    const s = armed('sniper');
-    const ids = [700, 760, 820].map(
-      (x) => enemy(s, { hp: 1000, maxHp: 1000, x, y: 360, stunnedUntil: 9 }).id,
-    );
-    let t = tick(s, STEP);
-    for (let i = 0; i < 30 && t.bullets.length > 0; i++) t = tick(t, STEP);
-    const dmg = WEAPONS.sniper.damage;
-    // A crit doubles every hit of the one bullet alike; through the first, into the second, stop.
-    const taken = ids.map((id) => 1000 - hpOf(t, id)!);
-    expect(taken[0]).toBeGreaterThanOrEqual(dmg - 1e-9);
-    expect(taken[1]).toBeCloseTo(taken[0]!);
-    expect(taken[2]).toBe(0);
+    // The first bullet of seed `seed`, once it is in the air.
+    const shot = (base: WeaponId, seed: number, affixes: OwnedWeapon['affixes'] = []) => {
+      const s = armed(base, seed);
+      s.defenders[0]!.loadout = { primary: owned(base, affixes), secondary: null, item: null };
+      enemy(s, { hp: 1000, maxHp: 1000, x: 700, y: 360, stunnedUntil: 9 });
+      return tick(s, STEP).bullets[0]!;
+    };
+    const seeds = 600;
+    let extra = 0;
+    let extraAffix = 0;
+    for (let seed = 1; seed <= seeds; seed++) {
+      const own = shot('sniper', seed).pierce;
+      expect([0, 1], `seed ${seed}`).toContain(own);
+      extra += own;
+      const withAffix = shot('sniper', seed, [{ id: 'pierce', value: 1 }]).pierce;
+      expect([1, 2], `seed ${seed}`).toContain(withAffix);
+      extraAffix += withAffix - 1;
+      // No other gun rolls it: the Carbine always stays at 0.
+      expect(shot('rifle', seed).pierce).toBe(0);
+    }
+    // 600 seeded shots at 10%: ±3.5 standard deviations is about ±0.043.
+    expect(extra / seeds).toBeGreaterThan(0.1 - 0.045);
+    expect(extra / seeds).toBeLessThan(0.1 + 0.045);
+    expect(extraAffix / seeds).toBeGreaterThan(0.1 - 0.045);
+    expect(extraAffix / seeds).toBeLessThan(0.1 + 0.045);
   });
 
-  it('a piercing bullet of two goes through two enemies, each next within reach', () => {
-    const s = armed('sniper');
-    s.defenders[0]!.loadout = {
-      primary: owned('sniper', [{ id: 'pierce', value: 1 }]),
-      secondary: null,
-      item: null,
+  it('a sniper shot without the extra pierce stops at the first enemy; one with it goes through the second', () => {
+    const run = (seed: number) => {
+      const s = armed('sniper', seed);
+      const ids = [700, 760, 820].map(
+        (x) => enemy(s, { hp: 1000, maxHp: 1000, x, y: 360, stunnedUntil: 9 }).id,
+      );
+      let t = tick(s, STEP);
+      const bonus = t.bullets[0]!.pierce;
+      for (let i = 0; i < 30 && t.bullets.length > 0; i++) t = tick(t, STEP);
+      return { bonus, hit: ids.map((id) => hpOf(t, id)! < 1000) };
     };
-    const ids = [700, 760, 820, 880].map(
-      (x) => enemy(s, { hp: 1000, maxHp: 1000, x, y: 360, stunnedUntil: 9 }).id,
-    );
-    let t = tick(s, STEP);
-    for (let i = 0; i < 30 && t.bullets.length > 0; i++) t = tick(t, STEP);
-    const hit = ids.map((id) => hpOf(t, id)! < 1000);
-    expect(hit).toEqual([true, true, true, false]);
-    expect(t.impacts.filter((i) => i.hit)).toHaveLength(3);
-    expect(t.impacts[0]!.x).toBeCloseTo(700 - ENEMY_RADIUS, 0);
+    const seen = new Set<number>();
+    for (let seed = 1; seed <= 200 && seen.size < 2; seed++) {
+      const { bonus, hit } = run(seed);
+      expect(hit, `seed ${seed}`).toEqual(bonus === 0 ? [true, false, false] : [true, true, false]);
+      seen.add(bonus);
+    }
+    expect(seen.size).toBe(2);
+  });
+
+  it('a piercing bullet goes through the enemies it crosses, each next within reach (pierce affix 1, plus the sniper chance)', () => {
+    // Pierce 1 from the affix, 2 on the seeds where the sniper's 10% chance lands.
+    const run = (seed: number) => {
+      const s = armed('sniper', seed);
+      s.defenders[0]!.loadout = {
+        primary: owned('sniper', [{ id: 'pierce', value: 1 }]),
+        secondary: null,
+        item: null,
+      };
+      const ids = [700, 760, 820, 880].map(
+        (x) => enemy(s, { hp: 1000, maxHp: 1000, x, y: 360, stunnedUntil: 9 }).id,
+      );
+      let t = tick(s, STEP);
+      const pierce = t.bullets[0]!.pierce;
+      for (let i = 0; i < 30 && t.bullets.length > 0; i++) t = tick(t, STEP);
+      return { pierce, t, hit: ids.map((id) => hpOf(t, id)! < 1000) };
+    };
+    const seen = new Set<number>();
+    for (let seed = 1; seed <= 200 && seen.size < 2; seed++) {
+      const { pierce, t, hit } = run(seed);
+      const through = pierce + 1;
+      expect(hit, `seed ${seed}`).toEqual([0, 1, 2, 3].map((i) => i < through));
+      expect(t.impacts.filter((i) => i.hit)).toHaveLength(through);
+      expect(t.impacts[0]!.x).toBeCloseTo(700 - ENEMY_RADIUS, 0);
+      seen.add(pierce);
+    }
+    expect(seen.size).toBe(2);
   });
 });

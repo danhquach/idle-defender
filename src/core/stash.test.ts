@@ -2,9 +2,25 @@
 // number; the stash holds STASH_CAP and throws the weakest away; a survivor's gun is picked
 // from the stash between hordes, the old one going back.
 import { describe, expect, it } from 'vitest';
-import { DROP_GUNS, gunPower, rollWeapon, squadDropWeights, type OwnedWeapon } from './armoury.ts';
+import {
+  DROP_GUNS,
+  dropRarity,
+  gunPower,
+  rollSquadGun,
+  rollUpgrade,
+  rollWeapon,
+  squadDropWeights,
+  type OwnedWeapon,
+} from './armoury.ts';
 import { recruit } from './camp.ts';
-import { RARITY_ORDER, SQUAD_DROP, STASH_CAP, WEAPONS, type Rarity } from './data.ts';
+import {
+  PISTOL_DROP_FLOOR,
+  RARITY_ORDER,
+  SQUAD_DROP,
+  STASH_CAP,
+  WEAPONS,
+  type Rarity,
+} from './data.ts';
 import { newGame, type GameState } from './game.ts';
 import { tick, type HordeState } from './horde.ts';
 import {
@@ -56,11 +72,13 @@ const smgs = (n: number): OwnedWeapon[] =>
  * The rarities horde `n` dropped over `seeds` replay wins: a replay rolls the band itself,
  * less half its top share (ID-098); a first clear moves it up one rarity (farm.test.ts).
  */
-function rarities(n: number, seeds = 400): Set<Rarity> {
+/** The rarities Horde `n` drops over 400 seeds; `noPistols` leaves out dropped Pistols (ID-135). */
+function rarities(n: number, noPistols = false): Set<Rarity> {
   const g = squadGame(1, n + 1);
   const seen = new Set<Rarity>();
-  for (let seed = 1; seed <= seeds; seed++) {
-    seen.add(squadDrop(g, { ...startSquadHorde(g, seed, NOW, n), outcome: 'won' })!.weapon.rarity);
+  for (let seed = 1; seed <= 400; seed++) {
+    const w = squadDrop(g, { ...startSquadHorde(g, seed, NOW, n), outcome: 'won' })!.weapon;
+    if (!noPistols || w.base !== 'pistol') seen.add(w.rarity);
   }
   return seen;
 }
@@ -69,7 +87,8 @@ describe('the drop table by horde band (ID-067)', () => {
   it('Hordes 1–3 drop only the two lowest tiers', () => {
     for (const n of [1, 2, 3]) {
       expect(squadDropWeights(n)).toEqual(SQUAD_DROP[0]!.rarity);
-      expect([...rarities(n)].sort()).toEqual(['common', 'rusty']);
+      // A dropped Pistol is at least Military (ID-135); every other gun is Rusty or Common.
+      expect([...rarities(n, true)].sort()).toEqual(['common', 'rusty']);
     }
   });
 
@@ -98,9 +117,38 @@ describe('the drop table by horde band (ID-067)', () => {
       bases.add(weapon.base);
     }
     expect([...bases].sort()).toEqual([...DROP_GUNS].sort());
-    expect(DROP_GUNS).not.toContain('pistol');
     expect(DROP_GUNS).not.toContain('knife');
     expect(DROP_GUNS).not.toContain('toolkit');
+    // ID-135: every gun drops, the sidearms and the Pistol included.
+    for (const g of ['pistol', 'handcannon', 'machinepistol', 'assault', 'cartridge']) {
+      expect(DROP_GUNS).toContain(g);
+    }
+  });
+
+  it('a dropped Pistol is never below Military (ID-135); other guns keep their rolled rarity', () => {
+    const below = (r: Rarity) => RARITY_ORDER.indexOf(r) < RARITY_ORDER.indexOf(PISTOL_DROP_FLOOR);
+    expect(dropRarity('pistol', 'rusty')).toBe(PISTOL_DROP_FLOOR);
+    expect(dropRarity('pistol', 'common')).toBe(PISTOL_DROP_FLOOR);
+    expect(dropRarity('pistol', 'relic')).toBe('relic');
+    expect(dropRarity('smg', 'rusty')).toBe('rusty');
+    // Every drop path: a band of only Rusty and Common still drops Pistols at Military.
+    const low = squadDropWeights(1);
+    let pistols = 0;
+    let rusty = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const w = rollSquadGun(createRng(seed), 'h1', low, 1);
+      if (w.base === 'pistol') {
+        pistols++;
+        expect(below(w.rarity), w.rarity).toBe(false);
+      } else if (w.rarity === 'rusty') rusty++;
+    }
+    expect(pistols).toBeGreaterThan(0);
+    expect(rusty).toBeGreaterThan(0);
+    // A guaranteed upgrade over a weak gun can be a Pistol, never a low one.
+    for (let seed = 1; seed <= 200; seed++) {
+      const up = rollUpgrade(createRng(seed), 'g1', low, 1, 1, 'rusty');
+      if (up?.base === 'pistol') expect(below(up.rarity)).toBe(false);
+    }
   });
 
   it('refuses a horde number no band covers', () => {
@@ -186,7 +234,8 @@ describe('a win, a loss and the stash (ID-067)', () => {
   });
 
   it('at the cap a drop weaker than everything is the one thrown away', () => {
-    const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
+    // Relic Pump Shotguns, the most dmg/s of any gun (ID-135), so nothing Horde 2 drops beats them.
+    const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'shotgun', 'relic'));
     const g = squadGame(1, 2, stash);
     const won = ended(g, 'won');
     const { weapon, bonus, thrown } = squadDrop(g, won)!;
@@ -200,7 +249,7 @@ describe('a win, a loss and the stash (ID-067)', () => {
     const twin = { ...drop, uid: 'c99' };
     const stash = [
       twin,
-      ...Array.from({ length: STASH_CAP - 1 }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic')),
+      ...Array.from({ length: STASH_CAP - 1 }, (_, i) => gun(`c${i + 1}`, 'shotgun', 'relic')),
     ];
     const g = squadGame(1, 2, stash);
     expect(squadDrop(g, ended(g, 'won'))!.thrown[0]!.uid).toBe('h2');
@@ -243,7 +292,7 @@ describe('a win, a loss and the stash (ID-067)', () => {
   it('gunPower is damage per second through a magazine and its reload', () => {
     // Pistol: 6.2 × 10 / (10 × 0.6 + 1.5).
     expect(gunPower('pistol')).toBeCloseTo(62 / 7.5, 9);
-    expect(gunPower(gun('a', 'shotgun', 'common'))).toBeCloseTo((4 * 6 * 8) / (8 * 0.75 + 2.5), 9);
+    expect(gunPower(gun('a', 'shotgun', 'common'))).toBeCloseTo((7 * 6 * 6) / (6 * 0.8 + 3.6), 9);
     expect(gunPower(gun('a', 'rifle', 'military'))).toBeGreaterThan(
       gunPower(gun('b', 'rifle', 'common')),
     );
@@ -326,7 +375,8 @@ describe('equip and swap (ID-067)', () => {
 describe('best gun for everyone (ID-108)', () => {
   const weak = gun('a', 'smg', 'rusty');
   const mid = gun('b', 'smg', 'military');
-  const top = gun('c', 'rifle', 'relic');
+  // A Relic LMG: the Carbine lost its crit, so a Relic one no longer outranks a Military SMG.
+  const top = gun('c', 'lmg', 'relic');
 
   it('hands the strongest stash guns to the weakest hands, the pistol included', () => {
     const g = squadGame(3, 3, [weak, mid, top]);

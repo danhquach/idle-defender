@@ -98,7 +98,8 @@ describe('the drop on the result screen (ID-067)', () => {
   });
 
   it('a drop weaker than the whole full stash is the one thrown away, and says so', () => {
-    const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
+    // Relic Pump Shotguns, the most dmg/s of any gun (ID-135), so the drop is the weakest.
+    const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'shotgun', 'relic'));
     const g = squadGame(1, 2, stash);
     const won = ended(g, 'won');
     const { weapon } = squadDrop(g, won)!;
@@ -144,7 +145,7 @@ describe('the gun pickers (ID-067)', () => {
     }
     expect(gear.rows[1]!.options.find((o) => o.value === 'h1')!.label).toBe(gunOption(rifle));
     // The number first in a picker, so a closed select never cuts it off; last on the drop line.
-    expect(gunOption('pistol')).toBe('8.3 dmg/s · Lv 1 Pistol · Backup');
+    expect(gunOption('pistol')).toBe('8.3 dmg/s · Lv 1 Pistol · All-rounder');
     expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 dmg/s');
   });
 
@@ -368,7 +369,7 @@ describe('the debrief layout (ID-067)', () => {
     };
     expect(dropTile({ armoury: [] }, dropOf(rifle)).affixes).toBe('+30% crit damage (role)');
     expect(gunOption(rifle)).toMatch(
-      / · Lv 1 Military Rifle · Marksman \(role \+30% crit damage\)$/,
+      / · Lv 1 Military Carbine · Marksman \(role \+30% crit damage\)$/,
     );
 
     const root = document.createElement('div');
@@ -425,9 +426,12 @@ describe('the debrief layout (ID-067)', () => {
     expect(tile.querySelector(':scope > .tile-row')).not.toBeNull();
     expect(tile.classList.contains('tile-drop-lost')).toBe(false);
 
-    const relics = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
+    const relics = Array.from({ length: STASH_CAP }, (_, i) =>
+      gun(`c${i + 1}`, 'shotgun', 'relic'),
+    );
     const full = squadGame(1, 1, relics);
-    // Horde 1 drops only Rusty or Common: always weaker than a stash of Relic LMGs.
+    // Horde 1 drops Rusty or Common (a Pistol at Military, ID-135): always weaker than a stash
+    // of Relic Pump Shotguns, the most dmg/s of any gun.
     const drop = squadDrop(full, ended(full, 'won'))!;
     expect(drop.thrown[0]).toBe(drop.weapon);
     h.showResult(squadScreen(full, ended(full, 'won')));

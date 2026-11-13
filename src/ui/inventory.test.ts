@@ -114,7 +114,7 @@ describe('inventoryView', () => {
     const v = inventoryView(g);
     expect(v.squad.map((s) => [s.name, s.gun.name, s.gun.where])).toEqual([
       [g.roster[0]!.name, 'Pistol', `Held by ${g.roster[0]!.name}.`],
-      [g.roster[1]!.name, 'Relic Rifle', `Held by ${g.roster[1]!.name}.`],
+      [g.roster[1]!.name, 'Relic Carbine', `Held by ${g.roster[1]!.name}.`],
     ]);
     // A gun in hand is no stash gun: it doesn't combine from here.
     expect(v.squad[1]!.gun.owned).toBeNull();
@@ -149,11 +149,11 @@ describe('inventoryView', () => {
     };
     const v = inventoryView(camp(1, [w]));
     expect(slotLabel(v.stash[0]!)).toBe(
-      `Military Rifle, Military rarity, Marksman: +10% crit chance, level 1, ${gunPower(w).toFixed(1)} dmg/s, 1 affix`,
+      `Military Carbine, Military rarity, Marksman: Fires 3-round bursts; +10% crit chance, level 1, ${gunPower(w).toFixed(1)} dmg/s, 1 affix`,
     );
     expect(slotLabel(v.stash[0]!, true)).toMatch(/, can combine$/);
     expect(slotLabel(v.squad[0]!.gun)).toBe(
-      `Pistol, Common rarity, Backup: Fastest reload of any gun, level 1, ${gunPower('pistol').toFixed(1)} dmg/s, no affixes, held by ${v.squad[0]!.name}`,
+      `Pistol, Common rarity, All-rounder: Fastest reload of any gun, level 1, ${gunPower('pistol').toFixed(1)} dmg/s, no affixes, held by ${v.squad[0]!.name}`,
     );
   });
 });
@@ -301,10 +301,10 @@ describe('the Inventory dialog', () => {
     expect(document.activeElement).toBe(first);
     const d = details();
     const name = d.querySelector<HTMLElement>('.inv-name')!;
-    expect(name.textContent).toBe('Lv 1 Military Rifle');
+    expect(name.textContent).toBe('Lv 1 Military Carbine');
     expect(name.dataset.rarity).toBe('military');
     // Colour is not the only cue: the rarity is named.
-    expect(d.querySelector('.inv-rarity')!.textContent).toBe('Military rarity · Rifle');
+    expect(d.querySelector('.inv-rarity')!.textContent).toBe('Military rarity · Carbine');
     expect([...d.querySelectorAll('[aria-label="Affixes"] li')].map((n) => n.textContent)).toEqual([
       '+7% damage',
       '+21% magazine',
@@ -322,17 +322,21 @@ describe('the Inventory dialog', () => {
     };
     const { button, slots, details } = setup(camp(1, [w, gun('b', 'shotgun', 'rusty')]));
     button.click();
-    // The Rusty Shotgun out-shoots the Rifle, so it opens first.
+    // The Rusty Pump Shotgun out-shoots the Rifle, so it opens first.
     const at = (k: string) => slots('Stash').find((x) => x.dataset.key === k)!;
     const rifle = at('stash:a');
     const shotgun = at('stash:b');
     rifle.click();
     const d = details();
-    expect(d.querySelector('.inv-role')!.textContent).toBe('Marksman: +10% crit chance');
+    expect(d.querySelector('.inv-role')!.textContent).toBe(
+      'Marksman: Fires 3-round bursts; +10% crit chance',
+    );
     expect([...d.querySelectorAll('[aria-label="Affixes"] li')].map((n) => n.textContent)).toEqual([
       '+5% crit chance (role)',
     ]);
-    expect(rifle.getAttribute('aria-label')).toContain('Marksman: +10% crit chance');
+    expect(rifle.getAttribute('aria-label')).toContain(
+      'Marksman: Fires 3-round bursts; +10% crit chance',
+    );
     // Even a Rusty gun with no affixes has its role.
     shotgun.click();
     expect(details().querySelector('.inv-role')!.textContent).toBe(
@@ -529,7 +533,7 @@ describe('Combine in the details (ID-091)', () => {
     const v = inventoryView(camp(1, stash));
     expect(v.combine.map((r) => [r.name, r.rarity, r.count, r.note, r.uses?.length ?? 0])).toEqual([
       ['Rusty SMG', 'rusty', '4 in stash', '3 make a Common SMG', 3],
-      ['Common Rifle', 'common', '2/3', '1 more for a Military Rifle', 0],
+      ['Common Carbine', 'common', '2/3', '1 more for a Military Carbine', 0],
     ]);
   });
 
@@ -694,7 +698,7 @@ describe('Combine in the details (ID-091)', () => {
     leave(dialog.querySelector('.inv-body')!);
     slot('stash:x').click();
     expect(details().querySelector('.inv-combine-confirm')).toBeNull();
-    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Common Rifle');
+    expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Common Carbine');
   });
 
   it('on a touch screen a tap on a gun, then on Combine 3, opens the confirm first time (#272)', () => {
@@ -804,7 +808,7 @@ describe('Combine in the details (ID-091)', () => {
     over(slot('stash:p1-1'));
     details().querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
     const box = details().querySelector<HTMLElement>('.inv-combine-confirm')!;
-    expect(box.getAttribute('aria-label')).toBe('Combine into a Common Rifle');
+    expect(box.getAttribute('aria-label')).toBe('Combine into a Common Carbine');
     expect(slot('stash:p1-1').getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).toBe(box.querySelector('.inv-combine-no'));
     // Moving the pointer over another slot leaves the confirm up.
@@ -861,7 +865,7 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     expect(slot.querySelector('.inv-slot-badge')!.textContent).toBe(
       String(Math.round(gunPower(w))),
     );
-    expect(document.querySelector('.inv-name')!.textContent).toBe('Lv 12 Military Rifle');
+    expect(document.querySelector('.inv-name')!.textContent).toBe('Lv 12 Military Carbine');
     const pistol = document.querySelector<HTMLElement>('.inv-slot[data-key="pistol"]')!;
     expect(pistol.querySelector('.inv-slot-level')!.textContent).toBe('Lv 1');
   });

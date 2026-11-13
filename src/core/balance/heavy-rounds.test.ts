@@ -99,8 +99,10 @@ describe('Heavy Rounds: a trade-off for its damage (ID-136)', () => {
   });
 
   it('makes every gun stronger, by less than its ×1.38 with no reload cost', () => {
+    // ×1.2 at least since ID-135 (×1.25 before): the Pump Shotgun loads shell by shell, so
+    // its reload is 43% of its fire cycle and the +25% reload costs it most (about ×1.25 there).
     for (const g of GUNS) {
-      expect(of(g, 'heavy'), `${g} ${table()}`).toBeGreaterThan(1.25);
+      expect(of(g, 'heavy'), `${g} ${table()}`).toBeGreaterThan(1.2);
       expect(of(g, 'heavy'), `${g} ${table()}`).toBeLessThan(1.38);
     }
   });
@@ -120,8 +122,11 @@ describe('Heavy Rounds: a trade-off for its damage (ID-136)', () => {
     const pistol = reloadIn(heavy, d, 'pistol');
     for (const g of GUNS.filter((x) => x !== 'pistol')) {
       expect(pistol, g).toBeLessThan(reloadIn(heavy, d, held(g)));
-      // Faster even than another gun with no Heavy Rounds.
-      expect(pistol, g).toBeLessThan(reloadIn(plain, d, held(g)));
+      // Faster even than another gun with no Heavy Rounds, unless that gun reloads fast by
+      // design (ID-135: the SMG's 1.6 s reload beats the Pistol's 1.5 s × 1.25).
+      if (reloadIn(plain, d, held(g)) >= 2) {
+        expect(pistol, g).toBeLessThan(reloadIn(plain, d, held(g)));
+      }
     }
   });
 });

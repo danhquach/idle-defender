@@ -2284,9 +2284,11 @@ describe('bullet visuals (ID-045)', () => {
           ([off, l]) => Math.abs(off) < 0.5 && l > 5,
         );
         expect(forward).toHaveLength(3);
-        // An LMG's main flame is the broadest of any gun.
+        // An LMG's main flame is the broadest of any gun, bar the Hand Cannon's short, fat
+        // blast (ID-135), which is broader but shorter.
+        expect(FLASH_STYLE.handcannon.tongues[0]![1]).toBeLessThan(FLASH_STYLE.lmg.tongues[0]![1]);
         for (const g of guns) {
-          if (g !== 'lmg')
+          if (g !== 'lmg' && g !== 'handcannon')
             expect(FLASH_STYLE[g].tongues[0]![2]).toBeLessThanOrEqual(
               FLASH_STYLE.lmg.tongues[0]![2],
             );
