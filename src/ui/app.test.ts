@@ -443,25 +443,25 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     expect(tick).toHaveBeenCalled();
   });
 
-  it('1× 2× 3× buttons and A S D run that many fixed steps a frame, and the choice is stored', () => {
+  it('1× 3× 5× buttons and A S D run that many fixed steps a frame, and the choice is stored', () => {
     const { speedButton, pressed } = fight();
     expect(pressed()).toEqual(['1×A']);
-    speedButton(3).click();
-    expect(pressed()).toEqual(['3×D']);
-    expect(localStorage.getItem(SPEED_KEY)).toBe('3');
+    speedButton(5).click();
+    expect(pressed()).toEqual(['5×D']);
+    expect(localStorage.getItem(SPEED_KEY)).toBe('5');
     step(16);
-    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.048);
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.08);
     press('s');
-    expect(pressed()).toEqual(['2×S']);
-    expect(localStorage.getItem(SPEED_KEY)).toBe('2');
+    expect(pressed()).toEqual(['3×S']);
+    expect(localStorage.getItem(SPEED_KEY)).toBe('3');
     step(32);
-    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.032);
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.048);
     press('A');
     expect(pressed()).toEqual(['1×A']);
     // A frame stalls at MAX_DT (0.1 s), times the speed: never a skipped stretch.
     press('d');
     step(5000);
-    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.3);
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.5);
   });
 
   it('Space stacks with a card offer: 1 still picks, the fight stays held, and resuming carries on', () => {
@@ -559,9 +559,13 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     expect(chip.hidden).toBe(true);
   });
 
-  it('the stored speed comes back on the next load; a bad one is 1×', () => {
+  it('the stored speed comes back on the next load; a bad one, or an old 2×, is 1×', () => {
+    localStorage.setItem(SPEED_KEY, '5');
+    expect(fight().pressed()).toEqual(['5×D']);
     localStorage.setItem(SPEED_KEY, '3');
-    expect(fight().pressed()).toEqual(['3×D']);
+    expect(fight().pressed()).toEqual(['3×S']);
+    localStorage.setItem(SPEED_KEY, '2');
+    expect(fight().pressed()).toEqual(['1×A']);
     localStorage.setItem(SPEED_KEY, '9');
     expect(fight().pressed()).toEqual(['1×A']);
   });

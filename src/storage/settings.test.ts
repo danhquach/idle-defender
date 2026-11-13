@@ -136,7 +136,7 @@ describe('Airstrike auto-aim setting (ID-140)', () => {
   });
 });
 
-describe('Game speed setting (ID-062)', () => {
+describe('Game speed setting (ID-062, ID-145)', () => {
   it('starts at 1× until the player chooses', () => {
     expect(readSpeed(memory())).toBe(1);
     expect(readSpeed(null)).toBe(1);
@@ -144,17 +144,38 @@ describe('Game speed setting (ID-062)', () => {
 
   it('round-trips each speed through storage', () => {
     const s = memory();
-    for (const speed of [3, 2, 1] as const) {
+    for (const speed of [5, 3, 1] as const) {
       writeSpeed(s, speed);
       expect(s.data.get(SPEED_KEY)).toBe(String(speed));
       expect(readSpeed(s)).toBe(speed);
     }
   });
 
+  it('an old saved 2× loads as 1× (ID-145)', () => {
+    expect(readSpeed(memory({ [SPEED_KEY]: '2' }))).toBe(1);
+  });
+
   it('anything but the exact stored strings falls back to 1×', () => {
     const hostile = [
       '0',
+      '2',
       '4',
+      '6',
+      '-5',
+      '5.0',
+      ' 5',
+      '5 ',
+      '05',
+      '5e0',
+      '0x5',
+      '５',
+      '٥',
+      '5​',
+      '‮5',
+      '"5"',
+      '[5]',
+      '{"__proto__":{"speed":5}}',
+      '5'.repeat(100_000),
       '-3',
       '1.5',
       '3.0',

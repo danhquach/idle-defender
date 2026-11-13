@@ -382,9 +382,18 @@ export const BULLET = {
 /**
  * A bullet's tail is its gun's `tracer` length plus one 60 fps frame of its flight at the
  * game speed, counted up to `pace` 2 (ID-070): about a frame's travel, so it reads as a
- * bullet and not a beam. At 3× the bright head carries the eye over the small gap.
+ * bullet and not a beam. At 3× the bright head carries the eye over the small gap. At 5×
+ * and up it is counted as `fast` 3 (ID-145): a bullet then jumps five frames' flight a
+ * frame, and a 2× tail left gaps as long as itself, read as flicker; 3 keeps the gaps
+ * short and the bullets still separate.
  */
-export const TAIL = { frame: 1 / 60, pace: 2 } as const;
+export const TAIL = { frame: 1 / 60, pace: 2, fast: 3 } as const;
+
+/** The game speed a bullet's tail is counted at (`TAIL`), from the speed it is shown at. */
+export function tailPace(pace: number | undefined): number {
+  const p = Math.max(pace ?? 1, 1);
+  return p >= 5 ? TAIL.fast : Math.min(p, TAIL.pace);
+}
 /**
  * A muzzle flash's look (ID-088), in px at zoom 1. Fire leaves the barrel end as `tongues`,
  * each `[turn off the shot in rad, length, width]`: the long one along the shot, short ones
@@ -709,7 +718,7 @@ export type Scene = Pick<
       | 'slicks'
     >
   > & {
-    /** The game speed (1×, 2×, 3×) a fight is shown at; bullet tails grow with it (ID-070). */
+    /** The game speed (1×, 3×, 5×) a fight is shown at; bullet tails grow with it (ID-070). */
     pace?: number;
     /** Survivors' speech bubbles (ID-085) and the chat clock they are timed on; build mode has none. */
     chat?: { bubbles: readonly Bubble[]; clock: number };
@@ -2330,7 +2339,7 @@ export interface BulletShape {
  * step by the fight's `acc` (the sim moves it in whole steps; drawn there, it would jump),
  * never past the spot it was aimed at before it gets there, nor past the end of its
  * flight. It drops from the muzzle to body height over the distance it was aimed. Its tail
- * is its gun's tracer plus one frame of flight at the game speed (counted to `TAIL.pace`),
+ * is its gun's tracer plus one frame of flight at the game speed (counted as `tailPace`),
  * and never reaches back past the muzzle.
  */
 export function bulletShape(scene: Scene, b: Bullet, cam: Camera): BulletShape {
@@ -2339,7 +2348,7 @@ export function bulletShape(scene: Scene, b: Bullet, cam: Camera): BulletShape {
   let lead = Math.max(0, Math.min(b.speed * (scene.acc ?? 0), b.left));
   if (flown < b.aim) lead = Math.min(lead, b.aim - flown);
   const at = flown + lead;
-  const pace = Math.min(Math.max(scene.pace ?? 1, 1), TAIL.pace);
+  const pace = tailPace(scene.pace);
   const length = Math.min(b.tracer.length + b.speed * TAIL.frame * pace, at);
   const zAt = (d: number): number =>
     muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? d / b.aim : 1);

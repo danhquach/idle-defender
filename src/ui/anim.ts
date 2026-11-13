@@ -158,7 +158,17 @@ function breathe(pose: Pose, time: number, phase: number): void {
 export interface EnemyActs {
   hurtAt: number;
   gait: Gait;
+  /**
+   * The game speed the fight is shown at (1 if not given). A flinch and its white flash
+   * last `flinch` s of real time at any speed (ID-145): at 5× a sprite under steady fire
+   * flashes no faster than at 1×, not five times as fast.
+   */
+  pace?: number;
 }
+
+/** How much of `acts`' flinch (`time` s of real time at its game speed) shows at `now`. */
+const flinch = (now: number, acts: EnemyActs, time: number): number =>
+  decay(now, acts.hurtAt, time * Math.max(1, acts.pace ?? 1));
 
 export function enemyPose(
   e: Pick<Enemy, 'id' | 'kind' | 'nextAttackAt'>,
@@ -172,8 +182,8 @@ export function enemyPose(
   // The attack frame leans into the blow; the lunge only carries it forward.
   const lunge = decay(time, struckAt(e), ANIM.strike.lunge);
   if (lunge > 0) pose.dx -= ANIM.strike.px * Math.sin(Math.PI * (1 - lunge));
-  pose.dx += ANIM.flinch.px * decay(time, acts.hurtAt, ANIM.flinch.time);
-  pose.flash = decay(time, acts.hurtAt, ANIM.flinch.flash);
+  pose.dx += ANIM.flinch.px * flinch(time, acts, ANIM.flinch.time);
+  pose.flash = flinch(time, acts, ANIM.flinch.flash);
   return pose;
 }
 
@@ -217,7 +227,7 @@ export function defenderPose(d: Pick<Defender, 'id'> & GunClock, time: number, a
     pose.dx += ANIM.swing.px * k;
     pose.rot += ANIM.swing.lean * k;
   }
-  pose.dx -= ANIM.flinch.px * decay(time, acts.hurtAt, ANIM.flinch.time);
+  pose.dx -= ANIM.flinch.px * flinch(time, acts, ANIM.flinch.time);
   return pose;
 }
 
@@ -261,6 +271,8 @@ export class Animator {
   private shots = new Map<string, number>();
   /** Each enemy alight now, and when it caught fire. */
   private lit = new Map<number, number>();
+  /** The game speed of the last frame seen (ID-145): flinches last the same real time. */
+  private pace = 1;
   corpses: Corpse[] = [];
 
   observe(scene: {
@@ -269,7 +281,9 @@ export class Animator {
     defenders: readonly Pick<Defender, 'id' | 'hp' | 'x' | 'y'>[];
     shots: readonly Shot[];
     bursts?: readonly { id: number }[];
+    pace?: number;
   }): void {
+    this.pace = Math.max(1, scene.pace ?? 1);
     const t = scene.time;
     if (t < this.time) {
       this.enemies.clear();
@@ -309,7 +323,8 @@ export class Animator {
    * A sprite `dt` s after it was last seen. The ground it covered adds to its walk, which
    * starts or settles over `settle` s toward how much its pace is a walk. A drop in HP
    * starts a flinch, unless one is still playing: damage every step twitches it each
-   * `flinch.time` instead of holding it back. HP that fire took (ID-089) doesn't count:
+   * `flinch.time` of real time (fight time over the game speed, ID-145) instead of holding
+   * it back. HP that fire took (ID-089) doesn't count:
    * a burning enemy shows its fire, not a white flash and a twitch every step; a hit
    * while it burns still does.
    */
@@ -339,7 +354,7 @@ export class Animator {
     );
     const moving = was.gait.moving + (walking - was.gait.moving) * ease;
     const hit = was.hp - now.hp - (burnt - was.burnt);
-    const hurt = hit > HIT && t - was.hurtAt >= ANIM.flinch.time;
+    const hurt = hit > HIT && t - was.hurtAt >= ANIM.flinch.time * this.pace;
     // Paused (no time passed), the gait holds as it was.
     const d = was.gait.drift;
     const drift =
@@ -384,7 +399,7 @@ export class Animator {
 
   enemy(id: number): EnemyActs {
     const seen = this.enemies.get(id);
-    return { hurtAt: seen?.hurtAt ?? NEVER, gait: seen?.gait ?? STANDING };
+    return { hurtAt: seen?.hurtAt ?? NEVER, gait: seen?.gait ?? STANDING, pace: this.pace };
   }
 
   acts(id: string, strikes: readonly Strike[]): Acts {
@@ -396,6 +411,7 @@ export class Animator {
       gait: seen?.gait ?? STANDING,
       shotAt: this.shots.get(id) ?? NEVER,
       struckAt,
+      pace: this.pace,
     };
   }
 }

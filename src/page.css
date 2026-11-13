@@ -4430,8 +4430,14 @@ body {
     padding: 0 var(--space-8);
   }
 
+  /* Each speed a 40×44px target, spaced so a thumb doesn't hit its neighbour, and still
+     clear of Roster on a 360px phone (ID-145). */
+  .hud-speed {
+    gap: var(--space-6);
+  }
+
   .hud-speed-button {
-    min-width: 36px;
+    min-width: 40px;
   }
 
   .menu-button {
@@ -4504,6 +4510,18 @@ body {
 @media (max-width: 360px) {
   .hud-swarm:not(.hud-swarm-hit) {
     font-size: 1rem;
+  }
+}
+
+/* Under 360px the speed group and the Roster, Inventory and Menu buttons don't fit one
+   row (ID-145): the speeds take a row of their own under them, the status line below. */
+@media (max-width: 359px) {
+  .hud-fight-bar {
+    padding-top: 102px;
+  }
+
+  .hud-speed {
+    top: 52px;
   }
 }
 

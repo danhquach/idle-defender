@@ -52,7 +52,7 @@ export function cuesBetween(prev: HordeState | null, next: HordeState): Cue[] {
   const cues = new Set<Cue>();
   const before = new Map(prev.defenders.map((d) => [d.id, d]));
 
-  // Shots. The muzzle-flash list keeps a shot only 0.08 s, so a long frame at 3× can add
+  // Shots. The muzzle-flash list keeps a shot only 0.08 s, so a long frame at speed can add
   // and drop one unseen: a magazine going down, or a turret's next shot moving later, is
   // read too.
   const gun = (id: WeaponId): void => {
