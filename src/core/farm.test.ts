@@ -37,6 +37,7 @@ import {
   squadPower,
   survivorPower,
 } from './squadpower.ts';
+import { xpForLevel } from './stats.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -401,7 +402,7 @@ describe('XP from replays and losses (ID-098)', () => {
 });
 
 describe('Squad Power and Recommended Power (ID-098)', () => {
-  it('sums each squad survivor, a better gun and Instinct each raising it', () => {
+  it('sums each squad survivor, a better gun and a higher level each raising it (ID-146)', () => {
     const g = farmGame(2, 3);
     const one = farmGame(1, 3);
     expect(squadPower(g)).toBeGreaterThan(squadPower(one));
@@ -425,18 +426,9 @@ describe('Squad Power and Recommended Power (ID-098)', () => {
       ],
     };
     expect(squadPower(levelled)).toBeGreaterThan(squadPower(armed));
-    const tough = {
-      ...one.roster[0]!,
-      xp: 1e6,
-      stats: { instinct: 5, agility: 0, mind: 0, tinker: 0 },
-    };
-    expect(survivorPower(tough)).toBeGreaterThan(survivorPower(one.roster[0]!));
-    const sharp = {
-      ...one.roster[0]!,
-      xp: 1e6,
-      stats: { instinct: 0, agility: 0, mind: 5, tinker: 0 },
-    };
-    expect(survivorPower(sharp)).toBeGreaterThan(survivorPower(one.roster[0]!));
+    const at = (xp: number) => survivorPower({ ...one.roster[0]!, xp });
+    expect(at(xpForLevel(5))).toBeGreaterThan(at(0));
+    expect(at(xpForLevel(20))).toBeGreaterThan(at(xpForLevel(5)));
   });
 
   it('counts only the squad, at most SQUAD_CAP', () => {

@@ -3,15 +3,7 @@
 // by the balance tests and the `npm run balance` report without playing by hand.
 import { repairSegment } from './base.ts';
 import { chooseCard, postUsable, replaces } from './cards.ts';
-import {
-  available,
-  finishHorde,
-  newGame,
-  recover,
-  spendPoint,
-  startHorde,
-  type GameState,
-} from './game.ts';
+import { available, finishHorde, newGame, recover, startHorde, type GameState } from './game.ts';
 import {
   layoutOf,
   tick,
@@ -35,17 +27,10 @@ import {
 } from './hordeonly.ts';
 import { skillLock, useSkill } from './skills.ts';
 import { squadPower } from './squadpower.ts';
-import { isGun, professionOf } from './loadout.ts';
+import { isGun } from './loadout.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
-import { levelOf, unspentPoints } from './stats.ts';
-import { FARM, FIELD, WALL, type Profession, type Stat } from './data.ts';
-
-/** The stat the scripted player puts a profession's points in. */
-const SPEND_STAT: Readonly<Record<Profession, Stat>> = {
-  gunner: 'mind',
-  ripper: 'mind',
-  engineer: 'agility',
-};
+import { levelOf } from './stats.ts';
+import { FARM, FIELD, WALL } from './data.ts';
 
 /** Longest a simulated horde may run, in fight seconds, before it counts as stuck. */
 const MAX_FIGHT = 3600;
@@ -162,24 +147,6 @@ export function repairWhatYouCan(game: GameState): GameState {
 }
 
 /**
- * The scripted player's stat points (design §6): every one into the stat that suits the
- * job their loadout gives them: Sharp Mind, the damage stat, for a Gunner or a Ripper (a
- * horde-only survivor carries a gun, so theirs go there too), Agility for an Engineer;
- * every one into `only` when given (ID-125: the stats' balance test).
- */
-export function spendAll(game: GameState, only?: Stat): GameState {
-  let g = game;
-  for (const d of game.roster) {
-    const stat = only ?? SPEND_STAT[professionOf(d.loadout)];
-    for (let n = unspentPoints(d); n > 0; n--) {
-      const r = spendPoint(g, d.id, stat);
-      if (r.ok) g = r.game;
-    }
-  }
-  return g;
-}
-
-/**
  * The horde-only scripted player's guns (ID-096), as a player equips their drops: while the
  * stash's strongest gun hits harder (`gunPower`) than the weakest one in the squad's hands,
  * it goes to that survivor (theirs goes to the stash).
@@ -218,8 +185,8 @@ export function nextHorde(game: GameState, now: number): { game: GameState; now:
 /**
  * Plays hordes from a new game until `hordes` have been fought. Between hordes the
  * scripted player waits until the whole roster is fit, repairs what it can afford
- * (most damaged segment first), spends stat points (`spendAll`) and retries a lost
- * horde. It never builds. Horde `i` (from 0) uses seed `seed + i`.
+ * (most damaged segment first) and retries a lost horde. It never builds. Horde `i`
+ * (from 0) uses seed `seed + i`.
  */
 export function playCampaign(seed: number, hordes: number): HordeRun[] {
   if (!Number.isInteger(hordes) || hordes < 0) {
@@ -233,7 +200,7 @@ export function playCampaign(seed: number, hordes: number): HordeRun[] {
     const horde = playHorde(game, seed + i, now);
     now += horde.time * 1000;
     runs.push(summarise(horde, seed + i));
-    game = spendAll(finishHorde(game, horde, now));
+    game = finishHorde(game, horde, now);
   }
   return runs;
 }
@@ -387,8 +354,6 @@ export interface SquadPlay {
    * upgrade for anyone.
    */
   worstLuck?: boolean;
-  /** Every stat point into this stat (ID-125), not the job's (`spendAll`). */
-  stat?: Stat;
 }
 
 /**
@@ -415,7 +380,7 @@ export function unlucky(game: GameState, next: GameState, drop: SquadDrop): Game
 
 /**
  * A horde-only campaign (ID-066, ID-102) from a new game until Horde `hordes` is won, as
- * the player plays it: a win adds XP (spent by `spendAll`), a survivor and a gun (equipped
+ * the player plays it: a win adds XP (levels, ID-146), a survivor and a gun (equipped
  * by `gearUp`); a loss pays its little XP, then the player farms (`SQUAD_FARM`) and tries
  * again. Stops after `maxFights` fights in all (`hordes × 10` by default). Fight `i` (from
  * 0) uses seed `seed + i`. Returns every fight, in order: the horde, whether it was a
@@ -443,7 +408,7 @@ export function playSquadCampaign(seed: number, hordes: number, play: SquadPlay 
     const drop = farm > 0 && play.worstLuck ? squadDrop(game, horde) : null;
     let next = finishSquadHorde(game, horde);
     if (drop) next = unlucky(game, next, drop);
-    game = gearUp(spendAll(next, play.stat));
+    game = gearUp(next);
     if (farm > 0) farm--;
     else if (horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
   }

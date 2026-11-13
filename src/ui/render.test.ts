@@ -3038,11 +3038,11 @@ describe('the horde-only fight (ID-068)', () => {
       for (const d of h.defenders) expect(build.texts.map((t) => t.text)).not.toContain(d.name);
     });
 
-    it('names every defender by name alone, whatever their stats: titles are parked (ID-084)', () => {
+    it('names every defender by name alone, whatever their level: titles are parked (ID-084)', () => {
       const game = newGame();
       const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
       const d = h.defenders.find((x) => h.posts.some((p) => p.id === x.postId))!;
-      const statted = { ...d, stats: { instinct: 100, agility: 100, mind: 100, tinker: 0 } };
+      const statted = { ...d, xp: 1e6 };
       const cam = frameCamera({ w: 1280, h: 720 });
       const full = tagged({ ...h, defenders: [statted] }, cam).texts.map((t) => t.text);
       expect(full).toEqual([d.name]);

@@ -27,7 +27,7 @@ function setup() {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const noop = () => {};
-  const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+  const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
   const game = { ...newGame('horde'), skillPick: ['airstrike' as const] };
   const s = startSquadHorde(game, 1, NOW);
   s.toSpawn = 0;

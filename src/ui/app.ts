@@ -2,16 +2,8 @@
 // panel between hordes and the HUD in a fight.
 import { recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
-import { FIELD, HORDE_ONLY, type SkillId, type Stat } from '../core/data.ts';
-import {
-  finishHorde,
-  newGame,
-  recover,
-  spendPoint,
-  unspendPoint,
-  startHorde,
-  type GameState,
-} from '../core/game.ts';
+import { FIELD, HORDE_ONLY, type SkillId } from '../core/data.ts';
+import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import {
   enemyAt,
   layoutOf,
@@ -26,7 +18,6 @@ import {
   combineGuns,
   equipGun,
   finishSquadHorde,
-  spendInFight,
   startSquadHorde,
   toggleSkill,
   type GunChoice,
@@ -60,7 +51,7 @@ import {
 import { Animator } from './anim.ts';
 import { dyingLeft } from './death.ts';
 import { SoundEngine, STING } from './audio.ts';
-import { createBuildPanel, FIELD_GREW, STATS_REFUNDED } from './build.ts';
+import { createBuildPanel, FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import {
   buildCamera,
   EASE_MS,
@@ -110,8 +101,8 @@ import { TITLE_PICTURE, type Art } from './sprites.ts';
 const MAX_DT = 0.1;
 /** A press that moves less than this (CSS px) before release is a click, not a drag. */
 const CLICK_SLOP = 5;
-/** How long the one-time stat refund note stays up, in ms (ID-084). */
-const REFUND_TOAST_MS = 8000;
+/** How long the one-time stats note stays up, in ms (ID-084; the level rework note since ID-146). */
+const REWORK_TOAST_MS = 8000;
 
 /**
  * What Esc does, first match wins: put an armed skill away, close the open slot, drop
@@ -179,10 +170,6 @@ export function start(root: HTMLElement, art: Art): void {
   let pendingResult: { screen: ResultScreen; at: number } | null = null;
   /** Whether the fight is over and its result screen up, so camp actions are open again. */
   const resultUp = (): boolean => endedAt !== null && pendingResult === null;
-  // Stat points spent on the result screen, applied with "Back to build". `card`: spent on a
-  // survivor's card there, which its Undo takes back; `roster`: spent in the Roster, which the
-  // Roster's own Undo takes back while it is open.
-  let spends: [string, Stat, 'card' | 'roster'][] = [];
   // Camp-level picks (or a survivor let in) on the result screen, applied in order with "Back to build".
   let campPicks: CampChoice[] = [];
   let selected: SlotHit | null = null;
@@ -241,11 +228,6 @@ export function start(root: HTMLElement, art: Art): void {
       }
       if (!horde || endedAt === null) return;
       let next = finishHorde(game, horde, endedAt);
-      for (const [id, stat] of spends) {
-        const r = spendPoint(next, id, stat);
-        if (r.ok) next = r.game;
-      }
-      spends = [];
       for (const id of campPicks) {
         const r = takeCampPick(next, id);
         // The HUD counts room as the core does, so a refusal is a bug: say so, and the
@@ -268,15 +250,6 @@ export function start(root: HTMLElement, art: Art): void {
     },
     () => {
       if (horde?.replace) horde = skipReplace(horde);
-    },
-    (defenderId, stat) => {
-      // The start screen's cards (ID-126): saved at once, as the Roster does there.
-      if (!horde) return startScreenSpend(defenderId, stat, spendPoint);
-      if (endedAt === null) return false;
-      spends.push([defenderId, stat, 'card']);
-      showPicker();
-      refreshDialogs();
-      return true;
     },
     (item) => {
       if (!horde) return;
@@ -318,70 +291,27 @@ export function start(root: HTMLElement, art: Art): void {
     else commit(r.game);
     hud.showSkills(skillPicker(game.skillPick));
   });
-  // A survivor card's Undo (ID-108): takes back the points spent on that card, not the ones
-  // spent in the Roster. On the start screen (ID-126) they were saved, so they come back out.
-  hud.onUnspend((id, stats) => {
-    if (!horde) {
-      // Newest first, each one the card spent; counted as the camp took them back.
-      return [...stats].reverse().filter((stat) => startScreenSpend(id, stat, unspendPoint)).length;
-    }
-    if (endedAt === null) return 0;
-    const before = spends.length;
-    spends = spends.filter(([who, , from]) => !(who === id && from === 'card'));
-    hud.syncPicks(pending().roster);
-    showPicker();
-    refreshDialogs();
-    return before - spends.length;
-  });
   hud.onHordePick((n) => {
     picked = n;
     // The Inventory's Squad Power line compares with the horde picked.
     inventory.refresh();
   });
   /**
-   * The horde-only result or start screen's button (ID-066): the stat points spent on the
-   * result screen are saved (the horde itself was taken in when it ended), then the next
-   * horde starts at once, or the same one again after a loss.
+   * The horde-only result or start screen's button (ID-066): the horde itself was taken in
+   * when it ended, so the next horde starts at once, or the same one again after a loss.
    */
   function squadNext(): void {
-    if (horde) {
-      if (endedAt === null) return;
-      // The picks are in the game once saved: cleared first, so the redraw `commit` makes
-      // doesn't count them twice (the Roster badge reads pending()).
-      const next = pending();
-      spends = [];
-      commit(next);
-    }
+    if (horde && endedAt === null) return;
     // The seed is the only randomness from outside the core.
     const now = Date.now();
     // Whatever is picked starts: one that isn't open (a stale pick) falls back to the new horde.
     const open = Number.isInteger(picked) && picked >= 1 && picked <= game.hordeNumber;
     startFight(startSquadHorde(game, now, now, open ? picked : game.hordeNumber));
   }
-  /**
-   * A point spent (or taken back) on the start screen (ID-126): saved at once, the squad on
-   * the wall stands with it, and the cards, the picker and the Roster follow. False when
-   * refused (the cards are put back to the camp).
-   */
-  function startScreenSpend(id: string, stat: Stat, act: typeof spendPoint): boolean {
-    if (!game.roster.some((d) => d.id === id)) return false;
-    const r = act(game, id, stat);
-    if (!r.ok) {
-      hud.toast(r.reason);
-      hud.syncPicks(game.roster);
-      return false;
-    }
-    commit(r.game);
-    preview = startSquadHorde(game, 0, Date.now());
-    hud.syncPicks(game.roster);
-    showPicker();
-    refreshDialogs();
-    return true;
-  }
   /** The horde picker redrawn off the squad as it stands, the pick kept (ID-098). */
   function showPicker(): void {
     const retry = horde && endedAt !== null && horde.outcome === 'lost' ? horde.hordeNumber : null;
-    hud.showPicker(hordePicker(pending(), picked, retry, !horde));
+    hud.showPicker(hordePicker(game, picked, retry, !horde));
   }
   /** The horde-only gun pickers (ID-067) for the game as it stands, between hordes only. */
   function showGear(): void {
@@ -393,7 +323,7 @@ export function start(root: HTMLElement, art: Art): void {
         showGear();
       }
     });
-    // A new gun or a spent point moves Squad Power, so the picker's bands follow.
+    // A new gun moves Squad Power, so the picker's bands follow.
     showPicker();
   }
   /**
@@ -419,7 +349,6 @@ export function start(root: HTMLElement, art: Art): void {
     preview = null;
     endedAt = null;
     pendingResult = null;
-    spends = [];
     campPicks = [];
     selected = null;
     selectedDefender = null;
@@ -540,26 +469,14 @@ export function start(root: HTMLElement, art: Art): void {
     sound.setMuted(on);
     writeMute(storage, on);
   }
-  /** The game with the points spent on the result screen so far (saved with its button). */
-  function pending(): GameState {
-    let next = game;
-    for (const [id, stat] of spends) {
-      const r = spendPoint(next, id, stat);
-      if (r.ok) next = r.game;
-    }
-    return next;
-  }
   // The Roster (ID-086, ID-108), left of the Inventory, in the horde-only build: every
-  // survivor's stats and gun. A + tap spends the point at once (ID-126): on the result screen
-  // with the screen's own picks, on the start screen saved, and in a fight (ID-116) saved and
-  // on that survivor in the fight too. Its Undo takes back, between hordes only, what it spent
-  // since it opened. Guns change as on the gun pickers, between hordes only.
+  // survivor's level bonus and gun (ID-146). Guns change as on the gun pickers, between
+  // hordes only.
   const roster: Roster | null = HORDE_ONLY
     ? createRoster(root, {
         state: () => ({
-          game: pending(),
+          game,
           fight: horde?.outcome === 'fighting' ? horde : null,
-          canSpend: !horde || resultUp() || horde.outcome === 'fighting',
           canGear: !horde || resultUp(),
           resumes: horde?.outcome === 'fighting' && !held,
         }),
@@ -574,52 +491,6 @@ export function start(root: HTMLElement, art: Art): void {
             showGear();
           }
           return { ok: true, moves: r.moves };
-        },
-        onSpend: (id, stat) => {
-          if (horde && !resultUp()) {
-            // Over, its screen not up yet (while its last kills die, ID-110): nothing to
-            // spend into.
-            if (horde.outcome !== 'fighting') return;
-            // Mid-fight (ID-116): saved at once, so a reload keeps it, and fought with now.
-            const f = spendInFight(game, horde, id, stat);
-            if (!f.ok) {
-              hud.toast(f.reason);
-              return;
-            }
-            horde = f.horde;
-            commit(f.game);
-            hud.fightPower(powerLine(squadPower(game), recommendedPower(horde.hordeNumber)));
-            return;
-          }
-          if (!horde) {
-            startScreenSpend(id, stat, spendPoint);
-            return;
-          }
-          const r = spendPoint(pending(), id, stat);
-          if (!r.ok) {
-            hud.toast(r.reason);
-            return;
-          }
-          spends.push([id, stat, 'roster']);
-          hud.syncPicks(r.game.roster);
-          showPicker();
-          refreshDialogs();
-        },
-        onUnspend: (id, stat) => {
-          if (horde && !resultUp()) return;
-          if (!horde) {
-            startScreenSpend(id, stat, unspendPoint);
-            return;
-          }
-          // The newest Roster spend of that stat on that survivor comes out of the screen's picks.
-          const i = spends.findLastIndex(
-            ([who, s, from]) => who === id && s === stat && from === 'roster',
-          );
-          if (i < 0) return;
-          spends.splice(i, 1);
-          hud.syncPicks(pending().roster);
-          showPicker();
-          refreshDialogs();
         },
       })
     : null;
@@ -734,14 +605,14 @@ export function start(root: HTMLElement, art: Art): void {
       panel?.notice(SAVE_STATUS.rejected.text);
       if (!panel) hud.toast(SAVE_STATUS.rejected.text);
     } else if (loaded.save) {
-      // Said once: the next save is the new version, the field grown and the points refunded.
+      // Said once: the next save is the new version, the field grown and the stat points dropped.
       const notes = [
         ...(loaded.save.grew ? [FIELD_GREW] : []),
-        ...(loaded.save.refunded ? [STATS_REFUNDED] : []),
+        ...(loaded.save.reworked ? [LEVELS_REWORKED] : []),
       ].join(' ');
       if (panel && notes) panel.notice(notes);
-      // A one-time note: up long enough to read (ID-084).
-      else if (!panel && loaded.save.refunded) hud.toast(STATS_REFUNDED, REFUND_TOAST_MS);
+      // A one-time note: up long enough to read (ID-146).
+      else if (!panel && loaded.save.reworked) hud.toast(LEVELS_REWORKED, REWORK_TOAST_MS);
     }
   }
 
@@ -993,7 +864,7 @@ export function start(root: HTMLElement, art: Art): void {
             : 0;
         pendingResult = { screen, at: endedAt + left * 1000 };
         // Horde-only (ID-066): XP and the new survivor are saved at once, so a reload on
-        // the result screen never loses a win; stat points follow with its button.
+        // the result screen never loses a win.
         if (HORDE_ONLY) commit(finishSquadHorde(game, horde));
       }
       if (pendingResult && Date.now() >= pendingResult.at) {

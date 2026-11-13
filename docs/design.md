@@ -69,8 +69,8 @@ loot, and the further you push into danger, the more you can win — or lose.
 - **Winning a horde:** the last wave is cleared (for a boss horde, the
   Mutated Horror is dead) *(designer's call)*.
 - **After a horde** *(designer's call)*: the result screen tallies
-  **defender XP** and **camp XP**. A defender who levels up gets stat
-  points (§6). A camp that levels up offers a camp-level pick (§11 Camp
+  **defender XP** and **camp XP**. A defender who levels up gets a little
+  better at everything (§6, ID-146). A camp that levels up offers a camp-level pick (§11 Camp
   level). Fight levels and their cards (§4) belong to the fight only and
   end with it.
 - **Losing a horde:** the horde is lost when enemies have broken through
@@ -306,8 +306,8 @@ Defenders stand on **posts** the player builds and chooses between.
   takes a post; the player picks which available defender and which post.
   Turrets and traps are whatever was built before the horde (§7); nothing
   is built mid-fight.
-- **Defender HP and injury:** defenders have HP: 100 plus Instinct's
-  bonus (§6 Stats), and Instinct's armour and injury dodge soften hits
+- **Defender HP and injury:** defenders have HP: 100 plus their level's
+  bonus (§6 Stats), and the level's armour softens hits (ID-146; Instinct's before)
   *(designer's call, starting point)*. Every recovered defender starts a
   horde at full HP and doesn't regain HP mid-horde. They are hit by ranged
   enemies (Spewers) and by enemies that broke into the camp. At 0 HP a
@@ -598,8 +598,8 @@ loadout decides which profession they are working as.
   are plain: no profession, so no Gunner fire rate, reload, crit or spread,
   no Ripper melee or shield, no Engineer repair or buff, no titles, title
   bonuses or badges, and no off-profession penalty. A survivor fights with
-  their primary gun only (the pistol if they have none) and their §6 stats
-  (Instinct, Agility, Sharp Mind; Tinker is locked). The roster keeps each
+  their primary gun only (the pistol if they have none) and their level's
+  §6 bonus (ID-146; stat points before). The roster keeps each
   loadout as it was.
 
 ### Loadout → profession
@@ -622,7 +622,7 @@ close-quarter weapons come out only when an enemy is close.
   knife; Engineer pistol + toolkit.
 - **Gunner handling** *(starting points)*: a Gunner is better with every
   gun, sidearm included: fires 12.5% faster (15% before ID-125), reloads 25% faster and aims
-  better (+5% crit chance, on top of Sharp Mind). A non-Gunner firing a
+  better (+5% crit chance, on top of the level's). A non-Gunner firing a
   specialised gun deals −30% damage and reloads 50% slower; a sidearm in
   anyone else's hands has no penalty and no bonus.
 - **Reload:** every gun has a magazine and a reload time.
@@ -854,33 +854,22 @@ close-quarter weapons come out only when an enemy is close.
   farther out than any other gun (a small margin from one Gunner; the balance
   pass, ID-102, kept these numbers).
 - **Roster screen (as built, ID-012):** a Roster button on the build panel
-  opens it in the panel's place: each defender's level and XP, stats
-  (Tinker shown locked), unspent points (spent there) and rest time, and three pickers
+  opens it in the panel's place: each defender's level and XP, the level's bonus line
+  (ID-146; stats and points to spend before) and rest time, and three pickers
   (primary, secondary, item). Swaps are free between hordes, injured or
   not; a loadout the rules refuse says why and changes nothing.
 - **As built (ID-108), the horde-only Roster:** one compact dialog, a bottom
-  sheet on a phone, as tall as what it shows. The Roster button carries a
-  badge with the number of survivors who have points to spend. The dialog has
+  sheet on a phone, as tall as what it shows. The Roster button carries no
+  badge (ID-146: the number of survivors with points to spend before). The dialog has
   a header (title, "Best gun for everyone", close), one row of squad tabs
-  (portrait, name, level, a badge with their points left), the selected
-  survivor beside their gun slot, and one panel that is either **Stats** or
+  (portrait, name, level, HP), the selected survivor beside their gun slot,
+  and one panel that is either **Level** or
   **Choose a gun**. A survivor's name on the result screen still opens that
   survivor here.
-  - **Stats** *(ID-126; drafts and Confirm before it, ID-108)*: each stat is one
-    row with its points, its effects as "now → with one more point" (the arrow
-    only while a point is left), and one + (40 px, hold to repeat). A tap on +
-    spends the point at once: there is no draft, no Confirm and no question on
-    close. The status line reads each spend out ("Agility 3 for Mara. 2 points
-    left."). **Undo** ("Undo 2") takes back, newest first, the points spent on
-    that survivor since the dialog opened, between hordes only; closing forgets
-    them, so points stay permanent (no respec). On the start screen a spend is
-    saved at once and Undo takes it back out of the save; on the result screen
-    the points join the screen's own picks and are saved with its button. In a
-    fight (ID-116) a spend is saved at once and the survivor fights with the new
-    stat straight away (an Instinct point's extra max HP is added to the HP they
-    have); there is no Undo there, so a point spent in a fight stays spent. A
-    survivor down in the fight keeps the points for later fights. The horde's XP
-    adds to them when it ends, and a retry fights with them.
+  - **Level** *(ID-146; a Stats panel with + buttons, Undo and mid-fight
+    spends before, ID-108, ID-116, ID-126)*: "Level 7" with the XP into it and
+    what the next costs, then the level's bonus line in full words (§6 Stats).
+    The gun picker's way back is labelled Level.
   - **Choose a gun** (between hordes): tiles for the free pistol and every
     stash gun except the one held, strongest first by dmg/s, each with its
     base gun, a rarity frame and a change badge against the held gun ("▲ +4.2",
@@ -901,21 +890,12 @@ close-quarter weapons come out only when an enemy is close.
     what moved ("Equipped: Mara → Military SMG · …") or that everyone already
     holds the best gun they can get. A gun never goes into the stash for the
     pistol, so the stash never grows.
-  - On the result screen each survivor card's **Undo** takes back the points
-    spent on that card on that screen; points spent in the Roster stay (the
-    Roster's own Undo takes those back while it is open).
-- **Spending from the start and result screens (ID-126):** a survivor card
-  with points to spend shows a **"+N"** badge beside the name (N = points
-  left). A tap opens that card's stat block in place, without the Roster: the
-  points count with the card's Undo, and one button per stat with what its
-  next point adds; a tap spends at once, read out to screen readers. The badge
-  closes it again (✕ while open, ↺ while closed with an Undo pending; its
-  spoken name starts with what it shows, "+2: spend 2 points on Mara"). The
-  hint over the cards reads "Tap + to spend points. Tap a name for their card." On
-  the start screen each spend, and each Undo, is saved at once; on the result
-  screen they are saved with its button, as before. A result screen with
-  points starts the keyboard on the first badge; the start screen keeps it on
-  its start button, so Enter still starts the horde.
+- **The start and result screens' survivor cards (ID-146):** under the gun,
+  a small line gives the level's bonus with short labels (§6 Stats), in the
+  Level up badge's colour on a card that levelled this win; its XP line ends
+  in "level up!". The hint over the cards
+  reads "Tap a name for their card." (ID-126's "+N" badge, in-place stat
+  block and Undo are gone with the points.)
 
 ### Ballistics
 
@@ -935,7 +915,7 @@ strikes stay instant.
   arrives, from its velocity over the last step. A Shambler walking
   straight is hit; one that changes lane after the shot can be missed.
 - **Spread:** each gun has a cone *(starting points: pistol ±2.5°,
-  turret ±1°)*; a Gunner's is halved, and Sharp Mind narrows it further
+  turret ±1°)*; a Gunner's is halved, and the level narrows it further (ID-146; Sharp Mind before)
   (§6 Stats). The angle is rolled through the seeded RNG, so a run stays
   deterministic.
 - **Pierce:** a bullet with pierce N goes through N enemies, each time
@@ -955,172 +935,72 @@ bonus than Gunner), Pyro (flamethrowers), Medic (uses Medicine better).
 
 ### Stats
 
-Each defender level gives **1 stat point** (ID-096; 3 before it), from a
-horde or a patrol alike, so every point is a choice:
+**Levels give an all-round bonus (ID-146).** Levelling up makes a survivor a
+little better at everything, a rookie growing into a veteran: no points to
+spend and no stat buttons. (Before ID-146 each level gave 1 stat point to
+spend by hand on Instinct, Agility or Sharp Mind, with Tinker locked; ID-084,
+ID-096, ID-125 and ID-126 tuned that system. Its numbers and balance tables
+are in the git history of this section.)
 
-Four stats, each with one clear role, each working with any weapon and any
-loadout (ID-084):
-
-| Stat | Now | Later (when the game expands) |
-|---|---|---|
-| **Instinct** | + max HP, + armour (flat damage off each hit taken), − chance of injury, + damage to enemies near the wall (ID-125): the last-line stat | + patrol survival |
-| **Agility** | + reload speed, + fire rate on every gun (ID-125): the sustained-fire stat | + move speed |
-| **Sharp Mind** | + gun accuracy (narrower cone), + crit chance and + crit damage on every hit, gun shot or blade or tool strike | — |
-| **Tinker** | **Locked:** its button greyed out, "Tinker (locked)", and "unlocks later" in the stats line and hint; no points can go in | + repair rate, + turret damage, + battery quality, + crafting |
-
-- Defender XP comes from hordes and from patrols (§10); both are full sources, so a defender can level by patrolling alone.
-- No stat respec in v1: points are permanent (loadout swaps are free).
+- Defender XP comes from hordes and from patrols (§10); both are full
+  sources, so a defender can level by patrolling alone.
 - Level L → L+1 costs 25 × L defender XP (ID-011), so a defender in every
-  win reaches level 2 after Horde 2 and level 3 after Horde 4. Points are
-  spent on the result screen after a win (or on the roster); unspent points
-  carry over. *As built (ID-126):* a tap on a stat spends the point at once,
-  in the Roster or on a start or result screen card ("+N" opens it in place);
-  Undo takes back what was spent since that panel opened, between hordes only
-  (see the Roster screen under §6).
-- **A point is split across its stat's active effects, and every bonus
-  shrinks as points pile up** *(starting points, ID-084, ID-096)*: with P
-  points in a stat that drives n **active** effects (the ones that work in
-  the build), each effect with cap C gives **C × P / (P + 10 × n)**. A stat
-  with one effect reaches half its cap at 10 points, one with three at 30;
-  no number of points reaches the cap, so stacking one stat can't break a
-  fight. Before the split, 1 new point is worth 2 old ones (ID-084's
-  C × P / (P + 20)).
-- **Active effects today** (`STAT_ACTIVE` in the core, the one place they
-  are listed): Instinct 4 (max HP, armour, injury dodge, damage near the
-  wall), Agility 2 (reload, fire rate; move speed is planned, not built),
-  Sharp Mind 3 (crit chance, crit damage, spread), Tinker none (locked).
-  ID-125 added Instinct's and Agility's newest effect, so points already in
-  them are shared one way more (an Instinct point's max HP, armour and dodge,
-  and an Agility point's reload, are smaller than before).
-- **An effect built later joins its stat's split:** listed in
-  `STAT_ACTIVE`, its stat's n goes up by 1, and every point already spent
-  in that stat is shared across the new set, so the existing effects'
-  bonuses go down. The ticket that builds it notes the change on the
-  survivor's stats. A planned effect gets no share and isn't shown as a
-  bonus until then.
-- The survivor card shows each active effect now and with the next point
-  ("Max HP 100 → 103"); each + button's hint, on the result screen and the
-  roster, says what the next point adds to each ("Next point: +3 max HP ·
-  +0.13 armour · +1.0% survive").
+  win reaches level 2 after Horde 2 and level 3 after Horde 4.
+- **Six bonuses, every level, no input** (`LEVEL_BONUS` in the core): max HP
+  (over the base 100, whole HP), armour (flat off each hit; a hit keeps at
+  least half its damage), fire rate (every gun, sidearm included; not blades
+  or tools), reload speed, accuracy (a narrower spread cone) and crit chance
+  (every hit, gun shot or blade or tool strike; added to the Gunner's +5% on
+  gun shots). Crit damage stays ×2 before guns and cards.
+- **The bonus shrinks as levels go up** *(starting points, ID-146)*: with
+  P = level − 1, each bonus with cap C is **C × P / (P + 20)**. Nothing at
+  level 1, half the cap at level 21, never the cap, so a high level can't
+  break a fight.
 
-  | Bonus | Cap | n | 1 point | 3 points | 5 points | 10 points |
-  |---|---|---|---|---|---|---|
-  | Instinct: max HP (over the base 100, rounded to whole HP) | +100 | 4 | +2 | +7 | +11 | +20 |
-  | Instinct: armour (flat off each hit; a hit keeps at least half its damage) | 4 | 4 | 0.10 | 0.28 | 0.44 | 0.8 |
-  | Instinct: injury dodge (a hit that would drop them to 0 HP leaves them at 1 HP instead) | 30% | 4 | 0.7% | 2.1% | 3.3% | 6% |
-  | Instinct: damage near the wall (within 250 px of its front, the SMG's band; any weapon; on a gun shot it adds to the SMG's +25%) | +175% | 4 | +4.3% | +12.2% | +19.4% | +35% |
-  | Agility: reload time | −50% | 2 | −2.4% | −6.5% | −10% | −16.7% |
-  | Agility: fire rate (every gun, sidearm included; not blades or tools) | +70% | 2 | +3.3% | +9.1% | +14% | +23.3% |
-  | Sharp Mind: spread | −50% | 3 | −1.6% | −4.5% | −7.1% | −12.5% |
-  | Sharp Mind: crit chance (added to the Gunner's +5% on gun shots; +35% before ID-096) | +50% | 3 | +1.6% | +4.5% | +7.1% | +12.5% |
-  | Sharp Mind: crit damage (over the base ×2) | +×2 | 3 | +×0.06 | +×0.18 | +×0.29 | +×0.5 |
+  | Bonus | Cap | Lv 2 | Lv 5 | Lv 7 | Lv 10 | Lv 15 | Lv 21 | Lv 30 |
+  |---|---|---|---|---|---|---|---|---|
+  | Max HP | +60 | +3 | +10 | +14 | +19 | +25 | +30 | +36 |
+  | Armour per hit | 2 | 0.10 | 0.33 | 0.46 | 0.62 | 0.82 | 1.00 | 1.18 |
+  | Fire rate | +30% | +1.4% | +5.0% | +6.9% | +9.3% | +12.4% | +15.0% | +17.8% |
+  | Reload time | −30% | −1.4% | −5.0% | −6.9% | −9.3% | −12.4% | −15.0% | −17.8% |
+  | Spread | −30% | −1.4% | −5.0% | −6.9% | −9.3% | −12.4% | −15.0% | −17.8% |
+  | Crit chance | +20% | +1.0% | +3.3% | +4.6% | +6.2% | +8.2% | +10.0% | +11.8% |
 
-- **Hold to add (ID-096):** a click or tap on a + stat button adds 1 point;
-  held past 400 ms it adds 1 more every 333 ms (about 3 a second) until
-  release, the pointer or finger sliding off, a scroll, no points left or
-  the screen closing. Holding Enter or Space does the same. A long press
-  opens no touch menu and selects no text; the locked Tinker button ignores
-  it. On the result screen's survivor cards and on the roster.
-- **Old saves (v13 and older, ID-096):** the levels they reached gave 3
-  points each, so each defender and survivor waiting to join **banks** the
-  2 a level more than today's 1 (`banked`, kept from then on): no point
-  earned before, spent or not, is lost, and each new level gives 1.
-
-- **Balance (ID-096):** with 1 point a level the squad grows more slowly
-  and late hordes push to the wire and the wall again. The horde-only
-  scripted player now also equips the stash's strongest guns after each win
-  (`gearUp`), as a player does; without that, no stat tuning can say how a
-  real squad fares late. Measured over 10 seeds to Horde 22, first try at
-  each horde (enemies reaching the Barbed Wire band, 400 px from the wall,
-  in every fight on both):
-
-  | | Wins per horde | Wall hit, Hordes 8–22 | Nearest enemy, median of medians |
-  |---|---|---|---|
-  | Main (3 points a level) | 10/10 | 0–2 of 10 | about 170 px |
-  | ID-096 (1 point a level, as built) | 8–10 of 10 | 1–5 of 10 | about 60 px |
-
-  Survivors are level 12-ish at Hordes 18–19; a balance test plays 4 seeds
-  to Horde 18 and checks enemies reach the wire band in every fight from
-  Horde 15 and hit the wall in some. The horde-only enemy HP growth (×1.20
-  then ×1.03) stays as it was: this hits the target (enemies regularly reach
-  the wire and sometimes the wall from mid-game) without restoring the old
-  survivor power.
-
-  The full game's targets were grid-tuned (each row: Horde 10 firing line
-  wins against the brood / charge / regen Horror of 20 seeds; Horde a
-  campaign without building reaches, 10 seeds; target ≥1 win each and 4–5):
-
-  | | Brood | Charge | Regen | Campaign reaches |
-  |---|---|---|---|---|
-  | Main (3 points a level) | 4 | 20 | 19 | 5 on every seed |
-  | 1 point a level, nothing retuned | 0 | 19 | 4 | 5, one seed 6 |
-  | + crit cap 0.35 → 0.5, Broodmother every 25 s → 35 s (built) | 4 | 19 | 8 | 5 on every seed |
-
-  What didn't work: Sharp Mind caps alone (crit 0.5–0.7, crit damage
-  +×3–4) never beat the brood; full-game HP growth ×1.15 beat the brood
-  (2 of 20) but let a full firing line on the bare wall win too much at
-  Hordes 5–7 (45% at Horde 5, the target is at most 25%); ×1.16 still lost
-  every brood fight. Every Broodmother 30 s: 0 wins; 40 s: 14.
-- **Balance (ID-084):** the scripted player puts every point into the stat
-  that suits the job: Sharp Mind, the damage stat, for a Gunner or a Ripper
-  (and every horde-only survivor), Agility for an Engineer. With these
-  numbers the horde-only squad wins Hordes 8, 9 and 10 at the first try on
-  95%, 70% and 65% of seeds (80%, 80% and 85% with Aim before; the target
-  is 60%); a campaign without building still stalls at Horde 5 on every
-  seed; and a Horde 10 firing line beats the brood Horror on 4 seeds of 20.
-  Spreading points evenly is weaker (40–80% at Hordes 8–10 in a test run),
-  and Instinct for the Ripper leaves the brood Horror unbeaten: without
-  a cleave stat, the crowd at the wall needs damage.
-
-- **Balance (ID-125): Agility and Instinct as strong a choice as Sharp Mind.**
-  Before it, Sharp Mind was the only stat worth points. Agility now also
-  raises fire rate, Instinct also adds damage near the wall; caps were
-  grid-tuned so each stat plays alike. Two measures, every point in one stat:
-
-  | | Sharp Mind | Agility | Instinct | No points |
-  |---|---|---|---|---|
-  | Scripted campaign, first-try wins over Hordes 4–10 (20 seeds) | 96% | 96% | 98% | 86% |
-  | Same squad at Recommended Power, no cards, Hordes 9–15 (70 fights) | 39% | 46% | 43% | 0% |
-  | ID-128: the same, with the scripted player's cards and skills | 61% | 57% | 61% | 4% |
-
-  The first is the ticket's measure, but Hordes 4–10 are won about 86% of the
-  time with no points at all, so it can hardly tell the stats apart; the
-  second (each squad's gun at the level where a Sharp Mind squad meets
-  Recommended Power) is where they show. The balance test checks both
-  within 10 points, and every stat well above none. ID-128 fits Recommended
-  Power to the card build, so the second measure plays with cards: at
-  Instinct's damage near the wall ×1.75 Instinct won 50% (Sharp Mind 61%, 11
-  points apart; with overlapping waves more of the fight is at the wall, but
-  cards scale the gun stats more), so `STAT_EFFECT.wallDamage` is now ×2.
-- **Shots at their true rate (ID-125):** a shot went off on the first 1/30 s
-  tick at or after it fell due, and the next was timed from that tick, so
-  every fire rate was rounded down to whole ticks (a Gunner's pistol at
-  +15% really fired 12.5% faster; an SMG's +15% gave nothing), and Agility's
-  fire rate paid only when it crossed a tick. The next shot is now timed
-  from when the last fell due (from the tick only after a wait for a target
-  or a reload; at most one shot a tick), turrets alike. To keep the balance
-  this rounding had set, the Gunner's fire rate and Steady Fire go to what a
-  pistol really got (+12.5%, ×1.125), Rapid Fire's step 8% → 7.5% (with
-  Steady Fire it gave ×1.20 a pick; at ×1.215 a lone starting survivor won
-  Horde 4 on one seed, at 7% the bare base lost Horde 2 or 3 on one and a
-  mid-game campaign never hit a wall), and Recommended Power's fit 10.3 →
-  9.7 (fire-rate affixes, which Squad Power counted in full, now land in
-  full). Blades, tools and turrets get the true rate too: their own
-  intervals are whole ticks, so only Rapid Fire, an Engineer's buff and a
-  turret's buffs and wear change what they deliver (a knife with one Rapid
-  Fire got nothing from it before). Left as is: the full-game balance tests
-  (campaign without building, firing line, Horror) stay green with it.
-- The injury dodge is rolled through the horde's seeded RNG, only for a
-  survivor with Instinct above 1 HP, so a run stays deterministic and a
-  survivor already at 1 HP gets no second save from the next hit.
-- **Tinker** stays locked until repair, turrets or crafting expand: its row
-  is visible so players know it's coming, and repair runs at its base rate.
-  A save edited to put points in Tinker loads with those points refunded.
-- **Old saves (v12 and older):** every spent point is refunded as unspent
-  points, with a one-time note on load. A patrol out keeps a strength no
-  higher than its party's today.
-- Patrol strength (§10) counts level and weapon only; Instinct's patrol
-  survival comes later.
+- **What it replaced:** Instinct's injury dodge and damage near the wall and
+  Sharp Mind's crit damage went with the stats; the six above are the
+  ticket's list. A hit that drops a survivor to 0 HP injures them, with no
+  roll.
+- **The survivor card** shows the level in its header and what it gives on
+  one line, every bonus as "+X stat": in the Roster "+14 HP · +0.5 armour ·
+  +6.9% fire rate · +6.9% reload speed · +6.9% accuracy · +4.6% crit"; on the
+  result and start screens' squad cards, short labels so a card stays two
+  lines ("+14 HP · +0.5 arm · +6.9% fire · +6.9% reload · +6.9% aim · +4.6%
+  crit"). A line breaks only between bonuses. At level 1 it says what levels
+  bring: "Each level: more HP, armour, fire rate, reload speed, accuracy and
+  crit" (shorter on a card). A win's XP line ends in "level up!" when it
+  brings one.
+- **Squad Power** (§11 Farming) counts the level's crit, aim, fire rate,
+  reload and extra HP the way it counted the stats.
+- **Old saves (v16 and older, ID-146):** points spent, unspent and banked
+  are dropped as the save loads; each survivor's bonus comes from their level
+  alone, so nobody is weaker than a fresh survivor of the same level. A save
+  with anyone past level 1 shows a one-time note ("Survivor stats were
+  reworked: stat points are gone, and each level now makes a survivor a
+  little better at everything.").
+- Patrol strength (§10) counts level and weapon only.
+- **Balance (ID-146):** a first try, no grid, measured against the balance
+  suite (every file green). The numbers keep a squad's damage per level about
+  where the old scripted build (every point in Sharp Mind) had it up to level
+  10, then grow more slowly; the extra HP and armour make up the rest.
+  - A squad at Recommended Power, with the scripted player's cards: Hordes 9,
+    12, 15 and 20 won 2, 4, 2 and 7 fights of 10 (target 2–8 each, a mean of
+    3.5–6.5; mean 3.75).
+  - The throwables canary's full-line scene moved from level-7 to level-9
+    survivors: at level 7 the line won more and Frag Grenades led (19,
+    Flashbang 16, Molotov 15 of 40); at level 9 Flashbang leads again (27,
+    25, 24), the same thin margin as before (11, 9, 9).
+  - The stat balance tests (each stat as strong a choice, ID-125) went with
+    the stats.
 
 ### Profession titles
 
@@ -1257,9 +1137,9 @@ profession's output).
     in. Below that is one card per survivor (on a win only those who
     levelled up, see below): name and level, on a win the XP
     it gave with a bar and a "Level up" badge, their gun select (bordered in
-    the gun's rarity), and on a win their stat points with + Instinct /
-    + Agility / + Sharp Mind buttons and a greyed-out Tinker (ID-084). The loss screen keeps the cards, so guns can change before the
-    retry. The footer says why points can wait, or how a horde is lost.
+    the gun's rarity), and the level's bonus line (ID-146; on a win stat buttons
+    before, ID-084). The loss screen keeps the cards, so guns can change before the
+    retry. The footer says how a horde is lost.
   - **A win shows only who levelled up** *(ID-134)*: the result screen has a
     card only for each survivor who gained a level in that horde, so the
     level-ups stand out. Nobody else gets one, not a survivor whose only news
@@ -1280,7 +1160,7 @@ profession's output).
   destroyed, so a loss can't delete your build *(designer's call)*. They
   can't be built or bought during a horde.
 - Fire automatically from mounts on walls and towers; an adjacent Engineer
-  adds damage and fire rate (Tinker will scale it once unlocked, §6).
+  adds damage and fire rate (nothing scales it yet; Tinker would have, before ID-146).
 - **Energy:** a turret only fires while powered. Each turret draws energy
   per second of firing (idle turrets draw nothing) from the base's
   **battery bank**.
@@ -1303,7 +1183,7 @@ profession's output).
   segment breaks stops firing until the
   segment is repaired. A full repair costs 20 Scrap, in proportion to the
   missing condition (Parts join later). A standing Engineer within 100 px
-  gives +15% damage and fire rate (not stacked; Tinker scales it later)
+  gives +15% damage and fire rate (not stacked)
   and repairs the most worn turret in reach 0.5 condition/s, never a
   jammed one. Between hordes a turret can be **salvaged** (50% of its
   cost × its condition share back, rounded down; the only way one is
@@ -1317,8 +1197,8 @@ profession's output).
     depots).
   - **Crafted** by a defender at the workbench from Scrap and Parts. A
     crafting job takes real time and keeps
-    running while the game is closed. Tinker (§6, locked for now) will
-    give faster crafting and better batteries (more charge).
+    running while the game is closed. Faster crafting and better batteries
+    (more charge) were to come from Tinker, gone with stat points (ID-146).
 - **Battery quality:** Makeshift, Standard, High-capacity, Military
   *(starting points)* — more charge per battery.
 - **Loading and cap** *(designer's call)*: batteries are loaded into the
@@ -1421,9 +1301,9 @@ spacing real hordes have (see the ID-077 note below).
   | Flashbang (ID-139; a skill before) | behaviour | rare | Throwable slot. The squad throws one every **10 s ÷ the survivors on the line**, aimed as Frag Grenades is (within **600 px**, the most others within **100 px**, landing **0.6 s** later). It stuns (no moving, no attacking) every enemy within **100 px** for **3 s**. An enemy can't be stunned again until **3 s** after its stun ends, and isn't aimed at till then, so a group or a boss is never held for good. **Cost:** the squad's guns reach **15%** less while it is held (the glare). Its throws take no one's hands | 4 s | 5 s |
   | Molotov (ID-139; a skill before) | behaviour | rare | Throwable slot. The squad throws one every **12 s ÷ the survivors on the line**, aimed as Frag Grenades is (within **600 px**, the most others within **50 px**, landing **0.6 s** later). It leaves a fire of **50 px** burning **4 s**, each second **10%** of this wave's Shambler HP to every enemy inside (`fireDps`). **Cost:** enemies inside a fire move **30%** faster. Its throws take no one's hands | 6 s | 8 s |
   | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each level-up (more below) | 25%; 20 durability | 35%; 30 durability |
-  | Aim for the Head (ID-130) | stat | rare | Every squad hit, any weapon, has **+5%** crit chance, added to the gun's own (the Rifle's trait, crit affixes), Sharp Mind's and the Gunner's | +10% | +15% |
-  | Hollow Points (ID-130; id `hollow-point-rounds`, as `hollow-points` is Heavy Rounds) | stat | rare | Every squad crit deals **+25%** of the hit more, added to the ×2 (and to Sharp Mind's and a crit damage affix's share): ×2.25 with nothing else | +50% (×2.5) | +75% (×2.75) |
-  | Kevlar Vests (ID-131) | stat | common | Every hit on a survivor on the line takes **1 HP** off, added to Instinct's armour; a hit still keeps half its damage (a Shambler's 5 is never under 2.5) | 2 HP | 3 HP |
+  | Aim for the Head (ID-130) | stat | rare | Every squad hit, any weapon, has **+5%** crit chance, added to the gun's own (the Rifle's trait, crit affixes), the level's and the Gunner's | +10% | +15% |
+  | Hollow Points (ID-130; id `hollow-point-rounds`, as `hollow-points` is Heavy Rounds) | stat | rare | Every squad crit deals **+25%** of the hit more, added to the ×2 (and to a crit damage affix's share): ×2.25 with nothing else | +50% (×2.5) | +75% (×2.75) |
+  | Kevlar Vests (ID-131) | stat | common | Every hit on a survivor on the line takes **1 HP** off, added to the level's armour; a hit still keeps half its damage (a Shambler's 5 is never under 2.5) | 2 HP | 3 HP |
   | First Aid Kits (ID-131) | stat | common | Every survivor on the line recovers **0.5%** of their max HP a second, up to max | 1% | 1.5% |
   | Sandbags (ID-132) | barrier | rare | The outermost built layer takes **10%** less of every hit (an enemy's blow, a Swollen's blast, a slab), shown as a low layer of bags on the ground in front of each standing segment of it | 20% | 30% |
   | Scavenged Ammo (ID-132) | stat | rare | Each squad gun shot has a **20%** chance not to use a round, rolled on the fight's seeded RNG (a whole shot: every pellet of a shotgun's) | 30% | 40% |
@@ -1459,11 +1339,12 @@ spacing real hordes have (see the ID-077 note below).
 
   **Crit cards (ID-130).** Aim for the Head and Hollow Points add to every
   other crit source: a hit crits at the gun's crit (the Rifle's trait, a
-  crit affix) + Sharp Mind's + the Gunner's + Aim for the Head's, and a crit
-  deals ×(2 + Sharp Mind's + a crit damage affix's + Hollow Points'). So
-  the pair multiply with each other and with Sharp Mind and the Rifle.
+  crit affix) + the level's + the Gunner's + Aim for the Head's, and a crit
+  deals ×(2 + a crit damage affix's + Hollow Points'). So the pair multiply
+  with each other and with the level's crit and the Rifle (Sharp Mind before
+  ID-146).
   Hollow Points is offered only while some survivor on the field can crit
-  (`squadCanCrit`: Aim for the Head held, Sharp Mind, the Gunner, or a gun
+  (`squadCanCrit`: Aim for the Head held, a level past 1, the Gunner, or a gun
   with crit), as a power card needs a turret: a fresh squad of pistols
   never crits, so the card would do nothing. Measured: in the Horde 4 card
   test (20 seeds, none wins 2) Aim for the Head wins 10, 14 and 20 at levels
@@ -2124,8 +2005,7 @@ station + pharmacy + hardware store.
 - **Loot chance:** each search rolls on the location's loot table. **Party
   strength** vs. the location's danger raises the number of rolls and the
   chance of rarer results.
-- **Party strength** = defender levels + weapons (Instinct adds patrol
-  survival later, §6), plus profession
+- **Party strength** = defender levels + weapons, plus profession
   bonuses where they fit (e.g. an Engineer finds more Parts at an
   electronics store *(guess)*).
 
@@ -2360,7 +2240,7 @@ Set before sending; they apply to any location, plaza or single building.
 | Medicine | Patrols (pharmacy, hospital) | Injury recovery (faster than Food) |
 | Chemicals | Patrols (pharmacy, hospital) | Chemical traps (slow, burn, corrode, paralyze) |
 | Mutated Genes | Hordes, especially mutants and bosses | Research |
-| Defender XP | Hordes, patrols | Defender levels → stat points |
+| Defender XP | Hordes, patrols | Defender levels → the all-round level bonus (ID-146) |
 | Camp XP | Horde wins | Camp levels → camp-level picks |
 
 - **Research** (paid in Mutated Genes): barrier tiers and traps, turret
@@ -2491,7 +2371,7 @@ Set before sending; they apply to any location, plaza or single building.
   plaza's is its highest ticked building) and not wiped out has 2 tries of 5% × T each to find a **survivor** (tier 1 about
   10%, the crater about 44% for one or more), rolled from its seed on a stream of
   their own, so loot and casualties don't move. Each is level 1 to T, with that
-  level's stat points rolled across the stats, a name from the recruits' list and
+  level's bonus (ID-146; its stat points rolled before), a name from the recruits' list and
   any weapon at the tier's patrol rarity; a gun is their primary, anything else
   goes beside a free pistol. They wait in the report, taking no slot, with **Let
   them join** and **Turn them away**; letting one in needs a free camp slot and armoury room
@@ -2581,8 +2461,8 @@ As built (ID-066), the horde-only build:
     highest horde beaten, and its line asks for the next one.
   - Replays of a boss horde give no part, no unlock and no ending.
 - **Balance** (scripted player, 20 seeds, `balance/horde-only.test.ts`): the expected
-  squad (a survivor more per win, every point in Sharp Mind, damage cards
-  first)
+  squad (a survivor more per win, the level bonus, ID-146, every point in
+  Sharp Mind before; damage cards first)
   wins each of Hordes 1–10 at the first try on at least 60% of seeds, and
   every campaign beats Horde 10's boss; the lone starting survivor wins
   Horde 1 on every seed and loses every horde from Horde 4. A fight from
@@ -2648,9 +2528,10 @@ and comes back stronger.
   down too) × waves cleared ÷ its waves (0 cleared → 0), rounded down. Still no
   drop on a loss.
 - **Squad Power:** per squad survivor, their gun's sustained dmg/s (rarity,
-  level, affixes; Sharp Mind's crit chance and damage; Agility's reload and
-  fire rate) × (1 + 0.5 × Sharp Mind's spread cut) × (1 + 0.5 × Instinct's
-  damage near the wall, ID-125) × (1 + 0.5 × Instinct's extra HP share) × 10, summed over the squad and rounded. Cards and skills don't
+  level, affixes; the level's crit chance, reload and fire rate) × (1 + 0.5 ×
+  the level's spread cut) × (1 + 0.5 × the level's extra HP share) × 10
+  (ID-146: from the stats before, with a × (1 + 0.5 × Instinct's damage near
+  the wall) term), summed over the squad and rounded. Cards and skills don't
   count. (Gun role traits join it with ID-101.)
 - **Recommended Power (ID-102, refitted ID-128):** 3 × the dmg/s a horde
   asks for (9.7 before ID-128, 10.3 before ID-125's true-rate shots): its
@@ -2750,7 +2631,7 @@ then grid-tuned with the scripted player (`src/core/sim.ts`).
 | Bad-luck ramp (`FARM`) | 5 points a count, sure at 5 | Kept | At the worst luck a sure upgrade at 8 slowed campaigns to Horde 13 (94 fights against 70); 3 didn't speed them up |
 | Skill ×2 (`SQUAD_SKILLS.solo`) | ×2 | Kept | The scripted player picks two skills; ID-100's tests cover ×2 |
 | Gun traits and role affixes (`TRAIT`, `AFFIXES`) | SMG +25% close, … | Kept | SMG +15% and +35% didn't move the targets; the gun balance tests still pass |
-| Stat caps (`STAT_EFFECT`) | Sharp Mind crit 0.5 | 0.5 (kept) | The most sensitive horde-only knob (0.4: 54% first-try losses, 0.6: 17%), and the band the full game's Horror test needs (ID-096) |
+| Stat caps (`STAT_EFFECT`, removed ID-146) | Sharp Mind crit 0.5 | 0.5 (kept) | The most sensitive horde-only knob (0.4: 54% first-try losses, 0.6: 17%), and the band the full game's Horror test needs (ID-096) |
 
 Targets, each with a balance test:
 
@@ -2809,7 +2690,7 @@ unless named:
 | Late HP (`SQUAD_EARLY_HP`, last entry) | 1 from Horde 11 | ×1.15 from Horde 11 | The held waves' size moved into HP. Grid: 1 kept every target but made walls shallow (3 of 4 seeds walled, at most 3 replays a wall, wall hit 74%); 1.15: 4 of 4, at most 9, 85% |
 | Mini-bosses (`ELITE.more`) | One on odd hordes from Horde 5 | Plus one with the last wave of every non-boss horde from Horde 11 | The ticket's ask: more mini-bosses past Horde 10 |
 | Recommended Power (`POWER.rec`) | 9.7 × HP ÷ spawn seconds, no cards; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | 3 ×, with cards; early ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.4, ×1.25; past Horde 10 ×1.2 (ID-136, ID-137) | Refitted to the card build (§11 Farming); k grid 2.2–4.0 per horde, Hordes 6–20 |
-| Instinct's damage near the wall (`STAT_EFFECT.wallDamage`) | ×1.75 | ×2 | With cards Instinct trailed Sharp Mind by 11 points at Recommended Power (§6 Stats) |
+| Instinct's damage near the wall (`STAT_EFFECT.wallDamage`, removed ID-146) | ×1.75 | ×2 | With cards Instinct trailed Sharp Mind by 11 points at Recommended Power (§6 Stats) |
 | Wire full (`wireFull`; `rebuildWire` before ID-133) | Sized for the new wave | For every enemy still to face when more | With overlap a level 1 row held 71% of Horde 15's last wave (target 75%, measured with the rebuild at every wave break; ID-133 replaced the target, §8 Barbed Wire) |
 | Loss XP's waves cleared (`wavesCleared`) | The wave reached − 1 | Waves with all their enemies gone | With overlap the wave reached runs ahead of the fight |
 
@@ -2996,6 +2877,13 @@ offline progress works across sessions.
   Load code message). A v13 save with points in Tinker loads with them
   refunded too. A patrol out in an old save keeps a strength no higher than
   its party's today.
+- **As built (ID-146): save version 17** holds no stat points: a defender
+  or survivor waiting to join is id, name, XP and loadout (or weapon), and a
+  `stats` or `banked` key is refused. A v16 or older save's `stats` and
+  `banked` are dropped unread as it loads (any value, prototype keys
+  included, never reaches the game), each survivor's bonus comes from their
+  level, and a save with anyone past level 1 says so once ("Survivor stats
+  were reworked: …"), in the same places as ID-084's note.
 
 ## 13. Out of scope (v1)
 

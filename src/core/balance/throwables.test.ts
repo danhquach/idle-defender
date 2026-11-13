@@ -12,6 +12,7 @@ import { newGame, type GameState } from '../game.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
 import { cacheFor } from './cache.ts';
+import { xpForLevel } from '../stats.ts';
 import { SEEDS, squadAt } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
@@ -52,8 +53,15 @@ const SCENES = {
   lone: () => fresh(2, 1),
   /** Two fresh survivors at Horde 4. */
   pair: () => fresh(4, 2),
-  /** Horde 6's full squad on level 1 Carbines: big groups to hold off. */
-  line: () => squadAt(6, 1),
+  /**
+   * Horde 6's full squad on level 1 Carbines, survivors at level 9: big groups to hold off.
+   * ID-146: level 7 before, but with the level bonus a level-7 line won more and Frag led
+   * (19, Flashbang 16, Molotov 15 of 40); at level 5 Frag leads further (11, 6, 3).
+   */
+  line: () => {
+    const g = squadAt(6, 1);
+    return { ...g, roster: g.roster.map((d) => ({ ...d, xp: xpForLevel(9) })) };
+  },
 };
 
 describe('each throwable is the best pick on one scene and not on another (ID-139)', () => {
@@ -86,7 +94,8 @@ describe('each throwable is the best pick on one scene and not on another (ID-13
     expect(best('line', 'frag-grenades'), table('line')).toBe(false);
   });
 
-  // Measured: Flashbang 11, Frag 9, Molotov 9 (of 40).
+  // Measured: Flashbang 27, Frag 25, Molotov 24 (of 40; ID-146).
+  // Before ID-146, with level 7 and Sharp Mind: Flashbang 11, Frag 9, Molotov 9.
   it('Flashbang is the best pick for the full line, and not for a lone survivor', () => {
     expect(best('line', 'flashbang'), table('line')).toBe(true);
     expect(best('lone', 'flashbang'), table('lone')).toBe(false);

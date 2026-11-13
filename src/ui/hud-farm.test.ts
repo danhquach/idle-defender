@@ -71,7 +71,7 @@ const dropOf = (weapon: OwnedWeapon, extra: Partial<SquadDrop> = {}): SquadDrop 
 function page() {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
-  const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+  const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
   const picks: number[] = [];
   h.onHordePick((n) => picks.push(n));
   const button = () => root.querySelector<HTMLButtonElement>('.hud-result-foot > .hud-button')!;

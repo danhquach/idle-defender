@@ -40,7 +40,6 @@ import {
   BATTERIES,
   BATTERY_IDS,
   BUILDING_MATERIALS,
-  HORDE_ONLY,
   COLUMNS,
   GENERATOR,
   MATERIALS,
@@ -116,7 +115,6 @@ import {
   riskLines,
   tickMap,
 } from './worldmap.ts';
-import { holdRepeat } from './hold.ts';
 import { rosterSection } from './roster.ts';
 import { costLine, setVariant } from './kit.ts';
 
@@ -124,13 +122,9 @@ import { costLine, setVariant } from './kit.ts';
 export const FIELD_GREW =
   'The field grew: your walls now hold the middle rows. Build the new rows top and bottom.';
 
-/**
- * Shown once when a save's spent stat points were refunded (ID-084), saying where to spend
- * them: the horde-only build after a win, the full game on the roster too.
- */
-export const STATS_REFUNDED = HORDE_ONLY
-  ? 'Survivor stats were reworked: every point spent is back, to spend after your next win.'
-  : 'Survivor stats were reworked: every point spent is back, to spend on the roster.';
+/** Shown once when an old save's stat points were dropped (ID-146) for the level bonus. */
+export const LEVELS_REWORKED =
+  'Survivor stats were reworked: stat points are gone, and each level now makes a survivor a little better at everything.';
 
 export function stockBarText(game: GameState): string {
   const shown = MATERIALS.filter((m) => BUILDING_MATERIALS.includes(m) || game.stock[m] > 0);
@@ -568,8 +562,6 @@ export function createBuildPanel(
 ): BuildPanel {
   const bar = el('div', 'hud-bar build-bar');
   const panel = el('aside', 'build-panel');
-  // Holding a roster stat button keeps adding points (ID-096).
-  holdRepeat(panel);
   bar.hidden = true;
   panel.hidden = true;
   root.append(bar, panel);

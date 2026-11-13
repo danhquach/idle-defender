@@ -1,10 +1,9 @@
 // Design §6: the roster screen's lines and loadout options.
 import { describe, expect, it } from 'vitest';
-import { type Stats } from '../core/data.ts';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { patrolOutcome, sendPatrol, settlePatrols } from '../core/patrol.ts';
-import { NO_STATS } from '../core/stats.ts';
+import { levelOf } from '../core/stats.ts';
 import {
   choiceFor,
   ITEM_CHOICES,
@@ -15,12 +14,12 @@ import {
   SECONDARY_OPTIONS,
   weaponChoices,
 } from './roster.ts';
+import { LEVEL_ONE_TEXT, levelText } from './statlines.ts';
 
 const NOW = 1_700_000_000_000;
-const jack = (d: Partial<RosterDefender> = {}, stats: Partial<Stats> = {}): RosterDefender => ({
+const jack = (d: Partial<RosterDefender> = {}): RosterDefender => ({
   ...newGame().roster[1]!,
   ...d,
-  stats: { ...NO_STATS, ...stats },
 });
 
 /** Jack back injured, John dead. */
@@ -28,31 +27,22 @@ const isHurt = (o: { wiped: boolean; dead: string[]; injured: string[] }): boole
   !o.wiped && o.dead.join() === 'john' && o.injured.join() === 'jack';
 
 describe('roster entry', () => {
-  it('a new defender: level 1, no stats, Tinker locked, no points, fit', () => {
+  it('a new defender: level 1, no level bonus yet, fit', () => {
     expect(rosterEntry(jack(), NOW)).toEqual({
       label: 'Jack — Ripper',
       level: 'level 1 · 0/25 XP',
-      stats: 'Instinct 0 · Agility 0 · Sharp Mind 0 · Tinker (unlocks later)',
-      points: '',
+      bonus: LEVEL_ONE_TEXT,
       status: 'Fit',
     });
   });
 
-  it('shows level progress and unspent points; no titles any more (ID-084)', () => {
-    // Level 3 needs 75 XP; 95 is 20 into the 75 that level 4 costs. 2 points earned (ID-096).
-    const e = rosterEntry(jack({ xp: 95 }, { agility: 1 }), NOW);
+  it('shows level progress and what the level gives (ID-146)', () => {
+    // Level 3 needs 75 XP; 95 is 20 into the 75 that level 4 costs.
+    const e = rosterEntry(jack({ xp: 95 }), NOW);
     expect(e.level).toBe('level 3 · 20/75 XP');
-    expect(e.points).toBe('1 stat point to spend');
-    expect(rosterEntry(jack({ xp: 95 }), NOW).points).toBe('2 stat points to spend');
-    const lots = jack({ xp: 1e6 }, { instinct: 10, mind: 25 });
-    expect(rosterEntry(lots, NOW)).toMatchObject({
-      label: 'Jack — Ripper',
-      stats: 'Instinct 10 · Agility 0 · Sharp Mind 25 · Tinker (unlocks later)',
-    });
-  });
-
-  it('all points spent: no picker line', () => {
-    expect(rosterEntry(jack({ xp: 25 }, { instinct: 1 }), NOW).points).toBe('');
+    expect(e.bonus).toBe(levelText(3));
+    expect(e.bonus).toMatch(/^\+\d+\u00a0HP\u00a0· /);
+    expect(rosterEntry(jack({ xp: 1e6 }), NOW).bonus).toBe(levelText(levelOf(1e6).level));
   });
 
   it('a defender on patrol says where and how long is left', () => {

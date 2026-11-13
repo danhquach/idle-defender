@@ -16,7 +16,7 @@ import {
 import { SQUAD_CARDS } from './hordeonly.ts';
 import { createRng } from './rng.ts';
 import { answerOffer } from './sim.ts';
-import { NO_STATS } from './stats.ts';
+import { xpForLevel } from './stats.ts';
 import { enemy, setup } from './testing.ts';
 
 const CRIT_CARDS = [
@@ -25,9 +25,9 @@ const CRIT_CARDS = [
 ] as const satisfies readonly UpgradeId[];
 
 /** Horde 1 with nothing left to spawn and defender a about to fire at a tough enemy. */
-function firing(seed: number, mind = 0): HordeState {
+function firing(seed: number, rank = 1): HordeState {
   const s = newHorde(1, setup());
-  if (mind > 0) s.defenders[0]!.stats = { ...NO_STATS, mind };
+  s.defenders[0]!.xp = xpForLevel(rank);
   s.toSpawn = 0;
   s.rng = { s: seed };
   s.defenders[0]!.nextShotAt = 0;
@@ -46,10 +46,10 @@ function picked(s: HordeState, id: UpgradeId, times: number): HordeState {
 }
 
 /** Defender a's first shot's damage on each seed, holding `cards` (id → level). */
-function firstShots(cards: Partial<Record<UpgradeId, number>>, seeds = 2000, mind = 0): number[] {
+function firstShots(cards: Partial<Record<UpgradeId, number>>, seeds = 2000, rank = 1): number[] {
   const out: number[] = [];
   for (let seed = 1; seed <= seeds; seed++) {
-    let s = firing(seed, mind);
+    let s = firing(seed, rank);
     for (const [id, lv] of Object.entries(cards)) s = picked(s, id as UpgradeId, lv);
     const b = tick(s, STEP).bullets.find((x) => x.owner === 'a');
     if (!b) throw new Error(`seed ${seed}: no shot`);
@@ -120,16 +120,16 @@ describe('crit cards (ID-130)', () => {
   });
 
   it('Hollow Points is offered only while the squad can crit', () => {
-    // Plain pistol survivors with no Sharp Mind never crit.
+    // Plain level-1 pistol survivors never crit.
     const s = newHorde(1, setup());
     for (const d of s.defenders) {
       d.plain = true;
-      delete d.stats;
+      delete d.xp;
     }
     expect(squadCanCrit(s)).toBe(false);
     expect(eligible(s, 'hollow-point-rounds')).toBe(false);
     expect(eligible(s, 'aim-for-the-head')).toBe(true);
-    // Any crit source puts it in: Aim for the Head, a gun with crit of its own, or Sharp Mind.
+    // Any crit source puts it in: Aim for the Head, a gun with crit of its own, or a level past 1.
     // The Carbine, LMG, Sniper rifle and Assault Rifle have crit of their own (ID-135).
     expect(eligible(picked(s, 'aim-for-the-head', 1), 'hollow-point-rounds')).toBe(true);
     const withGun = (base: 'rifle' | 'lmg' | 'sniper' | 'assault') => {
@@ -144,9 +144,9 @@ describe('crit cards (ID-130)', () => {
     for (const base of ['rifle', 'lmg', 'sniper', 'assault'] as const) {
       expect(eligible(withGun(base), 'hollow-point-rounds'), base).toBe(true);
     }
-    const mind = structuredClone(s);
-    mind.defenders[0]!.stats = { ...NO_STATS, mind: 10 };
-    expect(eligible(mind, 'hollow-point-rounds')).toBe(true);
+    const levelled = structuredClone(s);
+    levelled.defenders[0]!.xp = xpForLevel(2);
+    expect(eligible(levelled, 'hollow-point-rounds')).toBe(true);
   });
 
   it('add nothing when not held', () => {
@@ -184,10 +184,10 @@ describe('crit cards (ID-130)', () => {
     }
   });
 
-  it('the two multiply: with Sharp Mind, both at max gain more than the two gains alone added', () => {
+  it('the two multiply: with a levelled survivor, both at max gain more than the two gains alone added', () => {
     const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-    // Sharp Mind gives a real crit of its own, so each card alone gains something.
-    const shots = (cards: Partial<Record<UpgradeId, number>>) => mean(firstShots(cards, 1000, 30));
+    // The level gives a real crit of its own (ID-146), so each card alone gains something.
+    const shots = (cards: Partial<Record<UpgradeId, number>>) => mean(firstShots(cards, 1000, 31));
     const none = shots({});
     const aim = shots({ 'aim-for-the-head': 3 }) - none;
     const hollow = shots({ 'hollow-point-rounds': 3 }) - none;
@@ -196,7 +196,7 @@ describe('crit cards (ID-130)', () => {
     expect(hollow).toBeGreaterThan(0);
     // Expected hit = 1 + chance × (multiplier − 1): the cross term is Aim's chance × Hollow's
     // damage (0.15 × 0.75 of a hit), well clear of 1000 seeds' noise.
-    expect(both - aim - hollow).toBeGreaterThan(0.05 * plainHit(firstShots({}, 50, 30)));
+    expect(both - aim - hollow).toBeGreaterThan(0.05 * plainHit(firstShots({}, 50, 31)));
   });
 });
 

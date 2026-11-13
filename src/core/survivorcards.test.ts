@@ -11,7 +11,7 @@ import {
   survivorHurt,
 } from './cards.ts';
 import { createRng } from './rng.ts';
-import { CARD, CARD_MAX_LEVEL, ENEMIES, SPEWER, STAT_EFFECT, STEP } from './data.ts';
+import { ARMOUR_FLOOR, CARD, CARD_MAX_LEVEL, ENEMIES, SPEWER, STEP } from './data.ts';
 import {
   cardArmour,
   cardFirstAid,
@@ -21,7 +21,7 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import { SQUAD_CARDS } from './hordeonly.ts';
-import { damageTaken, NO_STATS } from './stats.ts';
+import { damageTaken, xpForLevel } from './stats.ts';
 import { enemy, setup } from './testing.ts';
 
 const SURVIVOR_CARDS = ['kevlar-vests', 'first-aid-kits'] as const satisfies readonly UpgradeId[];
@@ -36,18 +36,18 @@ function picked(s: HordeState, id: UpgradeId, times: number): HordeState {
   return t;
 }
 
-/** Horde 1 with nothing to spawn and defender a alone on the field, with `instinct` points. */
-function alone(instinct = 0): HordeState {
+/** Horde 1 with nothing to spawn and defender a alone on the field, at survivor level `rank`. */
+function alone(rank = 1): HordeState {
   const s = newHorde(1, setup());
   s.toSpawn = 0;
   s.defenders = s.defenders.slice(0, 1);
-  s.defenders[0]!.stats = { ...NO_STATS, instinct };
+  s.defenders[0]!.xp = xpForLevel(rank);
   return s;
 }
 
 /** HP defender a loses to one hit from a `kind` in the camp beside them, holding Kevlar at `level` (0: none). */
-function hitBy(kind: 'shambler' | 'brute', level: number, instinct = 0): number {
-  let s = alone(instinct);
+function hitBy(kind: 'shambler' | 'brute', level: number, rank = 1): number {
+  let s = alone(rank);
   if (level > 0) s = picked(s, 'kevlar-vests', level);
   const a = s.defenders[0]!;
   enemy(s, { kind, x: a.x, y: a.y, hp: 1e9, maxHp: 1e9, inCamp: true });
@@ -174,7 +174,7 @@ describe('survivor cards (ID-131)', () => {
     expect(hitBy('shambler', 1)).toBeCloseTo(shambler - 1, 9);
     expect(hitBy('shambler', 2)).toBeCloseTo(shambler - 2, 9);
     // 5 − 3 = 2 is under half the hit: the floor keeps 2.5.
-    expect(hitBy('shambler', 3)).toBeCloseTo(shambler * STAT_EFFECT.armourFloor, 9);
+    expect(hitBy('shambler', 3)).toBeCloseTo(shambler * ARMOUR_FLOOR, 9);
     expect(hitBy('brute', 3)).toBeCloseTo(ENEMIES.brute.damage - 3, 9);
   });
 
@@ -187,22 +187,19 @@ describe('survivor cards (ID-131)', () => {
       const t = tick(s, STEP);
       expect(t.defenders[0]!.hitBy, `Lv ${level}`).toBe('spewer');
       const spit = ENEMIES.spewer.damage;
-      const want = Math.max(
-        spit * STAT_EFFECT.armourFloor,
-        spit - (level ? CARD.armour[level - 1]! : 0),
-      );
+      const want = Math.max(spit * ARMOUR_FLOOR, spit - (level ? CARD.armour[level - 1]! : 0));
       expect(a.hp - t.defenders[0]!.hp, `Lv ${level}`).toBeCloseTo(want, 9);
     }
   });
 
-  it('Kevlar Vests stacks with Instinct’s armour', () => {
-    const instinct = 40;
-    const own = ENEMIES.brute.damage - hitBy('brute', 0, instinct);
+  it('Kevlar Vests stacks with the level’s armour (ID-146)', () => {
+    const rank = 21;
+    const own = ENEMIES.brute.damage - hitBy('brute', 0, rank);
     expect(own).toBeGreaterThan(0);
-    expect(hitBy('brute', 2, instinct)).toBeCloseTo(ENEMIES.brute.damage - own - 2, 9);
+    expect(hitBy('brute', 2, rank)).toBeCloseTo(ENEMIES.brute.damage - own - 2, 9);
     // The same sum the shared helper gives.
-    const d = alone(instinct).defenders[0]!;
-    expect(hitBy('brute', 2, instinct)).toBeCloseTo(damageTaken(d, ENEMIES.brute.damage, 2), 9);
+    const d = alone(rank).defenders[0]!;
+    expect(hitBy('brute', 2, rank)).toBeCloseTo(damageTaken(d, ENEMIES.brute.damage, 2), 9);
   });
 
   it('First Aid Kits: each level heals its share of max HP a second, up to max', () => {

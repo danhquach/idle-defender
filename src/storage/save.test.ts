@@ -57,7 +57,6 @@ import {
   preCars,
   preStats,
   preSurvivors,
-  refunded,
 } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
@@ -424,63 +423,10 @@ describe('save', () => {
     ).toBeNull();
   });
 
-  it('round-trips stats, and loads a save from before stats with all 0', () => {
+  it('round-trips XP, the level and its bonus coming from it (ID-146)', () => {
     const g = played();
     g.roster[1]!.xp = 75;
-    // Level 3: 2 points today, and 4 banked from an older save (ID-096).
-    g.roster[1]!.banked = 4;
-    g.roster[1]!.stats = { instinct: 1, agility: 3, mind: 2, tinker: 0 };
     expect(decodeSave(encodeSave(g, NOW))).toEqual({ savedAt: NOW, game: g });
-    const old = hostile((s) => {
-      for (const d of s.game.roster) delete d.stats;
-    }) as Loose;
-    expect(old.game.roster.map((d: Loose) => d.stats)).toEqual(
-      played().roster.map(() => ({ instinct: 0, agility: 0, mind: 0, tinker: 0 })),
-    );
-  });
-
-  it('refuses hostile stats', () => {
-    const at = (change: (stats: Loose) => void, xp = 75) =>
-      hostile((s) => {
-        s.game.roster[0].xp = xp;
-        change(s.game.roster[0].stats);
-      });
-    expect(at(() => {})).not.toBeNull();
-    expect(at((t) => (t.mind = 2))).not.toBeNull(); // level 3: exactly the 2 points earned
-    expect(at((t) => (t.mind = 3))).toBeNull(); // more than earned
-    expect(at((t) => Object.assign(t, { mind: 2, agility: 2, tinker: 2, instinct: 1 }))).toBeNull();
-    expect(at((t) => (t.mind = 1), 24)).toBeNull(); // level 1 has none
-    expect(at((t) => (t.mind = -1))).toBeNull();
-    expect(at((t) => (t.mind = 0.5))).toBeNull();
-    expect(at((t) => (t.mind = '1'))).toBeNull();
-    expect(at((t) => (t.mind = 1e13), 1e12)).toBeNull();
-    expect(at((t) => (t.luck = 1))).toBeNull();
-    expect(at((t) => delete t.instinct)).toBeNull();
-    expect(hostile((s) => (s.game.roster[0].stats = null))).toBeNull();
-    expect(hostile((s) => (s.game.roster[0].stats = [0, 0, 0, 0]))).toBeNull();
-    expect(hostile((s) => (s.game.roster[0].stats = 'aim'))).toBeNull();
-    // The old shape only for the whole roster: one defender without stats among others is refused.
-    expect(hostile((s) => delete s.game.roster[0].stats)).toBeNull();
-    expect(hostile((s) => (s.game.roster[0].level = 9))).toBeNull();
-    // The old shape is exact too: no extra key, no __proto__.
-    const old = (change: (d: Loose) => void) =>
-      hostile((s) => {
-        for (const d of s.game.roster) delete d.stats;
-        change(s.game.roster[0]);
-      });
-    expect(old(() => {})).not.toBeNull();
-    expect(old((d) => (d.level = 9))).toBeNull();
-    const oldRaw = encodeSave(played(), NOW)
-      .replace(/,"stats":\{[^}]*\}/g, '')
-      .replace('"xp"', '"__proto__":{"polluted":1},"xp"');
-    expect(oldRaw).not.toContain('"stats"');
-    expect(decodeSave(oldRaw)).toBeNull();
-    // Overspent at scale: the earned-points check, not the per-stat cap, refuses it.
-    expect(at((t) => (t.mind = 282_842 + 1), 1e12)).toBeNull();
-    expect(at((t) => (t.mind = 282_842), 1e12)).not.toBeNull();
-    const raw = encodeSave(played(), NOW).replace('"mind"', '"__proto__":{"polluted":1},"mind"');
-    expect(decodeSave(raw)).toBeNull();
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
   it('accepts the edges the rules allow', () => {
@@ -1135,7 +1081,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 17, '1', '16', 1.5, null]) {
+    for (const v of [0, 18, '1', '17', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1385,7 +1331,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(16);
+    expect(SAVE_VERSION).toBe(17);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1950,27 +1896,33 @@ describe('save: survivors (ID-032)', () => {
     }
   });
 
-  it('a survivor waiting holds banked points only within what the old rate gave (ID-096)', () => {
+  it('a survivor waiting holds no stats or banked points in a current save (ID-146)', () => {
     const offer = (x: Loose) => x.camp.offers[0].survivor;
-    // The level-3 offer could have banked at most 4.
-    const ok = changed((x) => (offer(x).banked = 4)) as Loose;
-    expect(ok.game.camp.offers[0].survivor.banked).toBe(4);
-    for (const bad of [5, 0, -1, 1.5, 1e9, '4', null, [4], true]) {
-      expect(
-        changed((x) => (offer(x).banked = bad)),
-        String(bad),
-      ).toBeNull();
-    }
-    // A level-1 survivor from a patrol has nothing to bank.
+    expect(changed((x) => (offer(x).banked = 4))).toBeNull();
+    expect(
+      changed((x) => (offer(x).stats = { instinct: 0, agility: 0, mind: 0, tinker: 0 })),
+    ).toBeNull();
     expect(changed((x) => (x.reports[0].survivors[0].banked = 1))).toBeNull();
-    // A v13 save never held the key, on a survivor either.
+    // A v13 save's survivor may hold them, and they are dropped.
     const v13 = JSON.parse(encodeSave(joined(), NOW));
     v13.v = 13;
     delete v13.game.farm;
     delete v13.game.skillPick;
-    expect(decodeSave(JSON.stringify(v13))).not.toBeNull();
     offer(v13.game).banked = 4;
-    expect(decodeSave(JSON.stringify(v13))).toBeNull();
+    offer(v13.game).stats = { instinct: 2, agility: 0, mind: 0, tinker: 0 };
+    const loaded = decodeSave(JSON.stringify(v13))!;
+    expect(loaded.game.camp.offers[0]!.survivor).toEqual(joined().camp.offers[0]!.survivor);
+    // Hostile values there are never read either, on a camp offer or a report survivor.
+    for (const bad of [null, -1, 1e300, 'x'.repeat(1000), [1], { __proto__: 1, mind: 1e9 }]) {
+      offer(v13.game).stats = bad;
+      offer(v13.game).banked = bad;
+      v13.game.reports[0].survivors[0].stats = bad;
+      const back = decodeSave(JSON.stringify(v13))!;
+      expect(back.game.camp.offers[0]!.survivor, JSON.stringify(bad)).toEqual(
+        joined().camp.offers[0]!.survivor,
+      );
+      expect(back.game.reports[0]!.survivors).toEqual(joined().reports[0]!.survivors);
+    }
   });
 
   it('round-trips survivors waiting and those who joined', () => {
@@ -1979,47 +1931,16 @@ describe('save: survivors (ID-032)', () => {
     expect(changed((g) => (g.camp.offers[0].picks = []))).not.toBeNull();
   });
 
-  it('a v12 save refunds survivors waiting too, and checks their old stats (ID-084)', () => {
+  it('a v12 save drops survivors’ old stats too, whatever they hold (ID-146)', () => {
     const g = joined();
-    expect(g.camp.offers[0]!.survivor!.stats).not.toEqual(
-      refunded(g).camp.offers[0]!.survivor!.stats,
-    );
     const v12 = (change: (game: Loose) => void = () => {}) => {
       const game = preStats(g) as Loose;
       change(game);
       return decodeSave(JSON.stringify({ v: 12, savedAt: NOW, game }));
     };
-    expect(v12()).toEqual({ game: refunded(g), savedAt: NOW, refunded: true });
-    // Overspent, new keys, or a prototype key on a camp-offer or report survivor: refused.
-    expect(v12((x) => (x.camp.offers[0].survivor.stats.aim = 99))).toBeNull();
-    expect(v12((x) => (x.reports[0].survivors[0].stats.grit = 1))).toBeNull(); // level 1 has none
-    expect(
-      v12(
-        (x) => (x.reports[0].survivors[0].stats = { instinct: 0, agility: 0, mind: 0, tinker: 0 }),
-      ),
-    ).toBeNull();
-    const proto = JSON.stringify({ v: 12, savedAt: NOW, game: preStats(g) }).replace(
-      /("survivor":\{[^}]*?"stats":)\{"aim"/,
-      '$1{"__proto__":{"polluted":1},"aim"',
-    );
-    expect(proto).toContain('"__proto__"');
-    expect(decodeSave(proto)).toBeNull();
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-  });
-
-  it('points in Tinker on a survivor waiting are refunded, never past what they earned (ID-084)', () => {
-    const offer = changed(
-      (x) => (x.camp.offers[0].survivor.stats = { instinct: 0, agility: 0, mind: 0, tinker: 1 }),
-    ) as Loose;
-    expect(offer.refunded).toBe(true);
-    expect(offer.game.camp.offers[0].survivor.stats).toEqual({
-      instinct: 0,
-      agility: 0,
-      mind: 0,
-      tinker: 0,
-    });
-    // A level-1 survivor from a patrol has earned none, so even one in Tinker is refused.
-    expect(changed((x) => (x.reports[0].survivors[0].stats.tinker = 1))).toBeNull();
+    expect(v12()).toEqual({ game: g, savedAt: NOW, reworked: true });
+    expect(v12((x) => (x.camp.offers[0].survivor.stats.aim = 99))?.game).toEqual(g);
+    expect(v12((x) => (x.reports[0].survivors[0].stats = 'x'))?.game).toEqual(g);
   });
 
   it('loads a v8 save with no survivors and its offers as bare picks, and refuses mixed shapes', () => {
@@ -2030,7 +1951,7 @@ describe('save: survivors (ID-032)', () => {
     };
     const v8 = preSurvivors(plain);
     const old = decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: v8 }))?.game;
-    expect(old).toEqual(refunded(plain));
+    expect(old).toEqual(plain);
     // A v8 save never held survivors; a v9 one must.
     expect(
       decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: JSON.parse(encodeSave(g, NOW)).game })),
@@ -2066,7 +1987,6 @@ describe('save: survivors (ID-032)', () => {
       ['weapon uid not theirs', (g) => (report(g).weapon.uid = 's7-1')],
       ['XP between levels', (g) => (report(g).xp += 1)],
       ['level above any tier', (g) => (report(g).xp = xpForLevel(6))],
-      ['points not earned', (g) => (report(g).stats.grit = 99)],
       // Patrol 7 went to the gas station (tier 1).
       [
         'level above the tier',
@@ -2081,7 +2001,7 @@ describe('save: survivors (ID-032)', () => {
       ['look-alike name', (g) => (report(g).name = '\u0410va')],
       ['oversized name', (g) => (report(g).name = 'A'.repeat(25))],
       ['extra key', (g) => (report(g).extra = 1)],
-      ['missing key', (g) => delete report(g).stats],
+      ['missing key', (g) => delete report(g).xp],
       [
         'three in a report',
         (g) =>
@@ -2256,8 +2176,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 16 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, then the skill pick came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(16);
+  it('is version 17 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, the skill pick, then no stat points came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(17);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {

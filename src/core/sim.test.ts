@@ -13,11 +13,9 @@ import {
   playHorde,
   playSquadHorde,
   repairWhatYouCan,
-  spendAll,
   summarise,
 } from './sim.ts';
 import { SEGMENTS, START_BASE, stockOf } from './data.ts';
-import { NO_STATS } from './stats.ts';
 import { loadoutFrom } from './loadout.ts';
 import { gunPower, rollWeapon } from './armoury.ts';
 import { recruit } from './camp.ts';
@@ -185,28 +183,6 @@ describe('nextHorde', () => {
 
   it('starts at once with everyone fit', () => {
     expect(nextHorde(newGame(), 100).now).toBe(100);
-  });
-});
-
-describe('spendAll', () => {
-  it("puts every point into the job's stat, and leaves a game with none alone", () => {
-    const g = newGame();
-    g.roster[0]!.xp = 150; // Bob, a Gunner, level 4: 3 points
-    g.roster[1]!.xp = 525; // Jack, a Ripper, level 7: 6 points, 2 already in Instinct
-    g.roster[1]!.stats = { ...NO_STATS, instinct: 2 };
-    g.roster[2]!.xp = 150; // John, an Engineer, level 4: 3 points
-    const after = spendAll(g);
-    expect(after.roster.map((d) => d.stats)).toEqual([
-      { ...NO_STATS, mind: 3 },
-      { ...NO_STATS, instinct: 2, mind: 4 },
-      { ...NO_STATS, agility: 3 },
-    ]);
-    // A plain survivor (horde-only, ID-066) puts theirs in Sharp Mind.
-    const squad = newGame('horde');
-    squad.roster[0]!.xp = 150;
-    expect(spendAll(squad).roster[0]!.stats).toEqual({ ...NO_STATS, mind: 3 });
-    expect(g.roster[0]!.stats).toEqual(NO_STATS);
-    expect(spendAll(newGame())).toEqual(newGame());
   });
 });
 

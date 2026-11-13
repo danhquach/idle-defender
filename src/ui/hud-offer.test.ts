@@ -14,7 +14,7 @@ const noop = () => {};
 function mount(onChoose: (i: number) => void = noop, onReroll: () => void = noop) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
-  const hud = createHud(root, onChoose, noop, noop, noop, noop, noop, noop, onReroll, noop, noop);
+  const hud = createHud(root, onChoose, noop, noop, noop, noop, noop, onReroll, noop, noop);
   const panel = root.querySelector<HTMLElement>('.hud-cards')!;
   const cards = () => [...panel.querySelectorAll<HTMLButtonElement>('.hud-card')];
   return { hud, panel, cards };

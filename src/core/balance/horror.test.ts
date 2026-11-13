@@ -5,7 +5,7 @@ import { postUsable } from '../cards.ts';
 import { HORROR, type HorrorAbility, stockOf } from '../data.ts';
 import { hordeXp, startHorde, type GameState } from '../game.ts';
 import { standing, tick, type HordeState } from '../horde.ts';
-import { answerOffer, opening, spendAll } from '../sim.ts';
+import { answerOffer, opening } from '../sim.ts';
 import { cacheFor } from './cache.ts';
 import { bareGame, SEEDS } from './shared.ts';
 
@@ -13,17 +13,17 @@ const keep = cacheFor(import.meta.url);
 
 describe('the Mutated Horror (ID-024)', () => {
   // A Horde 10 reference camp: the starting wall in concrete, every wall-walk spot
-  // built, and the starter roster with the XP of winning Hordes 1–9, stat points spent.
+  // built, and the starter roster with the XP of winning Hordes 1–9 (the level bonus with it, ID-146).
   // The Horror alone (its last wave's crowd left out), with the whole squad posted from
   // the start, as recruit cards would have done by then.
   const veteranXp = Array.from({ length: 9 }, (_, i) => hordeXp(i + 1)).reduce((a, b) => a + b);
   function camp(lined: boolean, squad: number): GameState {
-    let game = spendAll({
+    let game: GameState = {
       ...bareGame(10),
       roster: bareGame(10)
         .roster.slice(0, squad)
         .map((d) => ({ ...d, xp: veteranXp })),
-    });
+    };
     if (lined) {
       const l = lineWall(game.base, stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }), 0);
       if (!l.ok) throw new Error(l.reason);

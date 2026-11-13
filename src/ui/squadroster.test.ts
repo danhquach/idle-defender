@@ -1,52 +1,26 @@
 // @vitest-environment jsdom
-// ID-086, ID-108: the Roster — a top-bar button (badge = survivors with points to spend)
-// opens one dialog: squad tabs, the selected survivor with their gun slot, and one panel,
-// Stats (a + tap spends at once, ID-126; Undo takes back what this opening spent) or Choose
-// a gun (tiles, a comparison with the gun held, one Equip). Keyboard and touch alike.
+// ID-086, ID-108, ID-146: the Roster: a top-bar button opens one dialog: squad tabs, the
+// selected survivor with their gun slot, and one panel, their level and what it gives or
+// Choose a gun (tiles, a comparison with the gun held, one Equip). No stat points anywhere.
+// Keyboard and touch alike.
 import { describe, expect, it, vi } from 'vitest';
 import { rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import {
-  DEFENDER_HP,
-  STASH_CAP,
-  type Rarity,
-  type Stat,
-  type Stats,
-  type WeaponId,
-} from '../core/data.ts';
-import {
-  newGame,
-  spendPoint,
-  unspendPoint,
-  type GameState,
-  type RosterDefender,
-} from '../core/game.ts';
+import { DEFENDER_HP, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
+import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { bestGuns, equipGun, startSquadHorde } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
 import { maxHpOf, xpForLevel } from '../core/stats.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { ART_URLS, avatarOf, GUNNER_LOOKS, lookOf } from './sprites.ts';
-import {
-  createRoster,
-  pointsBadge,
-  rosterTiles,
-  SPEND_LATER_NOTE,
-  type RosterOptions,
-} from './squadroster.ts';
+import { LEVEL_ONE_TEXT, levelText } from './statlines.ts';
+import { createRoster, rosterTiles, type RosterOptions } from './squadroster.ts';
 
 const NOW = 1_800_000_000_000;
-const stats = (s: Partial<Stats> = {}): Stats => ({
-  instinct: 0,
-  agility: 0,
-  mind: 0,
-  tinker: 0,
-  ...s,
-});
-/** Survivor `n` at `level`, with `s` spent. */
-const at = (n: number, level: number, s: Partial<Stats> = {}): RosterDefender => ({
+/** Survivor `n` at `level`. */
+const at = (n: number, level: number): RosterDefender => ({
   ...recruit(n),
   xp: xpForLevel(level),
-  stats: stats(s),
 });
 const gun = (uid: string, base: WeaponId, rarity: Rarity): OwnedWeapon => ({
   uid,
@@ -61,10 +35,10 @@ function camp(roster: RosterDefender[], armoury: OwnedWeapon[] = []): GameState 
 }
 
 describe('the Roster tabs (ID-086)', () => {
-  it('lists every survivor with avatar, name, level, full HP, gun and unspent points', () => {
+  it('lists every survivor with avatar, name, level, full HP and gun', () => {
     const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
     const ivan = {
-      ...at(1, 7, { instinct: 2 }),
+      ...at(1, 7),
       loadout: { ...recruit(1).loadout, primary: relic },
     };
     const tiles = rosterTiles(camp([ivan, at(2, 1)]), NOW, null);
@@ -77,9 +51,9 @@ describe('the Roster tabs (ID-086)', () => {
       down: false,
       gun: 'Relic Carbine',
       rarity: 'relic',
-      points: 4,
     });
-    expect(tiles[1]).toMatchObject({ level: 1, gun: 'Pistol', rarity: 'common', points: 0 });
+    expect(tiles[0]).not.toHaveProperty('points');
+    expect(tiles[1]).toMatchObject({ level: 1, gun: 'Pistol', rarity: 'common' });
     expect(tiles[1]!.health).toBe(`HP ${DEFENDER_HP}/${DEFENDER_HP}`);
   });
 
@@ -111,31 +85,14 @@ describe('the Roster tabs (ID-086)', () => {
     expect(rosterTiles(camp([d]), NOW, null)[0]).toMatchObject({ health: 'Injured', down: true });
     expect(rosterTiles(camp([d]), NOW + 60_000, null)[0]!.down).toBe(false);
   });
-
-  it('the badge counts survivors with points to spend, not the points', () => {
-    expect(pointsBadge(camp([at(1, 4), at(2, 1), at(3, 2)]))).toBe(2);
-    expect(pointsBadge(camp([at(1, 1)]))).toBe(0);
-    expect(pointsBadge(camp([at(1, 2, { mind: 1 })]))).toBe(0);
-  });
 });
 
-/** The Roster mounted over `game`; spending, equipping and the best-guns call work on it as the app does. */
-function mount(game: GameState, over: { canSpend?: boolean; canGear?: boolean } = {}) {
+/** The Roster mounted over `game`; equipping and the best-guns call work on it as the app does. */
+function mount(game: GameState, over: { canGear?: boolean } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   let g = game;
-  const canSpend = over.canSpend ?? true;
   const canGear = over.canGear ?? true;
-  const onSpend = vi.fn((id: string, stat: Stat) => {
-    const r = spendPoint(g, id, stat);
-    if (r.ok) g = r.game;
-    roster.refresh();
-  });
-  const onUnspend = vi.fn((id: string, stat: Stat) => {
-    const r = unspendPoint(g, id, stat);
-    if (r.ok) g = r.game;
-    roster.refresh();
-  });
   const onEquip = vi.fn((id: string, choice: string) => {
     const r = equipGun(g, id, choice);
     if (!r.ok) return r;
@@ -150,9 +107,7 @@ function mount(game: GameState, over: { canSpend?: boolean; canGear?: boolean } 
     return { ok: true as const, moves: r.moves };
   });
   const opts: RosterOptions = {
-    state: () => ({ game: g, fight: null, canSpend, canGear, resumes: false }),
-    onSpend,
-    onUnspend,
+    state: () => ({ game: g, fight: null, canGear, resumes: false }),
     onEquip,
     onBestGuns,
   };
@@ -165,19 +120,15 @@ function mount(game: GameState, over: { canSpend?: boolean; canGear?: boolean } 
   const q = <T extends HTMLElement = HTMLButtonElement>(sel: string): T =>
     scrim.querySelector<T>(sel)!;
   const key = (k: string) => q(`[data-key="${k}"]`);
-  const plus = (stat: Stat, id = 'recruit-1') => key(`add:${id}:${stat}`);
   return {
     root,
     roster,
     scrim,
-    onSpend,
-    onUnspend,
     onEquip,
     onBestGuns,
     press,
     q,
     key,
-    plus,
     game: () => g,
     set: (next: GameState) => {
       g = next;
@@ -189,36 +140,25 @@ function mount(game: GameState, over: { canSpend?: boolean; canGear?: boolean } 
 }
 
 describe('the Roster button and tabs (ID-108)', () => {
-  it('the button’s badge counts survivors with points and follows the camp while shut', () => {
-    const m = mount(camp([at(1, 4), at(2, 3), at(3, 1)]));
-    const dot = m.button.querySelector<HTMLElement>('.roster-dot')!;
-    expect(dot.hidden).toBe(false);
-    expect(dot.textContent).toBe('2');
-    // Read out too, so the badge isn't a bare number.
-    expect(m.button.textContent).toContain('2 with points to spend');
-    m.set(camp([at(1, 4, { mind: 3 }), at(2, 3, { agility: 2 }), at(3, 1)]));
-    expect(dot.hidden).toBe(true);
-    expect(m.button.textContent).toBe('Roster');
-  });
-
-  it('opens on the first survivor with points; every survivor is a tab with a points badge', () => {
+  it('the button has no points badge and opens on the first survivor; every survivor is a tab', () => {
     const m = mount(camp([at(1, 1), at(2, 4), at(3, 2)]));
+    expect(m.button.querySelector('.roster-dot')).toBeNull();
+    expect(m.button.textContent).toBe('Roster');
     m.button.click();
     expect(m.scrim.hidden).toBe(false);
     expect(m.root.hasAttribute('inert')).toBe(true);
     const tabs = [...m.scrim.querySelectorAll<HTMLButtonElement>('.rv-tab')];
     expect(tabs).toHaveLength(3);
     expect(tabs.some((t) => t.hasAttribute('aria-pressed'))).toBe(false);
-    expect(tabs[1]!.getAttribute('aria-current')).toBe('true');
-    expect(tabs[0]!.hasAttribute('aria-current')).toBe(false);
-    expect(tabs[1]!.querySelector('.rv-badge')!.textContent).toBe('3');
-    expect(tabs[0]!.querySelector('.rv-badge')).toBeNull();
-    expect(tabs[1]!.getAttribute('aria-label')).toContain('3 points to spend');
+    expect(tabs[0]!.getAttribute('aria-current')).toBe('true');
+    expect(tabs[1]!.hasAttribute('aria-current')).toBe(false);
+    expect(m.scrim.querySelector('.rv-badge')).toBeNull();
+    expect(tabs[1]!.getAttribute('aria-label')).not.toContain('to spend');
     // The fight info stays compact: HP in the tab’s label and on the survivor row.
     expect(tabs[1]!.getAttribute('aria-label')).toContain('HP ');
-    expect(m.q('.rv-who-name').textContent).toBe(recruit(2).name);
+    expect(m.q('.rv-who-name').textContent).toBe(recruit(1).name);
     expect(tabs[0]!.querySelector('img')!.alt).toBe('');
-    expect(document.activeElement).toBe(tabs[1]);
+    expect(document.activeElement).toBe(tabs[0]);
   });
 
   it('a tab opens that survivor; a name on the squad screen opens them by id', () => {
@@ -247,12 +187,9 @@ describe('the Roster button and tabs (ID-108)', () => {
     expect(m.q('.rv-tab').title.startsWith(`${name}, level`)).toBe(true);
     expect(m.q('.rv-tab').getAttribute('aria-label')!.startsWith(`${name}, level`)).toBe(true);
     expect(m.q('.rv-who-name').textContent).toBe(name);
-    expect(m.plus('instinct').getAttribute('aria-label')).toContain(name);
-    // The status line after Best gun and after a spend: the name as text, nothing parsed.
+    // The status line after Best gun: the name as text, nothing parsed.
     m.q('.rv-best').click();
     expect(m.status()).toBe(`Equipped: ${name} → Military Carbine`);
-    m.plus('instinct').click();
-    expect(m.status()).toContain(name);
     expect(m.scrim.querySelector('.rv-status')!.children).toHaveLength(0);
     // The avatar and the gun icon: nothing the name made.
     expect(m.scrim.querySelectorAll('img').length).toBeLessThanOrEqual(3);
@@ -262,154 +199,47 @@ describe('the Roster button and tabs (ID-108)', () => {
   });
 });
 
-describe('Stats: a tap spends at once (ID-126)', () => {
-  it('+ spends the point now, through onSpend, and reads it out', () => {
-    const m = mount(camp([at(1, 4)]));
+describe('the level panel (ID-146)', () => {
+  it('shows the survivor’s level and what it gives, in one line', () => {
+    const m = mount(camp([at(1, 7)]));
     m.roster.open('recruit-1');
-    expect(m.q('.rv-left').textContent).toBe('3 to spend');
-    m.plus('agility').click();
-    expect(m.onSpend.mock.calls).toEqual([['recruit-1', 'agility']]);
-    expect(m.game().roster[0]!.stats.agility).toBe(1);
-    expect(m.q('.rv-left').textContent).toBe('2 to spend');
-    const row = m.plus('agility').closest('.rv-stat')!;
-    expect(row.querySelector('.rv-stat-ct')!.textContent).toBe('1');
-    expect(m.status()).toBe(`Agility 1 for ${recruit(1).name}. 2 points left.`);
-    expect(m.q('.rv-status').getAttribute('role')).toBe('status');
-    // The tab's badge counts what is left.
-    expect(m.q('.rv-tab .rv-badge').textContent).toBe('2');
+    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.q('.rv-level').textContent).toBe(levelText(7));
+    expect(m.q('.rv-level').textContent).toMatch(/^\+\d+\u00a0HP\u00a0· /);
+    expect(m.q('.rv-left').textContent).toMatch(/^\d+\/\d+ XP$/);
   });
 
-  it('there is no draft, no Confirm, no −, and closing asks nothing', () => {
-    const m = mount(camp([at(1, 4)]));
+  it('a level 1 survivor has no bonus yet', () => {
+    const m = mount(camp([at(1, 1)]));
     m.roster.open('recruit-1');
-    m.plus('mind').click();
-    expect(m.scrim.querySelector('[data-key="confirm"]')).toBeNull();
-    expect(m.scrim.querySelector('[data-key^="sub:"]')).toBeNull();
-    expect(m.scrim.querySelector('.rv-prompt')).toBeNull();
-    expect(m.scrim.textContent).not.toContain('Confirm');
-    m.press('Escape');
-    expect(m.scrim.hidden).toBe(true);
-    expect(m.game().roster[0]!.stats.mind).toBe(1);
-    m.roster.open('recruit-1');
-    m.plus('mind').click();
-    m.q('.rv-close').click();
-    expect(m.scrim.hidden).toBe(true);
-    expect(m.game().roster[0]!.stats.mind).toBe(2);
+    expect(m.q('.rv-level').textContent).toBe(LEVEL_ONE_TEXT);
   });
 
-  it('spent out: every + greys out, the keyboard goes to Undo, the status says none left', () => {
-    const m = mount(camp([at(1, 2)]));
+  it('follows the survivor shown and the camp as it changes', () => {
+    const m = mount(camp([at(1, 3), at(2, 9)]));
     m.roster.open('recruit-1');
-    m.plus('mind').focus();
-    m.plus('mind').click();
-    for (const s of ['instinct', 'agility', 'mind'] as const) expect(m.plus(s).disabled).toBe(true);
-    expect(document.activeElement).toBe(m.key('undo'));
-    expect(m.status()).toBe(`Sharp Mind 1 for ${recruit(1).name}. No points left.`);
-    expect(m.scrim.querySelector('.rv-tab .rv-badge')).toBeNull();
-  });
-
-  it('the effects read now → with one more point (grey)', () => {
-    const m = mount(camp([at(1, 4)]));
-    m.roster.open('recruit-1');
-    const fx = () => m.plus('agility').closest('.rv-stat')!.querySelector('.rv-fx')!;
-    expect(fx().textContent).toMatch(
-      /^Reload \d\.\d\d s → \d\.\d\d sFire rate \+\d+\.\d% → \+\d+\.\d%$/,
-    );
-    const one = fx().textContent;
-    m.plus('agility').click();
-    expect(fx().textContent).not.toBe(one);
-    // Tinker stays a locked row, with no buttons.
-    const locked = m.q('.rv-stat-locked');
-    expect(locked.textContent).toContain('Tinker');
-    expect(locked.querySelector('button')).toBeNull();
-  });
-
-  it('with no point to spend, the effects show only what the stat gives now', () => {
-    const m = mount(camp([at(1, 2, { agility: 1 })]));
-    m.roster.open('recruit-1');
-    const fx = m.plus('agility').closest('.rv-stat')!.querySelector('.rv-fx')!;
-    expect(fx.textContent).toMatch(/^Reload \d\.\d\d sFire rate \+\d+\.\d%$/);
-    expect(fx.querySelector('.rv-fx-to')).toBeNull();
-  });
-
-  it('a spend the camp refuses is neither read out nor undoable', () => {
-    const m = mount(camp([at(1, 4)]));
-    m.roster.open('recruit-1');
-    m.onSpend.mockImplementationOnce(() => {});
-    m.plus('mind').click();
-    expect(m.game().roster[0]!.stats.mind).toBe(0);
-    expect(m.status()).toBe('');
-    expect(m.key('undo').disabled).toBe(true);
-  });
-
-  it('every + reads its stat and survivor', () => {
-    const m = mount(camp([at(1, 4)]));
-    m.roster.open('recruit-1');
-    expect(m.plus('agility').getAttribute('aria-label')).toBe(
-      `Spend a point on Agility for ${recruit(1).name}, now 0`,
-    );
-  });
-
-  it('while points can’t be spent every + is disabled and says to spend between hordes', () => {
-    const m = mount(camp([at(1, 4)]), { canSpend: false });
-    m.roster.open('recruit-1');
-    for (const s of ['instinct', 'agility', 'mind'] as const) expect(m.plus(s).disabled).toBe(true);
-    m.plus('agility').click();
-    expect(m.onSpend).not.toHaveBeenCalled();
-    expect(m.scrim.textContent).toContain(SPEND_LATER_NOTE);
-  });
-
-  it('spent out: no note, and 0 to spend', () => {
-    const m = mount(camp([at(1, 2, { mind: 1 })]), { canSpend: false });
-    m.roster.open('recruit-1');
-    expect(m.scrim.textContent).not.toContain(SPEND_LATER_NOTE);
-    expect(m.q('.rv-left').textContent).toBe('0 to spend');
-  });
-});
-
-describe('Undo: points spent since it opened, between hordes (ID-126)', () => {
-  it('takes back this survivor’s points spent here, newest first, and says so', () => {
-    const m = mount(camp([at(1, 4), at(2, 3)]));
-    m.roster.open('recruit-1');
-    expect(m.key('undo').disabled).toBe(true);
-    m.plus('mind').click();
-    m.plus('instinct').click();
+    expect(m.q('.rv-level').textContent).toBe(levelText(3));
     m.q('.rv-tab[data-defender="recruit-2"]').click();
-    m.plus('agility', 'recruit-2').click();
-    m.q('.rv-tab[data-defender="recruit-1"]').click();
-    expect(m.key('undo').textContent).toBe('Undo 2');
-    m.key('undo').click();
-    expect(m.onUnspend.mock.calls).toEqual([
-      ['recruit-1', 'instinct'],
-      ['recruit-1', 'mind'],
-    ]);
-    expect(m.game().roster[0]!.stats).toMatchObject({ instinct: 0, mind: 0 });
-    // The other survivor's point stays.
-    expect(m.game().roster[1]!.stats.agility).toBe(1);
-    expect(m.status()).toBe(`Took back 2 points from ${recruit(1).name}. 3 points left.`);
-    expect(m.q('.rv-left').textContent).toBe('3 to spend');
-    expect(m.key('undo').disabled).toBe(true);
+    expect(m.q('.rv-level').textContent).toBe(levelText(9));
+    m.set(camp([at(1, 3), at(2, 12)]));
+    expect(m.q('.rv-level').textContent).toBe(levelText(12));
   });
 
-  it('points spent before it opened stay: Undo only knows this opening', () => {
-    const m = mount(camp([at(1, 4)]));
+  it('has no stat button, points count, badge, Undo or Tinker row', () => {
+    const m = mount(camp([at(1, 4), at(2, 2)]));
     m.roster.open('recruit-1');
-    m.plus('mind').click();
-    m.roster.close();
-    m.roster.open('recruit-1');
-    expect(m.key('undo').disabled).toBe(true);
-    m.key('undo').click();
-    expect(m.onUnspend).not.toHaveBeenCalled();
-    expect(m.game().roster[0]!.stats.mind).toBe(1);
-  });
-
-  it('in a fight there is no Undo: a point spent there stays spent', () => {
-    const m = mount(camp([at(1, 4)]), { canGear: false });
-    m.roster.open('recruit-1');
-    m.plus('mind').click();
-    expect(m.game().roster[0]!.stats.mind).toBe(1);
-    expect(m.scrim.querySelector('[data-key="undo"]')).toBeNull();
-    expect(m.q('.rv-hint').textContent).toContain('stays spent');
+    expect(
+      m.scrim.querySelector('[data-key^="add:"], [data-key="undo"], .rv-sb, .rv-stat'),
+    ).toBeNull();
+    expect(m.scrim.querySelector('.rv-badge, .roster-dot, .roster-badge')).toBeNull();
+    expect(m.scrim.textContent).not.toMatch(
+      /stat point|to spend|Undo|Instinct|Agility|Sharp Mind|Tinker|Spend points/,
+    );
+    // The same in a fight, where guns are locked.
+    const fight = mount(camp([at(1, 4)]), { canGear: false });
+    fight.roster.open('recruit-1');
+    expect(fight.scrim.querySelector('[data-key^="add:"], [data-key="undo"]')).toBeNull();
+    expect(fight.scrim.textContent).not.toMatch(/stat point|to spend|Undo/);
   });
 });
 
@@ -480,8 +310,8 @@ describe('Choose a gun (ID-108)', () => {
     expect(t[0]!.querySelector('.rv-d')!.getAttribute('data-kind')).toBe('up');
     expect(t[0]!.getAttribute('aria-label')).toMatch(/dmg\/s, \d+\.\d more dmg\/s than Pistol$/);
     // Slot, then the way back.
-    m.key('stats').click();
-    expect(m.q('.rv-ttl').textContent).toBe('Stats');
+    m.key('level').click();
+    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
     expect(document.activeElement).toBe(m.key('slot'));
   });
 
@@ -512,7 +342,7 @@ describe('Choose a gun (ID-108)', () => {
     expect(m.game().roster[0]!.loadout.primary).toMatchObject({ uid: 'g1' });
     expect(m.status()).toBe(`${recruit(1).name} now holds Lv 1 Common Pump Shotgun.`);
     // Back on Stats with the new gun in the slot, the keyboard on it.
-    expect(m.q('.rv-ttl').textContent).toBe('Stats');
+    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
     expect(m.key('slot').textContent).toContain('Common Pump Shotgun');
     expect(document.activeElement).toBe(m.key('slot'));
   });
@@ -593,12 +423,12 @@ describe('Choose a gun (ID-108)', () => {
     expect(m.game().roster[0]!.loadout.primary).toMatchObject({ uid: 'r1' });
   });
 
-  it('Esc on an open picker goes back to Stats first, then closes', () => {
+  it('Esc on an open picker goes back to Level first, then closes', () => {
     const m = picker();
     m.key('slot').click();
     m.press('Escape');
     expect(m.scrim.hidden).toBe(false);
-    expect(m.q('.rv-ttl').textContent).toBe('Stats');
+    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
     m.press('Escape');
     expect(m.scrim.hidden).toBe(true);
   });
@@ -610,11 +440,11 @@ describe('Choose a gun (ID-108)', () => {
     expect(m.scrim.textContent).toContain('No other gun to choose');
   });
 
-  it('a different survivor’s tab closes the picker back to Stats', () => {
+  it('a different survivor’s tab closes the picker back to Level', () => {
     const m = picker([at(1, 2), at(2, 2)]);
     m.key('slot').click();
     m.q('.rv-tab[data-defender="recruit-2"]').click();
-    expect(m.q('.rv-ttl').textContent).toBe('Stats');
+    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
   });
 
   it('in a fight the slot says to change guns between hordes, and nothing opens', () => {
@@ -623,7 +453,7 @@ describe('Choose a gun (ID-108)', () => {
     expect(slot.textContent).toContain(GUNS_WAIT);
     expect(slot.getAttribute('aria-disabled')).toBe('true');
     slot.click();
-    expect(m.q('.rv-ttl').textContent).toBe('Stats');
+    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
     expect(tiles(m)).toHaveLength(0);
     expect(m.key('best').disabled).toBe(true);
     expect(m.key('best').title).toBe(GUNS_WAIT);
@@ -654,20 +484,12 @@ describe('Best gun for everyone (ID-108)', () => {
     m.roster.open('recruit-1');
     m.key('slot').click();
     m.key('best').click();
-    expect(m.q('.rv-ttl').textContent).toBe('Stats');
+    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
     // The app refuses (a fight): its reason is shown.
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const refusing = createRoster(root, {
-      state: () => ({
-        game: camp([at(1, 1)]),
-        fight: null,
-        canSpend: true,
-        canGear: true,
-        resumes: false,
-      }),
-      onSpend: () => {},
-      onUnspend: () => {},
+      state: () => ({ game: camp([at(1, 1)]), fight: null, canGear: true, resumes: false }),
       onEquip: () => ({ ok: true }),
       onBestGuns: () => ({ ok: false, reason: GUNS_WAIT }),
     });

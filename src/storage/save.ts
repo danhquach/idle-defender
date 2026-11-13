@@ -75,7 +75,6 @@ import {
   SQUAD_CAP,
   STASH_CAP,
   SQUAD_SKILLS,
-  STATS,
   SURVIVOR,
   TIER_ORDER,
   TRAP_DURABILITY,
@@ -94,7 +93,6 @@ import {
   type PerkId,
   type ResearchId,
   type SkillId,
-  type Stats,
   type Stock,
   type Tier,
 } from '../core/data.ts';
@@ -121,20 +119,18 @@ import {
   type QueueId,
   type ResearchQueue,
 } from '../core/research.ts';
-import {
-  bankedPoints,
-  earnedPoints,
-  isLocked,
-  levelOf,
-  NO_STATS,
-  xpForLevel,
-} from '../core/stats.ts';
+import { levelOf, xpForLevel } from '../core/stats.ts';
 import { arr, fail, int, num, obj, oneOf, text, type Obj } from './validate.ts';
 
 export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 17 since levels give an all-round bonus (ID-146): no stat points. A v16 or older save's
+ * defenders and survivors waiting to join may hold `stats` (points spent) and `banked`;
+ * both are dropped as it loads, and each one's bonus comes from their level alone. When
+ * anyone was past level 1 the player gets a one-time note (`Save.reworked`).
+ *
  * 16 since skills in the horde-only build (ID-100): a v15 save has no `skillPick`, so it
  * loads with a new game's pick (`START_SKILLS`).
  *
@@ -151,7 +147,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  *
  * 13 since the stat rework (ID-084): a v12 save's stats are Aim, Might, Tech and Grit.
  * Every point spent there (a defender's, or a survivor's waiting to join) is refunded as
- * unspent points, with a one-time note (`Save.refunded`); a patrol out keeps a strength
+ * unspent points, with a one-time note (`Save.refunded`, now `reworked`); a patrol out keeps a strength
  * no higher than its party's today (stats no longer add to it).
  *
  * 12 since the horde-only build (ID-066): a v11 save has no reserve. Loaded into this
@@ -180,7 +176,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -244,23 +240,21 @@ export interface Save {
   savedAt: number;
   /** Set when a 5-row (v1) base was moved onto today's taller field. */
   grew?: true;
-  /** Set when spent stat points were refunded: an old save's (ID-084), or any in a locked stat. */
-  refunded?: true;
+  /** Set when an old save's stat points were dropped for the level bonus (ID-146). */
+  reworked?: true;
 }
 
 /**
- * How a save's stats read (ID-084): `legacy` for a v12 or older save (the old four stats,
- * refunded); `bank` for a v13 or older save (3 points a level, ID-096); `refunded` is set
- * by the readers when any spent point was given back.
+ * How a save's old stat points read: `legacy` for a v12 or older save (ID-084: a patrol's
+ * strength counted Grit); `points` for a v16 or older save, whose defenders and survivors
+ * may hold `stats` and `banked` (ID-146: dropped); `reworked` is set by the readers when
+ * anyone past level 1 had their points dropped.
  */
 interface StatsRead {
   legacy: boolean;
-  bank: boolean;
-  refunded: boolean;
+  points: boolean;
+  reworked: boolean;
 }
-
-/** The pre-ID-084 stats a v12 or older save holds. */
-const LEGACY_STATS = ['aim', 'might', 'tech', 'grit'] as const;
 
 /** The page's storage, or null where it is blocked (some private modes throw on access). */
 export function browserStorage(): SaveStorage | null {
@@ -331,7 +325,9 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
-  if (![SAVE_VERSION, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)) {
+  if (
+    ![SAVE_VERSION, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)
+  ) {
     fail('version');
   }
   const savedAt = int(o.savedAt, 0, MAX_TIME);
@@ -343,7 +339,7 @@ function readSave(v: unknown): Save {
   const reserve = ver >= 12;
   const farm = ver >= 15;
   const pick = ver >= 16;
-  const stats: StatsRead = { legacy: ver < 13, bank: ver < 14, refunded: false };
+  const stats: StatsRead = { legacy: ver < 13, points: ver < 17, reworked: false };
   const grid = ver === 1 ? V1_GRID : GRID;
   const game = readGame(
     o.game,
@@ -362,7 +358,7 @@ function readSave(v: unknown): Save {
     game,
     savedAt,
     ...(ver === 1 ? { grew: true as const } : {}),
-    ...(stats.refunded ? { refunded: true as const } : {}),
+    ...(stats.reworked ? { reworked: true as const } : {}),
   };
 }
 
@@ -861,50 +857,19 @@ function readPost(v: unknown, grid: Grid): BasePost {
 }
 
 /**
- * Points spent per stat: no more in all than lifetime `xp` has earned. An old save's
- * (`read.legacy`, the pre-ID-084 four) are checked the same way, then all refunded; a
- * point in a locked stat (Tinker, which no build lets a player spend) is refunded too.
- * `banked` (ID-096) counts as earned.
+ * The keys an old save's defender or survivor `v` may also hold (ID-146): `stats` and
+ * `banked` in a v16 or older save, dropped as it loads (never read). Marks the save
+ * `reworked` when someone at `xp` past level 1 had them.
  */
-function readStats(v: unknown, xp: number, banked: number, read: StatsRead): Stats {
-  const keys: readonly string[] = read.legacy ? LEGACY_STATS : STATS;
-  const o = obj(v, keys);
-  let spent = 0;
-  for (const k of keys) spent += int(o[k], 0, MAX_COUNT);
-  if (spent > earnedPoints(xp, banked)) fail('points not earned');
-  const stats = { ...NO_STATS };
-  if (read.legacy) {
-    if (spent > 0) read.refunded = true;
-    return stats;
-  }
-  for (const s of STATS) {
-    const n = o[s] as number;
-    if (isLocked(s)) {
-      if (n > 0) read.refunded = true;
-    } else stats[s] = n;
-  }
-  return stats;
+function oldPointKeys(v: unknown, read: StatsRead): string[] {
+  if (!read.points || typeof v !== 'object' || v === null) return [];
+  return ['stats', 'banked'].filter((k) => Object.hasOwn(v, k));
 }
 
-/** Whether `v` (a defender or survivor) carries a `banked` key; only a v14 save may (ID-096). */
-const hasBanked = (v: unknown, read: StatsRead): boolean =>
-  !read.bank && typeof v === 'object' && v !== null && Object.hasOwn(v, 'banked');
-
-/**
- * Points banked by someone with lifetime `xp` (ID-096): a v13 or older save's banks what its
- * 3 points a level gave over today's 1; a v14 save's `banked`, when there, is 1 or more and
- * no more than the old rate could have given for the levels `xp` reaches.
- */
-function readBanked(o: Obj, xp: number, read: StatsRead): number {
-  if (read.bank) return bankedPoints(xp);
-  if (!Object.hasOwn(o, 'banked')) return 0;
-  const most = bankedPoints(xp);
-  if (most < 1) fail('banked at level 1');
-  return int(o.banked, 1, most);
+/** Notes an old save's points dropped from someone with lifetime `xp` past level 1 (ID-146). */
+function dropPoints(xp: number, read: StatsRead): void {
+  if (read.points && levelOf(xp).level > 1) read.reworked = true;
 }
-
-/** `banked` as a field, left out at 0 (the shape a v14 save writes). */
-const bankedField = (banked: number): { banked?: number } => (banked > 0 ? { banked } : {});
 
 /** The order buildPost keeps posts in: column, then kind, then row, then spot. */
 function postOrder(a: BasePost, b: BasePost): number {
@@ -1020,9 +985,8 @@ function readRoster(
   const list = arr(v, min, MAX_ROSTER);
   const lacks = (key: string): boolean =>
     list.every((d) => typeof d === 'object' && d !== null && !Object.hasOwn(d, key));
-  // A save from before stats (0.4.1 and older) has none on any defender: all 0.
-  // One from before loadouts (0.4.3 and older) has a single `weapon` on each instead.
-  const old = { stats: lacks('stats'), loadout: lacks('loadout') };
+  // A save from before loadouts (0.4.3 and older) has a single `weapon` on each instead.
+  const old = { loadout: lacks('loadout') };
   const roster = list.map((d) => readDefender(d, savedAt, hordeNumber, patrolsSent, old, stats));
   if (new Set(roster.map((d) => d.id)).size !== roster.length) fail('id twice');
   return roster;
@@ -1035,14 +999,13 @@ function readDefender(
   savedAt: number,
   hordeNumber: number,
   patrolsSent: number,
-  old: { stats: boolean; loadout: boolean },
+  old: { loadout: boolean },
   read: StatsRead,
 ): RosterDefender {
-  const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout'];
-  if (hasBanked(v, read)) keys.push('banked');
-  const o = obj(v, old.stats ? keys : [...keys, 'stats']);
+  const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout', ...oldPointKeys(v, read)];
+  const o = obj(v, keys);
   const xp = int(o.xp, 0, MAX_COUNT);
-  const banked = readBanked(o, xp, read);
+  dropPoints(xp, read);
   return {
     id: text(o.id, 32, ID),
     name: text(o.name, 24, NAME),
@@ -1050,8 +1013,6 @@ function readDefender(
       ? loadoutFrom(oneOf(o.weapon, FREE_IDS))
       : readLoadout(o.loadout, hordeNumber, patrolsSent),
     xp,
-    stats: old.stats ? { ...NO_STATS } : readStats(o.stats, xp, banked, read),
-    ...bankedField(banked),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
     // clock set back, a code from a device whose clock runs ahead) is cut to that.
     injuredUntil:
@@ -1066,7 +1027,7 @@ function readDefender(
  * a location on the map, after patrols opened. Each member is on the roster, on one
  * patrol only, and was fit when it left. A start after the save (a clock set back) is cut
  * to it, as the generator's is. Its strength is never above what the party has now:
- * levels and weapons don't change while away, and stat points only grow.
+ * levels and weapons don't change while away.
  */
 function readPatrols(
   v: unknown,
@@ -1179,14 +1140,11 @@ function readLeftBehind(
 
 /**
  * A survivor waiting to join (design §10): from a patrol (`s`) or a camp level-up (`c`),
- * a plain name, the XP of a level no higher than any tier, points no more than that
- * earns, and an owned weapon whose uid is their id. Where the id comes from is checked
+ * a plain name, the XP of a level no higher than any tier, and an owned weapon whose uid is their id. Where the id comes from is checked
  * with the rest of the game.
  */
 function readSurvivor(v: unknown, from: 's' | 'c', stats: StatsRead): Survivor {
-  const keys = ['id', 'name', 'xp', 'stats', 'weapon'];
-  if (hasBanked(v, stats)) keys.push('banked');
-  const o = obj(v, keys);
+  const o = obj(v, ['id', 'name', 'xp', 'weapon', ...oldPointKeys(v, stats)]);
   const id = text(o.id, 9, SURVIVOR_ID);
   if (!id.startsWith(from)) fail('survivor id');
   const xp = int(o.xp, 0, MAX_COUNT);
@@ -1195,15 +1153,8 @@ function readSurvivor(v: unknown, from: 's' | 'c', stats: StatsRead): Survivor {
   // The weapon's uid is the survivor's own, so the future checks pass it through.
   const weapon = readOwned(o.weapon, MAX_HORDE, PATROL.max);
   if (weapon.uid !== id) fail('survivor weapon');
-  const banked = readBanked(o, xp, stats);
-  return {
-    id,
-    name: text(o.name, 24, NAME),
-    xp,
-    stats: readStats(o.stats, xp, banked, stats),
-    ...bankedField(banked),
-    weapon,
-  };
+  dropPoints(xp, stats);
+  return { id, name: text(o.name, 24, NAME), xp, weapon };
 }
 
 /** How a big horde ended; only a plaza has one. */

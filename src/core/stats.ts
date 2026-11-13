@@ -1,32 +1,25 @@
-// Defender levels and stat points (design §6), and what they do in a fight. Each stat
-// works with any weapon (ID-084); every bonus shrinks as points pile up. Pure.
+// Defender levels (design §6) and what they do in a fight: each level makes a survivor a
+// little better at everything, a bonus that shrinks as levels go up (ID-146). Pure.
 import {
+  ARMOUR_FLOOR,
   DEFENDER_HP,
   GUNNER,
+  LEVEL_BONUS,
+  LEVEL_HALF,
   LEVEL_XP,
-  LOCKED_STATS,
   OFF_PROFESSION,
-  OLD_POINTS_PER_LEVEL,
-  POINTS_PER_LEVEL,
   SHIELD,
-  STAT_ACTIVE,
-  STAT_EFFECT,
-  STAT_SPLIT,
-  STATS,
+  type LevelBonusId,
   type Profession,
-  type Stat,
-  type StatEffectId,
-  type Stats,
 } from './data.ts';
 import type { Held } from './armoury.ts';
 import { gunOf, isGun, professionOf, weaponOf, type Loadout } from './loadout.ts';
 
-export const NO_STATS: Readonly<Stats> = { instinct: 0, agility: 0, mind: 0, tinker: 0 };
-
-/** A defender as far as stats go; no `stats` means all 0. */
+/** A defender as far as their level and profession go. */
 export interface Statted {
   loadout: Loadout;
-  stats?: Readonly<Stats>;
+  /** Lifetime XP, the level comes from it (ID-146); none means level 1. */
+  xp?: number;
   /** A horde-only survivor (ID-066): no profession, so no profession bonus. */
   plain?: true;
 }
@@ -51,75 +44,20 @@ export function levelOf(xp: number): { level: number; into: number; next: number
   return { level, into: xp - xpForLevel(level), next: LEVEL_XP * level };
 }
 
-export const spentPoints = (stats: Readonly<Stats>): number =>
-  STATS.reduce((n, s) => n + stats[s], 0);
-
-/** Stat points earned by lifetime `xp`, plus any `banked` at the old rate (ID-096). */
-export const earnedPoints = (xp: number, banked = 0): number =>
-  POINTS_PER_LEVEL * (levelOf(xp).level - 1) + banked;
-
 /**
- * The points an older save banks (ID-096): what the old 3 per level gave for the levels
- * `xp` reached, over today's 1 per level, so no point earned before is lost.
+ * `effect`'s bonus at `level` (design §6, ID-146): its cap C × P / (P + `LEVEL_HALF`),
+ * P = level − 1. Nothing at level 1; each level adds less than the one before; never the cap.
  */
-export const bankedPoints = (xp: number): number =>
-  (OLD_POINTS_PER_LEVEL - POINTS_PER_LEVEL) * (levelOf(xp).level - 1);
-
-/** Someone who earns and spends stat points. */
-export interface Pointed {
-  xp: number;
-  stats: Readonly<Stats>;
-  /** Points banked from an older save's levels (ID-096); none when absent. */
-  banked?: number;
+export function levelBonus(level: number, effect: LevelBonusId): number {
+  if (!(Number.isInteger(level) && level >= 1))
+    throw new RangeError(`levelBonus: bad level ${level}`);
+  const p = level - 1;
+  return (LEVEL_BONUS[effect] * p) / (p + LEVEL_HALF);
 }
 
-/** Points left to spend. */
-export const unspentPoints = (d: Pointed): number =>
-  earnedPoints(d.xp, d.banked) - spentPoints(d.stats);
-
-/** Whether `stat` takes no points yet (ID-084: Tinker). */
-export const isLocked = (stat: Stat): boolean => LOCKED_STATS.includes(stat);
-
-/** `d` with one more point in `stat`; refused with no point left or a locked stat. Points are permanent. */
-export function spend<T extends Pointed>(
-  d: T,
-  stat: Stat,
-): { ok: true; defender: T } | { ok: false; reason: string } {
-  if (!STATS.includes(stat)) throw new RangeError(`spend: unknown stat ${String(stat)}`);
-  if (isLocked(stat)) return { ok: false, reason: 'Unlocks later' };
-  if (unspentPoints(d) <= 0) return { ok: false, reason: 'No stat points left' };
-  return { ok: true, defender: { ...d, stats: { ...d.stats, [stat]: d.stats[stat] + 1 } } };
-}
-
-/** `d` with one point taken back out of `stat` (an Undo, ID-126); refused with none in it. */
-export function unspend<T extends Pointed>(
-  d: T,
-  stat: Stat,
-): { ok: true; defender: T } | { ok: false; reason: string } {
-  if (!STATS.includes(stat)) throw new RangeError(`unspend: unknown stat ${String(stat)}`);
-  if (d.stats[stat] <= 0) return { ok: false, reason: 'No point in that stat' };
-  return { ok: true, defender: { ...d, stats: { ...d.stats, [stat]: d.stats[stat] - 1 } } };
-}
-
-/** How many effects `stat`'s points are shared across (ID-096): its active ones. */
-export const activeEffects = (stat: Stat): number => STAT_ACTIVE[stat].length;
-
-/**
- * `effect`'s bonus from `points` in `stat` (design §6, ID-096): its cap C times
- * `P / (P + STAT_SPLIT × n)`, n the stat's active effects; never the cap. An effect
- * that isn't active in `stat` gives nothing.
- */
-export function statBonus(points: number, stat: Stat, effect: StatEffectId): number {
-  if (!STAT_ACTIVE[stat].includes(effect)) return 0;
-  return (STAT_EFFECT[effect] * points) / (points + STAT_SPLIT * activeEffects(stat));
-}
-
-/** Points `d` has in `stat`. */
-const pointsIn = (d: Statted, stat: Stat): number => (d.stats ?? NO_STATS)[stat];
-
-/** `effect`'s bonus from `d`'s points in `stat`. */
-const bonusOf = (d: Statted, stat: Stat, effect: StatEffectId): number =>
-  statBonus(pointsIn(d, stat), stat, effect);
+/** `effect`'s bonus at `d`'s level. */
+const bonusOf = (d: Statted, effect: LevelBonusId): number =>
+  levelBonus(levelOf(d.xp ?? 0).level, effect);
 
 /** A specialised gun in a non-Gunner's hands (a sidearm suits everyone). */
 const offProfession = (d: Statted, weapon: Held): boolean =>
@@ -131,68 +69,53 @@ export function damageFactor(d: Statted, weapon: Held): number {
 }
 
 /**
- * Crit chance of a hit with any weapon: Sharp Mind, plus the Gunner's handling on a gun
+ * Crit chance of a hit with any weapon: the level's, plus the Gunner's handling on a gun
  * shot (`gun`).
  */
 export function critChance(d: Statted, gun = true): number {
   const gunner = gun && professionFor(d) === 'gunner' ? GUNNER.crit : 0;
-  return bonusOf(d, 'mind', 'crit') + gunner;
+  return bonusOf(d, 'crit') + gunner;
 }
 
-/** A crit's damage multiplier: ×2, plus Sharp Mind. */
-export function critDamage(d: Statted): number {
-  return STAT_EFFECT.critDamage + bonusOf(d, 'mind', 'critBonus');
-}
-
-/** Degrees either way gun `weapon`'s bullets stray off the aim: a Gunner's cone is narrower, and Sharp Mind's. */
+/** Degrees either way gun `weapon`'s bullets stray off the aim: a Gunner's cone is narrower, and a higher level's. */
 export function spreadOf(d: Statted, weapon: Held): number {
   const gunner = professionFor(d) === 'gunner' ? GUNNER.spread : 1;
-  return gunOf(weapon).spread * gunner * (1 - bonusOf(d, 'mind', 'spread'));
+  return gunOf(weapon).spread * gunner * (1 - bonusOf(d, 'spread'));
 }
 
 /**
  * Fire-rate factor for `weapon`: a Gunner's guns faster, a shield's holder's guns slower,
- * and Agility's guns faster (ID-125).
+ * and a higher level's guns faster.
  */
 export function fireRateFactor(d: Statted, weapon: Held): number {
   if (!isGun(weapon)) return 1;
   const gunner = professionFor(d) === 'gunner' ? 1 + GUNNER.fireRate : 1;
   const shield = d.loadout.item === 'shield' ? 1 - SHIELD.fireRate : 1;
-  return gunner * shield * (1 + bonusOf(d, 'agility', 'fireRate'));
-}
-
-/** Instinct's extra damage (a share) to an enemy near the wall, from any weapon (ID-125). */
-export function wallDamage(d: Statted): number {
-  return bonusOf(d, 'instinct', 'wallDamage');
+  return gunner * shield * (1 + bonusOf(d, 'fireRate'));
 }
 
 /**
  * Seconds to reload gun `weapon`: a Gunner's 25% faster, an off-profession specialised
- * gun's 50% slower, and Agility's faster.
+ * gun's 50% slower, and a higher level's faster.
  */
 export function reloadTime(d: Statted, weapon: Held): number {
   const gunner = professionFor(d) === 'gunner' ? 1 - GUNNER.reload : 1;
   const off = offProfession(d, weapon) ? 1 + OFF_PROFESSION.reload : 1;
-  const agility = 1 - bonusOf(d, 'agility', 'reload');
-  return gunOf(weapon).reload * gunner * off * agility;
+  const level = 1 - bonusOf(d, 'reload');
+  return gunOf(weapon).reload * gunner * off * level;
 }
 
-/** Max HP in a horde: the base plus Instinct (whole HP), whatever the loadout. */
+/** Max HP in a horde: the base plus the level's (whole HP), whatever the loadout. */
 export function maxHpOf(d: Statted): number {
-  return DEFENDER_HP + Math.round(bonusOf(d, 'instinct', 'hp'));
+  return DEFENDER_HP + Math.round(bonusOf(d, 'hp'));
 }
 
 /**
- * HP a hit of `damage` takes off `d`: a shield's share off, then Instinct's armour plus
- * `extra` (Kevlar Vests, ID-131), never under half.
+ * HP a hit of `damage` takes off `d`: a shield's share off, then the level's armour plus
+ * `extra` (Kevlar Vests, ID-131), never under `ARMOUR_FLOOR` of it.
  */
 export function damageTaken(d: Statted, damage: number, extra = 0): number {
   const shielded = damage * (d.loadout.item === 'shield' ? 1 - SHIELD.damageTaken : 1);
-  const armour = bonusOf(d, 'instinct', 'armour') + extra;
-  return Math.max(shielded * STAT_EFFECT.armourFloor, shielded - armour);
-}
-
-/** Chance a hit that would drop `d` to 0 HP leaves them at 1 HP instead: Instinct. */
-export function dodgeChance(d: Statted): number {
-  return bonusOf(d, 'instinct', 'dodge');
+  const armour = bonusOf(d, 'armour') + extra;
+  return Math.max(shielded * ARMOUR_FLOOR, shielded - armour);
 }

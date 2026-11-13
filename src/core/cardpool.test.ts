@@ -37,6 +37,7 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import { createRng } from './rng.ts';
+import { xpForLevel } from './stats.ts';
 import { enemy, setup } from './testing.ts';
 
 const tough = { hp: 1000, maxHp: 1000 };
@@ -661,7 +662,6 @@ describe('synergies', () => {
       id: 'g',
       name: 'G',
       loadout: { primary: 'pistol' as const, secondary: null, item: null },
-      stats: { instinct: 50, agility: 50, mind: 50, tinker: 0 },
     };
     s.defenders.push(standing(spec, { ...s.posts[1]!, id: 1 }, 1e9));
     enemy(s, { ...still, hp: 0.01, x: 900, y: ROW4, burnUntil: 2 });
@@ -690,7 +690,7 @@ describe('synergies', () => {
     expect(synergyOf(s, 'ricochet')).toMatch(/Piercing Rounds/);
     s.taken = ['ricochet'];
     expect(synergyOf(s, 'piercing-rounds')).toMatch(/Ricochet/);
-    s.defenders[0]!.stats = { instinct: 50, agility: 50, mind: 50, tinker: 0 };
+    s.defenders[0]!.xp = xpForLevel(50);
     expect(synergyOf(s, 'incendiary-rounds')).toBeNull();
     expect(synergyOf(s, 'sharpshooter')).toBeNull();
   });

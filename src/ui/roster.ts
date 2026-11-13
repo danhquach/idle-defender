@@ -1,8 +1,7 @@
 // The roster screen between hordes (design §6): the camp (§11: people and slots, the
 // camp upgrade, camp level and picks, the next free recruit, the car), then each defender's
-// level, stats and status, Food and Medicine for the resting (ID-031), their stat-point
-// picker (Tinker shown locked, ID-084), loadout pickers and Dismiss. Text only via
-// textContent.
+// level, what it gives (ID-146) and status, Food and Medicine for the resting (ID-031),
+// loadout pickers and Dismiss. Text only via textContent.
 import {
   buildCar,
   campLevelOf,
@@ -26,14 +25,11 @@ import {
   ITEMS,
   placeName,
   RARITY_ORDER,
-  STAT_NAMES,
-  STATS,
   FREE_WEAPONS,
   TREATMENT_MS,
   WEAPONS,
   type FreeWeaponId,
   type ItemId,
-  type Stat,
 } from '../core/data.ts';
 import { heldLabel, type Held } from '../core/armoury.ts';
 import {
@@ -41,24 +37,15 @@ import {
   carrierOf,
   equip,
   ownedWeapons,
-  spendPoint,
   type GameState,
   type RosterDefender,
 } from '../core/game.ts';
 import { isGun, weaponOf, type Loadout } from '../core/loadout.ts';
 import { freeCar, patrolDue, type Patrol } from '../core/patrol.ts';
-import { isLocked, levelOf, unspentPoints } from '../core/stats.ts';
-import {
-  campPickText,
-  defenderLabel,
-  el,
-  lockedLabel,
-  statHint,
-  statText,
-  survivorText,
-} from './hud.ts';
-import { holdable } from './hold.ts';
+import { levelOf } from '../core/stats.ts';
+import { campPickText, defenderLabel, el, survivorText } from './hud.ts';
 import { costLine, setVariant } from './kit.ts';
+import { levelText } from './statlines.ts';
 
 /**
  * The free weapons each slot may hold (design §6): guns as primary; a sidearm, blade or
@@ -83,20 +70,18 @@ export function restLeft(until: number, now: number): string {
 export interface RosterEntry {
   label: string;
   level: string;
-  stats: string;
-  points: string;
+  /** What the level gives (ID-146): "Lv 7: +14 HP · …". */
+  bonus: string;
   status: string;
 }
 
 /** `patrol` is the one `d` is out on, if any. */
 export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): RosterEntry {
   const { level, into, next } = levelOf(d.xp);
-  const left = unspentPoints(d);
   return {
     label: defenderLabel(d),
     level: `level ${level} · ${into}/${next} XP`,
-    stats: STATS.map((s) => statText(s, d.stats[s])).join(' · '),
-    points: left > 0 ? `${left} stat point${left === 1 ? '' : 's'} to spend` : '',
+    bonus: levelText(level),
     status: patrol
       ? `On patrol · ${placeName(patrol.location)} · ${restLeft(patrolDue(patrol), now)} left`
       : available(d, now)
@@ -269,7 +254,7 @@ const valueOf = (h: Held | ItemId | null): string =>
   h === null ? '' : typeof h === 'string' ? h : h.uid;
 
 /**
- * The camp section, then the roster's entries for `game` at `now`. A spend, an allowed
+ * The camp section, then the roster's entries for `game` at `now`. An allowed
  * equip or a dismiss `ask` agrees to goes out through `onChange` with the new game; a
  * refused equip says why under that defender and changes nothing.
  */
@@ -288,17 +273,12 @@ export function rosterSection(
     card.append(
       el('h3', 'build-slot-title', entry.label),
       el('p', 'build-slot-note', `${entry.level} · ${entry.status}`),
-      el('p', 'build-slot-note', entry.stats),
+      el('p', 'build-slot-note', entry.bonus),
     );
     if (!patrol && !available(d, now)) {
       const row = el('div', 'hud-pick-row');
       for (const item of TREATMENTS) row.append(treatButton(game, d, item, now, onChange));
       card.append(row);
-    }
-    if (entry.points) {
-      const row = el('div', 'hud-pick-row');
-      for (const stat of STATS) row.append(statButton(game, d, stat, onChange));
-      card.append(el('p', 'build-slot-note', entry.points), row);
     }
     const note = el('p', 'build-option-reason');
     note.setAttribute('role', 'status');
@@ -406,24 +386,3 @@ export function recruitNotice(names: readonly string[]): string {
 /** The confirm for dismissing `d`. */
 export const dismissQuestion = (d: Pick<RosterDefender, 'name'>): string =>
   `Dismiss ${d.name}? They leave the camp for good; their weapons go to the armoury.`;
-
-function statButton(
-  game: GameState,
-  d: RosterDefender,
-  stat: Stat,
-  onChange: (next: GameState) => void,
-): HTMLElement {
-  const locked = isLocked(stat);
-  const label = locked ? lockedLabel(stat) : `${STAT_NAMES[stat]} +1`;
-  const button = el('button', 'hud-button hud-pick-stat', label);
-  button.type = 'button';
-  button.title = statHint(d, stat);
-  // A locked stat (ID-084: Tinker) stays in view, greyed out, and takes no points.
-  button.disabled = locked;
-  holdable(button, `${d.id}:${stat}`);
-  button.addEventListener('click', () => {
-    const r = spendPoint(game, d.id, stat);
-    if (r.ok) onChange(r.game);
-  });
-  return button;
-}

@@ -8,7 +8,6 @@ import {
   SEGMENT_HEIGHT,
   SEGMENTS,
   START_BASE,
-  STAT_EFFECT,
   STEP,
   WALK_SPEED,
   WEAPONS,
@@ -223,17 +222,11 @@ describe('Gunner (pistol)', () => {
 describe('Engineer (pistol + toolkit)', () => {
   const base = baseWith({ kind: 'wall-walk', column: 0, row: GATE });
 
-  it('strikes weakly with the toolkit up close; of the stats only Instinct adds, near the wall (ID-125)', () => {
-    const s = fight(base, [
-      { ...spec('e', 'toolkit'), stats: { instinct: 30, agility: 30, mind: 30, tinker: 0 } },
-      'wall-walk',
-      GATE,
-    ]);
+  it('strikes weakly with the toolkit up close, no harder near the wall (ID-146)', () => {
+    const s = fight(base, [spec('e', 'toolkit'), 'wall-walk', GATE]);
     enemy(s, { ...tough, x: 520, y: GATE_Y });
     const after = tick(s, STEP);
-    expect(after.enemies[0]!.hp).toBeCloseTo(
-      1000 - WEAPONS.toolkit.damage * (1 + (STAT_EFFECT.wallDamage * 30) / (30 + 40)),
-    );
+    expect(after.enemies[0]!.hp).toBeCloseTo(1000 - WEAPONS.toolkit.damage);
     expect(struck(after)).toBe(true);
   });
 

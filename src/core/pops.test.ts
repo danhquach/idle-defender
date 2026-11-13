@@ -1,5 +1,6 @@
 // Damage numbers (ID-082): what each hit on an enemy or the wall did, merged per target.
 import { describe, expect, it } from 'vitest';
+import { xpForLevel } from './stats.ts';
 import { BRUTE, CARD, DAMAGE_POP, SEGMENT_HEIGHT, START_BASE, STEP, WEAPONS } from './data.ts';
 import { newHorde, shamblerHp, tick, type Bullet, type HordeState } from './horde.ts';
 import { loadoutFrom } from './loadout.ts';
@@ -98,13 +99,12 @@ describe('damage numbers on enemies (ID-082)', () => {
   });
 
   it('a crit from the trigger rides its bullet into a crit number', () => {
-    // A Sharp Mind of 100 puts a Gunner's crit chance at 30%: some first rounds crit, some don't.
+    // A high level puts a Gunner's crit chance well above 0: some first rounds crit, some don't.
     const seen = new Set<boolean>();
     for (let seed = 1; seed <= 30; seed++) {
-      const stats = { instinct: 0, agility: 0, mind: 100, tinker: 0 };
       const s = newHorde(seed, {
         ...setup(),
-        roster: [{ id: 'a', name: 'A', loadout: loadoutFrom('pistol'), stats }],
+        roster: [{ id: 'a', name: 'A', loadout: loadoutFrom('pistol'), xp: xpForLevel(100) }],
       });
       s.toSpawn = 0;
       enemy(s, { ...tough, x: 650 });

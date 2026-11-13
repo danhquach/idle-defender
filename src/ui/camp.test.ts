@@ -223,7 +223,6 @@ describe('the camp-level pick on the result screen', () => {
       noop,
       noop,
       noop,
-      noop,
       (id) => picked.push(id),
       noop,
     );

@@ -8,7 +8,7 @@ import { FARM, SQUAD_CAP } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
 import { finishSquadHorde, squadOf } from '../hordeonly.ts';
 import { createRng } from '../rng.ts';
-import { gearUp, playSquadCampaign, playSquadHorde, spendAll } from '../sim.ts';
+import { gearUp, playSquadCampaign, playSquadHorde } from '../sim.ts';
 import { squadPower } from '../squadpower.ts';
 import { xpForLevel } from '../stats.ts';
 import { cacheFor } from './cache.ts';
@@ -57,7 +57,7 @@ describe('farming (ID-102)', () => {
     }));
     g.camp.recruits = SQUAD_CAP;
     g.hordeNumber = wall;
-    return spendAll(g);
+    return g;
   }
 
   /** `fights` replays of Horde `n` from `game`: Squad Power and XP gained per fight minute. */
@@ -68,7 +68,7 @@ describe('farming (ID-102)', () => {
     for (let i = 0; i < fights; i++) {
       const h = playSquadHorde(g, seed + i, undefined, undefined, n);
       seconds += h.time;
-      g = gearUp(spendAll(finishSquadHorde(g, h)));
+      g = gearUp(finishSquadHorde(g, h));
     }
     const minutes = seconds / 60;
     return {

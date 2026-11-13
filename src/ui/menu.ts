@@ -8,7 +8,7 @@ import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
-import { FIELD_GREW, STATS_REFUNDED } from './build.ts';
+import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import { el, SKILL_KEYS, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 
 /** What the Save tab says about a refused code. */
@@ -109,7 +109,7 @@ const SQUAD_HOW_TO_PLAY: Steps = [
   ],
   [
     'Win and grow.',
-    'A win gives survivor XP and stat points, and a new survivor joins, up to a squad of 6.',
+    'A win gives survivor XP, and every level makes a survivor better at everything. A new survivor joins, up to a squad of 6.',
   ],
   [
     'Arm the squad.',
@@ -146,7 +146,7 @@ export function readCode(pasted: string): { game: GameState | null; message: str
   if (!result.ok) return { game: null, message: IMPORT_REFUSAL[result.why] };
   const notes = [
     ...(result.save.grew ? [FIELD_GREW] : []),
-    ...(result.save.refunded ? [STATS_REFUNDED] : []),
+    ...(result.save.reworked ? [LEVELS_REWORKED] : []),
   ];
   const message = [IMPORT_DONE, ...notes].join(' ');
   return { game: result.save.game, message };

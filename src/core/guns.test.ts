@@ -5,7 +5,7 @@ import {
   ENEMY_RADIUS,
   FREE_WEAPONS,
   GUNNER,
-  STAT_EFFECT,
+  CRIT_DAMAGE,
   STEP,
   WEAPONS,
   type WeaponId,
@@ -80,9 +80,7 @@ describe('the specialised guns', () => {
     expect(fired.defenders[0]!.ammo.primary).toBe(WEAPONS.shotgun.magazine - 1);
     // The crit is rolled once at the trigger: every pellet of a round deals the same.
     const dealt = fired.bullets[0]!.damage;
-    expect([1, STAT_EFFECT.critDamage].map((k) => k * WEAPONS.shotgun.damage)).toContainEqual(
-      dealt,
-    );
+    expect([1, CRIT_DAMAGE].map((k) => k * WEAPONS.shotgun.damage)).toContainEqual(dealt);
     for (const b of fired.bullets) expect(b.damage).toBe(dealt);
     // Each pellet rolls its own angle.
     expect(new Set(fired.bullets.map((b) => b.dy)).size).toBe(6);
