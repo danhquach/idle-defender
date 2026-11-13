@@ -30,6 +30,7 @@ import {
 } from '../core/data.ts';
 import {
   reloadIn,
+  magazineOf,
   barbedWire,
   plated,
   radiusOf,
@@ -63,7 +64,7 @@ import {
 } from '../core/horde.ts';
 import { baseOf } from '../core/armoury.ts';
 import { CHAT, CHAT_RANK, type Bubble } from '../core/chatter.ts';
-import { professionOf } from '../core/loadout.ts';
+import { gunOf as gunOfHeld, isGun, professionOf } from '../core/loadout.ts';
 import { createRng } from '../core/rng.ts';
 import { throwArea } from '../core/skills.ts';
 import {
@@ -215,6 +216,9 @@ const COLOR = {
   /** A segment a repair card heals (ID-075). */
   wallRepair: '#7fe08c',
   hpEdge: '#1b1a18',
+  /** An ammo bar's rounds and its empty part (ID-143): amber on dark, never read as HP. */
+  ammo: '#e8b04a',
+  ammoBack: '#4a443a',
   conditionBack: '#111110',
   conditionFill: '#a9c4d6',
   strike: '#f2f2f2',
@@ -572,6 +576,39 @@ export const NAME_TAG_GAP = 2;
  */
 export const RELOAD_PIE = { r: 6, gap: 2, edge: 1 } as const;
 /**
+ * A defender's ammo bar (ID-143), in screen px: `h` tall at zoom 1 (never under `min`),
+ * right under their HP bar and as wide, with a dark `edge`; a gun loaded shell by shell
+ * splits it into slots `slotGap` px apart.
+ */
+const AMMO_BAR = { h: 2, min: 2, edge: 1, slotGap: 1 } as const;
+/**
+ * A defender's primary magazine (ID-143): the share of its rounds left and, for a gun
+ * loaded shell by shell (ID-135), one slot per shell (0 for any other gun); null without a
+ * gun. The magazine is today's, Extended Mags (`cards`, design §8) included.
+ */
+export interface AmmoLook {
+  share: number;
+  slots: number;
+}
+/**
+ * How full `d`'s primary is (ID-143), or null when it is no gun. Only the primary counts:
+ * a Gunner's sidearm firing meanwhile doesn't change it.
+ */
+export function ammoLook(
+  d: Pick<Defender, 'ammo' | 'loadout'>,
+  cards: Pick<HordeState, 'taken' | 'cardLevels'> = { taken: [], cardLevels: {} },
+): AmmoLook | null {
+  const id = d.loadout.primary;
+  if (id === null || !isGun(id)) return null;
+  const mag = magazineOf(cards, id);
+  if (!(mag > 0)) return null;
+  const share = Math.min(1, Math.max(0, d.ammo.primary / mag));
+  return { share, slots: gunOfHeld(id).shells ? mag : 0 };
+}
+/** The screen px an ammo bar (ID-143) takes under the HP bar, its edge included. */
+const ammoStack = (cam: Camera): number =>
+  Math.max(AMMO_BAR.min, AMMO_BAR.h * cam.zoom) + 2 * AMMO_BAR.edge;
+/**
  * A survivor's speech bubble (ID-085), screen px and real seconds: `h` px high, its text
  * `padX` px in from each side, corners `r` round, on a dark `edge`. It sits beside its
  * speaker's name tag (ID-094), its `tail` px point `gap` px off the tag. It keeps `margin`
@@ -922,7 +959,7 @@ function drawHpBar(
  * A defender standing `z0` up at `(x, y)`: their profession's sprite (the weapon tells
  * it, design §15; a Gunner's shows their primary, or their throw frame mid-throw, ID-119)
  * in `pose`, a shield in front if they carry one, a ring at their feet when selected, and
- * an HP bar once hurt.
+ * with `bars` their HP and ammo bars (ID-143).
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,
@@ -936,6 +973,13 @@ function drawDefender(
   throwing: ThrowFrame | null = null,
   /** What the throw is (ID-139): a Flashbang or Molotov; undefined, a Frag Grenade. */
   item?: Grenade['item'],
+  /** How full their primary is (ID-143); null, no ammo bar. */
+  ammo: AmmoLook | null = null,
+  /**
+   * Whether their bars draw with the sprite. In a fight they draw later, over every reload
+   * pie (ID-143), so a crowded neighbour's pie never covers them.
+   */
+  bars = true,
 ): void {
   const feet = project({ x: d.x, y: d.y, z: z0 }, cam);
   if (selected) {
@@ -970,10 +1014,64 @@ function drawDefender(
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
     drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam, pose);
   }
+  if (bars) drawBars(ctx, d, z0, cam, ammo);
+}
+
+/**
+ * A defender's HP bar and, right under it, their ammo bar (ID-143). A survivor's bars always
+ * show (ID-068); a full-game defender's once hurt. The HP bar sits the ammo bar's height
+ * higher, gun or not.
+ */
+function drawBars(
+  ctx: CanvasRenderingContext2D,
+  d: Pick<Defender, 'x' | 'y' | 'hp' | 'maxHp' | 'plain'>,
+  z0: number,
+  cam: Camera,
+  ammo: AmmoLook | null,
+): void {
+  if (!d.plain && !(d.hp < d.maxHp)) return;
+  const size: { w: number; h: number; min?: { w: number; h: number } } = d.plain
+    ? SURVIVOR_BAR
+    : HP_BAR;
   const bar = { x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap / 2 };
-  // A survivor's bar always shows (ID-068); a full-game defender's once hurt.
-  if (d.plain) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, SURVIVOR_BAR, true);
-  else if (d.hp < d.maxHp) drawHpBar(ctx, bar, d.hp, d.maxHp, cam, undefined, HP_BAR, true);
+  const hp = { ...bar, z: bar.z + ammoStack(cam) / (cam.zoom * HEIGHT_SCALE) };
+  drawHpBar(ctx, hp, d.hp, d.maxHp, cam, undefined, size, true);
+  if (ammo) drawAmmoBar(ctx, bar, ammo, Math.max(size.min?.w ?? 0, size.w * cam.zoom), cam);
+}
+
+/**
+ * An ammo bar (ID-143) `w` px wide sitting on `at`, its dark edge round it: amber for the
+ * rounds left, dark for the rest; a gun loaded shell by shell shows a slot a shell, while
+ * the slots stay at least 1 px wide.
+ */
+function drawAmmoBar(
+  ctx: CanvasRenderingContext2D,
+  at: { x: number; y: number; z: number },
+  look: AmmoLook,
+  w: number,
+  cam: Camera,
+): void {
+  const { edge, slotGap } = AMMO_BAR;
+  const h = Math.max(AMMO_BAR.min, AMMO_BAR.h * cam.zoom);
+  const on = project(at, cam);
+  const x0 = on.sx - w / 2;
+  const y0 = on.sy - edge - h;
+  ctx.fillStyle = COLOR.hpEdge;
+  ctx.fillRect(x0 - edge, y0 - edge, w + 2 * edge, h + 2 * edge);
+  const n = look.slots;
+  const slot = n > 0 ? (w - slotGap * (n - 1)) / n : 0;
+  if (slot >= 1) {
+    const full = Math.round(look.share * n);
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = i < full ? COLOR.ammo : COLOR.ammoBack;
+      ctx.fillRect(x0 + i * (slot + slotGap), y0, slot, h);
+    }
+    return;
+  }
+  ctx.fillStyle = COLOR.ammoBack;
+  ctx.fillRect(x0, y0, w, h);
+  ctx.fillStyle = COLOR.ammo;
+  ctx.fillRect(x0, y0, w * look.share, h);
 }
 
 /**
@@ -1010,15 +1108,17 @@ function tagSpot(
   cam: Camera,
 ): { at: { x: number; y: number; z: number }; lift: number } {
   const at = { x: d.x, y: d.y, z: z0 + DEFENDER_TOP + HP_BAR.gap / 2 };
+  // The ammo bar (ID-143) sits under the HP bar, so the plate clears both, gun or not.
+  const ammo = ammoStack(cam);
   if (d.plain) {
     // The bar sits on `at` with its dark edge round it, above and below.
     const bar = Math.max(SURVIVOR_BAR.min.h, SURVIVOR_BAR.h * cam.zoom) + 2 * SURVIVOR_BAR.edge;
-    return { at, lift: bar + NAME_TAG_GAP };
+    return { at, lift: ammo + bar + NAME_TAG_GAP };
   }
   const half = (TAG_SPOT.h * cam.zoom) / 2;
   return {
     at: { ...at, z: z0 + DEFENDER_TOP + HP_BAR.gap + TAG_SPOT.z },
-    lift: half + NAME_TAG_GAP,
+    lift: ammo + half + NAME_TAG_GAP,
   };
 }
 
@@ -4190,6 +4290,11 @@ export function drawScene(
   // A Gunner mid-throw shows the throw, gun out of hand, so no muzzle flash (ID-119).
   const throwOf = (d: Defender): ThrowFrame | null =>
     anim && gunOf(d) ? throwFrame(d, scene.grenades, scene.time) : null;
+  // How full each primary is (ID-143), Extended Mags included.
+  const magCards = { taken: scene.taken ?? [], cardLevels: scene.cardLevels ?? {} };
+  const ammoOf = (d: Defender): AmmoLook | null => ammoLook(d, magCards);
+  // In a fight the bars draw after every reload pie, with the names (ID-143).
+  const barsWithSprite = !!build;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   // In a fight nothing left of the frame shows (ID-064): the camp's yard stays out of
@@ -4306,7 +4411,20 @@ export function drawScene(
           const selected = manned.id === selectedDefender;
           const throwing = throwOf(manned);
           const held = throwing ? throwItemOf(manned, scene.grenades, scene.time) : undefined;
-          drawDefender(ctx, art, manned, floor, selected, cam, pose, aimOf(manned), throwing, held);
+          drawDefender(
+            ctx,
+            art,
+            manned,
+            floor,
+            selected,
+            cam,
+            pose,
+            aimOf(manned),
+            throwing,
+            held,
+            ammoOf(manned),
+            barsWithSprite,
+          );
           if (!throwing) drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
         }
       },
@@ -4331,7 +4449,22 @@ export function drawScene(
         const throwing = throwOf(d);
         const selected = d.id === selectedDefender;
         const held = throwing ? throwItemOf(d, scene.grenades, scene.time) : undefined;
-        drawDefender(ctx, art, d, 0, selected, cam, defenderPoseOf(d), aimOf(d), throwing, held);
+        const pose = defenderPoseOf(d);
+        const ammo = ammoOf(d);
+        drawDefender(
+          ctx,
+          art,
+          d,
+          0,
+          selected,
+          cam,
+          pose,
+          aimOf(d),
+          throwing,
+          held,
+          ammo,
+          barsWithSprite,
+        );
         if (!throwing) drawFlash(ctx, scene, d.id, d.x, d.y, cam);
       },
     });
@@ -4528,6 +4661,9 @@ export function drawScene(
       });
       if (share !== null) drawReloadPie(ctx, d, share, z0, cam);
     }
+    // HP and ammo bars over every pie (ID-143): on a phone a survivor's pie sits right under
+    // the bars of the one above, and must never cover them.
+    for (const { d, z0 } of shown) drawBars(ctx, d, z0, cam, ammoOf(d));
     for (const { d, z0 } of shown) drawNameTag(ctx, d, z0, cam);
     // Scavenged Ammo's saved rounds (ID-132): a brass "+1" rises over the name and fades.
     for (const k of scene.saves ?? []) {
