@@ -601,15 +601,16 @@ export interface AmmoLook {
 }
 /**
  * How full `d`'s primary is (ID-143), or null when it is no gun. Only the primary counts:
- * a Gunner's sidearm firing meanwhile doesn't change it.
+ * a Gunner's sidearm firing meanwhile doesn't change it. A Soldier's bigger magazine with
+ * their guns (ID-149) counts.
  */
 export function ammoLook(
-  d: Pick<Defender, 'ammo' | 'loadout'>,
+  d: Pick<Defender, 'ammo' | 'loadout'> & Partial<Pick<Defender, 'job' | 'xp' | 'plain'>>,
   cards: Pick<HordeState, 'taken' | 'cardLevels'> = { taken: [], cardLevels: {} },
 ): AmmoLook | null {
   const id = d.loadout.primary;
   if (id === null || !isGun(id)) return null;
-  const mag = magazineOf(cards, id);
+  const mag = magazineOf(cards, id, d);
   if (!(mag > 0)) return null;
   const share = Math.min(1, Math.max(0, d.ammo.primary / mag));
   return { share, slots: gunOfHeld(id).shells ? mag : 0 };

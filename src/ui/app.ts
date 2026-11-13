@@ -146,7 +146,7 @@ export function start(root: HTMLElement, art: Art): void {
   // reload mid-horde comes back to the camp as it was before it.
   const storage = browserStorage();
   const loaded = storage ? loadSave(storage) : { save: null, rejected: false };
-  let game: GameState = loaded.save?.game ?? newGame(HORDE_ONLY ? 'horde' : 'full');
+  let game: GameState = loaded.save?.game ?? newGame(HORDE_ONLY ? 'horde' : 'full', Date.now());
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
   // The horde the horde-only start or result screen has picked (ID-098): the next new horde,
@@ -591,7 +591,7 @@ export function start(root: HTMLElement, art: Art): void {
         return;
       }
       startedFresh = true;
-      replaceCamp(newGame(HORDE_ONLY ? 'horde' : 'full'));
+      replaceCamp(newGame(HORDE_ONLY ? 'horde' : 'full', Date.now()));
     },
     onCardSeen: () => writeHowToSeen(storage),
     backdrop: art[TITLE_PICTURE],

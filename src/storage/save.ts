@@ -57,6 +57,7 @@ import {
   MAX_CONDITION,
   ORDER_IDS,
   PATROL,
+  JOB_IDS,
   PERK_IDS,
   PERK_LEVEL,
   PLACE_IDS,
@@ -98,6 +99,7 @@ import {
 } from '../core/data.ts';
 import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad } from '../core/hordeonly.ts';
+import { jobFor, textSeed } from '../core/jobs.ts';
 import {
   focusOptions,
   partyStrength,
@@ -126,6 +128,11 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 18 since professions (ID-149): each roster or reserve survivor has a `job`, one of
+ * `JOB_IDS`. A v17 or older save has none, so each gets one rolled from their id and the
+ * save's `savedAt` (the same save always rolls the same); a v18 survivor without one, or
+ * with any other value, is refused.
+ *
  * 17 since levels give an all-round bonus (ID-146): no stat points. A v16 or older save's
  * defenders and survivors waiting to join may hold `stats` (points spent) and `banked`;
  * both are dropped as it loads, and each one's bonus comes from their level alone. When
@@ -176,7 +183,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -248,12 +255,14 @@ export interface Save {
  * How a save's old stat points read: `legacy` for a v12 or older save (ID-084: a patrol's
  * strength counted Grit); `points` for a v16 or older save, whose defenders and survivors
  * may hold `stats` and `banked` (ID-146: dropped); `reworked` is set by the readers when
- * anyone past level 1 had their points dropped.
+ * anyone past level 1 had their points dropped. `jobSeed` is the seed a v17 or older
+ * save's roster rolls its professions with (ID-149), null for a save that has them.
  */
 interface StatsRead {
   legacy: boolean;
   points: boolean;
   reworked: boolean;
+  jobSeed: number | null;
 }
 
 /** The page's storage, or null where it is blocked (some private modes throw on access). */
@@ -326,7 +335,9 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
   if (
-    ![SAVE_VERSION, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(o.v as number)
+    ![SAVE_VERSION, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
+      o.v as number,
+    )
   ) {
     fail('version');
   }
@@ -339,7 +350,13 @@ function readSave(v: unknown): Save {
   const reserve = ver >= 12;
   const farm = ver >= 15;
   const pick = ver >= 16;
-  const stats: StatsRead = { legacy: ver < 13, points: ver < 17, reworked: false };
+  const stats: StatsRead = {
+    legacy: ver < 13,
+    points: ver < 17,
+    reworked: false,
+    // A v17 or older save's survivors roll their profession from its time (ID-149).
+    jobSeed: ver < 18 ? textSeed(String(savedAt)) : null,
+  };
   const grid = ver === 1 ? V1_GRID : GRID;
   const game = readGame(
     o.game,
@@ -1002,17 +1019,25 @@ function readDefender(
   old: { loadout: boolean },
   read: StatsRead,
 ): RosterDefender {
-  const keys = [...DEFENDER_KEYS, old.loadout ? 'weapon' : 'loadout', ...oldPointKeys(v, read)];
+  const keys = [
+    ...DEFENDER_KEYS,
+    old.loadout ? 'weapon' : 'loadout',
+    ...(read.jobSeed === null ? ['job'] : []),
+    ...oldPointKeys(v, read),
+  ];
   const o = obj(v, keys);
   const xp = int(o.xp, 0, MAX_COUNT);
   dropPoints(xp, read);
+  const id = text(o.id, 32, ID);
   return {
-    id: text(o.id, 32, ID),
+    id,
     name: text(o.name, 24, NAME),
     loadout: old.loadout
       ? loadoutFrom(oneOf(o.weapon, FREE_IDS))
       : readLoadout(o.loadout, hordeNumber, patrolsSent),
     xp,
+    // Allow-listed (ID-149); an older save rolls one, the same each time it loads.
+    job: read.jobSeed === null ? oneOf(o.job, JOB_IDS) : jobFor(id, read.jobSeed),
     // A rest never runs past RECOVERY_MS from when the game was saved; a later one (a
     // clock set back, a code from a device whose clock runs ahead) is cut to that.
     injuredUntil:

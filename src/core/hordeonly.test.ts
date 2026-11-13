@@ -176,7 +176,7 @@ describe('the squad in a horde (ID-066)', () => {
     expect(eligible(s, 'field-repairs')).toBe(true);
   });
 
-  it('a survivor carries only their primary, with no profession; a non-gun primary becomes the pistol', () => {
+  it('a survivor carries only their primary and their profession, no loadout profession; a non-gun primary becomes the pistol', () => {
     const d: RosterDefender = {
       ...survivor(1),
       loadout: { primary: 'pistol', secondary: 'knife', item: 'shield' },
@@ -187,6 +187,7 @@ describe('the squad in a horde (ID-066)', () => {
       loadout: { primary: 'pistol', secondary: null, item: null },
       xp: d.xp,
       plain: true,
+      job: d.job,
     });
     const odd = { ...d, loadout: { ...d.loadout, primary: 'knife' as const } };
     expect(squadSpec(odd).loadout.primary).toBe('pistol');
@@ -308,16 +309,16 @@ describe('after a horde (ID-066)', () => {
     const g = squadGame(2);
     const next = finishSquadHorde(g, ended(g, 'won'));
     expect(next.roster.map((d) => d.id)).toEqual(['recruit-1', 'recruit-2', 'recruit-3']);
-    expect(next.roster[2]).toEqual(recruit(3));
+    expect(next.roster[2]).toEqual(recruit(3, 1)); // rolled with the horde's seed (ID-149)
     expect(next.camp.recruits).toBe(3);
     expect(next.camp.offers).toEqual([]);
     expect(startSquadHorde(next, 1, NOW).defenders.map((d) => d.id)).toContain('recruit-3');
-    expect(squadResult(g, ended(g, 'won')).joined).toEqual(recruit(3));
+    expect(squadResult(g, ended(g, 'won')).joined).toEqual(recruit(3, 1));
   });
 
   it('at the cap of 6 nobody new joins', () => {
     const g = squadGame(SQUAD_CAP);
-    expect(joiner(g)).toBeNull();
+    expect(joiner(g, 1)).toBeNull();
     const next = finishSquadHorde(g, ended(g, 'won'));
     expect(next.roster).toHaveLength(SQUAD_CAP);
     expect(next.camp.recruits).toBe(SQUAD_CAP);

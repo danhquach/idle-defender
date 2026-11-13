@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { LEVELS_REWORKED } from './build.ts';
-import { RADIO_HORDES, SQUAD_CAP } from '../core/data.ts';
+import { JOBS, RADIO_HORDES, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
@@ -97,7 +97,7 @@ describe('the horde-only screens (ID-066)', () => {
     expect(screen.lines.join(' ')).not.toMatch(/stat point/);
     expect(screen.lines.some((l) => /level 2 · \d+\/50 XP to level 3/.test(l))).toBe(true);
     expect(screen.lines).toContain(
-      `New survivor: ${recruit(3).name} joins the squad for the next horde`,
+      `New survivor: ${recruit(3).name} (${JOBS[recruit(3, 1).job].name}) joins the squad for the next horde`,
     );
     expect(screen.lines.join(' ')).not.toMatch(/Camp|Genes|Payout|Repair|injured/);
     expect(screen.button).toBe(startLabel(6));

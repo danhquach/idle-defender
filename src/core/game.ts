@@ -33,6 +33,7 @@ import {
   ITEMS,
   RARITIES,
   FREE_WEAPONS,
+  type JobId,
   type PerkId,
   type ResearchId,
   type SkillId,
@@ -53,11 +54,16 @@ import { newPerkLevels, type PerkLevels } from './perks.ts';
 import { bankCap, loadBatteries, newPower, runGenerator, type Power } from './power.ts';
 import { advanceResearch, dropEntry, newQueue, type ResearchQueue } from './research.ts';
 import { chance, createRng, pick, rngFrom } from './rng.ts';
+import { jobFor } from './jobs.ts';
 import { levelOf } from './stats.ts';
 
-/** A defender on the camp's roster: lifetime XP (the level and its bonus come from it, ID-146). */
+/**
+ * A defender on the camp's roster: lifetime XP (the level and its bonus come from it, ID-146)
+ * and a profession (ID-149).
+ */
 export interface RosterDefender extends DefenderSpec {
   xp: number;
+  job: JobId;
   /** Injured until this time (ms); null when fit. */
   injuredUntil: number | null;
 }
@@ -130,10 +136,10 @@ const STARTER_ROSTER: readonly DefenderSpec[] = [
  * Horde 1 with one survivor carrying a pistol, free recruit 1. The rest is the full
  * game's, kept as it is (each horde-only fight is on a fresh `squadBase`).
  */
-export function newGame(preset: 'full' | 'horde' = 'full'): GameState {
+export function newGame(preset: 'full' | 'horde' = 'full', seed = 0): GameState {
   const game = fullGame();
   if (preset === 'full') return game;
-  return { ...game, roster: [recruit(1)], camp: { ...game.camp, recruits: 1 } };
+  return { ...game, roster: [recruit(1, seed)], camp: { ...game.camp, recruits: 1 } };
 }
 
 function fullGame(): GameState {
@@ -146,6 +152,7 @@ function fullGame(): GameState {
       ...d,
       loadout: { ...d.loadout },
       xp: 0,
+      job: jobFor(d.id),
       injuredUntil: null,
     })),
     armoury: [],

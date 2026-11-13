@@ -73,6 +73,7 @@ import {
   type SkillId,
   type Stock,
   WEAPONS,
+  JOBS,
 } from '../core/data.ts';
 import {
   hordeBossReward,
@@ -119,7 +120,7 @@ import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
 import { powerBand, recommendedPower, squadPower, type PowerBand } from '../core/squadpower.ts';
-import { levelOf } from '../core/stats.ts';
+import { jobFits, levelOf } from '../core/stats.ts';
 import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
@@ -1127,16 +1128,24 @@ export function squadGear(game: GameState): GearScreen {
       // What they fight with: a primary that is no gun fights as the pistol (squadSpec).
       const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
       const choices: Held[] = ['pistol', ...(isOwned(held) ? [held] : []), ...stash];
+      // A fighting job's guns carry a ★, and a gun that isn't theirs says so (ID-149).
+      const job = JOBS[d.job];
+      const fighter = job.kind === 'fight';
+      const off = fighter && !jobFits(d.job, held);
+      const role = roleLine(baseOf(held)) ?? '';
       return {
         id: d.id,
         name: d.name,
         options: choices
           .map((h) => ({ h, power: gunPower(h) }))
           .sort((a, b) => b.power - a.power)
-          .map(({ h }) => ({ value: isOwned(h) ? h.uid : 'pistol', label: gunOption(h) })),
+          .map(({ h }) => ({
+            value: isOwned(h) ? h.uid : 'pistol',
+            label: `${fighter && jobFits(d.job, h) ? '★ ' : ''}${gunOption(h)}`,
+          })),
         value: isOwned(held) ? held.uid : 'pistol',
         rarity: isOwned(held) ? held.rarity : 'common',
-        role: roleLine(baseOf(held)) ?? '',
+        role: off ? [role, `No ${job.name} bonus with this gun`].filter(Boolean).join(' · ') : role,
       };
     }),
   };
@@ -1203,6 +1212,8 @@ export interface SquadCard {
   id: string;
   name: string;
   level: number;
+  /** Their profession (ID-149): "Hunter". */
+  job: string;
   /** XP this win gave; null off a win. */
   xp: number | null;
   levelUp: boolean;
@@ -1229,11 +1240,18 @@ export interface Debrief {
   foot: string;
 }
 
+/** Survivor `id`'s profession name on `game`'s roster (ID-149), '' for none there. */
+const jobName = (game: Pick<GameState, 'roster'>, id: string): string => {
+  const d = game.roster.find((r) => r.id === id);
+  return d ? JOBS[d.job].name : '';
+};
+
 /** A card for `d` off a win, or with no gain. */
 const plainCard = (d: RosterDefender): SquadCard => ({
   id: d.id,
   name: d.name,
   level: levelOf(d.xp).level,
+  job: JOBS[d.job].name,
   xp: null,
   levelUp: false,
   bar: null,
@@ -1449,6 +1467,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       id: g.id,
       name: g.name,
       level: g.level,
+      job: jobName(game, g.id),
       xp: g.xp,
       levelUp: g.levels > 0,
       bar: {
@@ -1476,7 +1495,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           ? []
           : [
               joined
-                ? `New survivor: ${joined.name} joins the squad for the next horde`
+                ? `New survivor: ${joined.name} (${JOBS[joined.job].name}) joins the squad for the next horde`
                 : `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
             ]),
         ...(drop ? squadDropLines(game, drop) : []),
@@ -1505,7 +1524,12 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         recruit: replay
           ? null
           : joined
-            ? { label: 'New survivor', name: joined.name, sub: 'Joins next horde', full: false }
+            ? {
+                label: 'New survivor',
+                name: joined.name,
+                sub: `${JOBS[joined.job].name} · joins next horde`,
+                full: false,
+              }
             : {
                 label: 'Squad',
                 name: `${SQUAD_CAP}/${SQUAD_CAP} full`,
@@ -2276,7 +2300,7 @@ export function createHud(
         // The whole name on hover, as one line can end it in "…" (ID-111).
         name.title = c.name;
         name.setAttribute('aria-label', `${c.name}: open survivor card`);
-        who.append(name, el('span', 'squad-card-level', `Lv ${c.level}`));
+        who.append(name, el('span', 'squad-card-level', `Lv ${c.level} · ${c.job}`));
         if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
         top.append(who);
         if (c.xp !== null) top.append(el('span', 'squad-card-xp', `+${c.xp} XP`));
