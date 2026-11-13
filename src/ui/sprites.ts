@@ -379,6 +379,9 @@ export const CARD_ICON: Readonly<Record<UpgradeId, ArtId>> = {
   'extended-mags': 'card-extended-mags',
   'concussion-rounds': 'card-concussion-rounds',
   'frag-grenades': 'card-frag-grenades',
+  // The skill art (ID-139: Flashbang and Molotov were skills).
+  flashbang: 'icon-flashbang',
+  molotov: 'icon-molotov',
   'barbed-wire': 'card-barbed-wire',
   'aim-for-the-head': 'card-aim-for-the-head',
   'hollow-point-rounds': 'card-hollow-point-rounds',
@@ -394,8 +397,6 @@ export const CARD_ICON: Readonly<Record<UpgradeId, ArtId>> = {
 };
 /** Each skill's icon on its button (design §15, ID-041). */
 export const SKILL_ICON: Readonly<Record<SkillId, ArtId>> = {
-  flashbang: 'icon-flashbang',
-  molotov: 'icon-molotov',
   airstrike: 'icon-airstrike',
 };
 

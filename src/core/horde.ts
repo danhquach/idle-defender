@@ -122,6 +122,8 @@ export type UpgradeId =
   | 'incendiary-rounds'
   | 'concussion-rounds'
   | 'frag-grenades'
+  | 'flashbang'
+  | 'molotov'
   | 'shock-rounds'
   | 'barbed-wire'
   | 'aim-for-the-head'
@@ -535,26 +537,33 @@ export const FEAT_KEEP = 1;
  * one every `gap` s each, so steady fire doesn't turn it into noise.
  */
 export const SAVE_CUE = { keep: 0.8, gap: 1.5 } as const;
-/** A molotov's fire on the ground, lit at `at`, burning enemies inside until `until` (fight time). */
+/** A Molotov's fire on the ground (ID-139), lit at `at`, burning enemies inside until `until` (fight time). */
 export interface Fire {
   x: number;
   y: number;
   at: number;
   until: number;
 }
-/** A bomb, bottle or flashbang still in the air, landing at `(x, y)` at `at` (ID-041). */
+/** An airstrike bomb still in the air, landing at `(x, y)` at `at` (ID-041). */
 export interface Incoming {
   skill: SkillId;
   x: number;
   y: number;
   at: number;
 }
+/** What a survivor throws (ID-139): the throwable card held when it was thrown. */
+export type Throwable = 'frag' | 'flashbang' | 'molotov';
 /**
- * A Frag Grenade (design §8): thrown by defender `by` from `(fromX, fromY)` at `at`, landing
- * at `(x, y)` at `lands`, when it bursts (`burst`); its blast is drawn until
- * `lands + CARD.frag.flash`.
+ * A Frag Grenade (design §8), or a thrown Flashbang or Molotov (`item`, ID-139): thrown by
+ * defender `by` from `(fromX, fromY)` at `at`, landing at `(x, y)` at `lands`, when it bursts
+ * (`burst`); a Frag Grenade's blast is drawn until `lands + CARD.frag.flash`. A Flashbang's
+ * stun or a Molotov's fire lasts `seconds`, its card's level when thrown, so one in the air
+ * when the card is swapped lands as it was.
  */
 export interface Grenade {
+  /** Absent: a Frag Grenade (and every tar bomb). */
+  item?: Exclude<Throwable, 'frag'>;
+  seconds?: number;
   by: string;
   fromX: number;
   fromY: number;
@@ -695,8 +704,11 @@ export interface HordeState {
   bursts: Burst[];
   /** Frag Grenades in the air or bursting (design §8); cleared when the horde ends. */
   grenades: Grenade[];
-  /** When the next Frag Grenade may be thrown; absent until the card is picked. */
-  nextFragAt?: number;
+  /**
+   * When the throwable slot's next throw may come (ID-139; Frag Grenades' alone before);
+   * absent until the first throwable card is picked, kept across a swap.
+   */
+  nextThrowAt?: number;
   /** Oil Bomb's tar bombs in the air (ID-132; `burst` once landed); cleared when the horde ends. */
   tarBombs: Grenade[];
   /** Oil Bomb's slicks on the ground (ID-132); cleared when the horde ends. */
@@ -852,7 +864,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     mutantKills: 0,
     buffs: { adrenaline: 0, overdrive: 0 },
     skills: [...skills],
-    cooldowns: { flashbang: 0, molotov: 0, airstrike: 0 },
+    cooldowns: { airstrike: 0 },
     perks: [...perks],
     perkLevels: levels,
     research: [...research],
@@ -964,10 +976,14 @@ export function tickInPlace(s: HordeState, dt: number): HordeState {
   return s;
 }
 
-/** How far `weapon` (a gun) reaches from `post`: its range × the post's × the cards'. */
+/**
+ * How far `weapon` (a gun) reaches from `post`: its range × the post's × the cards', and ×
+ * Flashbang's glare while that card is held (its cost, ID-139).
+ */
 export function gunRange(state: HordeState, post: Pick<Post, 'kind'>, weapon: Held): number {
   const factor = post.kind === 'line' ? SQUAD_LINE.range : POST_RANGE[post.kind];
-  return gunOf(weapon).range * factor * state.mods.range;
+  const glare = took(state, 'flashbang') ? CARD.flashbang.glare : 1;
+  return gunOf(weapon).range * factor * state.mods.range * glare;
 }
 
 /** Whether the bought buff `id` is still running (fight time stops during picks, so it does too). */
@@ -1193,7 +1209,7 @@ function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   walk(s);
   fire(s, rng);
-  throwFrag(s);
+  throwHeld(s);
   throwTar(s);
   fireTurrets(s, rng);
   fly(s);
@@ -2019,28 +2035,48 @@ function shock(s: HordeState, e: Enemy): void {
 export const shocked = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   e.shockUntil !== undefined && !due(s.time, e.shockUntil);
 
+/** The throwable card the squad holds (ID-139: one slot), or null. */
+export function heldThrowable(s: Pick<HordeState, 'taken'>): Throwable | null {
+  if (took(s, 'frag-grenades')) return 'frag';
+  if (took(s, 'flashbang')) return 'flashbang';
+  return took(s, 'molotov') ? 'molotov' : null;
+}
+
+/** Whether a Flashbang can stun `e` now (ID-139): not while stunned, nor `immune` s after its last flash. */
+const flashable = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  !stunned(s, e) && s.time >= (e.dazedUntil ?? -Infinity) + CARD.flashbang.immune - EPS;
+
 /**
- * Frag Grenades (design §8): when due, the survivor on the line nearest the target throws
- * at the enemy outside the camp, within `CARD.frag.range` of a survivor, with the most
- * others within `CARD.frag.radius` (ties → nearest the wall, then lowest id), aimed where it
- * will be in `CARD.frag.flight` s; the next one comes `CARD.frag.every` ÷ the survivors on the
- * line later. With nobody in reach it waits for the next step.
+ * The throwable slot (design §8, ID-139): when due, the survivor on the line nearest the
+ * target throws the card held, at the enemy outside the camp, within the card's `range` of a
+ * survivor, with the most others within its `radius` (ties → nearest the wall, then lowest
+ * id), aimed where it will be in `flight` s (a Flashbang only at enemies it can stun); the
+ * next comes the card's `every` ÷ the survivors on the line later. One timer serves the
+ * slot, so a swap waits it out. With nobody in reach it waits for the next step.
+ *
+ * A Frag Grenade's cost (ID-137): the throw takes the thrower's hands for `pause` s. A
+ * Flashbang or a Molotov takes no one's hands (its cost is its card's own), and carries its
+ * level's `seconds`, so one in the air when the card is swapped lands as it was.
  */
-function throwFrag(s: HordeState): void {
-  if (s.nextFragAt === undefined || !took(s, 'frag-grenades') || !due(s.time, s.nextFragAt)) {
-    return;
-  }
+function throwHeld(s: HordeState): void {
+  const item = heldThrowable(s);
+  if (item === null || s.nextThrowAt === undefined || !due(s.time, s.nextThrowAt)) return;
+  const c = CARD[item];
   const throwers = onTheLine(s);
-  const aim = throwAt(s, throwers, CARD.frag.range, CARD.frag.radius, CARD.frag.flight);
+  const skip = item === 'flashbang' ? (e: Enemy) => !flashable(s, e) : undefined;
+  const aim = throwAt(s, throwers, c.range, c.radius, c.flight, skip);
   if (!aim) return;
-  s.grenades.push(aim);
+  if (item === 'frag') {
+    s.grenades.push(aim);
+    // The shot that was due waits out the pause too.
+    const thrower = throwers.find((d) => d.id === aim.by)!;
+    thrower.nextShotAt = Math.max(thrower.nextShotAt, s.time) + CARD.frag.pause;
+  } else {
+    s.grenades.push({ ...aim, item, seconds: atLevel(s, item, CARD[item].seconds) });
+  }
   s.feats.push({ kind: 'throw', by: aim.by, at: s.time });
-  // Its cost (ID-137): the throw takes the thrower's hands for `pause` s, so no shot comes
-  // before then, and the shot that was due waits that long too.
-  const thrower = throwers.find((d) => d.id === aim.by)!;
-  thrower.nextShotAt = Math.max(thrower.nextShotAt, s.time) + CARD.frag.pause;
-  // Every survivor on the line carries grenades: the squad throws one every `every` s each.
-  s.nextFragAt = s.time + CARD.frag.every / throwers.length;
+  // Every survivor on the line carries some: the squad throws one every `every` s each.
+  s.nextThrowAt = s.time + c.every / throwers.length;
 }
 
 /** The survivors standing at a post (on the line), in post order. */
@@ -2055,10 +2091,10 @@ function onTheLine(s: HordeState): Defender[] {
 type Thrower = Pick<Defender, 'id' | 'x' | 'y'>;
 
 /**
- * A throw from one of `throwers` (Frag Grenades, Oil Bomb): at the enemy outside the camp,
- * within `range` of a thrower, with the most others within `radius` (ties → nearest the
- * wall, then lowest id), by the thrower nearest it, aimed where it will be in `flight` s.
- * Undefined with nobody in reach.
+ * A throw from one of `throwers` (the throwable slot, Oil Bomb): at the enemy outside the
+ * camp, within `range` of a thrower, with the most others within `radius` (ties → nearest
+ * the wall, then lowest id), by the thrower nearest it, aimed where it will be in `flight`
+ * s. Enemies `skip` holds are neither aimed at nor counted. Undefined with nobody in reach.
  */
 function throwAt(
   s: HordeState,
@@ -2066,10 +2102,11 @@ function throwAt(
   range: number,
   radius: number,
   flight: number,
+  skip?: (e: Enemy) => boolean,
 ): Grenade | undefined {
   let best: { e: Enemy; by: Thrower; near: number } | undefined;
   for (const e of s.enemies) {
-    if (e.hp <= 0 || e.inCamp) continue;
+    if (e.hp <= 0 || e.inCamp || skip?.(e)) continue;
     let by: Thrower | undefined;
     let byD = Infinity;
     for (const d of throwers) {
@@ -2077,7 +2114,9 @@ function throwAt(
       if (dist <= range + EPS && dist < byD) [by, byD] = [d, dist];
     }
     if (!by) continue;
-    const near = around(s, e, radius).length;
+    const near = skip
+      ? around(s, e, radius).filter((o) => !skip(o)).length
+      : around(s, e, radius).length;
     const better =
       !best ||
       near > best.near ||
@@ -2155,15 +2194,43 @@ export const slickDps = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>
   CARD.oil.burn * shamblerHp(s);
 
 /**
+ * A thrown Flashbang or Molotov landing (ID-139): a Flashbang stuns (no moving, no
+ * attacking) every enemy within its radius it can stun (`flashable`) for its `seconds`, with
+ * a white pop; a Molotov lights a fire burning for its `seconds`.
+ */
+function landItem(s: HordeState, g: Grenade, item: Exclude<Throwable, 'frag'>): void {
+  const seconds = g.seconds ?? CARD[item].seconds[0]!;
+  if (item === 'molotov') {
+    s.fires.push({ x: g.x, y: g.y, at: s.time, until: s.time + seconds });
+    return;
+  }
+  s.blasts.push({ skill: 'flashbang', x: g.x, y: g.y, at: s.time });
+  for (const e of s.enemies) {
+    if (e.hp <= 0 || !flashable(s, e)) continue;
+    if (Math.hypot(e.x - g.x, e.y - g.y) > CARD.flashbang.radius + EPS) continue;
+    e.dazedUntil = s.time + seconds;
+    e.stunnedUntil = Math.max(e.stunnedUntil, e.dazedUntil);
+  }
+}
+
+/**
  * Each Frag Grenade landing bursts for `fragDamage` (a share of this wave's Shambler HP,
- * ID-124; armour doesn't reduce it) on every enemy within its reach.
+ * ID-124; armour doesn't reduce it) on every enemy within its reach; a Flashbang or Molotov
+ * lands as `landItem` says.
  */
 function blowFrags(s: HordeState): void {
-  s.grenades = s.grenades.filter((g) => s.time - g.lands < CARD.frag.flash);
+  // A landed Flashbang or Molotov is gone: its blast or fire takes over (ID-139).
+  s.grenades = s.grenades.filter(
+    (g) => (g.item === undefined || !g.burst) && s.time - g.lands < CARD.frag.flash,
+  );
   const damage = fragDamage(s);
   for (const g of s.grenades) {
     if (g.burst || !due(s.time, g.lands)) continue;
     g.burst = true;
+    if (g.item !== undefined) {
+      landItem(s, g, g.item);
+      continue;
+    }
     for (const e of s.enemies) {
       if (e.hp > 0 && Math.hypot(e.x - g.x, e.y - g.y) <= CARD.frag.radius + EPS) {
         popOn(s, e, damage);
@@ -2435,12 +2502,15 @@ export const shamblerHp = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale
   enemyHp('shambler', s.hordeNumber, s.wave, s.hpScale);
 
 /**
- * A molotov fire's damage a second (ID-114): `SKILLS.molotov.burn` of this wave's Shambler
- * HP, so it keeps up with enemy HP as hordes go up, at the skill's power.
+ * A Molotov fire's damage a second (ID-114, ID-139): `CARD.molotov.burn` of this wave's
+ * Shambler HP, so it keeps up with enemy HP as hordes go up.
  */
-export const fireDps = (
-  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'freeSkills'>,
-): number => SKILLS.molotov.burn * shamblerHp(s) * skillPower(s);
+export const fireDps = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
+  CARD.molotov.burn * shamblerHp(s);
+
+/** Whether `e` stands in a Molotov's fire (ID-139): outside the camp only. */
+export const inFire = (s: Pick<HordeState, 'fires'>, e: Enemy): boolean =>
+  !e.inCamp && s.fires.some((f) => Math.hypot(e.x - f.x, e.y - f.y) <= CARD.molotov.radius + EPS);
 
 /** An Incendiary Rounds burn's damage a second at the card's level (ID-124): its share of this wave's Shambler HP. */
 export const burnDpsOf = (
@@ -2460,30 +2530,29 @@ export const dazed = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   e.dazedUntil !== undefined && !due(s.time, e.dazedUntil);
 
 /**
- * Design §4, ID-041: each airstrike bomb that lands hits every enemy within its radius
- * at once, and each flashbang stuns them, both flashing; each molotov bottle lights a fire.
+ * An airstrike bomb's hit (ID-139): `SKILLS.airstrike.share` of this wave's Shambler HP, so it
+ * keeps up with the hordes as Molotov's fires (ID-114) and Frag Grenades (ID-124) do, at the
+ * skill's power (ID-100).
+ */
+export const bombDamage = (
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'freeSkills'>,
+): number => SKILLS.airstrike.share * shamblerHp(s) * skillPower(s);
+
+/**
+ * Design §4, ID-041: each airstrike bomb that lands hits every enemy within its radius at
+ * once for `bombDamage`, and flashes.
  */
 function land(s: HordeState): void {
   const landed = s.incoming.filter((i) => due(s.time, i.at));
   if (landed.length === 0) return;
   s.incoming = s.incoming.filter((i) => !due(s.time, i.at));
+  const damage = bombDamage(s);
   for (const i of landed) {
-    if (i.skill === 'molotov') {
-      s.fires.push({ x: i.x, y: i.y, at: s.time, until: s.time + SKILLS.molotov.seconds });
-      continue;
-    }
-    const skill = i.skill;
-    s.blasts.push({ skill, x: i.x, y: i.y, at: s.time });
+    s.blasts.push({ skill: 'airstrike', x: i.x, y: i.y, at: s.time });
     for (const e of s.enemies) {
-      if (e.hp <= 0 || Math.hypot(e.x - i.x, e.y - i.y) > SKILLS[skill].radius + EPS) continue;
-      if (skill === 'airstrike') {
-        const damage = SKILLS.airstrike.damage * skillPower(s);
-        popOn(s, e, damage);
-        e.hp = Math.max(0, e.hp - damage);
-      } else {
-        e.dazedUntil = Math.max(e.dazedUntil ?? 0, s.time + SKILLS.flashbang.seconds);
-        e.stunnedUntil = Math.max(e.stunnedUntil, e.dazedUntil);
-      }
+      if (e.hp <= 0 || Math.hypot(e.x - i.x, e.y - i.y) > SKILLS.airstrike.radius + EPS) continue;
+      popOn(s, e, damage);
+      e.hp = Math.max(0, e.hp - damage);
     }
   }
 }
@@ -2517,7 +2586,7 @@ function burn(s: HordeState): void {
   const fireHit = fireDps(s) * STEP;
   for (const f of s.fires) {
     for (const e of s.enemies) {
-      if (Math.hypot(e.x - f.x, e.y - f.y) <= SKILLS.molotov.radius + EPS) {
+      if (Math.hypot(e.x - f.x, e.y - f.y) <= CARD.molotov.radius + EPS) {
         popOn(s, e, fireHit);
         e.hp = Math.max(0, e.hp - fireHit);
         e.burnt = (e.burnt ?? 0) + fireHit;
@@ -2658,6 +2727,8 @@ function move(s: HordeState): Moves {
       STEP *
       (slowed ? 1 - wireSlow : 1) *
       (s.slicks.length > 0 && slicksUnder(s, e).length > 0 ? 1 - CARD.oil.slow : 1) *
+      // Molotov's cost (ID-139): the flames drive enemies on.
+      (s.fires.length > 0 && inFire(s, e) ? 1 + CARD.molotov.panic : 1) *
       trapSlow(s, e) *
       screamed(screamers, e) *
       (roared(s, e) ? 1 + BOSS_SKILL.roar.speed : 1) *

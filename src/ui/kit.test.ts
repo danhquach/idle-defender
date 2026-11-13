@@ -78,10 +78,9 @@ describe('button variants (ID-056)', () => {
     const noop = () => {};
     const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
     const s = newHorde(1, setup());
-    s.skills = ['flashbang'];
     hud.update(s);
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
-    const [adrenaline, , patch, , flashbang, molotov] = buttons;
+    const [adrenaline, , patch, , airstrike] = buttons;
     // No cash: Adrenaline is only unaffordable, its cost red and no extra line.
     expect(variantsOf(adrenaline!)).toEqual(['unaffordable']);
     expect(adrenaline!.querySelector('.btn-cost-short')!.textContent).toBe('30');
@@ -92,15 +91,17 @@ describe('button variants (ID-056)', () => {
     expect(patch!.disabled).toBe(true);
     expect(patch!.querySelector('.btn-lock, .btn-reason')).toBeNull();
     // Not researched: locked, with a short note; the full reason is the tooltip.
-    expect(variantsOf(molotov!)).toEqual(['locked']);
-    expect(molotov!.querySelector('.btn-reason')!.textContent).toBe(LOCKED_NOTE);
-    expect(molotov!.title).toBe('Research Molotov first');
+    expect(variantsOf(airstrike!)).toEqual(['locked']);
+    expect(airstrike!.querySelector('.btn-reason')!.textContent).toBe(LOCKED_NOTE);
+    expect(airstrike!.title).toBe('Research Airstrike first');
     // Using a skill (cooling down) adds no badge and no line.
     const shape = () => buttons.map((b) => b.querySelectorAll('.btn-lock, .btn-reason').length);
+    const researched = { ...s, skills: ['airstrike' as const], cash: 100 };
+    hud.update(researched);
     const before = shape();
-    hud.update({ ...s, cash: 100, cooldowns: { ...s.cooldowns, flashbang: s.time + 10 } });
-    expect(flashbang!.disabled).toBe(true);
-    expect(variantsOf(flashbang!)).toEqual(['secondary']);
+    hud.update({ ...researched, cooldowns: { airstrike: s.time + 10 } });
+    expect(airstrike!.disabled).toBe(true);
+    expect(variantsOf(airstrike!)).toEqual(['secondary']);
     expect(shape()).toEqual(before);
   });
 });

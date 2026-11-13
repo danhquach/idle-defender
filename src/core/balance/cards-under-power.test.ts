@@ -4,6 +4,7 @@
 // still lose on most seeds. Frag Grenades and Incendiary Rounds deal a share of the wave's
 // Shambler HP, so they neither crush early hordes nor fade late.
 import { describe, expect, it } from 'vitest';
+import { THROWABLE_CARDS } from '../cards.ts';
 import { CARD } from '../data.ts';
 import type { GameState } from '../game.ts';
 import { startSquadHorde } from '../hordeonly.ts';
@@ -20,6 +21,8 @@ const MOST_LOST = 4;
 /** Each card at its max (Sharpshooter, uncapped, at five picks: +50% damage). */
 const CARDS: readonly [UpgradeId, number][] = [
   ['frag-grenades', 1],
+  ['flashbang', 3],
+  ['molotov', 3],
   ['incendiary-rounds', 3],
   ['piercing-rounds', 3],
   ['concussion-rounds', 1],
@@ -68,7 +71,7 @@ function won(game: GameState, n: number, seed: number, cards: [UpgradeId, number
   s.taken = cards.map(([id]) => id);
   s.cardLevels = Object.fromEntries(cards);
   // As the picks would: the first grenade is thrown at once; Sharpshooter's steps add up.
-  if (s.taken.includes('frag-grenades')) s.nextFragAt = 0;
+  if (s.taken.some((id) => THROWABLE_CARDS.includes(id))) s.nextThrowAt = 0;
   const sharp = s.cardLevels.sharpshooter ?? 0;
   s.mods.damage = 1 + CARD.step.damage * sharp;
   while (s.outcome === 'fighting') {

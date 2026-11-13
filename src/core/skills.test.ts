@@ -1,5 +1,5 @@
-// Design §4, as built ID-019, ID-041: active skills researched at the Lab,
-// paid with horde cash and then cooling down; they hit enemies only.
+// Design §4, as built ID-019, ID-041, ID-139: the active skill (the Airstrike) researched at
+// the Lab, paid with horde cash and then cooling down; it hits enemies only.
 import { describe, expect, it } from 'vitest';
 import {
   ENEMIES,
@@ -8,6 +8,7 @@ import {
   SKILL_IDS,
   SKILLS,
   SQUAD_SKILLS,
+  START_SKILLS,
   STEP,
   THROW_FALL,
   type SkillId,
@@ -15,19 +16,10 @@ import {
   WALL,
 } from './data.ts';
 import { newGame, startHorde } from './game.ts';
-import { dazed, fireDps, newHorde, stunned, tick, type HordeState } from './horde.ts';
+import { bombDamage, newHorde, tick, type HordeState } from './horde.ts';
 import { queueLock, upgradeLab } from './research.ts';
-import {
-  carpet,
-  skillLeft,
-  skillLock,
-  throwArea,
-  useSkill,
-  wallFront,
-  type AreaSkill,
-} from './skills.ts';
+import { skillLeft, skillLock, throwArea, useSkill, wallFront } from './skills.ts';
 import { enemy, researchNow, setup } from './testing.ts';
-import { enemyHp } from './waves.ts';
 
 /** A horde with every skill researched, no spawns left and `cash` in hand. */
 function fight(cash = 100): HordeState {
@@ -37,7 +29,7 @@ function fight(cash = 100): HordeState {
   return s;
 }
 
-function used(s: HordeState, id: SkillId, x = 1400, y = 200): HordeState {
+function used(s: HordeState, id: SkillId = 'airstrike', x = 1400, y = 200): HordeState {
   const r = useSkill(s, id, x, y);
   if (!r.ok) throw new Error(r.reason);
   return r.state;
@@ -46,7 +38,7 @@ function used(s: HordeState, id: SkillId, x = 1400, y = 200): HordeState {
 const wallHp = (s: HordeState): number =>
   s.layers.reduce((sum, l) => sum + l.segments.reduce((t, seg) => t + seg.hp, 0), 0);
 
-/** `s` ticked until every bomb and bottle in the air has landed. */
+/** `s` ticked until every bomb in the air has landed. */
 function landed(s: HordeState): HordeState {
   let t = s;
   for (let i = 0; i < 100 && t.incoming.length > 0; i++) t = tick(t, STEP);
@@ -54,57 +46,167 @@ function landed(s: HordeState): HordeState {
   return t;
 }
 
-describe('airstrike (carpet bombing, ID-041)', () => {
-  it('bombs the aimed row from the outer wall to the field’s end, one bomb at a time', () => {
+/** The distance from `(cx, cy)` of each of `s`'s bombs in the air. */
+const spread = (s: HordeState, cx: number, cy: number): number[] =>
+  s.incoming.map((m) => Math.hypot(m.x - cx, m.y - cy));
+
+describe('the skill list (ID-139)', () => {
+  it('the Airstrike is the only skill, picked from the start, researched at Lab 2 with nothing before it', () => {
+    expect(SKILL_IDS).toEqual(['airstrike']);
+    expect(START_SKILLS).toEqual(['airstrike']);
+    expect(SKILLS.airstrike).toMatchObject({
+      aim: 'area',
+      area: 260,
+      count: 12,
+      share: 4,
+      cooldown: 60,
+      every: 0.1,
+    });
+  });
+});
+
+describe('airstrike (area bombing, ID-041, ID-139)', () => {
+  it('drops its bombs over the aimed area, one every 0.1 s after a fall, and pays its cost', () => {
     const s = fight();
-    const { radius: r, every } = SKILLS.airstrike;
-    const front = wallFront(s);
-    expect(front).toBe(Math.max(...s.layers.map((l) => l.x + WALL.depth)));
-    const after = used(s, 'airstrike', 300, 250);
-    const bombs = after.incoming;
-    expect(bombs).toEqual(
-      carpet(s, 250).map((p, i) => ({ skill: 'airstrike', ...p, at: THROW_FALL + i * every })),
-    );
-    expect(bombs[0]!.x).toBeCloseTo(front + r, 9);
-    for (let i = 1; i < bombs.length; i++)
-      expect(bombs[i]!.x - bombs[i - 1]!.x).toBeCloseTo(2 * r, 9);
-    expect(bombs.at(-1)!.x).toBeLessThanOrEqual(FIELD.right - r);
-    expect(bombs.at(-1)!.x + 2 * r).toBeGreaterThan(FIELD.right - r);
-    expect(bombs.every((b) => b.y === 250)).toBe(true);
+    const { count, every, area } = SKILLS.airstrike;
+    const after = used(s, 'airstrike', 1000, 400);
+    expect(after.incoming).toHaveLength(count);
+    after.incoming.forEach((m, i) => {
+      expect(m.skill).toBe('airstrike');
+      expect(m.at).toBeCloseTo(THROW_FALL + i * every, 9);
+      expect(Math.hypot(m.x - 1000, m.y - 400)).toBeLessThanOrEqual(area + 1e-9);
+    });
+    expect(new Set(after.incoming.map((m) => m.x)).size).toBe(count);
     expect(after.cash).toBe(100 - SKILLS.airstrike.cost);
     expect(after.enemies).toEqual(s.enemies); // nothing lands until the fight runs
+    expect(s.incoming).toEqual([]); // pure
+  });
+
+  it('aimed elsewhere it lands elsewhere; the same fight drops the same way, the next drop differently', () => {
+    const s = fight();
+    const { count, area } = SKILLS.airstrike;
+    const a = used(s, 'airstrike', 1000, 400);
+    for (const d of spread(used(s, 'airstrike', 1400, 150), 1400, 150)) {
+      expect(d).toBeLessThanOrEqual(area + 1e-9);
+    }
+    // Seeded: the same fight drops the same way; the next drop lands elsewhere.
+    expect(a.rng).not.toEqual(s.rng);
+    expect(used(s, 'airstrike', 1000, 400).incoming).toEqual(a.incoming);
+    const next = used({ ...a, cooldowns: s.cooldowns }, 'airstrike', 1000, 400).incoming.slice(
+      count,
+    );
+    expect(next.map((m) => [m.x, m.y])).not.toEqual(a.incoming.map((m) => [m.x, m.y]));
+  });
+
+  it('a different seed drops differently', () => {
+    const a = used(fight(), 'airstrike', 1000, 400);
+    const other = newHorde(2, { ...setup(), skills: [...SKILL_IDS] });
+    other.toSpawn = 0;
+    other.cash = 100;
+    expect(used(other, 'airstrike', 1000, 400).incoming).not.toEqual(a.incoming);
+  });
+
+  it('spreads evenly over the whole area, not just its middle', () => {
+    let s = fight();
+    const { area } = SKILLS.airstrike;
+    const spots: number[] = [];
+    for (let i = 0; i < 40; i++) {
+      s = used({ ...s, cash: 100, cooldowns: fight().cooldowns }, 'airstrike', 1000, 400);
+      spots.push(...spread(s, 1000, 400));
+      s.incoming = [];
+    }
+    expect(Math.max(...spots)).toBeGreaterThan(0.9 * area);
+    expect(Math.min(...spots)).toBeLessThan(0.3 * area);
+    // Even over the circle's area: about a quarter of the bombs inside half its radius.
+    const inner = spots.filter((d) => d <= area / 2).length / spots.length;
+    expect(inner).toBeGreaterThan(0.18);
+    expect(inner).toBeLessThan(0.32);
+  });
+
+  it('near a field edge or behind the wall, bombs stay on the field past the wall, inside the area', () => {
+    for (const [x, y] of [
+      [0, 0],
+      [FIELD.right, FIELD.height],
+      [wallFront(fight()) - 50, 30],
+    ] as const) {
+      let s = fight();
+      for (let k = 0; k < 10; k++) {
+        s = used({ ...s, cash: 100, cooldowns: fight().cooldowns }, 'airstrike', x, y);
+        const c = throwArea(s, 'airstrike', x, y);
+        expect(c.x).toBeGreaterThanOrEqual(wallFront(s));
+        expect(s.incoming).toHaveLength(SKILLS.airstrike.count); // none dropped for the edge
+        for (const m of s.incoming.splice(0)) {
+          expect(m.x).toBeGreaterThanOrEqual(wallFront(s));
+          expect(m.x).toBeLessThanOrEqual(FIELD.right);
+          expect(m.y).toBeGreaterThanOrEqual(0);
+          expect(m.y).toBeLessThanOrEqual(FIELD.height);
+          expect(Math.hypot(m.x - c.x, m.y - c.y)).toBeLessThanOrEqual(c.r + 1e-9);
+        }
+      }
+    }
+  });
+
+  it('the area is the skill’s own, past the wall front, with the aim moved onto the field', () => {
+    const s = fight();
+    expect(wallFront(s)).toBe(Math.max(...s.layers.map((l) => l.x + WALL.depth)));
+    expect(throwArea(s, 'airstrike', 0, 200)).toEqual({
+      x: wallFront(s),
+      y: 200,
+      r: SKILLS.airstrike.area,
+    });
+    expect(throwArea(s, 'airstrike', 1000, -50).y).toBe(0);
+    expect(throwArea(s, 'airstrike', 1000, FIELD.height + 50).y).toBe(FIELD.height);
+    expect(throwArea(s, 'airstrike', FIELD.right + 50, 200).x).toBe(FIELD.right);
   });
 
   it('each bomb hits every enemy within its radius as it lands, edge included, nothing past it', () => {
     const s = fight();
     for (const d of s.defenders) d.nextShotAt = 1e9; // only the bombs hit
     const r = SKILLS.airstrike.radius;
-    const [b0, b3] = [carpet(s, 200)[0]!, carpet(s, 200)[3]!];
-    const hold = { hp: 100, maxHp: 100, stunnedUntil: 1e9 };
-    const first = enemy(s, { x: b0.x, y: 200, ...hold });
-    const edge = enemy(s, { x: b3.x, y: 200 + r, ...hold });
-    const past = enemy(s, { x: b3.x, y: 200 - r - 1, ...hold });
+    const t0 = used(s, 'airstrike', 1000, 400);
+    // The first bomb alone: twelve in a circle this size would overlap.
+    t0.incoming = t0.incoming.slice(0, 1);
+    const b0 = t0.incoming[0]!;
+    const hold = { hp: 1000, maxHp: 1000, stunnedUntil: 1e9 };
+    const first = enemy(t0, { x: b0.x, y: b0.y, ...hold });
+    const edge = enemy(t0, { x: b0.x, y: b0.y + r, ...hold });
+    const past = enemy(t0, { x: b0.x, y: b0.y - r - 1, ...hold });
     // Nothing lands while the bombs fall (ID-107); then the first one hits.
-    let t = tick(used(s, 'airstrike', 0, 200), THROW_FALL - STEP);
+    let t = tick(t0, THROW_FALL - STEP);
     expect(t.blasts).toEqual([]);
     t = tick(t, 2 * STEP);
     const hp = (id: number) => t.enemies.find((e) => e.id === id)!.hp;
-    expect(hp(first.id)).toBe(100 - SKILLS.airstrike.damage);
-    expect(hp(edge.id)).toBe(100); // its bomb is still in the air
+    expect(hp(first.id)).toBe(1000 - bombDamage({ ...t0, freeSkills: undefined }));
+    expect(hp(edge.id)).toBe(1000 - bombDamage({ ...t0, freeSkills: undefined }));
+    expect(hp(past.id)).toBe(1000);
     expect(t.blasts).toHaveLength(1);
     t = landed(t);
-    expect(hp(first.id)).toBe(100 - SKILLS.airstrike.damage);
-    expect(hp(edge.id)).toBe(100 - SKILLS.airstrike.damage);
-    expect(hp(past.id)).toBe(100);
+    expect(hp(first.id)).toBe(1000 - bombDamage({ ...t0, freeSkills: undefined }));
+    expect(hp(past.id)).toBe(1000);
+  });
+
+  it('deals its damage times the skill’s power (a lone pick throws ×2)', () => {
+    for (const power of [1, SQUAD_SKILLS.solo]) {
+      const s = { ...fight(), freeSkills: { power } } as HordeState;
+      for (const d of s.defenders) d.nextShotAt = 1e9;
+      const t0 = used(s);
+      t0.incoming = [{ skill: 'airstrike', x: 1000, y: 400, at: 0 }];
+      const e = enemy(t0, { x: 1000, y: 400, hp: 1000, maxHp: 1000, stunnedUntil: 1e9 });
+      const t = tick(t0, STEP);
+      expect(t.enemies.find((o) => o.id === e.id)!.hp).toBe(
+        1000 - bombDamage({ ...t0, freeSkills: { power } }),
+      );
+    }
   });
 
   it('kills pay XP and cash, and clear a focus on them', () => {
     const s = fight();
-    const p = carpet(s, 200)[2]!;
-    const a = enemy(s, { x: p.x, y: 200, stunnedUntil: 1e9 });
-    enemy(s, { x: p.x + 20, y: 210, stunnedUntil: 1e9 });
-    s.focusId = a.id;
-    const after = landed(used(s, 'airstrike', 0, 200));
+    const t0 = used(s, 'airstrike', 1000, 400);
+    t0.incoming = [{ skill: 'airstrike', x: 1000, y: 400, at: 0 }];
+    const a = enemy(t0, { x: 1000, y: 400, stunnedUntil: 1e9 });
+    enemy(t0, { x: 1020, y: 410, stunnedUntil: 1e9 });
+    t0.focusId = a.id;
+    const after = landed(t0);
     expect(after.enemies).toEqual([]);
     expect(after.cash).toBe(100 - SKILLS.airstrike.cost + 2 * ENEMIES.shambler.cash);
     expect(after.xp).toBe(2 * ENEMIES.shambler.xp);
@@ -120,378 +222,26 @@ describe('airstrike (carpet bombing, ID-041)', () => {
     expect(after.layers).toEqual(before.layers);
     expect(after.turrets).toEqual(before.turrets);
     expect(after.energy).toBe(before.energy);
+    expect(wallHp(after)).toBe(wallHp(before));
   });
 
   it('a pick holds the bombs in the air; the end of the fight drops them', () => {
-    let s = used(fight(), 'airstrike', 0, 200);
+    let s = used(fight(), 'airstrike', 1000, 200);
     s.offer = [];
     s = tick(s, 5);
-    expect(s.incoming).toHaveLength(carpet(s, 200).length);
+    expect(s.incoming).toHaveLength(SKILLS.airstrike.count);
     s.offer = null;
     s.wave = s.waveCount; // the last wave, cleared: the next step wins
     s = tick(s, STEP);
     expect(s.outcome).not.toBe('fighting');
     expect(s.incoming).toEqual([]);
   });
-});
-
-describe('aimed throws (area, ID-107)', () => {
-  const AREA: readonly AreaSkill[] = ['flashbang', 'molotov'];
-
-  it('the area is much larger than one burst', () => {
-    for (const id of AREA) expect(SKILLS[id].area).toBeGreaterThanOrEqual(2.5 * SKILLS[id].radius);
-  });
-
-  it.each(AREA)(
-    '%s: every burst lands inside the aimed area, one at a time, after a fall',
-    (id) => {
-      const s = fight();
-      const { count, every, area } = SKILLS[id];
-      const a = used(s, id, 1000, 400);
-      expect(a.incoming).toHaveLength(count);
-      a.incoming.forEach((m, i) => {
-        expect(m.skill).toBe(id);
-        expect(m.at).toBeCloseTo(THROW_FALL + i * every, 9);
-        expect(Math.hypot(m.x - 1000, m.y - 400)).toBeLessThanOrEqual(area + 1e-9);
-      });
-      expect(new Set(a.incoming.map((m) => m.x)).size).toBe(count);
-      // Aimed elsewhere, it lands elsewhere.
-      const b = used(s, id, 1400, 150);
-      b.incoming.forEach((m) =>
-        expect(Math.hypot(m.x - 1400, m.y - 150)).toBeLessThanOrEqual(area),
-      );
-      // Seeded: the same fight throws the same way; the next throw lands elsewhere.
-      expect(a.rng).not.toEqual(s.rng);
-      expect(used(s, id, 1000, 400).incoming).toEqual(a.incoming);
-      const next = used({ ...a, cooldowns: s.cooldowns }, id, 1000, 400).incoming.slice(count);
-      expect(next.map((m) => [m.x, m.y])).not.toEqual(a.incoming.map((m) => [m.x, m.y]));
-    },
-  );
-
-  it.each(AREA)('%s: spreads over the whole area, not just its middle', (id) => {
-    let s = fight();
-    const { area } = SKILLS[id];
-    const spots: number[] = [];
-    for (let i = 0; i < 40; i++) {
-      s = used({ ...s, cash: 100, cooldowns: fight().cooldowns }, id, 1000, 400);
-      spots.push(...s.incoming.splice(0).map((m) => Math.hypot(m.x - 1000, m.y - 400)));
-    }
-    expect(Math.max(...spots)).toBeGreaterThan(0.9 * area);
-    expect(Math.min(...spots)).toBeLessThan(0.3 * area);
-  });
-
-  it.each(AREA)(
-    '%s: near a field edge or behind the wall, bursts stay on the field past the wall, inside the area',
-    (id) => {
-      for (const [x, y] of [
-        [0, 0],
-        [FIELD.right, FIELD.height],
-        [wallFront(fight()) - 50, 30],
-      ] as const) {
-        let s = fight();
-        for (let k = 0; k < 10; k++) {
-          s = used({ ...s, cash: 100, cooldowns: fight().cooldowns }, id, x, y);
-          const c = throwArea(s, id, x, y);
-          expect(c.x).toBeGreaterThanOrEqual(wallFront(s));
-          for (const m of s.incoming.splice(0)) {
-            expect(m.x).toBeGreaterThanOrEqual(wallFront(s));
-            expect(m.x).toBeLessThanOrEqual(FIELD.right);
-            expect(m.y).toBeGreaterThanOrEqual(0);
-            expect(m.y).toBeLessThanOrEqual(FIELD.height);
-            expect(Math.hypot(m.x - c.x, m.y - c.y)).toBeLessThanOrEqual(c.r + 1e-9);
-          }
-        }
-      }
-    },
-  );
-
-  it('nothing happens on the press: a burst takes effect only when it lands', () => {
-    let s = fight();
-    for (const d of s.defenders) d.nextShotAt = 1e9;
-    s = used(s, 'flashbang', 1000, 400);
-    const first = s.incoming[0]!;
-    const e = enemy(s, { x: first.x, y: first.y, hp: 1e6, maxHp: 1e6 });
-    s = tick(s, THROW_FALL - 2 * STEP);
-    expect(
-      stunned(
-        s,
-        s.enemies.find((x) => x.id === e.id)!,
-      ),
-    ).toBe(false);
-    expect(s.blasts).toEqual([]);
-    s = tick(s, 3 * STEP);
-    expect(s.blasts.length).toBeGreaterThan(0);
-    const after = s.enemies.find((x) => x.id === e.id)!;
-    expect(stunned(s, after)).toBe(true);
-    expect(dazed(s, after)).toBe(true);
-  });
-
-  it('×2 solo rule unchanged: a lone flashbang throws 8 bursts, all inside the area', () => {
-    const s = { ...fight(), freeSkills: { power: SQUAD_SKILLS.solo } } as HordeState;
-    const a = used(s, 'flashbang', 1000, 400);
-    expect(a.incoming).toHaveLength(SKILLS.flashbang.count * SQUAD_SKILLS.solo);
-    expect(a.incoming).toHaveLength(8);
-    a.incoming.forEach((m) =>
-      expect(Math.hypot(m.x - 1000, m.y - 400)).toBeLessThanOrEqual(SKILLS.flashbang.area),
-    );
-    expect(used(s, 'molotov', 1000, 400).incoming).toHaveLength(SKILLS.molotov.count);
-  });
-
-  it('airstrike bombs fall too: the carpet lands THROW_FALL later, still along the row', () => {
-    const s = fight();
-    const bombs = used(s, 'airstrike', 300, 250).incoming;
-    expect(bombs.map((b) => [b.x, b.y])).toEqual(carpet(s, 250).map((p) => [p.x, p.y]));
-    bombs.forEach((b, i) => expect(b.at).toBeCloseTo(THROW_FALL + i * SKILLS.airstrike.every, 9));
-  });
-});
-
-describe('molotov (ID-041)', () => {
-  it('each bottle lights a fire where it lands; every one of them lands', () => {
-    const s = used(fight(), 'molotov');
-    const fires = landed(s).fires;
-    expect(fires.map((f) => [f.x, f.y])).toEqual(s.incoming.map((m) => [m.x, m.y]));
-    fires.forEach((f, i) => {
-      // On the first step at or after its landing time.
-      expect(f.at).toBeGreaterThanOrEqual(s.incoming[i]!.at - 1e-9);
-      expect(f.at).toBeLessThan(s.incoming[i]!.at + STEP);
-      expect(f.until).toBeCloseTo(f.at + SKILLS.molotov.seconds, 9);
-    });
-  });
-
-  it('a fire burns enemies inside for its seconds of fight time, then goes out', () => {
-    let s = used(fight(), 'molotov');
-    // One bottle only, so no other fire overlaps, landing now.
-    s.incoming = s.incoming.slice(0, 1).map((m) => ({ ...m, at: 0 }));
-    const spot = s.incoming[0]!;
-    // Held in place so they stay put, out of the defender's reach.
-    const hold = { hp: 1000, maxHp: 1000, stunnedUntil: 1e9 };
-    const held = enemy(s, { x: spot.x, y: spot.y, ...hold });
-    // Just outside the fire, on whichever side has field to spare.
-    const side = spot.y < FIELD.height / 2 ? 1 : -1;
-    const out = enemy(s, { x: spot.x, y: spot.y + side * (SKILLS.molotov.radius + 1), ...hold });
-    s = tick(s, 1);
-    const hp = (id: number) => s.enemies.find((e) => e.id === id)!.hp;
-    const dps = SKILLS.molotov.burn * ENEMIES.shambler.hp; // Horde 1 wave 1: base HP (ID-114).
-    expect(hp(held.id)).toBeCloseTo(1000 - dps, 6);
-    expect(hp(out.id)).toBe(1000);
-    s = tick(s, SKILLS.molotov.seconds + 1);
-    expect(s.fires).toEqual([]);
-    expect(hp(held.id)).toBeCloseTo(1000 - dps * SKILLS.molotov.seconds, 6);
-    // It counts the HP fire took (for the view's hit flash, ID-089); none outside.
-    const burnt = (id: number) => s.enemies.find((e) => e.id === id)!.burnt ?? 0;
-    expect(burnt(held.id)).toBeCloseTo(1000 - hp(held.id), 6);
-    expect(burnt(out.id)).toBe(0);
-  });
-
-  it('stops burning during a pick, and a burn kill pays cash', () => {
-    let s = landed(used(fight(), 'molotov'));
-    const spot = s.fires[0]!;
-    const e = enemy(s, { x: spot.x, y: spot.y, hp: 1, stunnedUntil: 1e9 });
-    s.offer = [];
-    s = tick(s, 5);
-    expect(s.enemies.find((x) => x.id === e.id)!.hp).toBe(1);
-    s.offer = null;
-    const cash = s.cash;
-    s = tick(s, 1);
-    expect(s.enemies.some((x) => x.id === e.id)).toBe(false);
-    expect(s.cash).toBe(cash + ENEMIES.shambler.cash);
-  });
-});
-
-describe('molotov keeps up with the hordes (ID-114)', () => {
-  /** A fight at Horde `n`'s last wave, nothing left to spawn, the squad not shooting. */
-  function late(n: number, power = 1, seed = 1): HordeState {
-    const s = newHorde(seed, {
-      ...setup(),
-      hordeNumber: n,
-      skills: ['molotov', 'flashbang'],
-      freeSkills: { power },
-    });
-    s.wave = s.waveCount;
-    s.toSpawn = 0;
-    s.enemies = [];
-    for (const d of s.defenders) d.nextShotAt = 1e9;
-    return s;
-  }
-
-  it('a fire burns a share of this wave’s Shambler HP a second, at every horde and wave', () => {
-    for (const n of [1, 4, 7, 12, 20]) {
-      const s = late(n);
-      const shambler = enemyHp('shambler', n, s.wave);
-      expect(fireDps(s)).toBeCloseTo(SKILLS.molotov.burn * shambler, 9);
-      expect(fireDps({ ...s, wave: 1 })).toBeCloseTo(
-        SKILLS.molotov.burn * enemyHp('shambler', n, 1),
-        9,
-      );
-      expect(fireDps(late(n, 2))).toBeCloseTo(2 * fireDps(s), 9);
-    }
-    // The horde-only build's own HP curve (`hpScale`) is followed too.
-    const squad = { ...late(7), hpScale: 3 };
-    expect(fireDps(squad)).toBeCloseTo(
-      SKILLS.molotov.burn * enemyHp('shambler', 7, squad.wave, 3),
-      9,
-    );
-    // A Shambler that walks across a whole fire (its width at walking speed) burns to death.
-    const across = (2 * SKILLS.molotov.radius) / ENEMIES.shambler.speed;
-    expect(SKILLS.molotov.burn * across).toBeGreaterThanOrEqual(1);
-  });
-
-  /**
-   * One throw into a walking crowd of 40 Shamblers at Horde 7's last wave, with only the
-   * fires doing damage, over 6 fights: the Shamblers killed of those the fires touched.
-   */
-  function killShare(power: number): number {
-    let touched = 0;
-    let killed = 0;
-    for (let seed = 1; seed <= 6; seed++) {
-      const s = late(7, power, seed);
-      const hp = enemyHp('shambler', 7, s.wave);
-      for (let i = 0; i < 40; i++) {
-        enemy(s, { x: 950 + (i % 8) * 40, y: 250 + Math.floor(i / 8) * 75, hp, maxHp: hp });
-      }
-      let t = used(s, 'molotov', 1100, 400);
-      const ids = new Set(t.enemies.map((e) => e.id));
-      const hit = new Set<number>();
-      for (let i = 0; i < 9 / STEP; i++) {
-        t = tick(t, STEP);
-        for (const e of t.enemies) if ((e.burnt ?? 0) > 0) hit.add(e.id);
-      }
-      const alive = new Set(t.enemies.map((e) => e.id));
-      touched += hit.size;
-      killed += [...ids].filter((id) => !alive.has(id)).length;
-    }
-    return killed / touched;
-  }
-
-  it('one throw at a Horde 7 crowd kills at least 30% of the Shamblers it burns, half alone', () => {
-    expect(killShare(1)).toBeGreaterThanOrEqual(0.3);
-    expect(killShare(SQUAD_SKILLS.solo)).toBeGreaterThanOrEqual(0.5);
-  });
-});
-
-describe('flashbang (ID-041)', () => {
-  /**
-   * A fight with one flashbang thrown (none landed yet) and where its first one lands; its
-   * fall cut short, so the first one lands on the next step.
-   */
-  function thrown(): { s: HordeState; spot: { x: number; y: number } } {
-    const s = used(fight(), 'flashbang', 1000, 400);
-    s.incoming = s.incoming.map((m) => ({ ...m, at: m.at - THROW_FALL }));
-    return { s, spot: { x: s.incoming[0]!.x, y: s.incoming[0]!.y } };
-  }
-
-  it('a dazed enemy is marked for the view’s stars until its stun ends', () => {
-    const t = thrown();
-    let s = t.s;
-    const spot = t.spot;
-    s.incoming = s.incoming.slice(0, 1);
-    const e = enemy(s, { ...spot, hp: 1e6, maxHp: 1e6 });
-    const other = enemy(s, { x: spot.x, y: spot.y - SKILLS.flashbang.radius - 5, hp: 1e6 });
-    s = tick(s, STEP);
-    const at = (id: number) => s.enemies.find((x) => x.id === id)!;
-    expect(dazed(s, at(e.id))).toBe(true);
-    expect(dazed(s, at(other.id))).toBe(false);
-    s = tick(s, SKILLS.flashbang.seconds - 0.2);
-    expect(dazed(s, at(e.id))).toBe(true);
-    s = tick(s, 0.3);
-    expect(dazed(s, at(e.id))).toBe(false);
-    expect(stunned(s, at(e.id))).toBe(false);
-  });
-
-  it('each bang stuns enemies in its radius from moving until it wears off', () => {
-    const thrownOnce = thrown();
-    let s = thrownOnce.s;
-    const spot = thrownOnce.spot;
-    const near = enemy(s, { ...spot, hp: 1e6, maxHp: 1e6 });
-    const far = enemy(s, {
-      x: spot.x,
-      y: spot.y - SKILLS.flashbang.radius - 1,
-      hp: 1e6,
-      maxHp: 1e6,
-    });
-    // Only the first bang: the others land elsewhere.
-    s.incoming = s.incoming.slice(0, 1);
-    s = tick(s, STEP);
-    const at = (id: number) => s.enemies.find((e) => e.id === id)!;
-    expect(stunned(s, at(near.id))).toBe(true);
-    expect(stunned(s, at(far.id))).toBe(false);
-    expect(s.blasts).toEqual([{ skill: 'flashbang', ...spot, at: 0 }]);
-    const x = at(near.id).x;
-    s = tick(s, SKILLS.flashbang.seconds - 0.5);
-    expect(at(near.id).x).toBe(x);
-    expect(at(far.id).x).toBeLessThan(far.x);
-    s = tick(s, 1);
-    expect(stunned(s, at(near.id))).toBe(false);
-    expect(at(near.id).x).toBeLessThan(x);
-  });
-
-  it('stops a stunned enemy hitting the wall; an unstunned one does', () => {
-    const atWall = (stun: boolean): HordeState => {
-      const s = fight();
-      const outer = s.layers.reduce((a, b) => (b.x > a.x ? b : a));
-      enemy(s, { x: outer.x + 20, y: 220, hp: 1e6, maxHp: 1e6 });
-      if (!stun) return s;
-      const t = used(s, 'flashbang', 0, 0);
-      t.incoming = [{ skill: 'flashbang', x: outer.x + 20, y: 220, at: 0 }];
-      return tick(t, STEP);
-    };
-    const control = atWall(false);
-    expect(wallHp(tick(control, 2))).toBeLessThan(wallHp(control));
-    const stunnedAtWall = atWall(true);
-    expect(wallHp(tick(stunnedAtWall, 2))).toBe(wallHp(stunnedAtWall));
-  });
-
-  it('stuns in fight time: a pick holds it, and a second bang never shortens it', () => {
-    let { s, spot } = thrown();
-    enemy(s, { ...spot, stunnedUntil: 99 });
-    expect(tick(s, STEP).enemies[0]!.stunnedUntil).toBe(99);
-
-    ({ s, spot } = thrown());
-    enemy(s, { ...spot });
-    s = tick(s, STEP);
-    s.offer = [];
-    s = tick(s, 10);
-    expect(stunned(s, s.enemies[0]!)).toBe(true);
-  });
-
-  it('a bang landing on a charging Horror holds its ability clocks (design §9, ID-024)', () => {
-    const { s: first, spot } = thrown();
-    let s = first;
-    s.incoming = s.incoming.slice(0, 1);
-    const h = enemy(s, { kind: 'horror', ...spot, hp: 1e6, maxHp: 1e6 });
-    h.horror = {
-      boss: 0,
-      skills: ['charge'],
-      next: { charge: 9 },
-      fired: {},
-      chargeUntil: 2,
-      charged: false,
-      hitAt: 0,
-      seenHp: 1e6,
-      broods: 0,
-      platesOff: false,
-    };
-    s = tick(s, STEP);
-    const clock = () => s.enemies.find((e) => e.id === h.id)!.horror!;
-    expect(
-      stunned(
-        s,
-        s.enemies.find((e) => e.id === h.id)!,
-      ),
-    ).toBe(true);
-    // Stunned on the bang's own step: its clocks move on with the time it loses.
-    expect(clock().next.charge).toBeCloseTo(9 + STEP, 9);
-    expect(clock().chargeUntil).toBeCloseTo(2 + STEP, 9);
-    s = tick(s, 1);
-    expect(clock().next.charge).toBeCloseTo(9 + STEP + 1, 6);
-    expect(clock().chargeUntil).toBeCloseTo(2 + STEP + 1, 6);
-  });
 
   it('a flash shows for about SKILL_FLASH seconds', () => {
-    let { s } = thrown();
-    s.incoming = s.incoming.slice(0, 1);
+    let s = used(fight(), 'airstrike', 1000, 400);
+    s.incoming = [{ skill: 'airstrike', x: 1000, y: 400, at: 0 }];
     s = tick(s, STEP);
-    expect(s.blasts).toHaveLength(1);
+    expect(s.blasts).toEqual([{ skill: 'airstrike', x: 1000, y: 400, at: 0 }]);
     s = tick(s, SKILL_FLASH - 2 * STEP);
     expect(s.blasts).toHaveLength(1);
     s = tick(s, 3 * STEP);
@@ -500,22 +250,29 @@ describe('flashbang (ID-041)', () => {
 });
 
 describe('cooldowns', () => {
-  it('start at use, count fight time only, and every skill is ready at the start', () => {
+  it('the airstrike’s is 60 s: it starts at use, counts fight time only, and it is ready at the start', () => {
     let s = fight();
-    for (const id of SKILL_IDS) expect(skillLock(s, id)).toBeNull();
-    s = used(s, 'molotov');
-    expect(skillLeft(s, 'molotov')).toBe(SKILLS.molotov.cooldown);
-    expect(useSkill(s, 'molotov', 1400, 200)).toEqual({ ok: false, reason: 'Not ready yet' });
-    expect(skillLock(s, 'flashbang')).toBeNull(); // each skill cools down on its own
+    expect(skillLock(s, 'airstrike')).toBeNull();
+    s = used(s);
+    expect(skillLeft(s, 'airstrike')).toBe(60);
+    expect(SKILLS.airstrike.cooldown).toBe(60);
+    expect(useSkill(s, 'airstrike', 1400, 200)).toEqual({ ok: false, reason: 'Not ready yet' });
     s.offer = [];
     s = tick(s, 10);
-    expect(skillLeft(s, 'molotov')).toBe(SKILLS.molotov.cooldown);
+    expect(skillLeft(s, 'airstrike')).toBe(60);
     s.offer = null;
-    s = tick(s, SKILLS.molotov.cooldown - 1);
-    expect(skillLeft(s, 'molotov')).toBeGreaterThan(0);
-    s = tick(s, 1 + STEP);
-    expect(skillLeft(s, 'molotov')).toBe(0);
-    expect(skillLock(s, 'molotov')).toBeNull();
+    // Fight time, with any card offer along the way turned down (time stops for it).
+    const run = (seconds: number): void => {
+      for (let i = 0; i < Math.round(seconds / STEP); i++) {
+        if (s.offer) s.offer = null;
+        s = tick(s, STEP);
+      }
+    };
+    run(60 - 1);
+    expect(skillLeft(s, 'airstrike')).toBeGreaterThan(0);
+    run(1 + STEP);
+    expect(skillLeft(s, 'airstrike')).toBe(0);
+    expect(skillLock(s, 'airstrike')).toBeNull();
   });
 });
 
@@ -527,19 +284,22 @@ describe('refusals', () => {
       ok: false,
       reason: 'Research Airstrike first',
     });
-    const poor = fight(SKILLS.flashbang.cost - 1);
+    const poor = fight(SKILLS.airstrike.cost - 1);
     const before = structuredClone(poor);
-    expect(useSkill(poor, 'flashbang', 900, 200)).toEqual({ ok: false, reason: 'Not enough cash' });
+    expect(useSkill(poor, 'airstrike', 900, 200)).toEqual({
+      ok: false,
+      reason: 'Not enough cash',
+    });
     expect(poor).toEqual(before);
     const s = fight();
-    expect(useSkill({ ...s, offer: [] }, 'flashbang', 900, 200)).toEqual({
+    expect(useSkill({ ...s, offer: [] }, 'airstrike', 900, 200)).toEqual({
       ok: false,
       reason: 'Pick first',
     });
-    expect(useSkill({ ...s, replace: { injuredId: 'a' } as never }, 'flashbang', 900, 200)).toEqual(
+    expect(useSkill({ ...s, replace: { injuredId: 'a' } as never }, 'airstrike', 900, 200)).toEqual(
       { ok: false, reason: 'Pick first' },
     );
-    expect(useSkill({ ...s, outcome: 'lost' }, 'flashbang', 900, 200)).toEqual({
+    expect(useSkill({ ...s, outcome: 'lost' }, 'airstrike', 900, 200)).toEqual({
       ok: false,
       reason: 'The horde is over',
     });
@@ -554,45 +314,47 @@ describe('refusals', () => {
       [900, -1],
       [900, FIELD.height + 1],
     ] as const) {
-      expect(useSkill(s, 'flashbang', x, y)).toEqual({ ok: false, reason: 'Aim at the field' });
+      expect(useSkill(s, 'airstrike', x, y)).toEqual({ ok: false, reason: 'Aim at the field' });
     }
-    expect(useSkill(s, 'flashbang', 0, FIELD.height).ok).toBe(true); // corners count
+    expect(useSkill(s, 'airstrike', 0, FIELD.height).ok).toBe(true); // corners count
     expect(s).toEqual(before);
     for (const bad of [NaN, Infinity, -Infinity]) {
-      expect(() => useSkill(s, 'flashbang', bad, 200)).toThrow(RangeError);
-      expect(() => useSkill(s, 'flashbang', 900, bad)).toThrow(RangeError);
+      expect(() => useSkill(s, 'airstrike', bad, 200)).toThrow(RangeError);
+      expect(() => useSkill(s, 'airstrike', 900, bad)).toThrow(RangeError);
     }
-    expect(() => useSkill(s, 'nuke' as never, 900, 200)).toThrow(RangeError);
-    expect(() => skillLock(s, '__proto__' as never)).toThrow(RangeError);
-    expect(SKILL_IDS).toEqual(['flashbang', 'molotov', 'airstrike']);
+    // The retired skills are no skills (ID-139).
+    for (const gone of ['flashbang', 'molotov', 'nuke', '__proto__']) {
+      expect(() => useSkill(s, gone as never, 900, 200)).toThrow(RangeError);
+      expect(() => skillLock(s, gone as never)).toThrow(RangeError);
+    }
   });
 });
 
-describe('research (PM decision D1)', () => {
-  it('Flashbang needs a Lab, Molotov needs Flashbang, Airstrike needs Lab 2 and Molotov', () => {
+describe('research (PM decision D1, ID-139)', () => {
+  it('Airstrike needs Lab level 2 and nothing else', () => {
     let g = newGame();
     g.stock = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
-    expect(queueLock(g, 'flashbang')).toBe('Needs a Research Lab');
-    g = ok(upgradeLab(g));
-    expect(queueLock(g, 'molotov')).toBe('Needs Flashbang');
-    g = ok(researchNow(g, 'flashbang'));
-    g = ok(researchNow(g, 'molotov'));
     expect(queueLock(g, 'airstrike')).toBe('Needs Lab level 2');
     g = ok(upgradeLab(g));
+    expect(queueLock(g, 'airstrike')).toBe('Needs Lab level 2');
+    g = ok(upgradeLab(g));
+    expect(queueLock(g, 'airstrike')).toBeNull();
     g = ok(researchNow(g, 'airstrike'));
-    expect(g.research).toEqual(['flashbang', 'molotov', 'airstrike']);
+    expect(g.research).toEqual(['airstrike']);
   });
 
   it('a horde gets only the skills researched, and nothing carries to the next one', () => {
     const g = newGame();
-    g.lab = 1;
-    g.research = ['flashbang'];
+    g.lab = 2;
+    g.research = ['airstrike'];
     const id = g.roster[0]!.id;
     const s = startHorde(g, 1, id, 0, 0);
-    expect(s.skills).toEqual(['flashbang']);
-    expect(skillLock({ ...s, cash: 99 }, 'molotov')).toBe('Research Molotov first');
+    expect(s.skills).toEqual(['airstrike']);
+    expect(skillLock({ ...s, cash: 99 }, 'airstrike')).toBeNull();
+    const none = startHorde({ ...g, research: [] }, 1, id, 0, 0);
+    expect(skillLock({ ...none, cash: 99 }, 'airstrike')).toBe('Research Airstrike first');
     const next = startHorde(g, 2, id, 0, 0);
-    expect(next.cooldowns).toEqual({ flashbang: 0, molotov: 0, airstrike: 0 });
+    expect(next.cooldowns).toEqual({ airstrike: 0 });
     expect(next.fires).toEqual([]);
   });
 });

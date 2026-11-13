@@ -54,6 +54,9 @@ export function recruitPost(state: HordeState): Post | undefined {
 
 export type CardCategory = 'stat' | 'behaviour' | 'barrier' | 'power';
 
+/** Flashbang's cost in words (ID-139). */
+const glareText = `−${Math.round((1 - CARD.flashbang.glare) * 100)}% gun range for the whole squad while held`;
+
 /**
  * Design §8: the upgrade cards. `levels` is how often a card can be picked in a horde:
  * 3 for a levelled card (levels 1, 2 and max, ID-097), 1 for a unique (epic) or once-only
@@ -164,6 +167,22 @@ export const UPGRADES: Readonly<
     rarity: 'epic',
     levels: 1,
   },
+  // Active skills until ID-139: now thrown by the squad, from the throwable slot.
+  flashbang: {
+    name: 'Flashbang',
+    // The gain and its cost: "… for 3 s; −15% gun range for the whole squad while held".
+    text: `Each survivor throws a flashbang every ${CARD.flashbang.every} s into the thickest group, stunning enemies within ${CARD.flashbang.radius} px for ${CARD.flashbang.seconds[0]} s; ${glareText}`,
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: CARD_MAX_LEVEL,
+  },
+  molotov: {
+    name: 'Molotov',
+    text: `Each survivor throws a molotov every ${CARD.molotov.every} s into the thickest group: its fire burns enemies for ${Math.round(CARD.molotov.burn * 100)}% of a Shambler’s HP a second for ${CARD.molotov.seconds[0]} s, but they move ${Math.round(CARD.molotov.panic * 100)}% faster in the flames`,
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: CARD_MAX_LEVEL,
+  },
   'barbed-wire': {
     name: 'Barbed Wire',
     text: 'Wire strung out in the field slows enemies crossing it, rebuilt at each level-up',
@@ -256,11 +275,15 @@ export const UPGRADES: Readonly<
 
 /** The squad's one ammo slot (ID-097): it holds at most one of these. */
 export const AMMO_CARDS: readonly UpgradeId[] = ['incendiary-rounds', 'shock-rounds'];
+/** The squad's one throwable slot (ID-139): it holds at most one of these. */
+export const THROWABLE_CARDS: readonly UpgradeId[] = ['frag-grenades', 'flashbang', 'molotov'];
+const SLOTS = [AMMO_CARDS, THROWABLE_CARDS] as const;
 
-/** The other ammo card held while `id` isn't (picking `id` would replace it), or null. */
+/** The other card of `id`'s slot held while `id` isn't (picking `id` would replace it), or null. */
 export function replaces(state: Pick<HordeState, 'taken'>, id: UpgradeId): UpgradeId | null {
-  if (!AMMO_CARDS.includes(id) || took(state, id)) return null;
-  return AMMO_CARDS.find((other) => other !== id && took(state, other)) ?? null;
+  const slot = SLOTS.find((cards) => cards.includes(id));
+  if (!slot || took(state, id)) return null;
+  return slot.find((other) => other !== id && took(state, other)) ?? null;
 }
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
@@ -299,6 +322,8 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
   // Sandbags guard the outer wall, and Oil Bomb holds enemies off it (ID-132): offered once
   // enemies have reached it; before, they would crowd the offers the squad needs.
   if ((id === 'sandbags' || id === 'oil-bomb') && !outerWallHit(state)) return false;
+  // Flashbang and Molotov work on groups (ID-139): offered while one stands on the field.
+  if ((id === 'flashbang' || id === 'molotov') && !crowded(state)) return false;
   return u.category !== 'power' || state.turrets.length > 0;
 }
 
@@ -309,6 +334,13 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
  */
 export const survivorHurt = (s: Pick<HordeState, 'defenders' | 'injured'>): boolean =>
   s.injured.length > 0 || s.defenders.some((d) => d.hp < d.maxHp / 2);
+
+/**
+ * Whether a group stands on the field (ID-139): at least `CARD.crowd` enemies outside the
+ * camp, for a thrown Flashbang or Molotov to land in.
+ */
+export const crowded = (s: Pick<HordeState, 'enemies'>): boolean =>
+  s.enemies.filter((e) => e.hp > 0 && !e.inCamp).length >= CARD.crowd;
 
 /**
  * Whether enemies have reached the outer wall this fight (ID-132): a built segment of the
@@ -429,6 +461,19 @@ export function effectAt(
         value: `${lv(CARD.shock.seconds)} s`,
         post: ' (half on the big ones)',
       };
+    // Thrown on their own, so each says how often (design review, ID-139).
+    case 'flashbang':
+      return {
+        pre: `Each survivor throws one every ${CARD.flashbang.every} s: stuns enemies within ${CARD.flashbang.radius} px for `,
+        value: `${lv(CARD.flashbang.seconds)} s`,
+        post: `; ${glareText}`,
+      };
+    case 'molotov':
+      return {
+        pre: `Each survivor throws one every ${CARD.molotov.every} s: its fire burns for `,
+        value: `${lv(CARD.molotov.seconds)} s`,
+        post: `, ${pct(CARD.molotov.burn)} of a Shambler’s HP a second; enemies move ${pct(CARD.molotov.panic)} faster in the flames`,
+      };
     case 'barbed-wire':
       return {
         pre: 'Enemies ',
@@ -497,10 +542,13 @@ export function pitch(state: HordeState, id: UpgradeId): CardPitch {
   const out: CardPitch = { tag, tagSpoken, effect, text };
   if (other) {
     const o = UPGRADES[other];
-    const lvl = `Lv ${levelName(cardLevel(state, other), o.levels ?? CARD_MAX_LEVEL)}`;
+    // A unique card (Frag Grenades, ID-139) has no levels to lose.
+    const lvl =
+      o.levels === 1 ? '' : ` Lv ${levelName(cardLevel(state, other), o.levels ?? CARD_MAX_LEVEL)}`;
+    const to = u.levels === 1 ? '' : ' Lv 1';
     out.replace = {
-      warning: `Replaces ${o.name} ${lvl}. Its levels are lost.`,
-      swap: `${o.name} ${lvl} → ${u.name} Lv 1`,
+      warning: `Replaces ${o.name}${lvl}.${lvl ? ' Its levels are lost.' : ''}`,
+      swap: `${o.name}${lvl} → ${u.name}${to}`,
     };
   }
   return out;
@@ -619,12 +667,15 @@ const stack = (s: Pick<HordeState, 'cardLevels'>, id: UpgradeId): number => s.ca
 
 function applyUpgrade(s: HordeState, id: UpgradeId): void {
   const segments = s.layers.flatMap((l) => l.segments);
-  // The one ammo slot (ID-097): the other ammo card and its levels are gone.
+  // The one ammo slot (ID-097), and the throwable slot (ID-139): the other card of the
+  // slot and its levels are gone. What it already threw lands as it was.
   const other = replaces(s, id);
   if (other) {
     s.taken = s.taken.filter((t) => t !== other);
     delete s.cardLevels[other];
   }
+  // The throwable slot's first card throws at once; a swap or a level waits out its timer.
+  if (THROWABLE_CARDS.includes(id)) s.nextThrowAt ??= s.time;
   if (!s.taken.includes(id)) s.taken.push(id);
   s.cardLevels[id] = stack(s, id) + 1;
   if (UPGRADES[id].category === 'barrier') s.barrierAt = s.time;
@@ -673,9 +724,6 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       break;
     case 'power-surge':
       s.freeWave = s.wave;
-      break;
-    case 'frag-grenades':
-      s.nextFragAt = s.time;
       break;
     case 'oil-bomb':
       // The first tar bomb goes as soon as it is picked, as Frag Grenades' first throw.

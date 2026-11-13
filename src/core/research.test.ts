@@ -140,32 +140,34 @@ describe('the queue (AC2)', () => {
   it('runs one node at a time, in order, from when it was queued', () => {
     let g = queue(lab(1), 'metal-walls');
     expect(g.queue).toEqual({ ids: ['metal-walls'], endsAt: T + 15 * MIN });
-    g = queue(g, 'flashbang', T + MIN);
+    g = queue(g, 'sharpened-spikes', T + MIN);
     expect(g.queue.endsAt).toBe(T + 15 * MIN); // waiting entries don't move the end
     expect(researchLeft(g.queue, T + 5 * MIN)).toBe(10 * MIN);
     expect(advanceResearch(g, T + 15 * MIN - 1)).toBe(g);
     const a = advanceResearch(g, T + 15 * MIN);
     expect(a.research).toEqual(['metal-walls']);
     expect(a.tiers).toEqual(['wood', 'metal']);
-    expect(a.queue).toEqual({ ids: ['flashbang'], endsAt: T + 30 * MIN });
+    expect(a.queue).toEqual({ ids: ['sharpened-spikes'], endsAt: T + 30 * MIN });
     expect(g.research).toEqual([]); // pure
   });
 
   it('catches up while the game is closed: each next one starts when the last ended', () => {
     let g = lab(1);
-    for (const id of ['metal-walls', 'flashbang', 'molotov', 'fortify'] as const) g = queue(g, id);
+    for (const id of ['metal-walls', 'sharpened-spikes', 'glue-traps', 'fortify'] as const)
+      g = queue(g, id);
     const later = advanceResearch(g, T + 45 * MIN);
-    expect(later.research).toEqual(['metal-walls', 'flashbang']);
-    expect(later.queue).toEqual({ ids: ['molotov', 'fortify'], endsAt: T + 60 * MIN });
+    expect(later.research).toEqual(['metal-walls', 'sharpened-spikes']);
+    expect(later.queue).toEqual({ ids: ['glue-traps', 'fortify'], endsAt: T + 60 * MIN });
     const done = advanceResearch(g, T + 10 * 60 * MIN);
-    expect(done.research).toEqual(['metal-walls', 'flashbang', 'molotov', 'fortify']);
+    expect(done.research).toEqual(['metal-walls', 'sharpened-spikes', 'glue-traps', 'fortify']);
     expect(done.perkLevels.fortify).toBe(1);
     expect(done.queue).toEqual({ ids: [], endsAt: null });
   });
 
   it('holds the running node and 3 more', () => {
     let g = lab(1);
-    for (const id of ['metal-walls', 'flashbang', 'molotov', 'fortify'] as const) g = queue(g, id);
+    for (const id of ['metal-walls', 'sharpened-spikes', 'glue-traps', 'fortify'] as const)
+      g = queue(g, id);
     expect(g.queue.ids).toHaveLength(RESEARCH_QUEUE.size);
     expect(queueResearch(g, 'rally-call', T)).toEqual({
       ok: false,
@@ -174,26 +176,27 @@ describe('the queue (AC2)', () => {
   });
 
   it('removing a waiting node refunds it in full and leaves the running one alone', () => {
-    let g = queue(queue(lab(1, 100), 'metal-walls'), 'flashbang');
+    let g = queue(queue(lab(1, 100), 'metal-walls'), 'sharpened-spikes');
     expect(g.stock.genes).toBe(80);
-    g = ok(unqueue(g, 'flashbang', T + 5 * MIN));
+    g = ok(unqueue(g, 'sharpened-spikes', T + 5 * MIN));
     expect(g.stock.genes).toBe(90);
     expect(g.queue).toEqual({ ids: ['metal-walls'], endsAt: T + 15 * MIN });
   });
 
   it('cancelling the running node refunds it, and the next starts now', () => {
-    let g = queue(queue(lab(1, 100), 'metal-walls'), 'flashbang');
+    let g = queue(queue(lab(1, 100), 'metal-walls'), 'sharpened-spikes');
     g = ok(unqueue(g, 'metal-walls', T + 5 * MIN));
     expect(g.stock.genes).toBe(90);
-    expect(g.queue).toEqual({ ids: ['flashbang'], endsAt: T + 20 * MIN });
-    g = ok(unqueue(g, 'flashbang', T + 6 * MIN));
+    expect(g.queue).toEqual({ ids: ['sharpened-spikes'], endsAt: T + 20 * MIN });
+    g = ok(unqueue(g, 'sharpened-spikes', T + 6 * MIN));
     expect(g.stock.genes).toBe(100);
     expect(g.queue).toEqual({ ids: [], endsAt: null });
   });
 
   it('runs the queue to now first: a finished entry is done, not refunded, and makes room', () => {
     let g = lab(1, 100);
-    for (const id of ['metal-walls', 'flashbang', 'molotov', 'fortify'] as const) g = queue(g, id);
+    for (const id of ['metal-walls', 'sharpened-spikes', 'glue-traps', 'fortify'] as const)
+      g = queue(g, id);
     // Metal walls ended at T + 15 min, but nothing has run the queue yet.
     expect(unqueue(g, 'metal-walls', T + 20 * MIN)).toEqual({
       ok: false,
@@ -201,18 +204,21 @@ describe('the queue (AC2)', () => {
     });
     const more = queue(g, 'rally-call', T + 20 * MIN);
     expect(more.research).toEqual(['metal-walls']);
-    expect(more.queue.ids).toEqual(['flashbang', 'molotov', 'fortify', 'rally-call']);
+    expect(more.queue.ids).toEqual(['sharpened-spikes', 'glue-traps', 'fortify', 'rally-call']);
   });
 
   it('needs its earlier node done or ahead in the queue, and that one then stays', () => {
-    const g = lab(1);
-    expect(queueLock(g, 'molotov')).toBe('Needs Flashbang');
-    const q = queue(g, 'flashbang');
-    expect(queueLock(q, 'molotov')).toBeNull();
-    const both = queue(q, 'molotov');
-    expect(unqueueLock(both, 'flashbang')).toBe('Molotov needs it');
-    expect(unqueue(both, 'flashbang', T)).toEqual({ ok: false, reason: 'Molotov needs it' });
-    expect(unqueueLock(both, 'molotov')).toBeNull();
+    const g = lab(2);
+    expect(queueLock(g, 'incendiary-traps')).toBe('Needs Glue traps');
+    const q = queue(g, 'glue-traps');
+    expect(queueLock(q, 'incendiary-traps')).toBeNull();
+    const both = queue(q, 'incendiary-traps');
+    expect(unqueueLock(both, 'glue-traps')).toBe('Incendiary traps needs it');
+    expect(unqueue(both, 'glue-traps', T)).toEqual({
+      ok: false,
+      reason: 'Incendiary traps needs it',
+    });
+    expect(unqueueLock(both, 'incendiary-traps')).toBeNull();
   });
 
   it('refuses a node twice, one done, or one above the Lab', () => {
@@ -474,9 +480,9 @@ describe('Genes against the tree (AC7)', () => {
     return [...nodes].sort((a, b) => a - b).filter((c) => (left -= c) >= 0).length;
   };
 
-  it('by Horde 10 a meaningful early part: Metal walls, a skill and a perk slot, even with no mutant killed', () => {
+  it('by Horde 10 a meaningful early part: Metal walls, a trap upgrade and a perk slot, even with no mutant killed', () => {
     const low = earned(10, false);
-    const starter = (['metal-walls', 'flashbang', 'perk-slot-2'] as const).reduce(
+    const starter = (['metal-walls', 'sharpened-spikes', 'perk-slot-2'] as const).reduce(
       (n, id) => n + RESEARCH[id].genes,
       0,
     );

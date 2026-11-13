@@ -15,7 +15,7 @@ describe('the stats are each as strong a choice (ID-125)', () => {
   // player's cards and skills (ID-128: Recommended Power is fitted to that build; no cards
   // before). A later balance change that moves a few fights can flip it, so re-measure the
   // stats when it does. About 3 min alone.
-  it('the same squad at Recommended Power: wins within 10 points, all above none', () => {
+  it('the same squad at Recommended Power: wins within 20 points (10 before ID-139), all above none', () => {
     const HORDES = [9, 10, 11, 12, 13, 14, 15];
     const CLOSE_SEEDS = 10;
     const won = (game: GameState, n: number, seed: number): boolean =>
@@ -39,7 +39,12 @@ describe('the stats are each as strong a choice (ID-125)', () => {
     const rate = (s: Stat) => (wins.get(s) ?? 0) / fights;
     const all = PICKS.map(rate);
     const said = [...PICKS, 'tinker' as const].map((s) => `${s} ${rate(s).toFixed(2)}`).join(' ');
-    expect(spread(all), said).toBeLessThanOrEqual(WITHIN);
+    // ID-139 (PM): with Airstrike the one skill (bombs a share of Shambler HP, ×2 alone),
+    // Agility pulls ahead in these close fights: mind 0.47, agility 0.67, instinct 0.56
+    // (main before: 0.47, 0.53, 0.50). The new cards don't cause it (0.56, 0.67, 0.43
+    // without them). The PM moved this bar from 10 to 20 points rather than retune the
+    // stats here; the first-try measure in stats.test.ts keeps STAT_WITHIN.
+    expect(spread(all), said).toBeLessThanOrEqual(0.2 + 1e-9);
     // Tinker is locked: its points stay unspent, so it stands for a squad with none.
     for (const s of PICKS) expect(rate(s), said).toBeGreaterThan(rate('tinker') + WITHIN);
   }, 600_000);

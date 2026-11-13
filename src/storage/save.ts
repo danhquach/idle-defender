@@ -464,7 +464,7 @@ function readGame(
       : newCamp(),
     reserve: [],
     farm: hasFarm ? readFarm(o.farm) : newFarm(),
-    skillPick: hasPick ? readSkillPick(o.skillPick) : [...START_SKILLS],
+    skillPick: hasPick ? readSkillPick(o.skillPick, research) : [...START_SKILLS],
   };
   // Each car out is one the camp built, on one patrol at a time.
   const taken = out.flatMap((p) => (p.car === null ? [] : [p.car]));
@@ -598,6 +598,19 @@ function readTiers(v: unknown): Tier[] {
 }
 
 /**
+ * The skills ID-139 made cards: a save's skill pick, research or research queue may still
+ * hold them, and they are dropped as it loads (no version bump: nothing else changed).
+ */
+const RETIRED_SKILLS: readonly string[] = ['flashbang', 'molotov'];
+
+/** Array `v` of at most `max` entries plus the retired skills, without them. */
+function unretired(v: unknown, max: number): unknown[] {
+  return arr(v, 0, max + RETIRED_SKILLS.length).filter(
+    (x) => typeof x !== 'string' || !RETIRED_SKILLS.includes(x),
+  );
+}
+
+/**
  * Research the game could have done: known nodes, once each, in an order where each
  * one's earlier node comes first, each within `lab`'s level, and each one's tier
  * unlocked. A tier with no node behind it is allowed: a save from before the Lab
@@ -605,7 +618,7 @@ function readTiers(v: unknown): Tier[] {
  */
 function readResearch(v: unknown, lab: number, tiers: readonly Tier[]): ResearchId[] {
   const done: ResearchId[] = [];
-  for (const x of arr(v, 0, RESEARCH_IDS.length)) {
+  for (const x of unretired(v, RESEARCH_IDS.length)) {
     const id = oneOf(x, RESEARCH_IDS);
     const node = RESEARCH[id];
     if (done.includes(id)) fail('research twice');
@@ -672,18 +685,24 @@ function readQueue(
 ): ResearchQueue {
   const o = obj(v, ['ids', 'endsAt']);
   const ids: QueueId[] = [];
-  for (const x of arr(o.ids, 0, QUEUE_IDS.length)) {
+  for (const x of unretired(o.ids, QUEUE_IDS.length)) {
     const id = oneOf(x, QUEUE_IDS);
     if (queueLock({ ...game, queue: { ids, endsAt: null } }, id) !== null) fail('queue entry');
     ids.push(id);
   }
   const head = ids[0];
   if (head === undefined) {
-    if (o.endsAt !== null) fail('empty queue with an end');
+    // A queue that held only retired skills (ID-139) is empty now, its end with it.
+    const retired = Array.isArray(o.ids) && o.ids.length > 0;
+    if (o.endsAt !== null && !retired) fail('empty queue with an end');
     return newQueue();
   }
   const full = entryOf(game, head).minutes * 60_000;
-  return { ids, endsAt: Math.min(int(o.endsAt, 0, MAX_TIME), savedAt + full) };
+  const endsAt = int(o.endsAt, 0, MAX_TIME);
+  // A retired skill that was running (ID-139) hands over as if it had finished at its end:
+  // the next entry starts then, and takes its own full time, never less.
+  const headRetired = Array.isArray(o.ids) && o.ids[0] !== head;
+  return { ids, endsAt: Math.min(headRetired ? endsAt + full : endsAt, savedAt + full) };
 }
 
 /** Exactly `materials`, each a whole count; any the save predates start at 0. */
@@ -977,10 +996,15 @@ function readFarm(v: unknown): Farm {
   };
 }
 
-/** The horde-only skill pick (ID-100): up to `SQUAD_SKILLS.max` known skills, each once. */
-function readSkillPick(v: unknown): SkillId[] {
-  const pick = arr(v, 0, SQUAD_SKILLS.max).map((k) => oneOf(k, SKILL_IDS));
+/**
+ * The horde-only skill pick (ID-100): up to `SQUAD_SKILLS.max` known skills, each once. A
+ * pick the retired skills leave empty (ID-139) falls back to Airstrike if it is researched.
+ */
+function readSkillPick(v: unknown, research: readonly ResearchId[]): SkillId[] {
+  const raw = arr(v, 0, SQUAD_SKILLS.max);
+  const pick = unretired(raw, SQUAD_SKILLS.max).map((k) => oneOf(k, SKILL_IDS));
   if (new Set(pick).size !== pick.length) fail('skill twice');
+  if (pick.length === 0 && raw.length > 0 && research.includes('airstrike')) return ['airstrike'];
   return pick;
 }
 

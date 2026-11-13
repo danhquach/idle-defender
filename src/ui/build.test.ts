@@ -141,7 +141,7 @@ describe('build panel', () => {
     let g: GameState = { ...newGame(), lab: 1, stock: stockOf({ genes: 100 }) };
     const queueLine = (id: string) =>
       labAndResearch(g, T).find((l) => l.kind === 'action' && l.label.startsWith(`Queue ${id}`));
-    for (const name of ['Metal walls', 'Flashbang']) {
+    for (const name of ['Metal walls', 'Sharpened spikes']) {
       const line = queueLine(name);
       if (line?.kind !== 'action') throw new Error(`no ${name}`);
       const r = line.act!(T);
@@ -154,15 +154,18 @@ describe('build panel', () => {
       'Research queue',
       `Metal walls · running, done at ${clockTime(T + 15 * 60_000)}`,
       '[Cancel Metal walls (refunds 10 Genes)]',
-      'Flashbang · waiting',
-      '[Remove Flashbang (refunds 10 Genes)]',
+      'Sharpened spikes · waiting',
+      '[Remove Sharpened spikes (refunds 10 Genes)]',
     ]);
     // Queued nodes aren't offered again below.
     expect(shown.some((t) => t.startsWith('[Queue Metal walls'))).toBe(false);
     const cancel = lines[4]!;
     if (cancel.kind !== 'action') throw new Error('no cancel');
     const after = cancel.act!(T + 60_000);
-    expect(after.ok && after.game.queue).toEqual({ ids: ['flashbang'], endsAt: T + 16 * 60_000 });
+    expect(after.ok && after.game.queue).toEqual({
+      ids: ['sharpened-spikes'],
+      endsAt: T + 16 * 60_000,
+    });
     expect(after.ok && after.game.stock.genes).toBe(90);
   });
 

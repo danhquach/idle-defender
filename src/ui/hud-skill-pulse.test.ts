@@ -28,18 +28,18 @@ function setup() {
   document.body.replaceChildren(root);
   const noop = () => {};
   const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
-  const game = { ...newGame('horde'), skillPick: ['molotov' as const] };
+  const game = { ...newGame('horde'), skillPick: ['airstrike' as const] };
   const s = startSquadHorde(game, 1, NOW);
   s.toSpawn = 0;
-  const r = useSkill(s, 'molotov', 0, 0);
+  const r = useSkill(s, 'airstrike', 1000, 200);
   if (!r.ok) throw new Error(r.reason);
   return { h, game, cooling: r.state };
 }
 
-/** `s` with its clock moved on to just past the molotov's cooldown. */
+/** `s` with its clock moved on to just past the airstrike's cooldown. */
 const ready = (s: HordeState): HordeState => ({
   ...s,
-  time: s.time + SKILLS.molotov.cooldown + 0.01,
+  time: s.time + SKILLS.airstrike.cooldown + 0.01,
 });
 
 describe('the ready pulse (ID-100)', () => {

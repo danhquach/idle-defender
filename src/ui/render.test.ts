@@ -34,7 +34,7 @@ import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy, HordeState, Pop, Spit } from '../core/horde.ts';
 import { CHAT, CHAT_LINES, type Bubble } from '../core/chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
-import { carpet, throwArea, wallFront } from '../core/skills.ts';
+import { throwArea, wallFront } from '../core/skills.ts';
 import { reloadTime } from '../core/stats.ts';
 import { enemy } from '../core/testing.ts';
 import { ANIM, Animator, STILL } from './anim.ts';
@@ -1114,52 +1114,77 @@ describe('drawScene with art', () => {
     expect(alphaAt(7)).toBeUndefined();
   });
 
-  it('shows an armed flashbang or molotov as its area round the hover, and one burst’s reach (ID-107)', () => {
-    for (const skill of ['flashbang', 'molotov'] as const) {
-      const r = recorder();
-      const rings: number[][] = [];
-      Object.assign(r.ctx, {
-        ellipse: (x: number, y: number, rx: number) => rings.push([x, y, rx]),
-      });
-      const scene = blank();
-      drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill, x: 1000, y: 400 });
-      const c = project({ x: 1000, y: 400 }, CAM);
-      expect(rings).toEqual([
-        [c.sx, c.sy, SKILLS[skill].area],
-        [c.sx, c.sy, SKILLS[skill].radius],
-      ]);
-      // Aimed behind the wall, it shows where it will really land: just past it.
-      rings.length = 0;
-      drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill, x: 0, y: 400 });
-      const a = throwArea(scene, skill, 0, 400);
-      expect(a.x).toBe(wallFront(scene));
-      expect(rings[0]).toEqual([project(a, CAM).sx, project(a, CAM).sy, SKILLS[skill].area]);
-    }
+  it('shows an armed airstrike as its area round the hover, and one bomb’s reach (ID-107, ID-139)', () => {
+    const skill = 'airstrike' as const;
+    const r = recorder();
+    const rings: number[][] = [];
+    Object.assign(r.ctx, {
+      ellipse: (x: number, y: number, rx: number) => rings.push([x, y, rx]),
+    });
+    const scene = blank();
+    drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill, x: 1000, y: 400 });
+    const c = project({ x: 1000, y: 400 }, CAM);
+    expect(rings).toEqual([
+      [c.sx, c.sy, SKILLS[skill].area],
+      [c.sx, c.sy, SKILLS[skill].radius],
+    ]);
+    // Aimed behind the wall, it shows where it will really land: just past it.
+    rings.length = 0;
+    drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill, x: 0, y: 400 });
+    const a = throwArea(scene, skill, 0, 400);
+    expect(a.x).toBe(wallFront(scene));
+    expect(rings[0]).toEqual([project(a, CAM).sx, project(a, CAM).sy, SKILLS[skill].area]);
   });
 
-  it('a thrown burst falls from the sky with a growing shadow; none once landed (ID-107)', () => {
-    const fallShare = (u: number) =>
-      thrownFall({ skill: 'molotov', x: 1, y: 1, at: 2 }, 2 - (1 - u) * THROW_FALL);
+  it('an airstrike bomb falls from the sky with a growing shadow; none once landed (ID-107)', () => {
+    const bomb = { skill: 'airstrike' as const, x: 1, y: 1, at: 2 };
+    const fallShare = (u: number) => thrownFall(bomb, 2 - (1 - u) * THROW_FALL);
     expect(fallShare(0)).toBeCloseTo(0, 9);
     expect(fallShare(0.5)).toBeCloseTo(0.5, 9);
     expect(fallShare(1)).toBeCloseTo(1, 9);
-    expect(thrownFall({ skill: 'molotov', x: 1, y: 1, at: 2 }, 2 - THROW_FALL - 0.1)).toBeNull();
-    expect(thrownFall({ skill: 'molotov', x: 1, y: 1, at: 2 }, 2.01)).toBeNull();
-    expect(thrownFall({ skill: 'airstrike', x: 1, y: 1, at: 2 }, 2 - THROW_FALL / 2)).toBeCloseTo(
-      0.5,
-      9,
-    );
-    // The bottle is drawn from its icon, high up; the shadow grows on the ground under it.
+    expect(thrownFall(bomb, 2 - THROW_FALL - 0.1)).toBeNull();
+    expect(thrownFall(bomb, 2.01)).toBeNull();
+    // The bomb is drawn from its art, high up; the shadow grows on the ground under it.
     const r = recorder();
     const shadows: number[] = [];
     Object.assign(r.ctx, { ellipse: (_x: number, _y: number, rx: number) => shadows.push(rx) });
-    const incoming = [{ skill: 'molotov' as const, x: 1000, y: 400, at: 1 }];
+    const incoming = [{ skill: 'airstrike' as const, x: 1000, y: 400, at: 1 }];
     for (const time of [1 - THROW_FALL * 0.9, 1 - THROW_FALL * 0.1]) {
       drawScene(r.ctx, r.art, { ...blank(), time, incoming }, CAM, VIEW);
     }
-    expect(r.drawn.filter((id) => id === 'icon-molotov')).toHaveLength(2);
+    expect(r.drawn.filter((id) => id === BOMB_ART)).toHaveLength(2);
     expect(shadows).toHaveLength(2);
     expect(shadows[1]!).toBeGreaterThan(shadows[0]!);
+  });
+
+  it('a survivor’s thrown Molotov flies as its icon, a Flashbang as a canister, and neither bursts as a frag (ID-139)', () => {
+    const throwOf = (item: 'flashbang' | 'molotov' | undefined, burst: boolean) => ({
+      ...(item ? { item, seconds: 4 } : {}),
+      by: 's1',
+      fromX: 420,
+      fromY: 360,
+      x: 900,
+      y: 300,
+      at: 0.8,
+      lands: 1.4,
+      burst,
+    });
+    const draw = (item: 'flashbang' | 'molotov' | undefined, time: number, burst: boolean) => {
+      const r = recorder();
+      drawScene(r.ctx, r.art, { ...blank(), time, grenades: [throwOf(item, burst)] }, CAM, VIEW);
+      return r;
+    };
+    // In the air: a molotov is its icon, spinning on its arc; a frag has none.
+    expect(draw('molotov', 1.1, false).drawn.filter((id) => id === 'icon-molotov')).toHaveLength(1);
+    expect(draw(undefined, 1.1, false).drawn).not.toContain('icon-molotov');
+    expect(draw('flashbang', 1.1, false).drawn).not.toContain('icon-molotov');
+    // Landed: a frag explodes (its scorch); a flashbang or molotov shows nothing of the kind,
+    // its own blast or fire taking over.
+    const booms = (item: 'flashbang' | 'molotov' | undefined) =>
+      draw(item, 1.4 + 0.3 * CARD.frag.flash, true).drawn.filter((id) => id === SCORCH_ART).length;
+    expect(booms(undefined)).toBe(1);
+    expect(booms('flashbang')).toBe(0);
+    expect(booms('molotov')).toBe(0);
   });
 
   it('an airstrike bomb arcs in from the left, nose along its path, landing on its spot (ID-107)', () => {
@@ -1171,8 +1196,6 @@ describe('drawScene with art', () => {
     // Moving right all the way down, dropping faster as it goes.
     expect(fallAt(bomb, 0.5).x).toBeGreaterThan(start.x);
     expect(start.z - fallAt(bomb, 0.5).z).toBeLessThan(fallAt(bomb, 0.5).z - end.z);
-    // A flashbang or bottle drops straight down.
-    expect(fallAt({ ...bomb, skill: 'molotov' }, 0).x).toBe(1000);
     // Drawn with the bomb art, nose turned from near level at the top to steep at the bottom.
     const angles: number[] = [];
     for (const u of [0.05, 0.95]) {
@@ -1230,7 +1253,7 @@ describe('drawScene with art', () => {
     const look = molotovLook(f, 3, 3, CAM)!;
     expect(look.licks).toHaveLength(MOLOTOV_FIRE.licks);
     const c = project(f, CAM);
-    const R = SKILLS.molotov.radius;
+    const R = CARD.molotov.radius;
     for (const k of look.licks) {
       // Every flame stands inside the fire's circle on the ground, rising up.
       expect(Math.abs(k.x - c.sx)).toBeLessThanOrEqual(R + 1e-6);
@@ -1268,19 +1291,6 @@ describe('drawScene with art', () => {
     expect(starsAt(3, 1, 3)).toBe(0);
     // A stun with no daze (Shock Rounds' paralysis) shows its own spark, not stars.
     expect(starsAt(1, 1)).toBe(0);
-  });
-
-  it('shows an armed airstrike as every bomb along the hovered row (ID-041)', () => {
-    const r = recorder();
-    const centres: number[][] = [];
-    Object.assign(r.ctx, {
-      ellipse: (x: number, y: number, rx: number) => centres.push([x, y, rx]),
-    });
-    const scene = blank();
-    drawScene(r.ctx, r.art, scene, CAM, VIEW, null, null, { skill: 'airstrike', x: 900, y: 300 });
-    const bombs = carpet(scene, 300).map((p) => project(p, CAM));
-    expect(bombs.length).toBeGreaterThan(1);
-    expect(centres).toEqual(bombs.map((b) => [b.sx, b.sy, SKILLS.airstrike.radius]));
   });
 
   it('an explosion lays its scorch flat across its reach; a flashbang’s white pop leaves none; both gone after SKILL_FLASH (ID-107)', () => {
@@ -2760,6 +2770,11 @@ describe('the horde-only fight (ID-068)', () => {
     expect(firing.sprites).toContain(ta!.release);
     expect(firing.flashes).toBe(0);
     expect(at(1.3, [{ owner: b!.id, at: 1.3 }]).flashes).toBe(1);
+    // A Molotov winds up as its bottle in the hand (ID-139), not a frag ball.
+    const molotov = { ...grenade, item: 'molotov' as const, seconds: 4, burst: false };
+    const bottle = geometry(cam, { ...scene, time: 1.05, grenades: [molotov] }, anim);
+    expect(bottle.marks.some((m) => m.kind === 'art' && m.id === 'icon-molotov')).toBe(true);
+    expect(bottle.dots.filter((m) => m.kind === 'dot' && m.colour === '#8a9a4a')).toHaveLength(0);
     // Out of a fight (no animator) nobody poses.
     const r = recorder();
     drawScene(

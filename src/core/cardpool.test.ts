@@ -368,14 +368,14 @@ describe('behaviour cards', () => {
 
   it('Frag Grenades: thrown on pick at the thickest group, it bursts for a share of the wave’s Shambler HP on all in reach', () => {
     const { s, group, lone } = fragged({ kind: 'brute', x: 900, y: ROW4 + 60 });
-    expect(s.nextFragAt).toBe(s.time);
+    expect(s.nextThrowAt).toBe(s.time);
     let t = tick(s, STEP);
     expect(t.grenades).toHaveLength(1);
     const g = t.grenades[0]!;
     // The middle one and the one below it both have 3 others within 70 px; same x, so lowest id.
     expect({ x: g.x, y: g.y }).toEqual({ x: 900, y: ROW4 });
     expect(g.lands).toBeCloseTo(g.at + CARD.frag.flight, 9);
-    expect(t.nextFragAt).toBeCloseTo(g.at + CARD.frag.every, 9);
+    expect(t.nextThrowAt).toBeCloseTo(g.at + CARD.frag.every, 9);
     // It names its thrower (ID-119), who stands where it was thrown from.
     const by = t.defenders.find((d) => d.id === g.by)!;
     expect({ x: by.x, y: by.y }).toEqual({ x: g.fromX, y: g.fromY });
@@ -429,7 +429,7 @@ describe('behaviour cards', () => {
     s.defenders.push(standing(spec, post, 1e9));
     const t = tick(s, STEP);
     expect(t.grenades).toHaveLength(1);
-    expect(t.nextFragAt).toBeCloseTo(t.grenades[0]!.at + CARD.frag.every / 2, 9);
+    expect(t.nextThrowAt).toBeCloseTo(t.grenades[0]!.at + CARD.frag.every / 2, 9);
   });
 
   it('turret bullets set off no behaviour card', () => {
@@ -703,7 +703,7 @@ describe('determinism and cost', () => {
     const play = () => {
       const s = newHorde(7, { ...setup(), hordeNumber: 6 });
       s.taken = [...ALL, 'speed-loaders', 'extended-mags', 'barbed-wire', 'shock-rounds'];
-      s.nextFragAt = 0;
+      s.nextThrowAt = 0;
       return steps(s, Math.round(40 / STEP));
     };
     const t = play();
@@ -713,7 +713,7 @@ describe('determinism and cost', () => {
 
   it('300 enemies and 200 bullets with every behaviour card, a grenade thrown, cost well under the 33 ms step', () => {
     const s = quiet(...ALL);
-    s.nextFragAt = 2 * STEP;
+    s.nextThrowAt = 2 * STEP;
     const kinds = Object.keys(ENEMIES) as EnemyKind[];
     for (let i = 0; i < 300; i++) {
       enemy(s, {

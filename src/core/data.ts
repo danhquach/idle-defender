@@ -139,8 +139,8 @@ export const POWER = {
  */
 export const SQUAD_SKILLS = { max: 2, solo: 2 } as const;
 
-/** The skills a new game starts with picked (ID-100). */
-export const START_SKILLS: readonly SkillId[] = ['flashbang', 'molotov'];
+/** The skills a new game starts with picked (ID-100); Flashbang and Molotov before ID-139. */
+export const START_SKILLS: readonly SkillId[] = ['airstrike'];
 
 /**
  * Farming beaten hordes (ID-098, design §11 Farming): a replay more than `farOff` hordes
@@ -1098,6 +1098,42 @@ export const CARD = {
    * shot for `pause` s after each throw.
    */
   frag: { every: 8, range: 600, flight: 0.6, share: 0.25, radius: 70, flash: 1.2, pause: 1.5 },
+  /** Enemies on the field before Flashbang and Molotov are offered (ID-139: a group to throw at). */
+  crowd: 12,
+  /**
+   * Flashbang (ID-139; an active skill before): one every `every` s per survivor on the
+   * line, thrown as a Frag Grenade is (`range`, `flight`), stunning (no moving, no
+   * attacking) every enemy within `radius` of where it lands for `seconds` at the card's
+   * level. An enemy can't be stunned again until `immune` s after its stun ends, and isn't
+   * aimed at until then, so the squad can't hold a group (or a boss) for good. Its cost:
+   * the squad's gun range × `glare` while it is held.
+   */
+  flashbang: {
+    every: 10,
+    range: 600,
+    flight: 0.6,
+    radius: 100,
+    seconds: [3, 4, 5],
+    immune: 3,
+    glare: 0.85,
+  },
+  /**
+   * Molotov (ID-139; an active skill before): one every `every` s per survivor on the line,
+   * thrown as a Frag Grenade is, leaving a fire of `radius` where it lands that burns for
+   * `seconds` at the card's level, each second `burn` of this wave's Shambler HP to every
+   * enemy inside (`fireDps`). Its cost: enemies inside a fire move `panic` faster. The
+   * skill's 0.4 a second for 6 s came 5 fires every 30 s; thrown this often (ID-139's
+   * balance pass) that won every small fight, so its fires are weaker and shorter.
+   */
+  molotov: {
+    every: 12,
+    range: 600,
+    flight: 0.6,
+    radius: 50,
+    burn: 0.1,
+    seconds: [4, 6, 8],
+    panic: 0.3,
+  },
   /**
    * Field Repairs (a research card): every wall segment to full. Its cost (ID-137): the
    * squad's fire rate × `fireRate` for `seconds` of fight time after the pick.
@@ -1224,8 +1260,6 @@ export const LAB_LEVELS: readonly Partial<Stock>[] = [
 export type ResearchId =
   | 'metal-walls'
   | 'auto-turret'
-  | 'flashbang'
-  | 'molotov'
   | 'airstrike'
   | Exclude<PerkId, typeof START_PERK>
   | PerkSlotId
@@ -1265,9 +1299,8 @@ const node = (
 export const RESEARCH: Readonly<Record<ResearchId, ResearchNode>> = {
   'metal-walls': node('Metal walls', 'barriers', 1, null, 10, 15, 'metal'),
   'auto-turret': node('Auto-turret', 'power', 2, 'metal-walls', 40, 60),
-  flashbang: node('Flashbang', 'skills', 1, null, 10, 15),
-  molotov: node('Molotov', 'skills', 1, 'flashbang', 20, 30),
-  airstrike: node('Airstrike', 'skills', 2, 'molotov', 60, 60),
+  // Flashbang (10) and Molotov (20, after Flashbang) led here until ID-139 made them cards.
+  airstrike: node('Airstrike', 'skills', 2, null, 60, 60),
   'scavengers-eye': node("Scavenger's Eye", 'perks', 1, null, 15, 30),
   fortify: node('Fortify', 'perks', 1, null, 20, 30),
   'butchers-hunger': node("Butcher's Hunger", 'perks', 1, null, 15, 30),
@@ -1437,54 +1470,33 @@ export const BUFF_IDS: readonly BuffId[] = ['adrenaline', 'overdrive'];
 
 // --- Active skills (ID-019). Design §4. ---
 
-export type SkillId = 'flashbang' | 'molotov' | 'airstrike';
+// Flashbang and Molotov were skills here until ID-139 made them throwable cards (`CARD`).
+export type SkillId = 'airstrike';
 /**
  * Skills bought with horde cash, each researched at the Lab first and hitting enemies
- * only, within `radius` of where each lands. `aim` is what the player picks: an airstrike
- * a row, carpet bombed from the outer wall's front to the field's end, a bomb dealing
- * `damage` every `every` s, `2 × radius` apart; a flashbang or a molotov an area (ID-107):
- * `count` drop from the sky at random spots within `area` of the aim (and past the outer
- * wall, inside the field), one every `every` s, each landing `THROW_FALL` s after it is
- * thrown, a flashbang stunning (no moving, no attacking) for `seconds`, a molotov's fire
- * burning for `seconds` (ID-041), each second `burn` of this wave's Shambler HP (ID-114,
- * `fireDps`). `cooldown` is fight seconds after a use.
+ * only, within `radius` of where each lands. `aim` is what the player picks: an area
+ * (ID-107, ID-139). An airstrike's `count` bombs drop from the sky at seeded random spots
+ * spread evenly over the circle of `area` round the aim (kept past the outer wall, inside
+ * the field), one every `every` s, each landing `THROW_FALL` s after it is dropped and
+ * dealing `share` of this wave's Shambler HP (`bombDamage`). `cooldown` is fight seconds
+ * after a use. Before ID-139 it carpet bombed a row from the outer wall's front, a flat 40 a
+ * bomb on a 40 s cooldown (design §4 has the tuning).
  */
 export const SKILLS = {
-  flashbang: {
-    name: 'Flashbang',
-    aim: 'area',
-    area: 260,
-    cost: 20,
-    cooldown: 25,
-    radius: 100,
-    seconds: 3,
-    count: 4,
-    every: 0.15,
-  },
-  molotov: {
-    name: 'Molotov',
-    aim: 'area',
-    area: 180,
-    cost: 25,
-    cooldown: 30,
-    radius: 50,
-    burn: 0.4,
-    seconds: 6,
-    count: 5,
-    every: 0.15,
-  },
   airstrike: {
     name: 'Airstrike',
-    aim: 'row',
+    aim: 'area',
+    area: 260,
+    count: 12,
     cost: 40,
-    cooldown: 40,
+    cooldown: 60,
     radius: 60,
-    damage: 40,
+    share: 4,
     every: 0.1,
   },
 } as const;
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
-/** Fight seconds a thrown flashbang or molotov, or an airstrike bomb, falls from the sky before it lands (ID-107). */
+/** Fight seconds an airstrike bomb falls from the sky before it lands (ID-107). */
 export const THROW_FALL = 0.5;
 /** How long a skill's explosion stays on screen, in seconds (ID-107: its fireball, smoke and scorch). */
 export const SKILL_FLASH = 1.2;
