@@ -18,11 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     # A normal run takes a few minutes; a hung simulation must not hold the runner for hours.
     timeout-minutes: 15
-    # The unit tests run in four jobs at once (ID-105): a test file runs on one worker, so
-    # the slowest balance files set the time and get jobs of their own. The stats files
-    # (ID-125) are the slowest of all, about 11 minutes on one worker, so they run in a job
-    # of their own, split in two so they play side by side: beside the other balance files
-    # they outran their 10-minute hook limit.
+    # The unit tests run in three jobs at once (ID-105): a test file runs on one worker, so
+    # the slowest balance files set the time and get jobs of their own. (ID-146 removed the
+    # stats files, ID-125's slowest, and their job.)
     # The last job runs every other file, so a new test file always runs somewhere; a file
     # named here that no longer exists fails its job ("No test files found").
     strategy:
@@ -34,8 +32,6 @@ jobs:
             tests: src/core/balance/late-hordes.test.ts src/core/balance/guns.test.ts
           - name: Unit (horde-only, Squad Power)
             tests: src/core/balance/horde-only.test.ts src/core/balance/squad-power.test.ts
-          - name: Unit (stats)
-            tests: src/core/balance/stats.test.ts src/core/balance/stats-close.test.ts
           - name: Lint, build, other unit
             checks: true
             tests: >-
@@ -43,8 +39,6 @@ jobs:
               --exclude src/core/balance/guns.test.ts
               --exclude src/core/balance/horde-only.test.ts
               --exclude src/core/balance/squad-power.test.ts
-              --exclude src/core/balance/stats.test.ts
-              --exclude src/core/balance/stats-close.test.ts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
