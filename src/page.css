@@ -1780,6 +1780,34 @@ body {
   display: none;
 }
 
+/* The Airstrike's Auto toggle (ID-140): muted and dashed while off (still tappable, not
+   the disabled look), lit while on. */
+.hud-auto {
+  padding: var(--space-6) var(--space-12);
+  border-style: dashed;
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+@media (pointer: coarse), (max-width: 480px) {
+  .hud-auto {
+    min-height: 44px;
+  }
+}
+
+.hud-auto[aria-pressed='true'] {
+  border-style: solid;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  font-weight: 600;
+}
+
+.hud-auto[hidden] {
+  display: none;
+}
+
 .hud-shop-item {
   padding: var(--space-6) var(--space-12);
   font-variant-numeric: tabular-nums;

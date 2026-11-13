@@ -1,12 +1,14 @@
-// ID-039, ID-062, ID-080, ID-085, ID-106: Reduce motion, the fight speed, sound, chatter and the how-to card are stored on their own
+// ID-039, ID-062, ID-080, ID-085, ID-106, ID-140: Reduce motion, the fight speed, sound, chatter, the how-to card and Airstrike auto-aim are stored on their own
 // and read back through an allow-list.
 import { describe, expect, it } from 'vitest';
 import {
+  AUTO_STRIKE_KEY,
   CHATTER_KEY,
   clampVolume,
   HOW_TO_SEEN_KEY,
   MOTION_KEY,
   MUTE_KEY,
+  readAutoStrike,
   readChatter,
   readHowToSeen,
   readReduceMotion,
@@ -15,6 +17,7 @@ import {
   SPEED_KEY,
   VOLUME_DEFAULTS,
   VOLUME_KEYS,
+  writeAutoStrike,
   writeChatter,
   writeHowToSeen,
   writeMute,
@@ -87,6 +90,49 @@ describe('Reduce motion setting', () => {
     expect(readReduceMotion(throwing, true)).toBe(true);
     expect(() => writeReduceMotion(throwing, true)).not.toThrow();
     expect(() => writeReduceMotion(null, true)).not.toThrow();
+  });
+});
+
+describe('Airstrike auto-aim setting (ID-140)', () => {
+  it('is off until the player turns it on', () => {
+    expect(readAutoStrike(memory())).toBe(false);
+    expect(readAutoStrike(null)).toBe(false);
+  });
+
+  it('round-trips through storage', () => {
+    const s = memory();
+    writeAutoStrike(s, true);
+    expect(s.data.get(AUTO_STRIKE_KEY)).toBe('1');
+    expect(readAutoStrike(s)).toBe(true);
+    writeAutoStrike(s, false);
+    expect(s.data.get(AUTO_STRIKE_KEY)).toBe('0');
+    expect(readAutoStrike(s)).toBe(false);
+  });
+
+  it('anything but the exact stored "1" loads as off', () => {
+    const hostile = [
+      'true',
+      'on',
+      ' 1',
+      '1 ',
+      '01',
+      '１',
+      '1​',
+      '‮1',
+      '{"__proto__":{"x":1}}',
+      '[1]',
+      'null',
+      '',
+      '1'.repeat(100_000),
+    ];
+    for (const v of hostile) expect(readAutoStrike(memory({ [AUTO_STRIKE_KEY]: v }))).toBe(false);
+    expect(({} as Record<string, unknown>).x).toBeUndefined();
+  });
+
+  it('storage that throws or is missing never breaks it', () => {
+    expect(readAutoStrike(throwing)).toBe(false);
+    expect(() => writeAutoStrike(throwing, true)).not.toThrow();
+    expect(() => writeAutoStrike(null, true)).not.toThrow();
   });
 });
 
