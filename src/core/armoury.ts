@@ -12,7 +12,7 @@ import {
   RARITIES,
   RARITY_ORDER,
   SQUAD_DROP,
-  STAT_EFFECT,
+  CRIT_DAMAGE,
   TRAIT,
   WEAPON_DROP,
   WEAPONS,
@@ -293,7 +293,7 @@ export function gunPower(h: Held): number {
   if (w.kind !== 'sidearm' && w.kind !== 'gun')
     throw new RangeError(`gunPower: ${baseOf(h)} is no gun`);
   // A gun's own crit counts (ID-101): the Rifle's trait, crit and crit damage affixes.
-  const crit = 1 + gunCrit(h) * (STAT_EFFECT.critDamage + gunCritDamage(h) - 1);
+  const crit = 1 + gunCrit(h) * (CRIT_DAMAGE + gunCritDamage(h) - 1);
   return (w.damage * w.pellets * crit * w.magazine) / (w.magazine * w.fireInterval + w.reload);
 }
 

@@ -391,11 +391,9 @@ describe('loot', () => {
     expect(mean(99)).toBeGreaterThan(mean(0) + 0.2);
   });
 
-  it('works out strength from level and weapon rarity; stats add none (ID-084)', () => {
+  it('works out strength from level and weapon rarity', () => {
     const bob = newGame().roster[0]!;
     expect(memberStrength(bob)).toBeCloseTo(1.8); // level 1, a Rusty pistol
-    const statted = { ...bob, stats: { instinct: 9, agility: 9, mind: 9, tinker: 0 } };
-    expect(memberStrength(statted)).toBeCloseTo(1.8);
     const relic = {
       ...bob,
       loadout: {

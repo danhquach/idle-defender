@@ -59,7 +59,7 @@ function squadUnder(n: number): GameState {
   for (const rarity of ['military', 'common'] as const) {
     // Power rises with the gun's level, so the first squad over the cap ends the search.
     for (let lv = 1; lv <= 200; lv++) {
-      const g = squadAt(n, lv, undefined, rarity);
+      const g = squadAt(n, lv, rarity);
       if (squadPower(g) > cap) break;
       if (!low || squadPower(g) > squadPower(low)) low = g;
     }

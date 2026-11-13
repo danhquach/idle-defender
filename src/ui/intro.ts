@@ -27,10 +27,7 @@ export const HOW_TO_CARD: readonly (readonly [string, string, string?])[] = [
     'Pick up to 2 before each horde, then tap or click them when they are ready.',
     `Keys: ${SKILL_KEYS.join(' ')}.`,
   ],
-  [
-    'Between hordes',
-    'Spend stat points, swap guns and pick the next horde. A loss costs nothing: try again.',
-  ],
+  ['Between hordes', 'Swap guns and pick the next horde. A loss costs nothing: try again.'],
 ];
 
 export interface IntroOptions {

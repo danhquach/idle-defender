@@ -1138,7 +1138,7 @@ function tagSpot(
  * included, so a stat change mid-reload moves the pie (the sim keeps only the reload's end).
  */
 export function reloadShare(
-  d: Pick<Defender, 'ammo' | 'reloadedAt' | 'loadout' | 'stats' | 'plain'>,
+  d: Pick<Defender, 'ammo' | 'reloadedAt' | 'loadout' | 'xp' | 'plain'>,
   time: number,
   cards: Pick<HordeState, 'taken' | 'cardLevels'> = { taken: [], cardLevels: {} },
 ): number | null {

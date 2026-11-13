@@ -1,6 +1,7 @@
 // Design §5, as built ID-020: commander perks unlocked at the Lab, equipped in perk
 // slots between hordes, fixed for the fight, each changing the whole battlefield.
 import { describe, expect, it } from 'vitest';
+import { xpForLevel } from './stats.ts';
 import { buildPost, buildTurret, newBase, type Base } from './base.ts';
 import { chooseCard, rerollLock, rerollOffer, rollOffer } from './cards.ts';
 import {
@@ -252,7 +253,7 @@ describe('perks in the horde', () => {
           id: 'a',
           name: 'A',
           loadout: { primary: 'pistol', secondary: 'knife', item: null },
-          stats: { instinct: 20, agility: 20, mind: 20, tinker: 0 },
+          xp: xpForLevel(20),
         },
       ],
       base: r.base,

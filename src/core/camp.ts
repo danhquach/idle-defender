@@ -15,15 +15,12 @@ import {
   DEFENDER_XP,
   MATERIALS,
   MAX_COUNT,
-  OPEN_STATS,
-  POINTS_PER_LEVEL,
   RECOVERY_MS,
   RECRUIT_NAMES,
   SURVIVOR,
   TREATMENT_MS,
   WEAPON_IDS,
   type CampPickId,
-  type Stats,
   type Stock,
   type ResearchId,
 } from './data.ts';
@@ -32,7 +29,7 @@ import type { HordeState } from './horde.ts';
 import { isGun } from './loadout.ts';
 import { pay, type GameResult } from './research.ts';
 import { chance, createRng, int, pick, type Rng } from './rng.ts';
-import { NO_STATS, xpForLevel } from './stats.ts';
+import { xpForLevel } from './stats.ts';
 
 /**
  * Someone who wants to join the camp (design §10 Survivors), rolled once and shown as
@@ -43,9 +40,6 @@ export interface Survivor {
   id: string;
   name: string;
   xp: number;
-  stats: Stats;
-  /** Stat points banked from an older save's levels (ID-096); absent when none. */
-  banked?: number;
   weapon: OwnedWeapon;
 }
 
@@ -264,16 +258,14 @@ export function takeCampPick(game: GameState, choice: CampChoice): GameResult {
 }
 
 /**
- * Survivor `id` of `level` (design §10): a name, the XP of that level with its stat
- * points rolled across the stats, and any weapon at a tier-`tier` place's rarity.
+ * Survivor `id` of `level` (design §10): a name, the XP of that level (its bonus comes
+ * with it, ID-146), and any weapon at a tier-`tier` place's rarity.
  */
 export function rollSurvivor(rng: Rng, id: string, level: number, tier: number): Survivor {
   const name = pick(rng, RECRUIT_NAMES);
-  const stats = { ...NO_STATS };
-  for (let n = POINTS_PER_LEVEL * (level - 1); n > 0; n--) stats[pick(rng, OPEN_STATS)] += 1;
   const base = pick(rng, WEAPON_IDS);
   const weapon = rollWeapon(rng, id, base, tierRarity(rng, tier));
-  return { id, name, xp: xpForLevel(level), stats, weapon };
+  return { id, name, xp: xpForLevel(level), weapon };
 }
 
 /** Survivor `s` on the roster: fit, carrying their weapon (a pistol too if it isn't a gun). */
@@ -286,8 +278,6 @@ export function survivorDefender(s: Survivor): RosterDefender {
       ? { primary: w, secondary: null, item: null }
       : { primary: 'pistol', secondary: w, item: null },
     xp: s.xp,
-    stats: { ...s.stats },
-    ...(s.banked ? { banked: s.banked } : {}),
     injuredUntil: null,
   };
 }
@@ -411,7 +401,6 @@ export function recruit(no: number): RosterDefender {
     name: pick(createRng(Math.imul(no, 0x9e3779b1)), RECRUIT_NAMES),
     loadout: { primary: 'pistol', secondary: null, item: null },
     xp: 0,
-    stats: { ...NO_STATS },
     injuredUntil: null,
   };
 }

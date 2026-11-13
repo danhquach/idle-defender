@@ -1,39 +1,23 @@
 // @vitest-environment jsdom
-// Design §6, ID-084: the roster's stat buttons: every stat, Tinker shown but locked.
+// Design §6, ID-146: the roster shows each survivor's level line and no stat-point controls.
 import { describe, expect, it, vi } from 'vitest';
 import { newGame, type GameState } from '../core/game.ts';
 import { rosterSection } from './roster.ts';
+import { levelText } from './statlines.ts';
 
 const NOW = 1_700_000_000_000;
 
-describe("the roster's stat picker (ID-084)", () => {
-  it('a button per stat; Tinker is greyed out, says it unlocks later and takes no point', () => {
+describe('the roster’s level line (ID-146)', () => {
+  it('shows the level and what it gives; no stat buttons, points line or Undo', () => {
     const g = newGame();
-    g.roster[0]!.xp = 25; // Bob: 3 points
-    const onChange = vi.fn<(next: GameState) => void>();
+    g.roster[0]!.xp = 75; // Bob: level 3
     const root = document.createElement('div');
-    root.append(...rosterSection(g, NOW, onChange, () => false));
+    root.append(...rosterSection(g, NOW, vi.fn<(next: GameState) => void>(), () => false));
     const bob = [...root.querySelectorAll('.roster-entry')].find((c) =>
       c.textContent?.startsWith('Bob'),
     )!;
-    const buttons = [...bob.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')];
-    expect(buttons.map((b) => b.textContent)).toEqual([
-      'Instinct +1',
-      'Agility +1',
-      'Sharp Mind +1',
-      'Tinker (locked)',
-    ]);
-    expect(buttons.map((b) => b.disabled)).toEqual([false, false, false, true]);
-    expect(bob.textContent).toContain('Tinker (unlocks later)');
-    buttons[3]!.click();
-    expect(onChange).not.toHaveBeenCalled();
-    buttons[2]!.click();
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange.mock.calls[0]![0].roster[0]!.stats).toEqual({
-      instinct: 0,
-      agility: 0,
-      mind: 1,
-      tinker: 0,
-    });
+    expect(bob.textContent).toContain(levelText(3));
+    expect(root.querySelector('.hud-pick-stat')).toBeNull();
+    expect(root.textContent).not.toMatch(/stat point|Instinct|Agility|Sharp Mind|Tinker|Undo/);
   });
 });

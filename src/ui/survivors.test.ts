@@ -132,7 +132,7 @@ describe('a survivor in a patrol report', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
-    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
+    const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop);
     const g = { ...newGame(), camp: { ...newGame().camp, xp: 25 } };
     const s = startHorde(g, 1, 'bob', 0, NOW);
     s.outcome = 'won';
@@ -167,7 +167,6 @@ describe('a survivor in a camp level-up offer', () => {
       root,
       noop,
       done,
-      noop,
       noop,
       noop,
       noop,
@@ -224,7 +223,6 @@ describe('a survivor in a camp level-up offer', () => {
     const noop = () => {};
     const hud = createHud(
       root,
-      noop,
       noop,
       noop,
       noop,

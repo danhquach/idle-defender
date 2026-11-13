@@ -1,27 +1,20 @@
-// The Roster (ID-086, reworked by ID-108): a top-bar button, with a badge counting the
-// survivors who have stat points to spend, opens one compact dialog: a header (the title,
-// "Best gun for everyone", close), one row of squad tabs (portrait, name, level, a badge
-// with their unspent points), the selected survivor beside their gun slot, and one panel
-// that is either their Stats or "Choose a gun". A tap on a stat's + spends the point at
-// once (ID-126); Undo takes back what was spent since the dialog opened, between hordes
-// only (no respec otherwise: design §6), and each spend is read out. A gun is compared with
-// the one held before it is equipped. Like the Inventory, the field goes inert behind it
-// and an open Roster holds a fight. Text reaches the page only through textContent.
+// The Roster (ID-086, reworked by ID-108): a top-bar button that opens one compact dialog:
+// a header (the title, "Best gun for everyone", close), one row of squad tabs (portrait,
+// name, level), the selected survivor beside their gun slot, and one panel that is either
+// their level and what it gives (ID-146) or "Choose a gun". A gun is compared with the one
+// held before it is equipped. Like the Inventory, the field goes inert behind it and an
+// open Roster holds a fight. Text reaches the page only through textContent.
 import { baseOf, gunPower, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
-import { STAT_NAMES, STASH_CAP, STATS, WEAPONS, type Rarity, type Stat } from '../core/data.ts';
+import { STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import type { GunMove } from '../core/hordeonly.ts';
 import type { HordeState } from '../core/horde.ts';
-import { isLocked, levelOf, maxHpOf, unspentPoints } from '../core/stats.ts';
+import { levelOf, maxHpOf } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
-import { holdable, holdRepeat } from './hold.ts';
-import { el, STAT_LOCKED_NOTE } from './hud.ts';
+import { el } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
-import { effectChange } from './statlines.ts';
+import { levelText } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
-
-/** "3 points", "1 point". */
-const pointsText = (n: number): string => `${n} point${n === 1 ? '' : 's'}`;
 
 /** One survivor's tab on the Roster. */
 export interface RosterTile {
@@ -34,8 +27,6 @@ export interface RosterTile {
   /** "Military Rifle"; the free pistol is "Pistol". */
   gun: string;
   rarity: Rarity;
-  /** Stat points left to spend: the tab's badge when above 0. */
-  points: number;
   art: ArtId;
 }
 
@@ -67,18 +58,10 @@ export function rosterTiles(
       down: !inFight && (downInFight || resting),
       gun: heldName(held),
       rarity: rarityOf(held),
-      points: unspentPoints(d),
       art: avatarOf(d),
     };
   });
 }
-
-/** How many survivors have points to spend: the Roster button's badge. */
-export const pointsBadge = (game: Pick<GameState, 'roster'>): number =>
-  game.roster.filter((d) => unspentPoints(d) > 0).length;
-
-/** Under a survivor's stats while points can't be spent (`canSpend` off): they wait for the screen between hordes. */
-export const SPEND_LATER_NOTE = 'Spend points between hordes.';
 
 function avatar(art: ArtId, className: string): HTMLElement {
   // Decoration only: the name is right beside it.
@@ -94,21 +77,15 @@ function avatar(art: ArtId, className: string): HTMLElement {
 
 export interface RosterOptions {
   /**
-   * The camp now (with any points spent on the result screen), the fight under way if
-   * any, whether points can be spent, whether guns can be changed, and whether closing
-   * resumes a fight (Close label).
+   * The camp now, the fight under way if any, whether guns can be changed, and whether
+   * closing resumes a fight (Close label).
    */
   state: () => {
     game: Pick<GameState, 'roster' | 'armoury'>;
     fight: HordeState | null;
-    canSpend: boolean;
     canGear: boolean;
     resumes: boolean;
   };
-  /** A + tap: spend one point of `stat` on survivor `id` now. */
-  onSpend: (id: string, stat: Stat) => void;
-  /** Undo, between hordes only: take back one point of `stat` that this dialog spent on `id`. */
-  onUnspend: (id: string, stat: Stat) => void;
   /** Equip: give survivor `id` the free pistol ('pistol') or the stash gun with uid `choice`. */
   onEquip: (id: string, choice: string) => { ok: true } | { ok: false; reason: string };
   /** "Best gun for everyone": the guns handed out, or why not. */
@@ -118,8 +95,7 @@ export interface RosterOptions {
 export interface Roster {
   isOpen(): boolean;
   /**
-   * Opens on survivor `id`'s Stats (the first with points to spend, or the first, without
-   * one); closing gives the keyboard back to `from` (what was clicked), else to what had it.
+   * Opens on survivor `id`'s level (the first survivor without one); closing gives the keyboard back to `from` (what was clicked), else to what had it.
    */
   open(id?: string, from?: HTMLElement): void;
   /** Closes at once. */
@@ -136,8 +112,6 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   let current: string | null = null;
   let picking = false;
   let picked: string | null = null;
-  // The points spent between hordes since it opened, oldest first: what Undo can take back.
-  let spentHere: [string, Stat][] = [];
   let status = { text: '', tone: 'ok' as 'ok' | 'danger' };
   // What had the keyboard before it opened (the button, or a name on the squad screen).
   let opener: HTMLElement | null = null;
@@ -145,11 +119,6 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   const button = el('button', 'roster-button', 'Roster');
   button.type = 'button';
   button.setAttribute('aria-haspopup', 'dialog');
-  const badge = el('span', 'roster-dot');
-  badge.setAttribute('aria-hidden', 'true');
-  badge.hidden = true;
-  const badgeText = el('span', 'sr-only');
-  button.append(badge, badgeText);
   button.addEventListener('click', () => api.open());
   root.append(button);
 
@@ -163,8 +132,6 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   dialog.tabIndex = -1;
   scrim.append(dialog);
   doc.body.append(scrim);
-  // Holding a + keeps spending (ID-096).
-  holdRepeat(dialog);
   scrim.addEventListener('mousedown', (e) => {
     if (e.target === scrim) e.preventDefault();
   });
@@ -236,62 +203,17 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     status = { text, tone };
   }
 
-  /** Points survivor `id` has left in the camp now. */
-  const leftNow = (id: string): number => {
-    const d = opts.state().game.roster.find((r) => r.id === id);
-    return d ? unspentPoints(d) : 0;
-  };
-
-  /** Stat `stat` of survivor `id` in the camp now. */
-  const statNow = (id: string, stat: Stat): number =>
-    opts.state().game.roster.find((r) => r.id === id)?.stats[stat] ?? 0;
-
-  /** Spends one point of `stat` on `d` now; reads out what it did, or that the camp refused. */
-  function spendOne(d: RosterDefender, stat: Stat): void {
-    const { canGear } = opts.state();
-    const before = leftNow(d.id);
-    opts.onSpend(d.id, stat);
-    const left = leftNow(d.id);
-    // Counted off the camp, so a spend the app refused is not reported or undone.
-    if (left >= before) return;
-    // In a fight a point stays spent: only one spent between hordes can be undone.
-    if (canGear) spentHere.push([d.id, stat]);
-    setStatus(
-      `${STAT_NAMES[stat]} ${statNow(d.id, stat)} for ${d.name}. ${left > 0 ? `${pointsText(left)} left` : 'No points left'}.`,
-    );
-  }
-
-  /** Takes back every point spent on `d` since the dialog opened, newest first. */
-  function undoSpends(d: RosterDefender): void {
-    const mine = spentHere.filter(([id]) => id === d.id);
-    spentHere = spentHere.filter(([id]) => id !== d.id);
-    const before = leftNow(d.id);
-    for (const [, stat] of mine.reverse()) opts.onUnspend(d.id, stat);
-    const left = leftNow(d.id);
-    const n = left - before;
-    // The points left keep two Undos in a row from reading the same (and going unread).
-    setStatus(n > 0 ? `Took back ${pointsText(n)} from ${d.name}. ${pointsText(left)} left.` : '');
-  }
-
   const keyOf = (): string | undefined =>
     (doc.activeElement as HTMLElement | null)?.dataset?.key ?? undefined;
 
-  function updateBadge(game: Pick<GameState, 'roster'>): void {
-    const n = pointsBadge(game);
-    badge.hidden = n === 0;
-    badge.textContent = n === 0 ? '' : String(n);
-    badgeText.textContent = n === 0 ? '' : `, ${n} with points to spend`;
-  }
-
   /** Draws everything; keeps the keyboard on `key` (default: where it is) when it is still there. */
   function draw(focus?: string): void {
-    const { game, fight, canSpend, canGear, resumes } = opts.state();
-    updateBadge(game);
+    const { game, fight, canGear, resumes } = opts.state();
     if (!opened) return;
     const want = focus ?? keyOf();
     let d = game.roster.find((r) => r.id === current);
     if (!d) {
-      d = game.roster.find((r) => unspentPoints(r) > 0) ?? game.roster[0];
+      d = game.roster[0];
       current = d?.id ?? null;
       picking = false;
       picked = null;
@@ -314,9 +236,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
           canGear,
         ),
       );
-      panel.replaceChildren(
-        ...(picking ? pickerPanel(d, game, canGear) : statsPanel(d, canSpend, canGear)),
-      );
+      panel.replaceChildren(...(picking ? pickerPanel(d, game, canGear) : levelPanel(d)));
     } else {
       top.replaceChildren();
       panel.replaceChildren();
@@ -333,8 +253,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       [...dialog.querySelectorAll<HTMLButtonElement>('[data-key]')].find(
         (b) => b.dataset.key === k && !b.disabled && !b.hidden,
       );
-    // A spent-out + moves to Undo, then the tab, then the close.
-    const target = find(key) ?? find('undo') ?? find(`tab:${current}`) ?? find('close');
+    const target = find(key) ?? find(`tab:${current}`) ?? find('close');
     target?.focus();
   }
 
@@ -346,21 +265,12 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     tab.dataset.defender = t.id;
     // One state, announced once: the survivor shown is the current one.
     if (selected) tab.setAttribute('aria-current', 'true');
-    const left = t.points;
     tab.title = `${t.name}, level ${t.level}, ${t.health}`;
-    tab.setAttribute(
-      'aria-label',
-      `${t.name}, level ${t.level}, ${t.health}${left > 0 ? `, ${pointsText(left)} to spend` : ''}`,
-    );
+    tab.setAttribute('aria-label', `${t.name}, level ${t.level}, ${t.health}`);
     tab.classList.toggle('rv-tab-down', t.down);
     const text = el('span', 'rv-tab-text');
     text.append(el('span', 'rv-tab-name', t.name), el('span', 'rv-tab-level', `Lv ${t.level}`));
     tab.append(avatar(t.art, 'roster-avatar roster-avatar-xs'), text);
-    if (left > 0) {
-      const dot = el('span', 'roster-badge rv-badge', String(left));
-      dot.setAttribute('aria-hidden', 'true');
-      tab.append(dot);
-    }
     tab.addEventListener('click', () => {
       if (t.id === current) return;
       current = t.id;
@@ -398,7 +308,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     const dps = heldDps(held);
     slot.setAttribute(
       'aria-label',
-      `Gun: ${gunName(held)}, ${dps} dmg/s. ${canGear ? (picking ? 'Back to stats' : 'Change gun') : GUNS_WAIT}`,
+      `Gun: ${gunName(held)}, ${dps} dmg/s. ${canGear ? (picking ? 'Back to level' : 'Change gun') : GUNS_WAIT}`,
     );
     const icon = el('span', 'rv-gico');
     // The inventory slot's tint, so the dark gun art reads (ID-092).
@@ -447,87 +357,15 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     return [who, slot];
   }
 
-  function statsPanel(d: RosterDefender, canSpend: boolean, canGear: boolean): HTMLElement[] {
-    const left = unspentPoints(d);
-    const undone = spentHere.filter(([id]) => id === d.id).length;
+  /** The level panel (ID-146): "Level N" and its XP, then what the level gives. */
+  function levelPanel(d: RosterDefender): HTMLElement[] {
+    const { level, into, next } = levelOf(d.xp);
     const headRow = el('div', 'rv-phead');
-    const lefts = el('span', 'rv-left');
-    lefts.append(el('b', '', String(left)), ' to spend');
-    headRow.append(el('span', 'rv-ttl', 'Stats'), lefts);
-    // Between hordes only: a point spent in a fight stays spent.
-    if (canGear) {
-      const undo = el('button', 'hud-button rv-btn', undone > 0 ? `Undo ${undone}` : 'Undo');
-      undo.type = 'button';
-      undo.dataset.key = 'undo';
-      undo.disabled = undone === 0;
-      undo.setAttribute(
-        'aria-label',
-        undone > 0
-          ? `Undo ${pointsText(undone)} spent on ${d.name}`
-          : 'Undo: nothing spent here yet',
-      );
-      undo.addEventListener('click', () => {
-        if (undo.disabled) return;
-        undoSpends(d);
-        draw();
-      });
-      headRow.append(undo);
-    }
-    const out: HTMLElement[] = [headRow];
-    if (!canSpend && left > 0) out.push(el('p', 'menu-note', SPEND_LATER_NOTE));
-    const list = el('ul', 'rv-stats');
-    for (const stat of STATS) list.append(statRow(d, stat, left, canSpend));
-    out.push(list);
-    out.push(
-      el(
-        'p',
-        'rv-hint',
-        canGear
-          ? 'Tap + to spend a point now. → shows the next point. Undo takes back what you spent here.'
-          : 'Tap + to spend a point now. → shows the next point. In a fight it stays spent.',
-      ),
+    headRow.append(
+      el('span', 'rv-ttl', `Level ${level}`),
+      el('span', 'rv-left', `${into}/${next} XP`),
     );
-    return out;
-  }
-
-  function statRow(d: RosterDefender, stat: Stat, left: number, canSpend: boolean): HTMLElement {
-    const label = STAT_NAMES[stat];
-    const li = el('li', 'rv-stat');
-    if (isLocked(stat)) {
-      li.classList.add('rv-stat-locked');
-      li.append(el('span', 'rv-stat-name', label), el('span', 'rv-fx', STAT_LOCKED_NOTE));
-      return li;
-    }
-    const name = el('span', 'rv-stat-name', label);
-    name.append(el('span', 'rv-stat-ct', String(d.stats[stat])));
-    const fx = el('span', 'rv-fx');
-    // With no point to spend, only what the stat gives now: no "→ next" a survivor can't buy.
-    for (const c of effectChange(d, stat, 1)) {
-      const item = el('span', 'rv-fx-item');
-      item.append(el('span', 'rv-fx-k', `${c.label} `), c.from);
-      if (left > 0) item.append(el('span', 'rv-fx-to', ` → ${c.to}`));
-      fx.append(item);
-    }
-    const plus = el('button', 'hud-button rv-sb rv-sb-plus', '+');
-    plus.type = 'button';
-    plus.dataset.key = `add:${d.id}:${stat}`;
-    holdable(plus, `add:${d.id}:${stat}`);
-    plus.disabled = left <= 0 || !canSpend;
-    plus.setAttribute(
-      'aria-label',
-      `Spend a point on ${label} for ${d.name}, now ${d.stats[stat]}`,
-    );
-    plus.addEventListener('click', () => {
-      if (plus.disabled) return;
-      // The camp's redraw during the spend can't move the keyboard on before Undo is live.
-      const at = keyOf();
-      spendOne(d, stat);
-      draw(at);
-    });
-    const pm = el('span', 'rv-pm');
-    pm.append(plus);
-    li.append(name, fx, pm);
-    return li;
+    return [headRow, el('p', 'rv-level', levelText(level))];
   }
 
   function pickerPanel(
@@ -539,9 +377,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     const tiles = gunTiles(game, d.id);
     if (picked !== null && !tiles.some((t) => t.choice === picked)) picked = null;
     const headRow = el('div', 'rv-phead');
-    const back = el('button', 'hud-button rv-btn', 'Stats');
+    const back = el('button', 'hud-button rv-btn', 'Level');
     back.type = 'button';
-    back.dataset.key = 'stats';
+    back.dataset.key = 'level';
     back.addEventListener('click', () => {
       picking = false;
       picked = null;
@@ -666,15 +504,13 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
         opened = true;
         const at = from ?? doc.activeElement;
         opener = at instanceof HTMLElement && root.contains(at) ? at : null;
-        spentHere = [];
         status = { text: '', tone: 'ok' };
         scrim.hidden = false;
         root.setAttribute('inert', '');
       }
       const { game } = opts.state();
       const asked = game.roster.find((r) => r.id === id);
-      current =
-        (asked ?? game.roster.find((r) => unspentPoints(r) > 0) ?? game.roster[0])?.id ?? null;
+      current = (asked ?? game.roster[0])?.id ?? null;
       picking = false;
       picked = null;
       (doc.activeElement as HTMLElement | null)?.blur?.();
@@ -685,7 +521,6 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     close() {
       if (!opened) return;
       opened = false;
-      spentHere = [];
       scrim.hidden = true;
       root.removeAttribute('inert');
       (opener?.isConnected ? opener : button).focus();
@@ -696,7 +531,6 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     },
   };
 
-  updateBadge(opts.state().game);
   return api;
 }
 

@@ -16,6 +16,7 @@ import {
   CARD,
   CARD_MAX_LEVEL,
   COLUMNS,
+  CRIT_DAMAGE,
   ENEMIES,
   ENGINEER_BUFF,
   ENEMY_RADIUS,
@@ -67,7 +68,6 @@ import {
   type PerkId,
   type ResearchId,
   type SkillId,
-  type Stats,
   type Tracer,
   type Weapon,
 } from './data.ts';
@@ -86,15 +86,12 @@ import { openReplace } from './replace.ts';
 import { chance, int, rngFrom, type Rng, type RngState } from './rng.ts';
 import {
   critChance,
-  critDamage,
   damageFactor,
   damageTaken,
-  dodgeChance,
   fireRateFactor,
   maxHpOf,
   reloadTime,
   spreadOf,
-  wallDamage,
 } from './stats.ts';
 import {
   enemyHp,
@@ -142,19 +139,17 @@ export interface DefenderSpec {
   id: string;
   name: string;
   loadout: Loadout;
-  /** Permanent stats from the roster (design §6); none means all 0. */
-  stats?: Readonly<Stats>;
+  /** Lifetime XP from the roster, the level and its bonus come from it (design §6, ID-146); none means level 1. */
+  xp?: number;
   /** A horde-only survivor (ID-066): no profession, its bonuses, title or badge. */
   plain?: true;
 }
 
-/** The spec a fight defender came from, stats and all. */
+/** The spec a fight defender came from, XP and all. */
 export function specOf(d: DefenderSpec): DefenderSpec {
-  const { id, name, stats } = d;
+  const { id, name, xp } = d;
   const loadout = { ...d.loadout };
-  const spec: DefenderSpec = stats
-    ? { id, name, loadout, stats: { ...stats } }
-    : { id, name, loadout };
+  const spec: DefenderSpec = xp === undefined ? { id, name, loadout } : { id, name, loadout, xp };
   if (d.plain) spec.plain = true;
   return spec;
 }
@@ -461,8 +456,7 @@ export interface Bullet {
   /** A Sniper rifle's round: it ignores armour, a boss's plates too (ID-099, ID-101). */
   ap?: true;
   /**
-   * Gun traits and role affixes (ID-101), as shares: extra damage near the wall (an SMG's,
-   * plus the shooter's Instinct, ID-125),
+   * Gun traits and role affixes (ID-101), as shares: extra damage near the wall (an SMG's),
    */
   close?: number;
   /** a Sniper rifle's (or a Hand Cannon's affix) extra damage to bosses and heavies, */
@@ -1240,7 +1234,7 @@ function step(s: HordeState, rng: Rng): void {
     e.vx = (e.x - wasX[i]!) / STEP;
     e.vy = (e.y - wasY[i]!) / STEP;
   }
-  attack(s, moved, rng);
+  attack(s, moved);
   injure(s);
   drop(s);
   advanceWave(s);
@@ -1658,7 +1652,7 @@ export const cardFirstAid = (s: Parameters<typeof cardLevel>[0]): number =>
 
 /**
  * Whether any survivor on the field can crit (ID-130): Aim for the Head held, or a weapon
- * with crit chance from Sharp Mind, the Gunner's handling or the gun itself.
+ * with crit chance from the level, the Gunner's handling or the gun itself.
  */
 export function squadCanCrit(
   s: Pick<HordeState, 'defenders'> & Parameters<typeof cardLevel>[0],
@@ -2313,8 +2307,8 @@ function fire(s: HordeState, rng: Rng): void {
     const id = defender.loadout[slot]!;
     const weapon = weaponOf(id);
     const gun = isGun(id);
-    // Any weapon can crit with Sharp Mind (ID-084). Crits roll only when the chance is
-    // above 0, so a defender without it (or a Gunner's handling) leaves the RNG alone.
+    // Any weapon can crit with the level's crit (ID-146). Crits roll only when the chance is
+    // above 0, so a level-1 defender without it (or a Gunner's handling) leaves the RNG alone.
     // A gun adds its own crit (ID-101, ID-135): its trait (the Assault Rifle's, the LMG's, the
     // Sniper rifle's), a crit or crit damage affix.
     // Aim for the Head and Hollow Points (ID-130) add theirs on any weapon.
@@ -2325,12 +2319,10 @@ function fire(s: HordeState, rng: Rng): void {
       s.mods.damage *
       boost(s, 'damage') *
       damageFactor(defender, id) *
-      (critHit ? critDamage(defender) + gunCritDamage(id) + cardCritDamage(s) : 1);
-    // Instinct's last-line damage (ID-125): on a bullet it adds to the SMG's near-wall share.
-    const wall = wallDamage(defender);
+      (critHit ? CRIT_DAMAGE + gunCritDamage(id) + cardCritDamage(s) : 1);
     if (gun) {
       const traits = { ...traitsOf(id, critHit), shot: s.time };
-      const close = (traits.close ?? 0) + wall;
+      const close = traits.close ?? 0;
       launch(s, rng, {
         owner: defender.id,
         x: use.x,
@@ -2348,10 +2340,8 @@ function fire(s: HordeState, rng: Rng): void {
         ...(close > 0 ? { close } : {}),
       });
     } else {
-      const near = wall > 0 && target.x <= wallFront(s) + TRAIT.close.range + EPS;
-      const dealt = near ? hit * (1 + wall) : hit;
-      popOn(s, target, dealt, critHit);
-      target.hp -= dealt;
+      popOn(s, target, hit, critHit);
+      target.hp -= hit;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
     // Butcher's Hunger counts the blade or tool kill of this strike.
@@ -2952,7 +2942,7 @@ export function separate(s: Pick<HordeState, 'enemies'>): void {
  * Design §9: a climbing Crawler doesn't attack; a Spewer spits from its stand-off; a
  * Swollen's hit is its blast, which takes it off the field with no kill paid.
  */
-function attack(s: HordeState, moves: Moves, rng: Rng): void {
+function attack(s: HordeState, moves: Moves): void {
   const blown = new Set<number>();
   for (const e of s.enemies) {
     if (stunned(s, e) || e.climbUntil > 0 || !due(s.time, e.nextAttackAt)) continue;
@@ -2961,14 +2951,14 @@ function attack(s: HordeState, moves: Moves, rng: Rng): void {
       const defender = moves.reached.get(e.id);
       if (!defender) continue;
       defender.hitBy = e.kind;
-      hurt(s, defender, enemy.damage, rng);
+      hurt(s, defender, enemy.damage);
       if (e.kind === 'swollen') blown.add(e.id);
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
     const slide = moves.sliding.get(e.id);
     if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
-    if (e.kind === 'spewer' && spit(s, e, rng)) {
+    if (e.kind === 'spewer' && spit(s, e)) {
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
@@ -3069,7 +3059,7 @@ function blast(s: HordeState, layer: Layer, row: number, scale = 1): void {
  * index): HP off a defender (as any hit, `hurt`), condition off a turret.
  * Returns false when there is none.
  */
-function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
+function spit(s: HordeState, e: Enemy): boolean {
   let best: { x: number; y: number; hit: () => void } | null = null;
   let bestD = Infinity;
   const damage = ENEMIES.spewer.damage;
@@ -3082,7 +3072,7 @@ function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
       y: d.y,
       hit: () => {
         d.hitBy = 'spewer';
-        hurt(s, d, damage, rng);
+        hurt(s, d, damage);
       },
     };
   }
@@ -3101,19 +3091,11 @@ function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
 }
 
 /**
- * A hit of `damage` on defender `d` (design §6): a shield's share and Instinct's and
- * Kevlar Vests' armour (ID-131) off. One that would drop them to 0 HP leaves them at 1
- * instead on an Instinct roll, rolled only for a survivor with Instinct so the RNG is left
- * alone otherwise.
+ * A hit of `damage` on defender `d` (design §6): a shield's share and the level's and
+ * Kevlar Vests' armour (ID-131) off (ID-146: Instinct's injury dodge is gone).
  */
-function hurt(s: HordeState, d: Defender, damage: number, rng: Rng): void {
-  const hp = d.hp - damageTaken(d, damage, cardArmour(s));
-  if (hp > 0) {
-    d.hp = hp;
-    return;
-  }
-  const dodge = dodgeChance(d);
-  d.hp = dodge > 0 && d.hp > 1 && chance(rng, dodge) ? 1 : 0;
+function hurt(s: HordeState, d: Defender, damage: number): void {
+  d.hp = Math.max(0, d.hp - damageTaken(d, damage, cardArmour(s)));
 }
 
 /** First Aid Kits (ID-131): each survivor on the line recovers its share of max HP a second, up to max. */

@@ -4,7 +4,7 @@ import { finishHorde, newGame, startHorde, type GameState } from '../core/game.t
 import { upgradeLab, type GameResult } from '../core/research.ts';
 import { researchNow } from '../core/testing.ts';
 import { BUILDING_MATERIALS, stockOf } from '../core/data.ts';
-import { bankedPoints } from '../core/stats.ts';
+import { levelOf } from '../core/stats.ts';
 
 /** `game`'s stock as a save from before ID-025 (v3 and older) holds it: building materials only. */
 export const oldStock = (game: GameState): Record<string, number> =>
@@ -54,7 +54,7 @@ export function preStats(game: GameState): Record<string, unknown> {
   return json;
 }
 
-type JsonPointed = { stats?: Record<string, number>; banked?: number };
+type JsonPointed = { xp?: number; stats?: Record<string, number>; banked?: number };
 
 /** Runs `f` on every defender and survivor waiting to join in save JSON `json`. */
 function forEveryone(json: Record<string, unknown>, f: (d: JsonPointed) => void): void {
@@ -76,9 +76,24 @@ function dropLevels(v: unknown): void {
   }
 }
 
+/**
+ * `game` as JSON from before ID-146 (v16 and older): stat points on every defender and
+ * survivor waiting to join. Someone past level 1 has 1 point spent in Sharp Mind, the rest
+ * unspent, and the 2 a level an even older save banked (ID-096); level 1 has none.
+ */
+export function prePoints(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  forEveryone(json, (d) => {
+    const past = levelOf(d.xp!).level - 1;
+    d.stats = { instinct: 0, agility: 0, mind: Math.min(1, past), tinker: 0 };
+    if (past > 0) d.banked = 2 * past;
+  });
+  return json;
+}
+
 /** `game` as JSON from before ID-100 (v15 and older): no skill pick. */
 export function prePick(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = prePoints(game);
   delete json.skillPick;
   return json;
 }
@@ -97,39 +112,6 @@ export function preBank(game: GameState): Record<string, unknown> {
   forEveryone(json, (d) => delete d.banked);
   return json;
 }
-
-type Pointed = { xp: number; stats: GameState['roster'][number]['stats']; banked?: number };
-
-/** `game` with `f` applied to every defender and every survivor waiting to join. */
-function everyone(game: GameState, f: <T extends Pointed>(d: T) => T): GameState {
-  return {
-    ...game,
-    roster: game.roster.map(f),
-    reserve: game.reserve.map(f),
-    camp: {
-      ...game.camp,
-      offers: game.camp.offers.map((o) => ({ ...o, survivor: o.survivor && f(o.survivor) })),
-    },
-    reports: game.reports.map((r) => ({ ...r, survivors: r.survivors.map(f) })),
-  };
-}
-
-/**
- * `game` as a v13 or older save loads it (ID-096): everyone above level 1 banks the points
- * the old 3 a level gave over today's 1.
- */
-export const banked = (game: GameState): GameState =>
-  everyone(game, (d) => {
-    const b = bankedPoints(d.xp);
-    return b > 0 ? { ...d, banked: b } : d;
-  });
-
-/**
- * `game` as an old save (v12 or older) loads it (ID-084): every spent stat point refunded,
- * and the old levels' points banked (ID-096).
- */
-export const refunded = (game: GameState): GameState =>
-  banked(everyone(game, (d) => ({ ...d, stats: { instinct: 0, agility: 0, mind: 0, tinker: 0 } })));
 
 /** `game` as JSON from before ID-066 (v11 and older): no reserve. */
 export function preReserve(game: GameState): Record<string, unknown> {

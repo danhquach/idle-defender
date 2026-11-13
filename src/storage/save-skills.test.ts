@@ -25,8 +25,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 }
 
 describe('save: the skill pick (ID-100)', () => {
-  it('is version 16, and round-trips every pick', () => {
-    expect(SAVE_VERSION).toBe(16);
+  it('is version 17, and round-trips every pick', () => {
+    expect(SAVE_VERSION).toBe(17);
     const picks = [[], ...SKILL_IDS.map((k) => [k])] as GameState['skillPick'][];
     for (const p of picks) {
       const g = picked(...p);
@@ -41,12 +41,12 @@ describe('save: the skill pick (ID-100)', () => {
     expect(s.freeSkills).toEqual({ power: 2 });
   });
 
-  it('a v15 save loads with a new game’s pick, and saves again as v16', () => {
+  it('a v15 save loads with a new game’s pick, and saves again as the current version', () => {
     const g = picked('airstrike');
     const v15 = { v: 15, savedAt: NOW, game: prePick(g) };
     const save = decodeSave(JSON.stringify(v15));
     expect(save?.game.skillPick).toEqual([...START_SKILLS]);
-    expect(JSON.parse(encodeSave(save!.game, NOW)).v).toBe(16);
+    expect(JSON.parse(encodeSave(save!.game, NOW)).v).toBe(SAVE_VERSION);
   });
 
   it('refuses a v15 save with a pick, and a v16 save without one', () => {
@@ -190,6 +190,6 @@ describe('save: the retired Flashbang and Molotov skills (ID-139)', () => {
     const back = researched(['flashbang', 'molotov'], ['airstrike']);
     expect(back).not.toBeNull();
     expect(JSON.parse(encodeSave(back!.game, NOW)).game.skillPick).toEqual(['airstrike']);
-    expect(SAVE_VERSION).toBe(16); // no version bump: nothing else changed
+    expect(SAVE_VERSION).toBe(17); // ID-139 bumped nothing; 17 is ID-146's
   });
 });

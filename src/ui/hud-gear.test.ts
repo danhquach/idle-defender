@@ -26,13 +26,13 @@ import {
   lossXpText,
   SQUAD_LOSS_RULE,
   SQUAD_NO_LEVEL_UPS,
-  SQUAD_POINTS_NOTE,
   squadGear,
   squadScreen,
   SQUAD_NO_DROP,
   squadStart,
 } from './hud.ts';
 import { ART_URLS, GUN_ICON, type GunId } from './sprites.ts';
+import { levelText } from './statlines.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -152,7 +152,7 @@ describe('the gun pickers (ID-067)', () => {
   function page() {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
-    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
     return { root, h };
   }
 
@@ -255,7 +255,7 @@ describe('the debrief layout (ID-067)', () => {
   function page() {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
-    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
     return { root, h };
   }
 
@@ -290,22 +290,20 @@ describe('the debrief layout (ID-067)', () => {
   });
 
   describe('a win shows only who levelled up in it (ID-134)', () => {
-    // Just into level 30: 29 points from earlier hordes, and a level needs 750 more XP.
+    // Just into level 30: a level needs 750 more XP.
     const veteran = (n: number) => ({ ...recruit(n), xp: xpForLevel(30) });
 
-    it('a survivor whose only news is points from earlier hordes gets no card', () => {
+    it('a survivor who did not level up gets no card', () => {
       const g = { ...squadGame(2, 3), roster: [recruit(1), veteran(2)] };
       const screen = squadScreen(g, ended(g, 'won'));
       expect(screen.debrief!.cards.map((c) => c.id)).toEqual(['recruit-1']);
-      expect(screen.picks.map((p) => p.id)).toEqual(['recruit-1']);
     });
 
-    it('nobody levelled up: one line in place of the cards, no points note', () => {
+    it('nobody levelled up: one line in place of the cards', () => {
       const g = { ...squadGame(2, 3), roster: [veteran(1), veteran(2)] };
       const screen = squadScreen(g, ended(g, 'won'));
       expect(screen.debrief!.cards).toEqual([]);
       expect(screen.debrief!.empty).toBe(SQUAD_NO_LEVEL_UPS);
-      expect(screen.picks).toEqual([]);
       expect(screen.debrief!.foot).toBe('');
       const { root, h } = page();
       h.showResult(screen);
@@ -374,7 +372,7 @@ describe('the debrief layout (ID-067)', () => {
 
     const root = document.createElement('div');
     document.body.replaceChildren(root);
-    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
     const g = squadGame(1, 3, [rifle]);
     const r = equipGun(g, 'recruit-1', 'h1');
     if (!r.ok) throw new Error(r.reason);
@@ -498,26 +496,22 @@ describe('the debrief layout (ID-067)', () => {
     const fill = root.querySelector<HTMLElement>('.squad-card .xp-fill')!;
     expect(fill.style.width).toMatch(/%$/);
     expect(fill.parentElement!.getAttribute('aria-hidden')).toBe('true');
-    expect(root.querySelector('.squad-points')!.textContent).toMatch(/^\d+ points?$/);
     const button = root.querySelector('.hud-result-foot > .hud-button')!;
     expect(button.classList.contains('btn-primary')).toBe(true);
-    expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe(SQUAD_POINTS_NOTE);
+    expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe('');
   });
 
-  it('a spent-out card shows 0 in the muted style, and its buttons go grey', () => {
+  it('a level-up card shows the level line, and no stat button, points badge or Undo (ID-146)', () => {
     const { root, h } = page();
     const g = squadGame(1, 5);
-    h.showResult(squadScreen(g, ended(g, 'won')));
-    const aim = () => root.querySelector<HTMLButtonElement>('.hud-pick-stat')!;
-    const points = () => root.querySelector('.squad-points')!;
-    expect(points().classList.contains('squad-points-none')).toBe(false);
-    for (let n = 0; n < 1000 && !aim().disabled; n++) aim().click();
-    expect(aim().disabled).toBe(true);
-    // Shows a bare 0; screen readers get "0 points" from the hidden unit.
-    expect(points().firstChild!.textContent).toBe('0');
-    expect(points().querySelector('.sr-only')!.textContent).toBe(' points');
-    expect(points().textContent).toBe('0 points');
-    expect(points().classList.contains('squad-points-none')).toBe(true);
+    const screen = squadScreen(g, ended(g, 'won'));
+    h.showResult(screen);
+    const card = screen.debrief!.cards[0]!;
+    expect(card.bonus).toBe(levelText(card.level, true));
+    expect(root.querySelector('.squad-card .squad-card-bonus')!.textContent).toBe(card.bonus);
+    expect(root.querySelector('.hud-pick-stat')).toBeNull();
+    expect(root.querySelector('.squad-plus, .squad-points, .squad-undo')).toBeNull();
+    expect(root.textContent).not.toMatch(/stat point|points? left|Undo|Instinct|Sharp Mind/);
   });
 
   it('the full game’s result screen keeps its plain list and button', () => {
@@ -537,7 +531,7 @@ describe('the debrief panel scrolls (ID-067)', () => {
   it('a new screen starts at its top', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
-    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
     const g = squadGame(2, 3);
     h.showResult(squadScreen(g, ended(g, 'won')));
     const panel = root.querySelector<HTMLElement>('.hud-result')!;
@@ -551,7 +545,7 @@ describe('bonus guns on the result screen (ID-122)', () => {
   function page() {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
-    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
     return { root, h };
   }
 

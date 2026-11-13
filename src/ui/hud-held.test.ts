@@ -17,7 +17,7 @@ const noop = (): void => {};
 function mount(squad = true) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
-  const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, squad);
+  const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, squad);
   const strip = root.querySelector<HTMLElement>('.hud-held')!;
   const chips = () => [...strip.querySelectorAll<HTMLButtonElement>('.hud-held-card')];
   const tip = strip.querySelector<HTMLElement>('.hud-held-tip')!;

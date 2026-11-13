@@ -21,7 +21,6 @@ import {
   LOCATIONS,
   PATROL,
   PLAZAS,
-  POINTS_PER_LEVEL,
   RECRUIT_NAMES,
   SURVIVOR,
   type LocationId,
@@ -38,7 +37,7 @@ import {
   settlePatrols,
   type Patrol,
 } from './patrol.ts';
-import { levelOf, spentPoints, xpForLevel } from './stats.ts';
+import { levelOf, xpForLevel } from './stats.ts';
 
 const NOW = 1_800_000_000_000;
 
@@ -100,7 +99,7 @@ const stuffed = (game: GameState): GameState => ({
 });
 
 describe('rolling a survivor', () => {
-  it('has a name, the XP of their level, its stat points spent, and a weapon whose uid is their id', () => {
+  it('has a name, the XP of their level (its bonus comes with it, ID-146), and a weapon whose uid is their id', () => {
     for (let seed = 1; seed < 50; seed++) {
       const lvl = (seed % 5) + 1;
       const s = rollSurvivor(createRng(seed), 's3-1', lvl, 3);
@@ -108,9 +107,7 @@ describe('rolling a survivor', () => {
       expect(RECRUIT_NAMES).toContain(s.name);
       expect(s.xp).toBe(xpForLevel(lvl));
       expect(level(s)).toBe(lvl);
-      // 1 point a level (ID-096).
-      expect(spentPoints(s.stats)).toBe(POINTS_PER_LEVEL * (lvl - 1));
-      expect(POINTS_PER_LEVEL).toBe(1);
+      expect(Object.keys(s).sort()).toEqual(['id', 'name', 'weapon', 'xp']);
       expect(s.weapon.uid).toBe('s3-1');
     }
     expect(rollSurvivor(createRng(9), 'c2', 2, 2)).toEqual(rollSurvivor(createRng(9), 'c2', 2, 2));
@@ -126,7 +123,6 @@ describe('rolling a survivor', () => {
         id: 'c3',
         name: s.name,
         xp: s.xp,
-        stats: s.stats,
         injuredUntil: null,
       });
       if (isGun(s.weapon))

@@ -104,12 +104,13 @@ export const SQUAD_DROP: readonly { from: number; rarity: Record<Rarity, number>
 export const GUN_LEVEL_DAMAGE = 0.06;
 /**
  * Squad Power and Recommended Power (ID-098). A survivor's power is their gun's sustained
- * dmg/s × (1 + `aim` × Sharp Mind's spread cut) × (1 + `wall` × Instinct's damage near the
- * wall, ID-125: about the share of a fight's damage dealt there) × (1 + `tough` × Instinct's
- * extra HP share) × `scale`. A horde's Recommended Power is `rec.k` × its enemy HP for each
- * second its waves take to spawn (ID-102: the dmg/s it asks for; HP ^ 0.59 × 3.19 before),
- * fitted so a squad at it wins about half the time with the scripted player's cards and
- * skills (ID-128: an average build; with no cards before); × `rec.early` in Hordes 1 to 10
+ * dmg/s × (1 + `aim` × the level's spread cut) × (1 + `tough` × the level's extra HP
+ * share) × `scale` (ID-146: the level bonus; Sharp Mind and Instinct before; Instinct's
+ * damage near the wall had a `wall` term). A horde's Recommended Power is `rec.k` × its
+ * enemy HP for each second its waves take to spawn (ID-102: the dmg/s it asks for;
+ * HP ^ 0.59 × 3.19 before), fitted so a squad at it wins about half the time with the
+ * scripted player's cards and skills (ID-128: an average build; with no cards before);
+ * × `rec.early` in Hordes 1 to 10
  * (sure wins in Hordes 1 to 4; Hordes 5 to 10 fitted so the scripted campaign's squad
  * stands at about 1.5× it). A swarm wave's HP (already `SWARM.size` times a calm wave's) is
  * weighted `rec.swarm` more (ID-099): it comes twice as fast, so it asks for more dmg/s
@@ -121,7 +122,6 @@ export const GUN_LEVEL_DAMAGE = 0.06;
  */
 export const POWER = {
   aim: 0.5,
-  wall: 0.5,
   tough: 0.5,
   scale: 10,
   rec: {
@@ -1039,7 +1039,7 @@ export const CARD = {
   loaders: [0.9, 0.8, 0.7],
   /** Extended Mags: squad magazine size factor, per level. */
   mags: [4 / 3, 5 / 3, 2],
-  /** Aim for the Head (ID-130): squad crit chance added, per level, on top of guns and Sharp Mind. */
+  /** Aim for the Head (ID-130): squad crit chance added, per level, on top of guns and levels. */
   crit: [0.05, 0.1, 0.15],
   /**
    * Hollow Points (ID-130; id hollow-point-rounds, as hollow-points is Heavy Rounds): squad
@@ -1048,7 +1048,7 @@ export const CARD = {
   critDamage: [0.25, 0.5, 0.75],
   /**
    * Kevlar Vests (ID-131): flat damage off each hit a survivor on the line takes, per level,
-   * added to Instinct's armour; a hit still keeps `STAT_EFFECT.armourFloor` of its damage.
+   * added to the level's armour; a hit still keeps `ARMOUR_FLOOR` of its damage.
    */
   armour: [1, 2, 3],
   /** First Aid Kits (ID-131): share of max HP a survivor on the line recovers a second, per level. */
@@ -1169,83 +1169,36 @@ export const CARD = {
   recharge: 0.25,
 } as const;
 
-// --- Defender levels, stats and titles (M4). Design §6. ---
+// --- Defender levels and titles (M4). Design §6. ---
 
-export type Stat = 'instinct' | 'agility' | 'mind' | 'tinker';
-export type Stats = Record<Stat, number>;
-export const STATS: readonly Stat[] = ['instinct', 'agility', 'mind', 'tinker'];
-export const STAT_NAMES: Readonly<Record<Stat, string>> = {
-  instinct: 'Instinct',
-  agility: 'Agility',
-  mind: 'Sharp Mind',
-  tinker: 'Tinker',
-};
-/** Stats that take no points yet (ID-084): shown greyed out until the game expands. */
-export const LOCKED_STATS: readonly Stat[] = ['tinker'];
-/** The stats points can go in. */
-export const OPEN_STATS: readonly Stat[] = STATS.filter((s) => !LOCKED_STATS.includes(s));
 /** XP from level L to L + 1 is `LEVEL_XP × L`. */
 export const LEVEL_XP = 25;
-/** Stat points a defender level gives (ID-096; 3 before it). */
-export const POINTS_PER_LEVEL = 1;
-/** Stat points a level gave before ID-096: an older save banks the difference. */
-export const OLD_POINTS_PER_LEVEL = 3;
 /**
- * What stat points do (design §6, ID-084, ID-096). A stat's points are shared evenly across
- * its active effects: with P points and n active effects, each bonus with cap C is
- * `C × P / (P + STAT_SPLIT × n)`. It shrinks as points pile up and never reaches C.
+ * What a survivor's level gives (design §6 Levels, ID-146): a little of everything, with
+ * no points to spend. With P = level − 1, each bonus with cap C is `C × P / (P + LEVEL_HALF)`:
+ * half its cap at level `LEVEL_HALF + 1`, shrinking as levels go up, never the cap.
  */
-export const STAT_SPLIT = 10;
-/** A stat's effects: the bonuses in `STAT_EFFECT` its points drive. */
-export type StatEffectId =
-  | 'hp'
-  | 'armour'
-  | 'dodge'
-  | 'wallDamage'
-  | 'reload'
-  | 'fireRate'
-  | 'spread'
-  | 'crit'
-  | 'critBonus';
-/**
- * Each stat's active effects (ID-096), the ones that work in the build. The one place
- * a stat's split comes from: an effect built later is added here, and its stat's
- * points are then shared one way more (planned and not built yet: Agility's move speed,
- * Instinct's patrol survival, every Tinker effect).
- */
-export const STAT_ACTIVE: Readonly<Record<Stat, readonly StatEffectId[]>> = {
-  instinct: ['hp', 'armour', 'dodge', 'wallDamage'],
-  agility: ['reload', 'fireRate'],
-  mind: ['crit', 'critBonus', 'spread'],
-  tinker: [],
-};
-export const STAT_EFFECT = {
-  /** Instinct: max HP over `DEFENDER_HP`. */
-  hp: 100,
-  /** Instinct: flat damage off each hit taken… */
-  armour: 4,
-  /** …but a hit keeps at least this share of its damage. */
-  armourFloor: 0.5,
-  /** Instinct: chance a hit that would drop them to 0 HP leaves them at 1 HP instead. */
-  dodge: 0.3,
-  /**
-   * Instinct (ID-125): extra damage, as a share, to an enemy near the wall (within the
-   * SMG's `TRAIT.close.range` of its front), from any weapon: the last-line stat.
-   */
-  wallDamage: 2,
-  /** Agility: share off every reload time. */
-  reload: 0.5,
-  /** Agility (ID-125): share more fire rate on every gun: the sustained-fire stat. */
-  fireRate: 0.7,
-  /** Sharp Mind: share off every gun's spread cone. */
-  spread: 0.5,
-  /** Sharp Mind: crit chance. */
-  crit: 0.5,
-  /** Sharp Mind: crit damage over `critDamage`. */
-  critBonus: 2,
-  /** A crit's damage multiplier with no Sharp Mind. */
-  critDamage: 2,
+export const LEVEL_BONUS = {
+  /** Max HP over `DEFENDER_HP`, rounded to whole HP. */
+  hp: 60,
+  /** Flat damage off each hit taken (a hit keeps `ARMOUR_FLOOR` of its damage). */
+  armour: 2,
+  /** Share more fire rate on every gun, sidearm included; not blades or tools. */
+  fireRate: 0.3,
+  /** Share off every reload time. */
+  reload: 0.3,
+  /** Share off every gun's spread cone. */
+  spread: 0.3,
+  /** Crit chance on every hit, gun shot or blade or tool strike. */
+  crit: 0.2,
 } as const;
+export type LevelBonusId = keyof typeof LEVEL_BONUS;
+/** The level past 1 where each `LEVEL_BONUS` gives half its cap. */
+export const LEVEL_HALF = 20;
+/** A hit keeps at least this share of its damage, whatever the armour. */
+export const ARMOUR_FLOOR = 0.5;
+/** A crit's damage multiplier, before a gun's or a card's crit damage. */
+export const CRIT_DAMAGE = 2;
 
 // --- Research Lab, turrets and energy (M5). Design §7 and §11. ---
 

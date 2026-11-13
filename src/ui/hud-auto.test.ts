@@ -15,7 +15,7 @@ const noop = (): void => {};
 function mount(squad: boolean) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
-  const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, squad);
+  const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, squad);
   const auto = root.querySelector<HTMLButtonElement>('.hud-auto')!;
   const strike = root.querySelectorAll<HTMLButtonElement>('.hud-skill')[0]!;
   return { hud, auto, strike };

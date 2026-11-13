@@ -17,7 +17,7 @@ import {
   AFFIXES,
   BRUTE,
   FIELD,
-  STAT_EFFECT,
+  CRIT_DAMAGE,
   GUN_ROLES,
   HORROR,
   STEP,
@@ -597,21 +597,16 @@ describe('dmg/s counts a gun’s own crit (ID-101)', () => {
     };
     // The LMG's +8% and the Sniper's +20% with its +0.5 crit damage count (ID-135).
     const lmg = owned('lmg');
-    expect(gunPower(lmg)).toBeCloseTo(
-      raw(lmg) * (1 + TRAIT.crit.lmg * (STAT_EFFECT.critDamage - 1)),
-    );
+    expect(gunPower(lmg)).toBeCloseTo(raw(lmg) * (1 + TRAIT.crit.lmg * (CRIT_DAMAGE - 1)));
     const sniper = owned('sniper');
     expect(gunPower(sniper)).toBeCloseTo(
-      raw(sniper) *
-        (1 + TRAIT.crit.sniper * (STAT_EFFECT.critDamage + TRAIT.sniper.critDamage - 1)),
+      raw(sniper) * (1 + TRAIT.crit.sniper * (CRIT_DAMAGE + TRAIT.sniper.critDamage - 1)),
     );
     const rifle = owned('rifle');
     const rolled = owned('rifle', [{ id: 'crit', value: 5 }]);
     expect(gunPower(rolled)).toBeGreaterThan(gunPower(rifle));
     // The Carbine's +10% counts, and a crit damage affix adds on top of it.
-    expect(gunPower(rifle)).toBeCloseTo(
-      raw(rifle) * (1 + TRAIT.crit.rifle * (STAT_EFFECT.critDamage - 1)),
-    );
+    expect(gunPower(rifle)).toBeCloseTo(raw(rifle) * (1 + TRAIT.crit.rifle * (CRIT_DAMAGE - 1)));
     const critDmg = owned('rifle', [{ id: 'critDamage', value: 50 }]);
     expect(gunPower(critDmg)).toBeGreaterThan(gunPower(rifle));
     // No crit of its own: dmg/s as before, and crit damage alone adds nothing.

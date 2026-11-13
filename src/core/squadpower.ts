@@ -2,10 +2,10 @@
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
 import { gunCrit, gunCritDamage, statsOf } from './armoury.ts';
-import { DEFENDER_HP, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
+import { CRIT_DAMAGE, DEFENDER_HP, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
 import type { GameState, RosterDefender } from './game.ts';
 import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
-import { critChance, critDamage, maxHpOf, reloadTime, statBonus, wallDamage } from './stats.ts';
+import { critChance, levelBonus, levelOf, maxHpOf, reloadTime } from './stats.ts';
 import {
   enemyHp,
   hordeBosses,
@@ -18,21 +18,21 @@ import {
 
 /**
  * One survivor's share of Squad Power: their gun's sustained dmg/s (rarity, level and
- * affixes; Sharp Mind's crit and the gun's own, ID-101; tighter aim; Agility's reload and fire
- * rate, ID-125; Instinct's damage near the wall, ID-125), times a toughness factor from
- * Instinct's extra HP. Cards and skills don't count.
+ * affixes; the level's crit and the gun's own, ID-101; the level's tighter aim, reload and
+ * fire rate, ID-146), times a toughness factor from the level's extra HP. Cards and
+ * skills don't count.
  */
 export function survivorPower(d: RosterDefender): number {
   const spec = squadSpec(d);
   const gun = spec.loadout.primary;
   const w = statsOf(gun);
   if (w.kind !== 'sidearm' && w.kind !== 'gun') return 0;
-  const crit = 1 + (critChance(spec) + gunCrit(gun)) * (critDamage(spec) + gunCritDamage(gun) - 1);
-  const aim = 1 + POWER.aim * statBonus(spec.stats?.mind ?? 0, 'mind', 'spread');
-  const wall = 1 + POWER.wall * wallDamage(spec);
-  const rate = 1 + statBonus(spec.stats?.agility ?? 0, 'agility', 'fireRate');
+  const crit = 1 + (critChance(spec) + gunCrit(gun)) * (CRIT_DAMAGE + gunCritDamage(gun) - 1);
+  const { level } = levelOf(d.xp);
+  const aim = 1 + POWER.aim * levelBonus(level, 'spread');
+  const rate = 1 + levelBonus(level, 'fireRate');
   const dps =
-    (w.damage * w.pellets * crit * aim * wall * w.magazine) /
+    (w.damage * w.pellets * crit * aim * w.magazine) /
     ((w.magazine * w.fireInterval) / rate + reloadTime(spec, gun));
   const tough = 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
   return dps * tough * POWER.scale;

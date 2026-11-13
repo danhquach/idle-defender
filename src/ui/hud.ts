@@ -1,5 +1,5 @@
 // HUD over the canvas: status bar, the "camp is falling" warning, the 1-of-3 card
-// panel, the replacement panel, the result panel with its stat-point picker, the horde
+// panel, the replacement panel, the result panel, the horde
 // cash shop row with the active skills, the commander's perks and Second Look's
 // reroll, and a short toast (refused moves).
 // Text reaches the page only through textContent.
@@ -65,16 +65,12 @@ import {
   SQUAD_SKILLS,
   SKILLS,
   STASH_CAP,
-  OPEN_STATS,
-  STAT_NAMES,
-  STATS,
   type EnemyKind,
   type CampPickId,
   type BossSkill,
   type Rarity,
   type ShopItem,
   type SkillId,
-  type Stat,
   type Stock,
   WEAPONS,
 } from '../core/data.ts';
@@ -123,13 +119,12 @@ import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
 import { powerBand, recommendedPower, squadPower, type PowerBand } from '../core/squadpower.ts';
-import { isLocked, levelOf, spend, unspentPoints } from '../core/stats.ts';
+import { levelOf } from '../core/stats.ts';
 import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
-import { holdable, holdRepeat } from './hold.ts';
-import { nextGains, nextPointText } from './statlines.ts';
+import { levelText } from './statlines.ts';
 import {
   ART_URLS,
   avatarOf,
@@ -880,8 +875,6 @@ export interface ResultScreen {
   picker?: HordePicker;
   /** The skill pick for the next horde (ID-100), horde-only. */
   skills?: SkillPick;
-  /** Defenders from a win with stat points to spend, XP added. */
-  picks: RosterDefender[];
   /**
    * Camp-level picks and the offers to pick from before "Back to build" (design §11),
    * with the room left after the horde for a survivor to join.
@@ -891,115 +884,20 @@ export interface ResultScreen {
 
 export type CampScreen = Pick<Camp, 'picks' | 'offers'> & { room: Room };
 
-/** A survivor (design §10) as "Ava · level 3 · Instinct 2, Agility 4 · Military Rifle (+10% damage)". */
+/** A survivor (design §10) as "Ava · level 3 · Military Rifle (+10% damage)". */
 export function survivorText(s: Survivor): string {
-  const stats = STATS.filter((st) => s.stats[st] > 0).map((st) => statText(st, s.stats[st]));
   const affixes = affixLines(s.weapon, true);
   return [
     s.name,
     `level ${levelOf(s.xp).level}`,
-    ...(stats.length > 0 ? [stats.join(', ')] : []),
     heldName(s.weapon) + (affixes.length > 0 ? ` (${affixes.join(', ')})` : ''),
   ].join(' · ');
 }
 
-/** What each stat does in full, for a stat button's tooltip (design §6, ID-084). */
-export const STAT_HINT: Readonly<Record<Stat, string>> = {
-  instinct:
-    'More HP and armour on every hit, a chance to survive a downing hit at 1 HP, and more damage to enemies near the wall',
-  agility: 'Faster reloads and faster fire with every gun',
-  mind: 'Better gun accuracy, and more and harder crits with any weapon',
-  tinker: 'Unlocks later: repair, turrets, batteries and crafting',
-};
-
-/** A stat button's tooltip for `d` (ID-096): what the stat does, then what the next point adds. */
-export const statHint = (d: RosterDefender, stat: Stat): string =>
-  isLocked(stat) ? STAT_HINT[stat] : `${STAT_HINT[stat]}. ${nextPointText(d, stat)}`;
-
-/**
- * What the next point in each open stat adds for `d` (ID-096), one line per stat, shown
- * under a picker's buttons while points are left: "Instinct: +2 max HP · +0.10 armour ·
- * +0.7% survive · +4.3% damage near the wall". None once spent out.
- */
-export function gainLines(d: RosterDefender): string[] {
-  if (unspentPoints(d) <= 0) return [];
-  return OPEN_STATS.map((s) => `${STAT_NAMES[s]}: ${nextGains(d, s).join(' · ')}`);
-}
-
-/** `gainLines` as a list, or nothing. */
-function gainList(d: RosterDefender): HTMLElement[] {
-  const lines = gainLines(d);
-  if (lines.length === 0) return [];
-  const list = el('ul', 'hud-pick-gains');
-  list.setAttribute('aria-label', 'Next point adds');
-  for (const line of lines) {
-    // Lines wrap only between gains, never inside one ("+1.0% survive" stays whole).
-    const li = el('li', '');
-    line.split(' · ').forEach((part, i) => {
-      if (i > 0) li.append(' · ');
-      li.append(el('span', 'hud-pick-gain', part));
-    });
-    list.append(li);
-  }
-  return [list];
-}
-
-/** What each stat does in a few words, for the picker's one-line hint. */
-export const STAT_SHORT: Readonly<Record<Stat, string>> = {
-  instinct: 'HP, armour, wall damage',
-  agility: 'reloads and fire rate',
-  mind: 'accuracy and crits',
-  tinker: 'unlocks later',
-};
-
-/** What a locked stat (ID-084: Tinker) says in place of its points. */
-export const STAT_LOCKED_NOTE = 'Unlocks later';
-
-/** A locked stat's button: short, so it fits its cell like the others. */
-export const lockedLabel = (stat: Stat): string => `${STAT_NAMES[stat]} (locked)`;
-
-/** "Instinct 2"; a locked stat is "Tinker (unlocks later)". */
-export const statText = (stat: Stat, points: number): string =>
-  isLocked(stat)
-    ? `${STAT_NAMES[stat]} (${STAT_LOCKED_NOTE.toLowerCase()})`
-    : `${STAT_NAMES[stat]} ${points}`;
-
-/** The picker's line on what each stat does: "Instinct: HP, armour, wall damage · …". */
-export const statHints = (): string =>
-  STATS.map((st) => `${STAT_NAMES[st]}: ${STAT_SHORT[st]}`).join(' · ');
-
-/** One defender's row in the stat picker. */
-export interface PickerRow {
-  heading: string;
-  buttons: { stat: Stat; label: string; disabled: boolean }[];
-}
-
-/**
- * The picker row for `d`: name, points left, a button per stat. A horde-only survivor's
- * (`squad`) buttons say they add a point. A locked stat (ID-084: Tinker) shows greyed out.
- */
-export function pickerRow(d: RosterDefender, squad = false): PickerRow {
-  const left = unspentPoints(d);
-  return {
-    heading: `${d.name} · ${left} stat point${left === 1 ? '' : 's'} to spend`,
-    buttons: STATS.map((stat) => ({
-      stat,
-      // A horde-only button says it adds a point: "+ Instinct (2)"; spent out, it reads as
-      // the stat as it stands, "Instinct (2)" (ID-111).
-      label: isLocked(stat)
-        ? lockedLabel(stat)
-        : squad
-          ? `${left > 0 ? '+ ' : ''}${STAT_NAMES[stat]} (${d.stats[stat]})`
-          : `${STAT_NAMES[stat]} ${d.stats[stat]}`,
-      disabled: left <= 0 || isLocked(stat),
-    })),
-  };
-}
-
-/** "Bob +25 XP · level 2 (10/50) · +3 stat points". */
+/** "Bob +25 XP · level 2 (10/50) · level up!". */
 function xpLine(g: ReturnType<typeof levelGains>[number], tag: string): string {
-  const points = g.points ? ` · +${g.points} stat point${g.points === 1 ? '' : 's'}` : '';
-  return `${tag} +${g.xp} XP · level ${g.level} (${g.into}/${g.next})${points}`;
+  const up = g.levels > 0 ? ' · level up!' : '';
+  return `${tag} +${g.xp} XP · level ${g.level} (${g.into}/${g.next})${up}`;
 }
 
 /** "Jack · injured by a Shambler · back at 14:05", for a horde that ended at `now`. */
@@ -1087,14 +985,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
   if (s.outcome === 'won') {
     const gains = levelGains(game, s);
     const lines: string[] = [];
-    const picks: RosterDefender[] = [];
-    for (const g of gains) {
-      const d = game.roster.find((r) => r.id === g.id);
-      lines.push(xpLine(g, g.name));
-      if (!d) continue;
-      const after = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
-      if (unspentPoints(after) > 0) picks.push(after);
-    }
+    for (const g of gains) lines.push(xpLine(g, g.name));
     return {
       title: `Horde ${s.hordeNumber} held`,
       lines: [
@@ -1109,7 +1000,6 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
         repairLine(game, s),
       ],
       button: 'Back to build',
-      picks,
       camp,
     };
   }
@@ -1132,7 +1022,6 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
       repairLine(game, s),
     ],
     button: `Back to build · retry Horde ${s.hordeNumber}`,
-    picks: [],
     camp,
   };
 }
@@ -1144,9 +1033,9 @@ const noCamp = (game: GameState): CampScreen => ({
   room: roomOf(game),
 });
 
-/** "Ava +30 XP · level 2 · 5/50 XP to level 3 · level up! +3 stat points". */
+/** "Ava +30 XP · level 2 · 5/50 XP to level 3 · level up!". */
 function squadXpLine(g: ReturnType<typeof levelGains>[number]): string {
-  const up = g.levels > 0 ? ` · level up! +${g.points} stat point${g.points === 1 ? '' : 's'}` : '';
+  const up = g.levels > 0 ? ' · level up!' : '';
   return `${g.name} +${g.xp} XP · level ${g.level} · ${g.into}/${g.next} XP to level ${g.level + 1}${up}`;
 }
 
@@ -1319,12 +1208,8 @@ export interface SquadCard {
   levelUp: boolean;
   /** XP into the level, as a share and as text; null off a win. */
   bar: { pct: number; text: string } | null;
-  /**
-   * The survivor as the card's stat block reads them (ID-111), this result's XP in. With
-   * points to spend the card shows a "+N" badge that opens the block in place (ID-126), on
-   * the start screen too. Null only for one the roster doesn't hold.
-   */
-  survivor: RosterDefender | null;
+  /** What their level gives (ID-146), this result's XP in: "Lv 7: +14 HP · …". */
+  bonus: string;
 }
 
 /** The horde-only panel laid out (ID-067), for the start, win and loss screens. */
@@ -1352,7 +1237,7 @@ const plainCard = (d: RosterDefender): SquadCard => ({
   xp: null,
   levelUp: false,
   bar: null,
-  survivor: d,
+  bonus: levelText(levelOf(d.xp).level, true),
 });
 
 /** The loot tile for `drop`, against the stash `game` had before it. */
@@ -1451,22 +1336,13 @@ export const SQUAD_NO_DROP = 'No weapon drop on a loss';
 export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivor is down.';
 
 /** Over the squad's cards (ID-086): a name opens that survivor's card in the Roster. */
-export const SQUAD_CARD_HINT = 'Tap + to spend points. Tap a name for their card.';
-
-/** "2 points left", "No points left": a card's spend and Undo read-outs (ID-126). */
-const pointsLeft = (d: RosterDefender): string => {
-  const n = unspentPoints(d);
-  return n > 0 ? `${n} point${n === 1 ? '' : 's'} left` : 'No points left';
-};
+export const SQUAD_CARD_HINT = 'Tap a name for their card.';
 
 /**
  * In place of a win's cards when nobody levelled up in it (ID-134); it points at the Roster,
  * the only place left on this screen to equip the gun the win dropped.
  */
 export const SQUAD_NO_LEVEL_UPS = 'No level-ups this horde. Change guns in the Roster.';
-
-/** Under the horde-only stat picker: points not spent now aren't lost. */
-export const SQUAD_POINTS_NOTE = 'Unspent points are kept for later.';
 
 /**
  * The campaign's goal on the start screen (ID-127): the radio's progress and where the next
@@ -1510,7 +1386,6 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
     squad: true,
     picker,
     skills: skillPicker(game.skillPick),
-    picks: [],
     camp: noCamp(game),
     debrief: {
       kind: 'start',
@@ -1569,16 +1444,6 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     won ? null : s.hordeNumber,
   );
   const goOn = picker.options.find((o) => o.horde === picker.value)!.button;
-  const picks: RosterDefender[] = [];
-  // Each survivor with this result's XP in, for their card's stat block (ID-111).
-  const grown = new Map<string, RosterDefender>();
-  for (const g of gains) {
-    const d = game.roster.find((r) => r.id === g.id);
-    if (!d) continue;
-    const next = { ...d, xp: d.xp + g.xp, stats: { ...d.stats } };
-    grown.set(d.id, next);
-    if (unspentPoints(next) > 0) picks.push(next);
-  }
   const xpCards = (): SquadCard[] =>
     gains.map((g): SquadCard => ({
       id: g.id,
@@ -1590,13 +1455,11 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         pct: g.next > 0 ? Math.min(100, (100 * g.into) / g.next) : 100,
         text: `${g.into}/${g.next} XP to Lv ${g.level + 1}`,
       },
-      survivor: grown.get(g.id) ?? null,
+      bonus: levelText(g.level, true),
     }));
   if (won) {
-    // A win shows only who levelled up in it (ID-134): the rest, and anyone whose points are
-    // left over from earlier hordes, spend and change guns from the Roster.
+    // A win shows only who levelled up in it (ID-134): the rest change guns from the Roster.
     const ups = xpCards().filter((c) => c.levelUp);
-    const upPicks = picks.filter((p) => ups.some((c) => c.id === p.id));
     const reward = bossReward(game, s.hordeNumber);
     const ending = reward?.finale === true;
     const rewardNote = reward ? bossRewardNote(reward) : null;
@@ -1623,7 +1486,6 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       squad: true,
       picker,
       skills: skillPicker(game.skillPick),
-      picks: upPicks,
       camp: noCamp(game),
       debrief: {
         kind: 'won',
@@ -1652,7 +1514,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
               },
         cards: ups,
         empty: ups.length > 0 ? null : SQUAD_NO_LEVEL_UPS,
-        foot: upPicks.length > 0 ? SQUAD_POINTS_NOTE : '',
+        foot: '',
       },
     };
   }
@@ -1675,7 +1537,6 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     squad: true,
     picker,
     skills: skillPicker(game.skillPick),
-    picks,
     camp: noCamp(game),
     debrief: {
       kind: 'lost',
@@ -1693,7 +1554,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       recruit: null,
       cards: xp > 0 ? xpCards() : squadOf(game).map((d) => plainCard(d)),
       empty: null,
-      foot: picks.length > 0 ? SQUAD_POINTS_NOTE : '',
+      foot: '',
     },
   };
 }
@@ -1710,8 +1571,6 @@ export function createHud(
   onDone: () => void,
   onReplace: (defenderId: string, postId: number) => void,
   onSkip: () => void,
-  /** A card's spend; returning false says the camp refused it (the card takes it back). */
-  onSpend: (defenderId: string, stat: Stat) => boolean | void,
   onBuy: (item: ShopItem) => void,
   onArm: (skill: SkillId) => void,
   onReroll: () => void,
@@ -1725,16 +1584,6 @@ export function createHud(
   showResult(screen: ResultScreen): void;
   /** The horde-only gun pickers (ID-067) on the result or start screen; each pick goes to `onEquip`. */
   showGear(gear: GearScreen, onEquip: (defenderId: string, choice: string) => void): void;
-  /**
-   * The result screen's pickers redrawn for `picks` (ID-086): points spent on a survivor's
-   * card in the Roster count here too.
-   */
-  syncPicks(picks: readonly RosterDefender[]): void;
-  /**
-   * Where a survivor card's Undo goes (ID-108): take back the points spent on that card on
-   * this screen (`stats`, oldest first), not the ones spent in the Roster; the app sets it once.
-   */
-  onUnspend(handler: (defenderId: string, stats: Stat[]) => number | void): void;
   /** Where a horde picked from the picker goes (ID-098); the app sets it once. */
   onHordePick(handler: (horde: number) => void): void;
   /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
@@ -1874,8 +1723,6 @@ export function createHud(
   const resultTitle = el('h2', 'hud-result-title');
   const resultList = el('ul', 'hud-result-list');
   const picker = el('div', 'hud-picker');
-  // Holding a + stat button keeps adding points (ID-096).
-  holdRepeat(picker);
   const campPicker = el('div', 'hud-picker');
   const gear = el('div', 'hud-picker hud-gear');
   const back = el('button', 'hud-button');
@@ -1899,13 +1746,7 @@ export function createHud(
   let onPickSkill: (skill: SkillId) => void = () => {};
   foot.append(skillBlock, pickBlock, footNote, back);
   let onPickHorde: (horde: number) => void = () => {};
-  let onUnspend: ((defenderId: string, stats: Stat[]) => number | void) | null = null;
-  // Points spent on each survivor's card on this screen, oldest first, which its Undo takes back.
-  const cardSpent = new Map<string, Stat[]>();
-  // Each card spend and Undo read out (ID-126): the buttons alone change silently.
-  const said = el('p', 'sr-only');
-  said.setAttribute('role', 'status');
-  result.append(resultTitle, resultList, picker, gear, campPicker, foot, said);
+  result.append(resultTitle, resultList, picker, gear, campPicker, foot);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
@@ -2128,8 +1969,6 @@ export function createHud(
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
-  // Each result-screen picker's way to take a survivor spent elsewhere (ID-086), by id.
-  const pickSync = new Map<string, (d: RosterDefender) => void>();
   // Second Look's reroll can deal the same three cards; its button still has to grey out.
   let shownRerolled = '';
   // While a pick's confirm effect plays (ID-103): the panel takes no input and closes after.
@@ -2214,119 +2053,6 @@ export function createHud(
     skip.type = 'button';
     skip.addEventListener('click', () => answer(onSkip));
     replace.replaceChildren(...parts, row, skip);
-  }
-
-  /**
-   * One defender's picker; each click spends a point here and through `onSpend`. `drawn`
-   * hears the survivor each time it redraws (the card's "+N" badge follows it).
-   */
-  function pickerBlock(
-    start: RosterDefender,
-    squadPicks = false,
-    drawn?: (d: RosterDefender) => void,
-  ): HTMLElement {
-    const block = el('div', squadPicks ? 'hud-pick squad-pick' : 'hud-pick');
-    let d = start;
-    pickSync.set(start.id, (next) => {
-      d = next;
-      draw();
-    });
-    const draw = (): void => {
-      const row = pickerRow(d, squadPicks);
-      const buttons = el('div', 'hud-pick-row');
-      row.buttons.forEach((b, i) => {
-        const button = el('button', 'hud-button hud-pick-stat', squadPicks ? '' : b.label);
-        button.type = 'button';
-        button.disabled = b.disabled;
-        if (squadPicks) {
-          // The stat, then what its next point adds, in short (ID-111), breaking only
-          // between gains. It shows spent out too, so the card never changes size.
-          const next = el('span', 'hud-pick-next');
-          nextGains(d, b.stat, true).forEach((gain, k) => {
-            if (k > 0) next.append(' · ');
-            next.append(el('span', 'hud-pick-gain', gain));
-          });
-          // The space keeps the two apart in the button's name ("Instinct (2) +3 HP …").
-          button.append(el('span', 'hud-pick-label', b.label), ' ', next);
-        }
-        // A locked stat's label already says it unlocks later; spent out, the button only
-        // shows the stat as it stands.
-        if (squadPicks && !isLocked(b.stat) && !b.disabled) {
-          const now = d.stats[b.stat];
-          button.setAttribute('aria-label', `Add ${STAT_NAMES[b.stat]} to ${d.name}, now ${now}`);
-        }
-        button.title = statHint(d, b.stat);
-        holdable(button, `${d.id}:${b.stat}`);
-        button.addEventListener('click', () => {
-          if (result.hidden) return;
-          const r = spend(d, b.stat);
-          if (!r.ok) return;
-          const was = d;
-          d = r.defender;
-          // Refused by the camp: the card goes back, and nothing is kept for its Undo.
-          if (onSpend(d.id, b.stat) === false) {
-            d = was;
-            draw();
-            return;
-          }
-          if (squadPicks) {
-            cardSpent.set(d.id, [...(cardSpent.get(d.id) ?? []), b.stat]);
-            said.textContent = `${STAT_NAMES[b.stat]} ${d.stats[b.stat]} for ${d.name}. ${pointsLeft(d)}.`;
-          }
-          draw();
-          // Keep the keyboard where it was; spent out, a card's goes to its Undo, else the
-          // next picker with points left (wrapping round), then the screen's button.
-          const again = block.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')[i];
-          const undo = block.querySelector<HTMLButtonElement>('.squad-undo:not([hidden])');
-          const open = [...picker.querySelectorAll<HTMLButtonElement>('.hud-pick-stat')].filter(
-            (x) => !x.disabled && !x.closest('[hidden]'),
-          );
-          const after = open.find(
-            (x) => block.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING,
-          );
-          (again && !again.disabled ? again : (undo ?? after ?? open[0] ?? back)).focus();
-        });
-        buttons.append(button);
-      });
-      if (squadPicks) {
-        // A survivor card's points row (ID-067): the count, then the buttons.
-        const left = unspentPoints(d);
-        // Spent out reads a bare "0" (ID-083): the card has no room for a sentence.
-        // A hidden " points" keeps the unit for screen readers.
-        const count = el(
-          'p',
-          'squad-points',
-          left > 0 ? `${left} point${left === 1 ? '' : 's'}` : '0',
-        );
-        if (left <= 0) count.append(el('span', 'sr-only', ' points'));
-        count.classList.toggle('squad-points-none', left === 0);
-        const undo = el('button', 'hud-button squad-undo', 'Undo');
-        undo.type = 'button';
-        undo.hidden = !onUnspend || !cardSpent.get(d.id)?.length;
-        undo.setAttribute('aria-label', `Undo the points spent on ${d.name} here`);
-        undo.addEventListener('click', () => {
-          if (result.hidden || !onUnspend) return;
-          const stats = cardSpent.get(d.id) ?? [];
-          cardSpent.delete(d.id);
-          // What the camp took back, not what was asked (the app syncs `d` meanwhile).
-          const n = onUnspend(d.id, stats) ?? stats.length;
-          // The points left keep two Undos in a row from reading the same (and going unread).
-          said.textContent = `Took back ${n} point${n === 1 ? '' : 's'} from ${d.name}. ${pointsLeft(d)}.`;
-          block.querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')?.focus();
-        });
-        // Undo shares the count's row and keeps its room while hidden: spending never
-        // changes the card's size (ID-111). Each button carries its gains, so no list.
-        const head = el('div', 'squad-points-row');
-        head.append(count, undo);
-        block.replaceChildren(head, buttons);
-        drawn?.(d);
-        return;
-      }
-      block.replaceChildren(el('p', 'hud-pick-heading', row.heading), buttons, ...gainList(d));
-      drawn?.(d);
-    };
-    draw();
-    return block;
   }
 
   const chipNodes = (list: readonly Chip[]): HTMLElement[] =>
@@ -2446,7 +2172,7 @@ export function createHud(
    * The horde-only panel's body (ID-067): header chips, loot, then the cards (a win's only
    * for who levelled up, or one line with none, ID-134).
    */
-  function debriefBlock(d: Debrief, picks: readonly RosterDefender[]): HTMLElement[] {
+  function debriefBlock(d: Debrief): HTMLElement[] {
     const parts: HTMLElement[] = [];
     if (d.chips.length > 0) {
       const chips = el('div', 'debrief-chips');
@@ -2564,14 +2290,8 @@ export function createHud(
           card.append(track, el('p', 'squad-card-xptext', c.bar.text));
         }
         card.append(el('div', 'squad-card-gear'));
-        // A survivor with points shows "+N" (ID-126), on the start screen too: it opens the
-        // stat block in place, under the gun; spending never changes the card's size again.
-        const pick = picks.find((p) => p.id === c.id) ?? c.survivor;
-        if (pick) {
-          const slot = statSlot(pick);
-          who.append(slot.plus);
-          card.append(slot.block);
-        }
+        // What the level gives (ID-146), on the start screen too.
+        card.append(el('p', 'squad-card-bonus', c.bonus));
         grid.append(card);
       }
       section.append(head, grid);
@@ -2585,59 +2305,6 @@ export function createHud(
       parts.push(section);
     }
     return parts;
-  }
-
-  // Numbers the cards' stat blocks for their badges' aria-controls (ids never come from a save).
-  let slotCount = 0;
-  /** A card's "+N" badge and the stat block it opens and closes in place (ID-126). */
-  function statSlot(start: RosterDefender): { plus: HTMLButtonElement; block: HTMLElement } {
-    const plus = el('button', 'squad-plus');
-    plus.type = 'button';
-    plus.setAttribute('aria-expanded', 'false');
-    const syncPlus = (d: RosterDefender): void => {
-      const left = unspentPoints(d);
-      const open = !block.hidden;
-      // Shown while there is a point to spend, or the block is open (to close it, or reach
-      // its Undo); a closed block with an Undo keeps it too. Open, it reads as a close (the
-      // block heads its own count); closed, its name starts with what it shows (WCAG 2.5.3).
-      plus.hidden = left <= 0 && !open && !cardSpent.get(d.id)?.length;
-      plus.textContent = open ? '✕' : left > 0 ? `+${left}` : '↺';
-      plus.setAttribute(
-        'aria-label',
-        open
-          ? `Close ${d.name}'s stats`
-          : left > 0
-            ? `+${left}: spend ${left} point${left === 1 ? '' : 's'} on ${d.name}`
-            : `Open ${d.name}'s stats`,
-      );
-      plus.title = plus.getAttribute('aria-label')!;
-      plus.classList.toggle('squad-plus-open', open);
-    };
-    let last = start;
-    // The block draws once while it is made, before `block` holds it.
-    let made = false;
-    const block = pickerBlock(start, true, (d) => {
-      last = d;
-      if (made) syncPlus(d);
-    });
-    made = true;
-    block.hidden = true;
-    block.id = `squad-pick-${++slotCount}`;
-    plus.setAttribute('aria-controls', block.id);
-    plus.addEventListener('click', () => {
-      if (result.hidden) return;
-      block.hidden = !block.hidden;
-      plus.setAttribute('aria-expanded', String(!block.hidden));
-      syncPlus(last);
-      if (block.hidden) return;
-      block
-        .querySelector<HTMLButtonElement>('.hud-pick-stat:enabled')
-        ?.focus({ preventScroll: true });
-      // The whole block into the screen's scroller, not only its first button (jsdom has none).
-      block.scrollIntoView?.({ block: 'nearest' });
-    });
-    syncPlus(start);
-    return { plus, block };
   }
 
   /**
@@ -2966,19 +2633,7 @@ export function createHud(
       resultList.replaceChildren(...(d ? [] : screen.lines.map((line) => el('li', '', line))));
       footNote.textContent = d?.foot ?? '';
       back.classList.toggle('btn-primary', d !== undefined);
-      pickSync.clear();
-      cardSpent.clear();
-      picker.replaceChildren(
-        ...(d
-          ? debriefBlock(d, screen.picks)
-          : screen.picks.length
-            ? [
-                el('p', 'hud-result-body', statHints()),
-                ...screen.picks.map((d) => pickerBlock(d, screen.squad === true)),
-                ...(screen.squad ? [el('p', 'hud-pick-note', SQUAD_POINTS_NOTE)] : []),
-              ]
-            : []),
-      );
+      picker.replaceChildren(...(d ? debriefBlock(d) : []));
       back.textContent = screen.button;
       drawPicker(screen.picker);
       drawSkills(screen.skills);
@@ -2990,22 +2645,10 @@ export function createHud(
       for (const item of skillItems) item.cooling = false;
       // A new screen starts at its top, not where the last one was scrolled to.
       result.scrollTop = 0;
-      // A horde-only result with points to spend starts on the first "+N" (ID-126), so Enter
-      // doesn't skip it; the start screen's Enter still starts the horde.
-      const firstStat =
-        screen.squad && d?.kind !== 'start'
-          ? picker.querySelector<HTMLButtonElement>('.squad-plus:not([hidden])')
-          : null;
       // Without scrolling: the sticky footer's button would pull the panel past the drop tile.
-      (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? firstStat ?? back).focus({
+      (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus({
         preventScroll: true,
       });
-    },
-    syncPicks(picks) {
-      for (const p of picks) pickSync.get(p.id)?.(p);
-    },
-    onUnspend(handler) {
-      onUnspend = handler;
     },
     onHordePick(handler) {
       onPickHorde = handler;
