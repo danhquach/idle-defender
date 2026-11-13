@@ -12,7 +12,10 @@ import { chooseCard } from '../cards.ts';
 import { newGame, type GameState } from '../game.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
+import { cacheFor } from './cache.ts';
 import { SEEDS } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 /** Horde `n` with `size` fresh survivors, each with the Pistol they start with. */
 function fight(n: number, size: number): GameState {
@@ -73,16 +76,32 @@ describe('the epic cards after their costs are fair picks (ID-137)', () => {
   const worn = new Map<string, number>();
   beforeAll(() => {
     const three = fight(4, 3);
-    squad.set('none', wins(three, null));
-    for (const id of SQUAD) squad.set(id, wins(three, id as UpgradeId));
+    squad.set(
+      'none',
+      keep('squad none', () => wins(three, null)),
+    );
+    for (const id of SQUAD)
+      squad.set(
+        id,
+        keep(`squad ${id}`, () => wins(three, id as UpgradeId)),
+      );
     const one = fight(2, 1);
     // A lone survivor's fights are short and the margin thin, so twice the seeds.
     for (const id of ['frag-grenades', 'sharpshooter', 'incendiary-rounds'] as const)
-      lone.set(id, wins(one, id, 1, 2 * SEEDS));
+      lone.set(
+        id,
+        keep(`lone ${id}`, () => wins(one, id, 1, 2 * SEEDS)),
+      );
     for (const id of ['field-repairs', 'frag-grenades', 'patch-up', 'incendiary-rounds'] as const)
-      broken.set(id, wins(three, id, 0.3));
+      broken.set(
+        id,
+        keep(`broken ${id}`, () => wins(three, id, 0.3)),
+      );
     for (const id of ['field-repairs', 'frag-grenades'] as const)
-      worn.set(id, wins(three, id, 0.6));
+      worn.set(
+        id,
+        keep(`worn ${id}`, () => wins(three, id, 0.6)),
+      );
   }, 300_000);
   const table = (m: Map<string, number>): string => JSON.stringify(Object.fromEntries(m));
 

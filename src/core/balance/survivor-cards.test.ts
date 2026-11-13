@@ -12,7 +12,10 @@ import type { GameState } from '../game.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
 import { squadPick, useSkills } from '../sim.ts';
+import { cacheFor } from './cache.ts';
 import { SEEDS, squadAt } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 const HORDE = 15;
 const GUN_LEVEL = 19;
@@ -51,8 +54,12 @@ describe('survivor cards keep the line alive in a close fight (ID-131, Horde 15)
   const withCard = new Map<UpgradeId, { wins: number; injured: number }>();
   beforeAll(() => {
     const game = squadAt(HORDE, GUN_LEVEL);
-    none = play(game, null);
-    for (const id of CARDS) withCard.set(id, play(game, id));
+    none = keep('none', () => play(game, null));
+    for (const id of CARDS)
+      withCard.set(
+        id,
+        keep(`card ${id}`, () => play(game, id)),
+      );
   }, 600_000);
 
   it('the fight is close: the squad loses survivors, and some seeds, without the cards', () => {

@@ -19,6 +19,9 @@ export default mergeConfig(
         'src/lint.test.ts',
       ],
       environment: 'node',
+      // One test file at a time on a laptop (ID-142): a balance file is one long fight loop
+      // per worker, and several side by side drained the machine. CI keeps its default.
+      maxWorkers: process.env.CI ? undefined : 1,
     },
   }),
 );

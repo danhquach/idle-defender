@@ -11,7 +11,10 @@ import { startSquadHorde } from '../hordeonly.ts';
 import { squadCanCrit, tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { useSkills } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
+import { cacheFor } from './cache.ts';
 import { squadAt } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 const SEEDS = 10;
 const HORDES = [10, 15] as const;
@@ -100,7 +103,10 @@ describe('no one card carries a squad at 70% of Recommended Power (ID-124)', () 
       for (const n of HORDES) {
         let wins = 0;
         for (let seed = 1; seed <= SEEDS; seed++)
-          if (won(squads.get(n)!, n, seed * 101, [[id, lv]])) wins++;
+          if (
+            keep(`${n} ${seed} ${id} ${lv}`, () => won(squads.get(n)!, n, seed * 101, [[id, lv]]))
+          )
+            wins++;
         expect(wins, `Horde ${n}: ${wins} of ${SEEDS} won`).toBeLessThanOrEqual(MOST_LOST);
       }
     },
@@ -113,7 +119,12 @@ describe('no one card carries a squad at 70% of Recommended Power (ID-124)', () 
       for (const n of HORDES) {
         let wins = 0;
         for (let seed = 1; seed <= SEEDS; seed++)
-          if (won(squads.get(n)!, n, seed * 101, cards)) wins++;
+          if (
+            keep(`${n} ${seed} ${JSON.stringify(cards)}`, () =>
+              won(squads.get(n)!, n, seed * 101, cards),
+            )
+          )
+            wins++;
         expect(wins, `Horde ${n}: ${wins} of ${SEEDS} won`).toBeLessThanOrEqual(MOST_LOST);
       }
     },

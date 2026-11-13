@@ -11,6 +11,9 @@ import { createRng } from '../rng.ts';
 import { gearUp, playSquadCampaign, playSquadHorde, spendAll } from '../sim.ts';
 import { squadPower } from '../squadpower.ts';
 import { xpForLevel } from '../stats.ts';
+import { cacheFor } from './cache.ts';
+
+const keep = cacheFor(import.meta.url);
 
 describe('farming (ID-102)', () => {
   it('at the worst luck, the bad-luck guarantee still gets every campaign past Horde 13', () => {
@@ -18,7 +21,9 @@ describe('farming (ID-102)', () => {
     /** Most replays spent at any one horde: half as many again as with average luck (30). */
     const MAX_REPLAYS = 45;
     for (let seed = 1; seed <= 2; seed++) {
-      const runs = playSquadCampaign(seed * 1000, LAST, { worstLuck: true, maxFights: 400 });
+      const runs = keep(`worst ${seed}`, () =>
+        playSquadCampaign(seed * 1000, LAST, { worstLuck: true, maxFights: 400 }),
+      );
       const last = runs.at(-1)!;
       expect([last.hordeNumber, last.outcome, last.replay], `seed ${seed}`).toEqual([
         LAST,
@@ -78,8 +83,8 @@ describe('farming (ID-102)', () => {
     let nearPower = 0;
     let farPower = 0;
     for (let seed = 1; seed <= 3; seed++) {
-      const near = farm(game, WALL - 1, 6, seed * 100);
-      const far = farm(game, WALL - 1 - FARM.farOff - 1, 6, seed * 100);
+      const near = keep(`near ${seed}`, () => farm(game, WALL - 1, 6, seed * 100));
+      const far = keep(`far ${seed}`, () => farm(game, WALL - 1 - FARM.farOff - 1, 6, seed * 100));
       expect(near.xp, `seed ${seed}: XP a minute`).toBeGreaterThan(far.xp);
       nearPower += near.power;
       farPower += far.power;

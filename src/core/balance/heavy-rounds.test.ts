@@ -11,6 +11,9 @@ import { STEP } from '../data.ts';
 import { newHorde, reloadIn, tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { createRng } from '../rng.ts';
 import { enemy, setup } from '../testing.ts';
+import { cacheFor } from './cache.ts';
+
+const keep = cacheFor(import.meta.url);
 
 type Gun = 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'lmg' | 'sniper';
 const GUNS: readonly Gun[] = ['pistol', 'smg', 'rifle', 'shotgun', 'lmg', 'sniper'];
@@ -78,12 +81,13 @@ describe('Heavy Rounds: a trade-off for its damage (ID-136)', () => {
   const gain = new Map<Gun, Record<Hand, number>>();
   beforeAll(() => {
     for (const g of GUNS) {
-      const base = damage(g, 'none');
+      const dealt = (hand: Hand): number => keep(`damage ${g} ${hand}`, () => damage(g, hand));
+      const base = dealt('none');
       gain.set(g, {
         none: 1,
-        heavy: damage(g, 'heavy') / base,
-        sharpshooter: damage(g, 'sharpshooter') / base,
-        'rapid-fire': damage(g, 'rapid-fire') / base,
+        heavy: dealt('heavy') / base,
+        sharpshooter: dealt('sharpshooter') / base,
+        'rapid-fire': dealt('rapid-fire') / base,
       });
     }
   }, 300_000);

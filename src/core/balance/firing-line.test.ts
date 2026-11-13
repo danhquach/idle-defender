@@ -3,7 +3,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { lineWall } from '../base.ts';
 import { ENEMY_MIX, stockOf } from '../data.ts';
 import { playHorde, summarise, type HordeRun } from '../sim.ts';
+import { cacheFor } from './cache.ts';
 import { bareGame, SEEDS, winRate } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 describe('a full firing line on the starting wall (ID-048)', () => {
   // Every wall-walk spot of the starting layer built: 20 posts for 3 defenders. A line
@@ -21,7 +24,9 @@ describe('a full firing line on the starting wall (ID-048)', () => {
       const g = { ...game, base: lined.base };
       byHorde.set(
         n,
-        Array.from({ length: SEEDS }, (_, i) => summarise(playHorde(g, i + 1, 0), i + 1)),
+        keep(`line ${n}`, () =>
+          Array.from({ length: SEEDS }, (_, i) => summarise(playHorde(g, i + 1, 0), i + 1)),
+        ),
       );
     }
   }, 60_000);
@@ -47,8 +52,8 @@ describe('a full firing line on the starting wall (ID-048)', () => {
         );
         if (!lined.ok) throw new Error(lined.reason);
         const g = { ...game, base: lined.base };
-        const runs = Array.from({ length: SEEDS }, (_, i) =>
-          summarise(playHorde(g, i + 1, 0), i + 1),
+        const runs = keep(`shamblers only ${n}`, () =>
+          Array.from({ length: SEEDS }, (_, i) => summarise(playHorde(g, i + 1, 0), i + 1)),
         );
         shamblersOnly.set(n, winRate(runs));
       }

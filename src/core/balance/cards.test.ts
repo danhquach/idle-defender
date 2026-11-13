@@ -11,7 +11,10 @@ import { WALL } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
 import { rebuildWire, tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
+import { cacheFor } from './cache.ts';
 import { SEEDS } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 const HORDE = 4;
 const SQUAD = 3;
@@ -46,6 +49,14 @@ function play(
   card: UpgradeId | null,
   level = 1,
   also?: [UpgradeId, number],
+): { wins: number; killedAt: number } {
+  return keep(`${card} ${level} ${JSON.stringify(also)}`, () => playFresh(card, level, also));
+}
+
+function playFresh(
+  card: UpgradeId | null,
+  level: number,
+  also: [UpgradeId, number] | undefined,
 ): { wins: number; killedAt: number } {
   let wins = 0;
   let out = 0;

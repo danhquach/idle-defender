@@ -5,6 +5,9 @@ import { newHorde, tick } from '../horde.ts';
 import { createRng } from '../rng.ts';
 import { answerOffer } from '../sim.ts';
 import { enemy, setup } from '../testing.ts';
+import { cacheFor } from './cache.ts';
+
+const keep = cacheFor(import.meta.url);
 
 describe('lead against Runners and lane drift (ID-023)', () => {
   // A lone pistol Gunner on the upper tower against 10 walking enemies of one kind,
@@ -38,8 +41,8 @@ describe('lead against Runners and lane drift (ID-023)', () => {
   }
 
   it('misses happen, more on Runners than on Shamblers, while the balance targets above hold', () => {
-    const shambler = missRate('shambler');
-    const runner = missRate('runner');
+    const shambler = keep('shambler', () => missRate('shambler'));
+    const runner = keep('runner', () => missRate('runner'));
     expect(shambler).toBeGreaterThan(0);
     expect(runner).toBeGreaterThan(shambler);
   });

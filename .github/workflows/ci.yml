@@ -68,6 +68,15 @@ jobs:
           key: modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-${{ steps.deps.outputs.hash }}
       - if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
+      # The balance tests' results (ID-142, src/core/balance/cache.ts), per job: each entry
+      # is keyed inside by the simulation code, Node's version and its test file. A change
+      # outside src/core replays no fights; a test file's change replays that file only;
+      # any other change in src/core replays them all. Saved only by a job that passes.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/balance
+          key: balance-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-job${{ strategy.job-index }}-${{ hashFiles('src/core/**/*.ts') }}
+          restore-keys: balance-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-job${{ strategy.job-index }}-
       - name: Version raised over main's
         # Each PR to main raises the game's version. Dependabot's PRs never bump it
         # and are let through.
