@@ -1,6 +1,7 @@
 // Design §15: a turret's and a trap's state reads from its sprite: lit, dark, jammed, worn, broken.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTurret, newBase, type Base } from '../core/base.ts';
+import type { Held } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame, startHorde, type GameState } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
@@ -101,6 +102,7 @@ import {
   popLook,
   shownPops,
   RELOAD_PIE,
+  ammoLook,
   reloadShare,
   SURVIVOR_BAR,
   TAIL,
@@ -2831,7 +2833,10 @@ describe('the horde-only fight (ID-068)', () => {
       expect(b.w).toBeGreaterThanOrEqual(SURVIVOR_BAR.min.w);
       expect(b.h).toBeGreaterThanOrEqual(SURVIVOR_BAR.min.h);
     }
-    expect(fills.filter((f) => f.style === '#1b1a18' && f.w > SURVIVOR_BAR.min.w)).toHaveLength(3);
+    // The HP bar's edge (the ammo bar's, ID-143, is thinner).
+    const hpEdge = (f: { style: string; w: number; h: number }) =>
+      f.style === '#1b1a18' && f.w > SURVIVOR_BAR.min.w && f.h >= SURVIVOR_BAR.min.h;
+    expect(fills.filter(hpEdge)).toHaveLength(3);
     // At the 1280×720 frame's zoom it is bigger than an enemy's bar.
     fills.length = 0;
     const cam = frameCamera({ w: 1280, h: 720 });
@@ -2839,6 +2844,109 @@ describe('the horde-only fight (ID-068)', () => {
     const bar = fills.find((f) => f.style === '#c43b3b')!;
     expect(bar.w).toBeCloseTo(SURVIVOR_BAR.w * cam.zoom, 9);
     expect(bar.h).toBeGreaterThanOrEqual(5);
+  });
+
+  describe('ammo bar (ID-143)', () => {
+    const shotgun: Held = { uid: 'pump', base: 'shotgun', rarity: 'common', affixes: [] };
+    const smg: Held = { uid: 'smg', base: 'smg', rarity: 'common', affixes: [] };
+    const holding = (d: Defender, primary: Held, rounds: number) => ({
+      ...d,
+      loadout: { ...d.loadout, primary },
+      ammo: { ...d.ammo, primary: rounds },
+    });
+    const cam = frameCamera({ w: 1280, h: 720 });
+    /** Every fill drawn, in order (`arc` for a reload pie's). */
+    const fillsOf = (scene: Scene, at = cam) => {
+      const r = recorder();
+      const out: { style: string; x: number; y: number; w: number; h: number }[] = [];
+      const ctx = r.ctx as unknown as { fillStyle: string };
+      Object.assign(r.ctx, {
+        arc: () => out.push({ style: 'arc', x: 0, y: 0, w: 0, h: 0 }),
+        fillRect: (x: number, y: number, w: number, h: number) =>
+          out.push({ style: ctx.fillStyle, x, y, w, h }),
+        measureText: (t: string) => ({ width: t.length * 6 }),
+      });
+      drawScene(r.ctx, r.art, scene, at, { w: 1280, h: 720 });
+      return out;
+    };
+    const AMBER = '#e8b04a';
+    const DARK = '#4a443a';
+    const ammoFills = (f: { style: string }) => f.style === AMBER || f.style === DARK;
+
+    it('reads the primary over its magazine: a slot a shell for the Pump Shotgun, none without a gun', () => {
+      const d = squadScene(1).defenders[0]!;
+      expect(ammoLook(holding(d, smg, 15))).toEqual({ share: 0.5, slots: 0 });
+      expect(ammoLook(holding(d, smg, 99))!.share).toBe(1);
+      expect(ammoLook(holding(d, shotgun, 4))).toEqual({ share: 4 / 6, slots: 6 });
+      const mags = { taken: ['extended-mags' as const], cardLevels: { 'extended-mags': 3 } };
+      expect(ammoLook(holding(d, shotgun, 4), mags)).toEqual({ share: 4 / 12, slots: 12 });
+      expect(ammoLook(holding(d, 'knife', 0))).toBeNull();
+      const sidearm = { ...holding(d, smg, 15), ammo: { primary: 15, secondary: 0 } };
+      expect(ammoLook(sidearm)).toEqual(ammoLook(holding(d, smg, 15)));
+    });
+
+    it('draws under the HP bar, as wide, after every reload pie', () => {
+      const base = squadScene(3);
+      const [a, b, c] = base.defenders as [Defender, Defender, Defender];
+      const reloading = {
+        ...holding(b, smg, 0),
+        reloadedAt: { primary: base.time + 1, secondary: 0 },
+      };
+      const scene = {
+        ...base,
+        defenders: [holding(a, shotgun, 4), reloading, holding(c, 'knife', 0)],
+      };
+      const fills = fillsOf(scene);
+      const hp = fills.find((f) => f.style === '#c43b3b')!;
+      // The shotgun's 6 slots, lit from the left, spanning the HP bar just under it.
+      const slots = fills.filter(
+        (f) => ammoFills(f) && Math.abs(f.y - fills.find(ammoFills)!.y) < 1e-9,
+      );
+      expect(slots.map((f) => f.style)).toEqual([AMBER, AMBER, AMBER, AMBER, DARK, DARK]);
+      expect(slots[0]!.x).toBeCloseTo(hp.x, 9);
+      expect(slots[5]!.x + slots[5]!.w).toBeCloseTo(hp.x + hp.w, 9);
+      expect(slots[0]!.y).toBeGreaterThan(hp.y + hp.h);
+      // The empty SMG: one dark bar; the knife: none. 6 + 1 + 1 (its zero-width fill).
+      expect(fills.filter(ammoFills)).toHaveLength(8);
+      // Every bar after the last pie, so a crowded neighbour's pie never covers one.
+      const bars = fills.flatMap((f, i) => (ammoFills(f) || f.style === '#c43b3b' ? [i] : []));
+      expect(Math.min(...bars)).toBeGreaterThan(fills.map((f) => f.style).lastIndexOf('arc'));
+    });
+
+    it("shows a full-game defender's only while their HP bar does", () => {
+      const game = newGame();
+      const h = startHorde(game, 1, game.roster[0]!.id, 0, 0);
+      const d = holding(
+        h.defenders.find((x) => h.posts.some((p) => p.id === x.postId))!,
+        smg,
+        15,
+      );
+      expect(fillsOf({ ...h, defenders: [d] }).filter(ammoFills)).toEqual([]);
+      const hurt = fillsOf({ ...h, defenders: [{ ...d, hp: d.maxHp / 2 }] });
+      expect(hurt.find((f) => f.style === DARK)!.w).toBeCloseTo(
+        hurt.find((f) => f.style === '#c43b3b')!.w,
+        9,
+      );
+    });
+
+    it('lifts the name plate and its bubble box clear of both bars at any zoom', () => {
+      const base = squadScene(1);
+      const d = holding(base.defenders[0]!, shotgun, 6);
+      const scene = { ...base, defenders: [d] };
+      const said: Bubble = {
+        ...{ by: d.id, event: 'reload', line: 'Reloading!', at: 0, x: d.x, y: d.y },
+        ...{ postId: d.walking ? null : d.postId, plain: true },
+      };
+      for (const zoom of [0.5, 1, cam.zoom, 2]) {
+        const at = { ...cam, zoom };
+        const fills = fillsOf(scene, at);
+        const plate = fills.find((f) => f.style === 'rgba(21, 23, 26, 0.6)' && f.h === PLATE_H)!;
+        const top = Math.min(...fills.filter((f) => f.style === '#1b1a18').map((f) => f.y));
+        expect(top - (plate.y + plate.h)).toBeCloseTo(NAME_TAG_GAP, 9);
+        const box = bubbleTag(said, scene.layers, scene.posts, at, d.name.length * 6);
+        expect(box.y1).toBeCloseTo(plate.y + plate.h, 9);
+      }
+    });
   });
 
   describe('name tags (ID-074)', () => {
@@ -2880,9 +2988,12 @@ describe('the horde-only fight (ID-068)', () => {
           (p) => p.style === 'rgba(21, 23, 26, 0.6)' && p.y < text!.y && p.y + p.h > text!.y,
         )!;
         expect(plate, d.name).toBeDefined();
-        const edge = rects.find(
-          (b) => b.style === '#1b1a18' && b.x < feet.sx && b.x + b.w > feet.sx && b.y > plate.y,
-        )!;
+        // The nearest edge under the plate: the bars all draw in one pass (ID-143).
+        const edge = rects
+          .filter(
+            (b) => b.style === '#1b1a18' && b.x < feet.sx && b.x + b.w > feet.sx && b.y > plate.y,
+          )
+          .sort((a, b) => a.y - b.y)[0]!;
         expect(edge, d.name).toBeDefined();
         expect(edge.y - (plate.y + plate.h)).toBeCloseTo(NAME_TAG_GAP, 9);
       }

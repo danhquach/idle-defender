@@ -3080,6 +3080,20 @@ original outline.
   never changes across fights or saves: a numbered id counts round the four
   looks by its last number (recruit 1 is the soldier, recruits 2 to 4 the
   others, recruit 5 the soldier again), any other id is hashed.
+- **As built (ID-143): the ammo bar.** A thin amber bar (2 px at zoom 1, at
+  least 2 px, dark edge) sits right under each defender's HP bar and is just
+  as wide, showing whenever the HP bar does: its fill is the rounds left in
+  the **primary** over today's magazine (Extended Mags included); a Gunner's
+  sidearm doesn't move it, and a primary that is no gun shows none. A gun
+  loaded shell by shell (the Pump Shotgun, ID-135) splits it into a slot a
+  shell, 1 px apart, lit from the left, so each shell going in shows (the
+  slots fall back to a plain bar only below 1 px each). A magazine gun's
+  bar drains shot by shot and stays empty while its reload pie (ID-078)
+  fills. The HP bar, name tag, reload pie and bubble boxes sit the bar's
+  height higher, gun or not, so every plate keeps its gap at any zoom. In a
+  fight both bars draw after every reload pie (just before the names): on a
+  phone a survivor's pie sits right under the bars of the one above, and
+  never covers them.
 - **As built (ID-082): damage numbers.** Every hit on an enemy (bullet,
   blade, cleave, frag, airstrike, trap, burning) shows its
   damage where it landed, over the enemy's HP bar at that moment (it stays
