@@ -959,7 +959,7 @@ function drawHpBar(
  * A defender standing `z0` up at `(x, y)`: their profession's sprite (the weapon tells
  * it, design §15; a Gunner's shows their primary, or their throw frame mid-throw, ID-119)
  * in `pose`, a shield in front if they carry one, a ring at their feet when selected, and
- * an HP bar once hurt.
+ * with `bars` their HP and ammo bars (ID-143).
  */
 function drawDefender(
   ctx: CanvasRenderingContext2D,

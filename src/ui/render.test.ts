@@ -2905,7 +2905,8 @@ describe('the horde-only fight (ID-068)', () => {
       expect(slots.map((f) => f.style)).toEqual([AMBER, AMBER, AMBER, AMBER, DARK, DARK]);
       expect(slots[0]!.x).toBeCloseTo(hp.x, 9);
       expect(slots[5]!.x + slots[5]!.w).toBeCloseTo(hp.x + hp.w, 9);
-      expect(slots[0]!.y).toBeGreaterThan(hp.y + hp.h);
+      // Flush: the ammo bar's 1 px edge starts where the HP bar's 1 px edge ends.
+      expect(slots[0]!.y - 1).toBeCloseTo(hp.y + hp.h + 1, 9);
       // The empty SMG: one dark bar; the knife: none. 6 + 1 + 1 (its zero-width fill).
       expect(fills.filter(ammoFills)).toHaveLength(8);
       // Every bar after the last pie, so a crowded neighbour's pie never covers one.
