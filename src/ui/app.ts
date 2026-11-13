@@ -38,15 +38,17 @@ import { chatter, newChat } from '../core/chatter.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
-import { skillLock, useSkill } from '../core/skills.ts';
+import { autoLookDue, autoStrike, skillLock, useSkill } from '../core/skills.ts';
 import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
 import {
+  readAutoStrike,
   readChatter,
   readHowToSeen,
   readReduceMotion,
   readSound,
   readSpeed,
   SPEEDS,
+  writeAutoStrike,
   writeChatter,
   writeHowToSeen,
   writeMute,
@@ -69,6 +71,7 @@ import {
   targetAt,
 } from './buildscene.ts';
 import {
+  AUTO_KEY,
   createHud,
   defenderLabel,
   hordePicker,
@@ -192,6 +195,10 @@ export function start(root: HTMLElement, art: Art): void {
   // Fight speed, kept between hordes, and the Space pause, which each fight starts without (ID-062).
   let speed: Speed = readSpeed(storage);
   let held = false;
+  // Airstrike auto-aim (ID-140), kept between hordes and sessions; and the fight time it
+  // last looked for a target, so it looks every `AUTO_AIM.look` s, not every frame.
+  let autoOn = readAutoStrike(storage);
+  let autoLookedAt = -Infinity;
   // Sound (ID-080): it starts on the first click or key press, as browsers require; the
   // fight's cues come from comparing each frame's state with the last one heard.
   const soundSettings = readSound(storage);
@@ -286,6 +293,14 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (next) => setSpeed(next),
   );
+  /** The Airstrike's Auto toggle (ID-140), by its button or key: saved at once. */
+  function toggleAuto(): void {
+    autoOn = !autoOn;
+    writeAutoStrike(storage, autoOn);
+    hud.showAutoStrike(autoOn);
+  }
+  hud.onAutoStrike(toggleAuto);
+  hud.showAutoStrike(autoOn);
   /** A skill's button or key (ID-100): it is armed, waiting for an aim (ID-107). */
   function arm(skill: SkillId): void {
     if (!horde) return;
@@ -782,6 +797,7 @@ export function start(root: HTMLElement, art: Art): void {
     }
     // Every fight key by its place (ID-100), so one press is one key on any layout.
     const name = fightKeyName(e);
+    if (name === AUTO_KEY && !e.repeat) toggleAuto();
     const next = SPEEDS.find((sp) => SPEED_KEYS[sp] === name);
     if (next && !e.repeat) setSpeed(next);
     // Horde-only (ID-100): Q and W use the picked skills, left to right as their buttons stand.
@@ -901,6 +917,11 @@ export function start(root: HTMLElement, art: Art): void {
       // Speed runs more of the core's fixed steps per frame, never longer ones; a pick
       // or replacement stops the rest of the frame's steps in the core.
       if (horde) horde = tick(horde, dt * speed);
+      // Auto-aim (ID-140): fires the Airstrike on the biggest group the moment it is ready.
+      if (horde && autoOn && autoLookDue(horde.time, autoLookedAt)) {
+        autoLookedAt = horde.time;
+        horde = autoStrike(horde);
+      }
       // A defender sent to the bench, or a finished fight, drops the selection.
       if (
         horde &&

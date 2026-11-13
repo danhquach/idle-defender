@@ -1496,6 +1496,11 @@ export const SKILLS = {
   },
 } as const;
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
+/**
+ * Airstrike auto-aim (ID-140): it fires only where its circle covers at least `min` live
+ * enemies, looking again every `look` fight s while it holds.
+ */
+export const AUTO_AIM = { min: 4, look: 0.25 } as const;
 /** Fight seconds an airstrike bomb falls from the sky before it lands (ID-107). */
 export const THROW_FALL = 0.5;
 /** How long a skill's explosion stays on screen, in seconds (ID-107: its fireball, smoke and scorch). */

@@ -428,6 +428,25 @@ Defenders stand on **posts** the player builds and chooses between.
   Airstrike picked. A save whose pick, research or research queue holds
   `flashbang` or `molotov` loads with them dropped; a pick left empty falls
   back to Airstrike if it is researched, or to none.
+- **As built (ID-140): Airstrike auto-aim.** An **Auto** toggle sits just
+  after the Airstrike button (key **E**, in both builds), muted and dashed
+  while off, lit while on, at least 44 px tall on touch screens; it can be switched any time in a fight, during
+  picks too, and is kept in this browser (`idle-defender.airstrike-auto`,
+  only `'1'` reads as on, anything else as off; default **off**). While on,
+  the Airstrike fires by itself the moment it is ready (cooled down, and
+  with its cash in the full game), aimed by `strikeAim`: on the live enemy
+  past the outer wall and on the field whose circle (radius 260) covers the
+  most such enemies, ties to the one nearest the wall, then the lowest id.
+  It holds while no circle covers at least **4** (`AUTO_AIM.min`) and looks
+  again every 0.25 fight s (`AUTO_AIM.look`). It fires through the same
+  `useSkill` as a tap, so a manual strike, which still works, starts the
+  cooldown auto-aim waits on. In the full game it pays the Airstrike's 40
+  cash the moment it fires, so a player saving cash for the shop turns it
+  off. The scripted player in the balance tests keeps its old aim (the enemy
+  nearest the wall once 6 stand on the field), not auto-aim *(PM, ID-140)*:
+  aimed by `strikeAim` it won Horde 20 at Recommended Power in every fight
+  (target 20–80%) and spread the stats' win rates to 0.27 (target 0.20), so
+  a balance pass for auto-aim is left to its own ticket.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or
@@ -2685,7 +2704,8 @@ then grid-tuned with the scripted player (`src/core/sim.ts`).
   new horde it replays the highest beaten horde 3 times (`SQUAD_FARM`), then
   tries again; it uses its picked skills (Flashbang and Molotov; the Airstrike
   alone since ID-139, and it keeps the first throwable it takes) once 6 enemies
-  stand on the field, aimed at the one nearest the wall. A worst-luck mode
+  stand on the field, aimed at the one nearest the wall (not auto-aim, ID-140,
+  §4). A worst-luck mode
   throws every replay drop away except a guaranteed upgrade, and counts each
   toward the bad-luck guarantee.
 - **Baseline (main, before):** every balance file passed, with the late-horde

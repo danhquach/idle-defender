@@ -26,6 +26,26 @@ export function writeReduceMotion(storage: SaveStorage | null, on: boolean): voi
   }
 }
 
+export const AUTO_STRIKE_KEY = 'idle-defender.airstrike-auto';
+
+/** Whether the Airstrike's auto-aim is on (ID-140): only the stored '1' is on, anything else off. */
+export function readAutoStrike(storage: SaveStorage | null): boolean {
+  try {
+    return storage?.getItem(AUTO_STRIKE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Stores the toggle; where the browser refuses it, it still applies until reload. */
+export function writeAutoStrike(storage: SaveStorage | null, on: boolean): void {
+  try {
+    storage?.setItem(AUTO_STRIKE_KEY, on ? '1' : '0');
+  } catch {
+    // Storage blocked or full.
+  }
+}
+
 export const SPEED_KEY = 'idle-defender.game-speed';
 /** The fight speeds (ID-062): how many times fight time runs to real time. */
 export const SPEEDS = [1, 2, 3] as const;

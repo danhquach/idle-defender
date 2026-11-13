@@ -482,6 +482,9 @@ export const fightKeyName = (e: Pick<KeyboardEvent, 'code' | 'key'>): string =>
 /** The fight's skill keys in the horde-only build (ID-100), left to right: clear of A S D, Space and the card keys. */
 export const SKILL_KEYS: readonly string[] = ['Q', 'W'];
 
+/** The Airstrike's Auto toggle key (ID-140), in both builds: clear of the skill, speed and card keys. */
+export const AUTO_KEY = 'E';
+
 /** The fight's skills as their buttons stand, left to right (ID-100): `SKILL_KEYS` follow it. */
 export const skillSlots = (s: Pick<HordeState, 'skills'>): SkillId[] =>
   SKILL_IDS.filter((k) => s.skills.includes(k));
@@ -1740,6 +1743,10 @@ export function createHud(
   onSkillPick(handler: (skill: SkillId) => void): void;
   /** The skill pick redrawn (ID-100) once the app has saved a toggle. */
   showSkills(pick: SkillPick): void;
+  /** Where the Airstrike's Auto toggle goes (ID-140); the app sets it once. */
+  onAutoStrike(handler: () => void): void;
+  /** The Auto toggle shown on or off (ID-140). */
+  showAutoStrike(on: boolean): void;
   /** Squad Power against Recommended Power for the fight's corner (ID-098); null hides it. */
   fightPower(line: PowerLine | null): void;
   show(visible: boolean): void;
@@ -1954,6 +1961,30 @@ export function createHud(
     );
     return { ...item, key, cooling: false };
   });
+  // Airstrike auto-aim (ID-140): its own toggle just after the Airstrike button (a button
+  // can't hold another), usable any time in a fight, during picks too.
+  const autoButton = el('button', 'hud-button hud-auto');
+  autoButton.type = 'button';
+  autoButton.hidden = true;
+  autoButton.setAttribute('aria-keyshortcuts', AUTO_KEY);
+  // Its name is "Auto" and `aria-pressed` says on or off; the on/off word and the key are
+  // for the eyes only (`aria-keyshortcuts` names the key), so a reader never hears both.
+  const autoState = el('span', 'hud-auto-state');
+  autoState.setAttribute('aria-hidden', 'true');
+  const autoKey = el('kbd', 'menu-key hud-skill-key', AUTO_KEY);
+  autoKey.setAttribute('aria-hidden', 'true');
+  autoButton.append('Auto ', autoState, autoKey);
+  let autoHandler: (() => void) | null = null;
+  autoButton.addEventListener('click', () => autoHandler?.());
+  const showAuto = (on: boolean): void => {
+    autoState.textContent = on ? 'on' : 'off';
+    autoButton.setAttribute('aria-pressed', String(on));
+    autoButton.title = on
+      ? `Airstrike fires by itself on the biggest group (key ${AUTO_KEY} to turn off)`
+      : `Turn on to fire the Airstrike by itself on the biggest group (key ${AUTO_KEY})`;
+  };
+  showAuto(false);
+  skillItems[SKILL_IDS.indexOf('airstrike')]!.button.after(autoButton);
   // In the horde-only build only the picked skills show, and no cash shop (ID-066, ID-100).
   if (squad) for (const item of shopItems) item.button.hidden = true;
   // Each button starts in its tallest look (name · cost, locked with its note), so the
@@ -2737,13 +2768,17 @@ export function createHud(
       // shows only while a skill is armed; everything is put back as it was.
       const shopWas = shop.hidden;
       const skillsWere = skillItems.map((s) => s.button.hidden);
+      // The Auto toggle (ID-140) counts too, as it shows beside a picked Airstrike.
+      const autoWas = autoButton.hidden;
       if (squad) {
         shop.hidden = false;
         skillItems.forEach((s, i) => (s.button.hidden = i >= SQUAD_SKILLS.max));
+        autoButton.hidden = false;
       }
       const box = shop.getBoundingClientRect();
       shop.hidden = shopWas;
       skillItems.forEach((s, i) => (s.button.hidden = skillsWere[i]!));
+      autoButton.hidden = autoWas;
       hud.hidden = was;
       // The HUD overlays the whole window, as the canvas does.
       return box.height > 0 ? window.innerHeight - box.top : 0;
@@ -2853,6 +2888,9 @@ export function createHud(
         }
         item.cooling = b.cooling;
       });
+      // The Auto toggle (ID-140) shows with the Airstrike button, whatever its cooldown or a pick.
+      const strike = skills[SKILL_IDS.indexOf('airstrike')];
+      autoButton.hidden = !strike || strike.hidden || !state.skills.includes('airstrike');
       const aiming = skills.find((b) => b.armed);
       const prompt = aiming ? AIM_PROMPT[aiming.skill] : '';
       if (aimCaption.textContent !== prompt) aimCaption.textContent = prompt;
@@ -2977,6 +3015,12 @@ export function createHud(
     },
     onSkillPick(handler) {
       onPickSkill = handler;
+    },
+    onAutoStrike(handler) {
+      autoHandler = handler;
+    },
+    showAutoStrike(on) {
+      showAuto(on);
     },
     showSkills(next) {
       if (!result.hidden) drawSkills(next);
