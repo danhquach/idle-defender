@@ -2,20 +2,33 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Held } from '../armoury.ts';
 import { chooseCard, UPGRADES } from '../cards.ts';
-import { STEP } from '../data.ts';
+import { STEP, type GunBase } from '../data.ts';
 import { newHorde, tick, type HordeState } from '../horde.ts';
 import { createRng } from '../rng.ts';
 import { answerOffer, playHorde, summarise } from '../sim.ts';
 import { enemy, horror, setup } from '../testing.ts';
 import { bareGame, winRate } from './shared.ts';
 
-describe('the specialised guns (ID-046)', () => {
+describe('the guns (ID-046, roster reworked in ID-135)', () => {
   // A lone Gunner on the upper tower (420, 360) with one Common gun, against 20-HP
   // shamblers held in place, so only the gun differs: kills in the time, mean of the seeds.
+  // ID-135 reworked every gun's character and added the Hand Cannon, Machine Pistol,
+  // Assault Rifle and Cartridge Shotgun.
   // Level-ups take the first stat card offered, else none: the other cards (ID-022)
   // favour some guns over others.
-  type Gun = 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'lmg' | 'sniper';
-  const GUNS: readonly Gun[] = ['pistol', 'smg', 'rifle', 'shotgun', 'lmg', 'sniper'];
+  type Gun = GunBase;
+  const GUNS: readonly Gun[] = [
+    'pistol',
+    'smg',
+    'rifle',
+    'shotgun',
+    'lmg',
+    'sniper',
+    'handcannon',
+    'machinepistol',
+    'assault',
+    'cartridge',
+  ];
   const held = (g: Gun): Held =>
     g === 'pistol' ? 'pistol' : { uid: 'h1', base: g, rarity: 'common', affixes: [] };
   /** Where the enemies stand, how many, for how long, over how many seeds. */
@@ -142,77 +155,87 @@ describe('the specialised guns (ID-046)', () => {
       );
       roles.set(g, { boss: bossDamage(g), heavy: heavyDamage(g), hold: holdLine(g) });
     }
-  }, 90_000);
+  }, 180_000);
   const at = (g: Gun, sc: Scene): number => table.get(g)![sc];
   const best = (sc: Scene): Gun => GUNS.reduce((a, b) => (at(b, sc) > at(a, sc) ? b : a));
   const role = (g: Gun, k: 'boss' | 'heavy' | 'hold'): number => roles.get(g)![k];
 
-  it('each beats the pistol in its role: twice over, the all-rounder 1.5× everywhere', () => {
-    const roles: Record<Exclude<Gun, 'pistol'>, Scene[]> = {
-      smg: ['close'],
+  /** Every measure: the four kill scenes, then boss, heavies and holding a walking crowd. */
+  const measures = (g: Gun): number[] => [
+    ...SCENE_IDS.map((sc) => at(g, sc)),
+    role(g, 'boss'),
+    role(g, 'heavy'),
+    role(g, 'hold'),
+  ];
+
+  it('each beats the pistol in its role: twice over, the all-rounders 1.5× everywhere', () => {
+    const scenes: Partial<Record<Gun, Scene[]>> = {
+      smg: ['close', 'lane'],
       shotgun: ['close'],
-      rifle: SCENE_IDS,
+      cartridge: ['close'],
+      machinepistol: ['close'],
       lmg: ['sustained'],
-      sniper: ['far', 'lane'],
+      rifle: SCENE_IDS,
     };
-    for (const [g, scenes] of Object.entries(roles) as [Gun, Scene[]][]) {
-      for (const sc of scenes) {
+    for (const [g, list] of Object.entries(scenes) as [Gun, Scene[]][]) {
+      for (const sc of list) {
         expect(at(g, sc), `${g} ${sc}`).toBeGreaterThanOrEqual(
           (g === 'rifle' ? 1.5 : 2) * at('pistol', sc),
         );
       }
     }
+    // The Assault Rifle: 1.5× wherever it reaches (its reach is the LMG's, so not far).
+    for (const sc of ['close', 'lane', 'sustained'] as const) {
+      expect(at('assault', sc), `assault ${sc}`).toBeGreaterThanOrEqual(1.5 * at('pistol', sc));
+    }
+    // The heavy hitters: twice the pistol on a boss and on heavies.
+    for (const g of ['sniper', 'handcannon'] as const) {
+      expect(role(g, 'boss'), `${g} boss`).toBeGreaterThanOrEqual(2 * role('pistol', 'boss'));
+      expect(role(g, 'heavy'), `${g} heavy`).toBeGreaterThanOrEqual(2 * role('pistol', 'heavy'));
+    }
   });
 
-  it('leads in its own role: the shotgun up close, the sniper far and in a lane, the LMG sustained', () => {
+  it('each leads in its own role (ID-135)', () => {
+    // The Pump Shotgun up close, the Carbine far, the SMG in a lane, the LMG in sustained fire.
     expect(best('close')).toBe('shotgun');
-    expect(best('far')).toBe('sniper');
-    expect(best('lane')).toBe('sniper');
+    expect(best('far')).toBe('rifle');
+    expect(best('lane')).toBe('smg');
     expect(best('sustained')).toBe('lmg');
-  });
-
-  it('gun roles (ID-101): each role beats the others in its own scene', () => {
-    const others = (gs: Gun[]) => GUNS.filter((g) => !gs.includes(g));
-    // Close crowd: the swarm guns (SMG, LMG, Shotgun) out-kill every other gun.
-    const swarm: Gun[] = ['smg', 'lmg', 'shotgun'];
-    for (const g of swarm) {
-      for (const o of others(swarm))
-        expect(at(g, 'close'), `${g} > ${o} close`).toBeGreaterThan(at(o, 'close'));
-    }
-    // Far: the marksmen (Rifle, Sniper rifle) out-kill the swarm guns.
-    for (const g of ['rifle', 'sniper'] as const) {
-      for (const o of swarm) expect(at(g, 'far'), `${g} > ${o} far`).toBeGreaterThan(at(o, 'far'));
-    }
-    // Boss and heavies: the Sniper rifle out-damages every other gun by a fifth or more.
-    for (const o of others(['sniper'])) {
+    // The Sniper rifle has the highest single-target damage: on a boss by a fifth or more,
+    // on heavies above every other gun.
+    for (const o of GUNS.filter((g) => g !== 'sniper')) {
       expect(role('sniper', 'boss'), `sniper > ${o} boss`).toBeGreaterThan(1.2 * role(o, 'boss'));
-      expect(role('sniper', 'heavy'), `sniper > ${o} heavy`).toBeGreaterThan(
-        1.2 * role(o, 'heavy'),
-      );
+      expect(role('sniper', 'heavy'), `sniper > ${o} heavy`).toBeGreaterThan(role(o, 'heavy'));
     }
-    // A walking crowd: the Shotgun's stagger and the LMG's slow hold it farther out than any other gun.
-    for (const g of ['shotgun', 'lmg'] as const) {
-      for (const o of others(['shotgun', 'lmg'])) {
+    // The knockback guns (both shotguns, the Hand Cannon) hold a walking crowd farther out
+    // than any other gun.
+    const stoppers: Gun[] = ['shotgun', 'cartridge', 'handcannon'];
+    for (const g of stoppers) {
+      for (const o of GUNS.filter((x) => !stoppers.includes(x))) {
         expect(role(g, 'hold'), `${g} holds > ${o}`).toBeGreaterThan(role(o, 'hold') + 2);
       }
     }
   });
 
-  it('none dominates: each is out-shot by another gun somewhere, and the short guns are useless far', () => {
-    for (const g of GUNS) {
+  it('none dominates: no gun is strictly worse than another, none leads more than two scenes', () => {
+    for (const g of GUNS.filter((x) => x !== 'pistol')) {
       expect(
         SCENE_IDS.filter((sc) => best(sc) === g).length,
         `${g} leads too much`,
       ).toBeLessThanOrEqual(2);
-      expect(
-        SCENE_IDS.some((sc) => best(sc) !== g),
-        `${g} is never out-shot`,
-      ).toBe(true);
+      for (const o of GUNS.filter((x) => x !== g)) {
+        const mine = measures(g);
+        const theirs = measures(o);
+        expect(
+          mine.some((v, k) => v > theirs[k]!),
+          `${g} beats ${o} somewhere`,
+        ).toBe(true);
+      }
     }
-    expect(at('smg', 'far')).toBeLessThan(at('pistol', 'far'));
-    expect(at('shotgun', 'far')).toBeLessThan(at('pistol', 'far'));
-    // The all-rounder leads nowhere.
-    for (const sc of SCENE_IDS) expect(best(sc), sc).not.toBe('rifle');
+    // The short guns are useless far.
+    for (const g of ['shotgun', 'cartridge', 'machinepistol'] as const) {
+      expect(at(g, 'far'), `${g} far`).toBeLessThan(at('pistol', 'far'));
+    }
   });
 
   it('in a real horde, a Gunner with any of them does at least as well as with the pistol, without trivialising the curve', () => {

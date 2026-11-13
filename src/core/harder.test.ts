@@ -517,9 +517,9 @@ describe('boss skills (ID-099)', () => {
     expect(plated(one(t, h.id))).toBe(false);
   });
 
-  it('a Sniper rifle’s bullets carry armour-piercing; other guns don’t', () => {
-    const shoot = (gun: 'sniper' | 'rifle') => {
-      const s = newHorde(1, {
+  it('a Sniper rifle’s bullets carry armour-piercing only when the shot crits (ID-135); other guns never do', () => {
+    const shoot = (gun: 'sniper' | 'rifle', seed: number) => {
+      const s = newHorde(seed, {
         ...setup(),
         roster: [
           {
@@ -539,8 +539,18 @@ describe('boss skills (ID-099)', () => {
       for (let i = 0; i < 300 && t.bullets.length === 0; i++) t = tick(t, STEP);
       return t.bullets[0]!;
     };
-    expect(shoot('sniper').ap).toBe(true);
-    expect(shoot('rifle').ap).toBeUndefined();
+    let crits = 0;
+    let plain = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const b = shoot('sniper', seed);
+      // ap goes with the crit, never without it.
+      expect(b.ap === true, `sniper seed ${seed}`).toBe(b.crit === true);
+      if (b.crit) crits++;
+      else plain++;
+      expect(shoot('rifle', seed).ap).toBeUndefined();
+    }
+    expect(crits).toBeGreaterThan(0);
+    expect(plain).toBeGreaterThan(0);
   });
 
   it('Brood grows by one Shambler with each brood in the harder hordes', () => {

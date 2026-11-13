@@ -21,7 +21,19 @@ describe('Sound files (ID-080)', () => {
   });
 
   it('every recording the engine asks for is one of them', () => {
-    const asked = Object.keys(SAMPLES).map((cue) => `${cue}.mp3`);
+    // ID-135's four guns have no file of their own: each reuses the closest recording.
+    const reuse = {
+      'shot-handcannon': 'shot-sniper',
+      'shot-machinepistol': 'shot-smg',
+      'shot-assault': 'shot-lmg',
+      'shot-cartridge': 'shot-shotgun',
+    } as const;
+    for (const [cue, from] of Object.entries(reuse)) {
+      expect(SAMPLES[cue as keyof typeof SAMPLES], cue).toBe(SAMPLES[from]);
+    }
+    const asked = Object.keys(SAMPLES)
+      .filter((cue) => !(cue in reuse))
+      .map((cue) => `${cue}.mp3`);
     expect([...asked].sort()).toEqual([...files].sort());
   });
 

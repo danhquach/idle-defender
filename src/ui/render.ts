@@ -386,7 +386,7 @@ export const TAIL = { frame: 1 / 60, pace: 2 } as const;
  * flaring out to the sides. Each tongue is an `edge`-coloured flame with a hot pale centre,
  * on a soft `halo` of that colour, with a white-hot dot at the muzzle. A pistol's is small,
  * an SMG's thin and spiky (its flames' lengths vary more, `roll`), a rifle's long, a
- * sniper's a long needle, a shotgun's a wide fan, an LMG's a big star; a turret's is a
+ * sniper's a long needle, a shotgun's a wide fan, an LMG's a big star (ID-135's guns below); a turret's is a
  * cold, electric cross, unlike any survivor's.
  */
 export type FlashStyle = {
@@ -455,6 +455,48 @@ export const FLASH_STYLE: Readonly<Record<GunId | 'turret', FlashStyle>> = {
       [2.2, 2.5, 1.5],
     ],
     halo: 5,
+    edge: GUNFIRE,
+  },
+  // ID-135: the Hand Cannon's a short, fat blast; the Machine Pistol's a small, spiky
+  // flicker; the Assault Rifle's between the rifle's and the LMG's.
+  handcannon: {
+    tongues: [
+      [0, 8, 4.5],
+      [-1, 4, 2.5],
+      [1, 4, 2.5],
+    ],
+    halo: 5,
+    edge: GUNFIRE,
+  },
+  machinepistol: {
+    tongues: [
+      [0, 6, 2],
+      [-1, 2.5, 1.2],
+      [1, 2.5, 1.2],
+    ],
+    halo: 3,
+    edge: GUNFIRE,
+    roll: 0.5,
+  },
+  assault: {
+    tongues: [
+      [0, 10, 3.5],
+      [-0.9, 4, 1.8],
+      [0.9, 4, 1.8],
+    ],
+    halo: 4.5,
+    edge: GUNFIRE,
+  },
+  // The Cartridge Shotgun's: the pump's fan, a little smaller.
+  cartridge: {
+    tongues: [
+      [0, 8, 3.5],
+      [-0.4, 6.5, 3],
+      [0.4, 6.5, 3],
+      [-1.2, 2.5, 1.5],
+      [1.2, 2.5, 1.5],
+    ],
+    halo: 4.5,
     edge: GUNFIRE,
   },
   turret: {

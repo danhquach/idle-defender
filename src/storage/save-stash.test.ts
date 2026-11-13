@@ -82,7 +82,7 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       base: 'lmg',
       affixes: [{ id: 'magazine', value: 25 }],
     });
-    expect(roleOf('lmg')?.trait).toMatch(/slow/);
+    expect(roleOf('lmg')?.trait).toMatch(/crit/);
     // Role affixes read on their own gun.
     for (const [base, affix] of [
       ['lmg', { id: 'magazine', value: 80 }],
@@ -91,6 +91,12 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       ['shotgun', { id: 'pellets', value: 2 }],
       ['smg', { id: 'closeDamage', value: 10 }],
       ['sniper', { id: 'bossDamage', value: 35 }],
+      // ID-135: the LMG rolls the crit role affix; the Hand Cannon shares the boss one.
+      ['lmg', { id: 'crit', value: 8 }],
+      ['handcannon', { id: 'bossDamage', value: 15 }],
+      ['machinepistol', { id: 'magazine', value: 100 }],
+      ['cartridge', { id: 'pellets', value: 2 }],
+      ['assault', { id: 'crit', value: 3 }],
     ] as const) {
       expect(reread(g, as(base, affix)), `${base} ${affix.id}`).not.toBeNull();
     }
@@ -108,9 +114,96 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       ['shotgun', { id: 'pellets', value: '2' }],
       ['shotgun', { id: 'pellets', value: -1 }],
       ['lmg', { id: 'slow', value: 1e9 }],
+      // ID-135: the Hand Cannon, Machine Pistol and Assault Rifle roll no other gun's role affix.
+      ['handcannon', { id: 'crit', value: 5 }],
+      ['machinepistol', { id: 'bossDamage', value: 20 }],
+      ['assault', { id: 'critDamage', value: 30 }],
+      ['cartridge', { id: 'closeDamage', value: 10 }],
     ] as const) {
       expect(reread(g, as(base, affix)), `${base} ${affix.id} ${affix.value}`).toBeNull();
     }
+  });
+
+  it('every gun of the ID-135 roster reads back, a Common one with no affixes too', () => {
+    const g = armed(4);
+    for (const base of ['handcannon', 'machinepistol', 'assault', 'cartridge'] as const) {
+      const r = reread(g, (x) => {
+        x.armoury[0].base = base;
+        military(x.armoury[0], { id: 'damage', value: 10 });
+      });
+      expect(r?.game.armoury[0], base).toMatchObject({
+        base,
+        affixes: [{ id: 'damage', value: 10 }],
+      });
+      const plain = reread(g, (x) => {
+        x.armoury[0].base = base;
+        x.armoury[0].rarity = 'common';
+        x.armoury[0].affixes = [];
+      });
+      expect(plain?.game.armoury[0], base).toMatchObject({ base, rarity: 'common', affixes: [] });
+    }
+  });
+
+  it('an older LMG’s slow affix (5 to 15) reads as the crit affix it rolls now (ID-135)', () => {
+    const g = armed(4);
+    const lmgWith = (affix: Loose) =>
+      reread(g, (x) => {
+        x.armoury[0].base = 'lmg';
+        military(x.armoury[0], affix);
+      });
+    for (const [slow, crit] of [
+      [5, 3],
+      [6, 4],
+      [10, 6],
+      [14, 8],
+      [15, 8],
+    ] as const) {
+      expect(
+        lmgWith({ id: 'slow', value: slow })?.game.armoury[0]?.affixes,
+        `slow ${slow}`,
+      ).toEqual([{ id: 'crit', value: crit }]);
+    }
+    // Out of the old range, fractional, text, hostile or on another gun: refused, as before.
+    for (const value of [4, 16, 0, -5, 7.5, 1e9, NaN, '10', '__proto__', null, {}, [10]]) {
+      expect(lmgWith({ id: 'slow', value }), `slow ${String(value)}`).toBeNull();
+    }
+    for (const id of ['__proto__', 'constructor', 'toString']) {
+      expect(lmgWith({ id, value: 10 }), id).toBeNull();
+    }
+    const rifle = reread(g, (x) => {
+      x.armoury[0].base = 'rifle';
+      military(x.armoury[0], { id: 'slow', value: 10 });
+    });
+    expect(rifle).toBeNull();
+    // An extra key on the affix is still an unknown shape, a `__proto__` key too (an own key
+    // of parsed JSON): refused, and nothing leaks onto Object.prototype.
+    expect(lmgWith({ id: 'slow', value: 10, extra: 1 })).toBeNull();
+    const polluted = reread(g, (x) => {
+      x.armoury[0].base = 'lmg';
+      x.armoury[0].rarity = 'military';
+      x.armoury[0].affixes = JSON.parse('[{"id":"slow","value":10,"__proto__":{"polluted":1}}]');
+    });
+    expect(polluted).toBeNull();
+    expect(({} as Loose).polluted).toBeUndefined();
+    // Tiny, huge or infinite numbers are no slow either.
+    for (const value of [Number.MIN_VALUE, Number.MAX_VALUE, 5.0000001, 14.9999999]) {
+      expect(lmgWith({ id: 'slow', value }), String(value)).toBeNull();
+    }
+    // Wrong counts: a slow beside a second affix on a Prototype LMG (2 due) still migrates the
+    // slow, and the second affix is checked on its own.
+    const two = (second: Loose) =>
+      reread(g, (x) => {
+        x.armoury[0].base = 'lmg';
+        x.armoury[0].rarity = 'prototype';
+        x.armoury[0].affixes = [{ id: 'slow', value: 5 }, second];
+      });
+    expect(two({ id: 'magazine', value: 60 })?.game.armoury[0]?.affixes).toEqual([
+      { id: 'crit', value: 3 },
+      { id: 'magazine', value: 60 },
+    ]);
+    // A slow beside a migrated crit would repeat the affix: refused.
+    expect(two({ id: 'crit', value: 4 })).toBeNull();
+    expect(two({ id: 'slow', value: 7 })).toBeNull();
   });
 
   it('refuses hostile stash and gun values', () => {

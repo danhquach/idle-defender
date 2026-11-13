@@ -466,16 +466,16 @@ describe('drop tile: kind, farm note and level (ID-098)', () => {
 });
 
 describe('gun level wherever the gun shows (ID-098)', () => {
-  it('"Lv 12 Military Rifle" in the label, the picker option and the drop line; the free pistol is Lv 1', () => {
+  it('"Lv 12 Military Carbine" in the label, the picker option and the drop line; the free pistol is Lv 1', () => {
     const w = gun('a', 12);
-    expect(levelName(w)).toBe('Lv 12 Military Rifle');
-    expect(levelLabel(w)).toBe('Lv 12 Military Rifle (+7% damage)');
-    expect(gunLabel(w)).toMatch(/^Lv 12 Military Rifle \(\+7% damage\) · [\d.]+ dmg\/s$/);
+    expect(levelName(w)).toBe('Lv 12 Military Carbine');
+    expect(levelLabel(w)).toBe('Lv 12 Military Carbine (+7% damage)');
+    expect(gunLabel(w)).toMatch(/^Lv 12 Military Carbine \(\+7% damage\) · [\d.]+ dmg\/s$/);
     expect(gunOption(w)).toMatch(
-      /^[\d.]+ dmg\/s · Lv 12 Military Rifle · Marksman \(\+7% damage\)$/,
+      /^[\d.]+ dmg\/s · Lv 12 Military Carbine · Marksman \(\+7% damage\)$/,
     );
     expect(levelLabel('pistol')).toBe('Lv 1 Pistol');
-    expect(levelLabel(gun('b'))).toBe('Lv 1 Military Rifle (+7% damage)');
+    expect(levelLabel(gun('b'))).toBe('Lv 1 Military Carbine (+7% damage)');
   });
 
   it('the gun picker lists each gun with its level, strongest first including level', () => {
@@ -484,7 +484,7 @@ describe('gun level wherever the gun shows (ID-098)', () => {
     const g = squadGame(1, 3, [low, high]);
     const row = squadGear(g).rows[0]!;
     expect(row.options.map((o) => o.value)).toEqual(['hi', 'lo', 'pistol']);
-    expect(row.options[0]!.label).toContain('Lv 20 Military Rifle');
+    expect(row.options[0]!.label).toContain('Lv 20 Military Carbine');
     expect(row.options[2]!.label).toContain('Lv 1 Pistol');
   });
 
@@ -493,9 +493,9 @@ describe('gun level wherever the gun shows (ID-098)', () => {
     const thrown = gun('t', 3);
     const full = { armoury: [thrown, ...Array.from({ length: STASH_CAP - 1 }, () => w)] };
     const t = dropTile(full, dropOf(w, { thrown: [thrown] }));
-    expect(t.thrown).toBe('Thrown away: Lv 3 Military Rifle');
+    expect(t.thrown).toBe('Thrown away: Lv 3 Military Carbine');
     const lines = squadDropLines(full, dropOf(w, { thrown: [thrown] }));
-    expect(lines.some((l) => l.includes('Lv 3 Military Rifle (+7% damage)'))).toBe(true);
+    expect(lines.some((l) => l.includes('Lv 3 Military Carbine (+7% damage)'))).toBe(true);
   });
 });
 

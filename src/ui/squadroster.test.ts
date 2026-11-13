@@ -75,7 +75,7 @@ describe('the Roster tabs (ID-086)', () => {
       level: 7,
       health: `HP ${maxHpOf(ivan)}/${maxHpOf(ivan)}`,
       down: false,
-      gun: 'Relic Rifle',
+      gun: 'Relic Carbine',
       rarity: 'relic',
       points: 4,
     });
@@ -250,7 +250,7 @@ describe('the Roster button and tabs (ID-108)', () => {
     expect(m.plus('instinct').getAttribute('aria-label')).toContain(name);
     // The status line after Best gun and after a spend: the name as text, nothing parsed.
     m.q('.rv-best').click();
-    expect(m.status()).toBe(`Equipped: ${name} → Military Rifle`);
+    expect(m.status()).toBe(`Equipped: ${name} → Military Carbine`);
     m.plus('instinct').click();
     expect(m.status()).toContain(name);
     expect(m.scrim.querySelector('.rv-status')!.children).toHaveLength(0);
@@ -490,10 +490,10 @@ describe('Choose a gun (ID-108)', () => {
     m.key('slot').click();
     const other = tiles(m).find((x) => x.dataset.choice === 'g1')!;
     other.click();
-    expect(m.q('.rv-v-name').textContent).toBe('Lv 1 Common Shotgun');
+    expect(m.q('.rv-v-name').textContent).toBe('Lv 1 Common Pump Shotgun');
     // The table: Now / New / Change, pellets shown.
     const heads = [...m.scrim.querySelectorAll('.rv-ctab thead th')].map((th) => th.textContent);
-    expect(heads).toEqual(['', 'Now: Pistol', 'New: Shotgun', 'Change']);
+    expect(heads).toEqual(['', 'Now: Pistol', 'New: Pump Shotgun', 'Change']);
     const rows = [...m.scrim.querySelectorAll('.rv-ctab tbody tr')].map((tr) =>
       [...tr.children].map((c) => c.textContent),
     );
@@ -505,15 +505,15 @@ describe('Choose a gun (ID-108)', () => {
       'Range',
       'Role',
     ]);
-    expect(rows.find((r) => r[0] === 'Damage')![2]).toBe('4.0 × 6');
+    expect(rows.find((r) => r[0] === 'Damage')![2]).toBe('7.0 × 6');
     expect(rows.find((r) => r[0] === 'Role')![3]).toBe('new role');
     m.key('equip').click();
     expect(m.onEquip).toHaveBeenCalledWith('recruit-1', 'g1');
     expect(m.game().roster[0]!.loadout.primary).toMatchObject({ uid: 'g1' });
-    expect(m.status()).toBe(`${recruit(1).name} now holds Lv 1 Common Shotgun.`);
+    expect(m.status()).toBe(`${recruit(1).name} now holds Lv 1 Common Pump Shotgun.`);
     // Back on Stats with the new gun in the slot, the keyboard on it.
     expect(m.q('.rv-ttl').textContent).toBe('Stats');
-    expect(m.key('slot').textContent).toContain('Common Shotgun');
+    expect(m.key('slot').textContent).toContain('Common Pump Shotgun');
     expect(document.activeElement).toBe(m.key('slot'));
   });
 
@@ -552,7 +552,7 @@ describe('Choose a gun (ID-108)', () => {
     expect(m.q('.rv-tile[data-choice="pistol"] .rv-ty').textContent).toBe('Pistol ∞');
     m.key('equip').click();
     expect(m.status()).toBe(
-      `${recruit(1).name} now holds the free pistol; Lv 1 Military Rifle is back in the stash.`,
+      `${recruit(1).name} now holds the free pistol; Lv 1 Military Carbine is back in the stash.`,
     );
     expect(m.game().armoury.map((w) => w.uid)).toContain('r1');
   });
@@ -632,17 +632,18 @@ describe('Choose a gun (ID-108)', () => {
 
 describe('Best gun for everyone (ID-108)', () => {
   it('acts at once and says what moved', () => {
-    const rifle = gun('r1', 'rifle', 'relic');
+    // A Relic LMG is the strongest (a Relic Carbine no longer outranks a Military SMG, ID-135).
+    const rifle = gun('r1', 'lmg', 'relic');
     const smg = gun('s1', 'smg', 'military');
     const m = mount(camp([at(1, 1), at(2, 1)], [smg, rifle]));
     m.roster.open('recruit-1');
     m.key('best').click();
     expect(m.onBestGuns).toHaveBeenCalledTimes(1);
     expect(m.status()).toBe(
-      `Equipped: ${recruit(1).name} → Relic Rifle · ${recruit(2).name} → Military SMG`,
+      `Equipped: ${recruit(1).name} → Relic LMG · ${recruit(2).name} → Military SMG`,
     );
     expect(m.game().armoury).toEqual([]);
-    expect(m.key('slot').textContent).toContain('Relic Rifle');
+    expect(m.key('slot').textContent).toContain('Relic LMG');
     // A second press: nothing left to hand out.
     m.key('best').click();
     expect(m.status()).toBe('Everyone already holds the best gun they can get.');

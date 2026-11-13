@@ -129,15 +129,21 @@ describe('crit cards (ID-130)', () => {
     expect(squadCanCrit(s)).toBe(false);
     expect(eligible(s, 'hollow-point-rounds')).toBe(false);
     expect(eligible(s, 'aim-for-the-head')).toBe(true);
-    // Any crit source puts it in: Aim for the Head, a Rifle, or Sharp Mind.
+    // Any crit source puts it in: Aim for the Head, a gun with crit of its own, or Sharp Mind.
+    // The Carbine, LMG, Sniper rifle and Assault Rifle have crit of their own (ID-135).
     expect(eligible(picked(s, 'aim-for-the-head', 1), 'hollow-point-rounds')).toBe(true);
-    const rifle = structuredClone(s);
-    rifle.defenders[0]!.loadout = {
-      primary: rollWeapon(createRng(1), 'r1', 'rifle', 'common', 1),
-      secondary: null,
-      item: null,
+    const withGun = (base: 'rifle' | 'lmg' | 'sniper' | 'assault') => {
+      const x = structuredClone(s);
+      x.defenders[0]!.loadout = {
+        primary: rollWeapon(createRng(1), 'r1', base, 'common', 1),
+        secondary: null,
+        item: null,
+      };
+      return x;
     };
-    expect(eligible(rifle, 'hollow-point-rounds')).toBe(true);
+    for (const base of ['rifle', 'lmg', 'sniper', 'assault'] as const) {
+      expect(eligible(withGun(base), 'hollow-point-rounds'), base).toBe(true);
+    }
     const mind = structuredClone(s);
     mind.defenders[0]!.stats = { ...NO_STATS, mind: 10 };
     expect(eligible(mind, 'hollow-point-rounds')).toBe(true);

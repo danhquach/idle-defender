@@ -25,6 +25,13 @@ export const SAMPLES: Readonly<Partial<Record<Cue, string>>> = {
   'shot-lmg': shotLmg,
   'shot-sniper': shotSniper,
   'shot-turret': shotTurret,
+  // ID-135's guns reuse the closest recording: the Hand Cannon the sniper rifle's (the
+  // heaviest single shot), the Machine Pistol the 9 mm SMG's, the Assault Rifle the
+  // 7.62x39 mm automatic rifle's (the LMG's), the Cartridge Shotgun the pump shotgun's.
+  'shot-handcannon': shotSniper,
+  'shot-machinepistol': shotSmg,
+  'shot-assault': shotLmg,
+  'shot-cartridge': shotShotgun,
 };
 /**
  * A recording's level on the effects bus: half, since the clips are cut to peak at
@@ -172,7 +179,10 @@ function hiss(
 const note = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
 
 /** How each cue sounds, and how long it lasts (s), for the overlap cap. */
-const RECIPES: Record<Cue, { length: number; play: (v: Voice) => void }> = {
+type Recipe = { length: number; play: (v: Voice) => void };
+/** ID-135's guns, made in code as the guns whose recordings they reuse. */
+type Reused = 'shot-handcannon' | 'shot-machinepistol' | 'shot-assault' | 'shot-cartridge';
+const OWN: Record<Exclude<Cue, Reused>, Recipe> = {
   'shot-pistol': {
     length: 0.1,
     play: (v) => (hiss(v, 'bandpass', 1800, 0, 0.08, 0.5), tone(v, 'sine', 180, 60, 0, 0.08, 0.4)),
@@ -301,6 +311,13 @@ const RECIPES: Record<Cue, { length: number; play: (v: Voice) => void }> = {
       ),
   },
   click: { length: 0.04, play: (v) => tone(v, 'square', 1200, 1000, 0, 0.03, 0.04) },
+};
+const RECIPES: Record<Cue, Recipe> = {
+  ...OWN,
+  'shot-handcannon': OWN['shot-sniper'],
+  'shot-machinepistol': OWN['shot-smg'],
+  'shot-assault': OWN['shot-lmg'],
+  'shot-cartridge': OWN['shot-shotgun'],
 };
 
 /**

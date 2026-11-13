@@ -39,13 +39,13 @@ describe('save: farming (ID-098)', () => {
   it('round-trips the farm, replay drops and gun levels', () => {
     const g = farmed();
     expect(g.farm.replays).toBe(2);
-    // Each win's drop, then its bonus guns (ID-122), at the horde's level.
+    // Each win's drop, then its bonus guns (ID-122), at the horde's level (the seeded rolls as
+    // since ID-135's ten-gun drop pick).
     expect(g.armoury.map((w) => w.uid)).toEqual([
       'h1',
       'h1-1',
       'h2',
       'h2-1',
-      'h2-2',
       'h3',
       'h3-1',
       'h4',
@@ -55,7 +55,7 @@ describe('save: farming (ID-098)', () => {
       'r1-2',
       'r2',
     ]);
-    expect(g.armoury.map(gunLevel)).toEqual([1, 1, 2, 2, 2, 3, 3, 4, 4, 3, 3, 3, 3]);
+    expect(g.armoury.map(gunLevel)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 3, 3]);
     expect(reread(g)?.game).toEqual(g);
   });
 

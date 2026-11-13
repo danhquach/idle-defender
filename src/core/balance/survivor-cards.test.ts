@@ -1,6 +1,7 @@
 // Balance: Kevlar Vests and First Aid Kits (ID-131) keep survivors on the line alive (see
 // shared.ts). Survivors take no hits until an enemy is in the camp, so a fight the squad
-// wins cleanly never tests them: Horde 15 with its expected squad (level 20 Military Rifles)
+// wins cleanly never tests them: Horde 15 with its expected squad (level 19 Military Carbines;
+// level 20 before ID-135, whose Carbine burst made the same squad a little stronger)
 // is a close fight, the wall breaks late on most seeds and the squad loses some. Played with
 // the horde-only scripted player's cards and skills, and the card at `level` held from the
 // start, against the same fights without it: at max each card leaves fewer survivors injured
@@ -14,7 +15,7 @@ import { squadPick, useSkills } from '../sim.ts';
 import { SEEDS, squadAt } from './shared.ts';
 
 const HORDE = 15;
-const GUN_LEVEL = 20;
+const GUN_LEVEL = 19;
 /** How many sets of `SEEDS` fights each case is played over (ID-132). */
 const RUNS = 3;
 const CARDS = ['kevlar-vests', 'first-aid-kits'] as const satisfies readonly UpgradeId[];

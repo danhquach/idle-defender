@@ -550,8 +550,8 @@ close-quarter weapons come out only when an enemy is close.
 
 | Kind | Examples | Slot | Who handles it well |
 |---|---|---|---|
-| **Sidearm** | Pistol | Primary or secondary | Everyone: low damage, but fast to reload and light to handle |
-| **Specialised gun** | SMG, rifle, shotgun, LMG, sniper rifle | Primary | Gunners; anyone else takes a penalty |
+| **Sidearm** | Pistol, Hand Cannon, Machine Pistol | Primary or secondary | Everyone: low damage, but fast to reload and light to handle |
+| **Specialised gun** | SMG, rifle, assault rifle, shotgun, LMG, sniper rifle | Primary | Gunners; anyone else takes a penalty |
 | **Blade** | Knife, machete, sword, chainsaw (machine saw) | Secondary | Rippers: close-quarter damage at walls and gates |
 | **Tool** | Toolkit, welder | Secondary | Engineers: a weak blunt weapon up close; mostly for repairing barriers and turrets, buffing turrets and crafting better batteries |
 
@@ -595,11 +595,19 @@ close-quarter weapons come out only when an enemy is close.
   | Gun | Damage | Every | Range | Magazine | Reload | Speed | Spread | Pellets | Pierce |
   |---|---|---|---|---|---|---|---|---|---|
   | Pistol | 6.2 | 0.6 s | 600 | 10 | 1.5 s | 1,800 | ±2.5° | 1 | 0 |
-  | SMG | 5 | 0.2 s | 400 | 30 | 2 s | 1,600 | ±5° | 1 | 0 |
-  | Rifle | 7 | 0.4 s | 750 | 20 | 2 s | 2,200 | ±1.5° | 1 | 0 |
-  | Shotgun | 4 per pellet | 0.75 s | 350 | 8 | 2.5 s | 1,400 | ±12° | 6 | 0 |
-  | LMG | 6.5 | 0.22 s | 500 | 80 | 5 s | 2,000 | ±4° | 1 | 0 |
-  | Sniper rifle | 22 | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 1 |
+  | SMG | 4.5 | 0.17 s | 480 | 30 | 1.6 s | 1,600 | ±3.5° | 1 | 0 |
+  | Carbine (was Rifle) | 7 | 0.4 s, in 3-round bursts | 750 | 21 | 2 s | 2,200 | ±1° | 1 | 0 |
+  | Pump Shotgun (was Shotgun) | 7 per pellet | 0.8 s | 350 | 6 | 3.6 s, shell by shell | 1,400 | ±12° | 6 | 0 |
+  | LMG | 6.5 | 0.22 s | 500 | 80 | 5 s | 2,000 | ±6° | 1 | 0 |
+  | Sniper rifle | 35 | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 0 (10% chance of 1) |
+  | Hand Cannon *(sidearm)* | 20 | 1 s | 500 | 6 | 2.5 s | 2,000 | ±0.75° | 1 | 0 |
+  | Machine Pistol *(sidearm)* | 3.5 | 0.08 s | 380 | 16 | 1.6 s | 1,600 | ±9° | 1 | 0 |
+  | Assault Rifle | 8 | 0.35 s | 500 | 30 | 2.2 s | 2,100 | ±2° | 1 | 0 |
+  | Drum Shotgun | 3.5 per pellet | 0.6 s | 380 | 8 | 2.5 s | 1,400 | ±12° | 6 | 0 |
+
+  As built since ID-135 (the roster rework, below); the ID-046 numbers were the
+  first six guns' rows before it. The balance table that follows is ID-046's, kept
+  as history.
 
   Balance (a lone Common-gun Gunner on the upper tower against 20-HP Shamblers
   held in place; kills, mean of the seeds; `balance/guns.test.ts`):
@@ -631,35 +639,140 @@ close-quarter weapons come out only when an enemy is close.
   close (21.4 to the shotgun's 25.2) or in a lane (20.0 to 21.0). The scenes
   now pick only the repeatable stat cards, as written above (they took Speed
   Loaders and Extended Mags too).
+- **The gun roster (as built, ID-135) *(starting points)*:** every gun was given
+  a character by the project owner, and four guns were added. The ids in a save
+  stay the same, so old saves load; two guns show new names (the Rifle is the
+  **Carbine**, the Shotgun the **Pump Shotgun**).
+  - **Pistol** — all-rounder; fastest reload of any gun.
+  - **SMG** — high fire rate, mid reach (shorter than the Carbine), fast reload,
+    decent accuracy; +25% damage near the wall (kept).
+  - **Carbine** — long to mid range, accurate, ok damage; **burst fire**: 3
+    rounds 0.08 s apart, then a pause, so its average time a shot stays the
+    listed 0.4 s (dmg/s, Squad Power and the gun compare need no change); it keeps
+    the Rifle's +10% crit chance (its "high accuracy"; Recommended Power and the
+    stat caps, ID-125 and ID-128, were fitted with it, and without it Sharp Mind
+    fell 26 points behind Agility).
+  - **Pump Shotgun** — slightly slow fire, very high damage up close, short
+    range; **loaded shell by shell**: one shell every reload ÷ magazine s while
+    it is not full, each shell starting once the fire cooldown is over (so fire
+    at the wall settles at the same dmg/s as emptying and refilling the
+    magazine). It loads to full first and fires mid-load only at an enemy
+    within 250 px of the wall's front (the SMG's "near the wall"). A hit
+    **knocks back** an enemy near the wall 25 px.
+  - **Drum Shotgun** *(new; specialised)* — a drum-fed shotgun: faster than the
+    pump, less damage a pellet, a magazine reload, a bit more reach; the same
+    near-wall knockback.
+  - **LMG** — very fast fire (slower than the Machine Pistol), low accuracy,
+    slow reload, high damage; **+8% crit chance** (zombies are already dead, so
+    the old suppression slow is gone).
+  - **Sniper rifle** — the highest single hit, slow fire and reload; **+20% crit
+    chance and +×0.5 crit damage** (more than any other gun), **its crits ignore
+    armour** (a non-crit hit takes a Brute's 3 off like any gun), and each shot
+    has a **10% chance to go through 1 more enemy** (a pierce affix still adds
+    its own).
+  - **Hand Cannon** *(new; sidearm)* — slow fire, slow reload, high damage, very
+    accurate; a hit **knocks back** the enemy 12 px at any range.
+  - **Machine Pistol** *(new; sidearm)* — the fastest fire of any gun, fast
+    reload, low accuracy, a small magazine.
+  - **Assault Rifle** *(new; specialised)* — decent fire rate, reload and
+    accuracy, high damage; +5% crit chance.
+
+  **Knockback** (both shotguns and the Hand Cannon): once a shot, however many
+  pellets land and in whatever step; a heavy kind (Brute, Swollen, Horror) half
+  of it; at most 100 px an enemy in all, so steady fire can't hold it in place;
+  never a Crawler on the wall, one inside the camp, or past the spawn edge. It is
+  apart from Concussion Rounds' push and daze.
+
+  The Hand Cannon and Machine Pistol are sidearms but owned items, not free like
+  the pistol: horde drops picked evenly with the specialised guns, with rarity,
+  affixes, gun levels and Combine like them, and, as sidearms, no off-profession
+  penalty and either slot in the full game. Every win's drop is now an even pick
+  of all ten guns: the Pistol drops too, never below **Military** (every survivor
+  already has a free Common one, so a Rusty or Common drop would be no reward; a
+  rolled Rusty or Common Pistol drops as Military, on every drop path, guaranteed
+  upgrades included).
+
+  Old saves: an LMG's slow affix (5–15%) is read as the crit affix the LMG now
+  rolls (5 → 3% … 15 → 8%); every other affix reads as before.
+
+  Art: each new gun has an icon, the model held in every survivor look (idle
+  and aim) and its rarity tints, each passed by the art reviewer one gun at a
+  time. The Drum Shotgun was drawn from the owner's description of a drum-fed
+  shotgun as an edit of the Pump Shotgun's model, and the Machine Pistol (a boxy
+  receiver, a threaded stub barrel, the magazine through the grip, a folded wire
+  stock) from a text description of the owner's sample; no outside picture was
+  sent to the image service. Sound: each new gun reuses the closest recording (no new
+  file): the Hand Cannon the sniper rifle's (the heaviest single shot), the
+  Machine Pistol the 9 mm SMG's, the Assault Rifle the 7.62 × 39 mm automatic
+  rifle's (the LMG's), the Drum Shotgun the pump shotgun's.
+
+  Balance (`balance/guns.test.ts`, the scenes above plus the ID-101 role scenes,
+  the lone Common-gun Gunner):
+
+  | Gun | Close crowd | Far | Lane | Sustained | Boss with plates | Six held Brutes | Walking crowd, mean x |
+  |---|---|---|---|---|---|---|---|
+  | Pistol | 8.3 | 8.0 | 8.3 | 27.8 | 41 | 116 | 619.0 |
+  | SMG | 28.3 | 8.6 | **21.5** | 65.8 | 127 | 326 | 619.0 |
+  | Carbine | 18.0 | **17.9** | 18.1 | 53.8 | 87 | 227 | 619.0 |
+  | Pump Shotgun | **30.2** | 0 | 12.0 | 60.8 | 153 | 474 | 665.3 |
+  | LMG | 23.0 | 12.6 | 19.6 | **66.2** | 136 | 355 | 619.0 |
+  | Sniper rifle | 12.4 | 12.4 | 12.5 | 34.6 | **372** | **527** | 619.0 |
+  | Hand Cannon | 19.2 | 11.6 | 19.2 | 57.4 | 158 | 335 | 625.0 |
+  | Machine Pistol | 21.5 | 0 | 14.3 | 60.4 | 148 | 167 | 619.0 |
+  | Assault Rifle | 20.9 | 11.9 | 20.6 | 62.4 | 140 | 340 | 619.0 |
+  | Drum Shotgun | 21.0 | 0 | 13.9 | 65.6 | 161 | 206 | **674.0** |
+
+  Each gun leads its role: the Pump Shotgun up close, the Carbine far, the SMG
+  in a lane, the LMG in sustained fire, the Sniper rifle on a boss (by a fifth or
+  more) and on heavies, the knockback guns (both shotguns, the Hand Cannon) hold
+  a walking crowd farther out than any other gun. No gun leads more than two of
+  the four kill scenes, and no gun is strictly worse than another across the
+  seven measures. Horde-only (`balance/horde-only.test.ts`, 20 seeds) still wins
+  Hordes 4–10 at the first try on at least 60%.
+
+  Tuning notes: the new sidearms first came in as true backups (Hand Cannon 14
+  damage, Machine Pistol 3), and with two weak guns in every eight drops the
+  horde-only squad fell to 35% at Horde 8 (a control with the Machine Pistol's
+  slot dropping an SMG gave 75%, one dropping a second Hand Cannon 40%); the
+  owner chose stronger sidearms. Damage barely moves the kill scenes (a 20-HP
+  Shambler takes 4 hits from 5 to 6.6 damage), so fire rate is the lever; the
+  Pump Shotgun's 8-pellet start had the highest dmg/s of any gun on paper while
+  reaching 300 px, so the scripted squad equipped it and fell to 50% at Horde 8 —
+  6 pellets and 350 px fixed that.
 - **Gun roles (as built, ID-101; kept by the balance pass, ID-102):**
   each gun has a role and a built-in trait every one of it carries, Rusty or
   Relic, plus role affixes only it rolls (below, in Gear). The Inventory, the
-  drop tile and the gun picker name the role and trait ("Marksman: +10% crit
-  chance"); the slot's screen-reader label and the picker's description read it.
-  A picker option reads "30.3 dmg/s · Lv 4 Prototype LMG · Suppression (role +12%
-  slow on hit)": the role right after the name, and in such a bracketed list a
+  drop tile and the gun picker name the role and trait ("Marksman: Fires 3-round
+  bursts; +10% crit chance"); the slot's screen-reader label and the picker's description read it.
+  A picker option reads "30.3 dmg/s · Lv 4 Prototype LMG · Shredder (role +6%
+  crit chance)": the role right after the name, and in such a bracketed list a
   role affix is "role …"; listed one a line (Inventory, drop tile) it is "… (role)".
-  dmg/s counts the gun's own crit (the Rifle's trait, crit and crit damage
+  dmg/s counts the gun's own crit (its trait — the Carbine's, the Assault Rifle's, the LMG's, the
+  Sniper rifle's, with the Sniper's crit damage — and crit and crit damage
   affixes), so ranking, stash-full discards and guaranteed upgrades see it; the
-  situational effects (near-wall damage, stagger, slow, boss damage, cone) are
-  not in dmg/s.
+  situational effects (near-wall damage, knockback, a crit ignoring armour, the
+  Sniper's pierce chance, boss damage, cone) are not in dmg/s. *(Examples and
+  traits as since ID-135.)*
 
   | Gun | Role | Built-in trait | Role affixes |
   |---|---|---|---|
-  | Pistol | Backup | Fastest reload of any gun (1.5 s, data) | +3–8% crit chance |
+  | Pistol | All-rounder (Backup before ID-135) | Fastest reload of any gun (1.5 s, data) | +3–8% crit chance |
   | SMG | Swarm shredder | +25% damage to an enemy within 250 px of the wall's front (the outermost built layer's face; the player reads "near the wall") | +10–25% close-range damage, added to the 25% |
-  | Rifle | Marksman | +10% crit chance | +3–8% crit chance, +20–50% crit damage (added to ×2) |
-  | Shotgun | Wall stopper | Each pellet hit briefly stops the enemy: no moving for 0.15 s, never again until 0.6 s after the last one began, nor while it is stunned or paralysed | +20–40% wider cone, +1–2 pellets |
-  | LMG | Suppression | A hit slows the enemy 20% for 1 s; a new hit renews the time with the larger slow, never stacking | +5–15% slow (capped at 35% in all), +40–80% magazine (its own range of the general magazine affix) |
-  | Sniper rifle | Boss and heavy killer | Ignores armour (a Brute's, a Horror's, a boss's plates); each shot goes through 1 more enemy | +15–35% damage to bosses, mini-bosses and the heavy kinds (Brute, Swollen, Horror), +1–2 pierce (its own range of the general pierce affix) |
+  | Carbine | Marksman | Fires 3-round bursts (ID-135); +10% crit chance | +3–8% crit chance, +20–50% crit damage (added to ×2) |
+  | Pump Shotgun | Wall stopper | Loads shell by shell; a hit knocks an enemy near the wall back (ID-135; a short stagger before) | +20–40% wider cone, +1–2 pellets |
+  | LMG | Shredder (Suppression before ID-135) | +8% crit chance (a 20% slow before) | +3–8% crit chance (+5–15% slow before), +40–80% magazine (its own range of the general magazine affix) |
+  | Sniper rifle | Boss and heavy killer | +20% crit chance, +50% crit damage; crits ignore armour; 10% chance to pierce (ID-135; it ignored armour and pierced 1 on every shot before) | +15–35% damage to bosses, mini-bosses and the heavy kinds (Brute, Swollen, Horror), +1–2 pierce (its own range of the general pierce affix) |
+  | Hand Cannon *(ID-135)* | Heavy sidearm | Each hit knocks the enemy back a little (12 px) | +15–35% damage to bosses, mini-bosses and the heavy kinds (the Sniper rifle's affix) |
+  | Machine Pistol *(ID-135)* | Close backup | Fastest fire of any gun (0.08 s, data) | +50–100% magazine (its own range of the general magazine affix) |
+  | Assault Rifle *(ID-135)* | Assault | +5% crit chance | +3–8% crit chance |
+  | Drum Shotgun *(ID-135)* | Crowd stopper | A hit knocks an enemy near the wall back (25 px) | +20–40% wider cone, +1–2 pellets (the Pump Shotgun's) |
 
-  Slow, stagger and Shock Rounds' paralysis stack (and multiply with Barbed
-  Wire and traps, untested here), but stay small: a Shambler hit every step by a
-  staggering pellet and a 35% slow, with Shock Rounds at max, still walks at
-  about 30% of its pace (`roles.test.ts`). Squad Power counts the gun's crit (the Rifle's
-  trait and crit affixes). An older save's guns keep their affixes (an LMG
-  magazine roll below the new 40% still reads) and gain their trait, which
-  comes from the base gun, not the save.
+  Since ID-135 the knockback and Shock Rounds' paralysis stack, but the
+  knockback is capped at 100 px an enemy (`roles.test.ts`). Squad Power and dmg/s
+  count a gun's own crit (its trait and crit affixes, the Sniper rifle's crit
+  damage). An older save's guns keep their affixes (an LMG magazine roll below
+  the new 40% still reads; an LMG slow affix becomes crit) and gain their trait,
+  which comes from the base gun, not the save.
 
   Role scenes (`balance/guns.test.ts`, the lone Common-gun Gunner, 5 seeds;
   before → after the traits):
@@ -985,10 +1098,11 @@ profession's output).
   mutants wait for burning effects and mutants. Manual salvage is a follow-up.
 - **As built (ID-067): weapon drops, stash and equip in the horde-only build.**
   Better guns are how the squad gets stronger.
-  - **Drop:** every horde won drops one specialised gun (SMG, rifle,
-    shotgun, LMG or sniper rifle, picked evenly). Never the pistol, which
-    every survivor has free, and never a blade or tool, which a survivor
-    doesn't use. Its
+  - **Drop:** every horde won drops one gun (SMG, Carbine, Pump Shotgun, LMG or
+    sniper rifle, picked evenly; since ID-135 also the Assault Rifle, the Drum
+    Shotgun and the sidearms, Hand Cannon, Machine Pistol and, at Military or
+    better, the Pistol, which every survivor also has free). Never a blade or
+    tool, which a survivor doesn't use. Its
     rarity comes from the horde's band *(starting points)*:
 
     | Hordes | Rusty | Common | Military | Prototype | Relic |

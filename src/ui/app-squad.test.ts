@@ -303,7 +303,7 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     select.value = 'h1';
     select.dispatchEvent(new Event('change'));
     expect(heading()).toBe(`Stash 0/${STASH_CAP}`);
-    expect(squadGun()).toBe('Relic Rifle');
+    expect(squadGun()).toBe('Relic Carbine');
   });
 
   it('equips from the Inventory (ID-095): saved at once, and the gun picker follows', () => {
@@ -314,7 +314,7 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     expect(saved().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
     expect(saved().armoury).toHaveLength(0);
     expect(root.querySelector<HTMLSelectElement>('.hud-gear-select')!.value).toBe('h1');
-    expect(invScrim.querySelector('.inv-status')!.textContent).toMatch(/now holds Relic Rifle$/);
+    expect(invScrim.querySelector('.inv-status')!.textContent).toMatch(/now holds Relic Carbine$/);
     // And back: Unequip puts it in the stash.
     invScrim.querySelector<HTMLButtonElement>('.inv-unequip')!.click();
     expect(saved().roster[0]!.loadout.primary).toBe('pistol');
@@ -717,7 +717,7 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     // drop is rolled from the clock and may be the stronger, so either can come first).
     const status = scrim.querySelector('.rv-status')!.textContent!;
     expect(status).toMatch(/^Equipped: .+ → .+ · .+ → .+$/);
-    expect(status).toContain(' → Relic Rifle');
+    expect(status).toContain(' → Relic Carbine');
     close();
     button().click();
     const after = saved();
@@ -740,7 +740,7 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
     select.value = 'h1';
     select.dispatchEvent(new Event('change'));
-    expect(slot()).toContain('Relic Rifle');
+    expect(slot()).toContain('Relic Carbine');
   });
 
   it('a survivor with no card on a win spends and changes guns from the Roster (ID-134)', () => {

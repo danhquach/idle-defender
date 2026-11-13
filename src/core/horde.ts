@@ -69,6 +69,7 @@ import {
   type SkillId,
   type Stats,
   type Tracer,
+  type Weapon,
 } from './data.ts';
 import { affixShare, baseOf, gunCrit, gunCritDamage, pierceOf, type Held } from './armoury.ts';
 import {
@@ -246,12 +247,12 @@ export interface Enemy {
   pushedAt?: number;
   /** Concussion Rounds (ID-124): px it has been knocked back in all; absent = 0. */
   pushed?: number;
-  /** A Shotgun's stagger (ID-101): fight time the latest one began, and ends; absent = never. */
-  staggerAt?: number;
-  staggerUntil?: number;
-  /** An LMG's slow (ID-101): fight time it ends, and its share off speed; absent = never. */
-  slowUntil?: number;
-  slowBy?: number;
+  /**
+   * A gun's knockback (ID-135): px it has been knocked back in all, and the shot that last
+   * pushed it (`owner@shot`, so a shotgun's pellets push once a shot); absent = never.
+   */
+  knocked?: number;
+  knockedBy?: string;
   /**
    * All the HP fire has taken from it so far (Incendiary Rounds and molotov fires); absent = 0.
    * Cosmetic: the view (ID-089) flashes a hit only for HP lost beyond it, so a burning
@@ -373,8 +374,13 @@ export interface Defender extends DefenderSpec {
   nextShotAt: number;
   /** Rounds left in each gun's magazine (0 for a blade, a tool or none). */
   ammo: Record<Slot, number>;
-  /** When an empty gun's reload ends. */
+  /**
+   * When an empty gun's reload ends; for a gun loaded shell by shell (ID-135), when its next
+   * shell is in.
+   */
   reloadedAt: Record<Slot, number>;
+  /** Shots fired in the current burst of a burst-fire gun (ID-135); absent = 0. */
+  burst?: number;
   x: number;
   y: number;
   postId: number;
@@ -457,12 +463,15 @@ export interface Bullet {
    * plus the shooter's Instinct, ID-125),
    */
   close?: number;
-  /** a Sniper rifle's extra damage to bosses and heavies, */
+  /** a Sniper rifle's (or a Hand Cannon's affix) extra damage to bosses and heavies, */
   heavy?: number;
-  /** an LMG's slow on hit, */
-  slow?: number;
-  /** and a Shotgun pellet's stagger. */
-  stagger?: true;
+  /**
+   * and a knockback, px (ID-135): a Hand Cannon's at any range, a shotgun's `near` the wall
+   * only; `shot` is the fight time the shot was fired, so its pellets push once.
+   */
+  knock?: number;
+  near?: true;
+  shot?: number;
 }
 /**
  * A gun going off: `owner` (as on its bullet) fired in the step ending at `at`, when it
@@ -1491,15 +1500,21 @@ function walk(s: HordeState): void {
 }
 
 /** The focused enemy if within `range` of `(x, y)`, else the nearest within it (ties → lowest id). */
-function targetFrom(s: HordeState, x: number, y: number, range: number): Enemy | undefined {
+function targetFrom(
+  s: HordeState,
+  x: number,
+  y: number,
+  range: number,
+  ok: (e: Enemy) => boolean = () => true,
+): Enemy | undefined {
   const dist = (e: Enemy): number => Math.hypot(e.x - x, e.y - y);
   const focus = s.enemies.find((e) => e.id === s.focusId && e.hp > 0);
-  if (focus && dist(focus) <= range) return focus;
+  if (focus && dist(focus) <= range && ok(focus)) return focus;
   let target: Enemy | undefined;
   let best = Infinity;
   for (const e of s.enemies) {
     const d = dist(e);
-    if (e.hp <= 0 || d > range) continue;
+    if (e.hp <= 0 || d > range || !ok(e)) continue;
     if (d < best || (d === best && target && e.id < target.id)) {
       target = e;
       best = d;
@@ -1508,15 +1523,43 @@ function targetFrom(s: HordeState, x: number, y: number, range: number): Enemy |
   return target;
 }
 
-/** Refills every empty gun whose reload has ended; Extended Mags (design §8) holds more. */
+/**
+ * Refills every empty gun whose reload has ended; Extended Mags (design §8) holds more. A
+ * gun loaded shell by shell (ID-135) takes one shell each `shellIn` s while it is not full,
+ * each shell's time starting once the gun's fire cooldown is over.
+ */
 function reload(s: HordeState, d: Defender): void {
   for (const slot of ['primary', 'secondary'] as const) {
     const id = d.loadout[slot];
-    if (id !== null && isGun(id) && d.ammo[slot] === 0 && due(s.time, d.reloadedAt[slot])) {
+    if (id === null || !isGun(id) || !due(s.time, d.reloadedAt[slot])) continue;
+    if (gunOf(id).shells) {
+      if (d.ammo[slot] < magazineOf(s, id)) {
+        d.ammo[slot] += 1;
+        // From now at the latest, so a long-stale time (Extended Mags picked mid-fight on a
+        // partly empty gun) can't load a shell every step.
+        d.reloadedAt[slot] = Math.max(d.reloadedAt[slot], s.time - STEP) + shellIn(s, d, id);
+      }
+    } else if (d.ammo[slot] === 0) {
       d.ammo[slot] = magazineOf(s, id);
     }
   }
 }
+
+/**
+ * The wait (before fire-rate factors) after `d`'s shot with `w` (ID-135): its interval; for a
+ * burst-fire gun, `burst.gap` inside a burst and the rest of the burst's time after its last
+ * round, so its average stays `fireInterval`. Counts the burst on `d`.
+ */
+function burstWait(d: Defender, w: Weapon): number {
+  if (!('burst' in w) || w.burst === undefined) return w.fireInterval;
+  const { rounds, gap } = w.burst;
+  d.burst = ((d.burst ?? 0) + 1) % rounds;
+  return d.burst === 0 ? rounds * w.fireInterval - (rounds - 1) * gap : gap;
+}
+
+/** Seconds one shell of gun `id` takes to load (ID-135): its full reload over its magazine. */
+const shellIn = (s: HordeState, d: Defender, id: Held): number =>
+  reloadIn(s, d, id) / gunOf(id).magazine;
 
 /** Scavenged Ammo's chance (ID-132) that a squad gun's shot uses no round, at its level. */
 export const scavengeOf = (s: Parameters<typeof cardLevel>[0]): number =>
@@ -1604,11 +1647,27 @@ export function extraPierce(s: Parameters<typeof cardLevel>[0], rng: Rng): numbe
   return chance(rng, atLevel(s, 'piercing-rounds', CARD.pierce)) ? 1 : 0;
 }
 
-/** A gun in `slot` with a round in it. */
-function loaded(d: Defender, slot: Slot): boolean {
+/**
+ * A gun in `slot` with a round in it. One loaded shell by shell (ID-135) fires mid-load only
+ * at an enemy near the wall; otherwise it loads to full first.
+ */
+function loaded(s: HordeState, d: Defender, slot: Slot): boolean {
   const id = d.loadout[slot];
-  return id !== null && isGun(id) && d.ammo[slot] > 0;
+  if (id === null || !isGun(id) || d.ammo[slot] <= 0) return false;
+  if (!midLoad(s, d, slot)) return true;
+  const front = wallFront(s);
+  return s.enemies.some((e) => e.hp > 0 && nearWall(front, e));
 }
+
+/** Whether `d`'s gun in `slot` is loaded shell by shell and not yet full (ID-135). */
+function midLoad(s: HordeState, d: Defender, slot: Slot): boolean {
+  const id = d.loadout[slot];
+  return id !== null && isGun(id) && gunOf(id).shells === true && d.ammo[slot] < magazineOf(s, id);
+}
+
+/** Whether `e` is near the wall (within `TRAIT.close.range` of its front `front`), outside the camp. */
+const nearWall = (front: number, e: Enemy): boolean =>
+  !e.inCamp && e.x <= front + TRAIT.close.range + EPS;
 
 /**
  * What `d` uses this step and at whom (design §6 Loadout), or null: a blade or tool
@@ -1624,9 +1683,9 @@ function choose(
   const { primary, secondary } = d.loadout;
   if (d.walking) {
     const slot: Slot | null =
-      isSidearm(primary) && loaded(d, 'primary')
+      isSidearm(primary) && loaded(s, d, 'primary')
         ? 'primary'
-        : isSidearm(secondary) && loaded(d, 'secondary')
+        : isSidearm(secondary) && loaded(s, d, 'secondary')
           ? 'secondary'
           : null;
     if (slot === null) return null;
@@ -1638,11 +1697,14 @@ function choose(
     const target = targetFrom(s, post.x, post.y, meleeOf(secondary).reach);
     if (target) return { slot: 'secondary', target, x: post.x, y: post.y };
   }
-  if (loaded(d, 'primary')) {
-    const target = targetFrom(s, post.x, post.y, gunRange(s, post, primary));
+  if (loaded(s, d, 'primary')) {
+    // Mid-load (ID-135), a shell-by-shell gun shoots only at an enemy near the wall.
+    const front = wallFront(s);
+    const ok = midLoad(s, d, 'primary') ? (e: Enemy) => nearWall(front, e) : undefined;
+    const target = targetFrom(s, post.x, post.y, gunRange(s, post, primary), ok);
     return target ? { slot: 'primary', target, x: post.x, y: post.y } : null;
   }
-  if (professionOf(d.loadout) === 'gunner' && isSidearm(secondary) && loaded(d, 'secondary')) {
+  if (professionOf(d.loadout) === 'gunner' && isSidearm(secondary) && loaded(s, d, 'secondary')) {
     const range = Math.min(SIDEARM_CLOSE, gunRange(s, post, secondary!));
     const target = targetFrom(s, post.x, post.y, range);
     if (target) return { slot: 'secondary', target, x: post.x, y: post.y };
@@ -1784,7 +1846,7 @@ function fly(s: HordeState): void {
       b.left -= hit.at;
       travel -= hit.at;
       s.impacts.push({ x: b.x, y: b.y, hit: true, at: s.time + STEP });
-      traitHit(s, b, hit.enemy);
+      traitHit(s, front, b, hit.enemy);
       if (!b.owner.startsWith('turret:')) cardHit(s, b, hit.enemy, first, dealt, bounces);
       if (b.pierce <= 0) return false;
       b.pierce -= 1;
@@ -1823,32 +1885,27 @@ function traitFactor(front: number, b: Bullet, e: Enemy): number {
 }
 
 /**
- * Gun traits on a hit (ID-101), on `e` still standing: a Shotgun pellet staggers it (no
- * moving) for `TRAIT.stagger.seconds`, never while it is held already nor within
- * `TRAIT.stagger.gap` s of its last stagger's start; an LMG hit slows it for
- * `TRAIT.slow.seconds`, a new hit renewing the time with the larger slow, never stacking.
+ * Gun traits on a hit (ID-135; the Shotgun's stagger and the LMG's slow, ID-101, are gone),
+ * on `e` still standing, the wall's front at `front`: a knockback.
  */
-function traitHit(s: HordeState, b: Bullet, e: Enemy): void {
+function traitHit(s: HordeState, front: number, b: Bullet, e: Enemy): void {
   if (e.hp <= 0) return;
-  if (b.stagger && !stunned(s, e) && !staggered(s, e)) {
-    if (e.staggerAt === undefined || s.time - e.staggerAt >= TRAIT.stagger.gap - EPS) {
-      e.staggerAt = s.time;
-      e.staggerUntil = s.time + TRAIT.stagger.seconds;
-    }
-  }
-  if (b.slow !== undefined) {
-    e.slowBy = Math.max(slowedBy(s, e), b.slow);
-    e.slowUntil = s.time + TRAIT.slow.seconds;
-  }
+  // A gun's knockback (ID-135): never a Crawler on the wall or one inside the camp, never
+  // past the spawn edge, once a shot (a shotgun's pellets push once, even landing in
+  // different steps), a heavy kind `TRAIT.knock.heavy` of it, and at most `TRAIT.knock.cap`
+  // px in all, so steady fire can't hold it in place. A shotgun's pushes only an enemy near
+  // the wall. Its own, apart from Concussion Rounds' push.
+  const by = `${b.owner}@${b.shot}`;
+  if (b.knock === undefined || e.inCamp || e.climbUntil !== 0 || e.knockedBy === by) return;
+  if (b.near && e.x > front + TRAIT.close.range + EPS) return;
+  const heavy = HEAVY_KINDS.includes(e.kind) ? TRAIT.knock.heavy : 1;
+  const push = Math.min(TRAIT.knock.cap - (e.knocked ?? 0), b.knock * heavy);
+  if (push <= EPS) return;
+  const x = Math.max(e.x, Math.min(s.spawnX ?? FIELD.right, e.x + push));
+  e.knocked = (e.knocked ?? 0) + (x - e.x);
+  e.knockedBy = by;
+  e.x = x;
 }
-
-/** Whether a Shotgun's stagger stops `e` now (ID-101). */
-export const staggered = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
-  e.staggerUntil !== undefined && !due(s.time, e.staggerUntil);
-
-/** The share an LMG's slow takes off `e`'s speed now (ID-101); 0 when none holds. */
-export const slowedBy = (s: Pick<HordeState, 'time'>, e: Enemy): number =>
-  e.slowUntil !== undefined && !due(s.time, e.slowUntil) ? (e.slowBy ?? 0) : 0;
 
 /** The living enemies other than `e` within `radius` of it, nearest first (ties → lowest id). */
 function around(s: HordeState, e: Enemy, radius: number): Enemy[] {
@@ -2116,23 +2173,34 @@ function blowFrags(s: HordeState): void {
   }
 }
 
-/** The trait and role-affix marks a bullet from gun `h` carries (ID-101; `TRAIT`, `GUN_ROLES`). */
-function traitsOf(h: Held): Pick<Bullet, 'ap' | 'close' | 'heavy' | 'slow' | 'stagger'> {
+/**
+ * The trait and role-affix marks a bullet from gun `h` carries (ID-101, ID-135; `TRAIT`,
+ * `GUN_ROLES`); `crit`: whether the shot crits (a Sniper rifle's crit ignores armour).
+ */
+function traitsOf(
+  h: Held,
+  crit: boolean,
+): Pick<Bullet, 'ap' | 'close' | 'heavy' | 'knock' | 'near'> {
+  const heavy = affixShare(h, 'bossDamage');
+  const withHeavy = heavy > 0 ? { heavy } : {};
   switch (baseOf(h)) {
     case 'smg':
       return { close: TRAIT.close.bonus + affixShare(h, 'closeDamage') };
     case 'shotgun':
-      return { stagger: true };
-    case 'lmg':
-      return { slow: Math.min(TRAIT.slow.max, TRAIT.slow.by + affixShare(h, 'slow')) };
-    case 'sniper': {
-      const heavy = affixShare(h, 'bossDamage');
-      return heavy > 0 ? { ap: true, heavy } : { ap: true };
-    }
+    case 'cartridge':
+      return { knock: TRAIT.knock.shotgun, near: true };
+    case 'sniper':
+      return crit ? { ap: true, ...withHeavy } : withHeavy;
+    case 'handcannon':
+      return { knock: TRAIT.knock.hand, ...withHeavy };
     default:
       return {};
   }
 }
+
+/** The Sniper rifle's pierce chance (ID-135): 1 more enemy on `TRAIT.sniper.pierce` of its shots. */
+const sniperPierce = (h: Held, rng: Rng): number =>
+  baseOf(h) === 'sniper' && chance(rng, TRAIT.sniper.pierce) ? 1 : 0;
 
 function fire(s: HordeState, rng: Rng): void {
   s.strikes = s.strikes.filter((k) => s.time - k.at < STRIKE_FLASH);
@@ -2157,7 +2225,8 @@ function fire(s: HordeState, rng: Rng): void {
     const gun = isGun(id);
     // Any weapon can crit with Sharp Mind (ID-084). Crits roll only when the chance is
     // above 0, so a defender without it (or a Gunner's handling) leaves the RNG alone.
-    // A gun adds its own crit (ID-101): the Rifle's trait, a crit or crit damage affix.
+    // A gun adds its own crit (ID-101, ID-135): its trait (the Assault Rifle's, the LMG's, the
+    // Sniper rifle's), a crit or crit damage affix.
     // Aim for the Head and Hollow Points (ID-130) add theirs on any weapon.
     const crit = critChance(defender, gun) + (gun ? gunCrit(id) : 0) + cardCrit(s);
     const critHit = crit > 0 && chance(rng, crit);
@@ -2170,7 +2239,7 @@ function fire(s: HordeState, rng: Rng): void {
     // Instinct's last-line damage (ID-125): on a bullet it adds to the SMG's near-wall share.
     const wall = wallDamage(defender);
     if (gun) {
-      const traits = traitsOf(id);
+      const traits = { ...traitsOf(id, critHit), shot: s.time };
       const close = (traits.close ?? 0) + wall;
       launch(s, rng, {
         owner: defender.id,
@@ -2181,7 +2250,7 @@ function fire(s: HordeState, rng: Rng): void {
         spread: spreadOf(defender, id),
         range: gunRange(s, defender.walking ? { kind: 'ground' } : post, id),
         damage: hit,
-        pierce: pierceOf(id) + extraPierce(s, rng),
+        pierce: pierceOf(id) + extraPierce(s, rng) + sniperPierce(id, rng),
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
@@ -2199,23 +2268,24 @@ function fire(s: HordeState, rng: Rng): void {
     const kills = !gun && target.hp <= 0 ? 1 : 0;
     for (let k = 0; k < kills; k++) s.feats.push({ kind: 'kill', by: defender.id, at: s.time });
     if (kills > 0 && perkOn(s, 'butchers-hunger')) hunger(s, defender, kills);
-    defender.nextShotAt = nextShot(
-      s.time,
-      defender.nextShotAt,
-      weapon.fireInterval /
-        (s.mods.fireRate *
-          cardFireRate(s) *
-          boost(s, 'fireRate') *
-          engineerBuff(s, defender) *
-          fireRateFactor(defender, id) *
-          (gun ? perkFactor(s, 'steady-fire', PERK.steadyFire) : 1)),
-    );
+    const rate =
+      s.mods.fireRate *
+      cardFireRate(s) *
+      boost(s, 'fireRate') *
+      engineerBuff(s, defender) *
+      fireRateFactor(defender, id) *
+      (gun ? perkFactor(s, 'steady-fire', PERK.steadyFire) : 1);
+    defender.nextShotAt = nextShot(s.time, defender.nextShotAt, burstWait(defender, weapon) / rate);
     // Scavenged Ammo (ID-132): a shot may use no round, rolled only while the card is held.
     const saved = gun && took(s, 'scavenged-ammo') && chance(rng, scavengeOf(s));
     if (saved) savedRound(s, defender.id);
-    if (gun && !saved) {
-      defender.ammo[slot] -= 1;
-      if (defender.ammo[slot] === 0) defender.reloadedAt[slot] = s.time + reloadIn(s, defender, id);
+    if (gun && !saved) defender.ammo[slot] -= 1;
+    if (gun && gunOf(id).shells) {
+      // Shell by shell (ID-135): the next shell starts once this shot's cooldown is over.
+      defender.reloadedAt[slot] = defender.nextShotAt + shellIn(s, defender, id);
+    } else if (gun && !saved && defender.ammo[slot] === 0) {
+      defender.reloadedAt[slot] = s.time + reloadIn(s, defender, id);
+      defender.burst = 0;
     }
   }
 }
@@ -2576,7 +2646,7 @@ function move(s: HordeState): Moves {
   const wire = barbedWire(s);
   const wireSlow = wire === null ? 0 : atLevel(s, 'barbed-wire', CARD.wire.slow);
   for (const e of s.enemies) {
-    if (stunned(s, e) || staggered(s, e)) continue;
+    if (stunned(s, e)) continue;
     const slowed =
       wire !== null &&
       !e.inCamp &&
@@ -2588,7 +2658,6 @@ function move(s: HordeState): Moves {
       STEP *
       (slowed ? 1 - wireSlow : 1) *
       (s.slicks.length > 0 && slicksUnder(s, e).length > 0 ? 1 - CARD.oil.slow : 1) *
-      (1 - slowedBy(s, e)) *
       trapSlow(s, e) *
       screamed(screamers, e) *
       (roared(s, e) ? 1 + BOSS_SKILL.roar.speed : 1) *
