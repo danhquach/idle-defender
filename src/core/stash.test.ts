@@ -180,13 +180,13 @@ describe('seeded from the horde seed (ID-067)', () => {
     return s;
   }
 
-  it('a replay drops the same weapon at 1×, 2× and 3×', () => {
-    const [one, two, three] = [1, 2, 3].map(play);
+  it('a replay drops the same weapon at 1×, 3× and 5×', () => {
+    const [one, three, five] = [1, 3, 5].map(play);
     expect(one!.outcome).toBe('won');
     const g = squadGame(1);
     const drop = squadDrop(g, one!);
     expect(drop).not.toBeNull();
-    for (const run of [two!, three!]) {
+    for (const run of [three!, five!]) {
       expect({ ...run, acc: 0 }).toEqual({ ...one!, acc: 0 });
       expect(squadDrop(g, run)).toEqual(drop);
       expect(finishSquadHorde(g, run).armoury).toEqual(finishSquadHorde(g, one!).armoury);

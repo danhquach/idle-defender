@@ -98,6 +98,23 @@ describe('enemy pose', () => {
     expect(enemyPose(e, 3 + ANIM.flinch.time, hurt)).toMatchObject({ dx: 0, flash: 0 });
   });
 
+  it('at 5× the flinch and flash last the same real time as at 1× (ID-145)', () => {
+    const e = enemy({ vx: 0 });
+    const hurt = { ...IDLE, hurtAt: 3, pace: 5 };
+    // Half the flash in real time is 2.5× as much fight time at 5×.
+    const half = enemyPose(e, 3 + (ANIM.flinch.flash / 2) * 5, hurt);
+    expect(half.flash).toBeCloseTo(0.5, 9);
+    expect(enemyPose(e, 3 + ANIM.flinch.flash * 5, hurt).flash).toBe(0);
+    expect(enemyPose(e, 3 + ANIM.flinch.time * 5, hurt).dx).toBe(0);
+    // A defender's flinch too.
+    const d = defenderPose({ id: 'a' }, 3 + ANIM.flinch.time * 2.5, {
+      ...NONE,
+      hurtAt: 3,
+      pace: 5,
+    });
+    expect(d.dx).toBeCloseTo(-ANIM.flinch.px / 2, 9);
+  });
+
   it('starts each enemy at its own phase, so a crowd does not bob in lockstep', () => {
     const phases = Array.from({ length: 50 }, (_, id) => phaseOf(id));
     expect(new Set(phases.map((p) => p.toFixed(3))).size).toBe(50);
@@ -382,6 +399,29 @@ describe('Animator', () => {
     // One second of damage every step: a new flinch each `flinch.time`, not 30.
     expect(starts.size).toBeLessThanOrEqual(Math.ceil(1 / ANIM.flinch.time) + 1);
     expect(starts.size).toBeGreaterThan(1);
+  });
+
+  it('at 5× under steady damage it flashes no more often in real time than at 1× (ID-145)', () => {
+    /** Flinch starts in `real` s of 60 Hz frames at `speed`×, losing HP every frame. */
+    const flinches = (speed: number, real: number) => {
+      const a = new Animator();
+      let hp = 10_000;
+      const starts = new Set<number>();
+      for (let i = 0; i <= real * 60; i++) {
+        a.observe({ ...frame((i * speed) / 60, [enemy({ hp: hp-- })]), pace: speed });
+        starts.add(a.enemy(1).hurtAt);
+        expect(a.enemy(1).pace).toBe(speed);
+      }
+      starts.delete(-Infinity);
+      return starts.size;
+    };
+    const one = flinches(1, 2);
+    const five = flinches(5, 2);
+    // Two real seconds: about 2 / flinch.time flashes at either speed, not five times as many.
+    expect(one).toBeGreaterThan(5);
+    expect(Math.abs(five - one)).toBeLessThanOrEqual(1);
+    // At most 5 a second: under the 3 Hz–30 Hz strobe band's busy end, as at 1×.
+    expect(five / 2).toBeLessThanOrEqual(1 / ANIM.flinch.time + 0.5);
   });
 
   it('keeps a dead enemy falling where it stood, then lets it go', () => {

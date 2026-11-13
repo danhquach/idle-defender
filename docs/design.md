@@ -266,14 +266,18 @@ Defenders stand on **posts** the player builds and chooses between.
   empty ground clears the focus. While an active skill is armed, the click
   aims the skill instead.
 - **Length** *(designer's call)*: a horde takes about 3–5 minutes.
-- **Game speed:** 1×, 2×, 3×; Space pauses.
-  - **As built (ID-062):** three speed buttons sit in the fight's top bar,
-    left of the Menu button, keys A, S and D (clear of the card keys 1 2 3
-    and the action bar's). The choice is kept between hordes in this browser
-    under its own key, outside the save and the backup code, and read back
-    through an allow-list (anything but 1, 2 or 3 is 1×). A, S and D are
-    taken, so any keyboard camera control that ever comes uses the arrows,
-    not WASD.
+- **Game speed:** 1×, 3×, 5× (ID-145; was 1×, 2×, 3×); Space pauses.
+  - **As built (ID-062, ID-145):** three speed buttons sit in the fight's
+    top bar, left of the Menu button, keys A, S and D for 1×, 3× and 5×
+    (clear of the card keys 1 2 3 and the action bar's). The choice is kept
+    between hordes in this browser under its own key, outside the save and
+    the backup code, and read back through an allow-list (anything but 1, 3
+    or 5 is 1×, so a 2× saved before ID-145 loads as 1×). The default is 1×.
+    On a phone each speed button is a 40×44 px target with a 6 px gap; under
+    360 px wide the speeds take their own row under Roster, Inventory and
+    Menu, since the four groups don't fit one row there.
+    A, S and D are taken, so any keyboard camera control that ever comes uses
+    the arrows, not WASD.
   - Space holds the fight, with the menu's "Paused" chip in the top bar,
     tagged with the Space key.
     Opening and closing the menu leaves a Space pause on. Each fight starts
@@ -281,14 +285,23 @@ Defenders stand on **posts** the player builds and chooses between.
     screen.
   - Speed runs more of the core's fixed 1/30 s steps per frame, never
     longer ones, so a seed plays out the same at every speed (a test plays
-    Horde 1 at all three). A frame still covers at most 0.1 s, so 3× runs at
-    most 9 steps in a stalled frame: the fight slows, nothing is skipped.
-    About 1 ms of sim a frame at 3× with 300 enemies, so no lower cap was
-    needed.
+    Horde 1 at all three). A frame still covers at most 0.1 s, so 5× runs at
+    most 15 steps in a stalled frame: the fight slows, nothing is skipped.
+    With 300–340 enemies a 60 Hz frame at 5× (2–3 steps) costs about 2.5 ms
+    of sim and drawing (3.2 ms at the 95th percentile), so no lower cap was
+    needed. A crowd no real horde reaches (500+ enemies behind a wall that
+    cannot fall) would pass the frame budget; the 0.1 s cap then slows the
+    fight rather than skipping steps.
   - Picks and replacements stop the frame's remaining steps whatever the
     speed, and stack with a Space pause: resuming never skips an offer.
     Animations and effects run on fight time, so they speed up and freeze
-    with it.
+    with it, except where they would strobe or be cut short: damage numbers,
+    the wall's card glows and (ID-145) a hit's flinch and white flash last
+    the same real time at any speed, so a sprite under steady fire flashes
+    at most about 5 times a second at 5×, as at 1×. At 5× every muzzle flash
+    and hit spark is still drawn for at least one frame at 50 fps and up (a
+    frame of at most 3 steps; a test pins it); below that a frame can run 4
+    steps and a flash can go unseen.
 - **Start:** the commander's equipped perks are on (§5) and **1 defender**
   takes a post; the player picks which available defender and which post.
   Turrets and traps are whatever was built before the horde (§7); nothing
@@ -1162,7 +1175,7 @@ profession's output).
 
     Affixes roll as above. Duplicates are allowed. The drop is rolled from the
     horde's seed on a stream of its own, so the same seed drops the same gun at
-    1×, 2× and 3× and however the fight went. Nothing drops after a loss.
+    1×, 3× and 5× and however the fight went. Nothing drops after a loss.
   - **Bonus guns (as built, ID-122) *(starting points)*:** to soften the
     grind, every win, first clear or replay, then tries 2 more times, each at
     50%, to drop one more gun (about 1 more a win): a specialised gun picked
@@ -3211,9 +3224,12 @@ original outline.
   shows it flying. Only the head has a rim. The tail is the gun's tracer
   plus one 60 fps frame of flight at the game speed, counted up to 2×
   (pistol 12 + 30 px at 1×, 12 + 60 px at 2× and 3×); at 3× the bright head
-  carries the eye over the small gap. The fight moves bullets in whole
-  1/30 s steps, so the head is drawn carried on by the time since the last
-  step (never past the spot it was aimed at before it gets there, nor past
+  carries the eye over the small gap. At 5× (ID-145) it is counted as 3×
+  (pistol 12 + 90 px): a bullet jumps 150 px a frame there, and a 2× tail
+  left gaps as long as itself, which read as flicker; the 3× tail keeps
+  the gaps short while bullets stay separate, not a beam. The fight moves
+  bullets in whole 1/30 s steps, so the head is drawn carried on by the
+  time since the last step (never past the spot it was aimed at before it gets there, nor past
   the end of its flight) and moves smoothly instead of jumping. The tail
   never reaches back past the muzzle, so it joins shooter and target only on
   a close shot, for the frame or two before it lands. One shot's pellets (one
@@ -3698,7 +3714,7 @@ original outline.
   jump and a long aimed gun never shrinks the soldier. HP bars, and the full
   game's title badges, now sit just over the sprite's head instead of across
   it: a bar's bottom edge 3 units over the top of its sprite, at any zoom. Every clock is fight time: the walk follows ground covered and the aim
-  follows shots, so both keep pace at 1×, 2× and 3× and hold still while
+  follows shots, so both keep pace at every speed and hold still while
   paused. With Reduce motion on, enemies stand on their passing frame, but
   the attack and aim poses still show, since they say what a sprite is doing.
   Rippers and Engineers in the full game keep their ID-049 stills. Each pick

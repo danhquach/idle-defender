@@ -106,6 +106,7 @@ import {
   reloadShare,
   SURVIVOR_BAR,
   TAIL,
+  tailPace,
   trapLook,
   turretLook,
   wireLook,
@@ -1717,6 +1718,19 @@ describe('bullet visuals (ID-045)', () => {
       }
     },
   );
+
+  it('a tail counts the game speed up to 2 at 1× and 3×, and 3 at 5× (ID-070, ID-145)', () => {
+    expect([undefined, 0, 1, 3, 5, 9].map(tailPace)).toEqual([1, 1, 1, 2, 3, 3]);
+    const cam = { x: 0, y: 0, zoom: 1 };
+    const { scene, post, target } = fight();
+    const b = flying(post, { x: target.x, y: post.y }, 300);
+    const at = (pace: number) => bulletShape({ ...scene, pace }, b, cam).length;
+    const flight = 1800 * TAIL.frame;
+    expect(at(3)).toBeCloseTo(WEAPONS.pistol.tracer.length + 2 * flight, 6);
+    expect(at(5)).toBeCloseTo(WEAPONS.pistol.tracer.length + 3 * flight, 6);
+    // Still shorter than a 5× frame's jump (5 frames of flight): separate bullets, no beam.
+    expect(at(5)).toBeLessThan(5 * flight);
+  });
 
   it('draws each bullet as a white head at its simulated position, through the depth sort', () => {
     const cam = { x: 37, y: 12, zoom: 1.5 };

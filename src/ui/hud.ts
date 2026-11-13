@@ -142,7 +142,7 @@ import {
 } from './sprites.ts';
 
 /** The key for each fight speed (ID-062): clear of the card keys 1 2 3 and the action bar's. */
-export const SPEED_KEYS: Readonly<Record<Speed, string>> = { 1: 'A', 2: 'S', 3: 'D' };
+export const SPEED_KEYS: Readonly<Record<Speed, string>> = { 1: 'A', 3: 'S', 5: 'D' };
 
 /** How long a toast stays up. */
 const TOAST_MS = 2000;

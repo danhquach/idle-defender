@@ -774,7 +774,8 @@ export const WAVE_BREAK = 3;
 export const STRIKE_FLASH = 0.15;
 /**
  * How long a gun's muzzle flash shows, in seconds (design §15): long enough to light at
- * least one 60 fps frame at 3× (ID-070).
+ * least one 60 fps frame at 3× (ID-070), and at 5× while a frame runs at most 3 steps,
+ * at 50 fps and up (ID-145).
  */
 export const MUZZLE_FLASH = 0.08;
 /** How long a bullet's impact (a puff on a hit, dust on a miss) shows, in seconds. */
@@ -782,9 +783,10 @@ export const IMPACT_FLASH = 0.25;
 /**
  * Damage numbers (ID-082), fight seconds: a hit lands in the newest number on its target
  * younger than `merge` with the same crit (so a volley or a fire reads as one), and a
- * number is kept `keep` s (long enough to show at 3×), at most `cap` at once (newest kept).
+ * number is kept `keep` s (long enough to show its full 0.9 s of real time at 5×, ID-145),
+ * at most `cap` at once (newest kept).
  */
-export const DAMAGE_POP = { merge: 0.25, keep: 2.7, cap: 40 } as const;
+export const DAMAGE_POP = { merge: 0.25, keep: 4.5, cap: 40 } as const;
 
 // --- The base (M2). Grid, tiers and costs; design §3 and §11. ---
 

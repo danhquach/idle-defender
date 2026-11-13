@@ -47,11 +47,11 @@ export function writeAutoStrike(storage: SaveStorage | null, on: boolean): void 
 }
 
 export const SPEED_KEY = 'idle-defender.game-speed';
-/** The fight speeds (ID-062): how many times fight time runs to real time. */
-export const SPEEDS = [1, 2, 3] as const;
+/** The fight speeds (ID-062, ID-145): how many times fight time runs to real time. */
+export const SPEEDS = [1, 3, 5] as const;
 export type Speed = (typeof SPEEDS)[number];
 
-/** The stored fight speed, else 1×. */
+/** The stored fight speed, else 1× (an old saved 2× too, ID-145). */
 export function readSpeed(storage: SaveStorage | null): Speed {
   let raw: string | null;
   try {
@@ -59,7 +59,7 @@ export function readSpeed(storage: SaveStorage | null): Speed {
   } catch {
     return 1;
   }
-  return raw === '2' ? 2 : raw === '3' ? 3 : 1;
+  return raw === '3' ? 3 : raw === '5' ? 5 : 1;
 }
 
 /** Stores the speed; where the browser refuses it, it still applies until reload. */
