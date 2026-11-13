@@ -6,7 +6,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Stat } from '../data.ts';
 import { playSquadCampaign } from '../sim.ts';
+import { cacheFor } from './cache.ts';
 import { SEEDS, spread, STAT_PICKS as PICKS, STAT_WITHIN as WITHIN, winRate } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 // About 2.5 min a stat alone, more on CI. One hook a stat, so each stat's campaigns get
 // the full limit: in one hook, the three outran it once the epic cards' costs (ID-137)
@@ -17,7 +20,7 @@ describe('the stats are each as strong a choice (ID-125)', () => {
     beforeAll(() => {
       const first = [];
       for (let i = 1; i <= SEEDS; i++) {
-        const runs = playSquadCampaign(i * 1000, 10, { stat });
+        const runs = keep(`${stat} ${i}`, () => playSquadCampaign(i * 1000, 10, { stat }));
         for (let n = 4; n <= 10; n++) {
           const r = runs.find((r) => r.hordeNumber === n && !r.replay);
           if (r) first.push(r);

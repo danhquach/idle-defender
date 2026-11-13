@@ -6,7 +6,10 @@ import { HORROR, type HorrorAbility, stockOf } from '../data.ts';
 import { hordeXp, startHorde, type GameState } from '../game.ts';
 import { standing, tick, type HordeState } from '../horde.ts';
 import { answerOffer, opening, spendAll } from '../sim.ts';
+import { cacheFor } from './cache.ts';
 import { bareGame, SEEDS } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 describe('the Mutated Horror (ID-024)', () => {
   // A Horde 10 reference camp: the starting wall in concrete, every wall-walk spot
@@ -92,15 +95,15 @@ describe('the Mutated Horror (ID-024)', () => {
 
   it('a full firing line beats each Horror on some seeds; a lone pistol Gunner never does', () => {
     for (const ability of abilities) {
-      expect(play(line, ability).won, ability).toBeGreaterThan(0);
-      expect(play(camp(false, 1), ability).won, ability).toBe(0);
+      expect(keep(`line ${ability}`, () => play(line, ability)).won, ability).toBeGreaterThan(0);
+      expect(keep(`lone ${ability}`, () => play(camp(false, 1), ability)).won, ability).toBe(0);
     }
   }, 60_000);
 
   it('each ability makes it harder: fewer wins, or as many with more wall lost', () => {
     for (const ability of abilities) {
-      const on = play(line, ability);
-      const off = plain(() => play(line, ability));
+      const on = keep(`line ${ability}`, () => play(line, ability));
+      const off = keep(`plain ${ability}`, () => plain(() => play(line, ability)));
       expect(on.won, ability).toBeLessThanOrEqual(off.won);
       if (on.won === off.won) expect(on.wall, ability).toBeLessThan(off.wall);
     }

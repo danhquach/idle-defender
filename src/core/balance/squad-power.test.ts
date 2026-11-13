@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
 import { playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
+import { cacheFor } from './cache.ts';
 import { squadAt } from './shared.ts';
 
 const SEEDS = 10;
@@ -19,19 +20,27 @@ function squadNear(n: number, target: number): GameState {
   return best;
 }
 
-/** Fights won at horde `n` over `seeds` seeds, played with the scripted player's cards and skills. */
-function wins(game: GameState, n: number, seeds: number): number {
-  let won = 0;
-  for (let seed = 1; seed <= seeds; seed++) {
-    if (playSquadHorde(game, seed * 101, undefined, undefined, n).outcome === 'won') won++;
-  }
-  return won;
+const keep = cacheFor(import.meta.url);
+
+/**
+ * Fights won at horde `n` over `seeds` seeds, played with the scripted player's cards and
+ * skills, by the squad nearest `share` of its Recommended Power.
+ */
+function wins(n: number, share: number, seeds: number): number {
+  return keep(`${n} ${share} ${seeds}`, () => {
+    const game = squadNear(n, recommendedPower(n) * share);
+    let won = 0;
+    for (let seed = 1; seed <= seeds; seed++) {
+      if (playSquadHorde(game, seed * 101, undefined, undefined, n).outcome === 'won') won++;
+    }
+    return won;
+  });
 }
 
 describe('Recommended Power (ID-098, ID-128)', () => {
   const HORDES = [9, 12, 15, 20];
   it('a squad at Recommended Power, with the scripted player’s cards, wins about half the time', () => {
-    const rates = HORDES.map((n) => wins(squadNear(n, recommendedPower(n)), n, SEEDS) / SEEDS);
+    const rates = HORDES.map((n) => wins(n, 1, SEEDS) / SEEDS);
     for (const [i, rate] of rates.entries()) {
       expect(rate, `Horde ${HORDES[i]}`).toBeGreaterThanOrEqual(0.2);
       expect(rate, `Horde ${HORDES[i]}`).toBeLessThanOrEqual(0.8);
@@ -43,9 +52,8 @@ describe('Recommended Power (ID-098, ID-128)', () => {
 
   it('a squad well under Recommended Power loses, and one well over wins', () => {
     for (const n of [10, 15]) {
-      const rec = recommendedPower(n);
-      expect(wins(squadNear(n, rec * 0.7), n, 5), `Horde ${n} at 70%`).toBeLessThanOrEqual(1);
-      expect(wins(squadNear(n, rec * 1.3), n, 5), `Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
+      expect(wins(n, 0.7, 5), `Horde ${n} at 70%`).toBeLessThanOrEqual(1);
+      expect(wins(n, 1.3, 5), `Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
     }
   }, 600_000);
 });

@@ -9,6 +9,9 @@ import { newGame, type GameState } from '../game.ts';
 import { rebuildWire, tick, type HordeState } from '../horde.ts';
 import { finishSquadHorde, highestBeaten, startSquadHorde } from '../hordeonly.ts';
 import { gearUp, playSquadHorde, spendAll, SQUAD_FARM, squadPick, useSkills } from '../sim.ts';
+import { cacheFor } from './cache.ts';
+
+const keep = cacheFor(import.meta.url);
 
 const SEEDS = 2;
 const HORDES = [5, 10, 15] as const;
@@ -60,23 +63,25 @@ describe('Barbed Wire is worth levelling (ID-133)', () => {
   beforeAll(() => {
     for (let k = 1; k <= SEEDS; k++) {
       const seed = k * 1000;
-      let game = newGame('horde');
-      let farm = 0;
-      const done = new Set<number>();
-      for (let i = 0; i < LAST * 12 && game.hordeNumber <= LAST; i++) {
-        const n = farm > 0 ? highestBeaten(game) : game.hordeNumber;
-        if (farm === 0 && (HORDES as readonly number[]).includes(n) && !done.has(n)) {
-          done.add(n);
-          for (const lv of LEVELS) {
-            const at = shares.get(key(n, lv)) ?? [];
-            shares.set(key(n, lv), [...at, working(game, seed + i, n, lv)]);
+      const measured = keep(`campaign ${k}`, () => {
+        const out: [string, Share][] = [];
+        let game = newGame('horde');
+        let farm = 0;
+        const done = new Set<number>();
+        for (let i = 0; i < LAST * 12 && game.hordeNumber <= LAST; i++) {
+          const n = farm > 0 ? highestBeaten(game) : game.hordeNumber;
+          if (farm === 0 && (HORDES as readonly number[]).includes(n) && !done.has(n)) {
+            done.add(n);
+            for (const lv of LEVELS) out.push([key(n, lv), working(game, seed + i, n, lv)]);
           }
+          const horde = playSquadHorde(game, seed + i, 3600, undefined, n);
+          game = gearUp(spendAll(finishSquadHorde(game, horde)));
+          if (farm > 0) farm--;
+          else if (horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
         }
-        const horde = playSquadHorde(game, seed + i, 3600, undefined, n);
-        game = gearUp(spendAll(finishSquadHorde(game, horde)));
-        if (farm > 0) farm--;
-        else if (horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
-      }
+        return out;
+      });
+      for (const [at, share] of measured) shares.set(at, [...(shares.get(at) ?? []), share]);
     }
   }, 900_000);
 

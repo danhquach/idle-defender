@@ -3763,3 +3763,7 @@ original outline.
   always won, Hordes 1–2 in 3–5 minutes, difficulty rising, a win paying
   for its repairs, a camp that doesn't build stalling by Horde 5), and
   `npm run balance` (Node 22.6 or later) prints the full table for tuning.
+  The balance tests run apart from the unit tests (`npm run test:balance`)
+  and keep their fights' results in `.cache/balance/`, keyed by the
+  simulation's code, Node's version and the test file (ID-142), so they
+  replay only when one of those changes.

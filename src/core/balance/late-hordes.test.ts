@@ -5,6 +5,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CARD } from '../data.ts';
 import { playSquadCampaign, type SquadRun } from '../sim.ts';
+import { cacheFor } from './cache.ts';
+
+const keep = cacheFor(import.meta.url);
 
 // Each campaign to Horde 18 is 40–70 fights; CI runs the balance files side by side.
 describe('mid-game horde-only hordes (ID-102)', () => {
@@ -24,7 +27,9 @@ describe('mid-game horde-only hordes (ID-102)', () => {
   const tries: SquadRun[] = [];
   beforeAll(() => {
     for (let i = 1; i <= SEEDS; i++) {
-      const runs = playSquadCampaign(i * 1000, LAST, { watch: true, maxFights: LAST * 12 });
+      const runs = keep(`campaign ${i}`, () =>
+        playSquadCampaign(i * 1000, LAST, { watch: true, maxFights: LAST * 12 }),
+      );
       campaigns.push(runs);
       tries.push(...runs.filter((r) => !r.replay && r.hordeNumber >= FROM));
     }

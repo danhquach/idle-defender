@@ -1225,14 +1225,21 @@ function step(s: HordeState, rng: Rng): void {
   removeDead(s);
   mutate(s, rng);
   // Moving and separating keep the enemies' order, so their old places line up by index.
-  const wasX = s.enemies.map((e) => e.x);
-  const wasY = s.enemies.map((e) => e.y);
+  const es = s.enemies;
+  const n = es.length;
+  const wasX = new Float64Array(n);
+  const wasY = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    wasX[i] = es[i]!.x;
+    wasY[i] = es[i]!.y;
+  }
   const moved = move(s);
   separate(s);
-  s.enemies.forEach((e, i) => {
+  for (let i = 0; i < n; i++) {
+    const e = es[i]!;
     e.vx = (e.x - wasX[i]!) / STEP;
     e.vy = (e.y - wasY[i]!) / STEP;
-  });
+  }
   attack(s, moved, rng);
   injure(s);
   drop(s);
@@ -1330,6 +1337,20 @@ function place(s: HordeState, kind: EnemyKind, x: number, y: number): Enemy {
     vy: 0,
     climbUntil: 0,
     climbed: false,
+    // Every optional field up front, in one order (ID-142): enemies that gained them in
+    // different orders mid-fight took many hidden shapes, and every read of `e.x` slowed.
+    horror: undefined,
+    elite: undefined,
+    roarUntil: undefined,
+    burnUntil: undefined,
+    burnDps: undefined,
+    dazedUntil: undefined,
+    shockUntil: undefined,
+    pushedAt: undefined,
+    pushed: undefined,
+    knocked: undefined,
+    knockedBy: undefined,
+    burnt: undefined,
   };
   s.enemies.push(e);
   return e;
@@ -1799,6 +1820,8 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
     let at: number;
     if (gap <= 0) at = 0;
     else {
+      // Outside it and heading away: `at` below would be < 0 (ID-142, skip the root).
+      if (along >= 0) continue;
       const disc = along * along - gap;
       if (disc < 0) continue;
       at = -along - Math.sqrt(disc);
@@ -2607,11 +2630,16 @@ function stopLine(
   e: Enemy,
 ): { x: number; segment: Segment | null; layer: Layer | null } {
   // Only layers not yet crossed: a segment patched up behind an enemy never pulls it back.
-  const ahead = s.layers.filter((l) => l.x + WALL.depth <= e.x).sort((a, b) => b.x - a.x);
-  for (const layer of ahead) {
-    const segment = layer.segments[segmentAt(e.y)];
-    if (segment && segment.hp > 0) return { x: layer.x + WALL.depth, segment, layer };
+  // The outermost such layer standing in its row wins (equal x → the earlier layer); one
+  // pass, no sorted copy per enemy per step (ID-142).
+  const row = segmentAt(e.y);
+  let best: { segment: Segment; layer: Layer } | null = null;
+  for (const layer of s.layers) {
+    if (!(layer.x + WALL.depth <= e.x) || (best && layer.x <= best.layer.x)) continue;
+    const segment = layer.segments[row];
+    if (segment && segment.hp > 0) best = { segment, layer };
   }
+  if (best) return { x: best.layer.x + WALL.depth, segment: best.segment, layer: best.layer };
   return { x: CAMP.x, segment: null, layer: null };
 }
 

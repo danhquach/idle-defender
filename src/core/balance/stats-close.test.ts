@@ -6,7 +6,10 @@ import type { Stat } from '../data.ts';
 import type { GameState } from '../game.ts';
 import { playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
+import { cacheFor } from './cache.ts';
 import { spread, squadAt, STAT_PICKS as PICKS, STAT_WITHIN as WITHIN } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 describe('the stats are each as strong a choice (ID-125)', () => {
   // Hordes 4–10 at the first try are mostly won whatever the points (a squad with none
@@ -20,23 +23,26 @@ describe('the stats are each as strong a choice (ID-125)', () => {
     const CLOSE_SEEDS = 10;
     const won = (game: GameState, n: number, seed: number): boolean =>
       playSquadHorde(game, seed, undefined, undefined, n).outcome === 'won';
-    const wins = new Map<Stat, number>();
-    for (const n of HORDES) {
-      const rec = recommendedPower(n);
-      let level = 1;
-      for (let lv = 2; lv <= 200; lv++) {
-        const off = (l: number) => Math.abs(squadPower(squadAt(n, l, 'mind')) - rec);
-        if (off(lv) < off(level)) level = lv;
-      }
-      for (const stat of [...PICKS, 'tinker'] as const) {
-        const g = squadAt(n, level, stat);
-        for (let seed = 1; seed <= CLOSE_SEEDS; seed++) {
-          if (won(g, n, seed * 101)) wins.set(stat, (wins.get(stat) ?? 0) + 1);
+    const wins = keep('wins', () => {
+      const wins: Partial<Record<Stat, number>> = {};
+      for (const n of HORDES) {
+        const rec = recommendedPower(n);
+        let level = 1;
+        for (let lv = 2; lv <= 200; lv++) {
+          const off = (l: number) => Math.abs(squadPower(squadAt(n, l, 'mind')) - rec);
+          if (off(lv) < off(level)) level = lv;
+        }
+        for (const stat of [...PICKS, 'tinker'] as const) {
+          const g = squadAt(n, level, stat);
+          for (let seed = 1; seed <= CLOSE_SEEDS; seed++) {
+            if (won(g, n, seed * 101)) wins[stat] = (wins[stat] ?? 0) + 1;
+          }
         }
       }
-    }
+      return wins;
+    });
     const fights = HORDES.length * CLOSE_SEEDS;
-    const rate = (s: Stat) => (wins.get(s) ?? 0) / fights;
+    const rate = (s: Stat) => (wins[s] ?? 0) / fights;
     const all = PICKS.map(rate);
     const said = [...PICKS, 'tinker' as const].map((s) => `${s} ${rate(s).toFixed(2)}`).join(' ');
     // ID-139 (PM): with Airstrike the one skill (bombs a share of Shambler HP, ×2 alone),

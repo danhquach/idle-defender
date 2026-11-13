@@ -31,9 +31,17 @@ Needs Node 20.19+ or 22.12+.
 npm ci             # install (also points git at the pre-push hook)
 npm run dev        # local dev server
 npm run lint       # type-check, ESLint, Prettier
-npm test           # unit tests (Vitest)
+npm test           # unit tests (Vitest), without the balance tests
+npm run test:balance  # balance tests (src/core/balance/); one file: npx vitest run <file>
 npm run build      # production build in dist/
 ```
+
+The balance tests play many full fights. Their results are kept in
+`.cache/balance/` (git-ignored) under a hash of the simulation code
+(`src/core`), Node's version and the test file, so a run with neither
+changed replays nothing and takes seconds. Only the current code's
+results are kept, so switching to a branch with other `src/core` code
+replays them. `BALANCE_CACHE=off` plays everything.
 
 Every PR to `main` raises the version in `package.json`; CI and the pre-push
 hook check it.
@@ -41,7 +49,8 @@ hook check it.
 CI splits the unit tests across four jobs that run at once, because the
 balance tests (`src/core/balance/`) play many full fights and take most of
 the time. A new test file runs in the last job unless you add it to another
-group in `.github/workflows/ci.yml`.
+group in `.github/workflows/ci.yml`. Each job keeps its balance results in
+the Actions cache, so a PR that leaves `src/core` alone replays no fights.
 
 ## License
 

@@ -1,25 +1,43 @@
 // Balance on the starting base, nothing built (see shared.ts).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { repairAllCost } from '../base.ts';
-import { MATERIALS } from '../data.ts';
+import { MATERIALS, type Stock } from '../data.ts';
 import { finishHorde, hordePayout } from '../game.ts';
-import type { HordeState } from '../horde.ts';
 import { playHorde, summarise, type HordeRun } from '../sim.ts';
+import { cacheFor } from './cache.ts';
 import { bareGame, SEEDS, winRate } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 const HORDES = 9;
 
+interface Played {
+  run: HordeRun;
+  pay: Stock | null;
+  bill: Stock | null;
+}
+
 describe('balance on the starting base, no building', () => {
-  /** Every horde 1…HORDES played once per seed 1…SEEDS, and its summary. */
-  const played = new Map<number, HordeState[]>();
+  /** Every horde 1…HORDES played once per seed 1…SEEDS: its summary, and for a win its payout and repair bill. */
+  const played = new Map<number, Played[]>();
   const byHorde = new Map<number, HordeRun[]>();
   beforeAll(() => {
     for (let n = 1; n <= HORDES; n++) {
-      const hordes = Array.from({ length: SEEDS }, (_, i) => playHorde(bareGame(n), i + 1, 0));
+      const hordes = Array.from({ length: SEEDS }, (_, i) =>
+        keep(`${n} ${i + 1}`, (): Played => {
+          const horde = playHorde(bareGame(n), i + 1, 0);
+          const won = horde.outcome === 'won';
+          return {
+            run: summarise(horde, i + 1),
+            pay: won ? hordePayout(horde) : null,
+            bill: won ? repairAllCost(finishHorde(bareGame(n), horde, 0).base) : null,
+          };
+        }),
+      );
       played.set(n, hordes);
       byHorde.set(
         n,
-        hordes.map((h, i) => summarise(h, i + 1)),
+        hordes.map((h) => h.run),
       );
     }
   }, 60_000);
@@ -58,9 +76,8 @@ describe('balance on the starting base, no building', () => {
     let damaged = 0;
     for (const [n, hordes] of played) {
       for (const [i, horde] of hordes.entries()) {
-        if (horde.outcome !== 'won') continue;
-        const pay = hordePayout(horde);
-        const bill = repairAllCost(finishHorde(bareGame(n), horde, 0).base);
+        if (!horde.pay || !horde.bill) continue;
+        const { pay, bill } = horde;
         if (MATERIALS.some((m) => bill[m] > 0)) damaged += 1;
         for (const m of MATERIALS) {
           expect(pay[m], `horde ${n} seed ${i + 1} ${m}`).toBeGreaterThanOrEqual(bill[m]);

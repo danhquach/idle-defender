@@ -11,7 +11,10 @@ import { chooseCard } from '../cards.ts';
 import { newGame, type GameState } from '../game.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
+import { cacheFor } from './cache.ts';
 import { SEEDS, squadAt } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 const THROWABLES = ['frag-grenades', 'flashbang', 'molotov'] as const satisfies UpgradeId[];
 
@@ -58,7 +61,10 @@ describe('each throwable is the best pick on one scene and not on another (ID-13
   beforeAll(() => {
     for (const [name, scene] of Object.entries(SCENES)) {
       const game = scene();
-      won.set(name, new Map(THROWABLES.map((id) => [id, wins(game, id)])));
+      won.set(
+        name,
+        new Map(THROWABLES.map((id) => [id, keep(`${name} ${id}`, () => wins(game, id))])),
+      );
     }
   }, 600_000);
   const table = (name: string): string => JSON.stringify(Object.fromEntries(won.get(name)!));

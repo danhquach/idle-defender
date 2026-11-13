@@ -7,7 +7,10 @@ import { newHorde, tick, type HordeState } from '../horde.ts';
 import { createRng } from '../rng.ts';
 import { answerOffer, playHorde, summarise } from '../sim.ts';
 import { enemy, horror, setup } from '../testing.ts';
+import { cacheFor } from './cache.ts';
 import { bareGame, winRate } from './shared.ts';
+
+const keep = cacheFor(import.meta.url);
 
 describe('the guns (ID-046, roster reworked in ID-135)', () => {
   // A lone Gunner on the upper tower (420, 360) with one Common gun, against 20-HP
@@ -151,9 +154,15 @@ describe('the guns (ID-046, roster reworked in ID-135)', () => {
     for (const g of GUNS) {
       table.set(
         g,
-        Object.fromEntries(SCENE_IDS.map((sc) => [sc, kills(g, sc)])) as Record<Scene, number>,
+        Object.fromEntries(
+          SCENE_IDS.map((sc) => [sc, keep(`kills ${g} ${sc}`, () => kills(g, sc))]),
+        ) as Record<Scene, number>,
       );
-      roles.set(g, { boss: bossDamage(g), heavy: heavyDamage(g), hold: holdLine(g) });
+      roles.set(g, {
+        boss: keep(`boss ${g}`, () => bossDamage(g)),
+        heavy: keep(`heavy ${g}`, () => heavyDamage(g)),
+        hold: keep(`hold ${g}`, () => holdLine(g)),
+      });
     }
   }, 180_000);
   const at = (g: Gun, sc: Scene): number => table.get(g)![sc];
@@ -239,7 +248,9 @@ describe('the guns (ID-046, roster reworked in ID-135)', () => {
   });
 
   it('in a real horde, a Gunner with any of them does at least as well as with the pistol, without trivialising the curve', () => {
-    const winRateWith = (g: Gun, n: number): number => {
+    const winRateWith = (g: Gun, n: number): number =>
+      keep(`win rate ${g} ${n}`, () => playedWinRate(g, n));
+    const playedWinRate = (g: Gun, n: number): number => {
       const runs = Array.from({ length: 10 }, (_, i) => {
         const game = bareGame(n);
         game.roster[0]!.loadout = {

@@ -24,3 +24,6 @@ coverage/
 # Python bytecode (holds absolute paths)
 __pycache__/
 *.pyc
+
+# Balance results cache (src/core/balance/cache.ts)
+.cache/
