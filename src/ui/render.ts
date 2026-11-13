@@ -57,6 +57,7 @@ import {
   type Slab,
   type Slick,
   type Spit,
+  type Throwable,
   type Trap,
   type Turret,
 } from '../core/horde.ts';
@@ -64,7 +65,7 @@ import { baseOf } from '../core/armoury.ts';
 import { CHAT, CHAT_RANK, type Bubble } from '../core/chatter.ts';
 import { professionOf } from '../core/loadout.ts';
 import { createRng } from '../core/rng.ts';
-import { carpet, throwArea } from '../core/skills.ts';
+import { throwArea } from '../core/skills.ts';
 import {
   BLAST,
   blastLook,
@@ -151,7 +152,7 @@ import {
   lookOf,
   SCORCH_ART,
   BOMB_ART,
-  SKILL_ICON,
+  CARD_ICON,
   TIER_ART,
   TRAP_ART,
   TURRET_ART,
@@ -187,7 +188,6 @@ const COLOR = {
   reserved: 'rgba(156, 196, 240, 0.7)',
   shadow: 'rgba(0, 0, 0, 0.35)',
   focus: '#ffe066',
-  aimFill: 'rgba(255, 224, 102, 0.18)',
   aimFire: '#ff9a3c',
   aimFireFill: 'rgba(255, 154, 60, 0.18)',
   offFrame: '#d2453c',
@@ -241,17 +241,19 @@ const COLOR = {
   badgeText: '#111110',
 } as const;
 /**
- * A thrown flashbang or molotov bottle (ID-107): it drops from `height` (world units) over
- * `THROW_FALL`, falling faster as it goes, spinning `spin` turns a second, `size` across;
- * its shadow (`shadow` radius, darkening to `shadowAlpha`) grows under it as it nears the
- * ground. A flashbang is a grey canister, a bottle its icon's art; an airstrike bomb the
- * Heavy Rounds shell, `bomb` long, arcing in from `carry` behind (`fallAt`).
+ * An airstrike bomb (ID-107): the Heavy Rounds shell, `bomb` long, dropping from `height`
+ * (world units) over `THROW_FALL`, falling faster as it goes and arcing in from `carry`
+ * behind (`fallAt`); its shadow (`bombShadow` radius, darkening to `shadowAlpha`) grows
+ * under it as it nears the ground. A survivor's thrown Flashbang or Molotov (ID-139; they
+ * fell from the sky as skills before) is `item` across, spinning `spin` turns a second: a
+ * flashbang a grey canister, a molotov its icon's bottle.
  */
 export const THROWN = {
   height: 420,
   spin: 2.5,
-  size: 26,
-  shadow: 12,
+  item: 26,
+  /** A thrown Flashbang or Molotov in the thrower's hand at the wind-up, across. */
+  held: 11,
   shadowAlpha: 0.9,
   can: '#8a9097',
   canEdge: '#1d1f22',
@@ -263,18 +265,17 @@ export const THROWN = {
 } as const;
 
 /**
- * Where thrown burst `i` is `fall` of the way down (ID-107). A flashbang or bottle drops
- * straight onto its spot; an airstrike bomb keeps the plane's forward speed (left to
- * right, +x), so it arcs in from `carry` behind its spot: steady along x while gravity
- * speeds its drop, landing nose first.
+ * Where airstrike bomb `i` is `fall` of the way down (ID-107): it keeps the plane's forward
+ * speed (left to right, +x), so it arcs in from `carry` behind its spot: steady along x
+ * while gravity speeds its drop, landing nose first.
  */
 export function fallAt(i: Incoming, fall: number): { x: number; y: number; z: number } {
-  const carry = i.skill === 'airstrike' ? THROWN.carry * (1 - fall) : 0;
+  const carry = THROWN.carry * (1 - fall);
   return { x: i.x - carry, y: i.y, z: THROWN.height * (1 - fall * fall) };
 }
 
 /**
- * How far thrown burst or airstrike bomb `i` has fallen at `time` (ID-107): 0 just
+ * How far airstrike bomb `i` has fallen at `time` (ID-107): 0 just
  * dropped, 1 landing; null before it drops or once it has landed.
  */
 export function thrownFall(i: Incoming, time: number): number | null {
@@ -933,6 +934,8 @@ function drawDefender(
   pose: Readonly<Pose> = STILL,
   aim = false,
   throwing: ThrowFrame | null = null,
+  /** What the throw is (ID-139): a Flashbang or Molotov; undefined, a Frag Grenade. */
+  item?: Grenade['item'],
 ): void {
   const feet = project({ x: d.x, y: d.y, z: z0 }, cam);
   if (selected) {
@@ -959,7 +962,9 @@ function drawDefender(
       sx: feet.sx + held.x * px + pose.dx * cam.zoom,
       sy: feet.sy - held.y * px - pose.lift * cam.zoom,
     };
-    drawGrenadeBall(ctx, c, cam, GRENADE.held);
+    // A Flashbang or Molotov shows as what flies (ID-139), smaller in the hand.
+    if (item) drawItem(ctx, art, item, c, 0, cam, THROWN.held);
+    else drawGrenadeBall(ctx, c, cam, GRENADE.held);
   }
   if (d.loadout.item === 'shield') {
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
@@ -3001,6 +3006,19 @@ export function throwFrame(
   return t < THROW.wind ? 'wind' : 'release';
 }
 
+/** What `d`'s newest throw is (ID-139): a Flashbang or Molotov, or undefined for a Frag Grenade. */
+export function throwItemOf(
+  d: Pick<Defender, 'id'>,
+  grenades: readonly Pick<Grenade, 'by' | 'at' | 'item'>[],
+  time: number,
+): Grenade['item'] {
+  let newest: Pick<Grenade, 'at' | 'item'> | undefined;
+  for (const g of grenades) {
+    if (g.by === d.id && g.at <= time && (!newest || g.at > newest.at)) newest = g;
+  }
+  return newest?.item;
+}
+
 /**
  * Where and when a Frag Grenade leaves its thrower (ID-119): `dx` ahead of where they stand
  * and `z` up, at `at`. A Gunner throws from the release sprite's open hand once the wind-up
@@ -3054,7 +3072,8 @@ export const MORTAR = { height: 46, release: 22, arc: 140 } as const;
 /**
  * Frag Grenades (design §8): in the air, an olive-drab ball with a dark edge on its arc over its own
  * shadow (not yet while still in the thrower's hand, ID-119); landed, its explosion is drawn
- * with the others (`explosions`, ID-107).
+ * with the others (`explosions`, ID-107). A thrown Flashbang or Molotov (ID-139) flies the
+ * same arc as its own art (`drawItem`), spinning.
  */
 function drawGrenade(
   ctx: CanvasRenderingContext2D,
@@ -3063,6 +3082,7 @@ function drawGrenade(
   cam: Camera,
   from: Launch,
   look: BallLook = FRAG_BALL,
+  art?: Art,
 ): void {
   if (time < from.at) return;
   if (time < g.lands) {
@@ -3070,7 +3090,9 @@ function drawGrenade(
     groundCircle(ctx, at.x, at.y, look.r, cam);
     ctx.fillStyle = COLOR.shadow;
     ctx.fill();
-    drawGrenadeBall(ctx, project(at, cam), cam, look.r, look);
+    if (g.item !== undefined && art) {
+      drawItem(ctx, art, g.item, project(at, cam), (time - g.at) * THROWN.spin, cam);
+    } else drawGrenadeBall(ctx, project(at, cam), cam, look.r, look);
     return;
   }
   // Landed: its explosion is drawn with the others (`explosions`).
@@ -3197,12 +3219,14 @@ function explosions(
     if (look) out.push({ kind, x, y, width, u, look });
   };
   for (const b of scene.blasts) {
-    const kind = b.skill === 'flashbang' ? 'white' : 'fire';
+    const flash = b.skill === 'flashbang';
     const u = (scene.time - b.at) / SKILL_FLASH;
-    add(kind, b.x, b.y, SKILLS[b.skill].radius, FIREBALL_WIDTH.airstrike, u, b.at);
+    const r = flash ? CARD.flashbang.radius : SKILLS.airstrike.radius;
+    add(flash ? 'white' : 'fire', b.x, b.y, r, FIREBALL_WIDTH.airstrike, u, b.at);
   }
   for (const g of scene.grenades) {
-    if (scene.time < g.lands) continue;
+    // A landed Flashbang or Molotov shows as its blast or fire (ID-139).
+    if (scene.time < g.lands || g.item !== undefined) continue;
     const u = (scene.time - g.lands) / CARD.frag.flash;
     add('fire', g.x, g.y, CARD.frag.radius, FIREBALL_WIDTH.frag, u, g.lands);
   }
@@ -3261,36 +3285,49 @@ function drawBlastAir(
   }
 }
 
-/** Draws thrown burst `i` `fall` of the way down (`thrownFall`): spinning as it drops. */
+/** Draws airstrike bomb `i` `fall` of the way down (`thrownFall`), nose along its path. */
 function drawThrown(
   ctx: CanvasRenderingContext2D,
   art: Art,
   i: Incoming,
   fall: number,
-  time: number,
   cam: Camera,
 ): void {
-  // It speeds up as it falls.
   const c = project(fallAt(i, fall), cam);
-  const size = sized(THROWN.size, cam);
   ctx.save();
   ctx.translate(c.sx, c.sy);
-  if (i.skill === 'airstrike') {
-    // A bomb points its nose along its path on screen: near level as it leaves the plane,
-    // steep as it lands. The art lies at 45°, nose to the upper right.
-    const ahead = project(fallAt(i, Math.min(1, fall + 0.02)), cam);
-    const back = project(fallAt(i, Math.max(0, fall - 0.02)), cam);
-    ctx.rotate(Math.atan2(ahead.sy - back.sy, ahead.sx - back.sx) + Math.PI / 4);
-    const img = art[BOMB_ART];
-    const h = sized(THROWN.bomb, cam);
-    const w = (img.width / img.height) * h;
-    ctx.drawImage(img, -w / 2, -h / 2, w, h);
-    ctx.restore();
-    return;
-  }
-  ctx.rotate((time + i.x) * THROWN.spin * Math.PI * 2);
-  if (i.skill === 'molotov') {
-    const img = art[SKILL_ICON.molotov];
+  // A bomb points its nose along its path on screen: near level as it leaves the plane,
+  // steep as it lands. The art lies at 45°, nose to the upper right.
+  const ahead = project(fallAt(i, Math.min(1, fall + 0.02)), cam);
+  const back = project(fallAt(i, Math.max(0, fall - 0.02)), cam);
+  ctx.rotate(Math.atan2(ahead.sy - back.sy, ahead.sx - back.sx) + Math.PI / 4);
+  const img = art[BOMB_ART];
+  const h = sized(THROWN.bomb, cam);
+  const w = (img.width / img.height) * h;
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
+/**
+ * A thrown Flashbang or Molotov (ID-107, thrown by a survivor since ID-139) centred on screen
+ * point `c`, `THROWN.item` across, turned `turn` turns: a molotov its icon's bottle, a
+ * flashbang a grey canister.
+ */
+function drawItem(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  item: Exclude<Throwable, 'frag'>,
+  c: { sx: number; sy: number },
+  turn: number,
+  cam: Camera,
+  across: number = THROWN.item,
+): void {
+  const size = sized(across, cam);
+  ctx.save();
+  ctx.translate(c.sx, c.sy);
+  ctx.rotate(turn * Math.PI * 2);
+  if (item === 'molotov') {
+    const img = art[CARD_ICON.molotov];
     const h = size;
     const w = (img.width / img.height) * h;
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
@@ -3619,7 +3656,7 @@ export function molotovLook(
   time: number,
   clock: number,
   cam: Camera,
-  R: number = SKILLS.molotov.radius,
+  R: number = CARD.molotov.radius,
 ): FireLook | null {
   const heat = molotovHeat(time, f);
   if (heat <= 0) return null;
@@ -4199,7 +4236,7 @@ export function drawScene(
     const heat = molotovFade(scene.time, f);
     if (heat <= 0) continue;
     ctx.globalAlpha = MOLOTOV_FIRE.scorchAlpha * heat;
-    const r = SKILLS.molotov.radius * MOLOTOV_FIRE.scorch;
+    const r = CARD.molotov.radius * MOLOTOV_FIRE.scorch;
     groundArt(ctx, art[SCORCH_ART], f.x, f.y, r, cam);
     ctx.globalAlpha = 1;
   }
@@ -4219,14 +4256,13 @@ export function drawScene(
   // Explosions' scorch, dust and shockwave lie on the ground (ID-107).
   const booms = explosions(scene, cam, anim?.reduced ?? false);
   drawBlastGround(ctx, art, booms, cam);
-  // Each thrown flashbang or bottle's shadow grows under it as it falls (ID-107).
+  // Each airstrike bomb's shadow grows under it as it falls (ID-107).
   for (const i of scene.incoming) {
     const fall = thrownFall(i, scene.time);
     if (fall === null) continue;
     ctx.globalAlpha = THROWN.shadowAlpha * fall;
-    const shadow = i.skill === 'airstrike' ? THROWN.bombShadow : THROWN.shadow;
     const under = fallAt(i, fall);
-    groundCircle(ctx, under.x, under.y, shadow * (0.4 + 0.6 * fall), cam);
+    groundCircle(ctx, under.x, under.y, THROWN.bombShadow * (0.4 + 0.6 * fall), cam);
     ctx.fillStyle = COLOR.shadow;
     ctx.fill();
     ctx.globalAlpha = 1;
@@ -4269,7 +4305,8 @@ export function drawScene(
           const pose = defenderPoseOf(manned);
           const selected = manned.id === selectedDefender;
           const throwing = throwOf(manned);
-          drawDefender(ctx, art, manned, floor, selected, cam, pose, aimOf(manned), throwing);
+          const held = throwing ? throwItemOf(manned, scene.grenades, scene.time) : undefined;
+          drawDefender(ctx, art, manned, floor, selected, cam, pose, aimOf(manned), throwing, held);
           if (!throwing) drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
         }
       },
@@ -4293,7 +4330,8 @@ export function drawScene(
       draw: () => {
         const throwing = throwOf(d);
         const selected = d.id === selectedDefender;
-        drawDefender(ctx, art, d, 0, selected, cam, defenderPoseOf(d), aimOf(d), throwing);
+        const held = throwing ? throwItemOf(d, scene.grenades, scene.time) : undefined;
+        drawDefender(ctx, art, d, 0, selected, cam, defenderPoseOf(d), aimOf(d), throwing, held);
         if (!throwing) drawFlash(ctx, scene, d.id, d.x, d.y, cam);
       },
     });
@@ -4436,7 +4474,7 @@ export function drawScene(
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
   for (const k of scene.slabs ?? []) drawSlab(ctx, k, scene.time, cam);
   for (const g of scene.grenades) {
-    drawGrenade(ctx, g, scene.time, cam, launchOf(scene, g, anim !== null));
+    drawGrenade(ctx, g, scene.time, cam, launchOf(scene, g, anim !== null), FRAG_BALL, art);
   }
   // Oil Bomb's tar bombs lob high from their mortar's bucket (ID-132).
   for (const g of scene.tarBombs ?? []) {
@@ -4447,37 +4485,27 @@ export function drawScene(
   // shows its reach at the cursor.
   drawBlastAir(ctx, art, booms, cam, anim?.reduced ?? false);
   for (const { e, at } of starred) drawStars(ctx, e, at, flameClock, cam);
-  // Thrown flashbangs and bottles fall from the sky over everything (ID-107).
+  // Airstrike bombs fall from the sky over everything (ID-107).
   for (const i of scene.incoming) {
     const fall = thrownFall(i, scene.time);
-    if (fall !== null) drawThrown(ctx, art, i, fall, scene.time, cam);
+    if (fall !== null) drawThrown(ctx, art, i, fall, cam);
   }
   if (aim) {
-    ctx.strokeStyle = COLOR.focus;
+    // An airstrike shows the area its bombs land in (ID-107, ID-139), fire orange, and one
+    // bomb's reach.
+    const a = throwArea(scene, aim.skill, aim.x, aim.y);
+    ctx.strokeStyle = COLOR.aimFire;
     ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
-    if (aim.skill === 'airstrike') {
-      // An airstrike shows every bomb along its row.
-      for (const p of carpet(scene, aim.y)) {
-        groundCircle(ctx, p.x, p.y, SKILLS.airstrike.radius, cam);
-        ctx.stroke();
-      }
-    } else {
-      // A flashbang or molotov shows the area its bursts land in (ID-107), and one burst's reach.
-      // A molotov's area is fire orange, a flashbang's the focus yellow.
-      const a = throwArea(scene, aim.skill, aim.x, aim.y);
-      const fire = aim.skill === 'molotov';
-      if (fire) ctx.strokeStyle = COLOR.aimFire;
-      groundCircle(ctx, a.x, a.y, a.r, cam);
-      ctx.fillStyle = fire ? COLOR.aimFireFill : COLOR.aimFill;
-      ctx.fill();
-      ctx.setLineDash([8, 6]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      groundCircle(ctx, a.x, a.y, SKILLS[aim.skill].radius, cam);
-      ctx.globalAlpha = 0.6;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
+    groundCircle(ctx, a.x, a.y, a.r, cam);
+    ctx.fillStyle = COLOR.aimFireFill;
+    ctx.fill();
+    ctx.setLineDash([8, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    groundCircle(ctx, a.x, a.y, SKILLS[aim.skill].radius, cam);
+    ctx.globalAlpha = 0.6;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
   // Each defender's name on top of every sprite and effect, so none hides it (ID-074).
   // Only those the sprites above drew: a walker, or the one standing on their post.

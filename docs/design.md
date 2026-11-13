@@ -342,6 +342,8 @@ Defenders stand on **posts** the player builds and chooses between.
   cash, +30 condition to the most worn turret, unjamming a jammed one).
   Cash lives only in the fight and is never saved. Active skills come with
   ID-019.
+- *Before ID-139 (Airstrike is the one skill now; Flashbang and Molotov are
+  throwable cards, §8; see the ID-139 note below):*
 - **As built (ID-019, starting points):** three active skills are researched
   at the Research Lab: Flashbang (Lab 1, 30 Scrap, 20 Wood), Molotov (Lab 1,
   after Flashbang, 30 Scrap, 30 Wood) and Airstrike (Lab 2, after Molotov,
@@ -400,6 +402,32 @@ Defenders stand on **posts** the player builds and chooses between.
   Measured at Horde 7's last wave (a crowd of 40 Shamblers walking in, the
   squad not shooting, 6 seeds): one throw kills at least 30% of the
   Shamblers its fires touch, and at least half when picked alone.
+- **As built (ID-139): Airstrike is the one skill.** Flashbang and Molotov
+  left the skills to become throwable cards (§8): the notes above describe
+  them as they were before ID-139. They are gone from the Lab tree (§11),
+  the skill pick, `START_SKILLS` and the fight's skill buttons. The
+  **Airstrike** is now aimed at an area, not a row: its **12** bombs land at
+  seeded random spots spread evenly over a circle of radius **260** round
+  the aim (moved past the outer wall and onto the field first, as the
+  Flashbang's area was), still one every 0.1 s, each falling 0.5 s; an
+  armed Airstrike shows that circle, fire orange, and one bomb's reach.
+  Each bomb hits for **4×** this wave's Shambler HP (`SKILLS.airstrike.share`,
+  `bombDamage`; a flat 40 before), on a **60 s** cooldown (40 s before); cost
+  40 cash. The ticket's starting point was a flat 80 a bomb and the carpet's
+  9 bombs. The balance pass took the bombs to 12 (a carpet ran 9 to 12, 12
+  with no wall built) and made the hit a share of Shambler HP, as Molotov's
+  fires (ID-114) and Frag Grenades (ID-124) are: with Flashbang and Molotov
+  gone from the pick, flat bombs left horde-only Horde 8 under its 60% at
+  80–150 a bomb, and the late hordes (11–18) stalled a campaign at Horde 13,
+  where the old Molotov skill's scaling fires had carried. At 4× the
+  horde-only Hordes 4–10 match main (Horde 8 57% over 40 seeds on both) and
+  every late campaign beats Horde 18 in 74–78 fights (main 66–98). Picked alone
+  it still hits ×2, and in the horde-only build it is always alone. The
+  pick keeps its max-2 rule for later skills; with one skill an empty pick
+  says "No skill picked. Picked alone, it works ×2". A new game starts with
+  Airstrike picked. A save whose pick, research or research queue holds
+  `flashbang` or `molotov` loads with them dropped; a pick left empty falls
+  back to Airstrike if it is researched, or to none.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or
@@ -413,7 +441,8 @@ Defenders stand on **posts** the player builds and chooses between.
     recruit cards or replacements come.
   - Horde cash and the shop row are hidden: kills pay no cash and no skill
     is researched.
-  - **As built (ID-100): skills.** Before every horde the start or result
+  - **As built (ID-100): skills** *(before ID-139: the pick is Airstrike
+    alone now, picked for a new game, §4)*. Before every horde the start or result
     screen picks up to 2 of Flashbang, Molotov and Airstrike
     (`SQUAD_SKILLS.max`); the last pick is saved and pre-selected. A new
     game (and an older save) starts with Flashbang and Molotov picked
@@ -1357,6 +1386,8 @@ spacing real hordes have (see the ID-077 note below).
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
   | Incendiary Rounds | behaviour | rare | The enemy hit burns **3%** of this wave's Shambler HP a second for 3 s (ID-124; was a flat 1 dmg/s); a new hit resets it at the new hit's rate, never stacks | 6% | 9% (was 3 dmg/s) |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
+  | Flashbang (ID-139; a skill before) | behaviour | rare | Throwable slot. The squad throws one every **10 s ÷ the survivors on the line**, aimed as Frag Grenades is (within **600 px**, the most others within **100 px**, landing **0.6 s** later). It stuns (no moving, no attacking) every enemy within **100 px** for **3 s**. An enemy can't be stunned again until **3 s** after its stun ends, and isn't aimed at till then, so a group or a boss is never held for good. **Cost:** the squad's guns reach **15%** less while it is held (the glare). Its throws take no one's hands | 4 s | 5 s |
+  | Molotov (ID-139; a skill before) | behaviour | rare | Throwable slot. The squad throws one every **12 s ÷ the survivors on the line**, aimed as Frag Grenades is (within **600 px**, the most others within **50 px**, landing **0.6 s** later). It leaves a fire of **50 px** burning **4 s**, each second **10%** of this wave's Shambler HP to every enemy inside (`fireDps`). **Cost:** enemies inside a fire move **30%** faster. Its throws take no one's hands | 6 s | 8 s |
   | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each level-up (more below) | 25%; 20 durability | 35%; 30 durability |
   | Aim for the Head (ID-130) | stat | rare | Every squad hit, any weapon, has **+5%** crit chance, added to the gun's own (the Rifle's trait, crit affixes), Sharp Mind's and the Gunner's | +10% | +15% |
   | Hollow Points (ID-130; id `hollow-point-rounds`, as `hollow-points` is Heavy Rounds) | stat | rare | Every squad crit deals **+25%** of the hit more, added to the ×2 (and to Sharp Mind's and a crit damage affix's share): ×2.25 with nothing else | +50% (×2.5) | +75% (×2.75) |
@@ -1377,7 +1408,7 @@ spacing real hordes have (see the ID-077 note below).
   **Steady across hordes (ID-124).** Frag Grenades' burst and Incendiary
   Rounds' burn were flat (20 damage; 1, 2, 3 dmg/s), more than a whole
   Shambler early (16 HP at horde-only Horde 1) and a quarter of one late
-  (84 HP at Horde 15). Like Molotov's fire (ID-114) they are now a share of
+  (84 HP at Horde 15). Like Molotov's fire (ID-114; a card since ID-139) they are now a share of
   this wave's Shambler HP on the fight's HP curve (`CARD.frag.share`,
   `CARD.burn.share`, `shamblerHp`): **35%** a burst (25% since ID-137), and **3%, 6%, 9%** a
   second. Piercing Rounds is a chance at every level, **25%, 50%, 75%**, and
@@ -1531,6 +1562,31 @@ spacing real hordes have (see the ID-077 note below).
   later offer and replace the new one the same way, even when the held one
   is at max). New hits use the new card from the next shot; burns and
   paralyses already on enemies run out as they were.
+
+  **One throwable slot (ID-139):** the squad holds at most one of Frag
+  Grenades, Flashbang and Molotov, so the fight never turns into a
+  throwing game; all three stay in the pool all horde. Picking the one held
+  levels it up (Frag Grenades is unique: not offered again while held);
+  picking another replaces it as the ammo slot does: the new card starts at
+  level 1, the old card and its levels are gone, and the offer's red box
+  says so ("Replaces Molotov Lv 2. Its levels are lost."; for Frag
+  Grenades, which has no levels, "Replaces Frag Grenades."). One timer
+  serves the slot: the first throwable throws as soon as it is picked; a
+  swap or a level-up waits out the timer, then the new card throws.
+  Throws already in the air land as they were (a Flashbang's stun time and
+  a Molotov's burn time go with the throw), and fires and stuns on the
+  field run out as they were. Flashbang and Molotov are offered only while
+  a group stands on the field (**12** enemies outside the camp,
+  `CARD.crowd`), so they don't crowd early offers (ID-131); Frag Grenades
+  keeps its epic rarity as its only gate.
+
+  *Balance (ID-139, 40 seeds a scene, one throwable picked at the start,
+  no skill):* a lone survivor at Horde 2 wins most with Molotov (11, Frag
+  7, Flashbang 2); two fresh survivors at Horde 4 with Frag Grenades (9,
+  Molotov 2, Flashbang 0); Horde 6's full squad on level 1 Carbines with
+  Flashbang (11, Frag 9, Molotov 9). The skill's Molotov numbers (40% a
+  second for 6 s, 5 fires every 30 s) thrown this often won every small
+  fight, so the card's fires burn **10%** for **4/6/8 s**.
 
   **Repeatable cards (uncapped):** Sharpshooter (**+10%** damage a pick),
   Rapid Fire (**+7.5%** fire rate; +8% before ID-125), Long Sight (**+6%** range) and Reinforce
@@ -2303,8 +2359,11 @@ Set before sending; they apply to any location, plaza or single building.
     1 h (Lab 2, after Auto-turret) and **Military batteries** 200, 2 h
     (after High-capacity): each unlocks that battery for workbench
     crafting (ID-034) and adds 500 to the bank cap (1,000 → 2,000).
-  - Skills: Flashbang 10, 15 min; Molotov 20, 30 min; Airstrike 60, 1 h
-    (Lab 2).
+  - Skills: Airstrike 60, 1 h (Lab 2), with no earlier node since ID-139.
+    *Before ID-139:* Flashbang 10, 15 min; Molotov 20, 30 min (after
+    Flashbang); Airstrike after Molotov. Those two are cards now (§8); a
+    save's research or queue that holds them loads without them (no Genes
+    back).
   - Perks: Scavenger's Eye 15, Fortify 20, Butcher's Hunger 15, Rally
     Call 15 (30 min each); Second Look 60, 1 h; Overclock and Power Saver
     80, 1 h 30 min (Lab 2, after Auto-turret); Perk slot 2 15, 45 min;
@@ -2322,8 +2381,9 @@ Set before sending; they apply to any location, plaza or single building.
     build they come from the boss hordes instead (ID-127, Start and pacing).
   - Camp: **More cars** 150, 2 h (Lab 2): a second car.
   - Perk levels share the queue (§5). The whole tree, levels included,
-    costs about 4,300 Genes: Horde 10's Genes buy Metal walls, Flashbang
-    and Perk slot 2 even with no mutant killed (about a dozen nodes when
+    costs about 4,300 Genes (about 4,270 since ID-139 took Flashbang and
+    Molotov out): Horde 10's Genes buy Metal walls, Flashbang (before
+    ID-139) and Perk slot 2 even with no mutant killed (about a dozen nodes when
     the mutants die too), and winning every horde to 29 with every mutant
     killed still falls short of the whole tree. Larger base area and new
     map locations stay out of v1; the map keeps revealing by horde number.
@@ -2623,7 +2683,8 @@ then grid-tuned with the scripted player (`src/core/sim.ts`).
 
 - **The scripted player now plays like a stuck player.** After a loss at a
   new horde it replays the highest beaten horde 3 times (`SQUAD_FARM`), then
-  tries again; it uses its picked skills (Flashbang and Molotov) once 6 enemies
+  tries again; it uses its picked skills (Flashbang and Molotov; the Airstrike
+  alone since ID-139, and it keeps the first throwable it takes) once 6 enemies
   stand on the field, aimed at the one nearest the wall. A worst-luck mode
   throws every replay drop away except a guaranteed upgrade, and counts each
   toward the bad-luck guarantee.
@@ -2743,7 +2804,10 @@ Targets, each with a balance test (as in ID-102 unless named):
   2.5–7× the Squad Power and 2.2–2.5× the XP a fight minute of farming Horde
   11, on each of 3 seeds.
 - **Stats** (`balance/stats-close.test.ts`): the close-fight measure plays with
-  cards (§6 Stats).
+  cards (§6 Stats). Since ID-139 (PM) its bar is 20 points, not 10: with
+  Airstrike the one skill, Agility leads (Mind 0.47, Agility 0.67, Instinct
+  0.56; main before 0.47, 0.53, 0.50), and the stats were not retuned in that
+  ticket.
 
 ## 12. Save
 
@@ -3316,6 +3380,10 @@ original outline.
   reads only the label. The armed airstrike's aim shows every bomb's ring
   along the row. No drawn placeholder remains.
 - **As built (ID-107): thrown skills, molotov fire and stun stars.**
+  *Since ID-139 an armed Airstrike shows its area this way, fire orange, and
+  survivors throw Flashbangs and Molotovs on the Frag Grenade's arc (the same
+  canister and bottle art, 26 units across, smaller in the hand at the
+  wind-up); fires, pops and stars are as below. Before ID-139:*
   - An armed Flashbang or Molotov shows its area at the pointer as a pale
     yellow dashed ring with a faint fill, and one burst's reach inside it
     (on touch, where nothing hovers, the tap throws it at once).

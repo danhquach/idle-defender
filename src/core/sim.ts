@@ -248,6 +248,8 @@ const SQUAD_PICKS: readonly UpgradeId[] = [
   'sharpshooter',
   'rapid-fire',
   'frag-grenades',
+  'flashbang',
+  'molotov',
   'piercing-rounds',
   'concussion-rounds',
   'extended-mags',
@@ -267,8 +269,8 @@ const SQUAD_PICKS: readonly UpgradeId[] = [
 
 /**
  * Which card of the open offer the horde-only scripted player takes: the best by
- * `SQUAD_PICKS`. It keeps the ammo it loaded first (ID-097): a card that would replace it
- * comes last.
+ * `SQUAD_PICKS`. It keeps the ammo it loaded first (ID-097), and the throwable it took
+ * first (ID-139): a card that would replace either comes last.
  */
 export function squadPick(s: Pick<HordeState, 'offer' | 'taken'>): number {
   const rank = (c: Card): number => {

@@ -6,6 +6,7 @@
 // from the wall (design §8: the cards act where the fight is).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { recruit } from '../camp.ts';
+import { THROWABLE_CARDS } from '../cards.ts';
 import { WALL } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
 import { rebuildWire, tick, type HordeState, type UpgradeId } from '../horde.ts';
@@ -62,7 +63,7 @@ function play(
     // As the picks would: each wire row at its level's full (ID-104, ID-123).
     if (card === 'barbed-wire') rebuildWire(s);
     // As the pick would: the first grenade is thrown at once.
-    if (card === 'frag-grenades') s.nextFragAt = 0;
+    if (card && THROWABLE_CARDS.includes(card)) s.nextThrowAt = 0;
     const front = Math.max(...s.layers.map((l) => l.x)) + WALL.depth;
     // Each enemy's last place seen, half a second apart; one gone was killed there.
     let seen = new Map<number, number>();

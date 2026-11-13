@@ -1,7 +1,7 @@
 // Design §12, as built ID-035: the research queue and perk levels in the save, read back
 // through the allow-list. Hostile values are refused; a clock set back is cut as rests are.
 import { describe, expect, it } from 'vitest';
-import { BANK_CAP, CAR, PERK_IDS, RESEARCH, stockOf } from '../core/data.ts';
+import { BANK_CAP, CAR, PERK_IDS, RESEARCH, RESEARCH_IDS, stockOf } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { queueResearch } from '../core/research.ts';
 import { researchNow } from '../core/testing.ts';
@@ -19,11 +19,11 @@ function ok(r: ReturnType<typeof queueResearch>): GameState {
   return r.game;
 }
 
-/** Lab 2, plenty of Genes, Metal walls and Flashbang queued at NOW. */
+/** Lab 2, plenty of Genes, Metal walls and Sharpened spikes queued at NOW. */
 function queued(): GameState {
   let g: GameState = { ...newGame(), lab: 2, stock: stockOf({ genes: 999 }) };
   g = ok(queueResearch(g, 'metal-walls', NOW));
-  return ok(queueResearch(g, 'flashbang', NOW));
+  return ok(queueResearch(g, 'sharpened-spikes', NOW));
 }
 
 /** `game` saved at NOW, changed by `change` as JSON, then read back. */
@@ -38,7 +38,7 @@ describe('save: research queue (ID-035)', () => {
     const g = queued();
     expect(reread(g)?.game).toEqual(g);
     expect(reread(g)?.game.queue).toEqual({
-      ids: ['metal-walls', 'flashbang'],
+      ids: ['metal-walls', 'sharpened-spikes'],
       endsAt: NOW + 15 * MIN,
     });
   });
@@ -58,7 +58,7 @@ describe('save: research queue (ID-035)', () => {
   it('refuses more than 4 entries, a node twice, and unknown or look-alike ids', () => {
     const g = queued();
     const bad: unknown[][] = [
-      ['metal-walls', 'flashbang', 'molotov', 'fortify', 'rally-call'],
+      ['metal-walls', 'sharpened-spikes', 'glue-traps', 'fortify', 'rally-call'],
       ['metal-walls', 'metal-walls'],
       ['death-ray'],
       ['__proto__'],
@@ -88,7 +88,7 @@ describe('save: research queue (ID-035)', () => {
   it('refuses a queue the game could not have built', () => {
     const g = queued();
     const cases: [string, Loose][] = [
-      ['a node before the one it needs', ['molotov', 'flashbang']],
+      ['a node before the one it needs', ['incendiary-traps', 'glue-traps']],
       ['a node above the Lab', ['second-look']],
       ['a perk level for a perk not owned', ['level-fortify']],
       ['a perk level before its own node', ['level-fortify', 'fortify']],
@@ -100,10 +100,10 @@ describe('save: research queue (ID-035)', () => {
         why,
       ).toBeNull();
     }
-    const done = researchNow({ ...newGame(), lab: 1 }, 'flashbang');
+    const done = researchNow({ ...newGame(), lab: 1 }, 'sharpened-spikes');
     if (!done.ok) throw new Error(done.reason);
     const d = { ...done.game, queue: { ids: [], endsAt: null } };
-    expect(reread(d, (x) => (x.queue = { ids: ['flashbang'], endsAt: NOW }))).toBeNull();
+    expect(reread(d, (x) => (x.queue = { ids: ['sharpened-spikes'], endsAt: NOW }))).toBeNull();
     const top = { ...newGame(), lab: 1, perkLevels: { ...newGame().perkLevels, 'steady-fire': 3 } };
     expect(reread(top, (x) => (x.queue = { ids: ['level-steady-fire'], endsAt: NOW }))).toBeNull();
     // A perk owned (from a boss) is not researched again.
@@ -231,5 +231,121 @@ describe('save: research limits elsewhere (ID-035)', () => {
     if (!r.ok) throw new Error(r.reason);
     expect(reread(r.game, (x) => (x.camp.cars = 2))?.game.camp.cars).toBe(2);
     expect(reread(r.game, (x) => (x.camp.cars = 3))).toBeNull();
+  });
+});
+
+describe('save: the retired Flashbang and Molotov nodes (ID-139)', () => {
+  const asSaved = (change: (g: Loose) => void, game: GameState = { ...newGame(), lab: 2 }) =>
+    reread(game, change);
+
+  it('are dropped from the research, keeping the rest in order', () => {
+    const back = asSaved((x) => (x.research = ['flashbang', 'molotov', 'airstrike']));
+    expect(back?.game.research).toEqual(['airstrike']);
+    const mixed = asSaved((x) => (x.research = ['sharpened-spikes', 'flashbang', 'glue-traps']));
+    expect(mixed?.game.research).toEqual(['sharpened-spikes', 'glue-traps']);
+    // A research of nothing else, and with no Lab to have held them, is simply empty.
+    expect(asSaved((x) => (x.research = ['flashbang']), newGame())?.game.research).toEqual([]);
+  });
+
+  it('a retired id twice is dropped, not "researched twice"', () => {
+    const back = asSaved((x) => (x.research = ['flashbang', 'flashbang', 'molotov', 'molotov']));
+    expect(back?.game.research).toEqual([]);
+  });
+
+  it('the Airstrike no longer needs anything before it, only Lab 2', () => {
+    expect(asSaved((x) => (x.research = ['airstrike']))?.game.research).toEqual(['airstrike']);
+    expect(asSaved((x) => (x.research = ['airstrike']), { ...newGame(), lab: 1 })).toBeNull();
+  });
+
+  it('are dropped from the queue, the next entry then running', () => {
+    const g = queued();
+    const back = reread({ ...g, lab: 1 }, (x) => {
+      x.queue.ids = ['flashbang', 'metal-walls', 'molotov', 'fortify'];
+    });
+    expect(back?.game.queue.ids).toEqual(['metal-walls', 'fortify']);
+    expect(back?.game.queue.endsAt).toBeLessThanOrEqual(NOW + 15 * MIN);
+  });
+
+  it('a running retired node hands over as if it had ended: the next takes its full time after', () => {
+    // Molotov ran until 5 min from now; Metal walls (15 min) then runs to 20 min, capped at
+    // its full time from the save (15 min): never a free speed-up.
+    const g = queued();
+    const at = (endsAt: number) =>
+      reread({ ...g, lab: 1 }, (x) => {
+        x.queue = { ids: ['molotov', 'metal-walls'], endsAt };
+      })?.game.queue;
+    expect(at(NOW + 5 * MIN)).toEqual({ ids: ['metal-walls'], endsAt: NOW + 15 * MIN });
+    // One that ended 10 min ago: Metal walls started then, 5 min left.
+    expect(at(NOW - 10 * MIN)).toEqual({ ids: ['metal-walls'], endsAt: NOW + 5 * MIN });
+    // A retired node waiting behind the running one takes nothing from it.
+    const kept = reread({ ...g, lab: 1 }, (x) => {
+      x.queue = { ids: ['metal-walls', 'flashbang'], endsAt: NOW + 3 * MIN };
+    })?.game.queue;
+    expect(kept).toEqual({ ids: ['metal-walls'], endsAt: NOW + 3 * MIN });
+  });
+
+  it('hostile research arrays are still refused, retired ids or not', () => {
+    const bad: unknown[] = [
+      // Unknown or mistyped beside a retired id.
+      ['flashbang', 'death-ray'],
+      ['molotov', '__proto__'],
+      ['__proto__', 'flashbang'],
+      ['flashbang', 'constructor'],
+      ['flashbang', 1],
+      ['flashbang', null],
+      ['flashbang', ['molotov']],
+      ['flashbang', { molotov: true }],
+      ['Flashbang'],
+      ['flashbang '],
+      ['flashbang​'],
+      ['‮molotov'],
+      ['mоlotov'], // Cyrillic o
+      // Known twice, with retired ids around them.
+      ['flashbang', 'metal-walls', 'metal-walls'],
+      // Oversized.
+      new Array(10_000).fill('flashbang'),
+      new Array(RESEARCH_IDS.length + 3).fill('molotov'),
+      ['x'.repeat(100_000), 'flashbang'],
+      // Not an array.
+      'flashbang',
+      { 0: 'flashbang', length: 1 },
+    ];
+    for (const research of bad) {
+      expect(
+        asSaved((x) => (x.research = research)),
+        JSON.stringify(research).slice(0, 50),
+      ).toBeNull();
+    }
+  });
+
+  it('hostile queues are still refused, retired ids or not', () => {
+    const g = queued();
+    const bad: unknown[][] = [
+      ['flashbang', 'death-ray'],
+      ['molotov', '__proto__'],
+      ['flashbang', 1],
+      ['flashbang', null],
+      ['flashbang', 'metal-walls', 'metal-walls'],
+      ['flashbang', 'metal‐walls'], // a Unicode hyphen
+      ['‮flashbang'],
+      new Array(10_000).fill('flashbang'),
+      // More than the queue holds, retired ids not counting against it.
+      ['flashbang', 'metal-walls', 'sharpened-spikes', 'glue-traps', 'fortify', 'rally-call'],
+    ];
+    for (const ids of bad) {
+      expect(
+        reread(g, (x) => (x.queue.ids = ids)),
+        JSON.stringify(ids).slice(0, 60),
+      ).toBeNull();
+    }
+  });
+
+  it('an old queue holding only retired nodes still loads, with no queue', () => {
+    const g = queued();
+    const back = reread({ ...g, lab: 1 }, (x) => {
+      x.queue = { ids: ['flashbang', 'molotov'], endsAt: NOW + 15 * MIN };
+    });
+    expect(back).not.toBeNull();
+    expect(back?.game.queue).toEqual({ ids: [], endsAt: null });
   });
 });

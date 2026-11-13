@@ -418,8 +418,7 @@ export function shopButtons(s: HordeState): (HudButton & { item: ShopItem })[] {
 
 /** What a ready skill's button says it does next (design §4, ID-041). */
 const AIM_HINT = {
-  row: 'Then click a row to carpet bomb (Esc to cancel)',
-  area: 'Then click an area to throw it at (Esc to cancel)',
+  area: 'Then click an area to bomb (Esc to cancel)',
 } as const;
 
 /**
@@ -470,9 +469,7 @@ export function skillButtons(
  * away: touch screens show no tooltip.
  */
 export const AIM_PROMPT: Readonly<Record<SkillId, string>> = {
-  airstrike: 'Tap a row to bomb it · tap Airstrike again to cancel',
-  flashbang: 'Tap or drag to an area · tap Flashbang again to cancel',
-  molotov: 'Tap or drag to an area · tap Molotov again to cancel',
+  airstrike: 'Tap or drag to an area · tap Airstrike again to cancel',
 };
 
 /**
@@ -491,15 +488,10 @@ export const skillSlots = (s: Pick<HordeState, 'skills'>): SkillId[] =>
 
 /** What each skill does, for the pick before a horde (ID-100); `boost` is its ×2 line, picked alone. */
 const SKILL_BLURB: Readonly<Record<SkillId, { does: string; boost: string }>> = {
-  flashbang: {
-    does: `Stuns an area you pick, ${SKILLS.flashbang.count} bursts`,
-    boost: `×${SQUAD_SKILLS.solo}: ${SKILLS.flashbang.count * SQUAD_SKILLS.solo} bursts`,
+  airstrike: {
+    does: `Bombs an area you pick, ${SKILLS.airstrike.count} bombs`,
+    boost: `×${SQUAD_SKILLS.solo}: hits twice as hard`,
   },
-  molotov: {
-    does: 'Sets an area you pick on fire',
-    boost: `×${SQUAD_SKILLS.solo}: burns twice as hard`,
-  },
-  airstrike: { does: 'Bombs a row you pick', boost: `×${SQUAD_SKILLS.solo}: hits twice as hard` },
 };
 
 /** One skill in the pick before a horde (ID-100). */
@@ -520,7 +512,7 @@ export interface SkillChoice {
 /** The skill pick before a horde (ID-100): each skill, and a line on the pick's power. */
 export interface SkillPick {
   options: SkillChoice[];
-  /** "×2 power: Molotov alone works twice as hard", or how many more may be picked. */
+  /** "×2 power: Airstrike alone works twice as hard", or how many more may be picked. */
   note: string;
   /** Exactly one is picked: it works ×2. */
   solo: boolean;
@@ -529,6 +521,8 @@ export interface SkillPick {
 export function skillPicker(pick: readonly SkillId[]): SkillPick {
   const solo = pick.length === 1;
   const full = pick.length >= SQUAD_SKILLS.max;
+  // With one skill to pick (Airstrike, ID-139) it is always alone: no "up to 2" or "alone".
+  const only = SKILL_IDS.length === 1 ? SKILLS[SKILL_IDS[0]!].name : null;
   return {
     options: SKILL_IDS.map((skill) => {
       const picked = pick.includes(skill);
@@ -544,9 +538,13 @@ export function skillPicker(pick: readonly SkillId[]): SkillPick {
       };
     }),
     note: solo
-      ? `×${SQUAD_SKILLS.solo} power: ${SKILLS[pick[0]!].name} alone works twice as hard`
+      ? only
+        ? `×${SQUAD_SKILLS.solo} power: your only skill, so it hits twice as hard`
+        : `×${SQUAD_SKILLS.solo} power: ${SKILLS[pick[0]!].name} alone works twice as hard`
       : pick.length === 0
-        ? `Pick up to ${SQUAD_SKILLS.max}. Just 1 works twice as hard`
+        ? only
+          ? `No skill picked. ${only} hits ×${SQUAD_SKILLS.solo} as your only skill`
+          : `Pick up to ${SQUAD_SKILLS.max}. Just 1 works twice as hard`
         : `${SQUAD_SKILLS.max} picked. Drop one for ×${SQUAD_SKILLS.solo} power`,
     solo,
   };
@@ -2321,7 +2319,9 @@ export function createHud(
       skillBlock.replaceChildren();
       return;
     }
-    const label = el('span', 'hud-horde-label', `Skills (up to ${SQUAD_SKILLS.max})`);
+    // "Up to 2" asks for a second skill only while there is one (ID-139: Airstrike alone).
+    const most = Math.min(SQUAD_SKILLS.max, p.options.length);
+    const label = el('span', 'hud-horde-label', most > 1 ? `Skills (up to ${most})` : 'Skill');
     label.id = 'hud-skill-label';
     skillBlock.setAttribute('aria-labelledby', label.id);
     const row = el('div', 'hud-skill-options');

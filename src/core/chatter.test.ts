@@ -604,7 +604,7 @@ describe('feats the fight records for chatter (ID-085)', () => {
   it('a Frag Grenade thrown is its thrower’s', () => {
     const s = fight();
     s.taken.push('frag-grenades');
-    s.nextFragAt = 0;
+    s.nextThrowAt = 0;
     enemy(s, {
       x: s.defenders[0]!.x + 150,
       y: s.defenders[0]!.y,

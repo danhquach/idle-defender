@@ -941,125 +941,73 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     }
   };
 
-  it('a new game starts with Flashbang and Molotov picked; a toggle is saved at once', () => {
+  it('a new game starts with the Airstrike picked; a toggle is saved at once (ID-139)', () => {
     const { root, saved } = boot();
     step(0);
-    expect(options(root).map((b) => b.dataset.skill)).toEqual([
-      'flashbang',
-      'molotov',
-      'airstrike',
-    ]);
-    expect(pressed(root)).toEqual(['flashbang', 'molotov']);
-    expect(option(root, 'airstrike').disabled).toBe(true);
-    expect(root.querySelector('.hud-skill-note')!.textContent).toBe(
-      '2 picked. Drop one for ×2 power',
-    );
-    option(root, 'molotov').click();
-    expect(saved().skillPick).toEqual(['flashbang']);
-    expect(pressed(root)).toEqual(['flashbang']);
-    expect(root.querySelector('.hud-skill-note')!.textContent).toContain('×2 power');
-    expect(option(root, 'flashbang').querySelector('.hud-skill-option-boost')!.textContent).toBe(
-      '×2: 8 bursts',
-    );
+    expect(options(root).map((b) => b.dataset.skill)).toEqual(['airstrike']);
+    expect(pressed(root)).toEqual(['airstrike']);
     expect(option(root, 'airstrike').disabled).toBe(false);
+    // One skill to pick: the header asks for no second one.
+    expect(root.querySelector('#hud-skill-label')!.textContent).toBe('Skill');
+    expect(root.querySelector('.hud-skill-note')!.textContent).toBe(
+      '×2 power: your only skill, so it hits twice as hard',
+    );
+    expect(option(root, 'airstrike').querySelector('.hud-skill-option-boost')!.textContent).toBe(
+      '×2: hits twice as hard',
+    );
+    option(root, 'airstrike').click();
+    expect(saved().skillPick).toEqual([]);
+    expect(pressed(root)).toEqual([]);
+    expect(root.querySelector('.hud-skill-note')!.textContent).toBe(
+      'No skill picked. Airstrike hits ×2 as your only skill',
+    );
+    option(root, 'airstrike').click();
+    expect(saved().skillPick).toEqual(['airstrike']);
     // The skill row waits under the screen, and its keys do nothing there.
     expect(root.querySelector<HTMLElement>('.hud-shop')!.hidden).toBe(true);
     key('q');
-    expect(saved().skillPick).toEqual(['flashbang']);
+    expect(saved().skillPick).toEqual(['airstrike']);
   });
 
-  it('the fight shows the picked skills, free, on Q and W left to right, whatever the layout', () => {
-    const { root, button, saved } = boot();
+  it('the fight shows the picked skill, free, on Q, whatever the layout (ID-139)', () => {
+    const { root, button } = boot();
     step(0);
-    option(root, 'flashbang').click();
-    option(root, 'flashbang').click();
-    expect(saved().skillPick).toEqual(['molotov', 'flashbang']);
     button().click();
     step(16);
-    expect(shown(root).map((b) => b.querySelector('.hud-skill-key')!.textContent)).toEqual([
-      'Q',
-      'W',
-    ]);
-    expect(labels(root)).toEqual(['Flashbang', 'Molotov']);
-    expect(shown(root).map((b) => b.querySelector('.btn-cost')!.textContent)).toEqual(['', '']);
-    // W on a layout that types another letter there still arms the molotov (ID-107),
-    // and a click on the field throws it there.
-    key('ц', 'KeyW');
+    expect(shown(root).map((b) => b.querySelector('.hud-skill-key')!.textContent)).toEqual(['Q']);
+    expect(labels(root)).toEqual(['Airstrike ×2']);
+    expect(shown(root).map((b) => b.querySelector('.btn-cost')!.textContent)).toEqual(['']);
+    // Q on a layout that types another letter there still arms it (ID-107),
+    // and a click on the field drops it there.
+    key('ц', 'KeyQ');
     step(32);
-    expect(shown(root)[1]!.getAttribute('aria-pressed')).toBe('true');
-    expect(labels(root)).toEqual(['Flashbang', 'Molotov']);
+    expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('true');
+    expect(labels(root)).toEqual(['Airstrike ×2']);
     clickField(root, 1000, 400);
     step(48);
-    expect(labels(root)).toEqual(['Flashbang', `Molotov ${SKILLS.molotov.cooldown}s`]);
+    expect(labels(root)).toEqual([`Airstrike ×2 ${SKILLS.airstrike.cooldown}s`]);
     expect(vi.mocked(drawScene).mock.lastCall![2].incoming.map((i) => i.skill)).toEqual(
-      Array(SKILLS.molotov.count).fill('molotov'),
+      Array(SKILLS.airstrike.count).fill('airstrike'),
     );
-    // A key no skill holds does nothing.
+    // W holds no skill now, and neither does a key no skill holds.
+    key('w');
     key('e');
     expect(root.querySelector(HIDDEN)).toBeNull();
   });
 
-  it('one press is one key on any layout: the key at Q’s place is a skill, never also 1× (AZERTY)', () => {
-    const { root, button } = boot();
-    step(0);
-    button().click();
-    step(16);
-    const speed = () =>
-      root.querySelector('.hud-speed-button[aria-pressed="true"]')!.textContent!.slice(0, 2);
-    key('s');
-    step(32);
-    expect(speed()).toBe('2×');
-    // AZERTY's "a" sits at Q's place: Flashbang is armed, the speed stays.
-    key('a', 'KeyQ');
-    step(48);
-    expect(speed()).toBe('2×');
-    expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('true');
-    expect(labels(root)[0]).toBe('Flashbang');
-    // Its "q" sits at A's place: 1×, and no skill.
-    key('q', 'KeyA');
-    step(64);
-    expect(speed()).toBe('1×');
-    expect(labels(root)[1]).toBe('Molotov');
-  });
-
-  it('arming Airstrike says over the skill row how to aim it until it is put away', () => {
-    const { root, button } = boot();
-    step(0);
-    option(root, 'flashbang').click();
-    option(root, 'molotov').click();
-    option(root, 'airstrike').click();
-    button().click();
-    step(16);
-    expect(labels(root)).toEqual(['Airstrike ×2']);
-    const airstrike = shown(root)[0]!;
-    airstrike.click();
-    step(32);
-    // A caption over the skill row says how to aim, until it is used or put away.
-    const caption = root.querySelector<HTMLElement>('.hud-aim-caption')!;
-    expect(caption.hidden).toBe(false);
-    expect(caption.textContent).toBe(AIM_PROMPT.airstrike);
-    expect(airstrike.getAttribute('aria-pressed')).toBe('true');
-    step(5000);
-    expect(caption.hidden).toBe(false);
-    key('q');
-    step(5016);
-    expect(airstrike.getAttribute('aria-pressed')).toBe('false');
-    expect(caption.hidden).toBe(true);
-  });
-
-  it('Flashbang and Molotov arm with a caption, the area shows at the pointer, Esc or a second press cancels (ID-107)', () => {
+  it('the Airstrike arms with a caption, the area shows at the pointer, Esc or a second press cancels (ID-107, ID-139)', () => {
     const { root, button } = boot();
     step(0);
     button().click();
     step(16);
     const caption = root.querySelector<HTMLElement>('.hud-aim-caption')!;
-    const [flash, molotov] = shown(root);
+    const [flash] = shown(root);
     expect(caption.hidden).toBe(true);
     flash!.click();
     step(32);
     expect(flash!.getAttribute('aria-pressed')).toBe('true');
     expect(caption.hidden).toBe(false);
-    expect(caption.textContent).toBe(AIM_PROMPT.flashbang);
+    expect(caption.textContent).toBe(AIM_PROMPT.airstrike);
     // Nothing is thrown on the press.
     expect(vi.mocked(drawScene).mock.lastCall![2].incoming).toEqual([]);
     // A second press puts it away.
@@ -1068,14 +1016,14 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     expect(flash!.getAttribute('aria-pressed')).toBe('false');
     expect(caption.hidden).toBe(true);
     // Esc puts it away too.
-    molotov!.click();
+    flash!.click();
     step(64);
-    expect(caption.textContent).toBe(AIM_PROMPT.molotov);
+    expect(caption.textContent).toBe(AIM_PROMPT.airstrike);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     step(80);
-    expect(molotov!.getAttribute('aria-pressed')).toBe('false');
+    expect(flash!.getAttribute('aria-pressed')).toBe('false');
     expect(caption.hidden).toBe(true);
-    // Armed, the hovered spot is the aim drawn; a click throws every burst into the area.
+    // Armed, the hovered spot is the aim drawn; a click drops every bomb into the area.
     key('q');
     step(96);
     const canvas = root.querySelector('canvas')!;
@@ -1086,15 +1034,15 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     canvas.dispatchEvent(move);
     step(112);
     const aim = vi.mocked(drawScene).mock.lastCall![7]!;
-    expect(aim.skill).toBe('flashbang');
+    expect(aim.skill).toBe('airstrike');
     expect(aim.x).toBeCloseTo(1100, 6);
     expect(aim.y).toBeCloseTo(300, 6);
     clickField(root, 1100, 300);
     step(128);
     const thrown = vi.mocked(drawScene).mock.lastCall![2].incoming;
-    expect(thrown).toHaveLength(SKILLS.flashbang.count);
+    expect(thrown).toHaveLength(SKILLS.airstrike.count);
     for (const i of thrown) {
-      expect(Math.hypot(i.x - 1100, i.y - 300)).toBeLessThanOrEqual(SKILLS.flashbang.area + 1e-6);
+      expect(Math.hypot(i.x - 1100, i.y - 300)).toBeLessThanOrEqual(SKILLS.airstrike.area + 1e-6);
     }
     expect(flash!.getAttribute('aria-pressed')).toBe('false');
     expect(caption.hidden).toBe(true);
@@ -1126,15 +1074,15 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     touch('pointerdown', 1000, 300, 100);
     step(48);
     const aim = vi.mocked(drawScene).mock.lastCall![7]!;
-    expect([aim.skill, Math.round(aim.x), Math.round(aim.y)]).toEqual(['flashbang', 1000, 300]);
+    expect([aim.skill, Math.round(aim.x), Math.round(aim.y)]).toEqual(['airstrike', 1000, 300]);
     // A drag well past the click slop, then the finger lifts: thrown where it let go.
     touch('pointermove', 1200, 450, 160);
     touch('pointerup', 1200, 450, 160);
     step(64);
     const thrown = vi.mocked(drawScene).mock.lastCall![2].incoming;
-    expect(thrown).toHaveLength(SKILLS.flashbang.count);
+    expect(thrown).toHaveLength(SKILLS.airstrike.count);
     for (const i of thrown) {
-      expect(Math.hypot(i.x - 1200, i.y - 450)).toBeLessThanOrEqual(SKILLS.flashbang.area + 1e-6);
+      expect(Math.hypot(i.x - 1200, i.y - 450)).toBeLessThanOrEqual(SKILLS.airstrike.area + 1e-6);
     }
     expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('false');
   });
@@ -1146,12 +1094,12 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     step(16);
     const canvas = root.querySelector('canvas')!;
     canvas.setPointerCapture = () => {};
-    key('w');
+    key('q');
     step(32);
     canvas.dispatchEvent(new PointerEvent('pointerdown', { isPrimary: true, button: 0 }));
     canvas.dispatchEvent(new PointerEvent('pointercancel', { isPrimary: true }));
     step(48);
-    expect(shown(root)[1]!.getAttribute('aria-pressed')).toBe('true');
+    expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('true');
     expect(vi.mocked(drawScene).mock.lastCall![2].incoming).toEqual([]);
     // A drag let go off the field's far edge keeps it armed too: nothing thrown.
     const cam = vi.mocked(drawScene).mock.lastCall![3];
@@ -1165,16 +1113,13 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     press('pointermove', FIELD.right + 300, 200);
     press('pointerup', FIELD.right + 300, 200);
     step(64);
-    expect(shown(root)[1]!.getAttribute('aria-pressed')).toBe('true');
+    expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('true');
     expect(vi.mocked(drawScene).mock.lastCall![2].incoming).toEqual([]);
   });
 
-  it('the pick is pre-selected after a horde, and after a reload', () => {
+  it('the pick is pre-selected after a horde, and after a reload; a dropped skill stays dropped', () => {
     const { root, button, saved } = boot();
     step(0);
-    option(root, 'flashbang').click();
-    option(root, 'molotov').click();
-    option(root, 'airstrike').click();
     button().click();
     step(16);
     endNextTick('lost');
@@ -1184,6 +1129,17 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     const again = boot();
     step(0);
     expect(pressed(again.root)).toEqual(['airstrike']);
+    // Dropped before a horde, it is still dropped after it and after a reload.
+    option(again.root, 'airstrike').click();
+    again.button().click();
+    step(16);
+    endNextTick('lost');
+    step(32);
+    expect(pressed(again.root)).toEqual([]);
+    expect(saved().skillPick).toEqual([]);
+    const third = boot();
+    step(0);
+    expect(pressed(third.root)).toEqual([]);
   });
 });
 

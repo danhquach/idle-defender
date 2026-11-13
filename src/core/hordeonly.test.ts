@@ -12,6 +12,7 @@ import {
   RADIO_HORDES,
   ENEMY_RADIUS,
   FIELD,
+  SQUAD_SKILLS,
   SQUAD_SPAWN_X,
   STEP,
   WALL,
@@ -146,7 +147,7 @@ describe('the squad in a horde (ID-066)', () => {
     expect(s.cash).toBe(0);
     expect(s.cashRate).toBe(0);
     expect(s.skills).toEqual([...START_SKILLS]);
-    expect(s.freeSkills).toEqual({ power: 1 });
+    expect(s.freeSkills).toEqual({ power: SQUAD_SKILLS.solo }); // the lone Airstrike works ×2 (ID-139)
     expect(s.research).toEqual([]);
     expect(s.perks).toEqual([START_PERK]);
     expect(s.perkLevels).toEqual({ [START_PERK]: 1 });

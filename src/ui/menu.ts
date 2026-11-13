@@ -77,7 +77,7 @@ const SQUAD_CONTROLS: Controls = [
       ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
       [
         `Click a skill, or ${SKILL_KEYS.join(' ')}`,
-        'Use a picked skill; Airstrike bombs the row you click next',
+        'Use a picked skill; Airstrike bombs the area you click next',
       ],
       ['1 2 3', 'Pick a card when three are offered'],
       ['Space', 'Pause or resume the fight'],

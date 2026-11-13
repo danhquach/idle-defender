@@ -4,12 +4,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   chooseCard,
+  crowded,
   effectAt,
   eligible,
   patchUpGain,
   pitch,
   replaces,
   rollOffer,
+  THROWABLE_CARDS,
   UPGRADE_IDS,
   UPGRADES,
 } from './cards.ts';
@@ -18,7 +20,9 @@ import { enemyHp, waveCount, waveSize } from './waves.ts';
 import {
   cardLevel,
   extraPierce,
+  fireDps,
   fragDamage,
+  gunRange,
   magazineOf,
   newHorde,
   rebuildWire,
@@ -29,6 +33,7 @@ import {
   tick,
   wireMax,
   type Bullet,
+  type Enemy,
   type HordeState,
   type UpgradeId,
 } from './horde.ts';
@@ -92,9 +97,11 @@ describe('levels (ID-097)', () => {
         'barbed-wire',
         'extended-mags',
         'first-aid-kits',
+        'flashbang',
         'hollow-point-rounds',
         'incendiary-rounds',
         'kevlar-vests',
+        'molotov',
         'piercing-rounds',
         'ricochet',
         'sandbags',
@@ -116,6 +123,8 @@ describe('levels (ID-097)', () => {
     s.defenders[0]!.hp = 1;
     // Sandbags is offered only once enemies have reached the outer wall (ID-132).
     s.layers[0]!.segments[0]!.hp -= 1;
+    // Flashbang and Molotov only while a crowd stands on the field (ID-139).
+    for (let i = 0; i < CARD.crowd; i++) enemy(s, { ...tough, x: 900, y: ROW4 + i * 10 });
     for (let lv = 1; lv <= CARD_MAX_LEVEL; lv++) {
       expect(eligible(s, id)).toBe(true);
       s = picked(s, id);
@@ -781,6 +790,523 @@ describe('one ammo slot: Incendiary or Shock Rounds (ID-097)', () => {
   });
 });
 
+describe('one throwable slot: Frag Grenades, Flashbang or Molotov (ID-139)', () => {
+  const THROWN: readonly UpgradeId[] = ['frag-grenades', 'flashbang', 'molotov'];
+
+  /** `n` enemies standing out on the field (held still), for a crowd. */
+  function crowd(s: HordeState, n: number, extra: Partial<Enemy> = {}): Enemy[] {
+    return Array.from({ length: n }, (_, i) =>
+      enemy(s, {
+        ...tough,
+        stunnedUntil: 0,
+        x: 900 + (i % 4) * 20,
+        y: ROW4 + Math.floor(i / 4) * 20,
+        ...extra,
+      }),
+    );
+  }
+
+  it('the slot holds exactly these three cards', () => {
+    expect(THROWABLE_CARDS).toEqual(THROWN);
+    expect(UPGRADES.flashbang).toMatchObject({ rarity: 'rare', levels: CARD_MAX_LEVEL });
+    expect(UPGRADES.molotov).toMatchObject({ rarity: 'rare', levels: CARD_MAX_LEVEL });
+    expect(UPGRADES['frag-grenades'].levels).toBe(1);
+  });
+
+  it('picking another throwable replaces the one held, at level 1, the old one and its levels gone', () => {
+    let s = at('molotov', 2);
+    expect(replaces(s, 'flashbang')).toBe('molotov');
+    expect(replaces(s, 'frag-grenades')).toBe('molotov');
+    expect(replaces(s, 'molotov')).toBeNull();
+    s = picked(s, 'flashbang');
+    expect(s.taken).toEqual(['flashbang']);
+    expect(s.cardLevels).toEqual({ flashbang: 1 });
+    s = picked(s, 'frag-grenades');
+    expect(s.taken).toEqual(['frag-grenades']);
+    expect(s.cardLevels).toEqual({ 'frag-grenades': 1 });
+    s = picked(s, 'molotov');
+    expect(s.taken).toEqual(['molotov']);
+    expect(s.cardLevels).toEqual({ molotov: 1 });
+    // An ammo card is another slot: it neither replaces a throwable nor is replaced by one.
+    const both = picked(s, 'shock-rounds');
+    expect(both.taken).toEqual(['molotov', 'shock-rounds']);
+    expect(replaces(both, 'flashbang')).toBe('molotov');
+    expect(replaces(both, 'incendiary-rounds')).toBe('shock-rounds');
+  });
+
+  it('a held Flashbang or Molotov levels up in place, and keeps its other cards', () => {
+    for (const id of ['flashbang', 'molotov'] as const) {
+      let s = at(id, 1);
+      s = picked(s, 'sharpshooter');
+      s = picked(s, id);
+      expect(s.cardLevels[id]).toBe(2);
+      s = picked(s, id);
+      expect(s.cardLevels[id]).toBe(3);
+      expect(s.taken).toEqual([id, 'sharpshooter']);
+      expect(replaces(s, id)).toBeNull();
+    }
+  });
+
+  it('the unique Frag Grenades is not offered again once held; the others are, until maxed', () => {
+    const s = (held: UpgradeId, level = 1) => {
+      const t = at(held, level);
+      crowd(t, CARD.crowd);
+      return t;
+    };
+    expect(eligible(s('frag-grenades'), 'frag-grenades')).toBe(false);
+    expect(eligible(s('frag-grenades'), 'flashbang')).toBe(true);
+    expect(eligible(s('frag-grenades'), 'molotov')).toBe(true);
+    expect(eligible(s('molotov', 2), 'molotov')).toBe(true);
+    expect(eligible(s('molotov', 3), 'molotov')).toBe(false);
+    expect(eligible(s('molotov', 3), 'flashbang')).toBe(true);
+    expect(eligible(s('flashbang', 3), 'flashbang')).toBe(false);
+    expect(eligible(s('flashbang', 3), 'frag-grenades')).toBe(true);
+  });
+
+  it('a Flashbang or Molotov is offered only while CARD.crowd enemies stand outside the camp; Frag Grenades always', () => {
+    const base = (): HordeState => quiet();
+    expect(CARD.crowd).toBe(12);
+    for (const id of ['flashbang', 'molotov'] as const) {
+      const s = base();
+      expect(eligible(s, id), 'none').toBe(false);
+      crowd(s, CARD.crowd - 1);
+      expect(eligible(s, id), 'one short').toBe(false);
+      expect(crowded(s)).toBe(false);
+      crowd(s, 1);
+      expect(crowded(s)).toBe(true);
+      expect(eligible(s, id), 'exactly enough').toBe(true);
+      // Dead enemies and ones in the camp don't count.
+      s.enemies[0]!.hp = 0;
+      expect(eligible(s, id), 'a dead one').toBe(false);
+      s.enemies[0]!.hp = 1000;
+      s.enemies[1]!.inCamp = true;
+      expect(eligible(s, id), 'one in camp').toBe(false);
+    }
+    expect(eligible(base(), 'frag-grenades')).toBe(true);
+  });
+
+  it('warns what a pick replaces: a unique card has no level to lose', () => {
+    // Frag Grenades held (unique): no level, no "levels are lost".
+    expect(pitch(at('frag-grenades', 1), 'molotov').replace).toEqual({
+      warning: 'Replaces Frag Grenades.',
+      swap: 'Frag Grenades → Molotov Lv 1',
+    });
+    expect(pitch(at('frag-grenades', 1), 'flashbang').replace).toEqual({
+      warning: 'Replaces Frag Grenades.',
+      swap: 'Frag Grenades → Flashbang Lv 1',
+    });
+    // A levelled card held: its level, and that its levels are lost.
+    expect(pitch(at('molotov', 2), 'flashbang').replace).toEqual({
+      warning: 'Replaces Molotov Lv 2. Its levels are lost.',
+      swap: 'Molotov Lv 2 → Flashbang Lv 1',
+    });
+    expect(pitch(at('flashbang', 3), 'molotov').replace!.warning).toBe(
+      'Replaces Flashbang Lv Max. Its levels are lost.',
+    );
+    // To a unique card: it starts with no level.
+    expect(pitch(at('molotov', 2), 'frag-grenades').replace).toEqual({
+      warning: 'Replaces Molotov Lv 2. Its levels are lost.',
+      swap: 'Molotov Lv 2 → Frag Grenades',
+    });
+    // Nothing held, or the card itself held: nothing replaced.
+    expect(pitch(quiet(), 'molotov').replace).toBeUndefined();
+    expect(pitch(at('molotov', 1), 'molotov').replace).toBeUndefined();
+    // Another slot's card is not what it replaces.
+    expect(pitch(at('shock-rounds', 1), 'molotov').replace).toBeUndefined();
+  });
+
+  describe('the timer', () => {
+    it('is set to now on the first throwable pick only; any other pick leaves it unset', () => {
+      const s = quiet();
+      s.time = 5;
+      expect(picked(s, 'sharpshooter').nextThrowAt).toBeUndefined();
+      expect(picked(s, 'shock-rounds').nextThrowAt).toBeUndefined();
+      for (const id of THROWN) expect(picked(s, id).nextThrowAt, id).toBe(5);
+    });
+
+    it('is kept across a swap and across a level-up', () => {
+      let s = picked(quiet(), 'flashbang');
+      s.time = 9;
+      s.nextThrowAt = 20; // the next throw still waits
+      s = picked(s, 'molotov'); // a swap
+      expect(s.nextThrowAt).toBe(20);
+      s = picked(s, 'molotov'); // a level
+      expect(s.nextThrowAt).toBe(20);
+      s = picked(s, 'frag-grenades'); // a swap to the unique card
+      expect(s.nextThrowAt).toBe(20);
+      s = picked(s, 'flashbang');
+      expect(s.nextThrowAt).toBe(20);
+      // A swap with the timer in the past throws on the next step: nothing is reset to wait.
+      s.nextThrowAt = 0;
+      s = picked(s, 'molotov');
+      expect(s.nextThrowAt).toBe(0);
+    });
+
+    it('each card comes every `every` s per survivor on the line', () => {
+      expect(CARD.flashbang.every).toBe(10);
+      expect(CARD.molotov.every).toBe(12);
+      for (const id of ['flashbang', 'molotov'] as const) {
+        const s = at(id, 1);
+        crowd(s, 3);
+        s.nextThrowAt = 0;
+        const t = tick(s, STEP);
+        expect(t.grenades, id).toHaveLength(1);
+        expect(t.grenades[0]!.item).toBe(id);
+        expect(t.nextThrowAt).toBeCloseTo(t.grenades[0]!.at + CARD[id].every, 9);
+      }
+    });
+
+    it('a throw is a feat for the thrower, and only Frag Grenades takes their hands (ID-137)', () => {
+      const shot = (id: UpgradeId): { after: number; feats: number } => {
+        const s = at(id, 1);
+        crowd(s, 3);
+        s.nextThrowAt = 0;
+        s.defenders[0]!.nextShotAt = 5;
+        const t = tick(s, STEP);
+        expect(t.grenades).toHaveLength(1);
+        return {
+          after: t.defenders[0]!.nextShotAt,
+          feats: t.feats.filter((f) => f.kind === 'throw').length,
+        };
+      };
+      expect(shot('frag-grenades')).toEqual({ after: 5 + CARD.frag.pause, feats: 1 });
+      expect(shot('flashbang')).toEqual({ after: 5, feats: 1 });
+      expect(shot('molotov')).toEqual({ after: 5, feats: 1 });
+    });
+  });
+
+  describe('a throw in the air', () => {
+    /** The throw of `id` at `lv`: a group of enemies, the timer due, one step. */
+    function thrown(id: UpgradeId, lv: number): HordeState {
+      const s = at(id, lv);
+      crowd(s, 6);
+      s.nextThrowAt = 0;
+      return tick(s, STEP);
+    }
+
+    it('carries its level’s seconds when thrown', () => {
+      for (let lv = 1; lv <= 3; lv++) {
+        expect(thrown('flashbang', lv).grenades[0]!.seconds, `flashbang ${lv}`).toBe(
+          CARD.flashbang.seconds[lv - 1],
+        );
+        expect(thrown('molotov', lv).grenades[0]!.seconds, `molotov ${lv}`).toBe(
+          CARD.molotov.seconds[lv - 1],
+        );
+      }
+      expect(thrown('frag-grenades', 1).grenades[0]!.seconds).toBeUndefined();
+      expect(thrown('frag-grenades', 1).grenades[0]!.item).toBeUndefined();
+    });
+
+    it('a Molotov in the air when the card is swapped lands as the fire it was, at the level it was thrown', () => {
+      let s = thrown('molotov', 3);
+      const g = s.grenades[0]!;
+      expect(g.seconds).toBe(CARD.molotov.seconds[2]);
+      // Swap to a Flashbang, then to Frag Grenades, while it flies.
+      s = picked(s, 'flashbang');
+      s = picked(s, 'frag-grenades');
+      s.nextThrowAt = 1e9; // nothing more is thrown
+      while (s.time < g.lands + STEP) s = tick(s, STEP);
+      expect(s.fires).toHaveLength(1);
+      expect(s.fires[0]!.until - s.fires[0]!.at).toBeCloseTo(CARD.molotov.seconds[2]!, 9);
+      expect({ x: s.fires[0]!.x, y: s.fires[0]!.y }).toEqual({ x: g.x, y: g.y });
+      expect(s.blasts.some((b) => b.skill === 'flashbang')).toBe(false);
+      expect(s.grenades.filter((k) => !k.burst)).toEqual([]);
+    });
+
+    it('a Flashbang in the air when the card is swapped lands as the stun it was, at the level it was thrown', () => {
+      let s = thrown('flashbang', 2);
+      const g = s.grenades[0]!;
+      expect(g.seconds).toBe(CARD.flashbang.seconds[1]);
+      s = picked(s, 'molotov');
+      s.nextThrowAt = 1e9;
+      // Held no more by Flashbang's glare, and unstunned: an enemy walks to where it lands.
+      const e = enemy(s, { ...tough, x: g.x, y: g.y });
+      while (s.time < g.lands + STEP) {
+        s.enemies.find((o) => o.id === e.id)!.x = g.x;
+        s.enemies.find((o) => o.id === e.id)!.y = g.y;
+        s = tick(s, STEP);
+      }
+      const hit = s.enemies.find((o) => o.id === e.id)!;
+      expect(hit.dazedUntil).toBeDefined();
+      expect(hit.dazedUntil! - g.lands).toBeCloseTo(CARD.flashbang.seconds[1]!, 1);
+      expect(s.fires).toEqual([]);
+    });
+
+    it('a landed Flashbang or Molotov is gone at once: no frag burst, and no damage from it', () => {
+      for (const id of ['flashbang', 'molotov'] as const) {
+        let s = thrown(id, 1);
+        const g = s.grenades[0]!;
+        s.nextThrowAt = 1e9;
+        const e = crowd(s, 1, { x: g.x + 200, y: g.y })[0]!;
+        const hp = e.hp;
+        while (s.time < g.lands + 2 * STEP) s = tick(s, STEP);
+        expect(
+          s.grenades.filter((k) => k.item === id && k.burst),
+          id,
+        ).toEqual([]);
+        expect(s.enemies.find((o) => o.id === e.id)!.hp).toBe(hp);
+      }
+    });
+  });
+
+  describe('Flashbang', () => {
+    const FLASH = { x: 900, y: ROW4 };
+    /** A Flashbang landing on `FLASH` on the next step, for `seconds`. */
+    function landing(s: HordeState, seconds: number): void {
+      s.grenades.push({
+        item: 'flashbang',
+        seconds,
+        by: 'a',
+        fromX: 420,
+        fromY: 360,
+        ...FLASH,
+        at: s.time - 0.6,
+        lands: s.time,
+        burst: false,
+      });
+    }
+
+    it('stuns enemies within its radius for its level’s seconds, with a white pop', () => {
+      for (let lv = 1; lv <= 3; lv++) {
+        const s = quiet();
+        s.nextThrowAt = 1e9;
+        const seconds = CARD.flashbang.seconds[lv - 1]!;
+        const near = enemy(s, { ...tough, ...FLASH });
+        const edge = enemy(s, { ...tough, x: FLASH.x + CARD.flashbang.radius, y: FLASH.y });
+        const out = enemy(s, { ...tough, x: FLASH.x + CARD.flashbang.radius + 1, y: FLASH.y });
+        landing(s, seconds);
+        const t = tick(s, STEP);
+        const by = (id: number) => find(t, id);
+        expect(stunned(t, by(near.id)), `lv ${lv}`).toBe(true);
+        expect(stunned(t, by(edge.id))).toBe(true);
+        expect(stunned(t, by(out.id))).toBe(false);
+        expect(by(near.id).dazedUntil).toBeCloseTo(t.time - STEP + seconds, 6);
+        expect(t.blasts).toEqual([{ skill: 'flashbang', ...FLASH, at: t.time - STEP }]);
+        // It holds for the seconds, and not past them.
+        expect(stunned(steps(t, Math.round((seconds - 0.2) / STEP)), by(near.id))).toBe(true);
+        const later = steps(t, Math.round((seconds + 0.2) / STEP));
+        expect(stunned(later, find(later, near.id))).toBe(false);
+      }
+    });
+
+    it('does not stun an enemy already stunned, nor one whose daze ended less than `immune` s ago', () => {
+      const s = quiet();
+      s.nextThrowAt = 1e9;
+      s.time = 20;
+      const fresh = enemy(s, { ...tough, ...FLASH });
+      const held = enemy(s, { ...tough, ...FLASH, stunnedUntil: 1e9 });
+      const lately = enemy(s, { ...tough, ...FLASH, dazedUntil: 20 - CARD.flashbang.immune + 1 });
+      const long = enemy(s, { ...tough, ...FLASH, dazedUntil: 20 - CARD.flashbang.immune - 0.01 });
+      landing(s, 3);
+      const t = tick(s, STEP);
+      expect(find(t, fresh.id).dazedUntil).toBeDefined();
+      expect(find(t, long.id).dazedUntil! > 20).toBe(true);
+      expect(find(t, held.id).dazedUntil).toBeUndefined();
+      expect(find(t, held.id).stunnedUntil).toBe(1e9);
+      expect(find(t, lately.id).dazedUntil).toBe(20 - CARD.flashbang.immune + 1);
+      expect(stunned(t, find(t, lately.id))).toBe(false);
+      // The pop still shows over them.
+      expect(t.blasts).toHaveLength(1);
+    });
+
+    it('aims only at enemies it can stun: a lone one beats a group it can’t', () => {
+      const s = at('flashbang', 1);
+      s.nextThrowAt = 0;
+      const group = crowd(s, 5, { stunnedUntil: 0, dazedUntil: s.time - 0.5 }); // just woke: immune
+      const lone = enemy(s, { ...tough, stunnedUntil: 0, x: 700, y: ROW4 + 200 });
+      const t = tick(s, STEP);
+      expect(t.grenades).toHaveLength(1);
+      const g = t.grenades[0]!;
+      for (const e of group) expect(Math.hypot(g.x - e.x, g.y - e.y)).toBeGreaterThan(50);
+      expect(Math.hypot(g.x - lone.x, g.y - lone.y)).toBeLessThan(40);
+    });
+
+    it('with nobody it can stun, it holds the throw; a stunned group is not thrown at', () => {
+      const s = at('flashbang', 1);
+      s.nextThrowAt = 0;
+      crowd(s, 5, { stunnedUntil: 1e9 }); // held still by a stun
+      const t = steps(s, 5);
+      expect(t.grenades).toEqual([]);
+      expect(t.nextThrowAt).toBe(0);
+      // Nothing to throw at at all: the same.
+      const none = at('flashbang', 1);
+      none.nextThrowAt = 0;
+      expect(steps(none, 5).grenades).toEqual([]);
+    });
+
+    it('its count is by those it can stun: the thickest stunnable group, not the thickest group', () => {
+      const s = at('flashbang', 1);
+      s.nextThrowAt = 0;
+      // A tight group of 4, 3 of them immune; and a pair of two stunnable ones elsewhere.
+      crowd(s, 3, { stunnedUntil: 0, dazedUntil: s.time - 0.5 });
+      const withImmune = enemy(s, { ...tough, stunnedUntil: 0, x: 900, y: ROW4 + 60 });
+      const a = enemy(s, { ...tough, stunnedUntil: 0, x: 700, y: ROW4 + 250 });
+      const b = enemy(s, { ...tough, stunnedUntil: 0, x: 720, y: ROW4 + 250 });
+      const t = tick(s, STEP);
+      const g = t.grenades[0]!;
+      expect(Math.hypot(g.x - withImmune.x, g.y - withImmune.y)).toBeGreaterThan(30);
+      expect(
+        Math.min(Math.hypot(g.x - a.x, g.y - a.y), Math.hypot(g.x - b.x, g.y - b.y)),
+      ).toBeLessThan(40);
+    });
+
+    it('never holds a group for good: stun, then immunity, then it can be stunned again', () => {
+      const s = at('flashbang', 1);
+      s.defenders[0]!.nextShotAt = 1e9;
+      for (let i = 0; i < 6; i++) {
+        enemy(s, { hp: 1e6, maxHp: 1e6, x: 900 + (i % 3) * 20, y: ROW4 + Math.floor(i / 3) * 20 });
+      }
+      let t = s;
+      const throws: { at: number; lands: number }[] = [];
+      for (let i = 0; i < Math.round(12 / STEP); i++) {
+        // The timer never gates once the last one landed: only who can be stunned does.
+        if (!t.grenades.some((g) => !g.burst)) t.nextThrowAt = 0;
+        const before = t.grenades.length;
+        t = tick(t, STEP);
+        if (t.grenades.length > before)
+          throws.push({ at: t.grenades.at(-1)!.at, lands: t.grenades.at(-1)!.lands });
+      }
+      expect(throws.length).toBeGreaterThanOrEqual(2);
+      const [first, second] = throws;
+      // Not thrown again while the group is stunned, nor for `immune` s after.
+      expect(second!.at).toBeGreaterThanOrEqual(
+        first!.lands + CARD.flashbang.seconds[0]! + CARD.flashbang.immune - 2 * STEP,
+      );
+    });
+
+    it('costs gun range while held: × glare at every level, gone when swapped away', () => {
+      const post = quiet().posts[0]!;
+      const base = gunRange(quiet(), post, 'pistol');
+      expect(CARD.flashbang.glare).toBe(0.85);
+      for (let lv = 1; lv <= 3; lv++) {
+        expect(gunRange(at('flashbang', lv), post, 'pistol'), `lv ${lv}`).toBeCloseTo(
+          base * CARD.flashbang.glare,
+          9,
+        );
+      }
+      expect(gunRange(at('molotov', 3), post, 'pistol')).toBe(base);
+      expect(gunRange(at('frag-grenades', 1), post, 'pistol')).toBe(base);
+      expect(gunRange(picked(at('flashbang', 3), 'molotov'), post, 'pistol')).toBe(base);
+      expect(gunRange(picked(at('molotov', 3), 'flashbang'), post, 'pistol')).toBeCloseTo(
+        base * CARD.flashbang.glare,
+        9,
+      );
+    });
+  });
+
+  describe('Molotov', () => {
+    const SPOT = { x: 900, y: ROW4 };
+    /** A Molotov landing on `SPOT` on the next step, burning for `seconds`. */
+    function landing(s: HordeState, seconds: number): void {
+      s.grenades.push({
+        item: 'molotov',
+        seconds,
+        by: 'a',
+        fromX: 420,
+        fromY: 360,
+        ...SPOT,
+        at: s.time - 0.6,
+        lands: s.time,
+        burst: false,
+      });
+    }
+
+    it('lights a fire where it lands, burning for its level’s seconds', () => {
+      for (let lv = 1; lv <= 3; lv++) {
+        const s = quiet();
+        s.nextThrowAt = 1e9;
+        landing(s, CARD.molotov.seconds[lv - 1]!);
+        const t = tick(s, STEP);
+        expect(t.fires, `lv ${lv}`).toHaveLength(1);
+        const f = t.fires[0]!;
+        expect({ x: f.x, y: f.y }).toEqual(SPOT);
+        expect(f.until - f.at).toBeCloseTo(CARD.molotov.seconds[lv - 1]!, 9);
+      }
+      expect(CARD.molotov.seconds).toEqual([4, 6, 8]);
+    });
+
+    it('burns every enemy inside for a share of the wave’s Shambler HP a second, at no skill power, then goes out', () => {
+      for (const power of [undefined, 2]) {
+        const s = quiet();
+        s.nextThrowAt = 1e9;
+        if (power) s.freeSkills = { power };
+        const inside = enemy(s, { ...tough, stunnedUntil: 1e9, ...SPOT });
+        const edge = enemy(s, {
+          ...tough,
+          stunnedUntil: 1e9,
+          x: SPOT.x + CARD.molotov.radius,
+          y: SPOT.y,
+        });
+        const outside = enemy(s, {
+          ...tough,
+          stunnedUntil: 1e9,
+          x: SPOT.x,
+          y: SPOT.y - CARD.molotov.radius - 1,
+        });
+        s.fires.push({ ...SPOT, at: s.time, until: s.time + 4 });
+        const dps = CARD.molotov.burn * shamblerHp(s);
+        expect(fireDps(s)).toBeCloseTo(dps, 9);
+        expect(dps).toBeCloseTo(0.1 * ENEMIES.shambler.hp, 9); // Horde 1, wave 1: base HP
+        let t = steps(s, Math.round(1 / STEP));
+        expect(find(t, inside.id).hp).toBeCloseTo(1000 - dps, 6);
+        expect(find(t, edge.id).hp).toBeCloseTo(1000 - dps, 6);
+        expect(find(t, outside.id).hp).toBe(1000);
+        expect(find(t, inside.id).burnt).toBeCloseTo(dps, 6);
+        t = steps(t, Math.round(4 / STEP));
+        expect(t.fires).toEqual([]);
+        expect(find(t, inside.id).hp).toBeCloseTo(1000 - dps * 4, 5);
+        const after = steps(t, Math.round(1 / STEP));
+        expect(find(after, inside.id).hp).toBeCloseTo(find(t, inside.id).hp, 9);
+      }
+    });
+
+    it('keeps up with the hordes: its fire’s damage follows the wave’s Shambler HP', () => {
+      for (const n of [1, 4, 12]) {
+        const s = newHorde(1, { ...setup(), hordeNumber: n });
+        expect(fireDps(s)).toBeCloseTo(CARD.molotov.burn * enemyHp('shambler', n, s.wave), 9);
+      }
+      const squad = { ...newHorde(1, { ...setup(), hordeNumber: 7 }), hpScale: 3 };
+      expect(fireDps(squad)).toBeCloseTo(
+        CARD.molotov.burn * enemyHp('shambler', 7, squad.wave, 3),
+        9,
+      );
+    });
+
+    it('its cost: enemies inside a fire move × (1 + panic) faster, those outside as ever', () => {
+      const dx = (inFire: boolean, atX = 700): number => {
+        const s = quiet();
+        s.nextThrowAt = 1e9;
+        const e = enemy(s, { ...tough, x: atX, y: ROW4 + 100 });
+        if (inFire) s.fires.push({ x: atX, y: ROW4 + 100, at: s.time, until: s.time + 99 });
+        const t = steps(s, 3);
+        return atX - find(t, e.id).x;
+      };
+      expect(CARD.molotov.panic).toBe(0.3);
+      const plain = dx(false);
+      expect(plain).toBeGreaterThan(0);
+      expect(dx(true) / plain).toBeCloseTo(1 + CARD.molotov.panic, 6);
+      // A fire elsewhere changes nothing.
+      const s = quiet();
+      const e = enemy(s, { ...tough, x: 700, y: ROW4 + 100 });
+      s.fires.push({ x: 700 + CARD.molotov.radius + 1, y: ROW4 + 100, at: 0, until: 99 });
+      expect(700 - find(steps(s, 3), e.id).x).toBeCloseTo(plain, 9);
+    });
+
+    it('a fire also leaves its enemies’ speed alone once out', () => {
+      const s = quiet();
+      const e = enemy(s, { ...tough, x: 700, y: ROW4 + 100 });
+      s.fires.push({ x: 700, y: ROW4 + 100, at: 0, until: 0.05 });
+      const t = steps(s, 6); // the fire is out after 2 steps
+      expect(t.fires).toEqual([]);
+      const moved = 700 - find(t, e.id).x;
+      const plain = quiet();
+      const p = enemy(plain, { ...tough, x: 700, y: ROW4 + 100 });
+      expect(moved).toBeGreaterThan(700 - find(steps(plain, 6), p.id).x);
+      expect(moved).toBeLessThan(6 * STEP * ENEMIES.shambler.speed * (1 + CARD.molotov.panic));
+    });
+  });
+});
+
 describe('the offer spells out each pick (ID-097)', () => {
   it('a card not held shows "New" and its level 1 effect', () => {
     expect(pitch(quiet(), 'barbed-wire')).toMatchObject({
@@ -839,5 +1365,24 @@ describe('a card states its number as the data has it (ID-125)', () => {
     expect(effectAt('rapid-fire', 1)).toEqual({ pre: '', value: '+7.5%', post: ' fire rate' });
     expect(effectAt('rapid-fire', 2)!.value).toBe('+15%');
     expect(effectAt('sharpshooter', 1)!.value).toBe('+10%');
+  });
+});
+
+describe('Flashbang and Molotov say they are thrown, and how often (ID-139 design review)', () => {
+  it('every level names the cadence, the effect and the cost', () => {
+    for (const n of [1, 2, 3]) {
+      const f = effectAt('flashbang', n)!;
+      expect(f.pre).toBe(
+        `Each survivor throws one every ${CARD.flashbang.every} s: stuns enemies within ${CARD.flashbang.radius} px for `,
+      );
+      expect(f.value).toBe(`${CARD.flashbang.seconds[n - 1]} s`);
+      expect(f.post).toBe('; −15% gun range for the whole squad while held');
+      const m = effectAt('molotov', n)!;
+      expect(m.pre).toBe(
+        `Each survivor throws one every ${CARD.molotov.every} s: its fire burns for `,
+      );
+      expect(m.value).toBe(`${CARD.molotov.seconds[n - 1]} s`);
+      expect(m.post).toContain('enemies move 30% faster in the flames');
+    }
   });
 });

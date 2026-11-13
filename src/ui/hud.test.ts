@@ -4,7 +4,6 @@ import {
   PERK_IDS,
   PERKS,
   RECOVERY_MS,
-  SKILL_IDS,
   type Stats,
   stockOf,
 } from '../core/data.ts';
@@ -277,56 +276,42 @@ describe('hud', () => {
     });
   });
 
-  it('shows a skill button per skill as a dry run, cooling down and armed (ID-019)', () => {
+  it('shows the skill button as a dry run, cooling down and armed (ID-019, ID-139)', () => {
     const s = horde();
     expect(skillButtons(s, null).map((b) => [b.label, b.cost, b.variant, b.reason])).toEqual([
-      ['Flashbang', '20', 'locked', 'Research Flashbang first'],
-      ['Molotov', '25', 'locked', 'Research Molotov first'],
       ['Airstrike', '40', 'locked', 'Research Airstrike first'],
     ]);
-    s.skills = ['flashbang', 'molotov'];
-    s.cash = 30;
-    s.cooldowns.molotov = 12.2;
+    s.skills = ['airstrike'];
+    s.cash = 50;
     s.time = 0.5;
-    const [flashbang, molotov, airstrike] = skillButtons(s, 'flashbang');
-    expect(flashbang).toEqual({
-      skill: 'flashbang',
-      label: 'Flashbang',
-      cost: '20',
+    const [ready] = skillButtons(s, 'airstrike');
+    expect(ready).toEqual({
+      skill: 'airstrike',
+      label: 'Airstrike',
+      cost: '40',
       variant: 'secondary',
       disabled: false,
-      reason: 'Then click an area to throw it at (Esc to cancel)',
+      reason: 'Then click an area to bomb (Esc to cancel)',
       armed: true,
       hidden: false,
       key: null,
       cooling: false,
     });
-    expect(molotov).toMatchObject({
-      label: 'Molotov 12s',
+    s.cooldowns.airstrike = 12.2;
+    expect(skillButtons(s, null)[0]).toMatchObject({
+      label: 'Airstrike 12s',
       cost: '',
       variant: 'secondary',
       disabled: true,
       reason: 'Not ready yet',
     });
-    expect(airstrike).toMatchObject({ variant: 'locked', disabled: true, armed: false });
+    // A skill that can't be used never shows as armed.
+    expect(skillButtons(s, 'airstrike')[0]!.armed).toBe(false);
     // Researched and ready, short only of cash: unaffordable, not locked (ID-056).
-    expect(skillButtons({ ...s, skills: [...SKILL_IDS] }, null)[2]).toMatchObject({
+    expect(skillButtons({ ...s, cash: 0, cooldowns: { airstrike: 0 } }, null)[0]).toMatchObject({
       variant: 'unaffordable',
       reason: 'Not enough cash',
     });
-    const ready = {
-      ...s,
-      skills: [...SKILL_IDS],
-      cooldowns: { ...s.cooldowns, molotov: 0 },
-      cash: 100,
-    };
-    expect(skillButtons(ready, null).map((b) => b.reason)).toEqual([
-      'Then click an area to throw it at (Esc to cancel)',
-      'Then click an area to throw it at (Esc to cancel)',
-      'Then click a row to carpet bomb (Esc to cancel)',
-    ]);
-    // A skill that can't be used never shows as armed.
-    expect(skillButtons(s, 'molotov')[1]!.armed).toBe(false);
   });
 
   it("names each defender's profession from their weapon", () => {
