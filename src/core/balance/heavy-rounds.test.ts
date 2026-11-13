@@ -120,13 +120,19 @@ describe('Heavy Rounds: a trade-off for its damage (ID-136)', () => {
     const plain = scene('pistol', 'none', 1);
     const d = heavy.defenders[0]!;
     const pistol = reloadIn(heavy, d, 'pistol');
+    /** A reload this long or longer is one the Pistol beats even with Heavy Rounds' cost. */
+    const SLOW_RELOAD = 2;
+    let slow = 0;
     for (const g of GUNS.filter((x) => x !== 'pistol')) {
       expect(pistol, g).toBeLessThan(reloadIn(heavy, d, held(g)));
       // Faster even than another gun with no Heavy Rounds, unless that gun reloads fast by
       // design (ID-135: the SMG's 1.6 s reload beats the Pistol's 1.5 s × 1.25).
-      if (reloadIn(plain, d, held(g)) >= 2) {
+      if (reloadIn(plain, d, held(g)) >= SLOW_RELOAD) {
         expect(pistol, g).toBeLessThan(reloadIn(plain, d, held(g)));
+        slow++;
       }
     }
+    // Most guns still reload slower than the Pistol with Heavy Rounds, so the check bites.
+    expect(slow).toBeGreaterThanOrEqual(3);
   });
 });
