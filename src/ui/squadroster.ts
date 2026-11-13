@@ -1,18 +1,20 @@
 // The Roster (ID-086, reworked by ID-108): a top-bar button that opens one compact dialog:
 // a header (the title, "Best gun for everyone", close), one row of squad tabs (portrait,
-// name, level), the selected survivor beside their gun slot, and one panel that is either
-// their level and what it gives (ID-146) or "Choose a gun". A gun is compared with the one
+// name, level, profession), the selected survivor beside their gun slot, and one panel that
+// is either their details (ID-146, ID-149: what the level and the profession give, and every
+// stat split into the two) or "Choose a gun". A gun is compared with the one
 // held before it is equipped. Like the Inventory, the field goes inert behind it and an
 // open Roster holds a fight. Text reaches the page only through textContent.
 import { baseOf, gunPower, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
-import { STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
+import { JOBS, STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import type { GunMove } from '../core/hordeonly.ts';
+import { squadOf, type GunMove } from '../core/hordeonly.ts';
 import type { HordeState } from '../core/horde.ts';
-import { levelOf, maxHpOf } from '../core/stats.ts';
+import { jobFits, levelOf, maxHpOf } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
 import { el } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
+import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
 import { levelText } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -21,6 +23,9 @@ export interface RosterTile {
   id: string;
   name: string;
   level: number;
+  /** Their profession (ID-149): "Hunter"; `jobShort` where room is short. */
+  job: string;
+  jobShort: string;
   /** "HP 105/105"; "Injured" or "Down" in place of it when they can't fight. */
   health: string;
   down: boolean;
@@ -54,6 +59,8 @@ export function rosterTiles(
       id: d.id,
       name: d.name,
       level: levelOf(d.xp).level,
+      job: JOBS[d.job].name,
+      jobShort: JOB_SHORT[d.job],
       health,
       down: !inFight && (downInFight || resting),
       gun: heldName(held),
@@ -236,7 +243,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
           canGear,
         ),
       );
-      panel.replaceChildren(...(picking ? pickerPanel(d, game, canGear) : levelPanel(d)));
+      panel.replaceChildren(
+        ...(picking ? pickerPanel(d, game, canGear) : levelPanel(d, squadOf(game))),
+      );
     } else {
       top.replaceChildren();
       panel.replaceChildren();
@@ -265,11 +274,17 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     tab.dataset.defender = t.id;
     // One state, announced once: the survivor shown is the current one.
     if (selected) tab.setAttribute('aria-current', 'true');
-    tab.title = `${t.name}, level ${t.level}, ${t.health}`;
-    tab.setAttribute('aria-label', `${t.name}, level ${t.level}, ${t.health}`);
+    tab.title = `${t.name}, level ${t.level}, ${t.job}, ${t.health}`;
+    tab.setAttribute('aria-label', `${t.name}, level ${t.level}, ${t.job}, ${t.health}`);
     tab.classList.toggle('rv-tab-down', t.down);
     const text = el('span', 'rv-tab-text');
-    text.append(el('span', 'rv-tab-name', t.name), el('span', 'rv-tab-level', `Lv ${t.level}`));
+    // Name, level, then the profession on a line of its own (ID-149), so a narrow tab never
+    // cuts it; on a phone the level drops out and the short profession name stays.
+    text.append(
+      el('span', 'rv-tab-name', t.name),
+      el('span', 'rv-tab-level', `Lv ${t.level}`),
+      el('span', 'rv-tab-job', t.jobShort),
+    );
     tab.append(avatar(t.art, 'roster-avatar roster-avatar-xs'), text);
     tab.addEventListener('click', () => {
       if (t.id === current) return;
@@ -294,7 +309,10 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     fill.style.width = `${pct}%`;
     track.append(fill);
     const sub = el('p', 'rv-who-level');
-    sub.append(`Level ${level} · `, el('span', mark.down ? 'roster-tile-down' : '', mark.health));
+    sub.append(
+      `Level ${level} · ${mark.job} · `,
+      el('span', mark.down ? 'roster-tile-down' : '', mark.health),
+    );
     text.append(el('h3', 'rv-who-name', d.name), sub, track);
     who.append(avatar(mark.art, 'roster-avatar roster-avatar-md'), text);
 
@@ -357,15 +375,44 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     return [who, slot];
   }
 
-  /** The level panel (ID-146): "Level N" and its XP, then what the level gives. */
-  function levelPanel(d: RosterDefender): HTMLElement[] {
+  /**
+   * The details panel (ID-146, ID-149): "Level N" and its XP, the profession's benefit
+   * highlighted (greyed with "No bonus with this gun" for a fighting job off its guns; the
+   * no-stack note for a shared job another of `squad` has), what the level gives, and every
+   * stat split into the level's part and the profession's.
+   */
+  function levelPanel(d: RosterDefender, squad: readonly RosterDefender[]): HTMLElement[] {
     const { level, into, next } = levelOf(d.xp);
+    const held = heldGunOf(d);
     const headRow = el('div', 'rv-phead');
     headRow.append(
       el('span', 'rv-ttl', `Level ${level}`),
       el('span', 'rv-left', `${into}/${next} XP`),
     );
-    return [headRow, el('p', 'rv-level', levelText(level))];
+    const info = jobInfo(d, held, squad);
+    const job = el('div', 'rv-job');
+    job.toggleAttribute('data-off', info.off);
+    job.append(el('p', 'rv-job-line', info.line));
+    if (info.off) job.append(el('p', 'rv-job-note', NO_BONUS));
+    if (info.note) job.append(el('p', 'rv-job-note', info.note));
+    const table = el('table', 'rv-stats');
+    const head = el('tr', '');
+    for (const h of ['', 'Total', 'Level', 'Profession']) head.append(el('th', '', h));
+    const thead = el('thead', '');
+    thead.append(head);
+    const body = el('tbody', '');
+    for (const r of statRows(d, held)) {
+      const tr = el('tr', '');
+      const th = el('th', '', r.label);
+      th.scope = 'row';
+      const jobCell = el('td', 'rv-stat-job', r.job);
+      jobCell.toggleAttribute('data-off', r.off);
+      if (r.off) jobCell.title = NO_BONUS;
+      tr.append(th, el('td', 'rv-stat-total', r.total), el('td', '', r.level), jobCell);
+      body.append(tr);
+    }
+    table.append(thead, body);
+    return [headRow, job, el('p', 'rv-level', levelText(level)), table];
   }
 
   function pickerPanel(
@@ -445,6 +492,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     }
     const grid = el('ul', 'rv-grid');
     grid.setAttribute('aria-label', 'Guns that fit');
+    // A fighting job's guns are marked (ID-149): only they give the profession's bonus.
+    const fighter = JOBS[d.job].kind === 'fight';
+    const suits = (h: Held): boolean => fighter && jobFits(d.job, h);
     for (const t of tiles) {
       const li = el('li', 'rv-cell');
       const tile = el('button', 'rv-tile');
@@ -453,8 +503,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       tile.dataset.choice = t.choice;
       tile.dataset.rarity = t.rarity;
       tile.setAttribute('aria-pressed', String(t.choice === picked));
-      tile.setAttribute('aria-label', t.label);
-      tile.title = t.label;
+      const label = suits(t.held) ? `${t.label}, suits a ${JOBS[d.job].name}` : t.label;
+      tile.setAttribute('aria-label', label);
+      tile.title = label;
       const delta = el('span', 'rv-d', t.delta.text);
       delta.dataset.kind = t.delta.kind;
       tile.append(
@@ -463,6 +514,11 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
         el('span', 'rv-ty', `${t.type.split(' ')[0]}${t.free ? ' ∞' : ''}`),
         el('span', 'rv-dps', t.dps),
       );
+      if (suits(t.held)) {
+        const mark = el('span', 'rv-fit', '★');
+        mark.setAttribute('aria-hidden', 'true');
+        tile.append(mark);
+      }
       tile.addEventListener('click', () => {
         picked = t.choice;
         draw(`tile:${t.choice}`);
@@ -474,7 +530,17 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       grid.append(li);
     }
     out.push(grid);
-    out.push(el('p', 'rv-hint', 'Frame colour = rarity. ▲ ▼ compare dmg/s with the gun held now.'));
+    out.push(
+      el(
+        'p',
+        'rv-hint',
+        `Frame colour = rarity. ▲ ▼ compare dmg/s with the gun held now.${
+          fighter
+            ? ` ★ suits a ${JOBS[d.job].name}: the profession's bonus works only with these (dmg/s leaves it out).`
+            : ''
+        }`,
+      ),
+    );
     return out;
   }
 

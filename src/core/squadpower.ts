@@ -5,7 +5,16 @@ import { gunCrit, gunCritDamage, statsOf } from './armoury.ts';
 import { CRIT_DAMAGE, DEFENDER_HP, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
 import type { GameState, RosterDefender } from './game.ts';
 import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
-import { critChance, levelBonus, levelOf, maxHpOf, reloadTime } from './stats.ts';
+import {
+  critChance,
+  critDamageOf,
+  jobPart,
+  levelBonus,
+  levelOf,
+  magazineBonus,
+  maxHpOf,
+  reloadTime,
+} from './stats.ts';
 import {
   enemyHp,
   hordeBosses,
@@ -27,13 +36,18 @@ export function survivorPower(d: RosterDefender): number {
   const gun = spec.loadout.primary;
   const w = statsOf(gun);
   if (w.kind !== 'sidearm' && w.kind !== 'gun') return 0;
-  const crit = 1 + (critChance(spec) + gunCrit(gun)) * (CRIT_DAMAGE + gunCritDamage(gun) - 1);
+  const crit =
+    1 +
+    (critChance(spec, true, gun) + gunCrit(gun)) *
+      (CRIT_DAMAGE + gunCritDamage(gun) + critDamageOf(spec, gun) - 1);
   const { level } = levelOf(d.xp);
-  const aim = 1 + POWER.aim * levelBonus(level, 'spread');
-  const rate = 1 + levelBonus(level, 'fireRate');
+  // The profession's part counts too (ID-149): a fighting job's only with its guns.
+  const aim = 1 + POWER.aim * (levelBonus(level, 'spread') + jobPart(spec, 'spread', gun));
+  const rate = 1 + levelBonus(level, 'fireRate') + jobPart(spec, 'fireRate', gun);
+  const mag = w.magazine * (1 + magazineBonus(spec, gun));
   const dps =
-    (w.damage * w.pellets * crit * aim * w.magazine) /
-    ((w.magazine * w.fireInterval) / rate + reloadTime(spec, gun));
+    (w.damage * w.pellets * crit * aim * mag) /
+    ((mag * w.fireInterval) / rate + reloadTime(spec, gun));
   const tough = 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
   return dps * tough * POWER.scale;
 }

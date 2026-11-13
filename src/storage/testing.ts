@@ -1,6 +1,13 @@
 // Fixtures shared by the storage tests; never imported by game code.
 import { buildPost, buildSegment, buildTrap, buildTurret, upgradeSegment } from '../core/base.ts';
-import { finishHorde, newGame, startHorde, type GameState } from '../core/game.ts';
+import {
+  finishHorde,
+  newGame,
+  startHorde,
+  type GameState,
+  type RosterDefender,
+} from '../core/game.ts';
+import { jobFor, textSeed } from '../core/jobs.ts';
 import { upgradeLab, type GameResult } from '../core/research.ts';
 import { researchNow } from '../core/testing.ts';
 import { BUILDING_MATERIALS, stockOf } from '../core/data.ts';
@@ -82,13 +89,32 @@ function dropLevels(v: unknown): void {
  * unspent, and the 2 a level an even older save banked (ID-096); level 1 has none.
  */
 export function prePoints(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preJobs(game);
   forEveryone(json, (d) => {
     const past = levelOf(d.xp!).level - 1;
     d.stats = { instinct: 0, agility: 0, mind: Math.min(1, past), tinker: 0 };
     if (past > 0) d.banked = 2 * past;
   });
   return json;
+}
+
+/** `game` as JSON from before ID-149 (v17 and older): no profession on anyone. */
+export function preJobs(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  for (const d of [...(json.roster as object[]), ...((json.reserve ?? []) as object[])]) {
+    delete (d as { job?: unknown }).job;
+  }
+  return json;
+}
+
+/**
+ * `game` as a v17 or older save written at `savedAt` loads (ID-149): everyone on the roster
+ * and in the reserve with the profession rolled from their id and that time.
+ */
+export function rolled(game: GameState, savedAt = NOW): GameState {
+  const seed = textSeed(String(savedAt));
+  const roll = (d: RosterDefender): RosterDefender => ({ ...d, job: jobFor(d.id, seed) });
+  return { ...game, roster: game.roster.map(roll), reserve: game.reserve.map(roll) };
 }
 
 /** `game` as JSON from before ID-100 (v15 and older): no skill pick. */

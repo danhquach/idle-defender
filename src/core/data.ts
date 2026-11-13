@@ -1200,6 +1200,122 @@ export const ARMOUR_FLOOR = 0.5;
 /** A crit's damage multiplier, before a gun's or a card's crit damage. */
 export const CRIT_DAMAGE = 2;
 
+// --- Professions (ID-149). Design §6 Professions. ---
+
+/**
+ * What a profession's level can add: the six `LEVEL_BONUS` stats, plus crit damage (added
+ * to a crit's multiplier), magazine size (share more rounds), injury dodge (chance a hit
+ * that would drop the survivor to 0 HP leaves them at 1 HP), own XP (share more), and the
+ * squad and camp effects: max HP for every survivor on the field, horde XP for every
+ * survivor who fought, the wall's own repair (share of each standing segment's max HP a
+ * second), the wall's extra max HP (share of each segment's), the squad's healing (share of
+ * each survivor's max HP a second) and a won horde's bonus-gun chance (added to
+ * `SQUAD_BONUS.chance`). The squad and camp effects (`FIELD_EFFECTS`) count from the field
+ * only and never stack, whichever job has them.
+ */
+export type JobEffect =
+  | LevelBonusId
+  | 'critDamage'
+  | 'magazine'
+  | 'dodge'
+  | 'xp'
+  | 'squadHp'
+  | 'squadXp'
+  | 'wallRepair'
+  | 'dropChance'
+  | 'wallHp'
+  | 'squadHeal';
+
+/**
+ * Who a profession helps: a fighting job only with its guns (`guns`), a self job its holder
+ * with any gun, a squad job everyone on the field, a camp job the camp after a won horde.
+ */
+export type JobKind = 'fight' | 'self' | 'squad' | 'camp';
+
+export interface Job {
+  readonly name: string;
+  readonly kind: JobKind;
+  /** A fighting job's guns: its bonus works only with these. */
+  readonly guns?: readonly GunBase[];
+  /** Each effect's cap: the bonus at level L is cap × P / (P + `LEVEL_HALF`), P = L − 1. */
+  readonly bonus: Readonly<Partial<Record<JobEffect, number>>>;
+}
+
+/**
+ * The professions (design §6, ID-149), starting points. Every profession gets about the same
+ * budget, counted in `LEVEL_BONUS` caps (the all-round bonus is 6 of them): a fighting job
+ * about 40% of it (2.4 caps) on its two specialty stats, only with its guns; a self job about
+ * 25% (1.5 caps) with any gun; a squad or camp job spends its share on the shared effect,
+ * which never stacks (only the highest level of a job on the field counts). Same curve as the
+ * level's bonus, so every profession bonus shrinks with level and is 0 at level 1. Then
+ * measured (the professions balance test): the Soldier and Security guard trimmed to 2 caps,
+ * the Construction worker raised and given a little wall, the Paramedic a squad heal, and the
+ * Student's XP doubled.
+ */
+export const JOBS = {
+  police: {
+    name: 'Police officer',
+    kind: 'fight',
+    guns: ['pistol', 'handcannon', 'machinepistol', 'shotgun', 'cartridge'],
+    bonus: { reload: 0.36, fireRate: 0.36 },
+  },
+  soldier: {
+    name: 'Soldier',
+    kind: 'fight',
+    guns: ['assault', 'lmg'],
+    bonus: { spread: 0.3, magazine: 0.3 },
+  },
+  hunter: {
+    name: 'Hunter',
+    kind: 'fight',
+    guns: ['sniper', 'rifle'],
+    bonus: { crit: 0.24, critDamage: 0.36 },
+  },
+  guard: {
+    name: 'Security guard',
+    kind: 'fight',
+    guns: ['smg', 'machinepistol'],
+    bonus: { fireRate: 0.3, reload: 0.3 },
+  },
+  // Survival first (ID-149 retune: the squad is worn down on the line), plus a little wall.
+  builder: {
+    name: 'Construction worker',
+    kind: 'self',
+    bonus: { hp: 70, armour: 2.5, wallHp: 0.1 },
+  },
+  // The heal stays under First Aid Kits' first level (`CARD.firstAid`) at any level.
+  paramedic: { name: 'Paramedic', kind: 'self', bonus: { dodge: 0.4, squadHeal: 0.004 } },
+  mechanic: { name: 'Mechanic', kind: 'squad', bonus: { wallRepair: 0.004 } },
+  chef: { name: 'Chef', kind: 'squad', bonus: { squadHp: 20 } },
+  teacher: { name: 'Teacher', kind: 'squad', bonus: { squadXp: 0.3 } },
+  scavenger: { name: 'Scavenger', kind: 'camp', bonus: { dropChance: 0.3 } },
+  student: {
+    name: 'Student',
+    kind: 'self',
+    // A tenth of the all-round caps on top, and XP.
+    bonus: {
+      xp: 1,
+      hp: 6,
+      armour: 0.2,
+      fireRate: 0.03,
+      reload: 0.03,
+      spread: 0.03,
+      crit: 0.02,
+    },
+  },
+} as const satisfies Record<string, Job>;
+export type JobId = keyof typeof JOBS;
+/** The effects that work for the squad or camp from the field, and never stack (ID-149). */
+export const FIELD_EFFECTS: readonly JobEffect[] = [
+  'squadHp',
+  'squadXp',
+  'wallRepair',
+  'wallHp',
+  'squadHeal',
+  'dropChance',
+];
+export const JOB_IDS = Object.keys(JOBS) as JobId[];
+
 // --- Research Lab, turrets and energy (M5). Design §7 and §11. ---
 
 /** What each Research Lab level costs, level 1 first (design §11, as built ID-014). */

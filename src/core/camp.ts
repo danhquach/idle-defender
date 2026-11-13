@@ -26,6 +26,7 @@ import {
 } from './data.ts';
 import { ownedWeapons, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
+import { jobFor } from './jobs.ts';
 import { isGun } from './loadout.ts';
 import { pay, type GameResult } from './research.ts';
 import { chance, createRng, int, pick, type Rng } from './rng.ts';
@@ -268,7 +269,10 @@ export function rollSurvivor(rng: Rng, id: string, level: number, tier: number):
   return { id, name, xp: xpForLevel(level), weapon };
 }
 
-/** Survivor `s` on the roster: fit, carrying their weapon (a pistol too if it isn't a gun). */
+/**
+ * Survivor `s` on the roster: fit, carrying their weapon (a pistol too if it isn't a gun),
+ * with a profession rolled from their id (ID-149; ids are unique to the camp).
+ */
 export function survivorDefender(s: Survivor): RosterDefender {
   const w = s.weapon;
   return {
@@ -278,6 +282,7 @@ export function survivorDefender(s: Survivor): RosterDefender {
       ? { primary: w, secondary: null, item: null }
       : { primary: 'pistol', secondary: w, item: null },
     xp: s.xp,
+    job: jobFor(s.id),
     injuredUntil: null,
   };
 }
@@ -394,13 +399,18 @@ export function startFloor(g: GameState, at: number): void {
   if (g.camp.recruitAt === null && belowFloor(g)) g.camp.recruitAt = at + CAMP_SIZE.recruitMs;
 }
 
-/** Free recruit number `no`: level 1, a Rusty pistol, a name from `RECRUIT_NAMES`. */
-export function recruit(no: number): RosterDefender {
+/**
+ * Free recruit number `no`: level 1, a Rusty pistol, a name from `RECRUIT_NAMES`, and a
+ * profession rolled with `seed` (ID-149: a horde's seed for one who joins after it).
+ */
+export function recruit(no: number, seed = 0): RosterDefender {
+  const id = `recruit-${no}`;
   return {
-    id: `recruit-${no}`,
+    id,
     name: pick(createRng(Math.imul(no, 0x9e3779b1)), RECRUIT_NAMES),
     loadout: { primary: 'pistol', secondary: null, item: null },
     xp: 0,
+    job: jobFor(id, seed),
     injuredUntil: null,
   };
 }

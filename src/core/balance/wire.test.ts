@@ -13,7 +13,8 @@ import { cacheFor } from './cache.ts';
 
 const keep = cacheFor(import.meta.url);
 
-const SEEDS = 2;
+// 6 (2 before ID-149): at 2 the Horde 15 check swung from 1.0 to 0.84 on squad makeup alone.
+const SEEDS = 6;
 const HORDES = [5, 10, 15] as const;
 const LEVELS = [1, 2, 3] as const;
 const LAST = 15;

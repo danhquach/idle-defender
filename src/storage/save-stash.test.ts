@@ -298,7 +298,8 @@ describe('save: the stash and equipped guns (ID-067)', () => {
 
   it('a new survivor joins with the pistol, and loads back with it', () => {
     const g = armed(2);
-    expect(g.roster.at(-1)).toEqual(recruit(3));
+    // Their profession rolls with the seed of the horde they joined after (ID-149).
+    expect(g.roster.at(-1)).toEqual(recruit(3, 101));
     expect(reread(g)?.game.roster.at(-1)?.loadout.primary).toBe('pistol');
   });
 });

@@ -5,7 +5,15 @@ import type { Held } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame, startHorde, type GameState } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
-import { layoutOf, SAVE_CUE, tick, type Defender, type Layer, type Post } from '../core/horde.ts';
+import {
+  layoutOf,
+  magazineOf,
+  SAVE_CUE,
+  tick,
+  type Defender,
+  type Layer,
+  type Post,
+} from '../core/horde.ts';
 import {
   CAMP,
   DAMAGE_POP,
@@ -36,7 +44,7 @@ import type { Bullet, Enemy, HordeState, Pop, Spit } from '../core/horde.ts';
 import { CHAT, CHAT_LINES, type Bubble } from '../core/chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
 import { throwArea, wallFront } from '../core/skills.ts';
-import { reloadTime } from '../core/stats.ts';
+import { reloadTime, xpForLevel } from '../core/stats.ts';
 import { enemy } from '../core/testing.ts';
 import { ANIM, Animator, STILL } from './anim.ts';
 import {
@@ -2897,6 +2905,19 @@ describe('the horde-only fight (ID-068)', () => {
       expect(ammoLook(holding(d, 'knife', 0))).toBeNull();
       const sidearm = { ...holding(d, smg, 15), ammo: { primary: 15, secondary: 0 } };
       expect(ammoLook(sidearm)).toEqual(ammoLook(holding(d, smg, 15)));
+    });
+
+    it('a Soldier’s bigger magazine with their guns fills the bar (ID-149)', () => {
+      const d = squadScene(1).defenders[0]!;
+      const ar: Held = { uid: 'ar', base: 'assault', rarity: 'common', affixes: [] };
+      const soldier = { ...holding(d, ar, 30), job: 'soldier' as const, xp: xpForLevel(21) };
+      const mag = magazineOf({ taken: [], cardLevels: {} }, ar, soldier);
+      expect(mag).toBeGreaterThan(30);
+      expect(ammoLook(soldier)).toEqual({ share: 30 / mag, slots: 0 });
+      // Off their guns, the gun's own magazine.
+      expect(
+        ammoLook({ ...holding(d, smg, 15), job: 'soldier' as const, xp: xpForLevel(21) }),
+      ).toEqual({ share: 0.5, slots: 0 });
     });
 
     it('draws under the HP bar, as wide, after every reload pie', () => {

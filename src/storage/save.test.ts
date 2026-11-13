@@ -57,6 +57,8 @@ import {
   preCars,
   preStats,
   preSurvivors,
+  preJobs,
+  rolled,
 } from './testing.ts';
 
 /** A parsed save, poked at freely to build hostile ones. */
@@ -1014,7 +1016,7 @@ describe('save: the taller field (ID-047)', () => {
     expect(b.turrets).toEqual([{ mount: 'tower', column: 0, row: 5, condition: 61.2 }]);
     expect(b.traps).toEqual([{ kind: 'wire', row: 3, durability: 17 }]);
     // No lost resources: everything but the base is as saved.
-    expect({ ...save.game, base: null }).toEqual({ ...game, base: null });
+    expect({ ...save.game, base: null }).toEqual({ ...rolled(game), base: null });
   });
 
   it('the old starting base lands where the new one stands, less the new rows', () => {
@@ -1081,7 +1083,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 18, '1', '17', 1.5, null]) {
+    for (const v of [0, 19, '1', '18', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1281,7 +1283,7 @@ describe('save: commander perks (ID-020)', () => {
     save.game.stock = oldStock(played());
     delete save.game.perks;
     const loaded = decodeSave(JSON.stringify(save));
-    expect(loaded?.game).toEqual(played()); // its new resources are all 0, as a v2 save loads them
+    expect(loaded?.game).toEqual(rolled(played())); // its new resources are all 0, as a v2 save loads them
     expect(JSON.parse(encodeSave(loaded!.game, NOW)).v).toBe(SAVE_VERSION);
   });
 
@@ -1331,7 +1333,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(17);
+    expect(SAVE_VERSION).toBe(18);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1906,6 +1908,7 @@ describe('save: survivors (ID-032)', () => {
     // A v13 save's survivor may hold them, and they are dropped.
     const v13 = JSON.parse(encodeSave(joined(), NOW));
     v13.v = 13;
+    v13.game = preJobs(joined());
     delete v13.game.farm;
     delete v13.game.skillPick;
     offer(v13.game).banked = 4;
@@ -1938,9 +1941,9 @@ describe('save: survivors (ID-032)', () => {
       change(game);
       return decodeSave(JSON.stringify({ v: 12, savedAt: NOW, game }));
     };
-    expect(v12()).toEqual({ game: g, savedAt: NOW, reworked: true });
-    expect(v12((x) => (x.camp.offers[0].survivor.stats.aim = 99))?.game).toEqual(g);
-    expect(v12((x) => (x.reports[0].survivors[0].stats = 'x'))?.game).toEqual(g);
+    expect(v12()).toEqual({ game: rolled(g), savedAt: NOW, reworked: true });
+    expect(v12((x) => (x.camp.offers[0].survivor.stats.aim = 99))?.game).toEqual(rolled(g));
+    expect(v12((x) => (x.reports[0].survivors[0].stats = 'x'))?.game).toEqual(rolled(g));
   });
 
   it('loads a v8 save with no survivors and its offers as bare picks, and refuses mixed shapes', () => {
@@ -1951,7 +1954,7 @@ describe('save: survivors (ID-032)', () => {
     };
     const v8 = preSurvivors(plain);
     const old = decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: v8 }))?.game;
-    expect(old).toEqual(plain);
+    expect(old).toEqual(rolled(plain));
     // A v8 save never held survivors; a v9 one must.
     expect(
       decodeSave(JSON.stringify({ v: 8, savedAt: NOW, game: JSON.parse(encodeSave(g, NOW)).game })),
@@ -2176,8 +2179,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 17 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, the skill pick, then no stat points came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(17);
+  it('is version 18 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, the skill pick, then no stat points, then professions came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(18);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {
@@ -2441,7 +2444,7 @@ describe('save: the car (ID-030)', () => {
   it('loads a v9 save with no car and every patrol on foot, and never mixes the shapes', () => {
     const foot = { ...driving(), patrols: driving().patrols.map((p) => ({ ...p, car: null })) };
     const plain = { ...foot, camp: { ...foot.camp, cars: 0 } };
-    expect(raw(preCars(plain), 9)?.game).toEqual(plain);
+    expect(raw(preCars(plain), 9)?.game).toEqual(rolled(plain));
     // A v9 save never named a car; a v10 one always does.
     expect(raw(JSON.parse(JSON.stringify(driving())), 9)).toBeNull();
     expect(raw(preCars(plain))).toBeNull();

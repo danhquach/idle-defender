@@ -7,7 +7,7 @@ import { newGame, type GameState } from '../core/game.ts';
 import { partyStrength, sendPatrol } from '../core/patrol.ts';
 import { maxHpOf, xpForLevel } from '../core/stats.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
-import { NOW, preBank, prePick, prePoints, preStats } from './testing.ts';
+import { NOW, preBank, prePick, prePoints, preStats, rolled } from './testing.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Loose = any;
@@ -24,8 +24,8 @@ function levelled(): GameState {
 }
 
 describe('save: levels give an all-round bonus, no stat points (ID-146)', () => {
-  it('is version 17', () => {
-    expect(SAVE_VERSION).toBe(17);
+  it('is version 18 (17 was ID-146’s)', () => {
+    expect(SAVE_VERSION).toBe(18);
   });
 
   it('a v16 save with spent and unspent points loads with them dropped, and says so once', () => {
@@ -35,7 +35,7 @@ describe('save: levels give an all-round bonus, no stat points (ID-146)', () => 
     expect(v16.roster[0].banked).toBe(4);
     const loaded = read(16, v16)!;
     expect(loaded.reworked).toBe(true);
-    expect(loaded.game).toEqual(levelled());
+    expect(loaded.game).toEqual(rolled(levelled()));
     for (const d of loaded.game.roster) {
       expect(Object.hasOwn(d, 'stats')).toBe(false);
       expect(Object.hasOwn(d, 'banked')).toBe(false);
@@ -65,7 +65,7 @@ describe('save: levels give an all-round bonus, no stat points (ID-146)', () => 
       const loaded = read(v, game)!;
       expect(loaded, `v${v}`).not.toBeNull();
       expect(loaded.reworked, `v${v}`).toBe(true);
-      expect(loaded.game.roster, `v${v}`).toEqual(g.roster);
+      expect(loaded.game.roster, `v${v}`).toEqual(rolled(g).roster);
     }
   });
 
@@ -80,7 +80,7 @@ describe('save: levels give an all-round bonus, no stat points (ID-146)', () => 
     const json = prePoints(reserved) as Loose;
     expect(json.reserve[0].stats).toBeDefined();
     const loaded = read(16, json)!;
-    expect(loaded.game.reserve).toEqual(reserved.reserve);
+    expect(loaded.game.reserve).toEqual(rolled(reserved).reserve);
     expect(loaded.reworked).toBe(true);
   });
 
@@ -98,14 +98,14 @@ describe('save: levels give an all-round bonus, no stat points (ID-146)', () => 
       v16.roster[0].stats = bad;
       v16.roster[0].banked = bad;
       const loaded = read(16, v16);
-      expect(loaded?.game, JSON.stringify(bad).slice(0, 40)).toEqual(levelled());
+      expect(loaded?.game, JSON.stringify(bad).slice(0, 40)).toEqual(rolled(levelled()));
     }
     const proto = JSON.stringify({ v: 16, savedAt: NOW, game: prePoints(levelled()) }).replace(
       '"stats":{"instinct"',
       '"stats":{"__proto__":{"polluted":1},"instinct"',
     );
     expect(proto).toContain('__proto__');
-    expect(decodeSave(proto)!.game).toEqual(levelled());
+    expect(decodeSave(proto)!.game).toEqual(rolled(levelled()));
     // A prototype key on the defender itself is an unknown key: refused, old save or not.
     const top = JSON.stringify({ v: 16, savedAt: NOW, game: prePoints(levelled()) }).replace(
       '"stats":{"instinct"',

@@ -56,6 +56,8 @@ import {
   type RosterDefender,
 } from './game.ts';
 import {
+  feed,
+  fortify,
   newHorde,
   standing,
   wavesCleared,
@@ -65,6 +67,7 @@ import {
 } from './horde.ts';
 import { isGun } from './loadout.ts';
 import { chance, createRng } from './rng.ts';
+import { fieldBonus, jobPart } from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -93,8 +96,9 @@ export function squadHpScale(n: number): number {
 export const SQUAD_PERKS = [START_PERK] as const;
 
 /**
- * A roster defender as the squad fights: plain (no profession), their primary gun only
- * (the pistol if they somehow have none), no secondary or item. The roster keeps its loadout.
+ * A roster defender as the squad fights: plain (no loadout profession), their primary gun
+ * only (the pistol if they somehow have none), no secondary or item, and their profession
+ * from before the outbreak (ID-149). The roster keeps its loadout.
  */
 export function squadSpec(d: RosterDefender): DefenderSpec {
   const primary = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
@@ -104,6 +108,7 @@ export function squadSpec(d: RosterDefender): DefenderSpec {
     loadout: { primary, secondary: null, item: null },
     xp: d.xp,
     plain: true,
+    job: d.job,
   };
 }
 
@@ -196,13 +201,22 @@ export function startSquadHorde(
     s.tookPart.push(spec.id);
   });
   s.bench = [];
+  // A Chef's HP and a Construction worker's wall are there from the start (ID-149).
+  feed(s);
+  fortify(s);
   return s;
 }
 
-/** The survivor a win adds (ID-066): the next free recruit, or null with the squad full. */
-export function joiner(game: Pick<GameState, 'roster' | 'camp'>): RosterDefender | null {
+/**
+ * The survivor a win adds (ID-066): the next free recruit, their profession rolled with the
+ * horde's `seed` (ID-149), or null with the squad full.
+ */
+export function joiner(
+  game: Pick<GameState, 'roster' | 'camp'>,
+  seed: number,
+): RosterDefender | null {
   if (game.roster.length >= SQUAD_CAP || game.camp.recruits >= MAX_COUNT) return null;
-  return recruit(game.camp.recruits + 1);
+  return recruit(game.camp.recruits + 1, seed);
 }
 
 /** The highest horde beaten (ID-098): every horde up to it counts as beaten, 0 for none. */
@@ -253,7 +267,9 @@ function checkFinished(name: string, game: GameState, horde: HordeState): void {
 /**
  * Each survivor's XP from horde `horde` (ID-066, ID-098): a win's full, half for a replay
  * more than `FARM.farOff` hordes below the highest beaten; a loss `FARM.lossXp` of a win's
- * for each share of the waves cleared (0 cleared → 0). Rounded down.
+ * for each share of the waves cleared (0 cleared → 0). A Teacher who fought adds their share
+ * for everyone who fought (the highest level's; two never stack), and a Student their own
+ * share on top (ID-149). Rounded down.
  */
 export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typeof xpGains> {
   const full = xpGains({ ...horde, outcome: 'won' });
@@ -262,9 +278,15 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
   const win = far ? FARM.farXp : 1;
   const share =
     horde.outcome === 'won' ? win : (win * FARM.lossXp * wavesCleared(horde)) / horde.waveCount;
+  const fought = fieldOf(game, horde);
+  const taught = 1 + fieldBonus(fought, 'squadXp');
   // From the unrounded XP, so a share never rounds twice.
-  const each = Math.floor(hordeXp(horde.hordeNumber) * (horde.xpRate ?? 1) * share);
-  return full.map((g) => ({ ...g, xp: each }));
+  const each = hordeXp(horde.hordeNumber) * (horde.xpRate ?? 1) * share * taught;
+  return full.map((g) => {
+    const d = game.roster.find((r) => r.id === g.id);
+    const own = d ? 1 + jobPart(d, 'xp') : 1;
+    return { ...g, xp: Math.floor(each * own) };
+  });
 }
 
 /**
@@ -291,7 +313,7 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   if (!drop) return g;
   g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus]).armoury;
   if (drop.kind === 'first') {
-    const joined = joiner(game);
+    const joined = joiner(game, horde.seed);
     if (joined) {
       g.roster.push(joined);
       g.camp.recruits += 1;
@@ -325,10 +347,25 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
   const won = horde.outcome === 'won';
   return {
     gains: levelGains(game, horde, squadXpGains(game, horde)),
-    joined: won && !isReplay(game, horde.hordeNumber) ? joiner(game) : null,
+    joined: won && !isReplay(game, horde.hordeNumber) ? joiner(game, horde.seed) : null,
     drop: squadDrop(game, horde),
   };
 }
+
+/**
+ * The roster survivors who fought horde `horde` (ID-149), as the roster has them: the ones a
+ * squad or camp profession counts from.
+ */
+export const fieldOf = (
+  game: Pick<GameState, 'roster'>,
+  horde: Pick<HordeState, 'tookPart'>,
+): RosterDefender[] => game.roster.filter((d) => horde.tookPart.includes(d.id));
+
+/** The bonus-gun chance a Scavenger who fought horde `horde` adds (ID-149), 0 with none. */
+export const scavenged = (
+  game: Pick<GameState, 'roster'>,
+  horde: Pick<HordeState, 'tookPart'>,
+): number => fieldBonus(fieldOf(game, horde), 'dropChance');
 
 /** Which kind of drop a win gave (ID-098), as its tile says. */
 export type DropKind = 'first' | 'replay' | 'guaranteed';
@@ -401,13 +438,14 @@ const DROP_STREAM = 0x5bd1e995;
  * replay win) rolls `replayWeights` with the bad-luck count, or, with the count at
  * `FARM.guarantee`, a sure upgrade (`rollUpgrade`) unless no gun here could be one.
  * Then up to `SQUAD_BONUS.rolls` bonus guns (ID-122, uids `<drop uid>-1`, `-2`), each
- * by `bonusWeights`.
+ * by `bonusWeights`, each at `SQUAD_BONUS.chance` plus a Scavenger's who fought (ID-149; the
+ * highest level's, two never stack).
  *
  * The drop, then each bonus gun, goes into the stash as `stashWith` says.
  */
 export function squadDrop(
   game: Pick<GameState, 'armoury' | 'roster' | 'hordeNumber' | 'farm'>,
-  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber'>,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'tookPart'>,
 ): SquadDrop | null {
   if (horde.outcome !== 'won') return null;
   if (isReplay(game, horde.hordeNumber) && game.farm.replays >= FARM.maxReplays) return null;
@@ -433,8 +471,9 @@ export function squadDrop(
   }
   // Rolled after the drop, so the drop itself is the same gun it was before ID-122.
   const bonus: OwnedWeapon[] = [];
+  const odds = Math.min(1, SQUAD_BONUS.chance + scavenged(game, horde));
   for (let k = 0; k < SQUAD_BONUS.rolls; k++) {
-    if (chance(rng, SQUAD_BONUS.chance)) {
+    if (chance(rng, odds)) {
       bonus.push(rollSquadGun(rng, `${uid}-${bonus.length + 1}`, bonusWeights(n), n));
     }
   }

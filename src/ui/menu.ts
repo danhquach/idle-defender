@@ -467,7 +467,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   });
   const fresh = confirmed('New camp', NEW_CAMP_CONFIRM, 'Start new camp', () => ({
     run: () => {
-      opts.onNewCamp(newGame(HORDE_ONLY ? 'horde' : 'full'));
+      opts.onNewCamp(newGame(HORDE_ONLY ? 'horde' : 'full', Date.now()));
       return NEW_CAMP_DONE;
     },
   }));

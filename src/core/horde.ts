@@ -68,6 +68,7 @@ import {
   type PerkId,
   type ResearchId,
   type SkillId,
+  type JobId,
   type Tracer,
   type Weapon,
 } from './data.ts';
@@ -86,9 +87,13 @@ import { openReplace } from './replace.ts';
 import { chance, int, rngFrom, type Rng, type RngState } from './rng.ts';
 import {
   critChance,
+  critDamageOf,
   damageFactor,
   damageTaken,
+  dodgeChance,
+  fieldBonus,
   fireRateFactor,
+  magazineBonus,
   maxHpOf,
   reloadTime,
   spreadOf,
@@ -143,6 +148,8 @@ export interface DefenderSpec {
   xp?: number;
   /** A horde-only survivor (ID-066): no profession, its bonuses, title or badge. */
   plain?: true;
+  /** Their profession from before the outbreak (ID-149); none means none. */
+  job?: JobId;
 }
 
 /** The spec a fight defender came from, XP and all. */
@@ -151,6 +158,7 @@ export function specOf(d: DefenderSpec): DefenderSpec {
   const loadout = { ...d.loadout };
   const spec: DefenderSpec = xp === undefined ? { id, name, loadout } : { id, name, loadout, xp };
   if (d.plain) spec.plain = true;
+  if (d.job !== undefined) spec.job = d.job;
   return spec;
 }
 export interface HordeSetup {
@@ -307,6 +315,8 @@ export interface Segment {
   hitAt?: number;
   /** When a repair card last healed it (ID-075); absent = none this fight. A segment already whole gets none. */
   repairAt?: number;
+  /** Max HP a Construction worker on the field adds to it now (ID-149); absent = none. */
+  built?: number;
 }
 /** One wall layer: `SEGMENTS` segments, top to bottom. */
 export interface Layer {
@@ -386,6 +396,8 @@ export interface Defender extends DefenderSpec {
   maxHp: number;
   /** The kind of enemy that hit them last; null before any hit. */
   hitBy: EnemyKind | null;
+  /** Max HP a Chef on the field adds to theirs now (ID-149); absent = none. */
+  fed?: number;
 }
 /** A defender injured in this fight, and the post they held (stood on or walked to). */
 export interface Injury {
@@ -792,11 +804,15 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
   if (spawnX !== undefined && !(Number.isFinite(spawnX) && spawnX > 0 && spawnX <= FIELD.right)) {
     throw new RangeError(`newHorde: bad spawn x ${spawnX}`);
   }
-  const fortify = perkFactor({ perks: [...perks], perkLevels: levels }, 'fortify', PERK.fortify);
-  if (fortify !== 1) {
+  const fortifyFactor = perkFactor(
+    { perks: [...perks], perkLevels: levels },
+    'fortify',
+    PERK.fortify,
+  );
+  if (fortifyFactor !== 1) {
     for (const seg of layers.flatMap((l) => l.segments)) {
-      seg.hp *= fortify;
-      seg.maxHp *= fortify;
+      seg.hp *= fortifyFactor;
+      seg.maxHp *= fortifyFactor;
     }
   }
   const startPost = posts[startPostId];
@@ -892,7 +908,8 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
 /** `spec` at full HP standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
 export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): Defender {
   const hp = maxHpOf(spec);
-  const full = (id: Held | null): number => (id !== null && isGun(id) ? gunOf(id).magazine : 0);
+  const full = (id: Held | null): number =>
+    id !== null && isGun(id) ? magazineOf({ taken: [], cardLevels: {} }, id, spec) : 0;
   return {
     ...specOf(spec),
     nextShotAt,
@@ -1127,9 +1144,12 @@ export function baseAfter(base: Base, horde: HordeState): Base {
     l.slots.forEach((slot, row) => {
       // EPS: float noise from card maths (150 + 1e-12) must not round up a whole point.
       // Fortify's extra HP lasts the fight: the base keeps the same share of its own max.
+      // So does a Construction worker's extra max HP (ID-149): the same share, of the max without it.
       if (slot) {
-        const fortify = perkFactor(horde, 'fortify', PERK.fortify);
-        const hp = Math.ceil(horde.layers[i]!.segments[row]!.hp / fortify - EPS);
+        const fortifyFactor = perkFactor(horde, 'fortify', PERK.fortify);
+        const seg = horde.layers[i]!.segments[row]!;
+        const share = seg.maxHp > 0 ? (seg.maxHp - (seg.built ?? 0)) / seg.maxHp : 1;
+        const hp = Math.ceil((seg.hp * share) / fortifyFactor - EPS);
         slot.hp = Math.min(slot.maxHp, Math.max(0, hp));
       }
     });
@@ -1213,6 +1233,10 @@ function step(s: HordeState, rng: Rng): void {
   landTar(s);
   burn(s);
   repair(s);
+  mend(s);
+  feed(s);
+  fortify(s);
+  heal(s);
   treat(s);
   repairTurrets(s);
   springTraps(s);
@@ -1234,7 +1258,7 @@ function step(s: HordeState, rng: Rng): void {
     e.vx = (e.x - wasX[i]!) / STEP;
     e.vy = (e.y - wasY[i]!) / STEP;
   }
-  attack(s, moved);
+  attack(s, moved, rng);
   injure(s);
   drop(s);
   advanceWave(s);
@@ -1564,14 +1588,14 @@ function reload(s: HordeState, d: Defender): void {
     const id = d.loadout[slot];
     if (id === null || !isGun(id) || !due(s.time, d.reloadedAt[slot])) continue;
     if (gunOf(id).shells) {
-      if (d.ammo[slot] < magazineOf(s, id)) {
+      if (d.ammo[slot] < magazineOf(s, id, d)) {
         d.ammo[slot] += 1;
         // From now at the latest, so a long-stale time (Extended Mags picked mid-fight on a
         // partly empty gun) can't load a shell every step.
         d.reloadedAt[slot] = Math.max(d.reloadedAt[slot], s.time - STEP) + shellIn(s, d, id);
       }
     } else if (d.ammo[slot] === 0) {
-      d.ammo[slot] = magazineOf(s, id);
+      d.ammo[slot] = magazineOf(s, id, d);
     }
   }
 }
@@ -1603,10 +1627,19 @@ function savedRound(s: HordeState, by: string): void {
   s.saves.push({ by, at: s.time });
 }
 
-/** Rounds a full magazine of gun `id` holds in this fight: Extended Mags (design §8) adds to it. */
-export const magazineOf = (s: Parameters<typeof cardLevel>[0], id: Held): number =>
+/**
+ * Rounds a full magazine of gun `id` holds in this fight: Extended Mags (design §8) adds to
+ * it, and so does a Soldier's profession with their guns (`d`, ID-149).
+ */
+export const magazineOf = (
+  s: Parameters<typeof cardLevel>[0],
+  id: Held,
+  d?: Parameters<typeof magazineBonus>[0],
+): number =>
   Math.round(
-    gunOf(id).magazine * (took(s, 'extended-mags') ? atLevel(s, 'extended-mags', CARD.mags) : 1),
+    gunOf(id).magazine *
+      (took(s, 'extended-mags') ? atLevel(s, 'extended-mags', CARD.mags) : 1) *
+      (d ? 1 + magazineBonus(d, id) : 1),
   );
 
 /**
@@ -1663,7 +1696,7 @@ export function squadCanCrit(
       const id = d.loadout[slot];
       if (id === null) return false;
       const gun = isGun(id);
-      return critChance(d, gun) + (gun ? gunCrit(id) : 0) > 0;
+      return critChance(d, gun, id) + (gun ? gunCrit(id) : 0) > 0;
     }),
   );
 }
@@ -1693,7 +1726,9 @@ function loaded(s: HordeState, d: Defender, slot: Slot): boolean {
 /** Whether `d`'s gun in `slot` is loaded shell by shell and not yet full (ID-135). */
 function midLoad(s: HordeState, d: Defender, slot: Slot): boolean {
   const id = d.loadout[slot];
-  return id !== null && isGun(id) && gunOf(id).shells === true && d.ammo[slot] < magazineOf(s, id);
+  return (
+    id !== null && isGun(id) && gunOf(id).shells === true && d.ammo[slot] < magazineOf(s, id, d)
+  );
 }
 
 /** Whether `e` is near the wall (within `TRAIT.close.range` of its front `front`), outside the camp. */
@@ -2312,14 +2347,16 @@ function fire(s: HordeState, rng: Rng): void {
     // A gun adds its own crit (ID-101, ID-135): its trait (the Assault Rifle's, the LMG's, the
     // Sniper rifle's), a crit or crit damage affix.
     // Aim for the Head and Hollow Points (ID-130) add theirs on any weapon.
-    const crit = critChance(defender, gun) + (gun ? gunCrit(id) : 0) + cardCrit(s);
+    const crit = critChance(defender, gun, id) + (gun ? gunCrit(id) : 0) + cardCrit(s);
     const critHit = crit > 0 && chance(rng, crit);
     const hit =
       weapon.damage *
       s.mods.damage *
       boost(s, 'damage') *
       damageFactor(defender, id) *
-      (critHit ? CRIT_DAMAGE + gunCritDamage(id) + cardCritDamage(s) : 1);
+      (critHit
+        ? CRIT_DAMAGE + gunCritDamage(id) + cardCritDamage(s) + critDamageOf(defender, id)
+        : 1);
     if (gun) {
       const traits = { ...traitsOf(id, critHit), shot: s.time };
       const close = traits.close ?? 0;
@@ -2483,6 +2520,72 @@ function repair(s: HordeState): void {
     }
     if (worst) worst.hp = Math.min(worst.maxHp, worst.hp + w.repair * STEP);
   }
+}
+
+/**
+ * A Mechanic on the field (ID-149): every standing segment of the wall regains its share of
+ * max HP a second (the highest-level Mechanic's; two never stack). Broken segments wait.
+ */
+function mend(s: HordeState): void {
+  const rate = fieldBonus(s.defenders, 'wallRepair');
+  if (rate === 0) return;
+  for (const layer of s.layers) {
+    for (const seg of layer.segments) {
+      if (seg.hp <= 0 || seg.hp >= seg.maxHp) continue;
+      seg.hp = Math.min(seg.maxHp, seg.hp + rate * seg.maxHp * STEP);
+    }
+  }
+}
+
+/**
+ * A Chef on the field (ID-149): every survivor on the field has the highest-level Chef's
+ * extra max HP (whole HP; two never stack), only while that Chef is there. Gaining it adds
+ * the HP too; losing it takes the max back down, HP no higher than it.
+ */
+export function feed(s: Pick<HordeState, 'defenders'>): void {
+  const extra = Math.round(fieldBonus(s.defenders, 'squadHp'));
+  for (const d of s.defenders) {
+    const delta = extra - (d.fed ?? 0);
+    if (delta === 0) continue;
+    d.maxHp += delta;
+    d.hp = delta > 0 ? d.hp + delta : Math.min(d.hp, d.maxHp);
+    if (extra === 0) delete d.fed;
+    else d.fed = extra;
+  }
+}
+
+/**
+ * A Construction worker on the field (ID-149): every wall segment has the highest-level
+ * one's share more max HP (whole HP; two never stack), only while they are there. Gaining it
+ * adds the HP to a standing segment (a broken one stays broken); losing it takes the max
+ * back down, HP no higher than it.
+ */
+export function fortify(s: Pick<HordeState, 'defenders' | 'layers'>): void {
+  const share = fieldBonus(s.defenders, 'wallHp');
+  for (const layer of s.layers) {
+    for (const seg of layer.segments) {
+      if (seg.kind === null) continue;
+      const base = seg.maxHp - (seg.built ?? 0);
+      const extra = Math.round(base * share);
+      const delta = extra - (seg.built ?? 0);
+      if (delta === 0) continue;
+      seg.maxHp += delta;
+      seg.hp = seg.hp <= 0 ? 0 : delta > 0 ? seg.hp + delta : Math.min(seg.hp, seg.maxHp);
+      if (extra === 0) delete seg.built;
+      else seg.built = extra;
+    }
+  }
+}
+
+/**
+ * A Paramedic on the field (ID-149): each survivor on the field recovers the highest-level
+ * one's share of max HP a second, up to max (two never stack; always under First Aid Kits'
+ * first level).
+ */
+function heal(s: HordeState): void {
+  const rate = fieldBonus(s.defenders, 'squadHeal');
+  if (rate === 0) return;
+  for (const d of s.defenders) d.hp = Math.min(d.maxHp, d.hp + rate * d.maxHp * STEP);
 }
 
 /** Whether Incendiary Rounds still has `e` alight. */
@@ -2942,7 +3045,7 @@ export function separate(s: Pick<HordeState, 'enemies'>): void {
  * Design §9: a climbing Crawler doesn't attack; a Spewer spits from its stand-off; a
  * Swollen's hit is its blast, which takes it off the field with no kill paid.
  */
-function attack(s: HordeState, moves: Moves): void {
+function attack(s: HordeState, moves: Moves, rng: Rng): void {
   const blown = new Set<number>();
   for (const e of s.enemies) {
     if (stunned(s, e) || e.climbUntil > 0 || !due(s.time, e.nextAttackAt)) continue;
@@ -2951,14 +3054,14 @@ function attack(s: HordeState, moves: Moves): void {
       const defender = moves.reached.get(e.id);
       if (!defender) continue;
       defender.hitBy = e.kind;
-      hurt(s, defender, enemy.damage);
+      hurt(s, defender, enemy.damage, rng);
       if (e.kind === 'swollen') blown.add(e.id);
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
     const slide = moves.sliding.get(e.id);
     if (slide && Math.abs(slide.toY - e.y) < Math.abs(slide.toY - slide.fromY)) continue;
-    if (e.kind === 'spewer' && spit(s, e)) {
+    if (e.kind === 'spewer' && spit(s, e, rng)) {
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
     }
@@ -3059,7 +3162,7 @@ function blast(s: HordeState, layer: Layer, row: number, scale = 1): void {
  * index): HP off a defender (as any hit, `hurt`), condition off a turret.
  * Returns false when there is none.
  */
-function spit(s: HordeState, e: Enemy): boolean {
+function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
   let best: { x: number; y: number; hit: () => void } | null = null;
   let bestD = Infinity;
   const damage = ENEMIES.spewer.damage;
@@ -3072,7 +3175,7 @@ function spit(s: HordeState, e: Enemy): boolean {
       y: d.y,
       hit: () => {
         d.hitBy = 'spewer';
-        hurt(s, d, damage);
+        hurt(s, d, damage, rng);
       },
     };
   }
@@ -3091,11 +3194,18 @@ function spit(s: HordeState, e: Enemy): boolean {
 }
 
 /**
- * A hit of `damage` on defender `d` (design §6): a shield's share and the level's and
- * Kevlar Vests' armour (ID-131) off (ID-146: Instinct's injury dodge is gone).
+ * A hit of `damage` on defender `d` (design §6): a shield's share and the level's,
+ * the profession's and Kevlar Vests' armour (ID-131) off. A hit that would drop a Paramedic
+ * above 1 HP to 0 may leave them at 1 HP instead (`dodgeChance`, ID-149); rolled only then.
  */
-function hurt(s: HordeState, d: Defender, damage: number): void {
-  d.hp = Math.max(0, d.hp - damageTaken(d, damage, cardArmour(s)));
+function hurt(s: HordeState, d: Defender, damage: number, rng: Rng): void {
+  const hp = d.hp - damageTaken(d, damage, cardArmour(s));
+  if (hp > 0) {
+    d.hp = hp;
+    return;
+  }
+  const dodge = dodgeChance(d);
+  d.hp = dodge > 0 && d.hp > 1 && chance(rng, dodge) ? 1 : 0;
 }
 
 /** First Aid Kits (ID-131): each survivor on the line recovers its share of max HP a second, up to max. */

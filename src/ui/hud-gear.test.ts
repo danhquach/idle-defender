@@ -12,6 +12,7 @@ import {
   WEAPONS,
   type Rarity,
   type WeaponId,
+  JOBS,
 } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { xpForLevel } from '../core/stats.ts';
@@ -268,10 +269,11 @@ describe('the debrief layout (ID-067)', () => {
     expect(d.chips[0]).toEqual({ text: `${won.waveCount}/${won.waveCount} waves`, tone: 'ok' });
     expect(d.drop).toEqual(dropTile(g, dropOf(weapon)));
     expect(d.drop!.stash).toBe(`Stash 1/${STASH_CAP}`);
+    // Their profession rolls with the horde's seed, 1 (ID-149).
     expect(d.recruit).toEqual({
       label: 'New survivor',
       name: recruit(3).name,
-      sub: 'Joins next horde',
+      sub: `${JOBS[recruit(3, 1).job].name} · joins next horde`,
       full: false,
     });
     const full = squadGame(SQUAD_CAP, 3);
@@ -373,7 +375,9 @@ describe('the debrief layout (ID-067)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
-    const g = squadGame(1, 3, [rifle]);
+    // A Chef: no fighting job's note joins the role line (ID-149).
+    const plain = squadGame(1, 3, [rifle]);
+    const g = { ...plain, roster: plain.roster.map((d) => ({ ...d, job: 'chef' as const })) };
     const r = equipGun(g, 'recruit-1', 'h1');
     if (!r.ok) throw new Error(r.reason);
     expect(squadGear(r.game).rows[0]!.role).toBe(`Marksman: ${GUN_ROLES.rifle.trait}`);

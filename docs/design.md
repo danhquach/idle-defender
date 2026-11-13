@@ -600,7 +600,8 @@ loadout decides which profession they are working as.
   bonuses or badges, and no off-profession penalty. A survivor fights with
   their primary gun only (the pistol if they have none) and their level's
   §6 bonus (ID-146; stat points before). The roster keeps each
-  loadout as it was.
+  loadout as it was. Each survivor does have a profession from before the
+  outbreak (ID-149, §6 Professions), which has nothing to do with the loadout.
 
 ### Loadout → profession
 
@@ -862,14 +863,17 @@ close-quarter weapons come out only when an enemy is close.
   sheet on a phone, as tall as what it shows. The Roster button carries no
   badge (ID-146: the number of survivors with points to spend before). The dialog has
   a header (title, "Best gun for everyone", close), one row of squad tabs
-  (portrait, name, level; HP on hover and for screen readers), the selected
+  (portrait, name, level and profession, ID-149; HP on hover and for screen
+  readers), the selected
   survivor beside their gun slot,
   and one panel that is either **Level** or
   **Choose a gun**. A survivor's name on the result screen still opens that
   survivor here.
   - **Level** *(ID-146; a Stats panel with + buttons, Undo and mid-fight
     spends before, ID-108, ID-116, ID-126)*: "Level 7" with the XP into it and
-    what the next costs, then the level's bonus line in full words (§6 Stats).
+    what the next costs, the profession's benefit, the level's bonus line in
+    full words (§6 Stats), and the stat table split into level and profession
+    (§6 Professions, ID-149).
     The gun picker's way back is labelled Level.
   - **Choose a gun** (between hordes): tiles for the free pistol and every
     stash gun except the one held, strongest first by dmg/s, each with its
@@ -1002,6 +1006,94 @@ are in the git history of this section.)
     25, 24), the same thin margin as before (11, 9, 9).
   - The stat balance tests (each stat as strong a choice, ID-125) went with
     the stats.
+
+### Professions (ID-149)
+
+Each survivor has a **profession** from their life before the outbreak (not
+the loadout professions above, which the horde-only build doesn't use). A
+level gives the all-round bonus (§6 Stats) **plus** the profession's bonus.
+Every profession bonus uses the level's curve, cap × P / (P + 20) with
+P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
+
+| Profession | Kind | Good with | Cap (half at Lv 21) |
+|---|---|---|---|
+| Police officer | Fighting | Pistol, Hand Cannon, Machine Pistol, Pump Shotgun, Drum Shotgun | +36% reload speed, +36% fire rate |
+| Soldier | Fighting | Assault Rifle, LMG | +30% accuracy, +30% magazine size |
+| Hunter | Fighting | Sniper rifle, Carbine | +24% crit chance, +36% crit damage |
+| Security guard | Fighting | SMG, Machine Pistol | +30% fire rate, +30% reload speed |
+| Construction worker | Self (+ wall) | any gun | +70 max HP, +2.5 armour; +10% wall max HP while on the field |
+| Paramedic | Self (+ squad) | any gun | +40% injury dodge; everyone on the field heals 0.4% of max HP a second |
+| Student | Self | any gun | +100% own XP (levels faster, so stronger late), plus a tenth of the all-round caps |
+| Chef | Squad | on the field | +20 max HP for every survivor on the field |
+| Mechanic | Squad | on the field | the wall repairs 0.4% of each standing segment's max HP a second |
+| Teacher | Squad | on the field | +30% horde XP for every survivor who fought |
+| Scavenger | Camp | on the field | +30% bonus-gun chance after a won horde (added to the 50%) |
+
+- **Same budget** *(starting points)*, counted in all-round caps (the
+  all-round bonus is 6): a fighting job puts about 40% of it (2.4 caps) into
+  its two specialty stats, 1.2 caps each, only with its guns; a self job gets
+  about 25% (1.5 caps) with any gun; a squad or camp job spends its share on
+  the shared effect. **Then measured (PM, ID-149):** fights are lost when the
+  whole squad is worn down on the line, mostly with the wall still standing,
+  so survival bonuses at the starting points barely moved a fight. The
+  Construction worker got more HP and armour plus a little wall, the
+  Paramedic a squad heal (always under First Aid Kits' first level, 0.5%/s),
+  the Soldier and Security guard were trimmed to 1.0 cap a specialty, and
+  the Student levels twice as fast at the cap. Every gun is covered by at least one fighting job (the
+  Machine Pistol by two).
+- **No penalty.** Everyone always gets the full all-round bonus. A fighting
+  job with any other gun is exactly a plain survivor of their level.
+- **Squad effects don't stack**, and count only from the field (the
+  Construction worker's wall share and the Paramedic's heal too): with two
+  Chefs on the field only the higher-level one counts. A Chef's HP is there
+  while the Chef is on the field (gained HP comes with it; leaving takes the
+  max back down). Teacher and Scavenger count when they fought the horde.
+- **Injury dodge** (Paramedic): a hit that would drop them to 0 HP leaves
+  them at 1 HP instead, by that chance, while above 1 HP. Their injuries
+  resting 1 horde less (min 1) comes with resting injuries, ID-147.
+- **Getting one:** each new survivor rolls a profession at random, every one
+  as likely, repeats allowed (core RNG): one who joins after a win from that
+  horde's seed, a new game's first survivor from its start time. Old saves:
+  each survivor rolls one from their id and the save's time, the same each
+  time it loads.
+- **Squad Power** counts a fighting job's specialty with its gun, and the
+  self jobs' stats, the way it counts the level's.
+- **On screen:** each Roster tab reads name, "Lv 7" and the profession on
+  three short lines (on a phone only name and profession, short names of 8
+  letters at most so they fit a 375 px phone: "Police", "Guard", "Medic",
+  "Scav"). The selected survivor's line says "Level 7 · Hunter · HP …"; on a
+  phone the survivor and the gun slot share the row 2:3, so the gun's name
+  always shows. Their panel highlights the profession's benefit in the accent
+  colour ("Hunter: +12.0% crit chance, +18.0% crit damage with Sniper rifle,
+  Carbine"; at level 1 "from level 2, more …"), greyed and struck out with
+  "No bonus with this gun" when a fighting job holds another gun, and with
+  "Only counts on the field. Doesn’t stack: Cole is also a Chef. Cole’s counts (higher level)." (whose counts only when the levels differ; for a
+  Construction worker it starts "The wall part:", for a Paramedic "The heal part:", as
+  their own HP, armour and dodge do add up) when
+  another squad survivor has the same job with a squad or camp effect (the
+  Construction worker's wall and the Paramedic's heal included). Under it the
+  level's line, then a table of max HP, armour, fire rate, reload speed,
+  accuracy, crit chance, crit damage and injury dodge: the total, the level's
+  part and the profession's (a fighting job's part off its guns is struck out
+  and left out of the total). The Roster's gun picker marks a fighting job's
+  guns with ★ and says so under the tiles (its dmg/s leaves the bonus out).
+  The start screen's gun picker stars them too, and the card says "No Hunter
+  bonus with this gun" under the gun's role when the held one isn't theirs.
+  The start and result cards read "Lv 7 · Hunter"; a first clear's new
+  survivor tile says "Hunter · joins next horde".
+- **Balance (ID-149):** see the balance test (professions): each profession
+  at the same level, a squad of 5 plain survivors and 1 of it (a fighting job
+  with its own gun, the plain 5 with the reference Carbine): what it adds to
+  the win rate over a plain survivor with the same gun must not land more
+  than 10 points over the average (too strong fails; too weak is printed for
+  a person to judge, PM's call: one survivor in six moves the win rate by
+  less than 60 seeds can resolve); a fighting job off its guns never below a
+  plain survivor. Measured at Horde 12, level 13, 60 seeds: Security guard
+  +0.08, Soldier +0.05, Police +0.02, Mechanic, Teacher and Scavenger 0
+  (their effects come after the fight or on a wall that rarely falls first),
+  Construction worker, Paramedic and Chef −0.02, Hunter −0.03, Student −0.13
+  (seed noise: it only adds); mean −0.01. The Barbed Wire check went from 2
+  seeds to 6 (at 2 it swung from 1.0 to 0.84 on squad makeup alone).
 
 ### Profession titles
 
@@ -2885,6 +2977,13 @@ offline progress works across sessions.
   included, never reaches the game), each survivor's bonus comes from their
   level, and a save with anyone past level 1 says so once ("Survivor stats
   were reworked: …"), in the same places as ID-084's note.
+- **As built (ID-149): save version 18** holds each roster and reserve
+  survivor's profession, `job`, which must be one of the 11 (an allow-list:
+  any other value, a missing one or a prototype key refuses the save). A v17
+  or older save has none, and a `job` key there is refused: each survivor
+  rolls one from their id and the save's `savedAt`, the same every load, and
+  the next save keeps it. Survivors waiting to join (full game) have none
+  until they join.
 
 ## 13. Out of scope (v1)
 

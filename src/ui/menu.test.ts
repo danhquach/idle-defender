@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // ID-039: the Menu — its button and Esc, focus kept inside, the Save tab's code, load and
 // new camp (asked first, off in a fight), the save-problem dot, Reduce motion, Sound and Help.
+import { JOB_IDS } from '../core/data.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
@@ -347,7 +348,11 @@ describe('the Menu', () => {
     button('New camp').click();
     button('Start new camp').click();
     expect(fresh).toHaveLength(1);
-    expect(fresh[0]).toEqual(newGame('horde'));
+    // The first survivor's profession rolls with the new camp's start time (ID-149).
+    const job = fresh[0]!.roster[0]!.job;
+    expect(JOB_IDS).toContain(job);
+    const want = newGame('horde');
+    expect(fresh[0]).toEqual({ ...want, roster: [{ ...want.roster[0]!, job }] });
     expect(dialog.textContent).toContain(NEW_CAMP_DONE);
   });
 
