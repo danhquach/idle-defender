@@ -1528,6 +1528,9 @@ body {
    XP. The head takes two rows instead: name and level, then the badge and the XP. Every
    card of a result has its XP, so a level-up still makes no card taller (ID-111). */
 @container squad-card (width < 400px) {
+  /* Columns: name | level | XP. Row 1: the name, then the level across columns 2–3. Row 2:
+     the badge across columns 1–2, then the XP. The level and the badge share column 2 but
+     never a row, so keep each on its own row if this changes. */
   .squad-card-head {
     display: grid;
     grid-template-columns: minmax(0, max-content) 1fr auto;
