@@ -34,6 +34,7 @@ import {
   SHIELD,
   SIDEARM_CLOSE,
   SQUAD_LINE,
+  MID_SWAP,
   STEP,
   STRIKE_FLASH,
   MUZZLE_FLASH,
@@ -392,6 +393,8 @@ export interface Defender extends DefenderSpec {
   y: number;
   postId: number;
   walking: boolean;
+  /** Running in to take over a slot in a mid-fight swap (ID-148): `MID_SWAP.run`× the walk. */
+  running?: true;
   hp: number;
   maxHp: number;
   /** The kind of enemy that hit them last; null before any hit. */
@@ -421,6 +424,19 @@ export interface Breach {
    * standing segment (a Crawler, `climbed`).
    */
   through: SegmentKind | 'gap' | 'climbed';
+}
+/**
+ * A mid-fight swap (ID-148): bench survivor `inId` took over survivor `outId`'s slot when
+ * `outId` was down to `hp` of `maxHp`, at fight time `at`.
+ */
+export interface Swap {
+  inId: string;
+  inName: string;
+  outId: string;
+  outName: string;
+  hp: number;
+  maxHp: number;
+  at: number;
 }
 /** The open replacement offer: post `postId` is the injured one's, or null for the player's pick. */
 export interface ReplaceOffer {
@@ -640,6 +656,20 @@ export interface HordeState {
   breaches: Breach[];
   /** Ids of everyone who took part (starter, recruits, replacements), in join order. */
   tookPart: string[];
+  /**
+   * The horde-only bench (ID-148): fit survivors waiting to take over from one about to
+   * fall, in pick order. Absent in the full game, which has no mid-fight swaps.
+   */
+  subs?: DefenderSpec[];
+  /** Mid-fight swaps left this fight (ID-148); absent with `subs`. */
+  swapsLeft?: number;
+  /** The mid-fight swaps made (ID-148), in order; absent with `subs`. */
+  swaps?: Swap[];
+  /**
+   * Survivors pulled back in a swap (ID-148), limping off behind the line until
+   * `MID_SWAP.away` px back; only drawn: they don't fire and can't be hit.
+   */
+  leaving?: Defender[];
   /** Seconds the camp has been falling (an enemy inside, no defender left); 0 when not. */
   fallingFor: number;
   replace: ReplaceOffer | null;
@@ -1259,12 +1289,15 @@ function step(s: HordeState, rng: Rng): void {
     e.vy = (e.y - wasY[i]!) / STEP;
   }
   attack(s, moved, rng);
+  swapOut(s);
   injure(s);
   drop(s);
   advanceWave(s);
   fall(s);
   if (s.outcome !== 'fighting') {
     s.bullets = [];
+    // Nobody left frozen mid-limp under the result (ID-148).
+    if (s.leaving) s.leaving = [];
     s.shots = [];
     s.impacts = [];
     s.pops = [];
@@ -1540,18 +1573,27 @@ const charging = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
 function walk(s: HordeState): void {
   for (const d of s.defenders) {
     if (!d.walking) continue;
-    const stride = WALK_SPEED * (d.loadout.item === 'shield' ? 1 - SHIELD.walk : 1) * STEP;
+    const stride =
+      WALK_SPEED *
+      (d.loadout.item === 'shield' ? 1 - SHIELD.walk : 1) *
+      (d.running ? MID_SWAP.run : 1) *
+      STEP;
     const post = s.posts[d.postId]!;
     const dist = Math.hypot(post.x - d.x, post.y - d.y);
     if (dist <= stride + EPS) {
       d.x = post.x;
       d.y = post.y;
       d.walking = false;
+      delete d.running;
     } else {
       d.x += ((post.x - d.x) / dist) * stride;
       d.y += ((post.y - d.y) / dist) * stride;
     }
   }
+  // Pulled back in a swap (ID-148): limping straight back, gone once out of sight.
+  if (!s.leaving) return;
+  for (const d of s.leaving) d.x -= WALK_SPEED * MID_SWAP.limp * STEP;
+  s.leaving = s.leaving.filter((d) => s.posts[d.postId]!.x - d.x < MID_SWAP.away);
 }
 
 /** The focused enemy if within `range` of `(x, y)`, else the nearest within it (ties → lowest id). */
@@ -3226,6 +3268,43 @@ function wearMounted(s: HordeState, column: number, row: number, damage: number)
   for (const t of s.turrets) {
     if (t.mount !== 'wall-walk' || t.column !== column || t.row !== row) continue;
     wear(t, TURRET.hitWear * damage);
+  }
+}
+
+/**
+ * Mid-fight swaps (ID-148): in `defenders` order, a survivor still standing under
+ * `MID_SWAP.below` of their max HP pulls back (`leaving`), and the next survivor from `subs`
+ * runs in to their slot at full HP. The one who pulled back keeps their HP for the rest after
+ * the fight and is not back this fight. None with no one left in `subs` or no swaps left:
+ * they fight on (`injure`).
+ */
+function swapOut(s: HordeState): void {
+  if (!s.subs || !s.swaps || s.swapsLeft === undefined) return;
+  for (let i = 0; i < s.defenders.length; i++) {
+    if (s.swapsLeft <= 0) return;
+    const d = s.defenders[i]!;
+    if (d.hp <= 0 || d.hp >= d.maxHp * MID_SWAP.below) continue;
+    const sub = s.subs.shift();
+    if (!sub) return;
+    s.swapsLeft -= 1;
+    const post = s.posts[d.postId]!;
+    const fresh = standing(sub, post, s.time);
+    // They run in from `MID_SWAP.from` px behind the slot, firing only a sidearm on the way.
+    Object.assign(fresh, { x: post.x - MID_SWAP.from, y: post.y, walking: true, running: true });
+    post.defenderId = fresh.id;
+    s.defenders[i] = fresh;
+    // The hurt one limps back off the line (drawn only), facing the fight.
+    (s.leaving ??= []).push({ ...d, walking: true });
+    s.tookPart.push(fresh.id);
+    s.swaps.push({
+      inId: fresh.id,
+      inName: fresh.name,
+      outId: d.id,
+      outName: d.name,
+      hp: d.hp,
+      maxHp: d.maxHp,
+      at: s.time,
+    });
   }
 }
 

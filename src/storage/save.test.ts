@@ -284,6 +284,17 @@ describe('save', () => {
       expect(hostile((s) => (bob(s).name = 'Bob\u202egnp.exe'))).toBeNull(); // bidi override
       expect(hostile((s) => (bob(s).name = 'B\u200bob'))).toBeNull(); // zero-width space
       expect(hostile((s) => (bob(s).name = 'Вob'))).toBeNull(); // Cyrillic B
+      // The bench reads names the same way: they reach the swap note (ID-148).
+      const benched = (name: string) => (s: Loose) =>
+        (s.game.reserve = [{ ...bob(s), id: 'bench-1', name }]);
+      expect(hostile(benched('Bench'))).not.toBeNull();
+      for (const name of [
+        '<img src=x onerror=alert(1)>',
+        'Bob\u202egnp.exe',
+        'B\u200bob',
+        '\u0412ob',
+      ])
+        expect(hostile(benched(name)), name).toBeNull();
       expect(hostile((s) => (bob(s).name = 'B'.repeat(25)))).toBeNull();
       expect(hostile((s) => (bob(s).name = ''))).toBeNull();
       expect(hostile((s) => (bob(s).id = 'Bob'))).toBeNull();

@@ -43,6 +43,7 @@ import {
   BOSS_UNLOCKS,
   FINALE_HORDE,
   INJURY_REST,
+  MID_SWAP,
   RADIO_HORDES,
   SQUAD_JOIN,
   type ResearchCard,
@@ -71,7 +72,7 @@ import {
 } from './horde.ts';
 import { isGun } from './loadout.ts';
 import { chance, createRng, type Rng } from './rng.ts';
-import { fieldBonus, jobPart, survivorDps } from './stats.ts';
+import { fieldBonus, jobPart, levelOf, survivorDps } from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -186,6 +187,19 @@ export function fillSquad(game: GameState): GameState {
   };
 }
 
+/**
+ * Who swaps in mid-fight, in order (ID-148): the fit bench, highest level first (ties to
+ * camp order), at most `MID_SWAP.max`. Each brings their own gun.
+ */
+export function swapBench(game: Pick<GameState, 'reserve'>): RosterDefender[] {
+  return game.reserve
+    .map((d, i) => ({ d, i, level: levelOf(d.xp).level }))
+    .filter(({ d }) => isFit(d))
+    .sort((a, b) => b.level - a.level || a.i - b.i)
+    .slice(0, MID_SWAP.max)
+    .map(({ d }) => d);
+}
+
 /** `game` with anyone resting moved from the squad to the bench's end; `game` itself if none. */
 function benchResting(game: GameState): GameState {
   if (game.roster.every(isFit)) return game;
@@ -268,7 +282,8 @@ export const SQUAD_SLOTS: readonly { x: number; y: number }[] = Array.from(
  * Horde `game.hordeNumber` for the whole squad on the firing line behind a fresh
  * horde-only wall (full HP), each survivor in their slot in squad order
  * (`SQUAD_LINE.order`), with enemies spawning at `SQUAD_SPAWN_X`, at `now`. No towers,
- * turrets or traps; the bench sits out (ID-147), and no cash or bank come in.
+ * turrets or traps; the bench waits to swap in mid-fight (`swapBench`, ID-148), and no cash
+ * or bank come in.
  * The only research is the cards beaten boss hordes unlocked (ID-127). The skills picked
  * (ID-100) come in on cooldown only.
  */
@@ -310,14 +325,19 @@ export function startSquadHorde(
     skills: [...game.skillPick],
     freeSkills: { power: skillPickPower(game.skillPick) },
   });
-  // The rest of the squad take their slots too: nobody waits on the bench.
+  // The rest of the squad take their slots too.
   squad.slice(1).forEach((spec, k) => {
     const post = s.posts[postOf(k + 1)]!;
     post.defenderId = spec.id;
     s.defenders.push(standing(spec, post, 0));
     s.tookPart.push(spec.id);
   });
+  // No recruit cards or replacement offers: the bench comes in only by mid-fight swaps.
   s.bench = [];
+  s.subs = swapBench(game).map(squadSpec);
+  s.swapsLeft = MID_SWAP.max;
+  s.swaps = [];
+  s.leaving = [];
   // A Chef's HP and a Construction worker's wall are there from the start (ID-149).
   feed(s);
   fortify(s);
@@ -442,14 +462,17 @@ const REST_STREAM = 0x165667b1;
 
 /**
  * Hordes `d` rests after fighting horde `horde` (ID-147): `INJURY_REST.downed` if they
- * dropped to 0 HP, else the first band they ended under (`INJURY_REST.bands`), else 0. A
- * Paramedic's chance (`rest`, ID-149 scaling) cuts one horde, never under 1.
+ * dropped to 0 HP, else the first band they ended under (`INJURY_REST.bands`; one who
+ * pulled back in a swap, ID-148, at their HP then), else 0. A Paramedic's chance (`rest`,
+ * ID-149 scaling) cuts one horde, never under 1.
  */
 function restAfter(d: RosterDefender, horde: HordeState, rng: Rng): number {
   let rest = 0;
   if (horde.injured.some((i) => i.defender.id === d.id)) rest = INJURY_REST.downed;
   else {
-    const f = horde.defenders.find((x) => x.id === d.id);
+    // Each survivor pulls back at most once: once out, they never come back that fight.
+    const f =
+      horde.defenders.find((x) => x.id === d.id) ?? horde.swaps?.find((x) => x.outId === d.id);
     if (f && f.maxHp > 0) {
       rest = INJURY_REST.bands.find((b) => f.hp / f.maxHp < b.below)?.rest ?? 0;
     }
@@ -464,7 +487,7 @@ function restAfter(d: RosterDefender, horde: HordeState, rng: Rng): number {
  * alone). A loss rests nobody.
  */
 export function squadRests(
-  game: Pick<GameState, 'roster'>,
+  game: Pick<GameState, 'roster' | 'reserve'>,
   horde: HordeState,
 ): { id: string; name: string; rest: number }[] {
   // A lost fight downs everyone: resting them all would leave nobody to try again with.
@@ -539,7 +562,7 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
   // From the unrounded XP, so a share never rounds twice.
   const each = hordeXp(horde.hordeNumber) * (horde.xpRate ?? 1) * share * taught;
   return full.map((g) => {
-    const d = game.roster.find((r) => r.id === g.id);
+    const d = fought.find((r) => r.id === g.id);
     const own = d ? 1 + jobPart(d, 'xp') : 1;
     return { ...g, xp: Math.floor(each * own) };
   });
@@ -564,7 +587,8 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   const rests = new Map(squadRests(game, horde).map((r) => [r.id, r.rest]));
   const g = structuredClone(game);
   for (const gain of gains) {
-    const d = g.roster.find((r) => r.id === gain.id);
+    // A bench survivor who swapped in (ID-148) earns theirs too.
+    const d = campOf(g).find((r) => r.id === gain.id);
     // Capped where a save reads it, so a win never leaves a save that won't load.
     if (d) d.xp = Math.min(MAX_COUNT, d.xp + gain.xp);
   }
@@ -622,7 +646,8 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
   const next = finishSquadHorde(game, horde);
   const after = new Map(campOf(next).map((d) => [d.id, restOf(d)]));
   return {
-    gains: levelGains(game, horde, squadXpGains(game, horde)),
+    // Off the whole camp, so a bench survivor who swapped in (ID-148) levels from their XP.
+    gains: levelGains({ ...game, roster: campOf(game) }, horde, squadXpGains(game, horde)),
     joined:
       won && !isReplay(game, horde.hordeNumber) && squadDrop(game, horde)
         ? joiners(game, horde.seed)
@@ -636,17 +661,17 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
 }
 
 /**
- * The roster survivors who fought horde `horde` (ID-149), as the roster has them: the ones a
- * squad or camp profession counts from.
+ * The survivors who fought horde `horde` (ID-149), as the camp has them, squad then bench
+ * (a bench survivor who swapped in, ID-148): the ones a squad or camp profession counts from.
  */
 export const fieldOf = (
-  game: Pick<GameState, 'roster'>,
+  game: Pick<GameState, 'roster' | 'reserve'>,
   horde: Pick<HordeState, 'tookPart'>,
-): RosterDefender[] => game.roster.filter((d) => horde.tookPart.includes(d.id));
+): RosterDefender[] => campOf(game).filter((d) => horde.tookPart.includes(d.id));
 
 /** The bonus-gun chance a Scavenger who fought horde `horde` adds (ID-149), 0 with none. */
 export const scavenged = (
-  game: Pick<GameState, 'roster'>,
+  game: Pick<GameState, 'roster' | 'reserve'>,
   horde: Pick<HordeState, 'tookPart'>,
 ): number => fieldBonus(fieldOf(game, horde), 'dropChance');
 
@@ -745,7 +770,7 @@ const DROP_STREAM = 0x5bd1e995;
  * The drop, then each bonus gun, goes into the stash as `stashWith` says.
  */
 export function squadDrop(
-  game: Pick<GameState, 'armoury' | 'roster' | 'hordeNumber' | 'farm'>,
+  game: Pick<GameState, 'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm'>,
   horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'tookPart'>,
 ): SquadDrop | null {
   if (horde.outcome !== 'won') return null;

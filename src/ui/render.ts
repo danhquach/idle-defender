@@ -717,6 +717,7 @@ export type Scene = Pick<
       | 'tarBombs'
       | 'saves'
       | 'slicks'
+      | 'leaving'
     >
   > & {
     /** The game speed (1×, 3×, 5×) a fight is shown at; bullet tails grow with it (ID-070). */
@@ -4479,6 +4480,17 @@ export function drawScene(
       },
     });
   }
+  // Pulled back in a mid-fight swap (ID-148): limping off behind the line, never firing,
+  // their low HP bar with them (the later bars pass draws only those on the line).
+  for (const d of scene.leaving ?? []) {
+    const pose = defenderPoseOf(d);
+    sprites.push({
+      y: d.y,
+      x: d.x,
+      draw: () =>
+        drawDefender(ctx, art, d, 0, false, cam, pose, false, null, undefined, null, true),
+    });
+  }
   // A burning enemy's flames (ID-089) run on fight time; with Reduce motion they hold still.
   const flameClock = anim?.reduced ? 0 : scene.time;
   // Dazed enemies' stars, drawn over the explosions so a pop never hides them (ID-107).
@@ -4675,6 +4687,14 @@ export function drawScene(
     // the bars of the one above, and must never cover them.
     for (const { d, z0 } of shown) drawBars(ctx, d, z0, cam, ammoOf(d));
     for (const { d, z0 } of shown) drawNameTag(ctx, d, z0, cam);
+    // Whoever is limping off after a swap (ID-148) keeps a dimmed name, so who left reads
+    // without the note.
+    if (scene.leaving?.length) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      for (const d of scene.leaving) drawNameTag(ctx, d, 0, cam);
+      ctx.restore();
+    }
     // Scavenged Ammo's saved rounds (ID-132): a brass "+1" rises over the name and fades.
     for (const k of scene.saves ?? []) {
       const at = shown.find((v) => v.d.id === k.by);

@@ -284,6 +284,14 @@ body {
   display: none;
 }
 
+/* A mid-fight swap's note (ID-148): a line under the toast's place, so both can show. */
+.hud-swap-note {
+  top: calc(max(48px, var(--hud-held-bottom)) + 2.5rem);
+  max-width: calc(100vw - 32px);
+  font-weight: 600;
+  text-align: center;
+}
+
 .hud-panel {
   position: absolute;
   left: 50%;
@@ -2182,6 +2190,31 @@ body {
   margin: 0;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* The wave line, and the swaps left at its end (ID-148). */
+.hud-corner-top {
+  display: flex;
+  gap: var(--space-8);
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.hud-corner-top .hud-corner-wave {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud-corner-swaps {
+  flex: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hud-corner-swaps[hidden] {
+  display: none;
 }
 
 /* A swarm wave's marker (ID-121): the wave line in red for as long as it lasts. */

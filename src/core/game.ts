@@ -289,7 +289,13 @@ export function xpGains(
   h: HordeState,
 ): { id: string; name: string; xp: number; injured: boolean }[] {
   if (h.outcome !== 'won') return [];
-  const everyone = [...h.defenders, ...h.bench, ...h.injured.map((i) => i.defender)];
+  const everyone = [
+    ...h.defenders,
+    ...h.bench,
+    ...h.injured.map((i) => i.defender),
+    // Pulled back in a mid-fight swap (ID-148).
+    ...(h.swaps ?? []).map((x) => ({ id: x.outId, name: x.outName })),
+  ];
   return h.tookPart.map((id) => ({
     id,
     name: everyone.find((d) => d.id === id)!.name,

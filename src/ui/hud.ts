@@ -106,6 +106,7 @@ import {
 } from '../core/horde.ts';
 import {
   bossReward,
+  campOf,
   highestBeaten,
   isEndless,
   isFit,
@@ -348,11 +349,44 @@ export const enemiesLeft = (s: Pick<HordeState, 'enemies' | 'toSpawn'>): number 
  */
 export function squadStatus(s: HordeState): string {
   const left = enemiesLeft(s);
+  const swaps = swapsText(s);
   return [
     bossHorde(s) ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
     `Waves cleared ${wavesCleared(s)}/${s.waveCount}`,
     `${left} left`,
+    ...(swaps ? [swaps] : []),
   ].join(' · ');
+}
+
+/**
+ * The mid-fight swaps counter (ID-148): "Swaps left 2", the swaps still to come (no more
+ * than the bench has left). Null in a fight that started with nobody on the bench.
+ */
+export function swapsText(s: Pick<HordeState, 'subs' | 'swaps' | 'swapsLeft'>): string | null {
+  if (!s.subs || !s.swaps || s.swapsLeft === undefined) return null;
+  if (s.subs.length + s.swaps.length === 0) return null;
+  return `Swaps left ${Math.min(s.swapsLeft, s.subs.length)}`;
+}
+/** The swaps counter's tooltip (ID-148). */
+export const SWAPS_TIP = 'Bench survivors who can still take over from a badly hurt one this fight';
+
+/**
+ * How long "X takes over from Y" shows after a mid-fight swap (ID-148): `fight` s of fight
+ * time (held while paused) and at least `realMs` of real time, so it reads at 5× too. The
+ * real-time hold restarts whenever the text changes, a joined swap dropping out included.
+ */
+export const SWAP_NOTE = { fight: 3, realMs: 2000 } as const;
+
+/**
+ * The mid-fight swaps' note (ID-148): each swap in the last `SWAP_NOTE.fight` s, in order
+ * ("Lena takes over from Eli · Owen takes over from Nora"), so a quick second swap never
+ * hides the first; null for none.
+ */
+export function swapNote(s: Pick<HordeState, 'swaps' | 'time' | 'outcome'>): string | null {
+  if (s.outcome !== 'fighting') return null;
+  const recent = (s.swaps ?? []).filter((x) => s.time - x.at < SWAP_NOTE.fight);
+  if (recent.length === 0) return null;
+  return recent.map((x) => `${x.inName} takes over from ${x.outName}`).join(' · ');
 }
 
 /**
@@ -1258,8 +1292,9 @@ export interface Debrief {
 }
 
 /** Survivor `id`'s profession name on `game`'s roster (ID-149), '' for none there. */
-const jobName = (game: Pick<GameState, 'roster'>, id: string): string => {
-  const d = game.roster.find((r) => r.id === id);
+const jobName = (game: Pick<GameState, 'roster' | 'reserve'>, id: string): string => {
+  // A bench survivor who swapped in (ID-148) has one too.
+  const d = campOf(game).find((r) => r.id === id);
   return d ? JOBS[d.job].name : '';
 };
 
@@ -1714,6 +1749,19 @@ export function createHud(
   cornerPanel.setAttribute('role', 'group');
   cornerPanel.setAttribute('aria-label', 'Horde status');
   const waveLine = el('p', 'hud-corner-wave');
+  // Swaps left (ID-148) at the wave line's end; hidden with nobody on the bench.
+  const swapsChip = el('span', 'hud-corner-swaps');
+  swapsChip.title = SWAPS_TIP;
+  swapsChip.hidden = true;
+  const waveRow = el('div', 'hud-corner-top');
+  waveRow.append(waveLine, swapsChip);
+  // "X takes over from Y" after a mid-fight swap (ID-148), on fight time.
+  const swapNoteEl = el('div', 'hud-toast hud-swap-note');
+  swapNoteEl.setAttribute('role', 'status');
+  swapNoteEl.hidden = true;
+  // The note showing, and when (real ms) it last changed.
+  let noteShown: string | null = null;
+  let noteAt = 0;
   const xpRow = el('div', 'hud-corner-row hud-xp');
   const xpLabel = el('span', 'hud-xp-label');
   const xpMeter = el('meter', 'hud-xp-meter');
@@ -1730,7 +1778,7 @@ export function createHud(
   powerMeter.append(powerFill, powerTick);
   powerRow.append(powerLabel, powerMeter);
   powerRow.hidden = true;
-  cornerPanel.append(waveLine, xpRow, powerRow);
+  cornerPanel.append(waveRow, xpRow, powerRow);
   corner.append(badge, cornerPanel);
   corner.hidden = !squad;
   bar.append(...(squad ? [corner] : []));
@@ -2094,6 +2142,7 @@ export function createHud(
     swarm,
     warning,
     toast,
+    swapNoteEl,
     shop,
     held,
     cards,
@@ -2645,6 +2694,22 @@ export function createHud(
         const wave = `${swarmOn ? 'Swarm · ' : ''}Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
         if (waveLine.textContent !== wave) waveLine.textContent = wave;
         waveLine.classList.toggle('hud-corner-wave-swarm', swarmOn);
+        const swaps = swapsText(state);
+        swapsChip.hidden = swaps === null;
+        if (swaps !== null && swapsChip.textContent !== swaps) swapsChip.textContent = swaps;
+        // Fight time holds it while paused; real time keeps it readable at 3× and 5×.
+        const fresh = swapNote(state);
+        const at = performance.now();
+        if (fresh !== null) {
+          if (fresh !== noteShown) noteAt = at;
+          noteShown = fresh;
+        } else if (state.outcome !== 'fighting' || at - noteAt >= SWAP_NOTE.realMs) {
+          noteShown = null;
+        }
+        swapNoteEl.hidden = noteShown === null;
+        if (noteShown !== null && swapNoteEl.textContent !== noteShown) {
+          swapNoteEl.textContent = noteShown;
+        }
         const x = xpBar(state);
         if (xpLabel.textContent !== x.text) xpLabel.textContent = x.text;
         xpMeter.max = x.max;
