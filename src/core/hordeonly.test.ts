@@ -35,7 +35,7 @@ import {
   isEndless,
   radioParts,
   squadUnlocks,
-  joiner,
+  joiners,
   SQUAD_CARDS,
   squadHpScale,
   squadOf,
@@ -313,16 +313,16 @@ describe('after a horde (ID-066)', () => {
     expect(next.camp.recruits).toBe(3);
     expect(next.camp.offers).toEqual([]);
     expect(startSquadHorde(next, 1, NOW).defenders.map((d) => d.id)).toContain('recruit-3');
-    expect(squadResult(g, ended(g, 'won')).joined).toEqual(recruit(3, 1));
+    expect(squadResult(g, ended(g, 'won')).joined).toEqual([recruit(3, 1)]);
   });
 
-  it('at the cap of 6 nobody new joins', () => {
+  it('past 6, a win whose roll misses adds nobody (seed 1, ID-147)', () => {
     const g = squadGame(SQUAD_CAP);
-    expect(joiner(g, 1)).toBeNull();
+    expect(joiners(g, 1)).toEqual([]);
     const next = finishSquadHorde(g, ended(g, 'won'));
     expect(next.roster).toHaveLength(SQUAD_CAP);
     expect(next.camp.recruits).toBe(SQUAD_CAP);
-    expect(squadResult(g, ended(g, 'won')).joined).toBeNull();
+    expect(squadResult(g, ended(g, 'won')).joined).toEqual([]);
   });
 
   it('a loss with no wave cleared gives nothing and changes nothing: the same horde again', () => {
@@ -331,7 +331,7 @@ describe('after a horde (ID-066)', () => {
     expect(finishSquadHorde(g, lost)).toBe(g);
     const r = squadResult(g, lost);
     expect(r.gains.map((x) => x.xp)).toEqual([0, 0, 0]);
-    expect(r).toMatchObject({ joined: null, drop: null });
+    expect(r).toMatchObject({ joined: [], rests: [], drop: null });
   });
 
   it('a real loss, then the retry: every survivor back at full HP and the wall full', () => {

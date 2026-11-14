@@ -24,8 +24,30 @@ export const START_BASE = { gate: 5, towers: [4, 6] } as const;
  * new game is the horde-only preset. Their code and state stay, to come back later.
  */
 export const HORDE_ONLY = true;
-/** The most survivors in the squad; one more joins after each win until then. */
+/**
+ * The most survivors in the squad, one per slot on the firing line; one more joins after
+ * each first clear until the camp has this many (ID-147: the rest wait on the bench).
+ */
 export const SQUAD_CAP = 6;
+/**
+ * New survivors once the camp has `SQUAD_CAP` (ID-147), starting points: each first clear has
+ * `chance` that one joins, and then `second` that another comes with them. The camp stops
+ * growing at `max` survivors, so a save stays bounded.
+ */
+export const SQUAD_JOIN = { chance: 0.15, second: 0.2, max: 40 } as const;
+/**
+ * Hordes a survivor rests after a won fight (ID-147): `downed` if they dropped to 0 HP; else
+ * the first band whose `below` share of max HP they ended under. A lost fight rests nobody
+ * (everyone is down by then). Rest counts down one per horde played, won or lost; `max` is
+ * the most a survivor can owe. Measured: the ticket's 3/2/1 with a loss resting everyone
+ * locked campaigns at Hordes 5–8; 3/2/1 on wins only took 83% more fights to beat Horde 18,
+ * these 40% more.
+ */
+export const INJURY_REST = {
+  downed: 2,
+  bands: [{ below: 0.25, rest: 1 }],
+  max: 2,
+} as const;
 /**
  * The horde-only firing line (ID-068): one row of `SQUAD_CAP` fixed slots on the ground,
  * `offset` behind the wall's `x` and spaced evenly top to bottom, where survivors stand
@@ -1224,7 +1246,8 @@ export type JobEffect =
   | 'wallRepair'
   | 'dropChance'
   | 'wallHp'
-  | 'squadHeal';
+  | 'squadHeal'
+  | 'rest';
 
 /**
  * Who a profession helps: a fighting job only with its guns (`guns`), a self job its holder
@@ -1283,8 +1306,13 @@ export const JOBS = {
     kind: 'self',
     bonus: { hp: 70, armour: 2.5, wallHp: 0.1 },
   },
-  // The heal stays under First Aid Kits' first level (`CARD.firstAid`) at any level.
-  paramedic: { name: 'Paramedic', kind: 'self', bonus: { dodge: 0.4, squadHeal: 0.004 } },
+  // The heal stays under First Aid Kits' first level (`CARD.firstAid`) at any level. `rest`
+  // is the chance their own injury rests a horde less (ID-147, at least 1).
+  paramedic: {
+    name: 'Paramedic',
+    kind: 'self',
+    bonus: { dodge: 0.4, squadHeal: 0.004, rest: 1 },
+  },
   mechanic: { name: 'Mechanic', kind: 'squad', bonus: { wallRepair: 0.004 } },
   chef: { name: 'Chef', kind: 'squad', bonus: { squadHp: 20 } },
   teacher: { name: 'Teacher', kind: 'squad', bonus: { squadXp: 0.3 } },

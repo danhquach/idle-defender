@@ -3,12 +3,14 @@
 // name, level, profession), the selected survivor beside their gun slot, and one panel that
 // is either their details (ID-146, ID-149: what the level and the profession give, and every
 // stat split into the two) or "Choose a gun". A gun is compared with the one
-// held before it is equipped. Like the Inventory, the field goes inert behind it and an
-// open Roster holds a fight. Text reaches the page only through textContent.
+// held before it is equipped. The bench (ID-147) has its own row of tabs under the squad's:
+// between hordes a survivor moves between the two, unless they are resting. Like the
+// Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
+// the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
-import { JOBS, STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
+import { JOBS, SQUAD_CAP, STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import { squadOf, squadSpec, type GunMove } from '../core/hordeonly.ts';
+import { isFit, restLabel, restOf, squadOf, squadSpec, type GunMove } from '../core/hordeonly.ts';
 import type { HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
@@ -26,26 +28,37 @@ export interface RosterTile {
   /** Their profession (ID-149): "Hunter"; `jobShort` where room is short. */
   job: string;
   jobShort: string;
-  /** "HP 105/105"; "Injured" or "Down" in place of it when they can't fight. */
+  /**
+   * "HP 105/105"; "Injured", "Down" or "Resting: 2 hordes" (ID-147) in place of it when they
+   * can't fight.
+   */
   health: string;
   down: boolean;
+  /** On the bench (ID-147), not in the squad. */
+  bench: boolean;
+  /** Hordes left to rest (ID-147); 0 when fit. */
+  rest: number;
   /** "Military Rifle"; the free pistol is "Pistol". */
   gun: string;
   rarity: Rarity;
   art: ArtId;
 }
 
+/** A camp as the Roster reads it: the squad, and the bench if there is one (ID-147). */
+type Camp = Pick<GameState, 'roster'> & { reserve?: readonly RosterDefender[] };
+
 /**
- * The Roster's tabs for `game` at `now`: every survivor in roster order. In a fight
- * (`fight`), HP is the fight's and a survivor down in it is marked "Down"; between hordes
- * HP is full, and one still resting (an older camp save) is "Injured".
+ * The Roster's tabs for `game` at `now`: the squad in roster order, then the bench (ID-147),
+ * the fit first so the ones to pick come before the resting (each part in bench order).
+ * In a fight (`fight`), HP is the fight's and a survivor down in it is marked "Down";
+ * between hordes HP is full, one resting for hordes is "Resting: N hordes", and one still
+ * resting by the clock (an older camp save) is "Injured".
  */
-export function rosterTiles(
-  game: Pick<GameState, 'roster'>,
-  now: number,
-  fight: HordeState | null,
-): RosterTile[] {
-  return game.roster.map((d) => {
+export function rosterTiles(game: Camp, now: number, fight: HordeState | null): RosterTile[] {
+  const bench = new Set((game.reserve ?? []).map((d) => d.id));
+  const reserve = game.reserve ?? [];
+  const ordered = [...reserve.filter(isFit), ...reserve.filter((d) => !isFit(d))];
+  return [...game.roster, ...ordered].map((d) => {
     const held = heldGunOf(d);
     const inFight = fight?.defenders.find((f) => f.id === d.id);
     const downInFight = fight?.injured.some((i) => i.defender.id === d.id) ?? false;
@@ -53,6 +66,7 @@ export function rosterTiles(
     let health: string;
     if (inFight) health = `HP ${Math.max(0, Math.ceil(inFight.hp))}/${inFight.maxHp}`;
     else if (downInFight) health = 'Down';
+    else if (!isFit(d)) health = restLabel(restOf(d));
     else if (resting) health = 'Injured';
     else health = `HP ${maxHpOf(d)}/${maxHpOf(d)}`;
     return {
@@ -62,7 +76,9 @@ export function rosterTiles(
       job: JOBS[d.job].name,
       jobShort: JOB_SHORT[d.job],
       health,
-      down: !inFight && (downInFight || resting),
+      down: !inFight && (downInFight || resting || !isFit(d)),
+      bench: bench.has(d.id),
+      rest: restOf(d),
       gun: heldName(held),
       rarity: rarityOf(held),
       art: avatarOf(d),
@@ -88,13 +104,15 @@ export interface RosterOptions {
    * closing resumes a fight (Close label).
    */
   state: () => {
-    game: Pick<GameState, 'roster' | 'armoury'>;
+    game: Pick<GameState, 'roster' | 'armoury'> & { reserve?: readonly RosterDefender[] };
     fight: HordeState | null;
     canGear: boolean;
     resumes: boolean;
   };
   /** Equip: give survivor `id` the free pistol ('pistol') or the stash gun with uid `choice`. */
   onEquip: (id: string, choice: string) => { ok: true } | { ok: false; reason: string };
+  /** Move survivor `id` between the squad and the bench (ID-147), or why not. */
+  onToggleSquad: (id: string) => { ok: true } | { ok: false; reason: string };
   /** "Best gun for everyone": the guns handed out, or why not. */
   onBestGuns: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
 }
@@ -157,11 +175,16 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   head.append(title, bestButton, closeX);
   const tabs = el('ul', 'rv-tabs');
   tabs.setAttribute('aria-label', 'Squad');
+  // The bench (ID-147): its own row under the squad's, with a label over each row.
+  const squadLabel = el('p', 'rv-tabs-label');
+  const benchLabel = el('p', 'rv-tabs-label');
+  const benchTabs = el('ul', 'rv-tabs rv-bench');
+  benchTabs.setAttribute('aria-label', 'Bench');
   const top = el('div', 'rv-top');
   const panel = el('div', 'rv-panel');
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
-  dialog.append(grab, head, tabs, top, panel, statusLine);
+  dialog.append(grab, head, squadLabel, tabs, benchLabel, benchTabs, top, panel, statusLine);
 
   bestButton.addEventListener('click', () => {
     const r = opts.onBestGuns();
@@ -218,7 +241,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     const { game, fight, canGear, resumes } = opts.state();
     if (!opened) return;
     const want = focus ?? keyOf();
-    let d = game.roster.find((r) => r.id === current);
+    const camp = [...game.roster, ...(game.reserve ?? [])];
+    let d = camp.find((r) => r.id === current);
     if (!d) {
       d = game.roster[0];
       current = d?.id ?? null;
@@ -234,7 +258,15 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     bestButton.title = canGear ? '' : GUNS_WAIT;
 
     const marks = rosterTiles(game, Date.now(), fight);
-    tabs.replaceChildren(...marks.map((t) => tabItem(t, t.id === current)));
+    const benched = marks.filter((t) => t.bench);
+    const squadText = `Squad ${marks.length - benched.length}/${SQUAD_CAP}`;
+    tabs.setAttribute('aria-label', squadText);
+    tabs.replaceChildren(...marks.filter((t) => !t.bench).map((t) => tabItem(t, t.id === current)));
+    // With nobody on the bench the rows need no labels: the Roster looks as it did.
+    squadLabel.hidden = benchLabel.hidden = benchTabs.hidden = benched.length === 0;
+    squadLabel.textContent = squadText;
+    benchLabel.textContent = `Bench ${benched.length}`;
+    benchTabs.replaceChildren(...benched.map((t) => tabItem(t, t.id === current)));
     if (d) {
       top.replaceChildren(
         ...survivorRow(
@@ -283,7 +315,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     text.append(
       el('span', 'rv-tab-name', t.name),
       el('span', 'rv-tab-level', `Lv ${t.level}`),
-      el('span', 'rv-tab-job', t.jobShort),
+      // Resting (ID-147): how long, in words, where the profession was; not colour alone.
+      el('span', 'rv-tab-job', t.rest > 0 ? `Rest ${t.rest}` : t.jobShort),
     );
     tab.append(avatar(t.art, 'roster-avatar roster-avatar-xs'), text);
     tab.addEventListener('click', () => {
@@ -314,6 +347,10 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       el('span', mark.down ? 'roster-tile-down' : '', mark.health),
     );
     text.append(el('h3', 'rv-who-name', d.name), sub, track);
+    const { game } = opts.state();
+    // Only with a bench to swap with (ID-147): a camp of six or fewer has no choice to make.
+    // Someone resting gets none: "Resting: N hordes" on the line above says why.
+    if ((game.reserve ?? []).length > 0 && isFit(d)) text.append(squadButton(d, mark, canGear));
     who.append(avatar(mark.art, 'roster-avatar roster-avatar-md'), text);
 
     const held = heldGunOf(d);
@@ -373,6 +410,28 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       draw('slot');
     });
     return [who, slot];
+  }
+
+  /**
+   * Moves fit survivor `d` between the squad and the bench (ID-147): "Move to bench" in the
+   * squad, "Add to squad" on the bench, greyed with `SQUAD_WAIT` in a fight. A refusal (the
+   * last in the squad, a full squad) shows on the status line.
+   */
+  function squadButton(d: RosterDefender, mark: RosterTile, canGear: boolean): HTMLElement {
+    const label = mark.bench ? 'Add to squad' : 'Move to bench';
+    const b = el('button', 'hud-button rv-btn rv-squad', label);
+    b.type = 'button';
+    b.dataset.key = 'squad';
+    b.disabled = !canGear;
+    b.title = canGear ? '' : SQUAD_WAIT;
+    b.setAttribute('aria-label', `${label}: ${d.name}${canGear ? '' : `. ${SQUAD_WAIT}`}`);
+    b.addEventListener('click', () => {
+      const r = opts.onToggleSquad(d.id);
+      if (!r.ok) setStatus(r.reason, 'danger');
+      else setStatus(mark.bench ? `${d.name} joins the squad.` : `${d.name} waits on the bench.`);
+      draw('squad');
+    });
+    return b;
   }
 
   /**
@@ -577,7 +636,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
         root.setAttribute('inert', '');
       }
       const { game } = opts.state();
-      const asked = game.roster.find((r) => r.id === id);
+      const asked = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
       current = (asked ?? game.roster[0])?.id ?? null;
       picking = false;
       picked = null;
@@ -601,6 +660,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
 
   return api;
 }
+
+/** Why the squad can't change now (ID-147): it is picked between hordes. */
+export const SQUAD_WAIT = 'Pick the squad between hordes';
 
 /** A held gun's dmg/s in survivor `d`'s hands, as printed (level and profession, ID-152): the picker's figure. */
 const heldDps = (h: Held, d: RosterDefender): string => survivorDps(squadSpec(d), h).toFixed(1);

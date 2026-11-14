@@ -16,7 +16,9 @@ import {
 } from './horde.ts';
 import {
   bestGuns,
+  fillSquad,
   finishSquadHorde,
+  isFit,
   highestBeaten,
   squadDrop,
   squadOf,
@@ -28,7 +30,7 @@ import { skillLock, useSkill } from './skills.ts';
 import { squadPower } from './squadpower.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { levelOf } from './stats.ts';
-import { FARM, FIELD, WALL } from './data.ts';
+import { FARM, FIELD, SQUAD_CAP, WALL } from './data.ts';
 
 /** Longest a simulated horde may run, in fight seconds, before it counts as stuck. */
 const MAX_FIGHT = 3600;
@@ -145,10 +147,11 @@ export function repairWhatYouCan(game: GameState): GameState {
 }
 
 /**
- * The horde-only scripted player's guns (ID-096), as a player equips their drops: they tap
- * "Best gun for everyone" (`bestGuns`, ID-152: each gun in its holder's hands).
+ * The horde-only scripted player's squad and guns (ID-096): they fill any open slot from the
+ * fit bench (`fillSquad`, ID-147), then tap "Best gun for everyone" (`bestGuns`, ID-152:
+ * each gun in its holder's hands).
  */
-export const gearUp = (game: GameState): GameState => bestGuns(game).game;
+export const gearUp = (game: GameState): GameState => bestGuns(fillSquad(game)).game;
 
 /**
  * The scripted player between hordes: waits until the whole roster is fit, then
@@ -319,6 +322,17 @@ export function playSquadHorde(
  */
 export const SQUAD_FARM = { replays: 3 } as const;
 
+/**
+ * Whether the scripted player waits out a rest (ID-147): the squad has an open slot that only
+ * someone resting could fill (no fit survivor on the bench) and a horde is beaten, so they
+ * replay the highest beaten one, as a player would, rather than try a new horde short.
+ */
+export const restWait = (game: GameState): boolean =>
+  highestBeaten(game) >= 1 &&
+  squadOf(game).length < SQUAD_CAP &&
+  game.reserve.some((d) => !isFit(d)) &&
+  !game.reserve.some(isFit);
+
 /** How a scripted horde-only campaign is played (`playSquadCampaign`). */
 export interface SquadPlay {
   /** Most fights in all, replays included. */
@@ -359,7 +373,8 @@ export function unlucky(game: GameState, next: GameState, drop: SquadDrop): Game
  * A horde-only campaign (ID-066, ID-102) from a new game until Horde `hordes` is won, as
  * the player plays it: a win adds XP (levels, ID-146), a survivor and a gun (equipped
  * by `gearUp`); a loss pays its little XP, then the player farms (`SQUAD_FARM`) and tries
- * again. Stops after `maxFights` fights in all (`hordes × 10` by default). Fight `i` (from
+ * again. While a rest leaves the squad short (`restWait`, ID-147) they replay the highest
+ * beaten horde instead of a new one. Stops after `maxFights` fights in all (`hordes × 10` by default). Fight `i` (from
  * 0) uses seed `seed + i`. Returns every fight, in order: the horde, whether it was a
  * replay, the squad size it was fought with, the squad's mean level and Squad Power, and
  * with `watch` how close enemies came to the wall.
@@ -370,24 +385,26 @@ export function playSquadCampaign(seed: number, hordes: number, play: SquadPlay 
   const runs: SquadRun[] = [];
   let farm = 0;
   for (let i = 0; i < maxFights && game.hordeNumber <= hordes; i++) {
-    const n = farm > 0 ? highestBeaten(game) : game.hordeNumber;
+    const n = farm > 0 || restWait(game) ? highestBeaten(game) : game.hordeNumber;
+    const replay = n < game.hordeNumber;
     const seen = play.watch ? { nearest: Infinity } : undefined;
     const horde = playSquadHorde(game, seed + i, MAX_FIGHT, seen, n);
     const squad = squadOf(game);
     runs.push({
       ...summarise(horde, seed + i),
-      replay: farm > 0,
+      replay,
       squad: squad.length,
       level: squad.reduce((t, d) => t + levelOf(d.xp).level, 0) / squad.length,
       power: squadPower(game),
       ...(seen ? { nearest: seen.nearest } : {}),
     });
-    const drop = farm > 0 && play.worstLuck ? squadDrop(game, horde) : null;
+    const drop = replay && play.worstLuck ? squadDrop(game, horde) : null;
     let next = finishSquadHorde(game, horde);
     if (drop) next = unlucky(game, next, drop);
     game = gearUp(next);
+    // A rest-wait replay (ID-147) is no farming: only a lost new horde starts that.
     if (farm > 0) farm--;
-    else if (horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
+    else if (!replay && horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
   }
   return runs;
 }

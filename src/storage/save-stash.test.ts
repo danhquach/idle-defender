@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { roleOf, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { ARMOURY_CAP, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
+import { ARMOURY_CAP, SQUAD_JOIN, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { combineGuns, equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { decodeSave, encodeSave, MAX_OWNED, MAX_SAVE_CHARS } from './save.ts';
@@ -235,8 +235,8 @@ describe('save: the stash and equipped guns (ID-067)', () => {
     for (const [name, change] of cases) expect(reread(g, change), name).toBeNull();
   });
 
-  it('caps the stash as it is read: MAX_OWNED weapons load (a full stash and armed squad), one more is refused', () => {
-    // A camp at Horde 60 with nobody holding an owned gun: every uid is a horde already won.
+  it('caps the stash as it is read: MAX_OWNED weapons load (a full stash and armed camp), one more is refused', () => {
+    // A camp past Horde MAX_OWNED with nobody holding an owned gun: every uid is a horde won.
     const many = (n: number): OwnedWeapon[] =>
       Array.from({ length: n }, (_, i) => ({
         uid: `h${i + 1}`,
@@ -244,13 +244,14 @@ describe('save: the stash and equipped guns (ID-067)', () => {
         rarity: 'common',
         affixes: [],
       }));
-    const g = { ...newGame('horde'), hordeNumber: 60 };
-    expect(MAX_OWNED).toBe(Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_CAP));
+    const g = { ...newGame('horde'), hordeNumber: MAX_OWNED + 2 };
+    expect(MAX_OWNED).toBe(Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_JOIN.max));
     const at = { ...g, armoury: many(MAX_OWNED) };
     expect(reread(at)?.game).toEqual(at);
-    expect(reread(at, (x) => x.armoury.push({ ...x.armoury[0], uid: 'h59' }))).toBeNull();
+    const spare = `h${MAX_OWNED + 1}`;
+    expect(reread(at, (x) => x.armoury.push({ ...x.armoury[0], uid: spare }))).toBeNull();
     // Within the stash's bound, but a gun in hand takes the total owned past it.
-    const held = { uid: 'h59', base: 'rifle', rarity: 'common', affixes: [] };
+    const held = { uid: spare, base: 'rifle', rarity: 'common', affixes: [] };
     expect(reread(at, (x) => (x.roster[0].loadout.primary = held))).toBeNull();
     const fewer = { ...g, armoury: many(MAX_OWNED - 1) };
     expect(reread(fewer, (x) => (x.roster[0].loadout.primary = held))).not.toBeNull();
