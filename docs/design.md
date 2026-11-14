@@ -3040,7 +3040,8 @@ original outline.
   when jammed; sparks below 50 condition, smoke below 25; and a thin steel-blue
   condition bar over each turret, in build mode and in fights.
 - Muted, desaturated ruins; mutants get the only saturated colours (acid
-  green, flesh red).
+  green, flesh red). *(ID-144: the kinds are now people who turned, each
+  keeping its clothes' colour; the flesh-red Horror stays the most saturated.)*
 - World map as a hand-drawn ruined region with location icons, patrol
   routes and a risk colour on each location.
 - **Placeholder art first** *(designer's call)*: build with simple shapes
@@ -3708,6 +3709,26 @@ original outline.
   Rippers and Engineers in the full game keep their ID-049 stills. Each pick
   passed the art reviewer (the PM delegated the choice to it, passing a pose
   that is about 80% right).
+- **As built (ID-144): every kind is a person who turned.** New walk and
+  attack frames, made the same way (puppets in each kind's clothes, one seed
+  and prompt per kind), dress each kind in what hints at what it does: the
+  Shambler an office worker (white shirt, red tie, slacks); the Runner a lean
+  jogger (orange running vest, black shorts, white shoes); the Crawler a road
+  worker in a hi-vis vest, legs mostly gone, hauling itself on its arms (its
+  attack a clawed swipe from the ground); the Spewer a hunched hospital
+  patient in a pale blue gown, drooling green (its attack a gush of bile); the
+  Swollen an obese man in a maroon shirt split over his gut (a belly slam);
+  the Brute a riot officer in a helmet with a cracked visor, body armour and a
+  dark uniform; the Screamer a concert-goer in a plain teal T-shirt, jaw
+  stretched open (its attack a forward-leaning scream); the Horror keeps its
+  mutant body, in shreds of camouflage trousers. No brands, logos or
+  insignia. Each kind's clothes keep their colour (manifest `mutant` on every
+  kind but the Runner, whose vest stays muted); the flesh-red Horror is the
+  most saturated. The death cuts (head and limb) are redrawn on the new
+  corpse frames; hit size, stats and timing are unchanged. Each draw passed a
+  senior game designer review (the PM delegated approval to it); the built
+  roster then passed the art reviewer and the designer's review in the fight
+  view, at 0.5×, 1× and 2× zoom, with effects and deaths.
 - **As built (ID-119): a survivor throws their Frag Grenade.** The survivor
   who throws (§8) plays a 0.4 s overhand throw instead of their idle or aim
   pose: the **wind-up** (the grenade drawn back over the shoulder, the other

@@ -52,13 +52,13 @@ HUNCH = {  # bent knees, torso pitched forward, arms hanging
     'w1': dict(leg_n=(40, -10), leg_f=(-20, -50), arm_n=(15, 25), arm_f=(35, 45), lean=40),
     'w2': dict(leg_n=(15, -15), leg_f=(5, -60), arm_n=(25, 35), arm_f=(25, 35), lean=40),
     'w3': dict(leg_n=(-20, -50), leg_f=(40, -10), arm_n=(35, 45), arm_f=(15, 25), lean=40),
-    'at': dict(leg_n=(40, 0), leg_f=(-25, -40), arm_n=(60, 70), arm_f=(55, 65), lean=55),
+    'at': dict(leg_n=(40, 0), leg_f=(-25, -40), arm_n=(20, 30), arm_f=(30, 40), lean=55),  # ID-144: spews
 }
 SPREAD = {  # thin walker, clawed arms flung wide (side-on: one up and forward, one back)
     'w1': dict(leg_n=(45, -5), leg_f=(-35, -55), arm_n=(120, 150), arm_f=(-110, -140), lean=4),
     'w2': dict(leg_n=(2, 0), leg_f=(-10, -90), arm_n=(125, 155), arm_f=(-115, -145), lean=4),
     'w3': dict(leg_n=(-35, -55), leg_f=(45, -5), arm_n=(120, 150), arm_f=(-110, -140), lean=4),
-    'at': dict(leg_n=(32, 5), leg_f=(-28, -35), arm_n=(95, 100), arm_f=(85, 95), lean=-8),
+    'at': dict(leg_n=(32, 5), leg_f=(-28, -35), arm_n=(-60, -70), arm_f=(-50, -60), lean=30),  # ID-144: scream blast
 }
 DRAG = {  # colossal: slow stride, long arms swinging near the ground
     'w1': dict(leg_n=(20, -5), leg_f=(-16, -28), arm_n=(-10, 5), arm_f=(25, 35), lean=24),
@@ -66,30 +66,44 @@ DRAG = {  # colossal: slow stride, long arms swinging near the ground
     'w3': dict(leg_n=(-16, -28), leg_f=(20, -5), arm_n=(25, 35), arm_f=(-10, 5), lean=24),
     'at': dict(leg_n=(24, 5), leg_f=(-20, -28), arm_n=(155, 125), arm_f=(145, 115), lean=30),
 }
-# On all fours: the torso almost level, arms are front legs, legs fold back behind.
-CRAWL = {
-    'w1': dict(leg_n=(-20, 15), leg_f=(-50, -10), arm_n=(25, -5), arm_f=(-10, -15), lean=78),
-    'w2': dict(leg_n=(-35, 5), leg_f=(-35, 5), arm_n=(8, -10), arm_f=(8, -10), lean=78),
-    'w3': dict(leg_n=(-50, -10), leg_f=(-20, 15), arm_n=(-10, -15), arm_f=(25, -5), lean=78),
-    'at': dict(leg_n=(-25, 10), leg_f=(-45, 0), arm_n=(70, 60), arm_f=(55, 50), lean=55),
+# ID-144: legless, the chest low over the ground, hauling itself on by the arms; the thigh
+# stumps trail behind (only a leg's first angle is used).
+HAUL = {
+    'w1': dict(leg_n=(-80, 0), leg_f=(-95, 0), arm_n=(80, 20), arm_f=(-5, -40), lean=72),
+    'w2': dict(leg_n=(-88, 0), leg_f=(-88, 0), arm_n=(40, 5), arm_f=(40, 5), lean=72),
+    'w3': dict(leg_n=(-95, 0), leg_f=(-80, 0), arm_n=(-5, -40), arm_f=(80, 20), lean=72),
+    'at': dict(leg_n=(-80, 0), leg_f=(-95, 0), arm_n=(125, 135), arm_f=(40, 5), lean=72),
 }
 
 KINDS = {
-    'shambler': dict(poses=SHAMBLE, skin=(150, 185, 95), cloth=(150, 150, 155), torso=72,
+    # ID-144: a turned office worker: pale shirt, loose red tie, charcoal slacks.
+    'shambler': dict(poses=SHAMBLE, skin=(150, 175, 120), cloth=(215, 220, 225), pants=(60, 62, 70),
+                     tie=(165, 35, 40), boots=(40, 32, 28), torso=72,
                      limb=1.35, head=1.3, depth=(16, -10)),
-    'runner': dict(poses=RUN, skin=(175, 165, 150), cloth=(135, 135, 140), torso=56, limb=1.1,
+    # ID-144: a turned jogger: bright running vest, black shorts (bare shins), white shoes.
+    'runner': dict(poses=RUN, skin=(160, 172, 135), cloth=(235, 120, 30), pants=(35, 35, 40),
+                   boots=(235, 235, 235), shorts=True, sleeves=False, torso=56, limb=1.1,
                    head=1.15, depth=(14, -8)),
-    'brute': dict(bare=True, poses=STOMP, skin=(185, 75, 65), cloth=(95, 80, 70), torso=92, limb=1.7,
-                  head=1.05, depth=(22, -12), armour=(120, 120, 125)),
-    'swollen': dict(poses=WADDLE, skin=(150, 190, 80), cloth=(110, 105, 95), torso=70, limb=1.3,
+    # ID-144: a turned riot officer: dark uniform, body armour, helmet with a visor.
+    'brute': dict(poses=STOMP, skin=(150, 165, 125), cloth=(45, 55, 80), torso=92, limb=1.7,
+                  head=1.05, depth=(22, -12), armour=(60, 64, 70), helmet=(50, 54, 60),
+                  boots=(30, 30, 32)),
+    # ID-144: a bloated man in a stretched maroon shirt split over the gut, khaki trousers.
+    'swollen': dict(poses=WADDLE, skin=(160, 170, 125), cloth=(135, 45, 55), pants=(120, 105, 75),
+                    boots=(55, 45, 35), torso=70, limb=1.3,
                     head=0.85, depth=(14, -8), belly=118, legs=0.8),
-    'spewer': dict(bare=True, poses=HUNCH, skin=(140, 185, 75), cloth=(105, 100, 90), torso=58, limb=1.05,
-                   head=1.05, depth=(12, -8), sac=(70, 60), sleeves=False),
-    'screamer': dict(bare=True, poses=SPREAD, skin=(185, 80, 70), cloth=(100, 85, 75), torso=50, limb=1.0,
-                     head=1.15, depth=(12, -8), spikes=True, sleeves=False, tilt=18),
-    'horror': dict(bare=True, poses=DRAG, skin=(180, 70, 60), cloth=(95, 80, 70), torso=120, limb=1.9,
-                   head=0.85, depth=(24, -14), growths=True, arms=1.6, sleeves=False),
-    'crawler': dict(bare=True, poses=CRAWL, skin=(120, 190, 70), cloth=(95, 110, 75), torso=58, limb=1.15,
+    # ID-144: a turned hospital patient: pale blue gown to the knees, bare sickly legs and feet.
+    'spewer': dict(poses=HUNCH, skin=(150, 180, 95), cloth=(150, 190, 205), shorts=True,
+                   torso=58, limb=1.05, head=1.05, depth=(12, -8)),
+    # ID-144: a turned concert-goer: plain teal T-shirt, black jeans, head thrown back.
+    'screamer': dict(poses=SPREAD, skin=(175, 165, 150), cloth=(40, 145, 145), pants=(40, 40, 45),
+                     boots=(60, 55, 55), torso=50, limb=1.0, head=1.15, depth=(12, -8), tilt=18),
+    # ID-144: keeps its mutated body; shreds of olive military fatigues on the legs.
+    'horror': dict(bare=True, poses=DRAG, skin=(180, 70, 60), cloth=(95, 80, 70), pants=(85, 95, 60),
+                   torso=120, limb=1.9, head=0.85, depth=(24, -14), growths=True, arms=1.6, sleeves=False),
+    # ID-144: a turned road worker: hi-vis vest with reflective bands, torn work trousers, no legs.
+    'crawler': dict(poses=HAUL, skin=(145, 170, 115), cloth=(215, 235, 40), pants=(70, 80, 105),
+                    bands=(200, 205, 210), legless=True, torso=58, limb=1.15,
                     head=1.0, depth=(10, -10), sleeves=False),
 }
 
@@ -122,12 +136,18 @@ def draw(kind, pose):
     hip_f, sh_f = (dx, dy), (sh[0] + dx, sh[1] + dy)
 
     def leg(a, cloth, skin, h):
+        if k.get('legless'):  # a short thigh stump ending in a raw wound
+            end = seg(h, a[0], THIGH * 0.5)
+            contacts.append((end[0], end[1] - h[1]))
+            line(h, end, cloth, 30 * lw)
+            ell(end[0], end[1], 15 * lw, 15 * lw, (150, 40, 35))
+            return
         kn = seg(h, a[0], THIGH)
         ft = seg(kn, a[1], SHIN)
         contacts.append((ft[0], ft[1] - h[1]))  # a foot's reach below its own hip
         line(h, kn, cloth, 30 * lw)
-        line(kn, ft, cloth, 26 * lw)
-        line(ft, (ft[0] - 24 * lw, ft[1] + 2), skin, 14 * lw)
+        line(kn, ft, skin if k.get('shorts') else cloth, 26 * lw)
+        line(ft, (ft[0] - 24 * lw, ft[1] + 2), k.get('boots', skin), 14 * lw)
 
     def arm(a, cloth, skin, s):
         el = seg(s, a[0], UARM)
@@ -138,19 +158,28 @@ def draw(kind, pose):
         r = 11 * lw
         ell(hd[0], hd[1], r, r, skin)
 
+    pants_n = k.get('pants', cloth_n)
     arm(pose['arm_f'], cloth_f, skin_f, sh_f)
-    leg(pose['leg_f'], cloth_f, skin_f, hip_f)
+    leg(pose['leg_f'], shade(pants_n, 0.72), skin_f, hip_f)
     mid = ((hip[0] + neck[0]) / 2, (hip[1] + neck[1]) / 2)
-    if 'sac' in k:  # a fleshy sac on the upper back
-        rx, ry = k['sac']
-        ell(mid[0] + 40, mid[1] - 30, rx, ry, shade(skin_n, 1.08))
     if k.get('growths'):  # tumours over the hunched back
         for t, r in ((0.45, 46), (0.7, 40), (0.9, 30)):
             ell(neck[0] * t + 40, neck[1] * t - 20, r, r, shade(skin_n, 1.1))
-    line(hip, neck, skin_n if ('belly' in k or k.get('bare')) else cloth_n, k['torso'])
-    if 'belly' in k:
+    line(hip, neck, skin_n if k.get('bare') else cloth_n, k['torso'])
+    if 'bands' in k:  # reflective bands round the vest, across the torso
+        px, py = math.cos(lean) * k['torso'] / 2, -math.sin(lean) * k['torso'] / 2
+        for t in (0.35, 0.65):
+            c = (neck[0] * t, neck[1] * t)
+            line((c[0] - px, c[1] - py), (c[0] + px, c[1] + py), k['bands'], 9)
+    if 'tie' in k:  # a loose tie hanging down the chest (the front faces left)
+        fx, fy = -math.cos(lean) * k['torso'] * 0.36, math.sin(lean) * k['torso'] * 0.36
+        top = (neck[0] + fx + 10 * math.sin(lean), neck[1] + fy + 10 * math.cos(lean))
+        bot = (neck[0] * 0.45 + fx, neck[1] * 0.45 + fy)
+        line(top, bot, k['tie'], 12)
+    if 'belly' in k:  # a shirt stretched over the gut, split open low with bare skin bulging through
         r = k['belly']
-        ell(mid[0] - 18, mid[1] + 6, r, r * 0.92, skin_n)
+        ell(mid[0] - 18, mid[1] + 6, r, r * 0.92, cloth_n)
+        ell(mid[0] - 18 - r * 0.3, mid[1] + 6 + r * 0.45, r * 0.5, r * 0.36, skin_n)
     if 'armour' in k:  # plates over chest and shoulder
         a = k['armour']
         cx, cy = mid[0] - 30, mid[1] - 10
@@ -160,12 +189,11 @@ def draw(kind, pose):
     hr = k.get('head', 1.0)
     hx, hy = neck[0] - 20 + k.get('tilt', 0), neck[1] - 30 * hr
     ell(hx, hy, 28 * hr, 32 * hr, skin_n)
-    if k.get('spikes'):
-        for ang in (-40, 0, 40, 80):
-            a = math.radians(ang)
-            base = (hx + 26 * hr * math.sin(a), hy - 30 * hr * math.cos(a))
-            line(base, (base[0] + 26 * math.sin(a), base[1] - 26 * math.cos(a)), (230, 220, 200), 9)
-    leg(pose['leg_n'], cloth_n, skin_n, hip)
+    if 'helmet' in k:  # a dome over the head and a pale visor raised over the brow
+        ops.append(('chord', (hx - 34 * hr, hy - 40 * hr, hx + 34 * hr, hy + 16 * hr), k['helmet']))
+        ops.append(('poly', [(hx - 36 * hr, hy - 8 * hr), (hx + 6 * hr, hy - 14 * hr),
+                             (hx + 4 * hr, hy - 2 * hr), (hx - 38 * hr, hy + 6 * hr)], (150, 175, 190)))
+    leg(pose['leg_n'], pants_n, skin_n, hip)
     arm(pose['arm_n'], cloth_n, skin_n, sh)
 
     ox, oy = HIP_X, GROUND - max(p[1] for p in contacts)
@@ -182,6 +210,9 @@ def draw(kind, pose):
         elif op[0] == 'ell':
             x0, y0, x1, y1 = op[1]
             d.ellipse([x0 + ox, y0 + oy, x1 + ox, y1 + oy], fill=op[2], outline=EDGE, width=3)
+        elif op[0] == 'chord':
+            x0, y0, x1, y1 = op[1]
+            d.chord([x0 + ox, y0 + oy, x1 + ox, y1 + oy], 180, 360, fill=op[2], outline=EDGE, width=3)
         else:
             d.polygon([t(p) for p in op[1]], fill=op[2], outline=EDGE)
     return im
