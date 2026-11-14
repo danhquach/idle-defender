@@ -3,7 +3,7 @@
 // cap, a loss replays the same horde with everyone back and the wall full. The rest of
 // the game's state rides along untouched, so the full game can come back later.
 import {
-  bestDrop,
+  dropCanBeat,
   bonusWeights,
   firstClearWeights,
   gunLevel,
@@ -13,6 +13,7 @@ import {
   rollSquadGun,
   rollUpgrade,
   rollWeapon,
+  type GunScore,
   type Held,
   type OwnedWeapon,
 } from './armoury.ts';
@@ -67,7 +68,7 @@ import {
 } from './horde.ts';
 import { isGun } from './loadout.ts';
 import { chance, createRng } from './rng.ts';
-import { fieldBonus, jobPart } from './stats.ts';
+import { fieldBonus, jobPart, survivorDps } from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -384,44 +385,62 @@ export interface SquadDrop {
    */
   thrown: OwnedWeapon[];
   kind: DropKind;
-  /** One of the win's guns hits harder than the weakest gun a squad survivor holds (`weakestHeld`). */
+  /** One of the win's guns would do more for a squad survivor than their own (`squadGain`, ID-152). */
   upgrade: boolean;
-  /** A replay where no gun this horde can drop beats the weakest held: farm a higher horde. */
+  /** A replay where no gun this horde can drop is an upgrade (`squadGain`): farm a higher horde. */
   noUpgrades: boolean;
   /**
-   * With `noUpgrades`: the lowest horde above this one whose drop could beat the weakest
-   * held (a replay's band, or the next new horde's first clear) within `FARM.search`
+   * With `noUpgrades`: the lowest horde above this one whose drop could be an upgrade
+   * (a replay's band, or the next new horde's first clear) within `FARM.search`
    * hordes, or null if none can.
    */
   farmFrom: number | null;
 }
 
 /**
- * The weakest gun a squad survivor holds (ID-098), by `gunPower`: their one gun, the free
- * pistol included (a survivor with no gun fights with the pistol).
+ * The weakest gun a squad survivor holds (ID-098): the one that does the least in its
+ * holder's hands (`survivorDps`, their level and profession, ID-152), the free pistol
+ * included (a survivor with no gun fights with the pistol).
  */
 export function weakestHeld(game: Pick<GameState, 'roster'>): Held {
+  const held = squadOf(game).map((d) => {
+    const spec = squadSpec(d);
+    return { gun: spec.loadout.primary, dps: survivorDps(spec, spec.loadout.primary) };
+  });
   return (
-    squadOf(game)
-      .map((d) => squadSpec(d).loadout.primary)
-      .reduce<Held | null>((a, b) => (a === null || gunPower(b) < gunPower(a) ? b : a), null) ??
-    'pistol'
+    held.reduce<(typeof held)[number] | null>((a, b) => (a === null || b.dps < a.dps ? b : a), null)
+      ?.gun ?? 'pistol'
   );
 }
 
 /**
- * The lowest horde from `from` up to the next new one whose drop could beat `beat` dmg/s
- * (ID-098): a beaten horde's replay band with the bad-luck count, the new one's first
- * clear. Null when none can.
+ * How much more dmg/s gun `w` would do for the squad (ID-152): the most any squad survivor
+ * gains holding it instead of their own gun, in their hands (`survivorDps`: level and
+ * profession). Over 0 is an upgrade, a gun "Best gun for everyone" would hand out. At level
+ * 1 with no bonus it is `w`'s `gunPower` over the weakest held gun's, the rule before.
+ */
+export function squadGain(game: Pick<GameState, 'roster'>): GunScore {
+  const squad = squadOf(game).map((d) => {
+    const spec = squadSpec(d);
+    return { spec, now: survivorDps(spec, spec.loadout.primary) };
+  });
+  if (squad.length === 0) return (w) => gunPower(w) - gunPower('pistol');
+  return (w) => Math.max(...squad.map((s) => survivorDps(s.spec, w) - s.now));
+}
+
+/**
+ * The lowest horde from `from` up to the next new one whose drop could be an upgrade
+ * (`gain` over 0, ID-098, ID-152): a beaten horde's replay band with the bad-luck count,
+ * the new one's first clear. Null when none can.
  */
 function upgradeFrom(
   game: Pick<GameState, 'hordeNumber' | 'farm'>,
   from: number,
-  beat: number,
+  gain: GunScore,
 ): number | null {
   for (let n = from; n <= Math.min(game.hordeNumber, from + FARM.search - 1); n++) {
     const weights = isReplay(game, n) ? replayWeights(n, game.farm.badLuck) : firstClearWeights(n);
-    if (bestDrop(weights, n) > beat) return n;
+    if (dropCanBeat(weights, n, gain)) return n;
   }
   return null;
 }
@@ -452,7 +471,7 @@ export function squadDrop(
   const n = horde.hordeNumber;
   const rng = createRng(horde.seed ^ DROP_STREAM);
   const weakest = weakestHeld(game);
-  const beat = gunPower(weakest);
+  const gain = squadGain(game);
   let weapon: OwnedWeapon;
   let kind: DropKind = 'first';
   let noUpgrades = false;
@@ -461,10 +480,12 @@ export function squadDrop(
     weapon = rollSquadGun(rng, uid, firstClearWeights(n), n);
   } else {
     const weights = replayWeights(n, game.farm.badLuck);
-    noUpgrades = bestDrop(weights, n) <= beat;
+    noUpgrades = !dropCanBeat(weights, n, gain);
+    // The rarity floor is the weakest held gun's: a preference only, so the survivor the
+    // rolled gun suits best may hold another (the gun is still an upgrade for someone).
     const sure =
       game.farm.badLuck >= FARM.guarantee && !noUpgrades
-        ? rollUpgrade(rng, uid, weights, n, beat, isOwned(weakest) ? weakest.rarity : 'common')
+        ? rollUpgrade(rng, uid, weights, n, 0, isOwned(weakest) ? weakest.rarity : 'common', gain)
         : null;
     kind = sure ? 'guaranteed' : 'replay';
     weapon = sure ?? rollSquadGun(rng, uid, weights, n);
@@ -482,9 +503,9 @@ export function squadDrop(
     bonus,
     thrown: stashWith(game.armoury, [weapon, ...bonus]).thrown,
     kind,
-    upgrade: [weapon, ...bonus].some((w) => gunPower(w) > beat),
+    upgrade: [weapon, ...bonus].some((w) => gain(w) > 0),
     noUpgrades,
-    farmFrom: noUpgrades ? upgradeFrom(game, n + 1, beat) : null,
+    farmFrom: noUpgrades ? upgradeFrom(game, n + 1, gain) : null,
   };
 }
 
@@ -546,48 +567,93 @@ export function equipGun(
   return equip(game, me.id, { ...me.loadout, primary: gun });
 }
 
-/** One survivor's change in `bestGuns` (ID-108): the gun they had and the stash gun they got. */
+/** One survivor's change in `bestGuns` (ID-108): the gun they had and the gun they got. */
 export interface GunMove {
   id: string;
   name: string;
   from: Held;
-  to: OwnedWeapon;
+  /** A stash gun, or a squadmate's (ID-152), the free pistol included. */
+  to: Held;
 }
 
+/** Under this much more dmg/s for the squad, a change in `bestGuns` isn't worth making. */
+const BEST_GAIN = 1e-9;
+
 /**
- * Hands the stash's best guns to the squad (ID-108, between hordes): while the strongest
- * gun in the stash hits harder (`gunPower`) than the weakest in the squad's hands, the free
- * pistol included, it goes to that survivor and theirs goes to the stash. Each swap raises
- * the squad's total gun power, so it ends; a second call moves nothing. A gun never goes
- * into the stash for the pistol, so the stash never grows past what it was. Returns the new
- * game and one move per survivor who changed gun, in the order they changed.
+ * Hands out guns so they do the most for the squad (ID-108, ID-152, between hordes), each
+ * gun scored in the hands of the survivor who would hold it (`survivorDps`: their level
+ * and profession, so a fighting job's own guns count for more). Repeatedly makes the one
+ * change that raises the squad's total the most: a survivor takes a stash gun (theirs goes
+ * to the stash; the free pistol just goes), or two survivors trade guns, until no single
+ * change helps (a three-way trade isn't looked for). Every change raises the total, so it
+ * ends, and a second call moves nothing. A gun never goes into the stash for the pistol, so
+ * the stash never grows. Returns the new game and one move per survivor whose gun changed
+ * (from what they held to what they hold), in the order they first changed.
  */
 export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] } {
-  let g = game;
-  const moves: GunMove[] = [];
+  const squad = squadOf(game).map(squadSpec);
+  const start = squad.map((s) => s.loadout.primary);
+  const hands = [...start];
+  const stash = game.armoury.filter(isGun);
+  const score = (i: number, h: Held): number => survivorDps(squad[i]!, h);
+  // Holding an owned weapon that is no gun (fights as the pistol): it goes to the stash when
+  // they change, so they may only take a stash gun (one out, one in), never trade first.
+  const odd = squadOf(game).map((d) => isOwned(d.loadout.primary) && !isGun(d.loadout.primary));
+  const order: number[] = [];
   for (;;) {
-    const held = squadOf(g).map((d) => ({
-      d,
-      gun: isGun(d.loadout.primary) ? d.loadout.primary : ('pistol' as Held),
-    }));
-    const weakest = held.reduce<(typeof held)[number] | undefined>(
-      (a, h) => (!a || gunPower(h.gun) < gunPower(a.gun) ? h : a),
-      undefined,
-    );
-    const best = g.armoury
-      .filter(isGun)
-      .reduce<OwnedWeapon | undefined>(
-        (a, w) => (!a || gunPower(w) > gunPower(a) ? w : a),
-        undefined,
-      );
-    if (!weakest || !best || gunPower(best) <= gunPower(weakest.gun)) return { game: g, moves };
-    const r = equipGun(g, weakest.d.id, best.uid);
-    if (!r.ok) return { game: g, moves };
-    g = r.game;
-    // One move per survivor: after taking the stash's best, what is left in the stash is
-    // no stronger than their new gun, so they are never the one upgraded again.
-    moves.push({ id: weakest.d.id, name: weakest.d.name, from: weakest.gun, to: best });
+    // The best change this round: survivor `i` takes stash gun `s`, or trades with `j`.
+    let gain = BEST_GAIN;
+    let pick: { i: number; s: number } | { i: number; j: number } | null = null;
+    for (let i = 0; i < hands.length; i++) {
+      const now = score(i, hands[i]!);
+      for (let s = 0; s < stash.length; s++) {
+        const g = score(i, stash[s]!) - now;
+        if (g > gain) [gain, pick] = [g, { i, s }];
+      }
+      for (let j = i + 1; j < hands.length; j++) {
+        if (odd[i] || odd[j]) continue;
+        const g = score(i, hands[j]!) + score(j, hands[i]!) - now - score(j, hands[j]!);
+        if (g > gain) [gain, pick] = [g, { i, j }];
+      }
+    }
+    if (!pick) break;
+    const { i } = pick;
+    if ('s' in pick) {
+      const had = hands[i]!;
+      hands[i] = stash[pick.s]!;
+      if (isOwned(had)) stash[pick.s] = had;
+      else stash.splice(pick.s, 1);
+      odd[i] = false;
+    } else [hands[i], hands[pick.j]] = [hands[pick.j]!, hands[i]!];
+    for (const k of 's' in pick ? [i] : [i, pick.j]) if (!order.includes(k)) order.push(k);
   }
+  const same = (a: Held, b: Held): boolean =>
+    isOwned(a) && isOwned(b) ? a.uid === b.uid : a === b;
+  const changed = order.filter((i) => !same(start[i]!, hands[i]!));
+  if (changed.length === 0) return { game, moves: [] };
+  const byId = new Map(changed.map((i) => [squad[i]!.id, hands[i]!]));
+  const inHand = new Set(hands.filter(isOwned).map((h) => h.uid));
+  // What they really held: a primary that is no gun fights as the pistol, but goes back too.
+  const released = game.roster
+    .filter((d) => byId.has(d.id))
+    .map((d) => d.loadout.primary)
+    .filter(isOwned);
+  const g: GameState = {
+    ...game,
+    roster: game.roster.map((d) => {
+      const h = byId.get(d.id);
+      return h === undefined ? d : { ...d, loadout: { ...d.loadout, primary: h } };
+    }),
+    // As `equip` does: the stash keeps its order, a gun given back goes on the end.
+    armoury: [...game.armoury, ...released].filter((w) => !inHand.has(w.uid)),
+  };
+  const moves = changed.map((i) => ({
+    id: squad[i]!.id,
+    name: squad[i]!.name,
+    from: start[i]!,
+    to: hands[i]!,
+  }));
+  return { game: g, moves };
 }
 
 /** The rarity a combine of `rarity` guns makes (ID-091), or null for Relic, the top. */

@@ -1,20 +1,10 @@
 // Squad Power and Recommended Power (ID-098, design §11 Farming): one number for the
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
-import { gunCrit, gunCritDamage, statsOf } from './armoury.ts';
-import { CRIT_DAMAGE, DEFENDER_HP, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
+import { DEFENDER_HP, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
 import type { GameState, RosterDefender } from './game.ts';
 import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
-import {
-  critChance,
-  critDamageOf,
-  jobPart,
-  levelBonus,
-  levelOf,
-  magazineBonus,
-  maxHpOf,
-  reloadTime,
-} from './stats.ts';
+import { maxHpOf, survivorDps } from './stats.ts';
 import {
   enemyHp,
   hordeBosses,
@@ -26,30 +16,14 @@ import {
 } from './waves.ts';
 
 /**
- * One survivor's share of Squad Power: their gun's sustained dmg/s (rarity, level and
- * affixes; the level's crit and the gun's own, ID-101; the level's tighter aim, reload and
- * fire rate, ID-146), times a toughness factor from the level's extra HP. Cards and
- * skills don't count.
+ * One survivor's share of Squad Power: their gun's sustained dmg/s in their hands
+ * (`survivorDps`: level and profession counted), times a toughness factor from the level's
+ * extra HP. Cards and skills don't count.
  */
 export function survivorPower(d: RosterDefender): number {
   const spec = squadSpec(d);
-  const gun = spec.loadout.primary;
-  const w = statsOf(gun);
-  if (w.kind !== 'sidearm' && w.kind !== 'gun') return 0;
-  const crit =
-    1 +
-    (critChance(spec, true, gun) + gunCrit(gun)) *
-      (CRIT_DAMAGE + gunCritDamage(gun) + critDamageOf(spec, gun) - 1);
-  const { level } = levelOf(d.xp);
-  // The profession's part counts too (ID-149): a fighting job's only with its guns.
-  const aim = 1 + POWER.aim * (levelBonus(level, 'spread') + jobPart(spec, 'spread', gun));
-  const rate = 1 + levelBonus(level, 'fireRate') + jobPart(spec, 'fireRate', gun);
-  const mag = w.magazine * (1 + magazineBonus(spec, gun));
-  const dps =
-    (w.damage * w.pellets * crit * aim * mag) /
-    ((mag * w.fireInterval) / rate + reloadTime(spec, gun));
   const tough = 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
-  return dps * tough * POWER.scale;
+  return survivorDps(spec, spec.loadout.primary) * tough * POWER.scale;
 }
 
 /** Squad Power (ID-098): every squad survivor's `survivorPower`, summed, rounded. */

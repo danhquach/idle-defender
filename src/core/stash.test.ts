@@ -10,15 +10,21 @@ import {
   rollUpgrade,
   rollWeapon,
   squadDropWeights,
+  heldName,
+  isOwned,
+  type Held,
   type OwnedWeapon,
 } from './armoury.ts';
+import { survivorDps, xpForLevel } from './stats.ts';
 import { recruit } from './camp.ts';
 import {
   PISTOL_DROP_FLOOR,
   RARITY_ORDER,
+  SQUAD_CAP,
   SQUAD_DROP,
   STASH_CAP,
   WEAPONS,
+  type JobId,
   type Rarity,
 } from './data.ts';
 import { newGame, type GameState } from './game.ts';
@@ -63,6 +69,9 @@ const gun = (uid: string, base: keyof typeof WEAPONS, rarity: Rarity): OwnedWeap
   rarity,
   affixes: [],
 });
+
+/** A held weapon's uid, or the free weapon's id. */
+const idOf = (h: Held): string => (isOwned(h) ? h.uid : h);
 
 /** `n` Common SMGs, uids c1…cn, as a stash. */
 const smgs = (n: number): OwnedWeapon[] =>
@@ -381,16 +390,14 @@ describe('best gun for everyone (ID-108)', () => {
   it('hands the strongest stash guns to the weakest hands, the pistol included', () => {
     const g = squadGame(3, 3, [weak, mid, top]);
     const r = bestGuns(g);
-    expect(r.moves.map((m) => [m.id, m.from, m.to.uid])).toEqual([
+    expect(r.moves.map((m) => [m.id, m.from, idOf(m.to)])).toEqual([
       ['recruit-1', 'pistol', 'c'],
       ['recruit-2', 'pistol', 'b'],
       ['recruit-3', 'pistol', 'a'],
     ]);
     expect(r.game.armoury).toEqual([]);
     for (const m of r.moves) {
-      expect(r.game.roster.find((d) => d.id === m.id)!.loadout.primary).toMatchObject({
-        uid: m.to.uid,
-      });
+      expect(r.game.roster.find((d) => d.id === m.id)!.loadout.primary).toEqual(m.to);
     }
   });
 
@@ -428,5 +435,156 @@ describe('best gun for everyone (ID-108)', () => {
     if (!held.ok) throw new Error(held.reason);
     expect(gunPower(top)).toBeGreaterThan(gunPower(weak));
     expect(bestGuns(held.game).moves).toEqual([]);
+  });
+});
+
+describe('best gun for everyone counts professions (ID-152)', () => {
+  const LV21 = xpForLevel(21);
+  /** `game` with survivor `id` set to profession `job` at `xp`, holding `primary`. */
+  const as = (
+    game: GameState,
+    id: string,
+    job: JobId,
+    primary: Held = 'pistol',
+    xp = LV21,
+  ): GameState => ({
+    ...game,
+    roster: game.roster.map((d) =>
+      d.id === id ? { ...d, job, xp, loadout: { ...d.loadout, primary } } : d,
+    ),
+  });
+  const dps = (game: GameState, id: string, h: Held): number =>
+    survivorDps(squadSpec(game.roster.find((d) => d.id === id)!), h);
+  const squadTotal = (game: GameState): number =>
+    game.roster.reduce((s, d) => s + dps(game, d.id, squadSpec(d).loadout.primary), 0);
+  const uidOf = (game: GameState, id: string): string | undefined => {
+    const p = game.roster.find((d) => d.id === id)!.loadout.primary;
+    return isOwned(p) ? p.uid : undefined;
+  };
+
+  it('a fighting profession takes its own gun over a stronger off-profession one', () => {
+    const sniper = gun('s', 'sniper', 'common');
+    const assault = gun('a', 'assault', 'common');
+    const g = as(squadGame(1, 3, [assault, sniper]), 'recruit-1', 'hunter');
+    // The premise: the Assault Rifle hits harder on its own, the Sniper rifle in a Hunter's hands.
+    expect(gunPower(assault)).toBeGreaterThan(gunPower(sniper));
+    expect(dps(g, 'recruit-1', sniper)).toBeGreaterThan(dps(g, 'recruit-1', assault));
+    const r = bestGuns(g);
+    expect(r.moves.map((m) => [m.id, m.from, heldName(m.to)])).toEqual([
+      ['recruit-1', 'pistol', heldName(sniper)],
+    ]);
+    expect(r.game.armoury).toEqual([assault]);
+  });
+
+  it('swaps guns between survivors when each suits the other (the ticket’s case)', () => {
+    const carbine = gun('c', 'rifle', 'common');
+    const pump = gun('p', 'shotgun', 'common');
+    const sniper = gun('s', 'sniper', 'common');
+    let g = squadGame(2, 3, [sniper]);
+    g = as(g, 'recruit-1', 'police', carbine);
+    g = as(g, 'recruit-2', 'hunter', pump);
+    const before = squadTotal(g);
+    const r = bestGuns(g);
+    // The Police officer ends with the Pump Shotgun, the Hunter with the Sniper rifle (their
+    // best of the Hunter's guns); the Carbine goes to the stash.
+    expect(uidOf(r.game, 'recruit-1')).toBe('p');
+    expect(uidOf(r.game, 'recruit-2')).toBe('s');
+    expect(r.game.armoury).toEqual([carbine]);
+    expect(squadTotal(r.game)).toBeGreaterThan(before);
+    // Net moves, one per survivor who changed, from what they held to what they hold.
+    for (const m of r.moves) {
+      const d = r.game.roster.find((x) => x.id === m.id)!;
+      expect(d.loadout.primary).toEqual(m.to);
+      expect(m.from).toEqual(g.roster.find((x) => x.id === m.id)!.loadout.primary);
+    }
+    expect(new Set(r.moves.map((m) => m.id)).size).toBe(r.moves.length);
+    // Every gun is still somewhere, once: in a hand or in the stash.
+    const all = [
+      ...r.game.armoury.map((w) => w.uid),
+      ...r.game.roster.map((d) => uidOf(r.game, d.id)),
+    ];
+    expect(all.sort()).toEqual(['c', 'p', 's']);
+  });
+
+  it('swaps two held guns with an empty stash', () => {
+    const pump = gun('p', 'shotgun', 'common');
+    const sniper = gun('s', 'sniper', 'common');
+    let g = squadGame(2, 3);
+    g = as(g, 'recruit-1', 'police', sniper);
+    g = as(g, 'recruit-2', 'hunter', pump);
+    const r = bestGuns(g);
+    expect([uidOf(r.game, 'recruit-1'), uidOf(r.game, 'recruit-2')]).toEqual(['p', 's']);
+    expect(r.game.armoury).toEqual([]);
+    expect(r.moves.map((m) => m.id)).toEqual(['recruit-1', 'recruit-2']);
+  });
+
+  it('a survivor holding no gun only takes from the stash; the bench and stash items stay', () => {
+    const knife: OwnedWeapon = { uid: 'k', base: 'knife', rarity: 'common', affixes: [] };
+    const sniper = gun('s', 'sniper', 'common');
+    const lmg = gun('l', 'lmg', 'common');
+    const kit: OwnedWeapon = { uid: 'k2', base: 'knife', rarity: 'common', affixes: [] };
+    // A full squad plus one on the bench, who holds the LMG and is left alone.
+    let g = squadGame(SQUAD_CAP + 1, 3, [kit]);
+    g = as(g, 'recruit-1', 'hunter', knife);
+    g = as(g, 'recruit-2', 'police', sniper);
+    g = as(g, `recruit-${SQUAD_CAP + 1}`, 'hunter', lmg);
+    const r = bestGuns(g);
+    // Trading the Sniper rifle for the knife-holder's (pistol) hand would suit them, but would
+    // put the knife in the stash with nothing taken out: no trade, so nothing moves.
+    expect(r.moves).toEqual([]);
+    expect(r.game).toEqual(g);
+    // With a stash gun to take, the knife goes back as the gun comes out: the stash keeps its size.
+    const g2 = { ...g, armoury: [kit, gun('a', 'assault', 'common')] };
+    const r2 = bestGuns(g2);
+    expect(r2.game.armoury.length).toBeLessThanOrEqual(g2.armoury.length);
+    expect(r2.game.armoury.map((w) => w.uid)).toContain('k');
+    expect(r2.game.armoury.map((w) => w.uid)).toContain('k2');
+    expect(r2.game.roster[SQUAD_CAP]!.loadout.primary).toEqual(lmg);
+  });
+
+  it('an any-gun profession ranks guns by the level alone, as before', () => {
+    const stash = [gun('a', 'smg', 'rusty'), gun('b', 'smg', 'military'), gun('c', 'lmg', 'relic')];
+    // A squad job (no gun stat at all) and a self job with only HP and armour.
+    let p = squadGame(3, 3, stash);
+    let g = squadGame(3, 3, stash);
+    for (const id of ['recruit-1', 'recruit-2', 'recruit-3']) {
+      p = as(p, id, 'mechanic');
+      g = as(g, id, 'builder');
+    }
+    const mechanics = bestGuns(p);
+    const builders = bestGuns(g);
+    expect(mechanics.moves.map((m) => [m.id, m.from, heldName(m.to)])).toEqual([
+      ['recruit-1', 'pistol', heldName(stash[2]!)],
+      ['recruit-2', 'pistol', heldName(stash[1]!)],
+      ['recruit-3', 'pistol', heldName(stash[0]!)],
+    ]);
+    expect(builders.moves).toEqual(mechanics.moves);
+  });
+
+  it('ends at a squad no single swap or stash take can improve, and a second call moves nothing', () => {
+    const stash = (
+      ['smg', 'rifle', 'shotgun', 'lmg', 'sniper', 'assault', 'cartridge'] as const
+    ).map((b, i) => gun(`g${i}`, b, RARITY_ORDER[i % RARITY_ORDER.length]!));
+    let g = squadGame(4, 3, stash);
+    const jobs: JobId[] = ['police', 'soldier', 'hunter', 'guard'];
+    jobs.forEach((j, i) => (g = as(g, `recruit-${i + 1}`, j)));
+    const r = bestGuns(g);
+    const once = r.game;
+    const hands = once.roster.map((d) => squadSpec(d).loadout.primary);
+    for (let i = 0; i < hands.length; i++) {
+      const id = once.roster[i]!.id;
+      for (const w of once.armoury)
+        expect(dps(once, id, w)).toBeLessThanOrEqual(dps(once, id, hands[i]!) + 1e-9);
+      for (let j = i + 1; j < hands.length; j++) {
+        const jd = once.roster[j]!.id;
+        const now = dps(once, id, hands[i]!) + dps(once, jd, hands[j]!);
+        const swapped = dps(once, id, hands[j]!) + dps(once, jd, hands[i]!);
+        expect(swapped).toBeLessThanOrEqual(now + 1e-9);
+      }
+    }
+    expect(once.armoury.length).toBeLessThanOrEqual(g.armoury.length);
+    const twice = bestGuns(once);
+    expect(twice.moves).toEqual([]);
+    expect(twice.game).toEqual(once);
   });
 });

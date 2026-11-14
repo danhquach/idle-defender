@@ -8,9 +8,9 @@ import { rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { DEFENDER_HP, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
-import { bestGuns, equipGun, startSquadHorde } from '../core/hordeonly.ts';
+import { bestGuns, equipGun, squadSpec, startSquadHorde } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
-import { maxHpOf, xpForLevel } from '../core/stats.ts';
+import { maxHpOf, survivorDps, xpForLevel } from '../core/stats.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { ART_URLS, avatarOf, GUNNER_LOOKS, lookOf } from './sprites.ts';
 import { LEVEL_ONE_TEXT, levelText } from './statlines.ts';
@@ -328,7 +328,7 @@ describe('Choose a gun (ID-108)', () => {
       [...tr.children].map((c) => c.textContent),
     );
     expect(rows.map((r) => r[0])).toEqual([
-      'dmg/s',
+      `${recruit(1).name}'s dmg/s`,
       'Damage',
       'Fire rate',
       'Reload',
@@ -385,6 +385,23 @@ describe('Choose a gun (ID-108)', () => {
       `${recruit(1).name} now holds the free pistol; Lv 1 Military Carbine is back in the stash.`,
     );
     expect(m.game().armoury.map((w) => w.uid)).toContain('r1');
+  });
+
+  it('slot, tiles and hint show dmg/s in the survivor’s hands, so a Hunter opens on the Sniper rifle (ID-152)', () => {
+    const hunter: RosterDefender = { ...at(1, 21), job: 'hunter' };
+    const sniper = gun('s', 'sniper', 'common');
+    const assault = gun('a', 'assault', 'common');
+    const m = picker([hunter], [assault, sniper]);
+    const who = squadSpec(hunter);
+    expect(m.key('slot').querySelector('.rv-slot-line b')!.textContent).toBe(
+      survivorDps(who, 'pistol').toFixed(1),
+    );
+    m.key('slot').click();
+    expect(tiles(m)[0]!.getAttribute('aria-pressed')).toBe('true');
+    expect(tiles(m)[0]!.textContent).toContain(survivorDps(who, sniper).toFixed(1));
+    const hint = m.scrim.querySelector('.rv-hint')!.textContent!;
+    expect(hint).toContain(`dmg/s is ${hunter.name}'s, level and profession counted`);
+    expect(hint).not.toContain('leaves it out');
   });
 
   it('with no better gun nothing is preselected and Equip waits for a tap', () => {

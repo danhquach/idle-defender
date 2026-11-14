@@ -3,6 +3,7 @@
 // their profession adds (ID-149). Pure.
 import {
   ARMOUR_FLOOR,
+  CRIT_DAMAGE,
   DEFENDER_HP,
   GUNNER,
   JOBS,
@@ -10,6 +11,7 @@ import {
   LEVEL_HALF,
   LEVEL_XP,
   OFF_PROFESSION,
+  POWER,
   SHIELD,
   type Job,
   type JobEffect,
@@ -17,7 +19,7 @@ import {
   type LevelBonusId,
   type Profession,
 } from './data.ts';
-import { baseOf, type Held } from './armoury.ts';
+import { baseOf, gunCrit, gunCritDamage, statsOf, type Held } from './armoury.ts';
 import { gunOf, isGun, professionOf, weaponOf, type Loadout } from './loadout.ts';
 
 /** A defender as far as their level and profession go. */
@@ -197,4 +199,26 @@ export function fieldBonus(
     best = Math.max(best, jobBonus(levelOf(d.xp ?? 0).level, d.job, effect));
   }
   return best;
+}
+
+/**
+ * Gun `gun`'s sustained dmg/s in `d`'s hands, as Squad Power counts it (ID-098, ID-152):
+ * rarity, level and affixes; the level's and the profession's crit, aim, fire rate, reload
+ * and magazine (a fighting job's only with its guns, ID-149); the gun's own crit (ID-101).
+ * A level-1 survivor with no profession gets the gun's `gunPower`. 0 for a weapon that is
+ * no gun.
+ */
+export function survivorDps(d: Statted, gun: Held): number {
+  const w = statsOf(gun);
+  if (w.kind !== 'sidearm' && w.kind !== 'gun') return 0;
+  const crit =
+    1 +
+    (critChance(d, true, gun) + gunCrit(gun)) *
+      (CRIT_DAMAGE + gunCritDamage(gun) + critDamageOf(d, gun) - 1);
+  const aim = 1 + POWER.aim * bonusOf(d, 'spread', gun);
+  const rate = fireRateFactor(d, gun);
+  const mag = w.magazine * (1 + magazineBonus(d, gun));
+  return (
+    (w.damage * w.pellets * crit * aim * mag) / ((mag * w.fireInterval) / rate + reloadTime(d, gun))
+  );
 }

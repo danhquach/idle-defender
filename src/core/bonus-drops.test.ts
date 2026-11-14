@@ -150,7 +150,7 @@ describe('bonus guns on a win (ID-122)', () => {
     expect(next.farm.replays).toBe(3);
   });
 
-  it('a replay win is an upgrade when any of its guns, bonus ones too, beats the weakest held', () => {
+  it('a replay win is an upgrade when any of its guns, bonus ones too, beats the weakest held (level 1: the gun alone)', () => {
     // The squad holds a Common LMG at Horde 10's level: some drops beat it, some don't.
     const base = { ...squadGame(1, 11), farm: { replays: 0, badLuck: 3 } };
     const held = gun('h4', 'common', 10);

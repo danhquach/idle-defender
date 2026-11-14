@@ -15,8 +15,14 @@ import {
   JOBS,
 } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { xpForLevel } from '../core/stats.ts';
-import { equipGun, squadDrop, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
+import { survivorDps, xpForLevel } from '../core/stats.ts';
+import {
+  equipGun,
+  squadDrop,
+  squadSpec,
+  startSquadHorde,
+  type SquadDrop,
+} from '../core/hordeonly.ts';
 import { waveCount } from '../core/waves.ts';
 import {
   createHud,
@@ -122,6 +128,25 @@ describe('the drop on the result screen (ID-067)', () => {
 describe('the gun pickers (ID-067)', () => {
   const rifle = gun('h1', 'rifle', 'military');
   const smg = gun('h2', 'smg', 'rusty');
+
+  it('ranks and labels by dmg/s in the survivor’s hands, as the Roster does (ID-152)', () => {
+    const sniper = gun('h1', 'sniper', 'common');
+    const assault = gun('h2', 'assault', 'common');
+    const g0 = squadGame(1, 3, [assault, sniper]);
+    const g = {
+      ...g0,
+      roster: g0.roster.map((d) => ({ ...d, job: 'hunter' as const, xp: xpForLevel(21) })),
+    };
+    const who = squadSpec(g.roster[0]!);
+    // The Assault Rifle hits harder on its own; the Sniper rifle in a Lv 21 Hunter's hands.
+    expect(gunPower(assault)).toBeGreaterThan(gunPower(sniper));
+    const row = squadGear(g).rows[0]!;
+    expect(row.options.map((o) => o.value)).toEqual(['h1', 'h2', 'pistol']);
+    expect(row.options[0]!.label).toBe(`★ ${gunOption(sniper, survivorDps(who, sniper))}`);
+    expect(row.options[0]!.label.startsWith(`★ ${survivorDps(who, sniper).toFixed(1)} dmg/s`)).toBe(
+      true,
+    );
+  });
 
   it('one row per survivor: the pistol, the stash and their own gun, strongest first', () => {
     const g0 = squadGame(2, 3, [smg, rifle]);

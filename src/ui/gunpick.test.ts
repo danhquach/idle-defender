@@ -3,9 +3,10 @@
 import { describe, expect, it } from 'vitest';
 import { gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import type { Rarity, WeaponId } from '../core/data.ts';
+import type { JobId, Rarity, WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { equipGun } from '../core/hordeonly.ts';
+import { equipGun, squadSpec } from '../core/hordeonly.ts';
+import { survivorDps, xpForLevel } from '../core/stats.ts';
 import { bestUpgrade, deltaOf, gunCompare, gunName, gunTiles } from './gunpick.ts';
 
 const gun = (
@@ -14,6 +15,9 @@ const gun = (
   rarity: Rarity,
   affixes: OwnedWeapon['affixes'] = [],
 ): OwnedWeapon => ({ uid, base, rarity, affixes });
+
+/** A level-1 survivor: no level or profession bonus yet, so dmg/s in their hands is the gun's own. */
+const rookie = squadSpec(recruit(1));
 
 function camp(stash: OwnedWeapon[], holds?: string): GameState {
   const g = newGame('horde');
@@ -65,15 +69,15 @@ describe('the gun tiles (ID-108)', () => {
     const held = gun('h', 'lmg', 'common');
     const stronger = gun('a', 'lmg', 'relic');
     const weaker = gun('b', 'smg', 'rusty');
-    const up = deltaOf(held, stronger);
+    const up = deltaOf(held, stronger, rookie);
     expect(up.kind).toBe('up');
     expect(up.text).toBe(`▲ +${(gunPower(stronger) - gunPower(held)).toFixed(1)}`);
     expect(up.words).toMatch(/^\d+\.\d more dmg\/s$/);
-    const down = deltaOf(held, weaker);
+    const down = deltaOf(held, weaker, rookie);
     expect(down.kind).toBe('down');
     expect(down.text).toBe(`▼ ${(gunPower(held) - gunPower(weaker)).toFixed(1)}`);
     expect(down.words).toMatch(/^\d+\.\d less dmg\/s$/);
-    expect(deltaOf(held, { ...held, uid: 'twin' })).toEqual({
+    expect(deltaOf(held, { ...held, uid: 'twin' }, rookie)).toEqual({
       kind: 'same',
       text: '= same',
       words: 'same dmg/s',
@@ -97,24 +101,70 @@ describe('the gun tiles (ID-108)', () => {
   });
 });
 
+describe('the picker counts the survivor’s level and profession (ID-152)', () => {
+  const sniper = gun('s', 'sniper', 'common');
+  const assault = gun('a', 'assault', 'common');
+  /** `camp` with recruit-1 a Lv 21 `job`. */
+  const as = (game: GameState, job: JobId): GameState => ({
+    ...game,
+    roster: game.roster.map((d) => ({ ...d, job, xp: xpForLevel(21) })),
+  });
+
+  it('ranks, shows and opens on dmg/s in their hands', () => {
+    const g = as(camp([assault, sniper]), 'hunter');
+    const who = squadSpec(g.roster[0]!);
+    // The Assault Rifle hits harder on its own; the Sniper rifle in a Hunter's hands.
+    expect(gunPower(assault)).toBeGreaterThan(gunPower(sniper));
+    const tiles = gunTiles(g, 'recruit-1');
+    expect(tiles.map((t) => t.choice)).toEqual(['s', 'a']);
+    expect(tiles[0]!.power).toBeCloseTo(survivorDps(who, sniper), 9);
+    expect(tiles[0]!.dps).toBe(survivorDps(who, sniper).toFixed(1));
+    const d = survivorDps(who, sniper) - survivorDps(who, 'pistol');
+    expect(tiles[0]!.delta.text).toBe(`▲ +${d.toFixed(1)}`);
+    expect(bestUpgrade(tiles)).toBe('s');
+  });
+
+  it('the same stash ranks by the gun for a job those guns don’t suit', () => {
+    const g = as(camp([assault, sniper]), 'mechanic');
+    expect(gunTiles(g, 'recruit-1').map((t) => t.choice)).toEqual(['a', 's']);
+  });
+
+  it('the comparison’s verdict and dmg/s row are in their hands; the gun stats stay the gun’s', () => {
+    const g = as(camp([assault, sniper]), 'hunter');
+    const who = squadSpec(g.roster[0]!);
+    const cmp = gunCompare(assault, sniper, who);
+    expect(cmp.kind).toBe('up');
+    const row = Object.fromEntries(cmp.rows.map((r) => [r.label, r]));
+    expect(row['dmg/s']!.next).toBe(survivorDps(who, sniper).toFixed(1));
+    expect(row['dmg/s']!.now).toBe(survivorDps(who, assault).toFixed(1));
+    // For a level-1 survivor it reads as the gun alone: the Sniper rifle is weaker.
+    expect(gunCompare(assault, sniper, rookie).kind).toBe('down');
+    expect(row['Reload']).toEqual(
+      Object.fromEntries(gunCompare(assault, sniper, rookie).rows.map((r) => [r.label, r]))[
+        'Reload'
+      ],
+    );
+  });
+});
+
 describe('the comparison (ID-108)', () => {
   it('says stronger or weaker in words, with the dmg/s and the percent', () => {
     const rifle = gun('r', 'rifle', 'common');
     const relic = gun('x', 'rifle', 'relic');
-    const up = gunCompare(rifle, relic);
+    const up = gunCompare(rifle, relic, rookie);
     const d = gunPower(relic) - gunPower(rifle);
     const pct = Math.round((d / gunPower(rifle)) * 100);
     expect(up.verdict).toBe(`▲ Stronger: +${d.toFixed(1)} dmg/s (+${pct}%)`);
-    const down = gunCompare(relic, rifle);
+    const down = gunCompare(relic, rifle, rookie);
     expect(down.verdict).toMatch(/^▼ Weaker: −\d+\.\d dmg\/s \(−\d+%\)$/);
-    expect(gunCompare(rifle, { ...rifle, uid: 'twin' }).verdict).toBe('= Same dmg/s');
+    expect(gunCompare(rifle, { ...rifle, uid: 'twin' }, rookie).verdict).toBe('= Same dmg/s');
     expect(up.newName).toBe('Lv 1 Relic Carbine');
     expect(up.kind).toBe('up');
   });
 
   it('writes the changes out: slower, shorter, new role', () => {
     const rows = Object.fromEntries(
-      gunCompare('pistol', gun('s', 'smg', 'common')).rows.map((r) => [r.label, r]),
+      gunCompare('pistol', gun('s', 'smg', 'common'), rookie).rows.map((r) => [r.label, r]),
     );
     // SMG against the pistol: faster fire, 120 px shorter range, a new role, a reload 0.1 s slower.
     expect(rows['Fire rate']).toMatchObject({ now: '1.7/s', next: '5.9/s', tone: 'better' });
@@ -135,7 +185,9 @@ describe('the comparison (ID-108)', () => {
   it('shows pellets like "7.0 × 6", and affixes written out', () => {
     const rifle = gun('r', 'rifle', 'prototype', [{ id: 'damage', value: 10 }]);
     const shotgun = gun('g', 'shotgun', 'common');
-    const rows = Object.fromEntries(gunCompare(rifle, shotgun).rows.map((r) => [r.label, r]));
+    const rows = Object.fromEntries(
+      gunCompare(rifle, shotgun, rookie).rows.map((r) => [r.label, r]),
+    );
     expect(rows['Damage']!.next).toBe('7.0 × 6');
     expect(rows['Affixes']).toMatchObject({
       now: '1',
@@ -144,7 +196,9 @@ describe('the comparison (ID-108)', () => {
       tone: 'worse',
     });
     expect(rows['Role']!.change).toBe('new role');
-    const back = Object.fromEntries(gunCompare(shotgun, rifle).rows.map((r) => [r.label, r]));
+    const back = Object.fromEntries(
+      gunCompare(shotgun, rifle, rookie).rows.map((r) => [r.label, r]),
+    );
     expect(back['Affixes']).toMatchObject({
       now: 'none',
       next: '1',
@@ -152,7 +206,7 @@ describe('the comparison (ID-108)', () => {
       tone: 'better',
     });
     // The same gun twice: every change is "same".
-    const same = gunCompare(rifle, { ...rifle, uid: 'twin' });
+    const same = gunCompare(rifle, { ...rifle, uid: 'twin' }, rookie);
     expect(same.rows.every((r) => r.change === 'same')).toBe(true);
   });
 
