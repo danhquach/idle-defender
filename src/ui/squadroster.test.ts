@@ -8,13 +8,13 @@ import { rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { DEFENDER_HP, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
-import { bestGuns, equipGun, squadSpec, startSquadHorde } from '../core/hordeonly.ts';
+import { bestGuns, equipGun, squadSpec, startSquadHorde, toggleSquad } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
 import { maxHpOf, survivorDps, xpForLevel } from '../core/stats.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { ART_URLS, avatarOf, GUNNER_LOOKS, lookOf } from './sprites.ts';
 import { LEVEL_ONE_TEXT, levelText } from './statlines.ts';
-import { createRoster, rosterTiles, type RosterOptions } from './squadroster.ts';
+import { createRoster, rosterTiles, SQUAD_WAIT, type RosterOptions } from './squadroster.ts';
 
 const NOW = 1_800_000_000_000;
 /** Survivor `n` at `level`. */
@@ -106,9 +106,18 @@ function mount(game: GameState, over: { canGear?: boolean } = {}) {
     roster.refresh();
     return { ok: true as const, moves: r.moves };
   });
+  const onToggleSquad = vi.fn((id: string) => {
+    if (!canGear) return { ok: false as const, reason: SQUAD_WAIT };
+    const r = toggleSquad(g, id);
+    if (!r.ok) return r;
+    g = r.game;
+    roster.refresh();
+    return { ok: true as const };
+  });
   const opts: RosterOptions = {
     state: () => ({ game: g, fight: null, canGear, resumes: false }),
     onEquip,
+    onToggleSquad,
     onBestGuns,
   };
   const roster = createRoster(root, opts);
@@ -125,6 +134,7 @@ function mount(game: GameState, over: { canGear?: boolean } = {}) {
     roster,
     scrim,
     onEquip,
+    onToggleSquad,
     onBestGuns,
     press,
     q,
@@ -508,6 +518,7 @@ describe('Best gun for everyone (ID-108)', () => {
     const refusing = createRoster(root, {
       state: () => ({ game: camp([at(1, 1)]), fight: null, canGear: true, resumes: false }),
       onEquip: () => ({ ok: true }),
+      onToggleSquad: () => ({ ok: true }),
       onBestGuns: () => ({ ok: false, reason: GUNS_WAIT }),
     });
     refusing.open('recruit-1');

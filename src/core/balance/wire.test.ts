@@ -8,7 +8,7 @@ import { chooseCard } from '../cards.ts';
 import { newGame, type GameState } from '../game.ts';
 import { rebuildWire, tick, type HordeState } from '../horde.ts';
 import { finishSquadHorde, highestBeaten, startSquadHorde } from '../hordeonly.ts';
-import { gearUp, playSquadHorde, SQUAD_FARM, squadPick, useSkills } from '../sim.ts';
+import { gearUp, playSquadHorde, restWait, SQUAD_FARM, squadPick, useSkills } from '../sim.ts';
 import { cacheFor } from './cache.ts';
 
 const keep = cacheFor(import.meta.url);
@@ -70,15 +70,16 @@ describe('Barbed Wire is worth levelling (ID-133)', () => {
         let farm = 0;
         const done = new Set<number>();
         for (let i = 0; i < LAST * 12 && game.hordeNumber <= LAST; i++) {
-          const n = farm > 0 ? highestBeaten(game) : game.hordeNumber;
-          if (farm === 0 && (HORDES as readonly number[]).includes(n) && !done.has(n)) {
+          const replay = farm > 0 || restWait(game);
+          const n = replay ? highestBeaten(game) : game.hordeNumber;
+          if (!replay && (HORDES as readonly number[]).includes(n) && !done.has(n)) {
             done.add(n);
             for (const lv of LEVELS) out.push([key(n, lv), working(game, seed + i, n, lv)]);
           }
           const horde = playSquadHorde(game, seed + i, 3600, undefined, n);
           game = gearUp(finishSquadHorde(game, horde));
           if (farm > 0) farm--;
-          else if (horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
+          else if (!replay && horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
         }
         return out;
       });

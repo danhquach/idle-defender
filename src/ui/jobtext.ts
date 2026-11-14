@@ -80,6 +80,10 @@ const EFFECT: Readonly<Record<JobEffect, { value: (v: number) => string; name: s
     value: (v) => `everyone on the field heals ${(v * 100).toFixed(2)}% of max HP a second`,
     name: 'healing for the squad',
   },
+  rest: {
+    value: (v) => `${pct(v)} chance an injury rests 1 horde less`,
+    name: 'chance an injury rests 1 horde less',
+  },
 };
 
 /** A fighting job's guns by name: "Sniper rifle, Carbine". */

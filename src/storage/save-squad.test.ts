@@ -3,7 +3,7 @@
 // survivors past the squad's cap go to the reserve. Hostile values are refused.
 import { describe, expect, it } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { SQUAD_CAP } from '../core/data.ts';
+import { SQUAD_CAP, SQUAD_JOIN } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { sendPatrol } from '../core/patrol.ts';
@@ -63,8 +63,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 }
 
 describe('save: the horde-only build (ID-066)', () => {
-  it('is version 18', () => {
-    expect(SAVE_VERSION).toBe(18);
+  it('is version 19', () => {
+    expect(SAVE_VERSION).toBe(19);
   });
 
   it('round-trips a horde-only game, after a win adds a survivor', () => {
@@ -128,10 +128,14 @@ describe('save: the horde-only build (ID-066)', () => {
       ['reserve not a list', (x) => (x.reserve = { 0: x.reserve[0] })],
       ['reserve of text', (x) => (x.reserve = 'bob')],
       ['reserve too long', (x) => (x.reserve = Array.from({ length: 101 }, () => x.reserve[0]))],
-      // New ids, so the room check is what refuses it: 10 people in 9 slots.
+      // New ids, so the room check is what refuses it: one past the camp's bound (ID-147).
       [
         'more people than the camp holds',
-        (x) => x.reserve.push({ ...x.reserve[0], id: 'zed' }, { ...x.reserve[0], id: 'zoe' }),
+        (x) => {
+          for (let k = x.roster.length + x.reserve.length; k <= SQUAD_JOIN.max; k++) {
+            x.reserve.push({ ...x.reserve[0], id: `zed-${k}` });
+          }
+        },
       ],
       ['an id on the roster and the reserve', (x) => (x.reserve[0].id = x.roster[0].id)],
       ['an id twice in the reserve', (x) => x.reserve.push(x.reserve[0])],

@@ -20,6 +20,7 @@ import {
   finishSquadHorde,
   startSquadHorde,
   toggleSkill,
+  toggleSquad,
   type GunChoice,
 } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
@@ -82,7 +83,7 @@ import { createIntro } from './intro.ts';
 import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
-import { createRoster, type Roster } from './squadroster.ts';
+import { createRoster, SQUAD_WAIT, type Roster } from './squadroster.ts';
 import { cuesBetween } from './sound.ts';
 import {
   fightHitAt,
@@ -343,6 +344,23 @@ export function start(root: HTMLElement, art: Art): void {
     showGear();
     return { ok: true };
   }
+  /**
+   * Moves survivor `id` between the squad and the bench between hordes (the Roster, ID-147):
+   * saved at once; the start screen, its squad on the wall and the gun pickers redrawn.
+   */
+  function changeSquad(id: string): { ok: true } | { ok: false; reason: string } {
+    if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+    const r = toggleSquad(game, id);
+    if (!r.ok) return r;
+    commit(r.game);
+    if (!horde) {
+      preview = startSquadHorde(game, 0, Date.now());
+      hud.update(preview);
+      hud.showResult(squadStart(game, picked));
+    }
+    showGear();
+    return { ok: true };
+  }
   /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
   function startFight(next: HordeState): void {
     horde = next;
@@ -481,6 +499,7 @@ export function start(root: HTMLElement, art: Art): void {
           resumes: horde?.outcome === 'fighting' && !held,
         }),
         onEquip: changeGun,
+        onToggleSquad: changeSquad,
         onBestGuns: () => {
           if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
           const r = bestGuns(game);
@@ -494,12 +513,15 @@ export function start(root: HTMLElement, art: Art): void {
         },
       })
     : null;
-  // A survivor's name on the squad screen opens their card.
+  // A survivor's name on the squad screen opens their card; "Change squad" opens the Roster
+  // on the squad's first (ID-147).
   root.addEventListener('click', (e) => {
     const t =
-      e.target instanceof Element ? e.target.closest<HTMLElement>('[data-open-survivor]') : null;
-    const id = t?.dataset.openSurvivor;
-    if (roster && t && id !== undefined) roster.open(id, t);
+      e.target instanceof Element
+        ? e.target.closest<HTMLElement>('[data-open-survivor], [data-open-roster]')
+        : null;
+    if (!roster || !t) return;
+    roster.open(t.dataset.openSurvivor, t);
   });
   const dialogOpen = (): boolean =>
     intro.isOpen() || menu.isOpen() || inventory.isOpen() || !!roster?.isOpen();

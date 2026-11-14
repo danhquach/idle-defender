@@ -19,6 +19,7 @@ import {
   PATROL,
   RECOVERY_MS,
   SEGMENTS,
+  SQUAD_JOIN,
   STEP,
   stockOf,
 } from '../core/data.ts';
@@ -1083,7 +1084,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 19, '1', '18', 1.5, null]) {
+    for (const v of [0, 20, '1', '19', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1333,7 +1334,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(18);
+    expect(SAVE_VERSION).toBe(19);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -1800,9 +1801,13 @@ describe('save: the camp (ID-033)', () => {
         'more people than slots',
         (c, g) => {
           c.upgrades = 0;
-          // Past the horde-only squad's cap too (ID-066), which the camp's slots never shrink.
-          for (const id of ['extra-a', 'extra-b', 'extra-c', 'extra-d']) {
-            g.roster.push({ ...g.roster[0], id });
+          // Past the horde-only camp's bound too (ID-066, ID-147), which the camp's slots
+          // never shrink.
+          while (g.roster.length <= SQUAD_JOIN.max) {
+            g.roster.push({
+              ...g.roster[0],
+              id: `extra-${'abcdefghijklmnopqrstuvwxyz'[g.roster.length % 26]}${g.roster.length}`,
+            });
           }
         },
       ],
@@ -2179,8 +2184,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 18 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, the skill pick, then no stat points, then professions came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(18);
+  it('is version 19 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, the skill pick, then no stat points, then professions, then the bench came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(19);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {

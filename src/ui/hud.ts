@@ -108,8 +108,10 @@ import {
   bossReward,
   highestBeaten,
   isEndless,
+  isFit,
   isReplay,
   radioParts,
+  restLabel,
   squadOf,
   squadResult,
   squadSpec,
@@ -1201,12 +1203,12 @@ export interface DropTile {
   thrown: string | null;
 }
 
-/** The survivor joining, or the squad full, as the debrief's second tile. */
+/** Who joins the camp, or that nobody does, as the debrief's second tile. */
 export interface RecruitTile {
   label: string;
   name: string;
   sub: string;
-  /** The squad is full: nobody joins. */
+  /** Nobody joins this time (ID-147: the camp has its first six). */
   full: boolean;
 }
 
@@ -1241,6 +1243,11 @@ export interface Debrief {
   empty: string | null;
   /** The footer's line beside the button ('' for none). */
   foot: string;
+  /**
+   * The start screen's link to the Roster to pick the squad (ID-147), and the bench's line
+   * under it (`benchLine`); absent elsewhere.
+   */
+  roster?: { label: string; line: string | null };
 }
 
 /** Survivor `id`'s profession name on `game`'s roster (ID-149), '' for none there. */
@@ -1359,6 +1366,38 @@ export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivo
 /** Over the squad's cards (ID-086): a name opens that survivor's card in the Roster. */
 export const SQUAD_CARD_HINT = 'Tap a name for their card.';
 
+/** The start screen's link to the Roster, where the squad is picked (ID-147). */
+export const CHANGE_SQUAD = 'Change squad';
+
+/**
+ * The bench as the start screen sums it up (ID-147): "Bench 3 · 1 resting · 2 open slots:
+ * pick on the Roster", each part only when it applies; null with nobody on the bench.
+ */
+export function benchLine(game: Pick<GameState, 'roster' | 'reserve'>): string | null {
+  if (game.reserve.length === 0) return null;
+  const resting = game.reserve.filter((d) => !isFit(d)).length;
+  const fit = game.reserve.length - resting;
+  const open = Math.min(fit, SQUAD_CAP - squadOf(game).length);
+  return [
+    `Bench ${game.reserve.length}`,
+    ...(resting > 0 ? [`${resting} resting`] : []),
+    ...(open > 0 ? [`${open} open ${open === 1 ? 'slot' : 'slots'}: pick on the Roster`] : []),
+  ].join(' · ');
+}
+
+/**
+ * Who rests after a win (ID-147): "Resting: Bob 2 hordes, Ava 1 horde. Fill their slots on
+ * the Roster." (the last part only with someone fit on the bench to fill them); null for none.
+ */
+export function restNote(
+  rests: readonly { name: string; rest: number }[],
+  benchFit: boolean,
+): string | null {
+  if (rests.length === 0) return null;
+  const who = rests.map((r) => `${r.name} ${restLabel(r.rest).slice('Resting: '.length)}`);
+  return `Resting: ${who.join(', ')}.${benchFit ? ' Fill their slots on the Roster.' : ''}`;
+}
+
 /**
  * In place of a win's cards when nobody levelled up in it (ID-134); it points at the Roster,
  * the only place left on this screen to equip the gun the win dropped.
@@ -1394,12 +1433,14 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
   const goal = goalChip(game);
+  const bench = benchLine(game);
   return {
     title: now.start.title,
     lines: [
       `Squad ${squad.length}/${SQUAD_CAP}: ${squad
         .map((d) => `${d.name} (level ${levelOf(d.xp).level})`)
         .join(', ')}`,
+      ...(bench ? [bench] : []),
       `${waveCount(now.horde)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
       goal.note,
     ],
@@ -1418,6 +1459,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       cards: squad.map((d) => plainCard(d)),
       empty: null,
       foot: SQUAD_LOSS_RULE,
+      roster: { label: CHANGE_SQUAD, line: bench },
     },
   };
 }
@@ -1453,7 +1495,7 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, joined, drop } = squadResult(game, s);
+  const { gains, joined, rests, next, drop } = squadResult(game, s);
   const won = s.outcome === 'won';
   const replay = isReplay(game, s.hordeNumber);
   const first = won && !replay;
@@ -1485,6 +1527,16 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     const reward = bossReward(game, s.hordeNumber);
     const ending = reward?.finale === true;
     const rewardNote = reward ? bossRewardNote(reward) : null;
+    // Read off the camp as the win leaves it, so the screen says what really happens.
+    const inSquad = (id: string): boolean => next.roster.some((d) => d.id === id);
+    const joinText = (d: RosterDefender): string =>
+      inSquad(d.id) ? 'joins the squad for the next horde' : 'waits on the bench for now';
+    const squadJoins = joined.filter((d) => inSquad(d.id)).length;
+    // Slots still open, with someone fit on the bench to fill them.
+    const benchFit = next.roster.length < SQUAD_CAP && next.reserve.some(isFit);
+    const rested = restNote(rests, benchFit);
+    const note = [rewardNote, rested].filter((t) => t !== null).join(' ') || null;
+    const size = game.roster.length + game.reserve.length;
     return {
       title: ending
         ? EVACUATION_TITLE
@@ -1496,13 +1548,12 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         ...gains.map(squadXpLine),
         ...(replay
           ? []
-          : [
-              joined
-                ? `New survivor: ${joined.name} (${JOBS[joined.job].name}) joins the squad for the next horde`
-                : `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
-            ]),
+          : joined.length > 0
+            ? joined.map((d) => `New survivor: ${d.name} (${JOBS[d.job].name}) ${joinText(d)}`)
+            : [`Nobody new joins the camp this time (${size} survivors)`]),
         ...(drop ? squadDropLines(game, drop) : []),
         ...(rewardNote ? [rewardNote] : []),
+        ...(rested ? [rested] : []),
       ],
       button: ending ? 'Continue' : goOn,
       squad: true,
@@ -1521,22 +1572,33 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
             : []),
         ],
         callout: null,
-        note: rewardNote,
+        note,
         drop: drop ? dropTile(game, drop) : null,
         // A replay brings nobody: only a first clear's tile says who joins.
         recruit: replay
           ? null
-          : joined
+          : joined.length > 0
             ? {
-                label: 'New survivor',
-                name: joined.name,
-                sub: `${JOBS[joined.job].name} · joins next horde`,
+                label: joined.length > 1 ? 'New survivors' : 'New survivor',
+                name: joined.map((d) => d.name).join(' and '),
+                // Split between squad and bench: say who went where.
+                sub:
+                  squadJoins > 0 && squadJoins < joined.length
+                    ? joined
+                        .map(
+                          (d) =>
+                            `${d.name} ${inSquad(d.id) ? 'joins next horde' : 'waits on the bench'}`,
+                        )
+                        .join(' · ')
+                    : `${joined.map((d) => JOBS[d.job].name).join(', ')} · ${
+                        squadJoins > 0 ? 'joins next horde' : 'waits on the bench'
+                      }`,
                 full: false,
               }
             : {
-                label: 'Squad',
-                name: `${SQUAD_CAP}/${SQUAD_CAP} full`,
-                sub: 'Nobody new joins',
+                label: 'Camp',
+                name: `${size} survivors`,
+                sub: 'Nobody new joins this time',
                 full: true,
               },
         cards: ups,
@@ -2288,7 +2350,15 @@ export function createHud(
       const heading = el('h3', 'debrief-squad-title', 'Squad');
       heading.append(el('span', 'debrief-stash'));
       head.append(heading);
+      if (d.roster) {
+        // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
+        const change = el('button', 'hud-button debrief-change-squad', d.roster.label);
+        change.type = 'button';
+        change.dataset.openRoster = '';
+        head.append(change);
+      }
       head.append(el('p', 'debrief-hint', SQUAD_CARD_HINT));
+      if (d.roster?.line) head.append(el('p', 'debrief-hint debrief-bench', d.roster.line));
       const grid = el('div', 'squad-grid');
       for (const c of d.cards) {
         const card = el('div', 'squad-card');

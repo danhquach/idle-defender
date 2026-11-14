@@ -208,7 +208,7 @@ describe('the horde picker (ID-098)', () => {
     expect(after.hordeNumber).toBe(5);
     expect(after.roster).toHaveLength(2);
     expect(after.farm.replays).toBe(1);
-    expect(squadResult(g, ended(g, 3, 'won')).joined).toBeNull();
+    expect(squadResult(g, ended(g, 3, 'won')).joined).toEqual([]);
   });
 
   it('a first clear moves on, adds a survivor and leaves the farm alone', () => {

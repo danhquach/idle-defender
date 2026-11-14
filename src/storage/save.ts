@@ -73,7 +73,8 @@ import {
   SEGMENTS,
   SKILL_IDS,
   SQUAD_BONUS,
-  SQUAD_CAP,
+  SQUAD_JOIN,
+  INJURY_REST,
   STASH_CAP,
   SQUAD_SKILLS,
   SURVIVOR,
@@ -98,7 +99,7 @@ import {
   type Tier,
 } from '../core/data.ts';
 import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
-import { capSquad } from '../core/hordeonly.ts';
+import { capSquad, settleSquad } from '../core/hordeonly.ts';
 import { jobFor, textSeed } from '../core/jobs.ts';
 import {
   focusOptions,
@@ -128,6 +129,12 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 19 since the bench and rest (ID-147): the camp grows past the squad's cap, up to
+ * `SQUAD_JOIN.max` survivors (squad and bench); the squad is the roster (at most
+ * `SQUAD_CAP`), the bench the reserve. A survivor may hold `rest`, the hordes left to rest:
+ * a whole number from 1 to `INJURY_REST.max`, written only while resting. A v18 or older
+ * save has no rest; anyone resting in the squad as it loads moves to the bench.
+ *
  * 18 since professions (ID-149): each roster or reserve survivor has a `job`, one of
  * `JOB_IDS`. A v17 or older save has none, so each gets one rolled from their id and the
  * save's `savedAt` (the same save always rolls the same); a v18 survivor without one, or
@@ -183,7 +190,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 18;
+export const SAVE_VERSION = 19;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -222,9 +229,10 @@ const UID = new RegExp(
 );
 /**
  * The most owned weapons a save holds: the full game's armoury, or the horde-only stash
- * (ID-122: 40) and a primary and secondary in each squad survivor's hands.
+ * (ID-122: 40) and a primary and secondary in each camp survivor's hands (ID-147: squad
+ * and bench).
  */
-export const MAX_OWNED = Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_CAP);
+export const MAX_OWNED = Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_JOIN.max);
 /** A survivor's id (design §10): `s`, the patrol and its try; or `c` and the camp level. */
 const SURVIVOR_ID = /^(?:s([1-9][0-9]{0,5})-([0-9])|c([1-9][0-9]{0,5}))$/;
 /** Every research queue entry: each node, and each perk's next level. */
@@ -263,6 +271,8 @@ interface StatsRead {
   points: boolean;
   reworked: boolean;
   jobSeed: number | null;
+  /** Whether a survivor may hold `rest` (v19, ID-147). */
+  rest: boolean;
 }
 
 /** The page's storage, or null where it is blocked (some private modes throw on access). */
@@ -335,7 +345,7 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
   if (
-    ![SAVE_VERSION, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
+    ![SAVE_VERSION, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
       o.v as number,
     )
   ) {
@@ -356,6 +366,7 @@ function readSave(v: unknown): Save {
     reworked: false,
     // A v17 or older save's survivors roll their profession from its time (ID-149).
     jobSeed: ver < 18 ? textSeed(String(savedAt)) : null,
+    rest: ver >= 19,
   };
   const grid = ver === 1 ? V1_GRID : GRID;
   const game = readGame(
@@ -483,9 +494,9 @@ function readGame(
   const taken = out.flatMap((p) => (p.car === null ? [] : [p.car]));
   if (taken.some((c) => c >= game.camp.cars)) fail('car not built');
   if (new Set(taken).size !== taken.length) fail('car on two patrols');
-  // The horde-only squad grows to its cap whatever the camp's slots (ID-066), and such a
-  // save still loads once the full game is back.
-  const room = Math.max(campSlots(game), SQUAD_CAP);
+  // The horde-only camp grows to `SQUAD_JOIN.max` whatever the camp's slots (ID-066,
+  // ID-147), and such a save still loads once the full game is back.
+  const room = Math.max(campSlots(game), SQUAD_JOIN.max);
   if (game.roster.length > room) fail('more people than camp slots');
   // A free recruit's number comes from the camp's count, so the next one is always new.
   for (const d of game.roster) {
@@ -540,10 +551,10 @@ function readGame(
     if (m && Number(m[3] ?? 0) > level) fail('survivor from the future');
   }
   // Loading a save is between hordes: batteries waiting in storage go into the bank.
-  // The horde-only build fights with a squad of at most SQUAD_CAP; the full game takes
-  // the reserve back onto the roster.
+  // The horde-only build fights with a squad of at most SQUAD_CAP, nobody resting in it
+  // (ID-147); the full game takes the reserve back onto the roster.
   const loaded = loadBatteries(game);
-  return HORDE_ONLY ? capSquad({ ...loaded, roster, reserve }) : loaded;
+  return HORDE_ONLY ? settleSquad(capSquad({ ...loaded, roster, reserve })) : loaded;
 }
 
 /**
@@ -1024,6 +1035,9 @@ function readDefender(
     old.loadout ? 'weapon' : 'loadout',
     ...(read.jobSeed === null ? ['job'] : []),
     ...oldPointKeys(v, read),
+    ...(read.rest && typeof v === 'object' && v !== null && Object.hasOwn(v, 'rest')
+      ? ['rest']
+      : []),
   ];
   const o = obj(v, keys);
   const xp = int(o.xp, 0, MAX_COUNT);
@@ -1044,6 +1058,8 @@ function readDefender(
       o.injuredUntil === null
         ? null
         : Math.min(num(o.injuredUntil, 0, MAX_TIME), savedAt + RECOVERY_MS),
+    // Allow-listed (ID-147): written only while resting, so never 0.
+    ...(Object.hasOwn(o, 'rest') ? { rest: int(o.rest, 1, INJURY_REST.max) } : {}),
   };
 }
 

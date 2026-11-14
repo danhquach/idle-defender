@@ -1033,7 +1033,7 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
 | Hunter | Fighting | Sniper rifle, Carbine | +24% crit chance, +36% crit damage |
 | Security guard | Fighting | SMG, Machine Pistol | +30% fire rate, +30% reload speed |
 | Construction worker | Self (+ wall) | any gun | +70 max HP, +2.5 armour; +10% wall max HP while on the field |
-| Paramedic | Self (+ squad) | any gun | +40% injury dodge; everyone on the field heals 0.4% of max HP a second |
+| Paramedic | Self (+ squad) | any gun | +40% injury dodge; everyone on the field heals 0.4% of max HP a second; their own injury rests 1 horde less (a chance, up to 100%; never under 1, ID-147) |
 | Student | Self | any gun | +100% own XP (levels faster, so stronger late), plus a tenth of the all-round caps |
 | Chef | Squad | on the field | +20 max HP for every survivor on the field |
 | Mechanic | Squad | on the field | the wall repairs 0.4% of each standing segment's max HP a second |
@@ -2540,8 +2540,39 @@ As built (ID-066), the horde-only build:
   carrying a pistol. No named starters, no professions. The rest of a new
   game's state is the full game's, kept untouched.
 - **Survivors:** each horde won adds one survivor, in the squad for the next
-  horde: no accept step, camp slot or recruit card. The squad cap is 6; at
-  the cap nobody new joins (ID-067 adds the weapon drop).
+  horde: no accept step, camp slot or recruit card. The squad cap is 6
+  (ID-067 adds the weapon drop); past it, the bench below.
+- **The bench and rest (ID-147, `SQUAD_JOIN`, `INJURY_REST` in `data.ts`):**
+  - No camp cap below `SQUAD_JOIN.max` (40). Up to 6 fight a horde (one per
+    slot on the firing line); the rest wait on the bench.
+  - Under 6, each first clear adds one survivor as before. From 6 on, each
+    first clear has a 15% chance (seeded from the horde, core RNG) that one
+    joins, and then 20% that a second comes too (about 3% of first clears).
+    A replay or a loss adds nobody. A joiner takes an open squad slot, else
+    waits on the bench; the result screen names them and says which.
+  - Rest, in hordes: after a **won** fight, a survivor who was downed rests 2
+    hordes; one who ended under 25% of max HP rests 1. A lost fight rests
+    nobody (everyone is down by then). A Paramedic's chance cuts 2 to 1.
+    Rest counts down one per horde played, won or lost.
+  - *Measured (4 seeds to Horde 18, the scripted player refilling open
+    slots from the fit bench):* the ticket's first bands (downed 3, under 25%
+    2, under 50% 1) with a loss resting the whole squad locked every
+    campaign at Hordes 5–8 (a lone survivor woken, losing every replay).
+    Those bands on wins only took 83% more fights to beat Horde 18 than no
+    rest; downed 2 / under 25% 1 on wins only took 40% more (PM's pick);
+    downed-only 1 horde took 15% more.
+  - A survivor who rests leaves the squad for the bench; their slot stays
+    open until the player fills it on the Roster. The Roster lists the bench
+    under the squad: "Add to squad" / "Move to bench" between hordes (a full
+    squad or the last in it refuses), and a resting survivor shows
+    "Resting: N hordes" and can't be added. A bench survivor's gun can be
+    changed, so no gun is stuck there.
+  - The start screen shows the squad, a bench line ("Bench 3 · 1 resting ·
+    2 open slots: pick on the Roster") and a "Change squad" link to the
+    Roster.
+  - The game can't lock up: with nobody fit, the shortest rest ends at once
+    (ties to camp order); an empty squad takes the fit bench, highest XP
+    first.
 - **Progression:** survivor XP and levels, at twice the full game's XP per
   win (`SQUAD_XP_RATE`). One result screen shows the XP, level-ups (with the
   stat picker) and the new survivor. Camp XP, the camp level and Mutated
@@ -2753,7 +2784,10 @@ Targets, each with a balance test:
 - **Mid-game walls** (`balance/late-hordes.test.ts`, 4 seeds to Horde 18,
   re-enabled): every campaign beats Horde 18; in new-horde fights from Horde
   11, enemies reach the Barbed Wire's band in at least 75% and hit the wall in
-  15–95%; most seeds (3 of 4) lose at least one new horde at the first try
+  at least 15% (ID-147 dropped the upper bound: 99.2% over 8 seeds, the same
+  as before rest); every campaign beats Horde 18 within 120 fights (ID-147:
+  the scripted player replays the highest beaten horde while a rest leaves
+  the squad short, `restWait`); most seeds (3 of 4) lose at least one new horde at the first try
   (every seed before ID-127: Heavy Rounds, unlocked by Horde 10's boss, makes
   the squad stronger past it, by design); farming past any one horde takes at
   most 30 replays with average luck.
@@ -3002,6 +3036,15 @@ offline progress works across sessions.
   rolls one from their id and the save's `savedAt`, the same every load, and
   the next save keeps it. Survivors waiting to join (full game) have none
   until they join.
+- **As built (ID-147): save version 19** keeps the camp past 6: the squad in
+  `roster` (at most 6), the bench in `reserve`, both together at most
+  `SQUAD_JOIN.max`. A survivor may hold `rest`, a whole number from 1 to
+  `INJURY_REST.max`, written only while resting (0, a negative, a fraction,
+  text or anything past the most refuses the save). A v18 or older save has
+  no rest, and a `rest` key there is refused. As a save loads, anyone resting
+  in the squad moves to the bench, and with nobody fit the shortest rest
+  ends. The owned-weapon bound grows with the camp (`MAX_OWNED`: the stash
+  and two hands per survivor).
 
 ## 13. Out of scope (v1)
 

@@ -37,6 +37,7 @@ function open(game: GameState, id: string) {
   const roster = createRoster(root, {
     state: () => ({ game, fight: null, canGear: true, resumes: false }),
     onEquip: () => ({ ok: true }),
+    onToggleSquad: () => ({ ok: true }),
     onBestGuns: () => ({ ok: true, moves: [] }),
   });
   roster.open(id);

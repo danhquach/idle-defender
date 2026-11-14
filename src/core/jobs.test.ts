@@ -25,7 +25,7 @@ import { squadBase } from './base.ts';
 import {
   fieldOf,
   finishSquadHorde,
-  joiner,
+  joiners,
   scavenged,
   squadDrop,
   squadSpec,
@@ -501,7 +501,7 @@ describe('rolling a profession (ID-149)', () => {
 
   it('a new survivor rolls with the horde’s seed; repeats are allowed', () => {
     const g = squadOfPeople([person(1, 'police'), person(2, 'police')]);
-    expect(joiner(g, 123)!.job).toBe(jobFor('recruit-3', 123));
+    expect(joiners(g, 123)[0]!.job).toBe(jobFor('recruit-3', 123));
     const won = finishSquadHorde(g, { ...startSquadHorde(g, 456, NOW), outcome: 'won' });
     expect(won.roster.at(-1)!.job).toBe(jobFor('recruit-3', 456));
   });

@@ -66,6 +66,11 @@ export interface RosterDefender extends DefenderSpec {
   job: JobId;
   /** Injured until this time (ms); null when fit. */
   injuredUntil: number | null;
+  /**
+   * Horde-only (ID-147): hordes left to rest after an injury, 1 to `INJURY_REST.max`; absent
+   * (or 0) when fit. Counts down one per horde played.
+   */
+  rest?: number;
 }
 
 export interface GameState {
@@ -100,8 +105,8 @@ export interface GameState {
   /** Capacity, camp XP and level picks, and the roster floor (design §11). */
   camp: Camp;
   /**
-   * Survivors past the horde-only squad's cap from an older save (ID-066), kept for when
-   * the full game comes back; this version doesn't show them.
+   * The horde-only bench (ID-147): survivors outside the squad (`roster`), resting or not
+   * picked, in join order. The full game takes them back onto the roster.
    */
   reserve: RosterDefender[];
   /** Farming beaten hordes (ID-098): replay wins so far, and the bad-luck count. */

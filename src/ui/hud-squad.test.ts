@@ -104,10 +104,10 @@ describe('the horde-only screens (ID-066)', () => {
     expect(screen.squad).toBe(true);
   });
 
-  it('a win with the squad full says nobody joins', () => {
+  it('a win past 6 whose roll misses says nobody joins (seed 1, ID-147)', () => {
     const g = squadGame(SQUAD_CAP, 2);
     expect(squadScreen(g, ended(g, 'won')).lines).toContain(
-      `Squad full (${SQUAD_CAP}/${SQUAD_CAP}): nobody new joins`,
+      `Nobody new joins the camp this time (${SQUAD_CAP} survivors)`,
     );
   });
 
