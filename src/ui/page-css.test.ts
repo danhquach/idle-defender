@@ -252,3 +252,18 @@ describe('narrow squad cards: a 320 px window, two columns in a wide one (ID-151
     expect(block[2]).toMatch(/\.squad-card-xp \{[^}]*grid-area: 2 \//);
   });
 });
+
+describe('the Roster tabs (ID-154)', () => {
+  it('the shown survivor is styled by the attribute its tab sets (aria-current)', () => {
+    // The tabs mark the one shown with aria-current; a rule on aria-pressed never matched.
+    expect(rules).toMatch(/\.rv-tab\[aria-current='true'\]\s*\{/);
+    expect(rules).not.toMatch(/\.rv-tab\[aria-pressed/);
+  });
+
+  it('with a bench, the squad is raised and the bench dashed', () => {
+    expect(rules).toMatch(
+      /\.rv-tabs:not\(\.rv-bench\) \.rv-tab \{[^}]*background: var\(--color-surface\)/,
+    );
+    expect(rules).toMatch(/\.rv-bench \.rv-tab \{[^}]*border-style: dashed/);
+  });
+});

@@ -120,6 +120,8 @@ function mount(game: GameState, over: { canGear?: boolean } = {}) {
     onToggleSquad,
     onLetGo: () => null,
     onBestGuns,
+    onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
+    onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
   };
   const roster = createRoster(root, opts);
   const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
@@ -522,6 +524,8 @@ describe('Best gun for everyone (ID-108)', () => {
       onToggleSquad: () => ({ ok: true }),
       onLetGo: () => null,
       onBestGuns: () => ({ ok: false, reason: GUNS_WAIT }),
+      onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
+      onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
     });
     refusing.open('recruit-1');
     document.querySelector<HTMLButtonElement>('.rv-best')!.click();

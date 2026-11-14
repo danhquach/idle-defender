@@ -1,10 +1,9 @@
 // Squad Power and Recommended Power (ID-098, design §11 Farming): one number for the
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
-import { DEFENDER_HP, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
-import type { GameState, RosterDefender } from './game.ts';
-import { squadHpScale, squadOf, squadSpec } from './hordeonly.ts';
-import { maxHpOf, survivorDps } from './stats.ts';
+import { POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
+import type { GameState } from './game.ts';
+import { squadHpScale, squadOf, survivorPower } from './hordeonly.ts';
 import {
   enemyHp,
   hordeBosses,
@@ -15,16 +14,8 @@ import {
   waveSize,
 } from './waves.ts';
 
-/**
- * One survivor's share of Squad Power: their gun's sustained dmg/s in their hands
- * (`survivorDps`: level and profession counted), times a toughness factor from the level's
- * extra HP. Cards and skills don't count.
- */
-export function survivorPower(d: RosterDefender): number {
-  const spec = squadSpec(d);
-  const tough = 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
-  return survivorDps(spec, spec.loadout.primary) * tough * POWER.scale;
-}
+// One survivor's share lives in hordeonly.ts, where "Best squad" (ID-154) ranks by it.
+export { survivorPower };
 
 /** Squad Power (ID-098): every squad survivor's `survivorPower`, summed, rounded. */
 export const squadPower = (game: Pick<GameState, 'roster'>): number =>

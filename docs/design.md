@@ -2591,6 +2591,26 @@ As built (ID-066), the horde-only build:
     squad or the last in it refuses), and a resting survivor shows
     "Resting: N hordes" and can't be added. A bench survivor's gun can be
     changed, so no gun is stuck there.
+  - **Best squad (ID-154):** with a bench, the Roster's "Squad N/6" row ends
+    with a **Best squad** button and an **Auto** checkbox (between hordes;
+    greyed with "Pick the squad between hordes" in a fight). Best squad makes
+    the squad the 6 fit survivors with the most Squad Power share
+    (`survivorPower`: level, profession, gun), ties to camp order (the squad
+    first, so a tie never swaps). Who stays keeps their slot; a newcomer takes
+    the slot of one benched, the rest go on the end; the benched go on the
+    bench's end. Guns don't move; resting survivors are never picked; a second
+    press moves nobody. The status line names who came in and went out.
+  - **Auto (ID-154)**, off by default and saved, runs the same pick on its own
+    after each horde's result, an accepted joiner, a let-go and "Best gun for
+    everyone"; ticking it runs it once. The player's own moves (Add to squad,
+    Move to bench, a gun change) stand until the next of those, and loading a
+    save never runs it. The scripted player in the balance tests leaves it off.
+    Ticking it says when it runs ("Auto on: the best squad is picked again after
+    each horde, joiner, let-go and Best gun."), then who it moved. When it moves
+    someone after a fight, the result screen says so: "Auto squad: in A · out
+    B." In a fight a line under the row says "Pick the squad between hordes"
+    (a tooltip never shows on a phone). The Roster's status line is pinned to
+    the dialog's foot so what a press did stays in sight on a phone.
   - The start screen shows the squad, a bench line ("Bench 3 · 1 resting ·
     2 open slots: pick on the Roster") and a "Change squad" link to the
     Roster.
@@ -3097,6 +3117,11 @@ offline progress works across sessions.
   free pistol and nothing else, not resting or injured), with the camp and
   them together at most `SQUAD_JOIN.max`. Anything else refuses the save. A
   v19 or older save has nobody asking, and a `joining` key there is refused.
+- **As built (ID-154): save version 21** may hold `autoSquad`, written only
+  while "Auto" best squad is ticked. Exactly `true` turns it on; any other
+  value loads with it off (nothing else depends on it, so the save still
+  loads). A v20 or older save has it off, and an `autoSquad` key there is
+  refused.
 
 ## 13. Out of scope (v1)
 

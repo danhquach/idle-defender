@@ -15,7 +15,9 @@ import {
 } from '../core/horde.ts';
 import {
   answerJoin,
+  autoSquad,
   bestGuns,
+  bestSquad,
   campOf,
   combineGuns,
   equipGun,
@@ -23,6 +25,7 @@ import {
   joiningOf,
   letGo,
   refuseJoins,
+  setAutoSquad,
   startSquadHorde,
   toggleSkill,
   toggleSquad,
@@ -559,12 +562,32 @@ export function start(root: HTMLElement, art: Art): void {
         onBestGuns: () => {
           if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
           const r = bestGuns(game);
-          if (r.moves.length > 0) {
-            commit(r.game);
-            // The start screen's squad on the wall holds the new guns too.
-            if (!horde) preview = startSquadHorde(game, 0, Date.now());
-            showGear();
+          // "Auto" (ID-154) re-picks the squad on every press, new guns or not (they change
+          // Squad Power; with none, it still undoes a hand-picked squad, as the Roster says).
+          const next = autoSquad(r.game);
+          if (next !== game) {
+            commit(next);
+            // The start screen and its squad on the wall hold the new guns (and squad) too.
+            redrawSquad();
           }
+          return { ok: true, moves: r.moves };
+        },
+        // "Best squad" and "Auto" (ID-154): between hordes, saved at once, the start
+        // screen and its squad on the wall redrawn.
+        onBestSquad: () => {
+          if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+          const r = bestSquad(game);
+          if (r.game !== game) {
+            commit(r.game);
+            redrawSquad();
+          }
+          return { ok: true, moves: r.moves };
+        },
+        onAutoSquad: (on) => {
+          if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+          const r = setAutoSquad(game, on);
+          commit(r.game);
+          redrawSquad();
           return { ok: true, moves: r.moves };
         },
       })
