@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bestDrop,
+  DROP_GUNS,
   firstClearWeights,
   gunLevel,
   gunPower,
@@ -14,7 +15,16 @@ import {
   type OwnedWeapon,
 } from './armoury.ts';
 import { recruit } from './camp.ts';
-import { FARM, HORROR, POWER, RARITY_ORDER, SQUAD_CAP, WEAPONS, type Rarity } from './data.ts';
+import {
+  FARM,
+  HORROR,
+  POWER,
+  RARITY_ORDER,
+  SQUAD_CAP,
+  WEAPONS,
+  type JobId,
+  type Rarity,
+} from './data.ts';
 import { hordeXp, newGame, type GameState } from './game.ts';
 import type { HordeState } from './horde.ts';
 import {
@@ -23,7 +33,9 @@ import {
   highestBeaten,
   isReplay,
   squadDrop,
+  squadGain,
   squadResult,
+  squadSpec,
   squadXpGains,
   startSquadHorde,
   weakestHeld,
@@ -37,7 +49,7 @@ import {
   squadPower,
   survivorPower,
 } from './squadpower.ts';
-import { xpForLevel } from './stats.ts';
+import { survivorDps, xpForLevel } from './stats.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -364,6 +376,90 @@ describe('the bad-luck guarantee (ID-098)', () => {
       'military',
     );
     expect(w && gunPower(w)).toBeGreaterThan(gunPower(gun('x', 'rifle', 'military', 10)));
+  });
+});
+
+describe('an upgrade counts the survivor’s level and profession (ID-152)', () => {
+  /** A squad of one Lv `level` `job` holding `held`, the next new horde `next`. */
+  const holdingAs = (
+    held: OwnedWeapon,
+    job: JobId,
+    next: number,
+    badLuck = 0,
+    level = 21,
+  ): GameState => {
+    const g = farmGame(1, next);
+    return {
+      ...g,
+      roster: [
+        {
+          ...g.roster[0]!,
+          job,
+          xp: xpForLevel(level),
+          loadout: { primary: held, secondary: null, item: null },
+        },
+      ],
+      farm: { replays: 0, badLuck },
+    };
+  };
+
+  it('a gun of their profession, weaker on its own, is an upgrade; for an any-gun job it isn’t', () => {
+    const assault = gun('h1', 'assault', 'common');
+    const sniper = gun('x', 'sniper', 'common');
+    expect(gunPower(sniper)).toBeLessThan(gunPower(assault));
+    expect(squadGain(holdingAs(assault, 'hunter', 3))(sniper)).toBeGreaterThan(0);
+    expect(squadGain(holdingAs(assault, 'mechanic', 3))(sniper)).toBeLessThanOrEqual(0);
+  });
+
+  it('a gun stronger on its own is no upgrade when it does less in their hands', () => {
+    const pump = gun('h1', 'shotgun', 'common');
+    const g = holdingAs(pump, 'police', 3);
+    const who = squadSpec(g.roster[0]!);
+    const stronger = DROP_GUNS.flatMap((base) =>
+      RARITY_ORDER.map((rarity) => gun('x', base, rarity)),
+    ).find((w) => gunPower(w) > gunPower(pump) && survivorDps(who, w) < survivorDps(who, pump));
+    expect(stronger).toBeDefined();
+    expect(squadGain(g)(stronger!)).toBeLessThanOrEqual(0);
+    // The weakest held gun is theirs, judged in their hands.
+    expect(weakestHeld(g)).toEqual(pump);
+  });
+
+  it('a replay’s upgrade flag and the bad-luck count follow the gain, not the gun alone', () => {
+    const held = gun('h4', 'shotgun', 'common', 5);
+    const g = holdingAs(held, 'police', 9, 2);
+    const gain = squadGain(g);
+    let differs = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const s = ended(g, 8, 'won', seed);
+      const d = squadDrop(g, s)!;
+      const guns = [d.weapon, ...d.bonus];
+      expect(d.upgrade).toBe(guns.some((w) => gain(w) > 0));
+      if (d.upgrade !== guns.some((w) => gunPower(w) > gunPower(held))) differs += 1;
+      expect(finishSquadHorde(g, s).farm.badLuck).toBe(d.upgrade ? 0 : 3);
+    }
+    // Some drops hit harder than the Pump Shotgun on paper yet do less for a Police officer.
+    expect(differs).toBeGreaterThan(0);
+  });
+
+  it('with no squad, an upgrade is a gun that beats the free pistol, as before', () => {
+    const g = { ...farmGame(1, 3), roster: [] };
+    const gain = squadGain(g);
+    expect(gain(gun('x', 'smg', 'common'))).toBeCloseTo(
+      gunPower(gun('x', 'smg', 'common')) - gunPower('pistol'),
+      9,
+    );
+    expect(weakestHeld(g)).toBe('pistol');
+  });
+
+  it('at the guarantee, the sure upgrade is one in their hands', () => {
+    const held = gun('h9', 'sniper', 'military', 9);
+    for (let seed = 1; seed <= 10; seed++) {
+      const g = holdingAs(held, 'hunter', 10, FARM.guarantee);
+      const d = squadDrop(g, ended(g, 9, 'won', seed))!;
+      expect(d.kind).toBe('guaranteed');
+      expect(d.upgrade).toBe(true);
+      expect(squadGain(g)(d.weapon)).toBeGreaterThan(0);
+    }
   });
 });
 

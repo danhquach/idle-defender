@@ -5,12 +5,12 @@
 // stat split into the two) or "Choose a gun". A gun is compared with the one
 // held before it is equipped. Like the Inventory, the field goes inert behind it and an
 // open Roster holds a fight. Text reaches the page only through textContent.
-import { baseOf, gunPower, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
+import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
 import { JOBS, STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import { squadOf, type GunMove } from '../core/hordeonly.ts';
+import { squadOf, squadSpec, type GunMove } from '../core/hordeonly.ts';
 import type { HordeState } from '../core/horde.ts';
-import { jobFits, levelOf, maxHpOf } from '../core/stats.ts';
+import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
 import { el } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
@@ -323,7 +323,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     slot.dataset.rarity = rarityOf(held);
     slot.setAttribute('aria-expanded', String(picking));
     slot.setAttribute('aria-disabled', String(!canGear));
-    const dps = heldDps(held);
+    const dps = heldDps(held, d);
     slot.setAttribute(
       'aria-label',
       `Gun: ${gunName(held)}, ${dps} dmg/s. ${canGear ? (picking ? 'Back to level' : 'Change gun') : GUNS_WAIT}`,
@@ -440,7 +440,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     const out: HTMLElement[] = [headRow];
     const choice = tiles.find((t) => t.choice === picked);
     if (choice) {
-      const cmp = gunCompare(held, choice.held);
+      const cmp = gunCompare(held, choice.held, squadSpec(d));
       const box = el('div', 'rv-cmp');
       const verdict = el('div', 'rv-verdict');
       const v = el('div', 'rv-v');
@@ -472,7 +472,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
         const tr = el('tr', '');
         const change = el('td', 'rv-chg', r.change);
         if (r.tone) change.dataset.tone = r.tone;
-        tr.append(el('th', '', r.label), el('td', '', r.now), el('td', '', r.next), change);
+        // The dmg/s row is theirs (ID-152); the gun's own numbers follow.
+        const label = r.label === 'dmg/s' ? `${d.name}'s dmg/s` : r.label;
+        tr.append(el('th', '', label), el('td', '', r.now), el('td', '', r.next), change);
         for (const th of tr.querySelectorAll('th')) th.scope = 'row';
         body.append(tr);
       }
@@ -534,9 +536,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       el(
         'p',
         'rv-hint',
-        `Frame colour = rarity. ▲ ▼ compare dmg/s with the gun held now.${
+        `Frame colour = rarity. dmg/s is ${d.name}'s, level and profession counted; ▲ ▼ compare it with the gun held now.${
           fighter
-            ? ` ★ suits a ${JOBS[d.job].name}: the profession's bonus works only with these (dmg/s leaves it out).`
+            ? ` ★ suits a ${JOBS[d.job].name}: the profession's bonus works only with these.`
             : ''
         }`,
       ),
@@ -600,8 +602,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   return api;
 }
 
-/** A held gun's dmg/s as printed. */
-const heldDps = (h: Held): string => gunPower(h).toFixed(1);
+/** A held gun's dmg/s in survivor `d`'s hands, as printed (level and profession, ID-152): the picker's figure. */
+const heldDps = (h: Held, d: RosterDefender): string => survivorDps(squadSpec(d), h).toFixed(1);
 /** The base gun's name: "SMG". */
 const heldType = (h: Held): string => WEAPONS[baseOf(h)].name;
 /** The gun's role: "Marksman". */

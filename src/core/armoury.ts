@@ -400,13 +400,30 @@ function bestAffixSets(base: WeaponId, pool: readonly AffixId[], count: number):
   );
 }
 
-/** The most dmg/s a `rarity` `base` gun at `level` can roll (`gunPower`, every affix maxed). */
-export function bestRoll(base: WeaponId, rarity: Rarity, level: number): number {
-  return Math.max(
-    ...bestAffixSets(base, affixesFor(base), affixCount(base, rarity)).map((affixes) =>
-      gunPower({ uid: 'best', base, rarity, affixes, level }),
-    ),
-  );
+/** How a gun is scored for an upgrade: `gunPower` by default, or how much more it does for the squad (ID-152). */
+export type GunScore = (w: OwnedWeapon) => number;
+
+/** Every `rarity` `base` gun at `level` with its affixes maxed, one per affix set, uid `uid`. */
+const maxedRolls = (base: WeaponId, rarity: Rarity, level: number, uid = 'best'): OwnedWeapon[] =>
+  bestAffixSets(base, affixesFor(base), affixCount(base, rarity)).map((affixes) => ({
+    uid,
+    base,
+    rarity,
+    affixes,
+    level,
+  }));
+
+/**
+ * The best a `rarity` `base` gun at `level` can roll, every affix maxed, by `score`
+ * (`gunPower` by default: the most dmg/s).
+ */
+export function bestRoll(
+  base: WeaponId,
+  rarity: Rarity,
+  level: number,
+  score: GunScore = gunPower,
+): number {
+  return Math.max(...maxedRolls(base, rarity, level).map(score));
 }
 
 /** The most dmg/s any gun `weights` can drop at `level` can have (ID-098). */
@@ -415,14 +432,31 @@ export const bestDrop = (weights: Record<Rarity, number>, level: number): number
     ...weighted(weights).flatMap((r) => DROP_GUNS.map((b) => bestRoll(b, dropRarity(b, r), level))),
   );
 
+/**
+ * Whether some gun `weights` can drop at `level`, every affix maxed, scores over 0 by
+ * `score` (ID-152): `bestDrop(…) > 0`, stopping at the first that does.
+ */
+export function dropCanBeat(
+  weights: Record<Rarity, number>,
+  level: number,
+  score: GunScore,
+): boolean {
+  return weighted(weights).some((r) =>
+    DROP_GUNS.some((base) =>
+      maxedRolls(base, dropRarity(base, r), level).some((w) => score(w) > 0),
+    ),
+  );
+}
+
 /** How many rolls a guaranteed upgrade tries before it takes the best roll there is. */
 const UPGRADE_TRIES = 64;
 
 /**
  * A guaranteed upgrade (ID-098): a gun `weights` can drop at `level`, of a rarity at or
- * above `floor` where one can, that beats `beat` dmg/s. Picks evenly among the guns and
- * rarities that can beat it, then rerolls its affixes a bounded number of times, falling
- * back to that gun's best roll, so it always ends. Null when no gun here can beat it.
+ * above `floor` where one can, that scores over `beat` by `score` (`gunPower` by default;
+ * the squad's gain with it since ID-152). Picks evenly among the guns and rarities that can
+ * beat it, then rerolls its affixes a bounded number of times, falling back to that gun's
+ * best roll, so it always ends. Null when no gun here can beat it.
  */
 export function rollUpgrade(
   rng: Rng,
@@ -431,12 +465,13 @@ export function rollUpgrade(
   level: number,
   beat: number,
   floor: Rarity,
+  score: GunScore = gunPower,
 ): OwnedWeapon | null {
   const rarities = weighted(weights);
   const atFloor = rarities.filter((r) => RARITY_ORDER.indexOf(r) >= RARITY_ORDER.indexOf(floor));
   const can = (rs: Rarity[]) =>
     rs.flatMap((rarity) =>
-      DROP_GUNS.filter((base) => bestRoll(base, dropRarity(base, rarity), level) > beat).map(
+      DROP_GUNS.filter((base) => bestRoll(base, dropRarity(base, rarity), level, score) > beat).map(
         (base) => ({ base, rarity: dropRarity(base, rarity) }),
       ),
     );
@@ -445,10 +480,7 @@ export function rollUpgrade(
   const { base, rarity } = pick(rng, options);
   for (let i = 0; i < UPGRADE_TRIES; i++) {
     const w = rollWeapon(rng, uid, base, rarity, level);
-    if (gunPower(w) > beat) return w;
+    if (score(w) > beat) return w;
   }
-  const best = bestAffixSets(base, affixesFor(base), affixCount(base, rarity))
-    .map((affixes): OwnedWeapon => ({ uid, base, rarity, affixes, level }))
-    .reduce((a, b) => (gunPower(b) > gunPower(a) ? b : a));
-  return best;
+  return maxedRolls(base, rarity, level, uid).reduce((a, b) => (score(b) > score(a) ? b : a));
 }

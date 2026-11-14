@@ -14,9 +14,8 @@ import {
   type Outcome,
   type UpgradeId,
 } from './horde.ts';
-import { gunPower, type OwnedWeapon } from './armoury.ts';
 import {
-  equipGun,
+  bestGuns,
   finishSquadHorde,
   highestBeaten,
   squadDrop,
@@ -27,7 +26,6 @@ import {
 } from './hordeonly.ts';
 import { skillLock, useSkill } from './skills.ts';
 import { squadPower } from './squadpower.ts';
-import { isGun } from './loadout.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { levelOf } from './stats.ts';
 import { FARM, FIELD, WALL } from './data.ts';
@@ -147,31 +145,10 @@ export function repairWhatYouCan(game: GameState): GameState {
 }
 
 /**
- * The horde-only scripted player's guns (ID-096), as a player equips their drops: while the
- * stash's strongest gun hits harder (`gunPower`) than the weakest one in the squad's hands,
- * it goes to that survivor (theirs goes to the stash).
+ * The horde-only scripted player's guns (ID-096), as a player equips their drops: they tap
+ * "Best gun for everyone" (`bestGuns`, ID-152: each gun in its holder's hands).
  */
-export function gearUp(game: GameState): GameState {
-  let g = game;
-  // Each swap raises the squad's total gun power, so this ends.
-  for (;;) {
-    const held = squadOf(g).filter((d) => isGun(d.loadout.primary));
-    const weakest = held.reduce<(typeof held)[number] | undefined>(
-      (a, d) => (!a || gunPower(d.loadout.primary) < gunPower(a.loadout.primary) ? d : a),
-      undefined,
-    );
-    const best = g.armoury
-      .filter(isGun)
-      .reduce<OwnedWeapon | undefined>(
-        (a, w) => (!a || gunPower(w) > gunPower(a) ? w : a),
-        undefined,
-      );
-    if (!weakest || !best || gunPower(best) <= gunPower(weakest.loadout.primary)) return g;
-    const r = equipGun(g, weakest.id, best.uid);
-    if (!r.ok) return g;
-    g = r.game;
-  }
-}
+export const gearUp = (game: GameState): GameState => bestGuns(game).game;
 
 /**
  * The scripted player between hordes: waits until the whole roster is fit, then

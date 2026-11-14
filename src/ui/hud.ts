@@ -112,6 +112,7 @@ import {
   radioParts,
   squadOf,
   squadResult,
+  squadSpec,
   type SquadDrop,
 } from '../core/hordeonly.ts';
 import { isGun, professionOf } from '../core/loadout.ts';
@@ -120,7 +121,7 @@ import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
 import { powerBand, recommendedPower, squadPower, type PowerBand } from '../core/squadpower.ts';
-import { jobFits, levelOf } from '../core/stats.ts';
+import { jobFits, levelOf, survivorDps } from '../core/stats.ts';
 import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
@@ -1088,11 +1089,12 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
 /**
  * "30.3 dmg/s · Lv 4 Prototype LMG · Suppression (+12% damage)": a picker option, the number
  * first so a closed select keeps it, then the gun and its role (ID-101), then its affixes.
+ * `dps` is the figure shown: the gun's own by default, a survivor's in their picker (ID-152).
  */
-export const gunOption = (h: Held): string => {
+export const gunOption = (h: Held, dps = gunPower(h)): string => {
   const role = roleOf(baseOf(h));
   const affixes = affixLines(h, true);
-  return `${gunPower(h).toFixed(1)} dmg/s · ${levelName(h)}${role ? ` · ${role.role}` : ''}${
+  return `${dps.toFixed(1)} dmg/s · ${levelName(h)}${role ? ` · ${role.role}` : ''}${
     affixes.length > 0 ? ` (${affixes.join(', ')})` : ''
   }`;
 };
@@ -1118,7 +1120,8 @@ export interface GearScreen {
 
 /**
  * The horde-only gun pickers between hordes (ID-067), one per survivor in the squad: the
- * pistol, the stash's guns and the gun they hold, strongest first by `gunPower`.
+ * pistol, the stash's guns and the gun they hold, strongest first by dmg/s in their hands
+ * (`survivorDps`: level and profession, ID-152, as the Roster's picker), each labelled with it.
  */
 export function squadGear(game: GameState): GearScreen {
   const stash = game.armoury.filter(isGun);
@@ -1137,11 +1140,11 @@ export function squadGear(game: GameState): GearScreen {
         id: d.id,
         name: d.name,
         options: choices
-          .map((h) => ({ h, power: gunPower(h) }))
+          .map((h) => ({ h, power: survivorDps(squadSpec(d), h) }))
           .sort((a, b) => b.power - a.power)
-          .map(({ h }) => ({
+          .map(({ h, power }) => ({
             value: isOwned(h) ? h.uid : 'pistol',
-            label: `${fighter && jobFits(d.job, h) ? '★ ' : ''}${gunOption(h)}`,
+            label: `${fighter && jobFits(d.job, h) ? '★ ' : ''}${gunOption(h, power)}`,
           })),
         value: isOwned(held) ? held.uid : 'pistol',
         rarity: isOwned(held) ? held.rarity : 'common',
@@ -1170,7 +1173,7 @@ export interface DropTile {
   kind: string;
   /** The kind chip's tone: a guaranteed upgrade stands out, a first clear is milder. */
   kindTone: 'ok' | 'warn' | 'plain';
-  /** Where to go for upgrades when no gun this horde drops would beat the weakest held; else null. */
+  /** Where to go for upgrades when no gun this horde drops would be an upgrade (`squadGain`); else null. */
   farmNote: string | null;
   /** The gun's icon (ID-092), as the Inventory shows it. */
   icon: ArtId;
@@ -1340,7 +1343,7 @@ const KIND_TONE: Readonly<Record<SquadDrop['kind'], 'ok' | 'warn' | 'plain'>> = 
   guaranteed: 'warn',
 };
 
-/** A replay where nothing the horde drops could beat the weakest held gun: where to go (ID-098). */
+/** A replay where nothing the horde drops could be an upgrade (ID-098, ID-152): where to go. */
 export const farmText = (farmFrom: number | null): string =>
   farmFrom === null ? 'Beat a new horde for upgrades' : `Farm Horde ${farmFrom}+ for upgrades`;
 

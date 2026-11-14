@@ -1,12 +1,11 @@
 // The Roster's gun picker, as data (ID-108): the tiles a survivor can swap to (the free
-// pistol and every stash gun but the one held, strongest first by dmg/s), each with its
-// change against the held gun, and the Now / New / Change comparison for one of them. Pure:
-// no DOM, so the wording is testable.
+// pistol and every stash gun but the one held, strongest first by dmg/s in their hands,
+// ID-152), each with its change against the held gun, and the Now / New / Change comparison
+// for one of them. Pure: no DOM, so the wording is testable.
 import {
   affixLines,
   baseOf,
   gunLevel,
-  gunPower,
   heldName,
   isOwned,
   roleOf,
@@ -15,7 +14,9 @@ import {
 } from '../core/armoury.ts';
 import { RARITIES, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
+import { squadSpec } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
+import { survivorDps, type Statted } from '../core/stats.ts';
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as squadGear). */
 export const heldGunOf = (d: RosterDefender): Held =>
@@ -46,8 +47,11 @@ export interface Delta {
 /** Under this many dmg/s apart, two guns count as the same. */
 const SAME = 0.05;
 
-export function deltaOf(held: Held, other: Held): Delta {
-  const d = gunPower(other) - gunPower(held);
+/** A gun's dmg/s in survivor `who`'s hands (level and profession, ID-152). */
+const dpsOf = (h: Held, who: Statted): number => survivorDps(who, h);
+
+export function deltaOf(held: Held, other: Held, who: Statted): Delta {
+  const d = dpsOf(other, who) - dpsOf(held, who);
   if (Math.abs(d) < SAME) return { kind: 'same', text: '= same', words: 'same dmg/s' };
   return d > 0
     ? { kind: 'up', text: `▲ +${f1(d)}`, words: `${f1(d)} more dmg/s` }
@@ -73,21 +77,23 @@ export interface GunTile {
 
 /**
  * The guns survivor `id` can swap to (ID-108): the free pistol and every stash gun except
- * the one held, strongest first by `gunPower` (a stable sort: equal guns keep stash order).
+ * the one held, strongest first by dmg/s in their hands (`survivorDps`: their level and
+ * profession, ID-152; a stable sort: equal guns keep stash order).
  */
 export function gunTiles(game: Pick<GameState, 'roster' | 'armoury'>, id: string): GunTile[] {
   const d = game.roster.find((r) => r.id === id);
   if (!d) return [];
+  const who = squadSpec(d);
   const held = heldGunOf(d);
   const options: Held[] = [
     ...(isOwned(held) ? ['pistol' as Held] : []),
     ...game.armoury.filter((w) => isGun(w) && !(isOwned(held) && w.uid === held.uid)),
   ];
   return options
-    .map((h) => ({ h, power: gunPower(h) }))
+    .map((h) => ({ h, power: dpsOf(h, who) }))
     .sort((a, b) => b.power - a.power)
     .map(({ h, power }) => {
-      const delta = deltaOf(held, h);
+      const delta = deltaOf(held, h, who);
       const free = !isOwned(h);
       return {
         choice: isOwned(h) ? h.uid : 'pistol',
@@ -126,12 +132,12 @@ export interface GunCompare {
   rows: CompareRow[];
 }
 
-/** A gun's numbers as the table reads them. */
-function numbers(h: Held) {
+/** A gun's numbers as the table reads them: dmg/s in `who`'s hands, the rest the gun's own. */
+function numbers(h: Held, who: Statted) {
   const w = statsOf(h);
   if (w.kind !== 'gun' && w.kind !== 'sidearm') throw new RangeError('gunCompare: no gun');
   return {
-    power: gunPower(h),
+    power: dpsOf(h, who),
     damage: w.damage,
     pellets: w.pellets,
     rate: 1 / w.fireInterval,
@@ -174,11 +180,14 @@ function numRow(
 const shot = (damage: number, pellets: number): string =>
   pellets > 1 ? `${f1(damage)} × ${pellets}` : f1(damage);
 
-/** Gun `other` against the gun held: the verdict, then Now / New / Change per number (ID-108). */
-export function gunCompare(held: Held, other: Held): GunCompare {
-  const a = numbers(held);
-  const b = numbers(other);
-  const delta = deltaOf(held, other);
+/**
+ * Gun `other` against the gun held: the verdict, then Now / New / Change per number (ID-108).
+ * The verdict and the dmg/s row are in survivor `who`'s hands (ID-152); the rest is the gun's.
+ */
+export function gunCompare(held: Held, other: Held, who: Statted): GunCompare {
+  const a = numbers(held, who);
+  const b = numbers(other, who);
+  const delta = deltaOf(held, other, who);
   const d = b.power - a.power;
   const pct = Math.round((Math.abs(d) / a.power) * 100);
   const verdict =

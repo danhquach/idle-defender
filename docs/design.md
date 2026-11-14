@@ -876,25 +876,36 @@ close-quarter weapons come out only when an enemy is close.
     (§6 Professions, ID-149).
     The gun picker's way back is labelled Level.
   - **Choose a gun** (between hordes): tiles for the free pistol and every
-    stash gun except the one held, strongest first by dmg/s, each with its
-    base gun, a rarity frame and a change badge against the held gun ("▲ +4.2",
-    "▼ 1.1", "= same"; the symbol and number carry the meaning, colour is
-    second). It opens on the best upgrade. Above the tiles, the chosen gun is
+    stash gun except the one held, strongest first by dmg/s in this
+    survivor's hands (ID-152: their level and profession counted, as Squad
+    Power counts them, so a Hunter's Sniper rifle can outrank a gun that
+    hits harder on its own; the survivor's gun slot shows the same figure),
+    each with its base gun, a rarity frame and a change badge against the
+    held gun ("▲ +4.2", "▼ 1.1", "= same"; the symbol and number carry the
+    meaning, colour is second). The hint under the tiles says whose dmg/s
+    it is. It opens on the best upgrade. Above the tiles, the chosen gun is
     compared with the held one: a verdict in words ("Stronger: +8.9 dmg/s
-    (+72%)" or "Weaker: …") with one Equip button, then Now, New and Change
-    for dmg/s, damage a shot (pellets shown as "4.0 × 6"), fire rate, reload,
-    range, role and affixes, the change written out ("0.50 s slower",
+    (+72%)" or "Weaker: …", in their hands too) with one Equip button, then
+    Now, New and Change for dmg/s (in their hands, the row named "Ivan's
+    dmg/s"), damage a shot (pellets
+    shown as "4.0 × 6"), fire rate, reload, range, role and affixes, the change written out ("0.50 s slower",
     "200 px shorter", "new role"). Equip follows the same rules as the gun
     pickers: the stash holds 40 (20 before ID-122), the pistol is free and unlimited, and a gun
     is not given back for the pistol into a full stash (the reason is shown
     in the status line). In a fight the slot says guns change between
     hordes.
-  - **Best gun for everyone** acts at once: while the stash's strongest gun
-    beats the weakest gun in the squad's hands, the free pistol included, it
-    goes to that survivor and theirs goes to the stash. The status line says
-    what moved ("Equipped: Mara → Military SMG · …") or that everyone already
-    holds the best gun they can get. A gun never goes into the stash for the
-    pistol, so the stash never grows.
+  - **Best gun for everyone** acts at once (ID-152): each gun is scored in
+    the hands of the survivor who would hold it (dmg/s with their level and
+    profession, as Squad Power counts it: a fighting job's own guns count for
+    more). It keeps making the one change that raises the squad's total the
+    most: a survivor takes a stash gun (theirs goes to the stash; the free
+    pistol just goes), or two survivors trade guns. When no change helps, it
+    stops; a second tap moves nothing. The status line says what moved, once
+    per survivor from what they held to what they hold ("Equipped: Mara →
+    Military SMG · …"), or that everyone already holds the best gun they can
+    get. A gun never goes into the stash for the pistol, so the stash never
+    grows. (ID-108 to ID-149: the stash's strongest gun by the gun alone went
+    to the weakest gun held, and survivors never traded.)
 - **The start and result screens' survivor cards (ID-146):** under the gun,
   a small line gives the level's bonus with short labels (§6 Stats), in the
   Level up badge's colour on a card that levelled this win; its XP line ends
@@ -1076,7 +1087,8 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   accuracy, crit chance, crit damage and injury dodge: the total, the level's
   part and the profession's (a fighting job's part off its guns is struck out
   and left out of the total). The Roster's gun picker marks a fighting job's
-  guns with ★ and says so under the tiles (its dmg/s leaves the bonus out).
+  guns with ★ and says so under the tiles (its dmg/s counts the bonus since
+  ID-152; before, it left it out).
   The start screen's gun picker stars them too, and the card says "No Hunter
   bonus with this gun" under the gun's role when the held one isn't theirs.
   The start and result cards read "Lv 7 · Hunter"; a first clear's new
@@ -1157,8 +1169,8 @@ profession's output).
     Prototype), so the lower grades come most and feed Combine. Their uids
     are the drop's with `-1` and `-2`. They roll after the drop on the same
     stream, so the drop itself is the gun it was before. Any of the win's
-    guns that beats the weakest held counts as the upgrade that resets the
-    bad-luck count (§11 Farming). The result screen lists them under the
+    guns that is an upgrade (ID-152: for some survivor, in their hands)
+    resets the bad-luck count (§11 Farming). The result screen lists them under the
     drop, one compact row each (icon on its rarity's tint, level, rarity,
     gun, dmg/s, or "Thrown away"). At the worst luck the scripted player
     throws them away too.
@@ -1168,13 +1180,15 @@ profession's output).
     of the stash and that gun is thrown away (it may be one of the win's own
     guns); a tie throws away the later one. "Weakest" is the
     lowest damage per second through a magazine and its reload (pellets,
-    rarity and affixes counted), the dmg/s figure the pickers show. An older
-    save's armoury past 40 is kept as it is and never grows. A save holds at
+    rarity and affixes counted), the gun's own dmg/s (the Inventory's
+    figure; the pickers show a survivor's, ID-152). An older save's armoury
+    past 40 is kept as it is and never grows. A save holds at
     most 52 owned weapons (40 in the stash, a gun in each hand of 6 survivors).
   - **Equip:** between hordes, on the start and result screens, each survivor
     in the squad has a one-click gun picker (a select; the pick applies and
     saves at once). It lists the free pistol, the stash's guns and the gun
-    they hold, strongest first, each led by its dmg/s ("30.3 dmg/s ·
+    they hold, strongest first, each led by its dmg/s in that survivor's
+    hands (ID-152: level and profession counted, as in the Roster) ("30.3 dmg/s ·
     Prototype LMG (+12% damage, +21% magazine)") so a closed select never
     cuts the number off; the full label shows on hover. The gun they had goes to
     the stash; the pistol is free and unlimited, so it just goes, and taking
@@ -2598,16 +2612,20 @@ and comes back stronger.
   the rarity below. Uid `r<k>`, the k-th replay win.
 - **Bonus guns (ID-122):** first clears and replays alike may drop up to 2
   more, lower-grade guns (§6 Gear, Bonus guns).
-- **Bad-luck guarantee (replays only):** "an upgrade" is a drop with more
-  dmg/s than the weakest gun a squad survivor holds (the free pistol
-  included). Each replay win whose drop is no upgrade adds 1 to a saved
+- **Bad-luck guarantee (replays only):** "an upgrade" is a drop some squad
+  survivor would do more dmg/s with than with their own gun (the free
+  pistol included), in their hands: their level and profession counted, as
+  Squad Power and "Best gun for everyone" count them (ID-152; before, more
+  dmg/s than the weakest held gun on its own, which is the same at level 1).
+  The weakest held gun is the one that does least in its holder's hands.
+  Each replay win whose drop is no upgrade adds 1 to a saved
   count (at most 5); each count moves 5 points of rarity weight up one band,
   taken from the lowest rarity with weight left. At 5 the next replay drop is
   a sure upgrade: a gun and rarity (at or above the weakest held gun's where
-  the band has one) that can beat it, picked evenly, its affixes rerolled up
+  the band has one) that can be one, picked evenly, its affixes rerolled up
   to 64 times and then its best roll, so it always ends. Any upgrade resets
-  the count. When no gun the horde can drop could beat the weakest held gun
-  (every affix maxed), the count doesn't move, there is no reroll, and the
+  the count. When no gun the horde can drop could be an upgrade (every affix
+  maxed), the count doesn't move, there is no reroll, and the
   result screen says "Farm a higher horde for upgrades". First clears
   neither count nor reset it.
 - **Gun level:** every dropped gun's level is its horde number; each level
