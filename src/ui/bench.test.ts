@@ -8,11 +8,17 @@ import { recruit } from '../core/camp.ts';
 import { JOBS, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
-import { startSquadHorde, toggleSquad } from '../core/hordeonly.ts';
-import { benchLine, CHANGE_SQUAD, restNote, squadScreen, squadStart } from './hud.ts';
+import {
+  bestSquad,
+  setAutoSquad,
+  squadResult,
+  startSquadHorde,
+  toggleSquad,
+} from '../core/hordeonly.ts';
+import { benchLine, CHANGE_SQUAD, movesText, restNote, squadScreen, squadStart } from './hud.ts';
 import { askLine, answerText } from './joining.ts';
 import { JOB_SHORT } from './jobtext.ts';
-import { createRoster, rosterTiles, SQUAD_WAIT } from './squadroster.ts';
+import { AUTO_ON, createRoster, rosterTiles, SQUAD_WAIT } from './squadroster.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -153,6 +159,46 @@ describe('the result screen says what really happens (ID-147)', () => {
   });
 });
 
+describe('the result screen names who "Auto" moved (ID-154)', () => {
+  it('a note when it moved someone; none when it is off or moved nobody', () => {
+    const plain = campGame(people(6), [person(7, { xp: 30000 })]);
+    const g = { ...plain, autoSquad: true as const };
+    const h = won(g);
+    const s = squadScreen(g, h);
+    const out = squadResult(g, h).auto!.out[0]!;
+    const note = `Auto squad: in ${recruit(7).name} · out ${out}.`;
+    expect(s.debrief!.note).toContain(note);
+    expect(s.lines).toContain(note);
+    expect(squadScreen(plain, h).debrief!.note ?? '').not.toContain('Auto squad');
+    // A loss says it too.
+    const lost = squadScreen(g, { ...h, outcome: 'lost' });
+    expect(lost.debrief!.note).toContain('Auto squad: in');
+    // Auto on with nothing better on the bench: no note.
+    const best = { ...campGame(people(6), [person(7)]), autoSquad: true as const };
+    const settled = bestSquad(best).game;
+    expect(squadResult(settled, won(settled)).auto).toBeNull();
+  });
+
+  it('a rest is never reported as an Auto move; filling its slot is', () => {
+    const g = { ...campGame(people(6), [person(7)]), autoSquad: true as const };
+    const h = won(g, 1, ['recruit-1']);
+    const r = squadResult(g, h);
+    // recruit-1 rests (benched by the rest, not by Auto); Auto fills the open slot.
+    expect(r.rests.map((x) => x.id)).toContain('recruit-1');
+    expect(r.auto).toEqual({ in: [recruit(7).name], out: [] });
+    // Off, nobody fills it and nothing is reported.
+    const off = { ...g };
+    delete (off as Partial<GameState>).autoSquad;
+    expect(squadResult(off, h).auto).toBeNull();
+  });
+
+  it('movesText says who came in and went out, or null', () => {
+    expect(movesText({ in: ['Ava', 'Bo'], out: ['Cy'] })).toBe('in Ava, Bo · out Cy');
+    expect(movesText({ in: [], out: ['Cy'] })).toBe('out Cy');
+    expect(movesText({ in: [], out: [] })).toBeNull();
+  });
+});
+
 describe('designer review fixes (ID-147)', () => {
   it('each answer says where the newcomer went (ID-150)', () => {
     expect(answerText('Ava', 'squad')).toBe('Ava joins the squad.');
@@ -177,6 +223,8 @@ describe('designer review fixes (ID-147)', () => {
       onToggleSquad: () => ({ ok: true }),
       onLetGo: () => null,
       onBestGuns: () => ({ ok: true, moves: [] }),
+      onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
+      onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
     });
     roster.open('recruit-1');
     const job = (id: string) =>
@@ -211,17 +259,34 @@ describe('the Roster and the bench (ID-147)', () => {
       roster.refresh();
       return { ok: true as const };
     });
+    // "Best squad" and "Auto" (ID-154), as the app runs them.
+    const onBestSquad = vi.fn(() => {
+      if (!canGear) return { ok: false as const, reason: SQUAD_WAIT };
+      const r = bestSquad(g);
+      g = r.game;
+      roster.refresh();
+      return { ok: true as const, moves: r.moves };
+    });
+    const onAutoSquad = vi.fn((on: boolean) => {
+      if (!canGear) return { ok: false as const, reason: SQUAD_WAIT };
+      const r = setAutoSquad(g, on);
+      g = r.game;
+      roster.refresh();
+      return { ok: true as const, moves: r.moves };
+    });
     const roster = createRoster(root, {
       state: () => ({ game: g, fight: null, canGear, resumes: false }),
       onEquip: () => ({ ok: true }),
       onToggleSquad,
       onLetGo: () => null,
       onBestGuns: () => ({ ok: true, moves: [] }),
+      onBestSquad,
+      onAutoSquad,
     });
     const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
     const q = <T extends HTMLElement = HTMLButtonElement>(sel: string): T =>
       scrim.querySelector<T>(sel)!;
-    return { roster, scrim, q, onToggleSquad, game: () => g };
+    return { roster, scrim, q, onToggleSquad, onBestSquad, onAutoSquad, game: () => g };
   }
 
   it('with no bench the Roster looks as it did: no labels, no bench row, no squad button', () => {
@@ -229,9 +294,65 @@ describe('the Roster and the bench (ID-147)', () => {
     m.roster.open('recruit-1');
     expect(m.q('.rv-bench').hidden).toBe(true);
     expect(
-      [...m.scrim.querySelectorAll<HTMLElement>('.rv-tabs-label')].every((l) => l.hidden),
+      [...m.scrim.querySelectorAll<HTMLElement>('.rv-tabs-label')].every(
+        (l) => l.closest('[hidden]') !== null,
+      ),
     ).toBe(true);
     expect(m.q('[data-key="squad"]')).toBeNull();
+    // No "Best squad" or "Auto" (ID-154) either, and Tab never lands on them.
+    expect(m.q('[data-key="best-squad"]').closest('[hidden]')).not.toBeNull();
+    expect(m.q('[data-key="auto-squad"]').closest('[hidden]')).not.toBeNull();
+  });
+
+  it('"Best squad" swaps a weaker squad survivor for a stronger bench one, saying so (ID-154)', () => {
+    const vet = person(7, { xp: 5000 });
+    const m = mount(campGame(people(6), [vet]));
+    m.roster.open('recruit-1');
+    const b = m.q('[data-key="best-squad"]');
+    expect(b.closest('[hidden]')).toBeNull();
+    b.click();
+    expect(m.game().roster.map((d) => d.id)).toContain('recruit-7');
+    const out = m.game().reserve[0]!;
+    expect(m.q('.rv-status').textContent).toBe(`Squad: in ${vet.name} · out ${out.name}`);
+    expect(document.activeElement).toBe(m.q('[data-key="best-squad"]'));
+    // A second press changes nothing.
+    m.q('[data-key="best-squad"]').click();
+    expect(m.q('.rv-status').textContent).toBe('The squad is already the strongest it can be.');
+  });
+
+  it('"Auto" ticks on (running the pick once) and off, and shows the saved state (ID-154)', () => {
+    const m = mount(campGame(people(5), [person(6)]));
+    m.roster.open('recruit-1');
+    const box = m.q<HTMLInputElement>('[data-key="auto-squad"]');
+    expect(box.checked).toBe(false);
+    box.click();
+    expect(m.onAutoSquad).toHaveBeenLastCalledWith(true);
+    expect(m.game().autoSquad).toBe(true);
+    expect(m.game().roster).toHaveLength(6);
+    // It says when it runs, then who the tick moved.
+    expect(m.q('.rv-status').textContent).toBe(`${AUTO_ON} Squad: in ${recruit(6).name}`);
+    expect(m.q<HTMLInputElement>('[data-key="auto-squad"]').checked).toBe(true);
+    m.q<HTMLInputElement>('[data-key="auto-squad"]').click();
+    expect(m.game().autoSquad).toBeUndefined();
+    expect(m.q('.rv-status').textContent).toBe('Auto off: the squad stays as you pick it.');
+  });
+
+  it('in a fight "Best squad" and "Auto" are greyed with the reason (ID-154)', () => {
+    const m = mount(campGame(people(5), [person(6)]), false);
+    m.roster.open('recruit-1');
+    expect(m.q('[data-key="best-squad"]').disabled).toBe(true);
+    expect(m.q('[data-key="best-squad"]').title).toBe(SQUAD_WAIT);
+    expect(m.q<HTMLInputElement>('[data-key="auto-squad"]').disabled).toBe(true);
+    expect(m.q('.rv-auto').title).toBe(SQUAD_WAIT);
+    // In words too, for a phone, where a tooltip never shows.
+    expect(m.q('.rv-squad-wait').hidden).toBe(false);
+    expect(m.q('.rv-squad-wait').textContent).toBe(SQUAD_WAIT);
+    expect(m.q('[data-key="best-squad"]').getAttribute('aria-label')).toBe(
+      `Best squad. ${SQUAD_WAIT}`,
+    );
+    expect(m.q('[data-key="auto-squad"]').getAttribute('aria-label')).toBe(
+      `Auto best squad. ${SQUAD_WAIT}`,
+    );
   });
 
   it('moves a bench survivor into an open slot and back, saying so', () => {

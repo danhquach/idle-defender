@@ -115,6 +115,11 @@ export interface GameState {
    * counted in `camp.recruits`, so a refused one never comes back.
    */
   joining?: RosterDefender[];
+  /**
+   * Horde-only (ID-154): "Auto" ticked on the Roster, so `bestSquad` runs after each horde,
+   * an accepted joiner, a let-go and "Best gun for everyone". Absent when off.
+   */
+  autoSquad?: true;
   /** Farming beaten hordes (ID-098): replay wins so far, and the bad-luck count. */
   farm: Farm;
   /**

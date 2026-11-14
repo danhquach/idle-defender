@@ -24,9 +24,11 @@ import { UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
 import {
   COLUMNS,
   COMBINE_COUNT,
+  DEFENDER_HP,
   FARM,
   FIELD,
   MAX_COUNT,
+  POWER,
   RARITY_ORDER,
   SQUAD_BONUS,
   SQUAD_CAP,
@@ -72,7 +74,7 @@ import {
 } from './horde.ts';
 import { isGun } from './loadout.ts';
 import { chance, createRng, type Rng } from './rng.ts';
-import { fieldBonus, jobPart, levelOf, survivorDps } from './stats.ts';
+import { fieldBonus, jobPart, levelOf, maxHpOf, survivorDps } from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -115,6 +117,17 @@ export function squadSpec(d: RosterDefender): DefenderSpec {
     plain: true,
     job: d.job,
   };
+}
+
+/**
+ * One survivor's share of Squad Power (ID-098): their gun's sustained dmg/s in their hands
+ * (`survivorDps`: level and profession counted), times a toughness factor from the level's
+ * extra HP. Cards and skills don't count.
+ */
+export function survivorPower(d: RosterDefender): number {
+  const spec = squadSpec(d);
+  const tough = 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
+  return survivorDps(spec, spec.loadout.primary) * tough * POWER.scale;
 }
 
 /** How hard each picked skill works (ID-100): `SQUAD_SKILLS.solo`× when only 1 is picked. */
@@ -265,6 +278,65 @@ export function toggleSquad(
   };
 }
 
+/** Who "Best squad" (ID-154) moved: into the squad and onto the bench, by name. */
+export interface SquadMoves {
+  in: string[];
+  out: string[];
+}
+
+/**
+ * "Best squad" (ID-154, between hordes): the squad becomes the `SQUAD_CAP` fit survivors
+ * with the most `survivorPower`, ties to camp order (the squad first, so a tie never
+ * swaps). Who stays keeps their slot; a newcomer takes the slot of one benched, in rank
+ * order, and the rest go on the end; the benched go on the bench's end. Guns don't move.
+ * With nobody fit, or nothing to change, returns `game` itself; a second call moves nobody.
+ */
+export function bestSquad(game: GameState): { game: GameState; moves: SquadMoves } {
+  const ranked = campOf(game)
+    .map((d, i) => ({ d, i, power: survivorPower(d) }))
+    .filter(({ d }) => isFit(d))
+    .sort((a, b) => b.power - a.power || a.i - b.i)
+    .slice(0, SQUAD_CAP)
+    .map(({ d }) => d);
+  const none = { game, moves: { in: [], out: [] } };
+  if (ranked.length === 0) return none;
+  const pick = new Set(ranked);
+  const comers = ranked.filter((d) => !game.roster.includes(d));
+  const out = game.roster.filter((d) => !pick.has(d));
+  if (comers.length === 0 && out.length === 0) return none;
+  const queue = [...comers];
+  const roster = game.roster.flatMap((d) => {
+    if (pick.has(d)) return [d];
+    const next = queue.shift();
+    return next ? [next] : [];
+  });
+  return {
+    game: {
+      ...game,
+      roster: [...roster, ...queue],
+      reserve: [...game.reserve.filter((d) => !pick.has(d)), ...out],
+    },
+    moves: { in: comers.map((d) => d.name), out: out.map((d) => d.name) },
+  };
+}
+
+/** `bestSquad` when "Auto" is ticked (ID-154), else `game` itself. */
+export const autoSquad = (game: GameState): GameState =>
+  game.autoSquad === true ? bestSquad(game).game : game;
+
+/**
+ * Ticks or unticks "Auto" (ID-154, between hordes): saved only while on. Ticking runs
+ * `bestSquad` once at once.
+ */
+export function setAutoSquad(game: GameState, on: boolean): { game: GameState; moves: SquadMoves } {
+  if (!on) {
+    const g = { ...game };
+    delete g.autoSquad;
+    return { game: g, moves: { in: [], out: [] } };
+  }
+  return bestSquad({ ...game, autoSquad: true });
+}
+
 /** "Resting: 2 hordes" / "Resting: 1 horde" (ID-147). */
 export const restLabel = (rest: number): string =>
   `Resting: ${rest} ${rest === 1 ? 'horde' : 'hordes'}`;
@@ -398,10 +470,13 @@ export function answerJoin(
     all.filter((x) => x !== d),
   );
   if (!accept) return { ok: true, game: g, where: null };
-  if (g.roster.length < SQUAD_CAP) {
-    return { ok: true, game: { ...g, roster: [...g.roster, d] }, where: 'squad' };
-  }
-  return { ok: true, game: { ...g, reserve: [...g.reserve, d] }, where: 'bench' };
+  const joined =
+    g.roster.length < SQUAD_CAP
+      ? { ...g, roster: [...g.roster, d] }
+      : { ...g, reserve: [...g.reserve, d] };
+  // "Auto" (ID-154) may move them, or someone else, at once.
+  const next = autoSquad(joined);
+  return { ok: true, game: next, where: next.roster.includes(d) ? 'squad' : 'bench' };
 }
 
 /** Everyone asking to join turned away (ID-150): leaving the screen without answering. */
@@ -448,12 +523,15 @@ export function letGo(
     (h): h is OwnedWeapon => h !== null && isOwned(h),
   );
   const { armoury, thrown } = stashWith(game.armoury, guns);
-  const out = settleSquad({
-    ...game,
-    armoury,
-    roster: game.roster.filter((x) => x !== d),
-    reserve: game.reserve.filter((x) => x !== d),
-  });
+  // "Auto" (ID-154) fills the slot they leave with the best there is.
+  const out = autoSquad(
+    settleSquad({
+      ...game,
+      armoury,
+      roster: game.roster.filter((x) => x !== d),
+      reserve: game.reserve.filter((x) => x !== d),
+    }),
+  );
   return { ok: true, game: out, thrown };
 }
 
@@ -583,7 +661,8 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   const gains = squadXpGains(game, horde);
   // A loss that paid nothing, with nobody resting to count down, changes nothing.
   const still = horde.outcome !== 'won' && gains.every((x) => x.xp === 0);
-  if (still && campOf(game).every(isFit)) return game;
+  // ("Auto", ID-154, still re-picks: the player's own moves stand only until a fight.)
+  if (still && campOf(game).every(isFit)) return autoSquad(game);
   const rests = new Map(squadRests(game, horde).map((r) => [r.id, r.rest]));
   const g = structuredClone(game);
   for (const gain of gains) {
@@ -596,10 +675,12 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
     withRest(d, rests.get(d.id) ?? Math.max(0, restOf(d) - 1));
   g.roster = g.roster.map(rested);
   g.reserve = g.reserve.map(rested);
-  if (horde.outcome !== 'won') return settleSquad(g);
+  // "Auto" (ID-154): the best squad for the camp the fight left.
+  const settle = (x: GameState): GameState => autoSquad(settleSquad(x));
+  if (horde.outcome !== 'won') return settle(g);
   const drop = squadDrop(game, horde);
   // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
-  if (!drop) return settleSquad(g);
+  if (!drop) return settle(g);
   g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus]).armoury;
   if (drop.kind === 'first') {
     // Counted now, so a refused survivor's number is never offered again. Anyone still
@@ -607,7 +688,7 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
     const joined = joiners(game, horde.seed);
     g.camp.recruits += joined.length;
     g.hordeNumber += 1;
-    return settleSquad(withJoining(g, joined));
+    return settle(withJoining(g, joined));
   }
   g.farm = {
     replays: game.farm.replays + 1,
@@ -617,7 +698,7 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
         ? game.farm.badLuck
         : Math.min(FARM.guarantee, game.farm.badLuck + 1),
   };
-  return settleSquad(g);
+  return settle(g);
 }
 
 /** What a horde-only result screen reads off a finished horde. */
@@ -638,6 +719,11 @@ export interface SquadResult {
   next: GameState;
   /** The weapon the win drops, and what the stash throws away for it; null on a loss. */
   drop: SquadDrop | null;
+  /**
+   * Who "Auto" (ID-154) moved after this fight, against the squad the fight would leave
+   * without it; null when it is off or moved nobody.
+   */
+  auto: SquadMoves | null;
 }
 
 export function squadResult(game: GameState, horde: HordeState): SquadResult {
@@ -657,7 +743,23 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
       .filter((r) => r.rest > 0),
     next,
     drop: squadDrop(game, horde),
+    auto: autoMoves(game, horde, next),
   };
+}
+
+/** Who "Auto" moved (ID-154): `next` against the same fight finished with it off. */
+function autoMoves(game: GameState, horde: HordeState, next: GameState): SquadMoves | null {
+  if (game.autoSquad !== true) return null;
+  const off = { ...game };
+  delete off.autoSquad;
+  const plain = finishSquadHorde(off, horde).roster;
+  const has = (list: readonly RosterDefender[], d: RosterDefender): boolean =>
+    list.some((x) => x.id === d.id);
+  const moves = {
+    in: next.roster.filter((d) => !has(plain, d)).map((d) => d.name),
+    out: plain.filter((d) => !has(next.roster, d)).map((d) => d.name),
+  };
+  return moves.in.length + moves.out.length > 0 ? moves : null;
 }
 
 /**

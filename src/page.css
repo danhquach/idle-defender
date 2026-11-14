@@ -3585,6 +3585,8 @@ body {
   padding: var(--space-6) var(--space-6) 0 0;
   overflow-x: auto;
   list-style: none;
+  /* A scroller's min height is 0: in a dialog taller than the screen it would squash. */
+  flex-shrink: 0;
 }
 
 .rv-cell {
@@ -3614,7 +3616,7 @@ body {
   background: var(--color-surface-hover);
 }
 
-.rv-tab[aria-pressed='true'] {
+.rv-tab[aria-current='true'] {
   border-color: var(--color-accent);
   background: var(--color-surface-active);
   box-shadow: inset 0 -2px 0 var(--color-accent);
@@ -3666,9 +3668,119 @@ body {
   display: none;
 }
 
+/* The squad's label row (ID-154): "Squad 5/6", then "Best squad" and "Auto" at the end. */
+.rv-squad-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+}
+
+.rv-squad-row[hidden] {
+  display: none;
+}
+
+.rv-squad-row .rv-tabs-label {
+  margin-right: auto;
+}
+
+.rv-best-squad {
+  min-height: 32px;
+  padding: 0 var(--space-8);
+  font-size: var(--text-xs);
+}
+
+.rv-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 40px;
+  padding-inline: var(--space-4);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+/* In a fight (ID-154): why "Best squad" and "Auto" are greyed, on its own line under them. */
+.rv-squad-wait {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+}
+
+.rv-squad-wait[hidden] {
+  display: none;
+}
+
+/* In a fight the label greys with its box, as the button beside it does. */
+.rv-auto:has(:disabled) {
+  color: var(--color-text-subtle);
+  cursor: default;
+}
+
 /* The bench can outgrow the dialog: its row scrolls sideways, each tab at a fixed width. */
 .rv-bench {
   grid-auto-columns: 96px;
+}
+
+/* With a bench (ID-154), the squad stands out from it at a glance: the squad's tabs are
+   raised with an accent top edge and its label is in the accent; the bench's are flat,
+   dashed and dimmed. Without a bench the Roster looks as it did. */
+.roster-dialog:has(.rv-bench:not([hidden])) .rv-tabs:not(.rv-bench) .rv-tab {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
+/* The one shown still stands out among the squad: a full accent ring. */
+.roster-dialog:has(.rv-bench:not([hidden])) .rv-tabs:not(.rv-bench) .rv-tab[aria-current='true'] {
+  border-color: var(--color-accent-hover);
+  background: var(--color-surface-active);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+/* On the bench too: solid and lit. */
+.rv-bench .rv-tab[aria-current='true'],
+.rv-bench .rv-tab[aria-current='true']:hover {
+  border-style: solid;
+  background: var(--color-surface-active);
+}
+
+/* A survivor down in the fight keeps their danger edge. */
+.roster-dialog:has(.rv-bench:not([hidden])) .rv-tabs:not(.rv-bench) .rv-tab.rv-tab-down {
+  border-color: var(--color-danger);
+}
+
+.rv-squad-row .rv-tabs-label {
+  color: var(--color-accent);
+}
+
+.rv-bench .rv-tab {
+  border-style: dashed;
+  background: transparent;
+}
+
+.rv-bench .rv-tab:hover {
+  background: var(--color-surface-sunken);
+}
+
+.rv-bench .rv-tab:not([aria-current='true']) .roster-avatar-img {
+  opacity: 0.6;
+}
+
+.rv-bench .rv-tab:not([aria-current='true']) .rv-tab-name {
+  color: var(--color-text-subtle);
+}
+
+/* Resting on the bench: a solid red edge, apart from the merely benched. */
+.rv-bench .rv-tab.rv-tab-down {
+  border-style: solid;
+}
+
+/* Shown and down or resting: the red edge stays, with the accent ring inside it. */
+.rv-tab.rv-tab-down[aria-current='true'] {
+  border-color: var(--color-danger);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
 /* Squad ⇄ bench, under the XP bar: small, so the row keeps its height. */
@@ -4217,7 +4329,13 @@ body {
 }
 
 .rv-status {
+  /* Pinned to the dialog's foot (ID-154): what a button at the top did stays in sight on a
+     phone, however long the panel above it. */
+  position: sticky;
+  bottom: 0;
   margin: 0;
+  padding-block: var(--space-4);
+  background: var(--color-menu-bg);
   color: var(--color-ok-text);
   font-size: var(--text-sm);
 }
@@ -4236,6 +4354,15 @@ body {
      never squeezes the gun slot to its picture (ID-149). */
   .rv-top {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+
+  /* Beside the portrait at 320 px there is no room for "Move to bench" on one line:
+     it wraps, so it never runs under the gun slot. */
+  .rv-actions .rv-squad {
+    white-space: normal;
+    line-height: 1.15;
+    padding: var(--space-2) var(--space-6);
+    text-align: left;
   }
 
   .rv-tab {

@@ -129,6 +129,10 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 21 since "Auto" best squad (ID-154): the game may hold `autoSquad`, written only while
+ * ticked. Exactly `true` turns it on; any other value loads with it off (nothing else in
+ * the save depends on it). A v20 or older save has it off.
+ *
  * 20 since asking to join (ID-150): the game may hold `joining`, the survivors a first clear
  * brought who wait for Accept or Refuse, written only when someone waits. Each is a free
  * recruit already counted, new (level 1, the pistol, not resting), at most `MAX_JOINING`,
@@ -195,7 +199,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 20;
+export const SAVE_VERSION = 21;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -352,7 +356,7 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
   if (
-    ![SAVE_VERSION, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
+    ![SAVE_VERSION, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
       o.v as number,
     )
   ) {
@@ -389,6 +393,7 @@ function readSave(v: unknown): Save {
     pick,
     stats,
     ver >= 20,
+    ver >= 21,
   );
   return {
     game,
@@ -418,6 +423,8 @@ function readGame(
   stats: StatsRead,
   /** Whether the save may hold `joining` (v20). */
   mayJoin: boolean,
+  /** Whether the save may hold `autoSquad` (v21). */
+  mayAuto: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -450,7 +457,11 @@ function readGame(
     ...(hasPick ? ['skillPick'] : []),
     // Written only while someone is asking to join (ID-150).
     ...(mayJoin && !lacks('joining') ? ['joining'] : []),
+    // Written only while ticked (ID-154).
+    ...(mayAuto && !lacks('autoSquad') ? ['autoSquad'] : []),
   ]);
+  // Exactly `true`; anything else (a string, 1, an object) loads with it off.
+  const auto = Object.hasOwn(o, 'autoSquad') && o.autoSquad === true;
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
   const research = old.lab ? [] : readResearch(o.research, lab, tiers);
@@ -570,7 +581,13 @@ function readGame(
   // The horde-only build fights with a squad of at most SQUAD_CAP, nobody resting in it
   // (ID-147); the full game takes the reserve back onto the roster.
   const loaded = loadBatteries(game);
-  const camp = { ...loaded, roster, reserve, ...(joining.length > 0 ? { joining } : {}) };
+  const camp = {
+    ...loaded,
+    roster,
+    reserve,
+    ...(joining.length > 0 ? { joining } : {}),
+    ...(auto ? { autoSquad: true as const } : {}),
+  };
   return HORDE_ONLY ? settleSquad(capSquad(camp)) : loaded;
 }
 

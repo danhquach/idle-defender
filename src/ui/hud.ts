@@ -1441,6 +1441,18 @@ export function restNote(
 }
 
 /**
+ * Who a squad pick moved (ID-154): "in Ava, Bob · out Cy"; null when nobody moved. The
+ * Roster's status line and the result screen's Auto note both say it this way.
+ */
+export function movesText(moves: { in: readonly string[]; out: readonly string[] }): string | null {
+  const parts = [
+    ...(moves.in.length > 0 ? [`in ${moves.in.join(', ')}`] : []),
+    ...(moves.out.length > 0 ? [`out ${moves.out.join(', ')}`] : []),
+  ];
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
  * In place of a win's cards when nobody levelled up in it (ID-134); it points at the Roster,
  * the only place left on this screen to equip the gun the win dropped.
  */
@@ -1541,7 +1553,10 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, joined, rests, next, drop } = squadResult(game, s);
+  const { gains, joined, rests, next, drop, auto } = squadResult(game, s);
+  // "Auto" (ID-154): who it moved once the fight was over, so a pick never changes unseen.
+  const moved = auto ? movesText(auto) : null;
+  const autoNote = moved ? `Auto squad: ${moved}.` : null;
   const won = s.outcome === 'won';
   const replay = isReplay(game, s.hordeNumber);
   const first = won && !replay;
@@ -1578,7 +1593,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     const room = SQUAD_CAP - next.roster.length - joined.length;
     const benchFit = room > 0 && next.reserve.some(isFit);
     const rested = restNote(rests, benchFit);
-    const note = [rewardNote, rested].filter((t) => t !== null).join(' ') || null;
+    const note = [rewardNote, rested, autoNote].filter((t) => t !== null).join(' ') || null;
     const size = game.roster.length + game.reserve.length;
     return {
       title: ending
@@ -1597,6 +1612,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         ...(drop ? squadDropLines(game, drop) : []),
         ...(rewardNote ? [rewardNote] : []),
         ...(rested ? [rested] : []),
+        ...(autoNote ? [autoNote] : []),
       ],
       button: ending ? 'Continue' : goOn,
       squad: true,
@@ -1649,6 +1665,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       ...(xp > 0 ? gains.map(squadXpLine) : []),
       SQUAD_NO_DROP,
       again,
+      ...(autoNote ? [autoNote] : []),
     ],
     button: goOn,
     squad: true,
@@ -1666,7 +1683,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         // One line per boss (pre-line in page.css).
         sub: bossLost.length > 0 ? bossLost.join('\n') : null,
       },
-      note: again,
+      note: autoNote ? `${again}. ${autoNote}` : again,
       drop: null,
       recruit: null,
       cards: xp > 0 ? xpCards() : squadOf(game).map((d) => plainCard(d)),

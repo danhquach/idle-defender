@@ -41,6 +41,8 @@ function open(game: GameState, id: string) {
     onToggleSquad: () => ({ ok: true }),
     onLetGo: () => null,
     onBestGuns: () => ({ ok: true, moves: [] }),
+    onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
+    onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
   });
   roster.open(id);
   return document.querySelector<HTMLElement>('.roster-scrim')!;

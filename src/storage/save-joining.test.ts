@@ -43,8 +43,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}, v = SAVE
 }
 
 describe('save: asking to join (ID-150)', () => {
-  it('is version 20', () => {
-    expect(SAVE_VERSION).toBe(20);
+  it('is version 21 (20 was ID-150’s)', () => {
+    expect(SAVE_VERSION).toBe(21);
   });
 
   it('a reload mid-offer keeps the ask, and it can still be answered', () => {

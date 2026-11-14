@@ -4,7 +4,8 @@
 // is either their details (ID-146, ID-149: what the level and the profession give, and every
 // stat split into the two) or "Choose a gun". A gun is compared with the one
 // held before it is equipped. The bench (ID-147) has its own row of tabs under the squad's:
-// between hordes a survivor moves between the two, unless they are resting. Like the
+// between hordes a survivor moves between the two, unless they are resting; "Best squad"
+// and "Auto" (ID-154) on the squad's label row pick the strongest fit six. Like the
 // Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
 // the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
@@ -18,11 +19,12 @@ import {
   squadOf,
   squadSpec,
   type GunMove,
+  type SquadMoves,
 } from '../core/hordeonly.ts';
 import type { HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
-import { el } from './hud.ts';
+import { el, movesText } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
 import { levelText } from './statlines.ts';
@@ -112,7 +114,9 @@ export interface RosterOptions {
    * closing resumes a fight (Close label).
    */
   state: () => {
-    game: Pick<GameState, 'roster' | 'armoury'> & { reserve?: readonly RosterDefender[] };
+    game: Pick<GameState, 'roster' | 'armoury' | 'autoSquad'> & {
+      reserve?: readonly RosterDefender[];
+    };
     fight: HordeState | null;
     canGear: boolean;
     resumes: boolean;
@@ -128,6 +132,10 @@ export interface RosterOptions {
   onLetGo: (id: string) => { ok: true; text: string } | { ok: false; reason: string } | null;
   /** "Best gun for everyone": the guns handed out, or why not. */
   onBestGuns: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
+  /** "Best squad" (ID-154): who moved, or why not. */
+  onBestSquad: () => { ok: true; moves: SquadMoves } | { ok: false; reason: string };
+  /** "Auto" ticked or unticked (ID-154): who the tick moved, or why not. */
+  onAutoSquad: (on: boolean) => { ok: true; moves: SquadMoves } | { ok: false; reason: string };
 }
 
 export interface Roster {
@@ -190,6 +198,21 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   tabs.setAttribute('aria-label', 'Squad');
   // The bench (ID-147): its own row under the squad's, with a label over each row.
   const squadLabel = el('p', 'rv-tabs-label');
+  // "Best squad" and "Auto" (ID-154) on the squad label's row, shown with a bench only.
+  const bestSquadButton = el('button', 'hud-button rv-btn rv-best-squad', 'Best squad');
+  bestSquadButton.type = 'button';
+  bestSquadButton.dataset.key = 'best-squad';
+  const autoBox = el('input', 'menu-check-box');
+  autoBox.type = 'checkbox';
+  autoBox.id = 'rv-auto-squad';
+  autoBox.dataset.key = 'auto-squad';
+  const autoLabel = el('label', 'rv-auto');
+  autoLabel.htmlFor = autoBox.id;
+  autoLabel.append(autoBox, el('span', '', 'Auto'));
+  // In a fight, why both are greyed, in words (a tooltip never shows on a phone).
+  const squadWait = el('p', 'rv-squad-wait', SQUAD_WAIT);
+  const squadRow = el('div', 'rv-squad-row');
+  squadRow.append(squadLabel, bestSquadButton, autoLabel, squadWait);
   const benchLabel = el('p', 'rv-tabs-label');
   const benchTabs = el('ul', 'rv-tabs rv-bench');
   benchTabs.setAttribute('aria-label', 'Bench');
@@ -197,7 +220,26 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   const panel = el('div', 'rv-panel');
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
-  dialog.append(grab, head, squadLabel, tabs, benchLabel, benchTabs, top, panel, statusLine);
+  dialog.append(grab, head, squadRow, tabs, benchLabel, benchTabs, top, panel, statusLine);
+
+  /** What "Best squad" or a tick of "Auto" did, on the status line. */
+  bestSquadButton.addEventListener('click', () => {
+    const r = opts.onBestSquad();
+    const moved = r.ok ? movesText(r.moves) : null;
+    if (!r.ok) setStatus(r.reason, 'danger');
+    else setStatus(moved ? `Squad: ${moved}` : 'The squad is already the strongest it can be.');
+    draw('best-squad');
+  });
+  autoBox.addEventListener('change', () => {
+    const on = autoBox.checked;
+    const r = opts.onAutoSquad(on);
+    const moved = r.ok ? movesText(r.moves) : null;
+    if (!r.ok) setStatus(r.reason, 'danger');
+    else if (!on) setStatus('Auto off: the squad stays as you pick it.');
+    // Says when it runs: a tooltip never shows on a phone.
+    else setStatus(`${AUTO_ON}${moved ? ` Squad: ${moved}` : ''}`);
+    draw('auto-squad');
+  });
 
   bestButton.addEventListener('click', () => {
     const r = opts.onBestGuns();
@@ -229,8 +271,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       return;
     }
     if (e.key !== 'Tab') return;
-    const list = [...dialog.querySelectorAll<HTMLElement>('button')].filter(
-      (b) => !(b as HTMLButtonElement).disabled && !b.hidden,
+    const list = [...dialog.querySelectorAll<HTMLElement>('button, input')].filter(
+      (b) => !(b as HTMLButtonElement).disabled && !b.closest('[hidden]'),
     );
     const i = list.indexOf(doc.activeElement as HTMLElement);
     if (e.shiftKey && i <= 0) {
@@ -276,7 +318,16 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     tabs.setAttribute('aria-label', squadText);
     tabs.replaceChildren(...marks.filter((t) => !t.bench).map((t) => tabItem(t, t.id === current)));
     // With nobody on the bench the rows need no labels: the Roster looks as it did.
-    squadLabel.hidden = benchLabel.hidden = benchTabs.hidden = benched.length === 0;
+    squadRow.hidden = benchLabel.hidden = benchTabs.hidden = benched.length === 0;
+    bestSquadButton.disabled = autoBox.disabled = !canGear;
+    squadWait.hidden = canGear;
+    bestSquadButton.title = canGear ? '' : SQUAD_WAIT;
+    autoLabel.title = canGear ? AUTO_HINT : SQUAD_WAIT;
+    // A screen reader hears why they are greyed (a tooltip never shows on a phone).
+    const wait = canGear ? '' : `. ${SQUAD_WAIT}`;
+    bestSquadButton.setAttribute('aria-label', `Best squad${wait}`);
+    autoBox.setAttribute('aria-label', `Auto best squad${wait}`);
+    autoBox.checked = game.autoSquad === true;
     squadLabel.textContent = squadText;
     benchLabel.textContent = `Bench ${benched.length}`;
     benchTabs.replaceChildren(...benched.map((t) => tabItem(t, t.id === current)));
@@ -305,7 +356,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     if (key === undefined) return;
     const find = (k: string): HTMLButtonElement | undefined =>
       [...dialog.querySelectorAll<HTMLButtonElement>('[data-key]')].find(
-        (b) => b.dataset.key === k && !b.disabled && !b.hidden,
+        (b) => b.dataset.key === k && !b.disabled && !b.closest('[hidden]'),
       );
     const target = find(key) ?? find(`tab:${current}`) ?? find('close');
     target?.focus();
@@ -712,6 +763,12 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
 
   return api;
 }
+
+/** What "Auto" does (ID-154), on its tooltip. */
+const AUTO_HINT = 'Keep the best squad after each horde, a joiner, a let-go and Best gun';
+/** What a tick of "Auto" says (ID-154). */
+export const AUTO_ON =
+  'Auto on: the best squad is picked again after each horde, joiner, let-go and Best gun.';
 
 /** Why the squad can't change now (ID-147): it is picked between hordes. */
 export const SQUAD_WAIT = 'Pick the squad between hordes';
