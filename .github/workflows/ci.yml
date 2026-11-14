@@ -29,8 +29,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ID-153: the late hordes play 16 campaigns, 4 before (this whole job took 2.5 minutes
+          # on main with the cache, about 5 without); each campaign is about 20 s, so about 10
+          # minutes uncached now. The job has 25 for headroom.
           - name: Unit (late hordes, guns)
             tests: src/core/balance/late-hordes.test.ts src/core/balance/guns.test.ts
+            timeout: 25
           - name: Unit (horde-only, Squad Power)
             tests: src/core/balance/horde-only.test.ts src/core/balance/squad-power.test.ts
           # ID-149: the professions test plays 60 seeds and the Barbed Wire check 6
