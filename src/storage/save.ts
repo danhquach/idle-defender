@@ -129,6 +129,11 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 20 since asking to join (ID-150): the game may hold `joining`, the survivors a first clear
+ * brought who wait for Accept or Refuse, written only when someone waits. Each is a free
+ * recruit already counted, new (level 1, the pistol, not resting), at most `MAX_JOINING`,
+ * and the camp with them stays within `SQUAD_JOIN.max`. A v19 or older save has none.
+ *
  * 19 since the bench and rest (ID-147): the camp grows past the squad's cap, up to
  * `SQUAD_JOIN.max` survivors (squad and bench); the squad is the roster (at most
  * `SQUAD_CAP`), the bench the reserve. A survivor may hold `rest`, the hordes left to rest:
@@ -190,7 +195,9 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 19;
+export const SAVE_VERSION = 20;
+/** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
+const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
 interface Grid {
   rows: number;
@@ -345,7 +352,7 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
   if (
-    ![SAVE_VERSION, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
+    ![SAVE_VERSION, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
       o.v as number,
     )
   ) {
@@ -381,6 +388,7 @@ function readSave(v: unknown): Save {
     farm,
     pick,
     stats,
+    ver >= 20,
   );
   return {
     game,
@@ -408,6 +416,8 @@ function readGame(
   /** Whether the save has the horde-only skill pick (v16). */
   hasPick: boolean,
   stats: StatsRead,
+  /** Whether the save may hold `joining` (v20). */
+  mayJoin: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -438,6 +448,8 @@ function readGame(
     ...(hasReserve ? ['reserve'] : []),
     ...(hasFarm ? ['farm'] : []),
     ...(hasPick ? ['skillPick'] : []),
+    // Written only while someone is asking to join (ID-150).
+    ...(mayJoin && !lacks('joining') ? ['joining'] : []),
   ]);
   const tiers = readTiers(o.tiers);
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
@@ -452,9 +464,13 @@ function readGame(
   const reserve = hasReserve
     ? readRoster(o.reserve, savedAt, hordeNumber, patrolsSent, 0, stats)
     : [];
+  // Only a v20 save gets this far with the key (the allow-list above refuses it before).
+  const joining = Object.hasOwn(o, 'joining') ? readJoining(o.joining, savedAt, stats) : [];
   // The checks below treat the reserve as the roster it came from: one camp of people.
   const everyone = [...roster, ...reserve];
   if (new Set(everyone.map((d) => d.id)).size !== everyone.length) fail('id twice');
+  if (joining.some((j) => everyone.some((d) => d.id === j.id))) fail('joiner already in the camp');
+  if (everyone.length + joining.length > SQUAD_JOIN.max) fail('camp past its cap with joiners');
   const cars = hasCamp === 'cars';
   const survivors = hasCamp === 'survivors' || cars;
   const risk = patrols === 'risk' || patrols === 'plazas';
@@ -499,7 +515,7 @@ function readGame(
   const room = Math.max(campSlots(game), SQUAD_JOIN.max);
   if (game.roster.length > room) fail('more people than camp slots');
   // A free recruit's number comes from the camp's count, so the next one is always new.
-  for (const d of game.roster) {
+  for (const d of [...game.roster, ...joining]) {
     const n = RECRUIT.exec(d.id)?.[1];
     if (n !== undefined && Number(n) > game.camp.recruits) fail('recruit not counted');
   }
@@ -554,7 +570,26 @@ function readGame(
   // The horde-only build fights with a squad of at most SQUAD_CAP, nobody resting in it
   // (ID-147); the full game takes the reserve back onto the roster.
   const loaded = loadBatteries(game);
-  return HORDE_ONLY ? settleSquad(capSquad({ ...loaded, roster, reserve })) : loaded;
+  const camp = { ...loaded, roster, reserve, ...(joining.length > 0 ? { joining } : {}) };
+  return HORDE_ONLY ? settleSquad(capSquad(camp)) : loaded;
+}
+
+/**
+ * Who is asking to join (ID-150): 1 to `MAX_JOINING` free recruits (written only while
+ * someone waits), each new as a first clear brings them: level 1, the free pistol and
+ * nothing else, not resting.
+ */
+function readJoining(v: unknown, savedAt: number, stats: StatsRead): RosterDefender[] {
+  arr(v, 1, MAX_JOINING);
+  const list = readRoster(v, savedAt, 1, 0, 1, stats);
+  for (const d of list) {
+    const { primary, secondary, item } = d.loadout;
+    const fresh = d.xp === 0 && primary === 'pistol' && secondary === null && item === null;
+    if (!RECRUIT.test(d.id) || !fresh || d.rest !== undefined || d.injuredUntil !== null) {
+      fail('bad joiner');
+    }
+  }
+  return list;
 }
 
 /**

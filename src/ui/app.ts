@@ -14,10 +14,15 @@ import {
   type HordeState,
 } from '../core/horde.ts';
 import {
+  answerJoin,
   bestGuns,
+  campOf,
   combineGuns,
   equipGun,
   finishSquadHorde,
+  joiningOf,
+  letGo,
+  refuseJoins,
   startSquadHorde,
   toggleSkill,
   toggleSquad,
@@ -50,6 +55,7 @@ import {
   type Speed,
 } from '../storage/settings.ts';
 import { Animator } from './anim.ts';
+import { answerText, joinCards, leaveJoinQuestion, letGoQuestion, letGoText } from './joining.ts';
 import { dyingLeft } from './death.ts';
 import { SoundEngine, STING } from './audio.ts';
 import { createBuildPanel, FIELD_GREW, LEVELS_REWORKED } from './build.ts';
@@ -297,12 +303,35 @@ export function start(root: HTMLElement, art: Art): void {
     // The Inventory's Squad Power line compares with the horde picked.
     inventory.refresh();
   });
+  // Leaving with someone still asking to join refuses them (ID-150): asked first.
+  hud.onLeave(() => {
+    const ask = leaveJoinQuestion(game);
+    return ask === null || window.confirm(ask);
+  });
+  // An Accept or Refuse on the offer tile (ID-150), between hordes only: saved at once.
+  hud.onJoin((id, accept) => {
+    if (horde && !resultUp()) return;
+    const name = joiningOf(game).find((d) => d.id === id)?.name ?? '';
+    const r = answerJoin(game, id, accept);
+    if (!r.ok) {
+      hud.toast(r.reason);
+      return;
+    }
+    commit(r.game);
+    hud.toast(answerText(name, r.where));
+    redrawSquad();
+    // A start screen redrawn under the keyboard: it goes back to the tile, else the button.
+    hud.showJoin(joinCards(game), true);
+  });
   /**
    * The horde-only result or start screen's button (ID-066): the horde itself was taken in
    * when it ended, so the next horde starts at once, or the same one again after a loss.
    */
   function squadNext(): void {
     if (horde && endedAt === null) return;
+    // Going on without answering refused whoever was still asking to join (ID-150): the
+    // HUD asked first (`onLeave`).
+    if (joiningOf(game).length > 0) commit(refuseJoins(game));
     // The seed is the only randomness from outside the core.
     const now = Date.now();
     // Whatever is picked starts: one that isn't open (a stale pick) falls back to the new horde.
@@ -326,6 +355,8 @@ export function start(root: HTMLElement, art: Art): void {
     });
     // A new gun moves Squad Power, so the picker's bands follow.
     showPicker();
+    // Whoever is still asking to join (ID-150), on the result or start screen.
+    hud.showJoin(joinCards(game));
   }
   /**
    * Gives survivor `defenderId` gun `choice` between hordes (the gun pickers, and the
@@ -353,13 +384,37 @@ export function start(root: HTMLElement, art: Art): void {
     const r = toggleSquad(game, id);
     if (!r.ok) return r;
     commit(r.game);
+    redrawSquad();
+    return { ok: true };
+  }
+  /**
+   * After the camp changed between hordes (the squad picked, someone joined or left): the
+   * start screen and its squad on the wall, and the gun pickers, redrawn.
+   */
+  function redrawSquad(): void {
     if (!horde) {
       preview = startSquadHorde(game, 0, Date.now());
       hud.update(preview);
       hud.showResult(squadStart(game, picked));
     }
     showGear();
-    return { ok: true };
+  }
+  /**
+   * Lets survivor `id` go between hordes (the Roster, ID-150), on a yes to the confirm:
+   * saved at once, and the screens redrawn. Null when the player said no.
+   */
+  function letSurvivorGo(
+    id: string,
+  ): { ok: true; text: string } | { ok: false; reason: string } | null {
+    if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+    const r = letGo(game, id);
+    if (!r.ok) return r;
+    // `letGo` found them, so they are in the camp.
+    const d = campOf(game).find((x) => x.id === id)!;
+    if (!window.confirm(letGoQuestion(d, r.thrown))) return null;
+    commit(r.game);
+    redrawSquad();
+    return { ok: true, text: letGoText(d.name) };
   }
   /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
   function startFight(next: HordeState): void {
@@ -500,6 +555,7 @@ export function start(root: HTMLElement, art: Art): void {
         }),
         onEquip: changeGun,
         onToggleSquad: changeSquad,
+        onLetGo: letSurvivorGo,
         onBestGuns: () => {
           if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
           const r = bestGuns(game);

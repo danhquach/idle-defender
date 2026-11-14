@@ -12,12 +12,12 @@ import {
   WEAPONS,
   type Rarity,
   type WeaponId,
-  JOBS,
 } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { survivorDps, xpForLevel } from '../core/stats.ts';
 import {
   equipGun,
+  finishSquadHorde,
   squadDrop,
   squadSpec,
   startSquadHorde,
@@ -38,6 +38,7 @@ import {
   SQUAD_NO_DROP,
   squadStart,
 } from './hud.ts';
+import { joinCards } from './joining.ts';
 import { ART_URLS, GUN_ICON, type GunId } from './sprites.ts';
 import { levelText } from './statlines.ts';
 
@@ -294,13 +295,9 @@ describe('the debrief layout (ID-067)', () => {
     expect(d.chips[0]).toEqual({ text: `${won.waveCount}/${won.waveCount} waves`, tone: 'ok' });
     expect(d.drop).toEqual(dropTile(g, dropOf(weapon)));
     expect(d.drop!.stash).toBe(`Stash 1/${STASH_CAP}`);
-    // Their profession rolls with the horde's seed, 1 (ID-149).
-    expect(d.recruit).toEqual({
-      label: 'New survivor',
-      name: recruit(3).name,
-      sub: `${JOBS[recruit(3, 1).job].name} · joins next horde`,
-      full: false,
-    });
+    // The newcomer asks to join in the offer tile (ID-150), not the recruit tile.
+    expect(d.recruit).toBeNull();
+    expect(d.join).toBe(true);
     const full = squadGame(SQUAD_CAP, 3);
     expect(squadScreen(full, ended(full, 'won')).debrief!.recruit!.full).toBe(true);
     // Both fresh survivors level up; the new one is on the recruit tile, not a card (ID-134).
@@ -521,7 +518,15 @@ describe('the debrief layout (ID-067)', () => {
     );
     const tile = root.querySelector<HTMLElement>('.tile-drop')!;
     expect(tile.dataset.rarity).toBe(squadDrop(g, won)!.weapon.rarity);
-    expect(root.querySelector('.tile-recruit .tile-name')!.textContent).toBe(recruit(2).name);
+    // The offer tile (ID-150) sits beside the drop once the app fills it.
+    h.showJoin(joinCards(finishSquadHorde(g, won)));
+    const join = root.querySelector<HTMLElement>('.debrief-spoils > .tile-join')!;
+    expect(join.hidden).toBe(false);
+    expect(join.querySelector('.tile-name')!.textContent).toBe(recruit(2).name);
+    expect([...join.querySelectorAll('.join-btn')].map((b) => b.textContent)).toEqual([
+      'Accept',
+      'Refuse',
+    ]);
     const fill = root.querySelector<HTMLElement>('.squad-card .xp-fill')!;
     expect(fill.style.width).toMatch(/%$/);
     expect(fill.parentElement!.getAttribute('aria-hidden')).toBe('true');

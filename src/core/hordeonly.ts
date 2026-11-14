@@ -350,6 +350,93 @@ export function joiners(
   );
 }
 
+/** Who is asking to join (ID-150), oldest first; none when nobody is. */
+export const joiningOf = (game: Pick<GameState, 'joining'>): RosterDefender[] => game.joining ?? [];
+
+/** `game` with `list` asking to join; no field with nobody (as a save writes it). */
+function withJoining(game: GameState, list: RosterDefender[]): GameState {
+  const g = { ...game };
+  delete g.joining;
+  return list.length > 0 ? { ...g, joining: list } : g;
+}
+
+/**
+ * Answers survivor `id`'s ask to join (ID-150, between hordes): Accept puts them on the
+ * squad's end while it has room, else on the bench; Refuse sends them away for good (their
+ * recruit number is spent). Returns where they went (null for Refuse), or why not.
+ */
+export function answerJoin(
+  game: GameState,
+  id: string,
+  accept: boolean,
+): { ok: true; game: GameState; where: 'squad' | 'bench' | null } | { ok: false; reason: string } {
+  const all = joiningOf(game);
+  const d = all.find((x) => x.id === id);
+  if (!d) return { ok: false, reason: 'Nobody by that name is asking to join' };
+  const g = withJoining(
+    game,
+    all.filter((x) => x !== d),
+  );
+  if (!accept) return { ok: true, game: g, where: null };
+  if (g.roster.length < SQUAD_CAP) {
+    return { ok: true, game: { ...g, roster: [...g.roster, d] }, where: 'squad' };
+  }
+  return { ok: true, game: { ...g, reserve: [...g.reserve, d] }, where: 'bench' };
+}
+
+/** Everyone asking to join turned away (ID-150): leaving the screen without answering. */
+export const refuseJoins = (game: GameState): GameState =>
+  joiningOf(game).length > 0 ? withJoining(game, []) : game;
+
+/** Everyone asking to join taken in, oldest first (ID-150): the scripted player's answer. */
+export function acceptJoins(game: GameState): GameState {
+  let g = game;
+  for (const d of joiningOf(game)) {
+    const r = answerJoin(g, d.id, true);
+    if (r.ok) g = r.game;
+  }
+  return g;
+}
+
+/**
+ * Why nobody can be let go (ID-150), or null when they can: the camp must keep more than
+ * `SQUAD_CAP`, so the squad can always be filled.
+ */
+export function letGoLock(game: {
+  roster: readonly RosterDefender[];
+  reserve: readonly RosterDefender[];
+}): string | null {
+  const n = game.roster.length + game.reserve.length;
+  return n > SQUAD_CAP ? null : `Needs ${SQUAD_CAP + 1}+ survivors to let one go (camp ${n})`;
+}
+
+/**
+ * Lets survivor `id` go for good (ID-150, between hordes, from the squad or the bench):
+ * their gun goes back to the stash (`stashWith`: the weakest thrown away when full; the
+ * free pistol just goes), then `settleSquad`. Refused while `letGoLock` says so. Returns
+ * what the stash threw away for room.
+ */
+export function letGo(
+  game: GameState,
+  id: string,
+): { ok: true; game: GameState; thrown: OwnedWeapon[] } | { ok: false; reason: string } {
+  const d = campOf(game).find((x) => x.id === id);
+  if (!d) return { ok: false, reason: 'No such survivor' };
+  const lock = letGoLock(game);
+  if (lock) return { ok: false, reason: lock };
+  const guns = [d.loadout.primary, d.loadout.secondary].filter(
+    (h): h is OwnedWeapon => h !== null && isOwned(h),
+  );
+  const { armoury, thrown } = stashWith(game.armoury, guns);
+  const out = settleSquad({
+    ...game,
+    armoury,
+    roster: game.roster.filter((x) => x !== d),
+    reserve: game.reserve.filter((x) => x !== d),
+  });
+  return { ok: true, game: out, thrown };
+}
+
 /** The stream a horde's rest rolls come from (ID-147). */
 const REST_STREAM = 0x165667b1;
 
@@ -462,10 +549,11 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
  * Back from horde `horde` (ID-066, ID-098): every survivor who fought gets its XP
  * (`squadXpGains`, a loss's too). Rest counts down one for everyone resting, won or lost,
  * and on a win whoever ended the fight hurt rests (`squadRests`) on the bench (ID-147). A win puts
- * its drop in the stash (the weakest thrown away when full). A first clear also adds its
- * joiners (`joiners`: to the squad while it has room, else the bench) and moves on to the
- * next horde; a replay counts toward the bad-luck guarantee. Every fight's wall starts
- * full. Then `settleSquad`. No base damage, payout or camp XP.
+ * its drop in the stash (the weakest thrown away when full). A first clear also has its
+ * joiners (`joiners`) ask to join (`joining`, ID-150: the player accepts or refuses each,
+ * `answerJoin`; any left unanswered from before are turned away) and moves on to the next
+ * horde; a replay counts toward the bad-luck guarantee. Every fight's wall starts full.
+ * Then `settleSquad`. No base damage, payout or camp XP.
  */
 export function finishSquadHorde(game: GameState, horde: HordeState): GameState {
   checkFinished('finishSquadHorde', game, horde);
@@ -490,15 +578,12 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   if (!drop) return settleSquad(g);
   g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus]).armoury;
   if (drop.kind === 'first') {
-    // Joiners take the slots the resting leave, then wait on the bench.
-    const out = benchResting(g);
-    for (const joined of joiners(game, horde.seed)) {
-      if (out.roster.length < SQUAD_CAP) out.roster = [...out.roster, joined];
-      else out.reserve = [...out.reserve, joined];
-      out.camp.recruits += 1;
-    }
-    out.hordeNumber += 1;
-    return settleSquad(out);
+    // Counted now, so a refused survivor's number is never offered again. Anyone still
+    // asking from before was never answered: that counts as Refuse (ID-150).
+    const joined = joiners(game, horde.seed);
+    g.camp.recruits += joined.length;
+    g.hordeNumber += 1;
+    return settleSquad(withJoining(g, joined));
   }
   g.farm = {
     replays: game.farm.replays + 1,
@@ -515,7 +600,10 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
 export interface SquadResult {
   /** Each survivor's XP and levels; a loss's small share too (ID-098). */
   gains: LevelGain[];
-  /** The survivors joining the camp (ID-147): none on a loss or a replay, often none past 6. */
+  /**
+   * The survivors asking to join (ID-147, ID-150): none on a loss or a replay, often none
+   * past 6.
+   */
   joined: RosterDefender[];
   /**
    * Who rests after this fight and for how many hordes (ID-147), in roster order, as

@@ -6,7 +6,13 @@ import { roleOf, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { ARMOURY_CAP, SQUAD_JOIN, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { combineGuns, equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
+import {
+  acceptJoins,
+  combineGuns,
+  equipGun,
+  finishSquadHorde,
+  startSquadHorde,
+} from '../core/hordeonly.ts';
 import { decodeSave, encodeSave, MAX_OWNED, MAX_SAVE_CHARS } from './save.ts';
 import { NOW } from './testing.ts';
 
@@ -30,7 +36,7 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 function armed(wins: number): GameState {
   let g = newGame('horde');
   for (let i = 0; i < wins; i++) {
-    g = finishSquadHorde(g, { ...startSquadHorde(g, 100 + i, NOW), outcome: 'won' });
+    g = acceptJoins(finishSquadHorde(g, { ...startSquadHorde(g, 100 + i, NOW), outcome: 'won' }));
     // In hand at once, so a full stash never throws it away.
     if (i === 0) {
       const r = equipGun(g, 'recruit-1', 'h1');
@@ -61,7 +67,9 @@ describe('save: the stash and equipped guns (ID-067)', () => {
     expect(next.armoury).toHaveLength(STASH_CAP - 5);
     // Five more wins fill it back up.
     for (let i = 0; i < 5; i++) {
-      next = finishSquadHorde(next, { ...startSquadHorde(next, 900 + i, NOW), outcome: 'won' });
+      next = acceptJoins(
+        finishSquadHorde(next, { ...startSquadHorde(next, 900 + i, NOW), outcome: 'won' }),
+      );
     }
     expect(next.armoury).toHaveLength(STASH_CAP);
     expect(next.roster.every((d) => typeof d.loadout.primary === 'object')).toBe(true);

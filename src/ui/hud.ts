@@ -110,6 +110,7 @@ import {
   isEndless,
   isFit,
   isReplay,
+  joiningOf,
   radioParts,
   restLabel,
   squadOf,
@@ -128,6 +129,7 @@ import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '..
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
+import { askLine, joinLabel, REFUSE_NOTE, type JoinCard } from './joining.ts';
 import { levelText } from './statlines.ts';
 import {
   ART_URLS,
@@ -1248,6 +1250,11 @@ export interface Debrief {
    * under it (`benchLine`); absent elsewhere.
    */
   roster?: { label: string; line: string | null };
+  /**
+   * Someone is asking to join (ID-150): the panel keeps a place for the offer tile beside the
+   * drop, filled by `showJoin`; absent with nobody asking.
+   */
+  join?: true;
 }
 
 /** Survivor `id`'s profession name on `game`'s roster (ID-149), '' for none there. */
@@ -1434,6 +1441,8 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
   const now = picker.options.find((o) => o.horde === picker.value)!;
   const goal = goalChip(game);
   const bench = benchLine(game);
+  // Still asking after a reload on the result screen (ID-150): the offer waits here.
+  const asking = joiningOf(game);
   return {
     title: now.start.title,
     lines: [
@@ -1441,6 +1450,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
         .map((d) => `${d.name} (level ${levelOf(d.xp).level})`)
         .join(', ')}`,
       ...(bench ? [bench] : []),
+      ...asking.map(askLine),
       `${waveCount(now.horde)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
       goal.note,
     ],
@@ -1460,6 +1470,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       empty: null,
       foot: SQUAD_LOSS_RULE,
       roster: { label: CHANGE_SQUAD, line: bench },
+      ...(asking.length > 0 ? { join: true as const } : {}),
     },
   };
 }
@@ -1527,13 +1538,10 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     const reward = bossReward(game, s.hordeNumber);
     const ending = reward?.finale === true;
     const rewardNote = reward ? bossRewardNote(reward) : null;
-    // Read off the camp as the win leaves it, so the screen says what really happens.
-    const inSquad = (id: string): boolean => next.roster.some((d) => d.id === id);
-    const joinText = (d: RosterDefender): string =>
-      inSquad(d.id) ? 'joins the squad for the next horde' : 'waits on the bench for now';
-    const squadJoins = joined.filter((d) => inSquad(d.id)).length;
-    // Slots still open, with someone fit on the bench to fill them.
-    const benchFit = next.roster.length < SQUAD_CAP && next.reserve.some(isFit);
+    // Slots still open once any newcomer has taken one (ID-150), with someone fit on the
+    // bench to fill them.
+    const room = SQUAD_CAP - next.roster.length - joined.length;
+    const benchFit = room > 0 && next.reserve.some(isFit);
     const rested = restNote(rests, benchFit);
     const note = [rewardNote, rested].filter((t) => t !== null).join(' ') || null;
     const size = game.roster.length + game.reserve.length;
@@ -1549,7 +1557,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         ...(replay
           ? []
           : joined.length > 0
-            ? joined.map((d) => `New survivor: ${d.name} (${JOBS[d.job].name}) ${joinText(d)}`)
+            ? joined.map(askLine)
             : [`Nobody new joins the camp this time (${size} survivors)`]),
         ...(drop ? squadDropLines(game, drop) : []),
         ...(rewardNote ? [rewardNote] : []),
@@ -1574,27 +1582,11 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         callout: null,
         note,
         drop: drop ? dropTile(game, drop) : null,
-        // A replay brings nobody: only a first clear's tile says who joins.
-        recruit: replay
-          ? null
-          : joined.length > 0
-            ? {
-                label: joined.length > 1 ? 'New survivors' : 'New survivor',
-                name: joined.map((d) => d.name).join(' and '),
-                // Split between squad and bench: say who went where.
-                sub:
-                  squadJoins > 0 && squadJoins < joined.length
-                    ? joined
-                        .map(
-                          (d) =>
-                            `${d.name} ${inSquad(d.id) ? 'joins next horde' : 'waits on the bench'}`,
-                        )
-                        .join(' · ')
-                    : `${joined.map((d) => JOBS[d.job].name).join(', ')} · ${
-                        squadJoins > 0 ? 'joins next horde' : 'waits on the bench'
-                      }`,
-                full: false,
-              }
+        // A replay brings nobody; a first clear's newcomers ask to join in the offer tile
+        // (ID-150, `showJoin`), else this tile says nobody came.
+        recruit:
+          replay || joined.length > 0
+            ? null
             : {
                 label: 'Camp',
                 name: `${size} survivors`,
@@ -1604,6 +1596,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         cards: ups,
         empty: ups.length > 0 ? null : SQUAD_NO_LEVEL_UPS,
         foot: '',
+        ...(!replay && joined.length > 0 ? { join: true as const } : {}),
       },
     };
   }
@@ -1681,6 +1674,15 @@ export function createHud(
   onSkillPick(handler: (skill: SkillId) => void): void;
   /** The skill pick redrawn (ID-100) once the app has saved a toggle. */
   showSkills(pick: SkillPick): void;
+  /** Where an Accept or Refuse on the offer tile goes (ID-150); the app sets it once. */
+  onJoin(handler: (id: string, accept: boolean) => void): void;
+  /**
+   * Asked as the result or start screen's button is pressed (ID-150): false keeps the panel
+   * up and nothing happens; the app sets it once.
+   */
+  onLeave(check: () => boolean): void;
+  /** The offer tile redrawn (ID-150): who is still asking to join; none hides it. */
+  showJoin(cards: readonly JoinCard[], keep?: boolean): void;
   /** Where the Airstrike's Auto toggle goes (ID-140); the app sets it once. */
   onAutoStrike(handler: () => void): void;
   /** The Auto toggle shown on or off (ID-140). */
@@ -1814,14 +1816,57 @@ export function createHud(
   const picker = el('div', 'hud-picker');
   const campPicker = el('div', 'hud-picker');
   const gear = el('div', 'hud-picker hud-gear');
+  // Who is asking to join (ID-150): one row each with Accept and Refuse; hidden once answered.
+  const joinBox = el('section', 'tile tile-recruit tile-join');
+  joinBox.setAttribute('aria-label', 'Asking to join');
+  joinBox.hidden = true;
+  let onAnswerJoin: (id: string, accept: boolean) => void = () => {};
+  /** Fills the offer tile with `cards`; hides it with nobody left asking. */
+  function drawJoin(cards: readonly JoinCard[], keep = false): void {
+    const had = keep || joinBox.contains(document.activeElement);
+    joinBox.hidden = cards.length === 0;
+    const rows = cards.map((c) => {
+      const row = el('div', 'join-row');
+      row.dataset.joiner = c.id;
+      const answer = (accept: boolean): HTMLButtonElement => {
+        const b = el('button', 'hud-button join-btn', accept ? 'Accept' : 'Refuse');
+        b.type = 'button';
+        setVariant(b, accept ? 'primary' : 'secondary');
+        b.setAttribute('aria-label', `${accept ? 'Accept' : 'Refuse'} ${c.name}`);
+        b.addEventListener('click', () => {
+          if (!result.hidden) onAnswerJoin(c.id, accept);
+        });
+        return b;
+      };
+      const buttons = el('div', 'join-buttons');
+      buttons.append(answer(true), answer(false));
+      row.append(
+        el('p', 'tile-name', c.name),
+        el('p', 'tile-sub', c.sub),
+        el('p', 'tile-sub join-job', c.job),
+        buttons,
+      );
+      return row;
+    });
+    joinBox.replaceChildren(
+      el('p', 'tile-label', joinLabel(cards.length)),
+      el('p', 'tile-sub join-note', REFUSE_NOTE),
+      ...rows,
+    );
+    // An answer keeps the keyboard in the tile, else on the button that moves on.
+    if (had) (joinBox.querySelector<HTMLButtonElement>('button') ?? back).focus();
+  }
   const back = el('button', 'hud-button');
   back.type = 'button';
   back.addEventListener('click', () => {
     // Hide at once so a double click can't finish the same horde twice.
     if (result.hidden || back.disabled) return;
+    // Asked first (ID-150: someone still asking to join); a no keeps the panel up.
+    if (!canLeave()) return;
     result.hidden = true;
     onDone();
   });
+  let canLeave: () => boolean = () => true;
   // The button sits in a footer: a horde-only panel pins it, with a line beside it (ID-067).
   const foot = el('div', 'hud-result-foot');
   const footNote = el('p', 'hud-result-foot-note');
@@ -2275,7 +2320,7 @@ export function createHud(
       parts.push(callout);
     }
     if (d.note) parts.push(el('p', 'debrief-note', d.note));
-    if (d.drop || d.recruit) {
+    if (d.drop || d.recruit || d.join) {
       const spoils = el('div', 'debrief-spoils');
       if (d.drop) {
         const t = d.drop;
@@ -2342,6 +2387,8 @@ export function createHud(
         );
         spoils.append(tile);
       }
+      // The offer tile (ID-150), kept across redraws: `showJoin` fills it.
+      if (d.join) spoils.append(joinBox);
       parts.push(spoils);
     }
     if (d.cards.length > 0) {
@@ -2755,6 +2802,15 @@ export function createHud(
     },
     onSkillPick(handler) {
       onPickSkill = handler;
+    },
+    onJoin(handler) {
+      onAnswerJoin = handler;
+    },
+    onLeave(check) {
+      canLeave = check;
+    },
+    showJoin(cards, keep) {
+      drawJoin(cards, keep);
     },
     onAutoStrike(handler) {
       autoHandler = handler;

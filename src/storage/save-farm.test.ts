@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { gunLevel, type OwnedWeapon } from '../core/armoury.ts';
 import { FARM, SQUAD_BONUS } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
+import { acceptJoins, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
 import { NOW, preFarm } from './testing.ts';
 
@@ -15,11 +15,11 @@ import { NOW, preFarm } from './testing.ts';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Loose = any;
 
-/** Horde-only after 4 first clears and 2 replays of Horde 3. */
+/** Horde-only after 4 first clears (each new survivor accepted) and 2 replays of Horde 3. */
 function farmed(): GameState {
   let g = newGame('horde');
   for (let i = 0; i < 4; i++) {
-    g = finishSquadHorde(g, { ...startSquadHorde(g, 100 + i, NOW), outcome: 'won' });
+    g = acceptJoins(finishSquadHorde(g, { ...startSquadHorde(g, 100 + i, NOW), outcome: 'won' }));
   }
   for (let i = 0; i < 2; i++) {
     g = finishSquadHorde(g, { ...startSquadHorde(g, 200 + i, NOW, 3), outcome: 'won' });

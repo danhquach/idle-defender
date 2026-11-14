@@ -215,7 +215,9 @@ describe('the horde picker (ID-098)', () => {
     const g = { ...farmGame(2, 5), farm: { replays: 3, badLuck: 2 } };
     const after = finishSquadHorde(g, ended(g, 5, 'won'));
     expect(after.hordeNumber).toBe(6);
-    expect(after.roster).toHaveLength(3);
+    // The new survivor asks to join (ID-150).
+    expect(after.roster).toHaveLength(2);
+    expect(after.joining).toHaveLength(1);
     expect(after.farm).toEqual({ replays: 3, badLuck: 2 });
   });
 

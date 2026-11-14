@@ -118,6 +118,7 @@ function mount(game: GameState, over: { canGear?: boolean } = {}) {
     state: () => ({ game: g, fight: null, canGear, resumes: false }),
     onEquip,
     onToggleSquad,
+    onLetGo: () => null,
     onBestGuns,
   };
   const roster = createRoster(root, opts);
@@ -519,6 +520,7 @@ describe('Best gun for everyone (ID-108)', () => {
       state: () => ({ game: camp([at(1, 1)]), fight: null, canGear: true, resumes: false }),
       onEquip: () => ({ ok: true }),
       onToggleSquad: () => ({ ok: true }),
+      onLetGo: () => null,
       onBestGuns: () => ({ ok: false, reason: GUNS_WAIT }),
     });
     refusing.open('recruit-1');

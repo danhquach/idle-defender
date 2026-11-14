@@ -98,9 +98,16 @@ export function prePoints(game: GameState): Record<string, unknown> {
   return json;
 }
 
+/** `game` as JSON from before ID-150 (v19 and older): nobody asking to join. */
+export function preJoin(game: GameState): Record<string, unknown> {
+  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  delete json.joining;
+  return json;
+}
+
 /** `game` as JSON from before ID-149 (v17 and older): no profession on anyone. */
 export function preJobs(game: GameState): Record<string, unknown> {
-  const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
+  const json = preJoin(game);
   for (const d of [...(json.roster as object[]), ...((json.reserve ?? []) as object[])]) {
     delete (d as { job?: unknown }).job;
   }

@@ -1091,8 +1091,8 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   ID-152; before, it left it out).
   The start screen's gun picker stars them too, and the card says "No Hunter
   bonus with this gun" under the gun's role when the held one isn't theirs.
-  The start and result cards read "Lv 7 · Hunter"; a first clear's new
-  survivor tile says "Hunter · joins next horde".
+  The start and result cards read "Lv 7 · Hunter"; a first clear's newcomer
+  asking to join reads "Lv 1 · Hunter · Pistol" (ID-150).
 - **Balance (ID-149):** see the balance test (professions): each profession
   at the same level, a squad of 5 plain survivors and 1 of it (a fighting job
   with its own gun, the plain 5 with the reference Carbine): what it adds to
@@ -2539,17 +2539,41 @@ As built (ID-066), the horde-only build:
 - **New game:** Horde 1 with one survivor (free recruit 1, a random name)
   carrying a pistol. No named starters, no professions. The rest of a new
   game's state is the full game's, kept untouched.
-- **Survivors:** each horde won adds one survivor, in the squad for the next
-  horde: no accept step, camp slot or recruit card. The squad cap is 6
-  (ID-067 adds the weapon drop); past it, the bench below.
+- **Survivors:** each horde won brings one survivor, who asks to join (since
+  ID-150; before, they joined with no accept step). No camp slot or recruit
+  card. The squad cap is 6 (ID-067 adds the weapon drop); past it, the bench
+  below. The first survivor of a new game always joins (nothing to refuse).
+- **Joining the camp (ID-150):**
+  - Every join is an offer. The result screen shows each newcomer's card
+    (name, level, profession and what it brings, gun) with **Accept** and
+    **Refuse**, under "Refused survivors are gone for good." Accept puts them on the squad while it has an open slot, else
+    on the bench. Refuse sends them away for good: their recruit number is
+    spent, so the next offer is someone new.
+  - Pressing the result screen's button with someone still asking asks first
+    ("… is still asking to join. Go on without answering? They are refused
+    and gone for good."): No keeps the screen and the offer; Yes refuses
+    them. A later first clear also turns away any offer left unanswered, so
+    offers never pile up.
+  - The offer is saved (`joining`), so a reload on the result screen keeps
+    it: the start screen shows the same card with Accept and Refuse.
+  - **Let go:** on the Roster (on every survivor, next to Add to squad /
+    Move to bench), between hordes, after a confirm that names their gun. They
+    leave for good; their gun goes back to the stash (a full stash throws its
+    weakest away, as a drop does, and the confirm names it); the free pistol
+    just goes. Refused at 6 or fewer survivors in the camp so the squad can
+    always be filled: the button looks greyed and a press says why on the
+    Roster's status line and under the button ("Needs 7+ survivors to let one
+    go (camp 6)").
+  - The scripted player in the balance tests accepts every offer, so balance
+    is as before.
 - **The bench and rest (ID-147, `SQUAD_JOIN`, `INJURY_REST` in `data.ts`):**
   - No camp cap below `SQUAD_JOIN.max` (40). Up to 6 fight a horde (one per
     slot on the firing line); the rest wait on the bench.
   - Under 6, each first clear adds one survivor as before. From 6 on, each
     first clear has a 15% chance (seeded from the horde, core RNG) that one
     joins, and then 20% that a second comes too (about 3% of first clears).
-    A replay or a loss adds nobody. A joiner takes an open squad slot, else
-    waits on the bench; the result screen names them and says which.
+    A replay or a loss adds nobody. Each joiner asks to join (ID-150); once
+    accepted, they take an open squad slot, else wait on the bench.
   - Rest, in hordes: after a **won** fight, a survivor who was downed rests 2
     hordes; one who ended under 25% of max HP rests 1. A lost fight rests
     nobody (everyone is down by then). A Paramedic's chance cuts 2 to 1.
@@ -3045,6 +3069,12 @@ offline progress works across sessions.
   in the squad moves to the bench, and with nobody fit the shortest rest
   ends. The owned-weapon bound grows with the camp (`MAX_OWNED`: the stash
   and two hands per survivor).
+- **As built (ID-150): save version 20** keeps survivors asking to join in
+  `joining`, written only while someone waits: 1 or 2 free recruits, each
+  already counted in `camp.recruits`, not in the camp, and new (level 1, the
+  free pistol and nothing else, not resting or injured), with the camp and
+  them together at most `SQUAD_JOIN.max`. Anything else refuses the save. A
+  v19 or older save has nobody asking, and a `joining` key there is refused.
 
 ## 13. Out of scope (v1)
 

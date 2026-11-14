@@ -15,6 +15,7 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import {
+  acceptJoins,
   bestGuns,
   fillSquad,
   finishSquadHorde,
@@ -147,11 +148,11 @@ export function repairWhatYouCan(game: GameState): GameState {
 }
 
 /**
- * The horde-only scripted player's squad and guns (ID-096): they fill any open slot from the
- * fit bench (`fillSquad`, ID-147), then tap "Best gun for everyone" (`bestGuns`, ID-152:
- * each gun in its holder's hands).
+ * The horde-only scripted player's squad and guns (ID-096): they accept everyone asking to
+ * join (`acceptJoins`, ID-150), fill any open slot from the fit bench (`fillSquad`, ID-147),
+ * then tap "Best gun for everyone" (`bestGuns`, ID-152: each gun in its holder's hands).
  */
-export const gearUp = (game: GameState): GameState => bestGuns(fillSquad(game)).game;
+export const gearUp = (game: GameState): GameState => bestGuns(fillSquad(acceptJoins(game))).game;
 
 /**
  * The scripted player between hordes: waits until the whole roster is fit, then

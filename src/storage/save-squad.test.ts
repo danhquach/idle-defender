@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { SQUAD_CAP, SQUAD_JOIN } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
-import { capSquad, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
+import { acceptJoins, capSquad, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { sendPatrol } from '../core/patrol.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
 import { NOW, preReserve, rolled } from './testing.ts';
@@ -63,13 +63,13 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 }
 
 describe('save: the horde-only build (ID-066)', () => {
-  it('is version 19', () => {
-    expect(SAVE_VERSION).toBe(19);
+  it('is version 20', () => {
+    expect(SAVE_VERSION).toBe(20);
   });
 
   it('round-trips a horde-only game, after a win adds a survivor', () => {
     const g = newGame('horde');
-    const won = finishSquadHorde(g, { ...startSquadHorde(g, 1, NOW), outcome: 'won' });
+    const won = acceptJoins(finishSquadHorde(g, { ...startSquadHorde(g, 1, NOW), outcome: 'won' }));
     expect(won.roster).toHaveLength(2);
     expect(reread(won)?.game).toEqual(won);
   });
