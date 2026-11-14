@@ -1295,3 +1295,30 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     expect([...saved().roster, ...saved().reserve]).toHaveLength(6);
   });
 });
+
+describe('Best gun with Auto on (app.ts, ID-154)', () => {
+  it('re-picks the squad on every press, even when no gun changes', () => {
+    const g = newGame('horde');
+    // A squad picked by hand: a veteran left on the bench, Auto on. Loading never re-picks.
+    const camp: GameState = {
+      ...g,
+      hordeNumber: 4,
+      roster: [1, 2, 3, 4, 5, 6].map((n) => recruit(n)),
+      reserve: [{ ...recruit(7), xp: 30000 }],
+      camp: { ...g.camp, recruits: 7 },
+      autoSquad: true,
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    const { root, saved } = boot();
+    step(0);
+    expect(saved().reserve.map((d) => d.id)).toEqual(['recruit-7']);
+    root.querySelector<HTMLButtonElement>('.roster-button')!.click();
+    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    scrim.querySelector<HTMLButtonElement>('[data-key="best"]')!.click();
+    // No stash, so no gun moved; Auto still brought the veteran in.
+    expect(scrim.querySelector('.rv-status')!.textContent).toBe(
+      'Everyone already holds the best gun they can get.',
+    );
+    expect(saved().roster.map((d) => d.id)).toContain('recruit-7');
+  });
+});

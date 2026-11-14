@@ -562,9 +562,11 @@ export function start(root: HTMLElement, art: Art): void {
         onBestGuns: () => {
           if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
           const r = bestGuns(game);
-          if (r.moves.length > 0) {
-            // New guns change Squad Power: "Auto" (ID-154) re-picks the squad with them.
-            commit(autoSquad(r.game));
+          // "Auto" (ID-154) re-picks the squad on every press, new guns or not (they change
+          // Squad Power; with none, it still undoes a hand-picked squad, as the Roster says).
+          const next = autoSquad(r.game);
+          if (next !== game) {
+            commit(next);
             // The start screen and its squad on the wall hold the new guns (and squad) too.
             redrawSquad();
           }
