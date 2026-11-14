@@ -276,20 +276,24 @@ describe('art coverage', () => {
     }
   });
 
-  it('keeps the mutants and the Horror saturated and mutes the Runner (ID-051, ID-041, §15)', () => {
+  it("keeps each turned kind's clothes in colour and the Horror the most saturated (ID-144, §15)", () => {
     const mutant = (id: string): boolean =>
       manifest.assets.find((a) => a.id === id)?.mutant === true;
-    for (const k of ['crawler', 'swollen', 'spewer', 'brute', 'screamer', 'horror']) {
-      for (const id of [...ENEMY_ART[k as keyof typeof ENEMY_ART].walk]) {
-        expect(mutant(id), id).toBe(true);
-        // The Brute's grey armour and rag trousers make it the least saturated: about 0.23.
-        expect(saturatedShare(id), id).toBeGreaterThan(0.2);
+    const kinds = Object.keys(ENEMY_ART) as (keyof typeof ENEMY_ART)[];
+    // Every kind but the Runner keeps its colours (manifest `mutant`): the clothes that tell
+    // the kinds apart in a crowd (ID-144). The Runner's orange vest is muted, as before.
+    for (const k of kinds) {
+      for (const id of [...ENEMY_ART[k].walk, ENEMY_ART[k].attack]) {
+        expect(mutant(id), id).toBe(k !== 'runner');
       }
     }
-    for (const id of ENEMY_ART.runner.walk) {
-      expect(mutant(id)).toBe(false);
-      expect(saturatedShare(id)).toBeLessThan(0.15);
-    }
+    // The Horror, the one true mutant left, is the most saturated: raw flesh red, about 0.66;
+    // the rest are clothed people, at most about 0.45 (the Spewer's sickly skin).
+    const share = (k: keyof typeof ENEMY_ART) => Math.max(...ENEMY_ART[k].walk.map(saturatedShare));
+    const horror = Math.min(...ENEMY_ART.horror.walk.map(saturatedShare));
+    expect(horror).toBeGreaterThan(0.5);
+    for (const k of kinds.filter((k) => k !== 'horror'))
+      expect(share(k), k).toBeLessThan(horror - 0.1);
   });
 
   it('gives every tier one sliding gate outline, a solid panel as tall as two widths (ID-075)', () => {
