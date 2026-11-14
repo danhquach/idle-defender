@@ -216,3 +216,39 @@ describe('the horde-only skill row on a phone (ID-100)', () => {
     );
   });
 });
+
+describe('narrow squad cards: a 320 px window, two columns in a wide one (ID-151)', () => {
+  /** The body of the rule for exactly `selector`; a missing rule fails with its name. */
+  const rule = (selector: string): string => {
+    const found = new RegExp(`\\n${selector.replace(/[.[\]]/g, '\\$&')} \\{([^}]*)\\}`).exec(rules);
+    expect(found, `no "${selector} {" rule in page.css`).not.toBeNull();
+    return found![1]!;
+  };
+
+  it('caps a card at the grid’s width, so it never sticks out of the panel', () => {
+    const grid = rule('.squad-grid');
+    expect(grid).toMatch(
+      /grid-template-columns: repeat\(auto-fill, minmax\(min\(260px, 100%\), 1fr\)\);/,
+    );
+  });
+
+  it('lets the horde picker shrink to the panel, so it does not scroll sideways', () => {
+    expect(rule('.hud-horde-pick')).toMatch(/min-width: 0;/);
+  });
+
+  it('gives a narrow card a two-row head, measured on the card itself', () => {
+    // The card, not the grid: two 284 px cards in a wide window are narrow too.
+    expect(rule('.squad-card')).toMatch(/container: squad-card \/ inline-size;/);
+    const block = /@container squad-card \(width < (\d+)px\) \{([\s\S]*?)\n\}/.exec(rules);
+    expect(block, 'no "@container squad-card (width < …px)" block in page.css').not.toBeNull();
+    if (!block) return;
+    // Wider than a two-column card (up to ~400 px) and its worst one-line head (~390 px).
+    expect(Number(block[1])).toBe(400);
+    expect(block[2]).toMatch(/\.squad-card-head \{[^}]*display: grid;/);
+    expect(block[2]).toMatch(/\.squad-card-who \{[^}]*display: contents;/);
+    // Row 1 name and level, row 2 badge and XP: the badge never shares the name's row.
+    expect(block[2]).toMatch(/\.squad-card-level \{[^}]*grid-area: 1 \//);
+    expect(block[2]).toMatch(/\.squad-badge \{[^}]*grid-area: 2 \//);
+    expect(block[2]).toMatch(/\.squad-card-xp \{[^}]*grid-area: 2 \//);
+  });
+});
