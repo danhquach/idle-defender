@@ -36,17 +36,34 @@ export const SQUAD_CAP = 6;
  */
 export const SQUAD_JOIN = { chance: 0.15, second: 0.2, max: 40 } as const;
 /**
- * Hordes a survivor rests after a won fight (ID-147): `downed` if they dropped to 0 HP; else
- * the first band whose `below` share of max HP they ended under. A lost fight rests nobody
+ * Hordes a survivor rests after a won fight (ID-147, ID-155): `downed` if they dropped to 0
+ * HP; anyone who ends it standing, at any HP, rests none. A lost fight rests nobody
  * (everyone is down by then). Rest counts down one per horde played, won or lost; `max` is
- * the most a survivor can owe. Measured: the ticket's 3/2/1 with a loss resting everyone
- * locked campaigns at Hordes 5–8; 3/2/1 on wins only took 83% more fights to beat Horde 18,
- * these 40% more.
+ * the most a survivor can owe. ID-155 dropped ID-147's 2 hordes for the downed and 1 for
+ * under 25% HP: a win left most of the squad resting.
  */
 export const INJURY_REST = {
-  downed: 2,
-  bands: [{ below: 0.25, rest: 1 }],
-  max: 2,
+  downed: 1,
+  max: 1,
+} as const;
+/** The most a v19–v21 save's survivor could rest (ID-147); such a rest loads cut to `INJURY_REST.max`. */
+export const OLD_REST_MAX = 2;
+/**
+ * Paramedics patch up the downed (ID-155), starting points. Each Paramedic in the camp (squad
+ * or bench, resting or not, the downed one too) has `base` points plus `level` × P / (P +
+ * `LEVEL_HALF`), P = level − 1 (20 at level 1, 30 at 21, never 40); they all add up. After a
+ * win each downed survivor has the camp's points as a % chance, at most `chance`, to skip
+ * their rest: they fight the next horde at `hp` of max HP plus `over` of a % for each point
+ * past `from`, at most `hpCap`, and at full HP after it.
+ */
+export const PATCH_UP = {
+  base: 20,
+  level: 20,
+  chance: 0.8,
+  hp: 0.5,
+  from: 80,
+  over: 0.5,
+  hpCap: 0.8,
 } as const;
 /**
  * Mid-fight swaps (ID-148), starting points: a survivor on the line who drops under `below`
@@ -170,6 +187,14 @@ export const POWER = {
   },
   close: 0.15,
 } as const;
+/**
+ * The injury band before a horde (ID-155): how many survivors a win is likely to cost, read
+ * from Squad Power over Recommended Power. Few at `few` times it or more, some at `some` or
+ * more, else heavy. Measured (16 campaigns to Horde 18, 607 wins): downed per win 0.03 at
+ * 2.5× and up, 0.38 at 2–2.5×, 0.71 at 1.8–2×, 0.95 at 1.6–1.8×, 1.25 at 1.4–1.6×; at 1.6×
+ * and under, 1 win in 3 downs two or more.
+ */
+export const INJURY_BAND = { few: 2, some: 1.6 } as const;
 /**
  * Active skills in the horde-only build (ID-100, farming design Part 3): up to `max`
  * picked before each horde; one picked alone works `solo` times as hard (same cooldown).
@@ -1262,7 +1287,7 @@ export type JobEffect =
   | 'dropChance'
   | 'wallHp'
   | 'squadHeal'
-  | 'rest';
+  | 'patchUp';
 
 /**
  * Who a profession helps: a fighting job only with its guns (`guns`), a self job its holder
@@ -1321,12 +1346,13 @@ export const JOBS = {
     kind: 'self',
     bonus: { hp: 70, armour: 2.5, wallHp: 0.1 },
   },
-  // The heal stays under First Aid Kits' first level (`CARD.firstAid`) at any level. `rest`
-  // is the chance their own injury rests a horde less (ID-147, at least 1).
+  // The heal stays under First Aid Kits' first level (`CARD.firstAid`) at any level.
+  // `patchUp` is the level's part of their points toward the downed skipping rest
+  // (`PATCH_UP`, ID-155): `PATCH_UP.base` more on top, from level 1.
   paramedic: {
     name: 'Paramedic',
     kind: 'self',
-    bonus: { dodge: 0.4, squadHeal: 0.004, rest: 1 },
+    bonus: { dodge: 0.4, squadHeal: 0.004, patchUp: PATCH_UP.level },
   },
   mechanic: { name: 'Mechanic', kind: 'squad', bonus: { wallRepair: 0.004 } },
   chef: { name: 'Chef', kind: 'squad', bonus: { squadHp: 20 } },

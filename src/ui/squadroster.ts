@@ -21,7 +21,7 @@ import {
   type GunMove,
   type SquadMoves,
 } from '../core/hordeonly.ts';
-import type { HordeState } from '../core/horde.ts';
+import { startingHp, type HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
 import { el, movesText } from './hud.ts';
@@ -39,7 +39,7 @@ export interface RosterTile {
   job: string;
   jobShort: string;
   /**
-   * "HP 105/105"; "Injured", "Down" or "Resting: 2 hordes" (ID-147) in place of it when they
+   * "HP 105/105", or "HP 58/105 · patched up" (ID-155); "Injured", "Down" or "Resting: 1 horde" (ID-147) in place of it when they
    * can't fight.
    */
   health: string;
@@ -78,7 +78,10 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
     else if (downInFight) health = 'Down';
     else if (!isFit(d)) health = restLabel(restOf(d));
     else if (resting) health = 'Injured';
-    else health = `HP ${maxHpOf(d)}/${maxHpOf(d)}`;
+    // Patched up after being downed (ID-155): the HP they start the next horde at.
+    else if (d.startHp !== undefined) {
+      health = `HP ${startingHp(maxHpOf(d), d.startHp)}/${maxHpOf(d)} · patched\u00a0up`;
+    } else health = `HP ${maxHpOf(d)}/${maxHpOf(d)}`;
     return {
       id: d.id,
       name: d.name,

@@ -4,7 +4,14 @@
 import { describe, expect, it } from 'vitest';
 import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { INJURY_REST, SQUAD_CAP, SQUAD_JOIN, STASH_CAP } from '../core/data.ts';
+import {
+  INJURY_REST,
+  OLD_REST_MAX,
+  PATCH_UP,
+  SQUAD_CAP,
+  SQUAD_JOIN,
+  STASH_CAP,
+} from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
 import { decodeSave, encodeSave, MAX_SAVE_CHARS, SAVE_VERSION } from './save.ts';
@@ -31,11 +38,11 @@ function campGame(squad: RosterDefender[], bench: RosterDefender[]): GameState {
   };
 }
 
-/** Six in the squad and two on the bench, one of them resting 2 hordes. */
+/** Six in the squad and two on the bench, one of them resting a horde. */
 const benched = (): GameState =>
   campGame(
     Array.from({ length: SQUAD_CAP }, (_, i) => person(i + 1)),
-    [person(7, { rest: 2 }), person(8)],
+    [person(7, { rest: 1 }), person(8)],
   );
 
 function reread(game: GameState | Loose, change: (g: Loose) => void = () => {}, v = SAVE_VERSION) {
@@ -49,7 +56,7 @@ describe('save: the bench and rest (ID-147)', () => {
   it('round-trips a squad, a bench and each rest; a fit survivor writes no rest', () => {
     const g = benched();
     const json = JSON.parse(encodeSave(g, NOW));
-    expect(json.game.reserve[0].rest).toBe(2);
+    expect(json.game.reserve[0].rest).toBe(1);
     expect(Object.hasOwn(json.game.reserve[1], 'rest')).toBe(false);
     expect(reread(g)?.game).toEqual(g);
   });
@@ -103,7 +110,7 @@ describe('save: the bench and rest (ID-147)', () => {
   it('refuses a rest in a v18 save, which had none', () => {
     expect(reread(benched(), () => {}, 18)).toBeNull();
     // JSON's only way to an infinite number: a literal past the range.
-    const huge = encodeSave(benched(), NOW).replace('"rest":2', '"rest":1e999');
+    const huge = encodeSave(benched(), NOW).replace('"rest":1', '"rest":1e999');
     expect(huge).toContain('1e999');
     expect(decodeSave(huge)).toBeNull();
     const fit = campGame([person(1)], [person(2)]);
@@ -116,7 +123,7 @@ describe('save: the bench and rest (ID-147)', () => {
       Array.from({ length: SQUAD_JOIN.max - SQUAD_CAP }, (_, i) => person(SQUAD_CAP + i + 1)),
     );
     expect(reread(big)?.game).toEqual(big);
-    const raw = encodeSave(benched(), NOW).replace('"rest":2', '"rest":2,"__proto__":{"x":1}');
+    const raw = encodeSave(benched(), NOW).replace('"rest":1', '"rest":1,"__proto__":{"x":1}');
     expect(raw).toContain('__proto__');
     expect(decodeSave(raw)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
@@ -130,9 +137,81 @@ describe('save: the bench and rest (ID-147)', () => {
       ['recruit-3', undefined],
       ['recruit-1', 1],
     ]);
-    const allResting = campGame([person(1, { rest: 2 })], [person(2, { rest: 1 })]);
+    const allResting = campGame([person(1, { rest: 1 })], [person(2, { rest: 1 })]);
     const woke = reread(allResting)!.game;
     expect(woke.roster.map((d) => [d.id, d.rest])).toEqual([['recruit-2', undefined]]);
-    expect(woke.reserve.map((d) => [d.id, d.rest])).toEqual([['recruit-1', 2]]);
+    expect(woke.reserve.map((d) => [d.id, d.rest])).toEqual([['recruit-1', 1]]);
+  });
+});
+
+describe('save: patched up and the 1-horde rest (ID-155, v22)', () => {
+  /** The bench's first survivor patched up to `share` of max HP instead of resting. */
+  const patched = (share: number = PATCH_UP.hp): GameState =>
+    campGame(
+      Array.from({ length: SQUAD_CAP }, (_, i) => person(i + 1)),
+      [person(7, { startHp: share }), person(8)],
+    );
+
+  it('round-trips a patched-up survivor; one at full HP writes none', () => {
+    const g = patched(0.65);
+    const json = JSON.parse(encodeSave(g, NOW));
+    expect(json.game.reserve[0].startHp).toBe(0.65);
+    expect(Object.hasOwn(json.game.reserve[1], 'startHp')).toBe(false);
+    expect(reread(g)?.game).toEqual(g);
+    for (const share of [PATCH_UP.hp, PATCH_UP.hpCap]) {
+      expect(reread(patched(share))?.game).toEqual(patched(share));
+    }
+  });
+
+  it('refuses hostile starting HP', () => {
+    const cases: [string, (x: Loose) => void][] = [
+      ['under the floor', (x) => (x.reserve[0].startHp = PATCH_UP.hp - 0.01)],
+      ['over the cap', (x) => (x.reserve[0].startHp = PATCH_UP.hpCap + 0.01)],
+      ['over the cap in the squad', (x) => (x.roster[0].startHp = 0.9)],
+      ['0', (x) => (x.reserve[0].startHp = 0)],
+      ['negative', (x) => (x.reserve[0].startHp = -1)],
+      ['huge', (x) => (x.reserve[0].startHp = 1e300)],
+      ['text', (x) => (x.reserve[0].startHp = '0.6')],
+      ['null', (x) => (x.reserve[0].startHp = null)],
+      ['an object', (x) => (x.reserve[0].startHp = { valueOf: 0.6 })],
+      ['an array', (x) => (x.reserve[0].startHp = [0.6])],
+      ['with a rest too', (x) => (x.reserve[0].rest = 1)],
+      ['a rest of 2, past today’s most', (x) => (x.reserve[1].rest = 2)],
+    ];
+    for (const [name, change] of cases) expect(reread(patched(), change), name).toBeNull();
+    const nan = encodeSave(patched(), NOW).replace('"startHp":0.5', '"startHp":1e999');
+    expect(nan).toContain('1e999');
+    expect(decodeSave(nan)).toBeNull();
+    const proto = encodeSave(patched(), NOW).replace(
+      '"startHp":0.5',
+      '"startHp":0.5,"__proto__":{"y":1}',
+    );
+    expect(proto).toContain('__proto__');
+    expect(decodeSave(proto)).toBeNull();
+    expect(({} as Record<string, unknown>).y).toBeUndefined();
+  });
+
+  it('refuses starting HP in a v21 or older save, which had none', () => {
+    for (const v of [18, 19, 20, 21])
+      expect(
+        reread(patched(), () => {}, v),
+        `v${v}`,
+      ).toBeNull();
+  });
+
+  it('a v19–v21 save’s 2-horde rest loads as 1; past 2 it is refused', () => {
+    for (const v of [19, 20, 21]) {
+      const old = reread(benched(), (x) => (x.reserve[0].rest = OLD_REST_MAX), v);
+      expect(old?.game.reserve.find((d) => d.id === 'recruit-7')?.rest, `v${v}`).toBe(1);
+      expect(
+        reread(benched(), (x) => (x.reserve[0].rest = OLD_REST_MAX + 1), v),
+        `v${v}`,
+      ).toBeNull();
+    }
+  });
+
+  it('refuses someone asking to join who is patched up', () => {
+    const g = { ...campGame([person(1)], []), joining: [person(9, { startHp: 0.6 })] };
+    expect(reread(g)).toBeNull();
   });
 });

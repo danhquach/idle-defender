@@ -8,6 +8,7 @@ import {
   DEFENDER_HP,
   FIELD_EFFECTS,
   JOBS,
+  PATCH_UP,
   WEAPONS,
   type Job,
   type JobEffect,
@@ -44,8 +45,13 @@ const SHARED_PART: Partial<Record<JobId, string>> = {
 
 const pct = (x: number, digits = 1): string => `+${(x * 100).toFixed(digits)}%`;
 
-/** Each effect as it prints at value `v`, and its words while it is still 0 (level 1). */
-const EFFECT: Readonly<Record<JobEffect, { value: (v: number) => string; name: string }>> = {
+/**
+ * Each effect as it prints at value `v`, and its words while it is still 0 (level 1). One
+ * with `base` gives something from level 1 too, so it always prints its value.
+ */
+const EFFECT: Readonly<
+  Record<JobEffect, { value: (v: number) => string; name: string; base?: true }>
+> = {
   hp: { value: (v) => `+${Math.round(v)} max HP`, name: 'max HP' },
   armour: { value: (v) => `+${v.toFixed(1)} armour`, name: 'armour' },
   fireRate: { value: (v) => `${pct(v)} fire rate`, name: 'fire rate' },
@@ -80,9 +86,12 @@ const EFFECT: Readonly<Record<JobEffect, { value: (v: number) => string; name: s
     value: (v) => `everyone on the field heals ${(v * 100).toFixed(2)}% of max HP a second`,
     name: 'healing for the squad',
   },
-  rest: {
-    value: (v) => `${pct(v)} chance an injury rests 1 horde less`,
-    name: 'chance an injury rests 1 horde less',
+  // A Paramedic's points (ID-155): `PATCH_UP.base` from level 1, the level's part on top.
+  patchUp: {
+    value: (v) =>
+      `+${Math.round(PATCH_UP.base + v)}% chance a downed survivor skips rest (Paramedics in camp add up, to ${PATCH_UP.chance * 100}%)`,
+    name: 'chance a downed survivor skips rest',
+    base: true,
   },
 };
 
@@ -100,10 +109,13 @@ export function jobLine(job: JobId, level: number): string {
   const effects = Object.keys(j.bonus) as JobEffect[];
   const guns = j.kind === 'fight' ? ` with ${jobGuns(job)}` : '';
   if (level <= 1) {
-    const names = effects.map((e) => EFFECT[e].name);
+    // An effect with a base gives it already (ID-155: a Paramedic's points).
+    const now = effects.filter((e) => EFFECT[e].base).map((e) => EFFECT[e].value(0));
+    const names = effects.filter((e) => !EFFECT[e].base).map((e) => EFFECT[e].name);
     const list =
       names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
-    return `${j.name}: from level 2, more ${list}${guns}`;
+    const later = `from level 2, more ${list}${guns}`;
+    return `${j.name}: ${now.length > 0 ? `${now.join(', ')}; ${later}` : later}`;
   }
   const parts = effects.map((e) => EFFECT[e].value(jobBonus(level, job, e)));
   return `${j.name}: ${parts.join(', ')}${guns}`;

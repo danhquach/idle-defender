@@ -151,6 +151,8 @@ export interface DefenderSpec {
   plain?: true;
   /** Their profession from before the outbreak (ID-149); none means none. */
   job?: JobId;
+  /** Patched up after being downed (ID-155): they come in at this share of max HP; none is full. */
+  startHp?: number;
 }
 
 /** The spec a fight defender came from, XP and all. */
@@ -160,6 +162,7 @@ export function specOf(d: DefenderSpec): DefenderSpec {
   const spec: DefenderSpec = xp === undefined ? { id, name, loadout } : { id, name, loadout, xp };
   if (d.plain) spec.plain = true;
   if (d.job !== undefined) spec.job = d.job;
+  // No `startHp` (ID-155): it sets HP only as `standing` brings them in, never again.
   return spec;
 }
 export interface HordeSetup {
@@ -935,9 +938,17 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
   };
 }
 
-/** `spec` at full HP standing on `post`, ready to fire at `nextShotAt`. Does not touch the post. */
+/** HP out of `max` a fighter comes in with at `share` of it (ID-155): whole, at least 1; all of it with none. */
+export const startingHp = (max: number, share?: number): number =>
+  share === undefined ? max : Math.max(1, Math.round(max * share));
+
+/**
+ * `spec` standing on `post`, ready to fire at `nextShotAt`: at full HP, or at its `startHp`
+ * share (ID-155, whole HP, at least 1). Does not touch the post.
+ */
 export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): Defender {
-  const hp = maxHpOf(spec);
+  const max = maxHpOf(spec);
+  const hp = startingHp(max, spec.startHp);
   const full = (id: Held | null): number =>
     id !== null && isGun(id) ? magazineOf({ taken: [], cardLevels: {} }, id, spec) : 0;
   return {
@@ -950,7 +961,7 @@ export function standing(spec: DefenderSpec, post: Post, nextShotAt: number): De
     postId: post.id,
     walking: false,
     hp,
-    maxHp: hp,
+    maxHp: max,
     hitBy: null,
   };
 }

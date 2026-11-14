@@ -1,7 +1,7 @@
 // Squad Power and Recommended Power (ID-098, design §11 Farming): one number for the
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
-import { POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
+import { INJURY_BAND, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
 import type { GameState } from './game.ts';
 import { squadHpScale, squadOf, survivorPower } from './hordeonly.ts';
 import {
@@ -74,4 +74,17 @@ export type PowerBand = 'ok' | 'close' | 'short';
 export function powerBand(power: number, recommended: number): PowerBand {
   if (power >= recommended) return 'ok';
   return power >= recommended * (1 - POWER.close) ? 'close' : 'short';
+}
+
+/** How many survivors a win is likely to cost (ID-155): a rough band, never a %. */
+export type InjuryBand = 'few' | 'some' | 'heavy';
+
+/**
+ * The injury band for Squad Power `power` against Recommended `recommended` (ID-155): few at
+ * or above `INJURY_BAND.few` times it, some at or above `INJURY_BAND.some` times, else heavy.
+ * Squad Power counts dmg/s only, so this is a band, measured, and only advice.
+ */
+export function injuryBand(power: number, recommended: number): InjuryBand {
+  if (power >= recommended * INJURY_BAND.few) return 'few';
+  return power >= recommended * INJURY_BAND.some ? 'some' : 'heavy';
 }

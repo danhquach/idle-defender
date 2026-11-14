@@ -1033,7 +1033,7 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
 | Hunter | Fighting | Sniper rifle, Carbine | +24% crit chance, +36% crit damage |
 | Security guard | Fighting | SMG, Machine Pistol | +30% fire rate, +30% reload speed |
 | Construction worker | Self (+ wall) | any gun | +70 max HP, +2.5 armour; +10% wall max HP while on the field |
-| Paramedic | Self (+ squad) | any gun | +40% injury dodge; everyone on the field heals 0.4% of max HP a second; their own injury rests 1 horde less (a chance, up to 100%; never under 1, ID-147) |
+| Paramedic | Self (+ squad, + camp) | any gun | +40% injury dodge; everyone on the field heals 0.4% of max HP a second; patches up the downed: 20 points at level 1, rising with level (30 at level 21, never 40), every Paramedic in the camp adding up (ID-155, under the bench and rest) |
 | Student | Self | any gun | +100% own XP (levels faster, so stronger late), plus a tenth of the all-round caps |
 | Chef | Squad | on the field | +20 max HP for every survivor on the field |
 | Mechanic | Squad | on the field | the wall repairs 0.4% of each standing segment's max HP a second |
@@ -1060,8 +1060,9 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   while the Chef is on the field (gained HP comes with it; leaving takes the
   max back down). Teacher and Scavenger count when they fought the horde.
 - **Injury dodge** (Paramedic): a hit that would drop them to 0 HP leaves
-  them at 1 HP instead, by that chance, while above 1 HP. Their injuries
-  resting 1 horde less (min 1) comes with resting injuries, ID-147.
+  them at 1 HP instead, by that chance, while above 1 HP. (ID-147's chance that
+  their own injury rests a horde less is gone since ID-155: Paramedics patch
+  up any downed survivor instead.)
 - **Getting one:** each new survivor rolls a profession at random, every one
   as likely, repeats allowed (core RNG): one who joins after a win from that
   horde's seed, a new game's first survivor from its start time. Old saves:
@@ -2574,10 +2575,59 @@ As built (ID-066), the horde-only build:
     joins, and then 20% that a second comes too (about 3% of first clears).
     A replay or a loss adds nobody. Each joiner asks to join (ID-150); once
     accepted, they take an open squad slot, else wait on the bench.
-  - Rest, in hordes: after a **won** fight, a survivor who was downed rests 2
-    hordes; one who ended under 25% of max HP rests 1. A lost fight rests
-    nobody (everyone is down by then). A Paramedic's chance cuts 2 to 1.
-    Rest counts down one per horde played, won or lost.
+  - Rest, in hordes *(ID-155; `INJURY_REST`, `PATCH_UP`)*: after a **won**
+    fight, only a survivor who was downed rests, for 1 horde. Anyone who ends
+    it standing, at any HP, is fit for the next horde (ID-147's 2 hordes for
+    the downed and 1 for under 25% HP are gone: a win left most of the squad
+    resting). A lost fight rests nobody (everyone is down by then). Rest
+    counts down one per horde played, won or lost. A v19–v21 save's rest of 2
+    loads as 1.
+  - **Paramedics patch up the downed (ID-155):** each downed survivor rolls
+    once after the win (core RNG, the horde's seed). The chance is the
+    camp's Paramedic points as a %, capped at **80%** (`PATCH_UP.chance`).
+    Each Paramedic in the camp (squad or bench, resting or not, the downed
+    one too) adds **20** (`base`) + **20** × P / (P + 20) (`level`), P =
+    level − 1: 20 at level 1, 30 at level 21, never 40. They stack, unlike
+    the squad effects. On a success the survivor doesn't rest: they fight
+    the next horde at **50%** of max HP (`hp`), plus half a % (`over`) for
+    each point over **80** (`from`), at most **80%** (`hpCap`): 80 points
+    50%, 90 55%, 140 and up 80%. After that horde (played, won or lost) they
+    are at full HP again. That holds even if they sat it out on the bench,
+    as a rest counts down per horde played, not per horde fought. On a
+    failure they rest 1 horde. The Roster shows
+    "HP 58/115 · patched up"; the result screen says "Patched up by
+    Paramedics, back next horde: Bob (50% HP)."; with a Paramedic in camp, one
+    whose roll failed is listed as "Resting (not patched up): …". The
+    profession text says "Paramedics in camp add up, to 80%".
+  - *Measured (ID-155, the late-hordes balance test's 16 campaigns to Horde
+    18, seed i × 1000):* fights to beat Horde 18, ID-147's rule → this one:
+
+    | Seed | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | Mean |
+    | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+    | ID-147 | 55 | 56 | 92 | 60 | 42 | 56 | 67 | 48 | 66 | 67 | 72 | 65 | 157 | 67 | 48 | 79 | 68.6 |
+    | ID-155 | 57 | 90 | 48 | 84 | 58 | 28 | 62 | 41 | 106 | 34 | 52 | 83 | 55 | 78 | 72 | 68 | 63.5 |
+
+    Most replays at one horde: 37 (seed 13) → 24 (seed 14); every seed is now
+    within the farming bound (120 fights, 30 replays at a horde). New-horde
+    tries at Hordes 11–18 ending with 90%+ wall HP: 17.6% → 21.3% (ID-153's
+    band is 8–30%). One seed's count swings a lot with which fights it wins
+    (the same rule took seed 2 from 56 to 90 and seed 6 from 56 to 28), so
+    the mean is the measure.
+  - *The seed 13000 spiral (ID-155, #312):* under ID-147's rule it took 157
+    fights, with 37 replays spent at Horde 16 (and 33 of 37 Horde 15 replays
+    lost). Two causes fed each other. **Rest after the few won replays:** a
+    won replay that downed anyone left the next two fights short every time
+    (18 of 18 fights), and short replays won 1 of 37. The scripted player
+    farms 3 replays then tries the new horde again, so each block had at
+    most one real try. **A squad weaker than its Squad Power:** its full
+    squad won only 4 of 29 Horde 15 replays at 1.66–1.71× Recommended, where
+    the 16 seeds win 60% at 1.6–1.8×. Drops come only from wins and a loss
+    pays little XP, so with so few wins Squad Power hardly grew (about
+    6,700 → 6,900 over 30 fights). A loss rests nobody, so nothing else in
+    the loss and replay path shortens the squad. With only the downed
+    resting, 1 horde, the same seed beats Horde 18 in 55 fights, at most 9
+    replays at one horde (its full squad won 14 of 20 replays); no other
+    change was needed.
   - *Measured (4 seeds to Horde 18, the scripted player refilling open
     slots from the fit bench):* the ticket's first bands (downed 3, under 25%
     2, under 50% 1) with a loss resting the whole squad locked every
@@ -2634,9 +2684,9 @@ As built (ID-066), the horde-only build:
   - The corner's wave line ends with "Swaps left N", the swaps still to come
     (no more than the bench has left; a tooltip explains it); hidden in a
     fight that started with an empty bench.
-  - The one who pulled back keeps their HP: on a win they rest by the band of
-    that HP (under 25%: 1 horde), not as downed; a loss rests nobody as
-    before. They don't come back that fight. A bench survivor who came in
+  - The one who pulled back is still standing: on a win they don't rest
+    (ID-155; before it they rested by their HP then), and a loss rests
+    nobody as before. They don't come back that fight. A bench survivor who came in
     gets horde XP, levels and rest like anyone who fought.
   - Nobody fit on the bench, or 3 swaps used: the old rule (fight on to 0 HP).
 - **Progression:** survivor XP and levels, at twice the full game's XP per
@@ -2796,6 +2846,33 @@ and comes back stronger.
     20 60%.)
 - **Bands:** green at or above Recommended, amber within 15% below, red
   further. The numbers are always shown; it never blocks a start.
+- **Injury band (ID-155, `INJURY_BAND` in `data.ts`):** under the power line
+  the picker shows how many survivors a win is likely to cost: "Injuries if you
+  win" and a pill, **few** at 2× Recommended or more, **some** from 1.6×,
+  **heavy** under it, in the green / amber / red band colours (the word is
+  always there, so colour is never the only cue). It follows the picked horde.
+  The pill's tooltip says what it means: "usually nobody goes down", "about 1
+  survivor down on average", "about 1 or more survivors down on average".
+  A band, not a %: Squad Power counts dmg/s only, not HP or armour, so a
+  precise figure would mislead. Advice only, like the power bands: a green
+  power band can still read heavy, and it never blocks a start.
+  - *Measured (16 scripted campaigns to Horde 18, the ID-155 rest rule, 607
+    won fights; downed = dropped to 0 HP):*
+
+    | Squad Power ÷ Recommended | Wins | Downed per win | No one downed | 2 or more downed | Band |
+    | --- | --- | --- | --- | --- | --- |
+    | 2.5 and up | 115 | 0.03 | 97% | 1% | few |
+    | 2.0–2.5 | 146 | 0.38 | 82% | 10% | few |
+    | 1.8–2.0 | 108 | 0.71 | 74% | 21% | some |
+    | 1.6–1.8 | 137 | 0.95 | 64% | 26% | some |
+    | 1.4–1.6 | 73 | 1.25 | 49% | 38% | heavy |
+    | 1.2–1.4 | 27 | 0.85 | 70% | 22% | heavy |
+
+    Under 1.2 the campaigns hardly win (1 of 14 full-squad fights), so it reads
+    heavy. The 1.2–1.4 row (27 wins) is too few to trust its dip under 1.4–1.6.
+    Squad Power counts max HP, so a squad of patched-up survivors (starting
+    at half HP) reads the same band: a reason it stays advice. The same fights under ID-147's rule read alike (0.16, 0.53, 0.86,
+    1.23 and 1.38 downed per win from 2–2.5× down).
 
 ### Balance pass *(ID-102)*
 
@@ -2856,14 +2933,15 @@ Targets, each with a balance test:
   the wall itself in almost every fight (97% over 40 seeds, 2.5% end with it
   untouched), so "any wall HP lost" can't tell a scratch from a breach; it
   read 97–100% from ID-136 on and ID-147 dropped its bound. Measured 16.9%
-  over 40 seeds (15–18% over 16), and no such fight was lost. On the first 4
-  seeds, every campaign beats Horde 18 within 120 fights (ID-147:
+  over 40 seeds (15–18% over 16), and no such fight was lost (21.3% with
+  ID-155's rest rule). On all 16 seeds (since ID-155; 28–106 fights), every
+  campaign beats Horde 18 within 120 fights (ID-147:
   the scripted player replays the highest beaten horde while a rest leaves
   the squad short, `restWait`); most seeds (at least 3 in 4; 16 of 16 measured) lose at least one new horde at the first try
   (every seed before ID-127: Heavy Rounds, unlocked by Horde 10's boss, makes
-  the squad stronger past it, by design); on the first 4 seeds, farming past
-  any one horde takes at most 30 replays with average luck (seed 13 is stuck
-  at one horde for 12 tries, 157 fights to Horde 18).
+  the squad stronger past it, by design); on all 16 seeds, farming past any
+  one horde takes at most 30 replays with average luck (24 measured; seed 13
+  took 37 before ID-155, see the seed 13000 spiral under the bench and rest).
 - **Recommended Power** (`balance/squad-power.test.ts`): about half the
   fights won with no cards or skills, most with them (above).
 - **Worst luck** (`balance/farming.test.ts`, 2 seeds): with every replay

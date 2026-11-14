@@ -46,6 +46,7 @@ import {
   FINALE_HORDE,
   INJURY_REST,
   MID_SWAP,
+  PATCH_UP,
   RADIO_HORDES,
   SQUAD_JOIN,
   type ResearchCard,
@@ -73,8 +74,8 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import { isGun } from './loadout.ts';
-import { chance, createRng, type Rng } from './rng.ts';
-import { fieldBonus, jobPart, levelOf, maxHpOf, survivorDps } from './stats.ts';
+import { chance, createRng } from './rng.ts';
+import { fieldBonus, jobBonus, jobPart, levelOf, maxHpOf, survivorDps } from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -116,6 +117,7 @@ export function squadSpec(d: RosterDefender): DefenderSpec {
     xp: d.xp,
     plain: true,
     job: d.job,
+    ...(d.startHp !== undefined ? { startHp: d.startHp } : {}),
   };
 }
 
@@ -539,41 +541,58 @@ export function letGo(
 const REST_STREAM = 0x165667b1;
 
 /**
- * Hordes `d` rests after fighting horde `horde` (ID-147): `INJURY_REST.downed` if they
- * dropped to 0 HP, else the first band they ended under (`INJURY_REST.bands`; one who
- * pulled back in a swap, ID-148, at their HP then), else 0. A Paramedic's chance (`rest`,
- * ID-149 scaling) cuts one horde, never under 1.
+ * The camp's Paramedic points (ID-155): each Paramedic in `camp`, squad or bench, resting or
+ * not, adds `PATCH_UP.base` plus their level's part (`PATCH_UP.level` × P / (P + 20)).
  */
-function restAfter(d: RosterDefender, horde: HordeState, rng: Rng): number {
-  let rest = 0;
-  if (horde.injured.some((i) => i.defender.id === d.id)) rest = INJURY_REST.downed;
-  else {
-    // Each survivor pulls back at most once: once out, they never come back that fight.
-    const f =
-      horde.defenders.find((x) => x.id === d.id) ?? horde.swaps?.find((x) => x.outId === d.id);
-    if (f && f.maxHp > 0) {
-      rest = INJURY_REST.bands.find((b) => f.hp / f.maxHp < b.below)?.rest ?? 0;
-    }
-  }
-  if (rest > 1 && chance(rng, jobPart(d, 'rest'))) rest -= 1;
-  return rest;
+export const paramedicPoints = (camp: readonly Pick<RosterDefender, 'job' | 'xp'>[]): number =>
+  camp
+    .filter((d) => d.job === 'paramedic')
+    .reduce((t, d) => t + PATCH_UP.base + jobBonus(levelOf(d.xp).level, 'paramedic', 'patchUp'), 0);
+
+/** The chance a downed survivor skips rest with `points` Paramedic points (ID-155): at most `PATCH_UP.chance`. */
+export const patchUpChance = (points: number): number =>
+  Math.min(PATCH_UP.chance, Math.max(0, points) / 100);
+
+/** The share of max HP a patched-up survivor starts the next horde at, with `points` (ID-155). */
+export const patchUpHp = (points: number): number =>
+  Math.min(
+    PATCH_UP.hpCap,
+    PATCH_UP.hp + (PATCH_UP.over * Math.max(0, points - PATCH_UP.from)) / 100,
+  );
+
+/** One survivor downed in a won horde (ID-155): resting `rest` hordes, or patched up to `startHp`. */
+export interface Downed {
+  id: string;
+  name: string;
+  /** Hordes to rest: `INJURY_REST.downed`, or 0 when patched up. */
+  rest: number;
+  /** Patched up (rest 0): the share of max HP they start the next horde at. */
+  startHp?: number;
 }
 
 /**
- * Who rests after horde `horde` and for how long (ID-147): on a win, each survivor who fought
- * and ended it hurt, in roster order, with their rest (`restAfter`, rolled from the seed
- * alone). A loss rests nobody.
+ * Who was downed in horde `horde` and how they come out of it (ID-147, ID-155): on a win, each
+ * survivor who fought and dropped to 0 HP, in roster order. Each rolls the camp's Paramedic
+ * chance (`patchUpChance`, from the seed alone): patched up, they skip rest and start the
+ * next horde at `patchUpHp`; else they rest `INJURY_REST.downed`. Anyone who ended standing,
+ * at any HP (one who pulled back in a swap, ID-148, too), is fit. A loss rests nobody.
  */
 export function squadRests(
   game: Pick<GameState, 'roster' | 'reserve'>,
   horde: HordeState,
-): { id: string; name: string; rest: number }[] {
+): Downed[] {
   // A lost fight downs everyone: resting them all would leave nobody to try again with.
   if (horde.outcome !== 'won') return [];
   const rng = createRng(horde.seed ^ REST_STREAM);
+  const points = paramedicPoints(campOf(game));
+  const odds = patchUpChance(points);
   return fieldOf(game, horde)
-    .map((d) => ({ id: d.id, name: d.name, rest: restAfter(d, horde, rng) }))
-    .filter((r) => r.rest > 0);
+    .filter((d) => horde.injured.some((i) => i.defender.id === d.id))
+    .map((d) =>
+      chance(rng, odds)
+        ? { id: d.id, name: d.name, rest: 0, startHp: patchUpHp(points) }
+        : { id: d.id, name: d.name, rest: INJURY_REST.downed },
+    );
 }
 
 /** The highest horde beaten (ID-098): every horde up to it counts as beaten, 0 for none. */
@@ -662,8 +681,9 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   // A loss that paid nothing, with nobody resting to count down, changes nothing.
   const still = horde.outcome !== 'won' && gains.every((x) => x.xp === 0);
   // ("Auto", ID-154, still re-picks: the player's own moves stand only until a fight.)
-  if (still && campOf(game).every(isFit)) return autoSquad(game);
-  const rests = new Map(squadRests(game, horde).map((r) => [r.id, r.rest]));
+  const fresh = (d: RosterDefender): boolean => isFit(d) && d.startHp === undefined;
+  if (still && campOf(game).every(fresh)) return autoSquad(game);
+  const downed = new Map(squadRests(game, horde).map((r) => [r.id, r]));
   const g = structuredClone(game);
   for (const gain of gains) {
     // A bench survivor who swapped in (ID-148) earns theirs too.
@@ -671,8 +691,13 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
     // Capped where a save reads it, so a win never leaves a save that won't load.
     if (d) d.xp = Math.min(MAX_COUNT, d.xp + gain.xp);
   }
-  const rested = (d: RosterDefender): RosterDefender =>
-    withRest(d, rests.get(d.id) ?? Math.max(0, restOf(d) - 1));
+  // A patched-up survivor's low HP lasts one horde played (ID-155), as a rest counts down.
+  const rested = (d: RosterDefender): RosterDefender => {
+    const r = downed.get(d.id);
+    const out = withRest(d, r ? r.rest : Math.max(0, restOf(d) - 1));
+    delete out.startHp;
+    return r?.startHp !== undefined ? { ...out, startHp: r.startHp } : out;
+  };
   g.roster = g.roster.map(rested);
   g.reserve = g.reserve.map(rested);
   // "Auto" (ID-154): the best squad for the camp the fight left.
@@ -715,6 +740,11 @@ export interface SquadResult {
    * `finishSquadHorde` leaves them: one woken at once (nobody fit) is left out.
    */
   rests: { id: string; name: string; rest: number }[];
+  /**
+   * Who was downed but patched up by Paramedics (ID-155), in roster order: fit for the next
+   * horde at `startHp` of max HP.
+   */
+  patched: { id: string; name: string; startHp: number }[];
   /** The camp as `finishSquadHorde` leaves it (ID-147): who is in the squad and the bench. */
   next: GameState;
   /** The weapon the win drops, and what the stash throws away for it; null on a loss. */
@@ -731,6 +761,7 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
   const won = horde.outcome === 'won';
   const next = finishSquadHorde(game, horde);
   const after = new Map(campOf(next).map((d) => [d.id, restOf(d)]));
+  const downed = squadRests(game, horde);
   return {
     // Off the whole camp, so a bench survivor who swapped in (ID-148) levels from their XP.
     gains: levelGains({ ...game, roster: campOf(game) }, horde, squadXpGains(game, horde)),
@@ -738,9 +769,12 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
       won && !isReplay(game, horde.hordeNumber) && squadDrop(game, horde)
         ? joiners(game, horde.seed)
         : [],
-    rests: squadRests(game, horde)
-      .map((r) => ({ ...r, rest: after.get(r.id) ?? 0 }))
+    rests: downed
+      .map((r) => ({ id: r.id, name: r.name, rest: after.get(r.id) ?? 0 }))
       .filter((r) => r.rest > 0),
+    patched: downed.flatMap((r) =>
+      r.startHp !== undefined ? [{ id: r.id, name: r.name, startHp: r.startHp }] : [],
+    ),
     next,
     drop: squadDrop(game, horde),
     auto: autoMoves(game, horde, next),

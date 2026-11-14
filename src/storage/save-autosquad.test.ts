@@ -33,8 +33,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}, v = SAVE
 }
 
 describe('save: Auto best squad (ID-154)', () => {
-  it('is version 21', () => {
-    expect(SAVE_VERSION).toBe(21);
+  it('is version 22', () => {
+    expect(SAVE_VERSION).toBe(22);
   });
 
   it('round-trips on; off writes no field', () => {
