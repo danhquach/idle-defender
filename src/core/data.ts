@@ -49,6 +49,21 @@ export const INJURY_REST = {
   max: 2,
 } as const;
 /**
+ * Mid-fight swaps (ID-148), starting points: a survivor on the line who drops under `below`
+ * of their max HP (still standing) pulls back, and a fit bench survivor takes their slot.
+ * At most `max` a fight. The newcomer runs in from `from` px behind the slot at `run`× the
+ * walk; the hurt one limps back at `limp`× the walk until `away` px behind it. The fight's
+ * view shows `from` px behind the line, so both are seen (ID-148).
+ */
+export const MID_SWAP = {
+  below: 0.2,
+  max: 3,
+  from: 70,
+  run: 1.75,
+  limp: 0.5,
+  away: 100,
+} as const;
+/**
  * The horde-only firing line (ID-068): one row of `SQUAD_CAP` fixed slots on the ground,
  * `offset` behind the wall's `x` and spaced evenly top to bottom, where survivors stand
  * and shoot over the wall with `range` × their gun's range (a tower's, as before). `order`

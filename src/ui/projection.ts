@@ -9,6 +9,7 @@ import {
   POST_OFFSET,
   SEGMENT_HEIGHT,
   SEGMENTS,
+  MID_SWAP,
   SQUAD_LINE,
   SQUAD_SPAWN_X,
   TRAP_STRIP,
@@ -101,13 +102,19 @@ export const FRAME = {
 export type Frame = { left: number; right: number; top: number; bottom: number };
 
 /**
- * The horde-only fight's frame (ID-068), zoomed in on the wall: from just behind the
- * firing line (a survivor's half width and the same gap) to the nearer spawn edge, the
- * whole wall top to bottom and the strip above. No towers or ground posts stand left of
- * the line, so nothing is cut off.
+ * Ground shown behind the horde-only firing line (ID-148): room for a mid-fight swap to be
+ * seen, the newcomer running in from `MID_SWAP.from` back and the hurt one limping off.
+ */
+const SQUAD_GAP = MID_SWAP.from;
+
+/**
+ * The horde-only fight's frame (ID-068), zoomed in on the wall: from `SQUAD_GAP` behind the
+ * firing line (and a survivor's half width) to the nearer spawn edge, the whole wall top to
+ * bottom and the strip above. No towers or ground posts stand left of the line, so nothing
+ * is cut off.
  */
 export const SQUAD_FRAME: Frame = {
-  left: COLUMNS[0]! + SQUAD_LINE.offset - PIECE.defender.halfWidth - FRAME_GAP,
+  left: COLUMNS[0]! + SQUAD_LINE.offset - PIECE.defender.halfWidth - SQUAD_GAP,
   right: SQUAD_SPAWN_X,
   top: -MARGIN_Y,
   bottom: FIELD.height,

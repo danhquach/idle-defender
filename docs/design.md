@@ -469,8 +469,8 @@ Defenders stand on **posts** the player builds and chooses between.
   - The whole squad starts on the wall, each on a tower in join order from
     the middle out (rows 5, 7, 3, 9, 1, 10), a row apart so each one stands
     clear of the tower behind (ten rows hold only five such towers, so the
-    sixth is next to the fifth's). Nobody waits on the bench, so no
-    recruit cards or replacements come.
+    sixth is next to the fifth's). No recruit cards or replacement offers
+    come; the bench comes in only by mid-fight swaps (ID-148, §11 below).
   - Horde cash and the shop row are hidden: kills pay no cash and no skill
     is researched.
   - **As built (ID-100): skills** *(before ID-139: the pick is Airstrike
@@ -2573,6 +2573,28 @@ As built (ID-066), the horde-only build:
   - The game can't lock up: with nobody fit, the shortest rest ends at once
     (ties to camp order); an empty squad takes the fit bench, highest XP
     first.
+- **Mid-fight swaps (ID-148, `MID_SWAP` in `data.ts`):**
+  - A survivor on the line who drops under 20% of max HP (still standing)
+    pulls back, and a fit bench survivor takes the same slot at full HP with
+    their own gun. Up to 3 swaps a fight. Automatic, no pause, no RNG, so the
+    same seed gives the same swaps.
+  - Who comes in: the fit bench, highest level first (ties to camp order).
+  - They are seen: the newcomer runs in from just behind the line (1.75× the
+    walk, firing only a sidearm on the way) and shouts a swap line (chatter,
+    shown on Low too); the hurt one limps back off the frame's left edge
+    with their HP bar and a dimmed name. The fight's view shows 70 px of
+    ground behind the line (was 24, about 4% further out) so both are seen.
+  - A note "X takes over from Y" shows under the toast's place for 3 s of
+    fight time and at least 2 s of real time (readable at 5×, held while
+    paused); swaps close together join it ("… · …").
+  - The corner's wave line ends with "Swaps left N", the swaps still to come
+    (no more than the bench has left; a tooltip explains it); hidden in a
+    fight that started with an empty bench.
+  - The one who pulled back keeps their HP: on a win they rest by the band of
+    that HP (under 25%: 1 horde), not as downed; a loss rests nobody as
+    before. They don't come back that fight. A bench survivor who came in
+    gets horde XP, levels and rest like anyone who fought.
+  - Nobody fit on the bench, or 3 swaps used: the old rule (fight on to 0 HP).
 - **Progression:** survivor XP and levels, at twice the full game's XP per
   win (`SQUAD_XP_RATE`). One result screen shows the XP, level-ups (with the
   stat picker) and the new survivor. Camp XP, the camp level and Mutated

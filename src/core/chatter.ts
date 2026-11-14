@@ -7,6 +7,7 @@ import { pick, rngFrom, type RngState } from './rng.ts';
 
 /** What a survivor can speak up about. */
 export type ChatEvent =
+  | 'swapIn'
   | 'down'
   | 'lowHp'
   | 'breach'
@@ -62,6 +63,7 @@ export const CHAT_LINES: Readonly<
   Record<Personality, Readonly<Record<ChatEvent, readonly string[]>>>
 > = {
   calm: {
+    swapIn: ["I've got this spot. Fall back!", 'Taking over. Go get patched!', "Swap! I'm on it!"],
     down: ["I'm down. Keep firing.", 'Going down. Hold the line.', 'Hit bad. Stay sharp.'],
     lowHp: ["I'm hit. Still in it.", 'Bleeding. Need a patch.', 'Hurt. Cover me.'],
     breach: ['Breach. Plug that gap.', "They're through. Watch it.", "Wall's open."],
@@ -78,6 +80,7 @@ export const CHAT_LINES: Readonly<
     hit: ['Took one.', 'Hit. Fine.', 'Minor.'],
   },
   cocky: {
+    swapIn: ["Move over, I'll show you how!", 'My turn! Step aside!', 'Relax, the pro is here!'],
     down: ['Lucky shot!', "This isn't over!", 'Cheap shot!'],
     lowHp: ['Just a scratch!', "I've had worse!", 'That all you got?'],
     breach: ['Oh, you want in?!', 'Get back out there!', "Let 'em in, I dare you!"],
@@ -94,6 +97,7 @@ export const CHAT_LINES: Readonly<
     hit: ['Is that it?', 'Tickles!', 'Missed me! Mostly.'],
   },
   nervous: {
+    swapIn: ["I'm coming! I'm coming!", "Go, go! I'll hold it!", "Okay, okay, I'm in!"],
     down: ['Help! Help me!', "Don't leave me!", 'I knew it!'],
     lowHp: ["I don't want to die here!", 'So much blood!', 'Medic! Please!'],
     breach: ["They're in! They're in!", "The wall's gone!", "We're done for!"],
@@ -113,6 +117,8 @@ export const CHAT_LINES: Readonly<
 
 /** Which event wins, highest first: a higher one replaces a lower one already showing. */
 export const CHAT_RANK: Readonly<Record<ChatEvent, number>> = {
+  // A mid-fight swap (ID-148): the one taking over shouts as they run in.
+  swapIn: 13,
   down: 12,
   lowHp: 11,
   breach: 10,
@@ -258,6 +264,13 @@ function events(c: ChatState, prev: HordeState, next: HordeState): [Defender, Ch
   const wasHurt = new Set(prev.injured.map((i) => i.defender.id));
   for (const i of next.injured)
     if (!wasHurt.has(i.defender.id)) note(before.get(i.defender.id), 'down');
+
+  // Swapped in (ID-148): the one taking over shouts as they run in.
+  for (const x of (next.swaps ?? []).slice(prev.swaps?.length ?? 0))
+    note(
+      standing.find((d) => d.id === x.inId),
+      'swapIn',
+    );
 
   for (const d of standing) {
     const b = before.get(d.id);

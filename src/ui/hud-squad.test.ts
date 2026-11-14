@@ -22,8 +22,13 @@ import {
   squadStart,
   squadStatus,
   startLabel,
+  SWAP_NOTE,
+  swapNote,
+  SWAPS_TIP,
+  swapsText,
   xpBar,
 } from './hud.ts';
+import type { Swap } from '../core/horde.ts';
 import { ART_URLS } from './sprites.ts';
 import { levelText } from './statlines.ts';
 import { enemy } from '../core/testing.ts';
@@ -442,5 +447,99 @@ describe('no stat-point UI on the result and start screens (ID-146)', () => {
     h.showResult(squadScreen(all, ended(all, 'won')));
     expect(shapes()).toHaveLength(3);
     expect(new Set(shapes()).size).toBe(1);
+  });
+});
+
+const SWAP: Swap = { inId: 'b', inName: 'Bo', outId: 'a', outName: 'Al', hp: 5, maxHp: 50, at: 10 };
+
+describe('mid-fight swaps on the HUD (ID-148)', () => {
+  function benchGame(bench: number): GameState {
+    const g = squadGame(SQUAD_CAP, 3);
+    const reserve = Array.from({ length: bench }, (_, i) => recruit(SQUAD_CAP + i + 1));
+    return { ...g, reserve, camp: { ...g.camp, recruits: SQUAD_CAP + bench } };
+  }
+
+  it('counts the swaps still to come; none shown with an empty bench', () => {
+    const s = startSquadHorde(benchGame(4), 1, NOW);
+    expect(swapsText(s)).toBe('Swaps left 3');
+    expect(squadStatus(s)).toMatch(/ · Swaps left 3$/);
+    // Only as many as the bench has.
+    expect(swapsText(startSquadHorde(benchGame(2), 1, NOW))).toBe('Swaps left 2');
+    // All used up: still shown, at 0.
+    expect(swapsText({ ...s, subs: [], swapsLeft: 0, swaps: [SWAP, SWAP, SWAP] })).toBe(
+      'Swaps left 0',
+    );
+    const none = startSquadHorde(benchGame(0), 1, NOW);
+    expect(swapsText(none)).toBeNull();
+    expect(squadStatus(none)).not.toMatch(/Swaps/);
+  });
+
+  it('says who takes over from whom for SWAP_NOTE.fight s of fight time', () => {
+    const s = { ...startSquadHorde(benchGame(1), 1, NOW), swaps: [SWAP], time: 10 };
+    const fight = SWAP_NOTE.fight;
+    expect(swapNote(s)).toBe('Bo takes over from Al');
+    expect(swapNote({ ...s, time: 10 + fight - 0.01 })).toBe('Bo takes over from Al');
+    expect(swapNote({ ...s, time: 10 + fight })).toBeNull();
+    expect(swapNote({ ...s, outcome: 'won' })).toBeNull();
+    expect(swapNote({ ...s, swaps: [] })).toBeNull();
+  });
+
+  it('a second swap close behind joins the note, never hides the first', () => {
+    const next: Swap = { ...SWAP, inName: 'Cy', outName: 'Di', at: 11 };
+    const s = { ...startSquadHorde(benchGame(2), 1, NOW), swaps: [SWAP, next], time: 11.5 };
+    expect(swapNote(s)).toBe('Bo takes over from Al · Cy takes over from Di');
+    // The first drops out on its own time.
+    expect(swapNote({ ...s, time: 10 + SWAP_NOTE.fight })).toBe('Cy takes over from Di');
+  });
+
+  it('holds the note SWAP_NOTE.realMs of real time too, so it reads at 5×', () => {
+    vi.useFakeTimers();
+    try {
+      const root = document.createElement('div');
+      document.body.replaceChildren(root);
+      const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+      const note = root.querySelector<HTMLElement>('.hud-swap-note')!;
+      const s = { ...startSquadHorde(benchGame(1), 1, NOW), swaps: [SWAP], time: 10 };
+      h.update(s);
+      expect(note.hidden).toBe(false);
+      // At 5× its fight time is gone in 0.6 s of real time: it stays up.
+      vi.advanceTimersByTime(600);
+      h.update({ ...s, time: 10 + SWAP_NOTE.fight });
+      expect(note.hidden).toBe(false);
+      vi.advanceTimersByTime(SWAP_NOTE.realMs - 600);
+      h.update({ ...s, time: 13.5 });
+      expect(note.hidden).toBe(true);
+      // The fight ending takes it down at once.
+      h.update(s);
+      expect(note.hidden).toBe(false);
+      h.update({ ...s, time: 14, outcome: 'won' });
+      expect(note.hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the counter in the corner and the note, as text', () => {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const chip = root.querySelector<HTMLElement>('.hud-corner-swaps')!;
+    const note = root.querySelector<HTMLElement>('.hud-swap-note')!;
+    const s = startSquadHorde(benchGame(3), 1, NOW);
+    h.update(s);
+    expect([chip.hidden, chip.textContent, note.hidden]).toEqual([false, 'Swaps left 3', true]);
+    expect(chip.title).toBe(SWAPS_TIP);
+    // Names pass the save's allow-list first; even so the note only ever copies text.
+    const evil = { ...SWAP, inName: '<img src=x onerror=alert(1)>', outName: '<b>Al</b>\u202e' };
+    h.update({ ...s, subs: s.subs!.slice(1), swapsLeft: 2, swaps: [evil], time: 10 });
+    expect([chip.textContent, note.hidden]).toEqual(['Swaps left 2', false]);
+    expect(note.textContent).toBe('<img src=x onerror=alert(1)> takes over from <b>Al</b>\u202e');
+    expect(note.querySelector('img, b')).toBeNull();
+    expect(note.getAttribute('role')).toBe('status');
+    // Off once the fight ends (the timed hold has its own test).
+    h.update({ ...s, swaps: [evil], time: 10 + SWAP_NOTE.fight, outcome: 'lost' });
+    expect(note.hidden).toBe(true);
+    h.update(startSquadHorde(benchGame(0), 1, NOW));
+    expect(chip.hidden).toBe(true);
   });
 });

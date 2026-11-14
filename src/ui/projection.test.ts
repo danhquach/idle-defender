@@ -168,8 +168,9 @@ describe('projection', () => {
       expect(frameCamera({ w: 1280, h: 720 })).toEqual(
         frameCamera({ w: 1280, h: 720 }, 0, SQUAD_FRAME),
       );
-      // 500 − 30 − 7 − 24: a survivor's half width and the gap behind the line.
-      expect(SQUAD_FRAME.left).toBe(439);
+      // 500 − 30 − 7 − 70: a survivor's half width and the ground behind the line, where a
+      // mid-fight swap runs in and limps off (ID-148, `MID_SWAP.from`).
+      expect(SQUAD_FRAME.left).toBe(393);
       for (const p of SQUAD_SLOTS)
         expect(p.x - PIECE.defender.halfWidth).toBeGreaterThan(SQUAD_FRAME.left);
       expect(SQUAD_FRAME.right).toBe(SQUAD_SPAWN_X);
@@ -182,12 +183,13 @@ describe('projection', () => {
     });
 
     it.each([
-      { w: 1280, h: 720, zoom: 1.15 },
-      { w: 1440, h: 900, zoom: 1.31 },
-      { w: 1600, h: 900, zoom: 1.45 },
-      { w: 1920, h: 1080, zoom: 1.74 },
-      { w: 2560, h: 1440, zoom: 2.33 },
-      { w: 1280, h: 1024, zoom: 1.16 },
+      // ID-148 showed 46 px more ground behind the line: about 4% further out than before.
+      { w: 1280, h: 720, zoom: 1.12 },
+      { w: 1440, h: 900, zoom: 1.26 },
+      { w: 1600, h: 900, zoom: 1.39 },
+      { w: 1920, h: 1080, zoom: 1.67 },
+      { w: 2560, h: 1440, zoom: 2.23 },
+      { w: 1280, h: 1024, zoom: 1.12 },
       { w: 3440, h: 1440, zoom: 2.52 },
     ])(
       'frames the whole wall and the spawn edge at $w×$h (about $zoom×), zoomed in over ID-064',
@@ -219,12 +221,12 @@ describe('projection', () => {
       },
     );
 
-    it('zooms in about 17% over ID-064 at 1280×720 and 1440×900 (0.98× → 1.15×, 1.11× → 1.31×)', () => {
+    it('zooms in about 13% over ID-064 at 1280×720 and 1440×900 (0.98× → 1.12×, 1.11× → 1.26×)', () => {
       for (const view of [
         { w: 1280, h: 720 },
         { w: 1440, h: 900 },
       ]) {
-        expect(frameCamera(view).zoom / frameCamera(view, 0, FRAME).zoom).toBeGreaterThan(1.16);
+        expect(frameCamera(view).zoom / frameCamera(view, 0, FRAME).zoom).toBeGreaterThan(1.12);
       }
     });
 
