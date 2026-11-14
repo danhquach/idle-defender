@@ -2773,7 +2773,8 @@ and comes back stronger.
     Instinct 49% (7 points; ×1.07 and ×1.1 spread 13–14 points). A knife
     edge: a few fights move it. The late-hordes test now lets enemies hit
     the wall in up to 97% of new hordes' first tries (95% before ID-136;
-    measured 96%, 88% before).
+    measured 96%, 88% before; ID-153 replaced this measure, see Mid-game
+    walls below).
   - ID-128: fitted to the scripted player's cards and skills, an average
     build, since no player fights without cards. Before it was fitted with no
     cards, and with cards a squad at 70% of it still won Hordes 10 and 15 on 5
@@ -2847,16 +2848,22 @@ Targets, each with a balance test:
   at the first try on every seed, 4–10 on at least 60% (restored from
   ID-097's relaxed targets); every campaign beats Horde 10 (farming where it
   lost).
-- **Mid-game walls** (`balance/late-hordes.test.ts`, 4 seeds to Horde 18,
-  re-enabled): every campaign beats Horde 18; in new-horde fights from Horde
-  11, enemies reach the Barbed Wire's band in at least 75% and hit the wall in
-  at least 15% (ID-147 dropped the upper bound: 99.2% over 8 seeds, the same
-  as before rest); every campaign beats Horde 18 within 120 fights (ID-147:
+- **Mid-game walls** (`balance/late-hordes.test.ts`, 16 seeds to Horde 18
+  since ID-153, 4 before): every campaign beats Horde 18; in new-horde fights
+  from Horde 11 (every try at a new horde), enemies reach the Barbed Wire's
+  band in at least 75%, and **8–30% end with at least 90% of the wall's HP**
+  (ID-153: "the wall is hit in most fights, not every one"). Enemies reach
+  the wall itself in almost every fight (97% over 40 seeds, 2.5% end with it
+  untouched), so "any wall HP lost" can't tell a scratch from a breach; it
+  read 97–100% from ID-136 on and ID-147 dropped its bound. Measured 16.9%
+  over 40 seeds (15–18% over 16), and no such fight was lost. On the first 4
+  seeds, every campaign beats Horde 18 within 120 fights (ID-147:
   the scripted player replays the highest beaten horde while a rest leaves
-  the squad short, `restWait`); most seeds (3 of 4) lose at least one new horde at the first try
+  the squad short, `restWait`); most seeds (at least 3 in 4; 16 of 16 measured) lose at least one new horde at the first try
   (every seed before ID-127: Heavy Rounds, unlocked by Horde 10's boss, makes
-  the squad stronger past it, by design); farming past any one horde takes at
-  most 30 replays with average luck.
+  the squad stronger past it, by design); on the first 4 seeds, farming past
+  any one horde takes at most 30 replays with average luck (seed 13 is stuck
+  at one horde for 12 tries, 157 fights to Horde 18).
 - **Recommended Power** (`balance/squad-power.test.ts`): about half the
   fights won with no cards or skills, most with them (above).
 - **Worst luck** (`balance/farming.test.ts`, 2 seeds): with every replay
