@@ -80,8 +80,12 @@ export interface GunTile {
  * the one held, strongest first by dmg/s in their hands (`survivorDps`: their level and
  * profession, ID-152; a stable sort: equal guns keep stash order).
  */
-export function gunTiles(game: Pick<GameState, 'roster' | 'armoury'>, id: string): GunTile[] {
-  const d = game.roster.find((r) => r.id === id);
+export function gunTiles(
+  game: Pick<GameState, 'roster' | 'armoury'> & { reserve?: readonly RosterDefender[] },
+  id: string,
+): GunTile[] {
+  // A bench survivor's gun can change too (ID-147), so a gun is never stuck with them.
+  const d = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
   if (!d) return [];
   const who = squadSpec(d);
   const held = heldGunOf(d);

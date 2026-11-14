@@ -1434,6 +1434,18 @@ body {
   font-size: var(--text-xs);
 }
 
+/* The start screen's link to the Roster (ID-147), beside the Squad heading. */
+.debrief-change-squad {
+  min-height: 32px;
+  padding: 0 var(--space-12);
+  font-size: var(--text-xs);
+}
+
+/* The bench line under the hint (ID-147): a whole row of its own. */
+.debrief-bench {
+  flex-basis: 100%;
+}
+
 /* A win with no level-up (ID-134): one line where the cards would be. */
 .debrief-empty {
   margin: 0;
@@ -3582,6 +3594,31 @@ body {
   line-height: 1.2;
 }
 
+/* With a bench (ID-147): a small label over the squad's row and the bench's. */
+.rv-tabs-label {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+}
+
+.rv-tabs[hidden] {
+  display: none;
+}
+
+/* The bench can outgrow the dialog: its row scrolls sideways, each tab at a fixed width. */
+.rv-bench {
+  grid-auto-columns: 96px;
+}
+
+/* Squad ⇄ bench, under the XP bar: small, so the row keeps its height. */
+.rv-squad {
+  min-height: 32px;
+  margin-top: var(--space-4);
+  padding: 0 var(--space-8);
+  font-size: var(--text-xs);
+}
+
 /* The selected survivor beside their gun slot. */
 .rv-top {
   display: grid;
@@ -4154,6 +4191,13 @@ body {
   .rv-tabs {
     grid-auto-columns: minmax(0, 1fr);
     overflow-x: visible;
+  }
+
+  /* The bench's row (ID-147) may hold many more: narrow tabs, scrolling, the next one
+     peeking out at the edge so the row reads as more. */
+  .rv-bench {
+    grid-auto-columns: 52px;
+    overflow-x: auto;
   }
 
   .rv-slot-chev-word,

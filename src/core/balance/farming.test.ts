@@ -6,7 +6,7 @@ import { rollWeapon } from '../armoury.ts';
 import { recruit } from '../camp.ts';
 import { FARM, SQUAD_CAP } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
-import { finishSquadHorde, squadOf } from '../hordeonly.ts';
+import { campOf, finishSquadHorde } from '../hordeonly.ts';
 import { createRng } from '../rng.ts';
 import { gearUp, playSquadCampaign, playSquadHorde } from '../sim.ts';
 import { squadPower } from '../squadpower.ts';
@@ -64,7 +64,9 @@ describe('farming (ID-102)', () => {
   function farm(game: GameState, n: number, fights: number, seed: number) {
     let g = game;
     let seconds = 0;
-    const xp = (s: GameState) => squadOf(s).reduce((t, d) => t + d.xp, 0);
+    // The whole camp (ID-147): a survivor resting on the bench still keeps their XP and gun.
+    const whole = (s: GameState): GameState => ({ ...s, roster: campOf(s), reserve: [] });
+    const xp = (s: GameState) => campOf(s).reduce((t, d) => t + d.xp, 0);
     for (let i = 0; i < fights; i++) {
       const h = playSquadHorde(g, seed + i, undefined, undefined, n);
       seconds += h.time;
@@ -72,7 +74,7 @@ describe('farming (ID-102)', () => {
     }
     const minutes = seconds / 60;
     return {
-      power: (squadPower(g) - squadPower(game)) / minutes,
+      power: (squadPower(whole(g)) - squadPower(whole(game))) / minutes,
       xp: (xp(g) - xp(game)) / minutes,
     };
   }
@@ -82,16 +84,21 @@ describe('farming (ID-102)', () => {
     const game = stuckAt(WALL);
     let nearPower = 0;
     let farPower = 0;
-    for (let seed = 1; seed <= 3; seed++) {
+    for (let seed = 1; seed <= 10; seed++) {
       const near = keep(`near ${seed}`, () => farm(game, WALL - 1, 6, seed * 100));
       const far = keep(`far ${seed}`, () => farm(game, WALL - 1 - FARM.farOff - 1, 6, seed * 100));
       expect(near.xp, `seed ${seed}: XP a minute`).toBeGreaterThan(far.xp);
       nearPower += near.power;
       farPower += far.power;
     }
-    // Over the three seeds together (ID-132; each seed alone before): Squad Power comes in
-    // gun drops, and one lucky drop in 6 fights decides a seed. ID-132's cards re-roll the
-    // fights: seed 3 near 9.0 a minute, far 11.6 (one drop); in all, near 27.6, far 11.8.
+    // Over the seeds together (ID-132; each seed alone before): Squad Power comes in gun
+    // drops, and one lucky drop in 6 fights decides a seed. ID-147 widened 3 seeds to 10:
+    // rest (a win at the wall can rest 4 of 6, and the next replays go short) re-rolls the
+    // fights, and seeds 1–3 alone came out near 27.5, far 53.2 (main had near 56.2, far
+    // 38.5 there, not the 27.6/11.8 noted at ID-132). Seeds 1–10 a minute, near: 2.5, 12.4,
+    // 12.6, 63.3, 36.3, 60.0, 23.2, 41.1, 26.4, 6.1 (283.9); far: 15.1, 17.2, 20.9, 25.1,
+    // 18.8, 19.4, 3.3, 16.9, 11.4, 4.8 (153.0); near wins 7 of 10. Main: 369.8 against
+    // 167.3. Whole camp counted: someone resting keeps their gun.
     expect(nearPower, 'Squad Power a minute').toBeGreaterThan(farPower);
   }, 900_000);
 });
