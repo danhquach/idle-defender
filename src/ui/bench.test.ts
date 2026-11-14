@@ -10,6 +10,7 @@ import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
 import { startSquadHorde, toggleSquad } from '../core/hordeonly.ts';
 import { benchLine, CHANGE_SQUAD, restNote, squadScreen, squadStart } from './hud.ts';
+import { askLine, answerText } from './joining.ts';
 import { JOB_SHORT } from './jobtext.ts';
 import { createRoster, rosterTiles, SQUAD_WAIT } from './squadroster.ts';
 
@@ -79,36 +80,33 @@ describe('the start screen and the bench (ID-147)', () => {
 });
 
 describe('the result screen and the bench (ID-147)', () => {
-  it('names two joiners past 6, waiting on the bench while the squad is full (seed 9)', () => {
+  it('two ask to join past 6 (seed 9): a line each and the offer tile, no recruit tile', () => {
     const g = campGame(people(6));
     const s = squadScreen(g, won(g, 9));
     const [a, b] = [recruit(7, 9), recruit(8, 9)];
-    expect(s.lines).toContain(
-      `New survivor: ${a.name} (${JOBS[a.job].name}) waits on the bench for now`,
-    );
-    expect(s.lines).toContain(
-      `New survivor: ${b.name} (${JOBS[b.job].name}) waits on the bench for now`,
-    );
-    expect(s.debrief!.recruit).toEqual({
-      label: 'New survivors',
-      name: `${a.name} and ${b.name}`,
-      sub: `${JOBS[a.job].name}, ${JOBS[b.job].name} · waits on the bench`,
-      full: false,
-    });
+    expect(s.lines).toContain(`${a.name} (${JOBS[a.job].name}) asks to join the camp`);
+    expect(s.lines).toContain(`${b.name} (${JOBS[b.job].name}) asks to join the camp`);
+    expect(s.debrief!.recruit).toBeNull();
+    expect(s.debrief!.join).toBe(true);
   });
 
-  it('a joiner takes a slot the hurt leave, and the screen says who rests', () => {
+  it('one asks to join while one rests: the screen says who rests', () => {
     const g = campGame(people(6));
     const s = squadScreen(g, won(g, 8, ['recruit-2']));
     const a = recruit(7, 8);
-    expect(s.lines).toContain(
-      `New survivor: ${a.name} (${JOBS[a.job].name}) joins the squad for the next horde`,
-    );
-    expect(s.debrief!.recruit!.sub).toBe(`${JOBS[a.job].name} · joins next horde`);
-    // The joiner filled the slot: nothing left to fill on the Roster.
+    expect(s.lines).toContain(askLine(a));
+    expect(s.debrief!.join).toBe(true);
+    // Nobody fit on the bench yet (the newcomer only joins on Accept): no Roster step.
     const note = `Resting: ${recruit(2).name} 2 hordes.`;
     expect(s.debrief!.note).toBe(note);
     expect(s.lines).toContain(note);
+  });
+
+  it('a newcomer will take the one open slot: no Roster step in the rest note (ID-150)', () => {
+    const g = campGame(people(6), [person(7)]);
+    const s = squadScreen(g, won(g, 9, ['recruit-2']));
+    expect(s.debrief!.join).toBe(true);
+    expect(s.debrief!.note).toBe(`Resting: ${recruit(2).name} 2 hordes.`);
   });
 
   it('slots left open with someone fit on the bench: the note points at the Roster', () => {
@@ -156,13 +154,10 @@ describe('the result screen says what really happens (ID-147)', () => {
 });
 
 describe('designer review fixes (ID-147)', () => {
-  it('joiners split between squad and bench: the tile says who went where (seed 9)', () => {
-    const g = campGame(people(5), [person(6)]);
-    const s = squadScreen(g, won(g, 9));
-    const [a, b] = [recruit(7, 9), recruit(8, 9)];
-    expect(s.debrief!.recruit!.sub).toBe(
-      `${a.name} joins next horde · ${b.name} waits on the bench`,
-    );
+  it('each answer says where the newcomer went (ID-150)', () => {
+    expect(answerText('Ava', 'squad')).toBe('Ava joins the squad.');
+    expect(answerText('Ava', 'bench')).toBe('Ava joins the camp and waits on the bench.');
+    expect(answerText('Ava', null)).toBe('Ava is turned away for good.');
   });
 
   it('the Roster lists the fit bench before the resting, and a resting tab says how long', () => {
@@ -180,6 +175,7 @@ describe('designer review fixes (ID-147)', () => {
       state: () => ({ game: g, fight: null, canGear: true, resumes: false }),
       onEquip: () => ({ ok: true }),
       onToggleSquad: () => ({ ok: true }),
+      onLetGo: () => null,
       onBestGuns: () => ({ ok: true, moves: [] }),
     });
     roster.open('recruit-1');
@@ -219,6 +215,7 @@ describe('the Roster and the bench (ID-147)', () => {
       state: () => ({ game: g, fight: null, canGear, resumes: false }),
       onEquip: () => ({ ok: true }),
       onToggleSquad,
+      onLetGo: () => null,
       onBestGuns: () => ({ ok: true, moves: [] }),
     });
     const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;

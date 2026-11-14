@@ -17,7 +17,8 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     # A normal run takes a few minutes; a hung simulation must not hold the runner for hours.
-    timeout-minutes: 15
+    # A job may name its own limit (`timeout`); the rest stop at 15 minutes.
+    timeout-minutes: ${{ matrix.timeout || 15 }}
     # The unit tests run in five jobs at once (ID-105, ID-149, ID-152): a test file runs on one
     # worker, so the slowest balance files set the time and get jobs of their own. (ID-146 removed the
     # stats files, ID-125's slowest, and their job.)
@@ -34,9 +35,12 @@ jobs:
             tests: src/core/balance/horde-only.test.ts src/core/balance/squad-power.test.ts
           # ID-149: the professions test plays 60 seeds and the Barbed Wire check 6
           # campaigns, too slow to share the last job. ID-152: together they ran past the
-          # 15-minute limit (about 14 minutes before), so each has a job of its own.
+          # 15-minute limit (about 14 minutes before), so each has a job of its own. Since
+          # ID-147 the professions file alone takes 13 to 15+ minutes (main was cancelled at
+          # 15), so its job has 25 (ID-150).
           - name: Unit (professions)
             tests: src/core/balance/professions.test.ts
+            timeout: 25
           - name: Unit (wire)
             tests: src/core/balance/wire.test.ts
           - name: Lint, build, other unit

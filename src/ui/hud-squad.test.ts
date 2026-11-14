@@ -97,7 +97,7 @@ describe('the horde-only screens (ID-066)', () => {
     expect(screen.lines.join(' ')).not.toMatch(/stat point/);
     expect(screen.lines.some((l) => /level 2 · \d+\/50 XP to level 3/.test(l))).toBe(true);
     expect(screen.lines).toContain(
-      `New survivor: ${recruit(3).name} (${JOBS[recruit(3, 1).job].name}) joins the squad for the next horde`,
+      `${recruit(3).name} (${JOBS[recruit(3, 1).job].name}) asks to join the camp`,
     );
     expect(screen.lines.join(' ')).not.toMatch(/Camp|Genes|Payout|Repair|injured/);
     expect(screen.button).toBe(startLabel(6));

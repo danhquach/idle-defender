@@ -29,6 +29,7 @@ import {
 import { hordeXp, newGame, type GameState, type RosterDefender } from './game.ts';
 import { gunRange, moveDefender, tick } from './horde.ts';
 import {
+  acceptJoins,
   bossReward,
   capSquad,
   finishSquadHorde,
@@ -305,11 +306,15 @@ describe('after a horde (ID-066)', () => {
     expect(next.roster.slice(0, 2).map((d) => d.xp)).toEqual([xp, xp]);
   });
 
-  it('a win adds one survivor, in the squad for the next horde, with no accept step', () => {
+  it('a win has one survivor ask to join; accepted, they are in the squad for the next horde', () => {
     const g = squadGame(2);
-    const next = finishSquadHorde(g, ended(g, 'won'));
+    const asked = finishSquadHorde(g, ended(g, 'won'));
+    // Asking (ID-150): not in the camp until accepted.
+    expect(asked.roster.map((d) => d.id)).toEqual(['recruit-1', 'recruit-2']);
+    expect(asked.joining).toEqual([recruit(3, 1)]); // rolled with the horde's seed (ID-149)
+    const next = acceptJoins(asked);
     expect(next.roster.map((d) => d.id)).toEqual(['recruit-1', 'recruit-2', 'recruit-3']);
-    expect(next.roster[2]).toEqual(recruit(3, 1)); // rolled with the horde's seed (ID-149)
+    expect(next.joining).toBeUndefined();
     expect(next.camp.recruits).toBe(3);
     expect(next.camp.offers).toEqual([]);
     expect(startSquadHorde(next, 1, NOW).defenders.map((d) => d.id)).toContain('recruit-3');

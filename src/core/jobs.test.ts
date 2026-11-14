@@ -503,7 +503,7 @@ describe('rolling a profession (ID-149)', () => {
     const g = squadOfPeople([person(1, 'police'), person(2, 'police')]);
     expect(joiners(g, 123)[0]!.job).toBe(jobFor('recruit-3', 123));
     const won = finishSquadHorde(g, { ...startSquadHorde(g, 456, NOW), outcome: 'won' });
-    expect(won.roster.at(-1)!.job).toBe(jobFor('recruit-3', 456));
+    expect(won.joining!.at(-1)!.job).toBe(jobFor('recruit-3', 456));
   });
 
   it('a new game’s first survivor rolls with its seed', () => {

@@ -9,9 +9,10 @@ import type { OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { JOB_IDS, JOBS, type JobId, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
-import { equipGun, startSquadHorde } from '../core/hordeonly.ts';
+import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
 import { squadGear, squadScreen } from './hud.ts';
+import { joinCards } from './joining.ts';
 import { JOB_SHORT, jobLine, NO_BONUS, NO_STACK, statRows } from './jobtext.ts';
 import { createRoster, rosterTiles } from './squadroster.ts';
 
@@ -38,6 +39,7 @@ function open(game: GameState, id: string) {
     state: () => ({ game, fight: null, canGear: true, resumes: false }),
     onEquip: () => ({ ok: true }),
     onToggleSquad: () => ({ ok: true }),
+    onLetGo: () => null,
     onBestGuns: () => ({ ok: true, moves: [] }),
   });
   roster.open(id);
@@ -222,12 +224,17 @@ describe('squad cards and the new survivor name the profession (ID-149)', () => 
     expect(squadGear(suited).rows[0]!.role).not.toContain('No Hunter bonus');
   });
 
-  it('a first clear’s new survivor tile names their profession', () => {
+  it('a first clear’s newcomer asking to join names their profession (ID-150)', () => {
     const game = { ...camp([person(1, 'hunter'), person(2, 'chef')]), hordeNumber: 1 };
     const s = { ...startSquadHorde(game, 7, NOW), outcome: 'won' as const };
     const screen = squadScreen(game, s);
     const joined = recruit(3, 7);
-    expect(screen.debrief!.recruit!.sub).toBe(`${JOBS[joined.job].name} · joins next horde`);
+    expect(screen.lines).toContain(
+      `${joined.name} (${JOBS[joined.job].name}) asks to join the camp`,
+    );
+    expect(joinCards(finishSquadHorde(game, s))[0]!.sub).toBe(
+      `Lv 1 · ${JOBS[joined.job].name} · Pistol`,
+    );
   });
 
   it('equipping keeps the profession', () => {

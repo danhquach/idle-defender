@@ -10,7 +10,15 @@
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
 import { JOBS, SQUAD_CAP, STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import { isFit, restLabel, restOf, squadOf, squadSpec, type GunMove } from '../core/hordeonly.ts';
+import {
+  isFit,
+  letGoLock,
+  restLabel,
+  restOf,
+  squadOf,
+  squadSpec,
+  type GunMove,
+} from '../core/hordeonly.ts';
 import type { HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
@@ -113,6 +121,11 @@ export interface RosterOptions {
   onEquip: (id: string, choice: string) => { ok: true } | { ok: false; reason: string };
   /** Move survivor `id` between the squad and the bench (ID-147), or why not. */
   onToggleSquad: (id: string) => { ok: true } | { ok: false; reason: string };
+  /**
+   * Let survivor `id` go for good (ID-150), after the app's confirm: what to say once they
+   * have gone, why not, or null when the player said no.
+   */
+  onLetGo: (id: string) => { ok: true; text: string } | { ok: false; reason: string } | null;
   /** "Best gun for everyone": the guns handed out, or why not. */
   onBestGuns: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
 }
@@ -350,7 +363,14 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     const { game } = opts.state();
     // Only with a bench to swap with (ID-147): a camp of six or fewer has no choice to make.
     // Someone resting gets none: "Resting: N hordes" on the line above says why.
-    if ((game.reserve ?? []).length > 0 && isFit(d)) text.append(squadButton(d, mark, canGear));
+    // Let go (ID-150) always shows: greyed at 6 or fewer, where a press says why.
+    const actions = el('div', 'rv-actions');
+    if ((game.reserve ?? []).length > 0 && isFit(d)) actions.append(squadButton(d, mark, canGear));
+    actions.append(letGoButton(d, canGear));
+    text.append(actions);
+    // The lock's reason beside the button too (ID-150): the status line can sit below the fold.
+    const lock = letGoLock({ roster: game.roster, reserve: game.reserve ?? [] });
+    if (canGear && lock) text.append(el('p', 'rv-letgo-why', lock));
     who.append(avatar(mark.art, 'roster-avatar roster-avatar-md'), text);
 
     const held = heldGunOf(d);
@@ -430,6 +450,38 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       if (!r.ok) setStatus(r.reason, 'danger');
       else setStatus(mark.bench ? `${d.name} joins the squad.` : `${d.name} waits on the bench.`);
       draw('squad');
+    });
+    return b;
+  }
+
+  /**
+   * Lets `d` go for good (ID-150), after the app's confirm. At 6 or fewer in the camp it
+   * looks greyed and a press says why on the status line (a tooltip never shows on a phone);
+   * greyed with `SQUAD_WAIT` in a fight.
+   */
+  function letGoButton(d: RosterDefender, canGear: boolean): HTMLElement {
+    const { game } = opts.state();
+    const lock = letGoLock({ roster: game.roster, reserve: game.reserve ?? [] });
+    const b = el('button', 'hud-button rv-btn rv-squad rv-letgo', 'Let go');
+    b.type = 'button';
+    b.dataset.key = 'letgo';
+    b.disabled = !canGear;
+    b.title = canGear ? (lock ?? '') : SQUAD_WAIT;
+    b.classList.toggle('rv-letgo-locked', lock !== null);
+    b.setAttribute('aria-disabled', String(!canGear || lock !== null));
+    const why = !canGear ? SQUAD_WAIT : lock;
+    b.setAttribute('aria-label', `Let ${d.name} go${why ? `. ${why}` : ''}`);
+    b.addEventListener('click', () => {
+      if (lock) {
+        setStatus(lock, 'danger');
+        draw('letgo');
+        return;
+      }
+      const r = opts.onLetGo(d.id);
+      if (r === null) return;
+      if (!r.ok) setStatus(r.reason, 'danger');
+      else setStatus(r.text);
+      draw('letgo');
     });
     return b;
   }

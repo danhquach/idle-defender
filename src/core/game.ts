@@ -109,6 +109,12 @@ export interface GameState {
    * picked, in join order. The full game takes them back onto the roster.
    */
   reserve: RosterDefender[];
+  /**
+   * Horde-only (ID-150): survivors asking to join after a first clear, waiting for the
+   * player's Accept or Refuse; absent (or empty) with nobody waiting. Each is already
+   * counted in `camp.recruits`, so a refused one never comes back.
+   */
+  joining?: RosterDefender[];
   /** Farming beaten hordes (ID-098): replay wins so far, and the bad-luck count. */
   farm: Farm;
   /**

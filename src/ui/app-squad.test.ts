@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FIELD, HORDE_ONLY, SKILLS, STASH_CAP } from '../core/data.ts';
 import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { newGame } from '../core/game.ts';
+import { newGame, type GameState } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
@@ -77,6 +77,15 @@ function boot() {
   const bar = () => root.querySelector<HTMLElement>('.hud-corner')!.title;
   const saved = () => decodeSave(localStorage.getItem(SAVE_KEY))!.game;
   return { root, result, title, button, bar, saved };
+}
+
+/** Presses Accept for the first survivor asking to join (ID-150). */
+function accept(root: ParentNode): void {
+  const b = [...root.querySelectorAll<HTMLButtonElement>('.join-btn')].find(
+    (x) => x.textContent === 'Accept',
+  );
+  if (!b) throw new Error('nobody is asking to join');
+  b.click();
 }
 
 /** The next tick ends the fight as `outcome`. */
@@ -149,6 +158,9 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     expect(button().textContent).toBe('Start Horde 2');
     // Saved as the fight ends: a reload here keeps the win.
     expect(saved().hordeNumber).toBe(2);
+    // The new survivor asks to join (ID-150): accepted, they fight the next horde.
+    expect(saved().joining).toHaveLength(1);
+    accept(root);
     button().click();
     const g = saved();
     expect(g.hordeNumber).toBe(2);
@@ -539,6 +551,8 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     step(16);
     endNextTick('won');
     step(32);
+    // The newcomer joins (ID-150), so the Roster has all three.
+    accept(booted.root);
     const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
     const card = () =>
       booted.root.querySelector<HTMLElement>('.squad-card[data-defender="recruit-1"]')!;
@@ -686,6 +700,7 @@ describe('farming in the game (app.ts, ID-098)', () => {
     frame();
     expect(title()).toBe('Horde 5 held');
     expect(saved().hordeNumber).toBe(6);
+    accept(document.body);
     expect(select().value).toBe('6');
     expect([...select().options].map((o) => o.value)).toEqual(['6', '5', '4', '3', '2', '1']);
     expect(button().textContent).toMatch(/^Start Horde 6/);
@@ -1095,5 +1110,188 @@ describe('the Mute switch is silent when it mutes (app.ts, ID-106)', () => {
     expect(play).not.toHaveBeenCalledWith('click');
     mute.click();
     expect(play).toHaveBeenCalledWith('click');
+  });
+});
+
+describe('joining the camp in the game (app.ts, ID-150)', () => {
+  /** A saved camp of `n` (6 in the squad, the rest benched), the bench's first holding a gun. */
+  function campOf(n: number, extra: Partial<GameState> = {}) {
+    const g = newGame('horde');
+    const all = Array.from({ length: n }, (_, i) => recruit(i + 1));
+    const gun = rollWeapon(createRng(3), 'h1', 'rifle', 'military', 1);
+    if (all[6]) all[6] = { ...all[6], loadout: { primary: gun, secondary: null, item: null } };
+    return {
+      ...g,
+      hordeNumber: 2,
+      roster: all.slice(0, 6),
+      reserve: all.slice(6),
+      camp: { ...g.camp, recruits: n },
+      ...extra,
+    };
+  }
+
+  /** Wins Horde 1 from a new game: the result screen up with one survivor asking to join. */
+  function wonFirst() {
+    const booted = boot();
+    step(0);
+    booted.button().click();
+    step(16);
+    endNextTick('won');
+    step(32);
+    const join = () => booted.root.querySelector<HTMLElement>('.tile-join')!;
+    const press = (label: 'Accept' | 'Refuse') =>
+      [...join().querySelectorAll<HTMLButtonElement>('.join-btn')]
+        .find((b) => b.textContent === label)!
+        .click();
+    const toast = () => booted.root.querySelector('.hud-toast')!.textContent;
+    return { ...booted, join, press, toast };
+  }
+
+  it('the result screen shows the newcomer with Accept and Refuse; Accept saves them in the squad', () => {
+    const { join, press, saved, toast } = wonFirst();
+    const asking = saved().joining![0]!;
+    expect(join().hidden).toBe(false);
+    expect(join().querySelector('.tile-name')!.textContent).toBe(asking.name);
+    expect(join().querySelector('.join-row .tile-sub')!.textContent).toMatch(
+      /^Lv 1 · .+ · Pistol$/,
+    );
+    press('Accept');
+    expect(saved().roster.map((d) => d.id)).toEqual(['recruit-1', asking.id]);
+    expect(saved().joining).toBeUndefined();
+    expect(join().hidden).toBe(true);
+    expect(toast()).toBe(`${asking.name} joins the squad.`);
+  });
+
+  it('Refuse: gone for good, saved at once; the button then goes on with no question', () => {
+    const confirm = vi.fn<(q: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const { press, saved, button, bar, toast } = wonFirst();
+    const asking = saved().joining![0]!;
+    press('Refuse');
+    expect(saved().roster.map((d) => d.id)).toEqual(['recruit-1']);
+    expect(saved().joining).toBeUndefined();
+    expect(saved().camp.recruits).toBe(2);
+    expect(toast()).toBe(`${asking.name} is turned away for good.`);
+    button().click();
+    expect(confirm).not.toHaveBeenCalled();
+    step(48);
+    expect(bar()).toMatch(/^Horde 2 /);
+  });
+
+  it('going on without answering asks first: no keeps the screen and the ask; yes refuses them', () => {
+    const confirm = vi.fn<(q: string) => boolean>(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const { button, result, saved, join, bar } = wonFirst();
+    const asking = saved().joining![0]!;
+    button().click();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm.mock.calls[0]![0]).toBe(
+      `${asking.name} is still asking to join. Go on without answering? They are refused and gone for good.`,
+    );
+    expect(result().hidden).toBe(false);
+    expect(join().hidden).toBe(false);
+    expect(saved().joining).toHaveLength(1);
+    confirm.mockReturnValue(true);
+    button().click();
+    expect(saved().joining).toBeUndefined();
+    expect(saved().roster).toHaveLength(1);
+    step(48);
+    expect(bar()).toMatch(/^Horde 2 /);
+  });
+
+  it('a reload mid-offer: the start screen still asks, and Accept puts them on the wall', () => {
+    const { saved } = wonFirst();
+    const asking = saved().joining![0]!;
+    // Reload: a new page on the same save.
+    const again = boot();
+    step(100);
+    expect(again.title()).toMatch(/Horde 2/);
+    expect(again.result().textContent).toContain(asking.name);
+    const join = again.root.querySelector<HTMLElement>('.tile-join')!;
+    expect(join.hidden).toBe(false);
+    [...join.querySelectorAll<HTMLButtonElement>('.join-btn')]
+      .find((b) => b.textContent === 'Accept')!
+      .click();
+    expect(again.saved().roster.map((d) => d.id)).toContain(asking.id);
+    expect(again.root.querySelector<HTMLElement>('.tile-join')?.isConnected ?? false).toBe(false);
+    step(116);
+    expect(vi.mocked(drawScene).mock.lastCall![2].defenders).toHaveLength(2);
+  });
+
+  /** The Roster opened on bench survivor `id`. */
+  function rosterOn(id: string) {
+    const booted = boot();
+    step(0);
+    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    booted.root.querySelector<HTMLButtonElement>('.roster-button')!.click();
+    scrim.querySelector<HTMLButtonElement>(`.rv-tab[data-defender="${id}"]`)!.click();
+    const letGo = () => scrim.querySelector<HTMLButtonElement>('.rv-letgo')!;
+    const status = () => scrim.querySelector('.rv-status')!.textContent;
+    return { ...booted, scrim, letGo, status };
+  }
+
+  it('Let go past 6: a confirm naming the gun; no keeps them, yes saves them gone and the gun stashed', () => {
+    localStorage.setItem(SAVE_KEY, encodeSave(campOf(7), NOW));
+    const confirm = vi.fn<(q: string) => boolean>(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const { letGo, saved, status } = rosterOn('recruit-7');
+    letGo().click();
+    expect(confirm.mock.calls[0]![0]).toMatch(
+      new RegExp(
+        `^Let ${recruit(7).name} go\\? They leave the camp for good\\. Their Lv 1 .+ goes back to the stash\\.$`,
+      ),
+    );
+    expect(saved().reserve).toHaveLength(1);
+    confirm.mockReturnValue(true);
+    letGo().click();
+    const after = saved();
+    expect([...after.roster, ...after.reserve].map((d) => d.id)).not.toContain('recruit-7');
+    expect(after.armoury.map((w) => w.uid)).toEqual(['h1']);
+    expect(status()).toBe(`${recruit(7).name} has left the camp.`);
+  });
+
+  it('Let go at 6, all in the squad: shown greyed, and a press says why', () => {
+    localStorage.setItem(SAVE_KEY, encodeSave(campOf(6), NOW));
+    const confirm = vi.fn<(q: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const { letGo, status, scrim } = rosterOn('recruit-3');
+    expect(letGo().classList.contains('rv-letgo-locked')).toBe(true);
+    // The reason under the button too, before any press.
+    expect(scrim.querySelector('.rv-letgo-why')!.textContent).toBe(
+      'Needs 7+ survivors to let one go (camp 6)',
+    );
+    letGo().click();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(status()).toBe('Needs 7+ survivors to let one go (camp 6)');
+  });
+
+  it('Accept on the start screen after a reload keeps the keyboard there', () => {
+    wonFirst();
+    const again = boot();
+    step(100);
+    const accept = [...again.root.querySelectorAll<HTMLButtonElement>('.join-btn')].find(
+      (b) => b.textContent === 'Accept',
+    )!;
+    accept.focus();
+    accept.click();
+    expect(document.activeElement).toBe(again.button());
+  });
+
+  it('Let go at 6 (one resting on the bench): greyed, and a press says why; nothing is asked', () => {
+    const six = campOf(6);
+    const resting = { ...six.roster[5]!, rest: 1 };
+    localStorage.setItem(
+      SAVE_KEY,
+      encodeSave({ ...six, roster: six.roster.slice(0, 5), reserve: [resting] }, NOW),
+    );
+    const confirm = vi.fn<(q: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const { letGo, saved, status } = rosterOn('recruit-6');
+    expect(letGo().classList.contains('rv-letgo-locked')).toBe(true);
+    expect(letGo().getAttribute('aria-disabled')).toBe('true');
+    letGo().click();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(status()).toBe('Needs 7+ survivors to let one go (camp 6)');
+    expect([...saved().roster, ...saved().reserve]).toHaveLength(6);
   });
 });

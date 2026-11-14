@@ -8,6 +8,7 @@ import { INJURY_REST, MAX_COUNT, SQUAD_CAP, SQUAD_JOIN, STASH_CAP } from './data
 import { newGame, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
 import {
+  acceptJoins,
   campOf,
   equipGun,
   fillSquad,
@@ -117,7 +118,7 @@ describe('new survivors past 6 (ID-147)', () => {
 
   it('a first clear past 6 puts a joiner on the bench while the squad is full', () => {
     const g = campGame(people(6), people(1, 7));
-    const next = finishSquadHorde(g, ended(g, {}, 'won', 8));
+    const next = acceptJoins(finishSquadHorde(g, ended(g, {}, 'won', 8)));
     expect(next.roster.map((d) => d.id)).toEqual(g.roster.map((d) => d.id));
     expect(next.reserve.map((d) => d.id)).toEqual(['recruit-7', 'recruit-8']);
     expect(next.camp.recruits).toBe(8);
