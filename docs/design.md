@@ -2583,7 +2583,7 @@ As built (ID-066), the horde-only build:
     walk, firing only a sidearm on the way) and shouts a swap line (chatter,
     shown on Low too); the hurt one limps back off the frame's left edge
     with their HP bar and a dimmed name. The fight's view shows 70 px of
-    ground behind the line (was 24, about 4% further out) so both are seen.
+    ground behind the line (was 24, about 3–4% further out) so both are seen.
   - A note "X takes over from Y" shows under the toast's place for 3 s of
     fight time and at least 2 s of real time (readable at 5×, held while
     paused); swaps close together join it ("… · …").

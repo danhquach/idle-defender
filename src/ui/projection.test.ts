@@ -183,7 +183,7 @@ describe('projection', () => {
     });
 
     it.each([
-      // ID-148 showed 46 px more ground behind the line: about 4% further out than before.
+      // ID-148 showed 46 px more ground behind the line: about 3–4% further out than before.
       { w: 1280, h: 720, zoom: 1.12 },
       { w: 1440, h: 900, zoom: 1.26 },
       { w: 1600, h: 900, zoom: 1.39 },

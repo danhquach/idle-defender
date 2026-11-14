@@ -370,7 +370,8 @@ export const SWAPS_TIP = 'Bench survivors who can still take over from a badly h
 
 /**
  * How long "X takes over from Y" shows after a mid-fight swap (ID-148): `fight` s of fight
- * time (held while paused) and at least `realMs` of real time, so it reads at 5× too.
+ * time (held while paused) and at least `realMs` of real time, so it reads at 5× too. The
+ * real-time hold restarts whenever the text changes, a joined swap dropping out included.
  */
 export const SWAP_NOTE = { fight: 3, realMs: 2000 } as const;
 
