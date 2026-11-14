@@ -75,6 +75,8 @@ import {
   SQUAD_BONUS,
   SQUAD_JOIN,
   INJURY_REST,
+  OLD_REST_MAX,
+  PATCH_UP,
   STASH_CAP,
   SQUAD_SKILLS,
   SURVIVOR,
@@ -129,6 +131,11 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 22 since Paramedics patch up the downed (ID-155): a survivor may hold `startHp`, the share
+ * of max HP they start the next horde at, from `PATCH_UP.hp` to `PATCH_UP.hpCap`, written
+ * only while patched up and never with `rest`. A rest is at most `INJURY_REST.max` (1); a
+ * v19–v21 save's rest of up to `OLD_REST_MAX` loads cut to it. Older saves have no `startHp`.
+ *
  * 21 since "Auto" best squad (ID-154): the game may hold `autoSquad`, written only while
  * ticked. Exactly `true` turns it on; any other value loads with it off (nothing else in
  * the save depends on it). A v20 or older save has it off.
@@ -199,7 +206,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 21;
+export const SAVE_VERSION = 22;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -284,6 +291,8 @@ interface StatsRead {
   jobSeed: number | null;
   /** Whether a survivor may hold `rest` (v19, ID-147). */
   rest: boolean;
+  /** Whether a survivor may hold `startHp` (v22, ID-155); before it a rest may be up to `OLD_REST_MAX`. */
+  startHp: boolean;
 }
 
 /** The page's storage, or null where it is blocked (some private modes throw on access). */
@@ -356,9 +365,30 @@ export function loadSave(storage: SaveStorage): { save: Save | null; rejected: b
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'game']);
   if (
-    ![SAVE_VERSION, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].includes(
-      o.v as number,
-    )
+    ![
+      SAVE_VERSION,
+      21,
+      20,
+      19,
+      18,
+      17,
+      16,
+      15,
+      14,
+      13,
+      12,
+      11,
+      10,
+      9,
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+    ].includes(o.v as number)
   ) {
     fail('version');
   }
@@ -378,6 +408,7 @@ function readSave(v: unknown): Save {
     // A v17 or older save's survivors roll their profession from its time (ID-149).
     jobSeed: ver < 18 ? textSeed(String(savedAt)) : null,
     rest: ver >= 19,
+    startHp: ver >= 22,
   };
   const grid = ver === 1 ? V1_GRID : GRID;
   const game = readGame(
@@ -602,7 +633,13 @@ function readJoining(v: unknown, savedAt: number, stats: StatsRead): RosterDefen
   for (const d of list) {
     const { primary, secondary, item } = d.loadout;
     const fresh = d.xp === 0 && primary === 'pistol' && secondary === null && item === null;
-    if (!RECRUIT.test(d.id) || !fresh || d.rest !== undefined || d.injuredUntil !== null) {
+    if (
+      !RECRUIT.test(d.id) ||
+      !fresh ||
+      d.rest !== undefined ||
+      d.startHp !== undefined ||
+      d.injuredUntil !== null
+    ) {
       fail('bad joiner');
     }
   }
@@ -1082,16 +1119,19 @@ function readDefender(
   old: { loadout: boolean },
   read: StatsRead,
 ): RosterDefender {
+  const has = (key: string): boolean =>
+    typeof v === 'object' && v !== null && Object.hasOwn(v, key);
   const keys = [
     ...DEFENDER_KEYS,
     old.loadout ? 'weapon' : 'loadout',
     ...(read.jobSeed === null ? ['job'] : []),
     ...oldPointKeys(v, read),
-    ...(read.rest && typeof v === 'object' && v !== null && Object.hasOwn(v, 'rest')
-      ? ['rest']
-      : []),
+    ...(read.rest && has('rest') ? ['rest'] : []),
+    ...(read.startHp && has('startHp') ? ['startHp'] : []),
   ];
   const o = obj(v, keys);
+  // Patched up (ID-155) means not resting: never both.
+  if (Object.hasOwn(o, 'rest') && Object.hasOwn(o, 'startHp')) fail('rest and startHp');
   const xp = int(o.xp, 0, MAX_COUNT);
   dropPoints(xp, read);
   const id = text(o.id, 32, ID);
@@ -1110,8 +1150,20 @@ function readDefender(
       o.injuredUntil === null
         ? null
         : Math.min(num(o.injuredUntil, 0, MAX_TIME), savedAt + RECOVERY_MS),
-    // Allow-listed (ID-147): written only while resting, so never 0.
-    ...(Object.hasOwn(o, 'rest') ? { rest: int(o.rest, 1, INJURY_REST.max) } : {}),
+    // Allow-listed (ID-147): written only while resting, so never 0. A v19–v21 rest of up
+    // to `OLD_REST_MAX` loads cut to today's most (ID-155).
+    ...(Object.hasOwn(o, 'rest')
+      ? {
+          rest: Math.min(
+            INJURY_REST.max,
+            int(o.rest, 1, read.startHp ? INJURY_REST.max : OLD_REST_MAX),
+          ),
+        }
+      : {}),
+    // Allow-listed (ID-155): written only while patched up, from `PATCH_UP.hp` to `hpCap`.
+    ...(Object.hasOwn(o, 'startHp')
+      ? { startHp: num(o.startHp, PATCH_UP.hp, PATCH_UP.hpCap) }
+      : {}),
   };
 }
 

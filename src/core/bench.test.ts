@@ -1,10 +1,10 @@
-// The bench and rest (ID-147): the camp grows past the squad's 6 by a seeded chance, the
-// squad is picked from it, and a survivor who ends a won fight badly hurt rests for a few
-// hordes, counted down per horde played.
+// The bench and rest (ID-147, ID-155): the camp grows past the squad's 6 by a seeded chance,
+// the squad is picked from it, and a survivor downed in a won fight rests a horde unless the
+// camp's Paramedics patch them up, counted down per horde played.
 import { describe, expect, it } from 'vitest';
 import { rollWeapon } from './armoury.ts';
 import { recruit } from './camp.ts';
-import { INJURY_REST, MAX_COUNT, SQUAD_CAP, SQUAD_JOIN, STASH_CAP } from './data.ts';
+import { INJURY_REST, MAX_COUNT, PATCH_UP, SQUAD_CAP, SQUAD_JOIN, STASH_CAP } from './data.ts';
 import { newGame, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
 import {
@@ -15,6 +15,9 @@ import {
   finishSquadHorde,
   isFit,
   joiners,
+  paramedicPoints,
+  patchUpChance,
+  patchUpHp,
   restLabel,
   settleSquad,
   squadOf,
@@ -24,7 +27,7 @@ import {
   toggleSquad,
 } from './hordeonly.ts';
 import { createRng } from './rng.ts';
-import { jobBonus, levelOf, xpForLevel } from './stats.ts';
+import { xpForLevel } from './stats.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -134,16 +137,21 @@ describe('new survivors past 6 (ID-147)', () => {
   });
 });
 
-describe('rest after a fight (ID-147)', () => {
+describe('rest after a fight (ID-147, ID-155)', () => {
   const six = () => campGame(people(6), people(2, 7));
 
-  it('a won fight: downed rests INJURY_REST.downed, under 25% HP 1, anyone else 0', () => {
+  it('a won fight: only the downed rest, 1 horde; anyone standing, at any HP, none', () => {
     const g = six();
-    const h = ended(g, { 'recruit-1': 'down', 'recruit-2': 0.2, 'recruit-3': 0.3, 'recruit-4': 1 });
+    const h = ended(g, {
+      'recruit-1': 'down',
+      'recruit-2': 0.2,
+      'recruit-3': 0.01,
+      'recruit-4': 1,
+    });
     expect(squadRests(g, h)).toEqual([
       { id: 'recruit-1', name: recruit(1).name, rest: INJURY_REST.downed },
-      { id: 'recruit-2', name: recruit(2).name, rest: 1 },
     ]);
+    expect(INJURY_REST.downed).toBe(1);
     expect(INJURY_REST.downed).toBeLessThanOrEqual(INJURY_REST.max);
   });
 
@@ -156,10 +164,11 @@ describe('rest after a fight (ID-147)', () => {
     expect(squadOf(next)).toHaveLength(SQUAD_CAP);
   });
 
-  it('the hurt leave the squad for the bench; their slots stay open with fit survivors waiting', () => {
+  it('the downed leave the squad for the bench; the badly hurt stay; the slot stays open', () => {
     const g = six();
     const next = finishSquadHorde(g, ended(g, { 'recruit-1': 'down', 'recruit-2': 0.1 }));
     expect(next.roster.map((d) => d.id)).toEqual([
+      'recruit-2',
       'recruit-3',
       'recruit-4',
       'recruit-5',
@@ -168,9 +177,10 @@ describe('rest after a fight (ID-147)', () => {
     expect(next.reserve.map((d) => [d.id, d.rest])).toEqual([
       ['recruit-7', undefined],
       ['recruit-8', undefined],
-      ['recruit-1', 2],
-      ['recruit-2', 1],
+      ['recruit-1', 1],
     ]);
+    // The one who ended at 10% fights the next horde at full HP.
+    expect(campOf(next).find((d) => d.id === 'recruit-2')!.startHp).toBeUndefined();
     // The next horde is fought by the squad alone, not the bench.
     expect(startSquadHorde(next, 2, NOW).tookPart.sort()).toEqual(next.roster.map((d) => d.id));
   });
@@ -178,46 +188,113 @@ describe('rest after a fight (ID-147)', () => {
   it('rest counts down one per horde played, won or lost, then the survivor is fit', () => {
     let g = finishSquadHorde(six(), ended(six(), { 'recruit-1': 'down' }));
     const restOf1 = (x: GameState) => campOf(x).find((d) => d.id === 'recruit-1')!.rest;
-    expect(restOf1(g)).toBe(2);
-    g = finishSquadHorde(g, ended(g, {}, 'lost'));
     expect(restOf1(g)).toBe(1);
-    g = finishSquadHorde(g, ended(g, {}, 'won'));
+    g = finishSquadHorde(g, ended(g, {}, 'lost'));
     expect(restOf1(g)).toBeUndefined();
     // Their slot stayed open (nobody filled it), so they can take it back.
     expect(squadOf(g)).toHaveLength(SQUAD_CAP - 1);
     expect(toggleSquad(g, 'recruit-1').ok).toBe(true);
   });
+});
 
-  it('a Paramedic past level 1 sometimes rests a horde less, never under 1; at level 1 never', () => {
-    const medic = (xp: number) =>
-      campGame([person(1, { job: 'paramedic', xp }), ...people(5, 2)], people(1, 7));
-    const rests = (g: GameState, hp: number | 'down') =>
-      Array.from(
-        { length: 400 },
-        (_, seed) =>
-          squadRests(g, { ...ended(g, { 'recruit-1': hp }), seed }).find(
-            (r) => r.id === 'recruit-1',
-          )!.rest,
-      );
-    expect(new Set(rests(medic(0), 'down'))).toEqual(new Set([2]));
-    const xp = xpForLevel(25);
-    const down = rests(medic(xp), 'down');
-    const cut = down.filter((r) => r === 1).length / down.length;
-    const odds = jobBonus(levelOf(xp).level, 'paramedic', 'rest');
-    expect(odds).toBeGreaterThan(0.3);
-    expect(cut).toBeGreaterThan(odds - 0.08);
-    expect(cut).toBeLessThan(odds + 0.08);
-    expect(new Set(rests(medic(xp), 0.1))).toEqual(new Set([1]));
+describe('Paramedics patch up the downed (ID-155)', () => {
+  const medic = (no: number, level = 1, extra: Partial<RosterDefender> = {}) =>
+    person(no, { job: 'paramedic', xp: xpForLevel(level), ...extra });
+
+  it('points: 20 at level 1, 30 at level 21, never 40', () => {
+    expect(paramedicPoints([medic(1)])).toBe(PATCH_UP.base);
+    expect(paramedicPoints([medic(1)])).toBe(20);
+    expect(paramedicPoints([medic(1, 21)])).toBeCloseTo(30, 10);
+    const high = paramedicPoints([medic(1, 100_000)]);
+    expect(high).toBeGreaterThan(39.9);
+    expect(high).toBeLessThan(40);
+    // Anyone else adds nothing.
+    expect(paramedicPoints(people(6))).toBe(0);
+  });
+
+  it('chance: none 0%, one at Lv 1 20%, four 80%, six still 80%', () => {
+    const chanceOf = (n: number) =>
+      patchUpChance(paramedicPoints(Array.from({ length: n }, (_, i) => medic(i + 1))));
+    expect(chanceOf(0)).toBe(0);
+    expect(chanceOf(1)).toBeCloseTo(0.2, 10);
+    expect(chanceOf(4)).toBeCloseTo(0.8, 10);
+    expect(chanceOf(6)).toBeCloseTo(PATCH_UP.chance, 10);
+  });
+
+  it('every Paramedic in the camp counts: the downed one, the bench, the resting', () => {
+    const g = campGame(
+      [medic(1), ...people(5, 2)],
+      [medic(7), medic(8, 1, { rest: 1 }), ...people(1, 9)],
+    );
+    expect(paramedicPoints(campOf(g))).toBe(60);
+  });
+
+  it('starting HP: 80 points 50%, 90 55%, 140 80%, 200 still 80%', () => {
+    expect(patchUpHp(80)).toBeCloseTo(0.5, 10);
+    expect(patchUpHp(20)).toBeCloseTo(PATCH_UP.hp, 10);
+    expect(patchUpHp(90)).toBeCloseTo(0.55, 10);
+    expect(patchUpHp(140)).toBeCloseTo(0.8, 10);
+    expect(patchUpHp(200)).toBeCloseTo(PATCH_UP.hpCap, 10);
+  });
+
+  /** Recruit-1 downed in a won Horde 3 with `seed`, in a camp with `medics` Lv 1 Paramedics on the bench. */
+  function downed(medics: number, seed: number) {
+    const bench = Array.from({ length: medics }, (_, i) => medic(7 + i));
+    const g = campGame(people(6), [...bench, ...people(2, 20)]);
+    const h = { ...ended(g, { 'recruit-1': 'down' }), seed };
+    return { g, h, r: squadRests(g, h).find((x) => x.id === 'recruit-1')! };
+  }
+
+  it('each downed survivor rolls the camp’s chance: never with none, about 80% with four', () => {
+    for (let seed = 0; seed < 100; seed++) expect(downed(0, seed).r.rest).toBe(1);
+    const rolls = Array.from({ length: 400 }, (_, seed) => downed(4, seed).r);
+    const share = rolls.filter((r) => r.rest === 0).length / rolls.length;
+    expect(share).toBeGreaterThan(0.74);
+    expect(share).toBeLessThan(0.86);
+    for (const r of rolls) {
+      if (r.rest === 0) expect(r.startHp).toBeCloseTo(PATCH_UP.hp, 10);
+      else expect(r.startHp).toBeUndefined();
+    }
+  });
+
+  it('the roll is seeded: the same camp and horde give the same outcome', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const a = downed(2, seed);
+      const b = downed(2, seed);
+      expect(squadRests(a.g, a.h)).toEqual(squadRests(b.g, b.h));
+    }
+  });
+
+  it('a patched-up survivor fights the next horde at reduced HP, then at full HP', () => {
+    const seed = Array.from({ length: 50 }, (_, s) => s).find((s) => downed(4, s).r.rest === 0)!;
+    const { g, h } = downed(4, seed);
+    const next = finishSquadHorde(g, h);
+    const one = campOf(next).find((d) => d.id === 'recruit-1')!;
+    expect([one.rest, one.startHp]).toEqual([undefined, PATCH_UP.hp]);
+    expect(isFit(one)).toBe(true);
+    expect(squadOf(next).some((d) => d.id === 'recruit-1')).toBe(true);
+    const r = squadResult(g, h);
+    expect(r.patched).toEqual([{ id: 'recruit-1', name: one.name, startHp: PATCH_UP.hp }]);
+    expect(r.rests.some((x) => x.id === 'recruit-1')).toBe(false);
+    // The next fight: half HP, out of their full max.
+    const fight = startSquadHorde(next, 5, NOW);
+    const f = fight.defenders.find((d) => d.id === 'recruit-1')!;
+    expect(f.hp).toBe(Math.round(f.maxHp * PATCH_UP.hp));
+    expect(f.hp).toBeLessThan(f.maxHp);
+    // Played, won or lost: full HP again.
+    fight.outcome = 'lost';
+    const after = finishSquadHorde(next, fight);
+    expect(campOf(after).find((d) => d.id === 'recruit-1')!.startHp).toBeUndefined();
   });
 });
 
-describe('a win that hurts everyone (ID-147)', () => {
+describe('a win that downs everyone (ID-147)', () => {
   it('the first in camp order wakes at once and fights; the result leaves them out of the rests', () => {
     const g = campGame(people(6));
     const h = ended(g, Object.fromEntries(g.roster.map((d) => [d.id, 'down'])));
     const next = finishSquadHorde(g, h);
     expect(next.roster.map((d) => [d.id, d.rest])).toEqual([['recruit-1', undefined]]);
-    expect(next.reserve.every((d) => d.rest === 2)).toBe(true);
+    expect(next.reserve.every((d) => d.rest === 1)).toBe(true);
     const r = squadResult(g, h);
     expect(r.rests.map((x) => x.id)).toEqual(people(5, 2).map((d) => d.id));
     expect(r.next).toEqual(next);
@@ -238,9 +315,9 @@ describe('picking the squad (ID-147)', () => {
   });
 
   it('refuses the resting, a full squad, the last in the squad and a stranger', () => {
-    const resting = person(7, { rest: 2 });
+    const resting = person(7, { rest: 1 });
     const g = campGame(people(6), [resting, person(8)]);
-    expect(toggleSquad(g, 'recruit-7')).toEqual({ ok: false, reason: restLabel(2) });
+    expect(toggleSquad(g, 'recruit-7')).toEqual({ ok: false, reason: restLabel(1) });
     expect(restLabel(1)).toBe('Resting: 1 horde');
     expect(toggleSquad(g, 'recruit-8')).toEqual({
       ok: false,

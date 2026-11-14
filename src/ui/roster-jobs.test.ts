@@ -60,6 +60,14 @@ describe('profession words (ID-149)', () => {
     expect(jobLine('hunter', 1)).toBe(
       'Hunter: from level 2, more crit chance and crit damage with Sniper rifle, Carbine',
     );
+    // ID-155: a Paramedic's points work from level 1; the old rest cut is gone.
+    expect(jobLine('paramedic', 1)).toBe(
+      'Paramedic: +20% chance a downed survivor skips rest (Paramedics in camp add up, to 80%); from level 2, more injury dodge and healing for the squad',
+    );
+    expect(jobLine('paramedic', 21)).toBe(
+      'Paramedic: +20.0% injury dodge, everyone on the field heals 0.20% of max HP a second, +30% chance a downed survivor skips rest (Paramedics in camp add up, to 80%)',
+    );
+    expect(jobLine('paramedic', 21)).not.toContain('horde less');
     for (const j of JOB_IDS) {
       // Past level 1 every line names its numbers.
       expect(jobLine(j, 7), j).toMatch(new RegExp(`^${JOBS[j].name}: .*[0-9]`));

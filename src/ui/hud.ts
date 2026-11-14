@@ -112,6 +112,7 @@ import {
   isFit,
   isReplay,
   joiningOf,
+  paramedicPoints,
   radioParts,
   restLabel,
   squadOf,
@@ -124,7 +125,14 @@ import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { skillLeft, skillLock } from '../core/skills.ts';
-import { powerBand, recommendedPower, squadPower, type PowerBand } from '../core/squadpower.ts';
+import {
+  injuryBand,
+  powerBand,
+  recommendedPower,
+  squadPower,
+  type InjuryBand,
+  type PowerBand,
+} from '../core/squadpower.ts';
 import { jobFits, levelOf, survivorDps } from '../core/stats.ts';
 import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
@@ -667,6 +675,29 @@ export const BAND_WORD: Readonly<Record<PowerBand, string>> = {
   short: 'short',
 };
 
+/**
+ * The injury band in words (ID-155), beside its colour so colour is never the only cue,
+ * and the power band whose colour it borrows.
+ */
+export const INJURY_WORD: Readonly<Record<InjuryBand, string>> = {
+  few: 'few',
+  some: 'some',
+  heavy: 'heavy',
+};
+export const INJURY_TONE: Readonly<Record<InjuryBand, PowerBand>> = {
+  few: 'ok',
+  some: 'close',
+  heavy: 'short',
+};
+/** What each injury band means, as measured (ID-155): the pill's tooltip. */
+export const INJURY_TIP: Readonly<Record<InjuryBand, string>> = {
+  few: 'Few injuries: usually nobody goes down',
+  some: 'Some injuries: about 1 survivor down on average',
+  heavy: 'Heavy injuries: about 1 or more survivors down on average',
+};
+/** The words before the injury band: "Injuries if you win" (ID-155). */
+export const INJURY_LEAD = 'Injuries if you win';
+
 /** The meter's end, as a share of Recommended Power (ID-098): the tick sits at 1 / this. */
 export const POWER_METER_END = 1.2;
 
@@ -704,6 +735,8 @@ export interface HordeChoice {
   /** The screen's button once this is picked: "Start Horde 7", "Replay Horde 5". */
   button: string;
   power: PowerLine;
+  /** How many survivors a win is likely to cost (ID-155): a band, read off the same power. */
+  injury: InjuryBand;
   /** "Try Horde 8 to farm" when this horde is not at Squad Power's reach; null when it is. */
   hint: string | null;
   /** The start screen's title and chips for this horde, so they follow the pick. */
@@ -769,6 +802,7 @@ export function hordePicker(
       ].join(' · '),
       button: n === retry ? retryLabel(n) : isNew ? startLabel(n) : replayLabel(n),
       power,
+      injury: injuryBand(squad, power.rec),
       hint:
         power.band === 'ok'
           ? null
@@ -1428,16 +1462,30 @@ export function benchLine(game: Pick<GameState, 'roster' | 'reserve'>): string |
 }
 
 /**
- * Who rests after a win (ID-147): "Resting: Bob 2 hordes, Ava 1 horde. Fill their slots on
- * the Roster." (the last part only with someone fit on the bench to fill them); null for none.
+ * Who Paramedics patched up after a win (ID-155): "Patched up by Paramedics, back next
+ * horde: Bob (50% HP), Ava (55% HP)."; null for none.
+ */
+export function patchNote(patched: readonly { name: string; startHp: number }[]): string | null {
+  if (patched.length === 0) return null;
+  const who = patched.map((p) => `${p.name} (${Math.round(p.startHp * 100)}% HP)`);
+  return `Patched up by Paramedics, back next horde: ${who.join(', ')}.`;
+}
+
+/**
+ * Who rests after a win (ID-147, ID-155): "Resting: Bob 1 horde, Ava 1 horde. Fill their slots
+ * on the Roster." (the last part only with someone fit on the bench to fill them); null for
+ * none. With a Paramedic in camp (`medics`) it says the patch-up roll failed: "Resting (not
+ * patched up): …".
  */
 export function restNote(
   rests: readonly { name: string; rest: number }[],
   benchFit: boolean,
+  medics = false,
 ): string | null {
   if (rests.length === 0) return null;
   const who = rests.map((r) => `${r.name} ${restLabel(r.rest).slice('Resting: '.length)}`);
-  return `Resting: ${who.join(', ')}.${benchFit ? ' Fill their slots on the Roster.' : ''}`;
+  const lead = medics ? 'Resting (not patched up)' : 'Resting';
+  return `${lead}: ${who.join(', ')}.${benchFit ? ' Fill their slots on the Roster.' : ''}`;
 }
 
 /**
@@ -1553,7 +1601,7 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, joined, rests, next, drop, auto } = squadResult(game, s);
+  const { gains, joined, rests, patched, next, drop, auto } = squadResult(game, s);
   // "Auto" (ID-154): who it moved once the fight was over, so a pick never changes unseen.
   const moved = auto ? movesText(auto) : null;
   const autoNote = moved ? `Auto squad: ${moved}.` : null;
@@ -1592,8 +1640,10 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     // bench to fill them.
     const room = SQUAD_CAP - next.roster.length - joined.length;
     const benchFit = room > 0 && next.reserve.some(isFit);
-    const rested = restNote(rests, benchFit);
-    const note = [rewardNote, rested, autoNote].filter((t) => t !== null).join(' ') || null;
+    const rested = restNote(rests, benchFit, paramedicPoints(campOf(game)) > 0);
+    const note =
+      [rewardNote, patchNote(patched), rested, autoNote].filter((t) => t !== null).join(' ') ||
+      null;
     const size = game.roster.length + game.reserve.length;
     return {
       title: ending
@@ -2341,6 +2391,10 @@ export function createHud(
     const lineText = el('span', 'hud-horde-power-text');
     const band = el('span', 'hud-horde-band');
     line.append(lineText, ' ', band);
+    // The injury band (ID-155) under it, in the same shape: words, then the band's pill.
+    const hurt = el('p', 'hud-horde-power hud-horde-injury');
+    const hurtBand = el('span', 'hud-horde-band');
+    hurt.append(`${INJURY_LEAD} `, hurtBand);
     const hint = el('p', 'hud-horde-hint');
     const choice = (): HordeChoice => p.options.find((o) => String(o.horde) === select.value)!;
     const sync = (): void => {
@@ -2348,6 +2402,9 @@ export function createHud(
       lineText.textContent = o.power.text;
       band.textContent = BAND_WORD[o.power.band];
       line.dataset.band = o.power.band;
+      hurtBand.textContent = INJURY_WORD[o.injury];
+      hurtBand.title = INJURY_TIP[o.injury];
+      hurt.dataset.band = INJURY_TONE[o.injury];
       hint.textContent = o.hint ?? '';
       hint.hidden = o.hint === null;
       select.title = select.selectedOptions[0]?.textContent ?? '';
@@ -2364,7 +2421,7 @@ export function createHud(
       }
       onPickHorde(o.horde);
     });
-    pickBlock.replaceChildren(label, select, line, hint);
+    pickBlock.replaceChildren(label, select, line, hurt, hint);
     if (had) select.focus();
   }
 

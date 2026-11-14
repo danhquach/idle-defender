@@ -5,7 +5,8 @@
 // the page only through textContent.
 import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { JOBS, SQUAD_CAP } from '../core/data.ts';
+import { JOBS, PATCH_UP, SQUAD_CAP } from '../core/data.ts';
+import { maxHpOf } from '../core/stats.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
 import {
@@ -15,7 +16,15 @@ import {
   startSquadHorde,
   toggleSquad,
 } from '../core/hordeonly.ts';
-import { benchLine, CHANGE_SQUAD, movesText, restNote, squadScreen, squadStart } from './hud.ts';
+import {
+  benchLine,
+  CHANGE_SQUAD,
+  movesText,
+  patchNote,
+  restNote,
+  squadScreen,
+  squadStart,
+} from './hud.ts';
 import { askLine, answerText } from './joining.ts';
 import { JOB_SHORT } from './jobtext.ts';
 import { AUTO_ON, createRoster, rosterTiles, SQUAD_WAIT } from './squadroster.ts';
@@ -63,7 +72,7 @@ function won(game: GameState, seed = 1, down: string[] = []): HordeState {
 describe('the start screen and the bench (ID-147)', () => {
   it('sums up the bench: its size, who rests and the open slots to fill', () => {
     expect(benchLine(campGame(people(6)))).toBeNull();
-    expect(benchLine(campGame(people(6), [person(7), person(8, { rest: 2 })]))).toBe(
+    expect(benchLine(campGame(people(6), [person(7), person(8, { rest: 1 })]))).toBe(
       'Bench 2 · 1 resting',
     );
     expect(benchLine(campGame(people(4), [person(5), person(6), person(7)]))).toBe(
@@ -103,7 +112,7 @@ describe('the result screen and the bench (ID-147)', () => {
     expect(s.lines).toContain(askLine(a));
     expect(s.debrief!.join).toBe(true);
     // Nobody fit on the bench yet (the newcomer only joins on Accept): no Roster step.
-    const note = `Resting: ${recruit(2).name} 2 hordes.`;
+    const note = `Resting: ${recruit(2).name} 1 horde.`;
     expect(s.debrief!.note).toBe(note);
     expect(s.lines).toContain(note);
   });
@@ -112,14 +121,14 @@ describe('the result screen and the bench (ID-147)', () => {
     const g = campGame(people(6), [person(7)]);
     const s = squadScreen(g, won(g, 9, ['recruit-2']));
     expect(s.debrief!.join).toBe(true);
-    expect(s.debrief!.note).toBe(`Resting: ${recruit(2).name} 2 hordes.`);
+    expect(s.debrief!.note).toBe(`Resting: ${recruit(2).name} 1 horde.`);
   });
 
   it('slots left open with someone fit on the bench: the note points at the Roster', () => {
     const g = campGame(people(6), [person(7)]);
     const s = squadScreen(g, won(g, 1, ['recruit-2']));
     expect(s.debrief!.note).toBe(
-      `Resting: ${recruit(2).name} 2 hordes. Fill their slots on the Roster.`,
+      `Resting: ${recruit(2).name} 1 horde. Fill their slots on the Roster.`,
     );
   });
 
@@ -132,7 +141,7 @@ describe('the result screen and the bench (ID-147)', () => {
       sub: 'Nobody new joins this time',
       full: true,
     });
-    expect(s.debrief!.note).toBe(`Resting: ${recruit(1).name} 2 hordes.`);
+    expect(s.debrief!.note).toBe(`Resting: ${recruit(1).name} 1 horde.`);
     expect(restNote([], true)).toBeNull();
     expect(restNote([{ name: 'Ava', rest: 1 }], true)).toBe(
       'Resting: Ava 1 horde. Fill their slots on the Roster.',
@@ -145,16 +154,16 @@ describe('the result screen says what really happens (ID-147)', () => {
     const g = campGame(people(6));
     const all = g.roster.map((d) => d.id);
     const s = squadScreen(g, won(g, 1, all));
-    const resting = all.slice(1).map((_, i) => `${recruit(i + 2).name} 2 hordes`);
+    const resting = all.slice(1).map((_, i) => `${recruit(i + 2).name} 1 horde`);
     expect(s.debrief!.note).toBe(`Resting: ${resting.join(', ')}.`);
-    expect(s.debrief!.note).not.toContain(`${recruit(1).name} 2`);
+    expect(s.debrief!.note).not.toContain(`${recruit(1).name} 1`);
   });
 
   it('a bench survivor back from rest this horde can fill an open slot: the note says so', () => {
     const g = campGame(people(6), [person(7, { rest: 1 })]);
     const s = squadScreen(g, won(g, 1, ['recruit-2']));
     expect(s.debrief!.note).toBe(
-      `Resting: ${recruit(2).name} 2 hordes. Fill their slots on the Roster.`,
+      `Resting: ${recruit(2).name} 1 horde. Fill their slots on the Roster.`,
     );
   });
 });
@@ -397,5 +406,45 @@ describe('the Roster and the bench (ID-147)', () => {
     const b = m.q('[data-key="squad"]');
     expect(b.disabled).toBe(true);
     expect(b.title).toBe(SQUAD_WAIT);
+  });
+});
+
+describe('patched up by Paramedics (ID-155)', () => {
+  const medics = () =>
+    Array.from({ length: 4 }, (_, i) => person(7 + i, { job: 'paramedic' as const }));
+
+  it('the result screen names who is back next horde and at what HP', () => {
+    const g = campGame(people(6), medics());
+    // A seed where recruit-2's roll succeeds (80% with four Paramedics).
+    const seed = Array.from({ length: 40 }, (_, s) => s + 1).find((s) =>
+      squadScreen(g, won(g, s, ['recruit-2'])).debrief!.note?.startsWith('Patched up'),
+    )!;
+    const s = squadScreen(g, won(g, seed, ['recruit-2']));
+    expect(s.debrief!.note).toBe(
+      `Patched up by Paramedics, back next horde: ${recruit(2).name} (50% HP).`,
+    );
+    expect(patchNote([])).toBeNull();
+    // With a Paramedic in camp, the rest note says the roll failed.
+    expect(restNote([{ name: 'Bo', rest: 1 }], false, true)).toBe(
+      'Resting (not patched up): Bo 1 horde.',
+    );
+    expect(
+      patchNote([
+        { name: 'Ava', startHp: 0.55 },
+        { name: 'Bo', startHp: 0.8 },
+      ]),
+    ).toBe('Patched up by Paramedics, back next horde: Ava (55% HP), Bo (80% HP).');
+  });
+
+  it('the Roster shows the reduced HP they start the next horde at', () => {
+    const tiles = rosterTiles(
+      campGame([person(1, { startHp: PATCH_UP.hp }), person(2)]),
+      NOW,
+      null,
+    );
+    const max = maxHpOf(person(1));
+    expect(tiles[0]!.health).toBe(`HP ${Math.round(max * PATCH_UP.hp)}/${max} · patched\u00a0up`);
+    expect(tiles[0]!.down).toBe(false);
+    expect(tiles[1]!.health).toBe(`HP ${maxHpOf(person(2))}/${maxHpOf(person(2))}`);
   });
 });

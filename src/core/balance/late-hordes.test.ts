@@ -10,19 +10,14 @@ import { cacheFor } from './cache.ts';
 
 const keep = cacheFor(import.meta.url);
 
-// Each campaign to Horde 18 is 50–100 fights (ID-147: waiting out rests); CI runs the balance
-// files side by side.
+// Each campaign to Horde 18 is 28–106 fights (ID-155: mean 64); CI runs the balance files side
+// by side.
 describe('mid-game horde-only hordes (ID-102)', () => {
   /**
    * ID-153: the wall share needs many fights (about 270 tries on 16 seeds: one seed's luck
    * can't pass or fail it). On 4 seeds it ranged 10–28%.
    */
   const SEEDS = 16;
-  /**
-   * The campaign-length checks (fights and replays) stay on the first 4 seeds, as before
-   * ID-153: seed 13 is stuck at one horde for 12 tries (157 fights to Horde 18).
-   */
-  const PACE_SEEDS = 4;
   const FROM = 11;
   const LAST = 18;
   /**
@@ -31,7 +26,10 @@ describe('mid-game horde-only hordes (ID-102)', () => {
    * stronger past it by design.
    */
   const WALL_SEEDS = Math.ceil(SEEDS * 0.75);
-  /** Most replays a seed spends farming past any one horde, with average luck. */
+  /**
+   * Most replays a seed spends farming past any one horde, with average luck. ID-155: at most
+   * 24 on 16 seeds (seed 13: 9, was 37).
+   */
   const MAX_REPLAYS = 30;
   /**
    * ID-153: a fight "keeps the wall" when it ends with at least this share of the wall's HP.
@@ -65,19 +63,21 @@ describe('mid-game horde-only hordes (ID-102)', () => {
 
   // ID-153: "hit the wall in some fights, not every one" is held as 8–30% of new-horde tries
   // (every try at a new horde, not only the first) ending with at least 90% of the wall's HP.
-  // Measured 15–18% over 16 seeds (40 seeds: 16.9%), and no such fight was lost. The old
-  // measure, any wall HP lost, read 97–100% of tries since ID-136 (ID-147 dropped its bound):
-  // enemies reach the wall in 97% of tries, and 2.5% end with it untouched.
+  // Measured 15–18% over 16 seeds (40 seeds: 16.9%), and no such fight was lost; with ID-155's
+  // rest rule, 21.3%. The old measure, any wall HP lost, read 97–100% of tries since ID-136
+  // (ID-147 dropped its bound): enemies reach the wall in 97% of tries, and 2.5% end with it
+  // untouched.
   it('they break into the wall in most new-horde tries, not every one', () => {
     const kept = tries.filter((r) => r.wallLeft >= KEPT).length / tries.length;
     expect(kept).toBeGreaterThanOrEqual(0.08);
     expect(kept).toBeLessThanOrEqual(0.3);
   });
 
-  // ID-147: rest costs fights (the player waits it out on replays), so bound them: 96, 56,
-  // 71 and 64 to beat Horde 18 (about 60 with no rest; seeds 5–8: 46, 95, 67, 48).
+  // ID-147: rest costs fights (the player waits it out on replays), so bound them. ID-155 (only
+  // the downed rest, 1 horde) brought these checks back to every seed: 28–106 fights to beat
+  // Horde 18, mean 63.5 (68.6 before, when seed 13 took 157).
   it('every campaign beats Horde 18 within 120 fights', () => {
-    for (const runs of campaigns.slice(0, PACE_SEEDS)) {
+    for (const runs of campaigns) {
       expect(runs.length).toBeLessThanOrEqual(120);
     }
   });
@@ -108,7 +108,7 @@ describe('mid-game horde-only hordes (ID-102)', () => {
   });
 
   it('with average luck, farming gets past each wall within a bounded number of replays', () => {
-    for (const [i, runs] of campaigns.slice(0, PACE_SEEDS).entries()) {
+    for (const [i, runs] of campaigns.entries()) {
       // Replays spent at each new horde: the scripted player farms after each loss there.
       const spent = new Map<number, number>();
       for (const r of runs) {

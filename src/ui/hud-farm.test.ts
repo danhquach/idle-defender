@@ -8,7 +8,7 @@ import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, RADIO_HORDES, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
-import { powerBand, recommendedPower, squadPower } from '../core/squadpower.ts';
+import { injuryBand, powerBand, recommendedPower, squadPower } from '../core/squadpower.ts';
 import { horrorAbility, waveCount } from '../core/waves.ts';
 import {
   BAND_WORD,
@@ -20,6 +20,10 @@ import {
   gunLabel,
   gunOption,
   hordePicker,
+  INJURY_LEAD,
+  INJURY_TIP,
+  INJURY_TONE,
+  INJURY_WORD,
   PICKER_HORDES,
   levelLabel,
   lossXpText,
@@ -507,5 +511,40 @@ describe('text only (ID-098)', () => {
     for (const node of root.querySelectorAll('.hud-horde-pick, .tile-drop, .hud-corner')) {
       expect(node.querySelector('script, iframe, style')).toBeNull();
     }
+  });
+});
+
+describe('the injury band beside the power band (ID-155)', () => {
+  it('says how many a win is likely to cost, follows the pick, and never blocks a start', () => {
+    const { root, h, button, choose } = page();
+    const g = squadGame(6, 12);
+    h.showResult(squadStart(g));
+    const line = () => root.querySelector<HTMLElement>('.hud-horde-injury')!;
+    const power = squadPower(g);
+    const expectBand = (n: number) => {
+      const band = injuryBand(power, recommendedPower(n));
+      expect(line().textContent).toBe(`${INJURY_LEAD} ${INJURY_WORD[band]}`);
+      expect(line().querySelector('.hud-horde-band')!.textContent).toBe(INJURY_WORD[band]);
+      expect(line().dataset.band).toBe(INJURY_TONE[band]);
+      expect(line().querySelector<HTMLElement>('.hud-horde-band')!.title).toBe(INJURY_TIP[band]);
+      expect(hordePicker(g).options.find((o) => o.horde === n)!.injury).toBe(band);
+    };
+    expectBand(12);
+    choose(1);
+    // Horde 1 is far under this squad: few.
+    expect(injuryBand(power, recommendedPower(1))).toBe('few');
+    expectBand(1);
+    choose(12);
+    expectBand(12);
+    expect(button().disabled).toBe(false);
+  });
+
+  it('a squad far short reads heavy, in words and the short band’s colour', () => {
+    const { root, h, choose } = page();
+    h.showResult(squadStart(squadGame(1, 30)));
+    choose(30);
+    const line = root.querySelector<HTMLElement>('.hud-horde-injury')!;
+    expect(line.textContent).toBe(`${INJURY_LEAD} ${INJURY_WORD.heavy}`);
+    expect(line.dataset.band).toBe('short');
   });
 });

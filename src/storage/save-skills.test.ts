@@ -25,8 +25,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 }
 
 describe('save: the skill pick (ID-100)', () => {
-  it('is version 21, and round-trips every pick', () => {
-    expect(SAVE_VERSION).toBe(21);
+  it('is version 22, and round-trips every pick', () => {
+    expect(SAVE_VERSION).toBe(22);
     const picks = [[], ...SKILL_IDS.map((k) => [k])] as GameState['skillPick'][];
     for (const p of picks) {
       const g = picked(...p);
@@ -190,6 +190,6 @@ describe('save: the retired Flashbang and Molotov skills (ID-139)', () => {
     const back = researched(['flashbang', 'molotov'], ['airstrike']);
     expect(back).not.toBeNull();
     expect(JSON.parse(encodeSave(back!.game, NOW)).game.skillPick).toEqual(['airstrike']);
-    expect(SAVE_VERSION).toBe(21); // ID-139 bumped nothing; 21 is ID-154's
+    expect(SAVE_VERSION).toBe(22); // ID-139 bumped nothing; 22 is ID-155's
   });
 });

@@ -71,6 +71,12 @@ export interface RosterDefender extends DefenderSpec {
    * (or 0) when fit. Counts down one per horde played.
    */
   rest?: number;
+  /**
+   * Horde-only (ID-155): patched up by Paramedics after being downed, they fight the next
+   * horde at this share of max HP (`PATCH_UP.hp` to `PATCH_UP.hpCap`); absent at full HP.
+   * Gone once a horde is played.
+   */
+  startHp?: number;
 }
 
 export interface GameState {

@@ -1,5 +1,6 @@
 // Mid-fight swaps (ID-148): a fit bench survivor takes over the slot of one about to fall,
-// at most `MID_SWAP.max` times a fight; the one who pulled back rests from their HP then.
+// at most `MID_SWAP.max` times a fight; the one who pulled back is still standing, so on a
+// win they do not rest (ID-155).
 import { describe, expect, it } from 'vitest';
 import { recruit } from './camp.ts';
 import { CHAT_LINES, chatter, newChat, personalityOf } from './chatter.ts';
@@ -235,12 +236,13 @@ describe('after a fight with swaps (ID-148)', () => {
     return h;
   }
 
-  it('on a win, the one who pulled back rests from their HP at the swap, not as downed', () => {
+  it('on a win, the one who pulled back is still standing: no rest, full HP next horde (ID-155)', () => {
     const h = swapped('won');
     const r = squadResult(game, h);
-    expect(r.rests.find((x) => x.id === 'recruit-2')?.rest).toBe(1);
+    expect(r.rests.some((x) => x.id === 'recruit-2')).toBe(false);
     const next = finishSquadHorde(game, h);
-    expect(campOf(next).find((d) => d.id === 'recruit-2')!.rest).toBe(1);
+    const two = campOf(next).find((d) => d.id === 'recruit-2')!;
+    expect([two.rest, two.startHp]).toEqual([undefined, undefined]);
   });
 
   it('the bench survivor who came in gets horde XP and their level-up line', () => {
@@ -264,31 +266,51 @@ describe('after a fight with swaps (ID-148)', () => {
     ).toBeGreaterThanOrEqual(5);
   });
 
-  it('a newcomer who ends hurt or downed rests like anyone who fought', () => {
+  it('a newcomer who ends downed rests like anyone who fought; hurt, they do not (ID-155)', () => {
     const hurtIn = swapped('won');
     hurtIn.defenders.find((d) => d.id === 'recruit-7')!.hp *= 0.2;
-    expect(squadResult(game, hurtIn).rests.find((x) => x.id === 'recruit-7')?.rest).toBe(1);
+    expect(squadResult(game, hurtIn).rests.some((x) => x.id === 'recruit-7')).toBe(false);
     const downIn = swapped('won');
     const i = downIn.defenders.findIndex((d) => d.id === 'recruit-7');
     const [d] = downIn.defenders.splice(i, 1);
     downIn.injured.push({ defender: d!, postId: d!.postId, at: 1, offered: false, by: null });
-    // Downed rests 2 (a Police officer has no Paramedic's cut).
-    expect(squadResult(game, downIn).rests.find((x) => x.id === 'recruit-7')?.rest).toBe(2);
+    // Downed rests 1 (no Paramedic in this camp to patch them up).
+    expect(squadResult(game, downIn).rests.find((x) => x.id === 'recruit-7')?.rest).toBe(1);
   });
 
-  it('a chain pays everyone who fought and rests both who pulled back', () => {
+  it('a chain pays everyone who fought; neither who pulled back rests (ID-155)', () => {
     let h = tick(hurt(startSquadHorde(game, 1, NOW), 'recruit-2', 0.1), STEP);
     h = tick(hurt(h, 'recruit-7', 0.15), STEP);
     h.outcome = 'won';
     const r = squadResult(game, h);
     for (const id of ['recruit-2', 'recruit-7', 'recruit-8'])
       expect(r.gains.find((g) => g.id === id)?.xp, id).toBeGreaterThan(0);
-    expect(r.rests.filter((x) => ['recruit-2', 'recruit-7'].includes(x.id))).toHaveLength(2);
-    expect(r.rests.some((x) => x.id === 'recruit-8')).toBe(false);
+    expect(r.rests).toEqual([]);
   });
 
   it('a loss rests nobody, the one who pulled back included', () => {
     const r = squadResult(game, swapped('lost'));
     expect(r.rests).toEqual([]);
+  });
+});
+
+describe('a patched-up survivor (ID-155)', () => {
+  it('swapping in mid-fight, comes in at their reduced HP, not full', () => {
+    const game = campGame(people(6), [person(7, { startHp: 0.5 })]);
+    const h = tick(hurt(startSquadHorde(game, 1, NOW), 'recruit-2', 0.1), STEP);
+    const sub = h.defenders.find((d) => d.id === 'recruit-7')!;
+    expect(sub.hp).toBeGreaterThan(0);
+    expect(sub.hp).toBeLessThanOrEqual(Math.round(sub.maxHp * 0.5));
+    // Above the swap line, so they are not pulled straight back.
+    expect(sub.hp).toBeGreaterThan(sub.maxHp * MID_SWAP.below);
+    expect(Object.hasOwn(sub, 'startHp')).toBe(false);
+  });
+
+  it('sitting the next horde out on the bench, is at full HP after it', () => {
+    const game = campGame(people(6), [person(7, { startHp: 0.5 })]);
+    const h = startSquadHorde(game, 1, NOW);
+    h.outcome = 'won';
+    const next = finishSquadHorde(game, h);
+    expect(campOf(next).find((d) => d.id === 'recruit-7')!.startHp).toBeUndefined();
   });
 });
