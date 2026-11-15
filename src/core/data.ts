@@ -1160,16 +1160,22 @@ export const CARD = {
     fireRate: 0.9,
   },
   /**
-   * Frag Grenades: one every `every` s per survivor on the line, at an enemy within `range` of a survivor, landing
+   * Frag Grenades: each survivor carries 3, one back every `every` s (ID-178), at an enemy within `range` of a survivor, landing
    * `flight` s later within `radius` for `share` of this wave's Shambler HP (ID-124; was a
    * flat 20); its blast is drawn for `flash` s. Its cost (ID-137): the thrower fires no
    * shot for `pause` s after each throw.
    */
   frag: { every: 8, range: 600, flight: 0.6, share: 0.25, radius: 70, flash: 1.2, pause: 1.5 },
+  /**
+   * The throwable slot's supply (ID-178): each survivor carries up to `carry` throws; a throw
+   * uses one, and one comes back each `every` s of the held card, up to `carry`. The squad
+   * throws at most one every `gap` s, so a burst spreads over the field instead of one spot.
+   */
+  throws: { carry: 3, gap: 1.5 },
   /** Enemies on the field before Flashbang and Molotov are offered (ID-139: a group to throw at). */
   crowd: 12,
   /**
-   * Flashbang (ID-139; an active skill before): one every `every` s per survivor on the
+   * Flashbang (ID-139; an active skill before): each survivor carries 3, one back every `every` s, on the
    * line, thrown as a Frag Grenade is (`range`, `flight`), stunning (no moving, no
    * attacking) every enemy within `radius` of where it lands for `seconds` at the card's
    * level. An enemy can't be stunned again until `immune` s after its stun ends, and isn't
@@ -1186,7 +1192,7 @@ export const CARD = {
     glare: 0.85,
   },
   /**
-   * Molotov (ID-139; an active skill before): one every `every` s per survivor on the line,
+   * Molotov (ID-139; an active skill before): each survivor carries 3, one back every `every` s,
    * thrown as a Frag Grenade is, leaving a fire of `radius` where it lands that burns for
    * `seconds` at the card's level, each second `burn` of this wave's Shambler HP to every
    * enemy inside (`fireDps`). Its cost: enemies inside a fire move `panic` faster. The

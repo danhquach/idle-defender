@@ -81,19 +81,21 @@ describe('each throwable is the best pick on one scene and not on another (ID-13
     return THROWABLES.every((o) => o === id || m.get(id)! > m.get(o)!);
   };
 
-  // Measured: Molotov 11, Frag 7, Flashbang 2 (of 40).
+  // Measured: Molotov 10, Frag 3, Flashbang 0 (of 40; ID-178: 3 carried, 1.5 s apart).
+  // Before ID-178: Molotov 11, Frag 7, Flashbang 2.
   it('Molotov is the best pick for a lone survivor, and not for a pair', () => {
     expect(best('lone', 'molotov'), table('lone')).toBe(true);
     expect(best('pair', 'molotov'), table('pair')).toBe(false);
   });
 
-  // Measured: Frag 9, Molotov 2, Flashbang 0 (of 40).
+  // Measured: Frag 3, Molotov 1, Flashbang 0 (of 40; ID-178). Before ID-178: Frag 9, Molotov 2.
   it('Frag Grenades is the best pick for a pair, and not for the full line', () => {
     expect(best('pair', 'frag-grenades'), table('pair')).toBe(true);
     expect(best('line', 'frag-grenades'), table('line')).toBe(false);
   });
 
-  // Measured: Flashbang 27, Frag 25, Molotov 24 (of 40; ID-146).
+  // Measured: Flashbang 31, Molotov 29, Frag 25 (of 40; ID-178). ID-146: Flashbang 27, Frag 25,
+  // Molotov 24.
   // Before ID-146, with level 7 and Sharp Mind: Flashbang 11, Frag 9, Molotov 9.
   it('Flashbang is the best pick for the full line, and not for a lone survivor', () => {
     expect(best('line', 'flashbang'), table('line')).toBe(true);

@@ -390,6 +390,10 @@ export interface Defender extends DefenderSpec {
   reloadedAt: Record<Slot, number>;
   /** Shots fired in the current burst of a burst-fire gun (ID-135); absent = 0. */
   burst?: number;
+  /** Throws they carry for the throwable slot (ID-178); absent = a full `CARD.throws.carry`. */
+  throws?: number;
+  /** Fight time their next throw comes back (ID-178); absent while they carry a full load. */
+  throwBackAt?: number;
   x: number;
   y: number;
   postId: number;
@@ -2136,10 +2140,12 @@ const flashable = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
 
 /**
  * The throwable slot (design §8, ID-139): when due, the survivor on the line nearest the
- * target throws the card held, at the enemy outside the camp, within the card's `range` of a
- * survivor, with the most others within its `radius` (ties → nearest the wall, then lowest
- * id), aimed where it will be in `flight` s (a Flashbang only at enemies it can stun); the
- * next comes the card's `every` ÷ the survivors on the line later. One timer serves the
+ * target who still carries a throw throws the card held, at the enemy outside the camp,
+ * within the card's `range` of such a survivor, with the most others within its `radius`
+ * (ties → nearest the wall, then lowest id), aimed where it will be in `flight` s (a
+ * Flashbang only at enemies it can stun). Each survivor carries up to `CARD.throws.carry`
+ * throws and gets one back every the card's `every` s (ID-178), so the squad can burst, then
+ * must wait; the squad throws at most one every `CARD.throws.gap` s. One timer serves the
  * slot, so a swap waits it out. With nobody in reach it waits for the next step.
  *
  * A Frag Grenade's cost (ID-137): the throw takes the thrower's hands for `pause` s. A
@@ -2150,21 +2156,34 @@ function throwHeld(s: HordeState): void {
   const item = heldThrowable(s);
   if (item === null || s.nextThrowAt === undefined || !due(s.time, s.nextThrowAt)) return;
   const c = CARD[item];
-  const throwers = onTheLine(s);
+  for (const d of s.defenders) restock(s, d, c.every);
+  const throwers = onTheLine(s).filter((d) => carried(d) > 0);
   const skip = item === 'flashbang' ? (e: Enemy) => !flashable(s, e) : undefined;
   const aim = throwAt(s, throwers, c.range, c.radius, c.flight, skip);
   if (!aim) return;
+  const thrower = throwers.find((d) => d.id === aim.by)!;
   if (item === 'frag') {
     s.grenades.push(aim);
     // The shot that was due waits out the pause too.
-    const thrower = throwers.find((d) => d.id === aim.by)!;
     thrower.nextShotAt = Math.max(thrower.nextShotAt, s.time) + CARD.frag.pause;
   } else {
     s.grenades.push({ ...aim, item, seconds: atLevel(s, item, CARD[item].seconds) });
   }
   s.feats.push({ kind: 'throw', by: aim.by, at: s.time });
-  // Every survivor on the line carries some: the squad throws one every `every` s each.
-  s.nextThrowAt = s.time + c.every / throwers.length;
+  if (carried(thrower) === CARD.throws.carry) thrower.throwBackAt = s.time + c.every;
+  thrower.throws = carried(thrower) - 1;
+  s.nextThrowAt = s.time + CARD.throws.gap;
+}
+
+/** The throws survivor `d` carries now (ID-178). */
+export const carried = (d: Pick<Defender, 'throws'>): number => d.throws ?? CARD.throws.carry;
+
+/** Survivor `d`'s throws that came back by now, one every `every` s up to a full load (ID-178). */
+function restock(s: Pick<HordeState, 'time'>, d: Defender, every: number): void {
+  while (d.throwBackAt !== undefined && due(s.time, d.throwBackAt)) {
+    d.throws = carried(d) + 1;
+    d.throwBackAt = d.throws < CARD.throws.carry ? d.throwBackAt + every : undefined;
+  }
 }
 
 /** The survivors standing at a post (on the line), in post order. */

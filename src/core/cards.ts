@@ -162,7 +162,7 @@ export const UPGRADES: Readonly<
   },
   'frag-grenades': {
     name: 'Frag Grenades',
-    text: `Each survivor throws a grenade every ${CARD.frag.every} s into the thickest group, for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP; a throw stops its thrower firing for ${CARD.frag.pause} s`,
+    text: `Each survivor carries ${CARD.throws.carry} grenades; one comes back every ${CARD.frag.every} s. Thrown into the thickest group, for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP; a throw stops its thrower firing for ${CARD.frag.pause} s`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
@@ -171,14 +171,14 @@ export const UPGRADES: Readonly<
   flashbang: {
     name: 'Flashbang',
     // The gain and its cost: "… for 3 s; −15% gun range for the whole squad while held".
-    text: `Each survivor throws a flashbang every ${CARD.flashbang.every} s into the thickest group, stunning enemies within ${CARD.flashbang.radius} px for ${CARD.flashbang.seconds[0]} s; ${glareText}`,
+    text: `Each survivor carries ${CARD.throws.carry} flashbangs; one comes back every ${CARD.flashbang.every} s. Thrown into the thickest group, stunning enemies within ${CARD.flashbang.radius} px for ${CARD.flashbang.seconds[0]} s; ${glareText}`,
     category: 'behaviour',
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
   },
   molotov: {
     name: 'Molotov',
-    text: `Each survivor throws a molotov every ${CARD.molotov.every} s into the thickest group: its fire burns enemies for ${Math.round(CARD.molotov.burn * 100)}% of a Shambler’s HP a second for ${CARD.molotov.seconds[0]} s, but they move ${Math.round(CARD.molotov.panic * 100)}% faster in the flames`,
+    text: `Each survivor carries ${CARD.throws.carry} molotovs; one comes back every ${CARD.molotov.every} s. Thrown into the thickest group, its fire burns enemies for ${Math.round(CARD.molotov.burn * 100)}% of a Shambler’s HP a second for ${CARD.molotov.seconds[0]} s, but they move ${Math.round(CARD.molotov.panic * 100)}% faster in the flames`,
     category: 'behaviour',
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
@@ -461,16 +461,16 @@ export function effectAt(
         value: `${lv(CARD.shock.seconds)} s`,
         post: ' (half on the big ones)',
       };
-    // Thrown on their own, so each says how often (design review, ID-139).
+    // Thrown on their own, so each says how many and how often (design review, ID-139, ID-178).
     case 'flashbang':
       return {
-        pre: `Each survivor throws one every ${CARD.flashbang.every} s: stuns enemies within ${CARD.flashbang.radius} px for `,
+        pre: `Each survivor carries ${CARD.throws.carry}; one comes back every ${CARD.flashbang.every} s. Stuns enemies within ${CARD.flashbang.radius} px for `,
         value: `${lv(CARD.flashbang.seconds)} s`,
         post: `; ${glareText}`,
       };
     case 'molotov':
       return {
-        pre: `Each survivor throws one every ${CARD.molotov.every} s: its fire burns for `,
+        pre: `Each survivor carries ${CARD.throws.carry}; one comes back every ${CARD.molotov.every} s. Its fire burns for `,
         value: `${lv(CARD.molotov.seconds)} s`,
         post: `, ${pct(CARD.molotov.burn)} of a Shambler’s HP a second; enemies move ${pct(CARD.molotov.panic)} faster in the flames`,
       };
