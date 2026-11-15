@@ -84,6 +84,25 @@ describe('the horde-only skill button (ID-100, ID-139)', () => {
     });
   });
 
+  it('an armed skill stays pressed while a card or replacement offer holds it (ID-159)', () => {
+    const s = fight('airstrike');
+    const offer = { ...s, offer: [] };
+    const replace = { ...s, replace: { injuredId: 'x', postId: null } };
+    for (const held of [offer, replace]) {
+      expect(skillButtons(held, 'airstrike')[0]).toMatchObject({
+        armed: true,
+        disabled: true,
+        reason: 'Pick first',
+      });
+      expect(skillButtons(held, null)[0]!.armed).toBe(false);
+    }
+    // A skill that truly cannot be used never shows armed, offer or not.
+    expect(skillButtons({ ...offer, outcome: 'won' }, 'airstrike')[0]!.armed).toBe(false);
+    const r = useSkill(s, 'airstrike', 1000, 200);
+    if (!r.ok) throw new Error(r.reason);
+    expect(skillButtons(r.state, 'airstrike')[0]!.armed).toBe(false);
+  });
+
   it('nothing picked: no button shows', () => {
     expect(skillButtons(fight(), null).every((b) => b.hidden)).toBe(true);
   });

@@ -385,6 +385,11 @@ Defenders stand on **posts** the player builds and chooses between.
   click on the field throws it at the area round that spot, a circle of
   radius 260 for the Flashbang and 180 for the Molotov (`SKILLS.*.area`,
   well over twice a burst's radius). Esc or a second press puts it away.
+  **(ID-159)** A card or replacement offer holds the fight and the skills
+  but leaves an armed skill armed: a click on the field or the skill's key
+  only says "Pick first", Esc still puts it away, and after the pick the
+  next click throws it. Meanwhile the aim caption reads "Pick a card, then
+  tap an area".
   An aim behind the walls is moved onto the field just past the outermost
   wall. Each burst lands at a spot from the fight's seeded randomness, even
   over the circle, kept past the outermost wall and inside the field (so

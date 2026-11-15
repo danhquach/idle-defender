@@ -76,6 +76,7 @@ import {
   defenderLabel,
   hordePicker,
   joinedCard,
+  offerHolds,
   powerLine,
   resultScreen,
   fightKeyName,
@@ -288,6 +289,9 @@ export function start(root: HTMLElement, art: Art): void {
   /** A skill's button or key (ID-100): it is armed, waiting for an aim (ID-107). */
   function arm(skill: SkillId): void {
     if (!horde) return;
+    // An open offer holds the skills (ID-159): a key only says so and leaves the armed
+    // one armed; Esc still puts it away.
+    if (offerHolds(horde)) return hud.toast('Pick first');
     // A second click on the armed skill puts it away.
     const lock = skillLock(horde, skill);
     if (lock) hud.toast(lock);
@@ -824,16 +828,17 @@ export function start(root: HTMLElement, art: Art): void {
     if (e.pointerType !== 'mouse') hover = null;
   };
   // In a fight with a skill armed, a click aims it there (a refusal shows as a toast)
-  // and puts it away. Otherwise a click on one of your defenders selects it; with one
-  // selected, a click on a post sends it there (a refusal shows as a toast, unless a
-  // shambler is under the click). Otherwise a click focuses the shambler under it for
-  // every defender, or clears focus and selection on empty ground. In build mode it
-  // opens the slot under it (or closes the menu), or the part of the panel for the plot
-  // under it. Only finite canvas coordinates reach the hit tests, and only in-range grid
-  // slots from `slotAt` reach the core. In a fight nothing is drawn left of the frame, so
-  // a click there lands on nothing: an armed skill stays armed. With a skill armed, a
-  // press dragged across the field aims it where it lifts (ID-107): a finger sees the area
-  // first, slides it onto the crowd, and lets go; a cancelled press keeps it armed.
+  // and puts it away (while an offer is open it stays armed, ID-159). Otherwise a click
+  // on one of your defenders selects it; with one selected, a click on a post sends it
+  // there (a refusal shows as a toast, unless a shambler is under the click). Otherwise
+  // a click focuses the shambler under it for every defender, or clears focus and
+  // selection on empty ground. In build mode it opens the slot under it (or closes the
+  // menu), or the part of the panel for the plot under it. Only finite canvas coordinates
+  // reach the hit tests, and only in-range grid slots from `slotAt` reach the core. In a
+  // fight nothing is drawn left of the frame, so a click there lands on nothing: an armed
+  // skill stays armed. With a skill armed, a press dragged across the field aims it where
+  // it lifts (ID-107): a finger sees the area first, slides it onto the crowd, and lets
+  // go; a cancelled press keeps it armed.
   canvas.addEventListener('pointerup', (e) => {
     const pressed = e.isPrimary && press !== null;
     const click = pressed && press?.click === true;
@@ -848,7 +853,9 @@ export function start(root: HTMLElement, art: Art): void {
       const used = useSkill(horde, armed, ground.x, ground.y);
       if (used.ok) horde = used.state;
       else hud.toast(used.reason);
-      armed = null;
+      // A click while an offer is open throws nothing and keeps the skill armed for after
+      // the pick (ID-159).
+      if (used.ok || !offerHolds(horde)) armed = null;
     } else if (horde) {
       const hit = fightHitAt(ground.x, ground.y, horde);
       if (hit && 'defenderId' in hit) {
@@ -933,8 +940,9 @@ export function start(root: HTMLElement, art: Art): void {
     sound.music(horde?.outcome === 'fighting' ? 'horde' : 'camp', sting);
     sound.pump();
     if (horde) {
-      // A pick, the end of the fight or a cooldown puts an armed skill away.
-      if (armed && skillLock(horde, armed) !== null) armed = null;
+      // The end of the fight or a cooldown puts an armed skill away. A card offer only
+      // locks skills for the moment: the pick keeps what was armed armed (ID-159).
+      if (armed && !offerHolds(horde) && skillLock(horde, armed) !== null) armed = null;
       // Start Horde's ease: the camp shows until the clip has slid to the frame's edge.
       let t = 1;
       if (ease) {
