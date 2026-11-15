@@ -152,6 +152,37 @@ describe('enemy frames (ID-069)', () => {
     expect(enemyFrame(enemy(), 3, { ...IDLE, gait: jostled })).toBe(1);
   });
 
+  it('pulses a new focus once, over the same real time at any speed (ID-160)', () => {
+    const e = [enemy({ id: 4 })];
+    const T = ANIM.focus.time;
+    for (const pace of [1, 5]) {
+      const a = new Animator();
+      a.observe(frame(10, e, { pace }));
+      expect(a.focusPulse(4)).toBe(0);
+      a.observe(frame(10, e, { pace, focusId: 4 }));
+      expect(a.focusPulse(4)).toBe(1);
+      // Half its real time in: eased, a quarter left. Other enemies: none.
+      a.observe(frame(10 + (T / 2) * pace, e, { pace, focusId: 4 }));
+      expect(a.focusPulse(4), `pace ${pace}`).toBeCloseTo(0.25, 9);
+      expect(a.focusPulse(5)).toBe(0);
+      a.observe(frame(10 + T * pace, e, { pace, focusId: 4 }));
+      expect(a.focusPulse(4)).toBe(0);
+    }
+    // Held (the fight time stands), it holds; the same focus again doesn't restart it.
+    const a = new Animator();
+    a.observe(frame(2, e, { focusId: 4 }));
+    a.observe(frame(2, e, { focusId: 4 }));
+    expect(a.focusPulse(4)).toBe(1);
+    a.observe(frame(2 + T, e, { focusId: 4 }));
+    expect(a.focusPulse(4)).toBe(0);
+    // Cleared, then focused again: a new pulse. Reduce motion: none.
+    a.observe(frame(3, e, { focusId: null }));
+    a.observe(frame(3, e, { focusId: 4 }));
+    expect(a.focusPulse(4)).toBe(1);
+    a.reduced = true;
+    expect(a.focusPulse(4)).toBe(0);
+  });
+
   it('stands on its passing frame the moment it stops, not once its drift has faded', () => {
     const a = new Animator();
     let x = 900;

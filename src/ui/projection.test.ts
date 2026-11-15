@@ -10,6 +10,7 @@ import {
 } from '../core/base.ts';
 import {
   CAMP,
+  ENEMY_RADIUS,
   COLUMNS,
   FIELD,
   HORDE_ONLY,
@@ -19,15 +20,18 @@ import {
   START_STOCK,
   WALL,
 } from '../core/data.ts';
-import { layoutOf, newHorde, standing } from '../core/horde.ts';
+import { layoutOf, newHorde, radiusOf, standing } from '../core/horde.ts';
 import { newGame } from '../core/game.ts';
 import { SQUAD_SLOTS, startSquadHorde } from '../core/hordeonly.ts';
-import { setup } from '../core/testing.ts';
+import { enemy, setup } from '../core/testing.ts';
 import {
   depthSort,
+  ENEMY_BODY,
+  enemyHitAt,
   FIGHT_FRAME,
   fightHitAt,
   FRAME,
+  HEIGHT_SCALE,
   frameCamera,
   HUD_SPACE,
   MARGIN_Y,
@@ -494,5 +498,90 @@ describe('wallHitFade (ID-072)', () => {
     expect(wallHitFade(5, undefined)).toBe(0);
     expect(wallHitFade(4, 5)).toBe(0);
     expect(wallHitFade(NaN, 5)).toBe(0);
+  });
+});
+
+describe('enemyHitAt: a click on a zombie as drawn (ID-160)', () => {
+  /** The ground point a click `z` up a body at `(x, y)` reads as. */
+  const up = (x: number, y: number, z: number) => ({ x, y: y - (z * HEIGHT_SCALE) / TILT });
+  const quiet = () => {
+    const s = newHorde(1, setup());
+    s.toSpawn = 0;
+    return s;
+  };
+
+  it('hits a chest or head click, which reads as ground behind its feet', () => {
+    const s = quiet();
+    const e = enemy(s, { x: 700, y: 300 });
+    const reach = radiusOf(e) + ENEMY_RADIUS;
+    const chest = up(e.x, e.y, ENEMY_BODY.height / 2);
+    const head = up(e.x, e.y, ENEMY_BODY.height - 1);
+    // Both lie past a feet-only reach: the old hit test missed them.
+    expect(e.y - chest.y).toBeGreaterThan(reach / 2);
+    expect(e.y - head.y).toBeGreaterThan(reach);
+    expect(enemyHitAt(chest.x, chest.y, s)).toBe(e.id);
+    expect(enemyHitAt(head.x, head.y, s)).toBe(e.id);
+    expect(enemyHitAt(e.x, e.y, s)).toBe(e.id);
+    // Above its head, beside it or below its footprint: nothing.
+    const over = up(e.x, e.y - reach, ENEMY_BODY.height + 1);
+    expect(enemyHitAt(over.x, over.y, s)).toBeNull();
+    expect(enemyHitAt(e.x + reach + 1, e.y, s)).toBeNull();
+    expect(enemyHitAt(e.x, e.y + reach + 1, s)).toBeNull();
+  });
+
+  it('reaches as far sideways as its footprint plus a shambler, by kind', () => {
+    const s = quiet();
+    const brute = enemy(s, { kind: 'brute', x: 800, y: 200 });
+    const crawler = enemy(s, { kind: 'crawler', x: 800, y: 600 });
+    const reach = (e: typeof brute) => radiusOf(e) + ENEMY_RADIUS;
+    expect(enemyHitAt(800 + reach(brute), 200, s)).toBe(brute.id);
+    expect(enemyHitAt(800 + reach(brute) + 1, 200, s)).toBeNull();
+    expect(enemyHitAt(800 + reach(crawler), 600, s)).toBe(crawler.id);
+    expect(enemyHitAt(800 + reach(crawler) + 1, 600, s)).toBeNull();
+  });
+
+  it('an elite is taller to click', () => {
+    const s = quiet();
+    const e = enemy(s, { kind: 'brute', x: 700, y: 300, elite: true });
+    const plain = enemy(s, { kind: 'brute', x: 400, y: 300 });
+    const tall = (ENEMY_BODY.height * radiusOf(e)) / ENEMY_RADIUS;
+    // Just inside the elite's top edge (its footprint's far side, then its height).
+    const edge = radiusOf(e) + ENEMY_RADIUS;
+    const top = up(e.x, e.y - edge, tall - 1);
+    expect(enemyHitAt(top.x, top.y, s)).toBe(e.id);
+    // The same spot over a plain brute is above its head.
+    const plainTop = up(plain.x, plain.y - edge, tall - 1);
+    expect(enemyHitAt(plainTop.x, plainTop.y, s)).toBeNull();
+  });
+
+  it('where bodies overlap, the one whose middle is nearest wins; a tie, the lowest id', () => {
+    const s = quiet();
+    const back = enemy(s, { x: 700, y: 290 });
+    const front = enemy(s, { x: 700, y: 310 });
+    const frontChest = up(front.x, front.y, ENEMY_BODY.height / 2);
+    expect(enemyHitAt(frontChest.x, frontChest.y, s)).toBe(front.id);
+    const backChest = up(back.x, back.y, ENEMY_BODY.height / 2);
+    expect(enemyHitAt(backChest.x, backChest.y, s)).toBe(back.id);
+    const t = quiet();
+    const a = enemy(t, { x: 690, y: 300 }).id;
+    enemy(t, { x: 710, y: 300 });
+    const mid = up(700, 300, ENEMY_BODY.height / 2);
+    expect(enemyHitAt(mid.x, mid.y, t)).toBe(a);
+  });
+
+  it('skips the dead, and a non-finite point is no hit', () => {
+    const s = quiet();
+    const e = enemy(s, { x: 700, y: 300 });
+    e.hp = 0;
+    expect(enemyHitAt(700, 300, s)).toBeNull();
+    e.hp = 5;
+    for (const [x, y] of [
+      [NaN, 300],
+      [700, NaN],
+      [Infinity, 300],
+      [700, -Infinity],
+    ] as const) {
+      expect(enemyHitAt(x, y, s)).toBeNull();
+    }
   });
 });

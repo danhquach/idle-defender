@@ -1245,21 +1245,6 @@ export function moveDefender(state: HordeState, defenderId: string, postId: numb
   return { ok: true, state: s };
 }
 
-/** The living enemy nearest `(x, y)` within reach of a click (ties → lowest id), else null. */
-export function enemyAt(state: HordeState, x: number, y: number): number | null {
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  let best: Enemy | null = null;
-  let bestD = Infinity;
-  for (const e of state.enemies) {
-    const d = Math.hypot(e.x - x, e.y - y);
-    if (e.hp <= 0 || d > radiusOf(e) + ENEMY_RADIUS) continue;
-    if (d > bestD || (d === bestD && best && e.id > best.id)) continue;
-    best = e;
-    bestD = d;
-  }
-  return best?.id ?? null;
-}
-
 function step(s: HordeState, rng: Rng): void {
   spawn(s, rng);
   walk(s);

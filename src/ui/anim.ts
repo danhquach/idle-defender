@@ -44,6 +44,8 @@ export const ANIM = {
   strike: { time: 0.35, lunge: 0.25, px: 6 },
   /** Knocked back from a hit, the first `flash` s showing white (enemies only). */
   flinch: { time: 0.2, px: 3, flash: 0.1 },
+  /** A new focus's ring swelling back over `time` s of real time at any speed (ID-160). */
+  focus: { time: 0.25 },
   /**
    * A gun's kick straight back, from the shot that lit its muzzle flash: `time` s, or
    * `share` of the gun's time between shots when that is shorter, so a fast gun's kicks
@@ -273,6 +275,9 @@ export class Animator {
   private lit = new Map<number, number>();
   /** The game speed of the last frame seen (ID-145): flinches last the same real time. */
   private pace = 1;
+  /** The focused enemy (ID-160) and when it was focused. */
+  private focusId: number | null = null;
+  private focusAt = NEVER;
   corpses: Corpse[] = [];
 
   observe(scene: {
@@ -282,9 +287,16 @@ export class Animator {
     shots: readonly Shot[];
     bursts?: readonly { id: number }[];
     pace?: number;
+    focusId?: number | null;
   }): void {
     this.pace = Math.max(1, scene.pace ?? 1);
     const t = scene.time;
+    // A new focus starts its ring's pulse; the same one again doesn't.
+    const focusId = scene.focusId ?? null;
+    if (focusId !== this.focusId) {
+      this.focusId = focusId;
+      this.focusAt = focusId === null ? NEVER : t;
+    }
     if (t < this.time) {
       this.enemies.clear();
       this.defenders.clear();
@@ -395,6 +407,17 @@ export class Animator {
   /** When enemy `id` caught fire, while it burns (−∞ otherwise). */
   litAt(id: number): number {
     return this.lit.get(id) ?? NEVER;
+  }
+
+  /**
+   * How much of the focus pulse enemy `id` shows (ID-160): 1 as it is focused, easing to
+   * 0 over `ANIM.focus.time` of real time (fight time over the game speed); 0 for any
+   * other enemy, or with Reduce motion. A held fight holds it.
+   */
+  focusPulse(id: number): number {
+    if (this.reduced || id !== this.focusId) return 0;
+    const k = (this.time - this.focusAt) / this.pace / ANIM.focus.time;
+    return Number.isFinite(k) && k >= 0 && k < 1 ? (1 - k) ** 2 : 0;
   }
 
   enemy(id: number): EnemyActs {

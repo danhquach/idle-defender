@@ -76,6 +76,7 @@ import {
   bubbleTag,
   BULLET,
   BURN,
+  COLOR,
   burnHeat,
   fireLook,
   MOLOTOV_FIRE,
@@ -810,6 +811,35 @@ describe('drawScene with art', () => {
         kind,
       ).toHaveLength(1);
     }
+  });
+
+  it('rings the focused enemy only, on a dark edge, and outlines its HP bar (ID-160)', () => {
+    const r = recorder();
+    const strokes: unknown[] = [];
+    const rects: unknown[] = [];
+    const c = r.ctx as unknown as { strokeStyle: unknown } & Record<
+      'stroke' | 'strokeRect',
+      () => void
+    >;
+    c.stroke = () => strokes.push(c.strokeStyle);
+    c.strokeRect = () => rects.push(c.strokeStyle);
+    // blank() is a horde's state with the field emptied.
+    const s = blank() as unknown as HordeState;
+    enemy(s, { x: 700, y: 300 });
+    const target = enemy(s, { x: 760, y: 300 });
+    drawScene(r.ctx, r.art, { ...s, focusId: target.id }, CAM, VIEW);
+    // One ring: its dark edge first, then the yellow over it.
+    expect(strokes.filter((k) => k === COLOR.focus)).toHaveLength(1);
+    const edge = strokes.indexOf(COLOR.focusEdge);
+    expect(edge).toBeGreaterThanOrEqual(0);
+    expect(strokes[edge + 1]).toBe(COLOR.focus);
+    expect(rects.filter((k) => k === COLOR.focus)).toHaveLength(1);
+    strokes.length = 0;
+    rects.length = 0;
+    drawScene(r.ctx, r.art, { ...s, focusId: null }, CAM, VIEW);
+    expect(strokes).not.toContain(COLOR.focus);
+    expect(strokes).not.toContain(COLOR.focusEdge);
+    expect(rects).not.toContain(COLOR.focus);
   });
 
   it('draws a burning enemy (ID-022) and a Frag Grenade in the air, then its blast (ID-077)', () => {
