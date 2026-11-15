@@ -303,10 +303,10 @@ describe('Choose a gun (ID-108)', () => {
     const evil = '<img src=x onerror=alert(1)>';
     const m = picker([{ ...at(1, 2), name: evil }]);
     const slot = m.key('slot');
-    expect(slot.getAttribute('aria-label')).toContain(`dmg/s with ${evil}.`);
-    expect(slot.querySelector('.rv-slot-line')!.textContent).toContain(`dmg/s with ${evil}`);
+    expect(slot.getAttribute('aria-label')).toContain(`DPS with ${evil}.`);
+    expect(slot.querySelector('.rv-slot-line')!.textContent).toContain(`DPS with ${evil}`);
     slot.click();
-    expect(tiles(m)[0]!.getAttribute('aria-label')).toContain(`dmg/s with ${evil},`);
+    expect(tiles(m)[0]!.getAttribute('aria-label')).toContain(`DPS with ${evil},`);
     expect(m.scrim.querySelector('img[src="x"]')).toBeNull();
   });
 
@@ -318,7 +318,7 @@ describe('Choose a gun (ID-108)', () => {
     slot.click();
     expect(m.key('slot').getAttribute('aria-expanded')).toBe('true');
     expect(m.q('.rv-ttl').textContent).toBe('Choose a gun');
-    expect(m.q('.rv-left').textContent).toBe(`By dmg/s · stash 3/${STASH_CAP}`);
+    expect(m.q('.rv-left').textContent).toBe(`By DPS · stash 3/${STASH_CAP}`);
     const t = tiles(m);
     expect(t).toHaveLength(3);
     const dps = t.map((x) => Number(x.querySelector('.rv-dps')!.textContent));
@@ -327,15 +327,13 @@ describe('Choose a gun (ID-108)', () => {
     const sel = t.filter((x) => x.getAttribute('aria-pressed') === 'true');
     expect(sel).toHaveLength(1);
     expect(sel[0]!.dataset.choice).toBe(t[0]!.dataset.choice);
-    expect(m.q('.rv-verdict').textContent).toMatch(/▲ Stronger: \+\d+\.\d dmg\/s \(\+\d+%\)Equip$/);
+    expect(m.q('.rv-verdict').textContent).toMatch(/▲ Stronger: \+\d+\.\d DPS \(\+\d+%\)Equip$/);
     expect(m.q('.rv-v-name').textContent).toContain(t[0]!.querySelector('.rv-ty')!.textContent);
     // Rarity frames and change badges: symbol and number.
     expect(sel[0]!.dataset.rarity).toBe(t[0]!.dataset.rarity);
     expect(t[0]!.querySelector('.rv-d')!.textContent).toMatch(/^▲ \+\d+\.\d$/);
     expect(t[0]!.querySelector('.rv-d')!.getAttribute('data-kind')).toBe('up');
-    expect(t[0]!.getAttribute('aria-label')).toMatch(
-      /dmg\/s with \S+, \d+\.\d more dmg\/s than Pistol$/,
-    );
+    expect(t[0]!.getAttribute('aria-label')).toMatch(/DPS with \S+, \d+\.\d more DPS than Pistol$/);
     // Slot, then the way back.
     m.key('level').click();
     expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
@@ -355,7 +353,7 @@ describe('Choose a gun (ID-108)', () => {
       [...tr.children].map((c) => c.textContent),
     );
     expect(rows.map((r) => r[0])).toEqual([
-      `${recruit(1).name}'s dmg/s`,
+      `${recruit(1).name}'s DPS`,
       'Damage',
       'Fire rate',
       'Reload',
@@ -414,7 +412,7 @@ describe('Choose a gun (ID-108)', () => {
     expect(m.game().armoury.map((w) => w.uid)).toContain('r1');
   });
 
-  it('slot, tiles and hint show dmg/s in the survivor’s hands, so a Hunter opens on the Sniper rifle (ID-152)', () => {
+  it('slot, tiles and hint show DPS in the survivor’s hands, so a Hunter opens on the Sniper rifle (ID-152)', () => {
     const hunter: RosterDefender = { ...at(1, 21), job: 'hunter' };
     const sniper = gun('s', 'sniper', 'common');
     const assault = gun('a', 'assault', 'common');
@@ -425,13 +423,13 @@ describe('Choose a gun (ID-108)', () => {
     );
     // The figure names whose it is (ID-166).
     expect(m.key('slot').querySelector('.rv-slot-line')!.textContent).toContain(
-      `${survivorDps(who, 'pistol').toFixed(1)} dmg/s with ${hunter.name}`,
+      `${survivorDps(who, 'pistol').toFixed(1)} DPS with ${hunter.name}`,
     );
     m.key('slot').click();
     expect(tiles(m)[0]!.getAttribute('aria-pressed')).toBe('true');
     expect(tiles(m)[0]!.textContent).toContain(survivorDps(who, sniper).toFixed(1));
     const hint = m.scrim.querySelector('.rv-hint')!.textContent!;
-    expect(hint).toContain(`dmg/s is ${hunter.name}'s, level and profession counted`);
+    expect(hint).toContain(`DPS is ${hunter.name}'s, level and profession counted`);
     expect(hint).not.toContain('leaves it out');
   });
 

@@ -731,14 +731,14 @@ close-quarter weapons come out only when an enemy is close.
     decent accuracy; +25% damage near the wall (kept).
   - **Carbine** — long to mid range, accurate, ok damage; **burst fire**: 3
     rounds 0.08 s apart, then a pause, so its average time a shot stays the
-    listed 0.4 s (dmg/s, Squad Power and the gun compare need no change); it keeps
+    listed 0.4 s (DPS, Squad Power and the gun compare need no change); it keeps
     the Rifle's +10% crit chance (its "high accuracy"; Recommended Power and the
     stat caps, ID-125 and ID-128, were fitted with it, and without it Sharp Mind
     fell 26 points behind Agility).
   - **Pump Shotgun** — slightly slow fire, very high damage up close, short
     range; **loaded shell by shell**: one shell every reload ÷ magazine s while
     it is not full, each shell starting once the fire cooldown is over (so fire
-    at the wall settles at the same dmg/s as emptying and refilling the
+    at the wall settles at the same DPS as emptying and refilling the
     magazine). It loads to full first and fires mid-load only at an enemy
     within 250 px of the wall's front (the SMG's "near the wall"). A hit
     **knocks back** an enemy near the wall 25 px.
@@ -819,7 +819,7 @@ close-quarter weapons come out only when an enemy is close.
   slot dropping an SMG gave 75%, one dropping a second Hand Cannon 40%); the
   owner chose stronger sidearms. Damage barely moves the kill scenes (a 20-HP
   Shambler takes 4 hits from 5 to 6.6 damage), so fire rate is the lever; the
-  Pump Shotgun's 8-pellet start had the highest dmg/s of any gun on paper while
+  Pump Shotgun's 8-pellet start had the highest DPS of any gun on paper while
   reaching 300 px, so the scripted squad equipped it and fell to 50% at Horde 8 —
   6 pellets and 350 px fixed that.
 - **Gun roles (as built, ID-101; kept by the balance pass, ID-102):**
@@ -827,20 +827,20 @@ close-quarter weapons come out only when an enemy is close.
   Relic, plus role affixes only it rolls (below, in Gear). The Inventory, the
   drop tile and the gun picker name the role and trait ("Marksman: Fires 3-round
   bursts; +10% crit chance"); the slot's screen-reader label and the picker's description read it.
-  A picker option reads "30.3 dmg/s · Lv 4 Prototype LMG · Shredder (role +6%
+  A picker option reads "30.3 DPS · Lv 4 Prototype LMG · Shredder (role +6%
   crit chance)": the role right after the name, and in such a bracketed list a
   role affix is "role …"; listed one a line (Inventory, drop tile) it is "… (role)".
-  Every dmg/s figure says whose it is (ID-166): the gun's own reads "22.6 gun
-  dmg/s" (drop tile and lines, Inventory, Combine), a survivor's "26.7 dmg/s with
+  Every DPS figure says whose it is (ID-166): the gun's own reads "22.6
+  DPS" (ID-176: "DPS", not "dmg/s"; drop tile and lines, Inventory, Combine), a survivor's "26.7 DPS with
   Ivan" (their level and profession counted: the Roster's held gun, the Inventory
   beside the gun's own for a held gun, screen-reader labels). A survivor's gun
   picker keeps its options' figures bare so the gun's name keeps its room, under
-  a caption "dmg/s with Ivan"; the Roster's gun tiles carry it in their hint.
-  dmg/s counts the gun's own crit (its trait — the Carbine's, the Assault Rifle's, the LMG's, the
+  a caption "DPS with Ivan"; the Roster's gun tiles carry it in their hint.
+  DPS counts the gun's own crit (its trait — the Carbine's, the Assault Rifle's, the LMG's, the
   Sniper rifle's, with the Sniper's crit damage — and crit and crit damage
   affixes), so ranking, stash-full discards and guaranteed upgrades see it; the
   situational effects (near-wall damage, knockback, a crit ignoring armour, the
-  Sniper's pierce chance, boss damage, cone) are not in dmg/s. *(Examples and
+  Sniper's pierce chance, boss damage, cone) are not in DPS. *(Examples and
   traits as since ID-135.)*
 
   | Gun | Role | Built-in trait | Role affixes |
@@ -857,7 +857,7 @@ close-quarter weapons come out only when an enemy is close.
   | Drum Shotgun *(ID-135)* | Crowd stopper | A hit knocks an enemy near the wall back (25 px) | +20–40% wider cone, +1–2 pellets (the Pump Shotgun's) |
 
   Since ID-135 the knockback and Shock Rounds' paralysis stack, but the
-  knockback is capped at 100 px an enemy (`roles.test.ts`). Squad Power and dmg/s
+  knockback is capped at 100 px an enemy (`roles.test.ts`). Squad Power and DPS
   count a gun's own crit (its trait and crit affixes, the Sniper rifle's crit
   damage). An older save's guns keep their affixes (an LMG magazine roll below
   the new 40% still reads; an LMG slow affix becomes crit) and gain their trait,
@@ -903,18 +903,18 @@ close-quarter weapons come out only when an enemy is close.
     (§6 Professions, ID-149).
     The gun picker's way back is labelled Level.
   - **Choose a gun** (between hordes): tiles for the free pistol and every
-    stash gun except the one held, strongest first by dmg/s in this
+    stash gun except the one held, strongest first by DPS in this
     survivor's hands (ID-152: their level and profession counted, as Squad
     Power counts them, so a Hunter's Sniper rifle can outrank a gun that
     hits harder on its own; the survivor's gun slot shows the same figure),
     each with its base gun, a rarity frame and a change badge against the
     held gun ("▲ +4.2", "▼ 1.1", "= same"; the symbol and number carry the
-    meaning, colour is second). The hint under the tiles says whose dmg/s
+    meaning, colour is second). The hint under the tiles says whose DPS
     it is. It opens on the best upgrade. Above the tiles, the chosen gun is
-    compared with the held one: a verdict in words ("Stronger: +8.9 dmg/s
+    compared with the held one: a verdict in words ("Stronger: +8.9 DPS
     (+72%)" or "Weaker: …", in their hands too) with one Equip button, then
-    Now, New and Change for dmg/s (in their hands, the row named "Ivan's
-    dmg/s"), damage a shot (pellets
+    Now, New and Change for DPS (in their hands, the row named "Ivan's
+    DPS"), damage a shot (pellets
     shown as "4.0 × 6"), fire rate, reload, range, role and affixes, the change written out ("0.50 s slower",
     "200 px shorter", "new role"). Equip follows the same rules as the gun
     pickers: the stash holds 40 (20 before ID-122), the pistol is free and unlimited, and a gun
@@ -922,7 +922,7 @@ close-quarter weapons come out only when an enemy is close.
     in the status line). In a fight the slot says guns change between
     hordes.
   - **Best gun for everyone** acts at once (ID-152): each gun is scored in
-    the hands of the survivor who would hold it (dmg/s with their level and
+    the hands of the survivor who would hold it (DPS with their level and
     profession, as Squad Power counts it: a fighting job's own guns count for
     more). It keeps making the one change that raises the squad's total the
     most: a survivor takes a stash gun (theirs goes to the stash; the free
@@ -1115,7 +1115,7 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   accuracy, crit chance, crit damage and injury dodge: the total, the level's
   part and the profession's (a fighting job's part off its guns is struck out
   and left out of the total). The Roster's gun picker marks a fighting job's
-  guns with ★ and says so under the tiles (its dmg/s counts the bonus since
+  guns with ★ and says so under the tiles (its DPS counts the bonus since
   ID-152; before, it left it out).
   The start screen's gun picker stars them too, and the card says "No Hunter
   bonus with this gun" under the gun's role when the held one isn't theirs.
@@ -1200,7 +1200,7 @@ profession's output).
     guns that is an upgrade (ID-152: for some survivor, in their hands)
     resets the bad-luck count (§11 Farming). The result screen lists them under the
     drop, one compact row each (icon on its rarity's tint, level, rarity,
-    gun, dmg/s, or "Thrown away"). At the worst luck the scripted player
+    gun, DPS, or "Thrown away"). At the worst luck the scripted player
     throws them away too.
   - **Stash:** the camp's armoury, shown as the stash. It holds 40 weapons
     (20 before ID-122; more slots for a currency is a later idea). Each gun
@@ -1208,18 +1208,18 @@ profession's output).
     of the stash and that gun is thrown away (it may be one of the win's own
     guns); a tie throws away the later one. "Weakest" is the
     lowest damage per second through a magazine and its reload (pellets,
-    rarity and affixes counted), the gun's own dmg/s (the Inventory's
+    rarity and affixes counted), the gun's own DPS (the Inventory's
     figure; the pickers show a survivor's, ID-152). An older save's armoury
     past 40 is kept as it is and never grows. A save holds at
     most 52 owned weapons (40 in the stash, a gun in each hand of 6 survivors).
   - **Equip:** between hordes, on the start and result screens, each survivor
     in the squad has a one-click gun picker (a select; the pick applies and
     saves at once). It lists the free pistol, the stash's guns and the gun
-    they hold, strongest first, each led by its dmg/s in that survivor's
-    hands (ID-152: level and profession counted, as in the Roster) ("30.3 dmg/s ·
+    they hold, strongest first, each led by its DPS in that survivor's
+    hands (ID-152: level and profession counted, as in the Roster) ("30.3 DPS ·
     Prototype LMG (+12% damage, +21% magazine)") so a closed select never
     cuts the number off; the full label shows on hover. A caption over the
-    select, "dmg/s with Ivan", says whose the figures are (ID-166). The gun they had goes to
+    select, "DPS with Ivan", says whose the figures are (ID-166). The gun they had goes to
     the stash; the pistol is free and unlimited, so it just goes, and taking
     the pistol is refused while the stash is full. Every survivor starts with
     a pistol. The role (pistol, rifle, shotgun…) is the gun's: survivors have
@@ -1246,12 +1246,12 @@ profession's output).
     button, and its slots carry a ▲ mark in the grid; one short says "2/3" and
     "1 more for a Common SMG". A Relic says it combines no further, and a gun in
     hand that it must go back to the stash first. A combine uses
-    the 3 weakest of the set by dmg/s, so the best one stays. Combine asks
-    first: it lists the 3 guns used up (rarity colour, affixes, dmg/s) and what
+    the 3 weakest of the set by DPS, so the best one stays. Combine asks
+    first: it lists the 3 guns used up (rarity colour, affixes, DPS) and what
     comes out (rarity, "No affixes" or "1 random affix, rolled on combine", and its
-    gun dmg/s, "before affixes" while they are still to roll), with Combine into … and Cancel (Esc cancels; focus
+    DPS, "before affixes" while they are still to roll), with Combine into … and Cancel (Esc cancels; focus
     starts on Cancel). After it, a status line names the new gun with its
-    affixes and dmg/s ("Made: Common SMG, 14.2 gun dmg/s"), and the gun pickers
+    affixes and DPS ("Made: Common SMG, 14.2 DPS"), and the gun pickers
     update, and the new gun is selected; focus moves to that line (Cancel
     returns it to the Combine button). The result screen's drop tile stays a
     record of the win (its stash count then), so a combine on that screen
@@ -1263,7 +1263,7 @@ profession's output).
     squad size, boss, "No XP on a loss", "No weapon drop on a loss"). A win
     then shows two tiles side by side: the weapon drop (rarity in its colour —
     Rusty copper, Common grey, Military blue, Prototype purple, Relic gold —
-    a 56 px icon framed in that colour, the gun, its affixes, its dmg/s, the
+    a 56 px icon framed in that colour, the gun, its affixes, its DPS, the
     stash count, and any weapon thrown away) and the survivor joining (or
     "6/6 full"). *(ID-092)* The icon is the gun's own icon, as the
     Inventory's slots show it (the model the survivors hold, on its rarity's
@@ -1432,7 +1432,7 @@ spacing real hordes have (see the ID-077 note below).
   | Extended Mags | stat | rare | Every squad gun's magazine holds **×1.33** the rounds (rounded), from its next reload (a survivor who joins mid-fight, too: they come with a standard magazine loaded) | ×1.67 | ×2 |
   | Piercing Rounds | behaviour | rare | Each squad shot has a **25%** chance of +1 pierce, rolled on the fight's seeded RNG as it's fired (every pellet of a shot alike) | 50% | 75% (ID-124; was 35%, 70%, always) |
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
-  | Incendiary Rounds | behaviour | rare | The enemy hit burns **3%** of this wave's Shambler HP a second for 3 s (ID-124; was a flat 1 dmg/s); a new hit resets it at the new hit's rate, never stacks | 6% | 9% (was 3 dmg/s) |
+  | Incendiary Rounds | behaviour | rare | The enemy hit burns **3%** of this wave's Shambler HP a second for 3 s (ID-124; was a flat 1 DPS); a new hit resets it at the new hit's rate, never stacks | 6% | 9% (was 3 DPS) |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
   | Flashbang (ID-139; a skill before) | behaviour | rare | Throwable slot. The squad throws one every **10 s ÷ the survivors on the line**, aimed as Frag Grenades is (within **600 px**, the most others within **100 px**, landing **0.6 s** later). It stuns (no moving, no attacking) every enemy within **100 px** for **3 s**. An enemy can't be stunned again until **3 s** after its stun ends, and isn't aimed at till then, so a group or a boss is never held for good. **Cost:** the squad's guns reach **15%** less while it is held (the glare). Its throws take no one's hands | 4 s | 5 s |
   | Molotov (ID-139; a skill before) | behaviour | rare | Throwable slot. The squad throws one every **12 s ÷ the survivors on the line**, aimed as Frag Grenades is (within **600 px**, the most others within **50 px**, landing **0.6 s** later). It leaves a fire of **50 px** burning **4 s**, each second **10%** of this wave's Shambler HP to every enemy inside (`fireDps`). **Cost:** enemies inside a fire move **30%** faster. Its throws take no one's hands | 6 s | 8 s |
@@ -1454,7 +1454,7 @@ spacing real hordes have (see the ID-077 note below).
   | Oil Bomb (ID-132) | behaviour | epic | Two mortars stand just behind the outermost built layer, one at each end of the wall (**36 px** back, **22 px** in from each end). Every **20 s** the one nearer the target fires a tar bomb at the enemy outside the camp with the most others within **90 px** (as Frag Grenades picks, within **600 px** of a mortar), aimed where it will be when the bomb lands **1.5 s** later. It leaves a tar slick of radius **90 px** for **10 s**: every enemy inside moves **60%** slower (multiplying with Barbed Wire, traps and the rest). **Synergy:** an Incendiary Rounds hit on an enemy in an unlit slick lights it: it burns everyone inside for **20%** of this wave's Shambler HP a second, and burns out **3 s** later (gone, no slow). The first bomb comes as soon as the card is picked and an enemy is in reach. **Cost:** the slow shell and the long wait between bombs, and a lit slick burns out (PM, ID-132). Survivors don't fire it, so it is not a throwable and takes no one's hands |
 
   **Steady across hordes (ID-124).** Frag Grenades' burst and Incendiary
-  Rounds' burn were flat (20 damage; 1, 2, 3 dmg/s), more than a whole
+  Rounds' burn were flat (20 damage; 1, 2, 3 DPS), more than a whole
   Shambler early (16 HP at horde-only Horde 1) and a quarter of one late
   (84 HP at Horde 15). Like Molotov's fire (ID-114; a card since ID-139) they are now a share of
   this wave's Shambler HP on the fight's HP curve (`CARD.frag.share`,
@@ -2864,10 +2864,10 @@ and comes back stronger.
 - **Bonus guns (ID-122):** first clears and replays alike may drop up to 2
   more, lower-grade guns (§6 Gear, Bonus guns).
 - **Bad-luck guarantee (replays only):** "an upgrade" is a drop some squad
-  survivor would do more dmg/s with than with their own gun (the free
+  survivor would do more DPS with than with their own gun (the free
   pistol included), in their hands: their level and profession counted, as
   Squad Power and "Best gun for everyone" count them (ID-152; before, more
-  dmg/s than the weakest held gun on its own, which is the same at level 1).
+  DPS than the weakest held gun on its own, which is the same at level 1).
   The weakest held gun is the one that does least in its holder's hands.
   Each replay win whose drop is no upgrade adds 1 to a saved
   count (at most 5); each count moves 5 points of rarity weight up one band,
@@ -2884,18 +2884,18 @@ and comes back stronger.
   drop hits ×3.03 a Horde 1 drop of the same gun). ID-102: +5% of base damage
   a level, added, before (×1.95 at Horde 20). Combine takes 3 of a gun and
   rarity at any levels; the new gun has the highest. The free pistol and
-  older saves' guns are level 1. dmg/s everywhere includes it.
+  older saves' guns are level 1. DPS everywhere includes it.
 - **XP:** a replay pays that horde's survivor XP; more than 3 hordes below
   the highest beaten, half. A loss pays 25% of that horde's win XP (halved far
   down too) × waves cleared ÷ its waves (0 cleared → 0), rounded down. Still no
   drop on a loss.
-- **Squad Power:** per squad survivor, their gun's sustained dmg/s (rarity,
+- **Squad Power:** per squad survivor, their gun's sustained DPS (rarity,
   level, affixes; the level's crit chance, reload and fire rate) × (1 + 0.5 ×
   the level's spread cut) × (1 + 0.5 × the level's extra HP share) × 10
   (ID-146: from the stats before, with a × (1 + 0.5 × Instinct's damage near
   the wall) term), summed over the squad and rounded. Cards and skills don't
   count. (Gun role traits join it with ID-101.)
-- **Recommended Power (ID-102, refitted ID-128):** 3 × the dmg/s a horde
+- **Recommended Power (ID-102, refitted ID-128):** 3 × the DPS a horde
   asks for (9.7 before ID-128, 10.3 before ID-125's true-rate shots): its
   expected enemy HP over the seconds its waves take to spawn (each wave's size
   × its spawn gap, 0.6 s from Horde 6 and 0.8 s before, plus the 3 s break). The HP is each wave's size × its mix's mean HP,
@@ -2946,7 +2946,7 @@ and comes back stronger.
     expected squad's size and level, the scripted player's cards and skills)
     so a squad at it wins about half the time: Horde 9 50%, 12 60%, 15 60%,
     20 50% (25: 70%). Each horde's 50% point, Hordes 11–20, lies at 2.7–3.3 ×
-    the dmg/s (mean 3.0); Horde 9's at 4.0, Horde 10's at 3.7 (hence their
+    the DPS (mean 3.0); Horde 9's at 4.0, Horde 10's at 3.7 (hence their
     factors). At 70% of it a squad loses Hordes 10 and 15 on 5 of 5 seeds; at
     130% wins on 5 of 5. (ID-102's no-card fit: Horde 9 60%, 12 50%, 15 60%,
     20 60%.)
@@ -2959,7 +2959,7 @@ and comes back stronger.
   always there, so colour is never the only cue). It follows the picked horde.
   The pill's tooltip says what it means: "usually nobody goes down", "about 1
   survivor down on average", "about 1 or more survivors down on average".
-  A band, not a %: Squad Power counts dmg/s only, not HP or armour, so a
+  A band, not a %: Squad Power counts DPS only, not HP or armour, so a
   precise figure would mislead. Advice only, like the power bands: a green
   power band can still read heavy, and it never blocks a start.
   - *Measured (16 scripted campaigns to Horde 18, the ID-155 rest rule, 607
@@ -3191,7 +3191,7 @@ offline progress works across sessions.
   last); each squad survivor and the gun they fight with, in squad order (not
   the reserve, which this version doesn't show, nor its guns); and the free
   pistol. Each weapon shows its name in its rarity's colour, its affixes and its
-  dmg/s. The start and result screens keep their gun pickers. It opens between
+  DPS. The start and result screens keep their gun pickers. It opens between
   hordes and in a fight, which it holds like the Menu; Esc or Close shuts it.
   - **As a grid (ID-092):** the dialog has tabs (Weapons only for now; items and
     materials can join later). The squad row (each survivor's gun with their
@@ -3199,17 +3199,17 @@ offline progress works across sessions.
     64 px square slot per stash place up to the cap, empty places drawn empty.
     A slot shows the gun's icon (one per base gun, the model the survivors
     hold, long guns laid across the square) on its rarity's tint inside a frame
-    of its rarity's colour, with its gun dmg/s rounded in a corner badge (its
+    of its rarity's colour, with its DPS rounded in a corner badge (its
     tooltip gives the figure). Selecting
     a slot (click, tap, or the arrows, Home and End from its single Tab stop)
     rings it and fills the details beside the grid (under it on a phone): the
     name in its rarity's colour, "Military rarity · Rifle", its role and trait
-    (ID-101), each affix on its own line, the gun dmg/s (a held gun's also in
-    its holder's hands: "22.6 gun dmg/s · 26.7 dmg/s with Ivan"), who holds it,
+    (ID-101), each affix on its own line, the DPS (a held gun's also in
+    its holder's hands: "22.6 DPS · 26.7 DPS with Ivan"), who holds it,
     and Combine.
     Hovering a slot shows its details until the pointer leaves the grid. It
     opens on the strongest stash gun. Each slot's screen-reader label names the
-    gun, its rarity, role and trait, dmg/s and affix count. The result screen's
+    gun, its rarity, role and trait, DPS and affix count. The result screen's
     drop tile shows the same icon and tint.
   - **Drag and drop (ID-095), between hordes:** a stash gun dropped on a
     survivor's slot is theirs, the gun they held going to the stash (nothing
