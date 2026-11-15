@@ -107,6 +107,7 @@ import {
   type View,
 } from './projection.ts';
 import { drawScene, forgetBackdrop, type Aim, type CampView, type Scene } from './render.ts';
+import { fightSpeed } from './fastforward.ts';
 import { TITLE_PICTURE, type Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
@@ -912,10 +913,13 @@ export function start(root: HTMLElement, art: Art): void {
     const paused = document.hidden || dialogOpen() || held;
     const dt = frameStep(last, now, paused);
     last = paused ? null : now;
+    // The empty field runs fast (ID-164): the walk-in and the gaps between waves.
+    const pace = horde ? fightSpeed(speed, horde) : speed;
+    hud.skipping(!paused && pace > speed);
     if (dt > 0) {
       // Speed runs more of the core's fixed steps per frame, never longer ones; a pick
       // or replacement stops the rest of the frame's steps in the core.
-      if (horde) horde = tick(horde, dt * speed);
+      if (horde) horde = tick(horde, dt * pace);
       // Auto-aim (ID-140): fires the Airstrike on the biggest group the moment it is ready.
       if (horde && autoOn && autoLookDue(horde.time, autoLookedAt)) {
         autoLookedAt = horde.time;
@@ -959,7 +963,7 @@ export function start(root: HTMLElement, art: Art): void {
         // Bullet tails grow with the game speed (ID-070).
         {
           ...horde,
-          pace: speed,
+          pace,
           chat,
           // Once it is over, the real seconds since, for its last kills to finish dying
           // (ID-110): 0 on the frame it ends, before `endedAt` is read below.

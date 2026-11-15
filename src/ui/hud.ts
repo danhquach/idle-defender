@@ -152,6 +152,8 @@ import {
 
 /** The key for each fight speed (ID-062): clear of the card keys 1 2 3 and the action bar's. */
 export const SPEED_KEYS: Readonly<Record<Speed, string>> = { 1: 'A', 3: 'S', 5: 'D' };
+/** The 5× button's title while the empty field fast-forwards (ID-164). */
+export const SKIP_TITLE = 'Fast-forwarding the empty field';
 
 /** How long a toast stays up. */
 const TOAST_MS = 2000;
@@ -1799,6 +1801,11 @@ export function createHud(
   update(state: HordeState, armed?: SkillId | null): void;
   speed(speed: Speed, paused: boolean): void;
   /**
+   * Whether the empty field is running fast (ID-164): the 5× button is outlined, and a chip
+   * under the speed buttons says so where there is room for it (not on a phone).
+   */
+  skipping(on: boolean): void;
+  /**
    * Whether a fight is on (ID-165): the pause button shows only then. The app says, as a
    * start screen's preview state reads as fighting too.
    */
@@ -1960,6 +1967,7 @@ export function createHud(
     const button = el('button', 'hud-speed-button');
     button.type = 'button';
     button.append(`${sp}×`, el('kbd', 'menu-key', SPEED_KEYS[sp]));
+    button.dataset.speed = String(sp);
     button.setAttribute('aria-keyshortcuts', SPEED_KEYS[sp]);
     button.addEventListener('click', () => onSpeed(sp));
     return button;
@@ -1975,7 +1983,11 @@ export function createHud(
   pauseButton.title = 'Pause (Space)';
   pauseButton.hidden = true;
   pauseButton.addEventListener('click', () => onPauseToggle());
-  speed.append(pausedChip, ...speedButtons, pauseButton);
+  // The empty field fast-forwarded (ID-164): shown under the buttons, so the row never shifts.
+  const skipChip = el('span', 'hud-skip-chip', 'Fast-forward »');
+  skipChip.setAttribute('aria-hidden', 'true');
+  skipChip.hidden = true;
+  speed.append(skipChip, pausedChip, ...speedButtons, pauseButton);
   // A held fight on screen (ID-165): the field dims under the word, clicks pass through.
   const pausedVeil = el('div', 'hud-paused-veil');
   pausedVeil.append(el('span', 'hud-paused-word', 'Paused'));
@@ -2856,6 +2868,15 @@ export function createHud(
       speed.classList.toggle('hud-speed-held', paused);
       heldNow = paused;
       drawPause();
+    },
+    skipping(on) {
+      if (skipChip.hidden === !on) return;
+      skipChip.hidden = !on;
+      speed.classList.toggle('hud-speed-skip', on);
+      // The outlined 5× says why it is outlined: the chosen speed hasn't changed.
+      const top = speedButtons[speedButtons.length - 1]!;
+      if (on) top.title = SKIP_TITLE;
+      else top.removeAttribute('title');
     },
     fighting(on) {
       fightOn = on;

@@ -17,6 +17,7 @@ import { buildCamera, EASE_MS, PLOT_AT } from './buildscene.ts';
 import { FRAME, frameCamera, project, type Camera } from './projection.ts';
 import { MOTION_KEY, SPEED_KEY } from '../storage/settings.ts';
 import { drawScene } from './render.ts';
+import { fightSpeed, SKIP_SPEED } from './fastforward.ts';
 import type { Art } from './sprites.ts';
 
 // The full game's wiring (build panel, build scene), kept for when it comes back: these
@@ -28,6 +29,12 @@ vi.mock('../core/data.ts', async (importOriginal) => ({
 vi.mock('../core/horde.ts', async (importOriginal) => {
   const real = await importOriginal<typeof import('../core/horde.ts')>();
   return { ...real, tick: vi.fn(real.tick) };
+});
+// The empty field's fast-forward (ID-164) is off in these tests, which pin the chosen
+// speed's steps; one test below turns it back on.
+vi.mock('./fastforward.ts', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./fastforward.ts')>();
+  return { ...real, fightSpeed: vi.fn(real.fightSpeed) };
 });
 vi.mock('./render.ts', async (importOriginal) => {
   const real = await importOriginal<typeof import('./render.ts')>();
@@ -85,6 +92,7 @@ beforeEach(() => {
   );
   vi.mocked(tick).mockClear();
   vi.mocked(drawScene).mockClear();
+  vi.mocked(fightSpeed).mockImplementation((chosen) => chosen);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -512,6 +520,22 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     press('d');
     step(5000);
     expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.5);
+  });
+
+  it('the empty field runs at SKIP_SPEED× at 1×, with the chip shown (ID-164)', async () => {
+    const real = (await vi.importActual<typeof import('./fastforward.ts')>('./fastforward.ts'))
+      .fightSpeed;
+    vi.mocked(fightSpeed).mockImplementation(real);
+    const { root, pressed } = fight();
+    expect(pressed()).toEqual(['1×A']);
+    const skipChip = root.querySelector<HTMLElement>('.hud-skip-chip')!;
+    step(16);
+    expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.016 * SKIP_SPEED);
+    expect(skipChip.hidden).toBe(false);
+    // Held, nothing runs and the chip goes.
+    press(' ');
+    step(32);
+    expect(skipChip.hidden).toBe(true);
   });
 
   it('Space stacks with a card offer: 1 still picks, the fight stays held, and resuming carries on', () => {

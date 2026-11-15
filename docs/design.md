@@ -278,6 +278,17 @@ Defenders stand on **posts** the player builds and chooses between.
     Menu, since the four groups don't fit one row there.
     A, S and D are taken, so any keyboard camera control that ever comes uses
     the arrows, not WASD.
+  - **The empty field runs fast (ID-164):** while nothing can happen yet (no
+    living enemy within the farthest reach of the squad's guns and throwables,
+    the oil mortars, the turrets, a Spewer's spit at anyone standing, or 60 px
+    past the wall; nothing in the air; no boss winding up), the fight runs at 5×
+    whatever speed is chosen. A "Fast-forward »" chip hangs under the speed
+    buttons; on a phone, where the status line sits there, the 5× button is
+    outlined dashed instead, titled "Fast-forwarding the empty field". The
+    walk-in and the gaps between waves pass in a couple of seconds (at 1×, the
+    first shot of Hordes 1–5 comes under 3 s after the start, not 4–11 s). Only
+    the frame runs more of the core's fixed steps, so the fight takes the same
+    steps and every balance test is unchanged.
   - Space holds the fight, with the menu's "Paused" chip in the top bar,
     tagged with the Space key.
     Opening and closing the menu leaves a Space pause on. Each fight starts
