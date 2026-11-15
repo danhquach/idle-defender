@@ -1,9 +1,10 @@
 // Angled overhead view of the open field: depth (y) recedes up the screen, height
 // lifts a sprite. Screen units are CSS pixels.
 import type { Base } from '../core/base.ts';
-import type { HordeState, Layer, Post } from '../core/horde.ts';
+import { radiusOf, type HordeState, type Layer, type Post } from '../core/horde.ts';
 import {
   COLUMNS,
+  ENEMY_RADIUS,
   FIELD,
   HORDE_ONLY,
   POST_OFFSET,
@@ -84,6 +85,9 @@ export const PIECE = {
   /** A firing-line slot (ID-068): bare ground, nothing drawn; its footprint is a defender's. */
   line: { halfWidth: 7, halfDepth: 10, height: 0 },
 } as const;
+
+/** A shambler's clickable body height (ID-160): about 90% of its sprite, so a head click counts. */
+export const ENEMY_BODY = { height: 38 } as const;
 
 /** Ground shown behind column 0's ground posts at the frame's left edge. */
 const FRAME_GAP = 24;
@@ -289,6 +293,32 @@ function covers(
 }
 
 export type FightHit = { defenderId: string } | { postId: number };
+
+/**
+ * The enemy a fight click at ground point `(x, y)` lands on, as drawn (ID-160): its body
+ * from the ground to `ENEMY_BODY.height` (scaled with its size) above its feet, as wide
+ * as its footprint plus a shambler's reach. A click on a zombie's chest or head lands on
+ * the ground behind it, so its feet alone missed. Where bodies overlap, the one whose
+ * middle is nearest wins. Null when none is under it.
+ */
+export function enemyHitAt(
+  x: number,
+  y: number,
+  scene: Pick<HordeState, 'enemies'>,
+): number | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  let best: { d: number; id: number } | null = null;
+  for (const e of scene.enemies) {
+    if (e.hp <= 0) continue;
+    const r = radiusOf(e);
+    const z1 = (ENEMY_BODY.height * r) / ENEMY_RADIUS;
+    const reach = r + ENEMY_RADIUS;
+    if (!covers(x, y, { cx: e.x, cy: e.y, hw: reach, hd: reach, z0: 0, z1 })) continue;
+    const d = Math.hypot(x - e.x, y - (e.y - lift(z1 / 2)));
+    if (!best || d < best.d || (d === best.d && e.id < best.id)) best = { d, id: e.id };
+  }
+  return best?.id ?? null;
+}
 
 /**
  * What a fight click at ground point `(x, y)` lands on, as drawn: a defender's body

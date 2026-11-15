@@ -19,15 +19,7 @@ import {
   type Stock,
   stockOf,
 } from './data.ts';
-import {
-  enemyAt,
-  hitDamage,
-  newHorde,
-  standing,
-  tick,
-  type Bullet,
-  type HordeState,
-} from './horde.ts';
+import { hitDamage, newHorde, standing, tick, type Bullet, type HordeState } from './horde.ts';
 import { loadoutFrom } from './loadout.ts';
 import { createRng } from './rng.ts';
 import { answerOffer } from './sim.ts';
@@ -161,16 +153,6 @@ describe('body size', () => {
       s.bullets.push(b);
       expect(one(landed(s), e.id)!.hp < 1000, kind).toBe(hits);
     }
-  });
-
-  it('a click focuses an enemy within its radius plus a body of reach', () => {
-    const s = quiet();
-    const brute = enemy(s, { kind: 'brute', x: 800, y: 200 });
-    const crawler = enemy(s, { kind: 'crawler', x: 800, y: 600 });
-    expect(enemyAt(s, 830, 200)).toBe(brute.id);
-    expect(enemyAt(s, 833, 200)).toBeNull();
-    expect(enemyAt(s, 820, 600)).toBe(crawler.id);
-    expect(enemyAt(s, 823, 600)).toBeNull();
   });
 
   it('separation pushes bodies apart by the sum of their radii', () => {

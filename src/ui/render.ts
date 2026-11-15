@@ -189,6 +189,8 @@ export const COLOR = {
   reserved: 'rgba(156, 196, 240, 0.7)',
   shadow: 'rgba(0, 0, 0, 0.35)',
   focus: '#ffe066',
+  /** The focus ring's dark edge (ID-160), apart from yellow tracers and crits. */
+  focusEdge: 'rgba(0, 0, 0, 0.65)',
   aimFire: '#ff9a3c',
   aimFireFill: 'rgba(255, 154, 60, 0.18)',
   offFrame: '#d2453c',
@@ -945,6 +947,8 @@ function drawHpBar(
   colour: { back: string; fill: string } = { back: COLOR.hpBack, fill: COLOR.hpFill },
   size: { w: number; h: number; min?: { w: number; h: number }; edge?: number } = HP_BAR,
   over = false,
+  /** The focused enemy's bar (ID-160): a yellow outline, seen over a crowd. */
+  focused = false,
 ): void {
   const w = Math.max(size.min?.w ?? 0, size.w * cam.zoom);
   const h = Math.max(size.min?.h ?? 0, size.h * cam.zoom);
@@ -964,6 +968,11 @@ function drawHpBar(
   ctx.fillRect(bar.sx - w / 2, bar.sy, w, h);
   ctx.fillStyle = colour.fill;
   ctx.fillRect(bar.sx - w / 2, bar.sy, w * Math.max(0, hp / maxHp), h);
+  if (focused) {
+    ctx.strokeStyle = COLOR.focus;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bar.sx - w / 2 - 1.5, bar.sy - 1.5, w + 3, h + 3);
+  }
 }
 
 /**
@@ -4105,6 +4114,30 @@ function drawWindUp(
   ctx.restore();
 }
 
+const FOCUS_RING = { min: 2, swell: 0.6 } as const;
+/**
+ * The focused enemy's ring at its feet (ID-160): yellow on a dark edge, so it stands apart
+ * from tracers and crit numbers, at least `FOCUS_RING.min` px; `pulse` (1 → 0 just after
+ * a click) swells it by `FOCUS_RING.swell`.
+ */
+function drawFocusRing(
+  ctx: CanvasRenderingContext2D,
+  feet: Point,
+  pulse: number,
+  cam: Camera,
+): void {
+  const r = ENEMY.shadow * 1.8 * cam.zoom * (1 + FOCUS_RING.swell * pulse);
+  const w = Math.max(FOCUS_RING.min, 2 * cam.zoom);
+  ctx.beginPath();
+  ctx.ellipse(feet.sx, feet.sy, r, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = COLOR.focusEdge;
+  ctx.lineWidth = w + 2;
+  ctx.stroke();
+  ctx.strokeStyle = COLOR.focus;
+  ctx.lineWidth = w;
+  ctx.stroke();
+}
+
 /** A roared enemy (ID-099): an amber ring on the ground under it. */
 function drawRoared(ctx: CanvasRenderingContext2D, e: Enemy, cam: Camera): void {
   groundCircle(ctx, e.x, e.y, radiusOf(e) * 1.3, cam);
@@ -4504,14 +4537,8 @@ export function drawScene(
         const size = radiusOf(e) / ENEMY_RADIUS;
         drawShadow(ctx, ground, 1, cam, size);
         if (roared(scene, e)) drawRoared(ctx, e, cam);
-        if (e.id === scene.focusId) {
-          const r = ENEMY.shadow * 1.8 * cam.zoom;
-          ctx.strokeStyle = COLOR.focus;
-          ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
-          ctx.beginPath();
-          ctx.ellipse(ground.sx, ground.sy, r, r * 0.5, 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
+        const focused = e.id === scene.focusId;
+        if (focused) drawFocusRing(ctx, ground, anim?.focusPulse(e.id) ?? 0, cam);
         const acts = anim?.enemy(e.id);
         const pose = anim && acts ? anim.shown(enemyPose(e, scene.time, acts)) : STILL;
         const frame = anim && acts ? anim.shownFrame(enemyFrame(e, scene.time, acts)) : 1;
@@ -4526,7 +4553,7 @@ export function drawScene(
         drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
         if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam, heat > 0);
         const at = enemyBarAt(art, e.kind, e.x, e.y, e.elite ? ELITE.size : 1);
-        drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true);
+        drawHpBar(ctx, at, e.hp, e.maxHp, cam, undefined, HP_BAR, true, focused);
         // A flashbang's daze (ID-107): stars circle its head until the stun ends.
         if (dazed(scene, e)) starred.push({ e, at });
       },

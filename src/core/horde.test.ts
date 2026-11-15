@@ -19,7 +19,6 @@ import {
   baseAfter,
   gunRange,
   HIT_MARK_GAP,
-  enemyAt,
   moveDefender,
   newHorde,
   radiusOf,
@@ -575,29 +574,6 @@ describe('focus', () => {
     const { s, p } = pq();
     s.enemies.find((e) => e.id === p)!.hp = 0;
     expect(() => setFocus(s, p)).toThrow(RangeError);
-  });
-
-  it('enemyAt picks the nearest within reach', () => {
-    const { s, q } = pq();
-    expect(enemyAt(s, 852, 358)).toBe(q);
-    expect(enemyAt(s, 600, 490)).toBeNull();
-  });
-
-  it('enemyAt breaks a tie by the lowest id', () => {
-    const s = quiet();
-    const a = enemy(s, { x: 700, y: 100 }).id;
-    enemy(s, { x: 700, y: 120 });
-    expect(enemyAt(s, 700, 110)).toBe(a);
-  });
-
-  it.each([
-    [NaN, 0],
-    [0, NaN],
-    [Infinity, 120],
-    [850, -Infinity],
-  ])('enemyAt(%s, %s) is null', (x, y) => {
-    const { s } = pq();
-    expect(enemyAt(s, x, y)).toBeNull();
   });
 });
 

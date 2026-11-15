@@ -5,7 +5,6 @@ import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
 import { FIELD, HORDE_ONLY, type SkillId } from '../core/data.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import {
-  enemyAt,
   layoutOf,
   moveDefender,
   setFocus,
@@ -96,6 +95,7 @@ import { recruitNotice } from './roster.ts';
 import { createRoster, SQUAD_WAIT, type Roster } from './squadroster.ts';
 import { cuesBetween } from './sound.ts';
 import {
+  enemyHitAt,
   fightHitAt,
   frameCamera,
   FIGHT_FRAME,
@@ -862,7 +862,7 @@ export function start(root: HTMLElement, art: Art): void {
         selectedDefender = hit.defenderId;
         return;
       }
-      const enemyId = enemyAt(horde, ground.x, ground.y);
+      const enemyId = enemyHitAt(ground.x, ground.y, horde);
       if (hit && selectedDefender !== null) {
         const moved = moveDefender(horde, selectedDefender, hit.postId);
         if (moved.ok) {
