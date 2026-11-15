@@ -252,6 +252,20 @@ describe('narrow squad cards: a 320 px window, two columns in a wide one (ID-151
     expect(block[2]).toMatch(/\.squad-badge \{[^}]*grid-area: 2 \//);
     expect(block[2]).toMatch(/\.squad-card-xp \{[^}]*grid-area: 2 \//);
   });
+
+  it('on a phone or short window only Start stays pinned, so a whole squad card fits (ID-169)', () => {
+    // A roomy window keeps the whole footer pinned.
+    expect(rule('.hud-debrief .hud-result-foot')).toMatch(/position: sticky;/);
+    const block = /@media \(max-width: 480px\), \(max-height: 700px\) \{([\s\S]*?)\n\}/.exec(rules);
+    expect(block, 'no phone / short-window footer block in page.css').not.toBeNull();
+    if (!block) return;
+    // The footer's box goes: the Skill box, horde picker and lines scroll with the panel.
+    expect(block[1]).toMatch(/\.hud-debrief \.hud-result-foot \{\s*display: contents;/);
+    // Only the button is pinned, full width.
+    expect(block[1]).toMatch(
+      /\.hud-debrief \.hud-result-foot \.hud-button \{[^}]*position: sticky;[^}]*width: 100%;/,
+    );
+  });
 });
 
 describe('the Roster tabs (ID-154)', () => {
