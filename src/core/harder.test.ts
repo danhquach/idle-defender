@@ -8,13 +8,10 @@ import {
   ELITE,
   ENEMIES,
   HORROR,
-  SPAWN_INTERVAL,
   SQUAD_HP_GROWTH,
-  SQUAD_WAVES,
   STEP,
   SWARM,
   WALL,
-  WAVE_BREAK,
   WAVE_GROWTH,
   type BossSkill,
 } from './data.ts';
@@ -33,6 +30,7 @@ import {
   type HordeState,
 } from './horde.ts';
 import { squadHpScale, startSquadHorde } from './hordeonly.ts';
+import { FULL_PACE, SQUAD_PACE, wavePace } from './pacing.ts';
 import { hordeHp, recommendedPower } from './squadpower.ts';
 import { enemy, horror, setup } from './testing.ts';
 import { enemyHp, hordeBosses, kindFor, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
@@ -92,14 +90,15 @@ describe('shorter fights (ID-128)', () => {
     expect(waveSize(7, 1)).toBeGreaterThan(waveSize(6, 1));
   });
 
-  it('enemies come SQUAD_WAVES.interval apart, faster than the full game’s', () => {
-    expect(SQUAD_WAVES.interval).toBeLessThan(SPAWN_INTERVAL);
+  it('late enemies come their pacing’s interval apart, faster than the full game’s', () => {
+    expect(wavePace(12, true).interval).toBeLessThan(FULL_PACE.interval);
     const s = atWave(12, 1);
     expect(s.swarm).toBe(false);
-    expect(run(s, SQUAD_WAVES.interval * 10 - STEP / 2).enemies).toHaveLength(10);
+    expect(run(s, wavePace(12, true).interval * 10 - STEP / 2).enemies).toHaveLength(10);
   });
 
-  it('the next wave comes once this one has all spawned, its enemies still standing', () => {
+  it('at full overlap, the next wave comes once this one has all spawned, its enemies standing', () => {
+    expect(wavePace(12, true).overlap).toBe(1);
     let s = atWave(12, 1);
     s.toSpawn = 1;
     s = tick(s, STEP);
@@ -108,21 +107,78 @@ describe('shorter fights (ID-128)', () => {
     expect(s.toSpawn).toBe(waveSize(12, 2, true) * (s.swarm ? SWARM.size : 1));
     expect(s.enemies.every((e) => e.wave === 1)).toBe(true);
     // The new wave's first comes after its break, marked with its wave.
-    s = run(s, WAVE_BREAK + STEP);
+    s = run(s, wavePace(12, true).break + STEP);
     expect(s.enemies.some((e) => e.wave === 2)).toBe(true);
   });
 
-  it('before Horde SQUAD_WAVES.from, waves wait for a clear and spawn as the full game’s', () => {
-    expect(SQUAD_WAVES.from).toBe(6);
-    const s = atWave(SQUAD_WAVES.from - 1, 1);
-    expect(run(s, SPAWN_INTERVAL * 10 - STEP / 2).enemies).toHaveLength(10);
+  it('before the first overlapping horde, waves wait for a clear and spawn as the full game’s', () => {
+    const first = SQUAD_PACE.find((r) => r.overlap > 0)!.from;
+    expect(first).toBeGreaterThan(1);
+    const s = atWave(first - 1, 1);
+    expect(wavePace(first - 1, true)).toEqual({ ...FULL_PACE, from: 1 });
+    expect(run(s, FULL_PACE.interval * 10 - STEP / 2).enemies).toHaveLength(10);
     s.toSpawn = 0;
     enemy(s, { x: 1400 });
     expect(tick(s, STEP).wave).toBe(1);
-    const at = atWave(SQUAD_WAVES.from, 1);
+    // The first full-overlap horde moves on with a live enemy left at any share.
+    const full = SQUAD_PACE.find((r) => r.overlap >= 1)!.from;
+    const at = atWave(full, 1);
     at.toSpawn = 0;
-    enemy(at, { x: 1400 });
+    at.bosses = [];
+    for (let i = 0; i < waveSize(full, 1, true); i++) enemy(at, { x: 1400 });
     expect(tick(at, STEP).wave).toBe(2);
+  });
+
+  it('a partial overlap brings the next wave once no more than its share is left (ID-171)', () => {
+    const n = SQUAD_PACE.find((r) => r.overlap > 0 && r.overlap < 1)!.from;
+    const { overlap } = wavePace(n, true);
+    const ready = (alive: number): HordeState => {
+      const s = atWave(n, 1);
+      s.toSpawn = 0;
+      s.bosses = [];
+      for (let i = 0; i < alive; i++) enemy(s, { x: 1400, wave: 1 });
+      return s;
+    };
+    const share = Math.floor(overlap * waveSize(n, 1, true));
+    expect(tick(ready(share + 1), STEP).wave).toBe(1);
+    const next = tick(ready(share), STEP);
+    expect(next.wave).toBe(2);
+    expect(next.enemies).toHaveLength(share);
+    // The new wave's first comes after the row's break.
+    expect(run(next, wavePace(n, true).break - STEP).enemies.some((e) => e.wave === 2)).toBe(false);
+    expect(run(next, wavePace(n, true).break + STEP).enemies.some((e) => e.wave === 2)).toBe(true);
+  });
+
+  it('a partial overlap still brings a mini-boss with its wave, and its last wave waits for a clear', () => {
+    // Horde 7: an odd horde, its elite with the middle wave.
+    expect(wavePace(7, true).overlap).toBeGreaterThan(0);
+    const mid = Math.ceil(waveCount(7) / 2);
+    const held = atWave(7, mid);
+    held.toSpawn = 0;
+    expect(held.bosses.some((b) => b.elite && b.wave === mid)).toBe(true);
+    const next = tick(held, STEP);
+    expect(next.wave).toBe(mid + 1);
+    expect(next.enemies.some((e) => e.elite && e.wave === mid)).toBe(true);
+    const last = atWave(7, waveCount(7));
+    last.toSpawn = 0;
+    last.bosses = [];
+    enemy(last, { x: 1400 });
+    expect(tick(last, STEP)).toMatchObject({ outcome: 'fighting', wave: waveCount(7) });
+  });
+
+  it('a swarm wave still comes at its doubled size after a partial overlap', () => {
+    // Horde 6's last wave swarms; the one before it is calm.
+    const n = 6;
+    const w = waveCount(n);
+    expect(swarmWave(n, w)).toBe(true);
+    const s = atWave(n, w - 1);
+    s.toSpawn = 0;
+    s.bosses = [];
+    const share = Math.floor(wavePace(n, true).overlap * waveSize(n, w - 1, true));
+    for (let i = 0; i < share; i++) enemy(s, { x: 1400, wave: w - 1 });
+    const next = tick(s, STEP);
+    expect(next.wave).toBe(w);
+    expect(next.toSpawn).toBe(SWARM.size * waveSize(n, w, true));
   });
 
   it('the last wave still has to be cleared to win; the full game’s waves wait for a clear', () => {
@@ -194,10 +250,10 @@ describe('swarm waves (ID-099)', () => {
     const s = atWave(9, 4);
     expect(s.swarm).toBe(true);
     expect(s.toSpawn).toBe(2 * waveSize(9, 4, true));
-    const t = run(s, SQUAD_WAVES.interval * 10 - STEP / 2);
+    const t = run(s, wavePace(9, true).interval * 10 - STEP / 2);
     expect(t.enemies.length).toBe(20);
     // The calm wave before spawns half as fast.
-    expect(run(atWave(9, 3), SQUAD_WAVES.interval * 10 - STEP / 2).enemies.length).toBe(10);
+    expect(run(atWave(9, 3), wavePace(9, true).interval * 10 - STEP / 2).enemies.length).toBe(10);
     expect(run(atWave(9, 4, 3), 20)).toEqual(run(atWave(9, 4, 3), 20));
   });
 
@@ -224,7 +280,7 @@ describe('swarm waves (ID-099)', () => {
       const s = atWave(9, waveCount(9));
       s.swarm = swarm;
       s.toSpawn = 80;
-      const gap = swarm ? SQUAD_WAVES.interval / SWARM.size : SQUAD_WAVES.interval;
+      const gap = wavePace(9, true).interval / (swarm ? SWARM.size : 1);
       const t = run(s, 80 * gap);
       expect(t.toSpawn).toBe(0);
       return t.enemies.filter((e) => e.kind === 'runner').length;

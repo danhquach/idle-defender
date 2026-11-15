@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { SQUAD_CAP } from '../data.ts';
 import { newGame } from '../game.ts';
 import { playSquadCampaign, playSquadHorde } from '../sim.ts';
-import { recommendedPower } from '../squadpower.ts';
+import { injuryBand, recommendedPower } from '../squadpower.ts';
 import { horrorAbility } from '../waves.ts';
 import { cacheFor } from './cache.ts';
 import { SEEDS, winRate } from './shared.ts';
@@ -59,6 +59,26 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
     // About 1.3 measured; 6.4 / 1.6 = 4 before ID-163.
     expect(lead(4) / lead(5)).toBeLessThanOrEqual(1.6);
     expect(lead(4)).toBeGreaterThan(lead(5));
+  });
+
+  // ID-171: overlapping waves ramp in (pacing.ts) instead of arriving with the Spewers, so
+  // Hordes 5–8 harden a step at a time: 13/20 won and 3.2 injured a try at Horde 6 before,
+  // after 20/20 and none at Horde 5. A squad the injury forecast puts in "some" mostly wins.
+  it('Hordes 5–8 harden a step at a time, and "some" squads mostly win (ID-171)', () => {
+    const injured = (n: number): number =>
+      firstTry(n).reduce((t, r) => t + r.injured, 0) / firstTry(n).length;
+    const lost = (n: number): number => firstTry(n).filter((r) => r.outcome !== 'won').length;
+    for (let n = 6; n <= 8; n++) {
+      expect(lost(n) - lost(n - 1), `Horde ${n - 1}→${n} first tries lost`).toBeLessThanOrEqual(4);
+      expect(injured(n) - injured(n - 1), `Horde ${n - 1}→${n} injured`).toBeLessThanOrEqual(1.5);
+    }
+    const some = [6, 7, 8]
+      .flatMap((n) =>
+        firstTry(n).map((r) => ({ r, band: injuryBand(r.power, recommendedPower(n)) })),
+      )
+      .filter((x) => x.band === 'some');
+    expect(some.length).toBeGreaterThan(0);
+    expect(some.filter((x) => x.r.outcome !== 'won').length).toBeLessThan(some.length / 2);
   });
 
   it('the expected squad is one survivor more per horde won, up to 6', () => {

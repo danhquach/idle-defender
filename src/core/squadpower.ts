@@ -1,18 +1,11 @@
 // Squad Power and Recommended Power (ID-098, design §11 Farming): one number for the
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
-import { INJURY_BAND, POWER, SWARM, WAVE_BREAK, type EnemyKind } from './data.ts';
+import { INJURY_BAND, POWER, SWARM, type EnemyKind } from './data.ts';
 import type { GameState } from './game.ts';
 import { squadHpScale, squadOf, survivorPower } from './hordeonly.ts';
-import {
-  enemyHp,
-  hordeBosses,
-  spawnInterval,
-  swarmWave,
-  waveCount,
-  waveMix,
-  waveSize,
-} from './waves.ts';
+import { wavePace } from './pacing.ts';
+import { enemyHp, hordeBosses, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
 
 // One survivor's share lives in hordeonly.ts, where "Best squad" (ID-154) ranks by it.
 export { survivorPower };
@@ -44,13 +37,16 @@ export function hordeHp(n: number): number {
 
 /**
  * How long horde-only Horde `n`'s waves take to spawn, in fight seconds (ID-102): each
- * wave's enemies `spawnInterval` apart (a swarm wave's twice as many in the same time), and
- * the break before it. With waves overlapping (ID-128), about a fight's length.
+ * wave's enemies its pacing's `interval` apart (a swarm wave's twice as many in the same
+ * time), and the break before it. With waves overlapping (ID-128), about a fight's length.
+ * A partial overlap (ID-171, `Pace.overlap`) is left out: it makes a fight a little longer
+ * than this, so Recommended Power asks a little more than the horde needs, the safe side.
  */
 export function hordeSeconds(n: number): number {
+  const pace = wavePace(n, true);
   let total = 0;
   for (let w = 1; w <= waveCount(n); w++)
-    total += waveSize(n, w, true) * spawnInterval(n, true) + WAVE_BREAK;
+    total += waveSize(n, w, true) * pace.interval + pace.break;
   return total;
 }
 

@@ -835,15 +835,7 @@ export const SWARM = { from: 5, share: 0.25, growth: 0.01, cap: 0.5, size: 2, ru
  * harder, so a fight's length stops growing.
  */
 export const WAVE_GROWTH = { rate: 1.1, until: 6 } as const;
-export const SPAWN_INTERVAL = 0.8;
-/**
- * Horde-only waves from Horde `from` (ID-128): enemies `interval` s apart (`SPAWN_INTERVAL`
- * before it and in the full game), and the next wave comes once the current one has all
- * spawned, after its break, without waiting for the field to clear (the last wave still has
- * to be cleared to win). Before it a small squad would be buried, so waves wait as before.
- */
-export const SQUAD_WAVES = { from: 6, interval: 0.6 } as const;
-export const WAVE_BREAK = 3;
+// How fast enemies come (spawn gap, break, overlap) lives in pacing.ts (ID-171).
 /** How long a blade or tool strike stays on screen, in seconds. */
 export const STRIKE_FLASH = 0.15;
 /**

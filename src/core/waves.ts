@@ -5,8 +5,6 @@ import {
   ENEMY_MIX,
   HORROR,
   HORROR_ABILITIES,
-  SPAWN_INTERVAL,
-  SQUAD_WAVES,
   SWARM,
   WAVE_GROWTH,
   type BossSkill,
@@ -18,17 +16,6 @@ function whole(name: string, n: number): void {
   if (!Number.isInteger(n) || n < 1)
     throw new RangeError(`${name}: expected a whole number >= 1, got ${n}`);
 }
-
-/**
- * Whether horde `hordeNumber`'s waves overlap and spawn `SQUAD_WAVES.interval` apart: the
- * horde-only build's (`harder`) from Horde `SQUAD_WAVES.from` (ID-128).
- */
-export const fastWaves = (hordeNumber: number, harder: boolean): boolean =>
-  harder && hordeNumber >= SQUAD_WAVES.from;
-
-/** The s between spawns in horde `hordeNumber` (a calm wave's; `fastWaves`, ID-128). */
-export const spawnInterval = (hordeNumber: number, harder: boolean): number =>
-  fastWaves(hordeNumber, harder) ? SQUAD_WAVES.interval : SPAWN_INTERVAL;
 
 /** Waves in a horde: 5, one more every second horde, at most 10. */
 export function waveCount(hordeNumber: number): number {
