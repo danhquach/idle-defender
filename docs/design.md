@@ -2002,8 +2002,9 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     with Runners at 2× their share (Shamblers give way). The warning (ID-121), in
     the field's upper middle: through the 3 s break before it, "Swarm incoming"
     with a 3-2-1 countdown, held still; when it hits, "Swarm!" bigger and solid
-    red for its first 3 s, a red glow at the field's top and side edges (clear of
-    the wall and kept faint at the spawn edge so incoming enemies stay readable),
+    red for its first 3 s, a red glow at the field's top and side edges for its
+    first 8 s, timed apart from the banner (ID-175; clear of the wall and kept
+    faint at the spawn edge so incoming enemies stay readable),
     and a siren (three rising whoops over a drone; two blares before ID-121). The
     fight corner's wave line reads "Swarm · Wave n/m" in red from the break until
     the swarm wave ends: its last enemy down, even after the counter has moved on

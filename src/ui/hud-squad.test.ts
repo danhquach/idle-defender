@@ -249,8 +249,13 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     expect(banner.textContent).toBe('Swarm!');
     expect([banner.hidden, count.hidden, edge.hidden]).toEqual([false, true, false]);
     expect(banner.classList.contains('hud-swarm-hit')).toBe(true);
-    // Past its first seconds: only the marker stays.
-    h.update({ ...swarm, time: 20 });
+    // The banner goes after 3 s; the edge glow keeps flashing to 8 s (ID-175).
+    h.update({ ...swarm, time: 16 });
+    expect([banner.hidden, edge.hidden]).toEqual([true, false]);
+    h.update({ ...swarm, time: 20.4 });
+    expect(edge.hidden).toBe(false);
+    // Past its first 8 s: only the marker stays.
+    h.update({ ...swarm, time: 20.5 });
     expect([banner.hidden, edge.hidden]).toEqual([true, true]);
     expect(line.classList.contains('hud-corner-wave-swarm')).toBe(true);
     // The next break, a swarm again: back to the steady warning.
