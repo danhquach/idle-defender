@@ -73,8 +73,9 @@ function boot() {
   const result = () => root.querySelector<HTMLElement>('.hud-result')!;
   const title = () => result().querySelector('.hud-result-title')!.textContent;
   const button = () => result().querySelector<HTMLButtonElement>('.hud-result-foot > .hud-button')!;
-  // The corner's tooltip carries the status line the old top bar showed.
-  const bar = () => root.querySelector<HTMLElement>('.hud-corner')!.title;
+  // The corner as read: its tooltip (the horde) and its live wave line (ID-167).
+  const bar = () =>
+    `${root.querySelector<HTMLElement>('.hud-corner')!.title} · ${root.querySelector('.hud-corner-wave')!.textContent}`;
   const saved = () => decodeSave(localStorage.getItem(SAVE_KEY))!.game;
   return { root, result, title, button, bar, saved };
 }
@@ -150,7 +151,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     button().click();
     step(16);
     step(32);
-    expect(bar()).toMatch(/^Horde 1 · Waves cleared 0\//);
+    expect(bar()).toMatch(/^Horde 1 · Wave 1\//);
     endNextTick('won');
     step(48);
     expect(result().hidden).toBe(false);
@@ -246,7 +247,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     expect(saved().hordeNumber).toBe(4);
     expect(saved().roster).toEqual(newGame('horde').roster);
     step(48);
-    expect(bar()).toMatch(/^Horde 4 · Waves cleared 0\//);
+    expect(bar()).toMatch(/^Horde 4 · Wave 1\//);
   });
 
   describe('the Menu’s Load and New camp between hordes (ID-156)', () => {
@@ -355,7 +356,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
         menu.close();
         button().click();
         step(48);
-        expect(bar()).toMatch(/^Horde 1 · Waves cleared 0\//);
+        expect(bar()).toMatch(/^Horde 1 · Wave 1\//);
       },
     );
   });

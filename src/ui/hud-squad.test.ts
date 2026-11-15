@@ -55,15 +55,19 @@ const ended = (g: GameState, outcome: 'won' | 'lost') => ({
 });
 
 describe('the horde-only top bar (ID-066)', () => {
-  it('shows the horde, waves cleared and enemies left, and nothing of cash, bank or perks', () => {
+  it('names the horde only, and nothing of cash, bank or perks', () => {
     const s = startSquadHorde(squadGame(1, 3), 1, NOW);
-    expect(squadStatus(s)).toBe(`Horde 3 · Waves cleared 0/${s.waveCount} · ${s.toSpawn} left`);
+    expect(squadStatus(s)).toBe('Horde 3');
     expect(squadStatus(s)).not.toMatch(/Cash|Bank|Perks/);
-    expect(squadStatus({ ...s, wave: 3 })).toContain(`Waves cleared 2/${s.waveCount}`);
-    expect(squadStatus({ ...s, outcome: 'won' })).toContain(
-      `Waves cleared ${s.waveCount}/${s.waveCount}`,
-    );
-    expect(squadStatus({ ...s, toSpawn: 1 })).toMatch(/ · 1 left$/);
+    // No wave progress or enemy count (ID-167): a tooltip keeps its text while shown, so
+    // either went stale beside the wave line's live one as a wave ended or began.
+    for (const t of [
+      { ...s, wave: 3 },
+      { ...s, outcome: 'won' as const },
+      { ...s, toSpawn: 1234 },
+    ]) {
+      expect(squadStatus(t)).toBe('Horde 3');
+    }
     expect(squadStatus(startSquadHorde(squadGame(1, 10), 1, NOW))).toMatch(/^Horde 10 \(boss\)/);
   });
 
@@ -280,6 +284,26 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const corner = root.querySelector<HTMLElement>('.hud-corner')!;
     expect(corner.hidden).toBe(false);
     expect(corner.title).toBe(squadStatus(s));
+    // One enemy count and one wave figure on screen, tooltips included (ID-167): nothing
+    // can disagree with them, or go stale beside them.
+    const said = () =>
+      [
+        root.textContent ?? '',
+        ...[...root.querySelectorAll('[title], [aria-label]')].flatMap((e) => [
+          e.getAttribute('title') ?? '',
+          e.getAttribute('aria-label') ?? '',
+        ]),
+      ].join(' | ');
+    expect(said().match(/\d[\d,]* left(?![a-z])/g)).toEqual([
+      `${enemiesLeft(s).toLocaleString('en-US')} left`,
+    ]);
+    expect(said().match(/Waves?(?: cleared)? \d+\//g)).toEqual(['Wave 1/']);
+    // A big wave: still one count, in one format.
+    h.update({ ...s, toSpawn: 1234 });
+    const big = enemiesLeft({ ...s, toSpawn: 1234 }).toLocaleString('en-US');
+    expect(big).toContain(',');
+    expect(said().match(/\d[\d,]* left(?![a-z])/g)).toEqual([`${big} left`]);
+    h.update(s);
     expect(root.querySelector('.hud-badge-label')!.textContent).toBe('Horde');
     expect(root.querySelector('.hud-badge-num')!.textContent).toBe('2');
     expect(root.querySelector('.hud-badge')!.classList.contains('hud-badge-boss-on')).toBe(false);

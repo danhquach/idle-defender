@@ -92,7 +92,6 @@ import {
   perkOn,
   repairsLeft,
   skillPower,
-  wavesCleared,
   windingUp,
   type Enemy,
   type Breach,
@@ -352,16 +351,14 @@ export const enemiesLeft = (s: Pick<HordeState, 'enemies' | 'toSpawn'>): number 
   s.enemies.filter((e) => e.hp > 0).length + s.toSpawn;
 
 /**
- * The horde-only top bar (ID-066): "Horde 3 · Waves cleared 1/5 · 12 left". Waves overlap
- * (ID-128), so "left" is every enemy standing or still to come in the wave under way.
+ * The horde-only corner's tooltip (ID-066): "Horde 3 · Swaps left 1". Wave progress and
+ * the enemies left are on the wave line only (ID-167): a tooltip keeps the text it opened
+ * with, so a count here went stale beside the live one as a wave ended or began.
  */
 export function squadStatus(s: HordeState): string {
-  const left = enemiesLeft(s);
   const swaps = swapsText(s);
   return [
     bossHorde(s) ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
-    `Waves cleared ${wavesCleared(s)}/${s.waveCount}`,
-    `${left} left`,
     ...(swaps ? [swaps] : []),
   ].join(' · ');
 }
