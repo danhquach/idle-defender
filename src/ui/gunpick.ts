@@ -41,7 +41,7 @@ export interface Delta {
   kind: DeltaKind;
   /** "▲ +4.2", "▼ 1.1" or "= same". */
   text: string;
-  /** "4.2 more dmg/s", "1.1 less dmg/s" or "same dmg/s" (screen readers). */
+  /** "4.2 more DPS", "1.1 less DPS" or "same DPS" (screen readers). */
   words: string;
 }
 
@@ -53,10 +53,10 @@ const dpsOf = (h: Held, who: Statted): number => survivorDps(who, h);
 
 export function deltaOf(held: Held, other: Held, who: Statted): Delta {
   const d = dpsOf(other, who) - dpsOf(held, who);
-  if (Math.abs(d) < SAME) return { kind: 'same', text: '= same', words: 'same dmg/s' };
+  if (Math.abs(d) < SAME) return { kind: 'same', text: '= same', words: 'same DPS' };
   return d > 0
-    ? { kind: 'up', text: `▲ +${f1(d)}`, words: `${f1(d)} more dmg/s` }
-    : { kind: 'down', text: `▼ ${f1(-d)}`, words: `${f1(-d)} less dmg/s` };
+    ? { kind: 'up', text: `▲ +${f1(d)}`, words: `${f1(d)} more DPS` }
+    : { kind: 'down', text: `▼ ${f1(-d)}`, words: `${f1(-d)} less DPS` };
 }
 
 /** One tile of the picker. */
@@ -129,7 +129,7 @@ export interface CompareRow {
 }
 
 export interface GunCompare {
-  /** "▲ Stronger: +8.9 dmg/s (+72%)", "▼ Weaker: −1.1 dmg/s (−9%)" or "= Same dmg/s". */
+  /** "▲ Stronger: +8.9 DPS (+72%)", "▼ Weaker: −1.1 DPS (−9%)" or "= Same DPS". */
   verdict: string;
   kind: DeltaKind;
   nowName: string;
@@ -197,16 +197,16 @@ export function gunCompare(held: Held, other: Held, who: Statted): GunCompare {
   const pct = Math.round((Math.abs(d) / a.power) * 100);
   const verdict =
     delta.kind === 'same'
-      ? '= Same dmg/s'
+      ? '= Same DPS'
       : delta.kind === 'up'
-        ? `▲ Stronger: +${f1(d)} dmg/s (+${pct}%)`
-        : `▼ Weaker: ${MINUS}${f1(-d)} dmg/s (${MINUS}${pct}%)`;
+        ? `▲ Stronger: +${f1(d)} DPS (+${pct}%)`
+        : `▼ Weaker: ${MINUS}${f1(-d)} DPS (${MINUS}${pct}%)`;
   const roleA = roleOf(baseOf(held))?.role ?? '';
   const roleB = roleOf(baseOf(other))?.role ?? '';
   const affA = affixLines(held);
   const affB = affixLines(other);
   const rows: CompareRow[] = [
-    numRow('dmg/s', [a.power, b.power], 1, [f1(a.power), f1(b.power)], {
+    numRow('DPS', [a.power, b.power], 1, [f1(a.power), f1(b.power)], {
       more: '',
       less: '',
       signed: true,

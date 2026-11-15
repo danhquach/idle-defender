@@ -295,3 +295,20 @@ describe('Help marks (ID-168)', () => {
     expect(rgba('--color-mark-roar')).toEqual([+r!, +g!, +b!, +a!]);
   });
 });
+
+describe('the offer cards (ID-177)', () => {
+  it('the pick number is large and centred at the top; the name is centred', () => {
+    expect(rules).toMatch(
+      /\.hud-card-has-art \.hud-card-key \{[^}]*align-self: center;[^}]*font-size: var\(--text-title\)/,
+    );
+    expect(rules).not.toMatch(/\.hud-card-has-art \.hud-card-key \{[^}]*position: absolute/);
+    expect(rules).toMatch(
+      /\.hud-card-has-art \.hud-card-title,\s*\.hud-card-has-art \.hud-card-kind \{[^}]*text-align: center/,
+    );
+    expect(rules).toMatch(/\.hud-card-has-art \.hud-card-tag \{[^}]*align-self: center/);
+    // Stacked on a phone, both centre over the text column.
+    expect(rules).toMatch(
+      /\.hud-card-has-art > \.hud-card-key,\s*\.hud-card-has-art > \.hud-card-title,[^{]*\.hud-card-has-art > \.hud-card-kind \{[^}]*justify-self: center/,
+    );
+  });
+});

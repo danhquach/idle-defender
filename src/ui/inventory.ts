@@ -66,7 +66,7 @@ export interface InventoryItem {
   affixes: string[];
   /** The gun's role and built-in trait (ID-101); null for a weapon that is no gun. */
   role: { role: string; trait: string } | null;
-  /** "17.2 gun dmg/s", the gun's own (ID-166); null for a weapon that is no gun (an older save's blade or tool). */
+  /** "17.2 DPS", the gun's own (ID-166); null for a weapon that is no gun (an older save's blade or tool). */
   power: string | null;
   /** The slot's badge: dmg/s rounded ("17"); null for no gun. */
   badge: string | null;
@@ -80,7 +80,7 @@ export interface InventoryItem {
   where: string;
   /** The survivor who fights with it; null in the stash and for the free pistol. */
   holder: string | null;
-  /** "26.7 dmg/s with Ivan": its figure in its holder's hands (ID-166); null when nobody holds it. */
+  /** "26.7 DPS with Ivan": its figure in its holder's hands (ID-166); null when nobody holds it. */
   powerWith: string | null;
   /** The stash gun itself, for its set's Combine; null for a gun in hand or the pistol. */
   owned: OwnedWeapon | null;
@@ -333,7 +333,7 @@ export function combinePreview(uses: readonly OwnedWeapon[]): CombinePreview {
   };
 }
 
-/** The line after a combine: "Made: Common SMG, 14.2 gun dmg/s"; with its affixes in brackets. */
+/** The line after a combine: "Made: Common SMG, 14.2 DPS"; with its affixes in brackets. */
 export const combineResult = (w: OwnedWeapon): string =>
   `Made: ${levelLabel(w)}, ${gunDpsText(gunPower(w))}`;
 
@@ -343,7 +343,7 @@ const levelled = (it: InventoryItem): string =>
 
 /**
  * A slot's screen-reader name: "Military Rifle, Military rarity, Marksman: +10% crit chance,
- * 17.2 gun dmg/s, 2 affixes".
+ * 17.2 DPS, 2 affixes".
  */
 export function slotLabel(it: InventoryItem, ready = false): string {
   const parts = [it.name, `${RARITIES[it.rarity].name} rarity`];
