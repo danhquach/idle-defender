@@ -109,7 +109,7 @@ const SQUAD_HOW_TO_PLAY: Steps = [
   ],
   [
     'Win and grow.',
-    'A win gives survivor XP, and every level makes a survivor better at everything. A new survivor joins, up to a squad of 6.',
+    'A win gives survivor XP, and every level makes a survivor better at everything. A new survivor joins, up to a squad of 6. On the Roster, a survivor can combine with another of the same profession for XP.',
   ],
   [
     'Arm the squad.',

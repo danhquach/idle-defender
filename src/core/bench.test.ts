@@ -128,9 +128,11 @@ describe('new survivors past 6 (ID-147)', () => {
     expect(squadResult(g, ended(g, {}, 'won', 8)).joined.map((d) => d.id)).toEqual(['recruit-8']);
   });
 
-  it('a replay or a loss adds nobody, lucky seed or not', () => {
+  it('a loss adds nobody, lucky seed or not; a replay rolls its own rarer chance (ID-170)', () => {
     const g = campGame(people(6), [], 4);
     const replay = { ...ended(g, {}, 'won', 9), hordeNumber: 2 };
+    // Seed 9 brings two on a first clear but nobody on a replay.
+    expect(joiners(g, 9, true)).toEqual([]);
     expect(squadResult(g, replay).joined).toEqual([]);
     expect(campOf(finishSquadHorde(g, replay))).toHaveLength(6);
     expect(squadResult(g, ended(g, {}, 'lost', 9)).joined).toEqual([]);

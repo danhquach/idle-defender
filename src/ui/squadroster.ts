@@ -12,6 +12,7 @@ import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts
 import { JOBS, SQUAD_CAP, STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
+  combinePartners,
   isFit,
   letGoLock,
   restLabel,
@@ -133,6 +134,14 @@ export interface RosterOptions {
    * have gone, why not, or null when the player said no.
    */
   onLetGo: (id: string) => { ok: true; text: string } | { ok: false; reason: string } | null;
+  /**
+   * Survivor `keeper` takes in `fed` of the same profession (ID-170), after the app's
+   * confirm: what to say once done, why not, or null when the player said no.
+   */
+  onCombine: (
+    keeper: string,
+    fed: string,
+  ) => { ok: true; text: string } | { ok: false; reason: string } | null;
   /** "Best gun for everyone": the guns handed out, or why not. */
   onBestGuns: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
   /** "Best squad" (ID-154): who moved, or why not. */
@@ -161,6 +170,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   let current: string | null = null;
   let picking = false;
   let picked: string | null = null;
+  // The Combine pick (ID-170) open under the current survivor's buttons.
+  let combining = false;
   let status = { text: '', tone: 'ok' as 'ok' | 'danger' };
   // What had the keyboard before it opened (the button, or a name on the squad screen).
   let opener: HTMLElement | null = null;
@@ -310,6 +321,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     if (!canGear) {
       picking = false;
       picked = null;
+      combining = false;
     }
     closeX.setAttribute('aria-label', resumes ? 'Close roster and resume' : 'Close roster');
     bestButton.disabled = !canGear;
@@ -391,6 +403,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       current = t.id;
       picking = false;
       picked = null;
+      combining = false;
       draw(`tab:${t.id}`);
     });
     li.append(tab);
@@ -420,11 +433,19 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     // Let go (ID-150) always shows: greyed at 6 or fewer, where a press says why.
     const actions = el('div', 'rv-actions');
     if ((game.reserve ?? []).length > 0 && isFit(d)) actions.append(squadButton(d, mark, canGear));
+    const camp = { roster: game.roster, reserve: game.reserve ?? [] };
+    // Combine (ID-170) only with someone of the same profession to take in.
+    const partners = combinePartners(camp, d.id);
+    if (partners.length > 0) actions.append(combineButton(d, canGear));
     actions.append(letGoButton(d, canGear));
     text.append(actions);
     // The lock's reason beside the button too (ID-150): the status line can sit below the fold.
-    const lock = letGoLock({ roster: game.roster, reserve: game.reserve ?? [] });
+    // With a Combine button it names both, so neither reads as the other's answer (ID-170).
+    const lock = letGoLock(camp, partners.length > 0 ? 'combine or let one go' : undefined);
+    // A pick left open never comes back by itself once the lock or the partners go.
+    if (lock || partners.length === 0) combining = false;
     if (canGear && lock) text.append(el('p', 'rv-letgo-why', lock));
+    else if (canGear && combining) text.append(combinePick(d, partners));
     who.append(avatar(mark.art, 'roster-avatar roster-avatar-md'), text);
 
     const held = heldGunOf(d);
@@ -510,6 +531,72 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       draw('squad');
     });
     return b;
+  }
+
+  /**
+   * Opens or closes the pick of who `d` takes in (ID-170). Locked as Let go is (6 or fewer:
+   * greyed, a press says why), greyed with `SQUAD_WAIT` in a fight.
+   */
+  function combineButton(d: RosterDefender, canGear: boolean): HTMLElement {
+    const { game } = opts.state();
+    const lock = letGoLock({ roster: game.roster, reserve: game.reserve ?? [] }, 'combine');
+    const b = el('button', 'hud-button rv-btn rv-squad rv-combine', 'Combine');
+    b.type = 'button';
+    b.dataset.key = 'combine';
+    b.disabled = !canGear;
+    b.title = canGear ? (lock ?? '') : SQUAD_WAIT;
+    b.classList.toggle('rv-letgo-locked', lock !== null);
+    b.setAttribute('aria-disabled', String(!canGear || lock !== null));
+    b.setAttribute('aria-expanded', String(combining && lock === null));
+    const why = !canGear ? SQUAD_WAIT : lock;
+    b.setAttribute(
+      'aria-label',
+      `Combine another ${JOBS[d.job].name} into ${d.name}${why ? `. ${why}` : ''}`,
+    );
+    b.addEventListener('click', () => {
+      if (lock) {
+        setStatus(lock, 'danger');
+        draw('combine');
+        return;
+      }
+      combining = !combining;
+      draw(combining ? 'combine-pick' : 'combine');
+    });
+    return b;
+  }
+
+  /** Who `d` can take in (ID-170): one button each (name, level, gun), then Cancel. */
+  function combinePick(d: RosterDefender, partners: readonly RosterDefender[]): HTMLElement {
+    const box = el('div', 'rv-combine-pick');
+    box.append(
+      el('p', 'rv-combine-note', `Take in another ${JOBS[d.job].name}: they leave for good.`),
+    );
+    const row = el('div', 'rv-actions');
+    partners.forEach((p, i) => {
+      const label = `${p.name} · Lv ${levelOf(p.xp).level} · ${gunName(heldGunOf(p))}`;
+      const b = el('button', 'hud-button rv-btn rv-squad', label);
+      b.type = 'button';
+      if (i === 0) b.dataset.key = 'combine-pick';
+      b.setAttribute('aria-label', `Combine ${p.name} into ${d.name}: ${label}`);
+      b.addEventListener('click', () => {
+        const r = opts.onCombine(d.id, p.id);
+        if (r === null) return;
+        combining = false;
+        if (!r.ok) setStatus(r.reason, 'danger');
+        else setStatus(r.text);
+        draw('combine');
+      });
+      row.append(b);
+    });
+    const cancel = el('button', 'hud-button rv-btn rv-squad', 'Cancel');
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => {
+      combining = false;
+      draw('combine');
+    });
+    row.append(cancel);
+    box.append(row);
+    return box;
   }
 
   /**
@@ -750,6 +837,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       current = (asked ?? game.roster[0])?.id ?? null;
       picking = false;
       picked = null;
+      combining = false;
       (doc.activeElement as HTMLElement | null)?.blur?.();
       draw(`tab:${current}`);
       dialog.scrollTop = 0;

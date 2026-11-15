@@ -49,6 +49,7 @@ import {
   PATCH_UP,
   RADIO_HORDES,
   SQUAD_JOIN,
+  SURVIVOR_COMBINE,
   type ResearchCard,
   type Rarity,
   type SkillId,
@@ -75,7 +76,15 @@ import {
 } from './horde.ts';
 import { isGun } from './loadout.ts';
 import { chance, createRng } from './rng.ts';
-import { fieldBonus, jobBonus, jobPart, levelOf, maxHpOf, survivorDps } from './stats.ts';
+import {
+  fieldBonus,
+  jobBonus,
+  jobPart,
+  levelOf,
+  maxHpOf,
+  survivorDps,
+  xpForLevel,
+} from './stats.ts';
 
 /** The card categories a horde-only fight offers (ID-066); anything else stays out. */
 export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviour', 'barrier'];
@@ -425,16 +434,20 @@ const JOIN_STREAM = 0x27d4eb2f;
  * The survivors a first clear adds (ID-066, ID-147), the next free recruits, each with their
  * profession rolled with the horde's `seed` (ID-149): one while the camp has fewer than
  * `SQUAD_CAP`; after that one at `SQUAD_JOIN.chance`, then a second at `SQUAD_JOIN.second`,
- * rolled from the seed alone. None once the camp has `SQUAD_JOIN.max` or the recruit count
- * is at its cap.
+ * rolled from the seed alone. A replay win (`replay`, ID-170) has one at `SQUAD_JOIN.replay`
+ * whatever the camp's size, never a second. None once the camp has `SQUAD_JOIN.max` or the
+ * recruit count is at its cap.
  */
 export function joiners(
   game: Pick<GameState, 'roster' | 'reserve' | 'camp'>,
   seed: number,
+  replay = false,
 ): RosterDefender[] {
   const size = game.roster.length + game.reserve.length;
   let count = 1;
-  if (size >= SQUAD_CAP) {
+  if (replay) {
+    count = chance(createRng(seed ^ JOIN_STREAM), SQUAD_JOIN.replay) ? 1 : 0;
+  } else if (size >= SQUAD_CAP) {
     const rng = createRng(seed ^ JOIN_STREAM);
     count = chance(rng, SQUAD_JOIN.chance) ? (chance(rng, SQUAD_JOIN.second) ? 2 : 1) : 0;
   }
@@ -497,14 +510,18 @@ export function acceptJoins(game: GameState): GameState {
 
 /**
  * Why nobody can be let go (ID-150), or null when they can: the camp must keep more than
- * `SQUAD_CAP`, so the squad can always be filled.
+ * `SQUAD_CAP`, so the squad can always be filled. `act` names what is refused: Combine
+ * (ID-170) is locked by the same rule, in its own words.
  */
-export function letGoLock(game: {
-  roster: readonly RosterDefender[];
-  reserve: readonly RosterDefender[];
-}): string | null {
+export function letGoLock(
+  game: {
+    roster: readonly RosterDefender[];
+    reserve: readonly RosterDefender[];
+  },
+  act = 'let one go',
+): string | null {
   const n = game.roster.length + game.reserve.length;
-  return n > SQUAD_CAP ? null : `Needs ${SQUAD_CAP + 1}+ survivors to let one go (camp ${n})`;
+  return n > SQUAD_CAP ? null : `Needs ${SQUAD_CAP + 1}+ survivors to ${act} (camp ${n})`;
 }
 
 /**
@@ -535,6 +552,54 @@ export function letGo(
     }),
   );
   return { ok: true, game: out, thrown };
+}
+
+/**
+ * The XP a keeper gains for taking in a survivor with lifetime `xp` (ID-170):
+ * `SURVIVOR_COMBINE.share` of it, at least `minLevels` levels' worth from level 1, whole.
+ */
+export const combineXp = (xp: number): number =>
+  Math.max(Math.floor(SURVIVOR_COMBINE.share * xp), xpForLevel(1 + SURVIVOR_COMBINE.minLevels));
+
+/**
+ * The camp survivors `keeperId` can take in (ID-170), in camp order: the others of the same
+ * profession. None for an unknown keeper.
+ */
+export function combinePartners(
+  game: { roster: readonly RosterDefender[]; reserve: readonly RosterDefender[] },
+  keeperId: string,
+): RosterDefender[] {
+  const camp = [...game.roster, ...game.reserve];
+  const k = camp.find((d) => d.id === keeperId);
+  return k ? camp.filter((d) => d !== k && d.job === k.job) : [];
+}
+
+/**
+ * Survivor `keeperId` takes in `fedId` of the same profession (ID-170, between hordes): the
+ * keeper gains `combineXp` of their XP (capped at `MAX_COUNT`) and keeps their own gun, rest
+ * and slot; `fedId` leaves as with `letGo` (their gun back to the stash). Refused as
+ * `letGo` is, and for the same survivor or another profession.
+ */
+export function combineSurvivors(
+  game: GameState,
+  keeperId: string,
+  fedId: string,
+):
+  { ok: true; game: GameState; thrown: OwnedWeapon[]; xp: number } | { ok: false; reason: string } {
+  const camp = campOf(game);
+  const k = camp.find((d) => d.id === keeperId);
+  const f = camp.find((d) => d.id === fedId);
+  if (!k || !f) return { ok: false, reason: 'No such survivor' };
+  if (k === f) return { ok: false, reason: 'A survivor cannot combine with themselves' };
+  if (k.job !== f.job)
+    return { ok: false, reason: 'Only survivors of the same profession combine' };
+  const lock = letGoLock(game, 'combine');
+  if (lock) return { ok: false, reason: lock };
+  const xp = combineXp(f.xp);
+  const fed = (d: RosterDefender): RosterDefender =>
+    d === k ? { ...d, xp: Math.min(MAX_COUNT, d.xp + xp) } : d;
+  const r = letGo({ ...game, roster: game.roster.map(fed), reserve: game.reserve.map(fed) }, fedId);
+  return r.ok ? { ...r, xp } : r;
 }
 
 /** The stream a horde's rest rolls come from (ID-147). */
@@ -672,7 +737,8 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
  * its drop in the stash (the weakest thrown away when full). A first clear also has its
  * joiners (`joiners`) ask to join (`joining`, ID-150: the player accepts or refuses each,
  * `answerJoin`; any left unanswered from before are turned away) and moves on to the next
- * horde; a replay counts toward the bad-luck guarantee. Every fight's wall starts full.
+ * horde; a replay counts toward the bad-luck guarantee, and its rare joiner (ID-170) asks
+ * to join the same way. Every fight's wall starts full.
  * Then `settleSquad`. No base damage, payout or camp XP.
  */
 export function finishSquadHorde(game: GameState, horde: HordeState): GameState {
@@ -715,6 +781,11 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
     g.hordeNumber += 1;
     return settle(withJoining(g, joined));
   }
+  // A replay's newcomer (ID-170) turns away an offer left unanswered, as a first clear's
+  // does; with none, any offer stands.
+  const joined = joiners(game, horde.seed, true);
+  g.camp.recruits += joined.length;
+  if (joined.length > 0) g.joining = joined;
   g.farm = {
     replays: game.farm.replays + 1,
     badLuck: drop.upgrade
@@ -731,8 +802,8 @@ export interface SquadResult {
   /** Each survivor's XP and levels; a loss's small share too (ID-098). */
   gains: LevelGain[];
   /**
-   * The survivors asking to join (ID-147, ID-150): none on a loss or a replay, often none
-   * past 6.
+   * The survivors asking to join (ID-147, ID-150): none on a loss, often none past 6, and
+   * rarely one on a replay (ID-170).
    */
   joined: RosterDefender[];
   /**
@@ -766,8 +837,8 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
     // Off the whole camp, so a bench survivor who swapped in (ID-148) levels from their XP.
     gains: levelGains({ ...game, roster: campOf(game) }, horde, squadXpGains(game, horde)),
     joined:
-      won && !isReplay(game, horde.hordeNumber) && squadDrop(game, horde)
-        ? joiners(game, horde.seed)
+      won && squadDrop(game, horde)
+        ? joiners(game, horde.seed, isReplay(game, horde.hordeNumber))
         : [],
     rests: downed
       .map((r) => ({ id: r.id, name: r.name, rest: after.get(r.id) ?? 0 }))

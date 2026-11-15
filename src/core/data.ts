@@ -31,10 +31,17 @@ export const HORDE_ONLY = true;
 export const SQUAD_CAP = 6;
 /**
  * New survivors once the camp has `SQUAD_CAP` (ID-147), starting points: each first clear has
- * `chance` that one joins, and then `second` that another comes with them. The camp stops
- * growing at `max` survivors, so a save stays bounded.
+ * `chance` that one joins, and then `second` that another comes with them. A replay win that
+ * drops a gun has `replay` that one joins, at any camp size, never a second (ID-170). The
+ * camp stops growing at `max` survivors, so a save stays bounded.
  */
-export const SQUAD_JOIN = { chance: 0.15, second: 0.2, max: 40 } as const;
+export const SQUAD_JOIN = { chance: 0.15, second: 0.2, replay: 0.05, max: 40 } as const;
+/**
+ * Combining survivors (ID-170), starting points: the keeper takes in a survivor of the same
+ * profession and gains `share` of their lifetime XP, at least `minLevels` level-ups' worth
+ * from level 1 (so a fresh Lv 1 joiner still counts). The one taken in leaves the camp.
+ */
+export const SURVIVOR_COMBINE = { share: 0.5, minLevels: 1 } as const;
 /**
  * Hordes a survivor rests after a won fight (ID-147, ID-155): `downed` if they dropped to 0
  * HP; anyone who ends it standing, at any HP, rests none. A lost fight rests nobody

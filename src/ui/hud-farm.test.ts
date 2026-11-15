@@ -7,7 +7,8 @@ import { levelName, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, RADIO_HORDES, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
+import { joiners, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
+import { askLine } from './joining.ts';
 import { injuryBand, powerBand, recommendedPower, squadPower } from '../core/squadpower.ts';
 import { horrorAbility, waveCount } from '../core/waves.ts';
 import {
@@ -291,6 +292,18 @@ describe('result screens and the picker (ID-098)', () => {
     expect(s.debrief!.chips.map((c) => c.text)).not.toContain('Replay');
     expect(s.debrief!.drop).not.toBeNull();
     expect(s.debrief!.drop!.kind).toBe('Replay');
+  });
+
+  it('a lucky replay win (ID-170): the newcomer asks to join, with the offer tile', () => {
+    const g = squadGame(2, 6);
+    let seed = 1;
+    while (joiners(g, seed, true).length === 0) seed++;
+    const s = squadScreen(g, { ...startSquadHorde(g, seed, NOW, 3), outcome: 'won' as const });
+    const d = recruit(3, seed);
+    expect(s.title).toBe('Horde 3 held (replay)');
+    expect(s.lines).toContain(askLine(d));
+    expect(s.debrief!.join).toBe(true);
+    expect(s.debrief!.recruit).toBeNull();
   });
 
   it('the ending screen and radio parts are only for first clears, not replays (ID-127)', () => {

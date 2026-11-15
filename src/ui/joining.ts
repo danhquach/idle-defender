@@ -2,7 +2,7 @@
 // profession, level, gun), the confirm for leaving the screen without answering, the confirm
 // for letting a survivor go, and the lines said after each answer. Pure: no DOM.
 import type { OwnedWeapon } from '../core/armoury.ts';
-import { JOBS } from '../core/data.ts';
+import { JOBS, MAX_COUNT } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import { joiningOf } from '../core/hordeonly.ts';
 import { levelOf } from '../core/stats.ts';
@@ -78,3 +78,32 @@ export function letGoQuestion(d: RosterDefender, thrown: readonly OwnedWeapon[])
 
 /** What the Roster says once `name` has gone. */
 export const letGoText = (name: string): string => `${name} has left the camp.`;
+
+/**
+ * The confirm for `keeper` taking in `fed` (ID-170): who leaves for good, the XP and levels
+ * the keeper gains, where the gun goes, and what a full stash throws away for it.
+ */
+export function combineQuestion(
+  keeper: RosterDefender,
+  fed: RosterDefender,
+  xp: number,
+  thrown: readonly OwnedWeapon[],
+): string {
+  const held = heldGunOf(fed);
+  const from = levelOf(keeper.xp).level;
+  const to = levelOf(Math.min(MAX_COUNT, keeper.xp + xp)).level;
+  const levels = to > from ? ` (Lv ${from} → ${to})` : ` (stays Lv ${from})`;
+  const gun =
+    typeof held === 'object'
+      ? ` ${fed.name}'s ${gunName(held)} goes back to the stash.`
+      : ' The free pistol goes with them.';
+  const lost =
+    thrown.length > 0
+      ? ` The stash is full: ${thrown.map((w) => gunName(w)).join(', ')} will be thrown away.`
+      : '';
+  return `Combine ${fed.name} into ${keeper.name}? ${fed.name} (Lv ${levelOf(fed.xp).level}) leaves the camp for good. ${keeper.name} gains ${xp} XP${levels}.${gun}${lost}`;
+}
+
+/** What the Roster says once `keeper` has taken in `fed` (ID-170). */
+export const combineText = (keeper: string, fed: string, xp: number): string =>
+  `${keeper} took in ${fed}: +${xp} XP.`;
