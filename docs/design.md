@@ -2058,6 +2058,31 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
       0.25 and 0.6 first moved it to Horde 8, 11/20). Recommended Power still
       counts only spawn time, so a partial overlap's longer fight makes it ask
       slightly more than needed.
+    - **Retuning it (ID-172).** `npm run tune:pacing -- [--apply] [from] [to]
+      [candidates]` (default Hordes 5–8, 16 candidates, Node 22.6 or later)
+      plays the horde-only balance test's 20 seeds and prints, for each horde,
+      first-try wins and losses, injured a try, wall loss and the injury
+      forecast's few/some/heavy split, against ID-171's targets (a horde loses
+      at most 4 more first tries and adds at most 1.5 injured a try over the
+      one before; "some" squads mostly win). Where a horde misses, it moves one
+      knob at a time halfway across the step (that horde's overlap or interval
+      slower, or the horde before's faster), keeps the best table, and repeats
+      until every horde passes or the candidates run out, then prints the
+      suggested `SQUAD_PACE` with its numbers, or the closest one. Tables keep
+      `pacing.test.ts`'s rules and prefer the smallest change; a table that
+      stalls a campaign is skipped. Only the default range is the balance
+      test's (it also wants some squad in "some"); the tool notes when a
+      result can't vouch for the test. A candidate takes
+      about 40 s, so a default run is about 10 minutes, under `nice -n 19` in
+      one process. Candidates are swapped in memory; without `--apply` it only
+      prints. With `--apply`, a table that meets every target, with no note, is
+      written into `pacing.ts` itself: its rows and the measured numbers above
+      them inside `SQUAD_PACE`'s brackets, nothing else in the file (a table
+      already passing just has its numbers refreshed). `pacing.test.ts` pins
+      only what the default range can't move (Hordes 1–4 wait for a clear,
+      full overlap by Horde 10), and the horde-only balance test holds the
+      targets, so an applied table needs no test edits; check the diff and run
+      the suites before committing, and update the numbers quoted above.
     - Enemies carry the wave they came with. Waves cleared (the top bar's
       "Waves cleared", a loss's XP share) counts only waves that have all come
       with none of their enemies left; the top bar's count reads "N left" (all
@@ -4093,7 +4118,8 @@ original outline.
   scripted player; the tests in `src/core/balance/` hold the targets (Horde 1
   always won, Hordes 1–2 in 3–5 minutes, difficulty rising, a win paying
   for its repairs, a camp that doesn't build stalling by Horde 5), and
-  `npm run balance` (Node 22.6 or later) prints the full table for tuning.
+  `npm run balance` (Node 22.6 or later) prints the full table for tuning;
+  `npm run tune:pacing` searches the wave pacing table (§9, ID-172).
   The balance tests run apart from the unit tests (`npm run test:balance`)
   and keep their fights' results in `.cache/balance/`, keyed by the
   simulation's code, Node's version and the test file (ID-142), so they

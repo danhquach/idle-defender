@@ -32,10 +32,13 @@ describe('the pacing table (ID-171)', () => {
     expect(FULL_PACE.overlap).toBe(0);
   });
 
-  it('ramps overlap 0.5, 0.75, then full from Horde 8, all 0.6 s apart from Horde 6', () => {
-    // The tuned ramp (design §9, ID-171); the horde-only balance test holds its numbers.
-    expect([5, 6, 7, 8, 30].map((n) => wavePace(n, true).overlap)).toEqual([0, 0.5, 0.75, 1, 1]);
-    expect([5, 6, 7, 8].map((n) => wavePace(n, true).interval)).toEqual([0.8, 0.6, 0.6, 0.6]);
+  it('Hordes 1–4 wait for a clear; overlap is full by Horde 10', () => {
+    // The tuned ramp (design §9, ID-171) is `npm run tune:pacing -- --apply`'s to retune
+    // (ID-172), so its rows aren't pinned here; the horde-only balance test holds its targets.
+    // The tuner's default range moves Hordes 5–8 only.
+    expect([1, 2, 3, 4].map((n) => wavePace(n, true).overlap)).toEqual([0, 0, 0, 0]);
+    expect(wavePace(10, true).overlap).toBe(1);
+    expect(wavePace(30, true)).toBe(SQUAD_PACE.at(-1));
   });
 
   it('the first overlap is a partial one, so no horde jumps from a clear to full overlap', () => {
