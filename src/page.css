@@ -306,6 +306,32 @@ body {
   color: var(--color-accent);
 }
 
+/* The empty field fast-forwarded (ID-164): a chip hanging under the speed buttons, out of
+   the row so nothing shifts, and out of the way of clicks. */
+.hud-skip-chip {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  right: 0;
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-md);
+  background: var(--color-bar-bg);
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.hud-skip-chip[hidden] {
+  display: none;
+}
+
+/* While fast-forwarded the 5× button, the pace the field runs at, is outlined dashed. */
+.hud-speed-skip .hud-speed-button[data-speed='5']:not([aria-pressed='true']) {
+  border-style: dashed;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
 /* A held fight (ID-165): the field dims under the word; clicks and taps pass through. */
 .hud-paused-veil {
   position: fixed;
@@ -4708,6 +4734,11 @@ body {
   .hud-speed {
     left: 8px;
     right: auto;
+  }
+
+  /* No room under the speeds on a phone (the status line is there): the outlined 5× says it. */
+  .hud-skip-chip {
+    display: none;
   }
 
   .hud-speed .menu-key,
