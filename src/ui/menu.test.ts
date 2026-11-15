@@ -17,6 +17,7 @@ import {
   IMPORT_CONFIRM,
   IMPORT_DONE,
   IMPORT_REFUSAL,
+  MARKS,
   NEW_CAMP_CONFIRM,
   NEW_CAMP_DONE,
   readCode,
@@ -507,6 +508,21 @@ describe('the Menu', () => {
     expect(help.querySelectorAll('ol li')).toHaveLength(HOW_TO_PLAY.length);
     expect([...help.querySelectorAll('kbd')].map((k) => k.textContent)).toContain('1');
     expect([...help.querySelectorAll('kbd')].map((k) => k.textContent)).not.toContain('a');
+  });
+
+  it('Help explains the ammo bar and the roar ring, each with a swatch (ID-168)', () => {
+    const help = setup().panel('help');
+    const items = [...help.querySelectorAll('.menu-marks li')];
+    expect(items).toHaveLength(MARKS.length);
+    MARKS.forEach(({ look, name, text }, i) => {
+      expect(items[i]!.textContent).toBe(`${name} ${text}`);
+      const swatch = items[i]!.querySelector(`.menu-mark-${look}`)!;
+      expect(swatch.getAttribute('aria-hidden')).toBe('true');
+    });
+    expect(help.textContent).toMatch(/survivor’s bars.*red is HP lost.*orange bar.*rounds left/);
+    expect(help.textContent).toMatch(
+      /Orange ring under an enemy.*nearby roared.*moves faster for 4 s/,
+    );
   });
 
   it('Help lists no pan or zoom: the field is one fixed frame (ID-064)', () => {

@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PANEL_SPACE } from './build.ts';
+import { BOSS_LOOK, COLOR } from './render.ts';
 
 const css = readFileSync(new URL('../page.css', import.meta.url), 'utf8');
 
@@ -265,5 +266,18 @@ describe('the Roster tabs (ID-154)', () => {
       /\.rv-tabs:not\(\.rv-bench\) \.rv-tab \{[^}]*background: var\(--color-surface\)/,
     );
     expect(rules).toMatch(/\.rv-bench \.rv-tab \{[^}]*border-style: dashed/);
+  });
+});
+
+describe('Help marks (ID-168)', () => {
+  it('each mark swatch uses the colour the field draws it in', () => {
+    expect(tokens.get('--color-mark-hp')).toBe(COLOR.hpFill);
+    expect(tokens.get('--color-mark-hp-lost')).toBe(COLOR.hpBack);
+    expect(tokens.get('--color-mark-ammo')).toBe(COLOR.ammo);
+    expect(tokens.get('--color-mark-edge')).toBe(COLOR.hpEdge);
+    expect(tokens.get('--color-mark-ammo-empty')).toBe(COLOR.ammoBack);
+    // The field strokes rgba(r, g, b, a); the token is rgb(r g b / a%).
+    const [r, g, b, a] = /rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/.exec(BOSS_LOOK.roar)!.slice(1);
+    expect(rgba('--color-mark-roar')).toEqual([+r!, +g!, +b!, +a!]);
   });
 });

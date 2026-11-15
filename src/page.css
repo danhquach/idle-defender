@@ -81,6 +81,13 @@
   --color-synergy: #e9c46a;
   --color-reason: #c98a6a;
   --color-armed: #ffe066;
+  /* The fight's marks in Help (ID-168), as render.ts draws them (COLOR, BOSS_LOOK.roar). */
+  --color-mark-hp: #5ec24a;
+  --color-mark-hp-lost: #c43b3b;
+  --color-mark-ammo: #e8b04a;
+  --color-mark-edge: #1b1a18;
+  --color-mark-ammo-empty: #4a443a;
+  --color-mark-roar: rgb(255 176 32 / 55%);
 
   /* Card rarity (design §8) and recruits */
   --color-common: #6b6b6b;
@@ -2954,6 +2961,54 @@ body {
 
 .menu-how b {
   color: var(--color-text);
+}
+
+/* The fight marks in Help (ID-168): a swatch drawn like the mark, in the field's colour. */
+.menu-marks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+}
+
+.menu-marks li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.menu-marks b {
+  color: var(--color-text);
+}
+
+.menu-mark {
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 22px;
+}
+
+/* A hurt survivor's 4 px HP bar (green left, red lost) over their 2 px ammo bar, part spent. */
+.menu-mark-bars {
+  height: 7px;
+  background:
+    linear-gradient(to right, var(--color-mark-hp) 65%, var(--color-mark-hp-lost) 65%) top / 100%
+      4px no-repeat,
+    linear-gradient(to right, var(--color-mark-ammo) 60%, var(--color-mark-ammo-empty) 60%) bottom /
+      100% 2px no-repeat,
+    var(--color-mark-edge);
+  box-shadow: 0 0 0 1px var(--color-mark-edge);
+}
+
+/* The ring on the ground under a roared enemy. */
+.menu-mark-roar {
+  height: 10px;
+  border: 2px solid var(--color-mark-roar);
+  border-radius: 50%;
 }
 
 .menu-foot {
