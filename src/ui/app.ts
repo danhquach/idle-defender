@@ -478,8 +478,14 @@ export function start(root: HTMLElement, art: Art): void {
     commit(next);
     picked = game.hordeNumber;
     selected = null;
-    if (!panel) {
-      // The menu only loads a camp between hordes: its start screen is up.
+    // The menu only loads a camp between hordes: over a result screen, the fight it shows
+    // belongs to the old camp and goes with it (ID-156).
+    const overResult = horde !== null;
+    endedAt = null;
+    pendingResult = null;
+    campPicks = [];
+    if (!panel || overResult) {
+      // Back to the start screen (or the build) for the new camp.
       toBuild();
       return;
     }
@@ -512,7 +518,8 @@ export function start(root: HTMLElement, art: Art): void {
     onEquip: HORDE_ONLY ? changeGun : undefined,
   });
   const menu = createMenu(root, {
-    state: () => ({ game, fighting: horde !== null, held }),
+    // Load and New camp lock only while a fight runs: the result screen is between hordes (ID-156).
+    state: () => ({ game, fighting: horde !== null && !resultUp(), held }),
     onLoad: replaceCamp,
     onNewCamp: replaceCamp,
     reduceMotion: animator.reduced,
@@ -972,6 +979,8 @@ export function start(root: HTMLElement, art: Art): void {
         hud.showResult(pendingResult.screen);
         pendingResult = null;
         if (HORDE_ONLY) showGear();
+        // A Menu, Inventory or Roster open over the last kills unlocks now (ID-156).
+        refreshDialogs();
       }
     } else if (!panel) {
       // The horde-only build between hordes: the squad on a full wall, waiting to start.
