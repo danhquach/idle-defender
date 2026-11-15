@@ -9,8 +9,9 @@ import { affixLines, gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { GUN_ROLES, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { combineGuns, equipGun } from '../core/hordeonly.ts';
+import { combineGuns, equipGun, squadSpec } from '../core/hordeonly.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
+import { survivorDps, xpForLevel } from '../core/stats.ts';
 import {
   COMBINE_HELD,
   COMBINE_NOT_GUN,
@@ -19,10 +20,12 @@ import {
   COMBINE_WAIT,
   combinePreview,
   createInventory,
+  detailsPanel,
   INVENTORY_NOTE,
   inventoryView,
   NO_AFFIXES,
   PISTOL_NOTE,
+  slotFace,
   slotLabel,
   STASH_EMPTY,
 } from './inventory.ts';
@@ -66,7 +69,7 @@ describe('inventoryView', () => {
     expect(v.stashHeading).toBe(`Stash 3/${STASH_CAP}`);
     expect(v.free).toBe(STASH_CAP - 3);
     const powers = stash.map(gunPower).sort((x, y) => y - x);
-    expect(v.stash.map((i) => i.power)).toEqual(powers.map((p) => `${p.toFixed(1)} dmg/s`));
+    expect(v.stash.map((i) => i.power)).toEqual(powers.map((p) => `${p.toFixed(1)} gun dmg/s`));
     expect(v.stash.map((i) => i.badge)).toEqual(powers.map((p) => String(Math.round(p))));
     const top = v.stash.find((i) => i.name === 'Prototype LMG')!;
     expect(top).toMatchObject({
@@ -149,11 +152,11 @@ describe('inventoryView', () => {
     };
     const v = inventoryView(camp(1, [w]));
     expect(slotLabel(v.stash[0]!)).toBe(
-      `Military Carbine, Military rarity, Marksman: Fires 3-round bursts; +10% crit chance, level 1, ${gunPower(w).toFixed(1)} dmg/s, 1 affix`,
+      `Military Carbine, Military rarity, Marksman: Fires 3-round bursts; +10% crit chance, level 1, ${gunPower(w).toFixed(1)} gun dmg/s, 1 affix`,
     );
     expect(slotLabel(v.stash[0]!, true)).toMatch(/, can combine$/);
     expect(slotLabel(v.squad[0]!.gun)).toBe(
-      `Pistol, Common rarity, All-rounder: Fastest reload of any gun, level 1, ${gunPower('pistol').toFixed(1)} dmg/s, no affixes, held by ${v.squad[0]!.name}`,
+      `Pistol, Common rarity, All-rounder: Fastest reload of any gun, level 1, ${gunPower('pistol').toFixed(1)} gun dmg/s, no affixes, held by ${v.squad[0]!.name}`,
     );
   });
 });
@@ -309,7 +312,7 @@ describe('the Inventory dialog', () => {
       '+7% damage',
       '+21% magazine',
     ]);
-    expect(d.querySelector('.inv-power')!.textContent).toBe(`${gunPower(w).toFixed(1)} dmg/s`);
+    expect(d.querySelector('.inv-power')!.textContent).toBe(`${gunPower(w).toFixed(1)} gun dmg/s`);
     // View only: no way to equip from here.
     expect(d.querySelector('select')).toBeNull();
     expect(d.textContent).not.toMatch(/equip/i);
@@ -546,7 +549,7 @@ describe('Combine in the details (ID-091)', () => {
       name: 'Common SMG',
       rarity: 'common',
       affixes: [NO_AFFIXES],
-      power: `${bare.toFixed(1)} dmg/s`,
+      power: `${bare.toFixed(1)} gun dmg/s`,
     });
     const mil = combinePreview([
       gun('a', 'lmg', 'common'),
@@ -557,7 +560,7 @@ describe('Combine in the details (ID-091)', () => {
       name: 'Military LMG',
       rarity: 'military',
       affixes: ['1 random affix, rolled on combine'],
-      power: `base ${gunPower(gun('x', 'lmg', 'military')).toFixed(1)} dmg/s`,
+      power: `${gunPower(gun('x', 'lmg', 'military')).toFixed(1)} gun dmg/s before affixes`,
     });
     const proto = combinePreview([
       { ...gun('a', 'lmg', 'military'), affixes: [{ id: 'damage', value: 5 }] },
@@ -639,7 +642,7 @@ describe('Combine in the details (ID-091)', () => {
     expect(calls[0]).toHaveLength(3);
     const made = game().armoury.find((w) => w.rarity === 'common')!;
     expect(details().querySelector('.inv-combine-result')!.textContent).toBe(
-      `Made: Lv 1 Common SMG, ${gunPower(made).toFixed(1)} dmg/s`,
+      `Made: Lv 1 Common SMG, ${gunPower(made).toFixed(1)} gun dmg/s`,
     );
     expect(details().querySelector('.inv-combine-confirm')).toBeNull();
     // The new gun is selected: its details are up.
@@ -740,7 +743,7 @@ describe('Combine in the details (ID-091)', () => {
     expect(document.activeElement).toBe(line);
     expect(line.getAttribute('role')).toBe('status');
     expect(line.textContent).toBe(
-      `Made: Lv 1 Prototype SMG (${affixLines(made, true).join(', ')}), ${gunPower(made).toFixed(1)} dmg/s`,
+      `Made: Lv 1 Prototype SMG (${affixLines(made, true).join(', ')}), ${gunPower(made).toFixed(1)} gun dmg/s`,
     );
     // Tab from the line goes on through the dialog, not back to the top.
     const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
@@ -845,12 +848,47 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     expect(inventoryView(camp(1, [gun('k', 'knife', 'military')])).stash[0]!.levelBadge).toBeNull();
   });
 
+  it('a held gun shows its own dmg/s and its holder’s, side by side; the badge says whose (ID-166)', () => {
+    const levelled = { ...recruit(1), xp: xpForLevel(20) };
+    const g = { ...camp(1, [lv('s', 'rifle', 'military', 1)]), roster: [levelled] };
+    const v = inventoryView(g);
+    const held = v.squad[0]!.gun;
+    const own = gunPower('pistol');
+    const theirs = survivorDps(squadSpec(levelled), 'pistol');
+    expect(theirs).not.toBeCloseTo(own, 1);
+    expect(held.power).toBe(`${own.toFixed(1)} gun dmg/s`);
+    expect(held.powerWith).toBe(`${theirs.toFixed(1)} dmg/s with ${levelled.name}`);
+    // In the stash, and the free pistol: nobody's hands.
+    expect(v.stash[0]!.powerWith).toBeNull();
+    expect(v.pistol.powerWith).toBeNull();
+    expect(
+      detailsPanel(held)
+        .map((e) => e.textContent)
+        .join(' | '),
+    ).toContain(`${held.power} · ${held.powerWith}`);
+    // The slot's bare badge carries the figure it rounds as its tooltip.
+    const slot = slotFace(v.stash[0]!);
+    const badge = slot.find((e) => e.classList.contains('inv-slot-badge'))!;
+    expect(badge.title).toBe(v.stash[0]!.power);
+  });
+
+  it('a holder’s name reaches the details as text, never as markup (ID-166)', () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    const g = { ...camp(1), roster: [{ ...recruit(1), name: evil }] };
+    const held = inventoryView(g).squad[0]!.gun;
+    expect(held.powerWith).toContain(`dmg/s with ${evil}`);
+    const box = document.createElement('div');
+    box.append(...detailsPanel(held));
+    expect(box.textContent).toContain(`dmg/s with ${evil}`);
+    expect(box.querySelector('img')).toBeNull();
+  });
+
   it('dmg/s in the badge and sorting include the level', () => {
     const low = lv('l', 'rifle', 'military', 1);
     const high = lv('h', 'rifle', 'military', 20);
     const v = inventoryView(camp(1, [low, high]));
     expect(v.stash.map((i) => i.key)).toEqual(['stash:h', 'stash:l']);
-    expect(v.stash[0]!.power).toBe(`${gunPower(high).toFixed(1)} dmg/s`);
+    expect(v.stash[0]!.power).toBe(`${gunPower(high).toFixed(1)} gun dmg/s`);
     expect(gunPower(high)).toBeGreaterThan(gunPower(low));
   });
 

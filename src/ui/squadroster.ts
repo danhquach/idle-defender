@@ -24,7 +24,7 @@ import {
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
-import { el, movesText } from './hud.ts';
+import { dpsCaption, el, movesText } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
 import { levelText } from './statlines.ts';
@@ -437,7 +437,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     const dps = heldDps(held, d);
     slot.setAttribute(
       'aria-label',
-      `Gun: ${gunName(held)}, ${dps} dmg/s. ${canGear ? (picking ? 'Back to level' : 'Change gun') : GUNS_WAIT}`,
+      `Gun: ${gunName(held)}, ${dps} ${dpsCaption(d.name)}. ${canGear ? (picking ? 'Back to level' : 'Change gun') : GUNS_WAIT}`,
     );
     const icon = el('span', 'rv-gico');
     // The inventory slot's tint, so the dark gun art reads (ID-092).
@@ -454,7 +454,11 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     name.dataset.rarity = rarityOf(held);
     const line = el('span', 'rv-slot-line');
     // The role drops out on a phone, where it would be cut off; the comparison names it.
-    line.append(el('b', '', dps), ' dmg/s', el('span', 'rv-slot-role', ` · ${roleName(held)}`));
+    line.append(
+      el('b', '', dps),
+      ` ${dpsCaption(d.name)}`,
+      el('span', 'rv-slot-role', ` · ${roleName(held)}`),
+    );
     gtext.append(name, line);
     if (!canGear) gtext.append(el('span', 'rv-slot-note', GUNS_WAIT));
     slot.append(icon, gtext);

@@ -1119,8 +1119,18 @@ export const levelLabel = (h: Held): string =>
     ? `${levelName(h)} (${affixLines(h, true).join(', ')})`
     : levelName(h);
 
-/** "Lv 12 Military Rifle (+7% damage) · 17.2 dmg/s": a gun's name and affixes, and how hard it hits over time. */
-export const gunLabel = (h: Held): string => `${levelLabel(h)} · ${gunPower(h).toFixed(1)} dmg/s`;
+/**
+ * A dmg/s figure that says whose it is (ID-166): "17.2 gun dmg/s", the gun's own, or
+ * "46.1 dmg/s with Ivan", in a survivor's hands (their level and profession counted).
+ */
+export const gunDpsText = (dps: number): string => `${dps.toFixed(1)} gun dmg/s`;
+/** "dmg/s with Ivan": what a survivor's figures are, on their gun picker (ID-166). */
+export const dpsCaption = (name: string): string => `dmg/s with ${name}`;
+export const dpsWith = (dps: number, name: string): string =>
+  `${dps.toFixed(1)} ${dpsCaption(name)}`;
+
+/** "Lv 12 Military Rifle (+7% damage) · 17.2 gun dmg/s": a gun's name and affixes, and how hard it hits over time. */
+export const gunLabel = (h: Held): string => `${levelLabel(h)} · ${gunDpsText(gunPower(h))}`;
 
 /**
  * A horde-only win's drop lines (ID-067, ID-122), for the stash `game` had before it: the
@@ -1159,14 +1169,17 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
 }
 
 /**
- * "30.3 dmg/s · Lv 4 Prototype LMG · Suppression (+12% damage)": a picker option, the number
- * first so a closed select keeps it, then the gun and its role (ID-101), then its affixes.
- * `dps` is the figure shown: the gun's own by default, a survivor's in their picker (ID-152).
+ * "30.3 dmg/s · Lv 4 Prototype LMG · Suppression (+12% damage)": a picker option, the
+ * number first so a closed select keeps it, then the gun and its role (ID-101), then its
+ * affixes. With `dps`, the figure is a survivor's (ID-152), and their picker's caption
+ * says whose (`dpsCaption`, ID-166), so the gun's name keeps its room; without, it is
+ * the gun's own and says so.
  */
-export const gunOption = (h: Held, dps = gunPower(h)): string => {
+export const gunOption = (h: Held, dps?: number): string => {
   const role = roleOf(baseOf(h));
   const affixes = affixLines(h, true);
-  return `${dps.toFixed(1)} dmg/s · ${levelName(h)}${role ? ` · ${role.role}` : ''}${
+  const figure = dps === undefined ? gunDpsText(gunPower(h)) : `${dps.toFixed(1)} dmg/s`;
+  return `${figure} · ${levelName(h)}${role ? ` · ${role.role}` : ''}${
     affixes.length > 0 ? ` (${affixes.join(', ')})` : ''
   }`;
 };
@@ -1253,7 +1266,7 @@ export interface DropTile {
   affixes: string;
   /** "Marksman: +10% crit chance": the gun's role and built-in trait (ID-101). */
   role: string;
-  /** "17.2 dmg/s" */
+  /** "17.2 gun dmg/s": the gun's own (ID-166). */
   power: string;
   /**
    * "Stash 15/40" after the win's guns are in (bonus ones too), with " · thrown away"
@@ -1387,13 +1400,13 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
     icon: GUN_ICON[weapon.base as GunId],
     affixes: affixLines(weapon).join(', '),
     role: roleLine(weapon.base) ?? '',
-    power: `${power.toFixed(1)} dmg/s`,
+    power: gunDpsText(power),
     stash: `Stash ${count}/${STASH_CAP}${lost ? ' · thrown away' : ''}`,
     lost,
     bonus: bonus.map((w) => ({
       rarity: w.rarity,
       name: levelName(w),
-      power: `${gunPower(w).toFixed(1)} dmg/s`,
+      power: gunDpsText(gunPower(w)),
       icon: GUN_ICON[w.base as GunId],
       lost: thrown.includes(w),
     })),
@@ -1417,7 +1430,7 @@ export interface BonusRow {
   rarity: Rarity;
   /** "Lv 5 Rusty SMG" */
   name: string;
-  /** "9.1 dmg/s" */
+  /** "9.1 gun dmg/s" */
   power: string;
   icon: ArtId;
   /** Thrown away: the stash full of better guns. */
@@ -3132,18 +3145,18 @@ export function createHud(
         const role = el('p', 'hud-gear-role', row.role);
         role.id = `hud-gear-role-${i}`;
         if (row.role) select.setAttribute('aria-describedby', role.id);
+        // Its figures are theirs (ID-166): a caption over the picker says so, and its name.
+        const caption = el('label', 'hud-gear-caption', dpsCaption(row.name));
+        caption.htmlFor = select.id;
+        select.setAttribute('aria-label', `${row.name}'s gun, ${dpsCaption(row.name)}`);
         const slot = slots.get(row.id);
         if (slot) {
-          // The card names them already: the label is for screen readers.
-          const label = el('label', 'sr-only', `${row.name}'s gun`);
-          label.htmlFor = select.id;
-          slot.replaceChildren(label, select, role);
+          slot.replaceChildren(caption, select, role);
           return;
         }
         const line = el('div', 'hud-gear-row');
-        const label = el('label', 'hud-gear-name', row.name);
-        label.htmlFor = select.id;
-        line.append(label, select, role);
+        const label = el('span', 'hud-gear-name', row.name);
+        line.append(label, caption, select, role);
         loose.push(line);
       });
       // A win always has the stash count (beside its cards or its no-level-up line), and

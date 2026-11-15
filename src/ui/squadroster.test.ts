@@ -298,6 +298,17 @@ describe('Choose a gun (ID-108)', () => {
     ...m.scrim.querySelectorAll<HTMLButtonElement>('.rv-tile'),
   ];
 
+  it('a survivor’s name reaches the gun slot and tiles as text, never as markup (ID-166)', () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    const m = picker([{ ...at(1, 2), name: evil }]);
+    const slot = m.key('slot');
+    expect(slot.getAttribute('aria-label')).toContain(`dmg/s with ${evil}.`);
+    expect(slot.querySelector('.rv-slot-line')!.textContent).toContain(`dmg/s with ${evil}`);
+    slot.click();
+    expect(tiles(m)[0]!.getAttribute('aria-label')).toContain(`dmg/s with ${evil},`);
+    expect(m.scrim.querySelector('img[src="x"]')).toBeNull();
+  });
+
   it('the gun slot opens the picker: strongest first, the best upgrade preselected and compared', () => {
     const m = picker();
     const slot = m.key('slot');
@@ -321,7 +332,9 @@ describe('Choose a gun (ID-108)', () => {
     expect(sel[0]!.dataset.rarity).toBe(t[0]!.dataset.rarity);
     expect(t[0]!.querySelector('.rv-d')!.textContent).toMatch(/^▲ \+\d+\.\d$/);
     expect(t[0]!.querySelector('.rv-d')!.getAttribute('data-kind')).toBe('up');
-    expect(t[0]!.getAttribute('aria-label')).toMatch(/dmg\/s, \d+\.\d more dmg\/s than Pistol$/);
+    expect(t[0]!.getAttribute('aria-label')).toMatch(
+      /dmg\/s with \S+, \d+\.\d more dmg\/s than Pistol$/,
+    );
     // Slot, then the way back.
     m.key('level').click();
     expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
@@ -408,6 +421,10 @@ describe('Choose a gun (ID-108)', () => {
     const who = squadSpec(hunter);
     expect(m.key('slot').querySelector('.rv-slot-line b')!.textContent).toBe(
       survivorDps(who, 'pistol').toFixed(1),
+    );
+    // The figure names whose it is (ID-166).
+    expect(m.key('slot').querySelector('.rv-slot-line')!.textContent).toContain(
+      `${survivorDps(who, 'pistol').toFixed(1)} dmg/s with ${hunter.name}`,
     );
     m.key('slot').click();
     expect(tiles(m)[0]!.getAttribute('aria-pressed')).toBe('true');

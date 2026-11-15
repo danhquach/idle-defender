@@ -144,9 +144,9 @@ describe('the gun pickers (ID-067)', () => {
     const row = squadGear(g).rows[0]!;
     expect(row.options.map((o) => o.value)).toEqual(['h1', 'h2', 'pistol']);
     expect(row.options[0]!.label).toBe(`★ ${gunOption(sniper, survivorDps(who, sniper))}`);
-    expect(row.options[0]!.label.startsWith(`★ ${survivorDps(who, sniper).toFixed(1)} dmg/s`)).toBe(
-      true,
-    );
+    expect(
+      row.options[0]!.label.startsWith(`★ ${survivorDps(who, sniper).toFixed(1)} dmg/s · `),
+    ).toBe(true);
   });
 
   it('one row per survivor: the pistol, the stash and their own gun, strongest first', () => {
@@ -170,10 +170,16 @@ describe('the gun pickers (ID-067)', () => {
       );
       expect(powers).toEqual([...powers].sort((a, b) => b - a));
     }
-    expect(gear.rows[1]!.options.find((o) => o.value === 'h1')!.label).toBe(gunOption(rifle));
+    // In a survivor's picker the figure is theirs (its caption says whose, ID-166).
+    const two = r.game.roster[1]!;
+    expect(gear.rows[1]!.options.find((o) => o.value === 'h1')!.label).toBe(
+      gunOption(rifle, survivorDps(squadSpec(two), rifle)),
+    );
     // The number first in a picker, so a closed select never cuts it off; last on the drop line.
-    expect(gunOption('pistol')).toBe('8.3 dmg/s · Lv 1 Pistol · All-rounder');
-    expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 dmg/s');
+    // Without a survivor it is the gun's own, and says so.
+    expect(gunOption('pistol')).toBe('8.3 gun dmg/s · Lv 1 Pistol · All-rounder');
+    expect(gunOption('pistol', 9.04)).toBe('9.0 dmg/s · Lv 1 Pistol · All-rounder');
+    expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 gun dmg/s');
   });
 
   function page() {
@@ -209,7 +215,7 @@ describe('the gun pickers (ID-067)', () => {
     const now = root.querySelectorAll<HTMLSelectElement>('.hud-gear-select')[1]!;
     expect(now.value).toBe('h1');
     expect(document.activeElement).toBe(now);
-    expect(now.title).toBe(gunOption(rifle));
+    expect(now.title).toBe(gunOption(rifle, survivorDps(squadSpec(g.roster[1]!), rifle)));
     expect(now.dataset.rarity).toBe('military');
     expect(root.querySelector('.debrief-stash')!.textContent).toBe(`Stash 0/${STASH_CAP}`);
   });
@@ -227,15 +233,17 @@ describe('the gun pickers (ID-067)', () => {
     );
   });
 
-  it('each select is labelled by its survivor’s name', () => {
+  it('each select is labelled by its survivor’s name, and says its figures are theirs (ID-166)', () => {
     const { root, h } = page();
     const g = squadGame(1, 3);
     h.showResult(squadStart(g));
     h.showGear(squadGear(g), noop);
     const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
+    const name = g.roster[0]!.name;
     expect(root.querySelector<HTMLLabelElement>(`label[for="${select.id}"]`)!.textContent).toBe(
-      `${g.roster[0]!.name}'s gun`,
+      `dmg/s with ${name}`,
     );
+    expect(select.getAttribute('aria-label')).toBe(`${name}'s gun, dmg/s with ${name}`);
   });
 
   it('a new result screen clears the pickers until they are drawn again', () => {
@@ -260,7 +268,10 @@ describe('the gun pickers (ID-067)', () => {
     const imgs = [...root.querySelectorAll('.hud-result img')];
     expect(imgs.every((i) => i.closest('.hud-skill-option'))).toBe(true);
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
-    expect(root.querySelector('.squad-card-gear label')!.textContent).toBe(`${evil}'s gun`);
+    expect(root.querySelector('.squad-card-gear label')!.textContent).toBe(`dmg/s with ${evil}`);
+    // The name reaches the picker's accessible name as an attribute's text only (ID-166).
+    const select = root.querySelector('.squad-card-gear select')!;
+    expect(select.getAttribute('aria-label')).toBe(`${evil}'s gun, dmg/s with ${evil}`);
     expect(root.querySelector('.squad-card-gear option')!.textContent).toBe(evil);
   });
 
@@ -285,6 +296,40 @@ describe('the debrief layout (ID-067)', () => {
     const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
     return { root, h };
   }
+
+  it('every dmg/s figure on the debrief says whose it is: the gun alone or a survivor (ID-166)', () => {
+    const { root, h } = page();
+    const g = squadGame(2, 3, [gun('h1', 'rifle', 'military')]);
+    const won = ended(g, 'won');
+    h.showResult(squadScreen(g, won));
+    h.showGear(squadGear(g), noop);
+    // Each survivor's picker: a caption and a name that say its figures are theirs.
+    const selects = [...root.querySelectorAll<HTMLSelectElement>('.hud-gear-select')];
+    expect(selects).toHaveLength(g.roster.length);
+    for (const s of selects) {
+      const name = g.roster.find((d) => d.id === s.dataset.defender)!.name;
+      const caption = root.querySelector(`label[for="${s.id}"]`)!;
+      expect(caption.textContent).toBe(`dmg/s with ${name}`);
+      expect(caption.classList.contains('sr-only')).toBe(false);
+      expect(s.getAttribute('aria-label')).toBe(`${name}'s gun, dmg/s with ${name}`);
+    }
+    // Everywhere else, every figure is the gun's own or names its survivor.
+    const names = g.roster.map((d) => d.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const outside = (e: Element) => !e.closest('.hud-gear-select');
+    const said = [
+      ...[...root.querySelectorAll('*')]
+        .filter((e) => outside(e) && e.children.length === 0)
+        .map((e) => e.textContent ?? ''),
+      ...[...root.querySelectorAll('[title], [aria-label]')]
+        .filter(outside)
+        .flatMap((e) => [e.getAttribute('title') ?? '', e.getAttribute('aria-label') ?? '']),
+    ].join(' | ');
+    const figures = [
+      ...said.matchAll(new RegExp(`\\d+\\.\\d (gun )?dmg/s( with (?:${names}))?`, 'g')),
+    ];
+    expect(figures.some((m) => m[1])).toBe(true);
+    for (const m of figures) expect(Boolean(m[1]) || Boolean(m[2]), m[0]).toBe(true);
+  });
 
   it('a win: waves chip, the drop as a loot tile, the recruit tile, a card per level-up', () => {
     const g = squadGame(2, 3);

@@ -17,6 +17,7 @@ import type { GameState, RosterDefender } from '../core/game.ts';
 import { squadSpec } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
 import { survivorDps, type Statted } from '../core/stats.ts';
+import { dpsCaption } from './hud.ts';
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as squadGear). */
 export const heldGunOf = (d: RosterDefender): Held =>
@@ -108,7 +109,7 @@ export function gunTiles(
         power,
         dps: f1(power),
         delta,
-        label: `${gunName(h)}, ${RARITIES[rarityOf(h)].name} rarity, ${f1(power)} dmg/s, ${delta.words} than ${gunName(held)}${free ? ', free' : ''}`,
+        label: `${gunName(h)}, ${RARITIES[rarityOf(h)].name} rarity, ${f1(power)} ${dpsCaption(d.name)}, ${delta.words} than ${gunName(held)}${free ? ', free' : ''}`,
       };
     });
 }

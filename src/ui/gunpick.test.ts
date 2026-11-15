@@ -84,10 +84,18 @@ describe('the gun tiles (ID-108)', () => {
     });
   });
 
+  it('a survivor’s name reaches a tile’s label as plain text (ID-166)', () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    const g = camp([rifle]);
+    g.roster = [{ ...g.roster[0]!, name: evil }];
+    const [t] = gunTiles(g, 'recruit-1');
+    expect(t!.label).toContain(`${t!.dps} dmg/s with ${evil}, `);
+  });
+
   it('every tile names the gun, rarity, dmg/s and the change for a screen reader', () => {
     const [t] = gunTiles(camp([rifle]), 'recruit-1').filter((x) => x.choice === 'r1');
     expect(t!.label).toBe(
-      `Lv 1 Military Carbine, Military rarity, ${t!.dps} dmg/s, ${t!.delta.words} than Pistol`,
+      `Lv 1 Military Carbine, Military rarity, ${t!.dps} dmg/s with Ivan, ${t!.delta.words} than Pistol`,
     );
     const pistol = gunTiles(camp([rifle], 'r1'), 'recruit-1').find((x) => x.free)!;
     expect(pistol.label.endsWith(', free')).toBe(true);

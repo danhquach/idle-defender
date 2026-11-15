@@ -809,6 +809,12 @@ close-quarter weapons come out only when an enemy is close.
   A picker option reads "30.3 dmg/s · Lv 4 Prototype LMG · Shredder (role +6%
   crit chance)": the role right after the name, and in such a bracketed list a
   role affix is "role …"; listed one a line (Inventory, drop tile) it is "… (role)".
+  Every dmg/s figure says whose it is (ID-166): the gun's own reads "22.6 gun
+  dmg/s" (drop tile and lines, Inventory, Combine), a survivor's "26.7 dmg/s with
+  Ivan" (their level and profession counted: the Roster's held gun, the Inventory
+  beside the gun's own for a held gun, screen-reader labels). A survivor's gun
+  picker keeps its options' figures bare so the gun's name keeps its room, under
+  a caption "dmg/s with Ivan"; the Roster's gun tiles carry it in their hint.
   dmg/s counts the gun's own crit (its trait — the Carbine's, the Assault Rifle's, the LMG's, the
   Sniper rifle's, with the Sniper's crit damage — and crit and crit damage
   affixes), so ranking, stash-full discards and guaranteed upgrades see it; the
@@ -1191,7 +1197,8 @@ profession's output).
     they hold, strongest first, each led by its dmg/s in that survivor's
     hands (ID-152: level and profession counted, as in the Roster) ("30.3 dmg/s ·
     Prototype LMG (+12% damage, +21% magazine)") so a closed select never
-    cuts the number off; the full label shows on hover. The gun they had goes to
+    cuts the number off; the full label shows on hover. A caption over the
+    select, "dmg/s with Ivan", says whose the figures are (ID-166). The gun they had goes to
     the stash; the pistol is free and unlimited, so it just goes, and taking
     the pistol is refused while the stash is full. Every survivor starts with
     a pistol. The role (pistol, rifle, shotgun…) is the gun's: survivors have
@@ -1221,9 +1228,9 @@ profession's output).
     the 3 weakest of the set by dmg/s, so the best one stays. Combine asks
     first: it lists the 3 guns used up (rarity colour, affixes, dmg/s) and what
     comes out (rarity, "No affixes" or "1 random affix, rolled on combine", and its
-    base dmg/s, before affixes), with Combine into … and Cancel (Esc cancels; focus
+    gun dmg/s, "before affixes" while they are still to roll), with Combine into … and Cancel (Esc cancels; focus
     starts on Cancel). After it, a status line names the new gun with its
-    affixes and dmg/s ("Made: Common SMG, 14.2 dmg/s"), and the gun pickers
+    affixes and dmg/s ("Made: Common SMG, 14.2 gun dmg/s"), and the gun pickers
     update, and the new gun is selected; focus moves to that line (Cancel
     returns it to the Combine button). The result screen's drop tile stays a
     record of the win (its stash count then), so a combine on that screen
@@ -3093,11 +3100,14 @@ offline progress works across sessions.
     64 px square slot per stash place up to the cap, empty places drawn empty.
     A slot shows the gun's icon (one per base gun, the model the survivors
     hold, long guns laid across the square) on its rarity's tint inside a frame
-    of its rarity's colour, with its dmg/s rounded in a corner badge. Selecting
+    of its rarity's colour, with its gun dmg/s rounded in a corner badge (its
+    tooltip gives the figure). Selecting
     a slot (click, tap, or the arrows, Home and End from its single Tab stop)
     rings it and fills the details beside the grid (under it on a phone): the
     name in its rarity's colour, "Military rarity · Rifle", its role and trait
-    (ID-101), each affix on its own line, dmg/s, who holds it, and Combine.
+    (ID-101), each affix on its own line, the gun dmg/s (a held gun's also in
+    its holder's hands: "22.6 gun dmg/s · 26.7 dmg/s with Ivan"), who holds it,
+    and Combine.
     Hovering a slot shows its details until the pointer leaves the grid. It
     opens on the strongest stash gun. Each slot's screen-reader label names the
     gun, its rarity, role and trait, dmg/s and affix count. The result screen's
