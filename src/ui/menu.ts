@@ -3,7 +3,7 @@
 // fight the game loop holds the fight while it is open. The field behind is inert and
 // focus stays inside until it closes, then goes back to the Menu button.
 import { CHATTER_LEVELS, type ChatterLevel } from '../core/chatter.ts';
-import { HORDE_ONLY } from '../core/data.ts';
+import { BOSS_SKILL, HORDE_ONLY } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -136,6 +136,23 @@ const FULL_HOW_TO_PLAY: Steps = [
 
 /** The Help tab's how-to-play, in order. */
 export const HOW_TO_PLAY: Steps = HORDE_ONLY ? SQUAD_HOW_TO_PLAY : FULL_HOW_TO_PLAY;
+
+/**
+ * The Help tab's fight marks (ID-168): each mark's look (a CSS swatch, `menu-mark-<look>`,
+ * in the field's colour), its name and what it means.
+ */
+export const MARKS: readonly { look: 'bars' | 'roar'; name: string; text: string }[] = [
+  {
+    look: 'bars',
+    name: 'A survivor’s bars.',
+    text: 'Green is HP left, red is HP lost. The orange bar under it is rounds left in their gun: it empties as they shoot and refills as they reload.',
+  },
+  {
+    look: 'roar',
+    name: 'Orange ring under an enemy.',
+    text: `A boss or mini-boss nearby roared: that enemy moves faster for ${BOSS_SKILL.roar.time} s.`,
+  },
+];
 
 /**
  * What "Load code" makes of `pasted`: a readable code's camp and the line to show once
@@ -524,7 +541,23 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     });
     howSection.append(cardButton);
   }
-  panels.get('help')!.append(section(el('h3', 'menu-heading', 'Controls'), keys), howSection);
+  const marks = el('ul', 'menu-marks');
+  for (const { look, name, text } of MARKS) {
+    const li = el('li', '');
+    const swatch = el('span', `menu-mark menu-mark-${look}`);
+    swatch.setAttribute('aria-hidden', 'true');
+    const words = el('span', '');
+    words.append(el('b', '', name), ` ${text}`);
+    li.append(swatch, words);
+    marks.append(li);
+  }
+  panels
+    .get('help')!
+    .append(
+      section(el('h3', 'menu-heading', 'Controls'), keys),
+      howSection,
+      section(el('h3', 'menu-heading', 'Marks in a fight'), marks),
+    );
 
   function select(next: Tab, focus: boolean): void {
     // A confirm left open on a hidden tab would catch the next Esc unseen.

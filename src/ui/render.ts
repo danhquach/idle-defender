@@ -183,7 +183,7 @@ export const EDGE_LIP = {
   clear: 'rgba(0, 0, 0, 0)',
 } as const;
 
-const COLOR = {
+export const COLOR = {
   sky: '#15171a',
   selected: '#9cc4f0',
   reserved: 'rgba(156, 196, 240, 0.7)',
@@ -4043,7 +4043,7 @@ const WIND_COLOUR: Readonly<Record<BossSkill, string>> = {
   plates: '#dfe6ee',
 };
 /** Boss cue looks (ID-099): px at zoom 1; `lean` radians back, `swell` share taller at full wind-up. */
-const BOSS_LOOK = {
+export const BOSS_LOOK = {
   lean: 0.14,
   swell: 0.1,
   roar: 'rgba(255, 176, 32, 0.55)',
