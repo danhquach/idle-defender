@@ -1509,6 +1509,11 @@ body {
   container: squad-card / inline-size;
 }
 
+/* Just accepted into the squad (ID-157): green, apart from a level-up's amber. */
+.squad-card-new {
+  border-color: var(--color-ok-border);
+}
+
 .squad-card-up {
   border-color: var(--color-warn-border);
 }
@@ -1560,6 +1565,11 @@ body {
   border-color: var(--color-warn-border);
   background: var(--color-warn-bg);
   color: var(--color-warn);
+}
+
+.squad-badge-new {
+  border-color: var(--color-ok-border);
+  color: var(--color-ok-text);
 }
 
 .squad-card-xp {

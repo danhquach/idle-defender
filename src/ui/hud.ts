@@ -1296,6 +1296,8 @@ export interface SquadCard {
   bar: { pct: number; text: string } | null;
   /** What their level gives (ID-146), this result's XP in: "Lv 7: +14 HP · …". */
   bonus: string;
+  /** Just accepted into the squad on this screen (ID-157): marked "New". */
+  fresh?: true;
 }
 
 /** The horde-only panel laid out (ID-067), for the start, win and loss screens. */
@@ -1343,6 +1345,15 @@ const plainCard = (d: RosterDefender): SquadCard => ({
   bar: null,
   bonus: levelText(levelOf(d.xp).level, true),
 });
+
+/** The card for survivor `id`, just accepted into the squad (ID-157); null when not in it. */
+export function joinedCard(game: Pick<GameState, 'roster'>, id: string): SquadCard | null {
+  const d = squadOf(game).find((r) => r.id === id);
+  return d ? { ...plainCard(d), fresh: true } : null;
+}
+
+/** The "New" badge's text on a card just accepted (ID-157). */
+export const NEW_BADGE = 'New';
 
 /** The loot tile for `drop`, against the stash `game` had before it. */
 export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): DropTile {
@@ -1785,6 +1796,12 @@ export function createHud(
   onLeave(check: () => boolean): void;
   /** The offer tile redrawn (ID-150): who is still asking to join; none hides it. */
   showJoin(cards: readonly JoinCard[], keep?: boolean): void;
+  /**
+   * Survivor `card` just accepted into the squad (ID-157): their card in the Squad section
+   * (added when the screen has none for them, as a win shows only level-ups), marked "New"
+   * and scrolled into view. Nothing with the result screen down.
+   */
+  showJoined(card: SquadCard): void;
   /** Where the Airstrike's Auto toggle goes (ID-140); the app sets it once. */
   onAutoStrike(handler: () => void): void;
   /** The Auto toggle shown on or off (ID-140). */
@@ -2515,63 +2532,99 @@ export function createHud(
       parts.push(spoils);
     }
     if (d.cards.length > 0) {
-      const section = el('section', 'debrief-squad');
-      const head = el('div', 'debrief-squad-head');
-      const heading = el('h3', 'debrief-squad-title', 'Squad');
-      heading.append(el('span', 'debrief-stash'));
-      head.append(heading);
-      if (d.roster) {
-        // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
-        const change = el('button', 'hud-button debrief-change-squad', d.roster.label);
-        change.type = 'button';
-        change.dataset.openRoster = '';
-        head.append(change);
-      }
-      head.append(el('p', 'debrief-hint', SQUAD_CARD_HINT));
-      if (d.roster?.line) head.append(el('p', 'debrief-hint debrief-bench', d.roster.line));
-      const grid = el('div', 'squad-grid');
-      for (const c of d.cards) {
-        const card = el('div', 'squad-card');
-        card.dataset.defender = c.id;
-        card.classList.toggle('squad-card-up', c.levelUp);
-        const top = el('div', 'squad-card-head');
-        const who = el('span', 'squad-card-who');
-        // The name opens their card in the Roster (ID-086): the app listens for it.
-        const name = el('button', 'squad-card-name squad-card-open', c.name);
-        name.type = 'button';
-        name.dataset.openSurvivor = c.id;
-        // The whole name on hover, as one line can end it in "…" (ID-111).
-        name.title = c.name;
-        name.setAttribute('aria-label', `${c.name}: open survivor card`);
-        who.append(name, el('span', 'squad-card-level', `Lv ${c.level} · ${c.job}`));
-        if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
-        top.append(who);
-        if (c.xp !== null) top.append(el('span', 'squad-card-xp', `+${c.xp} XP`));
-        card.append(top);
-        if (c.bar) {
-          const track = el('div', 'xp-track');
-          track.setAttribute('aria-hidden', 'true');
-          const fill = el('div', 'xp-fill');
-          fill.style.width = `${c.bar.pct}%`;
-          track.append(fill);
-          card.append(track, el('p', 'squad-card-xptext', c.bar.text));
-        }
-        card.append(el('div', 'squad-card-gear'));
-        // What the level gives (ID-146), on the start screen too.
-        card.append(el('p', 'squad-card-bonus', c.bonus));
-        grid.append(card);
-      }
-      section.append(head, grid);
-      parts.push(section);
+      parts.push(squadSection(d.cards, d.roster));
     } else if (d.empty) {
-      const section = el('section', 'debrief-squad');
-      // The stash count (ID-067) stays beside the heading with no cards under it.
-      const heading = el('h3', 'debrief-squad-title', 'Squad');
-      heading.append(el('span', 'debrief-stash'));
-      section.append(heading, el('p', 'debrief-empty', d.empty));
-      parts.push(section);
+      parts.push(emptySection(d.empty));
     }
     return parts;
+  }
+
+  /** The Squad section with no cards: `text` in their place. */
+  function emptySection(text: string): HTMLElement {
+    const section = el('section', 'debrief-squad');
+    // The stash count (ID-067) stays beside the heading with no cards under it.
+    const heading = el('h3', 'debrief-squad-title', 'Squad');
+    heading.append(el('span', 'debrief-stash'));
+    section.append(heading, el('p', 'debrief-empty', text));
+    return section;
+  }
+
+  /** The debrief's Squad section with `cards`, and the start screen's Roster link (`roster`). */
+  function squadSection(cards: readonly SquadCard[], roster?: Debrief['roster']): HTMLElement {
+    const section = el('section', 'debrief-squad');
+    const head = el('div', 'debrief-squad-head');
+    const heading = el('h3', 'debrief-squad-title', 'Squad');
+    heading.append(el('span', 'debrief-stash'));
+    head.append(heading);
+    if (roster) {
+      // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
+      const change = el('button', 'hud-button debrief-change-squad', roster.label);
+      change.type = 'button';
+      change.dataset.openRoster = '';
+      head.append(change);
+    }
+    head.append(el('p', 'debrief-hint', SQUAD_CARD_HINT));
+    if (roster?.line) head.append(el('p', 'debrief-hint debrief-bench', roster.line));
+    const grid = el('div', 'squad-grid');
+    grid.append(...cards.map(squadCard));
+    section.append(head, grid);
+    return section;
+  }
+
+  /** One survivor's card in the Squad section. */
+  function squadCard(c: SquadCard): HTMLElement {
+    const card = el('div', 'squad-card');
+    card.dataset.defender = c.id;
+    card.classList.toggle('squad-card-up', c.levelUp);
+    const top = el('div', 'squad-card-head');
+    const who = el('span', 'squad-card-who');
+    // The name opens their card in the Roster (ID-086): the app listens for it.
+    const name = el('button', 'squad-card-name squad-card-open', c.name);
+    name.type = 'button';
+    name.dataset.openSurvivor = c.id;
+    // The whole name on hover, as one line can end it in "…" (ID-111).
+    name.title = c.name;
+    name.setAttribute('aria-label', `${c.name}: open survivor card`);
+    who.append(name, el('span', 'squad-card-level', `Lv ${c.level} · ${c.job}`));
+    if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
+    top.append(who);
+    if (c.xp !== null) top.append(el('span', 'squad-card-xp', `+${c.xp} XP`));
+    card.append(top);
+    if (c.bar) {
+      const track = el('div', 'xp-track');
+      track.setAttribute('aria-hidden', 'true');
+      const fill = el('div', 'xp-fill');
+      fill.style.width = `${c.bar.pct}%`;
+      track.append(fill);
+      card.append(track, el('p', 'squad-card-xptext', c.bar.text));
+    }
+    card.append(el('div', 'squad-card-gear'));
+    // What the level gives (ID-146), on the start screen too.
+    card.append(el('p', 'squad-card-bonus', c.bonus));
+    if (c.fresh) markNew(card);
+    return card;
+  }
+
+  /** Marks `card` as just accepted into the squad (ID-157): a "New" badge and outline. */
+  function markNew(card: HTMLElement): void {
+    if (card.classList.contains('squad-card-new')) return;
+    card.classList.add('squad-card-new');
+    card
+      .querySelector('.squad-card-who')
+      ?.append(el('span', 'squad-badge squad-badge-new', NEW_BADGE));
+  }
+
+  /**
+   * Scrolls the panel just enough that `card` sits whole between its top and the pinned
+   * footer (ID-157); a card taller than that space shows from its top.
+   */
+  function reveal(card: HTMLElement): void {
+    const gap = 8;
+    const box = card.getBoundingClientRect();
+    const top = result.getBoundingClientRect().top + gap;
+    const limit = foot.getBoundingClientRect().top - gap;
+    if (box.top < top) result.scrollTop -= top - box.top;
+    else if (box.bottom > limit) result.scrollTop += Math.min(box.bottom - limit, box.top - top);
   }
 
   /**
@@ -2951,6 +3004,26 @@ export function createHud(
     showJoin(cards, keep) {
       drawJoin(cards, keep);
     },
+    showJoined(c) {
+      if (result.hidden) return;
+      let card = [...picker.querySelectorAll<HTMLElement>('.squad-card')].find(
+        (x) => x.dataset.defender === c.id,
+      );
+      if (card) markNew(card);
+      else {
+        card = squadCard({ ...c, fresh: true });
+        const grid = picker.querySelector('.squad-grid');
+        if (grid) grid.append(card);
+        else {
+          // A win with no level-up has only its "nobody levelled up" line: the section
+          // becomes one with the newcomer's card.
+          const section = squadSection([]);
+          section.querySelector('.squad-grid')!.append(card);
+          picker.querySelector('.debrief-squad')?.replaceWith(section);
+        }
+      }
+      reveal(card);
+    },
     onAutoStrike(handler) {
       autoHandler = handler;
     },
@@ -2980,6 +3053,18 @@ export function createHud(
       const loose: HTMLElement[] = [];
       // A win's cards are only who levelled up (ID-134): the rest change guns in the Roster.
       const cardsOnly = result.dataset.kind === 'won';
+      // A newcomer benched or let go from the Roster since (ID-157): their "New" card goes.
+      const inSquad = new Set(screen.rows.map((r) => r.id));
+      for (const card of picker.querySelectorAll<HTMLElement>('.squad-card-new')) {
+        if (card.dataset.defender !== undefined && !inSquad.has(card.dataset.defender)) {
+          card.remove();
+        }
+      }
+      // A win left with no card says so again (a win's cards are only level-ups otherwise).
+      const grid = picker.querySelector('.squad-grid');
+      if (cardsOnly && grid && grid.children.length === 0) {
+        grid.closest('.debrief-squad')?.replaceWith(emptySection(SQUAD_NO_LEVEL_UPS));
+      }
       screen.rows.forEach((row, i) => {
         if (cardsOnly && !slots.has(row.id)) return;
         const select = el('select', 'build-select hud-gear-select');

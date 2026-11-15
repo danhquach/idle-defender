@@ -76,6 +76,7 @@ import {
   createHud,
   defenderLabel,
   hordePicker,
+  joinedCard,
   powerLine,
   resultScreen,
   fightKeyName,
@@ -322,9 +323,16 @@ export function start(root: HTMLElement, art: Art): void {
     }
     commit(r.game);
     hud.toast(answerText(name, r.where));
+    // Into the squad (ID-157): a win's screen shows only level-ups, so their card is added
+    // before the gun pickers are drawn into the cards.
+    const card = r.where === 'squad' ? joinedCard(game, id) : null;
+    if (card && horde) hud.showJoined(card);
     redrawSquad();
     // A start screen redrawn under the keyboard: it goes back to the tile, else the button.
     hud.showJoin(joinCards(game), true);
+    // Marked "New" and scrolled to last, once the tile has taken the keyboard (and on a start
+    // screen, once redrawn with them in it).
+    if (card) hud.showJoined(card);
   });
   /**
    * The horde-only result or start screen's button (ID-066): the horde itself was taken in
