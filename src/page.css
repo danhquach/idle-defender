@@ -983,6 +983,19 @@ body {
   color: var(--color-text);
 }
 
+/* Whose the picker's figures are (ID-166): "dmg/s with Ivan", over the select. */
+.hud-gear-caption {
+  display: block;
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+}
+
+.hud-gear-row .hud-gear-caption {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .hud-gear-select {
   flex: 0 1 24rem;
   min-width: 0;
@@ -3533,6 +3546,10 @@ body {
   font-size: var(--text-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.inv-power-part {
+  white-space: nowrap;
 }
 
 /* Combine (ID-091), in a stash gun's details: its set's count, button and confirm. */

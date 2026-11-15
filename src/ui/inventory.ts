@@ -36,12 +36,22 @@ import {
   combineSets,
   nextRarity,
   squadOf,
+  squadSpec,
   type CombineSet,
   type GunChoice,
 } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
-import { BAND_WORD, el, levelLabel, powerLine, type PowerLine } from './hud.ts';
+import { survivorDps } from '../core/stats.ts';
+import {
+  BAND_WORD,
+  dpsWith,
+  el,
+  gunDpsText,
+  levelLabel,
+  powerLine,
+  type PowerLine,
+} from './hud.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** One weapon as the Inventory shows it. */
@@ -56,7 +66,7 @@ export interface InventoryItem {
   affixes: string[];
   /** The gun's role and built-in trait (ID-101); null for a weapon that is no gun. */
   role: { role: string; trait: string } | null;
-  /** "17.2 dmg/s"; null for a weapon that is no gun (an older save's blade or tool). */
+  /** "17.2 gun dmg/s", the gun's own (ID-166); null for a weapon that is no gun (an older save's blade or tool). */
   power: string | null;
   /** The slot's badge: dmg/s rounded ("17"); null for no gun. */
   badge: string | null;
@@ -70,6 +80,8 @@ export interface InventoryItem {
   where: string;
   /** The survivor who fights with it; null in the stash and for the free pistol. */
   holder: string | null;
+  /** "26.7 dmg/s with Ivan": its figure in its holder's hands (ID-166); null when nobody holds it. */
+  powerWith: string | null;
   /** The stash gun itself, for its set's Combine; null for a gun in hand or the pistol. */
   owned: OwnedWeapon | null;
 }
@@ -150,13 +162,14 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
     rarity: isOwned(h) ? h.rarity : 'common',
     affixes: affixLines(h),
     role: roleOf(base),
-    power: gun ? `${power.toFixed(1)} dmg/s` : null,
+    power: gun ? gunDpsText(power) : null,
     badge: gun ? String(Math.round(power)) : null,
     level: gunLevel(h),
     levelBadge: gun ? `Lv ${gunLevel(h)}` : null,
     icon: gun ? GUN_ICON[base as GunId] : null,
     where,
     holder,
+    powerWith: null,
     owned: key.startsWith('stash:') && isOwned(h) ? h : null,
   };
 }
@@ -186,7 +199,11 @@ export function inventoryView(
       return {
         id: d.id,
         name: d.name,
-        gun: item(held, `squad:${d.id}`, `Held by ${d.name}.`, d.name),
+        gun: {
+          ...item(held, `squad:${d.id}`, `Held by ${d.name}.`, d.name),
+          // Both figures side by side (ID-166): the gun's own, and in their hands.
+          powerWith: dpsWith(survivorDps(squadSpec(d), held), d.name),
+        },
         uid: isOwned(held) ? held.uid : null,
       };
     }),
@@ -311,14 +328,14 @@ export function combinePreview(uses: readonly OwnedWeapon[]): CombinePreview {
         n === 0 ? NO_AFFIXES : `${n} random ${n === 1 ? 'affix' : 'affixes'}, rolled on combine`,
       ],
       // With affixes still to roll, the figure is the gun's base, before them.
-      power: `${n === 0 ? '' : 'base '}${bare.toFixed(1)} dmg/s`,
+      power: `${gunDpsText(bare)}${n === 0 ? '' : ' before affixes'}`,
     },
   };
 }
 
-/** The line after a combine: "Made: Common SMG, 14.2 dmg/s"; with its affixes in brackets. */
+/** The line after a combine: "Made: Common SMG, 14.2 gun dmg/s"; with its affixes in brackets. */
 export const combineResult = (w: OwnedWeapon): string =>
-  `Made: ${levelLabel(w)}, ${gunPower(w).toFixed(1)} dmg/s`;
+  `Made: ${levelLabel(w)}, ${gunDpsText(gunPower(w))}`;
 
 /** "Lv 12 Military Rifle" (ID-098): the level in front of the name, for a gun. */
 const levelled = (it: InventoryItem): string =>
@@ -326,7 +343,7 @@ const levelled = (it: InventoryItem): string =>
 
 /**
  * A slot's screen-reader name: "Military Rifle, Military rarity, Marksman: +10% crit chance,
- * 17.2 dmg/s, 2 affixes".
+ * 17.2 gun dmg/s, 2 affixes".
  */
 export function slotLabel(it: InventoryItem, ready = false): string {
   const parts = [it.name, `${RARITIES[it.rarity].name} rarity`];
@@ -344,7 +361,7 @@ export function slotLabel(it: InventoryItem, ready = false): string {
 }
 
 /** The square art of a slot: the gun's icon (or its name, for no gun) and its badge. */
-function slotFace(it: InventoryItem): HTMLElement[] {
+export function slotFace(it: InventoryItem): HTMLElement[] {
   const face: HTMLElement[] = [];
   const url = it.icon ? ART_URLS[it.icon] : undefined;
   if (url) {
@@ -358,7 +375,12 @@ function slotFace(it: InventoryItem): HTMLElement[] {
   } else {
     face.push(el('span', 'inv-slot-text', WEAPONS[it.base].name));
   }
-  if (it.badge) face.push(el('span', 'inv-slot-badge', it.badge));
+  if (it.badge) {
+    // A bare number on the slot: its tooltip says it is the gun's own dmg/s (ID-166).
+    const badge = el('span', 'inv-slot-badge', it.badge);
+    if (it.power) badge.title = it.power;
+    face.push(badge);
+  }
   if (it.levelBadge) face.push(el('span', 'inv-slot-level', it.levelBadge));
   return face;
 }
@@ -502,7 +524,13 @@ function facts(it: InventoryItem): HTMLElement[] {
         )
       : el('p', 'inv-affixes inv-affixes-none', NO_AFFIXES);
   const out = [name, rarity, ...role, affixes];
-  if (it.power) out.push(el('p', 'inv-power', it.power));
+  if (it.power) {
+    // Each figure stays whole, so a narrow panel breaks the line at the "·" (ID-166).
+    const line = el('p', 'inv-power');
+    line.append(el('span', 'inv-power-part', it.power));
+    if (it.powerWith) line.append(' · ', el('span', 'inv-power-part', it.powerWith));
+    out.push(line);
+  }
   return out;
 }
 
