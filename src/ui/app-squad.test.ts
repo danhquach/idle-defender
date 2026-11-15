@@ -16,7 +16,7 @@ import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { MUTE_KEY } from '../storage/settings.ts';
 import { NOW } from '../storage/testing.ts';
 import { SoundEngine } from './audio.ts';
-import { SAVE_STATUS } from './menu.ts';
+import { FIGHT_REFUSAL, SAVE_STATUS } from './menu.ts';
 import { LEVEL_ONE_SHORT, LEVEL_ONE_TEXT, levelText } from './statlines.ts';
 import { start } from './app.ts';
 import { skipIntro } from './testing.ts';
@@ -247,6 +247,117 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     expect(saved().roster).toEqual(newGame('horde').roster);
     step(48);
     expect(bar()).toMatch(/^Horde 4 · Waves cleared 0\//);
+  });
+
+  describe('the Menu’s Load and New camp between hordes (ID-156)', () => {
+    /** The Menu's Save tab: Load code and New camp, and the reasons showing. */
+    function saveTab(root: ParentNode) {
+      const dialog = document.querySelector<HTMLElement>('.menu-scrim')!;
+      const open = () => {
+        root.querySelector<HTMLButtonElement>('.menu-button')!.click();
+        dialog.querySelector<HTMLButtonElement>('#menu-tab-save')!.click();
+      };
+      const byText = (label: string) =>
+        [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(
+          (b) => b.textContent === label,
+        )!;
+      const reasons = () =>
+        [...dialog.querySelectorAll<HTMLElement>('.build-option-reason')].filter((r) => !r.hidden);
+      const close = () => byText('Close').click();
+      return { open, byText, reasons, close };
+    }
+
+    it('on the start screen they work; in a fight they are off with the reason', () => {
+      const { root, button } = boot();
+      step(0);
+      const menu = saveTab(root);
+      menu.open();
+      expect(menu.byText('Load code').disabled).toBe(false);
+      expect(menu.byText('New camp').disabled).toBe(false);
+      expect(menu.reasons()).toEqual([]);
+      menu.close();
+      button().click();
+      step(16);
+      menu.open();
+      expect(menu.byText('Load code').disabled).toBe(true);
+      expect(menu.byText('New camp').disabled).toBe(true);
+      expect(menu.reasons().map((r) => r.textContent)).toEqual([FIGHT_REFUSAL, FIGHT_REFUSAL]);
+    });
+
+    it('open while a win’s last kill dies: locked, then unlocked as the result shows', () => {
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW);
+      vi.stubGlobal(
+        'OffscreenCanvas',
+        class {
+          width: number;
+          height: number;
+          constructor(w: number, h: number) {
+            this.width = w;
+            this.height = h;
+          }
+          getContext() {
+            return ctx;
+          }
+        },
+      );
+      const { root, result, button } = boot();
+      step(0);
+      button().click();
+      step(16);
+      const real = vi.mocked(tick).getMockImplementation()!;
+      vi.mocked(tick).mockImplementationOnce((s: HordeState, dt: number) => {
+        const next = real(s, dt);
+        return { ...next, enemies: [...next.enemies, enemy(next, { x: 900, y: 60 })] };
+      });
+      step(32);
+      vi.mocked(tick).mockImplementationOnce((s: HordeState, dt: number) => ({
+        ...real(s, dt),
+        enemies: [],
+        outcome: 'won',
+      }));
+      step(48);
+      expect(result().hidden).toBe(true);
+      const menu = saveTab(root);
+      menu.open();
+      expect(menu.byText('Load code').disabled).toBe(true);
+      expect(menu.byText('New camp').disabled).toBe(true);
+      clock.mockReturnValue(NOW + 1000);
+      step(64);
+      expect(result().hidden).toBe(false);
+      // Unlocked in the open Menu, with no reopen.
+      expect(menu.byText('Load code').disabled).toBe(false);
+      expect(menu.byText('New camp').disabled).toBe(false);
+      expect(menu.reasons()).toEqual([]);
+    });
+
+    it.each(['won', 'lost'] as const)(
+      'on the result screen of a horde %s they work; New camp starts over at Horde 1',
+      (outcome) => {
+        localStorage.setItem(SAVE_KEY, encodeSave({ ...newGame('horde'), hordeNumber: 3 }, NOW));
+        const { root, title, button, bar, saved } = boot();
+        step(0);
+        button().click();
+        step(16);
+        endNextTick(outcome);
+        step(32);
+        expect(title()).not.toBe('Horde 3');
+        const menu = saveTab(root);
+        menu.open();
+        expect(menu.byText('Load code').disabled).toBe(false);
+        expect(menu.byText('New camp').disabled).toBe(false);
+        expect(menu.reasons()).toEqual([]);
+        menu.byText('New camp').click();
+        menu.byText('Start new camp').click();
+        expect(saved().hordeNumber).toBe(1);
+        // The old camp's result screen is gone: the new camp's start screen is up.
+        expect(title()).toBe('Horde 1');
+        expect(button().textContent).toBe('Start Horde 1');
+        menu.close();
+        button().click();
+        step(48);
+        expect(bar()).toMatch(/^Horde 1 · Waves cleared 0\//);
+      },
+    );
   });
 
   it('a saved over-full roster loads capped at 6, the rest in the reserve', () => {
