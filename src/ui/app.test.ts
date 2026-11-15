@@ -349,9 +349,9 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
         b.textContent!.startsWith(`${n}×`),
       )!;
     const pressed = () =>
-      [...booted.root.querySelectorAll('.hud-speed-button[aria-pressed="true"]')].map(
-        (b) => b.textContent,
-      );
+      [
+        ...booted.root.querySelectorAll('.hud-speed-button:not(.hud-pause)[aria-pressed="true"]'),
+      ].map((b) => b.textContent);
     step(0);
     vi.mocked(tick).mockClear();
     return { ...booted, chip, speedButton, pressed };
@@ -403,6 +403,56 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     step(5080);
     expect(vi.mocked(tick)).toHaveBeenCalledOnce();
     expect(vi.mocked(tick).mock.calls[0]![1]).toBeCloseTo(0.016);
+  });
+
+  it('the pause button (ID-165) is hidden between hordes', () => {
+    const { root } = boot();
+    step(0);
+    expect(root.querySelector<HTMLButtonElement>('.hud-pause')!.hidden).toBe(true);
+  });
+
+  it('the pause button (ID-165) does what Space does', () => {
+    const { root, chip, esc, dialogButton } = fight();
+    const pause = root.querySelector<HTMLButtonElement>('.hud-pause')!;
+    expect(pause.hidden).toBe(false);
+    expect(pause.parentElement!.classList.contains('hud-speed')).toBe(true);
+    expect(pause.getAttribute('aria-label')).toBe('Pause');
+    expect(pause.getAttribute('aria-pressed')).toBe('false');
+    pause.click();
+    expect(chip.hidden).toBe(false);
+    expect(pause.getAttribute('aria-pressed')).toBe('true');
+    expect(root.querySelector<HTMLElement>('.hud-paused-veil')!.hidden).toBe(false);
+    step(16);
+    step(5000);
+    expect(tick).not.toHaveBeenCalled();
+    // Space resumes a pause the button made, and the button follows.
+    press(' ');
+    expect(chip.hidden).toBe(true);
+    expect(pause.getAttribute('aria-pressed')).toBe('false');
+    step(5016);
+    step(5032);
+    expect(vi.mocked(tick)).toHaveBeenCalledOnce();
+    // The button pauses again; a click while the menu is open does nothing.
+    pause.click();
+    esc();
+    pause.click();
+    dialogButton('Close').click();
+    expect(chip.hidden).toBe(false);
+    pause.click();
+    expect(chip.hidden).toBe(true);
+  });
+
+  it('Space on the focused pause button toggles once, not twice (ID-165)', () => {
+    const { root, chip } = fight();
+    const pause = root.querySelector<HTMLButtonElement>('.hud-pause')!;
+    pause.focus();
+    expect(press(' ', {}, pause).defaultPrevented).toBe(true);
+    const up = new KeyboardEvent('keyup', { key: ' ', bubbles: true, cancelable: true });
+    pause.dispatchEvent(up);
+    // The keyup that would press the focused button is stopped, so the pause holds.
+    expect(up.defaultPrevented).toBe(true);
+    expect(chip.hidden).toBe(false);
+    expect(pause.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('Space on a focused HUD button pauses instead of pressing it', () => {

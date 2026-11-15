@@ -294,6 +294,10 @@ export function start(root: HTMLElement, art: Art): void {
     armed = lock || armed === skill ? null : skill;
     if (armed) selectedDefender = null;
   }
+  // The pause button (ID-165) does what Space does: in a fight, with no dialog open.
+  hud.onPause(() => {
+    if (horde?.outcome === 'fighting' && !dialogOpen()) hold(!held);
+  });
   // The skill pick (ID-100), between hordes only: saved at once, so it is there next time.
   hud.onSkillPick((skill) => {
     if (horde && !resultUp()) return;
@@ -659,6 +663,7 @@ export function start(root: HTMLElement, art: Art): void {
   // "Back to build" swaps the scene while the result screen closes: a hard cut to the build frame.
   function toBuild(): void {
     horde = null;
+    hud.fighting(false);
     selected = null;
     selectedDefender = null;
     armed = null;
@@ -965,6 +970,7 @@ export function start(root: HTMLElement, art: Art): void {
         backdropCtx,
       );
       hud.update(horde, armed);
+      hud.fighting(horde.outcome === 'fighting');
       // An armed skill shows at the pointer too (ID-107).
       const cursor = armed ? 'crosshair' : '';
       if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;

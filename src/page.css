@@ -81,6 +81,8 @@
   --color-synergy: #e9c46a;
   --color-reason: #c98a6a;
   --color-armed: #ffe066;
+  /* A held fight's dim over the field (ID-165). */
+  --color-paused-veil: rgb(0 0 0 / 30%);
   /* The fight's marks in Help (ID-168), as render.ts draws them (COLOR, BOSS_LOOK.roar). */
   --color-mark-hp: #5ec24a;
   --color-mark-hp-lost: #c43b3b;
@@ -273,6 +275,78 @@ body {
 .hud-speed-button[aria-pressed='true'] .menu-key {
   border-color: currentcolor;
   color: inherit;
+}
+
+/* The pause button (ID-165): two bars to pause; once paused, a play triangle to resume. */
+.hud-pause {
+  color: var(--color-text);
+}
+
+.hud-pause-icon {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 11px;
+  height: 13px;
+  border-right: 4px solid currentcolor;
+  border-left: 4px solid currentcolor;
+  vertical-align: -2px;
+}
+
+.hud-pause[aria-pressed='true'] .hud-pause-icon {
+  width: 0;
+  border-top: 6.5px solid transparent;
+  border-right: 0;
+  border-bottom: 6.5px solid transparent;
+  border-left: 11px solid currentcolor;
+}
+
+/* Held, the chosen speed steps back to an accent outline and text: the lit pause button is the state. */
+.hud-speed-held .hud-speed-button:not(.hud-pause)[aria-pressed='true'] {
+  background: var(--color-surface);
+  color: var(--color-accent);
+}
+
+/* A held fight (ID-165): the field dims under the word; clicks and taps pass through. */
+.hud-paused-veil {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-paused-veil);
+  pointer-events: none;
+}
+
+.hud-paused-veil[hidden] {
+  display: none;
+}
+
+.hud-paused-word {
+  padding: var(--space-6) var(--space-16);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-bar-bg);
+  color: var(--color-text);
+  font-size: var(--text-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* A narrow desktop window: the speed group drops its key hints, as on a phone, so it stays
+   clear of the corner panel (ID-165). Help still lists the keys. */
+@media (max-width: 1000px) {
+  .hud-speed .menu-key {
+    display: none;
+  }
+}
+
+/* Narrower still, it can't share the top row with the corner panel: it sits under the
+   Roster, Inventory and Menu buttons, at the right edge (ID-165). */
+@media (min-width: 641px) and (max-width: 760px) {
+  .hud-speed {
+    top: 38px;
+    right: 12px;
+  }
 }
 
 .hud-toast {
@@ -4706,9 +4780,10 @@ body {
   }
 }
 
-/* Under 360px the speed group and the Roster, Inventory and Menu buttons don't fit one
-   row (ID-145): the speeds take a row of their own under them, the status line below. */
-@media (max-width: 359px) {
+/* Under 408px the speed group (with its pause button, ID-165) and the Roster, Inventory
+   and Menu buttons don't fit one row (ID-145): the speeds take a row of their own under
+   them, the status line below. */
+@media (max-width: 407px) {
   .hud-fight-bar {
     padding-top: 102px;
   }
