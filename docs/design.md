@@ -491,9 +491,13 @@ Defenders stand on **posts** the player builds and chooses between.
     the one picked alone adds its ×2 line. The balance pass (ID-102) kept
     their numbers; its scripted player picks and uses Flashbang and Molotov.
   - Steady Fire is the one perk, always on at level 1; no perk screen.
-  - The top bar is minimal: the horde number, waves cleared and enemies left
+  - The top bar is minimal: the horde number, the wave and enemies left
     in the wave (on the field and still to come), with the speed buttons; the
     fight XP bar (its level and XP to the next) sits under it on the left.
+    Wave progress and the enemies-left count show once, on the wave line
+    (ID-167): the corner's tooltip names the horde (and the swaps left), never
+    a wave or enemy count, since a tooltip keeps the text it opened with and
+    went stale beside the live one.
   - Enemy HP grows ×1.20 per horde up to Horde 6 (the squad grows by a
     survivor a win until then), then ×1.06 (×1.03 before ID-099),
     instead of ×1.17 (§9). Hordes
