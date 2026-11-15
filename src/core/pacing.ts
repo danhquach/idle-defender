@@ -26,10 +26,12 @@ export const FULL_PACE: Pace = { interval: 0.8, break: 3, overlap: 0 };
  * ID-171: overlap no longer arrives in full at the horde Spewers join (Horde 6, `ENEMY_MIX`);
  * it builds a step a horde, so no horde from 5 to 8 is a cliff. Wherever overlap jumped
  * straight to 1, that horde was the cliff (20 seeds, first try: 13/20 at Horde 6 when it
- * came there; 11/20 at Horde 8 when Horde 6–7 ramped 0.25 and 0.6). This ramp: Hordes 5–8
- * won 20, 18, 16, 13 of 20.
+ * came there; 11/20 at Horde 8 when Horde 6–7 ramped 0.25 and 0.6). ID-172: `npm run
+ * tune:pacing -- --apply` retunes the rows and the measured numbers inside the brackets.
  */
 export const SQUAD_PACE: readonly (Pace & { readonly from: number })[] = [
+  // tune:pacing (20 seeds, first try): Hordes 5–8 won 20, 18, 16, 13 of 20;
+  // injured a try 0, 1.25, 1.95, 2.45.
   { from: 1, interval: 0.8, break: 3, overlap: 0 },
   { from: 6, interval: 0.6, break: 3, overlap: 0.5 },
   { from: 7, interval: 0.6, break: 3, overlap: 0.75 },
