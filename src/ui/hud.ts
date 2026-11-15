@@ -462,6 +462,14 @@ const AIM_HINT = {
 } as const;
 
 /**
+ * A card or replacement offer holds the skills mid-fight (ID-159): an armed skill stays
+ * armed for after the pick rather than being put away.
+ */
+export function offerHolds(s: Pick<HordeState, 'outcome' | 'offer' | 'replace'>): boolean {
+  return s.outcome === 'fighting' && (s.offer !== null || s.replace !== null);
+}
+
+/**
  * The skill buttons: each a dry run of `useSkill` before aiming (one cooling down shows
  * its seconds left); the armed one is pressed until it is used or put away.
  */
@@ -496,7 +504,8 @@ export function skillButtons(
       ),
       disabled: lock !== null,
       reason: lock ?? `${AIM_HINT[SKILLS[skill].aim]}${key ? ` (key ${key})` : ''}`,
-      armed: lock === null && skill === armed,
+      // Still pressed while a card offer holds the skills: the pick leaves it armed (ID-159).
+      armed: skill === armed && (lock === null || offerHolds(s)),
       hidden: free && slot < 0,
       key,
       cooling: left > 0,
@@ -511,6 +520,9 @@ export function skillButtons(
 export const AIM_PROMPT: Readonly<Record<SkillId, string>> = {
   airstrike: 'Tap or drag to an area · tap Airstrike again to cancel',
 };
+
+/** The aim caption while an offer holds the armed skill (ID-159): it waits for the pick. */
+export const AIM_HELD_PROMPT = 'Pick a card, then tap an area';
 
 /**
  * A fight key's name (ID-100): a letter key by its place (`KeyQ` is Q on any layout), so
@@ -2950,7 +2962,7 @@ export function createHud(
       const strike = skills[SKILL_IDS.indexOf('airstrike')];
       autoButton.hidden = !strike || strike.hidden || !state.skills.includes('airstrike');
       const aiming = skills.find((b) => b.armed);
-      const prompt = aiming ? AIM_PROMPT[aiming.skill] : '';
+      const prompt = !aiming ? '' : offerHolds(state) ? AIM_HELD_PROMPT : AIM_PROMPT[aiming.skill];
       if (aimCaption.textContent !== prompt) aimCaption.textContent = prompt;
       aimCaption.hidden = !aiming;
       // Horde-only (ID-100): the skill row waits under the start or result screen.
