@@ -1809,6 +1809,29 @@ body {
   margin-left: auto;
 }
 
+/* A phone or a short window (ID-169): the whole footer pinned took most of the panel, and
+   no squad card fitted above it. Here the Skill box, horde picker and lines scroll with the
+   panel, and only the button stays pinned, full width and in thumb reach. */
+@media (max-width: 480px), (max-height: 700px) {
+  .hud-debrief .hud-result-foot {
+    display: contents;
+  }
+
+  .hud-debrief .hud-result-foot > * {
+    margin-top: var(--space-16);
+  }
+
+  .hud-debrief .hud-result-foot .hud-button {
+    position: sticky;
+    bottom: var(--space-12);
+    display: block;
+    width: 100%;
+    margin: var(--space-16) 0 var(--space-12);
+    /* The panel's colour around it, so cards scrolling under it never show at its edges. */
+    box-shadow: 0 0 0 var(--space-12) var(--color-bg);
+  }
+}
+
 /* Full width, so it wraps only when the row runs out of room: one row keeps it in the
    64 px the fixed frame leaves clear (ID-064). Clicks between buttons reach the field. */
 .hud-shop {
