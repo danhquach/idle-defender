@@ -1776,6 +1776,13 @@ export function createHud(
 ): {
   update(state: HordeState, armed?: SkillId | null): void;
   speed(speed: Speed, paused: boolean): void;
+  /**
+   * Whether a fight is on (ID-165): the pause button shows only then. The app says, as a
+   * start screen's preview state reads as fighting too.
+   */
+  fighting(on: boolean): void;
+  /** Where the pause button goes (ID-165); the app sets it once. */
+  onPause(handler: () => void): void;
   showResult(screen: ResultScreen): void;
   /** The horde-only gun pickers (ID-067) on the result or start screen; each pick goes to `onEquip`. */
   showGear(gear: GearScreen, onEquip: (defenderId: string, choice: string) => void): void;
@@ -1922,8 +1929,8 @@ export function createHud(
   const speed = el('div', 'hud-speed');
   speed.setAttribute('role', 'group');
   speed.setAttribute('aria-label', 'Game speed');
-  // Its key tag says how to resume.
-  const pausedChip = el('span', 'menu-chip', 'Paused');
+  // Read out when the fight is held (ID-062); the pause button shows it on screen (ID-165).
+  const pausedChip = el('span', 'menu-chip sr-only', 'Paused');
   pausedChip.append(el('kbd', 'menu-key', 'Space'));
   pausedChip.setAttribute('role', 'status');
   pausedChip.hidden = true;
@@ -1935,7 +1942,31 @@ export function createHud(
     button.addEventListener('click', () => onSpeed(sp));
     return button;
   });
-  speed.append(pausedChip, ...speedButtons);
+  // The pause as a button too (ID-165), for mouse and touch: it does what Space does.
+  let onPauseToggle: () => void = () => {};
+  const pauseButton = el('button', 'hud-speed-button hud-pause');
+  pauseButton.type = 'button';
+  pauseButton.append(el('span', 'hud-pause-icon'), el('kbd', 'menu-key', 'Space'));
+  pauseButton.setAttribute('aria-keyshortcuts', 'Space');
+  pauseButton.setAttribute('aria-label', 'Pause');
+  pauseButton.setAttribute('aria-pressed', 'false');
+  pauseButton.title = 'Pause (Space)';
+  pauseButton.hidden = true;
+  pauseButton.addEventListener('click', () => onPauseToggle());
+  speed.append(pausedChip, ...speedButtons, pauseButton);
+  // A held fight on screen (ID-165): the field dims under the word, clicks pass through.
+  const pausedVeil = el('div', 'hud-paused-veil');
+  pausedVeil.append(el('span', 'hud-paused-word', 'Paused'));
+  pausedVeil.setAttribute('aria-hidden', 'true');
+  pausedVeil.hidden = true;
+  // Whether a fight is on (the app says; a start screen's preview isn't one) and held.
+  let fightOn = false;
+  let heldNow = false;
+  const drawPause = (): void => {
+    pauseButton.hidden = !fightOn;
+    pausedVeil.hidden = !(fightOn && heldNow);
+    pausedChip.hidden = !(fightOn && heldNow);
+  };
   const warning = el('div', 'hud-warning');
   warning.setAttribute('role', 'alert');
   warning.hidden = true;
@@ -2219,6 +2250,7 @@ export function createHud(
   cards.hidden = true;
   result.hidden = true;
   hud.append(
+    pausedVeil,
     swarmEdge,
     bar,
     speed,
@@ -2795,7 +2827,20 @@ export function createHud(
     },
     speed(now, paused) {
       speedButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(SPEEDS[i] === now)));
-      pausedChip.hidden = !paused;
+      // A toggle keeps its name (Pause); pressed says it's on (ID-165).
+      pauseButton.setAttribute('aria-pressed', String(paused));
+      pauseButton.title = paused ? 'Resume (Space)' : 'Pause (Space)';
+      // While held, the chosen speed steps back, so the lit pause button reads as the state.
+      speed.classList.toggle('hud-speed-held', paused);
+      heldNow = paused;
+      drawPause();
+    },
+    fighting(on) {
+      fightOn = on;
+      drawPause();
+    },
+    onPause(handler) {
+      onPauseToggle = handler;
     },
     toast(text, ms = TOAST_MS) {
       toast.textContent = text;
