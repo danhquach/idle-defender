@@ -2032,16 +2032,32 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     one more with the first spawn of its last wave, its kind and skill the next
     in turn after the middle one's (an odd horde's two always differ in kind):
     Horde 11 brings two, Horde 12 one (an elite Brute with Regen).
-  - **Shorter fights (ID-128).** From Horde 6 (`SQUAD_WAVES.from`, when the
+  - **Shorter fights (ID-128).** From Horde 6 (`SQUAD_PACE`, when the
     squad is full) enemies spawn 0.6 s apart (0.8 s in the full game and
-    before Horde 6), and the next wave comes once the current one has all
-    spawned, after its 3 s break, without waiting for the field to clear; the
+    before Horde 6), and the next wave comes before the field is clear (since
+    ID-171 the overlap ramps: see the pacing table below; from Horde 8 it comes
+    once the current one has all spawned, after its 3 s break); the
     last wave still has to be cleared to win, and a mini-boss's wave still waits
     for it. Before, each of 10 waves waited about 28 s for its last enemy to
     walk in and die, about 310 s of a Horde 15 fight. Before Horde 6 waves wait
     for a clear as before: with overlap a lone pistol was buried at Horde 1
     whatever its HP (0–30 of 60 seeds won with first-card picks; 60 of 60 on
     main and now).
+    - **Wave pacing table (ID-171).** Spawn gap, break and overlap now live in
+      one table, `SQUAD_PACE` in `src/core/pacing.ts` (`FULL_PACE` for the full
+      game): each row holds from its horde on, so a horde that comes too slow
+      or too fast is retuned by editing one row. `overlap` is a share from 0 to
+      1: 0 waits for a clear, 1 brings the next wave once this one has all
+      spawned (the ID-128 rule), and in between the next comes once at most that
+      share of this wave's size is still standing. Overlap used to arrive in
+      full at Horde 6 with the Spewers, and Horde 6 went from 20/20 first-try
+      wins to 13/20, every loss downing all six. It now ramps: 0.5 at Horde 6,
+      0.75 at Horde 7, 1 from Horde 8, all 0.6 s apart (20 seeds, first try:
+      Hordes 5–8 won 20, 18, 16, 13; injured a try 0, 1.25, 1.95, 2.45).
+      Wherever overlap jumped straight to 1 that horde was the cliff (ramping
+      0.25 and 0.6 first moved it to Horde 8, 11/20). Recommended Power still
+      counts only spawn time, so a partial overlap's longer fight makes it ask
+      slightly more than needed.
     - Enemies carry the wave they came with. Waves cleared (the top bar's
       "Waves cleared", a loss's XP share) counts only waves that have all come
       with none of their enemies left; the top bar's count reads "N left" (all
@@ -3046,7 +3062,7 @@ unless named:
 | Value | Before | After | Why |
 |---|---|---|---|
 | Wave size growth (`WAVE_GROWTH.until`) | Held from Horde 10 | Held from Horde 6 (the full game keeps ×1.1) | The ticket's starting point; the squad is full at Horde 6 |
-| Horde-only waves (`SQUAD_WAVES`) | 0.8 s apart, the next wave waits for a clear | From Horde 6: 0.6 s apart, the next wave comes once this one has all spawned | Only overlap reaches ~5 minutes (§9 Shorter fights); before Horde 6 a lone survivor was buried, so early hordes play as before |
+| Horde-only waves (`SQUAD_PACE`, ID-171: was `SQUAD_WAVES`) | 0.8 s apart, the next wave waits for a clear | From Horde 6: 0.6 s apart, the next wave comes once this one has all spawned (ID-171: overlap ramps 0.5, 0.75, then full from Horde 8) | Only overlap reaches ~5 minutes (§9 Shorter fights); before Horde 6 a lone survivor was buried, so early hordes play as before |
 | Late HP (`SQUAD_EARLY_HP`, last entry) | 1 from Horde 11 | ×1.15 from Horde 11 | The held waves' size moved into HP. Grid: 1 kept every target but made walls shallow (3 of 4 seeds walled, at most 3 replays a wall, wall hit 74%); 1.15: 4 of 4, at most 9, 85% |
 | Mini-bosses (`ELITE.more`) | One on odd hordes from Horde 5 | Plus one with the last wave of every non-boss horde from Horde 11 | The ticket's ask: more mini-bosses past Horde 10 |
 | Recommended Power (`POWER.rec`) | 9.7 × HP ÷ spawn seconds, no cards; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | 3 ×, with cards; early ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.4, ×1.25; past Horde 10 ×1.2 (ID-136, ID-137) | Refitted to the card build (§11 Farming); k grid 2.2–4.0 per horde, Hordes 6–20 |

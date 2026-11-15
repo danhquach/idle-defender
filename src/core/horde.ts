@@ -48,7 +48,6 @@ import {
   TURRET_RANGE,
   WALK_SPEED,
   WALL,
-  WAVE_BREAK,
   SHOP,
   SKILL_FLASH,
   SKILLS,
@@ -101,16 +100,15 @@ import {
 } from './stats.ts';
 import {
   enemyHp,
-  fastWaves,
   hordeBosses,
   kindFor,
-  spawnInterval,
   swarmWave,
   waveCount,
   waveMix,
   waveSize,
   type BossSpec,
 } from './waves.ts';
+import { nextWaveDue, wavePace } from './pacing.ts';
 
 export type UpgradeId =
   | 'sharpshooter'
@@ -1346,7 +1344,7 @@ function spawn(s: HordeState, rng: Rng): void {
       };
     });
   }
-  const interval = spawnInterval(s.hordeNumber, s.harder === true);
+  const interval = wavePace(s.hordeNumber, s.harder === true).interval;
   const gap = s.swarm ? interval / SWARM.size : interval;
   while (s.toSpawn > 0 && due(s.time, s.nextSpawnAt) && due(s.time, s.breakUntil)) {
     // Shamblers only (the tutorial) roll nothing, so its seeds play as before.
@@ -3388,9 +3386,11 @@ export function wavesCleared(
 
 function advanceWave(s: HordeState): void {
   if (s.toSpawn > 0) return;
-  // Horde-only waves overlap (ID-128): the next comes once this one has all spawned.
-  const overlap = fastWaves(s.hordeNumber, s.harder === true) && s.wave < s.waveCount;
-  if (s.enemies.length > 0 && !overlap) return;
+  // Horde-only waves overlap (ID-128): the next may come before a clear, as far as the
+  // horde's pacing lets it (ID-171, `Pace.overlap`).
+  const pace = wavePace(s.hordeNumber, s.harder === true);
+  const due = s.wave < s.waveCount ? nextWaveDue(pace, s.enemies.length, waveEnemies(s)) : false;
+  if (s.enemies.length > 0 && !due) return;
   if (s.wave >= s.waveCount) {
     // A boss horde is won once its bosses have come and gone (design §2).
     if (s.bosses.some((b) => b.id === null)) return;
@@ -3402,7 +3402,7 @@ function advanceWave(s: HordeState): void {
   s.wave += 1;
   s.swarm = s.harder === true && swarmWave(s.hordeNumber, s.wave);
   s.toSpawn = waveEnemies(s);
-  s.breakUntil = s.time + WAVE_BREAK;
+  s.breakUntil = s.time + pace.break;
   // The break resizes every wire row for the new wave, wear kept (ID-133).
   resizeWire(s);
   for (const row of s.wire) row.hit = [];
@@ -3429,11 +3429,11 @@ export function wireMax(level: number, enemies: number): number {
 
 /**
  * A Barbed Wire row's full durability now: for the current wave and the card's level (ID-123),
- * or for every enemy still to face when more: horde-only waves overlap (ID-128), so a new
- * wave's wire also meets the last one's still standing.
+ * or for every enemy still to face when more: horde-only waves may overlap (ID-128, ID-171),
+ * so a new wave's wire also meets the last one's still standing.
  */
 function wireFull(s: HordeState): number {
-  const overlap = fastWaves(s.hordeNumber, s.harder === true);
+  const overlap = wavePace(s.hordeNumber, s.harder === true).overlap > 0;
   const facing = overlap ? s.toSpawn + s.enemies.filter((e) => e.hp > 0).length : 0;
   return wireMax(cardLevel(s, 'barbed-wire'), Math.max(waveEnemies(s), facing));
 }
