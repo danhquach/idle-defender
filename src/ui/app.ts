@@ -19,6 +19,7 @@ import {
   bestSquad,
   campOf,
   combineGuns,
+  combineSurvivors,
   equipGun,
   finishSquadHorde,
   joiningOf,
@@ -57,7 +58,15 @@ import {
   type Speed,
 } from '../storage/settings.ts';
 import { Animator } from './anim.ts';
-import { answerText, joinCards, leaveJoinQuestion, letGoQuestion, letGoText } from './joining.ts';
+import {
+  answerText,
+  combineQuestion,
+  combineText,
+  joinCards,
+  leaveJoinQuestion,
+  letGoQuestion,
+  letGoText,
+} from './joining.ts';
 import { dyingLeft } from './death.ts';
 import { SoundEngine, STING } from './audio.ts';
 import { createBuildPanel, FIELD_GREW, LEVELS_REWORKED } from './build.ts';
@@ -436,6 +445,25 @@ export function start(root: HTMLElement, art: Art): void {
     redrawSquad();
     return { ok: true, text: letGoText(d.name) };
   }
+  /**
+   * Survivor `keeperId` takes in `fedId` between hordes (the Roster, ID-170), on a yes to the
+   * confirm: saved at once, and the screens redrawn. Null when the player said no.
+   */
+  function combineSurvivor(
+    keeperId: string,
+    fedId: string,
+  ): { ok: true; text: string } | { ok: false; reason: string } | null {
+    if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+    const r = combineSurvivors(game, keeperId, fedId);
+    if (!r.ok) return r;
+    // `combineSurvivors` found both, so they are in the camp.
+    const keeper = campOf(game).find((x) => x.id === keeperId)!;
+    const fed = campOf(game).find((x) => x.id === fedId)!;
+    if (!window.confirm(combineQuestion(keeper, fed, r.xp, r.thrown))) return null;
+    commit(r.game);
+    redrawSquad();
+    return { ok: true, text: combineText(keeper.name, fed.name, r.xp) };
+  }
   /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
   function startFight(next: HordeState): void {
     horde = next;
@@ -583,6 +611,7 @@ export function start(root: HTMLElement, art: Art): void {
         onEquip: changeGun,
         onToggleSquad: changeSquad,
         onLetGo: letSurvivorGo,
+        onCombine: combineSurvivor,
         onBestGuns: () => {
           if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
           const r = bestGuns(game);

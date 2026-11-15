@@ -1626,11 +1626,11 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
 
 /**
  * The horde-only result screen (ID-066) for horde `s`, fought from `game`: a win's XP,
- * level-ups and the survivor joining (a first clear only; a boss horde's also finds a radio
+ * level-ups and any survivor asking to join (a boss horde's first clear also finds a radio
  * part and may unlock a card, and the finale's is the ending screen, ID-127); a replay's win
- * says so and adds nobody. A win's cards are only who levelled up in it (ID-134); a loss
- * keeps every card. A loss says where they got in, the small XP it paid (ID-098)
- * and that the horde comes again in full. The picker
+ * says so, and its rare newcomer (ID-170) asks to join the same way. A win's cards are only
+ * who levelled up in it (ID-134); a loss keeps every card. A loss says where they got in, the
+ * small XP it paid (ID-098) and that the horde comes again in full. The picker
  * (ID-098) starts on the next new horde after a first clear, else on the same horde; its
  * bands read the squad as `game` holds it, so the app redraws it once the win is saved.
  */
@@ -1689,10 +1689,11 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       lines: [
         clearedLine(s),
         ...gains.map(squadXpLine),
-        ...(replay
-          ? []
-          : joined.length > 0
-            ? joined.map(askLine)
+        // A replay with nobody new says nothing of it: most bring nobody (ID-170).
+        ...(joined.length > 0
+          ? joined.map(askLine)
+          : replay
+            ? []
             : [`Nobody new joins the camp this time (${size} survivors)`]),
         ...(drop ? squadDropLines(game, drop) : []),
         ...(rewardNote ? [rewardNote] : []),
@@ -1718,8 +1719,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         callout: null,
         note,
         drop: drop ? dropTile(game, drop) : null,
-        // A replay brings nobody; a first clear's newcomers ask to join in the offer tile
-        // (ID-150, `showJoin`), else this tile says nobody came.
+        // Newcomers ask to join in the offer tile (ID-150, `showJoin`; a replay's too,
+        // ID-170); else a first clear's tile says nobody came, and a replay shows none.
         recruit:
           replay || joined.length > 0
             ? null
@@ -1732,7 +1733,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         cards: ups,
         empty: ups.length > 0 ? null : SQUAD_NO_LEVEL_UPS,
         foot: '',
-        ...(!replay && joined.length > 0 ? { join: true as const } : {}),
+        ...(joined.length > 0 ? { join: true as const } : {}),
       },
     };
   }

@@ -4013,13 +4013,27 @@ body {
   color: var(--color-danger-hover);
 }
 
+/* The Combine pick (ID-170) takes the column's width and wraps inside it, so long partner
+   names never widen the column and squeeze the gun slot beside it. */
+.rv-combine-pick {
+  width: 0;
+  min-width: 100%;
+}
+
+.rv-combine-pick .rv-squad {
+  white-space: normal;
+  text-align: left;
+}
+
 /* At 6 or fewer: looks unavailable, but a press still says why (ID-150). */
 .rv-letgo-locked {
   opacity: 0.55;
 }
 
-/* The lock's reason under the button, so it shows on a phone without scrolling (ID-150). */
-.rv-letgo-why {
+/* The lock's reason under the button, so it shows on a phone without scrolling (ID-150);
+   the Combine pick's note (ID-170) reads the same. */
+.rv-letgo-why,
+.rv-combine-note {
   margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);

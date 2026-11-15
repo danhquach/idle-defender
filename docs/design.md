@@ -2600,16 +2600,42 @@ As built (ID-066), the horde-only build:
     always be filled: the button looks greyed and a press says why on the
     Roster's status line and under the button ("Needs 7+ survivors to let one
     go (camp 6)").
-  - The scripted player in the balance tests accepts every offer, so balance
-    is as before.
+  - **Combine (ID-170, `SURVIVOR_COMBINE` in `data.ts`) *(starting
+    points)*:** on the Roster, between hordes, a survivor with another of the
+    same profession in the camp (squad or bench) has a **Combine** button
+    before Let go. It opens a pick under the buttons ("Take in another
+    Soldier: they leave for good.", one button per partner with name, level
+    and gun, then Cancel); a pick asks first, naming who leaves, the XP and
+    levels the keeper gains, where the gun goes and anything a full stash
+    throws away. The keeper gains 50% of the other's lifetime XP, at least
+    one level's worth from level 1 (25 XP), so a fresh joiner still counts;
+    capped as XP is everywhere. The other leaves as with Let go (gun to the
+    stash, the free pistol just goes); the keeper keeps their gun, rest and
+    slot, and "Auto" fills a slot the other leaves. Locked as Let go is (6 or
+    fewer in the camp: greyed, a press says "Needs 7+ survivors to combine
+    (camp 6)", and the line under the buttons names both, "… to combine or
+    let one go …"); refused for another
+    profession, the same survivor, or anyone still asking to join. No save
+    change: one survivor fewer, more XP. The scripted player never combines.
+    With "Auto" off the keeper keeps their slot; with it on, "Auto" picks the
+    best squad again (the keeper's new XP can move them, as any change can).
+  - The scripted player in the balance tests accepts every offer, a replay's
+    newcomer too (ID-170), so its bench grows a little faster than before.
 - **The bench and rest (ID-147, `SQUAD_JOIN`, `INJURY_REST` in `data.ts`):**
   - No camp cap below `SQUAD_JOIN.max` (40). Up to 6 fight a horde (one per
     slot on the firing line); the rest wait on the bench.
   - Under 6, each first clear adds one survivor as before. From 6 on, each
     first clear has a 15% chance (seeded from the horde, core RNG) that one
     joins, and then 20% that a second comes too (about 3% of first clears).
-    A replay or a loss adds nobody. Each joiner asks to join (ID-150); once
-    accepted, they take an open squad slot, else wait on the bench.
+    A loss adds nobody. A replay win that drops a gun has 5%
+    (`SQUAD_JOIN.replay`, ID-170) that one joins, at any camp size, never a
+    second: about one per 20 replay wins, so farming grows the bench slowly
+    and first clears stay the better source. Each replay is a new seed, so
+    each roll is fresh; a replay past `FARM.maxReplays` (no drop) adds
+    nobody. A replay's newcomer turns away an offer left unanswered, as a
+    first clear's does; a replay with nobody new leaves it standing. Each
+    joiner asks to join (ID-150); once accepted, they take an open squad
+    slot, else wait on the bench.
   - Rest, in hordes *(ID-155; `INJURY_REST`, `PATCH_UP`)*: after a **won**
     fight, only a survivor who was downed rests, for 1 horde. Anyone who ends
     it standing, at any HP, is fit for the next horde (ID-147's 2 hordes for
@@ -2785,8 +2811,9 @@ and comes back stronger.
   horde below it counts as beaten, so the highest beaten is `hordeNumber − 1`
   and an older save's beaten hordes count too. Between hordes a horde picker
   offers the next new horde or any beaten one. A replay is a normal horde of
-  that number (same waves, enemies and HP); a replay win adds no survivor
-  and doesn't move the next new horde on.
+  that number (same waves, enemies and HP); a replay win rarely adds a
+  survivor (5%, ID-170, see The bench and rest) and doesn't move the next
+  new horde on.
 - **First clear:** the drop rolls the horde's band (§6 Gear) moved up one
   rarity (Rusty → Common … Prototype → Relic; Relic stays). Uid `h<n>`.
   Older saves get no first-clear drops for hordes already beaten.

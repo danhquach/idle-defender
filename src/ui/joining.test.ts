@@ -9,6 +9,8 @@ import { newGame } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
 import { createHud, squadStart } from './hud.ts';
 import {
+  combineQuestion,
+  combineText,
   joinCards,
   joinLabel,
   leaveJoinQuestion,
@@ -60,6 +62,21 @@ describe('joining in words (ID-150)', () => {
       `Let ${d.name} go? They leave the camp for good. Their Lv 3 Military Carbine goes back to the stash. The stash is full: Lv 1 Rusty SMG will be thrown away.`,
     );
     expect(letGoText('Ava')).toBe('Ava has left the camp.');
+  });
+
+  it('the combine confirm (ID-170): who leaves, the XP and levels, the gun, a full stash', () => {
+    const k = { ...recruit(1), xp: 0 };
+    const f = recruit(7);
+    expect(combineQuestion(k, f, 25, [])).toBe(
+      `Combine ${f.name} into ${k.name}? ${f.name} (Lv 1) leaves the camp for good. ${k.name} gains 25 XP (Lv 1 → 2). The free pistol goes with them.`,
+    );
+    const gun = rollWeapon(createRng(1), 'h1', 'rifle', 'military', 3);
+    const old = rollWeapon(createRng(2), 'h2', 'smg', 'rusty', 1);
+    const armed = { ...f, loadout: { primary: gun, secondary: null, item: null } };
+    expect(combineQuestion(k, armed, 10, [old])).toBe(
+      `Combine ${f.name} into ${k.name}? ${f.name} (Lv 1) leaves the camp for good. ${k.name} gains 10 XP (stays Lv 1). ${f.name}'s Lv 3 Military Carbine goes back to the stash. The stash is full: Lv 1 Rusty SMG will be thrown away.`,
+    );
+    expect(combineText('Ava', 'Ben', 25)).toBe('Ava took in Ben: +25 XP.');
   });
 });
 

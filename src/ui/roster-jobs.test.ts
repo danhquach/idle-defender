@@ -40,6 +40,7 @@ function open(game: GameState, id: string) {
     onEquip: () => ({ ok: true }),
     onToggleSquad: () => ({ ok: true }),
     onLetGo: () => null,
+    onCombine: () => null,
     onBestGuns: () => ({ ok: true, moves: [] }),
     onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
     onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),

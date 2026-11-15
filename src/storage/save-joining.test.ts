@@ -6,7 +6,14 @@ import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { SQUAD_CAP, SQUAD_JOIN } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
-import { answerJoin, finishSquadHorde, joiningOf, startSquadHorde } from '../core/hordeonly.ts';
+import {
+  answerJoin,
+  combineSurvivors,
+  finishSquadHorde,
+  joiners,
+  joiningOf,
+  startSquadHorde,
+} from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
 import { NOW, preJoin } from './testing.ts';
@@ -124,5 +131,36 @@ describe('save: asking to join (ID-150)', () => {
     expect(reread(full)?.game).toEqual(full);
     const over = asking(camp(SQUAD_JOIN.max), recruit(SQUAD_JOIN.max + 1, 2));
     expect(reread(over)).toBeNull();
+  });
+});
+
+describe('save: replay joiners and combining survivors (ID-170)', () => {
+  it('a lucky replay’s ask round-trips with the next new horde unchanged', () => {
+    const g = camp(7);
+    let seed = 1;
+    while (joiners(g, seed, true).length === 0) seed++;
+    const won = finishSquadHorde(g, { ...startSquadHorde(g, seed, NOW, 2), outcome: 'won' });
+    expect(won.hordeNumber).toBe(4);
+    expect(joiningOf(won)).toHaveLength(1);
+    expect(reread(won)?.game).toEqual(won);
+  });
+
+  it('a camp after a combine round-trips: one fewer, the keeper’s XP, the gun stashed', () => {
+    const gun = rollWeapon(createRng(1), 'h1', 'rifle', 'military', 1);
+    const g = camp(7);
+    g.roster[0] = { ...g.roster[0]!, job: 'soldier', xp: 300 };
+    g.reserve[0] = {
+      ...g.reserve[0]!,
+      job: 'soldier',
+      xp: 400,
+      loadout: { primary: gun, secondary: null, item: null },
+    };
+    const r = combineSurvivors(g, 'recruit-1', 'recruit-7');
+    if (!r.ok) throw new Error(r.reason);
+    const back = reread(r.game)?.game;
+    expect(back).toEqual(r.game);
+    expect(back!.roster[0]!.xp).toBe(500);
+    expect(back!.reserve).toEqual([]);
+    expect(back!.armoury.map((w) => w.uid)).toEqual(['h1']);
   });
 });

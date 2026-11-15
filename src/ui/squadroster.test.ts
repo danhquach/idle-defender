@@ -119,6 +119,7 @@ function mount(game: GameState, over: { canGear?: boolean } = {}) {
     onEquip,
     onToggleSquad,
     onLetGo: () => null,
+    onCombine: () => null,
     onBestGuns,
     onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
     onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
@@ -540,6 +541,7 @@ describe('Best gun for everyone (ID-108)', () => {
       onEquip: () => ({ ok: true }),
       onToggleSquad: () => ({ ok: true }),
       onLetGo: () => null,
+      onCombine: () => null,
       onBestGuns: () => ({ ok: false, reason: GUNS_WAIT }),
       onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
       onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
@@ -548,5 +550,27 @@ describe('Best gun for everyone (ID-108)', () => {
     document.querySelector<HTMLButtonElement>('.rv-best')!.click();
     expect(document.querySelector('.rv-status')!.textContent).toBe(GUNS_WAIT);
     expect(document.querySelector<HTMLElement>('.rv-status')!.dataset.tone).toBe('danger');
+  });
+});
+
+describe('Combine in a fight (ID-170)', () => {
+  it('greyed with the wait reason; a press opens no pick', () => {
+    const seven = Array.from({ length: 7 }, (_, i) => ({
+      ...at(i + 1, 2),
+      job: 'soldier' as const,
+    }));
+    const g = { ...camp(seven.slice(0, 6)), reserve: seven.slice(6) };
+    const fight = mount(g, { canGear: false });
+    fight.roster.open('recruit-1');
+    const b = fight.q('.rv-combine');
+    expect(b.disabled).toBe(true);
+    expect(b.getAttribute('aria-label')).toContain(SQUAD_WAIT);
+    b.click();
+    expect(fight.scrim.querySelector('.rv-combine-pick')).toBeNull();
+    // Between hordes the same camp opens the pick.
+    const calm = mount(g);
+    calm.roster.open('recruit-1');
+    calm.q('.rv-combine').click();
+    expect(calm.scrim.querySelectorAll('.rv-combine-pick button')).toHaveLength(7);
   });
 });

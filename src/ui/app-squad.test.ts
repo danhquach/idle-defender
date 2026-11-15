@@ -10,6 +10,7 @@ import { rollOffer } from '../core/cards.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
+import { levelOf } from '../core/stats.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
 import { enemy } from '../core/testing.ts';
@@ -1474,6 +1475,85 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     accept.focus();
     accept.click();
     expect(document.activeElement).toBe(again.button());
+  });
+
+  /** Seven survivors: recruit 1 and the armed bench recruit 7 Soldiers, the rest Chefs. */
+  function soldiers() {
+    const g = campOf(7);
+    const job = (d: GameState['roster'][number], i: number) => ({
+      ...d,
+      job: i === 0 ? ('soldier' as const) : ('chef' as const),
+      xp: i === 0 ? 300 : 0,
+    });
+    return {
+      ...g,
+      roster: g.roster.map(job),
+      reserve: g.reserve.map((d) => ({ ...d, job: 'soldier' as const, xp: 400 })),
+    };
+  }
+
+  it('Combine (ID-170): a pick of the same profession, a confirm; yes saves the XP, them gone, the gun stashed', () => {
+    localStorage.setItem(SAVE_KEY, encodeSave(soldiers(), NOW));
+    const confirm = vi.fn<(q: string) => boolean>(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const { scrim, saved, status } = rosterOn('recruit-1');
+    const combine = () => scrim.querySelector<HTMLButtonElement>('.rv-combine')!;
+    expect(combine().disabled).toBe(false);
+    expect(scrim.querySelector('.rv-combine-pick')).toBeNull();
+    combine().click();
+    expect(combine().getAttribute('aria-expanded')).toBe('true');
+    const picks = [...scrim.querySelectorAll<HTMLButtonElement>('.rv-combine-pick button')];
+    // Only the other Soldier, then Cancel.
+    expect(picks.map((b) => b.textContent)).toEqual([
+      `${recruit(7).name} · Lv ${levelOf(400).level} · Lv 1 Military Carbine`,
+      'Cancel',
+    ]);
+    expect(document.activeElement).toBe(picks[0]);
+    picks[0]!.click();
+    expect(confirm.mock.calls[0]![0]).toBe(
+      `Combine ${recruit(7).name} into ${recruit(1).name}? ${recruit(7).name} (Lv ${levelOf(400).level}) leaves the camp for good. ${recruit(1).name} gains 200 XP (Lv ${levelOf(300).level} → ${levelOf(500).level}). ${recruit(7).name}'s Lv 1 Military Carbine goes back to the stash.`,
+    );
+    expect(saved().reserve).toHaveLength(1);
+    confirm.mockReturnValue(true);
+    scrim.querySelector<HTMLButtonElement>('.rv-combine-pick button')!.click();
+    const after = saved();
+    expect([...after.roster, ...after.reserve].map((d) => d.id)).not.toContain('recruit-7');
+    expect(after.roster.find((d) => d.id === 'recruit-1')!.xp).toBe(500);
+    expect(after.armoury.map((w) => w.uid)).toEqual(['h1']);
+    expect(status()).toBe(`${recruit(1).name} took in ${recruit(7).name}: +200 XP.`);
+    // Back at 6, nobody else of their profession: no Combine button.
+    expect(scrim.querySelector('.rv-combine')).toBeNull();
+  });
+
+  it('Combine: Cancel closes the pick; a Chef among Chefs has one; locked at 6', () => {
+    localStorage.setItem(SAVE_KEY, encodeSave(soldiers(), NOW));
+    const confirm = vi.fn<(q: string) => boolean>(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const { scrim } = rosterOn('recruit-1');
+    const combine = () => scrim.querySelector<HTMLButtonElement>('.rv-combine')!;
+    combine().click();
+    [...scrim.querySelectorAll<HTMLButtonElement>('.rv-combine-pick button')].at(-1)!.click();
+    expect(scrim.querySelector('.rv-combine-pick')).toBeNull();
+    expect(confirm).not.toHaveBeenCalled();
+    // A Chef among Chefs has partners; a lone profession has none.
+    scrim.querySelector<HTMLButtonElement>('.rv-tab[data-defender="recruit-2"]')!.click();
+    expect(scrim.querySelector('.rv-combine')).not.toBeNull();
+    // At 6: greyed, a press says why, no pick opens.
+    const six = soldiers();
+    six.reserve = [];
+    six.roster = [...six.roster.slice(0, 5), { ...six.roster[5]!, job: 'soldier' }];
+    localStorage.setItem(SAVE_KEY, encodeSave(six, NOW));
+    const again = rosterOn('recruit-1');
+    const locked = again.scrim.querySelector<HTMLButtonElement>('.rv-combine')!;
+    expect(locked.classList.contains('rv-letgo-locked')).toBe(true);
+    // Under the buttons the reason names both locked buttons.
+    expect(again.scrim.querySelector('.rv-letgo-why')!.textContent).toBe(
+      'Needs 7+ survivors to combine or let one go (camp 6)',
+    );
+    locked.click();
+    expect(again.scrim.querySelector('.rv-combine-pick')).toBeNull();
+    expect(again.status()).toBe('Needs 7+ survivors to combine (camp 6)');
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('Let go at 6 (one resting on the bench): greyed, and a press says why; nothing is asked', () => {
