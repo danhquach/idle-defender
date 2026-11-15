@@ -690,7 +690,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     });
     headRow.append(
       el('span', 'rv-ttl', 'Choose a gun'),
-      el('span', 'rv-left', `By dmg/s · stash ${game.armoury.length}/${STASH_CAP}`),
+      el('span', 'rv-left', `By DPS · stash ${game.armoury.length}/${STASH_CAP}`),
       back,
     );
     const out: HTMLElement[] = [headRow];
@@ -729,7 +729,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
         const change = el('td', 'rv-chg', r.change);
         if (r.tone) change.dataset.tone = r.tone;
         // The dmg/s row is theirs (ID-152); the gun's own numbers follow.
-        const label = r.label === 'dmg/s' ? `${d.name}'s dmg/s` : r.label;
+        const label = r.label === 'DPS' ? `${d.name}'s DPS` : r.label;
         tr.append(el('th', '', label), el('td', '', r.now), el('td', '', r.next), change);
         for (const th of tr.querySelectorAll('th')) th.scope = 'row';
         body.append(tr);
@@ -792,7 +792,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       el(
         'p',
         'rv-hint',
-        `Frame colour = rarity. dmg/s is ${d.name}'s, level and profession counted; ▲ ▼ compare it with the gun held now.${
+        `Frame colour = rarity. DPS is ${d.name}'s, level and profession counted; ▲ ▼ compare it with the gun held now.${
           fighter
             ? ` ★ suits a ${JOBS[d.job].name}: the profession's bonus works only with these.`
             : ''

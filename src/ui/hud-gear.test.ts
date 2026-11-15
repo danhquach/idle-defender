@@ -106,7 +106,7 @@ describe('the drop on the result screen (ID-067)', () => {
   });
 
   it('a drop weaker than the whole full stash is the one thrown away, and says so', () => {
-    // Relic Pump Shotguns, the most dmg/s of any gun (ID-135), so the drop is the weakest.
+    // Relic Pump Shotguns, the most DPS of any gun (ID-135), so the drop is the weakest.
     const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'shotgun', 'relic'));
     const g = squadGame(1, 2, stash);
     const won = ended(g, 'won');
@@ -130,7 +130,7 @@ describe('the gun pickers (ID-067)', () => {
   const rifle = gun('h1', 'rifle', 'military');
   const smg = gun('h2', 'smg', 'rusty');
 
-  it('ranks and labels by dmg/s in the survivor’s hands, as the Roster does (ID-152)', () => {
+  it('ranks and labels by DPS in the survivor’s hands, as the Roster does (ID-152)', () => {
     const sniper = gun('h1', 'sniper', 'common');
     const assault = gun('h2', 'assault', 'common');
     const g0 = squadGame(1, 3, [assault, sniper]);
@@ -145,7 +145,7 @@ describe('the gun pickers (ID-067)', () => {
     expect(row.options.map((o) => o.value)).toEqual(['h1', 'h2', 'pistol']);
     expect(row.options[0]!.label).toBe(`★ ${gunOption(sniper, survivorDps(who, sniper))}`);
     expect(
-      row.options[0]!.label.startsWith(`★ ${survivorDps(who, sniper).toFixed(1)} dmg/s · `),
+      row.options[0]!.label.startsWith(`★ ${survivorDps(who, sniper).toFixed(1)} DPS · `),
     ).toBe(true);
   });
 
@@ -177,9 +177,9 @@ describe('the gun pickers (ID-067)', () => {
     );
     // The number first in a picker, so a closed select never cuts it off; last on the drop line.
     // Without a survivor it is the gun's own, and says so.
-    expect(gunOption('pistol')).toBe('8.3 gun dmg/s · Lv 1 Pistol · All-rounder');
-    expect(gunOption('pistol', 9.04)).toBe('9.0 dmg/s · Lv 1 Pistol · All-rounder');
-    expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 gun dmg/s');
+    expect(gunOption('pistol')).toBe('8.3 DPS · Lv 1 Pistol · All-rounder');
+    expect(gunOption('pistol', 9.04)).toBe('9.0 DPS · Lv 1 Pistol · All-rounder');
+    expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 DPS');
   });
 
   function page() {
@@ -241,9 +241,9 @@ describe('the gun pickers (ID-067)', () => {
     const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
     const name = g.roster[0]!.name;
     expect(root.querySelector<HTMLLabelElement>(`label[for="${select.id}"]`)!.textContent).toBe(
-      `dmg/s with ${name}`,
+      `DPS with ${name}`,
     );
-    expect(select.getAttribute('aria-label')).toBe(`${name}'s gun, dmg/s with ${name}`);
+    expect(select.getAttribute('aria-label')).toBe(`${name}'s gun, DPS with ${name}`);
   });
 
   it('a new result screen clears the pickers until they are drawn again', () => {
@@ -268,10 +268,10 @@ describe('the gun pickers (ID-067)', () => {
     const imgs = [...root.querySelectorAll('.hud-result img')];
     expect(imgs.every((i) => i.closest('.hud-skill-option'))).toBe(true);
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
-    expect(root.querySelector('.squad-card-gear label')!.textContent).toBe(`dmg/s with ${evil}`);
+    expect(root.querySelector('.squad-card-gear label')!.textContent).toBe(`DPS with ${evil}`);
     // The name reaches the picker's accessible name as an attribute's text only (ID-166).
     const select = root.querySelector('.squad-card-gear select')!;
-    expect(select.getAttribute('aria-label')).toBe(`${evil}'s gun, dmg/s with ${evil}`);
+    expect(select.getAttribute('aria-label')).toBe(`${evil}'s gun, DPS with ${evil}`);
     expect(root.querySelector('.squad-card-gear option')!.textContent).toBe(evil);
   });
 
@@ -297,7 +297,7 @@ describe('the debrief layout (ID-067)', () => {
     return { root, h };
   }
 
-  it('every dmg/s figure on the debrief says whose it is: the gun alone or a survivor (ID-166)', () => {
+  it('every DPS figure on the debrief says whose it is: the gun alone or a survivor (ID-166)', () => {
     const { root, h } = page();
     const g = squadGame(2, 3, [gun('h1', 'rifle', 'military')]);
     const won = ended(g, 'won');
@@ -309,9 +309,9 @@ describe('the debrief layout (ID-067)', () => {
     for (const s of selects) {
       const name = g.roster.find((d) => d.id === s.dataset.defender)!.name;
       const caption = root.querySelector(`label[for="${s.id}"]`)!;
-      expect(caption.textContent).toBe(`dmg/s with ${name}`);
+      expect(caption.textContent).toBe(`DPS with ${name}`);
       expect(caption.classList.contains('sr-only')).toBe(false);
-      expect(s.getAttribute('aria-label')).toBe(`${name}'s gun, dmg/s with ${name}`);
+      expect(s.getAttribute('aria-label')).toBe(`${name}'s gun, DPS with ${name}`);
     }
     // Everywhere else, every figure is the gun's own or names its survivor.
     const names = g.roster.map((d) => d.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
@@ -324,11 +324,11 @@ describe('the debrief layout (ID-067)', () => {
         .filter(outside)
         .flatMap((e) => [e.getAttribute('title') ?? '', e.getAttribute('aria-label') ?? '']),
     ].join(' | ');
-    const figures = [
-      ...said.matchAll(new RegExp(`\\d+\\.\\d (gun )?dmg/s( with (?:${names}))?`, 'g')),
-    ];
-    expect(figures.some((m) => m[1])).toBe(true);
-    for (const m of figures) expect(Boolean(m[1]) || Boolean(m[2]), m[0]).toBe(true);
+    // A bare "17.2 DPS" is the gun's own (ID-176); a survivor's always says "with <name>".
+    const figures = [...said.matchAll(/\d+\.\d DPS( with)?/g)];
+    expect(figures.some((m) => !m[1])).toBe(true);
+    const theirs = [...said.matchAll(new RegExp(`\\d+\\.\\d DPS with (?:${names})\\b`, 'g'))];
+    expect(theirs).toHaveLength(figures.filter((m) => m[1]).length);
   });
 
   it('a win: waves chip, the drop as a loot tile, the recruit tile, a card per level-up', () => {
@@ -500,7 +500,7 @@ describe('the debrief layout (ID-067)', () => {
     );
     const full = squadGame(1, 1, relics);
     // Horde 1 drops Rusty or Common (a Pistol at Military, ID-135): always weaker than a stash
-    // of Relic Pump Shotguns, the most dmg/s of any gun.
+    // of Relic Pump Shotguns, the most DPS of any gun.
     const drop = squadDrop(full, ended(full, 'won'))!;
     expect(drop.thrown[0]).toBe(drop.weapon);
     h.showResult(squadScreen(full, ended(full, 'won')));
@@ -688,7 +688,7 @@ describe('bonus guns on the result screen (ID-122)', () => {
       const lost = drop.thrown.includes(drop.bonus[i]!);
       expect(row.classList.contains('tile-bonus-lost')).toBe(lost);
       expect(row.querySelector('.tile-bonus-power')!.textContent).toBe(
-        lost ? 'Thrown away' : `${gunPower(drop.bonus[i]!).toFixed(1)} dmg/s`,
+        lost ? 'Thrown away' : `${gunPower(drop.bonus[i]!).toFixed(1)} DPS`,
       );
     }
     expect(rows.some((r) => r.classList.contains('tile-bonus-lost'))).toBe(true);

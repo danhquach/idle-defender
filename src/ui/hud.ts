@@ -1131,16 +1131,16 @@ export const levelLabel = (h: Held): string =>
     : levelName(h);
 
 /**
- * A dmg/s figure that says whose it is (ID-166): "17.2 gun dmg/s", the gun's own, or
- * "46.1 dmg/s with Ivan", in a survivor's hands (their level and profession counted).
+ * A dmg/s figure that says whose it is (ID-166): "17.2 DPS", the gun's own, or
+ * "46.1 DPS with Ivan", in a survivor's hands (their level and profession counted).
  */
-export const gunDpsText = (dps: number): string => `${dps.toFixed(1)} gun dmg/s`;
-/** "dmg/s with Ivan": what a survivor's figures are, on their gun picker (ID-166). */
-export const dpsCaption = (name: string): string => `dmg/s with ${name}`;
+export const gunDpsText = (dps: number): string => `${dps.toFixed(1)} DPS`;
+/** "DPS with Ivan": what a survivor's figures are, on their gun picker (ID-166). */
+export const dpsCaption = (name: string): string => `DPS with ${name}`;
 export const dpsWith = (dps: number, name: string): string =>
   `${dps.toFixed(1)} ${dpsCaption(name)}`;
 
-/** "Lv 12 Military Rifle (+7% damage) · 17.2 gun dmg/s": a gun's name and affixes, and how hard it hits over time. */
+/** "Lv 12 Military Rifle (+7% damage) · 17.2 DPS": a gun's name and affixes, and how hard it hits over time. */
 export const gunLabel = (h: Held): string => `${levelLabel(h)} · ${gunDpsText(gunPower(h))}`;
 
 /**
@@ -1180,7 +1180,7 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
 }
 
 /**
- * "30.3 dmg/s · Lv 4 Prototype LMG · Suppression (+12% damage)": a picker option, the
+ * "30.3 DPS · Lv 4 Prototype LMG · Suppression (+12% damage)": a picker option, the
  * number first so a closed select keeps it, then the gun and its role (ID-101), then its
  * affixes. With `dps`, the figure is a survivor's (ID-152), and their picker's caption
  * says whose (`dpsCaption`, ID-166), so the gun's name keeps its room; without, it is
@@ -1189,7 +1189,7 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
 export const gunOption = (h: Held, dps?: number): string => {
   const role = roleOf(baseOf(h));
   const affixes = affixLines(h, true);
-  const figure = dps === undefined ? gunDpsText(gunPower(h)) : `${dps.toFixed(1)} dmg/s`;
+  const figure = dps === undefined ? gunDpsText(gunPower(h)) : `${dps.toFixed(1)} DPS`;
   return `${figure} · ${levelName(h)}${role ? ` · ${role.role}` : ''}${
     affixes.length > 0 ? ` (${affixes.join(', ')})` : ''
   }`;
@@ -1277,7 +1277,7 @@ export interface DropTile {
   affixes: string;
   /** "Marksman: +10% crit chance": the gun's role and built-in trait (ID-101). */
   role: string;
-  /** "17.2 gun dmg/s": the gun's own (ID-166). */
+  /** "17.2 DPS": the gun's own (ID-166). */
   power: string;
   /**
    * "Stash 15/40" after the win's guns are in (bonus ones too), with " · thrown away"
@@ -1441,7 +1441,7 @@ export interface BonusRow {
   rarity: Rarity;
   /** "Lv 5 Rusty SMG" */
   name: string;
-  /** "9.1 gun dmg/s" */
+  /** "9.1 DPS" */
   power: string;
   icon: ArtId;
   /** Thrown away: the stash full of better guns. */

@@ -487,9 +487,9 @@ describe('gun level wherever the gun shows (ID-098)', () => {
     const w = gun('a', 12);
     expect(levelName(w)).toBe('Lv 12 Military Carbine');
     expect(levelLabel(w)).toBe('Lv 12 Military Carbine (+7% damage)');
-    expect(gunLabel(w)).toMatch(/^Lv 12 Military Carbine \(\+7% damage\) · [\d.]+ gun dmg\/s$/);
+    expect(gunLabel(w)).toMatch(/^Lv 12 Military Carbine \(\+7% damage\) · [\d.]+ DPS$/);
     expect(gunOption(w)).toMatch(
-      /^[\d.]+ gun dmg\/s · Lv 12 Military Carbine · Marksman \(\+7% damage\)$/,
+      /^[\d.]+ DPS · Lv 12 Military Carbine · Marksman \(\+7% damage\)$/,
     );
     expect(levelLabel('pistol')).toBe('Lv 1 Pistol');
     expect(levelLabel(gun('b'))).toBe('Lv 1 Military Carbine (+7% damage)');
