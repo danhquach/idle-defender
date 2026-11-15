@@ -933,8 +933,16 @@ export function start(root: HTMLElement, art: Art): void {
     sound.music(horde?.outcome === 'fighting' ? 'horde' : 'camp', sting);
     sound.pump();
     if (horde) {
-      // A pick, the end of the fight or a cooldown puts an armed skill away.
-      if (armed && skillLock(horde, armed) !== null) armed = null;
+      // The end of the fight or a cooldown puts an armed skill away. A card offer only
+      // locks skills for the moment: the pick keeps what was armed armed (ID-159).
+      if (
+        armed &&
+        horde.offer === null &&
+        horde.replace === null &&
+        skillLock(horde, armed) !== null
+      ) {
+        armed = null;
+      }
       // Start Horde's ease: the camp shows until the clip has slid to the frame's edge.
       let t = 1;
       if (ease) {

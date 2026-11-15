@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FIELD, HORDE_ONLY, SKILLS, STASH_CAP } from '../core/data.ts';
 import { rollWeapon } from '../core/armoury.ts';
+import { rollOffer } from '../core/cards.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
@@ -958,6 +959,36 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     key('w');
     key('e');
     expect(root.querySelector(HIDDEN)).toBeNull();
+  });
+
+  it('an armed Airstrike stays armed when a card offer opens and is picked (ID-159)', () => {
+    const { root, button } = boot();
+    step(0);
+    button().click();
+    step(16);
+    const [flash] = shown(root);
+    flash!.click();
+    step(32);
+    const caption = root.querySelector<HTMLElement>('.hud-aim-caption')!;
+    expect(caption.hidden).toBe(false);
+    // A level-up offer opens on the next fight frame.
+    const real = vi.mocked(tick).getMockImplementation()!;
+    vi.mocked(tick).mockImplementationOnce((s, dt) => {
+      const next = real(s, dt);
+      return { ...next, offer: rollOffer(createRng(1), next) };
+    });
+    step(48);
+    expect(root.querySelector<HTMLElement>('.hud-cards')!.hidden).toBe(false);
+    // The offer only holds skills, it does not put the armed one away.
+    expect(caption.hidden).toBe(false);
+    key('1');
+    step(64);
+    expect(caption.hidden).toBe(false);
+    expect(flash!.getAttribute('aria-pressed')).toBe('true');
+    // Still armed, so the click throws the strike.
+    clickField(root, 1100, 300);
+    step(80);
+    expect(vi.mocked(drawScene).mock.lastCall![2].incoming).toHaveLength(SKILLS.airstrike.count);
   });
 
   it('the Airstrike arms with a caption, the area shows at the pointer, Esc or a second press cancels (ID-107, ID-139)', () => {

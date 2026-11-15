@@ -499,7 +499,8 @@ export function skillButtons(
       ),
       disabled: lock !== null,
       reason: lock ?? `${AIM_HINT[SKILLS[skill].aim]}${key ? ` (key ${key})` : ''}`,
-      armed: lock === null && skill === armed,
+      // Still pressed while a card offer holds the skills: the pick leaves it armed (ID-159).
+      armed: skill === armed && (lock === null || s.offer !== null || s.replace !== null),
       hidden: free && slot < 0,
       key,
       cooling: left > 0,
