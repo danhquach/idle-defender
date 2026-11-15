@@ -611,12 +611,13 @@ body {
   }
 }
 
-/* The number key sits in the plate's corner, out of the text's way. */
+/* The number key (ID-177): large and centred at the card's top, so 1, 2, 3 read at a glance. */
 .hud-card-has-art .hud-card-key {
-  position: absolute;
-  top: var(--space-4);
-  left: var(--space-6);
-  z-index: 1;
+  align-self: center;
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text);
 }
 
 /* On a wide screen the cards grow, so a choice that holds the fight reads easily. */
@@ -662,6 +663,17 @@ body {
 
 .hud-card-title {
   font-weight: 600;
+}
+
+/* The card's name, its tag and its rarity line, centred under the key (ID-177); the
+   body stays left for reading. */
+.hud-card-has-art .hud-card-title,
+.hud-card-has-art .hud-card-kind {
+  text-align: center;
+}
+
+.hud-card-has-art .hud-card-tag {
+  align-self: center;
 }
 
 .hud-card-body {
@@ -4934,9 +4946,12 @@ body {
     margin-top: var(--space-6);
   }
 
-  /* Placed by the card's corner, not by a grid column. */
-  .hud-card-has-art > .hud-card-key {
-    grid-column: auto;
+  /* Stacked, the key, name, tag and rarity line centre over the text column (ID-177). */
+  .hud-card-has-art > .hud-card-key,
+  .hud-card-has-art > .hud-card-title,
+  .hud-card-has-art > .hud-card-tag,
+  .hud-card-has-art > .hud-card-kind {
+    justify-self: center;
   }
 
   .hud-card-has-art > .hud-card-art {
