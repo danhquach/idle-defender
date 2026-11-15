@@ -3,6 +3,7 @@
 // slot Incendiary and Shock Rounds share; and what each offer card says it gives.
 import { describe, expect, it } from 'vitest';
 import {
+  AMMO_CARDS,
   chooseCard,
   crowded,
   effectAt,
@@ -1384,5 +1385,30 @@ describe('Flashbang and Molotov say they are thrown, and how often (ID-139 desig
       expect(m.value).toBe(`${CARD.molotov.seconds[n - 1]} s`);
       expect(m.post).toContain('enemies move 30% faster in the flames');
     }
+  });
+});
+
+describe('replace warnings (ID-161)', () => {
+  it('every pick that drops a held card says so, whichever card is Unique', () => {
+    let drops = 0;
+    for (const held of UPGRADE_IDS) {
+      for (const id of UPGRADE_IDS) {
+        if (id === held) continue;
+        const s = at(held, 1);
+        const warning = pitch(s, id).replace?.warning;
+        const dropped = !picked(s, id).taken.includes(held);
+        expect(warning !== undefined, `${id} over ${held}`).toBe(dropped);
+        if (dropped) expect(warning).toMatch(new RegExp(`^Replaces ${UPGRADES[held].name}\\b`));
+        if (dropped) drops++;
+      }
+    }
+    // Each card of a slot drops each other card of that slot, and nothing else drops.
+    const pairs = (n: number): number => n * (n - 1);
+    expect(drops).toBe(pairs(AMMO_CARDS.length) + pairs(THROWABLE_CARDS.length));
+    expect(drops).toBeGreaterThan(0);
+    // As reported: Frag Grenades leaves Concussion Rounds held, so it warns of nothing.
+    const s = picked(at('concussion-rounds', 1), 'frag-grenades');
+    expect(s.taken).toEqual(expect.arrayContaining(['concussion-rounds', 'frag-grenades']));
+    expect(pitch(at('concussion-rounds', 1), 'frag-grenades').replace).toBeUndefined();
   });
 });
