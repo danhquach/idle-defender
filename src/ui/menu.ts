@@ -3,7 +3,7 @@
 // fight the game loop holds the fight while it is open. The field behind is inert and
 // focus stays inside until it closes, then goes back to the Menu button.
 import { CHATTER_LEVELS, type ChatterLevel } from '../core/chatter.ts';
-import { BOSS_SKILL, HORDE_ONLY } from '../core/data.ts';
+import { BOSS_SKILL, HORDE_ONLY, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -113,7 +113,7 @@ const SQUAD_HOW_TO_PLAY: Steps = [
   ],
   [
     'Arm the squad.',
-    'Every win drops a gun into the stash (20 at most). Between hordes, pick each survivor’s gun.',
+    `Every win drops a gun into the stash (${STASH_CAP} at most). Between hordes, pick each survivor’s gun.`,
   ],
   ['Lose and retry.', 'A loss costs nothing: the same horde comes again with everyone back.'],
   ['Beat the boss.', 'Every 10th horde ends with a boss.'],

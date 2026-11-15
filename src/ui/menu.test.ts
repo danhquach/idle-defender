@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ID-039: the Menu — its button and Esc, focus kept inside, the Save tab's code, load and
 // new camp (asked first, off in a fight), the save-problem dot, Reduce motion, Sound and Help.
-import { JOB_IDS } from '../core/data.ts';
+import { JOB_IDS, STASH_CAP } from '../core/data.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
@@ -523,6 +523,11 @@ describe('the Menu', () => {
     expect(help.textContent).toMatch(
       /Orange ring under an enemy.*nearby roared.*moves faster for 4 s/,
     );
+  });
+
+  it('Help gives the stash limit the game uses (ID-158)', () => {
+    const help = setup().panel('help').textContent ?? '';
+    expect(help).toContain(`into the stash (${STASH_CAP} at most)`);
   });
 
   it('Help lists no pan or zoom: the field is one fixed frame (ID-064)', () => {
