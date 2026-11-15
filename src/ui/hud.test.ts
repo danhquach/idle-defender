@@ -30,8 +30,10 @@ import {
   statusText,
   stockText,
   swarmCue,
+  swarmEdge,
   swarmMarker,
   SWARM_CUE,
+  SWARM_EDGE,
 } from './hud.ts';
 import { loadoutFrom } from '../core/loadout.ts';
 import { cardText } from './hud.ts';
@@ -123,6 +125,23 @@ describe('hud', () => {
     expect(swarmCue({ ...s, time: 10 + SWARM_CUE })).toBeNull();
     expect(swarmCue({ ...s, time: 9, outcome: 'lost' })).toBeNull();
     expect(swarmCue({ ...s, time: 10, outcome: 'won' })).toBeNull();
+  });
+
+  it("flashes the swarm edge glow for the wave's first 8 s, apart from the banner (ID-175)", () => {
+    const s = newHorde(1, setup());
+    s.breakUntil = 10;
+    expect(swarmEdge({ ...s, time: 10 })).toBe(false);
+    s.swarm = true;
+    expect(SWARM_EDGE).toBe(8);
+    expect(SWARM_EDGE).toBeGreaterThan(SWARM_CUE);
+    expect(swarmEdge({ ...s, time: 9.99 })).toBe(false);
+    expect(swarmEdge({ ...s, time: 10 })).toBe(true);
+    expect(swarmEdge({ ...s, time: 10 + SWARM_CUE })).toBe(true);
+    expect(swarmCue({ ...s, time: 10 + SWARM_CUE })).toBeNull();
+    expect(swarmEdge({ ...s, time: 10 + SWARM_EDGE - 0.01 })).toBe(true);
+    expect(swarmEdge({ ...s, time: 10 + SWARM_EDGE })).toBe(false);
+    expect(swarmEdge({ ...s, time: 11, outcome: 'won' })).toBe(false);
+    expect(swarmEdge({ ...s, time: 11, outcome: 'lost' })).toBe(false);
   });
 
   it('marks a swarm wave from its break to its end (ID-121)', () => {

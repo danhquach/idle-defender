@@ -923,6 +923,19 @@ export function swarmCue(
   }
   return s.time < s.breakUntil + SWARM_CUE ? { phase: 'hit', title: 'Swarm!', count: '' } : null;
 }
+/** How long the red edge glow flashes once a swarm wave's enemies start coming (ID-175), in s. */
+export const SWARM_EDGE = 8;
+/** Whether the swarm's red edge glow shows (ID-175): its wave's first `SWARM_EDGE` s, timed apart from the banner. */
+export function swarmEdge(
+  s: Pick<HordeState, 'swarm' | 'outcome' | 'time' | 'breakUntil'>,
+): boolean {
+  return (
+    s.swarm &&
+    s.outcome === 'fighting' &&
+    s.time >= s.breakUntil &&
+    s.time < s.breakUntil + SWARM_EDGE
+  );
+}
 /**
  * The swarm marker (ID-121): from the break before a swarm wave until it ends, that is
  * until the last of its enemies is down. Horde-only waves overlap, so the counter can move
@@ -1953,8 +1966,8 @@ export function createHud(
   swarm.append(swarmTitle, swarmCount);
   swarm.hidden = true;
   // A red glow at the field's edges while a swarm hits (ID-121).
-  const swarmEdge = el('div', 'hud-swarm-edge');
-  swarmEdge.hidden = true;
+  const swarmEdgeEl = el('div', 'hud-swarm-edge');
+  swarmEdgeEl.hidden = true;
   // Fight speed and the Space pause (ID-062), top right beside the Menu button.
   const speed = el('div', 'hud-speed');
   speed.setAttribute('role', 'group');
@@ -2286,7 +2299,7 @@ export function createHud(
   result.hidden = true;
   hud.append(
     pausedVeil,
-    swarmEdge,
+    swarmEdgeEl,
     bar,
     speed,
     boss,
@@ -2951,7 +2964,7 @@ export function createHud(
       });
       const cue = swarmCue(state);
       swarm.hidden = cue === null;
-      swarmEdge.hidden = cue?.phase !== 'hit';
+      swarmEdgeEl.hidden = !swarmEdge(state);
       if (cue) {
         swarm.classList.toggle('hud-swarm-hit', cue.phase === 'hit');
         if (swarmTitle.textContent !== cue.title) swarmTitle.textContent = cue.title;
