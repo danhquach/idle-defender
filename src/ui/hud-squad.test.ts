@@ -15,9 +15,13 @@ import {
   defenderLabel,
   enemiesLeft,
   EVACUATION_TITLE,
+  joinedCard,
   lossXpText,
+  NEW_BADGE,
   powerLine,
   SQUAD_LOSS_RULE,
+  SQUAD_NO_LEVEL_UPS,
+  squadGear,
   squadScreen,
   squadStart,
   squadStatus,
@@ -541,5 +545,174 @@ describe('mid-fight swaps on the HUD (ID-148)', () => {
     expect(note.hidden).toBe(true);
     h.update(startSquadHorde(benchGame(0), 1, NOW));
     expect(chip.hidden).toBe(true);
+  });
+});
+
+describe('a survivor just accepted into the squad (ID-157)', () => {
+  function hud() {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    const result = root.querySelector<HTMLElement>('.hud-result')!;
+    const foot = root.querySelector<HTMLElement>('.hud-result-foot')!;
+    // jsdom has no layout: the panel's scroll offset is kept here.
+    let top = 0;
+    Object.defineProperty(result, 'scrollTop', {
+      get: () => top,
+      set: (v: number) => (top = v),
+      configurable: true,
+    });
+    const rect = (el: Element, t: number, b: number): void => {
+      vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({ top: t, bottom: b } as DOMRect);
+    };
+    return { root, h, result, foot, rect, scroll: () => top };
+  }
+  /** Survivor 2 of `g` as just accepted; `g`'s first levels up on a win when `up`. */
+  function joined(up: boolean): { g: GameState; won: GameState } {
+    // Just into Lv 2: a win's XP doesn't reach Lv 3. One short of it levels.
+    const g = squadGame(1, 1, up ? xpForLevel(2) - 1 : xpForLevel(2));
+    return { g, won: { ...g, roster: [...g.roster, recruit(2)] } };
+  }
+  const card = (root: ParentNode, id: string) =>
+    [...root.querySelectorAll<HTMLElement>('.squad-card')].find((c) => c.dataset.defender === id);
+
+  it('joinedCard: their plain card marked fresh; null for anyone not in the squad', () => {
+    const { won } = joined(false);
+    const c = joinedCard(won, 'recruit-2')!;
+    expect(c).toMatchObject({ id: 'recruit-2', name: recruit(2).name, level: 1, fresh: true });
+    expect(c.levelUp).toBe(false);
+    expect(c.xp).toBeNull();
+    expect(joinedCard(won, 'recruit-9')).toBeNull();
+    // Benched (past the squad's cap) is not in the squad.
+    const seven = squadGame(7);
+    expect(joinedCard(seven, 'recruit-7')).toBeNull();
+  });
+
+  it('a win with a level-up: their card goes after it, marked New once however often shown', () => {
+    const { root, h } = hud();
+    const { g, won } = joined(true);
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    expect(card(root, 'recruit-1')).toBeDefined();
+    const c = joinedCard(won, 'recruit-2')!;
+    h.showJoined(c);
+    h.showJoined(c);
+    const ids = [...root.querySelectorAll<HTMLElement>('.squad-card')].map(
+      (x) => x.dataset.defender,
+    );
+    expect(ids).toEqual(['recruit-1', 'recruit-2']);
+    const fresh = card(root, 'recruit-2')!;
+    expect(fresh.classList.contains('squad-card-new')).toBe(true);
+    expect([...fresh.querySelectorAll('.squad-badge-new')].map((b) => b.textContent)).toEqual([
+      NEW_BADGE,
+    ]);
+    // The level-up keeps its own badge and is not marked New.
+    expect(card(root, 'recruit-1')!.classList.contains('squad-card-new')).toBe(false);
+  });
+
+  it('a win with no level-up: the "nobody levelled up" line gives way to the Squad with their card', () => {
+    const { root, h } = hud();
+    const { g, won } = joined(false);
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    expect(root.querySelector('.debrief-empty')).not.toBeNull();
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    expect(root.querySelector('.debrief-empty')).toBeNull();
+    expect(root.querySelectorAll('.debrief-squad')).toHaveLength(1);
+    expect(root.querySelector('.debrief-squad .debrief-stash')).not.toBeNull();
+    expect(card(root, 'recruit-2')!.classList.contains('squad-card-new')).toBe(true);
+  });
+
+  it('the start screen: their card already there is marked, not added again', () => {
+    const { root, h } = hud();
+    const { won } = joined(false);
+    h.showResult(squadStart(won));
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    expect(root.querySelectorAll('.squad-card')).toHaveLength(2);
+    expect(
+      [...root.querySelectorAll<HTMLElement>('.squad-card-new')].map((c) => c.dataset.defender),
+    ).toEqual(['recruit-2']);
+  });
+
+  it('scrolls a card under the pinned footer up just clear of it', () => {
+    const { root, h, result, foot, rect, scroll } = hud();
+    const { won } = joined(false);
+    h.showResult(squadStart(won));
+    rect(result, 0, 600);
+    rect(foot, 400, 600);
+    rect(card(root, 'recruit-2')!, 500, 600);
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    // Its bottom to 8 px above the footer: 600 - (400 - 8).
+    expect(scroll()).toBe(208);
+  });
+
+  it('scrolls a card above the panel’s top down to it, and leaves one in view alone', () => {
+    const { root, h, result, foot, rect, scroll } = hud();
+    const { won } = joined(false);
+    h.showResult(squadStart(won));
+    result.scrollTop = 300;
+    rect(result, 0, 600);
+    rect(foot, 400, 600);
+    const c = card(root, 'recruit-2')!;
+    rect(c, -100, 0);
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    expect(scroll()).toBe(192);
+    rect(c, 100, 300);
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    expect(scroll()).toBe(192);
+  });
+
+  it('a card taller than the space shows from its top', () => {
+    const { root, h, result, foot, rect, scroll } = hud();
+    const { won } = joined(false);
+    h.showResult(squadStart(won));
+    rect(result, 0, 600);
+    rect(foot, 400, 600);
+    rect(card(root, 'recruit-2')!, 100, 900);
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    expect(scroll()).toBe(92);
+  });
+
+  it('does nothing with the result screen down', () => {
+    const { root, h } = hud();
+    const { won } = joined(false);
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    expect(root.querySelector('.squad-card')).toBeNull();
+  });
+
+  it('two accepted in a row: both cards are marked New', () => {
+    const { root, h } = hud();
+    const { g, won } = joined(false);
+    const both = { ...won, roster: [...won.roster, recruit(3)] };
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    h.showJoined(joinedCard(both, 'recruit-2')!);
+    h.showJoined(joinedCard(both, 'recruit-3')!);
+    const marked = [...root.querySelectorAll<HTMLElement>('.squad-card-new')];
+    expect(marked.map((c) => c.dataset.defender)).toEqual(['recruit-2', 'recruit-3']);
+  });
+
+  it('benched or let go from the Roster since: their New card goes, and the empty line comes back', () => {
+    const { root, h } = hud();
+    const { g, won } = joined(false);
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    h.showGear(squadGear(won), noop);
+    expect(card(root, 'recruit-2')!.querySelector('select')).not.toBeNull();
+    // Recruit 2 benched: the squad is recruit 1 alone again.
+    h.showGear(squadGear({ ...won, roster: g.roster, reserve: [recruit(2)] }), noop);
+    expect(card(root, 'recruit-2')).toBeUndefined();
+    expect(root.querySelector('.debrief-empty')!.textContent).toBe(SQUAD_NO_LEVEL_UPS);
+    expect(root.querySelector('.debrief-stash')!.textContent).not.toBe('');
+  });
+
+  it('a level-up card stays when the newcomer is benched', () => {
+    const { root, h } = hud();
+    const { g, won } = joined(true);
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    h.showGear(squadGear({ ...won, roster: g.roster, reserve: [recruit(2)] }), noop);
+    const ids = [...root.querySelectorAll<HTMLElement>('.squad-card')].map(
+      (x) => x.dataset.defender,
+    );
+    expect(ids).toEqual(['recruit-1']);
+    expect(root.querySelector('.debrief-empty')).toBeNull();
   });
 });

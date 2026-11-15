@@ -1273,6 +1273,49 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     expect(toast()).toBe(`${asking.name} joins the squad.`);
   });
 
+  it('Accept on a win: the newcomer’s card joins the Squad section, marked New (ID-157)', () => {
+    const { press, result, saved } = wonFirst();
+    const asking = saved().joining![0]!;
+    const cards = () => [...result().querySelectorAll<HTMLElement>('.squad-card')];
+    expect(cards().map((c) => c.dataset.defender)).not.toContain(asking.id);
+    press('Accept');
+    const card = cards().find((c) => c.dataset.defender === asking.id)!;
+    expect(card).toBeDefined();
+    expect(card.classList.contains('squad-card-new')).toBe(true);
+    expect(card.querySelector('.squad-badge-new')!.textContent).toBe('New');
+    expect(card.querySelector('.squad-card-name')!.textContent).toBe(asking.name);
+    // No "nobody levelled up" line left beside a card, and the card gets its gun picker.
+    expect(result().querySelector('.debrief-empty')).toBeNull();
+    expect(card.querySelector('select.hud-gear-select')).not.toBeNull();
+    // Only the newcomer is marked.
+    expect(result().querySelectorAll('.squad-card-new')).toHaveLength(1);
+  });
+
+  it('Accept on the start screen after a reload marks their card New (ID-157)', () => {
+    const g = campOf(2);
+    const save = { ...g, camp: { ...g.camp, recruits: 3 }, joining: [recruit(3)] };
+    localStorage.setItem(SAVE_KEY, encodeSave(save, NOW));
+    const { root, saved } = boot();
+    step(0);
+    accept(root);
+    expect(saved().roster.map((d) => d.id)).toContain('recruit-3');
+    const marked = [...root.querySelectorAll<HTMLElement>('.squad-card-new')];
+    expect(marked.map((c) => c.dataset.defender)).toEqual(['recruit-3']);
+    expect(marked[0]!.querySelectorAll('.squad-badge-new')).toHaveLength(1);
+  });
+
+  it('Accept onto the bench (squad full) adds no squad card (ID-157)', () => {
+    const g = campOf(6);
+    const save = { ...g, camp: { ...g.camp, recruits: 7 }, joining: [recruit(7)] };
+    localStorage.setItem(SAVE_KEY, encodeSave(save, NOW));
+    const { root, saved } = boot();
+    step(0);
+    accept(root);
+    expect(saved().reserve.map((d) => d.id)).toContain('recruit-7');
+    expect(root.querySelector('.squad-card-new')).toBeNull();
+    expect(root.querySelector('.squad-card[data-defender="recruit-7"]')).toBeNull();
+  });
+
   it('Refuse: gone for good, saved at once; the button then goes on with no question', () => {
     const confirm = vi.fn<(q: string) => boolean>(() => true);
     vi.stubGlobal('confirm', confirm);
