@@ -11,9 +11,8 @@ import { recruit } from '../camp.ts';
 import { chooseCard } from '../cards.ts';
 import { newGame, type GameState } from '../game.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
-import { startSquadHorde } from '../hordeonly.ts';
 import { cacheFor } from './cache.ts';
-import { SEEDS } from './shared.ts';
+import { cardFight, SEEDS } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
@@ -47,7 +46,7 @@ function weakest(s: HordeState): number {
 function wins(game: GameState, card: UpgradeId | null, wall = 1, seeds = SEEDS): number {
   let won = 0;
   for (let seed = 1; seed <= seeds; seed++) {
-    let s: HordeState = startSquadHorde(game, seed, 0);
+    let s: HordeState = cardFight(game, seed);
     s.research = ['hollow-points', 'field-repairs'];
     let pending = card;
     while (s.outcome === 'fighting') {

@@ -268,7 +268,10 @@ describe('bosses and mini-bosses, fixed by horde number (ID-099)', () => {
   });
 
   it('a mini-boss on every odd horde from Horde 5: an elite Brute or Swollen with one skill', () => {
-    for (let n = 1; n < ELITE.from; n++) expect(hordeBosses(n, true), `Horde ${n}`).toEqual([]);
+    for (let n = 1; n < ELITE.from; n++) {
+      if (n === ELITE.preview.horde) continue;
+      expect(hordeBosses(n, true), `Horde ${n}`).toEqual([]);
+    }
     for (const n of [6, 8]) expect(hordeBosses(n, true), `Horde ${n}`).toEqual([]);
     expect(hordeBosses(5, true)).toEqual([
       {
@@ -287,6 +290,16 @@ describe('bosses and mini-bosses, fixed by horde number (ID-099)', () => {
       expect(ELITE.kinds).toContain(b!.kind);
       expect(b!.skills).toHaveLength(1);
     }
+  });
+
+  it("Horde 4 previews Horde 5's elite in its last wave, at less HP (ID-163)", () => {
+    expect(ELITE.preview.horde).toBe(4);
+    expect(ELITE.preview.hp).toBeLessThan(ELITE.hp);
+    expect(hordeBosses(4, true)).toEqual([
+      { kind: 'brute', skills: ['roar'], wave: waveCount(4), hp: ELITE.preview.hp, elite: true },
+    ]);
+    // The full game has no elites.
+    expect(hordeBosses(4, false)).toEqual([]);
   });
 
   it('from Horde 11, every horde but a boss horde brings one more, with its last wave (ID-128)', () => {

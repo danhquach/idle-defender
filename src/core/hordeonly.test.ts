@@ -238,11 +238,14 @@ describe('the squad in a horde (ID-066)', () => {
   });
 
   it('enemy HP climbs SQUAD_HP_GROWTH.early per horde to the cap, then late', () => {
-    // Hordes 1–3 eased so they're sure wins (ID-097); full growth from Horde 4.
+    // Hordes 1–2 eased so they're sure wins (ID-097); Horde 3 at full growth and Horde 4
+    // a step above it (ID-163), so the wall is threatened before Horde 5.
     expect(squadHpScale(1)).toBe(0.8);
     expect(squadHpScale(2)).toBeCloseTo(0.9 * SQUAD_HP_GROWTH.early, 9);
-    expect(squadHpScale(3)).toBeCloseTo(0.95 * SQUAD_HP_GROWTH.early ** 2, 9);
-    expect(squadHpScale(4)).toBeCloseTo(SQUAD_HP_GROWTH.early ** 3, 9);
+    expect(squadHpScale(3)).toBeCloseTo(SQUAD_HP_GROWTH.early ** 2, 9);
+    expect(squadHpScale(4)).toBeCloseTo(1.2 * SQUAD_HP_GROWTH.early ** 3, 9);
+    // Never above Horde 5's: each of Horde 4's enemies is no tougher than the next horde's.
+    expect(squadHpScale(4)).toBeLessThanOrEqual(squadHpScale(5));
     expect(squadHpScale(SQUAD_CAP)).toBeCloseTo(SQUAD_HP_GROWTH.early ** (SQUAD_CAP - 1), 9);
     // Hordes 8–10 eased (ID-102): Brutes join at 8, the first boss at 10. Full growth from 11.
     for (const [n, ease] of [

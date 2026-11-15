@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { SQUAD_CAP } from '../data.ts';
 import { newGame } from '../game.ts';
 import { playSquadCampaign, playSquadHorde } from '../sim.ts';
+import { recommendedPower } from '../squadpower.ts';
 import { horrorAbility } from '../waves.ts';
 import { cacheFor } from './cache.ts';
 import { SEEDS, winRate } from './shared.ts';
@@ -25,9 +26,9 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
   const firstTry = (n: number) =>
     campaigns.map((runs) => runs.find((r) => r.hordeNumber === n && !r.replay)!);
 
-  // ID-097: Hordes 1–3 are sure wins while the player learns the cards. ID-102 restores the
-  // rest: the expected squad wins Hordes 4–10 at the first try on most seeds; the walls the
-  // player farms past come after the first boss.
+  // ID-097: Hordes 1–3 are sure wins while the player learns the cards (ID-163: Horde 3 may
+  // dent the wall, still won). ID-102 restores the rest: the expected squad wins Hordes 4–10
+  // at the first try on most seeds; the walls the player farms past come after the first boss.
   it('the expected squad wins Hordes 1–3 on every seed, and 4–10 on most, at the first try', () => {
     for (let n = 1; n <= LAST; n++) {
       expect(
@@ -39,6 +40,25 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
     for (let n = 4; n <= LAST; n++) {
       expect(winRate(firstTry(n)), `Horde ${n}`).toBeGreaterThanOrEqual(0.6);
     }
+  });
+
+  // ID-163: pressure builds before Horde 5. Hordes 3 and 4 dent the wall on some seeds
+  // (Horde 4's preview elite, its enemies a step tougher), and the squad's lead over
+  // Recommended Power shrinks steadily into Horde 5 instead of falling from 6× to 1.6×.
+  it('Hordes 3–4 dent the wall on some seeds, and the step into Horde 5 is gentle (ID-163)', () => {
+    // "Visible wall damage" (the ticket): a twentieth of the wall gone.
+    const VISIBLE = 0.95;
+    const dented = [3, 4].flatMap((n) => firstTry(n)).filter((r) => r.wallLeft < VISIBLE).length;
+    expect(dented).toBeGreaterThanOrEqual(4);
+    const lead = (n: number): number => {
+      const xs = firstTry(n)
+        .map((r) => r.power / recommendedPower(n))
+        .sort((a, b) => a - b);
+      return xs[Math.floor(xs.length / 2)]!;
+    };
+    // About 1.3 measured; 6.4 / 1.6 = 4 before ID-163.
+    expect(lead(4) / lead(5)).toBeLessThanOrEqual(1.6);
+    expect(lead(4)).toBeGreaterThan(lead(5));
   });
 
   it('the expected squad is one survivor more per horde won, up to 6', () => {

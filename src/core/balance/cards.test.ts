@@ -10,9 +10,8 @@ import { THROWABLE_CARDS } from '../cards.ts';
 import { WALL } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
 import { rebuildWire, tick, type HordeState, type UpgradeId } from '../horde.ts';
-import { startSquadHorde } from '../hordeonly.ts';
 import { cacheFor } from './cache.ts';
-import { SEEDS } from './shared.ts';
+import { cardFight, SEEDS } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
@@ -62,7 +61,7 @@ function playFresh(
   let out = 0;
   let kills = 0;
   for (let seed = 1; seed <= SEEDS; seed++) {
-    let s: HordeState = startSquadHorde(closeFight(), seed, 0);
+    let s: HordeState = cardFight(closeFight(), seed);
     if (card) {
       s.taken = [card];
       s.cardLevels = { [card]: level };
