@@ -105,13 +105,14 @@ export const SQUAD_WALL: Tier = 'concrete';
 export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.06 } as const;
 /**
  * Enemy HP's factor in horde-only Hordes 1, 2, … on top of the growth, the last one from
- * there on (ID-097, ID-102, ID-128): the first three are sure wins while the player learns
- * the cards; Hordes 8 and 9 soften the step where Brutes join the mix, and Horde 10 the
- * first boss, so the expected squad wins them at the first try on most seeds. From Horde 7
- * on, waves no longer grow (`WAVE_GROWTH.until`), so their size moves into HP.
+ * there on (ID-097, ID-102, ID-128): the first two are sure wins while the player learns
+ * the cards; Horde 3 takes the growth in full and Horde 4 a step more (ID-163), each enemy
+ * no tougher than Horde 5's, so the wall is threatened before Horde 5; Hordes 8 and 9
+ * soften the step where Brutes join the mix, and Horde 10 the first boss, so the expected
+ * squad wins them at the first try on most seeds. From Horde 7 on, waves no longer grow (`WAVE_GROWTH.until`), so their size moves into HP.
  */
 export const SQUAD_EARLY_HP: readonly number[] = [
-  0.8, 0.9, 0.95, 1, 1, 1, 1, 0.85, 0.75, 0.75, 1.15,
+  0.8, 0.9, 1, 1.2, 1, 1, 1, 0.85, 0.75, 0.75, 1.15,
 ];
 /** Survivor XP for a horde-only win, as a multiple of the full game's (`DEFENDER_XP`). */
 export const SQUAD_XP_RATE = 2;
@@ -165,8 +166,9 @@ export const GUN_LEVEL_DAMAGE = 0.06;
  * HP ^ 0.59 × 3.19 before), fitted so a squad at it wins about half the time with the
  * scripted player's cards and skills (ID-128: an average build; with no cards before);
  * × `rec.early` in Hordes 1 to 10
- * (sure wins in Hordes 1 to 4; Hordes 5 to 10 fitted so the scripted campaign's squad
- * stands at about 1.5× it). A swarm wave's HP (already `SWARM.size` times a calm wave's) is
+ * (sure wins in Hordes 1 and 2; Hordes 3 and 4 (ID-163) put the campaign's squad at about
+ * 2.6× and 2.2× it, closing in on Horde 5 in steps; Hordes 5 to 10 fitted so the scripted
+ * campaign's squad stands at about 1.5× it). A swarm wave's HP (already `SWARM.size` times a calm wave's) is
  * weighted `rec.swarm` more (ID-099): it comes twice as fast, so it asks for more dmg/s
  * than its HP alone says. A boss horde's is × `rec.boss` (ID-102): its bosses' skills
  * ask for more than their HP says. Past Horde 10 it is × `rec.late` (ID-136): Heavy Rounds,
@@ -180,7 +182,7 @@ export const POWER = {
   scale: 10,
   rec: {
     k: 3,
-    early: [0.3, 0.6, 1, 1, 1.9, 1.7, 1.25, 1.1, 1.4, 1.25],
+    early: [0.3, 0.6, 2, 2.1, 1.9, 1.7, 1.25, 1.1, 1.4, 1.25],
     late: 1.2,
     swarm: 2,
     boss: 1.12,
@@ -790,7 +792,8 @@ export const BOSSES: {
  * turn by horde, `hp` times its kind's HP and drawn `size` times as big. From Horde `more`
  * (ID-128), every horde that is no boss horde brings one more, with its last wave. An elite
  * Swollen still bursts at the wall, `blast` times as hard: its skill and HP are what get it
- * there.
+ * there. Horde `preview.horde` (ID-163) brings the first one early, at `preview.hp` times its
+ * kind's HP, with its last wave.
  */
 export const ELITE: {
   readonly from: number;
@@ -800,10 +803,12 @@ export const ELITE: {
   readonly blast: number;
   readonly kinds: readonly EnemyKind[];
   readonly skills: readonly BossSkill[];
+  readonly preview: { readonly horde: number; readonly hp: number };
 } = {
   from: 5,
   more: 11,
   hp: 4,
+  preview: { horde: 4, hp: 2.5 },
   size: 1.4,
   blast: 2,
   kinds: ['brute', 'swollen'],

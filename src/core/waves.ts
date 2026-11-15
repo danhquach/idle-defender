@@ -157,6 +157,10 @@ export function hordeBosses(hordeNumber: number, harder: boolean): BossSpec[] {
     elite: true,
   });
   const out: BossSpec[] = [];
+  // ID-163: Horde `preview.horde` brings the first elite's kind and skill early, at
+  // `preview.hp` times its kind's HP, in its last wave, so the wall is threatened before
+  // Horde 5's full elite.
+  if (hordeNumber === ELITE.preview.horde) out.push({ ...elite(0, last), hp: ELITE.preview.hp });
   if (hordeNumber >= ELITE.from && hordeNumber % 2 === 1) {
     out.push(elite((hordeNumber - ELITE.from) / 2, Math.ceil(last / 2)));
   }

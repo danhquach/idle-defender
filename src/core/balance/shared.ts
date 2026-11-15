@@ -5,8 +5,10 @@
 // Fixtures shared by those files; never imported by game code.
 import { rollWeapon } from '../armoury.ts';
 import { recruit } from '../camp.ts';
-import { SQUAD_CAP, type Rarity } from '../data.ts';
+import { SQUAD_CAP, SQUAD_HP_GROWTH, type Rarity } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
+import type { HordeState } from '../horde.ts';
+import { startSquadHorde } from '../hordeonly.ts';
 import { createRng } from '../rng.ts';
 import type { HordeRun } from '../sim.ts';
 import { xpForLevel } from '../stats.ts';
@@ -15,6 +17,21 @@ export const SEEDS = 20;
 
 /** Horde `n` on the starting base with a fresh roster. */
 export const bareGame = (n: number) => ({ ...newGame(), hordeNumber: n });
+
+/**
+ * The card tests' close fight (ID-163): `startSquadHorde`, but Horde 4 as it stood before
+ * ID-163 (enemy HP at the bare growth, no preview elite). Those tests measure a card's worth
+ * in a close fight a few fresh survivors can win, not Horde 4's own difficulty, which the
+ * horde-only campaign test covers; the harder Horde 4 left them nothing to win.
+ */
+export function cardFight(game: GameState, seed: number): HordeState {
+  const s = startSquadHorde(game, seed, 0);
+  if (game.hordeNumber !== 4) return s;
+  // Horde 4 before ID-163: ×1 on three steps of growth, and no elite.
+  s.hpScale = SQUAD_HP_GROWTH.early ** 3;
+  s.bosses = s.bosses.filter((b) => !b.elite);
+  return s;
+}
 
 export const winRate = (runs: HordeRun[]): number =>
   runs.filter((r) => r.outcome === 'won').length / runs.length;

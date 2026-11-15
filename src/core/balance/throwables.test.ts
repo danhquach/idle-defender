@@ -10,10 +10,9 @@ import { recruit } from '../camp.ts';
 import { chooseCard } from '../cards.ts';
 import { newGame, type GameState } from '../game.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
-import { startSquadHorde } from '../hordeonly.ts';
 import { cacheFor } from './cache.ts';
 import { xpForLevel } from '../stats.ts';
-import { SEEDS, squadAt } from './shared.ts';
+import { cardFight, SEEDS, squadAt } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
@@ -34,7 +33,7 @@ function fresh(n: number, size: number): GameState {
 function wins(game: GameState, card: UpgradeId): number {
   let won = 0;
   for (let seed = 1; seed <= 2 * SEEDS; seed++) {
-    let s: HordeState = startSquadHorde({ ...game, skillPick: [] }, seed, 0);
+    let s: HordeState = cardFight({ ...game, skillPick: [] }, seed);
     s = chooseCard({ ...s, offer: [{ kind: 'upgrade', id: card }] }, 0);
     s.offer = null;
     while (s.outcome === 'fighting') {

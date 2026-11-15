@@ -517,9 +517,10 @@ Defenders stand on **posts** the player builds and chooses between.
   - Enemy HP grows ×1.20 per horde up to Horde 6 (the squad grows by a
     survivor a win until then), then ×1.06 (×1.03 before ID-099),
     instead of ×1.17 (§9). Hordes
-    1–3 are eased to ×0.8, ×0.9 and ×0.95 of that (ID-097,
-    `SQUAD_EARLY_HP`), so the first hordes are sure wins while the player
-    learns the cards; Hordes 8, 9 and 10 to ×0.85, ×0.75 and ×0.75 (ID-102:
+    1–2 are eased to ×0.8 and ×0.9 of that (ID-097, `SQUAD_EARLY_HP`), so
+    the first hordes are sure wins while the player learns the cards; Horde 3
+    takes it in full and Horde 4 ×1.2 (ID-163: Hordes 1–4 couldn't be lost,
+    then Horde 5 jumped), each enemy still no tougher than Horde 5's; Hordes 8, 9 and 10 to ×0.85, ×0.75 and ×0.75 (ID-102:
     Brutes join at 8, the first boss comes at 10), so the expected squad wins
     them at the first try on most seeds. Waves stop growing ×1.1 a horde at
     Horde 10 (ID-102, §11 Balance pass).
@@ -1799,7 +1800,8 @@ spacing real hordes have (see the ID-077 note below).
   15 of 20), Hordes 2–7 on 90–100%, and Hordes 8–10 on only 20%, 10% and 10%:
   compounding Sharpshooter and Rapid Fire had carried the late hordes (flat
   steps at the old +20%/+15%/+15% still gave only 70%, 40%, 40%). Decided:
-  Hordes 1–3 are sure wins (enemy HP eased, §5 and §9), Hordes 4–7 are won
+  Hordes 1–3 are sure wins (enemy HP eased, §5 and §9; ID-163: Horde 3 may
+  dent the wall on a few seeds, still won), Hordes 4–7 are won
   at the first try on most seeds, and from Horde 8 the hordes are walls the
   player farms past. The balance pass (ID-102) brought back Hordes 8–10's
   first-try target (at least 60%) and the late-horde test, with farming (§11
@@ -2020,6 +2022,12 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     Charge, Regen in turn). Horde 5: an elite Brute with Roar; 7: an elite
     Swollen with Armour Plates. An elite Swollen still bursts at the wall, 2× as
     hard (its HP and skill are what get it there), so it must die on the way in.
+    Horde 4 previews it (ID-163, `ELITE.preview`): an elite Brute with Roar
+    with the first spawn of its last wave, at 2.5× its HP, so the wall is
+    threatened before Horde 5's (20 seeds, first try: Hordes 3–4 dent the wall
+    below 95% on 5 seeds, against 2; all still won). Grid: 2× dented Horde 4 on
+    2 seeds; 3× and 4× on 3 and 8, but took more of its wall on average (3.1%
+    and 4.8%) than Horde 5's (1.9%); 2.5× takes 2.2%.
     From Horde 11 (ID-128, `ELITE.more`) every horde but a boss horde brings
     one more with the first spawn of its last wave, its kind and skill the next
     in turn after the middle one's (an odd horde's two always differ in kind):
@@ -2825,8 +2833,10 @@ and comes back stronger.
   a swarm wave's (ID-099) weighted 2× on top of its doubled size (it comes
   twice as fast), plus its bosses and mini-bosses at their HP. A boss horde asks
   ×1.12 more (its bosses' skills ask for more than their HP says). Hordes 1 to
-  10 take ×0.3, ×0.6, 1, 1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.4 (×1.33 before ID-137) and ×1.25 of it:
-  Hordes 1–4 sure wins (the expected squad stands at 4–7× it), Hordes 5–10
+  10 take ×0.3, ×0.6, ×2, ×2.1, ×1.9, ×1.7, ×1.25, ×1.1, ×1.4 (×1.33 before ID-137) and ×1.25 of it:
+  Hordes 1–2 sure wins (the expected squad stands at 4–7× it); Hordes 3 and 4
+  (ID-163; 1 and 1 before) put it at about 2.6× and 2.2×, so the readout
+  closes in on Horde 5's 1.6× in steps instead of falling from over 6×; Hordes 5–10
   fitted so the scripted campaign's squad stands at about 1.5× it, where it
   wins 75–95% at the first try (at Hordes 9 and 10 a squad at it wins about
   half). Past Horde 10 it takes ×1.2 (ID-136: Heavy Rounds, unlocked by
@@ -2933,9 +2943,9 @@ then grid-tuned with the scripted player (`src/core/sim.ts`).
 | Horde-only wave size growth (`WAVE_GROWTH`) | ×1.1 a horde, no end | ×1.1 a horde up to Horde 10, then held (the full game keeps ×1.1) | Fight length grew with it (17 min at Horde 14); HP growth carries the difficulty past it |
 | Late HP growth (`SQUAD_HP_GROWTH.late`) | ×1.06 | ×1.06 (kept) | Grid 1.06–1.14 with gun steps of 5% and 8%: the gun step must match it, or players get stuck (1.10 with 5%: 27 losses at one horde) |
 | Gun level (`GUN_LEVEL_DAMAGE`) | +5% of base damage a level, added | ×1.06 a level, compounding | Matched to late HP growth, so farming can always close the gap; 8% let the squad run away (Squad Power 1.64× Recommended by Horde 25) |
-| Horde-only HP ease (`SQUAD_EARLY_HP`) | Hordes 1–3: ×0.8, ×0.9, ×0.95 | Also Hordes 8–10: ×0.85, ×0.75, ×0.75 | Brutes join at Horde 8 (mean enemy HP +55%), the first boss at 10. 20 seeds, first try: 85%, 70%, 65% (target at least 60%) |
+| Horde-only HP ease (`SQUAD_EARLY_HP`) | Hordes 1–3: ×0.8, ×0.9, ×0.95 (ID-163: ×0.8, ×0.9, ×1, and Horde 4 ×1.2) | Also Hordes 8–10: ×0.85, ×0.75, ×0.75 | Brutes join at Horde 8 (mean enemy HP +55%), the first boss at 10. 20 seeds, first try: 85%, 70%, 65% (target at least 60%) |
 | Swarm wave placement (`swarmWave`) | Counted from wave 1 | Counted back from the last wave, which always swarms | With wave size held, a growing share slid swarms onto smaller waves and Horde 14 had less HP than Horde 13 |
-| Recommended Power (`POWER.rec`) | 3.19 × HP^0.59 | 9.7 × HP ÷ spawn seconds (10.3 until ID-125); ×1.12 on boss hordes; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 | Refitted on each horde's measured 50%-win power, Hordes 3–30 (above) |
+| Recommended Power (`POWER.rec`) | 3.19 × HP^0.59 | 9.7 × HP ÷ spawn seconds (10.3 until ID-125); ×1.12 on boss hordes; early ×0.3, ×0.6, 1, 1, 1, 1, ×0.8, ×0.8 (refitted since; ID-163: Hordes 3–4 ×2, ×2.1) | Refitted on each horde's measured 50%-win power, Hordes 3–30 (above) |
 | Swarm share (`SWARM.share`) | 0.25 | 0.25 (kept) | 0.20 and 0.30 both made walls shallower (first-try losses at Hordes 11+: 25% and 29% against 46%) |
 | Boss count and HP (`BOSSES`) | n ÷ 10 up to 3, 4× HP | Kept | HP 3 and at most 2 bosses: no change to Horde 18; HP 5: a little easier (fewer replays) |
 | Mini-boss HP (`ELITE.hp`) | 4× | 4× (kept) | 3× and 5×: 29% and 50% first-try losses against 46% |
