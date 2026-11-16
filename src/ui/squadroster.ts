@@ -27,7 +27,7 @@ import {
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
-import { dpsCaption, el, movesText, slotOffer } from './hud.ts';
+import { BEST_GUNS, bestGunsLine, dpsCaption, el, movesText, slotOffer } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
 import { levelText } from './statlines.ts';
@@ -240,7 +240,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   grab.setAttribute('aria-hidden', 'true');
   const title = el('h2', 'menu-title', 'Roster');
   title.id = 'roster-title';
-  const bestButton = el('button', 'hud-button rv-btn rv-best', 'Best gun for everyone');
+  const bestButton = el('button', 'hud-button rv-btn rv-best', BEST_GUNS);
   bestButton.type = 'button';
   bestButton.dataset.key = 'best';
   const closeX = el('button', 'hud-button rv-btn rv-close', '×');
@@ -310,12 +310,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     const r = opts.onBestGuns();
     picking = false;
     picked = null;
-    if (!r.ok) setStatus(r.reason, 'danger');
-    else if (r.moves.length === 0) {
-      setStatus('Everyone already holds the best gun they can get.');
-    } else {
-      setStatus(`Equipped: ${r.moves.map((m) => `${m.name} → ${heldName(m.to)}`).join(' · ')}`);
-    }
+    setStatus(r.ok ? bestGunsLine(r.moves) : r.reason, r.ok ? 'ok' : 'danger');
     draw('best');
   });
   closeX.addEventListener('click', () => api.close());

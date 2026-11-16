@@ -119,6 +119,7 @@ import {
   stashCap,
   squadResult,
   squadSpec,
+  type GunMove,
   type SquadDrop,
 } from '../core/hordeonly.ts';
 import { isGun, professionOf } from '../core/loadout.ts';
@@ -1602,6 +1603,31 @@ export function movesText(moves: { in: readonly string[]; out: readonly string[]
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+/** "Best gun for everyone" (ID-108): the Roster's, the result screen's and the Inventory's button. */
+export const BEST_GUNS = 'Best gun for everyone';
+export const BEST_GUNS_NONE = 'Everyone already holds the best gun they can get.';
+
+/** What "Best gun for everyone" did: each survivor's new gun, or that nobody changed. */
+export function bestGunsLine(moves: readonly { name: string; to: Held }[]): string {
+  if (moves.length === 0) return BEST_GUNS_NONE;
+  return `Equipped: ${moves.map((m) => `${m.name} → ${heldName(m.to)}`).join(' · ')}`;
+}
+
+/**
+ * Rounds of `bestGuns` as one (ID-154 Auto between them): each survivor's first gun to
+ * their last, in the order they first changed; one who ended on the gun they started with
+ * is left out.
+ */
+export function joinMoves(first: readonly GunMove[], then: readonly GunMove[]): GunMove[] {
+  const key = (h: Held): string => (typeof h === 'object' ? `uid:${h.uid}` : h);
+  const byId = new Map<string, GunMove>();
+  for (const m of [...first, ...then]) {
+    const had = byId.get(m.id);
+    byId.set(m.id, had ? { ...had, to: m.to } : m);
+  }
+  return [...byId.values()].filter((m) => key(m.from) !== key(m.to));
+}
+
 /**
  * In place of a win's cards when nobody levelled up in it (ID-134); it points at the Roster,
  * the only place left on this screen to equip the gun the win dropped.
@@ -2736,10 +2762,20 @@ export function createHud(
   function emptySection(text: string): HTMLElement {
     const section = el('section', 'debrief-squad');
     // The stash count (ID-067) stays beside the heading with no cards under it.
+    const head = el('div', 'debrief-squad-head');
     const heading = el('h3', 'debrief-squad-title', 'Squad');
     heading.append(el('span', 'debrief-stash'));
-    section.append(heading, el('p', 'debrief-empty', text));
+    head.append(heading, bestGunsButton());
+    section.append(head, el('p', 'debrief-empty', text));
     return section;
+  }
+
+  /** "Best gun for everyone" beside the Squad heading: the app listens for it. */
+  function bestGunsButton(): HTMLButtonElement {
+    const b = el('button', 'hud-button debrief-best-guns', BEST_GUNS);
+    b.type = 'button';
+    b.dataset.bestGuns = '';
+    return b;
   }
 
   /** The debrief's Squad section with `cards`, and the start screen's Roster link (`roster`). */
@@ -2748,7 +2784,7 @@ export function createHud(
     const head = el('div', 'debrief-squad-head');
     const heading = el('h3', 'debrief-squad-title', 'Squad');
     heading.append(el('span', 'debrief-stash'));
-    head.append(heading);
+    head.append(heading, bestGunsButton());
     if (roster) {
       // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
       const change = el('button', 'hud-button debrief-change-squad', roster.label);

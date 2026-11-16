@@ -22,7 +22,7 @@ import { FIGHT_REFUSAL, SAVE_STATUS } from './menu.ts';
 import { LEVEL_ONE_SHORT, LEVEL_ONE_TEXT, levelText } from './statlines.ts';
 import { start } from './app.ts';
 import { skipIntro } from './testing.ts';
-import { AIM_HELD_PROMPT, AIM_PROMPT } from './hud.ts';
+import { AIM_HELD_PROMPT, AIM_PROMPT, BEST_GUNS, BEST_GUNS_NONE } from './hud.ts';
 import { project } from './projection.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { drawScene } from './render.ts';
@@ -433,6 +433,29 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     expect(squadGun()).toBe('Relic Carbine');
   });
 
+  it('Best gun for everyone in the Inventory hands out the stash, saved; greyed in a fight', () => {
+    const { root, button, invButton, invScrim, saved } = seeded();
+    invButton.click();
+    const best = invScrim.querySelector<HTMLButtonElement>('.inv-best')!;
+    const status = () => invScrim.querySelector('.inv-status')!.textContent;
+    expect(best.textContent).toBe(BEST_GUNS);
+    expect(best.disabled).toBe(false);
+    best.click();
+    expect(status()).toBe(`Equipped: ${recruit(1).name} → Relic Carbine`);
+    expect(saved().armoury).toEqual([]);
+    expect(saved().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
+    // The start screen's gun picker follows.
+    expect(root.querySelector<HTMLSelectElement>('.hud-gear-select')!.value).toBe('h1');
+    best.click();
+    expect(status()).toBe(BEST_GUNS_NONE);
+    invScrim.querySelector<HTMLButtonElement>('.menu-close')!.click();
+    button().click();
+    step(16);
+    invButton.click();
+    expect(best.disabled).toBe(true);
+    expect(best.title).toBe(GUNS_WAIT);
+  });
+
   it('equips from the Inventory (ID-095): saved at once, and the gun picker follows', () => {
     const { root, invButton, invScrim, saved } = seeded();
     invButton.click();
@@ -729,6 +752,36 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
         (d) => typeof d.loadout.primary === 'object' && d.loadout.primary.uid === 'h1',
       ),
     ).toBe(true);
+  });
+
+  it('Best gun for everyone beside the result screen’s Squad heading: equipped, saved, said', () => {
+    const { root, saved } = wonWithPoints();
+    const best = root.querySelector<HTMLButtonElement>('.debrief-squad-head .debrief-best-guns')!;
+    expect(best.textContent).toBe(BEST_GUNS);
+    best.click();
+    const toast = () => root.querySelector('.hud-toast')!.textContent!;
+    expect(toast()).toMatch(/^Equipped: .+ → .+$/);
+    expect(toast()).toContain(' → Relic Carbine');
+    expect(saved().armoury.some((w) => w.uid === 'h1')).toBe(false);
+    expect(
+      saved().roster.some(
+        (d) => typeof d.loadout.primary === 'object' && d.loadout.primary.uid === 'h1',
+      ),
+    ).toBe(true);
+    // The card's gun picker follows.
+    const select = root.querySelector<HTMLSelectElement>(
+      '.squad-card[data-defender="recruit-1"] .hud-gear-select',
+    );
+    expect(select).not.toBeNull();
+    root.querySelector<HTMLButtonElement>('.debrief-best-guns')!.click();
+    expect(toast()).toBe(BEST_GUNS_NONE);
+  });
+
+  it('Best gun for everyone reaches a survivor with no card on the win (ID-134)', () => {
+    const { root, saved } = wonWithPoints(150);
+    expect(root.querySelector('.squad-card[data-defender="recruit-1"]')).toBeNull();
+    root.querySelector<HTMLButtonElement>('.debrief-squad-head .debrief-best-guns')!.click();
+    expect(saved().armoury.some((w) => w.uid === 'h1')).toBe(false);
   });
 
   it('an id the page was edited to (unknown, __proto__) opens the first survivor, nothing else', () => {
@@ -1594,5 +1647,40 @@ describe('Best gun with Auto on (app.ts, ID-154)', () => {
       'Everyone already holds the best gun they can get.',
     );
     expect(saved().roster.map((d) => d.id)).toContain('recruit-7');
+  });
+
+  it('the start screen’s Best gun re-picks the squad too; the keyboard stays on the button', () => {
+    const g = newGame('horde');
+    const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
+    const camp: GameState = {
+      ...g,
+      hordeNumber: 4,
+      roster: [1, 2, 3, 4, 5, 6].map((n) => recruit(n)),
+      reserve: [{ ...recruit(7), xp: 30000 }],
+      camp: { ...g.camp, recruits: 7 },
+      armoury: [relic],
+      autoSquad: true,
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    const { root, saved } = boot();
+    step(0);
+    const best = () => root.querySelector<HTMLButtonElement>('.debrief-best-guns')!;
+    const toast = () => root.querySelector('.hud-toast')!.textContent!;
+    best().focus();
+    best().click();
+    expect(toast()).toMatch(/^Equipped: .+ → Relic Carbine$/);
+    expect(saved().armoury).toEqual([]);
+    expect(saved().roster.map((d) => d.id)).toContain('recruit-7');
+    // The relic is in the squad's hands, not left with someone Auto benched.
+    const holder = saved().roster.find(
+      (d) => typeof d.loadout.primary === 'object' && d.loadout.primary.uid === 'h1',
+    );
+    expect(holder).toBeDefined();
+    expect(toast()).toBe(`Equipped: ${holder!.name} → Relic Carbine`);
+    // The start screen was drawn afresh with the new squad and guns.
+    expect(root.querySelector('.squad-card[data-defender="recruit-7"]')).not.toBeNull();
+    expect(document.activeElement).toBe(best());
+    best().click();
+    expect(toast()).toBe(BEST_GUNS_NONE);
   });
 });

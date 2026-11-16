@@ -40,12 +40,15 @@ import {
   stashCap,
   type CombineSet,
   type GunChoice,
+  type GunMove,
 } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { survivorDps } from '../core/stats.ts';
 import {
   BAND_WORD,
+  BEST_GUNS,
+  bestGunsLine,
   dpsWith,
   el,
   gunDpsText,
@@ -734,6 +737,11 @@ export interface InventoryOptions {
    * the stash; without it guns can't be dragged and the details have no Equip.
    */
   onEquip?: (defenderId: string, choice: GunChoice) => { ok: true } | { ok: false; reason: string };
+  /**
+   * "Best gun for everyone" (between hordes): each survivor's new gun, or why not; without
+   * it the header has no such button.
+   */
+  onBestGuns?: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
 }
 
 /** A mouse press becomes a drag once it moves this far (px). */
@@ -802,7 +810,15 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   closeX.setAttribute('aria-label', 'Close inventory');
   closeX.addEventListener('click', () => api.close());
   const head = el('div', 'menu-head');
-  head.append(title, closeX);
+  // "Best gun for everyone" (horde-only, between hordes): what it did, or why not, on the
+  // status line; greyed in a fight, as the Roster's.
+  const best = el('button', 'hud-button inv-best', BEST_GUNS);
+  best.type = 'button';
+  best.addEventListener('click', () => {
+    const r = opts.onBestGuns?.();
+    if (r) say(r.ok ? bestGunsLine(r.moves) : r.reason, !r.ok);
+  });
+  head.append(title, ...(opts.onBestGuns ? [best] : []), closeX);
   // Tabs: Weapons for now; items and materials can join it later.
   const tablist = el('div', 'menu-tabs');
   tablist.setAttribute('role', 'tablist');
@@ -1408,6 +1424,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
       const { game, resumes, canCombine = false, horde = null, canBuy = false } = opts.state();
       hintText.textContent = resumes ? ' closes and resumes' : ' closes';
       done.textContent = resumes ? 'Resume' : 'Close';
+      best.disabled = !canCombine;
+      best.title = canCombine ? '' : GUNS_WAIT;
       if (
         game === listed &&
         canCombine === listedCombine &&
