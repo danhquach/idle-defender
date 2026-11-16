@@ -917,18 +917,13 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     expect(option(root, 'airstrike').disabled).toBe(false);
     // One skill to pick: the header asks for no second one.
     expect(root.querySelector('#hud-skill-label')!.textContent).toBe('Skill');
-    expect(root.querySelector('.hud-skill-note')!.textContent).toBe(
-      '×2 power: your only skill, so it hits twice as hard',
-    );
-    expect(option(root, 'airstrike').querySelector('.hud-skill-option-boost')!.textContent).toBe(
-      '×2: hits twice as hard',
-    );
+    expect(root.querySelector('.hud-skill-note')!.textContent).toBe('Your only skill');
+    // No ×2 claim on the card (ID-174).
+    expect(option(root, 'airstrike').textContent).not.toMatch(/×|twice/);
     option(root, 'airstrike').click();
     expect(saved().skillPick).toEqual([]);
     expect(pressed(root)).toEqual([]);
-    expect(root.querySelector('.hud-skill-note')!.textContent).toBe(
-      'No skill picked. Airstrike hits ×2 as your only skill',
-    );
+    expect(root.querySelector('.hud-skill-note')!.textContent).toBe('No skill picked');
     option(root, 'airstrike').click();
     expect(saved().skillPick).toEqual(['airstrike']);
     // The skill row waits under the screen, and its keys do nothing there.
@@ -943,17 +938,17 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     button().click();
     step(16);
     expect(shown(root).map((b) => b.querySelector('.hud-skill-key')!.textContent)).toEqual(['Q']);
-    expect(labels(root)).toEqual(['Airstrike ×2']);
+    expect(labels(root)).toEqual(['Airstrike']);
     expect(shown(root).map((b) => b.querySelector('.btn-cost')!.textContent)).toEqual(['']);
     // Q on a layout that types another letter there still arms it (ID-107),
     // and a click on the field drops it there.
     key('ц', 'KeyQ');
     step(32);
     expect(shown(root)[0]!.getAttribute('aria-pressed')).toBe('true');
-    expect(labels(root)).toEqual(['Airstrike ×2']);
+    expect(labels(root)).toEqual(['Airstrike']);
     clickField(root, 1000, 400);
     step(48);
-    expect(labels(root)).toEqual([`Airstrike ×2 ${SKILLS.airstrike.cooldown}s`]);
+    expect(labels(root)).toEqual([`Airstrike ${SKILLS.airstrike.cooldown}s`]);
     expect(vi.mocked(drawScene).mock.lastCall![2].incoming.map((i) => i.skill)).toEqual(
       Array(SKILLS.airstrike.count).fill('airstrike'),
     );

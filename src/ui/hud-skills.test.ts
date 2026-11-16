@@ -1,6 +1,7 @@
 // ID-100, ID-139: the skill pick before a horde-only horde, and the fight's skill button.
-// Only a picked skill shows, with no cash cost, ×2 on one picked alone, and a key (Q). The
-// Airstrike is the only skill since Flashbang and Molotov became cards (ID-139).
+// Only a picked skill shows, with no cash cost and a key (Q). The Airstrike is the only skill
+// since Flashbang and Molotov became cards (ID-139). A lone pick still works ×2, but no text
+// says so (ID-174, PM).
 import { describe, expect, it } from 'vitest';
 import { SKILLS, type SkillId } from '../core/data.ts';
 import { newGame } from '../core/game.ts';
@@ -13,42 +14,28 @@ const fight = (...pick: SkillId[]) => startSquadHorde({ ...newGame(), skillPick:
 
 describe('the skill pick (ID-100, ID-139)', () => {
   const rows = (pick: SkillId[]) =>
-    skillPicker(pick).options.map((o) => [
-      o.skill,
-      o.picked,
-      o.full,
-      o.detail,
-      o.boost,
-      o.cooldown,
-    ]);
+    skillPicker(pick).options.map((o) => [o.skill, o.picked, o.full, o.detail, o.cooldown]);
 
   it('the Airstrike card says what the skill does and its cooldown, and nothing else is offered', () => {
     const p = skillPicker([]);
-    expect(p.solo).toBe(false);
     expect(rows([])).toEqual([
-      ['airstrike', false, false, 'Bombs an area you pick, 12 bombs', null, '60s cooldown'],
+      ['airstrike', false, false, 'Bombs an area you pick, 12 bombs', '60s cooldown'],
     ]);
     expect(p.options.map((o) => o.name)).toEqual(['Airstrike']);
   });
 
   it('nothing picked: the note asks for the one skill there is, not for "up to 2"', () => {
-    expect(skillPicker([]).note).toBe('No skill picked. Airstrike hits ×2 as your only skill');
+    expect(skillPicker([]).note).toBe('No skill picked');
   });
 
-  it('picked alone: ×2 power in the note, and a ×2 line on the card', () => {
+  it('picked alone: no ×2 claim anywhere, though it still works ×2 (ID-174)', () => {
     const p = skillPicker(['airstrike']);
-    expect(p.solo).toBe(true);
-    expect(p.note).toBe('×2 power: your only skill, so it hits twice as hard');
+    expect(p.note).toBe('Your only skill');
     expect(rows(['airstrike'])).toEqual([
-      [
-        'airstrike',
-        true,
-        false,
-        'Bombs an area you pick, 12 bombs',
-        '×2: hits twice as hard',
-        '60s cooldown',
-      ],
+      ['airstrike', true, false, 'Bombs an area you pick, 12 bombs', '60s cooldown'],
     ]);
+    expect(JSON.stringify(p)).not.toMatch(/×|twice/);
+    expect(fight('airstrike').freeSkills).toEqual({ power: 2 });
   });
 });
 
@@ -65,10 +52,10 @@ describe('the horde-only skill button (ID-100, ID-139)', () => {
     expect(skillButtons(s, 'airstrike')[0]!.armed).toBe(true);
   });
 
-  it('alone it says ×2; cooling down it shows its seconds', () => {
+  it('alone it shows its name, no ×2 (ID-174); cooling down it shows its seconds', () => {
     const s = fight('airstrike');
     expect(skillButtons(s, null)[0]).toMatchObject({
-      label: 'Airstrike ×2',
+      label: 'Airstrike',
       key: 'Q',
       hidden: false,
       cost: '',
@@ -76,7 +63,7 @@ describe('the horde-only skill button (ID-100, ID-139)', () => {
     const r = useSkill(s, 'airstrike', 1000, 200);
     if (!r.ok) throw new Error(r.reason);
     expect(skillButtons(r.state, null)[0]).toMatchObject({
-      label: `Airstrike ×2 ${SKILLS.airstrike.cooldown}s`,
+      label: `Airstrike ${SKILLS.airstrike.cooldown}s`,
       cooling: true,
       cost: '',
       disabled: true,

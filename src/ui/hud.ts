@@ -91,7 +91,6 @@ import {
   cardLevel,
   perkOn,
   repairsLeft,
-  skillPower,
   windingUp,
   type Enemy,
   type Breach,
@@ -494,10 +493,10 @@ export function skillButtons(
     const free = s.freeSkills !== undefined;
     const slot = skillSlots(s).indexOf(skill);
     const key = free ? (SKILL_KEYS[slot] ?? null) : null;
-    const power = skillPower(s) > 1 ? ` ×${skillPower(s)}` : '';
+    // A lone pick's ×2 (`skillPower`) works in the background, unlabelled (ID-174, PM).
     return {
       skill,
-      label: left > 0 ? `${name}${power} ${Math.ceil(left)}s` : `${name}${power}`,
+      label: left > 0 ? `${name} ${Math.ceil(left)}s` : name,
       cost: left > 0 || free ? '' : String(cost),
       variant: variantOf(
         lock,
@@ -543,12 +542,9 @@ export const AUTO_KEY = 'E';
 export const skillSlots = (s: Pick<HordeState, 'skills'>): SkillId[] =>
   SKILL_IDS.filter((k) => s.skills.includes(k));
 
-/** What each skill does, for the pick before a horde (ID-100); `boost` is its ×2 line, picked alone. */
-const SKILL_BLURB: Readonly<Record<SkillId, { does: string; boost: string }>> = {
-  airstrike: {
-    does: `Bombs an area you pick, ${SKILLS.airstrike.count} bombs`,
-    boost: `×${SQUAD_SKILLS.solo}: hits twice as hard`,
-  },
+/** What each skill does, for the pick before a horde (ID-100). */
+const SKILL_BLURB: Readonly<Record<SkillId, { does: string }>> = {
+  airstrike: { does: `Bombs an area you pick, ${SKILLS.airstrike.count} bombs` },
 };
 
 /** One skill in the pick before a horde (ID-100). */
@@ -560,23 +556,22 @@ export interface SkillChoice {
   full: boolean;
   /** "Stuns, 4 bursts": what it does, whatever is picked. */
   detail: string;
-  /** "×2: 8 bursts" on the one skill picked alone; null otherwise. */
-  boost: string | null;
   /** "25s cooldown" */
   cooldown: string;
 }
 
-/** The skill pick before a horde (ID-100): each skill, and a line on the pick's power. */
+/**
+ * The skill pick before a horde (ID-100): each skill, and a line on the pick. A skill picked
+ * alone still works ×2 (`SQUAD_SKILLS.solo`), but no text claims it (ID-174, PM): one bomb
+ * already fells most enemies, so the ×2 couldn't be seen.
+ */
 export interface SkillPick {
   options: SkillChoice[];
-  /** "×2 power: Airstrike alone works twice as hard", or how many more may be picked. */
+  /** "Your only skill", or how many may be picked. */
   note: string;
-  /** Exactly one is picked: it works ×2. */
-  solo: boolean;
 }
 
 export function skillPicker(pick: readonly SkillId[]): SkillPick {
-  const solo = pick.length === 1;
   const full = pick.length >= SQUAD_SKILLS.max;
   // With one skill to pick (Airstrike, ID-139) it is always alone: no "up to 2" or "alone".
   const only = SKILL_IDS.length === 1 ? SKILLS[SKILL_IDS[0]!].name : null;
@@ -590,20 +585,17 @@ export function skillPicker(pick: readonly SkillId[]): SkillPick {
         picked,
         full: full && !picked,
         detail: blurb.does,
-        boost: picked && solo ? blurb.boost : null,
         cooldown: `${SKILLS[skill].cooldown}s cooldown`,
       };
     }),
-    note: solo
-      ? only
-        ? `×${SQUAD_SKILLS.solo} power: your only skill, so it hits twice as hard`
-        : `×${SQUAD_SKILLS.solo} power: ${SKILLS[pick[0]!].name} alone works twice as hard`
-      : pick.length === 0
+    note:
+      pick.length === 0
         ? only
-          ? `No skill picked. ${only} hits ×${SQUAD_SKILLS.solo} as your only skill`
-          : `Pick up to ${SQUAD_SKILLS.max}. Just 1 works twice as hard`
-        : `${SQUAD_SKILLS.max} picked. Drop one for ×${SQUAD_SKILLS.solo} power`,
-    solo,
+          ? 'No skill picked'
+          : `Pick up to ${SQUAD_SKILLS.max}`
+        : only
+          ? 'Your only skill'
+          : `${pick.length} of ${SQUAD_SKILLS.max} picked`,
   };
 }
 
@@ -2183,10 +2175,10 @@ export function createHud(
     setVariant(item.button, 'locked', LOCKED_NOTE);
   });
   // The horde-only build's skills are never locked or paid for: their tallest look is
-  // the name with ×2 and a key (ID-100).
+  // the name and a key (ID-100).
   if (squad) {
     for (const item of skillItems) {
-      item.label.textContent = `${item.label.textContent!.replace(' · ', '')} ×${SQUAD_SKILLS.solo}`;
+      item.label.textContent = item.label.textContent!.replace(' · ', '');
       item.cost.textContent = '';
       item.key.textContent = SKILL_KEYS[0]!;
       item.key.hidden = false;
@@ -2437,7 +2429,7 @@ export function createHud(
       button.disabled = o.full;
       button.title = o.full
         ? `Pick up to ${SQUAD_SKILLS.max}: drop one first`
-        : [o.detail, o.cooldown, ...(o.boost ? [o.boost] : [])].join(' · ');
+        : [o.detail, o.cooldown].join(' · ');
       const img = el('img', 'hud-icon');
       img.src = ART_URLS[SKILL_ICON[o.skill]] ?? '';
       img.alt = '';
@@ -2447,7 +2439,6 @@ export function createHud(
         head,
         el('span', 'hud-skill-option-detail', o.detail),
         el('span', 'hud-skill-option-detail', o.cooldown),
-        ...(o.boost ? [el('span', 'hud-skill-option-boost', o.boost)] : []),
       );
       button.addEventListener('click', () => {
         if (result.hidden) return;
@@ -2456,7 +2447,6 @@ export function createHud(
       row.append(button);
     }
     const note = el('p', 'hud-skill-note', p.note);
-    note.classList.toggle('hud-skill-note-solo', p.solo);
     note.setAttribute('role', 'status');
     skillBlock.replaceChildren(label, row, note);
     if (had) [...row.querySelectorAll('button')].find((b) => b.dataset.skill === had)?.focus();

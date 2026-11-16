@@ -1357,12 +1357,6 @@ body {
   color: inherit;
 }
 
-.hud-skill-option-boost {
-  color: var(--color-accent);
-  font-size: var(--text-xs);
-  font-weight: 600;
-}
-
 /* A skill ready again (ID-100): one brief pulse. */
 .hud-skill-ready {
   animation: hud-skill-ready 0.6s ease-out;
@@ -1382,11 +1376,6 @@ body {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-}
-
-.hud-skill-note-solo {
-  color: var(--color-accent);
-  font-weight: 600;
 }
 
 .hud-skill-key {
