@@ -28,6 +28,7 @@ import {
   letGo,
   refuseJoins,
   setAutoSquad,
+  squadOf,
   startSquadHorde,
   toggleSkill,
   toggleSquad,
@@ -94,6 +95,7 @@ import {
   hordePicker,
   joinedCard,
   joinMoves,
+  markBench,
   offerHolds,
   powerLine,
   resultScreen,
@@ -457,7 +459,8 @@ export function start(root: HTMLElement, art: Art): void {
       // The start screen and its squad on the wall hold the new guns (and squad) too.
       redrawSquad();
     }
-    return { ok: true, moves };
+    // Marked by where each ends: Auto may have moved them between squad and bench (ID-188).
+    return { ok: true, moves: markBench(moves, new Set(squadOf(next).map((d) => d.id))) };
   }
   /**
    * After the camp changed between hordes (the squad picked, someone joined or left): the

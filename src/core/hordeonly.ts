@@ -1234,32 +1234,33 @@ export interface GunMove {
   from: Held;
   /** A stash gun, or a squadmate's (ID-152), the free pistol included. */
   to: Held;
+  /** On the bench (ID-188): armed after the squad, from what the stash had left. */
+  bench?: true;
 }
 
 /** Under this much more dmg/s for the squad, a change in `bestGuns` isn't worth making. */
 const BEST_GAIN = 1e-9;
 
+/** One group's hands in `bestGuns`: who, what they hold, and the order they first changed. */
+interface Hands {
+  specs: DefenderSpec[];
+  hands: Held[];
+  /** Holding an owned weapon that is no gun (fights as the pistol). */
+  odd: boolean[];
+  order: number[];
+}
+
 /**
- * Hands out guns so they do the most for the squad (ID-108, ID-152, between hordes), each
- * gun scored in the hands of the survivor who would hold it (`survivorDps`: their level
- * and profession, so a fighting job's own guns count for more). Repeatedly makes the one
- * change that raises the squad's total the most: a survivor takes a stash gun (theirs goes
- * to the stash; the free pistol just goes), or two survivors trade guns, until no single
- * change helps (a three-way trade isn't looked for). Every change raises the total, so it
- * ends, and a second call moves nothing. A gun never goes into the stash for the pistol, so
- * the stash never grows. Returns the new game and one move per survivor whose gun changed
- * (from what they held to what they hold), in the order they first changed.
+ * `bestGuns`' search for one group (the squad, or the bench) against the shared `stash`:
+ * repeatedly makes the one change that raises the group's total the most, a survivor
+ * taking a stash gun (theirs goes to the stash; the free pistol just goes) or two of the
+ * group trading, until no single change helps (a three-way trade isn't looked for). True if
+ * anything changed.
  */
-export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] } {
-  const squad = squadOf(game).map(squadSpec);
-  const start = squad.map((s) => s.loadout.primary);
-  const hands = [...start];
-  const stash = game.armoury.filter(isGun);
-  const score = (i: number, h: Held): number => survivorDps(squad[i]!, h);
-  // Holding an owned weapon that is no gun (fights as the pistol): it goes to the stash when
-  // they change, so they may only take a stash gun (one out, one in), never trade first.
-  const odd = squadOf(game).map((d) => isOwned(d.loadout.primary) && !isGun(d.loadout.primary));
-  const order: number[] = [];
+function handOut(group: Hands, stash: Held[]): boolean {
+  const { specs, hands, odd, order } = group;
+  const score = (i: number, h: Held): number => survivorDps(specs[i]!, h);
+  let moved = false;
   for (;;) {
     // The best change this round: survivor `i` takes stash gun `s`, or trades with `j`.
     let gain = BEST_GAIN;
@@ -1270,13 +1271,16 @@ export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] }
         const g = score(i, stash[s]!) - now;
         if (g > gain) [gain, pick] = [g, { i, s }];
       }
+      // An odd holder's weapon goes to the stash when they change, so they may only take a
+      // stash gun (one out, one in), never trade first.
       for (let j = i + 1; j < hands.length; j++) {
         if (odd[i] || odd[j]) continue;
         const g = score(i, hands[j]!) + score(j, hands[i]!) - now - score(j, hands[j]!);
         if (g > gain) [gain, pick] = [g, { i, j }];
       }
     }
-    if (!pick) break;
+    if (!pick) return moved;
+    moved = true;
     const { i } = pick;
     if ('s' in pick) {
       const had = hands[i]!;
@@ -1287,31 +1291,69 @@ export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] }
     } else [hands[i], hands[pick.j]] = [hands[pick.j]!, hands[i]!];
     for (const k of 's' in pick ? [i] : [i, pick.j]) if (!order.includes(k)) order.push(k);
   }
+}
+
+/**
+ * Hands out guns so they do the most for the squad (ID-108, ID-152, between hordes), each
+ * gun scored in the hands of the survivor who would hold it (`survivorDps`: their level
+ * and profession, so a fighting job's own guns count for more): `handOut` for the squad.
+ * Then the bench (ID-188) does the same with what the stash has left, trading only among
+ * itself, so it never takes a squad survivor's gun.
+ * A gun the bench gives back may suit the squad better, so the squad looks again, and so
+ * on until neither changes: each change raises its group's total and the squad's never
+ * falls, so it ends, and a second call moves nothing. A gun never goes into the stash for
+ * the pistol, so the stash never grows. Returns the new game and one move per survivor
+ * whose gun changed (from what they held to what they hold): the squad's in the order they
+ * first changed, then the bench's.
+ */
+export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] } {
+  const group = (who: RosterDefender[]): Hands => ({
+    specs: who.map(squadSpec),
+    hands: who.map((d) => squadSpec(d).loadout.primary),
+    odd: who.map((d) => isOwned(d.loadout.primary) && !isGun(d.loadout.primary)),
+    order: [],
+  });
+  const squadMembers = squadOf(game);
+  const benchMembers = [...game.roster.slice(squadMembers.length), ...game.reserve];
+  const squad = group(squadMembers);
+  const bench = group(benchMembers);
+  const start = [...squad.hands, ...bench.hands];
+  const stash: Held[] = game.armoury.filter(isGun);
+  handOut(squad, stash);
+  while (handOut(bench, stash) && handOut(squad, stash));
   const same = (a: Held, b: Held): boolean =>
     isOwned(a) && isOwned(b) ? a.uid === b.uid : a === b;
+  // Everyone in one list: the squad's indices first, then the bench's after them.
+  const n = squad.hands.length;
+  const specs = [...squad.specs, ...bench.specs];
+  const hands = [...squad.hands, ...bench.hands];
+  const order = [...squad.order, ...bench.order.map((i) => n + i)];
   const changed = order.filter((i) => !same(start[i]!, hands[i]!));
   if (changed.length === 0) return { game, moves: [] };
-  const byId = new Map(changed.map((i) => [squad[i]!.id, hands[i]!]));
+  const byId = new Map(changed.map((i) => [specs[i]!.id, hands[i]!]));
   const inHand = new Set(hands.filter(isOwned).map((h) => h.uid));
+  const arm = (d: RosterDefender): RosterDefender => {
+    const h = byId.get(d.id);
+    return h === undefined ? d : { ...d, loadout: { ...d.loadout, primary: h } };
+  };
   // What they really held: a primary that is no gun fights as the pistol, but goes back too.
-  const released = game.roster
+  const released = campOf(game)
     .filter((d) => byId.has(d.id))
     .map((d) => d.loadout.primary)
     .filter(isOwned);
   const g: GameState = {
     ...game,
-    roster: game.roster.map((d) => {
-      const h = byId.get(d.id);
-      return h === undefined ? d : { ...d, loadout: { ...d.loadout, primary: h } };
-    }),
+    roster: game.roster.map(arm),
+    reserve: game.reserve.map(arm),
     // As `equip` does: the stash keeps its order, a gun given back goes on the end.
     armoury: [...game.armoury, ...released].filter((w) => !inHand.has(w.uid)),
   };
-  const moves = changed.map((i) => ({
-    id: squad[i]!.id,
-    name: squad[i]!.name,
+  const moves = changed.map((i): GunMove => ({
+    id: specs[i]!.id,
+    name: specs[i]!.name,
     from: start[i]!,
     to: hands[i]!,
+    ...(i >= n ? { bench: true as const } : {}),
   }));
   return { game: g, moves };
 }

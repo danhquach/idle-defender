@@ -379,9 +379,16 @@ body {
 
 .hud-toast {
   position: absolute;
+  /* Over the start and result screens' panel, which comes later in the HUD (ID-188): the
+     answer to a press on that panel showed under it. */
+  z-index: 2;
   top: max(48px, var(--hud-held-bottom));
   left: 50%;
   transform: translateX(-50%);
+  /* As wide as its line, up to the screen less a gutter: `left: 50%` alone held it to half. */
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
   padding: var(--space-6) var(--space-14);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

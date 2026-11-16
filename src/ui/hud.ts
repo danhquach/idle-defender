@@ -1608,10 +1608,25 @@ export function movesText(moves: { in: readonly string[]; out: readonly string[]
 export const BEST_GUNS = 'Best gun for everyone';
 export const BEST_GUNS_NONE = 'Everyone already holds the best gun they can get.';
 
-/** What "Best gun for everyone" did: each survivor's new gun, or that nobody changed. */
-export function bestGunsLine(moves: readonly { name: string; to: Held }[]): string {
+/** The most moves `bestGunsLine` names (ID-188): a full camp's would fill a phone's toast. */
+export const BEST_GUNS_SHOWN = 4;
+
+/**
+ * What "Best gun for everyone" did: each survivor's new gun, a bench survivor's marked
+ * "(bench)" (ID-188), or that nobody changed. Past `BEST_GUNS_SHOWN` moves the rest are a
+ * count, with how many of them are on the bench; the Roster shows each survivor's gun.
+ */
+export function bestGunsLine(moves: readonly { name: string; to: Held; bench?: true }[]): string {
   if (moves.length === 0) return BEST_GUNS_NONE;
-  return `Equipped: ${moves.map((m) => `${m.name} → ${heldName(m.to)}`).join(' · ')}`;
+  const line = (m: (typeof moves)[number]): string =>
+    `${m.name}${m.bench ? ' (bench)' : ''} → ${heldName(m.to)}`;
+  const shown = moves.slice(0, BEST_GUNS_SHOWN).map(line);
+  const rest = moves.slice(BEST_GUNS_SHOWN);
+  if (rest.length > 0) {
+    const bench = rest.filter((m) => m.bench).length;
+    shown.push(`${rest.length} more${bench > 0 ? ` (${bench} on the bench)` : ''}`);
+  }
+  return `Equipped: ${shown.join(' · ')}`;
 }
 
 /**
@@ -1627,6 +1642,19 @@ export function joinMoves(first: readonly GunMove[], then: readonly GunMove[]): 
     byId.set(m.id, had ? { ...had, to: m.to } : m);
   }
   return [...byId.values()].filter((m) => key(m.from) !== key(m.to));
+}
+
+/**
+ * The moves marked by where each survivor ends (ID-188): "(bench)" for anyone not in
+ * `squadIds`, none for the squad, the squad's first. Auto (ID-154) may move a survivor
+ * between the squad and the bench between rounds, so a round's own mark can be stale.
+ */
+export function markBench(moves: readonly GunMove[], squadIds: ReadonlySet<string>): GunMove[] {
+  const all = moves.map((m): GunMove => {
+    const plain: GunMove = { id: m.id, name: m.name, from: m.from, to: m.to };
+    return squadIds.has(m.id) ? plain : { ...plain, bench: true };
+  });
+  return [...all.filter((m) => !m.bench), ...all.filter((m) => m.bench)];
 }
 
 /**
