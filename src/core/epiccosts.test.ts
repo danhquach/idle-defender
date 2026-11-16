@@ -91,7 +91,7 @@ describe('every epic card names its gain and a cost (ID-137)', () => {
     expect(UPGRADES['hollow-points'].text).toBe('+38% damage, +25% reload time');
     // ID-132: its cost is the slow throw and a lit slick burning out.
     expect(UPGRADES['oil-bomb'].text).toBe(
-      'Two wall mortars lob a tar bomb into the thickest group every 20 s. Its slick slows enemies 60% for 10 s, and Incendiary hits set it alight (20% of a Shambler’s HP a second); but the bomb takes 1.5 s to land, and a lit slick burns out in 3 s',
+      'Two wall mortars lob a tar bomb into the thickest group every 20 s. Its slick slows enemies 60% for 10 s, and Incendiary hits or a Molotov’s fire set it alight (20% of a Shambler’s HP a second); but the bomb takes 1.5 s to land, and a lit slick burns out in 3 s',
     );
   });
 

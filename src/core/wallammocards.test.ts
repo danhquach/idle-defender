@@ -403,6 +403,91 @@ describe('Oil Bomb (ID-132)', () => {
     expect(synergyOf(picked(quiet(), 'oil-bomb'), 'incendiary-rounds')).toBe(
       'Oil Bomb: hits light the slick',
     );
+    // Oil Bomb + Molotov (ID-181).
+    expect(synergyOf(quiet(), 'molotov')).toBeNull();
+    expect(synergyOf(picked(quiet(), 'molotov'), 'oil-bomb')).toBe(
+      'Molotov: fire lights the slick',
+    );
+    expect(synergyOf(picked(quiet(), 'oil-bomb'), 'molotov')).toBe(
+      'Oil Bomb: fire lights the slick',
+    );
+    // Both held: the Oil Bomb offer names both pairings.
+    expect(synergyOf(picked(picked(quiet(), 'incendiary-rounds'), 'molotov'), 'oil-bomb')).toBe(
+      'Incendiary Rounds, Molotov: they light the slick',
+    );
+  });
+
+  describe('a Molotov’s fire lights it (ID-181)', () => {
+    /** A slick landed, no Incendiary Rounds and no shooting. */
+    const landed = () => steps(oiled().s, flight + 1);
+
+    it('a fire overlapping an unlit slick lights it; it burns and burns out as an Incendiary-lit one', () => {
+      const t = landed();
+      const k = t.slicks[0]!;
+      // Touching at the edge: the circles' radii apart.
+      const gap = CARD.oil.radius + CARD.molotov.radius - 1;
+      t.fires.push({ x: k.x + gap, y: k.y, at: t.time, until: t.time + 4 });
+      const group = t.enemies.map((e) => ({ id: e.id, hp: e.hp }));
+      const lit = tick(t, STEP);
+      const l = lit.slicks[0]!;
+      // Lit within that step, at its start time, as an Incendiary hit lights it.
+      expect(l.litAt).toBeCloseTo(t.time, 9);
+      expect(l.until).toBeCloseTo(l.litAt! + CARD.oil.burnFor, 9);
+      // The group inside (out of the fire's reach) burns at the slick's rate.
+      const u = steps(lit, Math.round(1 / STEP));
+      for (const g of group) {
+        expect(g.hp - find(u, g.id).hp).toBeCloseTo(slickDps(u) * (1 + STEP), 6);
+      }
+      // Burnt out on time, even though its tar had 10 s.
+      expect(steps(u, Math.round((CARD.oil.burnFor - 1) / STEP) + 1).slicks).toHaveLength(0);
+    });
+
+    it('a fire landing first lights a slick that lands in it later', () => {
+      let s = oiled().s;
+      s = tick(s, STEP);
+      const b = s.tarBombs[0]!;
+      s.fires.push({ x: b.x, y: b.y, at: s.time, until: s.time + 60 });
+      let t = s;
+      while (t.slicks.length === 0) t = tick(t, STEP);
+      // Lit in the very step it landed.
+      expect(t.slicks[0]!.litAt).toBeCloseTo(t.time - STEP, 9);
+    });
+
+    it('a fire out of reach does not light it, nor does one gone out', () => {
+      const t = landed();
+      const k = t.slicks[0]!;
+      const gap = CARD.oil.radius + CARD.molotov.radius + 2;
+      t.fires.push({ x: k.x, y: k.y + gap, at: t.time, until: t.time + 4 });
+      t.fires.push({ x: k.x, y: k.y, at: t.time - 4, until: t.time });
+      const u = steps(t, Math.round(1 / STEP));
+      expect(u.slicks[0]!.litAt).toBeUndefined();
+    });
+
+    it('a slick already lit keeps its time: a fire does not light it again', () => {
+      const t = landed();
+      const k = t.slicks[0]!;
+      t.fires.push({ x: k.x, y: k.y, at: t.time, until: t.time + 4 });
+      const lit = tick(t, STEP);
+      const { litAt, until } = lit.slicks[0]!;
+      const later = steps(lit, Math.round(1 / STEP));
+      expect(later.slicks[0]).toMatchObject({ litAt, until });
+    });
+
+    it('a real thrown Molotov lights the slick, with no Incendiary Rounds', () => {
+      let s = quiet();
+      s = picked(s, 'molotov');
+      s = picked(s, 'oil-bomb');
+      for (const dy of [-30, 0, 30]) enemy(s, { ...tough, ...still, x: 900, y: ROW4 + dy });
+      let t = s;
+      for (
+        let i = 0;
+        i < Math.round(20 / STEP) && !t.slicks.some((k) => k.litAt !== undefined);
+        i++
+      )
+        t = tick(t, STEP);
+      expect(t.fires.length).toBeGreaterThan(0);
+      expect(t.slicks.some((k) => k.litAt !== undefined)).toBe(true);
+    });
   });
 
   it('no throw without the card or with nobody in reach, and the horde end clears it', () => {
