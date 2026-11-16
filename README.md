@@ -13,15 +13,24 @@ the ruins while you're away.
 
 ## Status
 
-The game is playable in the browser: build on the base between hordes
-(walls in four tiers, tower, wall-walk and ground posts, upgrades and
-repairs paid in materials), pick the start defender and post, then fight a
-horde with waves, level-up cards and a win/lose result. In a fight, click a
-defender and then a post to walk it there; a defender on a wall that breaks
-drops to a ground post behind it. Damage carries over
-to the next build, and the game saves in the browser. The design is
-[`docs/design.md`](docs/design.md); its build order (§14) becomes GitHub
-issues.
+The test build is the horde-only build, playable in the browser:
+
+- **Hold the wall.** A squad of up to 6 survivors shoots on its own; click an
+  enemy to focus it. Hordes come in waves, with swarm waves, elites and a boss
+  every 10th horde.
+- **Level up in the fight.** Kills give fight XP; each level offers three
+  cards (stats, behaviours, barriers). A throwable card (Frag Grenades,
+  Flashbang or Molotov) gives each survivor 3 throws that come back over
+  time. The Airstrike skill runs on cooldown.
+- **Grow between hordes.** A win gives survivor XP and drops a gun into the
+  stash. Pick each survivor's gun (every gun shows its DPS), combine guns to
+  raise their rarity, and combine survivors of the same profession for XP.
+  New survivors join up to a squad of 6.
+- **Lose and retry.** A loss costs nothing: the same horde comes again.
+
+The game saves in the browser. The full game (base building, patrols on the
+world map) sits behind the same code. The design is
+[`docs/design.md`](docs/design.md); work is tracked in GitHub issues.
 
 ## Develop
 
