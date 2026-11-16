@@ -217,8 +217,10 @@ describe('the worst luck throws bonus guns away too (ID-122, sim)', () => {
     const s = SEEDS.find((x) => squadDrop(g, won(g, 10, x))!.bonus.length > 0)!;
     const drop = squadDrop(g, won(g, 10, s))!;
     expect(drop.kind).toBe('replay');
-    const out = unlucky(g, finishSquadHorde(g, won(g, 10, s)), drop);
+    const out = unlucky(g, finishSquadHorde(g, won(g, 10, s)), drop, 10);
     expect(out.armoury).toEqual(g.armoury);
+    // Only the win's Scrap: no salvage for guns this path never threw away (ID-179).
+    expect(out.stock.scrap).toBe(g.stock.scrap + 10 + 5 * 10);
     expect(out.farm).toEqual({ replays: 1, badLuck: 2 });
   });
 
@@ -227,7 +229,7 @@ describe('the worst luck throws bonus guns away too (ID-122, sim)', () => {
     const s = SEEDS.find((x) => squadDrop(g, won(g, 10, x))!.bonus.length > 0)!;
     const drop = squadDrop(g, won(g, 10, s))!;
     expect(drop.kind).toBe('guaranteed');
-    const out = unlucky(g, finishSquadHorde(g, won(g, 10, s)), drop);
+    const out = unlucky(g, finishSquadHorde(g, won(g, 10, s)), drop, 10);
     expect(out.armoury).toEqual([...g.armoury, drop.weapon]);
     expect(out.farm.badLuck).toBe(0);
   });

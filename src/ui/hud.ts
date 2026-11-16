@@ -61,10 +61,9 @@ import {
   SHOP,
   SHOP_ITEMS,
   SKILL_IDS,
-  SQUAD_CAP,
   SQUAD_SKILLS,
+  STASH_SLOT,
   SKILLS,
-  STASH_CAP,
   type EnemyKind,
   type CampPickId,
   type BossSkill,
@@ -113,7 +112,11 @@ import {
   paramedicPoints,
   radioParts,
   restLabel,
+  nextSquadSlotCost,
+  nextStashSlotCost,
+  squadCap,
   squadOf,
+  stashCap,
   squadResult,
   squadSpec,
   type SquadDrop,
@@ -771,7 +774,7 @@ export const PICKER_HORDES = 50;
  * listed horde is pickable.
  */
 export function hordePicker(
-  game: Pick<GameState, 'roster' | 'hordeNumber'>,
+  game: Pick<GameState, 'roster' | 'hordeNumber' | 'slots'>,
   picked: number = game.hordeNumber,
   retry: number | null = null,
   retitle = false,
@@ -820,7 +823,7 @@ export function hordePicker(
           ...(boss ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
           ...(isNew ? [] : [{ text: 'Replay', tone: 'ok' as const }]),
           { text: `${waveCount(n)} waves`, tone: 'ok' as const },
-          { text: `Squad ${squadOf(game).length}/${SQUAD_CAP}`, tone: 'ok' as const },
+          { text: `Squad ${squadOf(game).length}/${squadCap(game)}`, tone: 'ok' as const },
         ],
       },
     });
@@ -1153,8 +1156,12 @@ export const gunLabel = (h: Held): string => `${levelLabel(h)} · ${gunDpsText(g
  * drop, then each bonus gun, and where it went; with the stash full, the weakest weapon
  * thrown away for it.
  */
-export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop): string[] {
+export function squadDropLines(
+  game: Pick<GameState, 'armoury' | 'slots'>,
+  drop: SquadDrop,
+): string[] {
   const lines: string[] = [];
+  const cap = stashCap(game);
   let count = game.armoury.length;
   const thrown = [...drop.thrown];
   for (const [i, w] of [drop.weapon, ...drop.bonus].entries()) {
@@ -1163,9 +1170,9 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
         ? `Weapon drop (${DROP_KIND[drop.kind]}): ${gunLabel(w)}`
         : `Bonus gun: ${gunLabel(w)}`;
     // As `stashWith` puts them in: under the cap it goes in, else one is thrown away.
-    if (count < STASH_CAP) {
+    if (count < cap) {
       count += 1;
-      lines.push(`${got} · into the stash (${count}/${STASH_CAP})`);
+      lines.push(`${got} · into the stash (${count}/${cap})`);
       continue;
     }
     const out = thrown.shift()!;
@@ -1173,10 +1180,10 @@ export function squadDropLines(game: Pick<GameState, 'armoury'>, drop: SquadDrop
       ...(out === w
         ? [
             got,
-            `Stash full (${STASH_CAP}/${STASH_CAP}): the new ${levelName(w)} was no better than any gun in it, so it was thrown away`,
+            `Stash full (${cap}/${cap}): the new ${levelName(w)} was no better than any gun in it, so it was thrown away`,
           ]
         : [
-            `${got} · into the stash (${count}/${STASH_CAP})`,
+            `${got} · into the stash (${count}/${cap})`,
             `Stash full: the weakest, the ${levelLabel(out)}, was thrown away`,
           ]),
     );
@@ -1227,7 +1234,7 @@ export interface GearScreen {
 export function squadGear(game: GameState): GearScreen {
   const stash = game.armoury.filter(isGun);
   return {
-    heading: `Stash ${game.armoury.length}/${STASH_CAP}`,
+    heading: `Stash ${game.armoury.length}/${stashCap(game)}`,
     rows: squadOf(game).map((d) => {
       // What they fight with: a primary that is no gun fights as the pistol (squadSpec).
       const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
@@ -1259,6 +1266,8 @@ export function squadGear(game: GameState): GearScreen {
 export interface Chip {
   text: string;
   tone: 'ok' | 'boss' | 'warn';
+  /** A hover hint with the chip's detail (ID-179: what the Scrap is made of). */
+  title?: string;
 }
 
 /** A win's weapon drop as the debrief's loot tile (ID-067). */
@@ -1385,7 +1394,7 @@ export function joinedCard(game: Pick<GameState, 'roster'>, id: string): SquadCa
 export const NEW_BADGE = 'New';
 
 /** The loot tile for `drop`, against the stash `game` had before it. */
-export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): DropTile {
+export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: SquadDrop): DropTile {
   const { weapon, bonus, thrown } = drop;
   const lost = thrown.includes(weapon);
   const count = game.armoury.length + 1 + bonus.length - thrown.length;
@@ -1394,7 +1403,7 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
   // Which gun's going in threw the drop away (as `stashWith` puts them in): the drop's own
   // (the stash already full of better guns), or a stronger bonus gun's after it.
   let by: OwnedWeapon | null = null;
-  let room = STASH_CAP - game.armoury.length;
+  let room = stashCap(game) - game.armoury.length;
   let next = 0;
   for (const w of [weapon, ...bonus]) {
     if (room > 0) {
@@ -1417,7 +1426,7 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
     affixes: affixLines(weapon).join(', '),
     role: roleLine(weapon.base) ?? '',
     power: gunDpsText(power),
-    stash: `Stash ${count}/${STASH_CAP}${lost ? ' · thrown away' : ''}`,
+    stash: `Stash ${count}/${stashCap(game)}${lost ? ' · thrown away' : ''}`,
     lost,
     bonus: bonus.map((w) => ({
       rarity: w.rarity,
@@ -1437,6 +1446,12 @@ export function dropTile(game: Pick<GameState, 'armoury'>, drop: SquadDrop): Dro
             ]
           : []),
         ...(old.length > 0 ? [`Thrown away: ${old.map((w) => levelName(w)).join(', ')}`] : []),
+        // What the result chip's Scrap is made of (ID-179): the salvage shows by the guns.
+        ...(thrown.length > 0
+          ? [
+              `salvaged for ${thousands(thrown.reduce((n, w) => n + RARITIES[w.rarity].salvage, 0))} Scrap`,
+            ]
+          : []),
       ].join(' · ') || null,
   };
 }
@@ -1482,6 +1497,53 @@ export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivo
 /** Over the squad's cards (ID-086): a name opens that survivor's card in the Roster. */
 export const SQUAD_CARD_HINT = 'Tap a name for their card.';
 
+/** Why the slot buttons are greyed in a fight (ID-179). */
+export const BUY_WAIT = 'Buy slots between hordes';
+
+/** Which slots a purchase gives (ID-179). */
+export type SlotKind = 'squad' | 'stash';
+
+/** A buy button (ID-179): its text, whether it is greyed, and its tooltip. */
+export interface SlotOffer {
+  text: string;
+  disabled: boolean;
+  title: string;
+  cost: number;
+}
+
+/**
+ * The button that buys the next squad slot or stash slots (ID-179): "+1 slot · 500 Scrap";
+ * with too little Scrap it is greyed and shows progress, "+1 slot · 120/1,200 Scrap"; greyed with
+ * `BUY_WAIT` in a fight (`canBuy` false). Null once every slot is bought.
+ */
+export function slotOffer(
+  game: Pick<GameState, 'slots' | 'stock'>,
+  kind: SlotKind,
+  canBuy: boolean,
+): SlotOffer | null {
+  const cost = kind === 'squad' ? nextSquadSlotCost(game) : nextStashSlotCost(game);
+  if (cost === null) return null;
+  const what = kind === 'squad' ? '+1 slot' : `+${STASH_SLOT.add} slots`;
+  const short = game.stock.scrap < cost;
+  const price = short
+    ? `${thousands(game.stock.scrap)}/${thousands(cost)} Scrap`
+    : `${thousands(cost)} Scrap`;
+  return {
+    text: `${what} · ${price}`,
+    disabled: !canBuy || short,
+    title: !canBuy ? BUY_WAIT : short ? `Needs ${thousands(cost)} Scrap` : '',
+    cost,
+  };
+}
+
+/** The confirm before a purchase (ID-179). */
+export const buyQuestion = (kind: SlotKind, cost: number, scrap: number): string =>
+  `Buy ${kind === 'squad' ? '1 squad slot' : `${STASH_SLOT.add} stash slots`} for ${thousands(cost)} Scrap? You have ${thousands(scrap)}.`;
+
+/** What a purchase says once made (ID-179). */
+export const buyText = (kind: SlotKind, cost: number, left: number): string =>
+  `Bought ${kind === 'squad' ? '1 squad slot' : `${STASH_SLOT.add} stash slots`} · ${thousands(cost)} Scrap spent, ${thousands(left)} left.`;
+
 /** The start screen's link to the Roster, where the squad is picked (ID-147). */
 export const CHANGE_SQUAD = 'Change squad';
 
@@ -1489,11 +1551,11 @@ export const CHANGE_SQUAD = 'Change squad';
  * The bench as the start screen sums it up (ID-147): "Bench 3 · 1 resting · 2 open slots:
  * pick on the Roster", each part only when it applies; null with nobody on the bench.
  */
-export function benchLine(game: Pick<GameState, 'roster' | 'reserve'>): string | null {
+export function benchLine(game: Pick<GameState, 'roster' | 'reserve' | 'slots'>): string | null {
   if (game.reserve.length === 0) return null;
   const resting = game.reserve.filter((d) => !isFit(d)).length;
   const fit = game.reserve.length - resting;
-  const open = Math.min(fit, SQUAD_CAP - squadOf(game).length);
+  const open = Math.min(fit, squadCap(game) - squadOf(game).length);
   return [
     `Bench ${game.reserve.length}`,
     ...(resting > 0 ? [`${resting} resting`] : []),
@@ -1581,7 +1643,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
   return {
     title: now.start.title,
     lines: [
-      `Squad ${squad.length}/${SQUAD_CAP}: ${squad
+      `Squad ${squad.length}/${squadCap(game)}: ${squad
         .map((d) => `${d.name} (level ${levelOf(d.xp).level})`)
         .join(', ')}`,
       ...(bench ? [bench] : []),
@@ -1629,6 +1691,64 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
   return `Radio part found.${unlock}`;
 }
 
+/** "+35 Scrap": what a win paid, short, for the result screen's chip (ID-179). */
+export const scrapChipText = (scrap: { total: number }): string =>
+  `+${thousands(scrap.total)} Scrap`;
+
+/**
+ * "+35 Scrap (20 from salvage) · now 655": what a win paid and the balance after it, for the
+ * result line (ID-179).
+ */
+export const scrapLine = (scrap: { total: number; salvage: number; now: number }): string =>
+  `${scrapChipText(scrap)}${scrap.salvage > 0 ? ` (${thousands(scrap.salvage)} from salvage)` : ''} · now ${thousands(scrap.now)}`;
+
+/**
+ * The Scrap balance in the top bar (ID-179), left of the Roster button: a read-only chip
+ * on the page itself (not in the game's root), so it stays above the dialogs.
+ */
+export function createScrapChip(doc: Document): { set(n: number): void } {
+  const chip = doc.createElement('div');
+  chip.className = 'scrap-chip';
+  chip.setAttribute('role', 'status');
+  chip.setAttribute('aria-live', 'polite');
+  const label = doc.createElement('span');
+  label.className = 'scrap-chip-label';
+  const amount = doc.createElement('b');
+  doc.body.append(chip);
+  return {
+    set(n) {
+      const full = thousands(n);
+      if (chip.title === `Scrap ${full}`) return;
+      label.textContent = 'Scrap';
+      amount.textContent = shortCount(n);
+      chip.replaceChildren(label, ' ', amount);
+      chip.title = `Scrap ${full}`;
+      chip.setAttribute('aria-label', `Scrap balance: ${full}`);
+    },
+  };
+}
+
+/**
+ * A count short enough for the top bar (ID-179): whole up to 99,999 ("12,345"), then
+ * "123k", "4.5M", "6.7B", "8.9T", so the Scrap chip never grows into the speed buttons.
+ */
+export function shortCount(n: number): string {
+  if (n < 100_000) return thousands(n);
+  const units: [number, string][] = [
+    [1e12, 'T'],
+    [1e9, 'B'],
+    [1e6, 'M'],
+    [1e3, 'k'],
+  ];
+  for (const [size, unit] of units) {
+    if (n >= size) {
+      const v = Math.floor((n / size) * 10) / 10;
+      return `${v >= 100 ? Math.floor(v) : v}${unit}`;
+    }
+  }
+  return thousands(n);
+}
+
 /**
  * The horde-only result screen (ID-066) for horde `s`, fought from `game`: a win's XP,
  * level-ups and any survivor asking to join (a boss horde's first clear also finds a radio
@@ -1641,7 +1761,7 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, joined, rests, patched, next, drop, auto } = squadResult(game, s);
+  const { gains, joined, rests, patched, next, drop, scrap, auto } = squadResult(game, s);
   // "Auto" (ID-154): who it moved once the fight was over, so a pick never changes unseen.
   const moved = auto ? movesText(auto) : null;
   const autoNote = moved ? `Auto squad: ${moved}.` : null;
@@ -1678,7 +1798,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     const rewardNote = reward ? bossRewardNote(reward) : null;
     // Slots still open once any newcomer has taken one (ID-150), with someone fit on the
     // bench to fill them.
-    const room = SQUAD_CAP - next.roster.length - joined.length;
+    const room = squadCap(next) - next.roster.length - joined.length;
     const benchFit = room > 0 && next.reserve.some(isFit);
     const rested = restNote(rests, benchFit, paramedicPoints(campOf(game)) > 0);
     const note =
@@ -1701,6 +1821,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
             ? []
             : [`Nobody new joins the camp this time (${size} survivors)`]),
         ...(drop ? squadDropLines(game, drop) : []),
+        scrapLine(scrap),
         ...(rewardNote ? [rewardNote] : []),
         ...(rested ? [rested] : []),
         ...(autoNote ? [autoNote] : []),
@@ -1716,6 +1837,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           // The ending names the horde its title doesn't (ID-127).
           ...(ending ? [{ text: `Horde ${s.hordeNumber} held`, tone: 'ok' as const }] : []),
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
+          { text: scrapChipText(scrap), tone: 'ok', title: scrapLine(scrap) },
           ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'boss' as const })),
           ...(reward
             ? [{ text: `Radio part ${reward.part}/${RADIO_HORDES.length}`, tone: 'warn' as const }]
@@ -2398,6 +2520,7 @@ export function createHud(
     list.map((c) => {
       const chip = el('span', 'chip', c.text);
       chip.dataset.tone = c.tone;
+      if (c.title) chip.title = c.title;
       return chip;
     });
 

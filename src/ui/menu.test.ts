@@ -527,7 +527,7 @@ describe('the Menu', () => {
 
   it('Help gives the stash limit the game uses (ID-158)', () => {
     const help = setup().panel('help').textContent ?? '';
-    expect(help).toContain(`into the stash (${STASH_CAP} at most)`);
+    expect(help).toContain(`into the stash (${STASH_CAP} slots to start)`);
   });
 
   it('Help lists no pan or zoom: the field is one fixed frame (ID-064)', () => {

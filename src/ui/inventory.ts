@@ -26,7 +26,7 @@ import {
 import {
   COMBINE_COUNT,
   RARITIES,
-  STASH_CAP,
+  STASH_SLOT,
   WEAPONS,
   type Rarity,
   type WeaponId,
@@ -37,6 +37,7 @@ import {
   nextRarity,
   squadOf,
   squadSpec,
+  stashCap,
   type CombineSet,
   type GunChoice,
 } from '../core/hordeonly.ts';
@@ -50,7 +51,9 @@ import {
   gunDpsText,
   levelLabel,
   powerLine,
+  slotOffer,
   type PowerLine,
+  type SlotOffer,
 } from './hud.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -89,6 +92,8 @@ export interface InventoryItem {
 export interface InventoryView {
   /** "Stash 12/40"; "Stash 40/40 (full)" once the next drop would throw the weakest away. */
   stashHeading: string;
+  /** The button that buys more stash slots (ID-179); null once every slot is bought. */
+  buy: SlotOffer | null;
   /** The stash, strongest first; anything that is no gun after the guns. */
   stash: InventoryItem[];
   /** Empty places left under the cap (0 when full, or past it from an older save). */
@@ -180,19 +185,22 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
  * horde's Recommended Power (ID-098).
  */
 export function inventoryView(
-  game: Pick<GameState, 'armoury' | 'roster'>,
+  game: Pick<GameState, 'armoury' | 'roster'> & Partial<Pick<GameState, 'slots' | 'stock'>>,
   horde: number | null = null,
+  canBuy = false,
 ): InventoryView {
   const n = game.armoury.length;
+  const cap = stashCap(game);
   return {
     // An older save's stash past the cap is kept as it is (design §6), and is full too.
-    stashHeading: `Stash ${n}/${STASH_CAP}${n >= STASH_CAP ? ' (full)' : ''}`,
+    stashHeading: `Stash ${n}/${cap}${n >= cap ? ' (full)' : ''}`,
+    buy: game.stock ? slotOffer({ slots: game.slots, stock: game.stock }, 'stash', canBuy) : null,
     // A stable sort: equal guns keep the stash's order.
     stash: game.armoury
       .map((h) => ({ h, power: powerOf(h) }))
       .sort((a, b) => b.power - a.power)
       .map(({ h }) => item(h, `stash:${h.uid}`, IN_STASH)),
-    free: Math.max(0, STASH_CAP - n),
+    free: Math.max(0, cap - n),
     squad: squadOf(game).map((d) => {
       // What they fight with: a primary that is no gun fights as the pistol (as squadGear).
       const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
@@ -442,6 +450,23 @@ const button = (text: string, onClick: () => void, extra = ''): HTMLButtonElemen
   return b;
 };
 
+/** The stash heading with its buy button beside it (ID-179); the button only while slots remain. */
+function stashHead(view: InventoryView): HTMLElement {
+  const heading = el('h3', 'menu-heading inv-stash-heading', view.stashHeading);
+  if (!view.buy) return heading;
+  const row = el('div', 'inv-stash-head');
+  const b = button(view.buy.text, () => {}, 'inv-buy');
+  b.dataset.buy = 'stash';
+  b.disabled = view.buy.disabled;
+  b.title = view.buy.title;
+  b.setAttribute(
+    'aria-label',
+    `Buy ${STASH_SLOT.add} stash slots. ${view.buy.text}${view.buy.title ? `. ${view.buy.title}` : ''}`,
+  );
+  row.append(heading, b);
+  return row;
+}
+
 /**
  * The squad row and the stash grid for `view`, under `note`; with `canCombine` (between
  * hordes) slots in a set ready to combine are marked, and with `drag` too the slots that
@@ -468,7 +493,7 @@ export function inventoryGrid(
   });
   // The whole stash section is one drop place for a survivor's gun.
   const stash = section(
-    el('h3', 'menu-heading inv-stash-heading', view.stashHeading),
+    stashHead(view),
     ...(view.stash.length > 0 ? [] : [el('p', 'menu-note', STASH_EMPTY)]),
     el('p', 'menu-note inv-note', note),
     list('Stash', 'inv-grid inv-stash', [
@@ -679,18 +704,29 @@ export function detailsPanel(
   return out;
 }
 
+/** The camp as the Inventory reads it. */
+type InventoryGame = Pick<GameState, 'armoury' | 'roster'> &
+  Partial<Pick<GameState, 'slots' | 'stock'>>;
+
 export interface InventoryOptions {
   /**
    * The camp now, whether a fight is on and not held by Space (for the Close label), and
    * whether guns can be combined now (between hordes).
    */
   state: () => {
-    game: Pick<GameState, 'armoury' | 'roster'>;
+    game: InventoryGame;
     resumes: boolean;
     canCombine?: boolean;
+    /** Whether slots can be bought now (ID-179, between hordes); false when omitted. */
+    canBuy?: boolean;
     /** The horde the next fight is, for the Squad Power line (ID-098); omitted for none. */
     horde?: number;
   };
+  /**
+   * Buys the next stash slots (ID-179), after the app's confirm: what to say once bought,
+   * why not, or null when the player said no. Without it the button does nothing.
+   */
+  onBuyStash?: () => { ok: true; text: string } | { ok: false; reason: string } | null;
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
   onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
   /**
@@ -726,7 +762,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   const doc = root.ownerDocument;
   let opened = false;
   // The camp drawn last: a redraw only when it changes, so the grid keeps its scroll.
-  let listed: Pick<GameState, 'armoury' | 'roster'> | null = null;
+  let listed: InventoryGame | null = null;
+  let listedBuy = false;
   let listedCombine = false;
   let listedHorde: number | null = null;
   let view: InventoryView | null = null;
@@ -895,6 +932,17 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     // The click a drag's release makes is no selection (a key's click has no detail).
     if (swallowClick && e.detail !== 0) {
       swallowClick = false;
+      return;
+    }
+    const buy =
+      e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-buy[data-buy]') : null;
+    if (buy) {
+      const r = opts.onBuyStash?.();
+      if (!r) return;
+      const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
+      draw(game, canCombine, horde, canBuy);
+      say(r.ok ? r.text : r.reason, !r.ok);
+      (body.querySelector<HTMLElement>('.inv-buy') ?? slotOf(selected))?.focus();
       return;
     }
     const b =
@@ -1194,8 +1242,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     confirming = null;
     result = null;
     // onEquip's save has usually redrawn the grid already; drawn again for the new selection.
-    const { game, canCombine = false, horde = null } = opts.state();
-    draw(game, canCombine, horde);
+    const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
+    draw(game, canCombine, horde, canBuy);
     say(equipMessage(before, d));
     const b = slotOf(selected);
     b?.focus();
@@ -1268,21 +1316,23 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
 
   /** Draws the grid for `game`; a confirm whose guns have left the stash is dropped. */
   function draw(
-    game: Pick<GameState, 'armoury' | 'roster'>,
+    game: InventoryGame,
     canCombine: boolean,
     horde: number | null,
+    canBuy = false,
   ): void {
     // The slots are redrawn: a drag under way goes back.
     stopDrag();
     listed = game;
     listedCombine = canCombine;
     listedHorde = horde;
+    listedBuy = canBuy;
     if (confirming && !(canCombine && confirming.every((w) => game.armoury.includes(w)))) {
       confirming = null;
     }
     // Focus in the grid or the details: both are redrawn, so it comes back to the slot.
     const hadFocus = body.contains(doc.activeElement) || details.contains(doc.activeElement);
-    view = inventoryView(game, horde);
+    view = inventoryView(game, horde, canBuy);
     // On a touch screen a plain drag scrolls: the note says to hold first.
     const touch = !!doc.defaultView?.matchMedia?.('(pointer: coarse)').matches;
     const note = opts.onEquip
@@ -1313,8 +1363,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     result = r.ok ? combineResult(r.weapon) : r.reason;
     // The new gun takes a used gun's place: select it, so its details say what was made.
     if (r.ok) selected = `stash:${r.weapon.uid}`;
-    const { game, canCombine = false, horde = null } = opts.state();
-    draw(game, canCombine, horde);
+    const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
+    draw(game, canCombine, horde, canBuy);
     // Focus on the line saying what it made: a screen reader reads it.
     (details.querySelector<HTMLElement>('.inv-combine-result') ?? slotOf(selected))?.focus();
   }
@@ -1355,11 +1405,18 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     },
     refresh() {
       if (!opened) return;
-      const { game, resumes, canCombine = false, horde = null } = opts.state();
+      const { game, resumes, canCombine = false, horde = null, canBuy = false } = opts.state();
       hintText.textContent = resumes ? ' closes and resumes' : ' closes';
       done.textContent = resumes ? 'Resume' : 'Close';
-      if (game === listed && canCombine === listedCombine && horde === listedHorde) return;
-      draw(game, canCombine, horde);
+      if (
+        game === listed &&
+        canCombine === listedCombine &&
+        horde === listedHorde &&
+        canBuy === listedBuy
+      ) {
+        return;
+      }
+      draw(game, canCombine, horde, canBuy);
     },
   };
   return api;

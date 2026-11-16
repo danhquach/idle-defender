@@ -1,4 +1,4 @@
-// Design §12, as built ID-154: save version 21. "Auto" best squad (`autoSquad`) is saved
+// Design §12, as built ID-154: save version 21 (23 since ID-179). "Auto" best squad (`autoSquad`) is saved
 // only while ticked. Exactly `true` turns it on; any other value, hostile or not, loads with
 // it off and copies nothing; an older save has it off.
 import { describe, expect, it } from 'vitest';
@@ -33,8 +33,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}, v = SAVE
 }
 
 describe('save: Auto best squad (ID-154)', () => {
-  it('is version 22', () => {
-    expect(SAVE_VERSION).toBe(22);
+  it('is version 23', () => {
+    expect(SAVE_VERSION).toBe(23);
   });
 
   it('round-trips on; off writes no field', () => {

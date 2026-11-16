@@ -510,7 +510,7 @@ describe('gun level wherever the gun shows (ID-098)', () => {
     const thrown = gun('t', 3);
     const full = { armoury: [thrown, ...Array.from({ length: STASH_CAP - 1 }, () => w)] };
     const t = dropTile(full, dropOf(w, { thrown: [thrown] }));
-    expect(t.thrown).toBe('Thrown away: Lv 3 Military Carbine');
+    expect(t.thrown).toBe('Thrown away: Lv 3 Military Carbine · salvaged for 25 Scrap');
     const lines = squadDropLines(full, dropOf(w, { thrown: [thrown] }));
     expect(lines.some((l) => l.includes('Lv 3 Military Carbine (+7% damage)'))).toBe(true);
   });

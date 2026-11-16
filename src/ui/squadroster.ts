@@ -9,7 +9,7 @@
 // Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
 // the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
-import { JOBS, SQUAD_CAP, STASH_CAP, WEAPONS, type Rarity } from '../core/data.ts';
+import { JOBS, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
   combinePartners,
@@ -17,15 +17,17 @@ import {
   letGoLock,
   restLabel,
   restOf,
+  squadCap,
   squadOf,
   squadSpec,
+  stashCap,
   type GunMove,
   type SquadMoves,
 } from '../core/hordeonly.ts';
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
-import { dpsCaption, el, movesText } from './hud.ts';
+import { dpsCaption, el, movesText, slotOffer } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
 import { levelText } from './statlines.ts';
@@ -56,7 +58,7 @@ export interface RosterTile {
 }
 
 /** A camp as the Roster reads it: the squad, and the bench if there is one (ID-147). */
-type Camp = Pick<GameState, 'roster'> & { reserve?: readonly RosterDefender[] };
+type Camp = Pick<GameState, 'roster' | 'slots'> & { reserve?: readonly RosterDefender[] };
 
 /**
  * The Roster's tabs for `game` at `now`: the squad in roster order, then the bench (ID-147),
@@ -118,9 +120,10 @@ export interface RosterOptions {
    * closing resumes a fight (Close label).
    */
   state: () => {
-    game: Pick<GameState, 'roster' | 'armoury' | 'autoSquad'> & {
-      reserve?: readonly RosterDefender[];
-    };
+    game: Pick<GameState, 'roster' | 'armoury' | 'autoSquad'> &
+      Partial<Pick<GameState, 'slots' | 'stock'>> & {
+        reserve?: readonly RosterDefender[];
+      };
     fight: HordeState | null;
     canGear: boolean;
     resumes: boolean;
@@ -142,6 +145,11 @@ export interface RosterOptions {
     keeper: string,
     fed: string,
   ) => { ok: true; text: string } | { ok: false; reason: string } | null;
+  /**
+   * Buys the next squad slot (ID-179, between hordes), after the app's confirm: what to say
+   * once bought, why not, or null when the player said no. Without it the button does nothing.
+   */
+  onBuySquad?: () => { ok: true; text: string } | { ok: false; reason: string } | null;
   /** "Best gun for everyone": the guns handed out, or why not. */
   onBestGuns: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
   /** "Best squad" (ID-154): who moved, or why not. */
@@ -223,10 +231,14 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   const autoLabel = el('label', 'rv-auto');
   autoLabel.htmlFor = autoBox.id;
   autoLabel.append(autoBox, el('span', '', 'Auto'));
+  // The next squad slot for Scrap (ID-179), shown while slots remain.
+  const buySquadButton = el('button', 'hud-button rv-btn rv-buy-squad');
+  buySquadButton.type = 'button';
+  buySquadButton.dataset.key = 'buy-squad';
   // In a fight, why both are greyed, in words (a tooltip never shows on a phone).
   const squadWait = el('p', 'rv-squad-wait', SQUAD_WAIT);
   const squadRow = el('div', 'rv-squad-row');
-  squadRow.append(squadLabel, bestSquadButton, autoLabel, squadWait);
+  squadRow.append(squadLabel, buySquadButton, bestSquadButton, autoLabel, squadWait);
   const benchLabel = el('p', 'rv-tabs-label');
   const benchTabs = el('ul', 'rv-tabs rv-bench');
   benchTabs.setAttribute('aria-label', 'Bench');
@@ -253,6 +265,13 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     // Says when it runs: a tooltip never shows on a phone.
     else setStatus(`${AUTO_ON}${moved ? ` Squad: ${moved}` : ''}`);
     draw('auto-squad');
+  });
+
+  buySquadButton.addEventListener('click', () => {
+    const r = opts.onBuySquad?.();
+    if (!r) return;
+    setStatus(r.ok ? r.text : r.reason, r.ok ? 'ok' : 'danger');
+    draw('buy-squad');
   });
 
   bestButton.addEventListener('click', () => {
@@ -329,11 +348,24 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
 
     const marks = rosterTiles(game, Date.now(), fight);
     const benched = marks.filter((t) => t.bench);
-    const squadText = `Squad ${marks.length - benched.length}/${SQUAD_CAP}`;
+    const squadText = `Squad ${marks.length - benched.length}/${squadCap(game)}`;
     tabs.setAttribute('aria-label', squadText);
     tabs.replaceChildren(...marks.filter((t) => !t.bench).map((t) => tabItem(t, t.id === current)));
     // With nobody on the bench the rows need no labels: the Roster looks as it did.
     squadRow.hidden = benchLabel.hidden = benchTabs.hidden = benched.length === 0;
+    const offer = game.stock
+      ? slotOffer({ slots: game.slots, stock: game.stock }, 'squad', canGear)
+      : null;
+    buySquadButton.hidden = offer === null;
+    if (offer) {
+      buySquadButton.textContent = offer.text;
+      buySquadButton.disabled = offer.disabled;
+      buySquadButton.title = offer.title;
+      buySquadButton.setAttribute(
+        'aria-label',
+        `Buy 1 squad slot. ${offer.text}${offer.title ? `. ${offer.title}` : ''}`,
+      );
+    }
     bestSquadButton.disabled = autoBox.disabled = !canGear;
     squadWait.hidden = canGear;
     bestSquadButton.title = canGear ? '' : SQUAD_WAIT;
@@ -673,7 +705,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
 
   function pickerPanel(
     d: RosterDefender,
-    game: Pick<GameState, 'roster' | 'armoury'>,
+    game: Pick<GameState, 'roster' | 'armoury' | 'slots'>,
     canGear: boolean,
   ): HTMLElement[] {
     const held = heldGunOf(d);
@@ -690,7 +722,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     });
     headRow.append(
       el('span', 'rv-ttl', 'Choose a gun'),
-      el('span', 'rv-left', `By DPS · stash ${game.armoury.length}/${STASH_CAP}`),
+      el('span', 'rv-left', `By DPS · stash ${game.armoury.length}/${stashCap(game)}`),
       back,
     );
     const out: HTMLElement[] = [headRow];

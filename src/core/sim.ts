@@ -24,6 +24,11 @@ import {
   squadDrop,
   squadOf,
   startSquadHorde,
+  winScrap,
+  salvageOf,
+  scrapAfter,
+  squadCap,
+  stashCap,
   stashWith,
   type SquadDrop,
 } from './hordeonly.ts';
@@ -31,7 +36,7 @@ import { skillLock, useSkill } from './skills.ts';
 import { squadPower } from './squadpower.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { levelOf } from './stats.ts';
-import { FARM, FIELD, SQUAD_CAP, WALL } from './data.ts';
+import { FARM, FIELD, WALL } from './data.ts';
 
 /** Longest a simulated horde may run, in fight seconds, before it counts as stuck. */
 const MAX_FIGHT = 3600;
@@ -330,7 +335,7 @@ export const SQUAD_FARM = { replays: 3 } as const;
  */
 export const restWait = (game: GameState): boolean =>
   highestBeaten(game) >= 1 &&
-  squadOf(game).length < SQUAD_CAP &&
+  squadOf(game).length < squadCap(game) &&
   game.reserve.some((d) => !isFit(d)) &&
   !game.reserve.some(isFit);
 
@@ -354,12 +359,21 @@ export interface SquadPlay {
  * guaranteed upgrade; with no guaranteed upgrade, the bad-luck count up by 1 as for a drop
  * that is no upgrade.
  */
-export function unlucky(game: GameState, next: GameState, drop: SquadDrop): GameState {
+export function unlucky(
+  game: GameState,
+  next: GameState,
+  drop: SquadDrop,
+  /** The horde won: its Scrap is paid, but not the salvage of guns this path keeps. */
+  hordeNumber: number,
+): GameState {
+  const win = scrapAfter(game.stock, winScrap(hordeNumber));
   if (drop.kind === 'guaranteed') {
-    return { ...next, armoury: stashWith(game.armoury, [drop.weapon]).armoury };
+    const kept = stashWith(game.armoury, [drop.weapon], stashCap(game));
+    return { ...next, armoury: kept.armoury, stock: scrapAfter(win, salvageOf(kept.thrown)) };
   }
   return {
     ...next,
+    stock: win,
     armoury: game.armoury,
     farm: {
       ...next.farm,
@@ -401,7 +415,7 @@ export function playSquadCampaign(seed: number, hordes: number, play: SquadPlay 
     });
     const drop = replay && play.worstLuck ? squadDrop(game, horde) : null;
     let next = finishSquadHorde(game, horde);
-    if (drop) next = unlucky(game, next, drop);
+    if (drop) next = unlucky(game, next, drop, n);
     game = gearUp(next);
     // A rest-wait replay (ID-147) is no farming: only a lost new horde starts that.
     if (farm > 0) farm--;
