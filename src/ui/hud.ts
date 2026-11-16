@@ -571,7 +571,7 @@ export interface SkillChoice {
  */
 export interface SkillPick {
   options: SkillChoice[];
-  /** "Your only skill", or how many may be picked. */
+  /** How many may be picked, "No skill picked", or empty when the only skill is picked (ID-185). */
   note: string;
 }
 
@@ -598,7 +598,7 @@ export function skillPicker(pick: readonly SkillId[]): SkillPick {
           ? 'No skill picked'
           : `Pick up to ${SQUAD_SKILLS.max}`
         : only
-          ? 'Your only skill'
+          ? ''
           : `${pick.length} of ${SQUAD_SKILLS.max} picked`,
   };
 }
@@ -2597,6 +2597,7 @@ export function createHud(
     }
     const note = el('p', 'hud-skill-note', p.note);
     note.setAttribute('role', 'status');
+    note.hidden = p.note === '';
     skillBlock.replaceChildren(label, row, note);
     if (had) [...row.querySelectorAll('button')].find((b) => b.dataset.skill === had)?.focus();
   }

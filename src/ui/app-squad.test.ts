@@ -970,13 +970,15 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     expect(option(root, 'airstrike').disabled).toBe(false);
     // One skill to pick: the header asks for no second one.
     expect(root.querySelector('#hud-skill-label')!.textContent).toBe('Skill');
-    expect(root.querySelector('.hud-skill-note')!.textContent).toBe('Your only skill');
+    // The only skill, picked: no note at all (ID-185).
+    expect(root.querySelector<HTMLElement>('.hud-skill-note')!.hidden).toBe(true);
     // No ×2 claim on the card (ID-174).
     expect(option(root, 'airstrike').textContent).not.toMatch(/×|twice/);
     option(root, 'airstrike').click();
     expect(saved().skillPick).toEqual([]);
     expect(pressed(root)).toEqual([]);
     expect(root.querySelector('.hud-skill-note')!.textContent).toBe('No skill picked');
+    expect(root.querySelector<HTMLElement>('.hud-skill-note')!.hidden).toBe(false);
     option(root, 'airstrike').click();
     expect(saved().skillPick).toEqual(['airstrike']);
     // The skill row waits under the screen, and its keys do nothing there.

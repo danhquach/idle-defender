@@ -28,9 +28,9 @@ describe('the skill pick (ID-100, ID-139)', () => {
     expect(skillPicker([]).note).toBe('No skill picked');
   });
 
-  it('picked alone: no ×2 claim anywhere, though it still works ×2 (ID-174)', () => {
+  it('picked alone: no note (ID-185) and no ×2 claim anywhere, though it still works ×2 (ID-174)', () => {
     const p = skillPicker(['airstrike']);
-    expect(p.note).toBe('Your only skill');
+    expect(p.note).toBe('');
     expect(rows(['airstrike'])).toEqual([
       ['airstrike', true, false, 'Bombs an area you pick, 12 bombs', '60s cooldown'],
     ]);
