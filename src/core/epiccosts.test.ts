@@ -83,7 +83,7 @@ describe('every epic card names its gain and a cost (ID-137)', () => {
       'Hits knock enemies back (up to 100 px each) and daze them: +30% damage taken for 1 s after each hit; −10% fire rate',
     );
     expect(UPGRADES['frag-grenades'].text).toBe(
-      'Each survivor throws a grenade every 8 s into the thickest group, for 25% of a Shambler’s HP; a throw stops its thrower firing for 1.5 s',
+      'Each survivor carries 3 grenades; one comes back every 8 s. Thrown into the thickest group, for 25% of a Shambler’s HP; a throw stops its thrower firing for 1.5 s',
     );
     expect(UPGRADES['field-repairs'].text).toBe(
       'Repair every wall segment to full; −25% fire rate for 5 s',

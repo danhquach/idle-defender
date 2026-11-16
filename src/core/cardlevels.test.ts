@@ -20,6 +20,7 @@ import { CARD, CARD_MAX_LEVEL, ENEMIES, SEGMENT_HEIGHT, STEP, SWARM, WEAPONS } f
 import { enemyHp, waveCount, waveSize } from './waves.ts';
 import {
   cardLevel,
+  carried,
   extraPierce,
   fireDps,
   fragDamage,
@@ -943,7 +944,7 @@ describe('one throwable slot: Frag Grenades, Flashbang or Molotov (ID-139)', () 
       expect(s.nextThrowAt).toBe(0);
     });
 
-    it('each card comes every `every` s per survivor on the line', () => {
+    it('each card throws at once, then the squad waits `gap` s before the next (ID-178)', () => {
       expect(CARD.flashbang.every).toBe(10);
       expect(CARD.molotov.every).toBe(12);
       for (const id of ['flashbang', 'molotov'] as const) {
@@ -953,8 +954,64 @@ describe('one throwable slot: Frag Grenades, Flashbang or Molotov (ID-139)', () 
         const t = tick(s, STEP);
         expect(t.grenades, id).toHaveLength(1);
         expect(t.grenades[0]!.item).toBe(id);
-        expect(t.nextThrowAt).toBeCloseTo(t.grenades[0]!.at + CARD[id].every, 9);
+        expect(t.nextThrowAt).toBeCloseTo(t.grenades[0]!.at + CARD.throws.gap, 9);
       }
+    });
+
+    it('each survivor carries 3 throws: a burst, then one back every `every` s (ID-178)', () => {
+      expect(CARD.throws.carry).toBe(3);
+      const every = CARD.molotov.every;
+      let t = at('molotov', 1);
+      crowd(t, 4, { stunnedUntil: 1e9 });
+      t.nextThrowAt = 0;
+      // Throws counted step by step (feats are kept only a moment).
+      let thrown = 0;
+      const run = (n: number) => {
+        for (let i = 0; i < n; i++) {
+          const before = t.time;
+          t = tick(t, STEP);
+          thrown += t.feats.filter((f) => f.kind === 'throw' && f.at >= before).length;
+        }
+      };
+      const d = () => t.defenders[0]!;
+      run(1);
+      const first = t.time - STEP; // thrown at the step's start
+      expect([thrown, carried(d())]).toEqual([1, 2]);
+      expect(d().throwBackAt).toBeCloseTo(first + every, 9);
+      // The burst: the other two, `gap` s apart.
+      run(Math.ceil((2 * CARD.throws.gap) / STEP) + 1);
+      expect([thrown, carried(d())]).toEqual([3, 0]);
+      // Then nothing until the first comes back, `every` s after the first throw.
+      run(Math.floor((first + every - t.time) / STEP) - 1);
+      expect(thrown).toBe(3);
+      run(2);
+      expect([thrown, carried(d())]).toEqual([4, 0]);
+      // A long spell with nobody in reach refills to 3 and no further.
+      for (const e of t.enemies) e.x = d().x + CARD.molotov.range + 100;
+      run(Math.ceil((5 * every) / STEP));
+      expect(thrown).toBe(4);
+      expect(carried(d())).toBe(3);
+      expect(d().throwBackAt).toBeUndefined();
+    });
+
+    it('throws are the survivor’s: a swap keeps what they carry and the refill under way (ID-178)', () => {
+      const s = at('molotov', 1);
+      crowd(s, 4, { stunnedUntil: 1e9 });
+      s.nextThrowAt = 0;
+      let t = tick(s, STEP);
+      const d = () => t.defenders[0]!;
+      expect(carried(d())).toBe(2);
+      const back = d().throwBackAt!;
+      t = picked(t, 'flashbang');
+      expect([carried(d()), d().throwBackAt]).toEqual([2, back]);
+      // The pending refill keeps its time under the new card.
+      t.nextThrowAt = 1e9;
+      while (t.time < back + STEP) t = tick(t, STEP);
+      t.nextThrowAt = t.time;
+      t.enemies = t.enemies.map((e) => ({ ...e, x: d().x + CARD.flashbang.range + 100 }));
+      t = tick(t, STEP);
+      expect(carried(d())).toBe(3);
+      expect(d().throwBackAt).toBeUndefined();
     });
 
     it('a throw is a feat for the thrower, and only Frag Grenades takes their hands (ID-137)', () => {
@@ -1374,13 +1431,13 @@ describe('Flashbang and Molotov say they are thrown, and how often (ID-139 desig
     for (const n of [1, 2, 3]) {
       const f = effectAt('flashbang', n)!;
       expect(f.pre).toBe(
-        `Each survivor throws one every ${CARD.flashbang.every} s: stuns enemies within ${CARD.flashbang.radius} px for `,
+        `Each survivor carries 3; one comes back every ${CARD.flashbang.every} s. Stuns enemies within ${CARD.flashbang.radius} px for `,
       );
       expect(f.value).toBe(`${CARD.flashbang.seconds[n - 1]} s`);
       expect(f.post).toBe('; −15% gun range for the whole squad while held');
       const m = effectAt('molotov', n)!;
       expect(m.pre).toBe(
-        `Each survivor throws one every ${CARD.molotov.every} s: its fire burns for `,
+        `Each survivor carries 3; one comes back every ${CARD.molotov.every} s. Its fire burns for `,
       );
       expect(m.value).toBe(`${CARD.molotov.seconds[n - 1]} s`);
       expect(m.post).toContain('enemies move 30% faster in the flames');

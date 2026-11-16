@@ -376,7 +376,7 @@ describe('behaviour cards', () => {
     // The middle one and the one below it both have 3 others within 70 px; same x, so lowest id.
     expect({ x: g.x, y: g.y }).toEqual({ x: 900, y: ROW4 });
     expect(g.lands).toBeCloseTo(g.at + CARD.frag.flight, 9);
-    expect(t.nextThrowAt).toBeCloseTo(g.at + CARD.frag.every, 9);
+    expect(t.nextThrowAt).toBeCloseTo(g.at + CARD.throws.gap, 9);
     // It names its thrower (ID-119), who stands where it was thrown from.
     const by = t.defenders.find((d) => d.id === g.by)!;
     expect({ x: by.x, y: by.y }).toEqual({ x: g.fromX, y: g.fromY });
@@ -390,8 +390,8 @@ describe('behaviour cards', () => {
     for (const e of group) expect(hpOf(t, e.id)).toBeCloseTo(1000 - burst, 9);
     expect(hpOf(t, t.enemies.at(-1)!.id)).toBeCloseTo(1000 - burst, 9);
     expect(hpOf(t, lone.id)).toBe(1000);
-    // One grenade every 8 s, no more.
-    t = steps(t, Math.round((CARD.frag.every - CARD.frag.flight) / STEP) - 3);
+    // The next grenade waits out the squad's `gap` (ID-178), no sooner.
+    t = steps(t, Math.round((CARD.throws.gap - CARD.frag.flight) / STEP) - 3);
     expect(t.grenades.filter((k) => !k.burst)).toHaveLength(0);
     t = steps(t, 4);
     expect(t.grenades.filter((k) => !k.burst)).toHaveLength(1);
@@ -418,7 +418,7 @@ describe('behaviour cards', () => {
     expect(steps(none, 10).grenades).toHaveLength(0);
   });
 
-  it('Frag Grenades: every survivor on the line carries them, so two throw twice as often', () => {
+  it('Frag Grenades: every survivor on the line carries 3; with the nearest out, the next throws (ID-178)', () => {
     const { s } = fragged();
     const spec = {
       id: 'b',
@@ -428,9 +428,12 @@ describe('behaviour cards', () => {
     const post = s.posts[1]!;
     post.defenderId = 'b';
     s.defenders.push(standing(spec, post, 1e9));
+    s.defenders[0]!.throws = 0;
+    s.defenders[0]!.throwBackAt = 1e9;
     const t = tick(s, STEP);
     expect(t.grenades).toHaveLength(1);
-    expect(t.nextThrowAt).toBeCloseTo(t.grenades[0]!.at + CARD.frag.every / 2, 9);
+    expect(t.grenades[0]!.by).toBe('b');
+    expect(t.defenders.find((d) => d.id === 'b')!.throws).toBe(CARD.throws.carry - 1);
   });
 
   it('turret bullets set off no behaviour card', () => {
