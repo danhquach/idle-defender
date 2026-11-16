@@ -7,13 +7,15 @@ export default mergeConfig(
     test: {
       // Unit tests cover the pure simulation (src/core/**), the UI's pure
       // helpers (src/ui/**), the save and backup code (src/storage/**), the
-      // build's Content-Security-Policy, the lint rules that ban HTML sinks, the
-      // version checks, CI's dependency fingerprint and the pacing tuner's search.
+      // build's Content-Security-Policy, the page's metadata (ID-173), the lint
+      // rules that ban HTML sinks, the version checks, CI's dependency
+      // fingerprint and the pacing tuner's search.
       include: [
         'src/core/**/*.test.ts',
         'src/ui/**/*.test.ts',
         'src/storage/**/*.test.ts',
         'src/csp.test.ts',
+        'src/page-meta.test.ts',
         'src/version-checks.test.ts',
         'src/deps-hash.test.ts',
         'src/pacing-search.test.ts',
