@@ -37,7 +37,7 @@ describe('backup code', () => {
   it('refuses hidden marks and look-alikes in the code', () => {
     const c = code();
     const mid = Math.floor(c.length / 2);
-    for (const mark of ['​', '‮', '﻿', ' ', ' ']) {
+    for (const mark of ['\u200b', '\u202e', '\ufeff', '\u00a0', '\u2028']) {
       expect(importCode(c.slice(0, mid) + mark + c.slice(mid))).toEqual({ ok: false, why: 'bad' });
     }
     expect(importCode(c.replace('ID1:', 'IД1:'))).toEqual({ ok: false, why: 'bad' });

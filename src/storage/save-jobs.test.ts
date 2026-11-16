@@ -89,8 +89,8 @@ describe('save: professions (ID-149)', () => {
       'constructor',
       'toString',
       'hasOwnProperty',
-      'hunter​',
-      '‮hunter',
+      'hunter\u200b',
+      '\u202ehunter',
       'һunter', // a Cyrillic look-alike
       'x'.repeat(100_000),
       0,

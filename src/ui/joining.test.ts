@@ -126,11 +126,11 @@ describe('the offer tile on the page (ID-150)', () => {
       id: 'recruit-2',
       name: '<img src=x onerror=alert(1)>',
       sub: '<script>alert(1)</script>',
-      job: 'A‮B',
+      job: 'A\u202eB',
     };
     h.showJoin([hostile]);
     expect(tile().querySelector('img, script')).toBeNull();
     expect(tile().querySelector('.tile-name')!.textContent).toBe(hostile.name);
-    expect(tile().querySelector('.join-job')!.textContent).toBe('A‮B');
+    expect(tile().querySelector('.join-job')!.textContent).toBe('A\u202eB');
   });
 });

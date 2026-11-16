@@ -194,7 +194,7 @@ describe('the Roster button and tabs (ID-108)', () => {
   });
 
   it('a hostile name from a save stays text everywhere (no HTML sink)', () => {
-    const name = '<img src=x onerror=alert(1)>‮evil';
+    const name = '<img src=x onerror=alert(1)>\u202eevil';
     const m = mount(camp([{ ...at(1, 4), name }], [gun('h1', 'rifle', 'military')]));
     m.roster.open();
     expect(m.q('.rv-tab-name').textContent).toBe(name);

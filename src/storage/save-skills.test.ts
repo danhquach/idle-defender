@@ -82,8 +82,8 @@ describe('save: the skill pick (ID-100)', () => {
       ['toString'],
       ['Airstrike'],
       [' airstrike'],
-      ['airstrike​'],
-      ['‮airstrike'],
+      ['airstrike\u200b'],
+      ['\u202eairstrike'],
       ['airstrіke'], // Cyrillic i
       ['x'.repeat(100_000)],
       // The retired skills with something else: still refused.
@@ -92,7 +92,7 @@ describe('save: the skill pick (ID-100)', () => {
       ['flashbang', 1],
       ['molotov', null],
       ['flashbang', ['molotov']],
-      ['flashbang​'],
+      ['flashbang\u200b'],
       ['Molotov'],
       ['molotov', 'airstrike', 'airstrike'],
       // Too many once the retired ones are counted: the cap is on what is read, not kept.

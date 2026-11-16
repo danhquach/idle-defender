@@ -790,7 +790,7 @@ describe('moving guns without dragging (ID-095)', () => {
 
   it('shows hostile names as text', () => {
     const g = camp(1, [gun('a', 'rifle', 'military')]);
-    const evil = '<img src=x onerror=alert(1)>‮';
+    const evil = '<img src=x onerror=alert(1)>\u202e';
     g.roster[0] = { ...g.roster[0]!, name: evil };
     const { slot, details, status, dialog } = setup(g);
     slot('stash:a').click();

@@ -502,7 +502,7 @@ describe('the Inventory dialog', () => {
 
   it('shows hostile text as text', () => {
     const g = camp(1);
-    const name = '<img src=x onerror=alert(1)>‮evil';
+    const name = '<img src=x onerror=alert(1)>\u202eevil';
     const { button, dialog, slots, details } = setup({
       ...g,
       roster: [{ ...g.roster[0]!, name }],

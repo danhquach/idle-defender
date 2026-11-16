@@ -120,7 +120,7 @@ describe('a survivor in a patrol report', () => {
   });
 
   it('renders a hostile name as plain text', () => {
-    const evil = '<img src=x onerror=alert(1)>‮gnp.exe';
+    const evil = '<img src=x onerror=alert(1)>\u202egnp.exe';
     const { root, buttons } = panelFor(back(survivor('s1-0', evil)));
     buttons('World map')[0]!.click();
     expect(root.querySelector('img[src="x"]')).toBeNull();
