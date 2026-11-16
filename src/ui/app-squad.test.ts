@@ -682,6 +682,9 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
    * A won Horde 2. `xp` 149 is one short of level 4: the win levels survivor 1 up, so they
    * have a card (ID-134); at 150 (level 4 already) the win doesn't, so no card.
    */
+  /** The clock while `wonWithPoints` fights its horde. */
+  const PINNED = 1_700_000_000_000;
+
   function wonWithPoints(xp = 149) {
     const g = newGame('horde');
     const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
@@ -693,14 +696,23 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
       armoury: [relic],
     };
     localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
-    const booted = boot();
-    step(0);
-    booted.button().click();
-    step(16);
-    endNextTick('won');
-    step(32);
-    // The newcomer joins (ID-150), so the Roster has all three.
-    accept(booted.root);
+    // The clock is the app's only input from outside (the fight's seed, how long things
+    // took): pinned while the fight is fought, so every run wins the same fight with the
+    // same drops, whatever the machine's time or speed.
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(PINNED);
+    let booted: ReturnType<typeof boot>;
+    try {
+      booted = boot();
+      step(0);
+      booted.button().click();
+      step(16);
+      endNextTick('won');
+      step(32);
+      // The newcomer joins (ID-150), so the Roster has all three.
+      accept(booted.root);
+    } finally {
+      clock.mockRestore();
+    }
     const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const card = () =>
       booted.root.querySelector<HTMLElement>('.squad-card[data-defender="recruit-1"]')!;
