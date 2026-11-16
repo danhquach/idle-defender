@@ -205,8 +205,8 @@ describe('the Roster button and tabs (ID-108)', () => {
     m.q('.rv-best').click();
     expect(m.status()).toBe(`Equipped: ${name} → Military Carbine`);
     expect(m.scrim.querySelector('.rv-status')!.children).toHaveLength(0);
-    // The avatar and the gun icon: nothing the name made.
-    expect(m.scrim.querySelectorAll('img').length).toBeLessThanOrEqual(3);
+    // The tab's portrait and gun, the header portrait and the gun slot: nothing the name made.
+    expect(m.scrim.querySelectorAll('img').length).toBe(4);
     expect(
       [...m.scrim.querySelectorAll('img')].every((i) => i.getAttribute('onerror') === null),
     ).toBe(true);

@@ -899,9 +899,10 @@ close-quarter weapons come out only when an enemy is close.
 - **As built (ID-108), the horde-only Roster:** one compact dialog, a bottom
   sheet on a phone, as tall as what it shows. The Roster button carries no
   badge (ID-146: the number of survivors with points to spend before). The dialog has
-  a header (title, "Best gun for everyone", close), one row of squad tabs
-  (name, level, profession, and, as built ID-180, the held gun's icon on its
-  rarity tint with their DPS in their hands; no tab portrait; HP on hover and
+  a header (title, "Best gun for everyone", close), the squad tabs (one row on
+  desktop, rows of four on a phone)
+  (portrait, name, level, profession, and, as built ID-180, the held gun's icon on its
+  rarity tint with their DPS in their hands; HP on hover and
   for screen readers), the selected
   survivor beside their gun slot,
   and one panel that is either **Level** or
@@ -1108,13 +1109,17 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   time it loads.
 - **Squad Power** counts a fighting job's specialty with its gun, and the
   self jobs' stats, the way it counts the level's.
-- **On screen:** each Roster tab (squad and bench) is one stacked column: name,
-  "Lv 7" (wide dialogs only), the profession (short names of 8 letters at most
-  so they fit a 375 px phone: "Police", "Guard", "Medic", "Scav", "Mech", "Teach"), the
-  held gun's icon on its rarity tint across the card, and the bare DPS in their
-  hands (ID-180: the number the gun slot shows, ID-152; the free pistol shows
-  as the pistol on the common tint). Up to 8 squad cards share the row on desktop
-  and a phone; the bench's are 76 px (52 px when the Roster is 460 px or narrower) and scroll. A resting survivor shows "Rest N"
+- **On screen:** each Roster tab (squad and bench) is two columns: the
+  portrait beside the name, "Lv 7" and the profession (short names of 8 letters
+  at most so they fit a 375 px phone: "Police", "Guard", "Medic", "Scav", "Mech",
+  "Teach"), then the held gun's icon on its rarity tint beside the bare DPS in
+  their hands (ID-180: the number the gun slot shows, ID-152; the free pistol
+  shows as the pistol on the common tint). Up to 8 squad cards share the row on
+  desktop; when the Roster is 460 px or narrower (a phone) the squad sits in rows
+  of four, so 8 take two rows, none pushed off. The bench's cards are 84 px (a
+  quarter of the row on a phone) and scroll. A ★ after the DPS marks a fighting
+  job holding one of its guns (the gun picker's mark: the profession's bonus works),
+  and the label adds ", suits a Hunter". A resting survivor shows "Rest N"
   in place of the profession. The tab's label ends "…, Lv 3 Military Rifle, 17.2
   DPS". Tabs redraw on every Equip, Best gun, Best squad, Auto, Combine, buy
   and outside change. The selected survivor's line says "Level 7 · Hunter · HP …"; on a
@@ -1274,7 +1279,7 @@ profession's output).
     Help says "40 slots to start" and where each kind is bought. Numbers in
     these texts use thousands separators. At the worst luck (§11) the scripted
     player gets the win's Scrap only, no salvage for guns it keeps out of the
-    stash. On a phone the Roster's eight tabs share the row (the label row wraps).
+    stash. On a phone the Roster's eight tabs take two rows of four (the label row wraps).
   - **Equip:** between hordes, on the start and result screens, each survivor
     in the squad has a one-click gun picker (a select; the pick applies and
     saves at once). It lists the free pistol, the stash's guns and the gun
