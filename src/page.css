@@ -1961,9 +1961,10 @@ body {
 
 /* A phone (ID-169): the whole footer pinned took most of the panel, and no squad card
    fitted above it. Here the skill, horde picker and lines scroll with the panel, and only
-   the button stays pinned, full width and in thumb reach. A short window keeps the footer
-   pinned since it became one bar (ID-186). */
-@media (max-width: 480px) {
+   the button stays pinned, full width and in thumb reach. The same in a very short window
+   (a phone on its side, 360 px tall: the bar would cover most of a 230 px panel); a short
+   desktop window keeps the footer pinned since it became one bar (ID-186). */
+@media (max-width: 480px), (max-height: 500px) {
   .hud-debrief .hud-result-foot {
     display: contents;
   }

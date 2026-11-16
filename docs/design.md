@@ -1392,15 +1392,16 @@ profession's output).
       chips share a row, and the drop, the join tile and the squad share the
       next (three level-ups or more take a row of their own). From 1000 px
       it is up to 760 px, or up to 1,120 px with someone asking to join or
-      three level-ups or more. A phone stacks them, two cards across.
+      three level-ups or more. A phone stacks them, two cards across (one under about 340 px).
     - **One card size:** every card of a grid is the same size, as wide as
       its column and as tall as the tallest card, on the start and loss
       screens too; tiles that share a row are equally tall.
     - **The footer** (start, win and loss screens) is one compact bar: the
       skill as a small toggle (name and cooldown; its description is its
       tooltip), the horde select, the power and win-cost lines small beside
-      it, and the button. It stays pinned in a short window too; on a phone
-      (480 px or less) only the button is pinned, as before (ID-169).
+      it, and the button. It stays pinned in a short desktop window too; on
+      a phone (480 px wide or less, or a window 500 px tall or less, as a
+      phone on its side) only the button is pinned, as before (ID-169).
 
 ## 7. Turrets, energy and traps
 

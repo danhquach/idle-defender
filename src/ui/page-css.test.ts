@@ -253,13 +253,14 @@ describe('narrow squad cards: a 320 px window, two columns in a wide one (ID-151
     expect(block[2]).toMatch(/\.squad-card-xp \{[^}]*grid-area: 2 \//);
   });
 
-  it('on a phone only Start stays pinned, so a whole squad card fits (ID-169)', () => {
-    // A roomy window keeps the whole footer pinned; a short one too, since the footer is
-    // one compact bar (ID-186).
+  it('on a phone, upright or on its side, only Start stays pinned, so a whole squad card fits (ID-169)', () => {
+    // A roomy window keeps the whole footer pinned; a short desktop window (720 px) too,
+    // since the footer is one compact bar (ID-186). A window 500 px tall or less does not:
+    // at 360 px the bar would cover most of the 230 px panel.
     expect(rule('.hud-debrief .hud-result-foot')).toMatch(/position: sticky;/);
     expect(rules).not.toMatch(/@media \(max-width: 480px\), \(max-height: 700px\)/);
     const block =
-      /@media \(max-width: 480px\) \{\n {2}\.hud-debrief \.hud-result-foot \{([\s\S]*?)\n\}/.exec(
+      /@media \(max-width: 480px\), \(max-height: 500px\) \{\n {2}\.hud-debrief \.hud-result-foot \{([\s\S]*?)\n\}/.exec(
         rules,
       );
     expect(block, 'no phone footer block in page.css').not.toBeNull();
