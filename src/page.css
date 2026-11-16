@@ -4071,6 +4071,39 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   gap: var(--space-4) var(--space-8);
 }
 
+/* The stash's sort and filter selects (ID-192): one row, shrinking to fit a 375 px phone. */
+.inv-stash-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.inv-pick {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 var(--space-6);
+  font: inherit;
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  .inv-pick {
+    flex: 1 1 0;
+  }
+}
+
+.inv-show-all {
+  min-height: 32px;
+  font-size: var(--text-xs);
+}
+
 .inv-buy {
   min-height: 32px;
   font-size: var(--text-xs);
