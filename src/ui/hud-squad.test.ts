@@ -32,6 +32,7 @@ import {
   swapsText,
   xpBar,
 } from './hud.ts';
+import { wonNote } from './testing.ts';
 import type { Swap } from '../core/horde.ts';
 import { ART_URLS } from './sprites.ts';
 import { levelText } from './statlines.ts';
@@ -134,15 +135,15 @@ describe('the horde-only screens (ID-066)', () => {
     expect(a.title).toBe('Horde 10 held');
     expect(a.button).toBe(startLabel(11));
     expect(a.lines.at(-1)).toBe('Radio part found. New card unlocked: Heavy Rounds.');
-    expect(a.debrief!.note).toBe(a.lines.at(-1));
+    expect(wonNote(a)).toBe(a.lines.at(-1));
     expect(a.debrief!.chips.map((c) => c.text)).toContain('Radio part 1/3');
     const at20 = squadGame(SQUAD_CAP, 20);
     const b = squadScreen(at20, ended(at20, 'won'));
-    expect(b.debrief!.note).toBe('Radio part found. New card unlocked: Field Repairs.');
+    expect(wonNote(b)).toBe('Radio part found. New card unlocked: Field Repairs.');
     // No other horde finds a part.
     const at11 = squadGame(SQUAD_CAP, 11);
     const c = squadScreen(at11, ended(at11, 'won'));
-    expect(c.debrief!.note).toBeNull();
+    expect(wonNote(c)).toBeNull();
     expect(c.debrief!.chips.map((x) => x.text).join(' ')).not.toMatch(/Radio/);
   });
 
@@ -151,7 +152,7 @@ describe('the horde-only screens (ID-066)', () => {
     const screen = squadScreen(g, ended(g, 'won'));
     expect(screen.title).toBe(EVACUATION_TITLE);
     expect(screen.button).toBe('Continue');
-    expect(screen.debrief!.note).toBe(
+    expect(wonNote(screen)).toBe(
       'The radio works. You held the camp. Play on in Endless for a best horde.',
     );
     expect(screen.debrief!.chips[0]!.text).toBe('Horde 30 held');

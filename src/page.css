@@ -1669,8 +1669,12 @@ body {
   display: grid;
   /* Never wider than the panel: at 320 px it has 238 px for a 260 px card (ID-151). */
   grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
-  /* A card opened for its stats (ID-126) grows alone, not its row's other card. */
-  align-items: start;
+  /* Every card of a row is as tall as its tallest (ID-186): equal columns, equal rows, so
+     a longer gun line or a missing XP bar never leaves the grid ragged. (ID-126's card that
+     opened for its stats and grew alone is gone, ID-146.) */
+  align-items: stretch;
+  /* And every row as tall as the tallest row: one card size for the whole grid. */
+  grid-auto-rows: 1fr;
   gap: var(--space-8);
 }
 
@@ -1892,16 +1896,84 @@ body {
   margin-left: auto;
 }
 
-/* A phone or a short window (ID-169): the whole footer pinned took most of the panel, and
-   no squad card fitted above it. Here the Skill box, horde picker and lines scroll with the
-   panel, and only the button stays pinned, full width and in thumb reach. */
-@media (max-width: 480px), (max-height: 700px) {
+/* The footer as one compact bar (ID-186): the skill as a small toggle (its description
+   stays in its tooltip), the horde select, the power lines small beside it, the button. */
+.hud-debrief .hud-skill-pick {
+  flex: 0 1 auto;
+  flex-flow: row wrap;
+  align-items: center;
+}
+
+.hud-debrief .hud-skill-pick > .hud-horde-label,
+.hud-debrief .hud-horde-pick > .hud-horde-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.hud-debrief .hud-skill-options {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.hud-debrief .hud-skill-option {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 40px;
+  padding: 0 var(--space-10);
+}
+
+.hud-debrief .hud-skill-option-head + .hud-skill-option-detail {
+  display: none;
+}
+
+.hud-debrief .hud-skill-note {
+  flex-basis: 100%;
+  font-size: var(--text-xs);
+}
+
+.hud-debrief .hud-horde-pick {
+  flex: 1 1 200px;
+  gap: var(--space-2) var(--space-8);
+}
+
+/* The start screen's rule: a line of its own over the bar, not a column squeezed into it. */
+.hud-debrief .hud-result-foot-note {
+  flex: 1 0 100%;
+  order: -1;
+}
+
+/* Up to 340 px: "Horde 11 (new) · rec 3,199 · short" whole where the bar has the room. */
+.hud-debrief .hud-horde-select {
+  flex: 1 1 230px;
+  max-width: 340px;
+  min-height: 40px;
+}
+
+.hud-debrief .hud-horde-power,
+.hud-debrief .hud-horde-hint {
+  font-size: var(--text-xs);
+}
+
+/* A phone (ID-169): the whole footer pinned took most of the panel, and no squad card
+   fitted above it. Here the skill, horde picker and lines scroll with the panel, and only
+   the button stays pinned, full width and in thumb reach. A short window keeps the footer
+   pinned since it became one bar (ID-186). */
+@media (max-width: 480px) {
   .hud-debrief .hud-result-foot {
     display: contents;
   }
 
   .hud-debrief .hud-result-foot > * {
-    margin-top: var(--space-16);
+    margin-top: var(--space-8);
+  }
+
+  .hud-debrief .hud-horde-select {
+    max-width: none;
   }
 
   .hud-debrief .hud-result-foot .hud-button {
@@ -1909,9 +1981,522 @@ body {
     bottom: var(--space-12);
     display: block;
     width: 100%;
+    min-height: 44px;
+    /* Clear of the line above by more than the shadow, which would paint over it. */
     margin: var(--space-16) 0 var(--space-12);
     /* The panel's colour around it, so cards scrolling under it never show at its edges. */
     box-shadow: 0 0 0 var(--space-12) var(--color-bg);
+  }
+}
+
+/* --- A win's result at a glance (ID-186): chips for the numbers and what happened, a
+   one-row drop, one row per survivor asking to join, a small card per level-up. The
+   sentences, the drop's role and affixes, each card's XP count, gun picker and level bonus,
+   and the camp's line with nobody asking wait behind "Details" (`data-details` on the
+   panel). Desktop and tablet first: drop, join and squad share a row; a phone stacks them. --- */
+.hud-result.hud-debrief[data-kind='won'] {
+  padding: var(--space-12) var(--space-12) 0;
+}
+
+.hud-debrief[data-kind='won'] .hud-result-title {
+  margin-bottom: var(--space-8);
+  font-size: 1.125rem;
+}
+
+.hud-debrief[data-kind='won'] .hud-picker {
+  gap: var(--space-10);
+  margin-bottom: 0;
+}
+
+.hud-debrief[data-kind='won'] .hud-picker:empty {
+  display: none;
+}
+
+.hud-debrief[data-kind='won'] .hud-result-foot {
+  margin-top: var(--space-10);
+  padding: var(--space-8) 0 var(--space-12);
+  gap: var(--space-6) var(--space-10);
+}
+
+.hud-debrief[data-kind='won'] .debrief-chips {
+  gap: var(--space-4) var(--space-6);
+}
+
+.chip-details::after {
+  content: none;
+}
+
+.debrief-details {
+  padding: 2px 10px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.debrief-details::after {
+  content: ' \25BE';
+  content: ' \25BE' / '';
+}
+
+/* Open: filled, and it reads "Hide details", so the state never rests on the caret alone. */
+.debrief-details[aria-expanded='true'] {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-weight: 600;
+}
+
+.debrief-details[aria-expanded='true']::after {
+  content: ' \25B4';
+  content: ' \25B4' / '';
+}
+
+.debrief-details:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* A finger gets 40 px of each small toggle, the pill drawn no taller. */
+@media (pointer: coarse) {
+  .chip-details,
+  .debrief-details {
+    position: relative;
+  }
+
+  .chip-details::before,
+  .debrief-details::before {
+    content: '';
+    position: absolute;
+    inset: -8px -2px;
+  }
+
+  /* A small card's name (it opens their Roster card): 17 px of text in a 41 px button. The
+     name cuts its overflow for "…", so the room is padding, pulled back by the margin. */
+  .hud-debrief[data-kind='won']:not([data-details]) .squad-card-name {
+    min-width: 44px;
+    margin-block: -8px;
+    padding-block: 12px;
+    /* The dotted line stays under the text, not under the padding. */
+    border-bottom: 0;
+    text-decoration: underline dotted var(--color-text-subtle);
+    text-underline-offset: 3px;
+  }
+}
+
+.debrief-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-8) var(--space-10) var(--space-8) var(--space-24);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.debrief-notes[hidden],
+.debrief-notes:empty {
+  display: none;
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .tile-more,
+.hud-debrief[data-kind='won']:not([data-details]) .tile-recruit-full,
+.hud-debrief[data-kind='won']:not([data-details]) .debrief-hint,
+.hud-debrief[data-kind='won']:not([data-details]) .debrief-stash,
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-xptext,
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-gear,
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-bonus {
+  display: none;
+}
+
+.hud-debrief[data-kind='won'] .debrief-spoils {
+  gap: var(--space-10);
+}
+
+.hud-debrief[data-kind='won'] .tile {
+  padding: var(--space-8) var(--space-10);
+}
+
+/* The drop: icon, "First clear · Relic · Wall stopper" over its name, the DPS and stash
+   count at the right. */
+.hud-debrief[data-kind='won'] .tile-drop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  /* Its rows keep their own height when the tile is stretched to its neighbour's. */
+  align-content: start;
+  align-items: center;
+  column-gap: var(--space-8);
+}
+
+.hud-debrief[data-kind='won'] .tile-drop > * {
+  grid-column: 1 / -1;
+}
+
+.hud-debrief[data-kind='won'] .tile-drop > .tile-drop-head {
+  grid-column: 1;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.hud-debrief[data-kind='won'] .tile-drop > .tile-row {
+  grid-area: 1 / 2;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  margin: 0;
+}
+
+.hud-debrief[data-kind='won'] .tile-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.hud-debrief[data-kind='won'] .tile-drop-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-6);
+}
+
+.hud-debrief[data-kind='won'] .tile-drop-id > p {
+  flex: 1 0 100%;
+}
+
+/* Beside the kind chip with room for it, else on the next line: the role's name is not cut. */
+.hud-debrief[data-kind='won'] .tile-drop-id > .tile-rarity {
+  flex: 0 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-debrief[data-kind='won'] .tile-kind {
+  padding: 0 6px;
+  font-size: var(--text-xs);
+}
+
+.tile-what {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tile-role-name {
+  color: var(--color-text-subtle);
+}
+
+.hud-debrief[data-kind='won'] .tile-drop .tile-name {
+  margin-top: 0 !important;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-debrief[data-kind='won'] .tile-power {
+  font-size: var(--text-heading);
+  font-weight: 600;
+}
+
+.hud-debrief[data-kind='won'] .tile-stash {
+  font-size: var(--text-xs);
+}
+
+.hud-debrief[data-kind='won'] .tile-thrown {
+  color: var(--color-warn);
+  font-size: var(--text-xs);
+}
+
+/* "Bonus guns" is the list's own label; each row says "bonus" after the gun's name. */
+.hud-debrief[data-kind='won'] .tile-bonus-label {
+  display: none;
+}
+
+.hud-debrief[data-kind='won'] .tile-bonus {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-divider);
+}
+
+.hud-debrief[data-kind='won'] .tile-bonus-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.hud-debrief[data-kind='won'] .tile-bonus-name::after {
+  content: ' bonus';
+  content: ' bonus' / '';
+  color: var(--color-text-subtle);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Asking to join: who and what they bring at the left, Accept and Refuse at the right. */
+.hud-debrief[data-kind='won'] .join-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--space-8);
+}
+
+.hud-debrief[data-kind='won'] .join-note {
+  margin: 0 !important;
+  color: var(--color-warn);
+}
+
+.hud-debrief[data-kind='won'] .join-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-8);
+  margin-top: var(--space-6);
+}
+
+.hud-debrief[data-kind='won'] .join-row + .join-row {
+  padding-top: var(--space-6);
+}
+
+.hud-debrief[data-kind='won'] .join-row .tile-name {
+  grid-area: 1 / 1;
+  margin-top: 0 !important;
+  overflow: hidden;
+  font-size: var(--text-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-debrief[data-kind='won'] .join-row .tile-sub {
+  grid-area: 2 / 1;
+  font-size: var(--text-sm);
+}
+
+.hud-debrief[data-kind='won'] .join-row .join-job {
+  grid-area: 3 / 1 / 4 / 3;
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.hud-debrief[data-kind='won'] .join-buttons {
+  grid-area: 1 / 2 / 3 / 3;
+  gap: var(--space-6);
+  margin-top: 0;
+}
+
+.hud-debrief[data-kind='won'] .join-btn {
+  flex: none;
+  min-width: 64px;
+  padding: 0 var(--space-8);
+}
+
+/* Level-ups: the name, "▲ Lv 6" and the XP, the job, a thin XP bar. */
+.hud-debrief[data-kind='won'] .debrief-squad-head {
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+
+.hud-debrief[data-kind='won'] .debrief-squad-title {
+  font-size: var(--text-body);
+}
+
+/* 140 px holds "▲ Lv 20" and "+1,260 XP" on one line and a job under them, uncut: two
+   across on a phone, six at a tablet on its side (928 px inside the panel). */
+.hud-debrief[data-kind='won']:not([data-details]) .squad-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: var(--space-6);
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card {
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8);
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-4);
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-who,
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-level {
+  display: contents;
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-name {
+  flex: 0 1 auto;
+  max-width: 100%;
+  font-size: var(--text-body-sm);
+  text-align: left;
+}
+
+/* Ends the name's line: the name is only as wide as its text, so its underline is too. */
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-level::before {
+  content: '';
+  flex: 0 0 100%;
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-lv {
+  order: 1;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-up .squad-card-lv {
+  color: var(--color-warn);
+  font-weight: 600;
+}
+
+/* The "Level up" badge as a mark before the level; the badge itself stays for a reader. */
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-up .squad-card-lv::before {
+  content: '\25B2';
+  content: '\25B2' / '';
+  margin-right: var(--space-4);
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-badge-up {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-xp,
+.hud-debrief[data-kind='won']:not([data-details]) .squad-badge-new {
+  order: 2;
+  margin-left: auto;
+  font-size: var(--text-xs);
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-sep {
+  display: none;
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .squad-card-job {
+  order: 3;
+  flex: 1 0 100%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-debrief[data-kind='won']:not([data-details]) .xp-track {
+  height: 3px;
+}
+
+/* A tablet upright, and wider: the title and chips share a row; drop, join and squad share
+   the next one (three level-ups or more take a row of their own). The panel's own boxes
+   (`.hud-picker`, `.debrief-spoils`) step aside so their children lay out as one row. */
+@media (min-width: 700px) {
+  .hud-result.hud-debrief[data-kind='won'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    align-content: flex-start;
+    gap: var(--space-12);
+    width: min(720px, calc(100vw - 48px));
+    padding: var(--space-14) var(--space-16) 0;
+  }
+
+  .hud-debrief[data-kind='won'] > * {
+    flex: 0 0 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .hud-debrief[data-kind='won'] > .hud-result-title {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: var(--text-title);
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  .hud-debrief[data-kind='won'] > .hud-result-list + .hud-picker,
+  .hud-debrief[data-kind='won'] .debrief-spoils {
+    display: contents;
+  }
+
+  /* All of the row the title leaves, so no tile ever joins the two. */
+  .hud-debrief[data-kind='won'] .debrief-chips {
+    flex: 1 1 calc(100% - 300px);
+    justify-content: flex-end;
+    min-width: 300px;
+  }
+
+  .hud-debrief[data-kind='won'] .debrief-notes {
+    flex: 0 0 100%;
+    box-sizing: border-box;
+  }
+
+  /* Tiles that share a row are equally tall: their feet line up. */
+  .hud-debrief[data-kind='won'] .tile-drop,
+  .hud-debrief[data-kind='won'] .tile-join {
+    flex: 1 1 300px;
+    align-self: stretch;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  /* Wide enough for "Lv 3 · Paramedic · Pistol" beside the answers on one line: at a
+     tablet on its side the squad goes under the two tiles rather than squeeze this one. */
+  .hud-debrief[data-kind='won'] .tile-join {
+    flex-basis: 340px;
+  }
+
+  .hud-debrief[data-kind='won'] .debrief-squad {
+    flex: 1 1 300px;
+    min-width: 0;
+  }
+
+  .hud-debrief[data-kind='won'] .debrief-squad:has(.squad-card:nth-child(3)),
+  .hud-debrief[data-kind='won'][data-details] .debrief-squad {
+    flex-basis: 100%;
+  }
+
+  .hud-debrief[data-kind='won'] .hud-result-foot {
+    margin-top: 0;
+    padding: var(--space-10) 0 var(--space-14);
+  }
+
+  .hud-debrief[data-kind='won'] .hud-result-foot .hud-button {
+    min-width: 170px;
+    min-height: 40px;
+  }
+}
+
+/* A tablet on its side and a desktop: wider only with something to fill it (someone asking
+   to join, or three level-ups or more). */
+@media (min-width: 1000px) {
+  .hud-result.hud-debrief[data-kind='won'] {
+    width: min(760px, calc(100vw - 64px));
+  }
+
+  .hud-result.hud-debrief[data-kind='won']:has(.tile-join:not([hidden], .tile-recruit-full)),
+  .hud-result.hud-debrief[data-kind='won']:has(.squad-card:nth-child(3)) {
+    width: min(1120px, calc(100vw - 64px));
+  }
+}
+
+/* The panel at its full 1,120 px: six cards fill the row, with no empty seventh column. */
+@media (min-width: 1184px) {
+  .hud-debrief[data-kind='won']:not([data-details]) .squad-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
 }
 

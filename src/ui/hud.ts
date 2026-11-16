@@ -121,6 +121,7 @@ import {
   squadResult,
   squadSpec,
   type GunMove,
+  type NoJoin,
   type SquadDrop,
 } from '../core/hordeonly.ts';
 import { isGun, professionOf } from '../core/loadout.ts';
@@ -1300,6 +1301,8 @@ export interface Chip {
   title?: string;
   /** The chip is a button that opens the radio explanation under it (ID-190). */
   toggle?: true;
+  /** The chip is a button that opens the result's details (ID-186), where its sentence is. */
+  details?: true;
 }
 
 /** The radio explanation's lines (ID-190): a bold lead-in and its text. */
@@ -1330,6 +1333,8 @@ export interface DropTile {
   affixes: string;
   /** "Marksman: +10% crit chance": the gun's role and built-in trait (ID-101). */
   role: string;
+  /** "Marksman": the role alone, for the tile's short line (ID-186); '' with none. */
+  roleName: string;
   /** "17.2 DPS": the gun's own (ID-166). */
   power: string;
   /**
@@ -1383,8 +1388,13 @@ export interface Debrief {
   chips: Chip[];
   /** A loss: where they got in, and any horror still standing. */
   callout: { head: string; sub: string | null } | null;
-  /** A plain line under the header (the ending, a loss's retry). */
+  /** A plain line under the header (the start screen's goal, a loss's retry). */
   note: string | null;
+  /**
+   * A win's sentences (ID-186: the boss reward, who was patched up, who rests, who Auto
+   * moved), one each, shown only with the details open; its chips say them short.
+   */
+  notes?: string[];
   drop: DropTile | null;
   recruit: RecruitTile | null;
   cards: SquadCard[];
@@ -1468,6 +1478,7 @@ export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: Squad
     icon: GUN_ICON[weapon.base as GunId],
     affixes: affixLines(weapon).join(', '),
     role: roleLine(weapon.base) ?? '',
+    roleName: roleOf(weapon.base)?.role ?? '',
     power: gunDpsText(power),
     stash: `Stash ${count}/${stashCap(game)}${lost ? ' · thrown away' : ''}`,
     lost,
@@ -1887,6 +1898,36 @@ export function shortCount(n: number): string {
 }
 
 /**
+ * A win's XP as its chip says it (ID-186): "+126 XP each", "+126 XP" for one survivor,
+ * "+98–126 XP" when they differ; null with nobody.
+ */
+export function xpChipText(gains: readonly { xp: number }[]): string | null {
+  if (gains.length === 0) return null;
+  const low = Math.min(...gains.map((g) => g.xp));
+  const high = Math.max(...gains.map((g) => g.xp));
+  if (low !== high) return `+${thousands(low)}–${thousands(high)} XP`;
+  return `+${thousands(high)} XP${gains.length > 1 ? ' each' : ''}`;
+}
+
+/** "Auto: 2 in · 1 out": how many "Auto" moved, for its chip (ID-186); `movesText` names them. */
+export function autoChipText(moves: { in: readonly string[]; out: readonly string[] }): string {
+  const parts = [
+    ...(moves.in.length > 0 ? [`${moves.in.length} in`] : []),
+    ...(moves.out.length > 0 ? [`${moves.out.length} out`] : []),
+  ];
+  return `Auto: ${parts.join(' · ')}`;
+}
+
+/** "Camp 6 · nobody new" (or "· full"): the camp tile as a chip (ID-186) when nobody asks. */
+export const campChipText = (why: NoJoin, size: number): string =>
+  `Camp ${size} · ${why === 'camp-full' ? 'full' : 'nobody new'}`;
+
+/** The button that opens and closes a win's details (ID-186). */
+export const DETAILS = 'Details';
+/** The same button with them open (ID-186): its words say the state, not only its caret. */
+export const HIDE_DETAILS = 'Hide details';
+
+/**
  * The horde-only result screen (ID-066) for horde `s`, fought from `game`: a win's XP,
  * level-ups and any survivor asking to join (a boss horde's first clear also finds a radio
  * part and may unlock a card, and the finale's is the ending screen, ID-127); a replay's win
@@ -1938,10 +1979,11 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     const room = squadCap(next) - next.roster.length - joined.length;
     const benchFit = room > 0 && next.reserve.some(isFit);
     const rested = restNote(rests, benchFit, paramedicPoints(campOf(game)) > 0);
-    const note =
-      [rewardNote, patchNote(patched), rested, autoNote].filter((t) => t !== null).join(' ') ||
-      null;
+    const patch = patchNote(patched);
+    // Each sentence waits in the details (ID-186); its chip says it short and opens them.
+    const notes = [rewardNote, patch, rested, autoNote].filter((t) => t !== null);
     const size = game.roster.length + game.reserve.length;
+    const xpChip = xpChipText(gains);
     return {
       title: ending
         ? EVACUATION_TITLE
@@ -1969,13 +2011,39 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           ...(ending ? [{ text: `Horde ${s.hordeNumber} held`, tone: 'ok' as const }] : []),
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
           { text: scrapChipText(scrap), tone: 'ok', title: scrapLine(scrap) },
+          ...(xpChip ? [{ text: xpChip, tone: 'ok' as const }] : []),
           ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'boss' as const })),
           ...(reward
-            ? [{ text: `Radio part ${reward.part}/${RADIO_HORDES.length}`, tone: 'warn' as const }]
+            ? [
+                {
+                  text: `Radio part ${reward.part}/${RADIO_HORDES.length}`,
+                  tone: 'warn' as const,
+                  details: true as const,
+                },
+              ]
+            : []),
+          ...(patch
+            ? [
+                {
+                  text: `${patched.length} patched up`,
+                  tone: 'ok' as const,
+                  details: true as const,
+                },
+              ]
+            : []),
+          ...(rested
+            ? [{ text: `${rests.length} resting`, tone: 'warn' as const, details: true as const }]
+            : []),
+          ...(auto && moved
+            ? [{ text: autoChipText(auto), tone: 'ok' as const, details: true as const }]
+            : []),
+          ...(noJoin
+            ? [{ text: campChipText(noJoin, size), tone: 'ok' as const, details: true as const }]
             : []),
         ],
         callout: null,
-        note,
+        note: null,
+        notes,
         drop: drop ? dropTile(game, drop) : null,
         recruit: null,
         cards: ups,
@@ -2314,12 +2382,13 @@ export function createHud(
     });
     const answered = joinAnswers.map((t) => el('p', 'tile-sub join-answer', t));
     if (cards.length > 0) {
-      joinBox.replaceChildren(
+      // One row (ID-186): who asks, and beside it that a refusal is for good.
+      const head = el('div', 'join-head');
+      head.append(
         el('p', 'tile-label', joinLabel(cards.length)),
         el('p', 'tile-sub join-note', REFUSE_NOTE),
-        ...rows,
-        ...answered,
       );
+      joinBox.replaceChildren(head, ...rows, ...answered);
     } else {
       joinBox.replaceChildren(
         el('p', 'tile-label', 'Camp'),
@@ -2691,9 +2760,42 @@ export function createHud(
     replace.replaceChildren(...parts, row, skip);
   }
 
+  /**
+   * Opens or closes a win's details (ID-186): its sentences, the drop's role and affixes,
+   * each card's XP, gun picker and level bonus, and the camp's line. Every button that
+   * toggles them (the chips with a sentence there, and "Details") says which way they are.
+   */
+  function setDetails(open: boolean): void {
+    if (open) result.dataset.details = '';
+    else delete result.dataset.details;
+    const notes = picker.querySelector<HTMLElement>('.debrief-notes');
+    if (notes) notes.hidden = !open;
+    for (const b of picker.querySelectorAll('[data-details-toggle]')) {
+      b.setAttribute('aria-expanded', String(open));
+    }
+    const main = picker.querySelector('.debrief-details');
+    if (main) main.textContent = open ? HIDE_DETAILS : DETAILS;
+  }
+
+  /** A button that opens and closes the details: a chip with a sentence there, or "Details". */
+  function detailsButton(cls: string, text: string): HTMLButtonElement {
+    const b = el('button', cls, text);
+    b.type = 'button';
+    b.dataset.detailsToggle = '';
+    b.setAttribute('aria-controls', 'hud-debrief-notes');
+    b.setAttribute('aria-expanded', 'false');
+    b.addEventListener('click', () => setDetails(result.dataset.details === undefined));
+    return b;
+  }
+
   const chipNodes = (list: readonly Chip[], help: HTMLElement | null): HTMLElement[] =>
     list.map((c) => {
       if (c.toggle && help) return radioChip(c, help);
+      if (c.details) {
+        const chip = detailsButton('chip chip-toggle chip-details', c.text);
+        chip.dataset.tone = c.tone;
+        return chip;
+      }
       const chip = el('span', 'chip', c.text);
       chip.dataset.tone = c.tone;
       if (c.title) chip.title = c.title;
@@ -2853,7 +2955,18 @@ export function createHud(
     if (d.chips.length > 0) {
       const chips = el('div', 'debrief-chips');
       chips.append(...chipNodes(d.chips, help));
+      if (d.kind === 'won') chips.append(detailsButton('debrief-details', DETAILS));
       parts.push(chips);
+    }
+    if (d.kind === 'won') {
+      // A win's sentences (ID-186), closed until asked for; the region is there with none
+      // too, as the buttons name it and the rest of the details open with it.
+      const notes = el('ul', 'debrief-notes');
+      notes.id = 'hud-debrief-notes';
+      notes.setAttribute('aria-label', 'Result details');
+      notes.hidden = true;
+      notes.append(...(d.notes ?? []).map((t) => el('li', '', t)));
+      parts.push(notes);
     }
     if (d.callout) {
       const callout = el('div', 'debrief-callout');
@@ -2886,9 +2999,17 @@ export function createHud(
         name.append(el('span', 'tile-level', t.level), ` ${t.name}`);
         const kind = el('span', 'chip tile-kind', t.kind);
         kind.dataset.tone = t.kindTone;
-        id.append(kind, el('p', 'tile-label tile-rarity', `Weapon drop · ${t.rarityName}`), name);
-        if (t.role) id.append(el('p', 'tile-sub tile-role', t.role));
-        if (t.affixes) id.append(el('p', 'tile-sub', t.affixes));
+        // "Relic · Wall stopper" (ID-186): the role's name stays in sight, its sentence and
+        // the affixes wait in the details.
+        const rarity = el('p', 'tile-label tile-rarity');
+        rarity.append(
+          el('span', 'tile-what', 'Weapon drop · '),
+          t.rarityName,
+          ...(t.roleName ? [el('span', 'tile-role-name', ` · ${t.roleName}`)] : []),
+        );
+        id.append(kind, rarity, name);
+        if (t.role) id.append(el('p', 'tile-sub tile-role tile-more', t.role));
+        if (t.affixes) id.append(el('p', 'tile-sub tile-affixes tile-more', t.affixes));
         const head = el('div', 'tile-drop-head');
         head.append(icon, id);
         tile.append(head, power);
@@ -2917,7 +3038,7 @@ export function createHud(
           tile.append(list);
         }
         if (t.thrown) tile.append(el('p', 'tile-thrown', t.thrown));
-        if (t.farmNote) tile.append(el('p', 'tile-farm', t.farmNote));
+        if (t.farmNote) tile.append(el('p', 'tile-farm tile-more', t.farmNote));
         spoils.append(tile);
       }
       if (d.recruit) {
@@ -2998,7 +3119,14 @@ export function createHud(
     // The whole name on hover, as one line can end it in "…" (ID-111).
     name.title = c.name;
     name.setAttribute('aria-label', `${c.name}: open survivor card`);
-    who.append(name, el('span', 'squad-card-level', `Lv ${c.level} · ${c.job}`));
+    // "Lv 6 · Soldier", in two parts: a win's small card (ID-186) puts the job on its own line.
+    const level = el('span', 'squad-card-level');
+    level.append(
+      el('span', 'squad-card-lv', `Lv ${c.level}`),
+      el('span', 'squad-card-sep', ' · '),
+      el('span', 'squad-card-job', c.job),
+    );
+    who.append(name, level);
     if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
     top.append(who);
     if (c.xp !== null) top.append(el('span', 'squad-card-xp', `+${c.xp} XP`));
@@ -3407,6 +3535,8 @@ export function createHud(
       joinAnswers = [];
       back.classList.toggle('btn-primary', d !== undefined);
       picker.replaceChildren(...(d ? debriefBlock(d) : []));
+      // A new screen starts scannable: its details closed (ID-186).
+      setDetails(false);
       back.textContent = screen.button;
       drawPicker(screen.picker);
       drawSkills(screen.skills);

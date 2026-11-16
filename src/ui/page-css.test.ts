@@ -253,12 +253,18 @@ describe('narrow squad cards: a 320 px window, two columns in a wide one (ID-151
     expect(block[2]).toMatch(/\.squad-card-xp \{[^}]*grid-area: 2 \//);
   });
 
-  it('on a phone or short window only Start stays pinned, so a whole squad card fits (ID-169)', () => {
-    // A roomy window keeps the whole footer pinned.
+  it('on a phone only Start stays pinned, so a whole squad card fits (ID-169)', () => {
+    // A roomy window keeps the whole footer pinned; a short one too, since the footer is
+    // one compact bar (ID-186).
     expect(rule('.hud-debrief .hud-result-foot')).toMatch(/position: sticky;/);
-    const block = /@media \(max-width: 480px\), \(max-height: 700px\) \{([\s\S]*?)\n\}/.exec(rules);
-    expect(block, 'no phone / short-window footer block in page.css').not.toBeNull();
+    expect(rules).not.toMatch(/@media \(max-width: 480px\), \(max-height: 700px\)/);
+    const block =
+      /@media \(max-width: 480px\) \{\n {2}\.hud-debrief \.hud-result-foot \{([\s\S]*?)\n\}/.exec(
+        rules,
+      );
+    expect(block, 'no phone footer block in page.css').not.toBeNull();
     if (!block) return;
+    block[1] = `.hud-debrief .hud-result-foot {${block[1]}`;
     // The footer's box goes: the Skill box, horde picker and lines scroll with the panel.
     expect(block[1]).toMatch(/\.hud-debrief \.hud-result-foot \{\s*display: contents;/);
     // Only the button is pinned, full width.
@@ -329,5 +335,84 @@ describe('the offer cards (ID-177)', () => {
     expect(rules).toMatch(
       /\.hud-card-has-art > \.hud-card-key,\s*\.hud-card-has-art > \.hud-card-title,[^{]*\.hud-card-has-art > \.hud-card-kind \{[^}]*justify-self: center/,
     );
+  });
+});
+
+describe("a win's result at a glance (ID-186)", () => {
+  const won = String.raw`\.hud-debrief\[data-kind='won'\]`;
+  const closed = String.raw`${won}:not\(\[data-details\]\)`;
+
+  it('closed, the long lines are hidden; open, nothing is', () => {
+    // One rule hides them all, and only while the details are closed.
+    const hidden = new RegExp(
+      String.raw`((?:${closed} [^{]+,\s*)+${closed} [^{]+)\{\s*display: none;`,
+    );
+    const list = hidden.exec(rules);
+    expect(list, 'no closed-details rule in page.css').not.toBeNull();
+    for (const part of [
+      'tile-more',
+      'tile-recruit-full',
+      'squad-card-xptext',
+      'squad-card-gear',
+      'squad-card-bonus',
+      'debrief-hint',
+      'debrief-stash',
+    ]) {
+      expect(list![1]).toContain(`.${part}`);
+    }
+    // No rule hides any of them with the details open.
+    expect(rules).not.toMatch(/\[data-details\] [^{]*\{\s*display: none;/);
+  });
+
+  it('desktop and tablet first: tiles and squad share a row from 700 px, wider from 1000 px', () => {
+    const tablet = /@media \(min-width: 700px\) \{([\s\S]*?)\n\}/.exec(rules);
+    expect(tablet, 'no 700 px block').not.toBeNull();
+    expect(tablet![1]).toMatch(/width: min\(720px, calc\(100vw - 48px\)\);/);
+    // The panel's own boxes step aside so their children lay out as one row.
+    expect(tablet![1]).toMatch(/\.debrief-spoils \{\s*display: contents;/);
+    // Three level-ups or more take a row of their own.
+    expect(tablet![1]).toMatch(/\.debrief-squad:has\(\.squad-card:nth-child\(3\)\)/);
+    const desktop = /@media \(min-width: 1000px\) \{([\s\S]*?)\n\}/.exec(rules);
+    expect(desktop, 'no 1000 px block').not.toBeNull();
+    expect(desktop![1]).toMatch(/width: min\(760px, calc\(100vw - 64px\)\);/);
+    // Wide only with something to fill it: someone asking, or three level-ups.
+    expect(desktop![1]).toMatch(
+      /:has\(\.tile-join:not\(\[hidden\], \.tile-recruit-full\)\),[^{]*:has\(\.squad-card:nth-child\(3\)\) \{\s*width: min\(1120px, calc\(100vw - 64px\)\);/,
+    );
+  });
+
+  it('small things a finger must hit keep their size: answers 40 px, toggles a wider hit area', () => {
+    expect(rules).toMatch(/\.join-btn \{[^}]*min-height: 40px;/);
+    expect(rules).toMatch(
+      /@media \(pointer: coarse\) \{[\s\S]*?\.chip-details::before,\s*\.debrief-details::before \{[^}]*inset: -8px/,
+    );
+    // A small card's name is a 41 px button under a finger (17 px of text, 12 px each side).
+    expect(rules).toMatch(
+      /@media \(pointer: coarse\) \{[\s\S]*?:not\(\[data-details\]\) \.squad-card-name \{[^}]*min-width: 44px;[^}]*padding-block: 12px;/,
+    );
+    // Open, "Details" is filled: the state is not left to its caret.
+    expect(rules).toMatch(
+      /\.debrief-details\[aria-expanded='true'\] \{[^}]*background: var\(--color-accent\);/,
+    );
+    // The footer's skill toggle and horde select, on every debrief screen.
+    expect(rules).toMatch(/\.hud-debrief \.hud-skill-option \{[^}]*min-height: 40px;/);
+    expect(rules).toMatch(/\.hud-debrief \.hud-horde-select \{[^}]*min-height: 40px;/);
+  });
+});
+
+describe('one card size per grid (ID-186)', () => {
+  it('cards of a row stretch to the tallest, and every row is as tall as the tallest row', () => {
+    const grid = /\n\.squad-grid \{([^}]*)\}/.exec(rules);
+    expect(grid, 'no .squad-grid rule').not.toBeNull();
+    expect(grid![1]).toMatch(/align-items: stretch;/);
+    expect(grid![1]).toMatch(/grid-auto-rows: 1fr;/);
+    // Equal columns too: every grid of cards is auto-fill tracks of one minmax.
+    for (const m of rules.matchAll(/\.squad-grid \{[^}]*grid-template-columns: ([^;]+);/g)) {
+      expect(m[1]).toMatch(/^repeat\(auto-fill, minmax\(.+, 1fr\)\)$/);
+    }
+  });
+
+  it('tiles that share a row are equally tall', () => {
+    expect(rules).toMatch(/\.tile-drop,\s*[^{]*\.tile-join \{[^}]*align-self: stretch;/);
   });
 });

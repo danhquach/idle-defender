@@ -1363,6 +1363,44 @@ profession's output).
     without a card change guns and spend points from the Roster; a win's gun
     pickers are on its cards only, with no list for the rest. The loss
     screen is unchanged and keeps every card.
+  - **A win at a glance** *(ID-186)*: the win screen is built to be read in
+    a few seconds, desktop and tablet first. Nothing it said before is gone:
+    the long lines wait behind one **Details** button.
+    - **Chips** carry the numbers and what happened: waves, Scrap, the XP
+      ("+126 XP each"; "+126 XP" for one survivor; "+98–126 XP" when they
+      differ), each boss killed, then a chip for each sentence the win has:
+      "Radio part 1/3", "1 patched up", "2 resting", "Auto: 2 in · 1 out",
+      and, with nobody asking to join, "Camp 6 · nobody new" (or "· full").
+      Those last chips are buttons that open the details, as "Details" does.
+    - **Details** (closed on every new screen, not saved) show: the win's
+      sentences as a list (boss reward, patched up, resting, Auto squad);
+      the drop's role sentence, affixes and farm note; the camp tile with
+      why nobody came; and on each card the XP count, the gun picker and the
+      level's bonus line, with the hint and stash count over the cards.
+    - **The drop** is one row: a 40 px icon, the kind chip, "Relic · Wall
+      stopper" (rarity and the role's name), the level and name, and at the
+      right the DPS over the stash count. Bonus guns stay as small rows
+      marked "bonus"; a thrown-away line stays in sight, in the warning
+      colour.
+    - **Asking to join** is one row per survivor: name, "Lv 3 · Paramedic ·
+      Pistol", what the profession brings, and Accept and Refuse at the
+      right (40 px tall). "Refused survivors are gone for good." stays in
+      the tile's head.
+    - **Level-ups** are small cards: the name (still opens their Roster
+      card), "▲ Lv 6" and the XP, the profession, and a thin XP bar.
+    - **Width:** from 700 px the panel is up to 720 px wide, the title and
+      chips share a row, and the drop, the join tile and the squad share the
+      next (three level-ups or more take a row of their own). From 1000 px
+      it is up to 760 px, or up to 1,120 px with someone asking to join or
+      three level-ups or more. A phone stacks them, two cards across.
+    - **One card size:** every card of a grid is the same size, as wide as
+      its column and as tall as the tallest card, on the start and loss
+      screens too; tiles that share a row are equally tall.
+    - **The footer** (start, win and loss screens) is one compact bar: the
+      skill as a small toggle (name and cooldown; its description is its
+      tooltip), the horde select, the power and win-cost lines small beside
+      it, and the button. It stays pinned in a short window too; on a phone
+      (480 px or less) only the button is pinned, as before (ID-169).
 
 ## 7. Turrets, energy and traps
 

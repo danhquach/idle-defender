@@ -31,3 +31,10 @@ export async function answerConfirm(yes: boolean): Promise<string> {
   await flush();
   return question;
 }
+
+/**
+ * A win's sentences as one line (ID-186: they wait in the details, one each), null with
+ * none.
+ */
+export const wonNote = (s: { debrief?: { notes?: string[] } }): string | null =>
+  (s.debrief?.notes ?? []).join(' ') || null;
