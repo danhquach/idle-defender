@@ -278,9 +278,10 @@ Defenders stand on **posts** the player builds and chooses between.
     between hordes in this browser under its own key, outside the save and
     the backup code, and read back through an allow-list (anything but 1, 3
     or 5 is 1×, so a 2× saved before ID-145 loads as 1×). The default is 1×.
-    On a phone each speed button is a 40×44 px target with a 6 px gap; under
-    360 px wide the speeds take their own row under Roster, Inventory and
-    Menu, since the four groups don't fit one row there.
+    On a phone each speed button is a 40×44 px target with a 6 px gap; up to
+    640 px wide (under 408 px before the Scrap chip, ID-179) the speeds take
+    their own row under the Scrap chip, Roster, Inventory and Menu, since the
+    groups don't fit one row there.
     A, S and D are taken, so any keyboard camera control that ever comes uses
     the arrows, not WASD.
   - **The empty field runs fast (ID-164):** while nothing can happen yet (no

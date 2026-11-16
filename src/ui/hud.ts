@@ -1709,6 +1709,7 @@ export const scrapLine = (scrap: { total: number; salvage: number; now: number }
 export function createScrapChip(doc: Document): { set(n: number): void } {
   const chip = doc.createElement('div');
   chip.className = 'scrap-chip';
+  chip.setAttribute('role', 'status');
   chip.setAttribute('aria-live', 'polite');
   const label = doc.createElement('span');
   label.className = 'scrap-chip-label';

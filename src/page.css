@@ -4954,10 +4954,10 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 }
 
-/* Under 408px the speed group (with its pause button, ID-165) and the Roster, Inventory
-   and Menu buttons don't fit one row (ID-145): the speeds take a row of their own under
-   them, the status line below. */
-@media (max-width: 407px) {
+/* Up to 640px the speed group (with its pause button, ID-165), the Scrap chip and the
+   Roster, Inventory and Menu buttons don't fit one row (ID-145; 407px before the chip,
+   ID-179): the speeds take a row of their own under them, the status line below. */
+@media (max-width: 640px) {
   .hud-fight-bar {
     padding-top: 102px;
   }
