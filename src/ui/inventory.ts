@@ -58,6 +58,7 @@ import {
   type PowerLine,
   type SlotOffer,
 } from './hud.ts';
+import type { Answer } from './confirm.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** One weapon as the Inventory shows it. */
@@ -729,7 +730,7 @@ export interface InventoryOptions {
    * Buys the next stash slots (ID-179), after the app's confirm: what to say once bought,
    * why not, or null when the player said no. Without it the button does nothing.
    */
-  onBuyStash?: () => { ok: true; text: string } | { ok: false; reason: string } | null;
+  onBuyStash?: () => Answer | Promise<Answer>;
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
   onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
   /**
@@ -944,7 +945,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     return best;
   }
 
-  body.addEventListener('click', (e) => {
+  body.addEventListener('click', async (e) => {
     // The click a drag's release makes is no selection (a key's click has no detail).
     if (swallowClick && e.detail !== 0) {
       swallowClick = false;
@@ -953,7 +954,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     const buy =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-buy[data-buy]') : null;
     if (buy) {
-      const r = opts.onBuyStash?.();
+      const r = await opts.onBuyStash?.();
       if (!r) return;
       const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
       draw(game, canCombine, horde, canBuy);

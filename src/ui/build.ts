@@ -115,6 +115,7 @@ import {
   riskLines,
   tickMap,
 } from './worldmap.ts';
+import { ASK_CHANGED, askConfirm } from './confirm.ts';
 import { rosterSection } from './roster.ts';
 import { costLine, setVariant } from './kit.ts';
 
@@ -363,6 +364,8 @@ export type SlotLine =
       result: Result;
       /** Asked before the action goes ahead. */
       confirm?: string;
+      /** The confirm is for a one-way action: drawn in the danger colour. */
+      danger?: true;
     };
 
 /** The `game.base.turrets` index of the turret on this mount, or -1. */
@@ -442,6 +445,7 @@ export function turretLines(game: GameState, index: number): SlotLine[] {
       cost: null,
       result: salvageTurret(game.base, game.stock, index),
       confirm: `Salvage this turret for ${stockText(value)}? It is dismantled.`,
+      danger: true,
     },
   ];
 }
@@ -487,14 +491,18 @@ export function trapLines(game: GameState, row: number): SlotLine[] {
       cost: null,
       result: removeTrap(base, stock, index),
       confirm: `Remove this trap for ${stockText(refund)}?`,
+      danger: true,
     },
   ];
 }
 
 /** What clicking `line` gives: its result once `ask` agrees to any `confirm`, else null. */
-export function lineResult(line: SlotLine, ask: (question: string) => boolean): Result | null {
+export async function lineResult(
+  line: SlotLine,
+  ask: (question: string) => boolean | Promise<boolean>,
+): Promise<Result | null> {
   if (line.kind !== 'action' || !line.result.ok) return null;
-  if (line.confirm !== undefined && !ask(line.confirm)) return null;
+  if (line.confirm !== undefined && !(await ask(line.confirm))) return null;
   return line.result;
 }
 
@@ -708,6 +716,22 @@ export function createBuildPanel(
     return section;
   }
 
+  /**
+   * The game's confirm (ID-191) for a line of the panel as it is drawn now: a yes that comes
+   * after the panel was redrawn from another game (stock moved, a patrol came back) counts
+   * as a no, so a result worked out from the old camp never overwrites the new one.
+   */
+  async function askHere(question: string, danger = false): Promise<boolean> {
+    const at = shown?.game;
+    const yes = await askConfirm(question, { danger });
+    if (!yes) return false;
+    if (shown === null || shown.game !== at) {
+      api.notice(ASK_CHANGED);
+      return false;
+    }
+    return true;
+  }
+
   /** A turret menu line; an action with `confirm` asks first. */
   function slotLine(line: SlotLine): HTMLElement {
     if (line.kind !== 'action') {
@@ -716,8 +740,8 @@ export function createBuildPanel(
         : el('p', 'build-slot-note', line.text);
     }
     const { result } = line;
-    return choiceButton(line.label, line.cost, result.ok ? null : result, () => {
-      const done = lineResult(line, (q) => window.confirm(q));
+    return choiceButton(line.label, line.cost, result.ok ? null : result, async () => {
+      const done = await lineResult(line, (q) => askHere(q, line.danger === true));
       if (done?.ok) onChange(done.base, done.stock);
     });
   }
@@ -989,7 +1013,7 @@ export function createBuildPanel(
     return [
       el('h2', 'build-title', 'Roster'),
       backButton('roster'),
-      ...rosterSection(game, Date.now(), onGame, (q) => window.confirm(q)),
+      ...rosterSection(game, Date.now(), onGame, (q) => askHere(q, true)),
     ];
   }
 

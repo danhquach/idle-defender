@@ -18,6 +18,7 @@ import {
 } from './hud.ts';
 import { createInventory, inventoryView } from './inventory.ts';
 import { createRoster, type RosterOptions } from './squadroster.ts';
+import { flush } from './testing.ts';
 
 function camp(squad: number, bench: number, scrap: number): GameState {
   const g = newGame('horde');
@@ -92,17 +93,19 @@ function mountRoster(game: GameState, canGear = true) {
 }
 
 describe('the Roster buy button', () => {
-  it('sits on the squad row, buys on a click, then shows the next price', () => {
+  it('sits on the squad row, buys on a click, then shows the next price', async () => {
     const m = mountRoster(camp(6, 2, 2000));
     expect(m.scrim.querySelector('.rv-tabs-label')?.textContent).toBe('Squad 6/6');
     expect(m.buy().hidden).toBe(false);
     expect(m.buy().textContent).toBe('+1 slot · 500 Scrap');
     m.buy().click();
+    await flush();
     expect(m.onBuySquad).toHaveBeenCalledOnce();
     expect(m.game().roster).toHaveLength(7);
     expect(m.scrim.querySelector('.rv-tabs-label')?.textContent).toBe('Squad 7/7');
     expect(m.buy().textContent).toBe('+1 slot · 1,200 Scrap');
     m.buy().click();
+    await flush();
     expect(m.game().roster).toHaveLength(8);
     // Every slot bought: gone.
     expect(m.buy().hidden).toBe(true);
@@ -150,11 +153,12 @@ function mountInventory(game: GameState, canBuy = true, answer = true) {
 }
 
 describe('the Inventory buy button', () => {
-  it('sits by the stash heading, buys on a click and shows the new size', () => {
+  it('sits by the stash heading, buys on a click and shows the new size', async () => {
     const m = mountInventory(camp(2, 0, 400));
     expect(m.heading()).toBe('Stash 0/40');
     expect(m.buy()?.textContent).toBe('+10 slots · 150 Scrap');
     m.buy()!.click();
+    await flush();
     expect(m.onBuyStash).toHaveBeenCalledOnce();
     expect(m.heading()).toBe('Stash 0/50');
     expect(m.buy()?.textContent).toBe('+10 slots · 250 Scrap');
@@ -174,9 +178,10 @@ describe('the Inventory buy button', () => {
     expect(fight.buy()!.title).toBe(BUY_WAIT);
   });
 
-  it('a no to the confirm buys nothing', () => {
+  it('a no to the confirm buys nothing', async () => {
     const m = mountInventory(camp(2, 0, 400), true, false);
     m.buy()!.click();
+    await flush();
     expect(m.heading()).toBe('Stash 0/40');
   });
 

@@ -27,6 +27,7 @@ import {
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
+import type { Answer } from './confirm.ts';
 import { BEST_GUNS, bestGunsLine, dpsCaption, el, movesText, slotOffer } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
@@ -165,23 +166,21 @@ export interface RosterOptions {
   /** Move survivor `id` between the squad and the bench (ID-147), or why not. */
   onToggleSquad: (id: string) => { ok: true } | { ok: false; reason: string };
   /**
-   * Let survivor `id` go for good (ID-150), after the app's confirm: what to say once they
-   * have gone, why not, or null when the player said no.
+   * Let survivor `id` go for good (ID-150), after the app's confirm (ID-191, answered by the
+   * player, so it may take a while): what to say once they have gone, why not, or null when
+   * the player said no.
    */
-  onLetGo: (id: string) => { ok: true; text: string } | { ok: false; reason: string } | null;
+  onLetGo: (id: string) => Answer | Promise<Answer>;
   /**
    * Survivor `keeper` takes in `fed` of the same profession (ID-170), after the app's
    * confirm: what to say once done, why not, or null when the player said no.
    */
-  onCombine: (
-    keeper: string,
-    fed: string,
-  ) => { ok: true; text: string } | { ok: false; reason: string } | null;
+  onCombine: (keeper: string, fed: string) => Answer | Promise<Answer>;
   /**
    * Buys the next squad slot (ID-179, between hordes), after the app's confirm: what to say
    * once bought, why not, or null when the player said no. Without it the button does nothing.
    */
-  onBuySquad?: () => { ok: true; text: string } | { ok: false; reason: string } | null;
+  onBuySquad?: () => Answer | Promise<Answer>;
   /** "Best gun for everyone": the guns handed out, or why not. */
   onBestGuns: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
   /** "Best squad" (ID-154): who moved, or why not. */
@@ -299,8 +298,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     draw('auto-squad');
   });
 
-  buySquadButton.addEventListener('click', () => {
-    const r = opts.onBuySquad?.();
+  buySquadButton.addEventListener('click', async () => {
+    const r = await opts.onBuySquad?.();
     if (!r) return;
     setStatus(r.ok ? r.text : r.reason, r.ok ? 'ok' : 'danger');
     draw('buy-squad');
@@ -645,8 +644,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       b.type = 'button';
       if (i === 0) b.dataset.key = 'combine-pick';
       b.setAttribute('aria-label', `Combine ${p.name} into ${d.name}: ${label}`);
-      b.addEventListener('click', () => {
-        const r = opts.onCombine(d.id, p.id);
+      b.addEventListener('click', async () => {
+        const r = await opts.onCombine(d.id, p.id);
         if (r === null) return;
         combining = false;
         if (!r.ok) setStatus(r.reason, 'danger');
@@ -683,13 +682,13 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     b.setAttribute('aria-disabled', String(!canGear || lock !== null));
     const why = !canGear ? SQUAD_WAIT : lock;
     b.setAttribute('aria-label', `Let ${d.name} go${why ? `. ${why}` : ''}`);
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       if (lock) {
         setStatus(lock, 'danger');
         draw('letgo');
         return;
       }
-      const r = opts.onLetGo(d.id);
+      const r = await opts.onLetGo(d.id);
       if (r === null) return;
       if (!r.ok) setStatus(r.reason, 'danger');
       else setStatus(r.text);

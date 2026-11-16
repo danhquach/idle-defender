@@ -10,7 +10,7 @@ import { rollOffer } from '../core/cards.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
-import { levelOf } from '../core/stats.ts';
+import { levelOf, xpForLevel } from '../core/stats.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
 import { enemy } from '../core/testing.ts';
@@ -21,7 +21,8 @@ import { SoundEngine } from './audio.ts';
 import { FIGHT_REFUSAL, SAVE_STATUS } from './menu.ts';
 import { LEVEL_ONE_SHORT, LEVEL_ONE_TEXT, levelText } from './statlines.ts';
 import { start } from './app.ts';
-import { skipIntro } from './testing.ts';
+import { ASK_CHANGED } from './confirm.ts';
+import { answerConfirm, confirmPanel, confirmQuestion, flush, skipIntro } from './testing.ts';
 import { AIM_HELD_PROMPT, AIM_PROMPT, BEST_GUNS, BEST_GUNS_NONE } from './hud.ts';
 import { project } from './projection.ts';
 import { GUNS_WAIT } from './inventory.ts';
@@ -112,6 +113,10 @@ beforeEach(() => {
   );
   vi.mocked(tick).mockClear();
   vi.mocked(drawScene).mockClear();
+  // The browser's popup is gone (ID-191): every question is the game's own panel.
+  vi.spyOn(window, 'confirm').mockImplementation(() => {
+    throw new Error("window.confirm is banned: use the game's own confirm panel");
+  });
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -1413,8 +1418,6 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
   });
 
   it('Refuse: gone for good, saved at once; the button then goes on with no question', () => {
-    const confirm = vi.fn<(q: string) => boolean>(() => true);
-    vi.stubGlobal('confirm', confirm);
     const { press, saved, button, bar, toast } = wonFirst();
     const asking = saved().joining![0]!;
     press('Refuse');
@@ -1423,26 +1426,28 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     expect(saved().camp.recruits).toBe(2);
     expect(toast()).toBe(`${asking.name} is turned away for good.`);
     button().click();
-    expect(confirm).not.toHaveBeenCalled();
+    expect(confirmPanel()).toBeNull();
     step(48);
     expect(bar()).toMatch(/^Horde 2 /);
   });
 
-  it('going on without answering asks first: no keeps the screen and the ask; yes refuses them', () => {
-    const confirm = vi.fn<(q: string) => boolean>(() => false);
-    vi.stubGlobal('confirm', confirm);
+  it('going on without answering asks first: no keeps the screen and the ask; yes refuses them', async () => {
     const { button, result, saved, join, bar } = wonFirst();
     const asking = saved().joining![0]!;
     button().click();
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm.mock.calls[0]![0]).toBe(
+    expect(confirmQuestion()).toBe(
       `${asking.name} is still asking to join. Go on without answering? They are refused and gone for good.`,
     );
+    // A second press while it is up asks nothing more.
+    button().click();
+    expect(document.querySelectorAll('.confirm-scrim')).toHaveLength(1);
+    await answerConfirm(false);
+    expect(confirmPanel()).toBeNull();
     expect(result().hidden).toBe(false);
     expect(join().hidden).toBe(false);
     expect(saved().joining).toHaveLength(1);
-    confirm.mockReturnValue(true);
     button().click();
+    await answerConfirm(true);
     expect(saved().joining).toBeUndefined();
     expect(saved().roster).toHaveLength(1);
     step(48);
@@ -1480,20 +1485,23 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     return { ...booted, scrim, letGo, status };
   }
 
-  it('Let go past 6: a confirm naming the gun; no keeps them, yes saves them gone and the gun stashed', () => {
+  it('Let go past 6: a confirm naming the gun; no keeps them, yes saves them gone and the gun stashed', async () => {
     localStorage.setItem(SAVE_KEY, encodeSave(campOf(7), NOW));
-    const confirm = vi.fn<(q: string) => boolean>(() => false);
-    vi.stubGlobal('confirm', confirm);
     const { letGo, saved, status } = rosterOn('recruit-7');
+    // A real press focuses the button (jsdom's click doesn't).
+    letGo().focus();
     letGo().click();
-    expect(confirm.mock.calls[0]![0]).toMatch(
+    expect(await answerConfirm(false)).toMatch(
       new RegExp(
         `^Let ${recruit(7).name} go\\? They leave the camp for good\\. Their Lv 1 .+ goes back to the stash\\.$`,
       ),
     );
     expect(saved().reserve).toHaveLength(1);
-    confirm.mockReturnValue(true);
+    expect(status()).toBe('');
+    // Back on the button that opened it.
+    expect(document.activeElement).toBe(letGo());
     letGo().click();
+    await answerConfirm(true);
     const after = saved();
     expect([...after.roster, ...after.reserve].map((d) => d.id)).not.toContain('recruit-7');
     expect(after.armoury.map((w) => w.uid)).toEqual(['h1']);
@@ -1502,8 +1510,6 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
 
   it('Let go at 6, all in the squad: shown greyed, and a press says why', () => {
     localStorage.setItem(SAVE_KEY, encodeSave(campOf(6), NOW));
-    const confirm = vi.fn<(q: string) => boolean>(() => true);
-    vi.stubGlobal('confirm', confirm);
     const { letGo, status, scrim } = rosterOn('recruit-3');
     expect(letGo().classList.contains('rv-letgo-locked')).toBe(true);
     // The reason under the button too, before any press.
@@ -1511,7 +1517,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
       'Needs 7+ survivors to let one go (camp 6)',
     );
     letGo().click();
-    expect(confirm).not.toHaveBeenCalled();
+    expect(confirmPanel()).toBeNull();
     expect(status()).toBe('Needs 7+ survivors to let one go (camp 6)');
   });
 
@@ -1542,10 +1548,8 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     };
   }
 
-  it('Combine (ID-170): a pick of the same profession, a confirm; yes saves the XP, them gone, the gun stashed', () => {
+  it('Combine (ID-170): a pick of the same profession, a confirm; yes saves the XP, them gone, the gun stashed', async () => {
     localStorage.setItem(SAVE_KEY, encodeSave(soldiers(), NOW));
-    const confirm = vi.fn<(q: string) => boolean>(() => false);
-    vi.stubGlobal('confirm', confirm);
     const { scrim, saved, status } = rosterOn('recruit-1');
     const combine = () => scrim.querySelector<HTMLButtonElement>('.rv-combine')!;
     expect(combine().disabled).toBe(false);
@@ -1560,12 +1564,13 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     ]);
     expect(document.activeElement).toBe(picks[0]);
     picks[0]!.click();
-    expect(confirm.mock.calls[0]![0]).toBe(
+    expect(await answerConfirm(false)).toBe(
       `Combine ${recruit(7).name} into ${recruit(1).name}? ${recruit(7).name} (Lv ${levelOf(400).level}) leaves the camp for good. ${recruit(1).name} gains 200 XP (Lv ${levelOf(300).level} → ${levelOf(500).level}). ${recruit(7).name}'s Lv 1 Military Carbine goes back to the stash.`,
     );
     expect(saved().reserve).toHaveLength(1);
-    confirm.mockReturnValue(true);
+    expect(status()).toBe('');
     scrim.querySelector<HTMLButtonElement>('.rv-combine-pick button')!.click();
+    await answerConfirm(true);
     const after = saved();
     expect([...after.roster, ...after.reserve].map((d) => d.id)).not.toContain('recruit-7');
     expect(after.roster.find((d) => d.id === 'recruit-1')!.xp).toBe(500);
@@ -1577,14 +1582,12 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
 
   it('Combine: Cancel closes the pick; a Chef among Chefs has one; locked at 6', () => {
     localStorage.setItem(SAVE_KEY, encodeSave(soldiers(), NOW));
-    const confirm = vi.fn<(q: string) => boolean>(() => true);
-    vi.stubGlobal('confirm', confirm);
     const { scrim } = rosterOn('recruit-1');
     const combine = () => scrim.querySelector<HTMLButtonElement>('.rv-combine')!;
     combine().click();
     [...scrim.querySelectorAll<HTMLButtonElement>('.rv-combine-pick button')].at(-1)!.click();
     expect(scrim.querySelector('.rv-combine-pick')).toBeNull();
-    expect(confirm).not.toHaveBeenCalled();
+    expect(confirmPanel()).toBeNull();
     // A Chef among Chefs has partners; a lone profession has none.
     scrim.querySelector<HTMLButtonElement>('.rv-tab[data-defender="recruit-2"]')!.click();
     expect(scrim.querySelector('.rv-combine')).not.toBeNull();
@@ -1603,7 +1606,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     locked.click();
     expect(again.scrim.querySelector('.rv-combine-pick')).toBeNull();
     expect(again.status()).toBe('Needs 7+ survivors to combine (camp 6)');
-    expect(confirm).not.toHaveBeenCalled();
+    expect(confirmPanel()).toBeNull();
   });
 
   it('Let go at 6 (one resting on the bench): greyed, and a press says why; nothing is asked', () => {
@@ -1613,15 +1616,144 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
       SAVE_KEY,
       encodeSave({ ...six, roster: six.roster.slice(0, 5), reserve: [resting] }, NOW),
     );
-    const confirm = vi.fn<(q: string) => boolean>(() => true);
-    vi.stubGlobal('confirm', confirm);
     const { letGo, saved, status } = rosterOn('recruit-6');
     expect(letGo().classList.contains('rv-letgo-locked')).toBe(true);
     expect(letGo().getAttribute('aria-disabled')).toBe('true');
     letGo().click();
-    expect(confirm).not.toHaveBeenCalled();
+    expect(confirmPanel()).toBeNull();
     expect(status()).toBe('Needs 7+ survivors to let one go (camp 6)');
     expect([...saved().roster, ...saved().reserve]).toHaveLength(6);
+  });
+
+  it('Let go: a horde starting while the question is up commits nothing (ID-191)', async () => {
+    localStorage.setItem(SAVE_KEY, encodeSave(campOf(7), NOW));
+    const { letGo, saved, status, button } = rosterOn('recruit-7');
+    letGo().click();
+    expect(confirmPanel()).not.toBeNull();
+    // The fight starts from behind the panel (a shortcut, a timer): the answer is stale.
+    button().click();
+    step(16);
+    await answerConfirm(true);
+    expect([...saved().roster, ...saved().reserve].map((d) => d.id)).toContain('recruit-7');
+    expect(status()).toBe('Pick the squad between hordes');
+  });
+
+  it('Buy a squad slot: a horde starting while the question is up buys nothing', async () => {
+    const g = campOf(7);
+    localStorage.setItem(SAVE_KEY, encodeSave({ ...g, stock: { ...g.stock, scrap: 2000 } }, NOW));
+    const { scrim, saved, status, button } = rosterOn('recruit-7');
+    scrim.querySelector<HTMLButtonElement>('.rv-buy-squad')!.click();
+    button().click();
+    step(16);
+    await answerConfirm(true);
+    expect(saved().stock.scrap).toBe(2000);
+    expect(saved().slots?.squad ?? 0).toBe(0);
+    expect(status()).toBe('Buy slots between hordes');
+  });
+
+  it('Buy a squad slot: Scrap that moved while the question is up buys nothing and says so', async () => {
+    const g = campOf(7);
+    localStorage.setItem(SAVE_KEY, encodeSave({ ...g, stock: { ...g.stock, scrap: 2000 } }, NOW));
+    const { root, scrim, saved, status, button } = rosterOn('recruit-7');
+    scrim.querySelector<HTMLButtonElement>('.rv-buy-squad')!.click();
+    // The first horde is won from behind the panel: its Scrap changes "You have N".
+    // An open Roster holds the fight, so it is closed too.
+    button().click();
+    scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
+    step(16);
+    endNextTick('won');
+    step(32);
+    const paid = saved().stock.scrap;
+    expect(paid).toBeGreaterThan(2000);
+    // Back in the Roster (it says the answer there) with the question still up.
+    root.querySelector<HTMLButtonElement>('.roster-button')!.click();
+    await answerConfirm(true);
+    expect(saved().stock.scrap).toBe(paid);
+    expect(saved().slots?.squad ?? 0).toBe(0);
+    expect(status()).toBe(ASK_CHANGED);
+  });
+
+  it('Combine: a keeper whose level moved while the question is up combines nothing and says so', async () => {
+    const s = soldiers();
+    const keeper = { ...s.roster[0]!, xp: xpForLevel(5) - 1 };
+    localStorage.setItem(
+      SAVE_KEY,
+      encodeSave({ ...s, roster: [keeper, ...s.roster.slice(1)] }, NOW),
+    );
+    const { root, scrim, saved, status, button } = rosterOn('recruit-1');
+    scrim.querySelector<HTMLButtonElement>('.rv-combine')!.click();
+    scrim.querySelector<HTMLButtonElement>('.rv-combine-pick button')!.click();
+    button().click();
+    scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
+    step(16);
+    endNextTick('won');
+    step(32);
+    expect(saved().roster.find((d) => d.id === 'recruit-1')!.xp).toBeGreaterThan(keeper.xp);
+    root.querySelector<HTMLButtonElement>('.roster-button')!.click();
+    await answerConfirm(true);
+    expect([...saved().roster, ...saved().reserve].map((d) => d.id)).toContain('recruit-7');
+    expect(status()).toBe(ASK_CHANGED);
+  });
+
+  it('Esc on the confirm over the Roster cancels only the confirm; the Roster stays open', async () => {
+    localStorage.setItem(SAVE_KEY, encodeSave(campOf(7), NOW));
+    const { letGo, scrim, saved } = rosterOn('recruit-7');
+    letGo().focus();
+    letGo().click();
+    const yes = confirmPanel()!.querySelector<HTMLButtonElement>('.confirm-yes')!;
+    expect(document.activeElement).toBe(yes);
+    yes.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flush();
+    expect(confirmPanel()).toBeNull();
+    expect(scrim.hidden).toBe(false);
+    expect(saved().reserve).toHaveLength(1);
+    expect(document.activeElement).toBe(letGo());
+  });
+
+  it('Buy a squad slot (ID-179): the game panel asks; Cancel buys nothing, Confirm pays', async () => {
+    const g = campOf(7);
+    localStorage.setItem(SAVE_KEY, encodeSave({ ...g, stock: { ...g.stock, scrap: 2000 } }, NOW));
+    const { scrim, saved, status } = rosterOn('recruit-7');
+    const buy = () => scrim.querySelector<HTMLButtonElement>('.rv-buy-squad')!;
+    buy().click();
+    expect(await answerConfirm(false)).toBe('Buy 1 squad slot for 500 Scrap? You have 2,000.');
+    expect(saved().stock.scrap).toBe(2000);
+    expect(status()).toBe('');
+    buy().click();
+    await answerConfirm(true);
+    expect(saved().stock.scrap).toBe(1500);
+    expect(saved().slots?.squad).toBe(1);
+    expect(status()).toBe('Bought 1 squad slot · 500 Scrap spent, 1,500 left.');
+  });
+
+  it('Buy stash slots (ID-179): the game panel asks; Cancel buys nothing, Confirm pays', async () => {
+    const g = campOf(6);
+    localStorage.setItem(SAVE_KEY, encodeSave({ ...g, stock: { ...g.stock, scrap: 400 } }, NOW));
+    const { root, saved } = boot();
+    step(0);
+    root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const scrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+    const buy = () => scrim.querySelector<HTMLButtonElement>('.inv-buy')!;
+    buy().click();
+    expect(await answerConfirm(false)).toBe('Buy 10 stash slots for 150 Scrap? You have 400.');
+    expect(saved().stock.scrap).toBe(400);
+    buy().click();
+    await answerConfirm(true);
+    expect(saved().stock.scrap).toBe(250);
+    expect(scrim.querySelector('.inv-status')!.textContent).toBe(
+      'Bought 10 stash slots · 150 Scrap spent, 250 left.',
+    );
+  });
+
+  it('never opens the browser popup: every ask is the game panel', async () => {
+    const g = campOf(7);
+    localStorage.setItem(SAVE_KEY, encodeSave({ ...g, stock: { ...g.stock, scrap: 2000 } }, NOW));
+    const { scrim, letGo } = rosterOn('recruit-7');
+    letGo().click();
+    await answerConfirm(false);
+    scrim.querySelector<HTMLButtonElement>('.rv-buy-squad')!.click();
+    await answerConfirm(false);
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 });
 

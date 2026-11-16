@@ -74,6 +74,7 @@ import {
 import { dyingLeft } from './death.ts';
 import { SoundEngine, STING } from './audio.ts';
 import { createBuildPanel, FIELD_GREW, LEVELS_REWORKED } from './build.ts';
+import { ASK_CHANGED, askConfirm, type Answer } from './confirm.ts';
 import {
   buildCamera,
   EASE_MS,
@@ -341,7 +342,7 @@ export function start(root: HTMLElement, art: Art): void {
   // Leaving with someone still asking to join refuses them (ID-150): asked first.
   hud.onLeave(() => {
     const ask = leaveJoinQuestion(game);
-    return ask === null || window.confirm(ask);
+    return ask === null ? true : askConfirm(ask, { danger: true });
   });
   // An Accept or Refuse on the offer tile (ID-150), between hordes only: saved at once.
   hud.onJoin((id, accept) => {
@@ -475,57 +476,77 @@ export function start(root: HTMLElement, art: Art): void {
     showGear();
   }
   /**
-   * Lets survivor `id` go between hordes (the Roster, ID-150), on a yes to the confirm:
-   * saved at once, and the screens redrawn. Null when the player said no.
+   * Lets survivor `id` go between hordes (the Roster, ID-150), on a yes to the confirm
+   * (ID-191, the game's own panel): saved at once, and the screens redrawn. Null when the
+   * player said no. The camp is read again after the answer, and an answer to a question that
+   * has since changed (or a horde that has started) commits nothing.
    */
-  function letSurvivorGo(
-    id: string,
-  ): { ok: true; text: string } | { ok: false; reason: string } | null {
+  async function letSurvivorGo(id: string): Promise<Answer> {
     if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
     const r = letGo(game, id);
     if (!r.ok) return r;
     // `letGo` found them, so they are in the camp.
     const d = campOf(game).find((x) => x.id === id)!;
-    if (!window.confirm(letGoQuestion(d, r.thrown))) return null;
-    commit(r.game);
+    const ask = letGoQuestion(d, r.thrown);
+    if (!(await askConfirm(ask, { danger: true }))) return null;
+    if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+    const now = letGo(game, id);
+    if (!now.ok) return now;
+    const here = campOf(game).find((x) => x.id === id)!;
+    if (letGoQuestion(here, now.thrown) !== ask) return { ok: false, reason: ASK_CHANGED };
+    commit(now.game);
     redrawSquad();
     return { ok: true, text: letGoText(d.name) };
   }
   /**
-   * Buys the next squad slot or stash slots between hordes (ID-179), on a yes to the confirm:
-   * saved at once, and the screens redrawn. Null when the player said no.
+   * Buys the next squad slot or stash slots between hordes (ID-179), on a yes to the confirm
+   * (ID-191): saved at once, and the screens redrawn. Null when the player said no. The buy
+   * is worked out again after the answer: a horde that has started, or a price or Scrap that
+   * moved, commits nothing.
    */
-  function buySlots(
-    kind: 'squad' | 'stash',
-  ): { ok: true; text: string } | { ok: false; reason: string } | null {
+  async function buySlots(kind: 'squad' | 'stash'): Promise<Answer> {
     if (horde && !resultUp()) return { ok: false, reason: BUY_WAIT };
-    const before = game.stock.scrap;
-    const r = kind === 'squad' ? buySquadSlot(game) : buyStashSlots(game);
-    if (!r.ok) return r;
-    const cost = before - r.game.stock.scrap;
-    if (!window.confirm(buyQuestion(kind, cost, before))) return null;
-    commit(r.game);
+    const buy = (): { r: ReturnType<typeof buySquadSlot>; cost: number; before: number } => {
+      const before = game.stock.scrap;
+      const r = kind === 'squad' ? buySquadSlot(game) : buyStashSlots(game);
+      return { r, cost: r.ok ? before - r.game.stock.scrap : 0, before };
+    };
+    const first = buy();
+    if (!first.r.ok) return first.r;
+    const ask = buyQuestion(kind, first.cost, first.before);
+    if (!(await askConfirm(ask))) return null;
+    if (horde && !resultUp()) return { ok: false, reason: BUY_WAIT };
+    const now = buy();
+    if (!now.r.ok) return now.r;
+    if (buyQuestion(kind, now.cost, now.before) !== ask) return { ok: false, reason: ASK_CHANGED };
+    commit(now.r.game);
     redrawSquad();
-    return { ok: true, text: buyText(kind, cost, r.game.stock.scrap) };
+    return { ok: true, text: buyText(kind, now.cost, now.r.game.stock.scrap) };
   }
   /**
    * Survivor `keeperId` takes in `fedId` between hordes (the Roster, ID-170), on a yes to the
-   * confirm: saved at once, and the screens redrawn. Null when the player said no.
+   * confirm (ID-191): saved at once, and the screens redrawn. Null when the player said no.
+   * Checked again after the answer, as `letSurvivorGo`.
    */
-  function combineSurvivor(
-    keeperId: string,
-    fedId: string,
-  ): { ok: true; text: string } | { ok: false; reason: string } | null {
+  async function combineSurvivor(keeperId: string, fedId: string): Promise<Answer> {
     if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
     const r = combineSurvivors(game, keeperId, fedId);
     if (!r.ok) return r;
     // `combineSurvivors` found both, so they are in the camp.
     const keeper = campOf(game).find((x) => x.id === keeperId)!;
     const fed = campOf(game).find((x) => x.id === fedId)!;
-    if (!window.confirm(combineQuestion(keeper, fed, r.xp, r.thrown))) return null;
-    commit(r.game);
+    const ask = combineQuestion(keeper, fed, r.xp, r.thrown);
+    if (!(await askConfirm(ask, { danger: true }))) return null;
+    if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+    const now = combineSurvivors(game, keeperId, fedId);
+    if (!now.ok) return now;
+    const k = campOf(game).find((x) => x.id === keeperId)!;
+    const f = campOf(game).find((x) => x.id === fedId)!;
+    if (combineQuestion(k, f, now.xp, now.thrown) !== ask)
+      return { ok: false, reason: ASK_CHANGED };
+    commit(now.game);
     redrawSquad();
-    return { ok: true, text: combineText(keeper.name, fed.name, r.xp) };
+    return { ok: true, text: combineText(k.name, f.name, now.xp) };
   }
   /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
   function startFight(next: HordeState): void {
