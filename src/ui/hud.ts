@@ -141,7 +141,7 @@ import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '..
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
-import { askLine, joinLabel, REFUSE_NOTE, type JoinCard } from './joining.ts';
+import { askLine, joinLabel, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
 import { levelText } from './statlines.ts';
 import {
   ART_URLS,
@@ -1371,10 +1371,12 @@ export interface Debrief {
    */
   roster?: { label: string; line: string | null };
   /**
-   * Someone is asking to join (ID-150): the panel keeps a place for the offer tile beside the
-   * drop, filled by `showJoin`; absent with nobody asking.
+   * The camp tile beside the drop (ID-150, ID-182), on every win and on a start screen with
+   * someone still asking: `showJoin` fills it from who is asking now, and the answers given
+   * stay on it. `size` is the camp's survivors; `none` says why nobody is asking (null when
+   * someone is, or off a win's own roll).
    */
-  join?: true;
+  join?: { size: number; none: string | null };
   /** The start screen's radio explanation (ID-190), absent in Endless and elsewhere. */
   radio?: RadioHelp;
 }
@@ -1773,7 +1775,7 @@ export function squadStart(
       empty: null,
       foot: SQUAD_LOSS_RULE,
       roster: { label: CHANGE_SQUAD, line: bench },
-      ...(asking.length > 0 ? { join: true as const } : {}),
+      ...(asking.length > 0 ? { join: { size: campOf(game).length, none: null } } : {}),
     },
   };
 }
@@ -1867,7 +1869,7 @@ export function shortCount(n: number): string {
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, joined, rests, patched, next, drop, scrap, auto } = squadResult(game, s);
+  const { gains, joined, noJoin, rests, patched, next, drop, scrap, auto } = squadResult(game, s);
   // "Auto" (ID-154): who it moved once the fight was over, so a pick never changes unseen.
   const moved = auto ? movesText(auto) : null;
   const autoNote = moved ? `Auto squad: ${moved}.` : null;
@@ -1920,12 +1922,6 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       lines: [
         clearedLine(s),
         ...gains.map(squadXpLine),
-        // A replay with nobody new says nothing of it: most bring nobody (ID-170).
-        ...(joined.length > 0
-          ? joined.map(askLine)
-          : replay
-            ? []
-            : [`Nobody new joins the camp this time (${size} survivors)`]),
         ...(drop ? squadDropLines(game, drop) : []),
         scrapLine(scrap),
         ...(rewardNote ? [rewardNote] : []),
@@ -1952,21 +1948,13 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         callout: null,
         note,
         drop: drop ? dropTile(game, drop) : null,
-        // Newcomers ask to join in the offer tile (ID-150, `showJoin`; a replay's too,
-        // ID-170); else a first clear's tile says nobody came, and a replay shows none.
-        recruit:
-          replay || joined.length > 0
-            ? null
-            : {
-                label: 'Camp',
-                name: `${size} survivors`,
-                sub: 'Nobody new joins this time',
-                full: true,
-              },
+        recruit: null,
         cards: ups,
         empty: ups.length > 0 ? null : SQUAD_NO_LEVEL_UPS,
         foot: '',
-        ...(joined.length > 0 ? { join: true as const } : {}),
+        // The camp tile (ID-150, ID-170, ID-182), on every win: newcomers ask there
+        // (`showJoin`), and with nobody it says why, so the screen and the popup agree.
+        join: { size, none: noJoin ? noJoinText(noJoin, size) : null },
       },
     };
   }
@@ -2069,6 +2057,11 @@ export function createHud(
   onLeave(check: () => boolean | Promise<boolean>): void;
   /** The offer tile redrawn (ID-150): who is still asking to join; none hides it. */
   showJoin(cards: readonly JoinCard[], keep?: boolean): void;
+  /**
+   * An answer given on the camp tile (ID-182): `text` (`answerText`) stays on it after the
+   * toast is gone. Nothing with the result screen down.
+   */
+  noteJoin(text: string): void;
   /**
    * Survivor `card` just accepted into the squad (ID-157): their card in the Squad section
    * (added when the screen has none for them, as a win shows only level-ups), marked "New"
@@ -2255,10 +2248,18 @@ export function createHud(
   joinBox.setAttribute('aria-label', 'Asking to join');
   joinBox.hidden = true;
   let onAnswerJoin: (id: string, accept: boolean) => void = () => {};
-  /** Fills the offer tile with `cards`; hides it with nobody left asking. */
+  /** The screen's camp tile (`Debrief.join`) and the answers given on it, so far. */
+  let joinInfo: { size: number; none: string | null } | undefined;
+  let joinAnswers: string[] = [];
+  /**
+   * Draws the camp tile (ID-182) from `cards`, who is asking now: Accept and Refuse rows, then
+   * each answer given (it stays), else why nobody came. Hidden when it has nothing to say.
+   */
   function drawJoin(cards: readonly JoinCard[], keep = false): void {
     const had = keep || joinBox.contains(document.activeElement);
-    joinBox.hidden = cards.length === 0;
+    const none = cards.length === 0 && joinAnswers.length === 0 ? (joinInfo?.none ?? null) : null;
+    joinBox.hidden = cards.length === 0 && joinAnswers.length === 0 && none === null;
+    joinBox.setAttribute('aria-label', cards.length > 0 ? 'Asking to join' : 'Camp');
     const rows = cards.map((c) => {
       const row = el('div', 'join-row');
       row.dataset.joiner = c.id;
@@ -2282,11 +2283,26 @@ export function createHud(
       );
       return row;
     });
-    joinBox.replaceChildren(
-      el('p', 'tile-label', joinLabel(cards.length)),
-      el('p', 'tile-sub join-note', REFUSE_NOTE),
-      ...rows,
-    );
+    const answered = joinAnswers.map((t) => el('p', 'tile-sub join-answer', t));
+    if (cards.length > 0) {
+      joinBox.replaceChildren(
+        el('p', 'tile-label', joinLabel(cards.length)),
+        el('p', 'tile-sub join-note', REFUSE_NOTE),
+        ...rows,
+        ...answered,
+      );
+    } else {
+      joinBox.replaceChildren(
+        el('p', 'tile-label', 'Camp'),
+        ...(none !== null
+          ? [
+              el('p', 'tile-name', `${joinInfo?.size ?? 0} survivors`),
+              el('p', 'tile-sub join-none', none),
+            ]
+          : answered),
+      );
+    }
+    joinBox.classList.toggle('tile-recruit-full', none !== null);
     // An answer keeps the keyboard in the tile, else on the button that moves on.
     if (had) (joinBox.querySelector<HTMLButtonElement>('button') ?? back).focus();
   }
@@ -3358,6 +3374,8 @@ export function createHud(
       resultList.hidden = d !== undefined;
       resultList.replaceChildren(...(d ? [] : screen.lines.map((line) => el('li', '', line))));
       footNote.textContent = d?.foot ?? '';
+      joinInfo = d?.join;
+      joinAnswers = [];
       back.classList.toggle('btn-primary', d !== undefined);
       picker.replaceChildren(...(d ? debriefBlock(d) : []));
       back.textContent = screen.button;
@@ -3396,6 +3414,9 @@ export function createHud(
     },
     showJoin(cards, keep) {
       drawJoin(cards, keep);
+    },
+    noteJoin(text) {
+      if (!result.hidden) joinAnswers.push(text);
     },
     showJoined(c) {
       if (result.hidden) return;

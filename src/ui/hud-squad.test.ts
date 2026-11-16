@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { LEVELS_REWORKED } from './build.ts';
-import { JOBS, RADIO_HORDES, SQUAD_CAP } from '../core/data.ts';
+import { RADIO_HORDES, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
@@ -35,6 +35,7 @@ import {
 import type { Swap } from '../core/horde.ts';
 import { ART_URLS } from './sprites.ts';
 import { levelText } from './statlines.ts';
+import { noJoinText } from './joining.ts';
 import { enemy } from '../core/testing.ts';
 
 const NOW = 1_700_000_000_000;
@@ -109,19 +110,22 @@ describe('the horde-only screens (ID-066)', () => {
     expect(screen.lines.some((l) => l.endsWith(' · level up!'))).toBe(true);
     expect(screen.lines.join(' ')).not.toMatch(/stat point/);
     expect(screen.lines.some((l) => /level 2 · \d+\/50 XP to level 3/.test(l))).toBe(true);
-    expect(screen.lines).toContain(
-      `${recruit(3).name} (${JOBS[recruit(3, 1).job].name}) asks to join the camp`,
-    );
+    // The newcomer asks on the camp tile, not in the (unrendered) lines (ID-182).
+    expect(screen.lines.join(' ')).not.toMatch(/asks to join/);
+    expect(screen.debrief!.join).toEqual({ size: 2, none: null });
     expect(screen.lines.join(' ')).not.toMatch(/Camp|Genes|Payout|Repair|injured/);
     expect(screen.button).toBe(startLabel(6));
     expect(screen.squad).toBe(true);
   });
 
-  it('a win past 6 whose roll misses says nobody joins (seed 1, ID-147)', () => {
+  it('a win past 6 whose roll misses says why nobody joins on the camp tile (seed 1, ID-182)', () => {
     const g = squadGame(SQUAD_CAP, 2);
-    expect(squadScreen(g, ended(g, 'won')).lines).toContain(
-      `Nobody new joins the camp this time (${SQUAD_CAP} survivors)`,
-    );
+    const s = squadScreen(g, ended(g, 'won'));
+    expect(s.debrief!.join).toEqual({
+      size: SQUAD_CAP,
+      none: noJoinText('nobody-first', SQUAD_CAP),
+    });
+    expect(s.lines.join(' ')).not.toMatch(/Nobody new/);
   });
 
   it('a boss horde’s first clear finds a radio part and names its card unlock (ID-127)', () => {
@@ -201,6 +205,20 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, squad);
     return { root, h };
   }
+
+  it('an answer on the camp tile is text, never markup (ID-182)', () => {
+    const { root, h } = hud(true);
+    const g = squadGame(2, 5, 0);
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    const hostile = '<img src=x onerror=alert(1)>';
+    h.noteJoin(hostile);
+    h.showJoin([]);
+    h.showJoin([], true);
+    const tile = root.querySelector<HTMLElement>('.tile-join')!;
+    expect(tile.querySelector('.join-answer')!.textContent).toBe(hostile);
+    expect(tile.querySelector('img')).toBeNull();
+    expect(tile.children.length).toBeGreaterThan(0);
+  });
 
   it('a toast stays 2 s, or as long as asked (the stat refund note, ID-084)', () => {
     vi.useFakeTimers();

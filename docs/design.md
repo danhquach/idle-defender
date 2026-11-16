@@ -2730,6 +2730,27 @@ As built (ID-066), the horde-only build:
     offers never pile up.
   - The offer is saved (`joining`), so a reload on the result screen keeps
     it: the start screen shows the same card with Accept and Refuse.
+  - **The result and the popup always agree (ID-182).** One decision: the
+    finish (`finishSquadHorde`) is the only place that rolls the joiners, and
+    the result reads what it decided (`SquadResult.joined`, and `noJoin`, the
+    reason when nobody asks), never a second roll. The result's camp tile is
+    on every win and follows the live offer (`joining`), not a snapshot: the
+    Accept and Refuse rows while someone asks, then each answer, which stays
+    after the toast is gone and is the toast's own string ("Ava joined the
+    squad" / "Ava joined the camp, on the bench" / "Ava was turned away";
+    the bench is named the same on the tile, the toast and in the save).
+    With nobody asking the tile says why, with the numbers read off
+    `SQUAD_JOIN` / `SQUAD_CAP`: a replay "Nobody new this time. A replay
+    rarely brings a survivor (about 1 in 20)."; a first clear at 6 or more
+    "Nobody new this time. At 6 survivors or more, a new horde brings one
+    about 1 in 7."; a full camp (`SQUAD_JOIN.max` or the recruit
+    counter's cap) "Camp is full (N): nobody new can join."; a replay past
+    `FARM.maxReplays` "No drop and nobody new: replay limit reached." A lost
+    fight has no camp tile. The result's list of lines no longer carries the
+    joining text (the debrief never drew it). The Roster's own move reads
+    "X moves into the squad." / "X moves to the bench.", so it can't pass for
+    a newcomer. On a start screen reloaded mid-offer, the answers show in the
+    toast only.
   - **Let go:** on the Roster (on every survivor, next to Add to squad /
     Move to bench), between hordes, after a confirm that names their gun. They
     leave for good; their gun goes back to the stash (a full stash throws its

@@ -2,9 +2,9 @@
 // profession, level, gun), the confirm for leaving the screen without answering, the confirm
 // for letting a survivor go, and the lines said after each answer. Pure: no DOM.
 import type { OwnedWeapon } from '../core/armoury.ts';
-import { JOBS, MAX_COUNT } from '../core/data.ts';
+import { JOBS, MAX_COUNT, SQUAD_CAP, SQUAD_JOIN } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import { joiningOf } from '../core/hordeonly.ts';
+import { joiningOf, type NoJoin } from '../core/hordeonly.ts';
 import { levelOf } from '../core/stats.ts';
 import { gunName, heldGunOf } from './gunpick.ts';
 import { jobLine } from './jobtext.ts';
@@ -51,13 +51,39 @@ export function leaveJoinQuestion(game: Pick<GameState, 'joining'>): string | nu
   } refused and gone for good.`;
 }
 
-/** What is said after an answer: who went where, or who went on their way. */
+/**
+ * What is said after an answer (ID-182), the toast's words and the result's row alike: who
+ * went where, or who was turned away.
+ */
 export const answerText = (name: string, where: 'squad' | 'bench' | null): string =>
   where === 'squad'
-    ? `${name} joins the squad.`
+    ? `${name} joined the squad`
     : where === 'bench'
-      ? `${name} joins the camp and waits on the bench.`
-      : `${name} is turned away for good.`;
+      ? `${name} joined the camp, on the bench`
+      : `${name} was turned away`;
+
+/** "7" for a chance of 0.15: the whole number of tries a chance of `p` takes, on average. */
+const oneIn = (p: number): number => Math.round(1 / p);
+
+/**
+ * Why nobody is asking to join (ID-182), for the result's camp tile; null on a loss, which
+ * has no such tile. Every number is read off the join rule's data (`SQUAD_JOIN`,
+ * `SQUAD_CAP`); `size` is the camp's survivors.
+ */
+export function noJoinText(why: NoJoin, size: number): string | null {
+  switch (why) {
+    case 'lost':
+      return null;
+    case 'nobody-replay':
+      return `Nobody new this time. A replay rarely brings a survivor (about 1 in ${oneIn(SQUAD_JOIN.replay)}).`;
+    case 'nobody-first':
+      return `Nobody new this time. At ${SQUAD_CAP} survivors or more, a new horde brings one about 1 in ${oneIn(SQUAD_JOIN.chance)}.`;
+    case 'camp-full':
+      return `Camp is full (${size}): nobody new can join.`;
+    case 'no-drop':
+      return 'No drop and nobody new: replay limit reached.';
+  }
+}
 
 /**
  * The confirm for letting `d` go (ID-150): for good, their gun back to the stash, and what
