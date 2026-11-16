@@ -26,8 +26,10 @@ import {
 import {
   COMBINE_COUNT,
   RARITIES,
+  RARITY_ORDER,
   STASH_SLOT,
   WEAPONS,
+  type GunBase,
   type Rarity,
   type WeaponId,
 } from '../core/data.ts';
@@ -98,8 +100,14 @@ export interface InventoryView {
   stashHeading: string;
   /** The button that buys more stash slots (ID-179); null once every slot is bought. */
   buy: SlotOffer | null;
-  /** The stash, strongest first; anything that is no gun after the guns. */
+  /** The stash, strongest first; anything that is no gun after the guns. Every gun, whatever the pick. */
   stash: InventoryItem[];
+  /** The stash as the grid shows it (ID-192): `stash` under `pick`'s filters, in `pick`'s sort. */
+  shown: InventoryItem[];
+  /** The sort and filters in force (always known values). */
+  pick: StashPick;
+  /** The two filters' choices (ID-192): the values the stash holds, and the picked one. */
+  picks: { type: PickOption[]; rarity: PickOption[] };
   /** Empty places left under the cap (0 when full, or past it from an older save). */
   free: number;
   /**
@@ -118,6 +126,78 @@ export interface InventoryView {
   /** Every stash set below Relic (ID-091): ready ones first, then by base weapon and rarity. */
   combine: CombineRow[];
 }
+
+/** How the stash is sorted and filtered while the Inventory is open (ID-192). */
+export interface StashPick {
+  sort: SortKey;
+  type: 'all' | GunType;
+  rarity: 'all' | Rarity;
+}
+export type SortKey = 'dps' | 'rarity' | 'newest';
+export type GunType = 'pistol' | 'smg' | 'rifle' | 'sniper' | 'shotgun' | 'lmg';
+export type PickKind = keyof StashPick;
+/** One choice of a filter, its label counting the stash guns it would show. */
+export interface PickOption {
+  value: string;
+  label: string;
+}
+
+export const DEFAULT_PICK: Readonly<StashPick> = { sort: 'dps', type: 'all', rarity: 'all' };
+export const SORT_LABELS: Record<SortKey, string> = {
+  dps: 'Sort: DPS',
+  rarity: 'Sort: Rarity',
+  newest: 'Sort: Newest',
+};
+/** The gun types the filter offers, in the order it lists them, with their plural names. */
+export const GUN_TYPE_NAMES: Record<GunType, string> = {
+  pistol: 'Pistols',
+  smg: 'SMGs',
+  rifle: 'Rifles',
+  sniper: 'Snipers',
+  shotgun: 'Shotguns',
+  lmg: 'LMGs',
+};
+/** Every base gun in its type; blades and tools are in none (only "All types" shows them). */
+const TYPE_OF: Record<GunBase, GunType> = {
+  pistol: 'pistol',
+  handcannon: 'pistol',
+  machinepistol: 'pistol',
+  smg: 'smg',
+  rifle: 'rifle',
+  assault: 'rifle',
+  sniper: 'sniper',
+  shotgun: 'shotgun',
+  cartridge: 'shotgun',
+  lmg: 'lmg',
+};
+const typeOf = (base: string): GunType | null =>
+  Object.hasOwn(TYPE_OF, base) ? TYPE_OF[base as GunBase] : null;
+
+const SORT_KEYS = Object.keys(SORT_LABELS) as SortKey[];
+const TYPE_KEYS = Object.keys(GUN_TYPE_NAMES) as GunType[];
+/** Rarities from the best down, as the filter lists them. */
+const RARITY_DESC = [...RARITY_ORDER].reverse();
+
+/**
+ * `raw` (a select's value: page data) as a valid choice for `kind`: an allow-list, so
+ * anything else (unknown, odd case, spaces, an inherited name) is the default.
+ */
+export function pickValue(kind: PickKind, raw: unknown): StashPick[PickKind] {
+  const known: readonly string[] =
+    kind === 'sort' ? SORT_KEYS : kind === 'type' ? ['all', ...TYPE_KEYS] : ['all', ...RARITY_DESC];
+  return typeof raw === 'string' && known.includes(raw)
+    ? (raw as StashPick[PickKind])
+    : DEFAULT_PICK[kind];
+}
+
+/** `pick` with every field checked against the allow-list. */
+const cleanPick = (pick: Partial<Record<PickKind, unknown>>): StashPick => ({
+  sort: pickValue('sort', pick.sort) as SortKey,
+  type: pickValue('type', pick.type) as StashPick['type'],
+  rarity: pickValue('rarity', pick.rarity) as StashPick['rarity'],
+});
+
+const isFiltered = (p: StashPick): boolean => p.type !== 'all' || p.rarity !== 'all';
 
 /** One base weapon at one rarity in the stash, as the Combine shows it (ID-091). */
 export interface CombineRow {
@@ -192,18 +272,68 @@ export function inventoryView(
   game: Pick<GameState, 'armoury' | 'roster'> & Partial<Pick<GameState, 'slots' | 'stock'>>,
   horde: number | null = null,
   canBuy = false,
+  pickIn: Partial<Record<PickKind, unknown>> = DEFAULT_PICK,
 ): InventoryView {
   const n = game.armoury.length;
   const cap = stashCap(game);
+  const pick = cleanPick(pickIn);
+  const rows = game.armoury.map((h, at) => ({ h, at, power: powerOf(h), gun: isGun(h) }));
+  const toItem = ({ h }: (typeof rows)[number]): InventoryItem =>
+    item(h, `stash:${h.uid}`, IN_STASH);
+  const rarityAt = (h: Held): number => (isOwned(h) ? RARITY_ORDER.indexOf(h.rarity) : -1);
+  // Guns first in every sort, a blade or tool (an older save's) after them; ties keep the
+  // armoury's order. The armoury itself is never reordered (view only).
+  const byDps = (a: (typeof rows)[number], b: (typeof rows)[number]): number =>
+    Number(b.gun) - Number(a.gun) || b.power - a.power || a.at - b.at;
+  const sorts: Record<SortKey, (a: (typeof rows)[number], b: (typeof rows)[number]) => number> = {
+    dps: byDps,
+    rarity: (a, b) =>
+      Number(b.gun) - Number(a.gun) ||
+      rarityAt(b.h) - rarityAt(a.h) ||
+      b.power - a.power ||
+      a.at - b.at,
+    // The armoury appends: the later the place, the newer the gun.
+    newest: (a, b) => Number(b.gun) - Number(a.gun) || b.at - a.at,
+  };
+  const count = (keep: (r: (typeof rows)[number]) => boolean): number => rows.filter(keep).length;
+  const option = (value: string, name: string, c: number): PickOption => ({
+    value,
+    label: `${name} (${c})`,
+  });
+  const shown = rows
+    .filter(
+      (r) =>
+        (pick.type === 'all' || typeOf(baseOf(r.h)) === pick.type) &&
+        (pick.rarity === 'all' || (isOwned(r.h) && r.h.rarity === pick.rarity)),
+    )
+    .sort(sorts[pick.sort])
+    .map(toItem);
   return {
     // An older save's stash past the cap is kept as it is (design §6), and is full too.
-    stashHeading: `Stash ${n}/${cap}${n >= cap ? ' (full)' : ''}`,
+    stashHeading: `Stash ${n}/${cap}${n >= cap ? ' (full)' : ''}${
+      isFiltered(pick) && n > 0 ? ` · ${shown.length} shown` : ''
+    }`,
     buy: game.stock ? slotOffer({ slots: game.slots, stock: game.stock }, 'stash', canBuy) : null,
     // A stable sort: equal guns keep the stash's order.
-    stash: game.armoury
-      .map((h) => ({ h, power: powerOf(h) }))
-      .sort((a, b) => b.power - a.power)
-      .map(({ h }) => item(h, `stash:${h.uid}`, IN_STASH)),
+    stash: [...rows].sort(byDps).map(toItem),
+    shown,
+    pick,
+    picks: {
+      type: [
+        { value: 'all', label: 'All types' },
+        ...TYPE_KEYS.flatMap((t) => {
+          const c = count((r) => typeOf(baseOf(r.h)) === t);
+          return c > 0 || pick.type === t ? [option(t, GUN_TYPE_NAMES[t], c)] : [];
+        }),
+      ],
+      rarity: [
+        { value: 'all', label: 'All rarities' },
+        ...RARITY_DESC.flatMap((r) => {
+          const c = count((x) => isOwned(x.h) && x.h.rarity === r);
+          return c > 0 || pick.rarity === r ? [option(r, RARITIES[r].name, c)] : [];
+        }),
+      ],
+    },
     free: Math.max(0, cap - n),
     squad: squadOf(game).map((d) => {
       // What they fight with: a primary that is no gun fights as the pistol (as squadGear).
@@ -454,6 +584,16 @@ const button = (text: string, onClick: () => void, extra = ''): HTMLButtonElemen
   return b;
 };
 
+/** The line for a filter that hides every stash gun, with the button that lifts it. */
+function noMatch(): HTMLElement {
+  const box = el('div', 'inv-no-match');
+  box.append(
+    el('p', 'menu-note', NO_MATCH),
+    button('Show all', () => {}, 'inv-show-all'),
+  );
+  return box;
+}
+
 /** The stash heading with its buy button beside it (ID-179); the button only while slots remain. */
 function stashHead(view: InventoryView): HTMLElement {
   const heading = el('h3', 'menu-heading inv-stash-heading', view.stashHeading);
@@ -468,6 +608,39 @@ function stashHead(view: InventoryView): HTMLElement {
     `Buy ${STASH_SLOT.add} stash slots. ${view.buy.text}${view.buy.title ? `. ${view.buy.title}` : ''}`,
   );
   row.append(heading, b);
+  return row;
+}
+
+export const NO_MATCH = 'No stash guns match.';
+
+/** The stash's sort and filter row (ID-192): three selects that each name themselves. */
+function stashTools(view: InventoryView): HTMLElement {
+  const row = el('div', 'inv-stash-tools');
+  const make = (
+    kind: PickKind,
+    label: string,
+    options: readonly PickOption[],
+  ): HTMLSelectElement => {
+    const sel = el('select', 'inv-pick');
+    sel.dataset.pick = kind;
+    sel.setAttribute('aria-label', label);
+    for (const o of options) {
+      const opt = el('option', '', o.label);
+      opt.value = o.value;
+      sel.append(opt);
+    }
+    sel.value = view.pick[kind];
+    return sel;
+  };
+  row.append(
+    make(
+      'sort',
+      'Sort stash',
+      SORT_KEYS.map((k) => ({ value: k, label: SORT_LABELS[k] })),
+    ),
+    make('type', 'Show gun type', view.picks.type),
+    make('rarity', 'Show rarity', view.picks.rarity),
+  );
   return row;
 }
 
@@ -489,7 +662,9 @@ export function inventoryGrid(
     if (drag && canCombine && canDrag(view, b.dataset.key!)) b.dataset.drag = 'true';
     return li;
   };
-  const empty = Array.from({ length: view.free }, () => {
+  const filtered = isFiltered(view.pick);
+  // A filter hides the empty places: they are the end of the whole stash, not of a part.
+  const empty = Array.from({ length: filtered ? 0 : view.free }, () => {
     const li = el('li', 'inv-cell');
     li.setAttribute('aria-hidden', 'true');
     li.append(el('div', 'inv-slot inv-slot-empty'));
@@ -498,12 +673,17 @@ export function inventoryGrid(
   // The whole stash section is one drop place for a survivor's gun.
   const stash = section(
     stashHead(view),
-    ...(view.stash.length > 0 ? [] : [el('p', 'menu-note', STASH_EMPTY)]),
+    ...(view.stash.length > 0 ? [stashTools(view)] : [el('p', 'menu-note', STASH_EMPTY)]),
     el('p', 'menu-note inv-note', note),
-    list('Stash', 'inv-grid inv-stash', [
-      ...view.stash.map((it) => mark(slot(it, ready(it)))),
-      ...empty,
-    ]),
+    ...(view.stash.length > 0 && view.shown.length === 0
+      ? [noMatch()]
+      : [
+          list(
+            filtered ? `Stash, ${view.shown.length} of ${view.stash.length} shown` : 'Stash',
+            'inv-grid inv-stash',
+            [...view.shown.map((it) => mark(slot(it, ready(it)))), ...empty],
+          ),
+        ]),
   );
   stash.classList.add('inv-stash-zone');
   return [
@@ -776,6 +956,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   let listedCombine = false;
   let listedHorde: number | null = null;
   let view: InventoryView | null = null;
+  // The stash's sort and filters (ID-192): kept over every redraw, reset when it opens.
+  let pick: StashPick = { ...DEFAULT_PICK };
   // The slot selected (its key), and the one under the pointer, whose details show first.
   let selected: string | null = null;
   let hovered: string | null = null;
@@ -875,7 +1057,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   const slotOf = (key: string | null): HTMLButtonElement | undefined =>
     slots().find((b) => b.dataset.key === key);
   const items = (): InventoryItem[] =>
-    view ? [...view.squad.map((s) => s.gun), view.pistol, ...view.stash] : [];
+    view ? [...view.squad.map((s) => s.gun), view.pistol, ...view.shown] : [];
 
   // Keys stay in the dialog (the field's keys never see them); Esc closes, Tab cycles.
   dialog.addEventListener('keydown', (e) => {
@@ -894,7 +1076,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     }
     if (e.key !== 'Tab') return;
     const at = doc.activeElement as HTMLElement | null;
-    const stops = [...dialog.querySelectorAll<HTMLElement>('button, [tabindex]')].filter(
+    const stops = [...dialog.querySelectorAll<HTMLElement>('button, select, [tabindex]')].filter(
       (n) => n !== dialog && (n.tabIndex >= 0 || n === at) && !n.closest('[hidden]'),
     );
     const i = at ? stops.indexOf(at) : -1;
@@ -962,10 +1144,32 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
       (body.querySelector<HTMLElement>('.inv-buy') ?? slotOf(selected))?.focus();
       return;
     }
+    if (e.target instanceof Element && e.target.closest('.inv-show-all')) {
+      pick = { ...pick, type: 'all', rarity: 'all' };
+      redraw();
+      body.querySelector<HTMLElement>('select[data-pick="type"]')?.focus();
+      return;
+    }
     const b =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
     if (b) select(b.dataset.key!, true);
   });
+  // A sort or filter picked: only a known value counts, the select's value being page data.
+  body.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!(t instanceof Element) || !t.matches('select[data-pick]')) return;
+    const kind = (t as HTMLSelectElement).dataset.pick as PickKind;
+    if (kind !== 'sort' && kind !== 'type' && kind !== 'rarity') return;
+    pick = { ...pick, [kind]: pickValue(kind, (t as HTMLSelectElement).value) };
+    redraw();
+    // The selects are redrawn with the body: focus goes to the new one.
+    body.querySelector<HTMLElement>(`select[data-pick="${kind}"]`)?.focus();
+  });
+  /** Draws the stash again from the camp now (a new sort or filter). */
+  function redraw(): void {
+    const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
+    draw(game, canCombine, horde, canBuy);
+  }
   // Hover is a mouse's only. A tap on a touch screen sends compatibility mouseover and
   // mouseleave events too; a redraw on those makes iOS Safari treat the tap as a hover and
   // drop its click (the slot is not selected, the Combine button under the finger is
@@ -1260,6 +1464,13 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     result = null;
     // onEquip's save has usually redrawn the grid already; drawn again for the new selection.
     const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
+    // A gun the filters hide stays unselected: their own slot is where it came from.
+    if (
+      selected.startsWith('stash:') &&
+      !inventoryView(game, horde, canBuy, pick).shown.some((it) => it.key === selected)
+    ) {
+      selected = `squad:${d.defender}`;
+    }
     draw(game, canCombine, horde, canBuy);
     say(equipMessage(before, d));
     const b = slotOf(selected);
@@ -1349,7 +1560,12 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     }
     // Focus in the grid or the details: both are redrawn, so it comes back to the slot.
     const hadFocus = body.contains(doc.activeElement) || details.contains(doc.activeElement);
-    view = inventoryView(game, horde, canBuy);
+    // A focused sort or filter select is redrawn too: focus returns to its twin.
+    const pickFocus = (doc.activeElement as HTMLElement | null)?.closest?.('select[data-pick]');
+    const focusedPick = body.contains(pickFocus ?? null)
+      ? (pickFocus as HTMLElement).dataset.pick
+      : undefined;
+    view = inventoryView(game, horde, canBuy, pick);
     // On a touch screen a plain drag scrolls: the note says to hold first.
     const touch = !!doc.defaultView?.matchMedia?.('(pointer: coarse)').matches;
     const note = opts.onEquip
@@ -1362,13 +1578,21 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     body.replaceChildren(...inventoryGrid(view, canCombine, note, !!opts.onEquip));
     const keys = items().map((x) => x.key);
     if (selected === null || !keys.includes(selected)) {
+      // The selected gun is gone (filtered out or left): its confirm and lines go with it.
+      if (selected !== null) {
+        confirming = null;
+        result = null;
+        say('');
+      }
       // The strongest stash gun first; with an empty stash, the first survivor's gun.
-      selected = view.stash[0]?.key ?? keys[0] ?? null;
+      selected = view.shown[0]?.key ?? keys[0] ?? null;
     }
     if (hovered !== null && !keys.includes(hovered)) hovered = null;
     markSelected();
     drawDetails();
-    if (hadFocus && !dialog.contains(doc.activeElement)) slotOf(selected)?.focus();
+    if (focusedPick) {
+      body.querySelector<HTMLElement>(`select[data-pick="${focusedPick}"]`)?.focus();
+    } else if (hadFocus && !dialog.contains(doc.activeElement)) slotOf(selected)?.focus();
   }
 
   function confirm(): void {
@@ -1379,7 +1603,12 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     const r = opts.onCombine(uses.map((w) => w.uid));
     result = r.ok ? combineResult(r.weapon) : r.reason;
     // The new gun takes a used gun's place: select it, so its details say what was made.
-    if (r.ok) selected = `stash:${r.weapon.uid}`;
+    if (r.ok) {
+      selected = `stash:${r.weapon.uid}`;
+      // A rarity filter that hides what was made is lifted, so its details say what it is.
+      if (pick.rarity !== 'all' && pick.rarity !== r.weapon.rarity)
+        pick = { ...pick, rarity: 'all' };
+    }
     const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
     draw(game, canCombine, horde, canBuy);
     // Focus on the line saying what it made: a screen reader reads it.
@@ -1403,6 +1632,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
       result = null;
       selected = null;
       hovered = null;
+      pick = { ...DEFAULT_PICK };
       say('');
       // Drawn afresh: the details start on the strongest gun, with no confirm or result.
       listed = null;

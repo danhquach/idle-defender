@@ -3353,7 +3353,26 @@ offline progress works across sessions.
     its holder's hands: "22.6 DPS · 26.7 DPS with Ivan"), who holds it,
     and Combine.
     Hovering a slot shows its details until the pointer leaves the grid. It
-    opens on the strongest stash gun. Each slot's screen-reader label names the
+    opens on the strongest stash gun.
+  - **Sort and filter the stash (ID-192):** a row of three selects sits under
+    the stash heading (hidden while the stash is empty). "Sort: DPS" (the
+    default: the badge figure, high to low), "Sort: Rarity" (Relic down to
+    Rusty, then DPS) or "Sort: Newest" (the gun that went into the stash last
+    first: a drop, a patrol find, a combine's result or a gun taken off a
+    survivor all append); ties keep the stash's order and an older save's
+    blade or tool is always last. "All types" or one type: Pistols (Pistol,
+    Hand Cannon, Machine Pistol), SMGs (SMG), Rifles (Carbine, Assault Rifle),
+    Snipers (Sniper rifle), Shotguns (Pump Shotgun, Drum Shotgun), LMGs (LMG); "All rarities" or one rarity. Each
+    filter lists only what the stash holds (plus the one picked), each with its
+    count over the whole stash; the two filters combine (AND), and blades and
+    tools show only under "All types". Filtered, the heading adds " · N shown",
+    the empty places are hidden, and a filter that hides everything shows "No
+    stash guns match." with a "Show all" button (clears both filters, not the
+    sort). The pick is view-only (the armoury's own order never changes), stays
+    set over every redraw while the Inventory is open and resets to DPS, all,
+    all each time it opens; nothing is saved. A combine whose result a rarity
+    filter would hide clears that filter so the new gun stays selected. On a
+    375 px phone the three selects share one row. Each slot's screen-reader label names the
     gun, its rarity, role and trait, DPS and affix count. The result screen's
     drop tile shows the same icon and tint.
   - **Drag and drop (ID-095), between hordes:** a stash gun dropped on a
