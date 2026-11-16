@@ -158,7 +158,12 @@ describe('the how-to-play card', () => {
     expect(dialog.getAttribute('aria-labelledby')).toBe('intro-card-title');
     for (const [term] of HOW_TO_CARD) expect(dialog.textContent).toContain(term);
     // The skill keys are a keyboard hint, hidden on a touch screen (page.css).
-    expect(dialog.querySelector('.intro-how .intro-keys')!.textContent).toBe(' Keys: Q W.');
+    // One skill (ID-139), so one key and no "up to 2" (ID-193).
+    expect(dialog.querySelector('.intro-how .intro-keys')!.textContent).toBe(' Key: Q.');
+    expect(dialog.textContent).toContain(
+      'Pick the Airstrike before each horde, then tap or click it when it is ready.',
+    );
+    expect(dialog.textContent).not.toContain('up to');
     expect(root.hasAttribute('inert')).toBe(true);
     expect(document.activeElement).toBe(button('Got it'));
     button('Got it').click();

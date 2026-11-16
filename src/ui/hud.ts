@@ -604,6 +604,33 @@ export function skillPicker(pick: readonly SkillId[]): SkillPick {
   };
 }
 
+/** The skills as the help texts tell them (ID-193): how many may be picked and their keys. */
+export interface SkillHelp {
+  /** "Pick the Airstrike before each horde…", or "Pick up to 2…" with more than one skill. */
+  line: string;
+  /** The keys in play, one per skill that can be picked: ["Q"] while there is one skill. */
+  keys: readonly string[];
+  /** "Key: Q.", or "Keys: Q W." */
+  keyHint: string;
+  /** There is one skill, so the texts say "skill", not "skills". */
+  one: boolean;
+}
+
+export function skillHelp(
+  ids: readonly SkillId[] = SKILL_IDS,
+  max: number = SQUAD_SKILLS.max,
+): SkillHelp {
+  const keys = SKILL_KEYS.slice(0, Math.min(max, ids.length));
+  const one = ids.length === 1;
+  const line = one
+    ? `Pick the ${SKILLS[ids[0]!].name} before each horde, then tap or click it when it is ready.`
+    : keys.length === 1
+      ? 'Pick 1 skill before each horde, then tap or click it when it is ready.'
+      : `Pick up to ${keys.length} before each horde, then tap or click them when they are ready.`;
+  const keyHint = `${keys.length === 1 ? 'Key' : 'Keys'}: ${keys.join(' ')}.`;
+  return { line, keys, keyHint, one };
+}
+
 /** Amounts as "5 scrap, 10 wood" in material order, skipping zeros; "nothing" if all are. */
 export function stockText(stock: Partial<Stock>): string {
   const parts = MATERIALS.filter((m) => (stock[m] ?? 0) > 0).map((m) => `${stock[m]} ${m}`);

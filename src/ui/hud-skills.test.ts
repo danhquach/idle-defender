@@ -7,7 +7,7 @@ import { SKILLS, type SkillId } from '../core/data.ts';
 import { newGame } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { useSkill } from '../core/skills.ts';
-import { AIM_PROMPT, SKILL_KEYS, skillButtons, skillPicker, skillSlots } from './hud.ts';
+import { AIM_PROMPT, SKILL_KEYS, skillButtons, skillHelp, skillPicker, skillSlots } from './hud.ts';
 
 const NOW = 1_700_000_000_000;
 const fight = (...pick: SkillId[]) => startSquadHorde({ ...newGame(), skillPick: pick }, 1, NOW);
@@ -98,5 +98,40 @@ describe('the horde-only skill button (ID-100, ID-139)', () => {
     expect(AIM_PROMPT).toEqual({
       airstrike: 'Tap or drag to an area · tap Airstrike again to cancel',
     });
+  });
+});
+
+describe('the skills help text (ID-193)', () => {
+  it('with the one skill there is: names it, one key, no "up to"', () => {
+    expect(skillHelp()).toEqual({
+      line: 'Pick the Airstrike before each horde, then tap or click it when it is ready.',
+      keys: ['Q'],
+      keyHint: 'Key: Q.',
+      one: true,
+    });
+  });
+
+  it('with more skills than may be picked: "up to" the max, one key per pick', () => {
+    const three: SkillId[] = ['airstrike', 'airstrike', 'airstrike'];
+    expect(skillHelp(three, 2)).toEqual({
+      line: 'Pick up to 2 before each horde, then tap or click them when they are ready.',
+      keys: ['Q', 'W'],
+      keyHint: 'Keys: Q W.',
+      one: false,
+    });
+  });
+
+  it('never offers more keys than there are skills, or than may be picked', () => {
+    expect(skillHelp(['airstrike', 'airstrike'], 5).keys).toEqual(['Q', 'W']);
+    expect(skillHelp(['airstrike', 'airstrike'], 1).keys).toEqual(['Q']);
+  });
+
+  it('several skills but 1 pick: one key, no skill named', () => {
+    const h = skillHelp(['airstrike', 'airstrike'], 1);
+    expect([h.line, h.keyHint, h.one]).toEqual([
+      'Pick 1 skill before each horde, then tap or click it when it is ready.',
+      'Key: Q.',
+      false,
+    ]);
   });
 });
