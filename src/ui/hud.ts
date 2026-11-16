@@ -50,6 +50,7 @@ import {
   HORROR,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
+  BOSS_UNLOCKS,
   RADIO_HORDES,
   FALL_WARNING,
   GAS_PER_WIN,
@@ -1270,6 +1271,15 @@ export interface Chip {
   tone: 'ok' | 'boss' | 'warn';
   /** A hover hint with the chip's detail (ID-179: what the Scrap is made of). */
   title?: string;
+  /** The chip is a button that opens the radio explanation under it (ID-190). */
+  toggle?: true;
+}
+
+/** The radio explanation's lines (ID-190): a bold lead-in and its text. */
+export interface RadioHelp {
+  lines: { lead: string; text: string }[];
+  /** Starts open: the first time the chip shows. */
+  open: boolean;
 }
 
 /** A win's weapon drop as the debrief's loot tile (ID-067). */
@@ -1365,6 +1375,8 @@ export interface Debrief {
    * drop, filled by `showJoin`; absent with nobody asking.
    */
   join?: true;
+  /** The start screen's radio explanation (ID-190), absent in Endless and elsewhere. */
+  radio?: RadioHelp;
 }
 
 /** Survivor `id`'s profession name on `game`'s roster (ID-149), '' for none there. */
@@ -1677,8 +1689,41 @@ export function goalChip(game: Pick<GameState, 'hordeNumber'>): { chip: Chip; no
   }
   const parts = radioParts(game);
   return {
-    chip: { text: `Radio ${parts}/${RADIO_HORDES.length}`, tone: 'warn' },
+    chip: { text: `Radio ${parts}/${RADIO_HORDES.length}`, tone: 'warn', toggle: true },
     note: `Beat boss Horde ${RADIO_HORDES[parts]} for radio part ${parts + 1} of ${RADIO_HORDES.length}.`,
+  };
+}
+
+/** "10", "10 and 20" or "10, 20 and 30". */
+const listOf = (items: readonly (number | string)[]): string =>
+  items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+
+/**
+ * What the radio chip explains (ID-190): what it is, where parts come from and what the goal
+ * gives, all read off the data. Null in Endless, where there is no radio to build.
+ */
+export function radioHelp(
+  game: Pick<GameState, 'hordeNumber'>,
+  open: boolean = false,
+): RadioHelp | null {
+  if (isEndless(game)) return null;
+  const unlocks = RADIO_HORDES.flatMap((h) => {
+    const card = BOSS_UNLOCKS[h];
+    return card ? [`${UPGRADES[card].name} (Horde ${h})`] : [];
+  });
+  return {
+    open,
+    lines: [
+      { lead: 'The radio', text: ' is the goal: build it to call for evacuation.' },
+      {
+        lead: 'Parts:',
+        text: ` each boss horde (Hordes ${listOf(RADIO_HORDES)}) gives one the first time you beat it.`,
+      },
+      {
+        lead: 'You gain:',
+        text: ` ${unlocks.length > 0 ? `${unlocks.join(', ')}, then the ` : 'The '}finale: evacuation and Endless.`,
+      },
+    ],
   };
 }
 
@@ -1687,11 +1732,16 @@ export function goalChip(game: Pick<GameState, 'hordeNumber'>): { chip: Chip; no
  * campaign's goal (ID-127), and the horde picker (ID-098) with `picked` selected (the next
  * new horde by default).
  */
-export function squadStart(game: GameState, picked: number = game.hordeNumber): ResultScreen {
+export function squadStart(
+  game: GameState,
+  picked: number = game.hordeNumber,
+  radioOpen: boolean = false,
+): ResultScreen {
   const squad = squadOf(game);
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
   const goal = goalChip(game);
+  const radio = radioHelp(game, radioOpen);
   const bench = benchLine(game);
   // Still asking after a reload on the result screen (ID-150): the offer waits here.
   const asking = joiningOf(game);
@@ -1716,6 +1766,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       chips: now.start.chips,
       callout: null,
       note: goal.note,
+      ...(radio ? { radio } : {}),
       drop: null,
       recruit: null,
       cards: squad.map((d) => plainCard(d)),
@@ -2000,6 +2051,8 @@ export function createHud(
   showGear(gear: GearScreen, onEquip: (defenderId: string, choice: string) => void): void;
   /** Where a horde picked from the picker goes (ID-098); the app sets it once. */
   onHordePick(handler: (horde: number) => void): void;
+  /** The radio chip was toggled by hand (ID-190): the panel is now open or closed. */
+  onRadioToggle(handler: (open: boolean) => void): void;
   /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
   showPicker(picker: HordePicker): void;
   /** Where a skill toggled in the skill pick goes (ID-100); the app sets it once. */
@@ -2281,6 +2334,7 @@ export function createHud(
   let onPickSkill: (skill: SkillId) => void = () => {};
   foot.append(skillBlock, pickBlock, footNote, back);
   let onPickHorde: (horde: number) => void = () => {};
+  let onRadio: (open: boolean) => void = () => {};
   result.append(resultTitle, resultList, picker, gear, campPicker, foot);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
@@ -2592,13 +2646,31 @@ export function createHud(
     replace.replaceChildren(...parts, row, skip);
   }
 
-  const chipNodes = (list: readonly Chip[]): HTMLElement[] =>
+  const chipNodes = (list: readonly Chip[], help: HTMLElement | null): HTMLElement[] =>
     list.map((c) => {
+      if (c.toggle && help) return radioChip(c, help);
       const chip = el('span', 'chip', c.text);
       chip.dataset.tone = c.tone;
       if (c.title) chip.title = c.title;
       return chip;
     });
+
+  /** The radio chip as a button (ID-190) that shows or hides `help`; a retitle rebuilds it. */
+  function radioChip(c: Chip, help: HTMLElement): HTMLElement {
+    const chip = el('button', 'chip chip-toggle');
+    chip.type = 'button';
+    chip.title = 'What the radio is for';
+    chip.dataset.tone = c.tone;
+    chip.setAttribute('aria-controls', help.id);
+    chip.setAttribute('aria-expanded', String(!help.hidden));
+    chip.textContent = c.text;
+    chip.addEventListener('click', () => {
+      help.hidden = !help.hidden;
+      chip.setAttribute('aria-expanded', String(!help.hidden));
+      onRadio(!help.hidden);
+    });
+    return chip;
+  }
 
   /**
    * The skill pick (ID-100): a toggle per skill, pressed when picked, and a line on the
@@ -2704,7 +2776,11 @@ export function createHud(
       back.textContent = o.button;
       if (p.retitle) {
         resultTitle.textContent = o.start.title;
-        picker.querySelector('.debrief-chips')?.replaceChildren(...chipNodes(o.start.chips));
+        picker
+          .querySelector('.debrief-chips')
+          ?.replaceChildren(
+            ...chipNodes(o.start.chips, picker.querySelector<HTMLElement>('.radio-help')),
+          );
       }
       onPickHorde(o.horde);
     });
@@ -2718,9 +2794,20 @@ export function createHud(
    */
   function debriefBlock(d: Debrief): HTMLElement[] {
     const parts: HTMLElement[] = [];
+    // Built first: the radio chip toggles it.
+    const help = d.radio ? el('p', 'radio-help') : null;
+    if (help && d.radio) {
+      help.id = 'hud-radio-help';
+      help.hidden = !d.radio.open;
+      for (const line of d.radio.lines) {
+        const row = el('span', 'radio-help-line');
+        row.append(el('strong', '', line.lead), line.text);
+        help.append(row);
+      }
+    }
     if (d.chips.length > 0) {
       const chips = el('div', 'debrief-chips');
-      chips.append(...chipNodes(d.chips));
+      chips.append(...chipNodes(d.chips, help));
       parts.push(chips);
     }
     if (d.callout) {
@@ -2730,6 +2817,7 @@ export function createHud(
       parts.push(callout);
     }
     if (d.note) parts.push(el('p', 'debrief-note', d.note));
+    if (help) parts.push(help);
     if (d.drop || d.recruit || d.join) {
       const spoils = el('div', 'debrief-spoils');
       if (d.drop) {
@@ -3287,6 +3375,9 @@ export function createHud(
       (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus({
         preventScroll: true,
       });
+    },
+    onRadioToggle(handler) {
+      onRadio = handler;
     },
     onHordePick(handler) {
       onPickHorde = handler;

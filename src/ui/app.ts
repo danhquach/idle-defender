@@ -24,6 +24,7 @@ import {
   combineSurvivors,
   equipGun,
   finishSquadHorde,
+  isEndless,
   joiningOf,
   letGo,
   refuseJoins,
@@ -48,6 +49,7 @@ import {
   readAutoStrike,
   readChatter,
   readHowToSeen,
+  readRadioSeen,
   readReduceMotion,
   readSound,
   readSpeed,
@@ -55,6 +57,7 @@ import {
   writeAutoStrike,
   writeChatter,
   writeHowToSeen,
+  writeRadioSeen,
   writeMute,
   writeReduceMotion,
   writeSpeed,
@@ -464,6 +467,21 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true, moves: markBench(moves, new Set(squadOf(next).map((d) => d.id))) };
   }
   /**
+   * Whether the radio explanation (ID-190) shows open on a start screen: open the first time
+   * (the flag is saved at once), then as the player last left it. Kept for the session only.
+   */
+  let radioOpen: boolean | null = null;
+  function radioState(): boolean {
+    if (radioOpen === null && !isEndless(game)) {
+      radioOpen = !readRadioSeen(storage);
+      if (radioOpen) writeRadioSeen(storage);
+    }
+    return radioOpen ?? false;
+  }
+  hud.onRadioToggle((open) => {
+    radioOpen = open;
+  });
+  /**
    * After the camp changed between hordes (the squad picked, someone joined or left): the
    * start screen and its squad on the wall, and the gun pickers, redrawn.
    */
@@ -471,7 +489,7 @@ export function start(root: HTMLElement, art: Art): void {
     if (!horde) {
       preview = startSquadHorde(game, 0, Date.now());
       hud.update(preview);
-      hud.showResult(squadStart(game, picked));
+      hud.showResult(squadStart(game, picked, radioState()));
     }
     showGear();
   }
@@ -796,7 +814,7 @@ export function start(root: HTMLElement, art: Art): void {
       hud.show(true);
       hud.update(preview);
       picked = picked >= 1 && picked <= game.hordeNumber ? picked : game.hordeNumber;
-      hud.showResult(squadStart(game, picked));
+      hud.showResult(squadStart(game, picked, radioState()));
       showGear();
       cam = buildCam = fightCam;
       refreshDialogs();
