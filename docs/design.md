@@ -900,8 +900,9 @@ close-quarter weapons come out only when an enemy is close.
   sheet on a phone, as tall as what it shows. The Roster button carries no
   badge (ID-146: the number of survivors with points to spend before). The dialog has
   a header (title, "Best gun for everyone", close), one row of squad tabs
-  (portrait, name, level and profession, ID-149; HP on hover and for screen
-  readers), the selected
+  (name, level, profession, and, as built ID-180, the held gun's icon on its
+  rarity tint with their DPS in their hands; no tab portrait; HP on hover and
+  for screen readers), the selected
   survivor beside their gun slot,
   and one panel that is either **Level** or
   **Choose a gun**. A survivor's name on the result screen still opens that
@@ -1107,10 +1108,16 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   time it loads.
 - **Squad Power** counts a fighting job's specialty with its gun, and the
   self jobs' stats, the way it counts the level's.
-- **On screen:** each Roster tab reads name, "Lv 7" and the profession on
-  three short lines (on a phone only name and profession, short names of 8
-  letters at most so they fit a 375 px phone: "Police", "Guard", "Medic",
-  "Scav"). The selected survivor's line says "Level 7 · Hunter · HP …"; on a
+- **On screen:** each Roster tab (squad and bench) is one stacked column: name,
+  "Lv 7" (wide dialogs only), the profession (short names of 8 letters at most
+  so they fit a 375 px phone: "Police", "Guard", "Medic", "Scav", "Mech", "Teach"), the
+  held gun's icon on its rarity tint across the card, and the bare DPS in their
+  hands (ID-180: the number the gun slot shows, ID-152; the free pistol shows
+  as the pistol on the common tint). Up to 8 squad cards share the row on desktop
+  and a phone; the bench's are 76 px (52 px when the Roster is 460 px or narrower) and scroll. A resting survivor shows "Rest N"
+  in place of the profession. The tab's label ends "…, Lv 3 Military Rifle, 17.2
+  DPS". Tabs redraw on every Equip, Best gun, Best squad, Auto, Combine, buy
+  and outside change. The selected survivor's line says "Level 7 · Hunter · HP …"; on a
   phone the survivor and the gun slot share the row 2:3, so the gun's name
   always shows. Their panel highlights the profession's benefit in the accent
   colour ("Hunter: +12.0% crit chance, +18.0% crit damage with Sniper rifle,

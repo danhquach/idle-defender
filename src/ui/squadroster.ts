@@ -53,6 +53,12 @@ export interface RosterTile {
   rest: number;
   /** "Military Rifle"; the free pistol is "Pistol". */
   gun: string;
+  /** "Lv 3 Military Rifle" / "Pistol" (ID-180), for the tab's label. */
+  gunFull: string;
+  /** The held gun's icon (ID-180). */
+  gunIcon: ArtId;
+  /** Their DPS with it, as the gun slot shows (ID-152), "17.2". */
+  dps: string;
   rarity: Rarity;
   art: ArtId;
 }
@@ -96,6 +102,9 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
       bench: bench.has(d.id),
       rest: restOf(d),
       gun: heldName(held),
+      gunFull: gunName(held),
+      gunIcon: GUN_ICON[baseOf(held) as GunId],
+      dps: heldDps(held, d),
       rarity: rarityOf(held),
       art: avatarOf(d),
     };
@@ -112,6 +121,23 @@ function avatar(art: ArtId, className: string): HTMLElement {
   if (url) img.src = url;
   frame.append(img);
   return frame;
+}
+
+/**
+ * A gun's icon on its rarity's tint (ID-092, ID-180), so the dark gun art reads: the gun
+ * slot's, and each tab's (`extra` class).
+ */
+function gunIcon(rarity: Rarity, art: ArtId, extra = ''): HTMLElement {
+  const icon = el('span', `rv-gico${extra ? ` ${extra}` : ''}`);
+  icon.dataset.rarity = rarity;
+  const url = ART_URLS[art];
+  if (url) {
+    const img = el('img', 'rv-gico-img');
+    img.alt = '';
+    img.src = url;
+    icon.append(img);
+  }
+  return icon;
 }
 
 export interface RosterOptions {
@@ -417,8 +443,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     tab.dataset.defender = t.id;
     // One state, announced once: the survivor shown is the current one.
     if (selected) tab.setAttribute('aria-current', 'true');
-    tab.title = `${t.name}, level ${t.level}, ${t.job}, ${t.health}`;
-    tab.setAttribute('aria-label', `${t.name}, level ${t.level}, ${t.job}, ${t.health}`);
+    const label = `${t.name}, level ${t.level}, ${t.job}, ${t.health}, ${t.gunFull}, ${t.dps} DPS`;
+    tab.title = label;
+    tab.setAttribute('aria-label', label);
     tab.classList.toggle('rv-tab-down', t.down);
     const text = el('span', 'rv-tab-text');
     // Name, level, then the profession on a line of its own (ID-149), so a narrow tab never
@@ -429,7 +456,9 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       // Resting (ID-147): how long, in words, where the profession was; not colour alone.
       el('span', 'rv-tab-job', t.rest > 0 ? `Rest ${t.rest}` : t.jobShort),
     );
-    tab.append(avatar(t.art, 'roster-avatar roster-avatar-xs'), text);
+    // The held gun on its rarity tint, then their DPS with it (ID-180): the same number the
+    // gun slot shows.
+    tab.append(text, gunIcon(t.rarity, t.gunIcon, 'rv-tab-gun'), el('span', 'rv-tab-dps', t.dps));
     tab.addEventListener('click', () => {
       if (t.id === current) return;
       current = t.id;
@@ -492,16 +521,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       'aria-label',
       `Gun: ${gunName(held)}, ${dps} ${dpsCaption(d.name)}. ${canGear ? (picking ? 'Back to level' : 'Change gun') : GUNS_WAIT}`,
     );
-    const icon = el('span', 'rv-gico');
-    // The inventory slot's tint, so the dark gun art reads (ID-092).
-    icon.dataset.rarity = rarityOf(held);
-    const url = ART_URLS[GUN_ICON[(isOwned(held) ? held.base : held) as GunId]];
-    if (url) {
-      const img = el('img', 'rv-gico-img');
-      img.alt = '';
-      img.src = url;
-      icon.append(img);
-    }
+    const icon = gunIcon(rarityOf(held), GUN_ICON[baseOf(held) as GunId]);
     const gtext = el('span', 'rv-slot-text');
     const name = el('span', 'rv-slot-name', gunName(held));
     name.dataset.rarity = rarityOf(held);

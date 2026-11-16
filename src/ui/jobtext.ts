@@ -26,9 +26,9 @@ export const JOB_SHORT: Readonly<Record<JobId, string>> = {
   guard: 'Guard',
   builder: 'Builder',
   paramedic: 'Medic',
-  mechanic: 'Mechanic',
+  mechanic: 'Mech',
   chef: 'Chef',
-  teacher: 'Teacher',
+  teacher: 'Teach',
   scavenger: 'Scav',
   student: 'Student',
 };
