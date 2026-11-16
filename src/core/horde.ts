@@ -602,8 +602,8 @@ export interface Grenade {
 }
 /**
  * Oil Bomb's tar on the ground (ID-132): landed at `at`, centred on `(x, y)`, slowing the
- * enemies inside until `until`; once an Incendiary Rounds hit lights it (`litAt`), it burns
- * them and `until` is when it has burnt out.
+ * enemies inside until `until`; once an Incendiary Rounds hit or a Molotov's fire (ID-181)
+ * lights it (`litAt`), it burns them and `until` is when it has burnt out.
  */
 export interface Slick {
   x: number;
@@ -2045,11 +2045,7 @@ function cardHit(
     e.burnUntil = s.time + CARD.burn.seconds;
     e.burnDps = burnDpsOf(s);
     // The synergy (ID-132): a hit on an enemy in an unlit slick sets the slick alight.
-    for (const slick of slicksUnder(s, e)) {
-      if (slickLit(slick)) continue;
-      slick.litAt = s.time;
-      slick.until = Math.min(slick.until, s.time + CARD.oil.burnFor);
-    }
+    for (const slick of slicksUnder(s, e)) lightSlick(s, slick);
   }
   if (took(s, 'shock-rounds')) shock(s, e);
   if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
@@ -2295,6 +2291,17 @@ export function slicksUnder(s: Pick<HordeState, 'slicks' | 'time'>, e: Enemy): S
 
 /** Whether `k` is alight now (ID-132). */
 export const slickLit = (k: Slick): boolean => k.litAt !== undefined;
+
+/**
+ * Sets an unlit slick alight now (ID-132: an Incendiary Rounds hit inside it; ID-181: a
+ * Molotov's fire overlapping it): it burns until it burns out `burnFor` s later, or sooner
+ * if its tar was due to dry up first. A lit slick is left as it is.
+ */
+function lightSlick(s: Pick<HordeState, 'time'>, k: Slick): void {
+  if (slickLit(k)) return;
+  k.litAt = s.time;
+  k.until = Math.min(k.until, s.time + CARD.oil.burnFor);
+}
 
 /** An Oil Bomb burn's damage a second (ID-132): its share of this wave's Shambler HP. */
 export const slickDps = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
@@ -2745,6 +2752,14 @@ function burn(s: HordeState): void {
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
   // Oil Bomb (ID-132): a lit slick burns everyone inside until it burns out.
   s.slicks = s.slicks.filter((k) => !due(s.time, k.until));
+  // A Molotov's fire overlapping an unlit slick sets it alight (ID-181), whichever landed
+  // first; it then burns as one lit by Incendiary Rounds does.
+  if (s.fires.length > 0) {
+    const reach = CARD.oil.radius + CARD.molotov.radius + EPS;
+    for (const k of s.slicks) {
+      if (s.fires.some((f) => Math.hypot(k.x - f.x, k.y - f.y) <= reach)) lightSlick(s, k);
+    }
+  }
   const slickHit = slickDps(s) * STEP;
   // With no lit slick (the card not held, most steps), no enemy is looked at.
   for (const e of s.slicks.some(slickLit) ? s.enemies : []) {

@@ -1157,7 +1157,8 @@ export const CARD = {
    * `mortar.end` px in from each end of the wall, lob a tar bomb every `every` s between
    * them at the thickest group within `range` of one (as Frag Grenades picks), landing
    * `flight` s later; it leaves a slick of `radius` px for `seconds` s, in which enemies move
-   * `slow` slower. An Incendiary Rounds hit on an enemy inside lights it: it burns everyone
+   * `slow` slower. An Incendiary Rounds hit on an enemy inside, or a Molotov's fire overlapping
+   * it (ID-181), lights it: it burns everyone
    * inside for `burn` of this wave's Shambler HP a second for `burnFor` s, then it is gone.
    */
   oil: {

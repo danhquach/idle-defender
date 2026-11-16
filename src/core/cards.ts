@@ -178,7 +178,7 @@ export const UPGRADES: Readonly<
   },
   molotov: {
     name: 'Molotov',
-    text: `Each survivor carries ${CARD.throws.carry} molotovs; one comes back every ${CARD.molotov.every} s. Thrown into the thickest group, its fire burns enemies for ${Math.round(CARD.molotov.burn * 100)}% of a Shambler’s HP a second for ${CARD.molotov.seconds[0]} s, but they move ${Math.round(CARD.molotov.panic * 100)}% faster in the flames`,
+    text: `Each survivor carries ${CARD.throws.carry} molotovs; one comes back every ${CARD.molotov.every} s. Thrown into the thickest group, its fire burns enemies for ${Math.round(CARD.molotov.burn * 100)}% of a Shambler’s HP a second for ${CARD.molotov.seconds[0]} s, but they move ${Math.round(CARD.molotov.panic * 100)}% faster in the flames; its fire lights an Oil Bomb slick`,
     category: 'behaviour',
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
@@ -236,7 +236,7 @@ export const UPGRADES: Readonly<
   'oil-bomb': {
     name: 'Oil Bomb',
     // The gain and its cost (ID-137): a slow shell, a long wait, and a lit slick burns out.
-    text: `Two wall mortars lob a tar bomb into the thickest group every ${CARD.oil.every} s. Its slick slows enemies ${Math.round(CARD.oil.slow * 100)}% for ${CARD.oil.seconds} s, and Incendiary hits set it alight (${Math.round(CARD.oil.burn * 100)}% of a Shambler’s HP a second); but the bomb takes ${CARD.oil.flight} s to land, and a lit slick burns out in ${CARD.oil.burnFor} s`,
+    text: `Two wall mortars lob a tar bomb into the thickest group every ${CARD.oil.every} s. Its slick slows enemies ${Math.round(CARD.oil.slow * 100)}% for ${CARD.oil.seconds} s, and Incendiary hits or a Molotov’s fire set it alight (${Math.round(CARD.oil.burn * 100)}% of a Shambler’s HP a second); but the bomb takes ${CARD.oil.flight} s to land, and a lit slick burns out in ${CARD.oil.burnFor} s`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
@@ -378,11 +378,22 @@ export function synergyOf(state: HordeState, id: UpgradeId): string | null {
     return 'Piercing Rounds: bounces pierce';
   if (id === 'piercing-rounds' && state.taken.includes('ricochet'))
     return 'Ricochet: bounces pierce';
+  // Both of Oil Bomb's pairings held (ID-181): one line names both.
+  if (
+    id === 'oil-bomb' &&
+    state.taken.includes('incendiary-rounds') &&
+    state.taken.includes('molotov')
+  )
+    return 'Incendiary Rounds, Molotov: they light the slick';
   // Oil Bomb + Incendiary Rounds (ID-132): its text names the pairing; the line says it is on.
   if (id === 'oil-bomb' && state.taken.includes('incendiary-rounds'))
     return 'Incendiary Rounds: hits light the slick';
   if (id === 'incendiary-rounds' && state.taken.includes('oil-bomb'))
     return 'Oil Bomb: hits light the slick';
+  // Oil Bomb + Molotov (ID-181): a fire overlapping the slick lights it.
+  if (id === 'oil-bomb' && state.taken.includes('molotov')) return 'Molotov: fire lights the slick';
+  if (id === 'molotov' && state.taken.includes('oil-bomb'))
+    return 'Oil Bomb: fire lights the slick';
   return null;
 }
 
@@ -472,7 +483,7 @@ export function effectAt(
       return {
         pre: `Each survivor carries ${CARD.throws.carry}; one comes back every ${CARD.molotov.every} s. Its fire burns for `,
         value: `${lv(CARD.molotov.seconds)} s`,
-        post: `, ${pct(CARD.molotov.burn)} of a Shambler’s HP a second; enemies move ${pct(CARD.molotov.panic)} faster in the flames`,
+        post: `, ${pct(CARD.molotov.burn)} of a Shambler’s HP a second; enemies move ${pct(CARD.molotov.panic)} faster in the flames; its fire lights an Oil Bomb slick`,
       };
     case 'barbed-wire':
       return {
