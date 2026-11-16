@@ -31,10 +31,12 @@ import { newGame, type GameState } from './game.ts';
 import { tick, type HordeState } from './horde.ts';
 import {
   bestGuns,
+  campOf,
   equipGun,
   finishSquadHorde,
   squadDrop,
   squadResult,
+  squadOf,
   squadSpec,
   startSquadHorde,
   type SquadDrop,
@@ -586,5 +588,155 @@ describe('best gun for everyone counts professions (ID-152)', () => {
     const twice = bestGuns(once);
     expect(twice.moves).toEqual([]);
     expect(twice.game).toEqual(once);
+  });
+});
+
+describe('best gun for everyone arms the bench too (ID-188)', () => {
+  const weak = gun('a', 'smg', 'rusty');
+  const mid = gun('b', 'smg', 'military');
+  const top = gun('c', 'lmg', 'relic');
+  /** `squadGame` with the last `bench` survivors moved to the bench, holding `benchGuns`. */
+  const withBench = (
+    n: number,
+    bench: number,
+    stash: OwnedWeapon[],
+    benchGuns: Held[] = [],
+  ): GameState => {
+    const g = squadGame(n, 3, stash);
+    const out = g.roster.slice(n - bench).map((d, i) => ({
+      ...d,
+      loadout: { ...d.loadout, primary: benchGuns[i] ?? d.loadout.primary },
+    }));
+    return { ...g, roster: g.roster.slice(0, n - bench), reserve: out };
+  };
+  const held = (g: GameState, id: string): string => {
+    const d = [...g.roster, ...g.reserve].find((x) => x.id === id)!;
+    return idOf(d.loadout.primary);
+  };
+
+  it('the squad picks first, then the bench gets the best guns left; its moves come last, marked', () => {
+    const r = bestGuns(withBench(3, 1, [weak, mid, top]));
+    expect(r.moves.map((m) => [m.id, idOf(m.to), m.bench ?? false])).toEqual([
+      ['recruit-1', 'c', false],
+      ['recruit-2', 'b', false],
+      ['recruit-3', 'a', true],
+    ]);
+    expect(held(r.game, 'recruit-3')).toBe('a');
+    expect(r.game.reserve.map((d) => d.id)).toEqual(['recruit-3']);
+    expect(r.game.armoury).toEqual([]);
+  });
+
+  it('a bench survivor never takes a squad survivor’s gun, and the squad never takes theirs', () => {
+    // The squad holds the Relic; the bench has only the pistol and the stash is empty.
+    const g0 = withBench(2, 1, [top]);
+    const eq = equipGun(g0, 'recruit-1', 'c');
+    if (!eq.ok) throw new Error(eq.reason);
+    expect(bestGuns(eq.game).moves).toEqual([]);
+    // A bench survivor holding the Relic keeps it: the squad takes the stash's weaker gun.
+    const g1 = withBench(2, 1, [weak], [top]);
+    const r = bestGuns(g1);
+    expect(held(r.game, 'recruit-2')).toBe('c');
+    expect(held(r.game, 'recruit-1')).toBe('a');
+    expect(r.moves.map((m) => m.id)).toEqual(['recruit-1']);
+  });
+
+  it('with no gun left over, the bench keeps what it holds', () => {
+    const r = bestGuns(withBench(3, 1, [weak, mid]));
+    expect(r.moves.every((m) => !m.bench)).toBe(true);
+    expect(held(r.game, 'recruit-3')).toBe('pistol');
+  });
+
+  it('a bench gun given back that suits the squad better goes to the squad; a second call moves nothing', () => {
+    // A Hunter on the squad; on the bench a Soldier holds a Sniper rifle, the stash an
+    // Assault Rifle. The Soldier swaps theirs for the stash's, and the Hunter takes the Sniper.
+    const sniper = gun('s', 'sniper', 'common');
+    const assault = gun('r', 'assault', 'military');
+    let g = withBench(2, 1, [assault], [sniper]);
+    const LV21 = xpForLevel(21);
+    g = {
+      ...g,
+      roster: g.roster.map((d) => (d.id === 'recruit-1' ? { ...d, job: 'hunter', xp: LV21 } : d)),
+      reserve: g.reserve.map((d) => ({ ...d, job: 'soldier' as JobId, xp: LV21 })),
+    };
+    const once = bestGuns(g);
+    const twice = bestGuns(once.game);
+    expect(twice.moves).toEqual([]);
+    expect(twice.game).toEqual(once.game);
+    // Every gun held or stashed once, none lost or doubled.
+    const uids = [
+      ...[...once.game.roster, ...once.game.reserve].map((d) => d.loadout.primary).filter(isOwned),
+      ...once.game.armoury,
+    ].map((w) => w.uid);
+    expect(uids.sort()).toEqual(['r', 's']);
+  });
+
+  it('a bench survivor holding a non-gun weapon takes a stash gun; the weapon goes to the stash', () => {
+    const knife = gun('k', 'knife', 'common');
+    const r = bestGuns(withBench(2, 1, [weak, mid], [knife]));
+    // The squad's one survivor takes the Military SMG; the bench the Rusty one.
+    expect(held(r.game, 'recruit-1')).toBe('b');
+    expect(held(r.game, 'recruit-2')).toBe('a');
+    expect(r.game.armoury.map((w) => w.uid)).toEqual(['k']);
+    expect(bestGuns(r.game).moves).toEqual([]);
+  });
+
+  it('many camps: idempotent, no gun lost or doubled, and the squad never weaker than squad-only', () => {
+    const bases = ['smg', 'rifle', 'shotgun', 'lmg', 'sniper', 'assault', 'cartridge'] as const;
+    const jobs: JobId[] = ['police', 'soldier', 'hunter', 'guard', 'builder', 'student'];
+    const rng = createRng(188);
+    for (let k = 0; k < 40; k++) {
+      const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)]!;
+      const guns = Array.from({ length: 1 + Math.floor(rng() * 8) }, (_, i) =>
+        gun(`k${k}g${i}`, pick(bases), pick(RARITY_ORDER)),
+      );
+      // Odd camps keep the bench on the reserve; even ones leave it on the roster past the
+      // squad's cap (an older save's shape), so both places a bench survivor sits are armed.
+      const onRoster = k % 2 === 1;
+      const n = onRoster ? SQUAD_CAP + 1 + Math.floor(rng() * 2) : 3 + Math.floor(rng() * 4);
+      const bench = onRoster ? n - SQUAD_CAP : 1 + Math.floor(rng() * 2);
+      // Some guns start in hands, the rest in the stash.
+      const inHand = guns.slice(0, Math.min(n, Math.floor(rng() * guns.length)));
+      let g = squadGame(n, 3, guns.slice(inHand.length));
+      g = {
+        ...g,
+        roster: g.roster.map((d, i) => ({
+          ...d,
+          job: pick(jobs),
+          xp: xpForLevel(1 + Math.floor(rng() * 20)),
+          loadout: { ...d.loadout, primary: inHand[i] ?? 'pistol' },
+        })),
+      };
+      if (!onRoster)
+        g = { ...g, roster: g.roster.slice(0, n - bench), reserve: g.roster.slice(n - bench) };
+      const squadIds = new Set(squadOf(g).map((d) => d.id));
+      expect(squadIds.size).toBe(n - bench);
+      const group = (x: GameState, squad: boolean) =>
+        campOf(x).filter((d) => squadIds.has(d.id) === squad);
+      const total = (x: GameState, squad: boolean): number =>
+        group(x, squad).reduce(
+          (s, d) => s + survivorDps(squadSpec(d), squadSpec(d).loadout.primary),
+          0,
+        );
+      const squadOnly = bestGuns({ ...g, roster: squadOf(g), reserve: [] }).game;
+      const once = bestGuns(g);
+      const twice = bestGuns(once.game);
+      expect(twice.moves).toEqual([]);
+      // Nobody changed places: the squad is the squad, the bench the bench.
+      expect(squadOf(once.game).map((d) => d.id)).toEqual([...squadIds]);
+      for (const m of once.moves) expect(m.bench === true).toBe(!squadIds.has(m.id));
+      const all = [
+        ...campOf(once.game)
+          .map((d) => d.loadout.primary)
+          .filter(isOwned),
+        ...once.game.armoury,
+      ].map((w) => w.uid);
+      expect([...all].sort()).toEqual(guns.map((w) => w.uid).sort());
+      expect(total(once.game, true)).toBeGreaterThanOrEqual(total(squadOnly, true) - 1e-9);
+      // The bench takes nothing from the squad: a squad gun reaches the bench only once its
+      // holder swapped it into the stash, so the squad never ends weaker than it started.
+      expect(total(once.game, true)).toBeGreaterThanOrEqual(total(g, true) - 1e-9);
+      // The bench as a whole never ends weaker either (a trade inside it may cost one of them).
+      expect(total(once.game, false)).toBeGreaterThanOrEqual(total(g, false) - 1e-9);
+    }
   });
 });

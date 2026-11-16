@@ -940,13 +940,18 @@ close-quarter weapons come out only when an enemy is close.
     profession, as Squad Power counts it: a fighting job's own guns count for
     more). It keeps making the one change that raises the squad's total the
     most: a survivor takes a stash gun (theirs goes to the stash; the free
-    pistol just goes), or two survivors trade guns. When no change helps, it
-    stops; a second tap moves nothing. The status line says what moved, once
-    per survivor from what they held to what they hold ("Equipped: Mara →
-    Military SMG · …"), or that everyone already holds the best gun they can
-    get. A gun never goes into the stash for the pistol, so the stash never
-    grows. (ID-108 to ID-149: the stash's strongest gun by the gun alone went
-    to the weakest gun held, and survivors never traded.)
+    pistol just goes), or two survivors trade guns. When no change helps, the
+    bench does the same with what the stash has left (ID-188), trading only
+    among itself: a bench survivor never takes a squad survivor's gun. A gun
+    the bench gives back may suit the squad better, so the squad looks again,
+    until neither changes; a second tap moves nothing. The status line says
+    what moved, once per survivor from what they held to what they hold, the
+    squad first, then the bench marked ("Equipped: Mara → Military SMG · Sam
+    (bench) → Rusty SMG"; past four, the rest are counted, with how many are
+    on the bench), or that everyone already holds the best gun they can get.
+    A gun never goes into the stash for the pistol, so the stash never grows.
+    (ID-108 to ID-149: the stash's strongest gun by the gun alone went to
+    the weakest gun held, and survivors never traded.)
 - **The start and result screens' survivor cards (ID-146):** under the gun,
   a small line gives the level's bonus with short labels (§6 Stats), in the
   Level up badge's colour on a card that levelled this win; its XP line ends
