@@ -459,7 +459,7 @@ Defenders stand on **posts** the player builds and chooses between.
   every late campaign beats Horde 18 in 74–78 fights (main 66–98). Picked alone
   it still hits ×2, and in the horde-only build it is always alone. The
   pick keeps its max-2 rule for later skills; with one skill an empty pick
-  says "No skill picked", and a pick says "Your only skill". Since ID-174
+  says "No skill picked"; a pick shows no note (ID-185). Since ID-174
   (PM) no text claims the ×2 (the pick, the card, the fight button and Help
   said it): one bomb already deals 4× a Shambler's HP, so ×2 couldn't be seen,
   and making it visible as twice the bombs moved the balance checks off
