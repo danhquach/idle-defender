@@ -8,7 +8,7 @@ import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, RADIO_HORDES, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { joiners, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
-import { askLine } from './joining.ts';
+import { noJoinText } from './joining.ts';
 import { injuryBand, powerBand, recommendedPower, squadPower } from '../core/squadpower.ts';
 import { horrorAbility, waveCount } from '../core/waves.ts';
 import {
@@ -287,6 +287,8 @@ describe('result screens and the picker (ID-098)', () => {
     expect(s.button).toBe('Replay Horde 3');
     expect(s.lines.join('\n')).not.toMatch(/New survivor|nobody new joins|Squad full/);
     expect(s.debrief!.recruit).toBeNull();
+    // A replay where nobody joins says why on the camp tile (ID-182).
+    expect(s.debrief!.join).toEqual({ size: 2, none: noJoinText('nobody-replay', 2) });
     expect(s.debrief!.cards).toHaveLength(2);
     // "Replay" is said by the title and the tile's kind chip, not a third time.
     expect(s.debrief!.chips.map((c) => c.text)).not.toContain('Replay');
@@ -301,8 +303,9 @@ describe('result screens and the picker (ID-098)', () => {
     const s = squadScreen(g, { ...startSquadHorde(g, seed, NOW, 3), outcome: 'won' as const });
     const d = recruit(3, seed);
     expect(s.title).toBe('Horde 3 held (replay)');
-    expect(s.lines).toContain(askLine(d));
-    expect(s.debrief!.join).toBe(true);
+    expect(d.name).toBeTruthy();
+    expect(s.lines.join(' ')).not.toMatch(/asks to join/);
+    expect(s.debrief!.join).toEqual({ size: 2, none: null });
     expect(s.debrief!.recruit).toBeNull();
   });
 

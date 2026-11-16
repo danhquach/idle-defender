@@ -593,7 +593,8 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     b.addEventListener('click', () => {
       const r = opts.onToggleSquad(d.id);
       if (!r.ok) setStatus(r.reason, 'danger');
-      else setStatus(mark.bench ? `${d.name} joins the squad.` : `${d.name} waits on the bench.`);
+      else
+        setStatus(mark.bench ? `${d.name} moves into the squad.` : `${d.name} moves to the bench.`);
       draw('squad');
     });
     return b;

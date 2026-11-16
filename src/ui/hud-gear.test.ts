@@ -345,9 +345,9 @@ describe('the debrief layout (ID-067)', () => {
     expect(d.drop!.stash).toBe(`Stash 1/${STASH_CAP}`);
     // The newcomer asks to join in the offer tile (ID-150), not the recruit tile.
     expect(d.recruit).toBeNull();
-    expect(d.join).toBe(true);
+    expect(d.join).toEqual({ size: 2, none: null });
     const full = squadGame(SQUAD_CAP, 3);
-    expect(squadScreen(full, ended(full, 'won')).debrief!.recruit!.full).toBe(true);
+    expect(squadScreen(full, ended(full, 'won')).debrief!.join!.none).toMatch(/^Nobody new/);
     // Both fresh survivors level up; the new one is on the recruit tile, not a card (ID-134).
     expect(d.cards.map((c) => [c.id, c.levelUp])).toEqual([
       ['recruit-1', true],

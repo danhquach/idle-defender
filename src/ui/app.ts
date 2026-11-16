@@ -357,7 +357,10 @@ export function start(root: HTMLElement, art: Art): void {
       return;
     }
     commit(r.game);
-    hud.toast(answerText(name, r.where));
+    // One string, in the toast and on the result's camp tile (ID-182).
+    const said = answerText(name, r.where);
+    hud.toast(said);
+    hud.noteJoin(said);
     // Into the squad (ID-157): a win's screen shows only level-ups, so their card is added
     // before the gun pickers are drawn into the cards.
     const card = r.where === 'squad' ? joinedCard(game, id) : null;

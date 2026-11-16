@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { rollWeapon } from './armoury.ts';
 import { recruit } from './camp.ts';
-import { SQUAD_CAP, STASH_CAP } from './data.ts';
+import { FARM, MAX_COUNT, SQUAD_CAP, STASH_CAP } from './data.ts';
 import { newGame, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
 import {
@@ -193,5 +193,101 @@ describe('letting a survivor go (ID-150)', () => {
     for (const id of ['recruit-99', '__proto__', 'constructor', '']) {
       expect(letGo(g, id)).toEqual({ ok: false, reason: 'No such survivor' });
     }
+  });
+});
+
+describe('the result and the finish agree on who joins (ID-182)', () => {
+  const sizes = [1, 5, 6, 7, 39, 40];
+  const seeds = Array.from({ length: 40 }, (_, i) => i + 1);
+
+  /** A camp of `n` at Horde 3 (3 of 3 new), as the first clear or a replay of Horde 2. */
+  const camp = (n: number, auto: boolean): GameState => {
+    const g = campGame(people(Math.min(n, SQUAD_CAP)), people(Math.max(0, n - SQUAD_CAP), 7));
+    return auto ? { ...g, autoSquad: true } : g;
+  };
+  const fight = (g: GameState, seed: number, replay: boolean): HordeState => ({
+    ...startSquadHorde(g, seed, NOW, replay ? 2 : g.hordeNumber),
+    outcome: 'won',
+  });
+
+  it('joined is the finish’s own joining, by id, over seeds × camp sizes × first/replay × Auto', () => {
+    let someone = 0;
+    let nobody = 0;
+    for (const n of sizes)
+      for (const replay of [false, true])
+        for (const auto of [false, true])
+          for (const seed of seeds) {
+            const g = camp(n, auto);
+            const h = fight(g, seed, replay);
+            const r = squadResult(g, h);
+            const asked = joiningOf(finishSquadHorde(g, h)).map((d) => d.id);
+            expect(r.joined.map((d) => d.id)).toEqual(asked);
+            // A reason exactly when nobody asks.
+            expect(r.noJoin === null).toBe(asked.length > 0);
+            if (asked.length > 0) someone++;
+            else nobody++;
+          }
+    // Both outcomes were really exercised.
+    expect(someone).toBeGreaterThan(50);
+    expect(nobody).toBeGreaterThan(50);
+  });
+
+  /** The first seed from 1 whose horde of `g` has (or has not) a joiner. */
+  const seedWhere = (g: GameState, replay: boolean, asks: boolean): number => {
+    for (let seed = 1; seed < 500; seed++) {
+      if (joiners(g, seed, replay).length > 0 === asks) return seed;
+    }
+    throw new Error('no such seed');
+  };
+
+  it('a first clear past 6 that rolls nobody: nobody-first', () => {
+    const g = camp(7, false);
+    const r = squadResult(g, fight(g, seedWhere(g, false, false), false));
+    expect(r).toMatchObject({ joined: [], noJoin: 'nobody-first' });
+  });
+
+  it('a replay that rolls nobody: nobody-replay', () => {
+    const g = camp(7, false);
+    const r = squadResult(g, fight(g, seedWhere(g, true, false), true));
+    expect(r).toMatchObject({ joined: [], noJoin: 'nobody-replay' });
+  });
+
+  it('a camp at SQUAD_JOIN.max: camp-full, first clear and replay alike', () => {
+    const g = camp(40, false);
+    expect(squadResult(g, fight(g, 1, false)).noJoin).toBe('camp-full');
+    expect(squadResult(g, fight(g, 1, true)).noJoin).toBe('camp-full');
+  });
+
+  it('the recruit counter at its cap: camp-full', () => {
+    const g = camp(7, false);
+    g.camp.recruits = MAX_COUNT;
+    expect(squadResult(g, fight(g, 1, false)).noJoin).toBe('camp-full');
+  });
+
+  it('a replay past FARM.maxReplays drops nothing and brings nobody: no-drop', () => {
+    const g = camp(7, false);
+    g.farm = { ...g.farm, replays: FARM.maxReplays };
+    const r = squadResult(g, fight(g, seedWhere(g, true, true), true));
+    expect(r).toMatchObject({ joined: [], noJoin: 'no-drop', drop: null });
+    expect(joiningOf(r.next)).toEqual([]);
+  });
+
+  it('a lost fight: lost, nobody asks', () => {
+    const g = camp(7, false);
+    const r = squadResult(g, { ...fight(g, 1, false), outcome: 'lost' });
+    expect(r).toMatchObject({ joined: [], noJoin: 'lost' });
+  });
+
+  it('someone asking: no reason', () => {
+    const g = camp(3, false);
+    expect(squadResult(g, fight(g, 1, false))).toMatchObject({ noJoin: null });
+  });
+
+  it('a replay that rolls nobody leaves an old ask standing, and still says why', () => {
+    const g = { ...camp(7, false), joining: [recruit(8)] };
+    g.camp.recruits = 8;
+    const r = squadResult(g, fight(g, seedWhere(g, true, false), true));
+    expect(r.noJoin).toBe('nobody-replay');
+    expect(joiningOf(r.next).map((d) => d.id)).toEqual(['recruit-8']);
   });
 });

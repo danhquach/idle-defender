@@ -847,13 +847,30 @@ const salvaged = (stock: GameState['stock'], thrown: readonly OwnedWeapon[]): Ga
  * Then `settleSquad`. No base damage or camp XP.
  */
 export function finishSquadHorde(game: GameState, horde: HordeState): GameState {
+  return finishHorde(game, horde).next;
+}
+
+/** Why nobody asked to join after a horde (ID-182); see `SquadResult.noJoin`. */
+export type NoJoin = 'lost' | 'no-drop' | 'camp-full' | 'nobody-first' | 'nobody-replay';
+
+/**
+ * `finishSquadHorde`'s whole answer (ID-182): the camp it leaves, and who asks to join with,
+ * for nobody, the reason. The one place that rolls the joiners, so the result screen reads
+ * what the finish decided and the two never disagree.
+ */
+function finishHorde(
+  game: GameState,
+  horde: HordeState,
+): { next: GameState; joined: RosterDefender[]; noJoin: NoJoin | null } {
   checkFinished('finishSquadHorde', game, horde);
   const gains = squadXpGains(game, horde);
   // A loss that paid nothing, with nobody resting to count down, changes nothing.
   const still = horde.outcome !== 'won' && gains.every((x) => x.xp === 0);
   // ("Auto", ID-154, still re-picks: the player's own moves stand only until a fight.)
   const fresh = (d: RosterDefender): boolean => isFit(d) && d.startHp === undefined;
-  if (still && campOf(game).every(fresh)) return autoSquad(game);
+  if (still && campOf(game).every(fresh)) {
+    return { next: autoSquad(game), joined: [], noJoin: 'lost' };
+  }
   const downed = new Map(squadRests(game, horde).map((r) => [r.id, r]));
   const g = structuredClone(game);
   for (const gain of gains) {
@@ -873,12 +890,12 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   g.reserve = g.reserve.map(rested);
   // "Auto" (ID-154): the best squad for the camp the fight left.
   const settle = (x: GameState): GameState => autoSquad(settleSquad(x));
-  if (horde.outcome !== 'won') return settle(g);
+  if (horde.outcome !== 'won') return { next: settle(g), joined: [], noJoin: 'lost' };
   const drop = squadDrop(game, horde);
   // A win pays Scrap, and so does each gun thrown away (ID-179); no RNG, no fight changes.
   g.stock = scrapAfter(game.stock, winScrap(horde.hordeNumber) + salvageOf(drop?.thrown ?? []));
   // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
-  if (!drop) return settle(g);
+  if (!drop) return { next: settle(g), joined: [], noJoin: 'no-drop' };
   g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus], stashCap(game)).armoury;
   if (drop.kind === 'first') {
     // Counted now, so a refused survivor's number is never offered again. Anyone still
@@ -886,7 +903,11 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
     const joined = joiners(game, horde.seed);
     g.camp.recruits += joined.length;
     g.hordeNumber += 1;
-    return settle(withJoining(g, joined));
+    return {
+      next: settle(withJoining(g, joined)),
+      joined,
+      noJoin: joined.length > 0 ? null : noJoinWhy(game, false),
+    };
   }
   // A replay's newcomer (ID-170) turns away an offer left unanswered, as a first clear's
   // does; with none, any offer stands.
@@ -901,7 +922,18 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
         ? game.farm.badLuck
         : Math.min(FARM.guarantee, game.farm.badLuck + 1),
   };
-  return settle(g);
+  return {
+    next: settle(g),
+    joined,
+    noJoin: joined.length > 0 ? null : noJoinWhy(game, true),
+  };
+}
+
+/** Why a win that rolled nobody brought nobody (ID-182): a full camp, else the roll. */
+function noJoinWhy(game: Pick<GameState, 'roster' | 'reserve' | 'camp'>, replay: boolean): NoJoin {
+  const size = game.roster.length + game.reserve.length;
+  if (size >= SQUAD_JOIN.max || game.camp.recruits >= MAX_COUNT) return 'camp-full';
+  return replay ? 'nobody-replay' : 'nobody-first';
 }
 
 /** What a horde-only result screen reads off a finished horde. */
@@ -913,6 +945,12 @@ export interface SquadResult {
    * rarely one on a replay (ID-170).
    */
   joined: RosterDefender[];
+  /**
+   * Why nobody is asking to join (ID-182), null when someone is: a `lost` fight, a replay past
+   * `FARM.maxReplays` (`no-drop`), a `camp-full` camp, or a roll that brought nobody
+   * (`nobody-first`, `nobody-replay`). Read off `finishSquadHorde`'s own decision.
+   */
+  noJoin: NoJoin | null;
   /**
    * Who rests after this fight and for how many hordes (ID-147), in roster order, as
    * `finishSquadHorde` leaves them: one woken at once (nobody fit) is left out.
@@ -938,17 +976,14 @@ export interface SquadResult {
 
 export function squadResult(game: GameState, horde: HordeState): SquadResult {
   checkFinished('squadResult', game, horde);
-  const won = horde.outcome === 'won';
-  const next = finishSquadHorde(game, horde);
+  const { next, joined, noJoin } = finishHorde(game, horde);
   const after = new Map(campOf(next).map((d) => [d.id, restOf(d)]));
   const downed = squadRests(game, horde);
   return {
     // Off the whole camp, so a bench survivor who swapped in (ID-148) levels from their XP.
     gains: levelGains({ ...game, roster: campOf(game) }, horde, squadXpGains(game, horde)),
-    joined:
-      won && squadDrop(game, horde)
-        ? joiners(game, horde.seed, isReplay(game, horde.hordeNumber))
-        : [],
+    joined,
+    noJoin,
     rests: downed
       .map((r) => ({ id: r.id, name: r.name, rest: after.get(r.id) ?? 0 }))
       .filter((r) => r.rest > 0),

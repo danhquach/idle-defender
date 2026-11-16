@@ -1254,6 +1254,10 @@ body {
   font-size: var(--text-xs);
 }
 
+.join-answer {
+  margin-top: var(--space-4);
+}
+
 .join-row + .join-row {
   margin-top: var(--space-8);
   padding-top: var(--space-8);

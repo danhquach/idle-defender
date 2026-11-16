@@ -5,7 +5,7 @@
 // the page only through textContent.
 import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { JOBS, PATCH_UP, SQUAD_CAP } from '../core/data.ts';
+import { PATCH_UP, SQUAD_CAP } from '../core/data.ts';
 import { maxHpOf } from '../core/stats.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
@@ -25,7 +25,7 @@ import {
   squadScreen,
   squadStart,
 } from './hud.ts';
-import { askLine, answerText } from './joining.ts';
+import { answerText, noJoinText } from './joining.ts';
 import { JOB_SHORT } from './jobtext.ts';
 import { AUTO_ON, createRoster, rosterTiles, SQUAD_WAIT } from './squadroster.ts';
 
@@ -95,22 +95,21 @@ describe('the start screen and the bench (ID-147)', () => {
 });
 
 describe('the result screen and the bench (ID-147)', () => {
-  it('two ask to join past 6 (seed 9): a line each and the offer tile, no recruit tile', () => {
+  it('two ask to join past 6 (seed 9): the camp tile with no reason, no recruit tile', () => {
     const g = campGame(people(6));
     const s = squadScreen(g, won(g, 9));
     const [a, b] = [recruit(7, 9), recruit(8, 9)];
-    expect(s.lines).toContain(`${a.name} (${JOBS[a.job].name}) asks to join the camp`);
-    expect(s.lines).toContain(`${b.name} (${JOBS[b.job].name}) asks to join the camp`);
+    expect(a.name).not.toBe(b.name);
     expect(s.debrief!.recruit).toBeNull();
-    expect(s.debrief!.join).toBe(true);
+    expect(s.debrief!.join).toEqual({ size: 6, none: null });
   });
 
   it('one asks to join while one rests: the screen says who rests', () => {
     const g = campGame(people(6));
     const s = squadScreen(g, won(g, 8, ['recruit-2']));
     const a = recruit(7, 8);
-    expect(s.lines).toContain(askLine(a));
-    expect(s.debrief!.join).toBe(true);
+    expect(a.name).toBeTruthy();
+    expect(s.debrief!.join).toEqual({ size: 6, none: null });
     // Nobody fit on the bench yet (the newcomer only joins on Accept): no Roster step.
     const note = `Resting: ${recruit(2).name} 1 horde.`;
     expect(s.debrief!.note).toBe(note);
@@ -120,7 +119,7 @@ describe('the result screen and the bench (ID-147)', () => {
   it('a newcomer will take the one open slot: no Roster step in the rest note (ID-150)', () => {
     const g = campGame(people(6), [person(7)]);
     const s = squadScreen(g, won(g, 9, ['recruit-2']));
-    expect(s.debrief!.join).toBe(true);
+    expect(s.debrief!.join).toEqual({ size: 7, none: null });
     expect(s.debrief!.note).toBe(`Resting: ${recruit(2).name} 1 horde.`);
   });
 
@@ -135,12 +134,8 @@ describe('the result screen and the bench (ID-147)', () => {
   it('nobody joins: the tile says so; resting with nobody fit to fill names no Roster step', () => {
     const g = campGame(people(6));
     const s = squadScreen(g, won(g, 1, ['recruit-1']));
-    expect(s.debrief!.recruit).toEqual({
-      label: 'Camp',
-      name: '6 survivors',
-      sub: 'Nobody new joins this time',
-      full: true,
-    });
+    expect(s.debrief!.recruit).toBeNull();
+    expect(s.debrief!.join).toEqual({ size: 6, none: noJoinText('nobody-first', 6) });
     expect(s.debrief!.note).toBe(`Resting: ${recruit(1).name} 1 horde.`);
     expect(restNote([], true)).toBeNull();
     expect(restNote([{ name: 'Ava', rest: 1 }], true)).toBe(
@@ -210,9 +205,9 @@ describe('the result screen names who "Auto" moved (ID-154)', () => {
 
 describe('designer review fixes (ID-147)', () => {
   it('each answer says where the newcomer went (ID-150)', () => {
-    expect(answerText('Ava', 'squad')).toBe('Ava joins the squad.');
-    expect(answerText('Ava', 'bench')).toBe('Ava joins the camp and waits on the bench.');
-    expect(answerText('Ava', null)).toBe('Ava is turned away for good.');
+    expect(answerText('Ava', 'squad')).toBe('Ava joined the squad');
+    expect(answerText('Ava', 'bench')).toBe('Ava joined the camp, on the bench');
+    expect(answerText('Ava', null)).toBe('Ava was turned away');
   });
 
   it('the Roster lists the fit bench before the resting, and a resting tab says how long', () => {
@@ -381,11 +376,14 @@ describe('the Roster and the bench (ID-147)', () => {
         .roster.map((d) => d.id)
         .at(-1),
     ).toBe('recruit-6');
-    expect(m.q('.rv-status').textContent).toBe(`${recruit(6).name} joins the squad.`);
+    expect(m.q('.rv-status').textContent).toBe(`${recruit(6).name} moves into the squad.`);
+    // Not "joins": a newcomer joins on the result screen, this is a move (ID-182).
+    expect(m.q('.rv-status').textContent).not.toMatch(/joins/);
     expect(m.q('[data-key="squad"]').textContent).toBe('Move to bench');
     expect(document.activeElement).toBe(m.q('[data-key="squad"]'));
     m.q('[data-key="squad"]').click();
     expect(m.game().reserve.map((d) => d.id)).toEqual(['recruit-7', 'recruit-6']);
+    expect(m.q('.rv-status').textContent).toBe(`${recruit(6).name} moves to the bench.`);
   });
 
   it('a full squad refuses with its reason; the resting get no button, only their rest', () => {

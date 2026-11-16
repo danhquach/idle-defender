@@ -4,13 +4,15 @@
 // replays the same horde. The build panel and all it opens (world map, patrols,
 // research, workbench, camp, perks) are never on the page. Canvas and art are stand-ins.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FIELD, HORDE_ONLY, SKILLS, STASH_CAP } from '../core/data.ts';
+import { FARM, FIELD, HORDE_ONLY, SKILLS, STASH_CAP } from '../core/data.ts';
 import { rollWeapon } from '../core/armoury.ts';
 import { rollOffer } from '../core/cards.ts';
 import { recruit } from '../core/camp.ts';
+import { joiners } from '../core/hordeonly.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
 import { levelOf, xpForLevel } from '../core/stats.ts';
+import { noJoinText } from './joining.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
 import { enemy } from '../core/testing.ts';
@@ -119,6 +121,10 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  vi.useRealTimers();
+  // A confirm left open keeps its capture keydown listener on the document, which swallows
+  // every key of the tests after it: answer No, whatever a test left asking.
+  confirmPanel()?.querySelector<HTMLButtonElement>('.confirm-no')?.click();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -813,6 +819,12 @@ describe('farming in the game (app.ts, ID-098)', () => {
       camp: { ...g.camp, recruits },
     };
     localStorage.setItem(SAVE_KEY, encodeSave(saved, NOW));
+    // The horde's seed is the clock's. A replay win brings a survivor 1 in 20 (ID-170),
+    // and the result's button then asks before leaving: a fixed seed with nobody keeps these
+    // tests from depending on the time of day.
+    let seed = 1;
+    while (joiners(saved, seed, true).length > 0) seed++;
+    vi.spyOn(Date, 'now').mockReturnValue(seed);
     const booted = boot();
     step(0);
     const select = () => booted.root.querySelector<HTMLSelectElement>('#hud-horde-select')!;
@@ -1370,8 +1382,13 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     press('Accept');
     expect(saved().roster.map((d) => d.id)).toEqual(['recruit-1', asking.id]);
     expect(saved().joining).toBeUndefined();
-    expect(join().hidden).toBe(true);
-    expect(toast()).toBe(`${asking.name} joins the squad.`);
+    // The answer stays on the result's camp tile (ID-182), in the toast's own words.
+    expect(join().hidden).toBe(false);
+    expect(join().querySelector('.join-row')).toBeNull();
+    expect(join().querySelector('.join-answer')!.textContent).toBe(
+      `${asking.name} joined the squad`,
+    );
+    expect(toast()).toBe(`${asking.name} joined the squad`);
   });
 
   it('Accept on a win: the newcomer’s card joins the Squad section, marked New (ID-157)', () => {
@@ -1418,13 +1435,16 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
   });
 
   it('Refuse: gone for good, saved at once; the button then goes on with no question', () => {
-    const { press, saved, button, bar, toast } = wonFirst();
+    const { press, saved, button, bar, toast, join } = wonFirst();
     const asking = saved().joining![0]!;
     press('Refuse');
     expect(saved().roster.map((d) => d.id)).toEqual(['recruit-1']);
     expect(saved().joining).toBeUndefined();
     expect(saved().camp.recruits).toBe(2);
-    expect(toast()).toBe(`${asking.name} is turned away for good.`);
+    expect(toast()).toBe(`${asking.name} was turned away`);
+    expect(join().querySelector('.join-answer')!.textContent).toBe(
+      `${asking.name} was turned away`,
+    );
     button().click();
     expect(confirmPanel()).toBeNull();
     step(48);
@@ -1816,5 +1836,167 @@ describe('Best gun with Auto on (app.ts, ID-154)', () => {
     expect(document.activeElement).toBe(best());
     best().click();
     expect(toast()).toBe(BEST_GUNS_NONE);
+  });
+});
+
+describe('the result and the camp tile agree (app.ts, ID-182)', () => {
+  /** `save` booted on its start screen, the fight at Horde `horde` seeded `seed`, then won. */
+  function playWin(
+    save: GameState,
+    seed: number,
+    horde: number | null = null,
+    outcome: 'won' | 'lost' = 'won',
+  ) {
+    localStorage.setItem(SAVE_KEY, encodeSave(save, NOW));
+    // The horde's seed is the clock's: fixed, so the roll is known.
+    vi.spyOn(Date, 'now').mockReturnValue(seed);
+    const booted = boot();
+    step(0);
+    if (horde !== null) {
+      const select = booted.root.querySelector<HTMLSelectElement>('#hud-horde-select')!;
+      select.value = String(horde);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    booted.button().click();
+    step(16);
+    endNextTick(outcome);
+    step(32);
+    const tile = () => booted.root.querySelector<HTMLElement>('.tile-join');
+    const press = (label: 'Accept' | 'Refuse') =>
+      [...tile()!.querySelectorAll<HTMLButtonElement>('.join-btn')]
+        .find((b) => b.textContent === label)!
+        .click();
+    const toast = () => booted.root.querySelector<HTMLElement>('.hud-toast')!;
+    return { ...booted, tile, press, toast };
+  }
+
+  /** A camp of `n` at Horde 5 (6 in the squad, the rest on the bench). */
+  function camp(n: number): GameState {
+    const g = newGame('horde');
+    const all = Array.from({ length: n }, (_, i) => recruit(i + 1));
+    return {
+      ...g,
+      hordeNumber: 5,
+      roster: all.slice(0, 6),
+      reserve: all.slice(6),
+      camp: { ...g.camp, recruits: n },
+    };
+  }
+
+  /** The first seeds from 1 that ask, and that do not, for `n` survivors. */
+  function seeds(n: number, replay: boolean, asks: boolean, count: number): number[] {
+    const out: number[] = [];
+    for (let s = 1; out.length < count; s++) {
+      if (joiners(camp(n), s, replay).length > 0 === asks) out.push(s);
+    }
+    return out;
+  }
+
+  const cases: [string, number, boolean, boolean][] = [
+    ['first clear of a camp of 2, someone asks', 2, false, true],
+    ['first clear past 6, someone asks', 7, false, true],
+    ['first clear past 6, nobody', 7, false, false],
+    ['replay, someone asks', 7, true, true],
+    ['replay, nobody', 7, true, false],
+    ['camp of 40, first clear', 40, false, false],
+    ['camp of 40, replay', 40, true, false],
+  ];
+  it.each(cases)(
+    '%s: the offer rows are the saved ask, else the reason shows',
+    (_n, n, replay, asks) => {
+      // A full camp never asks, whatever the seed: any will do.
+      const seed = n >= 40 ? 1 : seeds(n, replay, asks, 1)[0]!;
+      const { tile, saved } = playWin(camp(n), seed, replay ? 3 : null);
+      const asking = saved().joining ?? [];
+      const rows = [...tile()!.querySelectorAll<HTMLElement>('.join-row')];
+      expect(tile()!.hidden).toBe(false);
+      expect(rows.map((r) => r.querySelector('.tile-name')!.textContent)).toEqual(
+        asking.map((d) => d.name),
+      );
+      if (asking.length > 0) {
+        expect(tile()!.getAttribute('aria-label')).toBe('Asking to join');
+        expect(tile()!.querySelector('.join-none')).toBeNull();
+      } else {
+        const why = n >= 40 ? 'camp-full' : replay ? 'nobody-replay' : 'nobody-first';
+        expect(tile()!.getAttribute('aria-label')).toBe('Camp');
+        expect(tile()!.querySelector('.join-none')!.textContent).toBe(noJoinText(why, n));
+      }
+      expect(asking.length > 0).toBe(asks && n < 40);
+    },
+  );
+
+  /** Ends the toast: its timer runs out. */
+  const toastGone = (toast: () => HTMLElement): void => {
+    vi.advanceTimersByTime(5000);
+    expect(toast().hidden).toBe(true);
+  };
+
+  it('Accept into the squad, then the toast is gone: the result still names them', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { tile, press, toast, saved } = playWin(camp(3), 1);
+    const asking = saved().joining![0]!;
+    press('Accept');
+    expect(toast().textContent).toBe(`${asking.name} joined the squad`);
+    toastGone(toast);
+    expect(tile()!.hidden).toBe(false);
+    expect(tile()!.textContent).toContain(`${asking.name} joined the squad`);
+    expect(saved().roster.map((d) => d.id)).toContain(asking.id);
+  });
+
+  it('Accept onto the bench (squad full): named as the bench in the toast, the tile and the save', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const [seed] = seeds(6, false, true, 1);
+    const { tile, press, toast, saved } = playWin(camp(6), seed!);
+    const asking = saved().joining![0]!;
+    press('Accept');
+    const said = `${asking.name} joined the camp, on the bench`;
+    expect(toast().textContent).toBe(said);
+    toastGone(toast);
+    expect(tile()!.textContent).toContain(said);
+    expect(saved().reserve.map((d) => d.id)).toContain(asking.id);
+    expect(saved().roster.map((d) => d.id)).not.toContain(asking.id);
+  });
+
+  it('Refuse, then the toast is gone: the result says they were turned away', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { tile, press, toast, saved } = playWin(camp(3), 1);
+    const asking = saved().joining![0]!;
+    press('Refuse');
+    toastGone(toast);
+    expect(tile()!.textContent).toContain(`${asking.name} was turned away`);
+    expect(tile()!.querySelector('.join-btn')).toBeNull();
+  });
+
+  it('a replay with nobody says why; a first clear with nobody says why and offers no one', () => {
+    const [replaySeed] = seeds(7, true, false, 1);
+    const a = playWin(camp(7), replaySeed!, 3);
+    expect(a.tile()!.textContent).toContain(noJoinText('nobody-replay', 7)!);
+    expect(a.saved().joining).toBeUndefined();
+    expect(a.tile()!.querySelector('.join-btn')).toBeNull();
+    // Odds come off the data: 1 in 20 and 1 in 7.
+    expect(noJoinText('nobody-replay', 7)).toBe(
+      'Nobody new this time. A replay rarely brings a survivor (about 1 in 20).',
+    );
+    expect(noJoinText('nobody-first', 7)).toBe(
+      'Nobody new this time. At 6 survivors or more, a new horde brings one about 1 in 7.',
+    );
+    expect(noJoinText('camp-full', 40)).toBe('Camp is full (40): nobody new can join.');
+    expect(noJoinText('no-drop', 7)).toBe('No drop and nobody new: replay limit reached.');
+    expect(noJoinText('lost', 7)).toBeNull();
+  });
+
+  it('a lost fight has no camp tile at all', () => {
+    const { root, title } = playWin(camp(7), 1, null, 'lost');
+    expect(title()).toBe('The wall fell');
+    expect(root.querySelector('.tile-join')).toBeNull();
+  });
+
+  it('a replay past the replay limit drops nothing and says so on the tile (no-drop)', () => {
+    const g = camp(7);
+    const save = { ...g, farm: { ...g.farm, replays: FARM.maxReplays } };
+    const { tile, saved } = playWin(save, 1, 3);
+    expect(tile()!.getAttribute('aria-label')).toBe('Camp');
+    expect(tile()!.querySelector('.join-none')!.textContent).toBe(noJoinText('no-drop', 7));
+    expect(saved().joining).toBeUndefined();
   });
 });

@@ -240,9 +240,7 @@ describe('squad cards and the new survivor name the profession (ID-149)', () => 
     const s = { ...startSquadHorde(game, 7, NOW), outcome: 'won' as const };
     const screen = squadScreen(game, s);
     const joined = recruit(3, 7);
-    expect(screen.lines).toContain(
-      `${joined.name} (${JOBS[joined.job].name}) asks to join the camp`,
-    );
+    expect(screen.debrief!.join).toEqual({ size: 2, none: null });
     expect(joinCards(finishSquadHorde(game, s))[0]!.sub).toBe(
       `Lv 1 · ${JOBS[joined.job].name} · Pistol`,
     );
