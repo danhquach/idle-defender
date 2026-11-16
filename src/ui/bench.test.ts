@@ -289,7 +289,7 @@ describe('the Roster and the bench (ID-147)', () => {
       onBestSquad,
       onAutoSquad,
     });
-    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const q = <T extends HTMLElement = HTMLButtonElement>(sel: string): T =>
       scrim.querySelector<T>(sel)!;
     return { roster, scrim, q, onToggleSquad, onBestSquad, onAutoSquad, game: () => g };

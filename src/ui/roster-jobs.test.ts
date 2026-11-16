@@ -46,7 +46,7 @@ function open(game: GameState, id: string) {
     onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
   });
   roster.open(id);
-  return document.querySelector<HTMLElement>('.roster-scrim')!;
+  return document.querySelector<HTMLElement>('.camp-scrim')!;
 }
 
 describe('profession words (ID-149)', () => {

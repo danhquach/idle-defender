@@ -114,6 +114,7 @@ import {
   squadStart,
 } from './hud.ts';
 import { createIntro } from './intro.ts';
+import { createCampWindow } from './campwindow.ts';
 import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
@@ -645,31 +646,37 @@ export function start(root: HTMLElement, art: Art): void {
   }
   // The Inventory (ID-079) sits left of the Menu; either one open holds a fight.
   // Its Combine (ID-091, horde-only) works between hordes, like the gun pickers.
-  const inventory = createInventory(root, {
-    state: () => ({
-      game,
-      resumes: horde?.outcome === 'fighting' && !held,
-      canCombine: !horde || resultUp(),
-      canBuy: !horde || resultUp(),
-      // Squad Power against the horde under way, or the one picked (ID-098).
-      ...(HORDE_ONLY ? { horde: horde && endedAt === null ? horde.hordeNumber : picked } : {}),
-    }),
-    onCombine: HORDE_ONLY
-      ? (uids) => {
-          if (horde && !resultUp()) return { ok: false, reason: COMBINE_WAIT };
-          const r = combineGuns(game, uids);
-          if (!r.ok) return r;
-          commit(r.game);
-          // The gun pickers list the stash: the new gun is there, the used ones gone.
-          showGear();
-          return { ok: true, weapon: r.weapon };
-        }
-      : undefined,
-    // Drag and drop (ID-095), horde-only and between hordes, as the gun pickers.
-    onEquip: HORDE_ONLY ? changeGun : undefined,
-    onBuyStash: HORDE_ONLY ? () => buySlots('stash') : undefined,
-    onBestGuns: HORDE_ONLY ? handOutBestGuns : undefined,
-  });
+  // Both are tabs of one camp window (ID-183): moving between them never closes it.
+  const campWindow = createCampWindow(root);
+  const inventory = createInventory(
+    root,
+    {
+      state: () => ({
+        game,
+        resumes: horde?.outcome === 'fighting' && !held,
+        canCombine: !horde || resultUp(),
+        canBuy: !horde || resultUp(),
+        // Squad Power against the horde under way, or the one picked (ID-098).
+        ...(HORDE_ONLY ? { horde: horde && endedAt === null ? horde.hordeNumber : picked } : {}),
+      }),
+      onCombine: HORDE_ONLY
+        ? (uids) => {
+            if (horde && !resultUp()) return { ok: false, reason: COMBINE_WAIT };
+            const r = combineGuns(game, uids);
+            if (!r.ok) return r;
+            commit(r.game);
+            // The gun pickers list the stash: the new gun is there, the used ones gone.
+            showGear();
+            return { ok: true, weapon: r.weapon };
+          }
+        : undefined,
+      // Drag and drop (ID-095), horde-only and between hordes, as the gun pickers.
+      onEquip: HORDE_ONLY ? changeGun : undefined,
+      onBuyStash: HORDE_ONLY ? () => buySlots('stash') : undefined,
+      onBestGuns: HORDE_ONLY ? handOutBestGuns : undefined,
+    },
+    campWindow,
+  );
   const menu = createMenu(root, {
     // Load and New camp lock only while a fight runs: the result screen is between hordes (ID-156).
     state: () => ({ game, fighting: horde !== null && !resultUp(), held }),
@@ -709,38 +716,42 @@ export function start(root: HTMLElement, art: Art): void {
   // survivor's level bonus and gun (ID-146). Guns change as on the gun pickers, between
   // hordes only.
   const roster: Roster | null = HORDE_ONLY
-    ? createRoster(root, {
-        state: () => ({
-          game,
-          fight: horde?.outcome === 'fighting' ? horde : null,
-          canGear: !horde || resultUp(),
-          resumes: horde?.outcome === 'fighting' && !held,
-        }),
-        onEquip: changeGun,
-        onToggleSquad: changeSquad,
-        onLetGo: letSurvivorGo,
-        onBuySquad: () => buySlots('squad'),
-        onCombine: combineSurvivor,
-        onBestGuns: handOutBestGuns,
-        // "Best squad" and "Auto" (ID-154): between hordes, saved at once, the start
-        // screen and its squad on the wall redrawn.
-        onBestSquad: () => {
-          if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
-          const r = bestSquad(game);
-          if (r.game !== game) {
+    ? createRoster(
+        root,
+        {
+          state: () => ({
+            game,
+            fight: horde?.outcome === 'fighting' ? horde : null,
+            canGear: !horde || resultUp(),
+            resumes: horde?.outcome === 'fighting' && !held,
+          }),
+          onEquip: changeGun,
+          onToggleSquad: changeSquad,
+          onLetGo: letSurvivorGo,
+          onBuySquad: () => buySlots('squad'),
+          onCombine: combineSurvivor,
+          onBestGuns: handOutBestGuns,
+          // "Best squad" and "Auto" (ID-154): between hordes, saved at once, the start
+          // screen and its squad on the wall redrawn.
+          onBestSquad: () => {
+            if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+            const r = bestSquad(game);
+            if (r.game !== game) {
+              commit(r.game);
+              redrawSquad();
+            }
+            return { ok: true, moves: r.moves };
+          },
+          onAutoSquad: (on) => {
+            if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
+            const r = setAutoSquad(game, on);
             commit(r.game);
             redrawSquad();
-          }
-          return { ok: true, moves: r.moves };
+            return { ok: true, moves: r.moves };
+          },
         },
-        onAutoSquad: (on) => {
-          if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
-          const r = setAutoSquad(game, on);
-          commit(r.game);
-          redrawSquad();
-          return { ok: true, moves: r.moves };
-        },
-      })
+        campWindow,
+      )
     : null;
   // "Best gun for everyone" beside the result or start screen's Squad heading: what it did
   // shows as a toast.

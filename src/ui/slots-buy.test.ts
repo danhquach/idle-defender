@@ -87,7 +87,7 @@ function mountRoster(game: GameState, canGear = true) {
   };
   const roster = createRoster(root, opts);
   roster.open();
-  const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+  const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
   const buy = () => scrim.querySelector<HTMLButtonElement>('.rv-buy-squad')!;
   return { buy, scrim, onBuySquad, game: () => g };
 }
@@ -146,7 +146,7 @@ function mountInventory(game: GameState, canBuy = true, answer = true) {
     onBuyStash,
   });
   inv.open();
-  const scrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+  const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
   const buy = () => scrim.querySelector<HTMLButtonElement>('.inv-buy');
   const heading = () => scrim.querySelector('.inv-stash-heading')?.textContent;
   return { buy, heading, onBuyStash, scrim };

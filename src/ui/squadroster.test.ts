@@ -125,7 +125,7 @@ function mount(game: GameState, over: { canGear?: boolean } = {}) {
     onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
   };
   const roster = createRoster(root, opts);
-  const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+  const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
   const press = (key: string, shiftKey = false) =>
     document.activeElement!.dispatchEvent(
       new KeyboardEvent('keydown', { key, shiftKey, bubbles: true }),

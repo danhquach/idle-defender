@@ -368,8 +368,8 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
   it('the open Inventory (ID-079) holds the fight and keeps its keys; closing resumes it', () => {
     const { root, chip } = fight();
     root.querySelector<HTMLButtonElement>('.inv-button')!.click();
-    const dialog = document.querySelector<HTMLElement>('.inv-scrim [role="dialog"]')!;
-    expect(dialog.querySelector('.inv-hint')!.textContent).toBe('Esc closes and resumes');
+    const dialog = document.querySelector<HTMLElement>('.camp-scrim [role="dialog"]')!;
+    expect(dialog.querySelector('.camp-hint')!.textContent).toBe('Esc closes and resumes');
     // Space in the dialog doesn't reach the fight's pause.
     press(' ', {}, document.activeElement!);
     expect(chip.hidden).toBe(true);

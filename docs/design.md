@@ -896,10 +896,12 @@ close-quarter weapons come out only when an enemy is close.
   (ID-146; stats and points to spend before) and rest time, and three pickers
   (primary, secondary, item). Swaps are free between hordes, injured or
   not; a loadout the rules refuse says why and changes nothing.
-- **As built (ID-108), the horde-only Roster:** one compact dialog, a bottom
-  sheet on a phone, as tall as what it shows. The Roster button carries no
+- **As built (ID-108), the horde-only Roster:** one compact dialog, as tall as
+  what it shows (a tab of the one window since ID-183, see Inventory below: no
+  bottom sheet on a phone and no title of its own any more). The Roster button carries no
   badge (ID-146: the number of survivors with points to spend before). The dialog has
-  a header (title, "Best gun for everyone", close), the squad tabs (rows of four,
+  a header ("Best gun for everyone" and the close, in the window's header since
+  ID-183), the squad tabs (rows of four,
   desktop and phone, since ID-187; one row on desktop before)
   (portrait, name, level, profession, and, as built ID-180, the held gun's icon on its
   rarity tint with their DPS in their hands; HP on hover and
@@ -3326,7 +3328,24 @@ offline progress works across sessions.
   throws away) have changed meanwhile, nothing is done and the Roster says so.
   It fits a 375 px phone (the panel is at most the window's width less 32 px,
   its buttons wrap).
-- **Inventory** *(as built, ID-079)*: an "Inventory" button in the top bar, left
+- **One window with tabs** *(as built, ID-183)*: the Roster and the Inventory's
+  Weapons are tabs of one window ("Roster" left of "Weapons"), so moving between
+  them never closes it. Each button opens it on its own tab: the top bar's
+  "Roster" and "Weapons" (the button once named "Inventory"), and the start
+  screen's "Change squad" and a survivor's name, which open the Roster on that
+  survivor. The window has no title: its header is one row of the tabs, the
+  open tab's "Best gun for everyone" ("Best gun" on a window under 360 px) and
+  the close; its foot holds the Esc hint, the open tab's status line (emptied
+  on a switch) and Close ("Resume" in a fight). Both tabs share one width
+  (720 px, the screen's on a phone) and hang from under the top bar, so the tab
+  strip stays put on a switch; the Roster tab is as tall as its content, the
+  Weapons tab 620 px (the screen's height on a phone). Left and Right, Home and
+  End move between the tabs; Esc steps back a layer (the gun picker, a drag, a
+  Combine confirm), then closes; closing gives the keyboard back to what opened
+  it. In a fight both tabs open read-only, as each did before. The build
+  without the Roster has the one Weapons tab.
+- **Inventory** *(as built, ID-079; a tab of the window above since ID-183,
+  its button named "Weapons")*: an "Inventory" button in the top bar, left
   of the Menu (its own place, not a Menu tab), opens a dialog (between hordes
   guns are equipped and combined there too: Combine, ID-091, §6 Gear; drag and
   drop, ID-095) of what
