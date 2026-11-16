@@ -68,7 +68,7 @@ function mount(game: GameState, canGear = true, fight: HordeState | null = null)
   };
   const roster = createRoster(root, opts);
   roster.open();
-  const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+  const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
   const tab = (id: string) => scrim.querySelector<HTMLElement>(`.rv-tab[data-defender="${id}"]`)!;
   return {
     scrim,

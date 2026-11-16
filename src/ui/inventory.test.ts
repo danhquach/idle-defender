@@ -4,7 +4,7 @@
 // each gun's icon framed in its rarity's colour, with a selected or hovered slot's
 // details beside the grid. Combine (ID-091) sits in a stash gun's details. Text reaches
 // the page only through textContent.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { affixLines, gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { GUN_ROLES, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
@@ -167,7 +167,7 @@ function setup(game: GameState, resumes = false) {
   let state = { game, resumes };
   const inv = createInventory(root, { state: () => state });
   const button = root.querySelector<HTMLButtonElement>('.inv-button')!;
-  const scrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+  const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
   const dialog = scrim.querySelector<HTMLElement>('[role="dialog"]')!;
   const key = (target: Element, k: string, init: KeyboardEventInit = {}) => {
     const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init });
@@ -188,7 +188,7 @@ function setup(game: GameState, resumes = false) {
 describe('the Inventory dialog', () => {
   it('opens from its button as a modal; the field goes inert; Esc closes back to the button', () => {
     const { root, inv, button, scrim, dialog, key } = setup(camp(1));
-    expect(button.textContent).toBe('Inventory');
+    expect(button.textContent).toBe('Weapons');
     expect(scrim.hidden).toBe(true);
     button.click();
     expect(inv.isOpen()).toBe(true);
@@ -476,7 +476,7 @@ describe('the Inventory dialog', () => {
   it('says Resume in a fight it holds, and Close otherwise', () => {
     const { button, dialog, set } = setup(camp(1), true);
     button.click();
-    const done = dialog.querySelector<HTMLButtonElement>('.menu-foot button')!;
+    const done = dialog.querySelector<HTMLButtonElement>('.camp-done')!;
     expect(done.textContent).toBe('Resume');
     set({ resumes: false });
     expect(done.textContent).toBe('Close');
@@ -484,15 +484,57 @@ describe('the Inventory dialog', () => {
     expect(document.activeElement).toBe(button);
   });
 
+  it('opens at the top: the selected gun takes the keyboard without a scroll (ID-183)', () => {
+    const { button, slots } = setup(camp(1, [gun('a', 'smg', 'rusty')]));
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    button.click();
+    const body = document.querySelector<HTMLElement>('.inv-body')!;
+    expect(body.scrollTop).toBe(0);
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+    expect(slots('Stash')).toContain(document.activeElement);
+    focus.mockRestore();
+  });
+
+  it('a selected gun below or cut off by the grid’s view brings its section’s heading to the top', () => {
+    const { button } = setup(camp(1, [gun('a', 'smg', 'rusty')]));
+    const rect = (top: number, bottom: number) => () => ({ top, bottom }) as DOMRect;
+    const real = HTMLElement.prototype.getBoundingClientRect;
+    let slotAt: [number, number] = [500, 564];
+    // The grid shows 100 to 400; its stash heading is at 450, the gun at 500.
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      if (this.classList.contains('inv-body')) return rect(100, 400)();
+      if (this.classList.contains('inv-slot')) return rect(slotAt[0], slotAt[1])();
+      return rect(450, 470)();
+    };
+    const body = () => document.querySelector<HTMLElement>('.inv-body')!;
+    try {
+      button.click();
+      expect(body().scrollTop).toBe(350);
+      // Cut off by the view's bottom edge (380 to 444) counts too.
+      document.querySelector<HTMLButtonElement>('.camp-close')!.click();
+      slotAt = [380, 444];
+      button.click();
+      expect(body().scrollTop).toBe(350);
+      // Wholly in view (300 to 364): it stays at the top.
+      document.querySelector<HTMLButtonElement>('.camp-close')!.click();
+      slotAt = [300, 364];
+      button.click();
+      expect(body().scrollTop).toBe(0);
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = real;
+    }
+  });
+
   it('Tab cycles inside the dialog', () => {
     const { button, dialog, key } = setup(camp(1, [gun('a', 'smg', 'rusty')]));
     button.click();
-    const done = dialog.querySelector<HTMLButtonElement>('.menu-foot button')!;
-    const closeX = dialog.querySelector<HTMLButtonElement>('.menu-close')!;
+    const done = dialog.querySelector<HTMLButtonElement>('.camp-done')!;
+    // The window's first stop is its tab strip (ID-183), its last the Close.
+    const tab = dialog.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')!;
     done.focus();
     expect(key(done, 'Tab').defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(closeX);
-    key(closeX, 'Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(tab);
+    key(tab, 'Tab', { shiftKey: true });
     expect(document.activeElement).toBe(done);
     // From a slot, Tab is left to the browser.
     const slot = dialog.querySelector<HTMLElement>('.inv-slot[tabindex="0"]')!;
@@ -593,7 +635,7 @@ describe('Combine in the details (ID-091)', () => {
       },
     });
     root.querySelector<HTMLButtonElement>('.inv-button')!.click();
-    const dialog = document.querySelector<HTMLElement>('.inv-scrim [role="dialog"]')!;
+    const dialog = document.querySelector<HTMLElement>('.camp-scrim [role="dialog"]')!;
     const setCan = (on: boolean) => {
       can = on;
       inv.refresh();
@@ -770,7 +812,7 @@ describe('Combine in the details (ID-091)', () => {
       state: () => ({ game: camp(1, rusty(3)), resumes: false, canCombine: true }),
       onCombine: () => ({ ok: false, reason }),
     }).open();
-    const dialog = document.querySelector<HTMLElement>('.inv-scrim [role="dialog"]')!;
+    const dialog = document.querySelector<HTMLElement>('.camp-scrim [role="dialog"]')!;
     dialog.querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
     dialog.querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
     const line = dialog.querySelector<HTMLElement>('.inv-combine-result')!;

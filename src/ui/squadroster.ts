@@ -1,6 +1,7 @@
-// The Roster (ID-086, reworked by ID-108): a top-bar button that opens one compact dialog:
-// a header (the title, "Best gun for everyone", close), one row of squad tabs (portrait,
-// name, level, profession), the selected survivor beside their gun slot, and one panel that
+// The Roster (ID-086, reworked by ID-108): a top-bar button that opens the camp window
+// (ID-183, campwindow.ts) on its compact Roster tab: "Best gun for everyone" in the
+// window's header, one row of squad tabs (portrait, name, level, profession), the
+// selected survivor beside their gun slot, and one panel that
 // is either their details (ID-146, ID-149: what the level and the profession give, and every
 // stat split into the two) or "Choose a gun". A gun is compared with the one
 // held before it is equipped. The bench (ID-147) has its own row of tabs under the squad's:
@@ -27,8 +28,17 @@ import {
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
+import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
 import type { Answer } from './confirm.ts';
-import { BEST_GUNS, bestGunsLine, dpsCaption, el, movesText, slotOffer } from './hud.ts';
+import {
+  BEST_GUNS_LEAD,
+  BEST_GUNS_TAIL,
+  bestGunsLine,
+  dpsCaption,
+  el,
+  movesText,
+  slotOffer,
+} from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
 import { levelText } from './statlines.ts';
@@ -201,8 +211,15 @@ export interface Roster {
   refresh(): void;
 }
 
-/** The Roster button, top-right left of the Inventory, and its dialog. */
-export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
+/**
+ * The Roster button, top-right left of the Inventory, and the Roster tab it opens in the camp
+ * window `win` (ID-183; a window of its own when none is given).
+ */
+export function createRoster(
+  root: HTMLElement,
+  opts: RosterOptions,
+  win: CampWindow = createCampWindow(root),
+): Roster {
   const doc = root.ownerDocument;
   let opened = false;
   // The survivor shown, and whether the panel is the gun picker (with the gun looked at).
@@ -212,41 +229,19 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   // The Combine pick (ID-170) open under the current survivor's buttons.
   let combining = false;
   let status = { text: '', tone: 'ok' as 'ok' | 'danger' };
-  // What had the keyboard before it opened (the button, or a name on the squad screen).
-  let opener: HTMLElement | null = null;
-
   const button = el('button', 'roster-button', 'Roster');
   button.type = 'button';
   button.setAttribute('aria-haspopup', 'dialog');
   button.addEventListener('click', () => api.open());
   root.append(button);
 
-  // Outside `root`, like the Menu and the Inventory, so the field can go inert behind it.
-  const scrim = el('div', 'roster-scrim');
-  scrim.hidden = true;
-  const dialog = el('div', 'menu roster-dialog');
-  dialog.setAttribute('role', 'dialog');
-  dialog.setAttribute('aria-modal', 'true');
-  dialog.setAttribute('aria-labelledby', 'roster-title');
-  dialog.tabIndex = -1;
-  scrim.append(dialog);
-  doc.body.append(scrim);
-  scrim.addEventListener('mousedown', (e) => {
-    if (e.target === scrim) e.preventDefault();
-  });
-
-  const grab = el('div', 'roster-grab');
-  grab.setAttribute('aria-hidden', 'true');
-  const title = el('h2', 'menu-title', 'Roster');
-  title.id = 'roster-title';
-  const bestButton = el('button', 'hud-button rv-btn rv-best', BEST_GUNS);
+  // The Roster tab of the camp window (ID-183): everything here sits in `pane`.
+  const pane = el('div', 'roster-dialog');
+  // "Best gun for everyone", in the window's header.
+  const bestButton = el('button', 'hud-button rv-btn rv-best');
+  shortLabel(bestButton, BEST_GUNS_LEAD, BEST_GUNS_TAIL);
   bestButton.type = 'button';
   bestButton.dataset.key = 'best';
-  const closeX = el('button', 'hud-button rv-btn rv-close', '×');
-  closeX.type = 'button';
-  closeX.dataset.key = 'close';
-  const head = el('div', 'rv-head');
-  head.append(title, bestButton, closeX);
   const tabs = el('ul', 'rv-tabs');
   tabs.setAttribute('aria-label', 'Squad');
   // The bench (ID-147): its own row under the squad's, with a label over each row.
@@ -277,7 +272,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   const panel = el('div', 'rv-panel');
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
-  dialog.append(grab, head, squadRow, tabs, benchLabel, benchTabs, top, panel, statusLine);
+  pane.append(squadRow, tabs, benchLabel, benchTabs, top, panel);
 
   /** What "Best squad" or a tick of "Auto" did, on the status line. */
   bestSquadButton.addEventListener('click', () => {
@@ -312,37 +307,6 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     setStatus(r.ok ? bestGunsLine(r.moves) : r.reason, r.ok ? 'ok' : 'danger');
     draw('best');
   });
-  closeX.addEventListener('click', () => api.close());
-
-  // Keys stay in the dialog (the field's keys never see them); Esc steps back, then closes;
-  // Tab cycles.
-  dialog.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (e.repeat) return;
-      // Esc steps back one layer: the gun picker, then the dialog.
-      if (picking) {
-        picking = false;
-        picked = null;
-        draw('slot');
-      } else api.close();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const list = [...dialog.querySelectorAll<HTMLElement>('button, input')].filter(
-      (b) => !(b as HTMLButtonElement).disabled && !b.closest('[hidden]'),
-    );
-    const i = list.indexOf(doc.activeElement as HTMLElement);
-    if (e.shiftKey && i <= 0) {
-      e.preventDefault();
-      list.at(-1)?.focus();
-    } else if (!e.shiftKey && (i < 0 || i === list.length - 1)) {
-      e.preventDefault();
-      list[0]?.focus();
-    }
-  });
-
   function setStatus(text: string, tone: 'ok' | 'danger' = 'ok'): void {
     status = { text, tone };
   }
@@ -368,7 +332,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       picked = null;
       combining = false;
     }
-    closeX.setAttribute('aria-label', resumes ? 'Close roster and resume' : 'Close roster');
+    win.setResumes(resumes);
     bestButton.disabled = !canGear;
     bestButton.title = canGear ? '' : GUNS_WAIT;
 
@@ -428,7 +392,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
   function focusKey(key: string | undefined): void {
     if (key === undefined) return;
     const find = (k: string): HTMLButtonElement | undefined =>
-      [...dialog.querySelectorAll<HTMLButtonElement>('[data-key]')].find(
+      [...win.dialog.querySelectorAll<HTMLButtonElement>('[data-key]')].find(
         (b) => b.dataset.key === k && !b.disabled && !b.closest('[hidden]'),
       );
     const target = find(key) ?? find(`tab:${current}`) ?? find('close');
@@ -849,7 +813,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
         draw(`tile:${t.choice}`);
         // On a short phone a bottom-row tile sits below the fold: bring the comparison and
         // its Equip into view (jsdom has no scrollIntoView).
-        dialog.querySelector<HTMLElement>('.rv-cmp')?.scrollIntoView?.({ block: 'nearest' });
+        pane.querySelector<HTMLElement>('.rv-cmp')?.scrollIntoView?.({ block: 'nearest' });
       });
       li.append(tile);
       grid.append(li);
@@ -888,35 +852,56 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     draw('slot');
   }
 
-  const api: Roster = {
-    isOpen: () => opened,
-    open(id, from) {
-      if (!opened) {
-        opened = true;
-        const at = from ?? doc.activeElement;
-        opener = at instanceof HTMLElement && root.contains(at) ? at : null;
-        status = { text: '', tone: 'ok' };
-        scrim.hidden = false;
-        root.setAttribute('inert', '');
-      }
-      const { game } = opts.state();
-      const asked = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
-      current = (asked ?? game.roster[0])?.id ?? null;
+  win.add({
+    id: 'roster',
+    label: 'Roster',
+    panel: pane,
+    tools: [bestButton],
+    status: statusLine,
+    button,
+    show() {
+      opened = true;
+      status = { text: '', tone: 'ok' };
       picking = false;
       picked = null;
       combining = false;
-      (doc.activeElement as HTMLElement | null)?.blur?.();
       draw(`tab:${current}`);
-      dialog.scrollTop = 0;
-      if (!dialog.contains(doc.activeElement)) closeX.focus();
+      pane.scrollTop = 0;
+    },
+    hide() {
+      opened = false;
+    },
+    // Esc steps back one layer first: the gun picker.
+    escape() {
+      if (!picking) return false;
+      picking = false;
+      picked = null;
+      draw('slot');
+      return true;
+    },
+  });
+
+  const api: Roster = {
+    isOpen: () => opened,
+    open(id, from) {
+      const { game } = opts.state();
+      const asked = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
+      current = (asked ?? game.roster[0])?.id ?? null;
+      if (opened) {
+        // Already on show: the survivor asked for, on their level.
+        picking = false;
+        picked = null;
+        combining = false;
+        draw(`tab:${current}`);
+        return;
+      }
+      // What had the keyboard (the button, or a name on the squad screen) gets it back.
+      const at = from ?? (doc.activeElement as HTMLElement | null);
+      at?.blur?.();
+      win.open('roster', at);
     },
     close() {
-      if (!opened) return;
-      opened = false;
-      scrim.hidden = true;
-      root.removeAttribute('inert');
-      (opener?.isConnected ? opener : button).focus();
-      opener = null;
+      if (opened) win.close();
     },
     refresh() {
       draw();

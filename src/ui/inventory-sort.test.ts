@@ -184,7 +184,7 @@ function setup(stash: OwnedWeapon[], extra: { combine?: boolean; equip?: boolean
     }),
   });
   inv.open();
-  const dialog = document.querySelector<HTMLElement>('.inv-scrim [role="dialog"]')!;
+  const dialog = document.querySelector<HTMLElement>('.camp-scrim [role="dialog"]')!;
   const sel = (k: string) => dialog.querySelector<HTMLSelectElement>(`select[data-pick="${k}"]`)!;
   const choose = (k: string, v: string) => {
     const s = sel(k);

@@ -1646,7 +1646,9 @@ export function movesText(moves: { in: readonly string[]; out: readonly string[]
 }
 
 /** "Best gun for everyone" (ID-108): the Roster's, the result screen's and the Inventory's button. */
-export const BEST_GUNS = 'Best gun for everyone';
+export const BEST_GUNS_LEAD = 'Best gun';
+export const BEST_GUNS_TAIL = ' for everyone';
+export const BEST_GUNS = `${BEST_GUNS_LEAD}${BEST_GUNS_TAIL}`;
 export const BEST_GUNS_NONE = 'Everyone already holds the best gun they can get.';
 
 /** The most moves `bestGunsLine` names (ID-188): a full camp's would fill a phone's toast. */

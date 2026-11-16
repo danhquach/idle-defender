@@ -205,7 +205,7 @@ body {
   left: 0;
   right: 0;
   padding: var(--space-8) var(--space-16);
-  /* Clear of the Scrap chip and the Roster, Inventory and Menu buttons on the right. */
+  /* Clear of the Scrap chip and the Roster, Weapons and Menu buttons on the right. */
   padding-right: 428px;
   background: var(--color-bar-bg);
   font-variant-numeric: tabular-nums;
@@ -222,7 +222,7 @@ body {
 .hud-speed {
   position: absolute;
   top: 5px;
-  /* Left of the Scrap chip and the Roster, Inventory and Menu buttons (ID-086, ID-179). */
+  /* Left of the Scrap chip and the Roster, Weapons and Menu buttons (ID-086, ID-179). */
   right: 428px;
   display: flex;
   align-items: center;
@@ -369,7 +369,7 @@ body {
 }
 
 /* Narrower still, it can't share the top row with the corner panel: it sits under the
-   Roster, Inventory and Menu buttons, at the right edge (ID-165). */
+   Roster, Weapons and Menu buttons, at the right edge (ID-165). */
 @media (min-width: 641px) and (max-width: 760px) {
   .hud-speed {
     top: 38px;
@@ -2786,11 +2786,11 @@ body {
 }
 
 /* The Scrap balance (ID-179): a read-only chip left of Roster, on the page itself so it
-   stays above the Roster and Inventory dialogs; styled as the speed buttons, no button. */
+   stays above the camp window (the Roster and Weapons); styled as the speed buttons, no button. */
 .scrap-chip {
   position: fixed;
   top: 5px;
-  right: 308px;
+  right: 299px;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -2851,8 +2851,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 /* Outside #app, so the field behind can go inert; a click on it does nothing. */
 .menu-scrim,
-.inv-scrim,
-.roster-scrim,
+.camp-scrim,
 .confirm-scrim {
   position: fixed;
   inset: 0;
@@ -2865,16 +2864,16 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-text);
 }
 
-/* Inventory and Roster keep clear of the top bar, so its Scrap chip (ID-179), which stays
-   above them, never sits on a tall dialog's edge (ID-180: the Roster grew taller). */
-.inv-scrim,
-.roster-scrim {
+/* The camp window (ID-183) hangs from under the top bar, so its Scrap chip (ID-179), which
+   stays above it, never sits on its edge, and the tab strip stays put whatever the tab's
+   height. */
+.camp-scrim {
+  place-items: start center;
   padding-top: 40px;
 }
 
 .menu-scrim[hidden],
-.inv-scrim[hidden],
-.roster-scrim[hidden] {
+.camp-scrim[hidden] {
   display: none;
 }
 
@@ -2953,10 +2952,9 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: none;
 }
 
-/* The Inventory's "Best gun for everyone", right of its title, before the close. */
+/* The Weapons tab's "Best gun for everyone", in the camp window's header. */
 .inv-best {
   min-height: 32px;
-  margin-left: auto;
   padding: 0 var(--space-12);
   font-size: var(--text-xs);
   white-space: nowrap;
@@ -2965,10 +2963,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 .inv-best:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.inv-best + .menu-close {
-  margin-left: 0;
 }
 
 .menu-close {
@@ -3305,7 +3299,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 .menu-hint,
-.inv-hint {
+.camp-hint {
   font-size: var(--text-sm);
   color: var(--color-text-subtle);
 }
@@ -3396,8 +3390,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   box-sizing: border-box;
 }
 
-/* The Inventory (ID-079, a grid since ID-092): its button left of the Menu's; a Weapons
-   tab of square slots (squad row over the stash) with the details beside them. */
+/* The Inventory (ID-079, a grid since ID-092): its "Weapons" button left of the Menu's; a
+   Weapons tab of square slots (squad row over the stash) with the details beside them. */
 .inv-button {
   right: 119px;
 }
@@ -3408,9 +3402,130 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   border-bottom: 1px solid var(--color-divider);
 }
 
+/* The Weapons tab's panel in the camp window (ID-183). */
 .inv-dialog {
-  width: min(760px, 100%);
-  height: min(660px, 100%);
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The camp window (ID-183): one frame for the Roster and Weapons tabs, the same width and
+   top edge for both so the tab strip never moves on a switch. The Roster hugs its content;
+   Weapons keeps a fixed box for its grid to scroll in. */
+.camp-dialog {
+  container-type: inline-size;
+  /* Solid: the scrim does the dimming, and small text stays clear of the screen behind. */
+  background: var(--color-panel-solid);
+  width: min(720px, 100%);
+  height: auto;
+  max-height: 100%;
+}
+
+.camp-dialog[data-tab='weapons'] {
+  height: min(620px, 100%);
+}
+
+.inv-dialog[hidden],
+.roster-dialog[hidden],
+.camp-tools[hidden] {
+  display: none;
+}
+
+/* One header row: the tabs, the open tab's tools, the close. */
+.camp-head {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-12) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.camp-tabs {
+  display: flex;
+  gap: var(--space-4);
+  margin-right: auto;
+}
+
+.camp-tab {
+  min-height: 36px;
+  padding: 0 var(--space-14);
+  font-size: var(--text-body);
+}
+
+/* A gold top edge: the tab on show reads at a glance on the dark frame. */
+.camp-tab[aria-selected='true'] {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
+.camp-tab:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.camp-tools {
+  display: flex;
+  gap: var(--space-6);
+  align-self: center;
+  padding-bottom: var(--space-4);
+}
+
+.camp-tools .hud-button {
+  min-height: 32px;
+  padding: 0 var(--space-12);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.camp-close {
+  flex: none;
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 0 var(--space-4);
+  font-size: 18px;
+}
+
+.camp-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 44px;
+  padding: var(--space-6) var(--space-12);
+  border-top: 1px solid var(--color-divider);
+  box-sizing: border-box;
+}
+
+.camp-status {
+  flex: 1;
+  min-width: 0;
+}
+
+.camp-done {
+  flex: none;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 var(--space-16);
+}
+
+.camp-foot button:focus-visible,
+.camp-head button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.camp-head .camp-tab:focus-visible {
+  outline-offset: -2px;
+}
+
+/* A narrow window (the full label needs about 357px beside the tabs and the close): "Best
+   gun for everyone" reads "Best gun". */
+@container (max-width: 359px) {
+  .camp-long {
+    display: none;
+  }
 }
 
 .inv-panel {
@@ -3599,9 +3714,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 /* What the last move did, in the foot so the grid never shifts; kept in the page while
    empty, so a screen reader hears it fill. */
 .inv-status {
-  flex: 1;
-  min-width: 0;
-  margin: 0 var(--space-12);
+  margin: 0;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text);
   text-align: right;
@@ -3815,8 +3929,48 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 /* A narrow window: the details go under the grid, with their own scroll. */
 @media (max-width: 640px) {
-  .inv-dialog {
+  /* The camp window (ID-183): the screen's width, flush under the top bar. */
+  .camp-scrim {
+    padding: 52px 0 0;
+  }
+
+  .camp-dialog {
+    width: 100%;
+    border-width: 0 0 1px;
+    border-radius: 0 0 14px 14px;
+  }
+
+  .camp-dialog[data-tab='weapons'] {
     height: 100%;
+    border-bottom: 0;
+    border-radius: 0;
+  }
+
+  .camp-head {
+    padding: var(--space-6) var(--space-10) 0;
+  }
+
+  .camp-tab {
+    min-height: 40px;
+    padding: 0 var(--space-10);
+  }
+
+  .camp-tools .hud-button {
+    min-height: 40px;
+    padding: 0 var(--space-8);
+  }
+
+  .camp-close {
+    width: 40px;
+    height: 40px;
+  }
+
+  .camp-foot {
+    padding: var(--space-6) var(--space-10);
+  }
+
+  .camp-done {
+    min-height: 40px;
   }
 
   .inv-panel {
@@ -3831,26 +3985,22 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 }
 
-/* The Roster (ID-086, ID-108): its button left of the Inventory's; one compact dialog that
-   hugs its content. */
+/* The Roster (ID-086, ID-108): its button left of the Weapons one; a compact tab of the camp
+   window (ID-183) that hugs its content. */
 .roster-button {
-  right: 222px;
+  right: 213px;
 }
 
 /* Sized to what it shows: a few rows of stats stay short, the gun picker gets its tiles. */
 .roster-dialog {
   container-type: inline-size;
-  width: min(680px, 100%);
-  height: auto;
-  max-height: 100%;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
   padding: var(--space-10) var(--space-12) var(--space-12);
   overflow-y: auto;
   gap: var(--space-8);
-}
-
-/* The sheet's grab handle: a phone only. */
-.roster-grab {
-  display: none;
 }
 
 .roster-avatar {
@@ -3895,16 +4045,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-weight: 600;
 }
 
-.rv-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.rv-head .menu-title {
-  flex: 1;
-}
-
 .rv-btn {
   min-height: 40px;
   padding: 0 var(--space-12);
@@ -3925,12 +4065,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 .rv-btn.primary:hover:not(:disabled) {
   background: var(--color-accent-hover);
-}
-
-.rv-close {
-  width: 40px;
-  padding: 0;
-  font-size: 18px;
 }
 
 .roster-dialog button:focus-visible {
@@ -4843,15 +4977,13 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 .rv-status {
-  /* Pinned to the dialog's foot (ID-154): what a button at the top did stays in sight on a
-     phone, however long the panel above it. */
-  position: sticky;
-  bottom: 0;
+  /* In the camp window's foot (ID-183; pinned there since ID-154): what a button at the top
+     did stays in sight on a phone, however long the panel above it. */
   margin: 0;
-  padding-block: var(--space-4);
-  background: var(--color-menu-bg);
   color: var(--color-ok-text);
   font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: right;
 }
 
 .rv-status[data-tone='danger'] {
@@ -4969,27 +5101,9 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 }
 
-/* A phone (ID-108): a bottom sheet, only as tall as its content, under the game's top bar. */
 @media (max-width: 600px) {
-  .roster-scrim {
-    place-items: end stretch;
-    padding: 52px 0 0;
-  }
-
   .roster-dialog {
-    width: 100%;
     padding: var(--space-6) var(--space-10) var(--space-10);
-    border-width: 1px 0 0;
-    border-radius: 14px 14px 0 0;
-  }
-
-  .roster-grab {
-    display: block;
-    width: 36px;
-    height: 4px;
-    margin: 0 auto var(--space-2);
-    border-radius: 2px;
-    background: var(--color-border-strong);
   }
 }
 
@@ -5016,17 +5130,17 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 @media (max-width: 480px) {
   /* No Esc key on a phone: the foot keeps room for its two buttons, or for the
      Inventory's status line (ID-095). */
-  .inv-dialog .inv-hint {
+  .camp-hint {
     display: none;
   }
 
-  .inv-status {
-    margin-left: 0;
+  .inv-status,
+  .rv-status {
     text-align: left;
   }
 }
 
-/* A phone (ID-086): the speed group and the Roster, Inventory and Menu buttons share the
+/* A phone (ID-086): the speed group and the Roster, Weapons and Menu buttons share the
    top row, their key hints dropped; the status line goes under them, then the XP and
    boss plates. */
 @media (max-width: 640px) {
@@ -5086,7 +5200,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     right: 8px;
   }
 
-  /* Touch-sized like its neighbours, in the same row: Roster, Inventory and Menu stay as
+  /* Touch-sized like its neighbours, in the same row: Roster, Weapons and Menu stay as
      they were, the chip fits left of them at 375px. */
   .scrap-chip {
     top: 4px;
@@ -5166,7 +5280,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* Up to 640px the speed group (with its pause button, ID-165), the Scrap chip and the
-   Roster, Inventory and Menu buttons don't fit one row (ID-145; 407px before the chip,
+   Roster, Weapons and Menu buttons don't fit one row (ID-145; 407px before the chip,
    ID-179): the speeds take a row of their own under them, the status line below. */
 @media (max-width: 640px) {
   .hud-fight-bar {

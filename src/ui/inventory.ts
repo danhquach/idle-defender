@@ -1,6 +1,7 @@
 // The Inventory (ID-079, redrawn as a grid in ID-092): a top-bar button beside the Menu
-// opens a dialog of everything the camp holds now. A Weapons tab shows the squad's guns
-// in a row (each survivor's, then the free pistol) over the stash: one square slot per
+// ("Weapons") opens the camp window (ID-183, campwindow.ts) on everything the camp holds
+// now. Its Weapons tab shows the squad's guns in a row (each survivor's, then the free
+// pistol) over the stash: one square slot per
 // place up to its cap, each gun as its icon framed in its rarity's colour, strongest
 // first, the empty places shown empty. Selecting a slot (click, tap, arrow keys) or
 // hovering it shows its details beside the grid: name, rarity, each affix and dmg/s.
@@ -49,7 +50,8 @@ import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { survivorDps } from '../core/stats.ts';
 import {
   BAND_WORD,
-  BEST_GUNS,
+  BEST_GUNS_LEAD,
+  BEST_GUNS_TAIL,
   bestGunsLine,
   dpsWith,
   el,
@@ -60,6 +62,7 @@ import {
   type PowerLine,
   type SlotOffer,
 } from './hud.ts';
+import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
 import type { Answer } from './confirm.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -946,8 +949,15 @@ export interface Inventory {
   refresh(): void;
 }
 
-/** The Inventory button, top-right left of the Menu, and its dialog. */
-export function createInventory(root: HTMLElement, opts: InventoryOptions): Inventory {
+/**
+ * The Inventory button, top-right left of the Menu, and the Weapons tab it opens in the camp
+ * window `win` (ID-183; a window of its own when none is given).
+ */
+export function createInventory(
+  root: HTMLElement,
+  opts: InventoryOptions,
+  win: CampWindow = createCampWindow(root),
+): Inventory {
   const doc = root.ownerDocument;
   let opened = false;
   // The camp drawn last: a redraw only when it changes, so the grid keeps its scroll.
@@ -965,58 +975,24 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   let confirming: readonly OwnedWeapon[] | null = null;
   let result: string | null = null;
 
-  const openButton = el('button', 'inv-button', 'Inventory');
+  const openButton = el('button', 'inv-button', 'Weapons');
   openButton.type = 'button';
   openButton.setAttribute('aria-haspopup', 'dialog');
   openButton.addEventListener('click', () => api.open());
   root.append(openButton);
 
-  // Outside `root`, like the Menu, so the field can go inert behind it. It shares the
-  // Menu's dialog classes for its look; tests and code reach either through its own scrim.
-  const scrim = el('div', 'inv-scrim');
-  scrim.hidden = true;
-  const dialog = el('div', 'menu inv-dialog');
-  dialog.setAttribute('role', 'dialog');
-  dialog.setAttribute('aria-modal', 'true');
-  dialog.setAttribute('aria-labelledby', 'inv-title');
-  dialog.tabIndex = -1;
-  scrim.append(dialog);
-  doc.body.append(scrim);
-  scrim.addEventListener('mousedown', (e) => {
-    if (e.target === scrim) e.preventDefault();
-  });
-
-  const title = el('h2', 'menu-title', 'Inventory');
-  title.id = 'inv-title';
-  const closeX = el('button', 'menu-close', '×');
-  closeX.type = 'button';
-  closeX.setAttribute('aria-label', 'Close inventory');
-  closeX.addEventListener('click', () => api.close());
-  const head = el('div', 'menu-head');
-  // "Best gun for everyone" (horde-only, between hordes): what it did, or why not, on the
-  // status line; greyed in a fight, as the Roster's.
-  const best = el('button', 'hud-button inv-best', BEST_GUNS);
+  // The Weapons tab of the camp window (ID-183): everything here sits in `pane`.
+  const pane = el('div', 'inv-dialog');
+  // "Best gun for everyone" (horde-only, between hordes), in the window's header: what it
+  // did, or why not, on the status line; greyed in a fight, as the Roster's.
+  const best = el('button', 'hud-button inv-best');
+  shortLabel(best, BEST_GUNS_LEAD, BEST_GUNS_TAIL);
   best.type = 'button';
   best.addEventListener('click', () => {
     const r = opts.onBestGuns?.();
     if (r) say(r.ok ? bestGunsLine(r.moves) : r.reason, !r.ok);
   });
-  head.append(title, ...(opts.onBestGuns ? [best] : []), closeX);
-  // Tabs: Weapons for now; items and materials can join it later.
-  const tablist = el('div', 'menu-tabs');
-  tablist.setAttribute('role', 'tablist');
-  tablist.setAttribute('aria-label', 'Inventory');
-  const tab = el('button', 'menu-tab', 'Weapons');
-  tab.type = 'button';
-  tab.id = 'inv-tab-weapons';
-  tab.setAttribute('role', 'tab');
-  tab.setAttribute('aria-selected', 'true');
-  tab.setAttribute('aria-controls', 'inv-panel-weapons');
-  tablist.append(tab);
   const panel = el('div', 'inv-panel');
-  panel.id = 'inv-panel-weapons';
-  panel.setAttribute('role', 'tabpanel');
-  panel.setAttribute('aria-labelledby', tab.id);
   const body = el('div', 'menu-body inv-body');
   // What the last move did, or why it was refused (ID-095): shown, and read out.
   const status = el('p', 'menu-note inv-status');
@@ -1041,15 +1017,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
   // result line is its own status.
   details.setAttribute('aria-label', 'Details');
   panel.append(body, details);
-  const hintText = el('span', '');
-  const hint = el('span', 'inv-hint');
-  hint.append(el('kbd', 'menu-key', 'Esc'), hintText);
-  const done = el('button', 'hud-button', 'Close');
-  done.type = 'button';
-  done.addEventListener('click', () => api.close());
-  const foot = el('div', 'menu-foot');
-  foot.append(hint, status, done);
-  dialog.append(head, tablist, panel, foot);
+  pane.append(panel);
 
   const slots = (): HTMLButtonElement[] => [
     ...body.querySelectorAll<HTMLButtonElement>('.inv-slot[data-key]'),
@@ -1058,36 +1026,6 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     slots().find((b) => b.dataset.key === key);
   const items = (): InventoryItem[] =>
     view ? [...view.squad.map((s) => s.gun), view.pistol, ...view.shown] : [];
-
-  // Keys stay in the dialog (the field's keys never see them); Esc closes, Tab cycles.
-  dialog.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      // A held-down Esc repeats: only a fresh press acts. An open Combine confirm goes first.
-      if (e.repeat) return;
-      // A drag goes first: the gun goes back where it was (and its release is no click).
-      if (press) {
-        if (press.ghost) swallowClick = true;
-        stopDrag();
-      } else if (confirming) cancel();
-      else api.close();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const at = doc.activeElement as HTMLElement | null;
-    const stops = [...dialog.querySelectorAll<HTMLElement>('button, select, [tabindex]')].filter(
-      (n) => n !== dialog && (n.tabIndex >= 0 || n === at) && !n.closest('[hidden]'),
-    );
-    const i = at ? stops.indexOf(at) : -1;
-    if (e.shiftKey && i <= 0) {
-      e.preventDefault();
-      done.focus();
-    } else if (!e.shiftKey && (i < 0 || i === stops.length - 1)) {
-      e.preventDefault();
-      closeX.focus();
-    }
-  });
 
   // The grid: one Tab stop; arrows, Home and End move through every slot.
   body.addEventListener('keydown', (e) => {
@@ -1304,9 +1242,9 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     }
     ghost.setAttribute('aria-hidden', 'true');
     ghost.append(...slotFace(it));
-    scrim.append(ghost);
+    win.scrim.append(ghost);
     press.ghost = ghost;
-    dialog.classList.add('inv-dragging');
+    pane.classList.add('inv-dragging');
     for (const b of slots()) {
       const key = b.dataset.key!;
       if (key === press.key) b.dataset.dragFrom = 'true';
@@ -1354,7 +1292,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     press.x = x;
     press.y = y;
     const to = dropTarget(x, y);
-    for (const n of dialog.querySelectorAll<HTMLElement>('[data-over]')) delete n.dataset.over;
+    for (const n of pane.querySelectorAll<HTMLElement>('[data-over]')) delete n.dataset.over;
     const over =
       to === 'stash'
         ? body.querySelector<HTMLElement>('.inv-stash-zone')
@@ -1425,8 +1363,8 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     doc.removeEventListener('pointerup', onUp);
     doc.removeEventListener('pointercancel', onCancel);
     doc.defaultView?.removeEventListener('blur', stopDrag);
-    dialog.classList.remove('inv-dragging');
-    for (const n of dialog.querySelectorAll<HTMLElement>(
+    pane.classList.remove('inv-dragging');
+    for (const n of pane.querySelectorAll<HTMLElement>(
       '[data-drop], [data-drag-from], [data-over]',
     )) {
       delete n.dataset.drop;
@@ -1592,7 +1530,7 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     drawDetails();
     if (focusedPick) {
       body.querySelector<HTMLElement>(`select[data-pick="${focusedPick}"]`)?.focus();
-    } else if (hadFocus && !dialog.contains(doc.activeElement)) slotOf(selected)?.focus();
+    } else if (hadFocus && !pane.contains(doc.activeElement)) slotOf(selected)?.focus();
   }
 
   function confirm(): void {
@@ -1623,10 +1561,14 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
     (details.querySelector<HTMLElement>('.inv-combine-button') ?? slotOf(selected))?.focus();
   }
 
-  const api: Inventory = {
-    isOpen: () => opened,
-    open() {
-      if (opened) return;
+  win.add({
+    id: 'weapons',
+    label: 'Weapons',
+    panel: pane,
+    tools: opts.onBestGuns ? [best] : [],
+    status,
+    button: openButton,
+    show() {
       opened = true;
       confirming = null;
       result = null;
@@ -1636,25 +1578,52 @@ export function createInventory(root: HTMLElement, opts: InventoryOptions): Inve
       say('');
       // Drawn afresh: the details start on the strongest gun, with no confirm or result.
       listed = null;
-      scrim.hidden = false;
-      root.setAttribute('inert', '');
       api.refresh();
+      // It opens at the top, on the squad's row: the keyboard goes to the selected gun
+      // without scrolling to it, unless that leaves it out of sight or cut off below; then
+      // its section's heading goes to the top, never a slot cut in half.
       body.scrollTop = 0;
-      slotOf(selected)?.focus();
+      const slot = slotOf(selected);
+      slot?.focus({ preventScroll: true });
+      const head = slot?.closest('section')?.firstElementChild;
+      if (
+        slot &&
+        head &&
+        slot.getBoundingClientRect().bottom > body.getBoundingClientRect().bottom
+      ) {
+        body.scrollTop = head.getBoundingClientRect().top - body.getBoundingClientRect().top;
+      }
     },
-    close() {
-      if (!opened) return;
+    hide() {
       opened = false;
       stopDrag();
-      scrim.hidden = true;
-      root.removeAttribute('inert');
-      openButton.focus();
+    },
+    // Esc steps back first: a drag goes back where it was (and its release is no click),
+    // then an open Combine confirm.
+    escape() {
+      if (press) {
+        if (press.ghost) swallowClick = true;
+        stopDrag();
+        return true;
+      }
+      if (!confirming) return false;
+      cancel();
+      return true;
+    },
+  });
+
+  const api: Inventory = {
+    isOpen: () => opened,
+    open() {
+      win.open('weapons');
+    },
+    close() {
+      if (opened) win.close();
     },
     refresh() {
       if (!opened) return;
       const { game, resumes, canCombine = false, horde = null, canBuy = false } = opts.state();
-      hintText.textContent = resumes ? ' closes and resumes' : ' closes';
-      done.textContent = resumes ? 'Resume' : 'Close';
+      win.setResumes(resumes);
       best.disabled = !canCombine;
       best.title = canCombine ? '' : GUNS_WAIT;
       if (

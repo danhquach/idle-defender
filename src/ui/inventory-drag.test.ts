@@ -200,7 +200,7 @@ function setup(game: GameState, fight = false) {
     },
   });
   root.querySelector<HTMLButtonElement>('.inv-button')!.click();
-  const scrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+  const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
   const dialog = scrim.querySelector<HTMLElement>('[role="dialog"]')!;
   const slot = (key: string) =>
     dialog.querySelector<HTMLButtonElement>(`.inv-slot[data-key="${key}"]`)!;
@@ -301,7 +301,7 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(g.getAttribute('aria-hidden')).toBe('true');
     expect(g.querySelector('img.gun-icon')).not.toBeNull();
     expect(g.style.transform).toBe('translate(200px, 200px)');
-    expect(dialog.classList.contains('inv-dragging')).toBe(true);
+    expect(dialog.querySelector('.inv-dialog')!.classList.contains('inv-dragging')).toBe(true);
     expect(slot('stash:a').dataset.dragFrom).toBe('true');
     expect(slot('squad:recruit-1').dataset.drop).toBe('ok');
     expect(slot('squad:recruit-2').dataset.drop).toBe('ok');

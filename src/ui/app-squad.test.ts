@@ -401,7 +401,7 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     const booted = boot();
     step(0);
     const invButton = booted.root.querySelector<HTMLButtonElement>('.inv-button')!;
-    const invScrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+    const invScrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const menuScrim = document.querySelector<HTMLElement>('.menu-scrim')!;
     return { ...booted, invButton, invScrim, menuScrim };
   }
@@ -512,9 +512,9 @@ describe('Combine in the game (app.ts, ID-091)', () => {
     const booted = boot();
     step(0);
     const invButton = booted.root.querySelector<HTMLButtonElement>('.inv-button')!;
-    const invScrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+    const invScrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const combineButtons = () => invScrim.querySelectorAll('.inv-combine-button');
-    const close = () => invScrim.querySelector<HTMLButtonElement>('.menu-foot button')!.click();
+    const close = () => invScrim.querySelector<HTMLButtonElement>('.camp-done')!.click();
     return { ...booted, invButton, invScrim, combineButtons, close };
   }
 
@@ -568,7 +568,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
     localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
     const booted = boot();
     step(0);
-    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const rosterButton = booted.root.querySelector<HTMLButtonElement>('.roster-button')!;
     const key = (k: string) => scrim.querySelector<HTMLButtonElement>(`[data-key="${k}"]`)!;
     return { ...booted, scrim, rosterButton, key };
@@ -670,7 +670,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
     expect(scrim.querySelector('.rv-who-name')!.textContent).toBe(recruit(1).name);
     expect(scrim.querySelector('.rv-level')!.textContent).toBe(levelText(4));
     expect(scrim.querySelector(NO_STAT_UI)).toBeNull();
-    scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
+    scrim.querySelector<HTMLButtonElement>('.camp-close')!.click();
     expect(document.activeElement).toBe(name);
     // Nothing waits for the button: the win was saved as the fight ended.
     expect(saved().roster[0]!.xp).toBeGreaterThanOrEqual(150);
@@ -701,11 +701,11 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     step(32);
     // The newcomer joins (ID-150), so the Roster has all three.
     accept(booted.root);
-    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const card = () =>
       booted.root.querySelector<HTMLElement>('.squad-card[data-defender="recruit-1"]')!;
     const open = () => card().querySelector<HTMLButtonElement>('.squad-card-open')!.click();
-    const close = () => scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
+    const close = () => scrim.querySelector<HTMLButtonElement>('.camp-close')!.click();
     return { ...booted, scrim, card, open, close };
   }
 
@@ -1497,7 +1497,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
   function rosterOn(id: string) {
     const booted = boot();
     step(0);
-    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     booted.root.querySelector<HTMLButtonElement>('.roster-button')!.click();
     scrim.querySelector<HTMLButtonElement>(`.rv-tab[data-defender="${id}"]`)!.click();
     const letGo = () => scrim.querySelector<HTMLButtonElement>('.rv-letgo')!;
@@ -1679,7 +1679,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     // The first horde is won from behind the panel: its Scrap changes "You have N".
     // An open Roster holds the fight, so it is closed too.
     button().click();
-    scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
+    scrim.querySelector<HTMLButtonElement>('.camp-close')!.click();
     step(16);
     endNextTick('won');
     step(32);
@@ -1704,7 +1704,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     scrim.querySelector<HTMLButtonElement>('.rv-combine')!.click();
     scrim.querySelector<HTMLButtonElement>('.rv-combine-pick button')!.click();
     button().click();
-    scrim.querySelector<HTMLButtonElement>('.rv-close')!.click();
+    scrim.querySelector<HTMLButtonElement>('.camp-close')!.click();
     step(16);
     endNextTick('won');
     step(32);
@@ -1752,7 +1752,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     const { root, saved } = boot();
     step(0);
     root.querySelector<HTMLButtonElement>('.inv-button')!.click();
-    const scrim = document.querySelector<HTMLElement>('.inv-scrim')!;
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const buy = () => scrim.querySelector<HTMLButtonElement>('.inv-buy')!;
     buy().click();
     expect(await answerConfirm(false)).toBe('Buy 10 stash slots for 150 Scrap? You have 400.');
@@ -1794,7 +1794,7 @@ describe('Best gun with Auto on (app.ts, ID-154)', () => {
     step(0);
     expect(saved().reserve.map((d) => d.id)).toEqual(['recruit-7']);
     root.querySelector<HTMLButtonElement>('.roster-button')!.click();
-    const scrim = document.querySelector<HTMLElement>('.roster-scrim')!;
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     scrim.querySelector<HTMLButtonElement>('[data-key="best"]')!.click();
     // No stash, so no gun moved; Auto still brought the veteran in.
     expect(scrim.querySelector('.rv-status')!.textContent).toBe(
