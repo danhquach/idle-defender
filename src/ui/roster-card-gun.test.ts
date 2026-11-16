@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // ID-180: every Roster card (squad and bench) shows the gun its survivor holds: the icon on
-// its rarity tint and their DPS with it (the gun slot's figure, ID-152), no tab portrait.
+// its rarity tint and their DPS with it (the gun slot's figure, ID-152), beside its portrait.
 import { describe, expect, it, vi } from 'vitest';
 import { rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
@@ -110,8 +110,55 @@ describe('rosterTiles gun fields (ID-180)', () => {
   });
 });
 
+describe('a ★ marks a survivor whose gun suits their profession (ID-180)', () => {
+  const as = (n: number, job: RosterDefender['job'], gun?: OwnedWeapon): RosterDefender => {
+    const d = { ...recruit(n), job };
+    return gun ? { ...d, loadout: { ...d.loadout, primary: gun } } : d;
+  };
+
+  it('a fighting job on one of its guns gets the ★ and says so; off them, or a non-fighter, none', () => {
+    const g = camp(
+      [as(1, 'hunter', relic()), as(2, 'police'), as(3, 'guard', relic()), as(4, 'chef', relic())],
+      [as(5, 'police')],
+    );
+    const m = mount(g);
+    const star = (id: string) => m.tab(id).querySelector('.rv-tab-fit');
+    const label = (id: string) => m.tab(id).getAttribute('aria-label')!;
+    // Hunter + Carbine (a rifle), Police + the free pistol: both suit, squad and bench alike.
+    for (const id of ['recruit-1', 'recruit-2', 'recruit-5']) {
+      expect(star(id)?.textContent).toBe('★');
+      // On the DPS side, after the number, never on the gun: the DPS keeps its text.
+      expect(star(id)?.parentElement?.classList.contains('rv-tab-stat')).toBe(true);
+      expect(star(id)?.previousElementSibling?.classList.contains('rv-tab-dps')).toBe(true);
+      expect(m.tab(id).querySelector('.rv-tab-gun .rv-tab-fit')).toBeNull();
+      expect(m.tab(id).querySelector('.rv-tab-dps')!.textContent).toMatch(/^\d+\.\d$/);
+      expect(star(id)?.getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(label('recruit-1').endsWith(', suits a Hunter')).toBe(true);
+    expect(label('recruit-2').endsWith(', suits a Police officer')).toBe(true);
+    // A Security guard with a rifle: off their guns. A Chef's bonus is not about guns.
+    for (const id of ['recruit-3', 'recruit-4']) {
+      expect(star(id)).toBeNull();
+      expect(label(id)).not.toContain('suits');
+    }
+    const tiles = rosterTiles(g, NOW, null);
+    expect(tiles.map((t) => t.fits)).toEqual([true, true, false, false, true]);
+  });
+
+  it('the ★ comes and goes with the gun', () => {
+    const gun = relic();
+    const g = camp([as(1, 'guard')], [], [gun]);
+    const m = mount(g);
+    expect(m.tab('recruit-1').querySelector('.rv-tab-fit')).toBeNull();
+    const r = equipGun(m.game(), 'recruit-1', gun.uid);
+    if (!r.ok) throw new Error(r.reason);
+    m.set({ ...r.game, roster: r.game.roster.map((d) => ({ ...d, job: 'hunter' as const })) });
+    expect(m.tab('recruit-1').querySelector('.rv-tab-fit')).not.toBeNull();
+  });
+});
+
 describe('the Roster cards show the held gun (ID-180)', () => {
-  it('every squad and bench tab has the gun on its rarity tint, the DPS, no portrait', () => {
+  it('every squad and bench tab has the gun on its rarity tint, the DPS and the portrait', () => {
     const g = camp([armed(1, relic()), recruit(2)], [recruit(3), armed(4, relic())]);
     const m = mount(g);
     const tabs = [...m.scrim.querySelectorAll<HTMLElement>('.rv-tab')];
@@ -120,7 +167,16 @@ describe('the Roster cards show the held gun (ID-180)', () => {
       const gun = t.querySelector<HTMLElement>('.rv-tab-gun[data-rarity]')!;
       expect(gun).not.toBeNull();
       expect(t.querySelector('.rv-tab-dps')?.textContent).toMatch(/^\d+\.\d$/);
-      expect(t.querySelector('.roster-avatar')).toBeNull();
+      const portrait = t.querySelector('.roster-avatar-xs img');
+      expect(portrait?.getAttribute('alt')).toBe('');
+      // Two columns, filled in order: portrait | name, level, job; gun | DPS.
+      expect([...t.children].map((c) => c.classList[0])).toEqual([
+        'roster-avatar',
+        'rv-tab-text',
+        'rv-gico',
+        'rv-tab-stat',
+      ]);
+      expect(t.querySelector('.rv-tab-level')?.textContent).toMatch(/^Lv \d+$/);
       expect(gun.querySelector('img')?.alt).toBe('');
     }
     expect(m.tab('recruit-1').querySelector<HTMLElement>('.rv-tab-gun')!.dataset.rarity).toBe(
@@ -145,7 +201,8 @@ describe('the Roster cards show the held gun (ID-180)', () => {
       expect(slot.getAttribute('aria-label')).toContain(`${dps} `);
       const tile = rosterTiles(m.game(), NOW, null).find((t) => t.id === id)!;
       const label = m.tab(id).getAttribute('aria-label')!;
-      expect(label.endsWith(`${tile.gunFull}, ${dps} DPS`)).toBe(true);
+      const suits = tile.fits ? `, suits a ${tile.job}` : '';
+      expect(label.endsWith(`${tile.gunFull}, ${dps} DPS${suits}`)).toBe(true);
       expect(m.tab(id).title).toBe(label);
     }
   });
@@ -156,7 +213,9 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     const m = mount(g);
     const label = m.tab('recruit-3').getAttribute('aria-label')!;
     expect(label).toContain('Resting: 2 hordes, Pistol, ');
-    expect(label.endsWith(' DPS')).toBe(true);
+    const tile = rosterTiles(g, NOW, null).find((t) => t.id === 'recruit-3')!;
+    const suits = tile.fits ? `, suits a ${tile.job}` : '';
+    expect(label.endsWith(`, ${tile.dps} DPS${suits}`)).toBe(true);
     expect(m.tab('recruit-3').querySelector('.rv-tab-job')!.textContent).toBe('Rest 2');
   });
 
@@ -183,7 +242,9 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     expect(after.src).toBe(ART_URLS[GUN_ICON.rifle]);
     expect(after.dps).not.toBe(before.dps);
     expect(after.label).toContain('Lv 3 Relic Carbine');
-    expect(after.label!.endsWith(`${after.dps} DPS`)).toBe(true);
+    const held = rosterTiles(m.game(), NOW, null).find((t) => t.id === 'recruit-1')!;
+    const suits = held.fits ? `, suits a ${held.job}` : '';
+    expect(after.label!.endsWith(`${after.dps} DPS${suits}`)).toBe(true);
 
     // An outside change plus refresh(): the gun goes back to the stash (pistol).
     const back = equipGun(m.game(), 'recruit-1', 'pistol');
@@ -214,7 +275,10 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     expect(tab.querySelector<HTMLElement>('.rv-tab-gun')!.dataset.rarity).toBe('relic');
     const tile = rosterTiles(now, NOW, null).find((t) => t.id === 'recruit-7')!;
     expect(tab.querySelector('.rv-tab-dps')!.textContent).toBe(tile.dps);
-    expect(tab.getAttribute('aria-label')!.endsWith(`${tile.gunFull}, ${tile.dps} DPS`)).toBe(true);
+    const suits = tile.fits ? `, suits a ${tile.job}` : '';
+    expect(
+      tab.getAttribute('aria-label')!.endsWith(`${tile.gunFull}, ${tile.dps} DPS${suits}`),
+    ).toBe(true);
     // Whoever left the squad is a bench card now, still with their gun and DPS.
     const out = [...m.scrim.querySelectorAll<HTMLElement>('.rv-bench .rv-tab')];
     expect(out).toHaveLength(1);

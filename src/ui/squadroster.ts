@@ -59,6 +59,11 @@ export interface RosterTile {
   gunIcon: ArtId;
   /** Their DPS with it, as the gun slot shows (ID-152), "17.2". */
   dps: string;
+  /**
+   * A fighting job holding one of its guns (ID-149), so the profession's bonus works: the
+   * card's ★ (ID-180), as the gun picker marks it.
+   */
+  fits: boolean;
   rarity: Rarity;
   art: ArtId;
 }
@@ -105,6 +110,7 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
       gunFull: gunName(held),
       gunIcon: GUN_ICON[baseOf(held) as GunId],
       dps: heldDps(held, d),
+      fits: JOBS[d.job].kind === 'fight' && jobFits(d.job, held),
       rarity: rarityOf(held),
       art: avatarOf(d),
     };
@@ -443,7 +449,7 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
     tab.dataset.defender = t.id;
     // One state, announced once: the survivor shown is the current one.
     if (selected) tab.setAttribute('aria-current', 'true');
-    const label = `${t.name}, level ${t.level}, ${t.job}, ${t.health}, ${t.gunFull}, ${t.dps} DPS`;
+    const label = `${t.name}, level ${t.level}, ${t.job}, ${t.health}, ${t.gunFull}, ${t.dps} DPS${t.fits ? `, suits a ${t.job}` : ''}`;
     tab.title = label;
     tab.setAttribute('aria-label', label);
     tab.classList.toggle('rv-tab-down', t.down);
@@ -456,9 +462,23 @@ export function createRoster(root: HTMLElement, opts: RosterOptions): Roster {
       // Resting (ID-147): how long, in words, where the profession was; not colour alone.
       el('span', 'rv-tab-job', t.rest > 0 ? `Rest ${t.rest}` : t.jobShort),
     );
-    // The held gun on its rarity tint, then their DPS with it (ID-180): the same number the
-    // gun slot shows.
-    tab.append(text, gunIcon(t.rarity, t.gunIcon, 'rv-tab-gun'), el('span', 'rv-tab-dps', t.dps));
+    // Two columns (ID-180): portrait | name, level, profession; the held gun on its rarity
+    // tint | their DPS with it (the number the gun slot shows) and the ★.
+    const stat = el('span', 'rv-tab-stat');
+    stat.append(el('span', 'rv-tab-dps', t.dps));
+    // Their gun suits their profession (ID-149): the gun picker's ★, after the DPS. The label
+    // says it in words.
+    if (t.fits) {
+      const star = el('span', 'rv-tab-fit', '★');
+      star.setAttribute('aria-hidden', 'true');
+      stat.append(star);
+    }
+    tab.append(
+      avatar(t.art, 'roster-avatar roster-avatar-xs'),
+      text,
+      gunIcon(t.rarity, t.gunIcon, 'rv-tab-gun'),
+      stat,
+    );
     tab.addEventListener('click', () => {
       if (t.id === current) return;
       current = t.id;
