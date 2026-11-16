@@ -9,7 +9,7 @@ import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
-import { el, SKILL_KEYS, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
+import { el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 
 /** What the Save tab says about a refused code. */
 export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
@@ -76,7 +76,7 @@ const SQUAD_CONTROLS: Controls = [
       ['Click a survivor, then a post', 'Move that survivor'],
       ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
       [
-        `Click a skill, or ${SKILL_KEYS.join(' ')}`,
+        `Click a skill, or ${skillHelp().keys.join(' ')}`,
         'Use a picked skill; Airstrike bombs the area you click next',
       ],
       ['1 2 3', 'Pick a card when three are offered'],
@@ -103,7 +103,10 @@ const SQUAD_HOW_TO_PLAY: Steps = [
     `Your survivors shoot on their own. Click an enemy to focus it. ${SQUAD_LOSS_RULE}`,
   ],
   ['Level up in the fight.', 'Kills give fight XP. Each fight level offers three cards.'],
-  ['Pick your skills.', 'Before each horde, pick your skill to use on cooldown.'],
+  [
+    skillHelp().one ? 'Pick your skill.' : 'Pick your skills.',
+    'Before each horde, pick your skill to use on cooldown.',
+  ],
   [
     'Win and grow.',
     'A win gives survivor XP, and every level makes a survivor better at everything. A new survivor joins, up to a squad of 6. On the Roster, a survivor can combine with another of the same profession for XP.',

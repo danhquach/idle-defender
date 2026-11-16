@@ -3,7 +3,7 @@
 // launch, a short how-to-play card that can be skipped and opened again from the Menu.
 // Like the Menu it sits outside `root`, which goes inert behind it, and its keys stay in it:
 // Enter is the main action, Esc goes back.
-import { el, SKILL_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
+import { el, skillHelp, SQUAD_LOSS_RULE } from './hud.ts';
 import { createTitleLogo } from './introTitle.ts';
 
 export const INTRO_TITLE = 'The Long Hold';
@@ -11,6 +11,9 @@ export const INTRO_TAGLINE =
   'The last survivors hold a wall against the hordes. Keep them standing.';
 export const NEW_GAME_CONFIRM =
   'Start a new game? Your saved camp is lost unless you kept its backup code (Menu, then Save).';
+
+/** The skills line and key hint, from the skills there are (ID-193). */
+const SKILLS_HELP = skillHelp();
 
 /**
  * The how-to-play card: the wall, the survivors, skills and the screens between hordes.
@@ -22,11 +25,7 @@ export const HOW_TO_CARD: readonly (readonly [string, string, string?])[] = [
     'Survivors',
     'They shoot on their own. Tap or click an enemy to focus fire. Kills level the fight up, and each level offers three cards.',
   ],
-  [
-    'Skills',
-    'Pick up to 2 before each horde, then tap or click them when they are ready.',
-    `Keys: ${SKILL_KEYS.join(' ')}.`,
-  ],
+  ['Skills', SKILLS_HELP.line, SKILLS_HELP.keyHint],
   ['Between hordes', 'Swap guns and pick the next horde. A loss costs nothing: try again.'],
 ];
 

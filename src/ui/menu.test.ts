@@ -510,6 +510,14 @@ describe('the Menu', () => {
     expect([...help.querySelectorAll('kbd')].map((k) => k.textContent)).not.toContain('a');
   });
 
+  it('Help tells one skill and its one key while the Airstrike is the only skill (ID-193)', () => {
+    const help = setup().panel('help');
+    expect(help.textContent).toContain('Click a skill, or Q');
+    expect(help.textContent).not.toContain('Q W');
+    expect(help.textContent).toContain('Pick your skill.');
+    expect(help.textContent).not.toContain('Pick your skills.');
+  });
+
   it('Help explains the ammo bar and the roar ring, each with a swatch (ID-168)', () => {
     const help = setup().panel('help');
     const items = [...help.querySelectorAll('.menu-marks li')];
