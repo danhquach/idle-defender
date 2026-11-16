@@ -321,7 +321,7 @@ describe('result screens and the picker (ID-098)', () => {
       expect(b.button).not.toBe('Continue');
       expect(b.lines.join(' ')).not.toMatch(/Radio|evacuation|New card/);
       expect(b.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
-      expect(b.debrief!.note).toBeNull();
+      expect(b.debrief!.notes).toEqual([]);
     }
   });
 
