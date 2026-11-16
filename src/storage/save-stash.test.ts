@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { roleOf, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { ARMOURY_CAP, SQUAD_JOIN, STASH_CAP } from '../core/data.ts';
+import { ARMOURY_CAP, SQUAD_JOIN, STASH_CAP, STASH_CAP_MAX } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import {
   acceptJoins,
@@ -252,10 +252,14 @@ describe('save: the stash and equipped guns (ID-067)', () => {
         rarity: 'common',
         affixes: [],
       }));
-    const g = { ...newGame('horde'), hordeNumber: MAX_OWNED + 2 };
-    expect(MAX_OWNED).toBe(Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_JOIN.max));
+    const g = { ...newGame('horde'), hordeNumber: MAX_OWNED + 2, slots: { squad: 0, stash: 4 } };
+    expect(MAX_OWNED).toBe(Math.max(ARMOURY_CAP, STASH_CAP_MAX + 2 * SQUAD_JOIN.max));
     const at = { ...g, armoury: many(MAX_OWNED) };
+    // Within the bound, a stash past the slots' cap is kept as it is (ID-179).
     expect(reread(at)?.game).toEqual(at);
+    const old = { ...at, slots: undefined };
+    delete old.slots;
+    expect(reread(old)?.game.armoury).toHaveLength(MAX_OWNED);
     const spare = `h${MAX_OWNED + 1}`;
     expect(reread(at, (x) => x.armoury.push({ ...x.armoury[0], uid: spare }))).toBeNull();
     // Within the stash's bound, but a gun in hand takes the total owned past it.

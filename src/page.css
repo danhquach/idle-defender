@@ -203,8 +203,8 @@ body {
   left: 0;
   right: 0;
   padding: var(--space-8) var(--space-16);
-  /* Clear of the Roster, Inventory and Menu buttons on the right. */
-  padding-right: 300px;
+  /* Clear of the Scrap chip and the Roster, Inventory and Menu buttons on the right. */
+  padding-right: 428px;
   background: var(--color-bar-bg);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -213,15 +213,15 @@ body {
 /* A fight's status line keeps clear of the speed buttons and Paused chip too. The top
    bar's redesign (ID-058) should give the speed group its own slot instead. */
 .hud-fight-bar {
-  padding-right: 576px;
+  padding-right: 704px;
 }
 
 /* Fight speed and the Space pause (ID-062), beside the Menu button. */
 .hud-speed {
   position: absolute;
   top: 5px;
-  /* Left of the Roster, Inventory and Menu buttons (ID-086). */
-  right: 300px;
+  /* Left of the Scrap chip and the Roster, Inventory and Menu buttons (ID-086, ID-179). */
+  right: 428px;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -2728,6 +2728,39 @@ body {
   outline-offset: 2px;
 }
 
+/* The Scrap balance (ID-179): a read-only chip left of Roster, on the page itself so it
+   stays above the Roster and Inventory dialogs; styled as the speed buttons, no button. */
+.scrap-chip {
+  position: fixed;
+  top: 5px;
+  right: 308px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 26px;
+  gap: var(--space-4);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  cursor: default;
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.scrap-chip-label {
+  color: var(--color-text-muted);
+}
+
+.scrap-chip:empty,
+body:has(.intro-scrim:not([hidden])) .scrap-chip {
+  display: none;
+}
+
 .menu-key {
   padding: 0 var(--space-4);
   border: 1px solid var(--color-border-strong);
@@ -3890,6 +3923,40 @@ body {
   margin-right: auto;
 }
 
+/* The stash heading's row (ID-179): the heading, then the buy button at the end. */
+.inv-stash-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-8);
+}
+
+.inv-buy {
+  min-height: 32px;
+  font-size: var(--text-xs);
+}
+
+.rv-buy-squad {
+  min-height: 32px;
+  padding: 0 var(--space-8);
+  font-size: var(--text-xs);
+}
+
+.rv-buy-squad[hidden] {
+  display: none;
+}
+
+/* Short of Scrap or in a fight: dashed and unfilled, but the text stays clearly readable. */
+.rv-buy-squad:disabled,
+.inv-buy:disabled {
+  border-style: dashed;
+  background: transparent;
+  color: var(--color-text);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 .rv-best-squad {
   min-height: 32px;
   padding: 0 var(--space-8);
@@ -4613,6 +4680,17 @@ body {
     font-size: var(--text-2xs);
   }
 
+  /* Eight tabs (the squad cap bought out) share the row at 375px: tighter gaps, no
+     scrolling, and the label row wraps ("Squad 8/8", the buy button, Best squad, Auto). */
+  .rv-tabs {
+    gap: 2px;
+    padding-right: 4px;
+  }
+
+  .rv-squad-row {
+    gap: var(--space-2) var(--space-6);
+  }
+
   /* Four columns stay on one row: the parts get the room they need. */
   .rv-stats th,
   .rv-stats td {
@@ -4795,6 +4873,16 @@ body {
 
   .menu-button {
     right: 8px;
+  }
+
+  /* Touch-sized like its neighbours, in the same row: Roster, Inventory and Menu stay as
+     they were, the chip fits left of them at 375px. */
+  .scrap-chip {
+    top: 4px;
+    right: 228px;
+    height: 44px;
+    padding: 0 var(--space-6);
+    font-size: var(--text-body-sm);
   }
 
   .inv-button {

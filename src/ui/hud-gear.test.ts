@@ -411,7 +411,7 @@ describe('the debrief layout (ID-067)', () => {
     expect(dropTile({ armoury: relics }, dropOf(weak, weak))).toMatchObject({
       stash: `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
       lost: true,
-      thrown: DROP_LOST_NOTE,
+      thrown: `${DROP_LOST_NOTE} · salvaged for 5 Scrap`,
     });
     expect(dropTile({ armoury: [] }, dropOf(weak, null)).thrown).toBeNull();
     const strong = gun('h2', 'lmg', 'relic');
@@ -421,7 +421,7 @@ describe('the debrief layout (ID-067)', () => {
       name: 'LMG',
       stash: `Stash ${STASH_CAP}/${STASH_CAP}`,
       lost: false,
-      thrown: 'Thrown away: Lv 1 Rusty SMG',
+      thrown: 'Thrown away: Lv 1 Rusty SMG · salvaged for 5 Scrap',
     });
   });
 
@@ -506,7 +506,9 @@ describe('the debrief layout (ID-067)', () => {
     h.showResult(squadScreen(full, ended(full, 'won')));
     const lost = root.querySelector<HTMLElement>('.tile-drop')!;
     expect(lost.classList.contains('tile-drop-lost')).toBe(true);
-    expect(lost.querySelector('.tile-thrown')!.textContent).toBe(DROP_LOST_NOTE);
+    expect(lost.querySelector('.tile-thrown')!.textContent).toBe(
+      `${DROP_LOST_NOTE} · salvaged for 25 Scrap`,
+    );
     expect(lost.querySelector('.tile-stash-lost')!.textContent).toBe(
       `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
     );
@@ -716,14 +718,14 @@ describe('bonus guns on the result screen (ID-122)', () => {
     expect(dropTile({ armoury: relics }, pushed)).toMatchObject({
       lost: true,
       stash: `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
-      thrown: 'Replaced by the stronger bonus gun Lv 9 Common LMG',
+      thrown: 'Replaced by the stronger bonus gun Lv 9 Common LMG · salvaged for 5 Scrap',
     });
     // Already full: the drop itself was no better than the stash.
     const full = [...relics, gun('c99', 'lmg', 'relic')];
     const own = dropOf(weak, null, { bonus: [strong], thrown: [weak, relics.at(-1)!] });
     expect(dropTile({ armoury: full }, own)).toMatchObject({
       lost: true,
-      thrown: `${DROP_LOST_NOTE} · Thrown away: Lv 1 Relic LMG`,
+      thrown: `${DROP_LOST_NOTE} · Thrown away: Lv 1 Relic LMG · salvaged for 105 Scrap`,
     });
   });
 });

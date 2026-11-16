@@ -17,6 +17,8 @@ import {
   autoSquad,
   bestGuns,
   bestSquad,
+  buySquadSlot,
+  buyStashSlots,
   campOf,
   combineGuns,
   combineSurvivors,
@@ -81,7 +83,11 @@ import {
 } from './buildscene.ts';
 import {
   AUTO_KEY,
+  buyQuestion,
+  buyText,
+  BUY_WAIT,
   createHud,
+  createScrapChip,
   defenderLabel,
   hordePicker,
   joinedCard,
@@ -238,6 +244,8 @@ export function start(root: HTMLElement, art: Art): void {
     true,
   );
 
+  // The Scrap balance in the top bar (ID-179), horde-only; redrawn with the dialogs.
+  const scrapChip = HORDE_ONLY ? createScrapChip(root.ownerDocument) : null;
   const hud = createHud(
     root,
     (index) => {
@@ -446,6 +454,23 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true, text: letGoText(d.name) };
   }
   /**
+   * Buys the next squad slot or stash slots between hordes (ID-179), on a yes to the confirm:
+   * saved at once, and the screens redrawn. Null when the player said no.
+   */
+  function buySlots(
+    kind: 'squad' | 'stash',
+  ): { ok: true; text: string } | { ok: false; reason: string } | null {
+    if (horde && !resultUp()) return { ok: false, reason: BUY_WAIT };
+    const before = game.stock.scrap;
+    const r = kind === 'squad' ? buySquadSlot(game) : buyStashSlots(game);
+    if (!r.ok) return r;
+    const cost = before - r.game.stock.scrap;
+    if (!window.confirm(buyQuestion(kind, cost, before))) return null;
+    commit(r.game);
+    redrawSquad();
+    return { ok: true, text: buyText(kind, cost, r.game.stock.scrap) };
+  }
+  /**
    * Survivor `keeperId` takes in `fedId` between hordes (the Roster, ID-170), on a yes to the
    * confirm: saved at once, and the screens redrawn. Null when the player said no.
    */
@@ -545,6 +570,7 @@ export function start(root: HTMLElement, art: Art): void {
       game,
       resumes: horde?.outcome === 'fighting' && !held,
       canCombine: !horde || resultUp(),
+      canBuy: !horde || resultUp(),
       // Squad Power against the horde under way, or the one picked (ID-098).
       ...(HORDE_ONLY ? { horde: horde && endedAt === null ? horde.hordeNumber : picked } : {}),
     }),
@@ -561,6 +587,7 @@ export function start(root: HTMLElement, art: Art): void {
       : undefined,
     // Drag and drop (ID-095), horde-only and between hordes, as the gun pickers.
     onEquip: HORDE_ONLY ? changeGun : undefined,
+    onBuyStash: HORDE_ONLY ? () => buySlots('stash') : undefined,
   });
   const menu = createMenu(root, {
     // Load and New camp lock only while a fight runs: the result screen is between hordes (ID-156).
@@ -611,6 +638,7 @@ export function start(root: HTMLElement, art: Art): void {
         onEquip: changeGun,
         onToggleSquad: changeSquad,
         onLetGo: letSurvivorGo,
+        onBuySquad: () => buySlots('squad'),
         onCombine: combineSurvivor,
         onBestGuns: () => {
           if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
@@ -658,6 +686,7 @@ export function start(root: HTMLElement, art: Art): void {
   const dialogOpen = (): boolean =>
     intro.isOpen() || menu.isOpen() || inventory.isOpen() || !!roster?.isOpen();
   function refreshDialogs(): void {
+    scrapChip?.set(game.stock.scrap);
     menu.refresh();
     inventory.refresh();
     roster?.refresh();

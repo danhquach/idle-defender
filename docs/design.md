@@ -251,6 +251,11 @@ Defenders stand on **posts** the player builds and chooses between.
   exists only in the fight (a `line` post), never in the base or a save.
   Enemies spawn at x 1,540 instead of the field's 1,600, so they walk about
   1,020 units to the wall instead of 1,080; the full game keeps its field.
+  As built (ID-179): a squad of 7 or 8 (bought slots, §6 Stash) stands on a
+  line of that many slots instead, spaced evenly in the same way (a seventh or
+  eighth of the wall each), filled from the middle out (`SQUAD_LINE_WIDE`: 7
+  fills 4, 3, 5, 2, 6, 1, 7; 8 fills 4, 5, 3, 6, 2, 7, 1, 8). A squad of 6 or
+  fewer keeps the line of 6 and its order exactly.
 
 ## 4. Horde defence (the active part)
 
@@ -1213,7 +1218,7 @@ profession's output).
     gun, DPS, or "Thrown away"). At the worst luck the scripted player
     throws them away too.
   - **Stash:** the camp's armoury, shown as the stash. It holds 40 weapons
-    (20 before ID-122; more slots for a currency is a later idea). Each gun
+    (20 before ID-122; more slots for Scrap, as built ID-179, below). Each gun
     a win drops goes in in turn, the drop first: with 40 in it, the weakest
     of the stash and that gun is thrown away (it may be one of the win's own
     guns); a tie throws away the later one. "Weakest" is the
@@ -1221,7 +1226,47 @@ profession's output).
     rarity and affixes counted), the gun's own DPS (the Inventory's
     figure; the pickers show a survivor's, ID-152). An older save's armoury
     past 40 is kept as it is and never grows. A save holds at
-    most 52 owned weapons (40 in the stash, a gun in each hand of 6 survivors).
+    most 52 owned weapons (40 in the stash, a gun in each hand of 6 survivors);
+    with every slot bought (ID-179) `MAX_OWNED` allows 160 (80 in the stash and
+    two hands each for the camp's 40 survivors).
+  - **As built (ID-179): Scrap, squad slots and stash slots.** The horde-only
+    build's currency is the existing Scrap stock (`stock.scrap`; "Parts" is
+    the radio parts' name). It is earned two ways, with no RNG and no change
+    to any fight: every win, first clear or replay, pays
+    `SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde × the horde's number` (10 + 5 ×
+    horde; Horde 4 pays 30), and a loss pays nothing; and every gun thrown
+    away from a full stash (a win's own gun too, or one a let-go survivor's
+    gun pushes out) is salvaged for its rarity's `salvage` Scrap (Rusty 5,
+    Common 10, Military 25, Prototype 50, Relic 100). The sum is capped at
+    `MAX_COUNT` where a save reads it, and the screens show what was actually
+    added. The balance is always on screen: a read-only chip ("Scrap 620", a
+    live region, not a button) in the top bar left of the Roster button, on the
+    page itself so it stays above the Roster and Inventory dialogs (hidden only
+    under the intro). The result screen has a short chip ("+35 Scrap", the full
+    "+55 Scrap (20 from salvage) · now 655" as its hover hint and in its lines),
+    and the drop tile's thrown-away note ends "salvaged for 20 Scrap". Scrap buys
+    slots, one purchase at a time, between hordes only, each after a confirm
+    (`window.confirm`, as Let go): a squad slot costs
+    `SQUAD_SLOT_COSTS` (500, then 1,200), so the squad's cap goes 6, 7, 8; stash
+    slots come `STASH_SLOT.add` (10) at a time at `STASH_SLOT.costs` (150, 250,
+    400, 600), so the stash goes 40, 50, … 80. The Roster's squad row has the
+    squad button ("+1 slot · 500 Scrap", with a bench) and the Inventory's stash
+    heading the stash one ("+10 slots · 150 Scrap"); each shows progress and is
+    greyed when short ("+1 slot · 120/1,200 Scrap", its tooltip "Needs 1,200
+    Scrap"; the greyed look is dashed, its text still clearly readable), greyed
+    with "Buy slots between hordes" in a fight, and
+    gone once every slot is bought. A new squad slot is filled from the bench
+    like any open one (highest XP first, then "Auto" if it is on). The caps are
+    `squadCap(game)` and `stashCap(game)` (`GameState.slots`, the purchases
+    made); `SQUAD_CAP` and `STASH_CAP` stay the base values, and keep driving
+    the difficulty (`squadHpScale`), the joiners' chances and the balance
+    fixtures: a bigger squad shifts fights only for a player who buys. The
+    scripted player never buys. After a purchase the status line says "Bought 1
+    squad slot · 500 Scrap spent, 120 left." (stash: "Bought 10 stash slots …").
+    Help says "40 slots to start" and where each kind is bought. Numbers in
+    these texts use thousands separators. At the worst luck (§11) the scripted
+    player gets the win's Scrap only, no salvage for guns it keeps out of the
+    stash. On a phone the Roster's eight tabs share the row (the label row wraps).
   - **Equip:** between hordes, on the start and result screens, each survivor
     in the squad has a one-click gun picker (a select; the pick applies and
     saves at once). It lists the free pistol, the stash's guns and the gun
@@ -2696,7 +2741,8 @@ As built (ID-066), the horde-only build:
     newcomer too (ID-170), so its bench grows a little faster than before.
 - **The bench and rest (ID-147, `SQUAD_JOIN`, `INJURY_REST` in `data.ts`):**
   - No camp cap below `SQUAD_JOIN.max` (40). Up to 6 fight a horde (one per
-    slot on the firing line); the rest wait on the bench.
+    slot on the firing line; 7 or 8 with bought slots, ID-179); the rest wait
+    on the bench.
   - Under 6, each first clear adds one survivor as before. From 6 on, each
     first clear has a 15% chance (seeded from the horde, core RNG) that one
     joins, and then 20% that a second comes too (about 3% of first clears).
@@ -3342,6 +3388,15 @@ offline progress works across sessions.
   free pistol and nothing else, not resting or injured), with the camp and
   them together at most `SQUAD_JOIN.max`. Anything else refuses the save. A
   v19 or older save has nobody asking, and a `joining` key there is refused.
+- **As built (ID-179): save version 23** may hold `slots`, the purchases made,
+  written only once any is bought: exactly `squad` (0 to 2) and `stash` (0 to
+  4), whole numbers, and nothing else. Anything else (text, a fraction, out
+  of range, an extra or missing key, `__proto__`, an array, NaN) loads with no
+  slots bought and copies nothing, so the save still loads; the Scrap balance
+  is the stock's `scrap`, read as before. The squad is then cut to the loaded
+  cap (the rest to the bench); a stash past its cap (an older save's) is kept
+  as it is and never grows, and `MAX_OWNED` counts the stash at its most (80). A v22 or older
+  save has none, and a `slots` key there is refused.
 - **As built (ID-154): save version 21** may hold `autoSquad`, written only
   while "Auto" best squad is ticked. Exactly `true` turns it on; any other
   value loads with it off (nothing else depends on it, so the save still
@@ -4152,6 +4207,10 @@ original outline.
   for its repairs, a camp that doesn't build stalling by Horde 5), and
   `npm run balance` (Node 22.6 or later) prints the full table for tuning;
   `npm run tune:pacing` searches the wave pacing table (§9, ID-172).
+  Scrap and slots (ID-179, `data.ts`): `SQUAD_SCRAP` { base 10, perHorde 5 },
+  `SQUAD_SLOT_COSTS` [500, 1,200], `STASH_SLOT` { add 10, costs [150, 250, 400,
+  600] }, `SQUAD_LINE_WIDE` (the 7 and 8 fill orders); `SQUAD_CAP` (6) and
+  `STASH_CAP` (40) are the base caps.
   The balance tests run apart from the unit tests (`npm run test:balance`)
   and keep their fights' results in `.cache/balance/`, keyed by the
   simulation's code, Node's version and the test file (ID-142), so they

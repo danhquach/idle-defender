@@ -96,6 +96,15 @@ export const MID_SWAP = {
  */
 export const SQUAD_LINE = { offset: -30, range: 1.25, order: [2, 3, 1, 4, 0, 5] } as const;
 /**
+ * The firing line's fill order for a squad of 7 or 8 (ID-179): slot indexes on a line of that
+ * many, from the middle out as `SQUAD_LINE.order` does. A squad of `SQUAD_CAP` or fewer
+ * uses `SQUAD_LINE.order` on the line of `SQUAD_CAP`.
+ */
+export const SQUAD_LINE_WIDE: Readonly<Record<7 | 8, readonly number[]>> = {
+  7: [3, 2, 4, 1, 5, 0, 6],
+  8: [3, 4, 2, 5, 1, 6, 0, 7],
+};
+/**
  * The horde-only spawn edge (ID-068): nearer the wall than `FIELD.right`, so the fight's
  * frame (from the firing line to here) zooms in on the wall, all ten rows in view.
  */
@@ -141,6 +150,26 @@ export const BOSS_UNLOCKS: Readonly<Record<number, ResearchCard>> = {
  * weakest is thrown away.
  */
 export const STASH_CAP = 40;
+/**
+ * Scrap a horde-only win pays (ID-179), first clear or replay: `base` + `perHorde` × the
+ * horde's number. A loss pays nothing. A gun thrown away from a full stash is salvaged for
+ * its rarity's `salvage` Scrap on top.
+ */
+export const SQUAD_SCRAP = { base: 10, perHorde: 5 } as const;
+/**
+ * Bought squad slots (ID-179), starting points: the Scrap price of each purchase in turn, so
+ * the squad's cap goes `SQUAD_CAP` → +1 → +2 (6 → 7 → 8).
+ */
+export const SQUAD_SLOT_COSTS: readonly number[] = [500, 1200];
+/**
+ * Bought stash slots (ID-179), starting points: each purchase adds `add` slots and costs the
+ * next of `costs` Scrap, so the stash goes `STASH_CAP` → 50 → … → 80 (40 → 80).
+ */
+export const STASH_SLOT = { add: 10, costs: [150, 250, 400, 600] } as const;
+/** The most survivors the squad can hold once every slot is bought (ID-179). */
+export const SQUAD_CAP_MAX = SQUAD_CAP + SQUAD_SLOT_COSTS.length;
+/** The most guns the stash can hold once every slot is bought (ID-179). */
+export const STASH_CAP_MAX = STASH_CAP + STASH_SLOT.add * STASH_SLOT.costs.length;
 /**
  * Bonus guns on a horde-only win (ID-122), first clear or replay: after the win's drop,
  * `rolls` more tries, each `chance` to drop one more gun, its rarity by the horde's band

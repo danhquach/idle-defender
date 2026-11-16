@@ -29,6 +29,7 @@ import {
   FIELD,
   MAX_COUNT,
   POWER,
+  RARITIES,
   RARITY_ORDER,
   SQUAD_BONUS,
   SQUAD_CAP,
@@ -36,10 +37,14 @@ import {
   SQUAD_HP_GROWTH,
   SKILL_IDS,
   SQUAD_LINE,
+  SQUAD_LINE_WIDE,
+  SQUAD_SCRAP,
   SQUAD_SKILLS,
+  SQUAD_SLOT_COSTS,
   SQUAD_SPAWN_X,
   SQUAD_XP_RATE,
   STASH_CAP,
+  STASH_SLOT,
   START_PERK,
   WEAPONS,
   BOSS_UNLOCKS,
@@ -163,12 +168,66 @@ export function toggleSkill(
   return { ok: true, game: { ...game, skillPick: pick } };
 }
 
+/** Slots bought so far (ID-179): none when the game holds no `slots`. */
+const boughtOf = (game: Pick<GameState, 'slots'>): { squad: number; stash: number } =>
+  game.slots ?? { squad: 0, stash: 0 };
+
+/** The most survivors the squad holds (ID-179): `SQUAD_CAP` and a slot for each one bought. */
+export const squadCap = (game: Pick<GameState, 'slots'>): number =>
+  SQUAD_CAP + boughtOf(game).squad;
+
+/** The most guns the stash holds (ID-179): `STASH_CAP` and `STASH_SLOT.add` for each purchase. */
+export const stashCap = (game: Pick<GameState, 'slots'>): number =>
+  STASH_CAP + STASH_SLOT.add * boughtOf(game).stash;
+
+/** The Scrap the next squad slot costs (ID-179), or null with every slot bought. */
+export const nextSquadSlotCost = (game: Pick<GameState, 'slots'>): number | null =>
+  SQUAD_SLOT_COSTS[boughtOf(game).squad] ?? null;
+
+/** The Scrap the next `STASH_SLOT.add` stash slots cost (ID-179), or null with every one bought. */
+export const nextStashSlotCost = (game: Pick<GameState, 'slots'>): number | null =>
+  STASH_SLOT.costs[boughtOf(game).stash] ?? null;
+
+/** `game` with `slots` as given; no field with none bought (as a save writes it). */
+function withSlots(game: GameState, slots: { squad: number; stash: number }): GameState {
+  const g = { ...game };
+  delete g.slots;
+  return slots.squad + slots.stash > 0 ? { ...g, slots } : g;
+}
+
+/** What a purchase of slots gives (ID-179): the game after it, or why not. */
+export type SlotBuy = { ok: true; game: GameState } | { ok: false; reason: string };
+
+function buySlot(game: GameState, kind: 'squad' | 'stash'): SlotBuy {
+  const cost = kind === 'squad' ? nextSquadSlotCost(game) : nextStashSlotCost(game);
+  if (cost === null) {
+    return { ok: false, reason: `Every ${kind} slot is bought` };
+  }
+  if (game.stock.scrap < cost) return { ok: false, reason: `Needs ${cost} Scrap` };
+  const bought = boughtOf(game);
+  const next = withSlots(
+    { ...game, stock: { ...game.stock, scrap: game.stock.scrap - cost } },
+    { ...bought, [kind]: bought[kind] + 1 },
+  );
+  return { ok: true, game: kind === 'squad' ? autoSquad(fillSquad(next)) : next };
+}
+
 /**
- * The squad that fights the next horde: the roster, at most `SQUAD_CAP`, in the order they
+ * Buys the next squad slot (ID-179, between hordes) for `nextSquadSlotCost` Scrap. The new
+ * slot is filled from the bench like any open one (`fillSquad`, then "Auto"). Refused with a
+ * player-facing reason when Scrap is short or every slot is bought.
+ */
+export const buySquadSlot = (game: GameState): SlotBuy => buySlot(game, 'squad');
+
+/** Buys the next `STASH_SLOT.add` stash slots (ID-179, between hordes); as `buySquadSlot`. */
+export const buyStashSlots = (game: GameState): SlotBuy => buySlot(game, 'stash');
+
+/**
+ * The squad that fights the next horde: the roster, at most `squadCap`, in the order they
  * were picked. Never anyone resting (`settleSquad` benches them).
  */
-export const squadOf = (game: Pick<GameState, 'roster'>): RosterDefender[] =>
-  game.roster.slice(0, SQUAD_CAP);
+export const squadOf = (game: Pick<GameState, 'roster' | 'slots'>): RosterDefender[] =>
+  game.roster.slice(0, squadCap(game));
 
 /** Everyone in the camp (ID-147): the squad, then the bench. */
 export const campOf = (game: Pick<GameState, 'roster' | 'reserve'>): RosterDefender[] => [
@@ -192,10 +251,10 @@ function withRest(d: RosterDefender, rest: number): RosterDefender {
 /**
  * Fills the squad's open slots from the bench (ID-147): fit survivors, highest XP first
  * (ties in bench order), each onto the squad's end in that order, until the squad has
- * `SQUAD_CAP`. Returns `game` itself when nobody moves.
+ * `squadCap`. Returns `game` itself when nobody moves.
  */
 export function fillSquad(game: GameState): GameState {
-  const room = SQUAD_CAP - game.roster.length;
+  const room = squadCap(game) - game.roster.length;
   if (room <= 0) return game;
   const picked = game.reserve
     .map((d, i) => ({ d, i }))
@@ -276,8 +335,9 @@ export function toggleSquad(
   const benched = game.reserve.find((d) => d.id === id);
   if (!benched) return { ok: false, reason: 'No such survivor' };
   if (!isFit(benched)) return { ok: false, reason: restLabel(restOf(benched)) };
-  if (game.roster.length >= SQUAD_CAP) {
-    return { ok: false, reason: `The squad is full (${SQUAD_CAP}/${SQUAD_CAP}): unmark one first` };
+  const cap = squadCap(game);
+  if (game.roster.length >= cap) {
+    return { ok: false, reason: `The squad is full (${cap}/${cap}): unmark one first` };
   }
   return {
     ok: true,
@@ -296,7 +356,7 @@ export interface SquadMoves {
 }
 
 /**
- * "Best squad" (ID-154, between hordes): the squad becomes the `SQUAD_CAP` fit survivors
+ * "Best squad" (ID-154, between hordes): the squad becomes the `squadCap` fit survivors
  * with the most `survivorPower`, ties to camp order (the squad first, so a tie never
  * swaps). Who stays keeps their slot; a newcomer takes the slot of one benched, in rank
  * order, and the rest go on the end; the benched go on the bench's end. Guns don't move.
@@ -307,7 +367,7 @@ export function bestSquad(game: GameState): { game: GameState; moves: SquadMoves
     .map((d, i) => ({ d, i, power: survivorPower(d) }))
     .filter(({ d }) => isFit(d))
     .sort((a, b) => b.power - a.power || a.i - b.i)
-    .slice(0, SQUAD_CAP)
+    .slice(0, squadCap(game))
     .map(({ d }) => d);
   const none = { game, moves: { in: [], out: [] } };
   if (ranked.length === 0) return none;
@@ -353,13 +413,32 @@ export const restLabel = (rest: number): string =>
   `Resting: ${rest} ${rest === 1 ? 'horde' : 'hordes'}`;
 
 /**
- * The firing line's slots (ID-068), top to bottom: `SQUAD_CAP` of them on the ground
+ * A firing line of `n` slots (ID-068, ID-179), top to bottom: on the ground
  * `SQUAD_LINE.offset` behind the wall, each in the middle of its even share of the wall.
  */
-export const SQUAD_SLOTS: readonly { x: number; y: number }[] = Array.from(
-  { length: SQUAD_CAP },
-  (_, i) => ({ x: COLUMNS[0]! + SQUAD_LINE.offset, y: ((i + 0.5) * FIELD.height) / SQUAD_CAP }),
-);
+const lineOf = (n: number): { x: number; y: number }[] =>
+  Array.from({ length: n }, (_, i) => ({
+    x: COLUMNS[0]! + SQUAD_LINE.offset,
+    y: ((i + 0.5) * FIELD.height) / n,
+  }));
+
+/** The firing line of a squad of `SQUAD_CAP` or fewer (ID-068): `SQUAD_CAP` slots. */
+export const SQUAD_SLOTS: readonly { x: number; y: number }[] = lineOf(SQUAD_CAP);
+
+/**
+ * The firing line a squad of `size` stands on (ID-179) and the slot each takes, in squad
+ * order: `SQUAD_SLOTS` and `SQUAD_LINE.order` up to `SQUAD_CAP` (as before bought slots),
+ * else a line of `size` slots filled by `SQUAD_LINE_WIDE`.
+ */
+export function squadLine(size: number): {
+  slots: readonly { x: number; y: number }[];
+  order: readonly number[];
+} {
+  const wide = size > SQUAD_CAP ? SQUAD_LINE_WIDE[size as 7 | 8] : undefined;
+  return wide
+    ? { slots: lineOf(size), order: wide }
+    : { slots: SQUAD_SLOTS, order: SQUAD_LINE.order };
+}
 
 /**
  * Horde `game.hordeNumber` for the whole squad on the firing line behind a fresh
@@ -385,7 +464,8 @@ export function startSquadHorde(
   const first = squad[0];
   if (!first) throw new RangeError('startSquadHorde: nobody in the squad');
   const base = squadBase();
-  const postOf = (i: number): number => base.posts.length + SQUAD_LINE.order[i]!;
+  const line = squadLine(squad.length);
+  const postOf = (i: number): number => base.posts.length + line.order[i]!;
   const s = newHorde(seed, {
     hordeNumber,
     roster: squad,
@@ -402,7 +482,7 @@ export function startSquadHorde(
     cards: SQUAD_CARDS,
     hpScale: squadHpScale(hordeNumber),
     xpRate: SQUAD_XP_RATE,
-    line: SQUAD_SLOTS,
+    line: line.slots,
     spawnX: SQUAD_SPAWN_X,
     harder: true,
     skills: [...game.skillPick],
@@ -486,7 +566,7 @@ export function answerJoin(
   );
   if (!accept) return { ok: true, game: g, where: null };
   const joined =
-    g.roster.length < SQUAD_CAP
+    g.roster.length < squadCap(g)
       ? { ...g, roster: [...g.roster, d] }
       : { ...g, reserve: [...g.reserve, d] };
   // "Auto" (ID-154) may move them, or someone else, at once.
@@ -510,18 +590,20 @@ export function acceptJoins(game: GameState): GameState {
 
 /**
  * Why nobody can be let go (ID-150), or null when they can: the camp must keep more than
- * `SQUAD_CAP`, so the squad can always be filled. `act` names what is refused: Combine
+ * `squadCap`, so the squad can always be filled. `act` names what is refused: Combine
  * (ID-170) is locked by the same rule, in its own words.
  */
 export function letGoLock(
   game: {
     roster: readonly RosterDefender[];
     reserve: readonly RosterDefender[];
+    slots?: GameState['slots'];
   },
   act = 'let one go',
 ): string | null {
   const n = game.roster.length + game.reserve.length;
-  return n > SQUAD_CAP ? null : `Needs ${SQUAD_CAP + 1}+ survivors to ${act} (camp ${n})`;
+  const cap = squadCap(game);
+  return n > cap ? null : `Needs ${cap + 1}+ survivors to ${act} (camp ${n})`;
 }
 
 /**
@@ -541,11 +623,12 @@ export function letGo(
   const guns = [d.loadout.primary, d.loadout.secondary].filter(
     (h): h is OwnedWeapon => h !== null && isOwned(h),
   );
-  const { armoury, thrown } = stashWith(game.armoury, guns);
+  const { armoury, thrown } = stashWith(game.armoury, guns, stashCap(game));
   // "Auto" (ID-154) fills the slot they leave with the best there is.
   const out = autoSquad(
     settleSquad({
       ...game,
+      stock: salvaged(game.stock, thrown),
       armoury,
       roster: game.roster.filter((x) => x !== d),
       reserve: game.reserve.filter((x) => x !== d),
@@ -730,6 +813,27 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
   });
 }
 
+/** The Scrap a horde-only win of horde `n` pays (ID-179). */
+export const winScrap = (n: number): number => SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * n;
+
+/** The Scrap guns thrown away from a full stash are salvaged for (ID-179), by rarity. */
+export const salvageOf = (thrown: readonly OwnedWeapon[]): number =>
+  thrown.reduce((t, w) => t + RARITIES[w.rarity].salvage, 0);
+
+/** The Scrap `n` adds to `stock` once capped where a save reads it (ID-179). */
+export const scrapGain = (stock: GameState['stock'], n: number): number =>
+  Math.min(MAX_COUNT, stock.scrap + n) - stock.scrap;
+
+/** `stock` with `n` more Scrap, capped where a save reads it (ID-179). */
+export const scrapAfter = (stock: GameState['stock'], n: number): GameState['stock'] => ({
+  ...stock,
+  scrap: Math.min(MAX_COUNT, stock.scrap + n),
+});
+
+/** `stock` with the Scrap `thrown` guns salvage for (ID-179). */
+const salvaged = (stock: GameState['stock'], thrown: readonly OwnedWeapon[]): GameState['stock'] =>
+  scrapAfter(stock, salvageOf(thrown));
+
 /**
  * Back from horde `horde` (ID-066, ID-098): every survivor who fought gets its XP
  * (`squadXpGains`, a loss's too). Rest counts down one for everyone resting, won or lost,
@@ -738,8 +842,9 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
  * joiners (`joiners`) ask to join (`joining`, ID-150: the player accepts or refuses each,
  * `answerJoin`; any left unanswered from before are turned away) and moves on to the next
  * horde; a replay counts toward the bad-luck guarantee, and its rare joiner (ID-170) asks
- * to join the same way. Every fight's wall starts full.
- * Then `settleSquad`. No base damage, payout or camp XP.
+ * to join the same way. Every fight's wall starts full. A win pays Scrap (`winScrap`) and
+ * each gun thrown away is salvaged for more (ID-179).
+ * Then `settleSquad`. No base damage or camp XP.
  */
 export function finishSquadHorde(game: GameState, horde: HordeState): GameState {
   checkFinished('finishSquadHorde', game, horde);
@@ -770,9 +875,11 @@ export function finishSquadHorde(game: GameState, horde: HordeState): GameState 
   const settle = (x: GameState): GameState => autoSquad(settleSquad(x));
   if (horde.outcome !== 'won') return settle(g);
   const drop = squadDrop(game, horde);
+  // A win pays Scrap, and so does each gun thrown away (ID-179); no RNG, no fight changes.
+  g.stock = scrapAfter(game.stock, winScrap(horde.hordeNumber) + salvageOf(drop?.thrown ?? []));
   // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
   if (!drop) return settle(g);
-  g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus]).armoury;
+  g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus], stashCap(game)).armoury;
   if (drop.kind === 'first') {
     // Counted now, so a refused survivor's number is never offered again. Anyone still
     // asking from before was never answered: that counts as Refuse (ID-150).
@@ -820,6 +927,8 @@ export interface SquadResult {
   next: GameState;
   /** The weapon the win drops, and what the stash throws away for it; null on a loss. */
   drop: SquadDrop | null;
+  /** The Scrap the win paid (ID-179), and how much of it came from guns thrown away; 0 on a loss. */
+  scrap: { total: number; salvage: number; now: number };
   /**
    * Who "Auto" (ID-154) moved after this fight, against the squad the fight would leave
    * without it; null when it is off or moved nobody.
@@ -848,8 +957,26 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
     ),
     next,
     drop: squadDrop(game, horde),
+    scrap: squadScrap(game, horde),
     auto: autoMoves(game, horde, next),
   };
+}
+
+/**
+ * The Scrap horde `horde` pays `game` (ID-179), as added once capped at `MAX_COUNT`: the
+ * `total`, the `salvage` in it, and the balance `now` after it.
+ */
+export function squadScrap(
+  game: Pick<
+    GameState,
+    'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm' | 'slots' | 'stock'
+  >,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'tookPart'>,
+): { total: number; salvage: number; now: number } {
+  if (horde.outcome !== 'won') return { total: 0, salvage: 0, now: game.stock.scrap };
+  const win = winScrap(horde.hordeNumber);
+  const total = scrapGain(game.stock, win + salvageOf(squadDrop(game, horde)?.thrown ?? []));
+  return { total, salvage: Math.max(0, total - win), now: game.stock.scrap + total };
 }
 
 /** Who "Auto" moved (ID-154): `next` against the same fight finished with it off. */
@@ -977,7 +1104,7 @@ const DROP_STREAM = 0x5bd1e995;
  * The drop, then each bonus gun, goes into the stash as `stashWith` says.
  */
 export function squadDrop(
-  game: Pick<GameState, 'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm'>,
+  game: Pick<GameState, 'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm' | 'slots'>,
   horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'tookPart'>,
 ): SquadDrop | null {
   if (horde.outcome !== 'won') return null;
@@ -1015,7 +1142,7 @@ export function squadDrop(
   return {
     weapon,
     bonus,
-    thrown: stashWith(game.armoury, [weapon, ...bonus]).thrown,
+    thrown: stashWith(game.armoury, [weapon, ...bonus], stashCap(game)).thrown,
     kind,
     upgrade: [weapon, ...bonus].some((w) => gain(w) > 0),
     noUpgrades,
@@ -1025,7 +1152,7 @@ export function squadDrop(
 
 /**
  * `armoury` with `guns` put in one by one (ID-067, ID-122), and what was thrown away for
- * room. With the stash at `STASH_CAP` (or past it, from an older save) each gun put in
+ * room. With the stash at `cap` (`stashCap`, ID-179; or past it, from an older save) each gun put in
  * throws away the weakest of the stash and that gun by `gunPower` (a blade or tool an
  * older save left there first); a tie throws the later one, so a duplicate goes rather
  * than the one kept.
@@ -1033,13 +1160,14 @@ export function squadDrop(
 export function stashWith(
   armoury: readonly OwnedWeapon[],
   guns: readonly OwnedWeapon[],
+  cap: number = STASH_CAP,
 ): { armoury: OwnedWeapon[]; thrown: OwnedWeapon[] } {
   // A blade or tool from an older save is no use to a survivor: it counts as the weakest.
   const power = (w: OwnedWeapon): number => (isGun(w) ? gunPower(w) : 0);
   let stash = [...armoury];
   const thrown: OwnedWeapon[] = [];
   for (const gun of guns) {
-    if (stash.length < STASH_CAP) {
+    if (stash.length < cap) {
       stash.push(gun);
       continue;
     }
@@ -1087,8 +1215,9 @@ export function equipGun(
   const had = me.loadout.primary;
   if (choice === 'pistol') {
     if (!isOwned(had)) return { ok: true, game };
-    if (game.armoury.length >= STASH_CAP) {
-      return { ok: false, reason: `The stash is full (${STASH_CAP}/${STASH_CAP})` };
+    const cap = stashCap(game);
+    if (game.armoury.length >= cap) {
+      return { ok: false, reason: `The stash is full (${cap}/${cap})` };
     }
     return equip(game, me.id, { ...me.loadout, primary: 'pistol' });
   }
@@ -1286,17 +1415,18 @@ export function combineGuns(
 }
 
 /**
- * `game` with at most `SQUAD_CAP` on the roster (ID-066): the rest go to the reserve. The
+ * `game` with at most `squadCap` on the roster (ID-066): the rest go to the reserve. The
  * squad is the highest XP (ties to roster order), kept in roster order; the reserve keeps
  * what it had, then the rest in roster order. Returns `game` itself with nothing to move.
  */
 export function capSquad(game: GameState): GameState {
-  if (game.roster.length <= SQUAD_CAP) return game;
+  const cap = squadCap(game);
+  if (game.roster.length <= cap) return game;
   const keep = new Set(
     game.roster
       .map((d, i) => ({ d, i }))
       .sort((a, b) => b.d.xp - a.d.xp || a.i - b.i)
-      .slice(0, SQUAD_CAP)
+      .slice(0, cap)
       .map(({ d }) => d.id),
   );
   return {

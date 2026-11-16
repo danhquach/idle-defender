@@ -77,8 +77,10 @@ import {
   INJURY_REST,
   OLD_REST_MAX,
   PATCH_UP,
-  STASH_CAP,
+  STASH_CAP_MAX,
   SQUAD_SKILLS,
+  SQUAD_SLOT_COSTS,
+  STASH_SLOT,
   SURVIVOR,
   TIER_ORDER,
   TRAP_DURABILITY,
@@ -131,6 +133,13 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 23 since bought slots (ID-179): the horde-only game may hold `slots`, the purchases made,
+ * written only when any: `squad` (0 to the number of `SQUAD_SLOT_COSTS`) and `stash` (0 to
+ * the number of `STASH_SLOT.costs`), whole numbers, and nothing else. Anything else (the
+ * wrong type, a fraction, out of range, extra keys) loads with none bought and copies
+ * nothing. The squad is cut to the cap the loaded slots give; a stash past its cap is kept
+ * as it is and never grows. A v22 or older save has none.
+ *
  * 22 since Paramedics patch up the downed (ID-155): a survivor may hold `startHp`, the share
  * of max HP they start the next horde at, from `PATCH_UP.hp` to `PATCH_UP.hpCap`, written
  * only while patched up and never with `rest`. A rest is at most `INJURY_REST.max` (1); a
@@ -206,7 +215,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 22;
+export const SAVE_VERSION = 23;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -247,10 +256,10 @@ const UID = new RegExp(
 );
 /**
  * The most owned weapons a save holds: the full game's armoury, or the horde-only stash
- * (ID-122: 40) and a primary and secondary in each camp survivor's hands (ID-147: squad
+ * (ID-122: 40, up to `STASH_CAP_MAX` with every slot bought, ID-179) and a primary and secondary in each camp survivor's hands (ID-147: squad
  * and bench).
  */
-export const MAX_OWNED = Math.max(ARMOURY_CAP, STASH_CAP + 2 * SQUAD_JOIN.max);
+export const MAX_OWNED = Math.max(ARMOURY_CAP, STASH_CAP_MAX + 2 * SQUAD_JOIN.max);
 /** A survivor's id (design §10): `s`, the patrol and its try; or `c` and the camp level. */
 const SURVIVOR_ID = /^(?:s([1-9][0-9]{0,5})-([0-9])|c([1-9][0-9]{0,5}))$/;
 /** Every research queue entry: each node, and each perk's next level. */
@@ -367,6 +376,7 @@ function readSave(v: unknown): Save {
   if (
     ![
       SAVE_VERSION,
+      22,
       21,
       20,
       19,
@@ -425,6 +435,7 @@ function readSave(v: unknown): Save {
     stats,
     ver >= 20,
     ver >= 21,
+    ver >= 23,
   );
   return {
     game,
@@ -456,6 +467,8 @@ function readGame(
   mayJoin: boolean,
   /** Whether the save may hold `autoSquad` (v21). */
   mayAuto: boolean,
+  /** Whether the save may hold `slots` (v23). */
+  maySlots: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -490,7 +503,10 @@ function readGame(
     ...(mayJoin && !lacks('joining') ? ['joining'] : []),
     // Written only while ticked (ID-154).
     ...(mayAuto && !lacks('autoSquad') ? ['autoSquad'] : []),
+    // Written only once a slot is bought (ID-179).
+    ...(maySlots && !lacks('slots') ? ['slots'] : []),
   ]);
+  const slots = Object.hasOwn(o, 'slots') ? readSlots(o.slots) : null;
   // Exactly `true`; anything else (a string, 1, an object) loads with it off.
   const auto = Object.hasOwn(o, 'autoSquad') && o.autoSquad === true;
   const tiers = readTiers(o.tiers);
@@ -618,8 +634,27 @@ function readGame(
     reserve,
     ...(joining.length > 0 ? { joining } : {}),
     ...(auto ? { autoSquad: true as const } : {}),
+    ...(slots ? { slots } : {}),
   };
-  return HORDE_ONLY ? settleSquad(capSquad(camp)) : loaded;
+  if (!HORDE_ONLY) return loaded;
+  // A stash past the loaded slots' cap (an older save's) is kept as it is and never grows.
+  return settleSquad(capSquad(camp));
+}
+
+/**
+ * The bought slots (ID-179): exactly `squad` and `stash`, whole numbers from 0 to the
+ * purchases there are to make; null (none bought) for anything else, or for none at all.
+ * Never throws, and copies only the two numbers.
+ */
+function readSlots(v: unknown): { squad: number; stash: number } | null {
+  try {
+    const o = obj(v, ['squad', 'stash']);
+    const squad = int(o.squad, 0, SQUAD_SLOT_COSTS.length);
+    const stash = int(o.stash, 0, STASH_SLOT.costs.length);
+    return squad + stash > 0 ? { squad, stash } : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

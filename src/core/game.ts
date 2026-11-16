@@ -126,6 +126,11 @@ export interface GameState {
    * an accepted joiner, a let-go and "Best gun for everyone". Absent when off.
    */
   autoSquad?: true;
+  /**
+   * Horde-only (ID-179): the Scrap purchases made so far, `squad` slots (one each, at
+   * `SQUAD_SLOT_COSTS`) and `stash` ones (`STASH_SLOT.add` slots each). Absent with none.
+   */
+  slots?: { squad: number; stash: number };
   /** Farming beaten hordes (ID-098): replay wins so far, and the bad-luck count. */
   farm: Farm;
   /**
