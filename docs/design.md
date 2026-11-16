@@ -3043,15 +3043,17 @@ and comes back stronger.
 - **Bands:** green at or above Recommended, amber within 15% below, red
   further. The numbers are always shown; it never blocks a start.
 - **Injury band (ID-155, `INJURY_BAND` in `data.ts`):** under the power line
-  the picker shows how many survivors a win is likely to cost: "Injuries if you
-  win" and a pill, **few** at 2× Recommended or more, **some** from 1.6×,
-  **heavy** under it, in the green / amber / red band colours (the word is
-  always there, so colour is never the only cue). It follows the picked horde.
-  The pill's tooltip says what it means: "usually nobody goes down", "about 1
-  survivor down on average", "about 1 or more survivors down on average".
+  the picker shows how many survivors a win is likely to cost: "Win cost:" and
+  a pill that says the result (ID-184; it said few / some / heavy until then):
+  **"usually nobody down"** at 2× Recommended or more, **"about 1 down"** from
+  1.6×, **"1 or more down"** under it, in the green / amber / red band colours
+  (the words are always there, so colour is never the only cue). It follows
+  the picked horde. The pill's tooltip says it in full: "If you win, usually
+  nobody goes down", "about 1 survivor goes down on average", "1 or more survivors
+  go down on average".
   A band, not a %: Squad Power counts DPS only, not HP or armour, so a
   precise figure would mislead. Advice only, like the power bands: a green
-  power band can still read heavy, and it never blocks a start.
+  power band can still read "1 or more down", and it never blocks a start.
   - *Measured (16 scripted campaigns to Horde 18, the ID-155 rest rule, 607
     won fights; downed = dropped to 0 HP):*
 
