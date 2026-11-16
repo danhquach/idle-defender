@@ -281,6 +281,25 @@ describe('the Roster tabs (ID-154)', () => {
     );
     expect(rules).toMatch(/\.rv-bench \.rv-tab \{[^}]*border-style: dashed/);
   });
+
+  it('a card is two equal columns, 2:3 on a 320 px phone, with no fixed-width left side (ID-187)', () => {
+    expect(rules).toMatch(
+      /\.rv-tab \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/,
+    );
+    expect(rules).toMatch(
+      /@container \(max-width: 340px\) \{\s*\.rv-tab \{\s*grid-template-columns: minmax\(0, 2fr\) minmax\(0, 3fr\)/,
+    );
+    expect(rules).not.toMatch(/\.rv-tab \{[^}]*grid-template-columns: \d+px/);
+    // Portrait and gun fill their column at a fixed shape, never stretched.
+    expect(rules).toMatch(/\.roster-avatar-xs \{[^}]*width: 100%;[^}]*aspect-ratio: 1;/);
+    expect(rules).toMatch(/\.rv-tab-gun \{[^}]*width: 100%;[^}]*aspect-ratio: 2 \/ 1;/);
+    expect(rules).not.toMatch(/\.rv-tab-gun \{[^}]*width: \d+px/);
+    // Rows of four cards at most 100 px wide on desktop; the bench at the same width.
+    expect(rules).toMatch(
+      /\.rv-tabs \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 100px\)\)/,
+    );
+    expect(rules).toMatch(/\.rv-bench \{[^}]*grid-auto-columns: 100px/);
+  });
 });
 
 describe('Help marks (ID-168)', () => {

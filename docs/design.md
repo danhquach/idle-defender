@@ -899,15 +899,17 @@ close-quarter weapons come out only when an enemy is close.
 - **As built (ID-108), the horde-only Roster:** one compact dialog, a bottom
   sheet on a phone, as tall as what it shows. The Roster button carries no
   badge (ID-146: the number of survivors with points to spend before). The dialog has
-  a header (title, "Best gun for everyone", close), the squad tabs (one row on
-  desktop, rows of four on a phone)
+  a header (title, "Best gun for everyone", close), the squad tabs (rows of four,
+  desktop and phone, since ID-187; one row on desktop before)
   (portrait, name, level, profession, and, as built ID-180, the held gun's icon on its
   rarity tint with their DPS in their hands; HP on hover and
   for screen readers), the selected
   survivor beside their gun slot,
   and one panel that is either **Level** or
   **Choose a gun**. A survivor's name on the result screen still opens that
-  survivor here.
+  survivor here. Each card is two equal columns (ID-187), portrait and gun
+  filling theirs without stretching, at most 100 px wide on desktop (bench cards
+  too); on a 320 px phone the split is 2:3 so every profession stays whole.
   - **Level** *(ID-146; a Stats panel with + buttons, Undo and mid-fight
     spends before, ID-108, ID-116, ID-126)*: "Level 7" with the XP into it and
     what the next costs, the profession's benefit, the level's bonus line in
