@@ -1266,7 +1266,7 @@ profession's output).
     "+55 Scrap (20 from salvage) · now 655" as its hover hint and in its lines),
     and the drop tile's thrown-away note ends "salvaged for 20 Scrap". Scrap buys
     slots, one purchase at a time, between hordes only, each after a confirm
-    (`window.confirm`, as Let go): a squad slot costs
+    (the game's confirm panel, as Let go): a squad slot costs
     `SQUAD_SLOT_COSTS` (500, then 1,200), so the squad's cap goes 6, 7, 8; stash
     slots come `STASH_SLOT.add` (10) at a time at `STASH_SLOT.costs` (150, 250,
     400, 600), so the stash goes 40, 50, … 80. The Roster's squad row has the
@@ -3280,6 +3280,22 @@ offline progress works across sessions.
   backup code, Load code and New camp (each asks first, and both wait until
   no horde is on). **Help:**
   the controls and a short how-to-play. In a fight, the open menu pauses it.
+- **Confirm panel** *(as built, ID-191)*: every question the game asks before
+  something that can't be taken back (buying slots, Let go, Combine, going on
+  with someone still asking to join, and in the full game Dismiss, Salvage,
+  Remove a trap and Line the wall) is one small panel in the game's own dialog
+  style, never the browser's popup. It shows the question with a **Confirm**
+  and a **Cancel** button. Esc, a tap outside the panel or Cancel says no;
+  Enter or Confirm says yes (with focus on Cancel, Enter presses Cancel).
+  Focus starts on Confirm, stays inside the panel and goes back to what opened
+  it. It sits above the Roster and the Inventory, and its keys go no further:
+  Esc closes only the panel, and the fight's shortcuts stay quiet. The rest
+  of the page is inert behind it. Only one is up at a time (a second question
+  cancels the first). A no changes nothing. After a yes, the game checks again:
+  if a horde has started, or the question's numbers (a price, what a full stash
+  throws away) have changed meanwhile, nothing is done and the Roster says so.
+  It fits a 375 px phone (the panel is at most the window's width less 32 px,
+  its buttons wrap).
 - **Inventory** *(as built, ID-079)*: an "Inventory" button in the top bar, left
   of the Menu (its own place, not a Menu tab), opens a dialog (between hordes
   guns are equipped and combined there too: Combine, ID-091, §6 Gear; drag and

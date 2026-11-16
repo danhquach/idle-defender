@@ -7,6 +7,8 @@ import { MAX_COUNT, stockOf, type CampPickId } from '../core/data.ts';
 import { newGame, startHorde, type GameState } from '../core/game.ts';
 import { createBuildPanel } from './build.ts';
 import { campPickText, createHud, resultScreen } from './hud.ts';
+import { ASK_CHANGED } from './confirm.ts';
+import { answerConfirm } from './testing.ts';
 import { campLines, dismissQuestion, recruitNotice, treatText } from './roster.ts';
 
 const NOW = 1_800_000_000_000;
@@ -30,7 +32,7 @@ function rosterFor(game: GameState) {
   const buttons = (label: string): HTMLButtonElement[] =>
     [...root.querySelectorAll('button')].filter((b) => b.textContent?.startsWith(label));
   buttons('Roster')[0]!.click();
-  return { root, games, buttons };
+  return { root, games, buttons, panel };
 }
 
 const four = (): GameState => {
@@ -38,7 +40,10 @@ const four = (): GameState => {
   return { ...g, roster: [...g.roster, { ...g.roster[0]!, id: 'recruit-1', name: 'Ava' }] };
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  document.querySelector('.confirm-scrim')?.remove();
+});
 
 describe('the camp in the roster view', () => {
   it('lists people and slots, the level, picks taken and the next recruit', () => {
@@ -79,20 +84,30 @@ describe('the camp in the roster view', () => {
     expect(again.querySelector('.btn-cost-short')).not.toBeNull();
   });
 
-  it('Dismiss is disabled at 3 alive; with 4 it asks first and a no changes nothing', () => {
+  it('Dismiss is disabled at 3 alive; with 4 it asks first and a no changes nothing', async () => {
     expect(
       rosterFor(newGame())
         .buttons('Dismiss')
         .every((b) => b.disabled),
     ).toBe(true);
-    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const { games, buttons } = rosterFor(four());
     buttons('Dismiss')[3]!.click();
-    expect(ask).toHaveBeenCalledWith(dismissQuestion({ name: 'Ava' }));
+    expect(await answerConfirm(false)).toBe(dismissQuestion({ name: 'Ava' }));
     expect(games).toEqual([]);
-    ask.mockReturnValue(true);
     buttons('Dismiss')[3]!.click();
+    await answerConfirm(true);
     expect(games.at(-1)!.roster.map((d) => d.id)).toEqual(['bob', 'jack', 'john']);
+  });
+
+  it('Dismiss asks in the danger colour; a yes after the panel was redrawn from another game does nothing and says so', async () => {
+    const { games, buttons, panel, root } = rosterFor(four());
+    buttons('Dismiss')[3]!.click();
+    expect(document.querySelector('.confirm-yes')!.classList.contains('menu-danger')).toBe(true);
+    // A patrol came back, a recruit arrived: the panel is drawn again from a new game.
+    panel.show({ ...four() }, null);
+    await answerConfirm(true);
+    expect(games).toEqual([]);
+    expect(root.querySelector('.build-notice')!.textContent).toBe(ASK_CHANGED);
   });
 
   it('a camp-level offer still waiting can be picked here', () => {

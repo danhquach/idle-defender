@@ -2010,9 +2010,10 @@ export function createHud(
   onJoin(handler: (id: string, accept: boolean) => void): void;
   /**
    * Asked as the result or start screen's button is pressed (ID-150): false keeps the panel
-   * up and nothing happens; the app sets it once.
+   * up and nothing happens; the app sets it once. It may answer later (the game's confirm,
+   * ID-191): the panel stays up meanwhile, and a press then is ignored.
    */
-  onLeave(check: () => boolean): void;
+  onLeave(check: () => boolean | Promise<boolean>): void;
   /** The offer tile redrawn (ID-150): who is still asking to join; none hides it. */
   showJoin(cards: readonly JoinCard[], keep?: boolean): void;
   /**
@@ -2241,12 +2242,32 @@ export function createHud(
   back.addEventListener('click', () => {
     // Hide at once so a double click can't finish the same horde twice.
     if (result.hidden || back.disabled) return;
+    if (leaving) return;
     // Asked first (ID-150: someone still asking to join); a no keeps the panel up.
-    if (!canLeave()) return;
+    const ok = canLeave();
+    if (ok === true) {
+      finishLeave();
+      return;
+    }
+    if (ok === false) return;
+    leaving = true;
+    void ok.then(
+      (yes) => {
+        leaving = false;
+        // The panel may have gone, or the button been locked, while the question was up.
+        if (yes && !result.hidden && !back.disabled) finishLeave();
+      },
+      () => {
+        leaving = false;
+      },
+    );
+  });
+  function finishLeave(): void {
     result.hidden = true;
     onDone();
-  });
-  let canLeave: () => boolean = () => true;
+  }
+  let leaving = false;
+  let canLeave: () => boolean | Promise<boolean> = () => true;
   // The button sits in a footer: a horde-only panel pins it, with a line beside it (ID-067).
   const foot = el('div', 'hud-result-foot');
   const footNote = el('p', 'hud-result-foot-note');

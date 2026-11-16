@@ -255,14 +255,15 @@ const valueOf = (h: Held | ItemId | null): string =>
 
 /**
  * The camp section, then the roster's entries for `game` at `now`. An allowed
- * equip or a dismiss `ask` agrees to goes out through `onChange` with the new game; a
- * refused equip says why under that defender and changes nothing.
+ * equip or a dismiss `ask` agrees to (it may answer later, ID-191: the game's own confirm)
+ * goes out through `onChange` with the new game; a refused equip says why under that defender
+ * and changes nothing.
  */
 export function rosterSection(
   game: GameState,
   now: number,
   onChange: (next: GameState) => void,
-  ask: (question: string) => boolean,
+  ask: (question: string) => boolean | Promise<boolean>,
 ): HTMLElement[] {
   return [campSection(game, now, onChange), ...game.roster.map((d) => defenderCard(d))];
 
@@ -333,7 +334,7 @@ function dismissButton(
   game: GameState,
   d: RosterDefender,
   onChange: (next: GameState) => void,
-  ask: (question: string) => boolean,
+  ask: (question: string) => boolean | Promise<boolean>,
 ): HTMLElement {
   const button = el('button', 'build-option');
   button.type = 'button';
@@ -343,8 +344,8 @@ function dismissButton(
     setVariant(button, 'locked', lock);
     return button;
   }
-  button.addEventListener('click', () => {
-    if (!ask(dismissQuestion(d))) return;
+  button.addEventListener('click', async () => {
+    if (!(await ask(dismissQuestion(d)))) return;
     const r = dismiss(game, d.id);
     if (r.ok) onChange(r.game);
   });

@@ -310,7 +310,7 @@ describe('wall-walk spots (ID-048)', () => {
     expect(lined.base.posts[pick.postId]).toEqual(second);
   });
 
-  it('"Line the wall" shows the total cost first and asks before going ahead', () => {
+  it('"Line the wall" shows the total cost first and asks before going ahead', async () => {
     const g = { ...newGame(), stock: RICH };
     const line = lineWallLine(g, 0);
     expect(line).toMatchObject({
@@ -320,8 +320,8 @@ describe('wall-walk spots (ID-048)', () => {
       confirm: 'Line layer 1 with 20 wall-walk posts for 100 scrap, 100 wood?',
       result: { ok: true },
     });
-    expect(lineResult(line, () => false)).toBeNull();
-    const done = lineResult(line, () => true);
+    expect(await lineResult(line, () => false)).toBeNull();
+    const done = await lineResult(line, () => true);
     expect(done?.ok && done.base.posts.filter((p) => p.kind === 'wall-walk')).toHaveLength(20);
   });
 
@@ -378,7 +378,7 @@ describe('turret menu', () => {
     );
   });
 
-  it('shows where a turret is, its condition and that it is powered; Repair and Salvage', () => {
+  it('shows where a turret is, its condition and that it is powered; Repair and Salvage', async () => {
     const g = withTurret();
     const i = turretIndex(g, 'tower', 0, 5);
     expect(i).toBe(0);
@@ -395,14 +395,20 @@ describe('turret menu', () => {
       cost: null,
       confirm: 'Salvage this turret for 20 scrap, 10 wood? It is dismantled.',
     });
+    // Salvage is one-way: its confirm is in the danger colour.
+    expect(lines[3]).toMatchObject({ danger: true });
+    expect(lines[2]).not.toHaveProperty('danger');
     // Salvage asks first: a no does nothing, a yes dismantles it.
     const asked: string[] = [];
-    expect(lineResult(lines[3]!, (q) => (asked.push(q), false))).toBeNull();
-    expect(lineResult(lines[3]!, () => true)).toMatchObject({ ok: true, base: { turrets: [] } });
+    expect(await lineResult(lines[3]!, (q) => (asked.push(q), false))).toBeNull();
+    expect(await lineResult(lines[3]!, () => true)).toMatchObject({
+      ok: true,
+      base: { turrets: [] },
+    });
     expect(asked).toEqual(['Salvage this turret for 20 scrap, 10 wood? It is dismantled.']);
     // Repair asks nothing; a refused line gives nothing.
-    expect(lineResult(lines[2]!, () => true)).toBeNull();
-    expect(lineResult(lines[0]!, () => true)).toBeNull();
+    expect(await lineResult(lines[2]!, () => true)).toBeNull();
+    expect(await lineResult(lines[0]!, () => true)).toBeNull();
     const salvaged = lines[3]!;
     expect(
       salvaged.kind === 'action' && salvaged.result.ok && salvaged.result.base.turrets,
@@ -530,9 +536,13 @@ describe('trap menu', () => {
     expect(text(lines[3]!)).toBe('Remove for nothing');
   });
 
-  it('removes only once the player agrees', () => {
+  it('removes only once the player agrees', async () => {
     const lines = trapLines(withSpikes(), 2);
-    expect(lineResult(lines[3]!, () => false)).toBeNull();
-    expect(lineResult(lines[3]!, () => true)).toMatchObject({ ok: true, base: { traps: [] } });
+    expect(lines[3]).toMatchObject({ danger: true });
+    expect(await lineResult(lines[3]!, () => false)).toBeNull();
+    expect(await lineResult(lines[3]!, () => true)).toMatchObject({
+      ok: true,
+      base: { traps: [] },
+    });
   });
 });
