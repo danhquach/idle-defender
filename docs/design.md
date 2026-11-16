@@ -1125,7 +1125,7 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   at the same level, a squad of 5 plain survivors and 1 of it (a fighting job
   with its own gun, the plain 5 with the reference Carbine): what it adds to
   the win rate over a plain survivor with the same gun must not land more
-  than 10 points over the average (too strong fails; too weak is printed for
+  than 12 points over the average (10 before ID-178; too strong fails; too weak is printed for
   a person to judge, PM's call: one survivor in six moves the win rate by
   less than 60 seeds can resolve); a fighting job off its guns never below a
   plain survivor. Measured at Horde 12, level 13, 60 seeds: Security guard
@@ -1134,6 +1134,12 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   Construction worker, Paramedic and Chef −0.02, Hunter −0.03, Student −0.13
   (seed noise: it only adds); mean −0.01. The Barbed Wire check went from 2
   seeds to 6 (at 2 it swung from 1.0 to 0.84 on squad makeup alone).
+  ID-178 (carried throws) moved the fights on these seeds: Police +0.12,
+  Soldier and Security guard +0.02, Builder, Mechanic, Chef, Teacher,
+  Scavenger 0, Paramedic and Student −0.02, Hunter −0.03; mean +0.01. Police
+  at 10.9 points over the mean is under a seed of 60; trimming it to +30%
+  broke the campaign checks (Horde 18 took 194 fights), so the PM raised the
+  cap to 12 points instead.
 
 ### Profession titles
 

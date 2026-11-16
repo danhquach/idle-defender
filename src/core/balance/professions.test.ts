@@ -2,9 +2,10 @@
 // profession at the same level fights as 1 of a squad of 6 (the other 5 plain survivors with
 // the reference Carbine; a fighting job with its own best gun, an everyday job with the
 // Carbine too), at a horde where the plain squad wins about half its fights, on the same
-// seeds. What it adds over a plain survivor with the same gun must not land more than 10 points
+// seeds. What it adds over a plain survivor with the same gun must not land more than 12 points
 // over the average (too weak is printed, not failed); a fighting job with a gun that is not
-// theirs never below a plain survivor.
+// theirs never below a plain survivor. The cap was 10 before ID-178 (PM): carried throws moved
+// the Police to 10.9 over, under a seed of 60.
 // See shared.ts.
 import { describe, expect, it } from 'vitest';
 import { gunPower, rollWeapon, type OwnedWeapon } from '../armoury.ts';
@@ -91,7 +92,7 @@ describe('professions (ID-149)', () => {
   // Only too strong fails (PM, ID-149): one survivor in six moves the win rate by a few
   // points, under what 60 seeds can resolve, so a profession that only adds (the Student)
   // can measure 13 points low on seed luck alone. Too weak is printed for a person to judge.
-  it('no profession lands more than 10 points over the average win rate', () => {
+  it('no profession lands more than 12 points over the average win rate', () => {
     const gains = JOB_IDS.map((job) => {
       const held = (JOBS[job] as Job).kind === 'fight' ? bestGun(base, job) : undefined;
       const plainRate = wins(
@@ -104,7 +105,9 @@ describe('professions (ID-149)', () => {
     const table = JOB_IDS.map((j, i) => `${j} ${gains[i]!.toFixed(2)}`).join(', ');
     console.info(`Professions, win-rate gain over plain (mean ${mean.toFixed(2)}): ${table}`);
     for (const [i, gain] of gains.entries()) {
-      expect(gain - mean, `${JOB_IDS[i]} (mean ${mean}; ${table})`).toBeLessThanOrEqual(0.1 + 1e-9);
+      expect(gain - mean, `${JOB_IDS[i]} (mean ${mean}; ${table})`).toBeLessThanOrEqual(
+        0.12 + 1e-9,
+      );
     }
   }, 1_200_000);
 
