@@ -1096,6 +1096,48 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.chip-toggle {
+  padding-block: 3px;
+  background: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.chip-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.chip-toggle::after {
+  content: 'i';
+  content: 'i' / '';
+  display: inline-block;
+  width: 1.2em;
+  margin-left: var(--space-6);
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.8em;
+  font-style: italic;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.radio-help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--color-warn-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-body-sm);
+}
+
+.radio-help[hidden] {
+  display: none;
+}
+
 .chip[data-tone='ok'] {
   border-color: var(--color-ok-border);
   color: var(--color-ok-text);

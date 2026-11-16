@@ -2901,6 +2901,15 @@ As built (ID-066), the horde-only build:
     a line naming the next part's boss horde. Parts are counted from the
     boss hordes beaten (the horde number), so an older save gets its parts
     and the save stores nothing new.
+  - The Radio chip is a button (ID-190) that opens a three-line note under
+    the chip row: what the radio is (the goal, built to call for evacuation),
+    where parts come from (each boss horde gives one the first time it is
+    beaten; the note above already names the next) and what finishing gives
+    (the cards the boss hordes unlock, then the finale and Endless). The text is read off
+    `RADIO_HORDES` and `BOSS_UNLOCKS`. It starts open the first time the
+    chip shows (flag `idle-defender.radio-seen`, only "1" counts) and
+    closed after; the toggle is not saved. In Endless the chip stays a
+    plain chip with no note.
   - A boss horde's first clear adds a "Radio part N/3" chip and a line to
     its result screen; this replaces Horde 10's old soft ending.
   - Each boss's first clear also unlocks a card for good: **Heavy Rounds**
