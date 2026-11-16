@@ -3,7 +3,7 @@
 // new-survivor lines, and each survivor gets a one-click gun picker between hordes.
 // Text reaches the page only through textContent.
 import { describe, expect, it, vi } from 'vitest';
-import { DROP_GUNS, gunPower, type OwnedWeapon } from '../core/armoury.ts';
+import { DROP_GUNS, gunPower, rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import {
   GUN_ROLES,
@@ -14,6 +14,7 @@ import {
   type WeaponId,
 } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
+import { createRng } from '../core/rng.ts';
 import { survivorDps, xpForLevel } from '../core/stats.ts';
 import {
   equipGun,
@@ -22,6 +23,7 @@ import {
   squadSpec,
   startSquadHorde,
   type SquadDrop,
+  type GunMove,
 } from '../core/hordeonly.ts';
 import { waveCount } from '../core/waves.ts';
 import {
@@ -30,6 +32,7 @@ import {
   dropTile,
   gunLabel,
   gunOption,
+  joinMoves,
   lossXpText,
   SQUAD_LOSS_RULE,
   SQUAD_NO_LEVEL_UPS,
@@ -382,6 +385,10 @@ describe('the debrief layout (ID-067)', () => {
       // No loose gun rows either: guns change in the Roster; the stash count stays.
       expect(root.querySelectorAll('.hud-gear-select')).toHaveLength(0);
       expect(root.querySelector('.debrief-stash')!.textContent).toBe(`Stash 0/${STASH_CAP}`);
+      // Best gun for everyone still sits beside the heading: guns change with no card too.
+      expect(root.querySelector('.debrief-squad-head .debrief-best-guns')!.textContent).toBe(
+        'Best gun for everyone',
+      );
     });
 
     it('only the cards shown get a gun picker on a win', () => {
@@ -727,5 +734,41 @@ describe('bonus guns on the result screen (ID-122)', () => {
       lost: true,
       thrown: `${DROP_LOST_NOTE} · Thrown away: Lv 1 Relic LMG · salvaged for 105 Scrap`,
     });
+  });
+});
+
+describe('joinMoves (ID-181): rounds of Best gun as one', () => {
+  const relic = rollWeapon(createRng(1), 'h1', 'rifle', 'relic');
+  const smg = rollWeapon(createRng(2), 'c1', 'smg', 'military');
+  // The same gun read back as another object: still the same gun (by uid).
+  const relicAgain = { ...relic };
+  const move = (id: string, from: GunMove['from'], to: GunMove['to']): GunMove => ({
+    id,
+    name: id.toUpperCase(),
+    from,
+    to,
+  });
+
+  it('keeps each survivor’s first gun and last gun, in the order they first changed', () => {
+    const joined = joinMoves(
+      [move('a', 'pistol', relic), move('b', 'pistol', smg)],
+      [move('c', 'pistol', relic), move('a', relic, smg)],
+    );
+    expect(joined).toEqual([
+      move('a', 'pistol', smg),
+      move('b', 'pistol', smg),
+      move('c', 'pistol', relic),
+    ]);
+  });
+
+  it('leaves out a survivor back on the gun they started with, owned guns by uid', () => {
+    expect(joinMoves([move('a', relic, 'pistol')], [move('a', 'pistol', relicAgain)])).toEqual([]);
+    expect(joinMoves([move('a', 'pistol', smg)], [move('a', smg, 'pistol')])).toEqual([]);
+  });
+
+  it('one round alone comes back as it was', () => {
+    const one = [move('a', 'pistol', relic)];
+    expect(joinMoves(one, [])).toEqual(one);
+    expect(joinMoves([], one)).toEqual(one);
   });
 });

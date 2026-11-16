@@ -32,6 +32,7 @@ import {
   toggleSkill,
   toggleSquad,
   type GunChoice,
+  type GunMove,
 } from '../core/hordeonly.ts';
 import { settlePatrols } from '../core/patrol.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
@@ -83,6 +84,7 @@ import {
 } from './buildscene.ts';
 import {
   AUTO_KEY,
+  bestGunsLine,
   buyQuestion,
   buyText,
   BUY_WAIT,
@@ -91,6 +93,7 @@ import {
   defenderLabel,
   hordePicker,
   joinedCard,
+  joinMoves,
   offerHolds,
   powerLine,
   resultScreen,
@@ -425,6 +428,38 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true };
   }
   /**
+   * "Best gun for everyone" between hordes (the Roster, the result or start screen and the
+   * Inventory): saved at once, and the screens redrawn.
+   */
+  function handOutBestGuns(): { ok: true; moves: GunMove[] } | { ok: false; reason: string } {
+    if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
+    let r = bestGuns(game);
+    let moves = r.moves;
+    // "Auto" (ID-154) re-picks the squad on every press, new guns or not (they change
+    // Squad Power; with none, it still undoes a hand-picked squad, as the Roster says).
+    let next = autoSquad(r.game);
+    // Whoever Auto brought in still holds their old gun: hand out again for the squad it
+    // picked, until it stands (a few rounds at most), so one press is enough.
+    const ids = (g: GameState): string => g.roster.map((d) => d.id).join();
+    for (let round = 0; round < 3 && ids(next) !== ids(r.game); round++) {
+      r = bestGuns(next);
+      moves = joinMoves(moves, r.moves);
+      next = autoSquad(r.game);
+    }
+    // Still moving after that: one last hand-out for the squad that stands, Auto not run again.
+    if (ids(next) !== ids(r.game)) {
+      r = bestGuns(next);
+      moves = joinMoves(moves, r.moves);
+      next = r.game;
+    }
+    if (next !== game) {
+      commit(next);
+      // The start screen and its squad on the wall hold the new guns (and squad) too.
+      redrawSquad();
+    }
+    return { ok: true, moves };
+  }
+  /**
    * After the camp changed between hordes (the squad picked, someone joined or left): the
    * start screen and its squad on the wall, and the gun pickers, redrawn.
    */
@@ -588,6 +623,7 @@ export function start(root: HTMLElement, art: Art): void {
     // Drag and drop (ID-095), horde-only and between hordes, as the gun pickers.
     onEquip: HORDE_ONLY ? changeGun : undefined,
     onBuyStash: HORDE_ONLY ? () => buySlots('stash') : undefined,
+    onBestGuns: HORDE_ONLY ? handOutBestGuns : undefined,
   });
   const menu = createMenu(root, {
     // Load and New camp lock only while a fight runs: the result screen is between hordes (ID-156).
@@ -640,19 +676,7 @@ export function start(root: HTMLElement, art: Art): void {
         onLetGo: letSurvivorGo,
         onBuySquad: () => buySlots('squad'),
         onCombine: combineSurvivor,
-        onBestGuns: () => {
-          if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
-          const r = bestGuns(game);
-          // "Auto" (ID-154) re-picks the squad on every press, new guns or not (they change
-          // Squad Power; with none, it still undoes a hand-picked squad, as the Roster says).
-          const next = autoSquad(r.game);
-          if (next !== game) {
-            commit(next);
-            // The start screen and its squad on the wall hold the new guns (and squad) too.
-            redrawSquad();
-          }
-          return { ok: true, moves: r.moves };
-        },
+        onBestGuns: handOutBestGuns,
         // "Best squad" and "Auto" (ID-154): between hordes, saved at once, the start
         // screen and its squad on the wall redrawn.
         onBestSquad: () => {
@@ -673,6 +697,16 @@ export function start(root: HTMLElement, art: Art): void {
         },
       })
     : null;
+  // "Best gun for everyone" beside the result or start screen's Squad heading: what it did
+  // shows as a toast.
+  root.addEventListener('click', (e) => {
+    const t = e.target instanceof Element ? e.target.closest('[data-best-guns]') : null;
+    if (!HORDE_ONLY || !t) return;
+    const r = handOutBestGuns();
+    hud.toast(r.ok ? bestGunsLine(r.moves) : r.reason, 4000);
+    // The start screen is drawn afresh on a change: the keyboard stays on the new button.
+    if (!t.isConnected) root.querySelector<HTMLButtonElement>('[data-best-guns]')?.focus();
+  });
   // A survivor's name on the squad screen opens their card; "Change squad" opens the Roster
   // on the squad's first (ID-147).
   root.addEventListener('click', (e) => {

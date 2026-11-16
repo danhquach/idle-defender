@@ -1592,8 +1592,9 @@ body {
   font-size: var(--text-xs);
 }
 
-/* The start screen's link to the Roster (ID-147), beside the Squad heading. */
-.debrief-change-squad {
+/* The start screen's link to the Roster (ID-147) and "Best gun for everyone", beside the Squad heading. */
+.debrief-change-squad,
+.debrief-best-guns {
   min-height: 32px;
   padding: 0 var(--space-12);
   font-size: var(--text-xs);
@@ -2863,6 +2864,24 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 .menu-chip[hidden] {
   display: none;
+}
+
+/* The Inventory's "Best gun for everyone", right of its title, before the close. */
+.inv-best {
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 var(--space-12);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.inv-best:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.inv-best + .menu-close {
+  margin-left: 0;
 }
 
 .menu-close {
