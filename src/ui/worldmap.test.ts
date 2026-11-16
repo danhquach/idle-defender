@@ -361,7 +361,7 @@ describe('world map in the build panel (ID-028)', () => {
   });
 
   it('renders hostile names as plain text', () => {
-    const evil = '<img src=x onerror=alert(1)>‮gnp.exe';
+    const evil = '<img src=x onerror=alert(1)>\u202egnp.exe';
     const g = open();
     g.roster[0]!.name = evil;
     const out = sent(g, ['bob']);

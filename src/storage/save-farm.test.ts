@@ -144,7 +144,18 @@ describe('save: farming (ID-098)', () => {
     const g = farmed();
     expect(reread(g, (x) => (x.farm.replays = 1))).toBeNull();
     expect(reread(g, (x) => (x.farm.replays = 9))).not.toBeNull();
-    for (const uid of ['r0', 'r01', 'r', 'r-1', 'r1.5', 'R2', 'r2 ', 'r​2', 'r‮2', 'r１']) {
+    for (const uid of [
+      'r0',
+      'r01',
+      'r',
+      'r-1',
+      'r1.5',
+      'R2',
+      'r2 ',
+      'r\u200b2',
+      'r\u202e2',
+      'r１',
+    ]) {
       expect(
         reread(g, (x) => (replayGun(x).uid = uid)),
         JSON.stringify(uid),
@@ -174,8 +185,8 @@ describe('save: farming (ID-098)', () => {
       'p1-1-1',
       'c1-1',
       'r1-1 ',
-      'r1-​1',
-      'r1‮-1',
+      'r1-\u200b1',
+      'r1\u202e-1',
       'r1-１',
       'r1–1',
       'r1-' + '1'.repeat(10_000),

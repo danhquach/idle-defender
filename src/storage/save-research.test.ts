@@ -69,8 +69,8 @@ describe('save: research queue (ID-035)', () => {
       ['metal-walls '],
       ['METAL-WALLS'],
       ['metal‐walls'], // a Unicode hyphen
-      ['metal-walls​'], // zero-width space
-      ['‮metal-walls'], // bidi override
+      ['metal-walls\u200b'], // zero-width space
+      ['\u202emetal-walls'], // bidi override
       [1],
       [null],
       [{}],
@@ -297,8 +297,8 @@ describe('save: the retired Flashbang and Molotov nodes (ID-139)', () => {
       ['flashbang', { molotov: true }],
       ['Flashbang'],
       ['flashbang '],
-      ['flashbang​'],
-      ['‮molotov'],
+      ['flashbang\u200b'],
+      ['\u202emolotov'],
       ['mоlotov'], // Cyrillic o
       // Known twice, with retired ids around them.
       ['flashbang', 'metal-walls', 'metal-walls'],
@@ -327,7 +327,7 @@ describe('save: the retired Flashbang and Molotov nodes (ID-139)', () => {
       ['flashbang', null],
       ['flashbang', 'metal-walls', 'metal-walls'],
       ['flashbang', 'metal‐walls'], // a Unicode hyphen
-      ['‮flashbang'],
+      ['\u202eflashbang'],
       new Array(10_000).fill('flashbang'),
       // More than the queue holds, retired ids not counting against it.
       ['flashbang', 'metal-walls', 'sharpened-spikes', 'glue-traps', 'fortify', 'rally-call'],

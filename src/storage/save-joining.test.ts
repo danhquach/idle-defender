@@ -97,8 +97,8 @@ describe('save: asking to join (ID-150)', () => {
       ['injured', (x) => (x.joining[0].injuredUntil = NOW)],
       ['an unknown profession', (x) => (x.joining[0].job = 'king')],
       ['an extra key', (x) => (x.joining[0].extra = 1)],
-      ['a bidi name', (x) => (x.joining[0].name = 'Ava‮')],
-      ['a zero-width name', (x) => (x.joining[0].name = 'A​va')],
+      ['a bidi name', (x) => (x.joining[0].name = 'Ava\u202e')],
+      ['a zero-width name', (x) => (x.joining[0].name = 'A\u200bva')],
       ['an oversized name', (x) => (x.joining[0].name = 'A'.repeat(500))],
       ['a markup name', (x) => (x.joining[0].name = '<img src=x onerror=alert(1)>')],
     ];

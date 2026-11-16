@@ -197,8 +197,8 @@ describe('combineGuns', () => {
     const hostile = [
       ['__proto__', 'constructor', 'prototype'],
       ['h1', 'h2', 'x'.repeat(100_000)],
-      ['h1', 'h2', 'h3‮'],
-      ['h1', 'h2', 'h​3'],
+      ['h1', 'h2', 'h3\u202e'],
+      ['h1', 'h2', 'h\u200b3'],
       ['h1', 'h2', '<img src=x onerror=alert(1)>'],
       Array.from({ length: 10_000 }, (_, i) => `h${i}`),
     ];
