@@ -560,4 +560,14 @@ describe('the injury band beside the power band (ID-155)', () => {
     expect(line.textContent).toBe(`${INJURY_LEAD} ${INJURY_WORD.heavy}`);
     expect(line.dataset.band).toBe('short');
   });
+
+  it('the words say the result, not few, some or heavy (ID-184)', () => {
+    expect(INJURY_LEAD).toBe('Win cost:');
+    expect(INJURY_WORD).toEqual({
+      few: 'usually nobody down',
+      some: 'about 1 down',
+      heavy: '1 or more down',
+    });
+    expect(INJURY_TONE).toEqual({ few: 'ok', some: 'close', heavy: 'short' });
+  });
 });

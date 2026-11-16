@@ -683,13 +683,14 @@ export const BAND_WORD: Readonly<Record<PowerBand, string>> = {
 };
 
 /**
- * The injury band in words (ID-155), beside its colour so colour is never the only cue,
+ * The injury band in words (ID-155), beside its colour so colour is never the only cue. Since
+ * ID-184 the words say the result ("Win cost: about 1 down"), not just few, some or heavy,
  * and the power band whose colour it borrows.
  */
 export const INJURY_WORD: Readonly<Record<InjuryBand, string>> = {
-  few: 'few',
-  some: 'some',
-  heavy: 'heavy',
+  few: 'usually nobody down',
+  some: 'about 1 down',
+  heavy: '1 or more down',
 };
 export const INJURY_TONE: Readonly<Record<InjuryBand, PowerBand>> = {
   few: 'ok',
@@ -698,12 +699,12 @@ export const INJURY_TONE: Readonly<Record<InjuryBand, PowerBand>> = {
 };
 /** What each injury band means, as measured (ID-155): the pill's tooltip. */
 export const INJURY_TIP: Readonly<Record<InjuryBand, string>> = {
-  few: 'Few injuries: usually nobody goes down',
-  some: 'Some injuries: about 1 survivor down on average',
-  heavy: 'Heavy injuries: about 1 or more survivors down on average',
+  few: 'If you win, usually nobody goes down',
+  some: 'If you win, about 1 survivor goes down on average',
+  heavy: 'If you win, 1 or more survivors go down on average',
 };
-/** The words before the injury band: "Injuries if you win" (ID-155). */
-export const INJURY_LEAD = 'Injuries if you win';
+/** The words before the injury band (ID-155; "Win cost:" since ID-184). */
+export const INJURY_LEAD = 'Win cost:';
 
 /** The meter's end, as a share of Recommended Power (ID-098): the tick sits at 1 / this. */
 export const POWER_METER_END = 1.2;

@@ -2480,6 +2480,7 @@ body {
 .hud-horde-band,
 .inv-power-band {
   padding: 0 var(--space-6);
+  white-space: nowrap;
   border: 1px solid currentcolor;
   border-radius: var(--radius-pill);
   font-size: var(--text-xs);
