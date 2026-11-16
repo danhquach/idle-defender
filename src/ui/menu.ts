@@ -103,10 +103,7 @@ const SQUAD_HOW_TO_PLAY: Steps = [
     `Your survivors shoot on their own. Click an enemy to focus it. ${SQUAD_LOSS_RULE}`,
   ],
   ['Level up in the fight.', 'Kills give fight XP. Each fight level offers three cards.'],
-  [
-    'Pick your skills.',
-    'Before each horde, pick up to 2 skills to use on cooldown. Pick just 1 and it works twice as hard.',
-  ],
+  ['Pick your skills.', 'Before each horde, pick your skill to use on cooldown.'],
   [
     'Win and grow.',
     'A win gives survivor XP, and every level makes a survivor better at everything. A new survivor joins, up to a squad of 6. On the Roster, a survivor can combine with another of the same profession for XP.',

@@ -46,7 +46,7 @@ describe('shop and skill icons (ID-041)', () => {
     });
   });
 
-  it('starts the horde-only skills in their tallest look: ×2 and a key, no cost or lock (ID-100)', () => {
+  it('starts the horde-only skills in their tallest look: name and a key, no cost or lock (ID-100)', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const noop = () => {};
@@ -54,9 +54,7 @@ describe('shop and skill icons (ID-041)', () => {
     const skills = [...root.querySelectorAll<HTMLButtonElement>('.hud-skill')];
     expect(skills).toHaveLength(SKILL_IDS.length);
     skills.forEach((button, i) => {
-      expect(button.querySelector('.hud-shop-label')!.textContent).toBe(
-        `${SKILLS[SKILL_IDS[i]!].name} ×2`,
-      );
+      expect(button.querySelector('.hud-shop-label')!.textContent).toBe(SKILLS[SKILL_IDS[i]!].name);
       expect(button.querySelector('.btn-cost')!.textContent).toBe('');
       expect(button.querySelector('.hud-skill-key')!.textContent).toBe('Q');
       expect(button.querySelector('.btn-reason')?.textContent ?? '').toBe('');
