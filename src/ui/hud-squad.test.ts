@@ -97,7 +97,7 @@ describe('the horde-only screens (ID-066)', () => {
     expect(screen.lines[1]).toBe(`${waveCount(4)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`);
     expect(screen.button).toBe(startLabel(4));
     expect(screen.camp.offers).toEqual([]);
-    expect(squadStart(squadGame(1, 10)).title).toBe('Horde 10 · Boss horde');
+    expect(squadStart(squadGame(1, 10)).title).toBe('Horde 10');
   });
 
   it('a win: XP and level-ups by name, the new survivor, and the next horde', () => {

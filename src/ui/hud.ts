@@ -682,17 +682,21 @@ const clearedLine = (s: HordeState): string =>
 const lostBossLines = (s: HordeState): string[] =>
   bossFates(s).map((f) => `${f.name}: ${f.dead ? 'dead' : 'still stood'}`);
 
-/** The start button: "Start Horde 10 · Boss horde" for a boss horde. */
+/**
+ * The base view's start button: "Start Horde 10 · Boss horde" for a boss horde. The Horde
+ * panel's picker names no boss on its button.
+ */
 export const startLabel = (hordeNumber: number): string =>
   `Start Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
 
-/** A beaten horde's button (ID-098): "Replay Horde 5", with the boss suffix as `startLabel`. */
-export const replayLabel = (hordeNumber: number): string =>
-  `Replay Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
+/**
+ * A beaten horde's button (ID-098): "Replay Horde 5". The picker's buttons name no boss:
+ * the select beside them says "Boss", and the start screen's pill "Boss horde".
+ */
+export const replayLabel = (hordeNumber: number): string => `Replay Horde ${hordeNumber}`;
 
-/** A lost horde's button: "Retry Horde 5", with the boss suffix as `startLabel`. */
-export const retryLabel = (hordeNumber: number): string =>
-  `Retry Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
+/** A lost horde's button: "Retry Horde 5". */
+export const retryLabel = (hordeNumber: number): string => `Retry Horde ${hordeNumber}`;
 
 const thousands = (n: number): string => Math.round(n).toLocaleString('en-US');
 
@@ -705,13 +709,13 @@ export const BAND_WORD: Readonly<Record<PowerBand, string>> = {
 
 /**
  * The injury band in words (ID-155), beside its colour so colour is never the only cue. Since
- * ID-184 the words say the result ("Win cost: about 1 down"), not just few, some or heavy,
+ * ID-184 the words say the result ("Win cost: ~1 down"), not just few, some or heavy,
  * and the power band whose colour it borrows.
  */
 export const INJURY_WORD: Readonly<Record<InjuryBand, string>> = {
-  few: 'usually nobody down',
-  some: 'about 1 down',
-  heavy: '1 or more down',
+  few: 'nobody down',
+  some: '~1 down',
+  heavy: '1+ down',
 };
 export const INJURY_TONE: Readonly<Record<InjuryBand, PowerBand>> = {
   few: 'ok',
@@ -824,13 +828,13 @@ export function hordePicker(
       horde: n,
       isNew,
       // Short, so the select never cuts it (ID-196): the pick's readiness is the line
-      // beside it (`power`), said once.
+      // under it (`power`), said once.
       label: [
         `Horde ${n}${isNew ? ' (new)' : ''}`,
         ...(boss ? ['Boss'] : []),
         ...(n === farm ? ['best to farm'] : []),
       ].join(' · '),
-      button: n === retry ? retryLabel(n) : isNew ? startLabel(n) : replayLabel(n),
+      button: n === retry ? retryLabel(n) : isNew ? `Start Horde ${n}` : replayLabel(n),
       power,
       injury: injuryBand(squad, power.rec),
       hint:
@@ -840,7 +844,8 @@ export function hordePicker(
             ? `Try Horde ${farm} to farm`
             : 'No beaten horde is at your power yet',
       start: {
-        title: `Horde ${n}${boss ? ' · Boss horde' : ''}${isNew ? '' : ' · Replay'}`,
+        // The chips say "Boss horde" and "Replay", once.
+        title: `Horde ${n}`,
         // Endless (ID-127) leads, whichever horde is picked.
         chips: [
           ...(goal ? [goal.chip] : []),
@@ -2721,11 +2726,11 @@ export function createHud(
       }
       onPickHorde(o.horde);
     });
-    // Two columns (ID-196): the select with its farm hint under it, then the readiness.
+    // Two columns: the select with its power line and farm hint under it, then the win cost.
     const pick = el('div', 'hud-horde-choice');
-    pick.append(select, hint);
+    pick.append(select, line, hint);
     const ready = el('div', 'hud-horde-ready');
-    ready.append(line, hurt);
+    ready.append(hurt);
     pickBlock.replaceChildren(label, pick, ready);
     if (had) select.focus();
   }

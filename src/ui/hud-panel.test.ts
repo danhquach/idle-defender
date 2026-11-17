@@ -143,7 +143,7 @@ describe('one structure on every screen (ID-196)', () => {
 });
 
 describe('the start row has three parts (ID-196)', () => {
-  it('the choice with its hint, then the readiness (power, then win cost), then the button', () => {
+  it('the choice with its power line and hint, then the win cost, then the button', () => {
     const { h, panel } = page();
     for (const [name, screen] of Object.entries(screens(squadGame(2, 12)))) {
       h.showResult(screen);
@@ -156,17 +156,16 @@ describe('the start row has three parts (ID-196)', () => {
         'hud-horde-ready',
       ]);
       const choice = pick.querySelector('.hud-horde-choice')!;
+      // The power line sits under the select, over the farm hint.
       expect(classes(choice.children), name).toEqual([
         'build-select hud-horde-select',
+        'hud-horde-power',
         'hud-horde-hint',
       ]);
       const ready = pick.querySelector('.hud-horde-ready')!;
-      expect(classes(ready.children), name).toEqual([
-        'hud-horde-power',
-        'hud-horde-power hud-horde-injury',
-      ]);
-      expect(ready.children[0]!.textContent, name).toMatch(/^Power [\d,]+ · rec [\d,]+ /);
-      expect(ready.children[1]!.textContent, name).toMatch(/^Win cost: /);
+      expect(classes(ready.children), name).toEqual(['hud-horde-power hud-horde-injury']);
+      expect(choice.children[1]!.textContent, name).toMatch(/^Power [\d,]+ · rec [\d,]+ /);
+      expect(ready.children[0]!.textContent, name).toMatch(/^Win cost: /);
       expect(row.lastElementChild!.tagName, name).toBe('BUTTON');
     }
   });

@@ -1406,9 +1406,9 @@ body {
   font-size: var(--text-xs);
 }
 
-/* The start row's three columns (ID-196): the horde select (where to farm instead under
-   it), the pick's readiness, said once (Squad Power against the horde's, a clear gap, what
-   a win is likely to cost), and the button. */
+/* The start row's three columns (ID-196): the horde select (Squad Power against the
+   horde's, then where to farm instead, under it), what a win is likely to cost, and the
+   button. */
 .hud-debrief .hud-start-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1447,7 +1447,6 @@ body {
   display: flex;
   flex-direction: column;
   justify-self: center;
-  gap: var(--space-14);
   min-width: 0;
 }
 
@@ -1455,6 +1454,8 @@ body {
    content, wide enough for the longest one ("Horde 120 · Boss · best to farm"). */
 .hud-debrief .hud-horde-select {
   flex: none;
+  /* Not stretched to the power line under it. */
+  align-self: flex-start;
   width: 16rem;
   max-width: 100%;
   min-height: 40px;
@@ -1463,7 +1464,6 @@ body {
 @supports (field-sizing: content) {
   .hud-debrief .hud-horde-select {
     width: auto;
-    min-width: 12rem;
     field-sizing: content;
   }
 }
@@ -1540,7 +1540,6 @@ body {
 
   .hud-horde-ready {
     justify-self: start;
-    gap: var(--space-6);
   }
 
   .hud-debrief .hud-start-row > .hud-button {

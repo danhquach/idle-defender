@@ -149,16 +149,25 @@ describe('the horde picker (ID-098)', () => {
     const g = squadGame(1, 10);
     const p = hordePicker(g, 10, 4);
     const by = (n: number) => p.options.find((o) => o.horde === n)!.button;
-    expect(by(10)).toBe(startLabel(10));
-    expect(by(10)).toBe('Start Horde 10 · Boss horde');
+    // No boss suffix: the option beside the button says "Boss", and the start screen's pill.
+    expect(by(10)).toBe('Start Horde 10');
     expect(by(5)).toBe('Replay Horde 5');
     expect(by(4)).toBe('Retry Horde 4');
     expect(hordePicker(g, 10).options.find((o) => o.horde === 4)!.button).toBe('Replay Horde 4');
-    // A boss horde keeps the suffix, replayed or retried.
-    const boss = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => horrorAbility(n) !== null);
-    if (boss !== undefined) {
-      expect(by(boss)).toBe(`Replay Horde ${boss} · Boss horde`);
-    }
+    const late = hordePicker(squadGame(1, 12), 12, 10);
+    expect(late.options.find((o) => o.horde === 10)!.button).toBe('Retry Horde 10');
+    expect(hordePicker(squadGame(1, 12)).options.find((o) => o.horde === 10)!.button).toBe(
+      'Replay Horde 10',
+    );
+  });
+
+  it('a boss replay says "Boss horde" and "Replay" once, as chips: not in the title or the button', () => {
+    const s = squadStart(squadGame(2, 12), 10);
+    expect(s.title).toBe('Horde 10');
+    expect(s.button).toBe('Replay Horde 10');
+    const chips = s.debrief!.chips.map((c) => c.text);
+    expect(chips.filter((c) => c === 'Boss horde')).toHaveLength(1);
+    expect(chips.filter((c) => c === 'Replay')).toHaveLength(1);
   });
 
   it('never blocks a start: a pick that is not open falls back to the new horde; Horde 1 is just the new horde', () => {
@@ -175,7 +184,7 @@ describe('the start screen (ID-098)', () => {
   it('opens on the next new horde, the picker beside Start', () => {
     const g = squadGame(2, 5);
     const s = squadStart(g);
-    expect(s.title).toBe(`Horde 5${horrorAbility(5) ? ' · Boss horde' : ''}`);
+    expect(s.title).toBe('Horde 5');
     expect(s.button).toBe(startLabel(5));
     expect(s.picker!.value).toBe(5);
     expect(s.picker!.retitle).toBe(true);
@@ -185,7 +194,7 @@ describe('the start screen (ID-098)', () => {
   it('a picked beaten horde makes it a replay: its title, waves, button', () => {
     const g = squadGame(2, 5);
     const s = squadStart(g, 3);
-    expect(s.title).toBe(`Horde 3${horrorAbility(3) ? ' · Boss horde' : ''} · Replay`);
+    expect(s.title).toBe('Horde 3');
     expect(s.button).toBe('Replay Horde 3');
     expect(s.picker!.value).toBe(3);
     expect(s.debrief!.chips.map((c) => c.text)).toEqual(
@@ -217,8 +226,8 @@ describe('the start screen (ID-098)', () => {
     choose(2);
     expect(picks).toEqual([2]);
     expect(button().textContent).toBe('Replay Horde 2');
-    expect(title()).toContain('Horde 2');
-    expect(title()).toContain('Replay');
+    // "Replay" is the chip's to say, not the title's.
+    expect(title()).toBe('Horde 2');
     expect(root.querySelector('.debrief-chips')!.textContent).toContain('Replay');
     // The campaign has no goal chip (ID-196): the radio is not on this panel.
     expect(root.querySelector('.debrief-chips')!.textContent).not.toMatch(/radio/i);
@@ -341,7 +350,7 @@ describe('result screens and the picker (ID-098)', () => {
     const lost = fought(g, 6, 'lost', 3);
     const s = squadScreen(g, lost);
     expect(s.picker!.value).toBe(6);
-    expect(s.button).toBe(`Retry Horde 6${horrorAbility(6) ? ' · Boss horde' : ''}`);
+    expect(s.button).toBe('Retry Horde 6');
     const xp = squadResult(g, lost).gains[0]!.xp;
     expect(xp).toBeGreaterThan(0);
     expect(s.debrief!.chips[0]).toEqual({ text: `+${xp} XP each`, tone: 'warn' });
@@ -564,9 +573,9 @@ describe('the injury band beside the power band (ID-155)', () => {
   it('the words say the result, not few, some or heavy (ID-184)', () => {
     expect(INJURY_LEAD).toBe('Win cost:');
     expect(INJURY_WORD).toEqual({
-      few: 'usually nobody down',
-      some: 'about 1 down',
-      heavy: '1 or more down',
+      few: 'nobody down',
+      some: '~1 down',
+      heavy: '1+ down',
     });
     expect(INJURY_TONE).toEqual({ few: 'ok', some: 'close', heavy: 'short' });
   });
