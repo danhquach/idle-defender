@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // A win's result at a glance (ID-186): chips for the numbers and what happened, the
 // sentences and the long lines behind "Details", and nothing the old screen said lost.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { RADIO_HORDES } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
@@ -12,12 +12,13 @@ import {
   createHud,
   DETAILS,
   HIDE_DETAILS,
-  squadGear,
   squadScreen,
   squadStart,
   xpChipText,
   type ResultScreen,
 } from './hud.ts';
+import { REFUSE_NOTE, type JoinCard } from './joining.ts';
+import { avatarOf } from './sprites.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -43,7 +44,7 @@ function hud() {
   return { root, h };
 }
 
-/** A boss horde's first clear with a drop: the radio part's chip and sentence, and a tile. */
+/** A boss horde's first clear with a drop: its card unlock's chip and sentence, and a tile. */
 function bossWin(): { g: GameState; screen: ResultScreen } {
   const g = squadGame(3, RADIO_HORDES[0]!);
   for (let seed = 1; seed < 200; seed++) {
@@ -52,6 +53,14 @@ function bossWin(): { g: GameState; screen: ResultScreen } {
   }
   throw new Error('no seed with a drop');
 }
+
+const ava = (): JoinCard => ({
+  id: 'j1',
+  name: 'Ava',
+  profession: 'Hunter',
+  sub: 'Lv 1 · Hunter · Pistol',
+  job: 'Hunter: crit',
+});
 
 const toggles = (root: HTMLElement): HTMLButtonElement[] => [
   ...root.querySelectorAll<HTMLButtonElement>('[data-details-toggle]'),
@@ -79,10 +88,12 @@ describe("a win's chips (ID-186)", () => {
     const gains = squadResult(g, ended(g, 'won')).gains;
     expect(d.chips.map((c) => c.text)).toContain(xpChipText(gains));
     expect(d.note).toBeNull();
-    // The boss reward: its sentence waits in the details, its chip opens them.
-    expect(d.notes).toEqual([expect.stringContaining('Radio part found')]);
-    const radio = d.chips.find((c) => c.text.startsWith('Radio part'))!;
-    expect(radio.details).toBe(true);
+    // The boss reward: its sentence waits in the details, its chip opens them. The chip
+    // names the card it unlocked and says nothing of the radio (ID-196).
+    expect(d.notes![0]).toMatch(/^Boss horde beaten\. New card unlocked: /);
+    const card = d.chips.find((c) => c.text.startsWith('New card: '))!;
+    expect(card.details).toBe(true);
+    expect(d.chips.map((c) => c.text).join(' ')).not.toMatch(/radio/i);
     // The plain numbers are not buttons: they have nothing more to say.
     for (const c of d.chips.filter((x) => /waves|Scrap|XP/.test(x.text))) {
       expect(c.details).toBeUndefined();
@@ -91,7 +102,7 @@ describe("a win's chips (ID-186)", () => {
     for (const n of d.notes!) expect(screen.lines).toContain(n);
   });
 
-  it('nobody asking: the camp chip says so, and opens the details where the tile says why', () => {
+  it('nobody asking: the camp chip says so, and opens the details where the last sentence says why', () => {
     const g = squadGame(6, 5);
     const h = ended(g, 'won');
     const { noJoin } = squadResult(g, h);
@@ -100,7 +111,8 @@ describe("a win's chips (ID-186)", () => {
     if (noJoin === null) expect(camp).toBeUndefined();
     else {
       expect(camp).toEqual({ text: campChipText(noJoin, 6), tone: 'ok', details: true });
-      expect(d.join!.none).not.toBeNull();
+      expect(d.join).toBe(true);
+      expect(d.notes!.at(-1)).toMatch(/^Nobody new|^Camp is full|[Nn]obody/);
     }
   });
 
@@ -126,10 +138,10 @@ describe("a win's details on the page (ID-186)", () => {
     expect([...notes.querySelectorAll('li')].map((li) => li.textContent)).toEqual(
       screen.debrief!.notes,
     );
-    // The "Details" button and the radio part's chip, both real buttons naming the region.
+    // The "Details" button and the new card's chip, both real buttons naming the region.
     const all = toggles(root);
     expect(all.map((b) => b.textContent)).toEqual(
-      expect.arrayContaining([DETAILS, expect.stringContaining('Radio part')]),
+      expect.arrayContaining([DETAILS, expect.stringContaining('New card: ')]),
     );
     for (const b of all) {
       expect(b.tagName).toBe('BUTTON');
@@ -157,11 +169,10 @@ describe("a win's details on the page (ID-186)", () => {
     for (const b of toggles(root)) expect(b.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('open, they stay open while the screen redraws its tiles, cards and guns', () => {
+  it('open, they stay open while the screen redraws its camp tile and cards', () => {
     const { root, h } = hud();
-    const { g, screen } = bossWin();
+    const { screen } = bossWin();
     h.showResult(screen);
-    h.showGear(squadGear(g), noop);
     root.querySelector<HTMLButtonElement>('.debrief-details')!.click();
     const panel = root.querySelector<HTMLElement>('.hud-result')!;
     const open = (): void => {
@@ -169,25 +180,15 @@ describe("a win's details on the page (ID-186)", () => {
       expect(root.querySelector<HTMLElement>('.debrief-notes')!.hidden).toBe(false);
       for (const b of toggles(root)) expect(b.getAttribute('aria-expanded')).toBe('true');
     };
-    // Someone asks, is answered, joins the squad, and a gun changes: only a new screen closes them.
-    h.showJoin([{ id: 'j1', name: 'Ava', sub: 'Lv 1 · Hunter · Pistol', job: 'Hunter: crit' }]);
+    // Someone asks, is answered, and joins the squad: only a new screen closes them.
+    h.showJoin([ava()]);
     open();
     h.noteJoin('Ava joined the squad');
     h.showJoin([], true);
     open();
-    h.showJoined({
-      id: 'j1',
-      name: 'Ava',
-      level: 1,
-      job: 'Hunter',
-      xp: null,
-      levelUp: false,
-      bar: null,
-      bonus: '',
-      fresh: true,
-    });
+    h.showJoined({ id: 'j1', name: 'Ava', level: 1, art: avatarOf(recruit(1)), levelUp: false });
     open();
-    h.showGear(squadGear(g), noop);
+    h.showSquad(new Set(['j1']));
     open();
   });
 
@@ -220,66 +221,95 @@ describe("a win's details on the page (ID-186)", () => {
   });
 });
 
-describe("a win's tiles and cards, short (ID-186)", () => {
-  it('the drop: its role by name on the short line, the sentences marked for the details', () => {
+describe("a win's weapons, cards and offer, short (ID-186, ID-196)", () => {
+  it('the drop: a chip per gun with level, name and DPS; the sentences wait in its details', () => {
     const { root, h } = hud();
     const { screen } = bossWin();
     const t = screen.debrief!.drop!;
     h.showResult(screen);
-    const tile = root.querySelector<HTMLElement>('.tile-drop')!;
-    expect(t.role.startsWith(`${t.roleName}: `)).toBe(true);
-    // Read aloud it is still a weapon drop; the eye gets "Relic · Wall stopper".
-    expect(tile.querySelector('.tile-rarity')!.textContent).toBe(
-      `Weapon drop · ${t.rarityName} · ${t.roleName}`,
+    const chips = [...root.querySelectorAll<HTMLElement>('.gun-chip')];
+    expect(chips).toHaveLength(t.guns.length);
+    const g = t.guns[0]!;
+    expect(chips[0]!.querySelector('.gun-chip-name')!.textContent).toBe(g.short);
+    expect(chips[0]!.querySelector('.gun-chip-power')!.textContent).toBe(
+      g.lost ? 'Thrown away' : g.power,
     );
-    expect(tile.querySelector('.tile-what')!.textContent).toBe('Weapon drop · ');
-    expect(tile.querySelector('.tile-role')!.textContent).toBe(t.role);
-    expect(tile.querySelector('.tile-role')!.classList.contains('tile-more')).toBe(true);
-    if (t.affixes) {
-      expect(tile.querySelector('.tile-affixes.tile-more')!.textContent).toBe(t.affixes);
-    }
-    // What stays in sight: the name, the DPS and the stash count.
-    expect(tile.querySelector('.tile-name')!.textContent).toBe(`${t.level} ${t.name}`);
-    expect(tile.querySelector('.tile-power')!.textContent).toBe(t.power);
-    expect(tile.querySelector('.tile-stash')!.textContent).toBe(t.stash);
+    // The role, affixes and stash count are not in sight until a chip is opened.
+    const details = root.querySelector<HTMLElement>('#hud-gun-details')!;
+    expect(details.hidden).toBe(true);
+    chips[0]!.click();
+    expect(details.hidden).toBe(false);
+    expect([...details.querySelectorAll('p')].map((p) => p.textContent)).toEqual(
+      expect.arrayContaining([g.short, ...g.lines, t.stash]),
+    );
   });
 
-  it('a level-up card keeps everything it had: the picker, XP count and bonus are still in it', () => {
+  it('a boss first clear says nothing of the radio anywhere, details open or not (ID-196)', () => {
+    const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    const panel = root.querySelector<HTMLElement>('.hud-result')!;
+    expect(panel.textContent).not.toMatch(/radio/i);
+    root.querySelector<HTMLButtonElement>('.debrief-details')!.click();
+    root.querySelector<HTMLButtonElement>('.gun-chip')!.click();
+    expect(root.querySelector<HTMLElement>('.debrief-notes')!.hidden).toBe(false);
+    expect(panel.textContent).not.toMatch(/radio/i);
+    expect(panel.textContent).toContain('Boss horde beaten.');
+  });
+
+  it('a level-up card is an avatar, a name and a triangle, and nothing else (ID-196)', () => {
     const { root, h } = hud();
     const g = squadGame(2, 3, 0);
     const screen = squadScreen(g, ended(g, 'won'));
     const c = screen.debrief!.cards[0]!;
     expect(c.levelUp).toBe(true);
     h.showResult(screen);
-    h.showGear(squadGear(g), noop);
     const card = root.querySelector<HTMLElement>('.squad-card')!;
-    expect(card.querySelector('.squad-card-level')!.textContent).toBe(`Lv ${c.level} · ${c.job}`);
-    expect(card.querySelector('.squad-card-lv')!.textContent).toBe(`Lv ${c.level}`);
-    expect(card.querySelector('.squad-card-job')!.textContent).toBe(c.job);
-    expect(card.querySelector('.squad-badge-up')).not.toBeNull();
-    expect(card.querySelector('.squad-card-xp')!.textContent).toBe(`+${c.xp} XP`);
-    expect(card.querySelector('.squad-card-xptext')!.textContent).toBe(c.bar!.text);
-    expect(card.querySelector('.squad-card-gear select')).not.toBeNull();
-    expect(card.querySelector('.squad-card-bonus')!.textContent).toBe(c.bonus);
+    const up = card.querySelector<HTMLElement>('.squad-up')!;
+    expect(up.textContent).toBe('▲');
+    expect(up.getAttribute('role')).toBe('img');
+    expect(up.getAttribute('aria-label')).toBe('Level up');
+    expect(up.title).toBe('Level up');
+    expect(card.querySelector('.squad-badge-up')).toBeNull();
+    expect(
+      card.querySelector<HTMLImageElement>('.squad-card-avatar > .roster-avatar-img')!.alt,
+    ).toBe('');
+    const name = card.querySelector<HTMLButtonElement>('button.squad-card-name')!;
+    expect(name.textContent).toBe(c.name);
+    expect(name.getAttribute('aria-label')).toBe(`${c.name}, level ${c.level}: open survivor card`);
+    expect(card.querySelector('select, .xp-track, .xp-fill')).toBeNull();
+    expect(card.textContent).toBe(`${c.name}▲`);
   });
 
-  it('asking to join: the label and the warning share a head, each asker a row with both answers', () => {
+  it('asking to join: one line per asker, the name and profession, then both answers', () => {
     const { root, h } = hud();
     h.showResult(bossWin().screen);
     h.showJoin([
-      { id: 'j1', name: 'Ava', sub: 'Lv 3 · Paramedic · Pistol', job: 'Paramedic: patches up' },
-      { id: 'j2', name: 'Bo', sub: 'Lv 1 · Hunter · Pistol', job: 'Hunter: +10% crit chance' },
+      {
+        id: 'j1',
+        name: 'Ava',
+        profession: 'Paramedic',
+        sub: 'Lv 3 · Paramedic · Pistol',
+        job: 'Paramedic: patches up',
+      },
+      {
+        id: 'j2',
+        name: 'Bo',
+        profession: 'Hunter',
+        sub: 'Lv 1 · Hunter · Pistol',
+        job: 'Hunter: +10% crit chance',
+      },
     ]);
-    const tile = root.querySelector<HTMLElement>('.tile-join')!;
-    const head = tile.querySelector('.join-head')!;
-    expect(head.querySelector('.tile-label')!.textContent).toBe('2 ask to join');
-    expect(head.querySelector('.join-note')!.textContent).toBe(
-      'Refused survivors are gone for good.',
-    );
-    const rows = [...tile.querySelectorAll<HTMLElement>('.join-row')];
-    expect(rows.map((r) => r.querySelector('.join-job')!.textContent)).toEqual([
-      'Paramedic: patches up',
-      'Hunter: +10% crit chance',
+    const box = root.querySelector<HTMLElement>('.debrief-join')!;
+    expect(box.hidden).toBe(false);
+    const rows = [...box.querySelectorAll<HTMLElement>('.join-row')];
+    expect(rows.map((r) => r.dataset.joiner)).toEqual(['j1', 'j2']);
+    expect(rows.map((r) => r.querySelector('.join-who')!.textContent)).toEqual([
+      'Ava · Paramedic asks to join',
+      'Bo · Hunter asks to join',
+    ]);
+    expect(rows.map((r) => r.querySelector<HTMLElement>('.join-who')!.title)).toEqual([
+      'Lv 3 · Paramedic · Pistol. Paramedic: patches up',
+      'Lv 1 · Hunter · Pistol. Hunter: +10% crit chance',
     ]);
     for (const r of rows) {
       expect([...r.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
@@ -287,5 +317,135 @@ describe("a win's tiles and cards, short (ID-186)", () => {
         'Refuse',
       ]);
     }
+    const buttons = [...rows[0]!.querySelectorAll<HTMLButtonElement>('button')];
+    expect(buttons.map((b) => b.title)).toEqual(['Paramedic: patches up', REFUSE_NOTE]);
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Accept Ava', 'Refuse Ava']);
+  });
+
+  it('a hostile survivor name stays plain text in the line, its title and the buttons (ID-196)', () => {
+    const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    const evil = '<img src=x onerror=alert(1)>';
+    h.showJoin([{ ...ava(), name: evil, sub: evil }]);
+    const row = root.querySelector<HTMLElement>('.join-row')!;
+    const who = row.querySelector<HTMLElement>('.join-who')!;
+    expect(who.querySelector('.join-name')!.textContent).toBe(evil);
+    expect(who.textContent).toBe(`${evil} · Hunter asks to join`);
+    expect(who.title).toBe(`${evil}. Hunter: crit`);
+    expect(row.querySelector('img')).toBeNull();
+    // The line, the name in it and the two buttons: no element comes from the name.
+    expect(row.querySelectorAll('*')).toHaveLength(4);
+    expect([...row.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual([
+      `Accept ${evil}`,
+      `Refuse ${evil}`,
+    ]);
+  });
+
+  it('an answer given stays as a line; with nobody asking and no answer the box is hidden', () => {
+    const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    const box = root.querySelector<HTMLElement>('.debrief-join')!;
+    h.showJoin([]);
+    expect(box.hidden).toBe(true);
+    h.showJoin([ava()]);
+    expect(box.hidden).toBe(false);
+    h.noteJoin('Ava joined the squad');
+    h.showJoin([], true);
+    expect(box.hidden).toBe(false);
+    expect(box.querySelector('.join-row')).toBeNull();
+    expect([...box.querySelectorAll('.join-answer')].map((p) => p.textContent)).toEqual([
+      'Ava joined the squad',
+    ]);
+    // A new screen forgets the answers and hides the box again.
+    h.showResult(bossWin().screen);
+    h.showJoin([]);
+    expect(root.querySelector<HTMLElement>('.debrief-join')!.hidden).toBe(true);
+  });
+});
+
+describe('the join pill in the header (ID-196)', () => {
+  const pill = (root: HTMLElement): HTMLButtonElement | null =>
+    root.querySelector<HTMLButtonElement>('.debrief-chips .chip-join');
+
+  it('shows while someone asks: warn tone, before Details, and the count in its words', () => {
+    const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    expect(pill(root)).toBeNull();
+    h.showJoin([ava()]);
+    const chip = pill(root)!;
+    expect(chip.tagName).toBe('BUTTON');
+    expect(chip.type).toBe('button');
+    expect(chip.classList.contains('chip')).toBe(true);
+    expect(chip.classList.contains('chip-toggle')).toBe(true);
+    expect(chip.dataset.tone).toBe('warn');
+    expect(chip.textContent).toBe('Asks to join');
+    // "Details" stays last.
+    expect(chip.nextElementSibling).toBe(root.querySelector('.debrief-details'));
+    expect(root.querySelector('.debrief-chips')!.lastElementChild).toBe(
+      root.querySelector('.debrief-details'),
+    );
+    h.showJoin([ava(), { ...ava(), id: 'j2', name: 'Bo' }]);
+    expect(root.querySelectorAll('.chip-join')).toHaveLength(1);
+    expect(pill(root)!.textContent).toBe('2 ask to join');
+  });
+
+  it('goes once nobody asks, and a new screen starts without it', () => {
+    const { root, h } = hud();
+    const { screen } = bossWin();
+    h.showResult(screen);
+    h.showJoin([ava()]);
+    expect(pill(root)).not.toBeNull();
+    h.showJoin([], true);
+    expect(pill(root)).toBeNull();
+    h.showJoin([ava()]);
+    h.showResult(screen);
+    expect(pill(root)).toBeNull();
+  });
+
+  it('is absent when the join box is not in the panel (a loss)', () => {
+    const { root, h } = hud();
+    const g = squadGame(3, 4);
+    h.showResult(squadScreen(g, ended(g, 'lost')));
+    expect(root.querySelector('.debrief-join')).toBeNull();
+    h.showJoin([ava()]);
+    expect(pill(root)).toBeNull();
+  });
+
+  it('a click brings the offer line into view and puts the keyboard on its first answer', () => {
+    const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    h.showJoin([ava()]);
+    const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
+    const box = root.querySelector<HTMLElement>('.debrief-join')!;
+    // jsdom has no layout: the body overflows, and the line sits below its bottom.
+    Object.defineProperty(body, 'scrollHeight', { value: 900 });
+    Object.defineProperty(body, 'clientHeight', { value: 300 });
+    let top = 0;
+    Object.defineProperty(body, 'scrollTop', {
+      get: () => top,
+      set: (v: number) => (top = v),
+      configurable: true,
+    });
+    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 400 } as DOMRect);
+    vi.spyOn(box, 'getBoundingClientRect').mockReturnValue({ top: 450, bottom: 500 } as DOMRect);
+    pill(root)!.click();
+    // Its bottom to 8 px above the body's: 500 - (400 - 8).
+    expect(top).toBe(108);
+    expect(document.activeElement).toBe(box.querySelector('button'));
+  });
+
+  it('survives a start-screen retitle by the horde picker', () => {
+    const { root, h } = hud();
+    // Someone still asking on the start screen: the offer line is in the panel.
+    const g = { ...squadGame(2, 12), joining: [recruit(3)] };
+    h.showResult(squadStart(g));
+    h.showJoin([ava()]);
+    expect(pill(root)).not.toBeNull();
+    const select = root.querySelector<HTMLSelectElement>('#hud-horde-select')!;
+    select.value = '3';
+    select.dispatchEvent(new Event('change'));
+    expect(root.querySelector('.hud-result-title')!.textContent).toBe(squadStart(g, 3).title);
+    expect(root.querySelectorAll('.chip-join')).toHaveLength(1);
+    expect(pill(root)!.textContent).toBe('Asks to join');
   });
 });

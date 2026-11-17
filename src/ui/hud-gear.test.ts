@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 // ID-067: the horde-only result screen names a win's weapon drop next to the XP and
-// new-survivor lines, and each survivor gets a one-click gun picker between hordes.
+// new-survivor lines, and lays the panel out (ID-196: a loot tile, a Squad of avatars and
+// names, the start screen's chips and rule). Guns change in the Roster, not on the panel.
 // Text reaches the page only through textContent.
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DROP_GUNS, gunPower, rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import {
@@ -15,12 +16,10 @@ import {
 } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
-import { survivorDps, xpForLevel } from '../core/stats.ts';
+import { xpForLevel } from '../core/stats.ts';
 import {
-  equipGun,
   finishSquadHorde,
   squadDrop,
-  squadSpec,
   startSquadHorde,
   type SquadDrop,
   type GunMove,
@@ -31,19 +30,16 @@ import {
   DROP_LOST_NOTE,
   dropTile,
   gunLabel,
-  gunOption,
   joinMoves,
   lossXpText,
   SQUAD_LOSS_RULE,
   SQUAD_NO_LEVEL_UPS,
-  squadGear,
   squadScreen,
   SQUAD_NO_DROP,
   squadStart,
 } from './hud.ts';
 import { joinCards } from './joining.ts';
 import { ART_URLS, GUN_ICON, type GunId } from './sprites.ts';
-import { levelText } from './statlines.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -129,169 +125,6 @@ describe('the drop on the result screen (ID-067)', () => {
   });
 });
 
-describe('the gun pickers (ID-067)', () => {
-  const rifle = gun('h1', 'rifle', 'military');
-  const smg = gun('h2', 'smg', 'rusty');
-
-  it('ranks and labels by DPS in the survivor’s hands, as the Roster does (ID-152)', () => {
-    const sniper = gun('h1', 'sniper', 'common');
-    const assault = gun('h2', 'assault', 'common');
-    const g0 = squadGame(1, 3, [assault, sniper]);
-    const g = {
-      ...g0,
-      roster: g0.roster.map((d) => ({ ...d, job: 'hunter' as const, xp: xpForLevel(21) })),
-    };
-    const who = squadSpec(g.roster[0]!);
-    // The Assault Rifle hits harder on its own; the Sniper rifle in a Lv 21 Hunter's hands.
-    expect(gunPower(assault)).toBeGreaterThan(gunPower(sniper));
-    const row = squadGear(g).rows[0]!;
-    expect(row.options.map((o) => o.value)).toEqual(['h1', 'h2', 'pistol']);
-    expect(row.options[0]!.label).toBe(`★ ${gunOption(sniper, survivorDps(who, sniper))}`);
-    expect(
-      row.options[0]!.label.startsWith(`★ ${survivorDps(who, sniper).toFixed(1)} DPS · `),
-    ).toBe(true);
-  });
-
-  it('one row per survivor: the pistol, the stash and their own gun, strongest first', () => {
-    const g0 = squadGame(2, 3, [smg, rifle]);
-    const r = equipGun(g0, 'recruit-2', 'h1');
-    if (!r.ok) throw new Error(r.reason);
-    const gear = squadGear(r.game);
-    expect(gear.heading).toBe(`Stash 1/${STASH_CAP}`);
-    expect(gear.rows.map((row) => [row.id, row.value, row.rarity])).toEqual([
-      ['recruit-1', 'pistol', 'common'],
-      ['recruit-2', 'h1', 'military'],
-    ]);
-    // Another survivor's gun is theirs: only the stash, the pistol and your own.
-    expect(gear.rows.map((row) => row.options.map((o) => o.value).sort())).toEqual([
-      ['h2', 'pistol'],
-      ['h1', 'h2', 'pistol'],
-    ]);
-    for (const row of gear.rows) {
-      const powers = row.options.map((o) =>
-        gunPower(o.value === 'pistol' ? 'pistol' : o.value === 'h1' ? rifle : smg),
-      );
-      expect(powers).toEqual([...powers].sort((a, b) => b - a));
-    }
-    // In a survivor's picker the figure is theirs (its caption says whose, ID-166).
-    const two = r.game.roster[1]!;
-    expect(gear.rows[1]!.options.find((o) => o.value === 'h1')!.label).toBe(
-      gunOption(rifle, survivorDps(squadSpec(two), rifle)),
-    );
-    // The number first in a picker, so a closed select never cuts it off; last on the drop line.
-    // Without a survivor it is the gun's own, and says so.
-    expect(gunOption('pistol')).toBe('8.3 DPS · Lv 1 Pistol · All-rounder');
-    expect(gunOption('pistol', 9.04)).toBe('9.0 DPS · Lv 1 Pistol · All-rounder');
-    expect(gunLabel('pistol')).toBe('Lv 1 Pistol · 8.3 DPS');
-  });
-
-  function page() {
-    const root = document.createElement('div');
-    document.body.replaceChildren(root);
-    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
-    return { root, h };
-  }
-
-  it('a pick goes out at once, one click; the redraw keeps focus on that survivor', () => {
-    const { root, h } = page();
-    let g = squadGame(2, 3, [rifle]);
-    h.showResult(squadStart(g));
-    const onEquip = vi.fn((id: string, choice: string) => {
-      const r = equipGun(g, id, choice);
-      if (r.ok) g = r.game;
-      h.showGear(squadGear(g), onEquip);
-    });
-    h.showGear(squadGear(g), onEquip);
-    const selects = root.querySelectorAll<HTMLSelectElement>('.hud-gear-select');
-    expect(selects).toHaveLength(2);
-    // Each sits in its survivor's card (the debrief), not in a list of its own.
-    expect(
-      [...selects].map((x) => x.closest<HTMLElement>('.squad-card')?.dataset.defender),
-    ).toEqual(g.roster.map((d) => d.id));
-    expect(root.querySelector('.hud-gear')!.children).toHaveLength(0);
-    const second = selects[1]!;
-    second.focus();
-    second.value = 'h1';
-    second.dispatchEvent(new Event('change'));
-    expect(onEquip).toHaveBeenCalledWith('recruit-2', 'h1');
-    expect(g.roster[1]!.loadout.primary).toEqual(rifle);
-    const now = root.querySelectorAll<HTMLSelectElement>('.hud-gear-select')[1]!;
-    expect(now.value).toBe('h1');
-    expect(document.activeElement).toBe(now);
-    expect(now.title).toBe(gunOption(rifle, survivorDps(squadSpec(g.roster[1]!), rifle)));
-    expect(now.dataset.rarity).toBe('military');
-    expect(root.querySelector('.debrief-stash')!.textContent).toBe(`Stash 0/${STASH_CAP}`);
-  });
-
-  it('a survivor with no card (none on this screen) gets a named row in a list', () => {
-    const { root, h } = page();
-    const g = squadGame(2, 3);
-    h.showResult({ ...squadStart(g), debrief: { ...squadStart(g).debrief!, cards: [] } });
-    h.showGear(squadGear(g), noop);
-    expect([...root.querySelectorAll('.hud-gear-name')].map((l) => l.textContent)).toEqual(
-      g.roster.map((d) => d.name),
-    );
-    expect(root.querySelector('.hud-gear .hud-pick-heading')!.textContent).toBe(
-      `Stash 0/${STASH_CAP}`,
-    );
-  });
-
-  it('each select is labelled by its survivor’s name, and says its figures are theirs (ID-166)', () => {
-    const { root, h } = page();
-    const g = squadGame(1, 3);
-    h.showResult(squadStart(g));
-    h.showGear(squadGear(g), noop);
-    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
-    const name = g.roster[0]!.name;
-    expect(root.querySelector<HTMLLabelElement>(`label[for="${select.id}"]`)!.textContent).toBe(
-      `DPS with ${name}`,
-    );
-    expect(select.getAttribute('aria-label')).toBe(`${name}'s gun, DPS with ${name}`);
-  });
-
-  it('a new result screen clears the pickers until they are drawn again', () => {
-    const { root, h } = page();
-    const g = squadGame(1, 3);
-    h.showResult(squadStart(g));
-    h.showGear(squadGear(g), noop);
-    h.showResult(squadStart(g));
-    expect(root.querySelector('.hud-gear-select')).toBeNull();
-  });
-
-  it('puts names and gun labels on the page as text, never as markup', () => {
-    const { root, h } = page();
-    const g = squadGame(1, 3, [rifle]);
-    const evil = '<img src=x onerror=alert(1)>';
-    g.roster[0] = { ...g.roster[0]!, name: evil };
-    const gear = squadGear(g);
-    gear.rows[0]!.options[0]!.label = evil;
-    h.showResult(squadStart(g));
-    h.showGear(gear, noop);
-    // The only pictures are the skill pick's own icons (ID-100), never one from a name.
-    const imgs = [...root.querySelectorAll('.hud-result img')];
-    expect(imgs.every((i) => i.closest('.hud-skill-option'))).toBe(true);
-    expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
-    expect(root.querySelector('.squad-card-gear label')!.textContent).toBe(`DPS with ${evil}`);
-    // The name reaches the picker's accessible name as an attribute's text only (ID-166).
-    const select = root.querySelector('.squad-card-gear select')!;
-    expect(select.getAttribute('aria-label')).toBe(`${evil}'s gun, DPS with ${evil}`);
-    expect(root.querySelector('.squad-card-gear option')!.textContent).toBe(evil);
-  });
-
-  it('no pick while the result panel is hidden', () => {
-    const { root, h } = page();
-    const g = squadGame(1, 3, [rifle]);
-    const onEquip = vi.fn();
-    h.showResult(squadStart(g));
-    h.showGear(squadGear(g), onEquip);
-    root.querySelector<HTMLElement>('.hud-result')!.hidden = true;
-    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
-    select.value = 'h1';
-    select.dispatchEvent(new Event('change'));
-    expect(onEquip).not.toHaveBeenCalled();
-  });
-});
-
 describe('the debrief layout (ID-067)', () => {
   function page() {
     const root = document.createElement('div');
@@ -300,41 +133,26 @@ describe('the debrief layout (ID-067)', () => {
     return { root, h };
   }
 
-  it('every DPS figure on the debrief says whose it is: the gun alone or a survivor (ID-166)', () => {
+  it('every DPS figure on the panel is the gun’s own: no survivor’s, no picker (ID-166, ID-196)', () => {
     const { root, h } = page();
     const g = squadGame(2, 3, [gun('h1', 'rifle', 'military')]);
-    const won = ended(g, 'won');
-    h.showResult(squadScreen(g, won));
-    h.showGear(squadGear(g), noop);
-    // Each survivor's picker: a caption and a name that say its figures are theirs.
-    const selects = [...root.querySelectorAll<HTMLSelectElement>('.hud-gear-select')];
-    expect(selects).toHaveLength(g.roster.length);
-    for (const s of selects) {
-      const name = g.roster.find((d) => d.id === s.dataset.defender)!.name;
-      const caption = root.querySelector(`label[for="${s.id}"]`)!;
-      expect(caption.textContent).toBe(`DPS with ${name}`);
-      expect(caption.classList.contains('sr-only')).toBe(false);
-      expect(s.getAttribute('aria-label')).toBe(`${name}'s gun, DPS with ${name}`);
-    }
-    // Everywhere else, every figure is the gun's own or names its survivor.
-    const names = g.roster.map((d) => d.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-    const outside = (e: Element) => !e.closest('.hud-gear-select');
+    h.showResult(squadScreen(g, ended(g, 'won')));
+    expect(root.querySelector('select:not(#hud-horde-select)')).toBeNull();
     const said = [
       ...[...root.querySelectorAll('*')]
-        .filter((e) => outside(e) && e.children.length === 0)
+        .filter((e) => e.children.length === 0)
         .map((e) => e.textContent ?? ''),
-      ...[...root.querySelectorAll('[title], [aria-label]')]
-        .filter(outside)
-        .flatMap((e) => [e.getAttribute('title') ?? '', e.getAttribute('aria-label') ?? '']),
+      ...[...root.querySelectorAll('[title], [aria-label]')].flatMap((e) => [
+        e.getAttribute('title') ?? '',
+        e.getAttribute('aria-label') ?? '',
+      ]),
     ].join(' | ');
-    // A bare "17.2 DPS" is the gun's own (ID-176); a survivor's always says "with <name>".
-    const figures = [...said.matchAll(/\d+\.\d DPS( with)?/g)];
-    expect(figures.some((m) => !m[1])).toBe(true);
-    const theirs = [...said.matchAll(new RegExp(`\\d+\\.\\d DPS with (?:${names})\\b`, 'g'))];
-    expect(theirs).toHaveLength(figures.filter((m) => m[1]).length);
+    // A bare "17.2 DPS" is the gun's own (ID-176); nothing on the panel is "… DPS with <name>".
+    expect([...said.matchAll(/\d+\.\d DPS/g)].length).toBeGreaterThan(0);
+    expect(said).not.toMatch(/DPS with/);
   });
 
-  it('a win: waves chip, the drop as a loot tile, the recruit tile, a card per level-up', () => {
+  it('a win: waves chip, the drop as a Weapons row, the offer line, a card per level-up', () => {
     const g = squadGame(2, 3);
     const won = ended(g, 'won');
     const { weapon } = squadDrop(g, won)!;
@@ -343,22 +161,20 @@ describe('the debrief layout (ID-067)', () => {
     expect(d.chips[0]).toEqual({ text: `${won.waveCount}/${won.waveCount} waves`, tone: 'ok' });
     expect(d.drop).toEqual(dropTile(g, dropOf(weapon)));
     expect(d.drop!.stash).toBe(`Stash 1/${STASH_CAP}`);
-    // The newcomer asks to join in the offer tile (ID-150), not the recruit tile.
-    expect(d.recruit).toBeNull();
-    expect(d.join).toEqual({ size: 2, none: null });
+    // The offer line is on every win (ID-150, ID-196); with nobody asking the details say why.
+    expect(d.join).toBe(true);
     const full = squadGame(SQUAD_CAP, 3);
-    expect(squadScreen(full, ended(full, 'won')).debrief!.join!.none).toMatch(/^Nobody new/);
-    // Both fresh survivors level up; the new one is on the recruit tile, not a card (ID-134).
+    const none = squadScreen(full, ended(full, 'won')).debrief!;
+    expect(none.join).toBe(true);
+    expect(none.notes!.at(-1)).toMatch(/^Nobody new/);
+    // Both fresh survivors level up (ID-134).
     expect(d.cards.map((c) => [c.id, c.levelUp])).toEqual([
       ['recruit-1', true],
       ['recruit-2', true],
     ]);
     expect(d.empty).toBeNull();
-    const card = d.cards[0]!;
-    expect(card.xp).toBeGreaterThan(0);
-    expect(card.bar!.pct).toBeGreaterThanOrEqual(0);
-    expect(card.bar!.pct).toBeLessThanOrEqual(100);
-    expect(card.bar!.text).toMatch(/^\d+\/\d+ XP to Lv \d+$/);
+    // A card is who they are and nothing else (ID-196): no XP, bar, job or bonus line.
+    expect(Object.keys(d.cards[0]!).sort()).toEqual(['art', 'id', 'level', 'levelUp', 'name']);
   });
 
   describe('a win shows only who levelled up in it (ID-134)', () => {
@@ -376,32 +192,27 @@ describe('the debrief layout (ID-067)', () => {
       const screen = squadScreen(g, ended(g, 'won'));
       expect(screen.debrief!.cards).toEqual([]);
       expect(screen.debrief!.empty).toBe(SQUAD_NO_LEVEL_UPS);
-      expect(screen.debrief!.foot).toBe('');
+      expect(screen.debrief!.note).toBeNull();
       const { root, h } = page();
       h.showResult(screen);
-      h.showGear(squadGear(g), noop);
       expect(root.querySelector('.debrief-empty')!.textContent).toBe(SQUAD_NO_LEVEL_UPS);
       expect(root.querySelectorAll('.squad-card')).toHaveLength(0);
-      // No loose gun rows either: guns change in the Roster; the stash count stays.
-      expect(root.querySelectorAll('.hud-gear-select')).toHaveLength(0);
-      expect(root.querySelector('.debrief-stash')!.textContent).toBe(`Stash 0/${STASH_CAP}`);
+      // No gun rows, no select: guns change in the Roster (ID-196).
+      expect(root.querySelector('select:not(#hud-horde-select)')).toBeNull();
       // Best gun for everyone still sits beside the heading: guns change with no card too.
       expect(root.querySelector('.debrief-squad-head .debrief-best-guns')!.textContent).toBe(
         'Best gun for everyone',
       );
     });
 
-    it('only the cards shown get a gun picker on a win', () => {
+    it('only the cards shown are drawn on a win, each an avatar and a name', () => {
       const g = { ...squadGame(2, 3), roster: [recruit(1), veteran(2)] };
       const { root, h } = page();
       h.showResult(squadScreen(g, ended(g, 'won')));
-      h.showGear(squadGear(g), noop);
       expect(
-        [...root.querySelectorAll<HTMLSelectElement>('.hud-gear-select')].map(
-          (s) => s.dataset.defender,
-        ),
+        [...root.querySelectorAll<HTMLElement>('.squad-card')].map((c) => c.dataset.defender),
       ).toEqual(['recruit-1']);
-      expect(root.querySelectorAll('.hud-gear-name')).toHaveLength(0);
+      expect(root.querySelector('.squad-card select')).toBeNull();
     });
 
     it('a loss keeps every card, with or without a level-up', () => {
@@ -412,95 +223,82 @@ describe('the debrief layout (ID-067)', () => {
     });
   });
 
-  it('the loot tile names what a full stash threw away, or that the drop itself went', () => {
+  it('the weapons row names what a full stash threw away, or that the drop itself went', () => {
     const relics = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
     const weak = gun('h1', 'smg', 'rusty');
-    expect(dropTile({ armoury: relics }, dropOf(weak, weak))).toMatchObject({
+    const lost = dropTile({ armoury: relics }, dropOf(weak, weak));
+    expect(lost).toMatchObject({
       stash: `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
-      lost: true,
       thrown: `${DROP_LOST_NOTE} · salvaged for 5 Scrap`,
     });
+    expect(lost.guns.map((g) => g.lost)).toEqual([true]);
     expect(dropTile({ armoury: [] }, dropOf(weak, null)).thrown).toBeNull();
     const strong = gun('h2', 'lmg', 'relic');
-    expect(dropTile({ armoury: relics }, dropOf(strong, weak))).toMatchObject({
-      rarity: 'relic',
-      rarityName: 'Relic',
-      name: 'LMG',
+    const kept = dropTile({ armoury: relics }, dropOf(strong, weak));
+    expect(kept).toMatchObject({
       stash: `Stash ${STASH_CAP}/${STASH_CAP}`,
-      lost: false,
       thrown: 'Thrown away: Lv 1 Rusty SMG · salvaged for 5 Scrap',
     });
+    expect(kept.guns[0]).toMatchObject({ rarity: 'relic', short: 'Lv 1 LMG', lost: false });
   });
 
-  it('the loot tile and the gun pickers name the gun’s role and trait, read with the picker (ID-101)', () => {
+  it('a gun’s details name its role and trait (ID-101)', () => {
     for (const base of DROP_GUNS) {
       const t = dropTile({ armoury: [] }, dropOf(gun('h1', base, 'rusty')));
-      expect(t.role).toBe(`${GUN_ROLES[base as 'smg'].role}: ${GUN_ROLES[base as 'smg'].trait}`);
+      expect(t.guns[0]!.lines).toContain(
+        `${GUN_ROLES[base as 'smg'].role}: ${GUN_ROLES[base as 'smg'].trait}`,
+      );
     }
     const rifle: OwnedWeapon = {
       ...gun('h1', 'rifle', 'military'),
       affixes: [{ id: 'critDamage', value: 30 }],
     };
-    expect(dropTile({ armoury: [] }, dropOf(rifle)).affixes).toBe('+30% crit damage (role)');
-    expect(gunOption(rifle)).toMatch(
-      / · Lv 1 Military Carbine · Marksman \(role \+30% crit damage\)$/,
+    expect(dropTile({ armoury: [] }, dropOf(rifle)).guns[0]!.lines.at(-1)).toBe(
+      '+30% crit damage (role)',
     );
 
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
-    // A Chef: no fighting job's note joins the role line (ID-149).
-    const plain = squadGame(1, 3, [rifle]);
-    const g = { ...plain, roster: plain.roster.map((d) => ({ ...d, job: 'chef' as const })) };
-    const r = equipGun(g, 'recruit-1', 'h1');
-    if (!r.ok) throw new Error(r.reason);
-    expect(squadGear(r.game).rows[0]!.role).toBe(`Marksman: ${GUN_ROLES.rifle.trait}`);
-    h.showResult(squadStart(r.game));
-    h.showGear(squadGear(r.game), noop);
-    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
-    const role = document.getElementById(select.getAttribute('aria-describedby')!)!;
-    expect(role.classList.contains('hud-gear-role')).toBe(true);
-    expect(role.textContent).toBe(`Marksman: ${GUN_ROLES.rifle.trait}`);
-
     const won = ended(squadGame(1, 5), 'won');
     h.showResult(squadScreen(squadGame(1, 5), won));
-    const tile = root.querySelector<HTMLElement>('.tile-drop')!;
     const dropped = squadDrop(squadGame(1, 5), won)!.weapon;
-    expect(tile.querySelector('.tile-role')!.textContent).toBe(
-      `${GUN_ROLES[dropped.base as 'smg'].role}: ${GUN_ROLES[dropped.base as 'smg'].trait}`,
-    );
+    const role = `${GUN_ROLES[dropped.base as 'smg'].role}: ${GUN_ROLES[dropped.base as 'smg'].trait}`;
+    // Only in the details, so closed it is nowhere on the panel.
+    expect(root.querySelector('.debrief-guns')!.textContent).not.toContain(role);
+    root.querySelector<HTMLButtonElement>('.gun-chip')!.click();
+    expect(root.querySelector('#hud-gun-details')!.textContent).toContain(role);
   });
 
-  it('the loot tile’s icon is the dropped gun’s own icon, for every gun a horde drops (ID-092)', () => {
+  it('a gun’s chip icon is the dropped gun’s own icon, for every gun a horde drops (ID-092)', () => {
     for (const base of DROP_GUNS) {
       const t = dropTile({ armoury: [] }, dropOf(gun('h1', base, 'common')));
-      expect(t.icon).toBe(GUN_ICON[base as GunId]);
-      expect(ART_URLS[t.icon]).toBeTruthy();
+      expect(t.guns[0]!.icon).toBe(GUN_ICON[base as GunId]);
+      expect(ART_URLS[t.guns[0]!.icon]).toBeTruthy();
     }
   });
 
-  it('on the page: the drop tile’s icon is decorative, beside the name; a lost drop greys out (ID-073)', () => {
+  it('on the page: the chip’s icon is decorative, beside the level and name; a lost drop greys out (ID-073)', () => {
     const { root, h } = page();
     const g = squadGame(1, 5);
     const won = ended(g, 'won');
     h.showResult(squadScreen(g, won));
-    const tile = root.querySelector<HTMLElement>('.tile-drop')!;
-    const img = tile.querySelector<HTMLImageElement>('.tile-drop-head > .tile-icon > img')!;
+    const chip = root.querySelector<HTMLElement>('.debrief-guns .gun-row > .gun-chip')!;
+    const img = chip.querySelector<HTMLImageElement>(':scope > .tile-icon > img.gun-icon')!;
     expect(img.alt).toBe('');
-    expect(img.getAttribute('src')).toBe(ART_URLS[squadScreen(g, won).debrief!.drop!.icon]);
+    expect(img.getAttribute('src')).toBe(
+      ART_URLS[squadScreen(g, won).debrief!.drop!.guns[0]!.icon],
+    );
     const dropped = squadDrop(g, won)!.weapon;
-    // The level sits in front of the name (ID-098), and the kind of drop above it.
-    expect(tile.querySelector('.tile-drop-id .tile-name')!.textContent).toBe(
+    // The level sits in front of the name (ID-098); its DPS is under it.
+    expect(chip.querySelector('.gun-chip-text > .gun-chip-name')!.textContent).toBe(
       `Lv ${dropped.level} ${WEAPONS[dropped.base].name}`,
     );
-    expect(tile.querySelector('.tile-drop-id .tile-level')!.textContent).toBe(
-      `Lv ${dropped.level}`,
+    expect(chip.querySelector('.gun-chip-text > .gun-chip-power')!.textContent).toBe(
+      `${gunPower(dropped).toFixed(1)} DPS`,
     );
-    expect(tile.querySelector('.tile-drop-id .tile-kind')!.textContent).toBe('First clear');
-    expect(tile.querySelector('.tile-farm')).toBeNull();
-    // The power row and thrown line stay full width under the head.
-    expect(tile.querySelector(':scope > .tile-row')).not.toBeNull();
-    expect(tile.classList.contains('tile-drop-lost')).toBe(false);
+    expect(chip.classList.contains('gun-chip-lost')).toBe(false);
+    expect(root.querySelector('.tile-farm')).toBeNull();
 
     const relics = Array.from({ length: STASH_CAP }, (_, i) =>
       gun(`c${i + 1}`, 'shotgun', 'relic'),
@@ -511,26 +309,28 @@ describe('the debrief layout (ID-067)', () => {
     const drop = squadDrop(full, ended(full, 'won'))!;
     expect(drop.thrown[0]).toBe(drop.weapon);
     h.showResult(squadScreen(full, ended(full, 'won')));
-    const lost = root.querySelector<HTMLElement>('.tile-drop')!;
-    expect(lost.classList.contains('tile-drop-lost')).toBe(true);
-    expect(lost.querySelector('.tile-thrown')!.textContent).toBe(
+    const lost = root.querySelector<HTMLElement>('.gun-chip')!;
+    expect(lost.classList.contains('gun-chip-lost')).toBe(true);
+    expect(lost.querySelector('.gun-chip-power')!.textContent).toBe('Thrown away');
+    lost.click();
+    expect(root.querySelector('.tile-thrown')!.textContent).toBe(
       `${DROP_LOST_NOTE} · salvaged for 25 Scrap`,
     );
-    expect(lost.querySelector('.tile-stash-lost')!.textContent).toBe(
+    expect(root.querySelector('.tile-stash')!.textContent).toBe(
       `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
     );
   });
 
-  it('a loss on the page: the no-drop chip, and no loot tile (ID-073)', () => {
+  it('a loss on the page: the no-drop chip, and no Weapons row (ID-073)', () => {
     const { root, h } = page();
     const g = squadGame(2, 3);
     h.showResult(squadScreen(g, ended(g, 'lost')));
     const chips = [...root.querySelectorAll('.chip')].map((c) => c.textContent);
     expect(chips).toEqual([lossXpText(0), SQUAD_NO_DROP]);
-    expect(root.querySelector('.tile-drop')).toBeNull();
+    expect(root.querySelector('.debrief-guns')).toBeNull();
   });
 
-  it('a loss: a callout, the no-XP chip, and the squad’s cards to change guns before the retry', () => {
+  it('a loss: a callout, the no-XP chip, and the whole squad’s cards before the retry', () => {
     const g = squadGame(3, 6);
     const d = squadScreen(g, ended(g, 'lost')).debrief!;
     expect(d.kind).toBe('lost');
@@ -543,22 +343,17 @@ describe('the debrief layout (ID-067)', () => {
     expect(squadScreen(g, ended(g, 'lost')).lines).toContain(SQUAD_NO_DROP);
     expect(d.drop).toBeNull();
     expect(d.cards.map((c) => c.id)).toEqual(g.roster.map((x) => x.id));
-    expect(d.cards.every((c) => c.xp === null && c.bar === null)).toBe(true);
   });
 
-  it('the start screen: goal, wave and squad chips, plain cards, the loss rule by the button', () => {
+  it('the start screen: wave and squad chips, plain cards, the loss rule after the squad (ID-196)', () => {
     const g = squadGame(2, 4);
     const d = squadStart(g).debrief!;
-    expect(d.chips.map((c) => c.text)).toEqual([
-      'Radio 0/3',
-      `${waveCount(4)} waves`,
-      `Squad 2/${SQUAD_CAP}`,
-    ]);
-    expect(d.foot).toBe(SQUAD_LOSS_RULE);
+    expect(d.chips.map((c) => c.text)).toEqual([`${waveCount(4)} waves`, `Squad 2/${SQUAD_CAP}`]);
+    expect(d.note).toBe(SQUAD_LOSS_RULE);
     expect(d.cards.map((c) => c.name)).toEqual(g.roster.map((x) => x.name));
   });
 
-  it('on the page: chips, the tile coloured by rarity, the XP bar, the footer and its button', () => {
+  it('on the page: chips, the chip coloured by rarity, the offer line and the start button', () => {
     const { root, h } = page();
     const g = squadGame(1, 5);
     const won = ended(g, 'won');
@@ -570,33 +365,38 @@ describe('the debrief layout (ID-067)', () => {
     expect(root.querySelector('.chip')!.textContent).toBe(
       `${won.waveCount}/${won.waveCount} waves`,
     );
-    const tile = root.querySelector<HTMLElement>('.tile-drop')!;
-    expect(tile.dataset.rarity).toBe(squadDrop(g, won)!.weapon.rarity);
-    // The offer tile (ID-150) sits beside the drop once the app fills it.
+    const chip = root.querySelector<HTMLElement>('.gun-chip')!;
+    expect(chip.dataset.rarity).toBe(squadDrop(g, won)!.weapon.rarity);
+    // The offer line (ID-150) comes once the app fills it, after the squad.
+    const joinBox = root.querySelector<HTMLElement>('.debrief-join')!;
+    expect(joinBox.hidden).toBe(true);
     h.showJoin(joinCards(finishSquadHorde(g, won)));
-    const join = root.querySelector<HTMLElement>('.debrief-spoils > .tile-join')!;
-    expect(join.hidden).toBe(false);
-    expect(join.querySelector('.tile-name')!.textContent).toBe(recruit(2).name);
-    expect([...join.querySelectorAll('.join-btn')].map((b) => b.textContent)).toEqual([
+    expect(joinBox.hidden).toBe(false);
+    expect(joinBox.previousElementSibling!.classList.contains('debrief-squad')).toBe(true);
+    expect(joinBox.querySelector('.join-name')!.textContent).toBe(recruit(2).name);
+    expect([...joinBox.querySelectorAll('.join-btn')].map((b) => b.textContent)).toEqual([
       'Accept',
       'Refuse',
     ]);
-    const fill = root.querySelector<HTMLElement>('.squad-card .xp-fill')!;
-    expect(fill.style.width).toMatch(/%$/);
-    expect(fill.parentElement!.getAttribute('aria-hidden')).toBe('true');
-    const button = root.querySelector('.hud-result-foot > .hud-button')!;
+    const button = root.querySelector('.hud-start-row > .hud-button')!;
     expect(button.classList.contains('btn-primary')).toBe(true);
-    expect(root.querySelector('.hud-result-foot-note')!.textContent).toBe('');
   });
 
-  it('a level-up card shows the level line, and no stat button, points badge or Undo (ID-146)', () => {
+  it('a level-up card is an avatar, a name and a triangle, with no stat button, points badge or Undo (ID-146, ID-196)', () => {
     const { root, h } = page();
     const g = squadGame(1, 5);
     const screen = squadScreen(g, ended(g, 'won'));
     h.showResult(screen);
-    const card = screen.debrief!.cards[0]!;
-    expect(card.bonus).toBe(levelText(card.level, true));
-    expect(root.querySelector('.squad-card .squad-card-bonus')!.textContent).toBe(card.bonus);
+    const card = root.querySelector<HTMLElement>('.squad-card')!;
+    const c = screen.debrief!.cards[0]!;
+    const up = card.querySelector<HTMLElement>('.squad-up')!;
+    expect(up.textContent).toBe('▲');
+    expect(up.getAttribute('role')).toBe('img');
+    expect(up.getAttribute('aria-label')).toBe('Level up');
+    expect(up.title).toBe('Level up');
+    expect(card.querySelector('.squad-badge-up')).toBeNull();
+    expect(card.querySelector('.squad-card-name')!.textContent).toBe(c.name);
+    expect(root.querySelector('.squad-card-bonus, .squad-card-xp, .squad-card-level')).toBeNull();
     expect(root.querySelector('.hud-pick-stat')).toBeNull();
     expect(root.querySelector('.squad-plus, .squad-points, .squad-undo')).toBeNull();
     expect(root.textContent).not.toMatch(/stat point|points? left|Undo|Instinct|Sharp Mind/);
@@ -610,22 +410,22 @@ describe('the debrief layout (ID-067)', () => {
     expect(root.querySelector('.hud-result')!.classList.contains('hud-debrief')).toBe(false);
     expect(root.querySelector('.hud-result-list')!.textContent).toContain('All');
     expect(
-      root.querySelector('.hud-result-foot > .hud-button')!.classList.contains('btn-primary'),
+      root.querySelector('.hud-start-row > .hud-button')!.classList.contains('btn-primary'),
     ).toBe(false);
   });
 });
 
-describe('the debrief panel scrolls (ID-067)', () => {
-  it('a new screen starts at its top', () => {
+describe('the debrief panel scrolls (ID-067, ID-196)', () => {
+  it('a new screen starts at the top of the body, the part that scrolls', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
     const g = squadGame(2, 3);
     h.showResult(squadScreen(g, ended(g, 'won')));
-    const panel = root.querySelector<HTMLElement>('.hud-result')!;
-    panel.scrollTop = 300;
+    const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
+    body.scrollTop = 300;
     h.showResult(squadStart(g));
-    expect(panel.scrollTop).toBe(0);
+    expect(body.scrollTop).toBe(0);
   });
 });
 
@@ -659,55 +459,63 @@ describe('bonus guns on the result screen (ID-122)', () => {
     ]);
     const t = dropTile(g, squadDrop(g, won)!);
     expect(t.stash).toBe(`Stash 3/${STASH_CAP}`);
-    expect(t.bonus.map((b) => b.lost)).toEqual([false, false]);
+    // The drop first, then the bonus guns; each says what it is in its details.
+    expect(t.guns.map((x) => x.lost)).toEqual([false, false, false]);
+    expect(t.guns.map((x) => x.lines[0]!.split(' · ')[0])).toEqual([
+      'First clear',
+      'Bonus gun',
+      'Bonus gun',
+    ]);
   });
 
-  it('a win with no bonus gun shows no bonus list', () => {
+  it('a win with no bonus gun has one chip', () => {
     const { root, h } = page();
     const g = squadGame(1, 6);
     h.showResult(squadScreen(g, ended(g, 'won', seedWith(g, 0))));
-    expect(root.querySelector('.tile-drop')).not.toBeNull();
-    expect(root.querySelector('.tile-bonus')).toBeNull();
+    expect(root.querySelectorAll('.debrief-guns .gun-chip')).toHaveLength(1);
   });
 
-  it('on the page: a compact row per bonus gun, icon decorative, a thrown one greyed', () => {
+  it('on the page: a chip per gun, the icon decorative, a thrown one greyed, no bonus text on a chip', () => {
     const { root, h } = page();
     const stash = Array.from({ length: STASH_CAP - 1 }, (_, i) => gun(`c${i + 1}`, 'lmg', 'relic'));
     const g = squadGame(1, 6, stash);
     const won = ended(g, 'won', seedWith(g, 2));
     const drop = squadDrop(g, won)!;
     h.showResult(squadScreen(g, won));
-    const list = root.querySelector<HTMLElement>('.tile-drop .tile-bonus')!;
-    expect(list.getAttribute('aria-label')).toBe('Bonus guns');
-    const rows = [...list.querySelectorAll<HTMLElement>('.tile-bonus-row')];
-    expect(rows).toHaveLength(2);
-    for (const [i, row] of rows.entries()) {
-      const b = drop.bonus[i]!;
-      expect(row.dataset.rarity).toBe(b.rarity);
-      expect(row.querySelector('img')!.alt).toBe('');
-      expect(row.querySelector('.tile-bonus-name')!.textContent).toBe(
-        `Lv 6 ${b.rarity[0]!.toUpperCase()}${b.rarity.slice(1)} ${WEAPONS[b.base].name}`,
+    const all = [drop.weapon, ...drop.bonus];
+    const chips = [...root.querySelectorAll<HTMLElement>('.debrief-guns .gun-row > .gun-chip')];
+    expect(chips).toHaveLength(3);
+    for (const [i, chip] of chips.entries()) {
+      const b = all[i]!;
+      expect(chip.dataset.rarity).toBe(b.rarity);
+      expect(chip.querySelector('img')!.alt).toBe('');
+      expect(chip.querySelector('.gun-chip-name')!.textContent).toBe(
+        `Lv 6 ${WEAPONS[b.base].name}`,
       );
+      expect(chip.textContent).not.toMatch(/bonus|First clear/i);
     }
     // One slot left: the drop takes it, then each bonus gun throws away the weaker of the
     // win's own guns (all weaker than a Relic LMG), so two of the three go.
     expect(drop.thrown).toHaveLength(2);
     expect(drop.thrown.every((w) => w.uid.startsWith('h6'))).toBe(true);
-    for (const [i, row] of rows.entries()) {
-      const lost = drop.thrown.includes(drop.bonus[i]!);
-      expect(row.classList.contains('tile-bonus-lost')).toBe(lost);
-      expect(row.querySelector('.tile-bonus-power')!.textContent).toBe(
-        lost ? 'Thrown away' : `${gunPower(drop.bonus[i]!).toFixed(1)} DPS`,
+    for (const [i, chip] of chips.entries()) {
+      const lost = drop.thrown.includes(all[i]!);
+      expect(chip.classList.contains('gun-chip-lost')).toBe(lost);
+      expect(chip.querySelector('.gun-chip-power')!.textContent).toBe(
+        lost ? 'Thrown away' : `${gunPower(all[i]!).toFixed(1)} DPS`,
       );
     }
-    expect(rows.some((r) => r.classList.contains('tile-bonus-lost'))).toBe(true);
-    expect(root.querySelector('.tile-drop .tile-stash')!.textContent).toBe(
+    expect(chips.some((c) => c.classList.contains('gun-chip-lost'))).toBe(true);
+    // The stash count and the bonus gun's kind are in the details only.
+    chips[1]!.click();
+    expect(root.querySelector('.tile-stash')!.textContent).toBe(
       drop.thrown.includes(drop.weapon)
         ? `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`
         : `Stash ${STASH_CAP}/${STASH_CAP}`,
     );
+    expect(root.querySelector('#hud-gun-details')!.textContent).toContain('Bonus gun · ');
     // Text only: a gun's name never reaches the page as markup.
-    expect(list.querySelector('b, script')).toBeNull();
+    expect(root.querySelector('.debrief-guns')!.querySelector('b, script')).toBeNull();
   });
 
   it('names the stronger bonus gun that pushed the drop out, apart from a drop no better than the stash', () => {
@@ -722,18 +530,20 @@ describe('bonus guns on the result screen (ID-122)', () => {
     const strong = lmg('h9-1', 'common');
     // One slot left: the drop takes it, then the stronger bonus gun throws the drop out.
     const pushed = dropOf(weak, null, { bonus: [strong], thrown: [weak] });
-    expect(dropTile({ armoury: relics }, pushed)).toMatchObject({
-      lost: true,
+    const a = dropTile({ armoury: relics }, pushed);
+    expect(a).toMatchObject({
       stash: `Stash ${STASH_CAP}/${STASH_CAP} · thrown away`,
       thrown: 'Replaced by the stronger bonus gun Lv 9 Common LMG · salvaged for 5 Scrap',
     });
+    expect(a.guns.map((x) => x.lost)).toEqual([true, false]);
     // Already full: the drop itself was no better than the stash.
     const full = [...relics, gun('c99', 'lmg', 'relic')];
     const own = dropOf(weak, null, { bonus: [strong], thrown: [weak, relics.at(-1)!] });
-    expect(dropTile({ armoury: full }, own)).toMatchObject({
-      lost: true,
+    const b = dropTile({ armoury: full }, own);
+    expect(b).toMatchObject({
       thrown: `${DROP_LOST_NOTE} · Thrown away: Lv 1 Relic LMG · salvaged for 105 Scrap`,
     });
+    expect(b.guns[0]!.lost).toBe(true);
   });
 });
 

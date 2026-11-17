@@ -2,8 +2,8 @@
 // ID-149: professions on screen. Each Roster tab names the survivor's profession; the
 // selected survivor's panel highlights what it gives, greys a fighting job's line off its
 // guns, notes a shared job that doesn't stack, and splits every stat into the level's and
-// the profession's part. The gun picker marks a fighting job's guns; squad cards and the
-// new-survivor tile name the profession.
+// the profession's part. The gun picker marks a fighting job's guns; the new-survivor tile
+// names the profession (the horde panel's squad cards say none, ID-196).
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
@@ -11,7 +11,7 @@ import { JOB_IDS, JOBS, type JobId, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
-import { squadGear, squadScreen } from './hud.ts';
+import { squadScreen } from './hud.ts';
 import { joinCards } from './joining.ts';
 import { JOB_SHORT, jobLine, NO_BONUS, NO_STACK, statRows } from './jobtext.ts';
 import { createRoster, rosterTiles } from './squadroster.ts';
@@ -204,35 +204,14 @@ describe('the Roster shows professions (ID-149)', () => {
   });
 });
 
-describe('squad cards and the new survivor name the profession (ID-149)', () => {
-  it('the start and result cards read "Lv N · Profession"', () => {
+describe('the new survivor names the profession; the panel’s cards do not (ID-149, ID-196)', () => {
+  it('the panel’s squad cards carry no profession: an avatar and a name only', () => {
     const game = camp([person(1, 'hunter'), person(2, 'chef')]);
     const s = { ...startSquadHorde(game, 7, NOW), outcome: 'lost' as const };
     const screen = squadScreen(game, s);
-    const cards = screen.debrief!.cards;
-    expect(cards.map((c) => c.job)).toEqual(['Hunter', 'Chef']);
-  });
-
-  it('the start screen’s gun picker stars a fighting job’s guns and says when the held one isn’t', () => {
-    const hunter = {
-      ...person(1, 'hunter'),
-      loadout: { primary: gun('h1', 'smg'), secondary: null, item: null },
-    };
-    const game = camp([hunter, person(2, 'chef')], [gun('h2', 'sniper'), gun('h3', 'lmg')]);
-    const [h, chef] = squadGear(game).rows;
-    const label = (row: typeof h, value: string) =>
-      row!.options.find((o) => o.value === value)!.label;
-    expect(label(h, 'h2').startsWith('★ ')).toBe(true);
-    expect(label(h, 'h1').startsWith('★ ')).toBe(false);
-    expect(label(h, 'h3').startsWith('★ ')).toBe(false);
-    expect(h!.role).toContain('No Hunter bonus with this gun');
-    // An everyday job marks nothing.
-    expect(chef!.options.some((o) => o.label.startsWith('★'))).toBe(false);
-    expect(chef!.role).not.toContain('bonus with this gun');
-    const suited = camp([
-      { ...hunter, loadout: { ...hunter.loadout, primary: gun('h2', 'sniper') } },
-    ]);
-    expect(squadGear(suited).rows[0]!.role).not.toContain('No Hunter bonus');
+    for (const c of screen.debrief!.cards) {
+      expect(Object.keys(c).sort()).toEqual(['art', 'id', 'level', 'levelUp', 'name']);
+    }
   });
 
   it('a first clear’s newcomer asking to join names their profession (ID-150)', () => {
@@ -240,7 +219,7 @@ describe('squad cards and the new survivor name the profession (ID-149)', () => 
     const s = { ...startSquadHorde(game, 7, NOW), outcome: 'won' as const };
     const screen = squadScreen(game, s);
     const joined = recruit(3, 7);
-    expect(screen.debrief!.join).toEqual({ size: 2, none: null });
+    expect(screen.debrief!.join).toBe(true);
     expect(joinCards(finishSquadHorde(game, s))[0]!.sub).toBe(
       `Lv 1 · ${JOBS[joined.job].name} · Pistol`,
     );

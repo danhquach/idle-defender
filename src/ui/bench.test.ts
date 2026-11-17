@@ -96,13 +96,13 @@ describe('the start screen and the bench (ID-147)', () => {
 });
 
 describe('the result screen and the bench (ID-147)', () => {
-  it('two ask to join past 6 (seed 9): the camp tile with no reason, no recruit tile', () => {
+  it('two ask to join past 6 (seed 9): the offer line is there, with no reason why nobody came', () => {
     const g = campGame(people(6));
     const s = squadScreen(g, won(g, 9));
     const [a, b] = [recruit(7, 9), recruit(8, 9)];
     expect(a.name).not.toBe(b.name);
-    expect(s.debrief!.recruit).toBeNull();
-    expect(s.debrief!.join).toEqual({ size: 6, none: null });
+    expect(s.debrief!.join).toBe(true);
+    expect(wonNote(s) ?? '').not.toMatch(/Nobody new/);
   });
 
   it('one asks to join while one rests: the screen says who rests', () => {
@@ -110,7 +110,7 @@ describe('the result screen and the bench (ID-147)', () => {
     const s = squadScreen(g, won(g, 8, ['recruit-2']));
     const a = recruit(7, 8);
     expect(a.name).toBeTruthy();
-    expect(s.debrief!.join).toEqual({ size: 6, none: null });
+    expect(s.debrief!.join).toBe(true);
     // Nobody fit on the bench yet (the newcomer only joins on Accept): no Roster step.
     const note = `Resting: ${recruit(2).name} 1 horde.`;
     expect(wonNote(s)).toBe(note);
@@ -120,22 +120,26 @@ describe('the result screen and the bench (ID-147)', () => {
   it('a newcomer will take the one open slot: no Roster step in the rest note (ID-150)', () => {
     const g = campGame(people(6), [person(7)]);
     const s = squadScreen(g, won(g, 9, ['recruit-2']));
-    expect(s.debrief!.join).toEqual({ size: 7, none: null });
+    expect(s.debrief!.join).toBe(true);
     expect(wonNote(s)).toBe(`Resting: ${recruit(2).name} 1 horde.`);
   });
 
   it('slots left open with someone fit on the bench: the note points at the Roster', () => {
     const g = campGame(people(6), [person(7)]);
     const s = squadScreen(g, won(g, 1, ['recruit-2']));
-    expect(wonNote(s)).toBe(`Resting: ${recruit(2).name} 1 horde. Fill their slots on the Roster.`);
+    expect(s.debrief!.notes![0]).toBe(
+      `Resting: ${recruit(2).name} 1 horde. Fill their slots on the Roster.`,
+    );
   });
 
-  it('nobody joins: the tile says so; resting with nobody fit to fill names no Roster step', () => {
+  it('nobody joins: the details say so, last; resting with nobody fit to fill names no Roster step', () => {
     const g = campGame(people(6));
     const s = squadScreen(g, won(g, 1, ['recruit-1']));
-    expect(s.debrief!.recruit).toBeNull();
-    expect(s.debrief!.join).toEqual({ size: 6, none: noJoinText('nobody-first', 6) });
-    expect(wonNote(s)).toBe(`Resting: ${recruit(1).name} 1 horde.`);
+    expect(s.debrief!.join).toBe(true);
+    expect(s.debrief!.notes).toEqual([
+      `Resting: ${recruit(1).name} 1 horde.`,
+      noJoinText('nobody-first', 6),
+    ]);
     expect(restNote([], true)).toBeNull();
     expect(restNote([{ name: 'Ava', rest: 1 }], true)).toBe(
       'Resting: Ava 1 horde. Fill their slots on the Roster.',
@@ -149,14 +153,16 @@ describe('the result screen says what really happens (ID-147)', () => {
     const all = g.roster.map((d) => d.id);
     const s = squadScreen(g, won(g, 1, all));
     const resting = all.slice(1).map((_, i) => `${recruit(i + 2).name} 1 horde`);
-    expect(wonNote(s)).toBe(`Resting: ${resting.join(', ')}.`);
+    expect(s.debrief!.notes![0]).toBe(`Resting: ${resting.join(', ')}.`);
     expect(wonNote(s)).not.toContain(`${recruit(1).name} 1`);
   });
 
   it('a bench survivor back from rest this horde can fill an open slot: the note says so', () => {
     const g = campGame(people(6), [person(7, { rest: 1 })]);
     const s = squadScreen(g, won(g, 1, ['recruit-2']));
-    expect(wonNote(s)).toBe(`Resting: ${recruit(2).name} 1 horde. Fill their slots on the Roster.`);
+    expect(s.debrief!.notes![0]).toBe(
+      `Resting: ${recruit(2).name} 1 horde. Fill their slots on the Roster.`,
+    );
   });
 });
 
@@ -417,7 +423,7 @@ describe('patched up by Paramedics (ID-155)', () => {
       wonNote(squadScreen(g, won(g, s, ['recruit-2'])))?.startsWith('Patched up'),
     )!;
     const s = squadScreen(g, won(g, seed, ['recruit-2']));
-    expect(wonNote(s)).toBe(
+    expect(s.debrief!.notes![0]).toBe(
       `Patched up by Paramedics, back next horde: ${recruit(2).name} (50% HP).`,
     );
     expect(patchNote([])).toBeNull();

@@ -954,7 +954,7 @@ close-quarter weapons come out only when an enemy is close.
     A gun never goes into the stash for the pistol, so the stash never grows.
     (ID-108 to ID-149: the stash's strongest gun by the gun alone went to
     the weakest gun held, and survivors never traded.)
-- **The start and result screens' survivor cards (ID-146):** under the gun,
+- **The start and result screens' survivor cards (ID-146)** *(off the panel since ID-196, §6)*: under the gun,
   a small line gives the level's bonus with short labels (§6 Stats), in the
   Level up badge's colour on a card that levelled this win; its XP line ends
   in "level up!". The hint over the cards
@@ -1289,8 +1289,10 @@ profession's output).
     these texts use thousands separators. At the worst luck (§11) the scripted
     player gets the win's Scrap only, no salvage for guns it keeps out of the
     stash. On a phone the Roster's eight tabs take two rows of four (the label row wraps).
-  - **Equip:** between hordes, on the start and result screens, each survivor
-    in the squad has a one-click gun picker (a select; the pick applies and
+  - **Equip** *(off the panel since ID-196: guns change in the Roster or with
+    "Best gun for everyone"; the rules below still hold there)*: between
+    hordes, on the start and result screens, each survivor
+    in the squad had a one-click gun picker (a select; the pick applies and
     saves at once). It lists the free pistol, the stash's guns and the gun
     they hold, strongest first, each led by its DPS in that survivor's
     hands (ID-152: level and profession counted, as in the Roster) ("30.3 DPS ·
@@ -1402,6 +1404,72 @@ profession's output).
       it, and the button. It stays pinned in a short desktop window too; on
       a phone (480 px wide or less, or a window 500 px tall or less, as a
       phone on its side) only the button is pinned, as before (ID-169).
+  - **One panel, one size** *(ID-196; replaces the layout, widths, tiles,
+    cards and footer above where they differ)*: the start, win and loss
+    screens are the same panel at the same size, with a win's Details open
+    too: up to 640 px wide and 442 px tall (520 px on a phone, 480 px wide
+    or less), never taller than the window less 128 px. That holds a win's
+    weapons row over six squad cards, three to a row. From the top:
+    - **Header:** the title, centred, over the reward pills, a win's
+      Details button last. A win's title is "Horde 4 - You hold the line"
+      (a replay adds "(replay)"; the finale keeps "The evacuation is
+      called"), a loss's "Horde 4 - Camp has fallen"; the start screen's is
+      the horde.
+    - **Body** (the only part that scrolls): a loss's callout; a win's
+      sentences (with Details open) and its weapons; the Squad section;
+      anyone asking to join; then the screen's line (how a horde is lost,
+      or a loss's way on).
+    - **Weapons** (a win): one chip per dropped gun, the drop first, then
+      the bonus guns, three to a row. A chip has two columns: the gun's icon
+      on its rarity's tint, then the level and gun ("Lv 4 Sniper rifle")
+      over its DPS. Nothing says "First clear" or "bonus" on the chip. A
+      gun thrown away (the stash full of better ones) is greyed and says
+      "Thrown away" where the DPS was. A click on a chip shows that gun's
+      details under the row (its kind and rarity, role and trait, affixes,
+      then the stash count, anything thrown away and where to farm
+      instead); a second click closes them. A caret at the chip's right
+      says it opens, and turns up while its details show.
+    - **Squad:** three cards to a row (two on a phone). A card has two
+      columns: the avatar, then the name (it opens their Roster card), with
+      a triangle pointing up after it for a level-up, or a "New" badge. No
+      guns and no stats: the gun pickers, XP counts, bars, professions and
+      level bonus lines are off the panel, and guns change in the Roster or
+      with "Best gun for everyone". A win shows only who levelled up
+      (ID-134); the start and loss screens show the squad.
+    - **Asking to join:** one line under the squad for each, "Eli · Chef
+      asks to join", then Accept and Refuse. What the profession brings is
+      Accept's tooltip, and "Refused survivors are gone for good." is
+      Refuse's; leaving with someone still asking asks first, as before. An
+      answer stays as a line in its place ("Eli joined the squad"). With
+      nobody asking, why is a sentence in the win's details. While someone
+      asks, the header has an amber pill ("Asks to join", "2 ask to
+      join"): the line can sit below the body's fold, and a click on the
+      pill scrolls to it and puts the keyboard on Accept.
+    - **Skills row:** the footer's first row, the skill toggles (name and
+      cooldown) after a "Skills" label ("Skills (up to 2)" once there is a second one), with room for more.
+    - **Start row:** three columns. The horde select, with where to farm
+      instead under it; the pick's readiness, "Power 815 · rec 242" with
+      its band over the win cost, a clear gap between the two; and the
+      button. Readiness is said once: the select's options are short
+      ("Horde 7 (new) · Boss", "Horde 5 · best to farm") and the select is
+      as wide as its pick, so it never cuts them. On a phone the select,
+      the readiness and the button each take a row.
+    - **No radio:** the panel has no radio pill, no explanation and no
+      word of it (ID-190 is undone here). A boss's first clear has a "New
+      card: …" pill when it unlocks one, and "Boss horde beaten. New card
+      unlocked: …" in the details.
+    - **One stash count:** in a gun's details; the Squad heading has none.
+    - **Pills:** a boss killed on a win is green ("Elite Brute (Roar)
+      dead"), as the win's other good news; red stays for "Boss horde"
+      on the start screen.
+    - **A loss's line** is one line: "Retry Horde 5, or farm an easier
+      horde: the squad and the wall are back at full strength".
+    - **A level-up on the last kill** opens no pick: the fight is over, so
+      the cards would change nothing, and the result is never drawn over an
+      open "Level up: pick one".
+    - A finger gets 44 px of each control (coarse pointers).
+    - In a window 540 px tall or less (a phone on its side) the whole panel
+      scrolls instead of its body, at the same size.
 
 ## 7. Turrets, energy and traps
 
@@ -2959,21 +3027,16 @@ As built (ID-066), the horde-only build:
 - **Goal (ID-127, `RADIO_HORDES`, `BOSS_UNLOCKS` in `data.ts`):** the boss
   hordes 10, 20 and 30 each yield a radio part on their first clear; the
   third calls the evacuation and Horde 30 is the finale.
-  - The start screen shows the radio's progress as a chip ("Radio 1/3") and
-    a line naming the next part's boss horde. Parts are counted from the
-    boss hordes beaten (the horde number), so an older save gets its parts
-    and the save stores nothing new.
-  - The Radio chip is a button (ID-190) that opens a three-line note under
-    the chip row: what the radio is (the goal, built to call for evacuation),
-    where parts come from (each boss horde gives one the first time it is
-    beaten; the note above already names the next) and what finishing gives
-    (the cards the boss hordes unlock, then the finale and Endless). The text is read off
-    `RADIO_HORDES` and `BOSS_UNLOCKS`. It starts open the first time the
-    chip shows (flag `idle-defender.radio-seen`, only "1" counts) and
-    closed after; the toggle is not saved. In Endless the chip stays a
-    plain chip with no note.
-  - A boss horde's first clear adds a "Radio part N/3" chip and a line to
-    its result screen; this replaces Horde 10's old soft ending.
+  - Parts are counted from the boss hordes beaten (the horde number), so an
+    older save gets its parts and the save stores nothing new.
+  - The panel between hordes says nothing of the radio *(ID-196)*: the
+    start screen's "Radio 1/3" chip, its line naming the next part's boss
+    horde and the chip's three-line note (ID-190, with its
+    `idle-defender.radio-seen` flag) are gone. In Endless the start screen
+    keeps its "Endless · best N" chip and the line naming the horde to hold.
+  - A boss horde's first clear adds a "New card: …" chip to its result
+    screen when it unlocks one (below), and the line "Boss horde beaten."
+    to the result's details; this replaces Horde 10's old soft ending.
   - Each boss's first clear also unlocks a card for good: **Heavy Rounds**
     joins the card pool from Horde 10's, **Field Repairs** from Horde 20's
     (in every fight after, replays included). These are the full game's

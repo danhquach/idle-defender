@@ -7,7 +7,7 @@ import { levelName, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, RADIO_HORDES, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
-import { joiners, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
+import { joiners, squadResult, startSquadHorde, type SquadDrop } from '../core/hordeonly.ts';
 import { noJoinText } from './joining.ts';
 import { injuryBand, powerBand, recommendedPower, squadPower } from '../core/squadpower.ts';
 import { horrorAbility, waveCount } from '../core/waves.ts';
@@ -19,7 +19,6 @@ import {
   dropTile,
   farmText,
   gunLabel,
-  gunOption,
   hordePicker,
   INJURY_LEAD,
   INJURY_TIP,
@@ -30,7 +29,6 @@ import {
   lossXpText,
   powerLine,
   squadDropLines,
-  squadGear,
   squadScreen,
   squadStart,
   startLabel,
@@ -79,7 +77,7 @@ function page() {
   const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
   const picks: number[] = [];
   h.onHordePick((n) => picks.push(n));
-  const button = () => root.querySelector<HTMLButtonElement>('.hud-result-foot > .hud-button')!;
+  const button = () => root.querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!;
   const select = () => root.querySelector<HTMLSelectElement>('#hud-horde-select')!;
   const title = () => root.querySelector('.hud-result-title')!.textContent;
   const choose = (n: number) => {
@@ -116,7 +114,7 @@ describe('the horde picker (ID-098)', () => {
     expect(p.options.map((o) => o.horde)).toEqual([6, 5, 4, 3, 2, 1]);
     expect(p.options.map((o) => o.isNew)).toEqual([true, false, false, false, false, false]);
     expect(p.value).toBe(6);
-    expect(p.options[0]!.label).toMatch(/^Horde 6 \(new\) · /);
+    expect(p.options[0]!.label).toMatch(/^Horde 6 \(new\)/);
   });
 
   it('lists at most PICKER_HORDES: the new horde and the highest beaten, however high', () => {
@@ -129,21 +127,22 @@ describe('the horde picker (ID-098)', () => {
     expect(p.value).toBe(100_000);
   });
 
-  it('each option names the number, a boss mark, rec power and the band word', () => {
+  it('each option names the number and a boss mark, and nothing of power: that is the line beside it (ID-196)', () => {
     const g = squadGame(2, 12);
     const p = hordePicker(g);
     const power = squadPower(g);
     for (const o of p.options) {
       const rec = recommendedPower(o.horde);
-      expect(o.label).toContain(`Horde ${o.horde}`);
-      expect(o.label).toContain(`rec ${rec.toLocaleString('en-US')}`);
-      expect(
-        o.label.replace(' · best to farm', '').endsWith(` · ${BAND_WORD[powerBand(power, rec)]}`),
-      ).toBe(true);
+      expect(o.label).toMatch(new RegExp(`^Horde ${o.horde}\\b`));
+      expect(o.label).not.toMatch(/rec/i);
+      expect(o.label).not.toContain(rec.toLocaleString('en-US'));
+      for (const word of Object.values(BAND_WORD)) expect(o.label.split(' · ')).not.toContain(word);
       expect(o.label.includes(' · Boss')).toBe(horrorAbility(o.horde) !== null);
       expect(o.power).toEqual(powerLine(power, rec));
     }
     expect(p.options.some((o) => o.label.includes(' · Boss'))).toBe(true);
+    expect(p.options[0]!.label).toBe('Horde 12 (new)');
+    expect(p.options.find((o) => o.horde === 10)!.label).toMatch(/^Horde 10 · Boss/);
   });
 
   it('the button follows the pick: Start for the new horde, Replay for a beaten one, Retry for the lost one', () => {
@@ -221,8 +220,8 @@ describe('the start screen (ID-098)', () => {
     expect(title()).toContain('Horde 2');
     expect(title()).toContain('Replay');
     expect(root.querySelector('.debrief-chips')!.textContent).toContain('Replay');
-    // The goal chip (ID-127) stays first whichever horde is picked.
-    expect(root.querySelector('.debrief-chips')!.firstElementChild!.textContent).toBe('Radio 0/3');
+    // The campaign has no goal chip (ID-196): the radio is not on this panel.
+    expect(root.querySelector('.debrief-chips')!.textContent).not.toMatch(/radio/i);
     expect(line().querySelector('.hud-horde-power-text')!.textContent).toBe(
       powerLine(power, recommendedPower(2)).text,
     );
@@ -230,6 +229,17 @@ describe('the start screen (ID-098)', () => {
     choose(5);
     expect(button().textContent).toBe(startLabel(5));
     expect(picks).toEqual([2, 5]);
+  });
+
+  it('Endless: its goal chip stays first whichever horde is picked (ID-127)', () => {
+    const { root, h, choose } = page();
+    const g = squadGame(2, 45);
+    h.showResult(squadStart(g));
+    const first = () => root.querySelector('.debrief-chips')!.firstElementChild!.textContent;
+    expect(first()).toBe('Endless · best 44');
+    choose(5);
+    expect(first()).toBe('Endless · best 44');
+    expect(squadStart(g, 5).debrief!.chips[0]!.text).toBe('Endless · best 44');
   });
 
   it('even a horde the squad is far short of can be picked and started', () => {
@@ -281,19 +291,19 @@ describe('result screens and the picker (ID-098)', () => {
   it('a replay win: the same replay horde, titled as a replay, nobody joins, a Replay chip', () => {
     const g = squadGame(2, 6);
     const s = squadScreen(g, fought(g, 3, 'won'));
-    expect(s.title).toBe('Horde 3 held (replay)');
+    expect(s.title).toBe('Horde 3 - You hold the line (replay)');
     expect(s.picker!.value).toBe(3);
     expect(s.picker!.options[0]!.horde).toBe(6);
     expect(s.button).toBe('Replay Horde 3');
     expect(s.lines.join('\n')).not.toMatch(/New survivor|nobody new joins|Squad full/);
-    expect(s.debrief!.recruit).toBeNull();
-    // A replay where nobody joins says why on the camp tile (ID-182).
-    expect(s.debrief!.join).toEqual({ size: 2, none: noJoinText('nobody-replay', 2) });
+    // A replay where nobody joins says why, last in the details (ID-182, ID-196).
+    expect(s.debrief!.join).toBe(true);
+    expect(s.debrief!.notes!.at(-1)).toBe(noJoinText('nobody-replay', 2));
     expect(s.debrief!.cards).toHaveLength(2);
     // "Replay" is said by the title and the tile's kind chip, not a third time.
     expect(s.debrief!.chips.map((c) => c.text)).not.toContain('Replay');
     expect(s.debrief!.drop).not.toBeNull();
-    expect(s.debrief!.drop!.kind).toBe('Replay');
+    expect(s.debrief!.drop!.guns[0]!.lines[0]).toMatch(/^Replay · /);
   });
 
   it('a lucky replay win (ID-170): the newcomer asks to join, with the offer tile', () => {
@@ -302,11 +312,11 @@ describe('result screens and the picker (ID-098)', () => {
     while (joiners(g, seed, true).length === 0) seed++;
     const s = squadScreen(g, { ...startSquadHorde(g, seed, NOW, 3), outcome: 'won' as const });
     const d = recruit(3, seed);
-    expect(s.title).toBe('Horde 3 held (replay)');
+    expect(s.title).toBe('Horde 3 - You hold the line (replay)');
     expect(d.name).toBeTruthy();
     expect(s.lines.join(' ')).not.toMatch(/asks to join/);
-    expect(s.debrief!.join).toEqual({ size: 2, none: null });
-    expect(s.debrief!.recruit).toBeNull();
+    expect(s.debrief!.join).toBe(true);
+    expect(s.debrief!.notes!.join(' ')).not.toMatch(/Nobody new/);
   });
 
   it('the ending screen and radio parts are only for first clears, not replays (ID-127)', () => {
@@ -317,11 +327,12 @@ describe('result screens and the picker (ID-098)', () => {
     for (const n of RADIO_HORDES) {
       const later = squadGame(SQUAD_CAP, FINALE_HORDE + 3);
       const b = squadScreen(later, fought(later, n, 'won'));
-      expect(b.title).toBe(`Horde ${n} held (replay)`);
+      expect(b.title).toBe(`Horde ${n} - You hold the line (replay)`);
       expect(b.button).not.toBe('Continue');
       expect(b.lines.join(' ')).not.toMatch(/Radio|evacuation|New card/);
       expect(b.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
-      expect(b.debrief!.notes).toEqual([]);
+      // Only why nobody asked to join is left in the details.
+      expect(b.debrief!.notes!.join(' ')).not.toMatch(/Boss horde|evacuation|New card|radio/i);
     }
   });
 
@@ -331,16 +342,14 @@ describe('result screens and the picker (ID-098)', () => {
     const s = squadScreen(g, lost);
     expect(s.picker!.value).toBe(6);
     expect(s.button).toBe(`Retry Horde 6${horrorAbility(6) ? ' · Boss horde' : ''}`);
-    const xp = s.debrief!.cards[0]!.xp!;
+    const xp = squadResult(g, lost).gains[0]!.xp;
     expect(xp).toBeGreaterThan(0);
     expect(s.debrief!.chips[0]).toEqual({ text: `+${xp} XP each`, tone: 'warn' });
     expect(s.lines).toContain(`+${xp} XP each`);
     expect(s.lines.join('\n')).not.toContain('No XP on a loss');
-    // Every card shows the XP the loss gave, and its bar.
-    expect(s.debrief!.cards.map((c) => c.xp)).toEqual([xp, xp, xp]);
-    expect(s.debrief!.cards.every((c) => c.bar !== null)).toBe(true);
+    // Every survivor still has a card (ID-196: it shows no XP, the chip says it).
+    expect(s.debrief!.cards.map((c) => c.id)).toEqual(g.roster.map((d) => d.id));
     expect(s.debrief!.drop).toBeNull();
-    expect(s.debrief!.recruit).toBeNull();
     expect(s.lines.join('\n')).not.toMatch(/New survivor/);
   });
 
@@ -349,7 +358,7 @@ describe('result screens and the picker (ID-098)', () => {
     const s = squadScreen(g, fought(g, 6, 'lost', 1));
     expect(lossXpText(0)).toBe('No XP: no wave cleared');
     expect(s.debrief!.chips[0]!.text).toBe('No XP: no wave cleared');
-    expect(s.debrief!.cards.every((c) => c.xp === null && c.bar === null)).toBe(true);
+    expect(s.debrief!.cards).toHaveLength(2);
   });
 
   it('a loss retried from a beaten horde keeps that horde picked and labelled Retry', () => {
@@ -418,25 +427,13 @@ describe('the farm hint and the result panel scroll (ID-098)', () => {
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every(([o]) => o?.preventScroll === true)).toBe(true);
     expect(root.querySelector<HTMLElement>('.hud-result')!.scrollTop).toBe(0);
+    expect(root.querySelector<HTMLElement>('.hud-result-scroll')!.scrollTop).toBe(0);
     spy.mockRestore();
   });
 });
 
-describe('drop tile: kind, farm note and level (ID-098)', () => {
-  it('the kind is a chip: a guaranteed upgrade is highlighted, a first clear milder', () => {
-    const w = gun('a', 5);
-    const tone = (kind: SquadDrop['kind']) =>
-      dropTile({ armoury: [] }, dropOf(w, { kind })).kindTone;
-    expect(tone('guaranteed')).toBe('warn');
-    expect(tone('first')).toBe('ok');
-    expect(tone('replay')).toBe('plain');
-    const { h, root } = page();
-    const g = squadGame(2, 6);
-    h.showResult(squadScreen(g, fought(g, 6, 'won')));
-    expect(root.querySelector<HTMLElement>('.tile-kind')!.dataset.tone).toBe('ok');
-  });
-
-  it('says which kind of drop it was', () => {
+describe('drop tile: kind, farm note and level (ID-098, ID-196)', () => {
+  it('says which kind of drop it was, on the first line of the gun’s details', () => {
     const w = gun('a', 5);
     expect(DROP_KIND).toEqual({
       first: 'First clear',
@@ -444,8 +441,21 @@ describe('drop tile: kind, farm note and level (ID-098)', () => {
       guaranteed: 'Guaranteed upgrade',
     });
     for (const kind of ['first', 'replay', 'guaranteed'] as const) {
-      expect(dropTile({ armoury: [] }, dropOf(w, { kind })).kind).toBe(DROP_KIND[kind]);
+      const t = dropTile({ armoury: [] }, dropOf(w, { kind }));
+      expect(t.guns[0]!.lines[0]).toBe(`${DROP_KIND[kind]} · Military`);
     }
+  });
+
+  it('the kind is not on the chip: the chip is the level, the gun and its DPS', () => {
+    const { h, root } = page();
+    const g = squadGame(2, 6);
+    h.showResult(squadScreen(g, fought(g, 6, 'won')));
+    const chip = root.querySelector<HTMLElement>('.gun-chip')!;
+    expect(chip.textContent).not.toMatch(/First clear|Replay|Guaranteed|bonus/i);
+    expect(chip.querySelector('.tile-kind, .tile-bonus')).toBeNull();
+    // Opened, the details say it.
+    chip.click();
+    expect(root.querySelector('#hud-gun-details')!.textContent).toContain('First clear');
   });
 
   it('says to farm a higher horde when nothing it drops could be an upgrade', () => {
@@ -464,48 +474,35 @@ describe('drop tile: kind, farm note and level (ID-098)', () => {
     ).toContain(farmText(null));
   });
 
-  it('on the page: kind line, level before the name, and the farm note', () => {
+  it('on the page: the chip has the level before the name, the details the farm note', () => {
     const { h, root } = page();
     const g = squadGame(2, 6);
     h.showResult(squadScreen(g, fought(g, 3, 'won')));
-    const tile = root.querySelector<HTMLElement>('.tile-drop')!;
-    expect(tile.querySelector('.tile-kind')!.textContent).toBe('Replay');
-    expect(tile.querySelector<HTMLElement>('.tile-kind')!.classList.contains('chip')).toBe(true);
     const drop = squadScreen(g, fought(g, 3, 'won')).debrief!.drop!;
-    expect(tile.querySelector('.tile-name')!.textContent).toBe(`${drop.level} ${drop.name}`);
-    expect(drop.level).toBe('Lv 3');
-    expect(tile.querySelector('.tile-farm')?.textContent ?? null).toBe(drop.farmNote);
+    const chip = root.querySelector<HTMLElement>('.gun-chip')!;
+    expect(chip.querySelector('.gun-chip-name')!.textContent).toBe(drop.guns[0]!.short);
+    expect(drop.guns[0]!.short).toMatch(/^Lv 3 /);
+    expect(root.querySelector('.tile-farm')).toBeNull();
+    chip.click();
+    expect(root.querySelector('.tile-farm')?.textContent ?? null).toBe(drop.farmNote);
   });
 
-  it('a first clear’s tile and lines say First clear', () => {
+  it('a first clear’s details and lines say First clear', () => {
     const g = squadGame(2, 4);
     const s = squadScreen(g, fought(g, 4, 'won'));
-    expect(s.debrief!.drop!.kind).toBe('First clear');
+    expect(s.debrief!.drop!.guns[0]!.lines[0]).toMatch(/^First clear · /);
     expect(s.lines.some((l) => l.startsWith('Weapon drop (First clear): '))).toBe(true);
   });
 });
 
 describe('gun level wherever the gun shows (ID-098)', () => {
-  it('"Lv 12 Military Carbine" in the label, the picker option and the drop line; the free pistol is Lv 1', () => {
+  it('"Lv 12 Military Carbine" in the label and the drop line; the free pistol is Lv 1', () => {
     const w = gun('a', 12);
     expect(levelName(w)).toBe('Lv 12 Military Carbine');
     expect(levelLabel(w)).toBe('Lv 12 Military Carbine (+7% damage)');
     expect(gunLabel(w)).toMatch(/^Lv 12 Military Carbine \(\+7% damage\) · [\d.]+ DPS$/);
-    expect(gunOption(w)).toMatch(
-      /^[\d.]+ DPS · Lv 12 Military Carbine · Marksman \(\+7% damage\)$/,
-    );
     expect(levelLabel('pistol')).toBe('Lv 1 Pistol');
     expect(levelLabel(gun('b'))).toBe('Lv 1 Military Carbine (+7% damage)');
-  });
-
-  it('the gun picker lists each gun with its level, strongest first including level', () => {
-    const low = gun('lo', 1);
-    const high = gun('hi', 20);
-    const g = squadGame(1, 3, [low, high]);
-    const row = squadGear(g).rows[0]!;
-    expect(row.options.map((o) => o.value)).toEqual(['hi', 'lo', 'pistol']);
-    expect(row.options[0]!.label).toContain('Lv 20 Military Carbine');
-    expect(row.options[2]!.label).toContain('Lv 1 Pistol');
   });
 
   it('a thrown-away gun is named with its level', () => {
@@ -524,7 +521,7 @@ describe('text only (ID-098)', () => {
     const { h, root } = page();
     const g = squadGame(2, 6);
     h.showResult(squadScreen(g, fought(g, 3, 'won')));
-    for (const node of root.querySelectorAll('.hud-horde-pick, .tile-drop, .hud-corner')) {
+    for (const node of root.querySelectorAll('.hud-horde-pick, .debrief-guns, .hud-corner')) {
       expect(node.querySelector('script, iframe, style')).toBeNull();
     }
   });

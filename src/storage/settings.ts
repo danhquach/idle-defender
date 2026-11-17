@@ -176,24 +176,3 @@ export function writeHowToSeen(storage: SaveStorage | null): void {
     // Storage blocked or full.
   }
 }
-
-// The radio explanation (ID-190): open the first time the radio chip shows. Only "1" counts as seen.
-export const RADIO_SEEN_KEY = 'idle-defender.radio-seen';
-
-/** Whether the radio explanation has been shown in this browser. */
-export function readRadioSeen(storage: SaveStorage | null): boolean {
-  try {
-    return storage?.getItem(RADIO_SEEN_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** Marks it shown; where the browser refuses it, it opens again next launch. */
-export function writeRadioSeen(storage: SaveStorage | null): void {
-  try {
-    storage?.setItem(RADIO_SEEN_KEY, '1');
-  } catch {
-    // Storage blocked or full.
-  }
-}

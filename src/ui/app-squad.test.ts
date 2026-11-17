@@ -21,7 +21,7 @@ import { MUTE_KEY } from '../storage/settings.ts';
 import { NOW } from '../storage/testing.ts';
 import { SoundEngine } from './audio.ts';
 import { FIGHT_REFUSAL, SAVE_STATUS } from './menu.ts';
-import { LEVEL_ONE_SHORT, LEVEL_ONE_TEXT, levelText } from './statlines.ts';
+import { LEVEL_ONE_TEXT, levelText } from './statlines.ts';
 import { start } from './app.ts';
 import { ASK_CHANGED } from './confirm.ts';
 import { answerConfirm, confirmPanel, confirmQuestion, flush, skipIntro } from './testing.ts';
@@ -77,7 +77,7 @@ function boot() {
   skipIntro();
   const result = () => root.querySelector<HTMLElement>('.hud-result')!;
   const title = () => result().querySelector('.hud-result-title')!.textContent;
-  const button = () => result().querySelector<HTMLButtonElement>('.hud-result-foot > .hud-button')!;
+  const button = () => result().querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!;
   // The corner as read: its tooltip (the horde) and its live wave line (ID-167).
   const bar = () =>
     `${root.querySelector<HTMLElement>('.hud-corner')!.title} · ${root.querySelector('.hud-corner-wave')!.textContent}`;
@@ -168,7 +168,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     endNextTick('won');
     step(48);
     expect(result().hidden).toBe(false);
-    expect(title()).toBe('Horde 1 held');
+    expect(title()).toBe('Horde 1 - You hold the line');
     expect(button().textContent).toBe('Start Horde 2');
     // Saved as the fight ends: a reload here keeps the win.
     expect(saved().hordeNumber).toBe(2);
@@ -231,7 +231,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     clock.mockReturnValue(NOW + 1000);
     step(80);
     expect(result().hidden).toBe(false);
-    expect(title()).toBe('Horde 1 held');
+    expect(title()).toBe('Horde 1 - You hold the line');
   });
 
   it('a loss shows its result at once (ID-110)', () => {
@@ -242,7 +242,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     endNextTick('lost');
     step(32);
     expect(result().hidden).toBe(false);
-    expect(title()).not.toBe('Horde 1 held');
+    expect(title()).not.toBe('Horde 1 - You hold the line');
   });
 
   it('a loss: nothing gained, and the same horde again with everyone', () => {
@@ -254,7 +254,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     step(16);
     endNextTick('lost');
     step(32);
-    expect(title()).toBe('The wall fell');
+    expect(title()).toBe('Horde 4 - Camp has fallen');
     expect(button().textContent).toBe('Retry Horde 4');
     button().click();
     expect(saved().hordeNumber).toBe(4);
@@ -425,7 +425,7 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
   });
 
   it('follows the camp while open: a gun equipped moves from the stash to the squad', () => {
-    const { root, invButton, invScrim } = seeded();
+    const { invButton, invScrim } = seeded();
     invButton.click();
     const heading = () => invScrim.querySelector('.inv-stash-heading')!.textContent;
     // The first survivor's slot is named for the gun they hold.
@@ -436,16 +436,15 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
         .split(',')[0];
     expect(heading()).toBe(`Stash 1/${STASH_CAP}`);
     expect(squadGun()).toBe('Pistol');
-    // The field is inert behind the dialog in a browser; jsdom lets the change through.
-    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
-    select.value = 'h1';
-    select.dispatchEvent(new Event('change'));
+    // Equip from the dialog itself: the squad's slot and the stash count follow it.
+    invScrim.querySelector<HTMLButtonElement>('.inv-slot[data-key="stash:h1"]')!.click();
+    invScrim.querySelector<HTMLButtonElement>('.inv-equip-on')!.click();
     expect(heading()).toBe(`Stash 0/${STASH_CAP}`);
     expect(squadGun()).toBe('Relic Carbine');
   });
 
   it('Best gun for everyone in the Inventory hands out the stash, saved; greyed in a fight', () => {
-    const { root, button, invButton, invScrim, saved } = seeded();
+    const { button, invButton, invScrim, saved } = seeded();
     invButton.click();
     const best = invScrim.querySelector<HTMLButtonElement>('.inv-best')!;
     const status = () => invScrim.querySelector('.inv-status')!.textContent;
@@ -455,8 +454,6 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     expect(status()).toBe(`Equipped: ${recruit(1).name} → Relic Carbine`);
     expect(saved().armoury).toEqual([]);
     expect(saved().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
-    // The start screen's gun picker follows.
-    expect(root.querySelector<HTMLSelectElement>('.hud-gear-select')!.value).toBe('h1');
     best.click();
     expect(status()).toBe(BEST_GUNS_NONE);
     invScrim.querySelector<HTMLButtonElement>('.menu-close')!.click();
@@ -467,19 +464,17 @@ describe('the Inventory in the game (app.ts, ID-079)', () => {
     expect(best.title).toBe(GUNS_WAIT);
   });
 
-  it('equips from the Inventory (ID-095): saved at once, and the gun picker follows', () => {
-    const { root, invButton, invScrim, saved } = seeded();
+  it('equips from the Inventory (ID-095): saved at once, and unequip puts it back', () => {
+    const { invButton, invScrim, saved } = seeded();
     invButton.click();
     invScrim.querySelector<HTMLButtonElement>('.inv-slot[data-key="stash:h1"]')!.click();
     invScrim.querySelector<HTMLButtonElement>('.inv-equip-on')!.click();
     expect(saved().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
     expect(saved().armoury).toHaveLength(0);
-    expect(root.querySelector<HTMLSelectElement>('.hud-gear-select')!.value).toBe('h1');
     expect(invScrim.querySelector('.inv-status')!.textContent).toMatch(/now holds Relic Carbine$/);
     // And back: Unequip puts it in the stash.
     invScrim.querySelector<HTMLButtonElement>('.inv-unequip')!.click();
     expect(saved().roster[0]!.loadout.primary).toBe('pistol');
-    expect(root.querySelector<HTMLSelectElement>('.hud-gear-select')!.value).toBe('pistol');
   });
 
   it('mid-fight the Inventory moves no guns and says when they change (ID-095)', () => {
@@ -518,17 +513,14 @@ describe('Combine in the game (app.ts, ID-091)', () => {
     return { ...booted, invButton, invScrim, combineButtons, close };
   }
 
-  it('on the start screen combines, saves, and the gun picker lists the new gun', () => {
-    const { root, invButton, invScrim, saved } = seeded();
+  it('on the start screen combines and saves the new gun', () => {
+    const { invButton, invScrim, saved } = seeded();
     invButton.click();
     invScrim.querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
     invScrim.querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
     expect(saved().armoury.map((w) => [w.uid, w.rarity, w.base])).toEqual([
       ['h1', 'common', 'smg'],
     ]);
-    const options = [...root.querySelectorAll<HTMLOptionElement>('.hud-gear-select option')];
-    expect(options.map((o) => o.value)).toContain('h1');
-    expect(options.find((o) => o.value === 'h1')!.textContent).toContain('Common SMG');
     expect(invScrim.querySelector('.inv-combine-result')!.textContent).toMatch(
       /^Made: Lv 1 Common SMG/,
     );
@@ -589,12 +581,15 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
     expect(root.textContent).not.toMatch(/stat point|points? left|Undo/);
   });
 
-  it('the start screen’s cards and the Roster show each survivor’s level line (ID-146)', () => {
+  it('the start screen’s cards read each survivor’s level aloud; the Roster shows the level line (ID-146, ID-196)', () => {
     const { root, scrim, rosterButton } = seeded();
-    const cardLine = (id: string) =>
-      root.querySelector(`.squad-card[data-defender="${id}"] .squad-card-bonus`)!.textContent;
-    expect(cardLine('recruit-1')).toBe(levelText(4, true));
-    expect(cardLine('recruit-2')).toBe(LEVEL_ONE_SHORT);
+    const cardLabel = (id: string) =>
+      root
+        .querySelector(`.squad-card[data-defender="${id}"] .squad-card-open`)!
+        .getAttribute('aria-label');
+    expect(cardLabel('recruit-1')).toMatch(/, level 4: open survivor card$/);
+    expect(cardLabel('recruit-2')).toMatch(/, level 1: open survivor card$/);
+    expect(root.querySelector('.squad-card-bonus')).toBeNull();
     rosterButton.click();
     expect(scrim.querySelector('.rv-level')!.textContent).toBe(levelText(4));
     scrim.querySelector<HTMLButtonElement>('.rv-tab[data-defender="recruit-2"]')!.click();
@@ -663,7 +658,8 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
     const name = [...result().querySelectorAll<HTMLButtonElement>('.squad-card-open')][0]!;
     expect(name.textContent).toBe(recruit(1).name);
     const card = root.querySelector<HTMLElement>(`.squad-card[data-defender="recruit-1"]`)!;
-    expect(card.querySelector('.squad-card-bonus')!.textContent).toBe(levelText(4, true));
+    expect(name.getAttribute('aria-label')).toBe(`${recruit(1).name}, level 4: open survivor card`);
+    expect(card.querySelector('.squad-card-bonus')).toBeNull();
     expect(root.querySelector(NO_STAT_UI)).toBeNull();
     name.click();
     expect(scrim.hidden).toBe(false);
@@ -721,9 +717,12 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     return { ...booted, scrim, card, open, close };
   }
 
-  it('a result card shows the level line and no stat block; the keyboard is on the button', () => {
+  it('a result card has no level line and no stat block; the keyboard is on the button', () => {
     const { card, button } = wonWithPoints();
-    expect(card().querySelector('.squad-card-bonus')!.textContent).toBe(levelText(4, true));
+    expect(card().querySelector('.squad-card-open')!.getAttribute('aria-label')).toMatch(
+      /, level 4: open survivor card$/,
+    );
+    expect(card().querySelector('.squad-card-bonus')).toBeNull();
     expect(card().querySelector('.squad-plus, .squad-pick, .hud-pick-stat')).toBeNull();
     expect(document.activeElement).toBe(button());
   });
@@ -746,18 +745,6 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
         (d) => typeof d.loadout.primary === 'object' && d.loadout.primary.uid === 'h1',
       ),
     ).toBe(true);
-  });
-
-  it('follows the camp while open: a gun equipped on the result screen shows in the slot', () => {
-    const { root, scrim } = wonWithPoints();
-    root.querySelector<HTMLButtonElement>('.roster-button')!.click();
-    const slot = () => scrim.querySelector('[data-key="slot"]')!.textContent!;
-    expect(slot()).toContain('Pistol');
-    // The field is inert behind the dialog in a browser; jsdom lets the change through.
-    const select = root.querySelector<HTMLSelectElement>('.hud-gear-select')!;
-    select.value = 'h1';
-    select.dispatchEvent(new Event('change'));
-    expect(slot()).toContain('Relic Carbine');
   });
 
   it('a survivor with no card on a win changes guns from the Roster (ID-134)', () => {
@@ -791,11 +778,8 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
         (d) => typeof d.loadout.primary === 'object' && d.loadout.primary.uid === 'h1',
       ),
     ).toBe(true);
-    // The card's gun picker follows.
-    const select = root.querySelector<HTMLSelectElement>(
-      '.squad-card[data-defender="recruit-1"] .hud-gear-select',
-    );
-    expect(select).not.toBeNull();
+    // The card has no gun picker: guns change in the Roster (ID-196).
+    expect(root.querySelector('.squad-card select')).toBeNull();
     root.querySelector<HTMLButtonElement>('.debrief-best-guns')!.click();
     expect(toast()).toBe(BEST_GUNS_NONE);
   });
@@ -871,7 +855,7 @@ describe('farming in the game (app.ts, ID-098)', () => {
     frame();
     endNextTick('won');
     frame();
-    expect(title()).toBe('Horde 3 held (replay)');
+    expect(title()).toBe('Horde 3 - You hold the line (replay)');
     expect(result().textContent).not.toContain('New survivor');
     // The next new horde has not moved; the roster has not grown; the XP is paid.
     expect(saved().hordeNumber).toBe(5);
@@ -894,7 +878,7 @@ describe('farming in the game (app.ts, ID-098)', () => {
     frame();
     endNextTick('won');
     frame();
-    expect(title()).toBe('Horde 5 held');
+    expect(title()).toBe('Horde 5 - You hold the line');
     expect(saved().hordeNumber).toBe(6);
     accept(document.body);
     expect(select().value).toBe('6');
@@ -998,7 +982,7 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     expect(pressed(root)).toEqual(['airstrike']);
     expect(option(root, 'airstrike').disabled).toBe(false);
     // One skill to pick: the header asks for no second one.
-    expect(root.querySelector('#hud-skill-label')!.textContent).toBe('Skill');
+    expect(root.querySelector('#hud-skill-label')!.textContent).toBe('Skills');
     // The only skill, picked: no note at all (ID-185).
     expect(root.querySelector<HTMLElement>('.hud-skill-note')!.hidden).toBe(true);
     // No ×2 claim on the card (ID-174).
@@ -1374,7 +1358,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     step(16);
     endNextTick('won');
     step(32);
-    const join = () => booted.root.querySelector<HTMLElement>('.tile-join')!;
+    const join = () => booted.root.querySelector<HTMLElement>('.debrief-join')!;
     const press = (label: 'Accept' | 'Refuse') =>
       [...join().querySelectorAll<HTMLButtonElement>('.join-btn')]
         .find((b) => b.textContent === label)!
@@ -1387,14 +1371,13 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     const { join, press, saved, toast } = wonFirst();
     const asking = saved().joining![0]!;
     expect(join().hidden).toBe(false);
-    expect(join().querySelector('.tile-name')!.textContent).toBe(asking.name);
-    expect(join().querySelector('.join-row .tile-sub')!.textContent).toMatch(
-      /^Lv 1 · .+ · Pistol$/,
-    );
+    expect(join().querySelector('.join-name')!.textContent).toBe(asking.name);
+    expect(join().querySelector('.join-who')!.textContent).toMatch(/^.+ · .+ asks to join$/);
+    expect(join().querySelector<HTMLElement>('.join-who')!.title).toMatch(/^Lv 1 · .+ · Pistol\. /);
     press('Accept');
     expect(saved().roster.map((d) => d.id)).toEqual(['recruit-1', asking.id]);
     expect(saved().joining).toBeUndefined();
-    // The answer stays on the result's camp tile (ID-182), in the toast's own words.
+    // The answer stays on the result's offer line (ID-182, ID-196), in the toast's own words.
     expect(join().hidden).toBe(false);
     expect(join().querySelector('.join-row')).toBeNull();
     expect(join().querySelector('.join-answer')!.textContent).toBe(
@@ -1414,9 +1397,9 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     expect(card.classList.contains('squad-card-new')).toBe(true);
     expect(card.querySelector('.squad-badge-new')!.textContent).toBe('New');
     expect(card.querySelector('.squad-card-name')!.textContent).toBe(asking.name);
-    // No "nobody levelled up" line left beside a card, and the card gets its gun picker.
+    // No "nobody levelled up" line left beside a card, and the card has no gun picker.
     expect(result().querySelector('.debrief-empty')).toBeNull();
-    expect(card.querySelector('select.hud-gear-select')).not.toBeNull();
+    expect(card.querySelector('select')).toBeNull();
     // Only the newcomer is marked.
     expect(result().querySelectorAll('.squad-card-new')).toHaveLength(1);
   });
@@ -1494,13 +1477,14 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     step(100);
     expect(again.title()).toMatch(/Horde 2/);
     expect(again.result().textContent).toContain(asking.name);
-    const join = again.root.querySelector<HTMLElement>('.tile-join')!;
+    const join = again.root.querySelector<HTMLElement>('.debrief-join')!;
     expect(join.hidden).toBe(false);
     [...join.querySelectorAll<HTMLButtonElement>('.join-btn')]
       .find((b) => b.textContent === 'Accept')!
       .click();
     expect(again.saved().roster.map((d) => d.id)).toContain(asking.id);
-    expect(again.root.querySelector<HTMLElement>('.tile-join')?.isConnected ?? false).toBe(false);
+    // Answered: the box is gone from the offer line's place, or hidden once the screen moves on.
+    expect(again.root.querySelector<HTMLElement>('.debrief-join .join-row') ?? null).toBeNull();
     step(116);
     expect(vi.mocked(drawScene).mock.lastCall![2].defenders).toHaveLength(2);
   });
@@ -1873,7 +1857,7 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
     step(16);
     endNextTick(outcome);
     step(32);
-    const tile = () => booted.root.querySelector<HTMLElement>('.tile-join');
+    const tile = () => booted.root.querySelector<HTMLElement>('.debrief-join');
     const press = (label: 'Accept' | 'Refuse') =>
       [...tile()!.querySelectorAll<HTMLButtonElement>('.join-btn')]
         .find((b) => b.textContent === label)!
@@ -1918,20 +1902,22 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
     (_n, n, replay, asks) => {
       // A full camp never asks, whatever the seed: any will do.
       const seed = n >= 40 ? 1 : seeds(n, replay, asks, 1)[0]!;
-      const { tile, saved } = playWin(camp(n), seed, replay ? 3 : null);
+      const { tile, saved, root } = playWin(camp(n), seed, replay ? 3 : null);
       const asking = saved().joining ?? [];
       const rows = [...tile()!.querySelectorAll<HTMLElement>('.join-row')];
-      expect(tile()!.hidden).toBe(false);
-      expect(rows.map((r) => r.querySelector('.tile-name')!.textContent)).toEqual(
+      expect(rows.map((r) => r.querySelector('.join-name')!.textContent)).toEqual(
         asking.map((d) => d.name),
       );
+      const notes = [...root.querySelectorAll('.debrief-notes li')].map((li) => li.textContent);
       if (asking.length > 0) {
+        expect(tile()!.hidden).toBe(false);
         expect(tile()!.getAttribute('aria-label')).toBe('Asking to join');
-        expect(tile()!.querySelector('.join-none')).toBeNull();
+        expect(notes.join(' ')).not.toMatch(/Nobody new|Camp is full/);
       } else {
+        // Nobody asks: the box is hidden and the details say why, last.
         const why = n >= 40 ? 'camp-full' : replay ? 'nobody-replay' : 'nobody-first';
-        expect(tile()!.getAttribute('aria-label')).toBe('Camp');
-        expect(tile()!.querySelector('.join-none')!.textContent).toBe(noJoinText(why, n));
+        expect(tile()!.hidden).toBe(true);
+        expect(notes.at(-1)).toBe(noJoinText(why, n));
       }
       expect(asking.length > 0).toBe(asks && n < 40);
     },
@@ -1982,8 +1968,12 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
   it('a replay with nobody says why; a first clear with nobody says why and offers no one', () => {
     const [replaySeed] = seeds(7, true, false, 1);
     const a = playWin(camp(7), replaySeed!, 3);
-    expect(a.tile()!.textContent).toContain(noJoinText('nobody-replay', 7)!);
+    // The reason is the last of the details; the offer line itself is hidden.
+    expect(a.root.querySelector('.debrief-notes li:last-child')!.textContent).toBe(
+      noJoinText('nobody-replay', 7),
+    );
     expect(a.saved().joining).toBeUndefined();
+    expect(a.tile()!.hidden).toBe(true);
     expect(a.tile()!.querySelector('.join-btn')).toBeNull();
     // Odds come off the data: 1 in 20 and 1 in 7.
     expect(noJoinText('nobody-replay', 7)).toBe(
@@ -1997,18 +1987,21 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
     expect(noJoinText('lost', 7)).toBeNull();
   });
 
-  it('a lost fight has no camp tile at all', () => {
+  it('a lost fight has no offer line at all', () => {
     const { root, title } = playWin(camp(7), 1, null, 'lost');
-    expect(title()).toBe('The wall fell');
-    expect(root.querySelector('.tile-join')).toBeNull();
+    expect(title()).toBe('Horde 5 - Camp has fallen');
+    expect(root.querySelector('.debrief-join')).toBeNull();
   });
 
-  it('a replay past the replay limit drops nothing and says so on the tile (no-drop)', () => {
+  it('a replay past the replay limit drops nothing and says so in the details (no-drop)', () => {
     const g = camp(7);
     const save = { ...g, farm: { ...g.farm, replays: FARM.maxReplays } };
-    const { tile, saved } = playWin(save, 1, 3);
-    expect(tile()!.getAttribute('aria-label')).toBe('Camp');
-    expect(tile()!.querySelector('.join-none')!.textContent).toBe(noJoinText('no-drop', 7));
+    const { tile, saved, root } = playWin(save, 1, 3);
+    expect(tile()!.hidden).toBe(true);
+    expect(root.querySelector('.debrief-notes li:last-child')!.textContent).toBe(
+      noJoinText('no-drop', 7),
+    );
+    expect(root.querySelector('.debrief-guns')).toBeNull();
     expect(saved().joining).toBeUndefined();
   });
 });

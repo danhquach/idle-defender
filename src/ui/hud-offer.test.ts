@@ -189,3 +189,24 @@ describe('picking a card (ID-103)', () => {
     expect(onChoose).toHaveBeenCalledExactlyOnceWith(2);
   });
 });
+
+describe('an offer on the tick the fight ends (ID-196)', () => {
+  it('is never shown: a won or lost fight keeps the cards panel hidden', () => {
+    for (const outcome of ['won', 'lost'] as const) {
+      const { hud, panel, cards } = mount();
+      hud.update({ ...withOffer(offer('hollow-points', 'field-repairs')), outcome });
+      expect(panel.hidden).toBe(true);
+      expect(cards()).toHaveLength(0);
+    }
+  });
+
+  it('an open offer goes away when the fight ends under it, and shows while it is on', () => {
+    const { hud, panel, cards } = mount();
+    const on = withOffer(offer('hollow-points', 'field-repairs'));
+    hud.update(on);
+    expect(panel.hidden).toBe(false);
+    expect(cards()).toHaveLength(2);
+    hud.update({ ...on, outcome: 'won' });
+    expect(panel.hidden).toBe(true);
+  });
+});
