@@ -1414,7 +1414,8 @@ profession's output).
       Details button last. A win's title is "Horde 4 - You hold the line"
       (a replay adds "(replay)"; the finale keeps "The evacuation is
       called"), a loss's "Horde 4 - Camp has fallen"; the start screen's is
-      the horde.
+      the horde alone ("Horde 10"): its "Boss horde" and "Replay" pills
+      say the rest, once.
     - **Body** (the only part that scrolls): a loss's callout; a win's
       sentences (with Details open) and its weapons; the Squad section;
       anyone asking to join; then the screen's line (how a horde is lost,
@@ -1447,13 +1448,15 @@ profession's output).
       pill scrolls to it and puts the keyboard on Accept.
     - **Skills row:** the footer's first row, the skill toggles (name and
       cooldown) after a "Skills" label ("Skills (up to 2)" once there is a second one), with room for more.
-    - **Start row:** three columns. The horde select, with where to farm
-      instead under it; the pick's readiness, "Power 815 · rec 242" with
-      its band over the win cost, a clear gap between the two; and the
-      button. Readiness is said once: the select's options are short
-      ("Horde 7 (new) · Boss", "Horde 5 · best to farm") and the select is
-      as wide as its pick, so it never cuts them. On a phone the select,
-      the readiness and the button each take a row.
+    - **Start row:** three columns. The horde select, with the pick's
+      power under it ("Power 815 · rec 242" and its band), then where to
+      farm instead; the win cost ("Win cost:" and its pill, on one line);
+      and the button ("Start Horde 7", "Replay Horde 5", "Retry Horde 5",
+      with no boss suffix: the select says "Boss"). Readiness is said
+      once: the select's options are short ("Horde 7 (new) · Boss",
+      "Horde 5 · best to farm") and the select is as wide as its pick, no
+      wider, so it never cuts them. On a phone the select with its power
+      line, the win cost and the button each take a row.
     - **No radio:** the panel has no radio pill, no explanation and no
       word of it (ID-190 is undone here). A boss's first clear has a "New
       card: …" pill when it unlocks one, and "Boss horde beaten. New card
@@ -2167,7 +2170,7 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
 
   Ability clocks run on fight time (they stop during picks) and wait out a
   flashbang: a stunned Rammer holds its charge, and a Regenerator's 0.3 s
-  count waits out the stun too. The HUD marks a boss horde on the start button ("Boss horde") and
+  count waits out the stun too. The HUD marks a boss horde on the base view's start button ("Boss horde"; the Horde panel says it with its pill and the select's "Boss") and
   in the status line, shows a boss bar with the Horror's name, ability and HP
   while it is on the field, and the result screen names it ("injured by the
   Mutated Horror", "the Mutated Horror: Rammer is dead", or "still stood").
@@ -3183,18 +3186,18 @@ and comes back stronger.
     20 60%.)
 - **Bands:** green at or above Recommended, amber within 15% below, red
   further. The numbers are always shown; it never blocks a start.
-- **Injury band (ID-155, `INJURY_BAND` in `data.ts`):** under the power line
-  the picker shows how many survivors a win is likely to cost: "Win cost:" and
-  a pill that says the result (ID-184; it said few / some / heavy until then):
-  **"usually nobody down"** at 2× Recommended or more, **"about 1 down"** from
-  1.6×, **"1 or more down"** under it, in the green / amber / red band colours
+- **Injury band (ID-155, `INJURY_BAND` in `data.ts`):** beside the horde
+  select the picker shows how many survivors a win is likely to cost: "Win cost:" and
+  a short pill that says the result (ID-184; it said few / some / heavy until then):
+  **"nobody down"** at 2× Recommended or more, **"~1 down"** from
+  1.6×, **"1+ down"** under it, in the green / amber / red band colours
   (the words are always there, so colour is never the only cue). It follows
   the picked horde. The pill's tooltip says it in full: "If you win, usually
   nobody goes down", "about 1 survivor goes down on average", "1 or more survivors
   go down on average".
   A band, not a %: Squad Power counts DPS only, not HP or armour, so a
   precise figure would mislead. Advice only, like the power bands: a green
-  power band can still read "1 or more down", and it never blocks a start.
+  power band can still read "1+ down", and it never blocks a start.
   - *Measured (16 scripted campaigns to Horde 18, the ID-155 rest rule, 607
     won fights; downed = dropped to 0 HP):*
 
