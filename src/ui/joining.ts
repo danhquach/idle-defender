@@ -13,6 +13,8 @@ import { jobLine } from './jobtext.ts';
 export interface JoinCard {
   id: string;
   name: string;
+  /** "Hunter": their profession alone, for the panel's one-line offer (ID-196). */
+  profession: string;
   /** "Lv 1 · Hunter · Pistol" */
   sub: string;
   /** What their profession brings (`jobLine`). */
@@ -27,6 +29,7 @@ export const joinCards = (game: Pick<GameState, 'joining'>): JoinCard[] =>
       id: d.id,
       name: d.name,
       sub: `Lv ${level} · ${JOBS[d.job].name} · ${gunName(heldGunOf(d))}`,
+      profession: JOBS[d.job].name,
       job: jobLine(d.job, level),
     };
   });
@@ -66,7 +69,7 @@ export const answerText = (name: string, where: 'squad' | 'bench' | null): strin
 const oneIn = (p: number): number => Math.round(1 / p);
 
 /**
- * Why nobody is asking to join (ID-182), for the result's camp tile; null on a loss, which
+ * Why nobody is asking to join (ID-182), for the result's details; null on a loss, which
  * has no such tile. Every number is read off the join rule's data (`SQUAD_JOIN`,
  * `SQUAD_CAP`); `size` is the camp's survivors.
  */

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Joining the camp in words and on the page (ID-150): the offer tile's cards, its Accept and
+// Joining the camp in words and on the page (ID-150): the offer line's cards, its Accept and
 // Refuse, the two confirms, and text reaching the page only through textContent.
 import { describe, expect, it, vi } from 'vitest';
 import { rollWeapon } from '../core/armoury.ts';
@@ -30,6 +30,7 @@ describe('joining in words (ID-150)', () => {
       {
         id: 'recruit-2',
         name: a.name,
+        profession: JOBS[a.job].name,
         sub: `Lv 1 · ${JOBS[a.job].name} · Pistol`,
         job: jobLine(a.job, 1),
       },
@@ -80,7 +81,7 @@ describe('joining in words (ID-150)', () => {
   });
 });
 
-describe('the offer tile on the page (ID-150)', () => {
+describe('the offer line on the page (ID-150, ID-196)', () => {
   function page() {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
@@ -90,7 +91,7 @@ describe('the offer tile on the page (ID-150)', () => {
     const g = { ...newGame('horde'), joining: [recruit(2)] };
     g.camp.recruits = 2;
     h.showResult(squadStart(g));
-    const tile = () => root.querySelector<HTMLElement>('.tile-join')!;
+    const tile = () => root.querySelector<HTMLElement>('.debrief-join')!;
     return { root, h, onJoin, tile };
   }
 
@@ -110,12 +111,12 @@ describe('the offer tile on the page (ID-150)', () => {
     expect(onJoin).toHaveBeenCalledTimes(2);
   });
 
-  it('nobody left asking hides the tile', () => {
+  it('nobody left asking hides the box', () => {
     const { h, tile } = page();
     h.showJoin(joinCards({ joining: [recruit(2)] }));
     expect(tile().hidden).toBe(false);
-    // Refuse is permanent, said before any answer.
-    expect(tile().querySelector('.join-note')!.textContent).toBe(REFUSE_NOTE);
+    // Refuse is permanent, said on its button before any answer.
+    expect(tile().querySelectorAll<HTMLButtonElement>('.join-btn')[1]!.title).toBe(REFUSE_NOTE);
     h.showJoin([]);
     expect(tile().hidden).toBe(true);
   });
@@ -125,12 +126,17 @@ describe('the offer tile on the page (ID-150)', () => {
     const hostile: JoinCard = {
       id: 'recruit-2',
       name: '<img src=x onerror=alert(1)>',
+      profession: 'Hunter',
       sub: '<script>alert(1)</script>',
       job: 'A\u202eB',
     };
     h.showJoin([hostile]);
     expect(tile().querySelector('img, script')).toBeNull();
-    expect(tile().querySelector('.tile-name')!.textContent).toBe(hostile.name);
-    expect(tile().querySelector('.join-job')!.textContent).toBe('A\u202eB');
+    expect(tile().querySelector('.join-name')!.textContent).toBe(hostile.name);
+    // The job is on the Accept button's hover title, the name and sub on the line's.
+    expect(tile().querySelector<HTMLButtonElement>('.join-btn')!.title).toBe('A\u202eB');
+    expect(tile().querySelector<HTMLElement>('.join-who')!.title).toBe(
+      '<script>alert(1)</script>. A\u202eB',
+    );
   });
 });

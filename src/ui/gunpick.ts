@@ -19,7 +19,7 @@ import { isGun } from '../core/loadout.ts';
 import { survivorDps, type Statted } from '../core/stats.ts';
 import { dpsCaption } from './hud.ts';
 
-/** The gun `d` fights with: a primary that is no gun fights as the pistol (as squadGear). */
+/** The gun `d` fights with: a primary that is no gun fights as the pistol (as `squadSpec`). */
 export const heldGunOf = (d: RosterDefender): Held =>
   isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
 

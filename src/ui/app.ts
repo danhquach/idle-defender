@@ -24,7 +24,6 @@ import {
   combineSurvivors,
   equipGun,
   finishSquadHorde,
-  isEndless,
   joiningOf,
   letGo,
   refuseJoins,
@@ -49,7 +48,6 @@ import {
   readAutoStrike,
   readChatter,
   readHowToSeen,
-  readRadioSeen,
   readReduceMotion,
   readSound,
   readSpeed,
@@ -57,7 +55,6 @@ import {
   writeAutoStrike,
   writeChatter,
   writeHowToSeen,
-  writeRadioSeen,
   writeMute,
   writeReduceMotion,
   writeSpeed,
@@ -108,7 +105,6 @@ import {
   skillPicker,
   skillSlots,
   SPEED_KEYS,
-  squadGear,
   squadScreen,
   type ResultScreen,
   squadStart,
@@ -358,7 +354,7 @@ export function start(root: HTMLElement, art: Art): void {
       return;
     }
     commit(r.game);
-    // One string, in the toast and on the result's camp tile (ID-182).
+    // One string, in the toast and on the result's offer line (ID-182).
     const said = answerText(name, r.where);
     hud.toast(said);
     hud.noteJoin(said);
@@ -393,16 +389,12 @@ export function start(root: HTMLElement, art: Art): void {
     const retry = horde && endedAt !== null && horde.outcome === 'lost' ? horde.hordeNumber : null;
     hud.showPicker(hordePicker(game, picked, retry, !horde));
   }
-  /** The horde-only gun pickers (ID-067) for the game as it stands, between hordes only. */
-  function showGear(): void {
-    hud.showGear(squadGear(game), (defenderId, choice) => {
-      if (horde && endedAt === null) return;
-      const r = changeGun(defenderId, choice);
-      if (!r.ok) {
-        hud.toast(r.reason);
-        showGear();
-      }
-    });
+  /**
+   * The result or start screen brought up to the game as it stands, between hordes only: its
+   * squad (ID-157), the picker's readiness and whoever is asking to join.
+   */
+  function refreshPanel(): void {
+    hud.showSquad(new Set(squadOf(game).map((d) => d.id)));
     // A new gun moves Squad Power, so the picker's bands follow.
     showPicker();
     // Whoever is still asking to join (ID-150), on the result or start screen.
@@ -422,7 +414,7 @@ export function start(root: HTMLElement, art: Art): void {
     commit(r.game);
     // The start screen's squad on the wall holds the new gun too.
     if (!horde) preview = startSquadHorde(game, 0, Date.now());
-    showGear();
+    refreshPanel();
     return { ok: true };
   }
   /**
@@ -471,21 +463,6 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true, moves: markBench(moves, new Set(squadOf(next).map((d) => d.id))) };
   }
   /**
-   * Whether the radio explanation (ID-190) shows open on a start screen: open the first time
-   * (the flag is saved at once), then as the player last left it. Kept for the session only.
-   */
-  let radioOpen: boolean | null = null;
-  function radioState(): boolean {
-    if (radioOpen === null && !isEndless(game)) {
-      radioOpen = !readRadioSeen(storage);
-      if (radioOpen) writeRadioSeen(storage);
-    }
-    return radioOpen ?? false;
-  }
-  hud.onRadioToggle((open) => {
-    radioOpen = open;
-  });
-  /**
    * After the camp changed between hordes (the squad picked, someone joined or left): the
    * start screen and its squad on the wall, and the gun pickers, redrawn.
    */
@@ -493,9 +470,9 @@ export function start(root: HTMLElement, art: Art): void {
     if (!horde) {
       preview = startSquadHorde(game, 0, Date.now());
       hud.update(preview);
-      hud.showResult(squadStart(game, picked, radioState()));
+      hud.showResult(squadStart(game, picked));
     }
-    showGear();
+    refreshPanel();
   }
   /**
    * Lets survivor `id` go between hordes (the Roster, ID-150), on a yes to the confirm
@@ -666,7 +643,7 @@ export function start(root: HTMLElement, art: Art): void {
             if (!r.ok) return r;
             commit(r.game);
             // The gun pickers list the stash: the new gun is there, the used ones gone.
-            showGear();
+            refreshPanel();
             return { ok: true, weapon: r.weapon };
           }
         : undefined,
@@ -828,8 +805,8 @@ export function start(root: HTMLElement, art: Art): void {
       hud.show(true);
       hud.update(preview);
       picked = picked >= 1 && picked <= game.hordeNumber ? picked : game.hordeNumber;
-      hud.showResult(squadStart(game, picked, radioState()));
-      showGear();
+      hud.showResult(squadStart(game, picked));
+      refreshPanel();
       cam = buildCam = fightCam;
       refreshDialogs();
       return;
@@ -1152,7 +1129,7 @@ export function start(root: HTMLElement, art: Art): void {
       if (pendingResult && Date.now() >= pendingResult.at) {
         hud.showResult(pendingResult.screen);
         pendingResult = null;
-        if (HORDE_ONLY) showGear();
+        if (HORDE_ONLY) refreshPanel();
         // A Menu, Inventory or Roster open over the last kills unlocks now (ID-156).
         refreshDialogs();
       }

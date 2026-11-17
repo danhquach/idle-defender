@@ -226,7 +226,7 @@ export const STASH_EMPTY = 'Empty. Every horde won drops a gun here.';
 export const PISTOL_NOTE = 'Free and unlimited: every survivor has one.';
 export const IN_STASH = 'In the stash.';
 export const INVENTORY_NOTE =
-  'Pick each survivor’s gun in the Roster, or on the start and result screens.';
+  'Pick each survivor’s gun in the Roster, or use Best gun for everyone.';
 export const COMBINE_NOTE = `${COMBINE_COUNT} stash guns of one kind and rarity make 1 of the next rarity.`;
 export const COMBINE_HELD = 'Only stash guns combine: put it back in the stash first.';
 export const COMBINE_TOP = 'Relic is the top rarity: it combines no further.';
@@ -339,7 +339,7 @@ export function inventoryView(
     },
     free: Math.max(0, cap - n),
     squad: squadOf(game).map((d) => {
-      // What they fight with: a primary that is no gun fights as the pistol (as squadGear).
+      // What they fight with: a primary that is no gun fights as the pistol (as `squadSpec`).
       const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
       return {
         id: d.id,

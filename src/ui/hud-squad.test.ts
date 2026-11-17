@@ -9,7 +9,7 @@ import { RADIO_HORDES, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
-import { waveCount, xpToNext } from '../core/waves.ts';
+import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import {
   createHud,
   defenderLabel,
@@ -21,7 +21,6 @@ import {
   powerLine,
   SQUAD_LOSS_RULE,
   SQUAD_NO_LEVEL_UPS,
-  squadGear,
   squadScreen,
   squadStart,
   squadStatus,
@@ -32,10 +31,8 @@ import {
   swapsText,
   xpBar,
 } from './hud.ts';
-import { wonNote } from './testing.ts';
 import type { Swap } from '../core/horde.ts';
 import { ART_URLS } from './sprites.ts';
-import { levelText } from './statlines.ts';
 import { noJoinText } from './joining.ts';
 import { enemy } from '../core/testing.ts';
 
@@ -106,14 +103,16 @@ describe('the horde-only screens (ID-066)', () => {
   it('a win: XP and level-ups by name, the new survivor, and the next horde', () => {
     const g = squadGame(2, 5, 0);
     const screen = squadScreen(g, ended(g, 'won'));
-    expect(screen.title).toBe('Horde 5 held');
+    expect(screen.title).toBe('Horde 5 - You hold the line');
     expect(screen.lines.some((l) => l.startsWith(`${recruit(1).name} +`))).toBe(true);
     expect(screen.lines.some((l) => l.endsWith(' · level up!'))).toBe(true);
     expect(screen.lines.join(' ')).not.toMatch(/stat point/);
     expect(screen.lines.some((l) => /level 2 · \d+\/50 XP to level 3/.test(l))).toBe(true);
     // The newcomer asks on the camp tile, not in the (unrendered) lines (ID-182).
     expect(screen.lines.join(' ')).not.toMatch(/asks to join/);
-    expect(screen.debrief!.join).toEqual({ size: 2, none: null });
+    expect(screen.debrief!.join).toBe(true);
+    // A newcomer is asking, so no reason why nobody came is in the details.
+    expect(screen.debrief!.notes!.join(' ')).not.toMatch(/Nobody new/);
     expect(screen.lines.join(' ')).not.toMatch(/Camp|Genes|Payout|Repair|injured/);
     expect(screen.button).toBe(startLabel(6));
     expect(screen.squad).toBe(true);
@@ -122,28 +121,30 @@ describe('the horde-only screens (ID-066)', () => {
   it('a win past 6 whose roll misses says why nobody joins on the camp tile (seed 1, ID-182)', () => {
     const g = squadGame(SQUAD_CAP, 2);
     const s = squadScreen(g, ended(g, 'won'));
-    expect(s.debrief!.join).toEqual({
-      size: SQUAD_CAP,
-      none: noJoinText('nobody-first', SQUAD_CAP),
-    });
+    expect(s.debrief!.join).toBe(true);
+    // The reason is the last sentence of the details (ID-196), not a camp tile or a line.
+    expect(s.debrief!.notes!.at(-1)).toBe(noJoinText('nobody-first', SQUAD_CAP));
     expect(s.lines.join(' ')).not.toMatch(/Nobody new/);
   });
 
-  it('a boss horde’s first clear finds a radio part and names its card unlock (ID-127)', () => {
+  it('a boss horde’s first clear names its card unlock, and the word radio is nowhere (ID-127, ID-196)', () => {
     const at10 = squadGame(SQUAD_CAP, 10);
     const a = squadScreen(at10, ended(at10, 'won'));
-    expect(a.title).toBe('Horde 10 held');
+    expect(a.title).toBe('Horde 10 - You hold the line');
     expect(a.button).toBe(startLabel(11));
-    expect(a.lines.at(-1)).toBe('Radio part found. New card unlocked: Heavy Rounds.');
-    expect(wonNote(a)).toBe(a.lines.at(-1));
-    expect(a.debrief!.chips.map((c) => c.text)).toContain('Radio part 1/3');
+    expect(a.lines.at(-1)).toBe('Boss horde beaten. New card unlocked: Heavy Rounds.');
+    expect(a.debrief!.notes![0]).toBe(a.lines.at(-1));
+    // The chip names the card (its sentence is in the details); no radio pill (ID-196).
+    const unlock = a.debrief!.chips.find((c) => c.text === 'New card: Heavy Rounds');
+    expect(unlock).toMatchObject({ details: true });
+    expect(a.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
     const at20 = squadGame(SQUAD_CAP, 20);
     const b = squadScreen(at20, ended(at20, 'won'));
-    expect(wonNote(b)).toBe('Radio part found. New card unlocked: Field Repairs.');
+    expect(b.debrief!.notes![0]).toBe('Boss horde beaten. New card unlocked: Field Repairs.');
     // No other horde finds a part.
     const at11 = squadGame(SQUAD_CAP, 11);
     const c = squadScreen(at11, ended(at11, 'won'));
-    expect(wonNote(c)).toBeNull();
+    expect(c.lines.join(' ')).not.toMatch(/Boss horde beaten/);
     expect(c.debrief!.chips.map((x) => x.text).join(' ')).not.toMatch(/Radio/);
   });
 
@@ -152,45 +153,68 @@ describe('the horde-only screens (ID-066)', () => {
     const screen = squadScreen(g, ended(g, 'won'));
     expect(screen.title).toBe(EVACUATION_TITLE);
     expect(screen.button).toBe('Continue');
-    expect(wonNote(screen)).toBe(
-      'The radio works. You held the camp. Play on in Endless for a best horde.',
+    expect(screen.debrief!.notes![0]).toBe(
+      'You held the camp and the evacuation is called. Play on in Endless for a best horde.',
     );
     expect(screen.debrief!.chips[0]!.text).toBe('Horde 30 held');
-    expect(screen.debrief!.chips.map((c) => c.text)).toContain('Radio part 3/3');
+    expect(screen.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
     // Continue starts the first Endless horde.
     expect(screen.picker!.value).toBe(31);
   });
 
-  it('the start screen shows the radio’s progress, then Endless and the best horde (ID-127)', () => {
-    const chip = (horde: number): string => squadStart(squadGame(1, horde)).debrief!.chips[0]!.text;
-    expect(chip(1)).toBe('Radio 0/3');
-    expect(chip(10)).toBe('Radio 0/3');
-    expect(chip(11)).toBe('Radio 1/3');
-    expect(chip(21)).toBe('Radio 2/3');
-    expect(chip(30)).toBe('Radio 2/3');
-    expect(chip(31)).toBe('Endless · best 30');
-    expect(chip(45)).toBe('Endless · best 44');
-    expect(squadStart(squadGame(1, 11)).debrief!.note).toBe(
-      'Beat boss Horde 20 for radio part 2 of 3.',
-    );
+  it('the start screen has no radio pill, then Endless and the best horde (ID-127, ID-196)', () => {
+    const chips = (horde: number, picked?: number): string[] =>
+      squadStart(squadGame(1, horde), picked).debrief!.chips.map((c) => c.text);
+    // The campaign: waves and squad only, from the first horde to the finale.
+    for (const horde of [1, 10, 11, 21, 30]) {
+      expect(chips(horde)).toEqual([
+        ...(horrorAbility(horde) ? ['Boss horde'] : []),
+        `${waveCount(horde)} waves`,
+        `Squad 1/${SQUAD_CAP}`,
+      ]);
+    }
+    expect(chips(31)[0]).toBe('Endless · best 30');
+    expect(chips(45)[0]).toBe('Endless · best 44');
+    // The goal says the same whichever horde the picker is on.
+    expect(chips(45, 5)[0]).toBe('Endless · best 44');
+    // The rule sits after the squad; in Endless the horde to hold leads it.
+    expect(squadStart(squadGame(1, 11)).debrief!.note).toBe(SQUAD_LOSS_RULE);
     expect(squadStart(squadGame(1, 45)).debrief!.note).toBe(
+      `Evacuation called. Hold Horde 45 for a new best. ${SQUAD_LOSS_RULE}`,
+    );
+    // Its lines keep the goal after the rule (ID-066).
+    expect(squadStart(squadGame(1, 45)).lines.at(-1)).toBe(
       'Evacuation called. Hold Horde 45 for a new best.',
     );
-    // The goal says the same whichever horde the picker is on.
-    expect(squadStart(squadGame(1, 21), 5).debrief!.chips[0]!.text).toBe('Radio 2/3');
-    expect(squadStart(squadGame(1, 21)).lines.at(-1)).toBe(
-      squadStart(squadGame(1, 21)).debrief!.note,
-    );
+  });
+
+  it('the campaign start screen says nothing of the radio: no pill, no explainer, no note (ID-196)', () => {
+    for (const horde of [1, 5, 10, 11, 20, 21, 30]) {
+      const g = squadGame(2, horde);
+      const d = squadStart(g).debrief!;
+      expect(d.chips.map((c) => c.text).join(' ')).not.toMatch(/radio/i);
+      expect(d.note).toBe(SQUAD_LOSS_RULE);
+      expect(JSON.stringify(d)).not.toMatch(/radio/i);
+      const root = document.createElement('div');
+      document.body.replaceChildren(root);
+      const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+      h.showResult(squadStart(g));
+      expect(root.querySelector('.hud-result')!.textContent).not.toMatch(/radio/i);
+      expect(root.querySelector('.radio-help, [data-radio-toggle], .chip-toggle')).toBeNull();
+    }
   });
 
   it('a loss: no XP, the same horde again with everyone back and a full wall', () => {
     const g = squadGame(3, 6);
     const screen = squadScreen(g, ended(g, 'lost'));
-    expect(screen.title).toBe('The wall fell');
+    expect(screen.title).toBe('Horde 6 - Camp has fallen');
     // No wave cleared: no XP (ID-098).
     expect(screen.lines).toContain(lossXpText(0));
     expect(screen.button).toBe('Retry Horde 6');
-    expect(screen.lines.join(' ')).not.toMatch(/Food|Medicine|back at|Repair/);
+    expect(screen.lines.join(' ')).not.toMatch(/Food|Medicine|Repair/);
+    expect(screen.debrief!.note).toBe(
+      'Retry Horde 6, or farm an easier horde: the squad and the wall are back at full strength',
+    );
   });
 
   it('a plain survivor is named alone, with no profession', () => {
@@ -215,7 +239,8 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     h.noteJoin(hostile);
     h.showJoin([]);
     h.showJoin([], true);
-    const tile = root.querySelector<HTMLElement>('.tile-join')!;
+    const tile = root.querySelector<HTMLElement>('.debrief-join')!;
+    expect(tile.hidden).toBe(false);
     expect(tile.querySelector('.join-answer')!.textContent).toBe(hostile);
     expect(tile.querySelector('img')).toBeNull();
     expect(tile.children.length).toBeGreaterThan(0);
@@ -402,28 +427,43 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     g.roster[0] = { ...g.roster[0]!, name: evil, xp: 0 };
     const screen = squadScreen(g, ended(g, 'won'));
     h.showResult(screen);
-    // The only pictures are the drop tile's own icon (ID-073) and the skill pick's (ID-100).
+    // The only pictures: each gun chip's icon (ID-073), each card's avatar (ID-196) and the
+    // skill pick's (ID-100); a name never makes one.
     const imgs = [
       ...root.querySelectorAll<HTMLImageElement>('.hud-result img:not(.hud-skill-option img)'),
     ];
-    expect(imgs.map((i) => i.parentElement!.className)).toEqual(['tile-icon']);
-    expect(imgs[0]!.getAttribute('src')).toBe(ART_URLS[screen.debrief!.drop!.icon]);
+    const guns = screen.debrief!.drop!.guns;
+    expect(imgs.map((i) => i.parentElement!.className).sort()).toEqual(
+      [
+        'roster-avatar squad-card-avatar',
+        'roster-avatar squad-card-avatar',
+        ...guns.map(() => 'tile-icon'),
+      ].sort(),
+    );
+    expect(imgs.every((i) => i.alt === '')).toBe(true);
+    expect(imgs.find((i) => i.closest('.tile-icon'))!.getAttribute('src')).toBe(
+      ART_URLS[guns[0]!.icon],
+    );
     // The debrief (ID-067): their card names them.
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
     // The name is the button that opens their card (ID-086): text, label and id stay plain.
     const open = root.querySelector<HTMLButtonElement>('.squad-card-open')!;
     expect(open.textContent).toBe(evil);
-    expect(open.getAttribute('aria-label')).toBe(`${evil}: open survivor card`);
+    expect(open.getAttribute('aria-label')).toBe(
+      `${evil}, level ${screen.debrief!.cards[0]!.level}: open survivor card`,
+    );
     // Its hover title (ID-111) is the plain name too.
     expect(open.title).toBe(evil);
     expect(open.dataset.openSurvivor).toBe(g.roster[0]!.id);
-    // The level line is plain text too (ID-146).
-    expect(root.querySelector('.squad-card-bonus')!.children).toHaveLength(0);
-    expect(root.querySelectorAll('.hud-result img:not(.hud-skill-option img)')).toHaveLength(1);
     // The start screen's card names them as text too.
     h.showResult(squadStart(g));
-    expect(root.querySelector('.hud-result img:not(.hud-skill-option img)')).toBeNull();
+    expect(
+      [...root.querySelectorAll('.hud-result img:not(.hud-skill-option img)')].map(
+        (i) => i.parentElement!.className,
+      ),
+    ).toEqual(['roster-avatar squad-card-avatar', 'roster-avatar squad-card-avatar']);
     expect(root.querySelector('.squad-card-name')!.textContent).toBe(evil);
+    expect(root.querySelector('.squad-card-name')!.children).toHaveLength(0);
   });
 });
 
@@ -462,24 +502,25 @@ describe('no stat-point UI on the result and start screens (ID-146)', () => {
         /stat point|points? left|Undo|Instinct|Agility|Sharp Mind|Tinker/,
       );
       // The keyboard starts on the footer's button, not on a card.
-      expect(document.activeElement).toBe(root.querySelector('.hud-result-foot > .hud-button'));
+      expect(document.activeElement).toBe(root.querySelector('.hud-start-row > .hud-button'));
     }
   });
 
-  it('each card shows the level line for its level (ID-146)', () => {
+  it('each card names its survivor and reads its level aloud, with no level line (ID-146, ID-196)', () => {
     const { root, h } = hud();
     const g = levelling(2, [0, 1]);
     const screen = squadScreen(g, ended(g, 'won'));
     h.showResult(screen);
-    const lines = [...root.querySelectorAll('.squad-card .squad-card-bonus')].map(
-      (p) => p.textContent,
+    const open = () =>
+      [...root.querySelectorAll<HTMLElement>('.squad-card .squad-card-open')].map((b) =>
+        b.getAttribute('aria-label'),
+      );
+    expect(open()).toEqual(
+      screen.debrief!.cards.map((c) => `${c.name}, level ${c.level}: open survivor card`),
     );
-    expect(lines).toEqual(screen.debrief!.cards.map((c) => levelText(c.level, true)));
-    expect(lines[0]).toMatch(/^\+\d+\u00a0HP\u00a0· /);
+    expect(root.querySelector('.squad-card-bonus, .squad-card-level, .squad-card-xp')).toBeNull();
     h.showResult(squadStart(g));
-    expect(
-      [...root.querySelectorAll('.squad-card .squad-card-bonus')].map((p) => p.textContent),
-    ).toEqual(g.roster.map(() => levelText(2, true)));
+    expect(open()).toEqual(g.roster.map((d) => `${d.name}, level 2: open survivor card`));
   });
 
   it('a level-up adds no part to a card: every card has the same parts', () => {
@@ -597,13 +638,17 @@ describe('mid-fight swaps on the HUD (ID-148)', () => {
 });
 
 describe('a survivor just accepted into the squad (ID-157)', () => {
-  function hud() {
+  function hud(overflows = true) {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
     const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
-    const result = root.querySelector<HTMLElement>('.hud-result')!;
-    const foot = root.querySelector<HTMLElement>('.hud-result-foot')!;
-    // jsdom has no layout: the panel's scroll offset is kept here.
+    // The body is the part that scrolls (ID-196), when it overflows; else the panel does.
+    const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
+    // jsdom has no layout: say whether the body's content is taller than the body.
+    Object.defineProperty(body, 'scrollHeight', { value: overflows ? 900 : 300 });
+    Object.defineProperty(body, 'clientHeight', { value: 300 });
+    const result = overflows ? body : root.querySelector<HTMLElement>('.hud-result')!;
+    // jsdom has no layout: the scroller's offset is kept here.
     let top = 0;
     Object.defineProperty(result, 'scrollTop', {
       get: () => top,
@@ -613,7 +658,7 @@ describe('a survivor just accepted into the squad (ID-157)', () => {
     const rect = (el: Element, t: number, b: number): void => {
       vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({ top: t, bottom: b } as DOMRect);
     };
-    return { root, h, result, foot, rect, scroll: () => top };
+    return { root, h, result, rect, scroll: () => top };
   }
   /** Survivor 2 of `g` as just accepted; `g`'s first levels up on a win when `up`. */
   function joined(up: boolean): { g: GameState; won: GameState } {
@@ -629,7 +674,6 @@ describe('a survivor just accepted into the squad (ID-157)', () => {
     const c = joinedCard(won, 'recruit-2')!;
     expect(c).toMatchObject({ id: 'recruit-2', name: recruit(2).name, level: 1, fresh: true });
     expect(c.levelUp).toBe(false);
-    expect(c.xp).toBeNull();
     expect(joinedCard(won, 'recruit-9')).toBeNull();
     // Benched (past the squad's cap) is not in the squad.
     const seven = squadGame(7);
@@ -665,7 +709,7 @@ describe('a survivor just accepted into the squad (ID-157)', () => {
     h.showJoined(joinedCard(won, 'recruit-2')!);
     expect(root.querySelector('.debrief-empty')).toBeNull();
     expect(root.querySelectorAll('.debrief-squad')).toHaveLength(1);
-    expect(root.querySelector('.debrief-squad .debrief-stash')).not.toBeNull();
+    expect(root.querySelector('.debrief-squad .squad-grid')).not.toBeNull();
     expect(card(root, 'recruit-2')!.classList.contains('squad-card-new')).toBe(true);
   });
 
@@ -680,25 +724,23 @@ describe('a survivor just accepted into the squad (ID-157)', () => {
     ).toEqual(['recruit-2']);
   });
 
-  it('scrolls a card under the pinned footer up just clear of it', () => {
-    const { root, h, result, foot, rect, scroll } = hud();
+  it('scrolls a card below the body’s bottom up just clear of it', () => {
+    const { root, h, result, rect, scroll } = hud();
     const { won } = joined(false);
     h.showResult(squadStart(won));
-    rect(result, 0, 600);
-    rect(foot, 400, 600);
+    rect(result, 0, 400);
     rect(card(root, 'recruit-2')!, 500, 600);
     h.showJoined(joinedCard(won, 'recruit-2')!);
-    // Its bottom to 8 px above the footer: 600 - (400 - 8).
+    // Its bottom to 8 px above the body's: 600 - (400 - 8).
     expect(scroll()).toBe(208);
   });
 
-  it('scrolls a card above the panel’s top down to it, and leaves one in view alone', () => {
-    const { root, h, result, foot, rect, scroll } = hud();
+  it('scrolls a card above the body’s top down to it, and leaves one in view alone', () => {
+    const { root, h, result, rect, scroll } = hud();
     const { won } = joined(false);
     h.showResult(squadStart(won));
     result.scrollTop = 300;
-    rect(result, 0, 600);
-    rect(foot, 400, 600);
+    rect(result, 0, 400);
     const c = card(root, 'recruit-2')!;
     rect(c, -100, 0);
     h.showJoined(joinedCard(won, 'recruit-2')!);
@@ -709,14 +751,26 @@ describe('a survivor just accepted into the squad (ID-157)', () => {
   });
 
   it('a card taller than the space shows from its top', () => {
-    const { root, h, result, foot, rect, scroll } = hud();
+    const { root, h, result, rect, scroll } = hud();
     const { won } = joined(false);
     h.showResult(squadStart(won));
-    rect(result, 0, 600);
-    rect(foot, 400, 600);
+    rect(result, 0, 400);
     rect(card(root, 'recruit-2')!, 100, 900);
     h.showJoined(joinedCard(won, 'recruit-2')!);
     expect(scroll()).toBe(92);
+  });
+
+  it('a body that does not overflow leaves the scrolling to the panel (ID-196)', () => {
+    const { root, h, result, rect, scroll } = hud(false);
+    expect(result.classList.contains('hud-result')).toBe(true);
+    const { won } = joined(false);
+    h.showResult(squadStart(won));
+    rect(result, 0, 400);
+    rect(card(root, 'recruit-2')!, 500, 600);
+    h.showJoined(joinedCard(won, 'recruit-2')!);
+    expect(scroll()).toBe(208);
+    // The body's own offset never moved.
+    expect(root.querySelector<HTMLElement>('.hud-result-scroll')!.scrollTop).toBe(0);
   });
 
   it('does nothing with the result screen down', () => {
@@ -737,18 +791,17 @@ describe('a survivor just accepted into the squad (ID-157)', () => {
     expect(marked.map((c) => c.dataset.defender)).toEqual(['recruit-2', 'recruit-3']);
   });
 
-  it('benched or let go from the Roster since: their New card goes, and the empty line comes back', () => {
+  it('benched or let go from the Roster since: their New card goes, and the empty line comes back (ID-196)', () => {
     const { root, h } = hud();
     const { g, won } = joined(false);
     h.showResult(squadScreen(g, ended(g, 'won')));
     h.showJoined(joinedCard(won, 'recruit-2')!);
-    h.showGear(squadGear(won), noop);
-    expect(card(root, 'recruit-2')!.querySelector('select')).not.toBeNull();
+    expect(card(root, 'recruit-2')!.querySelector('select')).toBeNull();
     // Recruit 2 benched: the squad is recruit 1 alone again.
-    h.showGear(squadGear({ ...won, roster: g.roster, reserve: [recruit(2)] }), noop);
+    h.showSquad(new Set(g.roster.map((d) => d.id)));
     expect(card(root, 'recruit-2')).toBeUndefined();
     expect(root.querySelector('.debrief-empty')!.textContent).toBe(SQUAD_NO_LEVEL_UPS);
-    expect(root.querySelector('.debrief-stash')!.textContent).not.toBe('');
+    expect(root.querySelector('.squad-card')).toBeNull();
   });
 
   it('a level-up card stays when the newcomer is benched', () => {
@@ -756,7 +809,7 @@ describe('a survivor just accepted into the squad (ID-157)', () => {
     const { g, won } = joined(true);
     h.showResult(squadScreen(g, ended(g, 'won')));
     h.showJoined(joinedCard(won, 'recruit-2')!);
-    h.showGear(squadGear({ ...won, roster: g.roster, reserve: [recruit(2)] }), noop);
+    h.showSquad(new Set(g.roster.map((d) => d.id)));
     const ids = [...root.querySelectorAll<HTMLElement>('.squad-card')].map(
       (x) => x.dataset.defender,
     );

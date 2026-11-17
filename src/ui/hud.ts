@@ -5,14 +5,12 @@
 // Text reaches the page only through textContent.
 import {
   affixLines,
-  baseOf,
   gunLevel,
   gunPower,
   heldName,
   isOwned,
   levelName,
   roleLine,
-  roleOf,
   type Held,
   type OwnedWeapon,
 } from '../core/armoury.ts';
@@ -50,8 +48,6 @@ import {
   HORROR,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
-  BOSS_UNLOCKS,
-  RADIO_HORDES,
   FALL_WARNING,
   GAS_PER_WIN,
   HORDE_ONLY,
@@ -73,7 +69,6 @@ import {
   type SkillId,
   type Stock,
   WEAPONS,
-  JOBS,
 } from '../core/data.ts';
 import {
   hordeBossReward,
@@ -111,7 +106,6 @@ import {
   isReplay,
   joiningOf,
   paramedicPoints,
-  radioParts,
   restLabel,
   nextSquadSlotCost,
   nextStashSlotCost,
@@ -119,12 +113,11 @@ import {
   squadOf,
   stashCap,
   squadResult,
-  squadSpec,
   type GunMove,
   type NoJoin,
   type SquadDrop,
 } from '../core/hordeonly.ts';
-import { isGun, professionOf } from '../core/loadout.ts';
+import { professionOf } from '../core/loadout.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
@@ -137,13 +130,12 @@ import {
   type InjuryBand,
   type PowerBand,
 } from '../core/squadpower.ts';
-import { jobFits, levelOf, survivorDps } from '../core/stats.ts';
+import { levelOf } from '../core/stats.ts';
 import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
 import { askLine, joinLabel, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
-import { levelText } from './statlines.ts';
 import {
   ART_URLS,
   avatarOf,
@@ -767,7 +759,7 @@ export interface HordeChoice {
   horde: number;
   /** The next new horde, not yet beaten. */
   isNew: boolean;
-  /** The option's text: "Horde 7 (new) · Boss · rec 1,400 · short". */
+  /** The option's text: "Horde 7 (new) · Boss", "Horde 5 · best to farm". */
   label: string;
   /** The screen's button once this is picked: "Start Horde 7", "Replay Horde 5". */
   button: string;
@@ -811,6 +803,7 @@ export function hordePicker(
   retitle = false,
 ): HordePicker {
   const squad = squadPower(game);
+  const goal = goalChip(game);
   const options: HordeChoice[] = [];
   const lowest = Math.max(1, game.hordeNumber - PICKER_HORDES + 1);
   // The best place to farm (ID-098): the highest beaten horde the squad already holds.
@@ -830,11 +823,11 @@ export function hordePicker(
     options.push({
       horde: n,
       isNew,
+      // Short, so the select never cuts it (ID-196): the pick's readiness is the line
+      // beside it (`power`), said once.
       label: [
         `Horde ${n}${isNew ? ' (new)' : ''}`,
         ...(boss ? ['Boss'] : []),
-        `rec ${thousands(power.rec)}`,
-        BAND_WORD[power.band],
         ...(n === farm ? ['best to farm'] : []),
       ].join(' · '),
       button: n === retry ? retryLabel(n) : isNew ? startLabel(n) : replayLabel(n),
@@ -848,9 +841,9 @@ export function hordePicker(
             : 'No beaten horde is at your power yet',
       start: {
         title: `Horde ${n}${boss ? ' · Boss horde' : ''}${isNew ? '' : ' · Replay'}`,
-        // The goal (ID-127) leads, whichever horde is picked.
+        // Endless (ID-127) leads, whichever horde is picked.
         chips: [
-          goalChip(game).chip,
+          ...(goal ? [goal.chip] : []),
           ...(boss ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
           ...(isNew ? [] : [{ text: 'Replay', tone: 'ok' as const }]),
           { text: `${waveCount(n)} waves`, tone: 'ok' as const },
@@ -1222,130 +1215,25 @@ export function squadDropLines(
   return [...lines, ...(drop.noUpgrades ? [farmText(drop.farmFrom)] : [])];
 }
 
-/**
- * "30.3 DPS · Lv 4 Prototype LMG · Suppression (+12% damage)": a picker option, the
- * number first so a closed select keeps it, then the gun and its role (ID-101), then its
- * affixes. With `dps`, the figure is a survivor's (ID-152), and their picker's caption
- * says whose (`dpsCaption`, ID-166), so the gun's name keeps its room; without, it is
- * the gun's own and says so.
- */
-export const gunOption = (h: Held, dps?: number): string => {
-  const role = roleOf(baseOf(h));
-  const affixes = affixLines(h, true);
-  const figure = dps === undefined ? gunDpsText(gunPower(h)) : `${dps.toFixed(1)} DPS`;
-  return `${figure} · ${levelName(h)}${role ? ` · ${role.role}` : ''}${
-    affixes.length > 0 ? ` (${affixes.join(', ')})` : ''
-  }`;
-};
-
-/** One survivor's gun picker (ID-067): who, what they can hold, and what they hold now. */
-export interface GearRow {
-  id: string;
-  name: string;
-  /** The free pistol and every gun in the stash or their hands, strongest first. */
-  options: { value: string; label: string }[];
-  /** The option they hold now: `pistol` or a weapon's uid. */
-  value: string;
-  /** The rarity of the gun they hold (the free pistol is Common). */
-  rarity: Rarity;
-  /** "Marksman: +10% crit chance": the held gun's role and trait (ID-101). */
-  role: string;
-}
-
-export interface GearScreen {
-  heading: string;
-  rows: GearRow[];
-}
-
-/**
- * The horde-only gun pickers between hordes (ID-067), one per survivor in the squad: the
- * pistol, the stash's guns and the gun they hold, strongest first by dmg/s in their hands
- * (`survivorDps`: level and profession, ID-152, as the Roster's picker), each labelled with it.
- */
-export function squadGear(game: GameState): GearScreen {
-  const stash = game.armoury.filter(isGun);
-  return {
-    heading: `Stash ${game.armoury.length}/${stashCap(game)}`,
-    rows: squadOf(game).map((d) => {
-      // What they fight with: a primary that is no gun fights as the pistol (squadSpec).
-      const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
-      const choices: Held[] = ['pistol', ...(isOwned(held) ? [held] : []), ...stash];
-      // A fighting job's guns carry a ★, and a gun that isn't theirs says so (ID-149).
-      const job = JOBS[d.job];
-      const fighter = job.kind === 'fight';
-      const off = fighter && !jobFits(d.job, held);
-      const role = roleLine(baseOf(held)) ?? '';
-      return {
-        id: d.id,
-        name: d.name,
-        options: choices
-          .map((h) => ({ h, power: survivorDps(squadSpec(d), h) }))
-          .sort((a, b) => b.power - a.power)
-          .map(({ h, power }) => ({
-            value: isOwned(h) ? h.uid : 'pistol',
-            label: `${fighter && jobFits(d.job, h) ? '★ ' : ''}${gunOption(h, power)}`,
-          })),
-        value: isOwned(held) ? held.uid : 'pistol',
-        rarity: isOwned(held) ? held.rarity : 'common',
-        role: off ? [role, `No ${job.name} bonus with this gun`].filter(Boolean).join(' · ') : role,
-      };
-    }),
-  };
-}
-
 /** A small labelled pill in the debrief's header: its text and colour. */
 export interface Chip {
   text: string;
   tone: 'ok' | 'boss' | 'warn';
   /** A hover hint with the chip's detail (ID-179: what the Scrap is made of). */
   title?: string;
-  /** The chip is a button that opens the radio explanation under it (ID-190). */
-  toggle?: true;
   /** The chip is a button that opens the result's details (ID-186), where its sentence is. */
   details?: true;
 }
 
-/** The radio explanation's lines (ID-190): a bold lead-in and its text. */
-export interface RadioHelp {
-  lines: { lead: string; text: string }[];
-  /** Starts open: the first time the chip shows. */
-  open: boolean;
-}
-
-/** A win's weapon drop as the debrief's loot tile (ID-067). */
+/** A win's weapons as the panel's Weapons row (ID-067, ID-196). */
 export interface DropTile {
-  rarity: Rarity;
-  /** "Military" */
-  rarityName: string;
-  /** "Rifle" */
-  name: string;
-  /** "Lv 12" (ID-098) */
-  level: string;
-  /** Which kind of drop it was (ID-098): "First clear", "Replay" or "Guaranteed upgrade". */
-  kind: string;
-  /** The kind chip's tone: a guaranteed upgrade stands out, a first clear is milder. */
-  kindTone: 'ok' | 'warn' | 'plain';
-  /** Where to go for upgrades when no gun this horde drops would be an upgrade (`squadGain`); else null. */
-  farmNote: string | null;
-  /** The gun's icon (ID-092), as the Inventory shows it. */
-  icon: ArtId;
-  /** "+7% damage, +21% magazine"; '' with none. A role affix is marked "(role)" (ID-101). */
-  affixes: string;
-  /** "Marksman: +10% crit chance": the gun's role and built-in trait (ID-101). */
-  role: string;
-  /** "Marksman": the role alone, for the tile's short line (ID-186); '' with none. */
-  roleName: string;
-  /** "17.2 DPS": the gun's own (ID-166). */
-  power: string;
+  /** Every gun the win dropped, the drop first, then the bonus guns (ID-122). */
+  guns: DropGun[];
   /**
    * "Stash 15/40" after the win's guns are in (bonus ones too), with " · thrown away"
-   * when the drop itself went.
+   * when the drop itself went. The panel's one stash count, in a gun's details.
    */
   stash: string;
-  /** The drop was thrown away (the stash full of better guns). */
-  lost: boolean;
-  /** The win's bonus guns (ID-122), one compact row each, in the order they went in. */
-  bonus: BonusRow[];
   /**
    * "Thrown away: Rusty Pistol" (every stash weapon thrown for this win's guns, comma
    * separated), `DROP_LOST_NOTE` when the drop itself went into a stash of better guns
@@ -1353,31 +1241,22 @@ export interface DropTile {
    * out, ID-122), or null.
    */
   thrown: string | null;
+  /** Where to go for upgrades when no gun this horde drops would be an upgrade (`squadGain`); else null. */
+  farmNote: string | null;
 }
 
-/** Who joins the camp, or that nobody does, as the debrief's second tile. */
-export interface RecruitTile {
-  label: string;
-  name: string;
-  sub: string;
-  /** Nobody joins this time (ID-147: the camp has its first six). */
-  full: boolean;
-}
-
-/** One survivor's card: who, their level, and on a win what it gave. */
+/**
+ * One survivor in the panel's Squad section (ID-196): their avatar and name, no guns and no
+ * stats. The level is only read out with the name.
+ */
 export interface SquadCard {
   id: string;
   name: string;
   level: number;
-  /** Their profession (ID-149): "Hunter". */
-  job: string;
-  /** XP this win gave; null off a win. */
-  xp: number | null;
+  /** Their avatar, as the Roster shows it. */
+  art: ArtId;
+  /** Levelled up in this horde. */
   levelUp: boolean;
-  /** XP into the level, as a share and as text; null off a win. */
-  bar: { pct: number; text: string } | null;
-  /** What their level gives (ID-146), this result's XP in: "Lv 7: +14 HP · …". */
-  bonus: string;
   /** Just accepted into the squad on this screen (ID-157): marked "New". */
   fresh?: true;
 }
@@ -1396,45 +1275,29 @@ export interface Debrief {
    */
   notes?: string[];
   drop: DropTile | null;
-  recruit: RecruitTile | null;
   cards: SquadCard[];
   /** The line shown in place of no cards (a win with no level-up, ID-134), else null. */
   empty: string | null;
-  /** The footer's line beside the button ('' for none). */
-  foot: string;
   /**
    * The start screen's link to the Roster to pick the squad (ID-147), and the bench's line
    * under it (`benchLine`); absent elsewhere.
    */
   roster?: { label: string; line: string | null };
   /**
-   * The camp tile beside the drop (ID-150, ID-182), on every win and on a start screen with
-   * someone still asking: `showJoin` fills it from who is asking now, and the answers given
-   * stay on it. `size` is the camp's survivors; `none` says why nobody is asking (null when
-   * someone is, or off a win's own roll).
+   * The offer line under the squad (ID-150, ID-182, ID-196), on every win and on a start
+   * screen with someone still asking: `showJoin` fills it from who is asking now, and the
+   * answers given stay on it.
    */
-  join?: { size: number; none: string | null };
-  /** The start screen's radio explanation (ID-190), absent in Endless and elsewhere. */
-  radio?: RadioHelp;
+  join?: true;
 }
-
-/** Survivor `id`'s profession name on `game`'s roster (ID-149), '' for none there. */
-const jobName = (game: Pick<GameState, 'roster' | 'reserve'>, id: string): string => {
-  // A bench survivor who swapped in (ID-148) has one too.
-  const d = campOf(game).find((r) => r.id === id);
-  return d ? JOBS[d.job].name : '';
-};
 
 /** A card for `d` off a win, or with no gain. */
 const plainCard = (d: RosterDefender): SquadCard => ({
   id: d.id,
   name: d.name,
   level: levelOf(d.xp).level,
-  job: JOBS[d.job].name,
-  xp: null,
+  art: avatarOf(d),
   levelUp: false,
-  bar: null,
-  bonus: levelText(levelOf(d.xp).level, true),
 });
 
 /** The card for survivor `id`, just accepted into the squad (ID-157); null when not in it. */
@@ -1465,29 +1328,20 @@ export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: Squad
     }
     if (thrown[next++] === weapon) by = w;
   }
-  // First, so anything but a gun is refused with its own error.
-  const power = gunPower(weapon);
   return {
-    rarity: weapon.rarity,
-    rarityName: RARITIES[weapon.rarity].name,
-    name: WEAPONS[weapon.base].name,
-    level: `Lv ${gunLevel(weapon)}`,
-    kind: DROP_KIND[drop.kind],
-    kindTone: KIND_TONE[drop.kind],
     farmNote: drop.noUpgrades ? farmText(drop.farmFrom) : null,
-    icon: GUN_ICON[weapon.base as GunId],
-    affixes: affixLines(weapon).join(', '),
-    role: roleLine(weapon.base) ?? '',
-    roleName: roleOf(weapon.base)?.role ?? '',
-    power: gunDpsText(power),
     stash: `Stash ${count}/${stashCap(game)}${lost ? ' · thrown away' : ''}`,
-    lost,
-    bonus: bonus.map((w) => ({
+    guns: [weapon, ...bonus].map((w, i) => ({
       rarity: w.rarity,
-      name: levelName(w),
+      short: `Lv ${gunLevel(w)} ${WEAPONS[w.base].name}`,
       power: gunDpsText(gunPower(w)),
       icon: GUN_ICON[w.base as GunId],
       lost: thrown.includes(w),
+      lines: [
+        `${i === 0 ? DROP_KIND[drop.kind] : 'Bonus gun'} · ${RARITIES[w.rarity].name}`,
+        roleLine(w.base) ?? '',
+        affixLines(w).join(', '),
+      ].filter((t) => t !== ''),
     })),
     // "No better", not "weaker": a tie throws the drop away too.
     thrown:
@@ -1510,16 +1364,18 @@ export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: Squad
   };
 }
 
-/** A bonus gun's compact row in the loot tile (ID-122). */
-export interface BonusRow {
+/** One gun a win dropped, as the panel's Weapons row shows it (ID-196). */
+export interface DropGun {
   rarity: Rarity;
-  /** "Lv 5 Rusty SMG" */
-  name: string;
-  /** "9.1 DPS" */
+  /** "Lv 2 Carbine" */
+  short: string;
+  /** "16.5 DPS" */
   power: string;
   icon: ArtId;
   /** Thrown away: the stash full of better guns. */
   lost: boolean;
+  /** Its details, shown on a click: kind and rarity, role and trait, affixes. */
+  lines: string[];
 }
 
 /** What a drop tile says about its kind (ID-098). */
@@ -1527,12 +1383,6 @@ export const DROP_KIND: Readonly<Record<SquadDrop['kind'], string>> = {
   first: 'First clear',
   replay: 'Replay',
   guaranteed: 'Guaranteed upgrade',
-};
-
-const KIND_TONE: Readonly<Record<SquadDrop['kind'], 'ok' | 'warn' | 'plain'>> = {
-  first: 'ok',
-  replay: 'plain',
-  guaranteed: 'warn',
 };
 
 /** A replay where nothing the horde drops could be an upgrade (ID-098, ID-152): where to go. */
@@ -1547,9 +1397,6 @@ export const SQUAD_NO_DROP = 'No weapon drop on a loss';
 
 /** How a horde-only horde is lost (ID-066, design §2), for the start screen and Help. */
 export const SQUAD_LOSS_RULE = 'You lose if they break through and every survivor is down.';
-
-/** Over the squad's cards (ID-086): a name opens that survivor's card in the Roster. */
-export const SQUAD_CARD_HINT = 'Tap a name for their card.';
 
 /** Why the slot buttons are greyed in a fight (ID-179). */
 export const BUY_WAIT = 'Buy slots between hordes';
@@ -1718,72 +1565,29 @@ export function markBench(moves: readonly GunMove[], squadIds: ReadonlySet<strin
 export const SQUAD_NO_LEVEL_UPS = 'No level-ups this horde. Change guns in the Roster.';
 
 /**
- * The campaign's goal on the start screen (ID-127): the radio's progress and where the next
- * part is, or, past the finale, Endless and the best horde reached.
+ * Endless on the start screen (ID-127), past the finale: the best horde reached and the next
+ * one to hold. Null in the campaign: the radio is off this panel (ID-196).
  */
-export function goalChip(game: Pick<GameState, 'hordeNumber'>): { chip: Chip; note: string } {
-  if (isEndless(game)) {
-    const best = highestBeaten(game);
-    return {
-      chip: { text: `Endless · best ${best}`, tone: 'warn' },
-      note: `Evacuation called. Hold Horde ${best + 1} for a new best.`,
-    };
-  }
-  const parts = radioParts(game);
-  return {
-    chip: { text: `Radio ${parts}/${RADIO_HORDES.length}`, tone: 'warn', toggle: true },
-    note: `Beat boss Horde ${RADIO_HORDES[parts]} for radio part ${parts + 1} of ${RADIO_HORDES.length}.`,
-  };
-}
-
-/** "10", "10 and 20" or "10, 20 and 30". */
-const listOf = (items: readonly (number | string)[]): string =>
-  items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
-
-/**
- * What the radio chip explains (ID-190): what it is, where parts come from and what the goal
- * gives, all read off the data. Null in Endless, where there is no radio to build.
- */
-export function radioHelp(
+export function goalChip(
   game: Pick<GameState, 'hordeNumber'>,
-  open: boolean = false,
-): RadioHelp | null {
-  if (isEndless(game)) return null;
-  const unlocks = RADIO_HORDES.flatMap((h) => {
-    const card = BOSS_UNLOCKS[h];
-    return card ? [`${UPGRADES[card].name} (Horde ${h})`] : [];
-  });
+): { chip: Chip; note: string } | null {
+  if (!isEndless(game)) return null;
+  const best = highestBeaten(game);
   return {
-    open,
-    lines: [
-      { lead: 'The radio', text: ' is the goal: build it to call for evacuation.' },
-      {
-        lead: 'Parts:',
-        text: ` each boss horde (Hordes ${listOf(RADIO_HORDES)}) gives one the first time you beat it.`,
-      },
-      {
-        lead: 'You gain:',
-        text: ` ${unlocks.length > 0 ? `${unlocks.join(', ')}, then the ` : 'The '}finale: evacuation and Endless.`,
-      },
-    ],
+    chip: { text: `Endless · best ${best}`, tone: 'warn' },
+    note: `Evacuation called. Hold Horde ${best + 1} for a new best.`,
   };
 }
 
 /**
- * The horde-only screen before a horde (ID-066): who fights it, its start button, the
- * campaign's goal (ID-127), and the horde picker (ID-098) with `picked` selected (the next
- * new horde by default).
+ * The horde-only screen before a horde (ID-066): who fights it, its start button, and the
+ * horde picker (ID-098) with `picked` selected (the next new horde by default).
  */
-export function squadStart(
-  game: GameState,
-  picked: number = game.hordeNumber,
-  radioOpen: boolean = false,
-): ResultScreen {
+export function squadStart(game: GameState, picked: number = game.hordeNumber): ResultScreen {
   const squad = squadOf(game);
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
   const goal = goalChip(game);
-  const radio = radioHelp(game, radioOpen);
   const bench = benchLine(game);
   // Still asking after a reload on the result screen (ID-150): the offer waits here.
   const asking = joiningOf(game);
@@ -1796,7 +1600,7 @@ export function squadStart(
       ...(bench ? [bench] : []),
       ...asking.map(askLine),
       `${waveCount(now.horde)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
-      goal.note,
+      ...(goal ? [goal.note] : []),
     ],
     button: now.button,
     squad: true,
@@ -1807,15 +1611,13 @@ export function squadStart(
       kind: 'start',
       chips: now.start.chips,
       callout: null,
-      note: goal.note,
-      ...(radio ? { radio } : {}),
+      // One line under the squad: the rule, and in Endless the horde to hold.
+      note: goal ? `${goal.note} ${SQUAD_LOSS_RULE}` : SQUAD_LOSS_RULE,
       drop: null,
-      recruit: null,
       cards: squad.map((d) => plainCard(d)),
       empty: null,
-      foot: SQUAD_LOSS_RULE,
       roster: { label: CHANGE_SQUAD, line: bench },
-      ...(asking.length > 0 ? { join: { size: campOf(game).length, none: null } } : {}),
+      ...(asking.length > 0 ? { join: true as const } : {}),
     },
   };
 }
@@ -1828,15 +1630,15 @@ export const lossXpText = (xp: number): string =>
 export const EVACUATION_TITLE = 'The evacuation is called';
 
 /**
- * What a boss horde's first clear says (ID-127): the radio part found and the card it
+ * What a boss horde's first clear says (ID-127, no word of the radio since ID-196): the card it
  * unlocked, or, for the finale, the ending and Endless after it.
  */
 export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>>): string {
   if (reward.finale) {
-    return 'The radio works. You held the camp. Play on in Endless for a best horde.';
+    return 'You held the camp and the evacuation is called. Play on in Endless for a best horde.';
   }
   const unlock = reward.unlock ? ` New card unlocked: ${UPGRADES[reward.unlock].name}.` : '';
-  return `Radio part found.${unlock}`;
+  return `Boss horde beaten.${unlock}`;
 }
 
 /** "+35 Scrap": what a win paid, short, for the result screen's chip (ID-179). */
@@ -1918,7 +1720,7 @@ export function autoChipText(moves: { in: readonly string[]; out: readonly strin
   return `Auto: ${parts.join(' · ')}`;
 }
 
-/** "Camp 6 · nobody new" (or "· full"): the camp tile as a chip (ID-186) when nobody asks. */
+/** "Camp 6 · nobody new" (or "· full"): the camp as a chip (ID-186) when nobody asks. */
 export const campChipText = (why: NoJoin, size: number): string =>
   `Camp ${size} · ${why === 'camp-full' ? 'full' : 'nobody new'}`;
 
@@ -1954,20 +1756,15 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     won ? null : s.hordeNumber,
   );
   const goOn = picker.options.find((o) => o.horde === picker.value)!.button;
+  // A bench survivor who swapped in (ID-148) gained XP too: the whole camp is looked up.
+  const camp = campOf(game);
   const xpCards = (): SquadCard[] =>
-    gains.map((g): SquadCard => ({
-      id: g.id,
-      name: g.name,
-      level: g.level,
-      job: jobName(game, g.id),
-      xp: g.xp,
-      levelUp: g.levels > 0,
-      bar: {
-        pct: g.next > 0 ? Math.min(100, (100 * g.into) / g.next) : 100,
-        text: `${g.into}/${g.next} XP to Lv ${g.level + 1}`,
-      },
-      bonus: levelText(g.level, true),
-    }));
+    gains.flatMap((g): SquadCard[] => {
+      const d = camp.find((r) => r.id === g.id);
+      return d
+        ? [{ id: g.id, name: g.name, level: g.level, art: avatarOf(d), levelUp: g.levels > 0 }]
+        : [];
+    });
   if (won) {
     // A win shows only who levelled up in it (ID-134): the rest change guns from the Roster.
     const ups = xpCards().filter((c) => c.levelUp);
@@ -1981,15 +1778,23 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     const rested = restNote(rests, benchFit, paramedicPoints(campOf(game)) > 0);
     const patch = patchNote(patched);
     // Each sentence waits in the details (ID-186); its chip says it short and opens them.
-    const notes = [rewardNote, patch, rested, autoNote].filter((t) => t !== null);
     const size = game.roster.length + game.reserve.length;
+    // Each sentence waits in the details (ID-186), why nobody asked to join among them
+    // (ID-196); its chip says it short and opens them.
+    const notes = [
+      rewardNote,
+      patch,
+      rested,
+      autoNote,
+      noJoin ? noJoinText(noJoin, size) : null,
+    ].filter((t) => t !== null);
     const xpChip = xpChipText(gains);
     return {
       title: ending
         ? EVACUATION_TITLE
         : replay
-          ? `Horde ${s.hordeNumber} held (replay)`
-          : `Horde ${s.hordeNumber} held`,
+          ? `Horde ${s.hordeNumber} - You hold the line (replay)`
+          : `Horde ${s.hordeNumber} - You hold the line`,
       lines: [
         clearedLine(s),
         ...gains.map(squadXpLine),
@@ -2012,11 +1817,13 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
           { text: scrapChipText(scrap), tone: 'ok', title: scrapLine(scrap) },
           ...(xpChip ? [{ text: xpChip, tone: 'ok' as const }] : []),
-          ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'boss' as const })),
-          ...(reward
+          // Good news on a win (ID-196): green, not the boss chip's red.
+          ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'ok' as const })),
+          // A boss's first clear (ID-127): the card it unlocked; its sentence is in the details.
+          ...(reward?.unlock
             ? [
                 {
-                  text: `Radio part ${reward.part}/${RADIO_HORDES.length}`,
+                  text: `New card: ${UPGRADES[reward.unlock].name}`,
                   tone: 'warn' as const,
                   details: true as const,
                 },
@@ -2045,13 +1852,11 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         note: null,
         notes,
         drop: drop ? dropTile(game, drop) : null,
-        recruit: null,
         cards: ups,
         empty: ups.length > 0 ? null : SQUAD_NO_LEVEL_UPS,
-        foot: '',
-        // The camp tile (ID-150, ID-170, ID-182), on every win: newcomers ask there
-        // (`showJoin`), and with nobody it says why, so the screen and the popup agree.
-        join: { size, none: noJoin ? noJoinText(noJoin, size) : null },
+        // The offer line (ID-150, ID-170, ID-182), on every win: newcomers ask there
+        // (`showJoin`); with nobody, the details say why.
+        join: true,
       },
     };
   }
@@ -2059,9 +1864,10 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   const where = inner ? `They got in during wave ${inner.wave} of ${s.waveCount}` : 'They got in';
   const bossLost = lostBossLines(s);
   const xp = gains[0]?.xp ?? 0;
-  const again = `Horde ${s.hordeNumber} again, or an easier horde to farm XP and guns: the squad is back on their feet and the wall at full HP`;
+  // One line (ID-196), so the panel's body shows it whole under two rows of squad.
+  const again = `Retry Horde ${s.hordeNumber}, or farm an easier horde: the squad and the wall are back at full strength`;
   return {
-    title: 'The wall fell',
+    title: `Horde ${s.hordeNumber} - Camp has fallen`,
     lines: [
       `${where} · nobody left standing`,
       ...bossLost,
@@ -2089,10 +1895,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       },
       note: autoNote ? `${again}. ${autoNote}` : again,
       drop: null,
-      recruit: null,
       cards: xp > 0 ? xpCards() : squadOf(game).map((d) => plainCard(d)),
       empty: null,
-      foot: '',
     },
   };
 }
@@ -2132,12 +1936,13 @@ export function createHud(
   /** Where the pause button goes (ID-165); the app sets it once. */
   onPause(handler: () => void): void;
   showResult(screen: ResultScreen): void;
-  /** The horde-only gun pickers (ID-067) on the result or start screen; each pick goes to `onEquip`. */
-  showGear(gear: GearScreen, onEquip: (defenderId: string, choice: string) => void): void;
+  /**
+   * The squad as it stands now, by id (ID-157): a "New" card of someone benched or let go
+   * since goes. Nothing with the result screen down.
+   */
+  showSquad(ids: ReadonlySet<string>): void;
   /** Where a horde picked from the picker goes (ID-098); the app sets it once. */
   onHordePick(handler: (horde: number) => void): void;
-  /** The radio chip was toggled by hand (ID-190): the panel is now open or closed. */
-  onRadioToggle(handler: (open: boolean) => void): void;
   /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
   showPicker(picker: HordePicker): void;
   /** Where a skill toggled in the skill pick goes (ID-100); the app sets it once. */
@@ -2155,7 +1960,7 @@ export function createHud(
   /** The offer tile redrawn (ID-150): who is still asking to join; none hides it. */
   showJoin(cards: readonly JoinCard[], keep?: boolean): void;
   /**
-   * An answer given on the camp tile (ID-182): `text` (`answerText`) stays on it after the
+   * An answer given on the offer line (ID-182): `text` (`answerText`) stays on it after the
    * toast is gone. Nothing with the result screen down.
    */
   noteJoin(text: string): void;
@@ -2336,27 +2141,50 @@ export function createHud(
   replace.hidden = true;
   const result = el('div', 'hud-panel hud-result');
   const resultTitle = el('h2', 'hud-result-title');
+  // The horde-only panel's header (ID-196): the title, then its reward pills.
+  const headChips = el('div', 'debrief-chips');
+  const resultHead = el('div', 'hud-result-head');
+  resultHead.append(resultTitle, headChips);
   const resultList = el('ul', 'hud-result-list');
   const picker = el('div', 'hud-picker');
   const campPicker = el('div', 'hud-picker');
-  const gear = el('div', 'hud-picker hud-gear');
+  // The body between the header and the footer: on the horde-only panel, the part that scrolls.
+  const resultBody = el('div', 'hud-result-scroll');
+  resultBody.append(resultList, picker, campPicker);
   // Who is asking to join (ID-150): one row each with Accept and Refuse; hidden once answered.
-  const joinBox = el('section', 'tile tile-recruit tile-join');
+  const joinBox = el('section', 'debrief-join');
   joinBox.setAttribute('aria-label', 'Asking to join');
   joinBox.hidden = true;
   let onAnswerJoin: (id: string, accept: boolean) => void = () => {};
-  /** The screen's camp tile (`Debrief.join`) and the answers given on it, so far. */
-  let joinInfo: { size: number; none: string | null } | undefined;
+  /** The answers given on the screen's offer line (`Debrief.join`), so far. */
   let joinAnswers: string[] = [];
+  /** How many are asking now, for the header's pill. */
+  let askers = 0;
   /**
-   * Draws the camp tile (ID-182) from `cards`, who is asking now: Accept and Refuse rows, then
-   * each answer given (it stays), else why nobody came. Hidden when it has nothing to say.
+   * A pill in the header while someone is asking (ID-196): the offer line can sit below the
+   * body's fold, and a click brings it into view with the keyboard on its first answer.
+   */
+  function drawJoinChip(): void {
+    headChips.querySelector('.chip-join')?.remove();
+    if (askers === 0 || result.hidden || !joinBox.isConnected) return;
+    const chip = el('button', 'chip chip-toggle chip-join', joinLabel(askers));
+    chip.type = 'button';
+    chip.dataset.tone = 'warn';
+    chip.addEventListener('click', () => {
+      reveal(joinBox);
+      joinBox.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+    });
+    // Before "Details", which stays last.
+    headChips.insertBefore(chip, headChips.querySelector('.debrief-details'));
+  }
+  /**
+   * Draws the offer line (ID-182, ID-196) from `cards`, who is asking now: one row each with
+   * Accept and Refuse, then each answer given (it stays). Hidden when it has nothing to say.
    */
   function drawJoin(cards: readonly JoinCard[], keep = false): void {
     const had = keep || joinBox.contains(document.activeElement);
-    const none = cards.length === 0 && joinAnswers.length === 0 ? (joinInfo?.none ?? null) : null;
-    joinBox.hidden = cards.length === 0 && joinAnswers.length === 0 && none === null;
-    joinBox.setAttribute('aria-label', cards.length > 0 ? 'Asking to join' : 'Camp');
+    joinBox.hidden = cards.length === 0 && joinAnswers.length === 0;
+    // One line each (ID-196): the name and profession, then Accept and Refuse.
     const rows = cards.map((c) => {
       const row = el('div', 'join-row');
       row.dataset.joiner = c.id;
@@ -2365,42 +2193,23 @@ export function createHud(
         b.type = 'button';
         setVariant(b, accept ? 'primary' : 'secondary');
         b.setAttribute('aria-label', `${accept ? 'Accept' : 'Refuse'} ${c.name}`);
+        // What the profession brings, and that a refusal is for good, on hover.
+        b.title = accept ? c.job : REFUSE_NOTE;
         b.addEventListener('click', () => {
           if (!result.hidden) onAnswerJoin(c.id, accept);
         });
         return b;
       };
-      const buttons = el('div', 'join-buttons');
-      buttons.append(answer(true), answer(false));
-      row.append(
-        el('p', 'tile-name', c.name),
-        el('p', 'tile-sub', c.sub),
-        el('p', 'tile-sub join-job', c.job),
-        buttons,
-      );
+      const who = el('p', 'join-who');
+      who.append(el('strong', 'join-name', c.name), ` · ${c.profession} asks to join`);
+      who.title = `${c.sub}. ${c.job}`;
+      row.append(who, answer(true), answer(false));
       return row;
     });
-    const answered = joinAnswers.map((t) => el('p', 'tile-sub join-answer', t));
-    if (cards.length > 0) {
-      // One row (ID-186): who asks, and beside it that a refusal is for good.
-      const head = el('div', 'join-head');
-      head.append(
-        el('p', 'tile-label', joinLabel(cards.length)),
-        el('p', 'tile-sub join-note', REFUSE_NOTE),
-      );
-      joinBox.replaceChildren(head, ...rows, ...answered);
-    } else {
-      joinBox.replaceChildren(
-        el('p', 'tile-label', 'Camp'),
-        ...(none !== null
-          ? [
-              el('p', 'tile-name', `${joinInfo?.size ?? 0} survivors`),
-              el('p', 'tile-sub join-none', none),
-            ]
-          : answered),
-      );
-    }
-    joinBox.classList.toggle('tile-recruit-full', none !== null);
+    const answered = joinAnswers.map((t) => el('p', 'join-answer', t));
+    joinBox.replaceChildren(...rows, ...answered);
+    askers = cards.length;
+    drawJoinChip();
     // An answer keeps the keyboard in the tile, else on the button that moves on.
     if (had) (joinBox.querySelector<HTMLButtonElement>('button') ?? back).focus();
   }
@@ -2435,21 +2244,22 @@ export function createHud(
   }
   let leaving = false;
   let canLeave: () => boolean | Promise<boolean> = () => true;
-  // The button sits in a footer: a horde-only panel pins it, with a line beside it (ID-067).
+  // The button sits in a footer: a horde-only panel pins it (ID-067), as two rows (ID-196):
+  // the skills, then the horde picker with its readiness and the button.
   const foot = el('div', 'hud-result-foot');
-  const footNote = el('p', 'hud-result-foot-note');
-  // The horde picker (ID-098), above the button it labels.
+  // The horde picker (ID-098), beside the button it labels.
   const pickBlock = el('div', 'hud-horde-pick');
   pickBlock.hidden = true;
-  // The skill pick for the next horde (ID-100), above the horde picker.
+  // The skill pick for the next horde (ID-100): a row of its own above the horde picker.
   const skillBlock = el('div', 'hud-skill-pick');
   skillBlock.setAttribute('role', 'group');
   skillBlock.hidden = true;
   let onPickSkill: (skill: SkillId) => void = () => {};
-  foot.append(skillBlock, pickBlock, footNote, back);
+  const startRow = el('div', 'hud-start-row');
+  startRow.append(pickBlock, back);
+  foot.append(skillBlock, startRow);
   let onPickHorde: (horde: number) => void = () => {};
-  let onRadio: (open: boolean) => void = () => {};
-  result.append(resultTitle, resultList, picker, gear, campPicker, foot);
+  result.append(resultHead, resultBody, foot);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
   toast.hidden = true;
@@ -2762,18 +2572,19 @@ export function createHud(
 
   /**
    * Opens or closes a win's details (ID-186): its sentences, the drop's role and affixes,
-   * each card's XP, gun picker and level bonus, and the camp's line. Every button that
-   * toggles them (the chips with a sentence there, and "Details") says which way they are.
+   * and the camp's line. They open inside the panel's body, which scrolls: the panel keeps
+   * its size (ID-196). Every button that toggles them (the chips with a sentence there, and
+   * "Details") says which way they are.
    */
   function setDetails(open: boolean): void {
     if (open) result.dataset.details = '';
     else delete result.dataset.details;
     const notes = picker.querySelector<HTMLElement>('.debrief-notes');
     if (notes) notes.hidden = !open;
-    for (const b of picker.querySelectorAll('[data-details-toggle]')) {
+    for (const b of result.querySelectorAll('[data-details-toggle]')) {
       b.setAttribute('aria-expanded', String(open));
     }
-    const main = picker.querySelector('.debrief-details');
+    const main = headChips.querySelector('.debrief-details');
     if (main) main.textContent = open ? HIDE_DETAILS : DETAILS;
   }
 
@@ -2788,9 +2599,8 @@ export function createHud(
     return b;
   }
 
-  const chipNodes = (list: readonly Chip[], help: HTMLElement | null): HTMLElement[] =>
+  const chipNodes = (list: readonly Chip[]): HTMLElement[] =>
     list.map((c) => {
-      if (c.toggle && help) return radioChip(c, help);
       if (c.details) {
         const chip = detailsButton('chip chip-toggle chip-details', c.text);
         chip.dataset.tone = c.tone;
@@ -2802,27 +2612,10 @@ export function createHud(
       return chip;
     });
 
-  /** The radio chip as a button (ID-190) that shows or hides `help`; a retitle rebuilds it. */
-  function radioChip(c: Chip, help: HTMLElement): HTMLElement {
-    const chip = el('button', 'chip chip-toggle');
-    chip.type = 'button';
-    chip.title = 'What the radio is for';
-    chip.dataset.tone = c.tone;
-    chip.setAttribute('aria-controls', help.id);
-    chip.setAttribute('aria-expanded', String(!help.hidden));
-    chip.textContent = c.text;
-    chip.addEventListener('click', () => {
-      help.hidden = !help.hidden;
-      chip.setAttribute('aria-expanded', String(!help.hidden));
-      onRadio(!help.hidden);
-    });
-    return chip;
-  }
-
   /**
-   * The skill pick (ID-100): a toggle per skill, pressed when picked, and a line on the
-   * pick's power. A third skill can't be added while two are picked. A toggle goes to
-   * `onPickSkill`; the app redraws it with the pick it saved.
+   * The skill pick (ID-100), the footer's Skills row (ID-196): a toggle per skill, pressed
+   * when picked, and a line on the pick's power. A third skill can't be added while two are
+   * picked. A toggle goes to `onPickSkill`; the app redraws it with the pick it saved.
    */
   function drawSkills(p: SkillPick | undefined): void {
     const had = document.activeElement?.closest('.hud-skill-pick')
@@ -2835,7 +2628,7 @@ export function createHud(
     }
     // "Up to 2" asks for a second skill only while there is one (ID-139: Airstrike alone).
     const most = Math.min(SQUAD_SKILLS.max, p.options.length);
-    const label = el('span', 'hud-horde-label', most > 1 ? `Skills (up to ${most})` : 'Skill');
+    const label = el('span', 'hud-horde-label', most > 1 ? `Skills (up to ${most})` : 'Skills');
     label.id = 'hud-skill-label';
     skillBlock.setAttribute('aria-labelledby', label.id);
     const row = el('div', 'hud-skill-options');
@@ -2923,44 +2716,40 @@ export function createHud(
       back.textContent = o.button;
       if (p.retitle) {
         resultTitle.textContent = o.start.title;
-        picker
-          .querySelector('.debrief-chips')
-          ?.replaceChildren(
-            ...chipNodes(o.start.chips, picker.querySelector<HTMLElement>('.radio-help')),
-          );
+        headChips.replaceChildren(...chipNodes(o.start.chips));
+        drawJoinChip();
       }
       onPickHorde(o.horde);
     });
-    pickBlock.replaceChildren(label, select, line, hurt, hint);
+    // Two columns (ID-196): the select with its farm hint under it, then the readiness.
+    const pick = el('div', 'hud-horde-choice');
+    pick.append(select, hint);
+    const ready = el('div', 'hud-horde-ready');
+    ready.append(line, hurt);
+    pickBlock.replaceChildren(label, pick, ready);
     if (had) select.focus();
   }
 
   /**
-   * The horde-only panel's body (ID-067): header chips, loot, then the cards (a win's only
-   * for who levelled up, or one line with none, ID-134).
+   * The horde-only panel's header pills (ID-196), with the "Details" button when the
+   * screen has sentences to open: with none it would open nothing.
+   */
+  function debriefChips(d: Debrief): HTMLElement[] {
+    return [
+      ...chipNodes(d.chips),
+      ...((d.notes ?? []).length > 0 ? [detailsButton('debrief-details', DETAILS)] : []),
+    ];
+  }
+
+  /**
+   * The horde-only panel's body (ID-067, ID-196): a loss's callout, a win's sentences and
+   * loot, the squad (a win's only who levelled up, or one line with none, ID-134), then the
+   * screen's line.
    */
   function debriefBlock(d: Debrief): HTMLElement[] {
     const parts: HTMLElement[] = [];
-    // Built first: the radio chip toggles it.
-    const help = d.radio ? el('p', 'radio-help') : null;
-    if (help && d.radio) {
-      help.id = 'hud-radio-help';
-      help.hidden = !d.radio.open;
-      for (const line of d.radio.lines) {
-        const row = el('span', 'radio-help-line');
-        row.append(el('strong', '', line.lead), line.text);
-        help.append(row);
-      }
-    }
-    if (d.chips.length > 0) {
-      const chips = el('div', 'debrief-chips');
-      chips.append(...chipNodes(d.chips, help));
-      if (d.kind === 'won') chips.append(detailsButton('debrief-details', DETAILS));
-      parts.push(chips);
-    }
-    if (d.kind === 'won') {
-      // A win's sentences (ID-186), closed until asked for; the region is there with none
-      // too, as the buttons name it and the rest of the details open with it.
+    if ((d.notes ?? []).length > 0) {
+      // A win's sentences (ID-186), closed until asked for by the buttons that name it.
       const notes = el('ul', 'debrief-notes');
       notes.id = 'hud-debrief-notes';
       notes.setAttribute('aria-label', 'Result details');
@@ -2974,103 +2763,79 @@ export function createHud(
       if (d.callout.sub) callout.append(el('p', 'debrief-callout-sub', d.callout.sub));
       parts.push(callout);
     }
-    if (d.note) parts.push(el('p', 'debrief-note', d.note));
-    if (help) parts.push(help);
-    if (d.drop || d.recruit || d.join) {
-      const spoils = el('div', 'debrief-spoils');
-      if (d.drop) {
-        const t = d.drop;
-        const tile = el('div', 'tile tile-drop');
-        tile.dataset.rarity = t.rarity;
-        tile.classList.toggle('tile-drop-lost', t.lost);
-        const power = el('div', 'tile-row');
-        const stash = el('span', 'tile-stash', t.stash);
-        stash.classList.toggle('tile-stash-lost', t.lost);
-        power.append(el('span', 'tile-power', t.power), stash);
-        // The gun's icon (ID-092), decoration only: its name is right beside it.
-        const icon = el('div', 'tile-icon');
-        const img = el('img', 'tile-icon-img gun-icon');
-        img.alt = '';
-        img.dataset.gun = t.icon.slice('weapon-'.length);
-        img.src = ART_URLS[t.icon] ?? '';
-        icon.append(img);
-        const id = el('div', 'tile-drop-id');
-        const name = el('p', 'tile-name');
-        name.append(el('span', 'tile-level', t.level), ` ${t.name}`);
-        const kind = el('span', 'chip tile-kind', t.kind);
-        kind.dataset.tone = t.kindTone;
-        // "Relic · Wall stopper" (ID-186): the role's name stays in sight, its sentence and
-        // the affixes wait in the details.
-        const rarity = el('p', 'tile-label tile-rarity');
-        rarity.append(
-          el('span', 'tile-what', 'Weapon drop · '),
-          t.rarityName,
-          ...(t.roleName ? [el('span', 'tile-role-name', ` · ${t.roleName}`)] : []),
-        );
-        id.append(kind, rarity, name);
-        if (t.role) id.append(el('p', 'tile-sub tile-role tile-more', t.role));
-        if (t.affixes) id.append(el('p', 'tile-sub tile-affixes tile-more', t.affixes));
-        const head = el('div', 'tile-drop-head');
-        head.append(icon, id);
-        tile.append(head, power);
-        // Bonus guns (ID-122): one compact row each, the icon on its rarity's tint.
-        if (t.bonus.length > 0) {
-          tile.append(el('p', 'tile-label tile-bonus-label', 'Bonus guns'));
-          const list = el('ul', 'tile-bonus');
-          list.setAttribute('aria-label', 'Bonus guns');
-          for (const b of t.bonus) {
-            const row = el('li', 'tile-bonus-row');
-            row.dataset.rarity = b.rarity;
-            row.classList.toggle('tile-bonus-lost', b.lost);
-            const icon = el('span', 'tile-bonus-icon');
-            const img = el('img', 'tile-icon-img gun-icon');
-            img.alt = '';
-            img.dataset.gun = b.icon.slice('weapon-'.length);
-            img.src = ART_URLS[b.icon] ?? '';
-            icon.append(img);
-            row.append(
-              icon,
-              el('span', 'tile-bonus-name', b.name),
-              el('span', 'tile-bonus-power', b.lost ? 'Thrown away' : b.power),
-            );
-            list.append(row);
-          }
-          tile.append(list);
-        }
-        if (t.thrown) tile.append(el('p', 'tile-thrown', t.thrown));
-        if (t.farmNote) tile.append(el('p', 'tile-farm tile-more', t.farmNote));
-        spoils.append(tile);
-      }
-      if (d.recruit) {
-        const tile = el('div', 'tile tile-recruit');
-        tile.classList.toggle('tile-recruit-full', d.recruit.full);
-        tile.append(
-          el('p', 'tile-label', d.recruit.label),
-          el('p', 'tile-name', d.recruit.name),
-          el('p', 'tile-sub', d.recruit.sub),
-        );
-        spoils.append(tile);
-      }
-      // The offer tile (ID-150), kept across redraws: `showJoin` fills it.
-      if (d.join) spoils.append(joinBox);
-      parts.push(spoils);
-    }
+    if (d.drop) parts.push(gunSection(d.drop));
     if (d.cards.length > 0) {
       parts.push(squadSection(d.cards, d.roster));
     } else if (d.empty) {
       parts.push(emptySection(d.empty));
     }
+    // The offer line (ID-150, ID-196) under the squad, kept across redraws: `showJoin` fills it.
+    if (d.join) parts.push(joinBox);
+    if (d.note) parts.push(el('p', 'debrief-note', d.note));
     return parts;
+  }
+
+  /**
+   * A win's weapons (ID-196): each dropped gun as its icon, level and name, and DPS. A click
+   * on one shows its details under the row (its kind and rarity, role and affixes, then the
+   * stash count and anything thrown away); a second click closes them.
+   */
+  function gunSection(t: DropTile): HTMLElement {
+    const section = el('section', 'debrief-guns');
+    section.setAttribute('aria-label', 'Weapons dropped');
+    const row = el('div', 'gun-row');
+    const details = el('div', 'gun-details');
+    details.id = 'hud-gun-details';
+    details.hidden = true;
+    const buttons = t.guns.map((g) => {
+      const b = el('button', 'tile gun-chip');
+      b.type = 'button';
+      b.dataset.rarity = g.rarity;
+      b.classList.toggle('gun-chip-lost', g.lost);
+      b.setAttribute('aria-controls', details.id);
+      b.setAttribute('aria-expanded', 'false');
+      // The whole name on hover, as one line can end it in "…".
+      b.title = g.short;
+      // The gun's icon (ID-092), decoration only: its name is right beside it.
+      const icon = el('span', 'tile-icon');
+      const img = el('img', 'tile-icon-img gun-icon');
+      img.alt = '';
+      img.dataset.gun = g.icon.slice('weapon-'.length);
+      img.src = ART_URLS[g.icon] ?? '';
+      icon.append(img);
+      // Two columns: the icon, then the level and gun over its DPS.
+      const text = el('span', 'gun-chip-text');
+      text.append(
+        el('span', 'gun-chip-name', g.short),
+        el('span', 'gun-chip-power', g.lost ? 'Thrown away' : g.power),
+      );
+      b.append(icon, text);
+      b.addEventListener('click', () => {
+        const open = b.getAttribute('aria-expanded') !== 'true';
+        for (const other of buttons) other.setAttribute('aria-expanded', 'false');
+        details.hidden = !open;
+        if (!open) return;
+        b.setAttribute('aria-expanded', 'true');
+        details.replaceChildren(
+          el('p', 'gun-details-name', g.short),
+          ...g.lines.map((line) => el('p', '', line)),
+          el('p', 'tile-stash', t.stash),
+          ...(t.thrown ? [el('p', 'tile-thrown', t.thrown)] : []),
+          ...(t.farmNote ? [el('p', 'tile-farm', t.farmNote)] : []),
+        );
+      });
+      return b;
+    });
+    row.append(...buttons);
+    section.append(row, details);
+    return section;
   }
 
   /** The Squad section with no cards: `text` in their place. */
   function emptySection(text: string): HTMLElement {
     const section = el('section', 'debrief-squad');
-    // The stash count (ID-067) stays beside the heading with no cards under it.
     const head = el('div', 'debrief-squad-head');
-    const heading = el('h3', 'debrief-squad-title', 'Squad');
-    heading.append(el('span', 'debrief-stash'));
-    head.append(heading, bestGunsButton());
+    head.append(el('h3', 'debrief-squad-title', 'Squad'), bestGunsButton());
     section.append(head, el('p', 'debrief-empty', text));
     return section;
   }
@@ -3087,9 +2852,7 @@ export function createHud(
   function squadSection(cards: readonly SquadCard[], roster?: Debrief['roster']): HTMLElement {
     const section = el('section', 'debrief-squad');
     const head = el('div', 'debrief-squad-head');
-    const heading = el('h3', 'debrief-squad-title', 'Squad');
-    heading.append(el('span', 'debrief-stash'));
-    head.append(heading, bestGunsButton());
+    head.append(el('h3', 'debrief-squad-title', 'Squad'), bestGunsButton());
     if (roster) {
       // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
       const change = el('button', 'hud-button debrief-change-squad', roster.label);
@@ -3097,51 +2860,42 @@ export function createHud(
       change.dataset.openRoster = '';
       head.append(change);
     }
-    head.append(el('p', 'debrief-hint', SQUAD_CARD_HINT));
-    if (roster?.line) head.append(el('p', 'debrief-hint debrief-bench', roster.line));
     const grid = el('div', 'squad-grid');
     grid.append(...cards.map(squadCard));
     section.append(head, grid);
+    if (roster?.line) section.append(el('p', 'debrief-hint debrief-bench', roster.line));
     return section;
   }
 
-  /** One survivor's card in the Squad section. */
+  /** One survivor in the Squad section (ID-196): their avatar and name, nothing else. */
   function squadCard(c: SquadCard): HTMLElement {
     const card = el('div', 'squad-card');
     card.dataset.defender = c.id;
     card.classList.toggle('squad-card-up', c.levelUp);
-    const top = el('div', 'squad-card-head');
-    const who = el('span', 'squad-card-who');
+    // Decoration only: the name is right beside it.
+    const frame = el('span', 'roster-avatar squad-card-avatar');
+    const img = el('img', 'roster-avatar-img');
+    img.alt = '';
+    // No URL, no request: an empty src would fetch the page itself.
+    const url = ART_URLS[c.art];
+    if (url) img.src = url;
+    frame.append(img);
     // The name opens their card in the Roster (ID-086): the app listens for it.
     const name = el('button', 'squad-card-name squad-card-open', c.name);
     name.type = 'button';
     name.dataset.openSurvivor = c.id;
     // The whole name on hover, as one line can end it in "…" (ID-111).
     name.title = c.name;
-    name.setAttribute('aria-label', `${c.name}: open survivor card`);
-    // "Lv 6 · Soldier", in two parts: a win's small card (ID-186) puts the job on its own line.
-    const level = el('span', 'squad-card-level');
-    level.append(
-      el('span', 'squad-card-lv', `Lv ${c.level}`),
-      el('span', 'squad-card-sep', ' · '),
-      el('span', 'squad-card-job', c.job),
-    );
-    who.append(name, level);
-    if (c.levelUp) who.append(el('span', 'squad-badge squad-badge-up', 'Level up'));
-    top.append(who);
-    if (c.xp !== null) top.append(el('span', 'squad-card-xp', `+${c.xp} XP`));
-    card.append(top);
-    if (c.bar) {
-      const track = el('div', 'xp-track');
-      track.setAttribute('aria-hidden', 'true');
-      const fill = el('div', 'xp-fill');
-      fill.style.width = `${c.bar.pct}%`;
-      track.append(fill);
-      card.append(track, el('p', 'squad-card-xptext', c.bar.text));
+    name.setAttribute('aria-label', `${c.name}, level ${c.level}: open survivor card`);
+    card.append(frame, name);
+    if (c.levelUp) {
+      // A triangle pointing up beside the name; a reader hears "Level up".
+      const up = el('span', 'squad-up', '▲');
+      up.setAttribute('role', 'img');
+      up.setAttribute('aria-label', 'Level up');
+      up.title = 'Level up';
+      card.append(up);
     }
-    card.append(el('div', 'squad-card-gear'));
-    // What the level gives (ID-146), on the start screen too.
-    card.append(el('p', 'squad-card-bonus', c.bonus));
     if (c.fresh) markNew(card);
     return card;
   }
@@ -3150,22 +2904,25 @@ export function createHud(
   function markNew(card: HTMLElement): void {
     if (card.classList.contains('squad-card-new')) return;
     card.classList.add('squad-card-new');
-    card
-      .querySelector('.squad-card-who')
-      ?.append(el('span', 'squad-badge squad-badge-new', NEW_BADGE));
+    card.append(el('span', 'squad-badge squad-badge-new', NEW_BADGE));
   }
 
   /**
-   * Scrolls the panel just enough that `card` sits whole between its top and the pinned
-   * footer (ID-157); a card taller than that space shows from its top.
+   * Scrolls just enough that `card` sits whole in view (ID-157); a card taller than that
+   * space shows from its top. The panel's body scrolls, or in a very short window the
+   * whole panel does (page.css).
    */
   function reveal(card: HTMLElement): void {
     const gap = 8;
+    const scroller = resultBody.scrollHeight > resultBody.clientHeight ? resultBody : result;
     const box = card.getBoundingClientRect();
-    const top = result.getBoundingClientRect().top + gap;
-    const limit = foot.getBoundingClientRect().top - gap;
-    if (box.top < top) result.scrollTop -= top - box.top;
-    else if (box.bottom > limit) result.scrollTop += Math.min(box.bottom - limit, box.top - top);
+    const frame = scroller.getBoundingClientRect();
+    const top = frame.top + gap;
+    const limit = frame.bottom - gap;
+    if (box.top < top) scroller.scrollTop -= top - box.top;
+    else if (box.bottom > limit) {
+      scroller.scrollTop += Math.min(box.bottom - limit, box.top - top);
+    }
   }
 
   /**
@@ -3501,22 +3258,26 @@ export function createHud(
         } else replace.replaceChildren();
       }
 
+      // A level-up on the horde's last kill opens an offer in a fight that is already over
+      // (ID-196): its cards would change nothing, so it never shows, and the result is
+      // never drawn over an open pick.
+      const offer = state.outcome === 'fighting' ? state.offer : null;
       // The sim clones its state each tick, so compare the offer by content.
       if (
-        JSON.stringify(state.offer) !== JSON.stringify(shownOffer) ||
+        JSON.stringify(offer) !== JSON.stringify(shownOffer) ||
         `${state.rerolledWave}:${state.rerolls}` !== shownRerolled
       ) {
-        shownOffer = state.offer;
+        shownOffer = offer;
         shownRerolled = `${state.rerolledWave}:${state.rerolls}`;
         // A new offer cuts a pick's confirm effect short; a closing one waits for it.
-        if (state.offer) {
+        if (offer) {
           endPick();
           // The offer takes the eye: an open card tip goes away (ID-113).
           showTip(null);
         }
         if (picking === undefined) {
-          cards.hidden = state.offer === null;
-          if (state.offer) showOffer(state.offer, state);
+          cards.hidden = offer === null;
+          if (offer) showOffer(offer, state);
           else cards.replaceChildren();
         }
       }
@@ -3530,17 +3291,15 @@ export function createHud(
       // A debrief lays its lines out itself; anything else is the plain list.
       resultList.hidden = d !== undefined;
       resultList.replaceChildren(...(d ? [] : screen.lines.map((line) => el('li', '', line))));
-      footNote.textContent = d?.foot ?? '';
-      joinInfo = d?.join;
       joinAnswers = [];
       back.classList.toggle('btn-primary', d !== undefined);
+      headChips.replaceChildren(...(d ? debriefChips(d) : []));
       picker.replaceChildren(...(d ? debriefBlock(d) : []));
       // A new screen starts scannable: its details closed (ID-186).
       setDetails(false);
       back.textContent = screen.button;
       drawPicker(screen.picker);
       drawSkills(screen.skills);
-      gear.replaceChildren();
       campBlock(screen.camp);
       result.hidden = false;
       if (squad) shop.hidden = true;
@@ -3548,13 +3307,11 @@ export function createHud(
       for (const item of skillItems) item.cooling = false;
       // A new screen starts at its top, not where the last one was scrolled to.
       result.scrollTop = 0;
-      // Without scrolling: the sticky footer's button would pull the panel past the drop tile.
+      resultBody.scrollTop = 0;
+      // Without scrolling: the footer's button would pull the panel past the drop tile.
       (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus({
         preventScroll: true,
       });
-    },
-    onRadioToggle(handler) {
-      onRadio = handler;
     },
     onHordePick(handler) {
       onPickHorde = handler;
@@ -3610,82 +3367,15 @@ export function createHud(
       fightLine = line;
       showFightPower();
     },
-    showGear(screen, onEquip) {
-      // A redraw after a pick keeps the keyboard on the same survivor's picker.
-      const active = document.activeElement;
-      const focused =
-        active instanceof HTMLSelectElement && result.contains(active)
-          ? active.dataset.defender
-          : undefined;
-      // Each survivor's card has a slot for their gun; one without a card goes in a list.
-      const slots = new Map<string, HTMLElement>();
-      for (const card of picker.querySelectorAll<HTMLElement>('.squad-card')) {
-        const slot = card.querySelector<HTMLElement>('.squad-card-gear');
-        if (card.dataset.defender !== undefined && slot) slots.set(card.dataset.defender, slot);
-      }
-      const loose: HTMLElement[] = [];
-      // A win's cards are only who levelled up (ID-134): the rest change guns in the Roster.
-      const cardsOnly = result.dataset.kind === 'won';
-      // A newcomer benched or let go from the Roster since (ID-157): their "New" card goes.
-      const inSquad = new Set(screen.rows.map((r) => r.id));
+    showSquad(ids) {
+      if (result.hidden) return;
       for (const card of picker.querySelectorAll<HTMLElement>('.squad-card-new')) {
-        if (card.dataset.defender !== undefined && !inSquad.has(card.dataset.defender)) {
-          card.remove();
-        }
+        if (card.dataset.defender !== undefined && !ids.has(card.dataset.defender)) card.remove();
       }
       // A win left with no card says so again (a win's cards are only level-ups otherwise).
       const grid = picker.querySelector('.squad-grid');
-      if (cardsOnly && grid && grid.children.length === 0) {
+      if (result.dataset.kind === 'won' && grid && grid.children.length === 0) {
         grid.closest('.debrief-squad')?.replaceWith(emptySection(SQUAD_NO_LEVEL_UPS));
-      }
-      screen.rows.forEach((row, i) => {
-        if (cardsOnly && !slots.has(row.id)) return;
-        const select = el('select', 'build-select hud-gear-select');
-        select.id = `hud-gear-${i}`;
-        select.dataset.defender = row.id;
-        select.dataset.rarity = row.rarity;
-        for (const o of row.options) {
-          const option = el('option', '', o.label);
-          option.value = o.value;
-          select.append(option);
-        }
-        select.value = row.value;
-        // The full label on hover, for one a narrow select cuts short.
-        select.title = select.selectedOptions[0]?.textContent ?? '';
-        select.addEventListener('change', () => {
-          if (result.hidden) return;
-          onEquip(row.id, select.value);
-        });
-        // The held gun's role and trait (ID-101), under the picker and read with it.
-        const role = el('p', 'hud-gear-role', row.role);
-        role.id = `hud-gear-role-${i}`;
-        if (row.role) select.setAttribute('aria-describedby', role.id);
-        // Its figures are theirs (ID-166): a caption over the picker says so, and its name.
-        const caption = el('label', 'hud-gear-caption', dpsCaption(row.name));
-        caption.htmlFor = select.id;
-        select.setAttribute('aria-label', `${row.name}'s gun, ${dpsCaption(row.name)}`);
-        const slot = slots.get(row.id);
-        if (slot) {
-          slot.replaceChildren(caption, select, role);
-          return;
-        }
-        const line = el('div', 'hud-gear-row');
-        const label = el('span', 'hud-gear-name', row.name);
-        line.append(label, caption, select, role);
-        loose.push(line);
-      });
-      // A win always has the stash count (beside its cards or its no-level-up line), and
-      // never loose rows, so this heading only shows off a debrief or on the start screen.
-      const stash = picker.querySelector<HTMLElement>('.debrief-stash');
-      if (stash) stash.textContent = screen.heading;
-      gear.replaceChildren(
-        ...(loose.length > 0 || !stash ? [el('h3', 'hud-pick-heading', screen.heading)] : []),
-        ...loose,
-      );
-      if (focused !== undefined) {
-        [...result.querySelectorAll<HTMLSelectElement>('select')]
-          .find((x) => x.dataset.defender === focused)
-          ?.focus();
       }
     },
   };
