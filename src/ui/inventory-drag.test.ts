@@ -381,7 +381,7 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(slot('stash:h2').getAttribute('aria-pressed')).toBe('true');
     const box = details().querySelector('.inv-combine-confirm')!;
     expect(box.getAttribute('aria-label')).toBe('Combine into a Common SMG');
-    expect(document.activeElement).toBe(box.querySelector('.inv-combine-no'));
+    expect(document.activeElement).toBe(details().querySelector('.inv-combine-no'));
     details().querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
     expect(now().armoury).toHaveLength(2);
   });
@@ -767,8 +767,13 @@ describe('moving guns without dragging (ID-095)', () => {
     slot('pistol').click();
     const on = [...details().querySelectorAll<HTMLButtonElement>('.inv-equip-on')];
     expect(on.map((b) => b.dataset.defender)).toEqual(['recruit-1']);
+    // Every survivor keeps a cell (ID-198): the one with nothing to do is a blank.
+    expect(details().querySelector('.inv-equip')!.children).toHaveLength(2);
+    expect(details().querySelectorAll('.inv-equip-blank')).toHaveLength(1);
     slot('squad:recruit-2').click();
-    expect(details().querySelector('.inv-gear')).toBeNull();
+    // A survivor's own pistol: nothing to move, the cells stay, blank.
+    expect(details().querySelectorAll('.inv-gear button')).toHaveLength(0);
+    expect(details().querySelectorAll('.inv-equip-blank')).toHaveLength(2);
     slot('squad:recruit-1').click();
     const off = details().querySelector<HTMLButtonElement>('.inv-unequip')!;
     expect(off.getAttribute('aria-label')).toBe(
@@ -800,5 +805,96 @@ describe('moving guns without dragging (ID-095)', () => {
     on.click();
     expect(status().textContent).toBe(`${evil} now holds Military Carbine`);
     expect(dialog.querySelector('img:not(.gun-icon)')).toBeNull();
+    // The gun in hand: the dock's heading, group and Unequip name the holder, as text (ID-198).
+    slot('squad:recruit-1').click();
+    const gear = details().querySelector<HTMLElement>('.inv-gear')!;
+    expect(gear.querySelector('.inv-combine-label')!.textContent).toBe(`Held by ${evil}`);
+    expect(gear.getAttribute('aria-label')).toBe(`Military Carbine, held by ${evil}`);
+    expect(gear.querySelector('.inv-unequip')!.getAttribute('aria-label')).toBe(
+      `Unequip Military Carbine from ${evil}`,
+    );
+    expect(dialog.querySelector('[onerror]')).toBeNull();
+    expect(dialog.querySelector('img:not(.gun-icon)')).toBeNull();
+  });
+});
+
+describe('the details hold still while picking and combining (ID-198)', () => {
+  /** The dock's shape, words aside: which parts, how many equip cells, where Combine is. */
+  const shape = (details: HTMLElement): string => {
+    const parts = [...details.children].map((c) => c.className);
+    const dock = details.querySelector('.inv-dock')!;
+    const first = dock.querySelector('.inv-combine-actions')!.firstElementChild!;
+    return JSON.stringify({
+      parts,
+      dock: [...dock.children].map((c) => c.className),
+      cells: dock.querySelector('.inv-equip')!.childElementCount,
+      line: dock.querySelector('.inv-combine-line')!.childElementCount,
+      // Combine, its greyed stand-in or the confirm's Confirm: always the row's first.
+      first: /inv-combine-(button|off|yes)/.test(first.className),
+    });
+  };
+
+  it('every gun, a confirm and a combine give the dock one shape', () => {
+    const relic = gun('r', 'rifle', 'relic');
+    const { slot, details, dialog } = setup(
+      camp(3, [...rusty(4), relic], [gun('x', 'rifle', 'common')]),
+    );
+    const seen = new Set<string>();
+    for (const b of dialog.querySelectorAll<HTMLButtonElement>('.inv-slot[data-key]')) {
+      b.click();
+      seen.add(shape(details()));
+    }
+    slot('stash:h1').click();
+    details().querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
+    expect(details().querySelector('.inv-combine-confirm')).not.toBeNull();
+    seen.add(shape(details()));
+    details().querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
+    expect(details().querySelector<HTMLElement>('.inv-combine-result')!.hidden).toBe(false);
+    seen.add(shape(details()));
+    expect([...seen]).toHaveLength(1);
+    expect(JSON.parse([...seen][0]!)).toMatchObject({
+      parts: ['inv-details-info', 'inv-dock'],
+      dock: ['inv-gear', 'inv-combine'],
+      cells: 3,
+      line: 2,
+      first: true,
+    });
+  });
+
+  it('a survivor keeps one cell from gun to gun; the greyed Combine says it can’t be pressed', () => {
+    const { slot, details } = setup(camp(3, [...rusty(3), gun('r', 'rifle', 'relic')]));
+    slot('stash:h1').click();
+    const cell = (id: string) =>
+      [...details().querySelector('.inv-equip')!.children].findIndex(
+        (c) => (c as HTMLElement).dataset.defender === id,
+      );
+    const at = cell('recruit-2');
+    slot('stash:r').click();
+    expect(cell('recruit-2')).toBe(at);
+    const off = details().querySelector<HTMLButtonElement>('.inv-combine-off')!;
+    expect(off.disabled).toBe(true);
+    // Its name says why it is greyed out.
+    expect(off.getAttribute('aria-label')).toBe(`Combine 3: ${COMBINE_TOP}`);
+    expect(details().querySelector('.inv-combine-button')).toBeNull();
+    expect(details().querySelector('.inv-combine-count')!.textContent).toBe(COMBINE_TOP);
+  });
+
+  it('after a combine the line shows the gun made by name, and the count stays in sight', () => {
+    const { slot, details } = setup(camp(1, rusty(3)));
+    slot('stash:h1').click();
+    details().querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
+    details().querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
+    const line = details().querySelector<HTMLElement>('.inv-combine-result')!;
+    // A reader hears it all; the rest (DPS) is hidden from sight and in its tooltip.
+    expect(line.textContent).toMatch(/^Made: Lv 1 Common SMG, [\d.]+ DPS$/);
+    expect(line.firstChild!.textContent).toBe('Made: Lv 1 Common SMG');
+    expect(line.querySelector('.sr-only')!.textContent).toMatch(/^, [\d.]+ DPS$/);
+    expect(line.title).toBe(line.textContent);
+    const count = details().querySelector<HTMLElement>('.inv-combine-count')!;
+    expect(count.hidden).toBe(false);
+    expect(count.textContent).toBe('Common SMG: 1/3 · 2 more for a Military SMG');
+    expect(details().querySelector('.inv-combine-off')!.getAttribute('aria-label')).toBe(
+      'Combine 3: Common SMG: 1/3 · 2 more for a Military SMG',
+    );
   });
 });

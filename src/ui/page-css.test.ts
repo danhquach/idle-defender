@@ -498,3 +498,57 @@ describe("a win's result at a glance (ID-186)", () => {
     expect(rules).toMatch(/\.join-who \{/);
   });
 });
+
+describe('the Weapons details hold still (ID-198)', () => {
+  it('the box is one fixed size: a set width beside the grid, a set height under it on a phone', () => {
+    expect(rule('.inv-details')).toMatch(/width: 240px;/);
+    expect(rule('.inv-details')).not.toMatch(/overflow/);
+    const phone = /@media \(max-width: 640px\) \{[\s\S]*?\n {2}\.inv-details \{([^}]*)\}/.exec(
+      rules,
+    );
+    expect(phone, 'no phone details rule in page.css').not.toBeNull();
+    expect(phone![1]).toMatch(/(?:^|\s)height: 55%;/);
+    expect(phone![1]).not.toMatch(/max-height/);
+    // Under the grid: a divider on top, none on the left.
+    expect(phone![1]).toMatch(/border-top: 1px solid var\(--color-divider\);[^}]*border-left: 0;/);
+    const equip = /@media \(max-width: 640px\) \{[\s\S]*?\n {2}\.inv-equip \{([^}]*)\}/.exec(rules);
+    expect(equip![1]).not.toMatch(/border/);
+  });
+
+  it('the gun’s lines scroll; the dock at the foot keeps its size', () => {
+    expect(rule('.inv-details-info')).toMatch(/flex: 1;[^}]*min-height: 0;[^}]*overflow-y: auto;/);
+    expect(rule('.inv-dock')).toMatch(/flex: none;/);
+  });
+
+  it('the dock’s parts have set sizes: equip cells, a two-line status, one button row', () => {
+    expect(rule('.inv-equip')).toMatch(/display: grid;[^}]*grid-auto-rows: 32px;/);
+    expect(rule('.inv-combine-line')).toMatch(
+      /height: calc\(2 \* 1\.35em\);[^}]*overflow: hidden;/,
+    );
+    expect(rule('.inv-combine-actions')).toMatch(/grid-template-columns: 2fr 1fr;/);
+    expect(rule('.inv-combine-actions')).toMatch(/grid-auto-rows: 36px;/);
+    // Combine spans the row; Confirm takes its first two thirds, over Combine's centre.
+    expect(rules).toMatch(
+      /\.inv-combine-actions \.inv-combine-button,\n\.inv-combine-actions \.inv-combine-off \{\s*grid-column: 1 \/ -1;/,
+    );
+  });
+
+  it('a finger gets 44 px dock buttons; under a result each status line is one line', () => {
+    expect(rules).toMatch(
+      /@media \(pointer: coarse\) \{\s*\.inv-equip,\n {2}\.inv-combine-actions \{\s*grid-auto-rows: 44px;/,
+    );
+    expect(rules).toMatch(
+      /\.inv-combine-result\[data-made\],\n\.inv-combine-result\[data-made\] \+ \.inv-combine-count \{[^}]*line-clamp: 1;/,
+    );
+  });
+
+  it('long names end in "…" in an equip cell instead of growing it', () => {
+    expect(rule('.inv-equip .menu-action')).toMatch(
+      /white-space: nowrap;[^}]*text-overflow: ellipsis;/,
+    );
+  });
+
+  it('the old text lines of the confirm have no rules left', () => {
+    expect(rules).not.toMatch(/\.inv-combine-row|\.inv-combine-affixes|\.inv-combine-power/);
+  });
+});

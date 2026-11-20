@@ -3566,16 +3566,63 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   user-select: none;
 }
 
+/* The details (ID-198): one fixed box whichever gun shows. What the gun is scrolls at the top;
+   the dock with its buttons is pinned at the foot, one shape for every gun. */
 .inv-details {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--space-6);
   width: 240px;
-  padding: var(--space-16);
-  overflow-y: auto;
+  min-height: 0;
   border-left: 1px solid var(--color-divider);
   box-sizing: border-box;
+}
+
+.inv-details-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-height: 0;
+  padding: var(--space-16);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.inv-dock {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-10);
+  padding: var(--space-10) var(--space-16) var(--space-16);
+  border-top: 1px solid var(--color-divider);
+}
+
+.inv-gear {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* One cell per survivor, always: a survivor's button keeps its spot from gun to gun. */
+.inv-equip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  grid-auto-rows: 32px;
+  gap: var(--space-6);
+}
+
+.inv-equip .menu-action {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 var(--space-4);
+  overflow: hidden;
+  line-height: 30px;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .inv-details p {
@@ -3831,26 +3878,22 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 .inv-name[data-rarity='rusty'],
-.inv-rarity[data-rarity='rusty'],
-.inv-combine-row[data-rarity='rusty'] .inv-name {
+.inv-rarity[data-rarity='rusty'] {
   color: var(--rarity-rusty);
 }
 
 .inv-name[data-rarity='military'],
-.inv-rarity[data-rarity='military'],
-.inv-combine-row[data-rarity='military'] .inv-name {
+.inv-rarity[data-rarity='military'] {
   color: var(--rarity-military);
 }
 
 .inv-name[data-rarity='prototype'],
-.inv-rarity[data-rarity='prototype'],
-.inv-combine-row[data-rarity='prototype'] .inv-name {
+.inv-rarity[data-rarity='prototype'] {
   color: var(--rarity-prototype);
 }
 
 .inv-name[data-rarity='relic'],
-.inv-rarity[data-rarity='relic'],
-.inv-combine-row[data-rarity='relic'] .inv-name {
+.inv-rarity[data-rarity='relic'] {
   color: var(--rarity-relic);
 }
 
@@ -3893,9 +3936,67 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  margin-top: var(--space-6);
-  padding-top: var(--space-10);
-  border-top: 1px solid var(--color-divider);
+}
+
+/* Two lines tall whatever it says, so the button under it never moves; longer is cut. */
+.inv-combine-line {
+  height: calc(2 * 1.35em);
+  overflow: hidden;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+
+.inv-combine-line p {
+  display: -webkit-box;
+  font-size: inherit;
+  line-height: inherit;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.inv-combine-line p[hidden] {
+  display: none;
+}
+
+/* After a combine, each of the two gets one line: what was made, then the count or why not. */
+.inv-combine-result[data-made],
+.inv-combine-result[data-made] + .inv-combine-count {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+/* Combine fills the row; its confirm's Confirm takes the same spot, Cancel the last third. */
+.inv-combine-actions {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-auto-rows: 36px;
+  gap: var(--space-6);
+}
+
+.inv-combine-actions .menu-action {
+  justify-content: center;
+  height: 100%;
+  min-height: 0;
+  white-space: nowrap;
+}
+
+.inv-combine-actions .inv-combine-button,
+.inv-combine-actions .inv-combine-off {
+  grid-column: 1 / -1;
+}
+
+/* A finger gets 44 px buttons in the dock; the dock is that much taller, still one shape. */
+@media (pointer: coarse) {
+  .inv-equip,
+  .inv-combine-actions {
+    grid-auto-rows: 44px;
+  }
+
+  .inv-equip .menu-action {
+    line-height: 42px;
+  }
 }
 
 .inv-combine-label {
@@ -3905,41 +4006,39 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-text-muted);
 }
 
+/* The confirm (ID-198): the guns as the grid's tiles, not lines of text. */
 .inv-combine-confirm {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  padding: var(--space-10);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-}
-
-.inv-combine-confirm .menu-row {
-  flex-wrap: wrap;
 }
 
 .inv-combine-list {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-6);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.inv-combine-row {
+/* A tile to look at, not to press. */
+.inv-slot-static {
+  cursor: default;
+}
+
+.inv-combine-makes {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+}
+
+.inv-combine-about {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
   font-size: var(--text-sm);
-}
-
-.inv-combine-row .inv-name {
-  font-size: var(--text-body-sm);
-}
-
-.inv-combine-affixes,
-.inv-combine-power {
-  color: var(--color-text-muted);
 }
 
 .inv-combine-result {
@@ -4001,11 +4100,53 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     flex-direction: column;
   }
 
+  /* A set height, not a cap: the grid above never grows or shrinks from gun to gun. */
   .inv-details {
     width: auto;
-    max-height: 40%;
+    height: 55%;
     border-top: 1px solid var(--color-divider);
     border-left: 0;
+  }
+
+  /* The confirm on one row: the 3 guns it uses up, then the one it makes; its name under. */
+  .inv-combine-confirm {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-4) var(--space-16);
+  }
+
+  /* Tighter on a phone, so a confirm's tiles, name and DPS all show above the dock. */
+  .inv-details-info {
+    padding: var(--space-10) var(--space-16);
+  }
+
+  .inv-combine-confirm > :nth-child(1) {
+    grid-area: 1 / 1;
+  }
+
+  .inv-combine-confirm > :nth-child(2) {
+    grid-area: 2 / 1;
+  }
+
+  .inv-combine-confirm > :nth-child(3) {
+    grid-area: 1 / 2;
+  }
+
+  .inv-combine-makes {
+    display: contents;
+  }
+
+  .inv-combine-makes > .inv-combine-list {
+    grid-area: 2 / 2;
+  }
+
+  .inv-combine-about {
+    grid-area: 3 / 1 / 4 / 3;
+  }
+
+  /* The full width holds a squad of 6 on one row, leaving the gun's lines more room. */
+  .inv-equip {
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
   }
 }
 
