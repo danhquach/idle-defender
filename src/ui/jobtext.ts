@@ -180,8 +180,10 @@ export interface StatRow {
   off: boolean;
 }
 
-/** `v` as a part of a stat: "—" for none. */
-const part = (v: number, show: (x: number) => string): string => (v === 0 ? '—' : show(v));
+/** A stat part that is none (the Roster draws it faint, ID-189). */
+export const NONE = '—';
+/** `v` as a part of a stat: `NONE` for none. */
+const part = (v: number, show: (x: number) => string): string => (v === 0 ? NONE : show(v));
 
 /**
  * `d`'s stats with `held` (ID-149): max HP, armour, fire rate, reload speed, accuracy, crit

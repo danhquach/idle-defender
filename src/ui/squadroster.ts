@@ -40,7 +40,7 @@ import {
   slotOffer,
 } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
-import { JOB_SHORT, jobInfo, NO_BONUS, statRows } from './jobtext.ts';
+import { JOB_SHORT, jobInfo, NO_BONUS, NONE, statRows, type StatRow } from './jobtext.ts';
 import { levelText } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -340,7 +340,11 @@ export function createRoster(
     const benched = marks.filter((t) => t.bench);
     const squadText = `Squad ${marks.length - benched.length}/${squadCap(game)}`;
     tabs.setAttribute('aria-label', squadText);
-    tabs.replaceChildren(...marks.filter((t) => !t.bench).map((t) => tabItem(t, t.id === current)));
+    const squadMarks = marks.filter((t) => !t.bench);
+    tabs.replaceChildren(...squadMarks.map((t) => tabItem(t, t.id === current)));
+    // How many cards (ID-189): the CSS splits them into even rows for the width.
+    tabs.dataset.count = String(squadMarks.length);
+    benchTabs.dataset.count = String(benched.length);
     // With nobody on the bench the rows need no labels: the Roster looks as it did.
     squadRow.hidden = benchLabel.hidden = benchTabs.hidden = benched.length === 0;
     const offer = game.stock
@@ -452,20 +456,23 @@ export function createRoster(
   function survivorRow(d: RosterDefender, mark: RosterTile, canGear: boolean): HTMLElement[] {
     const { level, into, next } = levelOf(d.xp);
     const pct = next > 0 ? Math.min(100, (100 * into) / next) : 100;
-    const who = el('div', 'rv-who');
+    // One row (ID-189): portrait | name, level line, XP, buttons | gun slot, each sized to
+    // its content. The level and XP show here once; the details panel has no head of its own.
     const text = el('div', 'rv-who-text');
-    const track = el('div', 'xp-track rv-xp');
+    const track = el('div', 'rv-xp');
     track.setAttribute('role', 'img');
     track.setAttribute('aria-label', `${into}/${next} XP to Lv ${level + 1}`);
-    const fill = el('div', 'xp-fill');
+    const fill = el('div', 'rv-xp-fill');
     fill.style.width = `${pct}%`;
     track.append(fill);
+    const xpRow = el('div', 'rv-xprow');
+    xpRow.append(track, el('span', 'rv-xp-text', `${into}/${next} XP`));
     const sub = el('p', 'rv-who-level');
     sub.append(
       `Level ${level} · ${mark.job} · `,
       el('span', mark.down ? 'roster-tile-down' : '', mark.health),
     );
-    text.append(el('h3', 'rv-who-name', d.name), sub, track);
+    text.append(el('h3', 'rv-who-name', d.name), sub, xpRow);
     const { game } = opts.state();
     // Only with a bench to swap with (ID-147): a camp of six or fewer has no choice to make.
     // Someone resting gets none: "Resting: N hordes" on the line above says why.
@@ -480,12 +487,14 @@ export function createRoster(
     text.append(actions);
     // The lock's reason beside the button too (ID-150): the status line can sit below the fold.
     // With a Combine button it names both, so neither reads as the other's answer (ID-170).
+    // It runs on after the buttons when it fits (ID-189).
     const lock = letGoLock(camp, partners.length > 0 ? 'combine or let one go' : undefined);
     // A pick left open never comes back by itself once the lock or the partners go.
     if (lock || partners.length === 0) combining = false;
-    if (canGear && lock) text.append(el('p', 'rv-letgo-why', lock));
-    else if (canGear && combining) text.append(combinePick(d, partners));
-    who.append(avatar(mark.art, 'roster-avatar roster-avatar-md'), text);
+    if (canGear && lock) actions.append(el('p', 'rv-letgo-why', lock));
+    // The Combine pick takes a row of its own under the name and the gun slot (ID-189), so
+    // its buttons never squeeze into the name's column.
+    const pick = canGear && !lock && combining ? [combinePick(d, partners)] : [];
 
     const held = heldGunOf(d);
     const slot = el('button', 'rv-slot');
@@ -497,20 +506,16 @@ export function createRoster(
     const dps = heldDps(held, d);
     slot.setAttribute(
       'aria-label',
-      `Gun: ${gunName(held)}, ${dps} ${dpsCaption(d.name)}. ${canGear ? (picking ? 'Back to level' : 'Change gun') : GUNS_WAIT}`,
+      `Gun: ${gunName(held)}, ${dps} ${dpsCaption(d.name)}. ${canGear ? (picking ? 'Back to stats' : 'Change gun') : GUNS_WAIT}`,
     );
     const icon = gunIcon(rarityOf(held), GUN_ICON[baseOf(held) as GunId]);
     const gtext = el('span', 'rv-slot-text');
     const name = el('span', 'rv-slot-name', gunName(held));
     name.dataset.rarity = rarityOf(held);
     const line = el('span', 'rv-slot-line');
-    // The role drops out on a phone, where it would be cut off; the comparison names it.
-    line.append(
-      el('b', '', dps),
-      ` ${dpsCaption(d.name)}`,
-      el('span', 'rv-slot-role', ` · ${roleName(held)}`),
-    );
-    gtext.append(name, line);
+    // Name, DPS and role on three short lines (ID-189), so the slot is only as wide as its gun.
+    line.append(el('b', '', dps), ` ${dpsCaption(d.name)}`);
+    gtext.append(name, line, el('span', 'rv-slot-role', roleName(held)));
     if (!canGear) gtext.append(el('span', 'rv-slot-note', GUNS_WAIT));
     slot.append(icon, gtext);
     if (canGear) {
@@ -538,7 +543,7 @@ export function createRoster(
       }
       draw('slot');
     });
-    return [who, slot];
+    return [avatar(mark.art, 'roster-avatar roster-avatar-lg'), text, slot, ...pick];
   }
 
   /**
@@ -663,43 +668,58 @@ export function createRoster(
   }
 
   /**
-   * The details panel (ID-146, ID-149): "Level N" and its XP, the profession's benefit
-   * highlighted (greyed with "No bonus with this gun" for a fighting job off its guns; the
-   * no-stack note for a shared job another of `squad` has), what the level gives, and every
-   * stat split into the level's part and the profession's.
+   * The details panel (ID-146, ID-149, ID-189): the profession's benefit highlighted (greyed
+   * with "No bonus with this gun" for a fighting job off its guns; the no-stack note for a
+   * shared job another of `squad` has), then every stat split into the level's part and the
+   * profession's, in two short tables side by side. The level and XP are on the row above;
+   * what the level gives is the Level column, so its line shows only at level 1, where that
+   * column is empty and the line says what levels will bring.
    */
   function levelPanel(d: RosterDefender, squad: readonly RosterDefender[]): HTMLElement[] {
-    const { level, into, next } = levelOf(d.xp);
+    const { level } = levelOf(d.xp);
     const held = heldGunOf(d);
-    const headRow = el('div', 'rv-phead');
-    headRow.append(
-      el('span', 'rv-ttl', `Level ${level}`),
-      el('span', 'rv-left', `${into}/${next} XP`),
-    );
     const info = jobInfo(d, held, squad);
     const job = el('div', 'rv-job');
     job.toggleAttribute('data-off', info.off);
     job.append(el('p', 'rv-job-line', info.line));
     if (info.off) job.append(el('p', 'rv-job-note', NO_BONUS));
     if (info.note) job.append(el('p', 'rv-job-note', info.note));
+    const rows = statRows(d, held);
+    const half = Math.ceil(rows.length / 2);
+    const cols = el('div', 'rv-statcols');
+    cols.append(statTable(rows.slice(0, half)), statTable(rows.slice(half)));
+    const out = [job, cols];
+    if (level <= 1) out.push(el('p', 'rv-level', levelText(level)));
+    return out;
+  }
+
+  /** One of the two stat tables: label, total, the level's part, the profession's ("—" faint). */
+  function statTable(rows: readonly StatRow[]): HTMLElement {
     const table = el('table', 'rv-stats');
     const head = el('tr', '');
-    for (const h of ['', 'Total', 'Level', 'Profession']) head.append(el('th', '', h));
+    for (const h of ['', 'Total', 'Level', 'Profession']) {
+      const th = el('th', '', h);
+      th.scope = 'col';
+      head.append(th);
+    }
     const thead = el('thead', '');
     thead.append(head);
     const body = el('tbody', '');
-    for (const r of statRows(d, held)) {
+    for (const r of rows) {
       const tr = el('tr', '');
       const th = el('th', '', r.label);
       th.scope = 'row';
+      const lvCell = el('td', 'rv-stat-lv', r.level);
+      lvCell.toggleAttribute('data-none', r.level === NONE);
       const jobCell = el('td', 'rv-stat-job', r.job);
+      jobCell.toggleAttribute('data-none', r.job === NONE);
       jobCell.toggleAttribute('data-off', r.off);
       if (r.off) jobCell.title = NO_BONUS;
-      tr.append(th, el('td', 'rv-stat-total', r.total), el('td', '', r.level), jobCell);
+      tr.append(th, el('td', 'rv-stat-total', r.total), lvCell, jobCell);
       body.append(tr);
     }
     table.append(thead, body);
-    return [headRow, job, el('p', 'rv-level', levelText(level)), table];
+    return table;
   }
 
   function pickerPanel(
@@ -711,7 +731,8 @@ export function createRoster(
     const tiles = gunTiles(game, d.id);
     if (picked !== null && !tiles.some((t) => t.choice === picked)) picked = null;
     const headRow = el('div', 'rv-phead');
-    const back = el('button', 'hud-button rv-btn', 'Level');
+    // Back to the stats panel (ID-189: it has no "Level" head any more).
+    const back = el('button', 'hud-button rv-btn', 'Stats');
     back.type = 'button';
     back.dataset.key = 'level';
     back.addEventListener('click', () => {

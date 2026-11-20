@@ -4194,11 +4194,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   height: 100%;
 }
 
-.roster-avatar-md {
-  width: 40px;
-  height: 50px;
-}
-
 .roster-avatar-img {
   max-width: 100%;
   max-height: 100%;
@@ -4253,6 +4248,33 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   list-style: none;
   /* A scroller's min height is 0: in a dialog taller than the screen it would squash. */
   flex-shrink: 0;
+}
+
+/* Even rows (ID-189): five or six cards stay on one row where they fit, not four over
+   two; seven or eight keep rows of four (4+3, 4+4). */
+@container (min-width: 530px) {
+  .rv-tabs[data-count='5'] {
+    grid-template-columns: repeat(5, minmax(0, 100px));
+  }
+}
+
+@container (min-width: 630px) {
+  .rv-tabs[data-count='6'] {
+    grid-template-columns: repeat(6, minmax(0, 100px));
+  }
+}
+
+/* Too narrow for all of them at full size: five or six split 3+2 or 3+3. */
+@container (max-width: 529px) {
+  .rv-tabs:not(.rv-bench)[data-count='5'] {
+    grid-template-columns: repeat(3, minmax(0, 100px));
+  }
+}
+
+@container (max-width: 629px) {
+  .rv-tabs:not(.rv-bench)[data-count='6'] {
+    grid-template-columns: repeat(3, minmax(0, 100px));
+  }
 }
 
 .rv-cell {
@@ -4537,20 +4559,28 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 .rv-squad {
   min-height: 32px;
   margin-top: var(--space-4);
-  padding: 0 var(--space-8);
+  padding: 0 var(--space-10);
   font-size: var(--text-xs);
 }
 
-/* Squad ⇄ bench and Let go side by side (ID-150), wrapping on a narrow phone. */
+/* Squad ⇄ bench and Let go side by side (ID-150), wrapping on a narrow phone; the lock's
+   reason on the same line when it fits (ID-189). */
 .rv-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  margin-top: var(--space-4);
+  align-items: center;
+  gap: var(--space-4) var(--space-6);
+  margin-top: var(--space-6);
 }
 
 .rv-actions .rv-squad {
   margin-top: 0;
+}
+
+.rv-actions .rv-letgo-why {
+  flex: 1 1 150px;
+  margin: 0;
+  line-height: 1.25;
 }
 
 /* Let go can't be undone (ID-150): a faint danger tint marks it apart from the squad button. */
@@ -4584,28 +4614,45 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-size: var(--text-xs);
 }
 
-/* The selected survivor beside their gun slot. */
+/* The selected survivor (ID-189): portrait | name, level line, XP, buttons | gun slot, each
+   sized to its content and packed to the left, so no gap opens between them. */
 .rv-top {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-8);
-  align-items: stretch;
+  grid-template-columns: auto minmax(0, max-content) minmax(0, 280px);
+  grid-template-areas: 'pic who slot';
+  justify-content: start;
+  gap: var(--space-4) var(--space-12);
+  align-items: start;
 }
 
-.rv-who {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
+.rv-top > .roster-avatar {
+  grid-area: pic;
 }
 
 .rv-who-text {
+  grid-area: who;
   min-width: 0;
+}
+
+.rv-top > .rv-slot {
+  grid-area: slot;
+  align-self: center;
+}
+
+/* The Combine pick (ID-170): its own row under the name and the gun slot (ID-189). */
+.rv-top > .rv-combine-pick {
+  grid-column: 2 / -1;
+}
+
+.roster-avatar-lg {
+  width: 52px;
+  height: 64px;
 }
 
 .rv-who-name {
   margin: 0;
   font-size: var(--text-heading);
-  line-height: 1.1;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
@@ -4613,23 +4660,45 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   margin: 0;
   color: var(--color-text-subtle);
   font-size: var(--text-xs);
-  white-space: nowrap;
+}
+
+/* The XP bar with its numbers beside it (ID-189: once, here, not in the panel too). */
+.rv-xprow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-2);
 }
 
 .rv-xp {
-  width: 72px;
+  flex: 0 1 140px;
   height: 4px;
-  margin-top: var(--space-4);
-  /* The shared track is the page colour, unseen on the dialog: a lighter one here. */
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  /* A lighter track than the page colour, which is unseen on the dialog. */
   background: var(--color-surface-active);
 }
 
+.rv-xp-fill {
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.rv-xp-text {
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The gun slot: as wide as its gun, never a half-width box (ID-189). */
 .rv-slot {
   display: flex;
   align-items: center;
   gap: var(--space-8);
   min-width: 0;
-  padding: 5px var(--space-8) 5px 5px;
+  max-width: 280px;
+  padding: var(--space-4) var(--space-8) var(--space-4) var(--space-4);
   border: 1px solid var(--color-border);
   border-left: 4px solid var(--slot-common);
   border-radius: var(--radius-lg);
@@ -4769,6 +4838,12 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   white-space: nowrap;
 }
 
+/* In a fight, why the gun can't change: whole, on two lines in the slot (ID-189). */
+.rv-slot-note {
+  white-space: normal;
+  line-height: 1.2;
+}
+
 .rv-slot-name {
   font-weight: 600;
   color: var(--rarity-common);
@@ -4785,8 +4860,23 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-weight: 600;
 }
 
+/* The gun's role on its own line under the DPS (ID-189). */
+.rv-slot-role {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
 .rv-slot-chev {
   flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  margin-left: var(--space-4);
+  padding-left: var(--space-8);
+  border-left: 1px solid var(--color-divider);
   color: var(--color-accent);
   font-size: var(--text-xs);
   font-weight: 600;
@@ -4847,19 +4937,19 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-size: var(--text-body-sm);
 }
 
-/* What the level gives (ID-146): one line that wraps between its bonuses. */
+/* Level 1 only (ID-189): what levels will bring, under the stats. Above level 1 the
+   Level column says what the level gives. */
 .rv-level {
-  margin: 0;
+  margin: var(--space-6) 0 0;
   color: var(--color-text-muted);
-  font-size: var(--text-body-sm);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
 }
 
 /* The profession's benefit (ID-149), highlighted in the accent; greyed when the gun held
    isn't one of a fighting job's. */
 .rv-job {
-  margin: 0 0 var(--space-4);
-  padding: var(--space-4) var(--space-6);
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4) var(--space-8);
   border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -4889,34 +4979,80 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-size: var(--text-xs);
 }
 
-/* Every stat, split into the level's part and the profession's (ID-149). */
+/* Every stat, split into the level's part and the profession's (ID-149), in two short
+   tables side by side (ID-189), so no wide gaps open between the columns. */
+.rv-statcols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-16);
+}
+
+/* Fixed columns, the same in both tables, so they line up when they stack on a phone. */
 .rv-stats {
   width: 100%;
-  margin-top: var(--space-4);
+  margin: 0;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
+.rv-stats tr > :nth-child(1) {
+  width: 32%;
+}
+
+.rv-stats tr > :nth-child(2),
+.rv-stats tr > :nth-child(3) {
+  width: 21%;
+}
+
+.rv-stats tr > :nth-child(4) {
+  width: 26%;
+}
+
 .rv-stats th,
 .rv-stats td {
-  padding: 1px var(--space-4);
+  padding: 2px var(--space-4);
   border-top: 1px solid var(--color-divider);
   text-align: right;
   white-space: nowrap;
 }
 
 .rv-stats th:first-child {
+  padding-left: 0;
   color: var(--color-text-subtle);
   font-weight: 400;
   text-align: left;
 }
 
 .rv-stats thead th {
+  padding-bottom: 1px;
   border-top: 0;
-  color: var(--color-text-subtle);
-  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  font-size: var(--text-2xs);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The parts read lighter than the total; a part that is none is a faint dash. */
+.rv-stat-lv {
+  color: var(--color-text-muted);
+}
+
+.rv-stats td[data-none] {
+  color: var(--color-border-strong);
+}
+
+/* Narrow dialog: the two tables stack into one (the second's heads would repeat). */
+@container (max-width: 540px) {
+  .rv-statcols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rv-stats + .rv-stats thead {
+    display: none;
+  }
 }
 
 .rv-stat-total {
@@ -5161,10 +5297,21 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 /* Narrow dialog (a phone, or a thin window): the tabs and rows shrink to fit. */
 @container (max-width: 460px) {
-  /* Survivor and gun share the row 2:3: a long "Level 7 · Construction worker" line
-     never squeezes the gun slot to its picture (ID-149). */
+  /* Portrait beside the name and buttons, the gun slot full width under them, right over
+     the panel it opens (ID-189). */
   .rv-top {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'pic who' 'slot slot';
+    gap: var(--space-6) var(--space-8);
+  }
+
+  .roster-avatar-lg {
+    width: 44px;
+    height: 55px;
+  }
+
+  .rv-top > .rv-slot {
+    max-width: none;
   }
 
   /* Beside the portrait at 320 px there is no room for "Move to bench" on one line:
@@ -5198,11 +5345,20 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   /* Four columns stay on one row: the parts get the room they need. */
   .rv-stats th,
   .rv-stats td {
-    padding: 1px var(--space-2);
+    padding: 2px var(--space-2);
   }
 
   .rv-xp {
-    width: 52px;
+    flex-basis: 110px;
+  }
+
+  /* Five or six cards in rows of three that fill the row (ID-189). */
+  .rv-tabs:not(.rv-bench):is([data-count='5'], [data-count='6']) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rv-top > .rv-combine-pick {
+    grid-column: 1 / -1;
   }
 
   /* The bench's row (ID-147) may hold many more: one row of cards about the squad's
@@ -5214,14 +5370,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     overflow-x: auto;
   }
 
-  .rv-slot-chev-word,
-  .rv-slot-role,
-  .rv-th-type {
-    display: none;
+  /* Over a squad in rows of three, the bench's cards are the same size as the squad's
+     (ID-189), still scrolling sideways past three. */
+  .roster-dialog:has(.rv-tabs:not(.rv-bench):is([data-count='5'], [data-count='6'])) .rv-bench {
+    grid-auto-columns: calc((100% - 4px) / 3);
   }
 
-  .rv-who-level {
-    white-space: normal;
+  .rv-th-type {
+    display: none;
   }
 
   /* The held gun's full name, on two lines if it needs them. */
