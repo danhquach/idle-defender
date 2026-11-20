@@ -55,7 +55,10 @@ export function recruitPost(state: HordeState): Post | undefined {
 export type CardCategory = 'stat' | 'behaviour' | 'barrier' | 'power';
 
 /** Flashbang's cost in words (ID-139). */
-const glareText = `−${Math.round((1 - CARD.flashbang.glare) * 100)}% gun range for the whole squad while held`;
+const glareText = `−${Math.round((1 - CARD.flashbang.glare) * 100)}% squad gun range while held`;
+/** How many each survivor carries and how often one comes back (ID-195: short, for the card). */
+const carryText = (every: number): string =>
+  `${CARD.throws.carry} per survivor, one back every ${every} s.`;
 
 /**
  * Design §8: the upgrade cards. `levels` is how often a card can be picked in a horde:
@@ -155,14 +158,14 @@ export const UPGRADES: Readonly<
   'concussion-rounds': {
     name: 'Concussion Rounds',
     // The gain and its cost (ID-137), as every epic card names both.
-    text: `Hits knock enemies back (up to ${CARD.concussion.cap} px each) and daze them: +${Math.round(CARD.concussion.daze * 100)}% damage taken for ${CARD.concussion.dazeFor} s after each hit; −${Math.round((1 - CARD.concussion.fireRate) * 100)}% fire rate`,
+    text: `Hits knock enemies back up to ${CARD.concussion.cap} px and daze them: +${Math.round(CARD.concussion.daze * 100)}% damage taken for ${CARD.concussion.dazeFor} s; −${Math.round((1 - CARD.concussion.fireRate) * 100)}% fire rate`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
   },
   'frag-grenades': {
     name: 'Frag Grenades',
-    text: `Each survivor carries ${CARD.throws.carry} grenades; one comes back every ${CARD.frag.every} s. Thrown into the thickest group, for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP; a throw stops its thrower firing for ${CARD.frag.pause} s`,
+    text: `${carryText(CARD.frag.every)} Hits the thickest group for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP; the thrower stops firing for ${CARD.frag.pause} s`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
@@ -171,14 +174,14 @@ export const UPGRADES: Readonly<
   flashbang: {
     name: 'Flashbang',
     // The gain and its cost: "… for 3 s; −15% gun range for the whole squad while held".
-    text: `Each survivor carries ${CARD.throws.carry} flashbangs; one comes back every ${CARD.flashbang.every} s. Thrown into the thickest group, stunning enemies within ${CARD.flashbang.radius} px for ${CARD.flashbang.seconds[0]} s; ${glareText}`,
+    text: `${carryText(CARD.flashbang.every)} Stuns enemies within ${CARD.flashbang.radius} px for ${CARD.flashbang.seconds[0]} s; ${glareText}`,
     category: 'behaviour',
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
   },
   molotov: {
     name: 'Molotov',
-    text: `Each survivor carries ${CARD.throws.carry} molotovs; one comes back every ${CARD.molotov.every} s. Thrown into the thickest group, its fire burns enemies for ${Math.round(CARD.molotov.burn * 100)}% of a Shambler’s HP a second for ${CARD.molotov.seconds[0]} s, but they move ${Math.round(CARD.molotov.panic * 100)}% faster in the flames; its fire lights an Oil Bomb slick`,
+    text: `${carryText(CARD.molotov.every)} Burns for ${CARD.molotov.seconds[0]} s at ${Math.round(CARD.molotov.burn * 100)}% of a Shambler’s HP a second; enemies ${Math.round(CARD.molotov.panic * 100)}% faster in it`,
     category: 'behaviour',
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
@@ -236,7 +239,7 @@ export const UPGRADES: Readonly<
   'oil-bomb': {
     name: 'Oil Bomb',
     // The gain and its cost (ID-137): a slow shell, a long wait, and a lit slick burns out.
-    text: `Two wall mortars lob a tar bomb into the thickest group every ${CARD.oil.every} s. Its slick slows enemies ${Math.round(CARD.oil.slow * 100)}% for ${CARD.oil.seconds} s, and Incendiary hits or a Molotov’s fire set it alight (${Math.round(CARD.oil.burn * 100)}% of a Shambler’s HP a second); but the bomb takes ${CARD.oil.flight} s to land, and a lit slick burns out in ${CARD.oil.burnFor} s`,
+    text: `Tar slick every ${CARD.oil.every} s: ${Math.round(CARD.oil.slow * 100)}% slower for ${CARD.oil.seconds} s, lit by Incendiary or Molotov fire (${Math.round(CARD.oil.burn * 100)}% of a Shambler’s HP a second); but it lands ${CARD.oil.flight} s late, and a lit slick burns out in ${CARD.oil.burnFor} s`,
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
@@ -475,15 +478,15 @@ export function effectAt(
     // Thrown on their own, so each says how many and how often (design review, ID-139, ID-178).
     case 'flashbang':
       return {
-        pre: `Each survivor carries ${CARD.throws.carry}; one comes back every ${CARD.flashbang.every} s. Stuns enemies within ${CARD.flashbang.radius} px for `,
+        pre: `${carryText(CARD.flashbang.every)} Stuns enemies within ${CARD.flashbang.radius} px for `,
         value: `${lv(CARD.flashbang.seconds)} s`,
         post: `; ${glareText}`,
       };
     case 'molotov':
       return {
-        pre: `Each survivor carries ${CARD.throws.carry}; one comes back every ${CARD.molotov.every} s. Its fire burns for `,
+        pre: `${carryText(CARD.molotov.every)} Burns for `,
         value: `${lv(CARD.molotov.seconds)} s`,
-        post: `, ${pct(CARD.molotov.burn)} of a Shambler’s HP a second; enemies move ${pct(CARD.molotov.panic)} faster in the flames; its fire lights an Oil Bomb slick`,
+        post: ` at ${pct(CARD.molotov.burn)} of a Shambler’s HP a second; enemies ${pct(CARD.molotov.panic)} faster in it`,
       };
     case 'barbed-wire':
       return {

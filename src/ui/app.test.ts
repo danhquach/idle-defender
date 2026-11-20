@@ -595,19 +595,21 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     expect(wire.querySelector('.hud-card-change')!.tagName).toBe('STRONG');
     expect(text(shock, '.hud-card-tag')).toBe('New');
     expect(text(shock, '.hud-card-warning')).toBe(
-      'Replaces Incendiary Rounds Lv 2. Its levels are lost.Incendiary Rounds Lv 2 → Shock Rounds Lv 1',
+      'Replaces Incendiary Rounds Lv 2. Its levels are lost.',
     );
-    // The loss is read right after the tag, before the card's kind and effect.
+    // ID-195: the tag is a badge on the plate, the loss the card's last line, in its foot.
     expect([...shock.children].map((c) => c.className)).toEqual([
       'hud-card-key',
       'hud-card-art',
       'hud-card-title',
-      'hud-card-tag',
-      'hud-card-warning',
       'hud-card-kind',
       'hud-card-body',
+      'hud-card-foot',
     ]);
-    expect(text(shock, '.hud-card-swap-line')).toBe('Incendiary Rounds Lv 2 → Shock Rounds Lv 1');
+    expect(shock.querySelector('.hud-card-art > .hud-card-tag')).not.toBeNull();
+    expect(shock.querySelector('.hud-card-foot > .hud-card-warning:last-child')).not.toBeNull();
+    // The card's name and tag say what you'd hold after: no separate swap line on the card.
+    expect(shock.querySelector('.hud-card-swap-line')).toBeNull();
     expect(shock.classList.contains('hud-card-swap')).toBe(true);
     expect(text(sharp, '.hud-card-tag')).toBe('×3 → ×4');
     expect(text(sharp, '.hud-card-body')).toBe('+30% → +40% damage');

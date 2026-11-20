@@ -4,9 +4,10 @@
 // motion) and the panel takes no second pick meanwhile.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UPGRADE_IDS, UPGRADES } from '../core/cards.ts';
+import { CARD_MAX_LEVEL } from '../core/data.ts';
 import { newHorde, type Card, type HordeState } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
-import { createHud, PICK_MS } from './hud.ts';
+import { cardText, createHud, PICK_MS } from './hud.ts';
 import { ART_URLS, avatarOf, CARD_ICON } from './sprites.ts';
 
 const noop = () => {};
@@ -208,5 +209,74 @@ describe('an offer on the tick the fight ends (ID-196)', () => {
     expect(cards()).toHaveLength(2);
     hud.update({ ...on, outcome: 'won' });
     expect(panel.hidden).toBe(true);
+  });
+});
+
+describe('every offer card one size (ID-195)', () => {
+  // The card's fixed height (`.hud-card.hud-card-has-art` in page.css) was measured in a
+  // browser at 212, 240 and 375 px wide against the longest words below. Characters only
+  // stand in for rendered lines (jsdom has no layout): words longer than these could
+  // overflow the card, so shorten them, or re-measure in a browser and raise the height.
+  const NAME_MAX = 18; // one line: "Recruit B — Gunner"
+  const BODY_MAX = 169; // Oil Bomb
+  const LOWER_MAX = 227; // under the name: effect, synergy and swap warning (Oil Bomb with both fires held)
+
+  /** Every state a card's words depend on: nothing held, each card held at each level,
+   * and every other card held (synergies and swaps), at each level. */
+  function states(): HordeState[] {
+    const base = withOffer(null);
+    const out: HordeState[] = [base];
+    for (let lv = 1; lv <= CARD_MAX_LEVEL; lv++) {
+      for (const id of UPGRADE_IDS) out.push({ ...base, taken: [id], cardLevels: { [id]: lv } });
+      out.push({
+        ...base,
+        taken: [...UPGRADE_IDS],
+        cardLevels: Object.fromEntries(UPGRADE_IDS.map((id) => [id, lv])),
+      });
+    }
+    return out;
+  }
+
+  it('keeps every card’s words within the size the card was measured for', () => {
+    for (const s of states()) {
+      const recruits = s.bench.map((defender): Card => ({ kind: 'recruit', defender }));
+      for (const card of [...offer(...UPGRADE_IDS), ...recruits]) {
+        const t = cardText(card, s);
+        const where = `${t.title} (${s.taken.length} held)`;
+        expect(t.title.length, where).toBeLessThanOrEqual(NAME_MAX);
+        expect(t.body.length, where).toBeLessThanOrEqual(BODY_MAX);
+        const lower =
+          t.body.length + (t.synergy?.length ?? 0) + (t.pitch?.replace?.warning.length ?? 0);
+        expect(lower, where).toBeLessThanOrEqual(LOWER_MAX);
+      }
+    }
+  });
+
+  it('builds every card with its parts in one order, the swap warning always last', () => {
+    const { hud, cards } = mount();
+    const s = withOffer(null);
+    hud.update({
+      ...s,
+      taken: ['frag-grenades', 'oil-bomb'],
+      offer: [...offer('molotov', 'sharpshooter'), { kind: 'recruit', defender: s.bench[0]! }],
+    });
+    const [molotov, sharp, recruit] = cards();
+    const parts = [
+      'hud-card-key',
+      'hud-card-art',
+      'hud-card-title',
+      'hud-card-kind',
+      'hud-card-body',
+    ];
+    expect([...molotov!.children].map((c) => c.className)).toEqual([...parts, 'hud-card-foot']);
+    expect([...sharp!.children].map((c) => c.className)).toEqual(parts);
+    expect([...recruit!.children].map((c) => c.className)).toEqual(parts);
+    // Synergy first, the red warning at the very bottom.
+    expect([...molotov!.querySelector('.hud-card-foot')!.children].map((c) => c.className)).toEqual(
+      ['hud-card-synergy', 'hud-card-warning'],
+    );
+    // The tag rides on the plate; a recruit card has none.
+    expect(sharp!.querySelector('.hud-card-art > .hud-card-tag')!.textContent).toBe('New');
+    expect(recruit!.querySelector('.hud-card-tag')).toBeNull();
   });
 });

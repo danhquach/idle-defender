@@ -620,6 +620,56 @@ body {
   }
 }
 
+/* ID-195: every offer card is one size, whatever its words, art, rarity or kind, and its
+   parts sit in the same place: the key, the plate, the name, the rarity line and the
+   effect from the top, a synergy and then a swap's warning at the bottom. The height fits
+   the longest card, measured in a browser (hud-offer.test.ts holds each card's words to
+   that size). */
+.hud-card.hud-card-has-art {
+  flex: none;
+  width: 212px;
+  height: 364px;
+}
+
+.hud-card-has-art > * {
+  flex: none;
+}
+
+/* Should a card's words ever outgrow it, the effect is cut, never the warning under it. */
+.hud-card-has-art > .hud-card-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* One line kept for the name (every card name fits it; a long one may take a second), so
+   the rarity line and effect start level on every card. */
+.hud-card-has-art .hud-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.25;
+  min-height: 1.25em;
+}
+
+.hud-card-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: auto;
+}
+
+/* The pick's tag ("New", "Lv 1 → 2") as a badge in the card's top corner, level with the key and
+   clear of the icon (ID-195). */
+.hud-card-has-art .hud-card-tag {
+  position: absolute;
+  top: var(--space-12);
+  right: var(--space-12);
+  background: var(--color-surface);
+  white-space: nowrap;
+}
+
 /* The number key (ID-177): large and centred at the card's top, so 1, 2, 3 read at a glance. */
 .hud-card-has-art .hud-card-key {
   align-self: center;
@@ -633,6 +683,10 @@ body {
 @media (min-width: 1200px) {
   .hud-card {
     width: 210px;
+  }
+
+  .hud-card.hud-card-has-art {
+    width: 240px;
   }
 
   .hud-card-art {
@@ -674,15 +728,11 @@ body {
   font-weight: 600;
 }
 
-/* The card's name, its tag and its rarity line, centred under the key (ID-177); the
-   body stays left for reading. */
+/* The card's name and its rarity line, centred under the key (ID-177); the body stays
+   left for reading. */
 .hud-card-has-art .hud-card-title,
 .hud-card-has-art .hud-card-kind {
   text-align: center;
-}
-
-.hud-card-has-art .hud-card-tag {
-  align-self: center;
 }
 
 .hud-card-body {
@@ -721,10 +771,6 @@ body {
   background: var(--color-danger-surface);
   font-size: var(--text-body-sm);
   color: var(--color-danger-text);
-}
-
-.hud-card-swap-line {
-  color: var(--color-text-subtle);
 }
 
 .hud-button {
@@ -5271,8 +5317,9 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* On a phone the offer's cards stack (ID-097): side by side they ran off both edges,
-   hiding a card's before → after line and an ammo swap's warning. */
-@media (max-width: 640px) {
+   hiding a card's before → after line and an ammo swap's warning. Up to 719px, as three
+   one-size cards side by side need 708px (ID-195). */
+@media (max-width: 719px) {
   .hud-cards {
     /* Opaque, so the XP bar behind it doesn't show through the heading. */
     background: var(--color-panel-solid);
@@ -5285,6 +5332,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   .hud-card-row {
     flex-direction: column;
+    gap: var(--space-8);
   }
 
   .hud-card {
@@ -5307,36 +5355,46 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
       0 2px 8px var(--color-shadow);
   }
 
-  /* Stacked, a card's icon sits at its left (ID-103), so three cards still fit the height. */
-  .hud-card-has-art {
+  /* Stacked, a card's icon sits at its left (ID-103), so three cards still fit the height;
+     every card is still one size, its parts in the same rows (ID-195). */
+  .hud-card.hud-card-has-art {
     display: grid;
     grid-template-columns: 64px 1fr;
+    grid-template-rows: auto auto 1fr auto;
     column-gap: var(--space-12);
-    row-gap: 0;
-    align-content: start;
+    row-gap: var(--space-6);
+    width: auto;
+    height: 236px;
   }
 
   .hud-card-has-art > * {
     grid-column: 2;
-    justify-self: start;
+    justify-self: stretch;
   }
 
-  /* Spaced by margin, not row gaps, so the plate's spare rows add no height. */
-  .hud-card-has-art > .hud-card-title ~ * {
-    margin-top: var(--space-6);
-  }
-
-  /* Stacked, the key, name, tag and rarity line centre over the text column (ID-177). */
-  .hud-card-has-art > .hud-card-key,
-  .hud-card-has-art > .hud-card-title,
-  .hud-card-has-art > .hud-card-tag,
-  .hud-card-has-art > .hud-card-kind {
+  /* Stacked, the key sits over the plate (ID-177, ID-195), so the text takes one row less. */
+  .hud-card-has-art > .hud-card-key {
+    grid-column: 1;
+    grid-row: 1;
     justify-self: center;
+  }
+
+  .hud-card-has-art > .hud-card-title {
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .hud-card-has-art > .hud-card-body {
+    grid-row: 3;
+  }
+
+  .hud-card-has-art > .hud-card-foot {
+    grid-row: 4;
   }
 
   .hud-card-has-art > .hud-card-art {
     grid-column: 1;
-    grid-row: 1 / span 6;
+    grid-row: 2 / -1;
     align-self: start;
     height: 64px;
   }
@@ -5344,6 +5402,20 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .hud-card-has-art .hud-card-icon {
     width: 52px;
     height: 52px;
+  }
+
+  /* Stacked, the key sits over the plate, so the tag goes on the plate instead: centred on
+     its bottom edge, as the plate is narrower than a long tag ("Lv 2 → Max"). */
+  .hud-card-has-art .hud-card-art {
+    position: relative;
+  }
+
+  .hud-card-has-art .hud-card-tag {
+    top: auto;
+    right: auto;
+    bottom: calc(-1 * var(--space-8));
+    left: 50%;
+    transform: translateX(-50%);
   }
 
   .hud-card-rare .hud-card-art {
@@ -5354,6 +5426,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .hud-card-epic .hud-card-art {
     background: radial-gradient(circle, var(--color-epic-glow-strong), transparent 80%)
       var(--color-surface-sunken);
+  }
+}
+
+/* The narrowest phones (320px) wrap the longest card into more lines: every card one taller
+   size there (ID-195). */
+@media (max-width: 359px) {
+  .hud-card.hud-card-has-art {
+    height: 260px;
   }
 }
 

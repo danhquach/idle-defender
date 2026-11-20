@@ -1431,16 +1431,14 @@ describe('Flashbang and Molotov say they are thrown, and how often (ID-139 desig
     for (const n of [1, 2, 3]) {
       const f = effectAt('flashbang', n)!;
       expect(f.pre).toBe(
-        `Each survivor carries 3; one comes back every ${CARD.flashbang.every} s. Stuns enemies within ${CARD.flashbang.radius} px for `,
+        `3 per survivor, one back every ${CARD.flashbang.every} s. Stuns enemies within ${CARD.flashbang.radius} px for `,
       );
       expect(f.value).toBe(`${CARD.flashbang.seconds[n - 1]} s`);
-      expect(f.post).toBe('; −15% gun range for the whole squad while held');
+      expect(f.post).toBe('; −15% squad gun range while held');
       const m = effectAt('molotov', n)!;
-      expect(m.pre).toBe(
-        `Each survivor carries 3; one comes back every ${CARD.molotov.every} s. Its fire burns for `,
-      );
+      expect(m.pre).toBe(`3 per survivor, one back every ${CARD.molotov.every} s. Burns for `);
       expect(m.value).toBe(`${CARD.molotov.seconds[n - 1]} s`);
-      expect(m.post).toContain('enemies move 30% faster in the flames');
+      expect(m.post).toContain('enemies 30% faster in it');
     }
   });
 });
