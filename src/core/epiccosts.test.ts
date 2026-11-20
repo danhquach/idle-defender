@@ -80,10 +80,11 @@ describe('every epic card names its gain and a cost (ID-137)', () => {
 
   it('each card’s text names its gain and then its cost, with the numbers', () => {
     expect(UPGRADES['concussion-rounds'].text).toBe(
-      'Hits knock enemies back (up to 100 px each) and daze them: +30% damage taken for 1 s after each hit; −10% fire rate',
+      'Hits knock enemies back up to 100 px and daze them: +30% damage taken for 1 s; −10% fire rate',
     );
+    // Short enough for the one-size card (ID-195).
     expect(UPGRADES['frag-grenades'].text).toBe(
-      'Each survivor carries 3 grenades; one comes back every 8 s. Thrown into the thickest group, for 25% of a Shambler’s HP; a throw stops its thrower firing for 1.5 s',
+      '3 per survivor, one back every 8 s. Hits the thickest group for 25% of a Shambler’s HP; the thrower stops firing for 1.5 s',
     );
     expect(UPGRADES['field-repairs'].text).toBe(
       'Repair every wall segment to full; −25% fire rate for 5 s',
@@ -91,7 +92,7 @@ describe('every epic card names its gain and a cost (ID-137)', () => {
     expect(UPGRADES['hollow-points'].text).toBe('+38% damage, +25% reload time');
     // ID-132: its cost is the slow throw and a lit slick burning out.
     expect(UPGRADES['oil-bomb'].text).toBe(
-      'Two wall mortars lob a tar bomb into the thickest group every 20 s. Its slick slows enemies 60% for 10 s, and Incendiary hits or a Molotov’s fire set it alight (20% of a Shambler’s HP a second); but the bomb takes 1.5 s to land, and a lit slick burns out in 3 s',
+      'Tar slick every 20 s: 60% slower for 10 s, lit by Incendiary or Molotov fire (20% of a Shambler’s HP a second); but it lands 1.5 s late, and a lit slick burns out in 3 s',
     );
   });
 

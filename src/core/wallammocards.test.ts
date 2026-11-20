@@ -144,7 +144,7 @@ describe('wall and ammo cards (ID-132): data and levels', () => {
     expect(lv2.effect).toMatchObject({ from: '−10%', to: '−20%' });
     // The epic card names its gain and its cost (ID-137), with the numbers.
     const oil = UPGRADES['oil-bomb'].text;
-    for (const part of ['20 s', '60%', '10 s', 'Incendiary hits', '20%', '3 s', '1.5 s']) {
+    for (const part of ['20 s', '60%', '10 s', 'Incendiary', 'Molotov', '20%', '3 s', '1.5 s']) {
       expect(oil).toContain(part);
     }
   });

@@ -391,11 +391,64 @@ describe('the offer cards (ID-177)', () => {
     expect(rules).toMatch(
       /\.hud-card-has-art \.hud-card-title,\s*\.hud-card-has-art \.hud-card-kind \{[^}]*text-align: center/,
     );
-    expect(rules).toMatch(/\.hud-card-has-art \.hud-card-tag \{[^}]*align-self: center/);
-    // Stacked on a phone, both centre over the text column.
+    // Stacked on a phone, the key centres over the plate (ID-195).
     expect(rules).toMatch(
-      /\.hud-card-has-art > \.hud-card-key,\s*\.hud-card-has-art > \.hud-card-title,[^{]*\.hud-card-has-art > \.hud-card-kind \{[^}]*justify-self: center/,
+      /\.hud-card-has-art > \.hud-card-key \{[^}]*grid-column: 1;[^}]*justify-self: center/,
     );
+  });
+});
+
+describe('every offer card one size (ID-195)', () => {
+  /**
+   * The declarations of the first rule whose selector is exactly `selector`, after `from`
+   * (a `@media` block's start: each query used here appears once in page.css).
+   */
+  const block = (selector: string, from = 0): string => {
+    const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`(?:^|\\n)\\s*${esc} \\{([^}]*)\\}`).exec(rules.slice(from));
+    expect(m, selector).not.toBeNull();
+    return m![1]!;
+  };
+  const media = (q: string): number => {
+    const at = rules.indexOf(`@media (${q})`);
+    expect(at, q).toBeGreaterThan(0);
+    return at;
+  };
+
+  it('fixes the width and height in px, at every screen width', () => {
+    const base = block('.hud-card.hud-card-has-art');
+    expect(base).toMatch(/\n\s*width: \d+px;/);
+    expect(base).toMatch(/\n\s*height: \d+px;/);
+    // Wide screens: wider, still one size; phones: one height, stacked full width.
+    expect(block('.hud-card.hud-card-has-art', media('min-width: 1200px'))).toMatch(
+      /\n\s*width: \d+px;/,
+    );
+    const phone = block('.hud-card.hud-card-has-art', media('max-width: 719px'));
+    expect(phone).toMatch(/\n\s*height: \d+px;/);
+    expect(phone).toMatch(/\n\s*width: auto;/);
+    // The narrowest phones wrap more: one taller size for every card there.
+    const narrow = block('.hud-card.hud-card-has-art', media('max-width: 359px'));
+    const h = (b: string) => Number(/height: (\d+)px;/.exec(b)![1]);
+    expect(h(narrow)).toBeGreaterThan(h(phone));
+  });
+
+  it('keeps each part in its place: a one-line name slot and the foot at the bottom', () => {
+    expect(block('.hud-card-has-art .hud-card-title')).toMatch(/min-height: 1\.25em;/);
+    expect(block('.hud-card-has-art .hud-card-title')).toMatch(/line-height: 1\.25;/);
+    expect(block('.hud-card-foot')).toMatch(/margin-top: auto;/);
+    expect(block('.hud-card-has-art .hud-card-tag')).toMatch(/position: absolute;/);
+    // The tag: in the card's corner on a wide card, on the plate when stacked.
+    expect(block('.hud-card-has-art .hud-card-tag')).toMatch(/top: var\(--space-12\);/);
+    expect(block('.hud-card-has-art .hud-card-art', media('max-width: 719px'))).toMatch(
+      /position: relative;/,
+    );
+  });
+
+  it('stacks the cards up to 719px, where three side by side no longer fit', () => {
+    const width = Number(/\n\s*width: (\d+)px;/.exec(block('.hud-card.hud-card-has-art'))![1]);
+    // Three cards, two row gaps (12px) and the panel's side padding (24px each).
+    expect(3 * width + 2 * 12 + 2 * 24).toBeLessThanOrEqual(719);
+    expect(rules).toMatch(/@media \(max-width: 719px\) \{\s*\.hud-cards \{/);
   });
 });
 

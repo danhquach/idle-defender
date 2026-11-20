@@ -3013,18 +3013,19 @@ export function createHud(
         ART_URLS[card.kind === 'upgrade' ? CARD_ICON[card.id] : avatarOf(card.defender)] ?? '';
       img.alt = '';
       plate.append(img);
+      // Every card is one size, its parts in the same place (ID-195): the tag is a badge
+      // on the plate's corner, and an ammo swap's warning and a synergy sit at the bottom.
+      if (pitch) plate.append(el('span', 'hud-card-tag', pitch.tag));
       button.append(el('span', 'hud-card-key', String(i + 1)), plate);
       button.append(el('span', 'hud-card-title', title));
-      if (pitch) button.append(el('span', 'hud-card-tag', pitch.tag));
-      // An ammo swap's loss, read right after the tag, in one red box (ID-097).
-      if (pitch?.replace) {
-        const warning = el('span', 'hud-card-warning', pitch.replace.warning);
-        warning.append(el('span', 'hud-card-swap-line', pitch.replace.swap));
-        button.append(warning);
-      }
       if (kind) button.append(el('span', 'hud-card-kind', kind));
       button.append(pitch ? effectLine(pitch, body) : el('span', 'hud-card-body', body));
-      if (synergy) button.append(el('span', 'hud-card-synergy', synergy));
+      const foot = el('span', 'hud-card-foot');
+      if (synergy) foot.append(el('span', 'hud-card-synergy', synergy));
+      // An ammo swap's loss in one red box (ID-097), always the card's last line (ID-195);
+      // the card's own name and tag already say what you'd hold after, so it names only what goes.
+      if (pitch?.replace) foot.append(el('span', 'hud-card-warning', pitch.replace.warning));
+      if (foot.childElementCount > 0) button.append(foot);
       button.addEventListener('click', () => choose(i));
       row.append(button);
     });
