@@ -5621,3 +5621,152 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     transition: none;
   }
 }
+
+/* Debug mode (ID-197): the DEBUG badge stays on screen while it is on, so a screenshot is
+   never taken for a normal run; it opens the panel above it, bottom-left over the field. */
+.debug-badge {
+  position: fixed;
+  bottom: var(--space-8);
+  left: var(--space-8);
+  z-index: 20;
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--color-danger-hover);
+  border-radius: var(--radius-md);
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.debug-badge:focus-visible,
+.debug-panel :focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.debug-panel {
+  position: fixed;
+  bottom: calc(var(--space-8) + 34px);
+  left: var(--space-8);
+  z-index: 20;
+  box-sizing: border-box;
+  width: 288px;
+  max-width: calc(100vw - 2 * var(--space-8));
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-10);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-lg);
+  background: var(--color-menu-bg);
+  color: var(--color-text);
+  font-size: var(--text-body-sm);
+}
+
+.debug-panel[hidden] {
+  display: none;
+}
+
+.debug-section + .debug-section {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-divider);
+}
+
+.debug-heading {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.debug-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 30px;
+}
+
+.debug-row + .debug-row {
+  margin-top: var(--space-4);
+}
+
+.debug-label {
+  flex: 0 0 42px;
+  color: var(--color-text-muted);
+}
+
+.debug-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.debug-field,
+.debug-select {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.debug-field {
+  width: 7ch;
+}
+
+.debug-select {
+  flex: 1 1 0;
+}
+
+.debug-panel .debug-btn {
+  height: 28px;
+  padding: 0 var(--space-6);
+  font-size: var(--text-body-sm);
+}
+
+.debug-panel .debug-btn:disabled {
+  border-color: var(--color-border-disabled);
+  color: var(--color-text-disabled);
+  cursor: default;
+}
+
+.debug-panel .debug-btn[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.debug-note {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.debug-status {
+  min-height: 1.2em;
+  margin: var(--space-8) 0 var(--space-6);
+  color: var(--color-ok-text);
+}
+
+.debug-status[data-refused='true'] {
+  color: var(--color-cost-short);
+}
+
+.debug-panel .debug-reset {
+  width: 100%;
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.debug-when {
+  color: var(--color-text-faint);
+  letter-spacing: 0;
+  text-transform: none;
+}

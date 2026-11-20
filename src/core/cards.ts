@@ -287,7 +287,7 @@ export function replaces(state: Pick<HordeState, 'taken'>, id: UpgradeId): Upgra
 }
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
-const OFFER_SIZE = 3;
+export const OFFER_SIZE = 3;
 const RARITIES: readonly CardRarity[] = ['common', 'rare', 'epic'];
 
 /** Percent odds of each rarity per offer slot in wave `wave` (design §8). */
@@ -369,7 +369,7 @@ export function patchUpGain(state: Pick<HordeState, 'layers'>): { hp: number; se
   return { hp, segments };
 }
 
-const isResearchCard = (id: UpgradeId): id is ResearchCard =>
+export const isResearchCard = (id: UpgradeId): id is ResearchCard =>
   (RESEARCH_CARDS as readonly string[]).includes(id);
 
 /** The synergy taking `id` would turn on (or has on), as a line for its card; null if none. */
