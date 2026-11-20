@@ -1,6 +1,6 @@
 // Wires the game to the page: canvas, frame loop, fixed camera and click input, the build
 // panel between hordes and the HUD in a fight.
-import { recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
+import { campLevelOf, recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
 import { FIELD, HORDE_ONLY, type SkillId } from '../core/data.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
@@ -39,11 +39,30 @@ import { settlePatrols } from '../core/patrol.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
 import { chatter, newChat } from '../core/chatter.ts';
+import {
+  cardsOpen,
+  downSurvivor,
+  fillStash,
+  grantCard,
+  grantGun,
+  loseNow,
+  offerCard,
+  reachHorde,
+  setCampLevel,
+  setScrap,
+  setSkill,
+  setSquadSize,
+  setSurvivorLevel,
+  winNow,
+  type DebugFight,
+  type DebugGame,
+} from '../core/debug.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
 import { autoLookDue, autoStrike, skillLock, useSkill } from '../core/skills.ts';
-import { browserStorage, loadSave, writeSave } from '../storage/save.ts';
+import { debugFlag, debugStorage } from '../storage/debug.ts';
+import { browserStorage, decodeSave, encodeSave, loadSave, writeSave } from '../storage/save.ts';
 import {
   readAutoStrike,
   readChatter,
@@ -109,6 +128,7 @@ import {
   type ResultScreen,
   squadStart,
 } from './hud.ts';
+import { createDebugPanel, type DebugActions, type DebugSpeed, type DebugView } from './debug.ts';
 import { createIntro } from './intro.ts';
 import { createCampWindow } from './campwindow.ts';
 import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
@@ -178,7 +198,11 @@ export function start(root: HTMLElement, art: Art): void {
 
   // The game between hordes is saved after every change; a fight is not, so a
   // reload mid-horde comes back to the camp as it was before it.
-  const storage = browserStorage();
+  // Debug mode (ID-197) keeps its camp in a save slot of its own: the player's is never read
+  // or written while it is on.
+  const debugOn = debugFlag(window.location.search);
+  const realStorage = browserStorage();
+  const storage = realStorage && debugOn ? debugStorage(realStorage) : realStorage;
   const loaded = storage ? loadSave(storage) : { save: null, rejected: false };
   let game: GameState = loaded.save?.game ?? newGame(HORDE_ONLY ? 'horde' : 'full', Date.now());
   // The fight under way, or null in build mode.
@@ -216,6 +240,8 @@ export function start(root: HTMLElement, art: Art): void {
   // Fight speed, kept between hordes, and the Space pause, which each fight starts without (ID-062).
   let speed: Speed = readSpeed(storage);
   let held = false;
+  // A debug fight speed (ID-197) in place of the player's; null when off.
+  let debugSpeed: DebugSpeed | null = null;
   // Airstrike auto-aim (ID-140), kept between hordes and sessions; and the fight time it
   // last looked for a target, so it looks every `AUTO_AIM.look` s, not every frame.
   let autoOn = readAutoStrike(storage);
@@ -1027,6 +1053,9 @@ export function start(root: HTMLElement, art: Art): void {
     hover = null;
   });
 
+  /** Debug mode's panel (ID-197): only with the URL flag; without it nothing here exists. */
+  const debugPanel = debugOn ? createDebugPanel(root, debugActions()) : null;
+
   // A hidden tab, the open menu or Space doesn't advance the fight; it resumes from where it was.
   let last: number | null = null;
   document.addEventListener('visibilitychange', () => {
@@ -1039,8 +1068,8 @@ export function start(root: HTMLElement, art: Art): void {
     const dt = frameStep(last, now, paused);
     last = paused ? null : now;
     // The empty field runs fast (ID-164): the walk-in and the gaps between waves.
-    const pace = horde ? fightSpeed(speed, horde) : speed;
-    hud.skipping(!paused && pace > speed);
+    const pace = debugSpeed ?? (horde ? fightSpeed(speed, horde) : speed);
+    hud.skipping(!paused && debugSpeed === null && pace > speed);
     if (dt > 0) {
       // Speed runs more of the core's fixed steps per frame, never longer ones; a pick
       // or replacement stops the rest of the frame's steps in the core.
@@ -1183,9 +1212,91 @@ export function start(root: HTMLElement, art: Art): void {
       const camp = { fence: fenceTier(game.base), plots };
       drawScene(ctx, art, scene, cam, view, overlay, null, null, null, camp, null, backdropCtx);
     }
+    if (debugPanel?.isOpen()) debugPanel.show(debugView());
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  function debugView(): DebugView {
+    const fighting = horde?.outcome === 'fighting';
+    return {
+      fighting,
+      between: !horde || resultUp(),
+      hordeNumber: game.hordeNumber,
+      campLevel: campLevelOf(game.camp.xp).level,
+      scrap: game.stock.scrap,
+      squad: squadOf(game).length,
+      stash: game.armoury.length,
+      seed: horde?.seed ?? null,
+      survivors: campOf(game),
+      line: fighting ? horde!.defenders : [],
+      cards: fighting ? cardsOpen(horde!) : [],
+      speed: debugSpeed,
+      held,
+    };
+  }
+  function debugActions(): DebugActions {
+    /** A camp edit between hordes, kept only when the save's own rules take it. */
+    const camp = (r: DebugGame): string | null => {
+      if (horde && !resultUp()) return 'Between hordes only';
+      if (!r.ok) return r.reason;
+      if (decodeSave(encodeSave(r.game, Date.now())) === null) {
+        return 'The game could not reach that state';
+      }
+      commit(r.game);
+      redrawSquad();
+      return null;
+    };
+    /** A fight edit, while one is on. */
+    const fight = (move: (s: HordeState) => DebugFight): string | null => {
+      if (!horde) return 'No fight on';
+      const r = move(horde);
+      if (r.ok) horde = r.state;
+      return r.ok ? null : r.reason;
+    };
+    const seed = (): number => Date.now() >>> 0;
+    return {
+      start(n, typed) {
+        if (horde && !resultUp()) return 'Between hordes only';
+        // Checked first: a refused start leaves the camp as it was.
+        if (squadOf(game).length === 0) return 'Nobody in the squad';
+        const reached = camp(reachHorde(game, n));
+        if (reached) return reached;
+        if (joiningOf(game).length > 0) commit(refuseJoins(game));
+        picked = n;
+        const now = Date.now();
+        hud.hideResult();
+        startFight(startSquadHorde(game, typed ?? seed(), now, n));
+        return null;
+      },
+      campLevel: (n) => camp(setCampLevel(game, n)),
+      scrap: (n) => camp(setScrap(game, n)),
+      squad: (n) => camp(setSquadSize(game, n, seed())),
+      level: (id, n) => camp(setSurvivorLevel(game, id, n)),
+      gun: (base, rarity) => camp(grantGun(game, base, rarity, seed())),
+      stash: (n) => camp(fillStash(game, n, seed())),
+      skill: (id) => {
+        const r = camp(setSkill(game, id));
+        if (r === null) hud.showSkills(skillPicker(game.skillPick));
+        return r;
+      },
+      offer: (id) => fight((s) => offerCard(s, id)),
+      grant: (id) => fight((s) => grantCard(s, id)),
+      speed: (x) => {
+        debugSpeed = x;
+      },
+      pause: () => {
+        if (horde?.outcome === 'fighting') hold(!held);
+      },
+      win: () => fight(winNow),
+      lose: () => fight(loseNow),
+      down: (id) => fight((s) => downSurvivor(s, id)),
+      reset: () => {
+        debugSpeed = null;
+        replaceCamp(newGame(HORDE_ONLY ? 'horde' : 'full', Date.now()));
+      },
+    };
+  }
 }
 
 /** The camp around the field, read from the game: its fence's tier and its plots (ID-065). */

@@ -1941,6 +1941,8 @@ export function createHud(
   /** Where the pause button goes (ID-165); the app sets it once. */
   onPause(handler: () => void): void;
   showResult(screen: ResultScreen): void;
+  /** Takes the result or start screen down without its button (debug mode's Start, ID-197). */
+  hideResult(): void;
   /**
    * The squad as it stands now, by id (ID-157): a "New" card of someone benched or let go
    * since goes. Nothing with the result screen down.
@@ -3286,6 +3288,9 @@ export function createHud(
           else cards.replaceChildren();
         }
       }
+    },
+    hideResult() {
+      result.hidden = true;
     },
     showResult(screen) {
       const d = screen.debrief;

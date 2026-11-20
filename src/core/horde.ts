@@ -1292,26 +1292,29 @@ function step(s: HordeState, rng: Rng): void {
   drop(s);
   advanceWave(s);
   fall(s);
-  if (s.outcome !== 'fighting') {
-    s.bullets = [];
-    // Nobody left frozen mid-limp under the result (ID-148).
-    if (s.leaving) s.leaving = [];
-    s.shots = [];
-    s.impacts = [];
-    s.pops = [];
-    s.feats = [];
-    s.saves = [];
-    s.spits = [];
-    s.bursts = [];
-    s.grenades = [];
-    s.tarBombs = [];
-    s.slicks = [];
-    s.incoming = [];
-    s.slabs = [];
-  }
+  if (s.outcome !== 'fighting') clearFight(s);
   // A finished fight has no card to pick, so its XP stays banked.
   if (s.outcome === 'fighting') levelUp(s, rng);
   s.time += STEP;
+}
+
+/** A finished fight's field: nothing left in flight or drawn mid-effect under the result. */
+export function clearFight(s: HordeState): void {
+  s.bullets = [];
+  // Nobody left frozen mid-limp under the result (ID-148).
+  if (s.leaving) s.leaving = [];
+  s.shots = [];
+  s.impacts = [];
+  s.pops = [];
+  s.feats = [];
+  s.saves = [];
+  s.spits = [];
+  s.bursts = [];
+  s.grenades = [];
+  s.tarBombs = [];
+  s.slicks = [];
+  s.incoming = [];
+  s.slabs = [];
 }
 
 /** How often each timed boss skill goes off, in s. */

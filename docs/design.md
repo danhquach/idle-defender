@@ -4426,3 +4426,20 @@ original outline.
   and keep their fights' results in `.cache/balance/`, keyed by the
   simulation's code, Node's version and the test file (ID-142), so they
   replay only when one of those changes.
+- **Debug mode** *(as built, ID-197)*: `?debug=1` (exactly one `debug`
+  parameter, exactly `1`; anything else is off) shows a red DEBUG badge that
+  stays on screen and opens a Debug panel (`src/ui/debug.ts`). The camp lives
+  in its own save slot (`idle-defender.debug.save`, `src/storage/debug.ts`):
+  the player's save is never read or written, and "Reset debug save" starts a
+  new debug camp. Between hordes it starts any horde 1–999 (from a typed
+  uint32 seed, or a random one; the fight's seed is shown), and sets the camp
+  level, Scrap, squad size (setting the bought squad slots to what it needs,
+  so a smaller size drops them, and adding recruits),
+  survivor levels, the skill pick, a gun at any rarity it can drop at, and
+  fills the stash to N. In a fight it offers or grants any card the fight's
+  pool still holds, runs at ×2/×5/×10 or pauses, downs a survivor, and wins or
+  loses now. Every move is one the game could make (`src/core/debug.ts`): a
+  gun takes a beaten horde's drop uid, a win comes from the fight's own rule
+  with the field cleared (no kill XP or cash), and each camp edit must pass
+  the save's own validation or is refused. Typed values are digits only, in
+  range, refused (never clamped) otherwise. No simulation number changes.
