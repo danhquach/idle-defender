@@ -21,7 +21,7 @@ import { MUTE_KEY } from '../storage/settings.ts';
 import { NOW } from '../storage/testing.ts';
 import { SoundEngine } from './audio.ts';
 import { FIGHT_REFUSAL, SAVE_STATUS } from './menu.ts';
-import { LEVEL_ONE_TEXT, levelText } from './statlines.ts';
+import { LEVEL_ONE_TEXT } from './statlines.ts';
 import { start } from './app.ts';
 import { ASK_CHANGED } from './confirm.ts';
 import { answerConfirm, confirmPanel, confirmQuestion, flush, skipIntro } from './testing.ts';
@@ -591,7 +591,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
     expect(cardLabel('recruit-2')).toMatch(/, level 1: open survivor card$/);
     expect(root.querySelector('.squad-card-bonus')).toBeNull();
     rosterButton.click();
-    expect(scrim.querySelector('.rv-level')!.textContent).toBe(levelText(4));
+    expect(scrim.querySelector('.rv-who-level')!.textContent).toMatch(/^Level 4 · /);
     scrim.querySelector<HTMLButtonElement>('.rv-tab[data-defender="recruit-2"]')!.click();
     expect(scrim.querySelector('.rv-level')!.textContent).toBe(LEVEL_ONE_TEXT);
   });
@@ -624,7 +624,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
     expect(key('best').disabled).toBe(true);
     expect(scrim.querySelector(NO_STAT_UI)).toBeNull();
     expect(scrim.textContent).not.toMatch(/Spend points|stat point|Undo/);
-    expect(scrim.querySelector('.rv-level')!.textContent).toBe(levelText(4));
+    expect(scrim.querySelector('.rv-who-level')!.textContent).toMatch(/^Level 4 · /);
     const ticks = vi.mocked(tick).mock.calls.length;
     step(32);
     step(48);
@@ -664,7 +664,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
     name.click();
     expect(scrim.hidden).toBe(false);
     expect(scrim.querySelector('.rv-who-name')!.textContent).toBe(recruit(1).name);
-    expect(scrim.querySelector('.rv-level')!.textContent).toBe(levelText(4));
+    expect(scrim.querySelector('.rv-who-level')!.textContent).toMatch(/^Level 4 · /);
     expect(scrim.querySelector(NO_STAT_UI)).toBeNull();
     scrim.querySelector<HTMLButtonElement>('.camp-close')!.click();
     expect(document.activeElement).toBe(name);
@@ -754,7 +754,7 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     expect(rosterButton.hidden).toBe(false);
     rosterButton.click();
     expect(scrim.hidden).toBe(false);
-    expect(scrim.querySelector('.rv-level')!.textContent).toBe(levelText(4));
+    expect(scrim.querySelector('.rv-who-level')!.textContent).toMatch(/^Level 4 · /);
     scrim.querySelector<HTMLButtonElement>('.rv-best')!.click();
     close();
     expect(

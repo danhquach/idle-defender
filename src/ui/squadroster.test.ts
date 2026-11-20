@@ -13,7 +13,9 @@ import { createRng } from '../core/rng.ts';
 import { maxHpOf, survivorDps, xpForLevel } from '../core/stats.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { ART_URLS, avatarOf, GUNNER_LOOKS, lookOf } from './sprites.ts';
-import { LEVEL_ONE_TEXT, levelText } from './statlines.ts';
+import { LEVEL_ONE_TEXT, levelGains, levelText } from './statlines.ts';
+import { statRows } from './jobtext.ts';
+import { heldGunOf } from './gunpick.ts';
 import { createRoster, rosterTiles, SQUAD_WAIT, type RosterOptions } from './squadroster.ts';
 
 const NOW = 1_800_000_000_000;
@@ -214,29 +216,81 @@ describe('the Roster button and tabs (ID-108)', () => {
 });
 
 describe('the level panel (ID-146)', () => {
-  it('shows the survivor’s level and what it gives, in one line', () => {
+  it('shows the level and XP once, on the survivor row, not again in the panel (ID-189)', () => {
     const m = mount(camp([at(1, 7)]));
     m.roster.open('recruit-1');
-    expect(m.q('.rv-ttl').textContent).toBe('Level 7');
-    expect(m.q('.rv-level').textContent).toBe(levelText(7));
-    expect(m.q('.rv-level').textContent).toMatch(/^\+\d+\u00a0HP\u00a0· /);
-    expect(m.q('.rv-left').textContent).toMatch(/^\d+\/175 XP$/);
+    expect(m.q('.rv-who-level').textContent).toMatch(/^Level 7 · /);
+    expect(m.q('.rv-xp-text').textContent).toMatch(/^\d+\/175 XP$/);
+    expect(m.q('.rv-xp').getAttribute('aria-label')).toMatch(/^\d+\/175 XP to Lv 8$/);
+    const panel = m.q('.rv-panel');
+    expect(panel.querySelector('.rv-phead')).toBeNull();
+    expect(panel.textContent).not.toMatch(/XP|Level 7/);
+    // What the level gives is the Level column: no line repeats it.
+    expect(panel.querySelector('.rv-level')).toBeNull();
   });
 
-  it('a level 1 survivor has no bonus yet', () => {
+  it('the Level column carries every bonus the level gives, in two tables of four (ID-189)', () => {
+    const m = mount(camp([at(1, 7)]));
+    m.roster.open('recruit-1');
+    const tables = [...m.scrim.querySelectorAll('.rv-statcols > .rv-stats')];
+    expect(tables).toHaveLength(2);
+    const rows = tables.flatMap((t) => [...t.querySelectorAll('tbody tr')]);
+    expect(rows).toHaveLength(8);
+    expect(tables.map((t) => t.querySelectorAll('tbody tr').length)).toEqual([4, 4]);
+    const levelCells = rows.map((r) => r.querySelector('.rv-stat-lv')!.textContent);
+    // "+14 HP", "+0.5 armour", "+6.9% fire rate", …: each value is the Level cell, in order.
+    expect(levelCells.slice(0, 6)).toEqual(levelGains(7).map((g) => g.split(/\s/)[0]));
+    expect(levelCells.slice(6)).toEqual(['—', '—']);
+    expect(levelText(7)).toMatch(/^\+\d+\u00a0HP\u00a0· /);
+  });
+
+  it('every stat cell is the one the profession and level give, none lost (ID-189)', () => {
+    for (const job of ['hunter', 'student', 'builder'] as const) {
+      const d = { ...at(1, 9), job };
+      const m = mount(camp([d]));
+      m.roster.open('recruit-1');
+      const shown = [...m.scrim.querySelectorAll('.rv-statcols tbody tr')].map((r) => ({
+        label: r.querySelector('th')!.textContent,
+        total: r.querySelector('.rv-stat-total')!.textContent,
+        level: r.querySelector('.rv-stat-lv')!.textContent,
+        job: r.querySelector('.rv-stat-job')!.textContent,
+        off: r.querySelector('.rv-stat-job')!.hasAttribute('data-off'),
+      }));
+      expect(shown).toEqual(statRows(d, heldGunOf(d)));
+      // A part that is none is marked faint; a real one is not.
+      for (const c of m.scrim.querySelectorAll('.rv-stat-job, .rv-stat-lv'))
+        expect(c.hasAttribute('data-none')).toBe(c.textContent === '—');
+    }
+  });
+
+  it('a level 1 survivor has no bonus yet: the panel says what levels bring', () => {
     const m = mount(camp([at(1, 1)]));
     m.roster.open('recruit-1');
     expect(m.q('.rv-level').textContent).toBe(LEVEL_ONE_TEXT);
+    const lv = [...m.scrim.querySelectorAll('.rv-stat-lv')];
+    expect(lv).toHaveLength(8);
+    // A part that is none is marked, so it is drawn faint.
+    expect(lv.every((c) => c.textContent === '—' && c.hasAttribute('data-none'))).toBe(true);
   });
 
   it('follows the survivor shown and the camp as it changes', () => {
     const m = mount(camp([at(1, 3), at(2, 9)]));
     m.roster.open('recruit-1');
-    expect(m.q('.rv-level').textContent).toBe(levelText(3));
+    expect(m.q('.rv-who-level').textContent).toMatch(/^Level 3 · /);
     m.q('.rv-tab[data-defender="recruit-2"]').click();
-    expect(m.q('.rv-level').textContent).toBe(levelText(9));
+    expect(m.q('.rv-who-level').textContent).toMatch(/^Level 9 · /);
     m.set(camp([at(1, 3), at(2, 12)]));
-    expect(m.q('.rv-level').textContent).toBe(levelText(12));
+    expect(m.q('.rv-who-level').textContent).toMatch(/^Level 12 · /);
+    expect(m.q('.rv-stat-lv').textContent).toBe(levelGains(12)[0]!.split(/\s/)[0]);
+  });
+
+  it('marks how many cards each row holds, so the CSS can split them evenly (ID-189)', () => {
+    const m = mount(camp([at(1, 1), at(2, 1), at(3, 1), at(4, 1), at(5, 1), at(6, 1)]));
+    m.roster.open('recruit-1');
+    expect(m.q('.rv-tabs:not(.rv-bench)').dataset.count).toBe('6');
+    expect(m.q('.rv-bench').dataset.count).toBe('0');
+    m.set(camp([at(1, 1), at(2, 1), at(3, 1), at(4, 1), at(5, 1)]));
+    expect(m.q('.rv-tabs:not(.rv-bench)').dataset.count).toBe('5');
   });
 
   it('has no stat button, points count, badge, Undo or Tinker row', () => {
@@ -336,7 +390,7 @@ describe('Choose a gun (ID-108)', () => {
     expect(t[0]!.getAttribute('aria-label')).toMatch(/DPS with \S+, \d+\.\d more DPS than Pistol$/);
     // Slot, then the way back.
     m.key('level').click();
-    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
     expect(document.activeElement).toBe(m.key('slot'));
   });
 
@@ -367,7 +421,7 @@ describe('Choose a gun (ID-108)', () => {
     expect(m.game().roster[0]!.loadout.primary).toMatchObject({ uid: 'g1' });
     expect(m.status()).toBe(`${recruit(1).name} now holds Lv 1 Common Pump Shotgun.`);
     // Back on Stats with the new gun in the slot, the keyboard on it.
-    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
     expect(m.key('slot').textContent).toContain('Common Pump Shotgun');
     expect(document.activeElement).toBe(m.key('slot'));
   });
@@ -443,8 +497,8 @@ describe('Choose a gun (ID-108)', () => {
     expect(m.scrim.textContent).toContain(
       'No upgrade in the stash. Tap a gun to compare it with Lv 1 Rusty SMG.',
     );
-    // The slot's role is its own span, so a phone can drop it.
-    expect(m.key('slot').querySelector('.rv-slot-role')!.textContent).toMatch(/^ · \S/);
+    // The slot's role is its own line under the DPS (ID-189).
+    expect(m.key('slot').querySelector('.rv-slot-role')!.textContent).toMatch(/^\S/);
     expect(m.scrim.querySelector('[data-key="equip"]')).toBeNull();
   });
 
@@ -474,7 +528,7 @@ describe('Choose a gun (ID-108)', () => {
     m.key('slot').click();
     m.press('Escape');
     expect(m.scrim.hidden).toBe(false);
-    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
     m.press('Escape');
     expect(m.scrim.hidden).toBe(true);
   });
@@ -490,7 +544,7 @@ describe('Choose a gun (ID-108)', () => {
     const m = picker([at(1, 2), at(2, 2)]);
     m.key('slot').click();
     m.q('.rv-tab[data-defender="recruit-2"]').click();
-    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
   });
 
   it('in a fight the slot says to change guns between hordes, and nothing opens', () => {
@@ -499,7 +553,7 @@ describe('Choose a gun (ID-108)', () => {
     expect(slot.textContent).toContain(GUNS_WAIT);
     expect(slot.getAttribute('aria-disabled')).toBe('true');
     slot.click();
-    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
     expect(tiles(m)).toHaveLength(0);
     expect(m.key('best').disabled).toBe(true);
     expect(m.key('best').title).toBe(GUNS_WAIT);
@@ -530,7 +584,7 @@ describe('Best gun for everyone (ID-108)', () => {
     m.roster.open('recruit-1');
     m.key('slot').click();
     m.key('best').click();
-    expect(m.q('.rv-ttl').textContent).toMatch(/^Level \d+$/);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
     // The app refuses (a fight): its reason is shown.
     const root = document.createElement('div');
     document.body.replaceChildren(root);
