@@ -710,6 +710,11 @@ export interface CombineUi {
   confirming: readonly OwnedWeapon[] | null;
   /** The line after the last combine (or why it was refused), or null. */
   result: string | null;
+  /**
+   * The start of `result` that shows, for a combine made ("Made: Lv 3 Prototype SMG"); the
+   * rest (affixes, DPS) is read out and in its tooltip (ID-198). Null shows it whole.
+   */
+  made?: string | null;
   ask(uses: readonly OwnedWeapon[]): void;
   confirm(): void;
   cancel(): void;
@@ -746,93 +751,117 @@ function facts(it: InventoryItem): HTMLElement[] {
   return out;
 }
 
-/** `items` with each run of identical lines (name, affixes, dmg/s) counted once. */
-function groups(items: readonly InventoryItem[]): { item: InventoryItem; n: number }[] {
-  const out: { item: InventoryItem; n: number }[] = [];
-  const same = (a: InventoryItem, b: InventoryItem): boolean =>
-    a.name === b.name &&
-    a.level === b.level &&
-    a.power === b.power &&
-    a.affixes.join('\n') === b.affixes.join('\n');
-  for (const it of items) {
-    const last = out.at(-1);
-    if (last && same(last.item, it)) last.n++;
-    else out.push({ item: it, n: 1 });
-  }
-  return out;
+/** A gun's tile as the grid shows it, to look at only: its label and tooltip say what it is. */
+function tile(it: InventoryItem): HTMLElement {
+  const li = el('li', 'inv-cell');
+  const face = el('div', 'inv-slot inv-slot-static');
+  face.dataset.rarity = it.rarity;
+  face.setAttribute('role', 'img');
+  face.setAttribute('aria-label', slotLabel(it));
+  face.title = [levelled(it), it.affixes.join(', ') || NO_AFFIXES, it.power ?? '']
+    .filter(Boolean)
+    .join('\n');
+  face.append(...slotFace(it));
+  li.append(face);
+  return li;
 }
 
-/** The Combine part of a gun's details: its set's count and button, or why it can't. */
-function combineBlock(it: InventoryItem, rows: readonly CombineRow[], ui: CombineUi): HTMLElement {
-  const block = el('div', 'inv-combine');
-  block.append(el('h4', 'inv-combine-label', 'Combine'));
-  const status = el('p', 'menu-note inv-combine-result', ui.result ?? '');
+/**
+ * The Combine confirm, for the details' scrolling part (ID-198: tiles, not lines): the guns it
+ * uses up as the grid's tiles, then the one it makes, its name and dmg/s beside it.
+ */
+function combineConfirm(uses: readonly OwnedWeapon[]): HTMLElement {
+  const p = combinePreview(uses);
+  const confirm = el('div', 'inv-combine-confirm');
+  confirm.setAttribute('role', 'group');
+  confirm.setAttribute('aria-label', `Combine into a ${p.makes.name}`);
+  const makes = el('div', 'inv-combine-makes');
+  const about = el('div', 'inv-combine-about');
+  const name = el('p', 'inv-name', levelled(p.makes));
+  name.dataset.rarity = p.makes.rarity;
+  // Its affixes and DPS on one line, so a phone shows them without a scroll.
+  const said = [...p.makes.affixes, ...(p.makes.power ? [p.makes.power] : [])];
+  about.append(name, el('p', 'menu-note', said.join(' · ')));
+  makes.append(list('Makes', 'inv-combine-list', [tile(p.makes)]), about);
+  confirm.append(
+    el('p', 'inv-combine-label', 'Uses up'),
+    list('Uses up', 'inv-combine-list', p.used.map(tile)),
+    el('p', 'inv-combine-label', 'Makes'),
+    makes,
+  );
+  return confirm;
+}
+
+/**
+ * The Combine part of a gun's details (ID-091). Since ID-198 it sits in the dock pinned to
+ * the panel's foot, always the same shape: its label, a two-line status (what the last combine
+ * made, then the set's count or why it can't), and one button row, so Combine and its confirm's
+ * Confirm stay under the pointer through a run of combines. `confirm` is the confirm's lists,
+ * for the scrolling part; `note` is the rule, said there too.
+ */
+function combineBlock(
+  it: InventoryItem,
+  rows: readonly CombineRow[],
+  ui: CombineUi,
+): { dock: HTMLElement; confirm: HTMLElement | null; note: string | null } {
+  const dock = el('div', 'inv-combine');
+  dock.append(el('h4', 'inv-combine-label', 'Combine'));
+  const status = el('p', 'menu-note inv-combine-result');
+  const made = ui.made && ui.result?.startsWith(ui.made) ? ui.made : null;
+  if (made && ui.result) {
+    // The gun's own lines above say the rest: the line shows its name, a reader hears it all.
+    status.append(made, el('span', 'sr-only', ui.result.slice(made.length)));
+    status.dataset.made = '';
+  } else status.textContent = ui.result ?? '';
+  if (ui.result) status.title = ui.result;
   status.setAttribute('role', 'status');
   status.hidden = ui.result === null;
   // Focused after a combine (not a Tab stop), so it is read out and scrolled into view.
   status.tabIndex = -1;
-  block.append(status);
-  // An older save's blade or tool, in the stash or not: only guns combine.
-  if (it.power === null) {
-    block.append(el('p', 'menu-note', COMBINE_NOT_GUN));
-    return block;
+  const actions = el('div', 'inv-combine-actions');
+  // Held in Combine's place when it can't be pressed, so the row keeps its shape; its name
+  // says why.
+  const off = (why: string): HTMLButtonElement => {
+    const b = button(`Combine ${COMBINE_COUNT}`, () => {}, 'inv-combine-off');
+    b.disabled = true;
+    b.setAttribute('aria-label', `Combine ${COMBINE_COUNT}: ${why}`);
+    return b;
+  };
+  // What the line says when no combine has just been made.
+  let why: string;
+  let note: string | null = null;
+  let confirm: HTMLElement | null = null;
+  const row = it.power !== null && it.owned ? rowOf(rows, it.owned) : undefined;
+  if (it.power === null) why = COMBINE_NOT_GUN;
+  else if (!it.owned) why = it.key === 'pistol' ? PISTOL_NOTE : COMBINE_HELD;
+  else if (!row) why = COMBINE_TOP;
+  else {
+    why = `${row.name}: ${row.count} · ${row.note}`;
+    note = ui.canCombine ? COMBINE_NOTE : COMBINE_WAIT;
   }
-  if (!it.owned) {
-    block.append(el('p', 'menu-note', it.key === 'pistol' ? PISTOL_NOTE : COMBINE_HELD));
-    return block;
-  }
-  const row = rowOf(rows, it.owned);
-  if (!row) {
-    block.append(el('p', 'menu-note', COMBINE_TOP));
-    return block;
-  }
-  const uses = row.uses;
-  if (ui.confirming && ui.canCombine) {
-    const p = combinePreview(ui.confirming);
-    const confirm = el('div', 'inv-combine-confirm');
-    confirm.setAttribute('role', 'group');
-    confirm.setAttribute('aria-label', `Combine into a ${p.makes.name}`);
-    const lines = (label: string, items: InventoryItem[]): HTMLElement =>
-      list(
-        label,
-        'inv-combine-list',
-        groups(items).map(({ item: u, n }) => {
-          const li = el('li', 'inv-combine-row');
-          li.dataset.rarity = u.rarity;
-          // Identical guns as one line: "3 × Rusty SMG".
-          li.append(el('span', 'inv-name', n > 1 ? `${n} × ${levelled(u)}` : levelled(u)));
-          li.append(el('span', 'inv-combine-affixes', u.affixes.join(', ') || NO_AFFIXES));
-          if (u.power) li.append(el('span', 'inv-combine-power', u.power));
-          return li;
-        }),
-      );
-    const actions = el('div', 'menu-row');
-    actions.append(
-      button(`Combine into ${p.makes.name}`, ui.confirm, 'inv-combine-yes'),
-      button('Cancel', ui.cancel, 'inv-combine-no'),
-    );
-    confirm.append(
-      el('p', 'inv-combine-label', 'Uses up'),
-      lines('Uses up', p.used),
-      el('p', 'inv-combine-label', 'Makes'),
-      lines('Makes', [p.makes]),
-      actions,
-    );
-    block.append(confirm);
-    return block;
-  }
-  block.append(el('p', 'menu-note inv-combine-count', `${row.name}: ${row.count} · ${row.note}`));
-  if (uses && ui.canCombine) {
+  const uses = row?.uses ?? null;
+  if (row && uses && ui.confirming && ui.canCombine) {
+    const makes = combinePreview(ui.confirming).makes.name;
+    // Confirm takes Combine's place and most of its width: the pointer is already on it.
+    const yes = button('Confirm', ui.confirm, 'inv-combine-yes');
+    yes.setAttribute('aria-label', `Combine into ${makes}`);
+    actions.append(yes, button('Cancel', ui.cancel, 'inv-combine-no'));
+    confirm = combineConfirm(ui.confirming);
+  } else if (row && uses && ui.canCombine) {
     const b = button(`Combine ${COMBINE_COUNT}`, () => ui.ask(uses), 'inv-combine-button');
     b.setAttribute('aria-label', `Combine ${COMBINE_COUNT} ${row.name}`);
     b.dataset.set = row.name;
-    block.append(b, el('p', 'menu-note', COMBINE_NOTE));
-  } else if (!ui.canCombine) {
-    block.append(el('p', 'menu-note', COMBINE_WAIT));
-  } else {
-    block.append(el('p', 'menu-note', COMBINE_NOTE));
-  }
-  return block;
+    actions.append(b);
+  } else actions.append(off(ui.canCombine || !row ? why : COMBINE_WAIT));
+  // Kept under a combine's short "Made: …", so a greyed Combine has its reason in sight; a
+  // refusal takes both lines instead, as it says why itself.
+  const count = el('p', 'menu-note inv-combine-count', why);
+  count.title = why;
+  count.hidden = ui.result !== null && !made;
+  const line = el('div', 'inv-combine-line');
+  line.append(status, count);
+  dock.append(line, actions);
+  return { dock, confirm, note };
 }
 
 /** What the Equip part of the details shows, between hordes, and what its buttons call. */
@@ -843,52 +872,74 @@ export interface GearUi {
 }
 
 /**
- * The buttons that move a gun without dragging (ID-095): a stash gun or the free pistol
- * has Equip on, one button per survivor it could go to; a survivor's stash gun Unequip.
+ * The buttons that move a gun without dragging (ID-095), in the dock (ID-198): one cell per
+ * survivor, always, so each survivor's button keeps its spot whichever gun is shown. A stash
+ * gun or the free pistol has Equip on in each cell it could go to; a survivor's stash gun has
+ * Unequip in its holder's cell. A cell with nothing to do keeps its place, empty.
  */
-function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement | null {
+function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement {
   const mine = ui.view.squad.find((s) => s.gun.key === it.key);
+  const block = el('div', 'inv-gear');
+  const grid = el('div', 'inv-equip');
+  const blank = (): HTMLElement => el('span', 'inv-equip-blank');
   if (mine) {
-    if (mine.uid === null) return null;
-    const b = button('Unequip', () => ui.move(it.key, 'stash'), 'inv-unequip');
-    b.setAttribute('aria-label', `Unequip ${it.name} from ${mine.name}`);
-    const block = el('div', 'inv-gear menu-row');
-    block.append(b);
+    block.setAttribute('role', 'group');
+    block.setAttribute('aria-label', `${it.name}, held by ${mine.name}`);
+    for (const s of ui.view.squad) {
+      if (s !== mine || mine.uid === null) {
+        grid.append(blank());
+        continue;
+      }
+      const b = button('Unequip', () => ui.move(it.key, 'stash'), 'inv-unequip');
+      b.setAttribute('aria-label', `Unequip ${it.name} from ${mine.name}`);
+      grid.append(b);
+    }
+    block.append(el('h4', 'inv-combine-label', `Held by ${mine.name}`), grid);
     return block;
   }
-  if (!canDrag(ui.view, it.key)) return null;
-  // The pistol goes only to a survivor holding a stash gun; a stash gun to anyone.
-  const who = ui.view.squad.filter((s) => it.key !== 'pistol' || s.uid !== null);
-  if (who.length === 0) return null;
-  const block = el('div', 'inv-gear');
+  const can = canDrag(ui.view, it.key);
   block.setAttribute('role', 'group');
   block.setAttribute('aria-label', `Equip ${it.name} on`);
-  const row = el('div', 'menu-row inv-equip');
-  for (const s of who) {
+  for (const s of ui.view.squad) {
+    // The pistol goes only to a survivor holding a stash gun; a stash gun to anyone.
+    if (!can || (it.key === 'pistol' && s.uid === null)) {
+      grid.append(blank());
+      continue;
+    }
     const b = button(s.name, () => ui.move(it.key, s.gun.key), 'inv-equip-on');
     b.setAttribute('aria-label', `Equip ${it.name} on ${s.name}`);
     b.dataset.defender = s.id;
-    row.append(b);
+    grid.append(b);
   }
-  block.append(el('h4', 'inv-combine-label', 'Equip on…'), row);
+  block.append(el('h4', 'inv-combine-label', 'Equip on…'), grid);
   return block;
 }
 
 /**
- * The details beside the grid for `it`; with its Combine when `combine` is given, and its
- * Equip on or Unequip when `gear` is (between hordes).
+ * The details beside the grid for `it`, as two parts (ID-198): what it is, which scrolls
+ * when long, and the dock pinned at the foot with its Equip on or Unequip when `gear` is
+ * given (between hordes) and its Combine when `combine` is. The dock keeps one shape for
+ * every gun, so no button moves between picks.
  */
 export function detailsPanel(
   it: InventoryItem | null,
   combine?: { rows: readonly CombineRow[]; ui: CombineUi },
   gear?: GearUi,
 ): HTMLElement[] {
-  if (!it) return [el('p', 'menu-note', STASH_EMPTY)];
-  const out = [...facts(it), el('p', 'menu-note inv-where', it.where)];
-  const g = gear ? gearBlock(it, gear) : null;
-  if (g) out.push(g);
-  if (combine) out.push(combineBlock(it, combine.rows, combine.ui));
-  return out;
+  const info = el('div', 'inv-details-info');
+  if (!it) {
+    info.append(el('p', 'menu-note', STASH_EMPTY));
+    return [info];
+  }
+  const dock = el('div', 'inv-dock');
+  if (gear) dock.append(gearBlock(it, gear));
+  const c = combine ? combineBlock(it, combine.rows, combine.ui) : null;
+  // A confirm shows what goes and what comes in place of the gun's own lines.
+  if (c?.confirm) info.append(c.confirm);
+  else info.append(...facts(it), el('p', 'menu-note inv-where', it.where));
+  if (c?.note) info.append(el('p', 'menu-note inv-combine-note', c.note));
+  if (c) dock.append(c.dock);
+  return dock.childElementCount > 0 ? [info, dock] : [info];
 }
 
 /** The camp as the Inventory reads it. */
@@ -974,6 +1025,8 @@ export function createInventory(
   // The Combine confirm up, and the line after the last combine (ID-091).
   let confirming: readonly OwnedWeapon[] | null = null;
   let result: string | null = null;
+  // The start of `result` that shows (ID-198): "Made: Lv 3 Prototype SMG".
+  let made: string | null = null;
 
   const openButton = el('button', 'inv-button', 'Weapons');
   openButton.type = 'button';
@@ -1400,6 +1453,7 @@ export function createInventory(
     hovered = null;
     confirming = null;
     result = null;
+    made = null;
     // onEquip's save has usually redrawn the grid already; drawn again for the new selection.
     const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
     // A gun the filters hide stays unselected: their own slot is where it came from.
@@ -1421,6 +1475,7 @@ export function createInventory(
     if (key !== selected) {
       confirming = null;
       result = null;
+      made = null;
       // The last move's line is about another gun now.
       say('');
     }
@@ -1454,6 +1509,7 @@ export function createInventory(
               canCombine: listedCombine,
               confirming: hovered ? null : confirming,
               result: hovered ? null : result,
+              made: hovered ? null : made,
               ask,
               confirm,
               cancel,
@@ -1476,6 +1532,7 @@ export function createInventory(
     markSelected();
     confirming = uses;
     result = null;
+    made = null;
     drawDetails();
     details.querySelector<HTMLElement>('.inv-combine-no')?.focus();
   }
@@ -1520,6 +1577,7 @@ export function createInventory(
       if (selected !== null) {
         confirming = null;
         result = null;
+        made = null;
         say('');
       }
       // The strongest stash gun first; with an empty stash, the first survivor's gun.
@@ -1540,6 +1598,7 @@ export function createInventory(
     say('');
     const r = opts.onCombine(uses.map((w) => w.uid));
     result = r.ok ? combineResult(r.weapon) : r.reason;
+    made = r.ok ? `Made: ${levelled(item(r.weapon, '', ''))}` : null;
     // The new gun takes a used gun's place: select it, so its details say what was made.
     if (r.ok) {
       selected = `stash:${r.weapon.uid}`;
@@ -1572,6 +1631,7 @@ export function createInventory(
       opened = true;
       confirming = null;
       result = null;
+      made = null;
       selected = null;
       hovered = null;
       pick = { ...DEFAULT_PICK };

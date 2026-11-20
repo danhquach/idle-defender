@@ -667,19 +667,23 @@ describe('Combine in the details (ID-091)', () => {
     go.click();
     expect(calls).toHaveLength(0);
     const box = details().querySelector<HTMLElement>('.inv-combine-confirm')!;
-    // Three identical guns, one line.
-    const used = box.querySelectorAll('[aria-label="Uses up"] li');
-    expect(used).toHaveLength(1);
-    expect(used[0]!.querySelector('.inv-name')!.textContent).toBe('3 × Lv 1 Rusty SMG');
-    expect(box.querySelector('[aria-label="Makes"] .inv-name')!.textContent).toBe(
-      'Lv 1 Common SMG',
-    );
-    expect(box.querySelector<HTMLElement>('[aria-label="Makes"] li')!.dataset.rarity).toBe(
+    // The guns as the grid's tiles (ID-198), each named for a screen reader.
+    const used = [...box.querySelectorAll<HTMLElement>('[aria-label="Uses up"] .inv-slot')];
+    expect(used).toHaveLength(3);
+    expect(used[0]!.getAttribute('role')).toBe('img');
+    expect(used[0]!.getAttribute('aria-label')).toMatch(/^Rusty SMG, Rusty rarity/);
+    expect(used[0]!.dataset.rarity).toBe('rusty');
+    expect(box.querySelector('.inv-combine-about .inv-name')!.textContent).toBe('Lv 1 Common SMG');
+    expect(box.querySelector<HTMLElement>('[aria-label="Makes"] .inv-slot')!.dataset.rarity).toBe(
       'common',
     );
+    // A tile is to look at: it is no control and no Tab stop.
+    expect(box.querySelectorAll('button, [tabindex]')).toHaveLength(0);
     // Focus lands on Cancel, the safe choice.
-    expect(document.activeElement).toBe(box.querySelector('.inv-combine-no'));
-    box.querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
+    expect(document.activeElement).toBe(details().querySelector('.inv-combine-no'));
+    const yes = details().querySelector<HTMLButtonElement>('.inv-combine-yes')!;
+    expect(yes.getAttribute('aria-label')).toBe('Combine into Common SMG');
+    yes.click();
     expect(calls).toHaveLength(1);
     expect(calls[0]).toHaveLength(3);
     const made = game().armoury.find((w) => w.rarity === 'common')!;
@@ -711,10 +715,11 @@ describe('Combine in the details (ID-091)', () => {
       mil('h3', 'damage', 5),
     ]);
     details().querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
-    const used = [...details().querySelectorAll('[aria-label="Uses up"] .inv-combine-affixes')].map(
-      (n) => n.textContent,
-    );
-    expect(used).not.toContain('+15% damage');
+    const used = [...details().querySelectorAll<HTMLElement>('[aria-label="Uses up"] .inv-slot')];
+    expect(used).toHaveLength(3);
+    // Each tile's tooltip lists its affixes.
+    expect(used.map((n) => n.title).join('\n')).not.toContain('+15% damage');
+    expect(used.map((n) => n.title).join('\n')).toContain('+5% damage');
     details().querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
     expect(calls[0]).not.toContain('h9');
   });
@@ -767,7 +772,7 @@ describe('Combine in the details (ID-091)', () => {
     tap(combine);
     const box = details().querySelector<HTMLElement>('.inv-combine-confirm')!;
     expect(box.getAttribute('aria-label')).toBe('Combine into a Common SMG');
-    box.querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
+    details().querySelector<HTMLButtonElement>('.inv-combine-yes')!.click();
     expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Common SMG');
   });
 
@@ -798,7 +803,9 @@ describe('Combine in the details (ID-091)', () => {
     details().querySelector<HTMLButtonElement>('.inv-combine-button')!.click();
     setCan(false);
     expect(details().querySelector('.inv-combine-confirm')).toBeNull();
-    expect(details().querySelectorAll('button')).toHaveLength(0);
+    // Combine keeps its place, greyed out: nothing in the details can be pressed.
+    expect(details().querySelectorAll('button:not(:disabled)')).toHaveLength(0);
+    expect(details().querySelector<HTMLButtonElement>('.inv-combine-off')!.disabled).toBe(true);
     expect(dialog.querySelector('.inv-slot-ready')).toBeNull();
     expect(details().textContent).toContain(COMBINE_WAIT);
     expect(details().textContent).toContain('3 in stash');
@@ -818,6 +825,9 @@ describe('Combine in the details (ID-091)', () => {
     const line = dialog.querySelector<HTMLElement>('.inv-combine-result')!;
     expect(line.textContent).toBe(reason);
     expect(line.querySelector('b')).toBeNull();
+    // A refusal says why itself, on both lines: no short "Made", the count steps aside.
+    expect(line.dataset.made).toBeUndefined();
+    expect(dialog.querySelector<HTMLElement>('.inv-combine-count')!.hidden).toBe(true);
   });
 
   it('a short set says how many more; Relic, a gun in hand and the pistol say why not', () => {
@@ -855,7 +865,7 @@ describe('Combine in the details (ID-091)', () => {
     const box = details().querySelector<HTMLElement>('.inv-combine-confirm')!;
     expect(box.getAttribute('aria-label')).toBe('Combine into a Common Carbine');
     expect(slot('stash:p1-1').getAttribute('aria-pressed')).toBe('true');
-    expect(document.activeElement).toBe(box.querySelector('.inv-combine-no'));
+    expect(document.activeElement).toBe(details().querySelector('.inv-combine-no'));
     // Moving the pointer over another slot leaves the confirm up.
     over(slot('stash:h1'));
     expect(details().querySelector('.inv-combine-confirm')).not.toBeNull();

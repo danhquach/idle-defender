@@ -1326,16 +1326,29 @@ profession's output).
     "1 more for a Common SMG". A Relic says it combines no further, and a gun in
     hand that it must go back to the stash first. A combine uses
     the 3 weakest of the set by DPS, so the best one stays. Combine asks
-    first: it lists the 3 guns used up (rarity colour, affixes, DPS) and what
-    comes out (rarity, "No affixes" or "1 random affix, rolled on combine", and its
-    DPS, "before affixes" while they are still to roll), with Combine into … and Cancel (Esc cancels; focus
+    first: it shows the 3 guns used up as the grid's tiles (icon, rarity frame,
+    level and DPS badges; a tile's tooltip and screen-reader name give its affixes)
+    and what comes out as a tile with its name, "No affixes" or "1 random affix,
+    rolled on combine", and its DPS, "before affixes" while they are still to roll
+    (ID-198), with Confirm (read as "Combine into …") and Cancel (Esc cancels; focus
     starts on Cancel). After it, a status line names the new gun with its
     affixes and DPS ("Made: Common SMG, 14.2 DPS"), and the gun pickers
     update, and the new gun is selected; focus moves to that line (Cancel
     returns it to the Combine button). The result screen's drop tile stays a
     record of the win (its stash count then), so a combine on that screen
-    doesn't change it. In a fight the set's count shows with no button or ▲
-    marks, and "Combine between hordes, on the start or result screen."
+    doesn't change it. In a fight the set's count shows with Combine greyed out
+    and no ▲ marks, and "Combine between hordes, on the start or result screen."
+  - **The details hold still (ID-198):** the details are one fixed box, whichever
+    gun shows, with nothing selected, and through a confirm and a combine (240 px
+    beside the grid; on a phone 55% of the window's height under it). The gun's
+    lines (or the confirm's tiles) scroll at the top; a dock pinned at the foot
+    keeps one shape: "Equip on…" with one cell per survivor (a cell with nothing
+    to do stays, blank; a held gun's Unequip sits in its holder's cell), then
+    Combine's two-line status (the set's count, why not, or "Made: …"; longer is
+    cut) and one button row. Combine fills that row and stays, greyed out, when it
+    can't be pressed; the confirm's Confirm takes its first two thirds, under the
+    pointer, and Cancel the last third. So a run of combines needs no pointer move
+    in the details.
   - **The panel between hordes (a debrief):** the start, win and loss
     screens share one layout, 640 px wide, scrolling inside the window with
     the button pinned in a footer. At the top are the title and chips (waves,
