@@ -3704,13 +3704,12 @@ offline progress works across sessions.
   "Stash 40/40 (full)", as the next drop throws the weakest away), strongest
   first as in the gun picker (anything that is no gun, from an older save,
   last); each squad survivor and the gun they fight with, in squad order (not
-  the reserve, which this version doesn't show, nor its guns); and the free
-  pistol. Each weapon shows its name in its rarity's colour, its affixes and its
+  the reserve, which this version doesn't show, nor its guns). Each weapon shows its name in its rarity's colour, its affixes and its
   DPS. The start and result screens keep their gun pickers. It opens between
   hordes and in a fight, which it holds like the Menu; Esc or Close shuts it.
   - **As a grid (ID-092):** the dialog has tabs (Weapons only for now; items and
     materials can join later). The squad row (each survivor's gun with their
-    name under it, then the free pistol once) sits over the stash grid: one
+    name under it; no free-pistol tile, since Unequip already gives it) sits over the stash grid: one
     64 px square slot per stash place up to the cap, empty places drawn empty.
     A slot shows the gun's icon (one per base gun, the model the survivors
     hold, long guns laid across the square) on its rarity's tint inside a frame
@@ -3746,11 +3745,10 @@ offline progress works across sessions.
     gun, its rarity, role and trait, DPS and affix count. The result screen's
     drop tile shows the same icon and tint.
   - **Drag and drop (ID-095), between hordes:** a stash gun dropped on a
-    survivor's slot is theirs, the gun they held going to the stash (nothing
-    for the free pistol); the free pistol dropped on a survivor with a gun sends
-    that gun to the stash; a survivor's gun dropped anywhere in the stash
-    section (a gun, an empty place, its heading) goes there and they fall back
-    to the pistol. A full stash refuses the last two with "Stash full", so the
+    survivor's slot is theirs, the gun they held going to the stash; a
+    survivor's gun dropped anywhere in the stash section (a gun, an empty
+    place, its heading) goes there and they fall back to the free pistol. A
+    full stash refuses that with "Stash full", so the
     stash never passes its cap and no gun is thrown away. A stash gun dropped
     on another of its set (same base gun and rarity, below Relic) with 3 or
     more opens that set's Combine confirm (the weakest 3, as ever); a short set,
@@ -3760,7 +3758,7 @@ offline progress works across sessions.
     While dragging, the gun follows the pointer in its rarity frame (by touch,
     a slot above the finger, with a short buzz where the phone has one), its
     own slot fades, valid drops get a green ring and invalid ones grey out (red
-    under the pointer); picking up a survivor's gun or the pistol with the
+    under the pointer); picking up a survivor's gun with the
     stash full says "Stash full" at once. Dropping on nothing, Esc, or a release
     the page never sees (the window lost it) puts it back. A mouse drag starts
     after 6 px; a touch drag after a 350 ms still press, so a finger that
@@ -3770,8 +3768,8 @@ offline progress works across sessions.
     gap between slots goes to the nearest slot; a long-press in the grid
     selects no text (#272). Held near the grid's top or bottom edge, a drag
     scrolls the grid. Without dragging, a gun's details do the same: a
-    stash gun or the free pistol has "Equip on…" with a button per survivor
-    (the pistol only those holding a gun), a survivor's gun Unequip, beside
+    stash gun has "Equip on…" with a button per survivor, a survivor's
+    gun Unequip, beside
     Combine. Hovering a slot shows its details with a mouse only: a tap on a
     touch screen selects the gun at once, so its buttons work on the first tap
     (#272). Each move or refusal is said in a status line in the dialog's

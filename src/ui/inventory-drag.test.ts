@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // ID-095: between hordes, guns move around the Inventory by drag and drop — a stash gun
-// or the free pistol onto a survivor equips it, a survivor's gun into the stash takes it
+// onto a survivor equips it, a survivor's gun into the stash takes it
 // off them, and a stash gun onto one of its set opens that set's Combine — and by the
 // details' Equip on, Unequip and Combine buttons. Each move is said in a status line.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -70,22 +70,6 @@ describe('dropAction', () => {
     expect(dropAction(f, 'stash:f1', 'squad:recruit-1')).toMatchObject({ kind: 'equip' });
   });
 
-  it("the free pistol onto a survivor with a gun sends their gun to the stash; refused when it's full", () => {
-    const v = inventoryView(camp(2, [], [gun('x', 'smg', 'rusty')]));
-    expect(dropAction(v, 'pistol', 'squad:recruit-1')).toEqual({
-      kind: 'equip',
-      defender: 'recruit-1',
-      choice: 'pistol',
-    });
-    // One already on the pistol: nothing to do.
-    expect(dropAction(v, 'pistol', 'squad:recruit-2')).toEqual({ kind: 'none' });
-    const f = inventoryView(camp(1, full(), [gun('x', 'smg', 'rusty')]));
-    expect(dropAction(f, 'pistol', 'squad:recruit-1')).toEqual({
-      kind: 'refused',
-      reason: STASH_FULL,
-    });
-  });
-
   it("a survivor's gun into the stash, or onto a stash gun, takes it off them; refused when full", () => {
     const v = inventoryView(camp(1, rusty(3), [gun('x', 'smg', 'rusty')]));
     const off = { kind: 'equip', defender: 'recruit-1', choice: 'pistol' };
@@ -142,19 +126,15 @@ describe('dropAction', () => {
     expect(dropAction(v, 'stash:h1', null)).toEqual(none);
     expect(dropAction(v, 'stash:h1', 'stash:h1')).toEqual(none);
     expect(dropAction(v, 'stash:h1', 'stash')).toEqual(none);
-    expect(dropAction(v, 'stash:h1', 'pistol')).toEqual(none);
-    // Survivor to survivor, or onto the pistol: not a move this version has.
+    // Survivor to survivor: not a move this version has.
     expect(dropAction(v, 'squad:recruit-1', 'squad:recruit-2')).toEqual(none);
-    expect(dropAction(v, 'squad:recruit-1', 'pistol')).toEqual(none);
-    expect(dropAction(v, 'pistol', 'stash')).toEqual(none);
   });
 
-  it('picks up stash guns, the pistol and a survivor’s stash gun, never the pistol in hand or a blade', () => {
+  it('picks up stash guns and a survivor’s stash gun, never the pistol in hand or a blade', () => {
     const v = inventoryView(
       camp(2, [gun('k', 'knife', 'rusty'), ...rusty(1)], [gun('x', 'smg', 'rusty')]),
     );
     expect(canDrag(v, 'stash:h1')).toBe(true);
-    expect(canDrag(v, 'pistol')).toBe(true);
     expect(canDrag(v, 'squad:recruit-1')).toBe(true);
     expect(canDrag(v, 'squad:recruit-2')).toBe(false);
     expect(canDrag(v, 'stash:k')).toBe(false);
@@ -306,9 +286,8 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     expect(slot('squad:recruit-1').dataset.drop).toBe('ok');
     expect(slot('squad:recruit-2').dataset.drop).toBe('ok');
     expect(slot('squad:recruit-2').dataset.over).toBe('true');
-    // Another gun of another set, and the pistol, look refused.
+    // Another gun of another set looks refused.
     expect(slot('stash:b').dataset.drop).toBe('no');
-    expect(slot('pistol').dataset.drop).toBe('no');
     expect(scrim.contains(g)).toBe(true);
   });
 
@@ -363,14 +342,6 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     drag(slot('squad:recruit-1'), dialog.querySelector('.inv-stash-heading'));
     expect(now()).toBe(before);
     expect(status().textContent).toBe(STASH_FULL);
-  });
-
-  it('the free pistol onto a survivor gives them the pistol and sends their gun to the stash', () => {
-    const { slot, now } = setup(camp(1, [], [gun('x', 'rifle', 'common')]));
-    drag(slot('pistol'), slot('squad:recruit-1'));
-    expect(now().roster[0]!.loadout.primary).toBe('pistol');
-    expect(now().armoury.map((w) => w.uid)).toEqual(['x']);
-    expect(now().armoury).toHaveLength(1);
   });
 
   it('a stash gun onto one of its set opens the Combine confirm; nothing changes until confirmed', () => {
@@ -464,18 +435,6 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     drag(slot('squad:recruit-1'), null, false);
     expect(status().textContent).toBe(STASH_FULL);
     expect(status().dataset.tone).toBe('refused');
-  });
-
-  it('picking up the pistol says "Stash full" only while someone holds a gun', () => {
-    const one = setup(camp(1, full(), [gun('x', 'rifle', 'common')]));
-    drag(one.slot('pistol'), null, false);
-    expect(one.status().textContent).toBe(STASH_FULL);
-    one.inv.close();
-    // Everyone on the pistol already: the stash is no reason, so nothing is said.
-    const none = setup(camp(1, full()));
-    drag(none.slot('pistol'), null, false);
-    expect(none.status().textContent).toBe('');
-    none.inv.close();
   });
 
   it('a drag release does not select the slot it lands on', () => {
@@ -699,7 +658,6 @@ describe('drag and drop in the Inventory (ID-095)', () => {
     const { dialog, slot } = setup(camp(2, rusty(1), [gun('x', 'rifle', 'common')]));
     expect(dialog.textContent).toContain(DRAG_NOTE);
     expect(slot('stash:h1').dataset.drag).toBe('true');
-    expect(slot('pistol').dataset.drag).toBe('true');
     expect(slot('squad:recruit-1').dataset.drag).toBe('true');
     // On the pistol already: nothing to pick up.
     expect(slot('squad:recruit-2').dataset.drag).toBeUndefined();
@@ -762,16 +720,10 @@ describe('moving guns without dragging (ID-095)', () => {
     expect(document.activeElement).toBe(slot('squad:recruit-2'));
   });
 
-  it("a survivor's gun has Unequip; the pistol's Equip on lists only survivors with a gun", () => {
+  it("a survivor's gun has Unequip, and puts them back on the free pistol", () => {
     const { slot, details, now, status } = setup(camp(2, [], [gun('x', 'rifle', 'common')]));
-    slot('pistol').click();
-    const on = [...details().querySelectorAll<HTMLButtonElement>('.inv-equip-on')];
-    expect(on.map((b) => b.dataset.defender)).toEqual(['recruit-1']);
-    // Every survivor keeps a cell (ID-198): the one with nothing to do is a blank.
-    expect(details().querySelector('.inv-equip')!.children).toHaveLength(2);
-    expect(details().querySelectorAll('.inv-equip-blank')).toHaveLength(1);
     slot('squad:recruit-2').click();
-    // A survivor's own pistol: nothing to move, the cells stay, blank.
+    // A survivor's own pistol: nothing to move, every survivor keeps a blank cell (ID-198).
     expect(details().querySelectorAll('.inv-gear button')).toHaveLength(0);
     expect(details().querySelectorAll('.inv-equip-blank')).toHaveLength(2);
     slot('squad:recruit-1').click();

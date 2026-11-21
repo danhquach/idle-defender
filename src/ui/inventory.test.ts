@@ -13,7 +13,7 @@ import { combineGuns, equipGun, squadSpec } from '../core/hordeonly.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { survivorDps, xpForLevel } from '../core/stats.ts';
 import {
-  COMBINE_HELD,
+  COMBINE_PISTOL,
   COMBINE_NOT_GUN,
   COMBINE_NOTE,
   COMBINE_TOP,
@@ -24,7 +24,6 @@ import {
   INVENTORY_NOTE,
   inventoryView,
   NO_AFFIXES,
-  PISTOL_NOTE,
   slotFace,
   slotLabel,
   STASH_EMPTY,
@@ -108,7 +107,7 @@ describe('inventoryView', () => {
     });
   });
 
-  it("shows each survivor's gun in squad order, the pistol for none, and the free pistol", () => {
+  it("shows each survivor's gun in squad order, the pistol for none", () => {
     let g = camp(2, [gun('r', 'rifle', 'relic')]);
     const id = g.roster[1]!.id;
     const r = equipGun(g, id, 'r');
@@ -123,14 +122,13 @@ describe('inventoryView', () => {
     expect(v.squad[1]!.gun.owned).toBeNull();
     // The gun in hand has left the stash.
     expect(v.stashHeading).toBe(`Stash 0/${STASH_CAP}`);
-    expect(v.pistol).toMatchObject({
-      key: 'pistol',
+    expect(v.squad[0]!.gun).toMatchObject({
       name: 'Pistol',
       rarity: 'common',
       affixes: [],
       icon: 'weapon-pistol',
-      where: PISTOL_NOTE,
     });
+    expect('pistol' in v).toBe(false);
   });
 
   it('gives every gun its own icon, one per base gun', () => {
@@ -259,22 +257,20 @@ describe('the Inventory dialog', () => {
     expect(first!.getAttribute('aria-label')).toMatch(/^Relic Sniper rifle, Relic rarity, /);
   });
 
-  it('shows the squad with each name under their gun, then the free pistol once', () => {
+  it('shows the squad with each name under their gun, and no Free pistol tile (ID-212)', () => {
     const { button, dialog, slots } = setup(camp(2));
     button.click();
     const squad = slots('Squad');
     expect(squad.map((b) => b.dataset.key)).toEqual([
       expect.stringMatching(/^squad:/),
       expect.stringMatching(/^squad:/),
-      'pistol',
     ]);
     const names = [...dialog.querySelectorAll('[aria-label="Squad"] .inv-who')].map(
       (n) => n.textContent,
     );
-    expect(names.at(-1)).toBe('Free pistol');
-    expect(
-      dialog.querySelector<HTMLElement>('[aria-label="Squad"] li:last-child .inv-who')!.title,
-    ).toBe(PISTOL_NOTE);
+    expect(names).toHaveLength(2);
+    expect(dialog.textContent).not.toContain('Free pistol');
+    expect(dialog.querySelector('.inv-slot[data-key="pistol"]')).toBeNull();
     expect(dialog.textContent).toContain(STASH_EMPTY);
   });
 
@@ -346,7 +342,7 @@ describe('the Inventory dialog', () => {
       `${GUN_ROLES.shotgun.role}: ${GUN_ROLES.shotgun.trait}`,
     );
     expect(shotgun.getAttribute('aria-label')).toContain(GUN_ROLES.shotgun.role);
-    // The free pistol too.
+    // A survivor holding the pistol too.
     const pistol = slots('Squad').at(-1)!;
     pistol.click();
     expect(details().querySelector('.inv-role')!.textContent).toBe(
@@ -367,14 +363,12 @@ describe('the Inventory dialog', () => {
     expect(details().querySelector('.inv-affixes')!.textContent).toBe(NO_AFFIXES);
   });
 
-  it('a squad slot says who holds it; the pistol says it is free', () => {
+  it('a squad slot says who holds it, the pistol too', () => {
     const { button, slots, details } = setup(camp(1));
     button.click();
-    const [mine, pistol] = slots('Squad');
+    const [mine] = slots('Squad');
     mine!.click();
     expect(details().querySelector('.inv-where')!.textContent).toMatch(/^Held by /);
-    pistol!.click();
-    expect(details().querySelector('.inv-where')!.textContent).toBe(PISTOL_NOTE);
   });
 
   it('hovering a slot shows its details; leaving the grid goes back to the selected one', () => {
@@ -418,27 +412,27 @@ describe('the Inventory dialog', () => {
     button.click();
     const all = [...slots('Squad'), ...slots('Stash')];
     // One Tab stop for the grid: the selected slot.
-    expect(all.filter((s) => s.tabIndex === 0)).toEqual([all[2]]);
+    expect(all.filter((s) => s.tabIndex === 0)).toEqual([all[1]]);
     key(document.activeElement!, 'ArrowRight');
-    expect(document.activeElement).toBe(all[3]);
-    expect(all[3]!.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(all[2]);
+    expect(all[2]!.getAttribute('aria-pressed')).toBe('true');
     expect(details().querySelector('.inv-name')!.textContent).toBe('Lv 1 Rusty SMG');
     // At the end it stays put.
     expect(key(document.activeElement!, 'ArrowRight').defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(all[3]);
+    expect(document.activeElement).toBe(all[2]);
     key(document.activeElement!, 'Home');
     expect(document.activeElement).toBe(all[0]);
     key(document.activeElement!, 'ArrowLeft');
     expect(document.activeElement).toBe(all[0]);
     key(document.activeElement!, 'End');
-    expect(document.activeElement).toBe(all[3]);
-    key(document.activeElement!, 'ArrowLeft');
     expect(document.activeElement).toBe(all[2]);
-    expect(all.filter((s) => s.tabIndex === 0)).toEqual([all[2]]);
+    key(document.activeElement!, 'ArrowLeft');
+    expect(document.activeElement).toBe(all[1]);
+    expect(all.filter((s) => s.tabIndex === 0)).toEqual([all[1]]);
   });
 
   it('Up and Down move to the slot above or below', () => {
-    const stash = Array.from({ length: 8 }, (_, i) => gun(`h${i}`, 'smg', 'rusty'));
+    const stash = Array.from({ length: 9 }, (_, i) => gun(`h${i}`, 'smg', 'rusty'));
     const { button, key, slots } = setup(camp(1, stash));
     button.click();
     // jsdom has no layout: lay the stash out four to a row by hand.
@@ -830,7 +824,7 @@ describe('Combine in the details (ID-091)', () => {
     expect(dialog.querySelector<HTMLElement>('.inv-combine-count')!.hidden).toBe(true);
   });
 
-  it('a short set says how many more; Relic, a gun in hand and the pistol say why not', () => {
+  it('a short set says how many more; Relic, and the free pistol say why not', () => {
     const { details, slot } = combining([...rusty(2), gun('r', 'sniper', 'relic')]);
     slot('stash:h1').click();
     expect(details().querySelector('.inv-combine-count')!.textContent).toBe(
@@ -843,9 +837,7 @@ describe('Combine in the details (ID-091)', () => {
       '.inv-slot[data-key^="squad:"]',
     )!;
     squad.click();
-    expect(details().textContent).toContain(COMBINE_HELD);
-    slot('pistol').click();
-    expect(details().querySelector('.inv-combine')!.textContent).toContain(PISTOL_NOTE);
+    expect(details().textContent).toContain(COMBINE_PISTOL);
   });
 
   it("an older save's blade in the stash says only guns combine", () => {
@@ -892,8 +884,8 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     const w = lv('a', 'rifle', 'military', 12);
     const v = inventoryView(camp(1, [w]));
     expect(v.stash[0]).toMatchObject({ level: 12, levelBadge: 'Lv 12' });
-    // The free pistol, and a gun from an older save with no level, are Lv 1.
-    expect(v.pistol).toMatchObject({ level: 1, levelBadge: 'Lv 1' });
+    // A survivor's pistol, and a gun from an older save with no level, are Lv 1.
+    expect(v.squad[0]!.gun).toMatchObject({ level: 1, levelBadge: 'Lv 1' });
     expect(inventoryView(camp(1, [gun('b', 'smg', 'rusty')])).stash[0]!.level).toBe(1);
     expect(slotLabel(v.stash[0]!)).toContain('level 12');
     // What is no gun has no level badge.
@@ -910,9 +902,8 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     expect(theirs).not.toBeCloseTo(own, 1);
     expect(held.power).toBe(`${own.toFixed(1)} DPS`);
     expect(held.powerWith).toBe(`${theirs.toFixed(1)} DPS with ${levelled.name}`);
-    // In the stash, and the free pistol: nobody's hands.
+    // In the stash: nobody's hands.
     expect(v.stash[0]!.powerWith).toBeNull();
-    expect(v.pistol.powerWith).toBeNull();
     expect(
       detailsPanel(held)
         .map((e) => e.textContent)
@@ -956,7 +947,7 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
       String(Math.round(gunPower(w))),
     );
     expect(document.querySelector('.inv-name')!.textContent).toBe('Lv 12 Military Carbine');
-    const pistol = document.querySelector<HTMLElement>('.inv-slot[data-key="pistol"]')!;
+    const pistol = document.querySelector<HTMLElement>('.inv-slot[data-key^="squad:"]')!;
     expect(pistol.querySelector('.inv-slot-level')!.textContent).toBe('Lv 1');
   });
 
