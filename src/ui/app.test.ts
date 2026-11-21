@@ -591,6 +591,55 @@ describe('pause and game speed in the game (app.ts, ID-062)', () => {
     expect(vi.mocked(tick).mock.lastCall![1]).toBeCloseTo(0.016);
   });
 
+  it('an open pick’s S skips it and keeps the speed; R rerolls and B then 1 bans (ID-210)', () => {
+    const { root, speedButton, pressed } = fight();
+    // The pick ignores R S B for a moment after it opens (the clock is moved by hand).
+    let now = 1000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const later = () => (now += 1000);
+    const real = vi.mocked(tick).getMockImplementation()!;
+    vi.mocked(tick).mockImplementationOnce((s, dt) => {
+      const next = real(s, dt);
+      return { ...next, offer: rollOffer(createRng(1), next) };
+    });
+    step(16);
+    step(32);
+    const cards = root.querySelector<HTMLElement>('.hud-cards')!;
+    const names = () =>
+      [...cards.querySelectorAll('.hud-card-title')].map((t) => t.textContent).join('|');
+    const before = pressed();
+    const first = names();
+    later();
+    press('r', { code: 'KeyR' });
+    step(48);
+    expect(cards.querySelector('.hud-offer-reroll')!.firstChild!.textContent).toBe('Reroll · 2');
+    expect(names()).not.toBe(first);
+    later();
+    press('b', { code: 'KeyB' });
+    // A survivor can't be banned: the first card that is an upgrade.
+    const up = [...cards.querySelectorAll('.hud-card')].findIndex(
+      (c) => !c.classList.contains('hud-card-recruit'),
+    );
+    press(String(up + 1), { code: `Digit${up + 1}` });
+    step(64);
+    expect(cards.querySelector('.hud-offer-ban')!.firstChild!.textContent).toBe('Ban · 0');
+    expect(cards.hidden).toBe(false);
+    later();
+    press('s', { code: 'KeyS' });
+    step(80);
+    expect(cards.hidden).toBe(true);
+    // S skipped the pick: it did not set 3× speed, and the skip gave a reroll back.
+    expect(pressed()).toEqual(before);
+    expect(speedButton(3).getAttribute('aria-pressed')).toBe('false');
+    expect(vi.mocked(tick).mock.lastCall![0].skips).toBe(1);
+    expect(vi.mocked(tick).mock.lastCall![0].offer).toBeNull();
+    // With no pick open, S is the 3× speed again.
+    later();
+    press('s', { code: 'KeyS' });
+    expect(speedButton(3).getAttribute('aria-pressed')).toBe('true');
+    clock.mockRestore();
+  });
+
   it('an offer card spells out its pick as text: level step, before and after, and a swap warning (ID-097)', () => {
     const { root } = fight();
     const real = vi.mocked(tick).getMockImplementation()!;

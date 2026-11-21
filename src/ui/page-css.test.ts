@@ -476,8 +476,8 @@ describe('every offer card one size (ID-195)', () => {
     expect(34 + 6 + 28 + height + 8).toBeLessThanOrEqual(360);
     // Measured against Oil Bomb with both fires held (the longest card): it fits 276 px.
     expect(height).toBeGreaterThanOrEqual(276);
-    // Second Look's Reroll rides the heading's row, so it adds no height under the cards.
-    expect(block('.hud-cards > .hud-reroll', at)).toMatch(/position: absolute;/);
+    // Reroll, Skip and Ban ride the heading's row (ID-210), so they add no height under the cards.
+    expect(block('.hud-cards > .hud-offer-actions', at)).toMatch(/position: absolute;/);
     // Shorter still (iPhone Safari's bars), the panel scrolls rather than cut a card.
     expect(block('.hud-cards', at)).toMatch(/overflow-y: auto;/);
   });

@@ -2,7 +2,7 @@
 // player, no page and no clock, so the starting numbers in `data.ts` can be checked
 // by the balance tests and the `npm run balance` report without playing by hand.
 import { repairSegment } from './base.ts';
-import { chooseCard, postUsable, replaces } from './cards.ts';
+import { chooseCard, postUsable, replaces, skipOffer } from './cards.ts';
 import { available, finishHorde, newGame, recover, startHorde, type GameState } from './game.ts';
 import {
   layoutOf,
@@ -88,6 +88,8 @@ export function opening(game: GameState, now: number): { defenderId: string; pos
  * crit it does next to nothing, so a real player wouldn't take it); every replacement taken.
  */
 export function answerOffer(s: HordeState): HordeState {
+  // Bans or a small card pool can leave an empty pick: the scripted player skips it.
+  if (s.offer?.length === 0) return skipOffer(s);
   if (s.offer) {
     const recruit = s.offer.findIndex((c) => c.kind === 'recruit');
     if (recruit >= 0) return chooseCard(s, recruit);
@@ -306,7 +308,8 @@ export function playSquadHorde(
     if (s.time > maxFight)
       throw new RangeError(`playSquadHorde: horde ${s.hordeNumber} never ended`);
     if (s.offer) {
-      s = chooseCard(s, squadPick(s));
+      // An empty pick (bans or a small pool took every card) is skipped.
+      s = s.offer.length === 0 ? skipOffer(s) : chooseCard(s, squadPick(s));
       owned = false;
     } else {
       const next = useSkills(s);

@@ -1114,6 +1114,15 @@ export const RARITY: Readonly<
 /** A levelled in-horde card's top level (ID-097): levels 1, 2 and 3 (max). */
 export const CARD_MAX_LEVEL = 3;
 
+/**
+ * The card pick's Reroll and Skip (ID-210, design §8): rerolls a horde, and the reroll a
+ * Skip gives back. Second Look's rerolls add to `perHorde`. Unused ones never carry over.
+ */
+export const REROLL = { perHorde: 3, perSkip: 1 } as const;
+
+/** The card pick's Ban (ID-210): bans a horde; a banned card is not offered again this horde. */
+export const BAN = { perHorde: 1 } as const;
+
 /** The big enemies a card's push or paralysis does half to (design §8). */
 export const HEAVY_KINDS: readonly EnemyKind[] = ['brute', 'swollen', 'horror'];
 
@@ -1727,7 +1736,7 @@ export const PERKS: Readonly<Record<PerkId, { readonly name: string; readonly te
     text: 'Blade and tool kills heal the nearest damaged wall 3 HP',
   },
   'rally-call': { name: 'Rally Call', text: 'Recruit cards appear twice as often' },
-  'second-look': { name: 'Second Look', text: 'Reroll the card offer once per wave' },
+  'second-look': { name: 'Second Look', text: 'Extra card rerolls: 1 a wave' },
   overclock: { name: 'Overclock', text: 'Turrets +20% damage, +10% energy use' },
   'power-saver': { name: 'Power Saver', text: 'Turrets use 25% less energy' },
 };

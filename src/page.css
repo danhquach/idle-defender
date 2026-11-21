@@ -434,8 +434,53 @@ body {
   gap: var(--space-12);
 }
 
-.hud-reroll {
+/* ID-210: Reroll, Skip and Ban in one row under the cards. */
+.hud-offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-8);
   margin-top: var(--space-12);
+}
+
+.hud-offer-act {
+  flex: none;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 var(--space-16);
+  white-space: nowrap;
+}
+
+/* Ban's first step: the button stays lit (the heading says what to do), and each card
+   that can be banned takes the danger colour; a survivor's card greys out. */
+.hud-offer-act[aria-pressed='true'] {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+/* A key hint only where there is a keyboard, as the fight's buttons show theirs. */
+.hud-offer-act .menu-key {
+  margin-left: var(--space-8);
+}
+
+@media (pointer: coarse) {
+  .hud-offer-act .menu-key {
+    display: none;
+  }
+}
+
+.hud-offer-empty {
+  margin: var(--space-12) 0 0;
+  color: var(--color-text-subtle);
+}
+
+.hud-cards-banning .hud-card:not(:disabled) {
+  border-color: var(--color-danger);
+}
+
+.hud-cards-banning .hud-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ID-103: each card is dealt in, one after another; it lifts on hover or focus. */
@@ -6367,18 +6412,30 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     line-height: 1.35;
   }
 
-  /* Second Look's Reroll joins the heading's row, so it never falls under the cards. */
-  .hud-cards > .hud-reroll {
+  /* Reroll, Skip and Ban join the heading's row (ID-210), so they never fall under the cards. */
+  .hud-cards > .hud-offer-actions {
     position: absolute;
     top: var(--space-6);
     right: var(--space-12);
+    flex-wrap: nowrap;
+    gap: var(--space-4);
     margin: 0;
-    padding: var(--space-2) var(--space-10);
+  }
+
+  /* No room beside the heading for the key hints, where a keyboard is rare. */
+  .hud-cards .hud-offer-act .menu-key {
+    display: none;
+  }
+
+  .hud-cards .hud-offer-act {
+    position: relative;
+    height: auto;
+    padding: var(--space-2) var(--space-8);
     font-size: var(--text-sm);
   }
 
   /* 28 px tall: 8 px more above and below for a finger. */
-  .hud-cards > .hud-reroll::after {
+  .hud-cards .hud-offer-act::after {
     content: '';
     position: absolute;
     inset: -8px 0;

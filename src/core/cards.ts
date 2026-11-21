@@ -1,9 +1,11 @@
 import {
+  BAN,
   CARD,
   CARD_MAX_LEVEL,
   PERK,
   RARITY,
   RECRUIT_CHANCE,
+  REROLL,
   RESEARCH_CARDS,
   WALL,
   type CardRarity,
@@ -12,7 +14,6 @@ import {
 import {
   cardLevel,
   perkFactor,
-  perkOn,
   perkScale,
   rebuildWire,
   squadCanCrit,
@@ -305,7 +306,8 @@ export function rarityOdds(wave: number): Record<CardRarity, number> {
 }
 
 /**
- * Whether `id` may show in an offer now: in the fight's card pool, if it has one; a card
+ * Whether `id` may show in an offer now: not banned this horde (ID-210); in the fight's
+ * card pool, if it has one; a card
  * with levels not yet at its max (ID-097); Patch Up only while some built segment is below
  * its max HP; Hollow Points only while the squad can crit (ID-130); Kevlar Vests and
  * First Aid Kits only once the line is in trouble (`survivorHurt`, ID-131); power only with
@@ -313,6 +315,7 @@ export function rarityOdds(wave: number): Record<CardRarity, number> {
  */
 export function eligible(state: HordeState, id: UpgradeId): boolean {
   const u = UPGRADES[id];
+  if (state.banned.includes(id)) return false;
   if (state.cardPool && !state.cardPool.includes(id)) return false;
   if (u.levels !== null && cardLevel(state, id) >= u.levels) return false;
   if (isResearchCard(id) && !state.research.includes(id)) return false;
@@ -584,29 +587,36 @@ function rollUpgrade(rng: Rng, pool: readonly UpgradeId[], wave: number): Upgrad
 }
 
 /**
- * Three cards: distinct upgrades by rarity, and at most one recruit from the bench while
- * a post is free. Rally Call (design §5) multiplies the recruit chance.
+ * One more card for an offer already showing `shown`: a recruit from the bench while a
+ * post is free and none shows yet (Rally Call, design §5 multiplies the chance), else a
+ * distinct upgrade by rarity; null when no card is left to offer (a banned or small pool).
  */
-export function rollOffer(rng: Rng, state: HordeState): Card[] {
+function rollCard(rng: Rng, state: HordeState, shown: readonly Card[]): Card | null {
   const recruits = recruitPost(state) === undefined ? [] : state.bench;
-  const canRecruit = recruits.length > 0;
   const p =
     (state.defenders.length < RECRUIT_CHANCE.largeFrom
       ? RECRUIT_CHANCE.small
       : RECRUIT_CHANCE.large) * perkFactor(state, 'rally-call', PERK.rally);
-  const pool = UPGRADE_IDS.filter((id) => eligible(state, id));
+  if (recruits.length > 0 && !shown.some((c) => c.kind === 'recruit') && chance(rng, p)) {
+    return { kind: 'recruit', defender: { ...pick(rng, recruits) } };
+  }
+  const showing = new Set(shown.flatMap((c) => (c.kind === 'upgrade' ? [c.id] : [])));
+  const left = UPGRADE_IDS.filter((id) => !showing.has(id) && eligible(state, id));
+  // Five repeatable cards are always eligible, so 3 slots run dry only when bans or a
+  // small card pool take them (ID-210).
+  return left.length === 0 ? null : { kind: 'upgrade', id: rollUpgrade(rng, left, state.wave) };
+}
+
+/**
+ * Three cards: distinct upgrades by rarity, and at most one recruit from the bench while
+ * a post is free; fewer when bans or the card pool leave too few (ID-210).
+ */
+export function rollOffer(rng: Rng, state: HordeState): Card[] {
   const cards: Card[] = [];
-  let recruited = false;
   while (cards.length < OFFER_SIZE) {
-    if (canRecruit && !recruited && chance(rng, p)) {
-      cards.push({ kind: 'recruit', defender: { ...pick(rng, recruits) } });
-      recruited = true;
-      continue;
-    }
-    const shown = new Set(cards.flatMap((c) => (c.kind === 'upgrade' ? [c.id] : [])));
-    const left = pool.filter((id) => !shown.has(id));
-    // Five repeatable cards are always eligible, so 3 slots never run the pool dry.
-    cards.push({ kind: 'upgrade', id: rollUpgrade(rng, left, state.wave) });
+    const card = rollCard(rng, state, cards);
+    if (!card) break;
+    cards.push(card);
   }
   return cards;
 }
@@ -620,38 +630,79 @@ export function levelUp(s: HordeState, rng: Rng): void {
 }
 
 /**
- * Rerolls Second Look gives in the current wave (design §5, ID-035): 1 at level 1; a
- * higher level's 1.5 or 2 per wave come as whole rerolls, the half one every other wave.
+ * Rerolls Second Look has given this horde up to the current wave (design §5, ID-210):
+ * they add to the horde's `REROLL.perHorde` and are spent from the same count.
  */
-export function rerollsThisWave(state: Pick<HordeState, 'perks' | 'perkLevels' | 'wave'>): number {
-  const scale = perkScale(state, 'second-look');
-  return Math.floor(scale * state.wave + EPS) - Math.floor(scale * (state.wave - 1) + EPS);
-}
+export const secondLookRerolls = (
+  state: Pick<HordeState, 'perks' | 'perkLevels' | 'wave'>,
+): number => Math.floor(perkScale(state, 'second-look') * state.wave + EPS);
 
-/** Rerolls of the current wave used so far. */
-const rerollsUsed = (state: Pick<HordeState, 'rerolledWave' | 'rerolls' | 'wave'>): number =>
-  state.rerolledWave === state.wave ? state.rerolls : 0;
-
-/** Rerolls left in the current wave. */
+/** Rerolls left this horde: 3, plus a skip's and Second Look's, less those used (ID-210). */
 export const rerollsLeft = (state: HordeState): number =>
-  Math.max(0, rerollsThisWave(state) - rerollsUsed(state));
+  Math.max(
+    0,
+    REROLL.perHorde + REROLL.perSkip * state.skips + secondLookRerolls(state) - state.rerolls,
+  );
 
-/** Why the open offer can't be rerolled, or null when it can (Second Look, design §5). */
+/** Bans left this horde (ID-210). */
+export const bansLeft = (state: Pick<HordeState, 'bans'>): number =>
+  Math.max(0, BAN.perHorde - state.bans);
+
+/** Why the open offer can't be rerolled, or null when it can. */
 export function rerollLock(state: HordeState): string | null {
-  if (!perkOn(state, 'second-look')) return 'Needs Second Look';
   if (state.offer === null) return 'No offer to reroll';
-  if (rerollsLeft(state) === 0) return 'Already rerolled this wave';
+  if (rerollsLeft(state) === 0) return 'No rerolls left';
   return null;
 }
 
-/** Rolls the open offer again (seeded), as often as Second Look allows a wave; returns a new state. */
+/** Rolls the open offer again (seeded, ID-210); returns a new state. */
 export function rerollOffer(state: HordeState): HordeState {
   const lock = rerollLock(state);
   if (lock) throw new RangeError(`rerollOffer: ${lock}`);
   const s = structuredClone(state);
   s.offer = rollOffer(rngFrom(s.rng), s);
-  s.rerolls = rerollsUsed(s) + 1;
-  s.rerolledWave = s.wave;
+  s.rerolls += 1;
+  return s;
+}
+
+/**
+ * Takes no card, closes the open offer and gives a reroll back (ID-210); free, any number
+ * of times. Banked XP opens the next offer, as after a pick. Returns a new state.
+ */
+export function skipOffer(state: HordeState): HordeState {
+  if (state.offer === null) throw new RangeError('skipOffer: no offer to skip');
+  const s = structuredClone(state);
+  s.offer = null;
+  s.skips += 1;
+  levelUp(s, rngFrom(s.rng));
+  return s;
+}
+
+/** Why card `index` of the open offer can't be banned, or null when it can. */
+export function banLock(state: HordeState, index: number): string | null {
+  if (state.offer === null) return 'No offer to ban from';
+  if (bansLeft(state) === 0) return 'No bans left';
+  const card = state.offer[index];
+  if (!Number.isInteger(index) || !card) return 'No such card';
+  if (card.kind === 'recruit') return 'A survivor can’t be banned';
+  return null;
+}
+
+/**
+ * Bans card `index` of the open offer for the rest of the horde (ID-210): it leaves the
+ * offer and every later one, and a new card (seeded) takes its slot while the pick stays
+ * open. With no card left to fill it, the offer is one shorter. Returns a new state.
+ */
+export function banCard(state: HordeState, index: number): HordeState {
+  const lock = banLock(state, index);
+  if (lock) throw new RangeError(`banCard: ${lock}`);
+  const s = structuredClone(state);
+  const offer = s.offer!;
+  const [gone] = offer.splice(index, 1);
+  if (gone?.kind === 'upgrade') s.banned.push(gone.id);
+  s.bans += 1;
+  const card = rollCard(rngFrom(s.rng), s, offer);
+  if (card) offer.splice(index, 0, card);
   return s;
 }
 

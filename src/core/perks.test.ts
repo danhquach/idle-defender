@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { xpForLevel } from './stats.ts';
 import { buildPost, buildTurret, newBase, type Base } from './base.ts';
-import { chooseCard, rerollLock, rerollOffer, rollOffer } from './cards.ts';
+import { chooseCard, rerollLock, rerollOffer, rerollsLeft, rollOffer } from './cards.ts';
 import {
   ENEMIES,
   PERK,
@@ -325,17 +325,17 @@ describe('Second Look', () => {
     return s;
   }
 
-  it('rerolls the open offer once per wave, seeded', () => {
+  it('rerolls the open offer, seeded, from the 3 a horde plus Second Look’s', () => {
     const s = offered(['second-look']);
     expect(rerollLock(s)).toBeNull();
+    expect(rerollsLeft(s)).toBe(4);
     const a = rerollOffer(s);
     expect(rerollOffer(s)).toEqual(a); // same seed, same cards
-    expect(a.rerolledWave).toBe(1);
+    expect(a.rerolls).toBe(1);
     expect(a.offer).toHaveLength(3);
-    expect(s.rerolledWave).toBe(0); // pure
-    expect(rerollLock(a)).toBe('Already rerolled this wave');
-    expect(() => rerollOffer(a)).toThrow(RangeError);
-    expect(rerollLock({ ...a, wave: 2 })).toBeNull();
+    expect(s.rerolls).toBe(0); // pure
+    expect(rerollsLeft(a)).toBe(3);
+    expect(rerollLock(rerollOffer(rerollOffer(rerollOffer(a))))).toBe('No rerolls left');
   });
 
   it('a different seed can deal different cards', () => {
@@ -347,8 +347,9 @@ describe('Second Look', () => {
     expect(offers.size).toBeGreaterThan(1);
   });
 
-  it('needs the perk and an open offer', () => {
-    expect(rerollLock(offered([]))).toBe('Needs Second Look');
+  it('needs an open offer; without the perk there are still 3', () => {
+    expect(rerollsLeft(offered([]))).toBe(3);
+    expect(rerollLock(offered([]))).toBeNull();
     expect(rerollLock({ ...offered(['second-look']), offer: null })).toBe('No offer to reroll');
   });
 });

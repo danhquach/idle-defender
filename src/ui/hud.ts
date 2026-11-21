@@ -33,9 +33,10 @@ import {
 } from '../core/camp.ts';
 import {
   AMMO_CARDS,
+  bansLeft,
   effectAt,
   pitch,
-  rerollLock,
+  rerollsLeft,
   synergyOf,
   UPGRADE_IDS,
   UPGRADES,
@@ -86,7 +87,6 @@ import {
   baseAfter,
   bossHorde,
   cardLevel,
-  perkOn,
   repairsLeft,
   windingUp,
   type Enemy,
@@ -535,6 +535,15 @@ export const fightKeyName = (e: Pick<KeyboardEvent, 'code' | 'key'>): string =>
 
 /** The fight's skill keys in the horde-only build (ID-100), left to right: clear of A S D, Space and the card keys. */
 export const SKILL_KEYS: readonly string[] = ['Q', 'W'];
+
+/** The card pick's keys (ID-210), beside 1 2 3: Skip takes S from the 3× speed while a pick is open. */
+export const OFFER_KEYS = { reroll: 'R', skip: 'S', ban: 'B' } as const;
+
+/**
+ * How long a new pick ignores R S B, in ms (ID-210): S is the 3× speed key, so a player
+ * tapping it for speed as the pick opens must not skip a card they have not seen.
+ */
+export const OFFER_KEY_GUARD_MS = 300;
 
 /** The Airstrike's Auto toggle key (ID-140), in both builds: clear of the skill, speed and card keys. */
 export const AUTO_KEY = 'E';
@@ -2014,6 +2023,9 @@ export function fallingText(s: HordeState): string {
   return `The camp is falling — ${Math.ceil(FALL_WARNING - s.fallingFor)} s`;
 }
 
+/** What the card pick's buttons ask for (ID-210); the app checks each against the live fight. */
+export type OfferAct = { act: 'reroll' } | { act: 'skip' } | { act: 'ban'; index: number };
+
 export function createHud(
   root: HTMLElement,
   onChoose: (index: number) => void,
@@ -2022,7 +2034,7 @@ export function createHud(
   onSkip: () => void,
   onBuy: (item: ShopItem) => void,
   onArm: (skill: SkillId) => void,
-  onReroll: () => void,
+  onOffer: (act: OfferAct) => void,
   onCampPick: (choice: CampChoice) => void,
   onSpeed: (speed: Speed) => void,
   /** The horde-only build's HUD (ID-066): the minimal top bar with the XP bar, no shop row. */
@@ -2598,8 +2610,15 @@ export function createHud(
   root.append(hud);
 
   let shownOffer: Card[] | null = null;
-  // Second Look's reroll can deal the same three cards; its button still has to grey out.
-  let shownRerolled = '';
+  // The state the offer is drawn from: its counts decide what the buttons and keys may do.
+  let shownState: HordeState | null = null;
+  // A reroll can deal the same three cards; its button still has to grey out, so the
+  // counts are compared too (ID-210).
+  let shownCounts = '';
+  // Ban's first step (ID-210): the next card tapped, or 1 2 3, is banned instead of taken.
+  let banning = false;
+  // When the pick opened (performance.now), for the key guard.
+  let offerOpenedAt = 0;
   // While a pick's confirm effect plays (ID-103): the panel takes no input and closes after.
   let picking: ReturnType<typeof setTimeout> | undefined;
   function endPick(): void {
@@ -2612,6 +2631,13 @@ export function createHud(
   // flashes and the others fade before the panel closes; without, it closes at once.
   function choose(index: number): void {
     if (cards.hidden || picking !== undefined || !shownOffer?.[index]) return;
+    if (banning) {
+      // A survivor can't be banned: the card stays, greyed, until Ban is cancelled.
+      if (shownOffer[index]!.kind === 'recruit') return;
+      banning = false;
+      onOffer({ act: 'ban', index });
+      return;
+    }
     shownOffer = null;
     if (reducedMotion()) {
       cards.hidden = true;
@@ -2635,11 +2661,55 @@ export function createHud(
       throw e;
     }
   }
+  /**
+   * A button or key of the card pick (ID-210): nothing while a pick's effect plays, with no
+   * offer, or when its count is 0. Ban only switches ban mode; the card then asks for it.
+   */
+  function offerAct(act: 'reroll' | 'skip' | 'ban'): void {
+    const state = shownState;
+    if (cards.hidden || picking !== undefined || !shownOffer || !state) return;
+    if (act === 'ban') {
+      if (!canBan(shownOffer, state)) return;
+      banning = !banning;
+      showOffer(shownOffer, state, 'ban');
+      return;
+    }
+    if (act === 'reroll' && rerollsLeft(state) === 0) return;
+    banning = false;
+    if (act === 'skip') {
+      // Closed at once, as a pick is: a second click or key in the same frame must not
+      // skip the next offer (banked XP) before it is drawn.
+      shownOffer = null;
+      cards.hidden = true;
+      cards.replaceChildren();
+    }
+    onOffer({ act });
+  }
   document.addEventListener('keydown', (e) => {
     // Not while the field is inert behind the open menu.
     if (e.repeat || root.closest('[inert]')) return;
     const index = ['1', '2', '3'].indexOf(e.key);
     if (index >= 0) choose(index);
+    // Reroll, Skip and Ban by their place on the keyboard (ID-210), as the fight's keys are.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // A typing field keeps its letters, as the fight's keys leave them (app.ts).
+    const t = e.target;
+    if (
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLTextAreaElement ||
+      t instanceof HTMLSelectElement
+    ) {
+      return;
+    }
+    const name = fightKeyName(e);
+    const act = (Object.keys(OFFER_KEYS) as (keyof typeof OFFER_KEYS)[]).find(
+      (k) => OFFER_KEYS[k] === name,
+    );
+    if (!act || cards.hidden || !shownOffer) return;
+    // The pick has the key: S is its Skip, not the fight's 3× speed (app.ts reads this).
+    e.preventDefault();
+    if (performance.now() - offerOpenedAt < OFFER_KEY_GUARD_MS) return;
+    offerAct(act);
   });
 
   // Like the cards: hide at once so a second click can't answer the same offer twice.
@@ -3099,8 +3169,12 @@ export function createHud(
     campPicker.replaceChildren(el('h3', 'hud-pick-heading', `Camp level up: pick one${more}`), row);
   }
 
-  function showOffer(offer: Card[], state: HordeState): void {
-    const heading = el('h2', 'hud-cards-title', 'Level up: pick one');
+  function showOffer(offer: Card[], state: HordeState, refocus?: 'ban'): void {
+    // A redraw under the keyboard keeps it on the button it used (ID-210).
+    const focused = refocus ?? (cards.contains(document.activeElement) ? focusName() : undefined);
+    shownState = state;
+    const heading = el('h2', 'hud-cards-title', banning ? 'Ban which card?' : 'Level up: pick one');
+    cards.classList.toggle('hud-cards-banning', banning);
     const row = el('div', 'hud-card-row');
     offer.forEach((card, i) => {
       const { title, body, kind, synergy, pitch, spoken } = cardText(card, state);
@@ -3133,22 +3207,61 @@ export function createHud(
       // the card's own name and tag already say what you'd hold after, so it names only what goes.
       if (pitch?.replace) foot.append(el('span', 'hud-card-warning', pitch.replace.warning));
       if (foot.childElementCount > 0) button.append(foot);
+      // A survivor can't be banned: in ban mode that card greys out (ID-210).
+      if (banning && card.kind === 'recruit') button.disabled = true;
       button.addEventListener('click', () => choose(i));
       row.append(button);
     });
-    cards.replaceChildren(heading, row);
-    if (perkOn(state, 'second-look')) {
-      const lock = rerollLock(state);
-      const reroll = el('button', 'hud-button hud-reroll', 'Reroll (Second Look)');
-      reroll.type = 'button';
-      reroll.disabled = lock !== null;
-      reroll.title = lock ?? '';
-      reroll.addEventListener('click', () => {
-        if (!cards.hidden && picking === undefined && rerollLock(state) === null) onReroll();
-      });
-      cards.append(reroll);
+    // Reroll, Skip and Ban under the cards (ID-210), each with its key and, where it
+    // counts, what is left; a spent one is greyed.
+    const actions = el('div', 'hud-offer-actions');
+    actions.setAttribute('role', 'group');
+    actions.setAttribute('aria-label', 'Card pick actions');
+    const act = (
+      kind: 'reroll' | 'skip' | 'ban',
+      label: string,
+      title: string,
+      off: boolean,
+    ): HTMLButtonElement => {
+      const b = el('button', `hud-button hud-offer-act hud-offer-${kind}`, label);
+      b.type = 'button';
+      b.dataset.act = kind;
+      b.disabled = off;
+      b.title = `${title} (${OFFER_KEYS[kind]})`;
+      b.setAttribute('aria-keyshortcuts', OFFER_KEYS[kind]);
+      // A dim key hint as the fight's buttons have; page.css hides it on a touch screen.
+      const key = el('kbd', 'menu-key hud-offer-key', OFFER_KEYS[kind]);
+      key.setAttribute('aria-hidden', 'true');
+      b.append(key);
+      b.addEventListener('click', () => offerAct(kind));
+      return b;
+    };
+    const left = rerollsLeft(state);
+    const ban = act(
+      'ban',
+      `Ban · ${bansLeft(state)}`,
+      'Ban a card for this horde',
+      !canBan(offer, state),
+    );
+    ban.setAttribute('aria-pressed', String(banning));
+    actions.append(
+      act('reroll', `Reroll · ${left}`, 'Replace all three cards', left === 0),
+      act('skip', 'Skip · +1 reroll', 'Take no card, get +1 reroll', false),
+      ban,
+    );
+    // A pick the pool ran dry on shows why there are no cards (ID-210).
+    const empty = offer.length === 0 ? [el('p', 'hud-offer-empty', 'No cards left to offer')] : [];
+    cards.replaceChildren(heading, row, ...empty, actions);
+    if (focused) {
+      cards.querySelector<HTMLElement>(`[data-act="${focused}"]`)?.focus({ preventScroll: true });
     }
   }
+  /** Whether Ban can start: one is left and the offer has a card that is not a survivor. */
+  const canBan = (offer: Card[], state: HordeState): boolean =>
+    bansLeft(state) > 0 && offer.some((c) => c.kind === 'upgrade');
+  /** The pick button the keyboard is on, by its action, or undefined when it is on a card. */
+  const focusName = (): string | undefined =>
+    document.activeElement instanceof HTMLElement ? document.activeElement.dataset.act : undefined;
 
   return {
     show(visible) {
@@ -3377,13 +3490,16 @@ export function createHud(
       // (ID-196): its cards would change nothing, so it never shows, and the result is
       // never drawn over an open pick.
       const offer = state.outcome === 'fighting' ? state.offer : null;
+      // Ban mode never outlives its pick.
+      if (offer === null || shownOffer === null) banning = false;
+      if (offer && shownOffer === null) offerOpenedAt = performance.now();
       // The sim clones its state each tick, so compare the offer by content.
       if (
         JSON.stringify(offer) !== JSON.stringify(shownOffer) ||
-        `${state.rerolledWave}:${state.rerolls}` !== shownRerolled
+        `${state.rerolls}:${state.skips}:${state.bans}` !== shownCounts
       ) {
         shownOffer = offer;
-        shownRerolled = `${state.rerolledWave}:${state.rerolls}`;
+        shownCounts = `${state.rerolls}:${state.skips}:${state.bans}`;
         // A new offer cuts a pick's confirm effect short; a closing one waits for it.
         if (offer) {
           endPick();
