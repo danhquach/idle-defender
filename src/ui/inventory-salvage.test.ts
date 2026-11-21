@@ -326,3 +326,76 @@ describe('the label fits the dock', () => {
     expect(document.querySelector('.inv-salvage-button')).toBeNull();
   });
 });
+
+describe('the stash keeps its place after a salvage (ID-214)', () => {
+  const three = () =>
+    camp([gun('h1', { rarity: 'military' }), gun('h2'), gun('h3', { rarity: 'rusty' })], 100);
+
+  /** The grid scrolled to `at`; jsdom lays nothing out, so the value is kept by hand. */
+  function scrolled(scrim: HTMLElement, at: number) {
+    const body = scrim.querySelector<HTMLElement>('.inv-body')!;
+    let top = at;
+    Object.defineProperty(body, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => (top = v),
+    });
+    return () => top;
+  }
+
+  const shown = (g: GameState) => inventoryView(g, null, false).shown.map((x) => x.key);
+
+  it('keeps the scroll and selects the gun that moved into the salvaged gun’s place', async () => {
+    const m = mount(three());
+    expect(shown(m.game())).toEqual(['stash:h1', 'stash:h2', 'stash:h3']);
+    const top = scrolled(m.scrim, 300);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    let last: unknown;
+    try {
+      m.slot('stash:h2').click();
+      m.button().click();
+      await m.settle();
+      last = focus.mock.calls.at(-1)?.[0];
+    } finally {
+      focus.mockRestore();
+    }
+    expect(m.slot('stash:h2')).toBeNull();
+    expect(top()).toBe(300);
+    expect(m.slot('stash:h3').getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(m.slot('stash:h3'));
+    // Focus comes back without scrolling the list.
+    expect(last).toEqual({ preventScroll: true });
+  });
+
+  it('the last gun salvaged hands the selection to the new last gun', async () => {
+    const m = mount(three());
+    const top = scrolled(m.scrim, 500);
+    m.slot('stash:h3').click();
+    m.button().click();
+    await m.settle();
+    expect(top()).toBe(500);
+    expect(m.slot('stash:h2').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('holds with a rarity filter on', async () => {
+    const m = mount(camp([gun('c1'), gun('m1', { rarity: 'military' }), gun('c2'), gun('c3')]));
+    const filter = m.scrim.querySelector<HTMLSelectElement>('select[data-pick="rarity"]')!;
+    filter.value = 'common';
+    filter.dispatchEvent(new Event('change', { bubbles: true }));
+    const stash = () =>
+      [...m.scrim.querySelectorAll<HTMLElement>('.inv-slot[data-key^="stash:"]')].map(
+        (b) => b.dataset.key,
+      );
+    expect(stash()).toEqual(['stash:c1', 'stash:c2', 'stash:c3']);
+    const top = scrolled(m.scrim, 200);
+    m.slot('stash:c2').click();
+    m.button().click();
+    await m.settle();
+    expect(top()).toBe(200);
+    // The filter still hides the Military gun.
+    expect(m.slot('stash:m1')).toBeNull();
+    // The gun now where c2 was is selected, inside the filter.
+    expect(stash()).toEqual(['stash:c1', 'stash:c3']);
+    expect(m.slot('stash:c3').getAttribute('aria-pressed')).toBe('true');
+  });
+});
