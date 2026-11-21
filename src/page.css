@@ -3688,10 +3688,19 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 /* One cell per survivor, always: a survivor's button keeps its spot from gun to gun. */
 .inv-equip {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
   grid-auto-rows: 32px;
   gap: var(--space-6);
+}
+
+/* Unequip (ID-213): over the whole first row, so the word fits at every width; the blank cells
+   under it keep the dock's height. */
+.inv-equip .inv-unequip {
+  position: absolute;
+  grid-area: 1 / 1 / 2 / -1;
+  inset: 0;
 }
 
 .inv-equip .menu-action {
@@ -4330,9 +4339,13 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     grid-area: 3 / 1 / 4 / 3;
   }
 
-  /* The full width holds a squad of 6 on one row, leaving the gun's lines more room. */
+  /* The full width holds a squad of 6 on one row, leaving the gun's lines more room; never more
+     than 6 columns, so a wide row doesn't squeeze each name into 48 px (ID-213). */
   .inv-equip {
-    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(max(48px, calc((100% - 5 * var(--space-6)) / 6)), 1fr)
+    );
   }
 }
 
