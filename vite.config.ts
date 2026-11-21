@@ -20,6 +20,7 @@ export function buildCsp(): string {
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
+    "manifest-src 'self'",
   ].join('; ');
 }
 

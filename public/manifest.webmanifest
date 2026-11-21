@@ -1,0 +1,12 @@
+{
+  "name": "The Long Hold",
+  "short_name": "Long Hold",
+  "description": "A zombie-survival base-defence game for the browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#15171a",
+  "theme_color": "#15171a",
+  "icons": [{ "src": "favicon-192.png", "sizes": "192x192", "type": "image/png" }]
+}

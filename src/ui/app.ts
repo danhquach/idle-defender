@@ -149,6 +149,7 @@ import {
 } from './projection.ts';
 import { drawScene, forgetBackdrop, type Aim, type CampView, type Scene } from './render.ts';
 import { fightSpeed } from './fastforward.ts';
+import { createTurnPrompt, goLandscape } from './landscape.ts';
 import { TITLE_PICTURE, type Art } from './sprites.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
@@ -873,6 +874,8 @@ export function start(root: HTMLElement, art: Art): void {
     onCardSeen: () => writeHowToSeen(storage),
     backdrop: art[TITLE_PICTURE],
     onDone: () => {
+      // The tap to play: a phone goes full screen and sideways where the browser allows.
+      goLandscape(window);
       if (!startedFresh) loadNotes();
     },
   });
@@ -1056,7 +1059,11 @@ export function start(root: HTMLElement, art: Art): void {
   /** Debug mode's panel (ID-197): only with the URL flag; without it nothing here exists. */
   const debugPanel = debugOn ? createDebugPanel(root, debugActions()) : null;
 
-  // A hidden tab, the open menu or Space doesn't advance the fight; it resumes from where it was.
+  /** A phone held upright is asked to turn sideways (ID-205); the fight waits. */
+  const turnPrompt = createTurnPrompt(window);
+
+  // A hidden tab, the open menu, Space or an upright phone doesn't advance the fight; it
+  // resumes from where it was.
   let last: number | null = null;
   document.addEventListener('visibilitychange', () => {
     last = null;
@@ -1064,7 +1071,7 @@ export function start(root: HTMLElement, art: Art): void {
   });
 
   function frame(now: number): void {
-    const paused = document.hidden || dialogOpen() || held;
+    const paused = document.hidden || dialogOpen() || held || turnPrompt.showing();
     const dt = frameStep(last, now, paused);
     last = paused ? null : now;
     // The empty field runs fast (ID-164): the walk-in and the gaps between waves.

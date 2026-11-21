@@ -322,9 +322,19 @@ describe('the horde panel has one size and one layout (ID-196)', () => {
     );
   });
 
-  it('a very short window scrolls the whole panel, still at its one size', () => {
+  it('a phone on its side: the panel runs under the top buttons to the bottom, Start always on screen (ID-205)', () => {
+    const short = /@media \(max-height: 540px\) \{\s*\.hud-result\.hud-debrief \{([^}]*)\}/.exec(
+      rules,
+    );
+    expect(short, 'no short-window panel rule in page.css').not.toBeNull();
+    expect(short![1]).toMatch(/top: 38px;/);
+    expect(short![1]).toMatch(/bottom: var\(--space-6\);/);
+    expect(short![1]).toMatch(/height: auto;/);
+    // The panel itself never scrolls: only the body between the header and the footer.
+    expect(short![1]).not.toMatch(/overflow/);
+    // The skills and the start row share the footer's row where the width allows.
     expect(rules).toMatch(
-      /@media \(max-height: \d+px\) \{\s*\.hud-result\.hud-debrief \{\s*overflow-y: auto;/,
+      /@media \(max-height: 540px\) \{[\s\S]*?\.hud-debrief \.hud-result-foot \{[^}]*flex-flow: row wrap;/,
     );
   });
 
@@ -448,7 +458,28 @@ describe('every offer card one size (ID-195)', () => {
     const width = Number(/\n\s*width: (\d+)px;/.exec(block('.hud-card.hud-card-has-art'))![1]);
     // Three cards, two row gaps (12px) and the panel's side padding (24px each).
     expect(3 * width + 2 * 12 + 2 * 24).toBeLessThanOrEqual(719);
-    expect(rules).toMatch(/@media \(max-width: 719px\) \{\s*\.hud-cards \{/);
+    // A phone on its side is never stacked: it has the width, not the height (ID-205).
+    expect(rules).toMatch(
+      /@media \(max-width: 719px\) and \(min-height: 541px\) \{\s*\.hud-cards \{/,
+    );
+  });
+
+  it('on its side a phone gets three shorter cards in a row, inside 667 x 360 (ID-205)', () => {
+    // The last short-window block: the phone-on-its-side rules at the end of page.css.
+    const at = rules.lastIndexOf('@media (max-height: 540px) {');
+    const card = block('.hud-card.hud-card-has-art', at);
+    const width = Number(/width: (\d+)px;/.exec(card)![1]);
+    const height = Number(/height: (\d+)px;/.exec(card)![1]);
+    // Three cards, two 8 px gaps, 12 px of panel padding each side, on an iPhone SE.
+    expect(3 * width + 2 * 8 + 2 * 12).toBeLessThanOrEqual(667 - 2 * 4);
+    // Under the top buttons (34 px), the heading (about 28 px) and the panel's padding.
+    expect(34 + 6 + 28 + height + 8).toBeLessThanOrEqual(360);
+    // Measured against Oil Bomb with both fires held (the longest card): it fits 276 px.
+    expect(height).toBeGreaterThanOrEqual(276);
+    // Second Look's Reroll rides the heading's row, so it adds no height under the cards.
+    expect(block('.hud-cards > .hud-reroll', at)).toMatch(/position: absolute;/);
+    // Shorter still (iPhone Safari's bars), the panel scrolls rather than cut a card.
+    expect(block('.hud-cards', at)).toMatch(/overflow-y: auto;/);
   });
 });
 
