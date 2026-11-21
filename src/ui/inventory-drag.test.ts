@@ -740,6 +740,28 @@ describe('moving guns without dragging (ID-095)', () => {
     expect(status().textContent).toMatch(/Common Carbine is back in the stash$/);
   });
 
+  it('Unequip and Equip keep the stash where it was scrolled (ID-214)', () => {
+    const { slot, details, now, dialog } = setup(
+      camp(2, [gun('h1', 'smg', 'common')], [gun('x', 'rifle', 'common')]),
+    );
+    const body = dialog.querySelector<HTMLElement>('.inv-body')!;
+    // jsdom lays nothing out: the scroll is kept by hand.
+    let top = 180;
+    Object.defineProperty(body, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => (top = v),
+    });
+    slot('squad:recruit-1').click();
+    details().querySelector<HTMLButtonElement>('.inv-unequip')!.click();
+    expect(now().roster[0]!.loadout.primary).toBe('pistol');
+    expect(top).toBe(180);
+    slot('stash:h1').click();
+    details().querySelector<HTMLButtonElement>('.inv-equip-on')!.click();
+    expect(now().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1' });
+    expect(top).toBe(180);
+  });
+
   it('Unequip into a full stash is refused with "Stash full"', () => {
     const { slot, details, now, status } = setup(camp(1, full(), [gun('x', 'rifle', 'common')]));
     const before = now();

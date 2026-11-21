@@ -1593,9 +1593,8 @@ export function createInventory(
     }
     draw(game, canCombine, horde, canBuy);
     say(equipMessage(before, d));
-    const b = slotOf(selected);
-    b?.focus();
-    b?.scrollIntoView?.({ block: 'nearest' });
+    // The list stays where it was scrolled (ID-214), even for a gun put back further down.
+    slotOf(selected)?.focus({ preventScroll: true });
   }
 
   /** Selects the slot `key`; `focus` moves the keyboard there too. */
@@ -1680,7 +1679,8 @@ export function createInventory(
     const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
     draw(game, canCombine, horde, canBuy);
     say(r.ok ? r.text : r.reason, !r.ok);
-    slotOf(selected)?.focus();
+    // On the gun that moved into its place, without scrolling the list (ID-214).
+    slotOf(selected)?.focus({ preventScroll: true });
   }
 
   let upgradeLockUntil = 0;
@@ -1702,7 +1702,7 @@ export function createInventory(
     (
       details.querySelector<HTMLButtonElement>('.inv-upgrade-button:not(:disabled)') ??
       slotOf(selected)
-    )?.focus();
+    )?.focus({ preventScroll: true });
   }
 
   /** Puts up the Combine confirm for `uses`. */
@@ -1742,6 +1742,9 @@ export function createInventory(
     const focusedPick = body.contains(pickFocus ?? null)
       ? (pickFocus as HTMLElement).dataset.pick
       : undefined;
+    // Where the selected gun stood in the stash as last drawn, so a gun that left (ID-214)
+    // hands the selection to the one that moves into its place.
+    const was = selected === null ? -1 : (view?.shown.findIndex((x) => x.key === selected) ?? -1);
     view = inventoryView(game, horde, canBuy, pick);
     // On a touch screen a plain drag scrolls: the note says to hold first.
     const touch = !!doc.defaultView?.matchMedia?.('(pointer: coarse)').matches;
@@ -1752,8 +1755,13 @@ export function createInventory(
           : DRAG_NOTE
         : GUNS_WAIT
       : INVENTORY_NOTE;
+    // The list keeps its scroll through the redraw (ID-214): a salvage, combine, upgrade or
+    // equip never sends it back to the top.
+    const top = body.scrollTop;
     body.replaceChildren(...inventoryGrid(view, canCombine, note, !!opts.onEquip));
+    body.scrollTop = top;
     const keys = items().map((x) => x.key);
+    const left = selected !== null && !game.armoury.some((w) => `stash:${w.uid}` === selected);
     if (selected === null || !keys.includes(selected)) {
       // The selected gun is gone (filtered out or left): its confirm and lines go with it.
       if (selected !== null) {
@@ -1762,15 +1770,20 @@ export function createInventory(
         made = null;
         say('');
       }
-      // The strongest stash gun first; with an empty stash, the first survivor's gun.
-      selected = view.shown[0]?.key ?? keys[0] ?? null;
+      // A stash gun that left (salvaged, combined away): the gun now in its place, so the
+      // list stays put. Else the strongest stash gun; with an empty stash, the first
+      // survivor's gun.
+      const next = left && was >= 0 ? view.shown[Math.min(was, view.shown.length - 1)] : undefined;
+      selected = next?.key ?? view.shown[0]?.key ?? keys[0] ?? null;
     }
     if (hovered !== null && !keys.includes(hovered)) hovered = null;
     markSelected();
     drawDetails();
     if (focusedPick) {
       body.querySelector<HTMLElement>(`select[data-pick="${focusedPick}"]`)?.focus();
-    } else if (hadFocus && !pane.contains(doc.activeElement)) slotOf(selected)?.focus();
+    } else if (hadFocus && !pane.contains(doc.activeElement)) {
+      slotOf(selected)?.focus({ preventScroll: true });
+    }
   }
 
   function confirm(): void {
@@ -1791,7 +1804,9 @@ export function createInventory(
     const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
     draw(game, canCombine, horde, canBuy);
     // Focus on the line saying what it made: a screen reader reads it.
-    (details.querySelector<HTMLElement>('.inv-combine-result') ?? slotOf(selected))?.focus();
+    (details.querySelector<HTMLElement>('.inv-combine-result') ?? slotOf(selected))?.focus({
+      preventScroll: true,
+    });
   }
 
   function cancel(): void {
@@ -1799,7 +1814,9 @@ export function createInventory(
     confirming = null;
     drawDetails();
     // Back to the set's own Combine button.
-    (details.querySelector<HTMLElement>('.inv-combine-button') ?? slotOf(selected))?.focus();
+    (details.querySelector<HTMLElement>('.inv-combine-button') ?? slotOf(selected))?.focus({
+      preventScroll: true,
+    });
   }
 
   win.add({

@@ -166,6 +166,22 @@ describe('the Upgrade button in the details', () => {
     expect(m.scrim.querySelector('.inv-details')?.textContent).toContain('Common SMG +1');
   });
 
+  it('keeps the stash where it was scrolled (ID-214)', () => {
+    const m = mount(camp([gun('h1', { level: 3 }), gun('h2', { level: 3 })], 200));
+    const body = m.scrim.querySelector<HTMLElement>('.inv-body')!;
+    // jsdom lays nothing out: the scroll is kept by hand.
+    let top = 240;
+    Object.defineProperty(body, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => (top = v),
+    });
+    m.slot('stash:h2').click();
+    m.button().click();
+    expect(m.game().armoury.find((w) => w.uid === 'h2')).toMatchObject({ step: 1 });
+    expect(top).toBe(240);
+  });
+
   it('upgrades a held gun from the squad row', () => {
     const m = mount(camp([], 100, gun('h3')));
     const key = `squad:${recruit(1).id}`;
