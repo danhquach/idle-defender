@@ -5,6 +5,7 @@ import { inflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildingsOf,
+  ELITE,
   ENEMIES,
   LOCATION_IDS,
   PLACE_IDS,
@@ -40,6 +41,8 @@ import {
   RESOURCE_IDS,
   SHOP_ICON,
   SCORCH_ART,
+  PLATED_ART,
+  PLATE_DEBRIS_ART,
   BOMB_ART,
   SKILL_ICON,
   TIER_ART,
@@ -62,6 +65,7 @@ const manifest = JSON.parse(readFileSync(new URL('art-src/manifest.json', root),
     mutant?: true;
     pose?: string;
     frames?: string;
+    like?: string;
     overlay?: Overlay | Overlay[];
     draw?: unknown;
     outside?: unknown;
@@ -142,6 +146,10 @@ describe('art coverage', () => {
     const states: TurretState[] = ['lit', 'dark', 'jammed', 'offline'];
     const used = [
       ...Object.values(ENEMY_ART).flatMap((e) => [...e.walk, e.attack]),
+      ...Object.values(PLATED_ART).flatMap((k) =>
+        [k.plated, k.broken].flatMap((e) => [...e.walk, e.attack]),
+      ),
+      PLATE_DEBRIS_ART,
       ...Object.keys(PROFESSIONS).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
       ...GUNNER_LOOKS.flatMap((look) => Object.values(look).flatMap((g) => [g.idle, g.aim])),
       ...THROW_LOOKS.flatMap((t) => [t.wind, t.release]),
@@ -204,6 +212,31 @@ describe('art coverage', () => {
       const frames = [...ENEMY_ART[k].walk, ENEMY_ART[k].attack];
       expect(frames, k).toEqual([`${k}-walk-a`, `${k}-walk-b`, `${k}-walk-c`, `${k}-attack`]);
       expect(new Set(frames).size).toBe(4);
+    }
+  });
+
+  it('gives every kind that can roll Armour Plates a plated and a broken look (ID-211)', () => {
+    // The kinds that can roll it: the boss Horror and the elites that draw from ELITE.skills.
+    const plated = new Set<string>(['horror']);
+    if (ELITE.skills.includes('plates')) for (const k of ELITE.kinds) plated.add(k);
+    expect(new Set(Object.keys(PLATED_ART))).toEqual(plated);
+    for (const [kind, looks] of Object.entries(PLATED_ART)) {
+      const plain = ENEMY_ART[kind as keyof typeof ENEMY_ART];
+      for (const look of ['plated', 'broken'] as const) {
+        const set = [...looks[look].walk, looks[look].attack];
+        expect(set, kind).toEqual(
+          [...plain.walk, plain.attack].map((id) => id.replace(kind, `${kind}-${look}`)),
+        );
+        const entries = set.map((id) => manifest.assets.find((a) => a.id === id)!);
+        // Repaints of the plain frames, in one set that stands as big as the plain one.
+        for (const [i, a] of entries.entries()) {
+          expect(a.ref, a.id).toBe([...plain.walk, plain.attack][i]);
+          expect(a.frames, a.id).toBe(`${kind}-${look}`);
+          expect(a.like, a.id).toBe(kind);
+          expect(a.mutant, a.id).toBe(true);
+        }
+        expect(new Set(set.map((id) => `${pixels(id).w}x${pixels(id).h}`)).size, kind).toBe(1);
+      }
     }
   });
 

@@ -11,6 +11,7 @@ import {
   enemyFrame,
   enemyPose,
   phaseOf,
+  PLATE_BURST,
   STANDING,
   STILL,
   type Acts,
@@ -453,6 +454,74 @@ describe('Animator', () => {
     expect(Math.abs(five - one)).toBeLessThanOrEqual(1);
     // At most 5 a second: under the 3 Hz–30 Hz strobe band's busy end, as at 1×.
     expect(five / 2).toBeLessThanOrEqual(1 / ANIM.flinch.time + 0.5);
+  });
+
+  it('notes where and when a standing enemy loses its Armour Plates, then lets it go (ID-211)', () => {
+    const a = new Animator();
+    const boss = (platesOff: boolean): Enemy =>
+      enemy({
+        kind: 'horror',
+        x: 640,
+        y: 300,
+        horror: {
+          boss: 0,
+          skills: ['plates', 'roar'],
+          next: {},
+          fired: {},
+          chargeUntil: 0,
+          charged: false,
+          hitAt: 0,
+          seenHp: 20,
+          broods: 0,
+          platesOff,
+        },
+      });
+    a.observe(frame(2, [boss(false)]));
+    a.observe(frame(2.1, [boss(false)]));
+    expect(a.cracks).toEqual([]);
+    a.observe(frame(2.2, [boss(true)]));
+    expect(a.cracks).toEqual([{ x: 640, y: 300, at: 2.2, r: ENEMIES.horror.radius }]);
+    // Broken for good: no second burst.
+    a.observe(frame(2.3, [boss(true)]));
+    expect(a.cracks).toHaveLength(1);
+    a.observe(frame(2.2 + PLATE_BURST.time - 0.01, [boss(true)]));
+    expect(a.cracks).toHaveLength(1);
+    a.observe(frame(2.2 + PLATE_BURST.time, [boss(true)]));
+    expect(a.cracks).toEqual([]);
+  });
+
+  it('bursts no plates for an enemy that never had them, died plated or came back in a new fight (ID-211)', () => {
+    const a = new Animator();
+    const plain = enemy();
+    a.observe(frame(1, [plain]));
+    a.observe(frame(1.1, [plain]));
+    // A plated elite killed outright: it falls in its plates, with no burst.
+    const elite = enemy({
+      id: 2,
+      kind: 'swollen',
+      elite: true,
+      horror: {
+        boss: 0,
+        skills: ['plates'],
+        next: {},
+        fired: {},
+        chargeUntil: 0,
+        charged: false,
+        hitAt: 0,
+        seenHp: 20,
+        broods: 0,
+        platesOff: false,
+      },
+    });
+    a.observe(frame(1.2, [plain, elite]));
+    a.observe(frame(1.3, [plain]));
+    expect(a.cracks).toEqual([]);
+    // A fight whose time runs back is a new one: what broke in the old one is gone.
+    a.observe(frame(1.4, [plain, elite]));
+    a.observe(frame(1.5, [{ ...elite, horror: { ...elite.horror!, platesOff: true } }]));
+    expect(a.cracks).toHaveLength(1);
+    a.observe(frame(0.1, [elite]));
+    expect(a.cracks).toEqual([]);
   });
 
   it('keeps a dead enemy falling where it stood, then lets it go', () => {

@@ -51,6 +51,32 @@ export const ART_IDS = [
   'horror-walk-b',
   'horror-walk-c',
   'horror-attack',
+  // Armour Plates (ID-211): each plated kind's look while they hold, and once they break.
+  'horror-plated-walk-a',
+  'horror-plated-walk-b',
+  'horror-plated-walk-c',
+  'horror-plated-attack',
+  'horror-broken-walk-a',
+  'horror-broken-walk-b',
+  'horror-broken-walk-c',
+  'horror-broken-attack',
+  'swollen-plated-walk-a',
+  'swollen-plated-walk-b',
+  'swollen-plated-walk-c',
+  'swollen-plated-attack',
+  'swollen-broken-walk-a',
+  'swollen-broken-walk-b',
+  'swollen-broken-walk-c',
+  'swollen-broken-attack',
+  'brute-plated-walk-a',
+  'brute-plated-walk-b',
+  'brute-plated-walk-c',
+  'brute-plated-attack',
+  'brute-broken-walk-a',
+  'brute-broken-walk-b',
+  'brute-broken-walk-c',
+  'brute-broken-attack',
+  'plate-debris',
   'scorch',
   'tar-slick',
   'airstrike-bomb',
@@ -324,6 +350,50 @@ export const ENEMY_ART: Readonly<Record<EnemyKind, EnemyArt>> = {
   },
   horror: { walk: ['horror-walk-a', 'horror-walk-b', 'horror-walk-c'], attack: 'horror-attack' },
 };
+
+/**
+ * Armour Plates (ID-211): the frames of each kind that can roll it (a boss Horror, an elite
+ * Swollen or Brute) while its plates hold and once they break. The Horror and the Swollen
+ * wear tan army plates; the Brute keeps its riot gear and carries a tan steel shield, slung
+ * on its back as it strikes. Each set shares its plain kind's scale and feet.
+ */
+export const PLATED_ART: Readonly<
+  Partial<Record<EnemyKind, { readonly plated: EnemyArt; readonly broken: EnemyArt }>>
+> = {
+  horror: {
+    plated: {
+      walk: ['horror-plated-walk-a', 'horror-plated-walk-b', 'horror-plated-walk-c'],
+      attack: 'horror-plated-attack',
+    },
+    broken: {
+      walk: ['horror-broken-walk-a', 'horror-broken-walk-b', 'horror-broken-walk-c'],
+      attack: 'horror-broken-attack',
+    },
+  },
+  swollen: {
+    plated: {
+      walk: ['swollen-plated-walk-a', 'swollen-plated-walk-b', 'swollen-plated-walk-c'],
+      attack: 'swollen-plated-attack',
+    },
+    broken: {
+      walk: ['swollen-broken-walk-a', 'swollen-broken-walk-b', 'swollen-broken-walk-c'],
+      attack: 'swollen-broken-attack',
+    },
+  },
+  brute: {
+    plated: {
+      walk: ['brute-plated-walk-a', 'brute-plated-walk-b', 'brute-plated-walk-c'],
+      attack: 'brute-plated-attack',
+    },
+    broken: {
+      walk: ['brute-broken-walk-a', 'brute-broken-walk-b', 'brute-broken-walk-c'],
+      attack: 'brute-broken-attack',
+    },
+  },
+};
+
+/** The plate pieces that fall when an enemy's Armour Plates break (ID-211), lying flat. */
+export const PLATE_DEBRIS_ART: ArtId = 'plate-debris';
 
 /**
  * The char a molotov fire or a fireball leaves on the ground (ID-107), lying flat across

@@ -139,8 +139,10 @@ import {
   defenderPose,
   enemyFrame,
   enemyPose,
+  PLATE_BURST,
   STILL,
   type Animator,
+  type Crack,
   type EnemyFrame,
   type Pose,
 } from './anim.ts';
@@ -148,6 +150,8 @@ import {
   BASE_ART,
   DEFENDER_ART,
   ENEMY_ART,
+  PLATED_ART,
+  PLATE_DEBRIS_ART,
   GUNNER_ART,
   GUNNER_LOOKS,
   lookOf,
@@ -163,6 +167,7 @@ import {
   ART_PX,
   type Art,
   type ArtId,
+  type EnemyArt,
 } from './sprites.ts';
 
 /**
@@ -2513,20 +2518,30 @@ function drawShadow(
 }
 
 /**
- * An enemy's body, feet on `feet`, in `pose`: its kind's art (design §15), scaled by its
- * radius (a Shambler's is the reference).
+ * The frames `e` is drawn with (design §15): its kind's, or with Armour Plates (ID-211) its
+ * plated look while they hold and its broken one after.
+ */
+export function enemyArtOf(e: Pick<Enemy, 'kind' | 'horror'>): EnemyArt {
+  const looks = PLATED_ART[e.kind];
+  if (!looks || !e.horror?.skills.includes('plates')) return ENEMY_ART[e.kind];
+  return plated(e) ? looks.plated : looks.broken;
+}
+
+/**
+ * An enemy's body, feet on `feet`, in `pose`: `frames` (its look, `enemyArtOf`), scaled by
+ * its kind's radius (a Shambler's is the reference).
  */
 function drawEnemy(
   ctx: CanvasRenderingContext2D,
   art: Art,
   kind: EnemyKind,
+  frames: EnemyArt,
   frame: EnemyFrame,
   feet: { sx: number; sy: number },
   cam: Camera,
   pose: Readonly<Pose>,
 ): void {
   const size = ENEMIES[kind].radius / ENEMY_RADIUS;
-  const frames = ENEMY_ART[kind];
   const img = art[frame === 'attack' ? frames.attack : frames.walk[frame]];
   drawStanding(ctx, img, feet, STAND.enemy * size, cam, pose);
 }
@@ -2694,7 +2709,8 @@ function drawDeath(
   cam: Camera,
   anim: Animator,
 ): Readonly<Pose> {
-  const img = art[ENEMY_ART[e.kind].walk[1]];
+  // It dies in the look it had (ID-211): plated, or its plates broken.
+  const img = art[enemyArtOf(e).walk[1]];
   let death: Death = anim.reduced ? 'back' : deathOf(seed, e);
   const cut =
     death === 'head' ? CUTS[e.kind]?.head : death === 'limb' ? CUTS[e.kind]?.limb : undefined;
@@ -4056,9 +4072,6 @@ export const BOSS_LOOK = {
   lean: 0.14,
   swell: 0.1,
   roar: 'rgba(255, 176, 32, 0.55)',
-  plate: '#4c535a',
-  plateLight: '#b8c0c7',
-  plateEdge: '#1e2226',
   slab: '#8f897e',
   slabEdge: '#3f3a33',
   slabSize: { w: 36, h: 24 },
@@ -4147,61 +4160,22 @@ function drawRoared(ctx: CanvasRenderingContext2D, e: Enemy, cam: Camera): void 
 }
 
 /**
- * Armour plates (ID-099) until they break: riveted gunmetal shingles over its back and
- * shoulder and one on its chest. `PLATES`: each plate's centre (shares of the sprite's
- * width from its middle, of its height from the feet), size and tilt.
+ * Armour Plates breaking (ID-211), `time` in fight seconds: the pieces burst out from under
+ * the enemy over `PLATE_BURST.spread` s, growing to `size` × its radius across, and lie
+ * flat where they fell, fading over the last `fade` s. With Reduce motion (`still`) they
+ * lie at full size from the start. Null once gone (or before it broke).
  */
-const PLATES: readonly { x: number; y: number; w: number; h: number; rot: number }[] = [
-  { x: 0.0, y: 0.8, w: 0.26, h: 0.14, rot: -0.25 },
-  { x: 0.12, y: 0.76, w: 0.22, h: 0.14, rot: 0.35 },
-  { x: 0.16, y: 0.6, w: 0.13, h: 0.17, rot: 0.15 },
-  { x: -0.1, y: 0.58, w: 0.18, h: 0.15, rot: -0.1 },
-];
-function drawPlates(
-  ctx: CanvasRenderingContext2D,
-  art: Art,
-  kind: EnemyKind,
-  feet: Point,
-  pose: Readonly<Pose>,
-  cam: Camera,
-): void {
-  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
-  const img = art[ENEMY_ART[kind].walk[1]];
-  const h = ((STAND.enemy * size * img.height) / ART_PX) * cam.zoom;
-  const w = (img.width / img.height) * h;
-  ctx.save();
-  ctx.translate(feet.sx + pose.dx * cam.zoom, feet.sy - pose.lift * cam.zoom);
-  ctx.rotate(pose.rot);
-  ctx.scale(pose.sx, pose.sy);
-  ctx.globalAlpha *= pose.alpha;
-  const line = Math.max(1, 1.5 * cam.zoom);
-  for (const p of PLATES) {
-    const pw = p.w * w;
-    const ph = p.h * h;
-    ctx.save();
-    ctx.translate(p.x * w, -p.y * h);
-    ctx.rotate(p.rot);
-    const r = Math.min(pw, ph) * 0.3;
-    const metal = ctx.createLinearGradient(0, -ph / 2, 0, ph / 2);
-    metal.addColorStop(0, BOSS_LOOK.plateLight);
-    metal.addColorStop(0.35, BOSS_LOOK.plate);
-    metal.addColorStop(1, BOSS_LOOK.plateEdge);
-    ctx.fillStyle = metal;
-    ctx.strokeStyle = BOSS_LOOK.plateEdge;
-    ctx.lineWidth = line;
-    ctx.beginPath();
-    ctx.roundRect(-pw / 2, -ph / 2, pw, ph, r);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = BOSS_LOOK.plateLight;
-    for (const side of [-1, 1]) {
-      ctx.beginPath();
-      ctx.arc(side * pw * 0.32, 0, Math.max(0.8, line * 0.7), 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-  ctx.restore();
+export function crackLook(
+  time: number,
+  c: Pick<Crack, 'at' | 'r'>,
+  still: boolean,
+): { r: number; alpha: number } | null {
+  const since = time - c.at;
+  if (!(since >= 0 && since < PLATE_BURST.time)) return null;
+  const k = still ? 1 : Math.min(1, since / PLATE_BURST.spread);
+  const grow = PLATE_BURST.from + (1 - PLATE_BURST.from) * (1 - (1 - k) ** 2);
+  const alpha = Math.min(1, (PLATE_BURST.time - since) / PLATE_BURST.fade);
+  return { r: c.r * PLATE_BURST.size * grow, alpha };
 }
 
 /** A boss's slab (ID-099): a concrete block arcing to where it lands, then a dust cloud there. */
@@ -4402,6 +4376,14 @@ export function drawScene(
     }
     ctx.globalAlpha = 1;
   }
+  // Broken Armour Plates' pieces lie flat where they fell (ID-211), under every sprite.
+  for (const c of anim?.cracks ?? []) {
+    const look = crackLook(scene.time, c, anim?.reduced ?? true);
+    if (!look) continue;
+    ctx.globalAlpha = look.alpha;
+    groundArt(ctx, art[PLATE_DEBRIS_ART], c.x, c.y, look.r, cam);
+    ctx.globalAlpha = 1;
+  }
   // Explosions' scorch, dust and shockwave lie on the ground (ID-107).
   const booms = explosions(scene, cam, anim?.reduced ?? false);
   drawBlastGround(ctx, art, booms, cam);
@@ -4547,8 +4529,7 @@ export function drawScene(
         const wind = windCue(scene, e);
         const body = bossPose(zap ? twitch(pose, e.id, flameClock) : pose, e, wind);
         if (wind) drawWindUp(ctx, wind, ground, size, flameClock, cam);
-        drawEnemy(ctx, art, e.kind, frame, ground, cam, body);
-        if (plated(e)) drawPlates(ctx, art, e.kind, ground, body, cam);
+        drawEnemy(ctx, art, e.kind, enemyArtOf(e), frame, ground, cam, body);
         const heat = burnHeat(scene.time, e, anim?.litAt(e.id) ?? -Infinity);
         drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
         if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam, heat > 0);

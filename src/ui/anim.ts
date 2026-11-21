@@ -4,7 +4,30 @@
 // it reads the fight and never changes it. Every clock is fight time, so a pause freezes it
 // and game speed carries it.
 import { ENEMIES, STRIKE_FLASH } from '../core/data.ts';
-import { burning, type Defender, type Enemy, type Shot, type Strike } from '../core/horde.ts';
+import {
+  burning,
+  plated,
+  radiusOf,
+  type Defender,
+  type Enemy,
+  type Shot,
+  type Strike,
+} from '../core/horde.ts';
+
+/**
+ * Armour Plates breaking (ID-211): the pieces burst out from under the enemy over `spread`
+ * s, from `from` of their size to full, lie `size` × its radius across, and fade over the
+ * last `fade` s of `time` (fight seconds).
+ */
+export const PLATE_BURST = { time: 1.6, spread: 0.15, from: 0.4, fade: 0.8, size: 1.5 } as const;
+
+/** Where and when an enemy's Armour Plates broke (ID-211), and its radius then. */
+export interface Crack {
+  x: number;
+  y: number;
+  at: number;
+  r: number;
+}
 
 /** How a sprite is moved off its spot: px at zoom 1, radians clockwise about its feet. */
 export interface Pose {
@@ -278,7 +301,11 @@ export class Animator {
   /** The focused enemy (ID-160) and when it was focused. */
   private focusId: number | null = null;
   private focusAt = NEVER;
+  /** Each enemy whose Armour Plates held last frame (ID-211). */
+  private plates = new Set<number>();
   corpses: Corpse[] = [];
+  /** Armour Plates that broke (ID-211), kept while their pieces show. */
+  cracks: Crack[] = [];
 
   observe(scene: {
     time: number;
@@ -303,6 +330,8 @@ export class Animator {
       this.shots.clear();
       this.lit.clear();
       this.corpses = [];
+      this.plates.clear();
+      this.cracks = [];
     }
     const dt = Number.isFinite(this.time) ? t - this.time : 0;
     this.time = t;
@@ -322,6 +351,14 @@ export class Animator {
     for (const e of scene.enemies) if (burning(scene, e)) lit.set(e.id, this.lit.get(e.id) ?? t);
     this.lit = lit;
     this.corpses = this.corpses.filter((c) => t - c.at < ANIM.fall.time);
+    // Plated last frame and not now, still standing: its plates just broke.
+    const plates = new Set<number>();
+    for (const e of scene.enemies) {
+      if (plated(e)) plates.add(e.id);
+      else if (this.plates.has(e.id)) this.cracks.push({ x: e.x, y: e.y, at: t, r: radiusOf(e) });
+    }
+    this.plates = plates;
+    this.cracks = this.cracks.filter((c) => t - c.at < PLATE_BURST.time);
     const defenders = new Map<string, Seen>();
     for (const d of scene.defenders)
       defenders.set(d.id, this.seen(this.defenders.get(d.id), d, t, dt));
