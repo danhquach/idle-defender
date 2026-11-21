@@ -26,7 +26,7 @@ import {
   type SquadMoves,
 } from '../core/hordeonly.ts';
 import { startingHp, type HordeState } from '../core/horde.ts';
-import { jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
+import { fieldMaxHp, jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
 import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
 import type { Answer } from './confirm.ts';
@@ -40,7 +40,15 @@ import {
   slotOffer,
 } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
-import { JOB_SHORT, jobInfo, NO_BONUS, NONE, statRows, type StatRow } from './jobtext.ts';
+import {
+  JOB_SHORT,
+  jobInfo,
+  NO_BONUS,
+  NONE,
+  statRows,
+  type FieldMember,
+  type StatRow,
+} from './jobtext.ts';
 import { levelText } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -93,7 +101,11 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
   const bench = new Set((game.reserve ?? []).map((d) => d.id));
   const reserve = game.reserve ?? [];
   const ordered = [...reserve.filter(isFit), ...reserve.filter((d) => !isFit(d))];
+  const squad = squadOf(game);
+  // A Chef's HP is there when the squad takes the field (ID-408), so the tab says so already.
+  const chefHp = fieldMaxHp(squad);
   return [...game.roster, ...ordered].map((d) => {
+    const extra = squad.some((s) => s.id === d.id) ? chefHp : 0;
     const held = heldGunOf(d);
     const inFight = fight?.defenders.find((f) => f.id === d.id);
     const downInFight = fight?.injured.some((i) => i.defender.id === d.id) ?? false;
@@ -105,8 +117,8 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
     else if (resting) health = 'Injured';
     // Patched up after being downed (ID-155): the HP they start the next horde at.
     else if (d.startHp !== undefined) {
-      health = `HP ${startingHp(maxHpOf(d), d.startHp)}/${maxHpOf(d)} · patched\u00a0up`;
-    } else health = `HP ${maxHpOf(d)}/${maxHpOf(d)}`;
+      health = `HP ${startingHp(maxHpOf(d), d.startHp) + extra}/${maxHpOf(d) + extra} · patched\u00a0up`;
+    } else health = `HP ${maxHpOf(d) + extra}/${maxHpOf(d) + extra}`;
     return {
       id: d.id,
       name: d.name,
@@ -380,8 +392,11 @@ export function createRoster(
           canGear,
         ),
       );
+      const squad = squadOf(game);
       panel.replaceChildren(
-        ...(picking ? pickerPanel(d, game, canGear) : levelPanel(d, squadOf(game))),
+        ...(picking
+          ? pickerPanel(d, game, canGear)
+          : levelPanel(d, squad, fight ? fight.defenders : squad)),
       );
     } else {
       top.replaceChildren();
@@ -675,7 +690,11 @@ export function createRoster(
    * what the level gives is the Level column, so its line shows only at level 1, where that
    * column is empty and the line says what levels will bring.
    */
-  function levelPanel(d: RosterDefender, squad: readonly RosterDefender[]): HTMLElement[] {
+  function levelPanel(
+    d: RosterDefender,
+    squad: readonly RosterDefender[],
+    field: readonly FieldMember[],
+  ): HTMLElement[] {
     const { level } = levelOf(d.xp);
     const held = heldGunOf(d);
     const info = jobInfo(d, held, squad);
@@ -684,7 +703,7 @@ export function createRoster(
     job.append(el('p', 'rv-job-line', info.line));
     if (info.off) job.append(el('p', 'rv-job-note', NO_BONUS));
     if (info.note) job.append(el('p', 'rv-job-note', info.note));
-    const rows = statRows(d, held);
+    const rows = statRows(d, held, field);
     const half = Math.ceil(rows.length / 2);
     const cols = el('div', 'rv-statcols');
     cols.append(statTable(rows.slice(0, half)), statTable(rows.slice(half)));
@@ -715,7 +734,10 @@ export function createRoster(
       jobCell.toggleAttribute('data-none', r.job === NONE);
       jobCell.toggleAttribute('data-off', r.off);
       if (r.off) jobCell.title = NO_BONUS;
-      tr.append(th, el('td', 'rv-stat-total', r.total), lvCell, jobCell);
+      const total = el('td', 'rv-stat-total', r.total);
+      // A Chef's part of Max HP (ID-408), so the total matches the HP in a fight.
+      if (r.field) total.append(el('span', 'rv-stat-field', ` (${r.field})`));
+      tr.append(th, total, lvCell, jobCell);
       body.append(tr);
     }
     table.append(thead, body);

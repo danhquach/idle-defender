@@ -255,6 +255,7 @@ describe('the level panel (ID-146)', () => {
         level: r.querySelector('.rv-stat-lv')!.textContent,
         job: r.querySelector('.rv-stat-job')!.textContent,
         off: r.querySelector('.rv-stat-job')!.hasAttribute('data-off'),
+        field: r.querySelector('.rv-stat-field')?.textContent ?? '',
       }));
       expect(shown).toEqual(statRows(d, heldGunOf(d)));
       // A part that is none is marked faint; a real one is not.

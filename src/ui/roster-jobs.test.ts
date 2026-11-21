@@ -95,6 +95,7 @@ describe('profession words (ID-149)', () => {
       level: '+10.0%',
       job: '+12.0%',
       off: false,
+      field: '',
     });
     const dmg = rows.find((r) => r.label === 'Crit damage')!;
     expect(dmg).toMatchObject({ total: '×2.18', level: '—', job: '+18%', off: false });
@@ -114,6 +115,7 @@ describe('profession words (ID-149)', () => {
       level: '+10.0%',
       job: '+12.0%',
       off: true,
+      field: '',
     });
     expect(rows.filter((r) => r.off).map((r) => r.label)).toEqual(['Crit chance', 'Crit damage']);
   });
@@ -229,5 +231,72 @@ describe('the new survivor names the profession; the panel’s cards do not (ID-
     const game = camp([person(1, 'hunter')], [gun('h1', 'sniper')]);
     const r = equipGun(game, 'recruit-1', 'h1');
     expect(r.ok && r.game.roster[0]!.job).toBe('hunter');
+  });
+});
+
+describe('Max HP counts the Chef on the field (ID-408)', () => {
+  const maxHp = (rows: ReturnType<typeof statRows>) => rows.find((r) => r.label === 'Max HP')!;
+  const chef = person(1, 'chef', 24);
+  const hunter = person(2, 'hunter', 1);
+
+  it('a non-Chef on the field gets the part, and the total counts it', () => {
+    const row = maxHp(statRows(hunter, gun('h1', 'sniper'), [chef, hunter]));
+    expect(row.total).toBe('111');
+    expect(row.field).toBe(`+11 Chef (${chef.name}) on the field`);
+  });
+
+  it('the Chef has it too; with no Chef on the field nothing changes', () => {
+    expect(maxHp(statRows(chef, gun('h1', 'sniper'), [chef, hunter])).field).toContain('+11');
+    expect(maxHp(statRows(hunter, gun('h1', 'sniper'), [hunter]))).toMatchObject({
+      total: '100',
+      field: '',
+    });
+    expect(maxHp(statRows(hunter, gun('h1', 'sniper')))).toMatchObject({ total: '100', field: '' });
+  });
+
+  it('two Chefs do not stack: the higher level gives it, and is named', () => {
+    const low = person(3, 'chef', 5);
+    const row = maxHp(statRows(hunter, gun('h1', 'sniper'), [low, chef, hunter]));
+    expect(row.total).toBe('111');
+    expect(row.field).toContain(chef.name);
+  });
+
+  it('a survivor off the field (the bench) has none', () => {
+    const row = maxHp(statRows(hunter, gun('h1', 'sniper'), [chef]));
+    expect(row).toMatchObject({ total: '100', field: '' });
+  });
+
+  it('in a fight the Roster header and the table agree', () => {
+    const game = camp([chef, hunter]);
+    const fight = startSquadHorde(game, 7, NOW);
+    const tile = rosterTiles(game, NOW, fight).find((t) => t.id === hunter.id)!;
+    const row = maxHp(statRows(hunter, gun('h1', 'sniper'), fight.defenders));
+    expect(tile.health).toBe(`HP ${row.total}/${row.total}`);
+  });
+
+  it('between hordes the tab agrees with the table: on the field 111, on the bench 100', () => {
+    const bench = person(4, 'student', 1);
+    const game = { ...camp([chef, hunter]), reserve: [bench] };
+    const row = maxHp(statRows(hunter, gun('h1', 'sniper'), [chef, hunter]));
+    const tiles = rosterTiles(game, NOW, null);
+    expect(tiles.find((t) => t.id === hunter.id)!.health).toBe(`HP ${row.total}/${row.total}`);
+    expect(tiles.find((t) => t.id === bench.id)!.health).toBe('HP 100/100');
+  });
+
+  it('a patched-up survivor’s tab is what the fight starts them at', () => {
+    const patched = { ...hunter, startHp: 0.5 };
+    const game = camp([chef, patched]);
+    const tile = rosterTiles(game, NOW, null).find((t) => t.id === patched.id)!;
+    const fight = startSquadHorde(game, 7, NOW);
+    const d = fight.defenders.find((f) => f.id === patched.id)!;
+    expect(tile.health).toBe(`HP ${Math.ceil(d.hp)}/${d.maxHp} · patched\u00a0up`);
+  });
+
+  it('the panel shows the part beside the total, and only for those on the field', () => {
+    const bench = person(4, 'student', 1);
+    const game = { ...camp([chef, hunter]), reserve: [bench] };
+    const field = open(game, hunter.id).querySelector('.rv-stat-field')!;
+    expect(field.textContent).toBe(` (+11 Chef (${chef.name}) on the field)`);
+    expect(open(game, bench.id).querySelector('.rv-stat-field')).toBeNull();
   });
 });

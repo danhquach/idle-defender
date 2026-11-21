@@ -201,6 +201,10 @@ export function fieldBonus(
   return best;
 }
 
+/** The whole max HP a Chef on `field` gives each of them (ID-149): `fieldBonus` rounded. */
+export const fieldMaxHp = (field: readonly Pick<Statted, 'job' | 'xp'>[]): number =>
+  Math.round(fieldBonus(field, 'squadHp'));
+
 /**
  * Gun `gun`'s sustained dmg/s in `d`'s hands, as Squad Power counts it (ID-098, ID-152):
  * rarity, level and affixes; the level's and the profession's crit, aim, fire rate, reload

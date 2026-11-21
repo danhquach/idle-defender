@@ -92,6 +92,7 @@ import {
   damageTaken,
   dodgeChance,
   fieldBonus,
+  fieldMaxHp,
   fireRateFactor,
   magazineBonus,
   maxHpOf,
@@ -2614,7 +2615,7 @@ function mend(s: HordeState): void {
  * the HP too; losing it takes the max back down, HP no higher than it.
  */
 export function feed(s: Pick<HordeState, 'defenders'>): void {
-  const extra = Math.round(fieldBonus(s.defenders, 'squadHp'));
+  const extra = fieldMaxHp(s.defenders);
   for (const d of s.defenders) {
     const delta = extra - (d.fed ?? 0);
     if (delta === 0) continue;

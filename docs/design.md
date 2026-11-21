@@ -1193,7 +1193,12 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   level's line, then a table of max HP, armour, fire rate, reload speed,
   accuracy, crit chance, crit damage and injury dodge: the total, the level's
   part and the profession's (a fighting job's part off its guns is struck out
-  and left out of the total). The Roster's gun picker marks a fighting job's
+  and left out of the total). A Chef on the field adds their max HP to the Max HP
+  total of everyone on the field (ID-408), named under it: "(+11 Chef (Cole) on
+  the field)"; in a fight the field is the fight, between hordes the squad that
+  takes it, so the total matches the HP in a fight (the Roster tab says the same
+  between hordes) and a bench survivor has none.
+  The Roster's gun picker marks a fighting job's
   guns with ★ and says so under the tiles (its DPS counts the bonus since
   ID-152; before, it left it out).
   The start screen's gun picker stars them too, and the card says "No Hunter

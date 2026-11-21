@@ -5245,6 +5245,13 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-weight: 600;
 }
 
+.rv-stat-field {
+  display: block;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+  color: var(--color-accent);
+}
+
 .rv-stat-job {
   color: var(--color-accent);
 }
