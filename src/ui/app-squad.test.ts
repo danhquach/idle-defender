@@ -2448,4 +2448,75 @@ describe('Salvage through the app (ID-207)', () => {
     expect(m.saved().stock.scrap).toBe(510);
     expect(m.chip()).toBe('Scrap 510');
   });
+
+  describe('several at once (ID-215)', () => {
+    const selectOn = (m: ReturnType<typeof salvageCamp>) =>
+      m.scrim().querySelector<HTMLButtonElement>('.inv-select')!.click();
+    const quick = (m: ReturnType<typeof salvageCamp>, rarity: string) =>
+      m
+        .scrim()
+        .querySelector<HTMLButtonElement>(`.inv-select-pick[data-rarity="${rarity}"]`)!
+        .click();
+    const bulk = (m: ReturnType<typeof salvageCamp>) =>
+      m.scrim().querySelector<HTMLButtonElement>('.inv-select-salvage')!;
+
+    it('lower rarities go in one tap: saved once, chip and status follow', async () => {
+      const m = salvageCamp([
+        gunOf('h2'),
+        gunOf('h3'),
+        gunOf('h4', { rarity: 'military' }),
+        gunOf('h5', { rarity: 'rusty' }),
+      ]);
+      m.open();
+      selectOn(m);
+      quick(m, 'common');
+      m.pickGun('stash:h4');
+      expect(bulk(m).textContent).toBe('Salvage 3 · +45 Scrap');
+      bulk(m).click();
+      await flush();
+      expect(confirmPanel()).toBeNull();
+      expect(m.saved().armoury.map((w) => w.uid)).toEqual(['h5']);
+      expect(m.saved().stock.scrap).toBe(545);
+      expect(m.chip()).toBe('Scrap 545');
+      expect(m.status()).toBe('Salvaged 3 guns · +45 Scrap, 545 now.');
+    });
+
+    it('a Prototype in the selection asks first: a no keeps every gun, a yes salvages them all', async () => {
+      const m = salvageCamp([gunOf('h2', { rarity: 'prototype' }), gunOf('h3')]);
+      m.open();
+      selectOn(m);
+      quick(m, 'prototype');
+      quick(m, 'common');
+      bulk(m).click();
+      await flush();
+      expect(confirmQuestion()).toBe(
+        'Salvage 2 guns (1 Prototype) for 60 Scrap? The guns are gone for good.',
+      );
+      await answerConfirm(false);
+      expect(m.saved().armoury).toHaveLength(2);
+      expect(m.saved().stock.scrap).toBe(500);
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1000);
+      bulk(m).click();
+      await flush();
+      await answerConfirm(true);
+      expect(m.saved().armoury).toHaveLength(0);
+      expect(m.saved().stock.scrap).toBe(560);
+      expect(m.chip()).toBe('Scrap 560');
+    });
+
+    it('works in a fight', async () => {
+      const m = salvageCamp([gunOf('h2'), gunOf('h3', { rarity: 'rusty' })]);
+      m.root.querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!.click();
+      m.frame();
+      m.frame();
+      m.open();
+      selectOn(m);
+      quick(m, 'common');
+      quick(m, 'rusty');
+      bulk(m).click();
+      await flush();
+      expect(m.saved().armoury).toHaveLength(0);
+      expect(m.saved().stock.scrap).toBe(515);
+    });
+  });
 });

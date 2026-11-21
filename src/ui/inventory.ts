@@ -54,6 +54,7 @@ import {
   BEST_GUNS_LEAD,
   BEST_GUNS_TAIL,
   bestGunsLine,
+  bulkSalvageOffer,
   dpsWith,
   el,
   gunDpsText,
@@ -641,8 +642,11 @@ function stashHead(view: InventoryView): HTMLElement {
 
 export const NO_MATCH = 'No stash guns match.';
 
-/** The stash's sort and filter row (ID-192): three selects that each name themselves. */
-function stashTools(view: InventoryView): HTMLElement {
+/**
+ * The stash's sort and filter row (ID-192): three selects that each name themselves; with
+ * `selecting` given, the Select button after them (ID-215), pressed while it is on.
+ */
+function stashTools(view: InventoryView, selecting?: boolean): HTMLElement {
   const row = el('div', 'inv-stash-tools');
   const make = (
     kind: PickKind,
@@ -669,19 +673,26 @@ function stashTools(view: InventoryView): HTMLElement {
     make('type', 'Show gun type', view.picks.type),
     make('rarity', 'Show rarity', view.picks.rarity),
   );
+  if (selecting !== undefined) {
+    const b = button(selecting ? SELECT_DONE : SELECT_ON, () => {}, 'inv-select');
+    b.setAttribute('aria-pressed', String(selecting));
+    b.setAttribute('aria-label', 'Select guns to salvage');
+    row.append(b);
+  }
   return row;
 }
 
 /**
  * The squad row and the stash grid for `view`, under `note`; with `canCombine` (between
  * hordes) slots in a set ready to combine are marked, and with `drag` too the slots that
- * can be picked up.
+ * can be picked up. With `selecting` given the stash tools have the Select button (ID-215).
  */
 export function inventoryGrid(
   view: InventoryView,
   canCombine = false,
   note = INVENTORY_NOTE,
   drag = false,
+  selecting?: boolean,
 ): HTMLElement[] {
   const ready = (it: InventoryItem): boolean =>
     canCombine && !!it.owned && !!rowOf(view.combine, it.owned)?.uses;
@@ -701,7 +712,9 @@ export function inventoryGrid(
   // The whole stash section is one drop place for a survivor's gun.
   const stash = section(
     stashHead(view),
-    ...(view.stash.length > 0 ? [stashTools(view)] : [el('p', 'menu-note', STASH_EMPTY)]),
+    ...(view.stash.length > 0
+      ? [stashTools(view, selecting)]
+      : [el('p', 'menu-note', STASH_EMPTY)]),
     el('p', 'menu-note inv-note', note),
     ...(view.stash.length > 0 && view.shown.length === 0
       ? [noMatch()]
@@ -1029,6 +1042,84 @@ function salvageBlock(it: InventoryItem, ui: SalvageUi): HTMLElement {
   return block;
 }
 
+/** The Select button's label (ID-215), and its label while ticking. */
+export const SELECT_ON = 'Select';
+export const SELECT_DONE = 'Done';
+export const SELECT_NOTE = 'Tap guns to tick them, then salvage them together.';
+export const SELECT_TITLE = 'Salvage several';
+export const SELECT_NONE = 'Tick guns to salvage';
+export const SELECT_HELD = 'A gun in hand can’t be ticked: put it back in the stash first.';
+export const SELECT_NOT_GUN = 'Only guns can be salvaged.';
+/** After a bulk salvage the button ignores presses this long (ms), as a single salvage's. */
+export const SELECT_LOCK_MS = SALVAGE_LOCK_MS;
+
+/** What the selection panel's buttons call (ID-215). */
+export interface SelectUi {
+  /** Ticks every gun of `rarity` the grid shows; unticks them when all already are. */
+  pick: (rarity: Rarity) => void;
+  /** Unticks everything. */
+  clear: () => void;
+  /** Salvages the ticked guns. */
+  run: () => void;
+}
+
+/** The stash guns of `view` a bulk salvage can take: the shown guns with a Salvage (ID-215). */
+export const tickable = (view: InventoryView): InventoryItem[] =>
+  view.shown.filter((it) => it.salvage !== null && it.owned !== null);
+
+/**
+ * The details while Select is on (ID-215): how many are ticked, a quick pick per rarity (the
+ * shown guns only, greyed when none shows), and in the dock Clear and one Salvage button
+ * naming the count and the total. `ticked` holds slot keys; `scrap` caps the total.
+ */
+export function selectPanel(
+  view: InventoryView,
+  ticked: ReadonlySet<string>,
+  scrap: number | undefined,
+  ui: SelectUi,
+): HTMLElement[] {
+  const can = tickable(view);
+  const on = can.filter((it) => ticked.has(it.key));
+  const info = el('div', 'inv-details-info inv-select-info');
+  // The count with Clear beside it, so the Salvage button has the dock's whole width.
+  const head = el('div', 'inv-select-head');
+  const clear = button('Clear', ui.clear, 'inv-select-clear');
+  clear.disabled = on.length === 0;
+  head.append(el('p', 'menu-note inv-select-count', `${on.length} ticked`), clear);
+  info.append(el('p', 'inv-select-title', SELECT_TITLE), head);
+  const picks = el('div', 'inv-select-picks');
+  for (const r of RARITY_ORDER) {
+    const of = can.filter((it) => it.rarity === r);
+    const n = of.length;
+    const name = RARITIES[r].name;
+    // Pressed once every one is ticked: a second tap unticks them.
+    const all = n > 0 && of.every((it) => ticked.has(it.key));
+    const b = button(`All ${name} · ${n}`, () => ui.pick(r), 'inv-select-pick');
+    b.dataset.rarity = r;
+    b.disabled = n === 0;
+    b.setAttribute('aria-pressed', String(all));
+    b.setAttribute('aria-label', `Tick all ${n} ${name} ${n === 1 ? 'gun' : 'guns'} shown`);
+    picks.append(b);
+  }
+  info.append(picks);
+  const dock = el('div', 'inv-dock inv-select-dock');
+  const offer = bulkSalvageOffer(
+    on.map((it) => it.owned!),
+    scrap,
+  );
+  const go = button(
+    on.length > 0 ? offer.text : SELECT_NONE,
+    ui.run,
+    'inv-salvage-button inv-select-salvage',
+  );
+  go.disabled = on.length === 0;
+  const full = on.length > 0 ? offer.full : SELECT_NONE;
+  go.title = full;
+  go.setAttribute('aria-label', full);
+  dock.append(go);
+  return [info, dock];
+}
+
 /**
  * The details beside the grid for `it`, as two parts (ID-198): what it is, which scrolls
  * when long, and the dock pinned at the foot with its Equip on or Unequip when `gear` is
@@ -1094,6 +1185,12 @@ export interface InventoryOptions {
    * details have no Salvage.
    */
   onSalvage?: (uid: string) => Answer | Promise<Answer>;
+  /**
+   * Salvages the stash guns `uids` together (ID-215), after the app's confirm when one is a
+   * Prototype or Relic, in a fight too: what it said, or why not; null when the player said
+   * no. Without it the stash has no Select.
+   */
+  onSalvageMany?: (uids: string[]) => Answer | Promise<Answer>;
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
   onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
   /**
@@ -1159,6 +1256,9 @@ export function createInventory(
   let result: string | null = null;
   // The start of `result` that shows (ID-198): "Made: Lv 3 Prototype SMG".
   let made: string | null = null;
+  // Select (ID-215): on while ticking guns for a bulk salvage, and the ticked slots' keys.
+  let picking = false;
+  const ticked = new Set<string>();
 
   const openButton = el('button', 'inv-button', 'Weapons');
   openButton.type = 'button';
@@ -1267,6 +1367,11 @@ export function createInventory(
       (body.querySelector<HTMLElement>('.inv-buy') ?? slotOf(selected))?.focus();
       return;
     }
+    if (e.target instanceof Element && e.target.closest('.inv-select')) {
+      setPicking(!picking);
+      body.querySelector<HTMLElement>('.inv-select')?.focus({ preventScroll: true });
+      return;
+    }
     if (e.target instanceof Element && e.target.closest('.inv-show-all')) {
       pick = { ...pick, type: 'all', rarity: 'all' };
       redraw();
@@ -1275,8 +1380,88 @@ export function createInventory(
     }
     const b =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
-    if (b) select(b.dataset.key!, true);
+    if (b && picking) tick(b.dataset.key!);
+    else if (b) select(b.dataset.key!, true);
   });
+
+  /** Select on or off (ID-215): either way nothing is ticked, and no confirm stays up. */
+  function setPicking(on: boolean): void {
+    picking = on;
+    ticked.clear();
+    confirming = null;
+    result = null;
+    made = null;
+    hovered = null;
+    say('');
+    redraw();
+  }
+
+  /** Ticks or unticks slot `key` (ID-215); a gun in hand or a non-gun says why not. */
+  function tick(key: string): void {
+    if (!view) return;
+    selected = key;
+    if (key.startsWith('squad:')) say(SELECT_HELD, true);
+    else if (!tickable(view).some((it) => it.key === key)) say(SELECT_NOT_GUN, true);
+    else {
+      if (!ticked.delete(key)) ticked.add(key);
+      say('');
+    }
+    markSelected();
+    drawDetails();
+    slotOf(key)?.focus({ preventScroll: true });
+  }
+
+  let selectLockUntil = 0;
+
+  /** Salvages the ticked guns (ID-215), in the grid's order; a double tap salvages once. */
+  async function salvageTicked(): Promise<void> {
+    if (!view || Date.now() < selectLockUntil) return;
+    const uids = tickable(view)
+      .filter((it) => ticked.has(it.key))
+      .map((it) => it.owned!.uid);
+    if (uids.length === 0) return;
+    selectLockUntil = Number.POSITIVE_INFINITY;
+    let r: Answer;
+    try {
+      r = (await opts.onSalvageMany?.(uids)) ?? null;
+    } finally {
+      selectLockUntil = Date.now() + SELECT_LOCK_MS;
+    }
+    if (!r) return;
+    if (r.ok) ticked.clear();
+    redraw();
+    say(r.ok ? r.text : r.reason, !r.ok);
+    (
+      details.querySelector<HTMLButtonElement>('.inv-select-pick:not(:disabled)') ??
+      slotOf(selected)
+    )?.focus({ preventScroll: true });
+  }
+
+  const selectUi: SelectUi = {
+    pick(rarity) {
+      if (!view) return;
+      const of = tickable(view).filter((it) => it.rarity === rarity);
+      const all = of.every((it) => ticked.has(it.key));
+      for (const it of of) {
+        if (all) ticked.delete(it.key);
+        else ticked.add(it.key);
+      }
+      say('');
+      markSelected();
+      drawDetails();
+      details
+        .querySelector<HTMLElement>(`.inv-select-pick[data-rarity="${rarity}"]`)
+        ?.focus({ preventScroll: true });
+    },
+    clear() {
+      ticked.clear();
+      say('');
+      markSelected();
+      drawDetails();
+      slotOf(selected)?.focus({ preventScroll: true });
+    },
+    run: () => void salvageTicked(),
+  };
   // A sort or filter picked: only a known value counts, the select's value being page data.
   body.addEventListener('change', (e) => {
     const t = e.target;
@@ -1303,7 +1488,7 @@ export function createInventory(
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
     const key = b?.dataset.key ?? null;
     // A confirm stays up while the pointer wanders over the grid; a drag keeps its gun's.
-    if (key === hovered || confirming || press?.ghost) return;
+    if (picking || key === hovered || confirming || press?.ghost) return;
     hovered = key;
     drawDetails();
   });
@@ -1333,7 +1518,7 @@ export function createInventory(
     // A press whose release never came (the window lost it): dropped, not a dead end. A
     // second finger or a palm (not primary) leaves a drag under way alone.
     if (e.isPrimary) stopDrag();
-    if (!view || !opts.onEquip || !listedCombine) return;
+    if (!view || picking || !opts.onEquip || !listedCombine) return;
     if (e.button !== 0 || !e.isPrimary) return;
     const b =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
@@ -1619,13 +1804,24 @@ export function createInventory(
 
   function markSelected(): void {
     for (const b of slots()) {
-      const on = b.dataset.key === selected;
+      const at = b.dataset.key === selected;
+      // While Select is on, pressed means ticked (ID-215); the selected slot keeps the Tab stop.
+      const on = picking ? ticked.has(b.dataset.key!) : at;
       b.setAttribute('aria-pressed', String(on));
-      b.tabIndex = on ? 0 : -1;
+      if (picking && on) b.dataset.ticked = 'true';
+      else delete b.dataset.ticked;
+      b.tabIndex = at ? 0 : -1;
     }
   }
 
   function drawDetails(): void {
+    if (picking && view) {
+      details.classList.add('inv-details-select');
+      details.replaceChildren(...selectPanel(view, ticked, listed?.stock?.scrap, selectUi));
+      detailKey = null;
+      return;
+    }
+    details.classList.remove('inv-details-select');
     const all = items();
     const it = all.find((x) => x.key === (hovered ?? selected)) ?? null;
     const combine =
@@ -1746,19 +1942,34 @@ export function createInventory(
     // hands the selection to the one that moves into its place.
     const was = selected === null ? -1 : (view?.shown.findIndex((x) => x.key === selected) ?? -1);
     view = inventoryView(game, horde, canBuy, pick);
+    // Select (ID-215) ends with an empty stash; only guns the grid shows stay ticked.
+    if (view.stash.length === 0) picking = false;
+    const can = new Set(tickable(view).map((it) => it.key));
+    for (const k of [...ticked]) if (!picking || !can.has(k)) ticked.delete(k);
     // On a touch screen a plain drag scrolls: the note says to hold first.
     const touch = !!doc.defaultView?.matchMedia?.('(pointer: coarse)').matches;
-    const note = opts.onEquip
-      ? canCombine
-        ? touch
-          ? DRAG_NOTE_TOUCH
-          : DRAG_NOTE
-        : GUNS_WAIT
-      : INVENTORY_NOTE;
+    const note = picking
+      ? SELECT_NOTE
+      : opts.onEquip
+        ? canCombine
+          ? touch
+            ? DRAG_NOTE_TOUCH
+            : DRAG_NOTE
+          : GUNS_WAIT
+        : INVENTORY_NOTE;
     // The list keeps its scroll through the redraw (ID-214): a salvage, combine, upgrade or
     // equip never sends it back to the top.
     const top = body.scrollTop;
-    body.replaceChildren(...inventoryGrid(view, canCombine, note, !!opts.onEquip));
+    // While ticking, no slot is marked ready to combine or picked up.
+    body.replaceChildren(
+      ...inventoryGrid(
+        view,
+        canCombine && !picking,
+        note,
+        !!opts.onEquip && !picking,
+        opts.onSalvageMany ? picking : undefined,
+      ),
+    );
     body.scrollTop = top;
     const keys = items().map((x) => x.key);
     const left = selected !== null && !game.armoury.some((w) => `stash:${w.uid}` === selected);
@@ -1833,6 +2044,8 @@ export function createInventory(
       made = null;
       hovered = null;
       pick = { ...DEFAULT_PICK };
+      picking = false;
+      ticked.clear();
       say('');
       // On the gun asked for (ID-209) when it is in the stash, else the strongest.
       const want =
@@ -1862,11 +2075,16 @@ export function createInventory(
       stopDrag();
     },
     // Esc steps back first: a drag goes back where it was (and its release is no click),
-    // then an open Combine confirm.
+    // then an open Combine confirm, then Select (ID-215).
     escape() {
       if (press) {
         if (press.ghost) swallowClick = true;
         stopDrag();
+        return true;
+      }
+      if (picking && !confirming) {
+        setPicking(false);
+        body.querySelector<HTMLElement>('.inv-select')?.focus({ preventScroll: true });
         return true;
       }
       if (!confirming) return false;

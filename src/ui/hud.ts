@@ -112,6 +112,7 @@ import {
   joiningOf,
   paramedicPoints,
   restLabel,
+  salvageGun,
   salvageOf,
   nextSquadSlotCost,
   nextStashSlotCost,
@@ -1613,6 +1614,80 @@ export const salvageQuestion = (w: OwnedWeapon, amount: number): string =>
 /** What a hand salvage says once made (ID-207): `w` is the gun that went. */
 export const salvageText = (w: OwnedWeapon, scrap: number, now: number): string =>
   `Salvaged ${levelName(w)} · +${thousands(scrap)} Scrap, ${thousands(now)} now.`;
+
+/** The button that salvages the ticked stash guns together (ID-215). */
+export interface BulkSalvageOffer {
+  count: number;
+  /** The Scrap it pays: each gun's own salvage, the sum stopping at the Scrap cap. */
+  amount: number;
+  /** The label ("Salvage 12 · +95 Scrap"). */
+  text: string;
+  /** The label in full words, for the tooltip and screen readers. */
+  full: string;
+}
+
+const guns = (n: number): string => `${n} ${n === 1 ? 'gun' : 'guns'}`;
+
+/**
+ * The Salvage button for the stash guns `ws` (ID-215): the count and the total, each gun paying
+ * what a single salvage pays; with the balance `scrap` given, the total stops at the Scrap cap.
+ */
+export function bulkSalvageOffer(ws: readonly OwnedWeapon[], scrap?: number): BulkSalvageOffer {
+  const sum = ws.reduce((t, w) => t + gunSalvage(w), 0);
+  const amount = scrap === undefined ? sum : Math.min(sum, Math.max(0, MAX_COUNT - scrap));
+  return {
+    count: ws.length,
+    amount,
+    text: `Salvage ${ws.length} · +${thousands(amount)}${NBSP}Scrap`,
+    full: `Salvage ${guns(ws.length)} for ${thousands(amount)} Scrap`,
+  };
+}
+
+/**
+ * The confirm before salvaging `ws` together when one is a Prototype or Relic (ID-215), naming
+ * how many of each; null when none is.
+ */
+export function bulkSalvageQuestion(ws: readonly OwnedWeapon[], amount: number): string | null {
+  const rare = SALVAGE_ASKS.flatMap((r) => {
+    const n = ws.filter((w) => w.rarity === r).length;
+    return n > 0 ? [`${n} ${RARITIES[r].name}`] : [];
+  });
+  if (rare.length === 0) return null;
+  // All of one rarity: "Salvage 12 Prototype guns", not "(12 Prototype)" again.
+  const one = SALVAGE_ASKS.find((r) => ws.every((w) => w.rarity === r));
+  if (one) {
+    return `Salvage ${ws.length} ${RARITIES[one].name} ${ws.length === 1 ? 'gun' : 'guns'} for ${thousands(amount)} Scrap? The guns are gone for good.`;
+  }
+  return `Salvage ${guns(ws.length)} (${rare.join(', ')}) for ${thousands(amount)} Scrap? The guns are gone for good.`;
+}
+
+/** What a bulk salvage did (ID-215). */
+export const bulkSalvageText = (n: number, scrap: number, now: number): string =>
+  `Salvaged ${guns(n)} · +${thousands(scrap)} Scrap, ${thousands(now)} now.`;
+
+/**
+ * `game` with the stash guns `uids` salvaged together (ID-215), each as `salvageGun` does it:
+ * all of them or none. Refused for an empty or repeated list, or any gun a single salvage
+ * refuses (held, gone, not a gun).
+ */
+export function salvageGuns(
+  game: GameState,
+  uids: readonly string[],
+):
+  | { ok: true; game: GameState; weapons: OwnedWeapon[]; scrap: number }
+  | { ok: false; reason: string } {
+  if (uids.length === 0) return { ok: false, reason: 'No guns ticked' };
+  if (new Set(uids).size !== uids.length) return { ok: false, reason: 'A gun is ticked twice' };
+  let at = game;
+  const weapons: OwnedWeapon[] = [];
+  for (const uid of uids) {
+    const r = salvageGun(at, uid);
+    if (!r.ok) return r;
+    at = r.game;
+    weapons.push(r.weapon);
+  }
+  return { ok: true, game: at, weapons, scrap: at.stock.scrap - game.stock.scrap };
+}
 
 /** The confirm before a purchase (ID-179). */
 export const buyQuestion = (kind: SlotKind, cost: number, scrap: number): string =>
