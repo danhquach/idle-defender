@@ -12,6 +12,8 @@ import {
   createHud,
   DETAILS,
   HIDE_DETAILS,
+  JOIN_NO,
+  JOIN_YES,
   squadScreen,
   squadStart,
   xpChipText,
@@ -313,12 +315,12 @@ describe("a win's weapons, cards and offer, short (ID-186, ID-196)", () => {
     ]);
     for (const r of rows) {
       expect([...r.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
-        'Accept',
-        'Refuse',
+        JOIN_YES,
+        JOIN_NO,
       ]);
     }
     const buttons = [...rows[0]!.querySelectorAll<HTMLButtonElement>('button')];
-    expect(buttons.map((b) => b.title)).toEqual(['Paramedic: patches up', REFUSE_NOTE]);
+    expect(buttons.map((b) => b.title)).toEqual(['Accept: Paramedic: patches up', REFUSE_NOTE]);
     expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Accept Ava', 'Refuse Ava']);
   });
 
@@ -363,89 +365,272 @@ describe("a win's weapons, cards and offer, short (ID-186, ID-196)", () => {
   });
 });
 
-describe('the join pill in the header (ID-196)', () => {
-  const pill = (root: HTMLElement): HTMLButtonElement | null =>
-    root.querySelector<HTMLButtonElement>('.debrief-chips .chip-join');
+describe('the join card, first in the body (ID-200)', () => {
+  const card = (root: HTMLElement): HTMLElement | null =>
+    root.querySelector<HTMLElement>('.hud-result-scroll > .debrief-join');
 
-  it('shows while someone asks: warn tone, before Details, and the count in its words', () => {
+  it('is the body’s first child on a win, with ✓ and ✕ whose words are the label and the tooltip', () => {
     const { root, h } = hud();
     h.showResult(bossWin().screen);
-    expect(pill(root)).toBeNull();
+    const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
+    expect(body.firstElementChild).toBe(card(root));
+    expect(card(root)!.tagName).toBe('SECTION');
     h.showJoin([ava()]);
-    const chip = pill(root)!;
-    expect(chip.tagName).toBe('BUTTON');
-    expect(chip.type).toBe('button');
-    expect(chip.classList.contains('chip')).toBe(true);
-    expect(chip.classList.contains('chip-toggle')).toBe(true);
-    expect(chip.dataset.tone).toBe('warn');
-    expect(chip.textContent).toBe('Asks to join');
-    // "Details" stays last.
-    expect(chip.nextElementSibling).toBe(root.querySelector('.debrief-details'));
-    expect(root.querySelector('.debrief-chips')!.lastElementChild).toBe(
-      root.querySelector('.debrief-details'),
-    );
-    h.showJoin([ava(), { ...ava(), id: 'j2', name: 'Bo' }]);
-    expect(root.querySelectorAll('.chip-join')).toHaveLength(1);
-    expect(pill(root)!.textContent).toBe('2 ask to join');
+    expect(body.firstElementChild).toBe(card(root));
+    expect(card(root)!.hidden).toBe(false);
+    const buttons = [...card(root)!.querySelectorAll<HTMLButtonElement>('.join-btn')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['✓', '✕']);
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Accept Ava', 'Refuse Ava']);
+    expect(buttons.map((b) => b.title)).toEqual(['Accept: Hunter: crit', REFUSE_NOTE]);
+    // Not in the header any more: no pill, nothing in the tags row.
+    expect(root.querySelector('.chip-join')).toBeNull();
+    expect(root.querySelector('.hud-result-head .debrief-join')).toBeNull();
   });
 
-  it('goes once nobody asks, and a new screen starts without it', () => {
+  it('stays first when the screen is redrawn, and a new screen starts without answers', () => {
     const { root, h } = hud();
     const { screen } = bossWin();
     h.showResult(screen);
     h.showJoin([ava()]);
-    expect(pill(root)).not.toBeNull();
+    h.noteJoin('Ava joined the squad');
     h.showJoin([], true);
-    expect(pill(root)).toBeNull();
-    h.showJoin([ava()]);
+    expect(card(root)).not.toBeNull();
     h.showResult(screen);
-    expect(pill(root)).toBeNull();
+    h.showJoin([]);
+    expect(root.querySelector('.hud-result-scroll')!.firstElementChild).toBe(card(root));
+    expect(card(root)!.hidden).toBe(true);
+    expect(card(root)!.querySelector('.join-answer')).toBeNull();
   });
 
-  it('is absent when the join box is not in the panel (a loss)', () => {
+  it('is absent on a loss, and showJoin there puts nothing in the panel', () => {
     const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    expect(card(root)).not.toBeNull();
     const g = squadGame(3, 4);
     h.showResult(squadScreen(g, ended(g, 'lost')));
     expect(root.querySelector('.debrief-join')).toBeNull();
     h.showJoin([ava()]);
-    expect(pill(root)).toBeNull();
+    expect(root.querySelector('.debrief-join')).toBeNull();
+    expect(root.querySelector('.hud-result-head')!.textContent).not.toMatch(/ask/i);
   });
 
-  it('a click brings the offer line into view and puts the keyboard on its first answer', () => {
+  it('sticks while anyone asks (data-asking), not once all are answered or on a new screen', () => {
     const { root, h } = hud();
-    h.showResult(bossWin().screen);
+    const { screen } = bossWin();
+    h.showResult(screen);
+    h.showJoin([]);
+    expect(card(root)!.hasAttribute('data-asking')).toBe(false);
+    h.showJoin([ava(), { ...ava(), id: 'j2', name: 'Bo' }]);
+    expect(card(root)!.hasAttribute('data-asking')).toBe(true);
+    // One answered, one still asking: it keeps its place in view.
+    h.noteJoin('Ava joined the squad');
+    h.showJoin([{ ...ava(), id: 'j2', name: 'Bo' }], true);
+    expect(card(root)!.hasAttribute('data-asking')).toBe(true);
+    h.showJoin([], true);
+    expect(card(root)!.hasAttribute('data-asking')).toBe(false);
     h.showJoin([ava()]);
-    const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
-    const box = root.querySelector<HTMLElement>('.debrief-join')!;
-    // jsdom has no layout: the body overflows, and the line sits below its bottom.
-    Object.defineProperty(body, 'scrollHeight', { value: 900 });
-    Object.defineProperty(body, 'clientHeight', { value: 300 });
-    let top = 0;
-    Object.defineProperty(body, 'scrollTop', {
-      get: () => top,
-      set: (v: number) => (top = v),
-      configurable: true,
-    });
-    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 400 } as DOMRect);
-    vi.spyOn(box, 'getBoundingClientRect').mockReturnValue({ top: 450, bottom: 500 } as DOMRect);
-    pill(root)!.click();
-    // Its bottom to 8 px above the body's: 500 - (400 - 8).
-    expect(top).toBe(108);
-    expect(document.activeElement).toBe(box.querySelector('button'));
+    h.showResult(screen);
+    expect(card(root)!.hasAttribute('data-asking')).toBe(false);
   });
 
-  it('survives a start-screen retitle by the horde picker', () => {
+  it('a start screen with someone asking has the card first, and a retitle keeps it', () => {
     const { root, h } = hud();
-    // Someone still asking on the start screen: the offer line is in the panel.
     const g = { ...squadGame(2, 12), joining: [recruit(3)] };
     h.showResult(squadStart(g));
     h.showJoin([ava()]);
-    expect(pill(root)).not.toBeNull();
+    expect(root.querySelector('.hud-result-scroll')!.firstElementChild).toBe(card(root));
     const select = root.querySelector<HTMLSelectElement>('#hud-horde-select')!;
     select.value = '3';
     select.dispatchEvent(new Event('change'));
     expect(root.querySelector('.hud-result-title')!.textContent).toBe(squadStart(g, 3).title);
-    expect(root.querySelectorAll('.chip-join')).toHaveLength(1);
-    expect(pill(root)!.textContent).toBe('Asks to join');
+    expect(root.querySelector('.hud-result-scroll')!.firstElementChild).toBe(card(root));
+    expect(root.querySelectorAll('.debrief-join .join-row')).toHaveLength(1);
+  });
+});
+
+describe('the header: the numbers, then the tags (ID-200)', () => {
+  const head = (root: HTMLElement) => ({
+    stats: root.querySelector<HTMLElement>('.hud-result-head .debrief-stats')!,
+    tags: root.querySelector<HTMLElement>('.hud-result-head .debrief-chips')!,
+  });
+  const isTag = (c: { details?: true; event?: true }): boolean =>
+    c.details === true || c.event === true;
+
+  it('the stats line holds the numbers as spans with their tone and title; the tags hold the rest', () => {
+    const { root, h } = hud();
+    const g = squadGame(3, RADIO_HORDES[0]!);
+    const screen = squadScreen(g, ended(g, 'won'));
+    const chips = screen.debrief!.chips;
+    h.showResult(screen);
+    const { stats, tags } = head(root);
+    const nums = chips.filter((c) => !isTag(c));
+    expect(nums.length).toBeGreaterThan(0);
+    expect([...stats.children].map((c) => c.textContent)).toEqual(nums.map((c) => c.text));
+    for (const [i, node] of [...stats.children].entries()) {
+      expect(node.tagName).toBe('SPAN');
+      expect(node.className).toBe('debrief-stat');
+      expect((node as HTMLElement).dataset.tone).toBe(nums[i]!.tone);
+      if (nums[i]!.title) expect((node as HTMLElement).title).toBe(nums[i]!.title);
+    }
+    expect(tags.querySelector('.debrief-stat')).toBeNull();
+    expect(stats.querySelector('.chip')).toBeNull();
+    // A list, so a screen reader parts the numbers.
+    expect(stats.getAttribute('role')).toBe('list');
+    for (const node of stats.children) expect(node.getAttribute('role')).toBe('listitem');
+  });
+
+  it("the next horde's meter is hidden from a screen reader (its power line says it); the fight's is not", () => {
+    const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    const card = root.querySelector<HTMLElement>('.hud-horde-pick .hud-power-meter')!;
+    expect(card.getAttribute('aria-hidden')).toBe('true');
+    expect(root.querySelector('.hud-horde-pick .hud-horde-power')!.textContent).toMatch(/Power/);
+    const corner = [...root.querySelectorAll<HTMLElement>('.hud-power-meter')].filter(
+      (m) => !m.closest('.hud-horde-pick'),
+    );
+    expect(corner.length).toBeGreaterThan(0);
+    for (const m of corner) expect(m.hasAttribute('aria-hidden')).toBe(false);
+  });
+
+  it('a dead boss is a tag, not a stat, and Details is the last tag', () => {
+    const { root, h } = hud();
+    const g = squadGame(3, RADIO_HORDES[0]!);
+    // Every boss of the horde has been on the field and is gone: dead.
+    const won = ended(g, 'won');
+    const down = { ...won, enemies: [], bosses: won.bosses.map((x, i) => ({ ...x, id: i + 1 })) };
+    const screen = squadScreen(g, down);
+    expect(down.bosses.length).toBeGreaterThan(0);
+    expect(screen.debrief!.chips.some((c) => c.event)).toBe(true);
+    const d = screen.debrief!;
+    h.showResult({ ...screen, debrief: { ...d, notes: ['Auto squad: in Ava.'] } });
+    const { stats, tags } = head(root);
+    const dead = d.chips.filter((c) => c.event).map((c) => c.text);
+    expect(dead[0]).toMatch(/ dead$/);
+    expect([...tags.querySelectorAll('.chip')].map((c) => c.textContent)).toEqual(
+      expect.arrayContaining(dead),
+    );
+    for (const t of dead) expect(stats.textContent).not.toContain(t);
+    expect(tags.lastElementChild).toBe(root.querySelector('.debrief-details'));
+    expect(root.querySelectorAll('.debrief-details')).toHaveLength(1);
+  });
+
+  it('with no sentence there is no Details, and a loss has stats only', () => {
+    const { root, h } = hud();
+    const g = squadGame(3, 4);
+    h.showResult(squadScreen(g, ended(g, 'lost')));
+    const { stats, tags } = head(root);
+    expect(stats.children.length).toBeGreaterThan(0);
+    expect(tags.querySelector('.debrief-details')).toBeNull();
+  });
+
+  it('a start-screen retitle by the horde select redraws both the stats and the tags', () => {
+    const { root, h } = hud();
+    const g = squadGame(2, 12);
+    h.showResult(squadStart(g));
+    const select = root.querySelector<HTMLSelectElement>('#hud-horde-select')!;
+    select.value = '3';
+    select.dispatchEvent(new Event('change'));
+    const want = squadStart(g, 3).debrief!.chips;
+    const { stats, tags } = head(root);
+    expect([...stats.children].map((c) => c.textContent)).toEqual(
+      want.filter((c) => !isTag(c)).map((c) => c.text),
+    );
+    expect([...tags.children].map((c) => c.textContent)).toEqual(
+      want.filter(isTag).map((c) => c.text),
+    );
+    expect(stats.textContent).toContain('Replay');
+    expect(tags.querySelector('.debrief-details')).toBeNull();
+    // Back to the newest horde: the stats follow again, with no duplicates.
+    select.value = '12';
+    select.dispatchEvent(new Event('change'));
+    expect([...stats.children].map((c) => c.textContent)).toEqual(
+      squadStart(g, 12)
+        .debrief!.chips.filter((c) => !isTag(c))
+        .map((c) => c.text),
+    );
+  });
+});
+
+describe('the body fades while more is below (ID-200)', () => {
+  /** jsdom has no layout: sets the body's measures. */
+  function measure(
+    body: HTMLElement,
+    m: { scrollHeight: number; clientHeight: number; top: number },
+  ) {
+    Object.defineProperty(body, 'scrollHeight', { value: m.scrollHeight, configurable: true });
+    Object.defineProperty(body, 'clientHeight', { value: m.clientHeight, configurable: true });
+    Object.defineProperty(body, 'scrollTop', { value: m.top, configurable: true, writable: true });
+  }
+
+  it('data-more is set while content extends below the bottom, and goes at the end', () => {
+    const { root, h } = hud();
+    h.showResult(bossWin().screen);
+    const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
+    // Content fits: nothing below.
+    expect(body.hasAttribute('data-more')).toBe(false);
+    measure(body, { scrollHeight: 900, clientHeight: 300, top: 0 });
+    body.dispatchEvent(new Event('scroll'));
+    expect(body.hasAttribute('data-more')).toBe(true);
+    measure(body, { scrollHeight: 900, clientHeight: 300, top: 300 });
+    body.dispatchEvent(new Event('scroll'));
+    expect(body.hasAttribute('data-more')).toBe(true);
+    // Within a pixel of the end counts as the end (rounding).
+    measure(body, { scrollHeight: 900, clientHeight: 300, top: 599.5 });
+    body.dispatchEvent(new Event('scroll'));
+    expect(body.hasAttribute('data-more')).toBe(false);
+    measure(body, { scrollHeight: 900, clientHeight: 300, top: 600 });
+    body.dispatchEvent(new Event('scroll'));
+    expect(body.hasAttribute('data-more')).toBe(false);
+  });
+
+  it('a new screen measures again, and content that fits clears it', () => {
+    const { root, h } = hud();
+    const { screen } = bossWin();
+    h.showResult(screen);
+    const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
+    measure(body, { scrollHeight: 900, clientHeight: 300, top: 0 });
+    h.showResult(screen);
+    expect(body.hasAttribute('data-more')).toBe(true);
+    measure(body, { scrollHeight: 300, clientHeight: 300, top: 0 });
+    h.showResult(screen);
+    expect(body.hasAttribute('data-more')).toBe(false);
+  });
+
+  it('a size change re-measures: one observer watches the body, its content and the join card', () => {
+    const watched: Element[] = [];
+    let fire: () => void = () => {};
+    class FakeObserver {
+      constructor(cb: () => void) {
+        fire = cb;
+      }
+      observe(node: Element): void {
+        watched.push(node);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', FakeObserver);
+    try {
+      const { root, h } = hud();
+      h.showResult(bossWin().screen);
+      const body = root.querySelector<HTMLElement>('.hud-result-scroll')!;
+      const join = root.querySelector<HTMLElement>('.debrief-join')!;
+      // The body, the debrief block inside it, and the join card; nothing more per screen.
+      expect(watched).toHaveLength(3);
+      expect(watched).toContain(body);
+      expect(watched).toContain(join);
+      expect(watched.filter((n) => body.contains(n) && n !== body && n !== join)).toHaveLength(1);
+      h.showResult(bossWin().screen);
+      expect(watched).toHaveLength(3);
+      // Details opened, an answer given, an image loaded: the observer fires and it updates.
+      measure(body, { scrollHeight: 900, clientHeight: 300, top: 0 });
+      fire();
+      expect(body.hasAttribute('data-more')).toBe(true);
+      measure(body, { scrollHeight: 300, clientHeight: 300, top: 0 });
+      fire();
+      expect(body.hasAttribute('data-more')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

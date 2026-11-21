@@ -89,7 +89,7 @@ function boot() {
 /** Presses Accept for the first survivor asking to join (ID-150). */
 function accept(root: ParentNode): void {
   const b = [...root.querySelectorAll<HTMLButtonElement>('.join-btn')].find(
-    (x) => x.textContent === 'Accept',
+    (x) => x.getAttribute('aria-label')?.startsWith('Accept ') === true,
   );
   if (!b) throw new Error('nobody is asking to join');
   b.click();
@@ -1362,7 +1362,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     const join = () => booted.root.querySelector<HTMLElement>('.debrief-join')!;
     const press = (label: 'Accept' | 'Refuse') =>
       [...join().querySelectorAll<HTMLButtonElement>('.join-btn')]
-        .find((b) => b.textContent === label)!
+        .find((b) => b.getAttribute('aria-label')?.startsWith(`${label} `))!
         .click();
     const toast = () => booted.root.querySelector('.hud-toast')!.textContent;
     return { ...booted, join, press, toast };
@@ -1481,7 +1481,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     const join = again.root.querySelector<HTMLElement>('.debrief-join')!;
     expect(join.hidden).toBe(false);
     [...join.querySelectorAll<HTMLButtonElement>('.join-btn')]
-      .find((b) => b.textContent === 'Accept')!
+      .find((b) => b.getAttribute('aria-label')?.startsWith('Accept '))!
       .click();
     expect(again.saved().roster.map((d) => d.id)).toContain(asking.id);
     // Answered: the box is gone from the offer line's place, or hidden once the screen moves on.
@@ -1543,7 +1543,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     const again = boot();
     step(100);
     const accept = [...again.root.querySelectorAll<HTMLButtonElement>('.join-btn')].find(
-      (b) => b.textContent === 'Accept',
+      (b) => b.getAttribute('aria-label')?.startsWith('Accept ') === true,
     )!;
     accept.focus();
     accept.click();
@@ -1861,7 +1861,7 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
     const tile = () => booted.root.querySelector<HTMLElement>('.debrief-join');
     const press = (label: 'Accept' | 'Refuse') =>
       [...tile()!.querySelectorAll<HTMLButtonElement>('.join-btn')]
-        .find((b) => b.textContent === label)!
+        .find((b) => b.getAttribute('aria-label')?.startsWith(`${label} `))!
         .click();
     const toast = () => booted.root.querySelector<HTMLElement>('.hud-toast')!;
     return { ...booted, tile, press, toast };

@@ -8,11 +8,14 @@ import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
+import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { xpForLevel } from '../core/stats.ts';
 import {
   createHud,
   EVACUATION_TITLE,
   hordePicker,
+  POWER_METER_END,
+  powerLine,
   SQUAD_NO_LEVEL_UPS,
   squadScreen,
   squadStart,
@@ -68,27 +71,32 @@ describe('one structure on every screen (ID-196)', () => {
       const head = panel.querySelector('.hud-result-head')!;
       expect(head.children[0]!.tagName, name).toBe('H2');
       expect(head.children[0]!.className, name).toBe('hud-result-title');
-      expect(head.children[1]!.className, name).toBe('debrief-chips');
-      // The pills are in the head, never in the body.
+      // ID-200: the numbers on one line, then the tags row.
+      expect(head.children[1]!.className, name).toBe('debrief-stats');
+      expect(head.children[2]!.className, name).toBe('debrief-chips');
+      // The numbers and tags are in the head, never in the body.
       expect(panel.querySelector('.hud-result-scroll .debrief-chips'), name).toBeNull();
-      expect(head.querySelectorAll('.chip').length, name).toBeGreaterThan(0);
+      expect(panel.querySelector('.hud-result-scroll .debrief-stats'), name).toBeNull();
+      expect(head.querySelectorAll('.debrief-stat').length, name).toBeGreaterThan(0);
     }
   });
 
-  it('the foot is two rows: the Skills row, then the horde select and Start in a row of their own', () => {
+  it('the foot is two columns: the next horde card, then the Skills row over Start (ID-200)', () => {
     const { h, panel } = page();
     for (const [name, screen] of Object.entries(screens(squadGame(2)))) {
       h.showResult(screen);
       const foot = panel.querySelector('.hud-result-foot')!;
-      expect(classes(foot.children), name).toEqual(['hud-skill-pick', 'hud-start-row']);
-      const skills = foot.querySelector<HTMLElement>('.hud-skill-pick')!;
+      expect(classes(foot.children), name).toEqual(['hud-horde-pick', 'hud-start-row']);
+      const card = foot.querySelector<HTMLElement>('.hud-horde-pick')!;
       const row = foot.querySelector<HTMLElement>('.hud-start-row')!;
+      const skills = row.querySelector<HTMLElement>('.hud-skill-pick')!;
       expect(skills.hidden, name).toBe(false);
       expect(skills.querySelector('.hud-horde-label')!.textContent, name).toMatch(/^Skills/);
       expect(skills.querySelectorAll('.hud-skill-option').length, name).toBeGreaterThan(0);
-      // The horde select and Start share the second row, and neither is in the Skills row.
-      expect(classes(row.children), name).toEqual(['hud-horde-pick', 'hud-button btn-primary']);
-      expect(row.querySelector('#hud-horde-select'), name).not.toBeNull();
+      // The horde select is in the card, Start under the skills, neither in the other's part.
+      expect(classes(row.children), name).toEqual(['hud-skill-pick', 'hud-button btn-primary']);
+      expect(card.querySelector('#hud-horde-select'), name).not.toBeNull();
+      expect(row.querySelector('select'), name).toBeNull();
       expect(skills.querySelector('select, .hud-start-row'), name).toBeNull();
       expect(skills.contains(row.querySelector('.hud-button')), name).toBe(false);
     }
@@ -142,32 +150,69 @@ describe('one structure on every screen (ID-196)', () => {
   });
 });
 
-describe('the start row has three parts (ID-196)', () => {
-  it('the choice with its power line and hint, then the win cost, then the button', () => {
+describe('the next horde card (ID-200)', () => {
+  it('the label, the select, the meter, the power line with the win cost, then the hint', () => {
     const { h, panel } = page();
     for (const [name, screen] of Object.entries(screens(squadGame(2, 12)))) {
       h.showResult(screen);
       const row = panel.querySelector<HTMLElement>('.hud-start-row')!;
-      const pick = row.querySelector<HTMLElement>('.hud-horde-pick')!;
-      // The label is visually hidden by the page; the select and its hint are one part.
+      const pick = panel.querySelector<HTMLElement>('.hud-result-foot > .hud-horde-pick')!;
       expect(classes(pick.children), name).toEqual([
         'hud-horde-label',
-        'hud-horde-choice',
-        'hud-horde-ready',
-      ]);
-      const choice = pick.querySelector('.hud-horde-choice')!;
-      // The power line sits under the select, over the farm hint.
-      expect(classes(choice.children), name).toEqual([
         'build-select hud-horde-select',
-        'hud-horde-power',
+        'hud-power-meter',
+        'hud-horde-ready',
         'hud-horde-hint',
       ]);
+      expect(pick.querySelector('.hud-horde-choice'), name).toBeNull();
+      expect(pick.children[0]!.textContent, name).toBe('Next horde');
+      expect(pick.children[0]!.getAttribute('for'), name).toBe('hud-horde-select');
       const ready = pick.querySelector('.hud-horde-ready')!;
-      expect(classes(ready.children), name).toEqual(['hud-horde-power hud-horde-injury']);
-      expect(choice.children[1]!.textContent, name).toMatch(/^Power [\d,]+ · rec [\d,]+ /);
-      expect(ready.children[0]!.textContent, name).toMatch(/^Win cost: /);
+      expect(classes(ready.children), name).toEqual([
+        'hud-horde-power',
+        'hud-horde-power hud-horde-injury',
+      ]);
+      expect(ready.children[0]!.textContent, name).toMatch(/^Power [\d,]+ · rec [\d,]+ /);
+      expect(ready.children[1]!.textContent, name).toMatch(/^Win cost: /);
       expect(row.lastElementChild!.tagName, name).toBe('BUTTON');
     }
+  });
+
+  it('the meter fills in proportion, and never past 100% however strong the squad (ID-200)', () => {
+    const { h, panel } = page();
+    h.showResult(squadStart(squadGame(2, 12)));
+    const meter = panel.querySelector<HTMLElement>('.hud-horde-pick .hud-power-meter')!;
+    const fill = meter.querySelector<HTMLElement>('.hud-power-fill')!;
+    const tick = meter.querySelector<HTMLElement>('.hud-power-tick')!;
+    expect(meter.getAttribute('role')).toBe('meter');
+    expect(meter.getAttribute('aria-valuemin')).toBe('0');
+    const l = powerLine(squadPower(squadGame(2, 12)), recommendedPower(12));
+    expect(fill.style.width).toBe(`${(100 * l.fill).toFixed(1)}%`);
+    expect(tick.style.left).toBe(`${(100 * l.tick).toFixed(1)}%`);
+    expect(meter.dataset.band).toBe(l.band);
+    expect(meter.getAttribute('aria-valuetext')).toContain(l.text);
+    expect(parseFloat(fill.style.width)).toBeLessThanOrEqual(100);
+    expect(Number(meter.getAttribute('aria-valuenow'))).toBeLessThanOrEqual(
+      Number(meter.getAttribute('aria-valuemax')),
+    );
+  });
+
+  it('far above Recommended: the fill is whole, not more, and the value stops at the meter’s end', () => {
+    expect(powerLine(9000, 778).fill).toBeLessThanOrEqual(1);
+    const { h, panel } = page();
+    const veterans = {
+      ...squadGame(2, 12),
+      roster: [1, 2].map((n) => ({ ...recruit(n), xp: xpForLevel(30) })),
+    };
+    h.showResult(squadStart(veterans));
+    const select = panel.querySelector<HTMLSelectElement>('#hud-horde-select')!;
+    select.value = '1';
+    select.dispatchEvent(new Event('change'));
+    const l = powerLine(squadPower(veterans), recommendedPower(1));
+    expect(l.power).toBeGreaterThan(Math.round(POWER_METER_END * l.rec));
+    const meter = panel.querySelector<HTMLElement>('.hud-horde-pick .hud-power-meter')!;
+    expect(parseFloat(meter.querySelector<HTMLElement>('.hud-power-fill')!.style.width)).toBe(100);
+    expect(meter.getAttribute('aria-valuenow')).toBe(meter.getAttribute('aria-valuemax'));
   });
 });
 
@@ -263,19 +308,21 @@ describe('no radio on the panel (ID-196)', () => {
       h.showResult(squadStart(squadGame(2, horde)));
       expect(panel.textContent, `horde ${horde}`).not.toMatch(/radio/i);
       expect(panel.querySelector('.radio-help, button.chip-toggle'), `horde ${horde}`).toBeNull();
-      expect(panel.querySelector('.debrief-chips')!.firstElementChild!.textContent).not.toMatch(
+      expect(panel.querySelector('.debrief-stats')!.firstElementChild!.textContent).not.toMatch(
         /^Radio/,
       );
-      for (const chip of panel.querySelectorAll('.debrief-chips .chip')) {
+      for (const chip of panel.querySelectorAll(
+        '.debrief-stats .debrief-stat, .debrief-chips .chip',
+      )) {
         expect(chip.tagName).toBe('SPAN');
       }
     }
   });
 
-  it('Endless keeps its goal chip, as a plain pill, and its note before the loss rule', () => {
+  it('Endless keeps its goal stat, as plain text, and its note before the loss rule', () => {
     const { h, panel } = page();
     h.showResult(squadStart(squadGame(2, 45)));
-    const first = panel.querySelector('.debrief-chips')!.firstElementChild!;
+    const first = panel.querySelector('.debrief-stats')!.firstElementChild!;
     expect(first.textContent).toBe('Endless · best 44');
     expect(first.tagName).toBe('SPAN');
     expect(panel.querySelector('.debrief-note')!.textContent).toMatch(

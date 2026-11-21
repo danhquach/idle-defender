@@ -12,7 +12,6 @@ import {
   combineQuestion,
   combineText,
   joinCards,
-  joinLabel,
   leaveJoinQuestion,
   letGoQuestion,
   letGoText,
@@ -36,8 +35,6 @@ describe('joining in words (ID-150)', () => {
       },
     ]);
     expect(joinCards({})).toEqual([]);
-    expect(joinLabel(1)).toBe('Asks to join');
-    expect(joinLabel(2)).toBe('2 ask to join');
   });
 
   it('the leave confirm names who is refused; none with nobody asking', () => {
@@ -134,7 +131,7 @@ describe('the offer line on the page (ID-150, ID-196)', () => {
     expect(tile().querySelector('img, script')).toBeNull();
     expect(tile().querySelector('.join-name')!.textContent).toBe(hostile.name);
     // The job is on the Accept button's hover title, the name and sub on the line's.
-    expect(tile().querySelector<HTMLButtonElement>('.join-btn')!.title).toBe('A\u202eB');
+    expect(tile().querySelector<HTMLButtonElement>('.join-btn')!.title).toBe('Accept: A\u202eB');
     expect(tile().querySelector<HTMLElement>('.join-who')!.title).toBe(
       '<script>alert(1)</script>. A\u202eB',
     );

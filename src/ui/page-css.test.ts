@@ -263,7 +263,7 @@ describe('squad cards: avatar and name, wrapping in the panel (ID-151, ID-196)',
   });
 });
 
-describe('the horde panel has one size and one layout (ID-196)', () => {
+describe('the horde panel is content-sized, in one layout (ID-196, ID-200)', () => {
   /** Every rule whose selector is the panel itself, with the qualifiers on it (no descendant). */
   const panelRules = [...rules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap((m) =>
     m[1]!
@@ -274,12 +274,16 @@ describe('the horde panel has one size and one layout (ID-196)', () => {
   );
   const SIZE = /(?:^|[\s;])(?:min-|max-)?(?:width|height|flex-basis|aspect-ratio):/;
 
-  it('the panel is one width and one height, in the base rule', () => {
+  it('the panel is content-sized under a cap, one width, in the base rule (ID-200)', () => {
     const base = panelRules.filter((r) => r.sel === '.hud-result.hud-debrief');
     expect(base.length).toBeGreaterThan(0);
     expect(base[0]!.body).toMatch(/(?:^|\s)width: min\(\d+px, calc\(100vw - \d+px\)\);/);
-    expect(base[0]!.body).toMatch(/(?:^|\s)height: min\(\d+px, calc\(100vh - 128px\)\);/);
+    expect(base[0]!.body).toMatch(/(?:^|\s)height: auto;/);
+    expect(base[0]!.body).toMatch(/(?:^|\s)max-height: calc\(100vh - 128px\);/);
     expect(base[0]!.body).toMatch(/overflow: hidden;/);
+    // No fixed height, and no top-and-bottom stretch, in the base rule.
+    expect(base[0]!.body).not.toMatch(/(?:^|[\s;])height: (?:min\(|\d)/);
+    expect(base[0]!.body).not.toMatch(/(?:^|\s)(?:top|bottom):/);
   });
 
   it('no rule sizes the panel by the screen’s kind, the open details or its contents', () => {
@@ -304,38 +308,98 @@ describe('the horde panel has one size and one layout (ID-196)', () => {
     expect(rule('.hud-debrief .hud-result-scroll')).toMatch(/overflow-y: auto;/);
   });
 
-  it('the footer is two rows: Skills above, the horde select and Start in a row of their own', () => {
-    expect(rule('.hud-debrief .hud-result-foot')).toMatch(/flex-direction: column;/);
-    expect(rule('.hud-debrief .hud-start-row')).toMatch(/display: grid;/);
-    // The pick holds the choice and the readiness side by side (stacked on a phone).
-    expect(rule('.hud-debrief .hud-horde-pick')).toMatch(/display: grid;/);
+  it('the footer is a two-column grid: the horde card, then the skills over Start (ID-200)', () => {
+    expect(rule('.hud-debrief .hud-result-foot')).toMatch(/display: grid;/);
+    expect(rule('.hud-debrief .hud-result-foot')).toMatch(
+      /grid-template-columns: minmax\(0, 1fr\) \d+px;/,
+    );
+    // The card stacks its parts; the start row stacks the skills over the button.
+    expect(rule('.hud-debrief .hud-horde-pick')).toMatch(/flex-direction: column;/);
+    expect(rule('.hud-debrief .hud-start-row')).toMatch(/flex-direction: column;/);
+    expect(rule('.hud-debrief .hud-start-row > .hud-button')).toMatch(/min-height: 52px;/);
   });
 
-  it('a phone gets a taller panel at the same one size for every screen, and Start full width', () => {
+  it('a phone centres the panel below the speed buttons, one footer column, skill beside Start', () => {
     const phone = /@media \(max-width: 480px\) \{\n {2}\.hud-result\.hud-debrief \{([^}]*)\}/.exec(
       rules,
     );
     expect(phone, 'no phone panel rule in page.css').not.toBeNull();
-    expect(phone![1]).toMatch(/(?:^|\s)height: min\(\d+px, calc\(100vh - 128px\)\);/);
-    expect(rules).toMatch(
-      /@media \(max-width: 480px\) \{[\s\S]*?\.hud-debrief \.hud-start-row > \.hud-button \{[^}]*width: 100%;/,
+    expect(phone![1]).toMatch(/top: calc\(50% \+ 44px\);/);
+    expect(phone![1]).toMatch(/max-height: calc\(100vh - 120px\);/);
+    expect(phone![1]).not.toMatch(/(?:^|\s)(?:height|bottom):/);
+    const block = /@media \(max-width: 480px\) \{([\s\S]*?)\n\}\n/.exec(rules)![1]!;
+    expect(block).toMatch(
+      /\.hud-debrief \.hud-result-foot \{[^}]*grid-template-columns: minmax\(0, 1fr\);/,
     );
+    expect(block).toMatch(/\.hud-debrief \.hud-start-row \{[^}]*flex-flow: row wrap;/);
+    expect(block).toMatch(/\.hud-debrief \.hud-start-row > \.hud-button \{[^}]*min-height: 48px;/);
   });
 
-  it('a phone on its side: the panel runs under the top buttons to the bottom, Start always on screen (ID-205)', () => {
+  it('a short window hangs the panel from the top buttons, capped at the bottom edge (ID-205, ID-200)', () => {
     const short = /@media \(max-height: 540px\) \{\s*\.hud-result\.hud-debrief \{([^}]*)\}/.exec(
       rules,
     );
     expect(short, 'no short-window panel rule in page.css').not.toBeNull();
     expect(short![1]).toMatch(/top: 38px;/);
-    expect(short![1]).toMatch(/bottom: var\(--space-6\);/);
-    expect(short![1]).toMatch(/height: auto;/);
-    // The panel itself never scrolls: only the body between the header and the footer.
+    expect(short![1]).toMatch(/max-height: calc\(100vh - 38px - var\(--space-6\)\);/);
+    // Content-sized: no bottom stretch, no fixed height; the panel itself never scrolls.
+    expect(short![1]).not.toMatch(/(?:^|\s)(?:bottom|height):/);
     expect(short![1]).not.toMatch(/overflow/);
-    // The skills and the start row share the footer's row where the width allows.
-    expect(rules).toMatch(
-      /@media \(max-height: 540px\) \{[\s\S]*?\.hud-debrief \.hud-result-foot \{[^}]*flex-flow: row wrap;/,
+    const block = /@media \(max-height: 540px\) \{([\s\S]*?)\n\}\n/.exec(rules)![1]!;
+    // The card tighter, its label visually hidden; Start 44 px.
+    expect(block).toMatch(
+      /\.hud-debrief \.hud-horde-pick > \.hud-horde-label \{[^}]*clip-path: inset\(50%\);/,
     );
+    expect(block).toMatch(/\.hud-debrief \.hud-start-row > \.hud-button \{[^}]*min-height: 44px;/);
+  });
+
+  it('more below the body: a sticky "more below" cue over a fade, taking no room or clicks (ID-200)', () => {
+    const cue = rule('.hud-debrief .hud-result-scroll[data-more]::after');
+    expect(cue).toMatch(/content: '\\25BE {2}more below' \/ '';/);
+    expect(cue).toMatch(/position: sticky;[^}]*bottom: 0;/);
+    // Pulled up by its own height and the body's gap, whatever the gap is (a short window's
+    // is smaller): the cue nets no room, so the scroll end it measures never moves.
+    expect(cue).toMatch(/margin-top: calc\(-28px - var\(--scroll-gap\)\);/);
+    expect(rule('.hud-debrief .hud-result-scroll')).toMatch(
+      /--scroll-gap: var\(--space-10\);[^}]*gap: var\(--scroll-gap\);/,
+    );
+    expect(rules).toMatch(
+      /@media \(max-height: 540px\) \{[\s\S]*?\.hud-debrief \.hud-result-scroll \{[^}]*--scroll-gap: var\(--space-8\);/,
+    );
+    expect(rules).not.toMatch(
+      /\.hud-debrief \.hud-result-scroll \{[^}]*\n\s+gap: var\(--space-8\)/,
+    );
+    expect(cue).toMatch(/background: linear-gradient\([^;]*var\(--color-panel-solid\)/);
+    expect(cue).toMatch(/pointer-events: none;/);
+    expect(cue).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(|black/i);
+    // No mask: it would fade the cue and the answers too.
+    expect(rules).not.toMatch(/\.hud-result-scroll\[data-more\]\s*\{[^}]*mask-image/);
+  });
+
+  it('the join card sticks to the body’s top only while anyone asks, over the gun chips (ID-200)', () => {
+    expect(rule('.hud-debrief .debrief-join[data-asking]')).toMatch(
+      /position: sticky;[^}]*z-index: 2;[^}]*top: 0;/,
+    );
+    expect(rule('.debrief-join')).not.toMatch(/position: sticky/);
+    expect(rules).toMatch(
+      /\n\.join-row \+ \.join-row \{[^}]*border-top: 1px solid var\(--color-warn-border\);/,
+    );
+    // Side by side in a short window: no rule between the two.
+    expect(rules).toMatch(
+      /@media \(max-height: 540px\) \{[\s\S]*?\.join-row \+ \.join-row \{[^}]*border-top: 0;/,
+    );
+  });
+
+  it('names wrap rather than cut: the join line freely, the loot to two lines (ID-200)', () => {
+    expect(rule('.join-who')).not.toMatch(/white-space: nowrap|text-overflow/);
+    const gun = rule('.gun-chip-name');
+    expect(gun).toMatch(/-webkit-line-clamp: 2;/);
+    expect(gun).toMatch(/-webkit-box-orient: vertical;/);
+    expect(gun).not.toMatch(/white-space: nowrap/);
+  });
+
+  it("the next horde's meter keeps its tick standing out: no clip (the fill is clamped in code) (ID-200)", () => {
+    expect(rule('.hud-debrief .hud-horde-pick > .hud-power-meter')).not.toMatch(/overflow/);
   });
 
   it('the old radio explainer, gun picker, XP bar, stash line and footer note have no rules left', () => {
@@ -493,7 +557,7 @@ describe("a win's result at a glance (ID-186)", () => {
     );
   });
 
-  it('a finger gets 44 px of weapons, answers, the Roster buttons, skills, the select and Start', () => {
+  it('a finger gets 44 px of weapons, answers, the Roster buttons, skills and the select', () => {
     const coarse = /@media \(pointer: coarse\) \{\s*([^{}]+)\{[^}]*min-height: 44px;/.exec(rules);
     expect(coarse, 'no coarse-pointer 44 px rule in page.css').not.toBeNull();
     const selectors = coarse![1]!.split(',').map((x) => x.trim());
@@ -504,12 +568,18 @@ describe("a win's result at a glance (ID-186)", () => {
       '.debrief-best-guns',
       '.hud-debrief .hud-skill-option',
       '.hud-debrief .hud-horde-select',
-      '.hud-debrief .hud-start-row > .hud-button',
     ]) {
       expect(selectors, sel).toContain(sel);
     }
+    // Start is already 52 px (48 on a phone, 44 in a short window): not in the list (ID-200).
+    expect(selectors).not.toContain('.hud-debrief .hud-start-row > .hud-button');
+    // The tick and the cross are 40 px square, 44 px square for a finger.
+    expect(rule('.join-btn')).toMatch(/width: 40px;[^}]*min-height: 40px;/);
+    expect(
+      /@media \(pointer: coarse\) \{[\s\S]*?\n {2}\.join-btn \{([^}]*)\}/.exec(rules)![1],
+    ).toMatch(/width: 44px;/);
     expect(rules).toMatch(
-      /@media \(pointer: coarse\) \{[\s\S]*?\.chip-details::before,\s*\.chip-join::before,\s*\.debrief-details::before \{[^}]*inset: -8px/,
+      /@media \(pointer: coarse\) \{[\s\S]*?\.chip-details::before,[\s\S]*?\.debrief-details::before \{[^}]*inset: -8px/,
     );
     // Open, "Details" is filled: the state is not left to its caret.
     expect(rules).toMatch(
