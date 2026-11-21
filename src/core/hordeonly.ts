@@ -21,6 +21,15 @@ import {
 } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
+import {
+  craftRng,
+  isCraftAmount,
+  rollBlueprint,
+  rollCraftRarity,
+  withBlueprint,
+  withoutBlueprint,
+  blueprintCount,
+} from './craft.ts';
 import { UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
 import {
   COLUMNS,
@@ -45,6 +54,9 @@ import {
   SQUAD_SLOT_COSTS,
   SQUAD_SPAWN_X,
   BENCH_XP_SHARE,
+  BLUEPRINT,
+  CRAFT,
+  CRAFT_MADE_MAX,
   SQUAD_XP_RATE,
   STASH_CAP,
   STASH_SLOT,
@@ -299,6 +311,84 @@ export function withUpgradedGun(horde: HordeState, weapon: OwnedWeapon): HordeSt
             },
           }
         : d,
+    ),
+  };
+}
+
+/** `game` with `craft` as its blueprints, or with none (no key) when null. */
+function withCraft(game: GameState, craft: GameState['craft'] | null): GameState {
+  const next = { ...game };
+  delete next.craft;
+  return craft ? { ...next, craft } : next;
+}
+
+/** What a craft gives (ID-209): the game after it, the gun, and the Scrap it took; or why not. */
+export type Crafted =
+  { ok: true; game: GameState; weapon: OwnedWeapon; cost: number } | { ok: false; reason: string };
+
+/** The shown reason when a gun type's blueprints are none (ID-209). */
+export const NO_BLUEPRINT = 'No blueprint for that gun';
+
+/**
+ * Why a craft of `base` with `amount` Scrap is refused (ID-209), as the player is told, or null
+ * when it can go ahead: no such blueprint, an amount a craft does not take, a full stash
+ * (the stash holds at most `stashCap`: a crafted gun is never thrown away for room), short
+ * Scrap. Reads only; the Craft tab greys its button off it.
+ */
+export function craftRefusal(game: GameState, base: WeaponId, amount: number): string | null {
+  if (blueprintCount(game, base) < 1) return NO_BLUEPRINT;
+  if (!isCraftAmount(amount)) {
+    return `Put in ${CRAFT.min} to ${CRAFT.min + CRAFT.step * CRAFT.steps} Scrap`;
+  }
+  if ((game.craft?.made ?? 0) >= CRAFT_MADE_MAX) return 'No more guns can be crafted';
+  if (game.armoury.length >= stashCap(game)) return 'Stash full';
+  if (game.stock.scrap < amount) return `Needs ${amount - game.stock.scrap} more Scrap`;
+  return null;
+}
+
+/**
+ * Crafts one `base` gun (ID-209) from a blueprint and `amount` Scrap (one of `craftAmounts`): at
+ * once, at the level of the highest horde beaten (at least 1) like a drop, its rarity rolled
+ * by `craftOdds(amount)` and affixes for it, uid `f<n>`, into the stash. The blueprint and
+ * the Scrap are used up. Refused (`craftRefusal`) with nothing changed.
+ */
+export function craftGun(game: GameState, base: WeaponId, amount: number): Crafted {
+  const why = craftRefusal(game, base, amount);
+  if (why !== null) return { ok: false, reason: why };
+  const rng = craftRng(game);
+  const uid = `f${(game.craft?.made ?? 0) + 1}`;
+  const level = Math.max(1, highestBeaten(game));
+  const weapon = rollWeapon(rng, uid, base, rollCraftRarity(rng, amount), level);
+  return {
+    ok: true,
+    cost: amount,
+    weapon,
+    game: withCraft(
+      {
+        ...game,
+        armoury: [...game.armoury, weapon],
+        stock: { ...game.stock, scrap: game.stock.scrap - amount },
+      },
+      withoutBlueprint(game.craft!, base, 1),
+    ),
+  };
+}
+
+/**
+ * Turns one `base` blueprint into `BLUEPRINT.salvage` Scrap (ID-209), any time; refused with
+ * none of that gun.
+ */
+export function salvageBlueprint(
+  game: GameState,
+  base: WeaponId,
+): { ok: true; game: GameState; scrap: number } | { ok: false; reason: string } {
+  if (blueprintCount(game, base) < 1) return { ok: false, reason: NO_BLUEPRINT };
+  return {
+    ok: true,
+    scrap: BLUEPRINT.salvage,
+    game: withCraft(
+      { ...game, stock: scrapAfter(game.stock, BLUEPRINT.salvage) },
+      withoutBlueprint(game.craft!, base),
     ),
   };
 }
@@ -1001,6 +1091,7 @@ function finishHorde(
   // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
   if (!drop) return { next: settle(g), joined: [], noJoin: 'no-drop' };
   g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus], stashCap(game)).armoury;
+  if (drop.blueprint) g.craft = withBlueprint(game.craft, drop.blueprint);
   if (drop.kind === 'first') {
     // Counted now, so a refused survivor's number is never offered again. Anyone still
     // asking from before was never answered: that counts as Refuse (ID-150).
@@ -1164,6 +1255,8 @@ export interface SquadDrop {
   weapon: OwnedWeapon;
   /** Bonus guns (ID-122), lower grades most (`SQUAD_BONUS`), in the order they go in. */
   bonus: OwnedWeapon[];
+  /** The blueprint the win drops (ID-209), a gun type; absent with none. At most one, from its own stream. */
+  blueprint?: WeaponId;
   /**
    * Thrown away for room, in order: each time a gun goes into the full stash, the weakest
    * of the stash and that gun (maybe one of this win's own).
@@ -1248,7 +1341,10 @@ const DROP_STREAM = 0x5bd1e995;
  * The drop, then each bonus gun, goes into the stash as `stashWith` says.
  */
 export function squadDrop(
-  game: Pick<GameState, 'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm' | 'slots'>,
+  game: Pick<
+    GameState,
+    'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm' | 'slots' | 'craft'
+  >,
   horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'tookPart'>,
 ): SquadDrop | null {
   if (horde.outcome !== 'won') return null;
@@ -1283,9 +1379,14 @@ export function squadDrop(
       bonus.push(rollSquadGun(rng, `${uid}-${bonus.length + 1}`, bonusWeights(n), n));
     }
   }
+  // Only a blueprint that is added counts (ID-209): over `BLUEPRINT.cap` of a type it is lost,
+  // so it is neither kept nor shown.
+  const rolled = rollBlueprint(horde.seed);
+  const blueprint = rolled !== null && blueprintCount(game, rolled) < BLUEPRINT.cap ? rolled : null;
   return {
     weapon,
     bonus,
+    ...(blueprint ? { blueprint } : {}),
     thrown: stashWith(game.armoury, [weapon, ...bonus], stashCap(game)).thrown,
     kind,
     upgrade: [weapon, ...bonus].some((w) => gain(w) > 0),

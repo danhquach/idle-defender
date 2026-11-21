@@ -31,7 +31,7 @@ export interface CampWindow {
   /** The layer over the field: what a tab floats over the dialog (a dragged gun) goes here. */
   readonly scrim: HTMLElement;
   readonly dialog: HTMLElement;
-  /** Adds a tab (Roster left of Weapons); its panel stays hidden until it is shown. */
+  /** Adds a tab (Roster, Weapons, Craft, left to right); its panel stays hidden until it is shown. */
   add(tab: CampTab): void;
   isOpen(): boolean;
   /** The tab on show; null with the window closed. */
@@ -42,6 +42,8 @@ export interface CampWindow {
    */
   open(id: string, from?: HTMLElement | null): void;
   close(): void;
+  /** Sets the label on tab `id`'s button (a count, say); the strip's name keeps the tab's own label. */
+  relabel(id: string, label: string): void;
   /** Whether closing resumes a fight: the close button, the hint and the foot's button say so. */
   setResumes(resumes: boolean): void;
 }
@@ -56,7 +58,7 @@ export function shortLabel(button: HTMLElement, lead: string, tail: string): voi
 }
 
 /** The tabs left to right, whichever is added first; one not listed goes last. */
-const ORDER = ['roster', 'weapons'];
+const ORDER = ['roster', 'weapons', 'craft'];
 const place = (id: string): number => (ORDER.indexOf(id) + ORDER.length + 1) % (ORDER.length + 1);
 
 export function createCampWindow(root: HTMLElement): CampWindow {
@@ -204,9 +206,13 @@ export function createCampWindow(root: HTMLElement): CampWindow {
       foot.insertBefore(status, done);
       dialog.insertBefore(tab.panel, foot);
       tabs.splice(i, 0, { tab, button, tools, status });
-      // The strip is called by what it holds ("Roster and Weapons"); the window takes the
-      // open tab's name.
-      tablist.setAttribute('aria-label', tabs.map((t) => t.tab.label).join(' and '));
+      // The strip is called by what it holds ("Roster, Weapons and Craft"); the window takes
+      // the open tab's name.
+      const names = tabs.map((t) => t.tab.label);
+      tablist.setAttribute(
+        'aria-label',
+        names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`,
+      );
       // Named before it first opens too.
       if (!dialog.hasAttribute('aria-labelledby'))
         dialog.setAttribute('aria-labelledby', button.id);
@@ -239,6 +245,10 @@ export function createCampWindow(root: HTMLElement): CampWindow {
       root.removeAttribute('inert');
       (opener?.isConnected ? opener : (first ?? last).button).focus();
       opener = first = null;
+    },
+    relabel(id, label) {
+      const t = tabs.find((x) => x.tab.id === id);
+      if (t) t.button.textContent = label;
     },
     setResumes(resumes) {
       closeX.setAttribute('aria-label', resumes ? 'Close and resume' : 'Close');

@@ -3262,6 +3262,75 @@ and comes back stronger.
     step is cheap and a fight can't wait). After it the status line says "Upgraded Lv 3
     Common SMG +2 · 60 Scrap spent, 120 left."; an open combine confirm over the gun is
     dropped, as its gun changed.
+- **Blueprints and the Craft tab (ID-209) *(starting points: the PM's call)*:** guns also
+  come from crafting, instant in this build (timed workbench jobs stay with the full game).
+  - **Blueprint drops:** a won horde that drops (a first clear, or a replay under
+    `FARM.maxReplays`) can also drop one blueprint: `BLUEPRINT.chance` (15%) a win, at most
+    one a horde. A blueprint names a gun type only (never the free Pistol; "Blueprint:
+    LMG"); the rarity is rolled when crafted. The roll comes from its own stream (the
+    horde's seed XOR `BLUEPRINT_STREAM`), so it never moves the gun drops or the bonus
+    guns (every drop test and balance fixture is unchanged) and the same seed always drops
+    the same blueprint. The result screen shows it with the loot: a "Blueprint: LMG · craft
+    it in the Craft tab" line under the weapon row, and in the win's lines. At most
+    `BLUEPRINT.cap` (99) of a gun type are held; over it the blueprint is lost, and is then
+    not shown either (the line only names a blueprint actually added). A loss drops none.
+  - **Craft tab:** the third tab of the Roster and Weapons window, after Weapons. It lists
+    every blueprint held with a count per gun type (the first is picked; picking one opens
+    its crafting area): a heading row with the gun type and, at its right, "Scrap 500 ·
+    Stash 3/40"; "Makes a Lv N <gun>" (N the highest horde beaten, at least 1, as a drop's
+    level); a Scrap slider from `CRAFT.min` (20) up in `CRAFT.steps` (10) steps of
+    `CRAFT.step` (20) to 220, with the live amount beside its label and "20" and "220"
+    under its ends; the odds of each rarity for that amount, live as it moves; the Craft
+    button (the one filled button) and "Salvage for 5 Scrap" (an outline, secondary). The
+    last amount chosen is kept for the session (in memory, not saved). The tab's label
+    carries the blueprints held, "Craft · 3", and is plain "Craft" with none (it follows
+    the camp while the window is shut, too). Blueprint rows show the gun's icon at full
+    strength with the stash tiles' pale rim, an unselected row only slightly dimmed (0.8).
+    Dense and content-sized; the blueprint list sits left of the area on a wide window and
+    above it in a narrow one; the five odds cells always sit in one row; on a short screen
+    (a phone in landscape) the padding tightens and the standing note is dropped so Craft
+    and the Scrap line stay in view, and the pane scrolls as a last resort. With crafting
+    shut (in a fight) the reason, "Craft between hordes, on the start or result screen.",
+    stands in place of the "Makes a Lv…" line, in the warning colour, up with the
+    controls; the standing note below says it only when there is no area.
+  - **Odds (percent):** at the minimum (20 Scrap) Rusty 30 / Common 45 / Military 20 /
+    Prototype 5 / Relic 0 (the horde drop's band); each extra step moves every rarity
+    evenly toward Rusty 0 / Common 20 / Military 45 / Prototype 30 / Relic 5, reached at
+    the cap (220 Scrap, 10 steps). Both ends and every step sum to 100. Relic is possible
+    only above the minimum: the odds are linear, so it rises from the first step (0.5% at
+    40 Scrap) to 5% at the cap. Spend more Scrap and a better rarity comes more
+    often; it is never certain.
+  - **Craft:** makes the gun at once into the stash, uid `f<n>`, with the affixes its
+    rarity rolls (as a drop's), and uses up the blueprint and the Scrap put in. The roll
+    uses the seeded generator from the number of guns crafted and the horde number, so a
+    camp replayed from the same state rolls the same gun (and a reload doesn't re-roll). It
+    works between hordes, on the start and result screens (greyed in a fight, as Combine
+    is). Greyed with "Needs N more Scrap" when short, or "Stash full" when the stash holds
+    its cap (`stashCap`, bought slots counted): a crafted gun is never thrown away for room
+    and nothing is spent; both read from one function the button and the craft share
+    (`craftRefusal`; a full stash is reported before short Scrap, as it can't be fixed by
+    changing the amount). The result shows "Crafted: Lv 12 Military LMG" with a "View in
+    Weapons" button that opens the Weapons tab on the new gun; it takes the place of the
+    "Makes a Lv…" line, so the area never grows and Craft stays where it was, even when the
+    last blueprint of a type was used and the next type's area shows. On a win's result
+    screen the drop tile's "Stash n/cap" is refreshed in place after a craft, like the Scrap
+    figure.
+  - **Salvage:** a blueprint not wanted turns into `BLUEPRINT.salvage` (5) Scrap, between
+    hordes, after the game's own confirm: "Salvage 1 LMG blueprint for 5 Scrap?" with
+    Salvage and Keep (Keep leaves everything as it was).
+  - **Balance:** the scripted player and so every balance test never craft, so they are
+    unchanged. Crafting lets a player choose a gun type and buy a rarity; the knobs are the
+    blueprint chance, the step cost (`CRAFT.step`) and the odds cap (`CRAFT.to`), to be
+    tuned from play.
+  - **Save:** the version stays 23 deliberately (the key is optional and written only by this
+    build). A save may hold `craft`, written only once a blueprint has dropped (or a gun was
+    crafted): exactly `blueprints` (a plain object whose keys are known blueprint gun types
+    only, each a whole count from 1 to `BLUEPRINT.cap`) and `made` (guns crafted, 0 to
+    `CRAFT_MADE_MAX`), nothing else. A crafted gun's uid is `f<n>`, n at most `made`; a `craft`
+    key with a bad shape, an unknown or look-alike gun type, `__proto__`, a count that is
+    negative, a fraction, NaN, text, zero or huge, an extra key, or nothing at all, refuses
+    the save (as a bad weapon does), and a v22 or older save holding it is refused. Old
+    saves load with no blueprints.
 - **XP:** a replay pays that horde's survivor XP; more than 3 hordes below
   the highest beaten, half. A loss pays 25% of that horde's win XP (halved far
   down too) × waves cleared ÷ its waves (0 cleared → 0), rounded down. Still no
@@ -3751,6 +3820,8 @@ offline progress works across sessions.
   cap (the rest to the bench); a stash past its cap (an older save's) is kept
   as it is and never grows, and `MAX_OWNED` counts the stash at its most (80). A v22 or older
   save has none, and a `slots` key there is refused.
+- **As built (ID-209): blueprints** are in the same save version 23: see Gear (Blueprints and
+  the Craft tab) for the `craft` key's rules.
 - **As built (ID-154): save version 21** may hold `autoSquad`, written only
   while "Auto" best squad is ticked. Exactly `true` turns it on; any other
   value loads with it off (nothing else depends on it, so the save still
