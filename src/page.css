@@ -1594,16 +1594,53 @@ body {
   }
 }
 
-/* A very short window (a phone on its side): the header and footer would leave the body
-   no room, so the whole panel scrolls instead, still at its one size. */
+/* A very short window (a phone on its side, ID-205): the panel runs from under the top
+   buttons to the bottom edge, its header and footer tighter; the header and footer keep
+   their place, so Start is always on screen, and the body between them scrolls. */
 @media (max-height: 540px) {
   .hud-result.hud-debrief {
-    overflow-y: auto;
+    top: 38px;
+    bottom: var(--space-6);
+    height: auto;
+    transform: translateX(-50%);
+  }
+
+  .hud-debrief .hud-result-head {
+    gap: var(--space-4);
+    padding: var(--space-6) var(--space-16);
+  }
+
+  .hud-debrief .hud-result-title {
+    font-size: var(--text-heading);
   }
 
   .hud-debrief .hud-result-scroll {
-    flex: none;
-    overflow: visible;
+    gap: var(--space-8);
+    padding-block: var(--space-8);
+  }
+
+  /* The skills and the start row share one row where the width allows, so the body keeps
+     room for the squad; a narrower phone wraps them back to two rows. */
+  .hud-debrief .hud-result-foot {
+    flex-flow: row wrap;
+    align-items: center;
+    gap: var(--space-6) var(--space-16);
+    padding: var(--space-6) var(--space-16) var(--space-8);
+  }
+
+  .hud-debrief .hud-result-foot > .hud-start-row {
+    flex: 1 1 360px;
+  }
+
+  .hud-debrief .hud-start-row > .hud-button {
+    min-width: 140px;
+  }
+}
+
+/* Wider than a phone's 640 px panel on its side: the body shows more of the squad. */
+@media (max-height: 540px) and (min-width: 700px) {
+  .hud-result.hud-debrief {
+    width: min(780px, calc(100vw - 32px));
   }
 }
 
@@ -5616,7 +5653,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 /* On a phone the offer's cards stack (ID-097): side by side they ran off both edges,
    hiding a card's before → after line and an ammo swap's warning. Up to 719px, as three
    one-size cards side by side need 708px (ID-195). */
-@media (max-width: 719px) {
+@media (max-width: 719px) and (min-height: 541px) {
   .hud-cards {
     /* Opaque, so the XP bar behind it doesn't show through the heading. */
     background: var(--color-panel-solid);
@@ -6146,4 +6183,244 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-text-faint);
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* A phone held upright (ID-205): the game plays sideways, so a prompt covers it until the
+   phone is turned. Kept in step with PORTRAIT_PHONE in src/ui/landscape.ts. */
+.turn-prompt {
+  display: none;
+}
+
+@media (orientation: portrait) and (pointer: coarse) and (max-width: 599px) {
+  .turn-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-10);
+    padding: var(--space-24);
+    background: var(--color-bg);
+    color: var(--color-text);
+    text-align: center;
+  }
+}
+
+.turn-prompt-icon {
+  width: 44px;
+  height: 76px;
+  margin-bottom: var(--space-10);
+  border: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  animation: turn-prompt-tilt 2.4s ease-in-out infinite;
+}
+
+@keyframes turn-prompt-tilt {
+  0%,
+  25% {
+    transform: rotate(0deg);
+  }
+
+  55%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
+.turn-prompt-title {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 600;
+}
+
+.turn-prompt-text {
+  max-width: 28ch;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-body);
+}
+
+.turn-prompt-button {
+  min-height: 44px;
+  margin-top: var(--space-10);
+  padding-inline: var(--space-16);
+  font-size: var(--text-heading);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-prompt-icon {
+    animation: none;
+    transform: rotate(-90deg);
+  }
+}
+
+:root[data-reduce-motion] .turn-prompt-icon {
+  animation: none;
+  transform: rotate(-90deg);
+}
+
+/* --- A window 540 px tall or less (ID-205): a phone on its side, or a rare short desktop
+   window. The offer's three cards sit side by side at a shorter size. iPad windows are
+   always taller and never match. --- */
+@media (max-height: 540px) {
+  /* The offer: from under the top buttons to the bottom edge, three cards in a row. In a
+     shorter window still (iPhone Safari's bars leave about 330 px), the panel scrolls. */
+  .hud-cards {
+    top: 34px;
+    box-sizing: border-box;
+    max-height: calc(100vh - 34px - var(--space-4));
+    overflow-y: auto;
+    transform: translateX(-50%);
+    padding: var(--space-6) var(--space-12) var(--space-8);
+    background: var(--color-panel-solid);
+  }
+
+  .hud-cards h2 {
+    margin-bottom: var(--space-6);
+    font-size: var(--text-heading);
+  }
+
+  .hud-card-row {
+    gap: var(--space-8);
+  }
+
+  .hud-card.hud-card-has-art {
+    gap: var(--space-4);
+    width: 204px;
+    height: 282px;
+    padding: var(--space-8);
+  }
+
+  .hud-card-has-art .hud-card-key {
+    font-size: var(--text-heading);
+  }
+
+  .hud-card-has-art .hud-card-tag {
+    top: var(--space-8);
+    right: var(--space-8);
+  }
+
+  .hud-card-art {
+    height: 44px;
+  }
+
+  .hud-card-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .hud-card-has-art > .hud-card-body,
+  .hud-card-has-art > .hud-card-foot {
+    font-size: var(--text-sm);
+    line-height: 1.35;
+  }
+
+  /* Second Look's Reroll joins the heading's row, so it never falls under the cards. */
+  .hud-cards > .hud-reroll {
+    position: absolute;
+    top: var(--space-6);
+    right: var(--space-12);
+    margin: 0;
+    padding: var(--space-2) var(--space-10);
+    font-size: var(--text-sm);
+  }
+
+  /* 28 px tall: 8 px more above and below for a finger. */
+  .hud-cards > .hud-reroll::after {
+    content: '';
+    position: absolute;
+    inset: -8px 0;
+  }
+}
+
+/* A phone on its side: no keyboard, so no key hints on the top buttons, and the row closes
+   up from the right (Menu, Weapons, Roster, Scrap) to leave the corner panel room. Each top
+   button keeps its look but takes a finger's 44 px of height (an invisible edge above and
+   below). An iPad is never this short, so it keeps its hints; a short desktop window
+   keeps its top bar as it was. */
+@media (pointer: coarse) and (max-height: 540px) {
+  /* The fight's corner panel is the bar's only content: no room is held on its right. A
+     phone 640 px wide or less on its side (the oldest iPhones, 568 px) keeps this one row
+     too, not the upright phone's stacked rows. */
+  .hud-fight-bar {
+    padding: 4px var(--space-16);
+  }
+
+  .menu-button,
+  .inv-button,
+  .roster-button,
+  .hud-speed-button,
+  .scrap-chip {
+    top: 5px;
+    height: 26px;
+  }
+
+  .menu-button {
+    right: 12px;
+  }
+
+  /* The speed group leaves the crowded top row: at the bar's left in the camp (the corner
+     panel is hidden there). */
+  .hud-speed {
+    top: 5px;
+    right: auto;
+    left: var(--space-16);
+  }
+
+  /* In a fight the left holds the held cards' strip and the middle the boss bars: the
+     speed group stands in a column at the right edge, under the Menu button. */
+  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed {
+    top: 40px;
+    right: var(--space-12);
+    left: auto;
+    flex-direction: column;
+  }
+
+  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed > button {
+    min-width: 40px;
+    height: 36px;
+  }
+
+  .menu-button .menu-key,
+  .hud-speed .menu-key,
+  .hud-skill-key {
+    display: none;
+  }
+
+  .inv-button {
+    right: 82px;
+  }
+
+  .roster-button {
+    right: 176px;
+  }
+
+  .scrap-chip {
+    right: 252px;
+  }
+
+  /* Up to the Scrap chip (as wide as 90 px), past the horde badge on its left. */
+  .hud-corner-panel {
+    width: min(300px, calc(100vw - 416px));
+  }
+
+  .menu-button::after,
+  .inv-button::after,
+  .roster-button::after,
+  .hud-speed > button::after {
+    content: '';
+    position: absolute;
+    inset: -9px -3px;
+  }
+
+  .hud-speed > button {
+    position: relative;
+  }
+
+  /* In the fight's column the buttons are 36 px tall: 4 px more above and below. */
+  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed > button::after {
+    inset: -4px -3px;
+  }
 }

@@ -74,3 +74,29 @@ describe('page metadata (ID-173)', () => {
     expect(meta('property', 'og:image:alt')).toBeTruthy();
   });
 });
+
+describe('the app manifest (ID-205)', () => {
+  const link = [...html.matchAll(/<link\b[^>]*>/g)]
+    .map((m) => m[0])
+    .find((l) => l.includes('rel="manifest"'));
+  const href = link ? /href="\.\/([^"]+)"/.exec(link)?.[1] : undefined;
+
+  it('is linked from the page and ships in public/', () => {
+    expect(href).toBe('manifest.webmanifest');
+  });
+
+  it('opens the game from the home screen full screen and sideways, at the game’s own path', () => {
+    const m = JSON.parse(readFileSync(`public/${href}`, 'utf8')) as Record<string, unknown>;
+    expect(m.orientation).toBe('landscape');
+    expect(m.display).toBe('fullscreen');
+    expect(m.name).toBe('The Long Hold');
+    // Relative, so it works under the repository sub-path on GitHub Pages.
+    expect(m.start_url).toBe('./');
+    expect(m.scope).toBe('./');
+    expect(m.theme_color).toBe(meta('name', 'theme-color'));
+    for (const icon of m.icons as { src: string; sizes: string }[]) {
+      const [w, h] = pngSize(`public/${icon.src}`);
+      expect(`${w}x${h}`, icon.src).toBe(icon.sizes);
+    }
+  });
+});
