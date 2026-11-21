@@ -99,7 +99,9 @@ describe('the view', () => {
     expect(v.stash.find((i) => i.key === 'stash:h1')!.salvage).toMatchObject({ uid: 'h1' });
     expect(v.stash.find((i) => i.key === 'stash:b1')!.salvage).toBeNull();
     expect(v.squad[0]!.gun.salvage).toBeNull();
-    expect(v.pistol.salvage).toBeNull();
+    const onPistol = v.squad.find((s) => s.gun.free);
+    expect(onPistol).toBeDefined();
+    expect(onPistol!.gun.salvage).toBeNull();
   });
 });
 
@@ -188,11 +190,8 @@ describe('the Salvage button in the details', () => {
     expect(m.button().textContent).toBe(SALVAGE_PISTOL_TEXT);
   });
 
-  it('is there, greyed, for the free pistol and for a blade or tool, saying why', () => {
+  it('is there, greyed, for a blade or tool, saying why', () => {
     const m = mount(camp([gun('b1', { base: 'knife' })]));
-    m.slot('pistol').click();
-    expect(m.button().disabled).toBe(true);
-    expect(m.button().textContent).toBe(SALVAGE_PISTOL_TEXT);
     m.slot('stash:b1').click();
     expect(m.button().disabled).toBe(true);
     expect(m.button().textContent).toBe(SALVAGE_NOT_GUN_TEXT);
