@@ -384,18 +384,19 @@ export const WEAPONS = {
     tracer: { length: 16, colour: '#ffe08a' },
     burst: { rounds: 3, gap: 0.08 },
   },
-  // Shown as the Pump Shotgun since ID-135.
+  // Shown as the Pump Shotgun since ID-135. ID-199: four heavy pellets in a tighter cone
+  // and a slower load (6 × 7 every 3.6 s out-damaged every gun on paper).
   shotgun: {
     name: 'Pump Shotgun',
     kind: 'gun',
-    damage: 7,
+    damage: 10,
     fireInterval: 0.8,
     range: 350,
     magazine: 6,
-    reload: 3.6,
+    reload: 5.4,
     speed: 1400,
-    spread: 12,
-    pellets: 6,
+    spread: 9,
+    pellets: 4,
     pierce: 0,
     tracer: { length: 8, colour: '#ffc04a' },
     shells: true,
@@ -417,7 +418,7 @@ export const WEAPONS = {
   sniper: {
     name: 'Sniper rifle',
     kind: 'gun',
-    damage: 35,
+    damage: 38, // ID-199: +10% (was 35) as the shotguns came down
     fireInterval: 2,
     range: 1100,
     magazine: 5,
@@ -460,7 +461,7 @@ export const WEAPONS = {
   assault: {
     name: 'Assault Rifle',
     kind: 'gun',
-    damage: 8,
+    damage: 8.8, // ID-199: +10% (was 8)
     fireInterval: 0.35,
     range: 500,
     magazine: 30,
@@ -478,7 +479,7 @@ export const WEAPONS = {
     fireInterval: 0.6,
     range: 380,
     magazine: 8,
-    reload: 2.5,
+    reload: 3.5, // ID-199: 2.5 s matched the LMG's dmg/s
     speed: 1400,
     spread: 12,
     pellets: 6,
@@ -588,7 +589,14 @@ export const AFFIXES = {
   critDamage: { min: 20, max: 50, kinds: GUNS, bases: ['rifle'] },
   closeDamage: { min: 10, max: 25, kinds: GUNS, bases: ['smg'] },
   cone: { min: 20, max: 40, kinds: GUNS, bases: ['shotgun', 'cartridge'] },
-  pellets: { min: 1, max: 2, kinds: GUNS, bases: ['shotgun', 'cartridge'] },
+  // ID-199: one more pellet at most on the Pump Shotgun's four (two was +50%).
+  pellets: {
+    min: 1,
+    max: 2,
+    kinds: GUNS,
+    bases: ['shotgun', 'cartridge'],
+    role: { shotgun: { min: 1, max: 1 } },
+  },
   bossDamage: { min: 15, max: 35, kinds: GUNS, bases: ['sniper', 'handcannon'] },
 } as const satisfies Record<
   AffixId,

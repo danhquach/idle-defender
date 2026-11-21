@@ -679,10 +679,11 @@ close-quarter weapons come out only when an enemy is close.
 - **Specialised guns (as built, ID-046, starting points):** each is an owned
   item only (a horde drop, picked evenly with the other base weapons; never
   free like the pistol, knife and toolkit), primary only, with the Gunner and
-  non-Gunner rules above, rarity and affixes. A shotgun round is 6 pellets, each
-  rolling its own angle in the cone and hitting on its own for the listed
+  non-Gunner rules above, rarity and affixes. A shotgun round is several pellets
+  (the table's Pellets: 4 for the Pump Shotgun, 6 for the Drum Shotgun since
+  ID-199), each rolling its own angle in the cone and hitting on its own for the listed
   damage (no distance falloff, one muzzle flash); the crit is rolled once per
-  round, so all six pellets crit together. The sniper rifle pierces one
+  round, so all of a round's pellets crit together. The sniper rifle pierces one
   enemy by default; a pierce affix adds one more.
 
   | Gun | Damage | Every | Range | Magazine | Reload | Speed | Spread | Pellets | Pierce |
@@ -690,13 +691,13 @@ close-quarter weapons come out only when an enemy is close.
   | Pistol | 6.2 | 0.6 s | 600 | 10 | 1.5 s | 1,800 | ±2.5° | 1 | 0 |
   | SMG | 4.5 | 0.17 s | 480 | 30 | 1.6 s | 1,600 | ±3.5° | 1 | 0 |
   | Carbine (was Rifle) | 7 | 0.4 s, in 3-round bursts | 750 | 21 | 2 s | 2,200 | ±1° | 1 | 0 |
-  | Pump Shotgun (was Shotgun) | 7 per pellet | 0.8 s | 350 | 6 | 3.6 s, shell by shell | 1,400 | ±12° | 6 | 0 |
+  | Pump Shotgun (was Shotgun) | 10 per pellet | 0.8 s | 350 | 6 | 5.4 s, shell by shell | 1,400 | ±9° | 4 | 0 |
   | LMG | 6.5 | 0.22 s | 500 | 80 | 5 s | 2,000 | ±6° | 1 | 0 |
-  | Sniper rifle | 35 | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 0 (10% chance of 1) |
+  | Sniper rifle | 38 (35 before ID-199) | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 0 (10% chance of 1) |
   | Hand Cannon *(sidearm)* | 20 | 1 s | 500 | 6 | 2.5 s | 2,000 | ±0.75° | 1 | 0 |
   | Machine Pistol *(sidearm)* | 3.5 | 0.08 s | 380 | 16 | 1.6 s | 1,600 | ±9° | 1 | 0 |
-  | Assault Rifle | 8 | 0.35 s | 500 | 30 | 2.2 s | 2,100 | ±2° | 1 | 0 |
-  | Drum Shotgun | 3.5 per pellet | 0.6 s | 380 | 8 | 2.5 s | 1,400 | ±12° | 6 | 0 |
+  | Assault Rifle | 8.8 (8 before ID-199) | 0.35 s | 500 | 30 | 2.2 s | 2,100 | ±2° | 1 | 0 |
+  | Drum Shotgun | 3.5 per pellet | 0.6 s | 380 | 8 | 3.5 s | 1,400 | ±12° | 6 | 0 |
 
   As built since ID-135 (the roster rework, below); the ID-046 numbers were the
   first six guns' rows before it. The balance table that follows is ID-046's, kept
@@ -800,7 +801,7 @@ close-quarter weapons come out only when an enemy is close.
   rifle's (the LMG's), the Drum Shotgun the pump shotgun's.
 
   Balance (`balance/guns.test.ts`, the scenes above plus the ID-101 role scenes,
-  the lone Common-gun Gunner):
+  the lone Common-gun Gunner; the shotguns', Assault Rifle's and Sniper rifle's rows are before ID-199's retune, below):
 
   | Gun | Close crowd | Far | Lane | Sustained | Boss with plates | Six held Brutes | Walking crowd, mean x |
   |---|---|---|---|---|---|---|---|
@@ -832,6 +833,52 @@ close-quarter weapons come out only when an enemy is close.
   Pump Shotgun's 8-pellet start had the highest DPS of any gun on paper while
   reaching 300 px, so the scripted squad equipped it and fell to 50% at Horde 8 —
   6 pellets and 350 px fixed that.
+- **Shotgun retune (as built, ID-199):** on paper (damage × pellets × magazine
+  over the time to empty and reload) the Pump Shotgun did ~30 DPS, about 30%
+  above every other gun, and the Drum Shotgun ~23, the LMG's, with a faster
+  reload; in a real fight the horde closes in, so short range held neither back.
+  The two now differ in kind:
+  - **Pump Shotgun:** 4 pellets of 10 (was 6 of 7) in a ±9° cone (was ±12°), a
+    5.4 s full load shell by shell (0.9 s a shell; was 3.6 s): **~23.5 DPS**,
+    under the LMG's 24.8 (its crit counted). Few heavy slugs in a tight cone: two
+    pellets drop a 20-HP Shambler with nothing wasted, and Brute armour takes
+    less of each. Its pellet affix adds **+1** (two on four pellets was +50%).
+  - **Drum Shotgun:** a 3.5 s drum swap (was 2.5 s): **~20.2 DPS**, near the
+    SMG and Assault Rifle. Six light pellets, the wide cone, fast fire and the
+    quicker swap; the pellet affix keeps +1–2.
+
+  Gun scenes before → after (`balance/guns.test.ts`; probe of the same scenes, "before" re-measured on main):
+
+  | Gun | Paper DPS | Close crowd | Lane | Sustained | Boss with plates | Six held Brutes | Walking crowd, mean x |
+  |---|---|---|---|---|---|---|---|
+  | Pump Shotgun | 30.0 → 23.5 | 30.2 → 29.1 | 12.0 → 11.7 | 52.4 → 46.4 | 153 → 184 | 474 → 457 | 665.3 → 652.8 |
+  | Drum Shotgun | 23.0 → 20.2 | 21.0 → 17.0 | 13.9 → 13.9 | 65.6 → 65.4 | 161 → 140 | 206 → 178 | 674.0 → 674.0 |
+
+  The Pump Shotgun still leads a close crowd (29.1 to the SMG's 28.3), now by
+  little; the LMG leads sustained fire by more; neither shotgun reaches far.
+
+  **The others came up instead of the shotguns only coming down (owner's call):**
+  with the shotguns alone cut, the horde-only squad (which equips the drops) lost
+  offence: Horde 8 first tries fell from 17 to 12 won of 20 and Horde 6 injuries
+  rose 1.35 → 1.95 a try. Two guns gained **+10% damage**: Assault Rifle 8 →
+  8.8 and Sniper rifle 35 → 38 (paper DPS 19.8 → 21.8, 16.6 → 18.3). The rest
+  stayed: the SMG would take the close crowd from the Pump Shotgun; the LMG at 7
+  damage drops a 20-HP Shambler in 3 hits, not 4, and led the close crowd and
+  the lane (29.7 and 23.8); the Carbine is the balance tests' reference squad's
+  gun, and +10% on it, the Hand Cannon and the Machine Pistol too left the
+  balance squads too strong (Hordes 3–4 stopped denting the wall, the Horde 15
+  survivor-card fight stopped being close). The Pistol is the free gun.
+  Horde-only first tries, 20 seeds, main → after: Horde 6 18 → 19 won (injured
+  1.35 → 1.25), Horde 7 18 → 18, Horde 8 17 → 16, Horde 9 14 → 12, Horde 10
+  16 → 18.
+
+  Three balance bars moved with it (owner's call): Hordes 3–4 dent the wall on
+  3 of 40 first tries, not 4 (main 5; every bump tried gave 3); farming near the
+  wall gives more XP a minute on 8 of 10 seeds and over the seeds together, not
+  on every seed (seeds 6 and 10 within 3%: 74.7 / 73.7 against 75.2 / 75.6;
+  1044.9 against 651.2 over the ten); and a Barbed Wire level need not
+  hold 5 points more than the one below once that one holds nearly all the
+  fight (Horde 10: Lv 2 97%, Lv 3 100%).
 - **Gun roles (as built, ID-101; kept by the balance pass, ID-102):**
   each gun has a role and a built-in trait every one of it carries, Rusty or
   Relic, plus role affixes only it rolls (below, in Gear). The Inventory, the
@@ -858,13 +905,13 @@ close-quarter weapons come out only when an enemy is close.
   | Pistol | All-rounder (Backup before ID-135) | Fastest reload of any gun (1.5 s, data) | +3–8% crit chance |
   | SMG | Swarm shredder | +25% damage to an enemy within 250 px of the wall's front (the outermost built layer's face; the player reads "near the wall") | +10–25% close-range damage, added to the 25% |
   | Carbine | Marksman | Fires 3-round bursts (ID-135); +10% crit chance | +3–8% crit chance, +20–50% crit damage (added to ×2) |
-  | Pump Shotgun | Wall stopper | Loads shell by shell; a hit knocks an enemy near the wall back (ID-135; a short stagger before) | +20–40% wider cone, +1–2 pellets |
+  | Pump Shotgun | Wall stopper | Loads shell by shell; a hit knocks an enemy near the wall back (ID-135; a short stagger before) | +20–40% wider cone, +1 pellet (ID-199; +1–2 before) |
   | LMG | Shredder (Suppression before ID-135) | +8% crit chance (a 20% slow before) | +3–8% crit chance (+5–15% slow before), +40–80% magazine (its own range of the general magazine affix) |
   | Sniper rifle | Boss and heavy killer | +20% crit chance, +50% crit damage; crits ignore armour; 10% chance to pierce (ID-135; it ignored armour and pierced 1 on every shot before) | +15–35% damage to bosses, mini-bosses and the heavy kinds (Brute, Swollen, Horror), +1–2 pierce (its own range of the general pierce affix) |
   | Hand Cannon *(ID-135)* | Heavy sidearm | Each hit knocks the enemy back a little (12 px) | +15–35% damage to bosses, mini-bosses and the heavy kinds (the Sniper rifle's affix) |
   | Machine Pistol *(ID-135)* | Close backup | Fastest fire of any gun (0.08 s, data) | +50–100% magazine (its own range of the general magazine affix) |
   | Assault Rifle *(ID-135)* | Assault | +5% crit chance | +3–8% crit chance |
-  | Drum Shotgun *(ID-135)* | Crowd stopper | A hit knocks an enemy near the wall back (25 px) | +20–40% wider cone, +1–2 pellets (the Pump Shotgun's) |
+  | Drum Shotgun *(ID-135)* | Crowd stopper | A hit knocks an enemy near the wall back (25 px) | +20–40% wider cone, +1–2 pellets |
 
   Since ID-135 the knockback and Shock Rounds' paralysis stack, but the
   knockback is capped at 100 px an enemy (`roles.test.ts`). Squad Power and DPS

@@ -101,11 +101,12 @@ describe('Barbed Wire is worth levelling (ID-133)', () => {
     expect(mean(5, 1, 'whole')).toBeGreaterThanOrEqual(0.75);
   });
 
-  it('late, each level holds more of the fight than the one below, by 5 points or more', () => {
+  it('late, each level holds more of the fight than the one below, by 5 points or more, up to the whole fight', () => {
     for (const n of [10, 15]) {
       for (const lv of [2, 3]) {
+        // A level can't hold more than the whole fight (ID-199: Lv 2 held 97% at Horde 10).
         expect(mean(n, lv, 'whole'), `Horde ${n}, Lv ${lv}`).toBeGreaterThanOrEqual(
-          mean(n, lv - 1, 'whole') + 0.05,
+          Math.min(mean(n, lv - 1, 'whole') + 0.05, 1),
         );
       }
     }
