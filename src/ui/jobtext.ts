@@ -16,7 +16,7 @@ import {
   type LevelBonusId,
 } from '../core/data.ts';
 import type { RosterDefender } from '../core/game.ts';
-import { jobBonus, jobFits, levelBonus, levelOf } from '../core/stats.ts';
+import { fieldMaxHp, jobBonus, jobFits, levelBonus, levelOf } from '../core/stats.ts';
 
 /** A profession's name where room is short (a Roster tab on a phone): 8 letters at most, measured to fit a 375 px phone. */
 export const JOB_SHORT: Readonly<Record<JobId, string>> = {
@@ -178,6 +178,32 @@ export interface StatRow {
   job: string;
   /** The profession's part doesn't count with the gun held (a fighting job off its guns). */
   off: boolean;
+  /** A Chef's field part of the total, "+11 Chef (Cole) on the field" (ID-408); '' = none. */
+  field: string;
+}
+
+/** Someone on the field, as the Max HP row reads it. */
+export interface FieldMember {
+  id: string;
+  name: string;
+  job?: JobId;
+  xp?: number;
+}
+
+/**
+ * The Chef's max HP `d` has from the field (ID-149, ID-408), `fieldBonus` rounded as the
+ * fight does, and whose it is; null when `d` isn't on the field or no Chef is.
+ */
+function fieldHp(
+  d: RosterDefender,
+  field: readonly FieldMember[],
+): { hp: number; name: string } | null {
+  if (!field.some((f) => f.id === d.id)) return null;
+  const hp = fieldMaxHp(field);
+  if (hp === 0) return null;
+  const chefs = field.filter((f) => f.job === 'chef');
+  const top = chefs.reduce((a, b) => (levelOf(b.xp ?? 0).level > levelOf(a.xp ?? 0).level ? b : a));
+  return { hp, name: top.name };
 }
 
 /** A stat part that is none (the Roster draws it faint, ID-189). */
@@ -189,9 +215,15 @@ const part = (v: number, show: (x: number) => string): string => (v === 0 ? NONE
  * `d`'s stats with `held` (ID-149): max HP, armour, fire rate, reload speed, accuracy, crit
  * chance, crit damage and injury dodge, each split into the level's part and the
  * profession's. A fighting job's part with a gun that isn't theirs shows what it would give,
- * marked `off`, and stays out of the total.
+ * marked `off`, and stays out of the total. `field` is who is on the field (the fight's
+ * defenders, or the squad that takes the next horde): a Chef among them adds their max HP
+ * to the total of everyone there, `d` included, as the fight does (ID-408).
  */
-export function statRows(d: RosterDefender, held: Held): StatRow[] {
+export function statRows(
+  d: RosterDefender,
+  held: Held,
+  field: readonly FieldMember[] = [],
+): StatRow[] {
   const { level } = levelOf(d.xp);
   const fits = jobFits(d.job, held);
   const lv = (e: LevelBonusId): number => levelBonus(level, e);
@@ -211,19 +243,23 @@ export function statRows(d: RosterDefender, held: Held): StatRow[] {
       level: part(lvPart, show),
       job: part(j, show),
       off: !fits && j > 0,
+      field: '',
     };
   };
+  const feed = fieldHp(d, field);
   const plus = (x: number): string => pct(x);
   const plain = (x: number): string => `${(x * 100).toFixed(1)}%`;
+  const maxHp = row(
+    'Max HP',
+    'hp',
+    DEFENDER_HP + (feed?.hp ?? 0),
+    lv('hp'),
+    (x) => `+${Math.round(x)}`,
+    (x) => `${Math.round(x)}`,
+  );
+  if (feed) maxHp.field = `+${feed.hp} ${JOBS.chef.name} (${feed.name}) on the field`;
   return [
-    row(
-      'Max HP',
-      'hp',
-      DEFENDER_HP,
-      lv('hp'),
-      (x) => `+${Math.round(x)}`,
-      (x) => `${Math.round(x)}`,
-    ),
+    maxHp,
     row(
       'Armour',
       'armour',
