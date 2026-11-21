@@ -1071,7 +1071,10 @@ export const EDGE_SPEED = 12;
 
 export interface Inventory {
   isOpen(): boolean;
-  open(): void;
+  /** Opens the Weapons tab; with `uid`, on that stash gun when it is there (ID-209). */
+  open(uid?: string): void;
+  /** The top-bar button that opens it. */
+  readonly button: HTMLElement;
   close(): void;
   /** Re-reads the camp: call when it changes. */
   refresh(): void;
@@ -1602,6 +1605,8 @@ export function createInventory(
   }
 
   let upgradeLockUntil = 0;
+  // The stash gun the next show selects (ID-209): set by `open(uid)`.
+  let wanted: string | null = null;
 
   /** Raises gun `uid` one step; says what it did, or why not, and keeps focus on the button. */
   function upgradeGunNow(uid: string): void {
@@ -1730,10 +1735,14 @@ export function createInventory(
       confirming = null;
       result = null;
       made = null;
-      selected = null;
       hovered = null;
       pick = { ...DEFAULT_PICK };
       say('');
+      // On the gun asked for (ID-209) when it is in the stash, else the strongest.
+      const want =
+        wanted && opts.state().game.armoury.some((w) => w.uid === wanted) ? wanted : null;
+      selected = want === null ? null : `stash:${want}`;
+      wanted = null;
       // Drawn afresh: the details start on the strongest gun, with no confirm or result.
       listed = null;
       api.refresh();
@@ -1772,8 +1781,11 @@ export function createInventory(
 
   const api: Inventory = {
     isOpen: () => opened,
-    open() {
+    button: openButton,
+    open(uid) {
+      wanted = uid ?? null;
       win.open('weapons');
+      wanted = null;
     },
     close() {
       if (opened) win.close();

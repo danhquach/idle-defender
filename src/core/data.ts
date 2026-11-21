@@ -181,6 +181,34 @@ export const STASH_CAP_MAX = STASH_CAP + STASH_SLOT.add * STASH_SLOT.costs.lengt
  * moved down one rarity (`bonusWeights`), so low grades come most.
  */
 export const SQUAD_BONUS = { rolls: 2, chance: 0.5 } as const;
+/**
+ * Blueprints (ID-209), starting points (the PM's call): a won horde drops one (a gun type, no
+ * rarity) at `chance`, at most one a horde, from its own random stream so the gun drops
+ * never move; the most of one gun type held is `cap`; a blueprint turned away salvages for
+ * `salvage` Scrap.
+ */
+export const BLUEPRINT = { chance: 0.15, cap: 99, salvage: 5 } as const;
+/**
+ * Crafting a gun from a blueprint (ID-209), starting points (the PM's call): the Scrap put in
+ * runs from `min` up in `steps` more steps of `step`. At `min` the rarity odds (percent) are
+ * `from` (the horde drop's band); each extra step moves them evenly toward `to`, the most
+ * Scrap's. Relic is only in `to`.
+ */
+export const CRAFT = {
+  min: 20,
+  step: 20,
+  steps: 10,
+  from: { rusty: 30, common: 45, military: 20, prototype: 5, relic: 0 },
+  to: { rusty: 0, common: 20, military: 45, prototype: 30, relic: 5 },
+} as const satisfies {
+  min: number;
+  step: number;
+  steps: number;
+  from: Record<Rarity, number>;
+  to: Record<Rarity, number>;
+};
+/** The most guns a save counts as crafted: a crafted gun's uid is `f<n>`, n up to this. */
+export const CRAFT_MADE_MAX = 99_999;
 /** Stash guns of one base weapon and rarity that combine into one of the next rarity (ID-091). */
 export const COMBINE_COUNT = 3;
 /**

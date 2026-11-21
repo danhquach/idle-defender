@@ -88,6 +88,8 @@ import {
   TURRET_MOUNTS,
   FREE_WEAPONS,
   GUN_UPGRADE,
+  BLUEPRINT,
+  CRAFT_MADE_MAX,
   WALK_SPOTS,
   WEAPON_IDS,
   stockOf,
@@ -103,6 +105,7 @@ import {
   type Stock,
   type Tier,
 } from '../core/data.ts';
+import { BLUEPRINT_GUNS, type Blueprints, type Craft } from '../core/craft.ts';
 import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad, settleSquad } from '../core/hordeonly.ts';
 import { jobFor, textSeed } from '../core/jobs.ts';
@@ -140,6 +143,13 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * wrong type, a fraction, out of range, extra keys) loads with none bought and copies
  * nothing. The squad is cut to the cap the loaded slots give; a stash past its cap is kept
  * as it is and never grows. A v22 or older save has none.
+ *
+ * Still 23 since blueprints (ID-209, no version bump: the key is only ever written by this
+ * build, and a v22 or older save holding it is refused): the horde-only game may hold `craft`,
+ * written only once a blueprint has dropped: `blueprints`, a count (1 to `BLUEPRINT.cap`) for
+ * each known gun type (`BLUEPRINT_GUNS`) and nothing else, and `made`, the guns crafted (0 to
+ * `CRAFT_MADE_MAX`). A crafted gun's uid is `f<n>`, n at most `made`. Anything else is refused
+ * (the whole save), prototype keys included.
  *
  * 22 since Paramedics patch up the downed (ID-155): a survivor may hold `startHp`, the share
  * of max HP they start the next horde at, from `PATCH_UP.hp` to `PATCH_UP.hpCap`, written
@@ -253,7 +263,7 @@ const BONUS = `(?:-(?:${Array.from({ length: SQUAD_BONUS.rolls }, (_, k) => k + 
  * number that found it and its place in the haul; or a survivor's (`SURVIVOR_ID`).
  */
 const UID = new RegExp(
-  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5})$`,
+  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5}|f[1-9][0-9]{0,4})$`,
 );
 /**
  * The most owned weapons a save holds: the full game's armoury, or the horde-only stash
@@ -506,7 +516,10 @@ function readGame(
     ...(mayAuto && !lacks('autoSquad') ? ['autoSquad'] : []),
     // Written only once a slot is bought (ID-179).
     ...(maySlots && !lacks('slots') ? ['slots'] : []),
+    // Written only once a blueprint has dropped (ID-209).
+    ...(maySlots && !lacks('craft') ? ['craft'] : []),
   ]);
+  const craft = Object.hasOwn(o, 'craft') ? readCraft(o.craft) : null;
   const slots = Object.hasOwn(o, 'slots') ? readSlots(o.slots) : null;
   // Exactly `true`; anything else (a string, 1, an object) loads with it off.
   const auto = Object.hasOwn(o, 'autoSquad') && o.autoSquad === true;
@@ -604,6 +617,11 @@ function readGame(
   ) {
     fail('replay drop from the future');
   }
+  // A crafted gun's uid (`f<n>`, ID-209) names a gun already crafted.
+  const made = craft?.made ?? 0;
+  if (every.some((w) => w.uid.startsWith('f') && Number(w.uid.slice(1)) > made)) {
+    fail('crafted gun from the future');
+  }
   // A gun level (ID-098) only in a v15 save, and from a horde beaten, in every slot: a
   // survivor waiting is read with no horde bound, so this is the check that holds for all.
   const top = Math.max(1, game.hordeNumber - 1);
@@ -636,10 +654,37 @@ function readGame(
     ...(joining.length > 0 ? { joining } : {}),
     ...(auto ? { autoSquad: true as const } : {}),
     ...(slots ? { slots } : {}),
+    ...(craft ? { craft } : {}),
   };
   if (!HORDE_ONLY) return loaded;
   // A stash past the loaded slots' cap (an older save's) is kept as it is and never grows.
   return settleSquad(capSquad(camp));
+}
+
+/**
+ * The blueprints (ID-209): exactly `blueprints` and `made`. `made` is a whole number from 0 to
+ * `CRAFT_MADE_MAX`; `blueprints` a plain object whose keys are known blueprint gun types only
+ * (a look-alike, `__proto__` or the free pistol is refused), each a whole count from 1 to
+ * `BLUEPRINT.cap`. Written only when there is something to keep, so an empty one is refused
+ * too. Copies only the named gun types into a fresh object.
+ */
+function readCraft(v: unknown): Craft {
+  const o = obj(v, ['blueprints', 'made']);
+  const made = int(o.made, 0, CRAFT_MADE_MAX);
+  const raw = o.blueprints;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) fail('blueprints');
+  if (Object.getPrototypeOf(raw) !== Object.prototype) fail('blueprints');
+  for (const key of Object.keys(raw)) {
+    if (!(BLUEPRINT_GUNS as readonly string[]).includes(key)) fail('unknown blueprint');
+  }
+  const blueprints: Blueprints = {};
+  for (const base of BLUEPRINT_GUNS) {
+    if (Object.hasOwn(raw, base)) {
+      blueprints[base] = int((raw as Obj)[base], 1, BLUEPRINT.cap);
+    }
+  }
+  if (Object.keys(blueprints).length === 0 && made === 0) fail('empty craft');
+  return { blueprints, made };
 }
 
 /**
@@ -1102,7 +1147,7 @@ function readOwned(
   const from = Number(uid.slice(1).split('-')[0]);
   // A survivor's camp-level weapon (`c`) is checked against the camp, and a replay's (`r`)
   // against the replays won, once they are read.
-  if (!/^[cr]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
+  if (!/^[crf]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
     fail('weapon from the future');
   }
   const base = oneOf(o.base, WEAPON_IDS);

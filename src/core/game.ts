@@ -3,6 +3,7 @@
 // real time comes in as `now` (ms since the epoch), never read from a clock.
 import { heldName, isOwned, rollDrop, type Held, type OwnedWeapon } from './armoury.ts';
 import { newBase, type Base, type Tier } from './base.ts';
+import type { Craft } from './craft.ts';
 import {
   campXpAfter,
   cashRate,
@@ -131,6 +132,11 @@ export interface GameState {
    * `SQUAD_SLOT_COSTS`) and `stash` ones (`STASH_SLOT.add` slots each). Absent with none.
    */
   slots?: { squad: number; stash: number };
+  /**
+   * Horde-only (ID-209): the blueprints held and the guns crafted so far; absent until a
+   * blueprint drops.
+   */
+  craft?: Craft;
   /** Farming beaten hordes (ID-098): replay wins so far, and the bad-luck count. */
   farm: Farm;
   /**

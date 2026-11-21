@@ -245,7 +245,7 @@ export const pierceOf = (h: Held): number => {
 export const dropChance = (hordeNumber: number): number =>
   Math.min(WEAPON_DROP.cap, WEAPON_DROP.base + WEAPON_DROP.perHorde * hordeNumber);
 
-function rollRarity(rng: Rng, weights: Record<Rarity, number> = WEAPON_DROP.rarity): Rarity {
+export function rollRarity(rng: Rng, weights: Record<Rarity, number> = WEAPON_DROP.rarity): Rarity {
   const total = RARITY_ORDER.reduce((sum, r) => sum + weights[r], 0);
   let roll = rng() * total;
   for (const r of RARITY_ORDER) {

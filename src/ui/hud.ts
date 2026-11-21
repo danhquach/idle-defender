@@ -71,6 +71,7 @@ import {
   type ShopItem,
   type SkillId,
   type Stock,
+  type WeaponId,
   WEAPONS,
 } from '../core/data.ts';
 import {
@@ -1238,8 +1239,16 @@ export function squadDropLines(
           ]),
     );
   }
-  return [...lines, ...(drop.noUpgrades ? [farmText(drop.farmFrom)] : [])];
+  return [
+    ...lines,
+    ...(drop.blueprint ? [blueprintLine(drop.blueprint)] : []),
+    ...(drop.noUpgrades ? [farmText(drop.farmFrom)] : []),
+  ];
 }
+
+/** A dropped blueprint's line (ID-209): "Blueprint: LMG · craft it in the Craft tab". */
+export const blueprintLine = (base: WeaponId): string =>
+  `Blueprint: ${WEAPONS[base].name} · craft it in the Craft tab`;
 
 /** A small labelled pill in the debrief's header: its text and colour. */
 export interface Chip {
@@ -1269,6 +1278,8 @@ export interface DropTile {
   thrown: string | null;
   /** Where to go for upgrades when no gun this horde drops would be an upgrade (`squadGain`); else null. */
   farmNote: string | null;
+  /** The blueprint the win dropped (ID-209), "Blueprint: LMG"; absent with none. */
+  blueprint?: string;
 }
 
 /**
@@ -1356,6 +1367,7 @@ export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: Squad
   }
   return {
     farmNote: drop.noUpgrades ? farmText(drop.farmFrom) : null,
+    ...(drop.blueprint ? { blueprint: blueprintLine(drop.blueprint) } : {}),
     stash: `Stash ${count}/${stashCap(game)}${lost ? ' · thrown away' : ''}`,
     guns: [weapon, ...bonus].map((w, i) => ({
       rarity: w.rarity,
@@ -1739,6 +1751,20 @@ const SCRAP_NOW = /· now [\d,]+/;
 export const scrapNowText = (text: string, now: number): string =>
   text.replace(SCRAP_NOW, `· now ${thousands(now)}`);
 
+/** `text` (a drop tile's "Stash 15/40 …") with its count and cap replaced (ID-209); other text as it is. */
+export const stashNowText = (text: string, count: number, cap: number): string =>
+  text.replace(/^Stash \d+\/\d+/, `Stash ${count}/${cap}`);
+
+/** A win's result screen with its drop tile's stash count set (ID-209), for a screen not yet shown. */
+export function withStashNow(screen: ResultScreen, count: number, cap: number): ResultScreen {
+  const d = screen.debrief;
+  if (!d?.drop) return screen;
+  return {
+    ...screen,
+    debrief: { ...d, drop: { ...d.drop, stash: stashNowText(d.drop.stash, count, cap) } },
+  };
+}
+
 /**
  * A win's result screen with the Scrap balance it shows set to `now` (ID-208): only the "now"
  * figure in its Scrap lines and chip tooltips, nothing else, for a screen not yet shown.
@@ -2063,6 +2089,11 @@ export function createHud(
    */
   resultScrap(now: number): void;
   /**
+   * Sets the stash count a shown win screen's drop tile reports (ID-209) in place ("Stash 15/40"
+   * after a craft added a gun): only that figure changes.
+   */
+  resultStash(count: number, cap: number): void;
+  /**
    * The squad as it stands now, by id (ID-157): a "New" card of someone benched or let go
    * since goes. Nothing with the result screen down.
    */
@@ -2284,6 +2315,8 @@ export function createHud(
   let onAnswerJoin: (id: string, accept: boolean) => void = () => {};
   /** The answers given on the screen's offer line (`Debrief.join`), so far. */
   let joinAnswers: string[] = [];
+  // The drop tile on the result screen now up (ID-209): its stash count is refreshed in place.
+  let shownDrop: DropTile | null = null;
   /** How many are asking now, for the header's pill. */
   let askers = 0;
   /**
@@ -2965,6 +2998,7 @@ export function createHud(
    * stash count and anything thrown away); a second click closes them.
    */
   function gunSection(t: DropTile): HTMLElement {
+    shownDrop = t;
     const section = el('section', 'debrief-guns');
     section.setAttribute('aria-label', 'Weapons dropped');
     const row = el('div', 'gun-row');
@@ -3012,6 +3046,8 @@ export function createHud(
     });
     row.append(...buttons);
     section.append(row, details);
+    // The blueprint the win dropped (ID-209), with the loot; crafted in the camp window's Craft tab.
+    if (t.blueprint) section.append(el('p', 'gun-blueprint', t.blueprint));
     return section;
   }
 
@@ -3516,6 +3552,12 @@ export function createHud(
     hideResult() {
       result.hidden = true;
     },
+    resultStash(count, cap) {
+      if (shownDrop) shownDrop.stash = stashNowText(shownDrop.stash, count, cap);
+      for (const node of result.querySelectorAll<HTMLElement>('.tile-stash')) {
+        node.textContent = stashNowText(node.textContent ?? '', count, cap);
+      }
+    },
     resultScrap(now) {
       for (const node of result.querySelectorAll<HTMLElement>('[title]')) {
         node.title = scrapNowText(node.title, now);
@@ -3533,6 +3575,7 @@ export function createHud(
       joinAnswers = [];
       back.classList.toggle('btn-primary', d !== undefined);
       headChips.replaceChildren(...(d ? debriefChips(d) : []));
+      shownDrop = null;
       picker.replaceChildren(...(d ? debriefBlock(d) : []));
       // A new screen starts scannable: its details closed (ID-186).
       setDetails(false);

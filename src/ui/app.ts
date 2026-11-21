@@ -2,7 +2,8 @@
 // panel between hordes and the HUD in a fight.
 import { campLevelOf, recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { banCard, banLock, chooseCard, rerollLock, rerollOffer, skipOffer } from '../core/cards.ts';
-import { FIELD, HORDE_ONLY, type SkillId } from '../core/data.ts';
+import { FIELD, HORDE_ONLY, type SkillId, type WeaponId } from '../core/data.ts';
+import type { OwnedWeapon } from '../core/armoury.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import {
   layoutOf,
@@ -30,6 +31,9 @@ import {
   setAutoSquad,
   squadOf,
   startSquadHorde,
+  craftGun,
+  salvageBlueprint,
+  stashCap,
   upgradeGun,
   withUpgradedGun,
   toggleSkill,
@@ -112,6 +116,7 @@ import {
   buyText,
   upgradeText,
   withScrapNow,
+  withStashNow,
   BUY_WAIT,
   createHud,
   createScrapChip,
@@ -136,6 +141,7 @@ import {
 import { createDebugPanel, type DebugActions, type DebugSpeed, type DebugView } from './debug.ts';
 import { createIntro } from './intro.ts';
 import { createCampWindow } from './campwindow.ts';
+import { CRAFT_WAIT, createCraft, type CraftTab } from './craft.ts';
 import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
@@ -455,6 +461,33 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true };
   }
   /**
+   * Crafts a `base` gun from a blueprint and `amount` Scrap (the Craft tab, ID-209), between
+   * hordes: saved at once, the gun in the stash; the gun pickers and the result screen's Scrap
+   * follow.
+   */
+  function craftNow(
+    base: WeaponId,
+    amount: number,
+  ): { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string } {
+    if (horde && !resultUp()) return { ok: false, reason: CRAFT_WAIT };
+    const r = craftGun(game, base, amount);
+    if (!r.ok) return r;
+    commit(r.game);
+    if (!horde) preview = startSquadHorde(game, 0, Date.now());
+    refreshPanel();
+    refreshResultScrap();
+    return { ok: true, weapon: r.weapon };
+  }
+  /** Turns a `base` blueprint into a little Scrap (the Craft tab, ID-209), between hordes: saved at once. */
+  function salvageNow(base: WeaponId): { ok: true; scrap: number } | { ok: false; reason: string } {
+    if (horde && !resultUp()) return { ok: false, reason: CRAFT_WAIT };
+    const r = salvageBlueprint(game, base);
+    if (!r.ok) return r;
+    commit(r.game);
+    refreshResultScrap();
+    return { ok: true, scrap: r.scrap };
+  }
+  /**
    * Raises gun `uid` one upgrade step (the Inventory, ID-208), held or in the stash, between
    * hordes or in a fight: saved at once. In a fight the survivor holding it fights with the new
    * numbers from the next shot, and the Squad Power chip follows.
@@ -482,8 +515,17 @@ export function start(root: HTMLElement, art: Art): void {
    */
   function refreshResultScrap(): void {
     if (!HORDE_ONLY || !horde || horde.outcome !== 'won') return;
-    if (pendingResult) pendingResult.screen = withScrapNow(pendingResult.screen, game.stock.scrap);
-    else if (endedAt !== null) hud.resultScrap(game.stock.scrap);
+    const stash = [game.armoury.length, stashCap(game)] as const;
+    if (pendingResult) {
+      pendingResult.screen = withStashNow(
+        withScrapNow(pendingResult.screen, game.stock.scrap),
+        ...stash,
+      );
+    } else if (endedAt !== null) {
+      hud.resultScrap(game.stock.scrap);
+      // The drop tile's "Stash n/cap" follows a gun crafted here (ID-209).
+      hud.resultStash(...stash);
+    }
   }
   /**
    * Moves survivor `id` between the squad and the bench between hordes (the Roster, ID-147):
@@ -724,6 +766,23 @@ export function start(root: HTMLElement, art: Art): void {
     },
     campWindow,
   );
+  // The Craft tab (ID-209), third in the camp window: blueprints and Scrap make a gun.
+  const craftTab: CraftTab | null = HORDE_ONLY
+    ? createCraft(
+        {
+          state: () => ({
+            game,
+            resumes: horde?.outcome === 'fighting' && !held,
+            canCraft: !horde || resultUp(),
+          }),
+          onCraft: craftNow,
+          onSalvage: salvageNow,
+          onView: (uid) => inventory.open(uid),
+        },
+        campWindow,
+        inventory.button,
+      )
+    : null;
   const menu = createMenu(root, {
     // Load and New camp lock only while a fight runs: the result screen is between hordes (ID-156).
     state: () => ({ game, fighting: horde !== null && !resultUp(), held }),
@@ -821,11 +880,16 @@ export function start(root: HTMLElement, art: Art): void {
     roster.open(t.dataset.openSurvivor, t);
   });
   const dialogOpen = (): boolean =>
-    intro.isOpen() || menu.isOpen() || inventory.isOpen() || !!roster?.isOpen();
+    intro.isOpen() ||
+    menu.isOpen() ||
+    inventory.isOpen() ||
+    !!craftTab?.isOpen() ||
+    !!roster?.isOpen();
   function refreshDialogs(): void {
     scrapChip?.set(game.stock.scrap);
     menu.refresh();
     inventory.refresh();
+    craftTab?.refresh();
     roster?.refresh();
   }
   /** Takes `next` as the game and saves it; the menu's Save tab says how that went. */

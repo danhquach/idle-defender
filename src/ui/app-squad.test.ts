@@ -25,7 +25,8 @@ import { LEVEL_ONE_TEXT } from './statlines.ts';
 import { start } from './app.ts';
 import { ASK_CHANGED } from './confirm.ts';
 import { answerConfirm, confirmPanel, confirmQuestion, flush, skipIntro } from './testing.ts';
-import { AIM_HELD_PROMPT, AIM_PROMPT, BEST_GUNS, BEST_GUNS_NONE } from './hud.ts';
+import { AIM_HELD_PROMPT, AIM_PROMPT, BEST_GUNS, BEST_GUNS_NONE, blueprintLine } from './hud.ts';
+import { BLUEPRINT_GUNS, rollBlueprint } from '../core/craft.ts';
 import { project } from './projection.ts';
 import { GUNS_WAIT } from './inventory.ts';
 import { drawScene } from './render.ts';
@@ -2199,5 +2200,137 @@ describe('Upgrade through the app (ID-208)', () => {
     const titles = [...m.result().querySelectorAll<HTMLElement>('[title]')].map((e) => e.title);
     expect(titles.some((t) => t.includes('now 1,890'))).toBe(true);
     expect(titles.some((t) => t.includes('now 2,040'))).toBe(false);
+  });
+});
+
+describe('Craft through the app (ID-209)', () => {
+  const GUN = BLUEPRINT_GUNS[0]!;
+
+  /** Horde 6, one survivor, `scrap` Scrap and (optionally) a blueprint of `GUN`. */
+  function craftCamp(scrap: number, bp = 1, seedWith: 'drop' | 'none' = 'none') {
+    const g = newGame('horde');
+    const camp: GameState = {
+      ...g,
+      hordeNumber: 6,
+      roster: [recruit(1)],
+      camp: { ...g.camp, recruits: 1 },
+      stock: { ...g.stock, scrap },
+      ...(bp > 0 ? { craft: { blueprints: { [GUN]: bp }, made: 0 } } : {}),
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    let seed = 1;
+    while (
+      joiners(camp, seed, true).length > 0 ||
+      (rollBlueprint(seed) !== null) !== (seedWith === 'drop')
+    )
+      seed++;
+    vi.spyOn(Date, 'now').mockReturnValue(seed);
+    const booted = boot();
+    step(0);
+    let t = 0;
+    const frame = () => step((t += 16));
+    const open = () => booted.root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const scrim = () => document.querySelector<HTMLElement>('.camp-scrim')!;
+    const tabs = () => [...scrim().querySelectorAll('.camp-tab')].map((x) => x.textContent);
+    const craftTab = () => scrim().querySelector<HTMLButtonElement>('#camp-tab-craft')!;
+    const go = () => scrim().querySelector<HTMLButtonElement>('.craft-go')!;
+    const chip = () => document.querySelector('.scrap-chip')!.textContent;
+    const fight = () => {
+      booted.root.querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!.click();
+      frame();
+      frame();
+    };
+    return { ...booted, frame, open, scrim, tabs, craftTab, go, chip, fight, seed };
+  }
+
+  it('has the Craft tab after Weapons (and the Roster before them)', () => {
+    const m = craftCamp(100);
+    m.open();
+    expect(m.tabs()).toEqual(['Roster', 'Weapons', 'Craft · 1']);
+  });
+
+  it('crafts between hordes: saved, in the stash, Scrap spent, the chip follows', () => {
+    const m = craftCamp(500);
+    m.open();
+    m.craftTab().click();
+    expect(m.go().textContent).toBe('Craft · 20 Scrap');
+    m.go().click();
+    expect(m.saved().stock.scrap).toBe(480);
+    expect(m.saved().armoury).toHaveLength(1);
+    expect(m.saved().armoury[0]).toMatchObject({ uid: 'f1', base: GUN, level: 5 });
+    expect(m.saved().craft).toEqual({ blueprints: {}, made: 1 });
+    expect(m.chip()).toBe('Scrap 480');
+    expect(m.scrim().querySelector('.craft-result-line')!.textContent).toMatch(/^Crafted: Lv 5 /);
+  });
+
+  it('salvages a blueprint for 5 Scrap after the confirm, saved', async () => {
+    const m = craftCamp(500, 2);
+    m.open();
+    m.craftTab().click();
+    m.scrim().querySelector<HTMLButtonElement>('.craft-salvage')!.click();
+    expect(confirmQuestion()).toMatch(/^Salvage 1 .+ blueprint for 5 Scrap\?$/);
+    await answerConfirm(true);
+    expect(m.saved().stock.scrap).toBe(505);
+    expect(m.saved().craft!.blueprints[GUN]).toBe(1);
+    expect(m.chip()).toBe('Scrap 505');
+  });
+
+  it('on the result screen a craft refreshes the drop tile’s stash count in place', () => {
+    const m = craftCamp(500, 1);
+    m.fight();
+    endNextTick('won');
+    m.frame();
+    const chip = m.result().querySelector<HTMLButtonElement>('.gun-chip')!;
+    chip.click();
+    const before = m.result().querySelector('.tile-stash')!.textContent!;
+    const n = Number(/^Stash (\d+)/.exec(before)![1]);
+    m.open();
+    m.craftTab().click();
+    m.go().click();
+    expect(m.result().querySelector('.tile-stash')!.textContent).toBe(
+      before.replace(/^Stash \d+/, `Stash ${n + 1}`),
+    );
+  });
+
+  it('in a fight the Craft button is greyed and nothing is made', () => {
+    const m = craftCamp(500);
+    m.fight();
+    m.open();
+    m.craftTab().click();
+    expect(m.go().disabled).toBe(true);
+    m.go().click();
+    expect(m.saved().armoury).toHaveLength(0);
+    expect(m.saved().craft!.blueprints[GUN]).toBe(1);
+  });
+
+  it('a won horde that drops a blueprint saves it and the result panel shows it with the loot', () => {
+    const m = craftCamp(0, 0, 'drop');
+    const base = rollBlueprint(m.seed)!;
+    m.fight();
+    endNextTick('won');
+    m.frame();
+    expect(m.saved().craft).toEqual({ blueprints: { [base]: 1 }, made: 0 });
+    expect(m.result().querySelector('.gun-blueprint')!.textContent).toBe(blueprintLine(base));
+  });
+
+  it('a won horde with no blueprint drop leaves the save with no craft', () => {
+    const m = craftCamp(0, 0, 'none');
+    m.fight();
+    endNextTick('won');
+    m.frame();
+    expect(m.saved().craft).toBeUndefined();
+    expect(m.result().querySelector('.gun-blueprint')).toBeNull();
+  });
+
+  it('crafts on the result screen too, after a win', () => {
+    const m = craftCamp(500, 1);
+    m.fight();
+    endNextTick('won');
+    m.frame();
+    m.open();
+    m.craftTab().click();
+    expect(m.go().disabled).toBe(false);
+    m.go().click();
+    expect(m.saved().armoury.some((w) => w.uid === 'f1')).toBe(true);
   });
 });
