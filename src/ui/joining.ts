@@ -37,9 +37,6 @@ export const joinCards = (game: Pick<GameState, 'joining'>): JoinCard[] =>
 /** Under the offer tile's label, before any answer (ID-150): Refuse can't be undone. */
 export const REFUSE_NOTE = 'Refused survivors are gone for good.';
 
-/** The offer tile's label: "Asks to join" / "2 ask to join". */
-export const joinLabel = (n: number): string => (n === 1 ? 'Asks to join' : `${n} ask to join`);
-
 /** "Ava (Hunter) asks to join the camp": the result screen's line for each. */
 export const askLine = (d: RosterDefender): string =>
   `${d.name} (${JOBS[d.job].name}) asks to join the camp`;

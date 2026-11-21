@@ -228,9 +228,9 @@ describe('the start screen (ID-098)', () => {
     expect(button().textContent).toBe('Replay Horde 2');
     // "Replay" is the chip's to say, not the title's.
     expect(title()).toBe('Horde 2');
-    expect(root.querySelector('.debrief-chips')!.textContent).toContain('Replay');
+    expect(root.querySelector('.debrief-stats')!.textContent).toContain('Replay');
     // The campaign has no goal chip (ID-196): the radio is not on this panel.
-    expect(root.querySelector('.debrief-chips')!.textContent).not.toMatch(/radio/i);
+    expect(root.querySelector('.debrief-stats')!.textContent).not.toMatch(/radio/i);
     expect(line().querySelector('.hud-horde-power-text')!.textContent).toBe(
       powerLine(power, recommendedPower(2)).text,
     );
@@ -240,11 +240,11 @@ describe('the start screen (ID-098)', () => {
     expect(picks).toEqual([2, 5]);
   });
 
-  it('Endless: its goal chip stays first whichever horde is picked (ID-127)', () => {
+  it('Endless: its goal stat stays first whichever horde is picked (ID-127)', () => {
     const { root, h, choose } = page();
     const g = squadGame(2, 45);
     h.showResult(squadStart(g));
-    const first = () => root.querySelector('.debrief-chips')!.firstElementChild!.textContent;
+    const first = () => root.querySelector('.debrief-stats')!.firstElementChild!.textContent;
     expect(first()).toBe('Endless · best 44');
     choose(5);
     expect(first()).toBe('Endless · best 44');

@@ -142,7 +142,7 @@ import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '..
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
-import { askLine, joinLabel, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
+import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
 import {
   ART_URLS,
   avatarOf,
@@ -774,6 +774,42 @@ export function powerLine(power: number, rec: number): PowerLine {
   };
 }
 
+/**
+ * A Squad Power meter (ID-098): a fill in its band's colour and a tick at Recommended Power.
+ * The fight's corner and the next horde's card (ID-200) each have one; `fillPowerMeter` sets it.
+ */
+function powerMeterNode(): HTMLElement {
+  const meter = document.createElement('div');
+  meter.className = 'hud-power-meter';
+  meter.setAttribute('role', 'meter');
+  meter.setAttribute('aria-valuemin', '0');
+  meter.setAttribute('aria-label', 'Squad Power against Recommended Power');
+  const fill = document.createElement('div');
+  fill.className = 'hud-power-fill';
+  const tick = document.createElement('div');
+  tick.className = 'hud-power-tick';
+  meter.append(fill, tick);
+  return meter;
+}
+
+/**
+ * Sets `meter` (`powerMeterNode`) to `l`. The fill never runs past the meter's end: a squad
+ * stronger than `POWER_METER_END` × Recommended fills it whole (ID-200).
+ */
+function fillPowerMeter(meter: HTMLElement, l: PowerLine): void {
+  const share = Math.min(1, Math.max(0, l.fill));
+  meter.dataset.band = l.band;
+  meter.querySelector<HTMLElement>('.hud-power-fill')!.style.width = `${(100 * share).toFixed(1)}%`;
+  meter.querySelector<HTMLElement>('.hud-power-tick')!.style.left = `${(100 * l.tick).toFixed(1)}%`;
+  const end = Math.round(POWER_METER_END * l.rec);
+  meter.setAttribute('aria-valuemax', String(end));
+  meter.setAttribute('aria-valuenow', String(Math.min(l.power, end)));
+  meter.setAttribute(
+    'aria-valuetext',
+    `${l.text} (${BAND_WORD[l.band]}; the mark is Recommended Power)`,
+  );
+}
+
 /** One entry of the horde picker (ID-098). */
 export interface HordeChoice {
   horde: number;
@@ -1261,6 +1297,11 @@ export interface Chip {
   title?: string;
   /** The chip is a button that opens the result's details (ID-186), where its sentence is. */
   details?: true;
+  /**
+   * Something that happened (a boss down), shown with the details' tags (ID-200), not with
+   * the numbers. A chip with `details` is one too.
+   */
+  event?: true;
 }
 
 /** A win's weapons as the panel's Weapons row (ID-067, ID-196). */
@@ -1700,6 +1741,10 @@ export function markBench(moves: readonly GunMove[], squadIds: ReadonlySet<strin
  */
 export const SQUAD_NO_LEVEL_UPS = 'No level-ups this horde. Change guns in the Roster.';
 
+/** The offer line's answers (ID-200): a tick and a cross; each button's label says it in words. */
+export const JOIN_YES = '✓';
+export const JOIN_NO = '✕';
+
 /**
  * Endless on the start screen (ID-127), past the finale: the best horde reached and the next
  * one to hold. Null in the campaign: the radio is off this panel (ID-196).
@@ -2001,7 +2046,11 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           ...(xpChip ? [{ text: xpChip, tone: 'ok' as const }] : []),
           ...(benchXp ? [{ text: benchXp, tone: 'ok' as const }] : []),
           // Good news on a win (ID-196): green, not the boss chip's red.
-          ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'ok' as const })),
+          ...bossFates(s).map((f) => ({
+            text: `${f.name} dead`,
+            tone: 'ok' as const,
+            event: true as const,
+          })),
           // A boss's first clear (ID-127): the card it unlocked; its sentence is in the details.
           ...(reward?.unlock
             ? [
@@ -2222,12 +2271,7 @@ export function createHud(
   const powerRow = el('div', 'hud-corner-row hud-power');
   const powerLabel = el('span', 'hud-power-label');
   // Squad Power's fill in its band's colour, a tick at Recommended; the number is always shown.
-  const powerMeter = el('div', 'hud-power-meter');
-  powerMeter.setAttribute('role', 'meter');
-  powerMeter.setAttribute('aria-valuemin', '0');
-  const powerFill = el('div', 'hud-power-fill');
-  const powerTick = el('div', 'hud-power-tick');
-  powerMeter.append(powerFill, powerTick);
+  const powerMeter = powerMeterNode();
   powerRow.append(powerLabel, powerMeter);
   powerRow.hidden = true;
   cornerPanel.append(waveRow, xpRow, powerRow);
@@ -2242,16 +2286,7 @@ export function createHud(
     const l = fightLine;
     if (powerLabel.textContent !== l.text) powerLabel.textContent = l.text;
     powerRow.dataset.band = l.band;
-    powerFill.style.width = `${(100 * l.fill).toFixed(1)}%`;
-    powerTick.style.left = `${(100 * l.tick).toFixed(1)}%`;
-    const end = Math.round(POWER_METER_END * l.rec);
-    powerMeter.setAttribute('aria-valuemax', String(end));
-    powerMeter.setAttribute('aria-valuenow', String(Math.min(l.power, end)));
-    powerMeter.setAttribute(
-      'aria-valuetext',
-      `${l.text} (${BAND_WORD[l.band]}; the mark is Recommended Power)`,
-    );
-    powerMeter.setAttribute('aria-label', 'Squad Power against Recommended Power');
+    fillPowerMeter(powerMeter, l);
   };
   // One row per boss on the field (ID-099): never more than BOSSES.max at once.
   const boss = el('div', 'hud-boss');
@@ -2341,44 +2376,42 @@ export function createHud(
   replace.hidden = true;
   const result = el('div', 'hud-panel hud-result');
   const resultTitle = el('h2', 'hud-result-title');
-  // The horde-only panel's header (ID-196): the title, then its reward pills.
+  // The horde-only panel's header (ID-196, ID-200): the title, the numbers on one line
+  // (waves, Scrap, XP), then a row of small tags for what happened, with "Details".
+  const headStats = el('p', 'debrief-stats');
+  // A list, so a screen reader parts the numbers instead of running them together.
+  headStats.setAttribute('role', 'list');
   const headChips = el('div', 'debrief-chips');
   const resultHead = el('div', 'hud-result-head');
-  resultHead.append(resultTitle, headChips);
+  resultHead.append(resultTitle, headStats, headChips);
   const resultList = el('ul', 'hud-result-list');
   const picker = el('div', 'hud-picker');
   const campPicker = el('div', 'hud-picker');
   // The body between the header and the footer: on the horde-only panel, the part that scrolls.
   const resultBody = el('div', 'hud-result-scroll');
   resultBody.append(resultList, picker, campPicker);
+  // The body fades out at its foot while more is below it (ID-200): a card cut off at the
+  // edge reads as "scroll for more", not as something lying under the footer.
+  const drawMore = (): void => {
+    const more = resultBody.scrollHeight - resultBody.clientHeight - resultBody.scrollTop > 1;
+    resultBody.toggleAttribute('data-more', more);
+  };
+  resultBody.addEventListener('scroll', drawMore, { passive: true });
   // Who is asking to join (ID-150): one row each with Accept and Refuse; hidden once answered.
   const joinBox = el('section', 'debrief-join');
   joinBox.setAttribute('aria-label', 'Asking to join');
   joinBox.hidden = true;
+  // The fade follows the body's size and its content's (a window resized, details opened,
+  // an answer given). No observer under jsdom.
+  if (typeof ResizeObserver !== 'undefined') {
+    const watch = new ResizeObserver(drawMore);
+    for (const node of [resultBody, picker, joinBox]) watch.observe(node);
+  }
   let onAnswerJoin: (id: string, accept: boolean) => void = () => {};
   /** The answers given on the screen's offer line (`Debrief.join`), so far. */
   let joinAnswers: string[] = [];
   // The drop tile on the result screen now up (ID-209): its stash count is refreshed in place.
   let shownDrop: DropTile | null = null;
-  /** How many are asking now, for the header's pill. */
-  let askers = 0;
-  /**
-   * A pill in the header while someone is asking (ID-196): the offer line can sit below the
-   * body's fold, and a click brings it into view with the keyboard on its first answer.
-   */
-  function drawJoinChip(): void {
-    headChips.querySelector('.chip-join')?.remove();
-    if (askers === 0 || result.hidden || !joinBox.isConnected) return;
-    const chip = el('button', 'chip chip-toggle chip-join', joinLabel(askers));
-    chip.type = 'button';
-    chip.dataset.tone = 'warn';
-    chip.addEventListener('click', () => {
-      reveal(joinBox);
-      joinBox.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
-    });
-    // Before "Details", which stays last.
-    headChips.insertBefore(chip, headChips.querySelector('.debrief-details'));
-  }
   /**
    * Draws the offer line (ID-182, ID-196) from `cards`, who is asking now: one row each with
    * Accept and Refuse, then each answer given (it stays). Hidden when it has nothing to say.
@@ -2386,17 +2419,22 @@ export function createHud(
   function drawJoin(cards: readonly JoinCard[], keep = false): void {
     const had = keep || joinBox.contains(document.activeElement);
     joinBox.hidden = cards.length === 0 && joinAnswers.length === 0;
+    // While anyone still asks, the card sticks to the body's top (ID-200): a scroll, or the
+    // reveal of a newcomer's card, never takes the answers out of view.
+    joinBox.toggleAttribute('data-asking', cards.length > 0);
     // One line each (ID-196): the name and profession, then Accept and Refuse.
     const rows = cards.map((c) => {
       const row = el('div', 'join-row');
       row.dataset.joiner = c.id;
       const answer = (accept: boolean): HTMLButtonElement => {
-        const b = el('button', 'hud-button join-btn', accept ? 'Accept' : 'Refuse');
+        // A tick or a cross (ID-200): small; the word is in the button's label and tooltip.
+        const b = el('button', 'hud-button join-btn', accept ? JOIN_YES : JOIN_NO);
         b.type = 'button';
         setVariant(b, accept ? 'primary' : 'secondary');
         b.setAttribute('aria-label', `${accept ? 'Accept' : 'Refuse'} ${c.name}`);
-        // What the profession brings, and that a refusal is for good, on hover.
-        b.title = accept ? c.job : REFUSE_NOTE;
+        // On hover, the word with what the profession brings, or the refusal note ("Refused
+        // survivors are gone for good."), which says it.
+        b.title = accept ? `Accept: ${c.job}` : REFUSE_NOTE;
         b.addEventListener('click', () => {
           if (!result.hidden) onAnswerJoin(c.id, accept);
         });
@@ -2410,8 +2448,6 @@ export function createHud(
     });
     const answered = joinAnswers.map((t) => el('p', 'join-answer', t));
     joinBox.replaceChildren(...rows, ...answered);
-    askers = cards.length;
-    drawJoinChip();
     // An answer keeps the keyboard in the tile, else on the button that moves on.
     if (had) (joinBox.querySelector<HTMLButtonElement>('button') ?? back).focus();
   }
@@ -2446,20 +2482,21 @@ export function createHud(
   }
   let leaving = false;
   let canLeave: () => boolean | Promise<boolean> = () => true;
-  // The button sits in a footer: a horde-only panel pins it (ID-067), as two rows (ID-196):
-  // the skills, then the horde picker with its readiness and the button.
+  // The button sits in a footer: a horde-only panel pins it (ID-067). Two columns (ID-200):
+  // the next horde's card (the picker, its power meter and readiness), then the skills over
+  // the button.
   const foot = el('div', 'hud-result-foot');
-  // The horde picker (ID-098), beside the button it labels.
+  // The horde picker (ID-098), the next horde's card.
   const pickBlock = el('div', 'hud-horde-pick');
   pickBlock.hidden = true;
-  // The skill pick for the next horde (ID-100): a row of its own above the horde picker.
+  // The skill pick for the next horde (ID-100), above the button.
   const skillBlock = el('div', 'hud-skill-pick');
   skillBlock.setAttribute('role', 'group');
   skillBlock.hidden = true;
   let onPickSkill: (skill: SkillId) => void = () => {};
   const startRow = el('div', 'hud-start-row');
-  startRow.append(pickBlock, back);
-  foot.append(skillBlock, startRow);
+  startRow.append(skillBlock, back);
+  foot.append(pickBlock, startRow);
   let onPickHorde: (horde: number) => void = () => {};
   result.append(resultHead, resultBody, foot);
   const toast = el('div', 'hud-toast');
@@ -2873,6 +2910,30 @@ export function createHud(
     });
 
   /**
+   * The header under the title (ID-200): the numbers (`chips` that are neither an event nor
+   * open the details) as one line of plain stats, then the events as small tags, with the
+   * "Details" button last when `details` (the screen has sentences to open).
+   */
+  function drawHead(chips: readonly Chip[], details: boolean): void {
+    const isTag = (c: Chip): boolean => c.details === true || c.event === true;
+    headStats.replaceChildren(
+      ...chips
+        .filter((c) => !isTag(c))
+        .map((c) => {
+          const stat = el('span', 'debrief-stat', c.text);
+          stat.setAttribute('role', 'listitem');
+          stat.dataset.tone = c.tone;
+          if (c.title) stat.title = c.title;
+          return stat;
+        }),
+    );
+    headChips.replaceChildren(
+      ...chipNodes(chips.filter(isTag)),
+      ...(details ? [detailsButton('debrief-details', DETAILS)] : []),
+    );
+  }
+
+  /**
    * The skill pick (ID-100), the footer's Skills row (ID-196): a toggle per skill, pressed
    * when picked, and a line on the pick's power. A third skill can't be added while two are
    * picked. A toggle goes to `onPickSkill`; the app redraws it with the pick it saved.
@@ -2944,8 +3005,12 @@ export function createHud(
       select.append(option);
     }
     select.value = String(p.value);
-    const label = el('label', 'hud-horde-label', 'Horde to fight');
+    const label = el('label', 'hud-horde-label', 'Next horde');
     label.htmlFor = select.id;
+    // Squad Power against the horde's Recommended Power, as the fight's corner meter shows it.
+    const meter = powerMeterNode();
+    // The power line under it says the same in words: a screen reader hears it once.
+    meter.setAttribute('aria-hidden', 'true');
     const line = el('p', 'hud-horde-power');
     const lineText = el('span', 'hud-horde-power-text');
     const band = el('span', 'hud-horde-band');
@@ -2961,6 +3026,7 @@ export function createHud(
       lineText.textContent = o.power.text;
       band.textContent = BAND_WORD[o.power.band];
       line.dataset.band = o.power.band;
+      fillPowerMeter(meter, o.power);
       hurtBand.textContent = INJURY_WORD[o.injury];
       hurtBand.title = INJURY_TIP[o.injury];
       hurt.dataset.band = INJURY_TONE[o.injury];
@@ -2976,29 +3042,16 @@ export function createHud(
       back.textContent = o.button;
       if (p.retitle) {
         resultTitle.textContent = o.start.title;
-        headChips.replaceChildren(...chipNodes(o.start.chips));
-        drawJoinChip();
+        drawHead(o.start.chips, false);
       }
       onPickHorde(o.horde);
     });
-    // Two columns: the select with its power line and farm hint under it, then the win cost.
-    const pick = el('div', 'hud-horde-choice');
-    pick.append(select, line, hint);
-    const ready = el('div', 'hud-horde-ready');
-    ready.append(hurt);
-    pickBlock.replaceChildren(label, pick, ready);
+    // The next horde's card (ID-200): its label, the select, the meter, then the power line
+    // and what a win is likely to cost on one row, and where to farm instead under them.
+    const nums = el('div', 'hud-horde-ready');
+    nums.append(line, hurt);
+    pickBlock.replaceChildren(label, select, meter, nums, hint);
     if (had) select.focus();
-  }
-
-  /**
-   * The horde-only panel's header pills (ID-196), with the "Details" button when the
-   * screen has sentences to open: with none it would open nothing.
-   */
-  function debriefChips(d: Debrief): HTMLElement[] {
-    return [
-      ...chipNodes(d.chips),
-      ...((d.notes ?? []).length > 0 ? [detailsButton('debrief-details', DETAILS)] : []),
-    ];
   }
 
   /**
@@ -3029,8 +3082,7 @@ export function createHud(
     } else if (d.empty) {
       parts.push(emptySection(d.empty));
     }
-    // The offer line (ID-150, ID-196) under the squad, kept across redraws: `showJoin` fills it.
-    if (d.join) parts.push(joinBox);
+    // The offer line (ID-150) is not here: `showResult` puts it first in the body (ID-200).
     if (d.note) parts.push(el('p', 'debrief-note', d.note));
     return parts;
   }
@@ -3616,10 +3668,15 @@ export function createHud(
       resultList.hidden = d !== undefined;
       resultList.replaceChildren(...(d ? [] : screen.lines.map((line) => el('li', '', line))));
       joinAnswers = [];
+      joinBox.removeAttribute('data-asking');
       back.classList.toggle('btn-primary', d !== undefined);
-      headChips.replaceChildren(...(d ? debriefChips(d) : []));
+      drawHead(d?.chips ?? [], (d?.notes ?? []).length > 0);
       shownDrop = null;
       picker.replaceChildren(...(d ? debriefBlock(d) : []));
+      // The offer line (ID-150) is the body's first card (ID-200): on screen without
+      // scrolling, and nothing scrolls under it. Kept across redraws; `showJoin` fills it.
+      if (d?.join) resultBody.prepend(joinBox);
+      else joinBox.remove();
       // A new screen starts scannable: its details closed (ID-186).
       setDetails(false);
       back.textContent = screen.button;
@@ -3633,6 +3690,7 @@ export function createHud(
       // A new screen starts at its top, not where the last one was scrolled to.
       result.scrollTop = 0;
       resultBody.scrollTop = 0;
+      drawMore();
       // Without scrolling: the footer's button would pull the panel past the drop tile.
       (campPicker.querySelector<HTMLButtonElement>('button:enabled') ?? back).focus({
         preventScroll: true,

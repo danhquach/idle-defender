@@ -80,6 +80,8 @@
   --color-band-short: #e86a6a;
   /* The band colour in use: set by [data-band] on a power line or meter. */
   --power-color: var(--color-text-muted);
+  /* The result panel body's gap (ID-200): set on the body, read by its "more below" cue. */
+  --scroll-gap: var(--space-10);
   --color-synergy: #e9c46a;
   --color-reason: #c98a6a;
   --color-armed: #ffe066;
@@ -1104,18 +1106,17 @@ body {
   white-space: nowrap;
 }
 
-/* --- The horde-only panel (ID-067, ID-196): one layout and one size before a horde, after
-   it and with a win's details open. A header (the centred title over its reward pills), a
-   body that scrolls (a win's weapons, the squad, anyone asking to join) and a footer of two
-   rows (the skills; the horde, its readiness and the button). Sized for a win's weapons row
-   over six squad cards, three to a row. --- */
+/* --- The horde-only panel (ID-067, ID-196): one layout before a horde and after it. A
+   header (the centred title over its reward pills), a body (a win's weapons, the squad), the
+   offer line while anyone asks to join, and a footer of two rows (the skills; the horde, its
+   readiness and the button). As tall as its content (ID-200), up to the room between the top
+   bar and the XP bar (64 px each side); past that only the body scrolls. --- */
 .hud-result.hud-debrief {
   display: flex;
   flex-direction: column;
-  width: min(640px, calc(100vw - 32px));
-  /* Clear of the top bar and the XP bar (64 px each side) in a short window. */
-  height: min(442px, calc(100vh - 128px));
-  max-height: none;
+  width: min(680px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100vh - 128px);
   padding: 0;
   overflow: hidden;
   text-align: left;
@@ -1145,11 +1146,56 @@ body {
   color: var(--color-danger-text);
 }
 
+/* The numbers under the title (ID-200): one line of plain stats in their tone's colour,
+   split by thin rules, a size up from the tags under them. */
+.debrief-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2) 0;
+  margin: 0;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.debrief-stats:empty {
+  display: none;
+}
+
+.debrief-stat {
+  padding: 0 var(--space-10);
+  white-space: nowrap;
+}
+
+.debrief-stat + .debrief-stat {
+  border-left: 1px solid var(--color-divider);
+}
+
+.debrief-stat[data-tone='ok'] {
+  color: var(--color-ok-text);
+}
+
+.debrief-stat[data-tone='warn'] {
+  color: var(--color-warn);
+}
+
+.debrief-stat[data-tone='boss'] {
+  color: var(--color-danger-text);
+}
+
+/* What happened (ID-200): small tags, quieter than the numbers, "Details" last. */
 .debrief-chips {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-4) var(--space-6);
+}
+
+.debrief-chips .chip,
+.debrief-chips .debrief-details {
+  padding: 1px 8px;
+  font-size: var(--text-xs);
 }
 
 .debrief-chips:empty {
@@ -1160,7 +1206,9 @@ body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--space-10);
+  /* The gap between its parts, a variable: the "more below" cue pulls itself up by it. */
+  --scroll-gap: var(--space-10);
+  gap: var(--scroll-gap);
   min-height: 0;
   padding: var(--space-10) var(--space-16);
   overflow-y: auto;
@@ -1251,13 +1299,18 @@ body {
   color: var(--color-accent);
 }
 
+/* Up to two lines (ID-200): the loot's name is what the player looks for, so a narrow chip
+   wraps it before it cuts it ("…" only past two lines). */
 .gun-chip-name {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   font-size: var(--text-body-sm);
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .gun-chip-power {
@@ -1404,12 +1457,56 @@ body {
   color: var(--color-ok-text);
 }
 
-/* Someone asking to join (ID-150, ID-196): one line under the squad, the name and
-   profession, then Accept and Refuse. An answer given stays as a line in its place. */
+/* Someone asking to join (ID-150, ID-196): one line each, the name and profession, then
+   Accept and Refuse. An answer given stays as a line in its place. The body's first card
+   (ID-200), on the warn tint: on screen without scrolling, and nothing scrolls under it. */
 .debrief-join {
   display: flex;
+  flex: none;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-12);
+  border: 1px solid var(--color-warn-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warn-bg);
+}
+
+/* While anyone still asks (`data-asking`), it sticks to the body's top: at rest it sits
+   there anyway; a scroll or a newcomer's revealed card never takes the answers away. Over
+   the gun chips, which are positioned. */
+.hud-debrief .debrief-join[data-asking] {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+}
+
+/* Two asking: a thin rule ties each name to its own answers. */
+.join-row + .join-row {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-warn-border);
+}
+
+/* More below the body's edge (`data-more`, set by the HUD): a cue at its foot, over a
+   fade, so a card cut at the edge reads as "more below". It takes no room (pulled up
+   over the last gap) and no clicks. */
+.hud-debrief .hud-result-scroll[data-more]::after {
+  /* The first is the fallback where alt text after "/" is not supported: keep both. */
+  /* Both on purpose: the first for a browser without alt text after "/", which a screen
+     reader then skips. */
+  content: '\25BE  more below';
+  content: '\25BE  more below' / '';
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  justify-content: center;
+  height: 28px;
+  margin-top: calc(-28px - var(--scroll-gap));
+  background: linear-gradient(to bottom, transparent, var(--color-panel-solid) 75%);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  pointer-events: none;
 }
 
 .debrief-join[hidden] {
@@ -1422,21 +1519,22 @@ body {
   gap: var(--space-8);
 }
 
+/* The line wraps rather than cut "asks to join" (ID-200); the answers keep their size. */
 .join-who {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;
-  overflow: hidden;
   font-size: var(--text-body-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
+/* A square tick or cross (ID-200); 44 px for a finger (below). */
 .join-btn {
   flex: none;
-  min-width: 72px;
-  min-height: 32px;
-  padding: 0 var(--space-10);
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
 }
 
 .join-answer {
@@ -1445,45 +1543,113 @@ body {
   font-size: var(--text-sm);
 }
 
-/* The footer, always in reach under the scrolling body: the Skills row, then the row with
-   the horde select, its readiness and the button. */
+/* The footer, always in reach under the body (ID-200): two columns, the next horde's card
+   (its select, the power meter, the readiness, where to farm), then the skills over the
+   button, both as tall as the card. */
 .hud-debrief .hud-result-foot {
-  display: flex;
+  display: grid;
   flex: none;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-10) var(--space-16) var(--space-14);
+  grid-template-columns: minmax(0, 1fr) 220px;
+  align-items: stretch;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16) var(--space-14);
   border-top: 1px solid var(--color-divider);
   background: var(--color-bg);
 }
 
-/* The Skills row: its label, then a small toggle per skill (its name and cooldown; the
-   description stays in the toggle's tooltip), with room for more of them. */
-.hud-debrief .hud-skill-pick {
-  flex: none;
-  flex-flow: row wrap;
-  align-items: center;
-  gap: var(--space-6) var(--space-10);
+/* With no horde to pick (the finale's Continue), the button's column takes the row. */
+.hud-debrief .hud-result-foot:has(> .hud-horde-pick[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.hud-debrief .hud-skill-pick > .hud-horde-label {
-  flex: none;
+.hud-debrief .hud-horde-label {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* The next horde's card. */
+.hud-debrief .hud-horde-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: var(--space-10) var(--space-12);
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.hud-debrief .hud-horde-pick[hidden] {
+  display: none;
+}
+
+/* Not the base picker's `flex: 1 1 14rem`: in this column it would grow the select tall. */
+.hud-debrief .hud-horde-select {
+  flex: none;
+  width: 100%;
+  min-height: 40px;
+}
+
+/* The fight corner's meter, a row of its own here, never taller. Its fill is clamped to
+   the meter's end in `fillPowerMeter`; the Recommended tick stands out above and below. */
+.hud-debrief .hud-horde-pick > .hud-power-meter {
+  flex: none;
+  background: var(--color-surface-active);
+}
+
+/* The power line at the left, what a win is likely to cost at the right. */
+.hud-debrief .hud-horde-ready {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-12);
+}
+
+.hud-debrief .hud-horde-power {
+  font-size: var(--text-sm);
+}
+
+.hud-debrief .hud-horde-hint {
+  flex: none;
+  font-size: var(--text-xs);
+}
+
+/* The skills over the button: the button sits at the column's foot, level with the card's. */
+.hud-debrief .hud-start-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.hud-debrief .hud-skill-pick {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.hud-debrief .hud-skill-pick[hidden] {
+  display: none;
 }
 
 .hud-debrief .hud-skill-options {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
 .hud-debrief .hud-skill-option {
   flex-direction: row;
   align-items: center;
+  justify-content: center;
   gap: var(--space-6);
+  width: 100%;
   min-height: 40px;
   padding: 0 var(--space-10);
 }
@@ -1493,84 +1659,14 @@ body {
 }
 
 .hud-debrief .hud-skill-note {
-  flex: 1 1 12rem;
-  font-size: var(--text-xs);
-}
-
-/* The start row's three columns (ID-196): the horde select (Squad Power against the
-   horde's, then where to farm instead, under it), what a win is likely to cost, and the
-   button. */
-.hud-debrief .hud-start-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-8) var(--space-16);
-}
-
-.hud-debrief .hud-horde-pick {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-8) var(--space-16);
-}
-
-.hud-debrief .hud-horde-pick[hidden] {
-  display: none;
-}
-
-.hud-debrief .hud-horde-pick > .hud-horde-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.hud-horde-choice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-width: 0;
-}
-
-.hud-horde-ready {
-  display: flex;
-  flex-direction: column;
-  justify-self: center;
-  min-width: 0;
-}
-
-/* As wide as its pick, so no option is ever cut; where a select cannot size to its
-   content, wide enough for the longest one ("Horde 120 · Boss · best to farm"). */
-.hud-debrief .hud-horde-select {
-  flex: none;
-  /* Not stretched to the power line under it. */
-  align-self: flex-start;
-  width: 16rem;
-  max-width: 100%;
-  min-height: 40px;
-}
-
-@supports (field-sizing: content) {
-  .hud-debrief .hud-horde-select {
-    width: auto;
-    field-sizing: content;
-  }
-}
-
-/* The readiness is what the pick is judged by: a size up from the hint under the select. */
-.hud-debrief .hud-horde-power {
-  font-size: var(--text-sm);
-}
-
-.hud-debrief .hud-horde-hint {
   font-size: var(--text-xs);
 }
 
 .hud-debrief .hud-start-row > .hud-button {
-  min-width: 170px;
-  min-height: 40px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: auto;
+  font-size: var(--text-body);
 }
 
 /* A finger gets 44 px of each control (and of a squad name, which opens their Roster card,
@@ -1581,9 +1677,12 @@ body {
   .debrief-change-squad,
   .debrief-best-guns,
   .hud-debrief .hud-skill-option,
-  .hud-debrief .hud-horde-select,
-  .hud-debrief .hud-start-row > .hud-button {
+  .hud-debrief .hud-horde-select {
     min-height: 44px;
+  }
+
+  .join-btn {
+    width: 44px;
   }
 
   .squad-card .squad-card-name {
@@ -1598,11 +1697,12 @@ body {
 }
 
 /* A phone: two weapons and two squad cards to a row; the select, its readiness and the
-   button each take a row, the button full width and in thumb reach. A little taller, for
-   the footer's extra rows. */
+   button each take a row, the button full width and in thumb reach. Centred in the room
+   under the speed buttons (they end 96 px down) and 16 px above the bottom edge (ID-200). */
 @media (max-width: 480px) {
   .hud-result.hud-debrief {
-    height: min(520px, calc(100vh - 128px));
+    top: calc(50% + 44px);
+    max-height: calc(100vh - 120px);
   }
 
   .hud-debrief .hud-result-head,
@@ -1616,38 +1716,81 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .join-row {
-    flex-wrap: wrap;
+  /* The numbers wrap on a phone: gaps, not rules, so no rule starts a line (ID-200). */
+  .debrief-stats {
+    gap: var(--space-2) var(--space-14);
   }
 
-  .join-who {
-    flex-basis: 100%;
+  .debrief-stat {
+    padding: 0;
   }
 
-  .hud-debrief .hud-start-row,
-  .hud-debrief .hud-horde-pick {
+  .debrief-stat + .debrief-stat {
+    border-left: 0;
+  }
+
+  /* One column: the next horde's card, then the skills and the button full width, in
+     thumb reach. */
+  .hud-debrief .hud-result-foot {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-10);
+    padding-bottom: var(--space-12);
   }
 
-  .hud-horde-ready {
-    justify-self: start;
+  /* The skills beside the button (their label read out only), so the body keeps room. */
+  .hud-debrief .hud-start-row {
+    flex-flow: row wrap;
+    align-items: stretch;
+  }
+
+  .hud-debrief .hud-skill-pick > .hud-horde-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .hud-debrief .hud-skill-option-detail {
+    display: none;
   }
 
   .hud-debrief .hud-start-row > .hud-button {
-    width: 100%;
-    min-height: 44px;
+    flex: 1 1 8rem;
+    width: auto;
+    min-height: 48px;
+    margin-top: 0;
   }
 }
 
-/* A very short window (a phone on its side, ID-205): the panel runs from under the top
-   buttons to the bottom edge, its header and footer tighter; the header and footer keep
-   their place, so Start is always on screen, and the body between them scrolls. */
+/* A very short window (a phone on its side, ID-205): the panel hangs from under the top
+   buttons, as tall as its content up to the bottom edge, its header and footer tighter;
+   the header, the offer line and the footer keep their place, so Start is always on
+   screen, and the body between them scrolls. */
 @media (max-height: 540px) {
   .hud-result.hud-debrief {
     top: 38px;
-    bottom: var(--space-6);
-    height: auto;
+    max-height: calc(100vh - 38px - var(--space-6));
     transform: translateX(-50%);
+  }
+
+  /* Two asking share a row where it fits (each line wraps in its cell), so the body keeps
+     room for the loot and the squad; side by side, no rule between them. */
+  .debrief-join {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--space-4) var(--space-16);
+    padding-block: var(--space-6);
+  }
+
+  .debrief-join[hidden] {
+    display: none;
+  }
+
+  .join-row + .join-row {
+    padding-top: 0;
+    border-top: 0;
   }
 
   .hud-debrief .hud-result-head {
@@ -1660,25 +1803,33 @@ body {
   }
 
   .hud-debrief .hud-result-scroll {
-    gap: var(--space-8);
+    --scroll-gap: var(--space-8);
     padding-block: var(--space-8);
   }
 
-  /* The skills and the start row share one row where the width allows, so the body keeps
-     room for the squad; a narrower phone wraps them back to two rows. */
+  /* The card tighter, its label read out only (the select says "Horde 11"), so the body
+     keeps room for the squad. */
   .hud-debrief .hud-result-foot {
-    flex-flow: row wrap;
-    align-items: center;
-    gap: var(--space-6) var(--space-16);
+    gap: var(--space-10);
     padding: var(--space-6) var(--space-16) var(--space-8);
   }
 
-  .hud-debrief .hud-result-foot > .hud-start-row {
-    flex: 1 1 360px;
+  .hud-debrief .hud-horde-pick {
+    gap: var(--space-6);
+    padding: var(--space-6) var(--space-10);
+  }
+
+  .hud-debrief .hud-horde-pick > .hud-horde-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .hud-debrief .hud-start-row > .hud-button {
-    min-width: 140px;
+    min-height: 44px;
   }
 }
 
@@ -1990,13 +2141,11 @@ body {
 /* A finger gets 40 px of each small toggle, the pill drawn no taller. */
 @media (pointer: coarse) {
   .chip-details,
-  .chip-join,
   .debrief-details {
     position: relative;
   }
 
   .chip-details::before,
-  .chip-join::before,
   .debrief-details::before {
     content: '';
     position: absolute;

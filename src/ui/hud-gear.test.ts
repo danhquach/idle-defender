@@ -30,6 +30,8 @@ import {
   DROP_LOST_NOTE,
   dropTile,
   gunLabel,
+  JOIN_NO,
+  JOIN_YES,
   joinMoves,
   lossXpText,
   SQUAD_LOSS_RULE,
@@ -325,7 +327,7 @@ describe('the debrief layout (ID-067)', () => {
     const { root, h } = page();
     const g = squadGame(2, 3);
     h.showResult(squadScreen(g, ended(g, 'lost')));
-    const chips = [...root.querySelectorAll('.chip')].map((c) => c.textContent);
+    const chips = [...root.querySelectorAll('.debrief-stat')].map((c) => c.textContent);
     expect(chips).toEqual([lossXpText(0), SQUAD_NO_DROP]);
     expect(root.querySelector('.debrief-guns')).toBeNull();
   });
@@ -353,7 +355,7 @@ describe('the debrief layout (ID-067)', () => {
     expect(d.cards.map((c) => c.name)).toEqual(g.roster.map((x) => x.name));
   });
 
-  it('on the page: chips, the chip coloured by rarity, the offer line and the start button', () => {
+  it('on the page: chips, the chip coloured by rarity, the offer line first (ID-200) and the start button', () => {
     const { root, h } = page();
     const g = squadGame(1, 5);
     const won = ended(g, 'won');
@@ -362,21 +364,21 @@ describe('the debrief layout (ID-067)', () => {
     expect(panel.classList.contains('hud-debrief')).toBe(true);
     expect(panel.dataset.kind).toBe('won');
     expect(root.querySelector<HTMLElement>('.hud-result-list')!.hidden).toBe(true);
-    expect(root.querySelector('.chip')!.textContent).toBe(
+    expect(root.querySelector('.debrief-stat')!.textContent).toBe(
       `${won.waveCount}/${won.waveCount} waves`,
     );
     const chip = root.querySelector<HTMLElement>('.gun-chip')!;
     expect(chip.dataset.rarity).toBe(squadDrop(g, won)!.weapon.rarity);
-    // The offer line (ID-150) comes once the app fills it, after the squad.
+    // The offer line (ID-150) comes once the app fills it, first in the body (ID-200).
     const joinBox = root.querySelector<HTMLElement>('.debrief-join')!;
     expect(joinBox.hidden).toBe(true);
     h.showJoin(joinCards(finishSquadHorde(g, won)));
     expect(joinBox.hidden).toBe(false);
-    expect(joinBox.previousElementSibling!.classList.contains('debrief-squad')).toBe(true);
+    expect(joinBox.parentElement!.firstElementChild).toBe(joinBox);
     expect(joinBox.querySelector('.join-name')!.textContent).toBe(recruit(2).name);
     expect([...joinBox.querySelectorAll('.join-btn')].map((b) => b.textContent)).toEqual([
-      'Accept',
-      'Refuse',
+      JOIN_YES,
+      JOIN_NO,
     ]);
     const button = root.querySelector('.hud-start-row > .hud-button')!;
     expect(button.classList.contains('btn-primary')).toBe(true);
