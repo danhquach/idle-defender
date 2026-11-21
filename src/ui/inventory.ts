@@ -899,8 +899,10 @@ export interface GearUi {
 /**
  * The buttons that move a gun without dragging (ID-095), in the dock (ID-198): one cell per
  * survivor, always, so each survivor's button keeps its spot whichever gun is shown. A stash
- * gun has Equip on in each cell it could go to; a survivor's stash gun has
- * Unequip in its holder's cell. A cell with nothing to do keeps its place, empty.
+ * gun has Equip on in each cell it could go to. A survivor's stash gun keeps every cell
+ * blank, so the dock keeps its height, with one Unequip laid over the grid's whole first row
+ * (ID-213: a survivor's cell is too narrow for the word). A cell with nothing to do keeps
+ * its place, empty.
  */
 function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement {
   const mine = ui.view.squad.find((s) => s.gun.key === it.key);
@@ -910,11 +912,8 @@ function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement {
   if (mine) {
     block.setAttribute('role', 'group');
     block.setAttribute('aria-label', `${it.name}, held by ${mine.name}`);
-    for (const s of ui.view.squad) {
-      if (s !== mine || mine.uid === null) {
-        grid.append(blank());
-        continue;
-      }
+    grid.append(...ui.view.squad.map(blank));
+    if (mine.uid !== null) {
       const b = button('Unequip', () => ui.move(it.key, 'stash'), 'inv-unequip');
       b.setAttribute('aria-label', `Unequip ${it.name} from ${mine.name}`);
       grid.append(b);
