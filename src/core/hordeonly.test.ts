@@ -6,6 +6,8 @@ import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
 import { eligible, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
 import {
+  BENCH_XP_SHARE,
+  MAX_COUNT,
   BOSS_UNLOCKS,
   COLUMNS,
   FINALE_HORDE,
@@ -30,6 +32,7 @@ import { hordeXp, newGame, type GameState, type RosterDefender } from './game.ts
 import { gunRange, moveDefender, tick } from './horde.ts';
 import {
   acceptJoins,
+  benchXpGains,
   bossReward,
   capSquad,
   finishSquadHorde,
@@ -41,6 +44,7 @@ import {
   squadHpScale,
   squadOf,
   squadResult,
+  squadXpGains,
   squadSpec,
   SQUAD_SLOTS,
   startSquadHorde,
@@ -546,5 +550,112 @@ describe('fixed slots (ID-068)', () => {
     const free = s.posts.find((p) => p.defenderId === null)!;
     const moved = moveDefender(s, s.defenders[0]!.id, free.id);
     expect(moved).toEqual({ ok: false, reason: 'Survivors hold their slots' });
+  });
+});
+
+describe('bench XP share (ID-206)', () => {
+  /** Two fighters (recruits 1-2) and two on the bench (3-4), at Horde 4. */
+  const benched = (): GameState => ({
+    ...squadGame(2, 4),
+    reserve: [survivor(3), survivor(4)],
+    camp: { ...squadGame(2, 4).camp, recruits: 4 },
+  });
+  const xpOf = (g: GameState, id: string): number =>
+    [...g.roster, ...g.reserve].find((d) => d.id === id)!.xp;
+  const fighterXp = Math.floor(hordeXp(4) * SQUAD_XP_RATE);
+
+  it('the share is one constant, 25% by default', () => {
+    expect(BENCH_XP_SHARE).toBe(0.25);
+  });
+
+  it('a win gives each bench survivor the share of a fighter, rounded down; fighters unchanged', () => {
+    const g = benched();
+    const next = finishSquadHorde(g, ended(g, 'won'));
+    const share = Math.floor(fighterXp * BENCH_XP_SHARE);
+    expect(share).toBeGreaterThan(0);
+    expect(xpOf(next, 'recruit-1')).toBe(fighterXp);
+    expect(xpOf(next, 'recruit-2')).toBe(fighterXp);
+    expect(xpOf(next, 'recruit-3')).toBe(share);
+    expect(xpOf(next, 'recruit-4')).toBe(share);
+  });
+
+  it('rounds down: fighters +50 pays the bench +12', () => {
+    const g = benched();
+    const h = ended(g, 'won');
+    const gains = benchXpGains(g, h, [{ xp: 50 }]);
+    expect(gains.map((x) => x.xp)).toEqual([12, 12]);
+  });
+
+  it('a loss pays the bench a share of the fighters loss XP', () => {
+    const g = benched();
+    const h = { ...ended(g, 'lost'), wave: 6 };
+    const fought = squadXpGains(g, h)[0]!.xp;
+    const next = finishSquadHorde(g, h);
+    expect(xpOf(next, 'recruit-1')).toBe(fought);
+    expect(xpOf(next, 'recruit-3')).toBe(Math.floor(fought * BENCH_XP_SHARE));
+  });
+
+  it('a loss that paid nothing pays the bench nothing', () => {
+    const g = benched();
+    const next = finishSquadHorde(g, ended(g, 'lost'));
+    expect(squadXpGains(g, ended(g, 'lost')).every((x) => x.xp === 0)).toBe(true);
+    expect(xpOf(next, 'recruit-3')).toBe(0);
+  });
+
+  it('a bench survivor who swapped in fought: full XP, not the share', () => {
+    const g = benched();
+    const won = ended(g, 'won');
+    // Recruit 3 came off the bench mid-fight (ID-148): on the wall, and in `tookPart`.
+    const h = {
+      ...won,
+      defenders: [...won.defenders, { ...won.defenders[0]!, id: 'recruit-3', name: 'Recruit 3' }],
+      tookPart: [...won.tookPart, 'recruit-3'],
+    };
+    const next = finishSquadHorde(g, h);
+    expect(xpOf(next, 'recruit-3')).toBe(fighterXp);
+    expect(xpOf(next, 'recruit-4')).toBe(Math.floor(fighterXp * BENCH_XP_SHARE));
+  });
+
+  it('a resting bench survivor gets the share too', () => {
+    const g = benched();
+    g.reserve[0] = { ...g.reserve[0]!, rest: 2 };
+    const next = finishSquadHorde(g, ended(g, 'won'));
+    expect(xpOf(next, 'recruit-3')).toBe(Math.floor(fighterXp * BENCH_XP_SHARE));
+  });
+
+  it('the result reports the bench gains and a bench level-up like a fighter', () => {
+    const g = benched();
+    // One XP short of level 2: the share tips them over.
+    g.reserve[0] = { ...g.reserve[0]!, xp: xpForLevel(2) - 1 };
+    const r = squadResult(g, ended(g, 'won'));
+    expect(r.gains.map((x) => x.id)).toEqual(['recruit-1', 'recruit-2']);
+    expect(r.bench.map((x) => x.id)).toEqual(['recruit-3', 'recruit-4']);
+    expect(r.bench[0]!.levels).toBe(1);
+    expect(r.bench[0]!.level).toBe(2);
+    expect(r.bench[1]!.levels).toBe(0);
+    expect(r.bench[0]!.xp).toBe(Math.floor(fighterXp * BENCH_XP_SHARE));
+  });
+
+  it('nobody fought: no bench gains', () => {
+    expect(benchXpGains(benched(), ended(benched(), 'won'), [])).toEqual([]);
+  });
+
+  it('uses the mean of differing fighter XP, floored', () => {
+    const g = benched();
+    const gains = benchXpGains(g, ended(g, 'won'), [{ xp: 50 }, { xp: 70 }]);
+    expect(gains.map((x) => x.xp)).toEqual([15, 15]);
+    expect(benchXpGains(g, ended(g, 'won'), [{ xp: 10 }, { xp: 11 }])[0]!.xp).toBe(2);
+  });
+
+  it('bench XP is capped where a save reads it', () => {
+    const g = benched();
+    g.reserve[0] = { ...g.reserve[0]!, xp: MAX_COUNT - 1 };
+    const next = finishSquadHorde(g, ended(g, 'won'));
+    expect(xpOf(next, 'recruit-3')).toBe(MAX_COUNT);
+  });
+
+  it('with nobody on the bench, nothing changes', () => {
+    const g = squadGame(2, 4);
+    expect(squadResult(g, ended(g, 'won')).bench).toEqual([]);
   });
 });

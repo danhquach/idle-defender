@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { recruit } from './camp.ts';
 import { CHAT_LINES, chatter, newChat, personalityOf } from './chatter.ts';
-import { MID_SWAP, STEP, WALK_SPEED } from './data.ts';
+import { BENCH_XP_SHARE, MID_SWAP, STEP, WALK_SPEED } from './data.ts';
 import { newGame, type GameState, type RosterDefender } from './game.ts';
 import { tick, tickInPlace, type HordeState } from './horde.ts';
 import { campOf, finishSquadHorde, squadResult, startSquadHorde, swapBench } from './hordeonly.ts';
@@ -252,9 +252,11 @@ describe('after a fight with swaps (ID-148)', () => {
     expect(gain?.xp).toBeGreaterThan(0);
     const next = finishSquadHorde(game, h);
     expect(campOf(next).find((d) => d.id === 'recruit-7')!.xp).toBe(gain!.xp);
-    // The bench survivor who never came in gets nothing.
+    // The bench survivor who never came in is no fighter: only the bench share (ID-206).
     expect(r.gains.some((g) => g.id === 'recruit-8')).toBe(false);
-    expect(campOf(next).find((d) => d.id === 'recruit-8')!.xp).toBe(0);
+    const share = r.bench.find((g) => g.id === 'recruit-8');
+    expect(share!.xp).toBe(Math.floor(gain!.xp * BENCH_XP_SHARE));
+    expect(campOf(next).find((d) => d.id === 'recruit-8')!.xp).toBe(share!.xp);
   });
 
   it('levels a bench survivor from their own XP', () => {
