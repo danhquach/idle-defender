@@ -4076,6 +4076,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   grid-column: 1 / -1;
 }
 
+.inv-salvage {
+  display: flex;
+  min-width: 0;
+}
+
 /* Upgrade (ID-208), in the dock: its label and one full-width button naming the next step. */
 .inv-upgrade {
   display: flex;
@@ -4115,6 +4120,54 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   cursor: not-allowed;
 }
 
+/* Salvage (ID-207), under Combine in the dock: the same full-width button, its label wrapping
+   in place, greyed with its reason in the text for a gun in hand. */
+.inv-salvage-button {
+  box-sizing: border-box;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding-block: var(--space-4);
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.inv-salvage-button:not(:disabled) {
+  border-color: var(--color-danger);
+}
+
+.inv-salvage-button:not(:disabled):hover,
+.inv-salvage-button:not(:disabled):focus-visible {
+  border-color: var(--color-danger-hover);
+}
+
+.inv-salvage-button:disabled {
+  border-style: dashed;
+  background: transparent;
+  color: var(--color-text);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+/* A short window (a phone turned sideways): the dock with Equip, Upgrade, Combine and Salvage is
+   taller than the details box, so the box scrolls as one (lines, then buttons) instead of
+   hiding the buttons under its foot. Never sideways. */
+@media (max-height: 540px) {
+  .inv-details {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .inv-details-info {
+    flex: none;
+    overflow: visible;
+  }
+}
+
 /* A finger gets 44 px buttons in the dock; the dock is that much taller, still one shape. */
 @media (pointer: coarse) {
   .inv-equip,
@@ -4122,7 +4175,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     grid-auto-rows: 44px;
   }
 
-  .inv-upgrade-button {
+  .inv-upgrade-button,
+  .inv-salvage-button {
     min-height: 44px;
   }
 

@@ -33,6 +33,7 @@ import {
   startSquadHorde,
   craftGun,
   salvageBlueprint,
+  salvageGun,
   stashCap,
   upgradeGun,
   withUpgradedGun,
@@ -114,6 +115,9 @@ import {
   bestGunsLine,
   buyQuestion,
   buyText,
+  salvageAsks,
+  salvageQuestion,
+  salvageText,
   upgradeText,
   withScrapNow,
   withStashNow,
@@ -508,6 +512,27 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true, text: upgradeText(r.weapon, r.cost, game.stock.scrap) };
   }
   /**
+   * Salvages stash gun `uid` for Scrap (the Inventory, ID-207), between hordes or in a fight:
+   * a Prototype or Relic asks first, in the game's own panel, and is checked again after the
+   * answer; saved at once. Null when the player said no.
+   */
+  async function salvageGunNow(uid: string): Promise<Answer> {
+    const first = salvageGun(game, uid);
+    if (!first.ok) return first;
+    const ask = salvageAsks(first.weapon) ? salvageQuestion(first.weapon, first.scrap) : null;
+    if (ask !== null && !(await askConfirm(ask, { confirm: 'Salvage', danger: true }))) return null;
+    const now = salvageGun(game, uid);
+    if (!now.ok) return now;
+    if (ask !== null && salvageQuestion(now.weapon, now.scrap) !== ask) {
+      return { ok: false, reason: ASK_CHANGED };
+    }
+    commit(now.game);
+    // The start screen's squad is unchanged (no one holds a stash gun); the Scrap chip and a
+    // result screen's "now" figure follow the new balance.
+    refreshResultScrap();
+    return { ok: true, text: salvageText(now.weapon, now.scrap, game.stock.scrap) };
+  }
+  /**
    * The Scrap balance a won horde's result screen reports, as it stands (ID-208): only its "now"
    * figure is set, in place (a screen waiting for the last kills is patched before it shows),
    * so a skill picked, details opened or a scroll on the screen stay as they are. Does nothing
@@ -761,6 +786,7 @@ export function start(root: HTMLElement, art: Art): void {
       // Drag and drop (ID-095), horde-only and between hordes, as the gun pickers.
       onEquip: HORDE_ONLY ? changeGun : undefined,
       onUpgrade: HORDE_ONLY ? upgradeGunNow : undefined,
+      onSalvage: HORDE_ONLY ? salvageGunNow : undefined,
       onBuyStash: HORDE_ONLY ? () => buySlots('stash') : undefined,
       onBestGuns: HORDE_ONLY ? handOutBestGuns : undefined,
     },

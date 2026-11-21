@@ -9,6 +9,7 @@ import {
   firstClearWeights,
   gunLevel,
   gunPower,
+  gunSalvage,
   gunStep,
   isOwned,
   replayWeights,
@@ -40,7 +41,6 @@ import {
   GUN_UPGRADE,
   MAX_COUNT,
   POWER,
-  RARITIES,
   RARITY_ORDER,
   SQUAD_BONUS,
   SQUAD_CAP,
@@ -1005,9 +1005,12 @@ export function benchXpGains(
 /** The Scrap a horde-only win of horde `n` pays (ID-179). */
 export const winScrap = (n: number): number => SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * n;
 
-/** The Scrap guns thrown away from a full stash are salvaged for (ID-179), by rarity. */
+/**
+ * The Scrap guns thrown away from a full stash are salvaged for (ID-179): by rarity, and
+ * half the Scrap their upgrade steps cost (`gunSalvage`, ID-207).
+ */
 export const salvageOf = (thrown: readonly OwnedWeapon[]): number =>
-  thrown.reduce((t, w) => t + RARITIES[w.rarity].salvage, 0);
+  thrown.reduce((t, w) => t + gunSalvage(w), 0);
 
 /** The Scrap `n` adds to `stock` once capped where a save reads it (ID-179). */
 export const scrapGain = (stock: GameState['stock'], n: number): number =>
@@ -1713,6 +1716,40 @@ export function combineGuns(
     ok: true,
     game: { ...game, armoury: [...game.armoury.filter((w) => !used.has(w.uid)), weapon] },
     weapon,
+  };
+}
+
+/** What a hand salvage gives (ID-207): the game after it, the gun, and the Scrap it paid; or why not. */
+export type GunSalvage =
+  { ok: true; game: GameState; weapon: OwnedWeapon; scrap: number } | { ok: false; reason: string };
+
+/**
+ * Salvages the stash gun `uid` by hand (ID-207), any time, in a fight too: it leaves the stash
+ * and pays `gunSalvage` Scrap (its rarity's, and half of what its upgrade steps cost). Refused
+ * with a player-facing reason for the free pistol, a gun a survivor holds (squad or bench: it
+ * must go back to the stash first, as for Combine), a gun that is not there, or a blade or tool.
+ */
+export function salvageGun(game: GameState, uid: string): GunSalvage {
+  if (uid === 'pistol') return { ok: false, reason: 'The free pistol can’t be salvaged' };
+  const weapon = game.armoury.find((w) => w.uid === uid);
+  if (!weapon) {
+    const holder = [...game.roster, ...game.reserve].find((d) =>
+      [d.loadout.primary, d.loadout.secondary].some((h) => isOwned(h) && h.uid === uid),
+    );
+    return {
+      ok: false,
+      reason: holder
+        ? `${holder.name} holds that gun: put it back in the stash first`
+        : 'That gun is not in the stash',
+    };
+  }
+  if (!isGun(weapon)) return { ok: false, reason: 'Only guns can be salvaged' };
+  const stock = scrapAfter(game.stock, gunSalvage(weapon));
+  return {
+    ok: true,
+    weapon,
+    scrap: stock.scrap - game.stock.scrap,
+    game: { ...game, stock, armoury: game.armoury.filter((w) => w !== weapon) },
   };
 }
 

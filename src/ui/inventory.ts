@@ -60,9 +60,11 @@ import {
   gunDpsText,
   levelLabel,
   powerLine,
+  salvageOffer,
   slotOffer,
   upgradeOffer,
   type PowerLine,
+  type SalvageOffer,
   type SlotOffer,
   type UpgradeOffer,
 } from './hud.ts';
@@ -104,6 +106,10 @@ export interface InventoryItem {
   owned: OwnedWeapon | null;
   /** The gun's Upgrade button (ID-208); null for the free pistol, a non-gun, or with no Scrap known. */
   upgrade: UpgradeOffer | null;
+  /** The gun's Salvage button (ID-207); null for a gun in hand, the free pistol, or a non-gun. */
+  salvage: SalvageOffer | null;
+  /** True for the free pistol, wherever it is (a survivor's hands too); absent for an owned gun. */
+  free?: boolean;
 }
 
 export interface InventoryView {
@@ -273,6 +279,8 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
     powerWith: null,
     owned: key.startsWith('stash:') && isOwned(h) ? h : null,
     upgrade: null,
+    salvage: null,
+    free: !isOwned(h),
   };
 }
 
@@ -295,8 +303,11 @@ export function inventoryView(
   // Upgrade (ID-208): a gun of the stash or in hand, priced against the Scrap there is.
   const upgradable = (it: InventoryItem, h: Held): InventoryItem =>
     scrap !== undefined && isOwned(h) && isGun(h) ? { ...it, upgrade: upgradeOffer(h, scrap) } : it;
+  // Salvage (ID-207): a stash gun only; one in hand must go back first.
+  const salvageable = (it: InventoryItem, h: Held): InventoryItem =>
+    isOwned(h) && isGun(h) ? { ...it, salvage: salvageOffer(h, scrap) } : it;
   const toItem = ({ h }: (typeof rows)[number]): InventoryItem =>
-    upgradable(item(h, `stash:${h.uid}`, IN_STASH), h);
+    salvageable(upgradable(item(h, `stash:${h.uid}`, IN_STASH), h), h);
   const rarityAt = (h: Held): number => (isOwned(h) ? RARITY_ORDER.indexOf(h.rarity) : -1);
   // Guns first in every sort, a blade or tool (an older save's) after them; ties keep the
   // armoury's order. The armoury itself is never reordered (view only).
@@ -985,6 +996,49 @@ function upgradeBlock(it: InventoryItem, ui: UpgradeUi): HTMLElement {
   return block;
 }
 
+/** What the Salvage part of the details calls (ID-207). */
+export interface SalvageUi {
+  /** Salvages the stash gun `uid`. */
+  run(uid: string): void | Promise<void>;
+}
+
+/** After a salvage the button ignores presses this long (ms), so a double tap salvages one gun. */
+export const SALVAGE_LOCK_MS = 400;
+/** What the greyed button says (visible, not a tooltip) for a gun in hand, the pistol, a non-gun. */
+export const SALVAGE_HELD_TEXT = 'Put it back in the stash first';
+export const SALVAGE_PISTOL_TEXT = 'Can’t salvage the pistol';
+export const SALVAGE_NOT_GUN_TEXT = 'Can’t salvage: not a gun';
+
+/**
+ * The Salvage part of a gun's details (ID-207), in the dock under Combine: one button naming
+ * what it pays ("Salvage · +25 Scrap"). Always there, so the dock keeps one shape: for a gun in
+ * hand, the pistol or a non-gun it is greyed and says why in its text (a touch screen has no
+ * tooltips); a held gun's says to put it back in the stash first, as Combine does.
+ */
+function salvageBlock(it: InventoryItem, ui: SalvageUi): HTMLElement {
+  const block = el('div', 'inv-salvage');
+  const offer = it.salvage;
+  const text = offer
+    ? offer.text
+    : it.power === null
+      ? SALVAGE_NOT_GUN_TEXT
+      : it.key === 'pistol' || it.free
+        ? SALVAGE_PISTOL_TEXT
+        : SALVAGE_HELD_TEXT;
+  const b = button(
+    text,
+    () => {
+      if (offer) void ui.run(offer.uid);
+    },
+    'inv-salvage-button',
+  );
+  b.disabled = !offer;
+  b.title = offer ? offer.full : `Salvage: ${text}`;
+  b.setAttribute('aria-label', offer ? offer.full : `Salvage: ${text}`);
+  block.append(b);
+  return block;
+}
+
 /**
  * The details beside the grid for `it`, as two parts (ID-198): what it is, which scrolls
  * when long, and the dock pinned at the foot with its Equip on or Unequip when `gear` is
@@ -996,6 +1050,7 @@ export function detailsPanel(
   combine?: { rows: readonly CombineRow[]; ui: CombineUi },
   gear?: GearUi,
   upgrade?: UpgradeUi,
+  salvage?: SalvageUi,
 ): HTMLElement[] {
   const info = el('div', 'inv-details-info');
   if (!it) {
@@ -1011,6 +1066,7 @@ export function detailsPanel(
   else info.append(...facts(it), el('p', 'menu-note inv-where', it.where));
   if (c?.note) info.append(el('p', 'menu-note inv-combine-note', c.note));
   if (c) dock.append(c.dock);
+  if (salvage) dock.append(salvageBlock(it, salvage));
   return dock.childElementCount > 0 ? [info, dock] : [info];
 }
 
@@ -1042,6 +1098,12 @@ export interface InventoryOptions {
    * it said, or why not; without it the details have no Upgrade.
    */
   onUpgrade?: (uid: string) => { ok: true; text: string } | { ok: false; reason: string };
+  /**
+   * Salvages the stash gun `uid` (ID-207), after the app's confirm for a Prototype or Relic,
+   * in a fight too: what it said, or why not; null when the player said no. Without it the
+   * details have no Salvage.
+   */
+  onSalvage?: (uid: string) => Answer | Promise<Answer>;
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
   onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
   /**
@@ -1601,7 +1663,38 @@ export function createInventory(
         ? { view, move: (from: string, to: string) => act(dropAction(view!, from, to), from, to) }
         : undefined;
     const upgrade = opts.onUpgrade ? { run: upgradeGunNow } : undefined;
-    details.replaceChildren(...detailsPanel(it, combine, gear, upgrade));
+    const salvage = opts.onSalvage ? { run: salvageGunNow } : undefined;
+    details.replaceChildren(...detailsPanel(it, combine, gear, upgrade, salvage));
+    // A short window scrolls the details as one box: another gun's start at the top, while the
+    // same gun redrawn (an upgrade) keeps its place.
+    if (it?.key !== detailKey) details.scrollTop = 0;
+    detailKey = it?.key ?? null;
+  }
+
+  let detailKey: string | null = null;
+
+  let salvageLockUntil = 0;
+
+  /**
+   * Salvages stash gun `uid`: asks first when the app does, says what it did or why not, and
+   * keeps focus on the grid. The gun leaves, so the next gun's Salvage lands under the same
+   * pointer: a press locks the button for `SALVAGE_LOCK_MS` (again once answered), so a double
+   * tap salvages one gun.
+   */
+  async function salvageGunNow(uid: string): Promise<void> {
+    if (Date.now() < salvageLockUntil) return;
+    salvageLockUntil = Number.POSITIVE_INFINITY;
+    let r: Answer;
+    try {
+      r = (await opts.onSalvage?.(uid)) ?? null;
+    } finally {
+      salvageLockUntil = Date.now() + SALVAGE_LOCK_MS;
+    }
+    if (!r) return;
+    const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
+    draw(game, canCombine, horde, canBuy);
+    say(r.ok ? r.text : r.reason, !r.ok);
+    slotOf(selected)?.focus();
   }
 
   let upgradeLockUntil = 0;

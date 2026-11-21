@@ -7,6 +7,7 @@ import {
   affixLines,
   gunLevel,
   gunPower,
+  gunSalvage,
   gunStep,
   heldName,
   isOwned,
@@ -54,6 +55,7 @@ import {
   GAS_PER_WIN,
   GUN_UPGRADE,
   HORDE_ONLY,
+  MAX_COUNT,
   MATERIALS,
   PERKS,
   PROFESSIONS,
@@ -110,6 +112,7 @@ import {
   joiningOf,
   paramedicPoints,
   restLabel,
+  salvageOf,
   nextSquadSlotCost,
   nextStashSlotCost,
   squadCap,
@@ -1393,11 +1396,7 @@ export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: Squad
           : []),
         ...(old.length > 0 ? [`Thrown away: ${old.map((w) => levelName(w)).join(', ')}`] : []),
         // What the result chip's Scrap is made of (ID-179): the salvage shows by the guns.
-        ...(thrown.length > 0
-          ? [
-              `salvaged for ${thousands(thrown.reduce((n, w) => n + RARITIES[w.rarity].salvage, 0))} Scrap`,
-            ]
-          : []),
+        ...(thrown.length > 0 ? [`salvaged for ${thousands(salvageOf(thrown))} Scrap`] : []),
       ].join(' · ') || null,
   };
 }
@@ -1529,6 +1528,50 @@ export function upgradeOffer(w: OwnedWeapon, scrap: number): UpgradeOffer {
 /** What an upgrade says once made (ID-208): `w` is the upgraded gun. */
 export const upgradeText = (w: OwnedWeapon, cost: number, left: number): string =>
   `Upgraded ${levelName(w)} · ${thousands(cost)} Scrap spent, ${thousands(left)} left.`;
+
+/** A stash gun's Salvage button (ID-207): its text, its full wording and the Scrap it pays. */
+export interface SalvageOffer {
+  /** The gun it salvages. */
+  uid: string;
+  /** The Scrap it pays: the rarity's, and half what the upgrade steps cost. */
+  amount: number;
+  /** The label ("Salvage · +25 Scrap"). */
+  text: string;
+  /** The label in full words, for the tooltip and screen readers. */
+  full: string;
+}
+
+/** The rarities whose salvage asks first (ID-207): a gun that took luck or Combines to get. */
+const SALVAGE_ASKS: readonly Rarity[] = ['prototype', 'relic'];
+
+/** Whether salvaging gun `w` asks first, with the game's confirm panel (ID-207). */
+export const salvageAsks = (w: OwnedWeapon): boolean => SALVAGE_ASKS.includes(w.rarity);
+
+/**
+ * The button that salvages stash gun `w` (ID-207): "Salvage · +25 Scrap", the amount including
+ * half the Scrap its upgrade steps cost (`gunSalvage`). The number keeps "Scrap" with it when
+ * the label wraps. With the balance `scrap` given, the amount stops at what still fits under the
+ * Scrap cap.
+ */
+export function salvageOffer(w: OwnedWeapon, scrap?: number): SalvageOffer {
+  // At the Scrap cap the label shows what the player will actually get.
+  const amount =
+    scrap === undefined ? gunSalvage(w) : Math.min(gunSalvage(w), Math.max(0, MAX_COUNT - scrap));
+  return {
+    uid: w.uid,
+    amount,
+    text: `Salvage · +${thousands(amount)}${NBSP}Scrap`,
+    full: `Salvage ${levelName(w)} for ${thousands(amount)} Scrap`,
+  };
+}
+
+/** The confirm before salvaging a Prototype or Relic (ID-207). */
+export const salvageQuestion = (w: OwnedWeapon, amount: number): string =>
+  `Salvage ${levelName(w)} for ${thousands(amount)} Scrap? The gun is gone for good.`;
+
+/** What a hand salvage says once made (ID-207): `w` is the gun that went. */
+export const salvageText = (w: OwnedWeapon, scrap: number, now: number): string =>
+  `Salvaged ${levelName(w)} · +${thousands(scrap)} Scrap, ${thousands(now)} now.`;
 
 /** The confirm before a purchase (ID-179). */
 export const buyQuestion = (kind: SlotKind, cost: number, scrap: number): string =>
