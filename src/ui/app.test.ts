@@ -136,6 +136,33 @@ describe('the Menu in the game (app.ts)', () => {
     expect(vi.mocked(tick).mock.calls[0]![1]).toBeCloseTo(0.016);
   });
 
+  it('an upright phone holds the fight under the turn prompt; turned, it carries on without a jump (ID-205)', () => {
+    // One live query, as a browser gives it: its `matches` follows the phone as it turns.
+    const upright = { matches: false };
+    vi.stubGlobal('matchMedia', (q: string) =>
+      q.includes('orientation: portrait') ? upright : { matches: false },
+    );
+    const { root } = boot();
+    expect(document.querySelector('.turn-prompt')).not.toBeNull();
+    [...root.querySelectorAll('button')]
+      .find((b) => b.textContent?.startsWith('Start Horde'))!
+      .click();
+    step(0);
+    step(16);
+    expect(vi.mocked(tick)).toHaveBeenCalledOnce();
+    upright.matches = true;
+    vi.mocked(tick).mockClear();
+    step(32);
+    step(5000);
+    expect(tick).not.toHaveBeenCalled();
+    upright.matches = false;
+    step(5016);
+    expect(tick).not.toHaveBeenCalled(); // the first frame back counts no time
+    step(5032);
+    expect(vi.mocked(tick)).toHaveBeenCalledOnce();
+    expect(vi.mocked(tick).mock.calls[0]![1]).toBeCloseTo(0.016);
+  });
+
   it('a loaded code and a new camp become the game and are saved', () => {
     const { menuButton, scrim, dialogButton, bar } = boot();
     const g = { ...newGame(), hordeNumber: 9 };
