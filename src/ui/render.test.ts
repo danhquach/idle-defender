@@ -45,8 +45,8 @@ import { CHAT, CHAT_LINES, type Bubble } from '../core/chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
 import { throwArea, wallFront } from '../core/skills.ts';
 import { reloadTime, xpForLevel } from '../core/stats.ts';
-import { enemy } from '../core/testing.ts';
-import { ANIM, Animator, STILL } from './anim.ts';
+import { enemy, horror } from '../core/testing.ts';
+import { ANIM, Animator, PLATE_BURST, STILL } from './anim.ts';
 import {
   FIGHT_FRAME,
   frameCamera,
@@ -123,6 +123,8 @@ import {
   SAVE_LOOK,
   saveLook,
   slickLook,
+  crackLook,
+  enemyArtOf,
   type BuildOverlay,
   type Scene,
 } from './render.ts';
@@ -132,6 +134,8 @@ import {
   ART_PX,
   BASE_ART,
   ENEMY_ART,
+  PLATED_ART,
+  PLATE_DEBRIS_ART,
   GUNNER_ART,
   GUNNER_LOOKS,
   THROW_LOOKS,
@@ -5060,5 +5064,82 @@ describe('death animations (ID-110)', () => {
     stubCuts();
     const drawn = died(idFor('limb'), ANIM.fall.time);
     expect(drawn.filter((x) => x.startsWith('cut-') || x.startsWith('shambler-'))).toEqual([]);
+  });
+});
+
+describe('Armour Plates (ID-211)', () => {
+  const plateBoss = (platesOff: boolean, kind: EnemyKind = 'horror', time = 2): HordeState => {
+    const s = blank() as unknown as HordeState;
+    const elite = kind === 'horror' ? {} : { elite: true as const };
+    const e = horror(s, ['plates', 'roar'], { kind, x: 900, y: 300, ...elite });
+    e.horror!.platesOff = platesOff;
+    return { ...s, time };
+  };
+
+  it('draws each plated kind in its plated look while they hold, and broken after', () => {
+    for (const kind of ['horror', 'swollen', 'brute'] as const) {
+      const on = recorder();
+      drawScene(on.ctx, on.art, plateBoss(false, kind), CAM, VIEW);
+      expect(on.drawn, kind).toContain(PLATED_ART[kind]!.plated.walk[1]);
+      expect(on.drawn, kind).not.toContain(ENEMY_ART[kind].walk[1]);
+      const off = recorder();
+      drawScene(off.ctx, off.art, plateBoss(true, kind), CAM, VIEW);
+      expect(off.drawn, kind).toContain(PLATED_ART[kind]!.broken.walk[1]);
+      expect(off.drawn, kind).not.toContain(PLATED_ART[kind]!.plated.walk[1]);
+    }
+  });
+
+  it('keeps the plain look for an enemy without plates, or a kind with no plated art', () => {
+    const s = blank() as unknown as HordeState;
+    const boss = horror(s, ['roar', 'slab']);
+    expect(enemyArtOf(boss)).toBe(ENEMY_ART.horror);
+    const shambler = enemy(s, { kind: 'shambler' });
+    shambler.horror = { ...boss.horror!, skills: ['plates'] };
+    expect(enemyArtOf(shambler)).toBe(ENEMY_ART.shambler);
+    expect(enemyArtOf(enemy(s, { kind: 'brute' }))).toBe(ENEMY_ART.brute);
+  });
+
+  it('bursts the plate pieces on the ground where they broke, then they are gone', () => {
+    const anim = new Animator();
+    drawScene(recorder().ctx, recorder().art, plateBoss(false), CAM, VIEW, null, null, null, anim);
+    const at = recorder();
+    drawScene(at.ctx, at.art, plateBoss(true, 'horror', 2.1), CAM, VIEW, null, null, null, anim);
+    expect(at.drawn).toContain(PLATE_DEBRIS_ART);
+    // Under the sprites: the pieces lie on the ground, the boss stands over them.
+    expect(at.drawn.indexOf(PLATE_DEBRIS_ART)).toBeLessThan(
+      at.drawn.indexOf(PLATED_ART.horror!.broken.walk[1]),
+    );
+    const gone = recorder();
+    const late = plateBoss(true, 'horror', 2.1 + PLATE_BURST.time);
+    drawScene(gone.ctx, gone.art, late, CAM, VIEW, null, null, null, anim);
+    expect(gone.drawn).not.toContain(PLATE_DEBRIS_ART);
+  });
+
+  it('grows the burst out fast, holds it, then fades it; Reduce motion lies it down at once', () => {
+    const c = { at: 5, r: 40 };
+    const full = 40 * PLATE_BURST.size;
+    expect(crackLook(4.99, c, false)).toBeNull();
+    expect(crackLook(5, c, false)).toEqual({ r: full * PLATE_BURST.from, alpha: 1 });
+    expect(crackLook(5, c, true)).toEqual({ r: full, alpha: 1 });
+    expect(crackLook(5 + PLATE_BURST.spread, c, false)!.r).toBeCloseTo(full, 9);
+    const fading = crackLook(5 + PLATE_BURST.time - PLATE_BURST.fade / 2, c, false)!;
+    expect(fading.r).toBeCloseTo(full, 9);
+    expect(fading.alpha).toBeCloseTo(0.5, 9);
+    expect(crackLook(5 + PLATE_BURST.time + 1e-9, c, false)).toBeNull();
+    expect(crackLook(Number.NaN, c, false)).toBeNull();
+  });
+
+  it('dies in the look it had: a broken boss falls broken', () => {
+    // Its death flash paints into a canvas.
+    stubCanvas();
+    const anim = new Animator();
+    const alive = plateBoss(true);
+    drawScene(recorder().ctx, recorder().art, alive, CAM, VIEW, null, null, null, anim);
+    anim.observe({ ...alive, time: 2.1, enemies: [] });
+    const r = recorder();
+    const dead = { ...alive, time: 2.3, enemies: [] };
+    drawScene(r.ctx, r.art, dead, CAM, VIEW, null, null, null, anim);
+    expect(r.drawn).toContain(PLATED_ART.horror!.broken.walk[1]);
+    expect(r.drawn).not.toContain(ENEMY_ART.horror.walk[1]);
   });
 });

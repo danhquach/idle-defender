@@ -2415,7 +2415,16 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     - **Armour Plates:** steel plates on its body; bullets do half damage until
       25% of its HP is gone, then they're gone for good (regen doesn't bring them
       back). A Sniper rifle's rounds go through them (the hook ID-101's
-      armour-piercing builds on).
+      armour-piercing builds on). Looks (ID-211): generated frames, not shapes
+      drawn over the sprite. The Horror and the elite Swollen wear tan army
+      plates (a plate carrier, a curved plate over the hump or belly, a shoulder
+      pad); the elite Brute keeps its riot gear and carries a tan steel riot
+      shield, slung on its back as it strikes. Once they break, each shows a
+      broken look (torn straps and an empty vest; the Brute a shield scrap on
+      its hand), and the plate pieces burst out under it and lie flat on the
+      ground, fading over 1.6 s. Each look has the kind's walk and attack
+      frames, at its scale and on its feet; it dies in the look it had. The
+      Horror's attack is a wind-up (the arm swung up and back behind its head).
     - **Brood:** today's Broodmother, +1 Shambler with each brood (2, 3, 4…).
     - **Charge** and **Regen:** as above.
   - **HUD:** one boss bar per boss or mini-boss on the field (up to 3), each

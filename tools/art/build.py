@@ -46,6 +46,15 @@ Manifest asset keys (unknown keys stop the build):
   its frames and scaled by one factor, so its frames line up by the feet; a frame
   is posed, or a repaint of a posed frame named by its single `ref`, ID-074: a
   survivor look repaints the soldier's frame, keeping its pose and grip),
+  like (ID-211: on a frame, the frame set whose scale and feet its set takes, so a
+  look of an enemy (armoured, its armour broken) stands exactly as big as the plain
+  one; its box grows round anything that pokes out, never shrinking the body, and is
+  cut at the plain set's feet, up to FEET_SLACK px below them),
+  patch (ID-211: {"from": id, "points": [[x, y], ...]}: the polygon (px of the
+  generation) copied from that same-size generation onto this one before keying,
+  its edge feathered, so a detail one frame of a set lost matches its other frames),
+  key (ID-211: [in, out], this sprite's own KEY_IN and KEY_OUT, for a generation
+  whose background drifted pale pink and would not key out at the defaults),
   overlay (ID-103: {"part": id, "at": [x, y], "size": s, "turn": degrees}: that
   part, keyed and turned clockwise by `turn` (optional, default 0), is pasted on
   top of this sprite after it is trimmed, centred at x, y (shares of its width and
@@ -92,8 +101,13 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
     "palette", "edge", "part", "style", "photo", "white", "pose", "frames", "overlay",
-    "draw", "outside",
+    "draw", "outside", "like", "patch", "key",
 }
+# How far (px of the generation) a patch's edge fades into the frame under it.
+PATCH_FEATHER = 2
+# How far (px of the generation) a frame set `like` another may reach below its feet;
+# that much is cut off at the feet, more stops the build.
+FEET_SLACK = 4
 POSES = ROOT / "art-src" / "poses"
 # The column each puppet family stands on in its 512 px canvas (tools/art/puppets.py:
 # HIP_X for the enemies, the soldier's hip for the survivors).
@@ -135,12 +149,13 @@ def allowed_models() -> set[str]:
     return set(rows)
 
 
-def key_out(img: Image.Image) -> Image.Image:
+def key_out(img: Image.Image, key: tuple[int, int] = (KEY_IN, KEY_OUT)) -> Image.Image:
     """The magenta background made transparent, its pink fringe pulled back to neutral."""
+    key_in, key_out_at = key
     a = np.asarray(img.convert("RGB")).astype(np.float32)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
     magenta = np.minimum(r, b) - g
-    alpha = np.clip((KEY_OUT - magenta) / (KEY_OUT - KEY_IN), 0, 1)
+    alpha = np.clip((key_out_at - magenta) / (key_out_at - key_in), 0, 1)
     spill = np.clip(magenta - 10, 0, None) * (1 - alpha * 0.5)
     rgb = np.stack([r - spill, g, b - spill], axis=-1).clip(0, 255)
     out = np.dstack([rgb, alpha * 255]).astype(np.uint8)
@@ -199,7 +214,7 @@ def strip_metadata(path: Path) -> None:
 
 def prepare(img: Image.Image, asset: dict) -> Image.Image:
     """A sprite keyed out, cleaned, trimmed, flipped and muted, at source size."""
-    img = keep_biggest(key_out(img))
+    img = keep_biggest(key_out(img, tuple(asset.get("key", (KEY_IN, KEY_OUT)))))
     box = img.getbbox()
     if box is None:
         sys.exit(f"{asset['id']}: nothing left after keying out the background")
@@ -308,23 +323,43 @@ def overlaid(
     return out
 
 
+def patched(img: Image.Image, src: Image.Image, points: list[list[float]]) -> Image.Image:
+    """`img` with the polygon `points` of same-size `src` copied over it, edge feathered."""
+    mask = Image.new("L", img.size)
+    ImageDraw.Draw(mask).polygon([tuple(p) for p in points], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(PATCH_FEATHER))
+    return Image.composite(src.convert("RGB"), img.convert("RGB"), mask)
+
+
 def frames_trimmed(
-    frames: list[Image.Image], name: str, hip: int
-) -> tuple[list[Image.Image], int]:
+    frames: list[Image.Image],
+    name: str,
+    hip: int,
+    within: tuple[int, int, int, int] | None = None,
+) -> tuple[list[Image.Image], int, tuple[int, int, int, int]]:
     """
     A frame set trimmed by one box round all its frames, so they keep their places, and
     widened with clear margin to sit evenly about column `hip` (where its puppets stand),
     so the body, not its reach, is over the sprite's middle: the renderer stands a sprite
     on its middle. Also the longer side of the box before it was widened, which sets the
-    set's scale, so a long reach (a raised gun) never shrinks the body.
+    set's scale, so a long reach (a raised gun) never shrinks the body, and the box.
+    A set `like` another (ID-211) has that set's box as `within`: its own box is grown to
+    hold it and cut at its feet (bottom, FEET_SLACK), so its body lines up.
     """
     if len({f.size for f in frames}) != 1:
         sys.exit(f"{name}: a frame set's generations must all be the same size")
-    boxes = [f.getbbox() for f in frames]
+    boxes = [f.getbbox() for f in frames] + ([within] if within else [])
     x0, x1 = min(b[0] for b in boxes), max(b[2] for b in boxes)
     y0, y1 = min(b[1] for b in boxes), max(b[3] for b in boxes)
+    if within:
+        # A repaint may draw a sole a px or two lower: cut at the plain set's feet, so the
+        # body stands where the plain one does; anything further down is a wrong repaint.
+        if y1 - within[3] > FEET_SLACK:
+            sys.exit(f"{name}: reaches {y1 - within[3]} px below the feet of the set it is like")
+        y1 = within[3]
     half = max(hip - x0, x1 - hip)
-    return [f.crop((hip - half, y0, hip + half, y1)) for f in frames], max(x1 - x0, y1 - y0)
+    crops = [f.crop((hip - half, y0, hip + half, y1)) for f in frames]
+    return crops, max(x1 - x0, y1 - y0), (x0, y0, x1, y1)
 
 
 def scaled(img: Image.Image, scale: float) -> Image.Image:
@@ -492,6 +527,39 @@ def check(
             f"{name}: frames names a set, on a posed sprite (or a repaint of one) "
             "with no group or part"
         )
+    like = asset.get("like")
+    if "like" in asset and (
+        frames is None or not isinstance(like, str) or not re.fullmatch(r"[a-z]+(-[a-z]+)*", like)
+    ):
+        sys.exit(f"{name}: like names a frame set, on a frame")
+    key = asset.get("key")
+    if "key" in asset and not (
+        asset["kind"] == "sprite"
+        and not is_drawn
+        and isinstance(key, list)
+        and len(key) == 2
+        and all(isinstance(v, int) and not isinstance(v, bool) for v in key)
+        and 0 <= key[0] < key[1] <= 255
+    ):
+        sys.exit(f"{name}: key is [in, out], whole numbers with 0 <= in < out <= 255, on a sprite")
+    patch = asset.get("patch")
+    points = patch.get("points") if isinstance(patch, dict) else None
+    if "patch" in asset and not (
+        isinstance(patch, dict)
+        and set(patch) == {"from", "points"}
+        and asset["kind"] == "sprite"
+        and not is_drawn
+        and isinstance(patch["from"], str)
+        and patch["from"] in ids
+        and patch["from"] != name
+        and isinstance(points, list)
+        and len(points) >= 3
+        and all(
+            isinstance(p, list) and len(p) == 2 and all(number(v) and v >= 0 for v in p)
+            for p in points
+        )
+    ):
+        sys.exit(f"{name}: patch is {{from: another generation's id, points: [[x, y], ...]}}")
     over = asset.get("overlay")
     # One overlay or a non-empty list of them; anything else (null, [], [5]) is refused.
     overs = over if isinstance(over, list) and over else [over]
@@ -550,8 +618,20 @@ def main(only: list[str]) -> None:
         if not src_path.exists():
             sys.exit(f"{asset['id']}: no generation at art-src/gen/{asset['id']}.jpg")
         sources[asset["id"]] = Image.open(src_path)
-    families = {a["edge"] for a in assets if "edge" in a}
     by_id = {a["id"]: a for a in assets}
+    for asset in assets:
+        if "patch" in asset:
+            p = asset["patch"]
+            if p["from"] not in sources:
+                sys.exit(f"{asset['id']}: patch from {p['from']}, which has no generation")
+            # From a raw generation only, so the result never hangs on manifest order.
+            if "patch" in by_id[p["from"]]:
+                sys.exit(f"{asset['id']}: patch from {p['from']}, which is patched itself")
+            img, src = sources[asset["id"]], sources[p["from"]]
+            if img.size != src.size:
+                sys.exit(f"{asset['id']}: patch from {p['from']}, a generation of another size")
+            sources[asset["id"]] = patched(img, src, p["points"])
+    families = {a["edge"] for a in assets if "edge" in a}
     built: dict[str, Image.Image] = {}
     for asset in assets:
         if asset.get("part"):
@@ -589,13 +669,29 @@ def main(only: list[str]) -> None:
     for asset in assets:
         if "frames" in asset:
             sets.setdefault(asset["frames"], []).append(asset["id"])
-    set_longest: dict[str, int] = {}
+    likes: dict[str, str] = {}
     for name, members in sets.items():
+        found = {by_id[i].get("like") for i in members}
+        if len(found) != 1 or found & {name} or not found <= set(sets) | {None}:
+            sys.exit(f"{name}: like is one other frame set, on every frame of the set or none")
+        if found != {None}:
+            likes[name] = found.pop()
+    if set(likes) & set(likes.values()):
+        sys.exit("like names a plain frame set, never one that is itself like another")
+    set_longest: dict[str, int] = {}
+    set_box: dict[str, tuple[int, int, int, int]] = {}
+    # Plain sets first: a set like another takes its box and scale.
+    for name in sorted(sets, key=lambda n: n in likes):
+        members = sets[name]
         poses = {by_id[i].get("pose", "").split("-")[0] for i in members}
         hip = POSE_HIP.get(poses.pop(), POSE_HIP["enemy"]) if len(poses) == 1 else None
         if hip is None:
             sys.exit(f"{name}: a frame set's frames are posed from one puppet family")
-        trimmed, set_longest[name] = frames_trimmed([built[i] for i in members], name, hip)
+        within = set_box[likes[name]] if name in likes else None
+        trimmed, longest_side, set_box[name] = frames_trimmed(
+            [built[i] for i in members], name, hip, within
+        )
+        set_longest[name] = set_longest[likes[name]] if name in likes else longest_side
         for i, img in zip(members, trimmed):
             built[i] = img
     # A group or a frame set shares one scale; any other sprite is scaled on its own.

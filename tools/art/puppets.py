@@ -64,7 +64,9 @@ DRAG = {  # colossal: slow stride, long arms swinging near the ground
     'w1': dict(leg_n=(20, -5), leg_f=(-16, -28), arm_n=(-10, 5), arm_f=(25, 35), lean=24),
     'w2': dict(leg_n=(2, 0), leg_f=(-4, -32), arm_n=(8, 18), arm_f=(8, 18), lean=24),
     'w3': dict(leg_n=(-16, -28), leg_f=(20, -5), arm_n=(25, 35), arm_f=(-10, 5), lean=24),
-    'at': dict(leg_n=(24, 5), leg_f=(-20, -28), arm_n=(155, 125), arm_f=(145, 115), lean=30),
+    # ID-211: winding up for a smash, the near arm swung up and back behind the head so the
+    # head stays forward and clear of it; the far arm reaches forward low.
+    'at': dict(leg_n=(24, 5), leg_f=(-20, -28), arm_n=(-125, -150), arm_f=(45, 60), lean=30),
 }
 # ID-144: legless, the chest low over the ground, hauling itself on by the arms; the thigh
 # stumps trail behind (only a leg's first angle is used).
