@@ -115,7 +115,10 @@ import {
   bestGunsLine,
   buyQuestion,
   buyText,
+  bulkSalvageQuestion,
+  bulkSalvageText,
   salvageAsks,
+  salvageGuns,
   salvageQuestion,
   salvageText,
   upgradeText,
@@ -532,6 +535,26 @@ export function start(root: HTMLElement, art: Art): void {
     refreshResultScrap();
     return { ok: true, text: salvageText(now.weapon, now.scrap, game.stock.scrap) };
   }
+
+  /**
+   * Salvages the stash guns `uids` together (ID-215), between hordes or in a fight: one with a
+   * Prototype or Relic asks first, and is checked again after the answer; saved once. Null
+   * when the player said no.
+   */
+  async function salvageGunsNow(uids: readonly string[]): Promise<Answer> {
+    const first = salvageGuns(game, uids);
+    if (!first.ok) return first;
+    const ask = bulkSalvageQuestion(first.weapons, first.scrap);
+    if (ask !== null && !(await askConfirm(ask, { confirm: 'Salvage', danger: true }))) return null;
+    const now = salvageGuns(game, uids);
+    if (!now.ok) return now;
+    if (bulkSalvageQuestion(now.weapons, now.scrap) !== ask) {
+      return { ok: false, reason: ASK_CHANGED };
+    }
+    commit(now.game);
+    refreshResultScrap();
+    return { ok: true, text: bulkSalvageText(now.weapons.length, now.scrap, game.stock.scrap) };
+  }
   /**
    * The Scrap balance a won horde's result screen reports, as it stands (ID-208): only its "now"
    * figure is set, in place (a screen waiting for the last kills is patched before it shows),
@@ -787,6 +810,7 @@ export function start(root: HTMLElement, art: Art): void {
       onEquip: HORDE_ONLY ? changeGun : undefined,
       onUpgrade: HORDE_ONLY ? upgradeGunNow : undefined,
       onSalvage: HORDE_ONLY ? salvageGunNow : undefined,
+      onSalvageMany: HORDE_ONLY ? salvageGunsNow : undefined,
       onBuyStash: HORDE_ONLY ? () => buySlots('stash') : undefined,
       onBestGuns: HORDE_ONLY ? handOutBestGuns : undefined,
     },
