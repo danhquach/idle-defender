@@ -133,6 +133,11 @@ export const SQUAD_EARLY_HP: readonly number[] = [
 /** Survivor XP for a horde-only win, as a multiple of the full game's (`DEFENDER_XP`). */
 export const SQUAD_XP_RATE = 2;
 /**
+ * The share of a fighter's horde XP each bench survivor gets (ID-206), win or loss:
+ * 25% of the fighters' average, rounded down. Tune the bench's catch-up here.
+ */
+export const BENCH_XP_SHARE = 0.25;
+/**
  * The campaign's goal (ID-127, design §11): each boss horde's first clear yields a radio
  * part, in this order; the last is the finale, whose win calls the evacuation, and play goes
  * on after it as Endless.

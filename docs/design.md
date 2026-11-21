@@ -489,7 +489,7 @@ Defenders stand on **posts** the player builds and chooses between.
 - **Reward on success:** mostly **defender XP**, **camp XP** (§11 Camp
   level) and **Mutated Genes**, plus a small chance of materials or a weapon. Higher horde numbers pay more.
   Defender XP goes in full to every defender who took part, injured or
-  not, so a recruit never dilutes it *(designer's call)*. Defenders left on the bench get no horde XP; patrols are their other way to level (§10).
+  not, so a recruit never dilutes it *(designer's call)*. Defenders left on the bench get a share of it, win or loss, resting or not: `BENCH_XP_SHARE` (25%) of the fighters' average, rounded down, so +50 each for the fighters is +12 on the bench *(PM, ID-206)*. One who swapped in mid-fight fought, and gets the full amount. Fighters' XP is unchanged, and a bench level-up shows like a fighter's. The result panel adds "Bench +N XP" beside the squad's ("each" with more than one on the bench, a range if their shares differ, as the squad's chip). Patrols are the bench's other way to level (§10).
 
 - **As built (ID-066): the horde-only fight.**
   - The whole squad starts on the wall, each on a tower in join order from

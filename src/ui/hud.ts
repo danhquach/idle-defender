@@ -1161,6 +1161,15 @@ function squadXpLine(g: ReturnType<typeof levelGains>[number]): string {
   return `${g.name} +${g.xp} XP · level ${g.level} · ${g.into}/${g.next} XP to level ${g.level + 1}${up}`;
 }
 
+/**
+ * "Bench +12 XP each": the share bench survivors earn (ID-206), worded like the squad's chip
+ * ("each" for more than one, a range when they differ); null with none benched or no XP.
+ */
+export const benchXpText = (bench: readonly { xp: number }[]): string | null => {
+  const text = xpChipText(bench.filter((b) => b.xp > 0));
+  return text === null ? null : `Bench ${text}`;
+};
+
 /** "Lv 12 Military Rifle (+7% damage)": a gun's level, name and affixes (ID-098). */
 export const levelLabel = (h: Held): string =>
   isOwned(h) && h.affixes.length
@@ -1746,7 +1755,11 @@ export const HIDE_DETAILS = 'Hide details';
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, joined, noJoin, rests, patched, next, drop, scrap, auto } = squadResult(game, s);
+  const { gains, bench, joined, noJoin, rests, patched, next, drop, scrap, auto } = squadResult(
+    game,
+    s,
+  );
+  const benchXp = benchXpText(bench);
   // "Auto" (ID-154): who it moved once the fight was over, so a pick never changes unseen.
   const moved = auto ? movesText(auto) : null;
   const autoNote = moved ? `Auto squad: ${moved}.` : null;
@@ -1764,7 +1777,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   // A bench survivor who swapped in (ID-148) gained XP too: the whole camp is looked up.
   const camp = campOf(game);
   const xpCards = (): SquadCard[] =>
-    gains.flatMap((g): SquadCard[] => {
+    // Bench survivors only when they levelled up (ID-206): a big bench never crowds the panel.
+    [...gains, ...bench.filter((g) => g.levels > 0)].flatMap((g): SquadCard[] => {
       const d = camp.find((r) => r.id === g.id);
       return d
         ? [{ id: g.id, name: g.name, level: g.level, art: avatarOf(d), levelUp: g.levels > 0 }]
@@ -1803,6 +1817,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       lines: [
         clearedLine(s),
         ...gains.map(squadXpLine),
+        ...(benchXp ? [benchXp] : []),
         ...(drop ? squadDropLines(game, drop) : []),
         scrapLine(scrap),
         ...(rewardNote ? [rewardNote] : []),
@@ -1822,6 +1837,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
           { text: scrapChipText(scrap), tone: 'ok', title: scrapLine(scrap) },
           ...(xpChip ? [{ text: xpChip, tone: 'ok' as const }] : []),
+          ...(benchXp ? [{ text: benchXp, tone: 'ok' as const }] : []),
           // Good news on a win (ID-196): green, not the boss chip's red.
           ...bossFates(s).map((f) => ({ text: `${f.name} dead`, tone: 'ok' as const })),
           // A boss's first clear (ID-127): the card it unlocked; its sentence is in the details.
@@ -1878,6 +1894,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       ...bossLost,
       lossXpText(xp),
       ...(xp > 0 ? gains.map(squadXpLine) : []),
+      ...(xp > 0 && benchXp ? [benchXp] : []),
       SQUAD_NO_DROP,
       again,
       ...(autoNote ? [autoNote] : []),
@@ -1891,6 +1908,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       kind: 'lost',
       chips: [
         { text: lossXpText(xp), tone: 'warn' },
+        ...(benchXp ? [{ text: benchXp, tone: 'warn' as const }] : []),
         { text: SQUAD_NO_DROP, tone: 'warn' },
       ],
       callout: {

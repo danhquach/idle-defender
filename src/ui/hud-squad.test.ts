@@ -5,12 +5,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { LEVELS_REWORKED } from './build.ts';
-import { RADIO_HORDES, SQUAD_CAP } from '../core/data.ts';
-import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
-import { startSquadHorde } from '../core/hordeonly.ts';
+import { BENCH_XP_SHARE, RADIO_HORDES, SQUAD_CAP, SQUAD_XP_RATE } from '../core/data.ts';
+import { hordeXp, newGame, type GameState, type RosterDefender } from '../core/game.ts';
+import { squadResult, startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
 import { horrorAbility, waveCount, xpToNext } from '../core/waves.ts';
 import {
+  benchXpText,
   createHud,
   defenderLabel,
   enemiesLeft,
@@ -84,6 +85,73 @@ describe('the horde-only top bar (ID-066)', () => {
       value: 7,
       max: xpToNext(2),
     });
+  });
+});
+
+describe('bench XP on the result panel (ID-206)', () => {
+  const benched = (xp = 0): GameState => ({
+    ...squadGame(2, 4),
+    reserve: [{ ...recruit(3), xp }],
+    camp: { ...squadGame(2, 4).camp, recruits: 3 },
+  });
+  const share = Math.floor(hordeXp(4) * SQUAD_XP_RATE * BENCH_XP_SHARE);
+
+  it('formats the line, none when nobody is benched or nothing was earned', () => {
+    expect(benchXpText([{ xp: 12 }])).toBe('Bench +12 XP');
+    expect(benchXpText([{ xp: 12 }, { xp: 12 }])).toBe('Bench +12 XP each');
+    expect(benchXpText([{ xp: 10 }, { xp: 12 }])).toBe('Bench +10–12 XP');
+    expect(benchXpText([{ xp: 0 }, { xp: 12 }])).toBe('Bench +12 XP');
+    expect(benchXpText([])).toBeNull();
+    expect(benchXpText([{ xp: 0 }])).toBeNull();
+  });
+
+  it('a win shows "Bench +N XP" in the lines and as a chip', () => {
+    const g = benched();
+    const s = squadScreen(g, ended(g, 'won'));
+    expect(s.lines).toContain(`Bench +${share} XP`);
+    expect(s.debrief!.chips.map((c) => c.text)).toContain(`Bench +${share} XP`);
+  });
+
+  it('a bench level-up is shown like a fighter who levelled', () => {
+    const g = benched(xpForLevel(2) - 1);
+    const s = squadScreen(g, ended(g, 'won'));
+    expect(s.debrief!.cards!.map((c) => [c.name, c.levelUp])).toContainEqual([
+      recruit(3).name,
+      true,
+    ]);
+  });
+
+  it('a loss that paid XP shows the bench line too; with none earned, no line', () => {
+    const g = benched();
+    const h = { ...ended(g, 'lost'), wave: 6 };
+    const lost = squadScreen(g, h);
+    expect(lost.lines.some((l) => /^Bench \+\d+ XP$/.test(l))).toBe(true);
+    expect(squadScreen(g, ended(g, 'lost')).lines.join(' ')).not.toMatch(/Bench/);
+  });
+
+  it('a loss with a large bench shows cards for fighters and levelled bench only', () => {
+    const g: GameState = {
+      ...squadGame(2, 4),
+      reserve: Array.from({ length: 30 }, (_, i) => ({
+        ...recruit(i + 3),
+        xp: i === 0 ? xpForLevel(2) - 1 : 0,
+      })),
+    };
+    const h = { ...ended(g, 'lost'), wave: 6 };
+    const s = squadScreen(g, h);
+    expect(s.debrief!.cards!.map((c) => c.name)).toEqual([
+      recruit(1).name,
+      recruit(2).name,
+      recruit(3).name,
+    ]);
+    const xp = squadResult(g, h).bench[0]!.xp;
+    expect(xp).toBeGreaterThan(0);
+    expect(s.debrief!.chips.map((c) => c.text)).toContain(`Bench +${xp} XP each`);
+  });
+
+  it('no bench, no line', () => {
+    const g = squadGame(2, 4);
+    expect(squadScreen(g, ended(g, 'won')).lines.join(' ')).not.toMatch(/Bench/);
   });
 });
 

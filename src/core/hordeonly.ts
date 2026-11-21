@@ -42,6 +42,7 @@ import {
   SQUAD_SKILLS,
   SQUAD_SLOT_COSTS,
   SQUAD_SPAWN_X,
+  BENCH_XP_SHARE,
   SQUAD_XP_RATE,
   STASH_CAP,
   STASH_SLOT,
@@ -813,6 +814,24 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
   });
 }
 
+/**
+ * What each bench survivor (in the camp, not in `tookPart`) gets from horde `horde` (ID-206):
+ * `BENCH_XP_SHARE` of the fighters' average XP in `fighters`, rounded down, win or loss,
+ * resting or not. A survivor who swapped in fought, so they are not here. Nobody fought → none.
+ */
+export function benchXpGains(
+  game: Pick<GameState, 'roster' | 'reserve'>,
+  horde: Pick<HordeState, 'tookPart'>,
+  fighters: readonly { xp: number }[],
+): { id: string; name: string; xp: number; injured: boolean }[] {
+  if (fighters.length === 0) return [];
+  const mean = fighters.reduce((t, g) => t + g.xp, 0) / fighters.length;
+  const xp = Math.floor(mean * BENCH_XP_SHARE);
+  return campOf(game)
+    .filter((d) => !horde.tookPart.includes(d.id))
+    .map((d) => ({ id: d.id, name: d.name, xp, injured: false }));
+}
+
 /** The Scrap a horde-only win of horde `n` pays (ID-179). */
 export const winScrap = (n: number): number => SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * n;
 
@@ -879,6 +898,11 @@ function finishHorde(
     // Capped where a save reads it, so a win never leaves a save that won't load.
     if (d) d.xp = Math.min(MAX_COUNT, d.xp + gain.xp);
   }
+  // The bench gets its share (ID-206), as the camp stood before the fight.
+  for (const gain of benchXpGains(game, horde, gains)) {
+    const d = campOf(g).find((r) => r.id === gain.id);
+    if (d) d.xp = Math.min(MAX_COUNT, d.xp + gain.xp);
+  }
   // A patched-up survivor's low HP lasts one horde played (ID-155), as a rest counts down.
   const rested = (d: RosterDefender): RosterDefender => {
     const r = downed.get(d.id);
@@ -940,6 +964,8 @@ function noJoinWhy(game: Pick<GameState, 'roster' | 'reserve' | 'camp'>, replay:
 export interface SquadResult {
   /** Each survivor's XP and levels; a loss's small share too (ID-098). */
   gains: LevelGain[];
+  /** Each bench survivor's share of that XP and their levels (ID-206); empty with nobody benched. */
+  bench: LevelGain[];
   /**
    * The survivors asking to join (ID-147, ID-150): none on a loss, often none past 6, and
    * rarely one on a replay (ID-170).
@@ -979,9 +1005,12 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
   const { next, joined, noJoin } = finishHorde(game, horde);
   const after = new Map(campOf(next).map((d) => [d.id, restOf(d)]));
   const downed = squadRests(game, horde);
+  const camp = { ...game, roster: campOf(game) };
+  const fought = squadXpGains(game, horde);
   return {
     // Off the whole camp, so a bench survivor who swapped in (ID-148) levels from their XP.
-    gains: levelGains({ ...game, roster: campOf(game) }, horde, squadXpGains(game, horde)),
+    gains: levelGains(camp, horde, fought),
+    bench: levelGains(camp, horde, benchXpGains(game, horde, fought)),
     joined,
     noJoin,
     rests: downed
