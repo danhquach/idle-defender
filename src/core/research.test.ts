@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildSegment } from './base.ts';
 import { buildCar, carLimit } from './camp.ts';
-import { chooseCard, eligible, rerollLock, rerollOffer, rerollsThisWave } from './cards.ts';
+import { chooseCard, eligible, rerollLock, rerollOffer, secondLookRerolls } from './cards.ts';
 import {
   BANK_CAP,
   BOSS_PERK_GENES,
@@ -302,17 +302,18 @@ describe('perk levels (AC4)', () => {
     expect(seg(lvl3).maxHp / seg(base).maxHp).toBeCloseTo(1.6 / 1.3, 9);
   });
 
-  it('Second Look gives 1 reroll a wave at level 1, 1.5 at level 2 (2 every other wave), 2 at level 3', () => {
-    const waves = (level: number) =>
+  it('Second Look has given 1 reroll a wave at level 1, 1.5 at level 2, 2 at level 3, by each wave', () => {
+    const upTo = (level: number) =>
       [1, 2, 3, 4].map((wave) =>
-        rerollsThisWave({ perks: ['second-look'], perkLevels: { 'second-look': level }, wave }),
+        secondLookRerolls({ perks: ['second-look'], perkLevels: { 'second-look': level }, wave }),
       );
-    expect(waves(1)).toEqual([1, 1, 1, 1]);
-    expect(waves(2)).toEqual([1, 2, 1, 2]);
-    expect(waves(3)).toEqual([2, 2, 2, 2]);
+    expect(upTo(1)).toEqual([1, 2, 3, 4]);
+    expect(upTo(2)).toEqual([1, 3, 4, 6]);
+    expect(upTo(3)).toEqual([2, 4, 6, 8]);
+    expect(secondLookRerolls({ perks: [], perkLevels: {}, wave: 4 })).toBe(0);
   });
 
-  it('at level 3, Second Look rerolls an offer twice in a wave, then refuses', () => {
+  it('at level 3, Second Look adds 2 to the 3 rerolls of wave 1, then they run out', () => {
     let s = newHorde(3, {
       ...setup(),
       perks: ['second-look'],
@@ -323,9 +324,9 @@ describe('perk levels (AC4)', () => {
       { kind: 'upgrade', id: 'rapid-fire' },
       { kind: 'upgrade', id: 'long-sight' },
     ];
-    s = rerollOffer(rerollOffer(s));
-    expect(s.rerolls).toBe(2);
-    expect(rerollLock(s)).toBe('Already rerolled this wave');
+    for (let i = 0; i < 5; i++) s = rerollOffer(s);
+    expect(s.rerolls).toBe(5);
+    expect(rerollLock(s)).toBe('No rerolls left');
   });
 });
 

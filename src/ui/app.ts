@@ -1,7 +1,7 @@
 // Wires the game to the page: canvas, frame loop, fixed camera and click input, the build
 // panel between hordes and the HUD in a fight.
 import { campLevelOf, recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
-import { chooseCard, rerollLock, rerollOffer } from '../core/cards.ts';
+import { banCard, banLock, chooseCard, rerollLock, rerollOffer, skipOffer } from '../core/cards.ts';
 import { FIELD, HORDE_ONLY, type SkillId } from '../core/data.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import {
@@ -127,6 +127,7 @@ import {
   SKILL_KEYS,
   skillPicker,
   skillSlots,
+  OFFER_KEYS,
   SPEED_KEYS,
   squadScreen,
   type ResultScreen,
@@ -325,8 +326,13 @@ export function start(root: HTMLElement, art: Art): void {
       else hud.toast(r.reason);
     },
     (skill) => arm(skill),
-    () => {
-      if (horde && rerollLock(horde) === null) horde = rerollOffer(horde);
+    (act) => {
+      // The card pick's buttons (ID-210), each checked against the live fight.
+      if (!horde?.offer) return;
+      if (act.act === 'skip') horde = skipOffer(horde);
+      else if (act.act === 'reroll') {
+        if (rerollLock(horde) === null) horde = rerollOffer(horde);
+      } else if (banLock(horde, act.index) === null) horde = banCard(horde, act.index);
     },
     (id) => {
       if (horde && endedAt !== null) campPicks.push(id);
@@ -986,7 +992,11 @@ export function start(root: HTMLElement, art: Art): void {
     // Every fight key by its place (ID-100), so one press is one key on any layout.
     const name = fightKeyName(e);
     if (name === AUTO_KEY && !e.repeat) toggleAuto();
-    const next = SPEEDS.find((sp) => SPEED_KEYS[sp] === name);
+    // An open pick's Skip takes S (ID-210; the pick marks the key handled): the 3× speed waits.
+    const next =
+      name === OFFER_KEYS.skip && (e.defaultPrevented || horde?.offer)
+        ? undefined
+        : SPEEDS.find((sp) => SPEED_KEYS[sp] === name);
     if (next && !e.repeat) setSpeed(next);
     // Horde-only (ID-100): Q and W use the picked skills, left to right as their buttons stand.
     const slot = SKILL_KEYS.indexOf(name);

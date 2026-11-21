@@ -115,7 +115,7 @@ export function cuesBetween(prev: HordeState | null, next: HordeState): Cue[] {
 
   // Cards: a level-up brings its offer; a reroll (even to the same cards) is a new offer;
   // a pick shuts it.
-  const rerolled = next.rerolls !== prev.rerolls || next.rerolledWave !== prev.rerolledWave;
+  const rerolled = next.rerolls !== prev.rerolls;
   if (next.level > prev.level) cues.add('level-up');
   else if (next.offer !== null && (rerolled || offerKey(next) !== offerKey(prev))) {
     cues.add('card-offer');

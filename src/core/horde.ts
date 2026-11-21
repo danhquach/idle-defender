@@ -720,10 +720,14 @@ export interface HordeState {
   perkLevels: Partial<Record<PerkId, number>>;
   /** Research done when the fight started (ID-035). */
   research: ResearchId[];
-  /** The wave Second Look's reroll was last used in; 0 = not yet. */
-  rerolledWave: number;
-  /** Rerolls used in `rerolledWave`. */
+  /** Card rerolls used this horde (ID-210). */
   rerolls: number;
+  /** Card picks skipped this horde (ID-210): each gives a reroll. */
+  skips: number;
+  /** Bans used this horde (ID-210). */
+  bans: number;
+  /** Cards banned this horde (ID-210): never offered again, until the horde ends. */
+  banned: UpgradeId[];
   fires: Fire[];
   blasts: Blast[];
   incoming: Incoming[];
@@ -913,8 +917,10 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     perks: [...perks],
     perkLevels: levels,
     research: [...research],
-    rerolledWave: 0,
     rerolls: 0,
+    skips: 0,
+    bans: 0,
+    banned: [],
     fires: [],
     blasts: [],
     incoming: [],

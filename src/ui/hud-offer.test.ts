@@ -164,7 +164,7 @@ describe('picking a card (ID-103)', () => {
       perks: ['second-look'],
     };
     hud.update(s as HordeState);
-    const reroll = panel.querySelector<HTMLButtonElement>('.hud-reroll')!;
+    const reroll = panel.querySelector<HTMLButtonElement>('.hud-offer-reroll')!;
     expect(reroll.disabled).toBe(false);
     press('1');
     reroll.click();

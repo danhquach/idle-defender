@@ -570,7 +570,7 @@ which apply to the whole battlefield.
 | Butcher's Hunger | Melee kills heal the nearest wall a little |
 | Overclock | Turrets +20% damage, +10% energy use |
 | Scavenger's Eye | +25% horde cash |
-| Second Look | One reroll of the 1-of-3 offer per wave |
+| Second Look | Extra card rerolls: one a wave (they add to the card pick's 3, §8) |
 | Rally Call | Recruit cards appear twice as often |
 | Fortify | All barrier layers +30% max HP |
 | Power Saver | Turrets use 25% less energy |
@@ -590,8 +590,8 @@ which apply to the whole battlefield.
   share of its own max afterwards; **Butcher's Hunger** each blade or tool
   kill heals the damaged standing segment nearest the
   defender 3 HP, up to max; **Rally Call** recruit chance ×2, still one
-  recruit per offer at most; **Second Look** one seeded reroll of the open
-  offer per wave; **Overclock** turret damage ×1.2 and draw ×1.1; **Power
+  recruit per offer at most; **Second Look** one extra reroll of the
+  card pick a wave, added to the pick's 3 a horde (§8, ID-210); **Overclock** turret damage ×1.2 and draw ×1.1; **Power
   Saver** turret draw ×0.75 (with Overclock, ×0.825). All stack
   multiplicatively with cards, shop buffs and Engineers. Perk levels and
   boss-horde unlocks come with ID-035. To absorb the starting Steady Fire,
@@ -616,7 +616,8 @@ which apply to the whole battlefield.
   +30/45/60% HP, Butcher's Hunger 3/4.5/6 HP, Rally Call ×2/2.5/3,
   Overclock +20/30/40% damage (its +10% draw stays), Power Saver
   −25/37.5/50% draw. **Second Look** gives 1 reroll a wave at level 1,
-  1 and 2 in turn at level 2, and 2 at level 3. The Perks view shows each
+  1 and 2 in turn at level 2, and 2 at level 3; they add to the card pick's 3
+  rerolls a horde (ID-210) and carry across the horde's waves, as the 3 do. The Perks view shows each
   perk's level and an Upgrade button that queues the next level.
 
 ## 6. Defenders, weapons and professions
@@ -2112,6 +2113,40 @@ spacing real hordes have (see the ID-077 note below).
   Research cards never come (nothing is researched). Four repeatable cards
   always stay in the pool (Patch Up only while the wall is damaged), so an
   offer never runs dry.
+
+- **Card pick: Reroll, Skip and Ban (ID-210).** Three buttons sit under the
+  cards on every pick (in the heading's row on a window 540 px tall or less),
+  each with a key beside 1 2 3 (a dim key hint on each button, hidden on a
+  touch screen). All counts are per horde: a new horde starts
+  full and nothing carries over (`REROLL`, `BAN` in `data.ts`).
+  - **Reroll** (R, "Reroll · N", greyed at 0): replaces all three cards with a
+    new offer. **3 a horde**, plus a Skip's, plus Second Look's (§5): the
+    perk's rerolls add to the 3 and are spent from the same count.
+  - **Skip** (S, "Skip · +1 reroll", free, unlimited): takes no card, closes the pick (the XP
+    stays spent, the level gained) and gives **+1 reroll**. Banked XP opens
+    the next pick as after a card. S is the 3× speed key; while a pick is open
+    it is Skip instead; R S B are ignored for the first **300 ms** of a
+    pick (`OFFER_KEY_GUARD_MS`), so a tap on S for speed as it opens can't skip
+    a card unseen (clicks are not delayed).
+  - **Ban** (B, "Ban · N", greyed at 0): **1 a horde**. Tap Ban, then a card
+    (or 1 2 3; the heading reads "Ban which card?"): that card leaves the offer and is **never offered again this
+    horde**, rerolls and later picks included, and a new card takes its slot;
+    the pick stays open. Ban again cancels. A recruit card can't be banned
+    (it greys out in ban mode).
+  - **Seeded:** the fight's RNG makes every new card, only when a button is
+    used (a pick answered with a card draws nothing extra, so the balance tests'
+    scripted player, which never uses the buttons, moves nothing). The same
+    seed and the same choices deal the same cards. A reroll and a ban follow
+    the offer's own rules: never a maxed or locked card, never the same card
+    twice in one offer, at most one recruit, Hollow Points only while the squad
+    can crit, a card pool's limits.
+  - **A short pool:** when bans or the fight's card pool leave fewer than
+    three cards, the offer is shorter (a ban with nothing left to fill the slot
+    leaves it empty). An empty pick keeps its heading, says "No cards left to
+    offer" above the buttons, and Skip closes it.
+    Nothing crashes and nothing loops. Auto-picking never uses the buttons.
+  - Not saved: a fight in progress is never saved (§12), so the counts and
+    the banned cards live in the fight only.
 
 ## 9. Enemies
 
