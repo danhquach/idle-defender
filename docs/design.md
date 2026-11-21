@@ -1254,7 +1254,8 @@ profession's output).
   line per affix. The camp owns at most 30 weapons (armoury and hands
   together); a drop past that is salvaged for Scrap (Rusty 5, Common 10,
   Military 25, Prototype 50, Relic 100). Incendiary rounds and +damage vs.
-  mutants wait for burning effects and mutants. Manual salvage is a follow-up.
+  mutants wait for burning effects and mutants. A spare stash gun can be salvaged by
+  hand too (Salvage, ID-207, under Gun upgrade).
 - **As built (ID-067): weapon drops, stash and equip in the horde-only build.**
   Better guns are how the squad gets stronger.
   - **Drop:** every horde won drops one gun (SMG, Carbine, Pump Shotgun, LMG or
@@ -3234,8 +3235,36 @@ and comes back stronger.
   so an upgraded gun, being stronger, stays unless it is dragged in by hand; the confirm
   shows the result with its inherited step. DPS, Squad Power, Recommended Power's
   comparison, Best gun for everyone and the gun pickers all count the step (they all read
-  the gun's numbers). Salvage paying back part of the Scrap spent (guess: half) is
-  deferred to #419, which carries those acceptance criteria.
+  the gun's numbers).
+  - **Salvage (ID-207, `UPGRADE_REFUND` in `data.ts`) *(starting point)*:** a salvaged gun
+    pays its rarity's `salvage` Scrap (Rusty 5, Common 10, Military 25, Prototype 50, Relic 100)
+    plus `UPGRADE_REFUND` (half) of the Scrap its upgrade steps cost, rounded down. The steps
+    of a Lv `L` gun at +`s` cost `GUN_UPGRADE.cost` × `L` × `s` × (`s` + 1) / 2 in all (a Lv 2
+    Military +2 spent 20 + 40 = 60: it pays 25 + 30 = 55). `gunSalvage` (`armoury.ts`) is the
+    one amount, used everywhere a gun is salvaged: by hand (`salvageGun`), a drop thrown away
+    when the stash is full, a survivor's gun returning to a full stash (the weakest of the
+    stash and the gun goes: `salvageOf`), and a gun a patrol brings home to a full stash.
+    **Combine inputs pay no refund** (the result keeps the step instead). Hordes only ever
+    drop +0 guns, so the balance tests, whose scripted player never upgrades, are unchanged.
+  - **Salvage in the Inventory:** a stash gun's details have a Salvage button in the dock under
+    Combine, always there so the dock keeps its shape: it names what it pays ("Salvage · +25
+    Scrap", "Salvage · +55 Scrap" with a refund; thousands separators; the tooltip and
+    screen-reader name have the full "Salvage Lv 2 Military SMG +2 for 55 Scrap"). The label
+    wraps rather than clip or scroll the dock sideways (desktop 1280x720 and iPad 1024x768 show the
+    whole dock; in a window under 541 px tall, a phone sideways, the details scroll as one box,
+    lines then buttons, so Salvage is reached by scrolling, never hidden).
+    Rusty, Common and Military go in one tap. A Prototype or Relic asks first, in the game's own
+    confirm panel ("Salvage Lv 3 Prototype SMG +1 for 65 Scrap? The gun is gone for good.",
+    Confirm labelled "Salvage"), and is checked again after the answer. A gun in a survivor's
+    hands (squad or bench) can't be salvaged: its button is greyed and says "Put it back in
+    the stash first" in visible text (Combine's rule; a touch screen has no tooltips); the
+    free pistol says "Can't salvage the pistol" and a blade or tool "Can't salvage: not a
+    gun". After it the gun leaves the stash and the next one is selected, the Scrap chip and a
+    result screen's "now" figure update, the camp is saved, and the status line says
+    "Salvaged Lv 2 Military SMG +2 · +55 Scrap, 555 now." It works between hordes and in a
+    fight, like Upgrade (the stash is not in the fight). A press locks the button for 400 ms
+    (and while a confirm is up), so a double tap salvages one gun, never the next one that
+    slides into the same spot.
   - **Drops are always +0:** every gun a horde can drop is +0, so a heavily upgraded squad
     can reach "no gun this horde can drop is an upgrade" (the farming guarantee's
     sure-upgrade roll and "Farm a higher horde for upgrades"). That is intended: upgrades

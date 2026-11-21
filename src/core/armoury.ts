@@ -8,6 +8,7 @@ import {
   PISTOL_DROP_FLOOR,
   GUN_LEVEL_DAMAGE,
   GUN_UPGRADE,
+  UPGRADE_REFUND,
   GUN_ROLES,
   PATROL,
   RARITIES,
@@ -102,6 +103,24 @@ export const gunStep = (h: Held): number => (isOwned(h) ? (h.step ?? 0) : 0);
 
 /** Upgrade step `step`'s damage factor (ID-208): ×(1 + `GUN_UPGRADE.damage` × step). */
 export const stepFactor = (step: number): number => 1 + GUN_UPGRADE.damage * step;
+
+/**
+ * The Scrap spent on gun `w`'s upgrade steps (ID-207): step `s` cost `GUN_UPGRADE.cost` × `s` ×
+ * the gun's level (`upgradeCost` in hordeonly), so all `step` of them cost cost × level ×
+ * step × (step + 1) / 2.
+ */
+export const upgradeSpent = (w: OwnedWeapon): number => {
+  const step = gunStep(w);
+  return (GUN_UPGRADE.cost * gunLevel(w) * step * (step + 1)) / 2;
+};
+
+/**
+ * What salvaging gun `w` pays (ID-207): its rarity's `salvage` Scrap plus `UPGRADE_REFUND` of
+ * what its upgrade steps cost, rounded down. The same for a hand salvage and an automatic one
+ * (a full stash's thrown-away gun).
+ */
+export const gunSalvage = (w: OwnedWeapon): number =>
+  RARITIES[w.rarity].salvage + Math.floor(UPGRADE_REFUND * upgradeSpent(w));
 
 /** "Military Pistol", "Military Pistol +2" once upgraded (ID-208); a free weapon is just "Pistol". */
 export const heldName = (h: Held): string =>

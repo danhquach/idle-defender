@@ -1,7 +1,7 @@
 // The loop between hordes (design §2): build on the base, fight a horde, carry the
 // damage, payout, XP and injuries back. Pure: every function returns new state, and
 // real time comes in as `now` (ms since the epoch), never read from a clock.
-import { heldName, isOwned, rollDrop, type Held, type OwnedWeapon } from './armoury.ts';
+import { gunSalvage, heldName, isOwned, rollDrop, type Held, type OwnedWeapon } from './armoury.ts';
 import { newBase, type Base, type Tier } from './base.ts';
 import type { Craft } from './craft.ts';
 import {
@@ -32,7 +32,6 @@ import {
   START_STOCK,
   START_TIERS,
   ITEMS,
-  RARITIES,
   FREE_WEAPONS,
   type JobId,
   type PerkId,
@@ -446,7 +445,7 @@ export function hordeDrop(game: GameState, h: HordeState): Drop | null {
   const weapon = rollDrop(rngFrom({ ...h.rng }), h.hordeNumber);
   if (!weapon) return null;
   const kept = ownedWeapons(game).length < ARMOURY_CAP;
-  return { weapon, kept, scrap: kept ? 0 : RARITIES[weapon.rarity].salvage };
+  return { weapon, kept, scrap: kept ? 0 : gunSalvage(weapon) };
 }
 
 /**

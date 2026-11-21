@@ -234,6 +234,11 @@ export const GUN_LEVEL_DAMAGE = 0.06;
  */
 export const GUN_UPGRADE = { max: 5, damage: 0.04, cost: 10 } as const;
 /**
+ * The share of the Scrap a gun's upgrade steps cost that salvaging it pays back (ID-207), on
+ * top of its rarity's `salvage`, rounded down. Combine inputs pay none. A starting point.
+ */
+export const UPGRADE_REFUND = 0.5;
+/**
  * Squad Power and Recommended Power (ID-098). A survivor's power is their gun's sustained
  * dmg/s × (1 + `aim` × the level's spread cut) × (1 + `tough` × the level's extra HP
  * share) × `scale` (ID-146: the level bonus; Sharp Mind and Instinct before; Instinct's

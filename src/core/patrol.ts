@@ -7,7 +7,7 @@
 // Plazas and orders (ID-029): a trip searches the ticked buildings of a place; a plaza may
 // draw a big horde; the order says what the party protects when things go wrong.
 // The car (ID-030): a patrol that takes it travels faster and pays Gas when it leaves.
-import { isOwned, rollWeapon, tierRarity, type OwnedWeapon } from './armoury.ts';
+import { gunSalvage, isOwned, rollWeapon, tierRarity, type OwnedWeapon } from './armoury.ts';
 import {
   lootBonus,
   MAX_FORAGING,
@@ -786,7 +786,7 @@ export function settlePatrols(game: GameState, now: number): GameState {
     const store = (weapon: OwnedWeapon): ReportWeapon => {
       const kept = ownedWeapons(g).length < ARMOURY_CAP;
       if (kept) g.armoury.push(weapon);
-      else haul.stock.scrap += RARITIES[weapon.rarity].salvage;
+      else haul.stock.scrap += gunSalvage(weapon);
       return { base: weapon.base, rarity: weapon.rarity, kept };
     };
     // The affixes come from their own stream, so the haul's rolls never shift.

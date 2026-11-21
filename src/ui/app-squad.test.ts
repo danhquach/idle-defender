@@ -2334,3 +2334,118 @@ describe('Craft through the app (ID-209)', () => {
     expect(m.saved().armoury.some((w) => w.uid === 'f1')).toBe(true);
   });
 });
+
+describe('Salvage through the app (ID-207)', () => {
+  const HELD: OwnedWeapon = { uid: 'h1', base: 'smg', rarity: 'common', affixes: [], level: 3 };
+  /** A gun the save accepts: its rarity's affixes rolled, the level and step as given. */
+  const gunOf = (
+    uid: string,
+    extra: { rarity?: OwnedWeapon['rarity']; level?: number; step?: number } = {},
+  ): OwnedWeapon => {
+    const { step, ...rest } = extra;
+    const w = rollWeapon(createRng(7), uid, 'smg', rest.rarity ?? 'common', rest.level);
+    return step ? { ...w, step } : w;
+  };
+
+  /** Horde 6, one survivor holding Lv 3 `h1`, `stash` in the stash, 500 Scrap. */
+  function salvageCamp(stash: OwnedWeapon[]) {
+    const g = newGame('horde');
+    const who = recruit(1);
+    const camp: GameState = {
+      ...g,
+      hordeNumber: 6,
+      roster: [{ ...who, loadout: { ...who.loadout, primary: HELD } }],
+      camp: { ...g.camp, recruits: 1 },
+      armoury: stash,
+      stock: { ...g.stock, scrap: 500 },
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    let seed = 1;
+    while (joiners(camp, seed, true).length > 0) seed++;
+    vi.spyOn(Date, 'now').mockReturnValue(seed);
+    const booted = boot();
+    step(0);
+    let t = 0;
+    const frame = () => step((t += 16));
+    const open = () => booted.root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const scrim = () => document.querySelector<HTMLElement>('.camp-scrim')!;
+    const chip = () => document.querySelector('.scrap-chip')!.textContent;
+    const pickGun = (key: string) =>
+      scrim().querySelector<HTMLButtonElement>(`.inv-slot[data-key="${key}"]`)!.click();
+    const salvage = () => scrim().querySelector<HTMLButtonElement>('.inv-salvage-button')!;
+    const status = () => scrim().querySelector('.inv-status')!.textContent;
+    return { ...booted, frame, open, scrim, chip, pickGun, salvage, status };
+  }
+
+  it('between hordes: a lower rarity goes in one tap; saved, chip and status follow', async () => {
+    const m = salvageCamp([gunOf('h2', { rarity: 'military', level: 2, step: 2 }), gunOf('h3')]);
+    m.open();
+    m.pickGun('stash:h2');
+    expect(m.salvage().textContent).toBe('Salvage · +55\u00a0Scrap');
+    m.salvage().click();
+    await flush();
+    expect(confirmPanel()).toBeNull();
+    expect(m.saved().armoury.map((w) => w.uid)).toEqual(['h3']);
+    expect(m.saved().stock.scrap).toBe(555);
+    expect(m.chip()).toBe('Scrap 555');
+    expect(m.status()).toBe('Salvaged Lv 2 Military SMG +2 · +55 Scrap, 555 now.');
+  });
+
+  it('a Prototype asks first: a no keeps the gun, a yes salvages it', async () => {
+    const m = salvageCamp([gunOf('h2', { rarity: 'prototype', level: 3, step: 1 })]);
+    m.open();
+    m.pickGun('stash:h2');
+    m.salvage().click();
+    await flush();
+    expect(confirmQuestion()).toBe(
+      'Salvage Lv 3 Prototype SMG +1 for 65 Scrap? The gun is gone for good.',
+    );
+    await answerConfirm(false);
+    expect(m.saved().armoury).toHaveLength(1);
+    expect(m.saved().stock.scrap).toBe(500);
+    // The press is locked for a moment (the clock is the test's own), so move it on.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1000);
+    m.salvage().click();
+    await flush();
+    await answerConfirm(true);
+    expect(m.saved().armoury).toHaveLength(0);
+    expect(m.saved().stock.scrap).toBe(565);
+    expect(m.chip()).toBe('Scrap 565');
+  });
+
+  it('a Relic asks first too', async () => {
+    const m = salvageCamp([gunOf('h2', { rarity: 'relic' })]);
+    m.open();
+    m.pickGun('stash:h2');
+    m.salvage().click();
+    await flush();
+    expect(confirmQuestion()).toMatch(/^Salvage Lv 1 Relic SMG for 100 Scrap\?/);
+    await answerConfirm(true);
+    expect(m.saved().stock.scrap).toBe(600);
+  });
+
+  it('a held gun is greyed, saying to put it back in the stash first', () => {
+    const m = salvageCamp([gunOf('h2')]);
+    m.open();
+    m.pickGun(`squad:${recruit(1).id}`);
+    expect(m.salvage().disabled).toBe(true);
+    expect(m.salvage().textContent).toBe('Put it back in the stash first');
+    m.salvage().click();
+    expect(m.saved().stock.scrap).toBe(500);
+  });
+
+  it('in a fight: a stash gun is salvaged and the fight carries on', async () => {
+    const m = salvageCamp([gunOf('h2')]);
+    m.root.querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!.click();
+    m.frame();
+    m.frame();
+    m.open();
+    m.pickGun('stash:h2');
+    expect(m.salvage().disabled).toBe(false);
+    m.salvage().click();
+    await flush();
+    expect(m.saved().armoury).toHaveLength(0);
+    expect(m.saved().stock.scrap).toBe(510);
+    expect(m.chip()).toBe('Scrap 510');
+  });
+});
