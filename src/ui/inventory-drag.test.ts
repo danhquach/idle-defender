@@ -727,7 +727,11 @@ describe('moving guns without dragging (ID-095)', () => {
     expect(details().querySelectorAll('.inv-gear button')).toHaveLength(0);
     expect(details().querySelectorAll('.inv-equip-blank')).toHaveLength(2);
     slot('squad:recruit-1').click();
+    // A gun in hand: still a blank per survivor, and one Unequip over the first row (ID-213).
+    expect(details().querySelectorAll('.inv-equip-blank')).toHaveLength(2);
+    expect(details().querySelectorAll('.inv-gear button')).toHaveLength(1);
     const off = details().querySelector<HTMLButtonElement>('.inv-unequip')!;
+    expect(off.textContent).toBe('Unequip');
     expect(off.getAttribute('aria-label')).toBe(
       `Unequip Common Carbine from ${now().roster[0]!.name}`,
     );
@@ -779,7 +783,8 @@ describe('the details hold still while picking and combining (ID-198)', () => {
     return JSON.stringify({
       parts,
       dock: [...dock.children].map((c) => c.className),
-      cells: dock.querySelector('.inv-equip')!.childElementCount,
+      // One per survivor; a held gun's Unequip lies over them (ID-213).
+      cells: dock.querySelectorAll('.inv-equip > :not(.inv-unequip)').length,
       line: dock.querySelector('.inv-combine-line')!.childElementCount,
       // Combine, its greyed stand-in or the confirm's Confirm: always the row's first.
       first: /inv-combine-(button|off|yes)/.test(first.className),

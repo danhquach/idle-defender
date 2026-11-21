@@ -573,6 +573,17 @@ describe('the Weapons details hold still (ID-198)', () => {
     );
   });
 
+  it('Unequip lies over the equip grid’s whole first row, so the word fits (ID-213)', () => {
+    expect(rule('.inv-equip')).toMatch(/position: relative;/);
+    expect(rule('.inv-equip .inv-unequip')).toMatch(
+      /position: absolute;[^}]*grid-area: 1 \/ 1 \/ 2 \/ -1;[^}]*inset: 0;/,
+    );
+    // A narrow phone row never splits into more than 6 columns.
+    expect(rules).toMatch(
+      /minmax\(max\(48px, calc\(\(100% - 5 \* var\(--space-6\)\) \/ 6\)\), 1fr\)/,
+    );
+  });
+
   it('long names end in "…" in an equip cell instead of growing it', () => {
     expect(rule('.inv-equip .menu-action')).toMatch(
       /white-space: nowrap;[^}]*text-overflow: ellipsis;/,
