@@ -18,6 +18,7 @@ import {
   baseOf,
   gunLevel,
   gunPower,
+  gunStep,
   heldName,
   isOwned,
   roleOf,
@@ -36,6 +37,7 @@ import {
 } from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
 import {
+  combineKept,
   combineSets,
   nextRarity,
   squadOf,
@@ -59,8 +61,10 @@ import {
   levelLabel,
   powerLine,
   slotOffer,
+  upgradeOffer,
   type PowerLine,
   type SlotOffer,
+  type UpgradeOffer,
 } from './hud.ts';
 import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
 import type { Answer } from './confirm.ts';
@@ -86,6 +90,8 @@ export interface InventoryItem {
   level: number;
   /** The slot's level badge (ID-098): "Lv 12"; null for no gun. */
   levelBadge: string | null;
+  /** The slot's upgrade badge (ID-208): "+2"; null at +0 and for no gun. */
+  stepBadge: string | null;
   /** The gun's icon; null for a weapon that is no gun. */
   icon: ArtId | null;
   /** Who fights with it ("Held by Ana"), the free pistol's note, or "In the stash". */
@@ -96,6 +102,8 @@ export interface InventoryItem {
   powerWith: string | null;
   /** The stash gun itself, for its set's Combine; null for a gun in hand or the pistol. */
   owned: OwnedWeapon | null;
+  /** The gun's Upgrade button (ID-208); null for the free pistol, a non-gun, or with no Scrap known. */
+  upgrade: UpgradeOffer | null;
 }
 
 export interface InventoryView {
@@ -258,11 +266,13 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
     badge: gun ? String(Math.round(power)) : null,
     level: gunLevel(h),
     levelBadge: gun ? `Lv ${gunLevel(h)}` : null,
+    stepBadge: gun && gunStep(h) > 0 ? `+${gunStep(h)}` : null,
     icon: gun ? GUN_ICON[base as GunId] : null,
     where,
     holder,
     powerWith: null,
     owned: key.startsWith('stash:') && isOwned(h) ? h : null,
+    upgrade: null,
   };
 }
 
@@ -281,8 +291,12 @@ export function inventoryView(
   const cap = stashCap(game);
   const pick = cleanPick(pickIn);
   const rows = game.armoury.map((h, at) => ({ h, at, power: powerOf(h), gun: isGun(h) }));
+  const scrap = game.stock?.scrap;
+  // Upgrade (ID-208): a gun of the stash or in hand, priced against the Scrap there is.
+  const upgradable = (it: InventoryItem, h: Held): InventoryItem =>
+    scrap !== undefined && isOwned(h) && isGun(h) ? { ...it, upgrade: upgradeOffer(h, scrap) } : it;
   const toItem = ({ h }: (typeof rows)[number]): InventoryItem =>
-    item(h, `stash:${h.uid}`, IN_STASH);
+    upgradable(item(h, `stash:${h.uid}`, IN_STASH), h);
   const rarityAt = (h: Held): number => (isOwned(h) ? RARITY_ORDER.indexOf(h.rarity) : -1);
   // Guns first in every sort, a blade or tool (an older save's) after them; ties keep the
   // armoury's order. The armoury itself is never reordered (view only).
@@ -345,7 +359,7 @@ export function inventoryView(
         id: d.id,
         name: d.name,
         gun: {
-          ...item(held, `squad:${d.id}`, `Held by ${d.name}.`, d.name),
+          ...upgradable(item(held, `squad:${d.id}`, `Held by ${d.name}.`, d.name), held),
           // Both figures side by side (ID-166): the gun's own, and in their hands.
           powerWith: dpsWith(survivorDps(squadSpec(d), held), d.name),
         },
@@ -461,9 +475,16 @@ export function combinePreview(uses: readonly OwnedWeapon[]): CombinePreview {
   const first = uses[0]!;
   const next = nextRarity(first.rarity)!;
   const n = affixCount(first.base, next);
-  // The result takes the highest level of the guns used (ID-098).
-  const level = Math.max(...uses.map(gunLevel));
-  const made: OwnedWeapon = { uid: '', base: first.base, rarity: next, affixes: [], level };
+  // The result takes the highest level of the guns used (ID-098) and that gun's step (ID-208).
+  const { level, step } = combineKept(uses);
+  const made: OwnedWeapon = {
+    uid: '',
+    base: first.base,
+    rarity: next,
+    affixes: [],
+    level,
+    ...(step > 0 ? { step } : {}),
+  };
   const bare = gunPower(made);
   return {
     used: uses.map((w) => item(w, `stash:${w.uid}`, IN_STASH)),
@@ -527,6 +548,7 @@ export function slotFace(it: InventoryItem): HTMLElement[] {
     face.push(badge);
   }
   if (it.levelBadge) face.push(el('span', 'inv-slot-level', it.levelBadge));
+  if (it.stepBadge) face.push(el('span', 'inv-slot-step', it.stepBadge));
   return face;
 }
 
@@ -915,6 +937,54 @@ function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement {
   return block;
 }
 
+/** What the Upgrade part of the details calls (ID-208). */
+export interface UpgradeUi {
+  /** Raises the gun `uid` one step. */
+  run(uid: string): void;
+}
+
+/** After an upgrade the button ignores presses this long (ms), so a double tap buys one step. */
+export const UPGRADE_LOCK_MS = 400;
+export const UPGRADE_PISTOL = 'The free pistol can’t be upgraded.';
+export const UPGRADE_NOT_GUN = 'Only guns can be upgraded.';
+/** What the greyed button says (visible, not a tooltip) for the pistol and for a non-gun. */
+export const UPGRADE_PISTOL_TEXT = 'Can’t upgrade the pistol';
+export const UPGRADE_NOT_GUN_TEXT = 'Can’t upgrade: not a gun';
+
+/**
+ * The Upgrade part of a gun's details (ID-208), in the dock: its label and one button naming
+ * the next step and its cost, greyed (with the Scrap short in its tooltip) when it can't be
+ * pressed. Always there, so the dock keeps one shape: a gun it can't apply to has it greyed.
+ */
+function upgradeBlock(it: InventoryItem, ui: UpgradeUi): HTMLElement {
+  const block = el('div', 'inv-upgrade');
+  block.append(el('h4', 'inv-upgrade-label', 'Upgrade'));
+  const offer = it.upgrade;
+  const why = it.power === null ? UPGRADE_NOT_GUN : UPGRADE_PISTOL;
+  // The greyed button for a gun it can't apply to says why in its text, so a touch screen
+  // (no tooltips) reads it too.
+  const b = button(
+    offer ? offer.text : it.power === null ? UPGRADE_NOT_GUN_TEXT : UPGRADE_PISTOL_TEXT,
+    () => {
+      if (offer && !offer.disabled) ui.run(offer.uid);
+    },
+    'inv-upgrade-button',
+  );
+  b.disabled = !offer || offer.disabled;
+  b.title = offer ? offer.title : why;
+  // The full wording for a screen reader: the label is short for the dock.
+  b.setAttribute(
+    'aria-label',
+    offer
+      ? offer.title.startsWith(offer.full)
+        ? offer.title
+        : `${offer.full}. ${offer.title}`
+      : `Upgrade: ${why}`,
+  );
+  block.append(b);
+  return block;
+}
+
 /**
  * The details beside the grid for `it`, as two parts (ID-198): what it is, which scrolls
  * when long, and the dock pinned at the foot with its Equip on or Unequip when `gear` is
@@ -925,6 +995,7 @@ export function detailsPanel(
   it: InventoryItem | null,
   combine?: { rows: readonly CombineRow[]; ui: CombineUi },
   gear?: GearUi,
+  upgrade?: UpgradeUi,
 ): HTMLElement[] {
   const info = el('div', 'inv-details-info');
   if (!it) {
@@ -933,6 +1004,7 @@ export function detailsPanel(
   }
   const dock = el('div', 'inv-dock');
   if (gear) dock.append(gearBlock(it, gear));
+  if (upgrade) dock.append(upgradeBlock(it, upgrade));
   const c = combine ? combineBlock(it, combine.rows, combine.ui) : null;
   // A confirm shows what goes and what comes in place of the gun's own lines.
   if (c?.confirm) info.append(c.confirm);
@@ -965,6 +1037,11 @@ export interface InventoryOptions {
    * why not, or null when the player said no. Without it the button does nothing.
    */
   onBuyStash?: () => Answer | Promise<Answer>;
+  /**
+   * Raises the gun `uid`, held or in the stash, one upgrade step (ID-208), in a fight too: what
+   * it said, or why not; without it the details have no Upgrade.
+   */
+  onUpgrade?: (uid: string) => { ok: true; text: string } | { ok: false; reason: string };
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
   onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
   /**
@@ -1520,7 +1597,28 @@ export function createInventory(
       opts.onEquip && view && listedCombine
         ? { view, move: (from: string, to: string) => act(dropAction(view!, from, to), from, to) }
         : undefined;
-    details.replaceChildren(...detailsPanel(it, combine, gear));
+    const upgrade = opts.onUpgrade ? { run: upgradeGunNow } : undefined;
+    details.replaceChildren(...detailsPanel(it, combine, gear, upgrade));
+  }
+
+  let upgradeLockUntil = 0;
+
+  /** Raises gun `uid` one step; says what it did, or why not, and keeps focus on the button. */
+  function upgradeGunNow(uid: string): void {
+    // One step a press: a double tap (or a fast second click) lands on the next step's button.
+    const at = Date.now();
+    if (at < upgradeLockUntil) return;
+    upgradeLockUntil = at + UPGRADE_LOCK_MS;
+    const r = opts.onUpgrade?.(uid);
+    if (!r) return;
+    // A confirm over a gun that was just replaced is stale: drawing drops it.
+    const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
+    draw(game, canCombine, horde, canBuy);
+    say(r.ok ? r.text : r.reason, !r.ok);
+    (
+      details.querySelector<HTMLButtonElement>('.inv-upgrade-button:not(:disabled)') ??
+      slotOf(selected)
+    )?.focus();
   }
 
   /** Puts up the Combine confirm for `uses`. */

@@ -9,6 +9,7 @@ import {
   firstClearWeights,
   gunLevel,
   gunPower,
+  gunStep,
   isOwned,
   replayWeights,
   rollSquadGun,
@@ -27,6 +28,7 @@ import {
   DEFENDER_HP,
   FARM,
   FIELD,
+  GUN_UPGRADE,
   MAX_COUNT,
   POWER,
   RARITIES,
@@ -222,6 +224,84 @@ export const buySquadSlot = (game: GameState): SlotBuy => buySlot(game, 'squad')
 
 /** Buys the next `STASH_SLOT.add` stash slots (ID-179, between hordes); as `buySquadSlot`. */
 export const buyStashSlots = (game: GameState): SlotBuy => buySlot(game, 'stash');
+
+/** The Scrap raising gun `w` one more step costs (ID-208), or null at `GUN_UPGRADE.max`. */
+export const upgradeCost = (w: OwnedWeapon): number | null =>
+  gunStep(w) >= GUN_UPGRADE.max ? null : GUN_UPGRADE.cost * (gunStep(w) + 1) * gunLevel(w);
+
+/** What an upgrade gives (ID-208): the game after it, the gun, and the Scrap it took; or why not. */
+export type GunUpgrade =
+  { ok: true; game: GameState; weapon: OwnedWeapon; cost: number } | { ok: false; reason: string };
+
+/**
+ * Raises gun `uid` one upgrade step (ID-208) for `upgradeCost` Scrap: a gun in the stash, in a
+ * survivor's hands (squad or bench), any time, in a fight too. Refused with a player-facing
+ * reason when there is no such gun, it is no gun, it is at the top step, or Scrap is short.
+ * The gun is a new object in the same place, so what worked out its numbers is not reused.
+ */
+export function upgradeGun(game: GameState, uid: string): GunUpgrade {
+  const camp = [...game.roster, ...game.reserve];
+  const found: OwnedWeapon | undefined =
+    game.armoury.find((w) => w.uid === uid) ??
+    camp
+      .flatMap((d) => [d.loadout.primary, d.loadout.secondary])
+      .find((h): h is OwnedWeapon => isOwned(h) && h.uid === uid);
+  if (!found) return { ok: false, reason: 'No such gun' };
+  if (!isGun(found)) return { ok: false, reason: 'Only guns can be upgraded' };
+  const cost = upgradeCost(found);
+  if (cost === null) return { ok: false, reason: `Already at +${GUN_UPGRADE.max}` };
+  if (game.stock.scrap < cost) return { ok: false, reason: `Needs ${cost} Scrap` };
+  const weapon: OwnedWeapon = { ...found, step: gunStep(found) + 1 };
+  const swap = (h: Held | null): Held | null => (isOwned(h) && h.uid === uid ? weapon : h);
+  const arm = (d: RosterDefender): RosterDefender => ({
+    ...d,
+    loadout: {
+      ...d.loadout,
+      primary: swap(d.loadout.primary)!,
+      secondary: swap(d.loadout.secondary),
+    },
+  });
+  return {
+    ok: true,
+    cost,
+    weapon,
+    game: {
+      ...game,
+      stock: { ...game.stock, scrap: game.stock.scrap - cost },
+      armoury: game.armoury.map((w) => (w.uid === uid ? weapon : w)),
+      roster: game.roster.map(arm),
+      reserve: game.reserve.map(arm),
+    },
+  };
+}
+
+/**
+ * `horde` with every defender who holds the gun `weapon.uid` holding `weapon` instead (ID-208):
+ * a gun upgraded in a fight under way hits harder from the next shot. `horde` itself when
+ * nobody holds it. Nothing else changes: the magazine and the reload carry on.
+ */
+export function withUpgradedGun(horde: HordeState, weapon: OwnedWeapon): HordeState {
+  const mine = (h: Held | null): boolean => isOwned(h) && h.uid === weapon.uid;
+  if (!horde.defenders.some((d) => mine(d.loadout.primary) || mine(d.loadout.secondary))) {
+    return horde;
+  }
+  const swap = (h: Held | null): Held | null => (mine(h) ? weapon : h);
+  return {
+    ...horde,
+    defenders: horde.defenders.map((d) =>
+      mine(d.loadout.primary) || mine(d.loadout.secondary)
+        ? {
+            ...d,
+            loadout: {
+              ...d.loadout,
+              primary: swap(d.loadout.primary)!,
+              secondary: swap(d.loadout.secondary),
+            },
+          }
+        : d,
+    ),
+  };
+}
 
 /**
  * The squad that fights the next horde: the roster, at most `squadCap`, in the order they
@@ -1456,6 +1536,18 @@ export function combineSets(game: Pick<GameState, 'armoury'>): CombineSet[] {
   return sets;
 }
 
+/**
+ * The level and upgrade step a combine of `guns` keeps (ID-098, ID-208): the highest level, and
+ * the step of the gun that brings it, the highest step among those tied on level. A step is
+ * never taken from a lower-level gun, so a cheap low-level +5 gun can't be combined into a
+ * high-level one.
+ */
+export function combineKept(guns: readonly OwnedWeapon[]): { level: number; step: number } {
+  const level = Math.max(...guns.map(gunLevel));
+  const step = Math.max(...guns.filter((g) => gunLevel(g) === level).map(gunStep));
+  return { level, step };
+}
+
 /** FNV-1a: a combine's seed from its inputs, so the same guns always roll the same affixes. */
 function hash(text: string): number {
   let h = 0x811c9dc5;
@@ -1470,7 +1562,8 @@ function hash(text: string): number {
  * rolls its rarity's affixes as a drop does, seeded from the inputs alone, so the same save
  * and the same picks give the same gun. The inputs are used up, and the new gun takes the
  * first input's uid (in sorted order), so it stays unique and a save reads it as before.
- * Free; 3 in and 1 out, so a full stash never refuses it.
+ * Free; 3 in and 1 out, so a full stash never refuses it. Level and upgrade step: the highest of
+ * the three, the step from the gun that brings that level (`combineKept`, ID-098, ID-208).
  */
 export function combineGuns(
   game: GameState,
@@ -1509,9 +1602,11 @@ export function combineGuns(
   if (!next) return { ok: false, reason: 'A Relic gun is the best there is: it can’t be combined' };
   const sorted = [...uids].sort();
   const rng = createRng(hash(`${first.base}:${first.rarity}:${sorted.join(',')}`));
-  // The new gun takes the highest level of the three (ID-098).
-  const level = Math.max(...guns.map(gunLevel));
-  const weapon = rollWeapon(rng, sorted[0]!, first.base, next, level > 1 ? level : undefined);
+  // The new gun takes the highest level of the three (ID-098), and the step of the gun that
+  // brings it (ID-208).
+  const { level, step } = combineKept(guns);
+  const rolled = rollWeapon(rng, sorted[0]!, first.base, next, level > 1 ? level : undefined);
+  const weapon = step > 0 ? { ...rolled, step } : rolled;
   const used = new Set(uids);
   return {
     ok: true,

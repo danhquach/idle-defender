@@ -30,6 +30,8 @@ import {
   setAutoSquad,
   squadOf,
   startSquadHorde,
+  upgradeGun,
+  withUpgradedGun,
   toggleSkill,
   toggleSquad,
   type GunChoice,
@@ -108,6 +110,8 @@ import {
   bestGunsLine,
   buyQuestion,
   buyText,
+  upgradeText,
+  withScrapNow,
   BUY_WAIT,
   createHud,
   createScrapChip,
@@ -445,6 +449,37 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true };
   }
   /**
+   * Raises gun `uid` one upgrade step (the Inventory, ID-208), held or in the stash, between
+   * hordes or in a fight: saved at once. In a fight the survivor holding it fights with the new
+   * numbers from the next shot, and the Squad Power chip follows.
+   */
+  function upgradeGunNow(uid: string): { ok: true; text: string } | { ok: false; reason: string } {
+    const r = upgradeGun(game, uid);
+    if (!r.ok) return r;
+    commit(r.game);
+    if (horde && !resultUp()) {
+      horde = withUpgradedGun(horde, r.weapon);
+      hud.fightPower(powerLine(squadPower(game), recommendedPower(horde.hordeNumber)));
+    } else {
+      // The start screen's squad on the wall holds the new numbers too.
+      if (!horde) preview = startSquadHorde(game, 0, Date.now());
+      refreshPanel();
+    }
+    refreshResultScrap();
+    return { ok: true, text: upgradeText(r.weapon, r.cost, game.stock.scrap) };
+  }
+  /**
+   * The Scrap balance a won horde's result screen reports, as it stands (ID-208): only its "now"
+   * figure is set, in place (a screen waiting for the last kills is patched before it shows),
+   * so a skill picked, details opened or a scroll on the screen stay as they are. Does nothing
+   * with no won result screen.
+   */
+  function refreshResultScrap(): void {
+    if (!HORDE_ONLY || !horde || horde.outcome !== 'won') return;
+    if (pendingResult) pendingResult.screen = withScrapNow(pendingResult.screen, game.stock.scrap);
+    else if (endedAt !== null) hud.resultScrap(game.stock.scrap);
+  }
+  /**
    * Moves survivor `id` between the squad and the bench between hordes (the Roster, ID-147):
    * saved at once; the start screen, its squad on the wall and the gun pickers redrawn.
    */
@@ -547,6 +582,7 @@ export function start(root: HTMLElement, art: Art): void {
     if (buyQuestion(kind, now.cost, now.before) !== ask) return { ok: false, reason: ASK_CHANGED };
     commit(now.r.game);
     redrawSquad();
+    refreshResultScrap();
     return { ok: true, text: buyText(kind, now.cost, now.r.game.stock.scrap) };
   }
   /**
@@ -676,6 +712,7 @@ export function start(root: HTMLElement, art: Art): void {
         : undefined,
       // Drag and drop (ID-095), horde-only and between hordes, as the gun pickers.
       onEquip: HORDE_ONLY ? changeGun : undefined,
+      onUpgrade: HORDE_ONLY ? upgradeGunNow : undefined,
       onBuyStash: HORDE_ONLY ? () => buySlots('stash') : undefined,
       onBestGuns: HORDE_ONLY ? handOutBestGuns : undefined,
     },

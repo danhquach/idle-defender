@@ -5,7 +5,7 @@
 // research, workbench, camp, perks) are never on the page. Canvas and art are stand-ins.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FARM, FIELD, HORDE_ONLY, SKILLS, STASH_CAP } from '../core/data.ts';
-import { rollWeapon } from '../core/armoury.ts';
+import { rollWeapon, statsOf, type OwnedWeapon } from '../core/armoury.ts';
 import { rollOffer } from '../core/cards.ts';
 import { recruit } from '../core/camp.ts';
 import { joiners } from '../core/hordeonly.ts';
@@ -2003,5 +2003,201 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
     );
     expect(root.querySelector('.debrief-guns')).toBeNull();
     expect(saved().joining).toBeUndefined();
+  });
+});
+
+describe('Upgrade through the app (ID-208)', () => {
+  const HELD: OwnedWeapon = {
+    uid: 'h1',
+    base: 'smg',
+    rarity: 'common',
+    affixes: [],
+    level: 3,
+  };
+  const STASHED: OwnedWeapon = { ...HELD, uid: 'h2', level: 2 };
+
+  /** Horde 6, one survivor holding Lv 3 `h1`, Lv 2 `h2` in the stash, `scrap` Scrap. */
+  function upgradeCamp(scrap: number, horde = 6) {
+    const g = newGame('horde');
+    const who = recruit(1);
+    const camp: GameState = {
+      ...g,
+      hordeNumber: horde,
+      roster: [{ ...who, loadout: { ...who.loadout, primary: HELD } }],
+      camp: { ...g.camp, recruits: 1 },
+      armoury: [STASHED],
+      stock: { ...g.stock, scrap },
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    let seed = 1;
+    while (joiners(camp, seed, true).length > 0) seed++;
+    vi.spyOn(Date, 'now').mockReturnValue(seed);
+    const booted = boot();
+    step(0);
+    let t = 0;
+    const frame = () => step((t += 16));
+    const open = () => booted.root.querySelector<HTMLButtonElement>('.inv-button')!.click();
+    const scrim = () => document.querySelector<HTMLElement>('.camp-scrim')!;
+    const chip = () => document.querySelector('.scrap-chip')!.textContent;
+    const pickGun = (key: string) =>
+      scrim().querySelector<HTMLButtonElement>(`.inv-slot[data-key="${key}"]`)!.click();
+    const upgrade = () => scrim().querySelector<HTMLButtonElement>('.inv-upgrade-button')!;
+    const status = () => scrim().querySelector('.inv-status')!.textContent;
+    return { ...booted, frame, open, scrim, chip, pickGun, upgrade, status, camp };
+  }
+
+  it('between hordes: a held gun is upgraded, saved, and the Scrap chip and status follow', () => {
+    const m = upgradeCamp(500);
+    expect(m.chip()).toBe('Scrap 500');
+    m.open();
+    m.pickGun(`squad:${recruit(1).id}`);
+    expect(m.upgrade().textContent).toBe('Upgrade +1 · 30\u00a0Scrap');
+    m.upgrade().click();
+    expect(m.saved().stock.scrap).toBe(470);
+    expect(m.saved().roster[0]!.loadout.primary).toMatchObject({ uid: 'h1', step: 1 });
+    expect(m.chip()).toBe('Scrap 470');
+    expect(m.status()).toBe('Upgraded Lv 3 Common SMG +1 · 30 Scrap spent, 470 left.');
+  });
+
+  it('between hordes: a stash gun is upgraded too', () => {
+    const m = upgradeCamp(500);
+    m.open();
+    m.pickGun('stash:h2');
+    m.upgrade().click();
+    expect(m.saved().armoury[0]).toMatchObject({ uid: 'h2', step: 1 });
+    expect(m.saved().stock.scrap).toBe(480);
+  });
+
+  it('in a fight: the live defender fights with the upgraded gun, and the power chip follows', () => {
+    const m = upgradeCamp(500);
+    m.root.querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!.click();
+    m.frame();
+    m.frame();
+    const label = () => m.root.querySelector('.hud-power-label')!.textContent;
+    const before = label();
+    m.open();
+    m.pickGun(`squad:${recruit(1).id}`);
+    m.upgrade().click();
+    expect(label()).not.toBe(before);
+    const power = squadPower({
+      roster: [
+        {
+          ...m.camp.roster[0]!,
+          loadout: { ...m.camp.roster[0]!.loadout, primary: { ...HELD, step: 1 } },
+        },
+      ],
+    });
+    expect(label()).toContain(`Power ${power.toLocaleString('en-US')}`);
+    expect(m.saved().stock.scrap).toBe(470);
+    expect(m.chip()).toBe('Scrap 470');
+    // Closed again, the fight resumes with the new gun in the defender's hands.
+    document.querySelector<HTMLButtonElement>('.camp-done')!.click();
+    vi.mocked(tick).mockClear();
+    m.frame();
+    m.frame();
+    const live = vi.mocked(tick).mock.calls.at(-1)![0];
+    expect(live.defenders[0]!.loadout.primary).toMatchObject({ uid: 'h1', step: 1 });
+    // The upgraded gun hits harder than the one it was.
+    expect(statsOf(live.defenders[0]!.loadout.primary).damage).toBeCloseTo(
+      statsOf(HELD).damage * 1.04,
+      9,
+    );
+  });
+
+  it('on the result screen: the Scrap it shows follows an upgrade', () => {
+    const m = upgradeCamp(500);
+    m.root.querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!.click();
+    m.frame();
+    m.frame();
+    endNextTick('won');
+    m.frame();
+    // The balance after the win is in the chip's tooltip and the details' line.
+    const text = () =>
+      [...m.result().querySelectorAll<HTMLElement>('[title]')].map((e) => e.title).join(' | ');
+    // 10 + 5 × 6 = 40 Scrap for the win: 540 now.
+    expect(text()).toContain('now 540');
+    expect(m.chip()).toBe('Scrap 540');
+    m.open();
+    m.pickGun('stash:h2');
+    m.upgrade().click();
+    expect(m.chip()).toBe('Scrap 520');
+    expect(text()).toContain('now 520');
+    expect(text()).not.toContain('now 540');
+    // The start button and picker still stand.
+    expect(m.button().textContent).toMatch(/^Start Horde 7/);
+  });
+
+  /** A won result screen over the upgrade camp, the Weapons tab not yet open. */
+  function won(scrap = 500, horde = 6) {
+    const m = upgradeCamp(scrap, horde);
+    m.root.querySelector<HTMLButtonElement>('.hud-start-row > .hud-button')!.click();
+    m.frame();
+    m.frame();
+    endNextTick('won');
+    m.frame();
+    const picked = () =>
+      [...m.result().querySelectorAll<HTMLButtonElement>('.hud-skill-option')]
+        .filter((b) => b.getAttribute('aria-pressed') === 'true')
+        .map((b) => b.dataset.skill);
+    const upgradeStash = () => {
+      m.open();
+      m.pickGun('stash:h2');
+      m.upgrade().click();
+      document.querySelector<HTMLButtonElement>('.camp-done')!.click();
+    };
+    return { ...m, picked, upgradeStash };
+  }
+
+  it('on the result screen: a skill toggled there is still shown as picked after an upgrade', () => {
+    const m = won();
+    expect(m.picked()).toEqual(['airstrike']);
+    m.result()
+      .querySelector<HTMLButtonElement>('.hud-skill-option[data-skill="airstrike"]')!
+      .click();
+    expect(m.saved().skillPick).toEqual([]);
+    expect(m.picked()).toEqual([]);
+    m.upgradeStash();
+    // The screen was not rebuilt from the camp before the win: the pick is the saved one.
+    expect(m.picked()).toEqual([]);
+    expect(m.saved().skillPick).toEqual([]);
+    m.result()
+      .querySelector<HTMLButtonElement>('.hud-skill-option[data-skill="airstrike"]')!
+      .click();
+    m.upgradeStash();
+    expect(m.picked()).toEqual(['airstrike']);
+    expect(m.saved().skillPick).toEqual(['airstrike']);
+  });
+
+  it('on the result screen: open details stay open through an upgrade, and so does the scroll', () => {
+    // A boss horde's first clear has a note, so the screen has its details.
+    const m = won(500, 10);
+    const toggle = () => m.result().querySelector<HTMLElement>('[data-details-toggle]')!;
+    toggle().click();
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    expect(m.result().dataset.details).toBeDefined();
+    m.upgradeStash();
+    expect(m.result().dataset.details).toBeDefined();
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    const body = m.result().querySelector<HTMLElement>('.hud-result-scroll')!;
+    body.scrollTop = 40;
+    m.upgradeStash();
+    expect(m.result().dataset.details).toBeDefined();
+    expect(body.scrollTop).toBe(40);
+  });
+
+  it('on the result screen: a slot purchase refreshes the Scrap figure too', async () => {
+    const m = won(2000);
+    expect(
+      [...m.result().querySelectorAll<HTMLElement>('[title]')].some((e) =>
+        e.title.includes('now 2,040'),
+      ),
+    ).toBe(true);
+    m.open();
+    m.scrim().querySelector<HTMLButtonElement>('.inv-buy')!.click();
+    await answerConfirm(true);
+    expect(m.chip()).toBe('Scrap 1,890');
+    const titles = [...m.result().querySelectorAll<HTMLElement>('[title]')].map((e) => e.title);
+    expect(titles.some((t) => t.includes('now 1,890'))).toBe(true);
+    expect(titles.some((t) => t.includes('now 2,040'))).toBe(false);
   });
 });

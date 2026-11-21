@@ -622,6 +622,22 @@ describe('patrol risk (ID-027)', () => {
     expect(plain.leftBehind).toEqual([]);
   });
 
+  it('leaves a dead survivor’s upgraded gun on the map without its upgrade step (ID-208)', () => {
+    const p = patrolAt('electronics', { members: ['bob', 'jack'], strength: 1 });
+    const seed = seedWhere(
+      p,
+      (o) => !o.wiped && o.dead.includes('bob') && !o.dead.includes('jack'),
+    );
+    const g = armed(ready({ patrols: [{ ...p, seed }], patrolsSent: 1 }));
+    const bob = g.roster.find((d) => d.id === 'bob')!;
+    bob.loadout = { ...bob.loadout, primary: { ...GUN, step: 3 } };
+    const back = settlePatrols(g, NOW + 60 * MIN);
+    expect(back.leftBehind[0]).toEqual({ location: 'electronics', weapon: GUN });
+    expect(Object.hasOwn(back.leftBehind[0]!.weapon, 'step')).toBe(false);
+    // The held one it came from is untouched.
+    expect(bob.loadout.primary).toMatchObject({ step: 3 });
+  });
+
   it('brings home what the dead left with the next party there, and nothing from elsewhere', () => {
     const left = [
       { location: 'electronics' as const, weapon: GUN },

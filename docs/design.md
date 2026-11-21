@@ -3179,6 +3179,54 @@ and comes back stronger.
   a level, added, before (×1.95 at Horde 20). Combine takes 3 of a gun and
   rarity at any levels; the new gun has the highest. The free pistol and
   older saves' guns are level 1. DPS everywhere includes it.
+- **Gun upgrade (ID-208) *(starting points)*:** a gun can be upgraded with Scrap to
+  +1, +2 … up to +`GUN_UPGRADE.max` (5), one step at a time. Each step adds
+  `GUN_UPGRADE.damage` (4%) of base damage, so +5 is ×1.2, multiplied with the gun
+  level's ×1.06 a level and the rarity's power, before affixes (Rusty +5 is ×0.96 of a
+  Common +0). Reaching step `s` costs `GUN_UPGRADE.cost` (10) × `s` × the gun's level in
+  Scrap (a Lv 3 gun: 30, 60, 90, 120, 150). It is player-driven only, so the scripted
+  player (and so every balance test) never upgrades and the fixtures are unchanged. The
+  step is `OwnedWeapon.step`, written to the save only when above 0 (an older save's
+  guns load at +0; the save version is unchanged), read as a whole number from 0 to the
+  top step and nothing else. It shows after the name everywhere ("Lv 3 Common SMG +2").
+  Held and stash guns can both be upgraded, between hordes and in a fight (a held gun
+  fights with the new numbers from the next shot; Squad Power follows). The free pistol
+  can't be upgraded. Combine's new gun takes the highest level of its three inputs
+  and the step of the gun that brings that level (on a level tie, the highest step among
+  the tied): a step is never taken from a lower-level gun, or a cheap low-level +5 gun
+  (10 + 20 + 30 + 40 + 50 Scrap at Lv 1) could be combined into a high-level result that
+  would otherwise cost 150 × its level. Combine still uses the 3 weakest by DPS as before,
+  so an upgraded gun, being stronger, stays unless it is dragged in by hand; the confirm
+  shows the result with its inherited step. DPS, Squad Power, Recommended Power's
+  comparison, Best gun for everyone and the gun pickers all count the step (they all read
+  the gun's numbers). Salvage paying back part of the Scrap spent (guess: half) is
+  deferred to #419, which carries those acceptance criteria.
+  - **Drops are always +0:** every gun a horde can drop is +0, so a heavily upgraded squad
+    can reach "no gun this horde can drop is an upgrade" (the farming guarantee's
+    sure-upgrade roll and "Farm a higher horde for upgrades"). That is intended: upgrades
+    are the player's own route past the drops.
+  - **Save:** the version stays 23 deliberately (the field is optional and read only when
+    present, so every older save loads at +0). The rollback caveat: an older build refuses a
+    save holding a step (its weapon reader knows no such key). A step is accepted only on a
+    gun in the stash or in a survivor's hands; a weapon left on the patrol map or carried by
+    a survivor waiting to join was never in the camp's hands (upgrades are horde-only), so a
+    step there is refused.
+  - **Result screen:** Scrap spent while a win's result screen is up (an upgrade or a slot
+    purchase) sets the "now" figure in its Scrap chip tooltip in place; nothing else on the
+    screen is redrawn, so a skill pick, open details or scroll stay as they are.
+  - **In the Inventory:** a gun's details have an Upgrade section in the dock, between
+    "Equip on…" and Combine, always there so the dock keeps its shape: one button naming
+    the next step and cost ("Upgrade +2 · 60 Scrap", thousands separators; the tooltip and
+    screen-reader name have the full "Upgrade to +2 · 60 Scrap"). The label wraps to a
+    second line rather than clip or scroll the dock. Short of Scrap it is greyed and dashed
+    like the slot buttons and shows progress ("Upgrade +2 · 20/60 Scrap", its tooltip adding
+    "Needs 60 Scrap (40 short)"); at +5 it says "Maxed at +5" greyed; for the free pistol
+    or a blade or tool it is greyed and says why in its text ("Can't upgrade the pistol",
+    "Can't upgrade: not a gun"), since a tooltip doesn't show on a touch screen. An
+    upgraded gun's tile has a "+N" badge top right (none at +0). There is no confirm (a
+    step is cheap and a fight can't wait). After it the status line says "Upgraded Lv 3
+    Common SMG +2 · 60 Scrap spent, 120 left."; an open combine confirm over the gun is
+    dropped, as its gun changed.
 - **XP:** a replay pays that horde's survivor XP; more than 3 hordes below
   the highest beaten, half. A loss pays 25% of that horde's win XP (halved far
   down too) × waves cleared ÷ its waves (0 cleared → 0), rounded down. Still no
