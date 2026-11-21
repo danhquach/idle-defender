@@ -414,7 +414,7 @@ describe('Choose a gun (ID-108)', () => {
       'Range',
       'Role',
     ]);
-    expect(rows.find((r) => r[0] === 'Damage')![2]).toBe('7.0 × 6');
+    expect(rows.find((r) => r[0] === 'Damage')![2]).toBe('10.0 × 4');
     expect(rows.find((r) => r[0] === 'Role')![3]).toBe('new role');
     m.key('equip').click();
     expect(m.onEquip).toHaveBeenCalledWith('recruit-1', 'g1');

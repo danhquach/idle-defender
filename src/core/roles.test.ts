@@ -289,10 +289,11 @@ describe('roles and traits', () => {
     d.nextShotAt = 0;
     d.reloadedAt.primary = 1e6;
     const near = dummy(s, TRAIT.close.range - 20);
-    // In the gun's range from the post, but past the near-the-wall band, and focused.
+    // In the gun's range from the post, but past the near-the-wall band, and focused; out of
+    // the cone aimed at `near` (ID-199: at y 300 a pellet missing `near` flew on into it).
     const far = enemy(s, {
       x: wallFront(s) + TRAIT.close.range + 60,
-      y: 300,
+      y: 250,
       hp: 1e9,
       maxHp: 1e9,
       stunnedUntil: 1e9,
@@ -472,7 +473,7 @@ describe('roles and traits', () => {
         expect(b.knock, base).toBe(TRAIT.knock.shotgun);
         expect(b.near, base).toBe(true);
       }
-      // Several of the 6 pellets land, yet the shot pushes the enemy once, 25 px.
+      // Several of the pellets land, yet the shot pushes the enemy once, 25 px.
       const t = landed(first);
       const pellets = Math.round((e.hp - find(t, e.id).hp) / first.bullets[0]!.damage);
       expect(pellets, base).toBeGreaterThan(1);
@@ -655,6 +656,8 @@ describe('role affixes', () => {
     expect(affixRange('pierce', 'sniper').max).toBe(2);
     expect(affixBounds('magazine', 'lmg').min).toBe(AFFIXES.magazine.min);
     expect(affixBounds('pierce', 'sniper')).toEqual({ min: 1, max: 2 });
+    // ID-199: the Pump Shotgun rolls +1 pellet, but an older +2 still reads.
+    expect(affixBounds('pellets', 'shotgun')).toEqual({ min: 1, max: 2 });
   });
 
   it('rolled values stay in the gun’s range, each affix at most once', () => {

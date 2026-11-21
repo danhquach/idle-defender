@@ -245,7 +245,7 @@ describe('a win, a loss and the stash (ID-067)', () => {
   });
 
   it('at the cap a drop weaker than everything is the one thrown away', () => {
-    // Relic Pump Shotguns, the most dmg/s of any gun (ID-135), so nothing Horde 2 drops beats them.
+    // Relic Pump Shotguns: nothing Horde 2 drops beats them.
     const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`c${i + 1}`, 'shotgun', 'relic'));
     const g = squadGame(1, 2, stash);
     const won = ended(g, 'won');
@@ -303,7 +303,7 @@ describe('a win, a loss and the stash (ID-067)', () => {
   it('gunPower is damage per second through a magazine and its reload', () => {
     // Pistol: 6.2 × 10 / (10 × 0.6 + 1.5).
     expect(gunPower('pistol')).toBeCloseTo(62 / 7.5, 9);
-    expect(gunPower(gun('a', 'shotgun', 'common'))).toBeCloseTo((7 * 6 * 6) / (6 * 0.8 + 3.6), 9);
+    expect(gunPower(gun('a', 'shotgun', 'common'))).toBeCloseTo((10 * 4 * 6) / (6 * 0.8 + 5.4), 9);
     expect(gunPower(gun('a', 'rifle', 'military'))).toBeGreaterThan(
       gunPower(gun('b', 'rifle', 'common')),
     );

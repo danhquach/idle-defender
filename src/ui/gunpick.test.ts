@@ -190,13 +190,13 @@ describe('the comparison (ID-108)', () => {
     expect(rows['Affixes']).toBeUndefined();
   });
 
-  it('shows pellets like "7.0 × 6", and affixes written out', () => {
+  it('shows pellets like "10.0 × 4", and affixes written out', () => {
     const rifle = gun('r', 'rifle', 'prototype', [{ id: 'damage', value: 10 }]);
     const shotgun = gun('g', 'shotgun', 'common');
     const rows = Object.fromEntries(
       gunCompare(rifle, shotgun, rookie).rows.map((r) => [r.label, r]),
     );
-    expect(rows['Damage']!.next).toBe('7.0 × 6');
+    expect(rows['Damage']!.next).toBe('10.0 × 4');
     expect(rows['Affixes']).toMatchObject({
       now: '1',
       next: 'none',

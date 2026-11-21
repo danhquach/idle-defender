@@ -96,6 +96,7 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       ['lmg', { id: 'magazine', value: 80 }],
       ['sniper', { id: 'pierce', value: 2 }],
       ['rifle', { id: 'critDamage', value: 50 }],
+      // ID-199: a Pump Shotgun now rolls +1 pellet; an older +2 still reads.
       ['shotgun', { id: 'pellets', value: 2 }],
       ['smg', { id: 'closeDamage', value: 10 }],
       ['sniper', { id: 'bossDamage', value: 35 }],

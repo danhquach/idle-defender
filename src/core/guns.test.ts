@@ -1,6 +1,6 @@
 // Design §6 (ID-046): the five specialised guns, each with its own bullet profile.
 import { describe, expect, it } from 'vitest';
-import { pierceOf, type OwnedWeapon } from './armoury.ts';
+import { affixRange, gunPower, pierceOf, type OwnedWeapon } from './armoury.ts';
 import {
   ENEMY_RADIUS,
   FREE_WEAPONS,
@@ -58,7 +58,7 @@ describe('the specialised guns', () => {
     };
     expect(profile('smg')).toEqual([1600, 3.5, 1, 0]);
     expect(profile('rifle')).toEqual([2200, 1, 1, 0]);
-    expect(profile('shotgun')).toEqual([1400, 12, 6, 0]);
+    expect(profile('shotgun')).toEqual([1400, 9, 4, 0]);
     expect(profile('lmg')).toEqual([2000, 6, 1, 0]);
     // ID-135: no base pierce; a shot's 10% chance of one more is the trait (TRAIT.sniper.pierce).
     expect(profile('sniper')).toEqual([3000, 0.5, 1, 0]);
@@ -71,11 +71,11 @@ describe('the specialised guns', () => {
     expect(() => equip(newGame(), 'bob', asSecondary)).toThrow(RangeError);
   });
 
-  it('a shotgun round is 6 pellets of its damage each, from one trigger and one flash', () => {
+  it('a Pump Shotgun round is 4 pellets of its damage each, from one trigger and one flash', () => {
     const s = armed('shotgun');
     enemy(s, { hp: 1000, maxHp: 1000, x: 650, y: 360, stunnedUntil: 9 });
     const fired = tick(s, STEP);
-    expect(fired.bullets).toHaveLength(6);
+    expect(fired.bullets).toHaveLength(4);
     expect(fired.shots).toHaveLength(1);
     expect(fired.defenders[0]!.ammo.primary).toBe(WEAPONS.shotgun.magazine - 1);
     // The crit is rolled once at the trigger: every pellet of a round deals the same.
@@ -83,15 +83,15 @@ describe('the specialised guns', () => {
     expect([1, CRIT_DAMAGE].map((k) => k * WEAPONS.shotgun.damage)).toContainEqual(dealt);
     for (const b of fired.bullets) expect(b.damage).toBe(dealt);
     // Each pellet rolls its own angle.
-    expect(new Set(fired.bullets.map((b) => b.dy)).size).toBe(6);
+    expect(new Set(fired.bullets.map((b) => b.dy)).size).toBe(4);
   });
 
   it('each pellet hits on its own: a round spreads its hits over several enemies, no falloff', () => {
     for (let seed = 1; seed <= 10; seed++) {
       const s = armed('shotgun', seed);
-      // A wall of enemies 250 px out, side by side across the cone (±6° ≈ ±26 px there).
-      const ids = [310, 335, 360, 385, 410].map(
-        (y) => enemy(s, { hp: 1000, maxHp: 1000, x: 670, y, stunnedUntil: 9 }).id,
+      // A wall of touching enemies 400 px out, side by side across the cone (±4.5° ≈ ±31 px there).
+      const ids = [312, 336, 360, 384, 408].map(
+        (y) => enemy(s, { hp: 1000, maxHp: 1000, x: 820, y, stunnedUntil: 9 }).id,
       );
       let t = tick(s, STEP);
       const pellet = t.bullets[0]!.damage;
@@ -121,6 +121,30 @@ describe('the specialised guns', () => {
         }
       }
     }
+  });
+
+  it('neither shotgun out-damages every gun on paper, and they differ (ID-199)', () => {
+    const power = (b: WeaponId) => gunPower(owned(b));
+    const others = (Object.keys(WEAPONS) as WeaponId[]).filter(
+      (b) =>
+        b !== 'shotgun' &&
+        b !== 'cartridge' &&
+        (WEAPONS[b].kind === 'gun' || WEAPONS[b].kind === 'sidearm'),
+    );
+    // Some other gun out-damages each on paper (the LMG both), and the Pump the Drum.
+    for (const b of ['shotgun', 'cartridge'] as const) {
+      expect(power(b), b).toBeLessThan(Math.max(...others.map(power)));
+    }
+    expect(power('shotgun')).toBeLessThan(power('lmg'));
+    expect(power('cartridge')).toBeLessThan(power('shotgun'));
+    // The Pump fires fewer, heavier pellets in a tighter cone; the Drum swaps a drum faster.
+    expect(WEAPONS.shotgun.pellets).toBeLessThan(WEAPONS.cartridge.pellets);
+    expect(WEAPONS.shotgun.damage).toBeGreaterThan(WEAPONS.cartridge.damage);
+    expect(WEAPONS.shotgun.spread).toBeLessThan(WEAPONS.cartridge.spread);
+    expect(WEAPONS.cartridge.reload).toBeLessThan(WEAPONS.shotgun.reload);
+    // The pellet affix adds at most one to the Pump's four, up to two to the Drum's six.
+    expect(affixRange('pellets', 'shotgun')).toEqual({ min: 1, max: 1 });
+    expect(affixRange('pellets', 'cartridge')).toEqual({ min: 1, max: 2 });
   });
 
   it('is seeded: the same seed fires the same pellets, another seed different ones', () => {
