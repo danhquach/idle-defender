@@ -97,7 +97,7 @@ describe('the name', () => {
     expect(slotLabel(v.stash.find((i) => i.key === 'stash:h1')!)).toMatch(/^Common SMG \+2,/);
   });
 
-  it('gives each gun its offer: stash and held guns have one, the free pistol none', () => {
+  it('gives each gun its offer: stash and held guns have one, the pistol in hand none', () => {
     const g = camp([gun('h1', { level: 3 })], 25, gun('h3'));
     const v = inventoryView(g);
     expect(v.stash[0]!.upgrade).toMatchObject({ uid: 'h1', text: 'Upgrade +1 · 25/30\u00a0Scrap' });
@@ -106,7 +106,6 @@ describe('the name', () => {
       text: 'Upgrade +1 · 10\u00a0Scrap',
     });
     expect(v.squad[1]!.gun.upgrade).toBeNull();
-    expect(v.pistol.upgrade).toBeNull();
   });
 });
 
@@ -197,9 +196,9 @@ describe('the Upgrade button in the details', () => {
     expect(m.button().textContent).toBe('Maxed at +5');
   });
 
-  it('is there, greyed, for the free pistol, saying why in its visible text', () => {
+  it('is there, greyed, for the pistol in hand, saying why in its visible text', () => {
     const m = mount(camp([gun('h1')], 500));
-    m.slot('pistol').click();
+    m.slot(`squad:${recruit(2).id}`).click();
     expect(m.button().disabled).toBe(true);
     expect(m.button().textContent).toBe(UPGRADE_PISTOL_TEXT);
     expect(m.button().textContent).toBe('Can’t upgrade the pistol');
@@ -340,7 +339,7 @@ describe('the +N badge on a tile', () => {
     expect(badge('stash:h1')).toBe('+2');
     expect(badge('stash:h2')).toBeNull();
     expect(badge(`squad:${recruit(1).id}`)).toBe('+5');
-    expect(badge('pistol')).toBeNull();
+    expect(badge(`squad:${recruit(2).id}`)).toBeNull();
     expect(m.slot('stash:h1').querySelector('.inv-slot-level')?.textContent).toBe('Lv 3');
     const v = inventoryView(camp([gun('h1', { step: 2 }), gun('h2')], 0));
     expect(v.stash.map((i) => i.stepBadge).sort()).toEqual(['+2', null]);

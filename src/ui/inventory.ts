@@ -1,14 +1,13 @@
 // The Inventory (ID-079, redrawn as a grid in ID-092): a top-bar button beside the Menu
 // ("Weapons") opens the camp window (ID-183, campwindow.ts) on everything the camp holds
-// now. Its Weapons tab shows the squad's guns in a row (each survivor's, then the free
-// pistol) over the stash: one square slot per
-// place up to its cap, each gun as its icon framed in its rarity's colour, strongest
+// now. Its Weapons tab shows the squad's guns in a row (each survivor's) over the stash: one
+// square slot per place up to its cap, each gun as its icon framed in its rarity's colour, strongest
 // first, the empty places shown empty. Selecting a slot (click, tap, arrow keys) or
 // hovering it shows its details beside the grid: name, rarity, each affix and dmg/s.
 // Between hordes a stash gun's details hold its set's Combine (ID-091): three of one kind
 // and rarity make one of the next rarity, after a confirm. Like the Menu, the field goes
 // inert behind it and an open Inventory holds a fight. Between hordes guns move by drag
-// and drop (ID-095): a stash gun or the free pistol onto a survivor equips it, a
+// and drop (ID-095): a stash gun onto a survivor equips it, a
 // survivor's gun into the stash takes it off them, and a stash gun onto one of its set
 // opens that set's Combine; a gun's details have buttons that do the same. Text reaches
 // the page only through textContent.
@@ -74,7 +73,7 @@ import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** One weapon as the Inventory shows it. */
 export interface InventoryItem {
-  /** Which slot it is, kept across redraws: `stash:<uid>`, `squad:<id>` or `pistol`. */
+  /** Which slot it is, kept across redraws: `stash:<uid>` or `squad:<id>`. */
   key: string;
   /** "Military Rifle"; the free pistol is "Pistol". */
   name: string;
@@ -96,7 +95,7 @@ export interface InventoryItem {
   stepBadge: string | null;
   /** The gun's icon; null for a weapon that is no gun. */
   icon: ArtId | null;
-  /** Who fights with it ("Held by Ana"), the free pistol's note, or "In the stash". */
+  /** Who fights with it ("Held by Ana") or "In the stash". */
   where: string;
   /** The survivor who fights with it; null in the stash and for the free pistol. */
   holder: string | null;
@@ -132,7 +131,6 @@ export interface InventoryView {
    * stash gun they hold, null on the free pistol.
    */
   squad: { id: string; name: string; gun: InventoryItem; uid: string | null }[];
-  pistol: InventoryItem;
   /**
    * Squad Power against the Recommended Power of the horde the next fight is (ID-098);
    * null where there is no horde to compare with.
@@ -237,12 +235,13 @@ export interface CombinePreview {
 }
 
 export const STASH_EMPTY = 'Empty. Every horde won drops a gun here.';
-export const PISTOL_NOTE = 'Free and unlimited: every survivor has one.';
 export const IN_STASH = 'In the stash.';
 export const INVENTORY_NOTE =
   'Pick each survivor’s gun in the Roster, or use Best gun for everyone.';
 export const COMBINE_NOTE = `${COMBINE_COUNT} stash guns of one kind and rarity make 1 of the next rarity.`;
 export const COMBINE_HELD = 'Only stash guns combine: put it back in the stash first.';
+/** A survivor on the free pistol (ID-212): it never goes to the stash, so it never combines. */
+export const COMBINE_PISTOL = 'The free pistol doesn’t combine.';
 export const COMBINE_TOP = 'Relic is the top rarity: it combines no further.';
 export const COMBINE_WAIT = 'Combine between hordes, on the start or result screen.';
 export const NO_AFFIXES = 'No affixes';
@@ -377,7 +376,6 @@ export function inventoryView(
         uid: isOwned(held) ? held.uid : null,
       };
     }),
-    pistol: item('pistol', 'pistol', PISTOL_NOTE),
     power: horde === null ? null : powerLine(squadPower(game), recommendedPower(horde)),
     powerHorde: horde,
     combine: combineRows(game),
@@ -422,16 +420,15 @@ export type Drop =
   | { kind: 'refused'; reason: string }
   | { kind: 'none' };
 
-/** Whether slot `key` can be picked up: a stash gun, the free pistol, or a survivor's stash gun. */
+/** Whether slot `key` can be picked up: a stash gun, or a survivor's stash gun. */
 export function canDrag(view: InventoryView, key: string): boolean {
-  if (key === 'pistol') return true;
   if (view.squad.some((s) => s.gun.key === key && s.uid !== null)) return true;
   return view.stash.some((it) => it.key === key && it.power !== null);
 }
 
 /**
  * Dropping slot `from` on `to`: a slot's key, `stash` (the stash grid itself, an empty
- * place or its heading) or null (nothing). A stash gun or the free pistol on a survivor
+ * place or its heading) or null (nothing). A stash gun on a survivor
  * equips it; a survivor's gun anywhere in the stash takes it off them; a stash gun on
  * another of its set opens that set's Combine (the weakest 3, as its button does).
  */
@@ -444,11 +441,6 @@ export function dropAction(view: InventoryView, from: string, to: string | null)
     if (to !== 'stash' && !to.startsWith('stash:')) return { kind: 'none' };
     if (view.free === 0) return { kind: 'refused', reason: STASH_FULL };
     return { kind: 'equip', defender: mine.id, choice: 'pistol' };
-  }
-  if (from === 'pistol') {
-    if (!onto || onto.uid === null) return { kind: 'none' };
-    if (view.free === 0) return { kind: 'refused', reason: STASH_FULL };
-    return { kind: 'equip', defender: onto.id, choice: 'pistol' };
   }
   const gun = view.stash.find((it) => it.key === from)!.owned!;
   if (onto) return { kind: 'equip', defender: onto.id, choice: gun.uid };
@@ -564,7 +556,7 @@ export function slotFace(it: InventoryItem): HTMLElement[] {
 }
 
 /** A slot's button: its face, framed in its rarity's colour; `caption` under it (a name). */
-function slot(it: InventoryItem, ready: boolean, caption?: string, tip = caption): HTMLElement {
+function slot(it: InventoryItem, ready: boolean, caption?: string): HTMLElement {
   const li = el('li', 'inv-cell');
   const b = el('button', 'inv-slot');
   b.type = 'button';
@@ -577,9 +569,9 @@ function slot(it: InventoryItem, ready: boolean, caption?: string, tip = caption
   if (ready) b.append(el('span', 'inv-slot-ready', '▲'));
   li.append(b);
   if (caption !== undefined) {
-    // A long name is cut short with an ellipsis; the whole name (or `tip`) shows on hover.
+    // A long name is cut short with an ellipsis; the whole name shows on hover.
     const who = el('span', 'inv-who', caption);
-    who.title = tip ?? caption;
+    who.title = caption;
     who.setAttribute('aria-hidden', 'true');
     li.append(who);
   }
@@ -728,7 +720,6 @@ export function inventoryGrid(
       ...(view.power ? [powerNote(view.power, view.powerHorde)] : []),
       list('Squad', 'inv-grid inv-squad', [
         ...view.squad.map((s) => mark(slot(s.gun, false, s.name))),
-        mark(slot(view.pistol, false, 'Free pistol', PISTOL_NOTE)),
       ]),
     ),
     stash,
@@ -866,7 +857,8 @@ function combineBlock(
   let confirm: HTMLElement | null = null;
   const row = it.power !== null && it.owned ? rowOf(rows, it.owned) : undefined;
   if (it.power === null) why = COMBINE_NOT_GUN;
-  else if (!it.owned) why = it.key === 'pistol' ? PISTOL_NOTE : COMBINE_HELD;
+  else if (it.free) why = COMBINE_PISTOL;
+  else if (!it.owned) why = COMBINE_HELD;
   else if (!row) why = COMBINE_TOP;
   else {
     why = `${row.name}: ${row.count} · ${row.note}`;
@@ -907,7 +899,7 @@ export interface GearUi {
 /**
  * The buttons that move a gun without dragging (ID-095), in the dock (ID-198): one cell per
  * survivor, always, so each survivor's button keeps its spot whichever gun is shown. A stash
- * gun or the free pistol has Equip on in each cell it could go to; a survivor's stash gun has
+ * gun has Equip on in each cell it could go to; a survivor's stash gun has
  * Unequip in its holder's cell. A cell with nothing to do keeps its place, empty.
  */
 function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement {
@@ -934,8 +926,7 @@ function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement {
   block.setAttribute('role', 'group');
   block.setAttribute('aria-label', `Equip ${it.name} on`);
   for (const s of ui.view.squad) {
-    // The pistol goes only to a survivor holding a stash gun; a stash gun to anyone.
-    if (!can || (it.key === 'pistol' && s.uid === null)) {
+    if (!can) {
       grid.append(blank());
       continue;
     }
@@ -1022,7 +1013,7 @@ function salvageBlock(it: InventoryItem, ui: SalvageUi): HTMLElement {
     ? offer.text
     : it.power === null
       ? SALVAGE_NOT_GUN_TEXT
-      : it.key === 'pistol' || it.free
+      : it.free
         ? SALVAGE_PISTOL_TEXT
         : SALVAGE_HELD_TEXT;
   const b = button(
@@ -1220,7 +1211,7 @@ export function createInventory(
   const slotOf = (key: string | null): HTMLButtonElement | undefined =>
     slots().find((b) => b.dataset.key === key);
   const items = (): InventoryItem[] =>
-    view ? [...view.squad.map((s) => s.gun), view.pistol, ...view.shown] : [];
+    view ? [...view.squad.map((s) => s.gun), ...view.shown] : [];
 
   // The grid: one Tab stop; arrows, Home and End move through every slot.
   body.addEventListener('keydown', (e) => {
@@ -1448,12 +1439,8 @@ export function createInventory(
     const zone = body.querySelector<HTMLElement>('.inv-stash-zone');
     const d = dropAction(view, press.key, 'stash');
     if (zone && d.kind !== 'none') zone.dataset.drop = droppable(d) ? 'ok' : 'no';
-    // Held back only by the stash being full (a survivor's gun, or the pistol while
-    // someone holds a gun to send there): said at once.
-    const full =
-      view.free === 0 &&
-      (press.key.startsWith('squad:') ||
-        (press.key === 'pistol' && view.squad.some((s) => s.uid !== null)));
+    // Held back only by the stash being full (a survivor's gun): said at once.
+    const full = view.free === 0 && press.key.startsWith('squad:');
     say(full ? STASH_FULL : '', full);
     press.scroller = setInterval(edgeScroll, 16);
     follow(x, y);
