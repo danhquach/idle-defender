@@ -3844,6 +3844,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 /* dmg/s, bottom right; the set-ready mark, top left. */
 .inv-slot-badge,
 .inv-slot-level,
+.inv-slot-step,
 .inv-slot-ready {
   position: absolute;
   padding: 0 var(--space-4);
@@ -3865,6 +3866,12 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 .inv-slot-level {
   bottom: 2px;
   left: 2px;
+  color: var(--color-accent);
+}
+
+.inv-slot-step {
+  top: 2px;
+  right: 2px;
   color: var(--color-accent);
 }
 
@@ -4024,11 +4031,54 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   grid-column: 1 / -1;
 }
 
+/* Upgrade (ID-208), in the dock: its label and one full-width button naming the next step. */
+.inv-upgrade {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.inv-upgrade-label {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* The label wraps to a second line rather than clip or push the dock sideways. */
+.inv-upgrade-button {
+  box-sizing: border-box;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding-block: var(--space-4);
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Short of Scrap, at +5 or no gun: dashed and unfilled, the text still clearly readable. */
+.inv-upgrade-button:disabled {
+  border-style: dashed;
+  background: transparent;
+  color: var(--color-text);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 /* A finger gets 44 px buttons in the dock; the dock is that much taller, still one shape. */
 @media (pointer: coarse) {
   .inv-equip,
   .inv-combine-actions {
     grid-auto-rows: 44px;
+  }
+
+  .inv-upgrade-button {
+    min-height: 44px;
   }
 
   .inv-equip .menu-action {

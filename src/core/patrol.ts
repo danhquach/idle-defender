@@ -820,7 +820,11 @@ export function settlePatrols(game: GameState, now: number): GameState {
       if (outcome.dead.includes(id)) {
         dead.push(d.name);
         for (const w of [d.loadout.primary, d.loadout.secondary]) {
-          if (w !== null && isOwned(w)) g.leftBehind.push({ location: p.location, weapon: w });
+          if (w === null || !isOwned(w)) continue;
+          // A weapon on the map carries no upgrade step (the save refuses one there, ID-208).
+          const weapon = { ...w };
+          delete weapon.step;
+          g.leftBehind.push({ location: p.location, weapon });
         }
         g.roster = g.roster.filter((r) => r.id !== id);
         startFloor(g, patrolDue(p));

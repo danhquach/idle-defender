@@ -199,6 +199,13 @@ export const SQUAD_DROP: readonly { from: number; rarity: Record<Rarity, number>
  */
 export const GUN_LEVEL_DAMAGE = 0.06;
 /**
+ * A gun's upgrade steps (ID-208): +1 up to +`max`, each one bought with Scrap. A step adds
+ * `damage` of the gun's base damage on top of its level and rarity (×(1 + `damage` × step));
+ * reaching step `s` costs `cost` × `s` × the gun's level in Scrap. Starting points: the damage
+ * and the cost per step are the PM's call.
+ */
+export const GUN_UPGRADE = { max: 5, damage: 0.04, cost: 10 } as const;
+/**
  * Squad Power and Recommended Power (ID-098). A survivor's power is their gun's sustained
  * dmg/s × (1 + `aim` × the level's spread cut) × (1 + `tough` × the level's extra HP
  * share) × `scale` (ID-146: the level bonus; Sharp Mind and Instinct before; Instinct's

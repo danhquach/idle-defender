@@ -1607,6 +1607,16 @@ describe('save: patrols (ID-026)', () => {
     expect(raw(patrolling(), 5)).toBeNull();
   });
 
+  it('a weapon left on the map has no upgrade step: only the camp’s guns do (ID-208)', () => {
+    expect(lost(() => {})).not.toBeNull();
+    for (const step of [0, 1, 5, -1, '2', null]) {
+      expect(
+        lost((g) => (g.leftBehind[0].weapon.step = step)),
+        `step ${String(step)}`,
+      ).toBeNull();
+    }
+  });
+
   it('refuses weapons left behind and casualties the game could not have written', () => {
     const cases: [string, (g: Loose) => void][] = [
       ['left not an array', (g) => (g.leftBehind = {})],
@@ -1909,6 +1919,19 @@ describe('save: survivors (ID-032)', () => {
         expect(
           changed((x) => (gun(x).level = bad)),
           String(bad),
+        ).toBeNull();
+      }
+    }
+  });
+
+  it('a survivor waiting holds a gun with no upgrade step (ID-208)', () => {
+    const offerGun = (x: Loose) => x.camp.offers[0].survivor.weapon;
+    const reportGun = (x: Loose) => x.reports[0].survivors[0].weapon;
+    for (const gun of [offerGun, reportGun]) {
+      for (const step of [0, 1, 5, -1, '2', null]) {
+        expect(
+          changed((x) => (gun(x).step = step)),
+          `step ${String(step)}`,
         ).toBeNull();
       }
     }

@@ -7,6 +7,7 @@ import {
   affixLines,
   gunLevel,
   gunPower,
+  gunStep,
   heldName,
   isOwned,
   levelName,
@@ -50,6 +51,7 @@ import {
   CAMP_PICKS,
   FALL_WARNING,
   GAS_PER_WIN,
+  GUN_UPGRADE,
   HORDE_ONLY,
   MATERIALS,
   PERKS,
@@ -113,6 +115,7 @@ import {
   squadOf,
   stashCap,
   squadResult,
+  upgradeCost,
   type GunMove,
   type NoJoin,
   type SquadDrop,
@@ -1451,6 +1454,61 @@ export function slotOffer(
   };
 }
 
+/** A gun's Upgrade button (ID-208): its text, whether it is greyed, its tooltip and its price. */
+export interface UpgradeOffer {
+  /** The gun it upgrades. */
+  uid: string;
+  /** The label: short enough for the details' dock ("Upgrade +2 · 60 Scrap"). */
+  text: string;
+  /** The label in full words ("Upgrade to +2 · 60 Scrap"), for the tooltip and screen readers. */
+  full: string;
+  disabled: boolean;
+  title: string;
+  /** The Scrap the next step costs; null at the top step. */
+  cost: number | null;
+}
+
+/** A non-breaking space: keeps a number and its unit on one line when a label wraps. */
+const NBSP = String.fromCharCode(160);
+
+/**
+ * The button that raises gun `w` one step (ID-208): "Upgrade +2 · 60 Scrap"; with too little
+ * Scrap it is greyed and shows progress, "Upgrade +2 · 20/60 Scrap", its tooltip the full
+ * wording and the shortfall; at the top step "Maxed at +5", greyed. The cost's space before
+ * "Scrap" doesn't break. It works in a fight too, so there is no `canBuy`.
+ */
+export function upgradeOffer(w: OwnedWeapon, scrap: number): UpgradeOffer {
+  const cost = upgradeCost(w);
+  if (cost === null) {
+    return {
+      uid: w.uid,
+      text: `Maxed at +${GUN_UPGRADE.max}`,
+      full: `Maxed at +${GUN_UPGRADE.max}`,
+      disabled: true,
+      title: `Already at +${GUN_UPGRADE.max}`,
+      cost,
+    };
+  }
+  const short = scrap < cost;
+  const step = gunStep(w) + 1;
+  const price = `${thousands(cost)} Scrap`;
+  const full = `Upgrade to +${step} · ${price}`;
+  // The button's cost keeps "Scrap" with its number when the label wraps (ID-208).
+  const tight = `${thousands(cost)}${NBSP}Scrap`;
+  return {
+    uid: w.uid,
+    text: short ? `Upgrade +${step} · ${thousands(scrap)}/${tight}` : `Upgrade +${step} · ${tight}`,
+    full,
+    disabled: short,
+    title: short ? `${full}. Needs ${price} (${thousands(cost - scrap)} short)` : full,
+    cost,
+  };
+}
+
+/** What an upgrade says once made (ID-208): `w` is the upgraded gun. */
+export const upgradeText = (w: OwnedWeapon, cost: number, left: number): string =>
+  `Upgraded ${levelName(w)} · ${thousands(cost)} Scrap spent, ${thousands(left)} left.`;
+
 /** The confirm before a purchase (ID-179). */
 export const buyQuestion = (kind: SlotKind, cost: number, scrap: number): string =>
   `Buy ${kind === 'squad' ? '1 squad slot' : `${STASH_SLOT.add} stash slots`} for ${thousands(cost)} Scrap? You have ${thousands(scrap)}.`;
@@ -1665,6 +1723,32 @@ export const scrapChipText = (scrap: { total: number }): string =>
  */
 export const scrapLine = (scrap: { total: number; salvage: number; now: number }): string =>
   `${scrapChipText(scrap)}${scrap.salvage > 0 ? ` (${thousands(scrap.salvage)} from salvage)` : ''} · now ${thousands(scrap.now)}`;
+
+const SCRAP_NOW = /· now [\d,]+/;
+
+/** `text` (a `scrapLine`) with its "now" figure replaced by `now` (ID-208); other text as it is. */
+export const scrapNowText = (text: string, now: number): string =>
+  text.replace(SCRAP_NOW, `· now ${thousands(now)}`);
+
+/**
+ * A win's result screen with the Scrap balance it shows set to `now` (ID-208): only the "now"
+ * figure in its Scrap lines and chip tooltips, nothing else, for a screen not yet shown.
+ */
+export function withScrapNow(screen: ResultScreen, now: number): ResultScreen {
+  const d = screen.debrief;
+  return {
+    ...screen,
+    lines: screen.lines.map((l) => scrapNowText(l, now)),
+    ...(d
+      ? {
+          debrief: {
+            ...d,
+            chips: d.chips.map((c) => (c.title ? { ...c, title: scrapNowText(c.title, now) } : c)),
+          },
+        }
+      : {}),
+  };
+}
 
 /**
  * The Scrap balance in the top bar (ID-179), left of the Roster button: a read-only chip
@@ -1961,6 +2045,11 @@ export function createHud(
   showResult(screen: ResultScreen): void;
   /** Takes the result or start screen down without its button (debug mode's Start, ID-197). */
   hideResult(): void;
+  /**
+   * Sets the Scrap balance a shown win screen reports (ID-208) in place: only its "now"
+   * figure changes, so nothing open, picked or scrolled on it moves.
+   */
+  resultScrap(now: number): void;
   /**
    * The squad as it stands now, by id (ID-157): a "New" card of someone benched or let go
    * since goes. Nothing with the result screen down.
@@ -3310,6 +3399,11 @@ export function createHud(
     },
     hideResult() {
       result.hidden = true;
+    },
+    resultScrap(now) {
+      for (const node of result.querySelectorAll<HTMLElement>('[title]')) {
+        node.title = scrapNowText(node.title, now);
+      }
     },
     showResult(screen) {
       const d = screen.debrief;

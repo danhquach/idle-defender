@@ -87,6 +87,7 @@ import {
   TRAP_KINDS,
   TURRET_MOUNTS,
   FREE_WEAPONS,
+  GUN_UPGRADE,
   WALK_SPOTS,
   WEAPON_IDS,
   stockOf,
@@ -1076,10 +1077,27 @@ function lmgSlow(base: string, x: Obj): Obj {
  * patrol already sent, and exactly its rarity's affixes, each one that fits the
  * weapon, once, in range.
  */
-function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedWeapon {
+function readOwned(
+  v: unknown,
+  hordeNumber: number,
+  patrolsSent: number,
+  allowStep = true,
+): OwnedWeapon {
   // A gun level (ID-098) is written only by v15 saves; absent, it is 1.
   const levelled = typeof v === 'object' && v !== null && Object.hasOwn(v, 'level');
-  const o = obj(v, ['uid', 'base', 'rarity', 'affixes', ...(levelled ? ['level'] : [])]);
+  // An upgrade step (ID-208) is written only once a gun has one; absent, it is +0.
+  // Only a gun in the stash or in hand can have one: a weapon left on the map or carried by a
+  // survivor waiting to join was never in the camp's hands, so a step there is refused (the
+  // key is unknown to it).
+  const stepped = allowStep && typeof v === 'object' && v !== null && Object.hasOwn(v, 'step');
+  const o = obj(v, [
+    'uid',
+    'base',
+    'rarity',
+    'affixes',
+    ...(levelled ? ['level'] : []),
+    ...(stepped ? ['step'] : []),
+  ]);
   const uid = text(o.uid, 8 + String(MAX_FOUND - 1).length, UID);
   const from = Number(uid.slice(1).split('-')[0]);
   // A survivor's camp-level weapon (`c`) is checked against the camp, and a replay's (`r`)
@@ -1098,9 +1116,13 @@ function readOwned(v: unknown, hordeNumber: number, patrolsSent: number): OwnedW
     return { id, value: int(x.value, min, max) };
   });
   if (new Set(affixes.map((a) => a.id)).size !== affixes.length) fail('affix twice');
-  if (!levelled) return { uid, base, rarity, affixes };
+  // Whole, 0 to the top step; +0 is no field, so a gun has one form in the save.
+  const step = stepped ? int(o.step, 0, GUN_UPGRADE.max) : 0;
+  const gun: OwnedWeapon = { uid, base, rarity, affixes };
   // From a horde beaten: 1 to the highest (`hordeNumber − 1`), at least 1.
-  return { uid, base, rarity, affixes, level: int(o.level, 1, Math.max(1, hordeNumber - 1)) };
+  if (levelled) gun.level = int(o.level, 1, Math.max(1, hordeNumber - 1));
+  if (step > 0) gun.step = step;
+  return gun;
 }
 
 /** Farming (ID-098): replay wins, and the bad-luck count up to its guarantee. */
@@ -1314,7 +1336,7 @@ function readLeftBehind(
     const location = oneOf(o.location, plazas ? PLACE_IDS : LOCATION_IDS);
     const reveal = revealOf(location);
     if (reveal === null || reveal > hordeNumber) fail('location not on the map');
-    return { location, weapon: readOwned(o.weapon, hordeNumber, patrolsSent) };
+    return { location, weapon: readOwned(o.weapon, hordeNumber, patrolsSent, false) };
   });
 }
 
@@ -1331,7 +1353,7 @@ function readSurvivor(v: unknown, from: 's' | 'c', stats: StatsRead): Survivor {
   const { level } = levelOf(xp);
   if (level > SURVIVOR.campLevel || xp !== xpForLevel(level)) fail('survivor level');
   // The weapon's uid is the survivor's own, so the future checks pass it through.
-  const weapon = readOwned(o.weapon, MAX_HORDE, PATROL.max);
+  const weapon = readOwned(o.weapon, MAX_HORDE, PATROL.max, false);
   if (weapon.uid !== id) fail('survivor weapon');
   dropPoints(xp, stats);
   return { id, name: text(o.name, 24, NAME), xp, weapon };

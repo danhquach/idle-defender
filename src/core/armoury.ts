@@ -7,6 +7,7 @@ import {
   FREE_WEAPONS,
   PISTOL_DROP_FLOOR,
   GUN_LEVEL_DAMAGE,
+  GUN_UPGRADE,
   GUN_ROLES,
   PATROL,
   RARITIES,
@@ -38,6 +39,8 @@ export interface OwnedWeapon {
   affixes: Affix[];
   /** Gun level (ID-098): the horde number it dropped from; absent = 1 (older saves, the full game). */
   level?: number;
+  /** Upgrade step (ID-208): 1 to `GUN_UPGRADE.max`; absent = +0 (older saves, never upgraded). */
+  step?: number;
 }
 
 /** What a loadout slot holds: a free Common weapon by id, or an owned one. */
@@ -94,9 +97,17 @@ export const roleOf = (base: WeaponId): { role: string; trait: string } | null =
 export const affixCount = (base: WeaponId, rarity: Rarity): number =>
   Math.min(RARITIES[rarity].affixes, affixesFor(base).length);
 
-/** "Military Pistol"; a free weapon is just "Pistol". */
+/** A weapon's upgrade step (ID-208): an owned one's, else 0 (the free pistol, a gun never upgraded). */
+export const gunStep = (h: Held): number => (isOwned(h) ? (h.step ?? 0) : 0);
+
+/** Upgrade step `step`'s damage factor (ID-208): ×(1 + `GUN_UPGRADE.damage` × step). */
+export const stepFactor = (step: number): number => 1 + GUN_UPGRADE.damage * step;
+
+/** "Military Pistol", "Military Pistol +2" once upgraded (ID-208); a free weapon is just "Pistol". */
 export const heldName = (h: Held): string =>
-  isOwned(h) ? `${RARITIES[h.rarity].name} ${WEAPONS[h.base].name}` : WEAPONS[h].name;
+  isOwned(h)
+    ? `${RARITIES[h.rarity].name} ${WEAPONS[h.base].name}${gunStep(h) > 0 ? ` +${gunStep(h)}` : ''}`
+    : WEAPONS[h].name;
 
 /** A weapon's gun level (ID-098): an owned one's, else 1 (the free pistol). */
 export const gunLevel = (h: Held): number => (isOwned(h) ? (h.level ?? 1) : 1);
@@ -177,7 +188,12 @@ function work(h: OwnedWeapon): Weapon {
   const power = RARITIES[h.rarity].power;
   const common = {
     name: heldName(h),
-    damage: w.damage * levelFactor(gunLevel(h)) * power * (1 + share(h, 'damage')),
+    damage:
+      w.damage *
+      levelFactor(gunLevel(h)) *
+      stepFactor(gunStep(h)) *
+      power *
+      (1 + share(h, 'damage')),
     fireInterval: w.fireInterval / (1 + share(h, 'fireRate')),
   };
   switch (w.kind) {
