@@ -5528,11 +5528,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-weight: 600;
 }
 
-.rv-stat-field {
-  display: block;
-  overflow-wrap: anywhere;
-  font-weight: 400;
+/* The Chef's part of Max HP, on its own full-width row under it (ID-216). */
+.rv-stats .rv-stat-field {
+  padding-top: 0;
+  border-top: 0;
   color: var(--color-accent);
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .rv-stat-job {

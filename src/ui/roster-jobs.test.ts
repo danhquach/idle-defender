@@ -295,8 +295,17 @@ describe('Max HP counts the Chef on the field (ID-408)', () => {
   it('the panel shows the part beside the total, and only for those on the field', () => {
     const bench = person(4, 'student', 1);
     const game = { ...camp([chef, hunter]), reserve: [bench] };
-    const field = open(game, hunter.id).querySelector('.rv-stat-field')!;
-    expect(field.textContent).toBe(` (+11 Chef (${chef.name}) on the field)`);
+    const field = open(game, hunter.id).querySelector<HTMLTableCellElement>('.rv-stat-field')!;
+    // A screen reader hears which stat the note belongs to; the page shows only the note.
+    expect(field.textContent).toBe(`Max HP: (+11 Chef (${chef.name}) on the field)`);
+    expect(field.querySelector('.sr-only')!.textContent).toBe('Max HP: ');
+    // Its own full-width row right under Max HP, so it never covers the Level column (ID-216).
+    const row = field.parentElement!;
+    expect(row.matches('tr.rv-stat-fieldrow')).toBe(true);
+    expect(row.children).toHaveLength(1);
+    expect(field.colSpan).toBe(4);
+    expect(row.previousElementSibling!.querySelector('th')!.textContent).toBe('Max HP');
+    expect(row.previousElementSibling!.querySelector('.rv-stat-field')).toBeNull();
     expect(open(game, bench.id).querySelector('.rv-stat-field')).toBeNull();
   });
 });

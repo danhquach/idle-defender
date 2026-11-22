@@ -249,15 +249,23 @@ describe('the level panel (ID-146)', () => {
       const d = { ...at(1, 9), job };
       const m = mount(camp([d]));
       m.roster.open('recruit-1');
-      const shown = [...m.scrim.querySelectorAll('.rv-statcols tbody tr')].map((r) => ({
+      const shown = [
+        ...m.scrim.querySelectorAll('.rv-statcols tbody tr:not(.rv-stat-fieldrow)'),
+      ].map((r) => ({
         label: r.querySelector('th')!.textContent,
         total: r.querySelector('.rv-stat-total')!.textContent,
         level: r.querySelector('.rv-stat-lv')!.textContent,
         job: r.querySelector('.rv-stat-job')!.textContent,
         off: r.querySelector('.rv-stat-job')!.hasAttribute('data-off'),
-        field: r.querySelector('.rv-stat-field')?.textContent ?? '',
+        note: r.nextElementSibling?.querySelector('.rv-stat-field')?.textContent ?? null,
       }));
-      expect(shown).toEqual(statRows(d, heldGunOf(d)));
+      const rows = statRows(d, heldGunOf(d));
+      expect(shown).toEqual(
+        rows.map(({ field, ...row }) => ({
+          ...row,
+          note: field ? `${row.label}: (${field})` : null,
+        })),
+      );
       // A part that is none is marked faint; a real one is not.
       for (const c of m.scrim.querySelectorAll('.rv-stat-job, .rv-stat-lv'))
         expect(c.hasAttribute('data-none')).toBe(c.textContent === '—');
