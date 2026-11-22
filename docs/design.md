@@ -3492,9 +3492,13 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   30, then Endless. Radio parts, Normal's boss cards and the evacuation ending are
   Normal's only; a higher mode's boss hordes unlock mode cards instead (below).
 - **Strength: the effective horde.** A mode's Horde n fights as Normal's Horde n
-  plus an offset: Normal 0, Nightmare 40, Hell 80 (a multiple of 10, so boss
-  hordes and the boss skill cycle keep their places). Enemy count and HP,
-  waves, pace, swarms and the mini-bosses follow that number; so do the gun
+  plus an offset: Normal 0, Nightmare 50, Hell 80 (a multiple of 10, so boss
+  hordes and the boss skill cycle keep their places). Nightmare was 40 until
+  ID-223: its Hordes 1–7 then asked less Recommended Power than Normal Horde 50,
+  which the player had already beaten; at 50 a new mode starts at the player's
+  edge, and Nightmare 30 (effective 80) sits about level with Hell 1 (81).
+  Enemy count and HP, waves, pace, swarms and the mini-bosses follow that
+  number; so do the gun
   level a drop comes at, XP and Scrap. A per-mode HP factor on top is the
   tuning knob (`MODES.hpScale`: Nightmare 1.12, Hell 1),
   and `MODES.recBoss` on a boss horde's Recommended Power (Normal and Nightmare 1,
@@ -3563,10 +3567,16 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   an older save that already cleared a boss horde has its card. Normal's pool and
   offer rolls are unchanged (no new id is in its pool). The result screen's note and
   chip name the card; no radio part is found in a higher mode.
-- **Balance.** A squad that just holds Normal Horde 50 wins Nightmare Hordes
-  1-10 at the first try on at least 60% of 20 seeds and is stopped by Nightmare
-  Horde 30 on most; a squad well over Recommended Power does not lose
-  repeatedly at Nightmare 20 and 30 or Hell 30 (`balance/modes.test.ts`). Hell (ID-222):
+- **Balance.** Nightmare starts where Normal ends (ID-223): a squad that just holds
+  Normal Horde 50 wins Nightmare Horde 1 at the first try on 30–70% of 20 seeds
+  (measured: gun level 49, 10 of 20); a squad at 2× Normal Horde 50's Recommended
+  Power (gun level 63), not gearing up between fights, is stopped by Nightmare Horde 20
+  on most (measured: 20 of 20, at Hordes 9–17; gearing up on Nightmare's drops it was
+  stopped on only 4 of 20, accepted: a strong squad winning is fine); a squad well over
+  Recommended Power does not lose repeatedly at Nightmare 20 and 30 or Hell 30
+  (`balance/modes.test.ts`). `MODES.nightmare.hpScale` stayed 1.12 (no wall at
+  Nightmare 30). Before ID-223 (offset 40) the check was Nightmare 1–10 on 60% of seeds
+  and stopped by Nightmare 30. Hell (ID-222):
   a squad that holds Nightmare Horde 50 wins Hell Hordes 1-10 at the first try on at
   least 60% of 20 seeds and is stopped by Hell Horde 30 on most, and a squad well over
   Recommended Power does not lose repeatedly at Hell 10 and 20 (`balance/hell.test.ts`;

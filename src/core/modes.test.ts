@@ -61,11 +61,11 @@ describe('the model (ID-218)', () => {
     expect(localHorde(g)).toBe(5);
     expect(localHorde(g, 'normal')).toBe(60);
     expect(localHorde(g, 'hell')).toBe(1);
-    expect(effHorde('nightmare', 5)).toBe(45);
+    expect(effHorde('nightmare', 5)).toBe(55);
     expect(effHorde('hell', 5)).toBe(85);
     expect(beatenIn(g)).toBe(4);
     expect(topBeaten(g)).toBe(59);
-    expect(topBeaten({ ...g, modes: { nightmare: 30 } })).toBe(29 + 40);
+    expect(topBeaten({ ...g, modes: { nightmare: 30 } })).toBe(29 + 50);
     expect(topBeaten(newGame('horde'))).toBe(0);
   });
 
@@ -231,7 +231,7 @@ describe('Scrap (ID-218)', () => {
   it('a win pays the effective horde’s Scrap times the mode’s multiple; Normal is as before', () => {
     expect(winScrap(10)).toBe(SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * 10);
     const pay = (n: number): number => SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * n;
-    expect(winScrap(41, 'nightmare')).toBe(Math.round(pay(41) * 1.5));
+    expect(winScrap(51, 'nightmare')).toBe(Math.round(pay(51) * 1.5));
     expect(winScrap(81, 'hell')).toBe(pay(81) * 2);
   });
 });
@@ -243,13 +243,13 @@ describe('a fight on a mode (ID-218)', () => {
     modes: { nightmare: local },
   });
 
-  it('starts at the mode’s Horde 1 as strong as Normal’s Horde 41', () => {
+  it('starts at the mode’s Horde 1 as strong as Normal’s Horde 51', () => {
     const g = nm();
     const s = startSquadHorde(g, 3, 0);
     expect(s.mode).toBe('nightmare');
-    expect(s.hordeNumber).toBe(41);
+    expect(s.hordeNumber).toBe(51);
     expect(localOf(s)).toBe(1);
-    const normal = startSquadHorde(squadAt(51, 60), 3, 0, 41);
+    const normal = startSquadHorde(squadAt(51, 60), 3, 0, 51);
     // The mode's own HP factor (the tuning knob) sits on top of the effective horde's.
     expect(s.hpScale).toBeCloseTo(normal.hpScale! * MODES.nightmare.hpScale, 9);
     expect(s.waveCount).toBe(normal.waveCount);
@@ -258,7 +258,7 @@ describe('a fight on a mode (ID-218)', () => {
 
   it('only the mode’s own hordes are open', () => {
     expect(() => startSquadHorde(nm(), 3, 0, 2)).toThrow(RangeError);
-    expect(startSquadHorde(nm(5), 3, 0, 3).hordeNumber).toBe(43);
+    expect(startSquadHorde(nm(5), 3, 0, 3).hordeNumber).toBe(53);
   });
 
   it('a boss horde brings the mode’s bosses with 3 skills', () => {
@@ -285,9 +285,9 @@ describe('a fight on a mode (ID-218)', () => {
     const drop = squadDrop(strong, won)!;
     expect(drop.kind).toBe('first');
     expect(drop.weapon.uid).toBe('n3');
-    expect(drop.weapon.level).toBe(43);
+    expect(drop.weapon.level).toBe(53);
     const scrap = squadScrap(strong, won);
-    expect(scrap.total - scrap.salvage).toBe(winScrap(43, 'nightmare'));
+    expect(scrap.total - scrap.salvage).toBe(winScrap(53, 'nightmare'));
     expect(next.stock.scrap).toBe(strong.stock.scrap + scrap.total);
   });
 
@@ -326,21 +326,21 @@ describe('a fight on a mode (ID-218)', () => {
     const won = playSquadHorde(strong, 9);
     const r = squadResult(strong, won);
     expect(r.next.modes).toEqual({ nightmare: 2 });
-    expect(r.scrap.total).toBeGreaterThanOrEqual(winScrap(41, 'nightmare'));
+    expect(r.scrap.total).toBeGreaterThanOrEqual(winScrap(effHorde('nightmare', 1), 'nightmare'));
   });
 
   it('Recommended Power follows the mode’s bosses and strength; Normal is as before', () => {
-    expect(recommendedPower(41, 'nightmare')).toBeGreaterThan(0);
-    // Nightmare 50 is Normal 90 with the same three bosses, at the mode's HP factor; Hell's Horde 10 has two, not three.
-    expect(hordeHp(90, 'nightmare') / hordeHp(90)).toBeCloseTo(MODES.nightmare.hpScale, 4);
-    expect(recommendedPower(90, 'nightmare')).toBeGreaterThan(recommendedPower(90));
+    expect(recommendedPower(51, 'nightmare')).toBeGreaterThan(0);
+    // Nightmare 50 is Normal 100 with the same three bosses, at the mode's HP factor; Hell's Horde 10 has two, not three.
+    expect(hordeHp(100, 'nightmare') / hordeHp(100)).toBeCloseTo(MODES.nightmare.hpScale, 4);
+    expect(recommendedPower(100, 'nightmare')).toBeGreaterThan(recommendedPower(100));
     expect(hordeHp(90, 'hell')).toBeLessThan(hordeHp(90));
     expect(recommendedPower(40)).toBe(recommendedPower(40, 'normal'));
   });
 
-  it('a gun dropped on a mode is a real gun: level 41 and up', () => {
-    const w = rollWeapon(createRng(1), 'n1', 'rifle', 'relic', 41);
-    expect(w.level).toBe(41);
+  it('a gun dropped on a mode is a real gun: level 51 and up', () => {
+    const w = rollWeapon(createRng(1), 'n1', 'rifle', 'relic', 51);
+    expect(w.level).toBe(51);
   });
 });
 
