@@ -63,8 +63,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}) {
 }
 
 describe('save: the horde-only build (ID-066)', () => {
-  it('is version 23', () => {
-    expect(SAVE_VERSION).toBe(23);
+  it('is version 24', () => {
+    expect(SAVE_VERSION).toBe(24);
   });
 
   it('round-trips a horde-only game, after a win adds a survivor', () => {

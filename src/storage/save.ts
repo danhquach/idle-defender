@@ -108,6 +108,16 @@ import {
 import { BLUEPRINT_GUNS, type Blueprints, type Craft } from '../core/craft.ts';
 import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad, settleSquad } from '../core/hordeonly.ts';
+import {
+  beatenIn,
+  HIGHER_MODES,
+  localHorde,
+  MODE_UNLOCK_HORDE,
+  modeBefore,
+  MODES,
+  modeUnlocked,
+  topBeaten,
+} from '../core/modes.ts';
 import { jobFor, textSeed } from '../core/jobs.ts';
 import {
   focusOptions,
@@ -137,6 +147,15 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 24 since difficulty modes (ID-218): the game may hold `mode` (`nightmare` or `hell`, an
+ * allow-list; absent on Normal) and `modes`, each higher mode's next horde, a whole number
+ * from 1 to `MAX_HORDE`, only for the modes played. Both are written only when set. Nightmare
+ * progress needs Normal past Horde 50 and Hell's needs Nightmare past it, and the mode in play
+ * must be open; read off the hordes, so nothing else is stored for an unlock. A first clear on a
+ * mode has uid `n<k>` (Nightmare) or `x<k>` (Hell), k a horde of that mode already beaten. A
+ * gun's level is 1 to the highest horde beaten on any mode, as its effective number. A v23 or
+ * older save has neither key and loads as Normal.
+ *
  * 23 since bought slots (ID-179): the horde-only game may hold `slots`, the purchases made,
  * written only when any: `squad` (0 to the number of `SQUAD_SLOT_COSTS`) and `stash` (0 to
  * the number of `STASH_SLOT.costs`), whole numbers, and nothing else. Anything else (the
@@ -226,7 +245,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 23;
+export const SAVE_VERSION = 24;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -240,6 +259,8 @@ const V1_GRID: Grid = { rows: 5, shift: 3 };
 /** A full save is about 2 KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 50_000;
 const MAX_HORDE = 100_000;
+/** The highest gun level any save can hold: a horde of the top mode, at its effective number (ID-218). */
+const MAX_GUN_LEVEL = MAX_HORDE + MODES.hell.offset;
 const MAX_ROSTER = 100;
 /** Latest time a save may name, in ms since the epoch (the year 2286). */
 const MAX_TIME = 1e13;
@@ -259,11 +280,12 @@ const MAX_FOUND = (PATROL.rolls + PATROL.bonusRolls) * MAX_BUILDINGS;
 const BONUS = `(?:-(?:${Array.from({ length: SQUAD_BONUS.rolls }, (_, k) => k + 1).join('|')}))?`;
 /**
  * An owned weapon's uid: `h` and the horde number that dropped it; `r` and the replay win
- * that dropped it (ID-098), either with a bonus gun's `BONUS` (ID-122); `p`, the patrol
+ * that dropped it (ID-098), either with a bonus gun's `BONUS` (ID-122); `n` or `x` and the
+ * Nightmare or Hell horde that dropped it (ID-218), the same; `p`, the patrol
  * number that found it and its place in the haul; or a survivor's (`SURVIVOR_ID`).
  */
 const UID = new RegExp(
-  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5}|f[1-9][0-9]{0,4})$`,
+  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5}|f[1-9][0-9]{0,4}|n[1-9][0-9]{0,5}${BONUS}|x[1-9][0-9]{0,5}${BONUS})$`,
 );
 /**
  * The most owned weapons a save holds: the full game's armoury, or the horde-only stash
@@ -387,6 +409,7 @@ function readSave(v: unknown): Save {
   if (
     ![
       SAVE_VERSION,
+      23,
       22,
       21,
       20,
@@ -447,6 +470,7 @@ function readSave(v: unknown): Save {
     ver >= 20,
     ver >= 21,
     ver >= 23,
+    ver >= 24,
   );
   return {
     game,
@@ -480,6 +504,8 @@ function readGame(
   mayAuto: boolean,
   /** Whether the save may hold `slots` (v23). */
   maySlots: boolean,
+  /** Whether the save may hold `mode` and `modes` (v24). */
+  mayModes: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -516,6 +542,9 @@ function readGame(
     ...(mayAuto && !lacks('autoSquad') ? ['autoSquad'] : []),
     // Written only once a slot is bought (ID-179).
     ...(maySlots && !lacks('slots') ? ['slots'] : []),
+    // Written only on a difficulty mode, or once one has been played (ID-218).
+    ...(mayModes && !lacks('mode') ? ['mode'] : []),
+    ...(mayModes && !lacks('modes') ? ['modes'] : []),
     // Written only once a blueprint has dropped (ID-209).
     ...(maySlots && !lacks('craft') ? ['craft'] : []),
   ]);
@@ -527,6 +556,17 @@ function readGame(
   const lab = old.lab ? 0 : int(o.lab, 0, LAB_LEVELS.length);
   const research = old.lab ? [] : readResearch(o.research, lab, tiers);
   const hordeNumber = int(o.hordeNumber, 1, MAX_HORDE);
+  const modes = Object.hasOwn(o, 'modes') ? readModes(o.modes) : null;
+  const mode = Object.hasOwn(o, 'mode') ? oneOf(o.mode, HIGHER_MODES) : null;
+  const progress = { hordeNumber, ...(modes ? { modes } : {}), ...(mode ? { mode } : {}) };
+  // A mode is open once the one before has beaten Horde 50; read off the hordes (ID-218).
+  for (const m of HIGHER_MODES) {
+    const before = modeBefore(m)!;
+    if (modes && Object.hasOwn(modes, m) && beatenIn(progress, before) < MODE_UNLOCK_HORDE) {
+      fail('mode progress before it is open');
+    }
+  }
+  if (mode && !modeUnlocked(progress, mode)) fail('mode not open');
   const perkLevels = hasQueue
     ? readPerkLevels(o.perkLevels, research, hordeNumber)
     : ownedLevels(research);
@@ -552,6 +592,8 @@ function readGame(
     : [];
   const game: GameState = {
     hordeNumber,
+    ...(mode ? { mode } : {}),
+    ...(modes ? { modes } : {}),
     base: readBase(o.base, tiers, research.includes('auto-turret'), grid),
     stock: readStock(o.stock, materials),
     tiers,
@@ -622,9 +664,17 @@ function readGame(
   if (every.some((w) => w.uid.startsWith('f') && Number(w.uid.slice(1)) > made)) {
     fail('crafted gun from the future');
   }
-  // A gun level (ID-098) only in a v15 save, and from a horde beaten, in every slot: a
-  // survivor waiting is read with no horde bound, so this is the check that holds for all.
-  const top = Math.max(1, game.hordeNumber - 1);
+  // A first clear on a mode (`n<k>`, `x<k>`, ID-218) names a horde of that mode already beaten.
+  for (const w of every) {
+    const m = /^([nx])([0-9]+)/.exec(w.uid);
+    if (m && Number(m[2]) >= localHorde(game, m[1] === 'n' ? 'nightmare' : 'hell')) {
+      fail('mode drop from the future');
+    }
+  }
+  // A gun level (ID-098) only in a v15 save, and from a horde beaten on some mode (as its
+  // effective number, ID-218), in every slot: a survivor waiting is read with no horde bound,
+  // so this is the check that holds for all.
+  const top = Math.max(1, topBeaten(game));
   for (const w of every) {
     if (w.level !== undefined && (!hasFarm || w.level > top)) fail('gun level');
   }
@@ -1145,9 +1195,9 @@ function readOwned(
   ]);
   const uid = text(o.uid, 8 + String(MAX_FOUND - 1).length, UID);
   const from = Number(uid.slice(1).split('-')[0]);
-  // A survivor's camp-level weapon (`c`) is checked against the camp, and a replay's (`r`)
-  // against the replays won, once they are read.
-  if (!/^[crf]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
+  // A survivor's camp-level weapon (`c`) is checked against the camp, a replay's (`r`)
+  // against the replays won and a mode's (`n`, `x`) against its horde, once they are read.
+  if (!/^[crfnx]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
     fail('weapon from the future');
   }
   const base = oneOf(o.base, WEAPON_IDS);
@@ -1164,10 +1214,30 @@ function readOwned(
   // Whole, 0 to the top step; +0 is no field, so a gun has one form in the save.
   const step = stepped ? int(o.step, 0, GUN_UPGRADE.max) : 0;
   const gun: OwnedWeapon = { uid, base, rarity, affixes };
-  // From a horde beaten: 1 to the highest (`hordeNumber − 1`), at least 1.
-  if (levelled) gun.level = int(o.level, 1, Math.max(1, hordeNumber - 1));
+  // From a horde beaten: 1 to the highest, at least 1; `readGame` holds it to the highest beaten
+  // on any mode (ID-218), which this reader does not know.
+  if (levelled) gun.level = int(o.level, 1, MAX_GUN_LEVEL);
   if (step > 0) gun.step = step;
   return gun;
+}
+
+/**
+ * Each higher mode's next horde (ID-218): a plain object with `nightmare`, `hell` or both, each
+ * a whole number from 1 to `MAX_HORDE`; nothing else (`__proto__` and look-alikes included),
+ * and never empty. Copies only the named keys into a fresh object.
+ */
+function readModes(v: unknown): NonNullable<GameState['modes']> {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) fail('modes');
+  if (Object.getPrototypeOf(v) !== Object.prototype) fail('modes');
+  const keys = Object.keys(v);
+  if (keys.length === 0 || keys.some((k) => !(HIGHER_MODES as readonly string[]).includes(k))) {
+    fail('unknown mode');
+  }
+  const out: NonNullable<GameState['modes']> = {};
+  for (const m of HIGHER_MODES) {
+    if (Object.hasOwn(v, m)) out[m] = int((v as Obj)[m], 1, MAX_HORDE);
+  }
+  return out;
 }
 
 /** Farming (ID-098): replay wins, and the bad-luck count up to its guarantee. */

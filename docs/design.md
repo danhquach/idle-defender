@@ -3476,6 +3476,53 @@ and comes back stronger.
     at half HP) reads the same band: a reason it stays advice. The same fights under ID-147's rule read alike (0.16, 0.53, 0.86,
     1.23 and 1.38 downed per win from 2–2.5× down).
 
+### Difficulty modes *(as built, ID-218; starting points, tuned by the balance pass)*
+
+After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
+
+- **Unlock.** Holding Horde 50 (beating it) on Normal opens Nightmare; holding
+  Horde 50 on Nightmare opens Hell. Permanent: read off the hordes, so an older
+  save that already holds Horde 50 has Nightmare. The start and result screens
+  show a mode switch (Normal, Nightmare, Hell) once Nightmare is open; a locked
+  mode says what opens it ("Hold Horde 50 on Nightmare"). A mode is switched only
+  between fights; switching loses no progress. The squad, guns, stash, Scrap
+  and blueprints are shared by every mode.
+- **Own hordes.** Each mode keeps its own next horde (from Horde 1) and its own
+  best: the start screen's chip reads "Nightmare · best N". Each runs Horde 1 to
+  30, then Endless. Radio parts, the boss cards and the evacuation ending are
+  Normal's only.
+- **Strength: the effective horde.** A mode's Horde n fights as Normal's Horde n
+  plus an offset: Normal 0, Nightmare 40, Hell 80 (a multiple of 10, so boss
+  hordes and the boss skill cycle keep their places). Enemy count and HP,
+  waves, pace, swarms and the mini-bosses follow that number; so do the gun
+  level a drop comes at, XP and Scrap. A per-mode HP factor on top is the
+  tuning knob (`MODES.hpScale`: Nightmare 1.12, Hell 1 until Hell is tuned).
+- **Bosses.** A boss horde (every 10th of the mode's own) brings as many bosses
+  as Normal's rule gives its own number (Horde 10: 1, 20: 2, 30 and on: 3),
+  Hell one more (up to `BOSSES.max` + 1 = 4); each has the HP of its effective
+  horde and **3** skills. With 1 or 2 bosses no skill repeats in the horde
+  (each keeps its pair of the set and takes one of the set's unused third
+  pair). With 3 or more every skill is used, none more than twice, and no two
+  bosses share the same three. Fixed by the horde alone, so a replay meets the
+  same bosses.
+- **Rewards.** Scrap × 1.5 (Nightmare) and × 2 (Hell). The gun drop's rarity
+  band is shifted before a first clear, replay or bonus moves it: each mode step
+  moves half of every rarity's share up one rarity (Relic keeps its own). A first
+  clear's Relic odds from Horde 10's band: about 35% Normal, 55% Nightmare, 71%
+  Hell. A first clear's gun uid is `n<k>` (Nightmare) or `x<k>` (Hell).
+- **Recommended Power** reads the mode's own bosses and HP factor at the
+  effective horde, so the meters and bands stay advice for the mode in play.
+- **Interim Hell.** Hell is built as offset 80, 3 existing skills per boss and one
+  more boss. **Not built yet (ID-222, #449):** its new skills (Enrage,
+  Shield and Poison pool, each with a readable tell, a fourth skill per boss)
+  and the six mode reward cards (each mode's boss hordes 10, 20 and 30 unlock a
+  utility or conditional card, never flat damage or HP, gated in the pool).
+- **Balance.** A squad that just holds Normal Horde 50 wins Nightmare Hordes
+  1-10 at the first try on at least 60% of 20 seeds and is stopped by Nightmare
+  Horde 30 on most; a squad well over Recommended Power does not lose
+  repeatedly at Nightmare 20 and 30 or Hell 30 (`balance/modes.test.ts`). Normal's
+  numbers are held by a golden test (`golden-normal.test.ts`).
+
 ### Balance pass *(ID-102)*
 
 One pass over farming, harder hordes, horde-only skills, gun roles, stat
@@ -3857,6 +3904,18 @@ offline progress works across sessions.
   free pistol and nothing else, not resting or injured), with the camp and
   them together at most `SQUAD_JOIN.max`. Anything else refuses the save. A
   v19 or older save has nobody asking, and a `joining` key there is refused.
+- **As built (ID-218): save version 24** may hold `mode` and `modes`, both written
+  only when set. `mode` is `nightmare` or `hell` (an allow-list: look-alikes,
+  hidden marks, other types and `normal` are refused; Normal is no key). `modes`
+  is a plain object with `nightmare`, `hell` or both, each a whole number from 1
+  to 100,000 and nothing else (`__proto__`, an empty object, a fraction, a
+  negative, an extra key all refuse the save). The unlocks are stored nowhere:
+  Nightmare progress needs Normal's horde past 50, Hell's needs Nightmare's, and
+  the mode in play must be open, else the save is refused. A first clear on a
+  mode has gun uid `n<k>` (Nightmare) or `x<k>` (Hell), `k` a horde of that mode
+  already beaten. A gun's level is held to the highest horde beaten on any mode,
+  as its effective number. A v23 or older save has neither key (a key there is
+  refused) and loads as Normal, with a mode open if it already holds Horde 50.
 - **As built (ID-179): save version 23** may hold `slots`, the purchases made,
   written only once any is bought: exactly `squad` (0 to 2) and `stash` (0 to
   4), whole numbers, and nothing else. Anything else (text, a fraction, out

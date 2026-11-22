@@ -32,6 +32,7 @@ import {
   stashWith,
   type SquadDrop,
 } from './hordeonly.ts';
+import { effHorde, localHorde, modeOf } from './modes.ts';
 import { skillLock, useSkill } from './skills.ts';
 import { squadPower } from './squadpower.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
@@ -290,7 +291,7 @@ export function playSquadHorde(
   seed: number,
   maxFight = MAX_FIGHT,
   watch?: { nearest: number },
-  hordeNumber = game.hordeNumber,
+  hordeNumber = localHorde(game),
 ): HordeState {
   let s = startSquadHorde(game, seed, 0, hordeNumber);
   const step = s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60;
@@ -366,10 +367,11 @@ export function unlucky(
   game: GameState,
   next: GameState,
   drop: SquadDrop,
-  /** The horde won: its Scrap is paid, but not the salvage of guns this path keeps. */
+  /** The (mode) horde won: its Scrap is paid, but not the salvage of guns this path keeps. */
   hordeNumber: number,
 ): GameState {
-  const win = scrapAfter(game.stock, winScrap(hordeNumber));
+  const mode = modeOf(game);
+  const win = scrapAfter(game.stock, winScrap(effHorde(mode, hordeNumber), mode));
   if (drop.kind === 'guaranteed') {
     const kept = stashWith(game.armoury, [drop.weapon], stashCap(game));
     return { ...next, armoury: kept.armoury, stock: scrapAfter(win, salvageOf(kept.thrown)) };

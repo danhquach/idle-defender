@@ -8,7 +8,8 @@ import { levelName, type OwnedWeapon } from '../core/armoury.ts';
 import { blueprintsOf, craftOdds } from '../core/craft.ts';
 import { BLUEPRINT, CRAFT, RARITIES, RARITY_ORDER, WEAPONS, type WeaponId } from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
-import { craftRefusal, highestBeaten, stashCap } from '../core/hordeonly.ts';
+import { craftRefusal, stashCap } from '../core/hordeonly.ts';
+import { topBeaten } from '../core/modes.ts';
 import type { CampWindow } from './campwindow.ts';
 import { askConfirm } from './confirm.ts';
 import { el } from './hud.ts';
@@ -159,7 +160,7 @@ export function createCraft(opts: CraftOptions, win: CampWindow, button: HTMLEle
   function area(game: GameState, base: WeaponId): HTMLElement {
     const section = el('section', 'craft-area');
     section.setAttribute('aria-label', 'Crafting');
-    const level = Math.max(1, highestBeaten(game));
+    const level = Math.max(1, topBeaten(game));
     // The gun type, and the Scrap and stash it works with, in one row.
     const head = el('div', 'craft-headrow');
     head.append(

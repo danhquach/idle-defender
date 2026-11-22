@@ -138,6 +138,11 @@ export const SQUAD_XP_RATE = 2;
  */
 export const BENCH_XP_SHARE = 0.25;
 /**
+ * A difficulty mode above Normal (ID-218, `modes.ts`): Nightmare, then Hell. Normal is no
+ * mode: it is the game as it was, with no mode saved.
+ */
+export type HigherMode = 'nightmare' | 'hell';
+/**
  * The campaign's goal (ID-127, design §11): each boss horde's first clear yields a radio
  * part, in this order; the last is the finale, whose win calls the evacuation, and play goes
  * on after it as Endless.
