@@ -33,8 +33,14 @@ import {
   magazineOf,
   barbedWire,
   plated,
+  poisonTarget,
   radiusOf,
   roared,
+  scorched,
+  stunned,
+  enraged,
+  enrageFast,
+  shielded,
   shocked,
   dazed,
   windingUp,
@@ -53,7 +59,9 @@ import {
   type Burst,
   type Enemy,
   type Fire,
+  type Glob,
   type Incoming,
+  type Pool,
   type Pop,
   type Slab,
   type Slick,
@@ -724,6 +732,8 @@ export type Scene = Pick<
       | 'tarBombs'
       | 'saves'
       | 'slicks'
+      | 'globs'
+      | 'pools'
       | 'leaving'
     >
   > & {
@@ -4066,6 +4076,10 @@ const WIND_COLOUR: Readonly<Record<BossSkill, string>> = {
   slab: '#dfe6ee',
   regen: '#8fd14f',
   plates: '#dfe6ee',
+  // Hell's skills (ID-222): red, ice blue and a sick yellow-green, apart from the rest.
+  enrage: '#ff2a2a',
+  shield: '#5cc8ff',
+  poison: '#b6e03a',
 };
 /** Boss cue looks (ID-099): px at zoom 1; `lean` radians back, `swell` share taller at full wind-up. */
 export const BOSS_LOOK = {
@@ -4077,6 +4091,12 @@ export const BOSS_LOOK = {
   slabSize: { w: 36, h: 24 },
   slabArc: 120,
   dust: 'rgba(185, 178, 166, 0.6)',
+  /** Hell's skills (ID-222): Enrage's steady ring and glow, Shield's rings, Cauterise's scorch, Poison. */
+  enrage: '#ff2a2a',
+  shield: '#5cc8ff',
+  scorch: '#ff7a2a',
+  poison: '#b6e03a',
+  glob: '#8fb82a',
 } as const;
 
 /** The skill `e` winds up and how far along, 0…1 (ID-099); null when none. */
@@ -4087,7 +4107,9 @@ function windCue(
   const skill = windingUp(scene, e);
   const at = skill === null ? undefined : e.horror?.next[skill];
   if (skill === null || at === undefined) return null;
-  return { skill, k: Math.min(1, Math.max(0, 1 - (at - scene.time) / BOSS_SKILL.windUp)) };
+  // Suppressing Fire (ID-222) lengthens a wind-up: the tell is measured against its new length.
+  const length = BOSS_SKILL.windUp + (e.horror?.longer?.[skill] ?? 0);
+  return { skill, k: Math.min(1, Math.max(0, 1 - (at - scene.time) / length)) };
 }
 
 /** A boss's body (ID-099): a mini-boss drawn `ELITE.size` big; a wind-up leans it back and swells it. */
@@ -4157,6 +4179,145 @@ function drawRoared(ctx: CanvasRenderingContext2D, e: Enemy, cam: Camera): void 
   ctx.strokeStyle = BOSS_LOOK.roar;
   ctx.lineWidth = Math.max(1.5, 2.5 * cam.zoom);
   ctx.stroke();
+}
+
+/**
+ * A Hell skill's or card's mark on a boss or an enemy it covers (ID-222), under the sprite:
+ * Enrage a steady red ring and low glow (dimmer while Tranq Darts holds its speed off); a shield
+ * boss the blue ring of its aura; a shielded enemy a thin blue ring; Cauterise an orange scorch
+ * while Regen is blocked.
+ */
+function drawHellMarks(
+  ctx: CanvasRenderingContext2D,
+  scene: Pick<HordeState, 'time'>,
+  e: Enemy,
+  cam: Camera,
+): void {
+  const r = radiusOf(e);
+  const ring = (radius: number, colour: string, width: number, alpha: number): void => {
+    groundCircle(ctx, e.x, e.y, radius, cam);
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = Math.max(1.5, width * cam.zoom);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+  if (enraged(e)) {
+    const fast = enrageFast(scene, e);
+    groundCircle(ctx, e.x, e.y, r * 1.5, cam);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = withAlpha(BOSS_LOOK.enrage, fast ? 0.22 : 0.08);
+    ctx.fill();
+    ctx.restore();
+    ring(r * 1.5, BOSS_LOOK.enrage, 3, fast ? 0.9 : 0.4);
+  }
+  if (e.horror?.shieldOn && !stunned(scene, e)) {
+    ring(BOSS_SKILL.shield.radius, BOSS_LOOK.shield, 2, 0.45);
+  }
+  if (shielded(e)) ring(r * 1.3, BOSS_LOOK.shield, 2, 0.9);
+  if (scorched(scene, e)) {
+    groundCircle(ctx, e.x, e.y, r * 1.4, cam);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = withAlpha(BOSS_LOOK.scorch, 0.3);
+    ctx.fill();
+    ctx.restore();
+    ring(r * 1.4, BOSS_LOOK.scorch, 2.5, 0.85);
+  }
+}
+
+/**
+ * A Poison pool lying on the ground (ID-222), flat under every sprite: the slick's art at half
+ * strength under a pulsing green wash and a few rising bubbles, so it reads as acid and not tar;
+ * it fades in and out. Held still with Reduce motion (`clock` 0).
+ */
+function drawPool(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  p: Pool,
+  time: number,
+  clock: number,
+  cam: Camera,
+): void {
+  const fade = Math.min(1, (time - p.at) / 0.3, (p.until - time) / 0.6);
+  if (!(fade > 0)) return;
+  const r = BOSS_SKILL.poison.radius;
+  ctx.globalAlpha = 0.5 * fade;
+  groundArt(ctx, art[BASE_ART.slick], p.x, p.y, r * SLICK.art, cam);
+  const pulse = 0.8 + 0.2 * Math.sin(clock * 5);
+  groundCircle(ctx, p.x, p.y, r, cam);
+  ctx.globalAlpha = 0.45 * fade * pulse;
+  ctx.fillStyle = BOSS_LOOK.poison;
+  ctx.fill();
+  ctx.globalAlpha = fade;
+  ctx.strokeStyle = BOSS_LOOK.poison;
+  ctx.lineWidth = Math.max(1.5, 2 * cam.zoom);
+  ctx.stroke();
+  ctx.fillStyle = '#eaffa0';
+  for (let i = 0; i < 4; i++) {
+    const phase = (clock * 0.7 + i * 0.25) % 1;
+    const bx = p.x + Math.cos(i * 2.4) * r * 0.5;
+    const c = project({ x: bx, y: p.y + Math.sin(i * 2.4) * r * 0.4, z: 14 * phase }, cam);
+    ctx.globalAlpha = fade * (1 - phase);
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, Math.max(1, 3 * cam.zoom), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * A Poison glob arcing from its boss to a survivor's slot (ID-222), like a slab's throw but
+ * green: a blob with its shadow; the slot's ring is `drawPoisonMark`'s.
+ */
+function drawGlob(ctx: CanvasRenderingContext2D, g: Glob, time: number, cam: Camera): void {
+  const t = Math.min(1, Math.max(0, (time - g.at) / (g.lands - g.at)));
+  const x = g.fromX + (g.x - g.fromX) * t;
+  const y = g.fromY + (g.y - g.fromY) * t;
+  const shadow = project({ x, y }, cam);
+  ctx.fillStyle = COLOR.shadow;
+  ctx.beginPath();
+  ctx.ellipse(shadow.sx, shadow.sy, 10 * cam.zoom, 4 * cam.zoom, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const c = project({ x, y, z: ENEMY.z + 4 * BOSS_LOOK.slabArc * t * (1 - t) }, cam);
+  ctx.fillStyle = BOSS_LOOK.glob;
+  ctx.strokeStyle = BOSS_LOOK.poison;
+  ctx.lineWidth = Math.max(1, 2 * cam.zoom);
+  ctx.beginPath();
+  ctx.arc(c.sx, c.sy, 9 * cam.zoom, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+/**
+ * Where the next Poison pool will land, shown from the start of its boss's wind-up until the
+ * pool is down (ID-222): survivors can't move, so the target slot is marked early. A green
+ * ring the pool's size, pulsing, on the nearest living survivor's slot.
+ */
+function drawPoisonMarks(
+  ctx: CanvasRenderingContext2D,
+  scene: Pick<Scene, 'time' | 'enemies' | 'defenders' | 'globs'>,
+  clock: number,
+  cam: Camera,
+): void {
+  const marks: { x: number; y: number }[] = [];
+  for (const g of scene.globs ?? []) marks.push({ x: g.x, y: g.y });
+  for (const e of scene.enemies) {
+    if (windingUp(scene, e) !== 'poison') continue;
+    const at = poisonTarget(scene, e);
+    if (at) marks.push(at);
+  }
+  for (const m of marks) {
+    groundCircle(ctx, m.x, m.y, BOSS_SKILL.poison.radius, cam);
+    ctx.globalAlpha = 0.55 + 0.35 * Math.sin(clock * 12);
+    ctx.strokeStyle = BOSS_LOOK.poison;
+    ctx.lineWidth = Math.max(2, 3 * cam.zoom);
+    ctx.setLineDash([8 * cam.zoom, 6 * cam.zoom]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
 }
 
 /**
@@ -4376,6 +4537,11 @@ export function drawScene(
     }
     ctx.globalAlpha = 1;
   }
+  // Poison pools lie flat too (ID-222), with the mark of the one about to land.
+  for (const p of scene.pools ?? []) {
+    drawPool(ctx, art, p, scene.time, anim?.reduced ? 0 : scene.time, cam);
+  }
+  if (!build) drawPoisonMarks(ctx, scene, anim?.reduced ? 0 : scene.time, cam);
   // Broken Armour Plates' pieces lie flat where they fell (ID-211), under every sprite.
   for (const c of anim?.cracks ?? []) {
     const look = crackLook(scene.time, c, anim?.reduced ?? true);
@@ -4519,6 +4685,7 @@ export function drawScene(
         const size = radiusOf(e) / ENEMY_RADIUS;
         drawShadow(ctx, ground, 1, cam, size);
         if (roared(scene, e)) drawRoared(ctx, e, cam);
+        drawHellMarks(ctx, scene, e, cam);
         const focused = e.id === scene.focusId;
         if (focused) drawFocusRing(ctx, ground, anim?.focusPulse(e.id) ?? 0, cam);
         const acts = anim?.enemy(e.id);
@@ -4636,6 +4803,7 @@ export function drawScene(
   for (const i of scene.impacts) if (i.hit) drawImpact(ctx, i, scene.time, cam);
   for (const k of scene.bursts) drawBurst(ctx, k, scene.time, cam);
   for (const k of scene.slabs ?? []) drawSlab(ctx, k, scene.time, cam);
+  for (const g of scene.globs ?? []) drawGlob(ctx, g, scene.time, cam);
   for (const g of scene.grenades) {
     drawGrenade(ctx, g, scene.time, cam, launchOf(scene, g, anim !== null), FRAG_BALL, art);
   }

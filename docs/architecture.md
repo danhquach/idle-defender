@@ -62,7 +62,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `stats.ts` / `jobs.ts` | Survivor levels, XP curve, professions and their bonuses. |
 | `camp.ts` | Recruits (shared); camp level, capacity and upgrade offers (full game). |
 | `squadpower.ts` | Squad Power vs Recommended Power shown before a fight. |
-| `modes.ts` | Difficulty modes (Normal / Nightmare / Hell): unlocks, each mode's local horde, effective horde, boss skills, Scrap and rarity boosts. |
+| `modes.ts` | Difficulty modes (Normal / Nightmare / Hell): unlocks, each mode's local horde, effective horde, boss skills (Hell's new one each), Scrap and rarity boosts. |
 | `chatter.ts` | Speech bubbles during a fight. |
 | `base.ts` | The base's wall, posts, turrets and traps; the fight runs on it (`squadBase` for the squad build). |
 | `perks.ts` | Commander perks; `levelScale` is used by the fight. |
@@ -119,10 +119,11 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A number (damage, HP, cost, rate) | `core/data.ts` |
 | A new gun | `WEAPONS` in `core/data.ts`; drop rules in `core/armoury.ts`; art ids in `ui/sprites.ts` (an icon plus held and aim sprites per look), PNGs in `src/assets/art/` built via `art-src/manifest.json` + `tools/art/` |
 | A new enemy or boss | `ENEMIES` / `BOSSES` in `core/data.ts`; behaviour in `core/horde.ts`; mix in `core/waves.ts`; art in `ui/sprites.ts` + `ui/render.ts` |
-| A new in-fight card | id in the `UpgradeId` type (`core/horde.ts`); entry and category in `UPGRADES` (`core/cards.ts`); stat/repair effect in `applyUpgrade` (`core/cards.ts`), behaviour effect where `core/horde.ts` checks the card. The squad pool (`SQUAD_CARDS`) picks it up by category. |
+| A new in-fight card | id in the `UpgradeId` type (`core/horde.ts`); entry and category in `UPGRADES` (`core/cards.ts`); stat/repair effect in `applyUpgrade` (`core/cards.ts`), behaviour effect where `core/horde.ts` checks the card. The squad pool (`SQUAD_CARDS`) picks it up by category. A mode reward card instead: id in `ModeCard` and `MODE_UNLOCKS` (`core/data.ts`), its fight-relevance gate in `modeCardRelevant` (`core/cards.ts`); it joins the pool only through `modeCards` (`core/hordeonly.ts`). |
 | A new skill | `SKILLS` and `SkillId` in `core/data.ts`; launch in `core/skills.ts`; landing in `core/horde.ts`; button in `ui/hud.ts`; art in `ui/sprites.ts` + `ui/render.ts` |
 | Fight rules | `core/horde.ts` |
-| Difficulty mode numbers or unlocks | `MODES` in `core/modes.ts`; start-screen switch in `ui/hud.ts` |
+| Difficulty mode numbers or unlocks | `MODES` in `core/modes.ts`; mode cards in `MODE_UNLOCKS` (`core/data.ts`) and `modeCards` (`core/hordeonly.ts`); start-screen switch in `ui/hud.ts` |
+| A boss skill (Hell's included) | `BossSkill` and `BOSS_SKILL` (`core/data.ts`); clocks and effects in `mutate` and its helpers (`core/horde.ts`); name and cue in `ui/hud.ts`, glow and marks in `ui/render.ts`, sounds in `ui/audio.ts` and `ui/sound.ts` |
 | What happens after a fight | `finishSquadHorde` in `core/hordeonly.ts` |
 | A new field on `GameState` | `core/game.ts`; then a `read*` in `storage/save.ts` with a default for older saves, bump `SAVE_VERSION` (note it in its comment, add the old number to `readSave`'s list), add an old-save fixture in `storage/testing.ts` |
 | HUD text or buttons in a fight | `ui/hud.ts` |

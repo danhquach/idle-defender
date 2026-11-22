@@ -218,6 +218,39 @@ describe('the horde-only screens (ID-066)', () => {
     expect(c.debrief!.chips.map((x) => x.text).join(' ')).not.toMatch(/Radio/);
   });
 
+  it('a higher mode’s first clear of horde 10 names its mode card, with no radio line (ID-222)', () => {
+    const nm = (n: number): GameState => ({
+      ...squadGame(SQUAD_CAP, 51),
+      mode: 'nightmare',
+      modes: { nightmare: n },
+    });
+    const first = nm(10);
+    const a = squadScreen(first, ended(first, 'won'));
+    expect(a.debrief!.notes![0]).toBe('Boss horde beaten. New card unlocked: Suppressing Fire.');
+    expect(a.debrief!.chips.find((c) => c.text === 'New card: Suppressing Fire')).toMatchObject({
+      details: true,
+    });
+    expect(a.lines.join(' ')).not.toMatch(/Radio|radio|part/);
+    expect(a.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
+    // A second clear of it unlocks nothing.
+    const again = nm(11);
+    const replay = squadScreen(again, {
+      ...startSquadHorde(again, 1, NOW, 10),
+      outcome: 'won' as const,
+    });
+    expect(replay.lines.join(' ')).not.toMatch(/Boss horde beaten|New card/);
+    expect(replay.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/New card/);
+    // Hell's first boss horde unlocks Gas Masks.
+    const hell: GameState = {
+      ...squadGame(SQUAD_CAP, 51),
+      mode: 'hell',
+      modes: { nightmare: 51, hell: 10 },
+    };
+    expect(squadScreen(hell, ended(hell, 'won')).debrief!.notes![0]).toBe(
+      'Boss horde beaten. New card unlocked: Gas Masks.',
+    );
+  });
+
   it('the finale’s first clear is the ending screen: Continue into Endless (ID-127)', () => {
     const g = squadGame(SQUAD_CAP, 30);
     const screen = squadScreen(g, ended(g, 'won'));

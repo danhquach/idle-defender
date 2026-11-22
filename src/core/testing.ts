@@ -89,7 +89,10 @@ export function horror(
   made.horror = {
     boss: 0,
     skills: list,
-    next: Object.fromEntries(list.filter((k) => TIMED_SKILLS.includes(k)).map((k) => [k, nextAt])),
+    // Enrage has no clock until its boss is hurt (ID-222), as in a fight.
+    next: Object.fromEntries(
+      list.filter((k) => TIMED_SKILLS.includes(k) && k !== 'enrage').map((k) => [k, nextAt]),
+    ),
     fired: {},
     chargeUntil: 0,
     charged: false,

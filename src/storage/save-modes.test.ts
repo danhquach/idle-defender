@@ -5,7 +5,10 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
+import { MODE_CARDS } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
+import { modeCards } from '../core/hordeonly.ts';
+import { modeOf } from '../core/modes.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
 import { NOW } from './testing.ts';
 
@@ -253,5 +256,99 @@ describe('save: difficulty modes (ID-218)', () => {
     const back = reread(camp({ modes: { nightmare: 5 } }))!.game;
     expect(Object.keys(back.modes!)).toEqual(['nightmare']);
     expect(Object.getPrototypeOf(back.modes)).toBe(Object.prototype);
+  });
+});
+
+// ID-222: the mode reward cards are not saved; they are read off the saved `modes`, so the
+// hostile tests go at that derivation: whatever a save says, a card comes only from a
+// validated mode horde.
+describe('save: mode cards derive from the saved modes (ID-222)', () => {
+  const ids = new Set<string>(MODE_CARDS);
+  const hostile = [
+    0,
+    -1,
+    1.5,
+    1e9,
+    100_001,
+    Number.MAX_SAFE_INTEGER,
+    '31',
+    null,
+    true,
+    [],
+    {},
+    NaN,
+  ];
+
+  it('a loaded save’s cards are a subset of MODE_UNLOCKS, and none on Normal', () => {
+    const g = camp({ mode: 'hell', modes: { nightmare: 51, hell: 31 } });
+    const back = reread(g)!.game;
+    expect(modeCards(back)).toEqual([...MODE_CARDS]);
+    for (const c of modeCards(back)) expect(ids.has(c)).toBe(true);
+    const normal = reread(camp({ modes: { nightmare: 51, hell: 31 } }))!.game;
+    expect(modeOf(normal)).toBe('normal');
+    expect(modeCards(normal)).toEqual([]);
+  });
+
+  it('refuses a mode horde that is not a bounded whole number, so no card comes of it', () => {
+    for (const n of hostile) {
+      for (const key of ['nightmare', 'hell'] as const) {
+        const modes = key === 'hell' ? { nightmare: 51, hell: n } : { nightmare: n };
+        expect(
+          reread(camp(), (g) => (g.modes = modes)),
+          `${key} ${String(n)}`,
+        ).toBeNull();
+      }
+    }
+    // The bounds themselves are fine, and 1e9 is not.
+    expect(reread(camp(), (g) => (g.modes = { nightmare: 100_000 }))).not.toBeNull();
+  });
+
+  it('refuses unknown, prototype and look-alike keys, and nothing is polluted', () => {
+    for (const key of [
+      '__proto__',
+      'constructor',
+      'prototype',
+      'toString',
+      'gas-masks',
+      'normal',
+      'hell\u200B',
+    ]) {
+      const raw = JSON.stringify({
+        v: SAVE_VERSION,
+        savedAt: NOW,
+        game: { ...JSON.parse(encodeSave(camp(), NOW)).game, modes: '__M__' },
+      }).replace('"__M__"', `{"nightmare":51,${JSON.stringify(key)}:31}`);
+      expect(decodeSave(raw), key).toBeNull();
+    }
+    expect(({} as Loose).hell).toBeUndefined();
+    expect(({} as Loose)['gas-masks']).toBeUndefined();
+    // A card list written by hand has nowhere to go: the save refuses unknown game fields.
+    for (const field of ['modeCards', 'cards', 'unlocks']) {
+      expect(
+        reread(camp({ modes: { nightmare: 11 } }), (g) => (g[field] = ['tranq-darts'])),
+        field,
+      ).toBeNull();
+    }
+  });
+
+  it('Hell without Nightmare past 50 is refused, so there is no Hell card', () => {
+    for (const nm of [undefined, 1, 30, 50]) {
+      const modes = { ...(nm ? { nightmare: nm } : {}), hell: 31 };
+      expect(
+        reread(camp(), (g) => (g.modes = modes)),
+        `nightmare ${String(nm)}`,
+      ).toBeNull();
+    }
+    const ok = reread(camp({ mode: 'hell', modes: { nightmare: 51, hell: 11 } }))!.game;
+    expect(modeCards(ok)).toContain('gas-masks');
+  });
+
+  it('a card is there from a saved first clear and does not move on a second one', () => {
+    const after = (n: number) =>
+      modeCards(reread(camp({ mode: 'nightmare', modes: { nightmare: n } }))!.game);
+    expect(after(10)).toEqual([]);
+    expect(after(11)).toEqual(['suppressing-fire']);
+    expect(after(12)).toEqual(['suppressing-fire']);
+    expect(after(30)).toEqual(['suppressing-fire', 'cauterise']);
   });
 });

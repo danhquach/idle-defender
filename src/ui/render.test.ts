@@ -5017,9 +5017,10 @@ describe('death animations (ID-110)', () => {
     drawScene(recorder().ctx, art, at(2, [e]), CAM, VIEW, null, null, null, anim);
     anim.observe(at(2.1, []));
     expect(draw(2.2)).toEqual(expect.arrayContaining(['cut-body', 'cut-piece']));
-    await new Promise((ok) => setTimeout(ok, 10));
+    // Blob, FileReader and Image each settle a tick apart; poll, as a busy runner can take
+    // longer than a fixed wait (it flaked on CI at 10 ms).
+    await vi.waitFor(() => expect(draw(2.25).filter((x) => x === 'loaded')).toHaveLength(2));
     const later = draw(2.25);
-    expect(later.filter((x) => x === 'loaded')).toHaveLength(2);
     expect(later.filter((x) => x.startsWith('cut-'))).toEqual([]);
   });
 
@@ -5141,5 +5142,61 @@ describe('Armour Plates (ID-211)', () => {
     drawScene(r.ctx, r.art, dead, CAM, VIEW, null, null, null, anim);
     expect(r.drawn).toContain(PLATED_ART.horror!.broken.walk[1]);
     expect(r.drawn).not.toContain(ENEMY_ART.horror.walk[1]);
+  });
+});
+
+// ID-222: Hell's skills on the canvas (code-drawn: no new art).
+describe('Hell boss skills (ID-222)', () => {
+  /** A scene with a Hell boss and one survivor, `extra` laid on top. */
+  function hell(extra: Partial<Scene> = {}): Scene {
+    const s = blank() as unknown as HordeState;
+    const boss = horror(s, ['enrage', 'shield', 'poison'], { x: 900, y: 300 }, { nextAt: 50 });
+    boss.horror!.enraged = true;
+    boss.horror!.shieldOn = true;
+    const near = enemy(s, { x: 800, y: 300 });
+    near.shielded = true;
+    s.defenders = [{ ...game0().defenders[0]!, x: 300, y: 300 }];
+    return { ...(s as unknown as Scene), ...extra };
+  }
+  const game0 = (): HordeState => {
+    const g = newGame();
+    return startHorde(g, 1, g.roster[0]!.id, 0, 0);
+  };
+
+  it('draws a Poison pool flat on the ground with the tar art under it, fading in', () => {
+    const r = recorder();
+    drawScene(
+      r.ctx,
+      r.art,
+      hell({ pools: [{ x: 300, y: 300, at: 0, until: 6 }], time: 3 }),
+      CAM,
+      VIEW,
+    );
+    expect(r.drawn).toContain(BASE_ART.slick);
+    const none = recorder();
+    drawScene(none.ctx, none.art, hell({ time: 3 }), CAM, VIEW);
+    expect(none.drawn).not.toContain(BASE_ART.slick);
+    // Expired: nothing is drawn.
+    const gone = recorder();
+    drawScene(
+      gone.ctx,
+      gone.art,
+      hell({ pools: [{ x: 300, y: 300, at: 0, until: 6 }], time: 6.5 }),
+      CAM,
+      VIEW,
+    );
+    expect(gone.drawn).not.toContain(BASE_ART.slick);
+  });
+
+  it('paints an enraged, shielding boss, a glob in flight and the next pool’s mark without error', () => {
+    const r = recorder();
+    const s = hell({
+      globs: [{ fromX: 900, fromY: 300, x: 300, y: 300, at: 0, lands: 0.6 }],
+      time: 0.3,
+    });
+    s.enemies[0]!.horror!.next.poison = 1;
+    s.enemies[0]!.horror!.longer = { poison: 2 };
+    expect(() => drawScene(r.ctx, r.art, s, CAM, VIEW)).not.toThrow();
+    expect(r.drawn).toContain(ENEMY_ART.horror.walk[1]);
   });
 });
