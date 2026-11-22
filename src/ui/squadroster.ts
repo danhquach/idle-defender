@@ -735,10 +735,19 @@ export function createRoster(
       jobCell.toggleAttribute('data-off', r.off);
       if (r.off) jobCell.title = NO_BONUS;
       const total = el('td', 'rv-stat-total', r.total);
-      // A Chef's part of Max HP (ID-408), so the total matches the HP in a fight.
-      if (r.field) total.append(el('span', 'rv-stat-field', ` (${r.field})`));
       tr.append(th, total, lvCell, jobCell);
       body.append(tr);
+      // A Chef's part of Max HP (ID-408), so the total matches the HP in a fight. It gets a
+      // full-width row of its own, so it never runs over the Level column (ID-216).
+      if (r.field) {
+        const note = el('tr', 'rv-stat-fieldrow');
+        const cell = el('td', 'rv-stat-field');
+        cell.colSpan = 4;
+        // A row of its own has no row head, so a screen reader is told which stat it is part of.
+        cell.append(el('span', 'sr-only', `${r.label}: `), `(${r.field})`);
+        note.append(cell);
+        body.append(note);
+      }
     }
     table.append(thead, body);
     return table;
