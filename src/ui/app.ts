@@ -5,6 +5,7 @@ import { banCard, banLock, chooseCard, rerollLock, rerollOffer, skipOffer } from
 import { FIELD, HORDE_ONLY, type SkillId, type WeaponId } from '../core/data.ts';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
+import { localHorde, localOf, modeOf, modeUnlocked, setMode } from '../core/modes.ts';
 import {
   layoutOf,
   moveDefender,
@@ -228,7 +229,7 @@ export function start(root: HTMLElement, art: Art): void {
   let horde: HordeState | null = null;
   // The horde the horde-only start or result screen has picked (ID-098): the next new horde,
   // or one already beaten; the next fight is this one.
-  let picked = game.hordeNumber;
+  let picked = localHorde(game);
   // The horde-only build between hordes (ID-066): the next horde, set up but not started,
   // drawn behind its start screen.
   let preview: HordeState | null = null;
@@ -384,6 +385,23 @@ export function start(root: HTMLElement, art: Art): void {
     else commit(r.game);
     hud.showSkills(skillPicker(game.skillPick));
   });
+  // A mode picked on the start or result screen (ID-218), between fights: saved at once, and
+  // back to the new mode's start screen with its own horde picked.
+  hud.onModePick((mode) => {
+    if (horde && !resultUp()) return;
+    if (!modeUnlocked(game, mode) || mode === modeOf(game)) return;
+    // Switching leaves the result screen, so anyone still asking would be refused unseen.
+    if (joiningOf(game).length > 0) {
+      hud.toast('Answer who is asking to join first');
+      return;
+    }
+    commit(setMode(game, mode));
+    picked = localHorde(game);
+    endedAt = null;
+    pendingResult = null;
+    campPicks = [];
+    toBuild();
+  });
   hud.onHordePick((n) => {
     picked = n;
     // The Inventory's Squad Power line compares with the horde picked.
@@ -431,12 +449,12 @@ export function start(root: HTMLElement, art: Art): void {
     // The seed is the only randomness from outside the core.
     const now = Date.now();
     // Whatever is picked starts: one that isn't open (a stale pick) falls back to the new horde.
-    const open = Number.isInteger(picked) && picked >= 1 && picked <= game.hordeNumber;
-    startFight(startSquadHorde(game, now, now, open ? picked : game.hordeNumber));
+    const open = Number.isInteger(picked) && picked >= 1 && picked <= localHorde(game);
+    startFight(startSquadHorde(game, now, now, open ? picked : localHorde(game)));
   }
   /** The horde picker redrawn off the squad as it stands, the pick kept (ID-098). */
   function showPicker(): void {
-    const retry = horde && endedAt !== null && horde.outcome === 'lost' ? horde.hordeNumber : null;
+    const retry = horde && endedAt !== null && horde.outcome === 'lost' ? localOf(horde) : null;
     hud.showPicker(hordePicker(game, picked, retry, !horde));
   }
   /**
@@ -505,7 +523,9 @@ export function start(root: HTMLElement, art: Art): void {
     commit(r.game);
     if (horde && !resultUp()) {
       horde = withUpgradedGun(horde, r.weapon);
-      hud.fightPower(powerLine(squadPower(game), recommendedPower(horde.hordeNumber)));
+      hud.fightPower(
+        powerLine(squadPower(game), recommendedPower(horde.hordeNumber, horde.mode ?? 'normal')),
+      );
     } else {
       // The start screen's squad on the wall holds the new numbers too.
       if (!horde) preview = startSquadHorde(game, 0, Date.now());
@@ -723,7 +743,9 @@ export function start(root: HTMLElement, art: Art): void {
     cam = fightCam;
     panel?.hide();
     if (HORDE_ONLY) {
-      hud.fightPower(powerLine(squadPower(game), recommendedPower(next.hordeNumber)));
+      hud.fightPower(
+        powerLine(squadPower(game), recommendedPower(next.hordeNumber, next.mode ?? 'normal')),
+      );
     }
     hud.show(true);
     refreshDialogs();
@@ -763,7 +785,7 @@ export function start(root: HTMLElement, art: Art): void {
   /** Another camp from the menu (a loaded code, a new camp): saved and shown. */
   function replaceCamp(next: GameState): void {
     commit(next);
-    picked = game.hordeNumber;
+    picked = localHorde(game);
     selected = null;
     // The menu only loads a camp between hordes: over a result screen, the fight it shows
     // belongs to the old camp and goes with it (ID-156).
@@ -793,7 +815,7 @@ export function start(root: HTMLElement, art: Art): void {
         canCombine: !horde || resultUp(),
         canBuy: !horde || resultUp(),
         // Squad Power against the horde under way, or the one picked (ID-098).
-        ...(HORDE_ONLY ? { horde: horde && endedAt === null ? horde.hordeNumber : picked } : {}),
+        ...(HORDE_ONLY ? { horde: horde && endedAt === null ? localOf(horde) : picked } : {}),
       }),
       onCombine: HORDE_ONLY
         ? (uids) => {
@@ -988,7 +1010,7 @@ export function start(root: HTMLElement, art: Art): void {
       preview = startSquadHorde(game, 0, Date.now());
       hud.show(true);
       hud.update(preview);
-      picked = picked >= 1 && picked <= game.hordeNumber ? picked : game.hordeNumber;
+      picked = picked >= 1 && picked <= localHorde(game) ? picked : localHorde(game);
       hud.showResult(squadStart(game, picked));
       refreshPanel();
       cam = buildCam = fightCam;

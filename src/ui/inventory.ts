@@ -47,6 +47,7 @@ import {
   type GunMove,
 } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
+import { effHorde, modeOf } from '../core/modes.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { survivorDps } from '../core/stats.ts';
 import {
@@ -290,7 +291,8 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
  * horde's Recommended Power (ID-098).
  */
 export function inventoryView(
-  game: Pick<GameState, 'armoury' | 'roster'> & Partial<Pick<GameState, 'slots' | 'stock'>>,
+  game: Pick<GameState, 'armoury' | 'roster'> &
+    Partial<Pick<GameState, 'slots' | 'stock' | 'mode'>>,
   horde: number | null = null,
   canBuy = false,
   pickIn: Partial<Record<PickKind, unknown>> = DEFAULT_PICK,
@@ -377,7 +379,14 @@ export function inventoryView(
         uid: isOwned(held) ? held.uid : null,
       };
     }),
-    power: horde === null ? null : powerLine(squadPower(game), recommendedPower(horde)),
+    // `horde` is the mode's own horde (ID-218); its power is that of its strength.
+    power:
+      horde === null
+        ? null
+        : powerLine(
+            squadPower(game),
+            recommendedPower(effHorde(modeOf(game), horde), modeOf(game)),
+          ),
     powerHorde: horde,
     combine: combineRows(game),
   };
@@ -1153,7 +1162,7 @@ export function detailsPanel(
 
 /** The camp as the Inventory reads it. */
 type InventoryGame = Pick<GameState, 'armoury' | 'roster'> &
-  Partial<Pick<GameState, 'slots' | 'stock'>>;
+  Partial<Pick<GameState, 'slots' | 'stock' | 'mode'>>;
 
 export interface InventoryOptions {
   /**
@@ -1166,7 +1175,7 @@ export interface InventoryOptions {
     canCombine?: boolean;
     /** Whether slots can be bought now (ID-179, between hordes); false when omitted. */
     canBuy?: boolean;
-    /** The horde the next fight is, for the Squad Power line (ID-098); omitted for none. */
+    /** The mode's horde the next fight is, for the Squad Power line (ID-098); omitted for none. */
     horde?: number;
   };
   /**

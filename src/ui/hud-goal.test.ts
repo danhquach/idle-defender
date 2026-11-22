@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ID-217 The next goal: one line on the start screen and a win's result naming the next boss
-// horde, its radio part and any card it unlocks, or the finale; none in Endless, on a loss or
-// on the ending screen. Text reaches the page only through textContent.
+// horde, its radio part and any card it unlocks, or the finale; past it the next mode to unlock
+// (ID-218); none on a loss or on the ending screen. Text reaches the page only through textContent.
 import { describe, expect, it } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, SQUAD_CAP } from '../core/data.ts';
@@ -30,6 +30,8 @@ const fought = (g: GameState, n: number, outcome: 'won' | 'lost', wave = 1) => (
 const H10 = 'Next: Horde 10 boss · radio part 1/3 · new card Heavy Rounds';
 const H20 = 'Next: Horde 20 boss · radio part 2/3 · new card Field Repairs';
 const H30 = 'Next: Horde 30 · call the evacuation';
+const UNLOCK_N = 'Next: hold Horde 50 · unlocks Nightmare';
+const UNLOCK_H = 'Next: hold Horde 50 · unlocks Hell';
 
 describe('nextGoalLine (ID-217)', () => {
   it('names the next boss horde not yet beaten, its part and its card', () => {
@@ -38,9 +40,23 @@ describe('nextGoalLine (ID-217)', () => {
     for (const n of [21, 29, 30]) expect(nextGoalLine({ hordeNumber: n })).toBe(H30);
   });
 
-  it('is null in Endless, past the finale', () => {
-    expect(nextGoalLine({ hordeNumber: FINALE_HORDE + 1 })).toBeNull();
+  it('past the finale it names the next mode to unlock, until it is open (ID-218)', () => {
+    for (const n of [FINALE_HORDE + 1, 45, 50])
+      expect(nextGoalLine({ hordeNumber: n })).toBe(UNLOCK_N);
+    expect(nextGoalLine({ hordeNumber: 51 })).toBeNull();
     expect(nextGoalLine({ hordeNumber: 500 })).toBeNull();
+  });
+
+  it('on Nightmare it names Hell; on Hell, nothing (ID-218)', () => {
+    const nm = (n: number) => ({
+      hordeNumber: 60,
+      mode: 'nightmare' as const,
+      modes: { nightmare: n },
+    });
+    for (const n of [1, 30, 50]) expect(nextGoalLine(nm(n))).toBe(UNLOCK_H);
+    expect(nextGoalLine(nm(51))).toBeNull();
+    const hell = { hordeNumber: 60, mode: 'hell' as const, modes: { nightmare: 60, hell: 3 } };
+    expect(nextGoalLine(hell)).toBeNull();
   });
 });
 
@@ -53,11 +69,13 @@ describe('the goal line on the panel (ID-217)', () => {
     expect(squadStart(g).lines).toContain(H20);
   });
 
-  it('Endless: the chip and its line stay, and no goal line is added', () => {
+  it('Endless: the chip and its line stay, and the goal is the next mode (ID-218)', () => {
     const s = squadStart(squadGame(2, 45));
-    expect(s.debrief!.goal).toBeUndefined();
+    expect(s.debrief!.goal).toBe(UNLOCK_N);
     expect(s.debrief!.chips[0]!.text).toBe('Endless · best 44');
-    expect(s.lines.join(' ')).not.toMatch(/Next:/);
+    expect(s.lines.at(-1)).toBe(UNLOCK_N);
+    // With Nightmare open the goal is gone.
+    expect(squadStart(squadGame(2, 60)).debrief!.goal).toBeUndefined();
   });
 
   it("a win's result names the goal once the win has counted", () => {
@@ -76,13 +94,15 @@ describe('the goal line on the panel (ID-217)', () => {
     expect(squadScreen(g, fought(g, 10, 'won')).debrief!.goal).toBe(H20);
   });
 
-  it('none on a loss, on the ending screen or on an Endless win', () => {
+  it('none on a loss or on the ending screen; an Endless win names the next mode', () => {
     const g = squadGame(3, 6);
     expect(squadScreen(g, fought(g, 6, 'lost', 2)).debrief!.goal).toBeUndefined();
     const fin = squadGame(SQUAD_CAP, FINALE_HORDE);
     expect(squadScreen(fin, fought(fin, FINALE_HORDE, 'won')).debrief!.goal).toBeUndefined();
     const end = squadGame(3, 40);
-    expect(squadScreen(end, fought(end, 40, 'won')).debrief!.goal).toBeUndefined();
+    expect(squadScreen(end, fought(end, 40, 'won')).debrief!.goal).toBe(UNLOCK_N);
+    const open = squadGame(3, 60);
+    expect(squadScreen(open, fought(open, 60, 'won')).debrief!.goal).toBeUndefined();
   });
 
   it('reaches the page as one plain-text line', () => {
@@ -95,6 +115,8 @@ describe('the goal line on the panel (ID-217)', () => {
     expect(lines[0]!.textContent).toBe(H10);
     expect(lines[0]!.children).toHaveLength(0);
     h.showResult(squadStart(squadGame(2, 45)));
+    expect(root.querySelector('.debrief-goal')!.textContent).toBe(UNLOCK_N);
+    h.showResult(squadStart(squadGame(2, 60)));
     expect(root.querySelector('.debrief-goal')).toBeNull();
   });
 });

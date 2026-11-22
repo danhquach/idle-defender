@@ -33,6 +33,7 @@ import {
   START_TIERS,
   ITEMS,
   FREE_WEAPONS,
+  type HigherMode,
   type JobId,
   type PerkId,
   type ResearchId,
@@ -80,8 +81,15 @@ export interface RosterDefender extends DefenderSpec {
 }
 
 export interface GameState {
-  /** The next horde to fight. */
+  /** The next horde to fight; on a difficulty mode's own run, Normal's (ID-218). */
   hordeNumber: number;
+  /**
+   * The difficulty mode being played (ID-218, `modes.ts`): absent on Normal. Only one that
+   * is unlocked; switched only between fights.
+   */
+  mode?: HigherMode;
+  /** Each higher mode's next horde (ID-218, 1 to start); a mode never played is absent. */
+  modes?: { nightmare?: number; hell?: number };
   base: Base;
   stock: Stock;
   tiers: Tier[];

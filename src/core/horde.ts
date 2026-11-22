@@ -56,6 +56,7 @@ import {
   CRAWLER,
   HORROR,
   BOSS_SKILL,
+  type HigherMode,
   ELITE,
   SCREAMER,
   SPEWER,
@@ -166,6 +167,11 @@ export function specOf(d: DefenderSpec): DefenderSpec {
 }
 export interface HordeSetup {
   hordeNumber: number;
+  /**
+   * The bosses and mini-bosses (ID-218: a difficulty mode's own), instead of the ones
+   * `hordeBosses` gives `hordeNumber`. Absent: those.
+   */
+  bosses?: BossSpec[];
   roster: DefenderSpec[];
   startDefenderId: string;
   base: Base;
@@ -634,7 +640,10 @@ export interface HordeState {
   rng: RngState;
   /** The seed the fight started from (uint32): what a horde-only drop rolls from (ID-067). */
   seed: number;
+  /** The horde's strength: for a difficulty mode (`mode`) its mode horde plus the mode's offset (ID-218). */
   hordeNumber: number;
+  /** The difficulty mode the horde is fought in (ID-218); absent on Normal. */
+  mode?: HigherMode;
   wave: number;
   waveCount: number;
   toSpawn: number;
@@ -817,6 +826,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     spawnX,
     harder = false,
     freeSkills,
+    bosses = hordeBosses(hordeNumber, harder),
   } = setup;
   if (freeSkills && !(Number.isInteger(freeSkills.power) && freeSkills.power >= 1)) {
     throw new RangeError(`newHorde: bad skill power ${freeSkills.power}`);
@@ -938,7 +948,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     grenades: [],
     tarBombs: [],
     slicks: [],
-    bosses: hordeBosses(hordeNumber, harder).map((b) => ({ ...b, id: null })),
+    bosses: bosses.map((b) => ({ ...b, id: null })),
     ...(harder ? { harder: true as const } : {}),
     ...(freeSkills ? { freeSkills: { power: freeSkills.power } } : {}),
     swarm: harder && swarmWave(hordeNumber, 1),

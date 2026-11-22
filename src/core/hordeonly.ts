@@ -95,6 +95,20 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import { isGun } from './loadout.ts';
+import {
+  advance,
+  beatenIn,
+  effHorde,
+  FIRST_UID,
+  localHorde,
+  localOf,
+  MODES,
+  modeBosses,
+  modeOf,
+  topBeaten,
+  type Mode,
+  type ModeProgress,
+} from './modes.ts';
 import { chance, createRng } from './rng.ts';
 import {
   fieldBonus,
@@ -357,7 +371,7 @@ export function craftGun(game: GameState, base: WeaponId, amount: number): Craft
   if (why !== null) return { ok: false, reason: why };
   const rng = craftRng(game);
   const uid = `f${(game.craft?.made ?? 0) + 1}`;
-  const level = Math.max(1, highestBeaten(game));
+  const level = Math.max(1, topBeaten(game));
   const weapon = rollWeapon(rng, uid, base, rollCraftRarity(rng, amount), level);
   return {
     ok: true,
@@ -612,7 +626,8 @@ export function squadLine(size: number): {
 }
 
 /**
- * Horde `game.hordeNumber` for the whole squad on the firing line behind a fresh
+ * The mode's horde `hordeNumber` (the game's next, ID-218: as strong as that plus the mode's
+ * offset, with its bosses and HP factor) for the whole squad on the firing line behind a fresh
  * horde-only wall (full HP), each survivor in their slot in squad order
  * (`SQUAD_LINE.order`), with enemies spawning at `SQUAD_SPAWN_X`, at `now`. No towers,
  * turrets or traps; the bench waits to swap in mid-fight (`swapBench`, ID-148), and no cash
@@ -624,13 +639,16 @@ export function startSquadHorde(
   game: GameState,
   seed: number,
   now: number,
-  /** The horde to fight (ID-098): the next new one, or any already beaten. */
-  hordeNumber: number = game.hordeNumber,
+  /** The horde of the mode being played to fight (ID-098): the next new one, or any already beaten. */
+  hordeNumber: number = localHorde(game),
 ): HordeState {
   if (!Number.isFinite(now)) throw new RangeError(`startSquadHorde: bad time ${now}`);
-  if (!Number.isInteger(hordeNumber) || hordeNumber < 1 || hordeNumber > game.hordeNumber) {
+  if (!Number.isInteger(hordeNumber) || hordeNumber < 1 || hordeNumber > localHorde(game)) {
     throw new RangeError(`startSquadHorde: horde ${hordeNumber} is not open`);
   }
+  // ID-218: a difficulty mode's horde is as strong as its mode horde plus the mode's offset.
+  const mode = modeOf(game);
+  const eff = effHorde(mode, hordeNumber);
   const squad = squadOf(game).map(squadSpec);
   const first = squad[0];
   if (!first) throw new RangeError('startSquadHorde: nobody in the squad');
@@ -638,7 +656,8 @@ export function startSquadHorde(
   const line = squadLine(squad.length);
   const postOf = (i: number): number => base.posts.length + line.order[i]!;
   const s = newHorde(seed, {
-    hordeNumber,
+    hordeNumber: eff,
+    ...(mode === 'normal' ? {} : { bosses: modeBosses(mode, hordeNumber) }),
     roster: squad,
     startDefenderId: first.id,
     base,
@@ -651,7 +670,7 @@ export function startSquadHorde(
     cashRate: 0,
     startCash: 0,
     cards: SQUAD_CARDS,
-    hpScale: squadHpScale(hordeNumber),
+    hpScale: squadHpScale(eff) * MODES[mode].hpScale,
     xpRate: SQUAD_XP_RATE,
     line: line.slots,
     spawnX: SQUAD_SPAWN_X,
@@ -659,6 +678,7 @@ export function startSquadHorde(
     skills: [...game.skillPick],
     freeSkills: { power: skillPickPower(game.skillPick) },
   });
+  if (mode !== 'normal') s.mode = mode;
   // The rest of the squad take their slots too.
   squad.slice(1).forEach((spec, k) => {
     const post = s.posts[postOf(k + 1)]!;
@@ -914,28 +934,29 @@ export function squadRests(
     );
 }
 
-/** The highest horde beaten (ID-098): every horde up to it counts as beaten, 0 for none. */
-export const highestBeaten = (game: Pick<GameState, 'hordeNumber'>): number => game.hordeNumber - 1;
+/**
+ * The highest horde beaten on the mode being played (ID-098, ID-218): every horde up to it
+ * counts as beaten, 0 for none.
+ */
+export const highestBeaten = (game: ModeProgress): number => beatenIn(game);
 
-/** Whether horde `n` is a replay of one already beaten (ID-098), not the next new one. */
-export const isReplay = (game: Pick<GameState, 'hordeNumber'>, n: number): boolean =>
-  n < game.hordeNumber;
+/** Whether horde `n` of the mode being played is a replay of one beaten (ID-098), not the next new one. */
+export const isReplay = (game: ModeProgress, n: number): boolean => n < localHorde(game);
 
 /**
  * The radio parts found (ID-127): one per boss horde in `RADIO_HORDES` beaten. Read from the
  * horde number, so an older save gets its parts and the save stores nothing new.
  */
 export const radioParts = (game: Pick<GameState, 'hordeNumber'>): number =>
-  RADIO_HORDES.filter((n) => n <= highestBeaten(game)).length;
+  RADIO_HORDES.filter((n) => n <= game.hordeNumber - 1).length;
 
-/** Whether the finale is beaten (ID-127): play goes on as Endless. */
-export const isEndless = (game: Pick<GameState, 'hordeNumber'>): boolean =>
-  highestBeaten(game) >= FINALE_HORDE;
+/** Whether the finale is beaten on the mode being played (ID-127, ID-218): play goes on as Endless. */
+export const isEndless = (game: ModeProgress): boolean => highestBeaten(game) >= FINALE_HORDE;
 
 /** The cards the beaten boss hordes have added to the card pool for good (ID-127). */
 export const squadUnlocks = (game: Pick<GameState, 'hordeNumber'>): ResearchCard[] =>
   Object.entries(BOSS_UNLOCKS)
-    .filter(([n]) => Number(n) <= highestBeaten(game))
+    .filter(([n]) => Number(n) <= game.hordeNumber - 1)
     .map(([, card]) => card);
 
 /**
@@ -944,9 +965,11 @@ export const squadUnlocks = (game: Pick<GameState, 'hordeNumber'>): ResearchCard
  * whether it was the finale; null for any other win, a replay included.
  */
 export function bossReward(
-  game: Pick<GameState, 'hordeNumber'>,
+  game: ModeProgress,
   n: number,
 ): { part: number; unlock: ResearchCard | null; finale: boolean } | null {
+  // Radio parts and the cards are Normal's (ID-218).
+  if (modeOf(game) !== 'normal') return null;
   const i = RADIO_HORDES.indexOf(n);
   if (i < 0 || isReplay(game, n)) return null;
   return { part: i + 1, unlock: BOSS_UNLOCKS[n] ?? null, finale: n === FINALE_HORDE };
@@ -954,7 +977,8 @@ export function bossReward(
 
 function checkFinished(name: string, game: GameState, horde: HordeState): void {
   if (horde.outcome === 'fighting') throw new RangeError(`${name}: the horde is still on`);
-  if (horde.hordeNumber < 1 || horde.hordeNumber > game.hordeNumber) {
+  const local = localOf(horde);
+  if (local < 1 || local > localHorde(game, horde.mode ?? 'normal')) {
     throw new RangeError(`${name}: horde ${horde.hordeNumber} is not this game's`);
   }
 }
@@ -968,7 +992,7 @@ function checkFinished(name: string, game: GameState, horde: HordeState): void {
  */
 export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typeof xpGains> {
   const full = xpGains({ ...horde, outcome: 'won' });
-  const far = highestBeaten(game) - horde.hordeNumber > FARM.farOff;
+  const far = beatenIn(game, horde.mode ?? 'normal') - localOf(horde) > FARM.farOff;
   // A loss pays its share of what a win of this horde would (halved far down too).
   const win = far ? FARM.farXp : 1;
   const share =
@@ -1002,8 +1026,14 @@ export function benchXpGains(
     .map((d) => ({ id: d.id, name: d.name, xp, injured: false }));
 }
 
-/** The Scrap a horde-only win of horde `n` pays (ID-179). */
-export const winScrap = (n: number): number => SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * n;
+/**
+ * The Scrap a horde-only win of horde `n` pays (ID-179); `n` is the horde's strength, and a
+ * higher mode's win pays its multiple (ID-218), rounded.
+ */
+export const winScrap = (n: number, mode: Mode = 'normal'): number => {
+  const pay = SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * n;
+  return MODES[mode].scrap === 1 ? pay : Math.round(pay * MODES[mode].scrap);
+};
 
 /**
  * The Scrap guns thrown away from a full stash are salvaged for (ID-179): by rarity, and
@@ -1090,7 +1120,10 @@ function finishHorde(
   if (horde.outcome !== 'won') return { next: settle(g), joined: [], noJoin: 'lost' };
   const drop = squadDrop(game, horde);
   // A win pays Scrap, and so does each gun thrown away (ID-179); no RNG, no fight changes.
-  g.stock = scrapAfter(game.stock, winScrap(horde.hordeNumber) + salvageOf(drop?.thrown ?? []));
+  g.stock = scrapAfter(
+    game.stock,
+    winScrap(horde.hordeNumber, horde.mode) + salvageOf(drop?.thrown ?? []),
+  );
   // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
   if (!drop) return { next: settle(g), joined: [], noJoin: 'no-drop' };
   g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus], stashCap(game)).armoury;
@@ -1100,9 +1133,9 @@ function finishHorde(
     // asking from before was never answered: that counts as Refuse (ID-150).
     const joined = joiners(game, horde.seed);
     g.camp.recruits += joined.length;
-    g.hordeNumber += 1;
+    const grown = advance(g, horde.mode ?? 'normal');
     return {
-      next: settle(withJoining(g, joined)),
+      next: settle(withJoining(grown, joined)),
       joined,
       noJoin: joined.length > 0 ? null : noJoinWhy(game, false),
     };
@@ -1207,12 +1240,12 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
 export function squadScrap(
   game: Pick<
     GameState,
-    'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm' | 'slots' | 'stock'
+    'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'mode' | 'modes' | 'farm' | 'slots' | 'stock'
   >,
-  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'tookPart'>,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'mode' | 'tookPart'>,
 ): { total: number; salvage: number; now: number } {
   if (horde.outcome !== 'won') return { total: 0, salvage: 0, now: game.stock.scrap };
-  const win = winScrap(horde.hordeNumber);
+  const win = winScrap(horde.hordeNumber, horde.mode);
   const total = scrapGain(game.stock, win + salvageOf(squadDrop(game, horde)?.thrown ?? []));
   return { total, salvage: Math.max(0, total - win), now: game.stock.scrap + total };
 }
@@ -1315,13 +1348,19 @@ export function squadGain(game: Pick<GameState, 'roster'>): GunScore {
  * the new one's first clear. Null when none can.
  */
 function upgradeFrom(
-  game: Pick<GameState, 'hordeNumber' | 'farm'>,
+  game: Pick<GameState, 'hordeNumber' | 'mode' | 'modes' | 'farm'>,
   from: number,
   gain: GunScore,
+  mode: Mode,
 ): number | null {
-  for (let n = from; n <= Math.min(game.hordeNumber, from + FARM.search - 1); n++) {
-    const weights = isReplay(game, n) ? replayWeights(n, game.farm.badLuck) : firstClearWeights(n);
-    if (dropCanBeat(weights, n, gain)) return n;
+  const open = localHorde(game, mode);
+  const steps = MODES[mode].rarity;
+  for (let n = from; n <= Math.min(open, from + FARM.search - 1); n++) {
+    // The mode horde `n` drops by its strength (ID-218).
+    const eff = effHorde(mode, n);
+    const weights =
+      n < open ? replayWeights(eff, game.farm.badLuck, steps) : firstClearWeights(eff, steps);
+    if (dropCanBeat(weights, eff, gain)) return n;
   }
   return null;
 }
@@ -1346,12 +1385,17 @@ const DROP_STREAM = 0x5bd1e995;
 export function squadDrop(
   game: Pick<
     GameState,
-    'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'farm' | 'slots' | 'craft'
+    'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'mode' | 'modes' | 'farm' | 'slots' | 'craft'
   >,
-  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'tookPart'>,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'mode' | 'tookPart'>,
 ): SquadDrop | null {
   if (horde.outcome !== 'won') return null;
-  if (isReplay(game, horde.hordeNumber) && game.farm.replays >= FARM.maxReplays) return null;
+  // ID-218: a mode's drop is for its strength (gun level, band), its rarity shifted up.
+  const mode = horde.mode ?? 'normal';
+  const steps = MODES[mode].rarity;
+  const local = localOf(horde);
+  const replay = local < localHorde(game, mode);
+  if (replay && game.farm.replays >= FARM.maxReplays) return null;
   const n = horde.hordeNumber;
   const rng = createRng(horde.seed ^ DROP_STREAM);
   const weakest = weakestHeld(game);
@@ -1359,11 +1403,11 @@ export function squadDrop(
   let weapon: OwnedWeapon;
   let kind: DropKind = 'first';
   let noUpgrades = false;
-  const uid = isReplay(game, n) ? `r${game.farm.replays + 1}` : `h${n}`;
-  if (!isReplay(game, n)) {
-    weapon = rollSquadGun(rng, uid, firstClearWeights(n), n);
+  const uid = replay ? `r${game.farm.replays + 1}` : `${FIRST_UID[mode]}${local}`;
+  if (!replay) {
+    weapon = rollSquadGun(rng, uid, firstClearWeights(n, steps), n);
   } else {
-    const weights = replayWeights(n, game.farm.badLuck);
+    const weights = replayWeights(n, game.farm.badLuck, steps);
     noUpgrades = !dropCanBeat(weights, n, gain);
     // The rarity floor is the weakest held gun's: a preference only, so the survivor the
     // rolled gun suits best may hold another (the gun is still an upgrade for someone).
@@ -1379,7 +1423,7 @@ export function squadDrop(
   const odds = Math.min(1, SQUAD_BONUS.chance + scavenged(game, horde));
   for (let k = 0; k < SQUAD_BONUS.rolls; k++) {
     if (chance(rng, odds)) {
-      bonus.push(rollSquadGun(rng, `${uid}-${bonus.length + 1}`, bonusWeights(n), n));
+      bonus.push(rollSquadGun(rng, `${uid}-${bonus.length + 1}`, bonusWeights(n, steps), n));
     }
   }
   // Only a blueprint that is added counts (ID-209): over `BLUEPRINT.cap` of a type it is lost,
@@ -1394,7 +1438,7 @@ export function squadDrop(
     kind,
     upgrade: [weapon, ...bonus].some((w) => gain(w) > 0),
     noUpgrades,
-    farmFrom: noUpgrades ? upgradeFrom(game, n + 1, gain) : null,
+    farmFrom: noUpgrades ? upgradeFrom(game, local + 1, gain, mode) : null,
   };
 }
 

@@ -348,12 +348,36 @@ export const dropRarity = (base: WeaponId, rarity: Rarity): Rarity =>
     ? PISTOL_DROP_FLOOR
     : rarity;
 
-/** The rarity weights horde-only Horde `hordeNumber` drops by (`SQUAD_DROP`, ID-067). */
-export function squadDropWeights(hordeNumber: number): Record<Rarity, number> {
+/**
+ * `weights` with half of each rarity's share moved up one rarity, `steps` times over
+ * (ID-218: a difficulty mode's half-step shift; Relic keeps its own). With 0 steps, `weights`
+ * itself.
+ */
+export function shiftUp(weights: Record<Rarity, number>, steps: number): Record<Rarity, number> {
+  let out = weights;
+  for (let k = 0; k < steps; k++) {
+    const next = { rusty: 0, common: 0, military: 0, prototype: 0, relic: 0 };
+    RARITY_ORDER.forEach((r, i) => {
+      const up = RARITY_ORDER[i + 1];
+      const move = up ? out[r] / 2 : 0;
+      next[r] += out[r] - move;
+      if (up) next[up] += move;
+    });
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * The rarity weights horde-only Horde `hordeNumber` drops by (`SQUAD_DROP`, ID-067), shifted
+ * up `steps` half-steps (`shiftUp`, ID-218) for a difficulty mode: the band, before a first
+ * clear, replay or bonus moves it.
+ */
+export function squadDropWeights(hordeNumber: number, steps = 0): Record<Rarity, number> {
   if (!Number.isInteger(hordeNumber) || hordeNumber < 1) {
     throw new RangeError(`squadDropWeights: bad horde ${hordeNumber}`);
   }
-  return SQUAD_DROP.filter((b) => b.from <= hordeNumber).at(-1)!.rarity;
+  return shiftUp(SQUAD_DROP.filter((b) => b.from <= hordeNumber).at(-1)!.rarity, steps);
 }
 
 /** The rarities `weights` can roll, lowest first. */
@@ -364,8 +388,8 @@ const weighted = (weights: Record<Rarity, number>): Rarity[] =>
  * A first clear's rarity weights (ID-098): the horde's band, each rarity's share moved up
  * one rarity (Relic stays Relic).
  */
-export function firstClearWeights(hordeNumber: number): Record<Rarity, number> {
-  const band = squadDropWeights(hordeNumber);
+export function firstClearWeights(hordeNumber: number, steps = 0): Record<Rarity, number> {
+  const band = squadDropWeights(hordeNumber, steps);
   const out = { rusty: 0, common: 0, military: 0, prototype: 0, relic: 0 };
   RARITY_ORDER.forEach((r, i) => {
     out[RARITY_ORDER[Math.min(i + 1, RARITY_ORDER.length - 1)]!] += band[r];
@@ -377,8 +401,8 @@ export function firstClearWeights(hordeNumber: number): Record<Rarity, number> {
  * A bonus gun's rarity weights (ID-122): the horde's band, each rarity's share moved down
  * one rarity (Rusty stays Rusty), so the lower grades drop most.
  */
-export function bonusWeights(hordeNumber: number): Record<Rarity, number> {
-  const band = squadDropWeights(hordeNumber);
+export function bonusWeights(hordeNumber: number, steps = 0): Record<Rarity, number> {
+  const band = squadDropWeights(hordeNumber, steps);
   const out = { rusty: 0, common: 0, military: 0, prototype: 0, relic: 0 };
   RARITY_ORDER.forEach((r, i) => {
     out[RARITY_ORDER[Math.max(i - 1, 0)]!] += band[r];
@@ -391,8 +415,8 @@ export function bonusWeights(hordeNumber: number): Record<Rarity, number> {
  * the rest moved to the rarity below; then `FARM.badLuckStep` points a bad-luck count
  * moved up one band, each from the lowest rarity left with weight.
  */
-export function replayWeights(hordeNumber: number, badLuck = 0): Record<Rarity, number> {
-  const out = { ...squadDropWeights(hordeNumber) };
+export function replayWeights(hordeNumber: number, badLuck = 0, steps = 0): Record<Rarity, number> {
+  const out = { ...squadDropWeights(hordeNumber, steps) };
   const has = weighted(out);
   const top = has.at(-1)!;
   const below = RARITY_ORDER[RARITY_ORDER.indexOf(top) - 1];

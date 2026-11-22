@@ -129,6 +129,22 @@ import {
   type SquadDrop,
 } from '../core/hordeonly.ts';
 import { professionOf } from '../core/loadout.ts';
+import {
+  advance,
+  beatenIn,
+  effHorde,
+  localHorde,
+  localOf,
+  MODE_IDS,
+  MODE_UNLOCK_HORDE,
+  modeBefore,
+  MODES,
+  modeOf,
+  modeUnlocked,
+  unlockHint,
+  type Mode,
+  type ModeProgress,
+} from '../core/modes.ts';
 import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
@@ -346,7 +362,7 @@ export const bankText = (charge: number, cap: number = BANK_CAP): string =>
 
 export function statusText(s: HordeState): string {
   return [
-    bossHorde(s) ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
+    bossHorde(s) ? `Horde ${localOf(s)} (boss)` : `Horde ${localOf(s)}`,
     `Wave ${s.wave}/${s.waveCount}`,
     `Lv ${s.level} (${s.xp}/${xpToNext(s.level)})`,
     bankText(s.energy, s.bankCap),
@@ -368,7 +384,7 @@ export const enemiesLeft = (s: Pick<HordeState, 'enemies' | 'toSpawn'>): number 
 export function squadStatus(s: HordeState): string {
   const swaps = swapsText(s);
   return [
-    bossHorde(s) ? `Horde ${s.hordeNumber} (boss)` : `Horde ${s.hordeNumber}`,
+    bossHorde(s) ? `Horde ${localOf(s)} (boss)` : `Horde ${localOf(s)}`,
     ...(swaps ? [swaps] : []),
   ].join(' · ');
 }
@@ -841,6 +857,42 @@ export interface HordePicker {
   farm: number | null;
   /** Whether the title and chips follow the pick (the start screen's). */
   retitle: boolean;
+  /** The mode switch (ID-218), once Nightmare is unlocked; absent before. */
+  modes?: ModeChoice[];
+}
+
+/** One button of the mode switch (ID-218): a mode, and what it asks while locked. */
+export interface ModeChoice {
+  mode: Mode;
+  label: string;
+  /** Open to play. */
+  open: boolean;
+  /** The mode being played. */
+  current: boolean;
+  /** The tooltip: its best horde, or what unlocks it. */
+  title: string;
+  /** What unlocks it, for a locked mode ("Hold Horde 50 on Nightmare"); null when open. */
+  hint: string | null;
+}
+
+/**
+ * The mode switch (ID-218): Normal, Nightmare and Hell once Nightmare is unlocked, each
+ * locked one with what unlocks it; null before that.
+ */
+export function modeChoices(game: ModeProgress): ModeChoice[] | null {
+  if (!modeUnlocked(game, 'nightmare')) return null;
+  return MODE_IDS.map((mode) => {
+    const open = modeUnlocked(game, mode);
+    const best = beatenIn(game, mode);
+    return {
+      mode,
+      label: MODES[mode].name,
+      open,
+      current: mode === modeOf(game),
+      title: open ? `${MODES[mode].name} · best ${best}` : unlockHint(mode),
+      hint: open ? null : unlockHint(mode),
+    };
+  });
 }
 
 /**
@@ -857,28 +909,32 @@ export const PICKER_HORDES = 50;
  * listed horde is pickable.
  */
 export function hordePicker(
-  game: Pick<GameState, 'roster' | 'hordeNumber' | 'slots'>,
-  picked: number = game.hordeNumber,
+  game: Pick<GameState, 'roster' | 'hordeNumber' | 'mode' | 'modes' | 'slots'>,
+  picked: number = localHorde(game),
   retry: number | null = null,
   retitle = false,
 ): HordePicker {
   const squad = squadPower(game);
   const goal = goalChip(game);
   const options: HordeChoice[] = [];
-  const lowest = Math.max(1, game.hordeNumber - PICKER_HORDES + 1);
+  // The hordes are the mode's own (ID-218); the power and waves are those of their strength.
+  const mode = modeOf(game);
+  const top = localHorde(game);
+  const rec = (n: number): number => recommendedPower(effHorde(mode, n), mode);
+  const lowest = Math.max(1, top - PICKER_HORDES + 1);
   // The best place to farm (ID-098): the highest beaten horde the squad already holds.
   let farm: number | null = null;
-  if (powerBand(squad, recommendedPower(game.hordeNumber)) !== 'ok') {
-    for (let n = game.hordeNumber - 1; n >= lowest; n--) {
-      if (powerBand(squad, recommendedPower(n)) === 'ok') {
+  if (powerBand(squad, rec(top)) !== 'ok') {
+    for (let n = top - 1; n >= lowest; n--) {
+      if (powerBand(squad, rec(n)) === 'ok') {
         farm = n;
         break;
       }
     }
   }
-  for (let n = game.hordeNumber; n >= lowest; n--) {
-    const isNew = n === game.hordeNumber;
-    const power = powerLine(squad, recommendedPower(n));
+  for (let n = top; n >= lowest; n--) {
+    const isNew = n === top;
+    const power = powerLine(squad, rec(n));
     const boss = horrorAbility(n) !== null;
     options.push({
       horde: n,
@@ -907,14 +963,15 @@ export function hordePicker(
           ...(goal ? [goal.chip] : []),
           ...(boss ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
           ...(isNew ? [] : [{ text: 'Replay', tone: 'ok' as const }]),
-          { text: `${waveCount(n)} waves`, tone: 'ok' as const },
+          { text: `${waveCount(effHorde(mode, n))} waves`, tone: 'ok' as const },
           { text: `Squad ${squadOf(game).length}/${squadCap(game)}`, tone: 'ok' as const },
         ],
       },
     });
   }
-  const open = Number.isInteger(picked) && picked >= lowest && picked <= game.hordeNumber;
-  return { options, value: open ? picked : game.hordeNumber, farm, retitle };
+  const open = Number.isInteger(picked) && picked >= lowest && picked <= top;
+  const modes = modeChoices(game);
+  return { options, value: open ? picked : top, farm, retitle, ...(modes ? { modes } : {}) };
 }
 
 /**
@@ -1830,11 +1887,20 @@ export const JOIN_NO = '✕';
 
 /**
  * Endless on the start screen (ID-127), past the finale: the best horde reached and the next
- * one to hold. Null in the campaign: the radio is off this panel (ID-196).
+ * one to hold. Null in the campaign: the radio is off this panel (ID-196). On a higher mode
+ * (ID-218) the chip is always there, "Nightmare · best 12", the mode's own best horde.
  */
-export function goalChip(
-  game: Pick<GameState, 'hordeNumber'>,
-): { chip: Chip; note: string } | null {
+export function goalChip(game: ModeProgress): { chip: Chip; note: string | null } | null {
+  const mode = modeOf(game);
+  if (mode !== 'normal') {
+    const best = highestBeaten(game);
+    // Before the mode's first win there is no best yet: the chip names the mode alone.
+    if (best === 0) return { chip: { text: MODES[mode].name, tone: 'warn' }, note: null };
+    return {
+      chip: { text: `${MODES[mode].name} · best ${best}`, tone: 'warn' },
+      note: `Hold Horde ${best + 1} for a new ${MODES[mode].name} best.`,
+    };
+  }
   if (!isEndless(game)) return null;
   const best = highestBeaten(game);
   return {
@@ -1844,14 +1910,21 @@ export function goalChip(
 }
 
 /**
- * The campaign's next goal (ID-217), for the start screen and a win's result: the next boss
- * horde in `RADIO_HORDES` not yet beaten, its radio part and any card it unlocks, or the
- * finale. Worked out from the horde number, so a replay names the goal ahead, never the horde
- * replayed. Null in Endless, which keeps its own chip and line.
+ * The campaign's next goal (ID-217), for the start screen and a win's result: on Normal, the
+ * next boss horde in `RADIO_HORDES` not yet beaten, its radio part and any card it unlocks, or
+ * the finale. Past those (Endless) and on a higher mode, the next mode to unlock (ID-218):
+ * "Next: hold Horde 50 · unlocks Nightmare". Worked out from the horde number, so a replay
+ * names the goal ahead, never the horde replayed. Null once Hell is the only mode left to
+ * play, or when the next mode is already open.
  */
-export function nextGoalLine(game: Pick<GameState, 'hordeNumber'>): string | null {
-  const n = RADIO_HORDES.find((h) => h >= game.hordeNumber);
-  if (n === undefined) return null;
+export function nextGoalLine(game: ModeProgress): string | null {
+  const mode = modeOf(game);
+  const n = mode === 'normal' ? RADIO_HORDES.find((h) => h >= game.hordeNumber) : undefined;
+  if (n === undefined) {
+    const next = MODE_IDS.find((m) => modeBefore(m) === mode);
+    if (next === undefined || modeUnlocked(game, next)) return null;
+    return `Next: hold Horde ${MODE_UNLOCK_HORDE} · unlocks ${MODES[next].name}`;
+  }
   if (n === FINALE_HORDE) return `Next: Horde ${n} · call the evacuation`;
   const card = BOSS_UNLOCKS[n];
   const part = `radio part ${RADIO_HORDES.indexOf(n) + 1}/${RADIO_HORDES.length}`;
@@ -1862,7 +1935,7 @@ export function nextGoalLine(game: Pick<GameState, 'hordeNumber'>): string | nul
  * The horde-only screen before a horde (ID-066): who fights it, its start button, and the
  * horde picker (ID-098) with `picked` selected (the next new horde by default).
  */
-export function squadStart(game: GameState, picked: number = game.hordeNumber): ResultScreen {
+export function squadStart(game: GameState, picked: number = localHorde(game)): ResultScreen {
   const squad = squadOf(game);
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
@@ -1879,8 +1952,8 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
         .join(', ')}`,
       ...(bench ? [bench] : []),
       ...asking.map(askLine),
-      `${waveCount(now.horde)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
-      ...(goal ? [goal.note] : []),
+      `${waveCount(effHorde(modeOf(game), now.horde))} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
+      ...(goal?.note ? [goal.note] : []),
       ...(next ? [next] : []),
     ],
     button: now.button,
@@ -1893,7 +1966,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       chips: now.start.chips,
       callout: null,
       // One line under the squad: the rule, and in Endless the horde to hold.
-      note: goal ? `${goal.note} ${SQUAD_LOSS_RULE}` : SQUAD_LOSS_RULE,
+      note: goal?.note ? `${goal.note} ${SQUAD_LOSS_RULE}` : SQUAD_LOSS_RULE,
       ...(next ? { goal: next } : {}),
       drop: null,
       cards: squad.map((d) => plainCard(d)),
@@ -2072,15 +2145,12 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   const moved = auto ? movesText(auto) : null;
   const autoNote = moved ? `Auto squad: ${moved}.` : null;
   const won = s.outcome === 'won';
-  const replay = isReplay(game, s.hordeNumber);
+  const horde = localOf(s);
+  const replay = isReplay(game, horde);
   const first = won && !replay;
   // The picker as it stands once a first clear has moved on to the next horde.
-  const after = first ? { ...game, hordeNumber: game.hordeNumber + 1 } : game;
-  const picker = hordePicker(
-    after,
-    first ? after.hordeNumber : s.hordeNumber,
-    won ? null : s.hordeNumber,
-  );
+  const after = first ? advance(game, s.mode ?? 'normal') : game;
+  const picker = hordePicker(after, first ? localHorde(after) : horde, won ? null : horde);
   const goOn = picker.options.find((o) => o.horde === picker.value)!.button;
   // A bench survivor who swapped in (ID-148) gained XP too: the whole camp is looked up.
   const camp = campOf(game);
@@ -2095,7 +2165,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (won) {
     // A win shows only who levelled up in it (ID-134): the rest change guns from the Roster.
     const ups = xpCards().filter((c) => c.levelUp);
-    const reward = bossReward(game, s.hordeNumber);
+    const reward = bossReward(game, horde);
     const ending = reward?.finale === true;
     const rewardNote = reward ? bossRewardNote(reward) : null;
     // Slots still open once any newcomer has taken one (ID-150), with someone fit on the
@@ -2116,14 +2186,14 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       noJoin ? noJoinText(noJoin, size) : null,
     ].filter((t) => t !== null);
     const xpChip = xpChipText(gains);
-    // The goal ahead once this win has counted (ID-217); none on the ending, Endless after it.
-    const goalLine = nextGoalLine(after);
+    // The goal ahead once this win has counted (ID-217); none on the ending.
+    const goalLine = ending ? null : nextGoalLine(after);
     return {
       title: ending
         ? EVACUATION_TITLE
         : replay
-          ? `Horde ${s.hordeNumber} - You hold the line (replay)`
-          : `Horde ${s.hordeNumber} - You hold the line`,
+          ? `Horde ${horde} - You hold the line (replay)`
+          : `Horde ${horde} - You hold the line`,
       lines: [
         clearedLine(s),
         ...gains.map(squadXpLine),
@@ -2144,7 +2214,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         kind: 'won',
         chips: [
           // The ending names the horde its title doesn't (ID-127).
-          ...(ending ? [{ text: `Horde ${s.hordeNumber} held`, tone: 'ok' as const }] : []),
+          ...(ending ? [{ text: `Horde ${horde} held`, tone: 'ok' as const }] : []),
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
           { text: scrapChipText(scrap), tone: 'ok', title: scrapLine(scrap) },
           ...(xpChip ? [{ text: xpChip, tone: 'ok' as const }] : []),
@@ -2202,9 +2272,9 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   const bossLost = lostBossLines(s);
   const xp = gains[0]?.xp ?? 0;
   // One line (ID-196), so the panel's body shows it whole under two rows of squad.
-  const again = `Retry Horde ${s.hordeNumber}, or farm an easier horde: the squad and the wall are back at full strength`;
+  const again = `Retry Horde ${horde}, or farm an easier horde: the squad and the wall are back at full strength`;
   return {
-    title: `Horde ${s.hordeNumber} - Camp has fallen`,
+    title: `Horde ${horde} - Camp has fallen`,
     lines: [
       `${where} · nobody left standing`,
       ...bossLost,
@@ -2297,6 +2367,8 @@ export function createHud(
   showSquad(ids: ReadonlySet<string>): void;
   /** Where a horde picked from the picker goes (ID-098); the app sets it once. */
   onHordePick(handler: (horde: number) => void): void;
+  /** Where a mode picked on the mode switch goes (ID-218); the app sets it once. */
+  onModePick(handler: (mode: Mode) => void): void;
   /** The picker redrawn (ID-098), its bands read off the squad as it stands now. */
   showPicker(picker: HordePicker): void;
   /** Where a skill toggled in the skill pick goes (ID-100); the app sets it once. */
@@ -2393,9 +2465,10 @@ export function createHud(
     powerRow.dataset.band = l.band;
     fillPowerMeter(powerMeter, l);
   };
-  // One row per boss on the field (ID-099): never more than BOSSES.max at once.
+  // One row per boss on the field (ID-099): never more than BOSSES.max at once, one more in
+  // Hell (ID-218).
   const boss = el('div', 'hud-boss');
-  const bossRows = Array.from({ length: BOSSES.max }, (_, i) => {
+  const bossRows = Array.from({ length: BOSSES.max + MODES.hell.extraBoss }, (_, i) => {
     const row = el('div', 'hud-boss-row');
     // Name, skill tag and HP in their own spans, so a tag never pushes the HP out.
     const label = el('div', 'hud-boss-label');
@@ -2603,6 +2676,7 @@ export function createHud(
   startRow.append(skillBlock, back);
   foot.append(pickBlock, startRow);
   let onPickHorde: (horde: number) => void = () => {};
+  let onPickMode: (mode: Mode) => void = () => {};
   result.append(resultHead, resultBody, foot);
   const toast = el('div', 'hud-toast');
   toast.setAttribute('role', 'status');
@@ -3091,6 +3165,33 @@ export function createHud(
   }
 
   /**
+   * The mode switch (ID-218): a button per mode in a group, the mode in play pressed and the
+   * locked ones disabled, each saying what opens it; a press goes to `onPickMode`.
+   */
+  function modeSwitch(choices: readonly ModeChoice[]): HTMLElement {
+    const row = el('div', 'hud-mode-row');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'Difficulty');
+    for (const c of choices) {
+      const button = el('button', 'hud-mode');
+      button.type = 'button';
+      button.dataset.mode = c.mode;
+      button.setAttribute('aria-pressed', String(c.current));
+      button.disabled = !c.open;
+      button.title = c.title;
+      button.append(el('span', 'hud-mode-name', c.label));
+      // A locked mode says what opens it under its name, so the switch stays one row.
+      if (c.hint !== null) button.append(el('span', 'hud-mode-hint', c.hint));
+      button.addEventListener('click', () => {
+        if (result.hidden || c.current) return;
+        onPickMode(c.mode);
+      });
+      row.append(button);
+    }
+    return row;
+  }
+
+  /**
    * The horde picker (ID-098) beside the button: a select, then Squad Power against that
    * horde's Recommended Power. A pick relabels the button (and, on the start screen, the
    * title and chips) and goes to `onPickHorde`; it never blocks a start.
@@ -3125,6 +3226,9 @@ export function createHud(
     const hurtBand = el('span', 'hud-horde-band');
     hurt.append(`${INJURY_LEAD} `, hurtBand);
     const hint = el('p', 'hud-horde-hint');
+    // The mode switch (ID-218), once Nightmare is open: one button a mode, the locked ones
+    // greyed with what unlocks them under the row.
+    const switcher = p.modes ? modeSwitch(p.modes) : null;
     const choice = (): HordeChoice => p.options.find((o) => String(o.horde) === select.value)!;
     const sync = (): void => {
       const o = choice();
@@ -3155,7 +3259,7 @@ export function createHud(
     // and what a win is likely to cost on one row, and where to farm instead under them.
     const nums = el('div', 'hud-horde-ready');
     nums.append(line, hurt);
-    pickBlock.replaceChildren(label, select, meter, nums, hint);
+    pickBlock.replaceChildren(...(switcher ? [switcher] : []), label, select, meter, nums, hint);
     if (had) select.focus();
   }
 
@@ -3595,12 +3699,12 @@ export function createHud(
       if (squad) {
         const status = squadStatus(state);
         if (corner.title !== status) corner.title = status;
-        const num = String(state.hordeNumber);
+        const num = String(localOf(state));
         if (badgeNum.textContent !== num) badgeNum.textContent = num;
         badge.classList.toggle('hud-badge-boss-on', bossHorde(state));
         badge.setAttribute(
           'aria-label',
-          `Horde ${state.hordeNumber}${bossHorde(state) ? ', boss horde' : ''}`,
+          `Horde ${localOf(state)}${bossHorde(state) ? ', boss horde' : ''}`,
         );
         // A swarm wave reads "Swarm" in red, in words too so it's never colour alone (ID-121).
         const swarmOn = swarmMarker(state);
@@ -3638,7 +3742,11 @@ export function createHud(
         const b = bars[i];
         r.row.hidden = !b;
         if (!b) return;
-        if (r.name.textContent !== b.name) r.name.textContent = b.name;
+        if (r.name.textContent !== b.name) {
+          r.name.textContent = b.name;
+          // Three or four skills (ID-218) may not fit a narrow bar: the tooltip names them all.
+          r.name.title = b.name;
+        }
         if (r.cue.textContent !== (b.cue ?? '')) r.cue.textContent = b.cue ?? '';
         r.cue.hidden = b.cue === null;
         r.cue.classList.toggle('hud-boss-cue-winding', b.winding);
@@ -3805,6 +3913,9 @@ export function createHud(
     },
     onHordePick(handler) {
       onPickHorde = handler;
+    },
+    onModePick(handler) {
+      onPickMode = handler;
     },
     showPicker(next) {
       if (!result.hidden) drawPicker(next);
