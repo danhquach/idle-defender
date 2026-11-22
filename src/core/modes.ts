@@ -49,7 +49,7 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
   },
   nightmare: {
     name: 'Nightmare',
-    offset: 40,
+    offset: 50,
     scrap: 1.5,
     rarity: 1,
     skills: 3,

@@ -122,6 +122,9 @@ describe('a mode’s screens (ID-218)', () => {
     const first = p.options.at(-1)!;
     expect(first.power.rec).toBe(recommendedPower(effHorde('nightmare', 1), 'nightmare'));
     expect(first.power.rec).toBeGreaterThan(recommendedPower(1));
+    // ID-223: Nightmare 1 is as strong as Normal 51, so it asks at least Normal 50's power.
+    expect(first.power.rec).toBe(recommendedPower(51, 'nightmare'));
+    expect(first.power.rec).toBeGreaterThanOrEqual(recommendedPower(50));
     // The boss horde of the mode is its own 10th.
     expect(hordePicker(nm(10)).options[0]!.label).toContain('Boss');
     expect(hordePicker(nm(9)).options[0]!.label).not.toContain('Boss');

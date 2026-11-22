@@ -1,51 +1,83 @@
-// Balance: difficulty modes (ID-218). A squad that just holds Normal Horde 50 wins Nightmare
-// Hordes 1–10 on most seeds at the first try and is stopped before Nightmare Horde 30 on
-// most; and no mode has a wall where a squad well above the expected power loses repeatedly.
-// The scripted player gears up between fights (`gearUp`) and stops at its first lost fight.
+// Balance: difficulty modes (ID-218, ID-223). Nightmare starts where Normal ends: a squad
+// that just holds Normal Horde 50 wins Nightmare Horde 1 at the first try on some seeds but
+// not all; a squad at twice Normal Horde 50's Recommended Power is stopped by Nightmare
+// Horde 20 on most; and no mode has a wall where a squad well above the expected power loses
+// repeatedly. The 2× run is a static squad (no `gearUp` between fights; it stops at its first
+// lost fight), as in ID-223's own measurement: the squad's power is what is under test, and
+// gearing up on Nightmare's drops (effective levels 51–70, rarity shifted up) lifts it past 2×
+// (geared, it was stopped by Horde 20 on only 4 of 20 seeds, accepted: a strong squad winning
+// is fine; the mode's start is held by the Horde 1 check).
 import { beforeAll, describe, expect, it } from 'vitest';
+import type { GameState } from '../game.ts';
 import { finishSquadHorde } from '../hordeonly.ts';
 import { localHorde, MODES } from '../modes.ts';
-import { gearUp, playSquadHorde } from '../sim.ts';
+import { playSquadHorde } from '../sim.ts';
+import { recommendedPower, squadPower } from '../squadpower.ts';
 import { cacheFor } from './cache.ts';
 import { holdLevel, inMode, SEEDS, squad, squadAbove, wins } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
-/** Where a seed's run through Nightmare ends: the horde it lost at first try, or null through 30. */
-function runNightmare(level: number, seed: number): number | null {
-  let game = inMode(squad(51, level), 'nightmare');
-  for (let n = 1; n <= 30; n++) {
+/** The expected squad, in Nightmare from Horde 1, at the gun level `level`. */
+const nightmare = (level: number): GameState => inMode(squad(51, level), 'nightmare');
+
+/** The lowest gun level whose Nightmare squad has `share` of Normal Horde 50's Recommended Power. */
+function levelOver(share: number): number {
+  const target = recommendedPower(50) * share;
+  for (let level = 1; level <= 400; level++) {
+    if (squadPower(nightmare(level)) >= target) return level;
+  }
+  throw new Error(`no squad reaches ${share} of Normal 50`);
+}
+
+/**
+ * Where a static squad's run through Nightmare ends (no gear-up): the horde it lost at first
+ * try, or null through `last`.
+ */
+function runNightmare(level: number, seed: number, last: number): number | null {
+  let game = nightmare(level);
+  for (let n = 1; n <= last; n++) {
     const horde = playSquadHorde(game, seed * 1000 + n, undefined, undefined, n);
     if (horde.outcome !== 'won') return n;
-    game = gearUp(finishSquadHorde(game, horde));
+    game = finishSquadHorde(game, horde);
     if (localHorde(game) !== n + 1) throw new Error(`Nightmare ${n} did not count`);
   }
   return null;
 }
 
-describe('difficulty modes (ID-218)', () => {
-  let level = 0;
+describe('difficulty modes (ID-218, ID-223)', () => {
+  let hold = 0;
+  let strong = 0;
+  const firsts: boolean[] = [];
   const ends: (number | null)[] = [];
   beforeAll(() => {
-    level = keep('hold level', holdLevel);
+    hold = keep('hold level', holdLevel);
+    strong = keep('2x level', () => levelOver(2));
     for (let i = 1; i <= SEEDS; i++) {
-      ends.push(keep(`nightmare ${level} ${i}`, () => runNightmare(level, i)));
+      firsts.push(
+        keep(
+          `nightmare 1 ${hold} ${i}`,
+          () =>
+            playSquadHorde(nightmare(hold), i * 1000 + 1, undefined, undefined, 1).outcome ===
+            'won',
+        ),
+      );
+      ends.push(keep(`nightmare 2x nogear ${strong} ${i}`, () => runNightmare(strong, i, 20)));
     }
   }, 3_600_000);
 
-  it('a squad that holds Normal Horde 50 wins Nightmare Hordes 1–10 at the first try on 60% of seeds', () => {
-    const cleared = ends.filter((end) => end === null || end > 10).length;
-    expect(
-      cleared / ends.length,
-      `gun level ${level}, ended at ${JSON.stringify(ends)}`,
-    ).toBeGreaterThanOrEqual(0.6);
+  it('a squad that just holds Normal Horde 50 wins Nightmare Horde 1 at the first try on 30–70% of seeds', () => {
+    const share = firsts.filter(Boolean).length / firsts.length;
+    const msg = `gun level ${hold}, won ${JSON.stringify(firsts)}`;
+    expect(share, msg).toBeGreaterThanOrEqual(0.3);
+    expect(share, msg).toBeLessThanOrEqual(0.7);
   }, 3_600_000);
 
-  it('and is stopped by Nightmare Horde 30 on most seeds', () => {
+  it('a squad at 2× Normal Horde 50’s Recommended Power is stopped by Nightmare Horde 20 on most seeds', () => {
     const stopped = ends.filter((end) => end !== null).length;
     expect(
       stopped / ends.length,
-      `gun level ${level}, ended at ${JSON.stringify(ends)}`,
+      `gun level ${strong}, ended at ${JSON.stringify(ends)}`,
     ).toBeGreaterThan(0.5);
   }, 3_600_000);
 

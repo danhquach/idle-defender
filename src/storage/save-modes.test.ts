@@ -239,14 +239,14 @@ describe('save: difficulty modes (ID-218)', () => {
     const normal = camp({ hordeNumber: 60 });
     expect(lv(59, normal)).not.toBeNull();
     expect(lv(60, normal)).toBeNull();
-    // Nightmare 31 beaten 30: effective 70.
+    // Nightmare 31 beaten 30: effective 80.
     const nm = camp({ hordeNumber: 60, modes: { nightmare: 31 } });
-    expect(lv(70, nm)).not.toBeNull();
-    expect(lv(71, nm)).toBeNull();
-    // Hell 20 beaten 19: effective 99.
-    const hell = camp({ hordeNumber: 60, modes: { nightmare: 51, hell: 20 } });
-    expect(lv(99, hell)).not.toBeNull();
-    expect(lv(100, hell)).toBeNull();
+    expect(lv(80, nm)).not.toBeNull();
+    expect(lv(81, nm)).toBeNull();
+    // Hell 30 beaten 29: effective 109 (over Nightmare 51 beaten 50: effective 100).
+    const hell = camp({ hordeNumber: 60, modes: { nightmare: 51, hell: 30 } });
+    expect(lv(109, hell)).not.toBeNull();
+    expect(lv(110, hell)).toBeNull();
     // Well past any bound.
     expect(lv(1e9, hell)).toBeNull();
     expect(lv(100_000_000, nm)).toBeNull();
