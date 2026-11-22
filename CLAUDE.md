@@ -49,6 +49,7 @@ Before pushing any branch, audit `main..HEAD` plus the PR description against th
 # Project docs
 
 - Design: `docs/design.md` (the source of truth for mechanics and numbers).
+- Code map: `docs/architecture.md` (which file owns what, the runtime flow, "to change X, open Y"). Read it before searching the code; update it when a module is added, removed or changes job.
 - Tickets: GitHub issues on this repo (`gh issue view <n>`).
 - Stack: Vite + TypeScript. Plain DOM for menus; the base view renders to a canvas (library chosen at planning, design §16). Unit tests Vitest (`src/core/**`).
 - Layering: `src/core/**` is the pure simulation (`tick(state, dt)`): no DOM, no storage, no UI imports (enforced by ESLint). The UI imports core, never the reverse.
