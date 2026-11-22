@@ -31,7 +31,7 @@ import {
   withoutBlueprint,
   blueprintCount,
 } from './craft.ts';
-import { UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
+import { isModeCard, UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
 import {
   COLUMNS,
   COMBINE_COUNT,
@@ -63,6 +63,7 @@ import {
   START_PERK,
   WEAPONS,
   BOSS_UNLOCKS,
+  MODE_UNLOCKS,
   FINALE_HORDE,
   INJURY_REST,
   MID_SWAP,
@@ -70,6 +71,7 @@ import {
   RADIO_HORDES,
   SQUAD_JOIN,
   SURVIVOR_COMBINE,
+  type ModeCard,
   type ResearchCard,
   type Rarity,
   type SkillId,
@@ -100,12 +102,14 @@ import {
   beatenIn,
   effHorde,
   FIRST_UID,
+  HIGHER_MODES,
   localHorde,
   localOf,
   MODES,
   modeBosses,
   modeOf,
   topBeaten,
+  type HigherMode,
   type Mode,
   type ModeProgress,
 } from './modes.ts';
@@ -127,8 +131,9 @@ export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviou
  * The cards a horde-only fight offers: stat, behaviour and barrier cards. Power cards (no
  * turrets) are out; recruit cards never come, as the whole squad starts on the field.
  */
-export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter((id) =>
-  SQUAD_CARD_CATEGORIES.includes(UPGRADES[id].category),
+export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter(
+  // The mode cards (ID-222) join a fight's pool only through `modeCards`.
+  (id) => SQUAD_CARD_CATEGORIES.includes(UPGRADES[id].category) && !isModeCard(id),
 );
 
 /**
@@ -669,7 +674,7 @@ export function startSquadHorde(
     research: squadUnlocks(game),
     cashRate: 0,
     startCash: 0,
-    cards: SQUAD_CARDS,
+    cards: [...SQUAD_CARDS, ...modeCards(game)],
     hpScale: squadHpScale(eff) * MODES[mode].hpScale,
     xpRate: SQUAD_XP_RATE,
     line: line.slots,
@@ -959,6 +964,24 @@ export const squadUnlocks = (game: Pick<GameState, 'hordeNumber'>): ResearchCard
     .filter(([n]) => Number(n) <= game.hordeNumber - 1)
     .map(([, card]) => card);
 
+/** The horde numbers of a mode's boss hordes that unlock a mode card (ID-222). */
+const MODE_UNLOCK_HORDES = [10, 20, 30] as const;
+
+/**
+ * The mode cards the fight being played starts with in its card pool (ID-222): every card of
+ * a higher mode at or below the one being played whose boss horde that mode has beaten, so a
+ * Nightmare card works in Nightmare and Hell and a Hell card only in Hell; none on Normal.
+ * Derived from the saved mode progress, so nothing new is stored, and a second clear changes
+ * nothing.
+ */
+export function modeCards(game: ModeProgress): ModeCard[] {
+  const played = HIGHER_MODES.indexOf(modeOf(game) as HigherMode);
+  if (played < 0) return [];
+  return HIGHER_MODES.slice(0, played + 1).flatMap((m) =>
+    MODE_UNLOCK_HORDES.filter((n) => beatenIn(game, m) >= n).map((n) => MODE_UNLOCKS[m][n]),
+  );
+}
+
 /**
  * What a win of horde `n` brings toward the goal (ID-127), with `game` as it stood before
  * the win: the radio part (1-based) and any card unlocked on a boss horde's first clear, and
@@ -967,9 +990,13 @@ export const squadUnlocks = (game: Pick<GameState, 'hordeNumber'>): ResearchCard
 export function bossReward(
   game: ModeProgress,
   n: number,
-): { part: number; unlock: ResearchCard | null; finale: boolean } | null {
-  // Radio parts and the cards are Normal's (ID-218).
-  if (modeOf(game) !== 'normal') return null;
+): { part: number; unlock: ResearchCard | ModeCard | null; finale: boolean } | null {
+  const mode = modeOf(game);
+  // A higher mode (ID-222): no radio part (`part` 0), a mode card on the first clear of 10, 20, 30.
+  if (mode !== 'normal') {
+    const unlock = isReplay(game, n) ? undefined : MODE_UNLOCKS[mode][n as 10 | 20 | 30];
+    return unlock ? { part: 0, unlock, finale: false } : null;
+  }
   const i = RADIO_HORDES.indexOf(n);
   if (i < 0 || isReplay(game, n)) return null;
   return { part: i + 1, unlock: BOSS_UNLOCKS[n] ?? null, finale: n === FINALE_HORDE };

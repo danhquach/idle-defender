@@ -282,6 +282,23 @@ const OWN: Record<Exclude<Cue, Reused>, Recipe> = {
     length: 1.1,
     play: (v) => (tone(v, 'sawtooth', 55, 110, 0, 1, 0.3), hiss(v, 'lowpass', 300, 0, 0.9, 0.3)),
   },
+  // Hell's skills going off (ID-222), synthesized like the rest: Enrage the growl an octave up
+  // and short, Shield a rising sine over a high hiss, Poison a low hiss and a falling tone.
+  'boss-enrage': {
+    length: 0.6,
+    play: (v) => (
+      tone(v, 'sawtooth', 110, 220, 0, 0.5, 0.3),
+      hiss(v, 'lowpass', 500, 0, 0.4, 0.25)
+    ),
+  },
+  'boss-shield': {
+    length: 0.8,
+    play: (v) => (tone(v, 'sine', 300, 900, 0, 0.7, 0.22), hiss(v, 'highpass', 4000, 0, 0.6, 0.12)),
+  },
+  'boss-poison': {
+    length: 1,
+    play: (v) => (hiss(v, 'lowpass', 900, 0, 0.9, 0.3), tone(v, 'triangle', 420, 90, 0, 0.8, 0.22)),
+  },
   // A swarm wave starting (ID-099, ID-121): a siren, three rising whoops over a low drone,
   // louder and longer than the two blares it replaced.
   swarm: {

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { firstClearWeights, shiftUp } from './armoury.ts';
 import { rollWeapon } from './armoury.ts';
-import { BOSSES, HORROR, RARITY_ORDER, SQUAD_SCRAP, type BossSkill } from './data.ts';
+import { BOSSES, HELL_SKILLS, HORROR, RARITY_ORDER, SQUAD_SCRAP, type BossSkill } from './data.ts';
 import { newGame, type GameState } from './game.ts';
 import {
   finishSquadHorde,
@@ -131,7 +131,7 @@ describe('boss counts and skills (ID-218)', () => {
       ['hell', 10],
     ] as const) {
       const all = skillsOf(mode, n);
-      for (const s of all) expect(s).toHaveLength(MODES[mode].skills);
+      for (const s of all) expect(s).toHaveLength(MODES[mode].skills + MODES[mode].newSkills);
       const flat = all.flat();
       expect(new Set(flat).size, `${mode} ${n}`).toBe(flat.length);
     }
@@ -165,6 +165,41 @@ describe('boss counts and skills (ID-218)', () => {
         expect(Math.max(...used.values())).toBeLessThanOrEqual(trios.length >= 3 ? 2 : 1);
       }
     }
+  });
+
+  it('every Hell boss has exactly one Hell skill next to its 3 others; Normal and Nightmare have none', () => {
+    const isHell = (k: BossSkill): boolean => (HELL_SKILLS as readonly BossSkill[]).includes(k);
+    for (let n = HORROR.every; n <= 200; n += HORROR.every) {
+      for (const b of modeBosses('hell', n)) {
+        expect(b.skills, `hell ${n}`).toHaveLength(4);
+        expect(b.skills.filter(isHell), `hell ${n}`).toHaveLength(1);
+        expect(new Set(b.skills).size).toBe(4);
+      }
+      for (const mode of ['normal', 'nightmare'] as const) {
+        for (const b of modeBosses(mode, n)) expect(b.skills.some(isHell)).toBe(false);
+      }
+    }
+  });
+
+  it('with 3 Hell bosses or fewer no two share a new skill; with 4 exactly one does', () => {
+    const newOf = (n: number): BossSkill[] =>
+      modeBosses('hell', n).map((b) =>
+        b.skills.find((k) => (HELL_SKILLS as readonly BossSkill[]).includes(k))!,
+      );
+    for (let n = HORROR.every; n <= 200; n += HORROR.every) {
+      const skills = newOf(n);
+      const distinct = new Set(skills).size;
+      if (skills.length <= 3) expect(distinct, `hell ${n}`).toBe(skills.length);
+      else {
+        expect(skills).toHaveLength(4);
+        expect(distinct, `hell ${n}`).toBe(3);
+        expect(skills[0]).toBe(skills[3]);
+      }
+    }
+    // Hell 10, 20 and 30 are the 2, 3 and 4 boss hordes.
+    expect([10, 20, 30].map((n) => newOf(n).length)).toEqual([2, 3, 4]);
+    // The new skill rotates by horde, so a horde does not always meet the same one first.
+    expect(new Set([10, 20, 30].map((n) => newOf(n)[0])).size).toBeGreaterThan(1);
   });
 
   it('a horde that is no boss horde keeps its effective number’s mini-bosses', () => {
@@ -274,6 +309,16 @@ describe('a fight on a mode (ID-218)', () => {
     expect(isEndless({ ...g, modes: { nightmare: 30 } })).toBe(false);
     expect(bossReward(g, 10)).toBeNull();
     expect(bossReward(squadAt(51, 1), 60)).toBeNull();
+    // A higher mode pays no radio part: its unlock is a mode card (ID-222), on a first clear.
+    const first = { ...g, modes: { nightmare: 10 } };
+    expect(bossReward(first, 10)).toEqual({ part: 0, unlock: 'suppressing-fire', finale: false });
+    expect(bossReward({ ...first, modes: { nightmare: 30 } }, 30)).toEqual({
+      part: 0,
+      unlock: 'momentum',
+      finale: false,
+    });
+    expect(bossReward({ ...first, modes: { nightmare: 11 } }, 10)).toBeNull();
+    expect(bossReward({ ...first, modes: { nightmare: 5 } }, 5)).toBeNull();
   });
 
   it('the result screen reads the same mode: first clear unlocks nothing it should not', () => {

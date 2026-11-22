@@ -2,7 +2,7 @@
 // holds Horde 50. Each mode keeps its own horde (1 to 30, then Endless); the fight is as
 // strong as Normal's Horde n + `offset` (the "effective horde"), and pays and drops more.
 // Pure: the squad, guns, stash and Scrap are the game's, shared by every mode.
-import { BOSSES, HORROR, type BossSkill, type HigherMode } from './data.ts';
+import { BOSSES, HELL_SKILLS, HORROR, type BossSkill, type HigherMode } from './data.ts';
 import type { GameState } from './game.ts';
 import { hordeBosses, type BossSpec } from './waves.ts';
 
@@ -23,26 +23,52 @@ export interface ModeRules {
   scrap: number;
   /** Half-steps the gun drop's rarity band shifts up (`shiftUp`). */
   rarity: number;
-  /** Skills each boss has. */
+  /** Skills each boss has from Normal's six (Normal's two, a higher mode's three). */
   skills: number;
+  /** New Hell skills (ID-222) each boss has on top of `skills`: 0 or 1. */
+  newSkills: number;
   /** Bosses a boss horde brings above Normal's count (up to `BOSSES.max` + this). */
   extraBoss: number;
   /** A tuning factor on enemy HP, on top of the effective horde's. */
   hpScale: number;
+  /** A tuning factor on a boss horde's Recommended Power (ID-222). */
+  recBoss: number;
 }
 
 export const MODES: Readonly<Record<Mode, ModeRules>> = {
-  normal: { name: 'Normal', offset: 0, scrap: 1, rarity: 0, skills: 2, extraBoss: 0, hpScale: 1 },
+  normal: {
+    name: 'Normal',
+    offset: 0,
+    scrap: 1,
+    rarity: 0,
+    skills: 2,
+    newSkills: 0,
+    extraBoss: 0,
+    hpScale: 1,
+    recBoss: 1,
+  },
   nightmare: {
     name: 'Nightmare',
     offset: 40,
     scrap: 1.5,
     rarity: 1,
     skills: 3,
+    newSkills: 0,
     extraBoss: 0,
     hpScale: 1.12,
+    recBoss: 1,
   },
-  hell: { name: 'Hell', offset: 80, scrap: 2, rarity: 2, skills: 3, extraBoss: 1, hpScale: 1 },
+  hell: {
+    name: 'Hell',
+    offset: 80,
+    scrap: 2,
+    rarity: 2,
+    skills: 3,
+    newSkills: 1,
+    extraBoss: 1,
+    hpScale: 1,
+    recBoss: 1.2,
+  },
 };
 
 /**
@@ -162,7 +188,8 @@ export function bossTrios(
  * The bosses and mini-boss horde `local` of `mode` brings (ID-218): Normal's as ever. In a
  * higher mode, a boss horde's count follows the mode's own horde (`local`, plus the mode's
  * `extraBoss`, up to `BOSSES.max` + that) and their strength the effective horde's, each with
- * `bossTrios`' three skills; any other horde keeps the mini-bosses of its effective number.
+ * `bossTrios`' three skills (and in Hell one of `HELL_SKILLS` on top, ID-222, rotating by
+ * horde); any other horde keeps the mini-bosses of its effective number.
  */
 export function modeBosses(mode: Mode, local: number): BossSpec[] {
   const eff = effHorde(mode, local);
@@ -171,5 +198,10 @@ export function modeBosses(mode: Mode, local: number): BossSpec[] {
   if (mode === 'normal' || !boss) return base;
   const count = Math.min(local / HORROR.every, BOSSES.max) + MODES[mode].extraBoss;
   const set = BOSSES.sets[(eff / HORROR.every - 1) % BOSSES.sets.length]!;
-  return bossTrios(set, count).map((skills) => ({ ...boss, skills }));
+  const hell = MODES[mode].newSkills > 0;
+  return bossTrios(set, count).map((trio, k) => ({
+    ...boss,
+    // Hell (ID-222): boss k adds one new skill, so with 3 bosses or fewer none repeats.
+    skills: hell ? [...trio, HELL_SKILLS[(k + eff / HORROR.every) % HELL_SKILLS.length]!] : trio,
+  }));
 }

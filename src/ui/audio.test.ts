@@ -547,6 +547,19 @@ describe('Sound engine (ID-080)', () => {
   });
 });
 
+describe('Hell’s boss skill cues (ID-222)', () => {
+  it('each is synthesized, short, and makes sound', async () => {
+    const { e, fake } = engine();
+    e.unlock();
+    await settle();
+    for (const cue of ['boss-enrage', 'boss-shield', 'boss-poison'] as const) {
+      const started = fake.started.length;
+      e.play(cue);
+      expect(fake.started.length, cue).toBeGreaterThan(started);
+    }
+  });
+});
+
 describe('the swarm alarm (ID-121)', () => {
   it('is a siren: louder and longer than the two blares it replaced', async () => {
     const { e, fake } = engine();

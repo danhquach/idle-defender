@@ -3489,22 +3489,25 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   and blueprints are shared by every mode.
 - **Own hordes.** Each mode keeps its own next horde (from Horde 1) and its own
   best: the start screen's chip reads "Nightmare · best N". Each runs Horde 1 to
-  30, then Endless. Radio parts, the boss cards and the evacuation ending are
-  Normal's only.
+  30, then Endless. Radio parts, Normal's boss cards and the evacuation ending are
+  Normal's only; a higher mode's boss hordes unlock mode cards instead (below).
 - **Strength: the effective horde.** A mode's Horde n fights as Normal's Horde n
   plus an offset: Normal 0, Nightmare 40, Hell 80 (a multiple of 10, so boss
   hordes and the boss skill cycle keep their places). Enemy count and HP,
   waves, pace, swarms and the mini-bosses follow that number; so do the gun
   level a drop comes at, XP and Scrap. A per-mode HP factor on top is the
-  tuning knob (`MODES.hpScale`: Nightmare 1.12, Hell 1 until Hell is tuned).
+  tuning knob (`MODES.hpScale`: Nightmare 1.12, Hell 1),
+  and `MODES.recBoss` on a boss horde's Recommended Power (Normal and Nightmare 1,
+  Hell 1.2: at 1.1 the four-boss Hell 30 beat a squad at 130% of it on 2 of 5 seeds, ID-222).
 - **Bosses.** A boss horde (every 10th of the mode's own) brings as many bosses
   as Normal's rule gives its own number (Horde 10: 1, 20: 2, 30 and on: 3),
   Hell one more (up to `BOSSES.max` + 1 = 4); each has the HP of its effective
-  horde and **3** skills. With 1 or 2 bosses no skill repeats in the horde
+  horde and **3** skills (Hell: a **fourth**, a new Hell skill, below). With 1 or 2
+  bosses no skill repeats in the horde
   (each keeps its pair of the set and takes one of the set's unused third
   pair). With 3 or more every skill is used, none more than twice, and no two
   bosses share the same three. Fixed by the horde alone, so a replay meets the
-  same bosses.
+  same bosses. Mini-bosses get no Hell skill.
 - **Rewards.** Scrap × 1.5 (Nightmare) and × 2 (Hell). The gun drop's rarity
   band is shifted before a first clear, replay or bonus moves it: each mode step
   moves half of every rarity's share up one rarity (Relic keeps its own). A first
@@ -3512,16 +3515,64 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   Hell. A first clear's gun uid is `n<k>` (Nightmare) or `x<k>` (Hell).
 - **Recommended Power** reads the mode's own bosses and HP factor at the
   effective horde, so the meters and bands stay advice for the mode in play.
-- **Interim Hell.** Hell is built as offset 80, 3 existing skills per boss and one
-  more boss. **Not built yet (ID-222, #449):** its new skills (Enrage,
-  Shield and Poison pool, each with a readable tell, a fourth skill per boss)
-  and the six mode reward cards (each mode's boss hordes 10, 20 and 30 unlock a
-  utility or conditional card, never flat damage or HP, gated in the pool).
+- **Hell's boss skills (ID-222, as built; starting points for the balance pass).**
+  Each Hell boss has its three skills and one of Enrage, Shield and Poison pool
+  (`HELL_SKILLS`), boss k of Hell Horde `h` taking number `(k + (h + 80) / 10) mod 3`:
+  with 3 bosses or fewer no two share one, with 4 (Hell 30 on) exactly one is
+  used twice, and it rotates by horde. Each winds up for `BOSS_SKILL.windUp` =
+  1.2 s with a glow in its colour (Enrage red, Shield ice blue, Poison
+  yellow-green) and the boss's pose, like the older skills, and shows in the boss
+  bar's name and cue; the bar lists a Hell skill first, so on a phone the
+  ellipsis cuts an old skill, never the new one.
+  - **Enrage.** Its tell starts at exactly 50% of max HP (one HP above: nothing)
+    and the effect lands one wind-up later (a stun pushes it like any clock).
+    Then, for good (Regen healing back over 50% does not end it): speed × 1.4,
+    which multiplies with a charge's ×3, and hits on walls and survivors × 1.5.
+    No spawn clock: it is armed only by the HP. A steady red ring and glow mark it.
+  - **Shield.** 4 s into the fight it winds up once; from then until its boss dies
+    or is stunned, every other enemy within 220 px takes 0.6 of a bullet's damage
+    (plates stack with it; an armour-piercing round, fire, frags and skills are
+    not reduced). Flashbang answers it. The boss wears a blue aura ring and each
+    covered enemy a thin one.
+  - **Poison pool.** Every 15 s after a wind-up a glob flies 0.6 s to the slot of
+    the nearest living survivor (by row; survivors cannot move, so the target
+    slot is marked on the ground from the wind-up's start), never thrown from the
+    camp. It leaves a 70 px pool for 6 s that takes 4% of each survivor's max HP a
+    second (once, in overlapping pools), straight off HP: 24% for a full pool. A
+    line slot is 100 to 133 px apart, so one pool hits one survivor.
+- **Mode reward cards (ID-222, as built).** Each higher mode's boss horde 10, 20
+  and 30 unlocks one card on its first clear; it is offered in that mode and the
+  ones above it (a Nightmare card in Nightmare and Hell, a Hell card in Hell only).
+  Nightmare: Suppressing Fire, Cauterise, Momentum; Hell: Gas Masks, Breaching
+  Rounds, Tranq Darts. Rare, once only, behaviour cards that act only on a boss
+  skill or a boss kill (never flat damage or HP), and offered only in a fight whose
+  bosses have what they answer (read at the fight's start), so they never crowd
+  the offers:
+  | Card | Effect | Offered when a boss has |
+  | --- | --- | --- |
+  | Suppressing Fire | A squad hit on a boss winding a skill up makes that wind-up last 2 s longer (once per wind-up; the tell stays lit) | a timed skill |
+  | Cauterise | Regen bosses can't heal for 3 s after a squad hit (a scorch tint shows it) | Regen |
+  | Momentum | A boss dying reloads every gun at once and gives each survivor a throw back | a boss (not a mini-boss) |
+  | Gas Masks | Poison pools hurt survivors 60% less | Poison pool |
+  | Breaching Rounds | Squad bullets take back half of what Armour plates and Shield cut | Shield or Armour plates |
+  | Tranq Darts | A hit takes Enrage's speed off an enraged boss for 3 s (its harder hits stay) | Enrage |
+
+  The unlock is not stored: it is read off each mode's saved horde (`modes`, already
+  allow-listed and range-checked on load, with Hell needing Nightmare past 50), as
+  Normal's boss cards are read off its horde, so a second clear changes nothing and
+  an older save that already cleared a boss horde has its card. Normal's pool and
+  offer rolls are unchanged (no new id is in its pool). The result screen's note and
+  chip name the card; no radio part is found in a higher mode.
 - **Balance.** A squad that just holds Normal Horde 50 wins Nightmare Hordes
   1-10 at the first try on at least 60% of 20 seeds and is stopped by Nightmare
   Horde 30 on most; a squad well over Recommended Power does not lose
-  repeatedly at Nightmare 20 and 30 or Hell 30 (`balance/modes.test.ts`). Normal's
-  numbers are held by a golden test (`golden-normal.test.ts`).
+  repeatedly at Nightmare 20 and 30 or Hell 30 (`balance/modes.test.ts`). Hell (ID-222):
+  a squad that holds Nightmare Horde 50 wins Hell Hordes 1-10 at the first try on at
+  least 60% of 20 seeds and is stopped by Hell Horde 30 on most, and a squad well over
+  Recommended Power does not lose repeatedly at Hell 10 and 20 (`balance/hell.test.ts`;
+  the retune order is `MODES.hell.hpScale`, the skill numbers, the offset in steps of
+  10, then `recBoss`). Normal's numbers are held by a golden test
+  (`golden-normal.test.ts`).
 
 ### Balance pass *(ID-102)*
 

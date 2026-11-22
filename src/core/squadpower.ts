@@ -61,7 +61,9 @@ export function hordeSeconds(n: number): number {
  * higher `mode` (ID-218) it is the effective horde, with that mode's bosses and HP factor.
  */
 export function recommendedPower(n: number, mode: Mode = 'normal'): number {
-  const boss = modeBosses(mode, n - MODES[mode].offset).some((b) => !b.elite) ? POWER.rec.boss : 1;
+  const boss = modeBosses(mode, n - MODES[mode].offset).some((b) => !b.elite)
+    ? POWER.rec.boss * MODES[mode].recBoss
+    : 1;
   // Hordes 1 to 10 by `early`, past Horde 10 by `late` (ID-136).
   const stage = POWER.rec.early[n - 1] ?? POWER.rec.late;
   return Math.round(stage * boss * POWER.rec.k * (hordeHp(n, mode) / hordeSeconds(n)));

@@ -18,6 +18,9 @@ export type Cue =
   | 'card-pick'
   | 'level-up'
   | 'boss-windup'
+  | 'boss-enrage'
+  | 'boss-shield'
+  | 'boss-poison'
   | 'swarm'
   | 'won'
   | 'lost'
@@ -130,6 +133,20 @@ export function cuesBetween(prev: HordeState | null, next: HordeState): Cue[] {
     )
   ) {
     cues.add('boss-windup');
+  }
+  // Hell's skills going off (ID-222), after their wind-up's growl: Enrage and Shield when they
+  // take hold, Poison when the glob lands as a pool.
+  const was = new Map(prev.enemies.map((e) => [e.id, e.horror]));
+  for (const e of next.enemies) {
+    if (!e.horror) continue;
+    const old = was.get(e.id);
+    if (e.horror.enraged && !old?.enraged) cues.add('boss-enrage');
+    if (e.horror.shieldOn && !old?.shieldOn) cues.add('boss-shield');
+  }
+  if (
+    next.pools?.some((p) => !prev.pools?.some((q) => q.at === p.at && q.x === p.x && q.y === p.y))
+  ) {
+    cues.add('boss-poison');
   }
   // A swarm wave's enemies start coming (ID-099).
   if (next.swarm && prev.time < next.breakUntil && next.time >= next.breakUntil) cues.add('swarm');

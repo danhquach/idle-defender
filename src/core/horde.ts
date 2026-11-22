@@ -57,6 +57,7 @@ import {
   HORROR,
   BOSS_SKILL,
   type HigherMode,
+  type ModeCard,
   ELITE,
   SCREAMER,
   SPEWER,
@@ -139,7 +140,8 @@ export type UpgradeId =
   | 'recharge'
   | 'power-surge'
   | 'hollow-points'
-  | 'field-repairs';
+  | 'field-repairs'
+  | ModeCard;
 
 export interface DefenderSpec {
   id: string;
@@ -273,6 +275,11 @@ export interface Enemy {
    * enemy doesn't strobe white every step.
    */
   burnt?: number;
+  /**
+   * A Hell boss's Shield covers it (ID-222): set and cleared each step, only in a horde whose
+   * bosses have the skill; absent otherwise.
+   */
+  shielded?: true;
 }
 /** Fight times are when, so they stop during picks; a stun pushes them back. */
 export interface HorrorClock {
@@ -295,6 +302,40 @@ export interface HorrorClock {
   broods: number;
   /** Armour plates: broken once `BOSS_SKILL.plates.share` of its HP is gone, for good. */
   platesOff: boolean;
+  /**
+   * The Hell skills and the cards that answer them (ID-222); each absent until it happens, so
+   * Normal's fights never carry them. Enrage: it went off, for good. Shield: it went off.
+   */
+  enraged?: true;
+  shieldOn?: true;
+  /** Tranq Darts: fight time until which an enraged boss has lost Enrage's speed. */
+  tranqUntil?: number;
+  /** Cauterise: fight time until which Regen is blocked. */
+  scorchUntil?: number;
+  /**
+   * Suppressing Fire: seconds the skill's current wind-up was lengthened by (once each); gone
+   * when the skill goes off.
+   */
+  longer?: Partial<Record<BossSkill, number>>;
+}
+/**
+ * A boss's Poison glob (ID-222), thrown at `at` from `(fromX, fromY)` to a survivor's slot at
+ * `(x, y)`, landing at `lands` as a `Pool`; drawn until it lands.
+ */
+export interface Glob {
+  fromX: number;
+  fromY: number;
+  x: number;
+  y: number;
+  at: number;
+  lands: number;
+}
+/** A Poison pool on the ground (ID-222): centred on `(x, y)`, from `at` until `until`. */
+export interface Pool {
+  x: number;
+  y: number;
+  at: number;
+  until: number;
 }
 /**
  * A boss's thrown slab (ID-099), from `(fromX, fromY)` at `at` to `(x, y)`, landing at
@@ -785,6 +826,9 @@ export interface HordeState {
   swarm: boolean;
   /** Boss slabs in flight or just landed (ID-099); cleared when the horde ends. */
   slabs: Slab[];
+  /** Poison globs in flight and pools on the ground (ID-222); absent until a boss throws one. */
+  globs?: Glob[];
+  pools?: Pool[];
   outcome: Outcome;
 }
 
@@ -1277,6 +1321,7 @@ function step(s: HordeState, rng: Rng): void {
   blowFrags(s);
   landTar(s);
   burn(s);
+  poison(s);
   repair(s);
   mend(s);
   feed(s);
@@ -1287,6 +1332,7 @@ function step(s: HordeState, rng: Rng): void {
   springTraps(s);
   removeDead(s);
   mutate(s, rng);
+  shieldAura(s);
   // Moving and separating keep the enemies' order, so their old places line up by index.
   const es = s.enemies;
   const n = es.length;
@@ -1332,6 +1378,8 @@ export function clearFight(s: HordeState): void {
   s.slicks = [];
   s.incoming = [];
   s.slabs = [];
+  delete s.globs;
+  delete s.pools;
 }
 
 /** How often each timed boss skill goes off, in s. */
@@ -1340,7 +1388,22 @@ const SKILL_EVERY: Readonly<Partial<Record<BossSkill, number>>> = {
   charge: HORROR.charge.every,
   roar: BOSS_SKILL.roar.every,
   slab: BOSS_SKILL.slab.every,
+  poison: BOSS_SKILL.poison.every,
 };
+
+/** The Hell skills that go off once (ID-222): their clock is dropped when they do. */
+const ONE_SHOT: readonly BossSkill[] = ['enrage', 'shield'];
+
+/**
+ * When timed skill `k` of a boss spawned at `time` first goes off (ID-222): Enrage has no
+ * clock until the boss falls to its HP (`mutate` arms it), Shield `BOSS_SKILL.shield.after` s
+ * in, the rest their `SKILL_EVERY` after the spawn.
+ */
+function firstAt(k: BossSkill, time: number): number | undefined {
+  if (k === 'enrage') return undefined;
+  if (k === 'shield') return time + BOSS_SKILL.shield.after;
+  return time + SKILL_EVERY[k]!;
+}
 
 function spawn(s: HordeState, rng: Rng): void {
   if (due(s.time, s.breakUntil)) {
@@ -1353,7 +1416,10 @@ function spawn(s: HordeState, rng: Rng): void {
       e.hp = e.maxHp = Math.round(e.hp * b.hp);
       b.id = e.id;
       const next: Partial<Record<BossSkill, number>> = {};
-      for (const k of b.skills) if (TIMED_SKILLS.includes(k)) next[k] = s.time + SKILL_EVERY[k]!;
+      for (const k of b.skills) {
+        const at = TIMED_SKILLS.includes(k) ? firstAt(k, s.time) : undefined;
+        if (at !== undefined) next[k] = at;
+      }
       e.horror = {
         boss: i,
         skills: [...b.skills],
@@ -1442,6 +1508,16 @@ function mutate(s: HordeState, rng: Rng): void {
     if (h.skills.includes('plates') && e.hp <= e.maxHp * (1 - BOSS_SKILL.plates.share) + EPS) {
       h.platesOff = true;
     }
+    // Enrage (ID-222): its tell starts at exactly `at` of its max HP, armed once; it goes off
+    // one wind-up later, and a stun pushes it as any clock.
+    if (
+      h.skills.includes('enrage') &&
+      h.enraged === undefined &&
+      h.next.enrage === undefined &&
+      e.hp <= e.maxHp * BOSS_SKILL.enrage.at + EPS
+    ) {
+      h.next.enrage = s.time + BOSS_SKILL.windUp;
+    }
     if (stunned(s, e)) {
       for (const k of Object.keys(h.next) as BossSkill[]) h.next[k]! += STEP;
       if (h.chargeUntil > 0) h.chargeUntil += STEP;
@@ -1449,7 +1525,11 @@ function mutate(s: HordeState, rng: Rng): void {
       h.seenHp = e.hp;
       continue;
     }
-    if (h.skills.includes('regen') && due(s.time, h.hitAt + HORROR.regen.after)) {
+    if (
+      h.skills.includes('regen') &&
+      due(s.time, h.hitAt + HORROR.regen.after) &&
+      !scorched(s, e)
+    ) {
       e.hp = Math.min(e.maxHp, e.hp + HORROR.regen.rate * e.maxHp * STEP);
     }
     // A charge's end takes its step: no skill goes off in it.
@@ -1458,14 +1538,23 @@ function mutate(s: HordeState, rng: Rng): void {
       for (const k of h.skills) {
         const at = h.next[k];
         if (at === undefined || !due(s.time, at)) continue;
-        h.next[k] = s.time + SKILL_EVERY[k]!;
+        if (ONE_SHOT.includes(k)) delete h.next[k];
+        else h.next[k] = s.time + SKILL_EVERY[k]!;
         h.fired[k] = s.time;
+        if (h.longer) {
+          delete h.longer[k];
+          if (Object.keys(h.longer).length === 0) delete h.longer;
+        }
+        // Every timed skill has its own branch: a new one can't fall through to a slab.
         if (k === 'charge') {
           h.chargeUntil = s.time + HORROR.charge.time;
           h.charged = false;
         } else if (k === 'brood') brood(s, e, rng);
         else if (k === 'roar') roar(s, e);
-        else throwSlab(s, e);
+        else if (k === 'slab') throwSlab(s, e);
+        else if (k === 'enrage') h.enraged = true;
+        else if (k === 'shield') h.shieldOn = true;
+        else if (k === 'poison') throwPoison(s, e);
       }
     }
     h.seenHp = e.hp;
@@ -1482,7 +1571,7 @@ export function windingUp(s: Pick<HordeState, 'time'>, e: Enemy): BossSkill | nu
   let best: BossSkill | null = null;
   for (const k of h.skills) {
     const at = h.next[k];
-    if (at === undefined || at - s.time > BOSS_SKILL.windUp + EPS) continue;
+    if (at === undefined || at - s.time > BOSS_SKILL.windUp + (h.longer?.[k] ?? 0) + EPS) continue;
     if (best === null || at < h.next[best]!) best = k;
   }
   return best;
@@ -1495,6 +1584,105 @@ export const plated = (e: Pick<Enemy, 'horror'>): boolean =>
 /** Whether a boss's Roar still speeds `e` up (ID-099). */
 export const roared = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   e.roarUntil !== undefined && !due(s.time, e.roarUntil);
+
+/** Whether `e`'s Enrage has gone off (ID-222): it is faster and hits harder for good. */
+export const enraged = (e: Pick<Enemy, 'horror'>): boolean => e.horror?.enraged === true;
+
+/**
+ * Whether `e` moves Enrage's `BOSS_SKILL.enrage.speed` faster now (ID-222): enraged, and not
+ * within `CARD.tranq.seconds` of a Tranq Darts hit. Its harder hits stay either way. The speed
+ * multiplies with a charge's.
+ */
+export const enrageFast = (s: Pick<HordeState, 'time'>, e: Pick<Enemy, 'horror'>): boolean =>
+  enraged(e) && (e.horror!.tranqUntil === undefined || due(s.time, e.horror!.tranqUntil));
+
+/** Whether Cauterise (ID-222) still blocks `e`'s Regen: the view's scorch. */
+export const scorched = (s: Pick<HordeState, 'time'>, e: Pick<Enemy, 'horror'>): boolean =>
+  e.horror?.scorchUntil !== undefined && !due(s.time, e.horror.scorchUntil);
+
+/** Whether a Shield boss's aura covers `e` now (ID-222). */
+export const shielded = (e: Pick<Enemy, 'shielded'>): boolean => e.shielded === true;
+
+/**
+ * Shield (ID-222): each step, in a horde whose bosses have the skill only, the other living
+ * enemies within `BOSS_SKILL.shield.radius` px of each shield boss that has gone off, is alive
+ * and is not stunned are marked; everyone else is cleared. The marks go the step their boss
+ * dies (`removeDead` runs first) or is stunned, so a Flashbang answers it.
+ */
+function shieldAura(s: HordeState): void {
+  if (!s.bosses.some((b) => b.skills.includes('shield'))) return;
+  for (const e of s.enemies) if (e.shielded) delete e.shielded;
+  for (const boss of s.enemies) {
+    if (!boss.horror?.shieldOn || boss.hp <= 0 || stunned(s, boss)) continue;
+    for (const o of around(s, boss, BOSS_SKILL.shield.radius)) o.shielded = true;
+  }
+}
+
+/**
+ * The slot a boss's Poison glob is thrown at (ID-222): the nearest living survivor's, by row
+ * (ties → the first in `defenders`). Null with none standing. The view marks it from the
+ * wind-up's start.
+ */
+export function poisonTarget(
+  s: Pick<HordeState, 'defenders'>,
+  e: Pick<Enemy, 'y'>,
+): { x: number; y: number } | null {
+  let best: Defender | null = null;
+  for (const d of s.defenders) {
+    if (d.hp <= 0) continue;
+    if (best === null || Math.abs(d.y - e.y) < Math.abs(best.y - e.y) - EPS) best = d;
+  }
+  return best ? { x: best.x, y: best.y } : null;
+}
+
+/** Poison pool (ID-222): a glob at the nearest living survivor's slot; none from the camp or with no one to aim at. */
+function throwPoison(s: HordeState, e: Enemy): void {
+  if (e.inCamp) return;
+  const target = poisonTarget(s, e);
+  if (!target) return;
+  (s.globs ??= []).push({
+    fromX: e.x,
+    fromY: e.y,
+    x: target.x,
+    y: target.y,
+    at: s.time,
+    lands: s.time + BOSS_SKILL.poison.flight,
+  });
+}
+
+/**
+ * Poison pools (ID-222): a glob that lands becomes a pool; each survivor within
+ * `BOSS_SKILL.poison.radius` px of a pool loses `BOSS_SKILL.poison.rate` of max HP a second
+ * (once, in overlapping pools), straight off HP, less with Gas Masks.
+ */
+function poison(s: HordeState): void {
+  if (!s.globs && !s.pools) return;
+  if (s.globs) {
+    for (const g of s.globs) {
+      if (due(s.time, g.lands)) {
+        (s.pools ??= []).push({
+          x: g.x,
+          y: g.y,
+          at: g.lands,
+          until: g.lands + BOSS_SKILL.poison.seconds,
+        });
+      }
+    }
+    s.globs = s.globs.filter((g) => !due(s.time, g.lands));
+  }
+  if (s.pools) s.pools = s.pools.filter((p) => !due(s.time, p.until));
+  if (!s.pools || s.pools.length === 0) return;
+  const factor = took(s, 'gas-masks') ? 1 - CARD.gasMasks.cut : 1;
+  for (const d of s.defenders) {
+    if (d.hp <= 0) continue;
+    const inside = s.pools.some(
+      (p) => Math.hypot(d.x - p.x, d.y - p.y) <= BOSS_SKILL.poison.radius + EPS,
+    );
+    if (!inside) continue;
+    d.hitBy = 'horror';
+    d.hp = Math.max(0, d.hp - BOSS_SKILL.poison.rate * d.maxHp * STEP * factor);
+  }
+}
 
 /** Roar (ID-099): the other living enemies within `BOSS_SKILL.roar.radius` speed up. */
 function roar(s: HordeState, e: Enemy): void {
@@ -1927,9 +2115,14 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
  * Horror's armour takes some off (design §9); an armour-piercing round, `ap` (a Sniper
  * rifle's, ID-099, ID-101), ignores both.
  */
-export function hitDamage(e: Enemy, damage: number, ap = false): number {
+export function hitDamage(e: Enemy, damage: number, ap = false, breach = false): number {
   if (ap) return damage;
-  const d = plated(e) ? damage * BOSS_SKILL.plates.factor : damage;
+  // A Hell boss's Shield (ID-222) cuts a bullet like plates do; Breaching Rounds (`breach`)
+  // takes half of either cut back.
+  const cut = (factor: number): number =>
+    breach ? 1 - (1 - factor) * (1 - CARD.breach.share) : factor;
+  let d = plated(e) ? damage * cut(BOSS_SKILL.plates.factor) : damage;
+  if (e.shielded) d *= cut(BOSS_SKILL.shield.factor);
   return e.kind === 'brute'
     ? Math.max(BRUTE.min, d - BRUTE.armour)
     : e.kind === 'horror'
@@ -1960,6 +2153,7 @@ function fly(s: HordeState): void {
             ? 1 + CARD.concussion.daze
             : 1),
         b.ap === true,
+        !b.owner.startsWith('turret:') && took(s, 'breaching-rounds'),
       );
       popOn(s, hit.enemy, dealt, b.crit === true);
       const alive = hit.enemy.hp > 0;
@@ -2069,6 +2263,7 @@ function cardHit(
   }
   if (took(s, 'shock-rounds')) shock(s, e);
   if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
+  if (e.horror) bossCards(s, e);
   if (!first || b.ricochet || !took(s, 'ricochet')) return;
   const next = around(s, e, CARD.ricochet.range).find((o) => !b.hit.includes(o.id));
   if (!next) return;
@@ -2089,6 +2284,49 @@ function cardHit(
     hit: [e.id],
     ricochet: true,
   });
+}
+
+/**
+ * The cards a Hell mode unlocks that act on a boss a squad bullet hit (ID-222). Suppressing
+ * Fire: the skill it is winding up lasts `CARD.suppress.seconds` longer (its tell stays lit),
+ * once per wind-up. Cauterise: a Regen boss can't heal for `CARD.cauterise.seconds`. Tranq Darts:
+ * an enraged boss moves without Enrage's speed for `CARD.tranq.seconds`.
+ */
+function bossCards(s: HordeState, e: Enemy): void {
+  const h = e.horror!;
+  if (took(s, 'suppressing-fire')) {
+    const k = windingUp(s, e);
+    if (k !== null && h.longer?.[k] === undefined) {
+      h.next[k]! += CARD.suppress.seconds;
+      (h.longer ??= {})[k] = CARD.suppress.seconds;
+    }
+  }
+  if (took(s, 'cauterise') && h.skills.includes('regen')) {
+    h.scorchUntil = s.time + CARD.cauterise.seconds;
+  }
+  if (took(s, 'tranq-darts') && h.enraged) h.tranqUntil = s.time + CARD.tranq.seconds;
+}
+
+/**
+ * Momentum (ID-222): when a boss falls, every gun on the line is reloaded at once and each
+ * survivor gets one throw back.
+ */
+function momentum(s: HordeState): void {
+  for (const d of s.defenders) {
+    for (const slot of ['primary', 'secondary'] as const) {
+      const id = d.loadout[slot];
+      if (id === null || !isGun(id)) continue;
+      d.ammo[slot] = Math.max(d.ammo[slot], magazineOf(s, id, d));
+      d.reloadedAt[slot] = Math.min(d.reloadedAt[slot], s.time);
+    }
+    if (carried(d) < CARD.throws.carry) {
+      d.throws = carried(d) + 1;
+      if (d.throws >= CARD.throws.carry) {
+        delete d.throws;
+        delete d.throwBackAt;
+      }
+    }
+  }
 }
 
 /**
@@ -2685,6 +2923,7 @@ export function removeDead(s: HordeState): void {
     s.cash += ENEMIES[e.kind].cash * perkFactor(s, 'scavengers-eye', PERK.cash) * s.cashRate;
     if (MUTANTS.includes(e.kind)) s.mutantKills += 1;
     if (e.id === s.focusId) s.focusId = null;
+    if (e.horror && !e.elite && took(s, 'momentum')) momentum(s);
   }
   s.enemies = s.enemies.filter((e) => e.hp > 0);
 }
@@ -2943,7 +3182,8 @@ function move(s: HordeState): Moves {
       trapSlow(s, e) *
       screamed(screamers, e) *
       (roared(s, e) ? 1 + BOSS_SKILL.roar.speed : 1) *
-      (charging(s, e) ? HORROR.charge.speed : 1);
+      (charging(s, e) ? HORROR.charge.speed : 1) *
+      (enrageFast(s, e) ? 1 + BOSS_SKILL.enrage.speed : 1);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
       continue;
@@ -3144,7 +3384,12 @@ function attack(s: HordeState, moves: Moves, rng: Rng): void {
       const defender = moves.reached.get(e.id);
       if (!defender) continue;
       defender.hitBy = e.kind;
-      hurt(s, defender, enemy.damage, rng);
+      hurt(
+        s,
+        defender,
+        enraged(e) ? enemy.damage * (1 + BOSS_SKILL.enrage.damage) : enemy.damage,
+        rng,
+      );
       if (e.kind === 'swollen') blown.add(e.id);
       e.nextAttackAt = s.time + enemy.attackInterval;
       continue;
@@ -3167,6 +3412,7 @@ function attack(s: HordeState, moves: Moves, rng: Rng): void {
       e.horror.charged = true;
       damage *= HORROR.charge.hit;
     }
+    if (enraged(e)) damage *= 1 + BOSS_SKILL.enrage.damage;
     hitSegment(s, stop.layer, stop.segment, damage);
     if (e.kind === 'spewer') {
       s.spits.push({ fromX: e.x, fromY: e.y, x: stop.x, y: e.y, at: s.time + STEP });

@@ -46,6 +46,7 @@ import {
 import {
   BANK_CAP,
   BOSS_SKILL,
+  HELL_SKILLS,
   BOSS_UNLOCKS,
   BOSSES,
   CARD,
@@ -694,10 +695,21 @@ export const SKILL_NAME: Readonly<Record<BossSkill, string>> = {
   roar: 'Roar',
   slab: 'Slab Throw',
   plates: 'Armour Plates',
+  enrage: 'Enrage',
+  shield: 'Shield',
+  poison: 'Poison',
 };
-/** A boss or mini-boss by its kind and skills: "Mutated Horror (Brood, Roar)", "Elite Brute (Roar)". */
-export const bossName = (b: Pick<BossSpec, 'kind' | 'skills' | 'elite'>): string =>
-  `${b.elite ? 'Elite ' : ''}${ENEMY_NAME[b.kind]} (${b.skills.map((k) => SKILL_NAME[k]).join(', ')})`;
+/**
+ * A boss or mini-boss by its kind and skills: "Mutated Horror (Brood, Roar)", "Elite Brute (Roar)".
+ * A Hell skill (ID-222) is named first, so on a phone, where the boss bar's name is cut short with
+ * an ellipsis, it is an old skill that goes and never the new one.
+ */
+export const bossName = (b: Pick<BossSpec, 'kind' | 'skills' | 'elite'>): string => {
+  const hell = (k: BossSkill): number =>
+    (HELL_SKILLS as readonly BossSkill[]).includes(k) ? 0 : 1;
+  const skills = [...b.skills].sort((x, y) => hell(x) - hell(y));
+  return `${b.elite ? 'Elite ' : ''}${ENEMY_NAME[b.kind]} (${skills.map((k) => SKILL_NAME[k]).join(', ')})`;
+};
 
 /** The bosses and mini-boss that came this horde, in order, each with whether it died (ID-099). */
 export function bossFates(
@@ -1022,6 +1034,10 @@ const CUE_HOLD: Readonly<Partial<Record<BossSkill, number>>> = {
   slab: 2 * BOSS_SKILL.slab.flight,
   charge: HORROR.charge.time,
   brood: 1,
+  // Hell's skills (ID-222): Enrage and Shield a moment, a Poison pool while it lies.
+  enrage: 2,
+  shield: 2,
+  poison: BOSS_SKILL.poison.flight + BOSS_SKILL.poison.seconds,
 };
 
 /** The skill a boss bar names now: the one winding up, else the latest still in effect. */

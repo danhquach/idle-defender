@@ -88,6 +88,40 @@ describe('hud', () => {
     ]);
   });
 
+  it('names a Hell skill first, so a phone’s cut-short name never loses the new one (ID-222)', () => {
+    expect(
+      bossName({ kind: 'horror', skills: ['brood', 'roar', 'regen', 'poison'], elite: false }),
+    ).toBe('Mutated Horror (Poison, Brood, Roar, Regen)');
+    expect(
+      bossName({ kind: 'horror', skills: ['slab', 'plates', 'charge', 'enrage'], elite: false }),
+    ).toBe('Mutated Horror (Enrage, Slab Throw, Armour Plates, Charge)');
+    expect(
+      bossName({ kind: 'horror', skills: ['roar', 'brood', 'regen', 'shield'], elite: false }),
+    ).toBe('Mutated Horror (Shield, Roar, Brood, Regen)');
+    // Every boss of a horde without one reads as before.
+    expect(bossName({ kind: 'horror', skills: ['brood', 'roar'], elite: false })).toBe(
+      'Mutated Horror (Brood, Roar)',
+    );
+  });
+
+  it('a boss bar names a Hell skill through its wind-up and its effect (ID-222)', () => {
+    const s = newHorde(1, { ...setup(), hordeNumber: 10, harder: true });
+    s.toSpawn = 0;
+    const e = horror(s, ['regen', 'enrage'], {}, { nextAt: 100 });
+    s.bosses[0]!.id = e.id;
+    expect(bossCue(s, e)).toBeNull();
+    e.horror!.next.enrage = 1.5;
+    expect(bossBars({ ...s, time: 1 })[0]).toMatchObject({ cue: 'Enrage!', winding: true });
+    delete e.horror!.next.enrage;
+    e.horror!.fired.enrage = 0;
+    expect(bossCue({ time: 1.9 }, e)).toBe('enrage');
+    expect(bossCue({ time: 2 }, e)).toBeNull();
+    const poison = horror(s, 'poison', {}, { nextAt: 100 });
+    poison.horror!.fired.poison = 0;
+    expect(bossCue({ time: 6.5 }, poison)).toBe('poison');
+    expect(bossCue({ time: 7 }, poison)).toBeNull();
+  });
+
   it('a boss bar keeps naming a skill through its effect, not just the wind-up (ID-099)', () => {
     const s = newHorde(1, { ...setup(), hordeNumber: 10, harder: true });
     s.toSpawn = 0;

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
-import { eligible, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
+import { eligible, isModeCard, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
 import {
   BENCH_XP_SHARE,
   MAX_COUNT,
@@ -204,9 +204,10 @@ describe('the squad in a horde (ID-066)', () => {
   it('offers only stat, behaviour and barrier cards: no power or recruit cards', () => {
     const allowed = ['stat', 'behaviour', 'barrier'];
     expect(SQUAD_CARDS.every((id) => allowed.includes(UPGRADES[id].category))).toBe(true);
-    // Every allowed card is in: the list is the categories, not a hand pick.
+    // Every allowed card is in: the list is the categories, not a hand pick; but for the mode
+    // cards (ID-222), which join a fight's pool only once a mode unlocks them.
     expect([...SQUAD_CARDS].sort()).toEqual(
-      UPGRADE_IDS.filter((id) => allowed.includes(UPGRADES[id].category)).sort(),
+      UPGRADE_IDS.filter((id) => allowed.includes(UPGRADES[id].category) && !isModeCard(id)).sort(),
     );
     // The ID-077 set, and none of the cards it replaced.
     for (const id of [

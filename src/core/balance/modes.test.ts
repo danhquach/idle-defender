@@ -3,72 +3,13 @@
 // most; and no mode has a wall where a squad well above the expected power loses repeatedly.
 // The scripted player gears up between fights (`gearUp`) and stops at its first lost fight.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { rollWeapon } from '../armoury.ts';
-import { recruit } from '../camp.ts';
-import { SQUAD_CAP, SQUAD_SLOT_COSTS } from '../data.ts';
-import { newGame, type GameState } from '../game.ts';
 import { finishSquadHorde } from '../hordeonly.ts';
-import { effHorde, localHorde, MODES, type HigherMode } from '../modes.ts';
-import { createRng } from '../rng.ts';
+import { localHorde, MODES } from '../modes.ts';
 import { gearUp, playSquadHorde } from '../sim.ts';
-import { recommendedPower, squadPower } from '../squadpower.ts';
-import { xpForLevel } from '../stats.ts';
 import { cacheFor } from './cache.ts';
-import { SEEDS } from './shared.ts';
+import { holdLevel, inMode, SEEDS, squad, squadAbove, wins } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
-
-/** Survivors the expected squad has: every slot bought. */
-const SIZE = SQUAD_CAP + SQUAD_SLOT_COSTS.length;
-
-/** The expected squad at Normal Horde `n`: `SIZE` survivors, each a Military Rifle at `level`. */
-function squad(n: number, level: number): GameState {
-  const g = newGame('horde');
-  const roster = Array.from({ length: SIZE }, (_, i) => ({
-    ...recruit(i + 1),
-    xp: xpForLevel(25),
-    loadout: {
-      primary: rollWeapon(createRng(i + 7), `h${i + 1}`, 'rifle', 'military', level),
-      secondary: null,
-      item: null,
-    },
-  }));
-  return {
-    ...g,
-    hordeNumber: n,
-    roster,
-    slots: { squad: SQUAD_SLOT_COSTS.length, stash: 0 },
-    camp: { ...g.camp, recruits: SIZE },
-  };
-}
-
-/** `game` playing `mode` from its Horde `local`. */
-const inMode = (game: GameState, mode: HigherMode, local = 1): GameState => ({
-  ...game,
-  mode,
-  modes: { ...game.modes, [mode]: local },
-});
-
-/** Fights won out of `seeds` at horde `n` (the game's own mode's), by `game`'s squad. */
-const wins = (game: GameState, n: number, seeds: number): number => {
-  let won = 0;
-  for (let s = 1; s <= seeds; s++) {
-    if (playSquadHorde(game, s * 101, undefined, undefined, n).outcome === 'won') won++;
-  }
-  return won;
-};
-
-/** The lowest gun level whose squad holds Normal Horde 50: most of 5 seeds won. */
-function holdLevel(): number {
-  let lo = 1;
-  let hi = 400;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (wins(squad(50, mid), 50, 5) >= 3) hi = mid;
-    else lo = mid + 1;
-  }
-  return lo;
-}
 
 /** Where a seed's run through Nightmare ends: the horde it lost at first try, or null through 30. */
 function runNightmare(level: number, seed: number): number | null {
@@ -80,18 +21,6 @@ function runNightmare(level: number, seed: number): number | null {
     if (localHorde(game) !== n + 1) throw new Error(`Nightmare ${n} did not count`);
   }
   return null;
-}
-
-/** The expected squad of `mode` whose Squad Power is at least `share` of horde `n`'s Recommended Power. */
-function squadAbove(mode: HigherMode, n: number, share: number): GameState {
-  const eff = effHorde(mode, n);
-  const target = recommendedPower(eff, mode) * share;
-  for (let level = 1; level <= 400; level++) {
-    const g = inMode(squad(mode === 'nightmare' ? 51 : 200, level), mode, n);
-    if (mode === 'hell') g.modes = { nightmare: 51, hell: n };
-    if (squadPower(g) >= target) return g;
-  }
-  throw new Error(`no squad reaches ${share} of ${mode} ${n}`);
 }
 
 describe('difficulty modes (ID-218)', () => {

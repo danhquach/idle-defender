@@ -143,6 +143,30 @@ export const BENCH_XP_SHARE = 0.25;
  */
 export type HigherMode = 'nightmare' | 'hell';
 /**
+ * The cards the difficulty modes unlock (ID-222): conditional and utility, each answering a
+ * boss skill, never flat damage or HP; offered only in a higher mode, once unlocked.
+ */
+export type ModeCard =
+  'suppressing-fire' | 'cauterise' | 'momentum' | 'gas-masks' | 'breaching-rounds' | 'tranq-darts';
+/**
+ * The card a mode's boss horde 10, 20 and 30 unlocks on its first clear (ID-222), for that
+ * mode and every one above it. Read off the mode's saved progress, never stored.
+ */
+export const MODE_UNLOCKS: Readonly<Record<HigherMode, Readonly<Record<10 | 20 | 30, ModeCard>>>> =
+  {
+    nightmare: { 10: 'suppressing-fire', 20: 'cauterise', 30: 'momentum' },
+    hell: { 10: 'gas-masks', 20: 'breaching-rounds', 30: 'tranq-darts' },
+  };
+/** Every mode card, in unlock order. */
+export const MODE_CARDS: readonly ModeCard[] = [
+  'suppressing-fire',
+  'cauterise',
+  'momentum',
+  'gas-masks',
+  'breaching-rounds',
+  'tranq-darts',
+];
+/**
  * The campaign's goal (ID-127, design §11): each boss horde's first clear yields a radio
  * part, in this order; the last is the finale, whose win calls the evacuation, and play goes
  * on after it as Endless.
@@ -823,9 +847,24 @@ export const HORROR = {
  * or a new one. A full-game Horror has one (`HORROR_ABILITIES`); a horde-only boss two, and
  * a mini-boss one.
  */
-export type BossSkill = HorrorAbility | 'roar' | 'slab' | 'plates';
+export type BossSkill = HorrorAbility | 'roar' | 'slab' | 'plates' | HellSkill;
+/**
+ * Hell's new boss skills (ID-222): each Hell boss has one next to its three others. Enrage
+ * and Shield go off once; Poison pool repeats.
+ */
+export type HellSkill = 'enrage' | 'shield' | 'poison';
+/** The Hell skills in the order Hell's bosses take them (`modeBosses`). */
+export const HELL_SKILLS: readonly HellSkill[] = ['enrage', 'shield', 'poison'];
 /** The skills that go off on a clock (each winds up first); Regen and Armour plates don't. */
-export const TIMED_SKILLS: readonly BossSkill[] = ['brood', 'charge', 'roar', 'slab'];
+export const TIMED_SKILLS: readonly BossSkill[] = [
+  'brood',
+  'charge',
+  'roar',
+  'slab',
+  'enrage',
+  'shield',
+  'poison',
+];
 /**
  * The new boss skills (ID-099; kept by the balance pass, ID-102). Each timed
  * skill winds up for `windUp` s before it goes off (a glow, a pose and a sound), so it can
@@ -843,6 +882,20 @@ export const BOSS_SKILL = {
   slab: { every: 16, range: 150, flight: 0.6, damage: 300 },
   plates: { share: 0.25, factor: 0.5 },
   broodGrow: 1,
+  /**
+   * Hell's skills (ID-222; starting points for the balance pass). Enrage: below `at` of its
+   * max HP it winds up once (a tell from exactly `at`, so the effect lands one `windUp`
+   * later), then for good moves `speed` faster (on top of a charge's) and hits walls and
+   * survivors `damage` harder. Shield: `after` s into the fight it winds up once, then for
+   * as long as it lives and is not stunned the other enemies within `radius` px take
+   * `factor` of a bullet's damage (an armour-piercing round, fire, frags and skills are
+   * not reduced). Poison pool: every `every` s a glob flies `flight` s to the nearest
+   * living survivor's slot and leaves a pool of `radius` px for `seconds` s, taking
+   * `rate` of each survivor's max HP a second off those standing in it.
+   */
+  enrage: { at: 0.5, speed: 0.4, damage: 0.5 },
+  shield: { after: 4, radius: 220, factor: 0.6 },
+  poison: { every: 15, flight: 0.6, radius: 70, seconds: 6, rate: 0.04 },
 } as const;
 /**
  * Horde-only boss hordes (ID-099): still every `HORROR.every`th horde, with Horde n's
@@ -1269,6 +1322,19 @@ export const CARD = {
    * throws at most one every `gap` s, so a burst spreads over the field instead of one spot.
    */
   throws: { carry: 3, gap: 1.5 },
+  /**
+   * The mode cards (ID-222; starting points). Suppressing Fire: a squad hit on a boss winding
+   * a skill up makes that wind-up last `seconds` longer, once. Cauterise: a hit stops a Regen
+   * boss healing for `seconds`. Momentum: a boss's death reloads every gun and returns one
+   * throw. Gas Masks: Poison pools hurt survivors `cut` less. Breaching Rounds: squad bullets
+   * take back `share` of Armour plates' and Shield's cut. Tranq Darts: a hit takes Enrage's
+   * speed off an enraged boss for `seconds`.
+   */
+  suppress: { seconds: 2 },
+  cauterise: { seconds: 3 },
+  gasMasks: { cut: 0.6 },
+  breach: { share: 0.5 },
+  tranq: { seconds: 3 },
   /** Enemies on the field before Flashbang and Molotov are offered (ID-139: a group to throw at). */
   crowd: 12,
   /**

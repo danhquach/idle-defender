@@ -90,8 +90,8 @@ A few card icons are drawn shapes rather than generations (manifest `draw`):
 plain polygons drawn by `tools/art/build.py` with no model. Their points are
 our own and copy no existing artwork, except `card-kevlar-vests`, whose
 outline is traced from a CC BY 3.0 icon (credited below) and recoloured, and
-`card-scavenged-ammo` and `card-oil-bomb`, whose layouts follow CC BY 3.0
-icons (credited below) with our own shapes and colours.
+`card-scavenged-ammo`, `card-oil-bomb` and the six ID-222 mode card icons,
+whose layouts or styles follow CC BY 3.0 icons (credited below) with our own shapes and colours.
 
 ## Reference photographs
 
@@ -132,3 +132,21 @@ Wikimedia Commons page id where it has none.
   (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our
   own polygons after its layout (a round bomb with a fuse and a flame on it),
   coloured tar black, sitting in a tar puddle, and a dark outline added.
+- `card-suppressing-fire` (ID-222): adapted from "Supersonic bullet" by Lorc,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its layout (a bullet with shock arcs), in cold blue-grey with the shared card bullet, and a dark outline added.
+- `card-cauterise` (ID-222): adapted from "Stitched wound" by Lorc and "Fire" by sbed,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after their style only (a stitched wound; a flame), recoloured, and a dark outline added.
+- `card-momentum` (ID-222): adapted from "Clockwise rotation" by Delapouite,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its style only (a ring with an arrow head), with our own revolver cylinder, recoloured gold and gunmetal, and a dark outline added.
+- `card-gas-masks` (ID-222): adapted from "Gas mask" by Lorc,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its layout (two lenses and a round filter), recoloured olive with toxic green lenses, and a dark outline added.
+- `card-breaching-rounds` (ID-222): adapted from "Broken shield" by Lorc,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its layout (a shield with a crack), recoloured steel blue, simplified, with the shared card bullet through it, and a dark outline added.
+- `card-tranq-darts` (ID-222): adapted from "Dart" by Delapouite,
+  <https://game-icons.net>, licensed CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its style only (a dart with flights), recoloured teal and violet, and a dark outline added.

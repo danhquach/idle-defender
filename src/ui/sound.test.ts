@@ -190,6 +190,33 @@ describe('Sound cues (ID-080)', () => {
     expect(cuesBetween(next, later)).toEqual([]);
   });
 
+  it('Hell’s skills going off, once each (ID-222)', () => {
+    const s = fight();
+    s.toSpawn = 0;
+    const b = horror(s, ['enrage', 'shield', 'poison'], {}, { nextAt: 100 });
+    const [prev, next] = frames(s);
+    expect(cuesBetween(prev, next)).toEqual([]);
+    const enraged = structuredClone(next);
+    enraged.enemies.find((e) => e.id === b.id)!.horror!.enraged = true;
+    expect(cuesBetween(next, enraged)).toEqual(['boss-enrage']);
+    const shielded = structuredClone(next);
+    shielded.enemies.find((e) => e.id === b.id)!.horror!.shieldOn = true;
+    expect(cuesBetween(next, shielded)).toEqual(['boss-shield']);
+    // The poison cue is the glob landing as a pool, not the throw.
+    const thrown = structuredClone(next);
+    thrown.globs = [{ fromX: 1, fromY: 1, x: 2, y: 2, at: 0, lands: 0.6 }];
+    expect(cuesBetween(next, thrown)).toEqual([]);
+    const landed = structuredClone(thrown);
+    landed.globs = [];
+    landed.pools = [{ x: 2, y: 2, at: 0.6, until: 6.6 }];
+    expect(cuesBetween(thrown, landed)).toEqual(['boss-poison']);
+    const later = structuredClone(landed);
+    later.time += 0.1;
+    expect(cuesBetween(landed, later)).toEqual([]);
+    // Already on in the frame before: no second cue.
+    expect(cuesBetween(enraged, structuredClone(enraged))).toEqual([]);
+  });
+
   it('a swarm wave starting (ID-099)', () => {
     const [prev, next] = frames();
     next.swarm = true;

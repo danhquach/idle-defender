@@ -2,13 +2,17 @@ import {
   BAN,
   CARD,
   CARD_MAX_LEVEL,
+  MODE_CARDS,
   PERK,
   RARITY,
   RECRUIT_CHANCE,
   REROLL,
   RESEARCH_CARDS,
+  TIMED_SKILLS,
   WALL,
+  type BossSkill,
   type CardRarity,
+  type ModeCard,
   type ResearchCard,
 } from './data.ts';
 import {
@@ -275,6 +279,50 @@ export const UPGRADES: Readonly<
     rarity: 'epic',
     levels: 1,
   },
+  // The mode cards (ID-222): unlocked by a mode's boss hordes, offered only in a higher mode
+  // and only in a fight whose bosses have what they answer (`eligible`).
+  'suppressing-fire': {
+    name: 'Suppressing Fire',
+    text: `A boss hit while it winds a skill up takes ${CARD.suppress.seconds} s longer to use it`,
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: 1,
+  },
+  cauterise: {
+    name: 'Cauterise',
+    text: `Regen bosses can’t heal for ${CARD.cauterise.seconds} s after a squad hit`,
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: 1,
+  },
+  momentum: {
+    name: 'Momentum',
+    text: 'When a boss dies every gun reloads at once and each survivor gets a throw back',
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: 1,
+  },
+  'gas-masks': {
+    name: 'Gas Masks',
+    text: `Survivors take ${Math.round(CARD.gasMasks.cut * 100)}% less from Poison pools`,
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: 1,
+  },
+  'breaching-rounds': {
+    name: 'Breaching Rounds',
+    text: `Bullets take back ${Math.round(CARD.breach.share * 100)}% of what Shield and Armour plates cut`,
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: 1,
+  },
+  'tranq-darts': {
+    name: 'Tranq Darts',
+    text: `A hit takes Enrage’s speed off an enraged boss for ${CARD.tranq.seconds} s`,
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: 1,
+  },
 };
 
 /** The squad's one ammo slot (ID-097): it holds at most one of these. */
@@ -291,6 +339,41 @@ export function replaces(state: Pick<HordeState, 'taken'>, id: UpgradeId): Upgra
 }
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
+
+/** Whether `id` is one of the cards the difficulty modes unlock (ID-222). */
+export const isModeCard = (id: UpgradeId): id is ModeCard =>
+  (MODE_CARDS as readonly string[]).includes(id);
+
+/** Whether a boss of the fight (known at its start) satisfies `has` (ID-222). */
+const bossesHave = (
+  s: Pick<HordeState, 'bosses'>,
+  has: (b: HordeState['bosses'][number]) => boolean,
+): boolean => s.bosses.some(has);
+
+/**
+ * Whether the fight has what mode card `id` answers (ID-222), read off its bosses: Suppressing
+ * Fire a timed skill; Cauterise Regen; Momentum a boss (not a mini-boss); Gas Masks Poison pool;
+ * Breaching Rounds Shield or Armour plates; Tranq Darts Enrage. Offered only then, so they never
+ * crowd the offers (ID-131).
+ */
+const modeCardRelevant = (s: Pick<HordeState, 'bosses'>, id: ModeCard): boolean => {
+  const has = (...skills: BossSkill[]) =>
+    bossesHave(s, (b) => b.skills.some((k) => skills.includes(k)));
+  switch (id) {
+    case 'suppressing-fire':
+      return has(...TIMED_SKILLS);
+    case 'cauterise':
+      return has('regen');
+    case 'momentum':
+      return bossesHave(s, (b) => !b.elite);
+    case 'gas-masks':
+      return has('poison');
+    case 'breaching-rounds':
+      return has('shield', 'plates');
+    case 'tranq-darts':
+      return has('enrage');
+  }
+};
 export const OFFER_SIZE = 3;
 const RARITIES: readonly CardRarity[] = ['common', 'rare', 'epic'];
 
@@ -317,6 +400,9 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
   const u = UPGRADES[id];
   if (state.banned.includes(id)) return false;
   if (state.cardPool && !state.cardPool.includes(id)) return false;
+  // A mode card (ID-222) comes only through a fight's card pool (never the full game's),
+  // and only when the fight has what it answers.
+  if (isModeCard(id) && (!state.cardPool || !modeCardRelevant(state, id))) return false;
   if (u.levels !== null && cardLevel(state, id) >= u.levels) return false;
   if (isResearchCard(id) && !state.research.includes(id)) return false;
   if (id === 'patch-up' && patchUpGain(state).segments === 0) return false;
