@@ -3142,11 +3142,16 @@ As built (ID-066), the horde-only build:
   third calls the evacuation and Horde 30 is the finale.
   - Parts are counted from the boss hordes beaten (the horde number), so an
     older save gets its parts and the save stores nothing new.
-  - The panel between hordes says nothing of the radio *(ID-196)*: the
-    start screen's "Radio 1/3" chip, its line naming the next part's boss
-    horde and the chip's three-line note (ID-190, with its
+  - The panel between hordes has no radio chip *(ID-196)*: the start
+    screen's "Radio 1/3" chip and its three-line note (ID-190, with its
     `idle-defender.radio-seen` flag) are gone. In Endless the start screen
     keeps its "Endless · best N" chip and the line naming the horde to hold.
+  - One line names the next goal *(ID-217, `nextGoalLine`)* on the start
+    screen and a win's result, worked out from the horde number (a replay
+    names the goal ahead, not the horde replayed): "Next: Horde 20 boss ·
+    radio part 2/3 · new card Field Repairs" (the card only when the boss
+    unlocks one), or "Next: Horde 30 · call the evacuation" for the finale.
+    None on a loss, on the ending screen or in Endless.
   - A boss horde's first clear adds a "New card: …" chip to its result
     screen when it unlocks one (below), and the line "Boss horde beaten."
     to the result's details; this replaces Horde 10's old soft ending.

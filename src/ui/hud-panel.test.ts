@@ -302,11 +302,14 @@ describe('titles say the result (ID-196)', () => {
 });
 
 describe('no radio on the panel (ID-196)', () => {
-  it('the campaign start screen has no radio pill, explainer, toggle or word', () => {
+  it('the campaign start screen has no radio pill, explainer or toggle; only the goal line says radio (ID-217)', () => {
     const { h, panel } = page();
     for (const horde of [1, 10, 11, 20, 21, 30]) {
       h.showResult(squadStart(squadGame(2, horde)));
-      expect(panel.textContent, `horde ${horde}`).not.toMatch(/radio/i);
+      expect(panel.querySelectorAll('.debrief-goal'), `horde ${horde}`).toHaveLength(1);
+      const rest = panel.cloneNode(true) as HTMLElement;
+      rest.querySelectorAll('.debrief-goal').forEach((e) => e.remove());
+      expect(rest.textContent, `horde ${horde}`).not.toMatch(/radio/i);
       expect(panel.querySelector('.radio-help, button.chip-toggle'), `horde ${horde}`).toBeNull();
       expect(panel.querySelector('.debrief-stats')!.firstElementChild!.textContent).not.toMatch(
         /^Radio/,
@@ -330,11 +333,11 @@ describe('no radio on the panel (ID-196)', () => {
     );
   });
 
-  it('the start screen’s loss rule is a note after the Squad, and nothing else is under it', () => {
+  it('the start screen: the goal line, the Squad, then the loss rule, and nothing else (ID-217)', () => {
     const { h, panel } = page();
     h.showResult(squadStart(squadGame(2)));
     const body = panel.querySelector('.hud-result-scroll .hud-picker')!;
-    expect(classes(body.children)).toEqual(['debrief-squad', 'debrief-note']);
+    expect(classes(body.children)).toEqual(['debrief-goal', 'debrief-squad', 'debrief-note']);
     expect(panel.querySelector('.hud-result-foot-note')).toBeNull();
   });
 });

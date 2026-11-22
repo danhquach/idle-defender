@@ -195,13 +195,15 @@ describe('the horde-only screens (ID-066)', () => {
     expect(s.lines.join(' ')).not.toMatch(/Nobody new/);
   });
 
-  it('a boss horde’s first clear names its card unlock, and the word radio is nowhere (ID-127, ID-196)', () => {
+  it('a boss horde’s first clear names its card unlock, and radio only in the goal line (ID-127, ID-196, ID-217)', () => {
     const at10 = squadGame(SQUAD_CAP, 10);
     const a = squadScreen(at10, ended(at10, 'won'));
     expect(a.title).toBe('Horde 10 - You hold the line');
     expect(a.button).toBe(startLabel(11));
-    expect(a.lines.at(-1)).toBe('Boss horde beaten. New card unlocked: Heavy Rounds.');
-    expect(a.debrief!.notes![0]).toBe(a.lines.at(-1));
+    // The last line is the next goal (ID-217); the boss sentence comes before it.
+    expect(a.lines.at(-1)).toBe(a.debrief!.goal);
+    expect(a.lines.at(-2)).toBe('Boss horde beaten. New card unlocked: Heavy Rounds.');
+    expect(a.debrief!.notes![0]).toBe(a.lines.at(-2));
     // The chip names the card (its sentence is in the details); no radio pill (ID-196).
     const unlock = a.debrief!.chips.find((c) => c.text === 'New card: Heavy Rounds');
     expect(unlock).toMatchObject({ details: true });
@@ -256,10 +258,11 @@ describe('the horde-only screens (ID-066)', () => {
     );
   });
 
-  it('the campaign start screen says nothing of the radio: no pill, no explainer, no note (ID-196)', () => {
+  it('the campaign start screen says radio only in its goal line: no pill, no explainer, no note (ID-196, ID-217)', () => {
     for (const horde of [1, 5, 10, 11, 20, 21, 30]) {
       const g = squadGame(2, horde);
-      const d = squadStart(g).debrief!;
+      const { goal, ...d } = squadStart(g).debrief!;
+      expect(goal).toMatch(/^Next: Horde /);
       expect(d.chips.map((c) => c.text).join(' ')).not.toMatch(/radio/i);
       expect(d.note).toBe(SQUAD_LOSS_RULE);
       expect(JSON.stringify(d)).not.toMatch(/radio/i);
@@ -267,7 +270,9 @@ describe('the horde-only screens (ID-066)', () => {
       document.body.replaceChildren(root);
       const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
       h.showResult(squadStart(g));
-      expect(root.querySelector('.hud-result')!.textContent).not.toMatch(/radio/i);
+      const panel = root.querySelector('.hud-result')!.cloneNode(true) as HTMLElement;
+      panel.querySelectorAll('.debrief-goal').forEach((e) => e.remove());
+      expect(panel.textContent).not.toMatch(/radio/i);
       expect(root.querySelector('.radio-help, [data-radio-toggle], .chip-toggle')).toBeNull();
     }
   });

@@ -246,15 +246,22 @@ describe("a win's weapons, cards and offer, short (ID-186, ID-196)", () => {
     );
   });
 
-  it('a boss first clear says nothing of the radio anywhere, details open or not (ID-196)', () => {
+  it('a boss first clear says radio only in the next-goal line, details open or not (ID-196, ID-217)', () => {
     const { root, h } = hud();
     h.showResult(bossWin().screen);
     const panel = root.querySelector<HTMLElement>('.hud-result')!;
-    expect(panel.textContent).not.toMatch(/radio/i);
+    // Everything but the goal line (ID-217), which names the next radio part.
+    const rest = (): string => {
+      const c = panel.cloneNode(true) as HTMLElement;
+      c.querySelectorAll('.debrief-goal').forEach((e) => e.remove());
+      return c.textContent ?? '';
+    };
+    expect(panel.querySelector('.debrief-goal')!.textContent).toMatch(/radio part 2\/3/);
+    expect(rest()).not.toMatch(/radio/i);
     root.querySelector<HTMLButtonElement>('.debrief-details')!.click();
     root.querySelector<HTMLButtonElement>('.gun-chip')!.click();
     expect(root.querySelector<HTMLElement>('.debrief-notes')!.hidden).toBe(false);
-    expect(panel.textContent).not.toMatch(/radio/i);
+    expect(rest()).not.toMatch(/radio/i);
     expect(panel.textContent).toContain('Boss horde beaten.');
   });
 

@@ -46,12 +46,14 @@ import {
 import {
   BANK_CAP,
   BOSS_SKILL,
+  BOSS_UNLOCKS,
   BOSSES,
   CARD,
   HORROR,
   CAMP_PICK_RANKS,
   CAMP_PICKS,
   FALL_WARNING,
+  FINALE_HORDE,
   GAS_PER_WIN,
   GUN_UPGRADE,
   HORDE_ONLY,
@@ -59,6 +61,7 @@ import {
   MATERIALS,
   PERKS,
   PROFESSIONS,
+  RADIO_HORDES,
   RARITIES,
   SHOP,
   SHOP_ITEMS,
@@ -1352,6 +1355,11 @@ export interface Debrief {
   /** A plain line under the header (the start screen's goal, a loss's retry). */
   note: string | null;
   /**
+   * The campaign's next goal (ID-217, `nextGoalLine`), one line on the start screen and a
+   * win's result; absent in Endless, on a loss and on the finale's ending screen.
+   */
+  goal?: string;
+  /**
    * A win's sentences (ID-186: the boss reward, who was patched up, who rests, who Auto
    * moved), one each, shown only with the details open; its chips say them short.
    */
@@ -1836,6 +1844,21 @@ export function goalChip(
 }
 
 /**
+ * The campaign's next goal (ID-217), for the start screen and a win's result: the next boss
+ * horde in `RADIO_HORDES` not yet beaten, its radio part and any card it unlocks, or the
+ * finale. Worked out from the horde number, so a replay names the goal ahead, never the horde
+ * replayed. Null in Endless, which keeps its own chip and line.
+ */
+export function nextGoalLine(game: Pick<GameState, 'hordeNumber'>): string | null {
+  const n = RADIO_HORDES.find((h) => h >= game.hordeNumber);
+  if (n === undefined) return null;
+  if (n === FINALE_HORDE) return `Next: Horde ${n} · call the evacuation`;
+  const card = BOSS_UNLOCKS[n];
+  const part = `radio part ${RADIO_HORDES.indexOf(n) + 1}/${RADIO_HORDES.length}`;
+  return `Next: Horde ${n} boss · ${part}${card ? ` · new card ${UPGRADES[card].name}` : ''}`;
+}
+
+/**
  * The horde-only screen before a horde (ID-066): who fights it, its start button, and the
  * horde picker (ID-098) with `picked` selected (the next new horde by default).
  */
@@ -1844,6 +1867,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
   const goal = goalChip(game);
+  const next = nextGoalLine(game);
   const bench = benchLine(game);
   // Still asking after a reload on the result screen (ID-150): the offer waits here.
   const asking = joiningOf(game);
@@ -1857,6 +1881,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       ...asking.map(askLine),
       `${waveCount(now.horde)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`,
       ...(goal ? [goal.note] : []),
+      ...(next ? [next] : []),
     ],
     button: now.button,
     squad: true,
@@ -1869,6 +1894,7 @@ export function squadStart(game: GameState, picked: number = game.hordeNumber): 
       callout: null,
       // One line under the squad: the rule, and in Endless the horde to hold.
       note: goal ? `${goal.note} ${SQUAD_LOSS_RULE}` : SQUAD_LOSS_RULE,
+      ...(next ? { goal: next } : {}),
       drop: null,
       cards: squad.map((d) => plainCard(d)),
       empty: null,
@@ -2090,6 +2116,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       noJoin ? noJoinText(noJoin, size) : null,
     ].filter((t) => t !== null);
     const xpChip = xpChipText(gains);
+    // The goal ahead once this win has counted (ID-217); none on the ending, Endless after it.
+    const goalLine = nextGoalLine(after);
     return {
       title: ending
         ? EVACUATION_TITLE
@@ -2105,6 +2133,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         ...(rewardNote ? [rewardNote] : []),
         ...(rested ? [rested] : []),
         ...(autoNote ? [autoNote] : []),
+        ...(goalLine ? [goalLine] : []),
       ],
       button: ending ? 'Continue' : goOn,
       squad: true,
@@ -2157,6 +2186,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         ],
         callout: null,
         note: null,
+        ...(goalLine ? { goal: goalLine } : {}),
         notes,
         drop: drop ? dropTile(game, drop) : null,
         cards: ups,
@@ -3136,6 +3166,8 @@ export function createHud(
    */
   function debriefBlock(d: Debrief): HTMLElement[] {
     const parts: HTMLElement[] = [];
+    // The next goal first (ID-217), so a phone shows it without a scroll.
+    if (d.goal) parts.push(el('p', 'debrief-goal', d.goal));
     if ((d.notes ?? []).length > 0) {
       // A win's sentences (ID-186), closed until asked for by the buttons that name it.
       const notes = el('ul', 'debrief-notes');
