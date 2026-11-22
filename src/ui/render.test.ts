@@ -5017,9 +5017,10 @@ describe('death animations (ID-110)', () => {
     drawScene(recorder().ctx, art, at(2, [e]), CAM, VIEW, null, null, null, anim);
     anim.observe(at(2.1, []));
     expect(draw(2.2)).toEqual(expect.arrayContaining(['cut-body', 'cut-piece']));
-    await new Promise((ok) => setTimeout(ok, 10));
+    // Blob, FileReader and Image each settle a tick apart; poll, as a busy runner can take
+    // longer than a fixed wait (it flaked on CI at 10 ms).
+    await vi.waitFor(() => expect(draw(2.25).filter((x) => x === 'loaded')).toHaveLength(2));
     const later = draw(2.25);
-    expect(later.filter((x) => x === 'loaded')).toHaveLength(2);
     expect(later.filter((x) => x.startsWith('cut-'))).toEqual([]);
   });
 
