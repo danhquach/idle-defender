@@ -41,6 +41,7 @@ import {
   withUpgradedGun,
   toggleSkill,
   toggleSquad,
+  treatSurvivor,
   type GunChoice,
   type GunMove,
 } from '../core/hordeonly.ts';
@@ -166,7 +167,7 @@ import {
 import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
-import { createRoster, SQUAD_WAIT, type Roster } from './squadroster.ts';
+import { createRoster, SQUAD_WAIT, TREAT_WAIT, type Roster } from './squadroster.ts';
 import { cuesBetween } from './sound.ts';
 import {
   enemyHitAt,
@@ -626,6 +627,15 @@ export function start(root: HTMLElement, art: Art): void {
     redrawSquad();
     return { ok: true };
   }
+  /** Treats resting survivor `id` with Medicine (ID-220): between hordes, saved at once. */
+  function treatInjured(id: string): { ok: true } | { ok: false; reason: string } {
+    if (horde && !resultUp()) return { ok: false, reason: TREAT_WAIT };
+    const r = treatSurvivor(game, id);
+    if (!r.ok) return r;
+    commit(r.game);
+    redrawSquad();
+    return { ok: true };
+  }
   /**
    * "Best gun for everyone" between hordes (the Roster, the result or start screen and the
    * Inventory): saved at once, and the screens redrawn.
@@ -980,6 +990,7 @@ export function start(root: HTMLElement, art: Art): void {
           }),
           onEquip: changeGun,
           onToggleSquad: changeSquad,
+          onTreat: treatInjured,
           onLetGo: letSurvivorGo,
           onBuySquad: () => buySlots('squad'),
           onCombine: combineSurvivor,

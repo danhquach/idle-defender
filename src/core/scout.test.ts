@@ -34,6 +34,7 @@ import {
   startSquadHorde,
   swapBench,
   toggleSquad,
+  treatSurvivor,
 } from './hordeonly.ts';
 import { createRng } from './rng.ts';
 import {
@@ -600,5 +601,40 @@ describe('review fixes: time running backwards counts as 0 (ID-219)', () => {
   it('never moves a trip for a clock running forward', () => {
     const g = sent(camp([person(1)], bench(1)), 'police', 'risky', ['recruit-2']);
     expect(clockCheck(g, NOW + 5 * MIN, NOW + 2 * MIN)).toBe(g);
+  });
+});
+
+describe('Medicine treats the patrol’s injured (ID-220)', () => {
+  const back = NOW + 200 * MIN;
+  it('a survivor injured on a patrol is treated like any other', () => {
+    let treated = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const g = sent(camp(squad(), bench(4)), 'pharmacy', 'dangerous', ids(bench(4)), seed);
+      const t = takeReport(g, 'pharmacy', back);
+      if (!t.ok) throw new Error(t.reason);
+      const hurt = t.report.members.find((m) => m.injured);
+      if (!hurt || (t.game.medicine ?? 0) === 0) continue;
+      const r = treatSurvivor(t.game, hurt.id);
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.game.reserve.find((d) => d.id === hurt.id)!.rest).toBeUndefined();
+      expect(r.game.medicine ?? 0).toBe((t.game.medicine ?? 0) - 1);
+      treated++;
+    }
+    expect(treated).toBeGreaterThan(0);
+  });
+
+  it('one out on patrol is refused as on patrol before anything else', () => {
+    const g = sent(camp(squad(), bench(4)), 'police', 'safe', ids(bench(4)));
+    // Hand-made: a resting patroller the core never makes (a doctored save).
+    const odd: GameState = {
+      ...g,
+      medicine: 2,
+      reserve: g.reserve.map((d) => (d.id === 'recruit-2' ? { ...d, rest: 1 } : d)),
+    };
+    expect(onMapPatrol(odd, 'recruit-2')).toBe(true);
+    expect(treatSurvivor(odd, 'recruit-2')).toEqual({
+      ok: false,
+      reason: `${recruit(2).name} is on patrol`,
+    });
   });
 });

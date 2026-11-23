@@ -2520,3 +2520,100 @@ describe('Salvage through the app (ID-207)', () => {
     });
   });
 });
+
+describe('Medicine treats the resting in the game (app.ts, ID-220)', () => {
+  /** A Horde 2 camp: survivors 1–2 in the squad, 3 resting on the bench, `medicine` in stock. */
+  function hurtCamp(medicine = 2) {
+    const g = newGame('horde');
+    const camp: GameState = {
+      ...g,
+      hordeNumber: 2,
+      roster: [recruit(1), recruit(2)],
+      reserve: [{ ...recruit(3), rest: 1 }],
+      camp: { ...g.camp, recruits: 3 },
+      medicine,
+    };
+    localStorage.setItem(SAVE_KEY, encodeSave(camp, NOW));
+    const booted = boot();
+    step(0);
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
+    const chip = () => document.querySelector('.medicine-chip-count')?.textContent ?? null;
+    const treat = () => scrim.querySelector<HTMLButtonElement>('[data-key="treat"]');
+    const openOn = (id: string) => {
+      booted.root.querySelector<HTMLButtonElement>('.roster-button')!.click();
+      scrim.querySelector<HTMLElement>(`[data-key="tab:${id}"]`)!.click();
+    };
+    return { ...booted, scrim, chip, treat, openOn };
+  }
+
+  it('between hordes: 1 Medicine ends the rest, saved, and the chip counts down at once', () => {
+    const t = hurtCamp(2);
+    expect(t.chip()).toBe('2');
+    t.openOn('recruit-3');
+    expect(t.treat()!.disabled).toBe(false);
+    t.treat()!.click();
+    expect(t.chip()).toBe('1');
+    const saved = t.saved();
+    expect(saved.medicine).toBe(1);
+    expect(saved.reserve.find((d) => d.id === 'recruit-3')!.rest).toBeUndefined();
+    expect(t.treat()).toBeNull();
+  });
+
+  it('the last Medicine: the chip drops it and nothing is left to spend', () => {
+    const t = hurtCamp(1);
+    t.openOn('recruit-3');
+    t.treat()!.click();
+    expect(t.chip()).toBeNull();
+    expect(t.saved().medicine).toBeUndefined();
+  });
+
+  it('on the result screen: a survivor downed in the win is treated; the debrief stays as fought', () => {
+    const t = hurtCamp(2);
+    t.button().click();
+    step(16);
+    // The next tick wins the fight with survivor 2 downed in it.
+    const real = vi.mocked(tick).getMockImplementation()!;
+    vi.mocked(tick).mockImplementationOnce((s: HordeState, dt: number) => {
+      const r = real(s, dt);
+      const d = r.defenders.find((x) => x.id === 'recruit-2')!;
+      return {
+        ...r,
+        outcome: 'won',
+        defenders: r.defenders.filter((x) => x !== d),
+        injured: [
+          ...r.injured,
+          {
+            defender: { id: d.id, name: d.name, loadout: d.loadout },
+            postId: d.postId,
+            at: 0,
+            offered: false,
+            by: null,
+          },
+        ],
+      };
+    });
+    step(32);
+    expect(t.title()).toMatch(/Horde 2/);
+    expect(t.saved().reserve.find((d) => d.id === 'recruit-2')?.rest).toBe(1);
+    const debrief = t.result().textContent;
+    expect(debrief).toContain('Resting');
+    t.openOn('recruit-2');
+    expect(t.treat()!.disabled).toBe(false);
+    t.treat()!.click();
+    expect(t.chip()).toBe('1');
+    expect(t.saved().reserve.find((d) => d.id === 'recruit-2')?.rest).toBeUndefined();
+    // The result reports what the fight did (ID-220 review): it is not redrawn.
+    expect(t.result().textContent).toBe(debrief);
+  });
+
+  it('mid-fight: greyed; the rest and the Medicine stay', () => {
+    const t = hurtCamp(2);
+    t.button().click();
+    step(16);
+    t.openOn('recruit-3');
+    expect(t.treat()!.disabled).toBe(true);
+    t.treat()!.click();
+    expect(t.chip()).toBe('2');
+    expect(t.saved().reserve.find((d) => d.id === 'recruit-3')!.rest).toBe(1);
+  });
+});

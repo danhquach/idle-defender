@@ -216,7 +216,7 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     const tile = rosterTiles(g, NOW, null).find((t) => t.id === 'recruit-3')!;
     const suits = tile.fits ? `, suits a ${tile.job}` : '';
     expect(label.endsWith(`, ${tile.dps} DPS${suits}`)).toBe(true);
-    expect(m.tab('recruit-3').querySelector('.rv-tab-job')!.textContent).toBe('Rest 2');
+    expect(m.tab('recruit-3').querySelector('.rv-tab-job')!.textContent).toBe('Injured');
   });
 
   it('updates at once after Equip, Best gun for everyone and an outside change', () => {

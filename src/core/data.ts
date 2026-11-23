@@ -53,6 +53,8 @@ export const INJURY_REST = {
   downed: 1,
   max: 1,
 } as const;
+/** Treating a resting survivor between hordes (ID-220): the Medicine it uses ends the whole rest. */
+export const TREAT = { medicine: 1 } as const;
 /** The most a v19–v21 save's survivor could rest (ID-147); such a rest loads cut to `INJURY_REST.max`. */
 export const OLD_REST_MAX = 2;
 /**

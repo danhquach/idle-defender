@@ -2780,6 +2780,13 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   The scripted player in the balance tests does not patrol.
 - **Save v25:** `map` (seed, draws, 4 areas, the patrols out) and `medicine`, each written
   once there is one; an older save loads with a fresh map and no Medicine.
+- **Medicine (ID-220):** between hordes, a resting survivor's Roster card has **Treat · 1
+  Medicine** (`TREAT`): one Medicine ends the whole rest, so they can fight the next horde at
+  full HP; with none in stock it reads "No Medicine", greyed. Hidden for anyone not resting
+  (one downed mid-fight rests only once the fight ends), greyed mid-fight; allowed on the
+  result screen, whose debrief still reports the fight as fought. "Auto" re-picks the squad.
+  The patrol's injured are treated the same way once its report is taken. No save change.
+  The scripted player in the balance tests does not use Medicine.
 
 ## 11. Resources and research
 
@@ -2791,7 +2798,7 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
 | Gas | Patrols (gas station) | Generator (recharges the battery bank), car (faster patrols) |
 | Batteries | Patrols, crafting | Turret energy |
 | Food (snacks count as Food) | Patrols (supermarket, gas station) | Injury recovery |
-| Medicine | Patrols (pharmacy, hospital) | Injury recovery (faster than Food) |
+| Medicine | Patrols (pharmacy, hospital) | Injury recovery (faster than Food; horde-only: 1 ends a rest, ID-220) |
 | Chemicals | Patrols (pharmacy, hospital) | Chemical traps (slow, burn, corrode, paralyze) |
 | Mutated Genes | Hordes, especially mutants and bosses | Research |
 | Defender XP | Hordes, patrols | Defender levels → the all-round level bonus (ID-146) |
@@ -2894,6 +2901,9 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   not the cut. Refused, with the reason on the button, for someone not
   injured or with none left; a defender out on patrol shows no buttons.
   No save change.
+- **Horde-only (ID-220):** rest counts hordes, not time; 1 Medicine clears the whole
+  rest (one horde) instead of cutting time, and Food is not used (see the World map
+  section).
 - **Roster floor** *(designer's call)*: if fewer than 3 defenders are
   alive, a free basic recruit (level 1, Rusty pistol) arrives every hour of
   real time (while camp slots allow), so a patrol wipe can never leave the
