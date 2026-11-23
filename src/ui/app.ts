@@ -528,6 +528,7 @@ export function start(root: HTMLElement, art: Art): void {
         powerLine(
           squadPower(game),
           recommendedPower(horde.hordeNumber, horde.mode ?? 'normal', squadSize(game)),
+          squadSize(game),
         ),
       );
     } else {
@@ -751,6 +752,7 @@ export function start(root: HTMLElement, art: Art): void {
         powerLine(
           squadPower(game),
           recommendedPower(next.hordeNumber, next.mode ?? 'normal', squadSize(game)),
+          squadSize(game),
         ),
       );
     }

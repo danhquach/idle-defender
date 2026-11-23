@@ -214,7 +214,7 @@ body {
   pointer-events: none;
 }
 
-/* A fight's status line keeps clear of the speed buttons and Paused chip too. The top
+/* Above 1000px a fight's status line keeps clear of the speed buttons and Paused chip too. The top
    bar's redesign (ID-058) should give the speed group its own slot instead. */
 .hud-fight-bar {
   padding-right: 704px;
@@ -370,12 +370,18 @@ body {
   }
 }
 
-/* Narrower still, it can't share the top row with the corner panel: it sits under the
-   Roster, Weapons and Menu buttons, at the right edge (ID-165). */
-@media (min-width: 641px) and (max-width: 760px) {
+/* Up to 1000px it can't share the top row with the corner panel: it sits under the
+   Roster, Weapons and Menu buttons, at the right edge (ID-165), and the corner keeps clear
+   of those buttons only. With the speeds beside it, an iPad's corner ran under them and its
+   Squad Power meter all but vanished behind "rec … for 8" (ID-226). */
+@media (min-width: 641px) and (max-width: 1000px) {
   .hud-speed {
     top: 38px;
     right: 12px;
+  }
+
+  .hud-fight-bar {
+    padding-right: 428px;
   }
 }
 
@@ -2513,6 +2519,18 @@ body {
   /* Room for every card in one row on a desktop window. */
   max-width: min(640px, calc(100vw - 32px));
   pointer-events: none;
+}
+
+/* Where the speeds sit under the Menu button (641-1000px, ID-226), the boss bars (centred)
+   and the held cards' strip share their band: both keep clear of the speeds' 160 px. */
+@media (min-width: 641px) and (max-width: 1000px) {
+  .hud-boss {
+    width: min(480px, calc(100% - 352px));
+  }
+
+  .hud-held {
+    max-width: min(640px, calc(100vw - 192px));
+  }
 }
 
 /* The boss bars and what stacks under them move down by as much as the strip reaches

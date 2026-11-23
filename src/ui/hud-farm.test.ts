@@ -97,6 +97,13 @@ describe('Squad Power line (ID-098)', () => {
     expect(BAND_WORD).toEqual({ ok: 'ok', close: 'close', short: 'short' });
   });
 
+  it('names the squad size only above six (ID-226)', () => {
+    expect(powerLine(92000, 55435, 6).text).toBe('Power 92,000 · rec 55,435');
+    expect(powerLine(92000, 55435, 1).text).toBe('Power 92,000 · rec 55,435');
+    expect(powerLine(92000, 55435, 7).text).toBe('Power 92,000 · rec 55,435 for 7');
+    expect(powerLine(92000, 55435, 8).text).toBe('Power 92,000 · rec 55,435 for 8');
+  });
+
   it('fills the meter to Squad Power with its end at 120% of Recommended, the tick at Recommended', () => {
     const l = powerLine(840, 1400);
     expect(l.fill).toBeCloseTo(0.5);
@@ -143,6 +150,15 @@ describe('the horde picker (ID-098)', () => {
     expect(p.options.some((o) => o.label.includes(' · Boss'))).toBe(true);
     expect(p.options[0]!.label).toBe('Horde 12 (new)');
     expect(p.options.find((o) => o.horde === 10)!.label).toMatch(/^Horde 10 · Boss/);
+  });
+
+  it('names a squad of 8 on every line, with Recommended Power for 8 (ID-226)', () => {
+    const g = { ...squadGame(8, 40), slots: { squad: 2, stash: 0 } };
+    const p = hordePicker(g);
+    for (const o of p.options) {
+      expect(o.power).toEqual(powerLine(squadPower(g), recommendedPower(o.horde, 'normal', 8), 8));
+      expect(o.power.text).toMatch(/ for 8$/);
+    }
   });
 
   it('the button follows the pick: Start for the new horde, Replay for a beaten one, Retry for the lost one', () => {
