@@ -52,7 +52,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | --- | --- |
 | `data.ts` | Every tuning number and content table: `WEAPONS`, `ENEMIES`, `BOSSES`, `SKILLS`, `PERKS`, `PROFESSIONS`, `JOBS`, squad/stash caps, drop and craft rates. Start here for any number. |
 | `horde.ts` | The fight: `HordeState`, `tick`, enemies, defenders, wall, shots, damage, boss and horror behaviour. The biggest core file. |
-| `hordeonly.ts` | The shipping loop: squad pick, `startSquadHorde` / `finishSquadHorde`, guns in the stash (equip, upgrade, combine, salvage, craft), survivors joining, combine, rest. |
+| `hordeonly.ts` | The shipping loop: squad pick, `startSquadHorde` / `finishSquadHorde`, guns in the stash (equip, upgrade, combine, salvage, craft), survivors joining, combine, rest, Medicine treats a rest (`treatSurvivor`, ID-220). |
 | `game.ts` | `GameState`, `newGame`, the full game's between-horde loop (`startHorde`, `finishHorde`, `recover`). |
 | `waves.ts` | Wave count and size, enemy HP growth, wave mix, horror abilities. |
 | `pacing.ts` | How fast a horde's enemies arrive. |

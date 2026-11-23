@@ -15,6 +15,7 @@ import {
   squadResult,
   startSquadHorde,
   toggleSquad,
+  treatSurvivor,
 } from '../core/hordeonly.ts';
 import {
   benchLine,
@@ -28,7 +29,18 @@ import {
 import { wonNote } from './testing.ts';
 import { answerText, noJoinText } from './joining.ts';
 import { JOB_SHORT } from './jobtext.ts';
-import { AUTO_ON, createRoster, rosterTiles, SQUAD_WAIT } from './squadroster.ts';
+import {
+  AUTO_ON,
+  createRoster,
+  NO_MEDICINE,
+  rosterTiles,
+  SQUAD_WAIT,
+  TREAT_LABEL,
+  TREAT_WAIT,
+  INJURED,
+  treatedText,
+} from './squadroster.ts';
+import { sendMapPatrol, withMap } from '../core/scout.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -237,7 +249,7 @@ describe('designer review fixes (ID-147)', () => {
     roster.open('recruit-1');
     const job = (id: string) =>
       document.querySelector(`.rv-bench [data-defender="${id}"] .rv-tab-job`)!.textContent;
-    expect(job('recruit-3')).toBe('Rest 2');
+    expect(job('recruit-3')).toBe('Injured');
     expect(job('recruit-4')).toBe(JOB_SHORT[recruit(4).job]);
   });
 });
@@ -267,6 +279,15 @@ describe('the Roster and the bench (ID-147)', () => {
       roster.refresh();
       return { ok: true as const };
     });
+    // Treat (ID-220), as the app runs it.
+    const onTreat = vi.fn((id: string) => {
+      if (!canGear) return { ok: false as const, reason: TREAT_WAIT };
+      const r = treatSurvivor(g, id);
+      if (!r.ok) return r;
+      g = r.game;
+      roster.refresh();
+      return { ok: true as const };
+    });
     // "Best squad" and "Auto" (ID-154), as the app runs them.
     const onBestSquad = vi.fn(() => {
       if (!canGear) return { ok: false as const, reason: SQUAD_WAIT };
@@ -286,6 +307,7 @@ describe('the Roster and the bench (ID-147)', () => {
       state: () => ({ game: g, fight: null, canGear, resumes: false }),
       onEquip: () => ({ ok: true }),
       onToggleSquad,
+      onTreat,
       onLetGo: () => null,
       onCombine: () => null,
       onBestGuns: () => ({ ok: true, moves: [] }),
@@ -295,7 +317,7 @@ describe('the Roster and the bench (ID-147)', () => {
     const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const q = <T extends HTMLElement = HTMLButtonElement>(sel: string): T =>
       scrim.querySelector<T>(sel)!;
-    return { roster, scrim, q, onToggleSquad, onBestSquad, onAutoSquad, game: () => g };
+    return { roster, scrim, q, onToggleSquad, onTreat, onBestSquad, onAutoSquad, game: () => g };
   }
 
   it('with no bench the Roster looks as it did: no labels, no bench row, no squad button', () => {
@@ -449,5 +471,130 @@ describe('patched up by Paramedics (ID-155)', () => {
     expect(tiles[0]!.health).toBe(`HP ${Math.round(max * PATCH_UP.hp)}/${max} · patched\u00a0up`);
     expect(tiles[0]!.down).toBe(false);
     expect(tiles[1]!.health).toBe(`HP ${maxHpOf(person(2))}/${maxHpOf(person(2))}`);
+  });
+});
+
+describe('the Roster: Medicine treats the resting (ID-220)', () => {
+  function mount(start: GameState, canGear = true) {
+    let g = start;
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const onTreat = vi.fn((id: string) => {
+      if (!canGear) return { ok: false as const, reason: TREAT_WAIT };
+      const r = treatSurvivor(g, id);
+      if (!r.ok) return r;
+      g = r.game;
+      roster.refresh();
+      return { ok: true as const };
+    });
+    const onToggleSquad = vi.fn((id: string) => {
+      const r = toggleSquad(g, id);
+      if (!r.ok) return r;
+      g = r.game;
+      roster.refresh();
+      return { ok: true as const };
+    });
+    const roster = createRoster(root, {
+      state: () => ({ game: g, fight: null, canGear, resumes: false }),
+      onEquip: () => ({ ok: true }),
+      onToggleSquad,
+      onTreat,
+      onLetGo: () => null,
+      onCombine: () => null,
+      onBestGuns: () => ({ ok: true, moves: [] }),
+      onBestSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
+      onAutoSquad: () => ({ ok: true, moves: { in: [], out: [] } }),
+    });
+    const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
+    const q = (sel: string): HTMLButtonElement | null =>
+      scrim.querySelector<HTMLButtonElement>(sel);
+    return { roster, q, onTreat, game: () => g };
+  }
+  const hurt = (medicine: number): GameState => ({
+    ...campGame(people(5), [person(6, { rest: 1 }), person(7)]),
+    ...(medicine > 0 ? { medicine } : {}),
+  });
+
+  it('a resting survivor: "Treat · 1 Medicine"; a press ends the rest and says so', () => {
+    const m = mount(hurt(2));
+    m.roster.open('recruit-6');
+    const b = m.q('[data-key="treat"]')!;
+    expect(b.textContent).toBe(TREAT_LABEL);
+    expect(b.disabled).toBe(false);
+    expect(m.q('[data-key="squad"]')).toBeNull();
+    b.click();
+    expect(m.onTreat).toHaveBeenCalledWith('recruit-6');
+    expect(m.game().medicine).toBe(1);
+    expect(m.q('.rv-status')!.textContent).toBe(treatedText(recruit(6).name));
+    // Fit now: no Treat, and "Add to squad" in its place works at once.
+    expect(m.q('[data-key="treat"]')).toBeNull();
+    expect(m.q('.rv-who-level')!.textContent).not.toContain('Resting');
+    m.q('[data-key="squad"]')!.click();
+    expect(m.game().roster.at(-1)!.id).toBe('recruit-6');
+  });
+
+  it('no Medicine: "No Medicine", greyed; nothing changes', () => {
+    const m = mount(hurt(0));
+    m.roster.open('recruit-6');
+    const b = m.q('[data-key="treat"]')!;
+    expect(b.textContent).toBe(NO_MEDICINE);
+    expect(b.disabled).toBe(true);
+    expect(b.getAttribute('aria-label')).toContain(NO_MEDICINE);
+    b.click();
+    expect(m.onTreat).not.toHaveBeenCalled();
+    expect(m.game().reserve[0]!.rest).toBe(1);
+  });
+
+  it('the injured look: red card, bandaged portrait, "Injured" tab and tag; the fit and the away have none', () => {
+    const sent = sendMapPatrol(
+      withMap(hurt(2), 7),
+      withMap(hurt(2), 7).map!.areas[0]!.kind,
+      ['recruit-7'],
+      1,
+      NOW,
+    );
+    if (!sent.ok) throw new Error(sent.reason);
+    // Hand-made: one out on patrol with a rest (a doctored save): "Out" wins, no injured look.
+    const g = {
+      ...sent.game,
+      reserve: sent.game.reserve.map((d) => (d.id === 'recruit-7' ? { ...d, rest: 1 } : d)),
+    };
+    const m = mount(g);
+    m.roster.open('recruit-6');
+    const tab = (id: string) => m.q(`[data-key="tab:${id}"]`)!;
+    expect(tab('recruit-6').classList.contains('rv-tab-hurt')).toBe(true);
+    expect(tab('recruit-6').querySelector('.rv-tab-job')!.textContent).toBe(INJURED);
+    expect(tab('recruit-6').getAttribute('aria-label')).toContain(`${INJURED}, Resting: 1 horde`);
+    expect(tab('recruit-6').querySelector('.roster-avatar-hurt .roster-bandage')).not.toBeNull();
+    expect(m.q('.rv-hurt-tag')!.textContent).toBe(INJURED);
+    expect(m.q('.rv-top .roster-avatar-hurt .roster-bandage')!.getAttribute('aria-hidden')).toBe(
+      'true',
+    );
+    for (const id of ['recruit-1', 'recruit-7']) {
+      expect(tab(id).classList.contains('rv-tab-hurt')).toBe(false);
+      expect(tab(id).querySelector('.roster-bandage')).toBeNull();
+    }
+    expect(tab('recruit-7').querySelector('.rv-tab-job')!.textContent).toBe('Out');
+    m.roster.open('recruit-1');
+    expect(m.q('.rv-hurt-tag')).toBeNull();
+    expect(m.q('.rv-top .roster-avatar-hurt')).toBeNull();
+  });
+
+  it('hidden for anyone not resting', () => {
+    const m = mount(hurt(3));
+    m.roster.open('recruit-7');
+    expect(m.q('[data-key="treat"]')).toBeNull();
+    m.roster.open('recruit-1');
+    expect(m.q('[data-key="treat"]')).toBeNull();
+  });
+
+  it('mid-fight: greyed, saying why; no Medicine used', () => {
+    const m = mount(hurt(2), false);
+    m.roster.open('recruit-6');
+    const b = m.q('[data-key="treat"]')!;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe(TREAT_WAIT);
+    expect(b.getAttribute('aria-label')).toContain(TREAT_WAIT);
+    expect(m.game().medicine).toBe(2);
   });
 });

@@ -59,6 +59,11 @@
   --color-danger-bg-hover: #4a2020;
   --color-danger-surface: #2a1717;
   --color-danger-text: #f0b4b4;
+  /* The Roster's bandage on an injured portrait (ID-220): gauze, its weave, a dried stain. */
+  --color-gauze: #e8dcc0;
+  --color-gauze-weave: #d3c4a2;
+  --color-gauze-stain: #8a3a2c;
+  --color-bandage-shadow: rgb(0 0 0 / 55%);
   /* Text on solid danger red, and the swarm alarm's glows (ID-121). */
   --color-on-danger: #ffffff;
   --color-swarm-glow: rgb(196 59 59 / 80%);
@@ -4801,6 +4806,45 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   opacity: 0.7;
 }
 
+/* Injured, resting between hordes (ID-220): a blood-dark card, the profession line says
+   "Injured" in danger text, and the portrait is greyed with a bandage. Readable at a glance
+   in a row of fit gold-edged cards, and not by colour alone. */
+.rv-tab-hurt .rv-tab-job {
+  color: var(--color-danger-text);
+  font-weight: 700;
+}
+
+.rv-tab-hurt .rv-tab-dps {
+  color: var(--color-text-subtle);
+}
+
+.roster-avatar-hurt {
+  position: relative;
+  border-color: var(--color-danger);
+}
+
+.roster-avatar-hurt .roster-avatar-img {
+  filter: grayscale(0.75) brightness(0.7);
+}
+
+/* A strip of gauze across the portrait's top corner, a dried stain on its pad. Drawn, not a
+   cross: a red cross is a protected emblem. Decoration only: the words say "Injured". */
+.roster-bandage {
+  position: absolute;
+  top: 6%;
+  right: -26%;
+  width: 72%;
+  height: 17%;
+  min-height: 6px;
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at 50% 50%, var(--color-gauze-stain) 0 22%, transparent 26%),
+    repeating-linear-gradient(90deg, var(--color-gauze) 0 3px, var(--color-gauze-weave) 3px 4px);
+  box-shadow: 0 1px 2px var(--color-bandage-shadow);
+  transform: rotate(38deg);
+  pointer-events: none;
+}
+
 .rv-tab-text {
   display: flex;
   flex-direction: column;
@@ -5155,6 +5199,32 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
+/* Injured (ID-220): a blood-dark fill, solid red edge, on the bench or in the squad; after
+   the bench's flat dashed look so it wins. Shown: the accent ring above stays inside it. */
+.rv-tabs .rv-tab.rv-tab-hurt {
+  border-style: solid;
+  border-color: var(--color-danger);
+  background: linear-gradient(160deg, var(--color-danger-bg), var(--color-danger-surface));
+}
+
+.rv-tabs .rv-tab.rv-tab-hurt:hover,
+.rv-tabs .rv-tab.rv-tab-hurt[aria-current='true'] {
+  background: var(--color-danger-bg-hover);
+}
+
+/* In the squad's row with a bench open, its raised look is more specific: the same red
+   there, the accent top edge or ring kept. */
+.roster-dialog:has(.rv-bench:not([hidden])) .rv-tabs:not(.rv-bench) .rv-tab.rv-tab-hurt {
+  border-color: var(--color-danger);
+  background: linear-gradient(160deg, var(--color-danger-bg), var(--color-danger-surface));
+}
+
+.roster-dialog:has(.rv-bench:not([hidden]))
+  .rv-tabs:not(.rv-bench)
+  .rv-tab.rv-tab-hurt[aria-current='true'] {
+  background: var(--color-danger-bg-hover);
+}
+
 /* Squad ⇄ bench, under the XP bar: small, so the row keeps its height. */
 .rv-squad {
   min-height: 32px;
@@ -5247,6 +5317,26 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 .roster-avatar-lg {
   width: 52px;
   height: 64px;
+}
+
+/* The name and, when injured (ID-220), its tag on one line. */
+.rv-who-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--space-8);
+}
+
+.rv-hurt-tag {
+  padding: 1px 6px;
+  border: 1px solid var(--color-danger);
+  border-radius: 999px;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .rv-who-name {

@@ -4,7 +4,15 @@
 import { describe, expect, it } from 'vitest';
 import { rollWeapon } from './armoury.ts';
 import { recruit } from './camp.ts';
-import { INJURY_REST, MAX_COUNT, PATCH_UP, SQUAD_CAP, SQUAD_JOIN, STASH_CAP } from './data.ts';
+import {
+  INJURY_REST,
+  MAX_COUNT,
+  PATCH_UP,
+  SQUAD_CAP,
+  SQUAD_JOIN,
+  STASH_CAP,
+  TREAT,
+} from './data.ts';
 import { newGame, type GameState, type RosterDefender } from './game.ts';
 import type { HordeState } from './horde.ts';
 import {
@@ -25,6 +33,7 @@ import {
   squadResult,
   startSquadHorde,
   toggleSquad,
+  treatSurvivor,
 } from './hordeonly.ts';
 import { createRng } from './rng.ts';
 import { xpForLevel } from './stats.ts';
@@ -410,5 +419,84 @@ describe('a bench survivor’s gun (ID-147)', () => {
       armoury: stash,
     };
     expect(equipGun(g, 'recruit-2', 'pistol').ok).toBe(false);
+  });
+});
+
+describe('Medicine treats the resting (ID-220)', () => {
+  const resting = (no: number) => person(no, { rest: INJURY_REST.downed });
+  const withMedicine = (g: GameState, medicine: number): GameState =>
+    medicine > 0 ? { ...g, medicine } : g;
+
+  it('ends a bench survivor’s rest and uses exactly 1 Medicine', () => {
+    const g = withMedicine(campGame(people(5), [resting(6)]), 3);
+    const r = treatSurvivor(g, 'recruit-6');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const d = campOf(r.game).find((x) => x.id === 'recruit-6')!;
+    expect(isFit(d)).toBe(true);
+    expect('rest' in d).toBe(false);
+    expect(r.game.medicine).toBe(2);
+    expect(TREAT.medicine).toBe(1);
+  });
+
+  it('treats a resting survivor still in the squad too', () => {
+    const g = withMedicine(campGame([resting(1), ...people(5, 2)]), 1);
+    const r = treatSurvivor(g, 'recruit-1');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(isFit(r.game.roster[0]!)).toBe(true);
+  });
+
+  it('the last Medicine drops the key: absent, not 0', () => {
+    const r = treatSurvivor(withMedicine(campGame(people(5), [resting(6)]), 1), 'recruit-6');
+    expect(r.ok && 'medicine' in r.game).toBe(false);
+  });
+
+  it('refuses at 0 Medicine, on the fit, an unknown id: game untouched', () => {
+    const none = campGame(people(5), [resting(6)]);
+    expect(treatSurvivor(none, 'recruit-6')).toEqual({ ok: false, reason: 'No Medicine' });
+    const before = structuredClone(none);
+    treatSurvivor(none, 'recruit-6');
+    expect(none).toEqual(before);
+    const g = withMedicine(campGame(people(5), [resting(6)]), 2);
+    expect(treatSurvivor(g, 'recruit-1')).toEqual({
+      ok: false,
+      reason: `${recruit(1).name} is not resting`,
+    });
+    expect(treatSurvivor(g, 'nobody')).toEqual({ ok: false, reason: 'No such survivor' });
+    expect(g.medicine).toBe(2);
+  });
+
+  it('twice in a row: the second is refused and spends nothing', () => {
+    const r = treatSurvivor(withMedicine(campGame(people(5), [resting(6)]), 2), 'recruit-6');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const again = treatSurvivor(r.game, 'recruit-6');
+    expect(again).toEqual({ ok: false, reason: `${recruit(6).name} is not resting` });
+    expect(r.game.medicine).toBe(1);
+  });
+
+  it('a treated survivor can join the squad at once', () => {
+    const g = withMedicine(campGame(people(5), [resting(6)]), 1);
+    expect(toggleSquad(g, 'recruit-6').ok).toBe(false);
+    const r = treatSurvivor(g, 'recruit-6');
+    if (!r.ok) throw new Error(r.reason);
+    const t = toggleSquad(r.game, 'recruit-6');
+    expect(t.ok && t.game.roster.at(-1)?.id).toBe('recruit-6');
+  });
+
+  it('with "Auto" on, the squad is re-picked', () => {
+    const strong = person(7, { xp: xpForLevel(8), rest: 1 });
+    const g = { ...withMedicine(campGame(people(6), [strong]), 1), autoSquad: true as const };
+    const r = treatSurvivor(g, 'recruit-7');
+    expect(r.ok && r.game.roster.some((d) => d.id === 'recruit-7')).toBe(true);
+  });
+
+  it('the next horde played leaves the treated fit, not owing a rest', () => {
+    const g = withMedicine(campGame(people(6), [resting(7)]), 1);
+    const r = treatSurvivor(g, 'recruit-7');
+    if (!r.ok) throw new Error(r.reason);
+    const next = finishSquadHorde(r.game, ended(r.game, {}));
+    expect(isFit(campOf(next).find((d) => d.id === 'recruit-7')!)).toBe(true);
   });
 });

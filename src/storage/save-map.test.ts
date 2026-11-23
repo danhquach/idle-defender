@@ -7,6 +7,7 @@ import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { MAP_PATROL } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
+import { treatSurvivor } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
 import { sendMapPatrol, takeReport, tripMs, withMap } from '../core/scout.ts';
 import { decodeSave, encodeSave } from './save.ts';
@@ -252,5 +253,34 @@ describe('save: hostile map payloads (ID-219)', () => {
       ['area', 'backAt', 'best', 'danger', 'members', 'no', 'power', 'seed', 'sentAt'].sort(),
     );
     expect(({} as Loose).x).toBeUndefined();
+  });
+});
+
+describe('save: after Medicine treats the resting (ID-220)', () => {
+  /** `camp()` with recruits 4 and 5 resting a horde and `medicine` in stock. */
+  const hurt = (medicine: number): GameState => {
+    const g = camp();
+    const rest = (d: GameState['reserve'][number]) =>
+      d.id === 'recruit-4' || d.id === 'recruit-5' ? { ...d, rest: 1 } : d;
+    return { ...g, reserve: g.reserve.map(rest), medicine };
+  };
+
+  it('a treat round-trips: no rest on the treated, one Medicine less', () => {
+    const r = treatSurvivor(hurt(2), 'recruit-4');
+    if (!r.ok) throw new Error(r.reason);
+    const back = reread(r.game)!.game;
+    expect(back).toEqual(r.game);
+    expect('rest' in back.reserve.find((d) => d.id === 'recruit-4')!).toBe(false);
+    expect(back.reserve.find((d) => d.id === 'recruit-5')!.rest).toBe(1);
+    expect(back.medicine).toBe(1);
+  });
+
+  it('the last Medicine used: the save writes no Medicine and loads none', () => {
+    const r = treatSurvivor(hurt(1), 'recruit-5');
+    if (!r.ok) throw new Error(r.reason);
+    expect('medicine' in JSON.parse(encodeSave(r.game, NOW)).game).toBe(false);
+    const back = reread(r.game)!.game;
+    expect(back.medicine).toBeUndefined();
+    expect(treatSurvivor(back, 'recruit-4')).toEqual({ ok: false, reason: 'No Medicine' });
   });
 });

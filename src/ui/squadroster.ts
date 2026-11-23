@@ -156,15 +156,22 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
   });
 }
 
-function avatar(art: ArtId, className: string): HTMLElement {
+function avatar(art: ArtId, className: string, hurt = false): HTMLElement {
   // Decoration only: the name is right beside it.
   const frame = el('div', className);
+  // Injured (ID-220): greyed, with a bandage across the corner (the words say it too).
+  frame.classList.toggle('roster-avatar-hurt', hurt);
   const img = el('img', 'roster-avatar-img');
   img.alt = '';
   // No URL, no request: an empty src would fetch the page itself.
   const url = ART_URLS[art];
   if (url) img.src = url;
   frame.append(img);
+  if (hurt) {
+    const bandage = el('span', 'roster-bandage');
+    bandage.setAttribute('aria-hidden', 'true');
+    frame.append(bandage);
+  }
   return frame;
 }
 
@@ -192,7 +199,7 @@ export interface RosterOptions {
    */
   state: () => {
     game: Pick<GameState, 'roster' | 'armoury' | 'autoSquad'> &
-      Partial<Pick<GameState, 'slots' | 'stock' | 'map'>> & {
+      Partial<Pick<GameState, 'slots' | 'stock' | 'map' | 'medicine'>> & {
         reserve?: readonly RosterDefender[];
       };
     fight: HordeState | null;
@@ -203,6 +210,8 @@ export interface RosterOptions {
   onEquip: (id: string, choice: string) => { ok: true } | { ok: false; reason: string };
   /** Move survivor `id` between the squad and the bench (ID-147), or why not. */
   onToggleSquad: (id: string) => { ok: true } | { ok: false; reason: string };
+  /** Treat resting survivor `id` with 1 Medicine (ID-220, between hordes), or why not. */
+  onTreat?: (id: string) => { ok: true } | { ok: false; reason: string };
   /**
    * Let survivor `id` go for good (ID-150), after the app's confirm (ID-191, answered by the
    * player, so it may take a while): what to say once they have gone, why not, or null when
@@ -442,19 +451,24 @@ export function createRoster(
     tab.dataset.defender = t.id;
     // One state, announced once: the survivor shown is the current one.
     if (selected) tab.setAttribute('aria-current', 'true');
-    const label = `${t.name}, level ${t.level}, ${t.job}, ${t.health}, ${t.gunFull}, ${t.dps} DPS${t.fits ? `, suits a ${t.job}` : ''}`;
+    // Injured, resting between hordes (ID-220): tinted, the portrait greyed and bandaged; the
+    // label says the visible word too (label in name), with how long.
+    const hurt = t.rest > 0 && !t.away;
+    const label = `${t.name}, level ${t.level}, ${t.job}, ${hurt ? `${INJURED}, ` : ''}${t.health}, ${t.gunFull}, ${t.dps} DPS${t.fits ? `, suits a ${t.job}` : ''}`;
     tab.title = label;
     tab.setAttribute('aria-label', label);
     tab.classList.toggle('rv-tab-down', t.down);
     tab.classList.toggle('rv-tab-away', t.away);
+    tab.classList.toggle('rv-tab-hurt', hurt);
     const text = el('span', 'rv-tab-text');
     // Name, level, then the profession on a line of its own (ID-149), so a narrow tab never
     // cuts it; on a phone the level drops out and the short profession name stays.
     text.append(
       el('span', 'rv-tab-name', t.name),
       el('span', 'rv-tab-level', `Lv ${t.level}`),
-      // Resting (ID-147): how long, in words, where the profession was; not colour alone.
-      el('span', 'rv-tab-job', t.away ? 'Out' : t.rest > 0 ? `Rest ${t.rest}` : t.jobShort),
+      // Resting (ID-147, ID-220): "Injured" in words where the profession was; not colour alone.
+      // How long is in the label and on the card.
+      el('span', 'rv-tab-job', t.away ? 'Out' : t.rest > 0 ? INJURED : t.jobShort),
     );
     // Two columns (ID-180): portrait | name, level, profession; the held gun on its rarity
     // tint | their DPS with it (the number the gun slot shows) and the ★.
@@ -468,7 +482,7 @@ export function createRoster(
       stat.append(star);
     }
     tab.append(
-      avatar(t.art, 'roster-avatar roster-avatar-xs'),
+      avatar(t.art, 'roster-avatar roster-avatar-xs', hurt),
       text,
       gunIcon(t.rarity, t.gunIcon, 'rv-tab-gun'),
       stat,
@@ -504,7 +518,12 @@ export function createRoster(
       `Level ${level} · ${mark.job} · `,
       el('span', mark.down ? 'roster-tile-down' : '', mark.health),
     );
-    text.append(el('h3', 'rv-who-name', d.name), sub, xpRow);
+    // Injured (ID-220): a tag beside the name, so the card says it before the level line.
+    const hurt = mark.rest > 0 && !mark.away;
+    const head = el('div', 'rv-who-head');
+    head.append(el('h3', 'rv-who-name', d.name));
+    if (hurt) head.append(el('span', 'rv-hurt-tag', INJURED));
+    text.append(head, sub, xpRow);
     const { game } = opts.state();
     // Only with a bench to swap with (ID-147): a camp of six or fewer has no choice to make.
     // Someone resting gets none: "Resting: N hordes" on the line above says why.
@@ -513,6 +532,10 @@ export function createRoster(
     // Out on a patrol (ID-219): "On patrol · …" on the line above says why there is none.
     if ((game.reserve ?? []).length > 0 && isFit(d) && !patrolOf(game, d.id)) {
       actions.append(squadButton(d, mark, canGear));
+    }
+    // Resting (ID-220): Medicine ends the rest, in the squad button's place.
+    if (opts.onTreat && !isFit(d) && !patrolOf(game, d.id)) {
+      actions.append(treatButton(d, (game.medicine ?? 0) > 0, canGear, opts.onTreat));
     }
     const camp = { roster: game.roster, reserve: game.reserve ?? [] };
     // Combine (ID-170) only with someone of the same profession to take in.
@@ -581,7 +604,7 @@ export function createRoster(
       }
       draw('slot');
     });
-    return [avatar(mark.art, 'roster-avatar roster-avatar-lg'), text, slot, ...pick];
+    return [avatar(mark.art, 'roster-avatar roster-avatar-lg', hurt), text, slot, ...pick];
   }
 
   /**
@@ -603,6 +626,36 @@ export function createRoster(
       else
         setStatus(mark.bench ? `${d.name} moves into the squad.` : `${d.name} moves to the bench.`);
       draw('squad');
+    });
+    return b;
+  }
+
+  /**
+   * "Treat · 1 Medicine" on resting survivor `d` (ID-220): "No Medicine", greyed, with none
+   * in stock; greyed with `TREAT_WAIT` in a fight. What it did shows on the status line.
+   */
+  function treatButton(
+    d: RosterDefender,
+    stocked: boolean,
+    canGear: boolean,
+    onTreat: NonNullable<RosterOptions['onTreat']>,
+  ): HTMLElement {
+    const b = el(
+      'button',
+      'hud-button rv-btn rv-squad rv-treat',
+      stocked ? TREAT_LABEL : NO_MEDICINE,
+    );
+    b.type = 'button';
+    b.dataset.key = 'treat';
+    b.disabled = !canGear || !stocked;
+    const why = !canGear ? TREAT_WAIT : stocked ? '' : NO_MEDICINE;
+    b.title = why;
+    b.setAttribute('aria-label', `Treat ${d.name} with 1 Medicine${why ? `. ${why}` : ''}`);
+    b.addEventListener('click', () => {
+      const r = onTreat(d.id);
+      if (r.ok) setStatus(treatedText(d.name));
+      else setStatus(r.reason, 'danger');
+      draw('treat');
     });
     return b;
   }
@@ -994,6 +1047,16 @@ export const AUTO_ON =
 
 /** Why the squad can't change now (ID-147): it is picked between hordes. */
 export const SQUAD_WAIT = 'Pick the squad between hordes';
+
+/** How the Roster names a survivor resting from an injury (ID-220), on their tab and card. */
+export const INJURED = 'Injured';
+/** The Treat button's words (ID-220): its cost, and what it says with no Medicine in stock. */
+export const TREAT_LABEL = 'Treat · 1 Medicine';
+export const NO_MEDICINE = 'No Medicine';
+/** Why nobody can be treated now (ID-220): Medicine is used between hordes, never mid-fight. */
+export const TREAT_WAIT = 'Treat the injured between hordes';
+/** What a treat says on the status line. */
+export const treatedText = (name: string): string => `${name} is treated: fit for the next horde.`;
 
 /** A held gun's dmg/s in survivor `d`'s hands, as printed (level and profession, ID-152): the picker's figure. */
 const heldDps = (h: Held, d: RosterDefender): string => survivorDps(squadSpec(d), h).toFixed(1);

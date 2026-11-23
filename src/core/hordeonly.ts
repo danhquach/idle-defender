@@ -73,6 +73,7 @@ import {
   RADIO_HORDES,
   SQUAD_JOIN,
   SURVIVOR_COMBINE,
+  TREAT,
   type ModeCard,
   type ResearchCard,
   type Rarity,
@@ -632,6 +633,29 @@ export function setAutoSquad(game: GameState, on: boolean): { game: GameState; m
 /** "Resting: 2 hordes" / "Resting: 1 horde" (ID-147). */
 export const restLabel = (rest: number): string =>
   `Resting: ${rest} ${rest === 1 ? 'horde' : 'hordes'}`;
+
+/**
+ * Treats resting survivor `id` (ID-220, between hordes): `TREAT.medicine` Medicine ends their
+ * whole rest, so they can fight the next horde at full HP, and "Auto" (ID-154) re-picks the
+ * squad. Refused, with `game` untouched, for an unknown id, one out on patrol, one not
+ * resting, or too little Medicine.
+ */
+export function treatSurvivor(
+  game: GameState,
+  id: string,
+): { ok: true; game: GameState } | { ok: false; reason: string } {
+  const d = campOf(game).find((r) => r.id === id);
+  if (!d) return { ok: false, reason: 'No such survivor' };
+  if (onMapPatrol(game, id)) return { ok: false, reason: `${d.name} is on patrol` };
+  if (isFit(d)) return { ok: false, reason: `${d.name} is not resting` };
+  const medicine = (game.medicine ?? 0) - TREAT.medicine;
+  if (medicine < 0) return { ok: false, reason: 'No Medicine' };
+  const heal = (r: RosterDefender): RosterDefender => (r === d ? withRest(r, 0) : r);
+  const g: GameState = { ...game, roster: game.roster.map(heal), reserve: game.reserve.map(heal) };
+  if (medicine > 0) g.medicine = medicine;
+  else delete g.medicine;
+  return { ok: true, game: autoSquad(g) };
+}
 
 /**
  * A firing line of `n` slots (ID-068, ID-179), top to bottom: on the ground
