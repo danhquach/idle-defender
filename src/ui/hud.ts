@@ -67,6 +67,7 @@ import {
   SHOP,
   SHOP_ITEMS,
   SKILL_IDS,
+  SQUAD_CAP,
   SQUAD_SKILLS,
   STASH_SLOT,
   SKILLS,
@@ -788,7 +789,7 @@ export interface PowerLine {
   power: number;
   rec: number;
   band: PowerBand;
-  /** "Power 1,240 · rec 1,400" */
+  /** "Power 1,240 · rec 1,400"; "… rec 1,400 for 8" when the squad is over `SQUAD_CAP` (ID-226). */
   text: string;
   /** The meter's fill, 0 to 1 of its length (Squad Power over `POWER_METER_END` × rec). */
   fill: number;
@@ -796,12 +797,17 @@ export interface PowerLine {
   tick: number;
 }
 
-export function powerLine(power: number, rec: number): PowerLine {
+/**
+ * `size` is the squad Recommended Power is for (`squadSize`): above `SQUAD_CAP` it asks more
+ * (ID-224), so the text names it then (ID-226); 6 or fewer reads as before.
+ */
+export function powerLine(power: number, rec: number, size: number = SQUAD_CAP): PowerLine {
+  const forSize = size > SQUAD_CAP ? ` for ${size}` : '';
   return {
     power,
     rec,
     band: powerBand(power, rec),
-    text: `Power ${thousands(power)} · rec ${thousands(rec)}`,
+    text: `Power ${thousands(power)} · rec ${thousands(rec)}${forSize}`,
     fill: rec > 0 ? Math.min(1, power / (POWER_METER_END * rec)) : 1,
     tick: 1 / POWER_METER_END,
   };
@@ -933,7 +939,8 @@ export function hordePicker(
   // The hordes are the mode's own (ID-218); the power and waves are those of their strength.
   const mode = modeOf(game);
   const top = localHorde(game);
-  const rec = (n: number): number => recommendedPower(effHorde(mode, n), mode, squadSize(game));
+  const size = squadSize(game);
+  const rec = (n: number): number => recommendedPower(effHorde(mode, n), mode, size);
   const lowest = Math.max(1, top - PICKER_HORDES + 1);
   // The best place to farm (ID-098): the highest beaten horde the squad already holds.
   let farm: number | null = null;
@@ -947,7 +954,7 @@ export function hordePicker(
   }
   for (let n = top; n >= lowest; n--) {
     const isNew = n === top;
-    const power = powerLine(squad, rec(n));
+    const power = powerLine(squad, rec(n), size);
     const boss = horrorAbility(n) !== null;
     options.push({
       horde: n,

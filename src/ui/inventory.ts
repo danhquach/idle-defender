@@ -387,6 +387,7 @@ export function inventoryView(
         : powerLine(
             squadPower(game),
             recommendedPower(effHorde(modeOf(game), horde), modeOf(game), squadSize(game)),
+            squadSize(game),
           ),
     powerHorde: horde,
     combine: combineRows(game),
