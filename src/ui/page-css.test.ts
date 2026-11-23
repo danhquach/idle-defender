@@ -664,3 +664,24 @@ describe('the Weapons details hold still (ID-198)', () => {
     expect(rules).not.toMatch(/\.inv-combine-row|\.inv-combine-affixes|\.inv-combine-power/);
   });
 });
+
+describe('a narrow desktop fight: the Scrap chip steps down (ID-228)', () => {
+  it('641-719px: the chip goes under the speeds and the fight bar keeps clear of the buttons only', () => {
+    expect(rules).toMatch(
+      /@media \(min-width: 641px\) and \(max-width: 719px\) \{\s*\.hud-fight-bar \{\s*padding-right: 300px;\s*\}\s*\}/,
+    );
+    expect(rules).toMatch(
+      /@media \(min-width: 641px\) and \(max-width: 719px\) and \(min-height: 541px\),\s*\(min-width: 641px\) and \(max-width: 719px\) and \(pointer: fine\) \{\s*body:not\(:has\(\.camp-scrim:not\(\[hidden\]\), \.menu-scrim:not\(\[hidden\]\)\)\) \.scrap-chip \{\s*top: 71px;\s*right: 12px;/,
+    );
+  });
+
+  it('a phone on its side keeps its own top row: the media list, not source order, leaves it out', () => {
+    // The step-down selector outranks the landscape `.scrap-chip` rules, so only its media
+    // list keeps it off a coarse pointer at 540px tall or less: every query in it needs
+    // either a taller window or a fine pointer.
+    const media = /(@media [^{]*)\{\s*body:not\(:has\(\.camp-scrim/.exec(rules)![1]!;
+    const queries = media.replace('@media', '').split(',');
+    expect(queries).toHaveLength(2);
+    for (const q of queries) expect(q).toMatch(/\(min-height: 541px\)|\(pointer: fine\)/);
+  });
+});
