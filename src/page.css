@@ -385,6 +385,15 @@ body {
   }
 }
 
+/* Up to 719px the corner panel (~219px at its narrowest, ~250px late on) has no room left of
+   the Scrap chip in the top row (ID-228): the chip steps down under the speeds (below), and
+   a fight's bar keeps clear of the Roster, Weapons and Menu buttons only. */
+@media (min-width: 641px) and (max-width: 719px) {
+  .hud-fight-bar {
+    padding-right: 300px;
+  }
+}
+
 .hud-toast {
   position: absolute;
   /* Over the start and result screens' panel, which comes later in the HUD (ID-188): the
@@ -3161,6 +3170,18 @@ body {
 .scrap-chip:empty,
 body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: none;
+}
+
+/* 641-719px (ID-228): under the speeds at the right edge, a third row clear of the held
+   cards' strip and the boss bars, so the fight's corner panel has the top row's room. It
+   stays in the top row while the camp window or the menu is open (it would sit on the
+   window's tabs), and on a phone on its side, which has its own top row. */
+@media (min-width: 641px) and (max-width: 719px) and (min-height: 541px),
+  (min-width: 641px) and (max-width: 719px) and (pointer: fine) {
+  body:not(:has(.camp-scrim:not([hidden]), .menu-scrim:not([hidden]))) .scrap-chip {
+    top: 71px;
+    right: 12px;
+  }
 }
 
 .menu-key {
