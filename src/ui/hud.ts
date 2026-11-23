@@ -168,7 +168,6 @@ import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
 import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
-import { mapButton } from './maptext.ts';
 import {
   ART_URLS,
   avatarOf,
@@ -1457,8 +1456,6 @@ export interface Debrief {
    * under it (`benchLine`); absent elsewhere.
    */
   roster?: { label: string; line: string | null };
-  /** The start screen's World map button (ID-219): its label, and whether a report is ready. */
-  map?: { label: string; ready: boolean };
   /**
    * The offer line under the squad (ID-150, ID-182, ID-196), on every win and on a start
    * screen with someone still asking: `showJoin` fills it from who is asking now, and the
@@ -1795,23 +1792,61 @@ export const buyText = (kind: SlotKind, cost: number, left: number): string =>
 export const CHANGE_SQUAD = 'Change squad';
 
 /**
- * Sets the World map button (ID-219) to `map`: its label, and a mark when a report is ready
- * (named for a screen reader too). Leaves it alone when nothing changed.
+ * The World map button in the top bar (ID-219), left of Roster: a globe; the app opens the
+ * World map tab from it and keeps it live with `setMapButton`.
  */
-export function setMapButton(b: HTMLElement, map: { label: string; ready: boolean }): void {
+export function createMapButton(root: HTMLElement): HTMLButtonElement {
+  const b = el('button', 'map-button');
+  b.type = 'button';
+  b.setAttribute('aria-haspopup', 'dialog');
+  setMapButton(b, { label: 'World map', out: 0, ready: false });
+  root.append(b);
+  return b;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** A line-drawn globe (outline, meridian, equator and two parallels), in the text colour. */
+function globe(doc: Document): SVGSVGElement {
+  const svg = doc.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'map-globe');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const shapes: [string, Record<string, string>][] = [
+    ['circle', { cx: '12', cy: '12', r: '9' }],
+    ['ellipse', { cx: '12', cy: '12', rx: '4', ry: '9' }],
+    ['path', { d: 'M3 12h18M4.6 7.5h14.8M4.6 16.5h14.8' }],
+  ];
+  for (const [tag, attrs] of shapes) {
+    const shape = doc.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) shape.setAttribute(k, v);
+    svg.append(shape);
+  }
+  return svg;
+}
+
+/**
+ * Sets the World map button to `map`: a globe, with a badge for the patrols out or "!" when
+ * a report is ready; its name (and hover title) says the same. Leaves it alone when nothing
+ * changed.
+ */
+export function setMapButton(
+  b: HTMLElement,
+  map: { label: string; out: number; ready: boolean },
+): void {
   const name = map.ready ? `${map.label}, report ready` : map.label;
   if (b.getAttribute('aria-label') === name) return;
   b.setAttribute('aria-label', name);
+  b.title = name;
   b.dataset.ready = String(map.ready);
-  const label = b.ownerDocument.createElement('span');
-  label.textContent = map.label;
-  const parts: Node[] = [label];
-  if (map.ready) {
-    const mark = b.ownerDocument.createElement('span');
-    mark.className = 'map-ready-mark';
-    mark.setAttribute('aria-hidden', 'true');
-    mark.textContent = '!';
-    parts.push(mark);
+  const doc = b.ownerDocument;
+  const parts: Node[] = [globe(doc)];
+  if (map.ready || map.out > 0) {
+    const badge = doc.createElement('span');
+    badge.className = map.ready ? 'map-badge map-badge-ready' : 'map-badge';
+    badge.setAttribute('aria-hidden', 'true');
+    badge.textContent = map.ready ? '!' : String(map.out);
+    parts.push(badge);
   }
   b.replaceChildren(...parts);
 }
@@ -1991,11 +2026,7 @@ export function nextGoalLine(game: ModeProgress): string | null {
  * The horde-only screen before a horde (ID-066): who fights it, its start button, and the
  * horde picker (ID-098) with `picked` selected (the next new horde by default).
  */
-export function squadStart(
-  game: GameState,
-  picked: number = localHorde(game),
-  at = 0,
-): ResultScreen {
+export function squadStart(game: GameState, picked: number = localHorde(game)): ResultScreen {
   const squad = squadOf(game);
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
@@ -2032,7 +2063,6 @@ export function squadStart(
       cards: squad.map((d) => plainCard(d)),
       empty: null,
       roster: { label: CHANGE_SQUAD, line: bench },
-      map: mapButton(game, at),
       ...(asking.length > 0 ? { join: true as const } : {}),
     },
   };
@@ -3366,7 +3396,7 @@ export function createHud(
     }
     if (d.drop) parts.push(gunSection(d.drop));
     if (d.cards.length > 0) {
-      parts.push(squadSection(d.cards, d.roster, d.map));
+      parts.push(squadSection(d.cards, d.roster));
     } else if (d.empty) {
       parts.push(emptySection(d.empty));
     }
@@ -3443,15 +3473,6 @@ export function createHud(
     return section;
   }
 
-  /** The World map button (ID-219): the app listens for it and keeps its label live. */
-  function mapOpenButton(map: NonNullable<Debrief['map']>): HTMLButtonElement {
-    const b = el('button', 'hud-button debrief-open-map');
-    b.type = 'button';
-    b.dataset.openMap = '';
-    setMapButton(b, map);
-    return b;
-  }
-
   /** "Best gun for everyone" beside the Squad heading: the app listens for it. */
   function bestGunsButton(): HTMLButtonElement {
     const b = el('button', 'hud-button debrief-best-guns', BEST_GUNS);
@@ -3461,15 +3482,10 @@ export function createHud(
   }
 
   /** The debrief's Squad section with `cards`, and the start screen's Roster link (`roster`). */
-  function squadSection(
-    cards: readonly SquadCard[],
-    roster?: Debrief['roster'],
-    map?: Debrief['map'],
-  ): HTMLElement {
+  function squadSection(cards: readonly SquadCard[], roster?: Debrief['roster']): HTMLElement {
     const section = el('section', 'debrief-squad');
     const head = el('div', 'debrief-squad-head');
     head.append(el('h3', 'debrief-squad-title', 'Squad'), bestGunsButton());
-    if (map) head.append(mapOpenButton(map));
     if (roster) {
       // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
       const change = el('button', 'hud-button debrief-change-squad', roster.label);

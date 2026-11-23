@@ -212,25 +212,25 @@ body {
   left: 0;
   right: 0;
   padding: var(--space-8) var(--space-16);
-  /* Clear of the Scrap chip and the Roster, Weapons and Menu buttons on the right. */
-  padding-right: 428px;
+  /* Clear of the Scrap chip and the World map, Roster, Weapons and Menu buttons on the right. */
+  padding-right: 460px;
   background: var(--color-bar-bg);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
 
-/* Above 1000px a fight's status line keeps clear of the speed buttons and Paused chip too. The top
+/* Above 1060px a fight's status line keeps clear of the speed buttons and Paused chip too. The top
    bar's redesign (ID-058) should give the speed group its own slot instead. */
 .hud-fight-bar {
-  padding-right: 704px;
+  padding-right: 736px;
 }
 
 /* Fight speed and the Space pause (ID-062), beside the Menu button. */
 .hud-speed {
   position: absolute;
   top: 5px;
-  /* Left of the Scrap chip and the Roster, Weapons and Menu buttons (ID-086, ID-179). */
-  right: 428px;
+  /* Left of the Scrap chip and the World map, Roster, Weapons and Menu buttons (ID-086, ID-179). */
+  right: 460px;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -369,31 +369,32 @@ body {
 
 /* A narrow desktop window: the speed group drops its key hints, as on a phone, so it stays
    clear of the corner panel (ID-165). Help still lists the keys. */
-@media (max-width: 1000px) {
+@media (max-width: 1060px) {
   .hud-speed .menu-key {
     display: none;
   }
 }
 
-/* Up to 1000px it can't share the top row with the corner panel: it sits under the
+/* Up to 1060px it can't share the top row with the corner panel: it sits under the
    Roster, Weapons and Menu buttons, at the right edge (ID-165), and the corner keeps clear
    of those buttons only. With the speeds beside it, an iPad's corner ran under them and its
-   Squad Power meter all but vanished behind "rec … for 8" (ID-226). */
-@media (min-width: 641px) and (max-width: 1000px) {
+   Squad Power meter all but vanished behind "rec … for 8" (ID-226). 1060px: the corner at
+   its narrowest (~325px with the badge) beside the speeds (266px) and the top row's 460px. */
+@media (min-width: 641px) and (max-width: 1060px) {
   .hud-speed {
     top: 38px;
     right: 12px;
   }
 
   .hud-fight-bar {
-    padding-right: 428px;
+    padding-right: 460px;
   }
 }
 
-/* Up to 719px the corner panel (~219px at its narrowest, ~250px late on) has no room left of
-   the Scrap chip in the top row (ID-228): the chip steps down under the speeds (below), and
-   a fight's bar keeps clear of the Roster, Weapons and Menu buttons only. */
-@media (min-width: 641px) and (max-width: 719px) {
+/* Up to 767px the corner panel (~219px at its narrowest, ~250px late on) has no room left of
+   the Scrap chip and the World map in the top row (ID-228): both step down under the speeds
+   (below), and a fight's bar keeps clear of the Roster, Weapons and Menu buttons only. */
+@media (min-width: 641px) and (max-width: 767px) {
   .hud-fight-bar {
     padding-right: 300px;
   }
@@ -2535,9 +2536,9 @@ body {
   pointer-events: none;
 }
 
-/* Where the speeds sit under the Menu button (641-1000px, ID-226), the boss bars (centred)
+/* Where the speeds sit under the Menu button (641-1060px, ID-226), the boss bars (centred)
    and the held cards' strip share their band: both keep clear of the speeds' 160 px. */
-@media (min-width: 641px) and (max-width: 1000px) {
+@media (min-width: 641px) and (max-width: 1060px) {
   .hud-boss {
     width: min(480px, calc(100% - 352px));
   }
@@ -3108,7 +3109,8 @@ body {
 /* The Menu (ID-039): the button sits top-right in both modes, over the top bar. */
 .menu-button,
 .inv-button,
-.roster-button {
+.roster-button,
+.map-button {
   position: absolute;
   top: 5px;
   right: 12px;
@@ -3127,9 +3129,11 @@ body {
 .menu-button:hover,
 .inv-button:hover,
 .roster-button:hover,
+.map-button:hover,
 .menu-button:focus-visible,
 .inv-button:focus-visible,
-.roster-button:focus-visible {
+.roster-button:focus-visible,
+.map-button:focus-visible {
   border-color: var(--color-accent-hover);
   background: var(--color-surface-active);
 }
@@ -3137,6 +3141,7 @@ body {
 .menu-button:focus-visible,
 .inv-button:focus-visible,
 .roster-button:focus-visible,
+.map-button:focus-visible,
 .menu button:focus-visible,
 .menu textarea:focus-visible,
 .menu input:focus-visible {
@@ -3144,12 +3149,58 @@ body {
   outline-offset: 2px;
 }
 
-/* The Scrap balance (ID-179): a read-only chip left of Roster, on the page itself so it
+/* The World map (ID-219): a square globe button left of Roster, styled like Roster and
+   Weapons; a badge on its corner counts the patrols out, or says "!" when a report waits. */
+.map-button {
+  right: 289px;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  padding: 0;
+}
+
+.map-globe {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+}
+
+.map-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 0 var(--space-4);
+  border-radius: 8px;
+  background: var(--color-surface-sunken);
+  box-shadow: 0 0 0 1px var(--color-border-strong);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.map-badge-ready {
+  background: var(--color-accent);
+  box-shadow: none;
+  color: var(--color-text-on-accent);
+  font-weight: 800;
+}
+
+/* The Scrap balance (ID-179): a read-only chip left of the World map, on the page itself so it
    stays above the camp window (the Roster and Weapons); styled as the speed buttons, no button. */
 .scrap-chip {
   position: fixed;
   top: 5px;
-  right: 299px;
+  right: 331px;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -3177,13 +3228,19 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: none;
 }
 
-/* 641-719px (ID-228): under the speeds at the right edge, a third row clear of the held
-   cards' strip and the boss bars, so the fight's corner panel has the top row's room. It
-   stays in the top row while the camp window or the menu is open (it would sit on the
-   window's tabs), and on a phone on its side, which has its own top row. */
-@media (min-width: 641px) and (max-width: 719px) and (min-height: 541px),
-  (min-width: 641px) and (max-width: 719px) and (pointer: fine) {
+/* 641-767px (ID-228): the chip, then the World map's globe at the right edge, under the
+   speeds: a third row clear of the held cards' strip and the boss bars, so the fight's corner
+   panel has the top row's room. They stay in the top row while the camp window or the menu is
+   open (the chip would sit on the window's tabs), and on a phone on its side, which has its
+   own top row. */
+@media (min-width: 641px) and (max-width: 767px) and (min-height: 541px),
+  (min-width: 641px) and (max-width: 767px) and (pointer: fine) {
   body:not(:has(.camp-scrim:not([hidden]), .menu-scrim:not([hidden]))) .scrap-chip {
+    top: 71px;
+    right: 54px;
+  }
+
+  body:not(:has(.camp-scrim:not([hidden]), .menu-scrim:not([hidden]))) .map-button {
     top: 71px;
     right: 12px;
   }
@@ -6165,9 +6222,10 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
    top row, their key hints dropped; the status line goes under them, then the XP and
    boss plates. */
 @media (max-width: 640px) {
+  /* 60px on the right: the World map's globe holds the second row's right end. */
   .hud-bar,
   .hud-fight-bar {
-    padding: 54px 12px 6px;
+    padding: 54px 60px 6px 12px;
   }
 
   .hud-speed {
@@ -6237,6 +6295,20 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   .roster-button {
     right: 156px;
+  }
+
+  /* No room left in the top row at 360px: the World map's globe takes the second row's right
+     end, under Menu, across from the speeds (a 44px square). */
+  .map-button {
+    top: 52px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .map-globe {
+    width: 22px;
+    height: 22px;
   }
 
   /* Under the held cards' strip (ID-113), which sits under the corner here: the boss bars
@@ -7035,6 +7107,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .menu-button,
   .inv-button,
   .roster-button,
+  .map-button,
   .hud-speed-button,
   .scrap-chip {
     top: 5px;
@@ -7081,18 +7154,47 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     right: 176px;
   }
 
+  /* Between hordes the globe sits left of Roster, the Scrap chip left of it. */
+  .map-button {
+    right: 252px;
+    width: 34px;
+  }
+
+  .map-globe {
+    width: 18px;
+    height: 18px;
+  }
+
   .scrap-chip {
+    right: 294px;
+  }
+
+  /* In a fight the top row is the corner panel's: the chip steps back beside Roster and the
+     globe heads the speed group's column at the right edge, the speeds under it. */
+  body:not(:has(.hud-debrief:not([hidden]))) .scrap-chip {
     right: 252px;
   }
 
-  /* Up to the Scrap chip (as wide as 90 px), past the horde badge on its left. */
+  body:not(:has(.hud-debrief:not([hidden]))) .map-button {
+    top: 40px;
+    right: var(--space-12);
+    width: 40px;
+    height: 36px;
+  }
+
+  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed {
+    top: 82px;
+  }
+
+  /* Up to the Scrap chip (about 100 px wide), past the horde badge on its left. */
   .hud-corner-panel {
-    width: min(300px, calc(100vw - 416px));
+    width: min(300px, calc(100vw - 426px));
   }
 
   .menu-button::after,
   .inv-button::after,
   .roster-button::after,
+  .map-button::after,
   .hud-speed > button::after {
     content: '';
     position: absolute;
@@ -7104,6 +7206,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 
   /* In the fight's column the buttons are 36 px tall: 4 px more above and below. */
+  body:not(:has(.hud-debrief:not([hidden]))) .map-button::after,
   body:not(:has(.hud-debrief:not([hidden]))) .hud-speed > button::after {
     inset: -4px -3px;
   }
@@ -7878,25 +7981,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 .map-found-gun[data-rarity='relic'] {
   color: var(--rarity-relic);
-}
-
-/* The start screen's World map button: a mark when a report is ready. */
-.debrief-open-map {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.map-ready-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-  font-size: var(--text-xs);
-  font-weight: 800;
 }
 
 .medicine-chip-label {

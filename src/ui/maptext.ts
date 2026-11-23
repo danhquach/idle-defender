@@ -1,5 +1,5 @@
 // The world map's words (ID-219): the button's label, countdowns, drops and a report's lines,
-// as plain text. Shared by the start screen's World map button (`hud.ts`) and the World map
+// as plain text. Shared by the top bar's World map button (`hud.ts`) and the World map
 // tab (`mapview.ts`). Pure: the time comes in as `now`.
 import { DANGERS, type AreaLoot, type Danger } from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
@@ -20,16 +20,17 @@ export function patrolsOut(n: number): string | null {
 }
 
 /**
- * The start screen's World map button: "World map", or with patrols out "World map · 2 out";
- * `ready` when a report waits.
+ * The top bar's World map button: "World map", or with patrols out "World map · 2 out", as
+ * its name; `out` for its badge; `ready` when a report waits.
  */
 export function mapButton(
   game: Pick<GameState, 'map'>,
   now: number,
-): { label: string; ready: boolean } {
+): { label: string; out: number; ready: boolean } {
   const out = game.map?.patrols.length ?? 0;
   return {
     label: out > 0 ? `World map · ${out} out` : 'World map',
+    out,
     ready: backPatrols(game, now).length > 0,
   };
 }

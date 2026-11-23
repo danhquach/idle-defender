@@ -18,7 +18,7 @@ import {
   withMap,
 } from '../core/scout.ts';
 import { createCampWindow } from './campwindow.ts';
-import { benchLine, createScrapChip, squadStart } from './hud.ts';
+import { benchLine, createMapButton, createScrapChip, setMapButton, squadStart } from './hud.ts';
 import {
   countdown,
   mapButton,
@@ -259,17 +259,34 @@ describe('World map words (ID-219)', () => {
     expect(patrolsOut(1)).toBe('1 patrol out');
     expect(patrolsOut(2)).toBe('2 patrols out');
     const g = send(send(camp(), ['recruit-2'], 0), ['recruit-3'], 1);
-    expect(mapButton(g, NOW)).toEqual({ label: 'World map · 2 out', ready: false });
+    expect(mapButton(g, NOW)).toEqual({ label: 'World map · 2 out', out: 2, ready: false });
     expect(mapButton(g, NOW + tripMs('dangerous')).ready).toBe(true);
-    expect(mapButton(camp(), NOW)).toEqual({ label: 'World map', ready: false });
+    expect(mapButton(camp(), NOW)).toEqual({ label: 'World map', out: 0, ready: false });
   });
 
-  it('puts the World map button on the start screen', () => {
+  it('leaves the start screen: the button is in the top bar', () => {
     const g = send(camp(), ['recruit-2']);
-    expect(squadStart(g, undefined, NOW).debrief?.map).toEqual({
-      label: 'World map · 1 out',
-      ready: false,
-    });
+    expect(squadStart(g).debrief).not.toHaveProperty('map');
+  });
+
+  it('draws the top bar button as a globe, with a badge for patrols out or a report', () => {
+    const root = document.createElement('div');
+    const b = createMapButton(root);
+    expect(root.contains(b)).toBe(true);
+    expect(b.getAttribute('aria-haspopup')).toBe('dialog');
+    setMapButton(b, { label: 'World map', out: 0, ready: false });
+    expect(b.getAttribute('aria-label')).toBe('World map');
+    expect(b.title).toBe('World map');
+    expect(b.querySelector('svg.map-globe')).not.toBeNull();
+    expect(b.querySelector('.map-badge')).toBeNull();
+    setMapButton(b, { label: 'World map · 2 out', out: 2, ready: false });
+    expect(b.querySelector('.map-badge')!.textContent).toBe('2');
+    expect(b.querySelector('.map-badge')!.getAttribute('aria-hidden')).toBe('true');
+    setMapButton(b, { label: 'World map · 2 out', out: 2, ready: true });
+    expect(b.getAttribute('aria-label')).toBe('World map · 2 out, report ready');
+    expect(b.dataset.ready).toBe('true');
+    expect(b.querySelector('.map-badge-ready')!.textContent).toBe('!');
+    expect(b.querySelectorAll('svg')).toHaveLength(1);
   });
 
   it('the bench line and the Roster say who is on patrol', () => {

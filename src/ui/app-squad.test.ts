@@ -2249,6 +2249,33 @@ describe('Craft through the app (ID-209)', () => {
     expect(m.tabs()).toEqual(['Roster', 'Weapons', 'Craft · 1', 'World map']);
   });
 
+  it('opens the World map from the globe in the top bar, not the start screen', () => {
+    const m = craftCamp(100);
+    const globe = m.root.querySelector<HTMLButtonElement>('.map-button')!;
+    expect(globe.getAttribute('aria-label')).toBe('World map');
+    expect(globe.querySelector('svg.map-globe')).not.toBeNull();
+    expect(m.root.querySelector('[data-open-map]')).toBeNull();
+    globe.focus();
+    globe.click();
+    expect(m.scrim().hidden).toBe(false);
+    expect(m.scrim().querySelector('#camp-tab-map')!.getAttribute('aria-selected')).toBe('true');
+    m.scrim().querySelector<HTMLButtonElement>('.camp-close')!.click();
+    expect(m.scrim().hidden).toBe(true);
+    expect(document.activeElement).toBe(globe);
+    // Tab walks the top bar left to right, as it shows.
+    const bar = [
+      ...m.root.querySelectorAll(
+        ':scope > .map-button, :scope > .roster-button, :scope > .inv-button, :scope > .menu-button',
+      ),
+    ];
+    expect(bar.map((b) => b.className)).toEqual([
+      'map-button',
+      'roster-button',
+      'inv-button',
+      'menu-button',
+    ]);
+  });
+
   it('crafts between hordes: saved, in the stash, Scrap spent, the chip follows', () => {
     const m = craftCamp(500);
     m.open();

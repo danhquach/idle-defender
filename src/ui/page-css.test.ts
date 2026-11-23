@@ -666,12 +666,12 @@ describe('the Weapons details hold still (ID-198)', () => {
 });
 
 describe('a narrow desktop fight: the Scrap chip steps down (ID-228)', () => {
-  it('641-719px: the chip goes under the speeds and the fight bar keeps clear of the buttons only', () => {
+  it('641-767px: the chip and the globe go under the speeds; the fight bar keeps clear of the buttons only', () => {
     expect(rules).toMatch(
-      /@media \(min-width: 641px\) and \(max-width: 719px\) \{\s*\.hud-fight-bar \{\s*padding-right: 300px;\s*\}\s*\}/,
+      /@media \(min-width: 641px\) and \(max-width: 767px\) \{\s*\.hud-fight-bar \{\s*padding-right: 300px;\s*\}\s*\}/,
     );
     expect(rules).toMatch(
-      /@media \(min-width: 641px\) and \(max-width: 719px\) and \(min-height: 541px\),\s*\(min-width: 641px\) and \(max-width: 719px\) and \(pointer: fine\) \{\s*body:not\(:has\(\.camp-scrim:not\(\[hidden\]\), \.menu-scrim:not\(\[hidden\]\)\)\) \.scrap-chip \{\s*top: 71px;\s*right: 12px;/,
+      /@media \(min-width: 641px\) and \(max-width: 767px\) and \(min-height: 541px\),\s*\(min-width: 641px\) and \(max-width: 767px\) and \(pointer: fine\) \{\s*body:not\(:has\(\.camp-scrim:not\(\[hidden\]\), \.menu-scrim:not\(\[hidden\]\)\)\) \.scrap-chip \{\s*top: 71px;\s*right: 54px;\s*\}\s*body:not\(:has\(\.camp-scrim:not\(\[hidden\]\), \.menu-scrim:not\(\[hidden\]\)\)\) \.map-button \{\s*top: 71px;\s*right: 12px;/,
     );
   });
 
@@ -683,5 +683,28 @@ describe('a narrow desktop fight: the Scrap chip steps down (ID-228)', () => {
     const queries = media.replace('@media', '').split(',');
     expect(queries).toHaveLength(2);
     for (const q of queries) expect(q).toMatch(/\(min-height: 541px\)|\(pointer: fine\)/);
+  });
+});
+
+describe('the World map globe in the top bar', () => {
+  it('sits left of Roster, the Scrap chip left of it, each 8px apart', () => {
+    expect(rules).toMatch(/\.roster-button \{\s*right: 213px;/);
+    expect(rules).toMatch(/\.map-button \{\s*right: 289px;[^}]*width: 34px;/);
+    expect(rules).toMatch(/\.scrap-chip \{\s*position: fixed;\s*top: 5px;\s*right: 331px;/);
+  });
+
+  it('the speeds share the top row only above 1060px, clear of the corner panel', () => {
+    expect(rules).toMatch(
+      /@media \(min-width: 641px\) and \(max-width: 1060px\) \{\s*\.hud-speed \{/,
+    );
+    expect(rules).not.toMatch(/max-width: 1000px/);
+    expect(rules).toMatch(/\.hud-speed \{\s*position: absolute;\s*top: 5px;[^}]*right: 460px;/);
+  });
+
+  it('heads the speed column in a fight on a phone on its side', () => {
+    const fight = 'body:not\\(:has\\(\\.hud-debrief:not\\(\\[hidden\\]\\)\\)\\)';
+    expect(rules).toMatch(new RegExp(`${fight} \\.map-button \\{\\s*top: 40px;`));
+    expect(rules).toMatch(new RegExp(`${fight} \\.hud-speed \\{\\s*top: 82px;`));
+    expect(rules).toMatch(new RegExp(`${fight} \\.scrap-chip \\{\\s*right: 252px;`));
   });
 });
