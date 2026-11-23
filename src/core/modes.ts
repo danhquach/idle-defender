@@ -55,7 +55,7 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
     skills: 3,
     newSkills: 0,
     extraBoss: 0,
-    hpScale: 1.12,
+    hpScale: 1.16,
     recBoss: 1,
   },
   hell: {

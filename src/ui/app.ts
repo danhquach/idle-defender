@@ -31,6 +31,7 @@ import {
   refuseJoins,
   setAutoSquad,
   squadOf,
+  squadSize,
   startSquadHorde,
   craftGun,
   salvageBlueprint,
@@ -524,7 +525,10 @@ export function start(root: HTMLElement, art: Art): void {
     if (horde && !resultUp()) {
       horde = withUpgradedGun(horde, r.weapon);
       hud.fightPower(
-        powerLine(squadPower(game), recommendedPower(horde.hordeNumber, horde.mode ?? 'normal')),
+        powerLine(
+          squadPower(game),
+          recommendedPower(horde.hordeNumber, horde.mode ?? 'normal', squadSize(game)),
+        ),
       );
     } else {
       // The start screen's squad on the wall holds the new numbers too.
@@ -744,7 +748,10 @@ export function start(root: HTMLElement, art: Art): void {
     panel?.hide();
     if (HORDE_ONLY) {
       hud.fightPower(
-        powerLine(squadPower(game), recommendedPower(next.hordeNumber, next.mode ?? 'normal')),
+        powerLine(
+          squadPower(game),
+          recommendedPower(next.hordeNumber, next.mode ?? 'normal', squadSize(game)),
+        ),
       );
     }
     hud.show(true);

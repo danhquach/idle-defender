@@ -120,7 +120,7 @@ export const holdLevel = (): number => holdFrom((level) => squad(50, level), 50)
 /** The expected squad of `mode` whose Squad Power is at least `share` of horde `n`'s Recommended Power. */
 export function squadAbove(mode: HigherMode, n: number, share: number): GameState {
   const eff = effHorde(mode, n);
-  const target = recommendedPower(eff, mode) * share;
+  const target = recommendedPower(eff, mode, SIZE) * share;
   for (let level = 1; level <= 400; level++) {
     const g = inMode(squad(mode === 'nightmare' ? 51 : 200, level), mode, n);
     if (mode === 'hell') g.modes = { nightmare: 51, hell: n };

@@ -122,6 +122,7 @@ import {
   nextStashSlotCost,
   squadCap,
   squadOf,
+  squadSize,
   stashCap,
   squadResult,
   upgradeCost,
@@ -932,7 +933,7 @@ export function hordePicker(
   // The hordes are the mode's own (ID-218); the power and waves are those of their strength.
   const mode = modeOf(game);
   const top = localHorde(game);
-  const rec = (n: number): number => recommendedPower(effHorde(mode, n), mode);
+  const rec = (n: number): number => recommendedPower(effHorde(mode, n), mode, squadSize(game));
   const lowest = Math.max(1, top - PICKER_HORDES + 1);
   // The best place to farm (ID-098): the highest beaten horde the squad already holds.
   let farm: number | null = null;

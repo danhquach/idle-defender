@@ -116,9 +116,19 @@ export const SQUAD_WALL: Tier = 'concrete';
  * win adds a survivor), then `late`: steep enough that every new horde asks for more Squad
  * Power than the last (ID-099; 1.03 before). The balance pass (ID-102) kept `late` at 1.06
  * and matched the gun level's step to it (`GUN_LEVEL_DAMAGE`), so farming can always
- * close the gap.
+ * close the gap. A squad above `SQUAD_CAP` meets a steeper late stretch (`SQUAD_BIG_HP`).
  */
 export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.06 } as const;
+/**
+ * A bigger squad's late Normal (ID-224): a squad of `SQUAD_CAP_MAX` (8) meets enemy HP growing
+ * `growth` a horde instead of `SQUAD_HP_GROWTH.late` over Hordes `from`+1 to `to` (31–50),
+ * the bump reached at `to` held from there on (Nightmare, Hell); each bought slot in use takes
+ * its share of the step (7: half), a squad of `SQUAD_CAP` or fewer none. At equal Squad Power
+ * 6 and 8 win alike, but two slots are a cheap +33%, so a squad of 8 skipped late Normal; this
+ * keeps it a little easier than 6, not a skip (×1.26 at Horde 50). Recommended Power counts it
+ * too. Beyond Horde 50 it drifts from the gun level's step (ID-102), capped at that ×1.26.
+ */
+export const SQUAD_BIG_HP = { from: 30, to: 50, growth: 1.0725 } as const;
 /**
  * Enemy HP's factor in horde-only Hordes 1, 2, … on top of the growth, the last one from
  * there on (ID-097, ID-102, ID-128): the first two are sure wins while the player learns
@@ -252,7 +262,8 @@ export const SQUAD_DROP: readonly { from: number; rarity: Record<Rarity, number>
 ];
 /**
  * A gun's level (ID-098): each level above 1 multiplies its base damage by 1 + this
- * (ID-102: compounding, matched to `SQUAD_HP_GROWTH.late`; 5% added a level before).
+ * (ID-102: compounding, matched to `SQUAD_HP_GROWTH.late`; 5% added a level before; a squad
+ * above `SQUAD_CAP` meets steeper HP over Hordes 31–50, `SQUAD_BIG_HP`).
  */
 export const GUN_LEVEL_DAMAGE = 0.06;
 /**
