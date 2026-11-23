@@ -42,8 +42,10 @@ import {
   MAX_COUNT,
   POWER,
   RARITY_ORDER,
+  SQUAD_BIG_HP,
   SQUAD_BONUS,
   SQUAD_CAP,
+  SQUAD_CAP_MAX,
   SQUAD_EARLY_HP,
   SQUAD_HP_GROWTH,
   SKILL_IDS,
@@ -139,14 +141,33 @@ export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter(
 /**
  * Enemy HP's factor in horde-only Horde `n` (ID-066): `SQUAD_HP_GROWTH.early` per horde
  * until the squad reaches its cap, `late` after; × `SQUAD_EARLY_HP`'s factor for the horde,
- * its last one from there on (ID-097, ID-102, ID-128).
+ * its last one from there on (ID-097, ID-102, ID-128); for a squad of `size` above
+ * `SQUAD_CAP`, × `bigSquadHp` (ID-224).
  */
-export function squadHpScale(n: number): number {
+export function squadHpScale(n: number, size: number = SQUAD_CAP): number {
   const early = Math.min(n, SQUAD_CAP) - 1;
   const late = Math.max(0, n - SQUAD_CAP);
   const ease = SQUAD_EARLY_HP[Math.min(n, SQUAD_EARLY_HP.length) - 1]!;
-  return ease * SQUAD_HP_GROWTH.early ** early * SQUAD_HP_GROWTH.late ** late;
+  return ease * SQUAD_HP_GROWTH.early ** early * SQUAD_HP_GROWTH.late ** late * bigSquadHp(n, size);
 }
+
+/**
+ * The bigger squad's factor on Horde `n`'s enemy HP (ID-224, `SQUAD_BIG_HP`): 1 for a squad
+ * of `SQUAD_CAP` or fewer and up to Horde `from`; each survivor over the cap (at most
+ * `SQUAD_CAP_MAX`) takes its share of the steeper growth, held from Horde `to` on. A size
+ * that is not a number counts as `SQUAD_CAP`.
+ */
+export function bigSquadHp(n: number, size: number): number {
+  const { from, to, growth } = SQUAD_BIG_HP;
+  const over = Number.isFinite(size) ? Math.min(Math.floor(size), SQUAD_CAP_MAX) - SQUAD_CAP : 0;
+  const share = Math.max(0, over) / (SQUAD_CAP_MAX - SQUAD_CAP);
+  const hordes = Math.min(Math.max(n, from), to) - from;
+  return (growth / SQUAD_HP_GROWTH.late) ** (hordes * share);
+}
+
+/** How many survivors fight the next horde (ID-224): `squadOf`'s length, the one count the fight and Recommended Power share. */
+export const squadSize = (game: Pick<GameState, 'roster' | 'slots'>): number =>
+  squadOf(game).length;
 
 /** The one perk a horde-only fight runs, always on at level 1 (no perk screen). */
 export const SQUAD_PERKS = [START_PERK] as const;
@@ -675,7 +696,7 @@ export function startSquadHorde(
     cashRate: 0,
     startCash: 0,
     cards: [...SQUAD_CARDS, ...modeCards(game)],
-    hpScale: squadHpScale(eff) * MODES[mode].hpScale,
+    hpScale: squadHpScale(eff, squad.length) * MODES[mode].hpScale,
     xpRate: SQUAD_XP_RATE,
     line: line.slots,
     spawnX: SQUAD_SPAWN_X,

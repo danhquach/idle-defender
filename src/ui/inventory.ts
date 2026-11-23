@@ -40,6 +40,7 @@ import {
   combineSets,
   nextRarity,
   squadOf,
+  squadSize,
   squadSpec,
   stashCap,
   type CombineSet,
@@ -385,7 +386,7 @@ export function inventoryView(
         ? null
         : powerLine(
             squadPower(game),
-            recommendedPower(effHorde(modeOf(game), horde), modeOf(game)),
+            recommendedPower(effHorde(modeOf(game), horde), modeOf(game), squadSize(game)),
           ),
     powerHorde: horde,
     combine: combineRows(game),

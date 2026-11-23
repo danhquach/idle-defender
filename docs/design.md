@@ -1336,7 +1336,10 @@ profession's output).
     `squadCap(game)` and `stashCap(game)` (`GameState.slots`, the purchases
     made); `SQUAD_CAP` and `STASH_CAP` stay the base values, and keep driving
     the difficulty (`squadHpScale`), the joiners' chances and the balance
-    fixtures: a bigger squad shifts fights only for a player who buys. The
+    fixtures: a bigger squad shifts fights only for a player who buys. A
+    squad of 7 or 8 meets steeper enemy HP over Normal Hordes 31–50, and
+    Recommended Power asks the same of it (ID-224, §11 Recommended Power), so
+    the slots make late Normal a little easier, not a skip. The
     scripted player never buys. After a purchase the status line says "Bought 1
     squad slot · 500 Scrap spent, 120 left." (stash: "Bought 10 stash slots …").
     Help says "40 slots to start" and where each kind is bought. Numbers in
@@ -2300,7 +2303,12 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     horde but more than the one before it). ID-102 kept ×1.06 and matched the
     gun level's step to it (§11 Balance pass). ×1.10 was tried first: Horde 20 then beat even a squad
     of level-200 Military Rifles with no cards, so no Recommended Power could
-    be fitted to it.
+    be fitted to it. A squad over 6 (ID-224, `SQUAD_BIG_HP`): a squad of 8
+    meets ×1.0725 a horde over Hordes 31–50 instead (×1.12 at Horde 40,
+    ×1.26 at 50, held from there on into Nightmare and Hell), a squad of 7
+    half the step in the exponent; a squad of 6 or fewer is unchanged. For 7
+    and 8 the HP then outgrows the gun level's ×1.06 over those 20 hordes
+    (the ID-102 match), by at most that ×1.26.
   - **Swarm waves:** from Horde 5, 25% of a horde's waves (at least one), +1% a
     horde, at most 50%, spread evenly back from the last wave, which always
     swarms (Horde 5: wave 7; Horde 9: waves 4 and 9; Hordes 11–19: 3, 7 and 10;
@@ -3408,6 +3416,42 @@ and comes back stronger.
   Horde 1 asks 18, 3 asks 115, 5 asks 778, 9 asks 1,774, 10 asks 1,899, 15
   asks 4,038, 20 asks 6,653, 30 asks 13,673 (before ID-137: 1,685, 3,534,
   5,821 and 11,963; before ID-136: 3,365, 5,544 and 11,394 past Horde 10).
+  - ID-224, a bigger squad: Recommended Power takes the squad that fights
+    (`squadSize`, the roster up to the bought slots), and a squad over 6 asks
+    more past Horde 30, by the same factor its enemies' HP takes
+    (`SQUAD_BIG_HP`, below). A squad of 6 or fewer asks what it did. Horde 40
+    asks 24,486 of a squad of 6 and 27,530 of 8; Horde 50 asks 43,847 and
+    55,435.
+    - Measured first (main, 40 seeds: the balance seeds and a second 20): at
+      equal Squad Power (the squad of 8 about 5 gun levels below the 6), a
+      squad of 6 and of 8 win alike, so Squad Power was already fair across
+      sizes. At 1.0× Recommended Power, Hordes 30, 40 and 50: 6 won 22, 27
+      and 28 of 40, 8 won 30, 25 and 32 (pooled 64% and 72%, inside the seed
+      noise; the balance seeds alone 42 and 42 of 60). At 0.85×: 9, 12, 9
+      against 10, 10, 12; at 1.15×: 34, 36, 39 against 38, 36, 37; at 1.3×
+      39 or 40 everywhere. A squad at Recommended Power wins 55–80% at
+      Hordes 30–50 for both sizes, not 50% (from before ID-224).
+    - So the issue was the cheap jump: two slots (1,700 Scrap) are +33%
+      Squad Power. A scripted campaign that buys each slot once it can
+      afford it had slot 7 by Horde 9–12 and slot 8 by 14–23, stood at
+      1.4–1.7× Recommended Power over Hordes 31–50 and won Horde 50 at the
+      first try on 18 of 20 seeds (one that never buys: 13 of 20, at 1.29×).
+      With the steeper late stretch for 8: 13 of 20 (Hordes 41–50 first
+      tries 185 of 200, 196 before); the one that never buys is unchanged.
+      A gentle bump on purpose (PM): a player who fields 8 wants a little
+      breathing room, so 8 stays easier than 6, it just no longer skips late
+      Normal. A save at 2.1× Recommended Power before stands at about 1.7×
+      after and still wins easily, which is fine (a strong squad winning is).
+    - A global ×1.07 (every squad) gave the buyer 13 of 20 too but dropped
+      the squad of 6 to 7 of 20 (Hordes 41–50 90% → 69%); ×1.065 left the
+      buyer at 17 of 20 and the 6 at 8. Only a squad-size term separates them.
+    - Held by `balance/squad8.test.ts`: a squad of 6 and of 8, each at its
+      own Recommended Power, win at Hordes 30, 40 and 50 on 30–90% of 20
+      seeds and within 30 points of each other; at 130% both win at least 8
+      of 10. The ticket's "expected squad of 8 wins Horde 50 on 30–70% at the
+      first try" is the campaign's 13 of 20 above, measured once (about 15
+      CPU-minutes) and not regression-tested; a fixed squad at the campaign's Squad Power is no stand-in
+      (it won 20 of 20 where the campaign won 13–18).
   - ID-137 refit: with the epic cards' costs, a squad at Recommended Power
     won 1, 0, 1 and 5 of 10 at Hordes 9, 12, 15 and 20, and a squad at 130%
     won 3 of 5 at Horde 15. Horde 9's factor goes 1.33 → 1.4 and `late`
@@ -3500,7 +3544,7 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   Enemy count and HP, waves, pace, swarms and the mini-bosses follow that
   number; so do the gun
   level a drop comes at, XP and Scrap. A per-mode HP factor on top is the
-  tuning knob (`MODES.hpScale`: Nightmare 1.12, Hell 1),
+  tuning knob (`MODES.hpScale`: Nightmare 1.16, 1.12 before ID-224; Hell 1),
   and `MODES.recBoss` on a boss horde's Recommended Power (Normal and Nightmare 1,
   Hell 1.2: at 1.1 the four-boss Hell 30 beat a squad at 130% of it on 2 of 5 seeds, ID-222).
 - **Bosses.** A boss horde (every 10th of the mode's own) brings as many bosses
@@ -3569,13 +3613,16 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   chip name the card; no radio part is found in a higher mode.
 - **Balance.** Nightmare starts where Normal ends (ID-223): a squad that just holds
   Normal Horde 50 wins Nightmare Horde 1 at the first try on 30–70% of 20 seeds
-  (measured: gun level 49, 10 of 20); a squad at 2× Normal Horde 50's Recommended
-  Power (gun level 63), not gearing up between fights, is stopped by Nightmare Horde 20
-  on most (measured: 20 of 20, at Hordes 9–17; gearing up on Nightmare's drops it was
+  (measured: gun level 54, 9 of 20; gun level 49, 10 of 20 before ID-224); a squad at 2× Normal
+  Horde 50's Recommended Power (gun level 63), not gearing up between fights, is stopped by Nightmare Horde 20
+  on most (measured: 20 of 20, at Hordes 6–11 since ID-224, 9–17 before; gearing up on Nightmare's drops it was
   stopped on only 4 of 20, accepted: a strong squad winning is fine); a squad well over
   Recommended Power does not lose repeatedly at Nightmare 20 and 30 or Hell 30
   (`balance/modes.test.ts`). `MODES.nightmare.hpScale` stayed 1.12 (no wall at
-  Nightmare 30). Before ID-223 (offset 40) the check was Nightmare 1–10 on 60% of seeds
+  Nightmare 30) until ID-224, which raised it to 1.16: the mode tests field a squad of 8, whose
+  steeper late Normal (`SQUAD_BIG_HP`) moved the hold level up and Nightmare 1 to 16 of 20 at
+  1.12, over the 70% cap; at 1.16 it is 9 of 20. The check swings by about 4 seeds across
+  knobs at the same strength (the hold level is a 5-seed bisect), so it is not finely tuned. Before ID-223 (offset 40) the check was Nightmare 1–10 on 60% of seeds
   and stopped by Nightmare 30. Hell (ID-222):
   a squad that holds Nightmare Horde 50 wins Hell Hordes 1-10 at the first try on at
   least 60% of 20 seeds and is stopped by Hell Horde 30 on most, and a squad well over
@@ -4801,7 +4848,10 @@ original outline.
   Scrap and slots (ID-179, `data.ts`): `SQUAD_SCRAP` { base 10, perHorde 5 },
   `SQUAD_SLOT_COSTS` [500, 1,200], `STASH_SLOT` { add 10, costs [150, 250, 400,
   600] }, `SQUAD_LINE_WIDE` (the 7 and 8 fill orders); `SQUAD_CAP` (6) and
-  `STASH_CAP` (40) are the base caps.
+  `STASH_CAP` (40) are the base caps. A bigger squad's late Normal (ID-224):
+  `SQUAD_BIG_HP` { from 30, to 50, growth 1.0725 }, with `MODES.nightmare.hpScale`
+  1.16 (1.12 before) to keep Nightmare 1 in its band for the squad of 8 the mode
+  tests field.
   The balance tests run apart from the unit tests (`npm run test:balance`)
   and keep their fights' results in `.cache/balance/`, keyed by the
   simulation's code, Node's version and the test file (ID-142), so they

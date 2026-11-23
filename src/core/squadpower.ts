@@ -1,7 +1,7 @@
 // Squad Power and Recommended Power (ID-098, design §11 Farming): one number for the
 // squad's strength, and one for what each horde-only horde asks, so a stuck player can
 // see how far short they are. Advice only: it never blocks a start. Pure.
-import { INJURY_BAND, POWER, SWARM, type EnemyKind } from './data.ts';
+import { INJURY_BAND, POWER, SQUAD_CAP, SWARM, type EnemyKind } from './data.ts';
 import type { GameState } from './game.ts';
 import { squadHpScale, squadOf, survivorPower } from './hordeonly.ts';
 import { wavePace } from './pacing.ts';
@@ -19,10 +19,11 @@ export const squadPower = (game: Pick<GameState, 'roster'>): number =>
  * The enemy HP horde-only Horde `n` brings, as expected: each wave's size times its mix's
  * mean HP (a swarm wave's doubled size and Runner-heavy mix, weighted `POWER.rec.swarm`,
  * ID-099), plus its bosses and mini-boss at their HP. `n` is the horde's strength; a higher
- * `mode`'s (ID-218) bosses and HP factor are its own.
+ * `mode`'s (ID-218) bosses and HP factor are its own; a squad of `size` above `SQUAD_CAP`
+ * meets more (ID-224, `squadHpScale`).
  */
-export function hordeHp(n: number, mode: Mode = 'normal'): number {
-  const scale = squadHpScale(n) * MODES[mode].hpScale;
+export function hordeHp(n: number, mode: Mode = 'normal', size: number = SQUAD_CAP): number {
+  const scale = squadHpScale(n, size) * MODES[mode].hpScale;
   const waves = waveCount(n);
   let total = 0;
   for (let w = 1; w <= waves; w++) {
@@ -59,14 +60,19 @@ export function hordeSeconds(n: number): number {
  * it wins about half the time with the scripted player's cards and skills, an average build
  * (ID-128; with no cards before; the balance test shows it). `n` is the horde's strength; in a
  * higher `mode` (ID-218) it is the effective horde, with that mode's bosses and HP factor.
+ * `size` is the squad that fights it (`squadSize`): above `SQUAD_CAP` it asks more (ID-224).
  */
-export function recommendedPower(n: number, mode: Mode = 'normal'): number {
+export function recommendedPower(
+  n: number,
+  mode: Mode = 'normal',
+  size: number = SQUAD_CAP,
+): number {
   const boss = modeBosses(mode, n - MODES[mode].offset).some((b) => !b.elite)
     ? POWER.rec.boss * MODES[mode].recBoss
     : 1;
   // Hordes 1 to 10 by `early`, past Horde 10 by `late` (ID-136).
   const stage = POWER.rec.early[n - 1] ?? POWER.rec.late;
-  return Math.round(stage * boss * POWER.rec.k * (hordeHp(n, mode) / hordeSeconds(n)));
+  return Math.round(stage * boss * POWER.rec.k * (hordeHp(n, mode, size) / hordeSeconds(n)));
 }
 
 /** How Squad Power stands against a horde's Recommended Power (ID-098). */
