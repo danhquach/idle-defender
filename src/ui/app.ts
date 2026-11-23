@@ -152,7 +152,7 @@ import { createDebugPanel, type DebugActions, type DebugSpeed, type DebugView } 
 import { createIntro } from './intro.ts';
 import { createCampWindow } from './campwindow.ts';
 import { CRAFT_WAIT, createCraft, type CraftTab } from './craft.ts';
-import { setMapButton } from './hud.ts';
+import { createMapButton, setMapButton } from './hud.ts';
 import { mapButton } from './maptext.ts';
 import { createMapView, MAP_WAIT, type MapTab } from './mapview.ts';
 import {
@@ -677,7 +677,7 @@ export function start(root: HTMLElement, art: Art): void {
     if (!horde) {
       preview = startSquadHorde(game, 0, Date.now());
       hud.update(preview);
-      hud.showResult(squadStart(game, picked, Date.now()));
+      hud.showResult(squadStart(game, picked));
     }
     refreshPanel();
   }
@@ -903,6 +903,8 @@ export function start(root: HTMLElement, art: Art): void {
     return out;
   }
   // The World map (ID-219), fourth in the camp window: patrols from the bench, between hordes.
+  // Its globe button sits in the top bar, left of Roster.
+  const mapOpen = HORDE_ONLY ? createMapButton(root) : null;
   const mapTab: MapTab | null = HORDE_ONLY
     ? createMapView(
         {
@@ -937,9 +939,13 @@ export function start(root: HTMLElement, art: Art): void {
           },
         },
         campWindow,
-        inventory.button,
+        mapOpen ?? inventory.button,
       )
     : null;
+  if (mapOpen) {
+    setMapButton(mapOpen, mapButton(game, Date.now()));
+    mapOpen.addEventListener('click', () => mapTab?.open(mapOpen));
+  }
   const menu = createMenu(root, {
     // Load and New camp lock only while a fight runs: the result screen is between hordes (ID-156).
     state: () => ({ game, fighting: horde !== null && !resultUp(), held }),
@@ -1017,6 +1023,11 @@ export function start(root: HTMLElement, art: Art): void {
         campWindow,
       )
     : null;
+  // The top bar's buttons in the order they show, left to right, so Tab walks them that way.
+  for (const cls of ['map-button', 'roster-button', 'inv-button', 'menu-button']) {
+    const b = root.querySelector(`:scope > .${cls}`);
+    if (b) root.append(b);
+  }
   // "Best gun for everyone" beside the result or start screen's Squad heading: what it did
   // shows as a toast.
   root.addEventListener('click', (e) => {
@@ -1026,12 +1037,6 @@ export function start(root: HTMLElement, art: Art): void {
     hud.toast(r.ok ? bestGunsLine(r.moves) : r.reason, 4000);
     // The start screen is drawn afresh on a change: the keyboard stays on the new button.
     if (!t.isConnected) root.querySelector<HTMLButtonElement>('[data-best-guns]')?.focus();
-  });
-  // The start screen's World map button opens the World map tab (ID-219).
-  root.addEventListener('click', (e) => {
-    const t = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-open-map]') : null;
-    if (!mapTab || !t) return;
-    mapTab.open(t);
   });
   // A survivor's name on the squad screen opens their card; "Change squad" opens the Roster
   // on the squad's first (ID-147).
@@ -1106,7 +1111,7 @@ export function start(root: HTMLElement, art: Art): void {
       hud.show(true);
       hud.update(preview);
       picked = picked >= 1 && picked <= localHorde(game) ? picked : localHorde(game);
-      hud.showResult(squadStart(game, picked, Date.now()));
+      hud.showResult(squadStart(game, picked));
       refreshPanel();
       cam = buildCam = fightCam;
       refreshDialogs();
@@ -1133,12 +1138,11 @@ export function start(root: HTMLElement, art: Art): void {
     const checked = syncClock(game, now);
     if (checked !== game) commit(checked);
     mapTab.tick(now);
-    const b = root.querySelector<HTMLElement>('[data-open-map]');
-    if (b) setMapButton(b, mapButton(game, now));
+    if (mapOpen) setMapButton(mapOpen, mapButton(game, now));
     const back = backPatrols(game, now).filter((p) => !reported.has(p.no));
     if (back.length > 0 && !horde && !dialogOpen()) {
       for (const p of back) reported.add(p.no);
-      mapTab.open(b);
+      mapTab.open(mapOpen);
     }
   }, 1000);
   if (!storage) menu.status('off');

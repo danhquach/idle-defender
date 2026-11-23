@@ -92,7 +92,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | Wiring and frame loop | `app.ts` (all callbacks from panels into core, `commit`, the frame loop) |
 | Canvas | `render.ts` (draws a fight and the camp), `projection.ts` (camera, angled view), `ground.ts` (tiles), `buildscene.ts` (camp scene) |
 | Sprites and effects | `sprites.ts` (art ids, URLs, loading), `anim.ts` (frames, gait), `death.ts`, `explosion.ts`, `spit.ts` |
-| In-fight HUD | `hud.ts` (status bar, card pick, skills, shop, result and squad screens, scrap chip) |
+| In-fight HUD | `hud.ts` (status bar, card pick, skills, shop, result and squad screens, scrap chip, the World map globe button) |
 | Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts`, `joining.ts` |
 | Dialogs and screens | `menu.ts` (settings, save, help), `confirm.ts`, `intro.ts` + `introTitle.ts`, `landscape.ts` (phone turn prompt), `debug.ts` (debug panel) |
 | Audio | `audio.ts` (Web Audio engine), `sound.ts` (cues from state changes) |
