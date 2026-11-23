@@ -4134,13 +4134,16 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   text-align: center;
 }
 
-/* dmg/s, bottom right; the set-ready mark, top left. */
+/* ID-227: the dmg/s has the bottom edge to itself, bottom right (4-5 digits ran into the
+   level there). The top row is the set-ready ▲ then the level, which takes it whole at
+   "▲ Lv 999"; the +N step sits under its right end. 2 px padding: at 4 px "▲ Lv 100" ran
+   past a 64 px slot. */
 .inv-slot-badge,
 .inv-slot-level,
 .inv-slot-step,
 .inv-slot-ready {
   position: absolute;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-xs);
   background: var(--color-label-bg);
   font-size: var(--text-xs);
@@ -4156,21 +4159,31 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-text);
 }
 
-.inv-slot-level {
-  bottom: 2px;
+.inv-slot-corner {
+  position: absolute;
+  top: 2px;
   left: 2px;
+  display: flex;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.inv-slot-corner > .inv-slot-level,
+.inv-slot-corner > .inv-slot-ready {
+  position: static;
+}
+
+.inv-slot-level {
   color: var(--color-accent);
 }
 
 .inv-slot-step {
-  top: 2px;
+  top: 19px;
   right: 2px;
   color: var(--color-accent);
 }
 
 .inv-slot-ready {
-  top: 2px;
-  left: 2px;
   color: var(--color-ok-text);
 }
 
@@ -4875,13 +4888,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   background: var(--color-accent-soft);
 }
 
-/* A ticked gun: the outline, and a tick top left (the combine mark is off while ticking). */
+/* A ticked gun: the outline, and a tick bottom left, clear of the level top left and the
+   dmg/s bottom right (ID-227). */
 .inv-slot[data-ticked='true']::after {
   content: '✓';
   position: absolute;
-  top: 2px;
+  bottom: 2px;
   left: 2px;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-xs);
   background: var(--color-focus);
   color: var(--color-bg);
