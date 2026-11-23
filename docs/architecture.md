@@ -66,6 +66,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `chatter.ts` | Speech bubbles during a fight. |
 | `base.ts` | The base's wall, posts, turrets and traps; the fight runs on it (`squadBase` for the squad build). |
 | `perks.ts` | Commander perks; `levelScale` is used by the fight. |
+| `scout.ts` | The horde-only World map (ID-219): its areas, sending a patrol team from the bench, team power and risk, real-time trips, the report rolled from the patrol's seed and taking it. |
 | `research.ts` / `power.ts` / `patrol.ts` | Full-game systems (see above). |
 | `sim.ts` | Headless scripted player for balance tests. |
 | `debug.ts` | Debug-mode edits (jump to a horde, set scrap or squad size). |
@@ -92,7 +93,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | Canvas | `render.ts` (draws a fight and the camp), `projection.ts` (camera, angled view), `ground.ts` (tiles), `buildscene.ts` (camp scene) |
 | Sprites and effects | `sprites.ts` (art ids, URLs, loading), `anim.ts` (frames, gait), `death.ts`, `explosion.ts`, `spit.ts` |
 | In-fight HUD | `hud.ts` (status bar, card pick, skills, shop, result and squad screens, scrap chip) |
-| Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons), `craft.ts` (Craft); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts`, `joining.ts` |
+| Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts`, `joining.ts` |
 | Dialogs and screens | `menu.ts` (settings, save, help), `confirm.ts`, `intro.ts` + `introTitle.ts`, `landscape.ts` (phone turn prompt), `debug.ts` (debug panel) |
 | Audio | `audio.ts` (Web Audio engine), `sound.ts` (cues from state changes) |
 | Shared bits | `kit.ts` (button variants), `fastforward.ts` (fight speed) |
@@ -127,7 +128,8 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | What happens after a fight | `finishSquadHorde` in `core/hordeonly.ts` |
 | A new field on `GameState` | `core/game.ts`; then a `read*` in `storage/save.ts` with a default for older saves, bump `SAVE_VERSION` (note it in its comment, add the old number to `readSave`'s list), add an old-save fixture in `storage/testing.ts` |
 | HUD text or buttons in a fight | `ui/hud.ts` |
-| Roster / Weapons / Craft tabs | `ui/squadroster.ts` / `ui/inventory.ts` / `ui/craft.ts` |
+| Roster / Weapons / Craft / World map tabs | `ui/squadroster.ts` / `ui/inventory.ts` / `ui/craft.ts` / `ui/mapview.ts` |
+| World map areas, danger, patrol rules | `AREAS`, `DANGERS`, `MAP_PATROL` in `core/data.ts`; rules in `core/scout.ts`; save in `readMap` (`storage/save.ts`) |
 | A player setting | `storage/settings.ts`; control in `ui/menu.ts` |
 | A sound | file in `src/assets/sounds/` (credit in `docs/audio-credits.md`); `ui/audio.ts` (samples), `ui/sound.ts` (when it plays) |
 | Page styles or layout | `src/page.css`; the DOM is built in the `ui/` file that owns the panel |

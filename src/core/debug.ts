@@ -33,7 +33,7 @@ import {
   type SkillId,
   type WeaponId,
 } from './data.ts';
-import type { GameState, RosterDefender } from './game.ts';
+import { onMapPatrol, type GameState, type RosterDefender } from './game.ts';
 import {
   cardLevel,
   clearFight,
@@ -96,7 +96,8 @@ export function setSquadSize(game: GameState, n: number, seed: number): DebugGam
   if (!inRange(n, DEBUG_LIMITS.squad)) return refuse('No such squad size');
   const g = structuredClone(game);
   const all = campOf(g);
-  const fit = all.filter(isFit);
+  // Out on a World map patrol (ID-219): away, never put in the squad.
+  const fit = all.filter((d) => isFit(d) && !onMapPatrol(g, d.id));
   const add = Math.max(0, n - fit.length);
   if (all.length + add > SQUAD_JOIN.max) return refuse('The camp is full');
   const recruits: RosterDefender[] = [];

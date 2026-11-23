@@ -83,6 +83,7 @@ import {
   equip,
   hordeXp,
   levelGains,
+  onMapPatrol,
   xpGains,
   type GameState,
   type LevelGain,
@@ -446,6 +447,13 @@ export const campOf = (game: Pick<GameState, 'roster' | 'reserve'>): RosterDefen
   ...game.reserve,
 ];
 
+/**
+ * The camp as a fight finds it (ID-219): everyone but those out on a World map patrol, who
+ * are away and do nothing for the squad (a Paramedic out patches nobody up).
+ */
+export const atCamp = (game: Pick<GameState, 'roster' | 'reserve' | 'map'>): RosterDefender[] =>
+  campOf(game).filter((d) => !onMapPatrol(game, d.id));
+
 /** Hordes `d` still rests (ID-147); 0 when fit. */
 export const restOf = (d: Pick<RosterDefender, 'rest'>): number => d.rest ?? 0;
 
@@ -469,7 +477,7 @@ export function fillSquad(game: GameState): GameState {
   if (room <= 0) return game;
   const picked = game.reserve
     .map((d, i) => ({ d, i }))
-    .filter(({ d }) => isFit(d))
+    .filter(({ d }) => isFit(d) && !onMapPatrol(game, d.id))
     .sort((a, b) => b.d.xp - a.d.xp || a.i - b.i)
     .slice(0, room)
     .map(({ d }) => d);
@@ -485,10 +493,10 @@ export function fillSquad(game: GameState): GameState {
  * Who swaps in mid-fight, in order (ID-148): the fit bench, highest level first (ties to
  * camp order), at most `MID_SWAP.max`. Each brings their own gun.
  */
-export function swapBench(game: Pick<GameState, 'reserve'>): RosterDefender[] {
+export function swapBench(game: Pick<GameState, 'reserve' | 'map'>): RosterDefender[] {
   return game.reserve
     .map((d, i) => ({ d, i, level: levelOf(d.xp).level }))
-    .filter(({ d }) => isFit(d))
+    .filter(({ d }) => isFit(d) && !onMapPatrol(game, d.id))
     .sort((a, b) => b.level - a.level || a.i - b.i)
     .slice(0, MID_SWAP.max)
     .map(({ d }) => d);
@@ -513,7 +521,8 @@ function benchResting(game: GameState): GameState {
  */
 export function settleSquad(game: GameState): GameState {
   let g = benchResting(game);
-  const camp = campOf(g);
+  // A survivor out on patrol (ID-219) is not in the camp to wake.
+  const camp = campOf(g).filter((d) => !onMapPatrol(g, d.id));
   if (camp.length > 0 && !camp.some(isFit)) {
     const first = camp.reduce((a, b) => (restOf(b) < restOf(a) ? b : a));
     const wake = (d: RosterDefender): RosterDefender => (d === first ? withRest(d, 0) : d);
@@ -545,6 +554,7 @@ export function toggleSquad(
   }
   const benched = game.reserve.find((d) => d.id === id);
   if (!benched) return { ok: false, reason: 'No such survivor' };
+  if (onMapPatrol(game, id)) return { ok: false, reason: `${benched.name} is on patrol` };
   if (!isFit(benched)) return { ok: false, reason: restLabel(restOf(benched)) };
   const cap = squadCap(game);
   if (game.roster.length >= cap) {
@@ -576,7 +586,7 @@ export interface SquadMoves {
 export function bestSquad(game: GameState): { game: GameState; moves: SquadMoves } {
   const ranked = campOf(game)
     .map((d, i) => ({ d, i, power: survivorPower(d) }))
-    .filter(({ d }) => isFit(d))
+    .filter(({ d }) => isFit(d) && !onMapPatrol(game, d.id))
     .sort((a, b) => b.power - a.power || a.i - b.i)
     .slice(0, squadCap(game))
     .map(({ d }) => d);
@@ -835,6 +845,7 @@ export function letGo(
 ): { ok: true; game: GameState; thrown: OwnedWeapon[] } | { ok: false; reason: string } {
   const d = campOf(game).find((x) => x.id === id);
   if (!d) return { ok: false, reason: 'No such survivor' };
+  if (onMapPatrol(game, id)) return { ok: false, reason: `${d.name} is on patrol` };
   const lock = letGoLock(game);
   if (lock) return { ok: false, reason: lock };
   const guns = [d.loadout.primary, d.loadout.secondary].filter(
@@ -866,10 +877,15 @@ export const combineXp = (xp: number): number =>
  * profession. None for an unknown keeper.
  */
 export function combinePartners(
-  game: { roster: readonly RosterDefender[]; reserve: readonly RosterDefender[] },
+  game: {
+    roster: readonly RosterDefender[];
+    reserve: readonly RosterDefender[];
+    map?: GameState['map'];
+  },
   keeperId: string,
 ): RosterDefender[] {
-  const camp = [...game.roster, ...game.reserve];
+  // Out on a World map patrol (ID-219): neither keeps nor is taken in until back.
+  const camp = [...game.roster, ...game.reserve].filter((d) => !onMapPatrol(game, d.id));
   const k = camp.find((d) => d.id === keeperId);
   return k ? camp.filter((d) => d !== k && d.job === k.job) : [];
 }
@@ -891,6 +907,9 @@ export function combineSurvivors(
   const f = camp.find((d) => d.id === fedId);
   if (!k || !f) return { ok: false, reason: 'No such survivor' };
   if (k === f) return { ok: false, reason: 'A survivor cannot combine with themselves' };
+  for (const d of [k, f]) {
+    if (onMapPatrol(game, d.id)) return { ok: false, reason: `${d.name} is on patrol` };
+  }
   if (k.job !== f.job)
     return { ok: false, reason: 'Only survivors of the same profession combine' };
   const lock = letGoLock(game, 'combine');
@@ -943,13 +962,13 @@ export interface Downed {
  * at any HP (one who pulled back in a swap, ID-148, too), is fit. A loss rests nobody.
  */
 export function squadRests(
-  game: Pick<GameState, 'roster' | 'reserve'>,
+  game: Pick<GameState, 'roster' | 'reserve' | 'map'>,
   horde: HordeState,
 ): Downed[] {
   // A lost fight downs everyone: resting them all would leave nobody to try again with.
   if (horde.outcome !== 'won') return [];
   const rng = createRng(horde.seed ^ REST_STREAM);
-  const points = paramedicPoints(campOf(game));
+  const points = paramedicPoints(atCamp(game));
   const odds = patchUpChance(points);
   return fieldOf(game, horde)
     .filter((d) => horde.injured.some((i) => i.defender.id === d.id))
@@ -1062,16 +1081,19 @@ export function squadXpGains(game: GameState, horde: HordeState): ReturnType<typ
  * resting or not. A survivor who swapped in fought, so they are not here. Nobody fought → none.
  */
 export function benchXpGains(
-  game: Pick<GameState, 'roster' | 'reserve'>,
+  game: Pick<GameState, 'roster' | 'reserve' | 'map'>,
   horde: Pick<HordeState, 'tookPart'>,
   fighters: readonly { xp: number }[],
 ): { id: string; name: string; xp: number; injured: boolean }[] {
   if (fighters.length === 0) return [];
   const mean = fighters.reduce((t, g) => t + g.xp, 0) / fighters.length;
   const xp = Math.floor(mean * BENCH_XP_SHARE);
-  return campOf(game)
-    .filter((d) => !horde.tookPart.includes(d.id))
-    .map((d) => ({ id: d.id, name: d.name, xp, injured: false }));
+  return (
+    campOf(game)
+      // Out on patrol (ID-219): away for the fight, so no share.
+      .filter((d) => !horde.tookPart.includes(d.id) && !onMapPatrol(game, d.id))
+      .map((d) => ({ id: d.id, name: d.name, xp, injured: false }))
+  );
 }
 
 /**
@@ -1535,6 +1557,10 @@ export function equipGun(
   choice: GunChoice,
 ): { ok: true; game: GameState } | { ok: false; reason: string } {
   const benched = game.reserve.find((d) => d.id === defenderId);
+  // Out on a World map patrol (ID-219): their gun went with them.
+  if (benched && onMapPatrol(game, defenderId)) {
+    return { ok: false, reason: `${benched.name} is on patrol` };
+  }
   if (benched) {
     // As if they were the whole squad: the stash is the same, then they go back.
     const r = equipGun({ ...game, roster: [benched], reserve: [] }, defenderId, choice);
@@ -1654,7 +1680,10 @@ export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] }
     order: [],
   });
   const squadMembers = squadOf(game);
-  const benchMembers = [...game.roster.slice(squadMembers.length), ...game.reserve];
+  // A survivor out on a World map patrol (ID-219) keeps the gun they went with.
+  const benchMembers = [...game.roster.slice(squadMembers.length), ...game.reserve].filter(
+    (d) => !onMapPatrol(game, d.id),
+  );
   const squad = group(squadMembers);
   const bench = group(benchMembers);
   const start = [...squad.hands, ...bench.hands];

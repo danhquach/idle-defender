@@ -14,7 +14,7 @@ import type {
   WEAPONS,
 } from '../core/data.ts';
 import { baseOf } from '../core/armoury.ts';
-import { buildingsOf } from '../core/data.ts';
+import { buildingsOf, type AreaId } from '../core/data.ts';
 import type { DefenderSpec, TurretState, UpgradeId } from '../core/horde.ts';
 import { isGun } from '../core/loadout.ts';
 
@@ -295,6 +295,12 @@ export const ART_IDS = [
   'map-hospital',
   'map-military',
   'map-crater',
+  'area-police',
+  'area-military',
+  'area-pharmacy',
+  'area-hospital',
+  'area-hardware',
+  'area-electronics',
 ] as const;
 export type ArtId = (typeof ART_IDS)[number];
 
@@ -302,7 +308,17 @@ export type ArtId = (typeof ART_IDS)[number];
  * Art the game doesn't wait for, loaded in the background: the world map's region (ID-028)
  * only shows behind a button after Horde 2; the title art (ID-106) fades in when it lands.
  */
-export const LAZY_ART: readonly ArtId[] = ['world-map', 'title-dusk'];
+export const LAZY_ART: readonly ArtId[] = [
+  'world-map',
+  'title-dusk',
+  // The World map tab's area pictures (ID-219): only shown once it is opened.
+  'area-police',
+  'area-military',
+  'area-pharmacy',
+  'area-hospital',
+  'area-hardware',
+  'area-electronics',
+];
 const PRELOAD = ART_IDS.filter((id) => !LAZY_ART.includes(id));
 
 /**
@@ -409,6 +425,16 @@ export const SCORCH_ART: ArtId = 'scorch';
 
 /** An Airstrike's bomb as it falls (ID-107): the Heavy Rounds shell, larger, nose down. */
 export const BOMB_ART: ArtId = 'airstrike-bomb';
+
+/** Each World map area's picture (ID-219), on its card, the team picker and the report. */
+export const AREA_ART: Readonly<Record<AreaId, ArtId>> = {
+  police: 'area-police',
+  military: 'area-military',
+  pharmacy: 'area-pharmacy',
+  hospital: 'area-hospital',
+  hardware: 'area-hardware',
+  electronics: 'area-electronics',
+};
 
 /** The world map's region (ID-028), drawn under the routes and places. */
 export const MAP_PICTURE: ArtId = 'world-map';

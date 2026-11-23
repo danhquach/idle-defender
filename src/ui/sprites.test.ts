@@ -36,6 +36,7 @@ import {
   MAP_ART,
   MAP_PICTURE,
   TITLE_PICTURE,
+  AREA_ART,
   placeArt,
   RESOURCE_ICON,
   RESOURCE_IDS,
@@ -167,6 +168,7 @@ describe('art coverage', () => {
       ...LOCATION_IDS.map((l) => MAP_ART[l]),
       MAP_PICTURE,
       TITLE_PICTURE,
+      ...Object.values(AREA_ART),
       ...states.map((s) => TURRET_ART[s]),
       ...TRAP_KINDS.flatMap((k) => [TRAP_ART[k].built, TRAP_ART[k].broken]),
       ...Object.keys(TIERS).flatMap((t) => Object.values(TIER_ART[t as keyof typeof TIER_ART])),
@@ -464,11 +466,11 @@ describe('loading the art', () => {
   });
 
   it('never waits for, or fails on, the lazy art', async () => {
-    expect(LAZY_ART).toEqual(['world-map', 'title-dusk']);
-    fakeImages((url) => (/\/(world-map|title-dusk)/.test(url) ? 'error' : 'load'));
+    expect(LAZY_ART).toEqual(['world-map', 'title-dusk', ...Object.values(AREA_ART)]);
+    fakeImages((url) => (/\/(world-map|title-dusk|area-)/.test(url) ? 'error' : 'load'));
     expect(Object.keys(await loadArt()).sort()).toEqual([...ART_IDS].sort());
     vi.useFakeTimers();
-    fakeImages((url) => (/\/(world-map|title-dusk)/.test(url) ? 'hang' : 'load'));
+    fakeImages((url) => (/\/(world-map|title-dusk|area-)/.test(url) ? 'hang' : 'load'));
     const art = loadArt();
     await vi.advanceTimersByTimeAsync(0);
     await expect(art).resolves.toBeDefined();

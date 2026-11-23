@@ -76,7 +76,10 @@ script refuses a model that is not listed here.
   that use of generated images follow Microsoft's terms of service; no statement
   of who owns the output, or of commercial use, was found, and the model is a
   preview in Foundry, whose preview terms may limit production use. Check these
-  terms again before release.
+  terms again before release. The World map's area pictures (ID-219: `area-police`,
+  `area-military`, `area-pharmacy`, `area-hospital`, `area-hardware`, `area-electronics`)
+  were made with it too, the project owner picking the level of detail from three tries;
+  the same points apply.
 - The FLUX names are Black Forest Labs trademarks; we name the models only to
   credit them, never to suggest endorsement.
 

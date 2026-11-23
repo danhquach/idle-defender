@@ -67,6 +67,8 @@ Manifest asset keys (unknown keys stop the build):
   each filled flat with a dark outline, every shape kept however small, for a
   plain shape the model would not draw as asked; besides id, kind and draw it takes
   only overlay and group, never a generation's keys such as model or prompt),
+  px (ID-219: a picture's width in px, for one shown small, such as a World map
+  area card; default PICTURE_PX),
   outside (ID-103: true on a sprite the project owner generated outside this build,
   in the app `model` names (a row of the art-credits table), from `prompt`; it has
   no seed, ref, pose or photo, and its source is kept in art-src/gen like any other).
@@ -101,7 +103,7 @@ CREDITS = ROOT / "docs" / "art-credits.md"
 KEYS = {
     "id", "kind", "model", "seed", "size", "prompt", "ref", "flip", "mutant", "group",
     "palette", "edge", "part", "style", "photo", "white", "pose", "frames", "overlay",
-    "draw", "outside", "like", "patch", "key",
+    "draw", "outside", "like", "patch", "key", "px",
 }
 # How far (px of the generation) a patch's edge fades into the frame under it.
 PATCH_FEATHER = 2
@@ -411,15 +413,16 @@ def texture(
     return tile.resize((TEXTURE_PX, TEXTURE_PX), Image.Resampling.LANCZOS)
 
 
-def picture(img: Image.Image) -> Image.Image:
-    """The frame cut off, muted, darkened toward the page and scaled to PICTURE_PX wide."""
+def picture(img: Image.Image, px: int = 0) -> Image.Image:
+    """The frame cut off, muted, darkened toward the page and scaled to `px` (PICTURE_PX) wide."""
+    px = px or PICTURE_PX
     img = img.convert("RGB")
     dx, dy = round(img.width * PICTURE_CROP), round(img.height * PICTURE_CROP)
     img = img.crop((dx, dy, img.width - dx, img.height - dy))
     img = ImageEnhance.Color(img).enhance(MUTED)
     img = Image.blend(img, Image.new("RGB", img.size, PAGE), PICTURE_DARKEN)
     img = img.resize(
-        (PICTURE_PX, round(img.height * PICTURE_PX / img.width)), Image.Resampling.LANCZOS
+        (px, round(img.height * px / img.width)), Image.Resampling.LANCZOS
     )
     # A 256-colour palette, dithered: under half the size of full colour, and the
     # game doesn't wait for it at start (src/ui/sprites.ts LAZY_ART).
@@ -475,6 +478,10 @@ def check(
         sys.exit(f"{name}: model {asset['model']} is not in the art-credits allow-list")
     if asset["kind"] not in ("sprite", "texture", "picture"):
         sys.exit(f"{name}: kind must be sprite, texture or picture")
+    if "px" in asset and (
+        asset["kind"] != "picture" or not number(asset["px"]) or not 64 <= asset["px"] <= PICTURE_PX
+    ):
+        sys.exit(f"{name}: px is a picture's width, 64 to {PICTURE_PX}")
     if outside and (asset["outside"] is not True or asset["kind"] != "sprite"):
         sys.exit(f"{name}: outside is true, on a sprite")
     if not is_drawn and asset.get("style", asset["kind"]) not in styles:
@@ -653,7 +660,7 @@ def main(only: list[str]) -> None:
                 built[asset["id"]] = overlaid(built[asset["id"]], pastes)
             continue
         if asset["kind"] == "picture":
-            built[asset["id"]] = picture(src)
+            built[asset["id"]] = picture(src, asset.get("px", 0))
             continue
         built[asset["id"]] = texture(
             src,

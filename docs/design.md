@@ -2738,6 +2738,49 @@ Set before sending; they apply to any location, plaza or single building.
   car it took (null on foot), every car out one the camp built and on one
   patrol at a time. A v9 save loads with no car and every patrol on foot.
 
+### Horde-only build: the World map (ID-219)
+
+The shipping build has its own small slice of this section, apart from the full game's
+patrols above (no plazas, car, orders or deaths). Numbers are starting points, to tune
+(`AREAS`, `DANGERS`, `MAP_PATROL` in `core/data.ts`).
+
+- **The map:** a World map tab in the camp window (opened from the start screen's World
+  map button, which shows "World map · 2 out" and a mark when a report is ready) shows 4
+  areas, each kind once, drawn from the core RNG with the map's seed. Each card shows the
+  area's picture, name, danger, trip time and its two drops with the chance per member.
+  When a patrol's report is taken its area is replaced by a new kind not on the map; areas
+  with no patrol stay until searched.
+- **Areas:** Police station (mostly weapons, sometimes Scrap), Military depot (weapons one
+  rarity step better, blueprints), Pharmacy (Medicine 1–2, Scrap), Hospital (Medicine 2–4,
+  blueprints), Hardware store (Scrap, blueprints), Electronics store (blueprints, Scrap). A
+  find is "mostly" 3 times in 4.
+- **Danger:** Safe 30 min, 40% a roll, replay rarity at the best horde, 25% of a win's XP,
+  a Scrap find half a win's Scrap; Risky 1 h, 60%, one step up, 50%, one win's Scrap;
+  Dangerous 2 h, 80%, two steps up, 100%, one and a half. The best horde is the strongest
+  beaten on any mode (at least 1), fixed when the patrol leaves.
+- **Team:** 1 to 4 fit bench survivors, one patrol per area, several areas at once. Team
+  power is the members' Squad Power shares (level and gun, as the squad's). The danger asks
+  for 1, 2 or 3 survivors at the best horde's Recommended Power per squad survivor; the
+  ratio of power to that sets each member's injury chance, 70% / (1 + 3.25 × ratio²), and
+  adds up to 15% to each roll's chance (full at a ratio of 2, at most 95%). The picker
+  rates the team Safe (ratio 1.5+), Risky (0.75+) or Dangerous, live as members are picked.
+- **Away:** members on patrol can't fight, swap in, join the squad, be let go or
+  combined, and earn no bench share; the Roster says "On patrol · Pharmacy · 42 m".
+- **Report:** on return each member rolls for an injury, then once for loot (a gun by the
+  existing drop rolls, uid `m<no>-<k>`, into the stash, a full stash throwing away and
+  salvaging the weakest; a blueprint, lost at the cap; Scrap; Medicine, kept up to 999).
+  Every member earns the XP, injured or not; the injured rest as if downed in a won fight.
+  Everything is rolled from the patrol's seed, so a reload gives the same report, and it
+  pays once, on OK, between hordes. It opens by itself on the start screen when a patrol is
+  back. Time is real time, also with the game closed. Time that runs backwards counts as 0:
+  a clock set back (even while closed, against the save's time) moves every trip back as
+  much, so it keeps exactly the time it had left and never finishes early. A clock set
+  forward can't be told from real time passing, so it does shorten a trip. A Paramedic out
+  on patrol patches nobody up, and a gun out with its holder can't be taken back meanwhile.
+  The scripted player in the balance tests does not patrol.
+- **Save v25:** `map` (seed, draws, 4 areas, the patrols out) and `medicine`, each written
+  once there is one; an older save loads with a fresh map and no Medicine.
+
 ## 11. Resources and research
 
 | Resource | Main source | Spent on |
