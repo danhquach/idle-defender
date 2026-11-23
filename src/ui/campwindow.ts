@@ -58,7 +58,7 @@ export function shortLabel(button: HTMLElement, lead: string, tail: string): voi
 }
 
 /** The tabs left to right, whichever is added first; one not listed goes last. */
-const ORDER = ['roster', 'weapons', 'craft'];
+const ORDER = ['roster', 'weapons', 'craft', 'map'];
 const place = (id: string): number => (ORDER.indexOf(id) + ORDER.length + 1) % (ORDER.length + 1);
 
 export function createCampWindow(root: HTMLElement): CampWindow {

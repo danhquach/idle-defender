@@ -2246,7 +2246,7 @@ describe('Craft through the app (ID-209)', () => {
   it('has the Craft tab after Weapons (and the Roster before them)', () => {
     const m = craftCamp(100);
     m.open();
-    expect(m.tabs()).toEqual(['Roster', 'Weapons', 'Craft · 1']);
+    expect(m.tabs()).toEqual(['Roster', 'Weapons', 'Craft · 1', 'World map']);
   });
 
   it('crafts between hordes: saved, in the stash, Scrap spent, the chip follows', () => {

@@ -227,6 +227,126 @@ export const SQUAD_BONUS = { rolls: 2, chance: 0.5 } as const;
  * `salvage` Scrap.
  */
 export const BLUEPRINT = { chance: 0.15, cap: 99, salvage: 5 } as const;
+
+/** What a world-map area can drop (ID-219). */
+export type AreaLoot = 'weapon' | 'blueprint' | 'scrap' | 'medicine';
+/** The world map's areas (ID-219), proposed, to tune. */
+export const AREA_IDS = [
+  'police',
+  'military',
+  'pharmacy',
+  'hospital',
+  'hardware',
+  'electronics',
+] as const;
+export type AreaId = (typeof AREA_IDS)[number];
+/** An area's danger (ID-219), fixed when it spawns on the map. */
+export const DANGER_IDS = ['safe', 'risky', 'dangerous'] as const;
+export type Danger = (typeof DANGER_IDS)[number];
+/**
+ * Each area (ID-219): its name, the loot it mostly drops and sometimes drops, extra gun rarity
+ * steps (the Military depot's better guns) and the Medicine one find brings (from, to).
+ */
+export const AREAS: Readonly<
+  Record<
+    AreaId,
+    {
+      name: string;
+      mostly: AreaLoot;
+      sometimes: AreaLoot;
+      rarity: number;
+      medicine: readonly [number, number];
+    }
+  >
+> = {
+  police: {
+    name: 'Police station',
+    mostly: 'weapon',
+    sometimes: 'scrap',
+    rarity: 0,
+    medicine: [1, 2],
+  },
+  military: {
+    name: 'Military depot',
+    mostly: 'weapon',
+    sometimes: 'blueprint',
+    rarity: 1,
+    medicine: [1, 2],
+  },
+  pharmacy: {
+    name: 'Pharmacy',
+    mostly: 'medicine',
+    sometimes: 'scrap',
+    rarity: 0,
+    medicine: [1, 2],
+  },
+  hospital: {
+    name: 'Hospital',
+    mostly: 'medicine',
+    sometimes: 'blueprint',
+    rarity: 0,
+    medicine: [2, 4],
+  },
+  hardware: {
+    name: 'Hardware store',
+    mostly: 'scrap',
+    sometimes: 'blueprint',
+    rarity: 0,
+    medicine: [1, 2],
+  },
+  electronics: {
+    name: 'Electronics store',
+    mostly: 'blueprint',
+    sometimes: 'scrap',
+    rarity: 0,
+    medicine: [1, 2],
+  },
+};
+/**
+ * Each danger (ID-219), proposed, to tune: trip `minutes`; the `drop` chance per member's roll;
+ * gun rarity `steps` up from a replay at the best horde; `xp`, the share of a win's XP at the
+ * best horde; `need`, the team power it asks for, in survivors at the best horde's Recommended
+ * Power per squad survivor; `scrap`, one Scrap find as a share of that win's Scrap.
+ */
+export const DANGERS: Readonly<
+  Record<
+    Danger,
+    {
+      name: string;
+      minutes: number;
+      drop: number;
+      steps: number;
+      xp: number;
+      need: number;
+      scrap: number;
+    }
+  >
+> = {
+  safe: { name: 'Safe', minutes: 30, drop: 0.4, steps: 0, xp: 0.25, need: 1, scrap: 0.5 },
+  risky: { name: 'Risky', minutes: 60, drop: 0.6, steps: 1, xp: 0.5, need: 2, scrap: 1 },
+  dangerous: { name: 'Dangerous', minutes: 120, drop: 0.8, steps: 2, xp: 1, need: 3, scrap: 1.5 },
+};
+/**
+ * Map patrols (ID-219), proposed, to tune: `areas` on the map; team size `min`–`max`; a find
+ * is `mostly` times as likely as a `sometimes` one; the injury chance is `injury` / (1 + `k` ×
+ * ratio²), ratio the team's power over the danger's need; a stronger team adds up to `dropBonus`
+ * to each roll's chance (full at a ratio of 2), at most `dropMax`; the team's rating is Safe at
+ * a ratio of `safeAt` or more, Risky at `riskyAt`, else Dangerous; Medicine is kept up to
+ * `medicineMax`.
+ */
+export const MAP_PATROL = {
+  areas: 4,
+  min: 1,
+  max: 4,
+  mostly: 3,
+  injury: 0.7,
+  k: 3.25,
+  dropBonus: 0.15,
+  dropMax: 0.95,
+  safeAt: 1.5,
+  riskyAt: 0.75,
+  medicineMax: 999,
+} as const;
 /**
  * Crafting a gun from a blueprint (ID-209), starting points (the PM's call): the Scrap put in
  * runs from `min` up in `steps` more steps of `step`. At `min` the rarity odds (percent) are

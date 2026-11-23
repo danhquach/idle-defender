@@ -6373,6 +6373,66 @@
         ],
         "outline": 14
       }
+    },
+    {
+      "id": "area-police",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "microsoft/mai-image-2.6",
+      "seed": 2191,
+      "size": "1536x1024",
+      "px": 640,
+      "prompt": "2D game illustration of an abandoned police station, instantly recognisable at a glance, hand-painted style with bold dark outlines and soft simple shading. One squat two-storey brick station seen from the front at a slight angle, centred, with a large shield-shaped police badge emblem above the double doors as the clear focal point and a dead blue lamp beside the entrance. A moderate amount of detail: cracked walls, barred windows, one smashed window, a toppled police barrier and a little rubble on the steps in front, some weeds. Muted desaturated palette of grey-brown and dusty grey, the badge and lamp the main colour accent in a muted blue, dim dusk sky. Simple soft background with faint distant ruined buildings in silhouette. No car, no people, no zombies, no text, no letters, no logos, no frame, no border."
+    },
+    {
+      "id": "area-military",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "microsoft/mai-image-2.6",
+      "seed": 2191,
+      "size": "1536x1024",
+      "px": 640,
+      "prompt": "2D game illustration of an abandoned military supply depot, instantly recognisable at a glance, hand-painted style with bold dark outlines and soft simple shading. One low concrete bunker warehouse with a curved roof seen from the front at a slight angle, centred, with a large painted star on its big steel doors as the clear focal point, a chain-link fence with barbed wire and a sandbag wall in front. A moderate amount of detail: cracked concrete, a few stacked olive ammunition crates, a little rubble, some weeds. Muted desaturated palette of grey-brown and dusty grey, the star and crates the main colour accent in a muted olive green, dim dusk sky. Simple soft background with faint distant ruined buildings in silhouette. No vehicles, no people, no zombies, no text, no letters, no logos, no frame, no border."
+    },
+    {
+      "id": "area-pharmacy",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "microsoft/mai-image-2.6",
+      "seed": 2191,
+      "size": "1536x1024",
+      "px": 640,
+      "prompt": "2D game illustration of an abandoned pharmacy, instantly recognisable at a glance, hand-painted style with bold dark outlines and soft simple shading. One single-storey shop seen from the front at a slight angle, centred, with a large cross sign above the door as the clear focal point. A moderate amount of detail: cracked walls, a smashed shop window with a few shelves visible inside, one boarded-up window, a little rubble and a few scattered pill bottles on the pavement in front, some weeds. Muted desaturated palette of grey-brown and dusty grey, the cross sign the main colour accent in a muted green, dim dusk sky. Simple soft background with faint distant ruined buildings in silhouette. No car, no people, no zombies, no text, no letters, no logos, no frame, no border."
+    },
+    {
+      "id": "area-hospital",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "microsoft/mai-image-2.6",
+      "seed": 2191,
+      "size": "1536x1024",
+      "px": 640,
+      "prompt": "2D game illustration of an abandoned hospital, instantly recognisable at a glance, hand-painted style with bold dark outlines and soft simple shading. One tall four-storey hospital block seen from the front at a slight angle, centred, with a large square sign showing a bold capital letter H on the facade above the entrance canopy as the clear focal point. A moderate amount of detail: rows of windows with some smashed, cracked walls, an overturned hospital stretcher and a little rubble in front of the entrance, some weeds. Muted desaturated palette of grey-brown and dusty grey, the H sign the main colour accent in a muted blue, dim dusk sky. Simple soft background with faint distant ruined buildings in silhouette. No crosses, no vehicles, no people, no zombies, no other text or letters, no logos, no frame, no border."
+    },
+    {
+      "id": "area-hardware",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "microsoft/mai-image-2.6",
+      "seed": 2191,
+      "size": "1536x1024",
+      "px": 640,
+      "prompt": "2D game illustration of an abandoned hardware store, instantly recognisable at a glance, hand-painted style with bold dark outlines and soft simple shading. One single-storey shop with a wide front seen at a slight angle, centred, with a large sign shaped as a crossed hammer and wrench above the door as the clear focal point. A moderate amount of detail: cracked walls, a smashed shop window with tools hanging on a wall inside, a stack of planks, a few paint cans, coiled rope and a little scrap metal on the pavement in front, some weeds. Muted desaturated palette of grey-brown and dusty grey, the hammer and wrench sign the main colour accent in a muted orange, dim dusk sky. Simple soft background with faint distant ruined buildings in silhouette. No car, no people, no zombies, no text, no letters, no logos, no frame, no border."
+    },
+    {
+      "id": "area-electronics",
+      "kind": "picture",
+      "style": "verbatim",
+      "model": "microsoft/mai-image-2.6",
+      "seed": 2191,
+      "size": "1536x1024",
+      "px": 640,
+      "prompt": "2D game illustration of an abandoned electronics store, instantly recognisable at a glance, hand-painted style with bold dark outlines and soft simple shading. One single-storey shop seen from the front at a slight angle, centred, with a large lightning bolt sign above the door as the clear focal point. A moderate amount of detail: cracked walls, a smashed shop window with dead old televisions and radios on shelves inside, a few cardboard boxes, a tangle of cables and a broken monitor on the pavement in front, some weeds. Muted desaturated palette of grey-brown and dusty grey, the lightning bolt sign the main colour accent in a muted yellow, dim dusk sky. Simple soft background with faint distant ruined buildings in silhouette. No car, no people, no zombies, no text, no letters, no logos, no frame, no border."
     }
   ]
 }

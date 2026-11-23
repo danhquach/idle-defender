@@ -51,6 +51,7 @@ import {
 } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
 import type { LeftWeapon, Patrol, PatrolReport } from './patrol.ts';
+import type { WorldMap } from './scout.ts';
 import { newPerkLevels, type PerkLevels } from './perks.ts';
 import { bankCap, loadBatteries, newPower, runGenerator, type Power } from './power.ts';
 import { advanceResearch, dropEntry, newQueue, type ResearchQueue } from './research.ts';
@@ -151,7 +152,21 @@ export interface GameState {
    * pick order, each once. Kept between hordes, so the last pick is pre-selected.
    */
   skillPick: SkillId[];
+  /**
+   * Horde-only (ID-219): the world map's areas and the patrols out on it (`scout.ts`); absent
+   * until the map is first drawn (a new game, or an older save, gets a fresh one).
+   */
+  map?: WorldMap;
+  /** Horde-only (ID-219): Medicine patrols brought back, 0 to `MAP_PATROL.medicineMax`; absent at 0. */
+  medicine?: number;
 }
+
+/**
+ * Whether survivor `id` is out on a world-map patrol (ID-219): they can't fight, swap in,
+ * join the squad or earn a bench share until the patrol's report is taken.
+ */
+export const onMapPatrol = (game: Pick<GameState, 'map'>, id: string): boolean =>
+  game.map?.patrols.some((p) => p.members.includes(id)) ?? false;
 
 /** Farming beaten hordes (ID-098, horde-only). */
 export interface Farm {

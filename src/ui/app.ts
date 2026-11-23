@@ -151,6 +151,18 @@ import { createDebugPanel, type DebugActions, type DebugSpeed, type DebugView } 
 import { createIntro } from './intro.ts';
 import { createCampWindow } from './campwindow.ts';
 import { CRAFT_WAIT, createCraft, type CraftTab } from './craft.ts';
+import { setMapButton } from './hud.ts';
+import { mapButton } from './maptext.ts';
+import { createMapView, MAP_WAIT, type MapTab } from './mapview.ts';
+import {
+  backPatrols,
+  clockCheck,
+  patrolAt,
+  patrolReport,
+  sendMapPatrol,
+  takeReport,
+  withMap,
+} from '../core/scout.ts';
 import { COMBINE_WAIT, createInventory, GUNS_WAIT } from './inventory.ts';
 import { createMenu, SAVE_STATUS } from './menu.ts';
 import { recruitNotice } from './roster.ts';
@@ -226,6 +238,8 @@ export function start(root: HTMLElement, art: Art): void {
   const storage = realStorage && debugOn ? debugStorage(realStorage) : realStorage;
   const loaded = storage ? loadSave(storage) : { save: null, rejected: false };
   let game: GameState = loaded.save?.game ?? newGame(HORDE_ONLY ? 'horde' : 'full', Date.now());
+  // The world map (ID-219): a new game, or an older save, draws a fresh one.
+  if (HORDE_ONLY) game = withMap(game, Date.now() >>> 0);
   // The fight under way, or null in build mode.
   let horde: HordeState | null = null;
   // The horde the horde-only start or result screen has picked (ID-098): the next new horde,
@@ -653,7 +667,7 @@ export function start(root: HTMLElement, art: Art): void {
     if (!horde) {
       preview = startSquadHorde(game, 0, Date.now());
       hud.update(preview);
-      hud.showResult(squadStart(game, picked));
+      hud.showResult(squadStart(game, picked, Date.now()));
     }
     refreshPanel();
   }
@@ -793,7 +807,8 @@ export function start(root: HTMLElement, art: Art): void {
       );
   /** Another camp from the menu (a loaded code, a new camp): saved and shown. */
   function replaceCamp(next: GameState): void {
-    commit(next);
+    // A loaded camp's trips keep the time they had left if the clock ran back meanwhile (ID-219).
+    commit(HORDE_ONLY ? syncClock(next, Date.now()) : next);
     picked = localHorde(game);
     selected = null;
     // The menu only loads a camp between hordes: over a result screen, the fight it shows
@@ -859,6 +874,57 @@ export function start(root: HTMLElement, art: Art): void {
           onCraft: craftNow,
           onSalvage: salvageNow,
           onView: (uid) => inventory.open(uid),
+        },
+        campWindow,
+        inventory.button,
+      )
+    : null;
+  // The latest time seen (ID-219): the save's own time to start with, so a clock set back while
+  // the game was closed is caught too.
+  let seen = Math.max(loaded.save?.savedAt ?? 0, Date.now());
+  /**
+   * `g` with a clock that ran back since `seen` made up for (time running backwards counts as
+   * 0, `clockCheck`), once: from here the clock runs on from `now`. Before anything reads or
+   * sends a patrol, so a patrol sent just after a jump is never moved by it.
+   */
+  function syncClock(g: GameState, now: number): GameState {
+    const out = clockCheck(g, now, seen);
+    seen = now;
+    return out;
+  }
+  // The World map (ID-219), fourth in the camp window: patrols from the bench, between hordes.
+  const mapTab: MapTab | null = HORDE_ONLY
+    ? createMapView(
+        {
+          state: () => ({
+            game,
+            now: Date.now(),
+            resumes: horde?.outcome === 'fighting' && !held,
+            canSend: !horde || resultUp(),
+          }),
+          onSend: (area, ids) => {
+            if (horde && !resultUp()) return { ok: false, reason: MAP_WAIT };
+            const now = Date.now();
+            const synced = syncClock(game, now);
+            // The seed is the only randomness from outside the core.
+            const r = sendMapPatrol(synced, area, ids, now >>> 0, now);
+            if (!r.ok) return r;
+            commit(r.game);
+            redrawSquad();
+            return { ok: true };
+          },
+          onTake: (area) => {
+            if (horde && !resultUp()) return { ok: false, reason: MAP_WAIT };
+            const r = takeReport(game, area, Date.now());
+            if (!r.ok) return r;
+            commit(r.game);
+            redrawSquad();
+            return { ok: true };
+          },
+          report: (area) => {
+            const p = patrolAt(game, area);
+            return p ? patrolReport(game, p) : null;
+          },
         },
         campWindow,
         inventory.button,
@@ -950,6 +1016,12 @@ export function start(root: HTMLElement, art: Art): void {
     // The start screen is drawn afresh on a change: the keyboard stays on the new button.
     if (!t.isConnected) root.querySelector<HTMLButtonElement>('[data-best-guns]')?.focus();
   });
+  // The start screen's World map button opens the World map tab (ID-219).
+  root.addEventListener('click', (e) => {
+    const t = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-open-map]') : null;
+    if (!mapTab || !t) return;
+    mapTab.open(t);
+  });
   // A survivor's name on the squad screen opens their card; "Change squad" opens the Roster
   // on the squad's first (ID-147).
   root.addEventListener('click', (e) => {
@@ -965,17 +1037,20 @@ export function start(root: HTMLElement, art: Art): void {
     menu.isOpen() ||
     inventory.isOpen() ||
     !!craftTab?.isOpen() ||
+    !!mapTab?.isOpen() ||
     !!roster?.isOpen();
   function refreshDialogs(): void {
-    scrapChip?.set(game.stock.scrap);
+    scrapChip?.set(game.stock.scrap, game.medicine ?? 0);
     menu.refresh();
     inventory.refresh();
     craftTab?.refresh();
+    mapTab?.refresh();
     roster?.refresh();
   }
   /** Takes `next` as the game and saves it; the menu's Save tab says how that went. */
   function commit(next: GameState): void {
-    game = next;
+    // A new camp (the menu's New camp or Load of an older save) draws its map (ID-219).
+    game = HORDE_ONLY ? withMap(next, Date.now() >>> 0) : next;
     if (storage) menu.status(writeSave(storage, game, Date.now()) ? 'ok' : 'failed');
     refreshDialogs();
   }
@@ -1020,7 +1095,7 @@ export function start(root: HTMLElement, art: Art): void {
       hud.show(true);
       hud.update(preview);
       picked = picked >= 1 && picked <= localHorde(game) ? picked : localHorde(game);
-      hud.showResult(squadStart(game, picked));
+      hud.showResult(squadStart(game, picked, Date.now()));
       refreshPanel();
       cam = buildCam = fightCam;
       refreshDialogs();
@@ -1033,6 +1108,28 @@ export function start(root: HTMLElement, art: Art): void {
     refreshDialogs();
   }
   toBuild();
+  // An older save's fresh map is kept at once, so a reload shows the same areas (ID-219).
+  if (HORDE_ONLY && storage && loaded.save && !loaded.save.game.map) {
+    writeSave(storage, game, Date.now());
+  }
+  // Once a second (ID-219): the map's countdowns and the World map button; a clock run back is
+  // made up for (`syncClock`); a patrol back shows its report on the start screen once, with
+  // nothing else open.
+  const reported = new Set<number>();
+  window.setInterval(() => {
+    if (!mapTab) return;
+    const now = Date.now();
+    const checked = syncClock(game, now);
+    if (checked !== game) commit(checked);
+    mapTab.tick(now);
+    const b = root.querySelector<HTMLElement>('[data-open-map]');
+    if (b) setMapButton(b, mapButton(game, now));
+    const back = backPatrols(game, now).filter((p) => !reported.has(p.no));
+    if (back.length > 0 && !horde && !dialogOpen()) {
+      for (const p of back) reported.add(p.no);
+      mapTab.open(b);
+    }
+  }, 1000);
   if (!storage) menu.status('off');
   else if (loaded.rejected) menu.status('rejected');
   // The intro (ID-106) covers the camp at launch; the load's notes wait until it is gone,

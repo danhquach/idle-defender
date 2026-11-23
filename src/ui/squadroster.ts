@@ -10,7 +10,7 @@
 // Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
 // the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
-import { JOBS, WEAPONS, type Rarity } from '../core/data.ts';
+import { AREAS, JOBS, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
   combinePartners,
@@ -25,6 +25,7 @@ import {
   type GunMove,
   type SquadMoves,
 } from '../core/hordeonly.ts';
+import { patrolOf } from '../core/scout.ts';
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { fieldMaxHp, jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
@@ -40,6 +41,9 @@ import {
   slotOffer,
 } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
+
+/** Why a survivor out on a World map patrol (ID-219) can't change guns. */
+export const MAP_GUN_AWAY = 'On patrol: their gun went with them.';
 import {
   JOB_SHORT,
   jobInfo,
@@ -49,6 +53,7 @@ import {
   type FieldMember,
   type StatRow,
 } from './jobtext.ts';
+import { onPatrolText } from './maptext.ts';
 import { levelText } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -66,6 +71,8 @@ export interface RosterTile {
    */
   health: string;
   down: boolean;
+  /** Out on a World map patrol (ID-219): away, shown plainly, not as hurt. */
+  away: boolean;
   /** On the bench (ID-147), not in the squad. */
   bench: boolean;
   /** Hordes left to rest (ID-147); 0 when fit. */
@@ -88,7 +95,7 @@ export interface RosterTile {
 }
 
 /** A camp as the Roster reads it: the squad, and the bench if there is one (ID-147). */
-type Camp = Pick<GameState, 'roster' | 'slots'> & { reserve?: readonly RosterDefender[] };
+type Camp = Pick<GameState, 'roster' | 'slots' | 'map'> & { reserve?: readonly RosterDefender[] };
 
 /**
  * The Roster's tabs for `game` at `now`: the squad in roster order, then the bench (ID-147),
@@ -100,7 +107,13 @@ type Camp = Pick<GameState, 'roster' | 'slots'> & { reserve?: readonly RosterDef
 export function rosterTiles(game: Camp, now: number, fight: HordeState | null): RosterTile[] {
   const bench = new Set((game.reserve ?? []).map((d) => d.id));
   const reserve = game.reserve ?? [];
-  const ordered = [...reserve.filter(isFit), ...reserve.filter((d) => !isFit(d))];
+  // Out on a patrol (ID-219) after the fit, before the resting.
+  const away = (d: RosterDefender): boolean => patrolOf(game, d.id) !== null;
+  const ordered = [
+    ...reserve.filter((d) => isFit(d) && !away(d)),
+    ...reserve.filter(away),
+    ...reserve.filter((d) => !isFit(d) && !away(d)),
+  ];
   const squad = squadOf(game);
   // A Chef's HP is there when the squad takes the field (ID-408), so the tab says so already.
   const chefHp = fieldMaxHp(squad);
@@ -110,8 +123,10 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
     const inFight = fight?.defenders.find((f) => f.id === d.id);
     const downInFight = fight?.injured.some((i) => i.defender.id === d.id) ?? false;
     const resting = d.injuredUntil !== null && d.injuredUntil > now;
+    const out = patrolOf(game, d.id);
     let health: string;
-    if (inFight) health = `HP ${Math.max(0, Math.ceil(inFight.hp))}/${inFight.maxHp}`;
+    if (out) health = onPatrolText(AREAS[out.area].name, out, now);
+    else if (inFight) health = `HP ${Math.max(0, Math.ceil(inFight.hp))}/${inFight.maxHp}`;
     else if (downInFight) health = 'Down';
     else if (!isFit(d)) health = restLabel(restOf(d));
     else if (resting) health = 'Injured';
@@ -126,7 +141,8 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
       job: JOBS[d.job].name,
       jobShort: JOB_SHORT[d.job],
       health,
-      down: !inFight && (downInFight || resting || !isFit(d)),
+      down: out === null && !inFight && (downInFight || resting || !isFit(d)),
+      away: out !== null,
       bench: bench.has(d.id),
       rest: restOf(d),
       gun: heldName(held),
@@ -176,7 +192,7 @@ export interface RosterOptions {
    */
   state: () => {
     game: Pick<GameState, 'roster' | 'armoury' | 'autoSquad'> &
-      Partial<Pick<GameState, 'slots' | 'stock'>> & {
+      Partial<Pick<GameState, 'slots' | 'stock' | 'map'>> & {
         reserve?: readonly RosterDefender[];
       };
     fight: HordeState | null;
@@ -430,6 +446,7 @@ export function createRoster(
     tab.title = label;
     tab.setAttribute('aria-label', label);
     tab.classList.toggle('rv-tab-down', t.down);
+    tab.classList.toggle('rv-tab-away', t.away);
     const text = el('span', 'rv-tab-text');
     // Name, level, then the profession on a line of its own (ID-149), so a narrow tab never
     // cuts it; on a phone the level drops out and the short profession name stays.
@@ -437,7 +454,7 @@ export function createRoster(
       el('span', 'rv-tab-name', t.name),
       el('span', 'rv-tab-level', `Lv ${t.level}`),
       // Resting (ID-147): how long, in words, where the profession was; not colour alone.
-      el('span', 'rv-tab-job', t.rest > 0 ? `Rest ${t.rest}` : t.jobShort),
+      el('span', 'rv-tab-job', t.away ? 'Out' : t.rest > 0 ? `Rest ${t.rest}` : t.jobShort),
     );
     // Two columns (ID-180): portrait | name, level, profession; the held gun on its rarity
     // tint | their DPS with it (the number the gun slot shows) and the ★.
@@ -493,7 +510,10 @@ export function createRoster(
     // Someone resting gets none: "Resting: N hordes" on the line above says why.
     // Let go (ID-150) always shows: greyed at 6 or fewer, where a press says why.
     const actions = el('div', 'rv-actions');
-    if ((game.reserve ?? []).length > 0 && isFit(d)) actions.append(squadButton(d, mark, canGear));
+    // Out on a patrol (ID-219): "On patrol · …" on the line above says why there is none.
+    if ((game.reserve ?? []).length > 0 && isFit(d) && !patrolOf(game, d.id)) {
+      actions.append(squadButton(d, mark, canGear));
+    }
     const camp = { roster: game.roster, reserve: game.reserve ?? [] };
     // Combine (ID-170) only with someone of the same profession to take in.
     const partners = combinePartners(camp, d.id);
@@ -511,17 +531,20 @@ export function createRoster(
     // its buttons never squeeze into the name's column.
     const pick = canGear && !lock && combining ? [combinePick(d, partners)] : [];
 
+    // Out on a World map patrol (ID-219): the gun went with them, so it can't change.
+    const gear = canGear && !mark.away;
+    const why = mark.away ? MAP_GUN_AWAY : GUNS_WAIT;
     const held = heldGunOf(d);
     const slot = el('button', 'rv-slot');
     slot.type = 'button';
     slot.dataset.key = 'slot';
     slot.dataset.rarity = rarityOf(held);
     slot.setAttribute('aria-expanded', String(picking));
-    slot.setAttribute('aria-disabled', String(!canGear));
+    slot.setAttribute('aria-disabled', String(!gear));
     const dps = heldDps(held, d);
     slot.setAttribute(
       'aria-label',
-      `Gun: ${gunName(held)}, ${dps} ${dpsCaption(d.name)}. ${canGear ? (picking ? 'Back to stats' : 'Change gun') : GUNS_WAIT}`,
+      `Gun: ${gunName(held)}, ${dps} ${dpsCaption(d.name)}. ${gear ? (picking ? 'Back to stats' : 'Change gun') : why}`,
     );
     const icon = gunIcon(rarityOf(held), GUN_ICON[baseOf(held) as GunId]);
     const gtext = el('span', 'rv-slot-text');
@@ -531,9 +554,9 @@ export function createRoster(
     // Name, DPS and role on three short lines (ID-189), so the slot is only as wide as its gun.
     line.append(el('b', '', dps), ` ${dpsCaption(d.name)}`);
     gtext.append(name, line, el('span', 'rv-slot-role', roleName(held)));
-    if (!canGear) gtext.append(el('span', 'rv-slot-note', GUNS_WAIT));
+    if (!gear) gtext.append(el('span', 'rv-slot-note', why));
     slot.append(icon, gtext);
-    if (canGear) {
+    if (gear) {
       // On a phone only the arrow shows: the cue that the slot opens the picker stays.
       const chev = el('span', 'rv-slot-chev');
       chev.append(
@@ -543,8 +566,8 @@ export function createRoster(
       slot.append(chev);
     }
     slot.addEventListener('click', () => {
-      if (!canGear) {
-        setStatus(GUNS_WAIT);
+      if (!gear) {
+        setStatus(why);
         draw('slot');
         return;
       }

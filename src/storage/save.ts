@@ -108,6 +108,8 @@ import {
 import { BLUEPRINT_GUNS, type Blueprints, type Craft } from '../core/craft.ts';
 import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad, settleSquad } from '../core/hordeonly.ts';
+import { AREA_IDS, DANGER_IDS, MAP_PATROL } from '../core/data.ts';
+import { tripMs, type MapArea, type MapPatrol, type WorldMap } from '../core/scout.ts';
 import {
   beatenIn,
   HIGHER_MODES,
@@ -147,6 +149,14 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 25 since the world map (ID-219): the horde-only game may hold `map` (its areas, the patrols
+ * out, the draws so far) and `medicine` (a whole number, 0 to `MAP_PATROL.medicineMax`), each
+ * written only once there is one. Every area kind and danger is from a fixed list, each kind
+ * once; a patrol is at an area on the map (one at most), its 1 to `MAP_PATROL.max` members are
+ * bench survivors (never the squad, never on two patrols), its times are whole and its trip is
+ * exactly its danger's. A gun a patrol finds has uid `m<no>-<k>` and reaches the camp only when
+ * its report is taken. A v24 or older save loads with no map (a fresh one is drawn) and none.
+ *
  * 24 since difficulty modes (ID-218): the game may hold `mode` (`nightmare` or `hell`, an
  * allow-list; absent on Normal) and `modes`, each higher mode's next horde, a whole number
  * from 1 to `MAX_HORDE`, only for the modes played. Both are written only when set. Nightmare
@@ -245,7 +255,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 24;
+export const SAVE_VERSION = 25;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -285,7 +295,7 @@ const BONUS = `(?:-(?:${Array.from({ length: SQUAD_BONUS.rolls }, (_, k) => k + 
  * number that found it and its place in the haul; or a survivor's (`SURVIVOR_ID`).
  */
 const UID = new RegExp(
-  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5}|f[1-9][0-9]{0,4}|n[1-9][0-9]{0,5}${BONUS}|x[1-9][0-9]{0,5}${BONUS})$`,
+  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5}|f[1-9][0-9]{0,4}|n[1-9][0-9]{0,5}${BONUS}|x[1-9][0-9]{0,5}${BONUS}|m[1-9][0-9]{0,5}-[1-4])$`,
 );
 /**
  * The most owned weapons a save holds: the full game's armoury, or the horde-only stash
@@ -409,6 +419,7 @@ function readSave(v: unknown): Save {
   if (
     ![
       SAVE_VERSION,
+      24,
       23,
       22,
       21,
@@ -471,6 +482,7 @@ function readSave(v: unknown): Save {
     ver >= 21,
     ver >= 23,
     ver >= 24,
+    ver >= 25,
   );
   return {
     game,
@@ -506,6 +518,8 @@ function readGame(
   maySlots: boolean,
   /** Whether the save may hold `mode` and `modes` (v24). */
   mayModes: boolean,
+  /** Whether the save may hold `map` and `medicine` (v25). */
+  mayMap: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -547,6 +561,9 @@ function readGame(
     ...(mayModes && !lacks('modes') ? ['modes'] : []),
     // Written only once a blueprint has dropped (ID-209).
     ...(maySlots && !lacks('craft') ? ['craft'] : []),
+    // Written only once the map is drawn, and once a patrol brought Medicine (ID-219).
+    ...(mayMap && !lacks('map') ? ['map'] : []),
+    ...(mayMap && !lacks('medicine') ? ['medicine'] : []),
   ]);
   const craft = Object.hasOwn(o, 'craft') ? readCraft(o.craft) : null;
   const slots = Object.hasOwn(o, 'slots') ? readSlots(o.slots) : null;
@@ -580,6 +597,10 @@ function readGame(
   const joining = Object.hasOwn(o, 'joining') ? readJoining(o.joining, savedAt, stats) : [];
   // The checks below treat the reserve as the roster it came from: one camp of people.
   const everyone = [...roster, ...reserve];
+  const map = Object.hasOwn(o, 'map')
+    ? readMap(o.map, reserve, Math.max(1, topBeaten(progress)))
+    : null;
+  const medicine = Object.hasOwn(o, 'medicine') ? int(o.medicine, 0, MAP_PATROL.medicineMax) : 0;
   if (new Set(everyone.map((d) => d.id)).size !== everyone.length) fail('id twice');
   if (joining.some((j) => everyone.some((d) => d.id === j.id))) fail('joiner already in the camp');
   if (everyone.length + joining.length > SQUAD_JOIN.max) fail('camp past its cap with joiners');
@@ -651,6 +672,15 @@ function readGame(
     ...waiting.map((s) => s.weapon),
   ];
   if (new Set(every.map((w) => w.uid)).size !== every.length) fail('weapon twice');
+  // A map patrol's guns (`m<no>-<k>`, ID-219) come from one already sent, and reach the camp
+  // only once its report is taken.
+  const mapOut = new Set(map?.patrols.map((p) => p.no) ?? []);
+  for (const w of every) {
+    const m = /^m([0-9]+)-/.exec(w.uid);
+    if (m && (Number(m[1]) > (map?.sent ?? 0) || mapOut.has(Number(m[1])))) {
+      fail('weapon from a map patrol not back');
+    }
+  }
   // A replay's drop (`r<k>`) comes from a replay already won (ID-098).
   if (
     every.some(
@@ -705,6 +735,8 @@ function readGame(
     ...(auto ? { autoSquad: true as const } : {}),
     ...(slots ? { slots } : {}),
     ...(craft ? { craft } : {}),
+    ...(map ? { map } : {}),
+    ...(medicine > 0 ? { medicine } : {}),
   };
   if (!HORDE_ONLY) return loaded;
   // A stash past the loaded slots' cap (an older save's) is kept as it is and never grows.
@@ -735,6 +767,73 @@ function readCraft(v: unknown): Craft {
   }
   if (Object.keys(blueprints).length === 0 && made === 0) fail('empty craft');
   return { blueprints, made };
+}
+
+/** A seed: a whole 32-bit number. */
+const SEED_MAX = 0xffffffff;
+/** The most area draws a save can count. */
+const MAP_COUNT_MAX = 1e9;
+/** The most map patrols a save can count: a found gun's uid (`m<no>-<k>`) has room for it. */
+const MAP_SENT_MAX = 999_999;
+/** The most a team's power can be (a Squad Power share; far above any reached). */
+const POWER_MAX = 1e15;
+
+/**
+ * The world map (ID-219): exactly `seed`, `drawn`, `areas`, `patrols`, `sent`. `MAP_PATROL.areas`
+ * areas, each a known kind (once) and danger; at most one patrol per area, at an area on the
+ * map with its danger, numbered 1 to `sent` (each once). Its members are 1 to
+ * `MAP_PATROL.max` ids of `bench` survivors, none twice, none on two patrols; its times are
+ * whole, from 0 to `MAX_TIME`, `backAt` exactly the trip after `sentAt`; its best horde 1 to
+ * `top`; its power 0 to `POWER_MAX`. Copies only the named fields into fresh objects.
+ */
+function readMap(v: unknown, bench: readonly RosterDefender[], top: number): WorldMap {
+  const o = obj(v, ['seed', 'drawn', 'areas', 'patrols', 'sent']);
+  const seed = int(o.seed, 0, SEED_MAX);
+  const drawn = int(o.drawn, MAP_PATROL.areas, MAP_COUNT_MAX);
+  const sent = int(o.sent, 0, MAP_SENT_MAX);
+  const areas = arr(o.areas, MAP_PATROL.areas, MAP_PATROL.areas).map((a): MapArea => {
+    const ao = obj(a, ['kind', 'danger']);
+    return { kind: oneOf(ao.kind, AREA_IDS), danger: oneOf(ao.danger, DANGER_IDS) };
+  });
+  if (new Set(areas.map((a) => a.kind)).size !== areas.length) fail('area twice');
+  const patrols = arr(o.patrols, 0, MAP_PATROL.areas).map((p): MapPatrol => {
+    const po = obj(p, [
+      'no',
+      'area',
+      'danger',
+      'members',
+      'sentAt',
+      'backAt',
+      'seed',
+      'best',
+      'power',
+    ]);
+    const area = oneOf(po.area, AREA_IDS);
+    const danger = oneOf(po.danger, DANGER_IDS);
+    if (!areas.some((a) => a.kind === area && a.danger === danger)) fail('patrol off the map');
+    const members = arr(po.members, MAP_PATROL.min, MAP_PATROL.max).map((id) => text(id, 32, ID));
+    if (new Set(members).size !== members.length) fail('member twice');
+    if (members.some((id) => !bench.some((d) => d.id === id))) fail('member not on the bench');
+    const sentAt = int(po.sentAt, 0, MAX_TIME);
+    const backAt = int(po.backAt, 0, MAX_TIME + tripMs('dangerous'));
+    if (backAt !== sentAt + tripMs(danger)) fail('trip time');
+    return {
+      no: int(po.no, 1, sent),
+      area,
+      danger,
+      members,
+      sentAt,
+      backAt,
+      seed: int(po.seed, 0, SEED_MAX),
+      best: int(po.best, 1, top),
+      power: num(po.power, 0, POWER_MAX),
+    };
+  });
+  if (new Set(patrols.map((p) => p.area)).size !== patrols.length) fail('two patrols at an area');
+  if (new Set(patrols.map((p) => p.no)).size !== patrols.length) fail('patrol twice');
+  const ids = patrols.flatMap((p) => p.members);
+  if (new Set(ids).size !== ids.length) fail('member on two patrols');
+  return { seed, drawn, areas, patrols, sent };
 }
 
 /**
@@ -1196,8 +1295,9 @@ function readOwned(
   const uid = text(o.uid, 8 + String(MAX_FOUND - 1).length, UID);
   const from = Number(uid.slice(1).split('-')[0]);
   // A survivor's camp-level weapon (`c`) is checked against the camp, a replay's (`r`)
-  // against the replays won and a mode's (`n`, `x`) against its horde, once they are read.
-  if (!/^[crfnx]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
+  // against the replays won, a mode's (`n`, `x`) against its horde and a map patrol's (`m`,
+  // ID-219) against the patrols sent, once they are read.
+  if (!/^[crfnxm]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
     fail('weapon from the future');
   }
   const base = oneOf(o.base, WEAPON_IDS);

@@ -88,6 +88,7 @@ import {
   hordePayout,
   injuredUntil,
   levelGains,
+  onMapPatrol,
   type GameState,
   type RosterDefender,
 } from '../core/game.ts';
@@ -116,6 +117,7 @@ import {
   isReplay,
   joiningOf,
   paramedicPoints,
+  atCamp,
   restLabel,
   salvageGun,
   salvageOf,
@@ -166,6 +168,7 @@ import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
 import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
+import { mapButton } from './maptext.ts';
 import {
   ART_URLS,
   avatarOf,
@@ -1454,6 +1457,8 @@ export interface Debrief {
    * under it (`benchLine`); absent elsewhere.
    */
   roster?: { label: string; line: string | null };
+  /** The start screen's World map button (ID-219): its label, and whether a report is ready. */
+  map?: { label: string; ready: boolean };
   /**
    * The offer line under the squad (ID-150, ID-182, ID-196), on every win and on a start
    * screen with someone still asking: `showJoin` fills it from who is asking now, and the
@@ -1790,16 +1795,43 @@ export const buyText = (kind: SlotKind, cost: number, left: number): string =>
 export const CHANGE_SQUAD = 'Change squad';
 
 /**
+ * Sets the World map button (ID-219) to `map`: its label, and a mark when a report is ready
+ * (named for a screen reader too). Leaves it alone when nothing changed.
+ */
+export function setMapButton(b: HTMLElement, map: { label: string; ready: boolean }): void {
+  const name = map.ready ? `${map.label}, report ready` : map.label;
+  if (b.getAttribute('aria-label') === name) return;
+  b.setAttribute('aria-label', name);
+  b.dataset.ready = String(map.ready);
+  const label = b.ownerDocument.createElement('span');
+  label.textContent = map.label;
+  const parts: Node[] = [label];
+  if (map.ready) {
+    const mark = b.ownerDocument.createElement('span');
+    mark.className = 'map-ready-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = '!';
+    parts.push(mark);
+  }
+  b.replaceChildren(...parts);
+}
+
+/**
  * The bench as the start screen sums it up (ID-147): "Bench 3 · 1 resting · 2 open slots:
  * pick on the Roster", each part only when it applies; null with nobody on the bench.
  */
-export function benchLine(game: Pick<GameState, 'roster' | 'reserve' | 'slots'>): string | null {
+export function benchLine(
+  game: Pick<GameState, 'roster' | 'reserve' | 'slots' | 'map'>,
+): string | null {
   if (game.reserve.length === 0) return null;
-  const resting = game.reserve.filter((d) => !isFit(d)).length;
-  const fit = game.reserve.length - resting;
+  // Out on a patrol (ID-219): away, so neither resting nor free to fill a slot.
+  const away = game.reserve.filter((d) => onMapPatrol(game, d.id)).length;
+  const resting = game.reserve.filter((d) => !isFit(d) && !onMapPatrol(game, d.id)).length;
+  const fit = game.reserve.length - resting - away;
   const open = Math.min(fit, squadCap(game) - squadOf(game).length);
   return [
     `Bench ${game.reserve.length}`,
+    ...(away > 0 ? [`${away} on patrol`] : []),
     ...(resting > 0 ? [`${resting} resting`] : []),
     ...(open > 0 ? [`${open} open ${open === 1 ? 'slot' : 'slots'}: pick on the Roster`] : []),
   ].join(' · ');
@@ -1959,7 +1991,11 @@ export function nextGoalLine(game: ModeProgress): string | null {
  * The horde-only screen before a horde (ID-066): who fights it, its start button, and the
  * horde picker (ID-098) with `picked` selected (the next new horde by default).
  */
-export function squadStart(game: GameState, picked: number = localHorde(game)): ResultScreen {
+export function squadStart(
+  game: GameState,
+  picked: number = localHorde(game),
+  at = 0,
+): ResultScreen {
   const squad = squadOf(game);
   const picker = hordePicker(game, picked, null, true);
   const now = picker.options.find((o) => o.horde === picker.value)!;
@@ -1996,6 +2032,7 @@ export function squadStart(game: GameState, picked: number = localHorde(game)): 
       cards: squad.map((d) => plainCard(d)),
       empty: null,
       roster: { label: CHANGE_SQUAD, line: bench },
+      map: mapButton(game, at),
       ...(asking.length > 0 ? { join: true as const } : {}),
     },
   };
@@ -2075,7 +2112,7 @@ export function withScrapNow(screen: ResultScreen, now: number): ResultScreen {
  * The Scrap balance in the top bar (ID-179), left of the Roster button: a read-only chip
  * on the page itself (not in the game's root), so it stays above the dialogs.
  */
-export function createScrapChip(doc: Document): { set(n: number): void } {
+export function createScrapChip(doc: Document): { set(n: number, medicine?: number): void } {
   const chip = doc.createElement('div');
   chip.className = 'scrap-chip';
   chip.setAttribute('role', 'status');
@@ -2085,14 +2122,29 @@ export function createScrapChip(doc: Document): { set(n: number): void } {
   const amount = doc.createElement('b');
   doc.body.append(chip);
   return {
-    set(n) {
+    // Medicine (ID-219) rides beside the Scrap once a patrol has brought some.
+    set(n, medicine = 0) {
       const full = thousands(n);
-      if (chip.title === `Scrap ${full}`) return;
+      const title = medicine > 0 ? `Scrap ${full} · Medicine ${medicine}` : `Scrap ${full}`;
+      if (chip.title === title) return;
       label.textContent = 'Scrap';
       amount.textContent = shortCount(n);
-      chip.replaceChildren(label, ' ', amount);
-      chip.title = `Scrap ${full}`;
-      chip.setAttribute('aria-label', `Scrap balance: ${full}`);
+      const parts: (Node | string)[] = [label, ' ', amount];
+      if (medicine > 0) {
+        const med = doc.createElement('span');
+        med.className = 'scrap-chip-label medicine-chip-label';
+        med.textContent = 'Med';
+        const count = doc.createElement('b');
+        count.className = 'medicine-chip-count';
+        count.textContent = String(medicine);
+        parts.push(' ', med, ' ', count);
+      }
+      chip.replaceChildren(...parts);
+      chip.title = title;
+      chip.setAttribute(
+        'aria-label',
+        medicine > 0 ? `Scrap balance: ${full}. Medicine: ${medicine}` : `Scrap balance: ${full}`,
+      );
     },
   };
 }
@@ -2195,8 +2247,9 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     // Slots still open once any newcomer has taken one (ID-150), with someone fit on the
     // bench to fill them.
     const room = squadCap(next) - next.roster.length - joined.length;
-    const benchFit = room > 0 && next.reserve.some(isFit);
-    const rested = restNote(rests, benchFit, paramedicPoints(campOf(game)) > 0);
+    // Out on a World map patrol (ID-219): away, so neither fills a slot nor patches anyone up.
+    const benchFit = room > 0 && next.reserve.some((d) => isFit(d) && !onMapPatrol(next, d.id));
+    const rested = restNote(rests, benchFit, paramedicPoints(atCamp(game)) > 0);
     const patch = patchNote(patched);
     // Each sentence waits in the details (ID-186); its chip says it short and opens them.
     const size = game.roster.length + game.reserve.length;
@@ -3313,7 +3366,7 @@ export function createHud(
     }
     if (d.drop) parts.push(gunSection(d.drop));
     if (d.cards.length > 0) {
-      parts.push(squadSection(d.cards, d.roster));
+      parts.push(squadSection(d.cards, d.roster, d.map));
     } else if (d.empty) {
       parts.push(emptySection(d.empty));
     }
@@ -3390,6 +3443,15 @@ export function createHud(
     return section;
   }
 
+  /** The World map button (ID-219): the app listens for it and keeps its label live. */
+  function mapOpenButton(map: NonNullable<Debrief['map']>): HTMLButtonElement {
+    const b = el('button', 'hud-button debrief-open-map');
+    b.type = 'button';
+    b.dataset.openMap = '';
+    setMapButton(b, map);
+    return b;
+  }
+
   /** "Best gun for everyone" beside the Squad heading: the app listens for it. */
   function bestGunsButton(): HTMLButtonElement {
     const b = el('button', 'hud-button debrief-best-guns', BEST_GUNS);
@@ -3399,10 +3461,15 @@ export function createHud(
   }
 
   /** The debrief's Squad section with `cards`, and the start screen's Roster link (`roster`). */
-  function squadSection(cards: readonly SquadCard[], roster?: Debrief['roster']): HTMLElement {
+  function squadSection(
+    cards: readonly SquadCard[],
+    roster?: Debrief['roster'],
+    map?: Debrief['map'],
+  ): HTMLElement {
     const section = el('section', 'debrief-squad');
     const head = el('div', 'debrief-squad-head');
     head.append(el('h3', 'debrief-squad-title', 'Squad'), bestGunsButton());
+    if (map) head.append(mapOpenButton(map));
     if (roster) {
       // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
       const change = el('button', 'hud-button debrief-change-squad', roster.label);
