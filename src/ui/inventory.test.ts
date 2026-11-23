@@ -649,6 +649,18 @@ describe('Combine in the details (ID-091)', () => {
     expect(marked[0]!.getAttribute('aria-label')).toMatch(/, can combine$/);
   });
 
+  it('puts the ▲ before the level in the slot’s top-left corner, once per marked slot (ID-227)', () => {
+    const { dialog } = combining([...rusty(3), gun('x', 'rifle', 'common')]);
+    const corner = (key: string): string[] =>
+      [...dialog.querySelector(`.inv-slot[data-key="${key}"] .inv-slot-corner`)!.children].map(
+        (c) => c.className,
+      );
+    for (const key of ['stash:h1', 'stash:h2', 'stash:h3']) {
+      expect(corner(key)).toEqual(['inv-slot-ready', 'inv-slot-level']);
+    }
+    expect(corner('stash:x')).toEqual(['inv-slot-level']);
+  });
+
   it('asks first, then combines the weakest three and says what it made', () => {
     const strong = gun('h9', 'smg', 'rusty');
     const { details, calls, game, slot } = combining([strong, ...rusty(3)]);
@@ -949,6 +961,27 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     expect(document.querySelector('.inv-name')!.textContent).toBe('Lv 12 Military Carbine');
     const pistol = document.querySelector<HTMLElement>('.inv-slot[data-key^="squad:"]')!;
     expect(pistol.querySelector('.inv-slot-level')!.textContent).toBe('Lv 1');
+  });
+
+  it('the face: the ▲ then the level in the top-left corner, the dmg/s on its own (ID-227)', () => {
+    const v = inventoryView(camp(1, [lv('a', 'rifle', 'military', 120)]));
+    const it = { ...v.stash[0]!, badge: '12345', stepBadge: '+5' };
+    const classes = (e: HTMLElement): string[] => [...e.children].map((c) => c.className);
+    const ready = slotFace(it, true);
+    const corner = ready.find((e) => e.classList.contains('inv-slot-corner'))!;
+    expect(classes(corner)).toEqual(['inv-slot-ready', 'inv-slot-level']);
+    expect(corner.textContent).toBe('▲Lv 120');
+    // The dmg/s and the step are the face's own, never in the level's corner.
+    expect(ready.map((e) => e.className)).toEqual([
+      'gun-icon',
+      'inv-slot-badge',
+      'inv-slot-corner',
+      'inv-slot-step',
+    ]);
+    expect(ready.find((e) => e.classList.contains('inv-slot-badge'))!.textContent).toBe('12345');
+    expect(classes(slotFace(it).find((e) => e.classList.contains('inv-slot-corner'))!)).toEqual([
+      'inv-slot-level',
+    ]);
   });
 
   it('a combine preview takes the highest level of the three and prices it in', () => {

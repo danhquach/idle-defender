@@ -541,8 +541,12 @@ export function slotLabel(it: InventoryItem, ready = false): string {
   return parts.join(', ');
 }
 
-/** The square art of a slot: the gun's icon (or its name, for no gun) and its badge. */
-export function slotFace(it: InventoryItem): HTMLElement[] {
+/**
+ * The square art of a slot: the gun's icon (or its name, for no gun) and its badges. The
+ * dmg/s has the bottom edge to itself, so 4 or 5 digits never run into the level (ID-227):
+ * the level sits top left, after the set-ready ▲ when `ready`; the +N step top right.
+ */
+export function slotFace(it: InventoryItem, ready = false): HTMLElement[] {
   const face: HTMLElement[] = [];
   const url = it.icon ? ART_URLS[it.icon] : undefined;
   if (url) {
@@ -562,7 +566,12 @@ export function slotFace(it: InventoryItem): HTMLElement[] {
     if (it.power) badge.title = it.power;
     face.push(badge);
   }
-  if (it.levelBadge) face.push(el('span', 'inv-slot-level', it.levelBadge));
+  if (ready || it.levelBadge) {
+    const corner = el('span', 'inv-slot-corner');
+    if (ready) corner.append(el('span', 'inv-slot-ready', '▲'));
+    if (it.levelBadge) corner.append(el('span', 'inv-slot-level', it.levelBadge));
+    face.push(corner);
+  }
   if (it.stepBadge) face.push(el('span', 'inv-slot-step', it.stepBadge));
   return face;
 }
@@ -577,8 +586,7 @@ function slot(it: InventoryItem, ready: boolean, caption?: string): HTMLElement 
   b.setAttribute('aria-label', slotLabel(it, ready));
   b.setAttribute('aria-pressed', 'false');
   b.tabIndex = -1;
-  b.append(...slotFace(it));
-  if (ready) b.append(el('span', 'inv-slot-ready', '▲'));
+  b.append(...slotFace(it, ready));
   li.append(b);
   if (caption !== undefined) {
     // A long name is cut short with an ellipsis; the whole name shows on hover.
