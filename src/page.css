@@ -5375,7 +5375,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   cursor: default;
 }
 
-/* The bench can outgrow the dialog: its row scrolls sideways, each tab as wide as the
+/* A patrol's row (ID-234) holds at most four, side by side, each tab as wide as the
    squad's (ID-187). */
 .rv-bench {
   grid-auto-flow: column;
@@ -5383,6 +5383,20 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   grid-auto-columns: 100px;
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+/* The bench itself (ID-241) can outgrow the dialog: its tabs, the squad's size, fill the
+   row and wrap onto new rows; past about two and a half rows it scrolls down, never
+   sideways, the half row showing there is more. */
+.rv-bench:not(.rv-patrol) {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(auto-fill, 100px);
+  grid-auto-columns: auto;
+  /* Two rows of 83px tabs, their gaps, the top padding and half a third row. */
+  max-height: 220px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* With a bench (ID-154), the squad stands out from it at a glance: the squad's tabs are
@@ -6366,19 +6380,17 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     grid-column: 1 / -1;
   }
 
-  /* The bench's row (ID-147) may hold many more: one row of cards about the squad's
-     width, scrolling sideways. */
-  .rv-bench {
-    grid-auto-flow: column;
-    grid-template-columns: none;
-    grid-auto-columns: calc((100% - 10px) / 4);
-    overflow-x: auto;
+  /* The bench (ID-241) wraps in rows of four cards that fill the row, scrolling down past
+     about two and a half rows (ID-147, ID-241). */
+  .rv-bench:not(.rv-patrol) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   /* Over a squad in rows of three, the bench's cards are the same size as the squad's
-     (ID-189), still scrolling sideways past three. */
-  .roster-dialog:has(.rv-tabs:not(.rv-bench):is([data-count='5'], [data-count='6'])) .rv-bench {
-    grid-auto-columns: calc((100% - 4px) / 3);
+     (ID-189): rows of three. */
+  .roster-dialog:has(.rv-tabs:not(.rv-bench):is([data-count='5'], [data-count='6']))
+    .rv-bench:not(.rv-patrol) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   /* A patrol's block (ID-234) takes the row, its (at most four) cards a quarter each, so a

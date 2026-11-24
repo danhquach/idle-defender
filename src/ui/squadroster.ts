@@ -316,6 +316,28 @@ export function createRoster(
   // The blocks drawn last, and what they were drawn from (`patrolKey`): `tick` moves their times.
   let shown: { p: MapPatrol; block: HTMLElement; time: HTMLElement }[] = [];
   let shownKey = '';
+  /** The bench tab last scrolled into view (ID-241), so a refresh never fights the player's scroll. */
+  let benchScrolled: string | null = null;
+  /**
+   * The bench wraps and scrolls down (ID-241): a bench tab newly shown is scrolled into the
+   * bench's view, the bench alone (the dialog stays put). Once per pick; a laid-out bench only.
+   */
+  function revealBenchTab(): void {
+    if (current === benchScrolled) return;
+    const tab = [...benchTabs.querySelectorAll<HTMLElement>('.rv-tab')].find(
+      (t) => t.dataset.defender === current,
+    );
+    const box = benchTabs.getBoundingClientRect();
+    if (!tab || box.height === 0) {
+      // Not on the bench (yet): "Move to bench" keeps them picked, so reveal them then.
+      if (!tab) benchScrolled = null;
+      return;
+    }
+    benchScrolled = current;
+    const r = tab.getBoundingClientRect();
+    if (r.top < box.top) benchTabs.scrollTop -= box.top - r.top;
+    else if (r.bottom > box.bottom) benchTabs.scrollTop += r.bottom - box.bottom;
+  }
   const top = el('div', 'rv-top');
   const panel = el('div', 'rv-panel');
   const statusLine = el('p', 'rv-status');
@@ -425,6 +447,7 @@ export function createRoster(
     squadLabel.textContent = squadText;
     benchLabel.textContent = `Bench ${benched.length}`;
     benchTabs.replaceChildren(...benched.map((t) => tabItem(t, t.id === current)));
+    revealBenchTab();
     patrolLabel.textContent = `On patrol ${patrol.length}`;
     // One block per patrol (ID-234), the soonest back first; its members in the order sent.
     shown = patrolsShown(game).flatMap((p) => {
@@ -1057,6 +1080,8 @@ export function createRoster(
       const { game } = opts.state();
       const asked = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
       current = (asked ?? game.roster[0])?.id ?? null;
+      // Asked for by name: shown, even if the player scrolled the bench since (ID-241).
+      benchScrolled = null;
       if (opened) {
         // Already on show: the survivor asked for, on their level.
         picking = false;

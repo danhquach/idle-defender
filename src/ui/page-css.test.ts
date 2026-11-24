@@ -443,6 +443,19 @@ describe('the Roster tabs (ID-154)', () => {
     );
     expect(rules).toMatch(/\.rv-bench \{[^}]*grid-auto-columns: 100px/);
   });
+
+  it('the bench wraps into rows of squad-size cards and scrolls down, never sideways (ID-241)', () => {
+    const bench = /\.rv-bench:not\(\.rv-patrol\) \{([^}]*)\}/.exec(rules)?.[1] ?? '';
+    expect(bench).toMatch(/grid-auto-flow: row/);
+    expect(bench).toMatch(/grid-template-columns: repeat\(auto-fill, 100px\)/);
+    expect(bench).toMatch(/max-height: \d+px/);
+    expect(bench).toMatch(/overflow-x: hidden/);
+    expect(bench).toMatch(/overflow-y: auto/);
+    // On a phone, rows of four (three over a squad in rows of three), filling the row.
+    expect(rules).toMatch(
+      /@container \(max-width: 460px\) \{[\s\S]*?\.rv-bench:not\(\.rv-patrol\) \{\s*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/,
+    );
+  });
 });
 
 describe('Help marks (ID-168)', () => {

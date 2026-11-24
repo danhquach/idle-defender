@@ -510,6 +510,40 @@ describe('the Roster and the bench (ID-147)', () => {
       expect(m.q('.rv-squad-row').hidden).toBe(false);
     });
 
+    it('a bench tab picked out of view scrolls the bench to it, once (ID-241)', () => {
+      const m = mount(campGame(people(6), people(14, 7)));
+      const bench = m.q<HTMLElement>('.rv-bench:not(.rv-patrol)');
+      // Laid out as the browser does: rows of six 83px tabs, a 220px bench scrolled by scrollTop.
+      const spy = vi
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: HTMLElement) {
+          if (this === bench) return DOMRect.fromRect({ x: 0, y: 0, width: 600, height: 220 });
+          const tabs = [...bench.querySelectorAll<HTMLElement>('.rv-tab')];
+          const i = tabs.indexOf(this);
+          const y = i < 0 ? 0 : 6 + Math.floor(i / 6) * 87 - bench.scrollTop;
+          return DOMRect.fromRect({ x: 0, y, width: 100, height: i < 0 ? 0 : 83 });
+        });
+      try {
+        m.roster.open('recruit-20');
+        // The 14th bench tab, third row (180–263): scrolled up so its bottom meets the box's.
+        expect(bench.scrollTop).toBe(43);
+        // The player scrolls back: a refresh leaves it where they put it.
+        bench.scrollTop = 0;
+        m.roster.refresh();
+        expect(bench.scrollTop).toBe(0);
+        // A tab in view needs no scroll.
+        m.roster.open('recruit-7');
+        expect(bench.scrollTop).toBe(0);
+        // Moved to the bench from the squad, they land last (third row) and are shown.
+        m.roster.open('recruit-1');
+        m.q<HTMLButtonElement>('[data-key="squad"]').click();
+        expect(rowIds('.rv-bench:not(.rv-patrol)', m).at(-1)).toBe('recruit-1');
+        expect(bench.scrollTop).toBeGreaterThan(0);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('nobody on patrol: the label and blocks are hidden', () => {
       const m = mount(campGame(people(3), [person(4)]));
       m.roster.open('recruit-1');

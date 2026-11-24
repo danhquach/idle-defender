@@ -977,6 +977,11 @@ close-quarter weapons come out only when an enemy is close.
   survivor here. Each card is two equal columns (ID-187), portrait and gun
   filling theirs without stretching, at most 100 px wide on desktop (bench cards
   too); on a 320 px phone the split is 2:3 so every profession stays whole.
+  The bench (ID-241; one sideways-scrolling row since ID-187 before) wraps its
+  cards into as many per row as fit (four a row on a phone, three over a squad
+  in rows of three) and, past about two and a half rows, scrolls down on its own,
+  never sideways; the squad, the patrol blocks and the details stay put. A bench
+  card picked or moved to the bench out of view is scrolled into it.
   - **Level** *(ID-146; a Stats panel with + buttons, Undo and mid-fight
     spends before, ID-108, ID-116, ID-126)*: "Level 7" with the XP into it and
     what the next costs, the profession's benefit, the level's bonus line in
