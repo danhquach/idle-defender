@@ -220,17 +220,19 @@ body {
 }
 
 /* Above 1060px a fight's status line keeps clear of the speed buttons and Paused chip too. The top
-   bar's redesign (ID-058) should give the speed group its own slot instead. */
+   bar's redesign (ID-058) should give the speed group its own slot instead. A wide Scrap chip
+   pushes both left (ID-239). */
 .hud-fight-bar {
-  padding-right: 736px;
+  padding-right: max(736px, calc(615px + var(--scrap-chip-w, 0px)));
 }
 
 /* Fight speed and the Space pause (ID-062), beside the Menu button. */
 .hud-speed {
   position: absolute;
   top: 5px;
-  /* Left of the Scrap chip and the World map, Roster, Weapons and Menu buttons (ID-086, ID-179). */
-  right: 460px;
+  /* Left of the Scrap chip and the World map, Roster, Weapons and Menu buttons (ID-086, ID-179),
+     8px clear of the chip however wide its balance grows (ID-239; its width is measured). */
+  right: max(460px, calc(339px + var(--scrap-chip-w, 0px)));
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -8243,11 +8245,20 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   margin-left: var(--space-4);
 }
 
-/* With Medicine beside the Scrap the chip is wider: an iPad-wide window drops the speed
-   group's key hints (as a narrower one does), so the two never touch. Help lists the keys. */
-@media (max-width: 1100px) {
+/* With Medicine beside the Scrap the chip is wider (up to ~177px, "Scrap 99,999 Med 999"): an
+   iPad-wide window drops the speed group's key hints (as a narrower one does), so the speeds,
+   pushed left of the chip (ID-239), stay clear of the corner panel. Help lists the keys.
+   1130px: the corner's room with the widest chip and the hints (ID-239). */
+@media (max-width: 1130px) {
   body:has(.medicine-chip-count) .hud-speed .menu-key {
     display: none;
+  }
+}
+
+/* There the fight's status line keeps clear of the hint-less speeds (160px) left of the chip. */
+@media (min-width: 1061px) and (max-width: 1130px) {
+  body:has(.medicine-chip-count) .hud-fight-bar {
+    padding-right: max(736px, calc(509px + var(--scrap-chip-w, 0px)));
   }
 }
 

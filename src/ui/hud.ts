@@ -2192,6 +2192,14 @@ export function createScrapChip(doc: Document): { set(n: number, medicine?: numb
   label.className = 'scrap-chip-label';
   const amount = doc.createElement('b');
   doc.body.append(chip);
+  // Its width, for the speed buttons to keep clear of however long it grows (ID-239): they
+  // sit left of it in the top row. No observer under jsdom.
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => {
+      const w = Math.ceil(chip.getBoundingClientRect().width);
+      doc.documentElement.style.setProperty('--scrap-chip-w', `${w}px`);
+    }).observe(chip);
+  }
   return {
     // Medicine (ID-219) rides beside the Scrap once a patrol has brought some.
     set(n, medicine = 0) {

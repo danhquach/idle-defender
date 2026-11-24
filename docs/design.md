@@ -282,6 +282,10 @@ Defenders stand on **posts** the player builds and chooses between.
     640 px wide (under 408 px before the Scrap chip, ID-179) the speeds take
     their own row under the Scrap chip, Roster, Inventory and Menu, since the
     groups don't fit one row there.
+    Above 1060 px they sit 8 px left of the Scrap chip however wide its balance
+    (and Medicine) grows (ID-239: the chip's width is measured); with Medicine
+    shown, up to 1130 px they drop their key hints so the corner panel keeps its
+    room.
     A, S and D are taken, so any keyboard camera control that ever comes uses
     the arrows, not WASD.
   - **The empty field runs fast (ID-164):** while nothing can happen yet (no
