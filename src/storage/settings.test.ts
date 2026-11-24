@@ -2,12 +2,14 @@
 // and read back through an allow-list.
 import { describe, expect, it } from 'vitest';
 import {
+  AIRSTRIKE_HINT_SEEN_KEY,
   AUTO_STRIKE_KEY,
   CHATTER_KEY,
   clampVolume,
   HOW_TO_SEEN_KEY,
   MOTION_KEY,
   MUTE_KEY,
+  readAirstrikeHintSeen,
   readAutoStrike,
   readChatter,
   readHowToSeen,
@@ -17,6 +19,7 @@ import {
   SPEED_KEY,
   VOLUME_DEFAULTS,
   VOLUME_KEYS,
+  writeAirstrikeHintSeen,
   writeAutoStrike,
   writeChatter,
   writeHowToSeen,
@@ -393,5 +396,45 @@ describe('How-to-play card seen (ID-106)', () => {
     expect(readHowToSeen(null)).toBe(false);
     expect(() => writeHowToSeen(throwing)).not.toThrow();
     expect(() => writeHowToSeen(null)).not.toThrow();
+  });
+});
+
+describe('Airstrike hint seen (ID-232)', () => {
+  it('starts unseen and reads back as seen once written', () => {
+    const store = memory();
+    expect(readAirstrikeHintSeen(store)).toBe(false);
+    writeAirstrikeHintSeen(store);
+    expect(store.data.get(AIRSTRIKE_HINT_SEEN_KEY)).toBe('1');
+    expect(readAirstrikeHintSeen(store)).toBe(true);
+  });
+
+  it('reads anything but the exact "1" as unseen', () => {
+    const hostile = [
+      '',
+      '0',
+      'true',
+      ' 1',
+      '1 ',
+      '01',
+      '1\u200b',
+      '\u202e1',
+      '\uff11',
+      '"1"',
+      '{"__proto__":{"polluted":1}}',
+      '__proto__',
+      '<img src=x onerror=alert(1)>',
+      '1'.repeat(1_000_000),
+    ];
+    for (const raw of hostile) {
+      expect(readAirstrikeHintSeen(memory({ [AIRSTRIKE_HINT_SEEN_KEY]: raw }))).toBe(false);
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('plays on where storage is blocked or full', () => {
+    expect(readAirstrikeHintSeen(throwing)).toBe(false);
+    expect(readAirstrikeHintSeen(null)).toBe(false);
+    expect(() => writeAirstrikeHintSeen(throwing)).not.toThrow();
+    expect(() => writeAirstrikeHintSeen(null)).not.toThrow();
   });
 });

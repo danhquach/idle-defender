@@ -81,7 +81,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `save.ts` | Versioned JSON save (`SAVE_VERSION`), `encodeSave` / `decodeSave`, one `read*` allow-list reader per part of `GameState`, upgrades from older versions. |
 | `validate.ts` | Small allow-list readers (`num`, `int`, `oneOf`, …) used by every `save.ts` reader. |
 | `code.ts` | The backup code: export and import the save as one line of text. |
-| `settings.ts` | Settings outside the save: mute, volumes, speed, reduced motion, auto-strike, chatter, how-to seen. |
+| `settings.ts` | Settings outside the save: mute, volumes, speed, reduced motion, auto-strike, chatter, how-to seen, Airstrike hint seen. |
 | `debug.ts` | The debug URL flag and its separate save slot. |
 | `testing.ts` | Old-save fixtures for migration tests. |
 
@@ -96,7 +96,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts`, `joining.ts` |
 | Dialogs and screens | `menu.ts` (settings, save, help), `confirm.ts`, `intro.ts` + `introTitle.ts`, `landscape.ts` (phone turn prompt), `debug.ts` (debug panel) |
 | Audio | `audio.ts` (Web Audio engine), `sound.ts` (cues from state changes) |
-| Shared bits | `kit.ts` (button variants), `fastforward.ts` (fight speed) |
+| Shared bits | `kit.ts` (button variants), `fastforward.ts` (fight speed), `hold.ts` (press-and-hold: the Airstrike's button and Q turn Auto on or off, ID-232) |
 | Full game only | `build.ts` (build panel; `app.ts`/`menu.ts` still import a few notes from it), `worldmap.ts`, `roster.ts` (old roster panel; only `recruitNotice` is shared), `perks.ts` (perk loadout panel) |
 | Styles | `src/page.css` (all page CSS) |
 | Tests | `testing.ts` (UI test helpers) |
@@ -121,7 +121,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A new gun | `WEAPONS` in `core/data.ts`; drop rules in `core/armoury.ts`; art ids in `ui/sprites.ts` (an icon plus held and aim sprites per look), PNGs in `src/assets/art/` built via `art-src/manifest.json` + `tools/art/` |
 | A new enemy or boss | `ENEMIES` / `BOSSES` in `core/data.ts`; behaviour in `core/horde.ts`; mix in `core/waves.ts`; art in `ui/sprites.ts` + `ui/render.ts` |
 | A new in-fight card | id in the `UpgradeId` type (`core/horde.ts`); entry and category in `UPGRADES` (`core/cards.ts`); stat/repair effect in `applyUpgrade` (`core/cards.ts`), behaviour effect where `core/horde.ts` checks the card. The squad pool (`SQUAD_CARDS`) picks it up by category. A mode reward card instead: id in `ModeCard` and `MODE_UNLOCKS` (`core/data.ts`), its fight-relevance gate in `modeCardRelevant` (`core/cards.ts`); it joins the pool only through `modeCards` (`core/hordeonly.ts`). |
-| A new skill | `SKILLS` and `SkillId` in `core/data.ts`; launch in `core/skills.ts`; landing in `core/horde.ts`; button in `ui/hud.ts`; art in `ui/sprites.ts` + `ui/render.ts`. Field Repairs is no `SkillId`: `repairsButton` in `ui/hud.ts`, key F in `ui/app.ts` |
+| A new skill | `SKILLS` and `SkillId` in `core/data.ts`; launch in `core/skills.ts`; landing in `core/horde.ts`; button in `ui/hud.ts`; art in `ui/sprites.ts` + `ui/render.ts`. Field Repairs is no `SkillId`: `repairsButton` in `ui/hud.ts`, key F in `ui/app.ts`. The Airstrike's Auto is a pill on its button (`.hud-strike` wrapper in `ui/hud.ts`); a hold on the button (`hud.ts`) or Q (`app.ts`) toggles it through `ui/hold.ts` |
 | Fight rules | `core/horde.ts` |
 | Difficulty mode numbers or unlocks | `MODES` in `core/modes.ts`; mode cards in `MODE_UNLOCKS` (`core/data.ts`) and `modeCards` (`core/hordeonly.ts`); start-screen switch in `ui/hud.ts` |
 | A boss skill (Hell's included) | `BossSkill` and `BOSS_SKILL` (`core/data.ts`); clocks and effects in `mutate` and its helpers (`core/horde.ts`); name and cue in `ui/hud.ts`, glow and marks in `ui/render.ts`, sounds in `ui/audio.ts` and `ui/sound.ts` |

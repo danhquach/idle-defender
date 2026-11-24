@@ -17,7 +17,7 @@ import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { tick, type HordeState } from '../core/horde.ts';
 import { enemy } from '../core/testing.ts';
 import { decodeSave, encodeSave, SAVE_KEY } from '../storage/save.ts';
-import { MUTE_KEY } from '../storage/settings.ts';
+import { AIRSTRIKE_HINT_SEEN_KEY, AUTO_STRIKE_KEY, MUTE_KEY } from '../storage/settings.ts';
 import { NOW } from '../storage/testing.ts';
 import { SoundEngine } from './audio.ts';
 import { FIGHT_REFUSAL, SAVE_STATUS } from './menu.ts';
@@ -25,7 +25,16 @@ import { LEVEL_ONE_TEXT } from './statlines.ts';
 import { start } from './app.ts';
 import { ASK_CHANGED } from './confirm.ts';
 import { answerConfirm, confirmPanel, confirmQuestion, flush, skipIntro } from './testing.ts';
-import { AIM_HELD_PROMPT, AIM_PROMPT, BEST_GUNS, BEST_GUNS_NONE, blueprintLine } from './hud.ts';
+import {
+  AIM_HELD_PROMPT,
+  AIM_PROMPT,
+  AUTO_NOTE_MS,
+  BEST_GUNS,
+  BEST_GUNS_NONE,
+  blueprintLine,
+  HOLD_MS,
+  STRIKE_HINT_MS,
+} from './hud.ts';
 import { BLUEPRINT_GUNS, rollBlueprint } from '../core/craft.ts';
 import { project } from './projection.ts';
 import { GUNS_WAIT } from './inventory.ts';
@@ -962,8 +971,16 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
   ];
   const labels = (root: HTMLElement) =>
     shown(root).map((b) => b.querySelector('.hud-shop-label')!.textContent);
-  const key = (k: string, code = `Key${k.toUpperCase()}`) =>
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: k, code, bubbles: true }));
+  /** The key's two halves (ID-232: a skill key aims on release, so a hold can be told from a tap). */
+  const keyDown = (k: string, code = `Key${k.toUpperCase()}`, init: KeyboardEventInit = {}) =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: k, code, bubbles: true, ...init }));
+  const keyUp = (k: string, code = `Key${k.toUpperCase()}`) =>
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: k, code, bubbles: true }));
+  /** A tap: down, then up. */
+  const key = (k: string, code = `Key${k.toUpperCase()}`) => {
+    keyDown(k, code);
+    keyUp(k, code);
+  };
   /** A click (or tap) on the field at `(x, y)`, where the last frame's camera shows it. */
   const clickField = (root: HTMLElement, x: number, y: number) => {
     const canvas = root.querySelector('canvas')!;
@@ -1025,6 +1042,205 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     key('w');
     key('e');
     expect(root.querySelector(HIDDEN)).toBeNull();
+  });
+
+  describe('Q: tap to aim, hold for Auto (ID-232)', () => {
+    /** A fight under way with the Airstrike picked, and its timers faked (the hold's only). */
+    function fighting() {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const booted = boot();
+      step(0);
+      booted.button().click();
+      step(16);
+      const pill = booted.root.querySelector<HTMLButtonElement>('.hud-auto-pill')!;
+      const note = booted.root.querySelector<HTMLElement>('.hud-auto-note')!;
+      const armed = () => shown(booted.root)[0]!.getAttribute('aria-pressed') === 'true';
+      const autoOn = () => pill.getAttribute('aria-pressed') === 'true';
+      return { ...booted, pill, note, armed, autoOn };
+    }
+
+    it('a tap aims on the key release, not the press', () => {
+      const { armed, autoOn } = fighting();
+      keyDown('q');
+      step(32);
+      expect(armed()).toBe(false);
+      keyUp('q');
+      step(48);
+      expect(armed()).toBe(true);
+      expect(autoOn()).toBe(false);
+    });
+
+    it('a hold turns Auto on at once when the time is up, saved and said; the release then does nothing', () => {
+      const { armed, autoOn, note } = fighting();
+      keyDown('q');
+      vi.advanceTimersByTime(HOLD_MS - 1);
+      expect(autoOn()).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(autoOn()).toBe(true);
+      expect(note.hidden).toBe(false);
+      expect(note.textContent).toBe('Auto on');
+      expect(localStorage.getItem(AUTO_STRIKE_KEY)).toBe('1');
+      keyUp('q');
+      step(32);
+      expect(armed()).toBe(false);
+      expect(autoOn()).toBe(true);
+    });
+
+    it('holds again to turn it off', () => {
+      const { autoOn, note } = fighting();
+      for (const want of [true, false]) {
+        keyDown('q');
+        vi.advanceTimersByTime(HOLD_MS);
+        keyUp('q');
+        expect(autoOn()).toBe(want);
+      }
+      expect(note.textContent).toBe('Auto off');
+    });
+
+    it('the key repeating during a hold is one toggle', () => {
+      const { autoOn } = fighting();
+      keyDown('q');
+      for (let i = 0; i < 10; i++) {
+        vi.advanceTimersByTime(150);
+        keyDown('q', 'KeyQ', { repeat: true });
+      }
+      expect(autoOn()).toBe(true);
+      keyUp('q');
+      expect(autoOn()).toBe(true);
+    });
+
+    it('a hold while armed toggles Auto and leaves the skill armed', () => {
+      const { armed, autoOn } = fighting();
+      key('q');
+      step(32);
+      expect(armed()).toBe(true);
+      keyDown('q');
+      vi.advanceTimersByTime(HOLD_MS);
+      keyUp('q');
+      step(48);
+      expect(autoOn()).toBe(true);
+      expect(armed()).toBe(true);
+    });
+
+    it('a hold works while the Airstrike is cooling down: Auto changes, nothing aims', () => {
+      const { root, armed, autoOn } = fighting();
+      key('q');
+      step(32);
+      clickField(root, 1000, 400);
+      step(48);
+      expect(labels(root)).toEqual([`Airstrike ${SKILLS.airstrike.cooldown}s`]);
+      keyDown('q');
+      vi.advanceTimersByTime(HOLD_MS);
+      keyUp('q');
+      step(64);
+      expect(autoOn()).toBe(true);
+      expect(armed()).toBe(false);
+    });
+
+    it('the release after a dialog opened mid-hold does nothing, and the hold sets nothing', () => {
+      const { armed, autoOn } = fighting();
+      keyDown('q');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      vi.advanceTimersByTime(HOLD_MS * 2);
+      keyUp('q');
+      document.querySelector<HTMLButtonElement>('.menu-scrim .menu-close')!.click();
+      step(32);
+      expect(autoOn()).toBe(false);
+      expect(armed()).toBe(false);
+      // The dialog took the key's release: the next tap is still a tap, not stuck.
+      key('q');
+      step(48);
+      expect(armed()).toBe(true);
+    });
+
+    it('the release after the window lost focus does nothing', () => {
+      const { armed, autoOn } = fighting();
+      keyDown('q');
+      window.dispatchEvent(new Event('blur'));
+      vi.advanceTimersByTime(HOLD_MS * 2);
+      keyUp('q');
+      step(32);
+      expect(autoOn()).toBe(false);
+      expect(armed()).toBe(false);
+    });
+
+    it('the release after the fight ended does nothing', () => {
+      const { root, armed, autoOn } = fighting();
+      keyDown('q');
+      endNextTick('won');
+      step(32);
+      vi.advanceTimersByTime(HOLD_MS * 2);
+      keyUp('q');
+      step(48);
+      expect(autoOn()).toBe(false);
+      expect(armed()).toBe(false);
+      expect(root.querySelector('.hud-aim-caption')!.textContent).toBe('');
+      // arm() would have toasted why the skill is locked once the fight is over.
+      expect(root.querySelector<HTMLElement>('.hud-toast')!.hidden).toBe(true);
+    });
+
+    it('a release with no press (a key let go from before the fight) does nothing', () => {
+      const { armed } = fighting();
+      keyUp('q');
+      step(32);
+      expect(armed()).toBe(false);
+    });
+
+    it('a layout that types another letter on Q holds the same way', () => {
+      const { autoOn } = fighting();
+      keyDown('ц', 'KeyQ');
+      vi.advanceTimersByTime(HOLD_MS);
+      keyUp('ц', 'KeyQ');
+      expect(autoOn()).toBe(true);
+    });
+
+    it('E turns Auto on or off with one press, said above the bar; not said at startup', () => {
+      const { pill, note, autoOn } = fighting();
+      expect(note.hidden).toBe(true);
+      expect(autoOn()).toBe(false);
+      key('e');
+      expect(autoOn()).toBe(true);
+      expect(note.textContent).toBe('Auto on');
+      keyDown('e', 'KeyE', { repeat: true });
+      expect(autoOn()).toBe(true);
+      pill.click();
+      expect(autoOn()).toBe(false);
+      expect(note.textContent).toBe('Auto off');
+      vi.advanceTimersByTime(AUTO_NOTE_MS);
+      expect(note.hidden).toBe(true);
+    });
+
+    it('the one-time hint shows in the first fight, goes after a few seconds, and never returns', () => {
+      const { root } = fighting();
+      const hint = () => root.querySelector<HTMLElement>('.hud-strike-hint')!;
+      expect(hint().hidden).toBe(false);
+      expect(localStorage.getItem(AIRSTRIKE_HINT_SEEN_KEY)).toBe('1');
+      vi.advanceTimersByTime(STRIKE_HINT_MS - 1);
+      expect(hint().hidden).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(hint().hidden).toBe(true);
+      // A new page load with it remembered: never shown.
+      const again = boot();
+      step(0);
+      again.button().click();
+      step(16);
+      expect(again.root.querySelector<HTMLElement>('.hud-strike-hint')!.hidden).toBe(true);
+    });
+
+    it('the first tap puts the hint away', () => {
+      const { root } = fighting();
+      const hint = root.querySelector<HTMLElement>('.hud-strike-hint')!;
+      expect(hint.hidden).toBe(false);
+      key('q');
+      expect(hint.hidden).toBe(true);
+    });
+
+    it('the first Auto change puts the hint away too', () => {
+      const { root } = fighting();
+      const hint = root.querySelector<HTMLElement>('.hud-strike-hint')!;
+      key('e');
+      expect(hint.hidden).toBe(true);
+    });
   });
 
   it('Field Repairs: F uses it at once, once, held or not; repeats, modified keys, text fields and no card do nothing; it never arms (ID-231)', () => {

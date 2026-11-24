@@ -167,6 +167,7 @@ import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '..
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
+import { createHold } from './hold.ts';
 import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
 import {
   ART_URLS,
@@ -487,11 +488,6 @@ export function shopButtons(s: HordeState): (HudButton & { item: ShopItem })[] {
   });
 }
 
-/** What a ready skill's button says it does next (design §4, ID-041). */
-const AIM_HINT = {
-  area: 'Then click an area to bomb (Esc to cancel)',
-} as const;
-
 /**
  * A card or replacement offer holds the skills mid-fight (ID-159): an armed skill stays
  * armed for after the pick rather than being put away.
@@ -534,7 +530,13 @@ export function skillButtons(
         !s.skills.includes(skill),
       ),
       disabled: lock !== null,
-      reason: lock ?? `${AIM_HINT[SKILLS[skill].aim]}${key ? ` (key ${key})` : ''}`,
+      // How to aim and how to turn Auto on (ID-232): the tap, the hold and the E key.
+      // The full game has no skill key: a click aims, a hold or E sets Auto.
+      reason:
+        lock ??
+        (key
+          ? `${key}: aim · Hold ${key} or press ${AUTO_KEY}: Auto`
+          : `Click: aim · Hold or press ${AUTO_KEY}: Auto`),
       // Still pressed while a card offer holds the skills: the pick leaves it armed (ID-159).
       armed: skill === armed && (lock === null || offerHolds(s)),
       hidden: free && slot < 0,
@@ -606,6 +608,15 @@ export const OFFER_KEY_GUARD_MS = 300;
 
 /** The Airstrike's Auto toggle key (ID-140), in both builds: clear of the skill, speed and card keys. */
 export const AUTO_KEY = 'E';
+
+/** How long the Airstrike's button or key is held to turn Auto on or off (ID-232), in ms. */
+export const HOLD_MS = 500;
+/** How long the "Auto on" / "Auto off" note shows above the skill bar (ID-232), in ms. */
+export const AUTO_NOTE_MS = 1000;
+/** How long the one-time "Tap to aim · Hold for Auto" hint shows if it is not tapped away (ID-232), in ms. */
+export const STRIKE_HINT_MS = 5000;
+/** The one-time hint's text (ID-232). */
+export const STRIKE_HINT = 'Tap to aim · Hold for Auto';
 
 /** The fight's skills as their buttons stand, left to right (ID-100): `SKILL_KEYS` follow it. */
 export const skillSlots = (s: Pick<HordeState, 'skills'>): SkillId[] =>
@@ -2539,6 +2550,12 @@ export function createHud(
   onRepairs(handler: () => void): void;
   /** The Auto toggle shown on or off (ID-140). */
   showAutoStrike(on: boolean): void;
+  /** "Auto on" / "Auto off" above the skill bar for `AUTO_NOTE_MS` (ID-232); not on startup. */
+  autoNote(on: boolean): void;
+  /** The hold ring round the Airstrike button while its key is held (ID-232). */
+  strikeHolding(on: boolean): void;
+  /** The Airstrike's one-time "Tap to aim · Hold for Auto" hint shown or put away (ID-232). */
+  strikeHint(show: boolean): void;
   /** Squad Power against Recommended Power for the fight's corner (ID-098); null hides it. */
   fightPower(line: PowerLine | null): void;
   show(visible: boolean): void;
@@ -2828,7 +2845,7 @@ export function createHud(
   aimCaption.hidden = true;
   shop.append(aimCaption);
   // Each button: its icon (decoration only, so a screen reader reads the label) and its label.
-  const iconButton = (className: string, icon: ArtId, onClick: () => void) => {
+  const iconButton = (className: string, icon: ArtId, onClick: (e: MouseEvent) => void) => {
     const button = el('button', className);
     button.type = 'button';
     button.addEventListener('click', onClick);
@@ -2860,9 +2877,16 @@ export function createHud(
     iconButton('hud-button hud-shop-item', SHOP_ICON[item], () => onBuy(item)),
   );
   const skillItems = SKILL_IDS.map((skill) => {
-    const item = iconButton('hud-button hud-shop-item hud-skill', SKILL_ICON[skill], () =>
-      onArm(skill),
-    );
+    const item = iconButton('hud-button hud-shop-item hud-skill', SKILL_ICON[skill], (e) => {
+      // The click after an Airstrike hold that fired, or was cancelled, is not a tap (ID-232).
+      // Pointer clicks only (`detail` 0 is the keyboard or a script): Enter and Space always
+      // aim. It asks the hold, which forgets at the next press, so no flag goes stale.
+      if (skill === 'airstrike' && e.detail > 0) {
+        const how = strikeHold.outcome;
+        if (how === 'hold' || how === 'cancel') return;
+      }
+      onArm(skill);
+    });
     // The horde-only build's key for it (ID-100); empty, and so hidden, in the full game.
     const key = el('kbd', 'menu-key hud-skill-key');
     key.hidden = true;
@@ -2872,30 +2896,94 @@ export function createHud(
     );
     return { ...item, key, cooling: false };
   });
-  // Airstrike auto-aim (ID-140): its own toggle just after the Airstrike button (a button
-  // can't hold another), usable any time in a fight, during picks too.
-  const autoButton = el('button', 'hud-button hud-auto');
-  autoButton.type = 'button';
-  autoButton.hidden = true;
-  autoButton.setAttribute('aria-keyshortcuts', AUTO_KEY);
-  // Its name is "Auto" and `aria-pressed` says on or off; the on/off word and the key are
-  // for the eyes only (`aria-keyshortcuts` names the key), so a reader never hears both.
-  const autoState = el('span', 'hud-auto-state');
-  autoState.setAttribute('aria-hidden', 'true');
-  const autoKey = el('kbd', 'menu-key hud-skill-key', AUTO_KEY);
-  autoKey.setAttribute('aria-hidden', 'true');
-  autoButton.append('Auto ', autoState, autoKey);
+  // Airstrike auto-aim (ID-140, ID-232): a small "Auto" pill on the Airstrike button's
+  // top-right corner (a button can't hold another, so it is the button's sibling in a
+  // wrapper), usable any time in a fight, during picks too. Holding the button for HOLD_MS
+  // turns Auto on or off too: a ring fills round it, and the click that follows a fired hold
+  // is swallowed. A tap still aims by the button's own click, so Enter and Space work.
+  const strikeItem = skillItems[SKILL_IDS.indexOf('airstrike')]!;
+  const strikeWrap = el('span', 'hud-strike');
+  const autoPill = el('button', 'hud-auto-pill');
+  autoPill.type = 'button';
+  autoPill.setAttribute('aria-keyshortcuts', AUTO_KEY);
+  // Its name is "Auto" and `aria-pressed` says on or off; the tick, the short "A" (a phone)
+  // and the key are for the eyes only, so a reader never hears them as well.
+  autoPill.setAttribute('aria-label', 'Auto');
+  const pillTick = el('span', 'hud-auto-tick', '\u2713');
+  const pillWord = el('span', 'hud-auto-word', 'Auto');
+  const pillShort = el('span', 'hud-auto-short', 'A');
+  const pillKey = el('kbd', 'menu-key hud-auto-key', AUTO_KEY);
+  for (const part of [pillTick, pillWord, pillShort, pillKey]) {
+    part.setAttribute('aria-hidden', 'true');
+    autoPill.append(part);
+  }
+  // The hold ring: drawn round the button, filling while a hold runs; no input of its own.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const holdRing = document.createElementNS(SVG_NS, 'svg');
+  holdRing.setAttribute('class', 'hud-hold-ring');
+  holdRing.setAttribute('viewBox', '0 0 100 100');
+  holdRing.setAttribute('preserveAspectRatio', 'none');
+  holdRing.setAttribute('aria-hidden', 'true');
+  const ringPath = document.createElementNS(SVG_NS, 'rect');
+  for (const [k, v] of Object.entries({
+    x: '1',
+    y: '1',
+    width: '98',
+    height: '98',
+    rx: '10',
+    pathLength: '100',
+  })) {
+    ringPath.setAttribute(k, v);
+  }
+  // The fill takes as long as the hold (the CSS's own 0.5 s is only the fallback).
+  ringPath.style.animationDuration = `${HOLD_MS}ms`;
+  holdRing.append(ringPath);
+  // The one-time hint (ID-232), above the button; the app shows and hides it.
+  const strikeHint = el('span', 'hud-strike-hint', STRIKE_HINT);
+  strikeHint.setAttribute('role', 'status');
+  strikeHint.hidden = true;
+  strikeItem.button.before(strikeWrap);
+  strikeWrap.append(strikeItem.button, autoPill, holdRing, strikeHint);
   let autoHandler: (() => void) | null = null;
-  autoButton.addEventListener('click', () => autoHandler?.());
+  autoPill.addEventListener('click', () => autoHandler?.());
   const showAuto = (on: boolean): void => {
-    autoState.textContent = on ? 'on' : 'off';
-    autoButton.setAttribute('aria-pressed', String(on));
-    autoButton.title = on
+    autoPill.setAttribute('aria-pressed', String(on));
+    strikeWrap.dataset.auto = on ? 'on' : 'off';
+    autoPill.title = on
       ? `Airstrike fires by itself on the biggest group (key ${AUTO_KEY} to turn off)`
       : `Turn on to fire the Airstrike by itself on the biggest group (key ${AUTO_KEY})`;
   };
   showAuto(false);
-  skillItems[SKILL_IDS.indexOf('airstrike')]!.button.after(autoButton);
+  const strikeHold = createHold(HOLD_MS, () => {
+    strikeWrap.classList.remove('hud-strike-holding');
+    autoHandler?.();
+  });
+  // Only the primary button or finger of the button itself starts a hold; the pill is its
+  // own button, and a locked Airstrike (no pill) has no Auto to change. No setPointerCapture here: Chrome would retarget the click to the wrapper
+  // and the button's own click (the tap that aims) would never fire.
+  strikeWrap.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary || autoPill.hidden || autoPill.contains(e.target as Node))
+      return;
+    strikeHold.down();
+    strikeWrap.classList.add('hud-strike-holding');
+  });
+  const endStrikeHold = (e: PointerEvent, how: 'up' | 'cancel'): void => {
+    if (!e.isPrimary) return;
+    if (how === 'up') strikeHold.up();
+    else strikeHold.cancel();
+    strikeWrap.classList.remove('hud-strike-holding');
+  };
+  strikeWrap.addEventListener('pointerup', (e) => endStrikeHold(e, 'up'));
+  strikeWrap.addEventListener('pointercancel', (e) => endStrikeHold(e, 'cancel'));
+  strikeWrap.addEventListener('pointerleave', (e) => endStrikeHold(e, 'cancel'));
+  // A long press never opens the browser's menu (the CSS stops the callout and selection).
+  strikeWrap.addEventListener('contextmenu', (e) => e.preventDefault());
+  // The "Auto on" / "Auto off" note above the skill bar (ID-232), for a moment.
+  const autoNoteEl = el('p', 'hud-auto-note');
+  autoNoteEl.setAttribute('role', 'status');
+  autoNoteEl.hidden = true;
+  shop.append(autoNoteEl);
+  let autoNoteTimer: ReturnType<typeof setTimeout> | undefined;
   // Field Repairs (ID-231): its own button after the Airstrike group, usable any time in a
   // fight, during picks too; it never arms or aims. Shown once the card is held.
   const repairsItem = iconButton('hud-button hud-shop-item hud-repairs', 'card-field-repairs', () =>
@@ -3776,20 +3864,21 @@ export function createHud(
       // shows only while a skill is armed; everything is put back as it was.
       const shopWas = shop.hidden;
       const skillsWere = skillItems.map((s) => s.button.hidden);
-      // The Auto toggle (ID-140) counts too, as it shows beside a picked Airstrike.
-      const autoWas = autoButton.hidden;
+      // The Airstrike's wrapper (ID-232) shows with its button; the Auto pill sits on the
+      // button's corner and takes no room of its own.
+      const strikeWas = strikeWrap.hidden;
       // So does Field Repairs (ID-231), which shows once its card is held.
       const repairsWas = repairsItem.button.hidden;
       repairsItem.button.hidden = false;
       if (squad) {
         shop.hidden = false;
         skillItems.forEach((s, i) => (s.button.hidden = i >= SQUAD_SKILLS.max));
-        autoButton.hidden = false;
+        strikeWrap.hidden = SKILL_IDS.indexOf('airstrike') >= SQUAD_SKILLS.max;
       }
       const box = shop.getBoundingClientRect();
       shop.hidden = shopWas;
       skillItems.forEach((s, i) => (s.button.hidden = skillsWere[i]!));
-      autoButton.hidden = autoWas;
+      strikeWrap.hidden = strikeWas;
       repairsItem.button.hidden = repairsWas;
       hud.hidden = was;
       // The HUD overlays the whole window, as the canvas does.
@@ -3930,6 +4019,13 @@ export function createHud(
         showButton(item, b);
         item.button.setAttribute('aria-pressed', String(b.armed));
         item.button.hidden = b.hidden;
+        if (item === strikeItem) {
+          strikeWrap.hidden = b.hidden;
+          // A disabled button takes no press (CSS), so the press and the hover land on the
+          // wrapper: it carries the reason (cooling, locked) the button's own title can't show.
+          const tip = b.disabled ? b.reason : '';
+          if (strikeWrap.title !== tip) strikeWrap.title = tip;
+        }
         if (item.key.textContent !== (b.key ?? '')) item.key.textContent = b.key ?? '';
         item.key.hidden = b.key === null;
         if (b.key) item.button.setAttribute('aria-keyshortcuts', b.key);
@@ -3942,9 +4038,10 @@ export function createHud(
         }
         item.cooling = b.cooling;
       });
-      // The Auto toggle (ID-140) shows with the Airstrike button, whatever its cooldown or a pick.
+      // The Auto pill (ID-140, ID-232) shows with the Airstrike button, whatever its cooldown
+      // or a pick, once the skill is picked or researched.
       const strike = skills[SKILL_IDS.indexOf('airstrike')];
-      autoButton.hidden = !strike || strike.hidden || !state.skills.includes('airstrike');
+      autoPill.hidden = !strike || strike.hidden || !state.skills.includes('airstrike');
       const repairs = repairsButton(state);
       showButton(repairsItem, repairs);
       repairsItem.button.hidden = repairs.hidden;
@@ -4124,6 +4221,20 @@ export function createHud(
     },
     showAutoStrike(on) {
       showAuto(on);
+    },
+    autoNote(on) {
+      autoNoteEl.textContent = on ? 'Auto on' : 'Auto off';
+      autoNoteEl.hidden = false;
+      clearTimeout(autoNoteTimer);
+      autoNoteTimer = setTimeout(() => (autoNoteEl.hidden = true), AUTO_NOTE_MS);
+    },
+    strikeHolding(on) {
+      strikeWrap.classList.toggle('hud-strike-holding', on);
+    },
+    strikeHint(show) {
+      strikeHint.hidden = !show;
+      // Set as it shows, so a screen reader announces the live region (an unhidden one may not be).
+      strikeHint.textContent = show ? STRIKE_HINT : '';
     },
     showSkills(next) {
       if (!result.hidden) drawSkills(next);

@@ -2301,32 +2301,197 @@ body {
   text-decoration: line-through;
 }
 
-/* The Airstrike's Auto toggle (ID-140): muted and dashed while off (still tappable, not
-   the disabled look), lit while on. */
-.hud-auto {
-  padding: var(--space-6) var(--space-12);
-  border-style: dashed;
-  border-color: var(--color-border);
+/* The Airstrike and its Auto pill (ID-140, ID-232): the pill sits on the button's top-right
+   corner. The wrapper takes the press, so a disabled (cooling) button, which takes none,
+   still lets a hold through; a long press never selects text or opens a menu. */
+.hud-strike {
+  position: relative;
+  display: inline-flex;
+  margin-right: 4px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.hud-strike[hidden] {
+  display: none;
+}
+
+.hud-strike img {
+  -webkit-user-drag: none;
+}
+
+/* Room on the button's right for the pill, so it never covers the label, cost or key. */
+.hud-strike .hud-skill {
+  padding-right: var(--space-20);
+}
+
+.hud-strike .hud-skill:disabled {
+  pointer-events: none;
+}
+
+/* It rides above the button's top edge, so even "✓ Auto E" never covers the label's top. */
+.hud-auto-pill {
+  position: absolute;
+  top: -17px;
+  right: -4px;
+  z-index: 1;
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
   color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 1.4;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-@media (pointer: coarse), (max-width: 480px) {
-  .hud-auto {
-    min-height: 44px;
-  }
+.hud-auto-pill[hidden] {
+  display: none;
 }
 
-.hud-auto[aria-pressed='true'] {
+.hud-auto-pill:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.hud-auto-tick,
+.hud-auto-short {
+  display: none;
+}
+
+.hud-auto-pill .hud-auto-key {
+  margin: 0;
+  font-size: inherit;
+}
+
+/* On: filled in the accent with a tick, so the state never rests on colour alone. */
+.hud-auto-pill[aria-pressed='true'] {
   border-style: solid;
   border-color: var(--color-accent);
-  color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
   font-weight: 600;
 }
 
-.hud-auto[hidden] {
+.hud-auto-pill[aria-pressed='true'] .hud-auto-tick {
+  display: inline;
+}
+
+/* Its key hint takes the pill's dark text on the accent, readable there. */
+.hud-auto-pill[aria-pressed='true'] .hud-auto-key {
+  border-color: currentColor;
+  color: inherit;
+}
+
+/* And the Airstrike button wears an accent ring, ready, cooling or locked. */
+.hud-strike[data-auto='on']:has(.hud-auto-pill:not([hidden])) .hud-skill,
+.hud-strike[data-auto='on']:has(.hud-auto-pill:not([hidden])) .hud-skill:disabled {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+/* A finger gets 44 x 44 px of the pill, drawn no bigger: it grows up and over the button's
+   corner, never to the right, so it stays clear of the next button (the bar's gap is 8 px). */
+@media (pointer: coarse) {
+  .hud-auto-pill::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: max(100%, 44px);
+    height: 44px;
+    transform: translateY(-50%);
+  }
+}
+
+/* A phone: the pill shrinks to "A", its key hint dropped like the other keys'. */
+@media (max-width: 480px) {
+  .hud-auto-word,
+  .hud-auto-pill .hud-auto-key {
+    display: none;
+  }
+
+  .hud-auto-short {
+    display: inline;
+  }
+}
+
+/* The hold ring (ID-232): fills round the button while it is held, closing as Auto changes. */
+.hud-hold-ring {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  overflow: visible;
+  fill: none;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.hud-hold-ring rect {
+  stroke: var(--color-accent);
+  stroke-width: 3px;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  vector-effect: non-scaling-stroke;
+}
+
+.hud-strike-holding .hud-hold-ring {
+  visibility: visible;
+}
+
+.hud-strike-holding .hud-hold-ring rect {
+  animation: hud-hold-ring 0.5s linear forwards;
+}
+
+@keyframes hud-hold-ring {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The note and the one-time hint (ID-232): over the bar, no input of their own. */
+.hud-shop > .hud-auto-note {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  /* Clear of the Auto pill, which rides 17 px above the bar. */
+  margin: 0 0 var(--space-20);
+  padding: 2px var(--space-10);
+  transform: translateX(-50%);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.hud-auto-note[hidden],
+.hud-strike-hint[hidden] {
   display: none;
+}
+
+.hud-strike-hint {
+  position: absolute;
+  bottom: calc(100% + 24px);
+  left: 0;
+  padding: var(--space-6) var(--space-10);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .hud-shop-item {
@@ -6549,12 +6714,24 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .hud-boss-cue-winding {
     animation: none;
   }
+
+  /* The Airstrike's hold ring (ID-232) shows whole while held, no fill to watch. */
+  .hud-strike-holding .hud-hold-ring rect {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 
 /* The game's own Reduce motion setting (ID-121): the swarm banner and glow hold still too. */
 :root[data-reduce-motion] .hud-swarm,
 :root[data-reduce-motion] .hud-swarm-edge {
   animation: none;
+}
+
+/* ... and so does the Airstrike's hold ring (ID-232). */
+:root[data-reduce-motion] .hud-strike-holding .hud-hold-ring rect {
+  animation: none;
+  stroke-dashoffset: 0;
 }
 
 /* The intro (ID-106): a title screen over the camp at launch, then a first-launch card.

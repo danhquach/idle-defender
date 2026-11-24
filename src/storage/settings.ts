@@ -176,3 +176,25 @@ export function writeHowToSeen(storage: SaveStorage | null): void {
     // Storage blocked or full.
   }
 }
+
+// The Airstrike's one-time hint (ID-232): "Tap to aim · Hold for Auto", shown the first time
+// the skill is in a fight. Only "1" counts as seen.
+export const AIRSTRIKE_HINT_SEEN_KEY = 'idle-defender.airstrike-hint-seen';
+
+/** Whether the Airstrike's hint has been shown in this browser. */
+export function readAirstrikeHintSeen(storage: SaveStorage | null): boolean {
+  try {
+    return storage?.getItem(AIRSTRIKE_HINT_SEEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Marks the hint shown; where the browser refuses it, it shows again next launch. */
+export function writeAirstrikeHintSeen(storage: SaveStorage | null): void {
+  try {
+    storage?.setItem(AIRSTRIKE_HINT_SEEN_KEY, '1');
+  } catch {
+    // Storage blocked or full.
+  }
+}
