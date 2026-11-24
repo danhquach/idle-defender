@@ -34,23 +34,24 @@ const CASES: [number, number][] = [
 ];
 
 /**
- * The recorded digests (main, before ID-218, Node 25 on arm64). A few long fights end a tick or
+ * The recorded digests (main, before ID-218, Node 25 on arm64; re-recorded in ID-236, whose
+ * wire rows carry a `broken` flag and heal and cut, a deliberate change to Normal). A few long fights end a tick or
  * two apart on another Node (its Math functions round their last bit differently, which is why
  * the balance cache is keyed on Node's version too), so CI's Node 22 has its own entries below.
  */
 const GOLDEN: Record<string, string> = {
-  'h1-L1-won': '7716a413:11633',
-  'h10-L9-won': 'a90bffdb:19849',
-  'h20-L18-lost': 'aa6aedb6:38599',
-  'h20-L40-won': 'cc8318e8:19641',
-  'h30-L27-lost': '20e96baf:46540',
-  'h30-L70-won': '6781a7b4:19697',
-  'h4-L4-won': '5ea6a95c:16565',
-  'h45-L40-lost': 'a0929863:43760',
-  'h5-L5-won': 'c085e57e:18143',
-  'h50-L150-won': 'fe553611:19642',
-  'h50-L45-lost': 'ed683d3a:44706',
-  'replay-won': '28bdfc6c:13530',
+  'h1-L1-won': 'e0c6024f:11933',
+  'h10-L9-won': '61207097:20149',
+  'h20-L18-lost': '4980ab77:40374',
+  'h20-L40-won': '57a905b8:19941',
+  'h30-L27-lost': '77f5ca0b:46840',
+  'h30-L70-won': '35a1184:19997',
+  'h4-L4-won': '190ef090:16865',
+  'h45-L40-lost': 'be561d0b:44060',
+  'h5-L5-won': '3bad2bce:18443',
+  'h50-L150-won': 'a8288ed9:19942',
+  'h50-L45-lost': '8139027e:45006',
+  'replay-won': '1e420150:13680',
 };
 
 /**

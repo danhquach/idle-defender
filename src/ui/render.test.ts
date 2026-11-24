@@ -3713,6 +3713,7 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     Array.from({ length: SEGMENTS }, (_, i) => ({
       durability: broken.includes(i) ? 0 : worn.includes(i) ? max / 2 : max,
       max,
+      broken: broken.includes(i),
       hit: [],
     }));
 
@@ -3738,6 +3739,7 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
         const wire = Array.from({ length: SEGMENTS }, (_, row) => ({
           durability: left[row] ?? 0,
           max,
+          broken: (left[row] ?? 0) <= 0,
           hit: [],
         }));
         const band = paintedDraws(
@@ -3935,6 +3937,47 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
       expect(y0).toBeCloseTo(yAt(from), 9);
       expect(y1).toBeCloseTo(yAt(to), 9);
     }
+  });
+
+  it('Barbed Wire: a broken row looks torn while it heals, until it works again (ID-236)', () => {
+    for (const max of CARD.wire.durability) {
+      expect(wireLook(0.2 * max, max, true)).toBe('torn');
+      expect(wireLook(0.25 * max, max, false)).toBe('worn');
+      expect(wireLook(max, max, false)).toBe('whole');
+    }
+  });
+
+  it('Barbed Wire: each damaged row shows a steel HP bar in its row, filled to its share; none at full (ID-236)', () => {
+    const r = recorder();
+    const bars: { x: number; y: number; w: number; h: number; style: string }[] = [];
+    const ctx = r.ctx as unknown as { fillStyle: string };
+    Object.assign(r.ctx, {
+      fillRect: (x: number, y: number, w: number, h: number) =>
+        bars.push({ x, y, w, h, style: ctx.fillStyle }),
+    });
+    const wire = wornRows([3], [6]);
+    // Row 3 broken but healing back at 10% of its max.
+    wire[3]!.durability = 0.1 * full;
+    drawScene(r.ctx, r.art, fight({}, { taken: ['barbed-wire'], wire }), CAM, VIEW);
+    const fills = bars.filter((b) => b.style === COLOR.conditionFill);
+    const backs = bars.filter((b) => b.style === COLOR.conditionBack);
+    // Two damaged rows, two bars: no wall bar uses these colours (turrets are off in this scene).
+    expect(fills).toHaveLength(2);
+    expect(backs).toHaveLength(2);
+    const [b3, b6] = backs.sort((a, b) => a.y - b.y);
+    const [f3, f6] = fills.sort((a, b) => a.y - b.y);
+    expect(f3!.w / b3!.w).toBeCloseTo(0.1, 9);
+    expect(f6!.w / b6!.w).toBeCloseTo(0.5, 9);
+    // Each in its own row of the band, the upper one higher on screen.
+    expect(b3!.y).toBeLessThan(b6!.y);
+    // With no card, or every row full, no bar.
+    const none = recorder();
+    const nb: string[] = [];
+    const nctx = none.ctx as unknown as { fillStyle: string };
+    Object.assign(none.ctx, { fillRect: () => nb.push(nctx.fillStyle) });
+    drawScene(none.ctx, none.art, fight({}, { taken: ['barbed-wire'], wire: rows() }), CAM, VIEW);
+    drawScene(none.ctx, none.art, fight({}, { wire }), CAM, VIEW);
+    expect(nb.filter((s) => s === COLOR.conditionFill)).toHaveLength(0);
   });
 
   it('Barbed Wire: where the browser can’t paint, a steel line down each coil and no fill', () => {

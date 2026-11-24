@@ -117,7 +117,9 @@ describe('the held cards strip (ID-113)', () => {
     // Its rarity's frame, and its whole entry for a screen reader.
     expect(wire!.classList.contains('hud-held-rare')).toBe(true);
     expect(concussion!.classList.contains('hud-held-epic')).toBe(true);
-    expect(wire!.getAttribute('aria-label')).toMatch(/^Barbed Wire, level 2\. Enemies /);
+    expect(wire!.getAttribute('aria-label')).toMatch(
+      /^Barbed Wire, level 2\. Field wire slows enemies /,
+    );
   });
 
   it('updates the moment a card is picked, and an ammo swap replaces the old chip', () => {

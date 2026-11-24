@@ -214,45 +214,53 @@ describe('levels (ID-097)', () => {
 
   it('Barbed Wire: a wave break keeps every row’s wear, broken rows broken; only a level-up rebuilds (ID-133)', () => {
     let s = at('barbed-wire', 2);
-    s.wire[1]!.durability = 0;
+    Object.assign(s.wire[1]!, { durability: 0, broken: true });
     s.wire[5]!.durability = 3;
     s.wire[5]!.hit = [1, 2];
     expect(s.wave).toBe(1);
     // Nothing left to spawn and no enemy standing: the next step starts the break.
     s = tick(s, STEP);
     expect(s.wave).toBe(2);
-    expect(s.wire.map((r) => r.durability)).toEqual([20, 0, 20, 20, 20, 3, 20, 20, 20, 20]);
+    // One step's heal on top (ID-236): level 2's share of 20 a second.
+    const healed = CARD.wire.heal[1]! * 20 * STEP;
+    const want = [20, healed, 20, 20, 20, 3 + healed, 20, 20, 20, 20];
+    s.wire.forEach((r, i) => expect(r.durability, `row ${i}`).toBeCloseTo(want[i]!, 9));
+    expect(s.wire.map((r) => r.broken)).toEqual(want.map((_, i) => i === 1));
     expect(s.wire.every((r) => r.max === 20 && r.hit.length === 0)).toBe(true);
-    // The level-up rebuilds them all at its full.
+    // The level-up rebuilds them all at its full, working.
     s = picked(s, 'barbed-wire');
-    expect(s.wire.every((r) => r.durability === 30 && r.max === 30)).toBe(true);
+    expect(s.wire.every((r) => r.durability === 30 && r.max === 30 && !r.broken)).toBe(true);
   });
 
-  it('Barbed Wire: at a wave break a row’s full follows the wave’s size, its worn share kept (ID-133)', () => {
+  it('Barbed Wire: at a wave break a row’s full follows the wave’s size, its HP share kept (ID-133, ID-236)', () => {
     let s = at('barbed-wire', 2);
-    // As if the last wave had been half the size: rows sized at 10.
+    // As if the last wave had been half the size: rows sized at 10, healing paused.
     for (const row of s.wire) [row.durability, row.max] = [10, 10];
-    s.wire[0]!.durability = 0;
+    Object.assign(s.wire[0]!, { durability: 0, broken: true });
     s.wire[1]!.durability = 5;
     s.wire[2]!.durability = 1;
     s.wire[3]!.durability = 0.2;
+    // The step heals first (at the old full), then the break resizes: share kept, no rounding.
+    const heal = CARD.wire.heal[1]! * 10 * STEP;
     s = tick(s, STEP);
     expect(s.wave).toBe(2);
     expect(s.wire.every((r) => r.max === 20)).toBe(true);
-    // Broken stays broken, half stays half, and a worn row never rounds down to broken.
-    expect(s.wire.slice(0, 5).map((r) => r.durability)).toEqual([0, 10, 2, 1, 20]);
+    [0, 5, 1, 0.2, 10].forEach((was, i) =>
+      expect(s.wire[i]!.durability, `row ${i}`).toBeCloseTo(Math.min(10, was + heal) * 2, 9),
+    );
+    // Broken stays broken; a worn row is not broken.
+    expect(s.wire.slice(0, 5).map((r) => r.broken)).toEqual([true, false, false, false, false]);
     // And a shrinking wave shrinks the full the same way.
-    for (const row of s.wire) [row.durability, row.max] = [row.durability * 2, 40];
+    for (const row of s.wire) [row.durability, row.max] = [Math.min(40, row.durability * 2), 40];
+    const before = s.wire.map((r) => r.durability);
     s.toSpawn = 0;
     s.enemies = [];
     s = tick(s, STEP);
-    expect(s.wire.slice(0, 5).map((r) => [r.durability, r.max])).toEqual([
-      [0, 20],
-      [10, 20],
-      [2, 20],
-      [1, 20],
-      [20, 20],
-    ]);
+    const heal2 = CARD.wire.heal[1]! * 40 * STEP;
+    s.wire.forEach((r, i) => {
+      expect(r.max).toBe(20);
+      expect(r.durability, `row ${i}`).toBeCloseTo(Math.min(40, before[i]! + heal2) / 2, 9);
+    });
   });
 
   it('Barbed Wire: a row’s full durability grows with the wave’s size, never below its level’s (ID-123)', () => {
@@ -1369,7 +1377,7 @@ describe('the offer spells out each pick (ID-097)', () => {
   it('a card not held shows "New" and its level 1 effect', () => {
     expect(pitch(quiet(), 'barbed-wire')).toMatchObject({
       tag: 'New',
-      effect: { from: null, to: '15%', pre: 'Enemies ' },
+      effect: { from: null, to: '15%', pre: 'Field wire slows enemies ' },
     });
   });
 

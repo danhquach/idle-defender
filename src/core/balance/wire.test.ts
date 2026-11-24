@@ -1,6 +1,7 @@
 // Balance: Barbed Wire is worth levelling (ID-133; see shared.ts). Its rows keep their wear
-// across wave breaks and are rebuilt only at a level-up, and their durability grows with the
-// wave's size, so a level 1 row wears out over a late horde while a max one holds. Measured
+// across wave breaks and are rebuilt only at a level-up, and their HP grows with the wave's
+// size. Since ID-236 they heal slowly and a broken row works again at 25%, so the wire lasts
+// into the late hordes: a max row holds, and a level 1 row still wears a little late. Measured
 // in the scripted horde-only campaign, at the first try of each horde, with the wire held from
 // the start at one level for the whole fight (offers of it turned down, so no rebuild).
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -52,7 +53,7 @@ function working(game: GameState, seed: number, n: number, level: number): Share
     s = tick(useSkills(s), 0.5);
     if (s.enemies.length === 0) continue;
     if (s.wave !== wave) [wave, last, looks] = [s.wave, 0, 0];
-    const up = s.wire.filter((r) => r.durability > 0).length / s.wire.length;
+    const up = s.wire.filter((r) => !r.broken).length / s.wire.length;
     [last, looks, whole, all] = [last + up, looks + 1, whole + up, all + 1];
   }
   return { last: looks > 0 ? last / looks : 1, whole: all > 0 ? whole / all : 1 };
@@ -101,18 +102,21 @@ describe('Barbed Wire is worth levelling (ID-133)', () => {
     expect(mean(5, 1, 'whole')).toBeGreaterThanOrEqual(0.75);
   });
 
-  it('late, each level holds more of the fight than the one below, by 5 points or more, up to the whole fight', () => {
+  it('late, each level holds at least as much of the fight as the one below', () => {
     for (const n of [10, 15]) {
       for (const lv of [2, 3]) {
-        // A level can't hold more than the whole fight (ID-199: Lv 2 held 97% at Horde 10).
         expect(mean(n, lv, 'whole'), `Horde ${n}, Lv ${lv}`).toBeGreaterThanOrEqual(
-          Math.min(mean(n, lv - 1, 'whole') + 0.05, 1),
+          mean(n, lv - 1, 'whole'),
         );
       }
     }
   });
 
-  it('late, a level 1 row wears out: under half of the last wave fought', () => {
-    for (const n of [10, 15]) expect(mean(n, 1, 'last'), `Horde ${n}`).toBeLessThan(0.5);
+  // ID-236 replaced "a level 1 row wears out: under half of the last wave" (ID-133): with the
+  // heal it lasts into the late hordes, but it still breaks now and then, so a level-up is worth it.
+  it('late, a level 1 row lasts most of the last wave fought but still breaks at times (ID-236)', () => {
+    const last = mean(15, 1, 'last');
+    expect(last).toBeGreaterThanOrEqual(0.5);
+    expect(last).toBeLessThan(mean(15, 3, 'last'));
   });
 });

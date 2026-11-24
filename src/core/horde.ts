@@ -270,9 +270,9 @@ export interface Enemy {
   knocked?: number;
   knockedBy?: string;
   /**
-   * All the HP fire has taken from it so far (Incendiary Rounds and molotov fires); absent = 0.
-   * Cosmetic: the view (ID-089) flashes a hit only for HP lost beyond it, so a burning
-   * enemy doesn't strobe white every step.
+   * All the HP fire has taken from it so far (Incendiary Rounds and molotov fires), and Barbed
+   * Wire's bleed (ID-236); absent = 0. Cosmetic: the view (ID-089) flashes a hit only for HP
+   * lost beyond it, so a burning or bleeding enemy doesn't strobe white every step.
    */
   burnt?: number;
   /**
@@ -416,13 +416,15 @@ export interface Trap {
   hit: number[];
 }
 /**
- * One row of Barbed Wire's band (ID-090): `durability` left, 0 when broken; it slows no one
- * once broken. `max`: its full durability this wave at the card's level (ID-123). `hit`: the
+ * One row of Barbed Wire's band (ID-090): `durability`, its HP left (ID-236). `max`: its full
+ * HP this wave at the card's level (ID-123). `broken`: it hit 0 HP and has not healed back to
+ * `CARD.wire.back` of `max` yet (ID-236); a broken row slows and cuts no one. `hit`: the
  * enemies that wore it, each only once.
  */
 export interface WireRow {
   durability: number;
   max: number;
+  broken: boolean;
   hit: number[];
 }
 /** How a turret looks and whether it fires: lit, dark (no charge), jammed (0 condition), or offline (its wall broke). */
@@ -945,7 +947,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     // At level 1's full durability for the first wave: the card's first pick (ID-104, ID-123).
     wire: Array.from({ length: SEGMENTS }, () => {
       const max = wireMax(1, toSpawn);
-      return { durability: max, max, hit: [] };
+      return { durability: max, max, broken: false, hit: [] };
     }),
     energy: bank,
     bankCap,
@@ -1326,6 +1328,8 @@ function step(s: HordeState, rng: Rng): void {
   blowFrags(s);
   landTar(s);
   burn(s);
+  bleed(s);
+  mendWire(s);
   poison(s);
   repair(s);
   mend(s);
@@ -1730,7 +1734,7 @@ function throwSlab(s: HordeState, e: Enemy): void {
   let target: { x: number; row: number; column: number | null } | null = null;
   const wire = barbedWire(s);
   if (wire) {
-    const r = nearest(s.wire.flatMap((w, i) => (w.durability > 0 ? [i] : [])));
+    const r = nearest(s.wire.flatMap((w, i) => (w.broken ? [] : [i])));
     if (r !== undefined) target = { x: (wire.from + wire.to) / 2, row: r, column: null };
   }
   if (!target) {
@@ -1765,8 +1769,8 @@ function landSlabs(s: HordeState): void {
     if (slab.landed || !due(s.time, slab.lands)) continue;
     slab.landed = true;
     if (slab.column === null) {
-      // Broken until the card's next level-up (ID-133).
-      s.wire[slab.row]!.durability = 0;
+      // Broken until it heals back (ID-236) or the card's next pick (ID-133).
+      Object.assign(s.wire[slab.row]!, { durability: 0, broken: true });
       continue;
     }
     const layer = s.layers.find((l) => l.column === slab.column);
@@ -3256,16 +3260,52 @@ export function barbedWire(
 
 /**
  * Barbed Wire's row under `e`, which stands in the band (ID-090): the first time `e` is in
- * a working row, the row loses its kind's wear (ID-104), never below 0. Whether that row
- * still slows: a row the crossing broke slows no one, `e` included.
+ * a working row, the row loses its kind's wear (ID-104), never below 0, and breaks at 0
+ * (ID-236). Whether that row still slows: a row the crossing broke slows no one, `e` included.
  */
 function wearWire(s: HordeState, e: Enemy): boolean {
   const row = s.wire[segmentAt(e.y)]!;
-  if (row.durability > 0 && !row.hit.includes(e.id)) {
+  if (!row.broken && !row.hit.includes(e.id)) {
     row.hit.push(e.id);
     row.durability = Math.max(0, row.durability - CARD.wire.wear[e.kind]);
+    if (row.durability <= 0) row.broken = true;
   }
-  return row.durability > 0;
+  return !row.broken;
+}
+
+/** Whether `e` stands in a working Barbed Wire row (`band` from `barbedWire`), outside the camp. */
+const inWire = (s: HordeState, band: { from: number; to: number }, e: Enemy): boolean =>
+  !e.inCamp && e.x >= band.from - EPS && e.x <= band.to + EPS && !s.wire[segmentAt(e.y)]!.broken;
+
+/**
+ * Barbed Wire's bleed (ID-236): every enemy in a working row loses its level's
+ * `CARD.wire.bleed` of this wave's Shambler HP a second, so it keeps up with the hordes.
+ */
+function bleed(s: HordeState): void {
+  const band = barbedWire(s);
+  if (!band) return;
+  const hit = atLevel(s, 'barbed-wire', CARD.wire.bleed) * shamblerHp(s) * STEP;
+  for (const e of s.enemies) {
+    if (e.hp <= 0 || !inWire(s, band, e)) continue;
+    popOn(s, e, hit);
+    e.hp = Math.max(0, e.hp - hit);
+    // A steady loss as a burn's: no white hit flash every step.
+    e.burnt = (e.burnt ?? 0) + hit;
+  }
+}
+
+/**
+ * Barbed Wire's rows heal (ID-236): each gains its level's `CARD.wire.heal` of its max HP a
+ * second up to its max, a broken one included; a broken row works again once back at
+ * `CARD.wire.back` of its max.
+ */
+function mendWire(s: HordeState): void {
+  if (!took(s, 'barbed-wire')) return;
+  const rate = atLevel(s, 'barbed-wire', CARD.wire.heal) * STEP;
+  for (const row of s.wire) {
+    row.durability = Math.min(row.max, row.durability + rate * row.max);
+    if (row.broken && row.durability >= CARD.wire.back * row.max - EPS) row.broken = false;
+  }
 }
 
 /** The trap whose cell `e` stands in, if any. */
@@ -3766,7 +3806,7 @@ function wireFull(s: HordeState): number {
 }
 
 /**
- * Puts every Barbed Wire row, broken or worn, at its full durability (`wireFull`): at each
+ * Puts every Barbed Wire row, broken or worn, at its full HP, working (`wireFull`): at each
  * pick of the card only (ID-133; each wave break too before it, ID-123).
  */
 export function rebuildWire(s: HordeState): void {
@@ -3774,20 +3814,19 @@ export function rebuildWire(s: HordeState): void {
   for (const row of s.wire) {
     row.durability = max;
     row.max = max;
+    row.broken = false;
   }
 }
 
 /**
  * At a wave break (ID-133): every row's full follows the new wave's size (`wireFull`) and the
- * row keeps its wear as a share of its full, rounded; a broken row stays broken and a worn one
- * never rounds down to broken.
+ * row keeps its HP as a share of its full (ID-236: no rounding, as it heals in fractions); a
+ * broken row stays broken until it heals back.
  */
 function resizeWire(s: HordeState): void {
   const max = wireFull(s);
   for (const row of s.wire) {
-    if (row.durability > 0) {
-      row.durability = Math.max(1, Math.round((row.durability / row.max) * max));
-    }
+    row.durability = (row.durability / row.max) * max;
     row.max = max;
   }
 }

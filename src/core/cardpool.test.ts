@@ -527,15 +527,19 @@ describe('barrier cards', () => {
     let t = tick(s, STEP);
     for (let i = 0; i < 20; i++) t = tick(t, STEP);
     expect(t.enemies.find((o) => o.id === e.id)!.x).toBeGreaterThan(FRONT + CARD.wire.from);
-    expect(t.wire[ROW]).toMatchObject({ durability: WHOLE - 1, max: WHOLE, hit: [e.id] });
+    // Worn by 1, then healing slowly since (ID-236): under a step's heal a step.
+    const healStep = CARD.wire.heal[2]! * WHOLE * STEP;
+    expect(t.wire[ROW]).toMatchObject({ max: WHOLE, hit: [e.id], broken: false });
+    expect(t.wire[ROW]!.durability).toBeGreaterThan(WHOLE - 1);
+    expect(t.wire[ROW]!.durability).toBeLessThanOrEqual(WHOLE - 1 + 21 * healStep + 1e-9);
     // Only the row it walks in.
     expect(t.wire.filter((r) => r.durability < WHOLE)).toHaveLength(1);
     // A second enemy wears it again.
+    const was = t.wire[ROW]!.durability;
     const f = enemy(t, { ...tough, x: FRONT + 300, y: ROW4 });
-    expect(tick(t, STEP).wire[ROW]).toMatchObject({
-      durability: WHOLE - 2,
-      hit: [e.id, f.id],
-    });
+    const u = tick(t, STEP);
+    expect(u.wire[ROW]!.hit).toEqual([e.id, f.id]);
+    expect(u.wire[ROW]!.durability).toBeCloseTo(was + healStep - 1, 9);
   });
 
   it('Barbed Wire: each kind wears a row by its own wear, only once (ID-104)', () => {
@@ -551,15 +555,17 @@ describe('barrier cards', () => {
     });
     for (const kind of Object.keys(ENEMIES) as EnemyKind[]) {
       const s = quiet('barbed-wire');
-      s.wire[ROW]!.durability = 30;
+      Object.assign(s.wire[ROW]!, { durability: 30, max: 30 });
       // Three steps in the band: worn the first time only.
       const e = enemy(s, { ...tough, kind, x: FRONT + 300, y: ROW4 });
       let t = tick(s, STEP);
       t = tick(tick(t, STEP), STEP);
-      expect(t.wire[ROW], kind).toMatchObject({
-        durability: 30 - CARD.wire.wear[kind],
-        hit: [e.id],
-      });
+      expect(t.wire[ROW]!.hit, kind).toEqual([e.id]);
+      // Worn once, healed a step's worth each step after (ID-236).
+      expect(t.wire[ROW]!.durability, kind).toBeCloseTo(
+        30 - CARD.wire.wear[kind] + 2 * CARD.wire.heal[2]! * 30 * STEP,
+        9,
+      );
     }
   });
 
@@ -569,7 +575,7 @@ describe('barrier cards', () => {
     s.wire[ROW]!.durability = 2;
     const brute = enemy(s, { ...tough, kind: 'brute', x: FRONT + 300, y: ROW4 });
     const t = tick(s, STEP);
-    expect(t.wire[ROW]).toMatchObject({ durability: 0, hit: [brute.id] });
+    expect(t.wire[ROW]).toMatchObject({ durability: 0, broken: true, hit: [brute.id] });
     expect(FRONT + 300 - t.enemies.find((o) => o.id === brute.id)!.x).toBeCloseTo(step, 9);
   });
 
@@ -587,18 +593,118 @@ describe('barrier cards', () => {
     const step = ENEMIES.shambler.speed * STEP;
     const slow = step * (1 - CARD.wire.slow[2]!);
     const s = quiet('barbed-wire');
-    s.wire[ROW]!.durability = 1;
+    // Under 1 after the step's heal, which comes before the wear.
+    s.wire[ROW]!.durability = 0.5;
     const breaker = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 });
     const above = enemy(s, { ...tough, x: FRONT + 300, y: ROW4 - SEGMENT_HEIGHT });
     let t = tick(s, STEP);
-    expect(t.wire[ROW]).toMatchObject({ durability: 0, hit: [breaker.id] });
+    expect(t.wire[ROW]).toMatchObject({ durability: 0, broken: true, hit: [breaker.id] });
     expect(FRONT + 300 - t.enemies.find((o) => o.id === breaker.id)!.x).toBeCloseTo(step, 9);
     expect(FRONT + 300 - t.enemies.find((o) => o.id === above.id)!.x).toBeCloseTo(slow, 9);
-    // Broken stays broken: a newcomer walks through at full speed and wears nothing.
+    // Broken stays broken while it heals: a newcomer walks through at full speed and wears nothing.
     const next = enemy(t, { ...tough, x: FRONT + 350, y: ROW4 });
     t = tick(t, STEP);
     expect(FRONT + 350 - t.enemies.find((o) => o.id === next.id)!.x).toBeCloseTo(step, 9);
-    expect(t.wire[ROW]).toMatchObject({ durability: 0, hit: [breaker.id] });
+    expect(t.wire[ROW]).toMatchObject({ broken: true, hit: [breaker.id] });
+    expect(t.wire[ROW]!.durability).toBeCloseTo(CARD.wire.heal[2]! * WHOLE * STEP, 9);
+  });
+
+  /**
+   * Horde 1 with Barbed Wire held (at max unless set), and one enemy held far out past the
+   * band, so the wave doesn't end (a break would resize the rows).
+   */
+  function held(card = true): HordeState {
+    const s = card ? quiet('barbed-wire') : quiet();
+    enemy(s, { ...tough, ...still, x: FRONT + CARD.wire.to + 400, y: ROW4 });
+    return s;
+  }
+
+  it('Barbed Wire: every row heals its level’s share of its max a second, up to its max (ID-236)', () => {
+    expect(CARD.wire.heal).toEqual([0.003, 0.006, 0.01]);
+    for (let lv = 1; lv <= 3; lv++) {
+      const s = held();
+      s.cardLevels['barbed-wire'] = lv;
+      s.wire[ROW]!.durability = 2;
+      s.wire[ROW + 1]!.durability = WHOLE - 0.001;
+      const t = steps(s, 30);
+      expect(t.wire[ROW]!.durability, `Lv ${lv}`).toBeCloseTo(
+        2 + CARD.wire.heal[lv - 1]! * WHOLE,
+        6,
+      );
+      expect(t.wire[ROW + 1]!.durability, `Lv ${lv}`).toBe(WHOLE);
+    }
+    // Without the card nothing heals.
+    const none = held(false);
+    none.wire[ROW]!.durability = 2;
+    expect(steps(none, 30).wire[ROW]!.durability).toBe(2);
+  });
+
+  it('Barbed Wire: a broken row heals too, and works again at 25% of its max (ID-236)', () => {
+    expect(CARD.wire.back).toBe(0.25);
+    const s = held();
+    Object.assign(s.wire[ROW]!, { durability: 0, broken: true });
+    // Level 3 (max) heals its share a second: back at 25% after 25% / that share.
+    const back = CARD.wire.back / CARD.wire.heal[2]!;
+    let t = steps(s, Math.round((back - 0.2) / STEP));
+    expect(t.wire[ROW]!.broken).toBe(true);
+    // Still broken: no slow, no wear.
+    const e = enemy(t, { ...tough, x: FRONT + 300, y: ROW4 });
+    t = tick(t, STEP);
+    expect(FRONT + 300 - t.enemies.find((o) => o.id === e.id)!.x).toBeCloseTo(
+      ENEMIES.shambler.speed * STEP,
+      9,
+    );
+    expect(t.wire[ROW]!.hit).toEqual([]);
+    t.enemies = t.enemies.filter((o) => o.id !== e.id);
+    t = steps(t, Math.round(0.3 / STEP));
+    expect(t.wire[ROW]!.broken).toBe(false);
+    expect(t.wire[ROW]!.durability).toBeGreaterThanOrEqual(CARD.wire.back * WHOLE - 1e-9);
+    // Working again: it slows the next one.
+    const f = enemy(t, { ...tough, x: FRONT + 300, y: ROW4 });
+    t = tick(t, STEP);
+    expect(FRONT + 300 - t.enemies.find((o) => o.id === f.id)!.x).toBeCloseTo(
+      ENEMIES.shambler.speed * STEP * (1 - CARD.wire.slow[2]!),
+      9,
+    );
+  });
+
+  it('Barbed Wire: an enemy in a working row bleeds its level’s share of this wave’s Shambler HP a second (ID-236)', () => {
+    expect(CARD.wire.bleed).toEqual([0.004, 0.008, 0.012]);
+    for (let lv = 1; lv <= 3; lv++) {
+      const s = quiet('barbed-wire');
+      s.cardLevels['barbed-wire'] = lv;
+      const inBand = enemy(s, { ...tough, x: FRONT + 380, y: ROW4 });
+      const out = enemy(s, { ...tough, x: FRONT + CARD.wire.to + 200, y: ROW4 });
+      const t = tick(s, STEP);
+      const lost = (id: number) => 1000 - t.enemies.find((o) => o.id === id)!.hp;
+      expect(lost(inBand.id), `Lv ${lv}`).toBeCloseTo(
+        CARD.wire.bleed[lv - 1]! * shamblerHp(s) * STEP,
+        9,
+      );
+      expect(lost(out.id)).toBe(0);
+      // A steady loss, not a hit: no white flash (as a burn).
+      expect(t.enemies.find((o) => o.id === inBand.id)!.burnt).toBeCloseTo(lost(inBand.id), 9);
+    }
+    // A broken row cuts no one; without the card nothing does.
+    const broken = quiet('barbed-wire');
+    Object.assign(broken.wire[ROW]!, { durability: 0, broken: true });
+    const e = enemy(broken, { ...tough, x: FRONT + 380, y: ROW4 });
+    expect(tick(broken, STEP).enemies.find((o) => o.id === e.id)!.hp).toBe(1000);
+    const none = quiet();
+    const g = enemy(none, { ...tough, x: FRONT + 380, y: ROW4 });
+    expect(tick(none, STEP).enemies.find((o) => o.id === g.id)!.hp).toBe(1000);
+  });
+
+  it('Barbed Wire: the bleed skips an enemy in the camp and one already dead (ID-236)', () => {
+    const s = held();
+    const inCamp = enemy(s, { ...tough, ...still, x: FRONT + 380, y: ROW4, inCamp: true });
+    const dead = enemy(s, { ...tough, ...still, x: FRONT + 380, y: ROW4, hp: 0 });
+    const t = tick(s, STEP);
+    expect(t.enemies.find((o) => o.id === inCamp.id)).toMatchObject({ hp: 1000 });
+    expect(t.enemies.find((o) => o.id === inCamp.id)!.burnt ?? 0).toBe(0);
+    // The dead one is gone, with no damage number put up for it.
+    expect(t.enemies.find((o) => o.id === dead.id)).toBeUndefined();
+    expect(t.pops.filter((p) => p.on === 'shambler')).toEqual([]);
   });
 
   it('Barbed Wire: stays put when the wall in front of it falls', () => {
