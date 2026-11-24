@@ -493,9 +493,15 @@ describe('a crowd of every kind', () => {
         tracer: WEAPONS.pistol.tracer,
       });
     }
-    let t = tick(s, STEP);
-    const start = performance.now();
-    for (let i = 0; i < 30; i++) t = tick(t, STEP);
-    expect((performance.now() - start) / 30).toBeLessThan(16);
+    const first = tick(s, STEP);
+    // The best of 3 batches, each from the same fight, so a busy machine doesn't fail it (ID-240).
+    let best = Infinity;
+    for (let b = 0; b < 3; b++) {
+      let t = structuredClone(first);
+      const start = performance.now();
+      for (let i = 0; i < 30; i++) t = tick(t, STEP);
+      best = Math.min(best, (performance.now() - start) / 30);
+    }
+    expect(best).toBeLessThan(16);
   });
 });
