@@ -159,8 +159,10 @@ describe('UI kit tokens (ID-056)', () => {
 
   it('defines every token a rule uses', () => {
     const used = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]!));
-    // `--risk` is set per place by the world map's script.
-    const missing = [...used].filter((t) => !tokens.has(t) && t !== '--risk');
+    // `--risk` is set per place by the world map's script; `--scrap-chip-w` is the Scrap
+    // chip's measured width (ID-239), set by its script.
+    const set = ['--risk', '--scrap-chip-w'];
+    const missing = [...used].filter((t) => !tokens.has(t) && !set.includes(t));
     expect(missing).toEqual([]);
   });
 
@@ -698,7 +700,34 @@ describe('the World map globe in the top bar', () => {
       /@media \(min-width: 641px\) and \(max-width: 1060px\) \{\s*\.hud-speed \{/,
     );
     expect(rules).not.toMatch(/max-width: 1000px/);
-    expect(rules).toMatch(/\.hud-speed \{\s*position: absolute;\s*top: 5px;[^}]*right: 460px;/);
+    // 8px left of the Scrap chip (right 331px) however wide it grows, never nearer the edge
+    // than before (ID-239); the fight's status line keeps clear of them by the same width.
+    const w = 'var\\(--scrap-chip-w, 0px\\)';
+    expect(rules).toMatch(
+      new RegExp(
+        `\\.hud-speed \\{\\s*position: absolute;\\s*top: 5px;[^}]*right: max\\(460px, calc\\(339px \\+ ${w}\\)\\);`,
+      ),
+    );
+    expect(rules).toMatch(
+      new RegExp(
+        `\\.hud-fight-bar \\{\\s*padding-right: max\\(736px, calc\\(615px \\+ ${w}\\)\\);`,
+      ),
+    );
+  });
+
+  it('with Medicine shown, up to 1130px the speeds drop their key hints and the bar follows (ID-239)', () => {
+    const med = 'body:has\\(\\.medicine-chip-count\\)';
+    expect(rules).toMatch(
+      new RegExp(
+        `@media \\(max-width: 1130px\\) \\{\\s*${med} \\.hud-speed \\.menu-key \\{\\s*display: none;`,
+      ),
+    );
+    expect(rules).toMatch(
+      new RegExp(
+        `@media \\(min-width: 1061px\\) and \\(max-width: 1130px\\) \\{\\s*${med} \\.hud-fight-bar \\{\\s*padding-right: max\\(736px, calc\\(509px \\+ var\\(--scrap-chip-w, 0px\\)\\)\\);`,
+      ),
+    );
+    expect(rules).not.toMatch(/max-width: 1100px/);
   });
 
   it('heads the speed column in a fight on a phone on its side', () => {

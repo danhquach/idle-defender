@@ -242,6 +242,53 @@ describe('Scrap on the screens', () => {
     expect(el.getAttribute('aria-label')).toBe('Scrap balance: 1,234,567');
   });
 
+  it("gives the page the chip's width, for the speed buttons to keep clear of (ID-239)", () => {
+    document.body.replaceChildren();
+    document.documentElement.style.removeProperty('--scrap-chip-w');
+    let fire = (): void => {};
+    const watched: Element[] = [];
+    class FakeObserver {
+      constructor(cb: () => void) {
+        fire = cb;
+      }
+      observe(node: Element): void {
+        watched.push(node);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', FakeObserver);
+    try {
+      const chip = createScrapChip(document);
+      const el = document.querySelector<HTMLElement>('.scrap-chip')!;
+      expect(watched).toEqual([el]);
+      chip.set(99_999, 999);
+      // "Scrap 99,999 Med 999" measured 176.7px wide in a browser: rounded up.
+      el.getBoundingClientRect = () => ({ width: 176.7 }) as DOMRect;
+      fire();
+      const width = () => document.documentElement.style.getPropertyValue('--scrap-chip-w');
+      expect(width()).toBe('177px');
+      // Hidden (before the intro is gone): 0, so the speeds keep their usual place.
+      el.getBoundingClientRect = () => ({ width: 0 }) as DOMRect;
+      fire();
+      expect(width()).toBe('0px');
+    } finally {
+      vi.unstubAllGlobals();
+      document.documentElement.style.removeProperty('--scrap-chip-w');
+    }
+  });
+
+  it('builds the chip without a ResizeObserver (jsdom, older browsers)', () => {
+    document.body.replaceChildren();
+    vi.stubGlobal('ResizeObserver', undefined);
+    try {
+      expect(() => createScrapChip(document).set(1234, 5)).not.toThrow();
+      expect(document.documentElement.style.getPropertyValue('--scrap-chip-w')).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('shortens counts past 99,999', () => {
     const cases: [number, string][] = [
       [0, '0'],
