@@ -3,9 +3,9 @@
 // Roster; a win names its joiners (squad or bench) and who rests; the Roster lists the bench
 // under the squad, marks the resting, and moves a fit survivor between the two. Text reaches
 // the page only through textContent.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { PATCH_UP, SQUAD_CAP } from '../core/data.ts';
+import { AREAS, JOBS, PATCH_UP, SQUAD_CAP } from '../core/data.ts';
 import { maxHpOf } from '../core/stats.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
@@ -40,9 +40,11 @@ import {
   INJURED,
   treatedText,
 } from './squadroster.ts';
-import { sendMapPatrol, withMap } from '../core/scout.ts';
+import { sendMapPatrol, takeReport, withMap } from '../core/scout.ts';
+import { patrolGroupLabel, patrolMission, patrolName, patrolTime } from './maptext.ts';
 
 const NOW = 1_700_000_000_000;
+const MIN = 60_000;
 
 const person = (no: number, extra: Partial<RosterDefender> = {}): RosterDefender => ({
   ...recruit(no),
@@ -317,7 +319,21 @@ describe('the Roster and the bench (ID-147)', () => {
     const scrim = document.querySelector<HTMLElement>('.camp-scrim')!;
     const q = <T extends HTMLElement = HTMLButtonElement>(sel: string): T =>
       scrim.querySelector<T>(sel)!;
-    return { roster, scrim, q, onToggleSquad, onTreat, onBestSquad, onAutoSquad, game: () => g };
+    // The camp changed outside the Roster (a report taken on the World map).
+    const set = (next: GameState): void => {
+      g = next;
+    };
+    return {
+      roster,
+      scrim,
+      q,
+      onToggleSquad,
+      onTreat,
+      onBestSquad,
+      onAutoSquad,
+      game: () => g,
+      set,
+    };
   }
 
   it('with no bench the Roster looks as it did: no labels, no bench row, no squad button', () => {
@@ -335,35 +351,153 @@ describe('the Roster and the bench (ID-147)', () => {
     expect(m.q('[data-key="auto-squad"]').closest('[hidden]')).not.toBeNull();
   });
 
-  describe('survivors on patrol have their own row (ID-230)', () => {
-    const out = (bench: RosterDefender[], ids: string[]): GameState => {
-      const g = withMap(campGame(people(3), bench), 7);
-      const sent = sendMapPatrol(g, g.map!.areas[0]!.kind, ids, 1, NOW);
-      if (!sent.ok) throw new Error(sent.reason);
-      return sent.game;
+  describe('survivors on patrol: their own row (ID-230), one block per patrol (ID-234)', () => {
+    // The clock a minute after the patrols left, so they are still out.
+    beforeEach(() => {
+      vi.useFakeTimers({ now: NOW + MIN, toFake: ['Date'] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    /** Sends each team in `teams` to the next area, in turn. */
+    const out = (bench: RosterDefender[], ...teams: string[][]): GameState => {
+      let g = withMap(campGame(people(3), bench), 7);
+      teams.forEach((ids, i) => {
+        const sent = sendMapPatrol(g, g.map!.areas[i]!.kind, ids, 1, NOW);
+        if (!sent.ok) throw new Error(sent.reason);
+        g = sent.game;
+      });
+      return g;
     };
     const rowIds = (sel: string, m: ReturnType<typeof mount>) =>
       [...m.scrim.querySelectorAll<HTMLElement>(`${sel} .rv-tab`)].map((t) => t.dataset.defender);
-    const label = (list: HTMLElement) => list.previousElementSibling as HTMLElement;
+    const blocks = (m: ReturnType<typeof mount>) => [
+      ...m.scrim.querySelectorAll<HTMLElement>('.rv-patrols .rv-patrol-block'),
+    ];
+    const label = (el: HTMLElement) => el.previousElementSibling as HTMLElement;
 
     it('Squad, Bench and On patrol rows, each counted apart; the card keeps its locks', () => {
       const m = mount(out([person(4), person(5, { rest: 1 }), person(6)], ['recruit-6']));
       m.roster.open('recruit-1');
       const bench = m.q<HTMLElement>('.rv-bench:not(.rv-patrol)');
-      const patrol = m.q<HTMLElement>('.rv-patrol');
       expect(rowIds('.rv-bench:not(.rv-patrol)', m)).toEqual(['recruit-4', 'recruit-5']);
       expect(rowIds('.rv-patrol', m)).toEqual(['recruit-6']);
       expect(label(bench).textContent).toBe('Bench 2');
-      expect(label(patrol).textContent).toBe('On patrol 1');
-      expect(patrol.getAttribute('aria-label')).toBe('On patrol');
-      expect(patrol.hidden || label(patrol).hidden).toBe(false);
+      expect(label(m.q('.rv-patrols')).textContent).toBe('On patrol 1');
+      expect(m.q('.rv-patrols').hidden).toBe(false);
       expect(m.q('.rv-squad-row').hidden).toBe(false);
       expect(m.q('.rv-patrol [data-defender="recruit-6"] .rv-tab-job').textContent).toBe('Out');
-      // The card: "On patrol · …", no squad or treat button, gun locked (ID-219).
+      // The card: the patrol by name, no squad or treat button, gun locked (ID-219).
+      const p = m.game().map!.patrols[0]!;
       m.roster.open('recruit-6');
-      expect(m.q('.rv-top').textContent).toMatch(/On patrol · /);
+      expect(m.q('.rv-who-level').textContent).toBe(
+        `Level 1 · ${JOBS[recruit(6).job].name} · ${patrolName(p)}`,
+      );
       expect(m.q('[data-key="squad"]')).toBeNull();
       expect(m.q('[data-key="treat"]')).toBeNull();
+    });
+
+    it('two patrols: two blocks, the soonest back first, each with its members in sent order', () => {
+      const m = mount(
+        out(people(5, 4), ['recruit-7', 'recruit-4', 'recruit-6', 'recruit-5'], ['recruit-8']),
+      );
+      m.roster.open('recruit-1');
+      const ps = [...m.game().map!.patrols].sort((a, b) => a.backAt - b.backAt || a.no - b.no);
+      const bs = blocks(m);
+      expect(bs).toHaveLength(2);
+      expect(label(m.q('.rv-patrols')).textContent).toBe('On patrol 5');
+      bs.forEach((b, i) => {
+        const p = ps[i]!;
+        expect(b.getAttribute('role')).toBe('group');
+        expect(b.getAttribute('aria-label')).toBe(patrolGroupLabel(p, NOW + MIN));
+        expect(b.querySelector('.rv-patrol-title')!.textContent).toBe(patrolName(p));
+        expect(b.querySelector('.rv-patrol-time')!.textContent).toBe(patrolTime(p, NOW + MIN));
+        expect(b.querySelector('.rv-patrol-mission')!.textContent).toBe(patrolMission(p));
+        const ids = [...b.querySelectorAll<HTMLElement>('.rv-tab')].map((t) => t.dataset.defender);
+        expect(ids).toEqual(p.members);
+        // The cards no longer repeat where and when: the header says it once.
+        for (const t of b.querySelectorAll('.rv-tab')) {
+          expect(t.getAttribute('aria-label')).toContain('On patrol');
+          expect(t.getAttribute('aria-label')).not.toContain(AREAS[p.area].name);
+          expect(t.getAttribute('aria-label')).not.toMatch(/\d+ (m|h|s)\b/);
+        }
+      });
+      // Four members fit their block's list, counted for the layout.
+      const four = bs.find((b) => b.querySelectorAll('.rv-tab').length === 4)!;
+      expect(four.querySelector<HTMLElement>('.rv-patrol')!.dataset.count).toBe('4');
+    });
+
+    it('patrols back at the same time are ordered by number', () => {
+      const g = out(people(2, 4), ['recruit-5'], ['recruit-4']);
+      const [a, b] = g.map!.patrols;
+      const tied = {
+        ...g,
+        map: { ...g.map!, patrols: [{ ...b!, backAt: a!.backAt }, a!] },
+      };
+      const m = mount(tied);
+      m.roster.open('recruit-1');
+      expect(blocks(m).map((x) => x.querySelector('.rv-patrol-title')!.textContent)).toEqual([
+        patrolName(a!),
+        patrolName(b!),
+      ]);
+    });
+
+    it('tick: closed does nothing; the countdown moves in place; back redraws, the card kept', () => {
+      const m = mount(out(people(2, 4), ['recruit-4'], ['recruit-5']));
+      m.roster.tick(NOW + 2 * MIN); // closed: nothing drawn, nothing thrown
+      expect(blocks(m)).toHaveLength(0);
+      m.roster.open('recruit-5');
+      const p = m.game().map!.patrols.find((x) => x.members.includes('recruit-4'))!;
+      const block = () => blocks(m).find((b) => b.querySelector('[data-defender="recruit-4"]'))!;
+      const before = block();
+      const time = before.querySelector('.rv-patrol-time')!;
+      // A minute left: the time moves, the same nodes stay.
+      m.roster.tick(p.backAt - MIN);
+      expect(block()).toBe(before);
+      expect(time.textContent).toBe('Back in 1 m');
+      expect(before.getAttribute('aria-label')).toBe(
+        `Patrol ${p.no}, ${AREAS[p.area].name}, back in 1 minute`,
+      );
+      // Nothing changed: nothing rewritten.
+      m.roster.tick(p.backAt - MIN);
+      expect(block()).toBe(before);
+      // Back: "report ready" in place; a timer never redraws what the player is using.
+      const shownCard = m.q('[data-defender="recruit-5"]');
+      shownCard.focus();
+      vi.setSystemTime(p.backAt);
+      m.roster.tick(p.backAt);
+      expect(block()).toBe(before);
+      expect(time.textContent).toBe('Back · report ready');
+      expect(before.getAttribute('aria-label')).toBe(
+        `Patrol ${p.no}, ${AREAS[p.area].name}, back, report ready`,
+      );
+      expect(document.activeElement).toBe(shownCard);
+      expect(shownCard.getAttribute('aria-current')).toBe('true');
+    });
+
+    it('tick: a patrol taken without a refresh is drawn again', () => {
+      const m = mount(out(people(2, 4), ['recruit-4'], ['recruit-5']));
+      m.roster.open('recruit-1');
+      const p = m.game().map!.patrols.find((x) => x.members.includes('recruit-4'))!;
+      const taken = takeReport(m.game(), p.area, p.backAt);
+      if (!taken.ok) throw new Error(taken.reason);
+      m.set(taken.game);
+      m.roster.tick(NOW + 2 * MIN);
+      expect(blocks(m)).toHaveLength(1);
+      expect(rowIds('.rv-bench:not(.rv-patrol)', m)).toContain('recruit-4');
+    });
+
+    it('a report taken: its block goes and its members are back on the Bench', () => {
+      const m = mount(out(people(2, 4), ['recruit-4'], ['recruit-5']));
+      m.roster.open('recruit-1');
+      const p = m.game().map!.patrols.find((x) => x.members.includes('recruit-4'))!;
+      const taken = takeReport(m.game(), p.area, p.backAt);
+      if (!taken.ok) throw new Error(taken.reason);
+      m.set(taken.game);
+      m.roster.refresh();
+      expect(blocks(m)).toHaveLength(1);
+      expect(rowIds('.rv-bench:not(.rv-patrol)', m)).toContain('recruit-4');
+      expect(rowIds('.rv-patrol', m)).toEqual(['recruit-5']);
     });
 
     it('the whole bench away: the Bench row hides, Squad and On patrol stay', () => {
@@ -371,16 +505,17 @@ describe('the Roster and the bench (ID-147)', () => {
       m.roster.open('recruit-1');
       const bench = m.q<HTMLElement>('.rv-bench:not(.rv-patrol)');
       expect(bench.hidden && label(bench).hidden).toBe(true);
-      expect(m.q('.rv-patrol').hidden).toBe(false);
-      expect(label(m.q('.rv-patrol')).textContent).toBe('On patrol 1');
+      expect(m.q('.rv-patrols').hidden).toBe(false);
+      expect(label(m.q('.rv-patrols')).textContent).toBe('On patrol 1');
       expect(m.q('.rv-squad-row').hidden).toBe(false);
     });
 
-    it('nobody on patrol: the On patrol row and its label are hidden', () => {
+    it('nobody on patrol: the label and blocks are hidden', () => {
       const m = mount(campGame(people(3), [person(4)]));
       m.roster.open('recruit-1');
-      const patrol = m.q<HTMLElement>('.rv-patrol');
-      expect(patrol.hidden && label(patrol).hidden).toBe(true);
+      const patrols = m.q<HTMLElement>('.rv-patrols');
+      expect(patrols.hidden && label(patrols).hidden).toBe(true);
+      expect(blocks(m)).toHaveLength(0);
       expect(label(m.q('.rv-bench')).textContent).toBe('Bench 1');
     });
   });

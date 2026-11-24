@@ -2783,7 +2783,10 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   adds up to 15% to each roll's chance (full at a ratio of 2, at most 95%). The picker
   rates the team Safe (ratio 1.5+), Risky (0.75+) or Dangerous, live as members are picked.
 - **Away:** members on patrol can't fight, swap in, join the squad, be let go or
-  combined, and earn no bench share; the Roster says "On patrol · Pharmacy · 42 m".
+  combined, and earn no bench share. On the Roster (ID-234) each patrol out is a block of
+  its members' cards, the soonest back first, under a header in the World map card's words:
+  "Patrol 3 · Pharmacy", "Back in 42 m" (then "Back · report ready"), and "Risky · 1 h ·
+  Finds Medicine, Scrap"; a member's own card names the patrol ("Patrol 3 · Pharmacy").
 - **Report:** on return each member rolls for an injury, then once for loot (a gun by the
   existing drop rolls, uid `m<no>-<k>`, into the stash, a full stash throwing away and
   salvaging the weakest; a blueprint, lost at the cap; Scrap; Medicine, kept up to 999).
