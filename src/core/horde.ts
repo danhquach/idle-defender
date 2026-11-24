@@ -811,7 +811,10 @@ export interface HordeState {
   slicks: Slick[];
   /** When the next tar bomb may be thrown; absent until Oil Bomb is picked. */
   nextTarAt?: number;
-  /** Field Repairs' cost (ID-137): the squad fires slower until this fight time; absent before. */
+  /**
+   * Field Repairs' cost (ID-137): the squad fires slower until this fight time; absent before.
+   * Set when the skill is used (ID-231), so it also marks the use: set = spent.
+   */
   repairsUntil?: number;
   /**
    * This horde's bosses and mini-boss (design §9, ID-099), fixed by its number; `id` is the

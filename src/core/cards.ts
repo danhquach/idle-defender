@@ -274,7 +274,7 @@ export const UPGRADES: Readonly<
   },
   'field-repairs': {
     name: 'Field Repairs',
-    text: `Repair every wall segment to full; −${Math.round((1 - CARD.fieldRepairs.fireRate) * 100)}% fire rate for ${CARD.fieldRepairs.seconds} s`,
+    text: `Field Repairs skill: repair every wall segment to full when you choose; −${Math.round((1 - CARD.fieldRepairs.fireRate) * 100)}% fire rate for ${CARD.fieldRepairs.seconds} s`,
     category: 'barrier',
     rarity: 'epic',
     levels: 1,
@@ -829,7 +829,8 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
   if (THROWABLE_CARDS.includes(id)) s.nextThrowAt ??= s.time;
   if (!s.taken.includes(id)) s.taken.push(id);
   s.cardLevels[id] = stack(s, id) + 1;
-  if (UPGRADES[id].category === 'barrier') s.barrierAt = s.time;
+  // Field Repairs glows when it is used (ID-231), not when it is picked.
+  if (UPGRADES[id].category === 'barrier' && id !== 'field-repairs') s.barrierAt = s.time;
   // A repair card marks only the segments it actually heals (ID-075).
   const repair = (heal: (seg: (typeof segments)[number]) => number): void => {
     for (const seg of segments) {
@@ -869,9 +870,7 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
       s.energy = Math.min(s.bankCap, s.energy + CARD.recharge * s.bankCap);
       break;
     case 'field-repairs':
-      repair((seg) => seg.maxHp);
-      // Its cost (ID-137): the squad fires slower while the wall is repaired.
-      s.repairsUntil = s.time + CARD.fieldRepairs.seconds;
+      // A skill (ID-231): the pick only gives the button; `useRepairs` heals and costs.
       break;
     case 'power-surge':
       s.freeWave = s.wave;

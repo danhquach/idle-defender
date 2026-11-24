@@ -153,7 +153,7 @@ import {
 import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
-import { skillLeft, skillLock } from '../core/skills.ts';
+import { repairsLock, repairsState, skillLeft, skillLock } from '../core/skills.ts';
 import {
   injuryBand,
   powerBand,
@@ -542,6 +542,36 @@ export function skillButtons(
       cooling: left > 0,
     };
   });
+}
+
+/** The Field Repairs button's key (ID-231), in both builds: clear of the skill, speed, card and Auto keys. */
+export const REPAIRS_KEY = 'F';
+
+/**
+ * Field Repairs' button (ID-231), a dry run of `useRepairs`: hidden until the card is held,
+ * "Field Repairs 5s" while its fire-rate cost runs, "Field Repairs · used" once spent, and a
+ * full wall or a held-over horde shows disabled with the reason. Never armed or aimed.
+ */
+export function repairsButton(s: HordeState): HudButton & { hidden: boolean; spent: boolean } {
+  const state = repairsState(s);
+  const lock = repairsLock(s);
+  const left = repairsLeft(s);
+  const spent = state === 'spent';
+  const reason = `Repair every wall segment to full, −${Math.round((1 - CARD.fieldRepairs.fireRate) * 100)}% fire rate for ${CARD.fieldRepairs.seconds} s (key ${REPAIRS_KEY})`;
+  return {
+    label:
+      left > 0
+        ? `Field Repairs ${Math.ceil(left)}s`
+        : spent
+          ? 'Field Repairs · used'
+          : 'Field Repairs',
+    cost: '',
+    variant: 'secondary',
+    disabled: lock !== null,
+    reason: lock ?? reason,
+    hidden: state === 'none',
+    spent,
+  };
 }
 
 /**
@@ -2505,6 +2535,8 @@ export function createHud(
   showJoined(card: SquadCard): void;
   /** Where the Airstrike's Auto toggle goes (ID-140); the app sets it once. */
   onAutoStrike(handler: () => void): void;
+  /** Where the Field Repairs button goes (ID-231); the app sets it once. */
+  onRepairs(handler: () => void): void;
   /** The Auto toggle shown on or off (ID-140). */
   showAutoStrike(on: boolean): void;
   /** Squad Power against Recommended Power for the fight's corner (ID-098); null hides it. */
@@ -2864,6 +2896,20 @@ export function createHud(
   };
   showAuto(false);
   skillItems[SKILL_IDS.indexOf('airstrike')]!.button.after(autoButton);
+  // Field Repairs (ID-231): its own button after the Airstrike group, usable any time in a
+  // fight, during picks too; it never arms or aims. Shown once the card is held.
+  const repairsItem = iconButton('hud-button hud-shop-item hud-repairs', 'card-field-repairs', () =>
+    repairsHandler?.(),
+  );
+  let repairsHandler: (() => void) | null = null;
+  repairsItem.button.hidden = true;
+  repairsItem.button.setAttribute('aria-keyshortcuts', REPAIRS_KEY);
+  const repairsKey = el('kbd', 'menu-key hud-skill-key', REPAIRS_KEY);
+  repairsKey.setAttribute('aria-hidden', 'true');
+  repairsItem.button.append(repairsKey);
+  // Its tallest look, so the bar's measured height (`bottomSpace`) covers it.
+  repairsItem.label.textContent = 'Field Repairs · used';
+  setVariant(repairsItem.button, 'secondary', '');
   // In the horde-only build only the picked skills show, and no cash shop (ID-066, ID-100).
   if (squad) for (const item of shopItems) item.button.hidden = true;
   // Each button starts in its tallest look (name · cost, locked with its note), so the
@@ -3732,6 +3778,9 @@ export function createHud(
       const skillsWere = skillItems.map((s) => s.button.hidden);
       // The Auto toggle (ID-140) counts too, as it shows beside a picked Airstrike.
       const autoWas = autoButton.hidden;
+      // So does Field Repairs (ID-231), which shows once its card is held.
+      const repairsWas = repairsItem.button.hidden;
+      repairsItem.button.hidden = false;
       if (squad) {
         shop.hidden = false;
         skillItems.forEach((s, i) => (s.button.hidden = i >= SQUAD_SKILLS.max));
@@ -3741,6 +3790,7 @@ export function createHud(
       shop.hidden = shopWas;
       skillItems.forEach((s, i) => (s.button.hidden = skillsWere[i]!));
       autoButton.hidden = autoWas;
+      repairsItem.button.hidden = repairsWas;
       hud.hidden = was;
       // The HUD overlays the whole window, as the canvas does.
       return box.height > 0 ? window.innerHeight - box.top : 0;
@@ -3895,6 +3945,10 @@ export function createHud(
       // The Auto toggle (ID-140) shows with the Airstrike button, whatever its cooldown or a pick.
       const strike = skills[SKILL_IDS.indexOf('airstrike')];
       autoButton.hidden = !strike || strike.hidden || !state.skills.includes('airstrike');
+      const repairs = repairsButton(state);
+      showButton(repairsItem, repairs);
+      repairsItem.button.hidden = repairs.hidden;
+      repairsItem.button.classList.toggle('hud-repairs-spent', repairs.spent);
       const aiming = skills.find((b) => b.armed);
       const prompt = !aiming ? '' : offerHolds(state) ? AIM_HELD_PROMPT : AIM_PROMPT[aiming.skill];
       if (aimCaption.textContent !== prompt) aimCaption.textContent = prompt;
@@ -4064,6 +4118,9 @@ export function createHud(
     },
     onAutoStrike(handler) {
       autoHandler = handler;
+    },
+    onRepairs(handler) {
+      repairsHandler = handler;
     },
     showAutoStrike(on) {
       showAuto(on);

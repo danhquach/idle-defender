@@ -70,7 +70,14 @@ import {
 import { advanceResearch } from '../core/research.ts';
 import { replaceInjured, skipReplace } from '../core/replace.ts';
 import { buy } from '../core/shop.ts';
-import { autoLookDue, autoStrike, skillLock, useSkill } from '../core/skills.ts';
+import {
+  autoLookDue,
+  autoStrike,
+  repairsState,
+  skillLock,
+  useRepairs,
+  useSkill,
+} from '../core/skills.ts';
 import { debugFlag, debugStorage } from '../storage/debug.ts';
 import { browserStorage, decodeSave, encodeSave, loadSave, writeSave } from '../storage/save.ts';
 import {
@@ -115,6 +122,7 @@ import {
 } from './buildscene.ts';
 import {
   AUTO_KEY,
+  REPAIRS_KEY,
   bestGunsLine,
   buyQuestion,
   buyText,
@@ -377,6 +385,17 @@ export function start(root: HTMLElement, art: Art): void {
   }
   hud.onAutoStrike(toggleAuto);
   hud.showAutoStrike(autoOn);
+  /**
+   * Field Repairs' button or key (ID-231): used at once, never armed; a refusal is toasted.
+   * Without the card there is no button, so F says nothing (as Q and W with no skill).
+   */
+  function repair(): void {
+    if (!horde || repairsState(horde) === 'none') return;
+    const r = useRepairs(horde);
+    if (r.ok) horde = r.state;
+    else hud.toast(r.reason);
+  }
+  hud.onRepairs(repair);
   /** A skill's button or key (ID-100): it is armed, waiting for an aim (ID-107). */
   function arm(skill: SkillId): void {
     if (!horde) return;
@@ -1249,6 +1268,7 @@ export function start(root: HTMLElement, art: Art): void {
     // Every fight key by its place (ID-100), so one press is one key on any layout.
     const name = fightKeyName(e);
     if (name === AUTO_KEY && !e.repeat) toggleAuto();
+    if (name === REPAIRS_KEY && !e.repeat) repair();
     // An open pick's Skip takes S (ID-210; the pick marks the key handled): the 3× speed waits.
     const next =
       name === OFFER_KEYS.skip && (e.defaultPrevented || horde?.offer)

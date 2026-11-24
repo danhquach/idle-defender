@@ -39,6 +39,7 @@ import {
   upgradeLab,
   type QueueId,
 } from './research.ts';
+import { useRepairs } from './skills.ts';
 import { BROOD_BOSS, researchNow, setup } from './testing.ts';
 
 const MIN = 60_000;
@@ -371,8 +372,12 @@ describe('new nodes in play (AC3)', () => {
     expect(chooseCard(s, 0).mods.damage).toBeCloseTo(1.38, 9);
     const hurt = structuredClone(s);
     for (const seg of hurt.layers.flatMap((l) => l.segments)) seg.hp = seg.maxHp / 4;
-    const fixed = chooseCard(hurt, 1);
-    for (const seg of fixed.layers.flatMap((l) => l.segments)) expect(seg.hp).toBe(seg.maxHp);
+    // Field Repairs is a skill (ID-231): the pick gives it, and using it mends the wall.
+    const picked = chooseCard(hurt, 1);
+    for (const seg of picked.layers.flatMap((l) => l.segments)) expect(seg.hp).toBe(seg.maxHp / 4);
+    const fixed = useRepairs(picked);
+    if (!fixed.ok) throw new Error(fixed.reason);
+    for (const seg of fixed.state.layers.flatMap((l) => l.segments)) expect(seg.hp).toBe(seg.maxHp);
   });
 
   it('More cars lets the camp build a second car', () => {

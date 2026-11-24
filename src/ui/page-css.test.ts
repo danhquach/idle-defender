@@ -213,7 +213,7 @@ describe('the horde-only skill row on a phone (ID-100)', () => {
     };
     inPhone(/\.hud-skill \.menu-key,[^{]*\{\s*display: none;/);
     inPhone(
-      /body:has\(\.hud:not\(\[hidden\]\) \.hud-shop:not\(\[hidden\]\) \.hud-skill:not\(\[hidden\]\)\) \.version \{\s*display: none;/,
+      /body:has\(\.hud:not\(\[hidden\]\) \.hud-shop:not\(\[hidden\]\) :is\(\.hud-skill, \.hud-repairs\):not\(\[hidden\]\)\)\s*\.version \{\s*display: none;/,
     );
   });
 });

@@ -1,7 +1,7 @@
 // ID-137: the epic cards each come with a cost the player weighs, every one different.
 // Concussion Rounds dazes what it hits (+30% squad damage for 1 s) and slows the squad's
 // fire while held; a Frag Grenade's throw takes its thrower's hands for 1.5 s; Field
-// Repairs slows the squad's fire for 5 s after its pick, while the wall is repaired.
+// Repairs slows the squad's fire for 5 s after its use (ID-231), while the wall is repaired.
 // Heavy Rounds' reload cost is ID-136's.
 import { describe, expect, it } from 'vitest';
 import { chooseCard, UPGRADE_IDS, UPGRADES } from './cards.ts';
@@ -15,6 +15,7 @@ import {
   type HordeState,
   type UpgradeId,
 } from './horde.ts';
+import { useRepairs } from './skills.ts';
 import { enemy, setup } from './testing.ts';
 
 const ROW4 = 4.5 * SEGMENT_HEIGHT;
@@ -34,6 +35,13 @@ function picked(s: HordeState, id: UpgradeId): HordeState {
   const t = chooseCard({ ...s, offer: [{ kind: 'upgrade', id }] }, 0);
   t.offer = null;
   return t;
+}
+/** `s` with Field Repairs picked and then used (ID-231), over a wall scratched so there is something to mend. */
+function repaired(s: HordeState): HordeState {
+  s.layers[0]!.segments[1]!.hp -= 10;
+  const r = useRepairs(picked(s, 'field-repairs'));
+  if (!r.ok) throw new Error(r.reason);
+  return r.state;
 }
 function steps(s: HordeState, n: number): HordeState {
   let t = s;
@@ -87,7 +95,7 @@ describe('every epic card names its gain and a cost (ID-137)', () => {
       '3 per survivor, one back every 8 s. Hits the thickest group for 25% of a Shambler’s HP; the thrower stops firing for 1.5 s',
     );
     expect(UPGRADES['field-repairs'].text).toBe(
-      'Repair every wall segment to full; −25% fire rate for 5 s',
+      'Field Repairs skill: repair every wall segment to full when you choose; −25% fire rate for 5 s',
     );
     expect(UPGRADES['hollow-points'].text).toBe('+38% damage, +25% reload time');
     // ID-132: its cost is the slow throw and a lit slick burning out.
@@ -142,7 +150,7 @@ describe('Concussion Rounds: −10% squad fire rate while held (ID-137)', () => 
     };
     const plain = turretGap(field());
     expect(plain).toBeGreaterThan(0);
-    const s = picked(picked(field(), 'concussion-rounds'), 'field-repairs');
+    const s = repaired(picked(field(), 'concussion-rounds'));
     expect(cardFireRate(s)).toBeCloseTo(0.9 * 0.75, 9);
     expect(turretGap(s)).toBeCloseTo(plain, 9);
   });
@@ -262,11 +270,11 @@ describe('Frag Grenades: the thrower fires no shot for 1.5 s after a throw (ID-1
   });
 });
 
-describe('Field Repairs: −25% squad fire rate for 5 s after the pick (ID-137)', () => {
+describe('Field Repairs: −25% squad fire rate for 5 s after its use (ID-137, ID-231)', () => {
   it('starts a 5 s countdown of fight time, slowing the squad until it ends', () => {
     let s = field();
     s.time = 12;
-    s = picked(s, 'field-repairs');
+    s = repaired(s);
     expect(s.repairsUntil).toBeCloseTo(12 + CARD.fieldRepairs.seconds, 9);
     expect(repairsLeft(s)).toBeCloseTo(5, 9);
     expect(cardFireRate(s)).toBeCloseTo(0.75, 9);
@@ -280,7 +288,7 @@ describe('Field Repairs: −25% squad fire rate for 5 s after the pick (ID-137)'
 
   it('the squad’s shots come 1/0.75 times as far apart while it runs, as before after', () => {
     const plain = interval(field());
-    const s = picked(field(), 'field-repairs');
+    const s = repaired(field());
     expect(interval(s)).toBeCloseTo(plain / CARD.fieldRepairs.fireRate, 6);
     const later = steps(s, Math.round((CARD.fieldRepairs.seconds + 1) / STEP));
     // A full magazine and a shot due now, so no reload falls between the two shots measured.
@@ -294,7 +302,7 @@ describe('Field Repairs: −25% squad fire rate for 5 s after the pick (ID-137)'
   });
 
   it('the countdown waits while a card offer is open (fight time stops)', () => {
-    let s = picked(field(), 'field-repairs');
+    let s = repaired(field());
     s = { ...s, offer: [{ kind: 'upgrade', id: 'sharpshooter' }] };
     const left = repairsLeft(s);
     s = steps(s, 30);
@@ -302,11 +310,11 @@ describe('Field Repairs: −25% squad fire rate for 5 s after the pick (ID-137)'
   });
 
   it('stacks with Concussion Rounds: the two costs multiply', () => {
-    const s = picked(picked(field(), 'concussion-rounds'), 'field-repairs');
+    const s = repaired(picked(field(), 'concussion-rounds'));
     expect(cardFireRate(s)).toBeCloseTo(0.9 * 0.75, 9);
   });
 
-  it('no countdown before the pick', () => {
+  it('no countdown before the pick or the use', () => {
     const s = field();
     expect(s.repairsUntil).toBeUndefined();
     expect(repairsLeft(s)).toBe(0);

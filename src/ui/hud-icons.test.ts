@@ -16,7 +16,9 @@ describe('shop and skill icons (ID-041)', () => {
     const hud = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, false);
     const s = newHorde(1, setup());
     hud.update(s);
-    const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
+    const buttons = [
+      ...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item:not(.hud-repairs)'),
+    ];
     const icons = [...SHOP_ITEMS.map((i) => SHOP_ICON[i]), ...SKILL_IDS.map((k) => SKILL_ICON[k])];
     const labels = [...shopButtons(s), ...skillButtons(s, null)].map(
       (b) => `${b.label} · ${b.cost}`,
@@ -37,7 +39,9 @@ describe('shop and skill icons (ID-041)', () => {
     document.body.replaceChildren(root);
     const noop = () => {};
     createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, false);
-    const buttons = [...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item')];
+    const buttons = [
+      ...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item:not(.hud-repairs)'),
+    ];
     const rest = [...SHOP_ITEMS.map((i) => SHOP[i]), ...SKILL_IDS.map((k) => SKILLS[k])];
     buttons.forEach((button, i) => {
       expect(button.querySelector('.hud-shop-label')!.textContent).toBe(`${rest[i]!.name} · `);
