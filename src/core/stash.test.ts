@@ -466,16 +466,17 @@ describe('best gun for everyone counts professions (ID-152)', () => {
 
   it('a fighting profession takes its own gun over a stronger off-profession one', () => {
     const sniper = gun('s', 'sniper', 'common');
-    const assault = gun('a', 'assault', 'common');
-    const g = as(squadGame(1, 3, [assault, sniper]), 'recruit-1', 'hunter');
-    // The premise: the Assault Rifle hits harder on its own, the Sniper rifle in a Hunter's hands.
-    expect(gunPower(assault)).toBeGreaterThan(gunPower(sniper));
-    expect(dps(g, 'recruit-1', sniper)).toBeGreaterThan(dps(g, 'recruit-1', assault));
+    // ID-233: the LMG; the Assault Rifle no longer out-hits the Sniper rifle on its own.
+    const lmg = gun('a', 'lmg', 'common');
+    const g = as(squadGame(1, 3, [lmg, sniper]), 'recruit-1', 'hunter');
+    // The premise: the LMG hits harder on its own, the Sniper rifle in a Hunter's hands.
+    expect(gunPower(lmg)).toBeGreaterThan(gunPower(sniper));
+    expect(dps(g, 'recruit-1', sniper)).toBeGreaterThan(dps(g, 'recruit-1', lmg));
     const r = bestGuns(g);
     expect(r.moves.map((m) => [m.id, m.from, heldName(m.to)])).toEqual([
       ['recruit-1', 'pistol', heldName(sniper)],
     ]);
-    expect(r.game.armoury).toEqual([assault]);
+    expect(r.game.armoury).toEqual([lmg]);
   });
 
   it('swaps guns between survivors when each suits the other (the ticket’s case)', () => {

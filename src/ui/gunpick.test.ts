@@ -111,7 +111,8 @@ describe('the gun tiles (ID-108)', () => {
 
 describe('the picker counts the survivor’s level and profession (ID-152)', () => {
   const sniper = gun('s', 'sniper', 'common');
-  const assault = gun('a', 'assault', 'common');
+  // ID-233: the LMG; the Assault Rifle no longer out-hits the Sniper rifle on its own.
+  const lmg = gun('a', 'lmg', 'common');
   /** `camp` with recruit-1 a Lv 21 `job`. */
   const as = (game: GameState, job: JobId): GameState => ({
     ...game,
@@ -119,10 +120,10 @@ describe('the picker counts the survivor’s level and profession (ID-152)', () 
   });
 
   it('ranks, shows and opens on DPS in their hands', () => {
-    const g = as(camp([assault, sniper]), 'hunter');
+    const g = as(camp([lmg, sniper]), 'hunter');
     const who = squadSpec(g.roster[0]!);
-    // The Assault Rifle hits harder on its own; the Sniper rifle in a Hunter's hands.
-    expect(gunPower(assault)).toBeGreaterThan(gunPower(sniper));
+    // The LMG hits harder on its own; the Sniper rifle in a Hunter's hands.
+    expect(gunPower(lmg)).toBeGreaterThan(gunPower(sniper));
     const tiles = gunTiles(g, 'recruit-1');
     expect(tiles.map((t) => t.choice)).toEqual(['s', 'a']);
     expect(tiles[0]!.power).toBeCloseTo(survivorDps(who, sniper), 9);
@@ -133,24 +134,22 @@ describe('the picker counts the survivor’s level and profession (ID-152)', () 
   });
 
   it('the same stash ranks by the gun for a job those guns don’t suit', () => {
-    const g = as(camp([assault, sniper]), 'mechanic');
+    const g = as(camp([lmg, sniper]), 'mechanic');
     expect(gunTiles(g, 'recruit-1').map((t) => t.choice)).toEqual(['a', 's']);
   });
 
   it('the comparison’s verdict and DPS row are in their hands; the gun stats stay the gun’s', () => {
-    const g = as(camp([assault, sniper]), 'hunter');
+    const g = as(camp([lmg, sniper]), 'hunter');
     const who = squadSpec(g.roster[0]!);
-    const cmp = gunCompare(assault, sniper, who);
+    const cmp = gunCompare(lmg, sniper, who);
     expect(cmp.kind).toBe('up');
     const row = Object.fromEntries(cmp.rows.map((r) => [r.label, r]));
     expect(row['DPS']!.next).toBe(survivorDps(who, sniper).toFixed(1));
-    expect(row['DPS']!.now).toBe(survivorDps(who, assault).toFixed(1));
+    expect(row['DPS']!.now).toBe(survivorDps(who, lmg).toFixed(1));
     // For a level-1 survivor it reads as the gun alone: the Sniper rifle is weaker.
-    expect(gunCompare(assault, sniper, rookie).kind).toBe('down');
+    expect(gunCompare(lmg, sniper, rookie).kind).toBe('down');
     expect(row['Reload']).toEqual(
-      Object.fromEntries(gunCompare(assault, sniper, rookie).rows.map((r) => [r.label, r]))[
-        'Reload'
-      ],
+      Object.fromEntries(gunCompare(lmg, sniper, rookie).rows.map((r) => [r.label, r]))['Reload'],
     );
   });
 });
