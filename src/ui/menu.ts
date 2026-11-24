@@ -9,7 +9,7 @@ import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
-import { el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
+import { AUTO_KEY, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 
 /** What the Save tab says about a refused code. */
 export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
@@ -56,6 +56,10 @@ const FULL_CONTROLS: Controls = [
       ['Click a defender, then a post', 'Move that defender'],
       ['Click an enemy', 'Everyone focuses it (click empty ground to clear)'],
       ['Click a skill', 'Use it; one that aims goes where you click next'],
+      [
+        `Hold a skill, or ${AUTO_KEY}`,
+        'Auto on or off: the Airstrike fires by itself (or tap the Auto pill on its button)',
+      ],
       ['1 2 3', 'Pick a card when three are offered'],
       ['Space', 'Pause or resume the fight (or use the pause button beside the speeds)'],
       [Object.values(SPEED_KEYS).join(' '), 'Fight at 1×, 3× or 5× speed'],
@@ -78,6 +82,10 @@ const SQUAD_CONTROLS: Controls = [
       [
         `Click a skill, or ${skillHelp().keys.join(' ')}`,
         'Use a picked skill; Airstrike bombs the area you click next',
+      ],
+      [
+        `Hold ${skillHelp().keys[0]}, or ${AUTO_KEY}`,
+        'Auto on or off: the Airstrike fires by itself (or tap the Auto pill on its button)',
       ],
       ['1 2 3', 'Pick a card when three are offered'],
       ['Space', 'Pause or resume the fight (or use the pause button beside the speeds)'],

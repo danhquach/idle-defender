@@ -334,7 +334,7 @@ describe('hud', () => {
       cost: '40',
       variant: 'secondary',
       disabled: false,
-      reason: 'Then click an area to bomb (Esc to cancel)',
+      reason: 'Click: aim · Hold or press E: Auto',
       armed: true,
       hidden: false,
       key: null,

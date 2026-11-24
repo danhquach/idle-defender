@@ -83,11 +83,13 @@ import { browserStorage, decodeSave, encodeSave, loadSave, writeSave } from '../
 import {
   readAutoStrike,
   readChatter,
+  readAirstrikeHintSeen,
   readHowToSeen,
   readReduceMotion,
   readSound,
   readSpeed,
   SPEEDS,
+  writeAirstrikeHintSeen,
   writeAutoStrike,
   writeChatter,
   writeHowToSeen,
@@ -122,6 +124,7 @@ import {
 } from './buildscene.ts';
 import {
   AUTO_KEY,
+  HOLD_MS,
   REPAIRS_KEY,
   bestGunsLine,
   buyQuestion,
@@ -148,6 +151,7 @@ import {
   resultScreen,
   fightKeyName,
   SKILL_KEYS,
+  STRIKE_HINT_MS,
   skillPicker,
   skillSlots,
   OFFER_KEYS,
@@ -156,6 +160,7 @@ import {
   type ResultScreen,
   squadStart,
 } from './hud.ts';
+import { createHold } from './hold.ts';
 import { createDebugPanel, type DebugActions, type DebugSpeed, type DebugView } from './debug.ts';
 import { createIntro } from './intro.ts';
 import { createCampWindow } from './campwindow.ts';
@@ -377,11 +382,34 @@ export function start(root: HTMLElement, art: Art): void {
     },
     (next) => setSpeed(next),
   );
-  /** The Airstrike's Auto toggle (ID-140), by its button or key: saved at once. */
+  /**
+   * The Airstrike's Auto toggle (ID-140), by its pill, a hold or the E key: saved at once,
+   * and said for a moment above the skill bar (ID-232).
+   */
   function toggleAuto(): void {
     autoOn = !autoOn;
     writeAutoStrike(storage, autoOn);
     hud.showAutoStrike(autoOn);
+    hud.autoNote(autoOn);
+    dismissStrikeHint();
+  }
+  // The Airstrike's one-time hint (ID-232): the first fight it is in, until a tap or a few
+  // seconds; remembered when shown, so it never comes back.
+  let strikeHintSeen = readAirstrikeHintSeen(storage);
+  let strikeHintTimer: ReturnType<typeof setTimeout> | undefined;
+  function dismissStrikeHint(): void {
+    if (strikeHintTimer === undefined) return;
+    clearTimeout(strikeHintTimer);
+    strikeHintTimer = undefined;
+    hud.strikeHint(false);
+  }
+  function maybeStrikeHint(): void {
+    if (strikeHintSeen || !horde || horde.outcome !== 'fighting' || resultUp()) return;
+    if (!horde.skills.includes('airstrike')) return;
+    strikeHintSeen = true;
+    writeAirstrikeHintSeen(storage);
+    hud.strikeHint(true);
+    strikeHintTimer = setTimeout(dismissStrikeHint, STRIKE_HINT_MS);
   }
   hud.onAutoStrike(toggleAuto);
   hud.showAutoStrike(autoOn);
@@ -399,6 +427,7 @@ export function start(root: HTMLElement, art: Art): void {
   /** A skill's button or key (ID-100): it is armed, waiting for an aim (ID-107). */
   function arm(skill: SkillId): void {
     if (!horde) return;
+    if (skill === 'airstrike') dismissStrikeHint();
     // An open offer holds the skills (ID-159): a key only says so and leaves the armed
     // one armed; Esc still puts it away.
     if (offerHolds(horde)) return hud.toast('Pick first');
@@ -1257,6 +1286,28 @@ export function start(root: HTMLElement, art: Art): void {
   };
   document.addEventListener('keyup', (e) => {
     if (e.key === ' ' && fightKey(e)) e.preventDefault();
+    // A skill key aims on release (ID-232), so a hold can be told from a tap. The release of a
+    // key that was never pressed in a fight, or of one whose fight or window has gone, does nothing.
+    if (!skillKeyDown || fightKeyName(e) !== skillKeyDown.name) return;
+    const { skill } = skillKeyDown;
+    skillKeyDown = null;
+    const how = skillHold.up();
+    hud.strikeHolding(false);
+    if (how !== 'hold' && fightKey(e)) arm(skill);
+  });
+  // Holding Q for HOLD_MS turns Auto on or off, but only where a fight is on and no dialog is
+  // open (a dialog opening mid-hold takes the key's release too); the release then does nothing.
+  let skillKeyDown: { name: string; skill: SkillId } | null = null;
+  const skillHold = createHold(HOLD_MS, () => {
+    hud.strikeHolding(false);
+    if (horde?.outcome === 'fighting' && !dialogOpen()) toggleAuto();
+    // Nothing to set: the release that follows is then no tap either.
+    else skillKeyDown = null;
+  });
+  window.addEventListener('blur', () => {
+    skillKeyDown = null;
+    skillHold.cancel();
+    hud.strikeHolding(false);
   });
   document.addEventListener('keydown', (e) => {
     if (!fightKey(e)) return;
@@ -1278,7 +1329,17 @@ export function start(root: HTMLElement, art: Art): void {
     // Horde-only (ID-100): Q and W use the picked skills, left to right as their buttons stand.
     const slot = SKILL_KEYS.indexOf(name);
     const skill = horde?.freeSkills ? skillSlots(horde)[slot] : undefined;
-    if (slot >= 0 && skill && !e.repeat) arm(skill);
+    // They aim on release (ID-232); held for HOLD_MS they toggle Auto instead. Only the
+    // Airstrike has Auto: another skill's hold is a tap.
+    if (slot >= 0 && skill && !e.repeat) {
+      // A press whose release never came (an open dialog takes the key's keyup) is dropped.
+      skillHold.cancel();
+      skillKeyDown = { name, skill };
+      if (skill === 'airstrike') {
+        skillHold.down();
+        hud.strikeHolding(true);
+      }
+    }
   });
 
   // One primary pointer clicks: right-click and a second finger are ignored, and a
@@ -1405,6 +1466,7 @@ export function start(root: HTMLElement, art: Art): void {
       // Speed runs more of the core's fixed steps per frame, never longer ones; a pick
       // or replacement stops the rest of the frame's steps in the core.
       if (horde) horde = tick(horde, dt * pace);
+      if (!strikeHintSeen) maybeStrikeHint();
       // Auto-aim (ID-140): fires the Airstrike on the biggest group the moment it is ready.
       if (horde && autoOn && autoLookDue(horde.time, autoLookedAt)) {
         autoLookedAt = horde.time;

@@ -48,7 +48,7 @@ describe('the horde-only skill button (ID-100, ID-139)', () => {
     expect(buttons.map((b) => [b.skill, b.hidden, b.key, b.cost, b.disabled])).toEqual([
       ['airstrike', false, 'Q', '', false],
     ]);
-    expect(buttons[0]!.reason).toBe('Then click an area to bomb (Esc to cancel) (key Q)');
+    expect(buttons[0]!.reason).toBe('Q: aim · Hold Q or press E: Auto');
     expect(skillButtons(s, 'airstrike')[0]!.armed).toBe(true);
   });
 

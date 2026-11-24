@@ -87,8 +87,12 @@ describe('the Field Repairs button (ID-231)', () => {
   it('is last in the skill bar, after the Airstrike button, keyed F and named by its label', () => {
     for (const squad of [false, true]) {
       const { root, button, strike } = mount(squad);
-      const bar = [...strike.parentElement!.children].filter((c) => c.tagName === 'BUTTON');
-      expect(bar.indexOf(button)).toBeGreaterThan(bar.indexOf(strike));
+      // The Airstrike sits in its wrapper with the Auto pill (ID-232).
+      const wrap = strike.closest('.hud-strike')!;
+      const bar = [...wrap.parentElement!.children].filter(
+        (c) => c === wrap || c.tagName === 'BUTTON',
+      );
+      expect(bar.indexOf(button)).toBeGreaterThan(bar.indexOf(wrap));
       expect(bar.at(-1)).toBe(button);
       expect(button.type).toBe('button');
       expect(REPAIRS_KEY).toBe('F');
