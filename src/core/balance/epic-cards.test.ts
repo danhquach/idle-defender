@@ -10,7 +10,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { recruit } from '../camp.ts';
 import { chooseCard } from '../cards.ts';
 import { newGame, type GameState } from '../game.ts';
+import { CARD } from '../data.ts';
 import { tick, type HordeState, type UpgradeId } from '../horde.ts';
+import { useRepairs } from '../skills.ts';
 import { cacheFor } from './cache.ts';
 import { cardFight, SEEDS } from './shared.ts';
 
@@ -55,6 +57,12 @@ function wins(game: GameState, card: UpgradeId | null, wall = 1, seeds = SEEDS):
       if (pending && weakest(s) <= wall + 1e-9) {
         s = chooseCard({ ...s, offer: [{ kind: 'upgrade', id: pending }] }, 0);
         s.offer = null;
+        // Field Repairs is a skill now (ID-231): used at once, pick + use is the old pick.
+        // A full wall refuses the use, so its cost starts as the old pick's did.
+        if (pending === 'field-repairs') {
+          const used = useRepairs(s);
+          s = used.ok ? used.state : { ...s, repairsUntil: s.time + CARD.fieldRepairs.seconds };
+        }
         pending = null;
       }
       s = tick(s, 0.5);

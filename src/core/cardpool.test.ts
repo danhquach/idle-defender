@@ -37,6 +37,7 @@ import {
   type UpgradeId,
 } from './horde.ts';
 import { createRng } from './rng.ts';
+import { useRepairs } from './skills.ts';
 import { xpForLevel } from './stats.ts';
 import { enemy, setup } from './testing.ts';
 
@@ -459,7 +460,9 @@ describe('barrier cards', () => {
       return chooseCard(s, 0).barrierAt;
     };
     for (const id of UPGRADE_IDS) {
-      expect(pick(id), id).toBe(UPGRADES[id].category === 'barrier' ? 12.5 : undefined);
+      // Field Repairs glows when it is used, not picked (ID-231).
+      const pulses = UPGRADES[id].category === 'barrier' && id !== 'field-repairs';
+      expect(pick(id), id).toBe(pulses ? 12.5 : undefined);
     }
   });
 
@@ -471,7 +474,11 @@ describe('barrier cards', () => {
       segs[1]!.hp = segs[1]!.maxHp / 2;
       segs[2]!.hp = 0;
       s.offer = [{ kind: 'upgrade', id }];
-      const t = chooseCard(s, 0).layers[0]!.segments;
+      const picked = chooseCard(s, 0);
+      // Field Repairs heals when it is used (ID-231).
+      const used =
+        id === 'field-repairs' ? useRepairs(picked) : { ok: true as const, state: picked };
+      const t = (used.ok ? used.state : picked).layers[0]!.segments;
       expect(t[1]!.repairAt, id).toBe(7);
       expect(t[2]!.repairAt, id).toBe(7);
       // Whole already, or never built: nothing to heal, nothing shown.

@@ -67,7 +67,7 @@ const HIDDEN = [
   '.build-bar',
   '.worldmap-backdrop',
   // The cash shop; the picked skills (ID-100) show in the same row.
-  '.hud-shop-item:not(.hud-skill):not([hidden])',
+  '.hud-shop-item:not(.hud-skill):not(.hud-repairs):not([hidden])',
   '.hud-card-camp',
 ].join(', ');
 
@@ -1025,6 +1025,72 @@ describe('skills in the horde-only build, through the app (ID-100)', () => {
     key('w');
     key('e');
     expect(root.querySelector(HIDDEN)).toBeNull();
+  });
+
+  it('Field Repairs: F uses it at once, once, held or not; repeats, modified keys, text fields and no card do nothing; it never arms (ID-231)', () => {
+    const { root, button } = boot();
+    step(0);
+    button().click();
+    step(16);
+    const repairs = root.querySelector<HTMLButtonElement>('.hud-repairs')!;
+    expect(repairs.hidden).toBe(true);
+    const f = (init: KeyboardEventInit, target: EventTarget = document) =>
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', bubbles: true, ...init }),
+      );
+    // No card, no button: F says nothing (as Q and W with no skill).
+    f({});
+    step(24);
+    expect(root.querySelector('.hud-toast')?.textContent ?? '').not.toContain('Field Repairs');
+    // The card is held and the wall is hurt, as of the next fight frame.
+    const real = vi.mocked(tick).getMockImplementation()!;
+    vi.mocked(tick).mockImplementationOnce((s: HordeState, dt: number) => {
+      const next = real(s, dt);
+      const seg = next.layers.flatMap((l) => l.segments).find((g) => g.kind !== null)!;
+      seg.hp = seg.maxHp / 2;
+      return { ...next, taken: [...next.taken, 'field-repairs'] };
+    });
+    step(32);
+    expect(repairs.hidden).toBe(false);
+    expect(repairs.disabled).toBe(false);
+    const wall = () =>
+      vi
+        .mocked(drawScene)
+        .mock.lastCall![2].layers.flatMap((l) => l.segments)
+        .filter((g) => g.kind !== null)
+        .every((g) => g.hp === g.maxHp);
+    expect(wall()).toBe(false);
+    f({ repeat: true });
+    f({ ctrlKey: true });
+    f({ metaKey: true });
+    f({ altKey: true });
+    // Typed into a text field: a letter, not a key.
+    const field = document.createElement('input');
+    document.body.append(field);
+    field.focus();
+    f({}, field);
+    field.remove();
+    step(48);
+    expect(wall()).toBe(false);
+    // Held (Space): it still works, at once.
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }),
+    );
+    f({});
+    step(56);
+    expect(wall()).toBe(true);
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }),
+    );
+    step(64);
+    expect(wall()).toBe(true);
+    expect(repairs.querySelector('.hud-shop-label')!.textContent).toMatch(/^Field Repairs [45]s$/);
+    expect(repairs.disabled).toBe(true);
+    // No skill was armed by it, and a second press is refused with its reason.
+    expect(root.querySelector('.hud-skill[aria-pressed="true"]')).toBeNull();
+    f({});
+    step(80);
+    expect(root.querySelector('.hud-toast')!.textContent).toBe('Already used');
   });
 
   it('an armed Airstrike stays armed when a card offer opens and is picked (ID-159)', () => {

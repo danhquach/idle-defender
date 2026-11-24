@@ -1707,7 +1707,7 @@ spacing real hordes have (see the ID-077 note below).
   |---|---|---|---|
   | Concussion Rounds | behaviour | epic | A squad bullet hit that leaves its enemy standing knocks it back **0.5 px per point of damage** dealt (after armour; about 3 px a pistol hit); half that for a Brute, Swollen or Horror. Never a Crawler on the wall, an enemy inside the camp, or past the spawn edge. After a push the enemy can't be pushed again for **0.5 s** (hits in that window still deal their damage), so steady fire pushes it at most twice a second, and each enemy is pushed at most **100 px** in all (ID-124), so steady fire can't hold it in place. Each hit that could push it (outside the 0.5 s gap, even once its push is used up) also **dazes** it for **1 s**: the squad's bullets deal it **+30%** (ID-137). The bullet that dazes deals its plain damage and any landing after it gains, the rest of a shotgun's pellets in the same volley too (with the daze starting a step later, the farming balance test fell off its knife edge); each such hit renews it, so steady fire keeps an enemy dazed. Turret bullets neither daze nor gain, and burns and blasts don't gain. **Cost (ID-137):** the squad's fire rate **−10%** while held (a blade or tool swings slower too) |
   | Frag Grenades | behaviour | epic | Each survivor on the line carries **3** and gets one back every **8 s**, up to 3 (ID-178); the squad throws at most one every **1.5 s** (ID-178; one every 8 s ÷ the survivors on the line before), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **25%** of this wave's Shambler HP (ID-137; 35% before, ID-124; a flat 20 before that; armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked and an enemy is in reach. **Cost (ID-137):** a throw takes its thrower's hands for **1.5 s**: no shot before then, and the shot that was due waits that long too |
-  | Field Repairs (research) | barrier | epic | Every wall segment to full HP. **Cost (ID-137):** the squad's fire rate **−25%** for **5 s** of fight time after the pick (the clock stops while an offer is open); it multiplies with Concussion Rounds'. The held cards strip counts it down on the card's chip, in the warning colour, and the chip goes back to plain when it ends |
+  | Field Repairs (research) | barrier | epic | **A skill (ID-231):** the pick adds a Field Repairs button to the skill bar, after the Airstrike and its Auto control, and does nothing else (no repair, no cost, no wall glow). Using it (tap, click or key **F**, any time in a fight, with an offer or replacement open too; the fight held or not) sets every built wall segment to full HP, broken ones too, and glows the ones it healed. **One use per pick**; unused it stays across waves and never carries to the next horde. It is refused on a full wall (unbuilt slots don't count) and once the horde is over. **Cost (ID-137):** the squad's fire rate **−25%** for **5 s** of fight time after the use (the clock stops while an offer is open); it multiplies with Concussion Rounds'. The held cards strip counts it down on the card's chip, in the warning colour, and the chip goes back to plain when it ends |
   | Oil Bomb (ID-132) | behaviour | epic | Two mortars stand just behind the outermost built layer, one at each end of the wall (**36 px** back, **22 px** in from each end). Every **20 s** the one nearer the target fires a tar bomb at the enemy outside the camp with the most others within **90 px** (as Frag Grenades picks, within **600 px** of a mortar), aimed where it will be when the bomb lands **1.5 s** later. It leaves a tar slick of radius **90 px** for **10 s**: every enemy inside moves **60%** slower (multiplying with Barbed Wire, traps and the rest). **Synergy:** an Incendiary Rounds hit on an enemy in an unlit slick lights it, and so does a Molotov's fire overlapping it, whichever landed first (ID-181): it burns everyone inside for **20%** of this wave's Shambler HP a second, and burns out **3 s** later (gone, no slow). The first bomb comes as soon as the card is picked and an enemy is in reach. **Cost:** the slow shell and the long wait between bombs, and a lit slick burns out (PM, ID-132). Survivors don't fire it, so it is not a throwable and takes no one's hands |
 
   **Steady across hordes (ID-124).** Frag Grenades' burst and Incendiary
@@ -1811,7 +1811,8 @@ spacing real hordes have (see the ID-077 note below).
   farming test compares Squad Power a minute over its three seeds together,
   as one lucky gun drop decides a seed.
 
-  Field Repairs (a campaign research card) stays epic and unique, and
+  Field Repairs (a campaign research card) stays epic and unique (it is a
+  skill the player uses when they choose, ID-231), and
   Heavy Rounds (research) stays once per horde with no levels.
 
   **Every epic card has a cost (ID-137).** Each epic card names its gain
@@ -1833,7 +1834,11 @@ spacing real hordes have (see the ID-077 note below).
   - Horde 4, three survivors, the pick the moment the weakest wall segment
     falls to 30%: Field Repairs 20 (the best pick, with Frag Grenades 20),
     Incendiary Rounds 13, Patch Up 12. At 60%: Frag Grenades 20, Incendiary
-    Rounds 17, Field Repairs 13, so it is not.
+    Rounds 17, Field Repairs 13, so it is not. (Those runs pick and use it
+    at the same moment; since ID-231 the player may hold the use, so the
+    balance test does the same to keep these anchors.) The scripted player
+    uses it when the weakest built segment is at 30% or less, looking every
+    5 s while it waits.
   - The starting points failed: at −10% fire rate Concussion Rounds won 1
     (8 with no cost; even −3% won 1), and pushing harder (2× push, 200 px
     cap) or slowing the dazed enemy 30% or 50% won 0–2: holding enemies back
@@ -4406,7 +4411,7 @@ original outline.
   went with the card, ID-097.) **Reinforce** lays a steel X brace over
   each segment's top and front at 40%, under the ID-072 damage, so every
   damage stage still reads; it looks the same however often it's taken.
-  **Patch Up** and **Field Repairs** glow each segment they actually heal
+  **Patch Up** (when picked) and **Field Repairs** (when used, ID-231) glow each segment they actually heal
   green (45%, fading over 0.9 s) under three small green crosses that float
   6 units up (they stay put with Reduce motion on); a segment already whole
   shows nothing. **Barbed Wire** (ID-077, replacing the Slow Field's tar

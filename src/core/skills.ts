@@ -1,7 +1,7 @@
 // Active skills (design §4, as built ID-019, ID-041, ID-139): abilities researched at the
 // Lab, paid with horde cash and then cooling down for a while. They hit enemies only. Pure:
 // `useSkill` returns a new state, or a refusal the UI shows as-is.
-import { AUTO_AIM, CAMP, FIELD, SKILLS, THROW_FALL, WALL, type SkillId } from './data.ts';
+import { AUTO_AIM, CAMP, CARD, FIELD, SKILLS, THROW_FALL, WALL, type SkillId } from './data.ts';
 import type { Enemy, HordeState, MoveResult } from './horde.ts';
 import { rngFrom } from './rng.ts';
 
@@ -139,4 +139,43 @@ export function autoStrike(s: HordeState): HordeState {
  */
 export function autoLookDue(time: number, lookedAt: number): boolean {
   return time < lookedAt || time - lookedAt >= AUTO_AIM.look;
+}
+
+/**
+ * Field Repairs' button (ID-231): `none` when the card is not held, `ready` while it can be
+ * used, `spent` once it has been (`repairsUntil` marks the use). A new horde starts `none`.
+ */
+export function repairsState(
+  s: Pick<HordeState, 'taken' | 'repairsUntil'>,
+): 'none' | 'ready' | 'spent' {
+  if (!s.taken.includes('field-repairs')) return 'none';
+  return s.repairsUntil === undefined ? 'ready' : 'spent';
+}
+
+/** Why Field Repairs can't be used now, or null when it can (also while a pick is open). */
+export function repairsLock(s: HordeState): string | null {
+  const state = repairsState(s);
+  if (state === 'none') return 'Pick Field Repairs first';
+  if (s.outcome !== 'fighting') return 'The horde is over';
+  if (state === 'spent') return 'Already used';
+  const built = s.layers.flatMap((l) => l.segments).filter((g) => g.kind !== null);
+  if (!built.some((g) => g.hp < g.maxHp - EPS)) return 'The wall is full';
+  return null;
+}
+
+/**
+ * Uses Field Repairs (ID-231): every built segment back to full (broken ones too), the
+ * healed ones glowing, and the squad's fire-rate cost (ID-137) starts. Once per pick.
+ */
+export function useRepairs(state: HordeState): MoveResult {
+  const lock = repairsLock(state);
+  if (lock) return { ok: false, reason: lock };
+  const s = structuredClone(state);
+  for (const seg of s.layers.flatMap((l) => l.segments)) {
+    if (seg.kind === null) continue;
+    if (seg.hp < seg.maxHp - EPS) seg.repairAt = s.time;
+    seg.hp = seg.maxHp;
+  }
+  s.repairsUntil = s.time + CARD.fieldRepairs.seconds;
+  return { ok: true, state: s };
 }

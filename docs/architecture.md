@@ -57,7 +57,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `waves.ts` | Wave count and size, enemy HP growth, wave mix, horror abilities. |
 | `pacing.ts` | How fast a horde's enemies arrive. |
 | `cards.ts` | The 1-of-3 upgrade cards in a fight (`UPGRADES`), who can take one (`eligible`), offer, reroll, ban, and stat/repair effects (`applyUpgrade`). |
-| `skills.ts` / `shop.ts` / `replace.ts` | Active skills, the mid-fight cash shop, swapping a survivor in between waves. |
+| `skills.ts` / `shop.ts` / `replace.ts` | Active skills (and Field Repairs' once-per-pick use, `repairsState` / `useRepairs`, ID-231), the mid-fight cash shop, swapping a survivor in between waves. |
 | `armoury.ts` / `loadout.ts` / `craft.ts` | Owned guns with rarity and affixes; what a defender carries; blueprints. |
 | `stats.ts` / `jobs.ts` | Survivor levels, XP curve, professions and their bonuses. |
 | `camp.ts` | Recruits (shared); camp level, capacity and upgrade offers (full game). |
@@ -121,7 +121,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A new gun | `WEAPONS` in `core/data.ts`; drop rules in `core/armoury.ts`; art ids in `ui/sprites.ts` (an icon plus held and aim sprites per look), PNGs in `src/assets/art/` built via `art-src/manifest.json` + `tools/art/` |
 | A new enemy or boss | `ENEMIES` / `BOSSES` in `core/data.ts`; behaviour in `core/horde.ts`; mix in `core/waves.ts`; art in `ui/sprites.ts` + `ui/render.ts` |
 | A new in-fight card | id in the `UpgradeId` type (`core/horde.ts`); entry and category in `UPGRADES` (`core/cards.ts`); stat/repair effect in `applyUpgrade` (`core/cards.ts`), behaviour effect where `core/horde.ts` checks the card. The squad pool (`SQUAD_CARDS`) picks it up by category. A mode reward card instead: id in `ModeCard` and `MODE_UNLOCKS` (`core/data.ts`), its fight-relevance gate in `modeCardRelevant` (`core/cards.ts`); it joins the pool only through `modeCards` (`core/hordeonly.ts`). |
-| A new skill | `SKILLS` and `SkillId` in `core/data.ts`; launch in `core/skills.ts`; landing in `core/horde.ts`; button in `ui/hud.ts`; art in `ui/sprites.ts` + `ui/render.ts` |
+| A new skill | `SKILLS` and `SkillId` in `core/data.ts`; launch in `core/skills.ts`; landing in `core/horde.ts`; button in `ui/hud.ts`; art in `ui/sprites.ts` + `ui/render.ts`. Field Repairs is no `SkillId`: `repairsButton` in `ui/hud.ts`, key F in `ui/app.ts` |
 | Fight rules | `core/horde.ts` |
 | Difficulty mode numbers or unlocks | `MODES` in `core/modes.ts`; mode cards in `MODE_UNLOCKS` (`core/data.ts`) and `modeCards` (`core/hordeonly.ts`); start-screen switch in `ui/hud.ts` |
 | A boss skill (Hell's included) | `BossSkill` and `BOSS_SKILL` (`core/data.ts`); clocks and effects in `mutate` and its helpers (`core/horde.ts`); name and cue in `ui/hud.ts`, glow and marks in `ui/render.ts`, sounds in `ui/audio.ts` and `ui/sound.ts` |

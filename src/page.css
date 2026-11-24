@@ -2295,6 +2295,12 @@ body {
   display: none;
 }
 
+/* Field Repairs used (ID-231): greyed and struck through, apart from the full wall's plain
+   disabled look. */
+.hud-repairs-spent .hud-shop-label {
+  text-decoration: line-through;
+}
+
 /* The Airstrike's Auto toggle (ID-140): muted and dashed while off (still tappable, not
    the disabled look), lit while on. */
 .hud-auto {
@@ -6240,12 +6246,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   .hud-speed .menu-key,
   .hud-skill .menu-key,
+  .hud-repairs .menu-key,
   .menu-button .menu-key {
     display: none;
   }
 
   /* The fight's skill row (ID-100) takes the bottom edge: the version label steps aside. */
-  body:has(.hud:not([hidden]) .hud-shop:not([hidden]) .hud-skill:not([hidden])) .version {
+  body:has(.hud:not([hidden]) .hud-shop:not([hidden]) :is(.hud-skill, .hud-repairs):not([hidden]))
+    .version {
     display: none;
   }
 

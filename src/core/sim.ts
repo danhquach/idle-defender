@@ -33,7 +33,7 @@ import {
   type SquadDrop,
 } from './hordeonly.ts';
 import { effHorde, localHorde, modeOf } from './modes.ts';
-import { skillLock, useSkill } from './skills.ts';
+import { repairsState, skillLock, useRepairs, useSkill } from './skills.ts';
 import { squadPower } from './squadpower.ts';
 import { replaceInjured, replacePosts, skipReplace } from './replace.ts';
 import { levelOf } from './stats.ts';
@@ -104,6 +104,28 @@ export function answerOffer(s: HordeState): HordeState {
   return r?.ok ? r.state : skipReplace(s);
 }
 
+/** The weakest wall segment's share of its max HP at which the scripted player uses Field Repairs (ID-231). */
+const REPAIRS_AT = 0.3;
+
+/** How often (fight s) the scripted player looks while Field Repairs is ready to be used (ID-231). */
+const REPAIRS_LOOK = 5;
+
+/** The step to the scripted player's next look: `step`, or `REPAIRS_LOOK` when Field Repairs waits. */
+const lookStep = (s: HordeState, step: number): number =>
+  repairsState(s) === 'ready' ? Math.min(step, REPAIRS_LOOK) : step;
+
+/**
+ * The scripted player's Field Repairs (ID-231): `s` with it used once the weakest built wall
+ * segment is down to `REPAIRS_AT` of its max HP, or as it was. Unbuilt slots don't count.
+ */
+export function useRepairsIfLow(s: HordeState): HordeState {
+  if (repairsState(s) !== 'ready') return s;
+  const built = s.layers.flatMap((l) => l.segments).filter((g) => g.kind !== null);
+  if (!built.some((g) => g.hp <= g.maxHp * REPAIRS_AT)) return s;
+  const r = useRepairs(s);
+  return r.ok ? r.state : s;
+}
+
 /**
  * Plays `game`'s next horde to the end with the scripted player; returns the finished
  * horde. Throws once it has run past `maxFight` fight seconds (a stuck fight).
@@ -118,7 +140,7 @@ export function playHorde(
   let s = startHorde(game, seed, defenderId, postId, now);
   while (s.outcome === 'fighting') {
     if (s.time > maxFight) throw new RangeError(`playHorde: horde ${s.hordeNumber} never ended`);
-    s = s.offer || s.replace ? answerOffer(s) : tick(s, 60);
+    s = s.offer || s.replace ? answerOffer(s) : tick(useRepairsIfLow(s), lookStep(s, 60));
   }
   return s;
 }
@@ -302,10 +324,7 @@ export function playSquadHorde(
   hordeNumber = localHorde(game),
 ): HordeState {
   let s = startSquadHorde(game, seed, 0, hordeNumber);
-  const step = s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60;
-  // Watching ticks each look in slices (ID-105): the player still looks to use its skills
-  // every `step`, so watching never changes how it plays.
-  const slices = watch ? Math.ceil(step / WATCH_EVERY) : 1;
+  const baseStep = s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60;
   const look = (): void => {
     if (watch) watch.nearest = Math.min(watch.nearest, nearestEnemy(s));
   };
@@ -321,7 +340,11 @@ export function playSquadHorde(
       s = s.offer.length === 0 ? skipOffer(s) : chooseCard(s, squadPick(s));
       owned = false;
     } else {
-      const next = useSkills(s);
+      const next = useRepairsIfLow(useSkills(s));
+      // Watching ticks each look in slices (ID-105): the player still looks to use its skills
+      // every `step`, so watching never changes how it plays.
+      const step = lookStep(next, baseStep);
+      const slices = watch ? Math.ceil(step / WATCH_EVERY) : 1;
       s = owned && next === s ? tickInPlace(s, step / slices) : tick(next, step / slices);
       owned = true;
       for (let k = 1; k < slices && !s.offer && !s.replace && s.outcome === 'fighting'; k++) {
