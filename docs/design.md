@@ -4086,8 +4086,25 @@ offline progress works across sessions.
     gun is selected), saved at once, and the gun pickers follow. On a phone
     the foot drops the Esc hint to make room. In a fight nothing drags, the
     details have no Equip, and the grid says "Change guns between hordes, on
-    the start or result screen." Kept out: reordering the stash, survivor to
-    survivor swaps, and the reserve.
+    the start or result screen." Kept out: reordering the stash and survivor to
+    survivor swaps.
+  - **Stash / Bench tabs (as built, ID-242):** with a survivor on the bench or out
+    on a World map patrol, a two-tab strip ("Stash and bench") sits between the squad
+    row (unchanged) and the stash; Stash is the default and every time the Inventory
+    opens, and holds everything above (heading, buy slots, sort and filter, Select,
+    Combine, drag and drop). Left, Right, Home and End move between the tabs. Bench
+    lists "Bench N" (survivors at camp, not those on a patrol) then "On patrol N",
+    one labelled group per patrol (its name only, no countdown), each survivor as a
+    squad slot with their name under it; an empty part is left out, and with neither
+    the strip is gone. A bench survivor's details have Change gun and To stash (not
+    while they hold the free pistol, and neither in a fight, as the squad's Equip);
+    Change gun opens a picker in the tab, over the lists (on a phone too, so the
+    fixed details box stays as it is): "Choose a gun for Ana", Back, and a tile for
+    the free pistol and each stash gun, strongest first in their hands, with the
+    change in DPS under it; tapping a tile puts the verdict and a table of changes in
+    the details with Equip. A refusal (the stash full) is said on the status line and
+    keeps the tab, picker and selection. A patrol survivor's details say their gun
+    went with them and have no buttons. Bench slots are not dragged and take no drop.
 
 - **As built (ID-066): save version 12** adds the reserve. A v11 save loads
   with its horde number and each survivor's level, stats and weapon; every

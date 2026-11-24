@@ -43,8 +43,6 @@ import {
 } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
 
-/** Why a survivor out on a World map patrol (ID-219) can't change guns. */
-export const MAP_GUN_AWAY = 'On patrol: their gun went with them.';
 import {
   JOB_SHORT,
   jobInfo,
@@ -54,7 +52,14 @@ import {
   type FieldMember,
   type StatRow,
 } from './jobtext.ts';
-import { patrolGroupLabel, patrolMission, patrolName, patrolTime } from './maptext.ts';
+import {
+  MAP_GUN_AWAY,
+  patrolGroupLabel,
+  patrolMission,
+  patrolName,
+  patrolsShown,
+  patrolTime,
+} from './maptext.ts';
 import { levelText } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -1121,10 +1126,6 @@ export function createRoster(
 
   return api;
 }
-
-/** The patrols out, as the Roster's blocks show them (ID-234): the soonest back first. */
-const patrolsShown = (game: Pick<GameState, 'map'>): MapPatrol[] =>
-  [...(game.map?.patrols ?? [])].sort((a, b) => a.backAt - b.backAt || a.no - b.no);
 
 /** What the blocks are drawn from: each patrol and its members. */
 const patrolKey = (game: Pick<GameState, 'map'>): string =>
