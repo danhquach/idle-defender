@@ -406,11 +406,12 @@ describe('an upgrade counts the survivor’s level and profession (ID-152)', () 
   };
 
   it('a gun of their profession, weaker on its own, is an upgrade; for an any-gun job it isn’t', () => {
-    const assault = gun('h1', 'assault', 'common');
+    // ID-233: the LMG; the Assault Rifle no longer out-hits the Sniper rifle on its own.
+    const lmg = gun('h1', 'lmg', 'common');
     const sniper = gun('x', 'sniper', 'common');
-    expect(gunPower(sniper)).toBeLessThan(gunPower(assault));
-    expect(squadGain(holdingAs(assault, 'hunter', 3))(sniper)).toBeGreaterThan(0);
-    expect(squadGain(holdingAs(assault, 'mechanic', 3))(sniper)).toBeLessThanOrEqual(0);
+    expect(gunPower(sniper)).toBeLessThan(gunPower(lmg));
+    expect(squadGain(holdingAs(lmg, 'hunter', 3))(sniper)).toBeGreaterThan(0);
+    expect(squadGain(holdingAs(lmg, 'mechanic', 3))(sniper)).toBeLessThanOrEqual(0);
   });
 
   it('a gun stronger on its own is no upgrade when it does less in their hands', () => {

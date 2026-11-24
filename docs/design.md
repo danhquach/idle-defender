@@ -711,8 +711,8 @@ close-quarter weapons come out only when an enemy is close.
   | Carbine (was Rifle) | 7 | 0.4 s, in 3-round bursts | 750 | 21 | 2 s | 2,200 | ±1° | 1 | 0 |
   | Pump Shotgun (was Shotgun) | 10 per pellet | 0.8 s | 350 | 6 | 5.4 s, shell by shell | 1,400 | ±9° | 4 | 0 |
   | LMG | 6.5 | 0.22 s | 500 | 80 | 5 s | 2,000 | ±6° | 1 | 0 |
-  | Sniper rifle | 38 (35 before ID-199) | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 0 (10% chance of 1) |
-  | Hand Cannon *(sidearm)* | 20 | 1 s | 500 | 6 | 2.5 s | 2,000 | ±0.75° | 1 | 0 |
+  | Sniper rifle | 50 (35 before ID-199, 38 before ID-233) | 2 s | 1,100 | 5 | 3.5 s | 3,000 | ±0.5° | 1 | 0 (10% chance of 1) |
+  | Hand Cannon *(sidearm)* | 28 (20 before ID-233) | 1 s | 500 | 6 | 2.5 s | 2,000 | ±0.75° | 1 | 0 |
   | Machine Pistol *(sidearm)* | 3.5 | 0.08 s | 380 | 16 | 1.6 s | 1,600 | ±9° | 1 | 0 |
   | Assault Rifle | 8.8 (8 before ID-199) | 0.35 s | 500 | 30 | 2.2 s | 2,100 | ±2° | 1 | 0 |
   | Drum Shotgun | 3.5 per pellet | 0.6 s | 380 | 8 | 3.5 s | 1,400 | ±12° | 6 | 0 |
@@ -897,6 +897,20 @@ close-quarter weapons come out only when an enemy is close.
   1044.9 against 651.2 over the ten); and a Barbed Wire level need not
   hold 5 points more than the one below once that one holds nearly all the
   fight (Horde 10: Lv 2 97%, Lv 3 100%).
+- **Single-shot guns (as built, ID-233):** the two slow, heavy guns did less over a
+  fight than the automatic guns of their group (Sniper rifle ~18.3 DPS against the
+  LMG's ~24.8 and the Assault Rifle's ~21.8; Hand Cannon ~14.1 against the Machine
+  Pistol's ~19.4 and the Cartridge's ~20.2), and their slow fire wastes damage on
+  overkill against weak enemies, so there was little reason to hold one. Each now
+  hits harder a shot: **Sniper rifle 38 → 50** (~24.1 DPS, about the LMG's) and
+  **Hand Cannon 20 → 28** (~19.8 DPS, about the Machine Pistol's and the
+  Cartridge's). Per-shot damage is what armour takes from (a Brute 3 a bullet, a
+  Mutated Horror 2), so the big hits pay off on armour, heavies and bosses, while
+  the automatic guns stay better on crowds of weak enemies. Their traits stay (the
+  Sniper rifle's crit, armour-ignoring crits and pierce; the Hand Cannon's
+  knockback). Squad Power and every DPS figure come from these numbers, so they
+  rise with them. The whole balance suite (`npm run test:balance`, campaign,
+  horde-only, Horror and the gun scenes) passes at these values with no bar moved.
 - **Gun roles (as built, ID-101; kept by the balance pass, ID-102):**
   each gun has a role and a built-in trait every one of it carries, Rusty or
   Relic, plus role affixes only it rolls (below, in Gear). The Inventory, the

@@ -625,7 +625,9 @@ export const WEAPONS = {
   sniper: {
     name: 'Sniper rifle',
     kind: 'gun',
-    damage: 38, // ID-199: +10% (was 35) as the shotguns came down
+    // ID-199: +10% (35 → 38) as the shotguns came down. ID-233: 38 → 50, so its dmg/s
+    // matches the LMG's and its big hits pay off on armour, heavies and bosses.
+    damage: 50,
     fireInterval: 2,
     range: 1100,
     magazine: 5,
@@ -640,7 +642,8 @@ export const WEAPONS = {
   handcannon: {
     name: 'Hand Cannon',
     kind: 'sidearm',
-    damage: 20,
+    // ID-233: 20 → 28, so its dmg/s matches the Machine Pistol's and the Cartridge's.
+    damage: 28,
     fireInterval: 1,
     range: 500,
     magazine: 6,
