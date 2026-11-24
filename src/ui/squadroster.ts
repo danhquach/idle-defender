@@ -6,7 +6,8 @@
 // stat split into the two) or "Choose a gun". A gun is compared with the one
 // held before it is equipped. The bench (ID-147) has its own row of tabs under the squad's:
 // between hordes a survivor moves between the two, unless they are resting; "Best squad"
-// and "Auto" (ID-154) on the squad's label row pick the strongest fit six. Like the
+// and "Auto" (ID-154) on the squad's label row pick the strongest fit six. Survivors away
+// on a World map patrol have a row of their own under the bench's (ID-230). Like the
 // Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
 // the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
@@ -107,7 +108,7 @@ type Camp = Pick<GameState, 'roster' | 'slots' | 'map'> & { reserve?: readonly R
 export function rosterTiles(game: Camp, now: number, fight: HordeState | null): RosterTile[] {
   const bench = new Set((game.reserve ?? []).map((d) => d.id));
   const reserve = game.reserve ?? [];
-  // Out on a patrol (ID-219) after the fit, before the resting.
+  // Out on a patrol (ID-219) after the fit, before the resting; drawn in their own row (ID-230).
   const away = (d: RosterDefender): boolean => patrolOf(game, d.id) !== null;
   const ordered = [
     ...reserve.filter((d) => isFit(d) && !away(d)),
@@ -305,11 +306,15 @@ export function createRoster(
   const benchLabel = el('p', 'rv-tabs-label');
   const benchTabs = el('ul', 'rv-tabs rv-bench');
   benchTabs.setAttribute('aria-label', 'Bench');
+  // Out on a World map patrol (ID-230): a row of their own under the bench, the bench's look.
+  const patrolLabel = el('p', 'rv-tabs-label');
+  const patrolTabs = el('ul', 'rv-tabs rv-bench rv-patrol');
+  patrolTabs.setAttribute('aria-label', 'On patrol');
   const top = el('div', 'rv-top');
   const panel = el('div', 'rv-panel');
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
-  pane.append(squadRow, tabs, benchLabel, benchTabs, top, panel);
+  pane.append(squadRow, tabs, benchLabel, benchTabs, patrolLabel, patrolTabs, top, panel);
 
   /** What "Best squad" or a tick of "Auto" did, on the status line. */
   bestSquadButton.addEventListener('click', () => {
@@ -374,16 +379,21 @@ export function createRoster(
     bestButton.title = canGear ? '' : GUNS_WAIT;
 
     const marks = rosterTiles(game, Date.now(), fight);
-    const benched = marks.filter((t) => t.bench);
-    const squadText = `Squad ${marks.length - benched.length}/${squadCap(game)}`;
-    tabs.setAttribute('aria-label', squadText);
+    // At camp on the bench, and away on a patrol (ID-230): two rows, each counted apart.
+    const benched = marks.filter((t) => t.bench && !t.away);
+    const patrol = marks.filter((t) => t.bench && t.away);
     const squadMarks = marks.filter((t) => !t.bench);
+    const squadText = `Squad ${squadMarks.length}/${squadCap(game)}`;
+    tabs.setAttribute('aria-label', squadText);
     tabs.replaceChildren(...squadMarks.map((t) => tabItem(t, t.id === current)));
     // How many cards (ID-189): the CSS splits them into even rows for the width.
     tabs.dataset.count = String(squadMarks.length);
     benchTabs.dataset.count = String(benched.length);
-    // With nobody on the bench the rows need no labels: the Roster looks as it did.
-    squadRow.hidden = benchLabel.hidden = benchTabs.hidden = benched.length === 0;
+    patrolTabs.dataset.count = String(patrol.length);
+    // With nobody off the squad the rows need no labels: the Roster looks as it did.
+    squadRow.hidden = benched.length + patrol.length === 0;
+    benchLabel.hidden = benchTabs.hidden = benched.length === 0;
+    patrolLabel.hidden = patrolTabs.hidden = patrol.length === 0;
     const offer = game.stock
       ? slotOffer({ slots: game.slots, stock: game.stock }, 'squad', canGear)
       : null;
@@ -409,6 +419,8 @@ export function createRoster(
     squadLabel.textContent = squadText;
     benchLabel.textContent = `Bench ${benched.length}`;
     benchTabs.replaceChildren(...benched.map((t) => tabItem(t, t.id === current)));
+    patrolLabel.textContent = `On patrol ${patrol.length}`;
+    patrolTabs.replaceChildren(...patrol.map((t) => tabItem(t, t.id === current)));
     if (d) {
       top.replaceChildren(
         ...survivorRow(
