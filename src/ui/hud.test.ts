@@ -22,6 +22,7 @@ import {
   clockTime,
   defenderLabel,
   fallingText,
+  FIRE_TAG,
   payoutText,
   resultScreen,
   shopButtons,
@@ -259,12 +260,22 @@ describe('hud', () => {
         name: 'Mutated Horror (Brood)',
         cue: null,
         winding: false,
+        fire: false,
         hpText: '1,234/2,000',
         label: 'Mutated Horror (Brood) · 1,234/2,000',
         hp: 1234,
         maxHp: 2000,
       },
     ]);
+    // Suppressing Fire (ID-235): tagged while under fire, and the label says so.
+    e.fireUntil = s.time + 1;
+    expect(bossBars(s)[0]).toMatchObject({
+      fire: true,
+      label: `Mutated Horror (Brood) · ${FIRE_TAG} · 1,234/2,000`,
+    });
+    // Gone the moment the fire ends, with the ring.
+    e.fireUntil = s.time;
+    expect(bossBars(s)[0]!.fire).toBe(false);
   });
 
   it('shows a shop button per item as a dry run of buy, with a running buff counting down', () => {

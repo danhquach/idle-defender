@@ -97,6 +97,7 @@ import {
   bossHorde,
   cardLevel,
   repairsLeft,
+  underFire,
   windingUp,
   type Enemy,
   type Breach,
@@ -1050,18 +1051,23 @@ export function bossBars(s: HordeState): BossBar[] {
       const name = bossName(s.bosses[e.horror!.boss]!);
       const skill = bossCue(s, e);
       const cue = skill ? `${SKILL_NAME[skill]}!` : null;
+      const fire = underFire(s, e);
       const hpText = `${hp.toLocaleString('en-US')}/${e.maxHp.toLocaleString('en-US')}`;
       return {
         name,
         cue,
         winding: skill !== null && windingUp(s, e) === skill,
+        fire,
         hpText,
-        label: [name, ...(cue ? [cue] : []), hpText].join(' · '),
+        label: [name, ...(cue ? [cue] : []), ...(fire ? [FIRE_TAG] : []), hpText].join(' · '),
         hp,
         maxHp: e.maxHp,
       };
     });
 }
+
+/** A boss bar's tag while Suppressing Fire holds it under fire (ID-235). */
+export const FIRE_TAG = 'Under fire';
 
 /** One boss bar: its name and skills, the skill it is using (a tag), its HP; `label` says it all. */
 export interface BossBar {
@@ -1069,6 +1075,8 @@ export interface BossBar {
   cue: string | null;
   /** The cue is a wind-up (about to happen), not an effect under way. */
   winding: boolean;
+  /** Suppressing Fire (ID-235): it is under fire, its skills slowed; tagged `FIRE_TAG`. */
+  fire: boolean;
   hpText: string;
   label: string;
   hp: number;
@@ -2640,15 +2648,19 @@ export function createHud(
     const name = el('span', 'hud-boss-name');
     const cue = el('span', 'hud-boss-cue');
     cue.hidden = true;
+    // Suppressing Fire (ID-235): a tag by the HP while the boss is under fire.
+    const fire = el('span', 'hud-boss-fire');
+    fire.textContent = FIRE_TAG;
+    fire.hidden = true;
     const hpText = el('span', 'hud-boss-hptext');
-    label.append(name, cue, hpText);
+    label.append(name, cue, fire, hpText);
     const meter = el('meter', 'hud-boss-hp');
     meter.min = 0;
     meter.setAttribute('aria-labelledby', label.id);
     row.append(label, meter);
     row.hidden = true;
     boss.append(row);
-    return { row, name, cue, hpText, meter };
+    return { row, name, cue, fire, hpText, meter };
   });
   boss.hidden = true;
   // The swarm banner (ID-121): its title, and the countdown while the wave is incoming.
@@ -4008,6 +4020,7 @@ export function createHud(
         if (r.cue.textContent !== (b.cue ?? '')) r.cue.textContent = b.cue ?? '';
         r.cue.hidden = b.cue === null;
         r.cue.classList.toggle('hud-boss-cue-winding', b.winding);
+        r.fire.hidden = !b.fire;
         if (r.hpText.textContent !== b.hpText) r.hpText.textContent = b.hpText;
         r.meter.max = b.maxHp;
         r.meter.value = b.hp;

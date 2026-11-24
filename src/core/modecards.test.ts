@@ -1,5 +1,6 @@
 // ID-222 mode reward cards: what unlocks them (derived from a mode's saved horde), where they
-// show (a higher mode's pool, only when the fight has what they answer), and what each does.
+// show (a higher mode's pool, only when the fight has what they answer; Suppressing Fire always,
+// ID-235), and what each does.
 import { describe, expect, it } from 'vitest';
 import { eligible, isModeCard, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
 import { BOSS_SKILL, CARD, MODE_CARDS, MODE_UNLOCKS, STEP, type BossSkill } from './data.ts';
@@ -11,6 +12,7 @@ import {
   newHorde,
   scorched,
   tick,
+  underFire,
   windingUp,
   type Enemy,
   type HordeState,
@@ -20,7 +22,7 @@ import { bossReward, modeCards, SQUAD_CARDS, startSquadHorde } from './hordeonly
 import { createRng } from './rng.ts';
 import { squadPick } from './sim.ts';
 import { squadAt } from './balance/shared.ts';
-import { horror, setup } from './testing.ts';
+import { enemy, horror, setup } from './testing.ts';
 
 type Prog = Pick<GameState, 'hordeNumber' | 'mode' | 'modes'>;
 const at = (mode: Prog['mode'], modes: Prog['modes']): Prog => ({ hordeNumber: 60, mode, modes });
@@ -158,7 +160,6 @@ function pooled(skills: BossSkill[], elite = false): HordeState {
 
 describe('only when the fight has what they answer', () => {
   const cases: [UpgradeId, BossSkill[], BossSkill[], boolean?][] = [
-    ['suppressing-fire', ['roar'], ['regen']],
     ['cauterise', ['regen'], ['roar']],
     ['gas-masks', ['poison'], ['roar']],
     ['breaching-rounds', ['shield'], ['roar']],
@@ -176,10 +177,16 @@ describe('only when the fight has what they answer', () => {
     });
   }
 
-  it('Momentum needs a boss, not just a mini-boss; Suppressing Fire a timed skill', () => {
+  it('Momentum needs a boss, not just a mini-boss; Suppressing Fire any fight (ID-235)', () => {
     expect(eligible(pooled(['roar']), 'momentum')).toBe(true);
     expect(eligible(pooled(['roar'], true), 'momentum')).toBe(false);
-    expect(eligible(pooled(NONE), 'suppressing-fire')).toBe(false);
+    expect(eligible(pooled(NONE), 'suppressing-fire')).toBe(true);
+    expect(
+      eligible(
+        newHorde(1, { ...setup(), cards: [...SQUAD_CARDS, ...MODE_CARDS] }),
+        'suppressing-fire',
+      ),
+    ).toBe(true);
     expect(
       eligible(newHorde(1, { ...setup(), cards: [...SQUAD_CARDS, ...MODE_CARDS] }), 'momentum'),
     ).toBe(false);
@@ -207,33 +214,114 @@ function untilHit(s: HordeState): HordeState {
   return t;
 }
 
-describe('Suppressing Fire', () => {
-  it('lengthens the wind-up in progress by its seconds, once, and the tell stays lit', () => {
-    const s = shooting('roar', { nextAt: 0.8 }, ['suppressing-fire']);
-    expect(windingUp(s, boss(s))).toBe('roar');
-    let t = untilHit(s);
-    const h = boss(t).horror!;
-    expect(h.longer).toEqual({ roar: CARD.suppress.seconds });
-    expect(h.next.roar).toBeCloseTo(0.8 + CARD.suppress.seconds, 9);
-    // Lit the whole way, never going dark and coming back.
-    while (t.time < 0.8 + CARD.suppress.seconds - 0.1) {
+describe('Suppressing Fire (ID-235)', () => {
+  /** Horde 1 with no one firing, `taken` held, and `e` added: a far shambler unless overridden. */
+  function quiet(taken: UpgradeId[], e: Partial<Enemy> = {}): { s: HordeState; e: Enemy } {
+    const s = newHorde(1, setup());
+    s.toSpawn = 0;
+    s.taken = taken;
+    for (const d of s.defenders) d.nextShotAt = 1e9;
+    return { s, e: enemy(s, { x: 1200, y: 360, ...e }) };
+  }
+  const moved = (s: HordeState, id: number): number => {
+    const x = s.enemies.find((o) => o.id === id)!.x;
+    return x - tick(s, STEP).enemies.find((o) => o.id === id)!.x;
+  };
+
+  it(`puts any enemy a squad bullet hits under fire for ${CARD.suppress.seconds} s, then not again for ${CARD.suppress.cooldown} s`, () => {
+    const s = newHorde(1, setup());
+    s.toSpawn = 0;
+    s.taken = ['suppressing-fire'];
+    const id = enemy(s, { x: 700, hp: 1e6, maxHp: 1e6 }).id;
+    const of = (t: HordeState): Enemy => t.enemies.find((o) => o.id === id)!;
+    let t = s;
+    for (let i = 0; i < 200 && of(t).hp >= 1e6; i++) t = tick(t, STEP);
+    expect(of(t).hp).toBeLessThan(1e6);
+    expect(underFire(t, of(t))).toBe(true);
+    // Set in the step the bullet landed: within one step of now plus its seconds.
+    expect(of(t).fireUntil! - t.time).toBeGreaterThan(CARD.suppress.seconds - STEP - 1e-9);
+    expect(of(t).fireUntil! - t.time).toBeLessThanOrEqual(CARD.suppress.seconds + 1e-9);
+    // The cap: the squad keeps hitting it, but no hit extends it or puts it back under fire
+    // until its cooldown has run out after the fire ended.
+    const until = of(t).fireUntil!;
+    const ready = until + CARD.suppress.cooldown;
+    let hits = 0;
+    while (t.time < ready - STEP) {
+      const hp = of(t).hp;
       t = tick(t, STEP);
-      expect(windingUp(t, boss(t)), `t=${t.time}`).toBe('roar');
+      if (of(t).hp < hp) hits++;
+      expect(of(t).fireUntil, `t=${t.time}`).toBe(until);
+      if (t.time > until + 1e-9) expect(underFire(t, of(t)), `t=${t.time}`).toBe(false);
     }
-    // Many more hits did not extend it again.
-    expect(boss(t).horror!.next.roar).toBeCloseTo(0.8 + CARD.suppress.seconds, 9);
-    // It goes off, the extension is spent, and the next one is a normal clock.
-    t = tick(t, 1);
-    expect(boss(t).horror!.longer).toBeUndefined();
-    expect(boss(t).horror!.fired.roar).toBeDefined();
+    expect(hits, 'kept hitting it through the window').toBeGreaterThanOrEqual(3);
+    // Past the cooldown, the next hit puts it under fire again.
+    for (let i = 0; i < 60 && of(t).fireUntil === until; i++) t = tick(t, STEP);
+    expect(of(t).fireUntil).toBeGreaterThan(ready);
+    expect(underFire(t, of(t))).toBe(true);
   });
 
-  it('does nothing without the card, or when no skill is winding up', () => {
-    const plain = untilHit(shooting('roar', { nextAt: 0.8 }));
-    expect(boss(plain).horror!.longer).toBeUndefined();
-    const idle = untilHit(shooting('roar', { nextAt: 50 }, ['suppressing-fire']));
-    expect(boss(idle).horror!.longer).toBeUndefined();
-    expect(boss(idle).horror!.next.roar).toBe(50);
+  it('never without the card', () => {
+    const plain = untilHit(shooting('roar', { nextAt: 50 }));
+    expect(boss(plain).fireUntil).toBeUndefined();
+    expect(boss(plain).horror!.next.roar).toBe(50);
+  });
+
+  it(`slows an enemy under fire ${CARD.suppress.slow * 100}%, a boss or mini-boss ${CARD.suppress.bossSlow * 100}%`, () => {
+    for (const [kind, slow] of [
+      ['shambler', CARD.suppress.slow],
+      ['boss', CARD.suppress.bossSlow],
+      ['mini-boss', CARD.suppress.bossSlow],
+    ] as const) {
+      const free = quiet([]);
+      const held = quiet([], { fireUntil: 100 });
+      if (kind !== 'shambler') {
+        const elite = kind === 'mini-boss' ? { elite: true as const } : {};
+        horror(free.s, 'roar', { x: 1200, y: 600, ...elite }, { nextAt: 50 });
+        horror(held.s, 'roar', { x: 1200, y: 600, fireUntil: 100, ...elite }, { nextAt: 50 });
+      }
+      const pick = (s: HordeState): number =>
+        kind === 'shambler' ? s.enemies.find((o) => !o.horror)!.id : boss(s).id;
+      const step = moved(free.s, pick(free.s));
+      expect(step).toBeGreaterThan(0);
+      expect(moved(held.s, pick(held.s)) / step, kind).toBeCloseTo(1 - slow, 6);
+    }
+  });
+
+  it(`runs a boss's skill clocks ${CARD.suppress.recharge * 100}% slower while under fire`, () => {
+    const { s } = quiet([]);
+    const b = horror(s, 'roar', { fireUntil: 100 }, { nextAt: 10 });
+    let t = s;
+    for (let i = 0; i < Math.round(1 / STEP); i++) t = tick(t, STEP);
+    expect(boss(t).horror!.next.roar).toBeCloseTo(10 + CARD.suppress.recharge, 6);
+    expect(b.horror!.next.roar).toBe(10);
+  });
+
+  it(`runs a wind-up ${CARD.suppress.windUp * 100}% slower, its tell lit the whole way`, () => {
+    const { s } = quiet([]);
+    horror(s, 'roar', { fireUntil: 100 }, { nextAt: 0.5 });
+    expect(windingUp(s, boss(s))).toBe('roar');
+    let t = s;
+    // 0.5 s of wind-up left at half speed: it goes off near 1 s, not 0.5 s.
+    const due = 0.5 / (1 - CARD.suppress.windUp);
+    while (t.time < due - 2 * STEP) {
+      t = tick(t, STEP);
+      expect(windingUp(t, boss(t)), `t=${t.time}`).toBe('roar');
+      expect(boss(t).horror!.fired.roar, `t=${t.time}`).toBeUndefined();
+    }
+    expect(boss(t).horror!.longer!.roar).toBeGreaterThan(0.4);
+    for (let i = 0; i < 4; i++) t = tick(t, STEP);
+    const h = boss(t).horror!;
+    expect(h.fired.roar).toBeCloseTo(due, 1);
+    expect(h.longer).toBeUndefined();
+  });
+
+  it('a stunned boss under fire: its clocks only wait, as any stun', () => {
+    const { s } = quiet([]);
+    horror(s, 'roar', { fireUntil: 100, stunnedUntil: 100 }, { nextAt: 10 });
+    let t = s;
+    for (let i = 0; i < Math.round(1 / STEP); i++) t = tick(t, STEP);
+    expect(boss(t).horror!.next.roar).toBeCloseTo(10 + t.time, 6);
+    expect(boss(t).horror!.longer).toBeUndefined();
   });
 });
 

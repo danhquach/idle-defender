@@ -8,7 +8,6 @@ import {
   RECRUIT_CHANCE,
   REROLL,
   RESEARCH_CARDS,
-  TIMED_SKILLS,
   WALL,
   type BossSkill,
   type CardRarity,
@@ -280,10 +279,11 @@ export const UPGRADES: Readonly<
     levels: 1,
   },
   // The mode cards (ID-222): unlocked by a mode's boss hordes, offered only in a higher mode
-  // and only in a fight whose bosses have what they answer (`eligible`).
+  // and only in a fight whose bosses have what they answer (`eligible`); Suppressing Fire in
+  // every fight (ID-235).
   'suppressing-fire': {
     name: 'Suppressing Fire',
-    text: `A boss hit while it winds a skill up takes ${CARD.suppress.seconds} s longer to use it`,
+    text: `Enemies you hit move ${Math.round(CARD.suppress.slow * 100)}% slower; bosses you hit use skills ${Math.round(CARD.suppress.recharge * 100)}% slower`,
     category: 'behaviour',
     rarity: 'rare',
     levels: 1,
@@ -352,16 +352,16 @@ const bossesHave = (
 
 /**
  * Whether the fight has what mode card `id` answers (ID-222), read off its bosses: Suppressing
- * Fire a timed skill; Cauterise Regen; Momentum a boss (not a mini-boss); Gas Masks Poison pool;
- * Breaching Rounds Shield or Armour plates; Tranq Darts Enrage. Offered only then, so they never
- * crowd the offers (ID-131).
+ * Fire always (ID-235: it slows every enemy); Cauterise Regen; Momentum a boss (not a
+ * mini-boss); Gas Masks Poison pool; Breaching Rounds Shield or Armour plates; Tranq Darts
+ * Enrage. Offered only then, so they never crowd the offers (ID-131).
  */
 const modeCardRelevant = (s: Pick<HordeState, 'bosses'>, id: ModeCard): boolean => {
   const has = (...skills: BossSkill[]) =>
     bossesHave(s, (b) => b.skills.some((k) => skills.includes(k)));
   switch (id) {
     case 'suppressing-fire':
-      return has(...TIMED_SKILLS);
+      return true;
     case 'cauterise':
       return has('regen');
     case 'momentum':
