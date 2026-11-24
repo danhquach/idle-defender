@@ -1514,10 +1514,13 @@ export const CARD = {
   fieldRepairs: { fireRate: 0.75, seconds: 5 },
   /**
    * Barbed Wire: the band `from`–`to` px in front of the outermost layer, and how much it
-   * slows per level. Each row of it (one per segment) has `durability` per level (ID-104),
+   * slows per level. Each row of it (one per segment) has HP (`durability`) per level (ID-104),
    * × the wave's enemies over `perWave` when that's more (ID-123; 30 since ID-133, which
    * keeps wear across wave breaks, was 60); an enemy entering a working row takes its kind's
-   * `wear` off it (ID-090, ID-104).
+   * `wear` off it (ID-090, ID-104). ID-236: every row heals `heal` of its max HP a second
+   * by level, broken or not; a broken row (0 HP) works again at `back` of its max; an enemy
+   * in a working row bleeds `bleed` of this wave's Shambler HP a second by level (the ticket's
+   * 1–3% heal and 5–12% bleed won every Horde 4 card fight at every level; design §8).
    */
   wire: {
     from: 250,
@@ -1525,6 +1528,9 @@ export const CARD = {
     slow: [0.15, 0.25, 0.35],
     durability: [10, 20, 30],
     perWave: 30,
+    heal: [0.003, 0.006, 0.01],
+    back: 0.25,
+    bleed: [0.004, 0.008, 0.012],
     wear: {
       shambler: 1,
       runner: 1,

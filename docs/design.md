@@ -1710,7 +1710,7 @@ spacing real hordes have (see the ID-077 note below).
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
   | Flashbang (ID-139; a skill before) | behaviour | rare | Throwable slot. Each survivor on the line carries **3** and gets one back every **10 s**, up to 3 (ID-178); the squad throws at most one every **1.5 s**, aimed as Frag Grenades is (within **600 px**, the most others within **100 px**, landing **0.6 s** later). It stuns (no moving, no attacking) every enemy within **100 px** for **3 s**. An enemy can't be stunned again until **3 s** after its stun ends, and isn't aimed at till then, so a group or a boss is never held for good. **Cost:** the squad's guns reach **15%** less while it is held (the glare). Its throws take no one's hands | 4 s | 5 s |
   | Molotov (ID-139; a skill before) | behaviour | rare | Throwable slot. Each survivor on the line carries **3** and gets one back every **12 s**, up to 3 (ID-178); the squad throws at most one every **1.5 s**, aimed as Frag Grenades is (within **600 px**, the most others within **50 px**, landing **0.6 s** later). It leaves a fire of **50 px** burning **4 s**, each second **10%** of this wave's Shambler HP to every enemy inside (`fireDps`). A fire overlapping an unlit Oil Bomb slick lights it (ID-181). **Cost:** enemies inside a fire move **30%** faster. Its throws take no one's hands | 6 s | 8 s |
-  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower; each row has **10** durability, more in a big wave, and is rebuilt at each level-up (more below) | 25%; 20 durability | 35%; 30 durability |
+  | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower and bleed **0.4%** of this wave's Shambler HP a second (ID-236); each row has **10** HP, more in a big wave, heals **0.3%** of its max a second, works again at **25%** once broken, and is rebuilt at each level-up (more below) | 25%; 0.8%; 20 HP; heals 0.6% | 35%; 1.2%; 30 HP; heals 1% |
   | Aim for the Head (ID-130) | stat | rare | Every squad hit, any weapon, has **+5%** crit chance, added to the gun's own (the Rifle's trait, crit affixes), the level's and the Gunner's | +10% | +15% |
   | Hollow Points (ID-130; id `hollow-point-rounds`, as `hollow-points` is Heavy Rounds) | stat | rare | Every squad crit deals **+25%** of the hit more, added to the ×2 (and to a crit damage affix's share): ×2.25 with nothing else | +50% (×2.5) | +75% (×2.75) |
   | Kevlar Vests (ID-131) | stat | common | Every hit on a survivor on the line takes **1 HP** off, added to the level's armour; a hit still keeps half its damage (a Shambler's 5 is never under 2.5) | 2 HP | 3 HP |
@@ -1960,8 +1960,8 @@ spacing real hordes have (see the ID-077 note below).
   (ID-133): every row, broken or worn, goes back to its full for the new
   level and the current wave's size. At a wave break (as it starts) each
   row's full follows the new wave's size and the row keeps its wear as a
-  share of its full, rounded: a broken row stays broken, a half-worn one
-  stays half-worn, and a worn one never rounds down to broken. An enemy that
+  share of its full (rounded before ID-236): a broken row stays broken, a
+  half-worn one stays half-worn. An enemy that
   already wore a row before a level-up still doesn't wear it again. Every
   horde starts the rows at level 1's full for its first wave. (Before ID-133
   each wave break also rebuilt every row to its full, ID-123; before ID-123
@@ -1971,10 +1971,50 @@ spacing real hordes have (see the ID-077 note below).
   row (`CARD.wire.wear`), only once per row and never below 0: **1** for a
   Shambler, Runner, Crawler, Spewer or Screamer, **3** for a Swollen, **4**
   for a Brute and **10** for the Horror (a level 1 row on its own). A row at
-  0 is broken until the next pick of the card (until the next wave break
-  or pick before ID-133): it slows no one, the enemy
-  that broke it included, while the other rows still slow. (It was 30 at
+  0 is broken: it slows and cuts no one, the enemy
+  that broke it included, while the other rows still do. (It was 30 at
   every level and 1 for every kind, ID-090.)
+
+  **Heal and bleed (ID-236).** The durability is the row's HP. Every row
+  heals its level's **0.3% / 0.6% / 1%** of its max a second (`CARD.wire.heal`)
+  through the whole fight, up to its max, a broken row included; a broken
+  row works again once it is back at **25%** of its max (`CARD.wire.back`),
+  so a level 3 row broken to 0 is back in 25 s and a level 1 row in about 83 s.
+  The rows are still not rebuilt at a wave break; a pick of the card still
+  rebuilds every row at the new level's full, working. Every enemy standing
+  in a working row's band bleeds its level's **0.4% / 0.8% / 1.2%** of this wave's
+  Shambler HP a second (`CARD.wire.bleed`), so the cut keeps up with the
+  hordes as the other share-of-Shambler cards do; the loss is steady, so
+  it doesn't flash the enemy white (as a burn). Before ID-236 a broken row
+  stayed broken until the next pick of the card (until the next wave break
+  or pick before ID-133), and the wire did no damage.
+
+  Measured (ID-236), the Horde 4 card test (three survivors, wins of 20 /
+  mean kill distance in px; no card 2 / 156.1). The ticket's first numbers
+  (heal 1/2/3%, bleed 5/8/12%) won every fight at every level and kept every
+  row whole at Hordes 5–15, so levels meant nothing; the bleed decides the
+  close fight (heal alone left 9/11/12 wins, a 1–2% bleed already won 20 at
+  level 3, and the wins swing ±2 between nearby bleeds). Chosen (PM): heal
+  0.3/0.6/1%, bleed 0.4/0.8/1.2%.
+
+  | | Lv 1 | Lv 2 | Lv 3 |
+  |---|---|---|---|
+  | Before ID-236 | 11 / 159 | 11 / 163 | 12 / 173 |
+  | Heal 1/2/3%, bleed 5/8/12% | 20 / 205 | 20 / 267 | 20 / 329 |
+  | **Chosen** | 12 / 164.2 | 15 / 173.7 | 20 / 183.8 |
+  | Best damage card (Speed Loaders, Extended Mags, Aim for the Head) | 10 / 161.8 | 14 / 170.1 | 20 / 175.8 |
+
+  In `balance/wire.test.ts`'s campaigns (6 seeds, wire held at one level,
+  no rebuild), the share of the last wave fought / of the whole fight its
+  rows were working: Horde 5 100% at every level; Horde 10 64% / 85% at
+  level 1, 100% at levels 2 and 3; Horde 15 53% / 72% at level 1, 100% at
+  levels 2 and 3 (ID-133: 0% / 38%, 59% / 88%, 97% / 99%). So the wire
+  lasts into the late hordes and a level 1 row still breaks at times.
+  `balance/wire.test.ts` now checks level 3 holds at least 85% of the last
+  wave at Hordes 5, 10 and 15, level 1 at least 75% of Horde 5, each level
+  at least as much of the late fights as the one below, and level 1 at least
+  half of Horde 15's last wave but less than level 3; `balance/cards.test.ts`
+  checks the wire wins no more than the best damage card at each level, ±2.
 
   Measured (ID-104, under its rules, before ID-123's rebuilds and wave
   scaling), horde-only campaigns as the scripted squad plays them,
@@ -2437,7 +2477,8 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
       4 s (an amber ring under each).
     - **Slab Throw:** every 16 s, from at least 150 px out, a concrete slab
       that lands 0.6 s later: with Barbed Wire it breaks the working wire row
-      nearest the boss's row (ties: the upper one; it's rebuilt at the next
+      nearest the boss's row (ties: the upper one; it heals back as any broken
+      row, ID-236, or is rebuilt at the next
       pick of the card, ID-133, and a slab still in the air when a wave ends
       breaks its row too; before ID-133 the next wave break rebuilt it and such
       a slab landed without breaking it, ID-123), else 300 damage to the
@@ -4456,7 +4497,12 @@ original outline.
   less shows worn (ID-115): cut partway, sagging, its pickets leaning; the
   share is of the row's own full, as this wave and level set it (ID-123),
   so a rebuilt row looks whole again, and a wave break keeps the look
-  (ID-133). It's drawn in code (no art file),
+  (ID-133). A broken row stays torn while it heals until it works again at
+  25% (ID-236), then shows worn. Each damaged row (under its max) shows a
+  thin steel HP bar, as wide as a wall's, in the middle of its row of the band,
+  drawn with the wall's bars over every sprite so a crowd in the band never
+  hides it; the player sees it fill back up as it heals, and a full row shows
+  none (ID-236). It's drawn in code (no art file),
   whole and torn each painted once into its own canvas
   (`src/ui/ground.ts`), and each run of rows alike is drawn in one go;
   where the browser can't paint them, a steel line down each coil of the

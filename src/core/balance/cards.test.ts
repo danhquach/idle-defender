@@ -143,6 +143,20 @@ describe('each ID-077 card makes a measurable difference (Horde 4, three survivo
     expect(of('barbed-wire', 3).killedAt).toBeGreaterThan(of('barbed-wire', 1).killedAt);
   });
 
+  // ID-236: the wire heals and cuts now, but it must not beat the damage cards outright: at
+  // each level it wins no more than the best levelled damage card at that level, give or take
+  // the ±2 noise of wins of 20 (the ticket's 5–12% bleed won 20 of 20 at every level).
+  it('Barbed Wire at each level wins no more fights than the best damage card at that level, ±2 (ID-236)', () => {
+    for (const lv of LEVELS) {
+      const best = Math.max(
+        ...(['speed-loaders', 'extended-mags', 'aim-for-the-head'] as const).map(
+          (id) => of(id, lv).wins,
+        ),
+      );
+      expect(of('barbed-wire', lv).wins, `Lv ${lv}`).toBeLessThanOrEqual(best + 2);
+    }
+  });
+
   it.each(LEVELLED)(
     '%s at max kills further out from the wall, by at least 5 px on average',
     (id) => {

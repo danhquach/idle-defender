@@ -1517,14 +1517,30 @@ function drawRepairSparks(
 }
 
 /**
- * How a Barbed Wire row with `durability` left of `max` looks (ID-115): torn at 0, worn at
- * `WIRE.worn.at` of `max` or less, whole above. A share, as `max` grows with the card's level
- * and the wave's size (ID-123).
+ * How a Barbed Wire row with `durability` (HP) left of `max` looks (ID-115): torn while
+ * `broken` (ID-236: at 0, and healing until it works again), worn at `WIRE.worn.at` of `max`
+ * or less, whole above. A share, as `max` grows with the card's level and the wave's size (ID-123).
  */
-export function wireLook(durability: number, max: number): WireLook {
-  if (durability <= 0) return 'torn';
+export function wireLook(durability: number, max: number, broken = durability <= 0): WireLook {
+  if (broken) return 'torn';
   return durability <= WIRE.worn.at * max ? 'worn' : 'whole';
 }
+
+/**
+ * Each damaged Barbed Wire row's HP bar (ID-236), in the middle of its row of the band, over
+ * every sprite (as the wall's bars) so a crowd in the band never hides it: none at full HP,
+ * so the player sees a row fill back up as it heals. Steel, as a turret's condition.
+ */
+function drawWireBars(ctx: CanvasRenderingContext2D, scene: Scene, cam: Camera): void {
+  const band = barbedWire({ taken: scene.taken ?? [], layers: scene.layers });
+  if (!band || !scene.wire) return;
+  for (const [row, r] of scene.wire.entries()) {
+    if (r.durability >= r.max) continue;
+    const at = { x: (band.from + band.to) / 2, y: (row + 0.5) * SEGMENT_HEIGHT, z: 0 };
+    drawHpBar(ctx, at, r.durability, r.max, cam, WIRE_BAR_COLOUR, WALL_BAR, true);
+  }
+}
+const WIRE_BAR_COLOUR = { back: COLOR.conditionBack, fill: COLOR.conditionFill };
 
 /**
  * Barbed Wire (ID-077): the band it slows, out in the field in front of the outermost
@@ -1542,7 +1558,7 @@ function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Ca
   // Each row against its own full durability, which grows with the level and the wave (ID-123).
   const look = (row: number): WireLook => {
     const r = scene.wire?.[row];
-    return r ? wireLook(r.durability, r.max) : 'whole';
+    return r ? wireLook(r.durability, r.max, r.broken) : 'whole';
   };
   // Runs of rows alike, top to bottom: [first row, end row, look].
   const runs: [number, number, WireLook][] = [];
@@ -4785,7 +4801,10 @@ export function drawScene(
   // A Spewer's spit over the sprites but under the wall's HP bars (ID-118).
   for (const k of scene.spits) drawSpit(ctx, art, k, scene.time, cam, anim?.reduced ?? false);
   if (build) drawBuildMarks(ctx, scene, build, camp, cam);
-  else drawWallBars(ctx, scene.layers, cam);
+  else {
+    drawWireBars(ctx, scene, cam);
+    drawWallBars(ctx, scene.layers, cam);
+  }
 
   // The selected slot: its footprint on the ground, on top of everything.
   if (build?.selected) {

@@ -192,7 +192,7 @@ export const UPGRADES: Readonly<
   },
   'barbed-wire': {
     name: 'Barbed Wire',
-    text: 'Wire strung out in the field slows enemies crossing it, rebuilt at each level-up',
+    text: 'Wire strung out in the field slows and cuts enemies crossing it; heals slowly',
     category: 'barrier',
     rarity: 'rare',
     levels: CARD_MAX_LEVEL,
@@ -579,9 +579,9 @@ export function effectAt(
       };
     case 'barbed-wire':
       return {
-        pre: 'Enemies ',
+        pre: 'Field wire slows enemies ',
         value: pct(lv(CARD.wire.slow)),
-        post: ' slower in the field wire, rebuilt at each level-up',
+        post: ' and cuts them each second; heals slowly',
       };
     default:
       return null;
