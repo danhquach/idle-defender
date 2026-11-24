@@ -55,12 +55,12 @@ const GOLDEN: Record<string, string> = {
 };
 
 /**
- * CI's runtime (Node 22 on x64): the digests that differ there. Taken from the branch on CI, the
- * same code path that matches main above byte for byte on Node 25.
+ * CI's runtime (Node 22 on x64): the digests that differ there. Taken from the branch on CI
+ * (re-taken in ID-236), the same code path that matches main above byte for byte on Node 25.
  */
 const NODE_22: Record<string, string> = {
-  'h20-L18-lost': '6c3903ff:38604',
-  'h20-L40-won': 'e771d534:19645',
+  'h20-L18-lost': '8323c83c:40379',
+  'h20-L40-won': 'fde0bb30:19945',
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */
