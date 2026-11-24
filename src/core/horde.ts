@@ -280,6 +280,8 @@ export interface Enemy {
    * bosses have the skill; absent otherwise.
    */
   shielded?: true;
+  /** Suppressing Fire (ID-235): fight time it is under fire until; absent = never hit with it. */
+  fireUntil?: number;
 }
 /** Fight times are when, so they stop during picks; a stun pushes them back. */
 export interface HorrorClock {
@@ -313,8 +315,8 @@ export interface HorrorClock {
   /** Cauterise: fight time until which Regen is blocked. */
   scorchUntil?: number;
   /**
-   * Suppressing Fire: seconds the skill's current wind-up was lengthened by (once each); gone
-   * when the skill goes off.
+   * Suppressing Fire (ID-235): seconds each skill's current wind-up has been stretched by while
+   * under fire; gone when the skill goes off.
    */
   longer?: Partial<Record<BossSkill, number>>;
 }
@@ -1489,6 +1491,7 @@ function place(s: HordeState, kind: EnemyKind, x: number, y: number): Enemy {
     knocked: undefined,
     knockedBy: undefined,
     burnt: undefined,
+    fireUntil: undefined,
   };
   s.enemies.push(e);
   return e;
@@ -1528,6 +1531,7 @@ function mutate(s: HordeState, rng: Rng): void {
       h.seenHp = e.hp;
       continue;
     }
+    if (underFire(s, e)) suppress(s, h);
     if (
       h.skills.includes('regen') &&
       due(s.time, h.hitAt + HORROR.regen.after) &&
@@ -1579,6 +1583,25 @@ export function windingUp(s: Pick<HordeState, 'time'>, e: Enemy): BossSkill | nu
   }
   return best;
 }
+
+/**
+ * Suppressing Fire (ID-235) on a boss under fire, for one step: each skill clock runs
+ * `CARD.suppress.recharge` slower and a wind-up `CARD.suppress.windUp` slower. A wind-up's
+ * stretch is kept in `longer`, so its tell stays lit and the view measures it against it.
+ */
+function suppress(s: HordeState, h: HorrorClock): void {
+  for (const k of Object.keys(h.next) as BossSkill[]) {
+    const at = h.next[k]!;
+    const winding = at - s.time <= BOSS_SKILL.windUp + (h.longer?.[k] ?? 0) + EPS;
+    const drag = STEP * (winding ? CARD.suppress.windUp : CARD.suppress.recharge);
+    h.next[k] = at + drag;
+    if (winding) (h.longer ??= {})[k] = (h.longer[k] ?? 0) + drag;
+  }
+}
+
+/** Whether Suppressing Fire (ID-235) holds `e` under fire now: slower, a boss's skills too. */
+export const underFire = (s: Pick<HordeState, 'time'>, e: Pick<Enemy, 'fireUntil'>): boolean =>
+  e.fireUntil !== undefined && !due(s.time, e.fireUntil);
 
 /** Whether `e`'s armour plates still hold (ID-099). */
 export const plated = (e: Pick<Enemy, 'horror'>): boolean =>
@@ -2266,6 +2289,14 @@ function cardHit(
   }
   if (took(s, 'shock-rounds')) shock(s, e);
   if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
+  // Suppressing Fire (ID-235): a hit doesn't extend the fire, and once it ends the enemy
+  // can't be put under fire again for `CARD.suppress.cooldown` s, so steady fire can't hold it.
+  if (
+    took(s, 'suppressing-fire') &&
+    (e.fireUntil === undefined || due(s.time, e.fireUntil + CARD.suppress.cooldown))
+  ) {
+    e.fireUntil = s.time + CARD.suppress.seconds;
+  }
   if (e.horror) bossCards(s, e);
   if (!first || b.ricochet || !took(s, 'ricochet')) return;
   const next = around(s, e, CARD.ricochet.range).find((o) => !b.hit.includes(o.id));
@@ -2290,20 +2321,12 @@ function cardHit(
 }
 
 /**
- * The cards a Hell mode unlocks that act on a boss a squad bullet hit (ID-222). Suppressing
- * Fire: the skill it is winding up lasts `CARD.suppress.seconds` longer (its tell stays lit),
- * once per wind-up. Cauterise: a Regen boss can't heal for `CARD.cauterise.seconds`. Tranq Darts:
- * an enraged boss moves without Enrage's speed for `CARD.tranq.seconds`.
+ * The cards a Hell mode unlocks that act on a boss a squad bullet hit (ID-222). Cauterise: a
+ * Regen boss can't heal for `CARD.cauterise.seconds`. Tranq Darts: an enraged boss moves
+ * without Enrage's speed for `CARD.tranq.seconds`.
  */
 function bossCards(s: HordeState, e: Enemy): void {
   const h = e.horror!;
-  if (took(s, 'suppressing-fire')) {
-    const k = windingUp(s, e);
-    if (k !== null && h.longer?.[k] === undefined) {
-      h.next[k]! += CARD.suppress.seconds;
-      (h.longer ??= {})[k] = CARD.suppress.seconds;
-    }
-  }
   if (took(s, 'cauterise') && h.skills.includes('regen')) {
     h.scorchUntil = s.time + CARD.cauterise.seconds;
   }
@@ -3186,7 +3209,8 @@ function move(s: HordeState): Moves {
       screamed(screamers, e) *
       (roared(s, e) ? 1 + BOSS_SKILL.roar.speed : 1) *
       (charging(s, e) ? HORROR.charge.speed : 1) *
-      (enrageFast(s, e) ? 1 + BOSS_SKILL.enrage.speed : 1);
+      (enrageFast(s, e) ? 1 + BOSS_SKILL.enrage.speed : 1) *
+      (underFire(s, e) ? 1 - (e.horror ? CARD.suppress.bossSlow : CARD.suppress.slow) : 1);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
       continue;

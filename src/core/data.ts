@@ -1456,14 +1456,17 @@ export const CARD = {
    */
   throws: { carry: 3, gap: 1.5 },
   /**
-   * The mode cards (ID-222; starting points). Suppressing Fire: a squad hit on a boss winding
-   * a skill up makes that wind-up last `seconds` longer, once. Cauterise: a hit stops a Regen
-   * boss healing for `seconds`. Momentum: a boss's death reloads every gun and returns one
+   * The mode cards (ID-222; starting points). Suppressing Fire (ID-235): an enemy a squad
+   * bullet hit is under fire for `seconds`: it moves `slow` slower (a boss or mini-boss
+   * `bossSlow`), and a boss's skill clocks run `recharge` slower, a wind-up `windUp` slower.
+   * Hits under fire don't extend it, and once it ends that enemy can't be put under fire again
+   * for `cooldown` s (at most `seconds` in every `seconds + cooldown`). Cauterise: a hit stops
+   * a Regen boss healing for `seconds`. Momentum: a boss's death reloads every gun and returns one
    * throw. Gas Masks: Poison pools hurt survivors `cut` less. Breaching Rounds: squad bullets
    * take back `share` of Armour plates' and Shield's cut. Tranq Darts: a hit takes Enrage's
    * speed off an enraged boss for `seconds`.
    */
-  suppress: { seconds: 2 },
+  suppress: { seconds: 1, cooldown: 2, slow: 0.15, bossSlow: 0.05, recharge: 0.3, windUp: 0.5 },
   cauterise: { seconds: 3 },
   gasMasks: { cut: 0.6 },
   breach: { share: 0.5 },

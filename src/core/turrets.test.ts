@@ -197,6 +197,19 @@ describe('turret build actions', () => {
 });
 
 describe('turrets in a horde', () => {
+  it("never put an enemy under fire: Suppressing Fire is the squad's (ID-235)", () => {
+    const s = fight(baseWith(['tower', 0, 5]));
+    s.taken = ['suppressing-fire'];
+    const id = enemy(s, { x: 600, y: 440, hp: 100, maxHp: 100 }).id;
+    let t = s;
+    for (let i = 0; i < 100 && t.enemies.find((o) => o.id === id)!.hp >= 100; i++) {
+      t = tick(t, STEP);
+    }
+    const e = t.enemies.find((o) => o.id === id)!;
+    expect(e.hp).toBeLessThan(100);
+    expect(e.fireUntil).toBeUndefined();
+  });
+
   it('fire at the nearest enemy in range: 5 damage, wear per shot, charge while it has a target', () => {
     const s = fight(baseWith(['tower', 0, 5]));
     expect(s.energy).toBe(setup().bank);

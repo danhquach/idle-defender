@@ -3670,13 +3670,14 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   and 30 unlocks one card on its first clear; it is offered in that mode and the
   ones above it (a Nightmare card in Nightmare and Hell, a Hell card in Hell only).
   Nightmare: Suppressing Fire, Cauterise, Momentum; Hell: Gas Masks, Breaching
-  Rounds, Tranq Darts. Rare, once only, behaviour cards that act only on a boss
-  skill or a boss kill (never flat damage or HP), and offered only in a fight whose
-  bosses have what they answer (read at the fight's start), so they never crowd
-  the offers:
+  Rounds, Tranq Darts. Rare, once only, behaviour cards (never flat damage or HP).
+  All but Suppressing Fire act only on a boss skill or a boss kill and are offered
+  only in a fight whose bosses have what they answer (read at the fight's start),
+  so they never crowd the offers; Suppressing Fire (ID-235) slows every enemy, so
+  it is offered in every fight of its modes:
   | Card | Effect | Offered when a boss has |
   | --- | --- | --- |
-  | Suppressing Fire | A squad hit on a boss winding a skill up makes that wind-up last 2 s longer (once per wind-up; the tell stays lit) | a timed skill |
+  | Suppressing Fire | An enemy a squad bullet hits is under fire for 1 s; hits under fire don't extend it, and once it ends that enemy can't be put under fire again for 2 s (at most 1 s in every 3 s; it never stacks with itself): it moves 15% slower (a boss or mini-boss 5%), multiplying with Barbed Wire, Oil and the other slows. A boss under fire runs its skill clocks 30% slower and a wind-up 50% slower; the stretched tell stays lit and is measured against its new length. A faint pale ring marks anyone under fire; a boss bar shows an "Under fire" tag (ID-235; before, one 2 s push of a wind-up in progress) | any fight |
   | Cauterise | Regen bosses can't heal for 3 s after a squad hit (a scorch tint shows it) | Regen |
   | Momentum | A boss dying reloads every gun at once and gives each survivor a throw back | a boss (not a mini-boss) |
   | Gas Masks | Poison pools hurt survivors 60% less | Poison pool |

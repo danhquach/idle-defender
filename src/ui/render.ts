@@ -38,6 +38,7 @@ import {
   roared,
   scorched,
   stunned,
+  underFire,
   enraged,
   enrageFast,
   shielded,
@@ -4097,6 +4098,8 @@ export const BOSS_LOOK = {
   scorch: '#ff7a2a',
   poison: '#b6e03a',
   glob: '#8fb82a',
+  /** Suppressing Fire (ID-235): the pale ring of an enemy under fire. */
+  fire: '#e8eef8',
 } as const;
 
 /** The skill `e` winds up and how far along, 0…1 (ID-099); null when none. */
@@ -4107,7 +4110,7 @@ function windCue(
   const skill = windingUp(scene, e);
   const at = skill === null ? undefined : e.horror?.next[skill];
   if (skill === null || at === undefined) return null;
-  // Suppressing Fire (ID-222) lengthens a wind-up: the tell is measured against its new length.
+  // Suppressing Fire (ID-235) stretches a wind-up: the tell is measured against its new length.
   const length = BOSS_SKILL.windUp + (e.horror?.longer?.[skill] ?? 0);
   return { skill, k: Math.min(1, Math.max(0, 1 - (at - scene.time) / length)) };
 }
@@ -4185,7 +4188,8 @@ function drawRoared(ctx: CanvasRenderingContext2D, e: Enemy, cam: Camera): void 
  * A Hell skill's or card's mark on a boss or an enemy it covers (ID-222), under the sprite:
  * Enrage a steady red ring and low glow (dimmer while Tranq Darts holds its speed off); a shield
  * boss the blue ring of its aura; a shielded enemy a thin blue ring; Cauterise an orange scorch
- * while Regen is blocked.
+ * while Regen is blocked; Suppressing Fire (ID-235) a faint pale ring on anyone under fire, one
+ * stroke, cheap on a full late horde.
  */
 function drawHellMarks(
   ctx: CanvasRenderingContext2D,
@@ -4225,6 +4229,7 @@ function drawHellMarks(
     ctx.restore();
     ring(r * 1.4, BOSS_LOOK.scorch, 2.5, 0.85);
   }
+  if (underFire(scene, e)) ring(r * 1.2, BOSS_LOOK.fire, 1.5, 0.5);
 }
 
 /**
