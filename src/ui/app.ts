@@ -1186,6 +1186,7 @@ export function start(root: HTMLElement, art: Art): void {
     const checked = syncClock(game, now);
     if (checked !== game) commit(checked);
     mapTab.tick(now);
+    roster?.tick(now);
     if (mapOpen) setMapButton(mapOpen, mapButton(game, now));
     const back = backPatrols(game, now).filter((p) => !reported.has(p.no));
     if (back.length > 0 && !horde && !dialogOpen()) {

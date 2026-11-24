@@ -1,9 +1,9 @@
 // The world map's words (ID-219): the button's label, countdowns, drops and a report's lines,
 // as plain text. Shared by the top bar's World map button (`hud.ts`) and the World map
 // tab (`mapview.ts`). Pure: the time comes in as `now`.
-import { DANGERS, type AreaLoot, type Danger } from '../core/data.ts';
+import { AREAS, DANGERS, type AreaLoot, type Danger } from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
-import { backPatrols, timeLeft, type MapPatrol } from '../core/scout.ts';
+import { areaDrops, backPatrols, timeLeft, type MapPatrol } from '../core/scout.ts';
 
 /** Each loot kind as a card names it. */
 export const LOOT_NAME: Readonly<Record<AreaLoot, string>> = {
@@ -46,7 +46,7 @@ export function countdown(ms: number): string {
   return rest > 0 ? `${h} h ${rest} m` : `${h} h`;
 }
 
-/** A patrol's state on its card: "Back in 1 h 12 m", or "Back · report ready". */
+/** A patrol's time on its World map card and Roster block: "Back in 1 h 12 m", or "Back · report ready". */
 export const patrolTime = (p: MapPatrol, now: number): string =>
   now >= p.backAt ? 'Back · report ready' : `Back in ${countdown(timeLeft(p, now))}`;
 
@@ -64,8 +64,34 @@ export function pct(p: number): string {
   return n < 1 ? '<1%' : n > 99 ? '>99%' : `${n}%`;
 }
 
-/** A Roster card's status for a survivor out on patrol: "On patrol · Pharmacy · 42 m". */
-export const onPatrolText = (area: string, p: MapPatrol, now: number): string =>
-  now >= p.backAt
-    ? `On patrol · ${area} · back`
-    : `On patrol · ${area} · ${countdown(timeLeft(p, now))}`;
+/** A patrol's name on the Roster (ID-234): "Patrol 3 · Pharmacy". */
+export const patrolName = (p: Pick<MapPatrol, 'no' | 'area'>): string =>
+  `Patrol ${p.no} · ${AREAS[p.area].name}`;
+
+/**
+ * A patrol's mission on the Roster (ID-234), in the World map card's words: its tag
+ * "Risky · 1 h", then what it finds, "Finds Medicine, Scrap".
+ */
+export function patrolMission(p: Pick<MapPatrol, 'area' | 'danger'>): string {
+  const finds = areaDrops({ kind: p.area, danger: p.danger }).map((d) => LOOT_NAME[d.loot]);
+  return `${DANGERS[p.danger].name} · ${tripText(p.danger)} · Finds ${finds.join(', ')}`;
+}
+
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** A countdown in words, for a screen reader: "42 minutes", "1 hour 5 minutes", "1 second". */
+export function countdownWords(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  if (s < 60) return plural(s, 'second');
+  const m = Math.ceil(s / 60);
+  if (m < 60) return plural(m, 'minute');
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest > 0 ? `${plural(h, 'hour')} ${plural(rest, 'minute')}` : plural(h, 'hour');
+}
+
+/** A patrol block's name for a screen reader (ID-234): "Patrol 3, Pharmacy, back in 42 minutes". */
+export const patrolGroupLabel = (p: MapPatrol, now: number): string =>
+  `Patrol ${p.no}, ${AREAS[p.area].name}, ${
+    now >= p.backAt ? 'back, report ready' : `back in ${countdownWords(timeLeft(p, now))}`
+  }`;

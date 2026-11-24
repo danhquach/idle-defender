@@ -9,6 +9,7 @@ import { recruit } from '../core/camp.ts';
 import { AREAS, DANGERS, MAP_PATROL } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import {
+  areaDrops,
   patrolAt,
   patrolReport,
   sendMapPatrol,
@@ -21,8 +22,12 @@ import { createCampWindow } from './campwindow.ts';
 import { benchLine, createMapButton, createScrapChip, setMapButton, squadStart } from './hud.ts';
 import {
   countdown,
+  countdownWords,
+  LOOT_NAME,
   mapButton,
-  onPatrolText,
+  patrolGroupLabel,
+  patrolMission,
+  patrolName,
   patrolTime,
   patrolsOut,
   pct,
@@ -292,12 +297,38 @@ describe('World map words (ID-219)', () => {
   it('the bench line and the Roster say who is on patrol', () => {
     const g = send(camp(3), ['recruit-2']);
     expect(benchLine(g)).toContain('1 on patrol');
-    const p = g.map!.patrols[0]!;
     const tile = rosterTiles(g, NOW + MIN, null).find((t) => t.id === 'recruit-2')!;
-    expect(tile.health).toBe(onPatrolText(AREAS[p.area].name, p, NOW + MIN));
-    expect(tile.health).toMatch(/^On patrol · .+ · \d+ (h|m)/);
+    // Where and when are on the patrol's block (ID-234), not on each card.
+    expect(tile.health).toBe('On patrol');
     expect(tile.away).toBe(true);
     expect(tile.down).toBe(false);
+  });
+
+  it("names a patrol's block in the World map card's words (ID-234)", () => {
+    const g = send(camp(3), ['recruit-2']);
+    const p = g.map!.patrols[0]!;
+    const area = g.map!.areas.find((a) => a.kind === p.area)!;
+    expect(patrolName(p)).toBe(`Patrol ${p.no} · ${AREAS[p.area].name}`);
+    const drops = areaDrops(area).map((d) => LOOT_NAME[d.loot]);
+    expect(patrolMission(p)).toBe(
+      `${DANGERS[p.danger].name} · ${tripText(p.danger)} · Finds ${drops.join(', ')}`,
+    );
+    expect(patrolGroupLabel(p, p.backAt - MIN)).toBe(
+      `Patrol ${p.no}, ${AREAS[p.area].name}, back in 1 minute`,
+    );
+    expect(patrolGroupLabel(p, p.backAt)).toBe(
+      `Patrol ${p.no}, ${AREAS[p.area].name}, back, report ready`,
+    );
+  });
+
+  it('says a countdown in words, singular and plural', () => {
+    expect(countdownWords(1000)).toBe('1 second');
+    expect(countdownWords(42_000)).toBe('42 seconds');
+    expect(countdownWords(MIN)).toBe('1 minute');
+    expect(countdownWords(42 * MIN)).toBe('42 minutes');
+    expect(countdownWords(60 * MIN)).toBe('1 hour');
+    expect(countdownWords(65 * MIN)).toBe('1 hour 5 minutes');
+    expect(countdownWords(121 * MIN)).toBe('2 hours 1 minute');
   });
 
   it('shows Medicine beside the Scrap once there is some', () => {

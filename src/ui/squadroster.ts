@@ -11,7 +11,7 @@
 // Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
 // the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
-import { AREAS, JOBS, WEAPONS, type Rarity } from '../core/data.ts';
+import { JOBS, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
   combinePartners,
@@ -26,7 +26,7 @@ import {
   type GunMove,
   type SquadMoves,
 } from '../core/hordeonly.ts';
-import { patrolOf } from '../core/scout.ts';
+import { patrolOf, type MapPatrol } from '../core/scout.ts';
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { fieldMaxHp, jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
@@ -54,7 +54,7 @@ import {
   type FieldMember,
   type StatRow,
 } from './jobtext.ts';
-import { onPatrolText } from './maptext.ts';
+import { patrolGroupLabel, patrolMission, patrolName, patrolTime } from './maptext.ts';
 import { levelText } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -126,7 +126,8 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
     const resting = d.injuredUntil !== null && d.injuredUntil > now;
     const out = patrolOf(game, d.id);
     let health: string;
-    if (out) health = onPatrolText(AREAS[out.area].name, out, now);
+    // Where and until when are said once, on the patrol's block (ID-234).
+    if (out) health = 'On patrol';
     else if (inFight) health = `HP ${Math.max(0, Math.ceil(inFight.hp))}/${inFight.maxHp}`;
     else if (downInFight) health = 'Down';
     else if (!isFit(d)) health = restLabel(restOf(d));
@@ -247,6 +248,8 @@ export interface Roster {
   close(): void;
   /** Re-reads the camp: call when it changes. */
   refresh(): void;
+  /** Once a second (ID-234): the patrols' countdowns; a redraw when one comes back. */
+  tick(now: number): void;
 }
 
 /**
@@ -306,15 +309,18 @@ export function createRoster(
   const benchLabel = el('p', 'rv-tabs-label');
   const benchTabs = el('ul', 'rv-tabs rv-bench');
   benchTabs.setAttribute('aria-label', 'Bench');
-  // Out on a World map patrol (ID-230): a row of their own under the bench, the bench's look.
+  // Out on a World map patrol (ID-230): under the bench, one block per patrol (ID-234), each
+  // named and timed in a header over its members' cards, the bench's look.
   const patrolLabel = el('p', 'rv-tabs-label');
-  const patrolTabs = el('ul', 'rv-tabs rv-bench rv-patrol');
-  patrolTabs.setAttribute('aria-label', 'On patrol');
+  const patrolBlocks = el('div', 'rv-patrols');
+  // The blocks drawn last, and what they were drawn from (`patrolKey`): `tick` moves their times.
+  let shown: { p: MapPatrol; block: HTMLElement; time: HTMLElement }[] = [];
+  let shownKey = '';
   const top = el('div', 'rv-top');
   const panel = el('div', 'rv-panel');
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
-  pane.append(squadRow, tabs, benchLabel, benchTabs, patrolLabel, patrolTabs, top, panel);
+  pane.append(squadRow, tabs, benchLabel, benchTabs, patrolLabel, patrolBlocks, top, panel);
 
   /** What "Best squad" or a tick of "Auto" did, on the status line. */
   bestSquadButton.addEventListener('click', () => {
@@ -378,7 +384,8 @@ export function createRoster(
     bestButton.disabled = !canGear;
     bestButton.title = canGear ? '' : GUNS_WAIT;
 
-    const marks = rosterTiles(game, Date.now(), fight);
+    const now = Date.now();
+    const marks = rosterTiles(game, now, fight);
     // At camp on the bench, and away on a patrol (ID-230): two rows, each counted apart.
     const benched = marks.filter((t) => t.bench && !t.away);
     const patrol = marks.filter((t) => t.bench && t.away);
@@ -389,11 +396,10 @@ export function createRoster(
     // How many cards (ID-189): the CSS splits them into even rows for the width.
     tabs.dataset.count = String(squadMarks.length);
     benchTabs.dataset.count = String(benched.length);
-    patrolTabs.dataset.count = String(patrol.length);
     // With nobody off the squad the rows need no labels: the Roster looks as it did.
     squadRow.hidden = benched.length + patrol.length === 0;
     benchLabel.hidden = benchTabs.hidden = benched.length === 0;
-    patrolLabel.hidden = patrolTabs.hidden = patrol.length === 0;
+    patrolLabel.hidden = patrolBlocks.hidden = patrol.length === 0;
     const offer = game.stock
       ? slotOffer({ slots: game.slots, stock: game.stock }, 'squad', canGear)
       : null;
@@ -420,7 +426,29 @@ export function createRoster(
     benchLabel.textContent = `Bench ${benched.length}`;
     benchTabs.replaceChildren(...benched.map((t) => tabItem(t, t.id === current)));
     patrolLabel.textContent = `On patrol ${patrol.length}`;
-    patrolTabs.replaceChildren(...patrol.map((t) => tabItem(t, t.id === current)));
+    // One block per patrol (ID-234), the soonest back first; its members in the order sent.
+    shown = patrolsShown(game).flatMap((p) => {
+      const members = p.members
+        .map((id) => patrol.find((t) => t.id === id))
+        .filter((t): t is RosterTile => t !== undefined);
+      // Nobody of it in the camp any more: no empty block.
+      if (members.length === 0) return [];
+      const block = el('section', 'rv-patrol-block');
+      block.setAttribute('role', 'group');
+      block.setAttribute('aria-label', patrolGroupLabel(p, now));
+      const head = el('div', 'rv-patrol-head');
+      const time = el('span', 'rv-patrol-time', patrolTime(p, now));
+      const title = el('p', 'rv-patrol-name');
+      title.append(el('span', 'rv-patrol-title', patrolName(p)), time);
+      head.append(title, el('p', 'rv-patrol-mission', patrolMission(p)));
+      const list = el('ul', 'rv-tabs rv-bench rv-patrol');
+      list.dataset.count = String(members.length);
+      list.replaceChildren(...members.map((t) => tabItem(t, t.id === current)));
+      block.append(head, list);
+      return { p, block, time };
+    });
+    shownKey = patrolKey(game);
+    patrolBlocks.replaceChildren(...shown.map((s) => s.block));
     if (d) {
       top.replaceChildren(
         ...survivorRow(
@@ -525,10 +553,13 @@ export function createRoster(
     track.append(fill);
     const xpRow = el('div', 'rv-xprow');
     xpRow.append(track, el('span', 'rv-xp-text', `${into}/${next} XP`));
+    const { game } = opts.state();
+    // Out on a patrol (ID-234): which one, by the name its block on the Roster has.
+    const out = patrolOf(game, d.id);
     const sub = el('p', 'rv-who-level');
     sub.append(
       `Level ${level} · ${mark.job} · `,
-      el('span', mark.down ? 'roster-tile-down' : '', mark.health),
+      el('span', mark.down ? 'roster-tile-down' : '', out ? patrolName(out) : mark.health),
     );
     // Injured (ID-220): a tag beside the name, so the card says it before the level line.
     const hurt = mark.rest > 0 && !mark.away;
@@ -536,12 +567,11 @@ export function createRoster(
     head.append(el('h3', 'rv-who-name', d.name));
     if (hurt) head.append(el('span', 'rv-hurt-tag', INJURED));
     text.append(head, sub, xpRow);
-    const { game } = opts.state();
     // Only with a bench to swap with (ID-147): a camp of six or fewer has no choice to make.
     // Someone resting gets none: "Resting: N hordes" on the line above says why.
     // Let go (ID-150) always shows: greyed at 6 or fewer, where a press says why.
     const actions = el('div', 'rv-actions');
-    // Out on a patrol (ID-219): "On patrol · …" on the line above says why there is none.
+    // Out on a patrol (ID-219): their patrol, named on the line above, says why there is none.
     if ((game.reserve ?? []).length > 0 && isFit(d) && !patrolOf(game, d.id)) {
       actions.append(squadButton(d, mark, canGear));
     }
@@ -1046,10 +1076,36 @@ export function createRoster(
     refresh() {
       draw();
     },
+    tick(now) {
+      if (!opened) return;
+      // A patrol sent or taken without a refresh: drawn again (who is where changed).
+      if (patrolKey(opts.state().game) !== shownKey) {
+        draw();
+        return;
+      }
+      // Otherwise only the times move, "Back · report ready" too, written in place only when
+      // their words change: a timer never redraws what the player is using.
+      for (const { p, block, time } of shown) {
+        const text = patrolTime(p, now);
+        if (time.textContent !== text) time.textContent = text;
+        const label = patrolGroupLabel(p, now);
+        if (block.getAttribute('aria-label') !== label) block.setAttribute('aria-label', label);
+      }
+    },
   };
 
   return api;
 }
+
+/** The patrols out, as the Roster's blocks show them (ID-234): the soonest back first. */
+const patrolsShown = (game: Pick<GameState, 'map'>): MapPatrol[] =>
+  [...(game.map?.patrols ?? [])].sort((a, b) => a.backAt - b.backAt || a.no - b.no);
+
+/** What the blocks are drawn from: each patrol and its members. */
+const patrolKey = (game: Pick<GameState, 'map'>): string =>
+  patrolsShown(game)
+    .map((p) => `${p.no}:${p.members.join(',')}`)
+    .join('|');
 
 /** What "Auto" does (ID-154), on its tooltip. */
 const AUTO_HINT = 'Keep the best squad after each horde, a joiner, a let-go and Best gun';
