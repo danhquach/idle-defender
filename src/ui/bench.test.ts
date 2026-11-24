@@ -335,6 +335,56 @@ describe('the Roster and the bench (ID-147)', () => {
     expect(m.q('[data-key="auto-squad"]').closest('[hidden]')).not.toBeNull();
   });
 
+  describe('survivors on patrol have their own row (ID-230)', () => {
+    const out = (bench: RosterDefender[], ids: string[]): GameState => {
+      const g = withMap(campGame(people(3), bench), 7);
+      const sent = sendMapPatrol(g, g.map!.areas[0]!.kind, ids, 1, NOW);
+      if (!sent.ok) throw new Error(sent.reason);
+      return sent.game;
+    };
+    const rowIds = (sel: string, m: ReturnType<typeof mount>) =>
+      [...m.scrim.querySelectorAll<HTMLElement>(`${sel} .rv-tab`)].map((t) => t.dataset.defender);
+    const label = (list: HTMLElement) => list.previousElementSibling as HTMLElement;
+
+    it('Squad, Bench and On patrol rows, each counted apart; the card keeps its locks', () => {
+      const m = mount(out([person(4), person(5, { rest: 1 }), person(6)], ['recruit-6']));
+      m.roster.open('recruit-1');
+      const bench = m.q<HTMLElement>('.rv-bench:not(.rv-patrol)');
+      const patrol = m.q<HTMLElement>('.rv-patrol');
+      expect(rowIds('.rv-bench:not(.rv-patrol)', m)).toEqual(['recruit-4', 'recruit-5']);
+      expect(rowIds('.rv-patrol', m)).toEqual(['recruit-6']);
+      expect(label(bench).textContent).toBe('Bench 2');
+      expect(label(patrol).textContent).toBe('On patrol 1');
+      expect(patrol.getAttribute('aria-label')).toBe('On patrol');
+      expect(patrol.hidden || label(patrol).hidden).toBe(false);
+      expect(m.q('.rv-squad-row').hidden).toBe(false);
+      expect(m.q('.rv-patrol [data-defender="recruit-6"] .rv-tab-job').textContent).toBe('Out');
+      // The card: "On patrol · …", no squad or treat button, gun locked (ID-219).
+      m.roster.open('recruit-6');
+      expect(m.q('.rv-top').textContent).toMatch(/On patrol · /);
+      expect(m.q('[data-key="squad"]')).toBeNull();
+      expect(m.q('[data-key="treat"]')).toBeNull();
+    });
+
+    it('the whole bench away: the Bench row hides, Squad and On patrol stay', () => {
+      const m = mount(out([person(4)], ['recruit-4']));
+      m.roster.open('recruit-1');
+      const bench = m.q<HTMLElement>('.rv-bench:not(.rv-patrol)');
+      expect(bench.hidden && label(bench).hidden).toBe(true);
+      expect(m.q('.rv-patrol').hidden).toBe(false);
+      expect(label(m.q('.rv-patrol')).textContent).toBe('On patrol 1');
+      expect(m.q('.rv-squad-row').hidden).toBe(false);
+    });
+
+    it('nobody on patrol: the On patrol row and its label are hidden', () => {
+      const m = mount(campGame(people(3), [person(4)]));
+      m.roster.open('recruit-1');
+      const patrol = m.q<HTMLElement>('.rv-patrol');
+      expect(patrol.hidden && label(patrol).hidden).toBe(true);
+      expect(label(m.q('.rv-bench')).textContent).toBe('Bench 1');
+    });
+  });
+
   it('"Best squad" swaps a weaker squad survivor for a stronger bench one, saying so (ID-154)', () => {
     const vet = person(7, { xp: 5000 });
     const m = mount(campGame(people(6), [vet]));
@@ -390,7 +440,9 @@ describe('the Roster and the bench (ID-147)', () => {
     const m = mount(campGame(people(5), [person(6), person(7)]));
     m.roster.open('recruit-6');
     expect(m.q('.rv-bench').hidden).toBe(false);
-    const labels = [...m.scrim.querySelectorAll('.rv-tabs-label')].map((l) => l.textContent);
+    const labels = [...m.scrim.querySelectorAll<HTMLElement>('.rv-tabs-label')]
+      .filter((l) => l.closest('[hidden]') === null)
+      .map((l) => l.textContent);
     expect(labels).toEqual([`Squad 5/${SQUAD_CAP}`, 'Bench 2']);
     expect(m.q('.rv-bench [data-defender="recruit-6"]')).not.toBeNull();
     m.q('[data-key="squad"]').click();
