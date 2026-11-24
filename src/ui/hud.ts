@@ -2906,14 +2906,18 @@ export function createHud(
   const autoPill = el('button', 'hud-auto-pill');
   autoPill.type = 'button';
   autoPill.setAttribute('aria-keyshortcuts', AUTO_KEY);
-  // Its name is "Auto" and `aria-pressed` says on or off; the tick, the short "A" (a phone)
-  // and the key are for the eyes only, so a reader never hears them as well.
+  // Its name is "Auto" and `aria-pressed` says on or off; the tick and the hints are for the
+  // eyes only, so a reader never hears them as well.
   autoPill.setAttribute('aria-label', 'Auto');
   const pillTick = el('span', 'hud-auto-tick', '\u2713');
   const pillWord = el('span', 'hud-auto-word', 'Auto');
-  const pillShort = el('span', 'hud-auto-short', 'A');
-  const pillKey = el('kbd', 'menu-key hud-auto-key', AUTO_KEY);
-  for (const part of [pillTick, pillWord, pillShort, pillKey]) {
+  // The hint names the hold (PM, ID-232): "Hold Q" with the Airstrike's key (the horde-only
+  // build; `update` sets it from the button's slot), "Hold" in the full game, which has no
+  // skill keys; on touch, which has no keys, "Press & Hold" (the CSS picks one). E still
+  // toggles; the tooltip and `aria-keyshortcuts` say so.
+  const pillKey = el('kbd', 'menu-key hud-auto-key hud-auto-desk', 'Hold');
+  const pillTouch = el('kbd', 'menu-key hud-auto-key hud-auto-touch', 'Press & Hold');
+  for (const part of [pillTick, pillWord, pillKey, pillTouch]) {
     part.setAttribute('aria-hidden', 'true');
     autoPill.append(part);
   }
@@ -2950,8 +2954,8 @@ export function createHud(
     autoPill.setAttribute('aria-pressed', String(on));
     strikeWrap.dataset.auto = on ? 'on' : 'off';
     autoPill.title = on
-      ? `Airstrike fires by itself on the biggest group (key ${AUTO_KEY} to turn off)`
-      : `Turn on to fire the Airstrike by itself on the biggest group (key ${AUTO_KEY})`;
+      ? `Airstrike fires by itself on the biggest group (hold the Airstrike or press ${AUTO_KEY} to turn off)`
+      : `Turn on to fire the Airstrike by itself on the biggest group (hold the Airstrike or press ${AUTO_KEY})`;
   };
   showAuto(false);
   const strikeHold = createHold(HOLD_MS, () => {
@@ -4042,6 +4046,9 @@ export function createHud(
       // or a pick, once the skill is picked or researched.
       const strike = skills[SKILL_IDS.indexOf('airstrike')];
       autoPill.hidden = !strike || strike.hidden || !state.skills.includes('airstrike');
+      // Its hint names the Airstrike's own key, whichever slot it holds; none: "Hold".
+      const holdText = strike?.key ? `Hold ${strike.key}` : 'Hold';
+      if (pillKey.textContent !== holdText) pillKey.textContent = holdText;
       const repairs = repairsButton(state);
       showButton(repairsItem, repairs);
       repairsItem.button.hidden = repairs.hidden;

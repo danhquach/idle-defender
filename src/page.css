@@ -2362,7 +2362,7 @@ body {
 }
 
 .hud-auto-tick,
-.hud-auto-short {
+.hud-auto-pill .hud-auto-touch {
   display: none;
 }
 
@@ -2409,16 +2409,19 @@ body {
     height: 44px;
     transform: translateY(-50%);
   }
-}
 
-/* A phone: the pill shrinks to "A", its key hint dropped like the other keys'. */
-@media (max-width: 480px) {
-  .hud-auto-word,
-  .hud-auto-pill .hud-auto-key {
+  /* When the bar wraps (the full game on a phone), the pill and its touch area reach 29 px
+     above the Airstrike: rows that far apart keep them off the buttons of the row above. */
+  .hud-shop:has(> .hud-strike:not([hidden])) {
+    row-gap: 30px;
+  }
+
+  /* Touch has no keys: the hint is the gesture, "Auto [Press & Hold]" (PM, ID-232). */
+  .hud-auto-pill .hud-auto-desk {
     display: none;
   }
 
-  .hud-auto-short {
+  .hud-auto-pill .hud-auto-touch {
     display: inline;
   }
 }

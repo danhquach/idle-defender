@@ -469,9 +469,10 @@ Defenders stand on **posts** the player builds and chooses between.
   back to Airstrike if it is researched, or to none.
 - **As built (ID-140): Airstrike auto-aim.** An **Auto** toggle (key **E**,
   in both builds) is a small **pill on the Airstrike button's top-right
-  corner** (ID-232; it was a button of its own before): a plain "Auto E"
-  while off ("A" on a phone), filled with the accent colour and a tick while
-  on, with an accent ring on the Airstrike button too, ready or cooling. Its
+  corner** (ID-232; it was a button of its own before): a plain "Auto
+  [Hold Q]" while off ("Auto [Hold]" in the full game, which has no skill
+  keys; "Auto [Press & Hold]" on touch), filled with the accent colour and a
+  tick while on, with an accent ring on the Airstrike button too, ready or cooling. Its
   tap area is 44 × 44 px on touch screens. **Holding** the Airstrike button
   (or Q) for **0.5 s** turns Auto on or off as well: a ring fills round the
   button while held, Auto changes when it closes and letting go then does
