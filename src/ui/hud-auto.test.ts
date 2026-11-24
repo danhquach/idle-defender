@@ -77,6 +77,23 @@ describe('the Auto pill (ID-140, ID-232)', () => {
     expect(wrap.dataset.auto).toBe('off');
   });
 
+  it('its hint names the hold: "Hold Q" (horde-only), "Hold" (full game), "Press & Hold" on touch', () => {
+    // The key comes from the Airstrike button's own slot, set as the HUD updates.
+    const squad = mount(true);
+    squad.hud.update(fight());
+    const desk = squad.pill.querySelector('.hud-auto-key.hud-auto-desk')!;
+    expect(desk.textContent).toBe('Hold Q');
+    const full = mount(false);
+    full.hud.update(newHorde(1, { ...setup(), skills: [...SKILL_IDS] }));
+    expect(full.pill.querySelector('.hud-auto-desk')!.textContent).toBe('Hold');
+    // On touch (no keys) the CSS shows the gesture instead: "Auto [Press & Hold]".
+    for (const m of [squad, full]) {
+      expect(m.pill.querySelector('.hud-auto-key.hud-auto-touch')!.textContent).toBe(
+        'Press & Hold',
+      );
+    }
+  });
+
   it('is named "Auto" for a reader, its words and key for the eyes only', () => {
     const { hud, pill } = mount(true);
     expect(pill.getAttribute('aria-label')).toBe('Auto');
@@ -90,7 +107,7 @@ describe('the Auto pill (ID-140, ID-232)', () => {
     hud.showAutoStrike(true);
     expect(pill.getAttribute('aria-pressed')).toBe('true');
     expect(wrap.dataset.auto).toBe('on');
-    expect(pill.title).toContain(`key ${AUTO_KEY} to turn off`);
+    expect(pill.title).toContain(`hold the Airstrike or press ${AUTO_KEY} to turn off`);
     hud.showAutoStrike(false);
     expect(pill.getAttribute('aria-pressed')).toBe('false');
     expect(wrap.dataset.auto).toBe('off');
