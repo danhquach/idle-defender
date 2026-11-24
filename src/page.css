@@ -4469,6 +4469,82 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-text-muted);
 }
 
+/* The Stash / Bench tabs under the squad (ID-242). A hidden panel stays hidden whatever its
+   own display says. */
+.inv-body [hidden] {
+  display: none;
+}
+
+.inv-tabs {
+  padding: var(--space-14) 0 0;
+}
+
+.inv-bench-zone,
+.inv-patrol,
+.inv-bench-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.inv-bench-zone {
+  gap: var(--space-16);
+}
+
+.inv-bench-picker {
+  padding-bottom: var(--space-14);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.inv-pick-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+/* Change gun and To stash: the one row the squad's Equip row takes in the dock, its buttons
+   sized as the Equip row's. */
+.inv-bench-actions {
+  display: grid;
+  /* The longer label, Change gun, gets the wider share. */
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-auto-rows: 32px;
+  gap: var(--space-6);
+}
+
+.inv-bench-actions .menu-action {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 var(--space-4);
+  overflow: hidden;
+  line-height: 30px;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* On the free pistol only Change gun shows: it takes the row. */
+.inv-bench-actions .menu-action:only-child {
+  grid-column: 1 / -1;
+}
+
+@media (pointer: coarse) {
+  .inv-tab {
+    min-height: 40px;
+  }
+
+  .inv-bench-actions {
+    grid-auto-rows: 44px;
+  }
+
+  .inv-bench-actions .menu-action {
+    line-height: 42px;
+  }
+}
+
 /* A gun's icon (ID-092): long guns lie across the square, a pale rim lifts them off it. */
 .gun-icon {
   width: 86%;

@@ -64,6 +64,13 @@ export function pct(p: number): string {
   return n < 1 ? '<1%' : n > 99 ? '>99%' : `${n}%`;
 }
 
+/** Why a survivor out on a World map patrol (ID-219) can't change guns. */
+export const MAP_GUN_AWAY = 'On patrol: their gun went with them.';
+
+/** The patrols out, as the Roster's blocks and the Inventory's Bench tab show them (ID-234): the soonest back first. */
+export const patrolsShown = (game: Pick<GameState, 'map'>): MapPatrol[] =>
+  [...(game.map?.patrols ?? [])].sort((a, b) => a.backAt - b.backAt || a.no - b.no);
+
 /** A patrol's name on the Roster (ID-234): "Patrol 3 · Pharmacy". */
 export const patrolName = (p: Pick<MapPatrol, 'no' | 'area'>): string =>
   `Patrol ${p.no} · ${AREAS[p.area].name}`;

@@ -9,8 +9,10 @@
 // inert behind it and an open Inventory holds a fight. Between hordes guns move by drag
 // and drop (ID-095): a stash gun onto a survivor equips it, a
 // survivor's gun into the stash takes it off them, and a stash gun onto one of its set
-// opens that set's Combine; a gun's details have buttons that do the same. Text reaches
-// the page only through textContent.
+// opens that set's Combine; a gun's details have buttons that do the same. With a survivor
+// on the bench or out on a patrol (ID-242) a Stash / Bench strip sits under the squad row: the
+// Bench tab lists them with their guns, a bench survivor's changes by a picker in the tab, a
+// patrol's is view-only. Text reaches the page only through textContent.
 import {
   affixCount,
   affixLines,
@@ -34,7 +36,7 @@ import {
   type Rarity,
   type WeaponId,
 } from '../core/data.ts';
-import type { GameState } from '../core/game.ts';
+import { onMapPatrol, type GameState, type RosterDefender } from '../core/game.ts';
 import {
   combineKept,
   combineSets,
@@ -71,6 +73,8 @@ import {
   type UpgradeOffer,
 } from './hud.ts';
 import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
+import { gunCompare, gunTiles, heldGunOf } from './gunpick.ts';
+import { MAP_GUN_AWAY, patrolName, patrolsShown } from './maptext.ts';
 import type { Answer } from './confirm.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -114,6 +118,15 @@ export interface InventoryItem {
   free?: boolean;
 }
 
+/** A survivor and the gun they fight with (ID-242: the squad's, the bench's, a patrol's). */
+export interface Seat {
+  id: string;
+  name: string;
+  gun: InventoryItem;
+  /** The stash gun they hold, null on the free pistol. */
+  uid: string | null;
+}
+
 export interface InventoryView {
   /** "Stash 12/40"; "Stash 40/40 (full)" once the next drop would throw the weakest away. */
   stashHeading: string;
@@ -133,7 +146,11 @@ export interface InventoryView {
    * Each survivor in the squad and the gun they fight with, in squad order; `uid` is the
    * stash gun they hold, null on the free pistol.
    */
-  squad: { id: string; name: string; gun: InventoryItem; uid: string | null }[];
+  squad: Seat[];
+  /** Survivors at camp off the squad (ID-242), keys `bench:<id>`; not those out on a patrol. */
+  bench: Seat[];
+  /** The patrols out, the soonest back first, each with its members (keys `patrol:<id>`). */
+  patrols: { no: number; name: string; members: Seat[] }[];
   /**
    * Squad Power against the Recommended Power of the horde the next fight is (ID-098);
    * null where there is no horde to compare with.
@@ -293,7 +310,7 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
  */
 export function inventoryView(
   game: Pick<GameState, 'armoury' | 'roster'> &
-    Partial<Pick<GameState, 'slots' | 'stock' | 'mode'>>,
+    Partial<Pick<GameState, 'slots' | 'stock' | 'mode' | 'reserve' | 'map'>>,
   horde: number | null = null,
   canBuy = false,
   pickIn: Partial<Record<PickKind, unknown>> = DEFAULT_PICK,
@@ -339,6 +356,22 @@ export function inventoryView(
     )
     .sort(sorts[pick.sort])
     .map(toItem);
+  // What a survivor fights with: a primary that is no gun fights as the pistol (as `squadSpec`).
+  const seat = (d: RosterDefender, kind: string, where: string, up: boolean): Seat => {
+    const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
+    const it = item(held, `${kind}:${d.id}`, where, d.name);
+    return {
+      id: d.id,
+      name: d.name,
+      gun: {
+        ...(up ? upgradable(it, held) : it),
+        // Both figures side by side (ID-166): the gun's own, and in their hands.
+        powerWith: dpsWith(survivorDps(squadSpec(d), held), d.name),
+      },
+      uid: isOwned(held) ? held.uid : null,
+    };
+  };
+  const reserve = game.reserve ?? [];
   return {
     // An older save's stash past the cap is kept as it is (design §6), and is full too.
     stashHeading: `Stash ${n}/${cap}${n >= cap ? ' (full)' : ''}${
@@ -366,19 +399,18 @@ export function inventoryView(
       ],
     },
     free: Math.max(0, cap - n),
-    squad: squadOf(game).map((d) => {
-      // What they fight with: a primary that is no gun fights as the pistol (as `squadSpec`).
-      const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
-      return {
-        id: d.id,
-        name: d.name,
-        gun: {
-          ...upgradable(item(held, `squad:${d.id}`, `Held by ${d.name}.`, d.name), held),
-          // Both figures side by side (ID-166): the gun's own, and in their hands.
-          powerWith: dpsWith(survivorDps(squadSpec(d), held), d.name),
-        },
-        uid: isOwned(held) ? held.uid : null,
-      };
+    squad: squadOf(game).map((d) => seat(d, 'squad', `Held by ${d.name}.`, true)),
+    // The reserve holds the patrol's members too: the bench is the ones at camp.
+    bench: reserve
+      .filter((d) => !onMapPatrol(game, d.id))
+      .map((d) => seat(d, 'bench', `On the bench with ${d.name}.`, true)),
+    patrols: patrolsShown(game).flatMap((p) => {
+      const members = p.members.flatMap((id) => {
+        const d = reserve.find((r) => r.id === id);
+        // Their gun is out with them: no Upgrade.
+        return d ? [seat(d, 'patrol', MAP_GUN_AWAY, false)] : [];
+      });
+      return members.length > 0 ? [{ no: p.no, name: patrolName(p), members }] : [];
     }),
     // `horde` is the mode's own horde (ID-218); its power is that of its strength.
     power:
@@ -474,7 +506,7 @@ export function dropAction(view: InventoryView, from: string, to: string | null)
 
 /** The line read out after equip `d` from `view` (the camp before it): "Mara now holds …". */
 export function equipMessage(view: InventoryView, d: Extract<Drop, { kind: 'equip' }>): string {
-  const s = view.squad.find((x) => x.id === d.defender);
+  const s = [...view.squad, ...view.bench].find((x) => x.id === d.defender);
   if (!s) return '';
   const back = s.uid === null ? '' : `; ${s.gun.name} is back in the stash`;
   if (d.choice === 'pistol') return `${s.name} now holds the free pistol${back}`;
@@ -712,6 +744,7 @@ export function inventoryGrid(
   note = INVENTORY_NOTE,
   drag = false,
   selecting?: boolean,
+  tabs?: BenchTabs,
 ): HTMLElement[] {
   const ready = (it: InventoryItem): boolean =>
     canCombine && !!it.owned && !!rowOf(view.combine, it.owned)?.uses;
@@ -746,16 +779,147 @@ export function inventoryGrid(
         ]),
   );
   stash.classList.add('inv-stash-zone');
-  return [
-    section(
-      el('h3', 'menu-heading', 'Squad'),
-      ...(view.power ? [powerNote(view.power, view.powerHorde)] : []),
-      list('Squad', 'inv-grid inv-squad', [
-        ...view.squad.map((s) => mark(slot(s.gun, false, s.name))),
-      ]),
-    ),
-    stash,
-  ];
+  const squad = section(
+    el('h3', 'menu-heading', 'Squad'),
+    ...(view.power ? [powerNote(view.power, view.powerHorde)] : []),
+    list('Squad', 'inv-grid inv-squad', [
+      ...view.squad.map((s) => mark(slot(s.gun, false, s.name))),
+    ]),
+  );
+  // No bench and nobody on patrol (ID-242): the stash alone, as ever.
+  if (!tabs || !benchShown(view)) return [squad, stash];
+  const bench = benchPanel(view);
+  const strip = benchTabs(tabs);
+  const panels: Record<BenchTab, HTMLElement> = { stash, bench };
+  for (const t of TABS) {
+    const p = panels[t.id];
+    p.id = `inv-panel-${t.id}`;
+    p.dataset.panel = t.id;
+    p.setAttribute('role', 'tabpanel');
+    p.setAttribute('aria-labelledby', `inv-tab-${t.id}`);
+    setTabOn(
+      strip.querySelector<HTMLElement>(`.inv-tab[data-tab="${t.id}"]`)!,
+      p,
+      t.id === tabs.tab,
+    );
+  }
+  return [squad, strip, stash, bench];
+}
+
+/** The two tabs under the squad (ID-242). */
+export type BenchTab = 'stash' | 'bench';
+const TABS: { id: BenchTab; label: string }[] = [
+  { id: 'stash', label: 'Stash' },
+  { id: 'bench', label: 'Bench' },
+];
+
+/** The tab strip's state and what it calls: `set` puts a tab on show. */
+export interface BenchTabs {
+  tab: BenchTab;
+  set(tab: BenchTab): void;
+}
+
+/** Whether the Bench tab has anything to show: a survivor at camp, or one out on a patrol. */
+export const benchShown = (view: Pick<InventoryView, 'bench' | 'patrols'>): boolean =>
+  view.bench.length > 0 || view.patrols.length > 0;
+
+/** The bench's slots, then each patrol's, in the order the Bench tab lists them. */
+export const benchItems = (view: Pick<InventoryView, 'bench' | 'patrols'>): InventoryItem[] => [
+  ...view.bench.map((s) => s.gun),
+  ...view.patrols.flatMap((p) => p.members.map((s) => s.gun)),
+];
+
+/** Tab `b` and its panel on or off: the selected tab has the Tab stop, the other panel is hidden. */
+export function setTabOn(b: HTMLElement, panel: HTMLElement, on: boolean): void {
+  b.setAttribute('aria-selected', String(on));
+  b.tabIndex = on ? 0 : -1;
+  panel.hidden = !on;
+}
+
+/**
+ * The Stash / Bench strip (ID-242), as the camp window's: Left and Right (and Home and End)
+ * move between the tabs and show the one reached, and never reach the grid's slot arrows.
+ */
+function benchTabs(tabs: BenchTabs): HTMLElement {
+  const strip = el('div', 'menu-tabs inv-tabs');
+  strip.setAttribute('role', 'tablist');
+  strip.setAttribute('aria-label', 'Stash and bench');
+  const buttons = TABS.map((t) => {
+    const b = el('button', 'menu-tab inv-tab', t.label);
+    b.type = 'button';
+    b.id = `inv-tab-${t.id}`;
+    b.dataset.tab = t.id;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-controls', `inv-panel-${t.id}`);
+    b.addEventListener('click', () => {
+      tabs.set(t.id);
+      b.focus();
+    });
+    return b;
+  });
+  strip.append(...buttons);
+  strip.addEventListener('keydown', (e) => {
+    const at = buttons.findIndex((b) => b === (e.target as Element).closest('.inv-tab'));
+    const moves: Record<string, number> = {
+      ArrowRight: at + 1,
+      ArrowLeft: at - 1,
+      Home: 0,
+      End: TABS.length - 1,
+    };
+    if (at < 0 || !Object.hasOwn(moves, e.key)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const next = (moves[e.key]! + TABS.length) % TABS.length;
+    tabs.set(TABS[next]!.id);
+    buttons[next]!.focus();
+  });
+  return strip;
+}
+
+/**
+ * The Bench tab's panel (ID-242): the gun picker's place, then "Bench N" (survivors at camp)
+ * and "On patrol N", one labelled group per patrol; an empty part is left out. Slots are the
+ * squad's own.
+ */
+function benchPanel(view: InventoryView): HTMLElement {
+  const panel = el('div', 'inv-bench-zone');
+  const picker = el('div', 'inv-bench-picker');
+  picker.hidden = true;
+  panel.append(picker);
+  if (view.bench.length > 0) {
+    panel.append(
+      section(
+        el('h3', 'menu-heading', `Bench ${view.bench.length}`),
+        list(
+          'Bench',
+          'inv-grid inv-bench',
+          view.bench.map((s) => slot(s.gun, false, s.name)),
+        ),
+      ),
+    );
+  }
+  if (view.patrols.length > 0) {
+    const out = view.patrols.reduce((n, p) => n + p.members.length, 0);
+    const groups = view.patrols.map((p) => {
+      const g = el('div', 'inv-patrol');
+      g.setAttribute('role', 'group');
+      g.setAttribute('aria-label', p.name);
+      // The group names the patrol once for a screen reader; the line shows it (ID-242).
+      const name = el('p', 'menu-note inv-patrol-name', p.name);
+      name.setAttribute('aria-hidden', 'true');
+      g.append(
+        name,
+        list(
+          'Survivors',
+          'inv-grid inv-patrol-list',
+          p.members.map((s) => slot(s.gun, false, s.name)),
+        ),
+      );
+      return g;
+    });
+    panel.append(section(el('h3', 'menu-heading', `On patrol ${out}`), ...groups));
+  }
+  return panel;
 }
 
 /** What the Combine part of the details is doing now, and what its buttons call (ID-091). */
@@ -970,6 +1134,35 @@ function gearBlock(it: InventoryItem, ui: GearUi): HTMLElement {
   return block;
 }
 
+/** What a bench survivor's buttons call (ID-242). */
+export interface BenchUi {
+  /** Opens the gun picker for survivor `id`. */
+  change(id: string): void;
+  /** Takes survivor `id`'s gun off: they go to the free pistol, the gun to the stash. */
+  toStash(id: string): void;
+}
+
+/**
+ * A bench survivor's buttons in the dock (ID-242): Change gun, and To stash while they hold a
+ * stash gun, in the one row the squad's Equip row takes, so the dock keeps its height.
+ */
+function benchBlock(it: InventoryItem, who: Seat, ui: BenchUi): HTMLElement {
+  const block = el('div', 'inv-gear');
+  block.setAttribute('role', 'group');
+  block.setAttribute('aria-label', `${it.name}, on the bench with ${who.name}`);
+  const row = el('div', 'inv-bench-actions');
+  const change = button('Change gun', () => ui.change(who.id), 'inv-bench-change btn-primary');
+  change.setAttribute('aria-label', `Change ${who.name}'s gun`);
+  row.append(change);
+  if (who.uid !== null) {
+    const off = button('To stash', () => ui.toStash(who.id), 'inv-bench-stash');
+    off.setAttribute('aria-label', `Take ${it.name} off ${who.name}, to the stash`);
+    row.append(off);
+  }
+  block.append(el('h4', 'inv-combine-label', `Held by ${who.name}`), row);
+  return block;
+}
+
 /** What the Upgrade part of the details calls (ID-208). */
 export interface UpgradeUi {
   /** Raises the gun `uid` one step. */
@@ -1151,6 +1344,7 @@ export function detailsPanel(
   gear?: GearUi,
   upgrade?: UpgradeUi,
   salvage?: SalvageUi,
+  bench?: { who: Seat; ui: BenchUi },
 ): HTMLElement[] {
   const info = el('div', 'inv-details-info');
   if (!it) {
@@ -1159,6 +1353,7 @@ export function detailsPanel(
   }
   const dock = el('div', 'inv-dock');
   if (gear) dock.append(gearBlock(it, gear));
+  else if (bench) dock.append(benchBlock(it, bench.who, bench.ui));
   if (upgrade) dock.append(upgradeBlock(it, upgrade));
   const c = combine ? combineBlock(it, combine.rows, combine.ui) : null;
   // A confirm shows what goes and what comes in place of the gun's own lines.
@@ -1172,7 +1367,7 @@ export function detailsPanel(
 
 /** The camp as the Inventory reads it. */
 type InventoryGame = Pick<GameState, 'armoury' | 'roster'> &
-  Partial<Pick<GameState, 'slots' | 'stock' | 'mode'>>;
+  Partial<Pick<GameState, 'slots' | 'stock' | 'mode' | 'reserve' | 'map'>>;
 
 export interface InventoryOptions {
   /**
@@ -1278,6 +1473,14 @@ export function createInventory(
   // Select (ID-215): on while ticking guns for a bulk salvage, and the ticked slots' keys.
   let picking = false;
   const ticked = new Set<string>();
+  // The Stash / Bench tab on show (ID-242), each tab's scroll, and the gun picker of the Bench
+  // tab: the bench survivor it is for (and their name, to say when they leave), and the tile
+  // being compared.
+  let tab: BenchTab = 'stash';
+  const scrolls: Record<BenchTab, number> = { stash: 0, bench: 0 };
+  let pickingFor: string | null = null;
+  let pickingName = '';
+  let pickedTile: string | null = null;
 
   const openButton = el('button', 'inv-button', 'Weapons');
   openButton.type = 'button';
@@ -1323,13 +1526,17 @@ export function createInventory(
   panel.append(body, details);
   pane.append(panel);
 
-  const slots = (): HTMLButtonElement[] => [
-    ...body.querySelectorAll<HTMLButtonElement>('.inv-slot[data-key]'),
-  ];
+  // The hidden tab's slots are out of reach: no arrow, focus or drop goes to them.
+  const slots = (): HTMLButtonElement[] =>
+    [...body.querySelectorAll<HTMLButtonElement>('.inv-slot[data-key]')].filter(
+      (b) => !b.closest('[hidden]'),
+    );
   const slotOf = (key: string | null): HTMLButtonElement | undefined =>
     slots().find((b) => b.dataset.key === key);
   const items = (): InventoryItem[] =>
-    view ? [...view.squad.map((s) => s.gun), ...view.shown] : [];
+    view
+      ? [...view.squad.map((s) => s.gun), ...(tab === 'bench' ? benchItems(view) : view.shown)]
+      : [];
 
   // The grid: one Tab stop; arrows, Home and End move through every slot.
   body.addEventListener('keydown', (e) => {
@@ -1809,6 +2016,12 @@ export function createInventory(
       made = null;
       // The last move's line is about another gun now.
       say('');
+      // The picker is for one survivor: another slot closes it.
+      if (pickingFor !== null) {
+        pickingFor = null;
+        pickedTile = null;
+        drawPicker();
+      }
     }
     selected = key;
     hovered = null;
@@ -1841,6 +2054,11 @@ export function createInventory(
       return;
     }
     details.classList.remove('inv-details-select');
+    if (pickingFor !== null && view) {
+      details.replaceChildren(...pickDetails());
+      detailKey = null;
+      return;
+    }
     const all = items();
     const it = all.find((x) => x.key === (hovered ?? selected)) ?? null;
     const combine =
@@ -1858,13 +2076,32 @@ export function createInventory(
             },
           }
         : undefined;
+    // A bench survivor has Change gun and To stash instead of Equip on; one out on a patrol has
+    // their gun with them, so nothing (ID-242).
+    const seat = it && view ? view.bench.find((s) => s.gun.key === it.key) : undefined;
+    const away = !!it && it.key.startsWith('patrol:');
+    const canGear = !!opts.onEquip && !!view && listedCombine;
     const gear =
-      opts.onEquip && view && listedCombine
-        ? { view, move: (from: string, to: string) => act(dropAction(view!, from, to), from, to) }
+      canGear && !seat && !away
+        ? {
+            view: view!,
+            move: (from: string, to: string) => act(dropAction(view!, from, to), from, to),
+          }
         : undefined;
-    const upgrade = opts.onUpgrade ? { run: upgradeGunNow } : undefined;
-    const salvage = opts.onSalvage ? { run: salvageGunNow } : undefined;
-    details.replaceChildren(...detailsPanel(it, combine, gear, upgrade, salvage));
+    const bench =
+      canGear && seat
+        ? {
+            who: seat,
+            ui: { change: startPicking, toStash: (id: string) => equipBench(id, 'pistol') },
+          }
+        : undefined;
+    const upgrade = opts.onUpgrade && !away ? { run: upgradeGunNow } : undefined;
+    const salvage = opts.onSalvage && !away ? { run: salvageGunNow } : undefined;
+    details.replaceChildren(
+      // Only stash guns combine: a bench or patrol gun's details leave Combine out, Salvage
+      // already says to put it back in the stash first (ID-242).
+      ...detailsPanel(it, away || seat ? undefined : combine, gear, upgrade, salvage, bench),
+    );
     // A short window scrolls the details as one box: another gun's start at the top, while the
     // same gun redrawn (an upgrade) keeps its place.
     if (it?.key !== detailKey) details.scrollTop = 0;
@@ -1957,10 +2194,26 @@ export function createInventory(
     const focusedPick = body.contains(pickFocus ?? null)
       ? (pickFocus as HTMLElement).dataset.pick
       : undefined;
+    // Likewise a focused tab (ID-242) or picker tile.
+    const active = body.contains(doc.activeElement) ? (doc.activeElement as HTMLElement) : null;
+    const focusedTab = active?.closest<HTMLElement>('.inv-tab')?.dataset.tab;
+    const focusedTile = active?.closest<HTMLElement>('.inv-pick-tile')?.dataset.choice;
     // Where the selected gun stood in the stash as last drawn, so a gun that left (ID-214)
     // hands the selection to the one that moves into its place.
     const was = selected === null ? -1 : (view?.shown.findIndex((x) => x.key === selected) ?? -1);
     view = inventoryView(game, horde, canBuy, pick);
+    // The Bench tab goes with its last survivor (ID-242): back to the stash.
+    if (tab === 'bench' && !benchShown(view)) tab = 'stash';
+    // The picker is for a survivor on the bench, between hordes: dropped with a line when not.
+    let dropped: string | null = null;
+    if (pickingFor !== null) {
+      const here = view.bench.some((s) => s.id === pickingFor);
+      if (!here || !canCombine || !opts.onEquip || tab !== 'bench') {
+        dropped = !here ? `${pickingName} is no longer on the bench.` : GUNS_WAIT;
+        pickingFor = null;
+        pickedTile = null;
+      }
+    }
     // Select (ID-215) ends with an empty stash; only guns the grid shows stay ticked.
     if (view.stash.length === 0) picking = false;
     const can = new Set(tickable(view).map((it) => it.key));
@@ -1987,8 +2240,10 @@ export function createInventory(
         note,
         !!opts.onEquip && !picking,
         opts.onSalvageMany ? picking : undefined,
+        { tab, set: setTab },
       ),
     );
+    drawPicker();
     body.scrollTop = top;
     const keys = items().map((x) => x.key);
     const left = selected !== null && !game.armoury.some((w) => `stash:${w.uid}` === selected);
@@ -2004,13 +2259,22 @@ export function createInventory(
       // list stays put. Else the strongest stash gun; with an empty stash, the first
       // survivor's gun.
       const next = left && was >= 0 ? view.shown[Math.min(was, view.shown.length - 1)] : undefined;
-      selected = next?.key ?? view.shown[0]?.key ?? keys[0] ?? null;
+      // On the Bench tab, the first of its survivors (not the squad's).
+      const first = tab === 'bench' ? benchItems(view)[0] : view.shown[0];
+      selected = next?.key ?? first?.key ?? keys[0] ?? null;
     }
     if (hovered !== null && !keys.includes(hovered)) hovered = null;
     markSelected();
     drawDetails();
+    if (dropped !== null) say(dropped, true);
     if (focusedPick) {
       body.querySelector<HTMLElement>(`select[data-pick="${focusedPick}"]`)?.focus();
+    } else if (focusedTab) {
+      body.querySelector<HTMLElement>(`.inv-tab[data-tab="${focusedTab}"]`)?.focus();
+    } else if (focusedTile) {
+      [...body.querySelectorAll<HTMLElement>('.inv-pick-tile')]
+        .find((t) => t.dataset.choice === focusedTile)
+        ?.focus({ preventScroll: true });
     } else if (hadFocus && !pane.contains(doc.activeElement)) {
       slotOf(selected)?.focus({ preventScroll: true });
     }
@@ -2049,6 +2313,201 @@ export function createInventory(
     });
   }
 
+  /** The survivor `id` of the camp now, bench or squad. */
+  const defenderOf = (id: string): RosterDefender | undefined =>
+    listed ? [...listed.roster, ...(listed.reserve ?? [])].find((d) => d.id === id) : undefined;
+
+  /** Puts the Stash or Bench tab on show (ID-242); nothing is drawn again, only shown and hidden. */
+  function setTab(next: BenchTab): void {
+    if (!view || next === tab || (next === 'bench' && !benchShown(view))) return;
+    // Select (ID-215) is the stash's: the Bench tab ends it.
+    if (next === 'bench' && picking) setPicking(false);
+    scrolls[tab] = body.scrollTop;
+    tab = next;
+    pickingFor = null;
+    pickedTile = null;
+    confirming = null;
+    result = null;
+    made = null;
+    hovered = null;
+    say('');
+    // The tab's own first slot is selected, so its details show; a squad slot stays.
+    const first = next === 'bench' ? benchItems(view)[0] : view.shown[0];
+    if (next === 'bench' || selected?.startsWith('bench:') || selected?.startsWith('patrol:')) {
+      selected = first?.key ?? view.squad[0]?.gun.key ?? null;
+    }
+    for (const t of TABS) {
+      const b = body.querySelector<HTMLElement>(`.inv-tab[data-tab="${t.id}"]`);
+      const p = body.querySelector<HTMLElement>(`[data-panel="${t.id}"]`);
+      if (b && p) setTabOn(b, p, t.id === next);
+    }
+    drawPicker();
+    markSelected();
+    drawDetails();
+    body.scrollTop = scrolls[next];
+  }
+
+  /** Opens the gun picker for bench survivor `id` (ID-242), in the Bench tab. */
+  function startPicking(id: string): void {
+    const s = view?.bench.find((b) => b.id === id);
+    if (!s || !opts.onEquip || !listedCombine) return;
+    pickingFor = id;
+    pickingName = s.name;
+    pickedTile = null;
+    drawPicker();
+    drawDetails();
+    const box = body.querySelector<HTMLElement>('.inv-bench-picker');
+    // On the first gun (Back when there is none), so the keyboard is in the picker.
+    (
+      box?.querySelector<HTMLElement>('.inv-pick-tile') ??
+      box?.querySelector<HTMLElement>('.inv-pick-back')
+    )?.focus({ preventScroll: true });
+    // The head in view: on a phone the tiles can sit past the fold.
+    box?.querySelector<HTMLElement>('.inv-pick-head')?.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  /** Closes the picker; `focus` hands the keyboard back to the survivor's slot. */
+  function closePicker(focus: boolean): void {
+    pickingFor = null;
+    pickedTile = null;
+    drawPicker();
+    drawDetails();
+    if (focus) slotOf(selected)?.focus({ preventScroll: true });
+  }
+
+  /**
+   * The picker's place in the Bench tab: "Choose a gun for X", Back, and the guns they can
+   * hold (`gunTiles`, strongest first in their hands) as tiles with the change against the
+   * gun held. Drawn from the camp now, so a refresh recomputes it; tapping a tile only
+   * compares (the details have the verdict and Equip). Not slots: no arrow key moves them.
+   */
+  function drawPicker(): void {
+    const box = body.querySelector<HTMLElement>('.inv-bench-picker');
+    if (!box) return;
+    const s = pickingFor === null ? undefined : view?.bench.find((b) => b.id === pickingFor);
+    if (!s || !listed) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    const tiles = gunTiles(listed, s.id);
+    if (pickedTile !== null && !tiles.some((t) => t.choice === pickedTile)) pickedTile = null;
+    const head = el('div', 'inv-pick-head');
+    head.append(
+      el('h3', 'menu-heading', `Choose a gun for ${s.name}`),
+      button('Back', () => closePicker(true), 'inv-pick-back'),
+    );
+    const grid = list(
+      `Guns for ${s.name}`,
+      'inv-grid inv-pick-grid',
+      tiles.map((t) => {
+        const li = el('li', 'inv-cell');
+        const b = el('button', 'inv-slot inv-pick-tile');
+        b.type = 'button';
+        b.dataset.choice = t.choice;
+        b.dataset.rarity = t.rarity;
+        b.setAttribute('aria-label', t.label);
+        b.setAttribute('aria-pressed', String(t.choice === pickedTile));
+        b.append(...slotFace(item(t.held, `pick:${t.choice}`, '')));
+        b.addEventListener('click', () => {
+          pickedTile = t.choice;
+          for (const x of grid.querySelectorAll<HTMLElement>('.inv-pick-tile')) {
+            x.setAttribute('aria-pressed', String(x.dataset.choice === pickedTile));
+          }
+          drawDetails();
+        });
+        const change = el('span', 'inv-who', t.delta.text);
+        change.dataset.kind = t.delta.kind;
+        change.title = t.delta.words;
+        change.setAttribute('aria-hidden', 'true');
+        li.append(b, change);
+        return li;
+      }),
+    );
+    box.replaceChildren(
+      head,
+      el(
+        'p',
+        'menu-note',
+        `By DPS in ${s.name}'s hands · stash ${listed.armoury.length}/${stashCap(listed)}`,
+      ),
+      ...(tiles.length > 0
+        ? [grid]
+        : [el('p', 'menu-note', 'No other gun to choose: every horde won drops one.')]),
+    );
+    box.hidden = false;
+  }
+
+  /** The details while the picker is open: the verdict on the tile compared, and Equip. */
+  function pickDetails(): HTMLElement[] {
+    const info = el('div', 'inv-details-info');
+    const dock = el('div', 'inv-dock');
+    const s = view?.bench.find((b) => b.id === pickingFor);
+    const d = pickingFor === null ? undefined : defenderOf(pickingFor);
+    const tile =
+      pickingFor && listed
+        ? gunTiles(listed, pickingFor).find((t) => t.choice === pickedTile)
+        : undefined;
+    const go = button('Equip', () => equipBench(pickingFor!, pickedTile!), 'inv-pick-equip');
+    // Shown once a tile is picked: before that there is nothing to equip (ID-242).
+    go.hidden = go.disabled = !tile || !d;
+    if (tile && d) {
+      const cmp = gunCompare(heldGunOf(d), tile.held, squadSpec(d));
+      const name = el('p', 'inv-name', cmp.newName);
+      name.dataset.rarity = tile.rarity;
+      const verdict = el('p', 'inv-verdict', cmp.verdict);
+      verdict.dataset.kind = cmp.kind;
+      // A tile tap changes the comparison: read the new verdict out.
+      verdict.setAttribute('aria-live', 'polite');
+      info.append(
+        name,
+        verdict,
+        list(
+          'Against the gun held',
+          'inv-affixes',
+          cmp.rows.map((r) =>
+            el(
+              'li',
+              '',
+              `${r.label === 'DPS' ? `${d.name}'s DPS` : r.label}: ${r.now} → ${r.next} (${r.change})`,
+            ),
+          ),
+        ),
+      );
+      go.setAttribute('aria-label', `Equip ${cmp.newName} on ${d.name}`);
+    } else {
+      info.append(
+        el('p', 'menu-note', `Tap a gun to compare it with ${s?.gun.name ?? 'the gun held'}.`),
+      );
+    }
+    dock.append(go);
+    return [info, dock];
+  }
+
+  /**
+   * Gives bench survivor `id` gun `choice` (ID-242; 'pistol' takes theirs off): says what it
+   * did, or the core's reason; a refusal keeps the tab, the picker and the selection.
+   */
+  function equipBench(id: string, choice: GunChoice): void {
+    if (!view || !opts.onEquip) return;
+    const before = view;
+    const r = opts.onEquip(id, choice);
+    if (!r.ok) {
+      say(r.reason, true);
+      return;
+    }
+    pickingFor = null;
+    pickedTile = null;
+    confirming = null;
+    result = null;
+    made = null;
+    hovered = null;
+    selected = `bench:${id}`;
+    redraw();
+    say(equipMessage(before, { kind: 'equip', defender: id, choice }));
+    slotOf(selected)?.focus({ preventScroll: true });
+  }
+
   win.add({
     id: 'weapons',
     label: 'Weapons',
@@ -2065,6 +2524,10 @@ export function createInventory(
       pick = { ...DEFAULT_PICK };
       picking = false;
       ticked.clear();
+      tab = 'stash';
+      scrolls.stash = scrolls.bench = 0;
+      pickingFor = null;
+      pickedTile = null;
       say('');
       // On the gun asked for (ID-209) when it is in the stash, else the strongest.
       const want =
@@ -2099,6 +2562,10 @@ export function createInventory(
       if (press) {
         if (press.ghost) swallowClick = true;
         stopDrag();
+        return true;
+      }
+      if (pickingFor !== null) {
+        closePicker(true);
         return true;
       }
       if (picking && !confirming) {
