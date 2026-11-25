@@ -10,7 +10,12 @@ import { AREAS, DANGERS, MAP_PATROL, type Danger } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import {
   areaDrops,
+  bestHorde,
   patrolAt,
+  patrolRatio,
+  safePower,
+  teamPower,
+  teamRating,
   patrolReport,
   sendMapPatrol,
   takeReport,
@@ -40,6 +45,10 @@ import {
   MAP_ALL_OUT,
   MAP_BEST_FIT,
   MAP_EMPTY_BENCH,
+  MAP_HELP,
+  MAP_HELP_LABEL,
+  powerText,
+  safeLine,
   MAP_NOBODY_FREE,
   MAP_WAIT,
 } from './mapview.ts';
@@ -472,5 +481,122 @@ describe('World map words (ID-219)', () => {
     chip.set(60, 3);
     expect(el.textContent).toBe('Scrap 60 Med 3');
     expect(el.getAttribute('aria-label')).toBe('Scrap balance: 60. Medicine: 3');
+  });
+});
+
+describe('the World map tab: power, the Safe line and how it works (ID-246)', () => {
+  it('words power whole and the Safe line so it never contradicts the rating', () => {
+    expect(powerText(1234.9)).toBe('1,234');
+    expect(powerText(0)).toBe('0');
+    expect(safeLine(489.7, 701.2, false)).toBe('Power 489 / 702 for Safe');
+    expect(safeLine(701.1, 701.2, false)).toBe('Power 701 / 702 for Safe');
+    expect(safeLine(701.2, 701.2, true)).toBe('Power 701 · Safe from 701');
+    expect(safeLine(1500.4, 701.9, true)).toBe('Power 1,500 · Safe from 701');
+  });
+
+  it('each survivor shows the power Best fit ranks by; the team its Safe line, live', () => {
+    const state = { game: camp(4), now: NOW };
+    state.game = {
+      ...state.game,
+      reserve: state.game.reserve.map((d, i) => ({ ...d, xp: i * 40_000 })),
+    };
+    const { all, q } = mount(state);
+    all('.map-send')[0]!.click();
+    const rows = all('.map-pick-member');
+    rows.forEach((r, i) => {
+      const d = state.game.reserve[i]!;
+      expect(r.querySelector('.map-member-power')!.textContent).toBe(
+        `Power ${powerText(survivorPower(d))}`,
+      );
+    });
+    expect(q('.map-risk-power')).toBeNull();
+    const danger = state.game.map!.areas[0]!.danger;
+    const need = safePower(danger, bestHorde(state.game));
+    const line = (team: RosterDefender[]) =>
+      safeLine(teamPower(team), need, teamRisk(state.game, team, danger).rating === 'safe');
+    const [a, , , d] = state.game.reserve;
+    rows[0]!.click();
+    expect(q('.map-risk-power')!.textContent).toBe(line([a!]));
+    all('.map-pick-member')[3]!.click();
+    expect(q('.map-risk-power')!.textContent).toBe(line([a!, d!]));
+    // Unticked: the line follows, and goes with the last one.
+    all('.map-pick-member')[0]!.click();
+    expect(q('.map-risk-power')!.textContent).toBe(line([d!]));
+    all('.map-pick-member')[3]!.click();
+    expect(q('.map-risk-power')).toBeNull();
+  });
+
+  it('the ⓘ beside Best fit opens and closes the explanation, kept while the tab is open', () => {
+    const state = { game: camp(3), now: NOW };
+    const { all, q, win, tab } = mount(state);
+    all('.map-send')[0]!.click();
+    const info = () => q<HTMLButtonElement>('.map-info')!;
+    const help = () => q('#map-help')!;
+    expect(info().getAttribute('aria-label')).toBe(MAP_HELP_LABEL);
+    expect(info().getAttribute('aria-controls')).toBe(help().id);
+    expect(info().getAttribute('aria-expanded')).toBe('false');
+    expect(help().hidden).toBe(true);
+    info().click();
+    expect(info().getAttribute('aria-expanded')).toBe('true');
+    expect(help().hidden).toBe(false);
+    expect([...help().querySelectorAll('li')].map((li) => li.textContent)).toEqual([...MAP_HELP]);
+    expect(document.activeElement).toBe(info());
+    // Best fit redraws the picker: the explanation stays open.
+    q<HTMLButtonElement>('.map-best')!.click();
+    expect(help().hidden).toBe(false);
+    info().click();
+    expect(help().hidden).toBe(true);
+    // Closing the tab closes it.
+    info().click();
+    win.close();
+    tab.open();
+    all('.map-send')[0]!.click();
+    expect(help().hidden).toBe(true);
+    expect(info().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it("a card with a team out shows the team's own rating and odds, from the power it left with", () => {
+    const area = camp().map!.areas[0]!;
+    const base = areaDrops(area).map((d) => pct(d.chance));
+    // A weak team (below Safe) and a strong one (Safe): the power each left with decides.
+    for (const [power, want] of [
+      [0.01, 'dangerous'],
+      [1e9, 'safe'],
+    ] as const) {
+      const g0 = send(camp(), ['recruit-2', 'recruit-3']);
+      const p0 = g0.map!.patrols[0]!;
+      const g = { ...g0, map: { ...g0.map!, patrols: [{ ...p0, power }] } };
+      const state = { game: g, now: NOW + MIN };
+      const { all, tab } = mount(state);
+      const p = state.game.map!.patrols[0]!;
+      expect(teamRating(patrolRatio(p))).toBe(want);
+      const card = () => all('.map-area')[0]!;
+      const tag = `${DANGERS[area.danger].name} (team rating ${DANGERS[want].name}) · ${tripText(area.danger)}`;
+      expect(card().querySelector('.map-danger')!.textContent).toBe(tag);
+      const real = card().querySelector<HTMLElement>('.map-real')!;
+      expect(real.dataset.rating).toBe(want);
+      expect(real.title).toBe(`Team rating: ${DANGERS[want].name}`);
+      expect(real.querySelector('.sr-only')!.textContent).toBe('team rating ');
+      const odds = () => [...card().querySelectorAll('.map-drop-pct')].map((n) => n.textContent);
+      const shown = areaDrops(area, patrolRatio(p)).map((d) => pct(d.chance));
+      expect(odds()).toEqual(shown);
+      if (want === 'safe') expect(odds()).not.toEqual(base);
+      // Levels gained after it left move neither.
+      state.game = {
+        ...state.game,
+        reserve: state.game.reserve.map((d) => ({ ...d, xp: d.xp + 500_000 })),
+      };
+      tab.refresh();
+      expect(card().querySelector('.map-danger')!.textContent).toBe(tag);
+      expect(odds()).toEqual(shown);
+      // Back with the report waiting: still the team's own.
+      state.now = p.backAt;
+      tab.tick(p.backAt);
+      expect(card().dataset.ready).toBe('true');
+      expect(card().querySelector('.map-danger')!.textContent).toBe(tag);
+      expect(odds()).toEqual(shown);
+      // Cards with no team out keep the plain tag.
+      expect(all('.map-area')[1]!.querySelector('.map-real')).toBeNull();
+    }
   });
 });

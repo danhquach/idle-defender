@@ -2852,6 +2852,12 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   fewest free survivors that rate Safe, strongest first (ties in bench order); when no team
   of 4 or fewer can, the strongest team allowed. It is greyed between fights and with
   nobody free; the ticks can be changed by hand after.
+  **As built (ID-246):** each survivor in the picker shows their power (what Best fit
+  ranks by), and the team's rating has a Safe line under it: "Power 489 / 702 for Safe",
+  or "Power 760 · Safe from 701" once there (the line rounded up when short, down when over). An ⓘ beside Best fit opens a short
+  explanation of power, the rating, the odds and Best fit. An area with a team out shows the
+  team's own rating after the area's danger, "Safe (Risky)", and its drop odds at that team's
+  power, both from the power it left with, so later levels or guns don't move them.
 - **Away:** members on patrol can't fight, swap in, join the squad, be let go or
   combined, and earn no bench share. On the Roster (ID-234) each patrol out is a block of
   its members' cards, the soonest back first, under a header in the World map card's words:
