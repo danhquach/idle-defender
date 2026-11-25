@@ -8,7 +8,7 @@ import { recruit } from '../core/camp.ts';
 import { MODE_CARDS } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { modeCards } from '../core/hordeonly.ts';
-import { modeOf } from '../core/modes.ts';
+import { MODES, modeOf } from '../core/modes.ts';
 import { decodeSave, encodeSave, SAVE_VERSION } from './save.ts';
 import { NOW } from './testing.ts';
 
@@ -243,10 +243,16 @@ describe('save: difficulty modes (ID-218)', () => {
     const nm = camp({ hordeNumber: 60, modes: { nightmare: 31 } });
     expect(lv(80, nm)).not.toBeNull();
     expect(lv(81, nm)).toBeNull();
-    // Hell 30 beaten 29: effective 109 (over Nightmare 51 beaten 50: effective 100).
+    // Hell 30 beaten 29: effective 129 (over Nightmare 51 beaten 50: effective 100).
     const hell = camp({ hordeNumber: 60, modes: { nightmare: 51, hell: 30 } });
-    expect(lv(109, hell)).not.toBeNull();
-    expect(lv(110, hell)).toBeNull();
+    expect(lv(129, hell)).not.toBeNull();
+    expect(lv(130, hell)).toBeNull();
+    // The top Hell horde a save can hold (ID-225): its effective number bounds the level, and
+    // the reader's own cap (MAX_HORDE + the Hell offset) sits one above it.
+    const top = camp({ hordeNumber: 60, modes: { nightmare: 51, hell: 100_000 } });
+    expect(lv(100_000 + MODES.hell.offset - 1, top)).not.toBeNull();
+    expect(lv(100_000 + MODES.hell.offset, top)).toBeNull();
+    expect(lv(100_000 + MODES.hell.offset + 1, top)).toBeNull();
     // Well past any bound.
     expect(lv(1e9, hell)).toBeNull();
     expect(lv(100_000_000, nm)).toBeNull();

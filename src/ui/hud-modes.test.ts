@@ -130,6 +130,16 @@ describe('a mode’s screens (ID-218)', () => {
     expect(hordePicker(nm(9)).options[0]!.label).not.toContain('Boss');
   });
 
+  it('Hell’s picker reads the Hell offset: Hell 1 asks about what Nightmare 50 did (ID-225)', () => {
+    const p = hordePicker(camp({ mode: 'hell', modes: { nightmare: 51, hell: 2 } }));
+    const first = p.options.at(-1)!;
+    expect(first.horde).toBe(1);
+    expect(first.power.rec).toBe(recommendedPower(effHorde('hell', 1), 'hell'));
+    const ratio = first.power.rec / recommendedPower(effHorde('nightmare', 50), 'nightmare');
+    expect(ratio).toBeGreaterThan(0.9);
+    expect(ratio).toBeLessThan(1.2);
+  });
+
   it('a first clear’s result moves on to the mode’s next horde', () => {
     const g = nm(3);
     const s = { ...startSquadHorde(g, 1, 0), outcome: 'won' as const, wave: 5 };

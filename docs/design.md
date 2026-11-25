@@ -3674,17 +3674,23 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   30, then Endless. Radio parts, Normal's boss cards and the evacuation ending are
   Normal's only; a higher mode's boss hordes unlock mode cards instead (below).
 - **Strength: the effective horde.** A mode's Horde n fights as Normal's Horde n
-  plus an offset: Normal 0, Nightmare 50, Hell 80 (a multiple of 10, so boss
-  hordes and the boss skill cycle keep their places). Nightmare was 40 until
+  plus an offset: Normal 0, Nightmare 50, Hell 100 (a multiple of 10, so boss
+  hordes keep their places). Nightmare was 40 until
   ID-223: its Hordes 1–7 then asked less Recommended Power than Normal Horde 50,
   which the player had already beaten; at 50 a new mode starts at the player's
-  edge, and Nightmare 30 (effective 80) sits about level with Hell 1 (81).
+  edge. Hell was 80 until ID-225: after ID-223 its Horde 1 (effective 81) sat
+  about 19 hordes under Nightmare 50 (effective 100), the wall that opens it; at
+  100 Hell 1 (effective 101) asks about what Nightmare 50 asked (Recommended
+  Power about 1.1×, as Nightmare 1 asks about 1.07× Normal 50's). A save
+  already in Hell keeps its Hell horde, which now fights 20 effective hordes
+  harder (and drops guns 20 levels higher).
   Enemy count and HP, waves, pace, swarms and the mini-bosses follow that
   number; so do the gun
   level a drop comes at, XP and Scrap. A per-mode HP factor on top is the
-  tuning knob (`MODES.hpScale`: Nightmare 1.16, 1.12 before ID-224; Hell 1),
+  tuning knob (`MODES.hpScale`: Nightmare 1.16, 1.12 before ID-224; Hell 1.4, 1 before ID-225),
   and `MODES.recBoss` on a boss horde's Recommended Power (Normal and Nightmare 1,
-  Hell 1.2: at 1.1 the four-boss Hell 30 beat a squad at 130% of it on 2 of 5 seeds, ID-222).
+  Hell 1.3: at 1.1 the four-boss Hell 30 beat a squad at 130% of it on 2 of 5 seeds, ID-222,
+  so 1.2; with ID-225's `hpScale` 1.4 it did again at 1.2, so 1.3, which wins 5 of 5).
 - **Bosses.** A boss horde (every 10th of the mode's own) brings as many bosses
   as Normal's rule gives its own number (Horde 10: 1, 20: 2, 30 and on: 3),
   Hell one more (up to `BOSSES.max` + 1 = 4); each has the HP of its effective
@@ -3703,9 +3709,13 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   effective horde, so the meters and bands stay advice for the mode in play.
 - **Hell's boss skills (ID-222, as built; starting points for the balance pass).**
   Each Hell boss has its three skills and one of Enrage, Shield and Poison pool
-  (`HELL_SKILLS`), boss k of Hell Horde `h` taking number `(k + (h + 80) / 10) mod 3`:
+  (`HELL_SKILLS`), boss k of Hell Horde `h` taking number `(k + (h + 100) / 10) mod 3`:
   with 3 bosses or fewer no two share one, with 4 (Hell 30 on) exactly one is
-  used twice, and it rotates by horde. Each winds up for `BOSS_SKILL.windUp` =
+  used twice, and it rotates by horde. Since ID-225 (offset 100) Hell 10's two
+  bosses take Poison and Enrage, Hell 20's three Enrage, Shield and Poison, and
+  Hell 30's four Shield, Poison, Enrage and Shield (at offset 80: Enrage and
+  Shield, then Shield, Poison and Enrage, then Poison twice); the three-skill
+  sets (`BOSSES.sets`, read off the effective horde) moved two sets on too. Each winds up for `BOSS_SKILL.windUp` =
   1.2 s with a glow in its colour (Enrage red, Shield ice blue, Poison
   yellow-green) and the boss's pose, like the older skills, and shows in the boss
   bar's name and cue; the bar lists a Hell skill first, so on a phone the
@@ -3756,18 +3766,22 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   Horde 50's Recommended Power (gun level 63), not gearing up between fights, is stopped by Nightmare Horde 20
   on most (measured: 20 of 20, at Hordes 6–11 since ID-224, 9–17 before; gearing up on Nightmare's drops it was
   stopped on only 4 of 20, accepted: a strong squad winning is fine); a squad well over
-  Recommended Power does not lose repeatedly at Nightmare 20 and 30 or Hell 30
+  Recommended Power does not lose repeatedly at Nightmare 20 and 30
   (`balance/modes.test.ts`). `MODES.nightmare.hpScale` stayed 1.12 (no wall at
   Nightmare 30) until ID-224, which raised it to 1.16: the mode tests field a squad of 8, whose
   steeper late Normal (`SQUAD_BIG_HP`) moved the hold level up and Nightmare 1 to 16 of 20 at
   1.12, over the 70% cap; at 1.16 it is 9 of 20. The check swings by about 4 seeds across
   knobs at the same strength (the hold level is a 5-seed bisect), so it is not finely tuned. Before ID-223 (offset 40) the check was Nightmare 1–10 on 60% of seeds
-  and stopped by Nightmare 30. Hell (ID-222):
-  a squad that holds Nightmare Horde 50 wins Hell Hordes 1-10 at the first try on at
-  least 60% of 20 seeds and is stopped by Hell Horde 30 on most, and a squad well over
-  Recommended Power does not lose repeatedly at Hell 10 and 20 (`balance/hell.test.ts`;
-  the retune order is `MODES.hell.hpScale`, the skill numbers, the offset in steps of
-  10, then `recBoss`). Normal's numbers are held by a golden test
+  and stopped by Nightmare 30. Hell starts where Nightmare ends (ID-225):
+  a squad that just holds Nightmare Horde 50 (gun level 107) wins Hell Horde 1 at the
+  first try on 30–70% of 20 seeds (measured: 12 of 20 at `hpScale` 1.4; 20 of 20 at 1,
+  17 at 1.2, 14 at 1.3, 8 at 1.5) and, gearing up between fights, is stopped before Hell
+  Horde 30 on most (measured: 20 of 20, all by Hell 3: it stands at its edge, as it
+  should); a squad at 130% of Recommended Power does not lose repeatedly at Hell 10, 20
+  and 30 (5 of 5 each; `balance/hell.test.ts`; the retune order is
+  `MODES.hell.hpScale`, the skill numbers, the offset in steps of 10, then `recBoss`).
+  Before ID-225 (offset 80) the check was Hell 1–10 on 60% of seeds and stopped by
+  Hell 30, with Hell 30's no-wall check in `balance/modes.test.ts`. Normal's numbers are held by a golden test
   (`golden-normal.test.ts`).
 
 ### Balance pass *(ID-102)*
@@ -5012,7 +5026,8 @@ original outline.
   `STASH_CAP` (40) are the base caps. A bigger squad's late Normal (ID-224):
   `SQUAD_BIG_HP` { from 30, to 50, growth 1.0725 }, with `MODES.nightmare.hpScale`
   1.16 (1.12 before) to keep Nightmare 1 in its band for the squad of 8 the mode
-  tests field.
+  tests field. Hell (ID-225): `MODES.hell` offset 100 (80 before), `hpScale` 1.4
+  (1 before), `recBoss` 1.3 (1.2 before).
   The balance tests run apart from the unit tests (`npm run test:balance`)
   and keep their fights' results in `.cache/balance/`, keyed by the
   simulation's code, Node's version and the test file (ID-142), so they

@@ -62,7 +62,7 @@ describe('the model (ID-218)', () => {
     expect(localHorde(g, 'normal')).toBe(60);
     expect(localHorde(g, 'hell')).toBe(1);
     expect(effHorde('nightmare', 5)).toBe(55);
-    expect(effHorde('hell', 5)).toBe(85);
+    expect(effHorde('hell', 5)).toBe(105);
     expect(beatenIn(g)).toBe(4);
     expect(topBeaten(g)).toBe(59);
     expect(topBeaten({ ...g, modes: { nightmare: 30 } })).toBe(29 + 50);
@@ -232,7 +232,7 @@ describe('Scrap (ID-218)', () => {
     expect(winScrap(10)).toBe(SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * 10);
     const pay = (n: number): number => SQUAD_SCRAP.base + SQUAD_SCRAP.perHorde * n;
     expect(winScrap(51, 'nightmare')).toBe(Math.round(pay(51) * 1.5));
-    expect(winScrap(81, 'hell')).toBe(pay(81) * 2);
+    expect(winScrap(101, 'hell')).toBe(pay(101) * 2);
   });
 });
 
@@ -271,7 +271,7 @@ describe('a fight on a mode (ID-218)', () => {
       0,
     );
     expect(hell.bosses.length).toBe(4);
-    expect(hell.hordeNumber).toBe(110);
+    expect(hell.hordeNumber).toBe(130);
   });
 
   it('a win moves only the mode’s horde on, pays its Scrap, and drops the mode’s uid at the effective level', () => {
@@ -334,8 +334,20 @@ describe('a fight on a mode (ID-218)', () => {
     // Nightmare 50 is Normal 100 with the same three bosses, at the mode's HP factor; Hell's Horde 10 has two, not three.
     expect(hordeHp(100, 'nightmare') / hordeHp(100)).toBeCloseTo(MODES.nightmare.hpScale, 4);
     expect(recommendedPower(100, 'nightmare')).toBeGreaterThan(recommendedPower(100));
-    expect(hordeHp(90, 'hell')).toBeLessThan(hordeHp(90));
+    expect(modeBosses('hell', 10)).toHaveLength(2);
+    expect(modeBosses('normal', effHorde('hell', 10)).filter((b) => !b.elite)).toHaveLength(3);
     expect(recommendedPower(40)).toBe(recommendedPower(40, 'normal'));
+  });
+
+  it('Hell starts where Nightmare ends (ID-225): Hell 1 asks about what Nightmare 50 asks', () => {
+    expect(effHorde('hell', 1)).toBe(effHorde('nightmare', 50) + 1);
+    for (const size of [1, 4, 8]) {
+      const ratio =
+        recommendedPower(effHorde('hell', 1), 'hell', size) /
+        recommendedPower(effHorde('nightmare', 50), 'nightmare', size);
+      expect(ratio, `squad of ${size}`).toBeGreaterThan(0.9);
+      expect(ratio, `squad of ${size}`).toBeLessThan(1.2);
+    }
   });
 
   it('a gun dropped on a mode is a real gun: level 51 and up', () => {

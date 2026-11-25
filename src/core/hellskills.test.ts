@@ -12,7 +12,7 @@ import {
   windingUp,
   type HordeState,
 } from './horde.ts';
-import { modeBosses } from './modes.ts';
+import { effHorde, modeBosses } from './modes.ts';
 import { enemy, horror, setup } from './testing.ts';
 
 /** Row 4's middle (see boss.test.ts). */
@@ -38,14 +38,15 @@ describe('Enrage', () => {
   it('has no clock until the boss is hurt, and never one that is NaN', () => {
     const s = newHorde(1, {
       ...setup(),
-      hordeNumber: 90,
-      bosses: modeBosses('hell', 10),
+      // Hell 20: three bosses, one with each Hell skill (ID-225 order).
+      hordeNumber: effHorde('hell', 20),
+      bosses: modeBosses('hell', 20),
     });
     s.wave = s.waveCount;
     s.toSpawn = 0;
     const t = tick(s, STEP);
     const bosses = t.enemies.filter((e) => e.horror);
-    expect(bosses).toHaveLength(2);
+    expect(bosses).toHaveLength(3);
     for (const b of bosses) {
       for (const at of Object.values(b.horror!.next)) expect(Number.isFinite(at)).toBe(true);
       expect(b.horror!.next.enrage).toBeUndefined();
