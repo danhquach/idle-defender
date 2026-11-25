@@ -61,6 +61,15 @@ export type Track = 'camp' | 'horde';
 
 /** The overlap cap: per cue, at most `voices` at once, and none closer than `gap` s. */
 export const LIMIT = { voices: 3, gap: 0.04 } as const;
+/**
+ * Real seconds a cue stays quiet after it last started (ID-245), checked in the engine on the
+ * audio clock: a run of hits is one heartbeat. A light thump also waits out a heavy one, but
+ * a heavy start cuts through a recent light one.
+ */
+export const CUE_GAP: Readonly<Partial<Record<Cue, number>>> = {
+  adrenaline: 8,
+  'adrenaline-heavy': 8,
+};
 /** Seconds a crossfade between tracks takes, and how far ahead music is scheduled. */
 export const FADE = 1.5;
 /** How fast the horde track goes when a won or lost sting plays, and how long the sting lasts. */
@@ -174,6 +183,16 @@ function hiss(
   src.connect(f).connect(g).connect(v.out);
   src.start(t);
   src.stop(t + dur + 0.02);
+}
+
+/**
+ * One heartbeat thump (ID-245): a falling sine, a triangle layer an octave up so it is heard
+ * on a small speaker, and a 3 ms low-passed click for the knock; `vol` scales all three.
+ */
+function thump(v: Voice, start: number, vol: number): void {
+  tone(v, 'sine', 70, 40, start, 0.18, 0.5 * vol);
+  tone(v, 'triangle', 140, 90, start, 0.1, 0.3 * vol);
+  hiss(v, 'lowpass', 800, start, 0.003, 0.3 * vol);
 }
 
 const note = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
@@ -299,6 +318,13 @@ const OWN: Record<Exclude<Cue, Reused>, Recipe> = {
     length: 1,
     play: (v) => (hiss(v, 'lowpass', 900, 0, 0.9, 0.3), tone(v, 'triangle', 420, 90, 0, 0.8, 0.22)),
   },
+  // Adrenaline starting (ID-245), synthesized: one heartbeat thump, or two a beat apart and
+  // louder for the heavy boost.
+  adrenaline: { length: 0.2, play: (v) => thump(v, 0, 1) },
+  'adrenaline-heavy': {
+    length: 0.4,
+    play: (v) => (thump(v, 0, 1.2), thump(v, 0.16, 1.2)),
+  },
   // A swarm wave starting (ID-099, ID-121): a siren, three rising whoops over a low drone,
   // louder and longer than the two blares it replaced.
   swarm: {
@@ -405,6 +431,8 @@ export class SoundEngine {
   private buses: Partial<Record<'music' | 'effects', GainNode>> = {};
   private noise: AudioBuffer | null = null;
   private limiter = new VoiceLimiter();
+  /** The audio-clock time each gapped cue (`CUE_GAP`) last started. */
+  private startedAt = new Map<Cue, number>();
   private playing: Playing[] = [];
   private want: Track | null = null;
   /** The tab is hidden: effects are dropped until it shows again. */
@@ -544,7 +572,15 @@ export class SoundEngine {
     const r = RECIPES[cue];
     const rec = this.buffers.get(cue);
     const length = rec ? rec.duration * SAMPLE.heard : r.length;
-    if (length <= 0 || !this.limiter.take(cue, ctx.currentTime, length)) return;
+    if (length <= 0) return;
+    const gap = CUE_GAP[cue];
+    if (gap !== undefined) {
+      const blockers: Cue[] = cue === 'adrenaline' ? ['adrenaline', 'adrenaline-heavy'] : [cue];
+      if (blockers.some((c) => ctx.currentTime - (this.startedAt.get(c) ?? -Infinity) < gap))
+        return;
+    }
+    if (!this.limiter.take(cue, ctx.currentTime, length)) return;
+    if (gap !== undefined) this.startedAt.set(cue, ctx.currentTime);
     if (!rec) {
       r.play({ ctx, out, at: ctx.currentTime, noise: this.noise });
       return;

@@ -159,7 +159,12 @@ export type HigherMode = 'nightmare' | 'hell';
  * boss skill, never flat damage or HP; offered only in a higher mode, once unlocked.
  */
 export type ModeCard =
-  'suppressing-fire' | 'cauterise' | 'momentum' | 'gas-masks' | 'breaching-rounds' | 'tranq-darts';
+  | 'suppressing-fire'
+  | 'cauterise'
+  | 'momentum'
+  | 'gas-masks'
+  | 'breaching-rounds'
+  | 'adrenaline-rush';
 /**
  * The card a mode's boss horde 10, 20 and 30 unlocks on its first clear (ID-222), for that
  * mode and every one above it. Read off the mode's saved progress, never stored.
@@ -167,7 +172,7 @@ export type ModeCard =
 export const MODE_UNLOCKS: Readonly<Record<HigherMode, Readonly<Record<10 | 20 | 30, ModeCard>>>> =
   {
     nightmare: { 10: 'suppressing-fire', 20: 'cauterise', 30: 'momentum' },
-    hell: { 10: 'gas-masks', 20: 'breaching-rounds', 30: 'tranq-darts' },
+    hell: { 10: 'gas-masks', 20: 'breaching-rounds', 30: 'adrenaline-rush' },
   };
 /** Every mode card, in unlock order. */
 export const MODE_CARDS: readonly ModeCard[] = [
@@ -176,7 +181,7 @@ export const MODE_CARDS: readonly ModeCard[] = [
   'momentum',
   'gas-masks',
   'breaching-rounds',
-  'tranq-darts',
+  'adrenaline-rush',
 ];
 /**
  * The campaign's goal (ID-127, design §11): each boss horde's first clear yields a radio
@@ -1463,17 +1468,22 @@ export const CARD = {
    * bullet hit is under fire for `seconds`: it moves `slow` slower (a boss or mini-boss
    * `bossSlow`), and a boss's skill clocks run `recharge` slower, a wind-up `windUp` slower.
    * Hits under fire don't extend it, and once it ends that enemy can't be put under fire again
-   * for `cooldown` s (at most `seconds` in every `seconds + cooldown`). Cauterise: a hit stops
-   * a Regen boss healing for `seconds`. Momentum: a boss's death reloads every gun and returns one
-   * throw. Gas Masks: Poison pools hurt survivors `cut` less. Breaching Rounds: squad bullets
-   * take back `share` of Armour plates' and Shield's cut. Tranq Darts: a hit takes Enrage's
-   * speed off an enraged boss for `seconds`.
+   * for `cooldown` s (at most `seconds` in every `seconds + cooldown`). Cauterise (ID-245): a
+   * squad bullet's hit scorches an enemy for `seconds` (a Regen boss `bossSeconds`): it takes
+   * `taken` more damage from every source, and a scorched Regen boss can't heal. A scorch
+   * doesn't stack. Momentum (ID-245): every `kills` kills reload every gun, and a boss's or
+   * mini-boss's death returns one throw each. Gas Masks: Poison pools hurt survivors `cut`
+   * less. Breaching Rounds: squad bullets take back `share` of Armour plates' and Shield's
+   * cut. Adrenaline (`rush`, ID-245): when a survivor loses HP the squad fires `rate` faster
+   * for `seconds`; a hit of `heavy` of that survivor's max HP gives `heavyRate`; the view
+   * fades the glow over the last `fade` s.
    */
   suppress: { seconds: 1, cooldown: 2, slow: 0.15, bossSlow: 0.05, recharge: 0.3, windUp: 0.5 },
-  cauterise: { seconds: 3 },
+  cauterise: { seconds: 3, bossSeconds: 5, taken: 0.1 },
+  momentum: { kills: 25 },
+  rush: { seconds: 3, rate: 0.2, heavyRate: 0.35, heavy: 0.1, fade: 0.5 },
   gasMasks: { cut: 0.6 },
   breach: { share: 0.5 },
-  tranq: { seconds: 3 },
   /** Enemies on the field before Flashbang and Molotov are offered (ID-139: a group to throw at). */
   crowd: 12,
   /**

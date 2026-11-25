@@ -68,6 +68,7 @@ import { BLAST, FIREBALL } from './explosion.ts';
 import { SPIT } from './spit.ts';
 import { CUTS, DEATH, deathOf, type Cut, type Death } from './death.ts';
 import {
+  BOSS_LOOK,
   BUBBLE,
   bubbleLayout,
   bubbleLines,
@@ -5241,5 +5242,154 @@ describe('Hell boss skills (ID-222)', () => {
     s.enemies[0]!.horror!.longer = { poison: 2 };
     expect(() => drawScene(r.ctx, r.art, s, CAM, VIEW)).not.toThrow();
     expect(r.drawn).toContain(ENEMY_ART.horror.walk[1]);
+  });
+});
+
+// ID-245: Cauterise's scorch rings and Adrenaline's glow (code-drawn: no new art).
+describe('Cauterise and Adrenaline on the canvas (ID-245)', () => {
+  /** A recorder that also notes each stroke's colour, dash and alpha, and each fill's colour and blend. */
+  function marks() {
+    const r = recorder();
+    const c = r.ctx as unknown as Record<string, unknown> & { globalAlpha: number };
+    let dash: number[] = [];
+    const strokes: { style: unknown; dash: number[]; alpha: number }[] = [];
+    const fills: { style: unknown; op: unknown; alpha: number }[] = [];
+    c.setLineDash = (d: number[]) => {
+      dash = d;
+    };
+    c.stroke = () => strokes.push({ style: c.strokeStyle, dash, alpha: c.globalAlpha });
+    c.fill = () =>
+      fills.push({ style: c.fillStyle, op: c.globalCompositeOperation, alpha: c.globalAlpha });
+    return { r, strokes, fills };
+  }
+  const base = (): HordeState => {
+    const g = newGame();
+    return startHorde(g, 1, g.roster[0]!.id, 0, 0);
+  };
+  const scene = (extra: Partial<Scene> = {}): Scene => ({ ...blank(), time: 5, ...extra });
+
+  it('a crowd of scorched enemies gets one dashed stroke in all; a boss gets its own; none unscorched', () => {
+    const crowd = scene();
+    const s = crowd as unknown as HordeState;
+    for (let i = 0; i < 20; i++)
+      enemy(s, { x: 700 + 30 * (i % 5), y: 200 + 40 * Math.floor(i / 5), scorchUntil: 9 });
+    const m = marks();
+    drawScene(m.r.ctx, m.r.art, crowd, CAM, VIEW);
+    const rings = m.strokes.filter((k) => k.style === BOSS_LOOK.scorchRing);
+    expect(rings).toHaveLength(1);
+    expect(rings[0]!.dash.length).toBeGreaterThan(0);
+    expect(rings[0]!.alpha).toBeCloseTo(0.6, 9);
+    // Expired: no ring at all.
+    const over = marks();
+    drawScene(over.r.ctx, over.r.art, { ...crowd, time: 9.5 }, CAM, VIEW);
+    expect(over.strokes.filter((k) => k.style === BOSS_LOOK.scorchRing)).toHaveLength(0);
+    // A scorched boss keeps its solid orange ring and fill, and adds no dashed one.
+    const bossScene = scene();
+    const b = horror(
+      bossScene as unknown as HordeState,
+      ['roar'],
+      { x: 800, y: 300 },
+      { nextAt: 50 },
+    );
+    b.scorchUntil = 9;
+    const bm = marks();
+    drawScene(bm.r.ctx, bm.r.art, bossScene, CAM, VIEW);
+    expect(bm.strokes.filter((k) => k.style === BOSS_LOOK.scorchRing)).toHaveLength(0);
+    expect(bm.strokes.some((k) => k.style === BOSS_LOOK.scorch && k.dash.length === 0)).toBe(true);
+  });
+
+  /** A scene with a gunner on the ground and a boost `rush`, at fight time 5. */
+  const boosted = (rush: HordeState['rush'], extra: Partial<Scene> = {}): Scene => {
+    const d = { ...base().defenders[0]!, x: 300, y: 300, walking: true };
+    return scene({ defenders: [d], rush, ...extra });
+  };
+  const glow = (m: ReturnType<typeof marks>) =>
+    m.fills.filter(
+      (f) => f.op === 'lighter' && (f.style === BOSS_LOOK.rush || f.style === BOSS_LOOK.rushHeavy),
+    );
+  const lines = (m: ReturnType<typeof marks>) =>
+    m.strokes.filter((k) => k.style === BOSS_LOOK.rush || k.style === BOSS_LOOK.rushHeavy);
+
+  it('a boosted survivor glows amber, a heavy boost red-orange, with speed lines at the gun', () => {
+    const light = marks();
+    drawScene(light.r.ctx, light.r.art, boosted({ at: 4, by: 'a', until: 7 }), CAM, VIEW);
+    expect(glow(light).map((f) => f.style)).toEqual([BOSS_LOOK.rush]);
+    expect(lines(light).map((k) => k.style)).toEqual([BOSS_LOOK.rush]);
+    const heavy = marks();
+    drawScene(
+      heavy.r.ctx,
+      heavy.r.art,
+      boosted({ at: 4, by: 'a', heavy: true, until: 7, heavyUntil: 7 }),
+      CAM,
+      VIEW,
+    );
+    expect(glow(heavy).map((f) => f.style)).toEqual([BOSS_LOOK.rushHeavy]);
+    expect(lines(heavy).map((k) => k.style)).toEqual([BOSS_LOOK.rushHeavy]);
+  });
+
+  it('fades over the last 0.5 s, and is gone when the boost is; none without one', () => {
+    const at = (time: number) => {
+      const m = marks();
+      drawScene(m.r.ctx, m.r.art, boosted({ at: 4, by: 'a', until: 7 }, { time }), CAM, VIEW);
+      return glow(m);
+    };
+    const full = at(5)[0]!.alpha;
+    const fading = at(6.75)[0]!.alpha;
+    expect(fading).toBeLessThan(full * 0.6);
+    expect(fading).toBeGreaterThan(0);
+    expect(at(7)).toHaveLength(0);
+    const none = marks();
+    drawScene(none.r.ctx, none.r.art, boosted(undefined), CAM, VIEW);
+    expect(glow(none)).toHaveLength(0);
+    expect(lines(none)).toHaveLength(0);
+  });
+
+  it('a light refresh during a heavy boost does not fade the glow: alpha 1 when the heavy window is 0.25 s from its end', () => {
+    const m = marks();
+    drawScene(
+      m.r.ctx,
+      m.r.art,
+      boosted({ at: 4, by: 'a', heavy: true, until: 9, heavyUntil: 7 }, { time: 6.75 }),
+      CAM,
+      VIEW,
+    );
+    const [g] = glow(m);
+    expect(g!.style).toBe(BOSS_LOOK.rushHeavy);
+    // Pulse is 0.3 ± 0.1, at full alpha: well above what a 0.25 s fade would leave.
+    expect(g!.alpha).toBeGreaterThanOrEqual(0.2);
+  });
+
+  it('is steady with Reduce motion: the same alpha at any time', () => {
+    const alpha = (time: number) => {
+      const m = marks();
+      const anim = new Animator();
+      anim.reduced = true;
+      drawScene(
+        m.r.ctx,
+        m.r.art,
+        boosted({ at: 0, by: 'a', until: 99 }, { time }),
+        CAM,
+        VIEW,
+        null,
+        null,
+        null,
+        anim,
+      );
+      return glow(m)[0]!.alpha;
+    };
+    expect(alpha(5.3)).toBe(alpha(11.9));
+  });
+
+  it('a survivor pulled back in a swap never glows', () => {
+    const d = { ...base().defenders[0]!, x: 300, y: 300 };
+    const m = marks();
+    drawScene(
+      m.r.ctx,
+      m.r.art,
+      scene({ leaving: [d], rush: { at: 4, by: 'a', until: 7 } }),
+      CAM,
+      VIEW,
+    );
+    expect(glow(m)).toHaveLength(0);
   });
 });

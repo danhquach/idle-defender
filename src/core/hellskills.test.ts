@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { BOSS_SKILL, ENEMIES, SEGMENT_HEIGHT, STEP } from './data.ts';
 import {
   clearFight,
-  enrageFast,
+  enraged,
   hitDamage,
   newHorde,
   poisonTarget,
@@ -140,13 +140,10 @@ describe('Enrage', () => {
     expect(wall(true)).toBeCloseTo(hit * (1 + BOSS_SKILL.enrage.damage), 9);
   });
 
-  it('an enraged boss is only as fast as Tranq Darts lets it, its hits stay hard', () => {
+  it('an enraged boss stays enraged for good', () => {
     const s = quiet();
-    const h = horror(s, 'enrage', {}, { enraged: true });
-    expect(enrageFast(s, h)).toBe(true);
-    h.horror!.tranqUntil = 3;
-    expect(enrageFast(s, h)).toBe(false);
-    expect(enrageFast({ time: 3 }, h)).toBe(true);
+    expect(enraged(horror(s, 'enrage', {}, { enraged: true }))).toBe(true);
+    expect(enraged(horror(s, 'enrage', {}))).toBe(false);
   });
 });
 

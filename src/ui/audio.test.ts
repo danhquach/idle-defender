@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   COMPRESSOR,
+  CUE_GAP,
   FADE,
   gainOf,
   LIMIT,
@@ -557,6 +558,71 @@ describe('Hell’s boss skill cues (ID-222)', () => {
       e.play(cue);
       expect(fake.started.length, cue).toBeGreaterThan(started);
     }
+  });
+});
+
+describe('Adrenaline thumps (ID-245)', () => {
+  it('both are synthesized, with the thump’s three layers; the heavy one is two, louder', async () => {
+    const { e, fake } = engine();
+    e.unlock();
+    await settle();
+    const starts = (cue: 'adrenaline' | 'adrenaline-heavy'): number[] => {
+      const from = fake.started.length;
+      const at = fake.currentTime;
+      e.play(cue);
+      fake.currentTime += 20;
+      return fake.started.slice(from).map((t) => t - at);
+    };
+    const light = starts('adrenaline');
+    expect(light).toHaveLength(3);
+    const heavy = starts('adrenaline-heavy');
+    expect(heavy).toHaveLength(6);
+    expect(Math.max(...heavy)).toBeCloseTo(0.16, 5);
+  });
+
+  it('light, then light 4 s later: one thump; light, then heavy 4 s later: both; heavy, then heavy: one', async () => {
+    const run = async (cues: ['adrenaline' | 'adrenaline-heavy', number][]): Promise<number> => {
+      const { e, fake } = engine();
+      e.unlock();
+      await settle();
+      const from = fake.started.length;
+      for (const [cue, after] of cues) {
+        fake.currentTime += after;
+        e.play(cue);
+      }
+      return fake.started.length - from;
+    };
+    expect(
+      await run([
+        ['adrenaline', 0],
+        ['adrenaline', 4],
+      ]),
+    ).toBe(3);
+    expect(
+      await run([
+        ['adrenaline', 0],
+        ['adrenaline-heavy', 4],
+      ]),
+    ).toBe(3 + 6);
+    expect(
+      await run([
+        ['adrenaline-heavy', 0],
+        ['adrenaline-heavy', 4],
+      ]),
+    ).toBe(6);
+    // A light one is also held off by a recent heavy one, and both play again after the gap.
+    expect(
+      await run([
+        ['adrenaline-heavy', 0],
+        ['adrenaline', 4],
+      ]),
+    ).toBe(6);
+    expect(
+      await run([
+        ['adrenaline', 0],
+        ['adrenaline', CUE_GAP.adrenaline! + 0.1],
+      ]),
+    ).toBe(6);
   });
 });
 

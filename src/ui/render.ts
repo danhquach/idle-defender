@@ -40,7 +40,6 @@ import {
   stunned,
   underFire,
   enraged,
-  enrageFast,
   shielded,
   shocked,
   dazed,
@@ -736,6 +735,7 @@ export type Scene = Pick<
       | 'globs'
       | 'pools'
       | 'leaving'
+      | 'rush'
     >
   > & {
     /** The game speed (1×, 3×, 5×) a fight is shown at; bullet tails grow with it (ID-070). */
@@ -1016,8 +1016,11 @@ function drawDefender(
    * pie (ID-143), so a crowded neighbour's pie never covers them.
    */
   bars = true,
+  /** Adrenaline's look while a boost runs (ID-245): a glow under them, speed lines at the gun. */
+  rush: RushLook | null = null,
 ): void {
   const feet = project({ x: d.x, y: d.y, z: z0 }, cam);
+  if (rush) drawRushGlow(ctx, feet, rush, cam);
   if (selected) {
     const r = DEFENDER.halfDepth * 1.8 * cam.zoom;
     ctx.strokeStyle = COLOR.selected;
@@ -1049,6 +1052,15 @@ function drawDefender(
   if (d.loadout.item === 'shield') {
     const front = project({ x: d.x + DEFENDER.halfWidth + 2, y: d.y + 2, z: z0 }, cam);
     drawStanding(ctx, art[BASE_ART.shield], front, STAND.shield, cam, pose);
+  }
+  if (rush && gun && throwing === null) {
+    const px = STAND.defender / ART_PX;
+    const muzzle = {
+      x: d.x + gun.barrel.x * px,
+      y: d.y,
+      z: z0 + (gun.barrel.y * px) / HEIGHT_SCALE,
+    };
+    drawRushLines(ctx, project(muzzle, cam), rush, cam);
   }
   if (bars) drawBars(ctx, d, z0, cam, ammo);
 }
@@ -4114,6 +4126,11 @@ export const BOSS_LOOK = {
   scorch: '#ff7a2a',
   poison: '#b6e03a',
   glob: '#8fb82a',
+  /** Cauterise (ID-245): the dashed deep-orange ring of a scorched enemy that is no boss. */
+  scorchRing: '#ff8a3d',
+  /** Adrenaline (ID-245): the glow under a boosted survivor, amber at 20%, red-orange at 35%. */
+  rush: '#ffb52e',
+  rushHeavy: '#ff5a2a',
   /** Suppressing Fire (ID-235): the pale ring of an enemy under fire. */
   fire: '#e8eef8',
 } as const;
@@ -4202,10 +4219,11 @@ function drawRoared(ctx: CanvasRenderingContext2D, e: Enemy, cam: Camera): void 
 
 /**
  * A Hell skill's or card's mark on a boss or an enemy it covers (ID-222), under the sprite:
- * Enrage a steady red ring and low glow (dimmer while Tranq Darts holds its speed off); a shield
- * boss the blue ring of its aura; a shielded enemy a thin blue ring; Cauterise an orange scorch
- * while Regen is blocked; Suppressing Fire (ID-235) a faint pale ring on anyone under fire, one
- * stroke, cheap on a full late horde.
+ * Enrage a steady red ring and glow; a shield boss the blue ring of its aura; a shielded
+ * enemy a thin blue ring; Cauterise (ID-245) an orange fill and ring on a scorched boss (any
+ * other enemy's dashed ring is drawn with the rest in one stroke, `drawScorchRings`);
+ * Suppressing Fire (ID-235) a faint pale ring on anyone under fire, one stroke, cheap on a
+ * full late horde.
  */
 function drawHellMarks(
   ctx: CanvasRenderingContext2D,
@@ -4223,20 +4241,19 @@ function drawHellMarks(
     ctx.globalAlpha = 1;
   };
   if (enraged(e)) {
-    const fast = enrageFast(scene, e);
     groundCircle(ctx, e.x, e.y, r * 1.5, cam);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = withAlpha(BOSS_LOOK.enrage, fast ? 0.22 : 0.08);
+    ctx.fillStyle = withAlpha(BOSS_LOOK.enrage, 0.22);
     ctx.fill();
     ctx.restore();
-    ring(r * 1.5, BOSS_LOOK.enrage, 3, fast ? 0.9 : 0.4);
+    ring(r * 1.5, BOSS_LOOK.enrage, 3, 0.9);
   }
   if (e.horror?.shieldOn && !stunned(scene, e)) {
     ring(BOSS_SKILL.shield.radius, BOSS_LOOK.shield, 2, 0.45);
   }
   if (shielded(e)) ring(r * 1.3, BOSS_LOOK.shield, 2, 0.9);
-  if (scorched(scene, e)) {
+  if (e.horror && scorched(scene, e)) {
     groundCircle(ctx, e.x, e.y, r * 1.4, cam);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -4309,6 +4326,102 @@ function drawGlob(ctx: CanvasRenderingContext2D, g: Glob, time: number, cam: Cam
   ctx.arc(c.sx, c.sy, 9 * cam.zoom, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+}
+
+/**
+ * Cauterise (ID-245): every scorched enemy that is no boss gets a faint dashed deep-orange
+ * ring on the ground, all in one path and one stroke, so a crowd costs one draw. Wider than
+ * and dashed against Suppressing Fire's solid pale ring, so the two never read alike.
+ */
+function drawScorchRings(
+  ctx: CanvasRenderingContext2D,
+  scene: Pick<Scene, 'time' | 'enemies'>,
+  cam: Camera,
+): void {
+  let any = false;
+  for (const e of scene.enemies) {
+    if (e.horror || !scorched(scene, e)) continue;
+    if (!any) {
+      ctx.beginPath();
+      any = true;
+    }
+    const c = project({ x: e.x, y: e.y }, cam);
+    const rx = radiusOf(e) * 1.45 * cam.zoom;
+    ctx.moveTo(c.sx + rx, c.sy);
+    ctx.ellipse(c.sx, c.sy, rx, rx * TILT, 0, 0, Math.PI * 2);
+  }
+  if (!any) return;
+  ctx.globalAlpha = 0.6;
+  ctx.strokeStyle = BOSS_LOOK.scorchRing;
+  ctx.lineWidth = Math.max(2, 2 * cam.zoom);
+  ctx.setLineDash([6 * cam.zoom, 4 * cam.zoom]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+}
+
+/** Adrenaline's look now (ID-245): its size, how faded it is, and the pulse clock. */
+interface RushLook {
+  heavy: boolean;
+  /** 1 until the last `CARD.rush.fade` s of the boost, then down to 0. */
+  alpha: number;
+  clock: number;
+}
+
+/** The boost's look at fight time `scene.time`, or null with none running; `clock` 0 holds it still. */
+function rushLook(scene: Pick<Scene, 'time' | 'rush'>, clock: number): RushLook | null {
+  const r = scene.rush;
+  if (!r) return null;
+  const heavy = r.heavyUntil !== undefined && scene.time < r.heavyUntil;
+  // Size and colour follow the heavy window; the fade follows the whole boost, so a light
+  // refresh during a heavy boost never fades the glow and pops it back.
+  const left = r.until - scene.time;
+  if (!(left > 0)) return null;
+  return { heavy, alpha: Math.min(1, left / CARD.rush.fade), clock };
+}
+
+/**
+ * Adrenaline's glow (ID-245): a soft pulsing ellipse on the ground at a survivor's feet,
+ * added to the light under it; amber for the 20% boost, bigger and red-orange for 35%. One
+ * fill; held steady with Reduce motion.
+ */
+function drawRushGlow(
+  ctx: CanvasRenderingContext2D,
+  feet: Point,
+  look: RushLook,
+  cam: Camera,
+): void {
+  const r = DEFENDER.halfDepth * (look.heavy ? 2.6 : 2.1) * cam.zoom;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = ((look.heavy ? 0.5 : 0.45) + 0.1 * Math.sin(look.clock * 8)) * look.alpha;
+  ctx.fillStyle = look.heavy ? BOSS_LOOK.rushHeavy : BOSS_LOOK.rush;
+  ctx.beginPath();
+  ctx.ellipse(feet.sx, feet.sy, r, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Adrenaline's speed lines (ID-245): three short strokes in one path trailing a gun's muzzle at `at`. */
+function drawRushLines(
+  ctx: CanvasRenderingContext2D,
+  at: Point,
+  look: RushLook,
+  cam: Camera,
+): void {
+  const len = 12 * cam.zoom;
+  ctx.save();
+  ctx.globalAlpha = (look.heavy ? 0.7 : 0.45) * look.alpha;
+  ctx.strokeStyle = look.heavy ? BOSS_LOOK.rushHeavy : BOSS_LOOK.rush;
+  ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+  ctx.beginPath();
+  for (const dy of [-1, 0, 1]) {
+    const y = at.sy + dy * 4 * cam.zoom;
+    ctx.moveTo(at.sx - 3 * cam.zoom, y);
+    ctx.lineTo(at.sx - 3 * cam.zoom - len * (dy === 0 ? 1 : 0.7), y);
+  }
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**
@@ -4495,6 +4608,8 @@ export function drawScene(
   const ammoOf = (d: Defender): AmmoLook | null => ammoLook(d, magCards);
   // In a fight the bars draw after every reload pie, with the names (ID-143).
   const barsWithSprite = !!build;
+  // Adrenaline's glow and speed lines on every survivor on the line while a boost runs (ID-245).
+  const rush = rushLook(scene, anim?.reduced ? 0 : scene.time);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   // In a fight nothing left of the frame shows (ID-064): the camp's yard stays out of
@@ -4563,6 +4678,7 @@ export function drawScene(
     drawPool(ctx, art, p, scene.time, anim?.reduced ? 0 : scene.time, cam);
   }
   if (!build) drawPoisonMarks(ctx, scene, anim?.reduced ? 0 : scene.time, cam);
+  drawScorchRings(ctx, scene, cam);
   // Broken Armour Plates' pieces lie flat where they fell (ID-211), under every sprite.
   for (const c of anim?.cracks ?? []) {
     const look = crackLook(scene.time, c, anim?.reduced ?? true);
@@ -4637,6 +4753,7 @@ export function drawScene(
             held,
             ammoOf(manned),
             barsWithSprite,
+            rush,
           );
           if (!throwing) drawFlash(ctx, scene, manned.id, post.x, post.y, cam);
         }
@@ -4677,6 +4794,7 @@ export function drawScene(
           held,
           ammo,
           barsWithSprite,
+          rush,
         );
         if (!throwing) drawFlash(ctx, scene, d.id, d.x, d.y, cam);
       },

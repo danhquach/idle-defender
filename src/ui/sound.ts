@@ -21,6 +21,8 @@ export type Cue =
   | 'boss-enrage'
   | 'boss-shield'
   | 'boss-poison'
+  | 'adrenaline'
+  | 'adrenaline-heavy'
   | 'swarm'
   | 'won'
   | 'lost'
@@ -147,6 +149,11 @@ export function cuesBetween(prev: HordeState | null, next: HordeState): Cue[] {
     next.pools?.some((p) => !prev.pools?.some((q) => q.at === p.at && q.x === p.x && q.y === p.y))
   ) {
     cues.add('boss-poison');
+  }
+  // Adrenaline (ID-245): a boost starts (its `at` is new, however long the frame): a heartbeat
+  // thump, a double one for the heavy boost. A refresh keeps `at`, so it plays nothing.
+  if (next.rush && next.rush.at !== prev.rush?.at) {
+    cues.add(next.rush.heavy ? 'adrenaline-heavy' : 'adrenaline');
   }
   // A swarm wave's enemies start coming (ID-099).
   if (next.swarm && prev.time < next.breakUntil && next.time >= next.breakUntil) cues.add('swarm');

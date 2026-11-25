@@ -21,6 +21,7 @@ export type ChatEvent =
   | 'reload'
   | 'throw'
   | 'kill'
+  | 'adrenaline'
   | 'hit';
 
 /** How a survivor talks (ID-093): it sets the lines they say, nothing else. */
@@ -77,6 +78,13 @@ export const CHAT_LINES: Readonly<
     reload: ['Reloading.', 'Changing mags.', 'Mag out, mag in.'],
     throw: ['Frag out.', 'Grenade. Heads down.', 'Throwing.'],
     kill: ['Target down.', 'Next.', 'Got it.'],
+    adrenaline: [
+      'Now I’m awake.',
+      'Pour it on.',
+      'Pulse up. Good.',
+      'Use it. Fire.',
+      'That woke me up.',
+    ],
     hit: ['Took one.', 'Hit. Fine.', 'Minor.'],
   },
   cocky: {
@@ -94,6 +102,7 @@ export const CHAT_LINES: Readonly<
     reload: ['Reload, then more of you!', 'Hold still, reloading!', 'Fresh mag, fresh pain!'],
     throw: ['Catch!', 'Special delivery!', 'Here, a present!'],
     kill: ['Too easy!', "Who's next?!", 'Another one!'],
+    adrenaline: ['Big mistake!', 'Now I’m angry!', 'Pour it on!', 'Get some!', 'Oh, it’s ON!'],
     hit: ['Is that it?', 'Tickles!', 'Missed me! Mostly.'],
   },
   nervous: {
@@ -111,6 +120,13 @@ export const CHAT_LINES: Readonly<
     reload: ['Reloading — hurry, hurry!', 'Come on, come on!', "Don't jam, don't jam!"],
     throw: ['Grenade! Duck!', 'Get down!', 'Please work!'],
     kill: ['Did I get it?!', 'Stay down, please!', "It's down! I think!"],
+    adrenaline: [
+      'Shoot faster! Faster!',
+      'Go go go go!',
+      'My heart! Keep firing!',
+      'Can’t feel my hands!',
+      'I’m okay! I’M OKAY!',
+    ],
     hit: ['Ow! Ow!', 'It bit me!', 'Get it off!'],
   },
 };
@@ -118,20 +134,22 @@ export const CHAT_LINES: Readonly<
 /** Which event wins, highest first: a higher one replaces a lower one already showing. */
 export const CHAT_RANK: Readonly<Record<ChatEvent, number>> = {
   // A mid-fight swap (ID-148): the one taking over shouts as they run in.
-  swapIn: 13,
-  down: 12,
-  lowHp: 11,
-  breach: 10,
-  boss: 9,
-  won: 8,
-  cleared: 8,
-  lastEnemy: 7,
-  crit: 6,
-  streak: 6,
-  dry: 5,
-  reload: 4,
-  throw: 3,
-  kill: 2,
+  swapIn: 14,
+  down: 13,
+  lowHp: 12,
+  breach: 11,
+  boss: 10,
+  won: 9,
+  cleared: 9,
+  lastEnemy: 8,
+  crit: 7,
+  streak: 7,
+  dry: 6,
+  reload: 5,
+  throw: 4,
+  kill: 3,
+  // Adrenaline (ID-245): the boost's start; it replaces the plain "ouch" of the same hit.
+  adrenaline: 2,
   hit: 1,
 };
 
@@ -154,7 +172,9 @@ export const CHAT = {
   again: { reload: 15, kill: 10, hit: 10, crit: 10 } as Readonly<
     Partial<Record<ChatEvent, number>>
   >,
-  squadAgain: { boss: 6, breach: 6 } as Readonly<Partial<Record<ChatEvent, number>>>,
+  squadAgain: { boss: 6, breach: 6, adrenaline: 10 } as Readonly<
+    Partial<Record<ChatEvent, number>>
+  >,
   lowFrom: 'lastEnemy' as ChatEvent,
   streak: { kills: 3, within: 3 },
   lowHp: 0.3,
@@ -286,6 +306,15 @@ function events(c: ChatState, prev: HordeState, next: HordeState): [Defender, Ch
       const dry = slots.length === 2 && slots.every((s) => d.ammo[s] === 0);
       note(d, dry ? 'dry' : 'reload');
     }
+  }
+
+  // Adrenaline (ID-245): a boost started (its `at` is new, however long the frame): the
+  // survivor who was hit says so, if still standing. A refresh keeps `at`, so it is silent.
+  if (next.rush && next.rush.at !== prev.rush?.at) {
+    note(
+      standing.find((d) => d.id === next.rush!.by),
+      'adrenaline',
+    );
   }
 
   // Kills, crits and throws from this frame's steps.
