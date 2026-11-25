@@ -3742,23 +3742,33 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
     camp. It leaves a 70 px pool for 6 s that takes 4% of each survivor's max HP a
     second (once, in overlapping pools), straight off HP: 24% for a full pool. A
     line slot is 100 to 133 px apart, so one pool hits one survivor.
-- **Mode reward cards (ID-222, as built).** Each higher mode's boss horde 10, 20
-  and 30 unlocks one card on its first clear; it is offered in that mode and the
-  ones above it (a Nightmare card in Nightmare and Hell, a Hell card in Hell only).
-  Nightmare: Suppressing Fire, Cauterise, Momentum; Hell: Gas Masks, Breaching
-  Rounds, Tranq Darts. Rare, once only, behaviour cards (never flat damage or HP).
-  All but Suppressing Fire act only on a boss skill or a boss kill and are offered
-  only in a fight whose bosses have what they answer (read at the fight's start),
-  so they never crowd the offers; Suppressing Fire (ID-235) slows every enemy, so
-  it is offered in every fight of its modes:
-  | Card | Effect | Offered when a boss has |
+- **Mode reward cards (ID-222, as built; reworked in ID-245).** Each higher mode's boss
+  horde 10, 20 and 30 unlocks one card on its first clear; it is offered in that
+  mode and the ones above it (a Nightmare card in Nightmare and Hell, a Hell card in
+  Hell only). Nightmare: Suppressing Fire, Cauterise, Momentum; Hell: Gas Masks,
+  Breaching Rounds, Adrenaline (which took Tranq Darts' unlock: a save that had
+  cleared Hell's boss horde 30 has Adrenaline, and Tranq Darts is gone from the game:
+  card, icon and text). Rare, once only, behaviour cards (never flat damage or HP).
+  Suppressing Fire (ID-235), Cauterise, Momentum and Adrenaline (ID-245) each work in
+  every fight of their mode, so they are offered in every fight; Gas Masks and
+  Breaching Rounds still act only on a boss skill and are offered only in a fight whose
+  bosses have what they answer (read at the fight's start). With the four always
+  offered, the mode cards stay a minority of the rare slots: measured over 2000 seeded
+  offers (Hell, all six unlocked, none taken), 7.6% of wave 1's upgrade slots are a
+  mode card and 14.2% at wave 9, where the rare odds cap at 45%; a crowding test holds
+  both under 15%:
+  | Card | Effect | Offered |
   | --- | --- | --- |
   | Suppressing Fire | An enemy a squad bullet hits is under fire for 1 s; hits under fire don't extend it, and once it ends that enemy can't be put under fire again for 2 s (at most 1 s in every 3 s; it never stacks with itself): it moves 15% slower (a boss or mini-boss 5%), multiplying with Barbed Wire, Oil and the other slows. A boss under fire runs its skill clocks 30% slower and a wind-up 50% slower; the stretched tell stays lit and is measured against its new length. A faint pale ring marks anyone under fire; a boss bar shows an "Under fire" tag (ID-235; before, one 2 s push of a wind-up in progress) | any fight |
-  | Cauterise | Regen bosses can't heal for 3 s after a squad hit (a scorch tint shows it) | Regen |
-  | Momentum | A boss dying reloads every gun at once and gives each survivor a throw back | a boss (not a mini-boss) |
+  | Cauterise | A squad bullet's hit scorches an enemy for 3 s (a boss with Regen 5 s): a scorched enemy takes 10% more damage from every source (bullets, turrets, throws, fire, wire, traps, strikes), applied after armour and Shield, so a dazed, scorched target takes 1.3 × 1.1; a scorched Regen boss can't heal at all. A scorched enemy is also knocked back a little further by Concussion Rounds (their push scales with the damage dealt). A scorch is applied by squad bullets only (not blades, turrets, throws or fire) and never stacks: a hit on a scorched enemy only renews the 3 s or 5 s. A scorched boss keeps the orange tint and its bar shows a "Scorched" tag; any other scorched enemy gets a faint dashed deep-orange ring (wider than, and unlike, Suppressing Fire's solid pale ring; all rings in a frame are one stroke) | any fight |
+  | Momentum | Every 25 kills (every enemy the fight pays for, whatever killed it: bullets, blades, throws, fire, wire, turrets, traps; a Swollen's own blast is not paid) reloads every gun at once; a boss or mini-boss kill also gives each survivor a throw back. The count carries across waves (not saved, starts at 0 each fight); the held-cards row shows the kills left on the card, and a reload flashes it | any fight |
+  | Adrenaline | When a survivor loses HP the whole squad fires 20% faster for 3 s; a hit of 10% or more of that survivor's max HP gives 35% instead. A hit during a boost refreshes the 3 s and never stacks; a light hit never extends a 35% boost, so chip hits can't hold it. "A hit" is the damage after shield and armour, before the clamp at 0 HP and before a Paramedic's dodge to 1 HP, and the survivor must really lose HP (a max-HP change, such as a Chef's food ending, never starts one); the hit that downs a survivor still starts it. A Poison pool tick is always the 20% boost, never 35%. It multiplies with Rapid Fire, Concussion Rounds' cost, Overdrive and the Engineer; turrets are unaffected. Every survivor on the line gets a pulsing glow at their feet (amber at 20%, bigger and red-orange at 35%) and three speed lines at the gun, fading over the last 0.5 s; the held-cards row shows the boost and its seconds left. A start plays a synthesized heartbeat thump (two for 35%, muted with everything else), at most once in 8 real seconds (a 35% start may cut through a recent 20% one), and the survivor hit says an Adrenaline line, one for the whole squad per 10 s. The glow shows on every start | any fight |
   | Gas Masks | Poison pools hurt survivors 60% less | Poison pool |
   | Breaching Rounds | Squad bullets take back half of what Armour plates and Shield cut | Shield or Armour plates |
-  | Tranq Darts | A hit takes Enrage's speed off an enraged boss for 3 s (its harder hits stay) | Enrage |
+
+  Adrenaline shares its name with the full game's shop buff (+25% damage); the two
+  never appear in the same build, since the shop is hidden in the horde-only build and
+  mode cards exist only there.
 
   The unlock is not stored: it is read off each mode's saved horde (`modes`, already
   allow-listed and range-checked on load, with Hell needing Nightmare past 50), as
@@ -4376,7 +4386,9 @@ original outline.
   both of two guns empty at once ("Click… uh oh."; there is no ammo to run out
   of otherwise), a Frag Grenade they throw, a kill with a bullet or a blade,
   three kills within 3 fight seconds (a streak), a crit round landing, a hit
-  taken, dropping under 30% HP, and going down (said where they fell). The
+  taken, an Adrenaline boost starting on them (ID-245: five lines per personality,
+  said by the survivor who was hit, in place of the plain hit line), dropping under
+  30% HP, and going down (said where they fell). The
   squad's moments are said by one of them: a breach (the survivor nearest that
   wall), a Horror or a Brute appearing (nearest it), the last enemy of a wave
   with no more to come (nearest it), a wave cleared and the horde won (any of
@@ -4388,14 +4400,15 @@ original outline.
   line never plays twice in a row. Event rank, highest first (the ticket's
   order, with the events it doesn't place fitted in by choice): down >
   low HP > breach > boss > won = wave cleared > last enemy > crit = streak > dry >
-  reload > throw > kill > hit. A survivor says only their highest event of a
+  reload > throw > kill > adrenaline > hit. A survivor says only their highest event of a
   frame; a higher one replaces their bubble at once, a lower one never does.
   Otherwise each survivor waits 4 real seconds between lines, except for a
   boss or anything higher, which never waits (a kill line must not swallow a
   down); and the routine events wait longer before the same survivor says them
   again: a reload 15 s, a kill, a hit or a crit 10 s (a lone pistol survivor
   reloads every few seconds); a boss or a breach is one call for the whole squad,
-  6 s before anyone calls the next. At most 3 bubbles show (a new one takes the lowest one's
+  6 s before anyone calls the next, and an Adrenaline start is one line for the whole
+  squad per 10 s (a refresh says nothing). At most 3 bubbles show (a new one takes the lowest one's
   place only if it outranks it). A bubble shows 1.5 real seconds at any game
   speed, growing in over 0.12 s and fading over its last 0.25 s (with Reduce
   motion it just shows and goes); it follows its survivor, sits over their

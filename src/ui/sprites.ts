@@ -140,7 +140,7 @@ export const ART_IDS = [
   'card-momentum',
   'card-gas-masks',
   'card-breaching-rounds',
-  'card-tranq-darts',
+  'card-adrenaline',
   'weapon-pistol',
   'weapon-smg',
   'weapon-rifle',
@@ -501,7 +501,7 @@ export const CARD_ICON: Readonly<Record<UpgradeId, ArtId>> = {
   momentum: 'card-momentum',
   'gas-masks': 'card-gas-masks',
   'breaching-rounds': 'card-breaching-rounds',
-  'tranq-darts': 'card-tranq-darts',
+  'adrenaline-rush': 'card-adrenaline',
 };
 /** Each skill's icon on its button (design §15, ID-041). */
 export const SKILL_ICON: Readonly<Record<SkillId, ArtId>> = {

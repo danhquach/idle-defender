@@ -99,6 +99,9 @@
   --color-mark-edge: #1b1a18;
   --color-mark-ammo-empty: #4a443a;
   --color-mark-roar: rgb(255 176 32 / 55%);
+  /* Adrenaline's boost (ID-245), as render.ts draws it (BOSS_LOOK.rush): 20% amber, 35% red-orange. */
+  --color-rush: #ffb52e;
+  --color-rush-heavy: #ff5a2a;
 
   /* Card rarity (design §8) and recruits */
   --color-common: #6b6b6b;
@@ -2613,6 +2616,20 @@ body {
   display: none;
 }
 
+/* Cauterise (ID-245): an orange outlined tag while the boss is scorched. */
+.hud-boss-scorch {
+  flex: none;
+  padding: 0 var(--space-6);
+  border: 1px solid currentcolor;
+  border-radius: var(--radius-pill);
+  color: var(--color-warn);
+  font-weight: 700;
+}
+
+.hud-boss-scorch[hidden] {
+  display: none;
+}
+
 .hud-boss-hptext {
   flex: none;
 }
@@ -2816,6 +2833,27 @@ body {
   border-color: var(--color-danger);
   background: var(--color-danger);
   color: var(--color-on-danger);
+}
+
+/* Adrenaline running (ID-245): its chip glows amber, red-orange for the 35% boost; the
+   seconds left are on its badge. Momentum's chip flashes for a moment after a reload. */
+.hud-held-live {
+  border-color: var(--color-rush);
+  box-shadow: 0 0 6px var(--color-rush);
+}
+
+.hud-held-live-heavy {
+  border-color: var(--color-rush-heavy);
+  box-shadow: 0 0 8px var(--color-rush-heavy);
+}
+
+.hud-held-flash {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 8px var(--color-focus);
+}
+
+.hud-held-tip-live {
+  font-weight: 600;
 }
 
 .hud-held-tip {

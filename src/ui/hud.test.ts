@@ -23,6 +23,7 @@ import {
   defenderLabel,
   fallingText,
   FIRE_TAG,
+  SCORCH_TAG,
   payoutText,
   resultScreen,
   shopButtons,
@@ -261,6 +262,7 @@ describe('hud', () => {
         cue: null,
         winding: false,
         fire: false,
+        scorch: false,
         hpText: '1,234/2,000',
         label: 'Mutated Horror (Brood) · 1,234/2,000',
         hp: 1234,
@@ -276,6 +278,18 @@ describe('hud', () => {
     // Gone the moment the fire ends, with the ring.
     e.fireUntil = s.time;
     expect(bossBars(s)[0]!.fire).toBe(false);
+    // Cauterise (ID-245): tagged while scorched, beside the fire tag; gone when it ends.
+    e.scorchUntil = s.time + 3;
+    expect(bossBars(s)[0]).toMatchObject({
+      scorch: true,
+      label: `Mutated Horror (Brood) · ${SCORCH_TAG} · 1,234/2,000`,
+    });
+    e.fireUntil = s.time + 1;
+    expect(bossBars(s)[0]!.label).toBe(
+      `Mutated Horror (Brood) · ${FIRE_TAG} · ${SCORCH_TAG} · 1,234/2,000`,
+    );
+    e.scorchUntil = s.time;
+    expect(bossBars(s)[0]!.scorch).toBe(false);
   });
 
   it('shows a shop button per item as a dry run of buy, with a running buff counting down', () => {

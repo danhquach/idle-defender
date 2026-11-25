@@ -138,6 +138,97 @@ describe('what a survivor speaks up about (ID-085)', () => {
     expect(b.postId).toBe(t.defenders[0]!.postId);
   });
 
+  describe('Adrenaline (ID-245)', () => {
+    /** `s` one frame on in which a boost by `by` started at `at`; the hit's HP loss included. */
+    const started = (s: HordeState, by: string, at: number, hp = 1): HordeState =>
+      later(s, (x) => {
+        hurt(x, by, hp);
+        x.rush = { at, by, until: at + 3 };
+      });
+
+    it('the survivor hit says an Adrenaline line in place of the plain hit', () => {
+      const s = fight(2);
+      const t = started(s, 'd1', 0);
+      const c = chatter(begun(s), s, t, 0.03, 'full');
+      expect(events(c)).toEqual([['d1', 'adrenaline']]);
+      expect(linesOf('d1').adrenaline).toContain(c.bubbles[0]!.line);
+    });
+
+    it('a refresh says nothing: the start is the same', () => {
+      const s = fight();
+      const t = started(s, 'a', 0);
+      const c1 = chatter(begun(s), s, t, 0.03, 'full');
+      const u = later(t, (x) => {
+        hurt(x, 'a');
+        x.rush!.until += 1;
+      });
+      const c2 = chatter(begun(t), t, u, 0.03, 'full');
+      expect(events(c1)).toEqual([['a', 'adrenaline']]);
+      expect(events(c2)).toEqual([['a', 'hit']]);
+    });
+
+    it('a long frame that spans a whole boost still says it once', () => {
+      const s = fight();
+      const t = later(s, (x) => {
+        x.time += 10;
+        x.rush = { at: 1, by: 'a', until: 4 };
+      });
+      expect(events(chatter(begun(s), s, t, 0.03, 'full'))).toEqual([['a', 'adrenaline']]);
+    });
+
+    it('low HP and down win over it', () => {
+      const s = fight();
+      const a = s.defenders[0]!;
+      const low = started(s, 'a', 0, a.hp - a.maxHp * 0.29);
+      expect(events(chatter(begun(s), s, low, 0.03, 'full'))).toEqual([['a', 'lowHp']]);
+      const down = later(s, (x) => {
+        x.defenders = [];
+        x.injured.push({ defender: a, postId: a.postId, at: x.time, offered: false, by: null });
+        x.rush = { at: 0, by: 'a', until: 3 };
+      });
+      expect(events(chatter(begun(s), s, down, 0.03, 'full'))).toEqual([['a', 'down']]);
+    });
+
+    it('two boost starts 4 s apart give one line for the whole squad; 10 s apart, two', () => {
+      const s = fight(2);
+      const first = started(s, 'a', 0);
+      let c = chatter(begun(s), s, first, 0.03, 'full');
+      expect(events(c)).toEqual([['a', 'adrenaline']]);
+      const second = later(first, (x) => {
+        hurt(x, 'd1');
+        x.rush = { at: 4, by: 'd1', until: 7 };
+      });
+      c = chatter(c, first, second, 4, 'full');
+      expect(c.bubbles.filter((b) => b.event === 'adrenaline')).toEqual([]);
+      const third = later(second, (x) => {
+        hurt(x, 'd1');
+        x.rush = { at: 10.5, by: 'd1', until: 13.5 };
+      });
+      c = chatter(c, second, third, 6.5, 'full');
+      expect(events(c)).toEqual([['d1', 'adrenaline']]);
+    });
+
+    it('never says the same line twice in a row', () => {
+      const s = fight();
+      let c = begun(s);
+      let prev = s;
+      const said: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        const next = started(prev, 'a', i * 20);
+        c = chatter(c, prev, next, 20, 'full');
+        said.push(c.bubbles.find((b) => b.event === 'adrenaline')!.line);
+        prev = next;
+      }
+      for (let i = 1; i < said.length; i++) expect(said[i]).not.toBe(said[i - 1]);
+    });
+
+    it('is not said on Low (it ranks below the last enemy)', () => {
+      const s = fight();
+      const t = started(s, 'a', 0);
+      expect(chatter(begun(s, 'low'), s, t, 0.03, 'low').bubbles).toEqual([]);
+    });
+  });
+
   it('dropping under 30% HP is low HP, not a plain hit; staying low after is only a hit', () => {
     const s = fight();
     const a = s.defenders[0]!;
@@ -282,8 +373,18 @@ describe('what a survivor speaks up about (ID-085)', () => {
 });
 
 describe('who gets to speak (ID-085)', () => {
-  it('ranks the events: down > low HP > breach > boss > crit/streak > reload > kill', () => {
-    const order: ChatEvent[] = ['down', 'lowHp', 'breach', 'boss', 'crit', 'reload', 'kill'];
+  it('ranks the events: down > low HP > breach > boss > crit/streak > reload > kill > adrenaline > hit', () => {
+    const order: ChatEvent[] = [
+      'down',
+      'lowHp',
+      'breach',
+      'boss',
+      'crit',
+      'reload',
+      'kill',
+      'adrenaline',
+      'hit',
+    ];
     for (let i = 1; i < order.length; i++) {
       expect(CHAT_RANK[order[i - 1]!]).toBeGreaterThan(CHAT_RANK[order[i]!]);
     }

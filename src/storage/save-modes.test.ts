@@ -331,7 +331,7 @@ describe('save: mode cards derive from the saved modes (ID-222)', () => {
     // A card list written by hand has nowhere to go: the save refuses unknown game fields.
     for (const field of ['modeCards', 'cards', 'unlocks']) {
       expect(
-        reread(camp({ modes: { nightmare: 11 } }), (g) => (g[field] = ['tranq-darts'])),
+        reread(camp({ modes: { nightmare: 11 } }), (g) => (g[field] = ['adrenaline-rush'])),
         field,
       ).toBeNull();
     }
@@ -347,6 +347,15 @@ describe('save: mode cards derive from the saved modes (ID-222)', () => {
     }
     const ok = reread(camp({ mode: 'hell', modes: { nightmare: 51, hell: 11 } }))!.game;
     expect(modeCards(ok)).toContain('gas-masks');
+  });
+
+  it('Hell past 30 has Adrenaline, never the removed Tranq Darts (ID-245)', () => {
+    const cards = modeCards(
+      reread(camp({ mode: 'hell', modes: { nightmare: 51, hell: 31 } }))!.game,
+    ) as string[];
+    expect(cards).toContain('adrenaline-rush');
+    expect(cards).not.toContain('tranq-darts');
+    expect(cards).toHaveLength(MODE_CARDS.length);
   });
 
   it('a card is there from a saved first clear and does not move on a second one', () => {

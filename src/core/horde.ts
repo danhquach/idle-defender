@@ -282,6 +282,11 @@ export interface Enemy {
   shielded?: true;
   /** Suppressing Fire (ID-235): fight time it is under fire until; absent = never hit with it. */
   fireUntil?: number;
+  /**
+   * Cauterise (ID-245): fight time it is scorched until (+`CARD.cauterise.taken` damage from
+   * every source, and a Regen boss can't heal); absent = never scorched.
+   */
+  scorchUntil?: number;
 }
 /** Fight times are when, so they stop during picks; a stun pushes them back. */
 export interface HorrorClock {
@@ -310,10 +315,6 @@ export interface HorrorClock {
    */
   enraged?: true;
   shieldOn?: true;
-  /** Tranq Darts: fight time until which an enraged boss has lost Enrage's speed. */
-  tranqUntil?: number;
-  /** Cauterise: fight time until which Regen is blocked. */
-  scorchUntil?: number;
   /**
    * Suppressing Fire (ID-235): seconds each skill's current wind-up has been stretched by while
    * under fire; gone when the skill goes off.
@@ -820,6 +821,20 @@ export interface HordeState {
    * Set when the skill is used (ID-231), so it also marks the use: set = spent.
    */
   repairsUntil?: number;
+  /**
+   * Momentum (ID-245): kills counted toward the next reload (`CARD.momentum.kills`); absent
+   * until the first counted kill.
+   */
+  streak?: number;
+  /** Momentum: fight time every gun was last reloaded by the streak (the view's flash). */
+  reloadedAllAt?: number;
+  /**
+   * Adrenaline (ID-245): the squad's fire-rate boost. `at`, `by` (the survivor hit) and
+   * `heavy` are written when a boost starts (none running) and kept after it ends, so a long
+   * frame still sees the new `at`; a refresh only moves `until` (and `heavyUntil` on a
+   * heavy hit). Absent until the card is taken and a survivor is hurt.
+   */
+  rush?: { at: number; by: string; heavy?: true; until: number; heavyUntil?: number };
   /**
    * This horde's bosses and mini-boss (design §9, ID-099), fixed by its number; `id` is the
    * enemy's once it has come (with the first spawn of its wave), null before.
@@ -1619,16 +1634,18 @@ export const roared = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
 export const enraged = (e: Pick<Enemy, 'horror'>): boolean => e.horror?.enraged === true;
 
 /**
- * Whether `e` moves Enrage's `BOSS_SKILL.enrage.speed` faster now (ID-222): enraged, and not
- * within `CARD.tranq.seconds` of a Tranq Darts hit. Its harder hits stay either way. The speed
- * multiplies with a charge's.
+ * Whether Cauterise (ID-245) has `e` scorched now (any enemy): it takes `CARD.cauterise.taken`
+ * more damage from every source, and a scorched Regen boss can't heal. The view's scorch.
  */
-export const enrageFast = (s: Pick<HordeState, 'time'>, e: Pick<Enemy, 'horror'>): boolean =>
-  enraged(e) && (e.horror!.tranqUntil === undefined || due(s.time, e.horror!.tranqUntil));
+export const scorched = (s: Pick<HordeState, 'time'>, e: Pick<Enemy, 'scorchUntil'>): boolean =>
+  e.scorchUntil !== undefined && !due(s.time, e.scorchUntil);
 
-/** Whether Cauterise (ID-222) still blocks `e`'s Regen: the view's scorch. */
-export const scorched = (s: Pick<HordeState, 'time'>, e: Pick<Enemy, 'horror'>): boolean =>
-  e.horror?.scorchUntil !== undefined && !due(s.time, e.horror.scorchUntil);
+/**
+ * `dmg` as `e` takes it (ID-245): a scorched enemy takes `CARD.cauterise.taken` more, after
+ * armour; `dmg` itself, untouched, when it isn't (Normal's fights never change).
+ */
+const taken = (s: Pick<HordeState, 'time'>, e: Enemy, dmg: number): number =>
+  scorched(s, e) ? dmg * (1 + CARD.cauterise.taken) : dmg;
 
 /** Whether a Shield boss's aura covers `e` now (ID-222). */
 export const shielded = (e: Pick<Enemy, 'shielded'>): boolean => e.shielded === true;
@@ -1710,7 +1727,10 @@ function poison(s: HordeState): void {
     );
     if (!inside) continue;
     d.hitBy = 'horror';
+    const before = d.hp;
     d.hp = Math.max(0, d.hp - BOSS_SKILL.poison.rate * d.maxHp * STEP * factor);
+    // Adrenaline (ID-245): a Poison tick is always the light boost.
+    if (d.hp < before) startRush(s, d, false);
   }
 }
 
@@ -1938,12 +1958,29 @@ export const repairsLeft = (s: Pick<HordeState, 'time' | 'repairsUntil'>): numbe
   s.repairsUntil !== undefined && !due(s.time, s.repairsUntil) ? s.repairsUntil - s.time : 0;
 
 /**
- * The squad's fire-rate factor from the epic cards' costs (ID-137): Concussion Rounds while
- * held, and Field Repairs for a few seconds after its pick; they multiply.
+ * Adrenaline's fire-rate factor now (ID-245): `1 + heavyRate` while a heavy boost runs, else
+ * `1 + rate` while any runs, else 1.
  */
-export const cardFireRate = (s: Pick<HordeState, 'taken' | 'time' | 'repairsUntil'>): number =>
+export const rushFactor = (s: Pick<HordeState, 'time' | 'rush'>): number =>
+  s.rush === undefined
+    ? 1
+    : s.rush.heavyUntil !== undefined && !due(s.time, s.rush.heavyUntil)
+      ? 1 + CARD.rush.heavyRate
+      : !due(s.time, s.rush.until)
+        ? 1 + CARD.rush.rate
+        : 1;
+
+/**
+ * The squad's fire-rate factor from the epic cards' costs (ID-137): Concussion Rounds while
+ * held, and Field Repairs for a few seconds after its pick; Adrenaline's boost (ID-245)
+ * while it runs. They multiply.
+ */
+export const cardFireRate = (
+  s: Pick<HordeState, 'taken' | 'time' | 'repairsUntil' | 'rush'>,
+): number =>
   (took(s, 'concussion-rounds') ? CARD.concussion.fireRate : 1) *
-  (repairsLeft(s) > 0 ? CARD.fieldRepairs.fireRate : 1);
+  (repairsLeft(s) > 0 ? CARD.fieldRepairs.fireRate : 1) *
+  rushFactor(s);
 
 /** Aim for the Head (ID-130): squad crit chance it adds in this fight, 0 when not held. */
 export const cardCrit = (s: Parameters<typeof cardLevel>[0]): number =>
@@ -2174,16 +2211,22 @@ function fly(s: HordeState): void {
     let travel = Math.min(b.speed * STEP, b.left);
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
       const first = b.hit.length === 0;
-      const dealt = hitDamage(
+      const dealt = taken(
+        s,
         hit.enemy,
-        b.damage *
-          traitFactor(front, b, hit.enemy) *
-          // Concussion Rounds (ID-137): a dazed enemy takes more from the squad's bullets.
-          (!b.owner.startsWith('turret:') && took(s, 'concussion-rounds') && concussed(s, hit.enemy)
-            ? 1 + CARD.concussion.daze
-            : 1),
-        b.ap === true,
-        !b.owner.startsWith('turret:') && took(s, 'breaching-rounds'),
+        hitDamage(
+          hit.enemy,
+          b.damage *
+            traitFactor(front, b, hit.enemy) *
+            // Concussion Rounds (ID-137): a dazed enemy takes more from the squad's bullets.
+            (!b.owner.startsWith('turret:') &&
+            took(s, 'concussion-rounds') &&
+            concussed(s, hit.enemy)
+              ? 1 + CARD.concussion.daze
+              : 1),
+          b.ap === true,
+          !b.owner.startsWith('turret:') && took(s, 'breaching-rounds'),
+        ),
       );
       popOn(s, hit.enemy, dealt, b.crit === true);
       const alive = hit.enemy.hp > 0;
@@ -2301,7 +2344,12 @@ function cardHit(
   ) {
     e.fireUntil = s.time + CARD.suppress.seconds;
   }
-  if (e.horror) bossCards(s, e);
+  // Cauterise (ID-245): a hit scorches the enemy; a plain refresh, no stack, no cooldown.
+  if (took(s, 'cauterise')) {
+    e.scorchUntil =
+      s.time +
+      (e.horror?.skills.includes('regen') ? CARD.cauterise.bossSeconds : CARD.cauterise.seconds);
+  }
   if (!first || b.ricochet || !took(s, 'ricochet')) return;
   const next = around(s, e, CARD.ricochet.range).find((o) => !b.hit.includes(o.id));
   if (!next) return;
@@ -2324,24 +2372,8 @@ function cardHit(
   });
 }
 
-/**
- * The cards a Hell mode unlocks that act on a boss a squad bullet hit (ID-222). Cauterise: a
- * Regen boss can't heal for `CARD.cauterise.seconds`. Tranq Darts: an enraged boss moves
- * without Enrage's speed for `CARD.tranq.seconds`.
- */
-function bossCards(s: HordeState, e: Enemy): void {
-  const h = e.horror!;
-  if (took(s, 'cauterise') && h.skills.includes('regen')) {
-    h.scorchUntil = s.time + CARD.cauterise.seconds;
-  }
-  if (took(s, 'tranq-darts') && h.enraged) h.tranqUntil = s.time + CARD.tranq.seconds;
-}
-
-/**
- * Momentum (ID-222): when a boss falls, every gun on the line is reloaded at once and each
- * survivor gets one throw back.
- */
-function momentum(s: HordeState): void {
+/** Momentum (ID-245): every gun on the line is reloaded at once. */
+function reloadAll(s: HordeState): void {
   for (const d of s.defenders) {
     for (const slot of ['primary', 'secondary'] as const) {
       const id = d.loadout[slot];
@@ -2349,6 +2381,12 @@ function momentum(s: HordeState): void {
       d.ammo[slot] = Math.max(d.ammo[slot], magazineOf(s, id, d));
       d.reloadedAt[slot] = Math.min(d.reloadedAt[slot], s.time);
     }
+  }
+}
+
+/** Momentum (ID-245): a boss or mini-boss death gives each survivor one throw back. */
+function throwBack(s: HordeState): void {
+  for (const d of s.defenders) {
     if (carried(d) < CARD.throws.carry) {
       d.throws = carried(d) + 1;
       if (d.throws >= CARD.throws.carry) {
@@ -2635,8 +2673,9 @@ function blowFrags(s: HordeState): void {
     }
     for (const e of s.enemies) {
       if (e.hp > 0 && Math.hypot(e.x - g.x, e.y - g.y) <= CARD.frag.radius + EPS) {
-        popOn(s, e, damage);
-        e.hp = Math.max(0, e.hp - damage);
+        const dmg = taken(s, e, damage);
+        popOn(s, e, dmg);
+        e.hp = Math.max(0, e.hp - dmg);
       }
     }
   }
@@ -2727,8 +2766,9 @@ function fire(s: HordeState, rng: Rng): void {
         ...(close > 0 ? { close } : {}),
       });
     } else {
-      popOn(s, target, hit, critHit);
-      target.hp -= hit;
+      const dmg = taken(s, target, hit);
+      popOn(s, target, dmg, critHit);
+      target.hp -= dmg;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
     // Butcher's Hunger counts the blade or tool kill of this strike.
@@ -2943,6 +2983,19 @@ export const burning = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
   e.burnUntil !== undefined && e.burnUntil > 0 && !due(s.time, e.burnUntil);
 
 /**
+ * Momentum (ID-245): a counted kill (every enemy `removeDead` pays for). A boss or mini-boss
+ * gives each survivor a throw back; every `CARD.momentum.kills` kills reload every gun.
+ */
+function streakKill(s: HordeState, e: Enemy): void {
+  if (e.horror) throwBack(s);
+  s.streak = (s.streak ?? 0) + 1;
+  if (s.streak < CARD.momentum.kills) return;
+  s.streak -= CARD.momentum.kills;
+  reloadAll(s);
+  s.reloadedAllAt = s.time;
+}
+
+/**
  * Pays XP and cash for every enemy at 0 HP, counts the mutants among them (ID-025), and
  * takes it off the field.
  */
@@ -2953,7 +3006,7 @@ export function removeDead(s: HordeState): void {
     s.cash += ENEMIES[e.kind].cash * perkFactor(s, 'scavengers-eye', PERK.cash) * s.cashRate;
     if (MUTANTS.includes(e.kind)) s.mutantKills += 1;
     if (e.id === s.focusId) s.focusId = null;
-    if (e.horror && !e.elite && took(s, 'momentum')) momentum(s);
+    if (took(s, 'momentum')) streakKill(s, e);
   }
   s.enemies = s.enemies.filter((e) => e.hp > 0);
 }
@@ -3018,8 +3071,9 @@ function land(s: HordeState): void {
     s.blasts.push({ skill: 'airstrike', x: i.x, y: i.y, at: s.time });
     for (const e of s.enemies) {
       if (e.hp <= 0 || Math.hypot(e.x - i.x, e.y - i.y) > SKILLS.airstrike.radius + EPS) continue;
-      popOn(s, e, damage);
-      e.hp = Math.max(0, e.hp - damage);
+      const dmg = taken(s, e, damage);
+      popOn(s, e, dmg);
+      e.hp = Math.max(0, e.hp - dmg);
     }
   }
 }
@@ -3033,9 +3087,10 @@ function burn(s: HordeState): void {
   for (const e of s.enemies) {
     if (!burning(s, e)) continue;
     const dps = e.burnDps ?? CARD.burn.share[CARD_MAX_LEVEL - 1]! * shamblerHp(s);
-    popOn(s, e, dps * STEP);
-    e.hp = Math.max(0, e.hp - dps * STEP);
-    e.burnt = (e.burnt ?? 0) + dps * STEP;
+    const dmg = taken(s, e, dps * STEP);
+    popOn(s, e, dmg);
+    e.hp = Math.max(0, e.hp - dmg);
+    e.burnt = (e.burnt ?? 0) + dmg;
   }
   s.fires = s.fires.filter((f) => !due(s.time, f.until));
   s.blasts = s.blasts.filter((b) => s.time - b.at < SKILL_FLASH);
@@ -3054,17 +3109,19 @@ function burn(s: HordeState): void {
   for (const e of s.slicks.some(slickLit) ? s.enemies : []) {
     // Overlapping lit slicks burn as one fire.
     if (e.hp <= 0 || !slicksUnder(s, e).some(slickLit)) continue;
-    popOn(s, e, slickHit);
-    e.hp = Math.max(0, e.hp - slickHit);
-    e.burnt = (e.burnt ?? 0) + slickHit;
+    const dmg = taken(s, e, slickHit);
+    popOn(s, e, dmg);
+    e.hp = Math.max(0, e.hp - dmg);
+    e.burnt = (e.burnt ?? 0) + dmg;
   }
   const fireHit = fireDps(s) * STEP;
   for (const f of s.fires) {
     for (const e of s.enemies) {
       if (Math.hypot(e.x - f.x, e.y - f.y) <= CARD.molotov.radius + EPS) {
-        popOn(s, e, fireHit);
-        e.hp = Math.max(0, e.hp - fireHit);
-        e.burnt = (e.burnt ?? 0) + fireHit;
+        const dmg = taken(s, e, fireHit);
+        popOn(s, e, dmg);
+        e.hp = Math.max(0, e.hp - dmg);
+        e.burnt = (e.burnt ?? 0) + dmg;
       }
     }
   }
@@ -3213,7 +3270,7 @@ function move(s: HordeState): Moves {
       screamed(screamers, e) *
       (roared(s, e) ? 1 + BOSS_SKILL.roar.speed : 1) *
       (charging(s, e) ? HORROR.charge.speed : 1) *
-      (enrageFast(s, e) ? 1 + BOSS_SKILL.enrage.speed : 1) *
+      (enraged(e) ? 1 + BOSS_SKILL.enrage.speed : 1) *
       (underFire(s, e) ? 1 - (e.horror ? CARD.suppress.bossSlow : CARD.suppress.slow) : 1);
     if (e.inCamp) {
       hunt(s, e, speed, reached);
@@ -3287,10 +3344,11 @@ function bleed(s: HordeState): void {
   const hit = atLevel(s, 'barbed-wire', CARD.wire.bleed) * shamblerHp(s) * STEP;
   for (const e of s.enemies) {
     if (e.hp <= 0 || !inWire(s, band, e)) continue;
-    popOn(s, e, hit);
-    e.hp = Math.max(0, e.hp - hit);
+    const dmg = taken(s, e, hit);
+    popOn(s, e, dmg);
+    e.hp = Math.max(0, e.hp - dmg);
     // A steady loss as a burn's: no white hit flash every step.
-    e.burnt = (e.burnt ?? 0) + hit;
+    e.burnt = (e.burnt ?? 0) + dmg;
   }
 }
 
@@ -3325,8 +3383,9 @@ function springTraps(s: HordeState): void {
     if (!t || t.durability <= 0 || t.hit.includes(e.id)) continue;
     t.hit.push(e.id);
     t.durability -= 1;
-    popOn(s, e, trapStats(s, t.kind).damage);
-    e.hp = Math.max(0, e.hp - trapStats(s, t.kind).damage);
+    const dmg = taken(s, e, trapStats(s, t.kind).damage);
+    popOn(s, e, dmg);
+    e.hp = Math.max(0, e.hp - dmg);
   }
 }
 
@@ -3602,13 +3661,40 @@ function spit(s: HordeState, e: Enemy, rng: Rng): boolean {
  * above 1 HP to 0 may leave them at 1 HP instead (`dodgeChance`, ID-149); rolled only then.
  */
 function hurt(s: HordeState, d: Defender, damage: number, rng: Rng): void {
-  const hp = d.hp - damageTaken(d, damage, cardArmour(s));
+  const before = d.hp;
+  const hit = damageTaken(d, damage, cardArmour(s));
+  const hp = before - hit;
   if (hp > 0) {
     d.hp = hp;
+  } else {
+    const dodge = dodgeChance(d);
+    d.hp = dodge > 0 && before > 1 && chance(rng, dodge) ? 1 : 0;
+  }
+  // Adrenaline (ID-245): heavy is judged on the hit (after armour, before the clamp and a
+  // Paramedic's dodge), and the survivor must really have lost HP.
+  if (d.hp < before) startRush(s, d, hit >= CARD.rush.heavy * d.maxHp);
+}
+
+/**
+ * Adrenaline (ID-245): a survivor lost HP, so the squad fires faster for `CARD.rush.seconds`.
+ * A running boost is only refreshed (its start, speaker and size stay; a heavy hit renews the
+ * heavy window, a light one never extends it); otherwise a new one starts at `at`.
+ */
+function startRush(s: HordeState, d: Defender, heavy: boolean): void {
+  if (!took(s, 'adrenaline-rush')) return;
+  const until = s.time + CARD.rush.seconds;
+  const r = s.rush;
+  if (r !== undefined && !due(s.time, r.until)) {
+    r.until = until;
+    if (heavy) r.heavyUntil = until;
     return;
   }
-  const dodge = dodgeChance(d);
-  d.hp = dodge > 0 && d.hp > 1 && chance(rng, dodge) ? 1 : 0;
+  s.rush = {
+    at: s.time,
+    by: d.id,
+    ...(heavy ? { heavy: true as const, heavyUntil: until } : {}),
+    until,
+  };
 }
 
 /** First Aid Kits (ID-131): each survivor on the line recovers its share of max HP a second, up to max. */

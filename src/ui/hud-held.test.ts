@@ -3,12 +3,12 @@
 // with its level; hovering, focusing or tapping one shows its name and effect. It
 // updates the moment a card is picked or an ammo card replaced, and stays out of the
 // way of the offer and the result screen.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { chooseCard } from '../core/cards.ts';
 import { CARD } from '../core/data.ts';
 import { newHorde, type HordeState, type UpgradeId } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
-import { createHud, heldCards } from './hud.ts';
+import { createHud, heldCards, momentumLeft } from './hud.ts';
 import { FIGHT_FRAME, frameCamera, HUD_SPACE, project } from './projection.ts';
 import { ART_URLS, CARD_ICON } from './sprites.ts';
 
@@ -326,5 +326,103 @@ describe('Field Repairs’ fire-rate cost on the strip (ID-137)', () => {
     expect(tip.querySelector('.hud-held-tip-cost')).toBeNull();
     // Sharpshooter's own badge never takes the warning style.
     expect(chips()[0]!.querySelector('.hud-held-badge-cost')).toBeNull();
+  });
+});
+
+describe('Momentum’s kill count on the strip (ID-245)', () => {
+  const streak = (n: number | undefined, reloadedAllAt?: number, time = 0): HordeState => ({
+    ...holding({ sharpshooter: 1, momentum: 1 }),
+    time,
+    ...(n === undefined ? {} : { streak: n }),
+    ...(reloadedAllAt === undefined ? {} : { reloadedAllAt }),
+  });
+
+  it('shows the kills left on its badge and in its tip, from a full ' + CARD.momentum.kills, () => {
+    const [, m] = heldCards(streak(undefined));
+    expect(m!.badge).toBe(String(CARD.momentum.kills));
+    expect(m!.live!.text).toBe(`Next reload in ${CARD.momentum.kills} kills`);
+    expect(m!.spoken).toContain(`Next reload in ${CARD.momentum.kills} kills.`);
+    expect(heldCards(streak(24))[1]!.badge).toBe('1');
+    expect(momentumLeft({ streak: 0 })).toBe(CARD.momentum.kills);
+  });
+
+  it('counts in place, never rebuilding the row, and flashes for a moment after a reload', () => {
+    const { hud, chips, tip } = mount();
+    hud.update(streak(3));
+    const row = chips();
+    const badge = () => chips()[1]!.querySelector('.hud-held-badge')!;
+    expect(badge().textContent).toBe(String(CARD.momentum.kills - 3));
+    chips()[1]!.focus();
+    expect(tip.querySelector('.hud-held-tip-live')!.textContent).toBe(
+      `Next reload in ${CARD.momentum.kills - 3} kills`,
+    );
+    hud.update(streak(4));
+    expect(chips()[1]).toBe(row[1]);
+    expect(badge().textContent).toBe(String(CARD.momentum.kills - 4));
+    expect(tip.querySelector('.hud-held-tip-live')!.textContent).toBe(
+      `Next reload in ${CARD.momentum.kills - 4} kills`,
+    );
+    expect(chips()[1]!.classList.contains('hud-held-flash')).toBe(false);
+    // A reload: the count starts over and the chip flashes for 0.8 s of real time, whatever
+    // the fight speed (fight time barely moves here; the wall clock decides).
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    hud.update(streak(0, 10, 10.2));
+    expect(chips()[1]).toBe(row[1]);
+    expect(badge().textContent).toBe(String(CARD.momentum.kills));
+    expect(chips()[1]!.classList.contains('hud-held-flash')).toBe(true);
+    clock.mockReturnValue(1700);
+    hud.update(streak(0, 10, 13));
+    expect(chips()[1]!.classList.contains('hud-held-flash')).toBe(true);
+    clock.mockReturnValue(1850);
+    hud.update(streak(0, 10, 13.1));
+    expect(chips()[1]!.classList.contains('hud-held-flash')).toBe(false);
+    clock.mockRestore();
+  });
+});
+
+describe('Adrenaline on the strip (ID-245)', () => {
+  const boosted = (time: number, heavy = false): HordeState => ({
+    ...holding({ sharpshooter: 1, 'adrenaline-rush': 1 }),
+    time,
+    rush: {
+      at: 10,
+      by: 'a',
+      until: 13,
+      ...(heavy ? { heavy: true as const, heavyUntil: 13 } : {}),
+    },
+  });
+
+  it('says the boost and its seconds left while it runs, and nothing after', () => {
+    const [, a] = heldCards(boosted(10.5));
+    expect(a!.live).toEqual({ text: 'Fire rate +20%, 3 s left' });
+    expect(a!.badge).toBe('3s');
+    expect(a!.spoken).toContain('Fire rate +20%, 3 s left.');
+    const [, h] = heldCards(boosted(10.5, true));
+    expect(h!.live).toEqual({ text: 'Fire rate +35%, 3 s left', heavy: true });
+    const [, over] = heldCards(boosted(13));
+    expect(over!.live).toBeUndefined();
+    expect(over!.badge).toBe('');
+  });
+
+  it('lights its chip (amber, red-orange when heavy), its tip counting down, rebuilt once a second', () => {
+    const { hud, chips, tip } = mount();
+    hud.update(boosted(10.5));
+    const chip = () => chips()[1]!;
+    expect(chip().classList.contains('hud-held-live')).toBe(true);
+    expect(chip().classList.contains('hud-held-live-heavy')).toBe(false);
+    chip().focus();
+    expect(tip.querySelector('.hud-held-tip-live')!.textContent).toBe('Fire rate +20%, 3 s left');
+    // The same second: no rebuild.
+    const before = chip();
+    hud.update(boosted(10.6));
+    expect(chip()).toBe(before);
+    hud.update(boosted(11.5));
+    expect(chip()).not.toBe(before);
+    expect(tip.querySelector('.hud-held-tip-live')!.textContent).toBe('Fire rate +20%, 2 s left');
+    hud.update(boosted(11.5, true));
+    expect(chip().classList.contains('hud-held-live-heavy')).toBe(true);
+    hud.update(boosted(13));
+    expect(chip().classList.contains('hud-held-live')).toBe(false);
+    expect(tip.querySelector('.hud-held-tip-live')).toBeNull();
   });
 });

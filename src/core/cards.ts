@@ -278,9 +278,9 @@ export const UPGRADES: Readonly<
     rarity: 'epic',
     levels: 1,
   },
-  // The mode cards (ID-222): unlocked by a mode's boss hordes, offered only in a higher mode
-  // and only in a fight whose bosses have what they answer (`eligible`); Suppressing Fire in
-  // every fight (ID-235).
+  // The mode cards (ID-222): unlocked by a mode's boss hordes, offered only in a higher mode;
+  // Suppressing Fire, Cauterise, Momentum and Adrenaline in every fight (ID-235, ID-245), the
+  // others only in a fight whose bosses have what they answer (`eligible`).
   'suppressing-fire': {
     name: 'Suppressing Fire',
     text: `Enemies you hit move ${Math.round(CARD.suppress.slow * 100)}% slower; bosses you hit use skills ${Math.round(CARD.suppress.recharge * 100)}% slower`,
@@ -290,14 +290,14 @@ export const UPGRADES: Readonly<
   },
   cauterise: {
     name: 'Cauterise',
-    text: `Regen bosses can’t heal for ${CARD.cauterise.seconds} s after a squad hit`,
+    text: `Hits scorch enemies: +${Math.round(CARD.cauterise.taken * 100)}% damage taken for ${CARD.cauterise.seconds} s; scorched bosses can’t heal`,
     category: 'behaviour',
     rarity: 'rare',
     levels: 1,
   },
   momentum: {
     name: 'Momentum',
-    text: 'When a boss dies every gun reloads at once and each survivor gets a throw back',
+    text: `Every ${CARD.momentum.kills} kills all guns reload; a boss or mini-boss kill gives each survivor a throw back`,
     category: 'behaviour',
     rarity: 'rare',
     levels: 1,
@@ -316,9 +316,9 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     levels: 1,
   },
-  'tranq-darts': {
-    name: 'Tranq Darts',
-    text: `A hit takes Enrage’s speed off an enraged boss for ${CARD.tranq.seconds} s`,
+  'adrenaline-rush': {
+    name: 'Adrenaline',
+    text: `When a survivor is hurt the squad fires ${Math.round(CARD.rush.rate * 100)}% faster for ${CARD.rush.seconds} s (${Math.round(CARD.rush.heavyRate * 100)}% if one hit takes ${Math.round(CARD.rush.heavy * 100)}%+ of their HP)`,
     category: 'behaviour',
     rarity: 'rare',
     levels: 1,
@@ -352,26 +352,23 @@ const bossesHave = (
 
 /**
  * Whether the fight has what mode card `id` answers (ID-222), read off its bosses: Suppressing
- * Fire always (ID-235: it slows every enemy); Cauterise Regen; Momentum a boss (not a
- * mini-boss); Gas Masks Poison pool; Breaching Rounds Shield or Armour plates; Tranq Darts
- * Enrage. Offered only then, so they never crowd the offers (ID-131).
+ * Fire, Cauterise, Momentum and Adrenaline always (ID-235, ID-245: each works in every fight
+ * of its mode); Gas Masks Poison pool; Breaching Rounds Shield or Armour plates. The others
+ * are offered only then, so they never crowd the offers (ID-131).
  */
 const modeCardRelevant = (s: Pick<HordeState, 'bosses'>, id: ModeCard): boolean => {
   const has = (...skills: BossSkill[]) =>
     bossesHave(s, (b) => b.skills.some((k) => skills.includes(k)));
   switch (id) {
     case 'suppressing-fire':
-      return true;
     case 'cauterise':
-      return has('regen');
     case 'momentum':
-      return bossesHave(s, (b) => !b.elite);
+    case 'adrenaline-rush':
+      return true;
     case 'gas-masks':
       return has('poison');
     case 'breaching-rounds':
       return has('shield', 'plates');
-    case 'tranq-darts':
-      return has('enrage');
   }
 };
 export const OFFER_SIZE = 3;

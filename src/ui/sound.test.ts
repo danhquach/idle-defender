@@ -217,6 +217,27 @@ describe('Sound cues (ID-080)', () => {
     expect(cuesBetween(enraged, structuredClone(enraged))).toEqual([]);
   });
 
+  it('Adrenaline starting: one thump, a heavy one named apart; a refresh and a long frame (ID-245)', () => {
+    const [prev, next] = frames();
+    expect(cuesBetween(prev, next)).toEqual([]);
+    const light = structuredClone(next);
+    light.rush = { at: 0.5, by: 'a', until: 3.5 };
+    expect(cuesBetween(next, light)).toEqual(['adrenaline']);
+    const heavy = structuredClone(next);
+    heavy.rush = { at: 0.5, by: 'a', heavy: true, until: 3.5, heavyUntil: 3.5 };
+    expect(cuesBetween(next, heavy)).toEqual(['adrenaline-heavy']);
+    // A refresh moves the end only: the same start, no cue.
+    const refreshed = structuredClone(light);
+    refreshed.time += 0.1;
+    refreshed.rush!.until = 4;
+    expect(cuesBetween(light, refreshed)).toEqual([]);
+    // A frame that spans the whole boost (the next frame is after its end) still cues once.
+    const after = structuredClone(next);
+    after.time += 10;
+    after.rush = { at: 1, by: 'a', until: 4 };
+    expect(cuesBetween(next, after)).toEqual(['adrenaline']);
+  });
+
   it('a swarm wave starting (ID-099)', () => {
     const [prev, next] = frames();
     next.swarm = true;

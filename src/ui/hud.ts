@@ -97,6 +97,7 @@ import {
   bossHorde,
   cardLevel,
   repairsLeft,
+  scorched,
   underFire,
   windingUp,
   type Enemy,
@@ -316,6 +317,26 @@ export interface HeldCard {
   spoken: string;
   /** A timed cost still running (ID-137): "Fire rate −25%, 4 s left"; absent when none. */
   cost?: string;
+  /**
+   * What the card is doing now (ID-245): Momentum's "Next reload in 12 kills", Adrenaline's
+   * "Fire rate +20%, 2 s left" (`heavy` for 35%); absent when idle.
+   */
+  live?: { text: string; heavy?: true };
+}
+
+/** Kills left until Momentum's next reload (ID-245). */
+export const momentumLeft = (s: Pick<HordeState, 'streak'>): number =>
+  CARD.momentum.kills - (s.streak ?? 0);
+
+/** Adrenaline's boost now (ID-245): its size and the whole seconds left, or null with none running. */
+export function rushLive(
+  s: Partial<Pick<HordeState, 'time' | 'rush'>>,
+): { heavy: boolean; secs: number } | null {
+  const r = s.rush;
+  if (!r || s.time === undefined) return null;
+  const heavy = r.heavyUntil !== undefined && s.time < r.heavyUntil;
+  const left = (heavy ? r.heavyUntil! : r.until) - s.time;
+  return left > 0 ? { heavy, secs: Math.ceil(left) } : null;
 }
 
 /** Screen px kept clear under the held cards' strip (ID-113), past its chips' level badges. */
@@ -323,7 +344,8 @@ const HELD_GAP = 8;
 
 /** The upgrade cards held this horde, in pick order (ID-113); a replaced ammo card is gone. */
 export function heldCards(
-  s: Pick<HordeState, 'taken' | 'cardLevels'> & Partial<Pick<HordeState, 'time' | 'repairsUntil'>>,
+  s: Pick<HordeState, 'taken' | 'cardLevels'> &
+    Partial<Pick<HordeState, 'time' | 'repairsUntil' | 'streak' | 'rush'>>,
 ): HeldCard[] {
   // Field Repairs' fire-rate cost while it runs (ID-137): its seconds left on the chip.
   const left =
@@ -348,14 +370,32 @@ export function heldCards(
     const cost = secs
       ? `Fire rate −${Math.round((1 - CARD.fieldRepairs.fireRate) * 100)}%, ${secs} s left`
       : undefined;
+    // Momentum's kills to the next reload, Adrenaline's running boost (ID-245).
+    const rush = id === 'adrenaline-rush' ? rushLive(s) : null;
+    const live: HeldCard['live'] | undefined =
+      id === 'momentum'
+        ? { text: `Next reload in ${momentumLeft(s)} kills` }
+        : rush
+          ? {
+              text: `Fire rate +${Math.round((rush.heavy ? CARD.rush.heavyRate : CARD.rush.rate) * 100)}%, ${rush.secs} s left`,
+              ...(rush.heavy ? { heavy: true as const } : {}),
+            }
+          : undefined;
     return {
       id,
-      badge: secs ? `${secs}s` : badge,
+      badge: secs
+        ? `${secs}s`
+        : id === 'momentum'
+          ? String(momentumLeft(s))
+          : rush
+            ? `${rush.secs}s`
+            : badge,
       title: `${u.name} · ${level}`,
       effect,
       kind,
-      spoken: `${u.name}, ${spokenLevel}. ${effect.replaceAll('×', 'times ')}. ${cost ? `${cost.replace('−', 'minus ')}. ` : ''}${kind}`,
+      spoken: `${u.name}, ${spokenLevel}. ${effect.replaceAll('×', 'times ')}. ${cost ? `${cost.replace('−', 'minus ')}. ` : ''}${live ? `${live.text}. ` : ''}${kind}`,
       ...(cost ? { cost } : {}),
+      ...(live ? { live } : {}),
     };
   });
 }
@@ -1052,14 +1092,22 @@ export function bossBars(s: HordeState): BossBar[] {
       const skill = bossCue(s, e);
       const cue = skill ? `${SKILL_NAME[skill]}!` : null;
       const fire = underFire(s, e);
+      const scorch = scorched(s, e);
       const hpText = `${hp.toLocaleString('en-US')}/${e.maxHp.toLocaleString('en-US')}`;
       return {
         name,
         cue,
         winding: skill !== null && windingUp(s, e) === skill,
         fire,
+        scorch,
         hpText,
-        label: [name, ...(cue ? [cue] : []), ...(fire ? [FIRE_TAG] : []), hpText].join(' · '),
+        label: [
+          name,
+          ...(cue ? [cue] : []),
+          ...(fire ? [FIRE_TAG] : []),
+          ...(scorch ? [SCORCH_TAG] : []),
+          hpText,
+        ].join(' · '),
         hp,
         maxHp: e.maxHp,
       };
@@ -1068,6 +1116,8 @@ export function bossBars(s: HordeState): BossBar[] {
 
 /** A boss bar's tag while Suppressing Fire holds it under fire (ID-235). */
 export const FIRE_TAG = 'Under fire';
+/** A boss bar's tag while Cauterise has it scorched (ID-245). */
+export const SCORCH_TAG = 'Scorched';
 
 /** One boss bar: its name and skills, the skill it is using (a tag), its HP; `label` says it all. */
 export interface BossBar {
@@ -1077,6 +1127,8 @@ export interface BossBar {
   winding: boolean;
   /** Suppressing Fire (ID-235): it is under fire, its skills slowed; tagged `FIRE_TAG`. */
   fire: boolean;
+  /** Cauterise (ID-245): it is scorched, taking more damage; tagged `SCORCH_TAG`. */
+  scorch: boolean;
   hpText: string;
   label: string;
   hp: number;
@@ -2652,15 +2704,19 @@ export function createHud(
     const fire = el('span', 'hud-boss-fire');
     fire.textContent = FIRE_TAG;
     fire.hidden = true;
+    // Cauterise (ID-245): a tag while the boss is scorched.
+    const scorch = el('span', 'hud-boss-scorch');
+    scorch.textContent = SCORCH_TAG;
+    scorch.hidden = true;
     const hpText = el('span', 'hud-boss-hptext');
-    label.append(name, cue, fire, hpText);
+    label.append(name, cue, fire, scorch, hpText);
     const meter = el('meter', 'hud-boss-hp');
     meter.min = 0;
     meter.setAttribute('aria-labelledby', label.id);
     row.append(label, meter);
     row.hidden = true;
     boss.append(row);
-    return { row, name, cue, fire, hpText, meter };
+    return { row, name, cue, fire, scorch, hpText, meter };
   });
   boss.hidden = true;
   // The swarm banner (ID-121): its title, and the countdown while the wave is incoming.
@@ -3078,6 +3134,7 @@ export function createHud(
       el('strong', 'hud-held-tip-title', card.title),
       el('span', 'hud-held-tip-effect', card.effect),
       ...(card.cost ? [el('span', 'hud-held-tip-cost', card.cost)] : []),
+      ...(card.live ? [el('span', 'hud-held-tip-live', card.live.text)] : []),
       el('span', 'hud-held-tip-kind', card.kind),
     );
     // Under its chip, kept inside the window.
@@ -3105,7 +3162,10 @@ export function createHud(
     heldCardsNow = list;
     heldRow.replaceChildren(
       ...list.map((c) => {
-        const chip = el('button', `hud-held-card hud-held-${UPGRADES[c.id].rarity}`);
+        const chip = el(
+          'button',
+          `hud-held-card hud-held-${UPGRADES[c.id].rarity}${c.id === 'adrenaline-rush' && c.live ? ` hud-held-live${c.live.heavy ? ' hud-held-live-heavy' : ''}` : ''}`,
+        );
         chip.type = 'button';
         chip.dataset.card = c.id;
         chip.setAttribute('aria-label', c.spoken);
@@ -3176,6 +3236,9 @@ export function createHud(
   let banning = false;
   // When the pick opened (performance.now), for the key guard.
   let offerOpenedAt = 0;
+  // Momentum's chip flash (ID-245): the last reload seen and when its flash ends (performance.now).
+  let momentumReloadSeen: number | undefined;
+  let momentumFlashUntil = 0;
   // While a pick's confirm effect plays (ID-103): the panel takes no input and closes after.
   let picking: ReturnType<typeof setTimeout> | undefined;
   function endPick(): void {
@@ -4021,6 +4084,7 @@ export function createHud(
         r.cue.hidden = b.cue === null;
         r.cue.classList.toggle('hud-boss-cue-winding', b.winding);
         r.fire.hidden = !b.fire;
+        r.scorch.hidden = !b.scorch;
         if (r.hpText.textContent !== b.hpText) r.hpText.textContent = b.hpText;
         r.meter.max = b.maxHp;
         r.meter.value = b.hp;
@@ -4087,6 +4151,8 @@ export function createHud(
         ? JSON.stringify([
             state.taken.map((id) => [id, state.cardLevels[id]]),
             Math.ceil(repairsLeft(state)),
+            // Adrenaline's boost (ID-245): its size and each second of its countdown.
+            rushLive(state),
           ])
         : '';
       const heldHidden = !squad || state.taken.length === 0 || !result.hidden;
@@ -4098,6 +4164,26 @@ export function createHud(
       if (held.hidden !== heldHidden) {
         held.hidden = heldHidden;
         if (heldHidden) showTip(null);
+      }
+      // Momentum's kills left (ID-245) change with every kill: set in place, never a row
+      // rebuild; its chip flashes for a moment after a reload.
+      if (squad && !heldHidden && state.taken.includes('momentum')) {
+        const chip = chipOf('momentum');
+        const badge = chip?.querySelector('.hud-held-badge');
+        const left = String(momentumLeft(state));
+        if (chip && badge && badge.textContent !== left) {
+          badge.textContent = left;
+          heldCardsNow = heldCards(state);
+          const now = heldCardsNow.find((c) => c.id === 'momentum');
+          if (now) chip.setAttribute('aria-label', now.spoken);
+          if (tipFor === 'momentum') showTip('momentum', tipPinned);
+        }
+        // Timed in real time, so the flash reads the same at 5× as at 1×.
+        if (state.reloadedAllAt !== momentumReloadSeen) {
+          momentumReloadSeen = state.reloadedAllAt;
+          if (state.reloadedAllAt !== undefined) momentumFlashUntil = performance.now() + 800;
+        }
+        chip?.classList.toggle('hud-held-flash', performance.now() < momentumFlashUntil);
       }
       // Its height changes with a redraw, showing or hiding, or the window's width.
       if (heldRedraw || heldSpaceFor !== heldHidden) {

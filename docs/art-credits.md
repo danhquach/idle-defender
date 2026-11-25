@@ -150,6 +150,6 @@ Wikimedia Commons page id where it has none.
 - `card-breaching-rounds` (ID-222): adapted from "Broken shield" by Lorc,
   <https://game-icons.net>, licensed CC BY 3.0
   (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its layout (a shield with a crack), recoloured steel blue, simplified, with the shared card bullet through it, and a dark outline added.
-- `card-tranq-darts` (ID-222): adapted from "Dart" by Delapouite,
+- `card-adrenaline` (ID-245): adapted from "Heart organ" by Lorc,
   <https://game-icons.net>, licensed CC BY 3.0
-  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its style only (a dart with flights), recoloured teal and violet, and a dark outline added.
+  (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its layout (a heart with two lobes and a point), recoloured red-orange, with our own bold white pulse line across it, and a dark outline added.
