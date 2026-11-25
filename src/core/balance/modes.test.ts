@@ -2,8 +2,9 @@
 // that just holds Normal Horde 50 wins Nightmare Horde 1 at the first try on some seeds but
 // not all; a squad at twice Normal Horde 50's Recommended Power is stopped by Nightmare
 // Horde 20 on most; and no mode has a wall where a squad well above the expected power loses
-// repeatedly. The 2× run is a static squad (no `gearUp` between fights; it stops at its first
-// lost fight), as in ID-223's own measurement: the squad's power is what is under test, and
+// repeatedly (Hell's own checks are in hell.test.ts). The 2× run is a static squad (no
+// `gearUp` between fights; it stops at its first lost fight), as in ID-223's own
+// measurement: the squad's power is what is under test, and
 // gearing up on Nightmare's drops (effective levels 51–70, rarity shifted up) lifts it past 2×
 // (geared, it was stopped by Horde 20 on only 4 of 20 seeds, accepted: a strong squad winning
 // is fine; the mode's start is held by the Horde 1 check).
@@ -85,7 +86,6 @@ describe('difficulty modes (ID-218, ID-223)', () => {
   it.each([
     ['nightmare', 20],
     ['nightmare', 30],
-    ['hell', 30],
   ] as const)(
     'a squad well over Recommended Power does not lose repeatedly: %s %i',
     (mode, n) => {

@@ -60,14 +60,14 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
   },
   hell: {
     name: 'Hell',
-    offset: 80,
+    offset: 100,
     scrap: 2,
     rarity: 2,
     skills: 3,
     newSkills: 1,
     extraBoss: 1,
-    hpScale: 1,
-    recBoss: 1.2,
+    hpScale: 1.4,
+    recBoss: 1.3,
   },
 };
 
