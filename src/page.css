@@ -8075,7 +8075,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   position: absolute;
   z-index: 1;
   left: var(--space-10);
+  right: var(--space-10);
   bottom: var(--space-6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--text-xs);
   font-weight: 700;
   text-shadow: 0 1px 2px var(--color-shadow);
@@ -8232,12 +8236,84 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 .map-member-gun {
-  grid-column: 1 / -1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+/* Under the gun, at the right (ID-246): what Best fit ranks by. */
+.map-member-power {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+/* A team out (ID-246): its own rating after the area's, in its band's colour. */
+.map-real[data-rating='safe'] {
+  color: var(--color-band-ok);
+}
+
+.map-real[data-rating='risky'] {
+  color: var(--color-band-close);
+}
+
+.map-real[data-rating='dangerous'] {
+  color: var(--color-band-short);
+}
+
+.map-risk-power {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+}
+
+/* The ⓘ beside Best fit: a square icon, not a share of the row; Send gets a row of its own. */
+.map-pick-side .map-buttons {
+  flex-wrap: wrap;
+}
+
+/* The picker's buttons follow the rating, not the column's foot: the explanation opening
+   under the bench moves nothing. */
+.map-pick .map-pick-side .map-buttons {
+  margin-top: 0;
+}
+
+.map-odd {
+  white-space: nowrap;
+}
+
+.map-pick-side .map-buttons > .map-info {
+  flex: none;
+  width: 36px;
+  padding: 0;
+}
+
+.map-pick-side .map-buttons > .map-go {
+  flex-basis: 100%;
+}
+
+.map-info[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.map-help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-6) var(--space-8) var(--space-6) var(--space-20);
+  border-radius: 6px;
+  background: var(--color-surface-sunken);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.map-help[hidden] {
+  display: none;
 }
 
 .map-risk {
@@ -8408,6 +8484,23 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .map-cols {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* One column (ID-246): the rating and each injury sit next to their names, not across
+     the full width; the team in two columns, like the bench above it. */
+  .map-risk-line {
+    justify-content: flex-start;
+  }
+
+  .map-chosen {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2) var(--space-10);
+  }
+
+  .map-chosen-row {
+    justify-content: flex-start;
+    gap: var(--space-6);
+  }
 }
 
 /* A short screen (a phone on its side): the four areas side by side, so all show at once. */
@@ -8437,6 +8530,18 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   .map-area .map-danger {
     left: var(--space-6);
+    right: var(--space-6);
+  }
+
+  /* Each drop whole: one that doesn't fit wraps under, never cut (ID-246). */
+  .map-drop {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  /* A team out (ID-246): the countdown shows the time, so the tag keeps room for both ratings. */
+  .map-area[data-out='true'] .map-trip {
+    display: none;
   }
 
   .map-drops {
@@ -8457,11 +8562,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .map-pick .map-art,
   .map-report .map-art {
     aspect-ratio: 10 / 1;
-  }
-
-  .map-drops {
-    flex-wrap: nowrap;
-    white-space: nowrap;
   }
 
   .map-pick .map-sub {

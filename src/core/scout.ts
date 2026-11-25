@@ -129,14 +129,26 @@ export const tripMs = (danger: Danger): number => DANGERS[danger].minutes * 60_0
 export const teamPower = (members: readonly RosterDefender[]): number =>
   members.reduce((t, d) => t + survivorPower(d), 0);
 
+/** The power `danger` asks at best horde `best`: a team of it has a ratio of 1. */
+const dangerNeed = (danger: Danger, best: number): number =>
+  (recommendedPower(best) / SQUAD_CAP) * DANGERS[danger].need;
+
 /**
  * A team of `power` against `danger` at best horde `best`: its power over what the danger
  * asks (`need` survivors at the horde's Recommended Power per squad survivor).
  */
 export function teamRatio(power: number, danger: Danger, best: number): number {
-  const need = (recommendedPower(best) / SQUAD_CAP) * DANGERS[danger].need;
+  const need = dangerNeed(danger, best);
   return need > 0 ? Math.max(0, power) / need : 0;
 }
+
+/** The team power that rates Safe against `danger` at best horde `best` (ID-246). */
+export const safePower = (danger: Danger, best: number): number =>
+  dangerNeed(danger, best) * MAP_PATROL.safeAt;
+
+/** A patrol's ratio from the power and best horde it left with: later changes don't move it (ID-246). */
+export const patrolRatio = (p: Pick<MapPatrol, 'power' | 'danger' | 'best'>): number =>
+  teamRatio(p.power, p.danger, p.best);
 
 /** Each member's injury chance at team ratio `ratio`: falls with every bit of power. */
 export const injuryChance = (ratio: number): number =>

@@ -2,7 +2,9 @@
 // map button. It shows the map's areas as cards (name, danger, trip time, what each can drop
 // and how likely); an area with a patrol out shows the team and a live countdown, then "report
 // ready". "Send a patrol" opens the team picker: bench survivors, the team's rating against the
-// area's danger and each member's injury chance, live as members are added or removed. A
+// area's danger and each member's injury chance, live as members are added or removed; each
+// survivor's power, the team's Safe line and an ⓘ explanation (ID-246). A team out shows its
+// own rating and odds from the power it left with (ID-246). A
 // patrol back opens its report; OK takes the loot and XP. Sending and taking reports work
 // between hordes only. Text reaches the page only through textContent.
 import { heldName, levelName } from '../core/armoury.ts';
@@ -19,7 +21,10 @@ import {
   patrolAt,
   patrolOf,
   patrolPool,
+  patrolRatio,
+  safePower,
   sendRefusal,
+  teamRating,
   teamRisk,
   type MapArea,
   type MapPatrol,
@@ -40,6 +45,27 @@ export const MAP_ALL_OUT = 'Everyone on the bench is out on patrol.';
 export const MAP_NOBODY_FREE = 'Nobody on the bench can go';
 export const MAP_BEST_FIT =
   'Picks the fewest bench survivors that rate Safe, strongest first; the strongest team when none can.';
+export const MAP_HELP_LABEL = 'How patrols are rated';
+/** The picker's explanation behind its ⓘ button (ID-246), one line each. */
+export const MAP_HELP: readonly string[] = [
+  "Power: each survivor's share of Squad Power, from their main gun, level and max HP.",
+  "Team rating: the team's power against what the area's danger asks.",
+  'A stronger team: lower injury chance and better drop odds.',
+  'Best fit: the fewest survivors that rate Safe, strongest first; the strongest team when none can.',
+];
+
+/** A power as shown (ID-246): whole, rounded down. */
+export const powerText = (n: number): string => Math.floor(n).toLocaleString('en-US');
+
+/**
+ * The team's power against the Safe line (ID-246): "Power 120 / 150 for Safe" short of it,
+ * "Power 160 · Safe from 150" once it rates Safe (`reached`, the rating's own test). The line
+ * is rounded up when short and down when over, so the two numbers never contradict the rating.
+ */
+export function safeLine(power: number, need: number, reached: boolean): string {
+  if (reached) return `Power ${powerText(power)} · Safe from ${powerText(need)}`;
+  return `Power ${powerText(power)} / ${Math.ceil(need).toLocaleString('en-US')} for Safe`;
+}
 
 /**
  * The team "Best fit" picks against `danger` (ID-244): the fewest free bench survivors that
@@ -93,6 +119,8 @@ const levelText = (d: RosterDefender): string => `Lv ${levelOf(d.xp).level}`;
 export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLElement): MapTab {
   let opened = false;
   let view: View = { kind: 'list' };
+  /** Whether the picker's explanation (ID-246) is open: kept while the tab is. */
+  let helpOpen = false;
   let drawn: { game: GameState; can: boolean; back: number } | null = null;
 
   const pane = el('div', 'map-dialog');
@@ -116,6 +144,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     danger: MapArea['danger'],
     title: string,
     tag?: string,
+    real?: Danger,
   ): HTMLElement {
     const art = el('div', 'map-art');
     art.dataset.danger = danger;
@@ -127,11 +156,17 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     if (url) img.src = url;
     const name = el('h3', 'map-area-name', title);
     name.tabIndex = -1;
-    art.append(
-      img,
-      el('span', 'map-danger', tag ?? `${DANGERS[danger].name} · ${tripText(danger)}`),
-      name,
-    );
+    const corner = el('span', 'map-danger', tag ?? DANGERS[danger].name);
+    // A team out (ID-246): its own rating, from the power it left with, after the area's.
+    if (real) {
+      const r = el('span', 'map-real');
+      r.dataset.rating = real;
+      r.title = `Team rating: ${DANGERS[real].name}`;
+      r.append(' (', el('span', 'sr-only', 'team rating '), DANGERS[real].name, ')');
+      corner.append(r);
+    }
+    if (!tag) corner.append(el('span', 'map-trip', ` · ${tripText(danger)}`));
+    art.append(img, corner, name);
     return art;
   }
 
@@ -139,10 +174,19 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     const card = el('article', 'map-area');
     card.dataset.area = area.kind;
     card.dataset.danger = area.danger;
-    const art = banner(area.kind, area.danger, AREAS[area.kind].name);
+    const p = patrolAt(game, area.kind);
+    // A team out: its rating and drop odds at the power it left with (ID-246).
+    const ratio = p ? patrolRatio(p) : 0;
+    const art = banner(
+      area.kind,
+      area.danger,
+      AREAS[area.kind].name,
+      undefined,
+      p ? teamRating(ratio) : undefined,
+    );
     const drops = el('ul', 'map-drops');
     drops.setAttribute('aria-label', 'Drops, chance per member');
-    for (const d of areaDrops(area)) {
+    for (const d of areaDrops(area, ratio)) {
       const li = el('li', 'map-drop');
       li.append(
         el('span', 'map-drop-name', LOOT_NAME[d.loot]),
@@ -151,7 +195,6 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       drops.append(li);
     }
     card.append(art);
-    const p = patrolAt(game, area.kind);
     if (p) {
       card.dataset.out = 'true';
       // Over the picture: where they are, as the first thing seen.
@@ -252,6 +295,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
           el('span', 'map-member-name', d.name),
           el('b', 'map-member-lv', levelText(d)),
           el('span', 'map-member-gun', lock ?? gun),
+          el('span', 'map-member-power', `Power ${powerText(survivorPower(d))}`),
         );
         b.addEventListener('click', () => {
           const next = on ? ids.filter((x) => x !== d.id) : [...ids, d.id];
@@ -276,12 +320,12 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       // The card's own drops, at this team's odds: each member rolls once.
       const ratio = teamRatio(teamPower(team), spot.danger, bestHorde(game));
       const odds = el('p', 'map-risk-odds');
-      odds.textContent = `${team.length} of ${MAP_PATROL.max} going · each finds ${areaDrops(
-        spot,
-        ratio,
-      )
-        .map((d) => `${LOOT_NAME[d.loot]} ${pct(d.chance)}`)
-        .join(' · ')}`;
+      // Each drop kept whole, so a wrap falls between them.
+      odds.append(`${team.length} of ${MAP_PATROL.max} going · each finds `);
+      areaDrops(spot, ratio).forEach((d, i) => {
+        if (i > 0) odds.append(' · ');
+        odds.append(el('span', 'map-odd', `${LOOT_NAME[d.loot]} ${pct(d.chance)}`));
+      });
       const chosen = el('ul', 'map-chosen');
       chosen.setAttribute('aria-label', 'Injury chance');
       for (const d of team) {
@@ -292,7 +336,12 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
         );
         chosen.append(li);
       }
-      rating.append(line, odds, chosen);
+      const power = el(
+        'p',
+        'map-risk-power',
+        safeLine(teamPower(team), safePower(spot.danger, bestHorde(game)), risk.rating === 'safe'),
+      );
+      rating.append(line, power, odds, chosen);
     }
     side.append(rating);
     const why = can ? sendRefusal(game, area, ids) : MAP_WAIT;
@@ -332,8 +381,26 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       go({ kind: 'pick', area, ids: fit }, true);
       pane.querySelector<HTMLElement>('.map-best')?.focus();
     });
+    // How it works (ID-246): opens the explanation under the bench.
+    const info = el('button', 'map-back map-info', 'ⓘ');
+    info.type = 'button';
+    info.title = MAP_HELP_LABEL;
+    info.setAttribute('aria-label', MAP_HELP_LABEL);
+    info.setAttribute('aria-controls', 'map-help');
+    info.setAttribute('aria-expanded', String(helpOpen));
+    info.addEventListener('click', () => {
+      helpOpen = !helpOpen;
+      draw();
+      pane.querySelector<HTMLElement>('.map-info')?.focus();
+    });
+    const help = el('ul', 'map-help');
+    help.id = 'map-help';
+    help.setAttribute('aria-label', MAP_HELP_LABEL);
+    help.hidden = !helpOpen;
+    for (const line of MAP_HELP) help.append(el('li', '', line));
+    main.append(help);
     const buttons = el('div', 'map-buttons');
-    buttons.append(back, best, send);
+    buttons.append(back, best, info, send);
     side.append(buttons);
     return [box];
   }
@@ -463,6 +530,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     },
     hide() {
       opened = false;
+      helpOpen = false;
       view = { kind: 'list' };
     },
     escape() {

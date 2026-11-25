@@ -46,8 +46,10 @@ import {
   newMap,
   patrolAt,
   patrolOf,
+  patrolRatio,
   patrolReport,
   patrolXp,
+  safePower,
   sendMapPatrol,
   sendRefusal,
   takeReport,
@@ -636,5 +638,33 @@ describe('Medicine treats the patrol’s injured (ID-220)', () => {
       ok: false,
       reason: `${recruit(2).name} is on patrol`,
     });
+  });
+});
+
+describe('the Safe line and a patrol out’s own rating (ID-246)', () => {
+  it('safePower is the power where a team turns Safe, at every danger and best horde', () => {
+    for (const danger of DANGER_IDS) {
+      for (const best of [1, 9, 40, 300]) {
+        const need = safePower(danger, best);
+        expect(need).toBeGreaterThan(0);
+        expect(teamRating(teamRatio(need, danger, best))).toBe('safe');
+        expect(teamRating(teamRatio(need * 0.999, danger, best))).not.toBe('safe');
+      }
+    }
+  });
+
+  it('a patrol’s ratio comes from the power and best horde it left with', () => {
+    const team = bench(2, { xp: xpForLevel(20) });
+    const g = sent(camp(squad(), team), AREA_IDS[0], 'risky', ids(team));
+    const p = g.map!.patrols[0]!;
+    expect(patrolRatio(p)).toBe(teamRatio(teamPower(team), 'risky', bestHorde(g)));
+    // What it left with, not the team now or the best horde now.
+    expect(patrolRatio({ ...p, power: p.power * 2 })).toBeCloseTo(patrolRatio(p) * 2);
+    expect(patrolRatio(p)).toBe(teamRatio(p.power, p.danger, p.best));
+    // Below Safe and Safe, by the power it left with.
+    expect(teamRating(patrolRatio({ ...p, power: 0 }))).toBe('dangerous');
+    const line = safePower(p.danger, p.best);
+    expect(teamRating(patrolRatio({ ...p, power: line }))).toBe('safe');
+    expect(teamRating(patrolRatio({ ...p, power: line * 0.99 }))).toBe('risky');
   });
 });
