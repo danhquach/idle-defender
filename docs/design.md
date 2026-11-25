@@ -2846,6 +2846,12 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   ratio of power to that sets each member's injury chance, 70% / (1 + 3.25 × ratio²), and
   adds up to 15% to each roll's chance (full at a ratio of 2, at most 95%). The picker
   rates the team Safe (ratio 1.5+), Risky (0.75+) or Dangerous, live as members are picked.
+  **As built (ID-244):** the picker lists only bench survivors not out on another patrol
+  (the resting stay, greyed); with every bench survivor out it says "Everyone on the bench
+  is out on patrol." **Best fit** (beside Back and Send) ticks, in place of the pick, the
+  fewest free survivors that rate Safe, strongest first (ties in bench order); when no team
+  of 4 or fewer can, the strongest team allowed. It is greyed between fights and with
+  nobody free; the ticks can be changed by hand after.
 - **Away:** members on patrol can't fight, swap in, join the squad, be let go or
   combined, and earn no bench share. On the Roster (ID-234) each patrol out is a block of
   its members' cards, the soonest back first, under a header in the World map card's words:

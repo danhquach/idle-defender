@@ -6,7 +6,7 @@
 // Text reaches the page only through textContent.
 import { describe, expect, it } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { AREAS, DANGERS, MAP_PATROL } from '../core/data.ts';
+import { AREAS, DANGERS, MAP_PATROL, type Danger } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import {
   areaDrops,
@@ -33,7 +33,16 @@ import {
   pct,
   tripText,
 } from './maptext.ts';
-import { createMapView, MAP_EMPTY_BENCH, MAP_WAIT } from './mapview.ts';
+import { survivorPower } from '../core/hordeonly.ts';
+import {
+  bestFit,
+  createMapView,
+  MAP_ALL_OUT,
+  MAP_BEST_FIT,
+  MAP_EMPTY_BENCH,
+  MAP_NOBODY_FREE,
+  MAP_WAIT,
+} from './mapview.ts';
 import { rosterTiles } from './squadroster.ts';
 
 const NOW = 1_700_000_000_000;
@@ -186,21 +195,34 @@ describe('the World map tab: the team picker (ID-219)', () => {
     expect(state.game.map!.patrols).toHaveLength(1);
   });
 
-  it('greys survivors out on patrol or resting, and a fifth pick', () => {
+  it('hides survivors out on another patrol, greys the resting, and a fifth pick (ID-244)', () => {
     const g0 = send(camp(6), ['recruit-2']);
     const g = {
       ...g0,
       reserve: g0.reserve.map((d) => (d.id === 'recruit-3' ? { ...d, rest: 1 } : d)),
     };
-    const { all } = mount({ game: g, now: NOW });
-    all('.map-send')[0]!.click();
+    const { all, q } = mount({ game: g, now: NOW });
+    all('.map-send')[1]!.click();
+    const ids = all('.map-pick-member').map((r) => r.dataset.id);
+    expect(ids).toEqual(['recruit-3', 'recruit-4', 'recruit-5', 'recruit-6', 'recruit-7']);
+    expect(q('.map-pick')!.textContent).not.toContain('On patrol');
+    expect(q('.map-empty')).toBeNull();
     const by = (id: string) => all('.map-pick-member').find((r) => r.dataset.id === id)!;
-    expect((by('recruit-2') as HTMLButtonElement).disabled).toBe(true);
-    expect(by('recruit-2').textContent).toContain('On patrol');
     expect((by('recruit-3') as HTMLButtonElement).disabled).toBe(true);
     for (const id of ['recruit-4', 'recruit-5', 'recruit-6', 'recruit-7']) by(id).click();
     expect(all('.map-pick-member[aria-pressed="true"]')).toHaveLength(4);
-    expect((by('recruit-2') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('says so when everyone on the bench is out, and Best fit is greyed', () => {
+    const g = send(camp(2), ['recruit-2', 'recruit-3']);
+    const { all, q } = mount({ game: g, now: NOW });
+    all('.map-send')[1]!.click();
+    expect(q('.map-empty')!.textContent).toBe(MAP_ALL_OUT);
+    expect(all('.map-pick-member')).toHaveLength(0);
+    expect(q('.map-sub')).toBeNull();
+    const best = q<HTMLButtonElement>('.map-best')!;
+    expect(best.disabled).toBe(true);
+    expect(best.title).toBe(MAP_NOBODY_FREE);
   });
 
   it('says so with nobody on the bench, and Esc steps back to the map', () => {
@@ -210,6 +232,116 @@ describe('the World map tab: the team picker (ID-219)', () => {
     win.dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(win.isOpen()).toBe(true);
     expect(q('.map-areas')).not.toBeNull();
+  });
+});
+
+describe('the World map tab: Best fit (ID-244)', () => {
+  /** A bench of levels `levels` (by XP), in that order. */
+  function benchOf(levels: readonly number[]): GameState {
+    const g = camp(levels.length);
+    return {
+      ...g,
+      reserve: g.reserve.map((d, i) => ({ ...d, xp: levels[i]! * 5_000 })),
+    };
+  }
+
+  /** The smallest team size that rates Safe at `danger`, by trying every team; null if none. */
+  function smallestSafe(g: GameState, danger: Danger): number | null {
+    const pool = g.reserve;
+    let best: number | null = null;
+    for (let mask = 1; mask < 1 << pool.length; mask++) {
+      const team = pool.filter((_, i) => mask & (1 << i));
+      if (team.length > MAP_PATROL.max) continue;
+      if (teamRisk(g, team, danger).rating !== 'safe') continue;
+      if (best === null || team.length < best) best = team.length;
+    }
+    return best;
+  }
+
+  it('picks the fewest that rate Safe, strongest first, or the strongest 4', () => {
+    const g = benchOf([1, 30, 4, 12, 60, 2]);
+    const order = [...g.reserve].sort((a, b) => survivorPower(b) - survivorPower(a));
+    for (const danger of Object.keys(DANGERS) as Danger[]) {
+      const fit = bestFit(g, danger);
+      const size = smallestSafe(g, danger);
+      if (size === null) {
+        expect(fit).toEqual(order.slice(0, MAP_PATROL.max).map((d) => d.id));
+      } else {
+        expect(fit).toEqual(order.slice(0, size).map((d) => d.id));
+        const team = g.reserve.filter((d) => fit.includes(d.id));
+        expect(teamRisk(g, team, danger).rating).toBe('safe');
+      }
+    }
+    // Both branches for sure: a weak pair can't make Safe, an equal strong bench can.
+    const weak = benchOf([1, 1]);
+    expect(smallestSafe(weak, 'dangerous')).toBeNull();
+    expect(bestFit(weak, 'dangerous')).toEqual(['recruit-2', 'recruit-3']);
+    const strong = benchOf([90, 90, 90, 90, 90]);
+    const k = smallestSafe(strong, 'safe');
+    expect(k).not.toBeNull();
+    // A tie keeps bench order.
+    expect(bestFit(strong, 'safe')).toEqual(strong.reserve.slice(0, k!).map((d) => d.id));
+  });
+
+  it('never takes the resting, those out, or the squad; nobody free picks nobody', () => {
+    const g0 = send(benchOf([90, 90, 1, 1]), ['recruit-2']);
+    const g = {
+      ...g0,
+      reserve: g0.reserve.map((d) => (d.id === 'recruit-3' ? { ...d, rest: 1 } : d)),
+    };
+    const fit = bestFit(g, 'dangerous');
+    expect(fit).not.toContain('recruit-2');
+    expect(fit).not.toContain('recruit-3');
+    expect(fit).not.toContain(g.roster[0]!.id);
+    expect(fit.length).toBeGreaterThan(0);
+    expect(bestFit(camp(0), 'safe')).toEqual([]);
+  });
+
+  it('replaces the pick, updates the risk and Send, and can be changed by hand', () => {
+    const state = { game: benchOf([1, 30, 4, 12, 60]), now: NOW };
+    const { all, q, sent } = mount(state);
+    all('.map-send')[0]!.click();
+    all('.map-pick-member')[0]!.click(); // the weakest, by hand
+    const best = q<HTMLButtonElement>('.map-best')!;
+    expect(best.disabled).toBe(false);
+    expect(best.title).toBe(MAP_BEST_FIT);
+    best.click();
+    const danger = state.game.map!.areas[0]!.danger;
+    const fit = bestFit(state.game, danger);
+    const pressed = () => all('.map-pick-member[aria-pressed="true"]').map((r) => r.dataset.id);
+    expect(pressed().sort()).toEqual([...fit].sort());
+    const team = state.game.reserve.filter((d) => fit.includes(d.id));
+    expect(q('.map-rating')!.textContent).toBe(
+      DANGERS[teamRisk(state.game, team, danger).rating].name,
+    );
+    expect(q('.map-go')!.textContent).toBe(`Send ${fit.length}`);
+    expect(document.activeElement).toBe(q('.map-best'));
+    const other = all('.map-pick-member').find((r) => !fit.includes(r.dataset.id!))!;
+    other.click();
+    expect(pressed()).toContain(other.dataset.id);
+    q<HTMLButtonElement>('.map-go')!.click();
+    expect(sent[0]!.sort()).toEqual([...fit, other.dataset.id!].sort());
+  });
+
+  it('is greyed when sending closes (a fight starts)', () => {
+    const state = { game: camp(3), now: NOW, canSend: true };
+    const { all, q, tab } = mount(state);
+    all('.map-send')[0]!.click();
+    expect(q<HTMLButtonElement>('.map-best')!.disabled).toBe(false);
+    state.canSend = false;
+    tab.refresh();
+    expect(q<HTMLButtonElement>('.map-best')!.disabled).toBe(true);
+    expect(q<HTMLButtonElement>('.map-best')!.title).toBe(MAP_WAIT);
+  });
+
+  it('is never offered for an area with a patrol out: its picker closes', () => {
+    const state = { game: camp(3), now: NOW, canSend: true };
+    const { all, q, tab } = mount(state);
+    all('.map-send')[1]!.click();
+    state.game = send(state.game, ['recruit-2'], 1);
+    tab.refresh();
+    expect(q('.map-pick')).toBeNull();
+    expect(q('.map-best')).toBeNull();
   });
 });
 

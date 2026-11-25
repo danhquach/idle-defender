@@ -8261,6 +8261,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 .map-pick-side .map-buttons > * {
   flex: 1 1 0;
+  white-space: nowrap;
 }
 
 .map-risk-line {
