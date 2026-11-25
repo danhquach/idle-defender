@@ -6,9 +6,9 @@
 // patrol back opens its report; OK takes the loot and XP. Sending and taking reports work
 // between hordes only. Text reaches the page only through textContent.
 import { heldName, levelName } from '../core/armoury.ts';
-import { AREAS, DANGERS, MAP_PATROL, WEAPONS, type AreaId } from '../core/data.ts';
+import { AREAS, DANGERS, MAP_PATROL, WEAPONS, type AreaId, type Danger } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import { restLabel, restOf } from '../core/hordeonly.ts';
+import { restLabel, restOf, survivorPower } from '../core/hordeonly.ts';
 import {
   areaDrops,
   backPatrols,
@@ -18,6 +18,7 @@ import {
   isBack,
   patrolAt,
   patrolOf,
+  patrolPool,
   sendRefusal,
   teamRisk,
   type MapArea,
@@ -35,6 +36,30 @@ export const MAP_NOTE =
   'Bench survivors scavenge in real time, even with the game closed. Each member rolls once: drop chances are per member.';
 export const MAP_EMPTY_BENCH =
   'Nobody on the bench to send. Survivors outside the squad can patrol: bench one on the Roster.';
+export const MAP_ALL_OUT = 'Everyone on the bench is out on patrol.';
+export const MAP_NOBODY_FREE = 'Nobody on the bench can go';
+export const MAP_BEST_FIT =
+  'Picks the fewest bench survivors that rate Safe, strongest first; the strongest team when none can.';
+
+/**
+ * The team "Best fit" picks against `danger` (ID-244): the fewest free bench survivors that
+ * rate Safe, strongest first (ties in bench order); with none Safe, the strongest team
+ * allowed. Team power is a plain sum of non-negative shares, so the strongest-first prefix is
+ * the smallest team that reaches Safe, and the longest one is the strongest team.
+ */
+export function bestFit(game: GameState, danger: Danger): string[] {
+  const ranked = patrolPool(game)
+    .map((d, i) => ({ d, i, power: survivorPower(d) }))
+    .sort((a, b) => b.power - a.power || a.i - b.i)
+    .slice(0, MAP_PATROL.max)
+    .map(({ d }) => d);
+  // The full team needs no check: it is the answer either way.
+  for (let n = 1; n < ranked.length; n++) {
+    const team = ranked.slice(0, n);
+    if (teamRisk(game, team, danger).rating === 'safe') return team.map((d) => d.id);
+  }
+  return ranked.map((d) => d.id);
+}
 
 export interface MapOptions {
   /** The camp now, the time, whether closing resumes a fight, and whether sending works now. */
@@ -178,14 +203,11 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     return [grid, el('p', 'menu-note map-note', can ? MAP_NOTE : MAP_WAIT)];
   }
 
-  /** Why bench survivor `d` can't be picked, or null. */
-  function lockOf(game: GameState, d: RosterDefender): string | null {
-    const out = patrolOf(game, d.id);
-    if (out) return `On patrol · ${AREAS[out.area].name}`;
-    return restOf(d) > 0 ? restLabel(restOf(d)) : null;
-  }
+  /** Why bench survivor `d` can't be picked, or null (those out on patrol aren't listed). */
+  const lockOf = (d: RosterDefender): string | null =>
+    restOf(d) > 0 ? restLabel(restOf(d)) : null;
 
-  function picker(game: GameState, area: AreaId, ids: string[], can: boolean): HTMLElement[] {
+  function picker(game: GameState, area: AreaId, picked: string[], can: boolean): HTMLElement[] {
     const spot = game.map?.areas.find((a) => a.kind === area);
     if (!spot) return list(game, opts.state().now, can);
     const box = el('section', 'map-pick');
@@ -197,9 +219,13 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     const cols = el('div', 'map-cols');
     cols.append(main, side);
     box.append(cols);
-    const bench = game.reserve;
-    if (bench.length === 0) {
+    // Survivors out on another patrol aren't listed (ID-244), nor kept in the pick.
+    const bench = game.reserve.filter((d) => !patrolOf(game, d.id));
+    const ids = picked.filter((id) => bench.some((d) => d.id === id));
+    if (game.reserve.length === 0) {
       main.append(el('p', 'map-empty', MAP_EMPTY_BENCH));
+    } else if (bench.length === 0) {
+      main.append(el('p', 'map-empty', MAP_ALL_OUT));
     } else {
       main.append(
         el(
@@ -212,7 +238,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       rows.setAttribute('role', 'group');
       rows.setAttribute('aria-label', 'Bench survivors');
       for (const d of bench) {
-        const lock = lockOf(game, d);
+        const lock = lockOf(d);
         const on = ids.includes(d.id);
         const b = el('button', 'map-pick-member');
         b.type = 'button';
@@ -291,8 +317,23 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     const back = el('button', 'map-back', 'Back');
     back.type = 'button';
     back.addEventListener('click', () => go({ kind: 'list' }));
+    // Best fit (ID-244): ticks the fewest free survivors that rate Safe, in place of the pick.
+    const fit = bestFit(game, spot.danger);
+    const fitWhy = !can
+      ? MAP_WAIT
+      : fit.length === 0
+        ? MAP_NOBODY_FREE
+        : sendRefusal(game, area, fit);
+    const best = el('button', 'map-back map-best', 'Best fit');
+    best.type = 'button';
+    best.disabled = fitWhy !== null;
+    best.title = fitWhy ?? MAP_BEST_FIT;
+    best.addEventListener('click', () => {
+      go({ kind: 'pick', area, ids: fit }, true);
+      pane.querySelector<HTMLElement>('.map-best')?.focus();
+    });
     const buttons = el('div', 'map-buttons');
-    buttons.append(back, send);
+    buttons.append(back, best, send);
     side.append(buttons);
     return [box];
   }
