@@ -1,7 +1,7 @@
 // The Roster's gun picker, as data (ID-108): the tiles a survivor can swap to (the free
-// pistol and every stash gun but the one held, strongest first by dmg/s in their hands,
-// ID-152), each with its change against the held gun, and the Now / New / Change comparison
-// for one of them. Pure: no DOM, so the wording is testable.
+// pistol and every stash gun but the one held, strongest first by their Power with it,
+// ID-152, ID-248), each with its change against the held gun, and the Now / New / Change
+// comparison for one of them. Pure: no DOM, so the wording is testable.
 import {
   affixLines,
   baseOf,
@@ -14,10 +14,12 @@ import {
 } from '../core/armoury.ts';
 import { RARITIES, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import { squadSpec } from '../core/hordeonly.ts';
+import { handWorth, squadSpec, type GunWorthGame } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
-import { survivorDps, type Statted } from '../core/stats.ts';
+import { survivorDps } from '../core/stats.ts';
+import type { DefenderSpec } from '../core/horde.ts';
 import { dpsCaption } from './hud.ts';
+import { powerText } from './mapview.ts';
 import { classLine } from './statlines.ts';
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as `squadSpec`). */
@@ -37,27 +39,39 @@ export const gunName = (h: Held): string =>
 
 export type DeltaKind = 'up' | 'down' | 'same';
 
-/** A gun's dmg/s against the held gun's: the symbol and number, and the same in words. */
+/**
+ * A gun's Power against the held gun's (ID-248): the symbol and number, and the same in words.
+ * Power is what Squad Power and Best gun count (`powerOf`: paper dmg/s times the gun's factor,
+ * reach and reload), so the picker never marks the gun Best gun hands out as weaker.
+ */
 export interface Delta {
   kind: DeltaKind;
-  /** "▲ +4.2", "▼ 1.1" or "= same". */
+  /** "▲ +42", "▼ 11" or "= same". */
   text: string;
-  /** "4.2 more DPS", "1.1 less DPS" or "same DPS" (screen readers). */
+  /** "42 more Power", "11 less Power" or "same Power" (screen readers). */
   words: string;
 }
 
-/** Under this many dmg/s apart, two guns count as the same. */
-const SAME = 0.05;
+/** A gun's dmg/s in survivor `who`'s hands (level and profession, ID-152): what the tile shows. */
+const dpsOf = (h: Held, who: DefenderSpec): number => survivorDps(who, h);
 
-/** A gun's dmg/s in survivor `who`'s hands (level and profession, ID-152). */
-const dpsOf = (h: Held, who: Statted): number => survivorDps(who, h);
+/**
+ * Survivor `d`'s worth with each gun (ID-248): what the picker ranks and compares by, the one
+ * `handWorth` Best gun scores with. Their Power with it; in Nightmare and Hell, for a squad
+ * survivor, what it adds to the squad's Power against the next horde's traits.
+ */
+export type Worth = (h: Held) => number;
 
-export function deltaOf(held: Held, other: Held, who: Statted): Delta {
-  const d = dpsOf(other, who) - dpsOf(held, who);
-  if (Math.abs(d) < SAME) return { kind: 'same', text: '= same', words: 'same DPS' };
+/** Power as it prints: whole numbers, as on the World map (`powerText`, which floors). */
+const p0 = powerText;
+
+export function deltaOf(held: Held, other: Held, worth: Worth): Delta {
+  // Whole Power as printed (floored), so the change is exactly the two printed numbers' difference.
+  const d = Math.floor(worth(other)) - Math.floor(worth(held));
+  if (d === 0) return { kind: 'same', text: '= same', words: 'same Power' };
   return d > 0
-    ? { kind: 'up', text: `▲ +${f1(d)}`, words: `${f1(d)} more DPS` }
-    : { kind: 'down', text: `▼ ${f1(-d)}`, words: `${f1(-d)} less DPS` };
+    ? { kind: 'up', text: `▲ +${p0(d)}`, words: `${p0(d)} more Power` }
+    : { kind: 'down', text: `▼ ${p0(-d)}`, words: `${p0(-d)} less Power` };
 }
 
 /** One tile of the picker. */
@@ -69,37 +83,42 @@ export interface GunTile {
   type: string;
   free: boolean;
   rarity: Rarity;
+  /** Their Power with it (ID-248): what the tiles are sorted by. */
   power: number;
-  /** "12.4" */
+  /** "1,234": that Power as printed (whole, grouped like the World map). */
+  powerText: string;
+  /** "12.4": paper dmg/s in their hands. */
   dps: string;
   delta: Delta;
-  /** The screen-reader name: gun, rarity, dmg/s and the change. */
+  /** The screen-reader name: gun, rarity, Power, dmg/s and the change. */
   label: string;
 }
 
 /**
  * The guns survivor `id` can swap to (ID-108): the free pistol and every stash gun except
- * the one held, strongest first by dmg/s in their hands (`survivorDps`: their level and
- * profession, ID-152; a stable sort: equal guns keep stash order).
+ * the one held, strongest first by their Power with it (`powerOf`: their level and
+ * profession, ID-152, and the gun's factor, ID-248; a stable sort: equal guns keep stash order).
  */
 export function gunTiles(
-  game: Pick<GameState, 'roster' | 'armoury'> & { reserve?: readonly RosterDefender[] },
+  game: Pick<GameState, 'armoury'> & GunWorthGame & { reserve?: readonly RosterDefender[] },
   id: string,
 ): GunTile[] {
   // A bench survivor's gun can change too (ID-147), so a gun is never stuck with them.
   const d = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
   if (!d) return [];
   const who = squadSpec(d);
+  const worth = handWorth(game, d);
   const held = heldGunOf(d);
   const options: Held[] = [
     ...(isOwned(held) ? ['pistol' as Held] : []),
     ...game.armoury.filter((w) => isGun(w) && !(isOwned(held) && w.uid === held.uid)),
   ];
   return options
-    .map((h) => ({ h, power: dpsOf(h, who) }))
+    .map((h) => ({ h, power: worth(h) }))
     .sort((a, b) => b.power - a.power)
     .map(({ h, power }) => {
-      const delta = deltaOf(held, h, who);
+      const dps = dpsOf(h, who);
+      const delta = deltaOf(held, h, worth);
       const free = !isOwned(h);
       return {
         choice: isOwned(h) ? h.uid : 'pistol',
@@ -108,9 +127,10 @@ export function gunTiles(
         free,
         rarity: rarityOf(h),
         power,
-        dps: f1(power),
+        powerText: p0(power),
+        dps: f1(dps),
         delta,
-        label: `${gunName(h)}, ${RARITIES[rarityOf(h)].name} rarity, ${f1(power)} ${dpsCaption(d.name)}, ${delta.words} than ${gunName(held)}${free ? ', free' : ''}`,
+        label: `${gunName(h)}, ${RARITIES[rarityOf(h)].name} rarity, ${p0(power)} Power, ${f1(dps)} ${dpsCaption(d.name)}, ${delta.words} than ${gunName(held)}${free ? ', free' : ''}`,
       };
     });
 }
@@ -130,7 +150,7 @@ export interface CompareRow {
 }
 
 export interface GunCompare {
-  /** "▲ Stronger: +8.9 DPS (+72%)", "▼ Weaker: −1.1 DPS (−9%)" or "= Same DPS". */
+  /** "▲ Stronger: +89 Power (+72%)", "▼ Weaker: −11 Power (−9%)" or "= Same Power" (ID-248). */
   verdict: string;
   kind: DeltaKind;
   nowName: string;
@@ -138,11 +158,12 @@ export interface GunCompare {
   rows: CompareRow[];
 }
 
-/** A gun's numbers as the table reads them: dmg/s in `who`'s hands, the rest the gun's own. */
-function numbers(h: Held, who: Statted) {
+/** A gun's numbers as the table reads them: Power and dmg/s in `who`'s hands, the rest the gun's own. */
+function numbers(h: Held, who: DefenderSpec, worth: Worth) {
   const w = statsOf(h);
   if (w.kind !== 'gun' && w.kind !== 'sidearm') throw new RangeError('gunCompare: no gun');
   return {
+    worth: worth(h),
     power: dpsOf(h, who),
     damage: w.damage,
     pellets: w.pellets,
@@ -188,25 +209,32 @@ const shot = (damage: number, pellets: number): string =>
 
 /**
  * Gun `other` against the gun held: the verdict, then Now / New / Change per number (ID-108).
- * The verdict and the dmg/s row are in survivor `who`'s hands (ID-152); the rest is the gun's.
+ * The verdict, the Power row and the dmg/s row are in survivor `who`'s hands (ID-152); the
+ * verdict goes by Power (ID-248), as Best gun does; the rest is the gun's.
  */
-export function gunCompare(held: Held, other: Held, who: Statted): GunCompare {
-  const a = numbers(held, who);
-  const b = numbers(other, who);
-  const delta = deltaOf(held, other, who);
-  const d = b.power - a.power;
-  const pct = Math.round((Math.abs(d) / a.power) * 100);
+export function gunCompare(held: Held, other: Held, who: DefenderSpec, worth: Worth): GunCompare {
+  const a = numbers(held, who, worth);
+  const b = numbers(other, who, worth);
+  const delta = deltaOf(held, other, worth);
+  const d = Math.floor(b.worth) - Math.floor(a.worth);
+  const pct = Math.round((Math.abs(b.worth - a.worth) / a.worth) * 100);
   const verdict =
     delta.kind === 'same'
-      ? '= Same DPS'
+      ? '= Same Power'
       : delta.kind === 'up'
-        ? `▲ Stronger: +${f1(d)} DPS (+${pct}%)`
-        : `▼ Weaker: ${MINUS}${f1(-d)} DPS (${MINUS}${pct}%)`;
+        ? `▲ Stronger: +${p0(d)} Power (+${pct}%)`
+        : `▼ Weaker: ${MINUS}${p0(-d)} Power (${MINUS}${pct}%)`;
   const roleA = roleOf(baseOf(held))?.role ?? '';
   const roleB = roleOf(baseOf(other))?.role ?? '';
   const affA = affixLines(held);
   const affB = affixLines(other);
   const rows: CompareRow[] = [
+    // What Squad Power counts (ID-248): dmg/s with the gun's reach and reload weighed in.
+    numRow('Power', [Math.floor(a.worth), Math.floor(b.worth)], 0, [p0(a.worth), p0(b.worth)], {
+      more: '',
+      less: '',
+      signed: true,
+    }),
     numRow('DPS', [a.power, b.power], 1, [f1(a.power), f1(b.power)], {
       more: '',
       less: '',

@@ -109,7 +109,7 @@ import {
   type HordeState,
   type UpgradeId,
 } from './horde.ts';
-import { isGun } from './loadout.ts';
+import { gunOf, isGun } from './loadout.ts';
 import {
   advance,
   beatenIn,
@@ -136,8 +136,8 @@ import {
   jobPart,
   levelOf,
   maxHpOf,
+  gunWorth,
   ratedDps,
-  survivorDps,
   xpForLevel,
 } from './stats.ts';
 
@@ -269,7 +269,7 @@ export function survivorPower(d: RosterDefender): number {
 }
 
 /** A survivor's Squad Power with gun `h` (ID-247): `ratedDps` times toughness and the scale. */
-const powerOf = (spec: DefenderSpec, h: Held): number =>
+export const powerOf = (spec: DefenderSpec, h: Held): number =>
   ratedDps(spec, h) * toughOf(spec) * POWER.scale;
 
 /** The toughness factor of a survivor's Squad Power share: from the level's extra HP. */
@@ -803,12 +803,33 @@ export function squadLine(size: number): {
 }
 
 /**
+ * The slot each of `squad` takes on a line filled in `order` (ID-248, #505), by squad index:
+ * the shortest-reaching gun takes the first slot of `order` (the middle), then the next
+ * shortest, so a short-range gun (a shotgun) is never left on an edge where it cannot reach the
+ * far rows of the wall. Reach is the primary gun's base range (affixes, rarity and profession
+ * never change it); a non-gun primary counts as 0. Ties keep squad order, so a squad of one
+ * gun fills `order` exactly as before.
+ */
+export function slotsByReach(squad: readonly DefenderSpec[], order: readonly number[]): number[] {
+  const reach = (s: DefenderSpec): number =>
+    isGun(s.loadout.primary) ? gunOf(s.loadout.primary).range : 0;
+  const slots: number[] = [];
+  squad
+    .map((s, i) => ({ i, r: reach(s) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .forEach(({ i }, k) => {
+      slots[i] = order[k]!;
+    });
+  return slots;
+}
+
+/**
  * The mode's horde `hordeNumber` (the game's next, ID-218: as strong as that plus the mode's
  * offset, with its bosses and HP factor) for the whole squad on the firing line behind a fresh
- * horde-only wall (full HP), each survivor in their slot in squad order
- * (`SQUAD_LINE.order`), with enemies spawning at `SQUAD_SPAWN_X`, at `now`. No towers,
- * turrets or traps; the bench waits to swap in mid-fight (`swapBench`, ID-148), and no cash
- * or bank come in.
+ * horde-only wall (full HP), each survivor in a slot by gun reach (`slotsByReach`: the
+ * shortest from the middle out, `SQUAD_LINE.order`), with enemies spawning at `SQUAD_SPAWN_X`,
+ * at `now`. No towers, turrets or traps; the bench waits to swap in mid-fight (`swapBench`,
+ * ID-148), and no cash or bank come in.
  * The only research is the cards beaten boss hordes unlocked (ID-127). The skills picked
  * (ID-100) come in on cooldown only.
  */
@@ -836,7 +857,8 @@ export function startSquadHorde(
   if (!first) throw new RangeError('startSquadHorde: nobody in the squad');
   const base = squadBase();
   const line = squadLine(squad.length);
-  const postOf = (i: number): number => base.posts.length + line.order[i]!;
+  const slotOf = slotsByReach(squad, line.order);
+  const postOf = (i: number): number => base.posts.length + slotOf[i]!;
   const theme = noTheme ? null : themeOf(game, hordeNumber, mode);
   const s = newHorde(seed, {
     hordeNumber: eff,
@@ -1540,14 +1562,14 @@ export interface SquadDrop {
 
 /**
  * The weakest gun a squad survivor holds (ID-098): the one that does the least in its
- * holder's hands (`survivorDps`, their level and profession, ID-152), the free pistol
- * included (a survivor with no gun fights with the pistol). Paper dmg/s on purpose, not
- * Squad Power's `ratedDps`, until ID-248 (#505): changing it moves the golden digests.
+ * holder's hands, as Squad Power counts it (`ratedDps`: their level and profession, ID-152,
+ * and the gun's factor, ID-248), the free pistol included (a survivor with no gun fights with
+ * the pistol).
  */
 export function weakestHeld(game: Pick<GameState, 'roster'>): Held {
   const held = squadOf(game).map((d) => {
     const spec = squadSpec(d);
-    return { gun: spec.loadout.primary, dps: survivorDps(spec, spec.loadout.primary) };
+    return { gun: spec.loadout.primary, dps: ratedDps(spec, spec.loadout.primary) };
   });
   return (
     held.reduce<(typeof held)[number] | null>((a, b) => (a === null || b.dps < a.dps ? b : a), null)
@@ -1556,19 +1578,18 @@ export function weakestHeld(game: Pick<GameState, 'roster'>): Held {
 }
 
 /**
- * How much more dmg/s gun `w` would do for the squad (ID-152): the most any squad survivor
- * gains holding it instead of their own gun, in their hands (`survivorDps`: level and
- * profession). Over 0 is an upgrade on paper dmg/s; Best gun scores by `ratedDps` (ID-247), so
- * it may not hand it out until ID-248 (#505) moves this to `ratedDps` too. At level 1 with no
- * bonus it is `w`'s `gunPower` over the weakest held gun's, the rule before.
+ * How much more gun `w` would do for the squad (ID-152): the most any squad survivor gains
+ * holding it instead of their own gun, as Squad Power and Best gun count it (`ratedDps`: level,
+ * profession and the gun's factor, ID-248). Over 0 is an upgrade. With no squad it is `w`'s
+ * `gunWorth` over the pistol's.
  */
 export function squadGain(game: Pick<GameState, 'roster'>): GunScore {
   const squad = squadOf(game).map((d) => {
     const spec = squadSpec(d);
-    return { spec, now: survivorDps(spec, spec.loadout.primary) };
+    return { spec, now: ratedDps(spec, spec.loadout.primary) };
   });
-  if (squad.length === 0) return (w) => gunPower(w) - gunPower('pistol');
-  return (w) => Math.max(...squad.map((s) => survivorDps(s.spec, w) - s.now));
+  if (squad.length === 0) return (w) => gunWorth(w) - gunWorth('pistol');
+  return (w) => Math.max(...squad.map((s) => ratedDps(s.spec, w) - s.now));
 }
 
 /**
@@ -1767,7 +1788,7 @@ export function winStash(
 /**
  * `armoury` with `guns` put in one by one (ID-067, ID-122), and what was thrown away for
  * room. With the stash at `cap` (`stashCap`, ID-179; or past it, from an older save) each gun put in
- * throws away the weakest of the stash and that gun by `gunPower` (a blade or tool an
+ * throws away the weakest of the stash and that gun by `gunWorth` (ID-248; a blade or tool an
  * older save left there first); a tie throws the later one, so a duplicate goes rather
  * than the one kept.
  */
@@ -1777,7 +1798,7 @@ export function stashWith(
   cap: number = STASH_CAP,
 ): { armoury: OwnedWeapon[]; thrown: OwnedWeapon[] } {
   // A blade or tool from an older save is no use to a survivor: it counts as the weakest.
-  const power = (w: OwnedWeapon): number => (isGun(w) ? gunPower(w) : 0);
+  const power = (w: OwnedWeapon): number => (isGun(w) ? gunWorth(w) : 0);
   let stash = [...armoury];
   const thrown: OwnedWeapon[] = [];
   for (const gun of guns) {
@@ -1926,6 +1947,43 @@ function plainMove(group: Hands, stash: readonly Held[]): HandMove | null {
   return pick;
 }
 
+/** A survivor's power with gun `h` against each kind of a fit context (ID-237): what `bestGuns` sums. */
+const fitPart = (ctx: FitContext, spec: DefenderSpec, h: Held): number[] =>
+  memberSums(ctx, { power: powerOf(spec, h), cls: classOf(h) });
+
+/** What `handWorth` reads of a game: the camp and what Best gun measures the squad against. */
+export type GunWorthGame = Pick<GameState, 'roster'> &
+  Partial<Pick<GameState, 'mode' | 'modes' | 'hordeNumber' | 'slots' | 'themes'>>;
+
+/**
+ * How much gun `h` is worth in survivor `d`'s hands, as Best gun scores it (ID-248): their
+ * Power with it. In a higher mode (ID-237) a squad survivor's gun counts by what it adds to
+ * the squad's effective power against the next horde (gun class against its enemy traits,
+ * the others as they hold now); so the gun Best gun picks is always the top score. On Normal,
+ * or for a bench survivor (Best gun gives the bench plain dmg/s), it is their plain Power.
+ */
+export function handWorth(game: GunWorthGame, d: RosterDefender): (h: Held) => number {
+  const who = squadSpec(d);
+  const squad = squadOf(game);
+  const ctx =
+    modeOf(game) === 'normal' || !squad.some((m) => m.id === d.id)
+      ? null
+      : fitFor({ hordeNumber: 1, ...game }, undefined, squad.length);
+  if (!ctx) return (h) => powerOf(who, h);
+  const rest = ctx.shares.map(() => 0);
+  for (const m of squad) {
+    if (m.id === d.id) continue;
+    const s = squadSpec(m);
+    fitPart(ctx, s, s.loadout.primary).forEach((v, k) => (rest[k]! += v));
+  }
+  const base = powerOver(ctx, rest);
+  return (h) =>
+    powerOver(
+      ctx,
+      fitPart(ctx, who, h).map((v, k) => v + rest[k]!),
+    ) - base;
+}
+
 /**
  * The change that adds the most effective power (ID-237) to the group, or null if none adds
  * more than `BEST_GAIN` (a share of the power, so float noise on a big squad is no gain).
@@ -1939,8 +1997,7 @@ function fitMove(group: Hands, stash: readonly Held[], ctx: FitContext): HandMov
     const cache = (group.parts ??= specs.map(() => new Map<Held, number[]>()))[i]!;
     let sums = cache.get(h);
     if (!sums) {
-      const power = powerOf(specs[i]!, h);
-      sums = memberSums(ctx, { power, cls: classOf(h) });
+      sums = fitPart(ctx, specs[i]!, h);
       cache.set(h, sums);
     }
     return sums;

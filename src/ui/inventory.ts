@@ -46,6 +46,7 @@ import {
   squadSize,
   squadSpec,
   stashCap,
+  handWorth,
   type CombineSet,
   type GunChoice,
   type GunMove,
@@ -1424,7 +1425,10 @@ export function detailsPanel(
 /** The camp as the Inventory reads it. */
 type InventoryGame = Pick<GameState, 'armoury' | 'roster'> &
   Partial<
-    Pick<GameState, 'slots' | 'stock' | 'mode' | 'modes' | 'hordeNumber' | 'reserve' | 'map'>
+    Pick<
+      GameState,
+      'slots' | 'stock' | 'mode' | 'modes' | 'hordeNumber' | 'reserve' | 'map' | 'themes'
+    >
   >;
 
 export interface InventoryOptions {
@@ -2487,7 +2491,7 @@ export function createInventory(
       el(
         'p',
         'menu-note',
-        `By DPS in ${s.name}'s hands · stash ${listed.armoury.length}/${stashCap(listed)}`,
+        `By Power in ${s.name}'s hands · stash ${listed.armoury.length}/${stashCap(listed)}`,
       ),
       ...(tiles.length > 0
         ? [grid]
@@ -2511,7 +2515,7 @@ export function createInventory(
     // Shown once a tile is picked: before that there is nothing to equip (ID-242).
     go.hidden = go.disabled = !tile || !d;
     if (tile && d) {
-      const cmp = gunCompare(heldGunOf(d), tile.held, squadSpec(d));
+      const cmp = gunCompare(heldGunOf(d), tile.held, squadSpec(d), handWorth(listed!, d));
       const name = el('p', 'inv-name', cmp.newName);
       name.dataset.rarity = tile.rarity;
       const verdict = el('p', 'inv-verdict', cmp.verdict);

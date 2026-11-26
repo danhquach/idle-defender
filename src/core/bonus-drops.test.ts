@@ -18,12 +18,14 @@ import type { HordeState } from './horde.ts';
 import {
   finishSquadHorde,
   squadDrop,
+  squadGain,
   startSquadHorde,
   stashWith,
   weakestHeld,
 } from './hordeonly.ts';
 import { createRng } from './rng.ts';
 import { unlucky } from './sim.ts';
+import { gunWorth } from './stats.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -158,13 +160,14 @@ describe('bonus guns on a win (ID-122)', () => {
       ...base,
       roster: base.roster.map((d) => ({ ...d, loadout: { ...d.loadout, primary: held } })),
     };
-    const beat = gunPower(weakestHeld(g));
-    expect(beat).toBe(gunPower(held));
+    // ID-248: "beats" is by Squad Power's rating, the gain a survivor would get with the gun.
+    expect(weakestHeld(g)).toEqual(held);
+    const gain = squadGain(g);
     let bonusOnly = 0;
     for (const s of SEEDS) {
       const d = squadDrop(g, won(g, 10, s))!;
-      const any = [d.weapon, ...d.bonus].some((w) => gunPower(w) > beat);
-      if (any && gunPower(d.weapon) <= beat) bonusOnly += 1;
+      const any = [d.weapon, ...d.bonus].some((w) => gain(w) > 0);
+      if (any && !(gain(d.weapon) > 0)) bonusOnly += 1;
       expect(d.upgrade).toBe(any);
       expect(finishSquadHorde(g, won(g, 10, s)).farm.badLuck).toBe(any ? 0 : 4);
     }
@@ -182,6 +185,21 @@ describe('the stash takes a win’s guns one by one (ID-122)', () => {
     // The relic takes the last free slot; the Rusty one is the weakest, so it goes.
     expect(out.thrown).toEqual([rusty]);
     expect(out.armoury).toEqual([...stash, relic]);
+  });
+
+  it('a full stash throws the gun worth less in Squad Power, not the one lower on paper (ID-248)', () => {
+    // A Common Pump Shotgun out-hits a Relic Carbine on paper dmg/s but is worth far less.
+    const carbine: OwnedWeapon = { uid: 'c1', base: 'rifle', rarity: 'relic', affixes: [] };
+    const pump: OwnedWeapon = { uid: 'p1', base: 'shotgun', rarity: 'common', affixes: [] };
+    expect(gunPower(pump)).toBeGreaterThan(gunPower(carbine));
+    expect(gunWorth(pump)).toBeLessThan(gunWorth(carbine));
+    // Either way round, with room for one: the Pump goes, the Carbine stays.
+    const a = stashWith([carbine], [pump], 1);
+    expect(a.thrown).toEqual([pump]);
+    expect(a.armoury).toEqual([carbine]);
+    const b = stashWith([pump], [carbine], 1);
+    expect(b.thrown).toEqual([pump]);
+    expect(b.armoury).toEqual([carbine]);
   });
 
   it('a later bonus gun can throw away the win’s own weaker drop', () => {

@@ -256,6 +256,15 @@ Defenders stand on **posts** the player builds and chooses between.
   eighth of the wall each), filled from the middle out (`SQUAD_LINE_WIDE`: 7
   fills 4, 3, 5, 2, 6, 1, 7; 8 fills 4, 5, 3, 6, 2, 7, 1, 8). A squad of 6 or
   fewer keeps the line of 6 and its order exactly.
+  As built (ID-248, #505): who takes which slot goes by gun reach, not squad
+  order. The slots are filled in that same middle-out order by the primary
+  gun's base range, shortest first (`slotsByReach`; a non-gun primary counts
+  as 0, ties keep squad order, and rarity, affixes and profession never change
+  a gun's range). A short-range gun (the Pump Shotgun, 437 px from the line on
+  an 800-high field) stands in the middle, where it reaches every wall row; a
+  long-range one (the Sniper rifle) takes an edge. A squad of one gun, or of
+  guns of one range, stands exactly as before. A mid-fight swap runs into the
+  slot of the one pulled back, so it keeps the line as it stood.
 
 ## 4. Horde defence (the active part)
 
@@ -1003,24 +1012,34 @@ close-quarter weapons come out only when an enemy is close.
     (§6 Professions, ID-149).
     The gun picker's way back is labelled Level.
   - **Choose a gun** (between hordes): tiles for the free pistol and every
-    stash gun except the one held, strongest first by DPS in this
-    survivor's hands (ID-152: their level and profession counted, as Squad
-    Power counts them, so a Hunter's Sniper rifle can outrank a gun that
-    hits harder on its own; the survivor's gun slot shows the same figure),
-    each with its base gun, a rarity frame and a change badge against the
-    held gun ("▲ +4.2", "▼ 1.1", "= same"; the symbol and number carry the
-    meaning, colour is second). The hint under the tiles says whose DPS
-    it is. It opens on the best upgrade. Above the tiles, the chosen gun is
-    compared with the held one: a verdict in words ("Stronger: +8.9 DPS
-    (+72%)" or "Weaker: …", in their hands too) with one Equip button, then
-    Now, New and Change for DPS (in their hands, the row named "Ivan's
-    DPS"), damage a shot (pellets
-    shown as "4.0 × 6"), fire rate, reload, range, role and affixes, the change written out ("0.50 s slower",
-    "200 px shorter", "new role"). Equip follows the same rules as the gun
-    pickers: the stash holds 40 (20 before ID-122), the pistol is free and unlimited, and a gun
-    is not given back for the pistol into a full stash (the reason is shown
-    in the status line). In a fight the slot says guns change between
-    hordes.
+    stash gun except the one held, strongest first by Power in this
+    survivor's hands (ID-248, ID-152: their level and profession counted, and
+    the gun's factor, reach and reload, exactly as Squad Power and Best gun
+    count them, so the top tile is the gun Best gun would give them and no
+    ▼ tile is ever Best gun's pick; the survivor's gun slot shows the same
+    figure). Each tile has its base gun, a rarity frame, the Power as the big
+    number, the DPS (paper damage a second in their hands) as a small line,
+    and a change badge in Power against the held gun ("▲ +42", "▼ 11",
+    "= same"; the symbol and number carry the meaning, colour is second). In
+    Nightmare and Hell (ID-237) a squad survivor's Power is what the gun adds
+    to the squad's Power against the next horde's traits (the gun's class
+    against its enemies, the others as they hold now), the number Best gun
+    maximises, so it can differ from the World map's per-survivor Power; the
+    hint says so. A bench survivor's, and Normal's, is plain Power. The hint
+    under the tiles reads "Frame colour = rarity. Big number = Ivan's Power
+    with the gun, small = DPS (level and profession counted); ▲ ▼ compare
+    Power with the gun held now." (then "Power is against the next horde's
+    traits." in a higher mode). It opens on the best upgrade. Above the
+    tiles, the chosen gun is compared with the held one: a verdict in words
+    ("▲ Stronger: +89 Power (+72%)", "▼ Weaker: …", "= Same Power") with one
+    Equip button, then Now, New and Change with the Power row first, then DPS
+    (in their hands), damage a shot (pellets shown as "4.0 × 6"), fire rate,
+    reload, range, role, class and affixes, the change written out ("0.50 s
+    slower", "200 px shorter", "new role"). Equip follows the same rules as
+    the gun pickers: the stash holds 40 (20 before ID-122), the pistol is
+    free and unlimited, and a gun is not given back for the pistol into a
+    full stash (the reason is shown in the status line). In a fight the slot
+    says guns change between hordes.
   - **Best gun for everyone** acts at once (ID-152): each gun is scored in
     the hands of the survivor who would hold it (DPS with their level and
     profession, as Squad Power counts it: a fighting job's own guns count for
@@ -3376,11 +3395,11 @@ and comes back stronger.
   the rarity below. Uid `r<k>`, the k-th replay win.
 - **Bonus guns (ID-122):** first clears and replays alike may drop up to 2
   more, lower-grade guns (§6 Gear, Bonus guns).
-- **Bad-luck guarantee (replays only):** "an upgrade" is a drop some squad
-  survivor would do more DPS with than with their own gun (the free
-  pistol included), in their hands: their level and profession counted, as
-  Squad Power and "Best gun for everyone" count them (ID-152; before, more
-  DPS than the weakest held gun on its own, which is the same at level 1).
+- **Bad-luck guarantee (replays only):** "an upgrade" is a drop that adds Squad Power: some squad
+  survivor would rate higher with it than with their own gun (the free
+  pistol included), in their hands: their level and profession counted, and
+  the gun's factor, reach and reload (`ratedDps`, `squadGain`, ID-248; plain
+  dmg/s before, ID-152, which is the same at level 1).
   The weakest held gun is the one that does least in its holder's hands.
   Each replay win whose drop is no upgrade adds 1 to a saved
   count (at most 5); each count moves 5 points of rarity weight up one band,
@@ -3563,19 +3582,27 @@ and comes back stronger.
     Sniper 0.85, LMG 0.74, Drum Shotgun 0.64, Machine Pistol 0.61, Pump
     Shotgun 0.47. Fitted on scripted-player squads at gun-level parity, not on
     per-rarity rolls. It reaches Squad Power, "Best gun for everyone" and
-    "Best squad" only: the DPS labels, the gun picker's ▲/▼ and the drop
-    scoring stay paper dmg/s (the drop scoring moved a golden digest, so it
-    was left alone). An all-Carbine squad's Squad Power is unchanged; a
+    "Best squad", and (ID-248) the drop and stash scoring (`gunWorth`,
+    `squadGain`, `weakestHeld`) and the gun picker's ranking and ▲/▼ (a
+    survivor's Power with the gun); the DPS labels stay paper dmg/s. An all-Carbine squad's Squad Power is unchanged; a
     Pump Shotgun squad's falls about 53%; Recommended Power is unchanged.
     `balance/gun-parity.test.ts` checks it: at Nightmare 9 and Hell 1 the
-    squads at equal Squad Power win 6 to 18 of 20 (one-gun squads) and the mix
-    at least 4. **Residue** (wins of 20 at the Carbine squad's 10-of-20 level,
-    Carbine / LMG / Sniper / Shotgun / Mix): Nightmare 9 11 / 16 / 15 / 12 / 9,
-    Hell 1 10 / 13 / 10 / 18 / 5, Normal 20 12 / 5 / 12 / 9 / 3, Hell 10
-    16 / 11 / 13 / 12 / 10. The mix trails everywhere (its guns do less than
-    the sum of their parts), the LMG and the mix trail at Normal 20, and the
-    Pump Shotgun runs ahead at Hell 1. A fitted term per mechanism (range
+    squads at equal Squad Power win 6 to 18 of 20, one-gun squads and the mix
+    alike. **Residue** (wins of 20 at the Carbine squad's 10-of-20 level,
+    Carbine / LMG / Sniper / Shotgun / Mix): Nightmare 9 11 / 16 / 15 / 12 / 10,
+    Hell 1 10 / 13 / 10 / 18 / 13, Normal 20 12 / 5 / 12 / 9 / 4, Hell 10
+    16 / 11 / 13 / 12 / 10. The mix trailed (9 and 5 at Nightmare 9 and Hell 1)
+    while it stood in squad order, because its Pump Shotguns landed on the
+    edges of the line and could not reach the far wall rows; standing by
+    reach (§3) fixed that. The LMG and the mix still trail at Normal 20, and
+    the Pump Shotgun runs ahead at Hell 1. A fitted term per mechanism (range
     uptime, hit share, card-weighted reload) would close more; not needed yet.
+    Four balance bars moved with the line by reach (owner's call: keep the fix,
+    a strong squad crushing a horde is fine): Hordes 3–4 no longer dent the wall
+    (0 of 40 first tries; now logged, not asserted), the late hordes' kept-wall
+    share is ≤ 0.45 (43.1%), no profession more than 13 points over the mean
+    (Soldier 12.6), and the traits check (a) allows 5 wins (Hell 1 mix 15 off,
+    10 on).
 - **Recommended Power (ID-102, refitted ID-128):** 3 × the DPS a horde
   asks for (9.7 before ID-128, 10.3 before ID-125's true-rate shots): its
   expected enemy HP over the seconds its waves take to spawn (each wave's size
@@ -3889,7 +3916,7 @@ golden digest are untouched).
   effective power against the horde picked on the screen (the mode's next new horde by default),
   one change at a time above `BEST_GAIN` (a hill climb: a local best, not a guaranteed global
   one); the bench keeps plain dmg/s. **The objective trusts Squad Power**, which rates guns of
-  equal Squad Power as equal although they are not (gun parity: follow-up ID-247, #501). Switching mode
+  equal Squad Power as equal (gun parity: ID-247, #501; the firing line by reach: ID-248, #505). Switching mode
   with Auto on re-fits the squad to the new mode.
 - **UI.** A gun always shows its class: icon and name on its card and the roster, the icon alone
   (name in its tooltip) on a weapon slot and a gun-pick tile; once Nightmare is unlocked the
@@ -3903,10 +3930,10 @@ golden digest are untouched).
   one-class replay; the new `balance/traits.test.ts` uses a mixed squad (2 LMG, 2 Carbine, 2 Sniper
   rifle, 2 Pump Shotgun) and bisects its own Hell 1 hold level with traits off (a test-only
   `noTraits` on the fight), then, at that level, with 20 seeds, checks (a) the mix with traits
-  on within 4 wins of the mix with them off, at equal Squad Power (within 2%) (b) an all-LMG
+  on within 4 wins (5 since ID-248) of the mix with them off, at equal Squad Power (within 2%) (b) an all-LMG
   squad loses at least 5 wins, (c) an all-Sniper squad at least 3, (d) the mix loses fewer than
   the LMG squad, (e) with traits on the mix wins at least 3 more than the LMG squad. Measured
-  (wins of 20, traits off then on): Hell 1 at gun level 106: mix 13 then 10, LMG 14 then 2, Sniper
+  (wins of 20, traits off then on): Hell 1 at gun level 106: mix 13 then 10 (15 then 10 since ID-248), LMG 14 then 2, Sniper
   19 then 15. Nightmare Horde 9 (logged, not asserted) at gun level 62: mix 14 then 16, LMG 15
   then 9, Sniper 20 then 18. Medium alone is not asserted: it saturates, and the guns do not match at
   equal Squad Power (ID-247). The Carbine replay against the figures before ID-237: Normal
@@ -4344,8 +4371,8 @@ offline progress works across sessions.
     while they hold the free pistol, and neither in a fight, as the squad's Equip);
     Change gun opens a picker in the tab, over the lists (on a phone too, so the
     fixed details box stays as it is): "Choose a gun for Ana", Back, and a tile for
-    the free pistol and each stash gun, strongest first in their hands, with the
-    change in DPS under it; tapping a tile puts the verdict and a table of changes in
+    the free pistol and each stash gun, strongest first by Power in their hands, with
+    the change in Power under it; tapping a tile puts the verdict and a table of changes in
     the details with Equip. A refusal (the stash full) is said on the status line and
     keeps the tab, picker and selection. A patrol survivor's details say their gun
     went with them and have no buttons. Bench slots are not dragged and take no drop.

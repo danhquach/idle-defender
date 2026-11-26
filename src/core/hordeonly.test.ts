@@ -1,7 +1,7 @@
 // The horde-only build (ID-066): the new game, the squad on the wall, survivors joining up
 // to the cap, loss and retry, no professions, and the fight's limits (cards, cash, perks).
 import { describe, expect, it } from 'vitest';
-import type { OwnedWeapon } from './armoury.ts';
+import { rollWeapon, type OwnedWeapon } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
 import { eligible, isModeCard, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
@@ -21,6 +21,7 @@ import {
   WEAPONS,
   HORDE_ONLY,
   SQUAD_CAP,
+  type GunBase,
   SQUAD_HP_GROWTH,
   SQUAD_LINE,
   SQUAD_WALL,
@@ -29,7 +30,7 @@ import {
   START_SKILLS,
 } from './data.ts';
 import { hordeXp, newGame, type GameState, type RosterDefender } from './game.ts';
-import { gunRange, moveDefender, tick } from './horde.ts';
+import { gunRange, moveDefender, tick, type DefenderSpec } from './horde.ts';
 import {
   acceptJoins,
   benchXpGains,
@@ -47,6 +48,8 @@ import {
   squadXpGains,
   squadSpec,
   SQUAD_SLOTS,
+  slotsByReach,
+  squadLine,
   startSquadHorde,
 } from './hordeonly.ts';
 import { gunOf, type Loadout } from './loadout.ts';
@@ -551,6 +554,97 @@ describe('fixed slots (ID-068)', () => {
     const free = s.posts.find((p) => p.defenderId === null)!;
     const moved = moveDefender(s, s.defenders[0]!.id, free.id);
     expect(moved).toEqual({ ok: false, reason: 'Survivors hold their slots' });
+  });
+});
+
+describe('the firing line by gun reach (ID-248, #505)', () => {
+  type Base = GunBase | 'knife';
+  const spec = (id: number, base: Base): DefenderSpec => ({
+    id: `r${id}`,
+    name: `R${id}`,
+    loadout: {
+      primary: base === 'knife' ? base : rollWeapon(createRng(id), `g${id}`, base, 'military', 1),
+      secondary: null,
+      item: null,
+    },
+  });
+  const specs = (bases: readonly Base[]): DefenderSpec[] => bases.map((b, i) => spec(i + 1, b));
+
+  it('a squad of one gun keeps the old slots exactly, at every size', () => {
+    for (let n = 1; n <= 8; n++) {
+      const order = squadLine(n).order;
+      expect(slotsByReach(specs(Array(n).fill('rifle')), order)).toEqual(order.slice(0, n));
+    }
+  });
+
+  it('a mix puts the shotguns in the middle and the Sniper rifles on the edges', () => {
+    const bases = ['sniper', 'shotgun', 'rifle', 'sniper', 'shotgun', 'rifle'] as const;
+    const order = squadLine(6).order;
+    const slots = slotsByReach(specs([...bases]), order);
+    // Shortest first: shotguns (squad 1, 4), then Carbines (2, 5), then Sniper rifles (0, 3).
+    expect(slots[1]).toBe(order[0]);
+    expect(slots[4]).toBe(order[1]);
+    expect(slots[2]).toBe(order[2]);
+    expect(slots[5]).toBe(order[3]);
+    expect(slots[0]).toBe(order[4]);
+    expect(slots[3]).toBe(order[5]);
+    expect([slots[0]!, slots[3]!].sort((a, b) => a - b)).toEqual([0, 5]);
+  });
+
+  it('sizes 1, 6, 7 and 8 each use every slot of their line once', () => {
+    for (const n of [1, 6, 7, 8]) {
+      const order = squadLine(n).order;
+      const bases = Array.from(
+        { length: n },
+        (_, i) => (['sniper', 'shotgun', 'rifle'] as const)[i % 3]!,
+      );
+      const slots = slotsByReach(specs([...bases]), order);
+      expect([...slots].sort((a, b) => a - b)).toEqual(
+        [...order.slice(0, n)].sort((a, b) => a - b),
+      );
+      // The first shotgun (squad 1) has the shortest reach and takes the middle.
+      if (n > 1) expect(slots[1]).toBe(order[0]);
+    }
+    const eight = slotsByReach(
+      specs(['sniper', 'sniper', 'rifle', 'rifle', 'shotgun', 'shotgun', 'smg', 'smg']),
+      squadLine(8).order,
+    );
+    expect(eight[4]).toBe(squadLine(8).order[0]);
+    expect([eight[0]!, eight[1]!].sort((a, b) => a - b)).toEqual([0, 7]);
+  });
+
+  it('a non-gun primary counts as reach 0 and takes the middle', () => {
+    const order = squadLine(3).order;
+    const slots = slotsByReach(specs(['shotgun', 'rifle', 'knife']), order);
+    expect(slots[2]).toBe(order[0]);
+    expect(slots[0]).toBe(order[1]);
+    expect(slots[1]).toBe(order[2]);
+  });
+
+  it('startSquadHorde stands the squad by reach, the first survivor still the one set out', () => {
+    const g = squadGame(6);
+    const bases = ['sniper', 'shotgun', 'rifle', 'sniper', 'shotgun', 'rifle'] as const;
+    const mixed: GameState = {
+      ...g,
+      roster: g.roster.map((d, i) => ({
+        ...d,
+        loadout: { ...d.loadout, primary: spec(i + 1, bases[i]!).loadout.primary },
+      })),
+    };
+    const s = startSquadHorde(mixed, 7, NOW);
+    const post = new Map(s.defenders.map((d) => [d.id, d.postId]));
+    const order = SQUAD_LINE.order;
+    expect(mixed.roster.map((d) => post.get(d.id))).toEqual([
+      order[4],
+      order[0],
+      order[2],
+      order[5],
+      order[1],
+      order[3],
+    ]);
+    expect(s.defenders[0]!.id).toBe(mixed.roster[0]!.id);
+    // Each post holds who stands on it.
+    for (const d of s.defenders) expect(s.posts[d.postId]!.defenderId).toBe(d.id);
   });
 });
 

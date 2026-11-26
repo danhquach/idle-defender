@@ -42,17 +42,22 @@ describe('the horde-only build, Hordes 1–10 (ID-066)', () => {
     }
   });
 
-  // ID-163: pressure builds before Horde 5. Hordes 3 and 4 dent the wall on some seeds
-  // (Horde 4's preview elite, its enemies a step tougher), and the squad's lead over
-  // Recommended Power shrinks steadily into Horde 5 instead of falling from 6× to 1.6×.
-  it('Hordes 3–4 dent the wall on some seeds, and the step into Horde 5 is gentle (ID-163)', () => {
+  // ID-163: pressure builds before Horde 5. Hordes 3 and 4 dented the wall on some seeds
+  // (Horde 4's preview elite, its enemies a step tougher; none since ID-248, 0 of 40), and the
+  // squad's lead over Recommended Power shrinks steadily into Horde 5 instead of falling from
+  // 6× to 1.6×.
+  it('the step into Horde 5 is gentle; Hordes 3–4 wall dents are logged (ID-163, ID-248)', () => {
     // "Visible wall damage" (the ticket): a twentieth of the wall gone.
     const VISIBLE = 0.95;
     const dented = [3, 4].flatMap((n) => firstTry(n)).filter((r) => r.wallLeft < VISIBLE).length;
     // ID-199: 3 of the 40 tries (4 before; the gun retune re-rolled the drops, main had 5).
     // ID-247: 2 of the 40: the scripted player now gears up by Squad Power's gun factor (fewer
     // shotguns), so its squad is a little stronger at Hordes 3–4. Measured 2: zero margin.
-    expect(dented).toBeGreaterThanOrEqual(2);
+    // ID-248: 0 of the 40: the firing line now stands by gun reach, so the scripted player's
+    // mixed squad covers the whole wall and no longer dents it at Hordes 3–4. PM picked keeping
+    // the line fix over retuning those hordes (a strong squad crushing a horde is fine), so the
+    // count is logged, not asserted; the gentle step below still holds the pressure curve.
+    console.info(`Hordes 3–4 dented the wall on ${dented} of 40 tries`);
     const lead = (n: number): number => {
       const xs = firstTry(n)
         .map((r) => r.power / recommendedPower(n))
