@@ -54,7 +54,8 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `horde.ts` | The fight: `HordeState`, `tick`, enemies, defenders, wall, shots, damage, boss and horror behaviour. The biggest core file. |
 | `hordeonly.ts` | The shipping loop: squad pick, `startSquadHorde` / `finishSquadHorde`, guns in the stash (equip, upgrade, combine, salvage, craft), survivors joining, combine, rest, Medicine treats a rest (`treatSurvivor`, ID-220). Also `hordeKindHp` (a horde's HP by kind) and `fitFor` (the fit context), and `bestSquad` / `bestGuns`, which in a higher mode maximise effective power (ID-237). |
 | `game.ts` | `GameState`, `newGame`, the full game's between-horde loop (`startHorde`, `finishHorde`, `recover`). |
-| `waves.ts` | Wave count and size, enemy HP growth, wave mix, horror abilities. |
+| `waves.ts` | Wave count and size, enemy HP growth, wave mix, horror abilities. Themed hordes (ID-238): `isThemed`, `themeMix`, `themeKind`, `themeScale` (a themed wave's count, HP and XP factors at the plain horde's totals). |
+| `themes.ts` | Themed hordes (ID-238): `themeAt` / `themeSequence` / `themeOf` (a pure pick from the save's theme seed, per mode), `themeCleared`, `withCleared`, `themedSlotsBeaten` (the most themes a save's `cleared` may list), and the two RNG streams. The tables are `THEMES` / `THEME` in `data.ts`; the first-clear gun is `themeReward` / `winStash` in `hordeonly.ts`. |
 | `pacing.ts` | How fast a horde's enemies arrive. |
 | `cards.ts` | The 1-of-3 upgrade cards in a fight (`UPGRADES`), who can take one (`eligible`), offer, reroll, ban, and stat/repair effects (`applyUpgrade`). |
 | `skills.ts` / `shop.ts` / `replace.ts` | Active skills (and Field Repairs' once-per-pick use, `repairsState` / `useRepairs`, ID-231), the mid-fight cash shop, swapping a survivor in between waves. |
@@ -79,7 +80,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 
 | File | Owns |
 | --- | --- |
-| `save.ts` | Versioned JSON save (`SAVE_VERSION`), `encodeSave` / `decodeSave`, one `read*` allow-list reader per part of `GameState`, upgrades from older versions. |
+| `save.ts` | Versioned JSON save (`SAVE_VERSION`), `encodeSave` / `decodeSave`, one `read*` allow-list reader per part of `GameState` (`readThemes`, v26: seed, cleared themes, and the `t<k>` theme-gun checks), upgrades from older versions. |
 | `validate.ts` | Small allow-list readers (`num`, `int`, `oneOf`, …) used by every `save.ts` reader. |
 | `code.ts` | The backup code: export and import the save as one line of text. |
 | `settings.ts` | Settings outside the save: mute, volumes, speed, reduced motion, auto-strike, chatter, how-to seen, Airstrike hint seen. |
@@ -125,6 +126,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A new skill | `SKILLS` and `SkillId` in `core/data.ts`; launch in `core/skills.ts`; landing in `core/horde.ts`; button in `ui/hud.ts`; art in `ui/sprites.ts` + `ui/render.ts`. Field Repairs is no `SkillId`: `repairsButton` in `ui/hud.ts`, key F in `ui/app.ts`. The Airstrike's Auto is a pill on its button (`.hud-strike` wrapper in `ui/hud.ts`); a hold on the button (`hud.ts`) or Q (`app.ts`) toggles it through `ui/hold.ts` |
 | Fight rules | `core/horde.ts` |
 | A gun's class, an enemy's trait, or the trait numbers (Nightmare and Hell) | `GUN_CLASS`, `ENEMY_TRAITS`, `FIT` in `core/data.ts`; `resist` / `weak` per mode in `MODES` (`core/modes.ts`); the factor in `core/traits.ts` (applied in `fly`, `core/horde.ts`); the class line and Help table in `ui/statlines.ts`, icons in `ui/classicon.ts`, picker chips and Fit pill in `ui/hud.ts`, damage-number look in `ui/render.ts` |
+| A horde theme (name, kind, share, tip, answering guns) or the theme numbers | `THEMES`, `THEME`, `THEME_IDS` in `core/data.ts` (`THEME_IDS` order is save format: append only); selection in `core/themes.ts`; count / HP / XP factors in `themeScale` (`core/waves.ts`), used by `spawn`, `waveEnemies`, `killXp` (`core/horde.ts`) and `hordeKindHp` (`core/hordeonly.ts`); reward in `themeReward` / `winStash` (`core/hordeonly.ts`); picker option, banner and warning in `ui/hud.ts` |
 | Difficulty mode numbers or unlocks | `MODES` in `core/modes.ts`; mode cards in `MODE_UNLOCKS` (`core/data.ts`) and `modeCards` (`core/hordeonly.ts`); start-screen switch in `ui/hud.ts` |
 | A boss skill (Hell's included) | `BossSkill` and `BOSS_SKILL` (`core/data.ts`); clocks and effects in `mutate` and its helpers (`core/horde.ts`); name and cue in `ui/hud.ts`, glow and marks in `ui/render.ts`, sounds in `ui/audio.ts` and `ui/sound.ts` |
 | What happens after a fight | `finishSquadHorde` in `core/hordeonly.ts` |

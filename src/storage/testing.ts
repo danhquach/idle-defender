@@ -102,6 +102,8 @@ export function prePoints(game: GameState): Record<string, unknown> {
 export function preJoin(game: GameState): Record<string, unknown> {
   const json = JSON.parse(JSON.stringify(game)) as Record<string, unknown>;
   delete json.joining;
+  // Themed hordes (ID-238, v26) came later: every older save is without them.
+  delete json.themes;
   return json;
 }
 

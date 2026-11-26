@@ -2409,7 +2409,8 @@ Renamed in ID-053: the Spewer and the Swollen had names other games already use;
     and a siren (three rising whoops over a drone; two blares before ID-121). The
     fight corner's wave line reads "Swarm · Wave n/m" in red from the break until
     the swarm wave ends: its last enemy down, even after the counter has moved on
-    to the next wave (waves overlap). With Reduce motion (the game's setting or
+    to the next wave (waves overlap). Themed hordes (ID-238, below) change a wave's mix and
+    count, not its time or total HP. With Reduce motion (the game's setting or
     the system's) the banner and glow hold still.
   - **Bosses:** still every 10th horde, now Horde n brings n/10 Mutated Horrors
     (at most 3), each at 4× a Horror's HP with two skills; a horde's bosses never
@@ -2880,6 +2881,8 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   The scripted player in the balance tests does not patrol.
 - **Save v25:** `map` (seed, draws, 4 areas, the patrols out) and `medicine`, each written
   once there is one; an older save loads with a fresh map and no Medicine.
+- **Save v26 (ID-238):** `themes` (the theme seed, the themes cleared), written once there is one;
+  a first-clear gun's uid `t<k>`. An older save loads with seed 0 and none cleared.
 - **Medicine (ID-220):** between hordes, a resting survivor's Roster card has **Treat · 1
   Medicine** (`TREAT`): one Medicine ends the whole rest, so they can fight the next horde at
   full HP; with none in stock it reads "No Medicine", greyed. Hidden for anyone not resting
@@ -3890,6 +3893,103 @@ golden digest are untouched).
   107 (was 12 of 20)**, so that check's floor moved from 30% to 15%: a one-class Medium squad now feels the
   traits (about 6% of its power in Hell, 4 to 9 wins of 30 on the calibration curve of the
   probe), as the design intends; and stopped before Hell 30 on 20 of 20, all by Hell 3 (same).
+
+### Themed hordes *(as built, ID-238)*
+
+From a mode's Horde 15, the horde in the middle of each boss cycle (15, 25, 35, ...; `isThemed`)
+is built around one enemy kind. Every mode has its own such hordes (Normal, Nightmare and Hell),
+and a theme is a property of the horde, so a lost horde, a replay and a debug jump all meet the
+same one. Plain hordes (every other number) are untouched: the golden digests of Hordes 1 to 30
+and 50 are byte for byte what they were; only `h45-L40-lost` (Horde 45 is themed) was re-recorded.
+
+| Theme | Kind | Its share of a wave | Answers (first-clear gun) | Tip |
+|---|---|---|---|---|
+| Stampede | Runner | 70% | SMG, LMG | Fast and many. Bring fast-firing guns, slows and knockback. |
+| Iron Wall | Brute | 40% | Sniper rifle, Hand Cannon | Few, armoured, very tough. Bring heavy guns and armour piercing. |
+| Crawl | Crawler | 25% | Pump Shotgun, Drum Shotgun | Low and hard to hit; they climb the wall. Bring spread or light guns. |
+| Bloat Tide | Swollen | 40% | Carbine, Sniper rifle | Their blasts break the wall. Long-range guns kill them far out; take Sandbags. |
+
+Shamblers take the rest of each wave. Elites and bosses of the horde are as ever.
+
+- **Equal total HP, XP and time.** A themed wave has `count` times the plain wave's enemies and
+  each `hp` times the HP, where `count` is the ratio of the plain mix's mean base HP to the
+  theme's, at most `THEME.maxCount` (1.6, a Stampede's cap: the rest goes into HP so a Horde 45
+  stays near 1,000 enemies, not 1,550). On the Horde 9+ mix: Stampede 2.41 (count x1.6, HP x1.5),
+  Iron Wall 0.55, Crawl 1.59, Bloat Tide 1.10 (those three at HP x1). The spawn gap is divided by
+  `count`, so a wave takes the same time; a swarm wave keeps its doubled size but uses the theme's
+  mix as it is (no doubled Runners). Recommended Power, `hordeHp` and `hordeSeconds` are
+  untouched: a themed horde asks the plain horde's power. `hordeKindHp(n, mode, size, theme)`
+  gives the same total (within 2%, tested for every theme, mode, and local Hordes 15 and 45) split
+  by kind, so ID-237's chips, Fit pill and Best squad weigh the themed mix.
+- **XP matches too.** A wave kill pays its kind's XP times `ThemeScale.xp` (Iron Wall about 1.4,
+  Stampede about 1.25, because a Brute's 5 XP is rarer and a Runner's 1 XP commoner than in the
+  plain mix), the fraction carried to the next kill (`xpCarry`), so a fight's card offers match the
+  plain horde's: measured within 5% over 12 seeds for every theme.
+- **Which theme.** `themeAt(seed, mode, local)`: a pure pick from the save's theme seed
+  (`GameState.themes.seed`; a new camp's start time, a save with none is seed 0), the mode, and
+  every themed slot up to the horde: from the themes whose kind has appeared by then, never the
+  one before. Its own RNG stream (`THEME_PICK_STREAM`), apart from every other. Old saves share
+  sequence 0 (Normal 15 Crawl, 25 Iron Wall, 35 Stampede, 45 Crawl).
+- **First-clear reward.** Horde-only: the first win over each theme (a replay of a beaten themed
+  horde counts, so a save already past it still earns it) gives one gun that answers the theme:
+  a base of its `answers`, uid `t<k>` (`k` the theme's place in `THEME_IDS`, append-only),
+  at least Military, at the fight's strength as gun level, from `THEME_GUN_STREAM` of the horde's
+  seed, so no drop or joiner moves; at most 4 guns per save. It goes in the stash with the win's
+  drop and bonus guns (`winStash` is the one place that says which guns go in and what a full
+  stash throws away; a capped replay with a theme due still gives it as a drop of its own). The
+  full game pays `THEME.genes` (10) Genes once per theme instead, since Genes are not spendable in
+  the horde-only build.
+- **Warnings.** The horde picker's option reads "Horde 15 (new) · Stampede" and has a chip; a
+  banner under the select (every mode) shows the theme kind's sprite, its name and its tip. A win
+  says "Horde 15 next: Stampede — a themed horde" on the result screen, read off the game's
+  pending horde whatever horde the picker preselects; a loss says "Horde 15 again: …" for the horde
+  just lost (what Retry offers). The tip is only on the picker banner. The
+  full game's stock bar reads "Horde 15 next · Stampede" (unreachable in the shipping build).
+- **Bloat Tide's answers.** Range is the answer, not class: the Carbine (750 px) and the Sniper
+  rifle (1,100 px) are the two longest-ranged guns (next the Pistol, 600), which kill a Swollen far
+  out; a Swollen resists Spread, so no shotgun. The tip does not claim exclusivity.
+- **Save v26.** `themes` (`seed`, `cleared`), written only once there is one. `cleared` holds each
+  known theme once and at most as many as themed hordes beaten across every mode (the reader does
+  not re-derive which theme each rolled, so a later retune of the picks never refuses a save);
+  a `t<k>` gun needs its theme cleared, a base that answers it and Military or better.
+  `THEME_IDS` is append-only (a uid names its place) and at most 9 long (the uid pattern is
+  `t[1-N]`).
+- **Balance (ID-238).** `balance/themes.test.ts` forces each theme through a theme seed. The rules
+  are relative to the plain horde's own wins on the same squad (the plain horde is not a sure win
+  for a mixed squad on Normal, so an absolute floor had no baseline): **B1** a sensible mix on
+  Normal 25 at 1.3x Recommended Power wins at least the plain's wins less 4 and 10 of 20, per theme
+  (at 1.0x it is asserted too, at least the plain's less 4, but with the plain at 0 that is trivially
+  true and says little); **B2** the Carbine wall at
+  1.0x wins at least the plain's less 4; **B3** Nightmare 15 Iron Wall at 1.3x costs an all-LMG
+  squad at least 3 wins against the mix; **B4** Hell 15, the mix at 1.3x, per theme at least the
+  plain's less 4 and 10 of 20; **B5** 20 campaigns (`playSquadCampaign`'s `themeSeed`) own an
+  answering gun at Horde 15 in at least 18; **B6** a Stampede Horde 45 peaks at 1.75x the plain
+  horde's enemies at most. Lower bounds only ("strong is fine, stuck is not").
+  **Measured (wins of 20; one full run, then one probe on Crawl's `share`, 0.5 to 0.25, then the
+  rules above fixed before the last run):**
+  - B1, mix on Normal 25, at 1.0x: plain 0, Stampede 2, Iron Wall 7, Crawl 0, Bloat Tide 13; at
+    1.3x: plain 12, Stampede 17, Iron Wall 19, Crawl 14, Bloat Tide 20. All meet plain less 4 (8)
+    and 10.
+  - B2, Carbine wall at 1.0x: plain 11, Stampede 16, Iron Wall 18, Crawl 16, Bloat Tide 20.
+  - B3, Nightmare 15 Iron Wall at 1.3x: mix 20, all-LMG 9 (11 fewer; floor 3).
+  - B4, Hell 15 mix at 1.3x: plain 12, Stampede 20, Iron Wall 19, Crawl 13, Bloat Tide 20.
+  - B5, campaigns owning an answering gun at Horde 15: 20 of 20 (Stampede 6, Bloat Tide 7, Iron
+    Wall 6, Crawl 1 of the campaigns that rolled each).
+  - B6, peak enemies of a Stampede Horde 45 against the plain horde's, six seeds: 194/138, 215/157,
+    190/134, 178/153, 162/127, 178/120 (at most 1.48x; cap 1.75x).
+  - Fight level (card offers), theme over plain: Stampede 1.08, Iron Wall 1.10, Crawl 1.00, Bloat
+    Tide 1.13, so the XP match holds to about 10%.
+  - Existing files: every one passed on the first full run except `squad-power` (Horde 15 Crawl: 0
+    of 10 at Recommended Power) and `survivor-cards`; Crawl's retune fixed `squad-power`, and
+    `survivor-cards`, which measures the cards in a plain close fight, plays the plain Horde 15
+    (`noTheme`) as before.
+  - **Why Crawl is 25%, not about 50%.** A Crawler is worth 40 HP against a Shambler's 20, so at
+    equal total HP a 50% mix is 1.33x the plain wave's enemies, 0.66 Crawlers per plain enemy; at
+    25% the count is 1.59x and the mix 0.40 per plain enemy, about 4x the plain horde's Crawlers
+    (10%) rather than 6.6x. At 50% the mixed squad won 1 of 20 on Normal 25 at 1.3x and 5 of 20 on
+    Hell 15 (a wall); 25% gives 14 and 13. Hell's Crawl cell (13, above the plain's 12) is still the lowest of
+    the four themes (the others 19 to 20), most likely from the Crawlers' wall climb plus Hell's
+    resist on the Sniper rifles in the mix (Crawlers resist Heavy); not measured.
 
 ### Balance pass *(ID-102)*
 

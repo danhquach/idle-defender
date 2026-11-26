@@ -5,7 +5,8 @@
 // is a close fight, the wall breaks late on most seeds and the squad loses some. Played with
 // the horde-only scripted player's cards and skills, and the card at `level` held from the
 // start, against the same fights without it: at max each card leaves fewer survivors injured
-// and wins at least as many.
+// and wins at least as many. Horde 15 is a themed horde (ID-238; Crawl for a seed-0 save): this
+// measures the cards, not a theme, so it plays the plain Horde 15 as before.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { chooseCard } from '../cards.ts';
 import type { GameState } from '../game.ts';
@@ -34,7 +35,7 @@ function play(
   // Three times the usual seeds (ID-132): over 20, adding any card to the pool re-rolls the
   // fights enough to swing the result past the bar either way, on main as well.
   for (let seed = 1; seed <= SEEDS * RUNS; seed++) {
-    let s: HordeState = startSquadHorde(game, seed * 101, 0, HORDE);
+    let s: HordeState = startSquadHorde(game, seed * 101, 0, HORDE, true);
     if (card) {
       s.taken = [card];
       s.cardLevels = { [card]: level };

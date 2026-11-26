@@ -1095,7 +1095,7 @@ describe('save: the taller field (ID-047)', () => {
     const proto = v1(newGame(), start).replace('"layers":', '"__proto__":{"x":1},"layers":');
     expect(decodeSave(proto)).toBeNull();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    for (const v of [0, 26, '1', '22', 1.5, null]) {
+    for (const v of [0, 27, '1', '22', 1.5, null]) {
       expect(decodeSave(JSON.stringify({ v, savedAt: NOW, game: newGame() }))).toBeNull();
     }
     // A current save never takes the v1 path: 5 slots are refused.
@@ -1345,7 +1345,7 @@ describe('save: resource inventory (ID-025)', () => {
   const full = stockOf({ scrap: 5, parts: 1, food: 2, medicine: 3, chemicals: 4, genes: 99 });
 
   it('round-trips every resource', () => {
-    expect(SAVE_VERSION).toBe(25);
+    expect(SAVE_VERSION).toBe(26);
     const game = withStock(full);
     expect(decodeSave(encodeSave(game, NOW))?.game.stock).toEqual(full);
   });
@@ -2218,8 +2218,8 @@ describe('save: plazas and orders (ID-029)', () => {
     expect(back!.armoury.map((w) => w.uid)).toContain('p1-12');
   });
 
-  it('is version 25 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, the skill pick, then no stat points, then professions, then the bench, then asking to join, then Auto best squad, then patched up, then bought slots, then difficulty modes came after plazas)', () => {
-    expect(SAVE_VERSION).toBe(25);
+  it('is version 26 (survivors, the car, the research queue, the reserve, the stats, 1 point a level, farming, the skill pick, then no stat points, then professions, then the bench, then asking to join, then Auto best squad, then patched up, then bought slots, then difficulty modes came after plazas)', () => {
+    expect(SAVE_VERSION).toBe(26);
   });
 
   it('round-trips a plaza patrol out, with its buildings, focus and order', () => {

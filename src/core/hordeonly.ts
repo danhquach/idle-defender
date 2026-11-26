@@ -6,6 +6,7 @@
 import {
   dropCanBeat,
   bonusWeights,
+  dropRarity,
   firstClearWeights,
   gunLevel,
   gunPower,
@@ -13,6 +14,7 @@ import {
   gunStep,
   isOwned,
   replayWeights,
+  rollRarity,
   rollSquadGun,
   rollUpgrade,
   rollWeapon,
@@ -75,8 +77,12 @@ import {
   RADIO_HORDES,
   SQUAD_JOIN,
   SURVIVOR_COMBINE,
+  THEME,
+  THEME_IDS,
+  THEMES,
   TREAT,
   type EnemyKind,
+  type ThemeId,
   type ModeCard,
   type ResearchCard,
   type Rarity,
@@ -120,9 +126,10 @@ import {
   type Mode,
   type ModeProgress,
 } from './modes.ts';
-import { chance, createRng } from './rng.ts';
+import { chance, createRng, pick } from './rng.ts';
 import { classOf, fitContext, memberSums, powerOver, type FitContext } from './traits.ts';
-import { enemyHp, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
+import { themeCleared, themeOf, THEME_GUN_STREAM, withCleared } from './themes.ts';
+import { enemyHp, swarmWave, themeMix, themeScale, waveCount, waveMix, waveSize } from './waves.ts';
 import {
   fieldBonus,
   jobBonus,
@@ -182,6 +189,8 @@ export function hordeKindHp(
   n: number,
   mode: Mode = 'normal',
   size: number = SQUAD_CAP,
+  /** The horde's theme (ID-238): its waves' kinds and counts at the same total HP. */
+  theme: ThemeId | null = null,
 ): [EnemyKind, number][] {
   const scale = squadHpScale(n, size) * MODES[mode].hpScale;
   const hp = new Map<EnemyKind, number>();
@@ -191,6 +200,12 @@ export function hordeKindHp(
   for (let w = 1; w <= waveCount(n); w++) {
     const swarm = swarmWave(n, w);
     const count = waveSize(n, w, true) * (swarm ? SWARM.size * POWER.rec.swarm : 1);
+    if (theme) {
+      const t = themeScale(theme, n, swarm);
+      for (const [kind, share] of themeMix(theme))
+        add(kind, count * t.count * share * enemyHp(kind, n, w, scale) * t.hp);
+      continue;
+    }
     for (const [kind, share] of waveMix(n, swarm))
       add(kind, count * share * enemyHp(kind, n, w, scale));
   }
@@ -207,14 +222,14 @@ export function hordeKindHp(
  * where no gun class counts.
  */
 export function fitFor(
-  game: Pick<GameState, 'mode' | 'modes' | 'hordeNumber' | 'roster' | 'slots'>,
+  game: Pick<GameState, 'mode' | 'modes' | 'hordeNumber' | 'roster' | 'slots' | 'themes'>,
   local: number = localHorde(game),
   size: number = squadSize(game),
 ): FitContext | null {
   const mode = modeOf(game);
   return mode === 'normal'
     ? null
-    : fitContext(mode, hordeKindHp(effHorde(mode, local), mode, size));
+    : fitContext(mode, hordeKindHp(effHorde(mode, local), mode, size, themeOf(game, local, mode)));
 }
 
 /** How many survivors fight the next horde (ID-224): `squadOf`'s length, the one count the fight and Recommended Power share. */
@@ -798,6 +813,11 @@ export function startSquadHorde(
   now: number,
   /** The horde of the mode being played to fight (ID-098): the next new one, or any already beaten. */
   hordeNumber: number = localHorde(game),
+  /**
+   * Test only (ID-238, the balance fixtures): the horde without its theme, as the plain horde of
+   * its number. Nothing stores it (a fight is never saved) and the app never passes it.
+   */
+  noTheme = false,
 ): HordeState {
   if (!Number.isFinite(now)) throw new RangeError(`startSquadHorde: bad time ${now}`);
   if (!Number.isInteger(hordeNumber) || hordeNumber < 1 || hordeNumber > localHorde(game)) {
@@ -812,8 +832,10 @@ export function startSquadHorde(
   const base = squadBase();
   const line = squadLine(squad.length);
   const postOf = (i: number): number => base.posts.length + line.order[i]!;
+  const theme = noTheme ? null : themeOf(game, hordeNumber, mode);
   const s = newHorde(seed, {
     hordeNumber: eff,
+    ...(theme ? { theme } : {}),
     ...(mode === 'normal' ? {} : { bosses: modeBosses(mode, hordeNumber) }),
     roster: squad,
     startDefenderId: first.id,
@@ -1309,15 +1331,14 @@ function finishHorde(
   // "Auto" (ID-154): the best squad for the camp the fight left.
   const settle = (x: GameState): GameState => autoSquad(settleSquad(x));
   if (horde.outcome !== 'won') return { next: settle(g), joined: [], noJoin: 'lost' };
-  const drop = squadDrop(game, horde);
+  const { drop, theme, guns, thrown } = winStash(game, horde);
   // A win pays Scrap, and so does each gun thrown away (ID-179); no RNG, no fight changes.
-  g.stock = scrapAfter(
-    game.stock,
-    winScrap(horde.hordeNumber, horde.mode) + salvageOf(drop?.thrown ?? []),
-  );
+  g.stock = scrapAfter(game.stock, winScrap(horde.hordeNumber, horde.mode) + salvageOf(thrown));
+  // A theme beaten for the first time (ID-238) is kept, and its gun goes in the stash with the drop's.
+  if (theme) g.themes = withCleared(game, theme.id);
   // Past `FARM.maxReplays` a replay drops nothing and the count stays (its XP is paid).
+  g.armoury = stashWith(game.armoury, guns, stashCap(game)).armoury;
   if (!drop) return { next: settle(g), joined: [], noJoin: 'no-drop' };
-  g.armoury = stashWith(game.armoury, [drop.weapon, ...drop.bonus], stashCap(game)).armoury;
   if (drop.blueprint) g.craft = withBlueprint(game.craft, drop.blueprint);
   if (drop.kind === 'first') {
     // Counted now, so a refused survivor's number is never offered again. Anyone still
@@ -1396,6 +1417,8 @@ export interface SquadResult {
    * without it; null when it is off or moved nobody.
    */
   auto: SquadMoves | null;
+  /** The theme this win beat for the first time and its gun (ID-238); absent otherwise. */
+  theme?: { id: ThemeId; gun: OwnedWeapon };
 }
 
 export function squadResult(game: GameState, horde: HordeState): SquadResult {
@@ -1405,6 +1428,7 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
   const downed = squadRests(game, horde);
   const camp = { ...game, roster: campOf(game) };
   const fought = squadXpGains(game, horde);
+  const stash = winStash(game, horde);
   return {
     // Off the whole camp, so a bench survivor who swapped in (ID-148) levels from their XP.
     gains: levelGains(camp, horde, fought),
@@ -1418,7 +1442,8 @@ export function squadResult(game: GameState, horde: HordeState): SquadResult {
       r.startHp !== undefined ? [{ id: r.id, name: r.name, startHp: r.startHp }] : [],
     ),
     next,
-    drop: squadDrop(game, horde),
+    drop: stash.shown,
+    ...(stash.theme ? { theme: stash.theme } : {}),
     scrap: squadScrap(game, horde),
     auto: autoMoves(game, horde, next),
   };
@@ -1437,7 +1462,7 @@ export function squadScrap(
 ): { total: number; salvage: number; now: number } {
   if (horde.outcome !== 'won') return { total: 0, salvage: 0, now: game.stock.scrap };
   const win = winScrap(horde.hordeNumber, horde.mode);
-  const total = scrapGain(game.stock, win + salvageOf(squadDrop(game, horde)?.thrown ?? []));
+  const total = scrapGain(game.stock, win + salvageOf(winStash(game, horde).thrown));
   return { total, salvage: Math.max(0, total - win), now: game.stock.scrap + total };
 }
 
@@ -1472,21 +1497,27 @@ export const scavenged = (
 ): number => fieldBonus(fieldOf(game, horde), 'dropChance');
 
 /** Which kind of drop a win gave (ID-098), as its tile says. */
-export type DropKind = 'first' | 'replay' | 'guaranteed';
+export type DropKind = 'first' | 'replay' | 'guaranteed' | 'theme';
 
 /**
  * A horde-only win's weapons (ID-067, ID-098, ID-122): its drop, any bonus guns, and the
  * weakest each pushed out of a full stash.
  */
 export interface SquadDrop {
+  /** The drop; a theme's first-clear gun alone (`kind` 'theme') when a capped replay drops none. */
   weapon: OwnedWeapon;
   /** Bonus guns (ID-122), lower grades most (`SQUAD_BONUS`), in the order they go in. */
   bonus: OwnedWeapon[];
+  /**
+   * The gun a theme's first clear gives on top (ID-238, uid `t<k>`), last in the order the guns
+   * go in; absent with none due, and on a drop that is itself the theme's (`kind` 'theme').
+   */
+  theme?: OwnedWeapon;
   /** The blueprint the win drops (ID-209), a gun type; absent with none. At most one, from its own stream. */
   blueprint?: WeaponId;
   /**
    * Thrown away for room, in order: each time a gun goes into the full stash, the weakest
-   * of the stash and that gun (maybe one of this win's own).
+   * of the stash and that gun (maybe one of this win's own), `dropGuns` going in.
    */
   thrown: OwnedWeapon[];
   kind: DropKind;
@@ -1576,9 +1607,18 @@ const DROP_STREAM = 0x5bd1e995;
 export function squadDrop(
   game: Pick<
     GameState,
-    'armoury' | 'roster' | 'reserve' | 'hordeNumber' | 'mode' | 'modes' | 'farm' | 'slots' | 'craft'
+    | 'armoury'
+    | 'roster'
+    | 'reserve'
+    | 'hordeNumber'
+    | 'mode'
+    | 'modes'
+    | 'farm'
+    | 'slots'
+    | 'craft'
+    | 'themes'
   >,
-  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'mode' | 'tookPart'>,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'mode' | 'tookPart' | 'theme'>,
 ): SquadDrop | null {
   if (horde.outcome !== 'won') return null;
   // ID-218: a mode's drop is for its strength (gun level, band), its rarity shifted up.
@@ -1621,16 +1661,100 @@ export function squadDrop(
   // so it is neither kept nor shown.
   const rolled = rollBlueprint(horde.seed);
   const blueprint = rolled !== null && blueprintCount(game, rolled) < BLUEPRINT.cap ? rolled : null;
-  return {
+  const theme = themeReward(game, horde);
+  const drop: SquadDrop = {
     weapon,
     bonus,
+    ...(theme ? { theme: theme.gun } : {}),
     ...(blueprint ? { blueprint } : {}),
-    thrown: stashWith(game.armoury, [weapon, ...bonus], stashCap(game)).thrown,
+    thrown: [],
     kind,
     upgrade: [weapon, ...bonus].some((w) => gain(w) > 0),
     noUpgrades,
     farmFrom: noUpgrades ? upgradeFrom(game, local + 1, gain, mode) : null,
   };
+  drop.thrown = stashWith(game.armoury, dropGuns(drop), stashCap(game)).thrown;
+  return drop;
+}
+
+/** The guns a drop puts in the stash, in order (ID-238): the drop, its bonus guns, then a theme's gun. */
+export const dropGuns = (drop: Pick<SquadDrop, 'weapon' | 'bonus' | 'theme'>): OwnedWeapon[] => [
+  drop.weapon,
+  ...drop.bonus,
+  ...(drop.theme ? [drop.theme] : []),
+];
+
+/**
+ * The gun a win over a theme not yet beaten gives (ID-238), with the theme: one that answers
+ * it (`THEMES[id].answers`), uid `t<k>`, `k` the theme's place in `THEME_IDS`, at least
+ * `THEME.rarityFloor`, at the fight's strength as its gun level. Rolled from its own stream
+ * of the horde's seed, so no drop or joiner moves. A replay counts (the theme may be one a
+ * save already beat before this build); null on a loss, a plain horde or a theme beaten.
+ */
+export function themeReward(
+  game: Pick<GameState, 'themes'>,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'mode' | 'theme'>,
+): { id: ThemeId; gun: OwnedWeapon } | null {
+  const id = horde.theme;
+  if (horde.outcome !== 'won' || !id || themeCleared(game, id)) return null;
+  const rng = createRng((horde.seed ^ THEME_GUN_STREAM) >>> 0);
+  const base = pick(rng, THEMES[id].answers);
+  const rolled = rollRarity(
+    rng,
+    firstClearWeights(horde.hordeNumber, MODES[horde.mode ?? 'normal'].rarity),
+  );
+  const floor = THEME.rarityFloor;
+  const rarity = RARITY_ORDER.indexOf(rolled) < RARITY_ORDER.indexOf(floor) ? floor : rolled;
+  const uid = `t${THEME_IDS.indexOf(id) + 1}`;
+  return { id, gun: rollWeapon(rng, uid, base, dropRarity(base, rarity), horde.hordeNumber) };
+}
+
+/**
+ * Everything a win puts in the stash (ID-238), the one place that says so: the `drop` (null
+ * for a capped replay), a theme's `theme` reward, the `guns` in the order they go in and what
+ * the full stash `thrown` away for them. A capped replay with a theme due still gives its gun,
+ * as a drop of its own (`kind` 'theme'); `shown` is the drop the result screen draws.
+ */
+export interface WinStash {
+  drop: SquadDrop | null;
+  theme: { id: ThemeId; gun: OwnedWeapon } | null;
+  guns: OwnedWeapon[];
+  thrown: OwnedWeapon[];
+  shown: SquadDrop | null;
+}
+
+export function winStash(
+  game: Pick<
+    GameState,
+    | 'armoury'
+    | 'roster'
+    | 'reserve'
+    | 'hordeNumber'
+    | 'mode'
+    | 'modes'
+    | 'farm'
+    | 'slots'
+    | 'craft'
+    | 'themes'
+  >,
+  horde: Pick<HordeState, 'outcome' | 'seed' | 'hordeNumber' | 'mode' | 'tookPart' | 'theme'>,
+): WinStash {
+  const drop = squadDrop(game, horde);
+  const theme = themeReward(game, horde);
+  const guns = drop ? dropGuns(drop) : theme ? [theme.gun] : [];
+  const thrown = drop ? drop.thrown : stashWith(game.armoury, guns, stashCap(game)).thrown;
+  const alone: SquadDrop | null = theme
+    ? {
+        weapon: theme.gun,
+        bonus: [],
+        thrown,
+        kind: 'theme',
+        upgrade: false,
+        noUpgrades: false,
+        farmFrom: null,
+      }
+    : null;
+  return { drop, theme, guns, thrown, shown: drop ?? alone };
 }
 
 /**

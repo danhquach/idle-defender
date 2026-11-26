@@ -47,7 +47,7 @@ const GOLDEN: Record<string, string> = {
   'h30-L27-lost': '77f5ca0b:46840',
   'h30-L70-won': '35a1184:19997',
   'h4-L4-won': '190ef090:16865',
-  'h45-L40-lost': 'be561d0b:44060',
+  'h45-L40-lost': '14f7e634:60385',
   'h5-L5-won': '3bad2bce:18443',
   'h50-L150-won': 'a8288ed9:19942',
   'h50-L45-lost': '8139027e:45006',

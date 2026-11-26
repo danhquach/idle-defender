@@ -19,7 +19,7 @@ jobs:
     # A normal run takes a few minutes; a hung simulation must not hold the runner for hours.
     # A job may name its own limit (`timeout`); the rest stop at 15 minutes.
     timeout-minutes: ${{ matrix.timeout || 15 }}
-    # The unit tests run in six jobs at once (ID-105, ID-149, ID-152, ID-218): a test file runs on one
+    # The unit tests run in eight jobs at once (ID-105, ID-149, ID-152, ID-218, ID-238): a test file runs on one
     # worker, so the slowest balance files set the time and get jobs of their own. (ID-146 removed the
     # stats files, ID-125's slowest, and their job.)
     # The last job runs every other file, so a new test file always runs somewhere; a file
@@ -58,6 +58,12 @@ jobs:
           - name: Unit (hell)
             tests: src/core/balance/hell.test.ts
             timeout: 25
+          # ID-238: the themed-hordes balance file plays 20 seeds on each of four themes through
+          # Normal 25, Nightmare 15, Hell 15 and 20 campaigns (about 8 minutes on one local worker,
+          # uncached); sharing the last job ran it past 15 minutes, so it has a job of its own.
+          - name: Unit (themes)
+            tests: src/core/balance/themes.test.ts
+            timeout: 25
           - name: Lint, build, other unit
             checks: true
             tests: >-
@@ -69,6 +75,7 @@ jobs:
               --exclude src/core/balance/wire.test.ts
               --exclude src/core/balance/modes.test.ts
               --exclude src/core/balance/hell.test.ts
+              --exclude src/core/balance/themes.test.ts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

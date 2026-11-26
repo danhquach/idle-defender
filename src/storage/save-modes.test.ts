@@ -43,8 +43,8 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}, v = SAVE
 }
 
 describe('save: difficulty modes (ID-218)', () => {
-  it('is version 25, and Normal writes neither field', () => {
-    expect(SAVE_VERSION).toBe(25);
+  it('is version 26, and Normal writes neither field', () => {
+    expect(SAVE_VERSION).toBe(26);
     const json = JSON.parse(encodeSave(camp(), NOW)).game;
     expect('mode' in json).toBe(false);
     expect('modes' in json).toBe(false);

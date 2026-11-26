@@ -69,6 +69,7 @@ import {
   type BossSkill,
   type BuffId,
   type EnemyKind,
+  type ThemeId,
   type PerkId,
   type ResearchId,
   type SkillId,
@@ -109,6 +110,8 @@ import {
   hordeBosses,
   kindFor,
   swarmWave,
+  themeKind,
+  themeScale,
   waveCount,
   waveMix,
   waveSize,
@@ -172,6 +175,8 @@ export function specOf(d: DefenderSpec): DefenderSpec {
 }
 export interface HordeSetup {
   hordeNumber: number;
+  /** The horde's theme (ID-238): its waves are built around one enemy kind at equal total HP. */
+  theme?: ThemeId;
   /**
    * The bosses and mini-bosses (ID-218: a difficulty mode's own), instead of the ones
    * `hordeBosses` gives `hordeNumber`. Absent: those.
@@ -699,6 +704,10 @@ export interface HordeState {
   hordeNumber: number;
   /** The difficulty mode the horde is fought in (ID-218); absent on Normal. */
   mode?: HigherMode;
+  /** The horde's theme (ID-238); written only when it has one, so a plain horde's state is as ever. */
+  theme?: ThemeId;
+  /** The fraction of an XP a themed horde's kills owe (ID-238, `killXp`); absent until one is. */
+  xpCarry?: number;
   /** Test only (balance fixtures, ID-237): a squad's bullets carry no gun class, so no trait applies. */
   noTraits?: true;
   /** How many damage numbers of each fit have carried a word so far (ID-237); never saved. */
@@ -885,6 +894,7 @@ const paused = (s: HordeState): boolean =>
 export function newHorde(seed: number, setup: HordeSetup): HordeState {
   const {
     hordeNumber,
+    theme,
     roster,
     startDefenderId,
     base,
@@ -954,6 +964,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     wave: 1,
     harder,
     swarm: harder && swarmWave(hordeNumber, 1),
+    ...(theme ? { theme } : {}),
   });
   return {
     time: 0,
@@ -961,6 +972,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     rng: { s: seed >>> 0 },
     seed: seed >>> 0,
     hordeNumber,
+    ...(theme ? { theme } : {}),
     wave: 1,
     waveCount: waveCount(hordeNumber),
     toSpawn,
@@ -1472,13 +1484,20 @@ function spawn(s: HordeState, rng: Rng): void {
     });
   }
   const interval = wavePace(s.hordeNumber, s.harder === true).interval;
-  const gap = s.swarm ? interval / SWARM.size : interval;
+  // A themed wave (ID-238) sends `count` times as many, so each comes that much sooner.
+  const scale = s.theme ? themeScale(s.theme, s.hordeNumber, s.swarm) : null;
+  const gap = (s.swarm ? interval / SWARM.size : interval) / (scale?.count ?? 1);
   while (s.toSpawn > 0 && due(s.time, s.nextSpawnAt) && due(s.time, s.breakUntil)) {
     // Shamblers only (the tutorial) roll nothing, so its seeds play as before.
-    const kind =
-      waveMix(s.hordeNumber).length > 1 ? kindFor(s.hordeNumber, rng(), s.swarm) : 'shambler';
+    const kind = s.theme
+      ? themeKind(s.theme, rng())
+      : waveMix(s.hordeNumber).length > 1
+        ? kindFor(s.hordeNumber, rng(), s.swarm)
+        : 'shambler';
     const r = ENEMIES[kind].radius;
-    place(s, kind, s.spawnX ?? FIELD.right, int(rng, r, FIELD.height - r));
+    const e = place(s, kind, s.spawnX ?? FIELD.right, int(rng, r, FIELD.height - r));
+    // Past the count cap the rest of the plain wave's HP is in each enemy.
+    if (scale && scale.hp !== 1) e.hp = e.maxHp = Math.round(e.hp * scale.hp);
     s.toSpawn -= 1;
     s.nextSpawnAt = s.time + gap;
   }
@@ -3014,13 +3033,31 @@ function streakKill(s: HordeState, e: Enemy): void {
 }
 
 /**
+ * The XP enemy `e`'s kill pays (ID-238): its kind's. In a themed horde a wave enemy pays the
+ * theme's `ThemeScale.xp` times that, so the horde's total matches the plain horde's; the
+ * fraction owed carries to the next kill (`xpCarry`), so the fight's XP stays whole. A boss,
+ * a mini-boss and a test's own enemy (no wave) pay as ever.
+ */
+function killXp(s: HordeState, e: Enemy): number {
+  const base = ENEMIES[e.kind].xp;
+  if (!s.theme || e.horror || e.elite || e.wave === undefined) return base;
+  const owed =
+    base *
+      themeScale(s.theme, s.hordeNumber, s.harder === true && swarmWave(s.hordeNumber, e.wave)).xp +
+    (s.xpCarry ?? 0);
+  const whole = Math.floor(owed + 1e-9);
+  s.xpCarry = owed - whole;
+  return whole;
+}
+
+/**
  * Pays XP and cash for every enemy at 0 HP, counts the mutants among them (ID-025), and
  * takes it off the field.
  */
 export function removeDead(s: HordeState): void {
   for (const e of s.enemies) {
     if (e.hp > 0) continue;
-    s.xp += ENEMIES[e.kind].xp;
+    s.xp += killXp(s, e);
     s.cash += ENEMIES[e.kind].cash * perkFactor(s, 'scavengers-eye', PERK.cash) * s.cashRate;
     if (MUTANTS.includes(e.kind)) s.mutantKills += 1;
     if (e.id === s.focusId) s.focusId = null;
@@ -3899,9 +3936,11 @@ function advanceWave(s: HordeState): void {
 
 /** Enemies the current wave sends: twice as many in a swarm wave (ID-102). */
 function waveEnemies(
-  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'swarm'> & { harder?: boolean },
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'swarm' | 'theme'> & { harder?: boolean },
 ): number {
-  return waveSize(s.hordeNumber, s.wave, s.harder === true) * (s.swarm ? SWARM.size : 1);
+  const plain = waveSize(s.hordeNumber, s.wave, s.harder === true) * (s.swarm ? SWARM.size : 1);
+  // A themed wave (ID-238) keeps the plain wave's HP over more or fewer enemies.
+  return s.theme ? Math.round(plain * themeScale(s.theme, s.hordeNumber, s.swarm).count) : plain;
 }
 
 /**

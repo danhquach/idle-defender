@@ -33,12 +33,14 @@ import {
   START_TIERS,
   ITEMS,
   FREE_WEAPONS,
+  THEME,
   type HigherMode,
   type JobId,
   type PerkId,
   type ResearchId,
   type SkillId,
   type Stock,
+  type ThemeId,
   stockOf,
 } from './data.ts';
 import {
@@ -58,6 +60,7 @@ import { advanceResearch, dropEntry, newQueue, type ResearchQueue } from './rese
 import { chance, createRng, pick, rngFrom } from './rng.ts';
 import { jobFor } from './jobs.ts';
 import { levelOf } from './stats.ts';
+import { themeCleared, themeOf, withCleared } from './themes.ts';
 
 /**
  * A defender on the camp's roster: lifetime XP (the level and its bonus come from it, ID-146)
@@ -91,6 +94,11 @@ export interface GameState {
   mode?: HigherMode;
   /** Each higher mode's next horde (ID-218, 1 to start); a mode never played is absent. */
   modes?: { nightmare?: number; hell?: number };
+  /**
+   * Themed hordes (ID-238): the `seed` the themes are picked from (`themeAt`; absent = 0) and
+   * the themes `cleared` so far, in `THEME_IDS` order. Written only once there is one.
+   */
+  themes?: { seed?: number; cleared?: ThemeId[] };
   base: Base;
   stock: Stock;
   tiers: Tier[];
@@ -192,7 +200,9 @@ const STARTER_ROSTER: readonly DefenderSpec[] = [
  * game's, kept as it is (each horde-only fight is on a fresh `squadBase`).
  */
 export function newGame(preset: 'full' | 'horde' = 'full', seed = 0): GameState {
-  const game = fullGame();
+  // A seed other than 0 also seeds the themed hordes (ID-238); 0 shares the older saves' sequence.
+  const themes = seed === 0 ? {} : { themes: { seed: seed >>> 0 } };
+  const game = { ...fullGame(), ...themes };
   if (preset === 'full') return game;
   return { ...game, roster: [recruit(1, seed)], camp: { ...game.camp, recruits: 1 } };
 }
@@ -499,8 +509,10 @@ export function startHorde(
   if (!fit.some((d) => d.id === defenderId)) {
     throw new RangeError(`startHorde: ${String(defenderId)} can't defend`);
   }
+  const theme = themeOf(game);
   return newHorde(seed, {
     hordeNumber: game.hordeNumber,
+    ...(theme ? { theme } : {}),
     roster: fit.map(({ id, name, loadout, xp }) => ({ id, name, loadout: { ...loadout }, xp })),
     startDefenderId: defenderId,
     base: game.base,
@@ -541,6 +553,11 @@ export function finishHorde(game: GameState, horde: HordeState, now: number): Ga
   if (find) payout[find.material] += find.amount;
   const reward = hordeBossReward(g, horde);
   if (reward && 'genes' in reward) payout.genes += reward.genes;
+  // A theme beaten for the first time pays Genes (ID-238), once.
+  if (horde.outcome === 'won' && horde.theme && !themeCleared(game, horde.theme)) {
+    payout.genes += THEME.genes;
+    g.themes = withCleared(game, horde.theme);
+  }
   if (reward && 'perk' in reward) {
     // A perk node still queued is refunded: the boss gave the perk.
     const queued = (g.queue.ids as readonly string[]).indexOf(reward.perk);

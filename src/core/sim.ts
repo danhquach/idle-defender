@@ -325,8 +325,10 @@ export function playSquadHorde(
   hordeNumber = localHorde(game),
   /** Test only (ID-237): the squad's bullets carry no gun class, so no enemy trait applies. */
   noTraits = false,
+  /** Test only (ID-238): the horde without its theme, the plain horde of its number. */
+  noTheme = false,
 ): HordeState {
-  let s = startSquadHorde(game, seed, 0, hordeNumber);
+  let s = startSquadHorde(game, seed, 0, hordeNumber, noTheme);
   if (noTraits) s.noTraits = true;
   const baseStep = s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60;
   const look = (): void => {
@@ -390,6 +392,13 @@ export interface SquadPlay {
    * upgrade for anyone.
    */
   worstLuck?: boolean;
+  /**
+   * The campaign's theme seed (ID-238): themed hordes (15, 25, ...) come in an order from it. Set
+   * on the sim's game only, never on `newGame`, so a fixture's recruit and the baselines hold.
+   */
+  themeSeed?: number;
+  /** Called before each fight with the camp as it stands and the (mode) horde about to be played. */
+  onFight?: (game: GameState, hordeNumber: number) => void;
 }
 
 /**
@@ -407,14 +416,19 @@ export function unlucky(
 ): GameState {
   const mode = modeOf(game);
   const win = scrapAfter(game.stock, winScrap(effHorde(mode, hordeNumber), mode));
+  // A theme's first-clear gun (ID-238) is no drop's luck: it stays, drop or not.
+  const guns = [
+    ...(drop.kind === 'guaranteed' ? [drop.weapon] : []),
+    ...(drop.theme ? [drop.theme] : []),
+  ];
+  const kept = stashWith(game.armoury, guns, stashCap(game));
   if (drop.kind === 'guaranteed') {
-    const kept = stashWith(game.armoury, [drop.weapon], stashCap(game));
     return { ...next, armoury: kept.armoury, stock: scrapAfter(win, salvageOf(kept.thrown)) };
   }
   return {
     ...next,
-    stock: win,
-    armoury: game.armoury,
+    stock: scrapAfter(win, salvageOf(kept.thrown)),
+    armoury: kept.armoury,
     farm: {
       ...next.farm,
       badLuck: drop.noUpgrades
@@ -437,12 +451,14 @@ export function unlucky(
 export function playSquadCampaign(seed: number, hordes: number, play: SquadPlay = {}): SquadRun[] {
   const maxFights = play.maxFights ?? hordes * 10;
   let game = newGame('horde');
+  if (play.themeSeed !== undefined) game = { ...game, themes: { seed: play.themeSeed >>> 0 } };
   const runs: SquadRun[] = [];
   let farm = 0;
   for (let i = 0; i < maxFights && game.hordeNumber <= hordes; i++) {
     const n = farm > 0 || restWait(game) ? highestBeaten(game) : game.hordeNumber;
     const replay = n < game.hordeNumber;
     const seen = play.watch ? { nearest: Infinity } : undefined;
+    play.onFight?.(game, n);
     const horde = playSquadHorde(game, seed + i, MAX_FIGHT, seen, n);
     const squad = squadOf(game);
     runs.push({

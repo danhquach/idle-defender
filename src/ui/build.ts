@@ -118,6 +118,8 @@ import {
 import { ASK_CHANGED, askConfirm } from './confirm.ts';
 import { rosterSection } from './roster.ts';
 import { costLine, setVariant } from './kit.ts';
+import { themeOf } from '../core/themes.ts';
+import { THEMES } from '../core/data.ts';
 
 /** Shown when a save from before the taller field (ID-047) is loaded. */
 export const FIELD_GREW =
@@ -130,7 +132,12 @@ export const LEVELS_REWORKED =
 export function stockBarText(game: GameState): string {
   const shown = MATERIALS.filter((m) => BUILDING_MATERIALS.includes(m) || game.stock[m] > 0);
   const stock = shown.map((m) => `${m[0]!.toUpperCase()}${m.slice(1)} ${game.stock[m]}`);
-  return [`Horde ${game.hordeNumber} next`, ...stock].join(' · ');
+  // A themed horde (ID-238) names its theme: "Horde 15 next · Stampede".
+  const theme = themeOf(game);
+  return [
+    `Horde ${game.hordeNumber} next${theme ? ` · ${THEMES[theme].name}` : ''}`,
+    ...stock,
+  ].join(' · ');
 }
 
 /** A post's slot as a stable key: building a post re-sorts `base.posts`, so ids shift. */

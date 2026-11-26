@@ -1164,6 +1164,70 @@ export const ELITE: {
 export const SWARM = { from: 5, share: 0.25, growth: 0.01, cap: 0.5, size: 2, runners: 2 } as const;
 
 /**
+ * Themed hordes (ID-238): every horde of a mode from Horde `THEME.from`, on the horde at the
+ * middle of a boss cycle (15, 25, 35, ...), is built around one enemy kind.
+ * THEME_IDS' order is save format (a gun's uid `t<k>` names `THEME_IDS[k - 1]`): append only,
+ * never reorder or remove, and at most 9 (the save's uid pattern is `t[1-N]`).
+ */
+export type ThemeId = 'stampede' | 'ironwall' | 'crawl' | 'bloat';
+export const THEME_IDS: readonly ThemeId[] = ['stampede', 'ironwall', 'crawl', 'bloat'];
+/**
+ * Each theme: its `name`, the enemy `kind` it is built around, that kind's `share` of every
+ * wave (Shamblers take the rest), a `tip`, and the gun bases that `answers` it (the first-clear
+ * reward is one of them). An answer is never a class its kind resists in ID-237's traits.
+ * Bloat Tide's answers are the two longest-ranged guns (the Carbine 750 px, the Sniper rifle
+ * 1100 px, the next 600): range, not class, is what kills a Swollen far out.
+ */
+export const THEMES: Readonly<
+  Record<
+    ThemeId,
+    {
+      readonly name: string;
+      readonly kind: EnemyKind;
+      readonly share: number;
+      readonly tip: string;
+      readonly answers: readonly GunBase[];
+    }
+  >
+> = {
+  stampede: {
+    name: 'Stampede',
+    kind: 'runner',
+    share: 0.7,
+    answers: ['smg', 'lmg'],
+    tip: 'Fast and many. Bring fast-firing guns, slows and knockback.',
+  },
+  ironwall: {
+    name: 'Iron Wall',
+    kind: 'brute',
+    share: 0.4,
+    answers: ['sniper', 'handcannon'],
+    tip: 'Few, armoured, very tough. Bring heavy guns and armour piercing.',
+  },
+  crawl: {
+    name: 'Crawl',
+    kind: 'crawler',
+    share: 0.25,
+    answers: ['shotgun', 'cartridge'],
+    tip: 'Low and hard to hit; they climb the wall. Bring spread or light guns.',
+  },
+  bloat: {
+    name: 'Bloat Tide',
+    kind: 'swollen',
+    share: 0.4,
+    answers: ['rifle', 'sniper'],
+    tip: 'Their blasts break the wall. Long-range guns kill them far out; take Sandbags.',
+  },
+};
+/**
+ * Themed hordes' numbers: from local Horde `from`; a theme's wave has at most `maxCount`
+ * times the plain wave's enemies (the rest of the HP goes into each enemy, so the total stays
+ * equal); a Genes reward `genes` for the first clear of each theme in the full game; the
+ * horde-only first-clear gun's rarity is at least `rarityFloor`.
+ */
+export const THEME = { from: 15, maxCount: 1.6, genes: 10, rarityFloor: 'military' } as const;
+
+/**
  * Enemies in a wave grow ×`rate` a horde up to Horde `until`, then hold in the horde-only
  * build (ID-102: Horde 10, no cap before; ID-128: earlier): past it, HP growth makes a horde
  * harder, so a fight's length stops growing.

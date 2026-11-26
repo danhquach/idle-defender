@@ -24,8 +24,8 @@ function levelled(): GameState {
 }
 
 describe('save: levels give an all-round bonus, no stat points (ID-146)', () => {
-  it('is version 25 (17 was ID-146’s)', () => {
-    expect(SAVE_VERSION).toBe(25);
+  it('is version 26 (17 was ID-146’s)', () => {
+    expect(SAVE_VERSION).toBe(26);
   });
 
   it('a v16 save with spent and unspent points loads with them dropped, and says so once', () => {
