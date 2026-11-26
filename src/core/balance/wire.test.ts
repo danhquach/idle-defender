@@ -4,6 +4,8 @@
 // into the late hordes: a max row holds, and a level 1 row still wears a little late. Measured
 // in the scripted horde-only campaign, at the first try of each horde, with the wire held from
 // the start at one level for the whole fight (offers of it turned down, so no rebuild).
+// Hordes 5, 10 and 15 are played plain (`noTheme`, ID-238): this measures the wire, not a theme
+// (a seed-0 Horde 15 is a Crawl), so its numbers are the plain hordes' as before.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { chooseCard } from '../cards.ts';
 import { newGame, type GameState } from '../game.ts';
@@ -33,7 +35,7 @@ interface Share {
  * one a lost fight fell in) and during the whole fight.
  */
 function working(game: GameState, seed: number, n: number, level: number): Share {
-  let s: HordeState = startSquadHorde(game, seed, 0, n);
+  let s: HordeState = startSquadHorde(game, seed, 0, n, true);
   s.taken = [...s.taken, 'barbed-wire'];
   s.cardLevels = { ...s.cardLevels, 'barbed-wire': level };
   rebuildWire(s);
@@ -77,7 +79,7 @@ describe('Barbed Wire is worth levelling (ID-133)', () => {
             done.add(n);
             for (const lv of LEVELS) out.push([key(n, lv), working(game, seed + i, n, lv)]);
           }
-          const horde = playSquadHorde(game, seed + i, 3600, undefined, n);
+          const horde = playSquadHorde(game, seed + i, 3600, undefined, n, false, true);
           game = gearUp(finishSquadHorde(game, horde));
           if (farm > 0) farm--;
           else if (!replay && horde.outcome !== 'won' && n > 1) farm = SQUAD_FARM.replays;
