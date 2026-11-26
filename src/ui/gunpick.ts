@@ -18,6 +18,7 @@ import { squadSpec } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
 import { survivorDps, type Statted } from '../core/stats.ts';
 import { dpsCaption } from './hud.ts';
+import { classLine } from './statlines.ts';
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as `squadSpec`). */
 export const heldGunOf = (d: RosterDefender): Held =>
@@ -237,6 +238,14 @@ export function gunCompare(held: Held, other: Held, who: Statted): GunCompare {
       now: roleA,
       next: roleB,
       change: roleA === roleB ? 'same' : 'new role',
+      tone: '',
+    },
+    // The class (ID-237): its name only here; the matchups are on the gun's card.
+    {
+      label: 'Class',
+      now: classLine(held, false) ?? '',
+      next: classLine(other, false) ?? '',
+      change: classLine(held, false) === classLine(other, false) ? 'same' : 'new class',
       tone: '',
     },
   ];

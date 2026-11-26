@@ -36,6 +36,7 @@ import {
   COLUMNS,
   COMBINE_COUNT,
   DEFENDER_HP,
+  ENEMIES,
   FARM,
   FIELD,
   GUN_UPGRADE,
@@ -55,6 +56,7 @@ import {
   SQUAD_SKILLS,
   SQUAD_SLOT_COSTS,
   SQUAD_SPAWN_X,
+  SWARM,
   BENCH_XP_SHARE,
   BLUEPRINT,
   CRAFT,
@@ -74,6 +76,7 @@ import {
   SQUAD_JOIN,
   SURVIVOR_COMBINE,
   TREAT,
+  type EnemyKind,
   type ModeCard,
   type ResearchCard,
   type Rarity,
@@ -118,6 +121,8 @@ import {
   type ModeProgress,
 } from './modes.ts';
 import { chance, createRng } from './rng.ts';
+import { classOf, fitContext, memberSums, powerOver, type FitContext } from './traits.ts';
+import { enemyHp, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
 import {
   fieldBonus,
   jobBonus,
@@ -167,6 +172,51 @@ export function bigSquadHp(n: number, size: number): number {
   return (growth / SQUAD_HP_GROWTH.late) ** (hordes * share);
 }
 
+/**
+ * Where horde-only Horde `n`'s enemy HP goes, kind by kind (ID-237): the walk `hordeHp`
+ * (squadpower.ts) makes, with the same scale, swarm weight and bosses, summed per kind
+ * (every kind the horde brings, in kind order). `hordeHp` is that total; it stays its own
+ * sum so the golden digest keeps its float order.
+ */
+export function hordeKindHp(
+  n: number,
+  mode: Mode = 'normal',
+  size: number = SQUAD_CAP,
+): [EnemyKind, number][] {
+  const scale = squadHpScale(n, size) * MODES[mode].hpScale;
+  const hp = new Map<EnemyKind, number>();
+  const add = (kind: EnemyKind, amount: number): void => {
+    hp.set(kind, (hp.get(kind) ?? 0) + amount);
+  };
+  for (let w = 1; w <= waveCount(n); w++) {
+    const swarm = swarmWave(n, w);
+    const count = waveSize(n, w, true) * (swarm ? SWARM.size * POWER.rec.swarm : 1);
+    for (const [kind, share] of waveMix(n, swarm))
+      add(kind, count * share * enemyHp(kind, n, w, scale));
+  }
+  for (const b of modeBosses(mode, n - MODES[mode].offset))
+    add(b.kind, b.hp * enemyHp(b.kind, n, b.wave, scale));
+  return (Object.keys(ENEMIES) as EnemyKind[])
+    .filter((k) => (hp.get(k) ?? 0) > 0)
+    .map((k) => [k, hp.get(k)!]);
+}
+
+/**
+ * What the squad tools and the Fit pill measure a squad against (ID-237): `mode`'s horde
+ * `local` (the next new one by default) split by kind, for a squad of `size`. Null on Normal,
+ * where no gun class counts.
+ */
+export function fitFor(
+  game: Pick<GameState, 'mode' | 'modes' | 'hordeNumber' | 'roster' | 'slots'>,
+  local: number = localHorde(game),
+  size: number = squadSize(game),
+): FitContext | null {
+  const mode = modeOf(game);
+  return mode === 'normal'
+    ? null
+    : fitContext(mode, hordeKindHp(effHorde(mode, local), mode, size));
+}
+
 /** How many survivors fight the next horde (ID-224): `squadOf`'s length, the one count the fight and Recommended Power share. */
 export const squadSize = (game: Pick<GameState, 'roster' | 'slots'>): number =>
   squadOf(game).length;
@@ -199,9 +249,11 @@ export function squadSpec(d: RosterDefender): DefenderSpec {
  */
 export function survivorPower(d: RosterDefender): number {
   const spec = squadSpec(d);
-  const tough = 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
-  return survivorDps(spec, spec.loadout.primary) * tough * POWER.scale;
+  return survivorDps(spec, spec.loadout.primary) * toughOf(spec) * POWER.scale;
 }
+
+/** The toughness factor of a survivor's Squad Power share: from the level's extra HP. */
+const toughOf = (spec: DefenderSpec): number => 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
 
 /** How hard each picked skill works (ID-100): `SQUAD_SKILLS.solo`× when only 1 is picked. */
 export const skillPickPower = (pick: readonly SkillId[]): number =>
@@ -583,14 +635,22 @@ export interface SquadMoves {
  * swaps). Who stays keeps their slot; a newcomer takes the slot of one benched, in rank
  * order, and the rest go on the end; the benched go on the bench's end. Guns don't move.
  * With nobody fit, or nothing to change, returns `game` itself; a second call moves nobody.
+ * In a higher mode (ID-237) the squad is built to fit `local` (the mode's next new horde by
+ * default): one survivor at a time, the fit one who adds the most effective power (ties in
+ * camp order, the squad first), so the squad covers the kinds the horde brings; a hill
+ * climb that trusts Squad Power, like the rest of the tool.
  */
-export function bestSquad(game: GameState): { game: GameState; moves: SquadMoves } {
-  const ranked = campOf(game)
+export function bestSquad(game: GameState, local?: number): { game: GameState; moves: SquadMoves } {
+  const cap = squadCap(game);
+  const fit = campOf(game)
     .map((d, i) => ({ d, i, power: survivorPower(d) }))
-    .filter(({ d }) => isFit(d) && !onMapPatrol(game, d.id))
-    .sort((a, b) => b.power - a.power || a.i - b.i)
-    .slice(0, squadCap(game))
-    .map(({ d }) => d);
+    .filter(({ d }) => isFit(d) && !onMapPatrol(game, d.id));
+  const ctx = fitFor(game, local, cap);
+  const ranked = (
+    ctx
+      ? pickByFit(ctx, fit, cap)
+      : fit.sort((a, b) => b.power - a.power || a.i - b.i).slice(0, cap)
+  ).map(({ d }) => d);
   const none = { game, moves: { in: [], out: [] } };
   if (ranked.length === 0) return none;
   const pick = new Set(ranked);
@@ -613,21 +673,58 @@ export function bestSquad(game: GameState): { game: GameState; moves: SquadMoves
   };
 }
 
+/**
+ * `bestSquad`'s higher-mode pick (ID-237): from `fit` (in camp order), up to `cap` times the
+ * survivor whose class and power raise the squad's effective power most, the first of equals
+ * (a gain within a part in 1e12 is a tie, so a second call picks the same).
+ */
+function pickByFit<T extends { d: RosterDefender; power: number }>(
+  ctx: FitContext,
+  fit: readonly T[],
+  cap: number,
+): T[] {
+  const sums = memberSums(ctx, { power: 0, cls: null });
+  const left = fit.map((c) => ({
+    c,
+    add: memberSums(ctx, { power: c.power, cls: classOf(squadSpec(c.d).loadout.primary) }),
+  }));
+  const out: T[] = [];
+  while (out.length < cap && left.length > 0) {
+    let best = 0;
+    let top = -1;
+    left.forEach(({ add }, k) => {
+      const v = powerOver(
+        ctx,
+        sums.map((s, j) => s + add[j]!),
+      );
+      if (v > top * (1 + 1e-12)) [best, top] = [k, v];
+    });
+    const [{ c, add }] = left.splice(best, 1) as [(typeof left)[number]];
+    add.forEach((a, j) => (sums[j]! += a));
+    out.push(c);
+  }
+  return out;
+}
+
 /** `bestSquad` when "Auto" is ticked (ID-154), else `game` itself. */
-export const autoSquad = (game: GameState): GameState =>
-  game.autoSquad === true ? bestSquad(game).game : game;
+export const autoSquad = (game: GameState, local?: number): GameState =>
+  game.autoSquad === true ? bestSquad(game, local).game : game;
 
 /**
  * Ticks or unticks "Auto" (ID-154, between hordes): saved only while on. Ticking runs
  * `bestSquad` once at once.
  */
-export function setAutoSquad(game: GameState, on: boolean): { game: GameState; moves: SquadMoves } {
+export function setAutoSquad(
+  game: GameState,
+  on: boolean,
+  local?: number,
+): { game: GameState; moves: SquadMoves } {
   if (!on) {
     const g = { ...game };
     delete g.autoSquad;
     return { game: g, moves: { in: [], out: [] } };
   }
-  return bestSquad({ ...game, autoSquad: true });
+  return bestSquad({ ...game, autoSquad: true }, local);
 }
 
 /** "Resting: 2 hordes" / "Resting: 1 horde" (ID-147). */
@@ -1638,37 +1735,29 @@ interface Hands {
   /** Holding an owned weapon that is no gun (fights as the pistol). */
   odd: boolean[];
   order: number[];
+  /** `fitMove`'s cache: each survivor's per-kind power with each gun they were tried with. */
+  parts?: Map<Held, number[]>[];
 }
+
+/** One change `handOut` can make: survivor `i` takes stash gun `s`, or trades hands with `j`. */
+type HandMove = { i: number; s: number } | { i: number; j: number };
 
 /**
  * `bestGuns`' search for one group (the squad, or the bench) against the shared `stash`:
  * repeatedly makes the one change that raises the group's total the most, a survivor
  * taking a stash gun (theirs goes to the stash; the free pistol just goes) or two of the
  * group trading, until no single change helps (a three-way trade isn't looked for). True if
- * anything changed.
+ * anything changed. With `fit` (the squad in a higher mode, ID-237) the total is the group's
+ * effective power, not its dmg/s.
  */
-function handOut(group: Hands, stash: Held[]): boolean {
-  const { specs, hands, odd, order } = group;
-  const score = (i: number, h: Held): number => survivorDps(specs[i]!, h);
+function handOut(group: Hands, stash: Held[], fit?: FitContext): boolean {
+  const { hands, odd, order } = group;
+  const pick0 = fit
+    ? (): HandMove | null => fitMove(group, stash, fit)
+    : (): HandMove | null => plainMove(group, stash);
   let moved = false;
   for (;;) {
-    // The best change this round: survivor `i` takes stash gun `s`, or trades with `j`.
-    let gain = BEST_GAIN;
-    let pick: { i: number; s: number } | { i: number; j: number } | null = null;
-    for (let i = 0; i < hands.length; i++) {
-      const now = score(i, hands[i]!);
-      for (let s = 0; s < stash.length; s++) {
-        const g = score(i, stash[s]!) - now;
-        if (g > gain) [gain, pick] = [g, { i, s }];
-      }
-      // An odd holder's weapon goes to the stash when they change, so they may only take a
-      // stash gun (one out, one in), never trade first.
-      for (let j = i + 1; j < hands.length; j++) {
-        if (odd[i] || odd[j]) continue;
-        const g = score(i, hands[j]!) + score(j, hands[i]!) - now - score(j, hands[j]!);
-        if (g > gain) [gain, pick] = [g, { i, j }];
-      }
-    }
+    const pick = pick0();
     if (!pick) return moved;
     moved = true;
     const { i } = pick;
@@ -1683,6 +1772,73 @@ function handOut(group: Hands, stash: Held[]): boolean {
   }
 }
 
+/** The change that adds the most dmg/s to the group, or null if none adds more than `BEST_GAIN`. */
+function plainMove(group: Hands, stash: readonly Held[]): HandMove | null {
+  const { specs, hands, odd } = group;
+  const score = (i: number, h: Held): number => survivorDps(specs[i]!, h);
+  let gain = BEST_GAIN;
+  let pick: HandMove | null = null;
+  for (let i = 0; i < hands.length; i++) {
+    const now = score(i, hands[i]!);
+    for (let s = 0; s < stash.length; s++) {
+      const g = score(i, stash[s]!) - now;
+      if (g > gain) [gain, pick] = [g, { i, s }];
+    }
+    // An odd holder's weapon goes to the stash when they change, so they may only take a
+    // stash gun (one out, one in), never trade first.
+    for (let j = i + 1; j < hands.length; j++) {
+      if (odd[i] || odd[j]) continue;
+      const g = score(i, hands[j]!) + score(j, hands[i]!) - now - score(j, hands[j]!);
+      if (g > gain) [gain, pick] = [g, { i, j }];
+    }
+  }
+  return pick;
+}
+
+/**
+ * The change that adds the most effective power (ID-237) to the group, or null if none adds
+ * more than `BEST_GAIN` (a share of the power, so float noise on a big squad is no gain).
+ * A survivor's power with a gun is cached per pair, and the per-kind sums change by the two
+ * parts a change swaps, never re-summed for each candidate. Like `bestSquad`, a hill climb:
+ * it finds a local best, not a guaranteed global one.
+ */
+function fitMove(group: Hands, stash: readonly Held[], ctx: FitContext): HandMove | null {
+  const { specs, hands, odd } = group;
+  const part = (i: number, h: Held): number[] => {
+    const cache = (group.parts ??= specs.map(() => new Map<Held, number[]>()))[i]!;
+    let sums = cache.get(h);
+    if (!sums) {
+      const power = survivorDps(specs[i]!, h) * toughOf(specs[i]!) * POWER.scale;
+      sums = memberSums(ctx, { power, cls: classOf(h) });
+      cache.set(h, sums);
+    }
+    return sums;
+  };
+  const cur = hands.map((h, i) => part(i, h));
+  const sums = ctx.shares.map((_, k) => cur.reduce((sum, c) => sum + c[k]!, 0));
+  const now = powerOver(ctx, sums);
+  const floor = BEST_GAIN * Math.max(1, now);
+  const swap = (out: readonly number[], ...changes: [number[], number[]][]): number =>
+    powerOver(
+      ctx,
+      out.map((s, k) => changes.reduce((sum, [from, to]) => sum - from[k]! + to[k]!, s)),
+    );
+  let gain = floor;
+  let pick: HandMove | null = null;
+  for (let i = 0; i < hands.length; i++) {
+    for (let s = 0; s < stash.length; s++) {
+      const g = swap(sums, [cur[i]!, part(i, stash[s]!)]) - now;
+      if (g > gain) [gain, pick] = [g, { i, s }];
+    }
+    for (let j = i + 1; j < hands.length; j++) {
+      if (odd[i] || odd[j]) continue;
+      const g = swap(sums, [cur[i]!, part(i, hands[j]!)], [cur[j]!, part(j, hands[i]!)]) - now;
+      if (g > gain) [gain, pick] = [g, { i, j }];
+    }
+  }
+  return pick;
+}
+
 /**
  * Hands out guns so they do the most for the squad (ID-108, ID-152, between hordes), each
  * gun scored in the hands of the survivor who would hold it (`survivorDps`: their level
@@ -1691,12 +1847,14 @@ function handOut(group: Hands, stash: Held[]): boolean {
  * itself, so it never takes a squad survivor's gun.
  * A gun the bench gives back may suit the squad better, so the squad looks again, and so
  * on until neither changes: each change raises its group's total and the squad's never
- * falls, so it ends, and a second call moves nothing. A gun never goes into the stash for
+ * falls, so it ends, and a second call moves nothing. In a higher mode (ID-237) the squad's
+ * total is its effective power (gun classes against the horde's enemy traits), still one
+ * change at a time above `BEST_GAIN`, so it ends the same way. A gun never goes into the stash for
  * the pistol, so the stash never grows. Returns the new game and one move per survivor
  * whose gun changed (from what they held to what they hold): the squad's in the order they
  * first changed, then the bench's.
  */
-export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] } {
+export function bestGuns(game: GameState, local?: number): { game: GameState; moves: GunMove[] } {
   const group = (who: RosterDefender[]): Hands => ({
     specs: who.map(squadSpec),
     hands: who.map((d) => squadSpec(d).loadout.primary),
@@ -1712,8 +1870,11 @@ export function bestGuns(game: GameState): { game: GameState; moves: GunMove[] }
   const bench = group(benchMembers);
   const start = [...squad.hands, ...bench.hands];
   const stash: Held[] = game.armoury.filter(isGun);
-  handOut(squad, stash);
-  while (handOut(bench, stash) && handOut(squad, stash));
+  // In a higher mode (ID-237) the squad's objective is its effective power against `local`'s
+  // horde (the mode's next new one by default), built once for the call; the bench keeps dmg/s.
+  const ctx = fitFor(game, local, squadMembers.length) ?? undefined;
+  handOut(squad, stash, ctx);
+  while (handOut(bench, stash) && handOut(squad, stash, ctx));
   const same = (a: Held, b: Held): boolean =>
     isOwned(a) && isOwned(b) ? a.uid === b.uid : a === b;
   // Everyone in one list: the squad's indices first, then the bench's after them.

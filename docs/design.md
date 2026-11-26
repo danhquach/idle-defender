@@ -2254,6 +2254,9 @@ one crowd (no lanes, §3).
 | Screamer | Speeds up nearby enemies | Focus it first |
 | Mutated Horror | Boss of every 10th horde; one unique ability each | Whole base |
 
+In Nightmare and Hell each kind but the Shambler also has a gun-class trait (it resists one class and is
+weak to another): see "Gun classes and enemy traits" in §11.
+
 Renamed in ID-053: the Spewer and the Swollen had names other games already use; mechanics and numbers are unchanged.
 
 - Mutants appear from Horde 5 *(starting point)*; new types join as horde
@@ -3796,7 +3799,8 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   knobs at the same strength (the hold level is a 5-seed bisect), so it is not finely tuned. Before ID-223 (offset 40) the check was Nightmare 1–10 on 60% of seeds
   and stopped by Nightmare 30. Hell starts where Nightmare ends (ID-225):
   a squad that just holds Nightmare Horde 50 (gun level 107) wins Hell Horde 1 at the
-  first try on 30–70% of 20 seeds (measured: 12 of 20 at `hpScale` 1.4; 20 of 20 at 1,
+  first try on 15–70% of 20 seeds (30–70% before ID-237's traits; measured: 5 of 20 since
+  ID-237, 12 of 20 before at `hpScale` 1.4; 20 of 20 at 1,
   17 at 1.2, 14 at 1.3, 8 at 1.5) and, gearing up between fights, is stopped before Hell
   Horde 30 on most (measured: 20 of 20, all by Hell 3: it stands at its edge, as it
   should); a squad at 130% of Recommended Power does not lose repeatedly at Hell 10, 20
@@ -3805,6 +3809,87 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   Before ID-225 (offset 80) the check was Hell 1–10 on 60% of seeds and stopped by
   Hell 30, with Hell 30's no-wall check in `balance/modes.test.ts`. Normal's numbers are held by a golden test
   (`golden-normal.test.ts`).
+
+### Gun classes and enemy traits *(as built, ID-237)*
+
+In Nightmare and Hell an enemy kind resists one class of gun and is weak to another, so a
+squad of one gun type is no longer the best squad. Normal has no traits (its numbers and the
+golden digest are untouched).
+
+- **Classes.** Every gun has one (`GUN_CLASS`): **Light** (Pistol, SMG, Machine Pistol, LMG),
+  **Medium** (Carbine, Assault Rifle), **Heavy** (Sniper rifle, Hand Cannon), **Spread** (Pump
+  Shotgun, Drum Shotgun). A survivor with no gun primary fights as the free pistol, so counts
+  as Light; the squad fights with the primary only, so a secondary never changes the class.
+- **Traits** (`ENEMY_TRAITS`; the Shambler has none):
+
+  | Enemy | Trait | Resists | Weak to |
+  |---|---|---|---|
+  | Runner | Swift | Heavy | Light |
+  | Crawler | Skittering | Heavy | Light |
+  | Spewer | Slick | Heavy | Medium |
+  | Swollen | Bloated | Spread | Light |
+  | Screamer | Darting | Medium | Spread |
+  | Brute | Plated | Light | Heavy |
+  | Mutated Horror (boss and mini-boss kinds too) | Hulking | Light | Heavy |
+
+- **Numbers** (`MODES`): a bullet of the resisted class deals `resist` of its damage, of the weak-to
+  class `weak`: Nightmare 0.65 and 1.25, Hell 0.5 and 1.25 (Normal 1 and 1). Only a squad
+  gun's bullet carries a class (set at the shot, so every pellet and a Ricochet bounce do);
+  turrets, blades, fire, grenades, traps, Barbed Wire, skills and the Airstrike never do.
+- **Order.** Bullet damage × the gun's trait × Concussion's daze × **class factor**, then the
+  boss's Armour plates ×0.5 and the Shield ×0.6 (Breaching Rounds taking half of those cuts
+  back), then the flat Brute −3 / Horror −2 (at least 1) — so the flat cut comes after the class
+  factor — then Cauterise ×1.1. A Sniper crit skips the plates, Shield and flat cut and keeps the
+  class factor. A resisted Light bullet on a plated, shielded Hell Horror is 0.5 × 0.5 × 0.6 before
+  the flat cut (accepted; the Fit pill and the Horror's chip say so).
+- **Damage numbers.** A hit on a trait is muted and a little smaller (resist) or bright, not the
+  crit yellow (weak); a crit keeps its size and its "!", and shows the fit colour (deliberately: the
+  trait matters more than the crit yellow). The first three numbers of each fit created in a fight
+  carry a small word, "Resists" or "Weak" (about 0.6 of the number, at least 11 px and never bigger
+  than the number, kept inside the canvas). A weak-to hit is drawn 1.1 times the size and a resisted
+  one 0.85 times, so size says it as well as colour.
+- **The Fit pill** (higher modes only, every horde in the picker including boss hordes): the squad's
+  *effective power* over its Squad Power, where effective power is the squad's power against each
+  kind, weighted by that kind's share of the horde's HP (`hordeKindHp`), as a harmonic mean.
+  Good at 0.93 or more **and** every kind covered at 0.7 or more of the squad's power
+  (so no one-class squad reads Good); Fair from 0.85; else Poor. On Fair or Poor it says what to
+  add ("Add Heavy or Medium", right under the pill). **It measures trait fit only, not the odds of a win**:
+  Squad Power and its bands say that. On Nightmare Horde 9 / Hell Horde 1 (squad of 8, equal
+  power per gun): all Light 0.88 / 0.76, all Medium 0.97 / 0.94, all Heavy 0.94 / 0.84, all
+  Spread 0.94 / 0.88, two of each class 0.98 / 0.94. Medium alone is small on paper
+  (0.97 / 0.94, Fair, not Poor), but at its hold level in Hell that cost 7 of 20 first-try wins
+  (see Balance below).
+- **Squad tools.** In a higher mode Best gun and Best squad (and Auto) maximise the squad's
+  effective power against the horde picked on the screen (the mode's next new horde by default),
+  one change at a time above `BEST_GAIN` (a hill climb: a local best, not a guaranteed global
+  one); the bench keeps plain dmg/s. **The objective trusts Squad Power**, which rates guns of
+  equal Squad Power as equal although they are not (gun parity: follow-up ID-247, #501). Switching mode
+  with Auto on re-fits the squad to the new mode.
+- **UI.** A gun always shows its class: icon and name on its card and the roster, the icon alone
+  (name in its tooltip) on a weapon slot and a gun-pick tile; once Nightmare is unlocked the
+  gun's card also says "Light · Good vs Runners, Crawlers, Swollen · Poor vs Brutes, Horrors".
+  The picker lists a chip per kind the horde brings ("Hulking · Resists Light · Weak to Heavy"),
+  open on a desktop or iPad, a closed "Horde traits" fold on a phone. The Help tab has the table.
+- **Out of scope.** Class-aware targeting (preferring a weak target) was tried in the probe and made
+  most squads worse, so shooters still take the nearest. The drop pool is unchanged (no class
+  is starved by drops). Bespoke trait icons: the trait is its name as text.
+- **Balance (ID-237).** The older balance checks keep the Carbine (Medium) squad and so are the
+  one-class replay; the new `balance/traits.test.ts` uses a mixed squad (2 LMG, 2 Carbine, 2 Sniper
+  rifle, 2 Pump Shotgun) and bisects its own Hell 1 hold level with traits off (a test-only
+  `noTraits` on the fight), then, at that level, with 20 seeds, checks (a) the mix with traits
+  on within 4 wins of the mix with them off, at equal Squad Power (within 2%) (b) an all-LMG
+  squad loses at least 5 wins, (c) an all-Sniper squad at least 3, (d) the mix loses fewer than
+  the LMG squad, (e) with traits on the mix wins at least 3 more than the LMG squad. Measured
+  (wins of 20, traits off then on): Hell 1 at gun level 106: mix 13 then 10, LMG 14 then 2, Sniper
+  19 then 15. Nightmare Horde 9 (logged, not asserted) at gun level 62: mix 14 then 16, LMG 15
+  then 9, Sniper 20 then 18. Medium alone is not asserted: it saturates, and the guns do not match at
+  equal Squad Power (ID-247). The Carbine replay against the figures before ID-237: Normal
+  hold level 54 (same); Nightmare 1 at the first try 8 of 20 (was 9); the 2× squad stopped by
+  Nightmare 20 on 20 of 20, at Hordes 5–12 (was 6–11); 130% of Recommended Power wins 5, 4, 5, 5, 5 of
+  5 at Nightmare 20, Nightmare 30, Hell 10, 20, 30; Hell 1 at the first try **5 of 20 at gun level
+  107 (was 12 of 20)**, so that check's floor moved from 30% to 15%: a one-class Medium squad now feels the
+  traits (about 6% of its power in Hell, 4 to 9 wins of 30 on the calibration curve of the
+  probe), as the design intends; and stopped before Hell 30 on 20 of 20, all by Hell 3 (same).
 
 ### Balance pass *(ID-102)*
 

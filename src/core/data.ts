@@ -847,6 +847,59 @@ export const GUN_ROLES = {
 } as const satisfies Record<GunBase, { role: string; trait: string }>;
 
 /**
+ * Gun classes (ID-237, design §11): how a gun sits against the enemy traits of Nightmare
+ * and Hell. Every gun has one; Normal ignores them.
+ */
+export type GunClass = 'light' | 'medium' | 'heavy' | 'spread';
+export const GUN_CLASSES: readonly GunClass[] = ['light', 'medium', 'heavy', 'spread'];
+export const GUN_CLASS = {
+  pistol: 'light',
+  smg: 'light',
+  machinepistol: 'light',
+  lmg: 'light',
+  rifle: 'medium',
+  assault: 'medium',
+  sniper: 'heavy',
+  handcannon: 'heavy',
+  shotgun: 'spread',
+  cartridge: 'spread',
+} as const satisfies Record<GunBase, GunClass>;
+export const GUN_CLASS_NAME: Readonly<Record<GunClass, string>> = {
+  light: 'Light',
+  medium: 'Medium',
+  heavy: 'Heavy',
+  spread: 'Spread',
+};
+/**
+ * What each enemy kind resists and is weak to in Nightmare and Hell (ID-237, table B of the
+ * design): a bullet of the `resists` class deals the mode's `resist` share, of the `weak`
+ * class its `weak` share. The Shambler has no trait. `name` is the trait's word.
+ */
+export const ENEMY_TRAITS: Readonly<
+  Record<
+    EnemyKind,
+    { readonly name: string; readonly resists: GunClass; readonly weak: GunClass } | null
+  >
+> = {
+  shambler: null,
+  runner: { name: 'Swift', resists: 'heavy', weak: 'light' },
+  crawler: { name: 'Skittering', resists: 'heavy', weak: 'light' },
+  spewer: { name: 'Slick', resists: 'heavy', weak: 'medium' },
+  swollen: { name: 'Bloated', resists: 'spread', weak: 'light' },
+  screamer: { name: 'Darting', resists: 'medium', weak: 'spread' },
+  brute: { name: 'Plated', resists: 'light', weak: 'heavy' },
+  horror: { name: 'Hulking', resists: 'light', weak: 'heavy' },
+};
+/** The first `TRAIT_WORDS` damage numbers of each fit in a fight carry a word (ID-237). */
+export const TRAIT_WORDS = 3;
+/**
+ * The Fit pill's bands (ID-237): a squad's effective power over its Squad Power. Good needs
+ * `good` and every kind's cover (the squad's power against it, over its total) at least `floor`,
+ * so no one-class squad reads Good; Fair `fair`; below, Poor.
+ */
+export const FIT = { good: 0.93, fair: 0.85, floor: 0.7 } as const;
+
+/**
  * The built-in traits' numbers (ID-101, reworked in ID-135).
  * SMG: `close.bonus` more damage to an enemy within `close.range` px of the wall's front.
  * Crit chance a gun adds: `crit` by base (the Carbine, the Assault Rifle, the LMG, the Sniper rifle);

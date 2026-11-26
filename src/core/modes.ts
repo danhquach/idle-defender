@@ -33,6 +33,10 @@ export interface ModeRules {
   hpScale: number;
   /** A tuning factor on a boss horde's Recommended Power (ID-222). */
   recBoss: number;
+  /** Share of a bullet's damage an enemy's resisted gun class deals (ID-237); 1 on Normal. */
+  resist: number;
+  /** Share of a bullet's damage an enemy's weak-to gun class deals (ID-237); 1 on Normal. */
+  weak: number;
 }
 
 export const MODES: Readonly<Record<Mode, ModeRules>> = {
@@ -46,6 +50,8 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
     extraBoss: 0,
     hpScale: 1,
     recBoss: 1,
+    resist: 1,
+    weak: 1,
   },
   nightmare: {
     name: 'Nightmare',
@@ -57,6 +63,8 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
     extraBoss: 0,
     hpScale: 1.16,
     recBoss: 1,
+    resist: 0.65,
+    weak: 1.25,
   },
   hell: {
     name: 'Hell',
@@ -68,6 +76,8 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
     extraBoss: 1,
     hpScale: 1.4,
     recBoss: 1.3,
+    resist: 0.5,
+    weak: 1.25,
   },
 };
 

@@ -1,7 +1,7 @@
 {
   "name": "the-long-hold",
   "private": true,
-  "version": "0.5.183",
+  "version": "0.5.184",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

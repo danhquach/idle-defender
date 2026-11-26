@@ -3,13 +3,22 @@
 // see how far short they are. Advice only: it never blocks a start. Pure.
 import { INJURY_BAND, POWER, SQUAD_CAP, SWARM, type EnemyKind } from './data.ts';
 import type { GameState } from './game.ts';
-import { squadHpScale, squadOf, survivorPower } from './hordeonly.ts';
+import {
+  fitFor,
+  hordeKindHp,
+  squadHpScale,
+  squadOf,
+  squadSpec,
+  survivorPower,
+} from './hordeonly.ts';
 import { wavePace } from './pacing.ts';
 import { MODES, modeBosses, type Mode } from './modes.ts';
+import { classOf, fitOfSquad, type Fit } from './traits.ts';
 import { enemyHp, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
 
-// One survivor's share lives in hordeonly.ts, where "Best squad" (ID-154) ranks by it.
-export { survivorPower };
+// One survivor's share lives in hordeonly.ts, where "Best squad" (ID-154) ranks by it; so does
+// the horde's HP by kind (ID-237), which the Fit pill and the tools read.
+export { hordeKindHp, survivorPower };
 
 /** Squad Power (ID-098): every squad survivor's `survivorPower`, summed, rounded. */
 export const squadPower = (game: Pick<GameState, 'roster'>): number =>
@@ -37,6 +46,27 @@ export function hordeHp(n: number, mode: Mode = 'normal', size: number = SQUAD_C
   for (const b of modeBosses(mode, n - MODES[mode].offset))
     total += b.hp * enemyHp(b.kind, n, b.wave, scale);
   return total;
+}
+
+/**
+ * How well the squad's guns fit horde `local` of the mode being played (ID-237, the next new
+ * one by default): its effective power over its Squad Power, as a Good, Fair or Poor band and
+ * the classes to add. It measures the trait fit only, never the odds of a win (Squad Power and
+ * its bands say that). Null on Normal, and for an empty squad.
+ */
+export function squadFit(
+  game: Pick<GameState, 'mode' | 'modes' | 'hordeNumber' | 'roster' | 'slots'>,
+  local?: number,
+): Fit | null {
+  const ctx = fitFor(game, local);
+  if (!ctx) return null;
+  return fitOfSquad(
+    ctx,
+    squadOf(game).map((d) => ({
+      power: survivorPower(d),
+      cls: classOf(squadSpec(d).loadout.primary),
+    })),
+  );
 }
 
 /**

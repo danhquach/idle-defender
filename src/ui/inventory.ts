@@ -33,6 +33,7 @@ import {
   STASH_SLOT,
   WEAPONS,
   type GunBase,
+  type GunClass,
   type Rarity,
   type WeaponId,
 } from '../core/data.ts';
@@ -51,6 +52,7 @@ import {
 } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
 import { effHorde, modeOf } from '../core/modes.ts';
+import { classOf } from '../core/traits.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { survivorDps } from '../core/stats.ts';
 import {
@@ -73,7 +75,9 @@ import {
   type UpgradeOffer,
 } from './hud.ts';
 import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
+import { classChip, classIcon } from './classicon.ts';
 import { gunCompare, gunTiles, heldGunOf } from './gunpick.ts';
+import { classLine, matchupsOpen } from './statlines.ts';
 import { MAP_GUN_AWAY, patrolName, patrolsShown } from './maptext.ts';
 import type { Answer } from './confirm.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
@@ -90,6 +94,9 @@ export interface InventoryItem {
   affixes: string[];
   /** The gun's role and built-in trait (ID-101); null for a weapon that is no gun. */
   role: { role: string; trait: string } | null;
+  /** The gun's class (ID-237) and its line: "Light", or with the matchups once Nightmare is open; null for no gun. */
+  cls: GunClass | null;
+  classLine: string | null;
   /** "17.2 DPS", the gun's own (ID-166); null for a weapon that is no gun (an older save's blade or tool). */
   power: string | null;
   /** The slot's badge: dmg/s rounded ("17"); null for no gun. */
@@ -276,7 +283,13 @@ export const STASH_FULL = 'Stash full';
 const powerOf = (h: Held): number => (isGun(h) ? gunPower(h) : -1);
 
 /** `h` as a slot: `key` names the slot, `where` says who has it, `holder` fights with it. */
-function item(h: Held, key: string, where: string, holder: string | null = null): InventoryItem {
+function item(
+  h: Held,
+  key: string,
+  where: string,
+  holder: string | null = null,
+  matchups = false,
+): InventoryItem {
   const base = baseOf(h);
   const gun = isGun(h);
   const power = gun ? gunPower(h) : 0;
@@ -287,6 +300,8 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
     rarity: isOwned(h) ? h.rarity : 'common',
     affixes: affixLines(h),
     role: roleOf(base),
+    cls: gun ? classOf(h) : null,
+    classLine: gun ? classLine(h, matchups) : null,
     power: gun ? gunDpsText(power) : null,
     badge: gun ? String(Math.round(power)) : null,
     level: gunLevel(h),
@@ -310,13 +325,16 @@ function item(h: Held, key: string, where: string, holder: string | null = null)
  */
 export function inventoryView(
   game: Pick<GameState, 'armoury' | 'roster'> &
-    Partial<Pick<GameState, 'slots' | 'stock' | 'mode' | 'reserve' | 'map'>>,
+    Partial<
+      Pick<GameState, 'slots' | 'stock' | 'mode' | 'modes' | 'hordeNumber' | 'reserve' | 'map'>
+    >,
   horde: number | null = null,
   canBuy = false,
   pickIn: Partial<Record<PickKind, unknown>> = DEFAULT_PICK,
 ): InventoryView {
   const n = game.armoury.length;
   const cap = stashCap(game);
+  const matchups = matchupsOpen(game);
   const pick = cleanPick(pickIn);
   const rows = game.armoury.map((h, at) => ({ h, at, power: powerOf(h), gun: isGun(h) }));
   const scrap = game.stock?.scrap;
@@ -327,7 +345,7 @@ export function inventoryView(
   const salvageable = (it: InventoryItem, h: Held): InventoryItem =>
     isOwned(h) && isGun(h) ? { ...it, salvage: salvageOffer(h, scrap) } : it;
   const toItem = ({ h }: (typeof rows)[number]): InventoryItem =>
-    salvageable(upgradable(item(h, `stash:${h.uid}`, IN_STASH), h), h);
+    salvageable(upgradable(item(h, `stash:${h.uid}`, IN_STASH, null, matchups), h), h);
   const rarityAt = (h: Held): number => (isOwned(h) ? RARITY_ORDER.indexOf(h.rarity) : -1);
   // Guns first in every sort, a blade or tool (an older save's) after them; ties keep the
   // armoury's order. The armoury itself is never reordered (view only).
@@ -359,7 +377,7 @@ export function inventoryView(
   // What a survivor fights with: a primary that is no gun fights as the pistol (as `squadSpec`).
   const seat = (d: RosterDefender, kind: string, where: string, up: boolean): Seat => {
     const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
-    const it = item(held, `${kind}:${d.id}`, where, d.name);
+    const it = item(held, `${kind}:${d.id}`, where, d.name, matchups);
     return {
       id: d.id,
       name: d.name,
@@ -561,6 +579,7 @@ const levelled = (it: InventoryItem): string =>
 export function slotLabel(it: InventoryItem, ready = false): string {
   const parts = [it.name, `${RARITIES[it.rarity].name} rarity`];
   if (it.role) parts.push(`${it.role.role}: ${it.role.trait}`);
+  if (it.classLine) parts.push(`class ${it.classLine}`);
   if (it.levelBadge) parts.push(`level ${it.level}`);
   if (it.power) parts.push(it.power);
   parts.push(
@@ -591,6 +610,10 @@ export function slotFace(it: InventoryItem, ready = false): HTMLElement[] {
     face.push(img);
   } else {
     face.push(el('span', 'inv-slot-text', WEAPONS[it.base].name));
+  }
+  if (it.cls) {
+    // The class, icon and name as text (ID-237); the sentence in its tooltip.
+    face.push(classChip(it.cls, it.classLine ?? undefined, true));
   }
   if (it.badge) {
     // A bare number on the slot: its tooltip says it is the gun's own dmg/s (ID-166).
@@ -940,8 +963,28 @@ export interface CombineUi {
   cancel(): void;
 }
 
+/**
+ * Marks a scrolling box `inv-more` while its lines run past the foot and it is not scrolled to
+ * the end, which fades the foot (a cue that needs no background colour).
+ */
+export function scrollCue(box: HTMLElement): void {
+  const sync = (): void => {
+    const room = box.scrollHeight - box.clientHeight;
+    box.classList.toggle('inv-more', room > 1 && box.scrollTop < room - 1);
+  };
+  box.addEventListener('scroll', sync, { passive: true });
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(sync).observe(box, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  }
+  if (typeof ResizeObserver === 'function') new ResizeObserver(sync).observe(box);
+}
+
 /** A gun's lines in the details: rarity, its role and trait (ID-101), each affix, then dmg/s. */
-function facts(it: InventoryItem): HTMLElement[] {
+export function facts(it: InventoryItem): HTMLElement[] {
   const name = el('p', 'inv-name', levelled(it));
   name.dataset.rarity = it.rarity;
   const rarity = el(
@@ -952,6 +995,17 @@ function facts(it: InventoryItem): HTMLElement[] {
   rarity.dataset.rarity = it.rarity;
   // The gun's role and the trait every one of it has (ID-101), read as one line.
   const role = it.role ? [el('p', 'inv-role', `${it.role.role}: ${it.role.trait}`)] : [];
+  // Its class (ID-237), the gun the subject: "Light · Good vs Runners · Poor vs Brutes".
+  if (it.cls) {
+    // The icon sits inline with the class name; the matchups follow in smaller type.
+    const [name, ...matchups] = (it.classLine ?? '').split(' · ');
+    const line = el('div', 'inv-class');
+    const head = el('span', 'inv-class-name');
+    head.append(classIcon(it.cls), name ?? '');
+    line.append(head);
+    if (matchups.length > 0) line.append(el('span', 'inv-class-note', matchups.join(' · ')));
+    role.push(line);
+  }
   const affixes =
     it.affixes.length > 0
       ? list(
@@ -1293,6 +1347,7 @@ export function selectPanel(
   const can = tickable(view);
   const on = can.filter((it) => ticked.has(it.key));
   const info = el('div', 'inv-details-info inv-select-info');
+  scrollCue(info);
   // The count with Clear beside it, so the Salvage button has the dock's whole width.
   const head = el('div', 'inv-select-head');
   const clear = button('Clear', ui.clear, 'inv-select-clear');
@@ -1347,6 +1402,7 @@ export function detailsPanel(
   bench?: { who: Seat; ui: BenchUi },
 ): HTMLElement[] {
   const info = el('div', 'inv-details-info');
+  scrollCue(info);
   if (!it) {
     info.append(el('p', 'menu-note', STASH_EMPTY));
     return [info];
@@ -1367,7 +1423,9 @@ export function detailsPanel(
 
 /** The camp as the Inventory reads it. */
 type InventoryGame = Pick<GameState, 'armoury' | 'roster'> &
-  Partial<Pick<GameState, 'slots' | 'stock' | 'mode' | 'reserve' | 'map'>>;
+  Partial<
+    Pick<GameState, 'slots' | 'stock' | 'mode' | 'modes' | 'hordeNumber' | 'reserve' | 'map'>
+  >;
 
 export interface InventoryOptions {
   /**
@@ -2441,6 +2499,7 @@ export function createInventory(
   /** The details while the picker is open: the verdict on the tile compared, and Equip. */
   function pickDetails(): HTMLElement[] {
     const info = el('div', 'inv-details-info');
+    scrollCue(info);
     const dock = el('div', 'inv-dock');
     const s = view?.bench.find((b) => b.id === pickingFor);
     const d = pickingFor === null ? undefined : defenderOf(pickingFor);

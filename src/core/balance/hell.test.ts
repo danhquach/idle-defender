@@ -3,7 +3,9 @@
 // stopped before Hell Horde 30 on most; and no Hell boss horde has a wall where a squad well
 // above the expected power loses repeatedly. The scripted player gears up between fights
 // (`gearUp`), stops at its first lost fight, and takes the mode cards it has unlocked (the
-// pool carries them in Hell).
+// pool carries them in Hell). The squad is all Carbines (Medium), so since ID-237 it is the
+// one-class replay: Hell's traits cost it first-try wins, and its floor is 15%. A mixed
+// squad's Hell 1 start is asserted in `traits.test.ts`.
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
 import { finishSquadHorde } from '../hordeonly.ts';
@@ -44,10 +46,10 @@ describe('Hell (ID-222, ID-225)', () => {
     }
   }, 3_600_000);
 
-  it('a squad that just holds Nightmare Horde 50 wins Hell Horde 1 at the first try on 30–70% of seeds', () => {
+  it('a squad that just holds Nightmare Horde 50 wins Hell Horde 1 at the first try on 15–70% of seeds (one-class Carbine replay, ID-237)', () => {
     const share = ends.filter((end) => end !== 1).length / ends.length;
     const msg = `gun level ${level}, ended at ${JSON.stringify(ends)}`;
-    expect(share, msg).toBeGreaterThanOrEqual(0.3);
+    expect(share, msg).toBeGreaterThanOrEqual(0.15);
     expect(share, msg).toBeLessThanOrEqual(0.7);
   }, 3_600_000);
 

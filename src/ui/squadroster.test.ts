@@ -422,9 +422,12 @@ describe('Choose a gun (ID-108)', () => {
       'Reload',
       'Range',
       'Role',
+      'Class',
     ]);
     expect(rows.find((r) => r[0] === 'Damage')![2]).toBe('10.0 × 4');
     expect(rows.find((r) => r[0] === 'Role')![3]).toBe('new role');
+    // ID-237: the class's name; the pistol is Light, the Pump Shotgun Spread.
+    expect(rows.find((r) => r[0] === 'Class')!.slice(1)).toEqual(['Light', 'Spread', 'new class']);
     m.key('equip').click();
     expect(m.onEquip).toHaveBeenCalledWith('recruit-1', 'g1');
     expect(m.game().roster[0]!.loadout.primary).toMatchObject({ uid: 'g1' });
@@ -444,6 +447,10 @@ describe('Choose a gun (ID-108)', () => {
     m.key('slot').click();
     const sniper = tiles(m).find((x) => x.dataset.choice === 'n1')!;
     expect(sniper.querySelector('.rv-ty')!.textContent).toBe('Sniper');
+    // ID-237: the class icon is on the DPS line (the name stays whole), its name the title.
+    expect(sniper.querySelector('.rv-dps svg')).not.toBeNull();
+    expect(sniper.querySelector('.rv-ty svg')).toBeNull();
+    expect(sniper.querySelector<HTMLElement>('.rv-dps')!.title).toBe('Heavy');
     expect(sniper.getAttribute('aria-label')).toContain('Sniper rifle');
     // A Lv 1 sniper is no upgrade on the pistol, so nothing is preselected: pick it.
     sniper.click();

@@ -5,7 +5,13 @@
 // Fixtures shared by those files; never imported by game code.
 import { rollWeapon } from '../armoury.ts';
 import { recruit } from '../camp.ts';
-import { SQUAD_CAP, SQUAD_HP_GROWTH, SQUAD_SLOT_COSTS, type Rarity } from '../data.ts';
+import {
+  SQUAD_CAP,
+  SQUAD_HP_GROWTH,
+  SQUAD_SLOT_COSTS,
+  type GunBase,
+  type Rarity,
+} from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
 import type { HordeState } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
@@ -82,6 +88,32 @@ export function squad(n: number, level: number): GameState {
     camp: { ...g.camp, recruits: SIZE },
   };
 }
+
+/**
+ * `squad`'s survivors with the guns `bases` hand round (survivor i takes `bases[i % length]`),
+ * each a Military one at `level` (ID-237). One class of gun is one base; the mix is four.
+ */
+export function gunSquad(n: number, level: number, bases: readonly GunBase[]): GameState {
+  const g = squad(n, level);
+  const roster = g.roster.map((d, i) => ({
+    ...d,
+    loadout: {
+      ...d.loadout,
+      primary: rollWeapon(
+        createRng(i + 7),
+        `h${i + 1}`,
+        bases[i % bases.length]!,
+        'military',
+        level,
+      ),
+    },
+  }));
+  return { ...g, roster };
+}
+
+/** The mixed squad (ID-237): 2 LMG (Light), 2 Carbine (Medium), 2 Sniper rifle (Heavy), 2 Pump Shotgun (Spread). */
+export const mixedSquad = (n: number, level: number): GameState =>
+  gunSquad(n, level, ['lmg', 'rifle', 'sniper', 'shotgun']);
 
 /** `game` playing `mode` from its Horde `local`. */
 export const inMode = (game: GameState, mode: HigherMode, local = 1): GameState => ({
