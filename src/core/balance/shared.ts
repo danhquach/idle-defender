@@ -5,21 +5,27 @@
 // Fixtures shared by those files; never imported by game code.
 import { rollWeapon } from '../armoury.ts';
 import { recruit } from '../camp.ts';
+import { skipOffer } from '../cards.ts';
 import {
+  STEP,
   SQUAD_CAP,
   SQUAD_HP_GROWTH,
   SQUAD_SLOT_COSTS,
+  type EnemyKind,
   type GunBase,
   type Rarity,
+  type ThemeId,
 } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
-import type { HordeState } from '../horde.ts';
+import { tickInPlace, type HordeState } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
-import { effHorde, type HigherMode } from '../modes.ts';
+import { effHorde, type HigherMode, type Mode } from '../modes.ts';
 import { createRng } from '../rng.ts';
 import { playSquadHorde, type HordeRun } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { xpForLevel } from '../stats.ts';
+import { themeAt } from '../themes.ts';
+import { xpToNext } from '../waves.ts';
 
 export const SEEDS = 20;
 
@@ -159,4 +165,60 @@ export function squadAbove(mode: HigherMode, n: number, share: number): GameStat
     if (squadPower(g) >= target) return g;
   }
   throw new Error(`no squad reaches ${share} of ${mode} ${n}`);
+}
+
+/**
+ * `game` with a theme seed (ID-238) under which `mode`'s horde `local` is theme `theme`: the
+ * lowest such seed, so a test can force a theme through the game's own rules.
+ */
+export function withTheme(game: GameState, mode: Mode, local: number, theme: ThemeId): GameState {
+  for (let seed = 1; seed < 5000; seed++) {
+    if (themeAt(seed, mode, local) === theme) return { ...game, themes: { seed } };
+  }
+  throw new Error(`no seed gives ${theme} at ${mode} ${local}`);
+}
+
+/** What `watchFight` saw of one fight. */
+export interface Watched {
+  outcome: HordeState['outcome'];
+  /** Every enemy that came, but bosses and mini-bosses: its max HP when first seen, summed. */
+  hp: number;
+  /** The fight's XP in all, as the level and what is banked say it. */
+  xp: number;
+  /** Most enemies on the field at once. */
+  peak: number;
+  /** The fight level the squad reached: one card offer for each level gained. */
+  level: number;
+  /** The wave's non-boss enemies by wave number and kind. */
+  kinds: Map<number, Partial<Record<EnemyKind, number>>>;
+}
+
+/**
+ * Plays horde `local` of `game`'s mode step by step with no cards taken (so use a squad that
+ * wins whatever it faces), looking at the field after every step so no enemy is missed. With
+ * `noTheme` the horde is the plain one of its number (ID-238).
+ */
+export function watchFight(game: GameState, seed: number, local: number, noTheme = false): Watched {
+  let s = startSquadHorde(game, seed, 0, local, noTheme);
+  const out: Watched = { outcome: 'fighting', hp: 0, xp: 0, peak: 0, level: 1, kinds: new Map() };
+  let seen = 0;
+  while (s.outcome === 'fighting') {
+    if (s.time > 3000) throw new RangeError('watchFight: the horde never ended');
+    s = s.offer ? skipOffer(s) : tickInPlace(s, STEP);
+    out.peak = Math.max(out.peak, s.enemies.length);
+    for (const e of s.enemies) {
+      if (e.id < seen) continue;
+      if (e.horror || e.elite) continue;
+      out.hp += e.maxHp;
+      const wave = out.kinds.get(e.wave ?? 0) ?? {};
+      wave[e.kind] = (wave[e.kind] ?? 0) + 1;
+      out.kinds.set(e.wave ?? 0, wave);
+    }
+    seen = s.nextEnemyId;
+  }
+  out.outcome = s.outcome;
+  out.level = s.level;
+  out.xp = s.xp;
+  for (let l = 1; l < s.level; l++) out.xp += xpToNext(l);
+  return out;
 }

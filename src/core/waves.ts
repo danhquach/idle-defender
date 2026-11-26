@@ -6,10 +6,13 @@ import {
   HORROR,
   HORROR_ABILITIES,
   SWARM,
+  THEME,
+  THEMES,
   WAVE_GROWTH,
   type BossSkill,
   type EnemyKind,
   type HorrorAbility,
+  type ThemeId,
 } from './data.ts';
 
 function whole(name: string, n: number): void {
@@ -86,6 +89,64 @@ export function kindFor(hordeNumber: number, roll: number, swarm = false): Enemy
     left -= share;
   }
   return mix[mix.length - 1]![0];
+}
+
+/**
+ * Whether a mode's horde `local` is a themed one (ID-238): from `THEME.from`, the middle of
+ * each boss cycle (15, 25, 35, ...). The modes' offsets (50, 100) keep the parity, so it is
+ * the effective horde's too.
+ */
+export const isThemed = (local: number): boolean =>
+  Number.isInteger(local) && local >= THEME.from && local % HORROR.every === HORROR.every / 2;
+
+/** Each kind's share of a themed wave (ID-238): the theme's kind, Shamblers for the rest. */
+export function themeMix(theme: ThemeId): [EnemyKind, number][] {
+  const { kind, share } = THEMES[theme];
+  return [
+    ['shambler', 1 - share],
+    [kind, share],
+  ];
+}
+
+/** The kind a roll in `[0, 1)` picks from a themed wave's mix (as `kindFor`). */
+export function themeKind(theme: ThemeId, roll: number): EnemyKind {
+  const { kind, share } = THEMES[theme];
+  return roll < 1 - share ? 'shambler' : kind;
+}
+
+/**
+ * How a themed wave keeps a plain wave's total HP and XP (ID-238): its enemies come
+ * `count` times as many as the plain wave's, each with `hp` times the HP and a kill paying
+ * `xp` times the XP (a rate of the whole, see `killXp` in horde.ts). `count` is the ratio of
+ * the plain mix's mean base HP to the theme's, at most `THEME.maxCount`; past that cap each
+ * enemy's HP takes the rest. `n` is the horde's strength, `swarm` a swarm wave (its plain
+ * mix has twice the Runners).
+ */
+export interface ThemeScale {
+  count: number;
+  hp: number;
+  xp: number;
+}
+
+const scales = new Map<string, ThemeScale>();
+
+export function themeScale(theme: ThemeId, n: number, swarm: boolean): ThemeScale {
+  const key = `${theme}:${n}:${swarm}`;
+  const known = scales.get(key);
+  if (known) return known;
+  const mean = (mix: [EnemyKind, number][], of: (k: EnemyKind) => number): number =>
+    mix.reduce((sum, [kind, share]) => sum + share * of(kind), 0);
+  const plain = waveMix(n, swarm);
+  const themed = themeMix(theme);
+  const ratio = mean(plain, (k) => ENEMIES[k].hp) / mean(themed, (k) => ENEMIES[k].hp);
+  const count = Math.min(ratio, THEME.maxCount);
+  const out = {
+    count,
+    hp: ratio / count,
+    xp: mean(plain, (k) => ENEMIES[k].xp) / (count * mean(themed, (k) => ENEMIES[k].xp)),
+  };
+  scales.set(key, out);
+  return out;
 }
 
 /**

@@ -354,7 +354,14 @@ describe('the Menu', () => {
     const job = fresh[0]!.roster[0]!.job;
     expect(JOB_IDS).toContain(job);
     const want = newGame('horde');
-    expect(fresh[0]).toEqual({ ...want, roster: [{ ...want.roster[0]!, job }] });
+    // A new camp has its own theme seed (ID-238), from the same start time.
+    const seed = fresh[0]!.themes?.seed;
+    expect(Number.isInteger(seed)).toBe(true);
+    expect(fresh[0]).toEqual({
+      ...want,
+      roster: [{ ...want.roster[0]!, job }],
+      themes: { seed },
+    });
     expect(dialog.textContent).toContain(NEW_CAMP_DONE);
   });
 

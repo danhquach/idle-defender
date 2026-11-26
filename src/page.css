@@ -8686,6 +8686,78 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-text);
 }
 
+/* A themed horde's banner (ID-238), under the horde select on every mode: its kind's sprite,
+   the theme's name and its tip. Never wider than the panel (the pick is a wrapping column). */
+.hud-horde-theme {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  border: 1px solid var(--color-warn);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.hud-horde-theme[hidden] {
+  display: none;
+}
+
+.hud-horde-theme-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  /* A dark kind (the Brute) stays readable on the dark banner: a light backing and glow. */
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-text-faint);
+  filter: drop-shadow(0 0 2px var(--color-text));
+}
+
+.hud-horde-theme-text {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+}
+
+.hud-horde-theme-name {
+  color: var(--color-warn);
+}
+
+/* A result's themed-horde warning (ID-238): apart from the goal line's amber by a bar and the
+   words "a themed horde", so it is never colour alone. */
+.debrief-warn {
+  margin: 0;
+  padding-left: var(--space-8);
+  border-left: 3px solid var(--color-warn);
+  color: var(--color-text);
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+}
+
+.chip-icon {
+  width: 1.4em;
+  height: 1.4em;
+  margin-right: var(--space-4);
+  vertical-align: middle;
+  object-fit: contain;
+  background: var(--color-text);
+  border-radius: var(--radius-md);
+}
+
+/* The "Theme reward" tag under a gun tile's name (ID-238). */
+.gun-chip-tag {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-warn);
+  font-weight: 600;
+}
+
 /* The Help tab's trait table (ID-237). */
 .menu-traits {
   width: 100%;

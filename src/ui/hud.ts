@@ -72,8 +72,11 @@ import {
   STASH_SLOT,
   SKILLS,
   ENEMY_TRAITS,
+  THEME,
+  THEMES,
   type EnemyKind,
   type GunClass,
+  type ThemeId,
   type HigherMode,
   type CampPickId,
   type BossSkill,
@@ -123,6 +126,7 @@ import {
   joiningOf,
   paramedicPoints,
   atCamp,
+  dropGuns,
   restLabel,
   salvageGun,
   salvageOf,
@@ -171,6 +175,7 @@ import {
   type PowerBand,
 } from '../core/squadpower.ts';
 import { levelOf } from '../core/stats.ts';
+import { themeCleared, themeIn, themeOf, themeSequence } from '../core/themes.ts';
 import { classOf, fitContext, fitOfSquad, type FitBand } from '../core/traits.ts';
 import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
@@ -184,6 +189,7 @@ import {
   ART_URLS,
   avatarOf,
   CARD_ICON,
+  ENEMY_ART,
   GUN_ICON,
   SHOP_ICON,
   SKILL_ICON,
@@ -962,7 +968,45 @@ export interface HordeChoice {
   traits?: TraitChip[];
   /** Nightmare and Hell only (ID-237): how the squad's gun classes fit this horde; absent for an empty squad. */
   fit?: FitChoice;
+  /** Absent on a plain horde (ID-238): the theme the horde brings, on every mode. */
+  theme?: ThemeChoice;
 }
+
+/** A themed horde's theme as the picker shows it (ID-238): its name and tip, and the kind whose sprite is its icon. */
+export interface ThemeChoice {
+  id: ThemeId;
+  name: string;
+  tip: string;
+  kind: EnemyKind;
+}
+
+/** The theme `id` as the picker shows it. */
+const themeChoice = (id: ThemeId): ThemeChoice => ({
+  id,
+  name: THEMES[id].name,
+  tip: THEMES[id].tip,
+  kind: THEMES[id].kind,
+});
+
+/**
+ * The warning a result screen gives before a themed horde (ID-238): the game's pending horde
+ * (the next new one, or the same one again after a loss) when it is themed, else null.
+ */
+export function themeWarning(
+  game: Pick<GameState, 'themes' | 'mode' | 'modes' | 'hordeNumber'>,
+  /** After a loss: the horde lost (what Retry offers) and its mode, "Horde 25 again". */
+  lost?: { local: number; mode: Mode },
+): string | null {
+  const local = lost?.local ?? localHorde(game);
+  const id = lost ? themeOf(game, local, lost.mode) : themeOf(game, local);
+  return id
+    ? `Horde ${local} ${lost ? 'again' : 'next'}: ${THEMES[id].name} — a themed horde`
+    : null;
+}
+
+/** The result chip for a theme's first clear (ID-238): "Iron Wall beaten · reward gun" or "· +10 Genes". */
+export const themeBeatenText = (id: ThemeId, reward: 'gun' | 'genes'): string =>
+  `${THEMES[id].name} beaten · ${reward === 'gun' ? 'reward gun' : `+${THEME.genes} Genes`}`;
 
 /** One enemy kind a higher-mode horde brings, with its trait (ID-237): "Hulking · Resists Light · Weak to Heavy". */
 export interface TraitChip {
@@ -1089,7 +1133,7 @@ function traitChips(hp: readonly (readonly [EnemyKind, number])[]): TraitChip[] 
  * listed horde is pickable.
  */
 export function hordePicker(
-  game: Pick<GameState, 'roster' | 'hordeNumber' | 'mode' | 'modes' | 'slots'>,
+  game: Pick<GameState, 'roster' | 'hordeNumber' | 'mode' | 'modes' | 'slots' | 'themes'>,
   picked: number = localHorde(game),
   retry: number | null = null,
   retitle = false,
@@ -1108,6 +1152,8 @@ export function hordePicker(
   const size = squadSize(game);
   const rec = (n: number): number => recommendedPower(effHorde(mode, n), mode, size);
   const lowest = Math.max(1, top - PICKER_HORDES + 1);
+  // The themes (ID-238) of every horde listed, from one walk of the mode's picks.
+  const themes = themeSequence(game.themes?.seed ?? 0, mode, top);
   // The best place to farm (ID-098): the highest beaten horde the squad already holds.
   let farm: number | null = null;
   if (powerBand(squad, rec(top)) !== 'ok') {
@@ -1124,11 +1170,13 @@ export function hordePicker(
     const boss = horrorAbility(n) !== null;
     // The traits and the fit (ID-237), in a higher mode only: Normal's picker is as it was.
     // One HP split a horde, shared by its chips and its fit.
-    const kindHp = mode === 'normal' ? null : hordeKindHp(effHorde(mode, n), mode, size);
+    const theme = themeIn(themes, n);
+    const kindHp = mode === 'normal' ? null : hordeKindHp(effHorde(mode, n), mode, size, theme);
     const fit = kindHp && fitOfSquad(fitContext(mode as HigherMode, kindHp), members);
     options.push({
       ...(kindHp ? { traits: traitChips(kindHp) } : {}),
       ...(fit ? { fit: { band: fit.band, text: fitText(fit) } } : {}),
+      ...(theme ? { theme: themeChoice(theme) } : {}),
       horde: n,
       isNew,
       // Short, so the select never cuts it (ID-196): the pick's readiness is the line
@@ -1136,6 +1184,7 @@ export function hordePicker(
       label: [
         `Horde ${n}${isNew ? ' (new)' : ''}`,
         ...(boss ? ['Boss'] : []),
+        ...(theme ? [THEMES[theme].name] : []),
         ...(n === farm ? ['best to farm'] : []),
       ].join(' · '),
       button: n === retry ? retryLabel(n) : isNew ? `Start Horde ${n}` : replayLabel(n),
@@ -1154,6 +1203,7 @@ export function hordePicker(
         chips: [
           ...(goal ? [goal.chip] : []),
           ...(boss ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
+          ...(theme ? [{ text: THEMES[theme].name, tone: 'boss' as const }] : []),
           ...(isNew ? [] : [{ text: 'Replay', tone: 'ok' as const }]),
           { text: `${waveCount(effHorde(mode, n))} waves`, tone: 'ok' as const },
           { text: `Squad ${squadOf(game).length}/${squadCap(game)}`, tone: 'ok' as const },
@@ -1404,6 +1454,12 @@ function bossLines(game: GameState, s: HordeState, now: number): string[] {
     : [`Boss reward: ${reward.genes} Genes (every perk owned)`];
 }
 
+/** A theme's first clear in the full game (ID-238): "Iron Wall beaten: 10 Genes", paid once per theme. */
+function themeLines(game: GameState, s: HordeState): string[] {
+  if (s.outcome !== 'won' || !s.theme || themeCleared(game, s.theme)) return [];
+  return [`${THEMES[s.theme].name} beaten: ${THEME.genes} Genes`];
+}
+
 /** A win's weapon drop (design §6 Gear): its name, then one line per affix; none without a drop. */
 function dropLines(game: GameState, s: HordeState): string[] {
   const drop = hordeDrop(game, s);
@@ -1442,6 +1498,7 @@ export function resultScreen(game: GameState, s: HordeState, now: number): Resul
         clearedLine(s),
         payoutText(s),
         ...bossLines(game, s, now),
+        ...themeLines(game, s),
         ...findLines(s),
         ...dropLines(game, s),
         ...lines,
@@ -1530,11 +1587,11 @@ export function squadDropLines(
   const cap = stashCap(game);
   let count = game.armoury.length;
   const thrown = [...drop.thrown];
-  for (const [i, w] of [drop.weapon, ...drop.bonus].entries()) {
+  for (const w of dropGuns(drop)) {
     const got =
-      i === 0
+      w === drop.weapon && !w.uid.startsWith('t')
         ? `Weapon drop (${DROP_KIND[drop.kind]}): ${gunLabel(w)}`
-        : `Bonus gun: ${gunLabel(w)}`;
+        : `${gunTag(drop, w)}: ${gunLabel(w)}`;
     // As `stashWith` puts them in: under the cap it goes in, else one is thrown away.
     if (count < cap) {
       count += 1;
@@ -1573,6 +1630,8 @@ export interface Chip {
   title?: string;
   /** The chip is a button that opens the result's details (ID-186), where its sentence is. */
   details?: true;
+  /** An enemy kind whose sprite leads the chip (ID-238: a theme's icon); text always says it too. */
+  icon?: EnemyKind;
   /**
    * Something that happened (a boss down), shown with the details' tags (ID-200), not with
    * the numbers. A chip with `details` is one too.
@@ -1627,6 +1686,11 @@ export interface Debrief {
   /** A plain line under the header (the start screen's goal, a loss's retry). */
   note: string | null;
   /**
+   * A result's warning (ID-238): "Horde 15 next: Stampede. ..." when the game's pending horde is
+   * themed (`themeWarning`) after a win; after a loss, the horde lost ("again", what Retry offers).
+   */
+  warn?: string;
+  /**
    * The campaign's next goal (ID-217, `nextGoalLine`), one line on the start screen and a
    * win's result; absent in Endless, on a loss and on the finale's ending screen.
    */
@@ -1677,17 +1741,18 @@ export function dropTile(
     Partial<Pick<GameState, 'hordeNumber' | 'mode' | 'modes'>>,
   drop: SquadDrop,
 ): DropTile {
-  const { weapon, bonus, thrown } = drop;
+  const { weapon, thrown } = drop;
+  const own = dropGuns(drop);
   const lost = thrown.includes(weapon);
-  const count = game.armoury.length + 1 + bonus.length - thrown.length;
+  const count = game.armoury.length + own.length - thrown.length;
   // Stash weapons thrown for room, not this win's own guns.
-  const old = thrown.filter((w) => w !== weapon && !bonus.includes(w));
+  const old = thrown.filter((w) => !own.includes(w));
   // Which gun's going in threw the drop away (as `stashWith` puts them in): the drop's own
   // (the stash already full of better guns), or a stronger bonus gun's after it.
   let by: OwnedWeapon | null = null;
   let room = stashCap(game) - game.armoury.length;
   let next = 0;
-  for (const w of [weapon, ...bonus]) {
+  for (const w of own) {
     if (room > 0) {
       room -= 1;
       continue;
@@ -1698,14 +1763,19 @@ export function dropTile(
     farmNote: drop.noUpgrades ? farmText(drop.farmFrom) : null,
     ...(drop.blueprint ? { blueprint: blueprintLine(drop.blueprint) } : {}),
     stash: `Stash ${count}/${stashCap(game)}${lost ? ' · thrown away' : ''}`,
-    guns: [weapon, ...bonus].map((w, i) => ({
+    // The theme's gun first on screen (ID-238), whatever order the stash takes them in.
+    guns: [
+      ...own.filter((w) => w.uid.startsWith('t')),
+      ...own.filter((w) => !w.uid.startsWith('t')),
+    ].map((w) => ({
+      ...(w.uid.startsWith('t') ? { tag: DROP_KIND.theme } : {}),
       rarity: w.rarity,
       short: `Lv ${gunLevel(w)} ${WEAPONS[w.base].name}`,
       power: gunDpsText(gunPower(w)),
       icon: GUN_ICON[w.base as GunId],
       lost: thrown.includes(w),
       lines: [
-        `${i === 0 ? DROP_KIND[drop.kind] : 'Bonus gun'} · ${RARITIES[w.rarity].name}`,
+        `${gunTag(drop, w)} · ${RARITIES[w.rarity].name}`,
         roleLine(w.base) ?? '',
         classLine(w, matchupsOpen(game)) ?? '',
         affixLines(w).join(', '),
@@ -1736,6 +1806,8 @@ export interface DropGun {
   /** "16.5 DPS" */
   power: string;
   icon: ArtId;
+  /** A small tag under the name (ID-238: "Theme reward"); absent on other guns. */
+  tag?: string;
   /** Thrown away: the stash full of better guns. */
   lost: boolean;
   /** Its details, shown on a click: kind and rarity, role and trait, affixes. */
@@ -1747,7 +1819,12 @@ export const DROP_KIND: Readonly<Record<SquadDrop['kind'], string>> = {
   first: 'First clear',
   replay: 'Replay',
   guaranteed: 'Guaranteed upgrade',
+  theme: 'Theme reward',
 };
+
+/** A win's gun, as its tile and line name it (ID-238 adds a theme's gun last, uid `t<k>`). */
+const gunTag = (drop: SquadDrop, w: OwnedWeapon): string =>
+  w.uid.startsWith('t') ? DROP_KIND.theme : w === drop.weapon ? DROP_KIND[drop.kind] : 'Bonus gun';
 
 /** A replay where nothing the horde drops could be an upgrade (ID-098, ID-152): where to go. */
 export const farmText = (farmFrom: number | null): string =>
@@ -2444,10 +2521,19 @@ export const HIDE_DETAILS = 'Hide details';
  */
 export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   if (s.outcome === 'fighting') throw new RangeError('squadScreen: the horde is still on');
-  const { gains, bench, joined, noJoin, rests, patched, next, drop, scrap, auto } = squadResult(
-    game,
-    s,
-  );
+  const {
+    gains,
+    bench,
+    joined,
+    noJoin,
+    rests,
+    patched,
+    next,
+    drop,
+    scrap,
+    auto,
+    theme: beaten,
+  } = squadResult(game, s);
   const benchXp = benchXpText(bench);
   // "Auto" (ID-154): who it moved once the fight was over, so a pick never changes unseen.
   const moved = auto ? movesText(auto) : null;
@@ -2497,6 +2583,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     const xpChip = xpChipText(gains);
     // The goal ahead once this win has counted (ID-217); none on the ending.
     const goalLine = ending ? null : nextGoalLine(after);
+    // The horde the game has pending after this win (ID-238), whatever the picker preselects.
+    const warn = ending ? null : themeWarning(next);
     return {
       title: ending
         ? EVACUATION_TITLE
@@ -2525,6 +2613,17 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           // The ending names the horde its title doesn't (ID-127).
           ...(ending ? [{ text: `Horde ${horde} held`, tone: 'ok' as const }] : []),
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
+          // A theme's first clear and its gun (ID-238), always in the header, with the theme's icon.
+          ...(beaten
+            ? [
+                {
+                  text: themeBeatenText(beaten.id, 'gun'),
+                  tone: 'ok' as const,
+                  event: true as const,
+                  icon: THEMES[beaten.id].kind,
+                },
+              ]
+            : []),
           { text: scrapChipText(scrap), tone: 'ok', title: scrapLine(scrap) },
           ...(xpChip ? [{ text: xpChip, tone: 'ok' as const }] : []),
           ...(benchXp ? [{ text: benchXp, tone: 'ok' as const }] : []),
@@ -2566,6 +2665,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         callout: null,
         note: null,
         ...(goalLine ? { goal: goalLine } : {}),
+        ...(warn ? { warn } : {}),
         notes,
         drop: drop ? dropTile(game, drop) : null,
         cards: ups,
@@ -2580,6 +2680,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   const where = inner ? `They got in during wave ${inner.wave} of ${s.waveCount}` : 'They got in';
   const bossLost = lostBossLines(s);
   const xp = gains[0]?.xp ?? 0;
+  // The horde that was lost is what Retry offers (ID-238), so it is the one warned about.
+  const lostWarn = themeWarning(game, { local: horde, mode: s.mode ?? 'normal' });
   // One line (ID-196), so the panel's body shows it whole under two rows of squad.
   const again = `Retry Horde ${horde}, or farm an easier horde: the squad and the wall are back at full strength`;
   return {
@@ -2612,6 +2714,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         sub: bossLost.length > 0 ? bossLost.join('\n') : null,
       },
       note: autoNote ? `${again}. ${autoNote}` : again,
+      ...(lostWarn ? { warn: lostWarn } : {}),
       drop: null,
       cards: xp > 0 ? xpCards() : squadOf(game).map((d) => plainCard(d)),
       empty: null,
@@ -3506,6 +3609,12 @@ export function createHud(
       const chip = el('span', 'chip', c.text);
       chip.dataset.tone = c.tone;
       if (c.title) chip.title = c.title;
+      if (c.icon) {
+        const img = el('img', 'chip-icon');
+        img.alt = '';
+        img.src = ART_URLS[ENEMY_ART[c.icon].walk[1]] ?? '';
+        chip.prepend(img);
+      }
       return chip;
     });
 
@@ -3659,6 +3768,15 @@ export function createHud(
     traitBox.open = !(
       window.matchMedia?.('(max-width: 640px), (max-height: 500px)').matches ?? false
     );
+    // The theme (ID-238) a themed horde brings, on every mode: its kind's sprite, its name and tip.
+    const banner = el('div', 'hud-horde-theme');
+    const bannerIcon = el('img', 'hud-horde-theme-icon');
+    bannerIcon.alt = '';
+    const bannerText = el('p', 'hud-horde-theme-text');
+    const bannerName = el('b', 'hud-horde-theme-name');
+    const bannerTip = el('span', 'hud-horde-theme-tip');
+    bannerText.append(bannerName, ' ', bannerTip);
+    banner.append(bannerIcon, bannerText);
     const traitList = el('ul', 'hud-trait-list');
     traitBox.append(el('summary', 'hud-horde-traits-head', 'Horde traits'), traitList);
     // The mode switch (ID-218), once Nightmare is open: one button a mode, the locked ones
@@ -3686,6 +3804,13 @@ export function createHud(
       traitBox.hidden = (o.traits ?? []).length === 0;
       traitList.replaceChildren(...(o.traits ?? []).map(traitItem));
       select.title = select.selectedOptions[0]?.textContent ?? '';
+      banner.hidden = o.theme === undefined;
+      if (o.theme) {
+        banner.dataset.theme = o.theme.id;
+        bannerIcon.src = ART_URLS[ENEMY_ART[o.theme.kind].walk[1]] ?? '';
+        bannerName.textContent = o.theme.name;
+        bannerTip.textContent = o.theme.tip;
+      }
     };
     sync();
     select.addEventListener('change', () => {
@@ -3704,11 +3829,14 @@ export function createHud(
     const nums = el('div', 'hud-horde-ready');
     // The fit and the traits are a higher mode's (ID-237): Normal's card is as it was.
     const higher = p.options.some((o) => o.fit !== undefined || o.traits !== undefined);
+    // The theme banner (ID-238) is there only when a horde listed has a theme.
+    const themed = p.options.some((o) => o.theme !== undefined);
     nums.append(line, hurt, ...(higher ? [fitLine] : []));
     pickBlock.replaceChildren(
       ...(switcher ? [switcher] : []),
       label,
       select,
+      ...(themed ? [banner] : []),
       meter,
       nums,
       ...(higher ? [fitHint] : []),
@@ -3727,6 +3855,9 @@ export function createHud(
     const parts: HTMLElement[] = [];
     // The next goal first (ID-217), so a phone shows it without a scroll.
     if (d.goal) parts.push(el('p', 'debrief-goal', d.goal));
+    // A win's warning follows the goal; a loss's comes last, after its callout and retry note.
+    const warn = d.warn ? el('p', 'debrief-warn', d.warn) : null;
+    if (warn && d.kind !== 'lost') parts.push(warn);
     if ((d.notes ?? []).length > 0) {
       // A win's sentences (ID-186), closed until asked for by the buttons that name it.
       const notes = el('ul', 'debrief-notes');
@@ -3750,6 +3881,7 @@ export function createHud(
     }
     // The offer line (ID-150) is not here: `showResult` puts it first in the body (ID-200).
     if (d.note) parts.push(el('p', 'debrief-note', d.note));
+    if (warn && d.kind === 'lost') parts.push(warn);
     return parts;
   }
 
@@ -3787,6 +3919,7 @@ export function createHud(
       text.append(
         el('span', 'gun-chip-name', g.short),
         el('span', 'gun-chip-power', g.lost ? 'Thrown away' : g.power),
+        ...(g.tag ? [el('span', 'gun-chip-tag', g.tag)] : []),
       );
       b.append(icon, text);
       b.addEventListener('click', () => {
@@ -4168,7 +4301,7 @@ export function createHud(
         );
         // A swarm wave reads "Swarm" in red, in words too so it's never colour alone (ID-121).
         const swarmOn = swarmMarker(state);
-        const wave = `${swarmOn ? 'Swarm · ' : ''}Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
+        const wave = `${state.theme ? `${THEMES[state.theme].name} · ` : ''}${swarmOn ? 'Swarm · ' : ''}Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
         if (waveLine.textContent !== wave) waveLine.textContent = wave;
         waveLine.classList.toggle('hud-corner-wave-swarm', swarmOn);
         const swaps = swapsText(state);

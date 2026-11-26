@@ -108,7 +108,8 @@ import {
 import { BLUEPRINT_GUNS, type Blueprints, type Craft } from '../core/craft.ts';
 import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad, settleSquad } from '../core/hordeonly.ts';
-import { AREA_IDS, DANGER_IDS, MAP_PATROL } from '../core/data.ts';
+import { AREA_IDS, DANGER_IDS, MAP_PATROL, THEME, THEME_IDS, THEMES } from '../core/data.ts';
+import { themedSlotsBeaten } from '../core/themes.ts';
 import { tripMs, type MapArea, type MapPatrol, type WorldMap } from '../core/scout.ts';
 import {
   beatenIn,
@@ -149,6 +150,14 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 26 since themed hordes (ID-238): the game may hold `themes`, written only once there is one: a
+ * `seed` (a whole number, 0 to 2^32 - 1) the themes are picked from, and `cleared`, the themes
+ * beaten (known ids from a fixed list, each once, in `THEME_IDS` order, never empty). A theme
+ * counts as cleared only if the game rolled it on a themed horde already beaten on some mode
+ * (replayed or first-cleared). A gun with uid `t<k>` is the first-clear gun of the `k`th theme: it
+ * needs that theme cleared, a base that answers it and Military or better. A v25 or older save
+ * has none: seed 0, nothing cleared.
+ *
  * 25 since the world map (ID-219): the horde-only game may hold `map` (its areas, the patrols
  * out, the draws so far) and `medicine` (a whole number, 0 to `MAP_PATROL.medicineMax`), each
  * written only once there is one. Every area kind and danger is from a fixed list, each kind
@@ -255,7 +264,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 25;
+export const SAVE_VERSION = 26;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -295,7 +304,7 @@ const BONUS = `(?:-(?:${Array.from({ length: SQUAD_BONUS.rolls }, (_, k) => k + 
  * number that found it and its place in the haul; or a survivor's (`SURVIVOR_ID`).
  */
 const UID = new RegExp(
-  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5}|f[1-9][0-9]{0,4}|n[1-9][0-9]{0,5}${BONUS}|x[1-9][0-9]{0,5}${BONUS}|m[1-9][0-9]{0,5}-[1-4])$`,
+  `^(?:h[1-9][0-9]{0,5}${BONUS}|r[1-9][0-9]{0,5}${BONUS}|p[1-9][0-9]{0,5}-(?:${Array.from({ length: MAX_FOUND }, (_, k) => k).join('|')})|s[1-9][0-9]{0,5}-[0-9]|c[1-9][0-9]{0,5}|f[1-9][0-9]{0,4}|n[1-9][0-9]{0,5}${BONUS}|x[1-9][0-9]{0,5}${BONUS}|m[1-9][0-9]{0,5}-[1-4]|t[1-${THEME_IDS.length}])$`,
 );
 /**
  * The most owned weapons a save holds: the full game's armoury, or the horde-only stash
@@ -419,6 +428,7 @@ function readSave(v: unknown): Save {
   if (
     ![
       SAVE_VERSION,
+      25,
       24,
       23,
       22,
@@ -483,6 +493,7 @@ function readSave(v: unknown): Save {
     ver >= 23,
     ver >= 24,
     ver >= 25,
+    ver >= 26,
   );
   return {
     game,
@@ -520,6 +531,8 @@ function readGame(
   mayModes: boolean,
   /** Whether the save may hold `map` and `medicine` (v25). */
   mayMap: boolean,
+  /** Whether the save may hold `themes` (v26). */
+  mayThemes: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -564,6 +577,8 @@ function readGame(
     // Written only once the map is drawn, and once a patrol brought Medicine (ID-219).
     ...(mayMap && !lacks('map') ? ['map'] : []),
     ...(mayMap && !lacks('medicine') ? ['medicine'] : []),
+    // Written only once the game has a theme seed or has beaten a theme (ID-238).
+    ...(mayThemes && !lacks('themes') ? ['themes'] : []),
   ]);
   const craft = Object.hasOwn(o, 'craft') ? readCraft(o.craft) : null;
   const slots = Object.hasOwn(o, 'slots') ? readSlots(o.slots) : null;
@@ -584,6 +599,12 @@ function readGame(
     }
   }
   if (mode && !modeUnlocked(progress, mode)) fail('mode not open');
+  const themes = Object.hasOwn(o, 'themes') ? readThemes(o.themes) : null;
+  // A theme is cleared on a themed horde beaten, on any mode: no more cleared than themed hordes
+  // beaten (ID-238). Which theme each rolled is not re-derived, so a retune never refuses a save.
+  if (themes?.cleared && themes.cleared.length > themedSlotsBeaten(progress)) {
+    fail('more themes cleared than themed hordes beaten');
+  }
   const perkLevels = hasQueue
     ? readPerkLevels(o.perkLevels, research, hordeNumber)
     : ownedLevels(research);
@@ -615,6 +636,7 @@ function readGame(
     hordeNumber,
     ...(mode ? { mode } : {}),
     ...(modes ? { modes } : {}),
+    ...(themes ? { themes } : {}),
     base: readBase(o.base, tiers, research.includes('auto-turret'), grid),
     stock: readStock(o.stock, materials),
     tiers,
@@ -693,6 +715,20 @@ function readGame(
   const made = craft?.made ?? 0;
   if (every.some((w) => w.uid.startsWith('f') && Number(w.uid.slice(1)) > made)) {
     fail('crafted gun from the future');
+  }
+  // A theme's first-clear gun (`t<k>`, ID-238) answers a theme already cleared, at Military or better.
+  for (const w of every) {
+    const m = new RegExp(`^t([1-${THEME_IDS.length}])$`).exec(w.uid);
+    if (!m) continue;
+    const id = THEME_IDS[Number(m[1]) - 1]!;
+    const answers: readonly string[] = THEMES[id].answers;
+    if (
+      !game.themes?.cleared?.includes(id) ||
+      !answers.includes(w.base) ||
+      RARITY_ORDER.indexOf(w.rarity) < RARITY_ORDER.indexOf(THEME.rarityFloor)
+    ) {
+      fail('theme gun from the future');
+    }
   }
   // A first clear on a mode (`n<k>`, `x<k>`, ID-218) names a horde of that mode already beaten.
   for (const w of every) {
@@ -1297,7 +1333,7 @@ function readOwned(
   // A survivor's camp-level weapon (`c`) is checked against the camp, a replay's (`r`)
   // against the replays won, a mode's (`n`, `x`) against its horde and a map patrol's (`m`,
   // ID-219) against the patrols sent, once they are read.
-  if (!/^[crfnxm]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
+  if (!/^[crfnxmt]/.test(uid) && from >= (uid.startsWith('h') ? hordeNumber : patrolsSent + 1)) {
     fail('weapon from the future');
   }
   const base = oneOf(o.base, WEAPON_IDS);
@@ -1336,6 +1372,28 @@ function readModes(v: unknown): NonNullable<GameState['modes']> {
   const out: NonNullable<GameState['modes']> = {};
   for (const m of HIGHER_MODES) {
     if (Object.hasOwn(v, m)) out[m] = int((v as Obj)[m], 1, MAX_HORDE);
+  }
+  return out;
+}
+
+/**
+ * Themed hordes (ID-238): a plain object with `seed` (a 32-bit whole number), `cleared` (up to
+ * every theme, each once, known ids only) or both; nothing else (`__proto__` and look-alikes
+ * included), and never empty. Copies only the named keys into a fresh object, `cleared` in
+ * `THEME_IDS` order. Whether `cleared` fits the hordes beaten is `readGame`'s check.
+ */
+function readThemes(v: unknown): NonNullable<GameState['themes']> {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) fail('themes');
+  if (Object.getPrototypeOf(v) !== Object.prototype) fail('themes');
+  const keys = Object.keys(v);
+  if (keys.length === 0 || keys.some((k) => k !== 'seed' && k !== 'cleared'))
+    fail('unknown theme key');
+  const out: NonNullable<GameState['themes']> = {};
+  if (Object.hasOwn(v, 'seed')) out.seed = int((v as Obj).seed, 0, MAX_SEED);
+  if (Object.hasOwn(v, 'cleared')) {
+    const list = arr((v as Obj).cleared, 1, THEME_IDS.length).map((t) => oneOf(t, THEME_IDS));
+    if (new Set(list).size !== list.length) fail('theme twice');
+    out.cleared = THEME_IDS.filter((t) => list.includes(t));
   }
   return out;
 }

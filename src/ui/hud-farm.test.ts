@@ -464,6 +464,7 @@ describe('drop tile: kind, farm note and level (ID-098, ID-196)', () => {
       first: 'First clear',
       replay: 'Replay',
       guaranteed: 'Guaranteed upgrade',
+      theme: 'Theme reward',
     });
     for (const kind of ['first', 'replay', 'guaranteed'] as const) {
       const t = dropTile({ armoury: [] }, dropOf(w, { kind }));
