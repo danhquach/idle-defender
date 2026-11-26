@@ -4070,7 +4070,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 /* The camp window (ID-183): one frame for the Roster and Weapons tabs, the same width and
    top edge for both so the tab strip never moves on a switch. The Roster hugs its content;
-   Weapons keeps a fixed box for its grid to scroll in. */
+   Weapons keeps a fixed box for its grid to scroll in, and Craft one for its blueprint list
+   (ID-250). */
 .camp-dialog {
   container-type: inline-size;
   /* Solid: the scrim does the dimming, and small text stays clear of the screen behind. */
@@ -7661,24 +7662,68 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: none;
 }
 
+/* One size whatever the blueprints held (ID-250): the window is set to the crafting area's
+   height, the blueprint list scrolls inside its column, and nothing moves as blueprints come
+   and go. A short screen still caps it, and then the pane scrolls. The heights are measured
+   off the area as it is (its lines, controls and note): re-measure when it changes. */
+.camp-dialog[data-tab='craft'] {
+  height: min(336px, 100%);
+}
+
+/* A finger's 44 px controls (an iPad) need a little more. */
+@media (pointer: coarse) {
+  .camp-dialog[data-tab='craft'] {
+    height: min(362px, 100%);
+  }
+}
+
+/* A narrow window, the area still beside the list: its lines wrap, so a little more. */
+@media (max-width: 640px) {
+  .camp-dialog[data-tab='craft'] {
+    height: min(370px, 100%);
+  }
+}
+
+/* A phone stacks the list over the area. */
+@media (max-width: 520px) {
+  .camp-dialog[data-tab='craft'] {
+    height: min(546px, 100%);
+  }
+}
+
 .craft-body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-8);
+  min-height: 0;
   padding: var(--space-12);
 }
 
 .craft-main {
   display: grid;
+  flex: 1 0 auto;
   grid-template-columns: minmax(140px, 190px) minmax(0, 1fr);
   gap: var(--space-12);
-  align-items: start;
+}
+
+/* The list never sets the row's height: the area does, the list fills it and scrolls. */
+.craft-list {
+  height: 0;
+  min-height: 100%;
 }
 
 @container (max-width: 520px) {
+  /* Stacked: the list is a fixed band of two rows over the area, so the area keeps its place. */
   .craft-main {
     grid-template-columns: minmax(0, 1fr);
+    align-content: start;
     gap: var(--space-8);
+  }
+
+  .craft-list {
+    height: auto;
+    min-height: 0;
   }
 }
 
@@ -7708,15 +7753,23 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 .craft-bps {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  /* Room for the focus ring and the scrollbar inside the scroll box. */
+  padding: 2px var(--space-4) 2px 2px;
 }
 
-/* A narrow window lays the blueprints in a wrapping row. */
+/* A narrow window lays the blueprints in a wrapping row: two rows' height, scrolling past. */
 @container (max-width: 520px) {
   .craft-bps {
+    flex: none;
     flex-direction: row;
     flex-wrap: wrap;
+    align-content: flex-start;
+    height: calc(2 * 32px + var(--space-4) + 4px);
   }
 }
 
@@ -7926,27 +7979,52 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   cursor: not-allowed;
 }
 
+/* The line under the heading and what was just made share one slot of one height, so a craft
+   never moves the slider or the buttons (ID-250). */
+.craft-area > .craft-sub,
+.craft-result {
+  box-sizing: border-box;
+  min-height: 34px;
+}
+
+.craft-area > .craft-sub {
+  display: flex;
+  align-items: center;
+}
+
+/* A narrow window: room for the result's name on two lines beside View. */
+@container (max-width: 640px) {
+  .craft-area > .craft-sub,
+  .craft-result {
+    min-height: 40px;
+  }
+}
+
 /* What was just made: first in the pane, so it is the thing seen. */
 .craft-result {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-8);
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-2) var(--space-8);
   border: 1px solid var(--color-accent);
   border-radius: 8px;
   background: var(--color-accent-soft);
 }
 
 .craft-result-line {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-width: 0;
   margin: 0;
   font-size: var(--text-body);
   font-weight: 700;
 }
 
+/* Slim enough for the shared slot (ID-250); a finger still gets 44 px (below). */
 .craft-view {
-  min-height: 32px;
+  flex: none;
+  min-height: 28px;
+  padding: 0 var(--space-10);
 }
 
 .gun-blueprint {
@@ -7967,6 +8045,18 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .craft-range {
     min-height: 32px;
   }
+
+  /* The shared slot holds a 44 px View button (ID-250). */
+  .craft-area > .craft-sub,
+  .craft-result {
+    min-height: 50px;
+  }
+
+  @container (max-width: 520px) {
+    .craft-bps {
+      height: calc(2 * 44px + var(--space-4) + 4px);
+    }
+  }
 }
 
 /* A short screen (a phone in landscape): tighter, so Craft and the Scrap line stay in view. */
@@ -7983,15 +8073,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   .craft-note {
     display: none;
-  }
-
-  /* What was just made stays one slim row, so the buttons never slip below the fold. */
-  .craft-result {
-    padding: var(--space-2) var(--space-8);
-  }
-
-  .craft-view {
-    min-height: 28px;
   }
 
   .craft-go,

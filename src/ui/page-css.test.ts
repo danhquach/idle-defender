@@ -770,3 +770,39 @@ describe('a Roster card keeps a gap between its gun and its DPS (ID-249)', () =>
     );
   });
 });
+
+describe('the Craft tab holds still whatever the blueprints held (ID-250)', () => {
+  it('the window is one set height on the Craft tab: mouse, finger and a stacked phone', () => {
+    expect(rules).toMatch(/\.camp-dialog\[data-tab='craft'\] \{\s*height: min\(336px, 100%\);/);
+    expect(rules).toMatch(
+      /@media \(max-width: 640px\) \{\s*\.camp-dialog\[data-tab='craft'\] \{\s*height: min\(370px, 100%\);/,
+    );
+    expect(rules).toMatch(
+      /@media \(pointer: coarse\) \{\s*\.camp-dialog\[data-tab='craft'\] \{\s*height: min\(362px, 100%\);/,
+    );
+    expect(rules).toMatch(
+      /@media \(max-width: 520px\) \{\s*\.camp-dialog\[data-tab='craft'\] \{\s*height: min\(546px, 100%\);/,
+    );
+  });
+
+  it("the list never sizes the row: it fills the area's height and scrolls", () => {
+    expect(rule('.craft-list')).toMatch(/height: 0;[^}]*min-height: 100%;/);
+    expect(rule('.craft-bps')).toMatch(/min-height: 0;[^}]*overflow-y: auto;/);
+    // Stacked on a phone: a band two rows high.
+    expect(rules).toMatch(
+      /\.craft-bps \{[^}]*height: calc\(2 \* 32px \+ var\(--space-4\) \+ 4px\);/,
+    );
+    expect(rules).toMatch(
+      /\.craft-bps \{[^}]*height: calc\(2 \* 44px \+ var\(--space-4\) \+ 4px\);/,
+    );
+  });
+
+  it("the line under the heading and a craft's result share one slot height", () => {
+    expect(rules).toMatch(
+      /\.craft-area > \.craft-sub,\s*\.craft-result \{\s*box-sizing: border-box;\s*min-height: 34px;/,
+    );
+    expect(rules).toMatch(/\.craft-area > \.craft-sub,\s*\.craft-result \{\s*min-height: 40px;/);
+    expect(rules).toMatch(/\.craft-area > \.craft-sub,\s*\.craft-result \{\s*min-height: 50px;/);
+    expect(rule('.craft-view')).toMatch(/min-height: 28px;/);
+  });
+});
