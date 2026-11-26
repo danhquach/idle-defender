@@ -2883,6 +2883,19 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   explanation of power, the rating, the odds and Best fit. An area with a team out shows the
   team's own rating after the area's danger, "Safe (Risky)", and its drop odds at that team's
   power, both from the power it left with, so later levels or guns don't move them.
+- **Reroll (ID-252):** a **Reroll** button in the World map's header (list view, between
+  hordes only; hidden in the picker, the report and mid-fight) spends Scrap to replace every
+  area with no patrol out by a new draw from the map's seed (so a reload replays it); an area
+  with a patrol, back or not, stays as it is. A new area is never of its own old kind and
+  never repeats a kind on the map, and is first drawn from kinds that were not on the map, so a
+  full reroll doesn't just swap places. The price is on the button ("Reroll · 30 Scrap") and
+  is about one Safe-area Scrap find, rounded up to 5, at least 10: half a win's Scrap at the
+  best horde beaten (`MAP_REROLL` in `core/data.ts`), so 10 at Horde 1, 30 at 10, 55 at 20, 80
+  at 30, 130 at 50. It is greyed with "Needs N Scrap" when Scrap is short and with "Every area
+  has a patrol out" when all 4 are out. No daily limit and no rising price: Scrap is the
+  limit, and a reroll pays nothing (patrols still take 30 to 120 minutes). No save field; the
+  draw count stops at `MAP_DRAWS_MAX` (a report or reroll past it repeats draws, never reached
+  in play) so a save always loads.
 - **Away:** members on patrol can't fight, swap in, join the squad, be let go or
   combined, and earn no bench share. On the Roster (ID-234) each patrol out is a block of
   its members' cards, the soonest back first, under a header in the World map card's words:

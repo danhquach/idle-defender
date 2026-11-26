@@ -13,6 +13,8 @@ import {
   bestHorde,
   patrolAt,
   patrolRatio,
+  rerollCost,
+  rerollMap,
   safePower,
   teamPower,
   teamRating,
@@ -51,6 +53,9 @@ import {
   safeLine,
   MAP_NOBODY_FREE,
   MAP_WAIT,
+  rerollAria,
+  rerollLabel,
+  rerollText,
 } from './mapview.ts';
 import { rosterTiles } from './squadroster.ts';
 
@@ -109,6 +114,13 @@ function mount(state: { game: GameState; now: number; canSend?: boolean }) {
       },
       onTake: (area) => {
         const r = takeReport(state.game, area, state.now);
+        if (!r.ok) return r;
+        state.game = r.game;
+        tab.refresh();
+        return { ok: true };
+      },
+      onReroll: () => {
+        const r = rerollMap(state.game);
         if (!r.ok) return r;
         state.game = r.game;
         tab.refresh();
@@ -612,5 +624,110 @@ describe('the World map tab: power, the Safe line and how it works (ID-246)', ()
       // Cards with no team out keep the plain tag.
       expect(all('.map-area')[1]!.querySelector('.map-real')).toBeNull();
     }
+  });
+});
+
+describe('the World map tab: Reroll (ID-252)', () => {
+  const rich = (g: GameState, scrap = 500): GameState => ({ ...g, stock: { ...g.stock, scrap } });
+  const NBSP = String.fromCharCode(160);
+
+  it('shows its cost on the button and in the read-out', () => {
+    const g = rich(camp());
+    const cost = rerollCost(g);
+    const { q } = mount({ game: g, now: NOW });
+    const b = q<HTMLButtonElement>('.map-reroll')!;
+    expect(b.textContent).toBe(`Reroll · ${cost}${NBSP}Scrap`);
+    expect(b.textContent).toBe(rerollLabel(cost));
+    expect(b.getAttribute('aria-label')).toBe(rerollAria(cost));
+    expect(rerollAria(30)).toBe('Reroll areas, 30 Scrap');
+    expect(b.hidden).toBe(false);
+    expect(b.disabled).toBe(false);
+    expect(b.title).toBe('');
+  });
+
+  it('is greyed with the price when Scrap is short', () => {
+    const g = rich(camp(), 0);
+    const cost = rerollCost(g);
+    const { q } = mount({ game: g, now: NOW });
+    const b = q<HTMLButtonElement>('.map-reroll')!;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe(`Needs ${cost} Scrap`);
+    expect(b.textContent).toBe(rerollLabel(cost));
+  });
+
+  it('is greyed when every area has a patrol out', () => {
+    let g = rich(camp());
+    for (let i = 0; i < 4; i++) g = send(g, [`recruit-${i + 2}`], i);
+    const { q } = mount({ game: g, now: NOW });
+    const b = q<HTMLButtonElement>('.map-reroll')!;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Every area has a patrol out');
+  });
+
+  it('is hidden mid-fight, in the picker and in the report', () => {
+    const g = rich(camp());
+    expect(mount({ game: g, now: NOW, canSend: false }).q('.map-reroll')!.hidden).toBe(true);
+    const picked = mount({ game: g, now: NOW });
+    picked.all('.map-send')[0]!.click();
+    expect(picked.q('.map-reroll')!.hidden).toBe(true);
+    const sent = send(g, ['recruit-2']);
+    const p = sent.map!.patrols[0]!;
+    const report = mount({ game: sent, now: p.backAt });
+    expect(report.q('.map-report')).not.toBeNull();
+    expect(report.q('.map-reroll')!.hidden).toBe(true);
+  });
+
+  it('comes back when the picker closes', () => {
+    const { q, all } = mount({ game: rich(camp()), now: NOW });
+    all('.map-send')[0]!.click();
+    expect(q('.map-reroll')!.hidden).toBe(true);
+    q<HTMLButtonElement>('.map-back')!.click();
+    expect(q('.map-reroll')!.hidden).toBe(false);
+  });
+
+  it('a click replaces the unsent areas, says the Scrap spent, and keeps the focus', () => {
+    const g = send(rich(camp()), ['recruit-2'], 1);
+    const state = { game: g, now: NOW };
+    const { q, all } = mount(state);
+    const cost = rerollCost(g);
+    const b = q<HTMLButtonElement>('.map-reroll')!;
+    b.focus();
+    b.click();
+    expect(state.game.stock.scrap).toBe(500 - cost);
+    expect(q('.map-status')!.textContent).toBe(rerollText(cost, 500 - cost));
+    expect(q('.map-status')!.textContent).toBe(
+      `New areas · ${cost} Scrap spent, ${500 - cost} left.`,
+    );
+    expect(q('.map-status')!.dataset.tone).toBeUndefined();
+    expect(all('.map-area-name').map((n) => n.textContent)).toEqual(
+      state.game.map!.areas.map((a) => AREAS[a.kind].name),
+    );
+    expect(state.game.map!.areas[1]).toBe(g.map!.areas[1]);
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('the label follows the Scrap: affordable, then greyed after the buy', () => {
+    const g = rich(camp(), rerollCost(camp()));
+    const state = { game: g, now: NOW };
+    const { q, tab } = mount(state);
+    const b = q<HTMLButtonElement>('.map-reroll')!;
+    expect(b.disabled).toBe(false);
+    b.click();
+    expect(state.game.stock.scrap).toBe(0);
+    expect(b.disabled).toBe(true);
+    state.game = rich(state.game, 1000);
+    tab.refresh();
+    expect(b.disabled).toBe(false);
+  });
+
+  it('shows the refusal in the status when the buy is refused', () => {
+    const state = { game: rich(camp()), now: NOW, canSend: true };
+    const { q } = mount(state);
+    state.game = rich(state.game, 0);
+    const b = q<HTMLButtonElement>('.map-reroll')!;
+    b.disabled = false;
+    b.click();
+    expect(q('.map-status')!.dataset.tone).toBe('refused');
+    expect(q('.map-status')!.textContent).toBe(`Needs ${rerollCost(state.game)} Scrap`);
   });
 });
