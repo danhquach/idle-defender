@@ -64,6 +64,11 @@ jobs:
           - name: Unit (themes)
             tests: src/core/balance/themes.test.ts
             timeout: 25
+          # ID-247: the gun-parity balance file plays 20 seeds on four hordes, a 10-of-20 bisect
+          # and five squads each (about 7 minutes on one local worker, uncached); a job of its own.
+          - name: Unit (gun parity)
+            tests: src/core/balance/gun-parity.test.ts
+            timeout: 25
           - name: Lint, build, other unit
             checks: true
             tests: >-
@@ -76,6 +81,7 @@ jobs:
               --exclude src/core/balance/modes.test.ts
               --exclude src/core/balance/hell.test.ts
               --exclude src/core/balance/themes.test.ts
+              --exclude src/core/balance/gun-parity.test.ts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

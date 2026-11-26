@@ -15,10 +15,12 @@ import {
   type Held,
   type OwnedWeapon,
 } from './armoury.ts';
-import { survivorDps, xpForLevel } from './stats.ts';
+import { ratedDps, maxHpOf, survivorDps, xpForLevel } from './stats.ts';
 import { recruit } from './camp.ts';
 import {
+  DEFENDER_HP,
   PISTOL_DROP_FLOOR,
+  POWER,
   RARITY_ORDER,
   SQUAD_CAP,
   SQUAD_DROP,
@@ -455,8 +457,11 @@ describe('best gun for everyone counts professions (ID-152)', () => {
       d.id === id ? { ...d, job, xp, loadout: { ...d.loadout, primary } } : d,
     ),
   });
-  const dps = (game: GameState, id: string, h: Held): number =>
-    survivorDps(squadSpec(game.roster.find((d) => d.id === id)!), h);
+  // What best gun for everyone maximises (ID-247): the survivor's Squad Power share with `h`.
+  const dps = (game: GameState, id: string, h: Held): number => {
+    const s = squadSpec(game.roster.find((d) => d.id === id)!);
+    return ratedDps(s, h) * (1 + POWER.tough * (maxHpOf(s) / DEFENDER_HP - 1)) * POWER.scale;
+  };
   const squadTotal = (game: GameState): number =>
     game.roster.reduce((s, d) => s + dps(game, d.id, squadSpec(d).loadout.primary), 0);
   const uidOf = (game: GameState, id: string): string | undefined => {
@@ -481,14 +486,15 @@ describe('best gun for everyone counts professions (ID-152)', () => {
 
   it('swaps guns between survivors when each suits the other (the ticket’s case)', () => {
     const carbine = gun('c', 'rifle', 'common');
-    const pump = gun('p', 'shotgun', 'common');
+    // ID-247: the Hand Cannon (0.9 in Squad Power); the Pump Shotgun at 0.47 no longer wins.
+    const cannon = gun('p', 'handcannon', 'common');
     const sniper = gun('s', 'sniper', 'common');
     let g = squadGame(2, 3, [sniper]);
     g = as(g, 'recruit-1', 'police', carbine);
-    g = as(g, 'recruit-2', 'hunter', pump);
+    g = as(g, 'recruit-2', 'hunter', cannon);
     const before = squadTotal(g);
     const r = bestGuns(g);
-    // The Police officer ends with the Pump Shotgun, the Hunter with the Sniper rifle (their
+    // The Police officer ends with the Hand Cannon, the Hunter with the Sniper rifle (their
     // best of the Hunter's guns); the Carbine goes to the stash.
     expect(uidOf(r.game, 'recruit-1')).toBe('p');
     expect(uidOf(r.game, 'recruit-2')).toBe('s');

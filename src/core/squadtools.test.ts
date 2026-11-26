@@ -127,7 +127,9 @@ describe('Best squad in a higher mode (ID-237)', () => {
   // Light are the squad; against Hell's traits a Heavy gun is worth a place.
   const lightLevel = 60;
   const lightPower = survivorPower(person(1, gun('lmg', lightLevel, 'x')));
-  const heavyLevel = levelFor('sniper', lightPower * 0.9);
+  // ID-247: 0.8, not 0.9: Squad Power now counts the Sniper at 0.85 and the LMG at 0.74, so the
+  // Heavy pair needs a wider gap to stay the weaker by Squad Power alone.
+  const heavyLevel = levelFor('sniper', lightPower * 0.8);
   const light = [1, 2, 3, 4, 5, 6].map((n) => person(n, gun('lmg', lightLevel, `l${n}`)));
   const heavy = [7, 8].map((n) => person(n, gun('sniper', heavyLevel, `s${n}`)));
   const classesOf = (g: GameState): (GunClass | null)[] =>
