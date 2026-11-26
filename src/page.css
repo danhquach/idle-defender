@@ -6299,7 +6299,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 .rv-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
   gap: 5px;
   margin: 0;
   padding: 0;
@@ -6313,8 +6313,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   align-items: center;
   justify-content: flex-end;
   width: 100%;
-  max-height: 72px;
-  aspect-ratio: 1;
+  /* Name, Power and DPS stack under the change (ID-248): taller than wide at the narrowest. */
+  min-height: 66px;
   padding: 3px 2px;
   border: 2px solid var(--slot-common);
   border-radius: var(--radius-md);
@@ -6381,8 +6381,18 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--rarity-relic);
 }
 
-.rv-dps {
+.rv-pw {
+  max-width: 100%;
   font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-dps {
+  color: var(--color-text-subtle);
+  font-size: var(--text-2xs);
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
 
@@ -6392,9 +6402,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   right: 2px;
   left: 2px;
   padding: 0 2px;
+  overflow: hidden;
   border-radius: var(--radius-xs);
   background: var(--color-surface-sunken);
   font-size: var(--text-2xs);
+  white-space: nowrap;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: center;

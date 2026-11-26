@@ -22,9 +22,11 @@ import {
   restOf,
   squadCap,
   squadOf,
+  handWorth,
   squadSpec,
   stashCap,
   type GunMove,
+  type GunWorthGame,
   type SquadMoves,
 } from '../core/hordeonly.ts';
 import { patrolOf, type MapPatrol } from '../core/scout.ts';
@@ -209,7 +211,10 @@ export interface RosterOptions {
   state: () => {
     game: Pick<GameState, 'roster' | 'armoury' | 'autoSquad'> &
       Partial<
-        Pick<GameState, 'slots' | 'stock' | 'map' | 'medicine' | 'mode' | 'modes' | 'hordeNumber'>
+        Pick<
+          GameState,
+          'slots' | 'stock' | 'map' | 'medicine' | 'mode' | 'modes' | 'hordeNumber' | 'themes'
+        >
       > & {
         reserve?: readonly RosterDefender[];
       };
@@ -909,10 +914,11 @@ export function createRoster(
 
   function pickerPanel(
     d: RosterDefender,
-    game: Pick<GameState, 'roster' | 'armoury' | 'slots'>,
+    game: Pick<GameState, 'armoury'> & GunWorthGame,
     canGear: boolean,
   ): HTMLElement[] {
     const held = heldGunOf(d);
+    const higher = game.mode !== undefined;
     const tiles = gunTiles(game, d.id);
     if (picked !== null && !tiles.some((t) => t.choice === picked)) picked = null;
     const headRow = el('div', 'rv-phead');
@@ -927,13 +933,13 @@ export function createRoster(
     });
     headRow.append(
       el('span', 'rv-ttl', 'Choose a gun'),
-      el('span', 'rv-left', `By DPS · stash ${game.armoury.length}/${stashCap(game)}`),
+      el('span', 'rv-left', `By Power · stash ${game.armoury.length}/${stashCap(game)}`),
       back,
     );
     const out: HTMLElement[] = [headRow];
     const choice = tiles.find((t) => t.choice === picked);
     if (choice) {
-      const cmp = gunCompare(held, choice.held, squadSpec(d));
+      const cmp = gunCompare(held, choice.held, squadSpec(d), handWorth(game, d));
       const box = el('div', 'rv-cmp');
       const verdict = el('div', 'rv-verdict');
       const v = el('div', 'rv-v');
@@ -1006,6 +1012,9 @@ export function createRoster(
       // The first word fits a tile ("Sniper", not "Sniper r…"); the label has it in full.
       const type = el('span', 'rv-ty');
       type.append(`${t.type.split(' ')[0]}${t.free ? ' ∞' : ''}`);
+      // Power is the tile's main number (ID-248); paper DPS is the smaller line under it.
+      const pwr = el('span', 'rv-pw', t.powerText);
+      pwr.title = 'Power';
       // The gun's class (ID-237): its icon inline before the DPS number, off the name line so the
       // name stays whole; its name is the DPS line's title.
       const dps = el('span', 'rv-dps');
@@ -1015,7 +1024,7 @@ export function createRoster(
         dps.append(classIcon(tileClass));
       }
       dps.append(t.dps);
-      tile.append(delta, type, dps);
+      tile.append(delta, type, pwr, dps);
       if (suits(t.held)) {
         const mark = el('span', 'rv-fit', '★');
         mark.setAttribute('aria-hidden', 'true');
@@ -1036,7 +1045,11 @@ export function createRoster(
       el(
         'p',
         'rv-hint',
-        `Frame colour = rarity. DPS is ${d.name}'s, level and profession counted; ▲ ▼ compare it with the gun held now.${
+        `Frame colour = rarity. Big number = ${d.name}'s Power with the gun, small = DPS (level and profession counted); ▲ ▼ compare Power with the gun held now.${
+          higher && squadOf(game).some((m) => m.id === d.id)
+            ? " Power is against the next horde's traits."
+            : ''
+        }${
           fighter
             ? ` ★ suits a ${JOBS[d.job].name}: the profession's bonus works only with these.`
             : ''
@@ -1154,8 +1167,8 @@ const AUTO_HINT = 'Keep the best squad after each horde, a joiner, a let-go and 
 export const AUTO_ON =
   'Auto on: the best squad is picked again after each horde, joiner, let-go and Best gun.';
 
-/** The tile hover hint (ID-247): the DPS is paper damage; Best gun counts reach and reload too. */
-const DPS_HINT = 'DPS is paper damage per second; Best gun also weighs reach and reload.';
+/** The tile hover hint (ID-247, ID-248): the DPS is paper damage; Power is what Best gun goes by. */
+const DPS_HINT = 'Power counts reach and reload too, as Best gun does.';
 
 /** Why the squad can't change now (ID-147): it is picked between hordes. */
 export const SQUAD_WAIT = 'Pick the squad between hordes';

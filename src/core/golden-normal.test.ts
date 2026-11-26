@@ -51,7 +51,9 @@ const GOLDEN: Record<string, string> = {
   'h5-L5-won': '3bad2bce:18443',
   'h50-L150-won': 'a8288ed9:19942',
   'h50-L45-lost': '8139027e:45006',
-  'replay-won': '1e420150:13680',
+  // ID-248: re-recorded locally (drop and stash scoring use Squad Power's rating, so the replay's
+  // drop changes). CI (Node 22) confirms this entry; if it differs there, add it to NODE_22.
+  'replay-won': 'a46e68fd:13681',
 };
 
 /**

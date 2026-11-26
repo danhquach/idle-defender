@@ -2,8 +2,7 @@
 // guarantee, gun levels, a replay's and a loss's XP, and Squad Power.
 import { describe, expect, it } from 'vitest';
 import {
-  bestDrop,
-  DROP_GUNS,
+  dropCanBeat,
   firstClearWeights,
   gunLevel,
   gunPower,
@@ -49,7 +48,7 @@ import {
   squadPower,
   survivorPower,
 } from './squadpower.ts';
-import { survivorDps, xpForLevel } from './stats.ts';
+import { gunWorth, ratedDps, xpForLevel } from './stats.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -314,7 +313,8 @@ describe('the bad-luck guarantee (ID-098)', () => {
       const d = squadDrop(g, s)!;
       expect(d.kind).toBe('guaranteed');
       expect(d.upgrade).toBe(true);
-      expect(gunPower(d.weapon)).toBeGreaterThan(gunPower(held));
+      // A sure upgrade is one by Squad Power's rating (ID-248), not by paper dmg/s.
+      expect(squadGain(g)(d.weapon)).toBeGreaterThan(0);
       expect(RARITY_ORDER.indexOf(d.weapon.rarity)).toBeGreaterThanOrEqual(
         RARITY_ORDER.indexOf('military'),
       );
@@ -325,7 +325,7 @@ describe('the bad-luck guarantee (ID-098)', () => {
   it('with no gun here able to beat the weakest, nothing counts and there is no reroll', () => {
     const held = gun('h30', 'shotgun', 'relic', 40);
     const g = holding(held, 41, 3);
-    expect(bestDrop(replayWeights(2, 3), 2)).toBeLessThan(gunPower(held));
+    expect(dropCanBeat(replayWeights(2, 3), 2, squadGain(g))).toBe(false);
     const s = ended(g, 2, 'won');
     const d = squadDrop(g, s)!;
     expect(d.noUpgrades).toBe(true);
@@ -333,8 +333,8 @@ describe('the bad-luck guarantee (ID-098)', () => {
     // It names the lowest horde that could drop an upgrade, and none below it can.
     const from = d.farmFrom!;
     expect(from).toBeGreaterThan(2);
-    expect(bestDrop(replayWeights(from, 3), from)).toBeGreaterThan(gunPower(held));
-    expect(bestDrop(replayWeights(from - 1, 3), from - 1)).toBeLessThanOrEqual(gunPower(held));
+    expect(dropCanBeat(replayWeights(from, 3), from, squadGain(g))).toBe(true);
+    expect(dropCanBeat(replayWeights(from - 1, 3), from - 1, squadGain(g))).toBe(false);
     expect(finishSquadHorde(g, s).farm.badLuck).toBe(3);
     // At the guarantee too: an ordinary replay drop, no endless reroll.
     const full = holding(held, 41, FARM.guarantee);
@@ -406,25 +406,45 @@ describe('an upgrade counts the survivor’s level and profession (ID-152)', () 
   };
 
   it('a gun of their profession, weaker on its own, is an upgrade; for an any-gun job it isn’t', () => {
-    // ID-233: the LMG; the Assault Rifle no longer out-hits the Sniper rifle on its own.
-    const lmg = gun('h1', 'lmg', 'common');
+    // ID-248: judged by Squad Power's rating. A Military Assault Rifle outrates a Common Sniper
+    // rifle for a Mechanic (no profession gun), but not for a Hunter, whose job the Sniper suits.
+    const assault = gun('h1', 'assault', 'military');
     const sniper = gun('x', 'sniper', 'common');
-    expect(gunPower(sniper)).toBeLessThan(gunPower(lmg));
-    expect(squadGain(holdingAs(lmg, 'hunter', 3))(sniper)).toBeGreaterThan(0);
-    expect(squadGain(holdingAs(lmg, 'mechanic', 3))(sniper)).toBeLessThanOrEqual(0);
+    expect(gunPower(sniper)).toBeLessThan(gunPower(assault));
+    expect(squadGain(holdingAs(assault, 'hunter', 3))(sniper)).toBeGreaterThan(0);
+    expect(squadGain(holdingAs(assault, 'mechanic', 3))(sniper)).toBeLessThanOrEqual(0);
   });
 
-  it('a gun stronger on its own is no upgrade when it does less in their hands', () => {
-    const pump = gun('h1', 'shotgun', 'common');
-    const g = holdingAs(pump, 'police', 3);
+  it('a gun stronger on its own is no upgrade when it counts for less in Squad Power (ID-248)', () => {
+    // A Common Pump Shotgun out-hits a Relic Carbine on paper dmg/s, but its factor in Squad
+    // Power is far lower: it is not an upgrade, and the Carbine is still what they hold.
+    const carbine = gun('h1', 'rifle', 'relic');
+    const pump = gun('x', 'shotgun', 'common');
+    const g = holdingAs(carbine, 'mechanic', 3);
     const who = squadSpec(g.roster[0]!);
-    const stronger = DROP_GUNS.flatMap((base) =>
-      RARITY_ORDER.map((rarity) => gun('x', base, rarity)),
-    ).find((w) => gunPower(w) > gunPower(pump) && survivorDps(who, w) < survivorDps(who, pump));
-    expect(stronger).toBeDefined();
-    expect(squadGain(g)(stronger!)).toBeLessThanOrEqual(0);
-    // The weakest held gun is theirs, judged in their hands.
-    expect(weakestHeld(g)).toEqual(pump);
+    expect(gunPower(pump)).toBeGreaterThan(gunPower(carbine));
+    expect(ratedDps(who, pump)).toBeLessThan(ratedDps(who, carbine));
+    expect(squadGain(g)(pump)).toBeLessThanOrEqual(0);
+    // The weakest held gun is theirs, as Squad Power rates it.
+    expect(weakestHeld(g)).toEqual(carbine);
+  });
+
+  it('a Pump Shotgun that beats the held Carbine on paper but not in Power is not an upgrade (ID-248)', () => {
+    // At level 1 with no squad job, and with no squad at all: the rated worth decides.
+    const carbine = gun('h1', 'rifle', 'common');
+    const pump = gun('x', 'shotgun', 'common');
+    expect(gunPower(pump)).toBeGreaterThan(gunPower(carbine));
+    expect(gunWorth(pump)).toBeLessThan(gunWorth(carbine));
+    const g = farmGame(1, 3);
+    const held = {
+      ...g,
+      roster: [{ ...g.roster[0]!, loadout: { primary: carbine, secondary: null, item: null } }],
+    };
+    expect(squadGain(held)(pump)).toBeLessThanOrEqual(0);
+    // Both guns beat the free pistol, the Carbine by more.
+    const none = { ...g, roster: [] };
+    expect(squadGain(none)(pump)).toBeGreaterThan(0);
+    expect(squadGain(none)(carbine)).toBeGreaterThan(squadGain(none)(pump));
   });
 
   it('a replay’s upgrade flag and the bad-luck count follow the gain, not the gun alone', () => {
@@ -444,11 +464,11 @@ describe('an upgrade counts the survivor’s level and profession (ID-152)', () 
     expect(differs).toBeGreaterThan(0);
   });
 
-  it('with no squad, an upgrade is a gun that beats the free pistol, as before', () => {
+  it('with no squad, an upgrade is a gun worth more than the free pistol', () => {
     const g = { ...farmGame(1, 3), roster: [] };
     const gain = squadGain(g);
     expect(gain(gun('x', 'smg', 'common'))).toBeCloseTo(
-      gunPower(gun('x', 'smg', 'common')) - gunPower('pistol'),
+      gunWorth(gun('x', 'smg', 'common')) - gunWorth('pistol'),
       9,
     );
     expect(weakestHeld(g)).toBe('pistol');

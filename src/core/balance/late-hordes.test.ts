@@ -75,8 +75,9 @@ describe('mid-game horde-only hordes (ID-102)', () => {
     expect(kept).toBeGreaterThanOrEqual(0.08);
     // ID-247: 37.0% measured (21.3% before) and none lost: the scripted player now gears up by
     // Squad Power's gun factor (fewer shotguns), so its squad is stronger. A strong squad
-    // crushing a horde is fine; only a squad stuck is not.
-    expect(kept).toBeLessThanOrEqual(0.4);
+    // crushing a horde is fine; only a squad stuck is not. ID-248: 43.1% (the firing line by gun
+    // reach makes the scripted player's mixed squad stronger again), so the bound is 0.45.
+    expect(kept).toBeLessThanOrEqual(0.45);
   });
 
   // ID-147: rest costs fights (the player waits it out on replays), so bound them. ID-155 (only

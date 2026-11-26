@@ -19,7 +19,7 @@ import {
   type LevelBonusId,
   type Profession,
 } from './data.ts';
-import { baseOf, gunCrit, gunCritDamage, statsOf, type Held } from './armoury.ts';
+import { baseOf, gunCrit, gunCritDamage, gunPower, statsOf, type Held } from './armoury.ts';
 import { gunOf, isGun, professionOf, weaponOf, type Loadout } from './loadout.ts';
 
 /** A defender as far as their level and profession go. */
@@ -214,6 +214,13 @@ export function ratedDps(d: Statted, gun: Held): number {
   if (dps === 0) return 0;
   return dps * (POWER.gun as Readonly<Record<string, number>>)[baseOf(gun)]!;
 }
+
+/**
+ * Gun `h`'s worth on its own (ID-248): its `gunPower` times its factor in Squad Power
+ * (`POWER.gun`), `ratedDps` for a level-1 survivor with no profession. Throws for no gun.
+ */
+export const gunWorth = (h: Held): number =>
+  gunPower(h) * (POWER.gun as Readonly<Record<string, number>>)[baseOf(h)]!;
 
 /**
  * Gun `gun`'s sustained paper dmg/s in `d`'s hands (ID-098, ID-152; Squad Power counts it via

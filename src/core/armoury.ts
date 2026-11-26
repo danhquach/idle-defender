@@ -485,15 +485,9 @@ export function bestRoll(
   return Math.max(...maxedRolls(base, rarity, level).map(score));
 }
 
-/** The most dmg/s any gun `weights` can drop at `level` can have (ID-098). */
-export const bestDrop = (weights: Record<Rarity, number>, level: number): number =>
-  Math.max(
-    ...weighted(weights).flatMap((r) => DROP_GUNS.map((b) => bestRoll(b, dropRarity(b, r), level))),
-  );
-
 /**
  * Whether some gun `weights` can drop at `level`, every affix maxed, scores over 0 by
- * `score` (ID-152): `bestDrop(…) > 0`, stopping at the first that does.
+ * `score` (ID-152), stopping at the first that does.
  */
 export function dropCanBeat(
   weights: Record<Rarity, number>,

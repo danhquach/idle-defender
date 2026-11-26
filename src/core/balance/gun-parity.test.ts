@@ -3,18 +3,19 @@
 // Here, traits off, the all-Carbine squad is set where it wins about 10 of 20 fights; the
 // all-LMG, all-Sniper and all-Pump Shotgun squads and the 2-of-each mix are set at the gun
 // level whose Squad Power is nearest (the match is asserted), and each should then win a
-// like share. At Nightmare 9 and Hell 1 every one-gun squad wins 6 to 18 of 20 and the best and
-// the worst are within 9 wins of each other. Normal 20 and Hell 10 are logged, not asserted: the
-// factors were fitted on Nightmare 9, Hell 1 and Normal 20 and the rest is the residue (the
-// LMG and the mix still trail at Normal 20; design §11, follow-up ID-248 #505).
+// like share. At Nightmare 9 and Hell 1 every one-gun squad and the mix wins 6 to 18 of 20 and
+// the one-gun squads' best and worst are within 9 wins of each other. Normal 20 and Hell 10 are
+// logged, not asserted: the factors were fitted on Nightmare 9, Hell 1 and Normal 20 and the
+// rest is the residue (the LMG and the mix still trail at Normal 20; design §11).
 // Measured, wins of 20 at the Carbine squad's 10-of-20 level (Carbine / LMG / Sniper / Shotgun /
 // Mix; every squad's Squad Power within 2.6% of the Carbine squad's, the mix's within 1%):
-//   Nightmare 9: 11 / 16 / 15 / 12 / 9      Hell 1:  10 / 13 / 10 / 18 / 5
+//   Nightmare 9: 11 / 16 / 15 / 12 / 10     Hell 1:  10 / 13 / 10 / 18 / 13
 // Zero margin at Hell 1: the shotgun's 18 (≤ 18), and the spread is 8 (≤ 9).
-//   Normal 20:   12 /  5 / 12 /  9 / 3      Hell 10: 16 / 11 / 13 / 12 / 10   (logged)
-// The mix trails the Carbine squad everywhere (Squad Power adds the guns up, a mixed squad
-// does less than the sum), so it has its own, looser bound: at least 4 wins and within 6 of
-// the Carbine squad. Before the factor the Pump Shotgun squad at equal Squad Power won 0.
+//   Normal 20:   12 /  5 / 12 /  9 /  4     Hell 10: 16 / 11 / 13 / 12 / 10   (logged)
+// The mix stands its guns by reach (ID-248, #505: the short-reach Pump Shotguns in the middle
+// of the firing line, the Sniper rifles on the edges), so it wins like a one-gun squad. Standing
+// them in squad order it won 9 at Nightmare 9 and 5 at Hell 1, the shotguns on the edges not
+// reaching the far wall rows. Before the factor the Pump Shotgun squad at equal Squad Power won 0.
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
 import type { GunBase } from '../data.ts';
@@ -138,10 +139,10 @@ describe('guns at equal Squad Power (ID-247)', () => {
   it.each([
     ['Nightmare 9', () => nm9],
     ['Hell 1', () => hell1],
-  ])('%s: the mix wins at least 4 and within 6 of the Carbine squad', (_, cells) => {
+  ])('%s: the mix wins 6 to 18 of 20 like any one-gun squad', (_, cells) => {
     const c = cells();
-    expect(c.wins.mix, JSON.stringify(c)).toBeGreaterThanOrEqual(4);
-    expect(c.wins.rifle - c.wins.mix, JSON.stringify(c)).toBeLessThanOrEqual(6);
+    expect(c.wins.mix, JSON.stringify(c)).toBeGreaterThanOrEqual(6);
+    expect(c.wins.mix, JSON.stringify(c)).toBeLessThanOrEqual(18);
   });
 
   it('the Pump Shotgun squad at equal Squad Power wins at least 6 (it won none before the factor)', () => {

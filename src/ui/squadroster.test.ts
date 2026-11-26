@@ -381,22 +381,32 @@ describe('Choose a gun (ID-108)', () => {
     slot.click();
     expect(m.key('slot').getAttribute('aria-expanded')).toBe('true');
     expect(m.q('.rv-ttl').textContent).toBe('Choose a gun');
-    expect(m.q('.rv-left').textContent).toBe(`By DPS · stash 3/${STASH_CAP}`);
+    expect(m.q('.rv-left').textContent).toBe(`By Power · stash 3/${STASH_CAP}`);
     const t = tiles(m);
     expect(t).toHaveLength(3);
-    const dps = t.map((x) => Number(x.querySelector('.rv-dps')!.textContent));
-    expect(dps).toEqual([...dps].sort((a, b) => b - a));
+    // Sorted by Power, the big number on the tile (ID-248); the small line is paper DPS.
+    const power = t.map((x) => Number(x.querySelector('.rv-pw')!.textContent!.replaceAll(',', '')));
+    expect(power).toEqual([...power].sort((a, b) => b - a));
+    expect(t.every((x) => /^\d+\.\d$/.test(x.querySelector('.rv-dps')!.textContent!))).toBe(true);
     // The best upgrade is selected, and its comparison is on screen at once.
     const sel = t.filter((x) => x.getAttribute('aria-pressed') === 'true');
     expect(sel).toHaveLength(1);
     expect(sel[0]!.dataset.choice).toBe(t[0]!.dataset.choice);
-    expect(m.q('.rv-verdict').textContent).toMatch(/▲ Stronger: \+\d+\.\d DPS \(\+\d+%\)Equip$/);
+    expect(m.q('.rv-verdict').textContent).toMatch(/▲ Stronger: \+[\d,]+ Power \(\+\d+%\)Equip$/);
     expect(m.q('.rv-v-name').textContent).toContain(t[0]!.querySelector('.rv-ty')!.textContent);
     // Rarity frames and change badges: symbol and number.
     expect(sel[0]!.dataset.rarity).toBe(t[0]!.dataset.rarity);
-    expect(t[0]!.querySelector('.rv-d')!.textContent).toMatch(/^▲ \+\d+\.\d$/);
+    expect(t[0]!.querySelector('.rv-d')!.textContent).toMatch(/^▲ \+[\d,]+$/);
     expect(t[0]!.querySelector('.rv-d')!.getAttribute('data-kind')).toBe('up');
-    expect(t[0]!.getAttribute('aria-label')).toMatch(/DPS with \S+, \d+\.\d more DPS than Pistol$/);
+    expect(t[0]!.getAttribute('aria-label')).toMatch(
+      /rarity, [\d,]+ Power, \d+\.\d DPS with \S+, [\d,]+ more Power than Pistol$/,
+    );
+    // The tile's Power is its main number; its hover hint is the short one.
+    expect(t[0]!.querySelector('.rv-pw')!.textContent).toMatch(/^[\d,]+$/);
+    expect(t[0]!.title.endsWith('. Power counts reach and reload too, as Best gun does.')).toBe(
+      true,
+    );
+    expect(t[0]!.title).not.toContain('Squad Power');
     // Slot, then the way back.
     m.key('level').click();
     expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
@@ -416,6 +426,7 @@ describe('Choose a gun (ID-108)', () => {
       [...tr.children].map((c) => c.textContent),
     );
     expect(rows.map((r) => r[0])).toEqual([
+      'Power',
       `${recruit(1).name}'s DPS`,
       'Damage',
       'Fire rate',
@@ -499,7 +510,8 @@ describe('Choose a gun (ID-108)', () => {
     expect(tiles(m)[0]!.getAttribute('aria-pressed')).toBe('true');
     expect(tiles(m)[0]!.textContent).toContain(survivorDps(who, sniper).toFixed(1));
     const hint = m.scrim.querySelector('.rv-hint')!.textContent!;
-    expect(hint).toContain(`DPS is ${hunter.name}'s, level and profession counted`);
+    expect(hint).toContain(`Big number = ${hunter.name}'s Power with the gun`);
+    expect(hint).toContain('small = DPS (level and profession counted)');
     expect(hint).not.toContain('leaves it out');
   });
 
