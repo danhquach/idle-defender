@@ -4178,11 +4178,25 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   outline-offset: -2px;
 }
 
-/* A narrow window (the full label needs about 357px beside the tabs and the close): "Best
-   gun for everyone" reads "Best gun". */
-@container (max-width: 359px) {
+/* A middling window (the full label needs about 545px beside the four tabs and the close):
+   "Best gun for everyone" reads "Best gun". */
+@container (min-width: 480px) and (max-width: 559px) {
   .camp-long {
     display: none;
+  }
+}
+
+/* A phone-wide window (ID-255): not even "Best gun" fits beside the tabs and the close, so
+   the tools take a row of their own above the tabs, at the right, and read in full. */
+@container (max-width: 479px) {
+  .camp-head {
+    flex-wrap: wrap;
+  }
+
+  .camp-tools {
+    flex: 1 1 100%;
+    order: -1;
+    justify-content: flex-end;
   }
 }
 
@@ -5969,7 +5983,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   line-height: 1.2;
 }
 
+/* The full name, wrapping onto more lines if it needs them, never cut: the slot's text box is
+   narrower than a long name (ID-255). */
 .rv-slot-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
   font-weight: 600;
   color: var(--rarity-common);
 }
@@ -6442,23 +6463,30 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: none;
 }
 
-/* Narrow dialog (a phone, or a thin window): the tabs and rows shrink to fit. */
-@container (max-width: 460px) {
-  /* Portrait beside the name and buttons, the gun slot full width under them, right over
-     the panel it opens (ID-189). */
+/* A thin dialog (ID-255, under 580 px): beside the name and buttons the gun slot is left
+   under 100 px for its name, so it goes under them. Portrait beside the name and buttons,
+   the gun slot full width under them, right over the panel it opens (ID-189). */
+@container (max-width: 579px) {
   .rv-top {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas: 'pic who' 'slot slot';
     gap: var(--space-6) var(--space-8);
   }
 
+  .rv-top > .rv-slot {
+    max-width: none;
+  }
+
+  .rv-top > .rv-combine-pick {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Narrow dialog (a phone, or a thin window): the tabs and rows shrink to fit. */
+@container (max-width: 460px) {
   .roster-avatar-lg {
     width: 44px;
     height: 55px;
-  }
-
-  .rv-top > .rv-slot {
-    max-width: none;
   }
 
   /* Beside the portrait at 320 px there is no room for "Move to bench" on one line:
@@ -6504,10 +6532,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .rv-top > .rv-combine-pick {
-    grid-column: 1 / -1;
-  }
-
   /* The bench (ID-241) wraps in rows of four cards that fill the row, scrolling down past
      about two and a half rows (ID-147, ID-241). */
   .rv-bench:not(.rv-patrol) {
@@ -6533,16 +6557,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   .rv-th-type {
     display: none;
-  }
-
-  /* The held gun's full name, on two lines if it needs them. */
-  .rv-slot-name {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    white-space: normal;
-    line-height: 1.15;
   }
 
   .rv-ctab {

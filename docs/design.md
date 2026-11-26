@@ -994,7 +994,9 @@ close-quarter weapons come out only when an enemy is close.
   (portrait, name, level, profession, and, as built ID-180, the held gun's icon on its
   rarity tint with their DPS in their hands; HP on hover and
   for screen readers), the selected
-  survivor beside their gun slot,
+  survivor beside their gun slot (ID-255: the gun's full name wraps, never cut; in a dialog
+  under 580 px the slot goes under them; in a window under 480 px "Best gun for everyone"
+  takes its own row above the tabs),
   and one panel that is either **Level** or
   **Choose a gun**. A survivor's name on the result screen still opens that
   survivor here. Each card is two equal columns (ID-187), portrait and gun
