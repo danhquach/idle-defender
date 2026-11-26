@@ -306,6 +306,20 @@ describe('the World map tab: Best fit (ID-244)', () => {
     expect(bestFit(camp(0), 'safe')).toEqual([]);
   });
 
+  it("the buttons head the picker's side column, over the rating, whoever is picked (ID-251)", () => {
+    const state = { game: benchOf([1, 30, 4, 12, 60]), now: NOW };
+    const { all, q } = mount(state);
+    all('.map-send')[0]!.click();
+    const order = () => [...q('.map-pick-side')!.children].map((c) => (c as HTMLElement).className);
+    const first = order();
+    expect(first).toEqual(['map-buttons', 'map-risk']);
+    all('.map-pick-member')[0]!.click();
+    expect(order()).toEqual(first);
+    q<HTMLButtonElement>('.map-best')!.click();
+    expect(all('.map-pick-member[aria-pressed="true"]').length).toBeGreaterThan(0);
+    expect(order()).toEqual(first);
+  });
+
   it('replaces the pick, updates the risk and Send, and can be changed by hand', () => {
     const state = { game: benchOf([1, 30, 4, 12, 60]), now: NOW };
     const { all, q, sent } = mount(state);

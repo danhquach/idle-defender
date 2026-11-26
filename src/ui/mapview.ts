@@ -343,7 +343,6 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       );
       rating.append(line, power, odds, chosen);
     }
-    side.append(rating);
     const why = can ? sendRefusal(game, area, ids) : MAP_WAIT;
     const send = el(
       'button',
@@ -399,9 +398,11 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     help.hidden = !helpOpen;
     for (const line of MAP_HELP) help.append(el('li', '', line));
     main.append(help);
+    // The buttons head the column and the rating follows (ID-251): picking a team, by hand or
+    // with Best fit, grows the rating under them, so no button moves.
     const buttons = el('div', 'map-buttons');
     buttons.append(back, best, info, send);
-    side.append(buttons);
+    side.append(buttons, rating);
     return [box];
   }
 

@@ -8392,8 +8392,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   flex-wrap: wrap;
 }
 
-/* The picker's buttons follow the rating, not the column's foot: the explanation opening
-   under the bench moves nothing. */
+/* The picker's buttons head the column, over the rating (ID-251), not at its foot: the
+   explanation opening under the bench moves nothing, nor does a team being picked. */
 .map-pick .map-pick-side .map-buttons {
   margin-top: 0;
 }
