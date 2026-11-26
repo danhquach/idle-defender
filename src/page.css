@@ -5917,8 +5917,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
    beside it. */
 .rv-tab-gun {
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-  /* Fills its column at 2:1 (ID-187); the icon fits inside, never stretched. */
-  width: 100%;
+  /* Fills its column at 2:1 (ID-187); the icon fits inside, never stretched. It stops short
+     of the column's end, padding included, so a long gun never touches its DPS: the gap is
+     the gun's to give, and the DPS keeps its whole column (ID-249). */
+  box-sizing: border-box;
+  width: calc(100% - var(--space-4));
   height: auto;
   aspect-ratio: 2 / 1;
   padding: 1px;
@@ -6511,6 +6514,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 2px;
     padding-right: 4px;
+  }
+
+  /* Four cards to a phone's row: a smaller gap between the gun and its DPS (ID-249). */
+  .rv-tab-gun {
+    width: calc(100% - var(--space-2));
   }
 
   .rv-squad-row {
