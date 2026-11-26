@@ -60,7 +60,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `cards.ts` | The 1-of-3 upgrade cards in a fight (`UPGRADES`), who can take one (`eligible`), offer, reroll, ban, and stat/repair effects (`applyUpgrade`). |
 | `skills.ts` / `shop.ts` / `replace.ts` | Active skills (and Field Repairs' once-per-pick use, `repairsState` / `useRepairs`, ID-231), the mid-fight cash shop, swapping a survivor in between waves. |
 | `armoury.ts` / `loadout.ts` / `craft.ts` | Owned guns with rarity and affixes; what a defender carries; blueprints. |
-| `stats.ts` / `jobs.ts` | Survivor levels, XP curve, professions and their bonuses. |
+| `stats.ts` / `jobs.ts` | Survivor levels, XP curve, professions and their bonuses; `survivorDps` (paper dmg/s, every DPS label) and `ratedDps` (× `POWER.gun`, what Squad Power and the squad tools count, ID-247). |
 | `camp.ts` | Recruits (shared); camp level, capacity and upgrade offers (full game). |
 | `squadpower.ts` | Squad Power vs Recommended Power shown before a fight; `squadFit`, the Fit pill's value, band and classes to add (ID-237). |
 | `traits.ts` | Gun classes against enemy traits (ID-237): `classOf`, `classFactor` (the fight's damage factor), `fitContext` / `effectivePower` / `worstCover` / `fitOfSquad` (what the squad tools and the Fit pill measure). Imports `data`, `modes` and `armoury` only; the tables are `GUN_CLASS` and `ENEMY_TRAITS` in `data.ts`. |

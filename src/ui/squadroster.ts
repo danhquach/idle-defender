@@ -1000,7 +1000,7 @@ export function createRoster(
       tile.setAttribute('aria-pressed', String(t.choice === picked));
       const label = suits(t.held) ? `${t.label}, suits a ${JOBS[d.job].name}` : t.label;
       tile.setAttribute('aria-label', label);
-      tile.title = label;
+      tile.title = `${label}. ${DPS_HINT}`;
       const delta = el('span', 'rv-d', t.delta.text);
       delta.dataset.kind = t.delta.kind;
       // The first word fits a tile ("Sniper", not "Sniper r…"); the label has it in full.
@@ -1153,6 +1153,9 @@ const AUTO_HINT = 'Keep the best squad after each horde, a joiner, a let-go and 
 /** What a tick of "Auto" says (ID-154). */
 export const AUTO_ON =
   'Auto on: the best squad is picked again after each horde, joiner, let-go and Best gun.';
+
+/** The tile hover hint (ID-247): the DPS is paper damage; Best gun counts reach and reload too. */
+const DPS_HINT = 'DPS is paper damage per second; Best gun also weighs reach and reload.';
 
 /** Why the squad can't change now (ID-147): it is picked between hordes. */
 export const SQUAD_WAIT = 'Pick the squad between hordes';

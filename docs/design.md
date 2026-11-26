@@ -3553,6 +3553,29 @@ and comes back stronger.
   (ID-146: from the stats before, with a × (1 + 0.5 × Instinct's damage near
   the wall) term), summed over the squad and rounded. Cards and skills don't
   count. (Gun role traits join it with ID-101.)
+  - **Gun factor (ID-247, `POWER.gun`):** each survivor's share is also
+    × their gun's worth next to the Carbine's, because paper DPS ignores reach
+    and the shotgun's cone, the reload share of a cycle, and few big bullets.
+    Measured: the power at which a one-gun squad holds a horde (6 of 10 seeds)
+    over the all-Carbine squad's, geometric mean of Nightmare 9, Hell 1 and
+    Normal 20 (Pump Shotgun 2.16 / 1.70 / 2.36 times as much as the Carbine
+    squad). Carbine 1, SMG 0.94, Assault 0.92, Pistol 0.9, Hand Cannon 0.9,
+    Sniper 0.85, LMG 0.74, Drum Shotgun 0.64, Machine Pistol 0.61, Pump
+    Shotgun 0.47. Fitted on scripted-player squads at gun-level parity, not on
+    per-rarity rolls. It reaches Squad Power, "Best gun for everyone" and
+    "Best squad" only: the DPS labels, the gun picker's ▲/▼ and the drop
+    scoring stay paper dmg/s (the drop scoring moved a golden digest, so it
+    was left alone). An all-Carbine squad's Squad Power is unchanged; a
+    Pump Shotgun squad's falls about 53%; Recommended Power is unchanged.
+    `balance/gun-parity.test.ts` checks it: at Nightmare 9 and Hell 1 the
+    squads at equal Squad Power win 6 to 18 of 20 (one-gun squads) and the mix
+    at least 4. **Residue** (wins of 20 at the Carbine squad's 10-of-20 level,
+    Carbine / LMG / Sniper / Shotgun / Mix): Nightmare 9 11 / 16 / 15 / 12 / 9,
+    Hell 1 10 / 13 / 10 / 18 / 5, Normal 20 12 / 5 / 12 / 9 / 3, Hell 10
+    16 / 11 / 13 / 12 / 10. The mix trails everywhere (its guns do less than
+    the sum of their parts), the LMG and the mix trail at Normal 20, and the
+    Pump Shotgun runs ahead at Hell 1. A fitted term per mechanism (range
+    uptime, hit share, card-weighted reload) would close more; not needed yet.
 - **Recommended Power (ID-102, refitted ID-128):** 3 × the DPS a horde
   asks for (9.7 before ID-128, 10.3 before ID-125's true-rate shots): its
   expected enemy HP over the seconds its waves take to spawn (each wave's size

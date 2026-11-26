@@ -206,7 +206,18 @@ export const fieldMaxHp = (field: readonly Pick<Statted, 'job' | 'xp'>[]): numbe
   Math.round(fieldBonus(field, 'squadHp'));
 
 /**
- * Gun `gun`'s sustained dmg/s in `d`'s hands, as Squad Power counts it (ID-098, ID-152):
+ * `survivorDps` times the gun's worth in Squad Power (ID-247, `POWER.gun`): 0 for a weapon
+ * that is no gun. What Squad Power and the scripted player's gun choice count, not a DPS label.
+ */
+export function ratedDps(d: Statted, gun: Held): number {
+  const dps = survivorDps(d, gun);
+  if (dps === 0) return 0;
+  return dps * (POWER.gun as Readonly<Record<string, number>>)[baseOf(gun)]!;
+}
+
+/**
+ * Gun `gun`'s sustained paper dmg/s in `d`'s hands (ID-098, ID-152; Squad Power counts it via
+ * `ratedDps`, ID-247):
  * rarity, level and affixes; the level's and the profession's crit, aim, fire rate, reload
  * and magazine (a fighting job's only with its guns, ID-149); the gun's own crit (ID-101).
  * A level-1 survivor with no profession gets the gun's `gunPower`. 0 for a weapon that is

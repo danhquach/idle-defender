@@ -136,6 +136,7 @@ import {
   jobPart,
   levelOf,
   maxHpOf,
+  ratedDps,
   survivorDps,
   xpForLevel,
 } from './stats.ts';
@@ -259,13 +260,17 @@ export function squadSpec(d: RosterDefender): DefenderSpec {
 
 /**
  * One survivor's share of Squad Power (ID-098): their gun's sustained dmg/s in their hands
- * (`survivorDps`: level and profession counted), times a toughness factor from the level's
+ * (`survivorDps`: level and profession counted) times the gun's factor (`ratedDps`, ID-247), times a toughness factor from the level's
  * extra HP. Cards and skills don't count.
  */
 export function survivorPower(d: RosterDefender): number {
   const spec = squadSpec(d);
-  return survivorDps(spec, spec.loadout.primary) * toughOf(spec) * POWER.scale;
+  return powerOf(spec, spec.loadout.primary);
 }
+
+/** A survivor's Squad Power with gun `h` (ID-247): `ratedDps` times toughness and the scale. */
+const powerOf = (spec: DefenderSpec, h: Held): number =>
+  ratedDps(spec, h) * toughOf(spec) * POWER.scale;
 
 /** The toughness factor of a survivor's Squad Power share: from the level's extra HP. */
 const toughOf = (spec: DefenderSpec): number => 1 + POWER.tough * (maxHpOf(spec) / DEFENDER_HP - 1);
@@ -1536,7 +1541,8 @@ export interface SquadDrop {
 /**
  * The weakest gun a squad survivor holds (ID-098): the one that does the least in its
  * holder's hands (`survivorDps`, their level and profession, ID-152), the free pistol
- * included (a survivor with no gun fights with the pistol).
+ * included (a survivor with no gun fights with the pistol). Paper dmg/s on purpose, not
+ * Squad Power's `ratedDps`, until ID-248 (#505): changing it moves the golden digests.
  */
 export function weakestHeld(game: Pick<GameState, 'roster'>): Held {
   const held = squadOf(game).map((d) => {
@@ -1552,8 +1558,9 @@ export function weakestHeld(game: Pick<GameState, 'roster'>): Held {
 /**
  * How much more dmg/s gun `w` would do for the squad (ID-152): the most any squad survivor
  * gains holding it instead of their own gun, in their hands (`survivorDps`: level and
- * profession). Over 0 is an upgrade, a gun "Best gun for everyone" would hand out. At level
- * 1 with no bonus it is `w`'s `gunPower` over the weakest held gun's, the rule before.
+ * profession). Over 0 is an upgrade on paper dmg/s; Best gun scores by `ratedDps` (ID-247), so
+ * it may not hand it out until ID-248 (#505) moves this to `ratedDps` too. At level 1 with no
+ * bonus it is `w`'s `gunPower` over the weakest held gun's, the rule before.
  */
 export function squadGain(game: Pick<GameState, 'roster'>): GunScore {
   const squad = squadOf(game).map((d) => {
@@ -1896,10 +1903,10 @@ function handOut(group: Hands, stash: Held[], fit?: FitContext): boolean {
   }
 }
 
-/** The change that adds the most dmg/s to the group, or null if none adds more than `BEST_GAIN`. */
+/** The change that adds the most Squad Power (ID-247) to the group, or null if none adds more than `BEST_GAIN`. */
 function plainMove(group: Hands, stash: readonly Held[]): HandMove | null {
   const { specs, hands, odd } = group;
-  const score = (i: number, h: Held): number => survivorDps(specs[i]!, h);
+  const score = (i: number, h: Held): number => powerOf(specs[i]!, h);
   let gain = BEST_GAIN;
   let pick: HandMove | null = null;
   for (let i = 0; i < hands.length; i++) {
@@ -1932,7 +1939,7 @@ function fitMove(group: Hands, stash: readonly Held[], ctx: FitContext): HandMov
     const cache = (group.parts ??= specs.map(() => new Map<Held, number[]>()))[i]!;
     let sums = cache.get(h);
     if (!sums) {
-      const power = survivorDps(specs[i]!, h) * toughOf(specs[i]!) * POWER.scale;
+      const power = powerOf(specs[i]!, h);
       sums = memberSums(ctx, { power, cls: classOf(h) });
       cache.set(h, sums);
     }
@@ -1965,7 +1972,7 @@ function fitMove(group: Hands, stash: readonly Held[], ctx: FitContext): HandMov
 
 /**
  * Hands out guns so they do the most for the squad (ID-108, ID-152, between hordes), each
- * gun scored in the hands of the survivor who would hold it (`survivorDps`: their level
+ * gun scored in the hands of the survivor who would hold it (`ratedDps`, ID-247: their level
  * and profession, so a fighting job's own guns count for more): `handOut` for the squad.
  * Then the bench (ID-188) does the same with what the stash has left, trading only among
  * itself, so it never takes a squad survivor's gun.

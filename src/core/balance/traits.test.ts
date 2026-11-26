@@ -105,8 +105,9 @@ describe('enemy traits against gun classes (ID-237)', () => {
     console.log(`traits Hell 1 (of ${SEEDS}): ${JSON.stringify(hell)}`);
   }, 3_600_000);
 
-  it('the squads compared are within 2% of the mix’s Squad Power', () => {
-    expect(hell.off).toBeLessThanOrEqual(0.02);
+  // ID-247: 3%, not 2%: with the LMG counted at 0.74 a gun level is 2.7% of its Squad Power.
+  it('the squads compared are within 3% of the mix’s Squad Power', () => {
+    expect(hell.off).toBeLessThanOrEqual(0.03);
   });
 
   it('(a) Hell 1: the mix with traits on is within 4 wins of the mix with them off', () => {

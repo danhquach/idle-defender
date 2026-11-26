@@ -436,6 +436,27 @@ export const POWER = {
     boss: 1.12,
   },
   close: 0.15,
+  /**
+   * Each gun's worth in Squad Power next to the rifle's (ID-247): paper dmg/s ignores reach
+   * and cone, the reload share of a cycle, and few big bullets, so a shotgun's dmg/s on paper
+   * takes about half as many wins as a rifle's. Measured as the one-gun squad's power at
+   * which it holds the horde (6 of 10 seeds) over the all-rifle squad's, geometric mean of
+   * Nightmare 9, Hell 1 and Normal 20, rounded: rifle 1, sniper 0.85, LMG 0.74, shotgun 0.47.
+   * Fitted on scripted-player squads at gun-level parity, not on per-rarity rolls. Only Squad
+   * Power and the scripted player's gun choice read it; the DPS labels stay paper dmg/s.
+   */
+  gun: {
+    rifle: 1,
+    smg: 0.94,
+    assault: 0.92,
+    pistol: 0.9,
+    handcannon: 0.9,
+    sniper: 0.85,
+    lmg: 0.74,
+    cartridge: 0.64,
+    machinepistol: 0.61,
+    shotgun: 0.47,
+  } satisfies Record<GunBase, number>,
 } as const;
 /**
  * The injury band before a horde (ID-155): how many survivors a win is likely to cost, read
