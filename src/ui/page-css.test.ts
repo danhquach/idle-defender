@@ -433,9 +433,12 @@ describe('the Roster tabs (ID-154)', () => {
       /@container \(max-width: 340px\) \{\s*\.rv-tab \{\s*grid-template-columns: minmax\(0, 2fr\) minmax\(0, 3fr\)/,
     );
     expect(rules).not.toMatch(/\.rv-tab \{[^}]*grid-template-columns: \d+px/);
-    // Portrait and gun fill their column at a fixed shape, never stretched.
+    // Portrait and gun fill their column at a fixed shape, never stretched (the gun short of
+    // it by its gap to the DPS, ID-249).
     expect(rules).toMatch(/\.roster-avatar-xs \{[^}]*width: 100%;[^}]*aspect-ratio: 1;/);
-    expect(rules).toMatch(/\.rv-tab-gun \{[^}]*width: 100%;[^}]*aspect-ratio: 2 \/ 1;/);
+    expect(rules).toMatch(
+      /\.rv-tab-gun \{[^}]*width: calc\(100% - var\(--space-4\)\);[^}]*aspect-ratio: 2 \/ 1;/,
+    );
     expect(rules).not.toMatch(/\.rv-tab-gun \{[^}]*width: \d+px/);
     // Rows of four cards at most 100 px wide on desktop; the bench at the same width.
     expect(rules).toMatch(
@@ -748,5 +751,22 @@ describe('the World map globe in the top bar', () => {
     expect(rules).toMatch(new RegExp(`${fight} \\.map-button \\{\\s*top: 40px;`));
     expect(rules).toMatch(new RegExp(`${fight} \\.hud-speed \\{\\s*top: 82px;`));
     expect(rules).toMatch(new RegExp(`${fight} \\.scrap-chip \\{\\s*right: 252px;`));
+  });
+});
+
+describe('a Roster card keeps a gap between its gun and its DPS (ID-249)', () => {
+  it('the gun tile stops short of its column, padding included; on a phone by less', () => {
+    expect(rule('.rv-tab-gun')).toMatch(
+      /box-sizing: border-box;[^}]*width: calc\(100% - var\(--space-4\)\);/,
+    );
+    const phone = /@container \(max-width: 460px\) \{[\s\S]*?\n {2}\.rv-tab-gun \{([^}]*)\}/.exec(
+      rules,
+    );
+    expect(phone, 'no phone gun tile rule in page.css').not.toBeNull();
+    expect(phone![1]).toMatch(/width: calc\(100% - var\(--space-2\)\);/);
+    // The DPS keeps its whole column: the cards' column gap is unchanged.
+    expect(rule('.rv-tab')).toMatch(
+      /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\);[^}]*gap: 2px;/,
+    );
   });
 });
