@@ -11,6 +11,7 @@
 // Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
 // the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
+import { classOf } from '../core/traits.ts';
 import { JOBS, WEAPONS, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
@@ -60,7 +61,8 @@ import {
   patrolsShown,
   patrolTime,
 } from './maptext.ts';
-import { levelText } from './statlines.ts';
+import { classChip, classIcon } from './classicon.ts';
+import { className, classLine, levelText, matchupsOpen } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
 /** One survivor's tab on the Roster. */
@@ -206,7 +208,9 @@ export interface RosterOptions {
    */
   state: () => {
     game: Pick<GameState, 'roster' | 'armoury' | 'autoSquad'> &
-      Partial<Pick<GameState, 'slots' | 'stock' | 'map' | 'medicine'>> & {
+      Partial<
+        Pick<GameState, 'slots' | 'stock' | 'map' | 'medicine' | 'mode' | 'modes' | 'hordeNumber'>
+      > & {
         reserve?: readonly RosterDefender[];
       };
     fight: HordeState | null;
@@ -647,6 +651,10 @@ export function createRoster(
     // Name, DPS and role on three short lines (ID-189), so the slot is only as wide as its gun.
     line.append(el('b', '', dps), ` ${dpsCaption(d.name)}`);
     gtext.append(name, line, el('span', 'rv-slot-role', roleName(held)));
+    // The gun's class (ID-237): icon and name, the matchups in its tooltip once Nightmare is open.
+    const heldClass = classOf(held);
+    if (heldClass)
+      gtext.append(classChip(heldClass, classLine(held, matchupsOpen(game)) ?? undefined));
     if (!gear) gtext.append(el('span', 'rv-slot-note', why));
     slot.append(icon, gtext);
     if (gear) {
@@ -995,12 +1003,19 @@ export function createRoster(
       tile.title = label;
       const delta = el('span', 'rv-d', t.delta.text);
       delta.dataset.kind = t.delta.kind;
-      tile.append(
-        delta,
-        // The first word fits a tile ("Sniper", not "Sniper r…"); the label has it in full.
-        el('span', 'rv-ty', `${t.type.split(' ')[0]}${t.free ? ' ∞' : ''}`),
-        el('span', 'rv-dps', t.dps),
-      );
+      // The first word fits a tile ("Sniper", not "Sniper r…"); the label has it in full.
+      const type = el('span', 'rv-ty');
+      type.append(`${t.type.split(' ')[0]}${t.free ? ' ∞' : ''}`);
+      // The gun's class (ID-237): its icon inline before the DPS number, off the name line so the
+      // name stays whole; its name is the DPS line's title.
+      const dps = el('span', 'rv-dps');
+      const tileClass = classOf(t.held);
+      if (tileClass) {
+        dps.title = className(tileClass);
+        dps.append(classIcon(tileClass));
+      }
+      dps.append(t.dps);
+      tile.append(delta, type, dps);
       if (suits(t.held)) {
         const mark = el('span', 'rv-fit', '★');
         mark.setAttribute('aria-hidden', 'true');

@@ -223,6 +223,9 @@ export const COLOR = {
   popHit: '#f4f1ea',
   popCrit: '#ffd23f',
   popWall: '#ff8a7a',
+  /** A hit on a trait (ID-237): a resisted gun class muted, a weak-to one bright (not the crit yellow). */
+  popResist: '#9aa0a6',
+  popWeak: '#6ee7ff',
   popEdge: 'rgba(17, 17, 16, 0.85)',
   /** A survivor's speech bubble (ID-085): dark text on a pale card with a dark edge. */
   bubble: '#f4f1ea',
@@ -681,6 +684,13 @@ export const POP = {
   edge: 3,
   stagger: 9,
   critStagger: 14,
+  /** A resisted hit's size against a plain one's (ID-237). */
+  resist: 0.85,
+  /** A weak-to hit's size against a plain one's: size carries the meaning, not colour alone. */
+  weak: 1.1,
+  /** The word's size against the number's, and its floor in px. */
+  word: 0.6,
+  wordMin: 11,
 } as const;
 /** How much wider than its footprint a piece's sprite may draw. */
 const OVERSPILL = 1.6;
@@ -2848,6 +2858,8 @@ export interface PopLook {
   dx: number;
   /** Screen px risen so far. */
   rise: number;
+  /** "Resists" or "Weak", small over the number, on the first few of each fit in a fight (ID-237). */
+  word?: string;
 }
 
 /**
@@ -2863,11 +2875,22 @@ export function popLook(p: Pop, time: number, pace: number, still: boolean): Pop
   const wall = p.on === 'wall';
   const grow = Math.min(1, p.amount / (wall ? POP.wallBigAt : POP.bigAt));
   const punch = p.crit && !still ? 1 + POP.punch.extra * Math.max(0, 1 - real / POP.punch.time) : 1;
-  const px = (POP.size + (POP.big - POP.size) * grow) * (p.crit ? POP.crit * punch : 1);
+  // A resisted hit is drawn smaller and a weak one bigger (ID-237); a crit keeps its size.
+  const small = p.fit === 'resist' ? POP.resist : p.fit === 'weak' ? POP.weak : 1;
+  const px = (POP.size + (POP.big - POP.size) * grow) * (p.crit ? POP.crit * punch : small);
   return {
     text: wall ? `−${n}` : p.crit ? `${n}!` : `${n}`,
     px: Math.round(px),
-    colour: wall ? COLOR.popWall : p.crit ? COLOR.popCrit : COLOR.popHit,
+    colour: wall
+      ? COLOR.popWall
+      : p.fit === 'weak'
+        ? COLOR.popWeak
+        : p.fit === 'resist'
+          ? COLOR.popResist
+          : p.crit
+            ? COLOR.popCrit
+            : COLOR.popHit,
+    ...(p.word && p.fit ? { word: p.fit === 'weak' ? 'Weak' : 'Resists' } : {}),
     alpha: age < 1 - POP.fade ? 1 : (1 - age) / POP.fade,
     dx: wall
       ? 0
@@ -2876,6 +2899,10 @@ export function popLook(p: Pop, time: number, pace: number, still: boolean): Pop
     rise: still ? 0 : POP.rise * age,
   };
 }
+
+/** The fit word's size (ID-237) over a number of `px`: about 0.6 of it, at least 11 px, never bigger than it. */
+export const popWordPx = (px: number): number =>
+  Math.min(px, Math.max(POP.wordMin, Math.round(px * POP.word)));
 
 /** The damage numbers still showing, oldest first: the newest `POP.cap` of them. */
 export function shownPops(pops: readonly Pop[], time: number, pace: number): Pop[] {
@@ -2912,14 +2939,34 @@ function drawPops(
     const at = project(bar.at, cam);
     const h = bar.h;
     ctx.globalAlpha = look.alpha;
-    ctx.font = `bold ${look.px}px system-ui, sans-serif`;
+    const numberFont = `bold ${look.px}px system-ui, sans-serif`;
+    // The fit's word (ID-237): small, about 0.6 of the number, never under 11 px, and never bigger than the number.
+    const wordFont = `bold ${popWordPx(look.px)}px system-ui, sans-serif`;
+    ctx.font = numberFont;
     const y = at.sy - h - POP.gap - look.rise;
     // A wall's loss on the camp side of its back face; an enemy's centred over it.
     ctx.textAlign = p.on === 'wall' ? 'right' : 'center';
-    const x = p.on === 'wall' ? at.sx - POP.gap : at.sx + look.dx;
+    let x = p.on === 'wall' ? at.sx - POP.gap : at.sx + look.dx;
+    if (p.on !== 'wall') {
+      // Number and word stay inside the canvas, by their measured width (no cut at the edge).
+      let wide = ctx.measureText(look.text).width;
+      if (look.word) {
+        ctx.font = wordFont;
+        wide = Math.max(wide, ctx.measureText(look.word).width);
+        ctx.font = numberFont;
+      }
+      const room = (ctx.canvas?.width ?? 0) / (ctx.getTransform?.().a || 1);
+      if (room > 0) x = Math.min(Math.max(x, wide / 2 + POP.edge), room - wide / 2 - POP.edge);
+    }
     ctx.strokeText(look.text, x, y);
     ctx.fillStyle = look.colour;
     ctx.fillText(look.text, x, y);
+    if (look.word) {
+      ctx.font = wordFont;
+      const up = y - look.px - 2;
+      ctx.strokeText(look.word, x, up);
+      ctx.fillText(look.word, x, up);
+    }
   }
   ctx.restore();
 }

@@ -150,11 +150,11 @@ describe('inventoryView', () => {
     };
     const v = inventoryView(camp(1, [w]));
     expect(slotLabel(v.stash[0]!)).toBe(
-      `Military Carbine, Military rarity, Marksman: Fires 3-round bursts; +10% crit chance, level 1, ${gunPower(w).toFixed(1)} DPS, 1 affix`,
+      `Military Carbine, Military rarity, Marksman: Fires 3-round bursts; +10% crit chance, class Medium, level 1, ${gunPower(w).toFixed(1)} DPS, 1 affix`,
     );
     expect(slotLabel(v.stash[0]!, true)).toMatch(/, can combine$/);
     expect(slotLabel(v.squad[0]!.gun)).toBe(
-      `Pistol, Common rarity, All-rounder: Fastest reload of any gun, level 1, ${gunPower('pistol').toFixed(1)} DPS, no affixes, held by ${v.squad[0]!.name}`,
+      `Pistol, Common rarity, All-rounder: Fastest reload of any gun, class Light, level 1, ${gunPower('pistol').toFixed(1)} DPS, no affixes, held by ${v.squad[0]!.name}`,
     );
   });
 });
@@ -974,6 +974,7 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     // The dmg/s and the step are the face's own, never in the level's corner.
     expect(ready.map((e) => e.className)).toEqual([
       'gun-icon',
+      'class-chip class-chip-medium class-chip-icon',
       'inv-slot-badge',
       'inv-slot-corner',
       'inv-slot-step',

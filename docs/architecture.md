@@ -52,7 +52,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | --- | --- |
 | `data.ts` | Every tuning number and content table: `WEAPONS`, `ENEMIES`, `BOSSES`, `SKILLS`, `PERKS`, `PROFESSIONS`, `JOBS`, squad/stash caps, drop and craft rates. Start here for any number. |
 | `horde.ts` | The fight: `HordeState`, `tick`, enemies, defenders, wall, shots, damage, boss and horror behaviour. The biggest core file. |
-| `hordeonly.ts` | The shipping loop: squad pick, `startSquadHorde` / `finishSquadHorde`, guns in the stash (equip, upgrade, combine, salvage, craft), survivors joining, combine, rest, Medicine treats a rest (`treatSurvivor`, ID-220). |
+| `hordeonly.ts` | The shipping loop: squad pick, `startSquadHorde` / `finishSquadHorde`, guns in the stash (equip, upgrade, combine, salvage, craft), survivors joining, combine, rest, Medicine treats a rest (`treatSurvivor`, ID-220). Also `hordeKindHp` (a horde's HP by kind) and `fitFor` (the fit context), and `bestSquad` / `bestGuns`, which in a higher mode maximise effective power (ID-237). |
 | `game.ts` | `GameState`, `newGame`, the full game's between-horde loop (`startHorde`, `finishHorde`, `recover`). |
 | `waves.ts` | Wave count and size, enemy HP growth, wave mix, horror abilities. |
 | `pacing.ts` | How fast a horde's enemies arrive. |
@@ -61,7 +61,8 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `armoury.ts` / `loadout.ts` / `craft.ts` | Owned guns with rarity and affixes; what a defender carries; blueprints. |
 | `stats.ts` / `jobs.ts` | Survivor levels, XP curve, professions and their bonuses. |
 | `camp.ts` | Recruits (shared); camp level, capacity and upgrade offers (full game). |
-| `squadpower.ts` | Squad Power vs Recommended Power shown before a fight. |
+| `squadpower.ts` | Squad Power vs Recommended Power shown before a fight; `squadFit`, the Fit pill's value, band and classes to add (ID-237). |
+| `traits.ts` | Gun classes against enemy traits (ID-237): `classOf`, `classFactor` (the fight's damage factor), `fitContext` / `effectivePower` / `worstCover` / `fitOfSquad` (what the squad tools and the Fit pill measure). Imports `data`, `modes` and `armoury` only; the tables are `GUN_CLASS` and `ENEMY_TRAITS` in `data.ts`. |
 | `modes.ts` | Difficulty modes (Normal / Nightmare / Hell): unlocks, each mode's local horde, effective horde, boss skills (Hell's new one each), Scrap and rarity boosts. |
 | `chatter.ts` | Speech bubbles during a fight. |
 | `base.ts` | The base's wall, posts, turrets and traps; the fight runs on it (`squadBase` for the squad build). |
@@ -93,7 +94,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | Canvas | `render.ts` (draws a fight and the camp), `projection.ts` (camera, angled view), `ground.ts` (tiles), `buildscene.ts` (camp scene) |
 | Sprites and effects | `sprites.ts` (art ids, URLs, loading), `anim.ts` (frames, gait), `death.ts`, `explosion.ts`, `spit.ts` |
 | In-fight HUD | `hud.ts` (status bar, card pick, skills, shop, result and squad screens, scrap chip, the World map globe button) |
-| Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons; ID-242: Stash / Bench tabs, the bench's gun picker over `gunpick.ts`), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`, which also names the Roster's patrol blocks, ID-234); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts`, `joining.ts` |
+| Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons; ID-242: Stash / Bench tabs, the bench's gun picker over `gunpick.ts`), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`, which also names the Roster's patrol blocks, ID-234); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts` (class lines, Help trait table, Fit words; ID-237), `classicon.ts` (gun class icons and chips; ID-237), `joining.ts` |
 | Dialogs and screens | `menu.ts` (settings, save, help), `confirm.ts`, `intro.ts` + `introTitle.ts`, `landscape.ts` (phone turn prompt), `debug.ts` (debug panel) |
 | Audio | `audio.ts` (Web Audio engine), `sound.ts` (cues from state changes) |
 | Shared bits | `kit.ts` (button variants), `fastforward.ts` (fight speed), `hold.ts` (press-and-hold: the Airstrike's button and Q turn Auto on or off, ID-232) |
@@ -123,6 +124,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A new in-fight card | id in the `UpgradeId` type (`core/horde.ts`); entry and category in `UPGRADES` (`core/cards.ts`); stat/repair effect in `applyUpgrade` (`core/cards.ts`), behaviour effect where `core/horde.ts` checks the card. The squad pool (`SQUAD_CARDS`) picks it up by category. A mode reward card instead: id in `ModeCard` and `MODE_UNLOCKS` (`core/data.ts`), its fight-relevance gate in `modeCardRelevant` (`core/cards.ts`); it joins the pool only through `modeCards` (`core/hordeonly.ts`). |
 | A new skill | `SKILLS` and `SkillId` in `core/data.ts`; launch in `core/skills.ts`; landing in `core/horde.ts`; button in `ui/hud.ts`; art in `ui/sprites.ts` + `ui/render.ts`. Field Repairs is no `SkillId`: `repairsButton` in `ui/hud.ts`, key F in `ui/app.ts`. The Airstrike's Auto is a pill on its button (`.hud-strike` wrapper in `ui/hud.ts`); a hold on the button (`hud.ts`) or Q (`app.ts`) toggles it through `ui/hold.ts` |
 | Fight rules | `core/horde.ts` |
+| A gun's class, an enemy's trait, or the trait numbers (Nightmare and Hell) | `GUN_CLASS`, `ENEMY_TRAITS`, `FIT` in `core/data.ts`; `resist` / `weak` per mode in `MODES` (`core/modes.ts`); the factor in `core/traits.ts` (applied in `fly`, `core/horde.ts`); the class line and Help table in `ui/statlines.ts`, icons in `ui/classicon.ts`, picker chips and Fit pill in `ui/hud.ts`, damage-number look in `ui/render.ts` |
 | Difficulty mode numbers or unlocks | `MODES` in `core/modes.ts`; mode cards in `MODE_UNLOCKS` (`core/data.ts`) and `modeCards` (`core/hordeonly.ts`); start-screen switch in `ui/hud.ts` |
 | A boss skill (Hell's included) | `BossSkill` and `BOSS_SKILL` (`core/data.ts`); clocks and effects in `mutate` and its helpers (`core/horde.ts`); name and cue in `ui/hud.ts`, glow and marks in `ui/render.ts`, sounds in `ui/audio.ts` and `ui/sound.ts` |
 | What happens after a fight | `finishSquadHorde` in `core/hordeonly.ts` |

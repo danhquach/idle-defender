@@ -8,6 +8,7 @@ import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { NOW, oldStock, prePatrol, preStats } from '../storage/testing.ts';
 import { escapeAction, frameStep } from './app.ts';
+import { TRAIT_ROWS } from './statlines.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import {
   CONTROLS,
@@ -516,6 +517,27 @@ describe('the Menu', () => {
     expect(help.textContent).not.toContain('Q W');
     expect(help.textContent).toContain('Pick your skill.');
     expect(help.textContent).not.toContain('Pick your skills.');
+  });
+
+  it('Help has the enemy trait table and what the modes do to it (ID-237)', () => {
+    const help = setup().panel('help');
+    expect(help.textContent).toContain('Enemy traits (Nightmare and Hell)');
+    const rows = [...help.querySelectorAll('.menu-traits tbody tr')].map((tr) =>
+      [...tr.children].map((c) => c.textContent),
+    );
+    expect(rows).toHaveLength(TRAIT_ROWS.length);
+    expect(rows.find((r) => r[0] === 'Mutated Horror')).toEqual([
+      'Mutated Horror',
+      'Hulking',
+      'Light',
+      'Heavy',
+    ]);
+    expect(help.querySelectorAll('.menu-classes li')).toHaveLength(4);
+    expect(help.querySelector('.menu-classes')!.textContent).toContain('Light: Pistol, SMG');
+    // Each class cell carries its icon.
+    expect(help.querySelectorAll('.menu-traits tbody td svg')).toHaveLength(TRAIT_ROWS.length * 2);
+    expect(help.textContent).toContain('Nightmare: a gun class an enemy resists deals 65%');
+    expect(help.textContent).toContain('Hell: a gun class an enemy resists deals 50%');
   });
 
   it('Help explains the ammo bar and the roar ring, each with a swatch (ID-168)', () => {

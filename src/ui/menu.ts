@@ -9,7 +9,9 @@ import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
-import { AUTO_KEY, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
+import { AUTO_KEY, ENEMY_NAME, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
+import { classIcon } from './classicon.ts';
+import { CLASS_LINES, TRAIT_NOTE, TRAIT_ROWS } from './statlines.ts';
 
 /** What the Save tab says about a refused code. */
 export const IMPORT_REFUSAL: Readonly<Record<Extract<ImportResult, { ok: false }>['why'], string>> =
@@ -559,12 +561,48 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     li.append(swatch, words);
     marks.append(li);
   }
+  // Enemy traits (ID-237): which gun class each kind resists and is weak to.
+  // Which guns are in which class, one line each.
+  const classLines = el('ul', 'menu-classes');
+  for (const { cls, text } of CLASS_LINES) {
+    const li = el('li', '');
+    li.append(classIcon(cls), text);
+    classLines.append(li);
+  }
+  const traits = el('table', 'menu-traits');
+  const headRow = el('tr', '');
+  for (const h of ['Enemy', 'Trait', 'Resists', 'Weak to']) headRow.append(el('th', '', h));
+  const thead = el('thead', '');
+  thead.append(headRow);
+  traits.append(thead);
+  const body = el('tbody', '');
+  for (const r of TRAIT_ROWS) {
+    const tr = el('tr', '');
+    for (const text of [ENEMY_NAME[r.kind], r.trait]) tr.append(el('td', '', text));
+    // The two classes, each with its icon beside its name.
+    for (const [cls, text] of [
+      [r.resistsClass, r.resists],
+      [r.weakClass, r.weak],
+    ] as const) {
+      const td = el('td', '');
+      td.append(classIcon(cls), text);
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+  traits.append(body);
   panels
     .get('help')!
     .append(
       section(el('h3', 'menu-heading', 'Controls'), keys),
       howSection,
       section(el('h3', 'menu-heading', 'Marks in a fight'), marks),
+      section(
+        el('h3', 'menu-heading', 'Enemy traits (Nightmare and Hell)'),
+        el('p', 'menu-note', TRAIT_NOTE),
+        classLines,
+        traits,
+      ),
     );
 
   function select(next: Tab, focus: boolean): void {

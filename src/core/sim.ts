@@ -323,8 +323,11 @@ export function playSquadHorde(
   maxFight = MAX_FIGHT,
   watch?: { nearest: number },
   hordeNumber = localHorde(game),
+  /** Test only (ID-237): the squad's bullets carry no gun class, so no enemy trait applies. */
+  noTraits = false,
 ): HordeState {
   let s = startSquadHorde(game, seed, 0, hordeNumber);
+  if (noTraits) s.noTraits = true;
   const baseStep = s.skills.length > 0 ? SQUAD_SKILL_USE.look : 60;
   const look = (): void => {
     if (watch) watch.nearest = Math.min(watch.nearest, nearestEnemy(s));

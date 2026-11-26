@@ -459,7 +459,8 @@ export function start(root: HTMLElement, art: Art): void {
       hud.toast('Answer who is asking to join first');
       return;
     }
-    commit(setMode(game, mode));
+    // With Auto on, the squad re-fits the new mode's horde (ID-237); without it nobody moves.
+    commit(autoSquad(setMode(game, mode)));
     picked = localHorde(game);
     endedAt = null;
     pendingResult = null;
@@ -684,28 +685,35 @@ export function start(root: HTMLElement, art: Art): void {
     redrawSquad();
     return { ok: true };
   }
+  /** The horde picked on the screen, for the squad tools' fit (ID-237); undefined when none is open. */
+  function pickedHorde(): number | undefined {
+    return Number.isInteger(picked) && picked >= 1 && picked <= localHorde(game)
+      ? picked
+      : undefined;
+  }
   /**
    * "Best gun for everyone" between hordes (the Roster, the result or start screen and the
    * Inventory): saved at once, and the screens redrawn.
    */
   function handOutBestGuns(): { ok: true; moves: GunMove[] } | { ok: false; reason: string } {
     if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
-    let r = bestGuns(game);
+    const local = pickedHorde();
+    let r = bestGuns(game, local);
     let moves = r.moves;
     // "Auto" (ID-154) re-picks the squad on every press, new guns or not (they change
     // Squad Power; with none, it still undoes a hand-picked squad, as the Roster says).
-    let next = autoSquad(r.game);
+    let next = autoSquad(r.game, local);
     // Whoever Auto brought in still holds their old gun: hand out again for the squad it
     // picked, until it stands (a few rounds at most), so one press is enough.
     const ids = (g: GameState): string => g.roster.map((d) => d.id).join();
     for (let round = 0; round < 3 && ids(next) !== ids(r.game); round++) {
-      r = bestGuns(next);
+      r = bestGuns(next, local);
       moves = joinMoves(moves, r.moves);
-      next = autoSquad(r.game);
+      next = autoSquad(r.game, local);
     }
     // Still moving after that: one last hand-out for the squad that stands, Auto not run again.
     if (ids(next) !== ids(r.game)) {
-      r = bestGuns(next);
+      r = bestGuns(next, local);
       moves = joinMoves(moves, r.moves);
       next = r.game;
     }
@@ -1053,7 +1061,7 @@ export function start(root: HTMLElement, art: Art): void {
           // screen and its squad on the wall redrawn.
           onBestSquad: () => {
             if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
-            const r = bestSquad(game);
+            const r = bestSquad(game, pickedHorde());
             if (r.game !== game) {
               commit(r.game);
               redrawSquad();
@@ -1062,7 +1070,7 @@ export function start(root: HTMLElement, art: Art): void {
           },
           onAutoSquad: (on) => {
             if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
-            const r = setAutoSquad(game, on);
+            const r = setAutoSquad(game, on, pickedHorde());
             commit(r.game);
             redrawSquad();
             return { ok: true, moves: r.moves };

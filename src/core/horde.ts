@@ -56,6 +56,7 @@ import {
   CRAWLER,
   HORROR,
   BOSS_SKILL,
+  type GunClass,
   type HigherMode,
   type ModeCard,
   ELITE,
@@ -64,6 +65,7 @@ import {
   SWARM,
   TIMED_SKILLS,
   TRAIT,
+  TRAIT_WORDS,
   type BossSkill,
   type BuffId,
   type EnemyKind,
@@ -75,6 +77,7 @@ import {
   type Weapon,
 } from './data.ts';
 import { affixShare, baseOf, gunCrit, gunCritDamage, pierceOf, type Held } from './armoury.ts';
+import { classFactor, classOf, fitOf } from './traits.ts';
 import {
   gunOf,
   isGun,
@@ -541,6 +544,8 @@ export interface Bullet {
   crit?: true;
   /** A Sniper rifle's round: it ignores armour, a boss's plates too (ID-099, ID-101). */
   ap?: true;
+  /** Its gun's class (ID-237): set by a squad gun's shot in a higher mode only, never a turret's. */
+  cls?: GunClass;
   /**
    * Gun traits and role affixes (ID-101), as shares: extra damage near the wall (an SMG's),
    */
@@ -600,6 +605,10 @@ export interface Pop {
   on: EnemyKind | 'wall';
   key: string;
   at: number;
+  /** A gun class's weakness or resistance on the target (ID-237); absent otherwise. */
+  fit?: 'weak' | 'resist';
+  /** One of the first `TRAIT_WORDS` numbers of its fit in the fight: drawn with a word (ID-237). */
+  word?: true;
 }
 /**
  * Something a survivor did (ID-085), for their chatter: `by` killed an enemy with a bullet
@@ -690,6 +699,10 @@ export interface HordeState {
   hordeNumber: number;
   /** The difficulty mode the horde is fought in (ID-218); absent on Normal. */
   mode?: HigherMode;
+  /** Test only (balance fixtures, ID-237): a squad's bullets carry no gun class, so no trait applies. */
+  noTraits?: true;
+  /** How many damage numbers of each fit have carried a word so far (ID-237); never saved. */
+  fitWords?: { weak?: number; resist?: number };
   wave: number;
   waveCount: number;
   toSpawn: number;
@@ -2223,12 +2236,14 @@ function fly(s: HordeState): void {
             took(s, 'concussion-rounds') &&
             concussed(s, hit.enemy)
               ? 1 + CARD.concussion.daze
-              : 1),
+              : 1) *
+            // The gun class against the enemy's trait (ID-237); 1 with no class (Normal, turrets).
+            classFactor(s.mode, b.cls, hit.enemy.kind),
           b.ap === true,
           !b.owner.startsWith('turret:') && took(s, 'breaching-rounds'),
         ),
       );
-      popOn(s, hit.enemy, dealt, b.crit === true);
+      popOn(s, hit.enemy, dealt, b.crit === true, fitOf(s.mode, b.cls, hit.enemy.kind));
       const alive = hit.enemy.hp > 0;
       hit.enemy.hp -= dealt;
       if (alive && !b.owner.startsWith('turret:')) {
@@ -2762,6 +2777,9 @@ function fire(s: HordeState, rng: Rng): void {
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
+        ...(s.mode !== undefined && !s.noTraits && classOf(id) !== null
+          ? { cls: classOf(id)! }
+          : {}),
         ...traits,
         ...(close > 0 ? { close } : {}),
       });
@@ -3554,8 +3572,14 @@ function attack(s: HordeState, moves: Moves, rng: Rng): void {
 }
 
 /** A damage number (ID-082) for `amount` taken by `e`, while it is alive. */
-function popOn(s: HordeState, e: Enemy, amount: number, crit = false): void {
-  if (e.hp > 0) addPop(s, e.x, e.y, amount, crit, e.kind, `e${e.id}`);
+function popOn(
+  s: HordeState,
+  e: Enemy,
+  amount: number,
+  crit = false,
+  fit: Pop['fit'] | null = null,
+): void {
+  if (e.hp > 0) addPop(s, e.x, e.y, amount, crit, e.kind, `e${e.id}`, fit);
 }
 
 /**
@@ -3570,18 +3594,29 @@ function addPop(
   crit: boolean,
   on: Pop['on'],
   key: string,
+  fit: Pop['fit'] | null = null,
 ): void {
   if (!(amount > 0)) return;
   // Newest last: none older than the merge window can take it.
   for (let i = s.pops.length - 1; i >= 0; i--) {
     const p = s.pops[i]!;
     if (s.time - p.at >= DAMAGE_POP.merge) break;
-    if (p.key === key && p.crit === crit) {
+    if (p.key === key && p.crit === crit && (p.fit ?? null) === fit) {
       p.amount += amount;
       return;
     }
   }
-  s.pops.push({ x, y, amount, crit, on, key, at: s.time });
+  const pop: Pop = { x, y, amount, crit, on, key, at: s.time };
+  if (fit !== null) {
+    pop.fit = fit;
+    // The first few of each fit in the fight are drawn with a word (ID-237).
+    const used = s.fitWords?.[fit] ?? 0;
+    if (used < TRAIT_WORDS) {
+      pop.word = true;
+      s.fitWords = { ...s.fitWords, [fit]: used + 1 };
+    }
+  }
+  s.pops.push(pop);
   if (s.pops.length > DAMAGE_POP.cap) s.pops.shift();
 }
 

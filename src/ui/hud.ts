@@ -71,7 +71,10 @@ import {
   SQUAD_SKILLS,
   STASH_SLOT,
   SKILLS,
+  ENEMY_TRAITS,
   type EnemyKind,
+  type GunClass,
+  type HigherMode,
   type CampPickId,
   type BossSkill,
   type Rarity,
@@ -128,8 +131,10 @@ import {
   squadCap,
   squadOf,
   squadSize,
+  squadSpec,
   stashCap,
   squadResult,
+  survivorPower,
   upgradeCost,
   type GunMove,
   type NoJoin,
@@ -157,6 +162,7 @@ import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { repairsLock, repairsState, skillLeft, skillLock } from '../core/skills.ts';
 import {
+  hordeKindHp,
   injuryBand,
   powerBand,
   recommendedPower,
@@ -165,11 +171,14 @@ import {
   type PowerBand,
 } from '../core/squadpower.ts';
 import { levelOf } from '../core/stats.ts';
+import { classOf, fitContext, fitOfSquad, type FitBand } from '../core/traits.ts';
 import { horrorAbility, swarmWave, waveCount, xpToNext, type BossSpec } from '../core/waves.ts';
 import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
 import { createHold } from './hold.ts';
+import { classChip } from './classicon.ts';
+import { classLine, FIT_TIP, FIT_WORD, fitText, matchupsOpen, traitText } from './statlines.ts';
 import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
 import {
   ART_URLS,
@@ -763,7 +772,7 @@ export function payoutText(s: HordeState): string {
 export const clockTime = (ms: number): string =>
   new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-const ENEMY_NAME: Readonly<Record<EnemyKind, string>> = {
+export const ENEMY_NAME: Readonly<Record<EnemyKind, string>> = {
   shambler: 'Shambler',
   runner: 'Runner',
   crawler: 'Crawler',
@@ -949,6 +958,29 @@ export interface HordeChoice {
   hint: string | null;
   /** The start screen's title and chips for this horde, so they follow the pick. */
   start: { title: string; chips: Chip[] };
+  /** Nightmare and Hell only (ID-237): a chip for each kind with a trait the horde brings, bosses included. */
+  traits?: TraitChip[];
+  /** Nightmare and Hell only (ID-237): how the squad's gun classes fit this horde; absent for an empty squad. */
+  fit?: FitChoice;
+}
+
+/** One enemy kind a higher-mode horde brings, with its trait (ID-237): "Hulking · Resists Light · Weak to Heavy". */
+export interface TraitChip {
+  kind: EnemyKind;
+  /** The kind's name: "Brute", "Mutated Horror". */
+  name: string;
+  /** The trait's name: "Hulking". */
+  trait: string;
+  /** The trait and what it resists and is weak to, as one line of text. */
+  text: string;
+  resists: GunClass;
+  weak: GunClass;
+}
+
+/** The Fit pill (ID-237): the band, and its words and what to add ("Add Heavy or Medium"). */
+export interface FitChoice {
+  band: FitBand;
+  text: string;
 }
 
 /** The horde picker (ID-098) between hordes: the next new horde first, then beaten ones, highest first. */
@@ -1005,6 +1037,51 @@ export function modeChoices(game: ModeProgress): ModeChoice[] | null {
  */
 export const PICKER_HORDES = 50;
 
+/** The Fit pill's band words and the power tones they borrow (ID-237). */
+const FIT_TONE: Readonly<Record<FitBand, PowerBand>> = { good: 'ok', fair: 'close', poor: 'short' };
+
+/** "Resists [chip]": one unbreakable span, so a narrow line breaks only between the halves. */
+function half(label: string, cls: GunClass): HTMLElement {
+  const span = el('span', 'hud-trait-half');
+  span.append(label, classChip(cls));
+  return span;
+}
+
+/** One kind's trait chip (ID-237): its name, the trait as text, then the two classes with their icons. */
+function traitItem(c: TraitChip): HTMLElement {
+  const li = el('li', 'hud-trait');
+  li.dataset.kind = c.kind;
+  li.append(
+    el('b', 'hud-trait-kind', c.name),
+    ' ',
+    el('span', 'hud-trait-name', c.trait),
+    ' · ',
+    half('Resists ', c.resists),
+    ' ',
+    half('· Weak to ', c.weak),
+  );
+  return li;
+}
+
+/** A chip for each kind with a trait among a horde's HP by kind (`hordeKindHp`), in kind order (ID-237). */
+function traitChips(hp: readonly (readonly [EnemyKind, number])[]): TraitChip[] {
+  return hp.flatMap(([kind]) => {
+    const t = ENEMY_TRAITS[kind];
+    return t
+      ? [
+          {
+            kind,
+            name: ENEMY_NAME[kind],
+            trait: t.name,
+            text: traitText(kind)!,
+            resists: t.resists,
+            weak: t.weak,
+          },
+        ]
+      : [];
+  });
+}
+
 /**
  * The picker for `game`, `picked` selected (the next new horde when it isn't listed): the
  * next new horde first, labelled new, then the beaten ones, highest first, `PICKER_HORDES`
@@ -1018,6 +1095,11 @@ export function hordePicker(
   retitle = false,
 ): HordePicker {
   const squad = squadPower(game);
+  // The squad as the fit sees it, worked out once for every horde listed (ID-237).
+  const members = squadOf(game).map((d) => ({
+    power: survivorPower(d),
+    cls: classOf(squadSpec(d).loadout.primary),
+  }));
   const goal = goalChip(game);
   const options: HordeChoice[] = [];
   // The hordes are the mode's own (ID-218); the power and waves are those of their strength.
@@ -1040,7 +1122,13 @@ export function hordePicker(
     const isNew = n === top;
     const power = powerLine(squad, rec(n), size);
     const boss = horrorAbility(n) !== null;
+    // The traits and the fit (ID-237), in a higher mode only: Normal's picker is as it was.
+    // One HP split a horde, shared by its chips and its fit.
+    const kindHp = mode === 'normal' ? null : hordeKindHp(effHorde(mode, n), mode, size);
+    const fit = kindHp && fitOfSquad(fitContext(mode as HigherMode, kindHp), members);
     options.push({
+      ...(kindHp ? { traits: traitChips(kindHp) } : {}),
+      ...(fit ? { fit: { band: fit.band, text: fitText(fit) } } : {}),
       horde: n,
       isNew,
       // Short, so the select never cuts it (ID-196): the pick's readiness is the line
@@ -1584,7 +1672,11 @@ export function joinedCard(game: Pick<GameState, 'roster'>, id: string): SquadCa
 export const NEW_BADGE = 'New';
 
 /** The loot tile for `drop`, against the stash `game` had before it. */
-export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: SquadDrop): DropTile {
+export function dropTile(
+  game: Pick<GameState, 'armoury' | 'slots'> &
+    Partial<Pick<GameState, 'hordeNumber' | 'mode' | 'modes'>>,
+  drop: SquadDrop,
+): DropTile {
   const { weapon, bonus, thrown } = drop;
   const lost = thrown.includes(weapon);
   const count = game.armoury.length + 1 + bonus.length - thrown.length;
@@ -1615,6 +1707,7 @@ export function dropTile(game: Pick<GameState, 'armoury' | 'slots'>, drop: Squad
       lines: [
         `${i === 0 ? DROP_KIND[drop.kind] : 'Bonus gun'} · ${RARITIES[w.rarity].name}`,
         roleLine(w.base) ?? '',
+        classLine(w, matchupsOpen(game)) ?? '',
         affixLines(w).join(', '),
       ].filter((t) => t !== ''),
     })),
@@ -3554,6 +3647,20 @@ export function createHud(
     const hurtBand = el('span', 'hud-horde-band');
     hurt.append(`${INJURY_LEAD} `, hurtBand);
     const hint = el('p', 'hud-horde-hint');
+    // The Fit pill (ID-237), in the same shape: its label, then the band's pill; and what to add.
+    const fitLine = el('p', 'hud-horde-fit');
+    const fitBand = el('span', 'hud-horde-band');
+    fitLine.title = FIT_TIP;
+    fitLine.append('Fit ', fitBand);
+    const fitHint = el('p', 'hud-horde-hint hud-horde-fit-hint');
+    // The kinds the horde brings and their traits (ID-237): an open row, shut on a phone.
+    const traitBox = el('details', 'hud-horde-traits');
+    // Shut on a phone, upright or turned sideways.
+    traitBox.open = !(
+      window.matchMedia?.('(max-width: 640px), (max-height: 500px)').matches ?? false
+    );
+    const traitList = el('ul', 'hud-trait-list');
+    traitBox.append(el('summary', 'hud-horde-traits-head', 'Horde traits'), traitList);
     // The mode switch (ID-218), once Nightmare is open: one button a mode, the locked ones
     // greyed with what unlocks them under the row.
     const switcher = p.modes ? modeSwitch(p.modes) : null;
@@ -3569,6 +3676,15 @@ export function createHud(
       hurt.dataset.band = INJURY_TONE[o.injury];
       hint.textContent = o.hint ?? '';
       hint.hidden = o.hint === null;
+      fitLine.hidden = o.fit === undefined;
+      if (o.fit) {
+        fitBand.textContent = FIT_WORD[o.fit.band];
+        fitLine.dataset.band = FIT_TONE[o.fit.band];
+      }
+      fitHint.textContent = o.fit?.band === 'good' ? '' : (o.fit?.text ?? '');
+      fitHint.hidden = fitHint.textContent === '';
+      traitBox.hidden = (o.traits ?? []).length === 0;
+      traitList.replaceChildren(...(o.traits ?? []).map(traitItem));
       select.title = select.selectedOptions[0]?.textContent ?? '';
     };
     sync();
@@ -3586,8 +3702,19 @@ export function createHud(
     // The next horde's card (ID-200): its label, the select, the meter, then the power line
     // and what a win is likely to cost on one row, and where to farm instead under them.
     const nums = el('div', 'hud-horde-ready');
-    nums.append(line, hurt);
-    pickBlock.replaceChildren(...(switcher ? [switcher] : []), label, select, meter, nums, hint);
+    // The fit and the traits are a higher mode's (ID-237): Normal's card is as it was.
+    const higher = p.options.some((o) => o.fit !== undefined || o.traits !== undefined);
+    nums.append(line, hurt, ...(higher ? [fitLine] : []));
+    pickBlock.replaceChildren(
+      ...(switcher ? [switcher] : []),
+      label,
+      select,
+      meter,
+      nums,
+      ...(higher ? [fitHint] : []),
+      hint,
+      ...(higher ? [traitBox] : []),
+    );
     if (had) select.focus();
   }
 

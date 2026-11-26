@@ -152,7 +152,7 @@ const AFFIX_TEXT: Readonly<Record<AffixId, (v: number) => string>> = {
   closeDamage: (v) => `+${v}% damage to enemies near the wall`,
   cone: (v) => `+${v}% wider cone`,
   pellets: (v) => `+${v} ${v === 1 ? 'pellet' : 'pellets'}`,
-  bossDamage: (v) => `+${v}% damage to bosses and heavies`,
+  bossDamage: (v) => `+${v}% damage to bosses, Brutes and Swollen`,
 };
 export const affixText = (a: Affix): string => AFFIX_TEXT[a.id](a.value);
 
