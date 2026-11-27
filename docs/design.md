@@ -1007,6 +1007,22 @@ close-quarter weapons come out only when an enemy is close.
   in rows of three) and, past about two and a half rows, scrolls down on its own,
   never sideways; the squad, the patrol blocks and the details stay put. A bench
   card picked or moved to the bench out of view is scrolled into it.
+  - **Boxes and folds** *(as built, ID-256)*: the Roster's four sections, Squad, Bench,
+    On patrol and Details, each sit in a bordered box with a title in the accent colour
+    ("Squad 5/6", "Bench 2", "On patrol 1", "Details"; the count in plain weight). The Bench,
+    each patrol block and Details fold shut from their header: the whole title row is the
+    button (arrow, `aria-expanded`, `aria-controls`), and a shut box is only its title row,
+    so the boxes above never move. Squad has no fold; the Bench box hides with an empty
+    bench and the Patrol box with no patrol; the Squad title always shows (Best squad and
+    Auto only with a bench or a patrol). A fold hides a wrapper, never the bench list, so the
+    squad keeps its raised look. Details holds the survivor row and the panel. All open by
+    default. Bench and Details are kept in this browser (own key each, read once when the
+    Roster is built; only the exact value "1" means shut, anything else is open). A patrol
+    block's fold lasts for the visit only and is forgotten when that patrol is gone. Picking
+    a survivor (a card, or the Roster opened on a name) shows Details again for the visit
+    without changing the kept choice; only the header changes it. A redraw keeps the
+    keyboard on the header pressed (found by its key); a fold shut over the focused card
+    sends it to the survivor shown, else Close.
   - **Level** *(ID-146; a Stats panel with + buttons, Undo and mid-fight
     spends before, ID-108, ID-116, ID-126)*: "Level 7" with the XP into it and
     what the next costs, the profession's benefit, the level's bonus line in

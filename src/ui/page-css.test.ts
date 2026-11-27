@@ -905,3 +905,50 @@ describe('the gun class badge (ID-254)', () => {
     expect(slot).toMatch(/bottom: 2px/);
   });
 });
+
+describe('the Roster folds (ID-256)', () => {
+  const fold = /\n\.rv-fold \{([^}]*)\}/.exec(rules)?.[1] ?? '';
+
+  it('a fold header is a 28 px row (40 px on touch) that keeps the title classes type', () => {
+    expect(fold).toMatch(/min-height: 28px;/);
+    expect(rules).toMatch(/@media \(pointer: coarse\) \{\s*\.rv-fold \{\s*min-height: 40px;/);
+    // Family only: the title classes set the size and weight.
+    expect(fold).toMatch(/font-family: inherit;/);
+    expect(fold).not.toMatch(/font: /);
+  });
+
+  it('the hover tint is only where a pointer hovers', () => {
+    expect(rules).toMatch(
+      /@media \(hover: hover\) \{\s*\.rv-fold:hover \{[^}]*--color-surface-hover/,
+    );
+    expect(rules.replace(/@media \(hover: hover\) \{\s*\.rv-fold:hover \{[^}]*\}/, '')).not.toMatch(
+      /\.rv-fold:hover/,
+    );
+  });
+
+  it('a collapsed box keeps no vertical padding, and the arrow turns instead of swapping', () => {
+    expect(rules).toMatch(/\.rv-box:has\(> \.rv-fold-body\[hidden\]\) \{\s*padding-block: 0;/);
+    expect(rules).toMatch(
+      /\.rv-fold\[aria-expanded='false'\]::before \{\s*transform: rotate\(-90deg\);/,
+    );
+  });
+
+  it("the squad's raised look still keys off a visible .rv-bench list (a fold hides a wrapper)", () => {
+    expect(rules).toMatch(
+      /\.roster-dialog:has\(\.rv-bench:not\(\[hidden\]\)\) \.rv-tabs:not\(\.rv-bench\) \.rv-tab \{/,
+    );
+    expect(rules).toMatch(
+      /\.roster-dialog:has\(\.rv-tabs:not\(\.rv-bench\):is\(\[data-count='5'\], \[data-count='6'\]\)\)\s*\.rv-bench:not\(\.rv-patrol\) \{/,
+    );
+    expect(rules).toMatch(/\.rv-fold-body\[hidden\] \{\s*display: none;/);
+  });
+
+  it('each box is bordered; patrol blocks have no border of their own, only a divider', () => {
+    expect(/\n\.rv-box \{([^}]*)\}/.exec(rules)?.[1]).toMatch(/border: 1px solid/);
+    const block = /\n\.rv-patrol-block \{([^}]*)\}/.exec(rules)?.[1] ?? '';
+    expect(block).not.toMatch(/border|background/);
+    expect(rules).toMatch(
+      /\.rv-patrol-block \+ \.rv-patrol-block \{[^}]*border-top: 1px solid var\(--color-divider\)/,
+    );
+  });
+});

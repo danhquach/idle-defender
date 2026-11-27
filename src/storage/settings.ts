@@ -198,3 +198,37 @@ export function writeAirstrikeHintSeen(storage: SaveStorage | null): void {
     // Storage blocked or full.
   }
 }
+
+// The Roster's folds (ID-256): Bench and Details open or closed, kept in this browser. Only the
+// exact string "1" means closed; anything else (missing, odd, a throwing store) is open.
+export const ROSTER_FOLD_KEYS = {
+  bench: 'idle-defender.roster-bench-closed',
+  details: 'idle-defender.roster-details-closed',
+} as const;
+
+export type RosterFold = keyof typeof ROSTER_FOLD_KEYS;
+
+/** Which Roster sections are closed (true) in this browser; read once. */
+export function readRosterFolds(storage: SaveStorage | null): Record<RosterFold, boolean> {
+  const closed = (fold: RosterFold): boolean => {
+    try {
+      return storage?.getItem(ROSTER_FOLD_KEYS[fold]) === '1';
+    } catch {
+      return false;
+    }
+  };
+  return { bench: closed('bench'), details: closed('details') };
+}
+
+/** Keeps a section closed ("1") or open ("0"); where the browser refuses it, it is not kept. */
+export function writeRosterFold(
+  storage: SaveStorage | null,
+  fold: RosterFold,
+  closed: boolean,
+): void {
+  try {
+    storage?.setItem(ROSTER_FOLD_KEYS[fold], closed ? '1' : '0');
+  } catch {
+    // Storage blocked or full.
+  }
+}
