@@ -108,7 +108,15 @@ import {
 import { BLUEPRINT_GUNS, type Blueprints, type Craft } from '../core/craft.ts';
 import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
 import { capSquad, settleSquad } from '../core/hordeonly.ts';
-import { AREA_IDS, DANGER_IDS, MAP_PATROL, THEME, THEME_IDS, THEMES } from '../core/data.ts';
+import {
+  AREA_IDS,
+  DANGER_IDS,
+  MAP_DRAWS_MAX,
+  MAP_PATROL,
+  THEME,
+  THEME_IDS,
+  THEMES,
+} from '../core/data.ts';
 import { themedSlotsBeaten } from '../core/themes.ts';
 import { tripMs, type MapArea, type MapPatrol, type WorldMap } from '../core/scout.ts';
 import {
@@ -807,8 +815,6 @@ function readCraft(v: unknown): Craft {
 
 /** A seed: a whole 32-bit number. */
 const SEED_MAX = 0xffffffff;
-/** The most area draws a save can count. */
-const MAP_COUNT_MAX = 1e9;
 /** The most map patrols a save can count: a found gun's uid (`m<no>-<k>`) has room for it. */
 const MAP_SENT_MAX = 999_999;
 /** The most a team's power can be (a Squad Power share; far above any reached). */
@@ -825,7 +831,7 @@ const POWER_MAX = 1e15;
 function readMap(v: unknown, bench: readonly RosterDefender[], top: number): WorldMap {
   const o = obj(v, ['seed', 'drawn', 'areas', 'patrols', 'sent']);
   const seed = int(o.seed, 0, SEED_MAX);
-  const drawn = int(o.drawn, MAP_PATROL.areas, MAP_COUNT_MAX);
+  const drawn = int(o.drawn, MAP_PATROL.areas, MAP_DRAWS_MAX);
   const sent = int(o.sent, 0, MAP_SENT_MAX);
   const areas = arr(o.areas, MAP_PATROL.areas, MAP_PATROL.areas).map((a): MapArea => {
     const ao = obj(a, ['kind', 'danger']);

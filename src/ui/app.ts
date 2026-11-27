@@ -174,6 +174,7 @@ import {
   patrolAt,
   patrolReport,
   sendMapPatrol,
+  rerollMap,
   takeReport,
   withMap,
 } from '../core/scout.ts';
@@ -984,6 +985,14 @@ export function start(root: HTMLElement, art: Art): void {
           onTake: (area) => {
             if (horde && !resultUp()) return { ok: false, reason: MAP_WAIT };
             const r = takeReport(game, area, Date.now());
+            if (!r.ok) return r;
+            commit(r.game);
+            redrawSquad();
+            return { ok: true };
+          },
+          onReroll: () => {
+            if (horde && !resultUp()) return { ok: false, reason: MAP_WAIT };
+            const r = rerollMap(game);
             if (!r.ok) return r;
             commit(r.game);
             redrawSquad();

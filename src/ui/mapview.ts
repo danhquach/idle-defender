@@ -22,6 +22,8 @@ import {
   patrolOf,
   patrolPool,
   patrolRatio,
+  rerollCost,
+  rerollRefusal,
   safePower,
   sendRefusal,
   teamRating,
@@ -37,6 +39,16 @@ import { AREA_ART, ART_URLS } from './sprites.ts';
 import { LOOT_NAME, patrolsOut, patrolTime, pct, tripText } from './maptext.ts';
 
 export const MAP_WAIT = 'Send patrols and take reports between hordes.';
+/** A number and its unit that never split across lines when a label wraps. */
+const NBSP = String.fromCharCode(160);
+const num = (n: number): string => n.toLocaleString('en-US');
+/** The Reroll button's label (ID-252): "Reroll · 30 Scrap", the space before Scrap not breaking. */
+export const rerollLabel = (cost: number): string => `Reroll · ${num(cost)}${NBSP}Scrap`;
+/** What the Reroll button is read out as. */
+export const rerollAria = (cost: number): string => `Reroll areas, ${num(cost)} Scrap`;
+/** What a reroll says once made: the new areas, the Scrap spent and what is left. */
+export const rerollText = (cost: number, left: number): string =>
+  `New areas · ${num(cost)} Scrap spent, ${num(left)} left.`;
 export const MAP_NOTE =
   'Bench survivors scavenge in real time, even with the game closed. Each member rolls once: drop chances are per member.';
 export const MAP_EMPTY_BENCH =
@@ -94,6 +106,8 @@ export interface MapOptions {
   onSend: (area: AreaId, ids: string[]) => { ok: true } | { ok: false; reason: string };
   /** Takes the report of the patrol at `area` (OK), saved at once. */
   onTake: (area: AreaId) => { ok: true } | { ok: false; reason: string };
+  /** Rerolls the areas without a patrol for Scrap (between hordes), saved at once. */
+  onReroll: () => { ok: true } | { ok: false; reason: string };
   /** The report the patrol at `area` brings, before it is taken. */
   report: (area: AreaId) => MapReport | null;
 }
@@ -127,6 +141,18 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
   const body = el('div', 'map-body');
   pane.append(body);
   const count = el('span', 'map-count');
+  const reroll = el('button', 'hud-button map-reroll');
+  reroll.type = 'button';
+  reroll.addEventListener('click', () => {
+    const before = opts.state().game;
+    const cost = rerollCost(before);
+    const r = opts.onReroll();
+    if (!r.ok) {
+      say(r.reason, true);
+      return;
+    }
+    say(rerollText(cost, opts.state().game.stock.scrap));
+  });
   const status = el('p', 'menu-note inv-status map-status');
   status.setAttribute('role', 'status');
   const say = (text: string, refused = false): void => {
@@ -502,6 +528,14 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     body.replaceChildren(...parts);
     pane.dataset.view = view.kind;
     count.textContent = patrolsOut(game.map?.patrols.length ?? 0) ?? '';
+    // Reroll shows on the map only, between hordes; greyed (with its reason) when it can't be bought.
+    reroll.hidden = view.kind !== 'list' || !canSend;
+    const cost = rerollCost(game);
+    const why = rerollRefusal(game);
+    reroll.textContent = rerollLabel(cost);
+    reroll.setAttribute('aria-label', rerollAria(cost));
+    reroll.disabled = why !== null;
+    reroll.title = why ?? '';
   }
 
   /** Shows `next`; the footer's line is cleared unless it was just set for this move (`keep`). */
@@ -516,7 +550,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     id: 'map',
     label: 'World map',
     panel: pane,
-    tools: [count],
+    tools: [count, reroll],
     status,
     button,
     show() {

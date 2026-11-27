@@ -15,7 +15,9 @@ import {
   DANGER_IDS,
   DANGERS,
   INJURY_REST,
+  MAP_DRAWS_MAX,
   MAP_PATROL,
+  MAP_REROLL,
   MAX_COUNT,
   SQUAD_CAP,
   type AreaId,
@@ -467,7 +469,7 @@ export function takeReport(
     stock: scrapAfter(game.stock, report.scrap + report.salvage),
     map: {
       ...map,
-      drawn: map.drawn + 1,
+      drawn: Math.min(MAP_DRAWS_MAX, map.drawn + 1),
       areas: map.areas.map((a) => (a.kind === area ? fresh : a)),
       patrols: map.patrols.filter((x) => x !== p),
     },
@@ -476,4 +478,61 @@ export function takeReport(
   const medicine = Math.min(MAP_PATROL.medicineMax, (game.medicine ?? 0) + report.medicine);
   if (medicine > 0) g.medicine = medicine;
   return { ok: true, game: autoSquad(g), report };
+}
+
+/** The Scrap a reroll costs (ID-252): about one Safe-area Scrap find, rounded up to `MAP_REROLL.round`. */
+export const rerollCost = (game: GameState): number =>
+  Math.max(
+    MAP_REROLL.min,
+    Math.ceil((winScrap(bestHorde(game)) * MAP_REROLL.share) / MAP_REROLL.round) * MAP_REROLL.round,
+  );
+
+/** Why the map can't be rerolled now, or null: no map, every area has a patrol out, or Scrap is short. */
+export function rerollRefusal(game: GameState): string | null {
+  if (!game.map) return 'No areas yet';
+  if (game.map.areas.every((a) => patrolAt(game, a.kind))) return 'Every area has a patrol out';
+  const cost = rerollCost(game);
+  return game.stock.scrap < cost ? `Needs ${cost} Scrap` : null;
+}
+
+/**
+ * Rerolls the map (ID-252) for `rerollCost` Scrap: every area without a patrol is replaced, in
+ * slot order, by a new draw from the map's seed (`drawn` counts them), so a save replays the
+ * same. A new area is never of a kind already on the map when one is free, and always of a
+ * kind different from the one it replaces; kinds stay unique. Areas with a patrol (back or
+ * not) are kept. Refused as `rerollRefusal` says, with `game` unchanged.
+ */
+export function rerollMap(
+  game: GameState,
+): { ok: true; game: GameState; cost: number; replaced: number } | { ok: false; reason: string } {
+  const reason = rerollRefusal(game);
+  if (reason) return { ok: false, reason };
+  const map = mapOf(game);
+  const cost = rerollCost(game);
+  const kept = map.areas.filter((a) => patrolAt(game, a.kind)).map((a) => a.kind);
+  const old = map.areas.map((a) => a.kind);
+  const drawnNow: AreaId[] = [];
+  let replaced = 0;
+  const areas = map.areas.map((a) => {
+    if (kept.includes(a.kind)) return a;
+    const taken = [...kept, ...drawnNow];
+    // First a kind that wasn't on the map, so a full reroll doesn't just swap places.
+    const fresh = AREA_IDS.some((k) => ![...taken, ...old].includes(k))
+      ? [...taken, ...old]
+      : [...taken, a.kind];
+    const next = drawArea(map.seed, map.drawn + replaced, fresh);
+    drawnNow.push(next.kind);
+    replaced += 1;
+    return next;
+  });
+  return {
+    ok: true,
+    game: {
+      ...game,
+      stock: { ...game.stock, scrap: game.stock.scrap - cost },
+      map: { ...map, drawn: Math.min(MAP_DRAWS_MAX, map.drawn + replaced), areas },
+    },
+    cost,
+    replaced,
+  };
 }

@@ -355,6 +355,16 @@ export const MAP_PATROL = {
   medicineMax: 999,
 } as const;
 /**
+ * The World map's Reroll (ID-252), proposed, to tune: the Scrap it costs is `share` of one win's
+ * Scrap at the best horde beaten (`winScrap`), rounded up to `round`, at least `min`.
+ */
+export const MAP_REROLL = { share: 0.5, min: 10, round: 5 } as const;
+/**
+ * The most area draws a save counts (`WorldMap.drawn`); a draw past it clamps here and repeats
+ * (unreachable in play: a draw happens per report or reroll).
+ */
+export const MAP_DRAWS_MAX = 1e9;
+/**
  * Crafting a gun from a blueprint (ID-209), starting points (the PM's call): the Scrap put in
  * runs from `min` up in `steps` more steps of `step`. At `min` the rarity odds (percent) are
  * `from` (the horde drop's band); each extra step moves them evenly toward `to`, the most

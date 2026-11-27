@@ -68,7 +68,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `chatter.ts` | Speech bubbles during a fight. |
 | `base.ts` | The base's wall, posts, turrets and traps; the fight runs on it (`squadBase` for the squad build). |
 | `perks.ts` | Commander perks; `levelScale` is used by the fight. |
-| `scout.ts` | The horde-only World map (ID-219): its areas, sending a patrol team from the bench, team power and risk, real-time trips, the report rolled from the patrol's seed and taking it. |
+| `scout.ts` | The horde-only World map (ID-219): its areas, sending a patrol team from the bench, team power and risk, real-time trips, the report rolled from the patrol's seed and taking it, and the Reroll (ID-252: `rerollCost`, `rerollRefusal`, `rerollMap`). |
 | `research.ts` / `power.ts` / `patrol.ts` | Full-game systems (see above). |
 | `sim.ts` | Headless scripted player for balance tests. |
 | `debug.ts` | Debug-mode edits (jump to a horde, set scrap or squad size). |
@@ -135,6 +135,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A new field on `GameState` | `core/game.ts`; then a `read*` in `storage/save.ts` with a default for older saves, bump `SAVE_VERSION` (note it in its comment, add the old number to `readSave`'s list), add an old-save fixture in `storage/testing.ts` |
 | HUD text or buttons in a fight | `ui/hud.ts` |
 | Roster / Weapons / Craft / World map tabs | `ui/squadroster.ts` / `ui/inventory.ts` / `ui/craft.ts` / `ui/mapview.ts` |
+| World map Reroll price, draw cap | `MAP_REROLL`, `MAP_DRAWS_MAX` in `core/data.ts`; `rerollCost` / `rerollMap` in `core/scout.ts`; the button in `ui/mapview.ts` |
 | World map areas, danger, patrol rules | `AREAS`, `DANGERS`, `MAP_PATROL` in `core/data.ts`; rules in `core/scout.ts`; save in `readMap` (`storage/save.ts`) |
 | A player setting | `storage/settings.ts`; control in `ui/menu.ts` |
 | A sound | file in `src/assets/sounds/` (credit in `docs/audio-credits.md`); `ui/audio.ts` (samples), `ui/sound.ts` (when it plays) |
