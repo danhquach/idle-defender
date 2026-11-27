@@ -289,7 +289,7 @@ describe('the horde panel is content-sized, in one layout (ID-196, ID-200)', () 
     expect(base.length).toBeGreaterThan(0);
     expect(base[0]!.body).toMatch(/(?:^|\s)width: min\(\d+px, calc\(100vw - \d+px\)\);/);
     expect(base[0]!.body).toMatch(/(?:^|\s)height: auto;/);
-    expect(base[0]!.body).toMatch(/(?:^|\s)max-height: calc\(100vh - 128px\);/);
+    expect(base[0]!.body).toMatch(/(?:^|\s)max-height: calc\(100dvh - 128px\);/);
     expect(base[0]!.body).toMatch(/overflow: hidden;/);
     // No fixed height, and no top-and-bottom stretch, in the base rule.
     expect(base[0]!.body).not.toMatch(/(?:^|[\s;])height: (?:min\(|\d)/);
@@ -335,7 +335,7 @@ describe('the horde panel is content-sized, in one layout (ID-196, ID-200)', () 
     );
     expect(phone, 'no phone panel rule in page.css').not.toBeNull();
     expect(phone![1]).toMatch(/top: calc\(50% \+ 44px\);/);
-    expect(phone![1]).toMatch(/max-height: calc\(100vh - 120px\);/);
+    expect(phone![1]).toMatch(/max-height: calc\(100dvh - 120px\);/);
     expect(phone![1]).not.toMatch(/(?:^|\s)(?:height|bottom):/);
     const block = /@media \(max-width: 480px\) \{([\s\S]*?)\n\}\n/.exec(rules)![1]!;
     expect(block).toMatch(
@@ -351,7 +351,7 @@ describe('the horde panel is content-sized, in one layout (ID-196, ID-200)', () 
     );
     expect(short, 'no short-window panel rule in page.css').not.toBeNull();
     expect(short![1]).toMatch(/top: 38px;/);
-    expect(short![1]).toMatch(/max-height: calc\(100vh - 38px - var\(--space-6\)\);/);
+    expect(short![1]).toMatch(/max-height: calc\(100dvh - 38px - var\(--space-6\)\);/);
     // Content-sized: no bottom stretch, no fixed height; the panel itself never scrolls.
     expect(short![1]).not.toMatch(/(?:^|\s)(?:bottom|height):/);
     expect(short![1]).not.toMatch(/overflow/);
@@ -1166,5 +1166,16 @@ describe('the Research Center chart has a fourth tier for the combos (ID-264)', 
       /path\[data-combo='true'\]\[data-done='true'\] \{\s*stroke: var\(--color-ok-border\);\s*stroke-dasharray: none;/,
     );
     expect(rules).toMatch(/path\[data-combo='true'\]\[data-active='true'\] \{\s*opacity: 1;/);
+  });
+});
+
+describe('panels fit the visible screen on a phone (ID-272)', () => {
+  it('sizes by the dynamic viewport, never vh', () => {
+    // On a phone, 100vh is the tallest the screen gets with the browser's bars hidden: a
+    // Pixel 7 on its side, full screen, measured 383px against 303px shown, which pushed
+    // the pre-horde panel's Start off the bottom. 100dvh is what is shown; the same holds
+    // for the intro's smaller vh paddings and logo height.
+    expect(rules).not.toMatch(/(?<![a-z\d.])\d+(?:\.\d+)?vh\b/);
+    expect(rules).toMatch(/100dvh/);
   });
 });
