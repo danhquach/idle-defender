@@ -8762,6 +8762,39 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   flex-direction: column;
 }
 
+/* One size for every report (ID-260): the team's list holds four members (the most a patrol
+   takes), the finds' box four lines; more scrolls inside them, so the window never grows or
+   shrinks from report to report and OK stays put. */
+.map-report-team,
+.map-found-box {
+  box-sizing: content-box;
+  flex-wrap: nowrap;
+  height: calc(4lh + 3 * var(--space-4));
+  overflow-y: auto;
+  font-size: var(--text-sm);
+  /* A faint edge at the foot while more is below; the cover scrolls with the lines and hides
+     it at the end. */
+  background:
+    linear-gradient(transparent, var(--color-surface-sunken) 70%) 0 100% / 100% 14px no-repeat local,
+    linear-gradient(transparent, var(--color-text-faint)) 0 100% / 100% 6px no-repeat scroll;
+}
+
+.map-found-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.map-found-box > * {
+  flex: none;
+}
+
+.map-report-team:focus-visible,
+.map-found-box:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 .map-report-member {
   display: grid;
   grid-template-columns: minmax(64px, 7em) 3.5em 5em minmax(0, 1fr);

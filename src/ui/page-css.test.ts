@@ -1083,3 +1083,16 @@ describe('the camp tab bar on a phone-wide window (ID-258)', () => {
     expect(tab).toMatch(/font-size: var\(--text-sm\);/);
   });
 });
+
+describe('a patrol report is one size (ID-260)', () => {
+  it('the team list and the finds box have a set height for four lines and scroll past it', () => {
+    const both = /\n\.map-report-team,\n\.map-found-box \{([^}]*)\}/.exec(rules);
+    expect(both, 'no shared report-size rule').not.toBeNull();
+    expect(both![1]).toMatch(/(?:^|\s)height: calc\(4lh \+ 3 \* var\(--space-4\)\);/);
+    expect(both![1]).toMatch(/overflow-y: auto;/);
+    // A column that wraps would grow a second column instead of scrolling.
+    expect(both![1]).toMatch(/flex-wrap: nowrap;/);
+    expect(rules).toMatch(/\n\.map-found-box > \* \{\s*flex: none;/);
+    expect(both![1]).not.toMatch(/max-height|min-height/);
+  });
+});
