@@ -201,7 +201,14 @@ import {
   type SlotHit,
   type View,
 } from './projection.ts';
-import { drawScene, forgetBackdrop, type Aim, type CampView, type Scene } from './render.ts';
+import {
+  drawScene,
+  forgetBackdrop,
+  forgetWallAim,
+  type Aim,
+  type CampView,
+  type Scene,
+} from './render.ts';
 import { fightSpeed } from './fastforward.ts';
 import { createTurnPrompt, goLandscape } from './landscape.ts';
 import { TITLE_PICTURE, type Art } from './sprites.ts';
@@ -842,6 +849,7 @@ export function start(root: HTMLElement, art: Art): void {
   }
   /** Into fight `next`: from the build panel, or the horde-only start or result screen. */
   function startFight(next: HordeState): void {
+    forgetWallAim();
     horde = next;
     preview = null;
     endedAt = null;

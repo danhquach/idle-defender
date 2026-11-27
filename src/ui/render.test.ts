@@ -13,6 +13,7 @@ import {
   type Defender,
   type Layer,
   type Post,
+  WALL_GUN,
 } from '../core/horde.ts';
 import {
   CAMP,
@@ -93,6 +94,13 @@ import {
   twitch,
   bulletShape,
   drawScene,
+  forgetWallAim,
+  tracerColour,
+  turnToward,
+  wallGunAim,
+  wallGunTip,
+  WALL_GUN_AIM,
+  WALL_GUN_ART_CUT,
   limbPose,
   forgetBackdrop,
   DUSK,
@@ -968,7 +976,8 @@ describe('drawScene with art', () => {
     it('the wall gun stands on its segment with its own sprite, and nothing is drawn without the card', () => {
       expect(placed(wall).drawn).not.toContain('wall-gun');
       const gun = placed({ ...wall, taken: ['wall-machine-gun'] });
-      expect(count(gun, 'wall-gun')).toBe(1);
+      // Two source rectangles of the one image: the still pedestal and the turning gun (ID-271).
+      expect(count(gun, 'wall-gun')).toBe(2);
       expect(gun.drawn).not.toContain('turret-lit');
       // Firing: its shot and bullet draw a flash from its own muzzle without a throw.
       const firing = {
@@ -1005,7 +1014,10 @@ describe('drawScene with art', () => {
           taken: ['wall-machine-gun'],
           layers: base.layers.map((l, i) => (i === 0 ? { ...l, segments: mutate(l.segments) } : l)),
         } as Scene;
-        return placed(scene).at.filter((a) => a.id === 'wall-gun');
+        // The pedestal is the first of the sprite's two draws.
+        return placed(scene)
+          .at.filter((a) => a.id === 'wall-gun' && a.h > 0)
+          .slice(0, 1);
       };
       const built = { kind: 'wall', tier: 'wood', hp: 100, maxHp: 100 } as const;
       // Only rows 0 and 9 built: the gun is drawn once, on row 0 (the nearer to the middle ties to the first).
@@ -1022,6 +1034,179 @@ describe('drawScene with art', () => {
       const mid = guns((rows) => rows.map((s, i) => (i === 5 ? { ...s, ...built } : s)));
       expect(mid[0]!.y).toBeGreaterThan(top[0]!.y);
       expect(mid[0]!.y).toBeLessThan(low[0]!.y);
+    });
+
+    describe('the wall gun aims where it shoots (ID-271)', () => {
+      const round = (dx: number, dy: number, at = 0, owner = WALL_GUN): Bullet => {
+        const len = Math.hypot(dx, dy);
+        return {
+          x: 500 + (dx / len) * at,
+          y: 400 + (dy / len) * at,
+          dx: dx / len,
+          dy: dy / len,
+          speed: 2000,
+          damage: 1,
+          owner,
+          fromX: 500,
+          fromY: 400,
+          aim: 600,
+          left: 1400,
+          pierce: 0,
+          hit: [],
+          tracer: { colour: '#ffe9a0', length: 14 },
+        };
+      };
+      const aimed = (time: number, ...bullets: Bullet[]) => wallGunAim({ time, bullets });
+      beforeEach(() => forgetWallAim());
+
+      it('points along its newest round, as the screen sees the line: down the field is down, up is up', () => {
+        expect(aimed(1, round(1, 0))).toBeCloseTo(0, 9);
+        forgetWallAim();
+        const d = project({ x: 3, y: 4 }, { x: 0, y: 0, zoom: 1 });
+        expect(aimed(1, round(3, 4))).toBeCloseTo(Math.atan2(d.sy, d.sx), 9);
+        forgetWallAim();
+        expect(aimed(1, round(3, -4))).toBeLessThan(0);
+        // Another owner's round never steers it.
+        forgetWallAim();
+        expect(aimed(1, round(3, 4, 0, 'turret:1'))).toBe(0);
+      });
+
+      it('turns at a limited speed, not a snap, and arrives', () => {
+        const up = round(1, -1);
+        expect(aimed(1, round(1, 0))).toBe(0);
+        const a = aimed(1 + 1 / 60, up);
+        expect(a).toBeLessThan(0);
+        expect(Math.abs(a)).toBeCloseTo(WALL_GUN_AIM.speed / 60, 9);
+        // Calling again at the same time doesn't turn it further.
+        expect(aimed(1 + 1 / 60, up)).toBe(a);
+        let t = 1 + 1 / 60;
+        let last = a;
+        for (let i = 0; i < 2; i++) {
+          t += 1 / 60;
+          const next = aimed(t, up);
+          expect(next).toBeLessThan(last);
+          last = next;
+        }
+        const goal = Math.atan2(
+          project({ x: 1, y: -1 }, { x: 0, y: 0, zoom: 1 }).sy,
+          project({ x: 1, y: -1 }, { x: 0, y: 0, zoom: 1 }).sx,
+        );
+        expect(aimed(t + 1, up)).toBeCloseTo(goal, 9);
+        expect(turnToward(0, 1, 0)).toBe(0);
+        expect(turnToward(1, 0, 10)).toBe(0);
+      });
+
+      it('holds its last aim with no round in flight, and starts level in a new fight', () => {
+        const goal = aimed(1, round(1, -1));
+        const held = aimed(5, round(1, -1));
+        expect(held).toBeCloseTo(goal, 9);
+        expect(aimed(9)).toBe(held);
+        // The fight's clock starts over: level again.
+        expect(aimed(0.5)).toBe(0);
+      });
+
+      it('never turns past its arc, even for a target straight up, down or behind it', () => {
+        expect(aimed(1, round(0, -1))).toBeCloseTo(-WALL_GUN_AIM.max, 9);
+        forgetWallAim();
+        expect(aimed(1, round(0, 1))).toBeCloseTo(WALL_GUN_AIM.max, 9);
+        forgetWallAim();
+        expect(aimed(1, round(-1, -0.2))).toBeCloseTo(-WALL_GUN_AIM.max, 9);
+      });
+
+      it("the barrel end follows the turn: higher aimed up, lower aimed down, and its tip is the art's at rest", () => {
+        const up = wallGunTip(-WALL_GUN_AIM.max);
+        const level = wallGunTip(0);
+        const down = wallGunTip(WALL_GUN_AIM.max);
+        expect(up.z).toBeGreaterThan(level.z);
+        expect(level.z).toBeGreaterThan(down.z);
+        // Turned steeply it reaches less far ahead than level.
+        expect(up.dx).toBeLessThan(level.dx);
+        expect(down.dx).toBeLessThan(level.dx);
+        // At the art's own slope the tip is where the art has it: its tip px, off the sprite's centre.
+        const { size, tip } = WALL_GUN_ART_CUT;
+        const rest = wallGunTip(WALL_GUN_ART_CUT.rest);
+        expect(rest.dx).toBeCloseTo(((tip.u - size.w / 2) * 46) / ART_PX, 9);
+        expect(rest.z).toBeCloseTo(((size.h - tip.v) * 46) / ART_PX / HEIGHT_SCALE, 9);
+      });
+
+      it('a round leaves the barrel tip wherever it points, and joins its line at the aim', () => {
+        const cam = { x: 0, y: 0, zoom: 1 };
+        const base = withSegment(blank(), { kind: 'wall', tier: 'wood', hp: 100, maxHp: 100 });
+        const scene = (time: number, bullets: Bullet[]): Scene =>
+          ({ ...base, time, taken: ['wall-machine-gun'], bullets }) as Scene;
+        const floor = wallHeight(100, 100);
+        const first = round(1, -0.3, 0);
+        forgetWallAim();
+        const s0 = bulletShape(scene(1, [first]), first, cam);
+        const tip = wallGunTip(wallGunAim(scene(1, [first])));
+        // The gun stands on row 0 (y = half a segment), not on the row its rounds start from (400).
+        const row = 0.5 * SEGMENT_HEIGHT;
+        const at = project({ x: 500 + tip.dx, y: row, z: floor + tip.z }, cam);
+        expect(s0.head.sx).toBeCloseTo(at.sx, 6);
+        expect(s0.head.sy).toBeCloseTo(at.sy, 6);
+        expect(s0.inBarrel).toBe(false);
+        // At the aim it is on its true line; a round still behind the muzzle isn't drawn.
+        const landed = round(1, -0.3, 600);
+        expect(bulletShape(scene(1, [landed]), landed, cam).head.sx).toBeCloseTo(
+          project({ x: landed.x, y: landed.y }, cam).sx,
+          6,
+        );
+        const behind = round(1, -0.3, -70);
+        expect(bulletShape(scene(1, [behind]), behind, cam).inBarrel).toBe(true);
+        // Other guns' rounds are never held back.
+        const squad = round(1, 0, 0, 'defender-1');
+        expect(bulletShape(scene(1, [squad]), squad, cam).inBarrel).toBe(false);
+      });
+
+      it("its tracer is its own colour, apart from the squad's, the turret's and every warm or status colour", () => {
+        const wallGun = round(1, 0);
+        const squad = round(1, 0, 0, 'defender-1');
+        expect(tracerColour(wallGun)).toBe(COLOR.wallGunTracer);
+        expect(tracerColour(squad)).toBe('#ffe9a0');
+        const rival = [
+          TURRET.tracer.colour,
+          ...Object.values(WEAPONS).map((w) => ('tracer' in w ? w.tracer.colour : '')),
+          COLOR.popCrit,
+          COLOR.popTopCrit,
+          COLOR.flame,
+          COLOR.acid,
+          SHOCK.glow,
+          COLOR.popWeak,
+          COLOR.wallRepair,
+        ].filter((c) => c !== '');
+        expect(rival).not.toContain(COLOR.wallGunTracer);
+        // At least 45 degrees of hue from the nearest of them.
+        const hue = (hex: string): number => {
+          const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [
+            number,
+            number,
+            number,
+          ];
+          const max = Math.max(r, g, b);
+          const d = max - Math.min(r, g, b);
+          if (d === 0) return 0;
+          const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+          return (h * 60 + 360) % 360;
+        };
+        const gap = (a: number, b: number): number =>
+          Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+        const own = hue(COLOR.wallGunTracer);
+        const cool: string[] = [COLOR.popWeak, SHOCK.glow, COLOR.wallRepair];
+        for (const c of rival.filter((c) => !cool.includes(c))) {
+          expect(gap(own, hue(c)), c).toBeGreaterThan(45);
+        }
+        // The cool ones are no tracer: a damage number, a shock glow, a wall's repair pulse.
+        for (const c of cool) expect(gap(own, hue(c)), c).toBeGreaterThan(20);
+      });
+
+      it('the split rows sit inside the 192 x 157 art: the gun over the pedestal, overlapping on the neck', async () => {
+        const { readFileSync } = await import('node:fs');
+        const png = readFileSync(new URL('../assets/art/wall-gun.png', import.meta.url));
+        expect(png.readUInt32BE(16)).toBe(WALL_GUN_ART_CUT.size.w);
+        expect(png.readUInt32BE(20)).toBe(WALL_GUN_ART_CUT.size.h);
+        expect(WALL_GUN_ART_CUT.pedestal).toBeLessThan(WALL_GUN_ART_CUT.gun);
+        expect(WALL_GUN_ART_CUT.gun).toBeLessThan(WALL_GUN_ART_CUT.size.h);
+      });
     });
 
     it('the net is drawn across the band only while a pulse fires, fading in and out', () => {
