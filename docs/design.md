@@ -4186,6 +4186,7 @@ is unrelated: this feature is `tech` in the code.)
   research HP ramp from Horde 30 (`SQUAD_RESEARCH_HP`, ×1.08 at Horde 40 on, Nightmare and Hell included)
   that puts this player where today's unresearched player stands.
 - **Tier 4 cards (ID-264).** Rules in the epic card table (§8): Wall Machine Gun is a share (`CARD.wallGun.share`) of the horde's demand rate delivered from the wall, Shock Net and Tar Moat are dead in comfortable wins and pay only under pressure; the PM kept the ticket's placement (net in the 250-400 px band, moat on the wall's front). Byte identity: a game without the cards has none of `nextGunAt`, `nextNetAt`, `moat`, `gunDps` or `nettedUntil` on its state or enemies; `tier4-identity.test.ts` pins the digests. The probe is below.
+- **The wall gun's look (ID-271).** Its rounds draw as survivor tracers but in their own mint-teal (`COLOR.wallGunTracer`), a hue no gun, crit, burn, shock or poison effect uses. Its pedestal stands still while the gun turns about its mount to face its newest round's line, at most 10 rad/s and within about 55° of level, and holds that aim between bursts. The muzzle flash and the rounds start at the barrel tip. Draw only: the simulation, damage and save are unchanged.
 - **Tier 4 probe (ID-264, scratch script, 20 seeds, `squadAt(n, n)`; the pressured arm is Horde 9 with common rifles at level 4, 0/20 won bare).** Wins, mean fight s, the gun's HP share of the horde's whole HP:
 
 | Arm | Horde 4 | Horde 9 | Horde 9 pressured |

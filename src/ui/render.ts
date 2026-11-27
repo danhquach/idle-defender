@@ -252,6 +252,12 @@ export const COLOR = {
   conditionFill: '#a9c4d6',
   strike: '#f2f2f2',
   slug: '#fffbe8',
+  /**
+   * The Wall Machine Gun's tracer (ID-271): a mint-teal (hue 165°) no other effect uses. Squad and turret
+   * tracers are warm yellows, crits and burn orange and red, poison yellow-green (72°), shock and
+   * shield blue (200-210°), a weak-to hit's number cyan (190°).
+   */
+  wallGunTracer: '#34f0b8',
   /** The white spark where a bullet hits a body (ID-070). */
   hitSpark: '#ffffff',
   blood: '#8e1f1a',
@@ -1298,6 +1304,105 @@ function wallGunAt(
   };
 }
 
+/** Turns `angle` toward `target` by at most `WALL_GUN_AIM.speed` × `dt` rad, never past it. */
+export function turnToward(angle: number, target: number, dt: number): number {
+  const step = WALL_GUN_AIM.speed * Math.max(0, dt);
+  return angle + Math.max(-step, Math.min(step, target - angle));
+}
+
+/**
+ * Where the wall gun is aimed, drawn as the screen angle of its newest round's line (0 level toward
+ * the field, down positive), held within `WALL_GUN_AIM.max`; null with none in flight.
+ */
+function wallGunHeading(scene: Pick<Scene, 'bullets'>): number | null {
+  let heading: number | null = null;
+  let least = Infinity;
+  for (const b of scene.bullets) {
+    // Signed along its line, as `bulletShape` has it: a burst's rounds start behind the muzzle.
+    const flown = (b.x - b.fromX) * b.dx + (b.y - b.fromY) * b.dy;
+    if (b.owner !== WALL_GUN || flown >= least) continue;
+    const d = project({ x: b.dx, y: b.dy }, { x: 0, y: 0, zoom: 1 });
+    [heading, least] = [Math.atan2(d.sy, d.sx), flown];
+  }
+  return heading === null ? null : Math.max(-WALL_GUN_AIM.max, Math.min(WALL_GUN_AIM.max, heading));
+}
+
+/** The wall gun's turn as last drawn (ID-271) and the aim it was heading for. */
+let wallAim: { angle: number; target: number; time: number } | null = null;
+
+/** Levels the wall gun: the UI calls it as a fight starts (a replayed clock may not have gone back). */
+export function forgetWallAim(): void {
+  wallAim = null;
+}
+
+/**
+ * The wall gun's barrel angle now (ID-271): it eases toward its newest round's line at
+ * `WALL_GUN_AIM.speed` and holds its last aim between bursts. The fight's clock steps it, and a
+ * call at the same time returns the same angle without rescanning the bullets (the sprite, the flash
+ * and every round ask once each a frame); a clock gone back, or `forgetWallAim`, starts it level.
+ */
+export function wallGunAim(scene: Pick<Scene, 'bullets' | 'time'>): number {
+  if (wallAim !== null && scene.time === wallAim.time) return wallAim.angle;
+  const heading = wallGunHeading(scene);
+  if (wallAim === null || scene.time < wallAim.time) {
+    wallAim = { angle: heading ?? 0, target: heading ?? 0, time: scene.time };
+    return wallAim.angle;
+  }
+  const target = heading ?? wallAim.target;
+  wallAim = {
+    angle: turnToward(wallAim.angle, target, scene.time - wallAim.time),
+    target,
+    time: scene.time,
+  };
+  return wallAim.angle;
+}
+
+/**
+ * The barrel end of a wall gun aimed `aim` rad (`WALL_GUN_ART_CUT`): `dx` ahead of the gun's spot and
+ * `z` above the wall top, the art's tip turned about its pivot (screen px, so z is the height over
+ * `HEIGHT_SCALE`).
+ */
+export function wallGunTip(aim: number): { dx: number; z: number } {
+  const { size, pivot, tip, rest } = WALL_GUN_ART_CUT;
+  const turn = aim - rest;
+  const rx = tip.u - pivot.u;
+  const ry = tip.v - pivot.v;
+  const u = pivot.u + rx * Math.cos(turn) - ry * Math.sin(turn);
+  const v = pivot.v + rx * Math.sin(turn) + ry * Math.cos(turn);
+  const px = WALL_GUN_LOOK.height / ART_PX;
+  return { dx: (u - size.w / 2) * px, z: ((size.h - v) * px) / HEIGHT_SCALE };
+}
+
+/** Draws the wall gun (ID-271): its pedestal still, its gun turned to `aim` about its mount. */
+function drawWallGun(
+  ctx: CanvasRenderingContext2D,
+  img: Picture,
+  feet: { sx: number; sy: number },
+  aim: number,
+  cam: Camera,
+): void {
+  const { size, pedestal, gun, pivot, rest } = WALL_GUN_ART_CUT;
+  const k = (WALL_GUN_LOOK.height / ART_PX) * cam.zoom;
+  const left = feet.sx - (size.w * k) / 2;
+  const top = feet.sy - size.h * k;
+  ctx.drawImage(
+    img,
+    0,
+    pedestal,
+    size.w,
+    size.h - pedestal,
+    left,
+    top + pedestal * k,
+    size.w * k,
+    (size.h - pedestal) * k,
+  );
+  ctx.save();
+  ctx.translate(left + pivot.u * k, top + pivot.v * k);
+  ctx.rotate(aim - rest);
+  ctx.drawImage(img, 0, 0, size.w, gun, -pivot.u * k, -pivot.v * k, size.w * k, gun * k);
+  ctx.restore();
+}
+
 type Sprite = { y: number; x: number; draw: () => void };
 
 /** Where a turret's head sits: on top of its tower, or on its wall's walk platform. */
@@ -2243,7 +2348,9 @@ function muzzleAt(
   // The Wall Machine Gun (ID-264) fires from its own spot on the wall.
   if (owner === WALL_GUN) {
     const g = wallGunAt(scene);
-    return { x: x + WALL_GUN_LOOK.muzzle.dx, y, z: (g?.z ?? 0) + WALL_GUN_LOOK.muzzle.z };
+    const tip = wallGunTip(wallGunAim(scene));
+    // On its own segment's row, which is not always the row its rounds start from (the field's middle).
+    return { x: x + tip.dx, y: g?.y ?? y, z: (g?.z ?? 0) + tip.z };
   }
   // Found by who fired (`turret:<id>`, as the shot and its sound name it), like its flash.
   const turret = scene.turrets.find((t) => `${TURRET_OWNER}${t.id}` === owner);
@@ -2442,6 +2549,13 @@ export interface BulletShape {
   groundTail: Point;
   /** The tail's length in world px along the flight. */
   length: number;
+  /** A wall gun round still behind its barrel tip (ID-271): not drawn yet. */
+  inBarrel: boolean;
+}
+
+/** A bullet's tracer colour: its gun's, but the wall gun's own (ID-271) whatever the core says. */
+export function tracerColour(b: Pick<Bullet, 'owner' | 'tracer'>): string {
+  return b.owner === WALL_GUN ? COLOR.wallGunTracer : b.tracer.colour;
 }
 
 /**
@@ -2453,25 +2567,36 @@ export interface BulletShape {
  * and never reaches back past the muzzle.
  */
 export function bulletShape(scene: Scene, b: Bullet, cam: Camera): BulletShape {
-  const muzzle = muzzleAt(scene, b.fromX, b.fromY, b.owner).z;
-  const flown = Math.hypot(b.x - b.fromX, b.y - b.fromY);
+  const m = muzzleAt(scene, b.fromX, b.fromY, b.owner);
+  const muzzle = m.z;
+  // A wall gun's burst is staggered back behind its muzzle (`CARD.wallGun.gap`), so its distance is signed.
+  const wall = b.owner === WALL_GUN;
+  const flown = wall
+    ? (b.x - b.fromX) * b.dx + (b.y - b.fromY) * b.dy
+    : Math.hypot(b.x - b.fromX, b.y - b.fromY);
   let lead = Math.max(0, Math.min(b.speed * (scene.acc ?? 0), b.left));
   if (flown < b.aim) lead = Math.min(lead, b.aim - flown);
   const at = flown + lead;
   const pace = tailPace(scene.pace);
-  const length = Math.min(b.tracer.length + b.speed * TAIL.frame * pace, at);
+  const length = Math.min(b.tracer.length + b.speed * TAIL.frame * pace, Math.max(at, 0));
   const zAt = (d: number): number =>
-    muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? d / b.aim : 1);
-  const hx = b.x + b.dx * lead;
-  const hy = b.y + b.dy * lead;
-  const tx = hx - b.dx * length;
-  const ty = hy - b.dy * length;
+    muzzle + (ENEMY.z - muzzle) * Math.min(1, b.aim > 0 ? Math.max(d, 0) / b.aim : 1);
+  // The wall gun's rounds leave the barrel tip, wherever it points, and join their true line by the
+  // spot they were aimed at (ID-271): the tip's offset from where they started shrinks to nothing.
+  const reachX = wall ? m.x - b.fromX : 0;
+  const reachY = wall ? m.y - b.fromY : 0;
+  const left = (d: number): number => 1 - Math.min(1, Math.max(0, b.aim > 0 ? d / b.aim : 1));
+  const hx = b.x + b.dx * lead + reachX * left(at);
+  const hy = b.y + b.dy * lead + reachY * left(at);
+  const tx = hx - b.dx * length + reachX * (left(at - length) - left(at));
+  const ty = hy - b.dy * length + reachY * (left(at - length) - left(at));
   return {
     head: project({ x: hx, y: hy, z: zAt(at) }, cam),
     tail: project({ x: tx, y: ty, z: zAt(at - length) }, cam),
     groundHead: project({ x: hx, y: hy }, cam),
     groundTail: project({ x: tx, y: ty }, cam),
     length,
+    inBarrel: wall && at < 0,
   };
 }
 
@@ -2511,7 +2636,9 @@ function drawBullets(
   bullets: readonly Bullet[],
   cam: Camera,
 ): void {
-  const shapes = bullets.map((b) => ({ ...bulletShape(scene, b, cam), colour: b.tracer.colour }));
+  const shapes = bullets
+    .map((b) => ({ ...bulletShape(scene, b, cam), colour: tracerColour(b) }))
+    .filter((s) => !s.inBarrel);
   const w = sized(BULLET.head.w, cam);
   const end = BULLET.tail.end * cam.zoom;
   const capsule = (s: (typeof shapes)[number], colour: string, width: number): void => {
@@ -4876,11 +5003,11 @@ export function drawScene(
       y: wallGun.y,
       x: wallGun.x,
       draw: () => {
-        drawStanding(
+        drawWallGun(
           ctx,
           art[WALL_GUN_ART],
           project({ x: wallGun.x, y: wallGun.y, z: wallGun.z }, cam),
-          WALL_GUN_LOOK.height,
+          wallGunAim(scene),
           cam,
         );
         drawFlash(ctx, scene, WALL_GUN, wallGun.x, wallGun.y, cam);
@@ -5259,8 +5386,29 @@ const MOAT_LOOK = {
   flameRadius: 70,
 } as const;
 const NET_LOOK = { alpha: 0.65, seconds: 0.5 } as const;
-/** The Wall Machine Gun's sprite height (px at zoom 1, as `MORTAR.height`) and its barrel end on it. */
-const WALL_GUN_LOOK = { height: 46, muzzle: { dx: 27, z: 28 } } as const;
+/** The Wall Machine Gun's sprite height (px at zoom 1, as `MORTAR.height`). */
+const WALL_GUN_LOOK = { height: 46 } as const;
+/**
+ * The Wall Machine Gun's art cut in two (ID-271), in px of `wall-gun.png` (192 × 157): the pedestal
+ * (rows `pedestal` down) stands still, the gun (rows 0 to `gun`) turns about `pivot` (the top of its
+ * mount) to point where it shoots. The two overlap on the pedestal's neck so no gap opens as it
+ * turns. `tip` is the barrel's end, and `rest` how far the art's barrel points below level (3/4 view),
+ * so a gun turned to a heading of 0 draws its barrel level. Both are source rectangles of the one
+ * preloaded image, not cut canvases (ID-087, ID-110).
+ */
+export const WALL_GUN_ART_CUT = {
+  size: { w: 192, h: 157 },
+  pedestal: 78,
+  gun: 84,
+  pivot: { u: 88, v: 68 },
+  tip: { u: 190, v: 68 },
+  rest: 0.3,
+} as const;
+/**
+ * How the wall gun turns: at most `speed` rad/s toward its target, which is held within `max` rad of
+ * level (about 55°) so it never swings round to face the camp or the sky.
+ */
+export const WALL_GUN_AIM = { speed: 10, max: 0.96 } as const;
 
 /**
  * Tar Moat (ID-264): the tar band's art (`MOAT_ART`) tiled along the outermost wall face, flat on
