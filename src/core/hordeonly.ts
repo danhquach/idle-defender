@@ -127,6 +127,7 @@ import {
   type ModeProgress,
 } from './modes.ts';
 import { chance, createRng, pick } from './rng.ts';
+import { techOf } from './techtree.ts';
 import { classOf, fitContext, memberSums, powerOver, type FitContext } from './traits.ts';
 import { themeCleared, themeOf, THEME_GUN_STREAM, withCleared } from './themes.ts';
 import { enemyHp, swarmWave, themeMix, themeScale, waveCount, waveMix, waveSize } from './waves.ts';
@@ -883,6 +884,7 @@ export function startSquadHorde(
     harder: true,
     skills: [...game.skillPick],
     freeSkills: { power: skillPickPower(game.skillPick) },
+    tech: techOf(game),
   });
   if (mode !== 'normal') s.mode = mode;
   // The rest of the squad take their slots too.

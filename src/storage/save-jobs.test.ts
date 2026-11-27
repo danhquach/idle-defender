@@ -33,7 +33,7 @@ function reread(game: GameState, change: (json: Loose) => void, v = SAVE_VERSION
 
 describe('save: professions (ID-149)', () => {
   it('is version 26 (18 was ID-149’s), and round-trips every profession on the roster and in the reserve', () => {
-    expect(SAVE_VERSION).toBe(26);
+    expect(SAVE_VERSION).toBe(27);
     for (const job of JOB_IDS) {
       const g = squad();
       g.roster[1] = { ...g.roster[1]!, job };

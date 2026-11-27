@@ -2535,3 +2535,161 @@ export const CAR = {
 } as const satisfies { cost: Partial<Stock>; limit: number; more: number; gasPer: number };
 /** How a patrol's odds read before it leaves (design §10 Risk and reward). */
 export type RiskRating = (typeof PATROL.risk)[number]['rating'];
+
+// --- Research Center (ID-263). Design §11 "Research Center". ---
+
+/** Research Center nodes (ID-263). The order is save format: append only. A node's prerequisite comes before it. */
+export const TECH_IDS = [
+  'reinforced-wall',
+  'steel-plating',
+  'spiked-wall',
+  'razor-wire',
+  'thick-coils',
+  'electric-wire',
+  'hand-loads',
+  'armour-piercing',
+  'quick-mortars',
+  'wide-slick',
+  'napalm-mortar',
+] as const;
+export type TechId = (typeof TECH_IDS)[number];
+export type TechBranch = 'wall' | 'wire' | 'ammo' | 'mortars';
+/** The chart's rows, top to bottom. */
+export const TECH_BRANCHES: readonly { id: TechBranch; name: string }[] = [
+  { id: 'wall', name: 'Wall' },
+  { id: 'wire', name: 'Barbed Wire' },
+  { id: 'ammo', name: 'Ammo' },
+  { id: 'mortars', name: 'Mortars' },
+];
+export interface TechNode {
+  name: string;
+  branch: TechBranch;
+  tier: 1 | 2 | 3;
+  /** Scrap. */
+  cost: number;
+  /** The node that has to be researched first; null for a Tier 1 node. */
+  needs: TechId | null;
+  /** What it does, in the detail panel and a Tier 3 confirm. */
+  effect: string;
+}
+/** The nodes, one per id; the Scrap costs add up to 9,300. */
+export const TECH: Readonly<Record<TechId, TechNode>> = {
+  'reinforced-wall': {
+    name: 'Reinforced Wall',
+    branch: 'wall',
+    tier: 1,
+    cost: 200,
+    needs: null,
+    effect: 'Wall HP +15% in every fight.',
+  },
+  'steel-plating': {
+    name: 'Steel Plating',
+    branch: 'wall',
+    tier: 2,
+    cost: 600,
+    needs: 'reinforced-wall',
+    effect: 'Wall HP +30% in every fight, in place of the +15%.',
+  },
+  'spiked-wall': {
+    name: 'Spiked Wall',
+    branch: 'wall',
+    tier: 3,
+    cost: 1500,
+    needs: 'steel-plating',
+    effect: "Crawlers climbing the wall lose 20% of a Shambler's HP a second.",
+  },
+  'razor-wire': {
+    name: 'Razor Wire',
+    branch: 'wire',
+    tier: 1,
+    cost: 200,
+    needs: null,
+    effect: "Barbed Wire's bleed +25%.",
+  },
+  'thick-coils': {
+    name: 'Thick Coils',
+    branch: 'wire',
+    tier: 2,
+    cost: 600,
+    needs: 'razor-wire',
+    effect: 'Barbed Wire rows have +50% HP.',
+  },
+  'electric-wire': {
+    name: 'Electric Wire',
+    branch: 'wire',
+    tier: 3,
+    cost: 1500,
+    needs: 'thick-coils',
+    effect:
+      "An enemy entering Barbed Wire is stunned for 1 s (then can't be stunned again for 3 s).",
+  },
+  'hand-loads': {
+    name: 'Hand-loads',
+    branch: 'ammo',
+    tier: 1,
+    cost: 400,
+    needs: null,
+    effect:
+      'When you pick one of these cards, it is 10% stronger: Heavy Rounds, Incendiary Rounds, Shock Rounds, Piercing Rounds, Scavenged Ammo.',
+  },
+  'armour-piercing': {
+    name: 'Armour-piercing',
+    branch: 'ammo',
+    tier: 2,
+    cost: 1200,
+    needs: 'hand-loads',
+    effect: 'While the squad holds one of those five ammo cards, its bullets ignore 20% of armour.',
+  },
+  'quick-mortars': {
+    name: 'Quick Mortars',
+    branch: 'mortars',
+    tier: 1,
+    cost: 300,
+    needs: null,
+    effect: 'Oil Bomb fires every 16 s instead of 20 (the first throw is as soon as ever).',
+  },
+  'wide-slick': {
+    name: 'Wide Slick',
+    branch: 'mortars',
+    tier: 2,
+    cost: 800,
+    needs: 'quick-mortars',
+    effect: 'Oil Bomb slicks are 25% wider.',
+  },
+  'napalm-mortar': {
+    name: 'Napalm Mortar',
+    branch: 'mortars',
+    tier: 3,
+    cost: 2000,
+    needs: 'wide-slick',
+    effect: 'Oil Bomb slicks land already burning, and stay for their full 10 s.',
+  },
+};
+/** The effect numbers of the nodes (ID-263), starting points; Spiked Wall's `spikes` is the first lever. */
+export const TECH_FX = {
+  /** Wall HP share added; the highest researched counts, not the sum. */
+  wallHp: { 'reinforced-wall': 0.15, 'steel-plating': 0.3 },
+  /** Share of this wave's Shambler HP a second a climbing Crawler loses. */
+  spikes: 0.2,
+  /** Barbed Wire's bleed factor, and its row HP factor. */
+  bleed: 1.25,
+  wireHp: 1.5,
+  /** Electric Wire's stun in seconds (the immunity after it is the Flashbang's). */
+  shockSeconds: 1,
+  /** Hand-loads' factor on an ammo card's number, and Armour-piercing's share of armour ignored. */
+  ammo: 1.1,
+  pierce: 0.2,
+  /** Quick Mortars' seconds between Oil Bombs, and Wide Slick's radius factor. */
+  oilEvery: 16,
+  slick: 1.25,
+  /** The cards the Ammo branch strengthens. */
+  ammoCards: [
+    'hollow-points',
+    'incendiary-rounds',
+    'shock-rounds',
+    'piercing-rounds',
+    'scavenged-ammo',
+  ],
+  /** Offer weight a researched node adds to its branch's cards, and the cap on all the extra weight (share of the pool). */
+  weight: { perNode: 0.15, cap: 0.25 },
+} as const;

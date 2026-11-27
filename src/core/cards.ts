@@ -8,13 +8,18 @@ import {
   RECRUIT_CHANCE,
   REROLL,
   RESEARCH_CARDS,
+  TECH,
+  TECH_FX,
   WALL,
   type BossSkill,
   type CardRarity,
   type ModeCard,
   type ResearchCard,
+  type TechBranch,
+  type TechId,
 } from './data.ts';
 import {
+  ammoBoost,
   cardLevel,
   perkFactor,
   perkScale,
@@ -243,7 +248,7 @@ export const UPGRADES: Readonly<
   'oil-bomb': {
     name: 'Oil Bomb',
     // The gain and its cost (ID-137): a slow shell, a long wait, and a lit slick burns out.
-    text: `Tar slick every ${CARD.oil.every} s: ${Math.round(CARD.oil.slow * 100)}% slower for ${CARD.oil.seconds} s, lit by Incendiary or Molotov fire (${Math.round(CARD.oil.burn * 100)}% of a Shambler’s HP a second); but it lands ${CARD.oil.flight} s late, and a lit slick burns out in ${CARD.oil.burnFor} s`,
+    text: oilText([]),
     category: 'behaviour',
     rarity: 'epic',
     levels: 1,
@@ -486,6 +491,23 @@ export function synergyOf(state: HordeState, id: UpgradeId): string | null {
   return null;
 }
 
+/**
+ * Oil Bomb's card text (ID-263): one builder for the table's constant (nothing researched) and
+ * the offer card's (`pitch`), so the two can't drift. Quick Mortars shortens the wait; Napalm
+ * Mortar lands the slick burning, with its full life.
+ */
+function oilText(tech: readonly TechId[]): string {
+  const every = tech.includes('quick-mortars') ? TECH_FX.oilEvery : CARD.oil.every;
+  const napalm = tech.includes('napalm-mortar');
+  const lit = napalm ? 'lands already burning' : 'lit by Incendiary or Molotov fire';
+  const out = napalm ? '' : `, and a lit slick burns out in ${CARD.oil.burnFor} s`;
+  return `Tar slick every ${every} s: ${Math.round(CARD.oil.slow * 100)}% slower for ${CARD.oil.seconds} s, ${lit} (${Math.round(CARD.oil.burn * 100)}% of a Shambler’s HP a second); but it lands ${CARD.oil.flight} s late${out}`;
+}
+
+/** Heavy Rounds' damage factor, with Hand-loads' share of it added (ID-263). */
+const heavyDamage = (s: Pick<HordeState, 'tech'>): number =>
+  ammoBoost(s) === 1 ? CARD.heavyRounds.damage : 1 + (CARD.heavyRounds.damage - 1) * ammoBoost(s);
+
 /** A share as a percent, to one decimal when not whole: 25%, 7.5%. */
 const pct = (x: number): string => `${Number((x * 100).toFixed(1))}%`;
 /** A factor with at most 2 decimals and no trailing zeros: 1.33, 1.67, 2. */
@@ -498,8 +520,11 @@ const factor = (x: number): string => String(Number(x.toFixed(2)));
 export function effectAt(
   id: UpgradeId,
   n: number,
+  /** The Research Center nodes researched (ID-263): Hand-loads shows its stronger numbers. */
+  tech: readonly TechId[] = [],
 ): { pre: string; value: string; post: string } | null {
   const lv = (levels: readonly number[]): number => levels[Math.min(levels.length, n) - 1]!;
+  const boost = tech.includes('hand-loads') ? TECH_FX.ammo : 1;
   switch (id) {
     case 'sharpshooter':
       return { pre: '', value: `+${pct(CARD.step.damage * n)}`, post: ' damage' };
@@ -534,13 +559,13 @@ export function effectAt(
     case 'scavenged-ammo':
       return {
         pre: 'Each gun shot has a ',
-        value: pct(lv(CARD.scavenge)),
+        value: pct(Math.min(1, lv(CARD.scavenge) * boost)),
         post: ' chance not to use a round',
       };
     case 'piercing-rounds':
       return {
         pre: 'Bullets go through 1 more enemy ',
-        value: pct(lv(CARD.pierce)),
+        value: pct(Math.min(1, lv(CARD.pierce) * boost)),
         post: ' of the time',
       };
     case 'ricochet':
@@ -552,13 +577,13 @@ export function effectAt(
     case 'incendiary-rounds':
       return {
         pre: 'Hits set enemies on fire: ',
-        value: pct(lv(CARD.burn.share)),
+        value: pct(lv(CARD.burn.share) * boost),
         post: ` of a Shambler’s HP a second for ${CARD.burn.seconds} s`,
       };
     case 'shock-rounds':
       return {
         pre: 'Hits paralyse enemies for ',
-        value: `${lv(CARD.shock.seconds)} s`,
+        value: `${Number((lv(CARD.shock.seconds) * boost).toFixed(2))} s`,
         post: ' (half on the big ones)',
       };
     // Thrown on their own, so each says how many and how often (design review, ID-139, ID-178).
@@ -607,8 +632,9 @@ export function pitch(state: HordeState, id: UpgradeId): CardPitch {
   const u = UPGRADES[id];
   const held = took(state, id) ? cardLevel(state, id) : 0;
   const next = held + 1;
-  const at = effectAt(id, next);
-  const was = held > 0 ? effectAt(id, held) : null;
+  const tech = state.tech ?? [];
+  const at = effectAt(id, next, tech);
+  const was = held > 0 ? effectAt(id, held, tech) : null;
   let effect: CardPitch['effect'] = at
     ? { pre: at.pre, from: was ? was.value : null, to: at.value, post: at.post }
     : null;
@@ -620,6 +646,11 @@ export function pitch(state: HordeState, id: UpgradeId): CardPitch {
     effect = { pre: 'Repairs ', from: null, to: `${Math.round(hp)} HP`, post: across };
     text = `Repairs ${Math.round(hp)} HP${across}`;
   }
+  // Research Center (ID-263): the constant texts are the unresearched numbers.
+  if (id === 'hollow-points' && tech.includes('hand-loads')) {
+    text = `+${pct((CARD.heavyRounds.damage - 1) * TECH_FX.ammo)} damage, +${Math.round((CARD.heavyRounds.reload - 1) * 100)}% reload time`;
+  }
+  if (id === 'oil-bomb') text = oilText(tech);
   let tag: string;
   let tagSpoken: string;
   if (u.levels === 1) {
@@ -654,8 +685,49 @@ export function pitch(state: HordeState, id: UpgradeId): CardPitch {
   return out;
 }
 
-/** A rarity rolled from this wave's odds, then the next one down, then up, until one has a card. */
-function rollUpgrade(rng: Rng, pool: readonly UpgradeId[], wave: number): UpgradeId {
+/**
+ * The cards the Ammo branch strengthens (ID-263). Wider than `AMMO_CARDS`, the exclusive ammo
+ * slot (Incendiary and Shock only): it adds Heavy Rounds, Piercing Rounds and Scavenged Ammo.
+ */
+export const TECH_AMMO_CARDS: readonly UpgradeId[] = TECH_FX.ammoCards;
+/** The cards each branch's researched nodes raise the offer weight of (ID-263); the wall has none. */
+export const TECH_CARDS: Readonly<Record<TechBranch, readonly UpgradeId[]>> = {
+  wall: [],
+  wire: ['barbed-wire'],
+  ammo: TECH_AMMO_CARDS,
+  mortars: ['oil-bomb'],
+};
+
+/**
+ * Each card of `pool`'s offer weight (ID-263), in `pool` order: 1, plus `TECH_FX.weight.perNode`
+ * for every researched node in a branch that lists it. All the extra weight together is capped
+ * at `TECH_FX.weight.cap` of the pool's size (every extra scaled down alike), so a small pool
+ * is not taken over. All 1s with nothing researched.
+ */
+export function offerWeights(pool: readonly UpgradeId[], tech: readonly TechId[]): number[] {
+  const { perNode, cap } = TECH_FX.weight;
+  const extra = pool.map(
+    (id) =>
+      perNode *
+      tech.filter((t) => (TECH_CARDS[TECH[t].branch] as readonly UpgradeId[]).includes(id)).length,
+  );
+  const sum = extra.reduce((a, b) => a + b, 0);
+  const limit = cap * pool.length;
+  const scale = sum > limit ? limit / sum : 1;
+  return extra.map((x) => 1 + x * scale);
+}
+
+/**
+ * A rarity rolled from this wave's odds, then the next one down, then up, until one has a card.
+ * `weights` (from `offerWeights` over the whole pool, ID-263) tilts the pick inside the rarity;
+ * with every weight there 1 it is the plain `pick`, the same single draw.
+ */
+function rollUpgrade(
+  rng: Rng,
+  pool: readonly UpgradeId[],
+  wave: number,
+  weights?: ReadonlyMap<UpgradeId, number>,
+): UpgradeId {
   const odds = rarityOdds(wave);
   const total = odds.common + odds.rare + odds.epic;
   let roll = rng() * total;
@@ -664,7 +736,12 @@ function rollUpgrade(rng: Rng, pool: readonly UpgradeId[], wave: number): Upgrad
   const order = [...RARITIES.slice(0, at + 1).reverse(), ...RARITIES.slice(at + 1)];
   for (const r of order) {
     const ids = pool.filter((id) => UPGRADES[id].rarity === r);
-    if (ids.length > 0) return pick(rng, ids);
+    if (ids.length === 0) continue;
+    const w = ids.map((id) => weights?.get(id) ?? 1);
+    if (w.every((x) => x === 1)) return pick(rng, ids);
+    let left = rng() * w.reduce((a, b) => a + b, 0);
+    const chosen = w.findIndex((x) => (left -= x) < 0);
+    return ids[chosen < 0 ? ids.length - 1 : chosen]!;
   }
   throw new RangeError('rollUpgrade: no card left');
 }
@@ -687,7 +764,11 @@ function rollCard(rng: Rng, state: HordeState, shown: readonly Card[]): Card | n
   const left = UPGRADE_IDS.filter((id) => !showing.has(id) && eligible(state, id));
   // Five repeatable cards are always eligible, so 3 slots run dry only when bans or a
   // small card pool take them (ID-210).
-  return left.length === 0 ? null : { kind: 'upgrade', id: rollUpgrade(rng, left, state.wave) };
+  if (left.length === 0) return null;
+  const tech = state.tech ?? [];
+  const w = tech.length === 0 ? [] : offerWeights(left, tech);
+  const weights = tech.length === 0 ? undefined : new Map(left.map((id, i) => [id, w[i]!]));
+  return { kind: 'upgrade', id: rollUpgrade(rng, left, state.wave, weights) };
 }
 
 /**
@@ -842,7 +923,7 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
     case 'hollow-points':
       s.mods.damage =
         (1 + CARD.step.damage * stack(s, 'sharpshooter')) *
-        (took(s, 'hollow-points') ? CARD.heavyRounds.damage : 1);
+        (took(s, 'hollow-points') ? heavyDamage(s) : 1);
       break;
     case 'rapid-fire':
       s.mods.fireRate = 1 + CARD.step.fireRate * stack(s, 'rapid-fire');

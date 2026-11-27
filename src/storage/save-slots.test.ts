@@ -45,7 +45,7 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}, v = SAVE
 
 describe('save: bought slots and Scrap (ID-179)', () => {
   it('is version 26, and the owned-weapon cap fits 80 in the stash and every pair of hands', () => {
-    expect(SAVE_VERSION).toBe(26);
+    expect(SAVE_VERSION).toBe(27);
     expect(MAX_OWNED).toBeGreaterThanOrEqual(80 + 2 * 40);
   });
 

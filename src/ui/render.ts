@@ -47,6 +47,7 @@ import {
   sandbagged,
   SAVE_CUE,
   mortars,
+  slickRadius,
   took,
   turretState,
   type Bullet,
@@ -4716,11 +4717,11 @@ export function drawScene(
     const { tar, scorch } = slickLook(scene.time, k);
     if (scorch > 0) {
       ctx.globalAlpha = scorch;
-      groundArt(ctx, art[SCORCH_ART], k.x, k.y, CARD.oil.radius, cam);
+      groundArt(ctx, art[SCORCH_ART], k.x, k.y, slickRadius(k), cam);
     }
     if (tar > 0) {
       ctx.globalAlpha = tar;
-      groundArt(ctx, art[BASE_ART.slick], k.x, k.y, CARD.oil.radius * SLICK.art, cam);
+      groundArt(ctx, art[BASE_ART.slick], k.x, k.y, slickRadius(k) * SLICK.art, cam);
     }
     ctx.globalAlpha = 1;
   }
@@ -4947,7 +4948,7 @@ export function drawScene(
       y: k.y,
       x: k.x,
       draw: () => {
-        const look = molotovLook(fire, scene.time, flameClock, cam, CARD.oil.radius);
+        const look = molotovLook(fire, scene.time, flameClock, cam, slickRadius(k));
         if (look) paintFire(ctx, look);
       },
     });
