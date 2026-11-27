@@ -1,7 +1,8 @@
 // Guard (ID-269): player-facing text lives in src/ui/text, not in the simulation, so that
 // rewording never counts as a sim change (src/core is what the balance cache hashes). Scans
 // every non-test core source with the TypeScript parser for a string that reads as a sentence
-// (a word, a space, a lowercase word) and any string under a text key (name, text, tip,
+// (a word, a space, a lowercase word), a capitalised word, a piece of a `+`-built sentence,
+// and any string under a text key (name, text, tip,
 // reason, label, title, role, trait). Throw and `new …Error` messages are dev text and pass.
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -18,6 +19,10 @@ const NAME_LISTS = ['RECRUIT_NAMES', 'STARTER_ROSTER'];
 
 const TEXT_KEYS = new Set(['name', 'text', 'tip', 'reason', 'label', 'title', 'role', 'trait']);
 const SENTENCE = /[A-Za-z][A-Za-z'’]* +[a-z]/;
+/** A capitalised word ("Rifle", "Field Repairs"): a name or the start of a sentence. */
+const CAPITAL = /^[A-Z][a-z]/;
+/** A piece of a sentence built with `+`: a word with a space before or after it. */
+const FRAGMENT = /^\s+[A-Za-z]|[A-Za-z]\s+$/;
 
 /** What a literal says, a template's holes as `${}`. */
 const textOf = (n: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression) =>
@@ -57,7 +62,8 @@ function textHits(source: string): string[] {
         ts.isPropertyAssignment(p) &&
         p.initializer === n &&
         TEXT_KEYS.has(p.name.getText().replace(/['"]/g, ''));
-      if ((keyed || SENTENCE.test(text)) && !isError(n) && !inNameList(n)) {
+      const wordy = SENTENCE.test(text) || CAPITAL.test(text) || FRAGMENT.test(text);
+      if ((keyed || wordy) && !isError(n) && !inNameList(n)) {
         hits.push(`${file.getLineAndCharacterOfPosition(n.getStart()).line + 1}: ${text}`);
       }
       return;
@@ -98,6 +104,10 @@ describe('no player-facing text in src/core (ID-269)', () => {
     expect(textHits('const c = { text: `Hits ${n} enemies` };')).toHaveLength(1);
     expect(textHits("const why = 'Not ready yet';")).toHaveLength(1);
     expect(textHits('const why = `The squad is full (${n}/${n})`;')).toHaveLength(1);
+    // A Title Case name under any key, and a sentence split with `+` (ID-269 review).
+    expect(textHits("const SKILL = { fieldRepairs: 'Field Repairs' };")).toHaveLength(1);
+    expect(textHits("const g = ['Rifle'];")).toHaveLength(1);
+    expect(textHits("const s = 'hits ' + n + ' enemies';")).toHaveLength(2);
   });
 
   it('passes throw and Error messages, ids, codes and survivor names', () => {

@@ -85,7 +85,7 @@ export function entryOf(
   const from = Math.max(1, game.perkLevels[perk]);
   const at = Math.min(from, PERK_LEVEL.top - 1) - 1;
   return {
-    level: from + 1,
+    level: entryLevel(game, id),
     genes: PERK_LEVEL.genes[at]!,
     minutes: PERK_LEVEL.minutes[at]!,
   };
