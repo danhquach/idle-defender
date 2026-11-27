@@ -5041,12 +5041,17 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     flex-direction: column;
   }
 
-  /* A set height, not a cap: the grid above never grows or shrinks from gun to gun. */
+  /* A set height, not a cap: the grid above never grows or shrinks from gun to gun. When the
+     dock is taller than the box (ID-257: at 320 px it ran past the box, under the camp
+     window's Close), the box scrolls down to the last button; where it fits, only the lines
+     scroll (ID-198). */
   .inv-details {
     width: auto;
     height: 55%;
     border-top: 1px solid var(--color-divider);
     border-left: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   /* The confirm on one row: the 3 guns it uses up, then the one it makes; its name under. */
@@ -5056,9 +5061,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     gap: var(--space-4) var(--space-16);
   }
 
-  /* Tighter on a phone, so a confirm's tiles, name and DPS all show above the dock. */
+  /* Tighter on a phone, so a confirm's tiles, name and DPS all show above the dock; about one
+     line (the gun's name) always shows above it (ID-257). */
   .inv-details-info {
-    padding: var(--space-10) var(--space-16);
+    min-height: 1lh;
+    padding: var(--space-8) var(--space-16);
   }
 
   .inv-combine-confirm > :nth-child(1) {
@@ -5421,9 +5428,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   cursor: pointer;
 }
 
+/* A phone: the menus share the row, each at least as wide as its choice; when the row can't
+   hold them all whole, it wraps rather than cut a label (ID-257). */
 @media (max-width: 480px) {
   .inv-pick {
-    flex: 1 1 0;
+    flex: 1 1 auto;
   }
 }
 
