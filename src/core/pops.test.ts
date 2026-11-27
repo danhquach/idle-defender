@@ -217,3 +217,43 @@ describe('damage numbers on the wall, at its last HP (ID-082)', () => {
     expect(t.pops.map((p) => [p.on, p.amount])).toEqual([['wall', 3]]);
   });
 });
+
+describe('orange crit numbers (ID-262)', () => {
+  it('a top crit bullet leaves a top number, apart from a plain crit on the same enemy', () => {
+    const s = holding();
+    enemy(s, tough);
+    shoot(s, { damage: 12, crit: true });
+    shoot(s, { damage: 30, crit: true, top: true });
+    shoot(s, { damage: 12, crit: true });
+    shoot(s, { damage: 30, crit: true, top: true });
+    const t = tick(s, STEP);
+    expect(t.pops.map((p) => [p.amount, p.crit, p.top ?? false])).toEqual([
+      [24, true, false],
+      [60, true, true],
+    ]);
+  });
+
+  it('a plain hit or a plain crit carries no top mark', () => {
+    const s = holding();
+    enemy(s, tough);
+    shoot(s);
+    shoot(s, { damage: 12, crit: true });
+    expect(tick(s, STEP).pops.every((p) => !('top' in p))).toBe(true);
+  });
+});
+
+describe('a Ricochet keeps an orange crit (ID-262)', () => {
+  it('the bounce off a top crit round leaves a top number on the next enemy', () => {
+    const s = holding();
+    s.taken = ['ricochet'];
+    s.cardLevels = { ricochet: 1 };
+    const first = enemy(s, tough);
+    const next = enemy(s, { ...tough, x: 640, y: 380 });
+    shoot(s, { damage: 30, crit: true, top: true });
+    const t = steps(s, 10);
+    const on = (id: number) => t.pops.filter((p) => p.key === `e${id}`);
+    expect(on(first.id).map((p) => [p.crit, p.top])).toEqual([[true, true]]);
+    expect(on(next.id).length).toBeGreaterThan(0);
+    expect(on(next.id).every((p) => p.crit && p.top === true)).toBe(true);
+  });
+});

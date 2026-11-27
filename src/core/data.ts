@@ -1737,6 +1737,13 @@ export const LEVEL_HALF = 20;
 export const ARMOUR_FLOOR = 0.5;
 /** A crit's damage multiplier, before a gun's or a card's crit damage. */
 export const CRIT_DAMAGE = 2;
+/**
+ * A crit whose multiplier is at least this shows its damage number orange, not yellow (ID-262):
+ * 90% of the ×3.61 ceiling (×2, +0.5 from the Sniper rifle's trait or a Carbine's crit damage
+ * affix, +0.75 from Hollow Points at level 3, the Hunter's +0.36 cap). Crit damage never rolls,
+ * so it marks a near-ceiling build: every crit that survivor lands with that gun.
+ */
+export const TOP_CRIT = 3.25;
 
 // --- Professions (ID-149). Design §6 Professions. ---
 

@@ -17,6 +17,7 @@ import {
   CARD_MAX_LEVEL,
   COLUMNS,
   CRIT_DAMAGE,
+  TOP_CRIT,
   ENEMIES,
   ENGINEER_BUFF,
   ENEMY_RADIUS,
@@ -547,6 +548,8 @@ export interface Bullet {
   ricochet?: true;
   /** Its damage is a crit's (ID-082: its damage number stands out). */
   crit?: true;
+  /** A crit at `TOP_CRIT` or more (ID-262): its damage number is orange. */
+  top?: true;
   /** A Sniper rifle's round: it ignores armour, a boss's plates too (ID-099, ID-101). */
   ap?: true;
   /** Its gun's class (ID-237): set by a squad gun's shot in a higher mode only, never a turret's. */
@@ -614,6 +617,8 @@ export interface Pop {
   fit?: 'weak' | 'resist';
   /** One of the first `TRAIT_WORDS` numbers of its fit in the fight: drawn with a word (ID-237). */
   word?: true;
+  /** A crit at `TOP_CRIT` or more (ID-262): drawn orange, not the crit yellow. */
+  top?: true;
 }
 /**
  * Something a survivor did (ID-085), for their chatter: `by` killed an enemy with a bullet
@@ -2262,7 +2267,14 @@ function fly(s: HordeState): void {
           !b.owner.startsWith('turret:') && took(s, 'breaching-rounds'),
         ),
       );
-      popOn(s, hit.enemy, dealt, b.crit === true, fitOf(s.mode, b.cls, hit.enemy.kind));
+      popOn(
+        s,
+        hit.enemy,
+        dealt,
+        b.crit === true,
+        fitOf(s.mode, b.cls, hit.enemy.kind),
+        b.top === true,
+      );
       const alive = hit.enemy.hp > 0;
       hit.enemy.hp -= dealt;
       if (alive && !b.owner.startsWith('turret:')) {
@@ -2772,14 +2784,14 @@ function fire(s: HordeState, rng: Rng): void {
     // Aim for the Head and Hollow Points (ID-130) add theirs on any weapon.
     const crit = critChance(defender, gun, id) + (gun ? gunCrit(id) : 0) + cardCrit(s);
     const critHit = crit > 0 && chance(rng, crit);
+    const critTimes = critHit
+      ? CRIT_DAMAGE + gunCritDamage(id) + cardCritDamage(s) + critDamageOf(defender, id)
+      : 1;
+    // A near-ceiling crit's number is orange (ID-262).
+    // A hair under, so a sum that is exactly the line in decimals never misses it by rounding.
+    const top = critHit && critTimes >= TOP_CRIT - 1e-9;
     const hit =
-      weapon.damage *
-      s.mods.damage *
-      boost(s, 'damage') *
-      damageFactor(defender, id) *
-      (critHit
-        ? CRIT_DAMAGE + gunCritDamage(id) + cardCritDamage(s) + critDamageOf(defender, id)
-        : 1);
+      weapon.damage * s.mods.damage * boost(s, 'damage') * damageFactor(defender, id) * critTimes;
     if (gun) {
       const traits = { ...traitsOf(id, critHit), shot: s.time };
       const close = traits.close ?? 0;
@@ -2796,6 +2808,7 @@ function fire(s: HordeState, rng: Rng): void {
         pellets: gunOf(id).pellets,
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
+        ...(top ? { top: true as const } : {}),
         ...(s.mode !== undefined && !s.noTraits && classOf(id) !== null
           ? { cls: classOf(id)! }
           : {}),
@@ -2804,7 +2817,7 @@ function fire(s: HordeState, rng: Rng): void {
       });
     } else {
       const dmg = taken(s, target, hit);
-      popOn(s, target, dmg, critHit);
+      popOn(s, target, dmg, critHit, null, top);
       target.hp -= dmg;
       s.strikes.push({ x: target.x, y: target.y, at: s.time, owner: defender.id });
     }
@@ -3615,12 +3628,13 @@ function popOn(
   amount: number,
   crit = false,
   fit: Pop['fit'] | null = null,
+  top = false,
 ): void {
-  if (e.hp > 0) addPop(s, e.x, e.y, amount, crit, e.kind, `e${e.id}`, fit);
+  if (e.hp > 0) addPop(s, e.x, e.y, amount, crit, e.kind, `e${e.id}`, fit, top);
 }
 
 /**
- * Adds `amount` to the newest number on `key` with the same `crit` younger than
+ * Adds `amount` to the newest number on `key` with the same `crit`, fit and `top` younger than
  * `DAMAGE_POP.merge`, or starts one; past `DAMAGE_POP.cap` the oldest goes.
  */
 function addPop(
@@ -3632,18 +3646,20 @@ function addPop(
   on: Pop['on'],
   key: string,
   fit: Pop['fit'] | null = null,
+  top = false,
 ): void {
   if (!(amount > 0)) return;
   // Newest last: none older than the merge window can take it.
   for (let i = s.pops.length - 1; i >= 0; i--) {
     const p = s.pops[i]!;
     if (s.time - p.at >= DAMAGE_POP.merge) break;
-    if (p.key === key && p.crit === crit && (p.fit ?? null) === fit) {
+    if (p.key === key && p.crit === crit && (p.fit ?? null) === fit && (p.top ?? false) === top) {
       p.amount += amount;
       return;
     }
   }
   const pop: Pop = { x, y, amount, crit, on, key, at: s.time };
+  if (top) pop.top = true;
   if (fit !== null) {
     pop.fit = fit;
     // The first few of each fit in the fight are drawn with a word (ID-237).

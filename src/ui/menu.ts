@@ -3,7 +3,7 @@
 // fight the game loop holds the fight while it is open. The field behind is inert and
 // focus stays inside until it closes, then goes back to the Menu button.
 import { CHATTER_LEVELS, type ChatterLevel } from '../core/chatter.ts';
-import { BOSS_SKILL, HORDE_ONLY, STASH_CAP } from '../core/data.ts';
+import { BOSS_SKILL, HORDE_ONLY, STASH_CAP, TOP_CRIT } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -162,6 +162,39 @@ export const MARKS: readonly { look: 'bars' | 'roar'; name: string; text: string
     name: 'Orange ring under an enemy.',
     text: `A boss or mini-boss nearby roared: that enemy moves faster for ${BOSS_SKILL.roar.time} s.`,
   },
+];
+
+/**
+ * The Help tab's damage numbers (ID-262): a sample number in each colour the fight draws them
+ * (a CSS class, `menu-pop-<look>`, its colour the canvas's `COLOR.pop*`), what it means.
+ */
+export const DAMAGE_NUMBERS: readonly {
+  look: 'hit' | 'crit' | 'top' | 'weak' | 'resist' | 'wall';
+  sample: string;
+  name: string;
+  text: string;
+}[] = [
+  { look: 'hit', sample: '12', name: 'White.', text: 'A hit.' },
+  { look: 'crit', sample: '24!', name: 'Yellow with "!".', text: 'A crit.' },
+  {
+    look: 'top',
+    sample: '39!',
+    name: 'Orange with "!".',
+    text: `A near-max crit: ×${TOP_CRIT} damage or more. Crit damage never varies, so every crit that survivor lands with that gun is orange.`,
+  },
+  {
+    look: 'weak',
+    sample: '13',
+    name: 'Cyan, bigger.',
+    text: 'The enemy is weak to that gun class ("Weak"). Nightmare and Hell only.',
+  },
+  {
+    look: 'resist',
+    sample: '10',
+    name: 'Grey, smaller.',
+    text: 'The enemy resists that gun class ("Resists"). Nightmare and Hell only. A crit on a weak or resist enemy keeps that colour and its "!".',
+  },
+  { look: 'wall', sample: '−5', name: 'Pale red.', text: 'Damage to the wall.' },
 ];
 
 /**
@@ -561,6 +594,16 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     li.append(swatch, words);
     marks.append(li);
   }
+  const pops = el('ul', 'menu-pops');
+  for (const { look, sample, name, text } of DAMAGE_NUMBERS) {
+    const li = el('li', '');
+    const swatch = el('span', `menu-pop menu-pop-${look}`, sample);
+    swatch.setAttribute('aria-hidden', 'true');
+    const words = el('span', '');
+    words.append(el('b', '', name), ` ${text}`);
+    li.append(swatch, words);
+    pops.append(li);
+  }
   // Enemy traits (ID-237): which gun class each kind resists and is weak to.
   // Which guns are in which class, one line each.
   const classLines = el('ul', 'menu-classes');
@@ -597,6 +640,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
       section(el('h3', 'menu-heading', 'Controls'), keys),
       howSection,
       section(el('h3', 'menu-heading', 'Marks in a fight'), marks),
+      section(el('h3', 'menu-heading', 'Damage numbers'), pops),
       section(
         el('h3', 'menu-heading', 'Enemy traits (Nightmare and Hell)'),
         el('p', 'menu-note', TRAIT_NOTE),

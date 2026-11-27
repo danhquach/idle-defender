@@ -13,6 +13,7 @@ import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import {
   CONTROLS,
   createMenu,
+  DAMAGE_NUMBERS,
   FIGHT_REFUSAL,
   HOW_TO_PLAY,
   IMPORT_CONFIRM,
@@ -560,6 +561,26 @@ describe('the Menu', () => {
     expect(help.textContent).toMatch(
       /Orange ring under an enemy.*nearby roared.*moves faster for 4 s/,
     );
+  });
+
+  it('Help explains each damage number colour with a sample in it (ID-262)', () => {
+    const help = setup().panel('help');
+    const heading = [...help.querySelectorAll('h3')].find(
+      (h) => h.textContent === 'Damage numbers',
+    );
+    expect(heading).toBeDefined();
+    const items = [...heading!.parentElement!.querySelectorAll('li')];
+    expect(items.map((li) => li.querySelector('.menu-pop')!.className)).toEqual(
+      DAMAGE_NUMBERS.map(({ look }) => `menu-pop menu-pop-${look}`),
+    );
+    DAMAGE_NUMBERS.forEach(({ sample, name, text }, i) => {
+      const swatch = items[i]!.querySelector('.menu-pop')!;
+      expect(swatch.textContent).toBe(sample);
+      expect(swatch.getAttribute('aria-hidden')).toBe('true');
+      expect(items[i]!.textContent).toBe(`${sample}${name} ${text}`);
+    });
+    expect(help.textContent).toMatch(/Orange with "!"\. A near-max crit: ×3\.25 damage or more/);
+    expect(help.textContent).toMatch(/keeps that colour and its "!"/);
   });
 
   it('Help gives the stash limit the game uses (ID-158)', () => {

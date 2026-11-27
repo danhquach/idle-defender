@@ -222,6 +222,8 @@ export const COLOR = {
   /** Damage numbers (ID-082): a hit on an enemy, a crit, a blow on the wall; all on a dark edge. */
   popHit: '#f4f1ea',
   popCrit: '#ffd23f',
+  /** A near-ceiling crit (ID-262, `TOP_CRIT`): orange, apart from the crit gold and the wall's salmon. */
+  popTopCrit: '#ff8c1a',
   popWall: '#ff8a7a',
   /** A hit on a trait (ID-237): a resisted gun class muted, a weak-to one bright (not the crit yellow). */
   popResist: '#9aa0a6',
@@ -2888,7 +2890,9 @@ export function popLook(p: Pop, time: number, pace: number, still: boolean): Pop
         : p.fit === 'resist'
           ? COLOR.popResist
           : p.crit
-            ? COLOR.popCrit
+            ? p.top
+              ? COLOR.popTopCrit
+              : COLOR.popCrit
             : COLOR.popHit,
     ...(p.word && p.fit ? { word: p.fit === 'weak' ? 'Weak' : 'Resists' } : {}),
     alpha: age < 1 - POP.fade ? 1 : (1 - age) / POP.fade,

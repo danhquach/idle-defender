@@ -480,6 +480,17 @@ describe('Help marks (ID-168)', () => {
     const [r, g, b, a] = /rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/.exec(BOSS_LOOK.roar)!.slice(1);
     expect(rgba('--color-mark-roar')).toEqual([+r!, +g!, +b!, +a!]);
   });
+
+  it('each damage number sample uses the colour the field draws it in (ID-262)', () => {
+    expect(tokens.get('--color-pop-hit')).toBe(COLOR.popHit);
+    expect(tokens.get('--color-pop-crit')).toBe(COLOR.popCrit);
+    expect(tokens.get('--color-pop-top')).toBe(COLOR.popTopCrit);
+    expect(tokens.get('--color-pop-weak')).toBe(COLOR.popWeak);
+    expect(tokens.get('--color-pop-resist')).toBe(COLOR.popResist);
+    expect(tokens.get('--color-pop-wall')).toBe(COLOR.popWall);
+    const [r, g, b, a] = /rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/.exec(COLOR.popEdge)!.slice(1);
+    expect(rgba('--color-pop-edge')).toEqual([+r!, +g!, +b!, +a!]);
+  });
 });
 
 describe('the offer cards (ID-177)', () => {

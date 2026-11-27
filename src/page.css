@@ -100,6 +100,14 @@
   --color-mark-edge: #1b1a18;
   --color-mark-ammo-empty: #4a443a;
   --color-mark-roar: rgb(255 176 32 / 55%);
+  /* Damage numbers in Help (ID-262), as render.ts draws them (COLOR.pop*). */
+  --color-pop-hit: #f4f1ea;
+  --color-pop-crit: #ffd23f;
+  --color-pop-top: #ff8c1a;
+  --color-pop-weak: #6ee7ff;
+  --color-pop-resist: #9aa0a6;
+  --color-pop-wall: #ff8a7a;
+  --color-pop-edge: rgb(17 17 16 / 85%);
   /* Adrenaline's boost (ID-245), as render.ts draws it (BOSS_LOOK.rush): 20% amber, 35% red-orange. */
   --color-rush: #ffb52e;
   --color-rush-heavy: #ff5a2a;
@@ -3908,7 +3916,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* The fight marks in Help (ID-168): a swatch drawn like the mark, in the field's colour. */
-.menu-marks {
+.menu-marks,
+.menu-pops {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -3919,13 +3928,15 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-text-muted);
 }
 
-.menu-marks li {
+.menu-marks li,
+.menu-pops li {
   display: flex;
   align-items: baseline;
   gap: var(--space-8);
 }
 
-.menu-marks b {
+.menu-marks b,
+.menu-pops b {
   color: var(--color-text);
 }
 
@@ -3953,6 +3964,47 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   height: 10px;
   border: 2px solid var(--color-mark-roar);
   border-radius: 50%;
+}
+
+/* A sample damage number (ID-262): its fight colour on the fight's dark edge; size says weak or resist too. */
+.menu-pop {
+  flex: none;
+  box-sizing: border-box;
+  width: 34px;
+  font-weight: 700;
+  font-size: 13px;
+  text-align: center;
+  text-shadow:
+    -1px -1px 0 var(--color-pop-edge),
+    1px -1px 0 var(--color-pop-edge),
+    -1px 1px 0 var(--color-pop-edge),
+    1px 1px 0 var(--color-pop-edge);
+}
+
+.menu-pop-hit {
+  color: var(--color-pop-hit);
+}
+
+.menu-pop-crit {
+  color: var(--color-pop-crit);
+}
+
+.menu-pop-top {
+  color: var(--color-pop-top);
+}
+
+.menu-pop-weak {
+  color: var(--color-pop-weak);
+  font-size: 14px;
+}
+
+.menu-pop-resist {
+  color: var(--color-pop-resist);
+  font-size: 11px;
+}
+
+.menu-pop-wall {
+  color: var(--color-pop-wall);
 }
 
 .menu-foot {
