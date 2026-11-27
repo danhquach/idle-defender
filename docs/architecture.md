@@ -64,7 +64,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `camp.ts` | Recruits (shared); camp level, capacity and upgrade offers (full game). |
 | `squadpower.ts` | Squad Power vs Recommended Power shown before a fight; `squadFit`, the Fit pill's value, band and classes to add (ID-237). |
 | `traits.ts` | Gun classes against enemy traits (ID-237): `classOf`, `classFactor` (the fight's damage factor), `fitContext` / `effectivePower` / `worstCover` / `fitOfSquad` (what the squad tools and the Fit pill measure). Imports `data`, `modes` and `armoury` only; the tables are `GUN_CLASS` and `ENEMY_TRAITS` in `data.ts`. |
-| `modes.ts` | Difficulty modes (Normal / Nightmare / Hell): unlocks, each mode's local horde, effective horde, boss skills (Hell's new one each), Scrap and rarity boosts. |
+| `modes.ts` | Difficulty modes (Normal / Nightmare / Hell): unlocks, each mode's local horde, effective horde, `hordeName` (a horde as the screens name it, "Nightmare 30", ID-267), boss skills (Hell's new one each), Scrap and rarity boosts. |
 | `chatter.ts` | Speech bubbles during a fight. |
 | `base.ts` | The base's wall, posts, turrets and traps; the fight runs on it (`squadBase` for the squad build). |
 | `perks.ts` | Commander perks; `levelScale` is used by the fight. |

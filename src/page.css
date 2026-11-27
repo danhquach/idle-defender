@@ -2980,6 +2980,11 @@ body {
   display: block;
 }
 
+/* A long mode name ("Nightmare", ID-267) clears the boss mark in the corner. */
+.hud-badge-boss-on .hud-badge-label {
+  padding-right: 8px;
+}
+
 .hud-corner-panel {
   box-sizing: border-box;
   display: flex;

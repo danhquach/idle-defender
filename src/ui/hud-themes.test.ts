@@ -53,7 +53,7 @@ describe('the picker (ID-238)', () => {
     const g = camp(15, 'crawl');
     const p = hordePicker(g);
     const o = p.options.find((x) => x.horde === 15)!;
-    expect(o.label).toBe('Horde 15 (new) · Crawl');
+    expect(o.label).toBe('Normal 15 (new) · Crawl');
     expect(o.theme).toEqual({
       id: 'crawl',
       name: 'Crawl',
@@ -62,7 +62,7 @@ describe('the picker (ID-238)', () => {
     });
     expect(o.start.chips.map((c) => c.text)).toContain('Crawl');
     const plain = p.options.find((x) => x.horde === 14)!;
-    expect(plain.label).toBe('Horde 14');
+    expect(plain.label).toBe('Normal 14');
     expect(plain.theme).toBeUndefined();
     expect(plain.start.chips.map((c) => c.text)).not.toContain('Crawl');
   });
@@ -70,7 +70,7 @@ describe('the picker (ID-238)', () => {
   it('a beaten themed horde keeps its theme in the list', () => {
     const g = camp(30, 'ironwall');
     const o = hordePicker(g).options.find((x) => x.horde === 15)!;
-    expect(o.label).toBe('Horde 15 · Iron Wall');
+    expect(o.label).toBe('Normal 15 · Iron Wall');
     expect(o.theme?.id).toBe('ironwall');
     expect(hordePicker(g).options.find((x) => x.horde === 25)!.theme?.id).toBe(
       themeAt(g.themes!.seed!, 'normal', 25),
@@ -153,10 +153,10 @@ describe('the picker (ID-238)', () => {
 describe('the result warning (ID-238)', () => {
   it('a win of the horde before warns of the pending themed horde', () => {
     const g = camp(14, 'stampede');
-    // Beating Horde 14 first-clears it: the game's pending horde is 15.
+    // Beating Normal 14 first-clears it: the game's pending horde is 15.
     const s = squadScreen(g, won(g, 14));
     const warn = s.debrief!.warn!;
-    expect(warn).toBe('Horde 15 next: Stampede — a themed horde');
+    expect(warn).toBe('Normal 15 next: Stampede — a themed horde');
     const { root, h } = hud();
     h.showResult(s);
     expect(root.querySelector('.debrief-warn')!.textContent).toBe(warn);
@@ -164,7 +164,7 @@ describe('the result warning (ID-238)', () => {
 
   it('a replay win of Horde 9 with Horde 15 pending warns; a replay of 14 with 30 pending does not', () => {
     const g = camp(15, 'crawl');
-    expect(squadScreen(g, won(g, 9)).debrief!.warn).toBe('Horde 15 next: Crawl — a themed horde');
+    expect(squadScreen(g, won(g, 9)).debrief!.warn).toBe('Normal 15 next: Crawl — a themed horde');
     const far = camp(30, 'crawl');
     expect(squadScreen(far, won(far, 14)).debrief!.warn).toBeUndefined();
     // A first clear of 15 moves the pending horde to 16: plain.
@@ -175,8 +175,16 @@ describe('the result warning (ID-238)', () => {
     const g = camp(15, 'ironwall');
     const lost = { ...startSquadHorde(g, 1, 0), outcome: 'lost' as const, wave: 2 };
     const s = squadScreen(g, lost);
-    expect(s.debrief!.warn).toBe(`Horde 15 again: Iron Wall — a themed horde`);
+    expect(s.debrief!.warn).toBe(`Normal 15 again: Iron Wall — a themed horde`);
     expect(themeWarning(g, { local: 15, mode: 'normal' })).toBe(s.debrief!.warn);
+    // The lost horde's own mode names it (ID-267), whatever mode the game is on.
+    const seed = g.themes!.seed!;
+    const k = Array.from({ length: 60 }, (_, i) => i + 1).find((i) =>
+      themeAt(seed, 'nightmare', i),
+    )!;
+    expect(themeWarning(g, { local: k, mode: 'nightmare' })).toBe(
+      `Nightmare ${k} again: ${THEMES[themeAt(seed, 'nightmare', k)!].name} — a themed horde`,
+    );
   });
 
   it('is absent before a plain horde, on the start screen, and reads each mode’s own pending horde', () => {
@@ -186,7 +194,7 @@ describe('the result warning (ID-238)', () => {
     const seed = camp(51, 'crawl').themes!.seed!;
     const nm: GameState = { ...camp(51, 'crawl'), mode: 'nightmare', modes: { nightmare: 15 } };
     expect(themeWarning(nm)).toBe(
-      `Horde 15 next: ${THEMES[themeAt(seed, 'nightmare', 15)!].name} — a themed horde`,
+      `Nightmare 15 next: ${THEMES[themeAt(seed, 'nightmare', 15)!].name} — a themed horde`,
     );
   });
 });
@@ -264,7 +272,7 @@ describe('the first-clear announcement and the other designer fixes (ID-238)', (
     const seeded = withTheme({ ...base, themes: undefined }, 'normal', 25, 'ironwall');
     const lost = { ...startSquadHorde(seeded, 1, 0), outcome: 'lost' as const, wave: 2 };
     const s = squadScreen(seeded, lost);
-    expect(s.debrief!.warn).toBe('Horde 25 again: Iron Wall — a themed horde');
+    expect(s.debrief!.warn).toBe('Normal 25 again: Iron Wall — a themed horde');
     const { root, h } = hud();
     h.showResult(s);
     const body = [...root.querySelectorAll('.debrief-callout, .debrief-note, .debrief-warn')].map(
@@ -279,20 +287,20 @@ describe('the first-clear announcement and the other designer fixes (ID-238)', (
       outcome: 'lost' as const,
       wave: 2,
     });
-    // Losing a replay of plain Horde 9 while 15 is pending: no warning about 15.
+    // Losing a replay of plain Normal 9 while 15 is pending: no warning about 15.
     const pending = camp(15, 'crawl');
     expect(squadScreen(pending, lostOf(pending, 9)).debrief!.warn).toBeUndefined();
-    // Losing a replay of themed 15 while 18 is pending: "Horde 15 again".
+    // Losing a replay of themed 15 while 18 is pending: "Normal 15 again".
     const later = camp(18, 'crawl');
     expect(squadScreen(later, lostOf(later, 15)).debrief!.warn).toBe(
-      'Horde 15 again: Crawl — a themed horde',
+      'Normal 15 again: Crawl — a themed horde',
     );
   });
 
   it('a win’s warning is the headline only, with no tip', () => {
     const g = camp(14, 'stampede');
     const warn = squadScreen(g, won(g, 14)).debrief!.warn!;
-    expect(warn).toBe('Horde 15 next: Stampede — a themed horde');
+    expect(warn).toBe('Normal 15 next: Stampede — a themed horde');
     expect(warn).not.toContain(THEMES.stampede.tip);
   });
 

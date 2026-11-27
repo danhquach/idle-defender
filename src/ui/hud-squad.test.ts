@@ -25,7 +25,6 @@ import {
   squadScreen,
   squadStart,
   squadStatus,
-  startLabel,
   SWAP_NOTE,
   swapNote,
   SWAPS_TIP,
@@ -57,7 +56,7 @@ const ended = (g: GameState, outcome: 'won' | 'lost') => ({
 describe('the horde-only top bar (ID-066)', () => {
   it('names the horde only, and nothing of cash, bank or perks', () => {
     const s = startSquadHorde(squadGame(1, 3), 1, NOW);
-    expect(squadStatus(s)).toBe('Horde 3');
+    expect(squadStatus(s)).toBe('Normal 3');
     expect(squadStatus(s)).not.toMatch(/Cash|Bank|Perks/);
     // No wave progress or enemy count (ID-167): a tooltip keeps its text while shown, so
     // either went stale beside the wave line's live one as a wave ended or began.
@@ -66,9 +65,9 @@ describe('the horde-only top bar (ID-066)', () => {
       { ...s, outcome: 'won' as const },
       { ...s, toSpawn: 1234 },
     ]) {
-      expect(squadStatus(t)).toBe('Horde 3');
+      expect(squadStatus(t)).toBe('Normal 3');
     }
-    expect(squadStatus(startSquadHorde(squadGame(1, 10), 1, NOW))).toMatch(/^Horde 10 \(boss\)/);
+    expect(squadStatus(startSquadHorde(squadGame(1, 10), 1, NOW))).toMatch(/^Normal 10 \(boss\)/);
   });
 
   it('counts the living enemies on the field and those still to come', () => {
@@ -158,20 +157,20 @@ describe('bench XP on the result panel (ID-206)', () => {
 describe('the horde-only screens (ID-066)', () => {
   it('the start screen names the squad and starts the horde', () => {
     const screen = squadStart(squadGame(2, 4, 30));
-    expect(screen.title).toBe('Horde 4');
+    expect(screen.title).toBe('Normal 4');
     expect(screen.lines[0]).toBe(
       `Squad 2/${SQUAD_CAP}: ${recruit(1).name} (level 2), ${recruit(2).name} (level 2)`,
     );
     expect(screen.lines[1]).toBe(`${waveCount(4)} waves. Hold the wall. ${SQUAD_LOSS_RULE}`);
-    expect(screen.button).toBe(startLabel(4));
+    expect(screen.button).toBe('Start Normal 4');
     expect(screen.camp.offers).toEqual([]);
-    expect(squadStart(squadGame(1, 10)).title).toBe('Horde 10');
+    expect(squadStart(squadGame(1, 10)).title).toBe('Normal 10');
   });
 
   it('a win: XP and level-ups by name, the new survivor, and the next horde', () => {
     const g = squadGame(2, 5, 0);
     const screen = squadScreen(g, ended(g, 'won'));
-    expect(screen.title).toBe('Horde 5 - You hold the line');
+    expect(screen.title).toBe('Normal 5 - You hold the line');
     expect(screen.lines.some((l) => l.startsWith(`${recruit(1).name} +`))).toBe(true);
     expect(screen.lines.some((l) => l.endsWith(' · level up!'))).toBe(true);
     expect(screen.lines.join(' ')).not.toMatch(/stat point/);
@@ -182,7 +181,7 @@ describe('the horde-only screens (ID-066)', () => {
     // A newcomer is asking, so no reason why nobody came is in the details.
     expect(screen.debrief!.notes!.join(' ')).not.toMatch(/Nobody new/);
     expect(screen.lines.join(' ')).not.toMatch(/Camp|Genes|Payout|Repair|injured/);
-    expect(screen.button).toBe(startLabel(6));
+    expect(screen.button).toBe('Start Normal 6');
     expect(screen.squad).toBe(true);
   });
 
@@ -198,8 +197,8 @@ describe('the horde-only screens (ID-066)', () => {
   it('a boss horde’s first clear names its card unlock, and radio only in the goal line (ID-127, ID-196, ID-217)', () => {
     const at10 = squadGame(SQUAD_CAP, 10);
     const a = squadScreen(at10, ended(at10, 'won'));
-    expect(a.title).toBe('Horde 10 - You hold the line');
-    expect(a.button).toBe(startLabel(11));
+    expect(a.title).toBe('Normal 10 - You hold the line');
+    expect(a.button).toBe('Start Normal 11');
     // The last line is the next goal (ID-217); the boss sentence comes before it.
     expect(a.lines.at(-1)).toBe(a.debrief!.goal);
     expect(a.lines.at(-2)).toBe('Boss horde beaten. New card unlocked: Heavy Rounds.');
@@ -259,7 +258,7 @@ describe('the horde-only screens (ID-066)', () => {
     expect(screen.debrief!.notes![0]).toBe(
       'You held the camp and the evacuation is called. Play on in Endless for a best horde.',
     );
-    expect(screen.debrief!.chips[0]!.text).toBe('Horde 30 held');
+    expect(screen.debrief!.chips[0]!.text).toBe('Normal 30 held');
     expect(screen.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
     // Continue starts the first Endless horde.
     expect(screen.picker!.value).toBe(31);
@@ -283,11 +282,11 @@ describe('the horde-only screens (ID-066)', () => {
     // The rule sits after the squad; in Endless the horde to hold leads it.
     expect(squadStart(squadGame(1, 11)).debrief!.note).toBe(SQUAD_LOSS_RULE);
     expect(squadStart(squadGame(1, 45)).debrief!.note).toBe(
-      `Evacuation called. Hold Horde 45 for a new best. ${SQUAD_LOSS_RULE}`,
+      `Evacuation called. Hold Normal 45 for a new best. ${SQUAD_LOSS_RULE}`,
     );
     // Its lines keep the goal after the rule (ID-066).
     expect(squadStart(squadGame(1, 45)).lines).toContain(
-      'Evacuation called. Hold Horde 45 for a new best.',
+      'Evacuation called. Hold Normal 45 for a new best.',
     );
   });
 
@@ -295,7 +294,7 @@ describe('the horde-only screens (ID-066)', () => {
     for (const horde of [1, 5, 10, 11, 20, 21, 30]) {
       const g = squadGame(2, horde);
       const { goal, ...d } = squadStart(g).debrief!;
-      expect(goal).toMatch(/^Next: Horde /);
+      expect(goal).toMatch(/^Next: Normal /);
       expect(d.chips.map((c) => c.text).join(' ')).not.toMatch(/radio/i);
       expect(d.note).toBe(SQUAD_LOSS_RULE);
       expect(JSON.stringify(d)).not.toMatch(/radio/i);
@@ -313,13 +312,13 @@ describe('the horde-only screens (ID-066)', () => {
   it('a loss: no XP, the same horde again with everyone back and a full wall', () => {
     const g = squadGame(3, 6);
     const screen = squadScreen(g, ended(g, 'lost'));
-    expect(screen.title).toBe('Horde 6 - Camp has fallen');
+    expect(screen.title).toBe('Normal 6 - Camp has fallen');
     // No wave cleared: no XP (ID-098).
     expect(screen.lines).toContain(lossXpText(0));
-    expect(screen.button).toBe('Retry Horde 6');
+    expect(screen.button).toBe('Retry Normal 6');
     expect(screen.lines.join(' ')).not.toMatch(/Food|Medicine|Repair/);
     expect(screen.debrief!.note).toBe(
-      'Retry Horde 6, or farm an easier horde: the squad and the wall are back at full strength',
+      'Retry Normal 6, or farm an easier horde: the squad and the wall are back at full strength',
     );
   });
 
@@ -412,7 +411,7 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     h.update({ ...swarm, time: 30, breakUntil: 31 });
     expect(banner.classList.contains('hud-swarm-hit')).toBe(false);
     expect(banner.textContent).toBe('Swarm incoming1');
-    // Horde 9 (swarms on waves 4 and 9): the counter on to wave 5 with a wave-4 enemy still
+    // Normal 9 (swarms on waves 4 and 9): the counter on to wave 5 with a wave-4 enemy still
     // standing, so the marker stays.
     const next = { ...calm, hordeNumber: 9, waveCount: waveCount(9), wave: 5, enemies: [] };
     const straggler = enemy(next, { wave: 4 });
@@ -459,7 +458,7 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     expect(big).toContain(',');
     expect(said().match(/\d[\d,]* left(?![a-z])/g)).toEqual([`${big} left`]);
     h.update(s);
-    expect(root.querySelector('.hud-badge-label')!.textContent).toBe('Horde');
+    expect(root.querySelector('.hud-badge-label')!.textContent).toBe('Normal');
     expect(root.querySelector('.hud-badge-num')!.textContent).toBe('2');
     expect(root.querySelector('.hud-badge')!.classList.contains('hud-badge-boss-on')).toBe(false);
     expect(root.querySelector('.hud-corner-wave')!.textContent).toBe(
@@ -477,7 +476,7 @@ describe('the horde-only HUD on the page (ID-066)', () => {
     h.update({ ...s, wave: s.waveCount, toSpawn: 3, enemies: [] });
     expect(root.querySelector('.hud-badge')!.classList.contains('hud-badge-boss-on')).toBe(true);
     expect(root.querySelector('.hud-badge')!.getAttribute('aria-label')).toBe(
-      `Horde ${RADIO_HORDES[0]}, boss horde`,
+      `Normal ${RADIO_HORDES[0]}, boss horde`,
     );
     expect(root.querySelector('.hud-corner-wave')!.textContent).toBe(
       `Wave ${s.waveCount}/${s.waveCount} · 3 left`,

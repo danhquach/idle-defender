@@ -8,7 +8,15 @@ import { newGame, type GameState } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { effHorde } from '../core/modes.ts';
 import { recommendedPower } from '../core/squadpower.ts';
-import { createHud, goalChip, hordePicker, modeChoices, squadScreen, squadStart } from './hud.ts';
+import {
+  createHud,
+  goalChip,
+  hordePicker,
+  modeChoices,
+  squadScreen,
+  squadStart,
+  squadStatus,
+} from './hud.ts';
 
 const noop = (): void => {};
 
@@ -46,7 +54,7 @@ describe('the mode switch (ID-218)', () => {
       ['nightmare', true, false],
       ['hell', false, false],
     ]);
-    expect(choices[2]!.hint).toBe('Hold Horde 50 on Nightmare');
+    expect(choices[2]!.hint).toBe('Hold Nightmare 50 to unlock Hell');
     expect(
       modeChoices(camp({ mode: 'nightmare', modes: { nightmare: 51 } }))!.map((c) => c.open),
     ).toEqual([true, true, true]);
@@ -60,10 +68,10 @@ describe('the mode switch (ID-218)', () => {
     expect(names).toEqual(['Normal', 'Nightmare', 'Hell']);
     expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
     expect(buttons.map((b) => b.disabled)).toEqual([false, false, true]);
-    expect(buttons[2]!.title).toBe('Hold Horde 50 on Nightmare');
+    expect(buttons[2]!.title).toBe('Hold Nightmare 50 to unlock Hell');
     // Only a locked mode names what opens it, under its name, in the same button.
     const hints = [...root.querySelectorAll('.hud-mode-hint')];
-    expect(hints.map((e) => e.textContent)).toEqual(['Hold Horde 50 on Nightmare']);
+    expect(hints.map((e) => e.textContent)).toEqual(['Hold Nightmare 50 to unlock Hell']);
     expect(buttons[2]!.contains(hints[0]!)).toBe(true);
     expect(root.querySelector('.hud-mode-row')!.getAttribute('role')).toBe('group');
     for (const e of root.querySelectorAll('.hud-mode-name, .hud-mode-hint')) {
@@ -100,6 +108,7 @@ describe('a mode’s screens (ID-218)', () => {
     // No best before the mode's first win: the mode alone, and no "new best" note.
     expect(goalChip(nm(1))).toEqual({ chip: { text: 'Nightmare', tone: 'warn' }, note: null });
     expect(goalChip(nm(13))!.chip.text).toBe('Nightmare · best 12');
+    expect(goalChip(nm(13))!.note).toBe('Hold Nightmare 13 for a new best.');
     expect(goalChip(camp({ mode: 'hell', modes: { nightmare: 60, hell: 4 } }))!.chip.text).toBe(
       'Hell · best 3',
     );
@@ -110,10 +119,10 @@ describe('a mode’s screens (ID-218)', () => {
 
   it('the start screen reads the mode’s horde, with the chip first', () => {
     const s = squadStart(nm(7));
-    expect(s.title).toBe('Horde 7');
+    expect(s.title).toBe('Nightmare 7');
     expect(s.debrief!.chips[0]!.text).toBe('Nightmare · best 6');
     expect(s.picker!.value).toBe(7);
-    expect(s.button).toBe('Start Horde 7');
+    expect(s.button).toBe('Start Nightmare 7');
   });
 
   it('the picker lists the mode’s own hordes, with the power of their strength', () => {
@@ -134,18 +143,44 @@ describe('a mode’s screens (ID-218)', () => {
     const p = hordePicker(camp({ mode: 'hell', modes: { nightmare: 51, hell: 2 } }));
     const first = p.options.at(-1)!;
     expect(first.horde).toBe(1);
+    // ID-267: the mode names the horde in the label, the title and the buttons.
+    expect(p.options[0]!.label).toMatch(/^Hell 2 \(new\)/);
+    expect(p.options[0]!.button).toBe('Start Hell 2');
+    expect(first.start.title).toBe('Hell 1');
+    expect(first.button).toBe('Replay Hell 1');
+    expect(
+      hordePicker(camp({ mode: 'hell', modes: { nightmare: 51, hell: 2 } }), 1, 1).options.at(-1)!
+        .button,
+    ).toBe('Retry Hell 1');
     expect(first.power.rec).toBe(recommendedPower(effHorde('hell', 1), 'hell'));
     const ratio = first.power.rec / recommendedPower(effHorde('nightmare', 50), 'nightmare');
     expect(ratio).toBeGreaterThan(0.9);
     expect(ratio).toBeLessThan(1.2);
   });
 
+  it('the fight corner, its tooltip and a loss name the mode with the horde (ID-267)', () => {
+    const g = camp({ mode: 'hell', modes: { nightmare: 51, hell: 10 } });
+    const s = startSquadHorde(g, 1, 0);
+    expect(squadStatus(s)).toMatch(/^Hell 10 \(boss\)/);
+    const { root, h } = hud();
+    h.update(s);
+    expect(root.querySelector('.hud-badge-label')!.textContent).toBe('Hell');
+    expect(root.querySelector('.hud-badge-num')!.textContent).toBe('10');
+    expect(root.querySelector('.hud-badge')!.getAttribute('aria-label')).toBe(
+      'Hell 10, boss horde',
+    );
+    const lost = squadScreen(g, { ...s, outcome: 'lost' as const, wave: 2 });
+    expect(lost.title).toBe('Hell 10 - Camp has fallen');
+    expect(lost.button).toBe('Retry Hell 10');
+    expect(lost.lines.join(' ')).toContain('Retry Hell 10, or farm an easier horde');
+  });
+
   it('a first clear’s result moves on to the mode’s next horde', () => {
     const g = nm(3);
     const s = { ...startSquadHorde(g, 1, 0), outcome: 'won' as const, wave: 5 };
     const screen = squadScreen(g, s);
-    expect(screen.title).toBe('Horde 3 - You hold the line');
+    expect(screen.title).toBe('Nightmare 3 - You hold the line');
     expect(screen.picker!.value).toBe(4);
-    expect(screen.button).toBe('Start Horde 4');
+    expect(screen.button).toBe('Start Nightmare 4');
   });
 });

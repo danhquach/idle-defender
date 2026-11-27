@@ -53,7 +53,7 @@ import {
   type GunMove,
 } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
-import { effHorde, modeOf } from '../core/modes.ts';
+import { effHorde, hordeName, modeOf } from '../core/modes.ts';
 import { classOf } from '../core/traits.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { survivorDps } from '../core/stats.ts';
@@ -165,8 +165,8 @@ export interface InventoryView {
    * null where there is no horde to compare with.
    */
   power: PowerLine | null;
-  /** The horde `power` compares with; null with no power line. */
-  powerHorde: number | null;
+  /** The horde `power` compares with, named by its mode ("Nightmare 12"); null with no power line. */
+  powerHorde: string | null;
   /** Every stash set below Relic (ID-091): ready ones first, then by base weapon and rarity. */
   combine: CombineRow[];
 }
@@ -441,7 +441,7 @@ export function inventoryView(
             recommendedPower(effHorde(modeOf(game), horde), modeOf(game), squadSize(game)),
             squadSize(game),
           ),
-    powerHorde: horde,
+    powerHorde: horde === null ? null : hordeName(modeOf(game), horde),
     combine: combineRows(game),
   };
 }
@@ -694,11 +694,11 @@ function slot(it: InventoryItem, ready: boolean, caption?: string): HTMLElement 
 }
 
 /** "Power 1,240 · rec 1,400 short", coloured by its band; the words say it too (ID-098). */
-function powerNote(p: PowerLine, horde: number | null): HTMLElement {
+function powerNote(p: PowerLine, horde: string | null): HTMLElement {
   const line = el(
     'p',
     'menu-note inv-power-line',
-    horde === null ? p.text : `${p.text} (Horde ${horde})`,
+    horde === null ? p.text : `${p.text} (${horde})`,
   );
   line.dataset.band = p.band;
   line.append(' ', el('span', 'inv-power-band', BAND_WORD[p.band]));

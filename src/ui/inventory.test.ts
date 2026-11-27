@@ -1005,8 +1005,12 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     });
     root.querySelector<HTMLButtonElement>('.inv-button')!.click();
     const line = document.querySelector<HTMLElement>('.inv-power-line')!;
-    expect(line.textContent).toBe(`${v.power!.text} (Horde 3) ${v.power!.band}`);
+    expect(line.textContent).toBe(`${v.power!.text} (Normal 3) ${v.power!.band}`);
     expect(line.dataset.band).toBe(v.power!.band);
+    // The mode names the horde (ID-267).
+    expect(
+      inventoryView({ ...g, mode: 'hell', modes: { nightmare: 51, hell: 4 } }, 3).powerHorde,
+    ).toBe('Hell 3');
     // Following the pick: another horde, another Recommended Power.
     horde = 30;
     inv.refresh();

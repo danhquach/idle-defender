@@ -148,8 +148,8 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     const { root, result, title, button } = boot();
     step(0);
     expect(result().hidden).toBe(false);
-    expect(title()).toBe('Horde 1');
-    expect(button().textContent).toBe('Start Horde 1');
+    expect(title()).toBe('Normal 1');
+    expect(button().textContent).toBe('Start Normal 1');
     expect(root.querySelector(HIDDEN)).toBeNull();
     const scene = vi.mocked(drawScene).mock.lastCall![2];
     expect(scene.defenders).toHaveLength(1);
@@ -174,12 +174,12 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     button().click();
     step(16);
     step(32);
-    expect(bar()).toMatch(/^Horde 1 · Wave 1\//);
+    expect(bar()).toMatch(/^Normal 1 · Wave 1\//);
     endNextTick('won');
     step(48);
     expect(result().hidden).toBe(false);
-    expect(title()).toBe('Horde 1 - You hold the line');
-    expect(button().textContent).toBe('Start Horde 2');
+    expect(title()).toBe('Normal 1 - You hold the line');
+    expect(button().textContent).toBe('Start Normal 2');
     // Saved as the fight ends: a reload here keeps the win.
     expect(saved().hordeNumber).toBe(2);
     // The new survivor asks to join (ID-150): accepted, they fight the next horde.
@@ -191,7 +191,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     expect(g.roster).toHaveLength(2);
     expect(g.roster[0]!.xp).toBeGreaterThan(0);
     step(64);
-    expect(bar()).toMatch(/^Horde 2 /);
+    expect(bar()).toMatch(/^Normal 2 /);
     expect(vi.mocked(drawScene).mock.lastCall![2].defenders).toHaveLength(2);
     expect(root.querySelector(HIDDEN)).toBeNull();
   });
@@ -241,7 +241,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     clock.mockReturnValue(NOW + 1000);
     step(80);
     expect(result().hidden).toBe(false);
-    expect(title()).toBe('Horde 1 - You hold the line');
+    expect(title()).toBe('Normal 1 - You hold the line');
   });
 
   it('a loss shows its result at once (ID-110)', () => {
@@ -252,25 +252,25 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     endNextTick('lost');
     step(32);
     expect(result().hidden).toBe(false);
-    expect(title()).not.toBe('Horde 1 - You hold the line');
+    expect(title()).not.toBe('Normal 1 - You hold the line');
   });
 
   it('a loss: nothing gained, and the same horde again with everyone', () => {
     localStorage.setItem(SAVE_KEY, encodeSave({ ...newGame('horde'), hordeNumber: 4 }, NOW));
     const { title, button, bar, saved } = boot();
     step(0);
-    expect(title()).toBe('Horde 4');
+    expect(title()).toBe('Normal 4');
     button().click();
     step(16);
     endNextTick('lost');
     step(32);
-    expect(title()).toBe('Horde 4 - Camp has fallen');
-    expect(button().textContent).toBe('Retry Horde 4');
+    expect(title()).toBe('Normal 4 - Camp has fallen');
+    expect(button().textContent).toBe('Retry Normal 4');
     button().click();
     expect(saved().hordeNumber).toBe(4);
     expect(saved().roster).toEqual(newGame('horde').roster);
     step(48);
-    expect(bar()).toMatch(/^Horde 4 · Wave 1\//);
+    expect(bar()).toMatch(/^Normal 4 · Wave 1\//);
   });
 
   describe('the Menu’s Load and New camp between hordes (ID-156)', () => {
@@ -355,7 +355,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
     });
 
     it.each(['won', 'lost'] as const)(
-      'on the result screen of a horde %s they work; New camp starts over at Horde 1',
+      'on the result screen of a horde %s they work; New camp starts over at Normal 1',
       (outcome) => {
         localStorage.setItem(SAVE_KEY, encodeSave({ ...newGame('horde'), hordeNumber: 3 }, NOW));
         const { root, title, button, bar, saved } = boot();
@@ -364,7 +364,7 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
         step(16);
         endNextTick(outcome);
         step(32);
-        expect(title()).not.toBe('Horde 3');
+        expect(title()).not.toBe('Normal 3');
         const menu = saveTab(root);
         menu.open();
         expect(menu.byText('Load code').disabled).toBe(false);
@@ -374,12 +374,12 @@ describe('the horde-only build in the game (app.ts, ID-066)', () => {
         menu.byText('Start new camp').click();
         expect(saved().hordeNumber).toBe(1);
         // The old camp's result screen is gone: the new camp's start screen is up.
-        expect(title()).toBe('Horde 1');
-        expect(button().textContent).toBe('Start Horde 1');
+        expect(title()).toBe('Normal 1');
+        expect(button().textContent).toBe('Start Normal 1');
         menu.close();
         button().click();
         step(48);
-        expect(bar()).toMatch(/^Horde 1 · Wave 1\//);
+        expect(bar()).toMatch(/^Normal 1 · Wave 1\//);
       },
     );
   });
@@ -545,7 +545,7 @@ describe('Combine in the game (app.ts, ID-091)', () => {
     close();
     endNextTick('won');
     step(32);
-    expect(title()).toMatch(/Horde 4/);
+    expect(title()).toMatch(/Normal 4/);
     invButton.click();
     // The win's drop may be the strongest gun, selected first: pick an SMG of the set.
     invScrim.querySelector<HTMLButtonElement>('.inv-slot[data-key="stash:h1"]')!.click();
@@ -555,7 +555,7 @@ describe('Combine in the game (app.ts, ID-091)', () => {
 
 describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
   /**
-   * A camp at Horde 2 with survivor 1 at level 4 and survivor 2 fresh; `xp` 149 puts
+   * A camp at Normal 2 with survivor 1 at level 4 and survivor 2 fresh; `xp` 149 puts
    * survivor 1 one XP short of level 4, so a win levels them up (ID-134).
    */
   function seeded(armoury: ReturnType<typeof rollWeapon>[] = [], xp = 150) {
@@ -685,7 +685,7 @@ describe('the Roster in the game (app.ts, ID-086, ID-108, ID-146)', () => {
 
 describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', () => {
   /**
-   * A won Horde 2. `xp` 149 is one short of level 4: the win levels survivor 1 up, so they
+   * A won Normal 2. `xp` 149 is one short of level 4: the win levels survivor 1 up, so they
    * have a card (ID-134); at 150 (level 4 already) the win doesn't, so no card.
    */
   /** The clock while `wonWithPoints` fights its horde. */
@@ -848,10 +848,10 @@ describe('farming in the game (app.ts, ID-098)', () => {
     const { button, select, pick, badge, frame, title } = at(5);
     expect(select().value).toBe('5');
     expect([...select().options].map((o) => o.value)).toEqual(['5', '4', '3', '2', '1']);
-    expect(button().textContent).toMatch(/^Start Horde 5/);
+    expect(button().textContent).toMatch(/^Start Normal 5/);
     pick(2);
-    expect(title()).toContain('Horde 2');
-    expect(button().textContent).toBe('Replay Horde 2');
+    expect(title()).toContain('Normal 2');
+    expect(button().textContent).toBe('Replay Normal 2');
     button().click();
     frame();
     frame();
@@ -865,14 +865,14 @@ describe('farming in the game (app.ts, ID-098)', () => {
     frame();
     endNextTick('won');
     frame();
-    expect(title()).toBe('Horde 3 - You hold the line (replay)');
+    expect(title()).toBe('Normal 3 - You hold the line (replay)');
     expect(result().textContent).not.toContain('New survivor');
     // The next new horde has not moved; the roster has not grown; the XP is paid.
     expect(saved().hordeNumber).toBe(5);
     expect(saved().roster).toHaveLength(2);
     expect(saved().roster[0]!.xp).toBeGreaterThan(0);
     expect(select().value).toBe('3');
-    expect(button().textContent).toBe('Replay Horde 3');
+    expect(button().textContent).toBe('Replay Normal 3');
     // The picker's list is the saved game's: five hordes, the new one first.
     expect([...select().options].map((o) => o.value)).toEqual(['5', '4', '3', '2', '1']);
     expect(result().textContent).toContain('Replay');
@@ -888,12 +888,12 @@ describe('farming in the game (app.ts, ID-098)', () => {
     frame();
     endNextTick('won');
     frame();
-    expect(title()).toBe('Horde 5 - You hold the line');
+    expect(title()).toBe('Normal 5 - You hold the line');
     expect(saved().hordeNumber).toBe(6);
     accept(document.body);
     expect(select().value).toBe('6');
     expect([...select().options].map((o) => o.value)).toEqual(['6', '5', '4', '3', '2', '1']);
-    expect(button().textContent).toMatch(/^Start Horde 6/);
+    expect(button().textContent).toMatch(/^Start Normal 6/);
     button().click();
     frame();
     frame();
@@ -907,9 +907,9 @@ describe('farming in the game (app.ts, ID-098)', () => {
     endNextTick('lost');
     frame();
     expect(select().value).toBe('4');
-    expect(button().textContent).toMatch(/^Retry Horde 4/);
+    expect(button().textContent).toMatch(/^Retry Normal 4/);
     pick(1);
-    expect(button().textContent).toBe('Replay Horde 1');
+    expect(button().textContent).toBe('Replay Normal 1');
     button().click();
     frame();
     frame();
@@ -1559,7 +1559,7 @@ describe('the intro in the game (app.ts, ID-106)', () => {
     expect(fresh.intro().hidden).toBe(true);
     expect(decodeSave(localStorage.getItem(SAVE_KEY))!.game.hordeNumber).toBe(1);
     step(0);
-    expect(fresh.root.querySelector('.hud-result-title')!.textContent).toBe('Horde 1');
+    expect(fresh.root.querySelector('.hud-result-title')!.textContent).toBe('Normal 1');
   });
 
   it('Mute on the intro is stored and the Menu shows it; the Menu reopens the card', () => {
@@ -1633,7 +1633,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     };
   }
 
-  /** Wins Horde 1 from a new game: the result screen up with one survivor asking to join. */
+  /** Wins Normal 1 from a new game: the result screen up with one survivor asking to join. */
   function wonFirst() {
     const booted = boot();
     step(0);
@@ -1726,7 +1726,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     button().click();
     expect(confirmPanel()).toBeNull();
     step(48);
-    expect(bar()).toMatch(/^Horde 2 /);
+    expect(bar()).toMatch(/^Normal 2 /);
   });
 
   it('going on without answering asks first: no keeps the screen and the ask; yes refuses them', async () => {
@@ -1749,7 +1749,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     expect(saved().joining).toBeUndefined();
     expect(saved().roster).toHaveLength(1);
     step(48);
-    expect(bar()).toMatch(/^Horde 2 /);
+    expect(bar()).toMatch(/^Normal 2 /);
   });
 
   it('a reload mid-offer: the start screen still asks, and Accept puts them on the wall', () => {
@@ -1758,7 +1758,7 @@ describe('joining the camp in the game (app.ts, ID-150)', () => {
     // Reload: a new page on the same save.
     const again = boot();
     step(100);
-    expect(again.title()).toMatch(/Horde 2/);
+    expect(again.title()).toMatch(/Normal 2/);
     expect(again.result().textContent).toContain(asking.name);
     const join = again.root.querySelector<HTMLElement>('.debrief-join')!;
     expect(join.hidden).toBe(false);
@@ -2149,7 +2149,7 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
     return { ...booted, tile, press, toast };
   }
 
-  /** A camp of `n` at Horde 5 (6 in the squad, the rest on the bench). */
+  /** A camp of `n` at Normal 5 (6 in the squad, the rest on the bench). */
   function camp(n: number): GameState {
     const g = newGame('horde');
     const all = Array.from({ length: n }, (_, i) => recruit(i + 1));
@@ -2272,7 +2272,7 @@ describe('the result and the camp tile agree (app.ts, ID-182)', () => {
 
   it('a lost fight has no offer line at all', () => {
     const { root, title } = playWin(camp(7), 1, null, 'lost');
-    expect(title()).toBe('Horde 5 - Camp has fallen');
+    expect(title()).toBe('Normal 5 - Camp has fallen');
     expect(root.querySelector('.debrief-join')).toBeNull();
   });
 
@@ -2299,7 +2299,7 @@ describe('Upgrade through the app (ID-208)', () => {
   };
   const STASHED: OwnedWeapon = { ...HELD, uid: 'h2', level: 2 };
 
-  /** Horde 6, one survivor holding Lv 3 `h1`, Lv 2 `h2` in the stash, `scrap` Scrap. */
+  /** Normal 6, one survivor holding Lv 3 `h1`, Lv 2 `h2` in the stash, `scrap` Scrap. */
   function upgradeCamp(scrap: number, horde = 6) {
     const g = newGame('horde');
     const who = recruit(1);
@@ -2407,7 +2407,7 @@ describe('Upgrade through the app (ID-208)', () => {
     expect(text()).toContain('now 520');
     expect(text()).not.toContain('now 540');
     // The start button and picker still stand.
-    expect(m.button().textContent).toMatch(/^Start Horde 7/);
+    expect(m.button().textContent).toMatch(/^Start Normal 7/);
   });
 
   /** A won result screen over the upgrade camp, the Weapons tab not yet open. */
@@ -2488,7 +2488,7 @@ describe('Upgrade through the app (ID-208)', () => {
 describe('Craft through the app (ID-209)', () => {
   const GUN = BLUEPRINT_GUNS[0]!;
 
-  /** Horde 6, one survivor, `scrap` Scrap and (optionally) a blueprint of `GUN`. */
+  /** Normal 6, one survivor, `scrap` Scrap and (optionally) a blueprint of `GUN`. */
   function craftCamp(scrap: number, bp = 1, seedWith: 'drop' | 'none' = 'none') {
     const g = newGame('horde');
     const camp: GameState = {
@@ -2656,7 +2656,7 @@ describe('Salvage through the app (ID-207)', () => {
     return step ? { ...w, step } : w;
   };
 
-  /** Horde 6, one survivor holding Lv 3 `h1`, `stash` in the stash, 500 Scrap. */
+  /** Normal 6, one survivor holding Lv 3 `h1`, `stash` in the stash, 500 Scrap. */
   function salvageCamp(stash: OwnedWeapon[]) {
     const g = newGame('horde');
     const who = recruit(1);
@@ -2831,7 +2831,7 @@ describe('Salvage through the app (ID-207)', () => {
 });
 
 describe('Medicine treats the resting in the game (app.ts, ID-220)', () => {
-  /** A Horde 2 camp: survivors 1–2 in the squad, 3 resting on the bench, `medicine` in stock. */
+  /** A Normal 2 camp: survivors 1–2 in the squad, 3 resting on the bench, `medicine` in stock. */
   function hurtCamp(medicine = 2) {
     const g = newGame('horde');
     const camp: GameState = {
@@ -2902,7 +2902,7 @@ describe('Medicine treats the resting in the game (app.ts, ID-220)', () => {
       };
     });
     step(32);
-    expect(t.title()).toMatch(/Horde 2/);
+    expect(t.title()).toMatch(/Normal 2/);
     expect(t.saved().reserve.find((d) => d.id === 'recruit-2')?.rest).toBe(1);
     const debrief = t.result().textContent;
     expect(debrief).toContain('Resting');
