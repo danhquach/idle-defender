@@ -5374,3 +5374,4 @@ original outline.
   with the field cleared (no kill XP or cash), and each camp edit must pass
   the save's own validation or is refused. Typed values are digits only, in
   range, refused (never clamped) otherwise. No simulation number changes.
+
