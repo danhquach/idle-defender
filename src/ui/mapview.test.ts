@@ -40,7 +40,9 @@ import {
   pct,
   tripText,
 } from './maptext.ts';
-import { survivorPower } from '../core/hordeonly.ts';
+import { stashCap, survivorPower } from '../core/hordeonly.ts';
+import { rollWeapon } from '../core/armoury.ts';
+import { createRng } from '../core/rng.ts';
 import {
   bestFit,
   createMapView,
@@ -398,6 +400,50 @@ describe('the World map tab: the report (ID-219)', () => {
     q<HTMLButtonElement>('.map-report .map-go')!.click();
     expect(state.game.map!.patrols).toEqual([]);
     expect(q('.map-areas')).not.toBeNull();
+  });
+
+  it('holds the finds in one fixed box, OK outside it, whatever was found (ID-260)', () => {
+    for (const ids of [['recruit-2'], ['recruit-2', 'recruit-3', 'recruit-4', 'recruit-5']]) {
+      const g = send(camp(), ids, 0);
+      const { q } = mount({ game: g, now: g.map!.patrols[0]!.backAt });
+      const box = q('.map-pick-side > .map-found-box')!;
+      expect(box).not.toBeNull();
+      expect(box.querySelector('.map-found')).not.toBeNull();
+      expect(box.querySelector('.map-go')).toBeNull();
+      expect(q('.map-pick-side > .map-buttons > .map-go')).not.toBeNull();
+    }
+  });
+
+  it('puts a full stash’s note first in the finds box, both boxes reachable by keyboard', () => {
+    // A stash at its cap: the first seed whose patrol brings a gun back throws one away.
+    const base = camp();
+    const full = {
+      ...base,
+      armoury: Array.from({ length: stashCap(base) }, (_, i) =>
+        rollWeapon(createRng(i), `h${1 + (i % 9)}x${i}`, 'smg', 'rusty'),
+      ),
+    };
+    let g: GameState | null = null;
+    // Area 1 on this map is the police station, where guns come back; the electronics store
+    // (area 0) brings blueprints and Scrap.
+    for (let seed = 1; seed < 400 && !g; seed++) {
+      const r = sendMapPatrol(
+        full,
+        full.map!.areas[1]!.kind,
+        ['recruit-2', 'recruit-3', 'recruit-4', 'recruit-5'],
+        seed,
+        NOW,
+      );
+      if (!r.ok) throw new Error(r.reason);
+      if (patrolReport(r.game, r.game.map!.patrols[0]!).thrown.length > 0) g = r.game;
+    }
+    expect(g, 'no seed threw a gun away').not.toBeNull();
+    const { q } = mount({ game: g!, now: g!.map!.patrols[0]!.backAt });
+    const box = q('.map-found-box')!;
+    expect(box.firstElementChild!.classList.contains('map-sub')).toBe(true);
+    expect(box.firstElementChild!.textContent).toMatch(/^Stash full: /);
+    expect(box.tabIndex).toBe(0);
+    expect(q('.map-report-team')!.tabIndex).toBe(0);
   });
 
   it('keeps the report shut during a fight', () => {

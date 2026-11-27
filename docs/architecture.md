@@ -141,6 +141,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A player setting | `storage/settings.ts`; control in `ui/menu.ts` |
 | Roster card's DPS figure (short form on the card, full in its label; ID-259) | `ui/squadroster.ts` (`cardDps`) |
 | Roster boxes, folds (Bench, patrol, Details) | `ui/squadroster.ts` (`foldButton`, `box`, `detailsOpen`); kept folds in `storage/settings.ts` (`readRosterFolds`); styles `.rv-box` / `.rv-fold` in `src/page.css` |
+| Patrol report's fixed size (team list, finds box; ID-260) | `ui/mapview.ts` (`reportView`), styles `.map-report-team` / `.map-found-box` in `src/page.css` |
 | A sound | file in `src/assets/sounds/` (credit in `docs/audio-credits.md`); `ui/audio.ts` (samples), `ui/sound.ts` (when it plays) |
 | Page styles or layout | `src/page.css`; the DOM is built in the `ui/` file that owns the panel |
 | Any PR | raise `version` in `package.json` (+ `package-lock.json`) over main's; the pre-push hook checks it |

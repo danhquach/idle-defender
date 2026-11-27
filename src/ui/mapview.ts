@@ -484,9 +484,17 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       const none = r.members.length - r.finds;
       item(`${none} found nothing`, 'map-found-none');
     }
-    side.append(el('h4', 'map-found-head', 'Found'), found);
+    // One fixed box for the finds and the stash note (ID-260): a long list scrolls inside it,
+    // so every report is one size and OK never moves. Both boxes take the keyboard, so it can
+    // scroll them; the stash note leads, as it says guns were lost.
+    const finds = el('div', 'map-found-box');
+    finds.tabIndex = 0;
+    finds.setAttribute('role', 'group');
+    finds.setAttribute('aria-label', 'What the patrol found');
+    people.tabIndex = 0;
+    side.append(el('h4', 'map-found-head', 'Found'), finds);
     if (r.thrown.length > 0) {
-      side.append(
+      finds.append(
         el(
           'p',
           'map-sub',
@@ -494,6 +502,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
         ),
       );
     }
+    finds.append(found);
     const ok = el('button', 'hud-button btn-primary map-go', 'OK');
     ok.type = 'button';
     ok.disabled = !can;
