@@ -9,9 +9,12 @@
 // rest is the residue (the LMG and the mix still trail at Normal 20; design §11).
 // Measured, wins of 20 at the Carbine squad's 10-of-20 level (Carbine / LMG / Sniper / Shotgun /
 // Mix; every squad's Squad Power within 2.6% of the Carbine squad's, the mix's within 1%):
-//   Nightmare 9: 11 / 16 / 15 / 12 / 10     Hell 1:  10 / 13 / 10 / 18 / 13
-// Zero margin at Hell 1: the shotgun's 18 (≤ 18), and the spread is 8 (≤ 9).
-//   Normal 20:   12 /  5 / 12 /  9 /  4     Hell 10: 16 / 11 / 13 / 12 / 10   (logged)
+//   Nightmare 9: 11 / 16 / 15 / 12 / 10     Hell 1:  10 / 13 / 10 / 18 / 13   (before ID-265)
+//   Nightmare 9: 16 / 16 / 13 / 17 / 14     Hell 1:  13 /  7 / 12 / 12 / 10
+// ID-265: every squad plays with the Research Center nodes the reference player owns at that horde
+// (`withRef`, 65% of the Scrap earned) against the research HP ramp, so the figures moved.
+// Margins now: Hell 1's LMG 7 (≥ 6), its spread 6 (≤ 9), Nightmare 9's shotgun 17 (≤ 18).
+//   Normal 20:   12 /  5 / 12 /  9 /  4     Hell 10: 10 / 15 / 12 / 15 / 11   (logged; 16 / 11 / 13 / 12 / 10 before)
 // The mix stands its guns by reach (ID-248, #505: the short-reach Pump Shotguns in the middle
 // of the firing line, the Sniper rifles on the edges), so it wins like a one-gun squad. Standing
 // them in squad order it won 9 at Nightmare 9 and 5 at Hell 1, the shotguns on the edges not
@@ -23,7 +26,7 @@ import type { HigherMode } from '../modes.ts';
 import { playSquadHorde } from '../sim.ts';
 import { squadPower } from '../squadpower.ts';
 import { cacheFor } from './cache.ts';
-import { gunSquad, inMode, mixedSquad, SEEDS } from './shared.ts';
+import { gunSquad, inMode, mixedSquad, SEEDS, withRef } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
@@ -48,11 +51,12 @@ const build =
     return inHorde(squad, mode, n);
   };
 
-/** Fights won out of `SEEDS` at horde `n`, traits off. */
+/** Fights won out of `SEEDS` at horde `n`, traits off, with the reference player's research (ID-265). */
 function wins(game: GameState, n: number): number {
   let won = 0;
+  const ref = withRef(game, n);
   for (let s = 1; s <= SEEDS; s++) {
-    if (playSquadHorde(game, s * 101, undefined, undefined, n, true).outcome === 'won') won++;
+    if (playSquadHorde(ref, s * 101, undefined, undefined, n, true).outcome === 'won') won++;
   }
   return won;
 }

@@ -132,6 +132,15 @@ export const SQUAD_HP_GROWTH = { early: 1.2, late: 1.06 } as const;
  */
 export const SQUAD_BIG_HP = { from: 30, to: 50, growth: 1.0725 } as const;
 /**
+ * The Research Center's HP ramp (ID-265): from Horde `from` to `to` a fight's enemy HP grows
+ * by `factor` in all (geometrically, a step a horde), held from `to` on, so Nightmare and Hell
+ * carry it too (it works on the effective horde). Tier 1 to 4 research makes fights easier, and
+ * this keeps the reference player (`balance/refplayer.ts`, 65% of the Scrap earned spent on
+ * research) where the unresearched player stood. It scales the fight only: Recommended Power
+ * and `hordeHp` stay the bare player's, and the Wall Machine Gun's demand includes it.
+ */
+export const SQUAD_RESEARCH_HP = { from: 30, to: 40, factor: 1.08 } as const;
+/**
  * Enemy HP's factor in horde-only Hordes 1, 2, … on top of the growth, the last one from
  * there on (ID-097, ID-102, ID-128): the first two are sure wins while the player learns
  * the cards; Horde 3 takes the growth in full and Horde 4 a step more (ID-163), each enemy

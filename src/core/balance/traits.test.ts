@@ -14,7 +14,7 @@ import type { HigherMode } from '../modes.ts';
 import { playSquadHorde } from '../sim.ts';
 import { squadPower } from '../squadpower.ts';
 import { cacheFor } from './cache.ts';
-import { gunSquad, inMode, mixedSquad, SEEDS } from './shared.ts';
+import { gunSquad, inMode, mixedSquad, SEEDS, withRef } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
@@ -24,11 +24,12 @@ const inHorde = (squad: GameState, mode: HigherMode, n: number): GameState => {
   return mode === 'hell' ? { ...g, modes: { nightmare: 51, hell: n } } : g;
 };
 
-/** Fights won out of `seeds` at horde `n`, with the traits `on` or off. */
+/** Fights won out of `seeds` at horde `n`, with the traits `on` or off, with the reference player's research (ID-265). */
 function winsWith(game: GameState, n: number, seeds: number, on: boolean): number {
   let won = 0;
+  const ref = withRef(game, n);
   for (let s = 1; s <= seeds; s++) {
-    if (playSquadHorde(game, s * 101, undefined, undefined, n, !on).outcome === 'won') won++;
+    if (playSquadHorde(ref, s * 101, undefined, undefined, n, !on).outcome === 'won') won++;
   }
   return won;
 }

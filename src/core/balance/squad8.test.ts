@@ -1,6 +1,7 @@
 // Balance: a bigger squad's late Normal (ID-224). Recommended Power counts the squad's size
 // (`squadSize`), so it means the same for a squad of 6 and of 8: each at its own Recommended
 // Power wins about as often at Normal Hordes 30, 40 and 50, and neither meets a wall well over it.
+// ID-265: both play with the Research Center nodes the reference player owns at that horde.
 import { describe, expect, it } from 'vitest';
 import { rollWeapon } from '../armoury.ts';
 import { recruit } from '../camp.ts';
@@ -11,7 +12,7 @@ import { createRng } from '../rng.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { xpForLevel } from '../stats.ts';
 import { cacheFor } from './cache.ts';
-import { SEEDS, wins } from './shared.ts';
+import { SEEDS, wins, withRef } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 const HORDES = [30, 40, 50] as const;
@@ -56,7 +57,9 @@ function squadAtShare(size: number, n: number, share: number): GameState {
 }
 
 const won = (size: number, n: number, share: number, seeds: number): number =>
-  keep(`${size} ${n} ${share} ${seeds}`, () => wins(squadAtShare(size, n, share), n, seeds));
+  keep(`${size} ${n} ${share} ${seeds}`, () =>
+    wins(withRef(squadAtShare(size, n, share), n), n, seeds),
+  );
 
 describe('a bigger squad’s late Normal (ID-224)', () => {
   it('a squad of 6 and of 8, each at its own Recommended Power, win alike at Hordes 30, 40, 50', () => {

@@ -52,6 +52,7 @@ import {
   SQUAD_CAP,
   SQUAD_CAP_MAX,
   SQUAD_EARLY_HP,
+  SQUAD_RESEARCH_HP,
   SQUAD_HP_GROWTH,
   SKILL_IDS,
   SQUAD_LINE,
@@ -170,6 +171,17 @@ export function squadHpScale(n: number, size: number = SQUAD_CAP): number {
   const late = Math.max(0, n - SQUAD_CAP);
   const ease = SQUAD_EARLY_HP[Math.min(n, SQUAD_EARLY_HP.length) - 1]!;
   return ease * SQUAD_HP_GROWTH.early ** early * SQUAD_HP_GROWTH.late ** late * bigSquadHp(n, size);
+}
+
+/**
+ * The Research Center's ramp on Horde `n`'s enemy HP in a fight (ID-265, `SQUAD_RESEARCH_HP`):
+ * exactly 1 up to Horde `from`, then `factor` to the power of the share of the way to `to`,
+ * held from there on. Applied last, to the fight's HP scale only: `squadHpScale`, `hordeHp`
+ * and so Recommended Power do not carry it.
+ */
+export function researchHp(n: number): number {
+  const { from, to, factor } = SQUAD_RESEARCH_HP;
+  return factor ** ((Math.min(Math.max(n, from), to) - from) / (to - from));
 }
 
 /**
@@ -870,7 +882,7 @@ export function startSquadHorde(
     cashRate: 0,
     startCash: 0,
     cards: [...SQUAD_CARDS, ...modeCards(game), ...techCards(game)],
-    hpScale: squadHpScale(eff, squad.length) * MODES[mode].hpScale,
+    hpScale: squadHpScale(eff, squad.length) * MODES[mode].hpScale * researchHp(eff),
     xpRate: SQUAD_XP_RATE,
     line: line.slots,
     spawnX: SQUAD_SPAWN_X,
@@ -883,7 +895,10 @@ export function startSquadHorde(
   // Wall Machine Gun (ID-264): its damage a second is a share of the horde's demand rate, fixed
   // here from the horde's HP (by kind, theme included) over the time its waves take. No RNG.
   if (techOf(game).includes('wall-machine-gun')) {
-    const demand = hordeKindHp(eff, mode, squad.length, theme).reduce((sum, [, hp]) => sum + hp, 0);
+    // The fight's HP carries the research ramp (ID-265), `hordeKindHp` does not: so does the demand.
+    const demand =
+      hordeKindHp(eff, mode, squad.length, theme).reduce((sum, [, hp]) => sum + hp, 0) *
+      researchHp(eff);
     s.gunDps = (CARD.wallGun.share * demand) / hordeSeconds(eff);
   }
   // The rest of the squad take their slots too.

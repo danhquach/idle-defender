@@ -35,7 +35,10 @@ const CASES: [number, number][] = [
 
 /**
  * The recorded digests (main, before ID-218, Node 25 on arm64; re-recorded in ID-236, whose
- * wire rows carry a `broken` flag and heal and cut, a deliberate change to Normal). A few long fights end a tick or
+ * wire rows carry a `broken` flag and heal and cut, a deliberate change to Normal; h45 and h50 re-recorded in
+ * ID-265, whose research HP ramp (`SQUAD_RESEARCH_HP`, from Horde 30, so h30 and below are untouched) makes
+ * Horde 31 on harder, on Node 25 only: NODE_22 below has no entry for them yet, so CI's Node 22 may differ
+ * and its values are to be taken from CI). A few long fights end a tick or
  * two apart on another Node (its Math functions round their last bit differently, which is why
  * the balance cache is keyed on Node's version too), so CI's Node 22 has its own entries below.
  */
@@ -47,10 +50,10 @@ const GOLDEN: Record<string, string> = {
   'h30-L27-lost': '77f5ca0b:46840',
   'h30-L70-won': '35a1184:19997',
   'h4-L4-won': '190ef090:16865',
-  'h45-L40-lost': '14f7e634:60385',
+  'h45-L40-lost': '40f457f0:62592',
   'h5-L5-won': '3bad2bce:18443',
-  'h50-L150-won': 'a8288ed9:19942',
-  'h50-L45-lost': '8139027e:45006',
+  'h50-L150-won': 'a4411e55:19942',
+  'h50-L45-lost': 'a2359238:45823',
   // ID-248: re-recorded locally (drop and stash scoring use Squad Power's rating, so the replay's
   // drop changes). CI (Node 22) confirms this entry; if it differs there, add it to NODE_22.
   'replay-won': 'a46e68fd:13681',
