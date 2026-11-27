@@ -440,7 +440,8 @@ export function tailPace(pace: number | undefined): number {
  * on a soft `halo` of that colour, with a white-hot dot at the muzzle. A pistol's is small,
  * an SMG's thin and spiky (its flames' lengths vary more, `roll`), a rifle's long, a
  * sniper's a long needle, a shotgun's a wide fan, an LMG's a big star (ID-135's guns below); a turret's is a
- * cold, electric cross, unlike any survivor's.
+ * cold, electric cross, unlike any survivor's; the Wall Machine Gun's (ID-280) a bigger star
+ * than the LMG's.
  */
 export type FlashStyle = {
   readonly tongues: readonly (readonly [number, number, number])[];
@@ -450,7 +451,7 @@ export type FlashStyle = {
   readonly roll?: number;
 };
 const GUNFIRE = '#ff9a3c';
-export const FLASH_STYLE: Readonly<Record<GunId | 'turret', FlashStyle>> = {
+export const FLASH_STYLE: Readonly<Record<GunId | 'turret' | 'wallGun', FlashStyle>> = {
   pistol: {
     tongues: [
       [0, 6, 3],
@@ -561,6 +562,19 @@ export const FLASH_STYLE: Readonly<Record<GunId | 'turret', FlashStyle>> = {
     ],
     halo: 4,
     edge: '#8fd3ff',
+  },
+  // The Wall Machine Gun (ID-280): a heavy mounted gun, so a bigger, hotter star than the
+  // LMG's, in gunfire, not the turrets' cold cross its `turret:` owner id would give it.
+  wallGun: {
+    tongues: [
+      [0, 17, 6],
+      [-0.75, 8, 3],
+      [0.75, 8, 3],
+      [-2.1, 4, 2],
+      [2.1, 4, 2],
+    ],
+    halo: 8,
+    edge: '#ffb347',
   },
 };
 /**
@@ -2446,10 +2460,12 @@ function flashOf(scene: Scene, owner: string): { at: number; age: number } | nul
 }
 
 /**
- * Whose flash look `owner` fires with (ID-088): a turret's own; a Gunner's primary's, as
+ * Whose flash look `owner` fires with (ID-088): the Wall Machine Gun's own (ID-280); a
+ * turret's own; a Gunner's primary's, as
  * their sprite holds it (the rifle's for any other gun); anyone else's sidearm, a pistol's.
  */
 function flashStyleOf(scene: Scene, owner: string): FlashStyle {
+  if (owner === WALL_GUN) return FLASH_STYLE.wallGun;
   if (owner.startsWith(TURRET_OWNER)) return FLASH_STYLE.turret;
   const d = scene.defenders.find((s) => s.id === owner);
   const gun = d ? gunIdOf(d) : null;
