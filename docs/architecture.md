@@ -139,6 +139,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | World map Reroll price, draw cap | `MAP_REROLL`, `MAP_DRAWS_MAX` in `core/data.ts`; `rerollCost` / `rerollMap` in `core/scout.ts`; the button in `ui/mapview.ts` |
 | World map areas, danger, patrol rules | `AREAS`, `DANGERS`, `MAP_PATROL` in `core/data.ts`; rules in `core/scout.ts`; save in `readMap` (`storage/save.ts`) |
 | A player setting | `storage/settings.ts`; control in `ui/menu.ts` |
+| Roster card's DPS figure (short form on the card, full in its label; ID-259) | `ui/squadroster.ts` (`cardDps`) |
 | Roster boxes, folds (Bench, patrol, Details) | `ui/squadroster.ts` (`foldButton`, `box`, `detailsOpen`); kept folds in `storage/settings.ts` (`readRosterFolds`); styles `.rv-box` / `.rv-fold` in `src/page.css` |
 | A sound | file in `src/assets/sounds/` (credit in `docs/audio-credits.md`); `ui/audio.ts` (samples), `ui/sound.ts` (when it plays) |
 | Page styles or layout | `src/page.css`; the DOM is built in the `ui/` file that owns the panel |

@@ -42,6 +42,7 @@ import {
   dpsCaption,
   el,
   movesText,
+  shortCount,
   slotOffer,
 } from './hud.ts';
 import { GUNS_WAIT } from './inventory.ts';
@@ -97,6 +98,8 @@ export interface RosterTile {
   gunIcon: ArtId;
   /** Their DPS with it, as the gun slot shows (ID-152), "17.2". */
   dps: string;
+  /** The same DPS as the card prints it (ID-259): `cardDps`, at most five characters. */
+  dpsCard: string;
   /**
    * A fighting job holding one of its guns (ID-149), so the profession's bonus works: the
    * card's ★ (ID-180), as the gun picker marks it.
@@ -134,6 +137,8 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
   return [...game.roster, ...ordered].map((d) => {
     const extra = squad.some((s) => s.id === d.id) ? chefHp : 0;
     const held = heldGunOf(d);
+    // One figure, printed two ways: in full for the label, short on the card (ID-259).
+    const power = survivorDps(squadSpec(d), held);
     const inFight = fight?.defenders.find((f) => f.id === d.id);
     const downInFight = fight?.injured.some((i) => i.defender.id === d.id) ?? false;
     const resting = d.injuredUntil !== null && d.injuredUntil > now;
@@ -163,7 +168,8 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
       gun: heldName(held),
       gunFull: gunName(held),
       gunIcon: GUN_ICON[baseOf(held) as GunId],
-      dps: heldDps(held, d),
+      dps: power.toFixed(1),
+      dpsCard: cardDps(power),
       fits: JOBS[d.job].kind === 'fight' && jobFits(d.job, held),
       rarity: rarityOf(held),
       cls: classOf(held),
@@ -641,7 +647,7 @@ export function createRoster(
     // Two columns (ID-180): portrait | name, level, profession; the held gun on its rarity
     // tint | their DPS with it (the number the gun slot shows) and the ★.
     const stat = el('span', 'rv-tab-stat');
-    stat.append(el('span', 'rv-tab-dps', t.dps));
+    stat.append(el('span', 'rv-tab-dps', t.dpsCard));
     // Their gun suits their profession (ID-149): the gun picker's ★, after the DPS. The label
     // says it in words.
     if (t.fits) {
@@ -1287,6 +1293,18 @@ export const NO_MEDICINE = 'No Medicine';
 export const TREAT_WAIT = 'Treat the injured between hordes';
 /** What a treat says on the status line. */
 export const treatedText = (name: string): string => `${name} is treated: fit for the next horde.`;
+
+/**
+ * A card's DPS (ID-259), short enough for a phone's four-to-a-row card: tenths below 1,000
+ * ("987.6"), whole up to 99,999 ("12345"), then the top bar's short form ("123k", "4.5M").
+ * The card's label keeps the full figure.
+ */
+export function cardDps(n: number): string {
+  // 999.95 and up would print "1000.0": six characters.
+  if (n < 999.95) return n.toFixed(1);
+  if (n < 100_000) return String(Math.floor(n));
+  return shortCount(n);
+}
 
 /** A held gun's dmg/s in survivor `d`'s hands, as printed (level and profession, ID-152): the picker's figure. */
 const heldDps = (h: Held, d: RosterDefender): string => survivorDps(squadSpec(d), h).toFixed(1);
