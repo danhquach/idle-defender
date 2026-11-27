@@ -28,6 +28,7 @@ import {
 } from '../core/armoury.ts';
 import {
   COMBINE_COUNT,
+  GUN_UPGRADE,
   RARITIES,
   RARITY_ORDER,
   STASH_SLOT,
@@ -593,12 +594,15 @@ export function slotLabel(it: InventoryItem, ready = false): string {
   return parts.join(', ');
 }
 
+/** From this level on the level plate shows the bare number: "Lv 100" would not fit beside +5. */
+const LEVEL_BARE_FROM = 100;
+
 /**
- * The square art of a slot: the gun's icon (or its name, for no gun) and its badges. The
- * dmg/s has the bottom edge to itself, so 4 or 5 digits never run into the level (ID-227):
- * the level sits top left, after the set-ready ▲ when `ready`; the +N step top right.
+ * The square art of a slot (ID-253): the gun's icon lying across the middle (or its name, for no
+ * gun), and four fixed corners: level top left, the Upgrade step +N top right (none at +0), the
+ * gun's own dmg/s bottom left, the class badge bottom right. A non-gun has no plates.
  */
-export function slotFace(it: InventoryItem, ready = false): HTMLElement[] {
+export function slotFace(it: InventoryItem): HTMLElement[] {
   const face: HTMLElement[] = [];
   const url = it.icon ? ART_URLS[it.icon] : undefined;
   if (url) {
@@ -612,23 +616,27 @@ export function slotFace(it: InventoryItem, ready = false): HTMLElement[] {
   } else {
     face.push(el('span', 'inv-slot-text', WEAPONS[it.base].name));
   }
-  if (it.cls) {
-    // The class badge alone (ID-237, ID-254): the name is its label, the sentence its tooltip.
-    face.push(classBadge(it.cls, { label: true, title: it.classLine ?? undefined }));
+  if (it.levelBadge) {
+    // "Lv N", or just the number from level 100, so it never meets the +N beside it.
+    const level = el(
+      'span',
+      'inv-slot-level',
+      it.level >= LEVEL_BARE_FROM ? String(it.level) : it.levelBadge,
+    );
+    level.title = `Level ${it.level}`;
+    face.push(level);
   }
+  if (it.stepBadge) face.push(el('span', 'inv-slot-step', it.stepBadge));
   if (it.badge) {
     // A bare number on the slot: its tooltip says it is the gun's own dmg/s (ID-166).
     const badge = el('span', 'inv-slot-badge', it.badge);
     if (it.power) badge.title = it.power;
     face.push(badge);
   }
-  if (ready || it.levelBadge) {
-    const corner = el('span', 'inv-slot-corner');
-    if (ready) corner.append(el('span', 'inv-slot-ready', '▲'));
-    if (it.levelBadge) corner.append(el('span', 'inv-slot-level', it.levelBadge));
-    face.push(corner);
+  if (it.cls) {
+    // The class badge alone (ID-237, ID-254): the name is its label, the sentence its tooltip.
+    face.push(classBadge(it.cls, { label: true, title: it.classLine ?? undefined }));
   }
-  if (it.stepBadge) face.push(el('span', 'inv-slot-step', it.stepBadge));
   return face;
 }
 
@@ -642,8 +650,14 @@ function slot(it: InventoryItem, ready: boolean, caption?: string): HTMLElement 
   b.setAttribute('aria-label', slotLabel(it, ready));
   b.setAttribute('aria-pressed', 'false');
   b.tabIndex = -1;
-  b.append(...slotFace(it, ready));
+  b.append(...slotFace(it));
   li.append(b);
+  if (ready) {
+    // A corner mark on the cell, not the slot: the slot clips what pokes past its frame.
+    const wedge = el('span', 'inv-ready');
+    wedge.setAttribute('aria-hidden', 'true');
+    li.append(wedge);
+  }
   if (caption !== undefined) {
     // A long name is cut short with an ellipsis; the whole name shows on hover.
     const who = el('span', 'inv-who', caption);
@@ -769,6 +783,7 @@ export function inventoryGrid(
   drag = false,
   selecting?: boolean,
   tabs?: BenchTabs,
+  key?: IconKey,
 ): HTMLElement[] {
   const ready = (it: InventoryItem): boolean =>
     canCombine && !!it.owned && !!rowOf(view.combine, it.owned)?.uses;
@@ -804,7 +819,7 @@ export function inventoryGrid(
   );
   stash.classList.add('inv-stash-zone');
   const squad = section(
-    el('h3', 'menu-heading', 'Squad'),
+    ...squadHead(key),
     ...(view.power ? [powerNote(view.power, view.powerHorde)] : []),
     list('Squad', 'inv-grid inv-squad', [
       ...view.squad.map((s) => mark(slot(s.gun, false, s.name))),
@@ -836,6 +851,68 @@ const TABS: { id: BenchTab; label: string }[] = [
   { id: 'stash', label: 'Stash' },
   { id: 'bench', label: 'Bench' },
 ];
+
+/** The icon key's state and what it calls (ID-253): `set` opens or closes it. */
+export interface IconKey {
+  open: boolean;
+  set(open: boolean): void;
+}
+
+export const ICON_KEY_LABEL = 'What the icons mean';
+
+/** The key's lines, one per corner mark; each has a live sample beside it (see `keySample`). */
+export const ICON_KEY: readonly string[] = [
+  'Top left: level (just the number at 100+)',
+  `Top right: upgrades, +1 to +${GUN_UPGRADE.max} (none at +0)`,
+  "Bottom left: the gun's damage per second",
+  'Bottom right: class — Light, Medium, Heavy, Spread',
+  `Green corner: ${COMBINE_COUNT} alike in the stash, ready to combine`,
+];
+
+const KEY_CLASSES: readonly GunClass[] = ['light', 'medium', 'heavy', 'spread'];
+
+/** Line `i`'s sample, built with the slot's own classes; hidden from screen readers. */
+function keySample(i: number): HTMLElement {
+  const box = el('span', 'inv-key-sample');
+  box.setAttribute('aria-hidden', 'true');
+  if (i === 0) box.append(el('span', 'inv-slot-level', 'Lv 3'));
+  else if (i === 1) box.append(el('span', 'inv-slot-step', '+2'));
+  else if (i === 2) box.append(el('span', 'inv-slot-badge', '128'));
+  else if (i === 3) box.append(...KEY_CLASSES.map((c) => classBadge(c)));
+  else box.append(el('span', 'inv-ready'));
+  return box;
+}
+
+/** The legend under the Squad heading: a sample and its words per line. */
+function iconKeyList(open: boolean): HTMLElement {
+  const ul = el('ul', 'inv-key');
+  ul.id = 'inv-key';
+  ul.setAttribute('aria-label', ICON_KEY_LABEL);
+  ul.hidden = !open;
+  ICON_KEY.forEach((line, i) => {
+    const li = el('li', 'inv-key-line');
+    // The class line names the classes in its words; the samples carry no names.
+    li.append(keySample(i), el('span', 'inv-key-text', line));
+    ul.append(li);
+  });
+  return ul;
+}
+
+/** The Squad heading with the ⓘ that opens the key at its end, then the key itself. */
+function squadHead(key?: IconKey): HTMLElement[] {
+  const heading = el('h3', 'menu-heading', 'Squad');
+  if (!key) return [heading];
+  const row = el('div', 'inv-squad-head');
+  const b = el('button', 'build-option menu-action inv-key-toggle', 'ⓘ');
+  b.type = 'button';
+  b.title = ICON_KEY_LABEL;
+  b.setAttribute('aria-label', ICON_KEY_LABEL);
+  b.setAttribute('aria-controls', 'inv-key');
+  b.setAttribute('aria-expanded', String(key.open));
+  b.addEventListener('click', () => key.set(!key.open));
+  row.append(heading, b);
+  return [row, iconKeyList(key.open)];
+}
 
 /** The tab strip's state and what it calls: `set` puts a tab on show. */
 export interface BenchTabs {
@@ -1539,6 +1616,8 @@ export function createInventory(
   // tab: the bench survivor it is for (and their name, to say when they leave), and the tile
   // being compared.
   let tab: BenchTab = 'stash';
+  /** The icon key (ID-253): closed by default, kept across redraws and tabs, never saved. */
+  let keyOpen = false;
   const scrolls: Record<BenchTab, number> = { stash: 0, bench: 0 };
   let pickingFor: string | null = null;
   let pickingName = '';
@@ -2259,6 +2338,8 @@ export function createInventory(
     // Likewise a focused tab (ID-242) or picker tile.
     const active = body.contains(doc.activeElement) ? (doc.activeElement as HTMLElement) : null;
     const focusedTab = active?.closest<HTMLElement>('.inv-tab')?.dataset.tab;
+    // The icon key's toggle keeps the keyboard across a redraw, never passing through a slot.
+    const focusedKey = !!active?.closest('.inv-key-toggle');
     const focusedTile = active?.closest<HTMLElement>('.inv-pick-tile')?.dataset.choice;
     // Where the selected gun stood in the stash as last drawn, so a gun that left (ID-214)
     // hands the selection to the one that moves into its place.
@@ -2303,6 +2384,15 @@ export function createInventory(
         !!opts.onEquip && !picking,
         opts.onSalvageMany ? picking : undefined,
         { tab, set: setTab },
+        {
+          open: keyOpen,
+          set: (open) => {
+            keyOpen = open;
+            redraw();
+            // A click doesn't focus a button everywhere (Safari): put the keyboard on it.
+            body.querySelector<HTMLElement>('.inv-key-toggle')?.focus({ preventScroll: true });
+          },
+        },
       ),
     );
     drawPicker();
@@ -2333,6 +2423,8 @@ export function createInventory(
       body.querySelector<HTMLElement>(`select[data-pick="${focusedPick}"]`)?.focus();
     } else if (focusedTab) {
       body.querySelector<HTMLElement>(`.inv-tab[data-tab="${focusedTab}"]`)?.focus();
+    } else if (focusedKey) {
+      body.querySelector<HTMLElement>('.inv-key-toggle')?.focus({ preventScroll: true });
     } else if (focusedTile) {
       [...body.querySelectorAll<HTMLElement>('.inv-pick-tile')]
         .find((t) => t.dataset.choice === focusedTile)

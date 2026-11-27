@@ -79,6 +79,7 @@
   --color-warn-bg: #2a2412;
   --color-ok-border: #3d5a3d;
   --color-ok-text: #b9d6b0;
+  --color-ready: #3fbf5a;
   /* Squad Power against Recommended (ID-098): at or above, within 15% below, further below. */
   --color-band-ok: #7cc47f;
   --color-band-close: #e0b84a;
@@ -4303,6 +4304,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 .inv-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4468,14 +4470,13 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   text-align: center;
 }
 
-/* ID-227: the dmg/s has the bottom edge to itself, bottom right (4-5 digits ran into the
-   level there). The top row is the set-ready ▲ then the level, which takes it whole at
-   "▲ Lv 999"; the +N step sits under its right end. 2 px padding: at 4 px "▲ Lv 100" ran
-   past a 64 px slot. */
+/* ID-253: four fixed corners on every gun slot. Top left the level, top right the Upgrade
+   step +N, bottom left the gun's own dmg/s, bottom right the class badge. From level 100 the
+   level is the bare number, so the top row fits beside +5. 2 px padding keeps 5 digits inside
+   a 64 px slot. */
 .inv-slot-badge,
 .inv-slot-level,
-.inv-slot-step,
-.inv-slot-ready {
+.inv-slot-step {
   position: absolute;
   padding: 0 var(--space-2);
   border-radius: var(--radius-xs);
@@ -4488,37 +4489,113 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 .inv-slot-badge {
-  right: 2px;
+  left: 2px;
   bottom: 2px;
   color: var(--color-text);
 }
 
-.inv-slot-corner {
-  position: absolute;
+.inv-slot-level {
   top: 2px;
   left: 2px;
-  display: flex;
-  gap: 1px;
-  pointer-events: none;
-}
-
-.inv-slot-corner > .inv-slot-level,
-.inv-slot-corner > .inv-slot-ready {
-  position: static;
-}
-
-.inv-slot-level {
   color: var(--color-accent);
 }
 
 .inv-slot-step {
-  top: 19px;
+  top: 2px;
   right: 2px;
   color: var(--color-accent);
 }
 
-.inv-slot-ready {
-  color: var(--color-ok-text);
+/* Set ready to combine (ID-253), on the cell (the slot clips its children). A corner flag over the frame's rounded top-left corner, its square tip just outside the
+   curve: green with a dark edge so it reads on every frame, and clear of the level plate
+   (the flag's edge runs at x + y = 7 from the cell corner, the plate starts at 4, 4). */
+.inv-ready {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  background: linear-gradient(
+    135deg,
+    var(--color-ready) 0 calc(50% - 1.5px),
+    var(--color-bg) calc(50% - 1.5px) 50%,
+    transparent 50%
+  );
+  pointer-events: none;
+}
+
+/* The icon key under the Squad heading: the heading row with the ⓘ at its end, and a legend
+   of live samples. Samples drop their slot positions to sit in the line. */
+.inv-squad-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.inv-key-toggle {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+
+@media (pointer: coarse) {
+  .inv-key-toggle {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.inv-key {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  gap: 6px 8px;
+  align-items: center;
+  margin: 0;
+  padding: var(--space-6) var(--space-8);
+  list-style: none;
+  border-radius: 6px;
+  background: var(--color-surface-sunken);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.inv-key[hidden] {
+  display: none;
+}
+
+/* Each line spans the two columns on the grid: the sample, then its words. */
+.inv-key-line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.inv-key-sample {
+  display: inline-flex;
+  justify-self: start;
+  gap: 2px;
+}
+
+.inv-key .inv-slot-level,
+.inv-key .inv-slot-step,
+.inv-key .inv-slot-badge {
+  position: static;
+  display: inline-flex;
+}
+
+.inv-key .inv-ready {
+  position: relative;
+  top: 0;
+  left: 0;
+  display: inline-block;
 }
 
 .inv-who {
@@ -4606,11 +4683,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 }
 
-/* A gun's icon (ID-092): long guns lie across the square, a pale rim lifts them off it. */
+/* A gun's icon (ID-092, flat in ID-253): the gun lies level, muzzle right, a pale rim lifts it
+   off its tint. */
 .gun-icon {
   width: 86%;
   height: auto;
-  transform: rotate(-35deg);
   filter: drop-shadow(0 0 1px var(--color-gun-rim)) drop-shadow(0 0 1px var(--color-gun-rim));
   pointer-events: none;
   user-select: none;
@@ -4621,9 +4698,16 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   width: 68%;
 }
 
-.gun-icon[data-gun='pistol'] {
-  width: 72%;
-  transform: none;
+/* On a slot's face (grid, ghost, bench picker, combine tiles) the gun sits in the band between
+   the corner plates, as on the Roster; the result chip keeps its own size. */
+.inv-slot .gun-icon {
+  width: 86%;
+  height: 44%;
+  object-fit: contain;
+}
+
+.inv-slot .gun-icon[data-gun='smg'] {
+  width: 68%;
 }
 
 .inv-name {
@@ -5360,20 +5444,24 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   background: var(--color-accent-soft);
 }
 
-/* A ticked gun: the outline, and a tick bottom left, clear of the level top left and the
-   dmg/s bottom right (ID-227). */
+/* A ticked gun: the outline, and a tick centred over the gun on a small round plate, clear of
+   all four corners (ID-253). */
 .inv-slot[data-ticked='true']::after {
   content: '✓';
   position: absolute;
-  bottom: 2px;
-  left: 2px;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-xs);
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
   background: var(--color-focus);
   color: var(--color-bg);
   font-size: var(--text-xs);
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1;
   pointer-events: none;
 }
 
@@ -8908,12 +8996,12 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 }
 
-/* On a weapon slot only the badge shows, at the foot's left, clear of the dmg/s badge at the
-   right (the name would not fit the slot's width); the name is its title and aria-label. */
+/* On a weapon slot only the badge shows, bottom right, clear of the dmg/s badge at the
+   left (the name would not fit the slot's width); the name is its title and aria-label. */
 .inv-slot > .class-badge {
   position: absolute;
+  right: 2px;
   bottom: 2px;
-  left: 2px;
   pointer-events: none;
 }
 

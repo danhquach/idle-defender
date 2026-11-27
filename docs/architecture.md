@@ -95,7 +95,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | Canvas | `render.ts` (draws a fight and the camp), `projection.ts` (camera, angled view), `ground.ts` (tiles), `buildscene.ts` (camp scene) |
 | Sprites and effects | `sprites.ts` (art ids, URLs, loading), `anim.ts` (frames, gait), `death.ts`, `explosion.ts`, `spit.ts` |
 | In-fight HUD | `hud.ts` (status bar, card pick, skills, shop, result and squad screens, scrap chip, the World map globe button) |
-| Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons; ID-242: Stash / Bench tabs, the bench's gun picker over `gunpick.ts`), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`, which also names the Roster's patrol blocks, ID-234); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts` (class lines, Help trait table, Fit words; ID-237), `classicon.ts` (gun class icon, badge and chip; ID-237, ID-254), `joining.ts` |
+| Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons; ID-242: Stash / Bench tabs, the bench's gun picker over `gunpick.ts`; ID-253: `slotFace` is the one builder of a gun slot's four corners, the ready wedge sits on the cell, the ⓘ icon key is `ICON_KEY`), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`, which also names the Roster's patrol blocks, ID-234); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts` (class lines, Help trait table, Fit words; ID-237), `classicon.ts` (gun class icon, badge and chip; ID-237, ID-254), `joining.ts` |
 | Dialogs and screens | `menu.ts` (settings, save, help), `confirm.ts`, `intro.ts` + `introTitle.ts`, `landscape.ts` (phone turn prompt), `debug.ts` (debug panel) |
 | Audio | `audio.ts` (Web Audio engine), `sound.ts` (cues from state changes) |
 | Shared bits | `kit.ts` (button variants), `fastforward.ts` (fight speed), `hold.ts` (press-and-hold: the Airstrike's button and Q turn Auto on or off, ID-232) |
@@ -120,6 +120,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | Change | Where |
 | --- | --- |
 | A number (damage, HP, cost, rate) | `core/data.ts` |
+| What a Weapons slot shows in its corners, the ready mark, or the icon key | `slotFace`, `slot` and `ICON_KEY` in `ui/inventory.ts`; positions, the gun band and the wedge in the `.inv-slot-*`, `.inv-slot .gun-icon` and `.inv-ready` rules in `page.css` (pinned in `page-css.test.ts`) |
 | A new gun | `WEAPONS` in `core/data.ts`; drop rules in `core/armoury.ts`; art ids in `ui/sprites.ts` (an icon plus held and aim sprites per look), PNGs in `src/assets/art/` built via `art-src/manifest.json` + `tools/art/` |
 | A new enemy or boss | `ENEMIES` / `BOSSES` in `core/data.ts`; behaviour in `core/horde.ts`; mix in `core/waves.ts`; art in `ui/sprites.ts` + `ui/render.ts` |
 | A new in-fight card | id in the `UpgradeId` type (`core/horde.ts`); entry and category in `UPGRADES` (`core/cards.ts`); stat/repair effect in `applyUpgrade` (`core/cards.ts`), behaviour effect where `core/horde.ts` checks the card. The squad pool (`SQUAD_CARDS`) picks it up by category. A mode reward card instead: id in `ModeCard` and `MODE_UNLOCKS` (`core/data.ts`), its fight-relevance gate in `modeCardRelevant` (`core/cards.ts`); it joins the pool only through `modeCards` (`core/hordeonly.ts`). |

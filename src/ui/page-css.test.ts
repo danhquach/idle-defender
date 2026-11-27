@@ -898,10 +898,10 @@ describe('the gun class badge (ID-254)', () => {
     expect(rules.match(/\.rv-tab-gun \.class-badge \{/g)).toHaveLength(2);
   });
 
-  it('the weapon slot’s badge stays bottom-left', () => {
+  it('the weapon slot’s badge sits bottom-right (ID-253)', () => {
     const slot = rule('.inv-slot > .class-badge');
     expect(slot).toMatch(/position: absolute/);
-    expect(slot).toMatch(/left: 2px/);
+    expect(slot).toMatch(/right: 2px/);
     expect(slot).toMatch(/bottom: 2px/);
   });
 });
@@ -950,5 +950,85 @@ describe('the Roster folds (ID-256)', () => {
     expect(rules).toMatch(
       /\.rv-patrol-block \+ \.rv-patrol-block \{[^}]*border-top: 1px solid var\(--color-divider\)/,
     );
+  });
+});
+
+describe('slot corners, the ready wedge and the icon key (ID-253)', () => {
+  /** Every rule body ending in exactly `selector` (grouped rules included), joined. */
+  const all = (selector: string): string =>
+    [
+      ...rules.matchAll(
+        new RegExp(`\\n${selector.replace(/[.[\]>]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`, 'g'),
+      ),
+    ]
+      .map((m) => m[1])
+      .join('\n');
+
+  const RARITIES = ['rusty', 'common', 'military', 'prototype', 'relic'];
+
+  it('the gun icon lies level: no rotate anywhere', () => {
+    expect(rule('.gun-icon')).not.toMatch(/rotate/);
+    expect(rules).not.toMatch(/\.gun-icon[^{]*\{[^}]*rotate/);
+  });
+
+  it('the band sizing is scoped to slot faces (grid, tiles, ghost, bench picker), not the result chip', () => {
+    const band = rule('.inv-slot .gun-icon');
+    expect(band).toMatch(/width: 86%/);
+    expect(band).toMatch(/height: 44%/);
+    expect(band).toMatch(/object-fit: contain/);
+    expect(rule('.gun-icon')).not.toMatch(/object-fit|height: 44%/);
+    // The ghost and the bench picker's tile are .inv-slot elements, so they take the band.
+    expect(rules).not.toMatch(/\.gun-chip[^{]*\.gun-icon[^{]*\{[^}]*44%/);
+  });
+
+  it('pins the four corners and the centred tick', () => {
+    expect(all('.inv-slot-level')).toMatch(/top: 2px;[^}]*left: 2px/);
+    expect(all('.inv-slot-step')).toMatch(/top: 2px;[^}]*right: 2px/);
+    expect(all('.inv-slot-badge')).toMatch(/left: 2px;[^}]*bottom: 2px/);
+    expect(rule('.inv-slot > .class-badge')).toMatch(/right: 2px;[^}]*bottom: 2px/);
+    const tick = rule(".inv-slot[data-ticked='true']::after");
+    expect(tick).toMatch(/top: 50%/);
+    expect(tick).toMatch(/left: 50%/);
+    expect(tick).toMatch(/translate\(-50%, -50%\)/);
+    expect(tick).not.toMatch(/bottom:/);
+  });
+
+  it('the ready flag sits over the top-left corner of the frame, inert, clear of the level plate', () => {
+    expect(rule('.inv-cell')).toMatch(/position: relative/);
+    const w = rule('.inv-ready');
+    // An 11px square from (-2, -2), half of it drawn: its edge runs at x + y = 7 from the cell
+    // corner; the level plate starts at (4, 4), x + y = 8.
+    expect(w).toMatch(/top: -2px;/);
+    expect(w).toMatch(/left: -2px;/);
+    expect(w).toMatch(/width: 11px;/);
+    expect(w).toMatch(/height: 11px;/);
+    expect(w).not.toMatch(/clip-path/);
+    expect(w).toMatch(/var\(--color-bg\) calc\(50% - 1\.5px\) 50%,\s*transparent 50%/);
+    expect(w).toMatch(/pointer-events: none/);
+    expect(rules).not.toMatch(/\.inv-ready::before/);
+  });
+
+  it('the flag reads on every rarity frame and tint: its dark edge 3:1 on each, the green 3:1 on the dark', () => {
+    for (const r of RARITIES) {
+      expect(contrast('--color-bg', `--rarity-${r}`), `frame ${r}`).toBeGreaterThanOrEqual(3);
+      expect(contrast('--color-bg', `--slot-${r}`), `tint ${r}`).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrast('--color-ready', '--color-bg')).toBeGreaterThanOrEqual(3);
+  });
+
+  it('the key toggle is a square and the key lays out as a grid', () => {
+    const t = rule('.inv-key-toggle');
+    expect(t).toMatch(/width: 36px/);
+    expect(t).toMatch(/height: 36px/);
+    expect(rule('.inv-key')).toMatch(/display: grid/);
+    expect(rule('.inv-key')).toMatch(/grid-template-columns: 5\.5em 1fr/);
+    expect(
+      rule(
+        '.inv-key .inv-slot-level, .inv-key .inv-slot-step, .inv-key .inv-slot-badge'.replace(
+          /, /g,
+          ',\n',
+        ),
+      ),
+    ).toMatch(/position: static/);
   });
 });

@@ -640,25 +640,23 @@ describe('Combine in the details (ID-091)', () => {
     return { inv, dialog, calls, game: () => g, setCan, details, slot };
   }
 
-  it('marks the slots of a set ready to combine', () => {
+  it('marks the cells of a set ready to combine with a corner wedge on the cell', () => {
     const { dialog } = combining([...rusty(3), gun('x', 'rifle', 'common')]);
-    const marked = [...dialog.querySelectorAll<HTMLElement>('.inv-slot')].filter((s) =>
-      s.querySelector('.inv-slot-ready'),
+    const marked = [...dialog.querySelectorAll<HTMLElement>('.inv-cell')].filter((c) =>
+      c.querySelector(':scope > .inv-ready'),
     );
-    expect(marked.map((s) => s.dataset.key).sort()).toEqual(['stash:h1', 'stash:h2', 'stash:h3']);
-    expect(marked[0]!.getAttribute('aria-label')).toMatch(/, can combine$/);
-  });
-
-  it('puts the ▲ before the level in the slot’s top-left corner, once per marked slot (ID-227)', () => {
-    const { dialog } = combining([...rusty(3), gun('x', 'rifle', 'common')]);
-    const corner = (key: string): string[] =>
-      [...dialog.querySelector(`.inv-slot[data-key="${key}"] .inv-slot-corner`)!.children].map(
-        (c) => c.className,
-      );
-    for (const key of ['stash:h1', 'stash:h2', 'stash:h3']) {
-      expect(corner(key)).toEqual(['inv-slot-ready', 'inv-slot-level']);
-    }
-    expect(corner('stash:x')).toEqual(['inv-slot-level']);
+    const keys = marked.map((c) => c.querySelector<HTMLElement>('.inv-slot')!.dataset.key);
+    expect(keys.sort()).toEqual(['stash:h1', 'stash:h2', 'stash:h3']);
+    expect(marked[0]!.querySelector('.inv-slot')!.getAttribute('aria-label')).toMatch(
+      /, can combine$/,
+    );
+    // The wedge is hidden decoration, never inside the clipping slot.
+    expect(dialog.querySelector('.inv-slot .inv-ready')).toBeNull();
+    expect(marked[0]!.querySelector('.inv-ready')!.getAttribute('aria-hidden')).toBe('true');
+    expect(dialog.querySelector('.inv-slot-corner, .inv-slot-ready')).toBeNull();
+    // An unmarked gun has none.
+    const x = dialog.querySelector<HTMLElement>('.inv-slot[data-key="stash:x"]')!;
+    expect(x.closest('.inv-cell')!.querySelector('.inv-ready')).toBeNull();
   });
 
   it('asks first, then combines the weakest three and says what it made', () => {
@@ -963,26 +961,20 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     expect(pistol.querySelector('.inv-slot-level')!.textContent).toBe('Lv 1');
   });
 
-  it('the face: the ▲ then the level in the top-left corner, the dmg/s on its own (ID-227)', () => {
+  it('the face: icon, level, step, dmg/s, class badge, one corner each (ID-253)', () => {
     const v = inventoryView(camp(1, [lv('a', 'rifle', 'military', 120)]));
     const it = { ...v.stash[0]!, badge: '12345', stepBadge: '+5' };
-    const classes = (e: HTMLElement): string[] => [...e.children].map((c) => c.className);
-    const ready = slotFace(it, true);
-    const corner = ready.find((e) => e.classList.contains('inv-slot-corner'))!;
-    expect(classes(corner)).toEqual(['inv-slot-ready', 'inv-slot-level']);
-    expect(corner.textContent).toBe('▲Lv 120');
-    // The dmg/s and the step are the face's own, never in the level's corner.
-    expect(ready.map((e) => e.className)).toEqual([
+    expect(slotFace(it).map((e) => e.className)).toEqual([
       'gun-icon',
-      'class-badge class-badge-medium',
-      'inv-slot-badge',
-      'inv-slot-corner',
-      'inv-slot-step',
-    ]);
-    expect(ready.find((e) => e.classList.contains('inv-slot-badge'))!.textContent).toBe('12345');
-    expect(classes(slotFace(it).find((e) => e.classList.contains('inv-slot-corner'))!)).toEqual([
       'inv-slot-level',
+      'inv-slot-step',
+      'inv-slot-badge',
+      'class-badge class-badge-medium',
     ]);
+    // From level 100 the level is the bare number; its title keeps the words.
+    const level = slotFace(it).find((e) => e.classList.contains('inv-slot-level'))!;
+    expect(level.textContent).toBe('120');
+    expect(level.title).toBe('Level 120');
   });
 
   it('a combine preview takes the highest level of the three and prices it in', () => {

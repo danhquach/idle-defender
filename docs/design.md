@@ -1452,7 +1452,9 @@ profession's output).
   - **Combine in the Inventory** *(in a gun's details since ID-092)*: a stash
     gun's details name its set (its base weapon and rarity, below Relic): a set
     with 3 or more says "4 in stash" and "3 make a Common SMG", with a Combine
-    button, and its slots carry a ▲ mark in the grid; one short says "2/3" and
+    button, and its slots carry a small green corner mark on the slot's top-left
+    border in the grid (ID-253; on a dark edge so it reads on every rarity frame);
+    one short says "2/3" and
     "1 more for a Common SMG". A Relic says it combines no further, and a gun in
     hand that it must go back to the stash first. A combine uses
     the 3 weakest of the set by DPS, so the best one stays. Combine asks
@@ -1467,7 +1469,7 @@ profession's output).
     returns it to the Combine button). The result screen's drop tile stays a
     record of the win (its stash count then), so a combine on that screen
     doesn't change it. In a fight the set's count shows with Combine greyed out
-    and no ▲ marks, and "Combine between hordes, on the start or result screen."
+    and no corner marks, and "Combine between hordes, on the start or result screen."
   - **The details hold still (ID-198):** the details are one fixed box, whichever
     gun shows, with nothing selected, and through a confirm and a combine (240 px
     beside the grid; on a phone 55% of the window's height under it). The gun's
@@ -3520,7 +3522,7 @@ and comes back stronger.
     "Needs 60 Scrap (40 short)"); at +5 it says "Maxed at +5" greyed; for the free pistol
     or a blade or tool it is greyed and says why in its text ("Can't upgrade the pistol",
     "Can't upgrade: not a gun"), since a tooltip doesn't show on a touch screen. An
-    upgraded gun's tile has a "+N" badge top right (none at +0). There is no confirm (a
+    upgraded gun's tile has a "+N" badge top right, the same corner on every gun slot (none at +0). There is no confirm (a
     step is cheap and a fight can't wait). After it the status line says "Upgraded Lv 3
     Common SMG +2 · 60 Scrap spent, 120 left."; an open combine confirm over the gun is
     dropped, as its gun changed.
@@ -3965,8 +3967,7 @@ golden digest are untouched).
   container of 460px or less 9/7 at the bottom-left (over the stock), so the muzzle stays visible
   on the ~24 x 12 px tile. The badge sits inside the tile, so
   the gap to the dmg/s (ID-249) is unchanged. It is decoration (`aria-hidden`) beside a class name
-  or in a tile whose label says "class Medium"; alone (a weapon slot, bottom-left, ID-253 may move
-  it) it is a named image with the class as its label and the matchup line as its title. In the
+  or in a tile whose label says "class Medium"; alone (a weapon slot, bottom-right since ID-253, inset 2px) it is a named image with the class as its label and the matchup line as its title. In the
   gun picker it sits inline before the dmg/s, not on the tint. Guns with no class show none.
 - **Out of scope.** Class-aware targeting (preferring a weak target) was tried in the probe and made
   most squads worse, so shooters still take the nearest. The drop pool is unchanged (no class
@@ -4336,9 +4337,18 @@ offline progress works across sessions.
     name under it; no free-pistol tile, since Unequip already gives it) sits over the stash grid: one
     64 px square slot per stash place up to the cap, empty places drawn empty.
     A slot shows the gun's icon (one per base gun, the model the survivors
-    hold, long guns laid across the square) on its rarity's tint inside a frame
-    of its rarity's colour, with its DPS rounded in a corner badge (its
-    tooltip gives the figure). Selecting
+    hold, lying level with the muzzle right, in a band between the corner
+    plates, as on the Roster) on its rarity's tint inside a frame of its
+    rarity's colour, with four fixed corners *(ID-253)*: top left the level
+    ("Lv 3", the bare number from level 100), top right the Upgrade step "+N"
+    (none at +0), bottom left the gun's own dmg/s rounded (its tooltip gives
+    the figure), bottom right the class badge (ID-254; none without a class).
+    A blade or tool has its name and no plates. The same face is used by the
+    squad, bench and patrol slots, the combine confirm's tiles, the drag ghost
+    and the bench gun picker. A ⓘ at the end of the Squad heading opens a key
+    that explains the corners and the combine mark, one line each with a live
+    sample; it starts closed, stays open across redraws and tabs, and is not
+    saved. Selecting
     a slot (click, tap, or the arrows, Home and End from its single Tab stop)
     rings it and fills the details beside the grid (under it on a phone): the
     name in its rarity's colour, "Military rarity · Rifle", its role and trait
