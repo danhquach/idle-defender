@@ -113,11 +113,14 @@ import {
   DANGER_IDS,
   MAP_DRAWS_MAX,
   MAP_PATROL,
+  TECH_IDS,
   THEME,
   THEME_IDS,
   THEMES,
+  type TechId,
 } from '../core/data.ts';
 import { themedSlotsBeaten } from '../core/themes.ts';
+import { cleanTech } from '../core/techtree.ts';
 import { tripMs, type MapArea, type MapPatrol, type WorldMap } from '../core/scout.ts';
 import {
   beatenIn,
@@ -158,6 +161,12 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 27 since the Research Center (ID-263): the horde-only game may hold `tech`, the nodes
+ * researched, written only when any. The reader never refuses the save for it: known ids
+ * (exact text) once each in `TECH_IDS` order, a node whose prerequisite is missing dropped, a
+ * list cut to twice the node count first, anything else (not a list, unknown or hostile
+ * entries) ignored. A v26 or older save has none, and one holding the key is refused.
+ *
  * 26 since themed hordes (ID-238): the game may hold `themes`, written only once there is one: a
  * `seed` (a whole number, 0 to 2^32 - 1) the themes are picked from, and `cleared`, the themes
  * beaten (known ids from a fixed list, each once, in `THEME_IDS` order, never empty). A theme
@@ -272,7 +281,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 26;
+export const SAVE_VERSION = 27;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -436,6 +445,7 @@ function readSave(v: unknown): Save {
   if (
     ![
       SAVE_VERSION,
+      26,
       25,
       24,
       23,
@@ -502,6 +512,7 @@ function readSave(v: unknown): Save {
     ver >= 24,
     ver >= 25,
     ver >= 26,
+    ver >= 27,
   );
   return {
     game,
@@ -541,6 +552,8 @@ function readGame(
   mayMap: boolean,
   /** Whether the save may hold `themes` (v26). */
   mayThemes: boolean,
+  /** Whether the save may hold `tech` (v27). */
+  mayTech: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -587,7 +600,10 @@ function readGame(
     ...(mayMap && !lacks('medicine') ? ['medicine'] : []),
     // Written only once the game has a theme seed or has beaten a theme (ID-238).
     ...(mayThemes && !lacks('themes') ? ['themes'] : []),
+    // Written only once a Research Center node is bought (ID-263).
+    ...(mayTech && !lacks('tech') ? ['tech'] : []),
   ]);
+  const tech = Object.hasOwn(o, 'tech') ? readTech(o.tech) : [];
   const craft = Object.hasOwn(o, 'craft') ? readCraft(o.craft) : null;
   const slots = Object.hasOwn(o, 'slots') ? readSlots(o.slots) : null;
   // Exactly `true`; anything else (a string, 1, an object) loads with it off.
@@ -781,6 +797,7 @@ function readGame(
     ...(craft ? { craft } : {}),
     ...(map ? { map } : {}),
     ...(medicine > 0 ? { medicine } : {}),
+    ...(tech.length > 0 ? { tech } : {}),
   };
   if (!HORDE_ONLY) return loaded;
   // A stash past the loaded slots' cap (an older save's) is kept as it is and never grows.
@@ -892,6 +909,17 @@ function readSlots(v: unknown): { squad: number; stash: number } | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The researched Research Center nodes (ID-263): the known ids of the list, each once, in
+ * `TECH_IDS` order, with any node whose prerequisite is missing dropped (`cleanTech`), and
+ * nothing else. Never throws: anything that is not a list loads as none researched, and a
+ * list cut to twice the node count before any work, so a hostile one costs nothing.
+ */
+function readTech(v: unknown): TechId[] {
+  if (!Array.isArray(v)) return [];
+  return cleanTech(v.slice(0, TECH_IDS.length * 2));
 }
 
 /**

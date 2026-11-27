@@ -2,7 +2,8 @@
 // panel between hordes and the HUD in a fight.
 import { campLevelOf, recruitArrivals, takeCampPick, type CampChoice } from '../core/camp.ts';
 import { banCard, banLock, chooseCard, rerollLock, rerollOffer, skipOffer } from '../core/cards.ts';
-import { FIELD, HORDE_ONLY, type SkillId, type WeaponId } from '../core/data.ts';
+import { FIELD, HORDE_ONLY, type SkillId, type TechId, type WeaponId } from '../core/data.ts';
+import { researchTech } from '../core/techtree.ts';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { finishHorde, newGame, recover, startHorde, type GameState } from '../core/game.ts';
 import { localHorde, localOf, modeOf, modeUnlocked, setMode } from '../core/modes.ts';
@@ -164,6 +165,12 @@ import { createHold } from './hold.ts';
 import { createDebugPanel, type DebugActions, type DebugSpeed, type DebugView } from './debug.ts';
 import { createIntro } from './intro.ts';
 import { createCampWindow } from './campwindow.ts';
+import {
+  createResearchCenter,
+  RESEARCH_WAIT,
+  researchQuestion,
+  researchText,
+} from './researchcenter.ts';
 import { CRAFT_WAIT, createCraft, type CraftTab } from './craft.ts';
 import { createMapButton, setMapButton } from './hud.ts';
 import { mapButton } from './maptext.ts';
@@ -788,6 +795,32 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true, text: buyText(kind, now.cost, now.r.game.stock.scrap) };
   }
   /**
+   * Buys Research Center node `id` between hordes (ID-263) on a yes to the confirm: saved at once.
+   * Null when the player said no. Worked out again after the answer, as `buySlots`: a fight that
+   * has started, or a price or Scrap that moved, commits nothing. A finished horde keeps the
+   * research it started with; the next one has the new node.
+   */
+  async function researchNode(id: TechId): Promise<Answer> {
+    if (horde && !resultUp()) return { ok: false, reason: RESEARCH_WAIT };
+    const buy = (): { r: ReturnType<typeof researchTech>; before: number } => ({
+      before: game.stock.scrap,
+      r: researchTech(game, id),
+    });
+    const first = buy();
+    if (!first.r.ok) return first.r;
+    const ask = researchQuestion(id, first.r.cost, first.before);
+    if (!(await askConfirm(ask, { confirm: 'Research' }))) return null;
+    if (horde && !resultUp()) return { ok: false, reason: RESEARCH_WAIT };
+    const now = buy();
+    if (!now.r.ok) return now.r;
+    if (researchQuestion(id, now.r.cost, now.before) !== ask) {
+      return { ok: false, reason: ASK_CHANGED };
+    }
+    commit(now.r.game);
+    refreshResultScrap();
+    return { ok: true, text: researchText(id, now.r.cost, now.r.game.stock.scrap) };
+  }
+  /**
    * Survivor `keeperId` takes in `fedId` between hordes (the Roster, ID-170), on a yes to the
    * confirm (ID-191): saved at once, and the screens redrawn. Null when the player said no.
    * Checked again after the answer, as `letSurvivorGo`.
@@ -1089,8 +1122,25 @@ export function start(root: HTMLElement, art: Art): void {
         campWindow,
       )
     : null;
+  // The Research Center (ID-263), left of Roster: Scrap upgrades, bought between hordes.
+  const researchCenter = HORDE_ONLY
+    ? createResearchCenter(root, {
+        state: () => ({
+          game,
+          canBuy: !horde || resultUp(),
+          resumes: horde?.outcome === 'fighting' && !held,
+        }),
+        onResearch: researchNode,
+      })
+    : null;
   // The top bar's buttons in the order they show, left to right, so Tab walks them that way.
-  for (const cls of ['map-button', 'roster-button', 'inv-button', 'menu-button']) {
+  for (const cls of [
+    'map-button',
+    'research-button',
+    'roster-button',
+    'inv-button',
+    'menu-button',
+  ]) {
     const b = root.querySelector(`:scope > .${cls}`);
     if (b) root.append(b);
   }
@@ -1120,6 +1170,7 @@ export function start(root: HTMLElement, art: Art): void {
     inventory.isOpen() ||
     !!craftTab?.isOpen() ||
     !!mapTab?.isOpen() ||
+    !!researchCenter?.isOpen() ||
     !!roster?.isOpen();
   function refreshDialogs(): void {
     scrapChip?.set(game.stock.scrap, game.medicine ?? 0);
@@ -1127,6 +1178,7 @@ export function start(root: HTMLElement, art: Art): void {
     inventory.refresh();
     craftTab?.refresh();
     mapTab?.refresh();
+    researchCenter?.refresh();
     roster?.refresh();
   }
   /** Takes `next` as the game and saves it; the menu's Save tab says how that went. */

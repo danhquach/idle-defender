@@ -56,6 +56,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `game.ts` | `GameState`, `newGame`, the full game's between-horde loop (`startHorde`, `finishHorde`, `recover`). |
 | `waves.ts` | Wave count and size, enemy HP growth, wave mix, horror abilities. Themed hordes (ID-238): `isThemed`, `themeMix`, `themeKind`, `themeScale` (a themed wave's count, HP and XP factors at the plain horde's totals). |
 | `themes.ts` | Themed hordes (ID-238): `themeAt` / `themeSequence` / `themeOf` (a pure pick from the save's theme seed, per mode), `themeCleared`, `withCleared`, `themedSlotsBeaten` (the most themes a save's `cleared` may list), and the two RNG streams. The tables are `THEMES` / `THEME` in `data.ts`; the first-clear gun is `themeReward` / `winStash` in `hordeonly.ts`. |
+| `techtree.ts` | Research Center rules (ID-263): `techState` / `techRefusal` / `researchTech` (a pure purchase: Scrap off, `tech` kept in table order, no refund), `techReady` (the top bar's dot), `unlocksOf`, `cleanTech` (the allow-list the save reader uses). The nodes, costs and effect numbers are `TECH` / `TECH_FX` in `data.ts`; fight hooks (`hasTech`) in `horde.ts`; offer weight (`offerWeights`) and card texts in `cards.ts`. |
 | `pacing.ts` | How fast a horde's enemies arrive. |
 | `cards.ts` | The 1-of-3 upgrade cards in a fight (`UPGRADES`), who can take one (`eligible`), offer, reroll, ban, and stat/repair effects (`applyUpgrade`). |
 | `skills.ts` / `shop.ts` / `replace.ts` | Active skills (and Field Repairs' once-per-pick use, `repairsState` / `useRepairs`, ID-231), the mid-fight cash shop, swapping a survivor in between waves. |
@@ -80,7 +81,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 
 | File | Owns |
 | --- | --- |
-| `save.ts` | Versioned JSON save (`SAVE_VERSION`), `encodeSave` / `decodeSave`, one `read*` allow-list reader per part of `GameState` (`readThemes`, v26: seed, cleared themes, and the `t<k>` theme-gun checks), upgrades from older versions. |
+| `save.ts` | Versioned JSON save (`SAVE_VERSION`), `encodeSave` / `decodeSave`, one `read*` allow-list reader per part of `GameState` (`readThemes`, v26: seed, cleared themes, and the `t<k>` theme-gun checks; `readTech`, v27: the Research Center nodes, tolerant, never refuses the save), upgrades from older versions. |
 | `validate.ts` | Small allow-list readers (`num`, `int`, `oneOf`, …) used by every `save.ts` reader. |
 | `code.ts` | The backup code: export and import the save as one line of text. |
 | `settings.ts` | Settings outside the save: mute, volumes, speed, reduced motion, auto-strike, chatter, how-to seen, Airstrike hint seen, Roster folds (ID-256: Bench and Details shut or open; only "1" is shut). |
@@ -96,6 +97,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | Sprites and effects | `sprites.ts` (art ids, URLs, loading), `anim.ts` (frames, gait), `death.ts`, `explosion.ts`, `spit.ts` |
 | In-fight HUD | `hud.ts` (status bar, card pick, skills, shop, result and squad screens, scrap chip, the World map globe button) |
 | Camp window | `campwindow.ts` (tabs) → `squadroster.ts` (Roster), `inventory.ts` (Weapons; ID-242: Stash / Bench tabs, the bench's gun picker over `gunpick.ts`; ID-253: `slotFace` is the one builder of a gun slot's four corners, the ready mark (`readyMark`, ID-261: three chevrons) sits on the cell and the slot gets `data-ready` for its green ring, the ⓘ icon key is `ICON_KEY`), `craft.ts` (Craft), `mapview.ts` (World map, ID-219; its words in `maptext.ts`, which also names the Roster's patrol blocks, ID-234); helpers `gunpick.ts`, `jobtext.ts`, `statlines.ts` (class lines, Help trait table, Fit words; ID-237), `classicon.ts` (gun class icon, badge and chip; ID-237, ID-254), `joining.ts` |
+| Research Center | `researchcenter.ts` (ID-263): `createResearchCenter` (its own camp window with one tab, "Upgrades · n/11"; the chart, connector lines, detail panel, the top-bar button and its dot), the texts `researchQuestion` / `researchText` / `nodeFace` / `researchOffer`. Buying is `researchNode` in `app.ts` (asks, checks between hordes, commits). Top-bar room: `--research-w` in `page.css`. |
 | Dialogs and screens | `menu.ts` (settings, save, help), `confirm.ts`, `intro.ts` + `introTitle.ts`, `landscape.ts` (phone turn prompt), `debug.ts` (debug panel) |
 | Audio | `audio.ts` (Web Audio engine), `sound.ts` (cues from state changes) |
 | Shared bits | `kit.ts` (button variants), `fastforward.ts` (fight speed), `hold.ts` (press-and-hold: the Airstrike's button and Q turn Auto on or off, ID-232) |
@@ -137,6 +139,8 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A new field on `GameState` | `core/game.ts`; then a `read*` in `storage/save.ts` with a default for older saves, bump `SAVE_VERSION` (note it in its comment, add the old number to `readSave`'s list), add an old-save fixture in `storage/testing.ts` |
 | HUD text or buttons in a fight | `ui/hud.ts` |
 | Roster / Weapons / Craft / World map tabs | `ui/squadroster.ts` / `ui/inventory.ts` / `ui/craft.ts` / `ui/mapview.ts` |
+| A research node (cost, effect, prerequisite) | `TECH` / `TECH_FX` in `core/data.ts` (`TECH_IDS` order is save format: append only); buying in `core/techtree.ts`; fight hooks in `core/horde.ts` (`hasTech(s, id)`) and `core/cards.ts` (offer weight `offerWeights`, card text `effectAt` / `pitch`); window in `ui/researchcenter.ts`; save in `readTech` (`storage/save.ts`) |
+| Top-bar button positions (Research, World map, Scrap chip, speeds) | `page.css` (three layouts: desktop and iPad, phone portrait, phone landscape) and the pins in `ui/page-css.test.ts`; change both together |
 | World map Reroll price, draw cap | `MAP_REROLL`, `MAP_DRAWS_MAX` in `core/data.ts`; `rerollCost` / `rerollMap` in `core/scout.ts`; the button in `ui/mapview.ts` |
 | World map areas, danger, patrol rules | `AREAS`, `DANGERS`, `MAP_PATROL` in `core/data.ts`; rules in `core/scout.ts`; save in `readMap` (`storage/save.ts`) |
 | A player setting | `storage/settings.ts`; control in `ui/menu.ts` |

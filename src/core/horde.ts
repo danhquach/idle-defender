@@ -15,6 +15,7 @@ import {
   CAMP,
   CARD,
   CARD_MAX_LEVEL,
+  TECH_FX,
   COLUMNS,
   CRIT_DAMAGE,
   TOP_CRIT,
@@ -74,6 +75,7 @@ import {
   type PerkId,
   type ResearchId,
   type SkillId,
+  type TechId,
   type JobId,
   type Tracer,
   type Weapon,
@@ -229,6 +231,8 @@ export interface HordeSetup {
    * full game's paid skills, at 1×, when absent.
    */
   freeSkills?: { power: number };
+  /** The Research Center nodes researched (ID-263, horde-only); none when absent. */
+  tech?: readonly TechId[];
 }
 export interface Enemy {
   id: number;
@@ -683,6 +687,8 @@ export interface Slick {
   at: number;
   until: number;
   litAt?: number;
+  /** Wide Slick (ID-263): this slick's radius; absent = `CARD.oil.radius`. */
+  radius?: number;
 }
 /** A bomb or flashbang going off at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
 export interface Blast {
@@ -803,6 +809,8 @@ export interface HordeState {
   perkLevels: Partial<Record<PerkId, number>>;
   /** Research done when the fight started (ID-035). */
   research: ResearchId[];
+  /** The Research Center nodes researched when the fight started (ID-263); absent with none. */
+  tech?: TechId[];
   /** Card rerolls used this horde (ID-210). */
   rerolls: number;
   /** Card picks skipped this horde (ID-210): each gives a reroll. */
@@ -920,6 +928,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     spawnX,
     harder = false,
     freeSkills,
+    tech = [],
     bosses = hordeBosses(hordeNumber, harder),
   } = setup;
   if (freeSkills && !(Number.isInteger(freeSkills.power) && freeSkills.power >= 1)) {
@@ -959,6 +968,14 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
       seg.maxHp *= fortifyFactor;
     }
   }
+  // Reinforced Wall / Steel Plating (ID-263): the wall comes in tougher, full, as Fortify does.
+  const techWall = 1 + wallTechShare(tech);
+  if (techWall !== 1) {
+    for (const seg of layers.flatMap((l) => l.segments)) {
+      seg.hp *= techWall;
+      seg.maxHp *= techWall;
+    }
+  }
   const startPost = posts[startPostId];
   if (!Number.isInteger(startPostId) || !startPost || !postUsable(layers, startPost)) {
     throw new RangeError(`newHorde: start post ${startPostId} is not usable`);
@@ -991,7 +1008,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     traps,
     // At level 1's full durability for the first wave: the card's first pick (ID-104, ID-123).
     wire: Array.from({ length: SEGMENTS }, () => {
-      const max = wireMax(1, toSpawn);
+      const max = wireMax(1, toSpawn, tech.includes('thick-coils') ? TECH_FX.wireHp : 1);
       return { durability: max, max, broken: false, hit: [] };
     }),
     energy: bank,
@@ -1024,6 +1041,7 @@ export function newHorde(seed: number, setup: HordeSetup): HordeState {
     perks: [...perks],
     perkLevels: levels,
     research: [...research],
+    ...(tech.length > 0 ? { tech: [...tech] } : {}),
     rerolls: 0,
     skips: 0,
     bans: 0,
@@ -1204,6 +1222,26 @@ const freePower = (state: Partial<Pick<HordeState, 'wave' | 'freeWave'>>): boole
 export const took = (state: Pick<HordeState, 'taken'>, id: UpgradeId): boolean =>
   state.taken.includes(id);
 
+/** Whether Research Center node `id` is researched for this fight (ID-263); false with none. */
+export const hasTech = (state: Pick<HordeState, 'tech'>, id: TechId): boolean =>
+  state.tech?.includes(id) === true;
+
+/** The wall HP share the researched wall nodes add (ID-263): the highest counts, not the sum. */
+export const wallTechShare = (tech: readonly TechId[]): number =>
+  Math.max(
+    0,
+    ...(Object.keys(TECH_FX.wallHp) as (keyof typeof TECH_FX.wallHp)[]).map((id) =>
+      tech.includes(id) ? TECH_FX.wallHp[id] : 0,
+    ),
+  );
+
+/** Hand-loads' factor on an ammo card's number (ID-263); 1 with none. */
+export const ammoBoost = (state: Pick<HordeState, 'tech'>): number =>
+  hasTech(state, 'hand-loads') ? TECH_FX.ammo : 1;
+
+/** An Oil Bomb slick's radius (ID-263): wider with Wide Slick, which writes it at landing. */
+export const slickRadius = (k: Pick<Slick, 'radius'>): number => k.radius ?? CARD.oil.radius;
+
 /**
  * Card `id`'s level this horde (ID-097): 0 when not held. A card held with no level
  * recorded (a scene built by hand) counts at `CARD_MAX_LEVEL`.
@@ -1374,6 +1412,7 @@ function step(s: HordeState, rng: Rng): void {
   landTar(s);
   burn(s);
   bleed(s);
+  spikes(s);
   mendWire(s);
   poison(s);
   repair(s);
@@ -1952,8 +1991,8 @@ const shellIn = (s: HordeState, d: Defender, id: Held): number =>
   reloadIn(s, d, id) / gunOf(id).magazine;
 
 /** Scavenged Ammo's chance (ID-132) that a squad gun's shot uses no round, at its level. */
-export const scavengeOf = (s: Parameters<typeof cardLevel>[0]): number =>
-  atLevel(s, 'scavenged-ammo', CARD.scavenge);
+export const scavengeOf = (s: Parameters<typeof cardLevel>[0] & Pick<HordeState, 'tech'>): number =>
+  Math.min(1, atLevel(s, 'scavenged-ammo', CARD.scavenge) * ammoBoost(s));
 
 /** Marks a round Scavenged Ammo saved `by` a survivor (ID-132), unless one did within `SAVE_CUE.gap` s. */
 function savedRound(s: HordeState, by: string): void {
@@ -2058,9 +2097,15 @@ export function squadCanCrit(
  * every level (ID-124: max is 75%, no longer always), rolled on the fight's RNG for the
  * whole shot.
  */
-export function extraPierce(s: Parameters<typeof cardLevel>[0], rng: Rng): number {
+export function extraPierce(
+  s: Parameters<typeof cardLevel>[0] & Pick<HordeState, 'tech'>,
+  rng: Rng,
+): number {
   if (!took(s, 'piercing-rounds')) return 0;
-  return chance(rng, atLevel(s, 'piercing-rounds', CARD.pierce)) ? 1 : 0;
+  // Hand-loads (ID-263) raises the chance, never past 1.
+  return chance(rng, Math.min(1, atLevel(s, 'piercing-rounds', CARD.pierce) * ammoBoost(s)))
+    ? 1
+    : 0;
 }
 
 /**
@@ -2219,18 +2264,27 @@ function crossed(s: HordeState, b: Bullet, travel: number): { enemy: Enemy; at: 
  * Horror's armour takes some off (design §9); an armour-piercing round, `ap` (a Sniper
  * rifle's, ID-099, ID-101), ignores both.
  */
-export function hitDamage(e: Enemy, damage: number, ap = false, breach = false): number {
+export function hitDamage(
+  e: Enemy,
+  damage: number,
+  ap = false,
+  breach = false,
+  /** Armour-piercing (ID-263): the share of armour a squad bullet ignores; 0 = none. */
+  ignore = 0,
+): number {
   if (ap) return damage;
   // A Hell boss's Shield (ID-222) cuts a bullet like plates do; Breaching Rounds (`breach`)
-  // takes half of either cut back.
+  // takes half of either cut back, and Armour-piercing (`ignore`) takes its share back too.
   const cut = (factor: number): number =>
-    breach ? 1 - (1 - factor) * (1 - CARD.breach.share) : factor;
+    breach || ignore > 0
+      ? 1 - (1 - factor) * (breach ? 1 - CARD.breach.share : 1) * (1 - ignore)
+      : factor;
   let d = plated(e) ? damage * cut(BOSS_SKILL.plates.factor) : damage;
   if (e.shielded) d *= cut(BOSS_SKILL.shield.factor);
   return e.kind === 'brute'
-    ? Math.max(BRUTE.min, d - BRUTE.armour)
+    ? Math.max(BRUTE.min, d - BRUTE.armour * (1 - ignore))
     : e.kind === 'horror'
-      ? Math.max(HORROR.min, d - HORROR.armour)
+      ? Math.max(HORROR.min, d - HORROR.armour * (1 - ignore))
       : d;
 }
 
@@ -2244,6 +2298,11 @@ function fly(s: HordeState): void {
   const bounces: Bullet[] = [];
   // Worked out once a step: an SMG's trait asks for it on every hit (ID-101).
   const front = wallFront(s);
+  // Armour-piercing (ID-263): while an ammo card is held, a squad bullet ignores some armour.
+  const pierceIgnore =
+    hasTech(s, 'armour-piercing') && TECH_FX.ammoCards.some((id) => took(s, id))
+      ? TECH_FX.pierce
+      : 0;
   s.bullets = s.bullets.filter((b) => {
     let travel = Math.min(b.speed * STEP, b.left);
     for (let hit = crossed(s, b, travel); hit; hit = crossed(s, b, travel)) {
@@ -2265,6 +2324,7 @@ function fly(s: HordeState): void {
             classFactor(s.mode, b.cls, hit.enemy.kind),
           b.ap === true,
           !b.owner.startsWith('turret:') && took(s, 'breaching-rounds'),
+          !b.owner.startsWith('turret:') ? pierceIgnore : 0,
         ),
       );
       popOn(
@@ -2486,7 +2546,8 @@ function shock(s: HordeState, e: Enemy): void {
   if (e.hp <= 0 || stunned(s, e)) return;
   if (e.shockUntil !== undefined && s.time < e.shockUntil + CARD.shock.immune - EPS) return;
   const heavy = CARD.shock.heavyKinds.includes(e.kind);
-  const secs = atLevel(s, 'shock-rounds', CARD.shock.seconds) * (heavy ? CARD.shock.heavy : 1);
+  const secs =
+    atLevel(s, 'shock-rounds', CARD.shock.seconds) * ammoBoost(s) * (heavy ? CARD.shock.heavy : 1);
   e.shockUntil = s.time + secs;
   e.stunnedUntil = Math.max(e.stunnedUntil, e.shockUntil);
 }
@@ -2636,11 +2697,13 @@ export function mortars(
  */
 function throwTar(s: HordeState): void {
   if (s.nextTarAt === undefined || !took(s, 'oil-bomb') || !due(s.time, s.nextTarAt)) return;
-  const { range, radius, flight, every } = CARD.oil;
+  const { range, flight } = CARD.oil;
+  const radius = hasTech(s, 'wide-slick') ? CARD.oil.radius * TECH_FX.slick : CARD.oil.radius;
   const aim = throwAt(s, mortars(s), range, radius, flight);
   if (!aim) return;
   s.tarBombs.push(aim);
-  s.nextTarAt = s.time + every;
+  // Quick Mortars (ID-263) shortens the wait after a throw; the first throw is unchanged.
+  s.nextTarAt = s.time + (hasTech(s, 'quick-mortars') ? TECH_FX.oilEvery : CARD.oil.every);
 }
 
 /** Each tar bomb landing leaves a slick where it lands (ID-132). */
@@ -2648,7 +2711,11 @@ function landTar(s: HordeState): void {
   for (const b of s.tarBombs) {
     if (b.burst || !due(s.time, b.lands)) continue;
     b.burst = true;
-    s.slicks.push({ x: b.x, y: b.y, at: s.time, until: s.time + CARD.oil.seconds });
+    const slick: Slick = { x: b.x, y: b.y, at: s.time, until: s.time + CARD.oil.seconds };
+    // Wide Slick (ID-263) widens it; Napalm Mortar lands it alight with its full life.
+    if (hasTech(s, 'wide-slick')) slick.radius = CARD.oil.radius * TECH_FX.slick;
+    if (hasTech(s, 'napalm-mortar')) slick.litAt = s.time;
+    s.slicks.push(slick);
   }
   s.tarBombs = s.tarBombs.filter((b) => !b.burst);
 }
@@ -2657,7 +2724,7 @@ function landTar(s: HordeState): void {
 export function slicksUnder(s: Pick<HordeState, 'slicks' | 'time'>, e: Enemy): Slick[] {
   if (e.inCamp) return [];
   return s.slicks.filter(
-    (k) => !due(s.time, k.until) && Math.hypot(e.x - k.x, e.y - k.y) <= CARD.oil.radius + EPS,
+    (k) => !due(s.time, k.until) && Math.hypot(e.x - k.x, e.y - k.y) <= slickRadius(k) + EPS,
   );
 }
 
@@ -3102,8 +3169,9 @@ export const inFire = (s: Pick<HordeState, 'fires'>, e: Enemy): boolean =>
 
 /** An Incendiary Rounds burn's damage a second at the card's level (ID-124): its share of this wave's Shambler HP. */
 export const burnDpsOf = (
-  s: Parameters<typeof cardLevel>[0] & Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>,
-): number => atLevel(s, 'incendiary-rounds', CARD.burn.share) * shamblerHp(s);
+  s: Parameters<typeof cardLevel>[0] &
+    Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'tech'>,
+): number => atLevel(s, 'incendiary-rounds', CARD.burn.share) * ammoBoost(s) * shamblerHp(s);
 
 /** A Frag Grenade's burst (ID-124): `CARD.frag.share` of this wave's Shambler HP. */
 export const fragDamage = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
@@ -3167,8 +3235,8 @@ function burn(s: HordeState): void {
   // A Molotov's fire overlapping an unlit slick sets it alight (ID-181), whichever landed
   // first; it then burns as one lit by Incendiary Rounds does.
   if (s.fires.length > 0) {
-    const reach = CARD.oil.radius + CARD.molotov.radius + EPS;
     for (const k of s.slicks) {
+      const reach = slickRadius(k) + CARD.molotov.radius + EPS;
       if (s.fires.some((f) => Math.hypot(k.x - f.x, k.y - f.y) <= reach)) lightSlick(s, k);
     }
   }
@@ -3394,6 +3462,12 @@ function wearWire(s: HordeState, e: Enemy): boolean {
     row.hit.push(e.id);
     row.durability = Math.max(0, row.durability - CARD.wire.wear[e.kind]);
     if (row.durability <= 0) row.broken = true;
+    // Electric Wire (ID-263): a first entry into a row still working stuns, as a Flashbang
+    // does (the same daze clock, so its 3 s immunity applies and it holds back a Flashbang's).
+    if (!row.broken && hasTech(s, 'electric-wire') && flashable(s, e)) {
+      e.dazedUntil = s.time + TECH_FX.shockSeconds;
+      e.stunnedUntil = Math.max(e.stunnedUntil, e.dazedUntil);
+    }
   }
   return !row.broken;
 }
@@ -3409,13 +3483,34 @@ const inWire = (s: HordeState, band: { from: number; to: number }, e: Enemy): bo
 function bleed(s: HordeState): void {
   const band = barbedWire(s);
   if (!band) return;
-  const hit = atLevel(s, 'barbed-wire', CARD.wire.bleed) * shamblerHp(s) * STEP;
+  // Razor Wire (ID-263).
+  const hit =
+    atLevel(s, 'barbed-wire', CARD.wire.bleed) *
+    (hasTech(s, 'razor-wire') ? TECH_FX.bleed : 1) *
+    shamblerHp(s) *
+    STEP;
   for (const e of s.enemies) {
     if (e.hp <= 0 || !inWire(s, band, e)) continue;
     const dmg = taken(s, e, hit);
     popOn(s, e, dmg);
     e.hp = Math.max(0, e.hp - dmg);
     // A steady loss as a burn's: no white hit flash every step.
+    e.burnt = (e.burnt ?? 0) + dmg;
+  }
+}
+
+/**
+ * Spiked Wall (ID-263): a Crawler climbing a standing wall segment loses `TECH_FX.spikes` of
+ * this wave's Shambler HP a second, a steady loss like a bleed's.
+ */
+function spikes(s: HordeState): void {
+  if (!hasTech(s, 'spiked-wall')) return;
+  const hit = TECH_FX.spikes * shamblerHp(s) * STEP;
+  for (const e of s.enemies) {
+    if (e.hp <= 0 || e.climbUntil === 0) continue;
+    const dmg = taken(s, e, hit);
+    popOn(s, e, dmg);
+    e.hp = Math.max(0, e.hp - dmg);
     e.burnt = (e.burnt ?? 0) + dmg;
   }
 }
@@ -3962,12 +4057,12 @@ function waveEnemies(
 /**
  * A Barbed Wire row's full durability (ID-123): its `level`'s `CARD.wire.durability` (level 1
  * when the card isn't held), × the wave's `enemies` over `CARD.wire.perWave` but never less
- * than ×1, rounded. So a row lasts about the same share of a big wave as of a small one.
+ * than ×1, × `factor` (Thick Coils, ID-263), rounded. So a row lasts about the same share of a big wave as of a small one.
  */
-export function wireMax(level: number, enemies: number): number {
+export function wireMax(level: number, enemies: number, factor = 1): number {
   const { durability, perWave } = CARD.wire;
   const base = durability[Math.min(durability.length, Math.max(1, level)) - 1]!;
-  return Math.round(base * Math.max(1, enemies / perWave));
+  return Math.round(base * Math.max(1, enemies / perWave) * factor);
 }
 
 /**
@@ -3978,7 +4073,12 @@ export function wireMax(level: number, enemies: number): number {
 function wireFull(s: HordeState): number {
   const overlap = wavePace(s.hordeNumber, s.harder === true).overlap > 0;
   const facing = overlap ? s.toSpawn + s.enemies.filter((e) => e.hp > 0).length : 0;
-  return wireMax(cardLevel(s, 'barbed-wire'), Math.max(waveEnemies(s), facing));
+  return wireMax(
+    cardLevel(s, 'barbed-wire'),
+    Math.max(waveEnemies(s), facing),
+    // Thick Coils (ID-263).
+    hasTech(s, 'thick-coils') ? TECH_FX.wireHp : 1,
+  );
 }
 
 /**

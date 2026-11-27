@@ -125,6 +125,10 @@ const SQUAD_HOW_TO_PLAY: Steps = [
     'Arm the squad.',
     `Every win drops a gun into the stash (${STASH_CAP} slots to start). Between hordes, pick each survivor’s gun. Wins, and guns thrown away from a full stash, pay Scrap: spend it on more stash slots under Weapons (up to 80 guns). Squad slots: on the Roster when someone is on the bench (up to 8 survivors).`,
   ],
+  [
+    'Research upgrades.',
+    'Open Research in the top bar (the button labelled Research, or the flask icon on a narrower window) and spend Scrap on permanent upgrades to the wall, Barbed Wire, ammo cards and the Oil Bomb mortars. A dot on it means an upgrade is affordable between hordes. Buy between hordes; there are no refunds. A researched card is offered a little more often.',
+  ],
   ['Lose and retry.', 'A loss costs nothing: the same horde comes again with everyone back.'],
   ['Beat the boss.', 'Every 10th horde ends with a boss.'],
 ];

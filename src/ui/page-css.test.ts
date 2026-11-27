@@ -703,12 +703,22 @@ describe('the Weapons details hold still (ID-198)', () => {
 });
 
 describe('a narrow desktop fight: the Scrap chip steps down (ID-228)', () => {
-  it('641-767px: the chip and the globe go under the speeds; the fight bar keeps clear of the buttons only', () => {
+  it('641-929px: the chip, Research and the globe go under the speeds; the fight bar keeps clear of the buttons only (ID-263)', () => {
     expect(rules).toMatch(
-      /@media \(min-width: 641px\) and \(max-width: 767px\) \{\s*\.hud-fight-bar \{\s*padding-right: 300px;\s*\}\s*\}/,
+      /@media \(min-width: 641px\) and \(max-width: 929px\) \{\s*\.hud-fight-bar \{\s*padding-right: 300px;\s*\}\s*\}/,
     );
+    const away =
+      'body:not\\(:has\\(\\.camp-scrim:not\\(\\[hidden\\]\\), \\.menu-scrim:not\\(\\[hidden\\]\\)\\)\\)';
     expect(rules).toMatch(
-      /@media \(min-width: 641px\) and \(max-width: 767px\) and \(min-height: 541px\),\s*\(min-width: 641px\) and \(max-width: 767px\) and \(pointer: fine\) \{\s*body:not\(:has\(\.camp-scrim:not\(\[hidden\]\), \.menu-scrim:not\(\[hidden\]\)\)\) \.scrap-chip \{\s*top: 71px;\s*right: 54px;\s*\}\s*body:not\(:has\(\.camp-scrim:not\(\[hidden\]\), \.menu-scrim:not\(\[hidden\]\)\)\) \.map-button \{\s*top: 71px;\s*right: 12px;/,
+      new RegExp(
+        `@media \\(min-width: 641px\\) and \\(max-width: 929px\\) and \\(min-height: 541px\\),\\s*\\(min-width: 641px\\) and \\(max-width: 929px\\) and \\(pointer: fine\\) \\{\\s*${away} \\.scrap-chip \\{\\s*top: 71px;\\s*right: calc\\(54px \\+ var\\(--research-w\\)\\);\\s*\\}\\s*${away} \\.research-button \\{\\s*top: 71px;\\s*right: 54px;\\s*\\}\\s*${away} \\.map-button \\{\\s*top: 71px;\\s*right: 12px;`,
+      ),
+    );
+  });
+
+  it('the Fast-forward chip steps aside where the third row is under the speeds (ID-263)', () => {
+    expect(rules).toMatch(
+      /\(pointer: fine\) \{[^@]*\.map-button \{\s*top: 71px;\s*right: 12px;\s*\}\s*\.hud-skip-chip \{\s*display: none;/,
     );
   });
 
@@ -724,10 +734,24 @@ describe('a narrow desktop fight: the Scrap chip steps down (ID-228)', () => {
 });
 
 describe('the World map globe in the top bar', () => {
-  it('sits left of Roster, the Scrap chip left of it, each 8px apart', () => {
+  it('Research sits left of Roster, the globe left of it, the Scrap chip left of that, each 8px apart (ID-263)', () => {
     expect(rules).toMatch(/\.roster-button \{\s*right: 213px;/);
-    expect(rules).toMatch(/\.map-button \{\s*right: 289px;[^}]*width: 34px;/);
-    expect(rules).toMatch(/\.scrap-chip \{\s*position: fixed;\s*top: 5px;\s*right: 331px;/);
+    expect(rules).toMatch(/\.research-button \{\s*right: 289px;[^}]*width: var\(--research-btn\);/);
+    // --research-w is its width and a gap: 42px as an icon, 84px as the 76px labelled button
+    // from 1024px (not 1061-1110px with Medicine shown, where the widest chip needs the room).
+    expect(css).toMatch(/:root \{[^}]*?--research-w: 42px;/);
+    expect(rules).toMatch(
+      /@media \(min-width: 1024px\) \{\s*:root \{\s*--research-w: 84px;\s*--research-btn: 76px;/,
+    );
+    expect(rules).toMatch(
+      /@media \(min-width: 1061px\) and \(max-width: 1110px\) \{\s*body:has\(\.medicine-chip-count\) \{\s*--research-w: 42px;/,
+    );
+    expect(rules).toMatch(
+      /\.map-button \{\s*right: calc\(289px \+ var\(--research-w\)\);[^}]*width: 34px;/,
+    );
+    expect(rules).toMatch(
+      /\.scrap-chip \{\s*position: fixed;\s*top: 5px;\s*right: calc\(331px \+ var\(--research-w\)\);/,
+    );
   });
 
   it('the speeds share the top row only above 1060px, clear of the corner panel', () => {
@@ -738,37 +762,34 @@ describe('the World map globe in the top bar', () => {
     // 8px left of the Scrap chip (right 331px) however wide it grows, never nearer the edge
     // than before (ID-239); the fight's status line keeps clear of them by the same width.
     const w = 'var\\(--scrap-chip-w, 0px\\)';
+    const r = 'var\\(--research-w\\)';
     expect(rules).toMatch(
       new RegExp(
-        `\\.hud-speed \\{\\s*position: absolute;\\s*top: 5px;[^}]*right: max\\(460px, calc\\(339px \\+ ${w}\\)\\);`,
+        `\\.hud-speed \\{\\s*position: absolute;\\s*top: 5px;[^}]*right: max\\(\\s*calc\\(460px \\+ ${r}\\),\\s*calc\\(339px \\+ ${r} \\+ ${w}\\)\\s*\\);`,
       ),
     );
     expect(rules).toMatch(
       new RegExp(
-        `\\.hud-fight-bar \\{\\s*padding-right: max\\(736px, calc\\(615px \\+ ${w}\\)\\);`,
+        `\\.hud-fight-bar \\{\\s*padding-right: max\\(\\s*calc\\(736px \\+ ${r}\\),\\s*calc\\(615px \\+ ${r} \\+ ${w}\\)\\s*\\);`,
       ),
     );
   });
 
-  it('with Medicine shown, up to 1130px the speeds drop their key hints and the bar follows (ID-239)', () => {
-    const med = 'body:has\\(\\.medicine-chip-count\\)';
+  it('up to 1210px the speeds drop their key hints and the bar follows, whatever the chip (ID-239, ID-263)', () => {
     expect(rules).toMatch(
-      new RegExp(
-        `@media \\(max-width: 1130px\\) \\{\\s*${med} \\.hud-speed \\.menu-key \\{\\s*display: none;`,
-      ),
+      /@media \(max-width: 1210px\) \{\s*\.hud-speed \.menu-key \{\s*display: none;/,
     );
     expect(rules).toMatch(
-      new RegExp(
-        `@media \\(min-width: 1061px\\) and \\(max-width: 1130px\\) \\{\\s*${med} \\.hud-fight-bar \\{\\s*padding-right: max\\(736px, calc\\(509px \\+ var\\(--scrap-chip-w, 0px\\)\\)\\);`,
-      ),
+      /@media \(min-width: 1061px\) and \(max-width: 1210px\) \{\s*\.hud-fight-bar \{\s*padding-right: max\(\s*calc\(736px \+ var\(--research-w\)\),\s*calc\(509px \+ var\(--research-w\) \+ var\(--scrap-chip-w, 0px\)\)\s*\);/,
     );
-    expect(rules).not.toMatch(/max-width: 1100px/);
+    expect(rules).not.toMatch(/max-width: 1100px|max-width: 1130px|max-width: 1180px/);
   });
 
-  it('heads the speed column in a fight on a phone on its side', () => {
+  it('heads the speed column in a fight on a phone on its side, Research under the globe (ID-263)', () => {
     const fight = 'body:not\\(:has\\(\\.hud-debrief:not\\(\\[hidden\\]\\)\\)\\)';
     expect(rules).toMatch(new RegExp(`${fight} \\.map-button \\{\\s*top: 40px;`));
-    expect(rules).toMatch(new RegExp(`${fight} \\.hud-speed \\{\\s*top: 82px;`));
+    expect(rules).toMatch(new RegExp(`${fight} \\.research-button \\{\\s*top: 80px;`));
+    expect(rules).toMatch(new RegExp(`${fight} \\.hud-speed \\{\\s*top: 122px;`));
     expect(rules).toMatch(new RegExp(`${fight} \\.scrap-chip \\{\\s*right: 252px;`));
   });
 });

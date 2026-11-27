@@ -519,6 +519,18 @@ describe('the Menu', () => {
     expect([...help.querySelectorAll('kbd')].map((k) => k.textContent)).not.toContain('a');
   });
 
+  it('Help has a Research step after "Arm the squad" (ID-263)', () => {
+    const { panel } = setup();
+    const help = panel('help');
+    const names = HOW_TO_PLAY.map(([name]) => name);
+    expect(names.indexOf('Research upgrades.')).toBe(names.indexOf('Arm the squad.') + 1);
+    expect(help.textContent).toContain('Open Research in the top bar');
+    expect(help.textContent).toContain('no refunds');
+    expect(help.textContent).toContain('flask icon');
+    expect(help.textContent).toContain('A dot on it means an upgrade is affordable between hordes');
+    expect(help.textContent).toContain('offered a little more often');
+  });
+
   it('Help tells one skill and its one key while the Airstrike is the only skill (ID-193)', () => {
     const help = setup().panel('help');
     expect(help.textContent).toContain('Click a skill, or Q');

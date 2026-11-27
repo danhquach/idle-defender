@@ -9,6 +9,11 @@
 /* The UI kit (design §15, ID-056): every colour, size, radius and gap the rules below use.
    Component rules take colours only from these tokens; a test holds text pairs to WCAG AA. */
 :root {
+  /* The top bar's Research button with its 8px gap (ID-263): 100px as the labelled button from
+     1231px. Everything left of it, in the top row, is pushed left by this much. */
+  --research-w: 42px;
+  --research-btn: 34px;
+
   /* Surfaces */
   --color-bg: #15171a;
   --color-surface-sunken: #1b1d20;
@@ -231,7 +236,7 @@ body {
   right: 0;
   padding: var(--space-8) var(--space-16);
   /* Clear of the Scrap chip and the World map, Roster, Weapons and Menu buttons on the right. */
-  padding-right: 460px;
+  padding-right: calc(460px + var(--research-w));
   background: var(--color-bar-bg);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -241,7 +246,10 @@ body {
    bar's redesign (ID-058) should give the speed group its own slot instead. A wide Scrap chip
    pushes both left (ID-239). */
 .hud-fight-bar {
-  padding-right: max(736px, calc(615px + var(--scrap-chip-w, 0px)));
+  padding-right: max(
+    calc(736px + var(--research-w)),
+    calc(615px + var(--research-w) + var(--scrap-chip-w, 0px))
+  );
 }
 
 /* Fight speed and the Space pause (ID-062), beside the Menu button. */
@@ -250,7 +258,10 @@ body {
   top: 5px;
   /* Left of the Scrap chip and the World map, Roster, Weapons and Menu buttons (ID-086, ID-179),
      8px clear of the chip however wide its balance grows (ID-239; its width is measured). */
-  right: max(460px, calc(339px + var(--scrap-chip-w, 0px)));
+  right: max(
+    calc(460px + var(--research-w)),
+    calc(339px + var(--research-w) + var(--scrap-chip-w, 0px))
+  );
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -389,7 +400,7 @@ body {
 
 /* A narrow desktop window: the speed group drops its key hints, as on a phone, so it stays
    clear of the corner panel (ID-165). Help still lists the keys. */
-@media (max-width: 1060px) {
+@media (max-width: 1210px) {
   .hud-speed .menu-key {
     display: none;
   }
@@ -407,14 +418,15 @@ body {
   }
 
   .hud-fight-bar {
-    padding-right: 460px;
+    padding-right: calc(460px + var(--research-w));
   }
 }
 
-/* Up to 767px the corner panel (~219px at its narrowest, ~250px late on) has no room left of
-   the Scrap chip and the World map in the top row (ID-228): both step down under the speeds
-   (below), and a fight's bar keeps clear of the Roster, Weapons and Menu buttons only. */
-@media (min-width: 641px) and (max-width: 767px) {
+/* Up to 929px the corner panel (~219px at its narrowest, up to 300px wide) has no room left of
+   the Scrap chip, the World map and Research in the top row (ID-228, ID-263; 929px: the corner
+   at 300px beside the widest chip, 177px wide, 373px from the edge): all three step down under
+   the speeds (below), and a fight's bar keeps clear of the Roster, Weapons and Menu buttons only. */
+@media (min-width: 641px) and (max-width: 929px) {
   .hud-fight-bar {
     padding-right: 300px;
   }
@@ -3360,6 +3372,7 @@ body {
 .menu-button,
 .inv-button,
 .roster-button,
+.research-button,
 .map-button {
   position: absolute;
   top: 5px;
@@ -3379,10 +3392,12 @@ body {
 .menu-button:hover,
 .inv-button:hover,
 .roster-button:hover,
+.research-button:hover,
 .map-button:hover,
 .menu-button:focus-visible,
 .inv-button:focus-visible,
 .roster-button:focus-visible,
+.research-button:focus-visible,
 .map-button:focus-visible {
   border-color: var(--color-accent-hover);
   background: var(--color-surface-active);
@@ -3391,6 +3406,7 @@ body {
 .menu-button:focus-visible,
 .inv-button:focus-visible,
 .roster-button:focus-visible,
+.research-button:focus-visible,
 .map-button:focus-visible,
 .menu button:focus-visible,
 .menu textarea:focus-visible,
@@ -3402,7 +3418,7 @@ body {
 /* The World map (ID-219): a square globe button left of Roster, styled like Roster and
    Weapons; a badge on its corner counts the patrols out, or says "!" when a report waits. */
 .map-button {
-  right: 289px;
+  right: calc(289px + var(--research-w));
   display: inline-grid;
   place-items: center;
   width: 34px;
@@ -3445,12 +3461,91 @@ body {
   font-weight: 800;
 }
 
+/* Research (ID-263): beside Roster, left of the World map's globe. A flask icon (34px, as the
+   globe) below 1024px; from 1024px a labelled button (76px, "Research", no icon), except from
+   1061 to 1110px with Medicine beside the Scrap (the chip is at its widest there), which keeps
+   the icon. --research-w is the room it takes with its 8px gap: everything left of it (the
+   globe, the Scrap chip, the speeds and the fight's bar) is pushed left by that much. A dot
+   says an upgrade is affordable between hordes. */
+.research-button {
+  right: 289px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  width: var(--research-btn);
+  padding: 0;
+}
+
+.research-flask {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.research-label {
+  display: none;
+}
+
+.research-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 2px solid var(--color-surface-sunken);
+  border-radius: 50%;
+  background: var(--color-accent);
+  pointer-events: none;
+}
+
+.research-dot[hidden] {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --research-w: 84px;
+    --research-btn: 76px;
+  }
+
+  .research-flask {
+    display: none;
+  }
+
+  .research-label {
+    display: inline;
+  }
+}
+
+/* Medicine shown, 1061-1110px: the widest chip leaves no room for the label. */
+@media (min-width: 1061px) and (max-width: 1110px) {
+  body:has(.medicine-chip-count) {
+    --research-w: 42px;
+    --research-btn: 34px;
+  }
+
+  body:has(.medicine-chip-count) .research-flask {
+    display: flex;
+  }
+
+  body:has(.medicine-chip-count) .research-label {
+    display: none;
+  }
+}
+
 /* The Scrap balance (ID-179): a read-only chip left of the World map, on the page itself so it
    stays above the camp window (the Roster and Weapons); styled as the speed buttons, no button. */
 .scrap-chip {
   position: fixed;
   top: 5px;
-  right: 331px;
+  right: calc(331px + var(--research-w));
   z-index: 1;
   display: flex;
   align-items: center;
@@ -3478,14 +3573,19 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: none;
 }
 
-/* 641-767px (ID-228): the chip, then the World map's globe at the right edge, under the
-   speeds: a third row clear of the held cards' strip and the boss bars, so the fight's corner
-   panel has the top row's room. They stay in the top row while the camp window or the menu is
+/* 641-929px (ID-228, ID-263): the chip, then Research, then the World map's globe at the right
+   edge, under the speeds: a third row clear of the held cards' strip and the boss bars, so the
+   fight's corner panel has the top row's room. They stay in the top row while the camp window or the menu is
    open (the chip would sit on the window's tabs), and on a phone on its side, which has its
    own top row. */
-@media (min-width: 641px) and (max-width: 767px) and (min-height: 541px),
-  (min-width: 641px) and (max-width: 767px) and (pointer: fine) {
+@media (min-width: 641px) and (max-width: 929px) and (min-height: 541px),
+  (min-width: 641px) and (max-width: 929px) and (pointer: fine) {
   body:not(:has(.camp-scrim:not([hidden]), .menu-scrim:not([hidden]))) .scrap-chip {
+    top: 71px;
+    right: calc(54px + var(--research-w));
+  }
+
+  body:not(:has(.camp-scrim:not([hidden]), .menu-scrim:not([hidden]))) .research-button {
     top: 71px;
     right: 54px;
   }
@@ -3493,6 +3593,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   body:not(:has(.camp-scrim:not([hidden]), .menu-scrim:not([hidden]))) .map-button {
     top: 71px;
     right: 12px;
+  }
+
+  /* "Fast-forward »" hangs under the speeds, onto the third row: the dashed 5× says it too. */
+  .hud-skip-chip {
+    display: none;
   }
 }
 
@@ -5700,7 +5805,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 /* Short of Scrap or in a fight: dashed and unfilled, but the text stays clearly readable. */
 .rv-buy-squad:disabled,
-.inv-buy:disabled {
+.inv-buy:disabled,
+.research-go:disabled {
   border-style: dashed;
   background: transparent;
   color: var(--color-text);
@@ -6973,10 +7079,10 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
    top row, their key hints dropped; the status line goes under them, then the XP and
    boss plates. */
 @media (max-width: 640px) {
-  /* 60px on the right: the World map's globe holds the second row's right end. */
+  /* 112px on the right: the World map's globe and Research hold the second row's right end. */
   .hud-bar,
   .hud-fight-bar {
-    padding: 54px 60px 6px 12px;
+    padding: 54px 112px 6px 12px;
   }
 
   .hud-speed {
@@ -7060,6 +7166,19 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 
   .map-globe {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Research (ID-263) beside the globe on that row, a 44px square: never off the screen. */
+  .research-button {
+    top: 52px;
+    right: 60px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .research-flask {
     width: 22px;
     height: 22px;
   }
@@ -7873,6 +7992,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .menu-button,
   .inv-button,
   .roster-button,
+  .research-button,
   .map-button,
   .hud-speed-button,
   .scrap-chip {
@@ -7920,9 +8040,20 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     right: 176px;
   }
 
-  /* Between hordes the globe sits left of Roster, the Scrap chip left of it. */
-  .map-button {
+  /* Between hordes Research sits left of Roster, the globe left of it, the Scrap chip left of
+     that (ID-263). */
+  .research-button {
     right: 252px;
+    width: 34px;
+  }
+
+  .research-flask {
+    width: 18px;
+    height: 18px;
+  }
+
+  .map-button {
+    right: 294px;
     width: 34px;
   }
 
@@ -7932,11 +8063,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 
   .scrap-chip {
-    right: 294px;
+    right: 336px;
   }
 
   /* In a fight the top row is the corner panel's: the chip steps back beside Roster and the
-     globe heads the speed group's column at the right edge, the speeds under it. */
+     globe and Research head the speed group's column at the right edge, the speeds under them. */
   body:not(:has(.hud-debrief:not([hidden]))) .scrap-chip {
     right: 252px;
   }
@@ -7948,8 +8079,15 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     height: 36px;
   }
 
+  body:not(:has(.hud-debrief:not([hidden]))) .research-button {
+    top: 80px;
+    right: var(--space-12);
+    width: 40px;
+    height: 36px;
+  }
+
   body:not(:has(.hud-debrief:not([hidden]))) .hud-speed {
-    top: 82px;
+    top: 122px;
   }
 
   /* Up to the Scrap chip (about 100 px wide), past the horde badge on its left. */
@@ -7960,6 +8098,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .menu-button::after,
   .inv-button::after,
   .roster-button::after,
+  .research-button::after,
   .map-button::after,
   .hud-speed > button::after {
     content: '';
@@ -7973,6 +8112,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   /* In the fight's column the buttons are 36 px tall: 4 px more above and below. */
   body:not(:has(.hud-debrief:not([hidden]))) .map-button::after,
+  body:not(:has(.hud-debrief:not([hidden]))) .research-button::after,
   body:not(:has(.hud-debrief:not([hidden]))) .hud-speed > button::after {
     inset: -4px -3px;
   }
@@ -8943,20 +9083,16 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   margin-left: var(--space-4);
 }
 
-/* With Medicine beside the Scrap the chip is wider (up to ~177px, "Scrap 99,999 Med 999"): an
-   iPad-wide window drops the speed group's key hints (as a narrower one does), so the speeds,
-   pushed left of the chip (ID-239), stay clear of the corner panel. Help lists the keys.
-   1130px: the corner's room with the widest chip and the hints (ID-239). */
-@media (max-width: 1130px) {
-  body:has(.medicine-chip-count) .hud-speed .menu-key {
-    display: none;
-  }
-}
-
+/* The speed group's key hints go up to 1210px whatever the chip (ID-239, ID-263): with Research's
+   label and the widest chip (~177px, "Scrap 99,999 Med 999") the hinted speeds would run into the
+   corner panel. Help lists the keys. */
 /* There the fight's status line keeps clear of the hint-less speeds (160px) left of the chip. */
-@media (min-width: 1061px) and (max-width: 1130px) {
-  body:has(.medicine-chip-count) .hud-fight-bar {
-    padding-right: max(736px, calc(509px + var(--scrap-chip-w, 0px)));
+@media (min-width: 1061px) and (max-width: 1210px) {
+  .hud-fight-bar {
+    padding-right: max(
+      calc(736px + var(--research-w)),
+      calc(509px + var(--research-w) + var(--scrap-chip-w, 0px))
+    );
   }
 }
 
@@ -9375,4 +9511,212 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 /* A class cell keeps its icon and word together. */
 .menu-traits td:nth-child(n + 3) {
   white-space: nowrap;
+}
+
+/* The Research Center (ID-263): the chart (branches down, tiers across, a line from each node
+   to what it unlocks) beside a detail panel, content-sized. The lines are one SVG over the
+   tier columns: the grid has equal rows and columns, so a line's ends are cell centres and no
+   layout is measured. A narrow window stacks the panel under the chart, which scrolls sideways. */
+.research-body {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: var(--space-12);
+  min-height: 0;
+  padding: var(--space-12);
+  overflow-y: auto;
+}
+
+.research-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.research-chart {
+  display: grid;
+  grid-template-columns: 72px repeat(3, minmax(124px, 1fr));
+  grid-template-rows: auto repeat(4, 72px);
+  min-width: 444px;
+}
+
+/* Wide enough for the chart (444px) beside the panel (260px) without scrolling; its own dialog,
+   so no tab strip moves. */
+.camp-dialog[data-tab='upgrades'] {
+  width: min(800px, 100%);
+}
+
+.research-lines {
+  z-index: 0;
+  grid-area: 2 / 2 / 6 / 5;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.research-lines line {
+  stroke: var(--color-border-strong);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+.research-lines line[data-done='true'] {
+  stroke: var(--color-ok-border);
+}
+
+.research-tier,
+.research-branch {
+  align-self: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.research-tier {
+  grid-row: 1;
+  padding-bottom: var(--space-4);
+  text-align: center;
+}
+
+.research-branch {
+  grid-column: 1;
+}
+
+.research-node {
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-4) var(--space-10);
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.research-node:hover,
+.research-node[aria-pressed='true'] {
+  border-color: var(--color-accent-hover);
+  background: var(--color-surface-active);
+}
+
+.research-node[aria-pressed='true'] {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.research-node:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.research-node-name {
+  font-size: var(--text-body-sm);
+  font-weight: 700;
+}
+
+.research-node-face {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* Bought: green, with its tick in the words. */
+.research-node[data-state='done'] {
+  border-color: var(--color-ok-border);
+  background: var(--color-surface-sunken);
+}
+
+.research-node[data-state='done'] .research-node-face {
+  color: var(--color-ok-text);
+}
+
+/* Ready to buy: amber, with its price. */
+.research-node[data-state='open'] {
+  border-color: var(--color-warn-border);
+  background: var(--color-warn-bg);
+}
+
+.research-node[data-state='open'] .research-node-face {
+  color: var(--color-warn);
+}
+
+/* Short of Scrap, or waiting on a prerequisite: dashed and unfilled, the words say why. */
+.research-node[data-state='short'],
+.research-node[data-state='locked'] {
+  border-style: dashed;
+  /* Solid, not clear: the connector line runs behind the node. */
+  background: var(--color-panel-solid);
+}
+
+.research-node[data-state='locked'] {
+  border-color: var(--color-border-disabled);
+}
+
+.research-detail {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-6);
+  box-sizing: border-box;
+  width: 260px;
+  padding: var(--space-10) var(--space-12);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.research-detail p,
+.research-detail h3 {
+  margin: 0;
+}
+
+.research-meta,
+.research-needs,
+.research-unlocks,
+.research-wait {
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+}
+
+.research-effect {
+  font-size: var(--text-body);
+}
+
+.research-done {
+  color: var(--color-ok-text);
+  font-weight: 700;
+}
+
+.research-go {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0 var(--space-8);
+  white-space: nowrap;
+}
+
+/* The chart runs past the window's edge on a phone: its inline end fades while more is to scroll
+   (the script sets data-more), so a Tier 3 column cut off reads as more to come. */
+.research-scroll[data-more='true'] {
+  mask-image: linear-gradient(to right, var(--color-mask) calc(100% - 36px), transparent);
+}
+
+@container (max-width: 640px) {
+  .research-body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .research-scroll {
+    flex: none;
+  }
+
+  .research-detail {
+    width: auto;
+  }
 }

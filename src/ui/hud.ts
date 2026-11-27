@@ -849,7 +849,7 @@ export const replayLabel = (mode: Mode, hordeNumber: number): string =>
 export const retryLabel = (mode: Mode, hordeNumber: number): string =>
   `Retry ${hordeName(mode, hordeNumber)}`;
 
-const thousands = (n: number): string => Math.round(n).toLocaleString('en-US');
+export const thousands = (n: number): string => Math.round(n).toLocaleString('en-US');
 
 /** The word for a band, shown beside the colour so colour is never the only cue (ID-098). */
 export const BAND_WORD: Readonly<Record<PowerBand, string>> = {

@@ -1781,6 +1781,8 @@ spacing real hordes have (see the ID-077 note below).
   | Sandbags (ID-132) | barrier | rare | The outermost built layer takes **10%** less of every hit (an enemy's blow, a Swollen's blast, a slab), shown as a low layer of bags on the ground in front of each standing segment of it | 20% | 30% |
   | Scavenged Ammo (ID-132) | stat | rare | Each squad gun shot has a **20%** chance not to use a round, rolled on the fight's seeded RNG (a whole shot: every pellet of a shotgun's) | 30% | 40% |
 
+  Research Center (ID-263, §11) strengthens three of these cards: Razor Wire, Thick Coils and Electric Wire change Barbed Wire; Quick Mortars, Wide Slick and Napalm Mortar change Oil Bomb; Hand-loads and Armour-piercing change Heavy Rounds, Incendiary, Shock, Piercing Rounds and Scavenged Ammo. A researched card is also offered a little more often.
+
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
   | Card | Kind | Rarity | Effect |
@@ -2167,7 +2169,8 @@ spacing real hordes have (see the ID-077 note below).
   Its card shows what it would restore ("Repairs 140 HP across 3 segments").
   Spiked Walls (3 damage to an enemy per blow on the wall) is gone (ID-097):
   enemies rarely reached the wall, so it almost never did anything; Shock
-  Rounds takes its place. Power
+  Rounds takes its place. (ID-263's Research Center brings a different Spiked Wall back, a
+  researched upgrade that hurts climbing Crawlers; see Research Center, §11.) Power
   (repeatable, offered only when the base has a turret, since the bank
   exists from the start): Recharge (common) adds 25% of the bank cap,
   capped; **Power Surge** (rare; named so it doesn't clash with the shop's
@@ -2940,6 +2943,8 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
   once there is one; an older save loads with a fresh map and no Medicine.
 - **Save v26 (ID-238):** `themes` (the theme seed, the themes cleared), written once there is one;
   a first-clear gun's uid `t<k>`. An older save loads with seed 0 and none cleared.
+- **Save v27 (ID-263):** `tech` (the Research Center nodes researched), written once there is one,
+  read tolerantly; see Research Center, §11. An older save loads with nothing researched.
 - **Medicine (ID-220):** between hordes, a resting survivor's Roster card has **Treat · 1
   Medicine** (`TREAT`): one Medicine ends the whole rest, so they can fight the next horde at
   full HP; with none in stock it reads "No Medicine", greyed. Hidden for anyone not resting
@@ -4091,6 +4096,80 @@ Shamblers take the rest of each wave. Elites and bosses of the horde are as ever
     Hell 15 (a wall); 25% gives 14 and 13. Hell's Crawl cell (13, above the plain's 12) is still the lowest of
     the four themes (the others 19 to 20), most likely from the Crawlers' wall climb plus Hell's
     resist on the Sniper rifles in the mix (Crawlers resist Heavy); not measured.
+
+### Research Center *(as built, ID-263)*
+
+Horde-only: Scrap buys permanent upgrades in a window opened from the top bar's Research button
+(next to Roster and Weapons; a labelled button from 1231 px, a flask icon below). Phase 1 of the
+Research Center spec (`docs/superpowers/specs/2026-11-26-research-center-design.md`): Tiers 1 to
+3 for cards the player already picks. Tier 4 combos, the difficulty retune and cosmetics are later
+tickets. Research is instant and permanent, with no refund. (The full game's Lab, `core/research.ts`,
+is unrelated: this feature is `tech` in the code.)
+
+- **The window.** A second camp window with one tab, "Upgrades · n/11". A chart: four branch rows
+  (Wall, Barbed Wire, Ammo, Mortars), three tier columns, a line from each node to what it unlocks
+  (green once its source is researched), and a detail panel (name, tier and branch, effect, "Needs:
+  ✓/○ ...", "Unlocks: ...", the Research button). A node says its state in words: "✓ Researched",
+  its price, "1,200/1,800 Scrap" when short (dashed), "Needs Razor Wire" when locked (dashed). On a
+  phone the chart scrolls sideways and the panel sits under it.
+- **Buying.** Between hordes only (the result screen counts); browsing works any time. In a fight the
+  button is greyed with "Research between hordes" in words under it. A purchase asks first ("Research
+  Steel Plating for 600 Scrap? You have 2,340."; a Tier 3 confirm repeats the effect), checks again
+  after the answer (a fight that started or a Scrap figure that moved commits nothing), saves at once
+  and says "Researched Steel Plating · 600 Scrap spent, 1,740 left." Refusals, in order: already
+  researched, prerequisite missing, Scrap short. The top-bar button shows a dot while some open node is
+  affordable and buying is allowed. A purchase made on a result screen leaves the finished horde as it
+  was; the next horde has it.
+- **The tree** (`TECH`, `core/data.ts`; the costs add up to 9,300 Scrap):
+
+| Node | Branch · tier | Scrap | Needs | Effect |
+|---|---|---|---|---|
+| Reinforced Wall | Wall · 1 | 200 | - | Wall HP +15% in every fight |
+| Steel Plating | Wall · 2 | 600 | Reinforced Wall | Wall HP +30% in every fight, in place of the +15% (the highest counts, not the sum: 1.30, not 1.45) |
+| Spiked Wall | Wall · 3 | 1,500 | Steel Plating | A Crawler climbing the wall loses 20% of this wave's Shambler HP a second (`TECH_FX.spikes`) |
+| Razor Wire | Barbed Wire · 1 | 200 | - | Barbed Wire's bleed ×1.25 |
+| Thick Coils | Barbed Wire · 2 | 600 | Razor Wire | Barbed Wire rows have ×1.5 HP (at the pick, at each wave break and at the start) |
+| Electric Wire | Barbed Wire · 3 | 1,500 | Thick Coils | An enemy's first entry into a working row stuns it 1 s, then it can't be stunned again for 3 s (the Flashbang's own daze and immunity) |
+| Hand-loads | Ammo · 1 | 400 | - | Heavy Rounds, Incendiary, Shock, Piercing Rounds and Scavenged Ammo are 10% stronger when you pick them |
+| Armour-piercing | Ammo · 2 | 1,200 | Hand-loads | While the squad holds one of those five cards, its bullets ignore 20% of armour |
+| Quick Mortars | Mortars · 1 | 300 | - | Oil Bomb waits 16 s between throws, not 20 (the first throw is unchanged) |
+| Wide Slick | Mortars · 2 | 800 | Quick Mortars | Oil Bomb slicks are 25% wider (112.5 px) |
+| Napalm Mortar | Mortars · 3 | 2,000 | Wide Slick | Slicks land already burning, and keep their full 10 s |
+
+- **How each acts.** The wall nodes scale every built segment's HP and max HP at the start of each
+  fight, as Fortify does (`hp *= f; maxHp *= f`, no rounding, so a damaged wall is not healed), alongside
+  Fortify (both multiply); Construction and the Reinforce card stack on top. Spiked Wall hurts Crawlers only
+  while they climb (`climbUntil` set), once a step like a bleed, and gives the XP of a kill. Electric
+  Wire writes the Flashbang's `dazedUntil` and asks its `flashable` test, so a Flashbang inside the
+  3 s window skips the enemy and a stunned enemy is no Flashbang target for 3 s. Hand-loads changes
+  only the five ammo cards' numbers (Heavy Rounds +38% becomes +41.8%; Incendiary 3/6/9% becomes
+  3.3/6.6/9.9%; Shock 0.2/0.3/0.4 s becomes 0.22/0.33/0.44 s; Piercing 25/50/75% becomes 27.5/55/82.5%;
+  Scavenged 20/30/40% becomes 22/33/44%), and nothing unless the card is held; Heavy Rounds' reload
+  cost is not boosted. Armour-piercing takes 20% off flat armour (Brute 3 becomes 2.4) and 20% of the
+  cut back from boss plates (x0.5 becomes x0.6) and the Shield (x0.6 becomes x0.68), multiplying with
+  Breaching Rounds (plates then x0.8); never for a turret's bullet. Napalm Mortar sets `litAt` at
+  landing without shortening `until` (`lightSlick` would cut the life to 3 s). Oil Bomb and
+  Incendiary Rounds do not exclude each other; with Napalm Mortar a slick lands lit, so Incendiary's
+  light adds nothing there. Card texts show the researched numbers (`effectAt`, `pitch`).
+- **Offer weight.** Each researched node raises its branch's cards' weight by 15%: Barbed Wire and Oil
+  Bomb reach ×1.45 with a full branch, each of the five ammo cards ×1.30 (`TECH_AMMO_CARDS`, wider
+  than `AMMO_CARDS`, the exclusive Incendiary/Shock slot); the wall has no card. All the extra weight
+  together is capped at +25% of the eligible pool's size (`offerWeights`), every extra scaled down
+  alike, so the cap binds below about 9.6 cards. The rarity roll is unchanged; inside the rolled
+  rarity one draw picks by weight, the very `pick` with all weights 1, so an unresearched game draws
+  the same numbers as before. Common cards keep their shares.
+- **Balance.** An unresearched game is byte for byte what it was: `tech` is absent from the state
+  when empty, no hook runs, no RNG draw changes (the golden digests and every balance file are
+  untouched). `balance/research.test.ts` plays the golden test's winning hordes unresearched and with
+  the whole tree: researching loses none the bare squad wins. Probe, Hordes 4 and 9, the expected
+  squad (`squadAt(n, n)`), 20 seeds: 20/20 won in every tree (none, whole, wire only, mortars only);
+  mean fight time Horde 4 165.8 s bare against 165.7 s whole, Horde 9 263.2 s against 261.6 s;
+  Barbed Wire cards taken at Horde 9: 1 bare, 3 whole. `TECH_FX.spikes` is the first lever if a
+  knife-edge horde flips; the retune of the difficulty for a researched player is ID-265 (#539).
+- **Save v27.** `tech`, the nodes researched in `TECH_IDS` order, written only when any. The reader is
+  tolerant (as `slots`): it never refuses the save for it; known ids, once each, a node whose
+  prerequisite is missing dropped, a list cut to twice the node count first, anything else ignored.
+  A v26 or older save has none, and one carrying the key is refused.
 
 ### Balance pass *(ID-102)*
 

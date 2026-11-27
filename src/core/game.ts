@@ -40,6 +40,7 @@ import {
   type ResearchId,
   type SkillId,
   type Stock,
+  type TechId,
   type ThemeId,
   stockOf,
 } from './data.ts';
@@ -148,6 +149,11 @@ export interface GameState {
    * `SQUAD_SLOT_COSTS`) and `stash` ones (`STASH_SLOT.add` slots each). Absent with none.
    */
   slots?: { squad: number; stash: number };
+  /**
+   * Horde-only (ID-263): the Research Center nodes bought with Scrap, in `TECH_IDS` order.
+   * Absent with none (like `slots`), so an unresearched game saves and plays as before.
+   */
+  tech?: TechId[];
   /**
    * Horde-only (ID-209): the blueprints held and the guns crafted so far; absent until a
    * blueprint drops.
