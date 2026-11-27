@@ -2,6 +2,8 @@
 // ID-039: the Menu — its button and Esc, focus kept inside, the Save tab's code, load and
 // new camp (asked first, off in a fight), the save-problem dot, Reduce motion, Sound and Help.
 import { JOB_IDS, STASH_CAP } from '../core/data.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
@@ -9,6 +11,7 @@ import { encodeSave } from '../storage/save.ts';
 import { NOW, oldStock, prePatrol, preStats } from '../storage/testing.ts';
 import { escapeAction, frameStep } from './app.ts';
 import { TRAIT_ROWS } from './statlines.ts';
+import { versionText } from './version.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import {
   CONTROLS,
@@ -598,6 +601,23 @@ describe('the Menu', () => {
   it('Help gives the stash limit the game uses (ID-158)', () => {
     const help = setup().panel('help').textContent ?? '';
     expect(help).toContain(`into the stash (${STASH_CAP} slots to start)`);
+  });
+
+  it('Help ends with the build version, the one the page label shows (ID-275)', () => {
+    const { panel } = setup();
+    const line = panel('help').querySelector('.menu-version')!;
+    expect(line.textContent).toBe(versionText());
+    expect(line.textContent).toMatch(/^v\d+\.\d+\.\d+ \(.+\)$/);
+    expect(panel('help').lastElementChild).toBe(line);
+    // main.ts draws the corner label from the same helper, not its own string.
+    const main = readFileSync(join(process.cwd(), 'src/main.ts'), 'utf8');
+    expect(main).toContain('versionText()');
+    expect(main).not.toContain('__APP_VERSION__');
+  });
+
+  it('Help tells a touch screen to hold the Airstrike button, not tap a pill (ID-275)', () => {
+    expect(JSON.stringify(CONTROLS)).not.toMatch(/Auto pill/);
+    expect(JSON.stringify(CONTROLS)).toMatch(/hold the Airstrike button/);
   });
 
   it('Help lists no pan or zoom: the field is one fixed frame (ID-064)', () => {

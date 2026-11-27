@@ -365,6 +365,7 @@ describe('hud', () => {
       hidden: false,
       key: null,
       cooling: false,
+      coolFrac: 0,
     });
     s.cooldowns.airstrike = 12.2;
     expect(skillButtons(s, null)[0]).toMatchObject({

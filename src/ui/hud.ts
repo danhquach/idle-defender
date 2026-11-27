@@ -562,6 +562,11 @@ export function offerHolds(s: Pick<HordeState, 'outcome' | 'offer' | 'replace'>)
   return s.outcome === 'fighting' && (s.offer !== null || s.replace !== null);
 }
 
+/** The share of a cooldown still to run, from 1 (just used) to 0 (ready), clamped. */
+export function coolFrac(left: number, cooldown: number): number {
+  return cooldown > 0 ? Math.min(1, Math.max(0, left / cooldown)) : 0;
+}
+
 /**
  * The skill buttons: each a dry run of `useSkill` before aiming (one cooling down shows
  * its seconds left); the armed one is pressed until it is used or put away.
@@ -576,11 +581,13 @@ export function skillButtons(
   key: string | null;
   /** Counting down its cooldown. */
   cooling: boolean;
+  /** Cooldown still to run, 1 just used down to 0 ready: the phone's sweep (ID-275). */
+  coolFrac: number;
 })[] {
   return SKILL_IDS.map((skill) => {
     const lock = skillLock(s, skill);
     const left = skillLeft(s, skill);
-    const { cost } = SKILLS[skill];
+    const { cost, cooldown } = SKILLS[skill];
     const name = ACTIVE_SKILL_NAME[skill];
     // The horde-only build (ID-100): only the picked skills show, free, each with its key.
     const free = s.freeSkills !== undefined;
@@ -609,6 +616,7 @@ export function skillButtons(
       hidden: free && slot < 0,
       key,
       cooling: left > 0,
+      coolFrac: coolFrac(left, cooldown),
     };
   });
 }
@@ -621,7 +629,9 @@ export const REPAIRS_KEY = 'F';
  * "Field Repairs 5s" while its fire-rate cost runs, "Field Repairs · used" once spent, and a
  * full wall or a held-over horde shows disabled with the reason. Never armed or aimed.
  */
-export function repairsButton(s: HordeState): HudButton & { hidden: boolean; spent: boolean } {
+export function repairsButton(
+  s: HordeState,
+): HudButton & { hidden: boolean; spent: boolean; running: boolean } {
   const state = repairsState(s);
   const lock = repairsLock(s);
   const left = repairsLeft(s);
@@ -640,6 +650,8 @@ export function repairsButton(s: HordeState): HudButton & { hidden: boolean; spe
     reason: lockText(lock) ?? reason,
     hidden: state === 'none',
     spent,
+    // Its fire-rate cost is running (ID-137): the phone's icon pulses (ID-275).
+    running: left > 0,
   };
 }
 
@@ -4431,6 +4443,13 @@ export function createHud(
           item.button.classList.add('hud-skill-ready');
         }
         item.cooling = b.cooling;
+        // The phone's cooldown sweep (ID-275): a plain 0-100 number, set only when it changes.
+        if (item === strikeItem) {
+          const pct = String(Math.round(b.coolFrac * 100));
+          if (strikeWrap.style.getPropertyValue('--cool') !== pct) {
+            strikeWrap.style.setProperty('--cool', pct);
+          }
+        }
       });
       // The Auto pill (ID-140, ID-232) shows with the Airstrike button, whatever its cooldown
       // or a pick, once the skill is picked or researched.
@@ -4442,7 +4461,9 @@ export function createHud(
       const repairs = repairsButton(state);
       showButton(repairsItem, repairs);
       repairsItem.button.hidden = repairs.hidden;
-      repairsItem.button.classList.toggle('hud-repairs-spent', repairs.spent);
+      // Spent shows once its cost has run out; while it runs it pulses instead (ID-275).
+      repairsItem.button.classList.toggle('hud-repairs-spent', repairs.spent && !repairs.running);
+      repairsItem.button.classList.toggle('hud-repairs-cost', repairs.running);
       const aiming = skills.find((b) => b.armed);
       const prompt = !aiming ? '' : offerHolds(state) ? AIM_HELD_PROMPT : AIM_PROMPT[aiming.skill];
       if (aimCaption.textContent !== prompt) aimCaption.textContent = prompt;
