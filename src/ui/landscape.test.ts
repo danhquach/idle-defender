@@ -4,7 +4,15 @@
 // fight holds under it.
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { canLock, createTurnPrompt, goLandscape, isPhone, PORTRAIT_PHONE } from './landscape.ts';
+import {
+  canLock,
+  createTurnPrompt,
+  goLandscape,
+  isPhone,
+  isShortTouch,
+  PORTRAIT_PHONE,
+  SHORT_TOUCH,
+} from './landscape.ts';
 
 interface Fake {
   coarse?: boolean;
@@ -13,6 +21,7 @@ interface Fake {
   lock?: ((o: string) => Promise<void>) | null;
   full?: (() => Promise<void> | undefined) | null;
   fullscreen?: boolean;
+  shortTouch?: boolean;
 }
 
 /** A window as the module reads it: media queries, the screen and full screen. */
@@ -23,6 +32,7 @@ function fakeWin(f: Fake = {}): Window {
   const queries: Record<string, boolean> = {
     '(pointer: coarse)': coarse,
     [PORTRAIT_PHONE]: upright,
+    [SHORT_TOUCH]: f.shortTouch ?? false,
   };
   return {
     matchMedia: (q: string) => ({ matches: queries[q] ?? false }),
@@ -53,6 +63,14 @@ describe('a phone, by its screen', () => {
     const win = { ...fakeWin(), matchMedia: undefined } as unknown as Window;
     expect(isPhone(win)).toBe(false);
     expect(createTurnPrompt(win).showing()).toBe(false);
+  });
+});
+
+describe('the phone shell flag (ID-273)', () => {
+  it('follows the short touch query, and is off where the browser cannot say', () => {
+    expect(isShortTouch(fakeWin({ shortTouch: true }))).toBe(true);
+    expect(isShortTouch(fakeWin({ shortTouch: false }))).toBe(false);
+    expect(isShortTouch({ ...fakeWin(), matchMedia: undefined } as unknown as Window)).toBe(false);
   });
 });
 
@@ -140,22 +158,15 @@ describe('page.css and the page keep step with the module', () => {
     expect(css).toMatch(/\n\.turn-prompt \{\n {2}display: none;\n\}/);
   });
 
-  it('on its side, a phone’s top buttons take 44 px of a finger; an iPad is never that short', () => {
-    const at = css.indexOf('@media (pointer: coarse) and (max-height: 540px) {');
-    expect(at).toBeGreaterThan(0);
-    const touch = css.slice(at, css.indexOf('\n}\n', at));
-    // 26 px buttons, 9 px more above and below; the fight's 36 px column, 4 px more.
-    expect(touch).toMatch(/\.roster-button::after,[\s\S]*?inset: -9px -3px;/);
-    expect(touch).toMatch(/\.hud-speed > button::after \{\s*inset: -4px -3px;/);
-    // The row closes up from the right without the key hints.
-    expect(touch).toMatch(
-      /\.menu-button \.menu-key,\s*\.hud-speed \.menu-key,\s*\.hud-skill-key \{\s*display: none;/,
-    );
+  it('the phone shell reads the query the CSS block is under (ID-273)', () => {
+    expect(css).toContain(`@media ${SHORT_TOUCH} {`);
   });
 
-  it('in a fight on its side, the speed group stands clear of the held cards and boss bars', () => {
-    expect(css).toMatch(
-      /body:not\(:has\(\.hud-debrief:not\(\[hidden\]\)\)\) \.hud-speed \{\s*top: 40px;\s*right: var\(--space-12\);\s*left: auto;\s*flex-direction: column;/,
+  it('on its side the key hints are gone: a phone has no keyboard', () => {
+    const at = css.indexOf(`@media ${SHORT_TOUCH} {`);
+    const touch = css.slice(at, css.indexOf('\n}\n', at));
+    expect(touch).toMatch(
+      /\.menu-button \.menu-key,\s*\.hud-speed \.menu-key,\s*\.hud-skill-key \{\s*display: none;/,
     );
   });
 

@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PANEL_SPACE } from './build.ts';
 import { BOSS_LOOK, COLOR } from './render.ts';
+import { SHORT_TOUCH } from './landscape.ts';
+import { HUD_SPACE_SHORT } from './projection.ts';
 
 const css = readFileSync(new URL('../page.css', import.meta.url), 'utf8');
 
@@ -168,8 +170,9 @@ describe('UI kit tokens (ID-056)', () => {
   it('defines every token a rule uses', () => {
     const used = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]!));
     // `--risk` is set per place by the world map's script; `--scrap-chip-w` is the Scrap
-    // chip's measured width (ID-239), set by its script.
-    const set = ['--risk', '--scrap-chip-w'];
+    // chip's measured width (ID-239), set by its script; `--strip-held` is set on `.hud`
+    // inside the phone shell's block (ID-273) and read by the rules under it.
+    const set = ['--risk', '--scrap-chip-w', '--strip-held'];
     const missing = [...used].filter((t) => !tokens.has(t) && !set.includes(t));
     expect(missing).toEqual([]);
   });
@@ -788,12 +791,12 @@ describe('the World map globe in the top bar', () => {
     expect(rules).not.toMatch(/max-width: 1100px|max-width: 1130px|max-width: 1180px/);
   });
 
-  it('heads the speed column in a fight on a phone on its side, Research under the globe (ID-263)', () => {
-    const fight = 'body:not\\(:has\\(\\.hud-debrief:not\\(\\[hidden\\]\\)\\)\\)';
-    expect(rules).toMatch(new RegExp(`${fight} \\.map-button \\{\\s*top: 40px;`));
-    expect(rules).toMatch(new RegExp(`${fight} \\.research-button \\{\\s*top: 80px;`));
-    expect(rules).toMatch(new RegExp(`${fight} \\.hud-speed \\{\\s*top: 122px;`));
-    expect(rules).toMatch(new RegExp(`${fight} \\.scrap-chip \\{\\s*right: 252px;`));
+  it('on a phone on its side the speeds head the right rail under the Scrap count, Research and the globe stand in the left one (ID-263, ID-273)', () => {
+    const shell = rules.slice(rules.indexOf(`@media ${SHORT_TOUCH} {`));
+    expect(shell).toMatch(/\.scrap-chip \{[^}]*height: 28px;/);
+    expect(shell).toMatch(/\.hud-speed \{[^}]*top: 28px;/);
+    expect(shell).toMatch(/\.map-button \{\s*top: 40%;/);
+    expect(shell).toMatch(/\.research-button \{\s*top: 60%;/);
   });
 });
 
@@ -1177,5 +1180,128 @@ describe('panels fit the visible screen on a phone (ID-272)', () => {
     // for the intro's smaller vh paddings and logo height.
     expect(rules).not.toMatch(/(?<![a-z\d.])\d+(?:\.\d+)?vh\b/);
     expect(rules).toMatch(/100dvh/);
+  });
+});
+
+describe('the phone shell (ID-273)', () => {
+  const query = `@media ${SHORT_TOUCH} {`;
+  const at = rules.indexOf(query);
+  const shell = rules.slice(at, rules.indexOf('\n}\n', at));
+  /** One rule's body inside the shell block. */
+  const rule = (selector: string): string => {
+    const m = new RegExp(
+      `\\n[ \\t]*\\n[ \\t]*${selector.replace(/[.[\]()>~:]/g, '\\$&')} \\{([^}]*)\\}`,
+    ).exec(shell);
+    if (!m) throw new Error(`no rule ${selector} in the phone shell`);
+    return m[1]!;
+  };
+  const px = (body: string, prop: string): number => {
+    const m = new RegExp(`(?:^|[\\s;])${prop}: (\\d+)px;`).exec(body);
+    if (!m) throw new Error(`no ${prop} in ${body}`);
+    return Number(m[1]);
+  };
+
+  it('is one block, under the query the camera reads: the phone shell is set in one place', () => {
+    expect(at).toBeGreaterThan(0);
+    expect(rules.split(query)).toHaveLength(2);
+    expect(SHORT_TOUCH).toBe('(pointer: coarse) and (max-height: 540px)');
+  });
+
+  it('reserves what the camera does: a 44 px rail each side, a 22 px strip above', () => {
+    const leftRail = rule(
+      '.roster-button,\n  .inv-button,\n  .map-button,\n  .research-button,\n  .menu-button',
+    );
+    expect(px(leftRail, 'width')).toBe(HUD_SPACE_SHORT.left);
+    expect(px(rule('.scrap-chip'), 'width')).toBe(HUD_SPACE_SHORT.right);
+    expect(px(rule('.hud-speed'), 'width')).toBe(HUD_SPACE_SHORT.right);
+    const strip = rule('.hud-bar,\n  .hud-fight-bar');
+    expect(px(strip, 'height')).toBe(HUD_SPACE_SHORT.top);
+    expect(px(strip, 'left')).toBe(HUD_SPACE_SHORT.left);
+    expect(px(strip, 'right')).toBe(HUD_SPACE_SHORT.right);
+    expect(HUD_SPACE_SHORT.bottom).toBe(0);
+  });
+
+  it('every rail target is at least 44 px wide and tall: five left buttons share the height, the speeds are 44 px', () => {
+    const left = rule(
+      '.roster-button,\n  .inv-button,\n  .map-button,\n  .research-button,\n  .menu-button',
+    );
+    expect(left).toMatch(/height: 20%;/);
+    for (const [name, top] of [
+      ['roster', 0],
+      ['inv', 20],
+      ['map', 40],
+      ['research', 60],
+      ['menu', 80],
+    ] as const) {
+      expect(rule(`.${name}-button`)).toMatch(new RegExp(`top: ${top}%?;`));
+    }
+    const speed = rule('.hud-speed-button');
+    expect(px(speed, 'width')).toBeGreaterThanOrEqual(44);
+    expect(px(speed, 'height')).toBeGreaterThanOrEqual(44);
+    const skill = rule(
+      '.hud-shop .hud-shop-item:not([hidden]),\n  .hud-shop .hud-strike .hud-skill:not([hidden])',
+    );
+    expect(px(skill, 'min-width')).toBeGreaterThanOrEqual(44);
+    expect(px(skill, 'min-height')).toBeGreaterThanOrEqual(44);
+  });
+
+  it('the info strip is one line of 22 px at most, its held chips 22 px tall and at least 32 wide', () => {
+    for (const sel of [
+      '.hud-corner',
+      '.hud-corner-panel',
+      '.hud-held',
+      '.hud-held-row',
+      '.hud-held-card',
+    ]) {
+      expect(px(rule(sel), 'height')).toBeLessThanOrEqual(22);
+    }
+    const chip = rule('.hud-held-card');
+    expect(px(chip, 'width')).toBeGreaterThanOrEqual(32);
+    expect(chip).toMatch(/flex: none;/);
+    // Flush, and one line: they scroll, never wrap.
+    const row = rule('.hud-held-row');
+    expect(row).toMatch(/flex-wrap: nowrap;/);
+    expect(row).toMatch(/gap: 0;/);
+  });
+
+  it('only the held row scrolls sideways: the strip would clip the tip under its chips', () => {
+    expect(rule('.hud-held-row')).toMatch(/overflow-x: auto;/);
+    expect(rule('.hud-held')).not.toMatch(/overflow/);
+  });
+
+  it('the rails stand over the windows, whose scrims leave them bare (a confirmation covers all)', () => {
+    expect(rule('.scrap-chip')).toMatch(/z-index: 1;/);
+    expect(
+      rule('.roster-button,\n  .inv-button,\n  .map-button,\n  .research-button,\n  .menu-button'),
+    ).toMatch(/z-index: 1;/);
+    expect(rule('.menu-scrim,\n  .camp-scrim')).toMatch(
+      new RegExp(`inset: 0 ${HUD_SPACE_SHORT.left}px;`),
+    );
+    // Outside the shell the scrims have no z-index and the confirmation's is above the rails'.
+    expect(rules).toMatch(/\.confirm-scrim \{\s*z-index: 10;/);
+    expect(shell).not.toMatch(/\.confirm-scrim/);
+  });
+
+  it('the rail icons are drawn only here: hidden by a base rule outside the block', () => {
+    expect(rules.slice(0, at)).toMatch(/\n\.rail-icon \{\s*display: none;\s*\}/);
+    expect(rule('.rail-icon,\n  .map-globe,\n  .research-flask')).toMatch(/display: block;/);
+  });
+
+  it('the old stacked-column rules are gone: no hit-area pseudo-elements, no scoped speed column', () => {
+    expect(shell).not.toMatch(/\.hud-speed > button::after/);
+    expect(shell).not.toMatch(/body:not\(:has\(\.hud-debrief/);
+  });
+});
+
+describe('the phone shell keeps hidden skill-row items hidden (ID-273)', () => {
+  it('shows a shop item or the strike only when it is not [hidden]', () => {
+    const at = rules.indexOf(`@media ${SHORT_TOUCH} {`);
+    const block = rules.slice(at, rules.indexOf('\n}\n', at));
+    const shows = [
+      ...block.matchAll(/([^{}]*\.hud-(?:shop-item|strike)[^{}]*)\{[^}]*display: flex;/g),
+    ].map((m) => m[1]!);
+    expect(shows.length).toBeGreaterThan(0);
+    for (const s of shows)
+      for (const sel of s.split(',')) expect(sel, sel).toMatch(/:not\(\[hidden\]\)/);
   });
 });

@@ -68,6 +68,7 @@ import type { SaveStorage } from '../storage/save.ts';
 import { classBadge, classChip } from './classicon.ts';
 import { className, classLine, levelText, matchupsOpen } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
+import { railIcon } from './railicon.ts';
 import {
   lockText,
   refusedText,
@@ -316,6 +317,7 @@ export function createRoster(
   const button = el('button', 'roster-button', 'Roster');
   button.type = 'button';
   button.setAttribute('aria-haspopup', 'dialog');
+  button.append(railIcon(doc, 'roster'));
   button.addEventListener('click', () => api.open());
   root.append(button);
 

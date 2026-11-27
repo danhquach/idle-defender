@@ -11,6 +11,7 @@ import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storag
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import { AUTO_KEY, ENEMY_NAME, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 import { classBadge } from './classicon.ts';
+import { railIcon } from './railicon.ts';
 import { CLASS_LINES, TRAIT_NOTE, TRAIT_ROWS } from './statlines.ts';
 
 /** What the Save tab says about a refused code. */
@@ -286,7 +287,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   button.title = 'Menu (Esc)';
   button.setAttribute('aria-haspopup', 'dialog');
   button.setAttribute('aria-label', 'Menu');
-  button.append(el('kbd', 'menu-key', 'Esc'), el('span', 'menu-dot'));
+  button.append(el('kbd', 'menu-key', 'Esc'), el('span', 'menu-dot'), railIcon(doc, 'menu'));
   button.addEventListener('click', () => api.open());
   root.append(button);
 

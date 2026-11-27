@@ -195,6 +195,7 @@ import {
   fightHitAt,
   frameCamera,
   FIGHT_FRAME,
+  HUD_SPACE_SHORT,
   project,
   unproject,
   type Camera,
@@ -210,7 +211,7 @@ import {
   type Scene,
 } from './render.ts';
 import { fightSpeed } from './fastforward.ts';
-import { createTurnPrompt, goLandscape } from './landscape.ts';
+import { createTurnPrompt, goLandscape, isShortTouch, SHORT_TOUCH } from './landscape.ts';
 import { TITLE_PICTURE, type Art } from './sprites.ts';
 import { refusalText, refusedText, type Refused } from './text/index.ts';
 
@@ -1209,13 +1210,18 @@ export function start(root: HTMLElement, art: Art): void {
     backdropCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
     // Resizing cleared the backdrop's canvas.
     forgetBackdrop();
-    fightCam = frameCamera(view, hud.bottomSpace(), FIGHT_FRAME, hud.topSpace());
+    // The phone shell (ID-273) has fixed rails and strip: its reserve stands in for the HUD's measure.
+    fightCam = isShortTouch(window)
+      ? frameCamera(view, { space: HUD_SPACE_SHORT })
+      : frameCamera(view, { bottom: hud.bottomSpace(), top: hud.topSpace() });
     // The horde-only build shows the fight frame between hordes too.
     buildCam = panel ? buildCamera(view, panel.room(view)) : fightCam;
     cam = horde ? fightCam : buildCam;
   }
   resize();
   window.addEventListener('resize', resize);
+  // The phone shell turns on and off with the window (a phone leaving full screen, a rotation).
+  window.matchMedia?.(SHORT_TOUCH)?.addEventListener?.('change', resize);
 
   // "Back to build" swaps the scene while the result screen closes: a hard cut to the build frame.
   function toBuild(): void {

@@ -40,7 +40,25 @@ export const MARGIN_Y = 80;
  * Screen px kept clear for the top bar and, at least, for the bottom HUD (shop and
  * skills): the frame fits between them, so neither covers the field.
  */
-export const HUD_SPACE = { top: 48, bottom: 64 } as const;
+export const HUD_SPACE = { top: 48, bottom: 64, left: 0, right: 0 } as const;
+
+/**
+ * The phone shell's reserve (ID-273): no top bar, a 22 px info strip, a 44 px rail down each
+ * side. Kept in step with the coarse short block in page.css.
+ */
+export const HUD_SPACE_SHORT = { top: 22, bottom: 0, left: 44, right: 44 } as const;
+export type HudSpace = { top: number; bottom: number; left: number; right: number };
+
+export interface FrameOptions {
+  /** The bottom HUD's measured height; a wrapped shop bar takes more. */
+  bottom?: number;
+  /** The top HUD's measured height, when it reaches past the bar (the held cards' strip, ID-113). */
+  top?: number;
+  /** This build's fight frame unless named. */
+  frame?: Frame;
+  /** The screen px kept clear on each side; HUD_SPACE unless named. */
+  space?: HudSpace;
+}
 
 export function project(
   p: { x: number; y: number; z?: number },
@@ -131,21 +149,21 @@ export const FIGHT_FRAME: Frame = HORDE_ONLY ? SQUAD_FRAME : FRAME;
  * The camera on the frame for a `view`: zoomed to fit it (the smaller of width fit and
  * height fit, between the HUD's bands), never under MIN_ZOOM, centred in the spare
  * space. A frame wider or taller than the view keeps its left (wall-side) or top edge.
- * `bottom` is the bottom HUD's measured height; a wrapped shop bar takes more. `frame`
- * is this build's fight frame unless named. `top` is the top HUD's measured height,
- * when it reaches past the bar (the held cards' strip, ID-113).
+ * `options` name the measured HUD bands, the frame and the reserved space (see FrameOptions).
  */
-export function frameCamera(view: View, bottom = 0, frame: Frame = FIGHT_FRAME, top = 0): Camera {
+export function frameCamera(view: View, options: FrameOptions = {}): Camera {
+  const { frame = FIGHT_FRAME, space = HUD_SPACE } = options;
   const w = frame.right - frame.left;
   const h = (frame.bottom - frame.top) * TILT;
-  const above = Math.max(HUD_SPACE.top, top);
-  const below = Math.max(HUD_SPACE.bottom, bottom);
+  const above = Math.max(space.top, options.top ?? 0);
+  const below = Math.max(space.bottom, options.bottom ?? 0);
   const band = Math.max(0, view.h - above - below);
-  const zoom = Math.max(MIN_ZOOM, Math.min(view.w / w, band / h));
-  const spareX = Math.max(0, view.w - w * zoom) / 2;
+  const across = Math.max(0, view.w - space.left - space.right);
+  const zoom = Math.max(MIN_ZOOM, Math.min(across / w, band / h));
+  const spareX = Math.max(0, across - w * zoom) / 2;
   const spareY = Math.max(0, band - h * zoom) / 2;
   return {
-    x: frame.left - spareX / zoom,
+    x: frame.left - (space.left + spareX) / zoom,
     y: frame.top - (above + spareY) / (zoom * TILT),
     zoom,
   };

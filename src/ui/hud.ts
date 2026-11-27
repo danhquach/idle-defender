@@ -194,6 +194,8 @@ import { createHold } from './hold.ts';
 import { classBadge, classChip } from './classicon.ts';
 import { classLine, FIT_TIP, FIT_WORD, fitText, matchupsOpen, traitText } from './statlines.ts';
 import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
+import { isShortTouch } from './landscape.ts';
+import { HUD_SPACE_SHORT } from './projection.ts';
 import {
   ART_URLS,
   avatarOf,
@@ -3361,10 +3363,17 @@ export function createHud(
       ...(card.live ? [el('span', 'hud-held-tip-live', card.live.text)] : []),
       el('span', 'hud-held-tip-kind', card.kind),
     );
-    // Under its chip, kept inside the window.
+    // Under its chip (where a scrolled row has moved it), kept inside the window: between
+    // the rails on the phone shell (ID-273), whose chips scroll sideways.
     const chip = chipOf(card.id);
-    const room = Math.max(0, window.innerWidth - held.getBoundingClientRect().left - 16);
-    heldTip.style.left = `${Math.max(0, Math.min(chip?.offsetLeft ?? 0, room - heldTip.offsetWidth))}px`;
+    const left = held.getBoundingClientRect().left;
+    const shell = isShortTouch(window);
+    const lo = shell ? HUD_SPACE_SHORT.left - left : 0;
+    const hi =
+      window.innerWidth - (shell ? HUD_SPACE_SHORT.right : 16) - left - heldTip.offsetWidth;
+    // From the boxes, not offsetLeft: engines differ on whether a scrolled parent counts.
+    const at = chip ? chip.getBoundingClientRect().left - left : 0;
+    heldTip.style.left = `${Math.max(lo, Math.min(at, hi))}px`;
   }
   // Where the strip ends (its rows wrap with the window's width), so the boss bars,
   // warning and toast sit under it, not on it; 0 while it is hidden or not laid out.

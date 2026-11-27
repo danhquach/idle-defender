@@ -7986,54 +7986,122 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 }
 
-/* A phone on its side: no keyboard, so no key hints on the top buttons, and the row closes
-   up from the right (Menu, Weapons, Roster, Scrap) to leave the corner panel room. Each top
-   button keeps its look but takes a finger's 44 px of height (an invisible edge above and
-   below). An iPad is never this short, so it keeps its hints; a short desktop window
-   keeps its top bar as it was. */
+/* The phone shell (ID-273): a touch screen 540 px tall or less (a phone on its side). The top
+   bar is gone: a 44 px rail down each side, a 22 px info strip across the top between them
+   and the field below it, so the fight frame fills about 281 of 303 px. The left rail holds the
+   camp's windows (Roster, Weapons, Map, Research) and the Menu; the right one the Scrap chip
+   and the speeds with Pause. The skills stand in an icon-only column against the right rail.
+   Kept in step with SHORT_TOUCH and HUD_SPACE_SHORT in the code (landscape.ts, projection.ts):
+   the camera reserves the same 44 px each side and 22 px above. An iPad is this short only in
+   a Stage Manager window under 540 px, which the shell suits too;
+   a short desktop window (no touch) keeps its top bar as it was. This block is the one place
+   the phone's shell is set: it follows every shared rule above it, so it wins them. */
+.rail-icon {
+  display: none;
+}
+
 @media (pointer: coarse) and (max-height: 540px) {
-  /* The fight's corner panel is the bar's only content: no room is held on its right. A
-     phone 640 px wide or less on its side (the oldest iPhones, 568 px) keeps this one row
-     too, not the upright phone's stacked rows. */
-  .hud-fight-bar {
-    padding: 4px var(--space-16);
+  .hud {
+    /* The strip's right part: the held cards; the info takes the rest. */
+    --strip-held: clamp(64px, 24vw, 240px);
+    --hud-held-push: 0px;
   }
 
-  .menu-button,
-  .inv-button,
+  /* --- Left rail: five equal buttons, an icon over a 9 px label. --- */
   .roster-button,
-  .research-button,
+  .inv-button,
   .map-button,
-  .hud-speed-button,
-  .scrap-chip {
-    top: 5px;
-    height: 26px;
+  .research-button,
+  .menu-button {
+    position: absolute;
+    left: 0;
+    right: auto;
+    z-index: 1;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 44px;
+    height: 20%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--color-bar-bg);
+    box-shadow:
+      inset -1px 0 var(--color-border-strong),
+      inset 0 -1px var(--color-border);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .roster-button {
+    top: 0;
+  }
+
+  .inv-button {
+    top: 20%;
+  }
+
+  .map-button {
+    top: 40%;
+  }
+
+  .research-button {
+    top: 60%;
   }
 
   .menu-button {
-    right: 12px;
+    top: 80%;
   }
 
-  /* The speed group leaves the crowded top row: at the bar's left in the camp (the corner
-     panel is hidden there). */
-  .hud-speed {
+  .roster-button:focus-visible,
+  .inv-button:focus-visible,
+  .map-button:focus-visible,
+  .research-button:focus-visible,
+  .menu-button:focus-visible {
+    outline-offset: -3px;
+  }
+
+  .rail-icon,
+  .map-globe,
+  .research-flask {
+    display: block;
+    flex: none;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.6;
+  }
+
+  .rail-icon {
+    order: -1;
+  }
+
+  .research-label {
+    display: block;
+  }
+
+  /* The globe has no text of its own: its label is drawn, its name stays on the button. */
+  .map-button::after {
+    content: 'Map';
+  }
+
+  .research-dot,
+  .menu-dot {
     top: 5px;
-    right: auto;
-    left: var(--space-16);
+    right: 8px;
   }
 
-  /* In a fight the left holds the held cards' strip and the middle the boss bars: the
-     speed group stands in a column at the right edge, under the Menu button. */
-  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed {
-    top: 40px;
-    right: var(--space-12);
-    left: auto;
-    flex-direction: column;
-  }
-
-  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed > button {
-    min-width: 40px;
-    height: 36px;
+  .map-badge {
+    top: 3px;
+    right: 3px;
   }
 
   .menu-button .menu-key,
@@ -8042,89 +8110,363 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     display: none;
   }
 
-  .inv-button {
-    right: 82px;
-  }
-
-  .roster-button {
-    right: 176px;
-  }
-
-  /* Between hordes Research sits left of Roster, the globe left of it, the Scrap chip left of
-     that (ID-263). */
-  .research-button {
-    right: 252px;
-    width: 34px;
-  }
-
-  .research-flask {
-    width: 18px;
-    height: 18px;
-  }
-
-  .map-button {
-    right: 294px;
-    width: 34px;
-  }
-
-  .map-globe {
-    width: 18px;
-    height: 18px;
-  }
-
+  /* --- Right rail: the Scrap count (the amount over any Medicine), then the speeds. --- */
   .scrap-chip {
-    right: 336px;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    display: block;
+    box-sizing: border-box;
+    width: 44px;
+    height: 28px;
+    padding: 1px 2px 0;
+    overflow: hidden;
+    border-radius: 0;
+    background: var(--color-bar-bg);
+    box-shadow:
+      inset 1px 0 var(--color-border-strong),
+      inset 0 -1px var(--color-border);
+    font-size: 10px;
+    line-height: 12px;
+    text-align: center;
   }
 
-  /* In a fight the top row is the corner panel's: the chip steps back beside Roster and the
-     globe and Research head the speed group's column at the right edge, the speeds under them. */
-  body:not(:has(.hud-debrief:not([hidden]))) .scrap-chip {
-    right: 252px;
+  .scrap-chip b:not(.medicine-chip-count) {
+    display: block;
   }
 
-  body:not(:has(.hud-debrief:not([hidden]))) .map-button {
-    top: 40px;
-    right: var(--space-12);
-    width: 40px;
-    height: 36px;
+  /* "Scrap" in small type over the amount, so a new player can tell what the number is; with
+     Medicine shown there is room only for the two amounts. */
+  .scrap-chip-label:not(.medicine-chip-label) {
+    display: block;
+    font-size: 8px;
+    line-height: 10px;
+    color: var(--color-text-subtle);
   }
 
-  body:not(:has(.hud-debrief:not([hidden]))) .research-button {
-    top: 80px;
-    right: var(--space-12);
-    width: 40px;
-    height: 36px;
+  body:has(.medicine-chip-count) .scrap-chip-label:not(.medicine-chip-label) {
+    display: none;
   }
 
-  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed {
-    top: 122px;
+  .medicine-chip-label {
+    font-size: 9px;
   }
 
-  /* Up to the Scrap chip (about 100 px wide), past the horde badge on its left. */
+  .hud-speed {
+    top: 28px;
+    right: 0;
+    left: auto;
+    z-index: 1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    width: 44px;
+  }
+
+  .hud-speed-button {
+    box-sizing: border-box;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    border-width: 0 0 1px;
+    border-radius: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .hud-skip-chip {
+    display: none;
+  }
+
+  /* --- The info strip: the horde, the wave, the level and Power in one line, the held
+     cards at its right end; never a second line. --- */
+  .hud-bar,
+  .hud-fight-bar {
+    top: 0;
+    right: 44px;
+    left: 44px;
+    box-sizing: border-box;
+    height: 22px;
+    padding: 0;
+  }
+
+  .hud:has(.hud-debrief:not([hidden])) .hud-fight-bar {
+    visibility: hidden;
+  }
+
+  .hud-corner {
+    gap: 6px;
+    align-items: center;
+    height: 22px;
+    padding-left: 4px;
+  }
+
+  .hud-badge {
+    flex-direction: row;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-sm);
+  }
+
+  .hud-badge-label {
+    display: none;
+  }
+
+  .hud-badge-num {
+    margin-top: 0;
+    font-size: 12px;
+  }
+
+  .hud-badge-boss {
+    top: -1px;
+    right: -4px;
+    font-size: 9px;
+  }
+
   .hud-corner-panel {
-    width: min(300px, calc(100vw - 426px));
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: auto;
+    max-width: calc(100vw - 88px - 40px - var(--strip-held));
+    height: 22px;
+    padding: 0 var(--space-4);
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+    font-size: 10px;
+    line-height: 22px;
   }
 
-  .menu-button::after,
-  .inv-button::after,
-  .roster-button::after,
-  .research-button::after,
-  .map-button::after,
-  .hud-speed > button::after {
-    content: '';
-    position: absolute;
-    inset: -9px -3px;
+  /* The wave line gives way first (an ellipsis); the level and Power stay whole. */
+  .hud-corner-top {
+    flex: 0 1 auto;
+    gap: var(--space-6);
   }
 
-  .hud-speed > button {
+  .hud-corner-row {
+    flex: none;
+    gap: 0;
+    height: auto;
+  }
+
+  .hud-xp-label,
+  .hud-power-label {
+    flex: none;
+  }
+
+  .hud-xp-meter,
+  .hud-power-meter {
+    display: none;
+  }
+
+  .hud-held {
+    top: 0;
+    right: 44px;
+    left: auto;
+    width: var(--strip-held);
+    max-width: none;
+    height: 22px;
+  }
+
+  /* Chips 22 px tall and at least 32 wide, flush; more than fit scroll sideways, never wrap.
+     Only the row scrolls: the tip below is the strip's sibling and is not clipped. */
+  .hud-held-row {
+    flex-wrap: nowrap;
+    gap: 0;
+    height: 22px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .hud-held-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hud-held-card {
+    flex: none;
+    width: 32px;
+    height: 22px;
+    border-radius: 0;
+  }
+
+  .hud-held-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .hud-held-badge {
+    right: 0;
+    bottom: 0;
+    padding: 0 2px;
+    font-size: 8px;
+    line-height: 9px;
+  }
+
+  .hud-held-tip {
+    max-width: min(280px, calc(100vw - 96px));
+  }
+
+  /* --- Under the strip: the boss bars, the warning and the toast, set outright. --- */
+  .hud-boss {
+    top: 24px;
+    gap: var(--space-4);
+    width: min(420px, calc(100vw - 96px));
+    padding: var(--space-4) var(--space-10);
+  }
+
+  .hud-toast {
+    top: 26px;
+    max-width: calc(100vw - 96px);
+  }
+
+  .hud-swap-note {
+    top: calc(26px + 2.5rem);
+    max-width: calc(100vw - 96px);
+  }
+
+  .hud-warning {
+    top: 24px;
+  }
+
+  .hud-boss:not([hidden]) ~ .hud-warning {
+    top: 76px;
+  }
+
+  .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(2):not([hidden])) ~ .hud-warning {
+    top: 116px;
+  }
+
+  .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(3):not([hidden])) ~ .hud-warning {
+    top: 156px;
+  }
+
+  .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(4):not([hidden])) ~ .hud-warning {
+    top: 196px;
+  }
+
+  .hud-swarm,
+  .hud-boss:not([hidden]):has(.hud-boss-row:nth-child(4):not([hidden])) ~ .hud-swarm {
+    top: 30%;
+  }
+
+  .hud-swarm {
+    padding: var(--space-4) var(--space-12);
+    font-size: 1.15rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* --- The skills: an icon-only column against the right rail, up from the bottom edge.
+     Each name stays for a screen reader; the cost and key are not drawn. --- */
+  .hud-shop {
+    top: auto;
+    right: 44px;
+    bottom: 0;
+    left: auto;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: var(--space-4);
+    width: 44px;
+  }
+
+  /* Room for the Auto pill riding over the strike's top edge (17px up), clear of the item above. */
+  .hud-shop:has(> .hud-strike:not([hidden])) {
+    row-gap: 22px;
+  }
+
+  /* Never over [hidden]: the build-mode items stay hidden in a horde, as they are on desktop. */
+  .hud-shop .hud-shop-item:not([hidden]),
+  .hud-shop .hud-strike .hud-skill:not([hidden]) {
     position: relative;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
   }
 
-  /* In the fight's column the buttons are 36 px tall: 4 px more above and below. */
-  body:not(:has(.hud-debrief:not([hidden]))) .map-button::after,
-  body:not(:has(.hud-debrief:not([hidden]))) .research-button::after,
-  body:not(:has(.hud-debrief:not([hidden]))) .hud-speed > button::after {
-    inset: -4px -3px;
+  .hud-shop .hud-strike:not([hidden]) {
+    display: flex;
+    margin: 0;
+  }
+
+  .hud-shop .hud-icon {
+    width: 28px;
+    height: 28px;
+    margin: 0;
+  }
+
+  .hud-shop .hud-shop-label,
+  .hud-shop .btn-cost {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* The armed skill's caption sits left of the column; the Auto pill and hints keep to it. */
+  .hud-shop > .hud-aim-caption {
+    position: absolute;
+    right: calc(100% + var(--space-6));
+    bottom: 0;
+    flex: none;
+    width: max-content;
+    max-width: 240px;
+    text-align: right;
+  }
+
+  .hud-auto-pill .hud-auto-touch,
+  .hud-auto-pill .hud-auto-desk {
+    display: none;
+  }
+
+  .hud-strike-hint {
+    right: 0;
+    left: auto;
+  }
+
+  /* The version line stays clear of the rails, bottom left of the field. */
+  .version {
+    right: auto;
+    bottom: 2px;
+    left: 52px;
+  }
+
+  /* --- Windows and panels sit between the rails, from the top edge; the rails stay in
+     view (and, behind a window, the page is inert: its buttons wait for the window to
+     close). A confirmation still covers everything. --- */
+  .menu-scrim,
+  .camp-scrim {
+    inset: 0 44px;
+    padding: var(--space-4);
+  }
+
+  .hud-cards,
+  .hud-result.hud-debrief {
+    top: 4px;
+    max-width: calc(100vw - 96px);
+    max-height: calc(100dvh - 8px);
+  }
+
+  .hud-result.hud-debrief {
+    width: min(780px, calc(100vw - 96px));
+  }
+
+  .hud-cards {
+    overflow-x: auto;
   }
 }
 
