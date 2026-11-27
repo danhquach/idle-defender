@@ -4195,16 +4195,43 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* A phone-wide window (ID-255): not even "Best gun" fits beside the tabs and the close, so
-   the tools take a row of their own above the tabs, at the right, and read in full. */
+   the tools take a row of their own above the tabs, at the right, and read in full.
+   ID-258: tighter tabs keep the four tabs and the close on one row under them; the strip
+   starts from nothing, so it never pushes the close down, and a label longer than these (a
+   big Craft count) is shortened with "…" rather than wrapped. */
 @container (max-width: 479px) {
   .camp-head {
     flex-wrap: wrap;
+    gap: var(--space-4);
   }
 
   .camp-tools {
     flex: 1 1 100%;
     order: -1;
     justify-content: flex-end;
+  }
+
+  .camp-tabs {
+    flex: 1 1 0;
+    min-width: 0;
+    gap: var(--space-2);
+  }
+
+  /* Beats the narrow window's tab padding (max-width: 640px, further down). */
+  .camp-tabs .camp-tab {
+    min-width: 0;
+    padding: 0 var(--space-6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* The narrowest (320 px): the tabs' small text. */
+@container (max-width: 359px) {
+  .camp-tabs .camp-tab {
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
   }
 }
 
