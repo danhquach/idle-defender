@@ -6,7 +6,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { levelName, type OwnedWeapon } from '../core/armoury.ts';
+import type { Refused } from './text/index.ts';
+import { type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { combineGuns, upgradeGun } from '../core/hordeonly.ts';
@@ -20,6 +21,7 @@ import {
   UPGRADE_NOT_GUN_TEXT,
   UPGRADE_PISTOL_TEXT,
 } from './inventory.ts';
+import { levelName } from './text/index.ts';
 
 const gun = (uid: string, extra: Partial<OwnedWeapon> = {}): OwnedWeapon => ({
   uid,
@@ -122,7 +124,7 @@ function mountWith(game: GameState, canCombine: boolean, withCombine: boolean) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   let g = game;
-  const onUpgrade = vi.fn((uid: string) => {
+  const onUpgrade = vi.fn((uid: string): { ok: true; text: string } | Refused => {
     const r = upgradeGun(g, uid);
     if (!r.ok) return r;
     g = r.game;

@@ -4150,7 +4150,7 @@ is unrelated: this feature is `tech` in the code.)
   Breaching Rounds (plates then x0.8); never for a turret's bullet. Napalm Mortar sets `litAt` at
   landing without shortening `until` (`lightSlick` would cut the life to 3 s). Oil Bomb and
   Incendiary Rounds do not exclude each other; with Napalm Mortar a slick lands lit, so Incendiary's
-  light adds nothing there. Card texts show the researched numbers (`effectAt`, `pitch`).
+  light adds nothing there. Card texts show the researched numbers (`effectAt`, `cardPitch` in `ui/text/cards.ts`).
 - **Offer weight.** Each researched node raises its branch's cards' weight by 15%: Barbed Wire and Oil
   Bomb reach ×1.45 with a full branch, each of the five ammo cards ×1.30 (`TECH_AMMO_CARDS`, wider
   than `AMMO_CARDS`, the exclusive Incendiary/Shock slot); the wall has no card. All the extra weight
@@ -5436,6 +5436,16 @@ original outline.
   and keep their fights' results in `.cache/balance/`, keyed by the
   simulation's code, Node's version and the test file (ID-142), so they
   replay only when one of those changes.
+- **Words live in the UI** *(as built, ID-269)*: the simulation (`src/core`) returns
+  ids, numbers and refusal codes, never sentences, so rewording a refusal, a name or a card
+  text never counts as a simulation change (the balance cache and CI's balance jobs key on
+  `src/core`). A refusal is `{ ok: false, code, …facts }` (`core/refusal.ts`); the UI
+  words it (`src/ui/text/refusals.ts`). Names, card texts, tips and roles are id-keyed
+  tables in `src/ui/text/`. Text that stays in core: the balance report (`sim.ts`), the
+  debug panel's refusals (`debug.ts`), test fixtures (`testing.ts`) and the survivor names
+  (`RECRUIT_NAMES`, the start squad), which the RNG picks and saves store; editing those
+  still replays balance. A test (`core/text-guard.test.ts`) fails on a sentence or a
+  text-keyed string in any other core file.
 - **Debug mode** *(as built, ID-197)*: `?debug=1` (exactly one `debug`
   parameter, exactly `1`; anything else is off) shows a red DEBUG badge that
   stays on screen and opens a Debug panel (`src/ui/debug.ts`). The camp lives

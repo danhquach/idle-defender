@@ -4,9 +4,9 @@
 // the amount changes), and a Craft button. A craft makes the gun at once, so the result shows
 // where it was made, with a button to see it in Weapons. A blueprint not wanted salvages for a
 // little Scrap. Text reaches the page only through textContent.
-import { levelName, type OwnedWeapon } from '../core/armoury.ts';
+import { type OwnedWeapon } from '../core/armoury.ts';
 import { blueprintsOf, craftOdds } from '../core/craft.ts';
-import { BLUEPRINT, CRAFT, RARITIES, RARITY_ORDER, WEAPONS, type WeaponId } from '../core/data.ts';
+import { BLUEPRINT, CRAFT, RARITY_ORDER, type WeaponId } from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
 import { craftRefusal, stashCap } from '../core/hordeonly.ts';
 import { topBeaten } from '../core/modes.ts';
@@ -14,6 +14,14 @@ import type { CampWindow } from './campwindow.ts';
 import { askConfirm } from './confirm.ts';
 import { el } from './hud.ts';
 import { ART_URLS, GUN_ICON, type GunId } from './sprites.ts';
+import {
+  lockText,
+  refusedText,
+  type Refused,
+  levelName,
+  RARITY_NAME,
+  WEAPON_NAME,
+} from './text/index.ts';
 
 export const CRAFT_EMPTY = 'No blueprints yet. A won horde can drop one.';
 export const CRAFT_WAIT = 'Craft between hordes, on the start or result screen.';
@@ -39,12 +47,9 @@ export interface CraftOptions {
   /** The camp now, whether closing resumes a fight, and whether crafting works now (between hordes). */
   state: () => { game: GameState; resumes: boolean; canCraft: boolean };
   /** Crafts a `base` gun for `amount` Scrap, saved at once: the gun, or why not. */
-  onCraft: (
-    base: WeaponId,
-    amount: number,
-  ) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
+  onCraft: (base: WeaponId, amount: number) => { ok: true; weapon: OwnedWeapon } | Refused;
   /** Salvages one `base` blueprint: the Scrap it gave, or why not. */
-  onSalvage: (base: WeaponId) => { ok: true; scrap: number } | { ok: false; reason: string };
+  onSalvage: (base: WeaponId) => { ok: true; scrap: number } | Refused;
   /** Shows gun `uid` in the Weapons tab. */
   onView: (uid: string) => void;
 }
@@ -55,7 +60,7 @@ export interface CraftTab {
   refresh(): void;
 }
 
-const gunName = (base: WeaponId): string => WEAPONS[base].name;
+const gunName = (base: WeaponId): string => WEAPON_NAME[base];
 
 /**
  * Adds the Craft tab to `win`; `button` is the top-bar button the keyboard goes back to on a
@@ -93,7 +98,7 @@ export function createCraft(opts: CraftOptions, win: CampWindow, button: HTMLEle
     base: WeaponId,
   ): { text: string; disabled: boolean; why: string } {
     if (!listedCan) return { text: craftLabel(amount), disabled: true, why: CRAFT_WAIT };
-    const why = craftRefusal(game, base, amount);
+    const why = lockText(craftRefusal(game, base, amount));
     return why === null
       ? { text: craftLabel(amount), disabled: false, why: '' }
       : { text: why, disabled: true, why };
@@ -207,7 +212,7 @@ export function createCraft(opts: CraftOptions, win: CampWindow, button: HTMLEle
     for (const r of RARITY_ORDER) {
       const cell = el('li', 'craft-odd');
       cell.dataset.rarity = r;
-      cell.append(el('span', 'craft-odd-name', RARITIES[r].name), el('span', 'craft-odd-pct'));
+      cell.append(el('span', 'craft-odd-name', RARITY_NAME[r]), el('span', 'craft-odd-pct'));
       cells.set(r, cell);
       odds.append(cell);
     }
@@ -266,7 +271,7 @@ export function createCraft(opts: CraftOptions, win: CampWindow, button: HTMLEle
     const base = selected;
     const r = opts.onCraft(base, amount);
     if (!r.ok) {
-      say(r.reason, true);
+      say(refusedText(r), true);
       draw();
       return;
     }
@@ -291,7 +296,10 @@ export function createCraft(opts: CraftOptions, win: CampWindow, button: HTMLEle
     }
     const r = opts.onSalvage(base);
     made = null;
-    say(r.ok ? `Salvaged a ${gunName(base)} blueprint for ${r.scrap} Scrap` : r.reason, !r.ok);
+    say(
+      r.ok ? `Salvaged a ${gunName(base)} blueprint for ${r.scrap} Scrap` : refusedText(r),
+      !r.ok,
+    );
     draw();
     (pane.querySelector<HTMLElement>('.craft-bp[aria-pressed="true"]') ?? pane).focus?.();
   }

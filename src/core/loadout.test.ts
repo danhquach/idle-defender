@@ -42,12 +42,18 @@ describe('loadout and profession', () => {
     ]) {
       expect(loadoutError(ok), JSON.stringify(ok)).toBeNull();
     }
-    expect(loadoutError(L('knife'))).toBe('The primary must be a gun');
-    expect(loadoutError(L('toolkit', 'pistol'))).toBe('The primary must be a gun');
-    expect(loadoutError(L('pistol', rifle))).toBe('Only a sidearm goes in the secondary slot');
-    expect(loadoutError(L('pistol', null, 'shield'))).toBe('A shield needs a blade');
-    expect(loadoutError(L('pistol', 'pistol', 'shield'))).toBe('A shield needs a blade');
-    expect(loadoutError(L('pistol', 'toolkit', 'shield'))).toBe('A shield needs a blade');
+    expect(loadoutError(L('knife'))).toEqual({ ok: false, code: 'primary-gun' });
+    expect(loadoutError(L('toolkit', 'pistol'))).toEqual({ ok: false, code: 'primary-gun' });
+    expect(loadoutError(L('pistol', rifle))).toEqual({ ok: false, code: 'secondary-sidearm' });
+    expect(loadoutError(L('pistol', null, 'shield'))).toEqual({ ok: false, code: 'shield-blade' });
+    expect(loadoutError(L('pistol', 'pistol', 'shield'))).toEqual({
+      ok: false,
+      code: 'shield-blade',
+    });
+    expect(loadoutError(L('pistol', 'toolkit', 'shield'))).toEqual({
+      ok: false,
+      code: 'shield-blade',
+    });
   });
 
   it('an old single weapon becomes a gun, plus a pistol for a blade or tool', () => {

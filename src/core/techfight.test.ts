@@ -42,7 +42,7 @@ describe('research in the fight', () => {
     g0.stock = { ...g0.stock, scrap: 1000 };
     const done = startSquadHorde(g0, 1, 0);
     const bought = researchTech(g0, 'reinforced-wall');
-    if (!bought.ok) throw new Error(bought.reason);
+    if (!bought.ok) throw new Error(bought.code);
     expect(done.tech).toBeUndefined();
     expect(startSquadHorde(bought.game, 1, 0).tech).toEqual(['reinforced-wall']);
   });

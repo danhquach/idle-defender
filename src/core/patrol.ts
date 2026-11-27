@@ -32,7 +32,6 @@ import {
   ORDERS,
   PATROL,
   PLACE_IDS,
-  placeName,
   RARITIES,
   RARITY_ORDER,
   revealOf,
@@ -60,6 +59,7 @@ import {
 import { loadBatteries } from './power.ts';
 import { chance, createRng, int, pick, type Rng } from './rng.ts';
 import { levelOf } from './stats.ts';
+import type { Refusal } from './refusal.ts';
 
 /** A party out on patrol. */
 export interface Patrol {
@@ -420,7 +420,7 @@ export function sendPatrol(
   seed: number,
   now: number,
   options: PatrolOptions = {},
-): { ok: true; game: GameState } | { ok: false; reason: string } {
+): { ok: true; game: GameState } | Refusal {
   if (!Number.isFinite(now)) throw new RangeError(`sendPatrol: bad time ${now}`);
   if (!Number.isInteger(seed)) throw new RangeError(`sendPatrol: bad seed ${seed}`);
   if (!PLACE_IDS.includes(location)) {
@@ -441,44 +441,41 @@ export function sendPatrol(
     if (!d) throw new RangeError(`sendPatrol: no defender ${String(id)}`);
     return d;
   });
-  if (members.length === 0) return { ok: false, reason: 'Pick someone to send' };
+  if (members.length === 0) return { ok: false, code: 'pick-someone' };
   if (new Set(memberIds).size !== memberIds.length) {
     throw new RangeError('sendPatrol: a defender picked twice');
   }
-  if (!patrolsUnlocked(game)) return { ok: false, reason: 'Patrols open after Horde 2' };
-  if (game.patrolsSent >= PATROL.max) return { ok: false, reason: 'No more patrols can be sent' };
+  if (!patrolsUnlocked(game)) return { ok: false, code: 'patrols-locked' };
+  if (game.patrolsSent >= PATROL.max) return { ok: false, code: 'patrols-max' };
   if (!revealedPlaces(game).includes(location)) {
-    return { ok: false, reason: `${placeName(location)} isn't on the map yet` };
+    return { ok: false, code: 'place-hidden', place: location };
   }
   // Searched in the place's order, each building once.
   const buildings = buildingsOf(location).filter((b) => ticked.includes(b));
   if (ticked.some((b) => !buildings.includes(b))) {
-    return { ok: false, reason: `Not every building is part of ${placeName(location)}` };
+    return { ok: false, code: 'building-outside', place: location };
   }
-  if (buildings.length === 0) return { ok: false, reason: 'Tick a building to search' };
+  if (buildings.length === 0) return { ok: false, code: 'tick-building' };
   if (!focusOptions(buildings).includes(focus)) {
-    return { ok: false, reason: `Nothing to favour: ${focus} can't be found there` };
+    return { ok: false, code: 'focus-none', focus };
   }
-  if (!hasGate(game)) return { ok: false, reason: 'Patrols leave by a gate: build or repair one' };
+  if (!hasGate(game)) return { ok: false, code: 'need-gate' };
   for (const d of members) {
-    if (onPatrol(game, d.id)) return { ok: false, reason: `${d.name} is on patrol` };
-    if (!available(d, now)) return { ok: false, reason: `${d.name} is injured` };
+    if (onPatrol(game, d.id)) return { ok: false, code: 'on-patrol', who: d.name };
+    if (!available(d, now)) return { ok: false, code: 'injured', who: d.name };
   }
   // A wipe must never leave the camp empty (until the roster floor, ID-033).
   if (game.roster.every((d) => onPatrol(game, d.id) || memberIds.includes(d.id))) {
-    return { ok: false, reason: 'Keep one defender at the camp' };
+    return { ok: false, code: 'keep-one' };
   }
   const byCar = options.car === true;
   const car = byCar ? freeCar(game) : null;
   const gas = byCar ? carGas(location, buildings) : 0;
   if (byCar) {
-    if (game.camp.cars === 0) return { ok: false, reason: 'Build a car first' };
-    if (car === null) return { ok: false, reason: 'The car is out on patrol' };
+    if (game.camp.cars === 0) return { ok: false, code: 'build-car' };
+    if (car === null) return { ok: false, code: 'car-out' };
     if (game.power.gas < gas) {
-      return {
-        ok: false,
-        reason: `Not enough Gas: the car needs ${gas}, the camp has ${game.power.gas}`,
-      };
+      return { ok: false, code: 'gas', need: gas, have: game.power.gas };
     }
   }
   const patrol: Patrol = {

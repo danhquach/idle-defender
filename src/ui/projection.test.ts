@@ -271,11 +271,11 @@ describe('two spots on one wall segment (ID-048)', () => {
   let base = newBase();
   for (const spot of [1, 0] as const) {
     const r = buildPost(base, rich, { kind: 'wall-walk', column: 0, row: 3, ...spotField(spot) });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     base = r.base;
   }
   const r = buildTurret(base, rich, true, 'wall-walk', 0, 2, 0);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   const { posts, turrets } = layoutOf(r.base);
   const [top, bottom] = posts.filter((p) => p.kind === 'wall-walk');
 
@@ -369,7 +369,7 @@ describe('slotAt', () => {
   it('follows a damaged wall, a wall-walk post and built posts in outer columns', () => {
     const rich = { ...START_STOCK, wood: 500, scrap: 500 };
     const ok = (r: ReturnType<typeof buildPost>): Base => {
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       return r.base;
     };
     let b = ok(buildSegment(base, rich, ['wood'], 1, 2, 'wall', 'wood'));
@@ -392,9 +392,9 @@ describe('slotAt', () => {
   it("selects a turret's spot by its head, on a tower or a wall mount", () => {
     const rich = { ...START_STOCK, wood: 500, scrap: 500 };
     let r = buildTurret(base, rich, true, 'tower', 0, 5);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     r = buildTurret(r.base, r.stock, true, 'wall-walk', 0, 1);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     // Tower turret at row 5 (centre y 440): 50 + 12 high → lift 82.7, from y 333.3; it is
     // in front of the row-4 tower, which wins there without the turret.
     expect(slotAt(420, 340, base)).toEqual({ column: 0, row: 4, what: 'tower' });
@@ -417,7 +417,7 @@ describe('fightHitAt', () => {
       [1, 0],
     ] as const) {
       const r = buildPost(base, rich, { kind: 'wall-walk', column: 0, row, ...spotField(spot) });
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       base = r.base;
     }
     const s = newHorde(1, { ...setup(), base, startPostId: 0 });

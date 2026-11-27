@@ -3,7 +3,6 @@
 // win they do not rest (ID-155).
 import { describe, expect, it } from 'vitest';
 import { recruit } from './camp.ts';
-import { CHAT_LINES, chatter, newChat, personalityOf } from './chatter.ts';
 import { BENCH_XP_SHARE, MID_SWAP, STEP, WALK_SPEED } from './data.ts';
 import { newGame, type GameState, type RosterDefender } from './game.ts';
 import { tick, tickInPlace, type HordeState } from './horde.ts';
@@ -119,15 +118,6 @@ describe('a swap mid-fight (ID-148)', () => {
     // Limping, gone once MID_SWAP.away behind the slot (well out of the frame).
     h = tick(h, 3.5);
     expect(h.leaving).toEqual([]);
-  });
-
-  it('the newcomer shouts as they run in, even with chatter on Low', () => {
-    const h0 = startSquadHorde(game, 1, NOW);
-    const h1 = tick(hurt(structuredClone(h0), 'recruit-2', 0.1), STEP);
-    const c = chatter(chatter(newChat(), null, h0, 0, 'low'), h0, h1, STEP, 'low');
-    const b = c.bubbles.find((x) => x.by === 'recruit-7')!;
-    expect(b.event).toBe('swapIn');
-    expect(CHAT_LINES[personalityOf('recruit-7')].swapIn).toContain(b.line);
   });
 
   it('at the threshold or above, nobody swaps', () => {

@@ -3,13 +3,10 @@
 // slot Incendiary and Shock Rounds share; and what each offer card says it gives.
 import { describe, expect, it } from 'vitest';
 import {
-  AMMO_CARDS,
   chooseCard,
   crowded,
-  effectAt,
   eligible,
   patchUpGain,
-  pitch,
   replaces,
   rollOffer,
   THROWABLE_CARDS,
@@ -447,7 +444,6 @@ describe('repeatable cards (ID-097)', () => {
 
   it('Heavy Rounds (ID-136): epic and unique, +38% damage for +25% reload time, named on the card', () => {
     expect(UPGRADES['hollow-points']).toMatchObject({ rarity: 'epic', levels: 1 });
-    expect(UPGRADES['hollow-points'].text).toBe('+38% damage, +25% reload time');
     expect(CARD.heavyRounds).toEqual({ damage: 1.38, reload: 1.25 });
     let s = quiet();
     s.research = ['hollow-points'];
@@ -499,17 +495,6 @@ describe('Patch Up (ID-097)', () => {
     const gain = patchUpGain(s);
     expect(gain.segments).toBe(2);
     expect(gain.hp).toBeCloseTo(20 + 0.3 * max, 9);
-    expect(pitch(s, 'patch-up').text).toBe(
-      `Repairs ${Math.round(20 + 0.3 * max)} HP across 2 segments`,
-    );
-    expect(pitch(s, 'patch-up')).toMatchObject({
-      tag: 'Repeatable',
-      effect: {
-        pre: 'Repairs ',
-        to: `${Math.round(20 + 0.3 * max)} HP`,
-        post: ' across 2 segments',
-      },
-    });
   });
 
   it('with Patch Up left out, the horde-only offer never comes up empty or repeats a card', () => {
@@ -893,36 +878,6 @@ describe('one throwable slot: Frag Grenades, Flashbang or Molotov (ID-139)', () 
       expect(eligible(s, id), 'one in camp').toBe(false);
     }
     expect(eligible(base(), 'frag-grenades')).toBe(true);
-  });
-
-  it('warns what a pick replaces: a unique card has no level to lose', () => {
-    // Frag Grenades held (unique): no level, no "levels are lost".
-    expect(pitch(at('frag-grenades', 1), 'molotov').replace).toEqual({
-      warning: 'Replaces Frag Grenades.',
-      swap: 'Frag Grenades → Molotov Lv 1',
-    });
-    expect(pitch(at('frag-grenades', 1), 'flashbang').replace).toEqual({
-      warning: 'Replaces Frag Grenades.',
-      swap: 'Frag Grenades → Flashbang Lv 1',
-    });
-    // A levelled card held: its level, and that its levels are lost.
-    expect(pitch(at('molotov', 2), 'flashbang').replace).toEqual({
-      warning: 'Replaces Molotov Lv 2. Its levels are lost.',
-      swap: 'Molotov Lv 2 → Flashbang Lv 1',
-    });
-    expect(pitch(at('flashbang', 3), 'molotov').replace!.warning).toBe(
-      'Replaces Flashbang Lv Max. Its levels are lost.',
-    );
-    // To a unique card: it starts with no level.
-    expect(pitch(at('molotov', 2), 'frag-grenades').replace).toEqual({
-      warning: 'Replaces Molotov Lv 2. Its levels are lost.',
-      swap: 'Molotov Lv 2 → Frag Grenades',
-    });
-    // Nothing held, or the card itself held: nothing replaced.
-    expect(pitch(quiet(), 'molotov').replace).toBeUndefined();
-    expect(pitch(at('molotov', 1), 'molotov').replace).toBeUndefined();
-    // Another slot's card is not what it replaces.
-    expect(pitch(at('shock-rounds', 1), 'molotov').replace).toBeUndefined();
   });
 
   describe('the timer', () => {
@@ -1370,108 +1325,5 @@ describe('one throwable slot: Frag Grenades, Flashbang or Molotov (ID-139)', () 
       expect(moved).toBeGreaterThan(700 - find(steps(plain, 6), p.id).x);
       expect(moved).toBeLessThan(6 * STEP * ENEMIES.shambler.speed * (1 + CARD.molotov.panic));
     });
-  });
-});
-
-describe('the offer spells out each pick (ID-097)', () => {
-  it('a card not held shows "New" and its level 1 effect', () => {
-    expect(pitch(quiet(), 'barbed-wire')).toMatchObject({
-      tag: 'New',
-      effect: { from: null, to: '15%', pre: 'Field wire slows enemies ' },
-    });
-  });
-
-  it('a card held shows its level step and the effect before and after', () => {
-    expect(pitch(at('barbed-wire', 1), 'barbed-wire')).toMatchObject({
-      tag: 'Lv 1 → 2',
-      tagSpoken: 'Level 1 to 2',
-      effect: { from: '15%', to: '25%' },
-    });
-    expect(pitch(at('barbed-wire', 2), 'barbed-wire')).toMatchObject({
-      tag: 'Lv 2 → Max',
-      tagSpoken: 'Level 2 to max',
-      effect: { from: '25%', to: '35%' },
-    });
-    expect(pitch(at('extended-mags', 1), 'extended-mags').effect).toMatchObject({
-      from: '×1.33',
-      to: '×1.67',
-    });
-  });
-
-  it('an epic shows "Unique"; a repeatable card its stack and totals', () => {
-    expect(pitch(quiet(), 'concussion-rounds').tag).toBe('Unique');
-    expect(pitch(quiet(), 'frag-grenades').tag).toBe('Unique');
-    expect(pitch(quiet(), 'sharpshooter')).toMatchObject({
-      tag: 'New',
-      effect: { from: null, to: '+10%', post: ' damage' },
-    });
-    expect(pitch(picked(quiet(), 'sharpshooter', 3), 'sharpshooter')).toMatchObject({
-      tag: '×3 → ×4',
-      effect: { from: '+30%', to: '+40%', post: ' damage' },
-    });
-  });
-
-  it('the other ammo card warns what it replaces, with what you’d hold before and after', () => {
-    const p = pitch(at('incendiary-rounds', 2), 'shock-rounds');
-    expect(p.tag).toBe('New');
-    expect(p.replace).toEqual({
-      warning: 'Replaces Incendiary Rounds Lv 2. Its levels are lost.',
-      swap: 'Incendiary Rounds Lv 2 → Shock Rounds Lv 1',
-    });
-    expect(pitch(at('incendiary-rounds', 3), 'shock-rounds').replace!.warning).toBe(
-      'Replaces Incendiary Rounds Lv Max. Its levels are lost.',
-    );
-    expect(pitch(quiet(), 'shock-rounds').replace).toBeUndefined();
-  });
-});
-
-describe('a card states its number as the data has it (ID-125)', () => {
-  it('Rapid Fire reads +7.5% a pick, not rounded to +8%', () => {
-    expect(CARD.step.fireRate).toBe(0.075);
-    expect(effectAt('rapid-fire', 1)).toEqual({ pre: '', value: '+7.5%', post: ' fire rate' });
-    expect(effectAt('rapid-fire', 2)!.value).toBe('+15%');
-    expect(effectAt('sharpshooter', 1)!.value).toBe('+10%');
-  });
-});
-
-describe('Flashbang and Molotov say they are thrown, and how often (ID-139 design review)', () => {
-  it('every level names the cadence, the effect and the cost', () => {
-    for (const n of [1, 2, 3]) {
-      const f = effectAt('flashbang', n)!;
-      expect(f.pre).toBe(
-        `3 per survivor, one back every ${CARD.flashbang.every} s. Stuns enemies within ${CARD.flashbang.radius} px for `,
-      );
-      expect(f.value).toBe(`${CARD.flashbang.seconds[n - 1]} s`);
-      expect(f.post).toBe('; −15% squad gun range while held');
-      const m = effectAt('molotov', n)!;
-      expect(m.pre).toBe(`3 per survivor, one back every ${CARD.molotov.every} s. Burns for `);
-      expect(m.value).toBe(`${CARD.molotov.seconds[n - 1]} s`);
-      expect(m.post).toContain('enemies 30% faster in it');
-    }
-  });
-});
-
-describe('replace warnings (ID-161)', () => {
-  it('every pick that drops a held card says so, whichever card is Unique', () => {
-    let drops = 0;
-    for (const held of UPGRADE_IDS) {
-      for (const id of UPGRADE_IDS) {
-        if (id === held) continue;
-        const s = at(held, 1);
-        const warning = pitch(s, id).replace?.warning;
-        const dropped = !picked(s, id).taken.includes(held);
-        expect(warning !== undefined, `${id} over ${held}`).toBe(dropped);
-        if (dropped) expect(warning).toMatch(new RegExp(`^Replaces ${UPGRADES[held].name}\\b`));
-        if (dropped) drops++;
-      }
-    }
-    // Each card of a slot drops each other card of that slot, and nothing else drops.
-    const pairs = (n: number): number => n * (n - 1);
-    expect(drops).toBe(pairs(AMMO_CARDS.length) + pairs(THROWABLE_CARDS.length));
-    expect(drops).toBeGreaterThan(0);
-    // As reported: Frag Grenades leaves Concussion Rounds held, so it warns of nothing.
-    const s = picked(at('concussion-rounds', 1), 'frag-grenades');
-    expect(s.taken).toEqual(expect.arrayContaining(['concussion-rounds', 'frag-grenades']));
-    expect(pitch(at('concussion-rounds', 1), 'frag-grenades').replace).toBeUndefined();
   });
 });

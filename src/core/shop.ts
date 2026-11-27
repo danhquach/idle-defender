@@ -1,28 +1,29 @@
 // The horde cash shop (design §4, as built ID-018): kills drop cash, spent mid-fight on
-// timed buffs and repairs. Pure: `buy` returns a new state, or a refusal the UI shows
-// as-is. Cash lives only in the fight state, so it is gone when the horde ends.
+// timed buffs and repairs. Pure: `buy` returns a new state, or a refusal (a code the UI
+// words). Cash lives only in the fight state, so it is gone when the horde ends.
 import { BUFF_IDS, MAX_CONDITION, SHOP, type BuffId, type ShopItem } from './data.ts';
 import { buffOn, type HordeState, type MoveResult, type Segment, type Turret } from './horde.ts';
+import type { Refusal } from './refusal.ts';
 
 export const isBuff = (item: ShopItem): item is BuffId =>
   (BUFF_IDS as readonly string[]).includes(item);
 
 /** Why `item` can't be bought now, or null when it can. */
-export function shopLock(s: HordeState, item: ShopItem): string | null {
+export function shopLock(s: HordeState, item: ShopItem): Refusal | null {
   if (!Object.hasOwn(SHOP, item)) throw new RangeError(`shop: unknown item ${String(item)}`);
-  if (s.outcome !== 'fighting') return 'The horde is over';
-  if (s.offer !== null || s.replace !== null) return 'Pick first';
-  if (isBuff(item) && buffOn(s, item)) return 'Already active';
-  if (item === 'patch' && !patchTarget(s)) return 'No wall to patch';
-  if (item === 'fix' && !fixTarget(s)) return 'No turret to fix';
-  if (s.cash < SHOP[item].cost) return 'Not enough cash';
+  if (s.outcome !== 'fighting') return { ok: false, code: 'horde-over' };
+  if (s.offer !== null || s.replace !== null) return { ok: false, code: 'pick-first' };
+  if (isBuff(item) && buffOn(s, item)) return { ok: false, code: 'buff-active' };
+  if (item === 'patch' && !patchTarget(s)) return { ok: false, code: 'no-patch' };
+  if (item === 'fix' && !fixTarget(s)) return { ok: false, code: 'no-fix' };
+  if (s.cash < SHOP[item].cost) return { ok: false, code: 'no-cash' };
   return null;
 }
 
 /** Spends cash on `item`: starts a buff, patches a wall segment or fixes a turret. */
 export function buy(state: HordeState, item: ShopItem): MoveResult {
   const lock = shopLock(state, item);
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   const s = structuredClone(state);
   s.cash -= SHOP[item].cost;
   if (isBuff(item)) s.buffs[item] = s.time + SHOP[item].seconds;

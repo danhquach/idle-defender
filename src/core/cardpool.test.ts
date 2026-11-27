@@ -803,9 +803,9 @@ describe('synergies', () => {
     const s = quiet();
     expect(synergyOf(s, 'ricochet')).toBeNull();
     s.taken = ['piercing-rounds'];
-    expect(synergyOf(s, 'ricochet')).toMatch(/Piercing Rounds/);
+    expect(synergyOf(s, 'ricochet')).toBe('ricochet-pierce');
     s.taken = ['ricochet'];
-    expect(synergyOf(s, 'piercing-rounds')).toMatch(/Ricochet/);
+    expect(synergyOf(s, 'piercing-rounds')).toBe('pierce-ricochet');
     s.defenders[0]!.xp = xpForLevel(50);
     expect(synergyOf(s, 'incendiary-rounds')).toBeNull();
     expect(synergyOf(s, 'sharpshooter')).toBeNull();

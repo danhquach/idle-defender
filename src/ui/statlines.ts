@@ -6,9 +6,7 @@ import {
   ENEMIES,
   ENEMY_TRAITS,
   GUN_CLASS,
-  GUN_CLASS_NAME,
   GUN_CLASSES,
-  WEAPONS,
   type GunBase,
   LEVEL_BONUS,
   type EnemyKind,
@@ -18,6 +16,7 @@ import {
 import { HIGHER_MODES, MODES, modeUnlocked, type ModeProgress } from '../core/modes.ts';
 import { levelBonus } from '../core/stats.ts';
 import { classOf, goodVs, poorVs, type Fit, type FitBand } from '../core/traits.ts';
+import { WEAPON_NAME, MODE_NAME, GUN_CLASS_NAME, traitName } from './text/index.ts';
 
 /** Joins a bonus's words so a line only breaks between bonuses, at " · ". */
 const keep = (...words: string[]): string => words.join(' ');
@@ -106,7 +105,9 @@ export function classLine(h: Held, matchups: boolean): string | null {
 /** A kind's trait as the horde's chip says it (ID-237): "Hulking · Resists Light · Weak to Heavy"; null for no trait. */
 export function traitText(kind: EnemyKind): string | null {
   const t = ENEMY_TRAITS[kind];
-  return t ? `${t.name} · Resists ${className(t.resists)} · Weak to ${className(t.weak)}` : null;
+  return t
+    ? `${traitName(kind)} · Resists ${className(t.resists)} · Weak to ${className(t.weak)}`
+    : null;
 }
 
 /** The Fit pill's band words (ID-237), the one table the pill and its sentence read. */
@@ -140,7 +141,7 @@ export const TRAIT_ROWS: readonly {
     ? [
         {
           kind,
-          trait: t.name,
+          trait: traitName(kind),
           resists: className(t.resists),
           weak: className(t.weak),
           resistsClass: t.resists,
@@ -155,14 +156,14 @@ export const CLASS_LINES: readonly { cls: GunClass; text: string }[] = GUN_CLASS
   cls,
   text: `${className(cls)}: ${(Object.keys(GUN_CLASS) as GunBase[])
     .filter((b) => GUN_CLASS[b] === cls)
-    .map((b) => WEAPONS[b].name)
+    .map((b) => WEAPON_NAME[b])
     .join(', ')}`,
 }));
 
 /** What the trait table's note says (ID-237): each higher mode's numbers and what is left alone. */
 export const TRAIT_NOTE = `${HIGHER_MODES.map(
   (m) =>
-    `${MODES[m].name}: a gun class an enemy resists deals ${Math.round(MODES[m].resist * 100)}% of its damage, one it is weak to ${Math.round(MODES[m].weak * 100)}%.`,
+    `${MODE_NAME[m]}: a gun class an enemy resists deals ${Math.round(MODES[m].resist * 100)}% of its damage, one it is weak to ${Math.round(MODES[m].weak * 100)}%.`,
 ).join(
   ' ',
 )} Normal has no traits. Turrets, blades, fire, grenades, traps and skills are not affected.`;

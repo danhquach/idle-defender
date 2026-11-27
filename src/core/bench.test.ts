@@ -26,7 +26,6 @@ import {
   paramedicPoints,
   patchUpChance,
   patchUpHp,
-  restLabel,
   settleSquad,
   squadOf,
   squadRests,
@@ -328,14 +327,14 @@ describe('picking the squad (ID-147)', () => {
   it('refuses the resting, a full squad, the last in the squad and a stranger', () => {
     const resting = person(7, { rest: 1 });
     const g = campGame(people(6), [resting, person(8)]);
-    expect(toggleSquad(g, 'recruit-7')).toEqual({ ok: false, reason: restLabel(1) });
-    expect(restLabel(1)).toBe('Resting: 1 horde');
+    expect(toggleSquad(g, 'recruit-7')).toEqual({ ok: false, code: 'resting-for', rest: 1 });
     expect(toggleSquad(g, 'recruit-8')).toEqual({
       ok: false,
-      reason: `The squad is full (${SQUAD_CAP}/${SQUAD_CAP}): unmark one first`,
+      code: 'squad-full',
+      cap: SQUAD_CAP,
     });
     expect(toggleSquad(campGame(people(1), people(1, 2)), 'recruit-1').ok).toBe(false);
-    expect(toggleSquad(g, 'nobody')).toEqual({ ok: false, reason: 'No such survivor' });
+    expect(toggleSquad(g, 'nobody')).toEqual({ ok: false, code: 'no-survivor' });
   });
 
   it('the field never holds more than 6, however big the camp', () => {
@@ -454,16 +453,17 @@ describe('Medicine treats the resting (ID-220)', () => {
 
   it('refuses at 0 Medicine, on the fit, an unknown id: game untouched', () => {
     const none = campGame(people(5), [resting(6)]);
-    expect(treatSurvivor(none, 'recruit-6')).toEqual({ ok: false, reason: 'No Medicine' });
+    expect(treatSurvivor(none, 'recruit-6')).toEqual({ ok: false, code: 'no-medicine' });
     const before = structuredClone(none);
     treatSurvivor(none, 'recruit-6');
     expect(none).toEqual(before);
     const g = withMedicine(campGame(people(5), [resting(6)]), 2);
     expect(treatSurvivor(g, 'recruit-1')).toEqual({
       ok: false,
-      reason: `${recruit(1).name} is not resting`,
+      code: 'not-resting',
+      who: recruit(1).name,
     });
-    expect(treatSurvivor(g, 'nobody')).toEqual({ ok: false, reason: 'No such survivor' });
+    expect(treatSurvivor(g, 'nobody')).toEqual({ ok: false, code: 'no-survivor' });
     expect(g.medicine).toBe(2);
   });
 
@@ -472,7 +472,7 @@ describe('Medicine treats the resting (ID-220)', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const again = treatSurvivor(r.game, 'recruit-6');
-    expect(again).toEqual({ ok: false, reason: `${recruit(6).name} is not resting` });
+    expect(again).toEqual({ ok: false, code: 'not-resting', who: recruit(6).name });
     expect(r.game.medicine).toBe(1);
   });
 
@@ -480,7 +480,7 @@ describe('Medicine treats the resting (ID-220)', () => {
     const g = withMedicine(campGame(people(5), [resting(6)]), 1);
     expect(toggleSquad(g, 'recruit-6').ok).toBe(false);
     const r = treatSurvivor(g, 'recruit-6');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const t = toggleSquad(r.game, 'recruit-6');
     expect(t.ok && t.game.roster.at(-1)?.id).toBe('recruit-6');
   });
@@ -495,7 +495,7 @@ describe('Medicine treats the resting (ID-220)', () => {
   it('the next horde played leaves the treated fit, not owing a rest', () => {
     const g = withMedicine(campGame(people(6), [resting(7)]), 1);
     const r = treatSurvivor(g, 'recruit-7');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const next = finishSquadHorde(r.game, ended(r.game, {}));
     expect(isFit(campOf(next).find((d) => d.id === 'recruit-7')!)).toBe(true);
   });

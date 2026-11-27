@@ -11,7 +11,6 @@ import {
   TURRET,
   stockOf,
 } from '../core/data.ts';
-import { QUEUE_FULL } from '../core/research.ts';
 import { researchNow } from '../core/testing.ts';
 import { durationText } from './perks.ts';
 import { newGame, type GameState } from '../core/game.ts';
@@ -36,6 +35,7 @@ import {
   type SlotLine,
 } from './build.ts';
 import { clockTime, postName } from './hud.ts';
+import { refusedText, RESEARCH_NAME } from './text/index.ts';
 
 /** The Lab section's lines, the queue, then each research node's, as the panel lists them. */
 const labAndResearch = (g: GameState, now: number) => [
@@ -64,7 +64,7 @@ describe('build panel', () => {
     const g = newGame();
     const tower = g.base.posts[1]!; // tower, row 3
     const r = buildPost(g.base, g.stock, { kind: 'ground', column: 0, row: 0 });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const after: GameState = { ...g, base: r.base, stock: r.stock };
     // 'ground' sorts before 'tower', so the tower moved from index 1 to 2.
     const pick = pickStart(after, 'jack', postKey(tower), 0)!;
@@ -75,9 +75,9 @@ describe('build panel', () => {
   it('falls back when the picked post is no longer usable or the defender is unknown', () => {
     const g = newGame();
     let r = buildSegment(g.base, g.stock, g.tiers, 1, 0, 'wall', 'wood');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     r = buildPost(r.base, r.stock, { kind: 'wall-walk', column: 1, row: 0 });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const walk = postKey({ kind: 'wall-walk', column: 1, row: 0 });
     const built: GameState = { ...g, base: r.base, stock: r.stock };
     const walkId = built.base.posts.findIndex((p) => postKey(p) === walk);
@@ -102,7 +102,7 @@ describe('build panel', () => {
 
   it('skips defenders out on patrol, and lists when they are back', () => {
     const r = sendPatrol({ ...newGame(), hordeNumber: 3 }, 'gas-station', ['bob'], 1, 0);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(pickStart(r.game, 'bob', null, 0)).toEqual({ defenderId: 'jack', postId: 0 });
     expect(injuredLines(r.game, 0)).toEqual([`Bob · on patrol, back at ${clockTime(15 * 60_000)}`]);
   });
@@ -123,12 +123,12 @@ describe('build panel', () => {
       'Research Lab: not built',
       'Build Research Lab',
       ...RESEARCH_IDS.map(
-        (id) => `Queue ${RESEARCH[id].name} (${durationText(RESEARCH[id].minutes)})`,
+        (id) => `Queue ${RESEARCH_NAME[id]} (${durationText(RESEARCH[id].minutes)})`,
       ),
     ]);
     expect(lines[2]).toMatchObject({ cost: { genes: 10 } });
     expect(
-      lines.slice(2).map((l) => l.kind === 'action' && !l.result.ok && l.result.reason),
+      lines.slice(2).map((l) => l.kind === 'action' && !l.result.ok && refusedText(l.result)),
     ).toEqual(
       RESEARCH_IDS.map((id) =>
         RESEARCH[id].lab === 1 ? 'Needs a Research Lab' : 'Needs Lab level 2',
@@ -145,7 +145,7 @@ describe('build panel', () => {
       const line = queueLine(name);
       if (line?.kind !== 'action') throw new Error(`no ${name}`);
       const r = line.act!(T);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = r.game;
     }
     const lines = labAndResearch(g, T);
@@ -175,14 +175,14 @@ describe('build panel', () => {
     for (const id of RESEARCH_IDS) {
       if (id === 'fortify') continue;
       const r = researchNow(g, id);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = r.game;
     }
     expect(labAndResearch(g, 0)).toEqual([
       { kind: 'heading', text: 'Research Lab · level 2' },
       ...RESEARCH_IDS.map((id) => ({
         kind: 'note',
-        text: `${RESEARCH[id].name} · ${id === 'fortify' ? 'owned' : 'researched'}`,
+        text: `${RESEARCH_NAME[id]} · ${id === 'fortify' ? 'owned' : 'researched'}`,
       })),
     ]);
   });
@@ -228,12 +228,12 @@ describe('build panel', () => {
     const list = researchList(g, 0);
     expect(list.heading).toBe('Research · 0 available');
     const full = list.shown.filter(
-      (l) => l.kind === 'action' && !l.result.ok && l.result.reason === QUEUE_FULL,
+      (l) => l.kind === 'action' && !l.result.ok && l.result.code === 'queue-full',
     );
     expect(full.length).toBeGreaterThan(0);
     expect(
       list.locked.some(
-        (l) => l.kind === 'action' && !l.result.ok && l.result.reason === QUEUE_FULL,
+        (l) => l.kind === 'action' && !l.result.ok && l.result.code === 'queue-full',
       ),
     ).toBe(false);
   });
@@ -249,7 +249,9 @@ describe('build panel', () => {
     ]);
     expect(lines[2]).toMatchObject({ cost: GENERATOR.cost, result: { ok: true } });
     const poor = powerLines({ ...g, stock: { ...g.stock, wood: 0 } })[2]!;
-    expect(poor.kind === 'action' && !poor.result.ok && poor.result.reason).toBe('Not enough wood');
+    expect(poor.kind === 'action' && !poor.result.ok && refusedText(poor.result)).toBe(
+      'Not enough wood',
+    );
     const stored = {
       ...g,
       power: {
@@ -296,7 +298,7 @@ describe('wall-walk spots (ID-048)', () => {
   it('names each spot, and the start pick keeps and lists spot 2 apart from spot 1', () => {
     const g = { ...newGame(), stock: RICH };
     const r = lineWall(g.base, g.stock, 0);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const lined: GameState = { ...g, base: r.base, stock: r.stock };
     const second = { kind: 'wall-walk', column: 0, row: 3, spot: 1 } as const;
     expect(postName(second)).toBe('Wall-walk post · Layer 1, row 4, spot 2');
@@ -333,13 +335,16 @@ describe('wall-walk spots (ID-048)', () => {
       result: { ok: true },
     });
     const r = lineWall(g.base, RICH, 0);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const full = lineWallLine({ ...g, base: r.base }, 0);
     expect(full).toMatchObject({
       label: 'Line the wall',
       cost: null,
-      result: { ok: false, reason: 'No free spot on this wall' },
+      result: { ok: false, code: 'no-free-spot' },
     });
+    expect(full.kind === 'action' && !full.result.ok && refusedText(full.result)).toBe(
+      'No free spot on this wall',
+    );
   });
 });
 
@@ -349,12 +354,12 @@ describe('turret menu', () => {
   function withTurret(): GameState {
     const g: GameState = { ...newGame(), stock: RICH, research: ['metal-walls', 'auto-turret'] };
     const r = buildTurret(g.base, g.stock, true, 'tower', 0, 5);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     return { ...g, base: r.base, stock: r.stock };
   }
   const text = (l: SlotLine): string => (l.kind === 'action' ? l.label : l.text);
   const why = (l: SlotLine): string | null =>
-    l.kind === 'action' && !l.result.ok ? l.result.reason : null;
+    l.kind === 'action' && !l.result.ok ? refusedText(l.result) : null;
   /** Tower mounts still free with `withTurret()` on the starting base (posts on 4, 6; turret on 5). */
   const FREE_TOWER_ROWS = [0, 1, 2, 3, 7, 8, 9];
 
@@ -363,8 +368,9 @@ describe('turret menu', () => {
     expect(buildTurretLine(g, 'tower', 0, 5)).toMatchObject({
       label: 'Auto-turret',
       cost: TURRET.cost,
-      result: { ok: false, reason: 'Research the Auto-turret first' },
+      result: { ok: false, code: 'research-turret' },
     });
+    expect(why(buildTurretLine(g, 'tower', 0, 5))).toBe('Research the Auto-turret first');
     const done: GameState = { ...g, research: ['metal-walls', 'auto-turret'] };
     const line = buildTurretLine(done, 'wall-walk', 0, 4);
     expect(line).toMatchObject({ label: 'Auto-turret (wall mount, spot 1)', result: { ok: true } });
@@ -437,7 +443,7 @@ describe('turret menu', () => {
   it('a wall turret over a broken segment is offline', () => {
     const g = withTurret();
     const r = buildTurret(g.base, g.stock, true, 'wall-walk', 0, 0);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const broken: GameState = { ...g, base: r.base, stock: r.stock };
     broken.base.layers[0]!.slots[0]!.hp = 0;
     const i = turretIndex(broken, 'wall-walk', 0, 0);
@@ -479,7 +485,7 @@ describe('turret menu', () => {
       ...Array.from({ length: SEGMENTS }, (_, r) => ['wall-walk', r, 1] as const),
     ] as const) {
       const r = buildTurret(g.base, g.stock, true, mount, 0, row, spot);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = { ...g, base: r.base, stock: r.stock };
     }
     expect(relocateTargets(g, 0)).toEqual([]);
@@ -490,12 +496,12 @@ describe('trap menu', () => {
   const RICH = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
   const text = (l: SlotLine): string => (l.kind === 'action' ? l.label : l.text);
   const why = (l: SlotLine): string | null =>
-    l.kind === 'action' && !l.result.ok ? l.result.reason : null;
+    l.kind === 'action' && !l.result.ok ? refusedText(l.result) : null;
   /** A new game with spikes in row 2. */
   function withSpikes(): GameState {
     const g: GameState = { ...newGame(), stock: RICH };
     const r = buildTrap(g.base, g.stock, 'spikes', 2);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     return { ...g, base: r.base, stock: r.stock };
   }
 

@@ -53,7 +53,7 @@ describe('roster entry', () => {
       1,
       NOW - 5 * 60_000,
     );
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(rosterEntry(jack(), NOW, r.game.patrols[0]).status).toBe(
       'On patrol · Electronics store · 40m left',
     );
@@ -61,7 +61,7 @@ describe('roster entry', () => {
 
   it('a defender back injured from patrol is resting; one who died is gone (ID-027)', () => {
     const r = sendPatrol({ ...newGame(), hordeNumber: 3 }, 'electronics', ['jack', 'john'], 1, NOW);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const p = r.game.patrols[0]!;
     let seed = 1;
     while (!isHurt(patrolOutcome({ ...p, seed }))) seed++;

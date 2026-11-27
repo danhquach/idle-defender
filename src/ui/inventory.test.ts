@@ -5,9 +5,9 @@
 // details beside the grid. Combine (ID-091) sits in a stash gun's details. Text reaches
 // the page only through textContent.
 import { describe, expect, it, vi } from 'vitest';
-import { affixLines, gunPower, type OwnedWeapon } from '../core/armoury.ts';
+import { gunPower, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { GUN_ROLES, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
+import { STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { combineGuns, equipGun, squadSpec } from '../core/hordeonly.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
@@ -29,6 +29,7 @@ import {
   STASH_EMPTY,
 } from './inventory.ts';
 import { ART_URLS, GUN_ICON } from './sprites.ts';
+import { affixLines, GUN_ROLE } from './text/index.ts';
 
 /** A pointer coming over `t` (it bubbles), a mouse unless `pointerType` says otherwise. */
 const over = (t: Element, pointerType = 'mouse') =>
@@ -77,7 +78,7 @@ describe('inventoryView', () => {
       rarity: 'prototype',
       // The LMG's magazine is its role affix (ID-101).
       affixes: ['+12% damage', '+30% magazine (role)'],
-      role: GUN_ROLES.lmg,
+      role: GUN_ROLE.lmg,
       icon: 'weapon-lmg',
       owned: lmg,
     });
@@ -111,7 +112,7 @@ describe('inventoryView', () => {
     let g = camp(2, [gun('r', 'rifle', 'relic')]);
     const id = g.roster[1]!.id;
     const r = equipGun(g, id, 'r');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     g = r.game;
     const v = inventoryView(g);
     expect(v.squad.map((s) => [s.name, s.gun.name, s.gun.where])).toEqual([
@@ -339,14 +340,14 @@ describe('the Inventory dialog', () => {
     // Even a Rusty gun with no affixes has its role.
     shotgun.click();
     expect(details().querySelector('.inv-role')!.textContent).toBe(
-      `${GUN_ROLES.shotgun.role}: ${GUN_ROLES.shotgun.trait}`,
+      `${GUN_ROLE.shotgun.role}: ${GUN_ROLE.shotgun.trait}`,
     );
-    expect(shotgun.getAttribute('aria-label')).toContain(GUN_ROLES.shotgun.role);
+    expect(shotgun.getAttribute('aria-label')).toContain(GUN_ROLE.shotgun.role);
     // A survivor holding the pistol too.
     const pistol = slots('Squad').at(-1)!;
     pistol.click();
     expect(details().querySelector('.inv-role')!.textContent).toBe(
-      `${GUN_ROLES.pistol.role}: ${GUN_ROLES.pistol.trait}`,
+      `${GUN_ROLE.pistol.role}: ${GUN_ROLE.pistol.trait}`,
     );
   });
 

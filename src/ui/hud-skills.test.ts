@@ -61,7 +61,7 @@ describe('the horde-only skill button (ID-100, ID-139)', () => {
       cost: '',
     });
     const r = useSkill(s, 'airstrike', 1000, 200);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(skillButtons(r.state, null)[0]).toMatchObject({
       label: `Airstrike ${SKILLS.airstrike.cooldown}s`,
       cooling: true,
@@ -86,7 +86,7 @@ describe('the horde-only skill button (ID-100, ID-139)', () => {
     // A skill that truly cannot be used never shows armed, offer or not.
     expect(skillButtons({ ...offer, outcome: 'won' }, 'airstrike')[0]!.armed).toBe(false);
     const r = useSkill(s, 'airstrike', 1000, 200);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(skillButtons(r.state, 'airstrike')[0]!.armed).toBe(false);
   });
 

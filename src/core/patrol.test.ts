@@ -76,7 +76,7 @@ const withDan = (game: GameState): GameState => ({
 
 function sent(game: GameState, location: PlaceId, ids: string[], seed = 1, now = NOW) {
   const r = sendPatrol(game, location, ids, seed, now);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -149,7 +149,7 @@ describe('sending a patrol', () => {
     expect(patrolsUnlocked(ready({ hordeNumber: 2 }))).toBe(false);
     expect(sendPatrol(ready({ hordeNumber: 2 }), 'gas-station', ['bob'], 1, NOW)).toEqual({
       ok: false,
-      reason: 'Patrols open after Horde 2',
+      code: 'patrols-locked',
     });
     expect(patrolsUnlocked(ready())).toBe(true);
   });
@@ -183,7 +183,7 @@ describe('sending a patrol', () => {
   });
 
   it('keeps one defender at the camp, so a wipe never empties it (ID-027)', () => {
-    const keep = { ok: false, reason: 'Keep one defender at the camp' };
+    const keep = { ok: false, code: 'keep-one' };
     expect(sendPatrol(ready(), 'gas-station', ['bob', 'jack', 'john'], 1, NOW)).toEqual(keep);
     const two = sent(ready(), 'gas-station', ['bob', 'jack']);
     expect(sendPatrol(two, 'supermarket', ['john'], 1, NOW)).toEqual(keep);
@@ -196,7 +196,8 @@ describe('sending a patrol', () => {
   it('refuses a hidden location, no standing gate, an injured member or one already out', () => {
     expect(sendPatrol(ready(), 'hardware', ['bob'], 1, NOW)).toEqual({
       ok: false,
-      reason: "Hardware store isn't on the map yet",
+      code: 'place-hidden',
+      place: 'hardware',
     });
     expect(sendPatrol(ready(), 'crater', ['bob'], 1, NOW).ok).toBe(false);
     const g = ready();
@@ -206,26 +207,28 @@ describe('sending a patrol', () => {
     expect(hasGate(noGate)).toBe(false);
     expect(sendPatrol(noGate, 'gas-station', ['bob'], 1, NOW)).toEqual({
       ok: false,
-      reason: 'Patrols leave by a gate: build or repair one',
+      code: 'need-gate',
     });
     const hurt = structuredClone(g);
     hurt.roster[0]!.injuredUntil = NOW + 1;
     expect(sendPatrol(hurt, 'gas-station', ['bob'], 1, NOW)).toEqual({
       ok: false,
-      reason: 'Bob is injured',
+      code: 'injured',
+      who: 'Bob',
     });
     // Rested by now, though not yet cleared: free to go.
     expect(sendPatrol(hurt, 'gas-station', ['bob'], 1, NOW + 1).ok).toBe(true);
     const out = sent(g, 'gas-station', ['bob']);
     expect(sendPatrol(out, 'supermarket', ['jack', 'bob'], 1, NOW)).toEqual({
       ok: false,
-      reason: 'Bob is on patrol',
+      code: 'on-patrol',
+      who: 'Bob',
     });
     expect(sendPatrol(g, 'gas-station', [], 1, NOW).ok).toBe(false);
     // Past the last patrol number a weapon uid can hold.
     expect(sendPatrol({ ...g, patrolsSent: PATROL.max }, 'gas-station', ['bob'], 1, NOW)).toEqual({
       ok: false,
-      reason: 'No more patrols can be sent',
+      code: 'patrols-max',
     });
   });
 
@@ -244,7 +247,8 @@ describe('sending a patrol', () => {
     expect([...h.defenders, ...h.bench].map((d) => d.id)).not.toContain('bob');
     expect(equip(g, 'bob', { primary: 'pistol', secondary: 'knife', item: null })).toEqual({
       ok: false,
-      reason: 'Bob is on patrol',
+      code: 'on-patrol',
+      who: 'Bob',
     });
   });
 });
@@ -587,7 +591,8 @@ describe('patrol risk (ID-027)', () => {
       expect(d.xp).toBe(patrolXp('electronics', PATROL.unlock));
       expect(sendPatrol(back, 'gas-station', [d.id], 1, due + RECOVERY_MS - 1)).toEqual({
         ok: false,
-        reason: `${d.name} is injured`,
+        code: 'injured',
+        who: d.name,
       });
     }
     expect(back.reports[0]!.injured).toEqual(
@@ -803,7 +808,7 @@ describe('plazas (ID-029)', () => {
       focus: 'gas',
       order: 'loot',
     });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     // Searched in the plaza's order, each once.
     expect(r.game.patrols[0]).toMatchObject({
       buildings: ['gas-station', 'hardware'],
@@ -816,7 +821,7 @@ describe('plazas (ID-029)', () => {
     const g = ready({ hordeNumber: 6 });
     const go = (options: Parameters<typeof sendPatrol>[5], place: PlaceId = 'riverside') =>
       sendPatrol(g, place, ['bob'], 1, NOW, options);
-    expect(go({ buildings: [] })).toEqual({ ok: false, reason: 'Tick a building to search' });
+    expect(go({ buildings: [] })).toEqual({ ok: false, code: 'tick-building' });
     expect(go({ buildings: ['supermarket'] }).ok).toBe(false);
     expect(go({ buildings: ['gas-station', 'electronics'] }).ok).toBe(false);
     // A single location's only building is itself.
@@ -830,7 +835,8 @@ describe('plazas (ID-029)', () => {
     expect(go({ focus: 'gas' }, 'supermarket').ok).toBe(false);
     expect(sendPatrol(ready(), 'riverside', ['bob'], 1, NOW)).toEqual({
       ok: false,
-      reason: "Riverside Plaza isn't on the map yet",
+      code: 'place-hidden',
+      place: 'riverside',
     });
   });
 

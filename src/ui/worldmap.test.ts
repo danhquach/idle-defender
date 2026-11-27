@@ -47,7 +47,7 @@ const open = (): GameState => ({ ...newGame(), hordeNumber: 3 });
 
 function sent(game: GameState, ids: string[], at = NOW, location = 'gas-station' as const) {
   const r = sendPatrol(game, location, ids, 1, at);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -673,7 +673,7 @@ describe('plazas on the world map (ID-029)', () => {
     const r = sendPatrol(g, 'riverside', ['bob'], 1, NOW, {
       buildings: ['gas-station', 'hardware'],
     });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const p = r.game.patrols[0]!;
     expect(patrolLine(r.game, p, NOW + 5 * 60_000)).toBe('Riverside Plaza · Bob · 1h 0m left');
     // Out 20 minutes, search 25, back 20.

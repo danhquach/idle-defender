@@ -4,7 +4,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { rollWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { JOBS } from '../core/data.ts';
 import { newGame } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
 import { createHud, squadStart } from './hud.ts';
@@ -19,6 +18,7 @@ import {
   type JoinCard,
 } from './joining.ts';
 import { jobLine } from './jobtext.ts';
+import { JOB_NAME } from './text/index.ts';
 
 const noop = () => {};
 
@@ -29,8 +29,8 @@ describe('joining in words (ID-150)', () => {
       {
         id: 'recruit-2',
         name: a.name,
-        profession: JOBS[a.job].name,
-        sub: `Lv 1 · ${JOBS[a.job].name} · Pistol`,
+        profession: JOB_NAME[a.job],
+        sub: `Lv 1 · ${JOB_NAME[a.job]} · Pistol`,
         job: jobLine(a.job, 1),
       },
     ]);

@@ -72,7 +72,7 @@ import {
   type Turret,
 } from '../core/horde.ts';
 import { baseOf } from '../core/armoury.ts';
-import { CHAT, CHAT_RANK, type Bubble } from '../core/chatter.ts';
+import { CHAT, CHAT_RANK, type Bubble } from './chatter.ts';
 import { gunOf as gunOfHeld, isGun, professionOf } from '../core/loadout.ts';
 import { createRng } from '../core/rng.ts';
 import { throwArea } from '../core/skills.ts';

@@ -130,7 +130,7 @@ describe('save: levels give an all-round bonus, no stat points (ID-146)', () => 
   it("a v12 patrol out keeps a strength no higher than its party's today (Grit no longer adds)", () => {
     const g: GameState = { ...levelled(), hordeNumber: 3 };
     const r = sendPatrol(g, 'gas-station', ['bob'], 0, NOW - H);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const today = partyStrength([r.game.roster[0]!]);
     const v12 = preStats(r.game) as Loose;
     // The old strength counted Bob's Grit.

@@ -6,7 +6,7 @@
 // Text reaches the page only through textContent.
 import { describe, expect, it } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { AREAS, DANGERS, MAP_PATROL, type Danger } from '../core/data.ts';
+import { DANGERS, MAP_PATROL, type Danger } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import {
   areaDrops,
@@ -60,6 +60,7 @@ import {
   rerollText,
 } from './mapview.ts';
 import { rosterTiles } from './squadroster.ts';
+import { AREA_NAME, DANGER_NAME } from './text/index.ts';
 
 const NOW = 1_700_000_000_000;
 const MIN = 60_000;
@@ -85,7 +86,7 @@ function camp(bench = 5): GameState {
 
 function send(g: GameState, ids: string[], at = 0, now = NOW): GameState {
   const r = sendMapPatrol(g, g.map!.areas[at]!.kind, ids, 3, now);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -151,9 +152,9 @@ describe('the World map tab: area cards (ID-219)', () => {
     expect(cards).toHaveLength(MAP_PATROL.areas);
     state.game.map!.areas.forEach((a, i) => {
       const c = cards[i]!;
-      expect(c.querySelector('.map-area-name')!.textContent).toBe(AREAS[a.kind].name);
+      expect(c.querySelector('.map-area-name')!.textContent).toBe(AREA_NAME[a.kind]);
       expect(c.querySelector('.map-danger')!.textContent).toBe(
-        `${DANGERS[a.danger].name} · ${tripText(a.danger)}`,
+        `${DANGER_NAME[a.danger]} · ${tripText(a.danger)}`,
       );
       expect(c.querySelector<HTMLImageElement>('.map-art-img')!.alt).toBe('');
       expect(c.querySelectorAll('.map-drop')).toHaveLength(2);
@@ -208,7 +209,7 @@ describe('the World map tab: the team picker (ID-219)', () => {
     const danger = state.game.map!.areas[0]!.danger;
     const team = state.game.reserve.slice(0, 2);
     const risk = teamRisk(state.game, team, danger);
-    expect(q('.map-rating')!.textContent).toBe(DANGERS[risk.rating].name);
+    expect(q('.map-rating')!.textContent).toBe(DANGER_NAME[risk.rating]);
     expect(all('.map-injury').map((n) => n.textContent)).toEqual([
       `injury ${pct(risk.injury)}`,
       `injury ${pct(risk.injury)}`,
@@ -349,7 +350,7 @@ describe('the World map tab: Best fit (ID-244)', () => {
     expect(pressed().sort()).toEqual([...fit].sort());
     const team = state.game.reserve.filter((d) => fit.includes(d.id));
     expect(q('.map-rating')!.textContent).toBe(
-      DANGERS[teamRisk(state.game, team, danger).rating].name,
+      DANGER_NAME[teamRisk(state.game, team, danger).rating],
     );
     expect(q('.map-go')!.textContent).toBe(`Send ${fit.length}`);
     expect(document.activeElement).toBe(q('.map-best'));
@@ -390,7 +391,7 @@ describe('the World map tab: the report (ID-219)', () => {
     const r = patrolReport(g, p);
     const { all, q } = mount(state);
     expect(q('.map-report')).not.toBeNull();
-    expect(q('.map-area-name')!.textContent).toBe(`Back from ${AREAS[p.area].name}`);
+    expect(q('.map-area-name')!.textContent).toBe(`Back from ${AREA_NAME[p.area]}`);
     expect(all('.map-report-member')).toHaveLength(2);
     expect(all('.map-report-xp').map((n) => n.textContent)).toEqual(
       r.members.map((m) => `+${m.xp.toLocaleString('en-US')} XP`),
@@ -434,7 +435,7 @@ describe('the World map tab: the report (ID-219)', () => {
         seed,
         NOW,
       );
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       if (patrolReport(r.game, r.game.map!.patrols[0]!).thrown.length > 0) g = r.game;
     }
     expect(g, 'no seed threw a gun away').not.toBeNull();
@@ -521,16 +522,16 @@ describe('World map words (ID-219)', () => {
     const g = send(camp(3), ['recruit-2']);
     const p = g.map!.patrols[0]!;
     const area = g.map!.areas.find((a) => a.kind === p.area)!;
-    expect(patrolName(p)).toBe(`Patrol ${p.no} · ${AREAS[p.area].name}`);
+    expect(patrolName(p)).toBe(`Patrol ${p.no} · ${AREA_NAME[p.area]}`);
     const drops = areaDrops(area).map((d) => LOOT_NAME[d.loot]);
     expect(patrolMission(p)).toBe(
-      `${DANGERS[p.danger].name} · ${tripText(p.danger)} · Finds ${drops.join(', ')}`,
+      `${DANGER_NAME[p.danger]} · ${tripText(p.danger)} · Finds ${drops.join(', ')}`,
     );
     expect(patrolGroupLabel(p, p.backAt - MIN)).toBe(
-      `Patrol ${p.no}, ${AREAS[p.area].name}, back in 1 minute`,
+      `Patrol ${p.no}, ${AREA_NAME[p.area]}, back in 1 minute`,
     );
     expect(patrolGroupLabel(p, p.backAt)).toBe(
-      `Patrol ${p.no}, ${AREAS[p.area].name}, back, report ready`,
+      `Patrol ${p.no}, ${AREA_NAME[p.area]}, back, report ready`,
     );
   });
 
@@ -643,11 +644,11 @@ describe('the World map tab: power, the Safe line and how it works (ID-246)', ()
       const p = state.game.map!.patrols[0]!;
       expect(teamRating(patrolRatio(p))).toBe(want);
       const card = () => all('.map-area')[0]!;
-      const tag = `${DANGERS[area.danger].name} (team rating ${DANGERS[want].name}) · ${tripText(area.danger)}`;
+      const tag = `${DANGER_NAME[area.danger]} (team rating ${DANGER_NAME[want]}) · ${tripText(area.danger)}`;
       expect(card().querySelector('.map-danger')!.textContent).toBe(tag);
       const real = card().querySelector<HTMLElement>('.map-real')!;
       expect(real.dataset.rating).toBe(want);
-      expect(real.title).toBe(`Team rating: ${DANGERS[want].name}`);
+      expect(real.title).toBe(`Team rating: ${DANGER_NAME[want]}`);
       expect(real.querySelector('.sr-only')!.textContent).toBe('team rating ');
       const odds = () => [...card().querySelectorAll('.map-drop-pct')].map((n) => n.textContent);
       const shown = areaDrops(area, patrolRatio(p)).map((d) => pct(d.chance));
@@ -746,7 +747,7 @@ describe('the World map tab: Reroll (ID-252)', () => {
     );
     expect(q('.map-status')!.dataset.tone).toBeUndefined();
     expect(all('.map-area-name').map((n) => n.textContent)).toEqual(
-      state.game.map!.areas.map((a) => AREAS[a.kind].name),
+      state.game.map!.areas.map((a) => AREA_NAME[a.kind]),
     );
     expect(state.game.map!.areas[1]).toBe(g.map!.areas[1]);
     expect(document.activeElement).toBe(b);

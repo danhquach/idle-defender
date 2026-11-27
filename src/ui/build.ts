@@ -37,7 +37,6 @@ import {
 import { acceptSurvivor, repairOff, turnAway } from '../core/camp.ts';
 import { postUsable } from '../core/cards.ts';
 import {
-  BATTERIES,
   BATTERY_IDS,
   BUILDING_MATERIALS,
   COLUMNS,
@@ -59,8 +58,6 @@ import {
   isPlaza,
   LOCATIONS,
   ORDER_IDS,
-  ORDERS,
-  placeName,
   WALK_SPOTS,
   PERKS,
   type Focus,
@@ -75,7 +72,6 @@ import { freeCar, idle, patrolDue, revealedPlaces, sendPatrol } from '../core/pa
 import {
   entryOf,
   labCost,
-  QUEUE_FULL,
   queueResearch,
   researched,
   unqueue,
@@ -119,7 +115,18 @@ import { ASK_CHANGED, askConfirm } from './confirm.ts';
 import { rosterSection } from './roster.ts';
 import { costLine, setVariant } from './kit.ts';
 import { themeOf } from '../core/themes.ts';
-import { THEMES } from '../core/data.ts';
+import {
+  refusedText,
+  placeName,
+  entryName,
+  BATTERY_NAME,
+  LOCATION_NAME,
+  ORDER_NAME,
+  THEME_NAME,
+  TIER_NAME,
+  TRAP_NAME,
+  RESEARCH_NAME,
+} from './text/index.ts';
 
 /** Shown when a save from before the taller field (ID-047) is loaded. */
 export const FIELD_GREW =
@@ -134,10 +141,9 @@ export function stockBarText(game: GameState): string {
   const stock = shown.map((m) => `${m[0]!.toUpperCase()}${m.slice(1)} ${game.stock[m]}`);
   // A themed horde (ID-238) names its theme: "Horde 15 next · Stampede".
   const theme = themeOf(game);
-  return [
-    `Horde ${game.hordeNumber} next${theme ? ` · ${THEMES[theme].name}` : ''}`,
-    ...stock,
-  ].join(' · ');
+  return [`Horde ${game.hordeNumber} next${theme ? ` · ${THEME_NAME[theme]}` : ''}`, ...stock].join(
+    ' · ',
+  );
 }
 
 /** A post's slot as a stable key: building a post re-sorts `base.posts`, so ids shift. */
@@ -220,7 +226,8 @@ export function queueLines(game: GameState, now: number): LabLine[] {
   const lines: LabLine[] = [];
   if (ids.length > 0) lines.push({ kind: 'heading', text: 'Research queue' });
   ids.forEach((id, i) => {
-    const { name, genes } = entryOf(game, id);
+    const { level, genes } = entryOf(game, id);
+    const name = entryName(id, level);
     const state = i === 0 ? `running, done at ${clockTime(endsAt!)}` : 'waiting';
     lines.push(
       { kind: 'note', text: `${name} · ${state}` },
@@ -243,10 +250,10 @@ export function researchLines(game: GameState, now: number): LabLine[] {
     const owned =
       !game.research.includes(id) && Object.hasOwn(PERKS, id) && game.perkLevels[id as PerkId] > 0;
     return game.research.includes(id) || owned
-      ? { kind: 'note', text: `${node.name} · ${owned ? 'owned' : 'researched'}` }
+      ? { kind: 'note', text: `${RESEARCH_NAME[id]} · ${owned ? 'owned' : 'researched'}` }
       : {
           kind: 'action',
-          label: `Queue ${node.name} (${durationText(node.minutes)})`,
+          label: `Queue ${RESEARCH_NAME[id]} (${durationText(node.minutes)})`,
           cost: { genes: node.genes },
           result: queueResearch(game, id, now),
           act: (at) => queueResearch(game, id, at),
@@ -262,7 +269,7 @@ const lockedLine = (line: LabLine): boolean =>
   line.kind === 'action' &&
   !line.result.ok &&
   line.result.short !== true &&
-  line.result.reason !== QUEUE_FULL;
+  line.result.code !== 'queue-full';
 
 /**
  * The research list as the panel shows it (ID-059): a heading counting the nodes that can
@@ -332,7 +339,7 @@ export function powerLines(game: GameState): LabLine[] {
     });
   }
   const stored = BATTERY_IDS.filter((b) => power.batteries[b] > 0).map(
-    (b) => `${power.batteries[b]} ${BATTERIES[b].name}`,
+    (b) => `${power.batteries[b]} ${BATTERY_NAME[b]}`,
   );
   lines.push({
     kind: 'note',
@@ -472,7 +479,7 @@ export function trapLines(game: GameState, row: number): SlotLine[] {
       { kind: 'heading', text: `${trapCellName(row)}: empty` },
       ...TRAP_KINDS.map((k): SlotLine => ({
         kind: 'action',
-        label: TRAPS[k].name,
+        label: TRAP_NAME[k],
         cost: TRAPS[k].cost,
         result: buildTrap(base, stock, k, row),
       })),
@@ -481,7 +488,7 @@ export function trapLines(game: GameState, row: number): SlotLine[] {
   const t = base.traps[index]!;
   const refund = trapRefund(t);
   return [
-    { kind: 'heading', text: `${TRAPS[t.kind].name} · ${trapCellName(row)}` },
+    { kind: 'heading', text: `${TRAP_NAME[t.kind]} · ${trapCellName(row)}` },
     {
       kind: 'note',
       text: `Durability ${t.durability}/${TRAP_DURABILITY}${t.durability <= 0 ? ' · broken' : ''}`,
@@ -645,8 +652,8 @@ export function createBuildPanel(
     if (refused !== null) {
       // An unaffordable cost names its shortfall in red, so the reason is only the tooltip.
       const variant = refused.short ? 'unaffordable' : 'locked';
-      setVariant(button, variant, variant === 'unaffordable' && cost ? '' : refused.reason);
-      button.title = refused.reason;
+      setVariant(button, variant, variant === 'unaffordable' && cost ? '' : refusedText(refused));
+      button.title = refusedText(refused);
     } else {
       button.addEventListener('click', onClick);
     }
@@ -670,8 +677,8 @@ export function createBuildPanel(
         return;
       }
       // Time moved on since the panel was drawn (the entry finished): say why, in place.
-      setVariant(button as HTMLButtonElement, 'locked', done.reason);
-      button.title = done.reason;
+      setVariant(button as HTMLButtonElement, 'locked', refusedText(done));
+      button.title = refusedText(done);
     });
     return button;
   }
@@ -810,7 +817,7 @@ export function createBuildPanel(
         el('h3', 'build-slot-title', `${slotName(column, row)}: empty`),
         ...TIER_ORDER.map((t) =>
           option(
-            `${TIERS[t].name} wall`,
+            `${TIER_NAME[t]} wall`,
             TIERS[t].cost,
             buildSegment(base, stock, tiers, column, row, 'wall', t),
           ),
@@ -821,7 +828,7 @@ export function createBuildPanel(
           : TIER_ORDER
         ).map((t) =>
           option(
-            `${TIERS[t].name} gate`,
+            `${TIER_NAME[t]} gate`,
             TIERS[t].cost,
             buildSegment(base, stock, tiers, column, row, 'gate', t),
           ),
@@ -844,14 +851,10 @@ export function createBuildPanel(
       ];
     });
     return [
-      el(
-        'h3',
-        'build-slot-title',
-        `${TIERS[seg.tier].name} ${seg.kind} · ${slotName(column, row)}`,
-      ),
+      el('h3', 'build-slot-title', `${TIER_NAME[seg.tier]} ${seg.kind} · ${slotName(column, row)}`),
       el('p', 'build-slot-hp', `${Math.ceil(seg.hp)}/${seg.maxHp} HP`),
       option(
-        next ? `Upgrade to ${TIERS[next].name}` : 'Upgrade',
+        next ? `Upgrade to ${TIER_NAME[next]}` : 'Upgrade',
         next ? TIERS[next].cost : null,
         upgradeSegment(base, stock, tiers, column, row),
       ),
@@ -1091,10 +1094,7 @@ export function createBuildPanel(
             redraw();
           });
           const label = el('label', 'worldmap-member');
-          label.append(
-            box,
-            document.createTextNode(`${LOCATIONS[b].name} · T${LOCATIONS[b].tier}`),
-          );
+          label.append(box, document.createTextNode(`${LOCATION_NAME[b]} · T${LOCATIONS[b].tier}`));
           search.append(label);
         }
       }
@@ -1114,7 +1114,7 @@ export function createBuildPanel(
       const order = el('select', 'worldmap-order');
       order.setAttribute('aria-label', 'When things go wrong');
       for (const id of ORDER_IDS) {
-        const option = el('option', '', ORDERS[id].name);
+        const option = el('option', '', ORDER_NAME[id]);
         option.value = id;
         option.selected = id === mapOrder;
         order.append(option);

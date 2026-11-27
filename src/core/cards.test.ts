@@ -81,11 +81,11 @@ describe('cards', () => {
 
   it('recruit takes the free post furthest forward', () => {
     let r: Result = buildPost(newBase(), RICH, { kind: 'ground', column: 0, row: 0 });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     r = buildSegment(r.base, r.stock, ['wood'], 1, 0, 'wall', 'wood');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     r = buildPost(r.base, r.stock, { kind: 'tower', column: 1, row: 4 });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const s = newHorde(1, { ...setup(), base: r.base, startPostId: 1 });
     expect(s.posts.map((p) => [p.kind, p.x])).toEqual([
       ['ground', 340],
@@ -103,7 +103,7 @@ describe('cards', () => {
 
   it('recruit skips a wall-walk post over a broken segment', () => {
     const r = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: 0 });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const s = newHorde(1, { ...setup(), base: r.base });
     const walk = s.posts.findIndex((p) => p.kind === 'wall-walk');
     s.posts[1]!.defenderId = 'x';

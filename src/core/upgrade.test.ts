@@ -2,16 +2,7 @@
 // rarity, costs Scrap by the step and the gun's level, and shows after the name. Combine keeps
 // the highest step; Best gun, DPS and Squad Power count it.
 import { describe, expect, it } from 'vitest';
-import {
-  gunPower,
-  gunStep,
-  heldLabel,
-  heldName,
-  levelFactor,
-  levelName,
-  statsOf,
-  type OwnedWeapon,
-} from './armoury.ts';
+import { gunPower, gunStep, levelFactor, statsOf, type OwnedWeapon } from './armoury.ts';
 import { recruit } from './camp.ts';
 import { GUN_UPGRADE, RARITIES, WEAPONS } from './data.ts';
 import { tick } from './horde.ts';
@@ -78,18 +69,6 @@ describe('damage', () => {
   });
 });
 
-describe('name', () => {
-  it('shows +N after the name, nothing at +0', () => {
-    expect(heldName(gun('a'))).toBe('Common SMG');
-    expect(heldName(gun('a', { step: 2 }))).toBe('Common SMG +2');
-    expect(levelName(gun('a', { level: 3, step: 2 }))).toBe('Lv 3 Common SMG +2');
-    expect(
-      heldLabel(gun('a', { step: 1, rarity: 'military', affixes: [{ id: 'damage', value: 5 }] })),
-    ).toBe('Military SMG +1 (+5% damage)');
-    expect(statsOf(gun('a', { step: 4 })).name).toBe('Common SMG +4');
-  });
-});
-
 describe('upgradeCost', () => {
   it('is 10 × the step it buys × the gun level; null at the top', () => {
     expect(upgradeCost(gun('a', { level: 3 }))).toBe(30);
@@ -142,26 +121,26 @@ describe('upgradeGun', () => {
     }
     expect(spent).toEqual([10, 20, 30, 40, 50]);
     const over = upgradeGun(g, 'h1');
-    expect(over).toEqual({ ok: false, reason: 'Already at +5' });
+    expect(over).toEqual({ ok: false, code: 'top-step', max: 5 });
     expect(g.stock.scrap).toBe(10_000 - 150);
   });
 
   it('refuses short of Scrap, naming the cost, and changes nothing', () => {
     const g = camp([gun('h1', { level: 3 })], 29);
     const r = upgradeGun(g, 'h1');
-    expect(r).toEqual({ ok: false, reason: 'Needs 30 Scrap' });
+    expect(r).toEqual({ ok: false, code: 'scrap', need: 30 });
     expect(upgradeGun({ ...g, stock: { ...g.stock, scrap: 30 } }, 'h1').ok).toBe(true);
   });
 
   it('refuses a gun that is not there, and the free pistol', () => {
     const g = camp([gun('h1')]);
-    expect(upgradeGun(g, 'nope')).toEqual({ ok: false, reason: 'No such gun' });
-    expect(upgradeGun(g, 'pistol')).toEqual({ ok: false, reason: 'No such gun' });
+    expect(upgradeGun(g, 'nope')).toEqual({ ok: false, code: 'no-gun' });
+    expect(upgradeGun(g, 'pistol')).toEqual({ ok: false, code: 'no-gun' });
   });
 
   it('refuses a blade or tool an older save left in the stash', () => {
     const g = camp([{ uid: 'h1', base: 'knife', rarity: 'common', affixes: [] }]);
-    expect(upgradeGun(g, 'h1')).toEqual({ ok: false, reason: 'Only guns can be upgraded' });
+    expect(upgradeGun(g, 'h1')).toEqual({ ok: false, code: 'upgrade-gun-only' });
   });
 });
 

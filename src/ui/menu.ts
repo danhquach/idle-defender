@@ -2,7 +2,7 @@
 // It opens from the top-right button or Esc (when Esc has nothing else to cancel); in a
 // fight the game loop holds the fight while it is open. The field behind is inert and
 // focus stays inside until it closes, then goes back to the Menu button.
-import { CHATTER_LEVELS, type ChatterLevel } from '../core/chatter.ts';
+import { CHATTER_LEVELS, type ChatterLevel } from '../storage/settings.ts';
 import { BOSS_SKILL, HORDE_ONLY, STASH_CAP, TOP_CRIT } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode, importCode, type ImportResult } from '../storage/code.ts';

@@ -553,7 +553,7 @@ describe('fixed slots (ID-068)', () => {
     const s = startSquadHorde(squadGame(2), 7, NOW);
     const free = s.posts.find((p) => p.defenderId === null)!;
     const moved = moveDefender(s, s.defenders[0]!.id, free.id);
-    expect(moved).toEqual({ ok: false, reason: 'Survivors hold their slots' });
+    expect(moved).toEqual({ ok: false, code: 'hold-slots' });
   });
 });
 

@@ -9,6 +9,7 @@ import { newHorde, type Card, type HordeState } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
 import { cardText, createHud, PICK_MS } from './hud.ts';
 import { ART_URLS, avatarOf, CARD_ICON } from './sprites.ts';
+import { CARD_NAME } from './text/index.ts';
 
 const noop = () => {};
 
@@ -129,7 +130,7 @@ describe('picking a card (ID-103)', () => {
     expect(panel.hidden).toBe(false);
     expect(panel.classList.contains('hud-cards-picking')).toBe(false);
     expect(cards().map((c) => c.querySelector('.hud-card-title')!.textContent)).toEqual(
-      next.map((id) => UPGRADES[id].name),
+      next.map((id) => CARD_NAME[id]),
     );
     // The old effect's timer must not close the new offer.
     vi.advanceTimersByTime(PICK_MS);

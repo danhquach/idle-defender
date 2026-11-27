@@ -40,7 +40,7 @@ function close(s: HordeState): void {
 
 /**
  * Sends bench defender `defenderId` in to post `postId` for the open offer; returns a
- * new state. Refuses a taken or unusable post with a reason; throws with no offer
+ * new state. Refuses a taken or unusable post (a refusal code); throws with no offer
  * open, an unknown bench id, or a post the offer doesn't allow.
  */
 export function replaceInjured(state: HordeState, defenderId: string, postId: number): MoveResult {
@@ -53,8 +53,8 @@ export function replaceInjured(state: HordeState, defenderId: string, postId: nu
   if (!post || (offer.postId !== null && postId !== offer.postId)) {
     throw new RangeError(`replaceInjured: post ${postId} is not on offer`);
   }
-  if (post.defenderId !== null) return { ok: false, reason: 'Post taken' };
-  if (!postUsable(state.layers, post)) return { ok: false, reason: 'No wall to stand on' };
+  if (post.defenderId !== null) return { ok: false, code: 'post-taken' };
+  if (!postUsable(state.layers, post)) return { ok: false, code: 'no-wall' };
   const s = structuredClone(state);
   const index = s.bench.findIndex((d) => d.id === defenderId);
   const [spec] = s.bench.splice(index, 1);

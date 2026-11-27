@@ -2,6 +2,7 @@
 // and the allow-list the save reader uses. Pure: no RNG, no clock, no DOM. There is no refund.
 import { TECH, TECH_IDS, type TechId } from './data.ts';
 import type { GameState } from './game.ts';
+import type { Refusal } from './refusal.ts';
 
 /** A node as the chart shows it: bought, ready to buy, or waiting on its prerequisite. */
 export type TechState = 'done' | 'open' | 'locked';
@@ -23,24 +24,24 @@ export function techState(g: Pick<GameState, 'tech'>, id: TechId): TechState {
 export const unlocksOf = (id: TechId): TechId[] => TECH_IDS.filter((t) => TECH[t].needs === id);
 
 /** Why `id` can't be bought now, or null. Order: already researched, prerequisite, Scrap. */
-export function techRefusal(g: Pick<GameState, 'tech' | 'stock'>, id: TechId): string | null {
-  if (!isTech(id)) return 'Unknown upgrade';
-  if (techOf(g).includes(id)) return 'Already researched';
+export function techRefusal(g: Pick<GameState, 'tech' | 'stock'>, id: TechId): Refusal | null {
+  if (!isTech(id)) return { ok: false, code: 'unknown-tech' };
+  if (techOf(g).includes(id)) return { ok: false, code: 'researched' };
   const node = TECH[id];
   if (node.needs !== null && !techOf(g).includes(node.needs)) {
-    return `Needs ${TECH[node.needs].name}`;
+    return { ok: false, code: 'needs-tech', node: node.needs };
   }
-  if (g.stock.scrap < node.cost) return `Needs ${node.cost.toLocaleString('en-US')} Scrap`;
+  if (g.stock.scrap < node.cost) return { ok: false, code: 'tech-scrap', need: node.cost };
   return null;
 }
 
 /** What a purchase gives: the game after it and the Scrap it took, or why not. */
-export type TechBuy = { ok: true; game: GameState; cost: number } | { ok: false; reason: string };
+export type TechBuy = { ok: true; game: GameState; cost: number } | Refusal;
 
 /** Buys node `id` (between hordes: the app checks that). Returns a new game; `g` is untouched. */
 export function researchTech(g: GameState, id: TechId): TechBuy {
-  const reason = techRefusal(g, id);
-  if (reason !== null) return { ok: false, reason };
+  const why = techRefusal(g, id);
+  if (why !== null) return why;
   const cost = TECH[id].cost;
   return {
     ok: true,

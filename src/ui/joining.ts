@@ -2,12 +2,13 @@
 // profession, level, gun), the confirm for leaving the screen without answering, the confirm
 // for letting a survivor go, and the lines said after each answer. Pure: no DOM.
 import type { OwnedWeapon } from '../core/armoury.ts';
-import { JOBS, MAX_COUNT, SQUAD_CAP, SQUAD_JOIN } from '../core/data.ts';
+import { MAX_COUNT, SQUAD_CAP, SQUAD_JOIN } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import { joiningOf, type NoJoin } from '../core/hordeonly.ts';
 import { levelOf } from '../core/stats.ts';
 import { gunName, heldGunOf } from './gunpick.ts';
 import { jobLine } from './jobtext.ts';
+import { JOB_NAME } from './text/index.ts';
 
 /** One survivor asking to join, as the offer tile shows them. */
 export interface JoinCard {
@@ -28,8 +29,8 @@ export const joinCards = (game: Pick<GameState, 'joining'>): JoinCard[] =>
     return {
       id: d.id,
       name: d.name,
-      sub: `Lv ${level} · ${JOBS[d.job].name} · ${gunName(heldGunOf(d))}`,
-      profession: JOBS[d.job].name,
+      sub: `Lv ${level} · ${JOB_NAME[d.job]} · ${gunName(heldGunOf(d))}`,
+      profession: JOB_NAME[d.job],
       job: jobLine(d.job, level),
     };
   });
@@ -39,7 +40,7 @@ export const REFUSE_NOTE = 'Refused survivors are gone for good.';
 
 /** "Ava (Hunter) asks to join the camp": the result screen's line for each. */
 export const askLine = (d: RosterDefender): string =>
-  `${d.name} (${JOBS[d.job].name}) asks to join the camp`;
+  `${d.name} (${JOB_NAME[d.job]}) asks to join the camp`;
 
 /** The confirm for leaving with someone still asking (ID-150): leaving refuses them. */
 export function leaveJoinQuestion(game: Pick<GameState, 'joining'>): string | null {

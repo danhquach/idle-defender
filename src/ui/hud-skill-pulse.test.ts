@@ -32,7 +32,7 @@ function setup() {
   const s = startSquadHorde(game, 1, NOW);
   s.toSpawn = 0;
   const r = useSkill(s, 'airstrike', 1000, 200);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return { h, game, cooling: r.state };
 }
 

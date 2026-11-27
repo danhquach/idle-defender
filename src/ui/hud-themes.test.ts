@@ -20,6 +20,7 @@ import {
   resultScreen,
 } from './hud.ts';
 import { THEME } from '../core/data.ts';
+import { THEME_NAME, THEME_TIP } from './text/index.ts';
 
 const noop = (): void => {};
 
@@ -57,7 +58,7 @@ describe('the picker (ID-238)', () => {
     expect(o.theme).toEqual({
       id: 'crawl',
       name: 'Crawl',
-      tip: THEMES.crawl.tip,
+      tip: THEME_TIP.crawl,
       kind: 'crawler',
     });
     expect(o.start.chips.map((c) => c.text)).toContain('Crawl');
@@ -97,7 +98,7 @@ describe('the picker (ID-238)', () => {
     const banner = root.querySelector<HTMLElement>('.hud-horde-theme')!;
     expect(banner.hidden).toBe(false);
     expect(banner.querySelector('.hud-horde-theme-name')!.textContent).toBe('Bloat Tide');
-    expect(banner.querySelector('.hud-horde-theme-tip')!.textContent).toBe(THEMES.bloat.tip);
+    expect(banner.querySelector('.hud-horde-theme-tip')!.textContent).toBe(THEME_TIP.bloat);
     const icon = banner.querySelector('img')!;
     expect(icon.alt).toBe('');
     expect([...banner.querySelectorAll('*')].map((e) => e.tagName)).toEqual([
@@ -183,7 +184,7 @@ describe('the result warning (ID-238)', () => {
       themeAt(seed, 'nightmare', i),
     )!;
     expect(themeWarning(g, { local: k, mode: 'nightmare' })).toBe(
-      `Nightmare ${k} again: ${THEMES[themeAt(seed, 'nightmare', k)!].name} — a themed horde`,
+      `Nightmare ${k} again: ${THEME_NAME[themeAt(seed, 'nightmare', k)!]} — a themed horde`,
     );
   });
 
@@ -194,7 +195,7 @@ describe('the result warning (ID-238)', () => {
     const seed = camp(51, 'crawl').themes!.seed!;
     const nm: GameState = { ...camp(51, 'crawl'), mode: 'nightmare', modes: { nightmare: 15 } };
     expect(themeWarning(nm)).toBe(
-      `Nightmare 15 next: ${THEMES[themeAt(seed, 'nightmare', 15)!].name} — a themed horde`,
+      `Nightmare 15 next: ${THEME_NAME[themeAt(seed, 'nightmare', 15)!]} — a themed horde`,
     );
   });
 });
@@ -301,7 +302,7 @@ describe('the first-clear announcement and the other designer fixes (ID-238)', (
     const g = camp(14, 'stampede');
     const warn = squadScreen(g, won(g, 14)).debrief!.warn!;
     expect(warn).toBe('Normal 15 next: Stampede — a themed horde');
-    expect(warn).not.toContain(THEMES.stampede.tip);
+    expect(warn).not.toContain(THEME_TIP.stampede);
   });
 
   it('the fight corner’s wave line names the theme', () => {
@@ -329,7 +330,7 @@ describe('the first-clear announcement and the other designer fixes (ID-238)', (
   });
 
   it('the Crawl tip names light guns too', () => {
-    expect(THEMES.crawl.tip).toBe(
+    expect(THEME_TIP.crawl).toBe(
       'Low and hard to hit; they climb the wall. Bring spread or light guns.',
     );
   });

@@ -8,7 +8,6 @@ import {
   ENEMIES,
   PERK,
   PERK_IDS,
-  PERKS,
   RESEARCH,
   STEP,
   TURRET,
@@ -37,7 +36,7 @@ function researchedGame(...ids: ResearchId[]): GameState {
     ...ids.map((id) => (x: GameState) => researchNow(x, id)),
   ]) {
     const r = step(g);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     g = r.game;
   }
   return g;
@@ -62,7 +61,6 @@ describe('perk data and slots', () => {
       'overclock',
       'power-saver',
     ]);
-    for (const id of PERK_IDS) expect(PERKS[id].name.length).toBeGreaterThan(0);
     expect(Object.hasOwn(RESEARCH, 'steady-fire')).toBe(false);
     expect(RESEARCH['scavengers-eye']).toMatchObject({ lab: 1, needs: null, genes: 15 });
     expect(RESEARCH.fortify).toMatchObject({ lab: 1, genes: 20 });
@@ -81,9 +79,21 @@ describe('perk data and slots', () => {
 
   it('slots 2–4 are researched in order, each adding one', () => {
     const g = researchedGame();
-    expect(queueLock(g, 'perk-slot-3')).toBe('Needs Perk slot 2');
-    expect(queueLock(g, 'perk-slot-4')).toBe('Needs Perk slot 3');
-    expect(queueLock({ ...newGame(), lab: 1 }, 'perk-slot-3')).toBe('Needs Lab level 2');
+    expect(queueLock(g, 'perk-slot-3')).toEqual({
+      ok: false,
+      code: 'needs-research',
+      node: 'perk-slot-2',
+    });
+    expect(queueLock(g, 'perk-slot-4')).toEqual({
+      ok: false,
+      code: 'needs-research',
+      node: 'perk-slot-3',
+    });
+    expect(queueLock({ ...newGame(), lab: 1 }, 'perk-slot-3')).toEqual({
+      ok: false,
+      code: 'needs-lab-level',
+      level: 2,
+    });
     expect(perkSlots(researchedGame('perk-slot-2'))).toBe(2);
     expect(perkSlots(researchedGame('perk-slot-2', 'perk-slot-3', 'perk-slot-4'))).toBe(4);
   });
@@ -99,21 +109,21 @@ describe('equipping perks', () => {
   it('equips an unlocked perk into a free slot and takes it out again', () => {
     let g = researchedGame('fortify', 'perk-slot-2');
     const r = equipPerk(g, 'fortify');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     g = r.game;
     expect(g.perks).toEqual(['steady-fire', 'fortify']);
     const off = unequipPerk(g, 'steady-fire');
-    if (!off.ok) throw new Error(off.reason);
+    if (!off.ok) throw new Error(off.code);
     expect(off.game.perks).toEqual(['fortify']);
     expect(g.perks).toEqual(['steady-fire', 'fortify']); // pure
   });
 
   it('refuses a locked perk, a full set of slots, a perk twice, and unequipping one not on', () => {
     const g = researchedGame('fortify');
-    expect(equipPerk(g, 'overclock')).toEqual({ ok: false, reason: 'Not researched' });
-    expect(equipPerk(g, 'fortify')).toEqual({ ok: false, reason: 'All perk slots are full' });
-    expect(equipPerk(g, 'steady-fire')).toEqual({ ok: false, reason: 'Already equipped' });
-    expect(unequipPerk(g, 'fortify')).toEqual({ ok: false, reason: 'Not equipped' });
+    expect(equipPerk(g, 'overclock')).toEqual({ ok: false, code: 'perk-unresearched' });
+    expect(equipPerk(g, 'fortify')).toEqual({ ok: false, code: 'perk-slots-full' });
+    expect(equipPerk(g, 'steady-fire')).toEqual({ ok: false, code: 'perk-equipped' });
+    expect(unequipPerk(g, 'fortify')).toEqual({ ok: false, code: 'perk-not-equipped' });
     expect(perkLock({ ...g, perks: [] }, 'fortify')).toBeNull();
   });
 
@@ -148,7 +158,7 @@ describe('perks in the horde', () => {
   it('Steady Fire leaves a blade alone', () => {
     const swing = (perks: PerkId[]): number => {
       const r = buildPost(newBase(), RICH, { kind: 'ground', column: 0, row: 4 });
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       const s = newHorde(1, {
         ...setup(),
         roster: [
@@ -215,7 +225,7 @@ describe('perks in the horde', () => {
   it("Butcher's Hunger: a blade kill heals the nearest damaged wall 3 HP, never past max", () => {
     const kill = (perks: PerkId[], hurt: number, secondary: 'knife' | null = 'knife') => {
       const r = buildPost(newBase(), RICH, { kind: 'ground', column: 0, row: 4 });
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       const s = newHorde(1, {
         ...setup(),
         roster: [{ id: 'a', name: 'A', loadout: { primary: 'pistol', secondary, item: null } }],
@@ -245,7 +255,7 @@ describe('perks in the horde', () => {
 
   it("Butcher's Hunger: a blade strike's kill heals; stats add no cleave (ID-084)", () => {
     const r = buildPost(newBase(), RICH, { kind: 'ground', column: 0, row: 4 });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const s = newHorde(1, {
       ...setup(),
       roster: [
@@ -292,7 +302,7 @@ describe('perks in the horde', () => {
 
   it('Overclock and Power Saver: turret damage and draw; together they multiply', () => {
     const r = buildTurret(newBase(), RICH, true, 'tower', 0, 5);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const shot = (perks: PerkId[]) => {
       const s = fight(perks, r.base);
       s.defenders = [];
@@ -335,7 +345,10 @@ describe('Second Look', () => {
     expect(a.offer).toHaveLength(3);
     expect(s.rerolls).toBe(0); // pure
     expect(rerollsLeft(a)).toBe(3);
-    expect(rerollLock(rerollOffer(rerollOffer(rerollOffer(a))))).toBe('No rerolls left');
+    expect(rerollLock(rerollOffer(rerollOffer(rerollOffer(a))))).toEqual({
+      ok: false,
+      code: 'no-rerolls',
+    });
   });
 
   it('a different seed can deal different cards', () => {
@@ -350,6 +363,9 @@ describe('Second Look', () => {
   it('needs an open offer; without the perk there are still 3', () => {
     expect(rerollsLeft(offered([]))).toBe(3);
     expect(rerollLock(offered([]))).toBeNull();
-    expect(rerollLock({ ...offered(['second-look']), offer: null })).toBe('No offer to reroll');
+    expect(rerollLock({ ...offered(['second-look']), offer: null })).toEqual({
+      ok: false,
+      code: 'no-offer-reroll',
+    });
   });
 });

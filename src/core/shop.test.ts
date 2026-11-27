@@ -24,7 +24,7 @@ function fight(cash = 100, turrets = 0): HordeState {
   let base = newBase();
   for (let row = 0; row < turrets; row++) {
     const r = buildTurret(base, RICH, true, 'wall-walk', 0, row);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     base = r.base;
   }
   const s = newHorde(1, { ...setup(), base });
@@ -35,7 +35,7 @@ function fight(cash = 100, turrets = 0): HordeState {
 
 function bought(s: HordeState, item: Parameters<typeof buy>[1]): HordeState {
   const r = buy(s, item);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.state;
 }
 
@@ -96,7 +96,7 @@ describe('buffs', () => {
 
   it('refuses a running buff, and ends after 30 s of fight time only', () => {
     let s = bought(fight(), 'adrenaline');
-    expect(buy(s, 'adrenaline')).toEqual({ ok: false, reason: 'Already active' });
+    expect(buy(s, 'adrenaline')).toEqual({ ok: false, code: 'buff-active' });
     expect(buy(s, 'overdrive').ok).toBe(true); // the other buff is separate
 
     // A pending card pick stops the clock.
@@ -129,7 +129,7 @@ describe('repairs', () => {
     const again = bought(p, 'patch');
     expect(again.layers[0]!.segments[1]!.hp).toBe(segs[1]!.maxHp);
     expect(again.layers[0]!.segments[0]!.hp).toBe(0);
-    expect(buy(again, 'patch')).toEqual({ ok: false, reason: 'No wall to patch' });
+    expect(buy(again, 'patch')).toEqual({ ok: false, code: 'no-patch' });
   });
 
   it('breaks Patch wall ties by the outer layer, then the lower row', () => {
@@ -147,7 +147,7 @@ describe('repairs', () => {
   it('refuses Patch wall when every standing segment is full', () => {
     const s = fight();
     s.layers[0]!.segments[2]!.hp = 0;
-    expect(buy(s, 'patch')).toEqual({ ok: false, reason: 'No wall to patch' });
+    expect(buy(s, 'patch')).toEqual({ ok: false, code: 'no-patch' });
   });
 
   it('Fix turret unjams the most worn turret first, capped at full', () => {
@@ -175,8 +175,8 @@ describe('repairs', () => {
   });
 
   it('refuses Fix turret with no turret, or all at full', () => {
-    expect(buy(fight(), 'fix')).toEqual({ ok: false, reason: 'No turret to fix' });
-    expect(buy(fight(100, 2), 'fix')).toEqual({ ok: false, reason: 'No turret to fix' });
+    expect(buy(fight(), 'fix')).toEqual({ ok: false, code: 'no-fix' });
+    expect(buy(fight(100, 2), 'fix')).toEqual({ ok: false, code: 'no-fix' });
   });
 });
 
@@ -184,17 +184,17 @@ describe('refusals', () => {
   it('refuses short cash, a pick, a replacement or a finished fight, changing nothing', () => {
     const s = fight(SHOP.adrenaline.cost - 1);
     const before = structuredClone(s);
-    expect(buy(s, 'adrenaline')).toEqual({ ok: false, reason: 'Not enough cash' });
+    expect(buy(s, 'adrenaline')).toEqual({ ok: false, code: 'no-cash' });
     expect(s).toEqual(before);
     const rich = fight();
-    expect(buy({ ...rich, offer: [] }, 'overdrive')).toEqual({ ok: false, reason: 'Pick first' });
+    expect(buy({ ...rich, offer: [] }, 'overdrive')).toEqual({ ok: false, code: 'pick-first' });
     expect(buy({ ...rich, replace: { injuryIndex: 0 } as never }, 'overdrive')).toEqual({
       ok: false,
-      reason: 'Pick first',
+      code: 'pick-first',
     });
     expect(buy({ ...rich, outcome: 'won' }, 'overdrive')).toEqual({
       ok: false,
-      reason: 'The horde is over',
+      code: 'horde-over',
     });
   });
 

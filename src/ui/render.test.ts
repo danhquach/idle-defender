@@ -41,7 +41,7 @@ import {
 } from '../core/data.ts';
 import type { Tier } from '../core/base.ts';
 import type { Bullet, Enemy, HordeState, Pop, Spit } from '../core/horde.ts';
-import { CHAT, CHAT_LINES, type Bubble } from '../core/chatter.ts';
+import { CHAT, CHAT_LINES, type Bubble } from './chatter.ts';
 import { SPEEDS } from '../storage/settings.ts';
 import { throwArea, wallFront } from '../core/skills.ts';
 import { reloadTime, xpForLevel } from '../core/stats.ts';
@@ -159,7 +159,7 @@ function scene(condition: number, energy: number, wallHp?: number) {
     0,
     0,
   );
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   r.base.turrets[0]!.condition = condition;
   const { layers, turrets } = layoutOf(r.base);
   if (wallHp !== undefined) layers[0]!.segments[0]!.hp = wallHp;
@@ -1654,7 +1654,7 @@ describe('the build scene (ID-065)', () => {
   it('crosses a jammed turret and a broken trap', () => {
     let base = newBase();
     const t = buildTurret(base, stockOf({ scrap: 99, wood: 99 }), true, 'tower', 0, 0);
-    if (!t.ok) throw new Error(t.reason);
+    if (!t.ok) throw new Error(t.code);
     base = t.base;
     base.turrets[0]!.condition = 0;
     base.traps = [
@@ -1981,7 +1981,7 @@ describe('bullet visuals (ID-045)', () => {
       0,
       5,
     );
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const { turrets, layers } = layoutOf(built.base);
     const { scene } = fight();
     const g = geometry(
@@ -2386,7 +2386,7 @@ describe('bullet visuals (ID-045)', () => {
           0,
           5,
         );
-        if (!built.ok) throw new Error(built.reason);
+        if (!built.ok) throw new Error(built.code);
         const { turrets, layers } = layoutOf(built.base);
         const { scene } = fight();
         const p = paints(

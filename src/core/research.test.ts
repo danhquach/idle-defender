@@ -46,7 +46,7 @@ const MIN = 60_000;
 const T = 1_700_000_000_000;
 
 function ok(r: ReturnType<typeof upgradeLab>): GameState {
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -78,7 +78,7 @@ describe('Research Lab', () => {
     g = ok(upgradeLab(g));
     expect(g.stock).toMatchObject({ scrap: 999 - 80, wood: 999 - 110 });
     expect(labCost(g)).toBeNull();
-    expect(upgradeLab(g)).toEqual({ ok: false, reason: 'The Lab is at the top level' });
+    expect(upgradeLab(g)).toEqual({ ok: false, code: 'lab-top' });
     expect(LAB_LEVELS).toHaveLength(2);
   });
 });
@@ -125,7 +125,8 @@ describe('the tree (AC1, AC3)', () => {
     expect(g.stock).toMatchObject({ genes: 40, scrap: 999, wood: 999 });
     expect(queueResearch(lab(1, 9), 'metal-walls', T)).toEqual({
       ok: false,
-      reason: 'Not enough genes',
+      code: 'short',
+      material: 'genes',
       short: true,
     });
   });
@@ -172,7 +173,7 @@ describe('the queue (AC2)', () => {
     expect(g.queue.ids).toHaveLength(RESEARCH_QUEUE.size);
     expect(queueResearch(g, 'rally-call', T)).toEqual({
       ok: false,
-      reason: 'The research queue is full',
+      code: 'queue-full',
     });
   });
 
@@ -201,7 +202,7 @@ describe('the queue (AC2)', () => {
     // Metal walls ended at T + 15 min, but nothing has run the queue yet.
     expect(unqueue(g, 'metal-walls', T + 20 * MIN)).toEqual({
       ok: false,
-      reason: 'Not in the queue',
+      code: 'not-queued',
     });
     const more = queue(g, 'rally-call', T + 20 * MIN);
     expect(more.research).toEqual(['metal-walls']);
@@ -210,24 +211,33 @@ describe('the queue (AC2)', () => {
 
   it('needs its earlier node done or ahead in the queue, and that one then stays', () => {
     const g = lab(2);
-    expect(queueLock(g, 'incendiary-traps')).toBe('Needs Glue traps');
+    expect(queueLock(g, 'incendiary-traps')).toEqual({
+      ok: false,
+      code: 'needs-research',
+      node: 'glue-traps',
+    });
     const q = queue(g, 'glue-traps');
     expect(queueLock(q, 'incendiary-traps')).toBeNull();
     const both = queue(q, 'incendiary-traps');
-    expect(unqueueLock(both, 'glue-traps')).toBe('Incendiary traps needs it');
-    expect(unqueue(both, 'glue-traps', T)).toEqual({
-      ok: false,
-      reason: 'Incendiary traps needs it',
-    });
+    const needed = { ok: false, code: 'needed-by', entry: 'incendiary-traps', level: null };
+    expect(unqueueLock(both, 'glue-traps')).toEqual(needed);
+    expect(unqueue(both, 'glue-traps', T)).toEqual(needed);
     expect(unqueueLock(both, 'incendiary-traps')).toBeNull();
   });
 
   it('refuses a node twice, one done, or one above the Lab', () => {
     const q = queue(lab(1), 'metal-walls');
-    expect(queueLock(q, 'metal-walls')).toBe('Already queued');
-    expect(queueLock(advanceResearch(q, T + 99 * MIN), 'metal-walls')).toBe('Already researched');
-    expect(queueLock(lab(0), 'metal-walls')).toBe('Needs a Research Lab');
-    expect(queueLock(lab(1), 'second-look')).toBe('Needs Lab level 2');
+    expect(queueLock(q, 'metal-walls')).toEqual({ ok: false, code: 'queued' });
+    expect(queueLock(advanceResearch(q, T + 99 * MIN), 'metal-walls')).toEqual({
+      ok: false,
+      code: 'researched',
+    });
+    expect(queueLock(lab(0), 'metal-walls')).toEqual({ ok: false, code: 'needs-lab' });
+    expect(queueLock(lab(1), 'second-look')).toEqual({
+      ok: false,
+      code: 'needs-lab-level',
+      level: 2,
+    });
   });
 
   it('a Metal walls tier from the queue lets Metal be built', () => {
@@ -248,23 +258,36 @@ describe('perk levels (AC4)', () => {
     let g = queue(lab(1, 1000), 'level-steady-fire');
     expect(g.stock.genes).toBe(1000 - PERK_LEVEL.genes[0]);
     expect(g.queue.endsAt).toBe(T + PERK_LEVEL.minutes[0] * MIN);
-    expect(queueLock(g, 'level-steady-fire')).toBe('Already queued');
+    expect(queueLock(g, 'level-steady-fire')).toEqual({ ok: false, code: 'queued' });
     g = advanceResearch(g, T + 999 * MIN);
     expect(g.perkLevels['steady-fire']).toBe(2);
     g = queue(g, 'level-steady-fire');
-    expect(entryOf(g, 'level-steady-fire').name).toBe('Steady Fire level 3');
+    expect(entryOf(g, 'level-steady-fire').level).toBe(3);
     expect(g.stock.genes).toBe(1000 - PERK_LEVEL.genes[0] - PERK_LEVEL.genes[1]);
     g = advanceResearch(g, T + 9999 * MIN);
     expect(g.perkLevels['steady-fire']).toBe(3);
-    expect(queueLock(g, 'level-steady-fire')).toBe('Steady Fire is at the top level');
+    expect(queueLock(g, 'level-steady-fire')).toEqual({
+      ok: false,
+      code: 'perk-top',
+      perk: 'steady-fire',
+    });
   });
 
   it('a perk not owned can be levelled only behind its own node', () => {
     const g = lab(1);
-    expect(queueLock(g, 'level-fortify')).toBe('Needs Fortify');
+    expect(queueLock(g, 'level-fortify')).toEqual({
+      ok: false,
+      code: 'needs-perk',
+      perk: 'fortify',
+    });
     const q = queue(queue(g, 'fortify'), 'level-fortify');
     expect(entryOf(q, 'level-fortify').genes).toBe(PERK_LEVEL.genes[0]);
-    expect(unqueueLock(q, 'fortify')).toBe('Fortify level 2 needs it');
+    expect(unqueueLock(q, 'fortify')).toEqual({
+      ok: false,
+      code: 'needed-by',
+      entry: 'level-fortify',
+      level: 2,
+    });
     const done = advanceResearch(q, T + 999 * MIN);
     expect(done.perkLevels.fortify).toBe(2);
   });
@@ -327,7 +350,7 @@ describe('perk levels (AC4)', () => {
     ];
     for (let i = 0; i < 5; i++) s = rerollOffer(s);
     expect(s.rerolls).toBe(5);
-    expect(rerollLock(s)).toBe('No rerolls left');
+    expect(rerollLock(s)).toEqual({ ok: false, code: 'no-rerolls' });
   });
 });
 
@@ -376,19 +399,19 @@ describe('new nodes in play (AC3)', () => {
     const picked = chooseCard(hurt, 1);
     for (const seg of picked.layers.flatMap((l) => l.segments)) expect(seg.hp).toBe(seg.maxHp / 4);
     const fixed = useRepairs(picked);
-    if (!fixed.ok) throw new Error(fixed.reason);
+    if (!fixed.ok) throw new Error(fixed.code);
     for (const seg of fixed.state.layers.flatMap((l) => l.segments)) expect(seg.hp).toBe(seg.maxHp);
   });
 
   it('More cars lets the camp build a second car', () => {
     const rich = { ...lab(2), stock: stockOf({ metal: 999, parts: 999, scrap: 999, genes: 999 }) };
     const one = ok(buildCar(rich));
-    expect(buildCar(one)).toEqual({ ok: false, reason: 'More cars come with research' });
+    expect(buildCar(one)).toEqual({ ok: false, code: 'cars-research' });
     const more = ok(researchNow(one, 'more-cars'));
     expect(carLimit(more)).toBe(CAR.limit + CAR.more);
     const two = ok(buildCar(more));
     expect(two.camp.cars).toBe(2);
-    expect(buildCar(two)).toEqual({ ok: false, reason: 'The camp has all its cars' });
+    expect(buildCar(two)).toEqual({ ok: false, code: 'cars-max' });
   });
 });
 

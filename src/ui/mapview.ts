@@ -7,10 +7,9 @@
 // own rating and odds from the power it left with (ID-246). A
 // patrol back opens its report; OK takes the loot and XP. Sending and taking reports work
 // between hordes only. Text reaches the page only through textContent.
-import { heldName, levelName } from '../core/armoury.ts';
-import { AREAS, DANGERS, MAP_PATROL, WEAPONS, type AreaId, type Danger } from '../core/data.ts';
+import { MAP_PATROL, type AreaId, type Danger } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
-import { restLabel, restOf, survivorPower } from '../core/hordeonly.ts';
+import { restOf, survivorPower } from '../core/hordeonly.ts';
 import {
   areaDrops,
   backPatrols,
@@ -37,6 +36,17 @@ import type { CampWindow } from './campwindow.ts';
 import { el } from './hud.ts';
 import { AREA_ART, ART_URLS } from './sprites.ts';
 import { LOOT_NAME, patrolsOut, patrolTime, pct, tripText } from './maptext.ts';
+import {
+  lockText,
+  refusedText,
+  type Refused,
+  heldName,
+  levelName,
+  restLabel,
+  AREA_NAME,
+  DANGER_NAME,
+  WEAPON_NAME,
+} from './text/index.ts';
 
 export const MAP_WAIT = 'Send patrols and take reports between hordes.';
 /** A number and its unit that never split across lines when a label wraps. */
@@ -103,11 +113,11 @@ export interface MapOptions {
   /** The camp now, the time, whether closing resumes a fight, and whether sending works now. */
   state: () => { game: GameState; now: number; resumes: boolean; canSend: boolean };
   /** Sends `ids` to `area`, saved at once. */
-  onSend: (area: AreaId, ids: string[]) => { ok: true } | { ok: false; reason: string };
+  onSend: (area: AreaId, ids: string[]) => { ok: true } | Refused;
   /** Takes the report of the patrol at `area` (OK), saved at once. */
-  onTake: (area: AreaId) => { ok: true } | { ok: false; reason: string };
+  onTake: (area: AreaId) => { ok: true } | Refused;
   /** Rerolls the areas without a patrol for Scrap (between hordes), saved at once. */
-  onReroll: () => { ok: true } | { ok: false; reason: string };
+  onReroll: () => { ok: true } | Refused;
   /** The report the patrol at `area` brings, before it is taken. */
   report: (area: AreaId) => MapReport | null;
 }
@@ -148,7 +158,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     const cost = rerollCost(before);
     const r = opts.onReroll();
     if (!r.ok) {
-      say(r.reason, true);
+      say(refusedText(r), true);
       return;
     }
     say(rerollText(cost, opts.state().game.stock.scrap));
@@ -182,13 +192,13 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     if (url) img.src = url;
     const name = el('h3', 'map-area-name', title);
     name.tabIndex = -1;
-    const corner = el('span', 'map-danger', tag ?? DANGERS[danger].name);
+    const corner = el('span', 'map-danger', tag ?? DANGER_NAME[danger]);
     // A team out (ID-246): its own rating, from the power it left with, after the area's.
     if (real) {
       const r = el('span', 'map-real');
       r.dataset.rating = real;
-      r.title = `Team rating: ${DANGERS[real].name}`;
-      r.append(' (', el('span', 'sr-only', 'team rating '), DANGERS[real].name, ')');
+      r.title = `Team rating: ${DANGER_NAME[real]}`;
+      r.append(' (', el('span', 'sr-only', 'team rating '), DANGER_NAME[real], ')');
       corner.append(r);
     }
     if (!tag) corner.append(el('span', 'map-trip', ` · ${tripText(danger)}`));
@@ -206,7 +216,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     const art = banner(
       area.kind,
       area.danger,
-      AREAS[area.kind].name,
+      AREA_NAME[area.kind],
       undefined,
       p ? teamRating(ratio) : undefined,
     );
@@ -280,8 +290,8 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     const spot = game.map?.areas.find((a) => a.kind === area);
     if (!spot) return list(game, opts.state().now, can);
     const box = el('section', 'map-pick');
-    box.setAttribute('aria-label', `Send a patrol to ${AREAS[area].name}`);
-    box.append(banner(area, spot.danger, `Send to ${AREAS[area].name}`));
+    box.setAttribute('aria-label', `Send a patrol to ${AREA_NAME[area]}`);
+    box.append(banner(area, spot.danger, `Send to ${AREA_NAME[area]}`));
     // Two columns: who can go, then the team's risk and the buttons beside it.
     const main = el('div', 'map-pick-main');
     const side = el('div', 'map-pick-side');
@@ -342,7 +352,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       rating.append(el('span', 'map-risk-line', 'Pick a team to see its risk.'));
     } else {
       const line = el('p', 'map-risk-line');
-      line.append(el('span', '', 'Team rating'), el('b', 'map-rating', DANGERS[risk.rating].name));
+      line.append(el('span', '', 'Team rating'), el('b', 'map-rating', DANGER_NAME[risk.rating]));
       // The card's own drops, at this team's odds: each member rolls once.
       const ratio = teamRatio(teamPower(team), spot.danger, bestHorde(game));
       const odds = el('p', 'map-risk-odds');
@@ -369,7 +379,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       );
       rating.append(line, power, odds, chosen);
     }
-    const why = can ? sendRefusal(game, area, ids) : MAP_WAIT;
+    const why = can ? lockText(sendRefusal(game, area, ids)) : MAP_WAIT;
     const send = el(
       'button',
       'hud-button btn-primary map-go',
@@ -381,10 +391,10 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     send.addEventListener('click', () => {
       const r = opts.onSend(area, ids);
       if (!r.ok) {
-        say(r.reason, true);
+        say(refusedText(r), true);
         return;
       }
-      say(`Patrol sent to ${AREAS[area].name}`);
+      say(`Patrol sent to ${AREA_NAME[area]}`);
       go({ kind: 'list' }, true);
       pane.querySelector<HTMLElement>(`.map-area[data-area="${area}"] .map-time`)?.focus?.();
     });
@@ -397,7 +407,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       ? MAP_WAIT
       : fit.length === 0
         ? MAP_NOBODY_FREE
-        : sendRefusal(game, area, fit);
+        : lockText(sendRefusal(game, area, fit));
     const best = el('button', 'map-back map-best', 'Best fit');
     best.type = 'button';
     best.disabled = fitWhy !== null;
@@ -437,7 +447,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     if (!r) return list(game, opts.state().now, can);
     const box = el('section', 'map-report');
     box.setAttribute('aria-label', 'Patrol report');
-    box.append(banner(r.area, r.danger, `Back from ${AREAS[r.area].name}`, DANGERS[r.danger].name));
+    box.append(banner(r.area, r.danger, `Back from ${AREA_NAME[r.area]}`, DANGER_NAME[r.danger]));
     // Two columns: who went and how they came back, then what they found.
     const main = el('div', 'map-pick-main');
     const side = el('div', 'map-pick-side');
@@ -475,7 +485,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
       found.append(li);
     }
     for (const b of r.blueprints) {
-      item(`${WEAPONS[b.base].name} blueprint${b.kept ? '' : ' (at the cap: lost)'}`);
+      item(`${WEAPON_NAME[b.base]} blueprint${b.kept ? '' : ' (at the cap: lost)'}`);
     }
     if (r.scrap > 0) item(`Scrap +${r.scrap.toLocaleString('en-US')}`);
     if (r.medicine > 0) item(`Medicine +${r.medicine}`);
@@ -510,10 +520,10 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     ok.addEventListener('click', () => {
       const t = opts.onTake(area);
       if (!t.ok) {
-        say(t.reason, true);
+        say(refusedText(t), true);
         return;
       }
-      say(`Report taken: ${AREAS[area].name}`);
+      say(`Report taken: ${AREA_NAME[area]}`);
       // Another report waiting comes next.
       const { game: g, now } = opts.state();
       const next = backPatrols(g, now)[0];
@@ -540,7 +550,7 @@ export function createMapView(opts: MapOptions, win: CampWindow, button: HTMLEle
     // Reroll shows on the map only, between hordes; greyed (with its reason) when it can't be bought.
     reroll.hidden = view.kind !== 'list' || !canSend;
     const cost = rerollCost(game);
-    const why = rerollRefusal(game);
+    const why = lockText(rerollRefusal(game));
     reroll.textContent = rerollLabel(cost);
     reroll.setAttribute('aria-label', rerollAria(cost));
     reroll.disabled = why !== null;

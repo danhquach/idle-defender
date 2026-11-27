@@ -13,6 +13,7 @@ import {
 } from './data.ts';
 import type { GameState } from './game.ts';
 import type { GameResult } from './research.ts';
+import type { Refusal } from './refusal.ts';
 
 /** Each perk's level: 0 = not owned, 1 … `PERK_LEVEL.top`. */
 export type PerkLevels = Record<PerkId, number>;
@@ -41,18 +42,18 @@ export const levelScale = (level: number): number => 1 + PERK_LEVEL.step * (leve
 export function perkLock(
   game: Pick<GameState, 'perks' | 'perkLevels' | 'research'>,
   id: PerkId,
-): string | null {
+): Refusal | null {
   if (!Object.hasOwn(PERKS, id)) throw new RangeError(`perks: unknown perk ${String(id)}`);
-  if (game.perks.includes(id)) return 'Already equipped';
-  if (game.perkLevels[id] < 1) return 'Not researched';
-  if (game.perks.length >= perkSlots(game)) return 'All perk slots are full';
+  if (game.perks.includes(id)) return { ok: false, code: 'perk-equipped' };
+  if (game.perkLevels[id] < 1) return { ok: false, code: 'perk-unresearched' };
+  if (game.perks.length >= perkSlots(game)) return { ok: false, code: 'perk-slots-full' };
   return null;
 }
 
 /** Equips `id` in the next free slot. */
 export function equipPerk(game: GameState, id: PerkId): GameResult {
   const lock = perkLock(game, id);
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   const g = structuredClone(game);
   g.perks.push(id);
   return { ok: true, game: g };
@@ -61,7 +62,7 @@ export function equipPerk(game: GameState, id: PerkId): GameResult {
 /** Takes `id` out of its slot. */
 export function unequipPerk(game: GameState, id: PerkId): GameResult {
   if (!Object.hasOwn(PERKS, id)) throw new RangeError(`perks: unknown perk ${String(id)}`);
-  if (!game.perks.includes(id)) return { ok: false, reason: 'Not equipped' };
+  if (!game.perks.includes(id)) return { ok: false, code: 'perk-not-equipped' };
   const g = structuredClone(game);
   g.perks = g.perks.filter((p) => p !== id);
   return { ok: true, game: g };

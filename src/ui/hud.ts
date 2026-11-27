@@ -4,15 +4,11 @@
 // reroll, and a short toast (refused moves).
 // Text reaches the page only through textContent.
 import {
-  affixLines,
   gunLevel,
   gunPower,
   gunSalvage,
   gunStep,
-  heldName,
   isOwned,
-  levelName,
-  roleLine,
   type Held,
   type OwnedWeapon,
 } from '../core/armoury.ts';
@@ -32,17 +28,7 @@ import {
   type Room,
   type Survivor,
 } from '../core/camp.ts';
-import {
-  AMMO_CARDS,
-  bansLeft,
-  effectAt,
-  pitch,
-  rerollsLeft,
-  synergyOf,
-  UPGRADE_IDS,
-  UPGRADES,
-  type CardPitch,
-} from '../core/cards.ts';
+import { AMMO_CARDS, bansLeft, rerollsLeft, UPGRADE_IDS, UPGRADES } from '../core/cards.ts';
 import {
   BANK_CAP,
   BOSS_SKILL,
@@ -52,7 +38,6 @@ import {
   CARD,
   HORROR,
   CAMP_PICK_RANKS,
-  CAMP_PICKS,
   FALL_WARNING,
   FINALE_HORDE,
   GAS_PER_WIN,
@@ -60,10 +45,7 @@ import {
   HORDE_ONLY,
   MAX_COUNT,
   MATERIALS,
-  PERKS,
-  PROFESSIONS,
   RADIO_HORDES,
-  RARITIES,
   SHOP,
   SHOP_ITEMS,
   SKILL_IDS,
@@ -85,7 +67,6 @@ import {
   type SkillId,
   type Stock,
   type WeaponId,
-  WEAPONS,
 } from '../core/data.ts';
 import {
   hordeBossReward,
@@ -127,7 +108,6 @@ import {
   paramedicPoints,
   atCamp,
   dropGuns,
-  restLabel,
   salvageGun,
   salvageOf,
   nextSquadSlotCost,
@@ -149,7 +129,6 @@ import {
   advance,
   beatenIn,
   effHorde,
-  hordeName,
   localHorde,
   localOf,
   MODE_IDS,
@@ -158,7 +137,6 @@ import {
   MODES,
   modeOf,
   modeUnlocked,
-  unlockHint,
   type Mode,
   type ModeProgress,
 } from '../core/modes.ts';
@@ -166,6 +144,36 @@ import { advanceResearch } from '../core/research.ts';
 import { replacePosts } from '../core/replace.ts';
 import { buffLeft, isBuff, shopLock } from '../core/shop.ts';
 import { repairsLock, repairsState, skillLeft, skillLock } from '../core/skills.ts';
+import type { Refusal } from '../core/refusal.ts';
+import {
+  lockText,
+  type Refused,
+  affixLines,
+  heldName,
+  levelName,
+  roleLine,
+  restLabel,
+  hordeName,
+  unlockHint,
+  effectAt,
+  type CardPitch,
+  cardPitch,
+  synergyText,
+  CARD_NAME,
+  CARD_TEXT,
+  PERK_NAME,
+  PROFESSION_NAME,
+  RARITY_NAME,
+  SHOP_NAME,
+  ACTIVE_SKILL_NAME,
+  THEME_NAME,
+  THEME_TIP,
+  WEAPON_NAME,
+  MODE_NAME,
+  traitName,
+  CAMP_PICK_NAME,
+  CAMP_PICK_TEXT,
+} from './text/index.ts';
 import {
   hordeKindHp,
   injuryBand,
@@ -245,7 +253,7 @@ export const postName = (p: Pick<Post, 'kind' | 'column' | 'row' | 'spot'>): str
  * plain survivor (ID-066) is their name alone.
  */
 export const defenderLabel = (d: Pick<DefenderSpec, 'name' | 'loadout' | 'plain'>): string =>
-  d.plain ? d.name : `${d.name} — ${PROFESSIONS[professionOf(d.loadout)].name}`;
+  d.plain ? d.name : `${d.name} — ${PROFESSION_NAME[professionOf(d.loadout)]}`;
 
 const capital = (w: string): string => w.charAt(0).toUpperCase() + w.slice(1);
 
@@ -277,14 +285,14 @@ export function cardText(
     };
   }
   const u = UPGRADES[card.id];
-  const synergy = synergyOf(state, card.id);
-  const p = pitch(state, card.id);
+  const synergy = synergyText(state, card.id);
+  const p = cardPitch(state, card.id);
   const e = p.effect;
   const body = e ? `${e.pre}${e.from === null ? '' : `${e.from} → `}${e.to}${e.post}` : p.text;
   const kind = `${capital(u.rarity)} ${u.category}`;
   const said = (s: string): string => s.replaceAll('→', 'to').replaceAll('×', 'times ');
   const spoken = [
-    u.name,
+    CARD_NAME[card.id],
     p.tagSpoken,
     said(body),
     kind,
@@ -292,7 +300,7 @@ export function cardText(
     ...(synergy ? [`Synergy: ${synergy}`] : []),
   ].join('. ');
   return {
-    title: u.name,
+    title: CARD_NAME[card.id],
     body,
     kind,
     ...(synergy ? { synergy: `Synergy — ${synergy}` } : {}),
@@ -374,7 +382,7 @@ export function heldCards(
       u.levels === 1 ? 'Unique' : u.levels === null ? `×${n}` : `Lv ${n}${max ? ' · Max' : ''}`;
     const badge = u.levels === 1 ? '' : max ? 'Max' : level;
     const e = effectAt(id, n);
-    const effect = e ? `${e.pre}${e.value}${e.post}` : u.text;
+    const effect = e ? `${e.pre}${e.value}${e.post}` : CARD_TEXT[id];
     const kind = `${capital(u.rarity)} ${u.category}`;
     const spokenLevel =
       u.levels === 1
@@ -406,10 +414,10 @@ export function heldCards(
           : rush
             ? `${rush.secs}s`
             : badge,
-      title: `${u.name} · ${level}`,
+      title: `${CARD_NAME[id]} · ${level}`,
       effect,
       kind,
-      spoken: `${u.name}, ${spokenLevel}. ${effect.replaceAll('×', 'times ')}. ${cost ? `${cost.replace('−', 'minus ')}. ` : ''}${live ? `${live.text}. ` : ''}${kind}`,
+      spoken: `${CARD_NAME[id]}, ${spokenLevel}. ${effect.replaceAll('×', 'times ')}. ${cost ? `${cost.replace('−', 'minus ')}. ` : ''}${live ? `${live.text}. ` : ''}${kind}`,
       ...(cost ? { cost } : {}),
       ...(live ? { live } : {}),
     };
@@ -431,7 +439,7 @@ export function statusText(s: HordeState): string {
     bankText(s.energy, s.bankCap),
     // Scavenger's Eye pays fractions of cash; only whole ones are shown.
     `Cash ${Math.floor(s.cash)}`,
-    ...(s.perks.length ? [`Perks: ${s.perks.map((p) => PERKS[p].name).join(', ')}`] : []),
+    ...(s.perks.length ? [`Perks: ${s.perks.map((p) => PERK_NAME[p]).join(', ')}`] : []),
   ].join(' · ');
 }
 
@@ -510,8 +518,8 @@ export function xpBar(s: Pick<HordeState, 'level' | 'xp'>): {
  * disabled, so no button changes shape mid-fight.
  */
 const variantOf = (
-  lock: string | null,
-  withCash: () => string | null,
+  lock: Refusal | null,
+  withCash: () => Refusal | null,
   gated = false,
 ): ButtonVariant =>
   gated ? 'locked' : lock !== null && withCash() === null ? 'unaffordable' : 'secondary';
@@ -535,11 +543,11 @@ export function shopButtons(s: HordeState): (HudButton & { item: ShopItem })[] {
     const left = isBuff(item) ? buffLeft(s, item) : 0;
     return {
       item,
-      label: left > 0 ? `${SHOP[item].name} ${Math.ceil(left)}s` : SHOP[item].name,
+      label: left > 0 ? `${SHOP_NAME[item]} ${Math.ceil(left)}s` : SHOP_NAME[item],
       cost: left > 0 ? '' : String(SHOP[item].cost),
       variant: variantOf(lock, () => shopLock({ ...s, cash: Infinity }, item)),
       disabled: lock !== null,
-      reason: lock ?? '',
+      reason: lockText(lock) ?? '',
     };
   });
 }
@@ -570,7 +578,8 @@ export function skillButtons(
   return SKILL_IDS.map((skill) => {
     const lock = skillLock(s, skill);
     const left = skillLeft(s, skill);
-    const { name, cost } = SKILLS[skill];
+    const { cost } = SKILLS[skill];
+    const name = ACTIVE_SKILL_NAME[skill];
     // The horde-only build (ID-100): only the picked skills show, free, each with its key.
     const free = s.freeSkills !== undefined;
     const slot = skillSlots(s).indexOf(skill);
@@ -589,7 +598,7 @@ export function skillButtons(
       // How to aim and how to turn Auto on (ID-232): the tap, the hold and the E key.
       // The full game has no skill key: a click aims, a hold or E sets Auto.
       reason:
-        lock ??
+        lockText(lock) ??
         (key
           ? `${key}: aim · Hold ${key} or press ${AUTO_KEY}: Auto`
           : `Click: aim · Hold or press ${AUTO_KEY}: Auto`),
@@ -626,7 +635,7 @@ export function repairsButton(s: HordeState): HudButton & { hidden: boolean; spe
     cost: '',
     variant: 'secondary',
     disabled: lock !== null,
-    reason: lock ?? reason,
+    reason: lockText(lock) ?? reason,
     hidden: state === 'none',
     spent,
   };
@@ -710,14 +719,14 @@ export interface SkillPick {
 export function skillPicker(pick: readonly SkillId[]): SkillPick {
   const full = pick.length >= SQUAD_SKILLS.max;
   // With one skill to pick (Airstrike, ID-139) it is always alone: no "up to 2" or "alone".
-  const only = SKILL_IDS.length === 1 ? SKILLS[SKILL_IDS[0]!].name : null;
+  const only = SKILL_IDS.length === 1 ? ACTIVE_SKILL_NAME[SKILL_IDS[0]!] : null;
   return {
     options: SKILL_IDS.map((skill) => {
       const picked = pick.includes(skill);
       const blurb = SKILL_BLURB[skill];
       return {
         skill,
-        name: SKILLS[skill].name,
+        name: ACTIVE_SKILL_NAME[skill],
         picked,
         full: full && !picked,
         detail: blurb.does,
@@ -754,7 +763,7 @@ export function skillHelp(
   const keys = SKILL_KEYS.slice(0, Math.min(max, ids.length));
   const one = ids.length === 1;
   const line = one
-    ? `Pick the ${SKILLS[ids[0]!].name} before each horde, then tap or click it when it is ready.`
+    ? `Pick the ${ACTIVE_SKILL_NAME[ids[0]!]} before each horde, then tap or click it when it is ready.`
     : keys.length === 1
       ? 'Pick 1 skill before each horde, then tap or click it when it is ready.'
       : `Pick up to ${keys.length} before each horde, then tap or click them when they are ready.`;
@@ -985,8 +994,8 @@ export interface ThemeChoice {
 /** The theme `id` as the picker shows it. */
 const themeChoice = (id: ThemeId): ThemeChoice => ({
   id,
-  name: THEMES[id].name,
-  tip: THEMES[id].tip,
+  name: THEME_NAME[id],
+  tip: THEME_TIP[id],
   kind: THEMES[id].kind,
 });
 
@@ -1002,13 +1011,13 @@ export function themeWarning(
   const local = lost?.local ?? localHorde(game);
   const id = lost ? themeOf(game, local, lost.mode) : themeOf(game, local);
   return id
-    ? `${hordeName(lost?.mode ?? modeOf(game), local)} ${lost ? 'again' : 'next'}: ${THEMES[id].name} — a themed horde`
+    ? `${hordeName(lost?.mode ?? modeOf(game), local)} ${lost ? 'again' : 'next'}: ${THEME_NAME[id]} — a themed horde`
     : null;
 }
 
 /** The result chip for a theme's first clear (ID-238): "Iron Wall beaten · reward gun" or "· +10 Genes". */
 export const themeBeatenText = (id: ThemeId, reward: 'gun' | 'genes'): string =>
-  `${THEMES[id].name} beaten · ${reward === 'gun' ? 'reward gun' : `+${THEME.genes} Genes`}`;
+  `${THEME_NAME[id]} beaten · ${reward === 'gun' ? 'reward gun' : `+${THEME.genes} Genes`}`;
 
 /** One enemy kind a higher-mode horde brings, with its trait (ID-237): "Hulking · Resists Light · Weak to Heavy". */
 export interface TraitChip {
@@ -1067,10 +1076,10 @@ export function modeChoices(game: ModeProgress): ModeChoice[] | null {
     const best = beatenIn(game, mode);
     return {
       mode,
-      label: MODES[mode].name,
+      label: MODE_NAME[mode],
       open,
       current: mode === modeOf(game),
-      title: open ? `${MODES[mode].name} · best ${best}` : unlockHint(mode),
+      title: open ? `${MODE_NAME[mode]} · best ${best}` : unlockHint(mode),
       hint: open ? null : unlockHint(mode),
     };
   });
@@ -1118,7 +1127,7 @@ function traitChips(hp: readonly (readonly [EnemyKind, number])[]): TraitChip[] 
           {
             kind,
             name: ENEMY_NAME[kind],
-            trait: t.name,
+            trait: traitName(kind),
             text: traitText(kind)!,
             resists: t.resists,
             weak: t.weak,
@@ -1186,7 +1195,7 @@ export function hordePicker(
       label: [
         `${hordeName(mode, n)}${isNew ? ' (new)' : ''}`,
         ...(boss ? ['Boss'] : []),
-        ...(theme ? [THEMES[theme].name] : []),
+        ...(theme ? [THEME_NAME[theme]] : []),
         ...(n === farm ? ['best to farm'] : []),
       ].join(' · '),
       button:
@@ -1210,7 +1219,7 @@ export function hordePicker(
         chips: [
           ...(goal ? [goal.chip] : []),
           ...(boss ? [{ text: 'Boss horde', tone: 'boss' as const }] : []),
-          ...(theme ? [{ text: THEMES[theme].name, tone: 'boss' as const }] : []),
+          ...(theme ? [{ text: THEME_NAME[theme], tone: 'boss' as const }] : []),
           ...(isNew ? [] : [{ text: 'Replay', tone: 'ok' as const }]),
           { text: `${waveCount(effHorde(mode, n))} waves`, tone: 'ok' as const },
           { text: `Squad ${squadOf(game).length}/${squadCap(game)}`, tone: 'ok' as const },
@@ -1425,8 +1434,7 @@ function campLine(game: GameState, s: HordeState): string {
 
 /** A camp-level pick as "Scavenging 2/5: +5% horde cash per kill", its rank after taking it. */
 export function campPickText(camp: Pick<Camp, 'picks'>, id: CampPickId): string {
-  const { name, text } = CAMP_PICKS[id];
-  return `${name} ${camp.picks[id] + 1}/${CAMP_PICK_RANKS}: ${text}`;
+  return `${CAMP_PICK_NAME[id]} ${camp.picks[id] + 1}/${CAMP_PICK_RANKS}: ${CAMP_PICK_TEXT[id]}`;
 }
 
 /** The repair bill for the damage that carries over, against the stock after the payout. */
@@ -1457,14 +1465,14 @@ function bossLines(game: GameState, s: HordeState, now: number): string[] {
   const reward = hordeBossReward(advanceResearch(game, now), s);
   if (!reward) return [];
   return 'perk' in reward
-    ? [`Boss reward: ${PERKS[reward.perk].name} perk unlocked`]
+    ? [`Boss reward: ${PERK_NAME[reward.perk]} perk unlocked`]
     : [`Boss reward: ${reward.genes} Genes (every perk owned)`];
 }
 
 /** A theme's first clear in the full game (ID-238): "Iron Wall beaten: 10 Genes", paid once per theme. */
 function themeLines(game: GameState, s: HordeState): string[] {
   if (s.outcome !== 'won' || !s.theme || themeCleared(game, s.theme)) return [];
-  return [`${THEMES[s.theme].name} beaten: ${THEME.genes} Genes`];
+  return [`${THEME_NAME[s.theme]} beaten: ${THEME.genes} Genes`];
 }
 
 /** A win's weapon drop (design §6 Gear): its name, then one line per affix; none without a drop. */
@@ -1627,7 +1635,7 @@ export function squadDropLines(
 
 /** A dropped blueprint's line (ID-209): "Blueprint: LMG · craft it in the Craft tab". */
 export const blueprintLine = (base: WeaponId): string =>
-  `Blueprint: ${WEAPONS[base].name} · craft it in the Craft tab`;
+  `Blueprint: ${WEAPON_NAME[base]} · craft it in the Craft tab`;
 
 /** A small labelled pill in the debrief's header: its text and colour. */
 export interface Chip {
@@ -1779,14 +1787,14 @@ export function dropTile(
       return {
         ...(w.uid.startsWith('t') ? { tag: DROP_KIND.theme } : {}),
         rarity: w.rarity,
-        short: `Lv ${gunLevel(w)} ${WEAPONS[w.base].name}`,
+        short: `Lv ${gunLevel(w)} ${WEAPON_NAME[w.base]}`,
         power: gunDpsText(gunPower(w)),
         icon: GUN_ICON[w.base as GunId],
         lost: thrown.includes(w),
         cls: classOf(w),
         classLine: line,
         lines: [
-          `${gunTag(drop, w)} · ${RARITIES[w.rarity].name}`,
+          `${gunTag(drop, w)} · ${RARITY_NAME[w.rarity]}`,
           roleLine(w.base) ?? '',
           line,
           affixLines(w).join(', '),
@@ -2029,13 +2037,13 @@ export function bulkSalvageOffer(ws: readonly OwnedWeapon[], scrap?: number): Bu
 export function bulkSalvageQuestion(ws: readonly OwnedWeapon[], amount: number): string | null {
   const rare = SALVAGE_ASKS.flatMap((r) => {
     const n = ws.filter((w) => w.rarity === r).length;
-    return n > 0 ? [`${n} ${RARITIES[r].name}`] : [];
+    return n > 0 ? [`${n} ${RARITY_NAME[r]}`] : [];
   });
   if (rare.length === 0) return null;
   // All of one rarity: "Salvage 12 Prototype guns", not "(12 Prototype)" again.
   const one = SALVAGE_ASKS.find((r) => ws.every((w) => w.rarity === r));
   if (one) {
-    return `Salvage ${ws.length} ${RARITIES[one].name} ${ws.length === 1 ? 'gun' : 'guns'} for ${thousands(amount)} Scrap? The guns are gone for good.`;
+    return `Salvage ${ws.length} ${RARITY_NAME[one]} ${ws.length === 1 ? 'gun' : 'guns'} for ${thousands(amount)} Scrap? The guns are gone for good.`;
   }
   return `Salvage ${guns(ws.length)} (${rare.join(', ')}) for ${thousands(amount)} Scrap? The guns are gone for good.`;
 }
@@ -2052,9 +2060,7 @@ export const bulkSalvageText = (n: number, scrap: number, now: number): string =
 export function salvageGuns(
   game: GameState,
   uids: readonly string[],
-):
-  | { ok: true; game: GameState; weapons: OwnedWeapon[]; scrap: number }
-  | { ok: false; reason: string } {
+): { ok: true; game: GameState; weapons: OwnedWeapon[]; scrap: number } | Refused {
   if (uids.length === 0) return { ok: false, reason: 'No guns ticked' };
   if (new Set(uids).size !== uids.length) return { ok: false, reason: 'A gun is ticked twice' };
   let at = game;
@@ -2274,9 +2280,9 @@ export function goalChip(game: ModeProgress): { chip: Chip; note: string | null 
   if (mode !== 'normal') {
     const best = highestBeaten(game);
     // Before the mode's first win there is no best yet: the chip names the mode alone.
-    if (best === 0) return { chip: { text: MODES[mode].name, tone: 'warn' }, note: null };
+    if (best === 0) return { chip: { text: MODE_NAME[mode], tone: 'warn' }, note: null };
     return {
-      chip: { text: `${MODES[mode].name} · best ${best}`, tone: 'warn' },
+      chip: { text: `${MODE_NAME[mode]} · best ${best}`, tone: 'warn' },
       note: `Hold ${hordeName(mode, best + 1)} for a new best.`,
     };
   }
@@ -2302,12 +2308,12 @@ export function nextGoalLine(game: ModeProgress): string | null {
   if (n === undefined) {
     const next = MODE_IDS.find((m) => modeBefore(m) === mode);
     if (next === undefined || modeUnlocked(game, next)) return null;
-    return `Next: hold ${hordeName(mode, MODE_UNLOCK_HORDE)} · unlocks ${MODES[next].name}`;
+    return `Next: hold ${hordeName(mode, MODE_UNLOCK_HORDE)} · unlocks ${MODE_NAME[next]}`;
   }
   if (n === FINALE_HORDE) return `Next: ${hordeName(mode, n)} · call the evacuation`;
   const card = BOSS_UNLOCKS[n];
   const part = `radio part ${RADIO_HORDES.indexOf(n) + 1}/${RADIO_HORDES.length}`;
-  return `Next: ${hordeName(mode, n)} boss · ${part}${card ? ` · new card ${UPGRADES[card].name}` : ''}`;
+  return `Next: ${hordeName(mode, n)} boss · ${part}${card ? ` · new card ${CARD_NAME[card]}` : ''}`;
 }
 
 /**
@@ -2371,7 +2377,7 @@ export function bossRewardNote(reward: NonNullable<ReturnType<typeof bossReward>
   if (reward.finale) {
     return 'You held the camp and the evacuation is called. Play on in Endless for a best horde.';
   }
-  const unlock = reward.unlock ? ` New card unlocked: ${UPGRADES[reward.unlock].name}.` : '';
+  const unlock = reward.unlock ? ` New card unlocked: ${CARD_NAME[reward.unlock]}.` : '';
   return `Boss horde beaten.${unlock}`;
 }
 
@@ -2655,7 +2661,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
           ...(reward?.unlock
             ? [
                 {
-                  text: `New card: ${UPGRADES[reward.unlock].name}`,
+                  text: `New card: ${CARD_NAME[reward.unlock]}`,
                   tone: 'warn' as const,
                   details: true as const,
                 },
@@ -3298,7 +3304,10 @@ export function createHud(
   // Each button starts in its tallest look (name · cost, locked with its note), so the
   // bar's measured height (`bottomSpace`) covers any fight's before the first update,
   // which redraws every button. The HUD stays hidden until then.
-  const rest = [...SHOP_ITEMS.map((i) => SHOP[i]), ...SKILL_IDS.map((k) => SKILLS[k])];
+  const rest = [
+    ...SHOP_ITEMS.map((i) => ({ name: SHOP_NAME[i], cost: SHOP[i].cost })),
+    ...SKILL_IDS.map((k) => ({ name: ACTIVE_SKILL_NAME[k], cost: SKILLS[k].cost })),
+  ];
   [...shopItems, ...skillItems].forEach((item, i) => {
     item.label.textContent = `${rest[i]!.name} · `;
     item.cost.textContent = String(rest[i]!.cost);
@@ -4105,7 +4114,7 @@ export function createHud(
       button.append(
         el('span', 'hud-card-title', `Survivor wants to join: ${survivorText(offer.survivor)}`),
       );
-      const lock = roomLock(camp.room);
+      const lock = lockText(roomLock(camp.room));
       if (lock !== null) {
         button.disabled = true;
         button.append(el('span', 'hud-card-body', lock));
@@ -4318,7 +4327,7 @@ export function createHud(
         const num = String(localOf(state));
         if (badgeNum.textContent !== num) badgeNum.textContent = num;
         // The mode names the horde (ID-267): "Nightmare" over the number.
-        const modeName = MODES[modeOf(state)].name;
+        const modeName = MODE_NAME[modeOf(state)];
         if (badgeLabel.textContent !== modeName) badgeLabel.textContent = modeName;
         badge.classList.toggle('hud-badge-boss-on', bossHorde(state));
         badge.setAttribute(
@@ -4327,7 +4336,7 @@ export function createHud(
         );
         // A swarm wave reads "Swarm" in red, in words too so it's never colour alone (ID-121).
         const swarmOn = swarmMarker(state);
-        const wave = `${state.theme ? `${THEMES[state.theme].name} · ` : ''}${swarmOn ? 'Swarm · ' : ''}Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
+        const wave = `${state.theme ? `${THEME_NAME[state.theme]} · ` : ''}${swarmOn ? 'Swarm · ' : ''}Wave ${Math.min(state.wave, state.waveCount)}/${state.waveCount} · ${thousands(enemiesLeft(state))} left`;
         if (waveLine.textContent !== wave) waveLine.textContent = wave;
         waveLine.classList.toggle('hud-corner-wave-swarm', swarmOn);
         const swaps = swapsText(state);

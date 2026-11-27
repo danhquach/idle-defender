@@ -5,7 +5,6 @@
 // loot focus, orders and a big-horde risk; a patrol may take the car (ID-030). Text only
 // via textContent; colours are constants.
 import {
-  BATTERIES,
   buildingsOf,
   CAR,
   FOCUS_IDS,
@@ -15,9 +14,6 @@ import {
   MAP_SPOTS,
   ORDERS,
   PATROL,
-  placeName,
-  RARITIES,
-  WEAPONS,
   type Focus,
   type LocationId,
   type LootEntry,
@@ -50,6 +46,14 @@ import {
 import { clockTime, defenderLabel, el, stockText } from './hud.ts';
 import { restLeft } from './roster.ts';
 import { ART_URLS, MAP_PICTURE, placeArt } from './sprites.ts';
+import {
+  placeName,
+  BATTERY_NAME,
+  LOCATION_NAME,
+  ORDER_NAME,
+  RARITY_NAME,
+  WEAPON_NAME,
+} from './text/index.ts';
 
 export const RISK_NAME: Readonly<Record<RiskRating, string>> = {
   safe: 'Safe',
@@ -81,9 +85,9 @@ export function lootName(e: LootEntry): string {
     case 'gas':
       return 'Gas';
     case 'battery':
-      return `${BATTERIES[e.id].name} batteries`;
+      return `${BATTERY_NAME[e.id]} batteries`;
     case 'weapon':
-      return e.bases.map((b) => WEAPONS[b].name).join(' or ');
+      return e.bases.map((b) => WEAPON_NAME[b]).join(' or ');
     case 'anything':
       return 'Anything';
   }
@@ -158,7 +162,7 @@ const HORDE_RESULT = {
 function orderLine(order: Order, applies: boolean): string {
   const o = ORDERS[order];
   const share = `keeps ${percent(o.keep)} of the loot, deaths and wipe x${o.risk}`;
-  return `When things go wrong: ${o.name} ${share}${applies ? '' : ' (only on a Dangerous or Deadly trip)'}`;
+  return `When things go wrong: ${ORDER_NAME[order]} ${share}${applies ? '' : ' (only on a Dangerous or Deadly trip)'}`;
 }
 
 /** The ticks and orders a trip is rated with; all of a place's buildings and Balanced by default. */
@@ -265,7 +269,7 @@ export function locationLines(
   const loot = isPlaza(place)
     ? buildings.map((b) => {
         const l = lootLines(b);
-        return `${LOCATIONS[b].name}: mostly ${l.mostly}; sometimes ${l.sometimes}`;
+        return `${LOCATION_NAME[b]}: mostly ${l.mostly}; sometimes ${l.sometimes}`;
       })
     : [
         `Mostly: ${lootLines(place as LocationId).mostly}`,
@@ -314,12 +318,12 @@ export function carLabel(
 }
 
 const weaponText = (w: ReportWeapon): string =>
-  `${RARITIES[w.rarity].name} ${WEAPONS[w.base].name}${w.kept ? '' : ' (salvaged)'}`;
+  `${RARITY_NAME[w.rarity]} ${WEAPON_NAME[w.base]}${w.kept ? '' : ' (salvaged)'}`;
 
 const batteryList = (b: PatrolReport['batteries']): string[] =>
   (Object.keys(b) as (keyof typeof b)[])
     .filter((k) => b[k] > 0)
-    .map((k) => `${b[k]} ${BATTERIES[k].name.toLowerCase()} batter${b[k] === 1 ? 'y' : 'ies'}`);
+    .map((k) => `${b[k]} ${BATTERY_NAME[k].toLowerCase()} batter${b[k] === 1 ? 'y' : 'ies'}`);
 
 /** A report's heading and lines, newest first in the list. */
 export function reportLines(r: PatrolReport): { title: string; lines: string[] } {
@@ -327,7 +331,7 @@ export function reportLines(r: PatrolReport): { title: string; lines: string[] }
   const lines = [`Sent: ${r.names.join(', ')}`];
   const plaza = isPlaza(r.location);
   if (plaza) {
-    const names = r.buildings.slice(0, r.searched).map((b) => LOCATIONS[b].name);
+    const names = r.buildings.slice(0, r.searched).map((b) => LOCATION_NAME[b]);
     lines.push(`Searched: ${names.length > 0 ? names.join(', ') : 'nothing'}`);
     if (r.bigHorde) {
       const [name, effect] = HORDE_RESULT[r.bigHorde];
@@ -336,7 +340,7 @@ export function reportLines(r: PatrolReport): { title: string; lines: string[] }
   }
   if (plaza || r.order !== 'balanced' || r.focus !== 'anything') {
     lines.push(
-      `Orders: ${ORDERS[r.order].name}${r.focus === 'anything' ? '' : `, favouring ${focusName(r.focus)}`}`,
+      `Orders: ${ORDER_NAME[r.order]}${r.focus === 'anything' ? '' : `, favouring ${focusName(r.focus)}`}`,
     );
   }
   if (r.wiped) return { title, lines: [...lines, 'The whole party was lost. Nothing came back.'] };

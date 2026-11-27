@@ -9,7 +9,6 @@ import {
   FIELD_EFFECTS,
   JOBS,
   PATCH_UP,
-  WEAPONS,
   type Job,
   type JobEffect,
   type JobId,
@@ -17,6 +16,7 @@ import {
 } from '../core/data.ts';
 import type { RosterDefender } from '../core/game.ts';
 import { fieldMaxHp, jobBonus, jobFits, levelBonus, levelOf } from '../core/stats.ts';
+import { WEAPON_NAME, JOB_NAME } from './text/index.ts';
 
 /** A profession's name where room is short (a Roster tab on a phone): 8 letters at most, measured to fit a 375 px phone. */
 export const JOB_SHORT: Readonly<Record<JobId, string>> = {
@@ -97,7 +97,7 @@ const EFFECT: Readonly<
 
 /** A fighting job's guns by name: "Sniper rifle, Carbine". */
 export const jobGuns = (job: JobId): string =>
-  ((JOBS[job] as Job).guns ?? []).map((g) => WEAPONS[g].name).join(', ');
+  ((JOBS[job] as Job).guns ?? []).map((g) => WEAPON_NAME[g]).join(', ');
 
 /**
  * What `job` gives at `level`, in words: "Hunter: +12.0% crit chance, +18.0% crit damage
@@ -115,10 +115,10 @@ export function jobLine(job: JobId, level: number): string {
     const list =
       names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
     const later = `from level 2, more ${list}${guns}`;
-    return `${j.name}: ${now.length > 0 ? `${now.join(', ')}; ${later}` : later}`;
+    return `${JOB_NAME[job]}: ${now.length > 0 ? `${now.join(', ')}; ${later}` : later}`;
   }
   const parts = effects.map((e) => EFFECT[e].value(jobBonus(level, job, e)));
-  return `${j.name}: ${parts.join(', ')}${guns}`;
+  return `${JOB_NAME[job]}: ${parts.join(', ')}${guns}`;
 }
 
 /** A survivor's profession as their Roster panel shows it. */
@@ -144,13 +144,13 @@ export function jobInfo(d: RosterDefender, held: Held, squad: readonly RosterDef
   const others = squad.filter((o) => o.id !== d.id && o.job === d.job);
   const twins = others.map((o) => o.name);
   return {
-    name: j.name,
+    name: JOB_NAME[d.job],
     line: jobLine(d.job, levelOf(d.xp).level),
     off: !jobFits(d.job, held),
     // Who else has it and whose counts, so the player knows whom to swap out.
     note:
       shared && twins.length > 0
-        ? `${SHARED_PART[d.job] ?? ''}${NO_STACK}: ${twins.join(', ')} ${twins.length > 1 ? `are also ${j.name}s` : `is also a ${j.name}`}.${whoseCounts(d, others)}`
+        ? `${SHARED_PART[d.job] ?? ''}${NO_STACK}: ${twins.join(', ')} ${twins.length > 1 ? `are also ${JOB_NAME[d.job]}s` : `is also a ${JOB_NAME[d.job]}`}.${whoseCounts(d, others)}`
         : null,
   };
 }
@@ -257,7 +257,7 @@ export function statRows(
     (x) => `+${Math.round(x)}`,
     (x) => `${Math.round(x)}`,
   );
-  if (feed) maxHp.field = `+${feed.hp} ${JOBS.chef.name} (${feed.name}) on the field`;
+  if (feed) maxHp.field = `+${feed.hp} ${JOB_NAME.chef} (${feed.name}) on the field`;
   return [
     maxHp,
     row(

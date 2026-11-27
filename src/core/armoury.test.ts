@@ -3,8 +3,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   affixCount,
-  heldLabel,
-  heldName,
   dropChance,
   rollDrop,
   rollWeapon,
@@ -64,7 +62,7 @@ describe('rarity', () => {
       expect(statsOf(owned('pistol', r)).damage).toBeCloseTo(WEAPONS.pistol.damage * power[r]);
       expect(statsOf(owned('knife', r)).damage).toBeCloseTo(WEAPONS.knife.damage * power[r]);
     }
-    expect(statsOf(owned('pistol'))).toEqual({ ...WEAPONS.pistol, name: 'Common Pistol' });
+    expect(statsOf(owned('pistol'))).toEqual(WEAPONS.pistol);
     expect(statsOf('pistol')).toBe(WEAPONS.pistol);
   });
 
@@ -165,16 +163,6 @@ describe('affixes in a fight', () => {
     const w = owned('pistol', 'military', one('damage', 12));
     expect(statsOf(w)).toBe(statsOf(w));
     expect(statsOf({ ...w })).toEqual(statsOf(w));
-  });
-
-  it('names: "Military Pistol (+12% damage)"; a free weapon is plain', () => {
-    const w = owned('pistol', 'prototype', [
-      { id: 'damage', value: 12 },
-      { id: 'reload', value: 10 },
-    ]);
-    expect(heldName(w)).toBe('Prototype Pistol');
-    expect(heldLabel(w)).toBe('Prototype Pistol (+12% damage, −10% reload time)');
-    expect(heldLabel('knife')).toBe('Knife');
   });
 });
 
@@ -323,18 +311,20 @@ describe('equipping owned weapons', () => {
 
   it('refuses one another defender carries, and says who has it', () => {
     const r = equip(withArmoury(), 'bob', gun(mil));
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const jack = r.game.roster[1]!.loadout;
     expect(equip(r.game, 'jack', { ...jack, primary: mil })).toEqual({
       ok: false,
-      reason: 'Bob carries the Military Pistol',
+      code: 'carries',
+      who: 'Bob',
+      held: mil,
     });
   });
 
   it('refuses one weapon in both slots', () => {
     expect(equip(withArmoury(), 'bob', { primary: mil, secondary: mil, item: null })).toEqual({
       ok: false,
-      reason: "One weapon can't fill two slots",
+      code: 'one-weapon-two-slots',
     });
   });
 
@@ -350,7 +340,7 @@ describe('equipping owned weapons', () => {
     const game = { ...withArmoury(), armoury: [knife] };
     expect(equip(game, 'bob', gun(knife))).toEqual({
       ok: false,
-      reason: 'The primary must be a gun',
+      code: 'primary-gun',
     });
     const r = equip(game, 'jack', { primary: 'pistol', secondary: knife, item: 'shield' });
     expect(r.ok && r.game.armoury).toEqual([]);
@@ -358,7 +348,7 @@ describe('equipping owned weapons', () => {
 
   it('a horde fights with the owned weapon it was started with', () => {
     const r = equip(withArmoury(), 'bob', gun(mil));
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const h = startHorde(r.game, 1, 'bob', 0, NOW);
     expect(h.defenders[0]!.loadout.primary).toEqual(mil);
   });

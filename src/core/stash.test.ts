@@ -10,7 +10,6 @@ import {
   rollUpgrade,
   rollWeapon,
   squadDropWeights,
-  heldName,
   isOwned,
   type Held,
   type OwnedWeapon,
@@ -325,7 +324,7 @@ describe('equip and swap (ID-067)', () => {
   it('a stash gun goes into their hands and out of the stash; they fight with it', () => {
     const g = squadGame(2, 3, [rifle, sniper]);
     const r = equipGun(g, 'recruit-2', 'h1');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster[1]!.loadout.primary).toEqual(rifle);
     expect(r.game.armoury).toEqual([sniper]);
     expect(squadSpec(r.game.roster[1]!).loadout.primary).toEqual(rifle);
@@ -335,9 +334,9 @@ describe('equip and swap (ID-067)', () => {
   it('a swap puts the gun they had back in the stash', () => {
     const g = squadGame(1, 3, [rifle, sniper]);
     const a = equipGun(g, 'recruit-1', 'h1');
-    if (!a.ok) throw new Error(a.reason);
+    if (!a.ok) throw new Error(a.code);
     const b = equipGun(a.game, 'recruit-1', 'h2');
-    if (!b.ok) throw new Error(b.reason);
+    if (!b.ok) throw new Error(b.code);
     expect(b.game.roster[0]!.loadout.primary).toEqual(sniper);
     expect(b.game.armoury).toEqual([rifle]);
   });
@@ -345,15 +344,16 @@ describe('equip and swap (ID-067)', () => {
   it('back to the pistol: the gun goes to the stash; refused into a full stash', () => {
     const g = squadGame(1, 3, [rifle]);
     const a = equipGun(g, 'recruit-1', 'h1');
-    if (!a.ok) throw new Error(a.reason);
+    if (!a.ok) throw new Error(a.code);
     const b = equipGun(a.game, 'recruit-1', 'pistol');
-    if (!b.ok) throw new Error(b.reason);
+    if (!b.ok) throw new Error(b.code);
     expect(b.game.roster[0]!.loadout.primary).toBe('pistol');
     expect(b.game.armoury).toEqual([rifle]);
     const full = { ...a.game, armoury: smgs(STASH_CAP) };
     expect(equipGun(full, 'recruit-1', 'pistol')).toEqual({
       ok: false,
-      reason: `The stash is full (${STASH_CAP}/${STASH_CAP})`,
+      code: 'stash-full',
+      cap: STASH_CAP,
     });
   });
 
@@ -361,14 +361,14 @@ describe('equip and swap (ID-067)', () => {
     const g = squadGame(1, 3, [rifle]);
     expect(equipGun(g, 'recruit-1', 'pistol')).toEqual({ ok: true, game: g });
     const a = equipGun(g, 'recruit-1', 'h1');
-    if (!a.ok) throw new Error(a.reason);
+    if (!a.ok) throw new Error(a.code);
     expect(equipGun(a.game, 'recruit-1', 'h1')).toEqual({ ok: true, game: a.game });
   });
 
   it('another survivor’s gun, an unknown uid or survivor, or a hostile key is refused', () => {
     const g = squadGame(2, 3, [rifle]);
     const a = equipGun(g, 'recruit-1', 'h1');
-    if (!a.ok) throw new Error(a.reason);
+    if (!a.ok) throw new Error(a.code);
     for (const choice of ['h1', 'h9', '', '__proto__', 'constructor', 'knife', 'toolkit']) {
       expect(equipGun(a.game, 'recruit-2', choice).ok).toBe(false);
     }
@@ -379,7 +379,7 @@ describe('equip and swap (ID-067)', () => {
   it('the role is the gun’s: the same survivor fights as the gun they hold', () => {
     const g = squadGame(1, 3, [rollWeapon(createRng(1), 'h1', 'shotgun', 'common')]);
     const r = equipGun(g, 'recruit-1', 'h1');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const s = startSquadHorde(r.game, 1, NOW);
     expect(s.defenders[0]!.loadout.primary).toMatchObject({ base: 'shotgun' });
   });
@@ -408,7 +408,7 @@ describe('best gun for everyone (ID-108)', () => {
   it('a better stash gun swaps with a held one, which goes to the stash', () => {
     const g0 = squadGame(2, 3, [weak, mid, top]);
     const a = equipGun(g0, 'recruit-1', 'a');
-    if (!a.ok) throw new Error(a.reason);
+    if (!a.ok) throw new Error(a.code);
     const r = bestGuns(a.game);
     // Both survivors end with the two strongest; the Rusty SMG is left in the stash.
     const holds = r.game.roster.map((d) => (d.loadout.primary as OwnedWeapon).uid).sort();
@@ -436,7 +436,7 @@ describe('best gun for everyone (ID-108)', () => {
     expect(bestGuns(squadGame(2, 3)).moves).toEqual([]);
     const g = squadGame(1, 3, [top]);
     const held = equipGun(g, 'recruit-1', 'c');
-    if (!held.ok) throw new Error(held.reason);
+    if (!held.ok) throw new Error(held.code);
     expect(gunPower(top)).toBeGreaterThan(gunPower(weak));
     expect(bestGuns(held.game).moves).toEqual([]);
   });
@@ -478,9 +478,7 @@ describe('best gun for everyone counts professions (ID-152)', () => {
     expect(gunPower(lmg)).toBeGreaterThan(gunPower(sniper));
     expect(dps(g, 'recruit-1', sniper)).toBeGreaterThan(dps(g, 'recruit-1', lmg));
     const r = bestGuns(g);
-    expect(r.moves.map((m) => [m.id, m.from, heldName(m.to)])).toEqual([
-      ['recruit-1', 'pistol', heldName(sniper)],
-    ]);
+    expect(r.moves.map((m) => [m.id, m.from, m.to])).toEqual([['recruit-1', 'pistol', sniper]]);
     expect(r.game.armoury).toEqual([lmg]);
   });
 
@@ -562,10 +560,10 @@ describe('best gun for everyone counts professions (ID-152)', () => {
     }
     const mechanics = bestGuns(p);
     const builders = bestGuns(g);
-    expect(mechanics.moves.map((m) => [m.id, m.from, heldName(m.to)])).toEqual([
-      ['recruit-1', 'pistol', heldName(stash[2]!)],
-      ['recruit-2', 'pistol', heldName(stash[1]!)],
-      ['recruit-3', 'pistol', heldName(stash[0]!)],
+    expect(mechanics.moves.map((m) => [m.id, m.from, m.to])).toEqual([
+      ['recruit-1', 'pistol', stash[2]!],
+      ['recruit-2', 'pistol', stash[1]!],
+      ['recruit-3', 'pistol', stash[0]!],
     ]);
     expect(builders.moves).toEqual(mechanics.moves);
   });
@@ -637,7 +635,7 @@ describe('best gun for everyone arms the bench too (ID-188)', () => {
     // The squad holds the Relic; the bench has only the pistol and the stash is empty.
     const g0 = withBench(2, 1, [top]);
     const eq = equipGun(g0, 'recruit-1', 'c');
-    if (!eq.ok) throw new Error(eq.reason);
+    if (!eq.ok) throw new Error(eq.code);
     expect(bestGuns(eq.game).moves).toEqual([]);
     // A bench survivor holding the Relic keeps it: the squad takes the stash's weaker gun.
     const g1 = withBench(2, 1, [weak], [top]);

@@ -76,7 +76,7 @@ function fight(base: Base, d: DefenderSpec, kind: BasePost['kind'], row: number)
 function wallWalk(): Base {
   const RICH: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
   const r = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: 2 });
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.base;
 }
 

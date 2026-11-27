@@ -42,7 +42,7 @@ function camp(cars = 1, gas = 100): GameState {
 
 function send(game: GameState, place: PlaceId, ids: string[], car = true, seed = 1, now = NOW) {
   const r = sendPatrol(game, place, ids, seed, now, { car });
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -60,7 +60,7 @@ describe('building the car (ID-030)', () => {
   it('costs 40 Metal, 20 Parts and 30 Scrap, and the first needs no research', () => {
     const g = { ...newGame(), stock: stockOf({ metal: 50, parts: 25, scrap: 35 }) };
     const r = buildCar(g);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.camp.cars).toBe(1);
     expect(r.game.stock).toMatchObject({ metal: 10, parts: 5, scrap: 5 });
     expect(r.game.research).toEqual([]);
@@ -70,13 +70,18 @@ describe('building the car (ID-030)', () => {
   it('is built once: more come from research (ID-035)', () => {
     const g = { ...newGame(), stock: stockOf({ metal: 500, parts: 500, scrap: 500 }) };
     const r = buildCar(g);
-    if (!r.ok) throw new Error(r.reason);
-    expect(buildCar(r.game)).toEqual({ ok: false, reason: 'More cars come with research' });
+    if (!r.ok) throw new Error(r.code);
+    expect(buildCar(r.game)).toEqual({ ok: false, code: 'cars-research' });
   });
 
   it('is refused short of materials, naming one', () => {
     const g = { ...newGame(), stock: stockOf({ metal: 40, parts: 19, scrap: 30 }) };
-    expect(buildCar(g)).toEqual({ ok: false, reason: 'Not enough parts', short: true });
+    expect(buildCar(g)).toEqual({
+      ok: false,
+      code: 'short',
+      material: 'parts',
+      short: true,
+    });
   });
 
   it('starts a new game with no car', () => {
@@ -155,7 +160,9 @@ describe('a patrol by car (ID-030)', () => {
     const g = camp(1, 3);
     expect(sendPatrol(g, 'electronics', ['bob'], 1, NOW, { car: true })).toEqual({
       ok: false,
-      reason: 'Not enough Gas: the car needs 4, the camp has 3',
+      code: 'gas',
+      need: 4,
+      have: 3,
     });
     // Exactly enough is enough.
     expect(send(camp(1, 4), 'electronics', ['bob']).power.gas).toBe(0);
@@ -164,7 +171,7 @@ describe('a patrol by car (ID-030)', () => {
   it('refuses the car with none built', () => {
     expect(sendPatrol(camp(0), 'electronics', ['bob'], 1, NOW, { car: true })).toEqual({
       ok: false,
-      reason: 'Build a car first',
+      code: 'build-car',
     });
   });
 
@@ -173,7 +180,7 @@ describe('a patrol by car (ID-030)', () => {
     expect(freeCar(g)).toBeNull();
     expect(sendPatrol(g, 'gas-station', ['jack'], 2, NOW + MIN, { car: true })).toEqual({
       ok: false,
-      reason: 'The car is out on patrol',
+      code: 'car-out',
     });
     // Another party still goes on foot.
     expect(send(g, 'gas-station', ['jack'], false, 2, NOW + MIN).patrols).toHaveLength(2);

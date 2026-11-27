@@ -38,6 +38,7 @@ import {
 } from './hordeonly.ts';
 import { topBeaten } from './modes.ts';
 import { chance, createRng, int, pick, type Rng } from './rng.ts';
+import type { Refusal } from './refusal.ts';
 import { recommendedPower } from './squadpower.ts';
 import { levelOf } from './stats.ts';
 
@@ -224,22 +225,23 @@ export function sendRefusal(
   game: GameState,
   area: AreaId,
   memberIds: readonly string[],
-): string | null {
+): Refusal | null {
   const spot = mapOf(game).areas.find((a) => a.kind === area);
-  if (!spot) return 'That area is not on the map';
-  if (patrolAt(game, area)) return `A patrol is already out at ${AREAS[area].name}`;
-  if (memberIds.length < MAP_PATROL.min) return 'Pick someone to send';
-  if (memberIds.length > MAP_PATROL.max) return `At most ${MAP_PATROL.max} can go`;
-  if (new Set(memberIds).size !== memberIds.length) return 'Someone is picked twice';
+  if (!spot) return { ok: false, code: 'area-missing' };
+  if (patrolAt(game, area)) return { ok: false, code: 'area-busy', area };
+  if (memberIds.length < MAP_PATROL.min) return { ok: false, code: 'pick-someone' };
+  if (memberIds.length > MAP_PATROL.max)
+    return { ok: false, code: 'team-max', max: MAP_PATROL.max };
+  if (new Set(memberIds).size !== memberIds.length) return { ok: false, code: 'picked-twice' };
   for (const id of memberIds) {
     const d = game.reserve.find((r) => r.id === id);
     if (!d) {
       return game.roster.some((r) => r.id === id)
-        ? 'Squad survivors stay to defend'
-        : 'Pick survivors from the camp';
+        ? { ok: false, code: 'squad-stays' }
+        : { ok: false, code: 'pick-camp' };
     }
-    if (onMapPatrol(game, id)) return `${d.name} is on patrol`;
-    if (!isFit(d)) return `${d.name} is resting`;
+    if (onMapPatrol(game, id)) return { ok: false, code: 'on-patrol', who: d.name };
+    if (!isFit(d)) return { ok: false, code: 'resting', who: d.name };
   }
   return null;
 }
@@ -254,11 +256,11 @@ export function sendMapPatrol(
   memberIds: readonly string[],
   seed: number,
   now: number,
-): { ok: true; game: GameState } | { ok: false; reason: string } {
+): { ok: true; game: GameState } | Refusal {
   if (!Number.isFinite(now)) throw new RangeError(`sendMapPatrol: bad time ${now}`);
   if (!Number.isInteger(seed)) throw new RangeError(`sendMapPatrol: bad seed ${seed}`);
-  const reason = sendRefusal(game, area, memberIds);
-  if (reason) return { ok: false, reason };
+  const why = sendRefusal(game, area, memberIds);
+  if (why) return why;
   const map = mapOf(game);
   const danger = map.areas.find((a) => a.kind === area)!.danger;
   const members = memberIds.map((id) => game.reserve.find((r) => r.id === id)!);
@@ -440,10 +442,10 @@ export function takeReport(
   game: GameState,
   area: AreaId,
   now: number,
-): { ok: true; game: GameState; report: MapReport } | { ok: false; reason: string } {
+): { ok: true; game: GameState; report: MapReport } | Refusal {
   const p = patrolAt(game, area);
-  if (!p) return { ok: false, reason: 'No patrol is out there' };
-  if (!isBack(p, now)) return { ok: false, reason: 'The patrol is not back yet' };
+  if (!p) return { ok: false, code: 'no-patrol-out' };
+  if (!isBack(p, now)) return { ok: false, code: 'patrol-not-back' };
   const report = patrolReport(game, p);
   const byId = new Map(report.members.map((m) => [m.id, m]));
   const back = (d: RosterDefender): RosterDefender => {
@@ -488,11 +490,11 @@ export const rerollCost = (game: GameState): number =>
   );
 
 /** Why the map can't be rerolled now, or null: no map, every area has a patrol out, or Scrap is short. */
-export function rerollRefusal(game: GameState): string | null {
-  if (!game.map) return 'No areas yet';
-  if (game.map.areas.every((a) => patrolAt(game, a.kind))) return 'Every area has a patrol out';
+export function rerollRefusal(game: GameState): Refusal | null {
+  if (!game.map) return { ok: false, code: 'no-areas' };
+  if (game.map.areas.every((a) => patrolAt(game, a.kind))) return { ok: false, code: 'areas-busy' };
   const cost = rerollCost(game);
-  return game.stock.scrap < cost ? `Needs ${cost} Scrap` : null;
+  return game.stock.scrap < cost ? { ok: false, code: 'scrap', need: cost } : null;
 }
 
 /**
@@ -504,9 +506,9 @@ export function rerollRefusal(game: GameState): string | null {
  */
 export function rerollMap(
   game: GameState,
-): { ok: true; game: GameState; cost: number; replaced: number } | { ok: false; reason: string } {
-  const reason = rerollRefusal(game);
-  if (reason) return { ok: false, reason };
+): { ok: true; game: GameState; cost: number; replaced: number } | Refusal {
+  const why = rerollRefusal(game);
+  if (why) return why;
   const map = mapOf(game);
   const cost = rerollCost(game);
   const kept = map.areas.filter((a) => patrolAt(game, a.kind)).map((a) => a.kind);

@@ -2,7 +2,7 @@
 // back through the allow-list: known weapon ids only, the stash's length capped, and
 // prototype keys, oversized and look-alike values refused.
 import { describe, expect, it } from 'vitest';
-import { roleOf, type OwnedWeapon } from '../core/armoury.ts';
+import type { OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { ARMOURY_CAP, SQUAD_JOIN, STASH_CAP, STASH_CAP_MAX } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
@@ -40,7 +40,7 @@ function armed(wins: number): GameState {
     // In hand at once, so a full stash never throws it away.
     if (i === 0) {
       const r = equipGun(g, 'recruit-1', 'h1');
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = r.game;
     }
   }
@@ -61,7 +61,7 @@ describe('save: the stash and equipped guns (ID-067)', () => {
     let next = g;
     for (const [i, d] of next.roster.slice(1).entries()) {
       const r = equipGun(next, d.id, next.armoury[i]!.uid);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       next = r.game;
     }
     expect(next.armoury).toHaveLength(STASH_CAP - 5);
@@ -90,7 +90,6 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       base: 'lmg',
       affixes: [{ id: 'magazine', value: 25 }],
     });
-    expect(roleOf('lmg')?.trait).toMatch(/crit/);
     // Role affixes read on their own gun.
     for (const [base, affix] of [
       ['lmg', { id: 'magazine', value: 80 }],
@@ -301,7 +300,7 @@ describe('save: the stash and equipped guns (ID-067)', () => {
       affixes: [{ id: 'damage', value: 10 }],
     }));
     const r = combineGuns(g, ['h2', 'h3', 'h4']);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.weapon).toMatchObject({ uid: 'h2', base: 'smg', rarity: 'prototype' });
     expect(r.weapon.affixes).toHaveLength(2);
     const back = reread(r.game)?.game;

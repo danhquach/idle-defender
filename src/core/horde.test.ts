@@ -583,7 +583,7 @@ function baseWith(...steps: ((b: Base, s: Stock) => Result)[]): Base {
   let stock: Stock = stockOf({ scrap: 9999, wood: 9999, metal: 9999, concrete: 9999 });
   for (const step of steps) {
     const r = step(base, stock);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     ({ base, stock } = r);
   }
   return base;
@@ -778,7 +778,7 @@ function breakNext(s: HordeState, row: number): void {
 
 const mustMove = (s: HordeState, id: string, post: number): HordeState => {
   const r = moveDefender(s, id, post);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.state;
 };
 
@@ -836,29 +836,29 @@ describe('moving defenders', () => {
   });
 
   const refusals: [string, string, (s: HordeState) => [HordeState, string, number]][] = [
-    ['to a taken post', 'Post taken', (s) => [s, 'a', postId(s, 'tower', 6)]],
+    ['to a taken post', 'post-taken', (s) => [s, 'a', postId(s, 'tower', 6)]],
     [
       'to a reserved post',
-      'Post reserved',
+      'post-reserved',
       (s) => [mustMove(s, 'b', postId(s, 'wall-walk', 0)), 'a', postId(s, 'wall-walk', 0)],
     ],
     [
       'to a wall-walk post over a broken segment',
-      'No wall to stand on',
+      'no-wall',
       (s) => {
         s.layers[0]!.segments[0]!.hp = 0;
         return [s, 'a', postId(s, 'wall-walk', 0)];
       },
     ],
-    ['to its own post', 'Already there', (s) => [s, 'a', postId(s, 'tower', 4)]],
+    ['to its own post', 'already-there', (s) => [s, 'a', postId(s, 'tower', 4)]],
     [
       'to the post it is walking to',
-      'Already on the way',
+      'on-the-way',
       (s) => [mustMove(s, 'a', postId(s, 'wall-walk', 0)), 'a', postId(s, 'wall-walk', 0)],
     ],
     [
       'during a card offer',
-      'Pick a card first',
+      'pick-card',
       (s) => {
         s.offer = [{ kind: 'upgrade', id: 'sharpshooter' }];
         return [s, 'a', postId(s, 'wall-walk', 0)];
@@ -866,17 +866,17 @@ describe('moving defenders', () => {
     ],
     [
       'after the outcome',
-      'The fight is over',
+      'fight-over',
       (s) => {
         s.outcome = 'won';
         return [s, 'a', postId(s, 'wall-walk', 0)];
       },
     ],
   ];
-  it.each(refusals)('refuses a move %s and changes nothing', (_, reason, make) => {
+  it.each(refusals)('refuses a move %s and changes nothing', (_, code, make) => {
     const [s, id, post] = make(fightOn(postsBase([]), ['tower', 4], ['tower', 6]));
     const before = structuredClone(s);
-    expect(moveDefender(s, id, post)).toEqual({ ok: false, reason });
+    expect(moveDefender(s, id, post)).toEqual({ ok: false, code });
     expect(s).toEqual(before);
   });
 
@@ -1046,7 +1046,7 @@ describe('dropping off a broken wall', () => {
     const after = tick(s, STEP);
     expect(moveDefender(after, 'a', postId(s, 'wall-walk', 0))).toEqual({
       ok: false,
-      reason: 'No wall to stand on',
+      code: 'no-wall',
     });
     after.offer = [
       { kind: 'recruit', defender: { id: 'b', name: 'B', loadout: loadoutFrom('pistol') } },

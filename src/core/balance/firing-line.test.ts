@@ -20,7 +20,7 @@ describe('a full firing line on the starting wall (ID-048)', () => {
         stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }),
         0,
       );
-      if (!lined.ok) throw new Error(lined.reason);
+      if (!lined.ok) throw new Error(lined.code);
       const g = { ...game, base: lined.base };
       byHorde.set(
         n,
@@ -50,7 +50,7 @@ describe('a full firing line on the starting wall (ID-048)', () => {
           stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }),
           0,
         );
-        if (!lined.ok) throw new Error(lined.reason);
+        if (!lined.ok) throw new Error(lined.code);
         const g = { ...game, base: lined.base };
         const runs = keep(`shamblers only ${n}`, () =>
           Array.from({ length: SEEDS }, (_, i) => summarise(playHorde(g, i + 1, 0), i + 1)),

@@ -76,7 +76,7 @@ describe('gunSalvage', () => {
     let paid = 0;
     for (let s = 1; s <= GUN_UPGRADE.max; s++) {
       const r = upgradeGun(g, 'a');
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       paid += r.cost;
       g = r.game;
       expect(upgradeSpent(g.armoury[0]!)).toBe(paid);
@@ -135,7 +135,8 @@ describe('salvageGun', () => {
     const r = salvageGun(g, 'h');
     expect(r).toEqual({
       ok: false,
-      reason: `${g.roster[0]!.name} holds that gun: put it back in the stash first`,
+      code: 'holds-gun',
+      who: g.roster[0]!.name,
     });
   });
 
@@ -144,19 +145,19 @@ describe('salvageGun', () => {
     const g = camp([], 10, held);
     const moved: GameState = { ...g, roster: [g.roster[1]!], reserve: [g.roster[0]!] };
     const r = salvageGun(moved, 'h');
-    expect(!r.ok && r.reason).toContain('put it back in the stash first');
+    expect(r).toEqual({ ok: false, code: 'holds-gun', who: moved.reserve[0]!.name });
   });
 
   it('refuses the free pistol, a gun that is not there, and a blade or tool', () => {
     const g = camp([gun('a')], 10);
     expect(salvageGun(g, 'pistol')).toEqual({
       ok: false,
-      reason: 'The free pistol can’t be salvaged',
+      code: 'pistol-salvage',
     });
-    expect(salvageGun(g, 'nope')).toEqual({ ok: false, reason: 'That gun is not in the stash' });
+    expect(salvageGun(g, 'nope')).toEqual({ ok: false, code: 'not-in-stash' });
     const blade = gun('k', { base: 'knife' as OwnedWeapon['base'] });
     const r = salvageGun(camp([blade], 10), 'k');
-    expect(r).toEqual({ ok: false, reason: 'Only guns can be salvaged' });
+    expect(r).toEqual({ ok: false, code: 'salvage-gun-only' });
   });
 
   it('refuses nothing for being full of Scrap: the balance is capped where a save reads it', () => {

@@ -40,7 +40,7 @@ function camp(seed = 5, best = 9, scrap = 500): GameState {
 function out(g: GameState, slots: number[]): GameState {
   return slots.reduce((acc, slot, i) => {
     const r = sendMapPatrol(acc, acc.map!.areas[slot]!.kind, [`recruit-${i + 2}`], 3, NOW);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     return r.game;
   }, g);
 }
@@ -48,7 +48,7 @@ function out(g: GameState, slots: number[]): GameState {
 const kinds = (g: GameState): AreaId[] => g.map!.areas.map((a) => a.kind);
 const reroll = (g: GameState) => {
   const r = rerollMap(g);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r;
 };
 const subsets = (): number[][] =>
@@ -83,28 +83,28 @@ describe('rerollCost (ID-252)', () => {
     const c = rerollCost(camp(5, 1e6));
     expect(Number.isInteger(c)).toBe(true);
     expect(c).toBe(Math.ceil(winScrap(1e6) / 10) * 5);
-    expect(rerollRefusal(camp(5, 1e6, 999))).toBe(`Needs ${c} Scrap`);
+    expect(rerollRefusal(camp(5, 1e6, 999))).toEqual({ ok: false, code: 'scrap', need: c });
   });
 });
 
 describe('rerollMap: refusals (ID-252)', () => {
   it('refuses with no map, the game unchanged', () => {
     const g = { ...camp(), map: undefined };
-    expect(rerollRefusal(g)).toBe('No areas yet');
-    expect(rerollMap(g)).toEqual({ ok: false, reason: 'No areas yet' });
+    expect(rerollRefusal(g)).toEqual({ ok: false, code: 'no-areas' });
+    expect(rerollMap(g)).toEqual({ ok: false, code: 'no-areas' });
   });
 
   it('refuses when every area has a patrol out', () => {
     const g = out(camp(), [0, 1, 2, 3]);
-    expect(rerollRefusal(g)).toBe('Every area has a patrol out');
-    expect(rerollMap(g)).toEqual({ ok: false, reason: 'Every area has a patrol out' });
+    expect(rerollRefusal(g)).toEqual({ ok: false, code: 'areas-busy' });
+    expect(rerollMap(g)).toEqual({ ok: false, code: 'areas-busy' });
   });
 
   it('refuses one Scrap short and takes exactly the cost otherwise, never below 0', () => {
     const g = camp();
     const cost = rerollCost(g);
     const short = { ...g, stock: { ...g.stock, scrap: cost - 1 } };
-    expect(rerollMap(short)).toEqual({ ok: false, reason: `Needs ${cost} Scrap` });
+    expect(rerollMap(short)).toEqual({ ok: false, code: 'scrap', need: cost });
     const exact = reroll({ ...g, stock: { ...g.stock, scrap: cost } });
     expect(exact.game.stock.scrap).toBe(0);
     expect(exact.cost).toBe(cost);

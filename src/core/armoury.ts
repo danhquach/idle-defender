@@ -9,7 +9,6 @@ import {
   GUN_LEVEL_DAMAGE,
   GUN_UPGRADE,
   UPGRADE_REFUND,
-  GUN_ROLES,
   PATROL,
   RARITIES,
   RARITY_ORDER,
@@ -20,7 +19,6 @@ import {
   WEAPONS,
   type AffixId,
   type FreeWeaponId,
-  type GunBase,
   type Rarity,
   type Weapon,
   type WeaponId,
@@ -90,10 +88,6 @@ export const affixBounds = (id: AffixId, base: WeaponId): { min: number; max: nu
   return { min: Math.min(d.min, r.min), max: Math.max(d.max, r.max) };
 };
 
-/** Gun `base`'s role and built-in trait (ID-101); null for a blade or tool. */
-export const roleOf = (base: WeaponId): { role: string; trait: string } | null =>
-  Object.hasOwn(GUN_ROLES, base) ? GUN_ROLES[base as GunBase] : null;
-
 /** How many affixes a `rarity` `base` weapon carries: its rarity's count, or as many as fit. */
 export const affixCount = (base: WeaponId, rarity: Rarity): number =>
   Math.min(RARITIES[rarity].affixes, affixesFor(base).length);
@@ -122,66 +116,11 @@ export const upgradeSpent = (w: OwnedWeapon): number => {
 export const gunSalvage = (w: OwnedWeapon): number =>
   RARITIES[w.rarity].salvage + Math.floor(UPGRADE_REFUND * upgradeSpent(w));
 
-/** "Military Pistol", "Military Pistol +2" once upgraded (ID-208); a free weapon is just "Pistol". */
-export const heldName = (h: Held): string =>
-  isOwned(h)
-    ? `${RARITIES[h.rarity].name} ${WEAPONS[h.base].name}${gunStep(h) > 0 ? ` +${gunStep(h)}` : ''}`
-    : WEAPONS[h].name;
-
 /** A weapon's gun level (ID-098): an owned one's, else 1 (the free pistol). */
 export const gunLevel = (h: Held): number => (isOwned(h) ? (h.level ?? 1) : 1);
 
-/** "Lv 12 Military Rifle" (ID-098): the level, then the name. */
-export const levelName = (h: Held): string => `Lv ${gunLevel(h)} ${heldName(h)}`;
-
 /** Gun level `level`'s base damage factor (ID-098, ID-102): ×(1 + `GUN_LEVEL_DAMAGE`) a level above 1. */
 export const levelFactor = (level: number): number => (1 + GUN_LEVEL_DAMAGE) ** (level - 1);
-
-const AFFIX_TEXT: Readonly<Record<AffixId, (v: number) => string>> = {
-  damage: (v) => `+${v}% damage`,
-  fireRate: (v) => `+${v}% fire rate`,
-  magazine: (v) => `+${v}% magazine`,
-  reload: (v) => `−${v}% reload time`,
-  pierce: (v) =>
-    v === 1
-      ? 'Pierce: goes through one more enemy in line'
-      : `Pierce: goes through ${v} more enemies in line`,
-  repair: (v) => `+${v}% repair`,
-  crit: (v) => `+${v}% crit chance`,
-  critDamage: (v) => `+${v}% crit damage`,
-  closeDamage: (v) => `+${v}% damage to enemies near the wall`,
-  cone: (v) => `+${v}% wider cone`,
-  pellets: (v) => `+${v} ${v === 1 ? 'pellet' : 'pellets'}`,
-  bossDamage: (v) => `+${v}% damage to bosses, Brutes and Swollen`,
-};
-export const affixText = (a: Affix): string => AFFIX_TEXT[a.id](a.value);
-
-/** Affix `a` on base weapon `base` as a line: "+5% crit chance (role)" for a role affix (ID-101). */
-export const affixLabel = (base: WeaponId, a: Affix): string =>
-  isRoleAffix(base, a.id) ? `${affixText(a)} (role)` : affixText(a);
-
-/**
- * `h`'s affixes as lines, role affixes marked "(role)" (ID-101); none for a free weapon.
- * `compact`, for a label that brackets the list, marks them "role +5% crit chance" instead.
- */
-export const affixLines = (h: Held, compact = false): string[] =>
-  isOwned(h)
-    ? h.affixes.map((a) =>
-        compact && isRoleAffix(h.base, a.id) ? `role ${affixText(a)}` : affixLabel(h.base, a),
-      )
-    : [];
-
-/** "Marksman: +10% crit chance": gun `base`'s role and trait (ID-101); null for a blade or tool. */
-export const roleLine = (base: WeaponId): string | null => {
-  const r = roleOf(base);
-  return r ? `${r.role}: ${r.trait}` : null;
-};
-
-/** "Military Pistol (+12% damage)": the name, then the affixes. */
-export const heldLabel = (h: Held): string =>
-  isOwned(h) && h.affixes.length
-    ? `${heldName(h)} (${affixLines(h, true).join(', ')})`
-    : heldName(h);
 
 /** The value `h` rolled for affix `id`; 0 when it has none (a free weapon never does). */
 export const affixValue = (h: Held, id: AffixId): number =>
@@ -206,7 +145,6 @@ function work(h: OwnedWeapon): Weapon {
   const w: Weapon = WEAPONS[h.base];
   const power = RARITIES[h.rarity].power;
   const common = {
-    name: heldName(h),
     damage:
       w.damage *
       levelFactor(gunLevel(h)) *

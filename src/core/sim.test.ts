@@ -31,7 +31,7 @@ describe('opening', () => {
     const game = newGame();
     game.roster[0]!.injuredUntil = 10;
     const built = buildPost(game.base, game.stock, { kind: 'wall-walk', column: 0, row: 4 });
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const g: GameState = { ...game, base: built.base, stock: built.stock };
     const at = g.base.posts.findIndex((p) => p.kind === 'wall-walk');
     expect(opening(g, 0)).toEqual({ defenderId: 'jack', postId: at });

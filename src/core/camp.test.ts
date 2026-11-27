@@ -86,7 +86,7 @@ describe('camp capacity and camp upgrades', () => {
       expect(campUpgradeCost(g)).toEqual(cost);
       const before = g.stock;
       const r = upgradeCamp(g);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = r.game;
       expect(campSlots(g)).toBe(5 + 2 * (i + 1));
       for (const [m, n] of Object.entries(cost)) {
@@ -95,12 +95,16 @@ describe('camp capacity and camp upgrades', () => {
     }
     expect(campSlots(g)).toBe(11);
     expect(campUpgradeCost(g)).toBeNull();
-    expect(upgradeCamp(g)).toEqual({ ok: false, reason: 'The camp is as big as it gets' });
+    expect(upgradeCamp(g)).toEqual({ ok: false, code: 'camp-max' });
   });
 
   it('refuses an upgrade the stock cannot cover, and spends nothing', () => {
     const g = { ...newGame(), stock: stockOf({ wood: 59, scrap: 40 }) };
-    expect(upgradeCamp(g)).toEqual({ ok: false, reason: 'Not enough materials', short: true });
+    expect(upgradeCamp(g)).toEqual({
+      ok: false,
+      code: 'short-materials',
+      short: true,
+    });
     expect(g.stock).toEqual(stockOf({ wood: 59, scrap: 40 }));
   });
 });
@@ -108,8 +112,8 @@ describe('camp capacity and camp upgrades', () => {
 describe('dismiss', () => {
   it('is refused while 3 or fewer are alive', () => {
     const g = newGame();
-    expect(dismissLock(g, 'bob')).toBe('Not while 3 or fewer are alive');
-    expect(dismiss(g, 'bob')).toEqual({ ok: false, reason: 'Not while 3 or fewer are alive' });
+    expect(dismissLock(g, 'bob')).toEqual({ ok: false, code: 'dismiss-floor', floor: 3 });
+    expect(dismiss(g, 'bob')).toEqual({ ok: false, code: 'dismiss-floor', floor: 3 });
   });
 
   it('removes a 4th defender for good, their owned weapons to the armoury', () => {
@@ -117,7 +121,7 @@ describe('dismiss', () => {
     const g = withExtra(newGame(), 1);
     g.roster[3] = { ...g.roster[3]!, loadout: { primary: gun, secondary: 'knife', item: null } };
     const r = dismiss(g, 'extra-1');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster.map((d) => d.id)).toEqual(['bob', 'jack', 'john']);
     expect(r.game.armoury).toEqual([gun]);
   });
@@ -135,7 +139,7 @@ describe('dismiss', () => {
     g.roster[3] = { ...g.roster[3]!, loadout: { primary: gun, secondary: null, item: null } };
     expect(ownedWeapons(g)).toHaveLength(ARMOURY_CAP);
     const r = dismiss(g, 'extra-1');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.armoury).toHaveLength(ARMOURY_CAP);
     expect(r.game.armoury.at(-1)).toEqual(gun);
   });
@@ -156,7 +160,7 @@ describe('dismiss', () => {
       car: null,
     };
     const out = { ...g, patrols: [p], patrolsSent: 1 };
-    expect(dismissLock(out, 'extra-1')).toBe('Extra is on patrol');
+    expect(dismissLock(out, 'extra-1')).toEqual({ ok: false, code: 'on-patrol', who: 'Extra' });
     expect(dismiss(out, 'extra-1').ok).toBe(false);
     expect(() => dismiss(g, 'nobody')).toThrow(RangeError);
   });
@@ -251,7 +255,7 @@ describe('camp-level picks', () => {
 
   it('takes a pick from the oldest offer: a rank up, the offer gone', () => {
     const r = takeCampPick(offered([['medic', 'salvage', 'foraging'], ['medic']]), 'salvage');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.camp.picks.salvage).toBe(1);
     expect(r.game.camp.offers).toEqual([{ picks: ['medic'], survivor: null }]);
   });
@@ -260,7 +264,7 @@ describe('camp-level picks', () => {
     expect(takeCampPick(offered([['medic']]), 'salvage').ok).toBe(false);
     expect(takeCampPick(newGame(), 'medic')).toEqual({
       ok: false,
-      reason: 'No camp pick waiting',
+      code: 'no-camp-pick',
     });
   });
 
@@ -269,7 +273,7 @@ describe('camp-level picks', () => {
       medic: CAMP_PICK_RANKS - 1,
     });
     const r = campAfterPick(g.camp, 'medic');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.camp.picks.medic).toBe(CAMP_PICK_RANKS);
     expect(r.camp.offers).toEqual([{ picks: ['salvage'], survivor: null }]);
   });
@@ -460,7 +464,7 @@ describe('injury recovery with Food and Medicine (ID-031)', () => {
   };
   const bob = (g: GameState): RosterDefender => g.roster.find((d) => d.id === 'bob')!;
   const ok = (r: ReturnType<typeof treat>): GameState => {
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     return r.game;
   };
 
@@ -514,14 +518,20 @@ describe('injury recovery with Food and Medicine (ID-031)', () => {
 
   it('refuses a defender who is not injured or has healed, and with none left; spends nothing', () => {
     const g = hurt({ food: 0, medicine: 1 });
-    expect(treat(g, 'jack', 'medicine', NOW)).toEqual({ ok: false, reason: "Jack isn't injured" });
+    expect(treat(g, 'jack', 'medicine', NOW)).toEqual({
+      ok: false,
+      code: 'not-injured',
+      who: 'Jack',
+    });
     expect(treat(g, 'bob', 'medicine', NOW + RECOVERY_MS)).toEqual({
       ok: false,
-      reason: "Bob isn't injured",
+      code: 'not-injured',
+      who: 'Bob',
     });
     expect(treat(g, 'bob', 'food', NOW)).toEqual({
       ok: false,
-      reason: 'No food left',
+      code: 'no-item',
+      item: 'food',
       short: true,
     });
     expect(g.stock).toEqual(stockOf({ medicine: 1 }));

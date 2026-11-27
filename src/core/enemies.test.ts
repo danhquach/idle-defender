@@ -234,7 +234,7 @@ describe('Crawler', () => {
 
   it('is in reach of wall-walk melee while it climbs', () => {
     const built = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: 4 });
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const s = newHorde(1, { ...setup(), base: built.base });
     s.toSpawn = 0;
     s.defenders = [];
@@ -340,7 +340,7 @@ describe('Spewer', () => {
 
   it('spits at a turret in range, wearing its condition', () => {
     const built = buildTurret(newBase(), RICH, true, 'tower', 0, 5);
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const s = quiet(built.base);
     s.defenders[0]!.x = -1000;
     const turret = s.turrets[0]!;
@@ -357,7 +357,7 @@ describe('Spewer', () => {
 
   it('leaves a turret whose wall broke alone', () => {
     const built = buildTurret(newBase(), RICH, true, 'wall-walk', 0, 4);
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const s = quiet(built.base);
     s.defenders[0]!.x = -1000;
     s.layers[0]!.segments[4]!.hp = 0;
@@ -415,7 +415,7 @@ describe('Brute', () => {
   it('a blade ignores the armour', () => {
     const gate = START_BASE.gate;
     const built = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: gate });
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const s = newHorde(1, { ...setup(), base: built.base });
     s.toSpawn = 0;
     s.defenders = [];

@@ -186,7 +186,7 @@ describe('craftGun (ID-209)', () => {
   it('makes the gun at once: stash, level of the highest horde beaten, affixes for its rarity', () => {
     const g = camp(500, have(base, 2));
     const r = craftGun(g, base, 120);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.cost).toBe(120);
     expect(r.weapon.base).toBe(base);
     expect(gunLevel(r.weapon)).toBe(12);
@@ -199,7 +199,7 @@ describe('craftGun (ID-209)', () => {
 
   it('uses the last blueprint up and keeps the count of guns made', () => {
     const r = craftGun(camp(500, have(base, 1, 4)), base, 20);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.craft).toEqual({ blueprints: {}, made: 5 });
     expect(r.weapon.uid).toBe('f5');
     expect(blueprintsOf(r.game)).toEqual([]);
@@ -211,7 +211,7 @@ describe('craftGun (ID-209)', () => {
     let game = g;
     for (let i = 0; i < 60; i++) {
       const r = craftGun(game, base, 20);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       expect(gunLevel(r.weapon)).toBe(1);
       expect(r.weapon.rarity).not.toBe('relic');
       seen.add(r.weapon.rarity);
@@ -225,7 +225,7 @@ describe('craftGun (ID-209)', () => {
     const seen = new Set<Rarity>();
     for (let i = 0; i < 300; i++) {
       const r = craftGun(game, base, 220);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       seen.add(r.weapon.rarity);
       game = {
         ...r.game,
@@ -256,7 +256,7 @@ describe('craftGun (ID-209)', () => {
     const N = 3000;
     for (let made = 0; made < N; made++) {
       const r = craftGun(camp(500, have(base, 1, made)), base, 120);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       counts[r.weapon.rarity] += 1;
     }
     const odds = craftOdds(120);
@@ -266,18 +266,19 @@ describe('craftGun (ID-209)', () => {
   it('refuses, changing nothing: no blueprint, a bad amount, a full stash, short Scrap', () => {
     const g = camp(100, have(base, 1));
     const other = BLUEPRINT_GUNS.find((b) => b !== base)!;
-    expect(craftGun(g, other, 20)).toEqual({ ok: false, reason: 'No blueprint for that gun' });
+    expect(craftGun(g, other, 20)).toEqual({ ok: false, code: 'no-blueprint' });
     for (const bad of [0, 19, 30, 240, 1e9, -20, NaN, 20.5, Infinity]) {
       expect(craftGun(g, base, bad), `amount ${bad}`).toMatchObject({ ok: false });
     }
-    expect(craftGun(g, base, 120)).toEqual({ ok: false, reason: 'Needs 20 more Scrap' });
+    expect(craftGun(g, base, 120)).toEqual({ ok: false, code: 'scrap-more', need: 20 });
     expect(craftGun(camp(500, have(base, 1), STASH_CAP), base, 20)).toEqual({
       ok: false,
-      reason: 'Stash full',
+      code: 'craft-stash-full',
     });
     expect(craftGun(camp(19, have(base, 1)), base, 20)).toEqual({
       ok: false,
-      reason: 'Needs 1 more Scrap',
+      code: 'scrap-more',
+      need: 1,
     });
     expect(g.craft).toEqual(have(base, 1));
     expect(g.stock.scrap).toBe(100);
@@ -303,13 +304,13 @@ describe('craftRefusal (ID-209)', () => {
       const why = craftRefusal(g, base, amount);
       const r = craftGun(g, base, amount);
       expect(r.ok).toBe(why === null);
-      if (!r.ok) expect(r.reason).toBe(why);
+      if (!r.ok) expect(r).toEqual(why);
     }
   });
 
   it('refuses a craft once the most guns were crafted (a uid could not name another)', () => {
     const g = camp(500, have(base, 1, CRAFT_MADE_MAX));
-    expect(craftRefusal(g, base, 20)).toBe('No more guns can be crafted');
+    expect(craftRefusal(g, base, 20)).toEqual({ ok: false, code: 'craft-max' });
   });
 });
 
@@ -317,7 +318,7 @@ describe('salvageBlueprint (ID-209)', () => {
   const base = BLUEPRINT_GUNS[0]!;
   it('turns one blueprint into a little Scrap', () => {
     const r = salvageBlueprint(camp(10, have(base, 2)), base);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.scrap).toBe(BLUEPRINT.salvage);
     expect(r.game.stock.scrap).toBe(10 + BLUEPRINT.salvage);
     expect(blueprintCount(r.game, base)).toBe(1);
@@ -326,19 +327,19 @@ describe('salvageBlueprint (ID-209)', () => {
   it('refuses with none of that gun', () => {
     expect(salvageBlueprint(camp(10), base)).toEqual({
       ok: false,
-      reason: 'No blueprint for that gun',
+      code: 'no-blueprint',
     });
   });
 
   it('leaves no craft at all when the last blueprint goes and nothing was ever crafted', () => {
     const r = salvageBlueprint(camp(0, have(base, 1)), base);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect('craft' in r.game).toBe(false);
   });
 
   it('keeps the count of guns made when the last one goes', () => {
     const r = salvageBlueprint(camp(0, have(base, 1, 3)), base);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.craft).toEqual({ blueprints: {}, made: 3 });
   });
 });
@@ -347,7 +348,7 @@ describe('crafted guns are ordinary stash guns', () => {
   it('have a save-safe shape', () => {
     const g = camp(500, have(BLUEPRINT_GUNS[0]!, 1));
     const r = craftGun(g, BLUEPRINT_GUNS[0]!, 20);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const w: OwnedWeapon = r.weapon;
     expect(Object.keys(w).sort()).toEqual(['affixes', 'base', 'level', 'rarity', 'uid']);
   });

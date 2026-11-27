@@ -1,9 +1,10 @@
 // The world map's words (ID-219): the button's label, countdowns, drops and a report's lines,
 // as plain text. Shared by the top bar's World map button (`hud.ts`) and the World map
 // tab (`mapview.ts`). Pure: the time comes in as `now`.
-import { AREAS, DANGERS, type AreaLoot, type Danger } from '../core/data.ts';
+import { DANGERS, type AreaLoot, type Danger } from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
 import { areaDrops, backPatrols, timeLeft, type MapPatrol } from '../core/scout.ts';
+import { AREA_NAME, DANGER_NAME } from './text/index.ts';
 
 /** Each loot kind as a card names it. */
 export const LOOT_NAME: Readonly<Record<AreaLoot, string>> = {
@@ -73,7 +74,7 @@ export const patrolsShown = (game: Pick<GameState, 'map'>): MapPatrol[] =>
 
 /** A patrol's name on the Roster (ID-234): "Patrol 3 · Pharmacy". */
 export const patrolName = (p: Pick<MapPatrol, 'no' | 'area'>): string =>
-  `Patrol ${p.no} · ${AREAS[p.area].name}`;
+  `Patrol ${p.no} · ${AREA_NAME[p.area]}`;
 
 /**
  * A patrol's mission on the Roster (ID-234), in the World map card's words: its tag
@@ -81,7 +82,7 @@ export const patrolName = (p: Pick<MapPatrol, 'no' | 'area'>): string =>
  */
 export function patrolMission(p: Pick<MapPatrol, 'area' | 'danger'>): string {
   const finds = areaDrops({ kind: p.area, danger: p.danger }).map((d) => LOOT_NAME[d.loot]);
-  return `${DANGERS[p.danger].name} · ${tripText(p.danger)} · Finds ${finds.join(', ')}`;
+  return `${DANGER_NAME[p.danger]} · ${tripText(p.danger)} · Finds ${finds.join(', ')}`;
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -99,6 +100,6 @@ export function countdownWords(ms: number): string {
 
 /** A patrol block's name for a screen reader (ID-234): "Patrol 3, Pharmacy, back in 42 minutes". */
 export const patrolGroupLabel = (p: MapPatrol, now: number): string =>
-  `Patrol ${p.no}, ${AREAS[p.area].name}, ${
+  `Patrol ${p.no}, ${AREA_NAME[p.area]}, ${
     now >= p.backAt ? 'back, report ready' : `back in ${countdownWords(timeLeft(p, now))}`
   }`;

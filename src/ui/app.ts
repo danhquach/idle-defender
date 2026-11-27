@@ -49,7 +49,7 @@ import {
 import { settlePatrols } from '../core/patrol.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { loadBatteries, runGenerator } from '../core/power.ts';
-import { chatter, newChat } from '../core/chatter.ts';
+import { chatter, newChat } from './chatter.ts';
 import {
   cardsOpen,
   downSurvivor,
@@ -205,6 +205,7 @@ import { drawScene, forgetBackdrop, type Aim, type CampView, type Scene } from '
 import { fightSpeed } from './fastforward.ts';
 import { createTurnPrompt, goLandscape } from './landscape.ts';
 import { TITLE_PICTURE, type Art } from './sprites.ts';
+import { refusalText, refusedText, type Refused } from './text/index.ts';
 
 /** Longest frame the sim will advance by: a stall never jumps the fight ahead. */
 const MAX_DT = 0.1;
@@ -352,7 +353,7 @@ export function start(root: HTMLElement, art: Art): void {
         // The HUD counts room as the core does, so a refusal is a bug: say so, and the
         // offer and those after it stay for the roster.
         if (!r.ok) {
-          hud.toast(r.reason);
+          hud.toast(refusedText(r));
           break;
         }
         next = r.game;
@@ -365,7 +366,7 @@ export function start(root: HTMLElement, art: Art): void {
       if (!horde?.replace) return;
       const sent = replaceInjured(horde, defenderId, postId);
       if (sent.ok) horde = sent.state;
-      else hud.toast(sent.reason);
+      else hud.toast(refusalText(sent));
     },
     () => {
       if (horde?.replace) horde = skipReplace(horde);
@@ -374,7 +375,7 @@ export function start(root: HTMLElement, art: Art): void {
       if (!horde) return;
       const r = buy(horde, item);
       if (r.ok) horde = r.state;
-      else hud.toast(r.reason);
+      else hud.toast(refusalText(r));
     },
     (skill) => arm(skill),
     (act) => {
@@ -429,7 +430,7 @@ export function start(root: HTMLElement, art: Art): void {
     if (!horde || repairsState(horde) === 'none') return;
     const r = useRepairs(horde);
     if (r.ok) horde = r.state;
-    else hud.toast(r.reason);
+    else hud.toast(refusalText(r));
   }
   hud.onRepairs(repair);
   /** A skill's button or key (ID-100): it is armed, waiting for an aim (ID-107). */
@@ -441,7 +442,7 @@ export function start(root: HTMLElement, art: Art): void {
     if (offerHolds(horde)) return hud.toast('Pick first');
     // A second click on the armed skill puts it away.
     const lock = skillLock(horde, skill);
-    if (lock) hud.toast(lock);
+    if (lock) hud.toast(refusalText(lock));
     armed = lock || armed === skill ? null : skill;
     if (armed) selectedDefender = null;
   }
@@ -453,7 +454,7 @@ export function start(root: HTMLElement, art: Art): void {
   hud.onSkillPick((skill) => {
     if (horde && !resultUp()) return;
     const r = toggleSkill(game, skill);
-    if (!r.ok) hud.toast(r.reason);
+    if (!r.ok) hud.toast(refusedText(r));
     else commit(r.game);
     hud.showSkills(skillPicker(game.skillPick));
   });
@@ -491,7 +492,7 @@ export function start(root: HTMLElement, art: Art): void {
     const name = joiningOf(game).find((d) => d.id === id)?.name ?? '';
     const r = answerJoin(game, id, accept);
     if (!r.ok) {
-      hud.toast(r.reason);
+      hud.toast(refusedText(r));
       return;
     }
     commit(r.game);
@@ -545,10 +546,7 @@ export function start(root: HTMLElement, art: Art): void {
    * Gives survivor `defenderId` gun `choice` between hordes (the gun pickers, and the
    * Inventory's drag and drop, ID-095): saved at once, and the pickers redrawn.
    */
-  function changeGun(
-    defenderId: string,
-    choice: GunChoice,
-  ): { ok: true } | { ok: false; reason: string } {
+  function changeGun(defenderId: string, choice: GunChoice): { ok: true } | Refused {
     if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
     const r = equipGun(game, defenderId, choice);
     if (!r.ok) return r;
@@ -563,10 +561,7 @@ export function start(root: HTMLElement, art: Art): void {
    * hordes: saved at once, the gun in the stash; the gun pickers and the result screen's Scrap
    * follow.
    */
-  function craftNow(
-    base: WeaponId,
-    amount: number,
-  ): { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string } {
+  function craftNow(base: WeaponId, amount: number): { ok: true; weapon: OwnedWeapon } | Refused {
     if (horde && !resultUp()) return { ok: false, reason: CRAFT_WAIT };
     const r = craftGun(game, base, amount);
     if (!r.ok) return r;
@@ -577,7 +572,7 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true, weapon: r.weapon };
   }
   /** Turns a `base` blueprint into a little Scrap (the Craft tab, ID-209), between hordes: saved at once. */
-  function salvageNow(base: WeaponId): { ok: true; scrap: number } | { ok: false; reason: string } {
+  function salvageNow(base: WeaponId): { ok: true; scrap: number } | Refused {
     if (horde && !resultUp()) return { ok: false, reason: CRAFT_WAIT };
     const r = salvageBlueprint(game, base);
     if (!r.ok) return r;
@@ -590,7 +585,7 @@ export function start(root: HTMLElement, art: Art): void {
    * hordes or in a fight: saved at once. In a fight the survivor holding it fights with the new
    * numbers from the next shot, and the Squad Power chip follows.
    */
-  function upgradeGunNow(uid: string): { ok: true; text: string } | { ok: false; reason: string } {
+  function upgradeGunNow(uid: string): { ok: true; text: string } | Refused {
     const r = upgradeGun(game, uid);
     if (!r.ok) return r;
     commit(r.game);
@@ -676,7 +671,7 @@ export function start(root: HTMLElement, art: Art): void {
    * Moves survivor `id` between the squad and the bench between hordes (the Roster, ID-147):
    * saved at once; the start screen, its squad on the wall and the gun pickers redrawn.
    */
-  function changeSquad(id: string): { ok: true } | { ok: false; reason: string } {
+  function changeSquad(id: string): { ok: true } | Refused {
     if (horde && !resultUp()) return { ok: false, reason: SQUAD_WAIT };
     const r = toggleSquad(game, id);
     if (!r.ok) return r;
@@ -685,7 +680,7 @@ export function start(root: HTMLElement, art: Art): void {
     return { ok: true };
   }
   /** Treats resting survivor `id` with Medicine (ID-220): between hordes, saved at once. */
-  function treatInjured(id: string): { ok: true } | { ok: false; reason: string } {
+  function treatInjured(id: string): { ok: true } | Refused {
     if (horde && !resultUp()) return { ok: false, reason: TREAT_WAIT };
     const r = treatSurvivor(game, id);
     if (!r.ok) return r;
@@ -703,7 +698,7 @@ export function start(root: HTMLElement, art: Art): void {
    * "Best gun for everyone" between hordes (the Roster, the result or start screen and the
    * Inventory): saved at once, and the screens redrawn.
    */
-  function handOutBestGuns(): { ok: true; moves: GunMove[] } | { ok: false; reason: string } {
+  function handOutBestGuns(): { ok: true; moves: GunMove[] } | Refused {
     if (horde && !resultUp()) return { ok: false, reason: GUNS_WAIT };
     const local = pickedHorde();
     let r = bestGuns(game, local);
@@ -1150,7 +1145,7 @@ export function start(root: HTMLElement, art: Art): void {
     const t = e.target instanceof Element ? e.target.closest('[data-best-guns]') : null;
     if (!HORDE_ONLY || !t) return;
     const r = handOutBestGuns();
-    hud.toast(r.ok ? bestGunsLine(r.moves) : r.reason, 4000);
+    hud.toast(r.ok ? bestGunsLine(r.moves) : refusedText(r), 4000);
     // The start screen is drawn afresh on a change: the keyboard stays on the new button.
     if (!t.isConnected) root.querySelector<HTMLButtonElement>('[data-best-guns]')?.focus();
   });
@@ -1463,7 +1458,7 @@ export function start(root: HTMLElement, art: Art): void {
       if (!click && (ground.x > FIELD.right || ground.y < 0 || ground.y > FIELD.height)) return;
       const used = useSkill(horde, armed, ground.x, ground.y);
       if (used.ok) horde = used.state;
-      else hud.toast(used.reason);
+      else hud.toast(refusalText(used));
       // A click while an offer is open throws nothing and keeps the skill armed for after
       // the pick (ID-159).
       if (used.ok || !offerHolds(horde)) armed = null;
@@ -1490,7 +1485,7 @@ export function start(root: HTMLElement, art: Art): void {
         }
         // A refused move over a shambler (one hitting the wall) is a focus click.
         if (enemyId === null) {
-          hud.toast(moved.reason);
+          hud.toast(refusalText(moved));
           return;
         }
       }

@@ -2,8 +2,9 @@
 // watches the fight from one frame to the next and never changes it; its lines are fixed
 // text written here, picked with its own seeded random source, so the fight's rolls
 // (and its replay from a seed) are untouched.
-import { wavesCleared, type Defender, type HordeState } from './horde.ts';
-import { pick, rngFrom, type RngState } from './rng.ts';
+import { wavesCleared, type Defender, type HordeState } from '../core/horde.ts';
+import { pick, rngFrom, type RngState } from '../core/rng.ts';
+import type { ChatterLevel } from '../storage/settings.ts';
 
 /** What a survivor can speak up about. */
 export type ChatEvent =
@@ -152,9 +153,6 @@ export const CHAT_RANK: Readonly<Record<ChatEvent, number>> = {
   adrenaline: 2,
   hit: 1,
 };
-
-export type ChatterLevel = 'off' | 'low' | 'full';
-export const CHATTER_LEVELS: readonly ChatterLevel[] = ['off', 'low', 'full'];
 
 /**
  * Real seconds: a bubble shows `life`; a survivor waits `wait` between lines (`lowWait` on

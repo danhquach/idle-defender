@@ -58,7 +58,7 @@ describe('the Field Repairs button (ID-231)', () => {
     const s = hurt();
     s.time = 10;
     const r = useRepairs(s);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const counting = repairsButton(r.state);
     expect(counting).toMatchObject({
       label: 'Field Repairs 5s',
@@ -128,7 +128,7 @@ describe('the Field Repairs button (ID-231)', () => {
     const s = hurt();
     s.time = 10;
     const r = useRepairs(s);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     hud.update(r.state);
     expect(spoken(button)).toBe('Field Repairs 5s');
     expect(button.disabled).toBe(true);

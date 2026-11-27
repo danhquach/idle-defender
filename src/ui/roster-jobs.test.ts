@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { JOB_IDS, JOBS, type JobId, type WeaponId } from '../core/data.ts';
+import { JOB_IDS, type JobId, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
 import { xpForLevel } from '../core/stats.ts';
@@ -15,6 +15,7 @@ import { squadScreen } from './hud.ts';
 import { joinCards } from './joining.ts';
 import { JOB_SHORT, jobLine, NO_BONUS, NO_STACK, statRows } from './jobtext.ts';
 import { createRoster, rosterTiles } from './squadroster.ts';
+import { JOB_NAME } from './text/index.ts';
 
 const NOW = 1_800_000_000_000;
 const person = (n: number, job: JobId, level = 21): RosterDefender => ({
@@ -71,7 +72,7 @@ describe('profession words (ID-149)', () => {
     expect(jobLine('paramedic', 21)).not.toContain('horde less');
     for (const j of JOB_IDS) {
       // Past level 1 every line names its numbers.
-      expect(jobLine(j, 7), j).toMatch(new RegExp(`^${JOBS[j].name}: .*[0-9]`));
+      expect(jobLine(j, 7), j).toMatch(new RegExp(`^${JOB_NAME[j]}: .*[0-9]`));
       expect(JOB_SHORT[j].length, j).toBeLessThanOrEqual(8);
     }
   });
@@ -125,7 +126,7 @@ describe('the Roster shows professions (ID-149)', () => {
   it('every tab names the profession; the short name for a phone', () => {
     const game = camp(JOB_IDS.slice(0, 6).map((j, i) => person(i + 1, j)));
     const tiles = rosterTiles(game, NOW, null);
-    expect(tiles.map((t) => t.job)).toEqual(JOB_IDS.slice(0, 6).map((j) => JOBS[j].name));
+    expect(tiles.map((t) => t.job)).toEqual(JOB_IDS.slice(0, 6).map((j) => JOB_NAME[j]));
     const scrim = open(game, 'recruit-1');
     const tabs = [...scrim.querySelectorAll<HTMLElement>('.rv-tab')];
     expect(tabs).toHaveLength(6);
@@ -133,7 +134,7 @@ describe('the Roster shows professions (ID-149)', () => {
       const job = JOB_IDS[i]!;
       expect(tab.querySelector('.rv-tab-level')!.textContent).toBe('Lv 21');
       expect(tab.querySelector('.rv-tab-job')!.textContent).toBe(JOB_SHORT[job]);
-      expect(tab.getAttribute('aria-label')).toContain(JOBS[job].name);
+      expect(tab.getAttribute('aria-label')).toContain(JOB_NAME[job]);
     }
     expect(scrim.querySelector('.rv-who-level')!.textContent).toContain(
       'Level 21 · Police officer',
@@ -223,7 +224,7 @@ describe('the new survivor names the profession; the panel’s cards do not (ID-
     const joined = recruit(3, 7);
     expect(screen.debrief!.join).toBe(true);
     expect(joinCards(finishSquadHorde(game, s))[0]!.sub).toBe(
-      `Lv 1 · ${JOBS[joined.job].name} · Pistol`,
+      `Lv 1 · ${JOB_NAME[joined.job]} · Pistol`,
     );
   });
 

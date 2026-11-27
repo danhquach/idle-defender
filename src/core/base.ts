@@ -31,6 +31,7 @@ import {
 } from './data.ts';
 
 export type { PostKind, Tier, TrapKind, TurretMount } from './data.ts';
+import type { Refusal } from './refusal.ts';
 export type SegmentKind = 'wall' | 'gate';
 export interface BaseSegment {
   kind: SegmentKind;
@@ -75,10 +76,10 @@ export interface Base {
   traps: BaseTrap[];
 }
 /**
- * A refusal; `short` when only the cost stands in the way (the UI shows it unaffordable,
- * ID-056). Set it only from the cost check, and keep that check last.
+ * A refusal (core/refusal.ts); `short` when only the cost stands in the way (the UI shows it
+ * unaffordable, ID-056). Set it only from the cost check, and keep that check last.
  */
-export type Refusal = { ok: false; reason: string; short?: true };
+export type { Refusal };
 export type Result = { ok: true; base: Base; stock: Stock } | Refusal;
 
 export function segmentMaxHp(kind: SegmentKind, tier: Tier): number {
@@ -152,10 +153,10 @@ export function buildSegment(
   checkKind(kind);
   checkTier(tier);
   const layer = layerAt(base, column);
-  if (layer?.slots[row]) return refuse('Slot taken');
-  if (!tiers.includes(tier)) return refuse(`${TIERS[tier].name} is locked`);
+  if (layer?.slots[row]) return { ok: false, code: 'slot-taken' };
+  if (!tiers.includes(tier)) return { ok: false, code: 'tier-locked', tier };
   if (kind === 'gate' && layer?.slots.some((s) => s?.kind === 'gate')) {
-    return refuse('This layer already has a gate');
+    return { ok: false, code: 'one-gate' };
   }
   return pay(base, stock, TIERS[tier].cost, (b) => {
     let l = layerAt(b, column);
@@ -179,10 +180,10 @@ export function upgradeSegment(
 ): Result {
   checkSlot(column, row);
   const seg = layerAt(base, column)?.slots[row];
-  if (!seg) return refuse('Nothing built here');
+  if (!seg) return { ok: false, code: 'nothing-built' };
   const next = TIER_ORDER[TIER_ORDER.indexOf(seg.tier) + 1];
-  if (!next) return refuse('Already at the top tier');
-  if (!tiers.includes(next)) return refuse(`${TIERS[next].name} is locked`);
+  if (!next) return { ok: false, code: 'top-tier' };
+  if (!tiers.includes(next)) return { ok: false, code: 'tier-locked', tier: next };
   return pay(base, stock, TIERS[next].cost, (b) => {
     const hp = segmentMaxHp(seg.kind, next);
     layerAt(b, column)!.slots[row] = { kind: seg.kind, tier: next, hp, maxHp: hp };
@@ -212,8 +213,8 @@ export function repairSegment(
 ): Result {
   checkSlot(column, row);
   const seg = layerAt(base, column)?.slots[row];
-  if (!seg) return refuse('Nothing built here');
-  if (seg.hp >= seg.maxHp) return refuse('Nothing to repair');
+  if (!seg) return { ok: false, code: 'nothing-built' };
+  if (seg.hp >= seg.maxHp) return { ok: false, code: 'nothing-to-repair' };
   return pay(base, stock, repairCost(seg, off), (b) => {
     const s = layerAt(b, column)!.slots[row]!;
     s.hp = s.maxHp;
@@ -240,7 +241,7 @@ export function repairAll(base: Base, stock: Stock, off = 0): Result {
     base.turrets.every((t) => t.condition >= MAX_CONDITION) &&
     base.traps.every((t) => t.durability >= TRAP_DURABILITY)
   ) {
-    return refuse('Nothing to repair');
+    return { ok: false, code: 'nothing-to-repair' };
   }
   return pay(base, stock, repairAllCost(base, off), (b) => {
     for (const s of segments(b)) s.hp = s.maxHp;
@@ -253,11 +254,11 @@ export function buildPost(base: Base, stock: Stock, post: BasePost): Result {
   checkPost(post);
   const { kind, column, row } = post;
   const spot = spotOf(post);
-  if (spotTaken(base, kind, column, row, spot)) return refuse('Slot taken');
+  if (spotTaken(base, kind, column, row, spot)) return { ok: false, code: 'slot-taken' };
   const layer = layerAt(base, column);
-  if (kind === 'wall-walk' && !layer?.slots[row]) return refuse('A wall-walk post needs a wall');
+  if (kind === 'wall-walk' && !layer?.slots[row]) return { ok: false, code: 'walk-needs-wall' };
   if (kind !== 'wall-walk' && !layer?.slots.some((s) => s)) {
-    return refuse(`${kind === 'tower' ? 'A tower' : 'A ground post'} needs a wall in front`);
+    return { ok: false, code: 'post-needs-front', post: kind };
   }
   return pay(base, stock, POST_COST[kind], (b) => {
     b.posts.push({ kind, column, row, ...spotField(spot) });
@@ -287,7 +288,7 @@ export function freeWalkSpots(base: Base, column: number): BasePost[] {
  */
 export function lineWall(base: Base, stock: Stock, column: number): Result {
   const free = freeWalkSpots(base, column);
-  if (free.length === 0) return refuse('No free spot on this wall');
+  if (free.length === 0) return { ok: false, code: 'no-free-spot' };
   let result = buildPost(base, stock, free[0]!);
   if (!result.ok) return result;
   for (const post of free.slice(1)) {
@@ -305,12 +306,12 @@ function mountError(
   column: number,
   row: number,
   spot: number,
-): string | null {
-  if (spotTaken(base, mount, column, row, spot)) return 'Slot taken';
+): Refusal | null {
+  if (spotTaken(base, mount, column, row, spot)) return { ok: false, code: 'slot-taken' };
   const layer = layerAt(base, column);
-  if (mount === 'wall-walk' && !layer?.slots[row]) return 'A wall mount needs a wall';
+  if (mount === 'wall-walk' && !layer?.slots[row]) return { ok: false, code: 'mount-walk-wall' };
   if (mount === 'tower' && !layer?.slots.some((s) => s))
-    return 'A tower mount needs a wall in front';
+    return { ok: false, code: 'mount-tower-front' };
   return null;
 }
 
@@ -325,9 +326,9 @@ export function buildTurret(
   spot = 0,
 ): Result {
   checkMount(mount, column, row, spot);
-  if (!researched) return refuse('Research the Auto-turret first');
+  if (!researched) return { ok: false, code: 'research-turret' };
   const why = mountError(base, mount, column, row, spot);
-  if (why) return refuse(why);
+  if (why) return why;
   return pay(base, stock, TURRET.cost, (b) => {
     b.turrets.push({ mount, column, row, ...spotField(spot), condition: MAX_CONDITION });
     b.turrets.sort(byTurret);
@@ -344,7 +345,7 @@ export function turretRepairCost(turret: BaseTurret, off = 0): Stock {
 
 export function repairTurret(base: Base, stock: Stock, index: number, off = 0): Result {
   const t = turretAt(base, index);
-  if (t.condition >= MAX_CONDITION) return refuse('Nothing to repair');
+  if (t.condition >= MAX_CONDITION) return { ok: false, code: 'nothing-to-repair' };
   return pay(base, stock, turretRepairCost(t, off), (b) => {
     b.turrets[index]!.condition = MAX_CONDITION;
   });
@@ -377,10 +378,10 @@ export function moveTurret(
   const t = turretAt(base, index);
   checkMount(mount, column, row, spot);
   if (t.mount === mount && t.column === column && t.row === row && spotOf(t) === spot) {
-    return refuse('Already there');
+    return { ok: false, code: 'already-there' };
   }
   const why = mountError(base, mount, column, row, spot);
-  if (why) return refuse(why);
+  if (why) return why;
   return pay(base, stock, {}, (b) => {
     const { condition } = b.turrets.splice(index, 1)[0]!;
     b.turrets.push({ mount, column, row, ...spotField(spot), condition });
@@ -391,7 +392,7 @@ export function moveTurret(
 /** Builds a trap at full durability in the strip's cell `row` (design §7); no research needed. */
 export function buildTrap(base: Base, stock: Stock, kind: TrapKind, row: number): Result {
   checkTrap(kind, row);
-  if (base.traps.some((t) => t.row === row)) return refuse('Slot taken');
+  if (base.traps.some((t) => t.row === row)) return { ok: false, code: 'slot-taken' };
   return pay(base, stock, TRAPS[kind].cost, (b) => {
     b.traps.push({ kind, row, durability: TRAP_DURABILITY });
     b.traps.sort((x, y) => x.row - y.row);
@@ -407,7 +408,7 @@ export function trapRepairCost(trap: BaseTrap, off = 0): Stock {
 
 export function repairTrap(base: Base, stock: Stock, index: number, off = 0): Result {
   const t = trapAt(base, index);
-  if (t.durability >= TRAP_DURABILITY) return refuse('Nothing to repair');
+  if (t.durability >= TRAP_DURABILITY) return { ok: false, code: 'nothing-to-repair' };
   return pay(base, stock, trapRepairCost(t, off), (b) => {
     b.traps[index]!.durability = TRAP_DURABILITY;
   });
@@ -427,7 +428,6 @@ export function removeTrap(base: Base, stock: Stock, index: number): Result {
   return { ok: true, base: b, stock: stockFrom((m) => stock[m] + value[m]) };
 }
 
-const refuse = (reason: string): Result => ({ ok: false, reason });
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const byPost = (x: BasePost, y: BasePost): number =>
   x.column - y.column || cmp(x.kind, y.kind) || x.row - y.row || spotOf(x) - spotOf(y);
@@ -457,7 +457,7 @@ const stockFrom = (f: (m: Material) => number): Stock =>
 /** Charges `cost` and applies `change` to a copy, or refuses naming the first short material. */
 function pay(base: Base, stock: Stock, cost: Partial<Stock>, change: (b: Base) => void): Result {
   const short = MATERIALS.find((m) => stock[m] < (cost[m] ?? 0));
-  if (short) return { ok: false, reason: `Not enough ${short}`, short: true };
+  if (short) return { ok: false, code: 'short', material: short, short: true };
   const b = structuredClone(base);
   change(b);
   return { ok: true, base: b, stock: stockFrom((m) => stock[m] - (cost[m] ?? 0)) };

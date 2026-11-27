@@ -1,7 +1,7 @@
 // The loop between hordes (design §2): build on the base, fight a horde, carry the
 // damage, payout, XP and injuries back. Pure: every function returns new state, and
 // real time comes in as `now` (ms since the epoch), never read from a clock.
-import { gunSalvage, heldName, isOwned, rollDrop, type Held, type OwnedWeapon } from './armoury.ts';
+import { gunSalvage, isOwned, rollDrop, type Held, type OwnedWeapon } from './armoury.ts';
 import { newBase, type Base, type Tier } from './base.ts';
 import type { Craft } from './craft.ts';
 import {
@@ -59,6 +59,7 @@ import { newPerkLevels, type PerkLevels } from './perks.ts';
 import { bankCap, loadBatteries, newPower, runGenerator, type Power } from './power.ts';
 import { advanceResearch, dropEntry, newQueue, type ResearchQueue } from './research.ts';
 import { chance, createRng, pick, rngFrom } from './rng.ts';
+import type { Refusal } from './refusal.ts';
 import { jobFor } from './jobs.ts';
 import { levelOf } from './stats.ts';
 import { themeCleared, themeOf, withCleared } from './themes.ts';
@@ -421,12 +422,12 @@ export function equip(
   game: GameState,
   defenderId: string,
   loadout: Loadout,
-): { ok: true; game: GameState } | { ok: false; reason: string } {
+): { ok: true; game: GameState } | Refusal {
   const i = game.roster.findIndex((d) => d.id === defenderId);
   if (i < 0) throw new RangeError(`equip: no defender ${String(defenderId)}`);
   const me = game.roster[i]!;
   // A patrol takes its weapons with it (design §10).
-  if (onPatrol(game, me.id)) return { ok: false, reason: `${me.name} is on patrol` };
+  if (onPatrol(game, me.id)) return { ok: false, code: 'on-patrol', who: me.name };
   const known = (id: string | null, table: object): boolean =>
     id === null || Object.hasOwn(table, id);
   const owned = [...game.armoury, ...carried(me)];
@@ -450,15 +451,14 @@ export function equip(
   for (const h of [primary, secondary]) {
     if (!isOwned(h)) continue;
     const by = carrierOf(game, h.uid);
-    if (by && by.id !== me.id)
-      return { ok: false, reason: `${by.name} carries the ${heldName(h)}` };
+    if (by && by.id !== me.id) return { ok: false, code: 'carries', who: by.name, held: h };
   }
   if (isOwned(primary) && isOwned(secondary) && primary.uid === secondary.uid) {
-    return { ok: false, reason: "One weapon can't fill two slots" };
+    return { ok: false, code: 'one-weapon-two-slots' };
   }
   const next: Loadout = { primary, secondary, item: loadout.item };
-  const reason = loadoutError(next);
-  if (reason !== null) return { ok: false, reason };
+  const why = loadoutError(next);
+  if (why !== null) return why;
   const holding = new Set(carried({ loadout: next }).map((w) => w.uid));
   const roster = [...game.roster];
   roster[i] = { ...me, loadout: next };

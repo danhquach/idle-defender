@@ -38,7 +38,7 @@ function hurt(): HordeState {
 }
 const used = (s: HordeState): HordeState => {
   const r = useRepairs(s);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.state;
 };
 
@@ -59,7 +59,7 @@ describe('Field Repairs as a skill (ID-231)', () => {
 
   it('is none until the card is held, and a new horde starts none', () => {
     expect(repairsState(fight())).toBe('none');
-    expect(repairsLock(fight())).toBe('Pick Field Repairs first');
+    expect(repairsLock(fight())).toEqual({ ok: false, code: 'pick-repairs' });
     const s = used(hurt());
     expect(repairsState(s)).toBe('spent');
     expect(repairsState(newHorde(2, setup()))).toBe('none');
@@ -86,21 +86,21 @@ describe('Field Repairs as a skill (ID-231)', () => {
     expect(repairsLeft(s)).toBeCloseTo(5, 9);
     expect(cardFireRate(s)).toBeCloseTo(0.75, 9);
     built(s)[0]!.hp = 1;
-    expect(useRepairs(s)).toEqual({ ok: false, reason: 'Already used' });
+    expect(useRepairs(s)).toEqual({ ok: false, code: 'repairs-used' });
     s = tick(s, 6);
     expect(repairsLeft(s)).toBe(0);
     expect(repairsState(s)).toBe('spent');
-    expect(repairsLock(s)).toBe('Already used');
+    expect(repairsLock(s)).toEqual({ ok: false, code: 'repairs-used' });
   });
 
   it('refuses a full wall, ignoring unbuilt slots', () => {
     const s = picked(fight());
-    expect(useRepairs(s)).toEqual({ ok: false, reason: 'The wall is full' });
+    expect(useRepairs(s)).toEqual({ ok: false, code: 'wall-full' });
     // An unbuilt slot (hp 0, max 0) is not damage.
     const slot = segs(s)[0]!;
     Object.assign(slot, { kind: null, tier: null, hp: 0, maxHp: 0 });
-    expect(useRepairs(s)).toEqual({ ok: false, reason: 'The wall is full' });
-    expect(repairsLock(s)).toBe('The wall is full');
+    expect(useRepairs(s)).toEqual({ ok: false, code: 'wall-full' });
+    expect(repairsLock(s)).toEqual({ ok: false, code: 'wall-full' });
   });
 
   it('is usable with a card offer or a replacement open, and while the fight is held', () => {
@@ -116,7 +116,7 @@ describe('Field Repairs as a skill (ID-231)', () => {
   it('is refused once the horde is over', () => {
     for (const outcome of ['won', 'lost'] as const) {
       const s = { ...hurt(), outcome };
-      expect(useRepairs(s)).toEqual({ ok: false, reason: 'The horde is over' });
+      expect(useRepairs(s)).toEqual({ ok: false, code: 'horde-over' });
     }
   });
 

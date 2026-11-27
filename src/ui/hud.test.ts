@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOSS_PERK_GENES, PERK_IDS, PERKS, RECOVERY_MS, stockOf } from '../core/data.ts';
+import { BOSS_PERK_GENES, PERK_IDS, RECOVERY_MS, stockOf } from '../core/data.ts';
 import { queueResearch, type QueueId } from '../core/research.ts';
 import {
   finishHorde,
@@ -39,6 +39,7 @@ import {
 } from './hud.ts';
 import { loadoutFrom } from '../core/loadout.ts';
 import { cardText } from './hud.ts';
+import { PERK_NAME } from './text/index.ts';
 
 const horde = (): HordeState => newHorde(1, setup());
 
@@ -455,22 +456,22 @@ describe('hud', () => {
         resultScreen(g, s, NOW).lines.find((l) => l.startsWith('Boss reward'));
       const reward = hordeBossReward(game, s);
       if (!reward || !('perk' in reward)) throw new Error('no perk');
-      expect(line(game)).toBe(`Boss reward: ${PERKS[reward.perk].name} perk unlocked`);
+      expect(line(game)).toBe(`Boss reward: ${PERK_NAME[reward.perk]} perk unlocked`);
       expect(finishHorde(game, s, NOW).perkLevels[reward.perk]).toBe(1);
       // That perk's node, queued, finishes during the fight: the screen and the finish both
       // see it owned and agree on another perk.
       const g: GameState = { ...game, lab: 2, stock: { ...game.stock, genes: 999 } };
       const q = queueResearch(g, reward.perk as QueueId, NOW - 24 * 60 * 60_000);
-      if (!q.ok) throw new Error(q.reason);
+      if (!q.ok) throw new Error(q.code);
       const other = line(q.game)!;
-      expect(other).not.toContain(PERKS[reward.perk].name);
+      expect(other).not.toContain(PERK_NAME[reward.perk]);
       const done = finishHorde(q.game, s, NOW);
       const gifted = PERK_IDS.filter(
         (id) =>
           done.perkLevels[id] === 1 && !done.research.includes(id as never) && id !== 'steady-fire',
       );
       expect(gifted).toHaveLength(1);
-      expect(other).toBe(`Boss reward: ${PERKS[gifted[0]!].name} perk unlocked`);
+      expect(other).toBe(`Boss reward: ${PERK_NAME[gifted[0]!]} perk unlocked`);
       // Every perk owned: Genes instead.
       const all = { ...game, perkLevels: { ...game.perkLevels } };
       for (const id of PERK_IDS) all.perkLevels[id] = 1;
@@ -571,7 +572,7 @@ describe('hud', () => {
     it('a worn turret joins the repair bill, even when it is the only damage', () => {
       const game = newGame();
       const built = buildTurret(game.base, game.stock, true, 'tower', 0, 2);
-      if (!built.ok) throw new Error(built.reason);
+      if (!built.ok) throw new Error(built.code);
       const g: GameState = { ...game, base: built.base, stock: built.stock };
       const s = startHorde(g, 1, 'bob', 0, NOW);
       s.outcome = 'won';

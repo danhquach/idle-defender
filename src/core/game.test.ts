@@ -208,7 +208,7 @@ describe('game', () => {
     const g = newGame();
     g.roster[0]!.injuredUntil = NOW + 1000;
     const r = equip(g, 'bob', { primary: 'pistol', secondary: 'knife', item: 'shield' });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster[0]!.loadout).toEqual({
       primary: 'pistol',
       secondary: 'knife',
@@ -225,11 +225,11 @@ describe('game', () => {
     const g = newGame();
     expect(equip(g, 'jack', { primary: 'pistol', secondary: null, item: 'shield' })).toEqual({
       ok: false,
-      reason: 'A shield needs a blade',
+      code: 'shield-blade',
     });
     expect(equip(g, 'jack', { primary: 'knife', secondary: null, item: null })).toEqual({
       ok: false,
-      reason: 'The primary must be a gun',
+      code: 'primary-gun',
     });
     expect(() => equip(g, 'nobody', loadoutFrom('pistol'))).toThrow(RangeError);
     for (const bad of [

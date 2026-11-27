@@ -1,15 +1,7 @@
 // Design §8, ID-131: Kevlar Vests (survivor armour) and First Aid Kits (survivor HP
 // recovery), levelled common stat cards in the horde pool.
 import { describe, expect, it } from 'vitest';
-import {
-  UPGRADES,
-  chooseCard,
-  effectAt,
-  eligible,
-  pitch,
-  rollOffer,
-  survivorHurt,
-} from './cards.ts';
+import { UPGRADES, chooseCard, eligible, rollOffer, survivorHurt } from './cards.ts';
 import { createRng } from './rng.ts';
 import { ARMOUR_FLOOR, CARD, CARD_MAX_LEVEL, ENEMIES, SPEWER, STEP } from './data.ts';
 import {
@@ -65,8 +57,6 @@ describe('survivor cards (ID-131)', () => {
       });
       expect(SQUAD_CARDS).toContain(id);
     }
-    expect(UPGRADES['kevlar-vests'].name).toBe('Kevlar Vests');
-    expect(UPGRADES['first-aid-kits'].name).toBe('First Aid Kits');
     expect(CARD.armour).toEqual([1, 2, 3]);
     expect(CARD.firstAid).toEqual([0.005, 0.01, 0.015]);
   });
@@ -105,34 +95,6 @@ describe('survivor cards (ID-131)', () => {
         expect(offer.some((c) => c.kind === 'upgrade' && c.id === id)).toBe(false);
       }
     }
-  });
-
-  it('card texts show the exact number at each level', () => {
-    expect([1, 2, 3].map((n) => effectAt('kevlar-vests', n)!.value)).toEqual([
-      '−1 HP',
-      '−2 HP',
-      '−3 HP',
-    ]);
-    expect(effectAt('kevlar-vests', 1)).toEqual({
-      pre: 'Each hit on a survivor ',
-      value: '−1 HP',
-      post: '',
-    });
-    expect([1, 2, 3].map((n) => effectAt('first-aid-kits', n)!.value)).toEqual([
-      '0.5%',
-      '1%',
-      '1.5%',
-    ]);
-    expect(effectAt('first-aid-kits', 1)).toEqual({
-      pre: 'Survivors recover ',
-      value: '0.5%',
-      post: ' of max HP a second',
-    });
-    const s = picked(newHorde(1, setup()), 'kevlar-vests', 1);
-    expect(pitch(s, 'kevlar-vests')).toMatchObject({
-      tag: 'Lv 1 → 2',
-      effect: { from: '−1 HP', to: '−2 HP' },
-    });
   });
 
   it('add nothing when not held', () => {

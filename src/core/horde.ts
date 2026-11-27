@@ -92,6 +92,7 @@ import {
   weaponOf,
   type Loadout,
 } from './loadout.ts';
+import type { Refusal } from './refusal.ts';
 import { openReplace } from './replace.ts';
 import { chance, int, rngFrom, type Rng, type RngState } from './rng.ts';
 import {
@@ -514,7 +515,7 @@ export interface ReplaceOffer {
   injuredId: string;
   postId: number | null;
 }
-export type MoveResult = { ok: true; state: HordeState } | { ok: false; reason: string };
+export type MoveResult = { ok: true; state: HordeState } | Refusal;
 /** A blade or tool strike by defender `owner` landing on `(x, y)`, drawn for `STRIKE_FLASH` s. */
 export interface Strike {
   x: number;
@@ -1366,29 +1367,28 @@ export function setFocus(state: HordeState, enemyId: number | null): HordeState 
 
 /**
  * Sends a defender walking to post `postId`: its old post is free at once and the new
- * one is reserved. Refuses with a player-facing reason; throws on an unknown id.
+ * one is reserved. Refuses with a code (core/refusal.ts); throws on an unknown id.
  */
 export function moveDefender(state: HordeState, defenderId: string, postId: number): MoveResult {
   const defender = state.defenders.find((d) => d.id === defenderId);
   if (!defender) throw new RangeError(`moveDefender: no defender ${String(defenderId)}`);
   const target = Number.isInteger(postId) ? state.posts[postId] : undefined;
   if (!target) throw new RangeError(`moveDefender: no post ${postId}`);
-  const refuse = (reason: string): MoveResult => ({ ok: false, reason });
-  if (state.outcome !== 'fighting') return refuse('The fight is over');
-  if (state.offer !== null) return refuse('Pick a card first');
-  if (state.replace !== null) return refuse('Pick a replacement first');
+  if (state.outcome !== 'fighting') return { ok: false, code: 'fight-over' };
+  if (state.offer !== null) return { ok: false, code: 'pick-card' };
+  if (state.replace !== null) return { ok: false, code: 'pick-replacement' };
   // The firing line's slots are fixed (ID-068): nobody moves onto or off them.
   if (target.kind === 'line' || state.posts[defender.postId]?.kind === 'line') {
-    return refuse('Survivors hold their slots');
+    return { ok: false, code: 'hold-slots' };
   }
   if (defender.postId === postId) {
-    return refuse(defender.walking ? 'Already on the way' : 'Already there');
+    return { ok: false, code: defender.walking ? 'on-the-way' : 'already-there' };
   }
   if (target.defenderId !== null) {
     const holder = state.defenders.find((d) => d.id === target.defenderId);
-    return refuse(holder?.walking ? 'Post reserved' : 'Post taken');
+    return { ok: false, code: holder?.walking ? 'post-reserved' : 'post-taken' };
   }
-  if (!postUsable(state.layers, target)) return refuse('No wall to stand on');
+  if (!postUsable(state.layers, target)) return { ok: false, code: 'no-wall' };
   const s = structuredClone(state);
   const d = s.defenders.find((x) => x.id === defenderId)!;
   s.posts[d.postId]!.defenderId = null;

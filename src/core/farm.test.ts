@@ -6,7 +6,6 @@ import {
   firstClearWeights,
   gunLevel,
   gunPower,
-  levelName,
   replayWeights,
   rollUpgrade,
   squadDropWeights,
@@ -95,11 +94,9 @@ describe('gun level (ID-098)', () => {
     expect(gunPower(twenty)).toBeGreaterThan(gunPower(one));
   });
 
-  it('is 1 for the free pistol and a gun with none, and shows as "Lv n Name"', () => {
+  it('is 1 for the free pistol and a gun with none', () => {
     expect(gunLevel('pistol')).toBe(1);
     expect(gunLevel(gun('h3', 'smg', 'common'))).toBe(1);
-    expect(levelName(gun('h12', 'rifle', 'military', 12))).toBe('Lv 12 Military Carbine');
-    expect(levelName('pistol')).toBe('Lv 1 Pistol');
   });
 
   it('lets a high-level Common beat a low-level Military', () => {

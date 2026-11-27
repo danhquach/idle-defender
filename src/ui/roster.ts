@@ -20,18 +20,15 @@ import {
 import {
   CAMP_PICK_IDS,
   CAMP_PICK_RANKS,
-  CAMP_PICKS,
   CAR,
   ITEMS,
-  placeName,
   RARITY_ORDER,
   FREE_WEAPONS,
   TREATMENT_MS,
-  WEAPONS,
   type FreeWeaponId,
   type ItemId,
 } from '../core/data.ts';
-import { heldLabel, type Held } from '../core/armoury.ts';
+import { type Held } from '../core/armoury.ts';
 import {
   available,
   carrierOf,
@@ -46,6 +43,15 @@ import { levelOf } from '../core/stats.ts';
 import { campPickText, defenderLabel, el, survivorText } from './hud.ts';
 import { costLine, setVariant } from './kit.ts';
 import { levelText } from './statlines.ts';
+import {
+  lockText,
+  refusedText,
+  placeName,
+  heldLabel,
+  CAMP_PICK_NAME,
+  ITEM_NAME,
+  WEAPON_NAME,
+} from './text/index.ts';
 
 /**
  * The free weapons each slot may hold (design §6): guns as primary; a sidearm, blade or
@@ -97,7 +103,7 @@ export function rosterEntry(d: RosterDefender, now: number, patrol?: Patrol): Ro
 export function campLines(game: GameState, now: number): string[] {
   const { level, into, next } = campLevelOf(game.camp.xp);
   const taken = CAMP_PICK_IDS.filter((id) => game.camp.picks[id] > 0).map(
-    (id) => `${CAMP_PICKS[id].name} ${game.camp.picks[id]}/${CAMP_PICK_RANKS}`,
+    (id) => `${CAMP_PICK_NAME[id]} ${game.camp.picks[id]}/${CAMP_PICK_RANKS}`,
   );
   const at = game.camp.recruitAt;
   const { cars } = game.camp;
@@ -142,8 +148,8 @@ export function campSection(
   if (r.ok) upgrade.addEventListener('click', () => onChange(r.game));
   else {
     // As in the build panel: the red cost says why, the reason is the tooltip.
-    setVariant(upgrade, r.short ? 'unaffordable' : 'locked', r.short && cost ? '' : r.reason);
-    upgrade.title = r.reason;
+    setVariant(upgrade, r.short ? 'unaffordable' : 'locked', r.short && cost ? '' : refusedText(r));
+    upgrade.title = refusedText(r);
   }
   section.append(upgrade);
   // The car (design §10 Vehicle): one at first; More cars research adds another (ID-035).
@@ -157,8 +163,12 @@ export function campSection(
     const built = buildCar(game);
     if (built.ok) build.addEventListener('click', () => onChange(built.game));
     else {
-      setVariant(build, built.short ? 'unaffordable' : 'locked', built.short ? '' : built.reason);
-      build.title = built.reason;
+      setVariant(
+        build,
+        built.short ? 'unaffordable' : 'locked',
+        built.short ? '' : refusedText(built),
+      );
+      build.title = refusedText(built);
     }
     section.append(build);
   }
@@ -186,7 +196,7 @@ export function campSection(
       section.append(
         el('p', 'build-slot-note', `Survivor wants to join: ${survivorText(offer.survivor)}`),
       );
-      const lock = joinLock(game);
+      const lock = lockText(joinLock(game));
       if (lock !== null) section.append(el('p', 'build-slot-note', lock));
     }
     section.append(row);
@@ -211,11 +221,11 @@ export interface Choice<T> {
 
 const plain = <T extends string | null>(
   options: readonly T[],
-  table: Readonly<Record<string, { name: string }>>,
+  table: Readonly<Record<string, string>>,
 ): Choice<T>[] =>
   options.map((id) => ({
     value: id ?? '',
-    label: id === null ? 'None' : table[id]!.name,
+    label: id === null ? 'None' : table[id]!,
     pick: id,
   }));
 
@@ -244,10 +254,13 @@ export function weaponChoices(
       const note = by && by.id !== d.id ? ` · carried by ${by.name}` : '';
       return { value: w.uid, label: `${heldLabel(w)}${note}`, pick: w };
     });
-  return [...plain(slot === 'primary' ? PRIMARY_OPTIONS : SECONDARY_OPTIONS, WEAPONS), ...owned];
+  return [
+    ...plain(slot === 'primary' ? PRIMARY_OPTIONS : SECONDARY_OPTIONS, WEAPON_NAME),
+    ...owned,
+  ];
 }
 
-export const ITEM_CHOICES: readonly Choice<ItemId | null>[] = plain(ITEM_OPTIONS, ITEMS);
+export const ITEM_CHOICES: readonly Choice<ItemId | null>[] = plain(ITEM_OPTIONS, ITEM_NAME);
 
 /** The page value of what a slot holds: the weapon id, the owned weapon's uid, or '' for none. */
 const valueOf = (h: Held | ItemId | null): string =>
@@ -303,7 +316,7 @@ export function rosterSection(
         if (r.ok) {
           onChange(r.game);
         } else {
-          note.textContent = r.reason;
+          note.textContent = refusedText(r);
           select.value = current;
         }
       });
@@ -339,7 +352,7 @@ function dismissButton(
   const button = el('button', 'build-option');
   button.type = 'button';
   button.append(el('span', 'build-option-label', 'Dismiss'));
-  const lock = dismissLock(game, d.id);
+  const lock = lockText(dismissLock(game, d.id));
   if (lock !== null) {
     setVariant(button, 'locked', lock);
     return button;
@@ -372,7 +385,7 @@ function treatButton(
   button.append(el('span', 'build-option-label', treatText(game, item)));
   const r = treat(game, d.id, item, now);
   if (r.ok) button.addEventListener('click', () => onChange(r.game));
-  else setVariant(button, r.short ? 'unaffordable' : 'locked', r.reason);
+  else setVariant(button, r.short ? 'unaffordable' : 'locked', refusedText(r));
   return button;
 }
 

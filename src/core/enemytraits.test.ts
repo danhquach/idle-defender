@@ -222,7 +222,7 @@ describe('what never carries a class (ID-237)', () => {
         'spikes',
         1,
       );
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       const s = newHorde(1, { ...setup(), base: r.base });
       s.toSpawn = 0;
       s.defenders = [];
@@ -248,7 +248,7 @@ describe('what never carries a class (ID-237)', () => {
       s.cash = 100;
       const e = target(s, 'runner');
       const r = useSkill(s, 'airstrike', e.x, e.y);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       let t = r.state;
       for (let i = 0; i < 200 && t.incoming.length > 0; i++) t = tick(t, STEP);
       return 5000 - t.enemies.find((x) => x.id === e.id)!.hp;
@@ -317,7 +317,7 @@ describe('what carries a class (ID-237)', () => {
       0,
       5,
     );
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     base = r.base;
     const s = newHorde(1, { ...setup(), base });
     s.toSpawn = 0;

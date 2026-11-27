@@ -2,20 +2,11 @@
 // to set up the state a tester needs in a few clicks. Every typed value is checked against
 // its range here and refused when it is anything else; the moves themselves are core/debug.ts.
 import { DROP_GUNS, dropRarity } from '../core/armoury.ts';
-import { UPGRADES } from '../core/cards.ts';
-import {
-  RARITIES,
-  RARITY_ORDER,
-  SKILL_IDS,
-  SKILLS,
-  WEAPONS,
-  type Rarity,
-  type SkillId,
-  type WeaponId,
-} from '../core/data.ts';
+import { RARITY_ORDER, SKILL_IDS, type Rarity, type SkillId, type WeaponId } from '../core/data.ts';
 import { DEBUG_LIMITS } from '../core/debug.ts';
 import type { UpgradeId } from '../core/horde.ts';
 import { el } from './hud.ts';
+import { CARD_NAME, RARITY_NAME, ACTIVE_SKILL_NAME, WEAPON_NAME } from './text/index.ts';
 
 /** The debug fight speeds (ID-197), apart from the player's own. */
 export const DEBUG_SPEEDS = [2, 5, 10] as const;
@@ -204,7 +195,7 @@ export function createDebugPanel(root: HTMLElement, act: DebugActions): DebugPan
   const gun = select('Gun');
   fill(
     gun,
-    DROP_GUNS.map((id) => [id, WEAPONS[id].name]),
+    DROP_GUNS.map((id) => [id, WEAPON_NAME[id]]),
   );
   const rarity = select('Rarity');
   const rarities = (): void =>
@@ -212,7 +203,7 @@ export function createDebugPanel(root: HTMLElement, act: DebugActions): DebugPan
       rarity,
       RARITY_ORDER.filter((r) => dropRarity(gun.value as WeaponId, r) === r).map((r) => [
         r,
-        RARITIES[r].name,
+        RARITY_NAME[r],
       ]),
     );
   gun.addEventListener('change', rarities);
@@ -222,7 +213,7 @@ export function createDebugPanel(root: HTMLElement, act: DebugActions): DebugPan
   // Cards and skills.
   const card = select('Card');
   const skill = select('Skill');
-  fill(skill, [['', 'None'], ...SKILL_IDS.map((id) => [id, SKILLS[id].name] as const)]);
+  fill(skill, [['', 'None'], ...SKILL_IDS.map((id) => [id, ACTIVE_SKILL_NAME[id]] as const)]);
   const offer = button('Offer', () => said(act.offer(card.value as UpgradeId), 'Offered'));
   const grant = button('Grant', () => said(act.grant(card.value as UpgradeId), 'Granted'));
 
@@ -348,7 +339,7 @@ export function createDebugPanel(root: HTMLElement, act: DebugActions): DebugPan
       );
       fill(
         card,
-        v.cards.map((id) => [id, UPGRADES[id].name] as const),
+        v.cards.map((id) => [id, CARD_NAME[id]] as const),
       );
       for (const b of between) b.disabled = !v.between;
       for (const b of fight) b.disabled = !v.fighting;

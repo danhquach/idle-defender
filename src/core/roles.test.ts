@@ -8,7 +8,6 @@ import {
   gunCritDamage,
   gunPower,
   isRoleAffix,
-  roleOf,
   rollWeapon,
   statsOf,
   type OwnedWeapon,
@@ -18,7 +17,6 @@ import {
   BRUTE,
   FIELD,
   CRIT_DAMAGE,
-  GUN_ROLES,
   HORROR,
   STEP,
   TOP_CRIT,
@@ -125,16 +123,6 @@ function shotLog(s: HordeState, seconds: number): { at: number; next: number; bu
 }
 
 describe('roles and traits', () => {
-  it('every gun has a role and a trait; blades and tools have none', () => {
-    for (const g of SHOOTERS) {
-      expect(roleOf(g)).toEqual(GUN_ROLES[g]);
-      expect(GUN_ROLES[g].role.length).toBeGreaterThan(0);
-      expect(GUN_ROLES[g].trait.length).toBeGreaterThan(0);
-    }
-    expect(roleOf('knife')).toBeNull();
-    expect(roleOf('toolkit')).toBeNull();
-  });
-
   it('Pistol: the fastest reload of any gun ', () => {
     for (const g of SHOOTERS.filter((g) => g !== 'pistol')) {
       expect(WEAPONS.pistol.reload, g).toBeLessThan(WEAPONS[g].reload);
@@ -180,7 +168,6 @@ describe('roles and traits', () => {
     ).bullets[0]!;
     expect('slow' in bullet).toBe(false);
     expect('stagger' in bullet).toBe(false);
-    expect(roleOf('lmg')?.trait).toMatch(/crit/);
   });
 
   it('Carbine: fires 3-round bursts, 0.08 s apart, then waits so a shot still averages its fire interval', () => {

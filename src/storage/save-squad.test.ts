@@ -47,7 +47,7 @@ function crowded(): GameState {
     camp: { ...g.camp, upgrades: 2 },
   };
   const r = sendPatrol(game, 'gas-station', ['bob'], 0, NOW - H);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 

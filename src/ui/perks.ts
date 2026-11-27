@@ -6,7 +6,6 @@ import {
   PERK_IDS,
   PERK_LEVEL,
   PERK_SLOT_IDS,
-  PERKS,
   RESEARCH,
   START_PERK,
   type PerkId,
@@ -16,6 +15,7 @@ import {
 import type { GameState } from '../core/game.ts';
 import { equipPerk, perkSlots, unequipPerk, unlockedPerks } from '../core/perks.ts';
 import { entryOf, queueResearch, type GameResult, type QueueId } from '../core/research.ts';
+import { PERK_NAME, PERK_TEXT, RESEARCH_NAME } from './text/index.ts';
 
 /** Perk slots a commander can ever own: the starting one and one per slot node. */
 export const MAX_PERK_SLOTS = 1 + PERK_SLOT_IDS.length;
@@ -35,7 +35,7 @@ export type PerkLine =
     };
 
 /** "Steady Fire: Guns fire 12.5% faster". */
-export const perkText = (id: PerkId): string => `${PERKS[id].name}: ${PERKS[id].text}`;
+export const perkText = (id: PerkId): string => `${PERK_NAME[id]}: ${PERK_TEXT[id]}`;
 
 /** A research time as "15 min", "1 h" or "1 h 30 min". */
 export function durationText(minutes: number): string {
@@ -48,7 +48,7 @@ export function durationText(minutes: number): string {
 /** Where a research node is found: "Lab 2, 60 Genes, 1 h, after Auto-turret". */
 export function researchText(id: ResearchId): string {
   const node = RESEARCH[id];
-  const after = node.needs ? `, after ${RESEARCH[node.needs].name}` : '';
+  const after = node.needs ? `, after ${RESEARCH_NAME[node.needs]}` : '';
   return `Lab ${node.lab}, ${node.genes} Genes, ${durationText(node.minutes)}${after}`;
 }
 
@@ -65,7 +65,7 @@ function levelLines(game: GameState, id: PerkId, now: number): PerkLine[] {
   const { genes, minutes } = entryOf(game, entry);
   lines.push({
     kind: 'action',
-    label: `Upgrade ${PERKS[id].name} to level ${level + 1} (${durationText(minutes)})`,
+    label: `Upgrade ${PERK_NAME[id]} to level ${level + 1} (${durationText(minutes)})`,
     cost: { genes },
     result: queueResearch(game, entry, now),
     act: (at) => queueResearch(game, entry, at),
@@ -95,7 +95,7 @@ export function perkLines(game: GameState, now: number): PerkLine[] {
     } else {
       lines.push(
         { kind: 'note', text: `Slot ${i + 1} · ${perkText(perk)}` },
-        { kind: 'action', label: `Unequip ${PERKS[perk].name}`, result: unequipPerk(game, perk) },
+        { kind: 'action', label: `Unequip ${PERK_NAME[perk]}`, result: unequipPerk(game, perk) },
       );
     }
   }
@@ -108,7 +108,7 @@ export function perkLines(game: GameState, now: number): PerkLine[] {
     } else if (unlocked.includes(id)) {
       lines.push(
         { kind: 'note', text: `${perkText(id)} · ${level}` },
-        { kind: 'action', label: `Equip ${PERKS[id].name}`, result: equipPerk(game, id) },
+        { kind: 'action', label: `Equip ${PERK_NAME[id]}`, result: equipPerk(game, id) },
         ...levelLines(game, id, now),
       );
     } else {
