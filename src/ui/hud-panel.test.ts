@@ -286,10 +286,10 @@ describe('the weapon chips open one details area (ID-196)', () => {
 describe('titles say the result (ID-196)', () => {
   it('a win holds the line, a replay says so, the finale keeps its own title, a loss says the camp fell', () => {
     const g = squadGame(2, 6);
-    expect(squadScreen(g, ended(g, 'won')).title).toBe('Horde 6 - You hold the line');
+    expect(squadScreen(g, ended(g, 'won')).title).toBe('Normal 6 - You hold the line');
     const replay = squadScreen(g, { ...startSquadHorde(g, 1, NOW, 3), outcome: 'won' as const });
-    expect(replay.title).toBe('Horde 3 - You hold the line (replay)');
-    expect(squadScreen(g, ended(g, 'lost')).title).toBe('Horde 6 - Camp has fallen');
+    expect(replay.title).toBe('Normal 3 - You hold the line (replay)');
+    expect(squadScreen(g, ended(g, 'lost')).title).toBe('Normal 6 - Camp has fallen');
     const finale = squadGame(2, FINALE_HORDE);
     expect(
       squadScreen(finale, { ...startSquadHorde(finale, 1, NOW), outcome: 'won' as const }).title,
@@ -297,7 +297,9 @@ describe('titles say the result (ID-196)', () => {
     // The page shows the same words.
     const { h, panel } = page();
     h.showResult(squadScreen(g, ended(g, 'lost')));
-    expect(panel.querySelector('.hud-result-title')!.textContent).toBe('Horde 6 - Camp has fallen');
+    expect(panel.querySelector('.hud-result-title')!.textContent).toBe(
+      'Normal 6 - Camp has fallen',
+    );
   });
 });
 
@@ -329,7 +331,7 @@ describe('no radio on the panel (ID-196)', () => {
     expect(first.textContent).toBe('Endless · best 44');
     expect(first.tagName).toBe('SPAN');
     expect(panel.querySelector('.debrief-note')!.textContent).toMatch(
-      /^Evacuation called\. Hold Horde 45 for a new best\. You lose if /,
+      /^Evacuation called\. Hold Normal 45 for a new best\. You lose if /,
     );
   });
 
@@ -444,7 +446,7 @@ describe('the horde picker says readiness once (ID-196)', () => {
       expect(options.length).toBeGreaterThan(1);
       for (const o of options) {
         expect(o.textContent).not.toMatch(/rec/i);
-        expect(o.textContent).toMatch(/^Horde \d+( \(new\))?( · Boss)?( · best to farm)?$/);
+        expect(o.textContent).toMatch(/^Normal \d+( \(new\))?( · Boss)?( · best to farm)?$/);
       }
     }
   });

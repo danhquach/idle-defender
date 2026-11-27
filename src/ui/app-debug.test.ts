@@ -142,7 +142,7 @@ describe('debug mode off (ID-197)', () => {
       expect(badge()).toBeNull();
       expect(panel()).toBeNull();
       expect(document.body.textContent).not.toMatch(/DEBUG/);
-      expect(root.querySelector('.hud-result-title')!.textContent).toBe('Horde 4');
+      expect(root.querySelector('.hud-result-title')!.textContent).toBe('Normal 4');
       expect(localStorage.getItem(DEBUG_SAVE_KEY)).toBeNull();
     },
   );
@@ -163,7 +163,7 @@ describe('debug mode on (ID-197)', () => {
   it('never reads or writes the real save: a fresh debug camp, kept in its own slot', () => {
     localStorage.setItem(SAVE_KEY, REAL);
     const { type, press, debugSaved, resultTitle } = boot('?debug=1');
-    expect(resultTitle()).toBe('Horde 1');
+    expect(resultTitle()).toBe('Normal 1');
     type('Scrap', '777');
     expect(press('Scrap', 'Set')).toBe('Scrap set');
     expect(debugSaved().stock.scrap).toBe(777);
@@ -175,7 +175,7 @@ describe('debug mode on (ID-197)', () => {
     type('Horde', '20');
     type('Seed', '5');
     expect(press('Horde', 'Start')).toBe('Horde 20 started');
-    // A reload mid-fight comes back to the camp before it: Horde 20 is the next one.
+    // A reload mid-fight comes back to the camp before it: Normal 20 is the next one.
     const s = boot('?debug=1');
     s.type('Camp level', '9');
     expect(s.press('Camp', 'Set')).toBe('Camp level set');
@@ -219,7 +219,7 @@ describe('debug mode on (ID-197)', () => {
     type('Seed', '4242');
     expect(press('Horde', 'Start')).toBe('Horde 12 started');
     step();
-    expect(corner()).toMatch(/^Horde 12/);
+    expect(corner()).toMatch(/^Normal 12/);
     expect(panel()!.querySelector('.debug-note')!.textContent).toBe('Now: 4242');
     expect(debugSaved().hordeNumber).toBe(12);
     // A camp edit waits for the fight to end.
@@ -266,7 +266,7 @@ describe('debug mode on (ID-197)', () => {
     expect(line()).toHaveLength(2);
     expect(press('End', 'Win')).toBe('Win forced');
     for (let i = 0; i < 1000 && !resultUp(); i++) step();
-    expect(resultTitle()).toMatch(/^Horde 1 - /);
+    expect(resultTitle()).toMatch(/^Normal 1 - /);
     expect(resultTitle()).not.toMatch(/fallen/);
     type('Horde', '2');
     expect(press('Horde', 'Start')).toBe('Horde 2 started');
@@ -274,7 +274,7 @@ describe('debug mode on (ID-197)', () => {
     expect(press('End', 'Lose')).toBe('Loss forced');
     step();
     expect(resultUp()).toBe(true);
-    expect(resultTitle()).toMatch(/^Horde 2 - Camp has fallen/);
+    expect(resultTitle()).toMatch(/^Normal 2 - Camp has fallen/);
     // From the result screen, a debug Start leaves it for the new fight.
     type('Squad size', '2');
     expect(press('Squad', 'Set')).toBe('Squad set');
@@ -310,7 +310,7 @@ describe('debug mode on (ID-197)', () => {
     panel()!.querySelector<HTMLButtonElement>('.debug-reset')!.click();
     step();
     expect(document.querySelector('.hud-corner')!.getAttribute('title') ?? '').not.toMatch(
-      /^Horde 9/,
+      /^Normal 9/,
     );
     step();
     expect(debugSaved().hordeNumber).toBe(1);

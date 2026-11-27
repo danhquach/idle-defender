@@ -27,11 +27,11 @@ const fought = (g: GameState, n: number, outcome: 'won' | 'lost', wave = 1) => (
   wave,
 });
 
-const H10 = 'Next: Horde 10 boss · radio part 1/3 · new card Heavy Rounds';
-const H20 = 'Next: Horde 20 boss · radio part 2/3 · new card Field Repairs';
-const H30 = 'Next: Horde 30 · call the evacuation';
-const UNLOCK_N = 'Next: hold Horde 50 · unlocks Nightmare';
-const UNLOCK_H = 'Next: hold Horde 50 · unlocks Hell';
+const H10 = 'Next: Normal 10 boss · radio part 1/3 · new card Heavy Rounds';
+const H20 = 'Next: Normal 20 boss · radio part 2/3 · new card Field Repairs';
+const H30 = 'Next: Normal 30 · call the evacuation';
+const UNLOCK_N = 'Next: hold Normal 50 · unlocks Nightmare';
+const UNLOCK_H = 'Next: hold Nightmare 50 · unlocks Hell';
 
 describe('nextGoalLine (ID-217)', () => {
   it('names the next boss horde not yet beaten, its part and its card', () => {

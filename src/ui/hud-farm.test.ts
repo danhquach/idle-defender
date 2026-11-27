@@ -31,7 +31,6 @@ import {
   squadDropLines,
   squadScreen,
   squadStart,
-  startLabel,
 } from './hud.ts';
 
 const NOW = 1_700_000_000_000;
@@ -121,7 +120,7 @@ describe('the horde picker (ID-098)', () => {
     expect(p.options.map((o) => o.horde)).toEqual([6, 5, 4, 3, 2, 1]);
     expect(p.options.map((o) => o.isNew)).toEqual([true, false, false, false, false, false]);
     expect(p.value).toBe(6);
-    expect(p.options[0]!.label).toMatch(/^Horde 6 \(new\)/);
+    expect(p.options[0]!.label).toMatch(/^Normal 6 \(new\)/);
   });
 
   it('lists at most PICKER_HORDES: the new horde and the highest beaten, however high', () => {
@@ -140,7 +139,7 @@ describe('the horde picker (ID-098)', () => {
     const power = squadPower(g);
     for (const o of p.options) {
       const rec = recommendedPower(o.horde);
-      expect(o.label).toMatch(new RegExp(`^Horde ${o.horde}\\b`));
+      expect(o.label).toMatch(new RegExp(`^Normal ${o.horde}\\b`));
       expect(o.label).not.toMatch(/rec/i);
       expect(o.label).not.toContain(rec.toLocaleString('en-US'));
       for (const word of Object.values(BAND_WORD)) expect(o.label.split(' · ')).not.toContain(word);
@@ -148,8 +147,8 @@ describe('the horde picker (ID-098)', () => {
       expect(o.power).toEqual(powerLine(power, rec));
     }
     expect(p.options.some((o) => o.label.includes(' · Boss'))).toBe(true);
-    expect(p.options[0]!.label).toBe('Horde 12 (new)');
-    expect(p.options.find((o) => o.horde === 10)!.label).toMatch(/^Horde 10 · Boss/);
+    expect(p.options[0]!.label).toBe('Normal 12 (new)');
+    expect(p.options.find((o) => o.horde === 10)!.label).toMatch(/^Normal 10 · Boss/);
   });
 
   it('names a squad of 8 on every line, with Recommended Power for 8 (ID-226)', () => {
@@ -166,21 +165,21 @@ describe('the horde picker (ID-098)', () => {
     const p = hordePicker(g, 10, 4);
     const by = (n: number) => p.options.find((o) => o.horde === n)!.button;
     // No boss suffix: the option beside the button says "Boss", and the start screen's pill.
-    expect(by(10)).toBe('Start Horde 10');
-    expect(by(5)).toBe('Replay Horde 5');
-    expect(by(4)).toBe('Retry Horde 4');
-    expect(hordePicker(g, 10).options.find((o) => o.horde === 4)!.button).toBe('Replay Horde 4');
+    expect(by(10)).toBe('Start Normal 10');
+    expect(by(5)).toBe('Replay Normal 5');
+    expect(by(4)).toBe('Retry Normal 4');
+    expect(hordePicker(g, 10).options.find((o) => o.horde === 4)!.button).toBe('Replay Normal 4');
     const late = hordePicker(squadGame(1, 12), 12, 10);
-    expect(late.options.find((o) => o.horde === 10)!.button).toBe('Retry Horde 10');
+    expect(late.options.find((o) => o.horde === 10)!.button).toBe('Retry Normal 10');
     expect(hordePicker(squadGame(1, 12)).options.find((o) => o.horde === 10)!.button).toBe(
-      'Replay Horde 10',
+      'Replay Normal 10',
     );
   });
 
   it('a boss replay says "Boss horde" and "Replay" once, as chips: not in the title or the button', () => {
     const s = squadStart(squadGame(2, 12), 10);
-    expect(s.title).toBe('Horde 10');
-    expect(s.button).toBe('Replay Horde 10');
+    expect(s.title).toBe('Normal 10');
+    expect(s.button).toBe('Replay Normal 10');
     const chips = s.debrief!.chips.map((c) => c.text);
     expect(chips.filter((c) => c === 'Boss horde')).toHaveLength(1);
     expect(chips.filter((c) => c === 'Replay')).toHaveLength(1);
@@ -200,8 +199,8 @@ describe('the start screen (ID-098)', () => {
   it('opens on the next new horde, the picker beside Start', () => {
     const g = squadGame(2, 5);
     const s = squadStart(g);
-    expect(s.title).toBe('Horde 5');
-    expect(s.button).toBe(startLabel(5));
+    expect(s.title).toBe('Normal 5');
+    expect(s.button).toBe('Start Normal 5');
     expect(s.picker!.value).toBe(5);
     expect(s.picker!.retitle).toBe(true);
     expect(s.debrief!.chips.map((c) => c.text)).toContain(`${waveCount(5)} waves`);
@@ -210,8 +209,8 @@ describe('the start screen (ID-098)', () => {
   it('a picked beaten horde makes it a replay: its title, waves, button', () => {
     const g = squadGame(2, 5);
     const s = squadStart(g, 3);
-    expect(s.title).toBe('Horde 3');
-    expect(s.button).toBe('Replay Horde 3');
+    expect(s.title).toBe('Normal 3');
+    expect(s.button).toBe('Replay Normal 3');
     expect(s.picker!.value).toBe(3);
     expect(s.debrief!.chips.map((c) => c.text)).toEqual(
       expect.arrayContaining(['Replay', `${waveCount(3)} waves`, `Squad 2/${SQUAD_CAP}`]),
@@ -227,7 +226,7 @@ describe('the start screen (ID-098)', () => {
       hordePicker(g).options.map((o) => o.label),
     );
     expect(select().value).toBe('5');
-    expect(button().textContent).toBe(startLabel(5));
+    expect(button().textContent).toBe('Start Normal 5');
     expect(select().classList.contains('build-select')).toBe(true);
     expect(root.querySelector('label[for="hud-horde-select"]')).not.toBeNull();
     const line = () => root.querySelector<HTMLElement>('.hud-horde-power')!;
@@ -241,9 +240,9 @@ describe('the start screen (ID-098)', () => {
     );
     choose(2);
     expect(picks).toEqual([2]);
-    expect(button().textContent).toBe('Replay Horde 2');
+    expect(button().textContent).toBe('Replay Normal 2');
     // "Replay" is the chip's to say, not the title's.
-    expect(title()).toBe('Horde 2');
+    expect(title()).toBe('Normal 2');
     expect(root.querySelector('.debrief-stats')!.textContent).toContain('Replay');
     // The campaign has no goal chip (ID-196): the radio is not on this panel.
     expect(root.querySelector('.debrief-stats')!.textContent).not.toMatch(/radio/i);
@@ -252,7 +251,7 @@ describe('the start screen (ID-098)', () => {
     );
     expect(button().disabled).toBe(false);
     choose(5);
-    expect(button().textContent).toBe(startLabel(5));
+    expect(button().textContent).toBe('Start Normal 5');
     expect(picks).toEqual([2, 5]);
   });
 
@@ -291,7 +290,7 @@ describe('the start screen (ID-098)', () => {
     expect(root.querySelector('.hud-horde-power-text')!.textContent).toBe(
       powerLine(squadPower(stronger), recommendedPower(4)).text,
     );
-    expect(button().textContent).toBe('Replay Horde 4');
+    expect(button().textContent).toBe('Replay Normal 4');
   });
 
   it('a screen with no picker hides it', () => {
@@ -310,16 +309,16 @@ describe('result screens and the picker (ID-098)', () => {
     expect(s.picker!.value).toBe(5);
     expect(s.picker!.options.map((o) => o.horde)).toEqual([5, 4, 3, 2, 1]);
     expect(s.picker!.retitle).toBe(false);
-    expect(s.button).toBe(startLabel(5));
+    expect(s.button).toBe('Start Normal 5');
   });
 
   it('a replay win: the same replay horde, titled as a replay, nobody joins, a Replay chip', () => {
     const g = squadGame(2, 6);
     const s = squadScreen(g, fought(g, 3, 'won'));
-    expect(s.title).toBe('Horde 3 - You hold the line (replay)');
+    expect(s.title).toBe('Normal 3 - You hold the line (replay)');
     expect(s.picker!.value).toBe(3);
     expect(s.picker!.options[0]!.horde).toBe(6);
-    expect(s.button).toBe('Replay Horde 3');
+    expect(s.button).toBe('Replay Normal 3');
     expect(s.lines.join('\n')).not.toMatch(/New survivor|nobody new joins|Squad full/);
     // A replay where nobody joins says why, last in the details (ID-182, ID-196).
     expect(s.debrief!.join).toBe(true);
@@ -337,7 +336,7 @@ describe('result screens and the picker (ID-098)', () => {
     while (joiners(g, seed, true).length === 0) seed++;
     const s = squadScreen(g, { ...startSquadHorde(g, seed, NOW, 3), outcome: 'won' as const });
     const d = recruit(3, seed);
-    expect(s.title).toBe('Horde 3 - You hold the line (replay)');
+    expect(s.title).toBe('Normal 3 - You hold the line (replay)');
     expect(d.name).toBeTruthy();
     expect(s.lines.join(' ')).not.toMatch(/asks to join/);
     expect(s.debrief!.join).toBe(true);
@@ -352,7 +351,7 @@ describe('result screens and the picker (ID-098)', () => {
     for (const n of RADIO_HORDES) {
       const later = squadGame(SQUAD_CAP, FINALE_HORDE + 3);
       const b = squadScreen(later, fought(later, n, 'won'));
-      expect(b.title).toBe(`Horde ${n} - You hold the line (replay)`);
+      expect(b.title).toBe(`Normal ${n} - You hold the line (replay)`);
       expect(b.button).not.toBe('Continue');
       expect(b.lines.join(' ')).not.toMatch(/Radio|evacuation|New card/);
       expect(b.debrief!.chips.map((c) => c.text).join(' ')).not.toMatch(/Radio/);
@@ -366,7 +365,7 @@ describe('result screens and the picker (ID-098)', () => {
     const lost = fought(g, 6, 'lost', 3);
     const s = squadScreen(g, lost);
     expect(s.picker!.value).toBe(6);
-    expect(s.button).toBe('Retry Horde 6');
+    expect(s.button).toBe('Retry Normal 6');
     const xp = squadResult(g, lost).gains[0]!.xp;
     expect(xp).toBeGreaterThan(0);
     expect(s.debrief!.chips[0]).toEqual({ text: `+${xp} XP each`, tone: 'warn' });
@@ -390,8 +389,8 @@ describe('result screens and the picker (ID-098)', () => {
     const g = squadGame(2, 9);
     const s = squadScreen(g, fought(g, 5, 'lost', 2));
     expect(s.picker!.value).toBe(5);
-    expect(s.button).toBe('Retry Horde 5');
-    expect(s.picker!.options.find((o) => o.horde === 9)!.button).toBe(startLabel(9));
+    expect(s.button).toBe('Retry Normal 5');
+    expect(s.picker!.options.find((o) => o.horde === 9)!.button).toBe('Start Normal 9');
   });
 
   it('on the page after a loss: pick an easier horde and the button says Replay', () => {
@@ -399,11 +398,11 @@ describe('result screens and the picker (ID-098)', () => {
     const g = squadGame(2, 6);
     h.showResult(squadScreen(g, fought(g, 6, 'lost', 3)));
     expect(select().value).toBe('6');
-    expect(button().textContent).toMatch(/^Retry Horde 6/);
+    expect(button().textContent).toMatch(/^Retry Normal 6/);
     choose(2);
-    expect(button().textContent).toBe('Replay Horde 2');
+    expect(button().textContent).toBe('Replay Normal 2');
     choose(6);
-    expect(button().textContent).toMatch(/^Retry Horde 6/);
+    expect(button().textContent).toMatch(/^Retry Normal 6/);
   });
 });
 
@@ -417,7 +416,7 @@ describe('the farm hint and the result panel scroll (ID-098)', () => {
     expect(p.farm).toBe(Math.max(...ok));
     for (const o of p.options) {
       expect(o.label.endsWith(' · best to farm')).toBe(o.horde === p.farm);
-      expect(o.hint).toBe(o.power.band === 'ok' ? null : `Try Horde ${p.farm} to farm`);
+      expect(o.hint).toBe(o.power.band === 'ok' ? null : `Try Normal ${p.farm} to farm`);
     }
     expect(power).toBeGreaterThan(0);
     // A squad that out-powers the new horde has no farm mark.
@@ -504,12 +503,19 @@ describe('drop tile: kind, farm note and level (ID-098, ID-196)', () => {
       { armoury: [] },
       dropOf(w, { kind: 'replay', noUpgrades: true, farmFrom: 9 }),
     );
-    expect(from.farmNote).toBe('Farm Horde 9+ for upgrades');
-    expect(farmText(9)).toBe('Farm Horde 9+ for upgrades');
+    expect(from.farmNote).toBe('Farm Normal 9+ for upgrades');
+    expect(farmText('normal', 9)).toBe('Farm Normal 9+ for upgrades');
+    expect(farmText('hell', 9)).toBe('Farm Hell 9+ for upgrades');
+    expect(
+      dropTile(
+        { armoury: [], mode: 'nightmare' },
+        dropOf(w, { kind: 'replay', noUpgrades: true, farmFrom: 9 }),
+      ).farmNote,
+    ).toBe('Farm Nightmare 9+ for upgrades');
     expect(dropTile({ armoury: [] }, dropOf(w, { kind: 'replay' })).farmNote).toBeNull();
     expect(
       squadDropLines({ armoury: [] }, dropOf(w, { kind: 'replay', noUpgrades: true })),
-    ).toContain(farmText(null));
+    ).toContain(farmText('normal', null));
   });
 
   it('on the page: the chip has the level before the name, the details the farm note', () => {
@@ -582,7 +588,7 @@ describe('the injury band beside the power band (ID-155)', () => {
     };
     expectBand(12);
     choose(1);
-    // Horde 1 is far under this squad: few.
+    // Normal 1 is far under this squad: few.
     expect(injuryBand(power, recommendedPower(1))).toBe('few');
     expectBand(1);
     choose(12);

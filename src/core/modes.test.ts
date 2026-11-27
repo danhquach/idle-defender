@@ -23,6 +23,7 @@ import {
   beatenIn,
   bossTrios,
   effHorde,
+  hordeName,
   localHorde,
   localOf,
   modeBosses,
@@ -78,8 +79,11 @@ describe('the model (ID-218)', () => {
     // Hell needs Nightmare, not Normal alone.
     expect(modeUnlocked(game(200, 1), 'hell')).toBe(false);
     expect(openModes(game(51, 1, 51))).toEqual(['normal', 'nightmare', 'hell']);
-    expect(unlockHint('nightmare')).toBe('Hold Horde 50 on Normal');
-    expect(unlockHint('hell')).toBe('Hold Horde 50 on Nightmare');
+    expect(hordeName('normal', 12)).toBe('Normal 12');
+    expect(hordeName('nightmare', 30)).toBe('Nightmare 30');
+    expect(hordeName('hell', 15)).toBe('Hell 15');
+    expect(unlockHint('nightmare')).toBe('Hold Normal 50 to unlock Nightmare');
+    expect(unlockHint('hell')).toBe('Hold Nightmare 50 to unlock Hell');
   });
 
   it('switching never loses progress, and a locked mode is refused', () => {

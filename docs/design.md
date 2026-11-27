@@ -1558,11 +1558,14 @@ profession's output).
     or less), never taller than the window less 128 px. That holds a win's
     weapons row over six squad cards, three to a row. From the top:
     - **Header:** the title, centred, over the reward pills, a win's
-      Details button last. A win's title is "Horde 4 - You hold the line"
+      Details button last. A win's title is "Normal 4 - You hold the line"
       (a replay adds "(replay)"; the finale keeps "The evacuation is
-      called"), a loss's "Horde 4 - Camp has fallen"; the start screen's is
-      the horde alone ("Horde 10"): its "Boss horde" and "Replay" pills
-      say the rest, once.
+      called"), a loss's "Normal 4 - Camp has fallen"; the start screen's is
+      the horde alone ("Normal 10"): its "Boss horde" and "Replay" pills
+      say the rest, once. The difficulty names the horde everywhere a
+      screen names one horde (ID-267): "Normal 12", "Nightmare 30", "Hell
+      15", the mode's own number; the fight corner's badge has the mode's
+      name over the number.
     - **Body** (the only part that scrolls): a loss's callout; a win's
       sentences (with Details open) and its weapons; the Squad section;
       anyone asking to join; then the screen's line (how a horde is lost,
@@ -1598,10 +1601,10 @@ profession's output).
     - **Start row:** three columns. The horde select, with the pick's
       power under it ("Power 815 · rec 242" and its band), then where to
       farm instead; the win cost ("Win cost:" and its pill, on one line);
-      and the button ("Start Horde 7", "Replay Horde 5", "Retry Horde 5",
+      and the button ("Start Normal 7", "Replay Nightmare 5", "Retry Hell 5",
       with no boss suffix: the select says "Boss"). Readiness is said
-      once: the select's options are short ("Horde 7 (new) · Boss",
-      "Horde 5 · best to farm") and the select is as wide as its pick, no
+      once: the select's options are short ("Normal 7 (new) · Boss",
+      "Normal 5 · best to farm") and the select is as wide as its pick, no
       wider, so it never cuts them. On a phone the select with its power
       line, the win cost and the button each take a row.
     - **No radio:** the panel has no radio pill, no explanation and no
@@ -1612,7 +1615,7 @@ profession's output).
     - **Pills:** a boss killed on a win is green ("Elite Brute (Roar)
       dead"), as the win's other good news; red stays for "Boss horde"
       on the start screen.
-    - **A loss's line** is one line: "Retry Horde 5, or farm an easier
+    - **A loss's line** is one line: "Retry Normal 5, or farm an easier
       horde: the squad and the wall are back at full strength".
     - **A level-up on the last kill** opens no pick: the fight is over, so
       the cards would change nothing, and the result is never drawn over an
@@ -3769,7 +3772,7 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   Horde 50 on Nightmare opens Hell. Permanent: read off the hordes, so an older
   save that already holds Horde 50 has Nightmare. The start and result screens
   show a mode switch (Normal, Nightmare, Hell) once Nightmare is open; a locked
-  mode says what opens it ("Hold Horde 50 on Nightmare"). A mode is switched only
+  mode says what opens it ("Hold Nightmare 50 to unlock Hell"). A mode is switched only
   between fights; switching loses no progress. The squad, guns, stash, Scrap
   and blueprints are shared by every mode.
 - **Own hordes.** Each mode keeps its own next horde (from Horde 1) and its own

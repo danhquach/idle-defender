@@ -149,6 +149,7 @@ import {
   advance,
   beatenIn,
   effHorde,
+  hordeName,
   localHorde,
   localOf,
   MODE_IDS,
@@ -439,16 +440,15 @@ export const enemiesLeft = (s: Pick<HordeState, 'enemies' | 'toSpawn'>): number 
   s.enemies.filter((e) => e.hp > 0).length + s.toSpawn;
 
 /**
- * The horde-only corner's tooltip (ID-066): "Horde 3 · Swaps left 1". Wave progress and
+ * The horde-only corner's tooltip (ID-066): "Normal 3 · Swaps left 1", the mode naming the
+ * horde (ID-267). Wave progress and
  * the enemies left are on the wave line only (ID-167): a tooltip keeps the text it opened
  * with, so a count here went stale beside the live one as a wave ended or began.
  */
 export function squadStatus(s: HordeState): string {
   const swaps = swapsText(s);
-  return [
-    bossHorde(s) ? `Horde ${localOf(s)} (boss)` : `Horde ${localOf(s)}`,
-    ...(swaps ? [swaps] : []),
-  ].join(' · ');
+  const name = hordeName(modeOf(s), localOf(s));
+  return [bossHorde(s) ? `${name} (boss)` : name, ...(swaps ? [swaps] : [])].join(' · ');
 }
 
 /**
@@ -839,13 +839,15 @@ export const startLabel = (hordeNumber: number): string =>
   `Start Horde ${hordeNumber}${horrorAbility(hordeNumber) ? ' · Boss horde' : ''}`;
 
 /**
- * A beaten horde's button (ID-098): "Replay Horde 5". The picker's buttons name no boss:
+ * A beaten horde's button (ID-098): "Replay Normal 5". The picker's buttons name no boss:
  * the select beside them says "Boss", and the start screen's pill "Boss horde".
  */
-export const replayLabel = (hordeNumber: number): string => `Replay Horde ${hordeNumber}`;
+export const replayLabel = (mode: Mode, hordeNumber: number): string =>
+  `Replay ${hordeName(mode, hordeNumber)}`;
 
-/** A lost horde's button: "Retry Horde 5". */
-export const retryLabel = (hordeNumber: number): string => `Retry Horde ${hordeNumber}`;
+/** A lost horde's button: "Retry Nightmare 5". */
+export const retryLabel = (mode: Mode, hordeNumber: number): string =>
+  `Retry ${hordeName(mode, hordeNumber)}`;
 
 const thousands = (n: number): string => Math.round(n).toLocaleString('en-US');
 
@@ -994,13 +996,13 @@ const themeChoice = (id: ThemeId): ThemeChoice => ({
  */
 export function themeWarning(
   game: Pick<GameState, 'themes' | 'mode' | 'modes' | 'hordeNumber'>,
-  /** After a loss: the horde lost (what Retry offers) and its mode, "Horde 25 again". */
+  /** After a loss: the horde lost (what Retry offers) and its mode, "Hell 25 again". */
   lost?: { local: number; mode: Mode },
 ): string | null {
   const local = lost?.local ?? localHorde(game);
   const id = lost ? themeOf(game, local, lost.mode) : themeOf(game, local);
   return id
-    ? `Horde ${local} ${lost ? 'again' : 'next'}: ${THEMES[id].name} — a themed horde`
+    ? `${hordeName(lost?.mode ?? modeOf(game), local)} ${lost ? 'again' : 'next'}: ${THEMES[id].name} — a themed horde`
     : null;
 }
 
@@ -1050,7 +1052,7 @@ export interface ModeChoice {
   current: boolean;
   /** The tooltip: its best horde, or what unlocks it. */
   title: string;
-  /** What unlocks it, for a locked mode ("Hold Horde 50 on Nightmare"); null when open. */
+  /** What unlocks it, for a locked mode ("Hold Nightmare 50 to unlock Hell"); null when open. */
   hint: string | null;
 }
 
@@ -1182,23 +1184,28 @@ export function hordePicker(
       // Short, so the select never cuts it (ID-196): the pick's readiness is the line
       // under it (`power`), said once.
       label: [
-        `Horde ${n}${isNew ? ' (new)' : ''}`,
+        `${hordeName(mode, n)}${isNew ? ' (new)' : ''}`,
         ...(boss ? ['Boss'] : []),
         ...(theme ? [THEMES[theme].name] : []),
         ...(n === farm ? ['best to farm'] : []),
       ].join(' · '),
-      button: n === retry ? retryLabel(n) : isNew ? `Start Horde ${n}` : replayLabel(n),
+      button:
+        n === retry
+          ? retryLabel(mode, n)
+          : isNew
+            ? `Start ${hordeName(mode, n)}`
+            : replayLabel(mode, n),
       power,
       injury: injuryBand(squad, power.rec),
       hint:
         power.band === 'ok'
           ? null
           : farm !== null
-            ? `Try Horde ${farm} to farm`
+            ? `Try ${hordeName(mode, farm)} to farm`
             : 'No beaten horde is at your power yet',
       start: {
         // The chips say "Boss horde" and "Replay", once.
-        title: `Horde ${n}`,
+        title: hordeName(mode, n),
         // Endless (ID-127) leads, whichever horde is picked.
         chips: [
           ...(goal ? [goal.chip] : []),
@@ -1580,7 +1587,7 @@ export const gunLabel = (h: Held): string => `${levelLabel(h)} · ${gunDpsText(g
  * thrown away for it.
  */
 export function squadDropLines(
-  game: Pick<GameState, 'armoury' | 'slots'>,
+  game: Pick<GameState, 'armoury' | 'slots' | 'mode'>,
   drop: SquadDrop,
 ): string[] {
   const lines: string[] = [];
@@ -1614,7 +1621,7 @@ export function squadDropLines(
   return [
     ...lines,
     ...(drop.blueprint ? [blueprintLine(drop.blueprint)] : []),
-    ...(drop.noUpgrades ? [farmText(drop.farmFrom)] : []),
+    ...(drop.noUpgrades ? [farmText(modeOf(game), drop.farmFrom)] : []),
   ];
 }
 
@@ -1737,7 +1744,7 @@ export const NEW_BADGE = 'New';
 
 /** The loot tile for `drop`, against the stash `game` had before it. */
 export function dropTile(
-  game: Pick<GameState, 'armoury' | 'slots'> &
+  game: Pick<GameState, 'armoury' | 'slots' | 'mode'> &
     Partial<Pick<GameState, 'hordeNumber' | 'mode' | 'modes'>>,
   drop: SquadDrop,
 ): DropTile {
@@ -1760,7 +1767,7 @@ export function dropTile(
     if (thrown[next++] === weapon) by = w;
   }
   return {
-    farmNote: drop.noUpgrades ? farmText(drop.farmFrom) : null,
+    farmNote: drop.noUpgrades ? farmText(modeOf(game), drop.farmFrom) : null,
     ...(drop.blueprint ? { blueprint: blueprintLine(drop.blueprint) } : {}),
     stash: `Stash ${count}/${stashCap(game)}${lost ? ' · thrown away' : ''}`,
     // The theme's gun first on screen (ID-238), whatever order the stash takes them in.
@@ -1835,8 +1842,10 @@ const gunTag = (drop: SquadDrop, w: OwnedWeapon): string =>
   w.uid.startsWith('t') ? DROP_KIND.theme : w === drop.weapon ? DROP_KIND[drop.kind] : 'Bonus gun';
 
 /** A replay where nothing the horde drops could be an upgrade (ID-098, ID-152): where to go. */
-export const farmText = (farmFrom: number | null): string =>
-  farmFrom === null ? 'Beat a new horde for upgrades' : `Farm Horde ${farmFrom}+ for upgrades`;
+export const farmText = (mode: Mode, farmFrom: number | null): string =>
+  farmFrom === null
+    ? 'Beat a new horde for upgrades'
+    : `Farm ${hordeName(mode, farmFrom)}+ for upgrades`;
 
 /** Under a drop the full stash threw away itself (ID-073). */
 export const DROP_LOST_NOTE = 'No better than any gun in the stash';
@@ -2268,14 +2277,14 @@ export function goalChip(game: ModeProgress): { chip: Chip; note: string | null 
     if (best === 0) return { chip: { text: MODES[mode].name, tone: 'warn' }, note: null };
     return {
       chip: { text: `${MODES[mode].name} · best ${best}`, tone: 'warn' },
-      note: `Hold Horde ${best + 1} for a new ${MODES[mode].name} best.`,
+      note: `Hold ${hordeName(mode, best + 1)} for a new best.`,
     };
   }
   if (!isEndless(game)) return null;
   const best = highestBeaten(game);
   return {
     chip: { text: `Endless · best ${best}`, tone: 'warn' },
-    note: `Evacuation called. Hold Horde ${best + 1} for a new best.`,
+    note: `Evacuation called. Hold ${hordeName('normal', best + 1)} for a new best.`,
   };
 }
 
@@ -2283,7 +2292,7 @@ export function goalChip(game: ModeProgress): { chip: Chip; note: string | null 
  * The campaign's next goal (ID-217), for the start screen and a win's result: on Normal, the
  * next boss horde in `RADIO_HORDES` not yet beaten, its radio part and any card it unlocks, or
  * the finale. Past those (Endless) and on a higher mode, the next mode to unlock (ID-218):
- * "Next: hold Horde 50 · unlocks Nightmare". Worked out from the horde number, so a replay
+ * "Next: hold Normal 50 · unlocks Nightmare". Worked out from the horde number, so a replay
  * names the goal ahead, never the horde replayed. Null once Hell is the only mode left to
  * play, or when the next mode is already open.
  */
@@ -2293,12 +2302,12 @@ export function nextGoalLine(game: ModeProgress): string | null {
   if (n === undefined) {
     const next = MODE_IDS.find((m) => modeBefore(m) === mode);
     if (next === undefined || modeUnlocked(game, next)) return null;
-    return `Next: hold Horde ${MODE_UNLOCK_HORDE} · unlocks ${MODES[next].name}`;
+    return `Next: hold ${hordeName(mode, MODE_UNLOCK_HORDE)} · unlocks ${MODES[next].name}`;
   }
-  if (n === FINALE_HORDE) return `Next: Horde ${n} · call the evacuation`;
+  if (n === FINALE_HORDE) return `Next: ${hordeName(mode, n)} · call the evacuation`;
   const card = BOSS_UNLOCKS[n];
   const part = `radio part ${RADIO_HORDES.indexOf(n) + 1}/${RADIO_HORDES.length}`;
-  return `Next: Horde ${n} boss · ${part}${card ? ` · new card ${UPGRADES[card].name}` : ''}`;
+  return `Next: ${hordeName(mode, n)} boss · ${part}${card ? ` · new card ${UPGRADES[card].name}` : ''}`;
 }
 
 /**
@@ -2548,6 +2557,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   const autoNote = moved ? `Auto squad: ${moved}.` : null;
   const won = s.outcome === 'won';
   const horde = localOf(s);
+  const name = hordeName(modeOf(s), horde);
   const replay = isReplay(game, horde);
   const first = won && !replay;
   // The picker as it stands once a first clear has moved on to the next horde.
@@ -2597,8 +2607,8 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       title: ending
         ? EVACUATION_TITLE
         : replay
-          ? `Horde ${horde} - You hold the line (replay)`
-          : `Horde ${horde} - You hold the line`,
+          ? `${name} - You hold the line (replay)`
+          : `${name} - You hold the line`,
       lines: [
         clearedLine(s),
         ...gains.map(squadXpLine),
@@ -2619,7 +2629,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
         kind: 'won',
         chips: [
           // The ending names the horde its title doesn't (ID-127).
-          ...(ending ? [{ text: `Horde ${horde} held`, tone: 'ok' as const }] : []),
+          ...(ending ? [{ text: `${name} held`, tone: 'ok' as const }] : []),
           { text: `${s.waveCount}/${s.waveCount} waves`, tone: 'ok' },
           // A theme's first clear and its gun (ID-238), always in the header, with the theme's icon.
           ...(beaten
@@ -2691,9 +2701,9 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
   // The horde that was lost is what Retry offers (ID-238), so it is the one warned about.
   const lostWarn = themeWarning(game, { local: horde, mode: s.mode ?? 'normal' });
   // One line (ID-196), so the panel's body shows it whole under two rows of squad.
-  const again = `Retry Horde ${horde}, or farm an easier horde: the squad and the wall are back at full strength`;
+  const again = `Retry ${name}, or farm an easier horde: the squad and the wall are back at full strength`;
   return {
-    title: `Horde ${horde} - Camp has fallen`,
+    title: `${name} - Camp has fallen`,
     lines: [
       `${where} · nobody left standing`,
       ...bossLost,
@@ -2850,7 +2860,8 @@ export function createHud(
   const badgeNum = el('span', 'hud-badge-num');
   const badgeBoss = el('span', 'hud-badge-boss', '☠');
   badgeBoss.setAttribute('aria-hidden', 'true');
-  badge.append(el('span', 'hud-badge-label', 'Horde'), badgeNum, badgeBoss);
+  const badgeLabel = el('span', 'hud-badge-label');
+  badge.append(badgeLabel, badgeNum, badgeBoss);
   const cornerPanel = el('div', 'hud-corner-panel');
   cornerPanel.setAttribute('role', 'group');
   cornerPanel.setAttribute('aria-label', 'Horde status');
@@ -4306,10 +4317,13 @@ export function createHud(
         if (corner.title !== status) corner.title = status;
         const num = String(localOf(state));
         if (badgeNum.textContent !== num) badgeNum.textContent = num;
+        // The mode names the horde (ID-267): "Nightmare" over the number.
+        const modeName = MODES[modeOf(state)].name;
+        if (badgeLabel.textContent !== modeName) badgeLabel.textContent = modeName;
         badge.classList.toggle('hud-badge-boss-on', bossHorde(state));
         badge.setAttribute(
           'aria-label',
-          `Horde ${localOf(state)}${bossHorde(state) ? ', boss horde' : ''}`,
+          `${hordeName(modeOf(state), localOf(state))}${bossHorde(state) ? ', boss horde' : ''}`,
         );
         // A swarm wave reads "Swarm" in red, in words too so it's never colour alone (ID-121).
         const swarmOn = swarmMarker(state);

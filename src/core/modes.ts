@@ -111,6 +111,9 @@ export const beatenIn = (game: ModeProgress, mode: Mode = modeOf(game)): number 
 /** The strength of horde `local` of `mode`: the Normal horde it is as strong as. */
 export const effHorde = (mode: Mode, local: number): number => local + MODES[mode].offset;
 
+/** Horde `local` of `mode` as the screens name it (ID-267): "Normal 12", "Nightmare 30", "Hell 15". */
+export const hordeName = (mode: Mode, local: number): string => `${MODES[mode].name} ${local}`;
+
 /** The mode horde a fight's strength (`HordeState.hordeNumber`) stands for. */
 export const localOf = (h: { hordeNumber: number; mode?: HigherMode }): number =>
   h.hordeNumber - MODES[h.mode ?? 'normal'].offset;
@@ -127,7 +130,9 @@ export function modeUnlocked(game: ModeProgress, mode: Mode): boolean {
 /** What a locked `mode` asks, as the start screen says it. */
 export const unlockHint = (mode: Mode): string => {
   const before = modeBefore(mode);
-  return before === null ? '' : `Hold Horde ${MODE_UNLOCK_HORDE} on ${MODES[before].name}`;
+  return before === null
+    ? ''
+    : `Hold ${hordeName(before, MODE_UNLOCK_HORDE)} to unlock ${MODES[mode].name}`;
 };
 
 /** The modes the player can play now, in order. */
