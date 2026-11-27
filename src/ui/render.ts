@@ -121,6 +121,10 @@ import {
   wallHeight,
   wallHitFade,
   wallStage,
+  wallTier,
+  wireTier,
+  RESEARCH_LOOK,
+  type ResearchTier,
   type Camera,
   type SlotHit,
   type View,
@@ -765,6 +769,7 @@ export type Scene = Pick<
       | 'rush'
       | 'moat'
       | 'nextNetAt'
+      | 'tech'
     >
   > & {
     /** The game speed (1×, 3×, 5×) a fight is shown at; bullet tails grow with it (ID-070). */
@@ -1586,6 +1591,8 @@ interface WallCards {
   pace: number;
   /** Reduce motion: a repair's sparks stay put instead of floating up. */
   still: boolean;
+  /** The Wall branch's highest researched tier (ID-270), shown on every standing segment. */
+  research: ResearchTier;
 }
 const NO_CARDS: WallCards = {
   reinforced: false,
@@ -1593,6 +1600,7 @@ const NO_CARDS: WallCards = {
   pickedAt: undefined,
   pace: 1,
   still: true,
+  research: 0,
 };
 
 /**
@@ -1618,9 +1626,11 @@ function drawSegment(
     ctx.save();
     ctx.translate(Math.sin(hit * Math.PI * 6) * hit * WALL_HIT.shake * cam.zoom, 0);
   }
-  drawSegmentBody(ctx, art, layer, seg, cam, standing && cards.reinforced);
+  drawSegmentBody(ctx, art, layer, seg, cam, standing && cards.reinforced, cards.research);
   // Sandbags (ID-132): a low layer of bags on the ground in front of it; gone when it falls.
   if (standing && cards.sandbags) drawSandbags(ctx, art, layer, seg, cam);
+  // Spiked Wall (ID-270): after the bags, so the spikes' tips lie over the bags' tops.
+  if (standing && cards.research >= 3) drawSpikes(ctx, art, layer, seg, cam);
   // Worked out only when a glow shows, so a quiet segment costs no more than before.
   let f: ReturnType<typeof faces> | undefined;
   const glow = (style: string, alpha: number): void => {
@@ -1734,7 +1744,8 @@ function drawWire(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Ca
     if (last && last[2] === look(row)) last[1] = row + 1;
     else runs.push([row, row + 1, look(row)]);
   }
-  const painted = new Map(runs.map(([, , l]) => [l, wireCanvas(art, l)] as const));
+  const tier = wireTier(scene.tech);
+  const painted = new Map(runs.map(([, , l]) => [l, wireCanvas(art, l, tier)] as const));
   if ([...painted.values()].every((c) => c)) {
     // A seam between runs on a whole pixel, so the two never blend into a hairline.
     const edge = (row: number) =>
@@ -1834,6 +1845,7 @@ function drawSegmentBody(
   seg: Layer['segments'][number],
   cam: Camera,
   reinforced: boolean,
+  research: ResearchTier = 0,
 ): void {
   const tier = TIER_ART[seg.tier!];
   const box = segmentBox(layer, seg);
@@ -1846,6 +1858,8 @@ function drawSegmentBody(
   const f = faces(box, cam);
   // The sliding gate fills the segment's top, closed and flush with its neighbours (ID-075).
   if (seg.kind === 'gate') ctx.drawImage(art[tier.gate], f.top.sx, f.top.sy, f.top.w, f.top.h);
+  // The Wall branch's research (ID-270): light steel on the edges, under the brace.
+  if (research > 0) drawResearch(ctx, art, f, research);
   // Reinforce's brace lies under the damage, so the damage stages still show (ID-075).
   if (reinforced) {
     ctx.globalAlpha = WALL_CARD.brace.alpha;
@@ -1868,6 +1882,56 @@ function drawSegmentBody(
     ctx.restore();
   }
   if (stage === 3) drawOnPart(ctx, art[BASE_ART.breach], f.top, WALL_DAMAGE.breach);
+}
+
+/**
+ * The Wall branch's research on a standing segment (ID-270), on its edges so the middle of
+ * the top stays free for Reinforce's brace: Tier 1 a steel strip along the top's outer
+ * (enemy-side) edge; from Tier 2 a riveted frame round the whole top and plates on the lower
+ * part of the front instead. Every tier keeps a steel angle along the front's foot: the strip laid on its side.
+ */
+function drawResearch(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  f: { top: Rect; front: Rect },
+  tier: ResearchTier,
+): void {
+  const { edge, frame, plates } = BASE_ART.research;
+  if (tier >= 2) {
+    ctx.drawImage(art[frame], f.top.sx, f.top.sy, f.top.w, f.top.h);
+    const h = f.front.h * RESEARCH_LOOK.plates;
+    ctx.drawImage(art[plates], f.front.sx, f.front.sy + f.front.h - h, f.front.w, h);
+  } else {
+    const w = f.top.w * RESEARCH_LOOK.edge;
+    ctx.drawImage(art[edge], f.top.sx + f.top.w - w, f.top.sy, w, f.top.h);
+    // A dark seam on its inner side, so the steel stands off a pale concrete top.
+    ctx.fillStyle = RESEARCH_LOOK.seam;
+    ctx.fillRect(f.top.sx + f.top.w - w, f.top.sy, Math.max(1, w * RESEARCH_LOOK.seamW), f.top.h);
+  }
+  const h = f.front.h * RESEARCH_LOOK.foot;
+  ctx.save();
+  ctx.translate(f.front.sx, f.front.sy + f.front.h);
+  ctx.rotate(-Math.PI / 2);
+  ctx.drawImage(art[edge], 0, 0, h, f.front.w);
+  ctx.restore();
+}
+
+/**
+ * Spiked Wall's spikes (ID-270): a row on a strip along the top's outer edge, jutting
+ * `RESEARCH_LOOK.spikes.length` past it toward the field at the top's height (as it is now).
+ */
+function drawSpikes(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  layer: Layer,
+  seg: Layer['segments'][number],
+  cam: Camera,
+): void {
+  const box = segmentBox(layer, seg);
+  const { inset, length } = RESEARCH_LOOK.spikes;
+  const a = project({ x: box.x1 - inset, y: box.y0, z: box.height }, cam);
+  const b = project({ x: box.x1 + length, y: box.y1, z: box.height }, cam);
+  ctx.drawImage(art[BASE_ART.research.spikes], a.sx, a.sy, b.sx - a.sx, b.sy - a.sy);
 }
 
 /**
@@ -4868,6 +4932,7 @@ export function drawScene(
         pickedAt: scene.barrierAt,
         pace: Math.max(1, scene.pace ?? 1),
         still: anim?.reduced ?? true,
+        research: wallTier(scene.tech),
       };
   // Barbed Wire's band (ID-077) and traps lie flat on the ground, under every sprite.
   if (!build) drawWire(ctx, art, scene, cam);

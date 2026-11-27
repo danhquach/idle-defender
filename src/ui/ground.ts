@@ -5,7 +5,7 @@
 // same tiles repeats without end (ID-057), so no bare background shows at any zoom or pan.
 import { CAMP, CARD, COLUMNS, FIELD, SEGMENT_HEIGHT, SEGMENTS, WALL } from '../core/data.ts';
 import { createRng, int, pick } from '../core/rng.ts';
-import { TILT } from './projection.ts';
+import { TILT, type ResearchTier } from './projection.ts';
 import { BASE_ART, type Art, type ArtId } from './sprites.ts';
 
 /** World units one ground tile covers. */
@@ -273,6 +273,24 @@ export const WIRE = {
     slack: 4.5,
     lean: 0.65,
   },
+  /**
+   * The Barbed Wire branch's research (ID-270), each tier on top of the last. Razor Wire:
+   * barbs `razor.barb` × as big and `razor.every` × as far apart, lit `shine`. Thick Coils: a
+   * second coil beside each, `thick.r` of its size and `thick.w` × as heavy, `thick.gap` × `r`
+   * toward the band's middle. Electric Wire: a faint blue `glow` `glowW` wide along every coil,
+   * and two white insulators with a blue rim on each post, `h` tall, at `at` of it down.
+   */
+  razor: { barb: 1.3, every: 0.85 },
+  thick: { r: 0.7, w: 1.3, gap: 1.05 },
+  electric: {
+    glow: 'rgba(110, 190, 255, 0.3)',
+    glowW: 4.5,
+    insulator: '#f4f7fa',
+    rim: '#2f7fd0',
+    /** Down the post (shares of its height from the top), and each one's height in units. */
+    at: [0.25, 0.55],
+    h: 2.2,
+  },
 } as const;
 
 /** A row of Barbed Wire's band as it looks: whole, worn partway (ID-115), or torn (ID-090). */
@@ -302,8 +320,11 @@ function coil(
   y1: number,
   r: number,
   tears: Tears | null = null,
+  tier: ResearchTier = 0,
+  heavy = 1,
 ): void {
-  const { px, w, squash } = WIRE;
+  const { px, squash } = WIRE;
+  const w = WIRE.w * heavy;
   const pitch = WIRE.pitch * px;
   const steps = Math.ceil(((y1 - y0) / pitch) * COIL_STEPS);
   const gaps = tears?.gaps ?? [];
@@ -353,6 +374,11 @@ function coil(
   g.strokeStyle = WIRE.shadow;
   g.lineWidth = 2.2 * px * w;
   path(() => true, 2 * px, 3 * px);
+  if (tier >= 3) {
+    g.strokeStyle = WIRE.electric.glow;
+    g.lineWidth = WIRE.electric.glowW * px * w;
+    path(() => true, 0, 0);
+  }
   for (const near of [false, true]) {
     const width = (near ? 1.3 : 1.1) * px * w;
     const strokes = [
@@ -367,8 +393,9 @@ function coil(
     }
   }
   // The razor barbs: a pair of crossed blades across the wire.
-  const b = WIRE.barb * px;
-  const every = Math.round(COIL_STEPS * WIRE.barbEvery);
+  const razor = tier >= 1;
+  const b = WIRE.barb * px * (razor ? WIRE.razor.barb : 1);
+  const every = Math.round(COIL_STEPS * WIRE.barbEvery * (razor ? WIRE.razor.every : 1));
   g.lineCap = 'butt';
   g.lineWidth = 0.7 * px * w;
   for (let s = 3; s <= steps; s += every) {
@@ -378,7 +405,7 @@ function coil(
     const l = Math.hypot(q.x - p.x, q.y - p.y) || 1;
     const [ux, uy] = [((q.x - p.x) / l) * b * 0.6, ((q.y - p.y) / l) * b * 0.6];
     const [nx, ny] = [(-(q.y - p.y) / l) * b, ((q.x - p.x) / l) * b];
-    g.strokeStyle = p.near ? WIRE.steel : WIRE.mid;
+    g.strokeStyle = razor ? (p.near ? WIRE.shine : WIRE.mid) : p.near ? WIRE.steel : WIRE.mid;
     g.beginPath();
     g.moveTo(p.x - nx + ux, p.y - ny + uy);
     g.lineTo(p.x + nx - ux, p.y + ny - uy);
@@ -388,8 +415,17 @@ function coil(
   }
 }
 
-/** A steel picket standing at `x, y` (its foot), on a light shadow; knocked over `fallen` radians. */
-function picket(g: OffscreenCanvasRenderingContext2D, x: number, y: number, fallen = 0): void {
+/**
+ * A steel picket standing at `x, y` (its foot), on a light shadow; knocked over `fallen` radians;
+ * `insulated` (Electric Wire, ID-270), two white insulators with a blue rim near its top.
+ */
+function picket(
+  g: OffscreenCanvasRenderingContext2D,
+  x: number,
+  y: number,
+  fallen = 0,
+  insulated = false,
+): void {
   const { px } = WIRE;
   const { fill, edge, cap } = WIRE.post;
   const [w, h] = [WIRE.post.w * px, WIRE.post.h * px];
@@ -407,24 +443,39 @@ function picket(g: OffscreenCanvasRenderingContext2D, x: number, y: number, fall
   g.strokeRect(-w / 2, -h, w, h);
   g.fillStyle = cap;
   g.fillRect(-w / 2, -h, w, 1.6 * px);
+  if (insulated) {
+    g.fillStyle = WIRE.electric.insulator;
+    g.strokeStyle = WIRE.electric.rim;
+    g.lineWidth = 0.8 * px;
+    const ih = WIRE.electric.h * px;
+    for (const at of WIRE.electric.at) {
+      g.fillRect(-w, -h * (1 - at) - ih / 2, 2 * w, ih);
+      g.strokeRect(-w, -h * (1 - at) - ih / 2, 2 * w, ih);
+    }
+  }
   g.restore();
 }
 
-const wires: Readonly<Record<WireLook, Painted>> = {
-  whole: new WeakMap(),
-  worn: new WeakMap(),
-  torn: new WeakMap(),
+/** One cache per look and research tier (ID-270): 12 canvases at most. */
+const wires: Readonly<Record<WireLook, readonly Painted[]>> = {
+  whole: [0, 1, 2, 3].map(() => new WeakMap()),
+  worn: [0, 1, 2, 3].map(() => new WeakMap()),
+  torn: [0, 1, 2, 3].map(() => new WeakMap()),
 };
 
 /**
  * Barbed Wire's band painted once per set of art (as every painted canvas), every row with
  * one `look`; the renderer takes each row from the one it needs. Null as `groundCanvas`.
  */
-export function wireCanvas(art: Art, look: WireLook = 'whole'): OffscreenCanvas | null {
-  return once(wires[look], art, () => paintWire(look));
+export function wireCanvas(
+  art: Art,
+  look: WireLook = 'whole',
+  tier: ResearchTier = 0,
+): OffscreenCanvas | null {
+  return once(wires[look][tier]!, art, () => paintWire(look, tier));
 }
 
-function paintWire(look: WireLook): OffscreenCanvas | null {
+function paintWire(look: WireLook, tier: ResearchTier): OffscreenCanvas | null {
   const { px } = WIRE;
   const w = (CARD.wire.to - CARD.wire.from) * px;
   const h = FIELD.height * TILT * px;
@@ -469,7 +520,15 @@ function paintWire(look: WireLook): OffscreenCanvas | null {
             }
           : null;
     // Past the band's ends, so no coil starts or stops in view.
-    coil(g, x, -r, h + r, r, tears);
+    coil(g, x, -r, h + r, r, tears, tier);
+    // Thick Coils (ID-270): a heavier coil beside it, toward the band's middle.
+    if (tier >= 2) {
+      // The near coil's to its right, the others' to their left: three even pairs.
+      const side = c === 0 ? 1 : -1;
+      const r2 = r * WIRE.thick.r;
+      const x2 = Math.min(w - r2 - 4 * px, Math.max(r2 + 4 * px, x + side * r * WIRE.thick.gap));
+      coil(g, x2, -r2, h + r2, r2, tears, tier, WIRE.thick.w);
+    }
     const every = WIRE.postEvery * TILT * px;
     for (let y = every / 2, i = 0; y <= h; y += every, i++) {
       // Toward the band's middle: the near coil's to the right, the far one's to the left.
@@ -480,7 +539,7 @@ function paintWire(look: WireLook): OffscreenCanvas | null {
           : look === 'worn' && wornCut(i)
             ? WIRE.worn.lean
             : 0;
-      picket(g, x, y, toward * tilt);
+      picket(g, x, y, toward * tilt, tier >= 3);
     }
   }
   return canvas;

@@ -820,6 +820,8 @@ export function start(root: HTMLElement, art: Art): void {
       return { ok: false, reason: ASK_CHANGED };
     }
     commit(now.r.game);
+    // The waiting wall shows the new node at once (ID-270); a finished horde keeps its own.
+    if (!horde) preview = startSquadHorde(game, 0, Date.now());
     refreshResultScrap();
     return { ok: true, text: researchText(id, now.r.cost, now.r.game.stock.scrap) };
   }

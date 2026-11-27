@@ -58,7 +58,7 @@ is a significant upgrade, so a player should see on the field which tier each br
 - **Gates:** a gate segment gets the same frame and spikes. The gate's sliding panel stays
   visible inside the frame.
 - **Every wall tier** (wood, metal, concrete) takes the same overlays.
-- **Where it shows:** in fights and in the camp/build scene. A purchase on a result screen
+- **Where it shows:** in fights and on the waiting wall between hordes (the full game's build scene, unreachable in horde-only play, shows none). A purchase on a result screen
   shows from the next horde, as its effect does.
 
 ### Barbed Wire (drawn in code in `ground.ts`)
