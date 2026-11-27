@@ -146,4 +146,4 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | A sound | file in `src/assets/sounds/` (credit in `docs/audio-credits.md`); `ui/audio.ts` (samples), `ui/sound.ts` (when it plays) |
 | Page styles or layout | `src/page.css`; the DOM is built in the `ui/` file that owns the panel |
 | Any PR | raise `version` in `package.json` (+ `package-lock.json`) over main's; the pre-push hook checks it |
-| Balance checks | `core/balance/*.test.ts`, shared setup in `core/balance/shared.ts`; a file that runs for more than a few minutes uncached gets its own job in `.github/workflows/ci.yml` (and an `--exclude` in the last job) |
+| Balance checks | `core/balance/*.test.ts`, shared setup in `core/balance/shared.ts`; a file that runs for more than a few minutes uncached gets its own job in `.github/workflows/ci.yml` (and an `--exclude` in the last job). The `changes` job there skips the balance jobs on a pull request that touches no simulation file (ID-268) |
