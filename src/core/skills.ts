@@ -1,8 +1,9 @@
 // Active skills (design §4, as built ID-019, ID-041, ID-139): abilities researched at the
 // Lab, paid with horde cash and then cooling down for a while. They hit enemies only. Pure:
-// `useSkill` returns a new state, or a refusal the UI shows as-is.
+// `useSkill` returns a new state, or a refusal (a code the UI words).
 import { AUTO_AIM, CAMP, CARD, FIELD, SKILLS, THROW_FALL, WALL, type SkillId } from './data.ts';
 import type { Enemy, HordeState, MoveResult } from './horde.ts';
+import type { Refusal } from './refusal.ts';
 import { rngFrom } from './rng.ts';
 
 // Accumulated float time can land a hair before a due time; count it as ready.
@@ -15,13 +16,13 @@ export function skillLeft(s: Pick<HordeState, 'time' | 'cooldowns'>, id: SkillId
 }
 
 /** Why `id` can't be used now (wherever it is aimed), or null when it can. */
-export function skillLock(s: HordeState, id: SkillId): string | null {
+export function skillLock(s: HordeState, id: SkillId): Refusal | null {
   if (!Object.hasOwn(SKILLS, id)) throw new RangeError(`skill: unknown skill ${String(id)}`);
-  if (!s.skills.includes(id)) return `Research ${SKILLS[id].name} first`;
-  if (s.outcome !== 'fighting') return 'The horde is over';
-  if (s.offer !== null || s.replace !== null) return 'Pick first';
-  if (skillLeft(s, id) > 0) return 'Not ready yet';
-  if (!s.freeSkills && s.cash < SKILLS[id].cost) return 'Not enough cash';
+  if (!s.skills.includes(id)) return { ok: false, code: 'research-skill', skill: id };
+  if (s.outcome !== 'fighting') return { ok: false, code: 'horde-over' };
+  if (s.offer !== null || s.replace !== null) return { ok: false, code: 'pick-first' };
+  if (skillLeft(s, id) > 0) return { ok: false, code: 'not-ready' };
+  if (!s.freeSkills && s.cash < SKILLS[id].cost) return { ok: false, code: 'no-cash' };
   return null;
 }
 
@@ -60,9 +61,9 @@ export function useSkill(state: HordeState, id: SkillId, x: number, y: number): 
     throw new RangeError(`useSkill: bad aim ${x}, ${y}`);
   }
   const lock = skillLock(state, id);
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   if (x < 0 || x > FIELD.right || y < 0 || y > FIELD.height) {
-    return { ok: false, reason: 'Aim at the field' };
+    return { ok: false, code: 'aim-field' };
   }
   const s = structuredClone(state);
   const skill = SKILLS[id];
@@ -153,13 +154,13 @@ export function repairsState(
 }
 
 /** Why Field Repairs can't be used now, or null when it can (also while a pick is open). */
-export function repairsLock(s: HordeState): string | null {
+export function repairsLock(s: HordeState): Refusal | null {
   const state = repairsState(s);
-  if (state === 'none') return 'Pick Field Repairs first';
-  if (s.outcome !== 'fighting') return 'The horde is over';
-  if (state === 'spent') return 'Already used';
+  if (state === 'none') return { ok: false, code: 'pick-repairs' };
+  if (s.outcome !== 'fighting') return { ok: false, code: 'horde-over' };
+  if (state === 'spent') return { ok: false, code: 'repairs-used' };
   const built = s.layers.flatMap((l) => l.segments).filter((g) => g.kind !== null);
-  if (!built.some((g) => g.hp < g.maxHp - EPS)) return 'The wall is full';
+  if (!built.some((g) => g.hp < g.maxHp - EPS)) return { ok: false, code: 'wall-full' };
   return null;
 }
 
@@ -169,7 +170,7 @@ export function repairsLock(s: HordeState): string | null {
  */
 export function useRepairs(state: HordeState): MoveResult {
   const lock = repairsLock(state);
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   const s = structuredClone(state);
   for (const seg of s.layers.flatMap((l) => l.segments)) {
     if (seg.kind === null) continue;

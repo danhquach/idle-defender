@@ -26,7 +26,7 @@ describe('the Mutated Horror (ID-024)', () => {
     };
     if (lined) {
       const l = lineWall(game.base, stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 }), 0);
-      if (!l.ok) throw new Error(l.reason);
+      if (!l.ok) throw new Error(l.code);
       game = { ...game, base: l.base };
     }
     const base = structuredClone(game.base);

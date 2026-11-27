@@ -35,7 +35,7 @@ function camp(): GameState {
 function out(): GameState {
   const g = camp();
   const r = sendMapPatrol(g, g.map!.areas[0]!.kind, ['recruit-2', 'recruit-3'], 99, NOW);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -267,7 +267,7 @@ describe('save: after Medicine treats the resting (ID-220)', () => {
 
   it('a treat round-trips: no rest on the treated, one Medicine less', () => {
     const r = treatSurvivor(hurt(2), 'recruit-4');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const back = reread(r.game)!.game;
     expect(back).toEqual(r.game);
     expect('rest' in back.reserve.find((d) => d.id === 'recruit-4')!).toBe(false);
@@ -277,10 +277,10 @@ describe('save: after Medicine treats the resting (ID-220)', () => {
 
   it('the last Medicine used: the save writes no Medicine and loads none', () => {
     const r = treatSurvivor(hurt(1), 'recruit-5');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect('medicine' in JSON.parse(encodeSave(r.game, NOW)).game).toBe(false);
     const back = reread(r.game)!.game;
     expect(back.medicine).toBeUndefined();
-    expect(treatSurvivor(back, 'recruit-4')).toEqual({ ok: false, reason: 'No Medicine' });
+    expect(treatSurvivor(back, 'recruit-4')).toEqual({ ok: false, code: 'no-medicine' });
   });
 });

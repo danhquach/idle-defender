@@ -13,6 +13,7 @@ import type { MapPatrol } from '../core/scout.ts';
 import { gunTiles } from './gunpick.ts';
 import { MAP_GUN_AWAY } from './maptext.ts';
 import { canDrag, createInventory, dropAction, inventoryView } from './inventory.ts';
+import { refusedText, type Refused } from './text/index.ts';
 
 const gun = (uid: string, base: WeaponId, rarity: Rarity): OwnedWeapon => ({
   uid,
@@ -78,7 +79,7 @@ function mount(game: GameState, canCombine = true) {
   document.body.replaceChildren(root);
   let g = game;
   let can = canCombine;
-  const onEquip = vi.fn((id: string, choice: GunChoice) => {
+  const onEquip = vi.fn((id: string, choice: GunChoice): { ok: true } | Refused => {
     const r = equipGun(g, id, choice);
     if (r.ok) g = r.game;
     return r.ok ? { ok: true as const } : r;
@@ -409,7 +410,7 @@ describe("a bench survivor's details and gun picker", () => {
     const m = mount(g);
     m.tab('bench').click();
     m.q('.inv-bench-stash').click();
-    expect(m.status().textContent).toBe(refused.ok ? '' : refused.reason);
+    expect(m.status().textContent).toBe(refused.ok ? '' : refusedText(refused));
     expect(m.status().dataset.tone).toBe('refused');
     expect(m.game().armoury).toHaveLength(40);
     expect(m.tab('bench').getAttribute('aria-selected')).toBe('true');

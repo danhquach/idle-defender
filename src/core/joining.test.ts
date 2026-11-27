@@ -98,10 +98,10 @@ describe('asking to join (ID-150)', () => {
     const asked = finishSquadHorde(g, won(g, 9));
     expect(joiningOf(asked).map((d) => d.id)).toEqual(['recruit-9', 'recruit-10']);
     const one = answerJoin(asked, 'recruit-10', true);
-    if (!one.ok) throw new Error(one.reason);
+    if (!one.ok) throw new Error(one.code);
     expect(joiningOf(one.game).map((d) => d.id)).toEqual(['recruit-9']);
     const two = answerJoin(one.game, 'recruit-9', false);
-    if (!two.ok) throw new Error(two.reason);
+    if (!two.ok) throw new Error(two.code);
     expect(campOf(two.game).map((d) => d.id)).toContain('recruit-10');
     expect(campOf(two.game).map((d) => d.id)).not.toContain('recruit-9');
   });
@@ -142,8 +142,14 @@ describe('letting a survivor go (ID-150)', () => {
   it('is refused at 6 or fewer, with the reason', () => {
     for (const n of [1, 3, SQUAD_CAP]) {
       const g = campGame(people(Math.min(n, SQUAD_CAP)), people(Math.max(0, n - SQUAD_CAP), 7));
-      expect(letGoLock(g)).toBe(`Needs ${SQUAD_CAP + 1}+ survivors to let one go (camp ${n})`);
-      expect(letGo(g, 'recruit-1')).toEqual({ ok: false, reason: letGoLock(g) });
+      expect(letGoLock(g)).toEqual({
+        ok: false,
+        code: 'camp-small',
+        need: SQUAD_CAP + 1,
+        have: n,
+        act: 'let-go',
+      });
+      expect(letGo(g, 'recruit-1')).toEqual(letGoLock(g));
     }
   });
 
@@ -152,7 +158,7 @@ describe('letting a survivor go (ID-150)', () => {
     const g = campGame(people(SQUAD_CAP), [benched]);
     expect(letGoLock(g)).toBeNull();
     const r = letGo(g, 'recruit-7');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(campOf(r.game).map((d) => d.id)).not.toContain('recruit-7');
     expect(r.game.armoury.map((w) => w.uid)).toEqual(['h1']);
     expect(r.thrown).toEqual([]);
@@ -163,7 +169,7 @@ describe('letting a survivor go (ID-150)', () => {
   it('a squad survivor leaves an open slot; a pistol just goes', () => {
     const g = campGame(people(SQUAD_CAP), people(1, 7));
     const r = letGo(g, 'recruit-2');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster.map((d) => d.id)).toEqual([
       'recruit-1',
       'recruit-3',
@@ -181,7 +187,7 @@ describe('letting a survivor go (ID-150)', () => {
     const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`h${i + 10}`));
     const g = { ...campGame(people(SQUAD_CAP), [benched]), armoury: stash };
     const r = letGo(g, 'recruit-7');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.armoury).toHaveLength(STASH_CAP);
     expect(r.game.armoury).toContain(strong);
     expect(r.thrown).toHaveLength(1);
@@ -191,7 +197,7 @@ describe('letting a survivor go (ID-150)', () => {
   it('refuses an unknown or hostile id', () => {
     const g = campGame(people(SQUAD_CAP), people(1, 7));
     for (const id of ['recruit-99', '__proto__', 'constructor', '']) {
-      expect(letGo(g, id)).toEqual({ ok: false, reason: 'No such survivor' });
+      expect(letGo(g, id)).toEqual({ ok: false, code: 'no-survivor' });
     }
   });
 });

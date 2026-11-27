@@ -99,7 +99,7 @@ function withArea(game: GameState, kind: AreaId, danger: Danger): GameState {
 /** Sends `ids` to `kind` (made `danger`) at NOW with `seed`; throws on a refusal. */
 function sent(game: GameState, kind: AreaId, danger: Danger, ids: string[], seed = 1): GameState {
   const r = sendMapPatrol(withArea(game, kind, danger), kind, ids, seed, NOW);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -226,19 +226,22 @@ describe('sending a patrol (ID-219)', () => {
   });
 
   it('refuses 0 or 5+ members, a pick twice, the squad, a stranger, the resting', () => {
-    expect(sendRefusal(g, area.kind, [])).toBe('Pick someone to send');
-    expect(sendRefusal(g, area.kind, ids(b))).toMatch(/At most 4/);
-    expect(sendRefusal(g, area.kind, [b[0]!.id, b[0]!.id])).toBe('Someone is picked twice');
-    expect(sendRefusal(g, area.kind, ['recruit-1'])).toBe('Squad survivors stay to defend');
-    expect(sendRefusal(g, area.kind, ['nobody'])).toBe('Pick survivors from the camp');
+    expect(sendRefusal(g, area.kind, [])).toEqual({ ok: false, code: 'pick-someone' });
+    expect(sendRefusal(g, area.kind, ids(b))).toEqual({ ok: false, code: 'team-max', max: 4 });
+    expect(sendRefusal(g, area.kind, [b[0]!.id, b[0]!.id])).toEqual({
+      ok: false,
+      code: 'picked-twice',
+    });
+    expect(sendRefusal(g, area.kind, ['recruit-1'])).toEqual({ ok: false, code: 'squad-stays' });
+    expect(sendRefusal(g, area.kind, ['nobody'])).toEqual({ ok: false, code: 'pick-camp' });
     const tired = camp(squad(), [person(2, { rest: 1 })]);
-    expect(sendRefusal(tired, tired.map!.areas[0]!.kind, ['recruit-2'])).toMatch(/resting/);
+    expect(sendRefusal(tired, tired.map!.areas[0]!.kind, ['recruit-2'])?.code).toBe('resting');
   });
 
   it('one patrol per area, several areas at once, a member on one patrol only', () => {
     const one = sent(g, area.kind, area.danger, [b[0]!.id]);
-    expect(sendRefusal(one, area.kind, [b[1]!.id])).toMatch(/already out/);
-    expect(sendRefusal(one, one.map!.areas[1]!.kind, [b[0]!.id])).toMatch(/on patrol/);
+    expect(sendRefusal(one, area.kind, [b[1]!.id])?.code).toBe('area-busy');
+    expect(sendRefusal(one, one.map!.areas[1]!.kind, [b[0]!.id])?.code).toBe('on-patrol');
     const two = sendMapPatrol(one, one.map!.areas[1]!.kind, [b[1]!.id], 2, NOW);
     expect(two.ok).toBe(true);
     if (two.ok) expect(two.game.map!.patrols.map((p) => p.no)).toEqual([1, 2]);
@@ -246,7 +249,7 @@ describe('sending a patrol (ID-219)', () => {
 
   it('refuses an area not on the map', () => {
     const off = AREA_IDS.find((k) => !g.map!.areas.some((a) => a.kind === k))!;
-    expect(sendRefusal(g, off, [b[0]!.id])).toBe('That area is not on the map');
+    expect(sendRefusal(g, off, [b[0]!.id])).toEqual({ ok: false, code: 'area-missing' });
   });
 
   it('throws on a bad time or seed', () => {
@@ -385,7 +388,7 @@ describe('the patrol report (ID-219)', () => {
     const g = sent(camp(squad(), bench(1)), 'police', 'safe', ['recruit-2']);
     expect(takeReport(g, 'police', NOW + 29 * MIN)).toEqual({
       ok: false,
-      reason: 'The patrol is not back yet',
+      code: 'patrol-not-back',
     });
     expect(takeReport(g, 'hospital', back).ok).toBe(false);
   });
@@ -411,7 +414,7 @@ describe('the patrol report (ID-219)', () => {
       };
       const g = sent(full, 'police', 'dangerous', ids(bench(4)), seed);
       const t = takeReport(g, 'police', back);
-      if (!t.ok) throw new Error(t.reason);
+      if (!t.ok) throw new Error(t.code);
       expect(t.game.armoury.length).toBeLessThanOrEqual(STASH_CAP);
       expect(t.game.medicine ?? 0).toBeLessThanOrEqual(MAP_PATROL.medicineMax);
       if (t.report.weapons.length > 0) {
@@ -437,7 +440,7 @@ describe('a member on patrol is away (ID-219)', () => {
   const away = b[0]!.id;
 
   it('can’t join the squad, swap in, or be picked by Best squad or a fill', () => {
-    expect(toggleSquad(g, away)).toEqual({ ok: false, reason: `${b[0]!.name} is on patrol` });
+    expect(toggleSquad(g, away)).toEqual({ ok: false, code: 'on-patrol', who: b[0]!.name });
     expect(swapBench(g).map((d) => d.id)).toEqual([b[2]!.id]);
     expect(bestSquad(g).game.roster.some((d) => d.id === away)).toBe(false);
     const empty = { ...g, roster: [], reserve: [...g.reserve, ...g.roster] };
@@ -455,7 +458,7 @@ describe('a member on patrol is away (ID-219)', () => {
       'risky',
       [away],
     );
-    expect(letGo(big, away)).toEqual({ ok: false, reason: `${b[0]!.name} is on patrol` });
+    expect(letGo(big, away)).toEqual({ ok: false, code: 'on-patrol', who: b[0]!.name });
     const keeper = big.reserve.find((d) => d.id !== away && d.job === b[0]!.job);
     if (keeper) expect(combineSurvivors(big, keeper.id, away).ok).toBe(false);
   });
@@ -508,7 +511,8 @@ describe('review fixes: away means away (ID-219)', () => {
     const g = sent(camp([person(1)], [holder]), 'police', 'safe', [holder.id]);
     expect(equipGun(g, holder.id, 'pistol')).toEqual({
       ok: false,
-      reason: `${holder.name} is on patrol`,
+      code: 'on-patrol',
+      who: holder.name,
     });
     const after = bestGuns(g).game;
     expect(after.reserve.find((d) => d.id === holder.id)!.loadout.primary).toEqual(gun);
@@ -552,7 +556,7 @@ describe('review fixes: away means away (ID-219)', () => {
       autoSquad: true as const,
     };
     const t = takeReport(g, 'police', NOW + 31 * MIN);
-    if (!t.ok) throw new Error(t.reason);
+    if (!t.ok) throw new Error(t.code);
     const back = t.report.members[0]!;
     const inSquad = t.game.roster.some((d) => d.id === strong.id);
     expect(inSquad).toBe(!back.injured);
@@ -613,11 +617,11 @@ describe('Medicine treats the patrol’s injured (ID-220)', () => {
     for (let seed = 0; seed < 40; seed++) {
       const g = sent(camp(squad(), bench(4)), 'pharmacy', 'dangerous', ids(bench(4)), seed);
       const t = takeReport(g, 'pharmacy', back);
-      if (!t.ok) throw new Error(t.reason);
+      if (!t.ok) throw new Error(t.code);
       const hurt = t.report.members.find((m) => m.injured);
       if (!hurt || (t.game.medicine ?? 0) === 0) continue;
       const r = treatSurvivor(t.game, hurt.id);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       expect(r.game.reserve.find((d) => d.id === hurt.id)!.rest).toBeUndefined();
       expect(r.game.medicine ?? 0).toBe((t.game.medicine ?? 0) - 1);
       treated++;
@@ -636,7 +640,8 @@ describe('Medicine treats the patrol’s injured (ID-220)', () => {
     expect(onMapPatrol(odd, 'recruit-2')).toBe(true);
     expect(treatSurvivor(odd, 'recruit-2')).toEqual({
       ok: false,
-      reason: `${recruit(2).name} is on patrol`,
+      code: 'on-patrol',
+      who: recruit(2).name,
     });
   });
 });

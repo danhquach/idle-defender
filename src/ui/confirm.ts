@@ -7,6 +7,7 @@
 // cancels only the confirm) nor the game's shortcuts. The question reaches the page only as
 // text. Focus starts on Confirm (Enter confirms), stays inside, and goes back to the opener.
 import { el } from './hud.ts';
+import type { Refused } from './text/index.ts';
 
 export interface ConfirmOptions {
   /** The Confirm button's label (default "Confirm"). */
@@ -129,7 +130,7 @@ export function askConfirm(question: string, opts: ConfirmOptions = {}): Promise
  * What an action that asks first reports: what to say once done, why not, or null when the
  * player said no (nothing changed).
  */
-export type Answer = { ok: true; text: string } | { ok: false; reason: string } | null;
+export type Answer = { ok: true; text: string } | Refused | null;
 
 /** Said when the camp changed while the question was open: nothing was done. */
 export const ASK_CHANGED = 'That changed while you were deciding. Nothing was done: try again.';

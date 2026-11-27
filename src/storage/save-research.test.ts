@@ -15,7 +15,7 @@ type Loose = any;
 const MIN = 60_000;
 
 function ok(r: ReturnType<typeof queueResearch>): GameState {
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 
@@ -101,7 +101,7 @@ describe('save: research queue (ID-035)', () => {
       ).toBeNull();
     }
     const done = researchNow({ ...newGame(), lab: 1 }, 'sharpened-spikes');
-    if (!done.ok) throw new Error(done.reason);
+    if (!done.ok) throw new Error(done.code);
     const d = { ...done.game, queue: { ids: [], endsAt: null } };
     expect(reread(d, (x) => (x.queue = { ids: ['sharpened-spikes'], endsAt: NOW }))).toBeNull();
     const top = { ...newGame(), lab: 1, perkLevels: { ...newGame().perkLevels, 'steady-fire': 3 } };
@@ -176,7 +176,7 @@ describe('save: perk levels (ID-035)', () => {
   it('the starting perk and every perk researched are owned', () => {
     expect(reread(newGame(), (x) => (x.perkLevels['steady-fire'] = 0))).toBeNull();
     const r = researchNow({ ...newGame(), lab: 1 }, 'fortify');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(reread(r.game)?.game.perkLevels.fortify).toBe(1);
     expect(reread(r.game, (x) => (x.perkLevels.fortify = 0))).toBeNull();
   });
@@ -199,7 +199,7 @@ describe('save: perk levels (ID-035)', () => {
 
   it('a v10 save loads with no queue, owning the starting perk and each one researched at level 1', () => {
     const r = researchNow({ ...newGame(), lab: 1 }, 'rally-call');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const save = { v: 10, savedAt: NOW, game: preQueue(r.game) };
     const back = decodeSave(JSON.stringify(save));
     expect(back?.game.queue).toEqual({ ids: [], endsAt: null });
@@ -218,7 +218,7 @@ describe('save: research limits elsewhere (ID-035)', () => {
     let g: GameState = { ...newGame(), lab: 2 };
     for (const id of ['metal-walls', 'auto-turret', 'high-capacity-batteries'] as const) {
       const r = researchNow(g, id);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = r.game;
     }
     expect(reread(g, (x) => (x.power.bank = BANK_CAP + 500))?.game.power.bank).toBe(BANK_CAP + 500);
@@ -228,7 +228,7 @@ describe('save: research limits elsewhere (ID-035)', () => {
   it('a second car only with More cars', () => {
     expect(reread(newGame(), (x) => (x.camp.cars = CAR.limit + 1))).toBeNull();
     const r = researchNow({ ...newGame(), lab: 2 }, 'more-cars');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(reread(r.game, (x) => (x.camp.cars = 2))?.game.camp.cars).toBe(2);
     expect(reread(r.game, (x) => (x.camp.cars = 3))).toBeNull();
   });

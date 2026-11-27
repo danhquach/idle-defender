@@ -10,6 +10,7 @@ import { techOf, techReady, techState, unlocksOf } from '../core/techtree.ts';
 import { createCampWindow } from './campwindow.ts';
 import type { Answer } from './confirm.ts';
 import { el, thousands } from './hud.ts';
+import { refusedText, TECH_BRANCH_NAME, TECH_EFFECT, TECH_NAME } from './text/index.ts';
 
 /** Why Research is greyed in a fight. */
 export const RESEARCH_WAIT = 'Research between hordes';
@@ -28,7 +29,7 @@ export function nodeFace(
   const node = TECH[id];
   const base = techState(game, id);
   if (base === 'done') return { state: 'done', text: '✓ Researched' };
-  if (base === 'locked') return { state: 'locked', text: `Needs ${TECH[node.needs!].name}` };
+  if (base === 'locked') return { state: 'locked', text: `Needs ${TECH_NAME[node.needs!]}` };
   if (game.stock.scrap < node.cost) {
     return {
       state: 'short',
@@ -73,13 +74,13 @@ export function researchOffer(
 /** The confirm before a purchase; a Tier 3 node repeats what it does. */
 export const researchQuestion = (id: TechId, cost: number, scrap: number): string => {
   const node = TECH[id];
-  const effect = node.tier === 3 ? `${node.effect} ` : '';
-  return `Research ${node.name} for ${thousands(cost)} Scrap? ${effect}You have ${thousands(scrap)}.`;
+  const effect = node.tier === 3 ? `${TECH_EFFECT[id]} ` : '';
+  return `Research ${TECH_NAME[id]} for ${thousands(cost)} Scrap? ${effect}You have ${thousands(scrap)}.`;
 };
 
 /** What a purchase says once made. */
 export const researchText = (id: TechId, cost: number, left: number): string =>
-  `Researched ${TECH[id].name} · ${thousands(cost)} Scrap spent, ${thousands(left)} left.`;
+  `Researched ${TECH_NAME[id]} · ${thousands(cost)} Scrap spent, ${thousands(left)} left.`;
 
 export interface ResearchState {
   game: GameState;
@@ -131,7 +132,7 @@ export function connectors(doc: Document, have: readonly TechId[] = []): SVGSVGE
   for (const id of TECH_IDS) {
     const { needs, tier, branch } = TECH[id];
     if (needs === null) continue;
-    const row = TECH_BRANCHES.findIndex((b) => b.id === branch);
+    const row = TECH_BRANCHES.indexOf(branch);
     const line = doc.createElementNS(SVG_NS, 'line');
     line.setAttribute('x1', String(tier - 1.5));
     line.setAttribute('x2', String(tier - 0.5));
@@ -203,10 +204,10 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
       nodes.push(head);
     }
     TECH_BRANCHES.forEach((branch, row) => {
-      const label = el('span', 'research-branch', branch.name);
+      const label = el('span', 'research-branch', TECH_BRANCH_NAME[branch]);
       label.style.gridRow = String(row + 2);
       nodes.push(label);
-      for (const id of TECH_IDS.filter((t) => TECH[t].branch === branch.id)) {
+      for (const id of TECH_IDS.filter((t) => TECH[t].branch === branch)) {
         const node = TECH[id];
         const face = nodeFace(game, id);
         const b = el('button', 'research-node');
@@ -217,7 +218,7 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
         b.style.gridColumn = String(node.tier + 1);
         b.setAttribute('aria-pressed', String(id === selected));
         b.append(
-          el('span', 'research-node-name', node.name),
+          el('span', 'research-node-name', TECH_NAME[id]),
           el('span', 'research-node-face', face.text),
         );
         b.addEventListener('click', () => pick(id));
@@ -232,25 +233,25 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
     if (selected === null) return;
     const node = TECH[selected];
     const have = techOf(game);
-    const branch = TECH_BRANCHES.find((b) => b.id === node.branch)!.name;
+    const branch = TECH_BRANCH_NAME[node.branch];
     const needs = el('p', 'research-needs');
     needs.textContent =
       node.needs === null
         ? 'Needs: nothing'
-        : `Needs: ${have.includes(node.needs) ? '✓' : '○'} ${TECH[node.needs].name}`;
+        : `Needs: ${have.includes(node.needs) ? '✓' : '○'} ${TECH_NAME[node.needs]}`;
     const next = unlocksOf(selected);
     const unlocks = el(
       'p',
       'research-unlocks',
       next.length === 0
         ? 'Unlocks: nothing yet'
-        : `Unlocks: ${next.map((t) => TECH[t].name).join(', ')}`,
+        : `Unlocks: ${next.map((t) => TECH_NAME[t]).join(', ')}`,
     );
     const offer = researchOffer(game, selected, can);
     const parts: HTMLElement[] = [
-      el('h3', 'research-name', node.name),
+      el('h3', 'research-name', TECH_NAME[selected]),
       el('p', 'research-meta', `Tier ${node.tier} · ${branch}`),
-      el('p', 'research-effect', node.effect),
+      el('p', 'research-effect', TECH_EFFECT[selected]),
       needs,
       unlocks,
     ];
@@ -282,7 +283,7 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
   async function buy(id: TechId): Promise<void> {
     const answer = await opts.onResearch(id);
     if (answer === null) return;
-    say(answer.ok ? answer.text : answer.reason, !answer.ok);
+    say(answer.ok ? answer.text : refusedText(answer), !answer.ok);
     if (opened) draw();
   }
 

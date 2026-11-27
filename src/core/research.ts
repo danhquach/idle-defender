@@ -17,7 +17,7 @@ import {
   type Stock,
 } from './data.ts';
 import type { GameState } from './game.ts';
-import type { Refusal } from './base.ts';
+import type { Refusal } from './refusal.ts';
 
 export type GameResult = { ok: true; game: GameState } | Refusal;
 
@@ -44,7 +44,7 @@ export function labCost(game: Pick<GameState, 'lab'>): Partial<Stock> | null {
 /** Builds the Lab (level 0 → 1) or upgrades it a level. */
 export function upgradeLab(game: GameState): GameResult {
   const cost = labCost(game);
-  if (!cost) return { ok: false, reason: 'The Lab is at the top level' };
+  if (!cost) return { ok: false, code: 'lab-top' };
   return pay(game, cost, (g) => {
     g.lab += 1;
   });
@@ -67,58 +67,70 @@ export const isQueueId = (id: string): id is QueueId =>
 type QueueView = Pick<GameState, 'perkLevels'>;
 
 /**
- * Entry `id`'s name, price and minutes. A perk level is the one after the perk's level
- * when it starts: its own node, if that is ahead in the queue, makes it level 1.
+ * Entry `id`'s level, price and minutes. A perk level is the one after the perk's level
+ * when it starts: its own node, if that is ahead in the queue, makes it level 1. `level` is
+ * the perk level it raises to (`entryLevel`), null for a research node; the UI names it
+ * (`entryName`).
  */
 export function entryOf(
   game: QueueView,
   id: QueueId,
-): { name: string; genes: number; minutes: number } {
+): { level: number | null; genes: number; minutes: number } {
   const perk = perkOfEntry(id);
   if (perk === null) {
     if (!Object.hasOwn(RESEARCH, id)) throw new RangeError(`research: unknown node ${String(id)}`);
     const node = RESEARCH[id as ResearchId];
-    return { name: node.name, genes: node.genes, minutes: node.minutes };
+    return { level: null, genes: node.genes, minutes: node.minutes };
   }
   const from = Math.max(1, game.perkLevels[perk]);
   const at = Math.min(from, PERK_LEVEL.top - 1) - 1;
   return {
-    name: `${PERKS[perk].name} level ${from + 1}`,
+    level: from + 1,
     genes: PERK_LEVEL.genes[at]!,
     minutes: PERK_LEVEL.minutes[at]!,
   };
+}
+
+/**
+ * The level a perk-level entry raises its perk to (as `entryOf` counts it), or null for a
+ * research node.
+ */
+export function entryLevel(game: QueueView, id: QueueId): number | null {
+  const perk = perkOfEntry(id);
+  return perk === null ? null : Math.max(1, game.perkLevels[perk]) + 1;
 }
 
 /** Whether perk `perk` is owned, or will be once the queue ahead of it is done. */
 const willOwn = (game: Pick<GameState, 'perkLevels' | 'queue'>, perk: PerkId): boolean =>
   game.perkLevels[perk] >= 1 || (game.queue.ids as readonly string[]).includes(perk);
 
-/** The refusal while the queue has no room: it passes once an entry is done. */
-export const QUEUE_FULL = 'The research queue is full';
-
 /** Why `id` can't be queued now (cost aside), or null when it can. Unknown ids throw. */
 export function queueLock(
   game: Pick<GameState, 'lab' | 'research' | 'perkLevels' | 'queue'>,
   id: QueueId,
-): string | null {
+): Refusal | null {
   const perk = perkOfEntry(id);
   entryOf(game, id); // throws on an unknown id
   if (perk === null) {
     const node = RESEARCH[id as ResearchId];
-    if (game.research.includes(id as ResearchId)) return 'Already researched';
-    if (Object.hasOwn(PERKS, id) && game.perkLevels[id as PerkId] >= 1) return 'Already owned';
-    if (game.queue.ids.includes(id)) return 'Already queued';
-    if (game.lab < node.lab)
-      return node.lab === 1 ? 'Needs a Research Lab' : `Needs Lab level ${node.lab}`;
+    if (game.research.includes(id as ResearchId)) return { ok: false, code: 'researched' };
+    if (Object.hasOwn(PERKS, id) && game.perkLevels[id as PerkId] >= 1)
+      return { ok: false, code: 'owned' };
+    if (game.queue.ids.includes(id)) return { ok: false, code: 'queued' };
+    if (game.lab < node.lab) {
+      return node.lab === 1
+        ? { ok: false, code: 'needs-lab' }
+        : { ok: false, code: 'needs-lab-level', level: node.lab };
+    }
     if (node.needs && !game.research.includes(node.needs) && !game.queue.ids.includes(node.needs))
-      return `Needs ${RESEARCH[node.needs].name}`;
+      return { ok: false, code: 'needs-research', node: node.needs };
   } else {
-    if (game.queue.ids.includes(id)) return 'Already queued';
-    if (game.lab < 1) return 'Needs a Research Lab';
-    if (!willOwn(game, perk)) return `Needs ${PERKS[perk].name}`;
-    if (game.perkLevels[perk] >= PERK_LEVEL.top) return `${PERKS[perk].name} is at the top level`;
+    if (game.queue.ids.includes(id)) return { ok: false, code: 'queued' };
+    if (game.lab < 1) return { ok: false, code: 'needs-lab' };
+    if (!willOwn(game, perk)) return { ok: false, code: 'needs-perk', perk };
+    if (game.perkLevels[perk] >= PERK_LEVEL.top) return { ok: false, code: 'perk-top', perk };
   }
-  if (game.queue.ids.length >= RESEARCH_QUEUE.size) return QUEUE_FULL;
+  if (game.queue.ids.length >= RESEARCH_QUEUE.size) return { ok: false, code: 'queue-full' };
   return null;
 }
 
@@ -130,7 +142,7 @@ export function queueResearch(state: GameState, id: QueueId, now: number): GameR
   finite('queueResearch', now);
   const game = advanceResearch(state, now);
   const lock = queueLock(game, id);
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   const { genes, minutes } = entryOf(game, id);
   return pay(game, { genes }, (g) => {
     g.queue.ids.push(id);
@@ -145,16 +157,17 @@ export function queueResearch(state: GameState, id: QueueId, now: number): GameR
 export function unqueueLock(
   game: Pick<GameState, 'perkLevels' | 'queue'>,
   id: QueueId,
-): string | null {
+): Refusal | null {
   const index = game.queue.ids.indexOf(id);
-  if (index < 0) return 'Not in the queue';
+  if (index < 0) return { ok: false, code: 'not-queued' };
   for (const later of game.queue.ids.slice(index + 1)) {
     const perk = perkOfEntry(later);
     const needs =
       perk === null
         ? RESEARCH[later as ResearchId].needs === id
         : perk === id && game.perkLevels[perk] < 1;
-    if (needs) return `${entryOf(game, later).name} needs it`;
+    if (needs)
+      return { ok: false, code: 'needed-by', entry: later, level: entryLevel(game, later) };
   }
   return null;
 }
@@ -168,7 +181,7 @@ export function unqueue(state: GameState, id: QueueId, now: number): GameResult 
   finite('unqueue', now);
   const game = advanceResearch(state, now);
   const lock = unqueueLock(game, id);
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   return { ok: true, game: dropEntry(game, game.queue.ids.indexOf(id), now) };
 }
 
@@ -237,7 +250,7 @@ export function pay(
   change: (g: GameState) => void,
 ): GameResult {
   const short = MATERIALS.find((m) => game.stock[m] < (cost[m] ?? 0));
-  if (short) return { ok: false, reason: `Not enough ${short}`, short: true };
+  if (short) return { ok: false, code: 'short', material: short, short: true };
   const g = structuredClone(game);
   for (const m of MATERIALS) g.stock[m] -= cost[m] ?? 0;
   change(g);

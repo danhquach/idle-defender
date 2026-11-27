@@ -45,7 +45,7 @@ function baseWith(...spots: [TurretMount, number, number][]): Base {
   let stock = RICH;
   for (const [mount, column, row] of spots) {
     const r = buildTurret(base, stock, true, mount, column, row);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     ({ base, stock } = r);
   }
   return base;
@@ -74,28 +74,29 @@ describe('turret build actions', () => {
   it('refuses before the Auto-turret is researched, and on a bad spot', () => {
     expect(buildTurret(newBase(), RICH, false, 'tower', 0, 5)).toEqual({
       ok: false,
-      reason: 'Research the Auto-turret first',
+      code: 'research-turret',
     });
     expect(buildTurret(newBase(), RICH, true, 'tower', 0, 4)).toEqual({
       ok: false,
-      reason: 'Slot taken', // a tower post
+      code: 'slot-taken', // a tower post
     });
     expect(buildTurret(baseWith(['tower', 0, 5]), RICH, true, 'tower', 0, 5)).toEqual({
       ok: false,
-      reason: 'Slot taken',
+      code: 'slot-taken',
     });
     expect(buildTurret(newBase(), RICH, true, 'wall-walk', 1, 0)).toEqual({
       ok: false,
-      reason: 'A wall mount needs a wall',
+      code: 'mount-walk-wall',
     });
     expect(buildTurret(newBase(), RICH, true, 'tower', 1, 0)).toEqual({
       ok: false,
-      reason: 'A tower mount needs a wall in front',
+      code: 'mount-tower-front',
     });
     const poor = stockOf({ scrap: 39, wood: 99, metal: 0, concrete: 0 });
     expect(buildTurret(newBase(), poor, true, 'tower', 0, 5)).toEqual({
       ok: false,
-      reason: 'Not enough scrap',
+      code: 'short',
+      material: 'scrap',
       short: true,
     });
   });
@@ -104,7 +105,7 @@ describe('turret build actions', () => {
     const base = baseWith(['wall-walk', 0, 0]);
     expect(buildPost(base, RICH, { kind: 'wall-walk', column: 0, row: 0 })).toEqual({
       ok: false,
-      reason: 'Slot taken',
+      code: 'slot-taken',
     });
   });
 
@@ -119,7 +120,7 @@ describe('turret build actions', () => {
 
   it('repairs for Scrap in proportion to the missing condition, jammed included', () => {
     const base = baseWith(['tower', 0, 5]);
-    expect(repairTurret(base, RICH, 0)).toEqual({ ok: false, reason: 'Nothing to repair' });
+    expect(repairTurret(base, RICH, 0)).toEqual({ ok: false, code: 'nothing-to-repair' });
     base.turrets[0]!.condition = 0;
     expect(turretRepairCost(base.turrets[0]!).scrap).toBe(TURRET.repairScrap);
     base.turrets[0]!.condition = 61;
@@ -135,12 +136,17 @@ describe('turret build actions', () => {
     expect(r.ok && r.base.turrets[0]!.condition).toBe(MAX_CONDITION);
     expect(r.ok && r.stock.scrap).toBe(999 - 8);
     const broke = repairTurret(base, { ...RICH, scrap: 7 }, 0);
-    expect(broke).toEqual({ ok: false, reason: 'Not enough scrap', short: true });
+    expect(broke).toEqual({
+      ok: false,
+      code: 'short',
+      material: 'scrap',
+      short: true,
+    });
   });
 
   it('Repair all repairs turrets with the walls, all or nothing', () => {
     const base = baseWith(['tower', 0, 5], ['wall-walk', 0, 0]);
-    expect(repairAll(base, RICH)).toEqual({ ok: false, reason: 'Nothing to repair' });
+    expect(repairAll(base, RICH)).toEqual({ ok: false, code: 'nothing-to-repair' });
     base.turrets[0]!.condition = 0; // 20 scrap
     base.turrets[1]!.condition = 61; // 8 scrap
     expect(repairAllCost(base)).toEqual(stockOf({ scrap: 28, wood: 0, metal: 0, concrete: 0 }));
@@ -150,7 +156,8 @@ describe('turret build actions', () => {
     expect(cost.wood).toBeGreaterThan(0);
     expect(repairAll(base, { ...RICH, scrap: cost.scrap - 1 })).toEqual({
       ok: false,
-      reason: 'Not enough scrap',
+      code: 'short',
+      material: 'scrap',
       short: true,
     });
     const r = repairAll(base, RICH);
@@ -186,12 +193,12 @@ describe('turret build actions', () => {
     expect(r.ok && r.stock).toEqual(RICH);
     expect(moveTurret(base, RICH, 0, 'tower', 0, 5)).toEqual({
       ok: false,
-      reason: 'Already there',
+      code: 'already-there',
     });
-    expect(moveTurret(base, RICH, 0, 'tower', 0, 4)).toEqual({ ok: false, reason: 'Slot taken' });
+    expect(moveTurret(base, RICH, 0, 'tower', 0, 4)).toEqual({ ok: false, code: 'slot-taken' });
     expect(moveTurret(base, RICH, 0, 'wall-walk', 2, 0)).toEqual({
       ok: false,
-      reason: 'A wall mount needs a wall',
+      code: 'mount-walk-wall',
     });
   });
 });

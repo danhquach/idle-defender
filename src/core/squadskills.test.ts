@@ -31,7 +31,7 @@ function fight(...pick: SkillId[]): HordeState {
 
 function used(s: HordeState, id: SkillId, x = 1400, y = 200): HordeState {
   const r = useSkill(s, id, x, y);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.state;
 }
 
@@ -57,7 +57,7 @@ describe('the skill pick (ID-100, ID-139)', () => {
     let g = picked();
     const toggle = (id: SkillId) => {
       const r = toggleSkill(g, id);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = r.game;
     };
     toggle('airstrike');
@@ -71,7 +71,8 @@ describe('the skill pick (ID-100, ID-139)', () => {
     const full = picked('a' as SkillId, 'b' as SkillId);
     expect(toggleSkill(full, 'airstrike')).toEqual({
       ok: false,
-      reason: 'Pick up to 2: drop one first',
+      code: 'skill-pick-max',
+      max: 2,
     });
   });
 
@@ -101,7 +102,11 @@ describe('skills in a horde-only fight (ID-100, ID-139)', () => {
     const none = fight();
     expect(none.skills).toEqual([]);
     expect(none.freeSkills).toEqual({ power: 1 });
-    expect(skillLock(none, 'airstrike')).toBe('Research Airstrike first');
+    expect(skillLock(none, 'airstrike')).toEqual({
+      ok: false,
+      code: 'research-skill',
+      skill: 'airstrike',
+    });
   });
 
   it('a later change to the pick never reaches a fight already started', () => {
@@ -118,14 +123,14 @@ describe('skills in a horde-only fight (ID-100, ID-139)', () => {
     const after = used(s, 'airstrike');
     expect(after.cash).toBe(0);
     expect(skillLeft(after, 'airstrike')).toBe(SKILLS.airstrike.cooldown);
-    expect(skillLock(after, 'airstrike')).toBe('Not ready yet');
+    expect(skillLock(after, 'airstrike')).toEqual({ ok: false, code: 'not-ready' });
   });
 
   it('keeps the full game’s cost and 1× power when the fight is not horde-only', () => {
     const s = fight('airstrike');
     delete s.freeSkills;
     expect(skillPower(s)).toBe(1);
-    expect(skillLock(s, 'airstrike')).toBe('Not enough cash');
+    expect(skillLock(s, 'airstrike')).toEqual({ ok: false, code: 'no-cash' });
   });
 
   it('the cooldown is the same at ×2', () => {
@@ -166,7 +171,7 @@ describe('skills in a horde-only fight (ID-100, ID-139)', () => {
     s.offer = [];
     s = tick(s, 10);
     expect(skillLeft(s, 'airstrike')).toBe(left);
-    expect(skillLock(s, 'airstrike')).toBe('Pick first');
+    expect(skillLock(s, 'airstrike')).toEqual({ ok: false, code: 'pick-first' });
     s.offer = null;
     s = tick(s, 10);
     expect(skillLeft(s, 'airstrike')).toBeCloseTo(left - 10, 6);

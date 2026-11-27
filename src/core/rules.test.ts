@@ -155,7 +155,7 @@ describe('injury', () => {
 
   it('a walker injured on the way frees its reservation', () => {
     const moved = moveDefender(quiet(), 'a', 1);
-    if (!moved.ok) throw new Error(moved.reason);
+    if (!moved.ok) throw new Error(moved.code);
     const s = moved.state;
     s.defenders[0]!.hp = 0;
     const after = tick(s, STEP);
@@ -245,7 +245,7 @@ describe('replacing an injured defender', () => {
   it('sends the replacement in at full HP on that post', () => {
     const offered = injuredAfterWave(quiet());
     const r = replaceInjured(offered, 'c', 0);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const s = r.state;
     expect(s.replace).toBeNull();
     expect(s.posts[0]!.defenderId).toBe('c');
@@ -272,17 +272,17 @@ describe('replacing an injured defender', () => {
     let mid = tick(t, STEP);
     expect(mid.replace).toBeNull();
     const moved = moveDefender(mid, 'b', 0);
-    if (!moved.ok) throw new Error(moved.reason);
+    if (!moved.ok) throw new Error(moved.code);
     mid = moved.state;
     mid.enemies = [];
     const offered = tick(mid, STEP);
     expect(offered.replace).toEqual({ injuredId: 'a', postId: null });
     expect(replacePosts(offered).map((p) => p.id)).toEqual([1]);
     const r = replaceInjured(offered, 'c', 1);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.state.posts[1]!.defenderId).toBe('c');
     expect(() => replaceInjured(offered, 'c', 0)).not.toThrow();
-    expect(replaceInjured(offered, 'c', 0)).toEqual({ ok: false, reason: 'Post taken' });
+    expect(replaceInjured(offered, 'c', 0)).toEqual({ ok: false, code: 'post-taken' });
   });
 
   it('no offer with no usable free post', () => {
@@ -339,7 +339,7 @@ describe('replacing an injured defender', () => {
     const next = skipReplace(offered);
     expect(next.replace).toEqual({ injuredId: 'b', postId: 1 });
     const r = replaceInjured(next, 'd', 1);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.state.replace).toBeNull();
   });
 
@@ -359,7 +359,7 @@ describe('replacing an injured defender', () => {
     field(offered, 'b', 1);
     expect(moveDefender(offered, 'b', 0)).toEqual({
       ok: false,
-      reason: 'Pick a replacement first',
+      code: 'pick-replacement',
     });
   });
 
@@ -381,7 +381,7 @@ describe('replacing an injured defender', () => {
     const t = quiet();
     t.tookPart.push('b');
     const r = replaceInjured(injuredAfterWave(t), 'b', 0);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.state.tookPart).toEqual(['a', 'b']);
   });
 

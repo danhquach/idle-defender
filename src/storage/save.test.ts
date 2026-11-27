@@ -1113,9 +1113,9 @@ describe('save: wall-walk spots (ID-048)', () => {
   function lined(): GameState {
     const game = played();
     const t = buildTurret(game.base, RICH, true, 'wall-walk', 0, 9, 1);
-    if (!t.ok) throw new Error(t.reason);
+    if (!t.ok) throw new Error(t.code);
     const r = lineWall(t.base, t.stock, 0);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     return { ...game, base: r.base };
   }
   const tweaked = (change: (base: Loose) => void): unknown => {
@@ -1405,7 +1405,7 @@ describe('save: patrols (ID-026)', () => {
     let g: GameState = { ...newGame(), hordeNumber: 3 };
     // Seeds where everyone comes back fit, so this fixture is about loot only.
     const r1 = sendPatrol(g, 'gas-station', ['bob'], 0, NOW - 3 * H);
-    if (!r1.ok) throw new Error(r1.reason);
+    if (!r1.ok) throw new Error(r1.code);
     g = settlePatrols(reseed(r1.game, unhurt), NOW - 2 * H);
     // The police station waits for research, so this patrol is placed by hand; it finds weapons.
     const police: Patrol = {
@@ -1420,7 +1420,7 @@ describe('save: patrols (ID-026)', () => {
     );
     g = settlePatrols({ ...g, patrols: [police], patrolsSent: 2 }, NOW - H / 2);
     const r3 = sendPatrol(g, 'electronics', ['jack', 'john'], 0, NOW - H / 4);
-    if (!r3.ok) throw new Error(r3.reason);
+    if (!r3.ok) throw new Error(r3.code);
     return reseed(r3.game, unhurt);
   }
   const raw = (game: Loose, v: unknown = SAVE_VERSION) =>
@@ -2149,7 +2149,7 @@ describe('save: plazas and orders (ID-029)', () => {
       focus: 'gas',
       order: 'loot',
     });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     return r.game;
   }
 
@@ -2160,7 +2160,7 @@ describe('save: plazas and orders (ID-029)', () => {
       buildings: [...ticked],
       order: 'loot',
     });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const p = r.game.patrols[0]!;
     let seed = 0;
     while (!(
@@ -2244,10 +2244,10 @@ describe('save: plazas and orders (ID-029)', () => {
   it('loads a v7 save with single-building patrols, Anything and Balanced, and reports with defaults', () => {
     let g: GameState = { ...newGame(), hordeNumber: 3 };
     const r1 = sendPatrol(g, 'gas-station', ['bob'], 0, NOW - 3 * H);
-    if (!r1.ok) throw new Error(r1.reason);
+    if (!r1.ok) throw new Error(r1.code);
     g = settlePatrols(r1.game, NOW - 2 * H);
     const r2 = sendPatrol(g, 'electronics', ['jack'], 0, NOW - H / 4);
-    if (!r2.ok) throw new Error(r2.reason);
+    if (!r2.ok) throw new Error(r2.code);
     g = r2.game;
     const old = raw(prePlazas(g), 7)?.game;
     expect(old?.patrols[0]).toMatchObject({
@@ -2324,7 +2324,7 @@ describe('save: plazas and orders (ID-029)', () => {
         1,
         NOW - H / 4,
       );
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       return r.game;
     };
     expect(poke(single, () => {})).not.toBeNull();
@@ -2386,7 +2386,7 @@ describe('save: plazas and orders (ID-029)', () => {
     const single = (): GameState => {
       let g: GameState = { ...newGame(), hordeNumber: 3 };
       const r = sendPatrol(g, 'gas-station', ['bob'], 0, NOW - 3 * H);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = settlePatrols(r.game, NOW - 2 * H);
       return g;
     };
@@ -2460,7 +2460,7 @@ describe('save: the car (ID-030)', () => {
       ['gas-station', 'jack', false],
     ] as const) {
       const r = sendPatrol(game, place, [id], 5, NOW - H / 4, { car });
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       game = r.game;
     }
     return game;

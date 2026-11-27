@@ -2,7 +2,7 @@
 // damage), levelled stat cards in the horde pool.
 import { describe, expect, it } from 'vitest';
 import { rollWeapon } from './armoury.ts';
-import { UPGRADES, chooseCard, effectAt, eligible, pitch } from './cards.ts';
+import { UPGRADES, chooseCard, eligible } from './cards.ts';
 import { CARD, CARD_MAX_LEVEL, STEP } from './data.ts';
 import {
   cardCrit,
@@ -72,8 +72,6 @@ describe('crit cards (ID-130)', () => {
       });
       expect(SQUAD_CARDS).toContain(id);
     }
-    expect(UPGRADES['aim-for-the-head'].name).toBe('Aim for the Head');
-    expect(UPGRADES['hollow-point-rounds'].name).toBe('Hollow Points');
     expect(CARD.crit).toEqual([0.05, 0.1, 0.15]);
     expect(CARD.critDamage).toEqual([0.25, 0.5, 0.75]);
   });
@@ -89,34 +87,6 @@ describe('crit cards (ID-130)', () => {
       }
       expect(eligible(s, id)).toBe(false);
     }
-  });
-
-  it('card texts show the exact number at each level', () => {
-    expect([1, 2, 3].map((n) => effectAt('aim-for-the-head', n)!.value)).toEqual([
-      '+5%',
-      '+10%',
-      '+15%',
-    ]);
-    expect(effectAt('aim-for-the-head', 1)).toEqual({
-      pre: 'Squad crit chance ',
-      value: '+5%',
-      post: '',
-    });
-    expect([1, 2, 3].map((n) => effectAt('hollow-point-rounds', n)!.value)).toEqual([
-      '+25%',
-      '+50%',
-      '+75%',
-    ]);
-    expect(effectAt('hollow-point-rounds', 1)).toEqual({
-      pre: 'Squad crit damage ',
-      value: '+25%',
-      post: ', added to the ×2',
-    });
-    const s = picked(newHorde(1, setup()), 'hollow-point-rounds', 1);
-    expect(pitch(s, 'hollow-point-rounds')).toMatchObject({
-      tag: 'Lv 1 → 2',
-      effect: { from: '+25%', to: '+50%' },
-    });
   });
 
   it('Hollow Points is offered only while the squad can crit', () => {

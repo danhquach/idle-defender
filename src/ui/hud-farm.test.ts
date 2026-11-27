@@ -3,7 +3,7 @@
 // against Recommended Power, the drop tile's kind, gun level wherever the gun shows, and
 // the replay and loss result screens. Text reaches the page only through textContent.
 import { describe, expect, it, vi } from 'vitest';
-import { levelName, type OwnedWeapon } from '../core/armoury.ts';
+import { type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, RADIO_HORDES, SQUAD_CAP, STASH_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
@@ -32,6 +32,7 @@ import {
   squadScreen,
   squadStart,
 } from './hud.ts';
+import { levelName } from './text/index.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};

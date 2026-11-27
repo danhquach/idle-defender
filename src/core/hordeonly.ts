@@ -127,6 +127,7 @@ import {
   type ModeProgress,
 } from './modes.ts';
 import { chance, createRng, pick } from './rng.ts';
+import type { CampAct, Refusal } from './refusal.ts';
 import { techOf } from './techtree.ts';
 import { classOf, fitContext, memberSums, powerOver, type FitContext } from './traits.ts';
 import { themeCleared, themeOf, THEME_GUN_STREAM, withCleared } from './themes.ts';
@@ -284,16 +285,13 @@ export const skillPickPower = (pick: readonly SkillId[]): number =>
  * Picks or drops skill `id` for the next horde (ID-100): a picked one is dropped; else it
  * is added, unless `SQUAD_SKILLS.max` are picked already (refused). Between hordes only.
  */
-export function toggleSkill(
-  game: GameState,
-  id: SkillId,
-): { ok: true; game: GameState } | { ok: false; reason: string } {
+export function toggleSkill(game: GameState, id: SkillId): { ok: true; game: GameState } | Refusal {
   if (!SKILL_IDS.includes(id)) throw new RangeError(`toggleSkill: unknown skill ${String(id)}`);
   const pick = game.skillPick.includes(id)
     ? game.skillPick.filter((k) => k !== id)
     : [...game.skillPick, id];
   if (pick.length > SQUAD_SKILLS.max) {
-    return { ok: false, reason: `Pick up to ${SQUAD_SKILLS.max}: drop one first` };
+    return { ok: false, code: 'skill-pick-max', max: SQUAD_SKILLS.max };
   }
   return { ok: true, game: { ...game, skillPick: pick } };
 }
@@ -326,14 +324,14 @@ function withSlots(game: GameState, slots: { squad: number; stash: number }): Ga
 }
 
 /** What a purchase of slots gives (ID-179): the game after it, or why not. */
-export type SlotBuy = { ok: true; game: GameState } | { ok: false; reason: string };
+export type SlotBuy = { ok: true; game: GameState } | Refusal;
 
 function buySlot(game: GameState, kind: 'squad' | 'stash'): SlotBuy {
   const cost = kind === 'squad' ? nextSquadSlotCost(game) : nextStashSlotCost(game);
   if (cost === null) {
-    return { ok: false, reason: `Every ${kind} slot is bought` };
+    return { ok: false, code: 'slots-bought', kind };
   }
-  if (game.stock.scrap < cost) return { ok: false, reason: `Needs ${cost} Scrap` };
+  if (game.stock.scrap < cost) return { ok: false, code: 'scrap', need: cost };
   const bought = boughtOf(game);
   const next = withSlots(
     { ...game, stock: { ...game.stock, scrap: game.stock.scrap - cost } },
@@ -345,7 +343,7 @@ function buySlot(game: GameState, kind: 'squad' | 'stash'): SlotBuy {
 /**
  * Buys the next squad slot (ID-179, between hordes) for `nextSquadSlotCost` Scrap. The new
  * slot is filled from the bench like any open one (`fillSquad`, then "Auto"). Refused with a
- * player-facing reason when Scrap is short or every slot is bought.
+ * refusal when Scrap is short or every slot is bought.
  */
 export const buySquadSlot = (game: GameState): SlotBuy => buySlot(game, 'squad');
 
@@ -357,13 +355,11 @@ export const upgradeCost = (w: OwnedWeapon): number | null =>
   gunStep(w) >= GUN_UPGRADE.max ? null : GUN_UPGRADE.cost * (gunStep(w) + 1) * gunLevel(w);
 
 /** What an upgrade gives (ID-208): the game after it, the gun, and the Scrap it took; or why not. */
-export type GunUpgrade =
-  { ok: true; game: GameState; weapon: OwnedWeapon; cost: number } | { ok: false; reason: string };
+export type GunUpgrade = { ok: true; game: GameState; weapon: OwnedWeapon; cost: number } | Refusal;
 
 /**
  * Raises gun `uid` one upgrade step (ID-208) for `upgradeCost` Scrap: a gun in the stash, in a
- * survivor's hands (squad or bench), any time, in a fight too. Refused with a player-facing
- * reason when there is no such gun, it is no gun, it is at the top step, or Scrap is short.
+ * survivor's hands (squad or bench), any time, in a fight too. Refused when there is no such gun, it is no gun, it is at the top step, or Scrap is short.
  * The gun is a new object in the same place, so what worked out its numbers is not reused.
  */
 export function upgradeGun(game: GameState, uid: string): GunUpgrade {
@@ -373,11 +369,11 @@ export function upgradeGun(game: GameState, uid: string): GunUpgrade {
     camp
       .flatMap((d) => [d.loadout.primary, d.loadout.secondary])
       .find((h): h is OwnedWeapon => isOwned(h) && h.uid === uid);
-  if (!found) return { ok: false, reason: 'No such gun' };
-  if (!isGun(found)) return { ok: false, reason: 'Only guns can be upgraded' };
+  if (!found) return { ok: false, code: 'no-gun' };
+  if (!isGun(found)) return { ok: false, code: 'upgrade-gun-only' };
   const cost = upgradeCost(found);
-  if (cost === null) return { ok: false, reason: `Already at +${GUN_UPGRADE.max}` };
-  if (game.stock.scrap < cost) return { ok: false, reason: `Needs ${cost} Scrap` };
+  if (cost === null) return { ok: false, code: 'top-step', max: GUN_UPGRADE.max };
+  if (game.stock.scrap < cost) return { ok: false, code: 'scrap', need: cost };
   const weapon: OwnedWeapon = { ...found, step: gunStep(found) + 1 };
   const swap = (h: Held | null): Held | null => (isOwned(h) && h.uid === uid ? weapon : h);
   const arm = (d: RosterDefender): RosterDefender => ({
@@ -438,26 +434,28 @@ function withCraft(game: GameState, craft: GameState['craft'] | null): GameState
 }
 
 /** What a craft gives (ID-209): the game after it, the gun, and the Scrap it took; or why not. */
-export type Crafted =
-  { ok: true; game: GameState; weapon: OwnedWeapon; cost: number } | { ok: false; reason: string };
-
-/** The shown reason when a gun type's blueprints are none (ID-209). */
-export const NO_BLUEPRINT = 'No blueprint for that gun';
+export type Crafted = { ok: true; game: GameState; weapon: OwnedWeapon; cost: number } | Refusal;
 
 /**
- * Why a craft of `base` with `amount` Scrap is refused (ID-209), as the player is told, or null
+ * Why a craft of `base` with `amount` Scrap is refused (ID-209), or null
  * when it can go ahead: no such blueprint, an amount a craft does not take, a full stash
  * (the stash holds at most `stashCap`: a crafted gun is never thrown away for room), short
  * Scrap. Reads only; the Craft tab greys its button off it.
  */
-export function craftRefusal(game: GameState, base: WeaponId, amount: number): string | null {
-  if (blueprintCount(game, base) < 1) return NO_BLUEPRINT;
+export function craftRefusal(game: GameState, base: WeaponId, amount: number): Refusal | null {
+  if (blueprintCount(game, base) < 1) return { ok: false, code: 'no-blueprint' };
   if (!isCraftAmount(amount)) {
-    return `Put in ${CRAFT.min} to ${CRAFT.min + CRAFT.step * CRAFT.steps} Scrap`;
+    return {
+      ok: false,
+      code: 'craft-amount',
+      min: CRAFT.min,
+      max: CRAFT.min + CRAFT.step * CRAFT.steps,
+    };
   }
-  if ((game.craft?.made ?? 0) >= CRAFT_MADE_MAX) return 'No more guns can be crafted';
-  if (game.armoury.length >= stashCap(game)) return 'Stash full';
-  if (game.stock.scrap < amount) return `Needs ${amount - game.stock.scrap} more Scrap`;
+  if ((game.craft?.made ?? 0) >= CRAFT_MADE_MAX) return { ok: false, code: 'craft-max' };
+  if (game.armoury.length >= stashCap(game)) return { ok: false, code: 'craft-stash-full' };
+  if (game.stock.scrap < amount)
+    return { ok: false, code: 'scrap-more', need: amount - game.stock.scrap };
   return null;
 }
 
@@ -469,7 +467,7 @@ export function craftRefusal(game: GameState, base: WeaponId, amount: number): s
  */
 export function craftGun(game: GameState, base: WeaponId, amount: number): Crafted {
   const why = craftRefusal(game, base, amount);
-  if (why !== null) return { ok: false, reason: why };
+  if (why !== null) return why;
   const rng = craftRng(game);
   const uid = `f${(game.craft?.made ?? 0) + 1}`;
   const level = Math.max(1, topBeaten(game));
@@ -496,8 +494,8 @@ export function craftGun(game: GameState, base: WeaponId, amount: number): Craft
 export function salvageBlueprint(
   game: GameState,
   base: WeaponId,
-): { ok: true; game: GameState; scrap: number } | { ok: false; reason: string } {
-  if (blueprintCount(game, base) < 1) return { ok: false, reason: NO_BLUEPRINT };
+): { ok: true; game: GameState; scrap: number } | Refusal {
+  if (blueprintCount(game, base) < 1) return { ok: false, code: 'no-blueprint' };
   return {
     ok: true,
     scrap: BLUEPRINT.salvage,
@@ -608,15 +606,12 @@ export function settleSquad(game: GameState): GameState {
 /**
  * Marks or unmarks survivor `id` for the squad (ID-147, between hordes): a squad survivor
  * goes to the bench, unless they are the last one; a bench survivor joins the squad's end,
- * unless they are resting or the squad is full. Refused with a player-facing reason.
+ * unless they are resting or the squad is full. Refused with a refusal code.
  */
-export function toggleSquad(
-  game: GameState,
-  id: string,
-): { ok: true; game: GameState } | { ok: false; reason: string } {
+export function toggleSquad(game: GameState, id: string): { ok: true; game: GameState } | Refusal {
   const inSquad = game.roster.find((d) => d.id === id);
   if (inSquad) {
-    if (game.roster.length === 1) return { ok: false, reason: 'The squad needs someone to fight' };
+    if (game.roster.length === 1) return { ok: false, code: 'squad-last' };
     return {
       ok: true,
       game: {
@@ -627,13 +622,11 @@ export function toggleSquad(
     };
   }
   const benched = game.reserve.find((d) => d.id === id);
-  if (!benched) return { ok: false, reason: 'No such survivor' };
-  if (onMapPatrol(game, id)) return { ok: false, reason: `${benched.name} is on patrol` };
-  if (!isFit(benched)) return { ok: false, reason: restLabel(restOf(benched)) };
+  if (!benched) return { ok: false, code: 'no-survivor' };
+  if (onMapPatrol(game, id)) return { ok: false, code: 'on-patrol', who: benched.name };
+  if (!isFit(benched)) return { ok: false, code: 'resting-for', rest: restOf(benched) };
   const cap = squadCap(game);
-  if (game.roster.length >= cap) {
-    return { ok: false, reason: `The squad is full (${cap}/${cap}): unmark one first` };
-  }
+  if (game.roster.length >= cap) return { ok: false, code: 'squad-full', cap };
   return {
     ok: true,
     game: {
@@ -748,10 +741,6 @@ export function setAutoSquad(
   return bestSquad({ ...game, autoSquad: true }, local);
 }
 
-/** "Resting: 2 hordes" / "Resting: 1 horde" (ID-147). */
-export const restLabel = (rest: number): string =>
-  `Resting: ${rest} ${rest === 1 ? 'horde' : 'hordes'}`;
-
 /**
  * Treats resting survivor `id` (ID-220, between hordes): `TREAT.medicine` Medicine ends their
  * whole rest, so they can fight the next horde at full HP, and "Auto" (ID-154) re-picks the
@@ -761,13 +750,13 @@ export const restLabel = (rest: number): string =>
 export function treatSurvivor(
   game: GameState,
   id: string,
-): { ok: true; game: GameState } | { ok: false; reason: string } {
+): { ok: true; game: GameState } | Refusal {
   const d = campOf(game).find((r) => r.id === id);
-  if (!d) return { ok: false, reason: 'No such survivor' };
-  if (onMapPatrol(game, id)) return { ok: false, reason: `${d.name} is on patrol` };
-  if (isFit(d)) return { ok: false, reason: `${d.name} is not resting` };
+  if (!d) return { ok: false, code: 'no-survivor' };
+  if (onMapPatrol(game, id)) return { ok: false, code: 'on-patrol', who: d.name };
+  if (isFit(d)) return { ok: false, code: 'not-resting', who: d.name };
   const medicine = (game.medicine ?? 0) - TREAT.medicine;
-  if (medicine < 0) return { ok: false, reason: 'No Medicine' };
+  if (medicine < 0) return { ok: false, code: 'no-medicine' };
   const heal = (r: RosterDefender): RosterDefender => (r === d ? withRest(r, 0) : r);
   const g: GameState = { ...game, roster: game.roster.map(heal), reserve: game.reserve.map(heal) };
   if (medicine > 0) g.medicine = medicine;
@@ -955,10 +944,10 @@ export function answerJoin(
   game: GameState,
   id: string,
   accept: boolean,
-): { ok: true; game: GameState; where: 'squad' | 'bench' | null } | { ok: false; reason: string } {
+): { ok: true; game: GameState; where: 'squad' | 'bench' | null } | Refusal {
   const all = joiningOf(game);
   const d = all.find((x) => x.id === id);
-  if (!d) return { ok: false, reason: 'Nobody by that name is asking to join' };
+  if (!d) return { ok: false, code: 'no-joiner' };
   const g = withJoining(
     game,
     all.filter((x) => x !== d),
@@ -990,7 +979,7 @@ export function acceptJoins(game: GameState): GameState {
 /**
  * Why nobody can be let go (ID-150), or null when they can: the camp must keep more than
  * `squadCap`, so the squad can always be filled. `act` names what is refused: Combine
- * (ID-170) is locked by the same rule, in its own words.
+ * (ID-170) is locked by the same rule, in its own words (the UI's).
  */
 export function letGoLock(
   game: {
@@ -998,11 +987,11 @@ export function letGoLock(
     reserve: readonly RosterDefender[];
     slots?: GameState['slots'];
   },
-  act = 'let one go',
-): string | null {
+  act: CampAct = 'let-go',
+): Refusal | null {
   const n = game.roster.length + game.reserve.length;
   const cap = squadCap(game);
-  return n > cap ? null : `Needs ${cap + 1}+ survivors to ${act} (camp ${n})`;
+  return n > cap ? null : { ok: false, code: 'camp-small', need: cap + 1, have: n, act };
 }
 
 /**
@@ -1014,12 +1003,12 @@ export function letGoLock(
 export function letGo(
   game: GameState,
   id: string,
-): { ok: true; game: GameState; thrown: OwnedWeapon[] } | { ok: false; reason: string } {
+): { ok: true; game: GameState; thrown: OwnedWeapon[] } | Refusal {
   const d = campOf(game).find((x) => x.id === id);
-  if (!d) return { ok: false, reason: 'No such survivor' };
-  if (onMapPatrol(game, id)) return { ok: false, reason: `${d.name} is on patrol` };
+  if (!d) return { ok: false, code: 'no-survivor' };
+  if (onMapPatrol(game, id)) return { ok: false, code: 'on-patrol', who: d.name };
   const lock = letGoLock(game);
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   const guns = [d.loadout.primary, d.loadout.secondary].filter(
     (h): h is OwnedWeapon => h !== null && isOwned(h),
   );
@@ -1072,20 +1061,18 @@ export function combineSurvivors(
   game: GameState,
   keeperId: string,
   fedId: string,
-):
-  { ok: true; game: GameState; thrown: OwnedWeapon[]; xp: number } | { ok: false; reason: string } {
+): { ok: true; game: GameState; thrown: OwnedWeapon[]; xp: number } | Refusal {
   const camp = campOf(game);
   const k = camp.find((d) => d.id === keeperId);
   const f = camp.find((d) => d.id === fedId);
-  if (!k || !f) return { ok: false, reason: 'No such survivor' };
-  if (k === f) return { ok: false, reason: 'A survivor cannot combine with themselves' };
+  if (!k || !f) return { ok: false, code: 'no-survivor' };
+  if (k === f) return { ok: false, code: 'combine-self' };
   for (const d of [k, f]) {
-    if (onMapPatrol(game, d.id)) return { ok: false, reason: `${d.name} is on patrol` };
+    if (onMapPatrol(game, d.id)) return { ok: false, code: 'on-patrol', who: d.name };
   }
-  if (k.job !== f.job)
-    return { ok: false, reason: 'Only survivors of the same profession combine' };
+  if (k.job !== f.job) return { ok: false, code: 'combine-job' };
   const lock = letGoLock(game, 'combine');
-  if (lock) return { ok: false, reason: lock };
+  if (lock) return lock;
   const xp = combineXp(f.xp);
   const fed = (d: RosterDefender): RosterDefender =>
     d === k ? { ...d, xp: Math.min(MAX_COUNT, d.xp + xp) } : d;
@@ -1830,11 +1817,11 @@ export function equipGun(
   game: GameState,
   defenderId: string,
   choice: GunChoice,
-): { ok: true; game: GameState } | { ok: false; reason: string } {
+): { ok: true; game: GameState } | Refusal {
   const benched = game.reserve.find((d) => d.id === defenderId);
   // Out on a World map patrol (ID-219): their gun went with them.
   if (benched && onMapPatrol(game, defenderId)) {
-    return { ok: false, reason: `${benched.name} is on patrol` };
+    return { ok: false, code: 'on-patrol', who: benched.name };
   }
   if (benched) {
     // As if they were the whole squad: the stash is the same, then they go back.
@@ -1852,19 +1839,19 @@ export function equipGun(
     };
   }
   const me = game.roster.find((d) => d.id === defenderId);
-  if (!me) return { ok: false, reason: 'No such survivor' };
+  if (!me) return { ok: false, code: 'no-survivor' };
   const had = me.loadout.primary;
   if (choice === 'pistol') {
     if (!isOwned(had)) return { ok: true, game };
     const cap = stashCap(game);
     if (game.armoury.length >= cap) {
-      return { ok: false, reason: `The stash is full (${cap}/${cap})` };
+      return { ok: false, code: 'stash-full', cap };
     }
     return equip(game, me.id, { ...me.loadout, primary: 'pistol' });
   }
   if (isOwned(had) && had.uid === choice) return { ok: true, game };
   const gun = game.armoury.find((w) => w.uid === choice);
-  if (!gun || !isGun(gun)) return { ok: false, reason: 'That gun is not in the stash' };
+  if (!gun || !isGun(gun)) return { ok: false, code: 'not-in-stash' };
   return equip(game, me.id, { ...me.loadout, primary: gun });
 }
 
@@ -2168,10 +2155,10 @@ function hash(text: string): number {
 export function combineGuns(
   game: GameState,
   uids: readonly string[],
-): { ok: true; game: GameState; weapon: OwnedWeapon } | { ok: false; reason: string } {
-  if (uids.includes('pistol')) return { ok: false, reason: 'The free pistol can’t be combined' };
+): { ok: true; game: GameState; weapon: OwnedWeapon } | Refusal {
+  if (uids.includes('pistol')) return { ok: false, code: 'pistol-combine' };
   if (uids.length !== COMBINE_COUNT || new Set(uids).size !== uids.length) {
-    return { ok: false, reason: `Combining takes ${COMBINE_COUNT} different guns` };
+    return { ok: false, code: 'combine-count', count: COMBINE_COUNT };
   }
   const guns: OwnedWeapon[] = [];
   for (const uid of uids) {
@@ -2183,23 +2170,16 @@ export function combineGuns(
     const holder = [...game.roster, ...game.reserve].find((d) =>
       [d.loadout.primary, d.loadout.secondary].some((h) => isOwned(h) && h.uid === uid),
     );
-    return {
-      ok: false,
-      reason: holder
-        ? `${holder.name} holds that gun: put it back in the stash first`
-        : 'That gun is not in the stash',
-    };
+    return holder
+      ? { ok: false, code: 'holds-gun', who: holder.name }
+      : { ok: false, code: 'not-in-stash' };
   }
   const [first] = guns as [OwnedWeapon, ...OwnedWeapon[]];
-  if (!guns.every(isGun)) return { ok: false, reason: 'Only guns can be combined' };
-  if (guns.some((g) => g.base !== first.base)) {
-    return { ok: false, reason: 'Combining takes guns of one kind' };
-  }
-  if (guns.some((g) => g.rarity !== first.rarity)) {
-    return { ok: false, reason: 'Combining takes guns of one rarity' };
-  }
+  if (!guns.every(isGun)) return { ok: false, code: 'combine-gun-only' };
+  if (guns.some((g) => g.base !== first.base)) return { ok: false, code: 'combine-kind' };
+  if (guns.some((g) => g.rarity !== first.rarity)) return { ok: false, code: 'combine-rarity' };
   const next = nextRarity(first.rarity);
-  if (!next) return { ok: false, reason: 'A Relic gun is the best there is: it can’t be combined' };
+  if (!next) return { ok: false, code: 'combine-relic' };
   const sorted = [...uids].sort();
   const rng = createRng(hash(`${first.base}:${first.rarity}:${sorted.join(',')}`));
   // The new gun takes the highest level of the three (ID-098), and the step of the gun that
@@ -2217,29 +2197,26 @@ export function combineGuns(
 
 /** What a hand salvage gives (ID-207): the game after it, the gun, and the Scrap it paid; or why not. */
 export type GunSalvage =
-  { ok: true; game: GameState; weapon: OwnedWeapon; scrap: number } | { ok: false; reason: string };
+  { ok: true; game: GameState; weapon: OwnedWeapon; scrap: number } | Refusal;
 
 /**
  * Salvages the stash gun `uid` by hand (ID-207), any time, in a fight too: it leaves the stash
  * and pays `gunSalvage` Scrap (its rarity's, and half of what its upgrade steps cost). Refused
- * with a player-facing reason for the free pistol, a gun a survivor holds (squad or bench: it
+ * for the free pistol, a gun a survivor holds (squad or bench: it
  * must go back to the stash first, as for Combine), a gun that is not there, or a blade or tool.
  */
 export function salvageGun(game: GameState, uid: string): GunSalvage {
-  if (uid === 'pistol') return { ok: false, reason: 'The free pistol can’t be salvaged' };
+  if (uid === 'pistol') return { ok: false, code: 'pistol-salvage' };
   const weapon = game.armoury.find((w) => w.uid === uid);
   if (!weapon) {
     const holder = [...game.roster, ...game.reserve].find((d) =>
       [d.loadout.primary, d.loadout.secondary].some((h) => isOwned(h) && h.uid === uid),
     );
-    return {
-      ok: false,
-      reason: holder
-        ? `${holder.name} holds that gun: put it back in the stash first`
-        : 'That gun is not in the stash',
-    };
+    return holder
+      ? { ok: false, code: 'holds-gun', who: holder.name }
+      : { ok: false, code: 'not-in-stash' };
   }
-  if (!isGun(weapon)) return { ok: false, reason: 'Only guns can be salvaged' };
+  if (!isGun(weapon)) return { ok: false, code: 'salvage-gun-only' };
   const stock = scrapAfter(game.stock, gunSalvage(weapon));
   return {
     ok: true,

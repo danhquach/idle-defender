@@ -327,7 +327,7 @@ describe('the Roster card’s class badge (ID-254)', () => {
       ['k', 'heavy'],
     ] as const) {
       const r = equipGun(m.game(), 'recruit-1', uid);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       m.set(r.game);
       const badges = m.tab('recruit-1').querySelectorAll('.class-badge');
       expect(badges).toHaveLength(1);

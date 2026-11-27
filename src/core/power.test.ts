@@ -106,11 +106,12 @@ describe('generator (ID-015)', () => {
     expect(r.game.stock.wood).toBe(g.stock.wood - GENERATOR.cost.wood);
     expect(buildGenerator(r.game)).toEqual({
       ok: false,
-      reason: 'The generator is already built',
+      code: 'generator-built',
     });
     expect(buildGenerator({ ...g, stock: { ...g.stock, scrap: 39 } })).toEqual({
       ok: false,
-      reason: 'Not enough scrap',
+      code: 'short',
+      material: 'scrap',
       short: true,
     });
     // Worked out long before the click (the panel's dry run): no time before the build counts.

@@ -215,10 +215,11 @@ describe('caps and buying (ID-179)', () => {
 
   it('refuses with too little Scrap, saying how many it needs', () => {
     const g = camp(2, 0, 3, 499);
-    expect(buySquadSlot(g)).toEqual({ ok: false, reason: 'Needs 500 Scrap' });
+    expect(buySquadSlot(g)).toEqual({ ok: false, code: 'scrap', need: 500 });
     expect(buyStashSlots({ ...g, stock: { ...g.stock, scrap: 149 } })).toEqual({
       ok: false,
-      reason: 'Needs 150 Scrap',
+      code: 'scrap',
+      need: 150,
     });
   });
 

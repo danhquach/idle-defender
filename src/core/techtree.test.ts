@@ -21,7 +21,7 @@ describe('the table', () => {
   it('has 11 nodes in 4 branches, costing 9,300 in all', () => {
     expect(TECH_IDS.length).toBe(11);
     expect(Object.keys(TECH).sort()).toEqual([...TECH_IDS].sort());
-    expect(TECH_BRANCHES.map((b) => b.id)).toEqual(['wall', 'wire', 'ammo', 'mortars']);
+    expect(TECH_BRANCHES).toEqual(['wall', 'wire', 'ammo', 'mortars']);
     expect(TECH_IDS.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(9300);
   });
 
@@ -49,11 +49,25 @@ describe('states and refusals', () => {
   });
 
   it('refuses in order: already researched, prerequisite, then Scrap', () => {
-    expect(techRefusal(withScrap(0, ['razor-wire']), 'razor-wire')).toBe('Already researched');
-    expect(techRefusal(withScrap(0), 'thick-coils')).toBe('Needs Razor Wire');
-    expect(techRefusal(withScrap(599, ['razor-wire']), 'thick-coils')).toBe('Needs 600 Scrap');
+    expect(techRefusal(withScrap(0, ['razor-wire']), 'razor-wire')).toEqual({
+      ok: false,
+      code: 'researched',
+    });
+    expect(techRefusal(withScrap(0), 'thick-coils')).toEqual({
+      ok: false,
+      code: 'needs-tech',
+      node: 'razor-wire',
+    });
+    expect(techRefusal(withScrap(599, ['razor-wire']), 'thick-coils')).toEqual({
+      ok: false,
+      code: 'tech-scrap',
+      need: 600,
+    });
     expect(techRefusal(withScrap(600, ['razor-wire']), 'thick-coils')).toBeNull();
-    expect(techRefusal(withScrap(9e9), '__proto__' as TechId)).toBe('Unknown upgrade');
+    expect(techRefusal(withScrap(9e9), '__proto__' as TechId)).toEqual({
+      ok: false,
+      code: 'unknown-tech',
+    });
   });
 });
 
@@ -74,7 +88,7 @@ describe('researchTech', () => {
     let g = withScrap(1e6);
     for (const id of ['hand-loads', 'razor-wire', 'quick-mortars', 'reinforced-wall'] as const) {
       const r = researchTech(g, id);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       g = r.game;
     }
     expect(g.tech).toEqual(['reinforced-wall', 'razor-wire', 'hand-loads', 'quick-mortars']);
@@ -82,7 +96,7 @@ describe('researchTech', () => {
 
   it('refuses without spending, and a refused buy returns the reason', () => {
     const r = researchTech(withScrap(100), 'reinforced-wall');
-    expect(r).toEqual({ ok: false, reason: 'Needs 200 Scrap' });
+    expect(r).toEqual({ ok: false, code: 'tech-scrap', need: 200 });
   });
 
   it('a game with nothing researched has no tech key', () => {

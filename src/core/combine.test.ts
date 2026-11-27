@@ -65,7 +65,7 @@ describe('combineGuns', () => {
         game([gun('h1', 'lmg', rarity), gun('h2', 'lmg', rarity), gun('h3', 'lmg', rarity)]),
         ['h1', 'h2', 'h3'],
       );
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       expect(r.weapon.rarity).toBe(next);
       expect(r.weapon.affixes).toHaveLength(affixCount('lmg', next));
       expect(new Set(r.weapon.affixes.map((a) => a.id)).size).toBe(r.weapon.affixes.length);
@@ -95,7 +95,7 @@ describe('combineGuns', () => {
     for (let k = 0; k < 20; k++) {
       const uids = [`h${3 * k + 1}`, `h${3 * k + 2}`, `h${3 * k + 3}`];
       const r = combineGuns(game(uids.map((u) => gun(u, 'shotgun', 'common'))), uids);
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       rolls.add(JSON.stringify(r.weapon.affixes));
     }
     expect(rolls.size).toBeGreaterThan(1);
@@ -119,7 +119,7 @@ describe('combineGuns', () => {
     ]);
     expect(combineGuns(g, ['h1', 'h2', 'h3'])).toEqual({
       ok: false,
-      reason: 'Combining takes guns of one kind',
+      code: 'combine-kind',
     });
   });
 
@@ -131,7 +131,7 @@ describe('combineGuns', () => {
     ]);
     expect(combineGuns(g, ['h1', 'h2', 'h3'])).toEqual({
       ok: false,
-      reason: 'Combining takes guns of one rarity',
+      code: 'combine-rarity',
     });
   });
 
@@ -144,7 +144,7 @@ describe('combineGuns', () => {
       ]);
     const r = combineGuns(game([relic('h1'), relic('h2'), relic('h3')]), ['h1', 'h2', 'h3']);
     expect(r.ok).toBe(false);
-    expect(!r.ok && r.reason).toMatch(/Relic/);
+    expect(r).toEqual({ ok: false, code: 'combine-relic' });
   });
 
   it('refuses a gun a survivor holds, naming them', () => {
@@ -153,7 +153,8 @@ describe('combineGuns', () => {
     const r = combineGuns(g, ['h1', 'h2', 'h3']);
     expect(r).toEqual({
       ok: false,
-      reason: `${g.roster[0]!.name} holds that gun: put it back in the stash first`,
+      code: 'holds-gun',
+      who: g.roster[0]!.name,
     });
   });
 
@@ -161,7 +162,7 @@ describe('combineGuns', () => {
     const g = game(rustySmgs());
     expect(combineGuns(g, ['h1', 'h2', 'pistol'])).toEqual({
       ok: false,
-      reason: 'The free pistol can’t be combined',
+      code: 'pistol-combine',
     });
   });
 
@@ -170,12 +171,13 @@ describe('combineGuns', () => {
     for (const uids of [['h1', 'h2'], ['h1', 'h2', 'h3', 'h4'], ['h1', 'h1', 'h2'], []]) {
       expect(combineGuns(g, uids)).toEqual({
         ok: false,
-        reason: `Combining takes ${COMBINE_COUNT} different guns`,
+        code: 'combine-count',
+        count: COMBINE_COUNT,
       });
     }
     expect(combineGuns(g, ['h1', 'h2', 'h99'])).toEqual({
       ok: false,
-      reason: 'That gun is not in the stash',
+      code: 'not-in-stash',
     });
   });
 
@@ -187,7 +189,7 @@ describe('combineGuns', () => {
     ]);
     expect(combineGuns(g, ['h1', 'h2', 'h3'])).toEqual({
       ok: false,
-      reason: 'Only guns can be combined',
+      code: 'combine-gun-only',
     });
   });
 

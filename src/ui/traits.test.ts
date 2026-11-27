@@ -23,7 +23,6 @@ import { classChip, classIcon, CLASS_SHAPE } from './classicon.ts';
 import { dropTile } from './hud.ts';
 import { facts as factsOf, inventoryView, scrollCue, slotFace, slotLabel } from './inventory.ts';
 import { COLOR, popLook, popWordPx, POP } from './render.ts';
-import { affixText } from '../core/armoury.ts';
 import {
   classLine,
   CLASS_LINES,
@@ -32,6 +31,7 @@ import {
   TRAIT_ROWS,
   traitText,
 } from './statlines.ts';
+import { affixText, ENEMY_TRAIT_NAME } from './text/index.ts';
 
 const noop = (): void => {};
 const owned = (base: GunBase) => rollWeapon(createRng(1), 'x', base, 'military', 1);
@@ -308,8 +308,8 @@ describe('damage numbers on a trait (ID-237)', () => {
 
 describe('names and Help (ID-237)', () => {
   it('Crawler and Screamer traits read as what they do, not as a gun to bring', () => {
-    expect(ENEMY_TRAITS.crawler!.name).toBe('Skittering');
-    expect(ENEMY_TRAITS.screamer!.name).toBe('Darting');
+    expect(ENEMY_TRAIT_NAME.crawler).toBe('Skittering');
+    expect(ENEMY_TRAIT_NAME.screamer).toBe('Darting');
     expect(traitText('crawler')).toBe('Skittering · Resists Heavy · Weak to Light');
   });
 
@@ -327,9 +327,10 @@ describe('names and Help (ID-237)', () => {
   });
 
   it('Brute is Plated and the Horror stays Hulking: no two kinds share a trait name', () => {
-    expect(ENEMY_TRAITS.brute!.name).toBe('Plated');
-    expect(ENEMY_TRAITS.horror!.name).toBe('Hulking');
-    const names = Object.values(ENEMY_TRAITS).flatMap((t) => (t ? [t.name] : []));
+    expect(ENEMY_TRAIT_NAME.brute).toBe('Plated');
+    expect(ENEMY_TRAIT_NAME.horror).toBe('Hulking');
+    const names = Object.values(ENEMY_TRAIT_NAME);
+    expect(names).toHaveLength(Object.values(ENEMY_TRAITS).filter((t) => t).length);
     expect(new Set(names).size).toBe(names.length);
   });
 

@@ -214,7 +214,7 @@ export function played(): GameState {
   ];
   for (const step of lab) {
     const r = step(g);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     g = r.game;
   }
   const steps = [
@@ -229,7 +229,7 @@ export function played(): GameState {
   ];
   for (const step of steps) {
     const r = step(g);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     g = { ...g, base: r.base, stock: r.stock };
   }
   const h = startHorde(g, 7, 'bob', 0, NOW);

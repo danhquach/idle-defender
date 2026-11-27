@@ -1,6 +1,6 @@
 // ID-263: what each Research Center node does in a fight, each against its unresearched twin.
 import { describe, expect, it } from 'vitest';
-import { chooseCard, effectAt, pitch } from './cards.ts';
+import { chooseCard } from './cards.ts';
 import { CARD, SEGMENT_HEIGHT, STEP, TECH_FX, WEAPONS, type TechId } from './data.ts';
 import {
   burnDpsOf,
@@ -270,21 +270,12 @@ describe('Quick Mortars, Wide Slick, Napalm Mortar', () => {
 describe('Hand-loads', () => {
   const HL: TechId[] = ['hand-loads'];
 
-  it('the five ammo cards’ numbers are 10% stronger, and shown that way', () => {
+  it('the five ammo cards’ numbers are 10% stronger', () => {
     const plain = at('incendiary-rounds', 3);
     const boosted = at('incendiary-rounds', 3, HL);
     expect(burnDpsOf(boosted)).toBeCloseTo(burnDpsOf(plain) * 1.1, 9);
     expect(scavengeOf(at('scavenged-ammo', 2, HL))).toBeCloseTo(CARD.scavenge[1]! * 1.1, 9);
     expect(scavengeOf(at('scavenged-ammo', 2))).toBe(CARD.scavenge[1]);
-    // The text shows what the pick gives.
-    expect(effectAt('incendiary-rounds', 3, HL)!.value).toBe('9.9%');
-    expect(effectAt('incendiary-rounds', 3)!.value).toBe('9%');
-    expect(effectAt('piercing-rounds', 3, HL)!.value).toBe('82.5%');
-    expect(effectAt('scavenged-ammo', 3, HL)!.value).toBe('44%');
-    expect(effectAt('shock-rounds', 3, HL)!.value).toBe('0.44 s');
-    expect(effectAt('shock-rounds', 3)!.value).toBe('0.4 s');
-    expect(pitch(quiet(HL), 'hollow-points').text).toBe('+41.8% damage, +25% reload time');
-    expect(pitch(quiet(), 'hollow-points').text).toBe('+38% damage, +25% reload time');
   });
 
   it('Shock Rounds paralyse 10% longer; Piercing Rounds hit more often', () => {

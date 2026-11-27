@@ -9,7 +9,6 @@ import {
   ENEMIES,
   LOCATION_IDS,
   PLACE_IDS,
-  PROFESSIONS,
   TIERS,
   TRAP_KINDS,
   WEAPONS,
@@ -52,6 +51,7 @@ import {
 } from './sprites.ts';
 import { DEATH } from './death.ts';
 import { SHOCK } from './render.ts';
+import { PROFESSION_NAME } from './text/index.ts';
 
 const root = new URL('../../', import.meta.url);
 type Overlay = { part: string; at: [number, number]; size: number; turn?: number };
@@ -151,7 +151,7 @@ describe('art coverage', () => {
         [k.plated, k.broken].flatMap((e) => [...e.walk, e.attack]),
       ),
       PLATE_DEBRIS_ART,
-      ...Object.keys(PROFESSIONS).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
+      ...Object.keys(PROFESSION_NAME).map((p) => DEFENDER_ART[p as keyof typeof DEFENDER_ART]),
       ...GUNNER_LOOKS.flatMap((look) => Object.values(look).flatMap((g) => [g.idle, g.aim])),
       ...THROW_LOOKS.flatMap((t) => [t.wind, t.release]),
       SCORCH_ART,

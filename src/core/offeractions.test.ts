@@ -64,12 +64,15 @@ describe('Reroll', () => {
     expect(rerollsLeft(s)).toBe(3); // the input is untouched
     const c = rerollOffer(rerollOffer(a));
     expect(rerollsLeft(c)).toBe(0);
-    expect(rerollLock(c)).toBe('No rerolls left');
+    expect(rerollLock(c)).toEqual({ ok: false, code: 'no-rerolls' });
     expect(() => rerollOffer(c)).toThrow(RangeError);
   });
 
   it('needs an open offer', () => {
-    expect(rerollLock({ ...offered(), offer: null })).toBe('No offer to reroll');
+    expect(rerollLock({ ...offered(), offer: null })).toEqual({
+      ok: false,
+      code: 'no-offer-reroll',
+    });
   });
 
   it('adds Second Look’s rerolls to the 3 (a level-3 perk: 2 a wave)', () => {
@@ -143,10 +146,10 @@ describe('Ban', () => {
 
   it('is refused at 0, with no offer, or on a bad index', () => {
     const a = banCard(offered(), 0);
-    expect(banLock(a, 0)).toBe('No bans left');
+    expect(banLock(a, 0)).toEqual({ ok: false, code: 'no-bans' });
     expect(() => banCard(a, 0)).toThrow(RangeError);
-    expect(banLock({ ...offered(), offer: null }, 0)).toBe('No offer to ban from');
-    expect(banLock(offered(), 7)).toBe('No such card');
+    expect(banLock({ ...offered(), offer: null }, 0)).toEqual({ ok: false, code: 'no-offer-ban' });
+    expect(banLock(offered(), 7)).toEqual({ ok: false, code: 'no-card' });
     expect(() => banCard(offered(), -1)).toThrow(RangeError);
   });
 
@@ -178,7 +181,7 @@ describe('Ban', () => {
       { kind: 'upgrade', id: 'sharpshooter' },
       { kind: 'upgrade', id: 'rapid-fire' },
     ];
-    expect(banLock(s, 0)).toBe('A survivor can’t be banned');
+    expect(banLock(s, 0)).toEqual({ ok: false, code: 'ban-survivor' });
     expect(() => banCard(s, 0)).toThrow(RangeError);
     expect(banLock(s, 1)).toBeNull();
   });

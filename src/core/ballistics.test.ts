@@ -241,7 +241,7 @@ describe('turret bullets', () => {
   it('a turret fires a bullet at 2,000 px/s that lands for its damage', () => {
     const rich = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
     const built = buildTurret(newBase(), rich, true, 'tower', 0, 5);
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const s = newHorde(1, { ...setup(), base: built.base });
     s.toSpawn = 0;
     s.defenders[0]!.nextShotAt = 1e9;

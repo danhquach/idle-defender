@@ -39,7 +39,7 @@ function baseWith(...cells: [TrapKind, number][]): Base {
   let stock = RICH;
   for (const [kind, row] of cells) {
     const r = buildTrap(base, stock, kind, row);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     ({ base, stock } = r);
   }
   return base;
@@ -75,12 +75,13 @@ describe('trap build actions', () => {
 
   it('refuses a taken cell and short materials, without changing anything', () => {
     const base = baseWith(['spikes', 2]);
-    expect(buildTrap(base, RICH, 'wire', 2)).toEqual({ ok: false, reason: 'Slot taken' });
-    expect(buildTrap(base, RICH, 'spikes', 2)).toEqual({ ok: false, reason: 'Slot taken' });
+    expect(buildTrap(base, RICH, 'wire', 2)).toEqual({ ok: false, code: 'slot-taken' });
+    expect(buildTrap(base, RICH, 'spikes', 2)).toEqual({ ok: false, code: 'slot-taken' });
     const poor = stockOf({ scrap: 9, wood: 99, metal: 0, concrete: 0 });
     expect(buildTrap(newBase(), poor, 'spikes', 0)).toEqual({
       ok: false,
-      reason: 'Not enough scrap',
+      code: 'short',
+      material: 'scrap',
       short: true,
     });
     expect(base.traps).toHaveLength(1);
@@ -97,7 +98,7 @@ describe('trap build actions', () => {
 
   it('repairs for its cost × the missing share, rounded up; refuses at full', () => {
     const base = baseWith(['spikes', 0]);
-    expect(repairTrap(base, RICH, 0)).toEqual({ ok: false, reason: 'Nothing to repair' });
+    expect(repairTrap(base, RICH, 0)).toEqual({ ok: false, code: 'nothing-to-repair' });
     base.traps[0]!.durability = 20; // a third missing: 5 Wood, 3.33 → 4 Scrap
     expect(trapRepairCost(base.traps[0]!)).toEqual(
       stockOf({ scrap: 4, wood: 5, metal: 0, concrete: 0 }),
@@ -111,7 +112,8 @@ describe('trap build actions', () => {
     );
     expect(repairTrap(base, stockOf({ scrap: 9, wood: 99, metal: 0, concrete: 0 }), 0)).toEqual({
       ok: false,
-      reason: 'Not enough scrap',
+      code: 'short',
+      material: 'scrap',
       short: true,
     });
   });
@@ -147,7 +149,7 @@ describe('trap build actions', () => {
     expect(r.ok && r.base.traps.map((t) => t.durability)).toEqual([30, 30]);
     expect(repairAll(base, { ...cost, scrap: cost.scrap - 1 }).ok).toBe(false);
     const full = baseWith(['spikes', 0]);
-    expect(repairAll(full, RICH)).toEqual({ ok: false, reason: 'Nothing to repair' });
+    expect(repairAll(full, RICH)).toEqual({ ok: false, code: 'nothing-to-repair' });
     full.traps[0]!.durability = 29;
     expect(repairAll(full, RICH).ok).toBe(true);
   });

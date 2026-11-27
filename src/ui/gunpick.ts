@@ -2,17 +2,8 @@
 // pistol and every stash gun but the one held, strongest first by their Power with it,
 // ID-152, ID-248), each with its change against the held gun, and the Now / New / Change
 // comparison for one of them. Pure: no DOM, so the wording is testable.
-import {
-  affixLines,
-  baseOf,
-  gunLevel,
-  heldName,
-  isOwned,
-  roleOf,
-  statsOf,
-  type Held,
-} from '../core/armoury.ts';
-import { RARITIES, WEAPONS, type GunClass, type Rarity } from '../core/data.ts';
+import { baseOf, gunLevel, isOwned, statsOf, type Held } from '../core/armoury.ts';
+import { type GunClass, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import { handWorth, squadSpec, type GunWorthGame } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
@@ -22,6 +13,7 @@ import type { DefenderSpec } from '../core/horde.ts';
 import { dpsCaption } from './hud.ts';
 import { powerText } from './mapview.ts';
 import { classLine } from './statlines.ts';
+import { affixLines, heldName, RARITY_NAME, WEAPON_NAME, roleOf } from './text/index.ts';
 
 /** The gun `d` fights with: a primary that is no gun fights as the pistol (as `squadSpec`). */
 export const heldGunOf = (d: RosterDefender): Held =>
@@ -124,14 +116,14 @@ export function gunTiles(
       return {
         choice: isOwned(h) ? h.uid : 'pistol',
         held: h,
-        type: WEAPONS[baseOf(h)].name,
+        type: WEAPON_NAME[baseOf(h)],
         free,
         rarity: rarityOf(h),
         power,
         powerText: p0(power),
         dps: f1(dps),
         delta,
-        label: `${gunName(h)}, ${RARITIES[rarityOf(h)].name} rarity, ${p0(power)} Power, ${f1(dps)} ${dpsCaption(d.name)}, ${delta.words} than ${gunName(held)}${free ? ', free' : ''}`,
+        label: `${gunName(h)}, ${RARITY_NAME[rarityOf(h)]} rarity, ${p0(power)} Power, ${f1(dps)} ${dpsCaption(d.name)}, ${delta.words} than ${gunName(held)}${free ? ', free' : ''}`,
       };
     });
 }

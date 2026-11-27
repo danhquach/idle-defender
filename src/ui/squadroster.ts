@@ -10,15 +10,14 @@
 // on a World map patrol have a row of their own under the bench's (ID-230). Like the
 // Inventory, the field goes inert behind it and an open Roster holds a fight. Text reaches
 // the page only through textContent.
-import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
+import { baseOf, isOwned, type Held } from '../core/armoury.ts';
 import { classOf } from '../core/traits.ts';
-import { JOBS, WEAPONS, type GunClass, type Rarity } from '../core/data.ts';
+import { JOBS, type GunClass, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
   combinePartners,
   isFit,
   letGoLock,
-  restLabel,
   restOf,
   squadCap,
   squadOf,
@@ -69,6 +68,16 @@ import type { SaveStorage } from '../storage/save.ts';
 import { classBadge, classChip } from './classicon.ts';
 import { className, classLine, levelText, matchupsOpen } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
+import {
+  lockText,
+  refusedText,
+  type Refused,
+  heldName,
+  restLabel,
+  JOB_NAME,
+  WEAPON_NAME,
+  roleOf,
+} from './text/index.ts';
 
 /** One survivor's tab on the Roster. */
 export interface RosterTile {
@@ -158,7 +167,7 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
       id: d.id,
       name: d.name,
       level: levelOf(d.xp).level,
-      job: JOBS[d.job].name,
+      job: JOB_NAME[d.job],
       jobShort: JOB_SHORT[d.job],
       health,
       down: out === null && !inFight && (downInFight || resting || !isFit(d)),
@@ -236,11 +245,11 @@ export interface RosterOptions {
     resumes: boolean;
   };
   /** Equip: give survivor `id` the free pistol ('pistol') or the stash gun with uid `choice`. */
-  onEquip: (id: string, choice: string) => { ok: true } | { ok: false; reason: string };
+  onEquip: (id: string, choice: string) => { ok: true } | Refused;
   /** Move survivor `id` between the squad and the bench (ID-147), or why not. */
-  onToggleSquad: (id: string) => { ok: true } | { ok: false; reason: string };
+  onToggleSquad: (id: string) => { ok: true } | Refused;
   /** Treat resting survivor `id` with 1 Medicine (ID-220, between hordes), or why not. */
-  onTreat?: (id: string) => { ok: true } | { ok: false; reason: string };
+  onTreat?: (id: string) => { ok: true } | Refused;
   /**
    * Let survivor `id` go for good (ID-150), after the app's confirm (ID-191, answered by the
    * player, so it may take a while): what to say once they have gone, why not, or null when
@@ -258,11 +267,11 @@ export interface RosterOptions {
    */
   onBuySquad?: () => Answer | Promise<Answer>;
   /** "Best gun for everyone": the guns handed out, or why not. */
-  onBestGuns: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
+  onBestGuns: () => { ok: true; moves: GunMove[] } | Refused;
   /** "Best squad" (ID-154): who moved, or why not. */
-  onBestSquad: () => { ok: true; moves: SquadMoves } | { ok: false; reason: string };
+  onBestSquad: () => { ok: true; moves: SquadMoves } | Refused;
   /** "Auto" ticked or unticked (ID-154): who the tick moved, or why not. */
-  onAutoSquad: (on: boolean) => { ok: true; moves: SquadMoves } | { ok: false; reason: string };
+  onAutoSquad: (on: boolean) => { ok: true; moves: SquadMoves } | Refused;
 }
 
 export interface Roster {
@@ -428,7 +437,7 @@ export function createRoster(
   bestSquadButton.addEventListener('click', () => {
     const r = opts.onBestSquad();
     const moved = r.ok ? movesText(r.moves) : null;
-    if (!r.ok) setStatus(r.reason, 'danger');
+    if (!r.ok) setStatus(refusedText(r), 'danger');
     else setStatus(moved ? `Squad: ${moved}` : 'The squad is already the strongest it can be.');
     draw('best-squad');
   });
@@ -436,7 +445,7 @@ export function createRoster(
     const on = autoBox.checked;
     const r = opts.onAutoSquad(on);
     const moved = r.ok ? movesText(r.moves) : null;
-    if (!r.ok) setStatus(r.reason, 'danger');
+    if (!r.ok) setStatus(refusedText(r), 'danger');
     else if (!on) setStatus('Auto off: the squad stays as you pick it.');
     // Says when it runs: a tooltip never shows on a phone.
     else setStatus(`${AUTO_ON}${moved ? ` Squad: ${moved}` : ''}`);
@@ -446,7 +455,7 @@ export function createRoster(
   buySquadButton.addEventListener('click', async () => {
     const r = await opts.onBuySquad?.();
     if (!r) return;
-    setStatus(r.ok ? r.text : r.reason, r.ok ? 'ok' : 'danger');
+    setStatus(r.ok ? r.text : refusedText(r), r.ok ? 'ok' : 'danger');
     draw('buy-squad');
   });
 
@@ -454,7 +463,7 @@ export function createRoster(
     const r = opts.onBestGuns();
     picking = false;
     picked = null;
-    setStatus(r.ok ? bestGunsLine(r.moves) : r.reason, r.ok ? 'ok' : 'danger');
+    setStatus(r.ok ? bestGunsLine(r.moves) : refusedText(r), r.ok ? 'ok' : 'danger');
     draw('best');
   });
   function setStatus(text: string, tone: 'ok' | 'danger' = 'ok'): void {
@@ -724,7 +733,7 @@ export function createRoster(
     // The lock's reason beside the button too (ID-150): the status line can sit below the fold.
     // With a Combine button it names both, so neither reads as the other's answer (ID-170).
     // It runs on after the buttons when it fits (ID-189).
-    const lock = letGoLock(camp, partners.length > 0 ? 'combine or let one go' : undefined);
+    const lock = lockText(letGoLock(camp, partners.length > 0 ? 'combine-or-let-go' : undefined));
     // A pick left open never comes back by itself once the lock or the partners go.
     if (lock || partners.length === 0) combining = false;
     if (canGear && lock) actions.append(el('p', 'rv-letgo-why', lock));
@@ -804,7 +813,7 @@ export function createRoster(
     b.setAttribute('aria-label', `${label}: ${d.name}${canGear ? '' : `. ${SQUAD_WAIT}`}`);
     b.addEventListener('click', () => {
       const r = opts.onToggleSquad(d.id);
-      if (!r.ok) setStatus(r.reason, 'danger');
+      if (!r.ok) setStatus(refusedText(r), 'danger');
       else
         setStatus(mark.bench ? `${d.name} moves into the squad.` : `${d.name} moves to the bench.`);
       draw('squad');
@@ -836,7 +845,7 @@ export function createRoster(
     b.addEventListener('click', () => {
       const r = onTreat(d.id);
       if (r.ok) setStatus(treatedText(d.name));
-      else setStatus(r.reason, 'danger');
+      else setStatus(refusedText(r), 'danger');
       draw('treat');
     });
     return b;
@@ -848,7 +857,9 @@ export function createRoster(
    */
   function combineButton(d: RosterDefender, canGear: boolean): HTMLElement {
     const { game } = opts.state();
-    const lock = letGoLock({ roster: game.roster, reserve: game.reserve ?? [] }, 'combine');
+    const lock = lockText(
+      letGoLock({ roster: game.roster, reserve: game.reserve ?? [] }, 'combine'),
+    );
     const b = el('button', 'hud-button rv-btn rv-squad rv-combine', 'Combine');
     b.type = 'button';
     b.dataset.key = 'combine';
@@ -860,7 +871,7 @@ export function createRoster(
     const why = !canGear ? SQUAD_WAIT : lock;
     b.setAttribute(
       'aria-label',
-      `Combine another ${JOBS[d.job].name} into ${d.name}${why ? `. ${why}` : ''}`,
+      `Combine another ${JOB_NAME[d.job]} into ${d.name}${why ? `. ${why}` : ''}`,
     );
     b.addEventListener('click', () => {
       if (lock) {
@@ -878,7 +889,7 @@ export function createRoster(
   function combinePick(d: RosterDefender, partners: readonly RosterDefender[]): HTMLElement {
     const box = el('div', 'rv-combine-pick');
     box.append(
-      el('p', 'rv-combine-note', `Take in another ${JOBS[d.job].name}: they leave for good.`),
+      el('p', 'rv-combine-note', `Take in another ${JOB_NAME[d.job]}: they leave for good.`),
     );
     const row = el('div', 'rv-actions');
     partners.forEach((p, i) => {
@@ -891,7 +902,7 @@ export function createRoster(
         const r = await opts.onCombine(d.id, p.id);
         if (r === null) return;
         combining = false;
-        if (!r.ok) setStatus(r.reason, 'danger');
+        if (!r.ok) setStatus(refusedText(r), 'danger');
         else setStatus(r.text);
         draw('combine');
       });
@@ -915,7 +926,7 @@ export function createRoster(
    */
   function letGoButton(d: RosterDefender, canGear: boolean): HTMLElement {
     const { game } = opts.state();
-    const lock = letGoLock({ roster: game.roster, reserve: game.reserve ?? [] });
+    const lock = lockText(letGoLock({ roster: game.roster, reserve: game.reserve ?? [] }));
     const b = el('button', 'hud-button rv-btn rv-squad rv-letgo', 'Let go');
     b.type = 'button';
     b.dataset.key = 'letgo';
@@ -933,7 +944,7 @@ export function createRoster(
       }
       const r = await opts.onLetGo(d.id);
       if (r === null) return;
-      if (!r.ok) setStatus(r.reason, 'danger');
+      if (!r.ok) setStatus(refusedText(r), 'danger');
       else setStatus(r.text);
       draw('letgo');
     });
@@ -1108,7 +1119,7 @@ export function createRoster(
       tile.dataset.choice = t.choice;
       tile.dataset.rarity = t.rarity;
       tile.setAttribute('aria-pressed', String(t.choice === picked));
-      const label = suits(t.held) ? `${t.label}, suits a ${JOBS[d.job].name}` : t.label;
+      const label = suits(t.held) ? `${t.label}, suits a ${JOB_NAME[d.job]}` : t.label;
       tile.setAttribute('aria-label', label);
       tile.title = `${label}. ${DPS_HINT}`;
       const delta = el('span', 'rv-d', t.delta.text);
@@ -1155,7 +1166,7 @@ export function createRoster(
             : ''
         }${
           fighter
-            ? ` ★ suits a ${JOBS[d.job].name}: the profession's bonus works only with these.`
+            ? ` ★ suits a ${JOB_NAME[d.job]}: the profession's bonus works only with these.`
             : ''
         }`,
       ),
@@ -1167,7 +1178,7 @@ export function createRoster(
   function equipPicked(d: RosterDefender, held: Held, choice: string, newName: string): void {
     const r = opts.onEquip(d.id, choice);
     if (!r.ok) {
-      setStatus(r.reason, 'danger');
+      setStatus(refusedText(r), 'danger');
       draw('equip');
       return;
     }
@@ -1309,6 +1320,6 @@ export function cardDps(n: number): string {
 /** A held gun's dmg/s in survivor `d`'s hands, as printed (level and profession, ID-152): the picker's figure. */
 const heldDps = (h: Held, d: RosterDefender): string => survivorDps(squadSpec(d), h).toFixed(1);
 /** The base gun's name: "SMG". */
-const heldType = (h: Held): string => WEAPONS[baseOf(h)].name;
+const heldType = (h: Held): string => WEAPON_NAME[baseOf(h)];
 /** The gun's role: "Marksman". */
 const roleName = (h: Held): string => roleOf(baseOf(h))?.role ?? '';

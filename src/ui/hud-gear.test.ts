@@ -6,14 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { DROP_GUNS, gunPower, rollWeapon, type OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import {
-  GUN_ROLES,
-  SQUAD_CAP,
-  STASH_CAP,
-  WEAPONS,
-  type Rarity,
-  type WeaponId,
-} from '../core/data.ts';
+import { SQUAD_CAP, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { createRng } from '../core/rng.ts';
 import { xpForLevel } from '../core/stats.ts';
@@ -42,6 +35,7 @@ import {
 } from './hud.ts';
 import { joinCards } from './joining.ts';
 import { ART_URLS, GUN_ICON, type GunId } from './sprites.ts';
+import { WEAPON_NAME, GUN_ROLE } from './text/index.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -248,7 +242,7 @@ describe('the debrief layout (ID-067)', () => {
     for (const base of DROP_GUNS) {
       const t = dropTile({ armoury: [] }, dropOf(gun('h1', base, 'rusty')));
       expect(t.guns[0]!.lines).toContain(
-        `${GUN_ROLES[base as 'smg'].role}: ${GUN_ROLES[base as 'smg'].trait}`,
+        `${GUN_ROLE[base as 'smg'].role}: ${GUN_ROLE[base as 'smg'].trait}`,
       );
     }
     const rifle: OwnedWeapon = {
@@ -265,7 +259,7 @@ describe('the debrief layout (ID-067)', () => {
     const won = ended(squadGame(1, 5), 'won');
     h.showResult(squadScreen(squadGame(1, 5), won));
     const dropped = squadDrop(squadGame(1, 5), won)!.weapon;
-    const role = `${GUN_ROLES[dropped.base as 'smg'].role}: ${GUN_ROLES[dropped.base as 'smg'].trait}`;
+    const role = `${GUN_ROLE[dropped.base as 'smg'].role}: ${GUN_ROLE[dropped.base as 'smg'].trait}`;
     // Only in the details, so closed it is nowhere on the panel.
     expect(root.querySelector('.debrief-guns')!.textContent).not.toContain(role);
     root.querySelector<HTMLButtonElement>('.gun-chip')!.click();
@@ -294,7 +288,7 @@ describe('the debrief layout (ID-067)', () => {
     const dropped = squadDrop(g, won)!.weapon;
     // The level sits in front of the name (ID-098); its DPS is under it.
     expect(chip.querySelector('.gun-chip-text > .gun-chip-name')!.textContent).toBe(
-      `Lv ${dropped.level} ${WEAPONS[dropped.base].name}`,
+      `Lv ${dropped.level} ${WEAPON_NAME[dropped.base]}`,
     );
     expect(chip.querySelector('.gun-chip-text > .gun-chip-power')!.textContent).toBe(
       `${gunPower(dropped).toFixed(1)} DPS`,
@@ -491,9 +485,7 @@ describe('bonus guns on the result screen (ID-122)', () => {
       const b = all[i]!;
       expect(chip.dataset.rarity).toBe(b.rarity);
       expect(chip.querySelector('img')!.alt).toBe('');
-      expect(chip.querySelector('.gun-chip-name')!.textContent).toBe(
-        `Lv 6 ${WEAPONS[b.base].name}`,
-      );
+      expect(chip.querySelector('.gun-chip-name')!.textContent).toBe(`Lv 6 ${WEAPON_NAME[b.base]}`);
       expect(chip.textContent).not.toMatch(/bonus|First clear/i);
     }
     // One slot left: the drop takes it, then each bonus gun throws away the weaker of the

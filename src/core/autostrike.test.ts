@@ -144,7 +144,7 @@ describe('autoStrike (ID-140)', () => {
     group(s, 5, 1000, 300);
     const aim = strikeAim(s)!;
     const manual = useSkill(s, 'airstrike', aim.x, aim.y);
-    if (!manual.ok) throw new Error(manual.reason);
+    if (!manual.ok) throw new Error(manual.code);
     const auto = autoStrike(s);
     expect(auto).toEqual(manual.state);
     expect(auto.cash).toBe(s.cash - SKILLS.airstrike.cost);
@@ -162,7 +162,7 @@ describe('autoStrike (ID-140)', () => {
     const ready = fight();
     group(ready, 6, 1000, 300);
     const cooling = autoStrike(ready);
-    expect(skillLock(cooling, 'airstrike')).toBe('Not ready yet');
+    expect(skillLock(cooling, 'airstrike')).toEqual({ ok: false, code: 'not-ready' });
     expect(autoStrike(cooling)).toBe(cooling);
 
     const picking = structuredClone(ready);
@@ -182,7 +182,7 @@ describe('autoStrike (ID-140)', () => {
     const s = fight();
     group(s, 6, 1000, 300);
     const r = useSkill(s, 'airstrike', 1200, 500);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(autoStrike(r.state)).toBe(r.state);
   });
 

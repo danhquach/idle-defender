@@ -164,7 +164,7 @@ describe('gates in the build menu (ID-026)', () => {
   it('offers no gate on a layer that has one', () => {
     const g = newGame();
     const r = buildSegment(g.base, g.stock, g.tiers, 1, 0, 'gate', 'wood');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const { button } = slotPanel({ ...g, base: r.base, stock: r.stock }, 1, 1);
     expect(button('Wood gate')).toBeUndefined();
     expect(button('Wood wall')!.disabled).toBe(false);
@@ -397,7 +397,7 @@ describe('Build and Camp tabs, the start footer (ID-059)', () => {
     const hostile = '<img src=x onerror=alert(1)>';
     const named = { ...g, roster: g.roster.map((d, i) => (i === 0 ? { ...d, name: hostile } : d)) };
     const out = sendPatrol(named, 'gas-station', [named.roster[0]!.id], 1, Date.now());
-    if (!out.ok) throw new Error(out.reason);
+    if (!out.ok) throw new Error(out.code);
     const { root, tab } = tabbed(out.game);
     tab('camp').click();
     expect(root.querySelector('img')).toBeNull();

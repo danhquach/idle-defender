@@ -77,7 +77,7 @@ describe('building the car in the camp section', () => {
 
   it('says when the car is out', () => {
     const r = sendPatrol(camp(1, 50), 'gas-station', ['bob'], 1, NOW, { car: true });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(campLines(r.game, NOW)).toContain('Car: out on patrol');
     expect(campLines(newGame(), NOW).some((l) => l.startsWith('Car'))).toBe(false);
   });
@@ -144,7 +144,7 @@ describe('the "Take the car" toggle', () => {
 
   it('moves a car patrol along its shorter route', () => {
     const r = sendPatrol(camp(1, 50), 'electronics', ['bob'], 1, NOW, { car: true });
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const p = r.game.patrols[0]!;
     // 8 minutes each way by car, 15 searching.
     expect(routeShare(p, NOW + 4 * MIN)).toBeCloseTo(0.5);

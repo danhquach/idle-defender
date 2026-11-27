@@ -9,7 +9,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
 import { finishSquadHorde } from '../hordeonly.ts';
-import { localHorde, MODES } from '../modes.ts';
+import { localHorde } from '../modes.ts';
 import { gearUp, playSquadHorde } from '../sim.ts';
 import { cacheFor } from './cache.ts';
 import { holdFrom, holdLevel, inMode, SEEDS, squad, squadAbove, wins } from './shared.ts';
@@ -66,7 +66,7 @@ describe('Hell (ID-222, ID-225)', () => {
     'a squad well over Recommended Power does not lose repeatedly: hell %i',
     (n) => {
       const won = keep(`over hell ${n}`, () => wins(squadAbove('hell', n, 1.3), n, 5));
-      expect(won, `${MODES.hell.name} Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
+      expect(won, `hell Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
     },
     3_600_000,
   );

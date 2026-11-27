@@ -53,8 +53,8 @@ import {
 } from './projection.ts';
 
 const RICH = stockOf({ scrap: 999, wood: 999, metal: 999, concrete: 999 });
-const ok = (r: { ok: true; base: Base } | { ok: false; reason: string }): Base => {
-  if (!r.ok) throw new Error(r.reason);
+const ok = (r: { ok: true; base: Base } | { ok: false; code: string }): Base => {
+  if (!r.ok) throw new Error(r.code);
   return r.base;
 };
 

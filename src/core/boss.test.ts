@@ -107,7 +107,7 @@ describe('boss hordes', () => {
   it('a blade ignores the armour', () => {
     const gate = START_BASE.gate;
     const built = buildPost(newBase(), RICH, { kind: 'wall-walk', column: 0, row: gate });
-    if (!built.ok) throw new Error(built.reason);
+    if (!built.ok) throw new Error(built.code);
     const s = newHorde(1, { ...setup(), base: built.base });
     s.toSpawn = 0;
     s.defenders = [];

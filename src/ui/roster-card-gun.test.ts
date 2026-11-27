@@ -152,7 +152,7 @@ describe('a ★ marks a survivor whose gun suits their profession (ID-180)', () 
     const m = mount(g);
     expect(m.tab('recruit-1').querySelector('.rv-tab-fit')).toBeNull();
     const r = equipGun(m.game(), 'recruit-1', gun.uid);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     m.set({ ...r.game, roster: r.game.roster.map((d) => ({ ...d, job: 'hunter' as const })) });
     expect(m.tab('recruit-1').querySelector('.rv-tab-fit')).not.toBeNull();
   });
@@ -239,7 +239,7 @@ describe('the Roster cards show the held gun (ID-180)', () => {
 
     // Equip (the app's onEquip changes the camp, then the Roster redraws).
     const equipped = equipGun(m.game(), 'recruit-1', gun.uid);
-    if (!equipped.ok) throw new Error(equipped.reason);
+    if (!equipped.ok) throw new Error(equipped.code);
     m.set(equipped.game);
     const after = state('recruit-1');
     expect(after.rarity).toBe('relic');
@@ -254,7 +254,7 @@ describe('the Roster cards show the held gun (ID-180)', () => {
 
     // An outside change plus refresh(): the gun goes back to the stash (pistol).
     const back = equipGun(m.game(), 'recruit-1', 'pistol');
-    if (!back.ok) throw new Error(back.reason);
+    if (!back.ok) throw new Error(back.code);
     m.set(back.game);
     expect(state('recruit-1')).toEqual(before);
 

@@ -7,6 +7,7 @@ import { newHorde } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
 import { createHud, LOCKED_NOTE, shopButtons, skillButtons } from './hud.ts';
 import { ART_URLS, SHOP_ICON, SKILL_ICON } from './sprites.ts';
+import { ACTIVE_SKILL_NAME, SHOP_NAME } from './text/index.ts';
 
 describe('shop and skill icons (ID-041)', () => {
   it('puts each button’s bundled icon, with empty alt text, beside its label', () => {
@@ -42,7 +43,10 @@ describe('shop and skill icons (ID-041)', () => {
     const buttons = [
       ...root.querySelectorAll<HTMLButtonElement>('.hud-shop-item:not(.hud-repairs)'),
     ];
-    const rest = [...SHOP_ITEMS.map((i) => SHOP[i]), ...SKILL_IDS.map((k) => SKILLS[k])];
+    const rest = [
+      ...SHOP_ITEMS.map((i) => ({ name: SHOP_NAME[i], cost: SHOP[i].cost })),
+      ...SKILL_IDS.map((k) => ({ name: ACTIVE_SKILL_NAME[k], cost: SKILLS[k].cost })),
+    ];
     buttons.forEach((button, i) => {
       expect(button.querySelector('.hud-shop-label')!.textContent).toBe(`${rest[i]!.name} · `);
       expect(button.querySelector('.btn-cost')!.textContent).toBe(String(rest[i]!.cost));
@@ -58,7 +62,9 @@ describe('shop and skill icons (ID-041)', () => {
     const skills = [...root.querySelectorAll<HTMLButtonElement>('.hud-skill')];
     expect(skills).toHaveLength(SKILL_IDS.length);
     skills.forEach((button, i) => {
-      expect(button.querySelector('.hud-shop-label')!.textContent).toBe(SKILLS[SKILL_IDS[i]!].name);
+      expect(button.querySelector('.hud-shop-label')!.textContent).toBe(
+        ACTIVE_SKILL_NAME[SKILL_IDS[i]!],
+      );
       expect(button.querySelector('.btn-cost')!.textContent).toBe('');
       expect(button.querySelector('.hud-skill-key')!.textContent).toBe('Q');
       expect(button.querySelector('.btn-reason')?.textContent ?? '').toBe('');

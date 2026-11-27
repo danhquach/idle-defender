@@ -15,24 +15,19 @@
 // patrol's is view-only. Text reaches the page only through textContent.
 import {
   affixCount,
-  affixLines,
   baseOf,
   gunLevel,
   gunPower,
   gunStep,
-  heldName,
   isOwned,
-  roleOf,
   type Held,
   type OwnedWeapon,
 } from '../core/armoury.ts';
 import {
   COMBINE_COUNT,
   GUN_UPGRADE,
-  RARITIES,
   RARITY_ORDER,
   STASH_SLOT,
-  WEAPONS,
   type GunBase,
   type GunClass,
   type Rarity,
@@ -53,7 +48,7 @@ import {
   type GunMove,
 } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
-import { effHorde, hordeName, modeOf } from '../core/modes.ts';
+import { effHorde, modeOf } from '../core/modes.ts';
 import { classOf } from '../core/traits.ts';
 import { recommendedPower, squadPower } from '../core/squadpower.ts';
 import { survivorDps } from '../core/stats.ts';
@@ -83,6 +78,16 @@ import { classLine, matchupsOpen } from './statlines.ts';
 import { MAP_GUN_AWAY, patrolName, patrolsShown } from './maptext.ts';
 import type { Answer } from './confirm.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
+import {
+  refusedText,
+  type Refused,
+  affixLines,
+  heldName,
+  hordeName,
+  RARITY_NAME,
+  WEAPON_NAME,
+  roleOf,
+} from './text/index.ts';
 
 /** One weapon as the Inventory shows it. */
 export interface InventoryItem {
@@ -414,7 +419,7 @@ export function inventoryView(
         { value: 'all', label: 'All rarities' },
         ...RARITY_DESC.flatMap((r) => {
           const c = count((x) => isOwned(x.h) && x.h.rarity === r);
-          return c > 0 || pick.rarity === r ? [option(r, RARITIES[r].name, c)] : [];
+          return c > 0 || pick.rarity === r ? [option(r, RARITY_NAME[r], c)] : [];
         }),
       ],
     },
@@ -448,7 +453,7 @@ export function inventoryView(
 
 /** "Common SMG": a base weapon's name at `rarity`. */
 const kindName = (set: Pick<CombineSet, 'base'>, rarity: Rarity): string =>
-  `${RARITIES[rarity].name} ${WEAPONS[set.base].name}`;
+  `${RARITY_NAME[rarity]} ${WEAPON_NAME[set.base]}`;
 
 function combineRows(game: Pick<GameState, 'armoury'>): CombineRow[] {
   const rows = combineSets(game).flatMap((set): CombineRow[] => {
@@ -579,7 +584,7 @@ const levelled = (it: InventoryItem): string =>
  * 17.2 DPS, 2 affixes".
  */
 export function slotLabel(it: InventoryItem, ready = false): string {
-  const parts = [it.name, `${RARITIES[it.rarity].name} rarity`];
+  const parts = [it.name, `${RARITY_NAME[it.rarity]} rarity`];
   if (it.role) parts.push(`${it.role.role}: ${it.role.trait}`);
   if (it.classLine) parts.push(`class ${it.classLine}`);
   if (it.levelBadge) parts.push(`level ${it.level}`);
@@ -614,7 +619,7 @@ export function slotFace(it: InventoryItem): HTMLElement[] {
     img.draggable = false;
     face.push(img);
   } else {
-    face.push(el('span', 'inv-slot-text', WEAPONS[it.base].name));
+    face.push(el('span', 'inv-slot-text', WEAPON_NAME[it.base]));
   }
   if (it.levelBadge) {
     // "Lv N", or just the number from level 100, so it never meets the +N beside it.
@@ -1093,7 +1098,7 @@ export function facts(it: InventoryItem): HTMLElement[] {
   const rarity = el(
     'p',
     'inv-rarity',
-    `${RARITIES[it.rarity].name} rarity · ${WEAPONS[it.base].name}`,
+    `${RARITY_NAME[it.rarity]} rarity · ${WEAPON_NAME[it.base]}`,
   );
   rarity.dataset.rarity = it.rarity;
   // The gun's role and the trait every one of it has (ID-101), read as one line.
@@ -1461,7 +1466,7 @@ export function selectPanel(
   for (const r of RARITY_ORDER) {
     const of = can.filter((it) => it.rarity === r);
     const n = of.length;
-    const name = RARITIES[r].name;
+    const name = RARITY_NAME[r];
     // Pressed once every one is ticked: a second tap unticks them.
     const all = n > 0 && of.every((it) => ticked.has(it.key));
     const b = button(`All ${name} · ${n}`, () => ui.pick(r), 'inv-select-pick');
@@ -1556,7 +1561,7 @@ export interface InventoryOptions {
    * Raises the gun `uid`, held or in the stash, one upgrade step (ID-208), in a fight too: what
    * it said, or why not; without it the details have no Upgrade.
    */
-  onUpgrade?: (uid: string) => { ok: true; text: string } | { ok: false; reason: string };
+  onUpgrade?: (uid: string) => { ok: true; text: string } | Refused;
   /**
    * Salvages the stash gun `uid` (ID-207), after the app's confirm for a Prototype or Relic,
    * in a fight too: what it said, or why not; null when the player said no. Without it the
@@ -1570,17 +1575,17 @@ export interface InventoryOptions {
    */
   onSalvageMany?: (uids: string[]) => Answer | Promise<Answer>;
   /** Combines the stash guns `uids` (ID-091); without it the details have no Combine. */
-  onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | { ok: false; reason: string };
+  onCombine?: (uids: string[]) => { ok: true; weapon: OwnedWeapon } | Refused;
   /**
    * Gives survivor `defenderId` gun `choice` (ID-095, between hordes), their gun going to
    * the stash; without it guns can't be dragged and the details have no Equip.
    */
-  onEquip?: (defenderId: string, choice: GunChoice) => { ok: true } | { ok: false; reason: string };
+  onEquip?: (defenderId: string, choice: GunChoice) => { ok: true } | Refused;
   /**
    * "Best gun for everyone" (between hordes): each survivor's new gun, or why not; without
    * it the header has no such button.
    */
-  onBestGuns?: () => { ok: true; moves: GunMove[] } | { ok: false; reason: string };
+  onBestGuns?: () => { ok: true; moves: GunMove[] } | Refused;
 }
 
 /** A mouse press becomes a drag once it moves this far (px). */
@@ -1663,7 +1668,7 @@ export function createInventory(
   best.type = 'button';
   best.addEventListener('click', () => {
     const r = opts.onBestGuns?.();
-    if (r) say(r.ok ? bestGunsLine(r.moves) : r.reason, !r.ok);
+    if (r) say(r.ok ? bestGunsLine(r.moves) : refusedText(r), !r.ok);
   });
   const panel = el('div', 'inv-panel');
   const body = el('div', 'menu-body inv-body');
@@ -1755,7 +1760,7 @@ export function createInventory(
       if (!r) return;
       const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
       draw(game, canCombine, horde, canBuy);
-      say(r.ok ? r.text : r.reason, !r.ok);
+      say(r.ok ? r.text : refusedText(r), !r.ok);
       (body.querySelector<HTMLElement>('.inv-buy') ?? slotOf(selected))?.focus();
       return;
     }
@@ -1822,7 +1827,7 @@ export function createInventory(
     if (!r) return;
     if (r.ok) ticked.clear();
     redraw();
-    say(r.ok ? r.text : r.reason, !r.ok);
+    say(r.ok ? r.text : refusedText(r), !r.ok);
     (
       details.querySelector<HTMLButtonElement>('.inv-select-pick:not(:disabled)') ??
       slotOf(selected)
@@ -2149,7 +2154,7 @@ export function createInventory(
     const before = view;
     const r = opts.onEquip(d.defender, d.choice);
     if (!r.ok) {
-      say(r.reason, true);
+      say(refusedText(r), true);
       return;
     }
     // The gun is selected where it went: a survivor's back in the stash, else in their hands.
@@ -2296,7 +2301,7 @@ export function createInventory(
     if (!r) return;
     const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
     draw(game, canCombine, horde, canBuy);
-    say(r.ok ? r.text : r.reason, !r.ok);
+    say(r.ok ? r.text : refusedText(r), !r.ok);
     // On the gun that moved into its place, without scrolling the list (ID-214).
     slotOf(selected)?.focus({ preventScroll: true });
   }
@@ -2316,7 +2321,7 @@ export function createInventory(
     // A confirm over a gun that was just replaced is stale: drawing drops it.
     const { game, canCombine = false, horde = null, canBuy = false } = opts.state();
     draw(game, canCombine, horde, canBuy);
-    say(r.ok ? r.text : r.reason, !r.ok);
+    say(r.ok ? r.text : refusedText(r), !r.ok);
     (
       details.querySelector<HTMLButtonElement>('.inv-upgrade-button:not(:disabled)') ??
       slotOf(selected)
@@ -2465,7 +2470,7 @@ export function createInventory(
     confirming = null;
     say('');
     const r = opts.onCombine(uses.map((w) => w.uid));
-    result = r.ok ? combineResult(r.weapon) : r.reason;
+    result = r.ok ? combineResult(r.weapon) : refusedText(r);
     made = r.ok ? `Made: ${levelled(item(r.weapon, '', ''))}` : null;
     // The new gun takes a used gun's place: select it, so its details say what was made.
     if (r.ok) {
@@ -2673,7 +2678,7 @@ export function createInventory(
     const before = view;
     const r = opts.onEquip(id, choice);
     if (!r.ok) {
-      say(r.reason, true);
+      say(refusedText(r), true);
       return;
     }
     pickingFor = null;

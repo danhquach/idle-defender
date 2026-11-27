@@ -95,7 +95,7 @@ export function runGenerator(game: GameState, now: number): GameState {
  * build worked out ahead of the click never earns time before it.
  */
 export function buildGenerator(game: GameState): GameResult {
-  if (game.power.generator) return { ok: false, reason: 'The generator is already built' };
+  if (game.power.generator) return { ok: false, code: 'generator-built' };
   return pay(game, GENERATOR.cost, (g) => {
     g.power.generator = { at: null };
   });

@@ -17,6 +17,7 @@ import {
   type Base,
   type Result,
 } from './base.ts';
+import type { Refusal } from './refusal.ts';
 import { SEGMENTS, START_BASE, START_STOCK, stockOf, type Stock, type Tier } from './data.ts';
 
 const WOOD: Tier[] = ['wood'];
@@ -25,12 +26,12 @@ const rich = (): Stock => stockOf({ scrap: 999, wood: 999, metal: 999, concrete:
 const empty = (): Stock => stockOf();
 
 function ok(r: Result): { base: Base; stock: Stock } {
-  if (!r.ok) throw new Error(`refused: ${r.reason}`);
+  if (!r.ok) throw new Error(`refused: ${r.code}`);
   return r;
 }
-function reason(r: Result): string {
+function reason(r: Result): Refusal {
   if (r.ok) throw new Error('expected a refusal');
-  return r.reason;
+  return r;
 }
 /** The starting base with column 0 row `row` set to `hp`. */
 function damaged(row: number, hp: number): Base {
@@ -99,20 +100,26 @@ describe('buildSegment', () => {
   });
 
   it('refuses a taken slot, a locked tier, short stock and a second gate', () => {
-    expect(reason(buildSegment(newBase(), rich(), WOOD, 0, 0, 'wall', 'wood'))).toBe('Slot taken');
-    expect(reason(buildSegment(newBase(), rich(), WOOD, 1, 0, 'wall', 'metal'))).toBe(
-      'Metal is locked',
-    );
+    expect(reason(buildSegment(newBase(), rich(), WOOD, 0, 0, 'wall', 'wood'))).toEqual({
+      ok: false,
+      code: 'slot-taken',
+    });
+    expect(reason(buildSegment(newBase(), rich(), WOOD, 1, 0, 'wall', 'metal'))).toEqual({
+      ok: false,
+      code: 'tier-locked',
+      tier: 'metal',
+    });
     expect(
       reason(buildSegment(newBase(), { ...rich(), wood: 9 }, WOOD, 1, 0, 'wall', 'wood')),
-    ).toBe('Not enough wood');
+    ).toEqual({ ok: false, code: 'short', material: 'wood', short: true });
     expect(
       reason(buildSegment(newBase(), { ...rich(), scrap: 4 }, WOOD, 1, 0, 'wall', 'wood')),
-    ).toBe('Not enough scrap');
+    ).toEqual({ ok: false, code: 'short', material: 'scrap', short: true });
     let r = ok(buildSegment(newBase(), rich(), WOOD, 1, 0, 'gate', 'wood'));
-    expect(reason(buildSegment(r.base, r.stock, WOOD, 1, 1, 'gate', 'wood'))).toBe(
-      'This layer already has a gate',
-    );
+    expect(reason(buildSegment(r.base, r.stock, WOOD, 1, 1, 'gate', 'wood'))).toEqual({
+      ok: false,
+      code: 'one-gate',
+    });
     r = ok(buildSegment(r.base, r.stock, WOOD, 1, 1, 'wall', 'wood'));
     expect(r.base.layers[1]!.slots[0]).toEqual({ kind: 'gate', tier: 'wood', hp: 150, maxHp: 150 });
   });
@@ -149,12 +156,25 @@ describe('upgradeSegment', () => {
     let r = ok(upgradeSegment(newBase(), rich(), ALL, 0, 0));
     r = ok(upgradeSegment(r.base, r.stock, ALL, 0, 0));
     r = ok(upgradeSegment(r.base, r.stock, ALL, 0, 0));
-    expect(reason(upgradeSegment(r.base, r.stock, ALL, 0, 0))).toBe('Already at the top tier');
-    expect(reason(upgradeSegment(newBase(), rich(), WOOD, 0, 0))).toBe('Metal is locked');
-    expect(reason(upgradeSegment(newBase(), rich(), ALL, 1, 0))).toBe('Nothing built here');
-    expect(reason(upgradeSegment(newBase(), { ...rich(), metal: 9 }, ALL, 0, 0))).toBe(
-      'Not enough metal',
-    );
+    expect(reason(upgradeSegment(r.base, r.stock, ALL, 0, 0))).toEqual({
+      ok: false,
+      code: 'top-tier',
+    });
+    expect(reason(upgradeSegment(newBase(), rich(), WOOD, 0, 0))).toEqual({
+      ok: false,
+      code: 'tier-locked',
+      tier: 'metal',
+    });
+    expect(reason(upgradeSegment(newBase(), rich(), ALL, 1, 0))).toEqual({
+      ok: false,
+      code: 'nothing-built',
+    });
+    expect(reason(upgradeSegment(newBase(), { ...rich(), metal: 9 }, ALL, 0, 0))).toEqual({
+      ok: false,
+      code: 'short',
+      material: 'metal',
+      short: true,
+    });
   });
 });
 
@@ -186,22 +206,36 @@ describe('repair', () => {
   });
 
   it('refuses a full segment, an unbuilt slot and short stock', () => {
-    expect(reason(repairSegment(newBase(), rich(), 0, 0))).toBe('Nothing to repair');
-    expect(reason(repairSegment(newBase(), rich(), 1, 0))).toBe('Nothing built here');
-    expect(reason(repairSegment(damaged(0, 0), { ...rich(), wood: 9 }, 0, 0))).toBe(
-      'Not enough wood',
-    );
+    expect(reason(repairSegment(newBase(), rich(), 0, 0))).toEqual({
+      ok: false,
+      code: 'nothing-to-repair',
+    });
+    expect(reason(repairSegment(newBase(), rich(), 1, 0))).toEqual({
+      ok: false,
+      code: 'nothing-built',
+    });
+    expect(reason(repairSegment(damaged(0, 0), { ...rich(), wood: 9 }, 0, 0))).toEqual({
+      ok: false,
+      code: 'short',
+      material: 'wood',
+      short: true,
+    });
   });
 
   it('repairAll is all or nothing', () => {
     const base = damaged(0, 0);
     base.layers[0]!.slots[1]!.hp = 100;
     expect(repairAllCost(base)).toEqual({ ...empty(), wood: 15, scrap: 8 });
-    expect(reason(repairAll(base, { ...rich(), wood: 14 }))).toBe('Not enough wood');
+    expect(reason(repairAll(base, { ...rich(), wood: 14 }))).toEqual({
+      ok: false,
+      code: 'short',
+      material: 'wood',
+      short: true,
+    });
     const r = ok(repairAll(base, rich()));
     expect(r.base).toEqual(newBase());
     expect(r.stock).toEqual({ ...rich(), wood: 984, scrap: 991 });
-    expect(reason(repairAll(newBase(), rich()))).toBe('Nothing to repair');
+    expect(reason(repairAll(newBase(), rich()))).toEqual({ ok: false, code: 'nothing-to-repair' });
   });
 });
 
@@ -225,24 +259,30 @@ describe('buildPost', () => {
   });
 
   it('refuses a taken slot, a missing wall and short stock', () => {
-    expect(reason(buildPost(newBase(), rich(), { kind: 'tower', column: 0, row: 4 }))).toBe(
-      'Slot taken',
-    );
-    expect(reason(buildPost(newBase(), rich(), { kind: 'tower', column: 1, row: 1 }))).toBe(
-      'A tower needs a wall in front',
-    );
-    expect(reason(buildPost(newBase(), rich(), { kind: 'ground', column: 1, row: 1 }))).toBe(
-      'A ground post needs a wall in front',
-    );
+    expect(reason(buildPost(newBase(), rich(), { kind: 'tower', column: 0, row: 4 }))).toEqual({
+      ok: false,
+      code: 'slot-taken',
+    });
+    expect(reason(buildPost(newBase(), rich(), { kind: 'tower', column: 1, row: 1 }))).toEqual({
+      ok: false,
+      code: 'post-needs-front',
+      post: 'tower',
+    });
+    expect(reason(buildPost(newBase(), rich(), { kind: 'ground', column: 1, row: 1 }))).toEqual({
+      ok: false,
+      code: 'post-needs-front',
+      post: 'ground',
+    });
     const r = ok(buildSegment(newBase(), rich(), WOOD, 1, 0, 'wall', 'wood'));
-    expect(reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 1, row: 1 }))).toBe(
-      'A wall-walk post needs a wall',
-    );
+    expect(reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 1, row: 1 }))).toEqual({
+      ok: false,
+      code: 'walk-needs-wall',
+    });
     // One wall in the column is enough for a ground post.
     ok(buildPost(r.base, r.stock, { kind: 'ground', column: 1, row: 1 }));
     expect(
       reason(buildPost(newBase(), { ...rich(), wood: 19 }, { kind: 'tower', column: 0, row: 0 })),
-    ).toBe('Not enough wood');
+    ).toEqual({ ok: false, code: 'short', material: 'wood', short: true });
   });
 });
 
@@ -254,16 +294,17 @@ describe('wall-walk spots (ID-048)', () => {
       { kind: 'wall-walk', column: 0, row: 3 },
       { kind: 'wall-walk', column: 0, row: 3, spot: 1 },
     ]);
-    expect(reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3 }))).toBe(
-      'Slot taken',
-    );
+    expect(reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3 }))).toEqual({
+      ok: false,
+      code: 'slot-taken',
+    });
     expect(
       reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3, spot: 1 })),
-    ).toBe('Slot taken');
+    ).toEqual({ ok: false, code: 'slot-taken' });
     // A spot written as 0 is the same spot as none.
     expect(
       reason(buildPost(r.base, r.stock, { kind: 'wall-walk', column: 0, row: 3, spot: 0 })),
-    ).toBe('Slot taken');
+    ).toEqual({ ok: false, code: 'slot-taken' });
   });
 
   it('a spot holds a post or a turret, not both; the other spot stays free', () => {
@@ -273,13 +314,19 @@ describe('wall-walk spots (ID-048)', () => {
     ]);
     expect(
       reason(buildPost(t.base, t.stock, { kind: 'wall-walk', column: 0, row: 2, spot: 1 })),
-    ).toBe('Slot taken');
+    ).toEqual({ ok: false, code: 'slot-taken' });
     const p = ok(buildPost(t.base, t.stock, { kind: 'wall-walk', column: 0, row: 2 }));
-    expect(reason(buildTurret(p.base, p.stock, true, 'wall-walk', 0, 2, 0))).toBe('Slot taken');
+    expect(reason(buildTurret(p.base, p.stock, true, 'wall-walk', 0, 2, 0))).toEqual({
+      ok: false,
+      code: 'slot-taken',
+    });
     // A turret moves between the two spots of one segment.
     const m = ok(moveTurret(t.base, t.stock, 0, 'wall-walk', 0, 2, 0));
     expect(m.base.turrets).toEqual([{ mount: 'wall-walk', column: 0, row: 2, condition: 100 }]);
-    expect(reason(moveTurret(m.base, m.stock, 0, 'wall-walk', 0, 2))).toBe('Already there');
+    expect(reason(moveTurret(m.base, m.stock, 0, 'wall-walk', 0, 2))).toEqual({
+      ok: false,
+      code: 'already-there',
+    });
   });
 
   it('refuses a spot past the second, a fraction, or a spot on a tower or the ground', () => {
@@ -298,7 +345,7 @@ describe('wall-walk spots (ID-048)', () => {
     const r = ok(lineWall(newBase(), rich(), 0));
     expect(r.base.posts.filter((p) => p.kind === 'wall-walk')).toHaveLength(2 * SEGMENTS);
     expect(r.stock).toEqual({ ...rich(), wood: 999 - 5 * 20, scrap: 999 - 5 * 20 });
-    expect(reason(lineWall(r.base, r.stock, 0))).toBe('No free spot on this wall');
+    expect(reason(lineWall(r.base, r.stock, 0))).toEqual({ ok: false, code: 'no-free-spot' });
   });
 
   it('"Line the wall" fills free spots top to bottom and skips taken ones and gaps', () => {
@@ -313,7 +360,7 @@ describe('wall-walk spots (ID-048)', () => {
     ]);
     expect(free).toHaveLength(2 * SEGMENTS - 2 - 2);
     expect(freeWalkSpots(b, 1)).toEqual([]);
-    expect(reason(lineWall(b, rich(), 1))).toBe('No free spot on this wall');
+    expect(reason(lineWall(b, rich(), 1))).toEqual({ ok: false, code: 'no-free-spot' });
   });
 
   it('"Line the wall" stops when the stock runs out, and refuses when it covers none', () => {
@@ -326,9 +373,12 @@ describe('wall-walk spots (ID-048)', () => {
       { kind: 'wall-walk', column: 0, row: 1, spot: 1 },
     ]);
     expect(r.stock).toEqual({ ...empty(), wood: 3, scrap: 3 });
-    expect(reason(lineWall(newBase(), { ...empty(), wood: 4, scrap: 99 }, 0))).toBe(
-      'Not enough wood',
-    );
+    expect(reason(lineWall(newBase(), { ...empty(), wood: 4, scrap: 99 }, 0))).toEqual({
+      ok: false,
+      code: 'short',
+      material: 'wood',
+      short: true,
+    });
   });
 
   it('"Line the wall" is pure and refuses a bad column', () => {

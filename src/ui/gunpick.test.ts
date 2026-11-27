@@ -38,7 +38,7 @@ function camp(stash: OwnedWeapon[], holds?: string): GameState {
   };
   if (!holds) return game;
   const r = equipGun(game, 'recruit-1', holds);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }
 

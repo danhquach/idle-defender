@@ -10,12 +10,15 @@ import {
   personalityOf,
   type ChatEvent,
   type ChatState,
-  type ChatterLevel,
 } from './chatter.ts';
-import { STEP, WEAPONS } from './data.ts';
-import { newHorde, tick, type HordeState } from './horde.ts';
-import { loadoutFrom } from './loadout.ts';
-import { enemy, setup } from './testing.ts';
+import { STEP, WEAPONS } from '../core/data.ts';
+import { newHorde, tick, type HordeState } from '../core/horde.ts';
+import { loadoutFrom } from '../core/loadout.ts';
+import { enemy, setup } from '../core/testing.ts';
+import type { ChatterLevel } from '../storage/settings.ts';
+import { recruit } from '../core/camp.ts';
+import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
+import { startSquadHorde } from '../core/hordeonly.ts';
 
 /** Horde 1 with `n` survivors on the line 40 apart along x, nothing to spawn, nobody firing. */
 function fight(n = 1): HordeState {
@@ -716,5 +719,32 @@ describe('feats the fight records for chatter (ID-085)', () => {
     const t = tick(s, STEP);
     expect(t.grenades).toHaveLength(1);
     expect(t.feats).toContainEqual({ kind: 'throw', by: 'a', at: 0 });
+  });
+});
+
+describe('a mid-fight swap (ID-148)', () => {
+  const NOW = 1_700_000_000_000;
+  const person = (no: number): RosterDefender => ({ ...recruit(no), job: 'police' });
+  const people = (n: number, from = 1): RosterDefender[] =>
+    Array.from({ length: n }, (_, i) => person(from + i));
+  const g = newGame('horde');
+  const game: GameState = {
+    ...g,
+    hordeNumber: 3,
+    roster: people(6),
+    reserve: people(4, 7),
+    camp: { ...g.camp, recruits: 10 },
+  };
+
+  it('the newcomer shouts as they run in, even with chatter on Low', () => {
+    const h0 = startSquadHorde(game, 1, NOW);
+    const h1 = structuredClone(h0);
+    const d = h1.defenders.find((x) => x.id === 'recruit-2')!;
+    d.hp = d.maxHp * 0.1;
+    const h2 = tick(h1, STEP);
+    const c = chatter(chatter(newChat(), null, h0, 0, 'low'), h0, h2, STEP, 'low');
+    const b = c.bubbles.find((x) => x.by === 'recruit-7')!;
+    expect(b.event).toBe('swapIn');
+    expect(CHAT_LINES[personalityOf('recruit-7')].swapIn).toContain(b.line);
   });
 });

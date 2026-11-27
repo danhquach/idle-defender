@@ -11,7 +11,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
 import { finishSquadHorde } from '../hordeonly.ts';
-import { localHorde, MODES } from '../modes.ts';
+import { localHorde } from '../modes.ts';
 import { playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { cacheFor } from './cache.ts';
@@ -90,7 +90,7 @@ describe('difficulty modes (ID-218, ID-223)', () => {
     'a squad well over Recommended Power does not lose repeatedly: %s %i',
     (mode, n) => {
       const won = keep(`over ${mode} ${n}`, () => wins(squadAbove(mode, n, 1.3), n, 5));
-      expect(won, `${MODES[mode].name} Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
+      expect(won, `${mode} Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
     },
     3_600_000,
   );

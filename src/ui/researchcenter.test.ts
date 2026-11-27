@@ -17,6 +17,7 @@ import {
   type ResearchState,
 } from './researchcenter.ts';
 import { flush } from './testing.ts';
+import { TECH_EFFECT } from './text/index.ts';
 
 const game = (scrap: number, tech: TechId[] = []): GameState => {
   const g = newGame('horde');
@@ -91,7 +92,7 @@ describe('texts', () => {
     );
     for (const id of TECH_IDS) {
       const asks = researchQuestion(id, TECH[id].cost, 9999);
-      expect(asks.includes(TECH[id].effect), id).toBe(TECH[id].tier === 3);
+      expect(asks.includes(TECH_EFFECT[id]), id).toBe(TECH[id].tier === 3);
     }
   });
 

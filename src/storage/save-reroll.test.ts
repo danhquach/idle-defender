@@ -30,7 +30,7 @@ function camp(drawn?: number): GameState {
 
 const rerolled = (g: GameState): GameState => {
   const r = rerollMap(g);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 };
 
@@ -45,7 +45,7 @@ describe('save: a rerolled map (ID-252)', () => {
   it('round-trips, with a patrol kept', () => {
     const g = camp();
     const sent = sendMapPatrol(g, g.map!.areas[1]!.kind, ['recruit-2'], 9, NOW);
-    if (!sent.ok) throw new Error(sent.reason);
+    if (!sent.ok) throw new Error(sent.code);
     const next = rerolled(sent.game);
     expect(reread(next)?.game).toEqual(next);
   });
@@ -62,10 +62,10 @@ describe('save: a rerolled map (ID-252)', () => {
     for (const drawn of [MAP_DRAWS_MAX - 1, MAP_DRAWS_MAX]) {
       const g = camp(drawn);
       const sent = sendMapPatrol(g, g.map!.areas[0]!.kind, ['recruit-2'], 9, NOW);
-      if (!sent.ok) throw new Error(sent.reason);
+      if (!sent.ok) throw new Error(sent.code);
       const p = sent.game.map!.patrols[0]!;
       const t = takeReport(sent.game, p.area, p.backAt);
-      if (!t.ok) throw new Error(t.reason);
+      if (!t.ok) throw new Error(t.code);
       expect(reread(t.game)?.game).toEqual(t.game);
     }
   });

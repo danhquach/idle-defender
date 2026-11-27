@@ -71,7 +71,7 @@ describe('save: blueprints (ID-209)', () => {
   it('a crafted gun round-trips with its uid, counted by `made`', () => {
     const g = camp({ craft: { blueprints: { [base]: 1 }, made: 0 } });
     const r = craftGun(g, base, 120);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.weapon.uid).toBe('f1');
     expect(reread(r.game)?.game).toEqual(r.game);
   });

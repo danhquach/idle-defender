@@ -1,15 +1,7 @@
 // Design §8, ID-132: Sandbags (the outer wall takes less damage), Scavenged Ammo (a shot may
 // use no round) and Oil Bomb (a thrown tar bomb's slick, lit by Incendiary Rounds).
 import { describe, expect, it } from 'vitest';
-import {
-  UPGRADES,
-  chooseCard,
-  effectAt,
-  eligible,
-  outerWallHit,
-  pitch,
-  synergyOf,
-} from './cards.ts';
+import { UPGRADES, chooseCard, eligible, outerWallHit, synergyOf } from './cards.ts';
 import {
   CARD,
   CARD_MAX_LEVEL,
@@ -70,19 +62,16 @@ const find = (s: HordeState, id: number): Enemy => s.enemies.find((e) => e.id ==
 describe('wall and ammo cards (ID-132): data and levels', () => {
   it('Sandbags and Scavenged Ammo are rare, levelled; Oil Bomb is epic and unique', () => {
     expect(UPGRADES.sandbags).toMatchObject({
-      name: 'Sandbags',
       category: 'barrier',
       rarity: 'rare',
       levels: CARD_MAX_LEVEL,
     });
     expect(UPGRADES['scavenged-ammo']).toMatchObject({
-      name: 'Scavenged Ammo',
       category: 'stat',
       rarity: 'rare',
       levels: CARD_MAX_LEVEL,
     });
     expect(UPGRADES['oil-bomb']).toMatchObject({
-      name: 'Oil Bomb',
       category: 'behaviour',
       rarity: 'epic',
       levels: 1,
@@ -105,7 +94,6 @@ describe('wall and ammo cards (ID-132): data and levels', () => {
     }
     const s = picked(quiet(), 'oil-bomb');
     expect(eligible(s, 'oil-bomb')).toBe(false);
-    expect(pitch(quiet(), 'oil-bomb').tag).toBe('Unique');
   });
 
   it('Sandbags and Oil Bomb are offered only once enemies have reached the outer wall', () => {
@@ -128,25 +116,6 @@ describe('wall and ammo cards (ID-132): data and levels', () => {
     expect(outerWallHit(s)).toBe(true);
     expect(eligible(s, 'sandbags')).toBe(true);
     expect(eligible(s, 'oil-bomb')).toBe(true);
-  });
-
-  it('card texts show the exact numbers', () => {
-    expect(effectAt('sandbags', 1)).toEqual({
-      pre: 'The outer wall takes ',
-      value: '−10%',
-      post: ' damage',
-    });
-    expect(effectAt('sandbags', 3)!.value).toBe('−30%');
-    expect(effectAt('scavenged-ammo', 1)!.value).toBe('20%');
-    expect(effectAt('scavenged-ammo', 3)!.value).toBe('40%');
-    const lv2 = pitch(picked(quiet(), 'sandbags'), 'sandbags');
-    expect(lv2.tag).toBe('Lv 1 → 2');
-    expect(lv2.effect).toMatchObject({ from: '−10%', to: '−20%' });
-    // The epic card names its gain and its cost (ID-137), with the numbers.
-    const oil = UPGRADES['oil-bomb'].text;
-    for (const part of ['20 s', '60%', '10 s', 'Incendiary', 'Molotov', '20%', '3 s', '1.5 s']) {
-      expect(oil).toContain(part);
-    }
   });
 });
 
@@ -397,23 +366,15 @@ describe('Oil Bomb (ID-132)', () => {
   it('the synergy shows on both cards once the other is held', () => {
     expect(synergyOf(quiet(), 'oil-bomb')).toBeNull();
     expect(synergyOf(quiet(), 'incendiary-rounds')).toBeNull();
-    expect(synergyOf(picked(quiet(), 'incendiary-rounds'), 'oil-bomb')).toBe(
-      'Incendiary Rounds: hits light the slick',
-    );
-    expect(synergyOf(picked(quiet(), 'oil-bomb'), 'incendiary-rounds')).toBe(
-      'Oil Bomb: hits light the slick',
-    );
+    expect(synergyOf(picked(quiet(), 'incendiary-rounds'), 'oil-bomb')).toBe('oil-incendiary');
+    expect(synergyOf(picked(quiet(), 'oil-bomb'), 'incendiary-rounds')).toBe('incendiary-oil');
     // Oil Bomb + Molotov (ID-181).
     expect(synergyOf(quiet(), 'molotov')).toBeNull();
-    expect(synergyOf(picked(quiet(), 'molotov'), 'oil-bomb')).toBe(
-      'Molotov: fire lights the slick',
-    );
-    expect(synergyOf(picked(quiet(), 'oil-bomb'), 'molotov')).toBe(
-      'Oil Bomb: fire lights the slick',
-    );
+    expect(synergyOf(picked(quiet(), 'molotov'), 'oil-bomb')).toBe('oil-molotov');
+    expect(synergyOf(picked(quiet(), 'oil-bomb'), 'molotov')).toBe('molotov-oil');
     // Both held: the Oil Bomb offer names both pairings.
     expect(synergyOf(picked(picked(quiet(), 'incendiary-rounds'), 'molotov'), 'oil-bomb')).toBe(
-      'Incendiary Rounds, Molotov: they light the slick',
+      'oil-both',
     );
   });
 

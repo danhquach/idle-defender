@@ -147,7 +147,7 @@ describe('combining survivors of the same profession (ID-170)', () => {
     };
     const g = camp([fed]);
     const r = combineSurvivors(g, 'recruit-1', 'recruit-7');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.xp).toBe(1000);
     const keeper = campOf(r.game).find((d) => d.id === 'recruit-1')!;
     expect(keeper.xp).toBe(1500);
@@ -163,7 +163,7 @@ describe('combining survivors of the same profession (ID-170)', () => {
     const keeper = { ...as(recruit(7), 'hunter', 0), rest: 1 };
     const g = camp([keeper]);
     const r = combineSurvivors(g, 'recruit-7', 'recruit-2');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const k = campOf(r.game).find((d) => d.id === 'recruit-7')!;
     expect(k.xp).toBe(combineXp(500));
     expect(k.rest).toBe(1);
@@ -174,7 +174,7 @@ describe('combining survivors of the same profession (ID-170)', () => {
   it('Auto off: the keeper keeps their slot, the slot left stays open; Auto on fills it', () => {
     const g = camp([as(recruit(7), 'hunter', 900)]);
     const off = combineSurvivors(g, 'recruit-3', 'recruit-2');
-    if (!off.ok) throw new Error(off.reason);
+    if (!off.ok) throw new Error(off.code);
     expect(off.game.roster.map((d) => d.id)).toEqual([
       'recruit-1',
       'recruit-3',
@@ -184,7 +184,7 @@ describe('combining survivors of the same profession (ID-170)', () => {
     ]);
     expect(off.game.reserve.map((d) => d.id)).toEqual(['recruit-7']);
     const on = combineSurvivors({ ...g, autoSquad: true }, 'recruit-3', 'recruit-2');
-    if (!on.ok) throw new Error(on.reason);
+    if (!on.ok) throw new Error(on.code);
     expect(on.game.roster).toHaveLength(SQUAD_CAP);
     expect(on.game.roster.map((d) => d.id)).toContain('recruit-7');
     expect(on.game.roster.map((d) => d.id)).toContain('recruit-3');
@@ -198,7 +198,7 @@ describe('combining survivors of the same profession (ID-170)', () => {
     };
     const stash = Array.from({ length: STASH_CAP }, (_, i) => gun(`h${i + 10}`));
     const r = combineSurvivors({ ...camp([fed]), armoury: stash }, 'recruit-1', 'recruit-7');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.armoury).toHaveLength(STASH_CAP);
     expect(r.game.armoury).toContain(strong);
     expect(r.thrown).toHaveLength(1);
@@ -208,7 +208,7 @@ describe('combining survivors of the same profession (ID-170)', () => {
     const g = camp([as(recruit(7), 'soldier', MAX_COUNT)]);
     g.roster[0] = as(g.roster[0]!, 'soldier', MAX_COUNT - 5);
     const r = combineSurvivors(g, 'recruit-1', 'recruit-7');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(campOf(r.game).find((d) => d.id === 'recruit-1')!.xp).toBe(MAX_COUNT);
   });
 
@@ -216,25 +216,22 @@ describe('combining survivors of the same profession (ID-170)', () => {
     const g = camp([as(recruit(7), 'chef')]);
     expect(combineSurvivors(g, 'recruit-1', 'recruit-7')).toEqual({
       ok: false,
-      reason: 'Only survivors of the same profession combine',
+      code: 'combine-job',
     });
     expect(combineSurvivors(g, 'recruit-2', 'recruit-2')).toEqual({
       ok: false,
-      reason: 'A survivor cannot combine with themselves',
+      code: 'combine-self',
     });
     const six = camp([]);
-    expect(combineSurvivors(six, 'recruit-2', 'recruit-3')).toEqual({
-      ok: false,
-      reason: letGoLock(six, 'combine'),
-    });
+    expect(combineSurvivors(six, 'recruit-2', 'recruit-3')).toEqual(letGoLock(six, 'combine'));
     for (const id of ['recruit-99', '__proto__', 'constructor', '']) {
       expect(combineSurvivors(g, 'recruit-1', id)).toEqual({
         ok: false,
-        reason: 'No such survivor',
+        code: 'no-survivor',
       });
       expect(combineSurvivors(g, id, 'recruit-1')).toEqual({
         ok: false,
-        reason: 'No such survivor',
+        code: 'no-survivor',
       });
     }
   });
@@ -243,7 +240,7 @@ describe('combining survivors of the same profession (ID-170)', () => {
     const g = { ...camp([as(recruit(7), 'chef')]), joining: [as(recruit(8), 'soldier')] };
     expect(combineSurvivors(g, 'recruit-1', 'recruit-8')).toEqual({
       ok: false,
-      reason: 'No such survivor',
+      code: 'no-survivor',
     });
   });
 });

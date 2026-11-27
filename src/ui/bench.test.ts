@@ -5,7 +5,7 @@
 // the page only through textContent.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
-import { AREAS, JOBS, PATCH_UP, SQUAD_CAP } from '../core/data.ts';
+import { PATCH_UP, SQUAD_CAP } from '../core/data.ts';
 import { maxHpOf } from '../core/stats.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import type { HordeState } from '../core/horde.ts';
@@ -42,6 +42,7 @@ import {
 } from './squadroster.ts';
 import { sendMapPatrol, takeReport, withMap } from '../core/scout.ts';
 import { patrolGroupLabel, patrolMission, patrolName, patrolTime } from './maptext.ts';
+import { AREA_NAME, JOB_NAME } from './text/index.ts';
 
 const NOW = 1_700_000_000_000;
 const MIN = 60_000;
@@ -364,7 +365,7 @@ describe('the Roster and the bench (ID-147)', () => {
       let g = withMap(campGame(people(3), bench), 7);
       teams.forEach((ids, i) => {
         const sent = sendMapPatrol(g, g.map!.areas[i]!.kind, ids, 1, NOW);
-        if (!sent.ok) throw new Error(sent.reason);
+        if (!sent.ok) throw new Error(sent.code);
         g = sent.game;
       });
       return g;
@@ -394,7 +395,7 @@ describe('the Roster and the bench (ID-147)', () => {
       const p = m.game().map!.patrols[0]!;
       m.roster.open('recruit-6');
       expect(m.q('.rv-who-level').textContent).toBe(
-        `Level 1 · ${JOBS[recruit(6).job].name} · ${patrolName(p)}`,
+        `Level 1 · ${JOB_NAME[recruit(6).job]} · ${patrolName(p)}`,
       );
       expect(m.q('[data-key="squad"]')).toBeNull();
       expect(m.q('[data-key="treat"]')).toBeNull();
@@ -421,7 +422,7 @@ describe('the Roster and the bench (ID-147)', () => {
         // The cards no longer repeat where and when: the header says it once.
         for (const t of b.querySelectorAll('.rv-tab')) {
           expect(t.getAttribute('aria-label')).toContain('On patrol');
-          expect(t.getAttribute('aria-label')).not.toContain(AREAS[p.area].name);
+          expect(t.getAttribute('aria-label')).not.toContain(AREA_NAME[p.area]);
           expect(t.getAttribute('aria-label')).not.toMatch(/\d+ (m|h|s)\b/);
         }
       });
@@ -459,7 +460,7 @@ describe('the Roster and the bench (ID-147)', () => {
       expect(block()).toBe(before);
       expect(time.textContent).toBe('Back in 1 m');
       expect(before.getAttribute('aria-label')).toBe(
-        `Patrol ${p.no}, ${AREAS[p.area].name}, back in 1 minute`,
+        `Patrol ${p.no}, ${AREA_NAME[p.area]}, back in 1 minute`,
       );
       // Nothing changed: nothing rewritten.
       m.roster.tick(p.backAt - MIN);
@@ -472,7 +473,7 @@ describe('the Roster and the bench (ID-147)', () => {
       expect(block()).toBe(before);
       expect(time.textContent).toBe('Back · report ready');
       expect(before.getAttribute('aria-label')).toBe(
-        `Patrol ${p.no}, ${AREAS[p.area].name}, back, report ready`,
+        `Patrol ${p.no}, ${AREA_NAME[p.area]}, back, report ready`,
       );
       expect(document.activeElement).toBe(shownCard);
       expect(shownCard.getAttribute('aria-current')).toBe('true');
@@ -483,7 +484,7 @@ describe('the Roster and the bench (ID-147)', () => {
       m.roster.open('recruit-1');
       const p = m.game().map!.patrols.find((x) => x.members.includes('recruit-4'))!;
       const taken = takeReport(m.game(), p.area, p.backAt);
-      if (!taken.ok) throw new Error(taken.reason);
+      if (!taken.ok) throw new Error(taken.code);
       m.set(taken.game);
       m.roster.tick(NOW + 2 * MIN);
       expect(blocks(m)).toHaveLength(1);
@@ -495,7 +496,7 @@ describe('the Roster and the bench (ID-147)', () => {
       m.roster.open('recruit-1');
       const p = m.game().map!.patrols.find((x) => x.members.includes('recruit-4'))!;
       const taken = takeReport(m.game(), p.area, p.backAt);
-      if (!taken.ok) throw new Error(taken.reason);
+      if (!taken.ok) throw new Error(taken.code);
       m.set(taken.game);
       m.roster.refresh();
       expect(blocks(m)).toHaveLength(1);
@@ -777,7 +778,7 @@ describe('the Roster: Medicine treats the resting (ID-220)', () => {
       1,
       NOW,
     );
-    if (!sent.ok) throw new Error(sent.reason);
+    if (!sent.ok) throw new Error(sent.code);
     // Hand-made: one out on patrol with a rest (a doctored save): "Out" wins, no injured look.
     const g = {
       ...sent.game,

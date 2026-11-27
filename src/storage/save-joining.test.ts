@@ -156,7 +156,7 @@ describe('save: replay joiners and combining survivors (ID-170)', () => {
       loadout: { primary: gun, secondary: null, item: null },
     };
     const r = combineSurvivors(g, 'recruit-1', 'recruit-7');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     const back = reread(r.game)?.game;
     expect(back).toEqual(r.game);
     expect(back!.roster[0]!.xp).toBe(500);

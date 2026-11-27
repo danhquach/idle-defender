@@ -16,7 +16,6 @@ export const HIGHER_MODES: readonly HigherMode[] = ['nightmare', 'hell'];
 
 /** What a mode changes (ID-218; starting points, tuned by the balance pass). */
 export interface ModeRules {
-  name: string;
   /** Added to the mode's horde for the fight's strength, gun level, Scrap and XP. */
   offset: number;
   /** Scrap a win pays, as a multiple of Normal's. */
@@ -41,7 +40,6 @@ export interface ModeRules {
 
 export const MODES: Readonly<Record<Mode, ModeRules>> = {
   normal: {
-    name: 'Normal',
     offset: 0,
     scrap: 1,
     rarity: 0,
@@ -54,7 +52,6 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
     weak: 1,
   },
   nightmare: {
-    name: 'Nightmare',
     offset: 50,
     scrap: 1.5,
     rarity: 1,
@@ -67,7 +64,6 @@ export const MODES: Readonly<Record<Mode, ModeRules>> = {
     weak: 1.25,
   },
   hell: {
-    name: 'Hell',
     offset: 100,
     scrap: 2,
     rarity: 2,
@@ -111,9 +107,6 @@ export const beatenIn = (game: ModeProgress, mode: Mode = modeOf(game)): number 
 /** The strength of horde `local` of `mode`: the Normal horde it is as strong as. */
 export const effHorde = (mode: Mode, local: number): number => local + MODES[mode].offset;
 
-/** Horde `local` of `mode` as the screens name it (ID-267): "Normal 12", "Nightmare 30", "Hell 15". */
-export const hordeName = (mode: Mode, local: number): string => `${MODES[mode].name} ${local}`;
-
 /** The mode horde a fight's strength (`HordeState.hordeNumber`) stands for. */
 export const localOf = (h: { hordeNumber: number; mode?: HigherMode }): number =>
   h.hordeNumber - MODES[h.mode ?? 'normal'].offset;
@@ -126,14 +119,6 @@ export function modeUnlocked(game: ModeProgress, mode: Mode): boolean {
   const before = modeBefore(mode);
   return before === null || beatenIn(game, before) >= MODE_UNLOCK_HORDE;
 }
-
-/** What a locked `mode` asks, as the start screen says it. */
-export const unlockHint = (mode: Mode): string => {
-  const before = modeBefore(mode);
-  return before === null
-    ? ''
-    : `Hold ${hordeName(before, MODE_UNLOCK_HORDE)} to unlock ${MODES[mode].name}`;
-};
 
 /** The modes the player can play now, in order. */
 export const openModes = (game: ModeProgress): Mode[] =>

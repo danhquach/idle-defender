@@ -40,7 +40,7 @@ function baseWith(...extra: BasePost[]): Base {
   let stock = RICH;
   for (const post of extra) {
     const r = buildPost(base, stock, post);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     ({ base, stock } = r);
   }
   return base;
@@ -288,12 +288,12 @@ describe('Engineer (pistol + toolkit)', () => {
       let stock = RICH;
       for (let row = 0; row < SEGMENTS; row++) {
         const r = buildSegment(base, stock, ['wood'], 1, row, 'wall', 'wood');
-        if (!r.ok) throw new Error(r.reason);
+        if (!r.ok) throw new Error(r.code);
         ({ base, stock } = r);
       }
       for (const kind of ['tower', 'wall-walk', 'ground'] as const) {
         const r = buildPost(base, stock, { kind, column: 1, row: 2 });
-        if (!r.ok) throw new Error(r.reason);
+        if (!r.ok) throw new Error(r.code);
         ({ base, stock } = r);
       }
       return base;

@@ -31,7 +31,7 @@ function fight(cash = 100): HordeState {
 
 function used(s: HordeState, id: SkillId = 'airstrike', x = 1400, y = 200): HordeState {
   const r = useSkill(s, id, x, y);
-  if (!r.ok) throw new Error(r.reason);
+  if (!r.ok) throw new Error(r.code);
   return r.state;
 }
 
@@ -256,7 +256,7 @@ describe('cooldowns', () => {
     s = used(s);
     expect(skillLeft(s, 'airstrike')).toBe(60);
     expect(SKILLS.airstrike.cooldown).toBe(60);
-    expect(useSkill(s, 'airstrike', 1400, 200)).toEqual({ ok: false, reason: 'Not ready yet' });
+    expect(useSkill(s, 'airstrike', 1400, 200)).toEqual({ ok: false, code: 'not-ready' });
     s.offer = [];
     s = tick(s, 10);
     expect(skillLeft(s, 'airstrike')).toBe(60);
@@ -282,26 +282,27 @@ describe('refusals', () => {
     none.cash = 999;
     expect(useSkill(none, 'airstrike', 900, 200)).toEqual({
       ok: false,
-      reason: 'Research Airstrike first',
+      code: 'research-skill',
+      skill: 'airstrike',
     });
     const poor = fight(SKILLS.airstrike.cost - 1);
     const before = structuredClone(poor);
     expect(useSkill(poor, 'airstrike', 900, 200)).toEqual({
       ok: false,
-      reason: 'Not enough cash',
+      code: 'no-cash',
     });
     expect(poor).toEqual(before);
     const s = fight();
     expect(useSkill({ ...s, offer: [] }, 'airstrike', 900, 200)).toEqual({
       ok: false,
-      reason: 'Pick first',
+      code: 'pick-first',
     });
     expect(useSkill({ ...s, replace: { injuredId: 'a' } as never }, 'airstrike', 900, 200)).toEqual(
-      { ok: false, reason: 'Pick first' },
+      { ok: false, code: 'pick-first' },
     );
     expect(useSkill({ ...s, outcome: 'lost' }, 'airstrike', 900, 200)).toEqual({
       ok: false,
-      reason: 'The horde is over',
+      code: 'horde-over',
     });
   });
 
@@ -314,7 +315,7 @@ describe('refusals', () => {
       [900, -1],
       [900, FIELD.height + 1],
     ] as const) {
-      expect(useSkill(s, 'airstrike', x, y)).toEqual({ ok: false, reason: 'Aim at the field' });
+      expect(useSkill(s, 'airstrike', x, y)).toEqual({ ok: false, code: 'aim-field' });
     }
     expect(useSkill(s, 'airstrike', 0, FIELD.height).ok).toBe(true); // corners count
     expect(s).toEqual(before);
@@ -334,9 +335,9 @@ describe('research (PM decision D1, ID-139)', () => {
   it('Airstrike needs Lab level 2 and nothing else', () => {
     let g = newGame();
     g.stock = stockOf({ scrap: 999, wood: 999, metal: 0, concrete: 0 });
-    expect(queueLock(g, 'airstrike')).toBe('Needs Lab level 2');
+    expect(queueLock(g, 'airstrike')).toEqual({ ok: false, code: 'needs-lab-level', level: 2 });
     g = ok(upgradeLab(g));
-    expect(queueLock(g, 'airstrike')).toBe('Needs Lab level 2');
+    expect(queueLock(g, 'airstrike')).toEqual({ ok: false, code: 'needs-lab-level', level: 2 });
     g = ok(upgradeLab(g));
     expect(queueLock(g, 'airstrike')).toBeNull();
     g = ok(researchNow(g, 'airstrike'));
@@ -352,14 +353,18 @@ describe('research (PM decision D1, ID-139)', () => {
     expect(s.skills).toEqual(['airstrike']);
     expect(skillLock({ ...s, cash: 99 }, 'airstrike')).toBeNull();
     const none = startHorde({ ...g, research: [] }, 1, id, 0, 0);
-    expect(skillLock({ ...none, cash: 99 }, 'airstrike')).toBe('Research Airstrike first');
+    expect(skillLock({ ...none, cash: 99 }, 'airstrike')).toEqual({
+      ok: false,
+      code: 'research-skill',
+      skill: 'airstrike',
+    });
     const next = startHorde(g, 2, id, 0, 0);
     expect(next.cooldowns).toEqual({ airstrike: 0 });
     expect(next.fires).toEqual([]);
   });
 });
 
-function ok<T>(r: { ok: true; game: T } | { ok: false; reason: string }): T {
-  if (!r.ok) throw new Error(r.reason);
+function ok<T>(r: { ok: true; game: T } | { ok: false; code: string }): T {
+  if (!r.ok) throw new Error(r.code);
   return r.game;
 }

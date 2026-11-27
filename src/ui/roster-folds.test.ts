@@ -33,7 +33,7 @@ function out(bench: RosterDefender[], ...teams: string[][]): GameState {
   let g = withMap(campGame(people(3), bench), 7);
   teams.forEach((ids, i) => {
     const sent = sendMapPatrol(g, g.map!.areas[i]!.kind, ids, 1, NOW);
-    if (!sent.ok) throw new Error(sent.reason);
+    if (!sent.ok) throw new Error(sent.code);
     g = sent.game;
   });
   return g;

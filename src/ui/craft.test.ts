@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { BLUEPRINT_GUNS, craftOdds } from '../core/craft.ts';
-import { BLUEPRINT, CRAFT, STASH_CAP, WEAPONS, type WeaponId } from '../core/data.ts';
+import { BLUEPRINT, CRAFT, STASH_CAP, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import {
   craftGun,
@@ -39,6 +39,7 @@ import {
 } from './hud.ts';
 import { createInventory } from './inventory.ts';
 import { answerConfirm, confirmPanel, confirmQuestion } from './testing.ts';
+import { WEAPON_NAME } from './text/index.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -180,9 +181,9 @@ describe('the Craft tab in the camp window', () => {
     const m = mount(camp(100, { [A]: 3, [B]: 1 }));
     const rows = [...m.scrim.querySelectorAll<HTMLButtonElement>('.craft-bp')];
     expect(rows.map((r) => r.dataset.base)).toEqual([A, B]);
-    expect(rows[0]!.textContent).toBe(`${WEAPONS[A].name}×3`);
-    expect(rows[1]!.textContent).toBe(`${WEAPONS[B].name}×1`);
-    expect(rows[0]!.getAttribute('aria-label')).toBe(`${WEAPONS[A].name} blueprint, 3 held`);
+    expect(rows[0]!.textContent).toBe(`${WEAPON_NAME[A]}×3`);
+    expect(rows[1]!.textContent).toBe(`${WEAPON_NAME[B]}×1`);
+    expect(rows[0]!.getAttribute('aria-label')).toBe(`${WEAPON_NAME[A]} blueprint, 3 held`);
   });
 
   it('says so when there are none, with no crafting area', () => {
@@ -195,7 +196,7 @@ describe('the Craft tab in the camp window', () => {
   it('picking a blueprint opens its crafting area: gun type, Scrap amount, odds, Craft button', () => {
     const m = mount(camp(500, { [A]: 3, [B]: 1 }));
     m.q<HTMLButtonElement>(`.craft-bp[data-base="${B}"]`).click();
-    expect(m.q('.craft-gun').textContent).toBe(`${WEAPONS[B].name} blueprint`);
+    expect(m.q('.craft-gun').textContent).toBe(`${WEAPON_NAME[B]} blueprint`);
     expect(m.q(`.craft-bp[data-base="${B}"]`).getAttribute('aria-pressed')).toBe('true');
     expect(m.q(`.craft-bp[data-base="${A}"]`).getAttribute('aria-pressed')).toBe('false');
     expect(m.q('.craft-sub').textContent).toContain('Lv 12');
@@ -270,7 +271,7 @@ describe('the Craft tab in the camp window', () => {
     expect(line.textContent).toMatch(/^Crafted: Lv 12 (Rusty|Common|Military|Prototype|Relic) /);
     expect(m.q('.craft-status').textContent).toBe(line.textContent);
     // The list shows the one left, the Scrap line the new balance.
-    expect(m.q(`.craft-bp[data-base="${A}"]`).textContent).toBe(`${WEAPONS[A].name}×1`);
+    expect(m.q(`.craft-bp[data-base="${A}"]`).textContent).toBe(`${WEAPON_NAME[A]}×1`);
     expect(m.q('.craft-have').textContent).toBe('Scrap 380 · Stash 1/40');
     expect(document.activeElement).toBe(line);
   });
@@ -338,8 +339,8 @@ describe('the Craft tab in the camp window', () => {
     expect(salvageLabel).toBe('Salvage for 5 Scrap');
     b.click();
     // Asked first; nothing has changed yet.
-    expect(confirmQuestion()).toBe(`Salvage 1 ${WEAPONS[A].name} blueprint for 5 Scrap?`);
-    expect(confirmQuestion()).toBe(salvageQuestion(WEAPONS[A].name));
+    expect(confirmQuestion()).toBe(`Salvage 1 ${WEAPON_NAME[A]} blueprint for 5 Scrap?`);
+    expect(confirmQuestion()).toBe(salvageQuestion(WEAPON_NAME[A]));
     expect(confirmPanel()!.querySelector('.confirm-yes')!.textContent).toBe('Salvage');
     expect(confirmPanel()!.querySelector('.confirm-no')!.textContent).toBe('Keep');
     expect(m.game().stock.scrap).toBe(10);
@@ -347,7 +348,7 @@ describe('the Craft tab in the camp window', () => {
     expect(m.game().stock.scrap).toBe(15);
     expect(m.game().craft!.blueprints[A]).toBe(1);
     expect(m.q('.craft-status').textContent).toBe(
-      `Salvaged a ${WEAPONS[A].name} blueprint for 5 Scrap`,
+      `Salvaged a ${WEAPON_NAME[A]} blueprint for 5 Scrap`,
     );
     expect(m.scrim.querySelector('.craft-result')).toBeNull();
   });
@@ -401,7 +402,7 @@ describe('the Craft tab in the camp window', () => {
     const m = mount(camp(500, { [A]: 1, [B]: 2 }));
     m.go().click();
     const area = m.q('.craft-area');
-    expect(area.querySelector('.craft-gun')!.textContent).toBe(`${WEAPONS[B].name} blueprint`);
+    expect(area.querySelector('.craft-gun')!.textContent).toBe(`${WEAPON_NAME[B]} blueprint`);
     expect(area.querySelector('.craft-result-line')!.textContent).toMatch(/^Crafted: /);
     expect(area.querySelector('.craft-sub')).toBeNull();
     // Craft sits in the same area, after the slider and the odds.
@@ -446,7 +447,7 @@ describe('the result panel shows a dropped blueprint with the loot (ID-209)', ()
     const g = g0();
     const base = rollBlueprint(withBp)!;
     const screen = squadScreen(g, won(withBp));
-    expect(screen.lines).toContain(`Blueprint: ${WEAPONS[base].name} · craft it in the Craft tab`);
+    expect(screen.lines).toContain(`Blueprint: ${WEAPON_NAME[base]} · craft it in the Craft tab`);
     expect(screen.debrief!.drop!.blueprint).toBe(blueprintLine(base));
     const drop = squadResult(g, won(withBp)).drop as SquadDrop;
     expect(drop.blueprint).toBe(base);

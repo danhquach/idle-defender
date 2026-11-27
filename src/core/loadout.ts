@@ -1,6 +1,7 @@
 // What a defender carries (design §6 Loadout): a primary gun, an optional secondary
 // and one item slot. The loadout decides the profession. Pure.
 import { baseOf, statsOf, type Held } from './armoury.ts';
+import type { Refusal } from './refusal.ts';
 import {
   WEAPONS,
   type Blade,
@@ -40,12 +41,13 @@ export function professionOf(l: Loadout): Profession {
 }
 
 /** Why `l` can't be carried, or null when it can. */
-export function loadoutError(l: Loadout): string | null {
-  if (!isGun(l.primary)) return 'The primary must be a gun';
+export function loadoutError(l: Loadout): Refusal | null {
+  if (!isGun(l.primary)) return { ok: false, code: 'primary-gun' };
   if (l.secondary !== null && kindOf(l.secondary) === 'gun') {
-    return 'Only a sidearm goes in the secondary slot';
+    return { ok: false, code: 'secondary-sidearm' };
   }
-  if (l.item === 'shield' && professionOf(l) !== 'ripper') return 'A shield needs a blade';
+  if (l.item === 'shield' && professionOf(l) !== 'ripper')
+    return { ok: false, code: 'shield-blade' };
   return null;
 }
 

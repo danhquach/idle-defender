@@ -258,7 +258,6 @@ export const AREAS: Readonly<
   Record<
     AreaId,
     {
-      name: string;
       mostly: AreaLoot;
       sometimes: AreaLoot;
       rarity: number;
@@ -267,42 +266,36 @@ export const AREAS: Readonly<
   >
 > = {
   police: {
-    name: 'Police station',
     mostly: 'weapon',
     sometimes: 'scrap',
     rarity: 0,
     medicine: [1, 2],
   },
   military: {
-    name: 'Military depot',
     mostly: 'weapon',
     sometimes: 'blueprint',
     rarity: 1,
     medicine: [1, 2],
   },
   pharmacy: {
-    name: 'Pharmacy',
     mostly: 'medicine',
     sometimes: 'scrap',
     rarity: 0,
     medicine: [1, 2],
   },
   hospital: {
-    name: 'Hospital',
     mostly: 'medicine',
     sometimes: 'blueprint',
     rarity: 0,
     medicine: [2, 4],
   },
   hardware: {
-    name: 'Hardware store',
     mostly: 'scrap',
     sometimes: 'blueprint',
     rarity: 0,
     medicine: [1, 2],
   },
   electronics: {
-    name: 'Electronics store',
     mostly: 'blueprint',
     sometimes: 'scrap',
     rarity: 0,
@@ -319,7 +312,6 @@ export const DANGERS: Readonly<
   Record<
     Danger,
     {
-      name: string;
       minutes: number;
       drop: number;
       steps: number;
@@ -329,9 +321,9 @@ export const DANGERS: Readonly<
     }
   >
 > = {
-  safe: { name: 'Safe', minutes: 30, drop: 0.4, steps: 0, xp: 0.25, need: 1, scrap: 0.5 },
-  risky: { name: 'Risky', minutes: 60, drop: 0.6, steps: 1, xp: 0.5, need: 2, scrap: 1 },
-  dangerous: { name: 'Dangerous', minutes: 120, drop: 0.8, steps: 2, xp: 1, need: 3, scrap: 1.5 },
+  safe: { minutes: 30, drop: 0.4, steps: 0, xp: 0.25, need: 1, scrap: 0.5 },
+  risky: { minutes: 60, drop: 0.6, steps: 1, xp: 0.5, need: 2, scrap: 1 },
+  dangerous: { minutes: 120, drop: 0.8, steps: 2, xp: 1, need: 3, scrap: 1.5 },
 };
 /**
  * Map patrols (ID-219), proposed, to tune: `areas` on the map; team size `min`–`max`; a find
@@ -515,11 +507,6 @@ export const GAP_SENSE = 200;
 // --- Professions (M4). The loadout decides the profession; design §6. ---
 
 export type Profession = 'gunner' | 'ripper' | 'engineer';
-export const PROFESSIONS: Readonly<Record<Profession, { readonly name: string }>> = {
-  gunner: { name: 'Gunner' },
-  ripper: { name: 'Ripper' },
-  engineer: { name: 'Engineer' },
-};
 
 /** How a gun's bullets look in flight (design §15): a streak `length` px behind the slug, in `colour`. */
 export interface Tracer {
@@ -535,7 +522,6 @@ export interface Tracer {
  * (design §6 Loadout).
  */
 export interface Gun {
-  readonly name: string;
   readonly kind: 'sidearm' | 'gun';
   readonly damage: number;
   readonly fireInterval: number;
@@ -560,7 +546,6 @@ export interface Gun {
 }
 /** A blade (secondary) strikes within `reach` of its holder's post; never from a tower. */
 export interface Blade {
-  readonly name: string;
   readonly kind: 'blade';
   readonly damage: number;
   readonly fireInterval: number;
@@ -572,7 +557,6 @@ export interface Blade {
  * `ENGINEER_BUFF`.
  */
 export interface Tool {
-  readonly name: string;
   readonly kind: 'tool';
   readonly damage: number;
   readonly fireInterval: number;
@@ -584,7 +568,6 @@ export type Weapon = Gun | Blade | Tool;
 
 export const WEAPONS = {
   pistol: {
-    name: 'Pistol',
     kind: 'sidearm',
     damage: 6.2,
     fireInterval: 0.6,
@@ -598,7 +581,6 @@ export const WEAPONS = {
     tracer: { length: 12, colour: '#ffd36a' },
   },
   smg: {
-    name: 'SMG',
     kind: 'gun',
     damage: 4.5,
     fireInterval: 0.17,
@@ -613,7 +595,6 @@ export const WEAPONS = {
   },
   // Shown as the Carbine since ID-135 (the id stays, so saves load).
   rifle: {
-    name: 'Carbine',
     kind: 'gun',
     damage: 7,
     fireInterval: 0.4,
@@ -630,7 +611,6 @@ export const WEAPONS = {
   // Shown as the Pump Shotgun since ID-135. ID-199: four heavy pellets in a tighter cone
   // and a slower load (6 × 7 every 3.6 s out-damaged every gun on paper).
   shotgun: {
-    name: 'Pump Shotgun',
     kind: 'gun',
     damage: 10,
     fireInterval: 0.8,
@@ -645,7 +625,6 @@ export const WEAPONS = {
     shells: true,
   },
   lmg: {
-    name: 'LMG',
     kind: 'gun',
     damage: 6.5,
     fireInterval: 0.22,
@@ -659,7 +638,6 @@ export const WEAPONS = {
     tracer: { length: 14, colour: '#ffb347' },
   },
   sniper: {
-    name: 'Sniper rifle',
     kind: 'gun',
     // ID-199: +10% (35 → 38) as the shotguns came down. ID-233: 38 → 50, so its dmg/s
     // matches the LMG's and its big hits pay off on armour, heavies and bosses.
@@ -676,7 +654,6 @@ export const WEAPONS = {
   },
   // ID-135: two owned sidearms (never free like the pistol) and two more specialised guns.
   handcannon: {
-    name: 'Hand Cannon',
     kind: 'sidearm',
     // ID-233: 20 → 28, so its dmg/s matches the Machine Pistol's and the Cartridge's.
     damage: 28,
@@ -691,7 +668,6 @@ export const WEAPONS = {
     tracer: { length: 16, colour: '#ffc04a' },
   },
   machinepistol: {
-    name: 'Machine Pistol',
     kind: 'sidearm',
     damage: 3.5,
     fireInterval: 0.08,
@@ -705,7 +681,6 @@ export const WEAPONS = {
     tracer: { length: 8, colour: '#ffd36a' },
   },
   assault: {
-    name: 'Assault Rifle',
     kind: 'gun',
     damage: 8.8, // ID-199: +10% (was 8)
     fireInterval: 0.35,
@@ -719,7 +694,6 @@ export const WEAPONS = {
     tracer: { length: 14, colour: '#ffe08a' },
   },
   cartridge: {
-    name: 'Drum Shotgun',
     kind: 'gun',
     damage: 3.5,
     fireInterval: 0.6,
@@ -732,9 +706,8 @@ export const WEAPONS = {
     pierce: 0,
     tracer: { length: 8, colour: '#ffc04a' },
   },
-  knife: { name: 'Knife', kind: 'blade', damage: 10, fireInterval: 0.5, reach: 50 },
+  knife: { kind: 'blade', damage: 10, fireInterval: 0.5, reach: 50 },
   toolkit: {
-    name: 'Toolkit',
     kind: 'tool',
     damage: 4,
     fireInterval: 0.6,
@@ -758,15 +731,12 @@ export type Rarity = 'rusty' | 'common' | 'military' | 'prototype' | 'relic';
  * armoury is full.
  */
 export const RARITIES = {
-  rusty: { name: 'Rusty', power: 0.8, affixes: 0, salvage: 5 },
-  common: { name: 'Common', power: 1, affixes: 0, salvage: 10 },
-  military: { name: 'Military', power: 1.15, affixes: 1, salvage: 25 },
-  prototype: { name: 'Prototype', power: 1.3, affixes: 2, salvage: 50 },
-  relic: { name: 'Relic', power: 1.5, affixes: 3, salvage: 100 },
-} as const satisfies Record<
-  Rarity,
-  { name: string; power: number; affixes: number; salvage: number }
->;
+  rusty: { power: 0.8, affixes: 0, salvage: 5 },
+  common: { power: 1, affixes: 0, salvage: 10 },
+  military: { power: 1.15, affixes: 1, salvage: 25 },
+  prototype: { power: 1.3, affixes: 2, salvage: 50 },
+  relic: { power: 1.5, affixes: 3, salvage: 100 },
+} as const satisfies Record<Rarity, { power: number; affixes: number; salvage: number }>;
 export const RARITY_ORDER: readonly Rarity[] = [
   'rusty',
   'common',
@@ -855,29 +825,6 @@ export const AFFIXES = {
 export const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
 
 /**
- * Gun roles (ID-101, design Part 4): each gun's role and the built-in trait every one of
- * it has, Rusty or Relic. The trait numbers are `TRAIT`'s.
- */
-export const GUN_ROLES = {
-  pistol: { role: 'All-rounder', trait: 'Fastest reload of any gun' },
-  smg: { role: 'Swarm shredder', trait: '+25% damage to enemies near the wall' },
-  rifle: { role: 'Marksman', trait: 'Fires 3-round bursts; +10% crit chance' },
-  shotgun: {
-    role: 'Wall stopper',
-    trait: 'Loads shell by shell; a hit knocks an enemy near the wall back',
-  },
-  lmg: { role: 'Shredder', trait: '+8% crit chance' },
-  sniper: {
-    role: 'Boss and heavy killer',
-    trait: '+20% crit chance, +50% crit damage; crits ignore armour; 10% chance to pierce',
-  },
-  handcannon: { role: 'Heavy sidearm', trait: 'Each hit knocks the enemy back a little' },
-  machinepistol: { role: 'Close backup', trait: 'Fastest fire of any gun' },
-  assault: { role: 'Assault', trait: '+5% crit chance' },
-  cartridge: { role: 'Crowd stopper', trait: 'A hit knocks an enemy near the wall back' },
-} as const satisfies Record<GunBase, { role: string; trait: string }>;
-
-/**
  * Gun classes (ID-237, design §11): how a gun sits against the enemy traits of Nightmare
  * and Hell. Every gun has one; Normal ignores them.
  */
@@ -895,31 +842,22 @@ export const GUN_CLASS = {
   shotgun: 'spread',
   cartridge: 'spread',
 } as const satisfies Record<GunBase, GunClass>;
-export const GUN_CLASS_NAME: Readonly<Record<GunClass, string>> = {
-  light: 'Light',
-  medium: 'Medium',
-  heavy: 'Heavy',
-  spread: 'Spread',
-};
 /**
  * What each enemy kind resists and is weak to in Nightmare and Hell (ID-237, table B of the
  * design): a bullet of the `resists` class deals the mode's `resist` share, of the `weak`
  * class its `weak` share. The Shambler has no trait. `name` is the trait's word.
  */
 export const ENEMY_TRAITS: Readonly<
-  Record<
-    EnemyKind,
-    { readonly name: string; readonly resists: GunClass; readonly weak: GunClass } | null
-  >
+  Record<EnemyKind, { readonly resists: GunClass; readonly weak: GunClass } | null>
 > = {
   shambler: null,
-  runner: { name: 'Swift', resists: 'heavy', weak: 'light' },
-  crawler: { name: 'Skittering', resists: 'heavy', weak: 'light' },
-  spewer: { name: 'Slick', resists: 'heavy', weak: 'medium' },
-  swollen: { name: 'Bloated', resists: 'spread', weak: 'light' },
-  screamer: { name: 'Darting', resists: 'medium', weak: 'spread' },
-  brute: { name: 'Plated', resists: 'light', weak: 'heavy' },
-  horror: { name: 'Hulking', resists: 'light', weak: 'heavy' },
+  runner: { resists: 'heavy', weak: 'light' },
+  crawler: { resists: 'heavy', weak: 'light' },
+  spewer: { resists: 'heavy', weak: 'medium' },
+  swollen: { resists: 'spread', weak: 'light' },
+  screamer: { resists: 'medium', weak: 'spread' },
+  brute: { resists: 'light', weak: 'heavy' },
+  horror: { resists: 'light', weak: 'heavy' },
 };
 /** The first `TRAIT_WORDS` damage numbers of each fit in a fight carry a word (ID-237). */
 export const TRAIT_WORDS = 3;
@@ -969,9 +907,7 @@ export const ARMOURY_CAP = 30;
 export const PIERCE = { reach: 200 } as const;
 
 export type ItemId = 'shield';
-export const ITEMS: Readonly<Record<ItemId, { readonly name: string }>> = {
-  shield: { name: 'Shield' },
-};
+export const ITEMS: Readonly<Record<ItemId, true>> = { shield: true };
 
 /**
  * A Gunner with any gun: fire rate and reload speed up, crit chance on top of Aim's, spread
@@ -1213,41 +1149,31 @@ export const THEMES: Readonly<
   Record<
     ThemeId,
     {
-      readonly name: string;
       readonly kind: EnemyKind;
       readonly share: number;
-      readonly tip: string;
       readonly answers: readonly GunBase[];
     }
   >
 > = {
   stampede: {
-    name: 'Stampede',
     kind: 'runner',
     share: 0.7,
     answers: ['smg', 'lmg'],
-    tip: 'Fast and many. Bring fast-firing guns, slows and knockback.',
   },
   ironwall: {
-    name: 'Iron Wall',
     kind: 'brute',
     share: 0.4,
     answers: ['sniper', 'handcannon'],
-    tip: 'Few, armoured, very tough. Bring heavy guns and armour piercing.',
   },
   crawl: {
-    name: 'Crawl',
     kind: 'crawler',
     share: 0.25,
     answers: ['shotgun', 'cartridge'],
-    tip: 'Low and hard to hit; they climb the wall. Bring spread or light guns.',
   },
   bloat: {
-    name: 'Bloat Tide',
     kind: 'swollen',
     share: 0.4,
     answers: ['rifle', 'sniper'],
-    tip: 'Their blasts break the wall. Long-range guns kill them far out; take Sandbags.',
   },
 };
 /**
@@ -1314,14 +1240,13 @@ export const COLUMNS: readonly number[] = [500, 760, 1020];
 export type Tier = 'wood' | 'metal' | 'concrete' | 'reinforced';
 /** In upgrade order. */
 export const TIER_ORDER: readonly Tier[] = ['wood', 'metal', 'concrete', 'reinforced'];
-export const TIERS: Readonly<
-  Record<Tier, { readonly name: string; readonly hp: number; readonly cost: Partial<Stock> }>
-> = {
-  wood: { name: 'Wood', hp: 200, cost: { wood: 10, scrap: 5 } },
-  metal: { name: 'Metal', hp: 400, cost: { metal: 10, scrap: 10 } },
-  concrete: { name: 'Concrete', hp: 800, cost: { concrete: 10, scrap: 15 } },
-  reinforced: { name: 'Reinforced', hp: 1600, cost: { concrete: 10, metal: 10, scrap: 20 } },
-};
+export const TIERS: Readonly<Record<Tier, { readonly hp: number; readonly cost: Partial<Stock> }>> =
+  {
+    wood: { hp: 200, cost: { wood: 10, scrap: 5 } },
+    metal: { hp: 400, cost: { metal: 10, scrap: 10 } },
+    concrete: { hp: 800, cost: { concrete: 10, scrap: 15 } },
+    reinforced: { hp: 1600, cost: { concrete: 10, metal: 10, scrap: 20 } },
+  };
 /** A gate has this share of its tier's HP and costs the same. */
 export const GATE_HP = 0.75;
 
@@ -1440,14 +1365,13 @@ export const CAMP_PICK_RANKS = 5;
  * (+%), cash at the start of a horde, repair cost (−%), injury rest (−%), patrol
  * materials and Gas (+%).
  */
-export const CAMP_PICKS: Readonly<Record<CampPickId, { name: string; per: number; text: string }>> =
-  {
-    scavenging: { name: 'Scavenging', per: 5, text: '+5% horde cash per kill' },
-    stockpile: { name: 'Stockpile', per: 10, text: 'Start each horde with +10 cash' },
-    salvage: { name: 'Salvage Crew', per: 10, text: 'Repairs cost 10% less' },
-    medic: { name: 'Field Medic', per: 10, text: 'Injuries heal 10% faster' },
-    foraging: { name: 'Foraging', per: 5, text: '+5% patrol materials and Gas' },
-  };
+export const CAMP_PICKS: Readonly<Record<CampPickId, { per: number }>> = {
+  scavenging: { per: 5 },
+  stockpile: { per: 10 },
+  salvage: { per: 10 },
+  medic: { per: 10 },
+  foraging: { per: 5 },
+};
 /** Names the roster floor's free recruits are given. */
 export const RECRUIT_NAMES: readonly string[] = [
   'Ava',
@@ -1779,7 +1703,6 @@ export type JobEffect =
 export type JobKind = 'fight' | 'self' | 'squad' | 'camp';
 
 export interface Job {
-  readonly name: string;
   readonly kind: JobKind;
   /** A fighting job's guns: its bonus works only with these. */
   readonly guns?: readonly GunBase[];
@@ -1800,32 +1723,27 @@ export interface Job {
  */
 export const JOBS = {
   police: {
-    name: 'Police officer',
     kind: 'fight',
     guns: ['pistol', 'handcannon', 'machinepistol', 'shotgun', 'cartridge'],
     bonus: { reload: 0.36, fireRate: 0.36 },
   },
   soldier: {
-    name: 'Soldier',
     kind: 'fight',
     guns: ['assault', 'lmg'],
     bonus: { spread: 0.3, magazine: 0.3 },
   },
   hunter: {
-    name: 'Hunter',
     kind: 'fight',
     guns: ['sniper', 'rifle'],
     bonus: { crit: 0.24, critDamage: 0.36 },
   },
   guard: {
-    name: 'Security guard',
     kind: 'fight',
     guns: ['smg', 'machinepistol'],
     bonus: { fireRate: 0.3, reload: 0.3 },
   },
   // Survival first (ID-149 retune: the squad is worn down on the line), plus a little wall.
   builder: {
-    name: 'Construction worker',
     kind: 'self',
     bonus: { hp: 70, armour: 2.5, wallHp: 0.1 },
   },
@@ -1833,16 +1751,14 @@ export const JOBS = {
   // `patchUp` is the level's part of their points toward the downed skipping rest
   // (`PATCH_UP`, ID-155): `PATCH_UP.base` more on top, from level 1.
   paramedic: {
-    name: 'Paramedic',
     kind: 'self',
     bonus: { dodge: 0.4, squadHeal: 0.004, patchUp: PATCH_UP.level },
   },
-  mechanic: { name: 'Mechanic', kind: 'squad', bonus: { wallRepair: 0.004 } },
-  chef: { name: 'Chef', kind: 'squad', bonus: { squadHp: 20 } },
-  teacher: { name: 'Teacher', kind: 'squad', bonus: { squadXp: 0.3 } },
-  scavenger: { name: 'Scavenger', kind: 'camp', bonus: { dropChance: 0.3 } },
+  mechanic: { kind: 'squad', bonus: { wallRepair: 0.004 } },
+  chef: { kind: 'squad', bonus: { squadHp: 20 } },
+  teacher: { kind: 'squad', bonus: { squadXp: 0.3 } },
+  scavenger: { kind: 'camp', bonus: { dropChance: 0.3 } },
   student: {
-    name: 'Student',
     kind: 'self',
     // A tenth of the all-round caps on top, and XP.
     bonus: {
@@ -1901,7 +1817,6 @@ export type Branch = 'barriers' | 'skills' | 'perks' | 'power' | 'traps' | 'card
  * barrier tier it unlocks, if any.
  */
 export interface ResearchNode {
-  readonly name: string;
   readonly branch: Branch;
   readonly lab: number;
   readonly needs: ResearchId | null;
@@ -1910,41 +1825,40 @@ export interface ResearchNode {
   readonly tier: Tier | null;
 }
 const node = (
-  name: string,
   branch: Branch,
   lab: number,
   needs: ResearchId | null,
   genes: number,
   minutes: number,
   tier: Tier | null = null,
-): ResearchNode => ({ name, branch, lab, needs, genes, minutes, tier });
+): ResearchNode => ({ branch, lab, needs, genes, minutes, tier });
 /** The research tree (design §11, ID-035 starting points). */
 export const RESEARCH: Readonly<Record<ResearchId, ResearchNode>> = {
-  'metal-walls': node('Metal walls', 'barriers', 1, null, 10, 15, 'metal'),
-  'auto-turret': node('Auto-turret', 'power', 2, 'metal-walls', 40, 60),
+  'metal-walls': node('barriers', 1, null, 10, 15, 'metal'),
+  'auto-turret': node('power', 2, 'metal-walls', 40, 60),
   // Flashbang (10) and Molotov (20, after Flashbang) led here until ID-139 made them cards.
-  airstrike: node('Airstrike', 'skills', 2, null, 60, 60),
-  'scavengers-eye': node("Scavenger's Eye", 'perks', 1, null, 15, 30),
-  fortify: node('Fortify', 'perks', 1, null, 20, 30),
-  'butchers-hunger': node("Butcher's Hunger", 'perks', 1, null, 15, 30),
-  'rally-call': node('Rally Call', 'perks', 1, null, 15, 30),
-  'second-look': node('Second Look', 'perks', 2, null, 60, 60),
-  overclock: node('Overclock', 'perks', 2, 'auto-turret', 80, 90),
-  'power-saver': node('Power Saver', 'perks', 2, 'auto-turret', 80, 90),
-  'perk-slot-2': node('Perk slot 2', 'perks', 1, null, 15, 45),
-  'perk-slot-3': node('Perk slot 3', 'perks', 2, 'perk-slot-2', 120, 90),
-  'perk-slot-4': node('Perk slot 4', 'perks', 2, 'perk-slot-3', 300, 120),
-  'high-capacity-batteries': node('High-capacity batteries', 'power', 2, 'auto-turret', 60, 60),
-  'military-batteries': node('Military batteries', 'power', 2, 'high-capacity-batteries', 200, 120),
-  'sharpened-spikes': node('Sharpened spikes', 'traps', 1, null, 10, 15),
-  'razor-wire': node('Razor wire', 'traps', 1, null, 10, 15),
-  'glue-traps': node('Glue traps', 'traps', 1, null, 20, 30),
-  'incendiary-traps': node('Incendiary traps', 'traps', 2, 'glue-traps', 60, 60),
-  'corrosive-traps': node('Corrosive traps', 'traps', 2, 'glue-traps', 100, 90),
-  'paralyzing-traps': node('Paralyzing traps', 'traps', 2, 'glue-traps', 150, 120),
-  'hollow-points': node('Heavy Rounds card', 'cards', 1, null, 25, 45),
-  'field-repairs': node('Field Repairs card', 'cards', 2, null, 80, 90),
-  'more-cars': node('More cars', 'camp', 2, null, 150, 120),
+  airstrike: node('skills', 2, null, 60, 60),
+  'scavengers-eye': node('perks', 1, null, 15, 30),
+  fortify: node('perks', 1, null, 20, 30),
+  'butchers-hunger': node('perks', 1, null, 15, 30),
+  'rally-call': node('perks', 1, null, 15, 30),
+  'second-look': node('perks', 2, null, 60, 60),
+  overclock: node('perks', 2, 'auto-turret', 80, 90),
+  'power-saver': node('perks', 2, 'auto-turret', 80, 90),
+  'perk-slot-2': node('perks', 1, null, 15, 45),
+  'perk-slot-3': node('perks', 2, 'perk-slot-2', 120, 90),
+  'perk-slot-4': node('perks', 2, 'perk-slot-3', 300, 120),
+  'high-capacity-batteries': node('power', 2, 'auto-turret', 60, 60),
+  'military-batteries': node('power', 2, 'high-capacity-batteries', 200, 120),
+  'sharpened-spikes': node('traps', 1, null, 10, 15),
+  'razor-wire': node('traps', 1, null, 10, 15),
+  'glue-traps': node('traps', 1, null, 20, 30),
+  'incendiary-traps': node('traps', 2, 'glue-traps', 60, 60),
+  'corrosive-traps': node('traps', 2, 'glue-traps', 100, 90),
+  'paralyzing-traps': node('traps', 2, 'glue-traps', 150, 120),
+  'hollow-points': node('cards', 1, null, 25, 45),
+  'field-repairs': node('cards', 2, null, 80, 90),
+  'more-cars': node('camp', 2, null, 150, 120),
 };
 export const RESEARCH_IDS = Object.keys(RESEARCH) as ResearchId[];
 
@@ -2014,13 +1928,11 @@ export const TURRET_RANGE: Readonly<Record<TurretMount, number>> = {
 
 export type Battery = 'makeshift' | 'standard' | 'high-capacity' | 'military';
 /** Charge each battery quality holds, smallest first (design §7, as built ID-015). */
-export const BATTERIES: Readonly<
-  Record<Battery, { readonly name: string; readonly charge: number }>
-> = {
-  makeshift: { name: 'Makeshift', charge: 60 },
-  standard: { name: 'Standard', charge: 100 },
-  'high-capacity': { name: 'High-capacity', charge: 160 },
-  military: { name: 'Military', charge: 250 },
+export const BATTERIES: Readonly<Record<Battery, { readonly charge: number }>> = {
+  makeshift: { charge: 60 },
+  standard: { charge: 100 },
+  'high-capacity': { charge: 160 },
+  military: { charge: 250 },
 };
 export const BATTERY_IDS = Object.keys(BATTERIES) as Battery[];
 /** The bank holds at most this much charge: 10 Standard batteries' worth, more with research (ID-035). */
@@ -2057,15 +1969,14 @@ export const TRAPS: Readonly<
   Record<
     TrapKind,
     {
-      readonly name: string;
       readonly cost: Partial<Stock>;
       readonly damage: number;
       readonly slow: number;
     }
   >
 > = {
-  spikes: { name: 'Spikes', cost: { wood: 15, scrap: 10 }, damage: 8, slow: 1 },
-  wire: { name: 'Barbed wire', cost: { wood: 10, scrap: 15 }, damage: 0, slow: 0.5 },
+  spikes: { cost: { wood: 15, scrap: 10 }, damage: 8, slow: 1 },
+  wire: { cost: { wood: 10, scrap: 15 }, damage: 0, slow: 0.5 },
 };
 export const TRAP_KINDS = Object.keys(TRAPS) as TrapKind[];
 /** Durability a trap is built with; each trigger costs 1, and at 0 it is broken (PM decision D2). */
@@ -2083,10 +1994,10 @@ export type ShopItem = BuffId | 'patch' | 'fix';
  * most damaged standing segment) and a turret fix (`condition` to the most worn turret).
  */
 export const SHOP = {
-  adrenaline: { name: 'Adrenaline', cost: 30, damage: 1.25, fireRate: 1, seconds: 30 },
-  overdrive: { name: 'Overdrive', cost: 30, damage: 1, fireRate: 1.25, seconds: 30 },
-  patch: { name: 'Patch wall', cost: 20, hp: 100 },
-  fix: { name: 'Fix turret', cost: 20, condition: 30 },
+  adrenaline: { cost: 30, damage: 1.25, fireRate: 1, seconds: 30 },
+  overdrive: { cost: 30, damage: 1, fireRate: 1.25, seconds: 30 },
+  patch: { cost: 20, hp: 100 },
+  fix: { cost: 20, condition: 30 },
 } as const;
 export const SHOP_ITEMS = Object.keys(SHOP) as ShopItem[];
 export const BUFF_IDS: readonly BuffId[] = ['adrenaline', 'overdrive'];
@@ -2107,7 +2018,6 @@ export type SkillId = 'airstrike';
  */
 export const SKILLS = {
   airstrike: {
-    name: 'Airstrike',
     aim: 'area',
     area: 260,
     count: 12,
@@ -2141,18 +2051,15 @@ export type PerkId =
   | 'overclock'
   | 'power-saver';
 /** Battlefield-wide effects the commander equips between hordes, one per perk slot. */
-export const PERKS: Readonly<Record<PerkId, { readonly name: string; readonly text: string }>> = {
-  'steady-fire': { name: 'Steady Fire', text: 'Guns fire 12.5% faster' },
-  'scavengers-eye': { name: "Scavenger's Eye", text: '+25% horde cash' },
-  fortify: { name: 'Fortify', text: 'Barrier segments +30% max HP' },
-  'butchers-hunger': {
-    name: "Butcher's Hunger",
-    text: 'Blade and tool kills heal the nearest damaged wall 3 HP',
-  },
-  'rally-call': { name: 'Rally Call', text: 'Recruit cards appear twice as often' },
-  'second-look': { name: 'Second Look', text: 'Extra card rerolls: 1 a wave' },
-  overclock: { name: 'Overclock', text: 'Turrets +20% damage, +10% energy use' },
-  'power-saver': { name: 'Power Saver', text: 'Turrets use 25% less energy' },
+export const PERKS: Readonly<Record<PerkId, true>> = {
+  'steady-fire': true,
+  'scavengers-eye': true,
+  fortify: true,
+  'butchers-hunger': true,
+  'rally-call': true,
+  'second-look': true,
+  overclock: true,
+  'power-saver': true,
 };
 export const PERK_IDS = Object.keys(PERKS) as PerkId[];
 /** The perk a new game has unlocked and equipped; every other one is researched. */
@@ -2204,7 +2111,6 @@ export type LootEntry =
   | { kind: 'anything'; weight: number };
 
 export interface Location {
-  readonly name: string;
   /** Danger tier, 1 (Safe) … 5. */
   readonly tier: number;
   /** Minutes each way, and minutes searching. */
@@ -2230,7 +2136,6 @@ const mat = (id: Material, min: number, max: number, weight: number): LootEntry 
  */
 export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
   'gas-station': {
-    name: 'Gas station',
     tier: 1,
     travel: 5,
     search: 5,
@@ -2243,7 +2148,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     ],
   },
   supermarket: {
-    name: 'Supermarket',
     tier: 1,
     travel: 7,
     search: 6,
@@ -2251,7 +2155,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     loot: [mat('food', 2, 3, 60), { kind: 'battery', id: 'makeshift', weight: 15 }],
   },
   electronics: {
-    name: 'Electronics store',
     tier: 2,
     travel: 15,
     search: 15,
@@ -2263,7 +2166,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     ],
   },
   hardware: {
-    name: 'Hardware store',
     tier: 2,
     travel: 20,
     search: 20,
@@ -2276,7 +2178,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     ],
   },
   pharmacy: {
-    name: 'Pharmacy',
     tier: 2,
     travel: 20,
     search: 20,
@@ -2284,7 +2185,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     loot: [mat('medicine', 1, 3, 60), mat('chemicals', 1, 2, 20)],
   },
   construction: {
-    name: 'Construction site',
     tier: 3,
     travel: 40,
     search: 40,
@@ -2296,7 +2196,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     ],
   },
   police: {
-    name: 'Police station',
     tier: 3,
     travel: 40,
     search: 40,
@@ -2304,7 +2203,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     loot: [{ kind: 'weapon', bases: ['pistol', 'shotgun', 'smg'], weight: 60 }],
   },
   hospital: {
-    name: 'Hospital',
     tier: 4,
     travel: 60,
     search: 60,
@@ -2312,7 +2210,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     loot: [mat('medicine', 3, 6, 60), mat('chemicals', 2, 4, 15), mat('genes', 1, 3, 5)],
   },
   military: {
-    name: 'Military depot',
     tier: 4,
     travel: 80,
     search: 80,
@@ -2324,7 +2221,6 @@ export const LOCATIONS: Readonly<Record<LocationId, Location>> = {
     ],
   },
   crater: {
-    name: 'The crater',
     tier: 5,
     travel: 160,
     search: 160,
@@ -2343,7 +2239,6 @@ export type PlazaId = 'riverside' | 'strip-mall';
 export type PlaceId = LocationId | PlazaId;
 
 export interface Plaza {
-  readonly name: string;
   /** The buildings it holds, in the order they are searched. */
   readonly buildings: readonly LocationId[];
   /** The horde number from which it shows on the map. */
@@ -2353,18 +2248,15 @@ export interface Plaza {
 /** Several buildings in one trip, with a big-horde risk a single building never has (ID-029). */
 export const PLAZAS: Readonly<Record<PlazaId, Plaza>> = {
   riverside: {
-    name: 'Riverside Plaza',
     buildings: ['gas-station', 'pharmacy', 'hardware'],
     reveal: 6,
   },
-  'strip-mall': { name: 'Strip mall', buildings: ['supermarket', 'electronics'], reveal: 3 },
+  'strip-mall': { buildings: ['supermarket', 'electronics'], reveal: 3 },
 };
 export const PLAZA_IDS = Object.keys(PLAZAS) as PlazaId[];
 export const PLACE_IDS: readonly PlaceId[] = [...LOCATION_IDS, ...PLAZA_IDS];
 
 export const isPlaza = (id: PlaceId): id is PlazaId => Object.hasOwn(PLAZAS, id);
-export const placeName = (id: PlaceId): string =>
-  isPlaza(id) ? PLAZAS[id].name : LOCATIONS[id].name;
 /** The buildings a trip to `id` can search: a plaza's, or the location itself. */
 export const buildingsOf = (id: PlaceId): readonly LocationId[] =>
   isPlaza(id) ? PLAZAS[id].buildings : [id];
@@ -2402,9 +2294,9 @@ export function focusOf(e: LootEntry): Focus | null {
  * the factor on the death and wipe odds.
  */
 export const ORDERS = {
-  loot: { name: 'Save the loot', keep: 0.8, risk: 1.25 },
-  balanced: { name: 'Balanced', keep: 0.4, risk: 1 },
-  people: { name: 'Save the people', keep: 0, risk: 0.5 },
+  loot: { keep: 0.8, risk: 1.25 },
+  balanced: { keep: 0.4, risk: 1 },
+  people: { keep: 0, risk: 0.5 },
 } as const;
 export type Order = keyof typeof ORDERS;
 export const ORDER_IDS = Object.keys(ORDERS) as Order[];
@@ -2554,115 +2446,84 @@ export const TECH_IDS = [
 ] as const;
 export type TechId = (typeof TECH_IDS)[number];
 export type TechBranch = 'wall' | 'wire' | 'ammo' | 'mortars';
-/** The chart's rows, top to bottom. */
-export const TECH_BRANCHES: readonly { id: TechBranch; name: string }[] = [
-  { id: 'wall', name: 'Wall' },
-  { id: 'wire', name: 'Barbed Wire' },
-  { id: 'ammo', name: 'Ammo' },
-  { id: 'mortars', name: 'Mortars' },
-];
+/** The chart's rows, top to bottom (their names are `TECH_BRANCH_NAME`, ui/text/names.ts). */
+export const TECH_BRANCHES: readonly TechBranch[] = ['wall', 'wire', 'ammo', 'mortars'];
+/** A node's numbers; its name and effect words are `TECH_NAME` / `TECH_EFFECT` (ui/text/names.ts). */
 export interface TechNode {
-  name: string;
   branch: TechBranch;
   tier: 1 | 2 | 3;
   /** Scrap. */
   cost: number;
   /** The node that has to be researched first; null for a Tier 1 node. */
   needs: TechId | null;
-  /** What it does, in the detail panel and a Tier 3 confirm. */
-  effect: string;
 }
 /** The nodes, one per id; the Scrap costs add up to 9,300. */
 export const TECH: Readonly<Record<TechId, TechNode>> = {
   'reinforced-wall': {
-    name: 'Reinforced Wall',
     branch: 'wall',
     tier: 1,
     cost: 200,
     needs: null,
-    effect: 'Wall HP +15% in every fight.',
   },
   'steel-plating': {
-    name: 'Steel Plating',
     branch: 'wall',
     tier: 2,
     cost: 600,
     needs: 'reinforced-wall',
-    effect: 'Wall HP +30% in every fight, in place of the +15%.',
   },
   'spiked-wall': {
-    name: 'Spiked Wall',
     branch: 'wall',
     tier: 3,
     cost: 1500,
     needs: 'steel-plating',
-    effect: "Crawlers climbing the wall lose 20% of a Shambler's HP a second.",
   },
   'razor-wire': {
-    name: 'Razor Wire',
     branch: 'wire',
     tier: 1,
     cost: 200,
     needs: null,
-    effect: "Barbed Wire's bleed +25%.",
   },
   'thick-coils': {
-    name: 'Thick Coils',
     branch: 'wire',
     tier: 2,
     cost: 600,
     needs: 'razor-wire',
-    effect: 'Barbed Wire rows have +50% HP.',
   },
   'electric-wire': {
-    name: 'Electric Wire',
     branch: 'wire',
     tier: 3,
     cost: 1500,
     needs: 'thick-coils',
-    effect:
-      "An enemy entering Barbed Wire is stunned for 1 s (then can't be stunned again for 3 s).",
   },
   'hand-loads': {
-    name: 'Hand-loads',
     branch: 'ammo',
     tier: 1,
     cost: 400,
     needs: null,
-    effect:
-      'When you pick one of these cards, it is 10% stronger: Heavy Rounds, Incendiary Rounds, Shock Rounds, Piercing Rounds, Scavenged Ammo.',
   },
   'armour-piercing': {
-    name: 'Armour-piercing',
     branch: 'ammo',
     tier: 2,
     cost: 1200,
     needs: 'hand-loads',
-    effect: 'While the squad holds one of those five ammo cards, its bullets ignore 20% of armour.',
   },
   'quick-mortars': {
-    name: 'Quick Mortars',
     branch: 'mortars',
     tier: 1,
     cost: 300,
     needs: null,
-    effect: 'Oil Bomb fires every 16 s instead of 20 (the first throw is as soon as ever).',
   },
   'wide-slick': {
-    name: 'Wide Slick',
     branch: 'mortars',
     tier: 2,
     cost: 800,
     needs: 'quick-mortars',
-    effect: 'Oil Bomb slicks are 25% wider.',
   },
   'napalm-mortar': {
-    name: 'Napalm Mortar',
     branch: 'mortars',
     tier: 3,
     cost: 2000,
     needs: 'wide-slick',
-    effect: 'Oil Bomb slicks land already burning, and stay for their full 10 s.',
   },
 };
 /** The effect numbers of the nodes (ID-263), starting points; Spiked Wall's `spikes` is the first lever. */

@@ -238,7 +238,7 @@ describe('survivors from patrols (design §10)', () => {
     const g = backFrom(p);
     const s = g.reports.at(-1)!.survivors[0]!;
     const r = acceptSurvivor(g, p.no, s.id);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster.at(-1)).toEqual(survivorDefender(s));
     expect(r.game.reports.at(-1)!.survivors.map((x) => x.id)).not.toContain(s.id);
     expect(ownedWeapons(r.game).map((w) => w.uid)).toContain(s.id);
@@ -249,7 +249,7 @@ describe('survivors from patrols (design §10)', () => {
     const g = backFrom(p);
     const [s] = g.reports.at(-1)!.survivors;
     const r = turnAway(g, p.no, s!.id);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster).toEqual(g.roster);
     expect(r.game.reports.at(-1)!.survivors).toEqual(g.reports.at(-1)!.survivors.slice(1));
   });
@@ -259,10 +259,10 @@ describe('survivors from patrols (design §10)', () => {
     const g = backFrom(p);
     const s = g.reports.at(-1)!.survivors[0]!;
     const crowded = full(g);
-    expect(acceptSurvivor(crowded, p.no, s.id)).toEqual({ ok: false, reason: 'The camp is full' });
+    expect(acceptSurvivor(crowded, p.no, s.id)).toEqual({ ok: false, code: 'camp-full' });
     expect(acceptSurvivor(stuffed(g), p.no, s.id)).toEqual({
       ok: false,
-      reason: 'The armoury is full',
+      code: 'armoury-full',
     });
     // Still waiting: free a slot and they can come in.
     expect(crowded.reports.at(-1)!.survivors).toContainEqual(s);
@@ -279,7 +279,7 @@ describe('survivors from patrols (design §10)', () => {
     expect(() => acceptSurvivor(g, p.no, 'bob')).toThrow(RangeError);
     expect(() => turnAway(g, p.no, '__proto__')).toThrow(RangeError);
     const once = turnAway(g, p.no, s.id);
-    if (!once.ok) throw new Error(once.reason);
+    if (!once.ok) throw new Error(once.code);
     expect(() => acceptSurvivor(once.game, p.no, s.id)).toThrow(RangeError);
   });
 });
@@ -348,13 +348,13 @@ describe('a survivor in a camp level-up offer (design §11)', () => {
     const after = finishHorde(g, h, NOW);
     expect(after.camp.offers).toEqual([offer]);
     const r = takeCampPick(after, 'join');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster.at(-1)).toEqual(survivorDefender(offer.survivor!));
     expect(r.game.camp.offers).toEqual([]);
     expect(r.game.camp.picks).toEqual(after.camp.picks);
     // The HUD walks the same choice on the camp alone.
     const hud = campAfterPick(after.camp, 'join');
-    if (!hud.ok) throw new Error(hud.reason);
+    if (!hud.ok) throw new Error(hud.code);
     expect(hud.camp).toEqual(r.game.camp);
   });
 
@@ -363,7 +363,7 @@ describe('a survivor in a camp level-up offer (design §11)', () => {
     const { h, offer } = joining(g);
     const after = finishHorde(g, h, NOW);
     const r = takeCampPick(after, offer.picks[0]!);
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.game.roster).toEqual(after.roster);
     expect(r.game.camp.offers).toEqual([]);
     expect(r.game.camp.picks[offer.picks[0]!]).toBe(1);
@@ -373,11 +373,11 @@ describe('a survivor in a camp level-up offer (design §11)', () => {
     const g = near();
     const { h } = joining(g);
     const after = full(finishHorde(g, h, NOW));
-    expect(joinLock(after)).toBe('The camp is full');
-    expect(takeCampPick(after, 'join')).toEqual({ ok: false, reason: 'The camp is full' });
+    expect(joinLock(after)).toEqual({ ok: false, code: 'camp-full' });
+    expect(takeCampPick(after, 'join')).toEqual({ ok: false, code: 'camp-full' });
     expect(takeCampPick(stuffed(finishHorde(g, h, NOW)), 'join')).toEqual({
       ok: false,
-      reason: 'The armoury is full',
+      code: 'armoury-full',
     });
   });
 
@@ -403,7 +403,7 @@ describe('a survivor in a camp level-up offer (design §11)', () => {
     // Full or not, an offer of a survivor alone can always be answered.
     for (const game of [g, full(g)]) {
       const r = takeCampPick(game, 'away');
-      if (!r.ok) throw new Error(r.reason);
+      if (!r.ok) throw new Error(r.code);
       expect(r.game.camp.offers).toEqual([]);
       expect(r.game.camp.picks).toEqual(game.camp.picks);
       expect(r.game.roster).toEqual(game.roster);
@@ -425,7 +425,7 @@ describe('a survivor in a camp level-up offer (design §11)', () => {
       ],
     };
     const r = campAfterPick(camp, 'medic');
-    if (!r.ok) throw new Error(r.reason);
+    if (!r.ok) throw new Error(r.code);
     expect(r.camp.offers).toEqual([{ picks: [], survivor: s }]);
   });
 });

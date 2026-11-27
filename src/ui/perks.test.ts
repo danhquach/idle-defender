@@ -1,9 +1,10 @@
 // Design §5, as built ID-021 and ID-035: the perk loadout's lines, its Equip/Unequip
 // dry runs and perk level upgrades.
 import { describe, expect, it } from 'vitest';
-import { PERK_IDS, PERKS, type PerkId, type ResearchId } from '../core/data.ts';
+import { PERK_IDS, type PerkId, type ResearchId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { MAX_PERK_SLOTS, perkLines, perkText, researchText, type PerkLine } from './perks.ts';
+import { refusedText, PERK_NAME } from './text/index.ts';
 
 /** A new game with `research` done (its perks owned) and `perks` equipped (no costs: the lines only read). */
 function game(research: ResearchId[] = [], perks: PerkId[] = ['steady-fire']): GameState {
@@ -64,10 +65,9 @@ describe('perk loadout lines', () => {
   it('a researched perk with full slots: Equip is refused with the core reason', () => {
     const lines = perkLines(game(['fortify']), 0);
     expect(texts(lines)).toContain('Fortify: Barrier segments +30% max HP · level 1 of 3');
-    expect(action(lines, 'Equip Fortify')).toEqual({
-      ok: false,
-      reason: 'All perk slots are full',
-    });
+    const refused = action(lines, 'Equip Fortify');
+    expect(refused).toEqual({ ok: false, code: 'perk-slots-full' });
+    expect(refused && !refused.ok && refusedText(refused)).toBe('All perk slots are full');
   });
 
   it('a free slot: Equip gives the game with the perk in the next slot', () => {
@@ -85,7 +85,7 @@ describe('perk loadout lines', () => {
   it('Unequip empties the slot and the perk can be equipped again (a swap)', () => {
     const g = game(['fortify']);
     const out = action(perkLines(g, 0), 'Unequip Steady Fire');
-    if (!out.ok) throw new Error(out.reason);
+    if (!out.ok) throw new Error(out.code);
     expect(out.game.perks).toEqual([]);
     const lines = perkLines(out.game, 0);
     expect(texts(lines)).toContain('Slot 1 · Empty');
@@ -152,7 +152,7 @@ describe('perk loadout lines', () => {
     const lines = texts(perkLines(newGame(), 0));
     const perks = lines.slice(lines.indexOf('Perks') + 1);
     for (const id of PERK_IDS) {
-      expect(perks.filter((t) => t.startsWith(`${PERKS[id].name}:`))).toHaveLength(1);
+      expect(perks.filter((t) => t.startsWith(`${PERK_NAME[id]}:`))).toHaveLength(1);
     }
   });
 });

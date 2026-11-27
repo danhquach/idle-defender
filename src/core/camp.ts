@@ -31,6 +31,7 @@ import { isGun } from './loadout.ts';
 import { pay, type GameResult } from './research.ts';
 import { chance, createRng, int, pick, type Rng } from './rng.ts';
 import { xpForLevel } from './stats.ts';
+import type { Refusal } from './refusal.ts';
 
 /**
  * Someone who wants to join the camp (design §10 Survivors), rolled once and shown as
@@ -100,9 +101,9 @@ export const campUpgradeCost = (game: Pick<GameState, 'camp'>): Partial<Stock> |
 /** Buys the next camp upgrade: `CAMP_SIZE.perUpgrade` more slots. */
 export function upgradeCamp(game: GameState): GameResult {
   const cost = campUpgradeCost(game);
-  if (!cost) return { ok: false, reason: 'The camp is as big as it gets' };
+  if (!cost) return { ok: false, code: 'camp-max' };
   if (MATERIALS.some((m) => game.stock[m] < (cost[m] ?? 0))) {
-    return { ok: false, reason: 'Not enough materials', short: true };
+    return { ok: false, code: 'short-materials', short: true };
   }
   const stock = { ...game.stock };
   for (const m of MATERIALS) stock[m] -= cost[m] ?? 0;
@@ -119,12 +120,7 @@ export const carLimit = (game: { readonly research: readonly ResearchId[] }): nu
 /** Builds a car (design §10 Vehicle): the first needs no research; more come from it (ID-035). */
 export function buildCar(game: GameState): GameResult {
   if (game.camp.cars >= carLimit(game)) {
-    return {
-      ok: false,
-      reason: game.research.includes('more-cars')
-        ? 'The camp has all its cars'
-        : 'More cars come with research',
-    };
+    return { ok: false, code: game.research.includes('more-cars') ? 'cars-max' : 'cars-research' };
   }
   return pay(game, CAR.cost, (g) => {
     g.camp.cars += 1;
@@ -132,13 +128,15 @@ export function buildCar(game: GameState): GameResult {
 }
 
 /** Why defender `id` can't be dismissed, or null when they can. */
-export function dismissLock(game: GameState, id: string): string | null {
+export function dismissLock(game: GameState, id: string): Refusal | null {
   const d = game.roster.find((r) => r.id === id);
   if (!d) throw new RangeError(`dismiss: no defender ${String(id)}`);
   if (game.roster.length <= CAMP_SIZE.floor) {
-    return `Not while ${CAMP_SIZE.floor} or fewer are alive`;
+    return { ok: false, code: 'dismiss-floor', floor: CAMP_SIZE.floor };
   }
-  if (game.patrols.some((p) => p.members.includes(id))) return `${d.name} is on patrol`;
+  if (game.patrols.some((p) => p.members.includes(id))) {
+    return { ok: false, code: 'on-patrol', who: d.name };
+  }
   return null;
 }
 
@@ -147,8 +145,8 @@ export function dismissLock(game: GameState, id: string): string | null {
  * to the armoury, which always has room: a carried weapon already counts towards it.
  */
 export function dismiss(game: GameState, id: string): GameResult {
-  const reason = dismissLock(game, id);
-  if (reason !== null) return { ok: false, reason };
+  const why = dismissLock(game, id);
+  if (why !== null) return why;
   const d = game.roster.find((r) => r.id === id)!;
   const kept = [d.loadout.primary, d.loadout.secondary].filter(isOwned);
   return {
@@ -227,12 +225,12 @@ export function hordeCampOffers(
 export function campAfterPick<T extends Pick<Camp, 'picks' | 'offers'>>(
   camp: T,
   choice: CampChoice,
-): { ok: true; camp: T } | { ok: false; reason: string } {
+): { ok: true; camp: T } | Refusal {
   const offer = camp.offers[0];
-  if (!offer) return { ok: false, reason: 'No camp pick waiting' };
+  if (!offer) return { ok: false, code: 'no-camp-pick' };
   const answer = choice === 'join' || choice === 'away';
   if (answer ? offer.survivor === null : !offer.picks.includes(choice)) {
-    return { ok: false, reason: `${String(choice)} isn't on offer` };
+    return { ok: false, code: 'not-on-offer', choice };
   }
   const picks = answer ? camp.picks : { ...camp.picks, [choice]: camp.picks[choice] + 1 };
   const offers = camp.offers
@@ -250,7 +248,7 @@ export function takeCampPick(game: GameState, choice: CampChoice): GameResult {
   const survivor = game.camp.offers[0]?.survivor ?? null;
   if (choice === 'join' && survivor !== null) {
     const lock = joinLock(game);
-    if (lock !== null) return { ok: false, reason: lock };
+    if (lock !== null) return lock;
   }
   const r = campAfterPick(game.camp, choice);
   if (!r.ok) return r;
@@ -299,14 +297,14 @@ export const roomOf = (game: GameState): Room => ({
 });
 
 /** Why a survivor can't join with `room` left, or null when they can. */
-export function roomLock(room: Room): string | null {
-  if (room.people < 1) return 'The camp is full';
-  if (room.weapons < 1) return 'The armoury is full';
+export function roomLock(room: Room): Refusal | null {
+  if (room.people < 1) return { ok: false, code: 'camp-full' };
+  if (room.weapons < 1) return { ok: false, code: 'armoury-full' };
   return null;
 }
 
 /** Why a survivor can't join now, or null when they can: a camp slot and armoury room for their weapon. */
-export const joinLock = (game: GameState): string | null => roomLock(roomOf(game));
+export const joinLock = (game: GameState): Refusal | null => roomLock(roomOf(game));
 
 /** Report `no`'s undecided survivor `id`; unknown ones throw. */
 function waiting(game: GameState, no: number, id: string): Survivor {
@@ -327,7 +325,7 @@ const withoutSurvivor = (game: GameState, no: number, id: string): GameState => 
 export function acceptSurvivor(game: GameState, no: number, id: string): GameResult {
   const s = waiting(game, no, id);
   const lock = joinLock(game);
-  if (lock !== null) return { ok: false, reason: lock };
+  if (lock !== null) return lock;
   const g = withoutSurvivor(game, no, id);
   return { ok: true, game: { ...g, roster: [...g.roster, survivorDefender(s)] } };
 }
@@ -364,9 +362,9 @@ export function treat(game: GameState, id: string, item: Treatment, now: number)
   if (!d) throw new RangeError(`treat: no defender ${String(id)}`);
   if (!Object.hasOwn(TREATMENT_MS, item)) throw new RangeError(`treat: no item ${String(item)}`);
   if (d.injuredUntil === null || now >= d.injuredUntil) {
-    return { ok: false, reason: `${d.name} isn't injured` };
+    return { ok: false, code: 'not-injured', who: d.name };
   }
-  if (game.stock[item] < 1) return { ok: false, reason: `No ${item} left`, short: true };
+  if (game.stock[item] < 1) return { ok: false, code: 'no-item', item, short: true };
   const until = d.injuredUntil - TREATMENT_MS[item];
   return {
     ok: true,
