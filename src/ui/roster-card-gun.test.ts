@@ -280,7 +280,7 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     expect(tab.closest('.rv-bench')).toBeNull();
     expect(tab.querySelector<HTMLElement>('.rv-tab-gun')!.dataset.rarity).toBe('relic');
     const tile = rosterTiles(now, NOW, null).find((t) => t.id === 'recruit-7')!;
-    expect(tab.querySelector('.rv-tab-dps')!.textContent).toBe(tile.dps);
+    expect(tab.querySelector('.rv-tab-dps')!.textContent).toBe(tile.dpsCard);
     const suits = tile.fits ? `, suits a ${tile.job}` : '';
     expect(
       tab
