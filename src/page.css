@@ -1157,7 +1157,7 @@ button[data-card='tar-moat'] .hud-held-icon {
    and the XP bar (64 px each side). */
 .hud-result {
   box-sizing: border-box;
-  max-height: calc(100vh - 128px);
+  max-height: calc(100dvh - 128px);
   overflow-y: auto;
 }
 
@@ -1180,7 +1180,7 @@ button[data-card='tar-moat'] .hud-held-icon {
   flex-direction: column;
   width: min(680px, calc(100vw - 32px));
   height: auto;
-  max-height: calc(100vh - 128px);
+  max-height: calc(100dvh - 128px);
   padding: 0;
   overflow: hidden;
   text-align: left;
@@ -1767,7 +1767,7 @@ button[data-card='tar-moat'] .hud-held-icon {
 @media (max-width: 480px) {
   .hud-result.hud-debrief {
     top: calc(50% + 44px);
-    max-height: calc(100vh - 120px);
+    max-height: calc(100dvh - 120px);
   }
 
   .hud-debrief .hud-result-head,
@@ -1836,7 +1836,7 @@ button[data-card='tar-moat'] .hud-held-icon {
 @media (max-height: 540px) {
   .hud-result.hud-debrief {
     top: 38px;
-    max-height: calc(100vh - 38px - var(--space-6));
+    max-height: calc(100dvh - 38px - var(--space-6));
     transform: translateX(-50%);
   }
 
@@ -7285,7 +7285,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     /* Opaque, so the XP bar behind it doesn't show through the heading. */
     background: var(--color-panel-solid);
     width: calc(100vw - 2 * var(--space-16));
-    max-height: calc(100vh - 2 * var(--space-16));
+    max-height: calc(100dvh - 2 * var(--space-16));
     overflow-x: hidden;
     overflow-y: auto;
     padding: var(--space-16);
@@ -7523,7 +7523,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: flex;
   flex-direction: column;
   gap: var(--space-10);
-  padding-top: clamp(var(--space-16), 7vh, 96px);
+  padding-top: clamp(var(--space-16), 7dvh, 96px);
 }
 
 .intro-foot {
@@ -7532,7 +7532,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   flex-direction: column;
   gap: var(--space-12);
   /* Clear of a phone's home bar. */
-  padding-bottom: calc(clamp(var(--space-8), 4vh, 48px) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(clamp(var(--space-8), 4dvh, 48px) + env(safe-area-inset-bottom, 0px));
 }
 
 /* The confirm and the card stay boxed, so their text reads over the art. */
@@ -7560,7 +7560,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   width: 100%;
   height: auto;
   /* A landscape phone: the logo shrinks (centred) so the buttons still fit. */
-  max-height: 32vh;
+  max-height: 32dvh;
   font-family: var(--font-title);
 }
 
@@ -7709,7 +7709,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   box-sizing: border-box;
   width: 288px;
   max-width: calc(100vw - 2 * var(--space-8));
-  max-height: calc(100vh - 90px);
+  max-height: calc(100dvh - 90px);
   overflow-y: auto;
   padding: var(--space-8) var(--space-10);
   border: 1px solid var(--color-danger);
@@ -7910,7 +7910,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .hud-cards {
     top: 34px;
     box-sizing: border-box;
-    max-height: calc(100vh - 34px - var(--space-4));
+    max-height: calc(100dvh - 34px - var(--space-4));
     overflow-y: auto;
     transform: translateX(-50%);
     padding: var(--space-6) var(--space-12) var(--space-8);
