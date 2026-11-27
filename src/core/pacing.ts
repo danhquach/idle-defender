@@ -2,6 +2,8 @@
 // fight drags; too fast and a squad is buried. Retune a horde by editing a row of
 // `SQUAD_PACE` (or `FULL_PACE`); nothing else reads these numbers. Pure.
 
+import { waveCount, waveSize } from './waves.ts';
+
 /** How a horde's waves come. */
 export interface Pace {
   /** Seconds between two spawns (a swarm wave's `SWARM.size` times as many in the same time). */
@@ -54,4 +56,19 @@ export function nextWaveDue(pace: Pace, alive: number, size: number): boolean {
   if (pace.overlap >= 1) return true;
   if (pace.overlap <= 0) return alive === 0;
   return alive <= pace.overlap * size;
+}
+
+/**
+ * How long horde-only Horde `n`'s waves take to spawn, in fight seconds (ID-102): each
+ * wave's enemies its pacing's `interval` apart (a swarm wave's twice as many in the same
+ * time), and the break before it. With waves overlapping (ID-128), about a fight's length.
+ * A partial overlap (ID-171, `Pace.overlap`) is left out: it makes a fight a little longer
+ * than this, so Recommended Power asks a little more than the horde needs, the safe side.
+ */
+export function hordeSeconds(n: number): number {
+  const pace = wavePace(n, true);
+  let total = 0;
+  for (let w = 1; w <= waveCount(n); w++)
+    total += waveSize(n, w, true) * pace.interval + pace.break;
+  return total;
 }

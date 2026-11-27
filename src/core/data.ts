@@ -1506,6 +1506,27 @@ export const CARD = {
     burnFor: 3,
   },
   /**
+   * Wall Machine Gun (ID-264, research): one gun mid-wall on the outermost built layer fires a
+   * `burst` of rounds every `every` s at the nearest enemy outside the camp (reach `range` px,
+   * no spread, no pierce). It deals `share` of the horde's demand rate a second (`hordeHp` over
+   * `hordeSeconds`), fixed at the fight's start; each round is `gap` px behind the last.
+   */
+  wallGun: { share: 0.27, every: 2, burst: 6, range: 2000, gap: 70 },
+  /**
+   * Shock Net (ID-264, research): every `every` s each enemy in the wire band (`CARD.wire`'s
+   * `from`–`to`) that a Flashbang could stun, and not netted in the last `seconds`, is stunned
+   * `seconds` s. It never writes the Flashbang's daze clock.
+   */
+  net: { every: 6, seconds: 2 },
+  /**
+   * Tar Moat (ID-264, research): a strip `depth` px deep along the outermost wall face; enemies
+   * inside move `slow` slower. A full moat lights `fuse` s after the first enemy steps in, or
+   * at once from a lit slick, a Molotov fire or an Incendiary hit inside. Lit, it burns everyone
+   * inside for `burn` of this wave's Shambler HP a second for `CARD.oil.burnFor` s, then is gone
+   * and refills `refill` s later.
+   */
+  moat: { depth: 60, slow: 0.4, fuse: 2, burn: 0.1, refill: 10 },
+  /**
    * Concussion Rounds (was Stopping Power): px of knock-back per point of damage dealt;
    * `heavy` of it for the big kinds; none again until `gap` s after the last push, and at
    * most `cap` px in all for each enemy (ID-124). Each such hit also dazes the enemy for
@@ -2443,6 +2464,10 @@ export const TECH_IDS = [
   'quick-mortars',
   'wide-slick',
   'napalm-mortar',
+  // Tier 4 (ID-264): each needs two parents, and gives a card (`TECH_CARD`).
+  'wall-machine-gun',
+  'shock-net',
+  'tar-moat',
 ] as const;
 export type TechId = (typeof TECH_IDS)[number];
 export type TechBranch = 'wall' | 'wire' | 'ammo' | 'mortars';
@@ -2451,81 +2476,105 @@ export const TECH_BRANCHES: readonly TechBranch[] = ['wall', 'wire', 'ammo', 'mo
 /** A node's numbers; its name and effect words are `TECH_NAME` / `TECH_EFFECT` (ui/text/names.ts). */
 export interface TechNode {
   branch: TechBranch;
-  tier: 1 | 2 | 3;
+  tier: 1 | 2 | 3 | 4;
   /** Scrap. */
   cost: number;
-  /** The node that has to be researched first; null for a Tier 1 node. */
-  needs: TechId | null;
+  /** The nodes that all have to be researched first, the same-row parent first; none for a Tier 1 node. */
+  needs: readonly TechId[];
 }
-/** The nodes, one per id; the Scrap costs add up to 9,300. */
+/** The nodes, one per id; the Scrap costs add up to 25,800 (Tiers 1 to 3: 9,300). */
 export const TECH: Readonly<Record<TechId, TechNode>> = {
   'reinforced-wall': {
     branch: 'wall',
     tier: 1,
     cost: 200,
-    needs: null,
+    needs: [],
   },
   'steel-plating': {
     branch: 'wall',
     tier: 2,
     cost: 600,
-    needs: 'reinforced-wall',
+    needs: ['reinforced-wall'],
   },
   'spiked-wall': {
     branch: 'wall',
     tier: 3,
     cost: 1500,
-    needs: 'steel-plating',
+    needs: ['steel-plating'],
   },
   'razor-wire': {
     branch: 'wire',
     tier: 1,
     cost: 200,
-    needs: null,
+    needs: [],
   },
   'thick-coils': {
     branch: 'wire',
     tier: 2,
     cost: 600,
-    needs: 'razor-wire',
+    needs: ['razor-wire'],
   },
   'electric-wire': {
     branch: 'wire',
     tier: 3,
     cost: 1500,
-    needs: 'thick-coils',
+    needs: ['thick-coils'],
   },
   'hand-loads': {
     branch: 'ammo',
     tier: 1,
     cost: 400,
-    needs: null,
+    needs: [],
   },
   'armour-piercing': {
     branch: 'ammo',
     tier: 2,
     cost: 1200,
-    needs: 'hand-loads',
+    needs: ['hand-loads'],
   },
   'quick-mortars': {
     branch: 'mortars',
     tier: 1,
     cost: 300,
-    needs: null,
+    needs: [],
   },
   'wide-slick': {
     branch: 'mortars',
     tier: 2,
     cost: 800,
-    needs: 'quick-mortars',
+    needs: ['quick-mortars'],
   },
   'napalm-mortar': {
     branch: 'mortars',
     tier: 3,
     cost: 2000,
-    needs: 'wide-slick',
+    needs: ['wide-slick'],
+  },
+  'wall-machine-gun': {
+    branch: 'ammo',
+    tier: 4,
+    cost: 6000,
+    needs: ['armour-piercing', 'spiked-wall'],
+  },
+  'shock-net': {
+    branch: 'wire',
+    tier: 4,
+    cost: 5500,
+    needs: ['electric-wire', 'steel-plating'],
+  },
+  'tar-moat': {
+    branch: 'mortars',
+    tier: 4,
+    cost: 5000,
+    needs: ['napalm-mortar', 'spiked-wall'],
   },
 };
+/** The card a Tier 4 node puts in the fight's pool (ID-264); its id is the node's. */
+export const TECH_CARD = {
+  'wall-machine-gun': 'wall-machine-gun',
+  'shock-net': 'shock-net',
+  'tar-moat': 'tar-moat',
+} as const;
 /** The effect numbers of the nodes (ID-263), starting points; Spiked Wall's `spikes` is the first lever. */
 export const TECH_FX = {
   /** Wall HP share added; the highest researched counts, not the sum. */

@@ -33,8 +33,10 @@ import {
   withoutBlueprint,
   blueprintCount,
 } from './craft.ts';
-import { isModeCard, UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
+import { isModeCard, isTechCard, UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
 import {
+  CARD,
+  TECH_CARD,
   COLUMNS,
   COMBINE_COUNT,
   DEFENDER_HP,
@@ -131,6 +133,7 @@ import type { CampAct, Refusal } from './refusal.ts';
 import { techOf } from './techtree.ts';
 import { classOf, fitContext, memberSums, powerOver, type FitContext } from './traits.ts';
 import { themeCleared, themeOf, THEME_GUN_STREAM, withCleared } from './themes.ts';
+import { hordeSeconds } from './pacing.ts';
 import { enemyHp, swarmWave, themeMix, themeScale, waveCount, waveMix, waveSize } from './waves.ts';
 import {
   fieldBonus,
@@ -152,7 +155,8 @@ export const SQUAD_CARD_CATEGORIES: readonly CardCategory[] = ['stat', 'behaviou
  */
 export const SQUAD_CARDS: readonly UpgradeId[] = UPGRADE_IDS.filter(
   // The mode cards (ID-222) join a fight's pool only through `modeCards`.
-  (id) => SQUAD_CARD_CATEGORIES.includes(UPGRADES[id].category) && !isModeCard(id),
+  (id) =>
+    SQUAD_CARD_CATEGORIES.includes(UPGRADES[id].category) && !isModeCard(id) && !isTechCard(id),
 );
 
 /**
@@ -865,7 +869,7 @@ export function startSquadHorde(
     research: squadUnlocks(game),
     cashRate: 0,
     startCash: 0,
-    cards: [...SQUAD_CARDS, ...modeCards(game)],
+    cards: [...SQUAD_CARDS, ...modeCards(game), ...techCards(game)],
     hpScale: squadHpScale(eff, squad.length) * MODES[mode].hpScale,
     xpRate: SQUAD_XP_RATE,
     line: line.slots,
@@ -876,6 +880,12 @@ export function startSquadHorde(
     tech: techOf(game),
   });
   if (mode !== 'normal') s.mode = mode;
+  // Wall Machine Gun (ID-264): its damage a second is a share of the horde's demand rate, fixed
+  // here from the horde's HP (by kind, theme included) over the time its waves take. No RNG.
+  if (techOf(game).includes('wall-machine-gun')) {
+    const demand = hordeKindHp(eff, mode, squad.length, theme).reduce((sum, [, hp]) => sum + hp, 0);
+    s.gunDps = (CARD.wallGun.share * demand) / hordeSeconds(eff);
+  }
   // The rest of the squad take their slots too.
   squad.slice(1).forEach((spec, k) => {
     const post = s.posts[postOf(k + 1)]!;
@@ -1165,6 +1175,10 @@ export const squadUnlocks = (game: Pick<GameState, 'hordeNumber'>): ResearchCard
 
 /** The horde numbers of a mode's boss hordes that unlock a mode card (ID-222). */
 const MODE_UNLOCK_HORDES = [10, 20, 30] as const;
+
+/** The Tier 4 cards (ID-264) the researched nodes put in the fight's pool, in `TECH_IDS` order. */
+export const techCards = (game: Pick<GameState, 'tech'>): UpgradeId[] =>
+  techOf(game).flatMap((id) => (id in TECH_CARD ? [TECH_CARD[id as keyof typeof TECH_CARD]] : []));
 
 /**
  * The mode cards the fight being played starts with in its card pool (ID-222): every card of

@@ -689,6 +689,17 @@ body {
   object-fit: contain;
 }
 
+/* The Tar Moat's art is a long, near-black band: the icon crops it to a square (its left end,
+   the wavy edge and the gloss) so it fills the tile, brightened with a light rim so it reads as
+   shiny tar and not a black bar (ID-264). */
+.hud-card-icon[data-card='tar-moat'],
+button[data-card='tar-moat'] .hud-held-icon {
+  object-fit: cover;
+  object-position: 12% 50%;
+  filter: brightness(2.4) contrast(1.25) saturate(1.4) drop-shadow(0 0 1px var(--color-text))
+    drop-shadow(0 0 3px var(--color-text));
+}
+
 /* A recruit's avatar is a tall, thin figure: it fills the plate's height instead. */
 .hud-card-recruit .hud-card-icon {
   width: 100%;
@@ -9514,8 +9525,9 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* The Research Center (ID-263): the chart (branches down, tiers across, a line from each node
-   to what it unlocks) beside a detail panel, content-sized. The lines are one SVG over the
-   tier columns: the grid has equal rows and columns, so a line's ends are cell centres and no
+   to what it unlocks) beside a detail panel, content-sized. ID-264 adds a fourth tier column, the
+   combos, with a purple edge and a line from each of their two parents. The lines are one SVG
+   over the tier columns: the grid has equal rows and columns, so a line's ends are cell centres and no
    layout is measured. A narrow window stacks the panel under the chart, which scrolls sideways. */
 .research-body {
   display: flex;
@@ -9535,33 +9547,53 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 .research-chart {
   display: grid;
-  grid-template-columns: 72px repeat(3, minmax(124px, 1fr));
+  grid-template-columns: 72px repeat(4, minmax(124px, 1fr));
   grid-template-rows: auto repeat(4, 72px);
-  min-width: 444px;
+  min-width: 568px;
 }
 
-/* Wide enough for the chart (444px) beside the panel (260px) without scrolling; its own dialog,
+/* Wide enough for the chart (568px) beside the panel (260px) without scrolling; its own dialog,
    so no tab strip moves. */
 .camp-dialog[data-tab='upgrades'] {
-  width: min(800px, 100%);
+  width: min(900px, 100%);
 }
 
 .research-lines {
   z-index: 0;
-  grid-area: 2 / 2 / 6 / 5;
+  grid-area: 2 / 2 / 6 / 6;
   width: 100%;
   height: 100%;
   pointer-events: none;
 }
 
-.research-lines line {
+.research-lines line,
+.research-lines path {
+  fill: none;
   stroke: var(--color-border-strong);
   stroke-width: 2px;
   vector-effect: non-scaling-stroke;
 }
 
-.research-lines line[data-done='true'] {
+.research-lines line[data-done='true'],
+.research-lines path[data-done='true'] {
   stroke: var(--color-ok-border);
+}
+
+/* A combo's lines are faint until its node (or a parent) is selected or hovered, purple and
+   dashed while the source is not researched, green and solid once it is: not by hue alone. */
+.research-lines path[data-combo='true'] {
+  stroke: var(--color-epic);
+  stroke-dasharray: 5 4;
+  opacity: 0.25;
+}
+
+.research-lines path[data-combo='true'][data-done='true'] {
+  stroke: var(--color-ok-border);
+  stroke-dasharray: none;
+}
+
+.research-lines path[data-combo='true'][data-active='true'] {
+  opacity: 1;
 }
 
 .research-tier,
@@ -9658,6 +9690,15 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   border-color: var(--color-border-disabled);
 }
 
+/* A Tier 4 combo: a purple edge in every state but bought (green says bought, the words say the rest). */
+.research-node[data-combo='true']:not([data-state='done']) {
+  border-color: var(--color-epic);
+}
+
+.research-node[data-combo='true']:not([data-state='done']) .research-node-name {
+  color: var(--color-epic-text);
+}
+
 .research-detail {
   display: flex;
   flex: none;
@@ -9669,6 +9710,10 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
   background: var(--color-surface-sunken);
+}
+
+.research-needs strong {
+  color: var(--color-text);
 }
 
 .research-detail p,
@@ -9706,7 +9751,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   mask-image: linear-gradient(to right, var(--color-mask) calc(100% - 36px), transparent);
 }
 
-@container (max-width: 640px) {
+@container (max-width: 860px) {
   .research-body {
     flex-direction: column;
     align-items: stretch;

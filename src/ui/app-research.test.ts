@@ -155,7 +155,7 @@ describe('the Research Center in the game (app.ts, ID-263)', () => {
     expect(status()).toBe('Researched Reinforced Wall · 200 Scrap spent, 2,140 left.');
     expect(chip()).toContain('2,140');
     expect(document.querySelector('.camp-tab[aria-selected="true"]')!.textContent).toBe(
-      'Upgrades · 1/11',
+      'Upgrades · 1/14',
     );
     // A node whose prerequisite is not bought stays greyed.
     node('spiked-wall').click();

@@ -9,6 +9,7 @@ import {
   REROLL,
   RESEARCH_CARDS,
   TECH,
+  TECH_CARD,
   TECH_FX,
   WALL,
   type BossSkill,
@@ -218,6 +219,23 @@ export const UPGRADES: Readonly<
     rarity: 'epic',
     levels: 1,
   },
+  // The Tier 4 research cards (ID-264): in a fight's pool only once their node is researched
+  // (`isTechCard`), no gate, no slot, no one's hands.
+  'wall-machine-gun': {
+    category: 'behaviour',
+    rarity: 'epic',
+    levels: 1,
+  },
+  'shock-net': {
+    category: 'behaviour',
+    rarity: 'epic',
+    levels: 1,
+  },
+  'tar-moat': {
+    category: 'barrier',
+    rarity: 'epic',
+    levels: 1,
+  },
   // The mode cards (ID-222): unlocked by a mode's boss hordes, offered only in a higher mode;
   // Suppressing Fire, Cauterise, Momentum and Adrenaline in every fight (ID-235, ID-245), the
   // others only in a fight whose bosses have what they answer (`eligible`).
@@ -271,6 +289,10 @@ export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
 /** Whether `id` is one of the cards the difficulty modes unlock (ID-222). */
 export const isModeCard = (id: UpgradeId): id is ModeCard =>
   (MODE_CARDS as readonly string[]).includes(id);
+
+/** Whether `id` is a Tier 4 research card (ID-264): in a fight's pool only once researched. */
+export const isTechCard = (id: UpgradeId): boolean =>
+  (Object.values(TECH_CARD) as string[]).includes(id);
 
 /** Whether a boss of the fight (known at its start) satisfies `has` (ID-222). */
 const bossesHave = (
@@ -328,6 +350,8 @@ export function eligible(state: HordeState, id: UpgradeId): boolean {
   // A mode card (ID-222) comes only through a fight's card pool (never the full game's),
   // and only when the fight has what it answers.
   if (isModeCard(id) && (!state.cardPool || !modeCardRelevant(state, id))) return false;
+  // A Tier 4 card (ID-264) comes only through a fight's card pool, which holds it once researched.
+  if (isTechCard(id) && !state.cardPool) return false;
   if (u.levels !== null && cardLevel(state, id) >= u.levels) return false;
   if (isResearchCard(id) && !state.research.includes(id)) return false;
   if (id === 'patch-up' && patchUpGain(state).segments === 0) return false;
@@ -447,7 +471,11 @@ export function offerWeights(pool: readonly UpgradeId[], tech: readonly TechId[]
   const extra = pool.map(
     (id) =>
       perNode *
-      tech.filter((t) => (TECH_CARDS[TECH[t].branch] as readonly UpgradeId[]).includes(id)).length,
+      tech.filter(
+        // A Tier 4 node (ID-264) gives a card of its own and adds no weight to its branch's.
+        (t) =>
+          TECH[t].tier !== 4 && (TECH_CARDS[TECH[t].branch] as readonly UpgradeId[]).includes(id),
+      ).length,
   );
   const sum = extra.reduce((a, b) => a + b, 0);
   const limit = cap * pool.length;
@@ -694,6 +722,15 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
     case 'oil-bomb':
       // The first tar bomb goes as soon as it is picked, as Frag Grenades' first throw.
       s.nextTarAt = s.time;
+      break;
+    case 'wall-machine-gun':
+      s.nextGunAt = s.time;
+      break;
+    case 'shock-net':
+      s.nextNetAt = s.time;
+      break;
+    case 'tar-moat':
+      s.moat = {};
       break;
     case 'barbed-wire':
       // Every pick rebuilds every row, broken or worn, at the new level's full (ID-123, ID-133).

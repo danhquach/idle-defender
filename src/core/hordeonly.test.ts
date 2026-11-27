@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { rollWeapon, type OwnedWeapon } from './armoury.ts';
 import { squadBase } from './base.ts';
 import { recruit } from './camp.ts';
-import { eligible, isModeCard, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
+import { eligible, isModeCard, isTechCard, rollOffer, UPGRADE_IDS, UPGRADES } from './cards.ts';
 import {
   BENCH_XP_SHARE,
   MAX_COUNT,
@@ -208,9 +208,12 @@ describe('the squad in a horde (ID-066)', () => {
     const allowed = ['stat', 'behaviour', 'barrier'];
     expect(SQUAD_CARDS.every((id) => allowed.includes(UPGRADES[id].category))).toBe(true);
     // Every allowed card is in: the list is the categories, not a hand pick; but for the mode
-    // cards (ID-222), which join a fight's pool only once a mode unlocks them.
+    // cards (ID-222) and the Tier 4 research cards (ID-264), which join a fight's pool only once a
+    // mode unlocks them or their node is researched.
     expect([...SQUAD_CARDS].sort()).toEqual(
-      UPGRADE_IDS.filter((id) => allowed.includes(UPGRADES[id].category) && !isModeCard(id)).sort(),
+      UPGRADE_IDS.filter(
+        (id) => allowed.includes(UPGRADES[id].category) && !isModeCard(id) && !isTechCard(id),
+      ).sort(),
     );
     // The ID-077 set, and none of the cards it replaced.
     for (const id of [

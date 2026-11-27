@@ -79,10 +79,20 @@ function shotsIn(s: HordeState, n: number): { shots: number; after: HordeState }
 
 const EPIC = UPGRADE_IDS.filter((id) => UPGRADES[id].rarity === 'epic');
 
-describe('every epic card names its gain and a cost (ID-137)', () => {
-  it('the epic cards are Heavy Rounds, Concussion Rounds, Frag Grenades, Field Repairs and Oil Bomb', () => {
+/** The research-gated Tier 4 epics (ID-264): their cost is the Scrap research price (design §8). */
+const TIER_4_EPICS = ['shock-net', 'tar-moat', 'wall-machine-gun'];
+
+describe('every epic card names its gain and a cost (ID-137), but the Tier 4 epics', () => {
+  it('the epic cards are Heavy Rounds, Concussion Rounds, Frag Grenades, Field Repairs, Oil Bomb and the three Tier 4 cards', () => {
     expect([...EPIC].sort()).toEqual(
-      ['concussion-rounds', 'field-repairs', 'frag-grenades', 'hollow-points', 'oil-bomb'].sort(),
+      [
+        'concussion-rounds',
+        'field-repairs',
+        'frag-grenades',
+        'hollow-points',
+        'oil-bomb',
+        ...TIER_4_EPICS,
+      ].sort(),
     );
   });
 });

@@ -58,6 +58,9 @@ export const CARD_NAME: Readonly<Record<UpgradeId, string>> = {
   'gas-masks': 'Gas Masks',
   'breaching-rounds': 'Breaching Rounds',
   'adrenaline-rush': 'Adrenaline',
+  'wall-machine-gun': 'Wall Machine Gun',
+  'shock-net': 'Shock Net',
+  'tar-moat': 'Tar Moat',
 };
 
 /** Each card's effect in words; a card with an `effectAt` shows that instead, with its numbers. */
@@ -88,6 +91,10 @@ export const CARD_TEXT: Readonly<Record<UpgradeId, string>> = {
   'scavenged-ammo': 'Each gun shot has a chance not to use a round',
   // The gain and its cost (ID-137): a slow shell, a long wait, and a lit slick burns out.
   'oil-bomb': oilText([]),
+  // The Tier 4 cards (ID-264): no cost, and the pick spends an epic slot (the cost is that).
+  'wall-machine-gun': `Fires a ${CARD.wallGun.burst}-round burst every ${CARD.wallGun.every} s at the nearest enemy, anywhere on the field. Hits harder in bigger hordes; ignores ${Math.round(TECH_FX.pierce * 100)}% of armour`,
+  'shock-net': `Every ${CARD.net.every} s, enemies near the wire are stunned for ${CARD.net.seconds} s`,
+  'tar-moat': `Tar strip at the wall: enemies in it move ${Math.round(CARD.moat.slow * 100)}% slower. It lights ${CARD.moat.fuse} s after an enemy steps in, or at once from fire, burning ${Math.round(CARD.moat.burn * 100)}% of a Shambler’s HP a second for ${CARD.oil.burnFor} s. Refills after ${CARD.moat.refill} s`,
   recharge: 'Add 25% of the bank’s cap to the battery bank',
   'power-surge': 'Turrets draw no charge until this wave ends',
   // The gain and its cost (ID-136): "+38% damage, +25% reload time".

@@ -151,7 +151,13 @@ export type UpgradeId =
   | 'power-surge'
   | 'hollow-points'
   | 'field-repairs'
+  | 'wall-machine-gun'
+  | 'shock-net'
+  | 'tar-moat'
   | ModeCard;
+
+/** The owner of the Wall Machine Gun's rounds and flash (ID-264): a `turret:` owner, so no card effect applies. */
+export const WALL_GUN = 'turret:wall-gun';
 
 export interface DefenderSpec {
   id: string;
@@ -268,6 +274,8 @@ export interface Enemy {
   burnDps?: number;
   /** A flashbang (ID-107): fight time its daze ends, for the view's stars; absent = never. */
   dazedUntil?: number;
+  /** Shock Net (ID-264): fight time its latest net stun ends; absent = never netted. */
+  nettedUntil?: number;
   /** Shock Rounds (ID-097): fight time its latest paralysis ends; absent = never shocked. */
   shockUntil?: number;
   /**
@@ -691,6 +699,15 @@ export interface Slick {
   /** Wide Slick (ID-263): this slick's radius; absent = `CARD.oil.radius`. */
   radius?: number;
 }
+/**
+ * Tar Moat (ID-264): full (no field), fusing from `touchedAt` (the first enemy stepped in),
+ * lit from `litAt` (burning until `litAt` + `CARD.oil.burnFor`), then gone until `refillAt`.
+ */
+export interface Moat {
+  touchedAt?: number;
+  litAt?: number;
+  refillAt?: number;
+}
 /** A bomb or flashbang going off at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
 export interface Blast {
   skill: 'airstrike' | 'flashbang';
@@ -852,6 +869,14 @@ export interface HordeState {
   slicks: Slick[];
   /** When the next tar bomb may be thrown; absent until Oil Bomb is picked. */
   nextTarAt?: number;
+  /** Wall Machine Gun (ID-264): the gun's damage a second, fixed at the fight's start; absent unless researched. */
+  gunDps?: number;
+  /** When the Wall Machine Gun's next burst may fire; absent until the card is picked. */
+  nextGunAt?: number;
+  /** When Shock Net's next pulse may come; absent until the card is picked. */
+  nextNetAt?: number;
+  /** Tar Moat's state (ID-264); absent until the card is picked. */
+  moat?: Moat;
   /**
    * Field Repairs' cost (ID-137): the squad fires slower until this fight time; absent before.
    * Set when the skill is used (ID-231), so it also marks the use: set = spent.
@@ -1405,12 +1430,15 @@ function step(s: HordeState, rng: Rng): void {
   throwHeld(s);
   throwTar(s);
   fireTurrets(s, rng);
+  fireWallGun(s);
+  shockNet(s);
   fly(s);
   land(s);
   landSlabs(s);
   blowFrags(s);
   landTar(s);
   burn(s);
+  moatTick(s);
   bleed(s);
   spikes(s);
   mendWire(s);
@@ -2324,7 +2352,8 @@ function fly(s: HordeState): void {
             classFactor(s.mode, b.cls, hit.enemy.kind),
           b.ap === true,
           !b.owner.startsWith('turret:') && took(s, 'breaching-rounds'),
-          !b.owner.startsWith('turret:') ? pierceIgnore : 0,
+          // The Wall Machine Gun always ignores its share of armour (ID-264); a turret's bullet none.
+          b.owner === WALL_GUN ? TECH_FX.pierce : !b.owner.startsWith('turret:') ? pierceIgnore : 0,
         ),
       );
       popOn(
@@ -2439,6 +2468,9 @@ function cardHit(
     e.burnDps = burnDpsOf(s);
     // The synergy (ID-132): a hit on an enemy in an unlit slick sets the slick alight.
     for (const slick of slicksUnder(s, e)) lightSlick(s, slick);
+    // Tar Moat (ID-264): a hit on an enemy standing in a full moat lights it.
+    const strip = s.moat ? moatStrip(s) : null;
+    if (strip && inStrip(strip, e)) lightMoat(s);
   }
   if (took(s, 'shock-rounds')) shock(s, e);
   if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
@@ -2719,6 +2751,167 @@ function landTar(s: HordeState): void {
   }
   s.tarBombs = s.tarBombs.filter((b) => !b.burst);
 }
+
+/** Whether some layer has a segment built, standing or not (the wall's outer face exists). */
+const hasWall = (s: Pick<HordeState, 'layers'>): boolean =>
+  s.layers.some((l) => l.segments.some((seg) => seg.kind !== null));
+
+/**
+ * Wall Machine Gun (ID-264): when due, a burst of `CARD.wallGun.burst` rounds from mid-wall on
+ * the outermost built layer, at the nearest enemy outside the camp (the focused one if in
+ * reach), each round `gap` px behind the last so they arrive in a train. No spread, so no RNG
+ * draw; the rounds' damage makes `gunDps` a second. With nobody in reach it waits.
+ */
+function fireWallGun(s: HordeState): void {
+  if (
+    s.nextGunAt === undefined ||
+    s.gunDps === undefined ||
+    !took(s, 'wall-machine-gun') ||
+    !due(s.time, s.nextGunAt) ||
+    !hasWall(s)
+  )
+    return;
+  const { every, burst, range, gap } = CARD.wallGun;
+  const x = wallFront(s) - WALL.depth / 2;
+  const y = FIELD.height / 2;
+  // The nearest enemy outside the camp (ties to the lowest id); the player's focus doesn't steer it.
+  let target: Enemy | undefined;
+  let best: number = range;
+  for (const e of s.enemies) {
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (e.hp <= 0 || e.inCamp || d > best || (d === best && target && e.id > target.id)) continue;
+    [target, best] = [e, d];
+  }
+  if (!target) return;
+  const aim = leadPoint(x, y, target, TURRET.speed);
+  const heading = Math.atan2(aim.y - y, aim.x - x);
+  const dx = Math.cos(heading);
+  const dy = Math.sin(heading);
+  const distance = Math.hypot(aim.x - x, aim.y - y);
+  for (let i = 0; i < burst; i++) {
+    s.bullets.push({
+      x: x - dx * gap * i,
+      y: y - dy * gap * i,
+      dx,
+      dy,
+      speed: TURRET.speed,
+      damage: (s.gunDps * every) / burst,
+      owner: WALL_GUN,
+      fromX: x,
+      fromY: y,
+      aim: distance,
+      left: range + gap * i,
+      pierce: 0,
+      hit: [],
+      tracer: TURRET.tracer,
+    });
+  }
+  s.shots.push({ owner: WALL_GUN, at: s.time + STEP });
+  s.nextGunAt = nextShot(s.time, s.nextGunAt, every);
+}
+
+/** Shock Net's band (ID-264): the wire band's reach in front of the wall's face; null with no wall. */
+export function netBand(s: Pick<HordeState, 'layers'>): { from: number; to: number } | null {
+  if (!hasWall(s)) return null;
+  const front = wallFront(s);
+  return { from: front + CARD.wire.from, to: front + CARD.wire.to };
+}
+
+/**
+ * Shock Net (ID-264): when due, every enemy in the band that a Flashbang could stun and that
+ * is past its last net stuns for `CARD.net.seconds`. It reads the Flashbang's test and writes
+ * only `stunnedUntil` and `nettedUntil`, never the daze clock (so no Flashbang immunity). A pulse
+ * that nets no one waits for the next step; one that does sets the next `every` s on.
+ */
+function shockNet(s: HordeState): void {
+  if (s.nextNetAt === undefined || !took(s, 'shock-net') || !due(s.time, s.nextNetAt)) return;
+  const band = netBand(s);
+  if (!band) return;
+  const until = s.time + CARD.net.seconds;
+  let netted = false;
+  for (const e of s.enemies) {
+    if (e.hp <= 0 || e.inCamp || e.x < band.from - EPS || e.x > band.to + EPS) continue;
+    if (!flashable(s, e) || (e.nettedUntil !== undefined && !due(s.time, e.nettedUntil))) continue;
+    e.stunnedUntil = Math.max(e.stunnedUntil, until);
+    e.nettedUntil = until;
+    netted = true;
+  }
+  if (netted) s.nextNetAt = nextShot(s.time, s.nextNetAt, CARD.net.every);
+}
+
+/** Tar Moat's strip (ID-264): the wall's face out `CARD.moat.depth` px; null without the card or a wall. */
+export function moatStrip(
+  s: Pick<HordeState, 'layers' | 'moat'>,
+): { from: number; to: number } | null {
+  if (!s.moat || !hasWall(s)) return null;
+  const front = wallFront(s);
+  return { from: front, to: front + CARD.moat.depth };
+}
+
+/** The moat's look and effect now (ID-264): `full`, `lit` (burning) or `gone` (until it refills). */
+export const moatPhase = (m: Moat): 'full' | 'lit' | 'gone' =>
+  m.refillAt !== undefined ? 'gone' : m.litAt !== undefined ? 'lit' : 'full';
+
+const inStrip = (strip: { from: number; to: number }, e: Enemy): boolean =>
+  !e.inCamp && e.x >= strip.from - EPS && e.x <= strip.to + EPS;
+
+/** Sets a full moat alight now (ID-264); a lit or gone one is left as it is. */
+function lightMoat(s: Pick<HordeState, 'time' | 'moat'>): void {
+  if (s.moat && moatPhase(s.moat) === 'full') s.moat.litAt = s.time;
+}
+
+/**
+ * Tar Moat (ID-264), once a step: a full moat lights `fuse` s after the first enemy stepped in,
+ * or at once from a lit slick or a Molotov fire overlapping it (an Incendiary hit is in
+ * `cardHit`); lit, it burns every enemy inside as a lit slick does, for `CARD.oil.burnFor`
+ * s, then is gone and refills `refill` s later.
+ */
+function moatTick(s: HordeState): void {
+  const m = s.moat;
+  const strip = moatStrip(s);
+  if (!m || !strip || !took(s, 'tar-moat')) return;
+  const phase = moatPhase(m);
+  if (phase === 'gone') {
+    if (due(s.time, m.refillAt!)) s.moat = {};
+    return;
+  }
+  if (phase === 'full') {
+    if (m.touchedAt === undefined && s.enemies.some((e) => e.hp > 0 && inStrip(strip, e))) {
+      m.touchedAt = s.time;
+    }
+    const slick = s.slicks.some(
+      (k) =>
+        slickLit(k) &&
+        !due(s.time, k.until) &&
+        k.x + slickRadius(k) >= strip.from &&
+        k.x - slickRadius(k) <= strip.to,
+    );
+    const reach = CARD.molotov.radius;
+    const fire = s.fires.some((f) => f.x + reach >= strip.from && f.x - reach <= strip.to);
+    if (slick || fire || (m.touchedAt !== undefined && due(s.time, m.touchedAt + CARD.moat.fuse))) {
+      lightMoat(s);
+    }
+    if (moatPhase(m) === 'full') return;
+  }
+  if (due(s.time, m.litAt! + CARD.oil.burnFor)) {
+    m.refillAt = s.time + CARD.moat.refill;
+    return;
+  }
+  const hit = CARD.moat.burn * shamblerHp(s) * STEP;
+  for (const e of s.enemies) {
+    if (e.hp <= 0 || !inStrip(strip, e)) continue;
+    const dmg = taken(s, e, hit);
+    popOn(s, e, dmg);
+    e.hp = Math.max(0, e.hp - dmg);
+    e.burnt = (e.burnt ?? 0) + dmg;
+  }
+}
+
+/** Whether Tar Moat slows `e` now (ID-264): the moat is full or lit and `e` stands in it. */
+const moatSlows = (s: Pick<HordeState, 'layers' | 'moat'>, e: Enemy): boolean => {
+  const strip = moatStrip(s);
+  return strip !== null && moatPhase(s.moat!) !== 'gone' && inStrip(strip, e);
+};
 
 /** The slicks `e` stands in (ID-132): outside the camp only; slicks can overlap. */
 export function slicksUnder(s: Pick<HordeState, 'slicks' | 'time'>, e: Enemy): Slick[] {
@@ -3400,6 +3593,8 @@ function move(s: HordeState): Moves {
       STEP *
       (slowed ? 1 - wireSlow : 1) *
       (s.slicks.length > 0 && slicksUnder(s, e).length > 0 ? 1 - CARD.oil.slow : 1) *
+      // Tar Moat (ID-264): the strip along the wall's face.
+      (s.moat !== undefined && moatSlows(s, e) ? 1 - CARD.moat.slow : 1) *
       // Molotov's cost (ID-139): the flames drive enemies on.
       (s.fires.length > 0 && inFire(s, e) ? 1 + CARD.molotov.panic : 1) *
       trapSlow(s, e) *

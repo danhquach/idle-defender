@@ -1137,3 +1137,31 @@ describe('a patrol report is one size (ID-260)', () => {
     expect(both![1]).not.toMatch(/max-height|min-height/);
   });
 });
+
+describe('the Research Center chart has a fourth tier for the combos (ID-264)', () => {
+  it('four tier columns, a line layer across all of them, and room for the panel beside it', () => {
+    expect(rules).toMatch(
+      /\.research-chart \{[^}]*grid-template-columns: 72px repeat\(4, minmax\(124px, 1fr\)\);/,
+    );
+    expect(rules).toMatch(/\.research-chart \{[^}]*min-width: 568px;/);
+    expect(rules).toMatch(/\.research-lines \{[^}]*grid-area: 2 \/ 2 \/ 6 \/ 6;/);
+    expect(rules).toMatch(/\.camp-dialog\[data-tab='upgrades'\] \{\s*width: min\(900px, 100%\);/);
+    // Chart (568) + panel (260) + padding and gaps no longer fit below 864px: the panel goes under.
+    expect(rules).toMatch(
+      /@container \(max-width: 860px\) \{\s*\.research-body \{\s*flex-direction: column;/,
+    );
+  });
+
+  it('a combo node has a purple edge until bought; its lines are faint, dashed and purple until their node is active or the source researched', () => {
+    expect(rules).toMatch(
+      /\.research-node\[data-combo='true'\]:not\(\[data-state='done'\]\) \{\s*border-color: var\(--color-epic\);/,
+    );
+    expect(rules).toMatch(
+      /\.research-lines path\[data-combo='true'\] \{\s*stroke: var\(--color-epic\);\s*stroke-dasharray: 5 4;\s*opacity: 0\.25;/,
+    );
+    expect(rules).toMatch(
+      /path\[data-combo='true'\]\[data-done='true'\] \{\s*stroke: var\(--color-ok-border\);\s*stroke-dasharray: none;/,
+    );
+    expect(rules).toMatch(/path\[data-combo='true'\]\[data-active='true'\] \{\s*opacity: 1;/);
+  });
+});

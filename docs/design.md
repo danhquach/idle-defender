@@ -1783,6 +1783,8 @@ spacing real hordes have (see the ID-077 note below).
 
   Research Center (ID-263, §11) strengthens three of these cards: Razor Wire, Thick Coils and Electric Wire change Barbed Wire; Quick Mortars, Wide Slick and Napalm Mortar change Oil Bomb; Hand-loads and Armour-piercing change Heavy Rounds, Incendiary, Shock, Piercing Rounds and Scavenged Ammo. A researched card is also offered a little more often.
 
+  **Research Center Tier 4 (ID-264, §11).** Wall Machine Gun, Shock Net and Tar Moat are epic unique cards that join a fight's pool only when researched. No gate: an eligibility test such as the wall being hit was dead too (`crowded` held at 0 of 15 Horde 4 offers), so each is offered whenever it is in the pool, at the plain epic rate (Tier 4 adds no offer weight, `offerWeights` skips it). Three more epics halve Frag Grenades' and Concussion Rounds' share of epic rolls; a test holds the share of non-tech offer slots at 0.8 of the baseline or more with all three researched.
+
   **Epic cards are unique:** one level, which is max, taken once per horde.
 
   | Card | Kind | Rarity | Effect |
@@ -1791,6 +1793,9 @@ spacing real hordes have (see the ID-077 note below).
   | Frag Grenades | behaviour | epic | Each survivor on the line carries **3** and gets one back every **8 s**, up to 3 (ID-178); the squad throws at most one every **1.5 s** (ID-178; one every 8 s ÷ the survivors on the line before), as soon as an enemy outside the camp is within **600 px** of a survivor on the line. The target is the enemy with the most others within **70 px** (ties → nearest the wall, then lowest id), thrown by the survivor nearest it and aimed where it will be when the grenade lands **0.6 s** later. It bursts for **25%** of this wave's Shambler HP (ID-137; 35% before, ID-124; a flat 20 before that; armour doesn't reduce it) on every enemy within 70 px. The first throw comes as soon as the card is picked and an enemy is in reach. **Cost (ID-137):** a throw takes its thrower's hands for **1.5 s**: no shot before then, and the shot that was due waits that long too |
   | Field Repairs (research) | barrier | epic | **A skill (ID-231):** the pick adds a Field Repairs button to the skill bar, after the Airstrike and its Auto pill, and does nothing else (no repair, no cost, no wall glow). Using it (tap, click or key **F**, any time in a fight, with an offer or replacement open too; the fight held or not) sets every built wall segment to full HP, broken ones too, and glows the ones it healed. **One use per pick**; unused it stays across waves and never carries to the next horde. It is refused on a full wall (unbuilt slots don't count) and once the horde is over. **Cost (ID-137):** the squad's fire rate **−25%** for **5 s** of fight time after the use (the clock stops while an offer is open); it multiplies with Concussion Rounds'. The held cards strip counts it down on the card's chip, in the warning colour, and the chip goes back to plain when it ends |
   | Oil Bomb (ID-132) | behaviour | epic | Two mortars stand just behind the outermost built layer, one at each end of the wall (**36 px** back, **22 px** in from each end). Every **20 s** the one nearer the target fires a tar bomb at the enemy outside the camp with the most others within **90 px** (as Frag Grenades picks, within **600 px** of a mortar), aimed where it will be when the bomb lands **1.5 s** later. It leaves a tar slick of radius **90 px** for **10 s**: every enemy inside moves **60%** slower (multiplying with Barbed Wire, traps and the rest). **Synergy:** an Incendiary Rounds hit on an enemy in an unlit slick lights it, and so does a Molotov's fire overlapping it, whichever landed first (ID-181): it burns everyone inside for **20%** of this wave's Shambler HP a second, and burns out **3 s** later (gone, no slow). The first bomb comes as soon as the card is picked and an enemy is in reach. **Cost:** the slow shell and the long wait between bombs, and a lit slick burns out (PM, ID-132). Survivors don't fire it, so it is not a throwable and takes no one's hands |
+  | Wall Machine Gun (ID-264, research) | behaviour | epic | In the pool only once Wall Machine Gun is researched (Tier 4, §11); no eligibility gate. One gun stands mid-wall on the outermost built layer. Every **2 s** it fires a burst of **6** rounds, spread **0**, pierce 0, at the nearest enemy outside the camp (by distance; the player's focus does not steer it), anywhere on the field up to the spawn edge. It deals `CARD.wallGun.share` (**27%**) of the horde's demand a second, `hordeHp ÷ hordeSeconds` for that horde, mode, squad size and theme (the sum of `hordeKindHp` over `hordeSeconds`), fixed when the fight starts (`gunDps`, no RNG): about 0.37 Shambler HP a second at Horde 4, 1.76 at Horde 9, 2.1 at Horde 15 and 2.4 at Horde 20, so it is a share of the squad's kill rate at every horde (measured: 19% of the horde's HP at Horde 4 and 16% at Horde 9 for the expected squad, the rest lost to overkill and armour). Its bullets always ignore `TECH_FX.pierce` (20%) of armour (its Armour-piercing parent, whether or not an ammo card is held); they carry a `turret:` owner, so no card effect, crit or gun class applies. **Cost:** the Scrap research price (§8 above; no cost in the fight, a flat buff, and the pick spends the epic slot). Survivors don't fire it, so it takes no one's hands |
+  | Shock Net (ID-264, research) | behaviour | epic | In the pool only once Shock Net is researched; no eligibility gate; works without Barbed Wire. Every **6 s** (`CARD.net.every`), each enemy outside the camp in the wire band **250–400 px** in front of the outermost layer that the Flashbang's `flashable` test allows and that is past its own `nettedUntil` is stunned **2 s** (`stunnedUntil`). It reads the Flashbang's immunity but never writes it, and never writes `dazedUntil`, so the Flashbang's aim is unchanged except while the enemy is already stunned; Electric Wire is unchanged. `nettedUntil` is a timestamp on the enemy, absent until netted. **Dead in comfortable wins:** the expected squad's enemies are almost never in the band (0% of Horde 4 enemy-time, 4.5% at Horde 9), so it acts only when the squad is under pressure, as Barbed Wire does. **Cost:** the Scrap research price |
+  | Tar Moat (ID-264, research) | barrier | epic | In the pool only once Tar Moat is researched; no eligibility gate. One flat strip **60 px** deep along the outermost wall face; every enemy inside moves **40%** slower (multiplying with the rest). A full moat lights itself **2 s** after the first enemy steps in, or at once when a lit Oil Bomb slick or a Molotov fire overlaps it, or an Incendiary Rounds hit lands on an enemy inside. Lit, it burns every enemy inside for `CARD.moat.burn` (**10%**) of this wave's Shambler HP a second for **3 s** (`CARD.oil.burnFor`), then is gone and refills after `CARD.moat.refill` (**10 s**). **Dead in comfortable wins:** nothing reaches the wall's front when the squad wins easily (0.1% of Horde 9 enemy-time within 150 px), so it acts only under pressure. **Cost:** the Scrap research price |
 
   **Steady across hordes (ID-124).** Frag Grenades' burst and Incendiary
   Rounds' burn were flat (20 damage; 1, 2, 3 DPS), more than a whole
@@ -1897,7 +1902,7 @@ spacing real hordes have (see the ID-077 note below).
   skill the player uses when they choose, ID-231), and
   Heavy Rounds (research) stays once per horde with no levels.
 
-  **Every epic card has a cost (ID-137).** Each epic card names its gain
+  **Every epic card has a cost (ID-137)**, except the research-gated Tier 4 epics (ID-264: Wall Machine Gun, Shock Net, Tar Moat), whose cost is the Scrap research price. Each epic card names its gain
   and its cost on the card, and no two share a cost: Heavy Rounds' reload
   time (ID-136), Concussion Rounds' fire rate while held, Frag Grenades'
   thrower pause, and Field Repairs' 5 s fire-rate dip (the table above).
@@ -4102,16 +4107,15 @@ Shamblers take the rest of each wave. Elites and bosses of the horde are as ever
 Horde-only: Scrap buys permanent upgrades in a window opened from the top bar's Research button
 (next to Roster and Weapons; a labelled button from 1231 px, a flask icon below). Phase 1 of the
 Research Center spec (`docs/superpowers/specs/2026-11-26-research-center-design.md`): Tiers 1 to
-3 for cards the player already picks. Tier 4 combos, the difficulty retune and cosmetics are later
-tickets. Research is instant and permanent, with no refund. (The full game's Lab, `core/research.ts`,
+3 for cards the player already picks, and (ID-264) Tier 4, three combination nodes that each need
+two branches. The difficulty retune and cosmetics are later tickets. Research is instant and permanent, with no refund. (The full game's Lab, `core/research.ts`,
 is unrelated: this feature is `tech` in the code.)
 
-- **The window.** A second camp window with one tab, "Upgrades · n/11". A chart: four branch rows
-  (Wall, Barbed Wire, Ammo, Mortars), three tier columns, a line from each node to what it unlocks
+- **The window.** A second camp window with one tab, "Upgrades · n/14". A chart: four branch rows
+  (Wall, Barbed Wire, Ammo, Mortars), four tier columns (ID-264: the combos in the fourth, with a purple edge and one line from each parent: right-angled, through the gutters, faint until the node or a parent is selected or hovered, dashed purple until the source is researched and then solid green), a line from each node to what it unlocks
   (green once its source is researched), and a detail panel (name, tier and branch, effect, "Needs:
   ✓/○ ...", "Unlocks: ...", the Research button). A node says its state in words: "✓ Researched",
-  its price, "1,200/1,800 Scrap" when short (dashed), "Needs Razor Wire" when locked (dashed). On a
-  phone the chart scrolls sideways and the panel sits under it.
+  its price, "1,200/1,800 Scrap" when short (dashed), "Needs Razor Wire" when locked (dashed; a combo says "Needs Armour + Spiked", short names from `TECH_SHORT`). The detail's missing parent is bold. Below 860 px container width (iPad portrait and phone) the panel sits under the chart; on a phone the chart also scrolls sideways.
 - **Buying.** Between hordes only (the result screen counts); browsing works any time. In a fight the
   button is greyed with "Research between hordes" in words under it. A purchase asks first ("Research
   Steel Plating for 600 Scrap? You have 2,340."; a Tier 3 confirm repeats the effect), checks again
@@ -4120,7 +4124,7 @@ is unrelated: this feature is `tech` in the code.)
   researched, prerequisite missing, Scrap short. The top-bar button shows a dot while some open node is
   affordable and buying is allowed. A purchase made on a result screen leaves the finished horde as it
   was; the next horde has it.
-- **The tree** (`TECH`, `core/data.ts`; the costs add up to 9,300 Scrap):
+- **The tree** (`TECH`, `core/data.ts`; the costs add up to 25,800 Scrap, 9,300 of it Tiers 1 to 3):
 
 | Node | Branch · tier | Scrap | Needs | Effect |
 |---|---|---|---|---|
@@ -4135,6 +4139,11 @@ is unrelated: this feature is `tech` in the code.)
 | Quick Mortars | Mortars · 1 | 300 | - | Oil Bomb waits 16 s between throws, not 20 (the first throw is unchanged) |
 | Wide Slick | Mortars · 2 | 800 | Quick Mortars | Oil Bomb slicks are 25% wider (112.5 px) |
 | Napalm Mortar | Mortars · 3 | 2,000 | Wide Slick | Slicks land already burning, and keep their full 10 s |
+| Wall Machine Gun | Ammo · 4 | 6,000 | Armour-piercing + Spiked Wall | Adds the Wall Machine Gun card to the fight's pool (card table, §8) |
+| Shock Net | Barbed Wire · 4 | 5,500 | Electric Wire + Steel Plating | Adds the Shock Net card to the pool |
+| Tar Moat | Mortars · 4 | 5,000 | Napalm Mortar + Spiked Wall | Adds the Tar Moat card to the pool |
+
+  A Tier 4 node's branch is its first (same-row) parent's row, so Wall Machine Gun sits in the Ammo row (its Armour-piercing parent first, then Spiked Wall); `needs` is a list and every parent is needed (`techState`, `techRefusal`, which names the first parent missing in `needs` order, and `cleanTech`, which drops a combo when either parent goes). A combo's locked face reads "Needs X + Y", its detail lists ✓/○ for each parent, and its confirm repeats the card's effect text. A combo has no effect of its own: researching it only puts its card in the pool. Offer weight is unchanged (Tier 4 is skipped in `offerWeights`).
 
 - **How each acts.** The wall nodes scale every built segment's HP and max HP at the start of each
   fight, as Fortify does (`hp *= f; maxHp *= f`, no rounding, so a damaged wall is not healed), alongside
@@ -4166,9 +4175,21 @@ is unrelated: this feature is `tech` in the code.)
   mean fight time Horde 4 165.8 s bare against 165.7 s whole, Horde 9 263.2 s against 261.6 s;
   Barbed Wire cards taken at Horde 9: 1 bare, 3 whole. `TECH_FX.spikes` is the first lever if a
   knife-edge horde flips; the retune of the difficulty for a researched player is ID-265 (#539).
+- **Tier 4 cards (ID-264).** Rules in the epic card table (§8): Wall Machine Gun is a share (`CARD.wallGun.share`) of the horde's demand rate delivered from the wall, Shock Net and Tar Moat are dead in comfortable wins and pay only under pressure; the PM kept the ticket's placement (net in the 250-400 px band, moat on the wall's front). Byte identity: a game without the cards has none of `nextGunAt`, `nextNetAt`, `moat`, `gunDps` or `nettedUntil` on its state or enemies; `tier4-identity.test.ts` pins the digests. The probe is below.
+- **Tier 4 probe (ID-264, scratch script, 20 seeds, `squadAt(n, n)`; the pressured arm is Horde 9 with common rifles at level 4, 0/20 won bare).** Wins, mean fight s, the gun's HP share of the horde's whole HP:
+
+| Arm | Horde 4 | Horde 9 | Horde 9 pressured |
+|---|---|---|---|
+| Bare | 20/20, 166.0 s | 20/20, 262.4 s | 0/20, 201.7 s |
+| Wall Machine Gun forced | 20/20, 162.7 s, gun 19.1% | 20/20, 254.4 s, gun 16.3% | 20/20, 273.7 s, gun 20.5% |
+| Shock Net forced | 20/20, 165.4 s; 1 fight netted | 20/20, 262.0 s; 36 stuns a fight, all 20 fights | 0/20, 229.0 s; 194 stuns a fight |
+| Tar Moat forced | 20/20, 166.0 s; never lit | 20/20, 263.1 s; lit in 8 of 20 | 0/20, 228.9 s; lit in all 20 |
+| All three, unforced (scripted picks) | 20/20, 165.6 s | 20/20, 258.8 s | 4/20, 223.7 s |
+
+  Each card was offered in the unforced arm at both Horde 4 and 9 (Horde 4: moat 8 fights of 20, gun 3, net 2; Horde 9: net 10, moat 8, gun 6). No fight was stuck, no card turned a win into a loss. `CARD.wallGun.share` was tuned from 0.18 (gun 13% and 12% of the horde's HP at Horde 4 and 9, under the 15% floor the PM set for it) to **0.27** (19% and 16%; ID-265 owns any retune); the gun alone turns the pressured arm from 0 to 20 wins, so it is a strong flat buff and the first number to cut if the retune (ID-265) wants it lower. Net and moat act at Horde 9 and under pressure but win nothing alone there, as designed (dead in comfortable wins).
 - **Save v27.** `tech`, the nodes researched in `TECH_IDS` order, written only when any. The reader is
   tolerant (as `slots`): it never refuses the save for it; known ids, once each, a node whose
-  prerequisite is missing dropped, a list cut to twice the node count first, anything else ignored.
+  prerequisite is missing dropped, a list cut to twice the node count first (28 now), anything else ignored.
   A v26 or older save has none, and one carrying the key is refused.
 
 ### Balance pass *(ID-102)*
