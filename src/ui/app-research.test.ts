@@ -162,6 +162,20 @@ describe('the Research Center in the game (app.ts, ID-263)', () => {
     expect(go().disabled).toBe(true);
   });
 
+  it('a purchase on the start screen shows on the waiting wall at once (ID-270)', async () => {
+    const { open, node, go } = seeded(camp(2340));
+    // Omitted from the fight's state while empty.
+    const shown = () => vi.mocked(drawScene).mock.calls.at(-1)![2].tech ?? [];
+    step(16);
+    expect(shown()).toEqual([]);
+    open.click();
+    node('reinforced-wall').click();
+    go().click();
+    await answerConfirm(true);
+    step(32);
+    expect(shown()).toEqual(['reinforced-wall']);
+  });
+
   it('a Tier 3 confirm repeats the effect', async () => {
     const { open, node, go } = seeded(camp(3100, ['reinforced-wall', 'steel-plating']));
     open.click();

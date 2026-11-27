@@ -4152,6 +4152,15 @@ is unrelated: this feature is `tech` in the code.)
 
   A Tier 4 node's branch is its first (same-row) parent's row, so Wall Machine Gun sits in the Ammo row (its Armour-piercing parent first, then Spiked Wall); `needs` is a list and every parent is needed (`techState`, `techRefusal`, which names the first parent missing in `needs` order, and `cleanTech`, which drops a combo when either parent goes). A combo's locked face reads "Needs X + Y", its detail lists ✓/○ for each parent, and its confirm repeats the card's effect text. A combo has no effect of its own: researching it only puts its card in the pool. Offer weight is unchanged (Tier 4 is skipped in `offerWeights`).
 
+- **How it looks (ID-270).** The highest Wall node shows on every standing segment in light
+  galvanised steel, on the edges so the middle of the top stays free for Reinforce's dark brace:
+  Reinforced Wall a riveted strip on the top's enemy-side edge and a steel angle along the front's
+  foot; Steel Plating a riveted frame round the top and plates on the lower part of the front;
+  Spiked Wall adds a row of spikes jutting toward the field, drawn over the sandbags. A broken
+  segment shows rubble only. The highest Barbed Wire node changes the band, painted once per look:
+  Razor Wire bigger, brighter barbs; Thick Coils a heavier second coil beside each; Electric Wire a
+  faint blue glow and white insulators on the posts. Worn and torn rows still show. Ammo and
+  Mortars add nothing new to see.
 - **How each acts.** The wall nodes scale every built segment's HP and max HP at the start of each
   fight, as Fortify does (`hp *= f; maxHp *= f`, no rounding, so a damaged wall is not healed), alongside
   Fortify (both multiply); Construction and the Reinforce card stack on top. Spiked Wall hurts Crawlers only

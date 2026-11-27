@@ -267,6 +267,10 @@ export const ART_IDS = [
   'wall-chips',
   'wall-breach',
   'wall-brace',
+  'wall-tech-edge',
+  'wall-tech-frame',
+  'wall-tech-plates',
+  'wall-tech-spikes',
   'sandbag',
   'mortar',
   'wall-gun',
@@ -791,6 +795,13 @@ export const BASE_ART = {
   breach: 'wall-breach',
   /** Barrier cards on the wall (ID-075): Reinforce's brace. */
   brace: 'wall-brace',
+  /** The Wall branch's research on the wall (ID-270): Tier 1 edge, Tier 2 frame and plates, Tier 3 spikes. */
+  research: {
+    edge: 'wall-tech-edge',
+    frame: 'wall-tech-frame',
+    plates: 'wall-tech-plates',
+    spikes: 'wall-tech-spikes',
+  },
   /** Sandbags' low layer of bags in front of the outer layer (ID-132). */
   sandbags: { bag: 'sandbag', front: 'sandbags-front' },
   /** Oil Bomb's mortars at the wall's ends (ID-132). */

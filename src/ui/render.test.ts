@@ -37,6 +37,7 @@ import {
   WALK_SPOTS,
   WALL,
   type EnemyKind,
+  type TechId,
   type Tracer,
   stockOf,
 } from '../core/data.ts';
@@ -61,6 +62,7 @@ import {
   WALL_HIT,
   wallHeight,
   wallPulse,
+  RESEARCH_LOOK,
   type Camera,
   type View,
 } from './projection.ts';
@@ -3922,6 +3924,7 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
   /** An OffscreenCanvas stand-in that records every fill painted into it: its colour and, for a rect, its size. */
   const paintable = () => {
     const fills: { style: string; w?: number; h?: number }[] = [];
+    const strokes: string[] = [];
     const Painted = class {
       width: number;
       height: number;
@@ -3939,8 +3942,9 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
           fillRect: (_x: number, _y: number, w: number, h: number) =>
             fills.push({ style: g.fillStyle, w, h }),
           fill: () => fills.push({ style: g.fillStyle }),
+          stroke: () => strokes.push(g.strokeStyle),
           ...Object.fromEntries(
-            ['strokeRect', 'beginPath', 'ellipse', 'moveTo', 'lineTo', 'stroke']
+            ['strokeRect', 'beginPath', 'ellipse', 'moveTo', 'lineTo']
               .concat(['save', 'restore', 'translate', 'rotate'])
               .map((k) => [k, noop]),
           ),
@@ -3949,7 +3953,7 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
       }
     };
     vi.stubGlobal('OffscreenCanvas', Painted);
-    return { Painted, fills };
+    return { Painted, fills, strokes };
   };
   /** Every painted canvas drawn, with where. */
   const paintedDraws = (
@@ -4349,6 +4353,135 @@ describe('barrier cards on the wall and the sliding gate (ID-075)', () => {
     expect(images(gate, TIER_ART.wood.gate)).toHaveLength(1);
     expect(images(gate, BASE_ART.brace)).toHaveLength(2);
     expect(fills(gate, '#b8f4ec')).toHaveLength(2);
+  });
+  describe('research tier art (ID-270)', () => {
+    const WALL_CHAIN = ['reinforced-wall', 'steel-plating', 'spiked-wall'] as const;
+    const research: readonly ArtId[] = Object.values(BASE_ART.research);
+    const researchIds = (s: Scene, build: BuildOverlay | null = null) =>
+      trace(s, build)
+        .ops.filter((o) => o.op === 'image' && research.includes(o.id as ArtId))
+        .map((o) => o.id);
+    const { edge, frame, plates, spikes } = BASE_ART.research;
+
+    it('an unresearched game draws the wall as it does today', () => {
+      // As text: a -0 and a 0 draw alike.
+      const ops = (s: Scene) => JSON.stringify(trace(s).ops);
+      const today = ops(fight({}, { taken: ['reinforce', 'sandbags'] }));
+      expect(ops(fight({}, { taken: ['reinforce', 'sandbags'], tech: [] }))).toEqual(today);
+      // Nodes of other branches leave the wall alone.
+      const other = fight(
+        {},
+        { taken: ['reinforce', 'sandbags'], tech: ['hand-loads', 'razor-wire'] },
+      );
+      expect(researchIds(other)).toEqual([]);
+    });
+
+    it('the highest researched wall tier is drawn, each on top of the last', () => {
+      const ids = (tech: TechId[]) => researchIds(fight({}, { tech }));
+      // Tier 1: the strip on the top's outer edge, and the angle along the front's foot.
+      expect(ids(['reinforced-wall'])).toEqual([edge, edge]);
+      // Tier 2: the frame and the plates instead of the strip; the angle kept.
+      expect(ids(['reinforced-wall', 'steel-plating'])).toEqual([frame, plates, edge]);
+      // Tier 3: and the spikes. The order the nodes were bought in doesn't matter.
+      expect(ids([...WALL_CHAIN])).toEqual([frame, plates, edge, spikes]);
+      expect(ids(['spiked-wall', 'reinforced-wall', 'steel-plating'])).toEqual([
+        frame,
+        plates,
+        edge,
+        spikes,
+      ]);
+    });
+
+    it('lies on the edges: the strip on the outer edge, the plates on the front’s lower part', () => {
+      const s = fight({}, { tech: ['reinforced-wall', 'steel-plating'] });
+      const at = (id: ArtId) => trace(s).ops.find((o) => o.op === 'image' && o.id === id)!.at!;
+      const tex = trace(fight({})).ops;
+      expect(tex.some((o) => o.op === 'image' && o.id === frame)).toBe(false);
+      const [, , fw, fh] = at(frame);
+      const [px, py, pw, ph] = at(plates);
+      expect(pw).toBeCloseTo(fw!, 9);
+      expect(fh).toBeGreaterThan(0);
+      expect(ph! / (py! + ph! - (at(frame)[1]! + fh!))).toBeCloseTo(RESEARCH_LOOK.plates, 9);
+      expect(px).toBeCloseTo(at(frame)[0]!, 9);
+      const one = trace(fight({}, { tech: ['reinforced-wall'] })).ops.find(
+        (o) => o.op === 'image' && o.id === edge,
+      )!.at!;
+      // The strip ends on the top's right (enemy-side) edge, `edge` of its width.
+      expect(one[0]! + one[2]!).toBeCloseTo(at(frame)[0]! + fw!, 9);
+      expect(one[2]! / fw!).toBeCloseTo(RESEARCH_LOOK.edge, 9);
+    });
+
+    it('over the texture and the gate, under Reinforce’s brace and the damage; spikes over the sandbags', () => {
+      const s = fight(
+        { kind: 'gate', tier: 'wood', hp: 90 },
+        { taken: ['reinforce', 'sandbags'], tech: [...WALL_CHAIN] },
+      );
+      const ids = trace(s)
+        .ops.filter((o) => o.op === 'image')
+        .map((o) => o.id);
+      expect(ids.indexOf(TIER_ART.wood.gate)).toBeLessThan(ids.indexOf(frame));
+      expect(ids.lastIndexOf(edge)).toBeLessThan(ids.indexOf(BASE_ART.brace));
+      expect(ids.lastIndexOf(BASE_ART.brace)).toBeLessThan(ids.indexOf(BASE_ART.cracks));
+      expect(ids.lastIndexOf(BASE_ART.sandbags.bag)).toBeLessThan(ids.indexOf(spikes));
+      // Research art draws at full strength; only the brace is faint.
+      const ops = trace(s).ops.filter((o) => o.op === 'image' && research.includes(o.id as ArtId));
+      expect(ops.every((o) => o.alpha === 1)).toBe(true);
+    });
+
+    it('a broken segment shows rubble only, and the build scene none', () => {
+      const tech = [...WALL_CHAIN];
+      expect(researchIds(fight({ hp: 0 }, { tech }))).toEqual([]);
+      expect(researchIds(fight({ hp: 0 }, { tech, taken: ['sandbags'] }))).toEqual([]);
+      expect(researchIds(fight({}, { tech }), overlay())).toEqual([]);
+      // Every wall tier takes the same art.
+      for (const tier of ['wood', 'metal', 'concrete', 'reinforced'] as const) {
+        expect(researchIds(fight({ tier }, { tech }))).toEqual([frame, plates, edge, spikes]);
+      }
+    });
+
+    it('Barbed Wire: a band painted per research tier, the same one again for the same tier', () => {
+      const { Painted, fills, strokes } = paintable();
+      try {
+        const band = (tech: TechId[], wire = rows()) =>
+          paintedDraws(fight({}, { taken: ['barbed-wire'], tech, wire }), Painted);
+        const none = band([]);
+        const t1 = band(['razor-wire']);
+        const t3 = band(['razor-wire', 'thick-coils', 'electric-wire']);
+        expect([none, t1, t3].map((b) => b.length)).toEqual([1, 1, 1]);
+        // Each tier paints differently: Razor Wire lights its barbs, Thick Coils adds a coil
+        // beside each, Electric Wire a glow along them. (Fresh art each call: counted per call.)
+        const painted = (tech: TechId[]) => {
+          strokes.length = 0;
+          band(tech);
+          return [...strokes];
+        };
+        const count = (s: string[], style: string) => s.filter((x) => x === style).length;
+        const [s0, s1, s2, s3] = [
+          painted([]),
+          painted(['razor-wire']),
+          painted(['razor-wire', 'thick-coils']),
+          painted(['razor-wire', 'thick-coils', 'electric-wire']),
+        ];
+        expect(count(s1, WIRE.shine)).toBeGreaterThan(count(s0, WIRE.shine));
+        expect(s2.length).toBeGreaterThan(1.5 * s1.length);
+        expect([s0, s1, s2].map((s) => count(s, WIRE.electric.glow))).toEqual([0, 0, 0]);
+        expect(count(s3, WIRE.electric.glow)).toBeGreaterThan(0);
+        expect([t3[0]!.img.width, t3[0]!.img.height]).toEqual([
+          none[0]!.img.width,
+          none[0]!.img.height,
+        ]);
+        // Worn and torn rows still come from their own bands at every tier.
+        expect(band(['razor-wire', 'thick-coils'], wornRows([2], [5]))).toHaveLength(5);
+        // Electric Wire: white insulators on the posts; no other tier adds a fill.
+        fills.length = 0;
+        band(['razor-wire', 'thick-coils']);
+        expect(fills.some((f) => f.style === WIRE.electric.insulator)).toBe(false);
+        band(['razor-wire', 'thick-coils', 'electric-wire']);
+        expect(fills.some((f) => f.style === WIRE.electric.insulator)).toBe(true);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 });
 

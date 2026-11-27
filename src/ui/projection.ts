@@ -5,6 +5,7 @@ import { radiusOf, type HordeState, type Layer, type Post } from '../core/horde.
 import {
   COLUMNS,
   ENEMY_RADIUS,
+  type TechId,
   FIELD,
   HORDE_ONLY,
   POST_OFFSET,
@@ -185,6 +186,40 @@ export function wallStage(hp: number, maxHp: number): WallStage {
   const share = hp / maxHp;
   return share >= 2 / 3 ? 1 : share >= 1 / 3 ? 2 : 3;
 }
+
+/** A branch's research tier on the field (ID-270): 0 none, up to its Tier 3 node. */
+export type ResearchTier = 0 | 1 | 2 | 3;
+const tierOf =
+  (nodes: readonly [TechId, TechId, TechId]) =>
+  (tech: readonly TechId[] | undefined): ResearchTier => {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      if (tech?.includes(nodes[i]!)) return (i + 1) as ResearchTier;
+    }
+    return 0;
+  };
+/** The Wall branch's highest researched tier (ID-270); the highest counts. */
+export const wallTier = tierOf(['reinforced-wall', 'steel-plating', 'spiked-wall']);
+/** The Barbed Wire branch's highest researched tier (ID-270); the highest counts. */
+export const wireTier = tierOf(['razor-wire', 'thick-coils', 'electric-wire']);
+
+/**
+ * How the Wall branch's research shows on each standing segment (ID-270), in light steel
+ * laid on the edges so the middle of the top stays free for Reinforce's brace: Tier 1 a strip
+ * `edge` of the top's width along its outer (enemy-side) edge, a dark `seam` (`seamW` of the strip) on its inner side so
+ * it stands off a pale top, and a steel angle `foot` of the
+ * front's height along its foot; Tier 2 a riveted frame round the top and plates over the
+ * lower `plates` of the front, so the wall's own front still shows above them (the angle
+ * kept); Tier 3 adds a row of spikes on a strip laid `spikes.inset` world units in from the
+ * top's outer edge, jutting `spikes.length` past it at the top's height, over the sandbags.
+ */
+export const RESEARCH_LOOK = {
+  edge: 0.2,
+  seam: 'rgba(24, 26, 28, 0.85)',
+  seamW: 0.12,
+  foot: 0.18,
+  plates: 0.55,
+  spikes: { inset: 4, length: 9 },
+} as const;
 
 /** A hit on the wall (ID-072): a warm flash and a sideways shake of `shake` world units, gone in `time` s. */
 export const WALL_HIT = { time: 0.25, shake: 2, flash: 0.55 } as const;

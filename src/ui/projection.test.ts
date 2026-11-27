@@ -48,6 +48,8 @@ import {
   wallHeight,
   wallHitFade,
   wallStage,
+  wallTier,
+  wireTier,
   type Camera,
 } from './projection.ts';
 
@@ -655,5 +657,20 @@ describe('enemyHitAt: a click on a zombie as drawn (ID-160)', () => {
     ] as const) {
       expect(enemyHitAt(x, y, s)).toBeNull();
     }
+  });
+});
+
+describe('research tiers on the field (ID-270)', () => {
+  it('the highest researched node of each branch counts; none is tier 0', () => {
+    expect(wallTier(undefined)).toBe(0);
+    expect(wallTier([])).toBe(0);
+    expect(wallTier(['hand-loads', 'razor-wire'])).toBe(0);
+    expect(wallTier(['reinforced-wall'])).toBe(1);
+    expect(wallTier(['reinforced-wall', 'steel-plating'])).toBe(2);
+    expect(wallTier(['spiked-wall', 'steel-plating', 'reinforced-wall'])).toBe(3);
+    expect(wireTier(['reinforced-wall', 'steel-plating'])).toBe(0);
+    expect(wireTier(['razor-wire'])).toBe(1);
+    expect(wireTier(['razor-wire', 'thick-coils'])).toBe(2);
+    expect(wireTier(['razor-wire', 'thick-coils', 'electric-wire', 'shock-net'])).toBe(3);
   });
 });

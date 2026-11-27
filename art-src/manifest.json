@@ -4185,6 +4185,42 @@
       "prompt": "seen flat from directly above, a heavy dark steel X-shaped cross brace made of two thin riveted steel straps crossing in the middle, a bolted square steel plate at each of the four ends, the space between the straps is empty background, a tall rectangle shape about twice as tall as wide. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
     },
     {
+      "id": "wall-tech-edge",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7542,
+      "size": "256x1024",
+      "prompt": "seen flat from directly above, one single long very narrow mid-grey galvanised steel bar standing upright, a flat steel strip with four round rivets spaced along it, one thin dark outline, a very tall thin rectangle shape about ten times as tall as wide, nothing else. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "wall-tech-frame",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7541,
+      "size": "512x1024",
+      "prompt": "seen flat from directly above, a thin mid-grey galvanised steel rectangular frame made of four very narrow flat steel bars joined at the corners, three round rivets spaced along each long bar and one on each short bar, one thin dark outline, the whole middle inside the frame is empty background, a tall rectangle shape about twice as tall as wide, the frame fills the whole image. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "wall-tech-plates",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7543,
+      "size": "512x768",
+      "prompt": "seen flat straight on, a wall cladding of two flat mid-grey galvanised steel plates side by side joined by a thin seam, each plate with a round rivet in each corner, one thin dark outline, soft scuffs, a rectangle a little taller than wide, the plates fill the whole image. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
+      "id": "wall-tech-spikes",
+      "kind": "sprite",
+      "style": "verbatim",
+      "model": "black-forest-labs/flux.2-klein-4b",
+      "seed": 7545,
+      "size": "512x1024",
+      "prompt": "seen flat from directly above, a thin flat rectangular mid-grey steel strip with square ends standing upright on the left, with exactly five identical short fat sharp steel cone spikes sticking straight out to the right, evenly spaced from top to bottom along the whole strip, the same size and shape each, mid-grey galvanised steel, not blue, with brighter tips, one bold dark outline, a tall shape about twice as tall as wide. 2D game sprite, hand-painted style, soft shading, bold dark outline, single object centred, plain flat solid magenta background #FF00FF, no text, no letters, no cast shadow, no ground, no hands, no person"
+    },
+    {
       "id": "ground",
       "kind": "texture",
       "model": "black-forest-labs/flux.2-klein-4b",
