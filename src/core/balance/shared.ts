@@ -19,12 +19,13 @@ import {
 import { newGame, type GameState } from '../game.ts';
 import { tickInPlace, type HordeState } from '../horde.ts';
 import { startSquadHorde } from '../hordeonly.ts';
-import { effHorde, type HigherMode, type Mode } from '../modes.ts';
+import { effHorde, localHorde, modeOf, type HigherMode, type Mode } from '../modes.ts';
 import { createRng } from '../rng.ts';
 import { playSquadHorde, type HordeRun } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { xpForLevel } from '../stats.ts';
 import { themeAt } from '../themes.ts';
+import { REF_SHARE, refTech } from './refplayer.ts';
 import { xpToNext } from '../waves.ts';
 
 export const SEEDS = 20;
@@ -128,6 +129,21 @@ export const inMode = (game: GameState, mode: HigherMode, local = 1): GameState 
   modes: { ...game.modes, [mode]: local },
 });
 
+/**
+ * `game` as the reference player plays it (ID-265): with the Research Center nodes they own at
+ * horde `n` of the game's mode (the next new one by default), 65% of the Scrap earned spent on
+ * research (`refplayer.ts`). `game` itself while they own none (Normal below Horde 30), so those
+ * fights are the ones they always were. Nothing is bought: no Scrap comes off.
+ */
+export function withRef(
+  game: GameState,
+  n: number = localHorde(game),
+  share: number = REF_SHARE,
+): GameState {
+  const tech = refTech(modeOf(game), n, share);
+  return tech.length > 0 ? { ...game, tech } : game;
+}
+
 /** Fights won out of `seeds` at horde `n` (the game's own mode's), by `game`'s squad. */
 export const wins = (game: GameState, n: number, seeds: number): number => {
   let won = 0;
@@ -152,20 +168,29 @@ export function holdFrom(game: (level: number) => GameState, n: number, from = 1
   return lo;
 }
 
-/** The lowest gun level whose squad holds Normal Horde 50: most of 5 seeds won. */
-export const holdLevel = (): number => holdFrom((level) => squad(50, level), 50);
+/** The lowest gun level whose squad, with the reference player's research, holds Normal Horde 50: most of 5 seeds won. */
+export const holdLevel = (): number => holdFrom((level) => withRef(squad(50, level)), 50);
 
-/** The expected squad of `mode` whose Squad Power is at least `share` of horde `n`'s Recommended Power. */
-export function squadAbove(mode: HigherMode, n: number, share: number): GameState {
-  const eff = effHorde(mode, n);
-  const target = recommendedPower(eff, mode, SIZE) * share;
+/** The expected squad of `mode`'s horde `n` (a Normal one at Horde `n`) at gun `level`, unresearched. */
+export function squadIn(mode: Mode, n: number, level: number): GameState {
+  if (mode === 'normal') return squad(n, level);
+  const g = inMode(squad(mode === 'nightmare' ? 51 : 200, level), mode, n);
+  if (mode === 'hell') g.modes = { nightmare: 51, hell: n };
+  return g;
+}
+
+/** The lowest gun level whose expected squad has at least `share` of horde `n`'s Recommended Power. */
+export function levelAbove(mode: Mode, n: number, share: number): number {
+  const target = recommendedPower(effHorde(mode, n), mode, SIZE) * share;
   for (let level = 1; level <= 400; level++) {
-    const g = inMode(squad(mode === 'nightmare' ? 51 : 200, level), mode, n);
-    if (mode === 'hell') g.modes = { nightmare: 51, hell: n };
-    if (squadPower(g) >= target) return g;
+    if (squadPower(squadIn(mode, n, level)) >= target) return level;
   }
   throw new Error(`no squad reaches ${share} of ${mode} ${n}`);
 }
+
+/** The expected squad of `mode` whose Squad Power is at least `share` of horde `n`'s Recommended Power. */
+export const squadAbove = (mode: Mode, n: number, share: number): GameState =>
+  squadIn(mode, n, levelAbove(mode, n, share));
 
 /**
  * `game` with a theme seed (ID-238) under which `mode`'s horde `local` is theme `theme`: the

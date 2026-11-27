@@ -8,6 +8,9 @@
 // gearing up on Nightmare's drops (effective levels 51–70, rarity shifted up) lifts it past 2×
 // (geared, it was stopped by Horde 20 on only 4 of 20 seeds, accepted: a strong squad winning
 // is fine; the mode's start is held by the Horde 1 check).
+// ID-265: every squad plays with the Research Center nodes the reference player owns at that
+// horde (`withRef`, 65% of the Scrap earned), against the research HP ramp
+// (`SQUAD_RESEARCH_HP`). Nightmare 1's hold-level window (30–70%) is the known knife-edge.
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
 import { finishSquadHorde } from '../hordeonly.ts';
@@ -15,7 +18,7 @@ import { localHorde } from '../modes.ts';
 import { playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { cacheFor } from './cache.ts';
-import { holdLevel, inMode, SEEDS, squad, squadAbove, wins } from './shared.ts';
+import { holdLevel, inMode, SEEDS, squad, squadAbove, wins, withRef } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
@@ -38,7 +41,7 @@ function levelOver(share: number): number {
 function runNightmare(level: number, seed: number, last: number): number | null {
   let game = nightmare(level);
   for (let n = 1; n <= last; n++) {
-    const horde = playSquadHorde(game, seed * 1000 + n, undefined, undefined, n);
+    const horde = playSquadHorde(withRef(game, n), seed * 1000 + n, undefined, undefined, n);
     if (horde.outcome !== 'won') return n;
     game = finishSquadHorde(game, horde);
     if (localHorde(game) !== n + 1) throw new Error(`Nightmare ${n} did not count`);
@@ -59,8 +62,8 @@ describe('difficulty modes (ID-218, ID-223)', () => {
         keep(
           `nightmare 1 ${hold} ${i}`,
           () =>
-            playSquadHorde(nightmare(hold), i * 1000 + 1, undefined, undefined, 1).outcome ===
-            'won',
+            playSquadHorde(withRef(nightmare(hold)), i * 1000 + 1, undefined, undefined, 1)
+              .outcome === 'won',
         ),
       );
       ends.push(keep(`nightmare 2x nogear ${strong} ${i}`, () => runNightmare(strong, i, 20)));
@@ -89,7 +92,7 @@ describe('difficulty modes (ID-218, ID-223)', () => {
   ] as const)(
     'a squad well over Recommended Power does not lose repeatedly: %s %i',
     (mode, n) => {
-      const won = keep(`over ${mode} ${n}`, () => wins(squadAbove(mode, n, 1.3), n, 5));
+      const won = keep(`over ${mode} ${n}`, () => wins(withRef(squadAbove(mode, n, 1.3)), n, 5));
       expect(won, `${mode} Horde ${n} at 130%`).toBeGreaterThanOrEqual(4);
     },
     3_600_000,

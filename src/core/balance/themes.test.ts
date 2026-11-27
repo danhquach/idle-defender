@@ -23,7 +23,16 @@ import { effHorde, type HigherMode } from '../modes.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { themeAt } from '../themes.ts';
 import { cacheFor } from './cache.ts';
-import { gunSquad, inMode, mixedSquad, SEEDS, squad, watchFight, withTheme } from './shared.ts';
+import {
+  gunSquad,
+  inMode,
+  mixedSquad,
+  SEEDS,
+  squad,
+  watchFight,
+  withRef,
+  withTheme,
+} from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
@@ -48,8 +57,10 @@ const inHorde = (g: GameState, mode: HigherMode, n: number): GameState => {
 /** Fights won out of SEEDS at horde `n`, the horde its theme's (`plain` false) or the plain one of its number. */
 function winsOf(game: GameState, n: number, plain: boolean): number {
   let won = 0;
+  // ID-265: with the Research Center nodes the reference player owns at that horde.
+  const ref = withRef(game, n);
   for (let s = 1; s <= SEEDS; s++) {
-    if (playSquadHorde(game, s * 101, undefined, undefined, n, false, plain).outcome === 'won') {
+    if (playSquadHorde(ref, s * 101, undefined, undefined, n, false, plain).outcome === 'won') {
       won++;
     }
   }
@@ -191,13 +202,17 @@ describe('themed hordes (ID-238)', () => {
     expect(r.owned, JSON.stringify(r)).toBeGreaterThanOrEqual(18);
   }, 3_600_000);
 
-  it('B6: a Stampede Horde 45 puts at most 1.75x the plain horde’s enemies on the field at once', () => {
+  it('B6: a Stampede Horde 45 puts at most 240 enemies on the field at once', () => {
     const rec = recommendedPower(45, 'normal', SIZE);
-    const game = withTheme(
-      squadAt((l) => squad(45, l), rec, 1),
-      'normal',
+    // ID-265: the reference player's research (a bare squad meets the research HP ramp alone).
+    const game = withRef(
+      withTheme(
+        squadAt((l) => squad(45, l), rec, 1),
+        'normal',
+        45,
+        'stampede',
+      ),
       45,
-      'stampede',
     );
     const r = keep('b6', () => {
       const rows: [number, number, number, number][] = [];
@@ -209,8 +224,9 @@ describe('themed hordes (ID-238)', () => {
       return rows;
     });
     console.log(`themes B6 peak enemies and fight levels, themed vs plain: ${JSON.stringify(r)}`);
-    for (const [themed, plain] of r)
-      expect(themed, JSON.stringify(r)).toBeLessThanOrEqual(1.75 * plain);
+    // ID-265: an absolute cap on the crowd (about 1.75 × the plain peak's mean, 138, on main): research
+    // shortens the plain fight, so a ratio to it fell; the Stampede's own peak is what the cap protects.
+    for (const [themed] of r) expect(themed, JSON.stringify(r)).toBeLessThanOrEqual(240);
   }, 3_600_000);
 
   it('logs the card offers a fight of each theme brings against the plain horde’s (about 1 with XP matched)', () => {

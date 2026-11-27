@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { recruit } from './camp.ts';
 import { SQUAD_BIG_HP, SQUAD_CAP, SQUAD_CAP_MAX, SQUAD_HP_GROWTH } from './data.ts';
 import { newGame, type GameState } from './game.ts';
-import { bigSquadHp, squadHpScale, squadSize, startSquadHorde } from './hordeonly.ts';
+import { bigSquadHp, researchHp, squadHpScale, squadSize, startSquadHorde } from './hordeonly.ts';
 import { effHorde, MODES, type Mode } from './modes.ts';
 import { hordeHp, recommendedPower } from './squadpower.ts';
 
@@ -75,10 +75,11 @@ describe('bigger squad late HP (ID-224)', () => {
     expect(squadSize(game(10, 2, 50))).toBe(SQUAD_CAP_MAX);
     expect(squadSize(game(4, 2, 50))).toBe(4);
     const benched = startSquadHorde(game(10, 0, 50), 1, 0);
-    expect(benched.hpScale).toBeCloseTo(squadHpScale(50), 12);
+    // The fight also carries the research HP ramp (ID-265), which Recommended Power does not.
+    expect(benched.hpScale).toBeCloseTo(squadHpScale(50) * researchHp(50), 12);
   });
 
-  it('starts the fight at the HP Recommended Power expects, from the same count', () => {
+  it('starts the fight at the HP Recommended Power expects (and the research ramp), from the same count', () => {
     for (const mode of ['normal', 'nightmare', 'hell'] as const) {
       for (const [n, bought] of [
         [6, 0],
@@ -90,7 +91,7 @@ describe('bigger squad late HP (ID-224)', () => {
         const eff = effHorde(mode, local);
         const s = startSquadHorde(g, 1, 0);
         expect(s.hpScale, `${mode} ${n}`).toBeCloseTo(
-          squadHpScale(eff, squadSize(g)) * MODES[mode].hpScale,
+          squadHpScale(eff, squadSize(g)) * MODES[mode].hpScale * researchHp(eff),
           12,
         );
       }

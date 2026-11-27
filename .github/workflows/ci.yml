@@ -110,6 +110,14 @@ jobs:
           - name: Unit (traits)
             tests: src/core/balance/traits.test.ts
             timeout: 25
+          # ID-265: the research file plays the stuck guard (five hordes, 20 seeds) and the skip-research
+          # metric (12 squads, 20 seeds, played twice), about 580 fights on top of its older 42; the
+          # last job also runs the older balance files (bare, cards, farming, horror, ...), which take
+          # about 6 minutes together uncached (one local worker, cache off; ID-265), so with the
+          # research file out of it that job stays well inside its 15. A job of its own.
+          - name: Unit (research)
+            tests: src/core/balance/research.test.ts
+            timeout: 25
           - name: Lint, build, other unit
             checks: true
             tests: >-
@@ -124,6 +132,7 @@ jobs:
               --exclude src/core/balance/themes.test.ts
               --exclude src/core/balance/gun-parity.test.ts
               --exclude src/core/balance/traits.test.ts
+              --exclude src/core/balance/research.test.ts
     steps:
       - name: Balance skipped
         if: env.RUN != 'true'

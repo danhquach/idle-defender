@@ -3670,6 +3670,11 @@ and comes back stronger.
   Horde 1 asks 18, 3 asks 115, 5 asks 778, 9 asks 1,774, 10 asks 1,899, 15
   asks 4,038, 20 asks 6,653, 30 asks 13,673 (before ID-137: 1,685, 3,534,
   5,821 and 11,963; before ID-136: 3,365, 5,544 and 11,394 past Horde 10).
+  - ID-265, research: Recommended Power stays the unresearched player's, to the digit (no figure above
+    moves). It does not carry the research HP ramp (`SQUAD_RESEARCH_HP`): the ramp scales the fight's
+    `hpScale` only, not `squadHpScale` or `hordeHp`. The reference player (65% of the Scrap earned
+    spent on research) has the Squad Power of the bare squad, so at Recommended Power it stands where the bare
+    player stood, against a fight up to ×1.08 tougher (Balance pass, ID-265).
   - ID-224, a bigger squad: Recommended Power takes the squad that fights
     (`squadSize`, the roster up to the bought slots), and a squad over 6 asks
     more past Horde 30, by the same factor its enemies' HP takes
@@ -3888,9 +3893,9 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   chip name the card; no radio part is found in a higher mode.
 - **Balance.** Nightmare starts where Normal ends (ID-223): a squad that just holds
   Normal Horde 50 wins Nightmare Horde 1 at the first try on 30–70% of 20 seeds
-  (measured: gun level 54, 9 of 20; gun level 49, 10 of 20 before ID-224); a squad at 2× Normal
+  (measured: gun level 54, 9 of 20; gun level 49, 10 of 20 before ID-224; with the reference player's research, ID-265: gun level 54, 9 of 20); a squad at 2× Normal
   Horde 50's Recommended Power (gun level 63), not gearing up between fights, is stopped by Nightmare Horde 20
-  on most (measured: 20 of 20, at Hordes 6–11 since ID-224, 9–17 before; gearing up on Nightmare's drops it was
+  on most (measured: 20 of 20, at Hordes 6–12 since ID-265, 6–11 before it, 9–17 before ID-224; gearing up on Nightmare's drops it was
   stopped on only 4 of 20, accepted: a strong squad winning is fine); a squad well over
   Recommended Power does not lose repeatedly at Nightmare 20 and 30
   (`balance/modes.test.ts`). `MODES.nightmare.hpScale` stayed 1.12 (no wall at
@@ -3900,7 +3905,7 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   knobs at the same strength (the hold level is a 5-seed bisect), so it is not finely tuned. Before ID-223 (offset 40) the check was Nightmare 1–10 on 60% of seeds
   and stopped by Nightmare 30. Hell starts where Nightmare ends (ID-225):
   a squad that just holds Nightmare Horde 50 (gun level 107) wins Hell Horde 1 at the
-  first try on 15–70% of 20 seeds (30–70% before ID-237's traits; measured: 5 of 20 since
+  first try on 15–70% of 20 seeds (30–70% before ID-237's traits; measured: 8 of 20 since ID-265 (the reference player's research), 5 of 20 since
   ID-237, 12 of 20 before at `hpScale` 1.4; 20 of 20 at 1,
   17 at 1.2, 14 at 1.3, 8 at 1.5) and, gearing up between fights, is stopped before Hell
   Horde 30 on most (measured: 20 of 20, all by Hell 3: it stands at its edge, as it
@@ -4074,8 +4079,9 @@ Shamblers take the rest of each wave. Elites and bosses of the horde are as ever
   1.0x wins at least the plain's less 4; **B3** Nightmare 15 Iron Wall at 1.3x costs an all-LMG
   squad at least 3 wins against the mix; **B4** Hell 15, the mix at 1.3x, per theme at least the
   plain's less 4 and 10 of 20; **B5** 20 campaigns (`playSquadCampaign`'s `themeSeed`) own an
-  answering gun at Horde 15 in at least 18; **B6** a Stampede Horde 45 peaks at 1.75x the plain
-  horde's enemies at most. Lower bounds only ("strong is fine, stuck is not").
+  answering gun at Horde 15 in at least 18; **B6** a Stampede Horde 45 peaks at 240 enemies at
+  most (ID-265: an absolute cap, about 1.75x the plain peak's mean of 138 on main; research shortens the plain
+  fight, so a ratio to it fell while the Stampede's own peak held). Lower bounds only ("strong is fine, stuck is not").
   **Measured (wins of 20; one full run, then one probe on Crawl's `share`, 0.5 to 0.25, then the
   rules above fixed before the last run):**
   - B1, mix on Normal 25, at 1.0x: plain 0, Stampede 2, Iron Wall 7, Crawl 0, Bloat Tide 13; at
@@ -4087,7 +4093,8 @@ Shamblers take the rest of each wave. Elites and bosses of the horde are as ever
   - B5, campaigns owning an answering gun at Horde 15: 20 of 20 (Stampede 6, Bloat Tide 7, Iron
     Wall 6, Crawl 1 of the campaigns that rolled each).
   - B6, peak enemies of a Stampede Horde 45 against the plain horde's, six seeds: 194/138, 215/157,
-    190/134, 178/153, 162/127, 178/120 (at most 1.48x; cap 1.75x).
+    190/134, 178/153, 162/127, 178/120 (at most 1.48x; cap 1.75x then). ID-265, with the reference player's research (`withRef`), the cap is 240
+    enemies: 192/104, 214/119, 196/129, 215/116, 177/120, 210/98 (max 215).
   - Fight level (card offers), theme over plain: Stampede 1.08, Iron Wall 1.10, Crawl 1.00, Bloat
     Tide 1.13, so the XP match holds to about 10%.
   - Existing files: every one passed on the first full run except `squad-power` (Horde 15 Crawl: 0
@@ -4174,7 +4181,10 @@ is unrelated: this feature is `tech` in the code.)
   squad (`squadAt(n, n)`), 20 seeds: 20/20 won in every tree (none, whole, wire only, mortars only);
   mean fight time Horde 4 165.8 s bare against 165.7 s whole, Horde 9 263.2 s against 261.6 s;
   Barbed Wire cards taken at Horde 9: 1 bare, 3 whole. `TECH_FX.spikes` is the first lever if a
-  knife-edge horde flips; the retune of the difficulty for a researched player is ID-265 (#539).
+  knife-edge horde flips; the retune of the difficulty for a researched player is ID-265 (#539), in
+  "Balance pass (ID-265)" below: a reference player who owns the nodes 65% of the Scrap earned buys, and a
+  research HP ramp from Horde 30 (`SQUAD_RESEARCH_HP`, ×1.08 at Horde 40 on, Nightmare and Hell included)
+  that puts this player where today's unresearched player stands.
 - **Tier 4 cards (ID-264).** Rules in the epic card table (§8): Wall Machine Gun is a share (`CARD.wallGun.share`) of the horde's demand rate delivered from the wall, Shock Net and Tar Moat are dead in comfortable wins and pay only under pressure; the PM kept the ticket's placement (net in the 250-400 px band, moat on the wall's front). Byte identity: a game without the cards has none of `nextGunAt`, `nextNetAt`, `moat`, `gunDps` or `nettedUntil` on its state or enemies; `tier4-identity.test.ts` pins the digests. The probe is below.
 - **Tier 4 probe (ID-264, scratch script, 20 seeds, `squadAt(n, n)`; the pressured arm is Horde 9 with common rifles at level 4, 0/20 won bare).** Wins, mean fight s, the gun's HP share of the horde's whole HP:
 
@@ -4336,6 +4346,104 @@ Targets, each with a balance test (as in ID-102 unless named):
   Airstrike the one skill, Agility leads (Mind 0.47, Agility 0.67, Instinct
   0.56; main before 0.47, 0.53, 0.50), and the stats were not retuned in that
   ticket.
+
+### Balance pass *(ID-265)*
+
+Tier 1–4 research (ID-263, ID-264) makes fights easier with nothing to balance it: a player who ignores
+research and one who owns the whole tree face the same hordes. Retuned for a **partly researched player**,
+with a reference player the balance tests play, one HP ramp, and two guards. Hordes 1–29 are untouched,
+bit for bit (`squadHpScale`, Recommended Power, every pre-existing digest below Horde 30).
+
+- **The reference player** (`core/balance/refplayer.ts`: a test fixture, not shipping code; deterministic,
+  no RNG). At horde `n` of a mode it owns the nodes it could have bought with **65%** of the Scrap earned
+  so far:
+  - *Earned Scrap* = the start stock (60) + a **floor factor** times the first clears' pay (`winScrap`: 10 + 5
+    × the effective horde, times the mode's Scrap: Nightmare ×1.5, Hell ×2) of every horde before `n` (Normal
+    1–50, then Nightmare 1–50, then Hell). The factor stands for replays, farming and salvage at the worst
+    luck: the lowest of the 5 seeds' worst-luck scripted campaigns (the player never spends, so stock = earned)
+    over start stock plus first clears is **1.06 at Horde 20, 1.30 at 30, 1.37 at 40 and 1.43 at 50** (at 50
+    the 5 seeds had 9,580–12,135 Scrap against 6,675). `REF_EARNED_FLOOR` interpolates linearly between
+    them, holds 1.06 below Horde 20, and holds 1.43 past Normal 50 (Nightmare and Hell: extrapolated, and
+    conservative, as their replays pay ×1.5 and ×2). A flat 1.43 first credited Hordes 31–39 with about one
+    Tier 1 node too many.
+  - *Slots first.* **All** slot purchases come off before any research: both squad slots (500 + 1,200 =
+    1,700) and the four stash slots (150 + 250 + 400 + 600 = 1,400), 3,100 in all (`REF_SLOTS_COST`). (A
+    first design paid each slot when affordable: the owned set then shrank when a slot was bought, 3 nodes at
+    Horde 18 and 0 at 19 in the probe.) Paying the stash slots too delays every node by a few hordes against a
+    player who buys the squad slots only; that is the conservative end, as the PM, QA and Dev reviewers asked.
+  - *Buying.* 65% of what is left buys the cheapest open node, again and again, ties in `TECH_IDS` order, a
+    node's parents owned first, until the next costs more than is left. The 40% player (the stuck guard's)
+    is the same rule at 40%.
+- **Schedule** (`refplayer.test.ts` pins it; nodes owned at 65% / at 40%):
+
+| Horde | Earned Scrap | 65% | 40% | The 65% player's nodes |
+|---|---|---|---|---|
+| Normal 20 | 1,268 | 0 | 0 | none (under the 3,100 of slots) |
+| Normal 30 | 3,265 | 0 | 0 | none (164 over the slots, under the first node's 200 at 65%) |
+| Normal 31, 32, 34, 37 | 3,491 / 3,726 / 4,223 / 5,038 | 1, 2, 3, 4 | 0, 1, 2, 3 | Reinforced Wall, + Razor Wire, + Quick Mortars, + Hand-loads |
+| Normal 40 | 5,937 | 5 | 4 | + Steel Plating (Reinforced Wall, Steel Plating, Razor Wire, Hand-loads, Quick Mortars) |
+| Normal 43, 46 | 6,910 / 7,969 | 6, 7 | 4, 5 | + Thick Coils, + Wide Slick |
+| Normal 50 | 9,519 | 7 | 6 | the same seven |
+| Nightmare 10 | 15,397 | 10 | 8 | + Spiked Wall, Electric Wire, Armour-piercing |
+| Nightmare 30 | 30,741 | 12 | 11 | + Napalm Mortar, Tar Moat |
+| Hell 10 | 65,239 | 14 | 13 | the whole tree (Shock Net from Nightmare 34, the Wall Machine Gun from Nightmare 43) |
+| Hell 30 | 99,988 | 14 | 14 | the whole tree |
+
+  The reference player owns its first node at Normal 31 (none at 30), so the ramp, which is exactly 1 at Horde 30, starts there.
+- **The knob** `SQUAD_RESEARCH_HP = { from: 30, to: 40, factor: 1.08 }` (`core/data.ts`, `researchHp` in
+  `core/hordeonly.ts`): a fight's enemy HP is multiplied by `factor` to the power of (clamp(`n`, from, to) −
+  from) / (to − from), the effective horde `n`: exactly 1 up to Horde 30, ×1.039 at 35, ×1.08 from 40 on, held
+  through Nightmare and Hell (so there is no step at Nightmare 1; `MODES.hell.hpScale` is untouched).
+  Multiplied last, onto the fight's `hpScale` only: `squadHpScale`, `hordeHp` and so **Recommended Power
+  are unchanged** (the reference player's Squad Power is the bare squad's, so it stands where the bare
+  player stood at Recommended Power). The Wall Machine Gun's demand (ID-264) **does** carry it ("it keeps
+  pace with bigger hordes"), pinned in `research-hp.test.ts`. `slickDps`, `fireDps` and `fragDamage` scale
+  with the fight's `hpScale`, so they keep pace too. Cap: 1.10 (hard); a ×1.06 ramp is one gun level.
+- **Measured, the one ramp probe** (scratch script, 20 seeds per gun level, the expected-squad fixtures of
+  `squad8`, `modes` and `hell`; L50 is the gun level of a 50% win; one level is 6% HP, noise about 0.4
+  level; Normal 30 is under the ramp, where the 65% player owned one node under the earlier flat earned factor, none now; probed with the schedule at Normal 40, 50, Nightmare and Hell, which the floor table leaves as probed):
+
+| Fixture | Bare, today | 65% at ×1.06 | 65% at ×1.10 |
+|---|---|---|---|
+| Normal 30, squad of 6 / 8 | 34.20 / 28.60 | 33.95 / 28.35 (no ramp) | |
+| Normal 40, squad of 6 / 8 | 44.50 / 40.40 | 44.10 / 40.75 | 44.40 / 41.25 |
+| Normal 50, squad of 6 / 8 | 54.20 / 52.95 | 53.75 / 52.90 | 54.10 / 53.10 |
+| Nightmare 10 | 64.20 | 64.20 | 63.55 |
+| Nightmare 30 | 85.75 | 86.10 | 86.05 |
+| Hell 10 | 118.65 | 118.50 | 119.20 |
+| Hell 30 | 145.20 | 143.95 | 144.40 |
+
+  Mean of the 65% player's L50 less today's bare L50: −0.20 at ×1.06 and +0.03 at ×1.10, so the 65% player
+  sits at today's bare level; **×1.08** (the middle, about −0.1 interpolated; the worst fixture, Normal 40
+  with 8, about +0.6, inside two noise widths) is set. The bare player now meets the same ×1.08: about 1.3 gun
+  levels more HP. Hell 30 stays about a level easier for the 65% player (1.25 at ×1.06; it owns the whole
+  tree there); not chased, one point.
+- **The stuck guard** (`balance/research.test.ts`): the 40% player at Recommended Power (the expected squad
+  of 8 at the first gun level at or over it) wins at least 8 of 20 seeds at Normal 30, 40, 50 and Nightmare 10,
+  30. Measured 19, 17, 18, 14, 16 of 20. It may lose fights, but is never stuck. A player with no research is
+  allowed to lose (not asserted).
+- **Skipping research is harder** (same file): pooled over Normal 30, 40, 50 and Nightmare 10 at Recommended
+  Power's level −3 to −1 (12 squads, 20 seeds, 240 fights), the reference player wins more than a player with
+  none by at least 6.5% of the fights. Measured 130 against 107 wins, a gap of 9.6% (Normal 30 0, Normal 40
+  +9, Normal 50 +13, Nightmare 10 +1); the floor is the gap less about 3% for noise.
+- **Balance tests moved to the reference player** (`withRef` in `balance/shared.ts`: the nodes it owns at
+  that horde, none when it owns none, so Normal up to Horde 30 is as it was): `modes`, `hell`, `squad8`,
+  `themes` (Normal 25 and 45, Nightmare 15, Hell 15), `gun-parity`, `traits`. After the retune: the Normal
+  hold level 54 (same), Nightmare 1 first try 9 of 20 (same), the 2× squad stopped by Nightmare 20 on 20 of 20
+  at Hordes 6–12 (6–11 before), Hell's hold level 107 (same), Hell 1 first try 8 of 20 (5), stopped before Hell
+  30 on 20 of 20, all by Hell 3, 130% of Recommended Power 5 of 5 at Nightmare 20, 30 and Hell 10, 20, 30; a
+  squad of 6 and of 8 at Recommended Power 13 / 15 (Horde 30), 11 / 13 (40), 11 / 13 (50) of 20, at 130% 9–10 of
+  10; guns at equal Squad Power at Nightmare 9: 16 / 16 / 13 / 17 / 14 (Carbine / LMG / Sniper / Shotgun /
+  Mix), Hell 1: 13 / 7 / 12 / 12 / 10; traits at Hell 1: mix 12 then 10 with traits on, LMG 16 then 5, Sniper
+  13 then 5.
+- **Digests.** `golden-normal.test.ts`: h45 and h50 re-recorded on Node 25 (they play past Horde 30); h30 and
+  below are byte-identical (the ramp is exactly 1 at Horde 30). The Node 22 entries for them come from CI.
+  `tier4-identity.test.ts` plays Hordes 4 and 9, so its digests are unchanged.
+- **Known knife-edges.** The Nightmare 1 and Hell 1 hold-level windows (30–70% and 15–70% of seeds at the
+  first try, each a 5-seed bisect of the hold level) move a few seeds with any change: 9 and 8 of 20 now.
+- **Not measured / caveats.** The scripted player picks Barbed Wire, Oil Bomb and Tar Moat late (`SQUAD_PICKS`),
+  so a real player gets more from the nodes than measured: the retune errs toward a strong researched squad,
+  which the PM accepts. A Hell-only extra and a ramp shape other than geometric were not tried.
 
 ## 12. Save
 
