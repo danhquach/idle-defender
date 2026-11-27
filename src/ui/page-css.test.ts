@@ -1032,3 +1032,25 @@ describe('slot corners, the ready wedge and the icon key (ID-253)', () => {
     ).toMatch(/position: static/);
   });
 });
+
+describe('Weapons on a 320 px window (ID-257)', () => {
+  const phone = (selector: string): string => {
+    const esc = selector.replace(/[.[\]]/g, '\\$&');
+    const m = new RegExp(
+      `@media \\(max-width: 640px\\) \\{[\\s\\S]*?\\n {2}${esc} \\{([^}]*)\\}`,
+    ).exec(rules);
+    expect(m, selector).not.toBeNull();
+    return m![1]!;
+  };
+
+  it('a dock taller than the details box scrolls with it, never under the Close', () => {
+    expect(phone('.inv-details')).toMatch(/overflow-x: hidden;\s*overflow-y: auto;/);
+    // The gun's name line stays above the dock while the box scrolls.
+    expect(phone('.inv-details-info')).toMatch(/min-height: 1lh;/);
+  });
+
+  it('the sort and filter menus keep their whole label and wrap the row instead', () => {
+    expect(rules).toMatch(/@media \(max-width: 480px\) \{\s*\.inv-pick \{\s*flex: 1 1 auto;/);
+    expect(rule('.inv-stash-tools')).toMatch(/flex-wrap: wrap;/);
+  });
+});
