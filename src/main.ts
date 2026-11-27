@@ -1,6 +1,7 @@
 // Entry point: the art loads, then the base view fills the page.
 import { start } from './ui/app.ts';
 import { loadArt } from './ui/sprites.ts';
+import { versionText } from './ui/version.ts';
 
 const app = document.getElementById('app');
 if (!app) throw new Error('main: #app is missing');
@@ -10,7 +11,7 @@ status.textContent = 'Loading…';
 app.append(status);
 const version = document.createElement('p');
 version.className = 'version';
-version.textContent = `v${__APP_VERSION__} (${__BUILD_ID__})`;
+version.textContent = versionText();
 app.append(version);
 
 loadArt().then(

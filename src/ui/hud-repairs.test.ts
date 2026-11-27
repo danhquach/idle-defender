@@ -132,15 +132,25 @@ describe('the Field Repairs button (ID-231)', () => {
     hud.update(r.state);
     expect(spoken(button)).toBe('Field Repairs 5s');
     expect(button.disabled).toBe(true);
+    // The phone's states (ID-275): the cost running pulses; neither it nor ready is struck out.
+    expect(button.classList.contains('hud-repairs-cost')).toBe(true);
+    expect(button.classList.contains('hud-repairs-spent')).toBe(false);
+    expect(repairsButton(r.state)).toMatchObject({ running: true, spent: true, hidden: false });
     hud.update({ ...r.state, time: 30 });
     expect(spoken(button)).toBe('Field Repairs · used');
     expect(button.classList.contains('hud-repairs-spent')).toBe(true);
+    expect(button.classList.contains('hud-repairs-cost')).toBe(false);
+    expect(repairsButton({ ...r.state, time: 30 })).toMatchObject({ running: false, spent: true });
     const full = hurt();
     for (const g of full.layers.flatMap((l) => l.segments)) g.hp = g.maxHp;
     hud.update(full);
     expect(button.disabled).toBe(true);
     expect(button.title).toBe('The wall is full');
     expect(button.classList.contains('hud-repairs-spent')).toBe(false);
+    expect(button.classList.contains('hud-repairs-cost')).toBe(false);
+    // Ready (card held, wall hurt): shown, plain. Absent (card not held): no button at all.
+    expect(repairsButton(hurt())).toMatchObject({ hidden: false, spent: false, running: false });
+    expect(repairsButton(newHorde(1, setup()))).toMatchObject({ hidden: true });
   });
 
   it('is usable during a card pick, and a click goes to the app', () => {

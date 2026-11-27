@@ -1,5 +1,6 @@
 // The UI kit's tokens (design §15, ID-056): colours live only in `:root`, every token a
 // rule uses is defined, and the text colours meet WCAG AA on the surfaces they sit on.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PANEL_SPACE } from './build.ts';
@@ -171,8 +172,9 @@ describe('UI kit tokens (ID-056)', () => {
     const used = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]!));
     // `--risk` is set per place by the world map's script; `--scrap-chip-w` is the Scrap
     // chip's measured width (ID-239), set by its script; `--strip-held` is set on `.hud`
-    // inside the phone shell's block (ID-273) and read by the rules under it.
-    const set = ['--risk', '--scrap-chip-w', '--strip-held'];
+    // inside the phone shell's block (ID-273) and read by the rules under it; `--cool` is the
+    // Airstrike's cooldown left (0-100), set on its wrapper by the HUD's script (ID-275).
+    const set = ['--risk', '--scrap-chip-w', '--strip-held', '--cool'];
     const missing = [...used].filter((t) => !tokens.has(t) && !set.includes(t));
     expect(missing).toEqual([]);
   });
@@ -1283,7 +1285,7 @@ describe('the phone shell (ID-273)', () => {
   });
 
   it('the rail icons are drawn only here: hidden by a base rule outside the block', () => {
-    expect(rules.slice(0, at)).toMatch(/\n\.rail-icon \{\s*display: none;\s*\}/);
+    expect(rules.slice(0, at)).toMatch(/\n\.rail-icon,\s*\.menu-version \{\s*display: none;\s*\}/);
     expect(rule('.rail-icon,\n  .map-globe,\n  .research-flask')).toMatch(/display: block;/);
   });
 
@@ -1303,5 +1305,146 @@ describe('the phone shell keeps hidden skill-row items hidden (ID-273)', () => {
     expect(shows.length).toBeGreaterThan(0);
     for (const s of shows)
       for (const sel of s.split(',')) expect(sel, sel).toMatch(/:not\(\[hidden\]\)/);
+  });
+});
+
+describe('the phone fight HUD (ID-275)', () => {
+  const query = `@media ${SHORT_TOUCH} {`;
+  const at = rules.indexOf(query);
+  const shell = rules.slice(at, rules.indexOf('\n}\n', at));
+  const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** One rule's body inside the shell block (the exact selector text, comma lists included). */
+  const rule = (selector: string): string => {
+    const m = new RegExp(`(?:^|\\n)  ${esc(selector)} \\{([^}]*)\\}`).exec(shell);
+    if (!m) throw new Error(`no rule ${selector} in the phone shell`);
+    return m[1]!;
+  };
+  const px = (body: string, prop: string): number => {
+    const m = new RegExp(`(?:^|[\\s;])${prop}: (\\d+)px;`).exec(body);
+    if (!m) throw new Error(`no ${prop} in ${body}`);
+    return Number(m[1]);
+  };
+
+  it('leaves the shared 540 px blocks byte for byte as they were on main', () => {
+    const blocks = [...rules.matchAll(/@media \(max-height: 540px\) \{[\s\S]*?\n\}\n/g)].map(
+      (m) => m[0],
+    );
+    const digest = createHash('sha256').update(blocks.join('')).digest('hex');
+    expect(blocks).toHaveLength(4);
+    expect(digest).toBe('fa01d46796d7f513dc0273804d1bb44ebacd1c84da1da07367b522e34e8efcda');
+  });
+
+  it('the skill rail is the foot of the right rail: right 0, 44 wide, the Airstrike 4 px above the bottom edge', () => {
+    const shop = rule('.hud-shop');
+    expect(px(shop, 'width')).toBe(44);
+    expect(shop).toMatch(/right: 0;/);
+    expect(shop).toMatch(/bottom: 4px;/);
+    expect(shop).toMatch(/flex-direction: column-reverse;/);
+    expect(shop).toMatch(/justify-content: flex-start;/);
+    // No 22 px row for the old floating pill.
+    expect(shell).not.toMatch(/row-gap: 2[0-9]px/);
+  });
+
+  it('the Auto pill is clipped to nothing, still focusable, with no tap area, and its focus shows on the button', () => {
+    const pill = rule('.hud-auto-pill');
+    expect(pill).toMatch(/clip-path: inset\(50%\);/);
+    expect(pill).toMatch(/pointer-events: none;/);
+    expect(pill).toMatch(/width: 1px;/);
+    expect(pill).not.toMatch(/display: none/);
+    expect(rule('.hud-auto-pill::before')).toMatch(/content: none;/);
+    expect(rule('.hud-strike:has(.hud-auto-pill:focus-visible) .hud-skill')).toMatch(
+      /outline: 2px solid var\(--color-focus\);/,
+    );
+  });
+
+  it('one look per Airstrike state: a cooldown sweep, an Auto frame with a label, a hold ring', () => {
+    const sweep = rule('.hud-strike::before');
+    expect(sweep).toMatch(/conic-gradient\(/);
+    expect(sweep).toMatch(/var\(--cool, 0\) \* 1%/);
+    expect(sweep).toMatch(/pointer-events: none;/);
+    const on = `.hud-strike[data-auto='on']:has(.hud-auto-pill:not([hidden]))`;
+    const frame = rule(`${on} .hud-skill,\n  ${on} .hud-skill:disabled`);
+    expect(frame).toMatch(/box-shadow: inset 0 0 0 2px var\(--color-accent\);/);
+    const label = rule(`${on}::after`);
+    expect(label).toMatch(/content: 'AUTO';/);
+    expect(px(label, 'font-size')).toBeGreaterThanOrEqual(9);
+    expect(label).toMatch(/background: var\(--color-accent\);/);
+    expect(label).toMatch(/color: var\(--color-text-on-accent\);/);
+    // Different drawings, so both together stay readable.
+    expect(frame).not.toMatch(/conic-gradient/);
+    expect(sweep).not.toMatch(/box-shadow/);
+    expect(contrast('--color-text-on-accent', '--color-accent')).toBeGreaterThanOrEqual(4.5);
+    // The held ring sits inside the button, drawn only while the base rule shows it.
+    const ring = rule('.hud-hold-ring');
+    expect(ring).toMatch(/inset: 2px;/);
+    expect(ring).not.toMatch(/visibility/);
+  });
+
+  it('the hints sit left of the rail at the field edge, never above the Auto button or over the middle', () => {
+    for (const sel of ['.hud-shop > .hud-auto-note', '.hud-strike-hint']) {
+      const body = rule(sel);
+      expect(body).toMatch(/right: calc\(100% \+ var\(--space-6\)\);/);
+      expect(body).toMatch(/left: auto;/);
+    }
+  });
+
+  it('the level-up offer sits under the 22 px strip, within the window, and may scroll', () => {
+    const cards = rule('.hud-cards');
+    expect(px(cards, 'top')).toBeGreaterThanOrEqual(HUD_SPACE_SHORT.top + 4);
+    expect(cards).toMatch(/max-height: calc\(100dvh - 30px\);/);
+    expect(cards).toMatch(/overflow-y: auto;/);
+    // The shared offer rules (top 34) and the old shell's (top 4) are replaced here.
+    expect(shell).not.toMatch(/\.hud-cards,\s*\.hud-result\.hud-debrief/);
+  });
+
+  it('Reroll, Skip and Ban: 44 px tall, 8 px apart, a tap zone no bigger than the button, Ban set apart', () => {
+    const actions = rule('.hud-cards > .hud-offer-actions');
+    expect(actions).toMatch(/position: static;/);
+    expect(actions).toMatch(/flex-direction: column;/);
+    expect(actions).toMatch(/gap: var\(--space-8\);/);
+    expect(tokens.get('--space-8')).toBe('8px');
+    const act = rule('.hud-cards .hud-offer-act');
+    expect(px(act, 'height')).toBeGreaterThanOrEqual(44);
+    expect(px(act, 'min-height')).toBeGreaterThanOrEqual(44);
+    expect(rule('.hud-cards .hud-offer-act::after')).toMatch(/inset: 0;/);
+    expect(rule('.hud-cards .hud-offer-ban')).toMatch(/border-color: var\(--color-danger\);/);
+  });
+
+  it('the offer has no 1/2/3 key row, and its tag sits in the art corner', () => {
+    expect(rule('.hud-card-has-art .hud-card-key')).toMatch(/display: none;/);
+    const tag = rule('.hud-card-has-art .hud-card-tag');
+    expect(tag).toMatch(/bottom: 0;/);
+    expect(rule('.hud-card-has-art > .hud-card-art')).toMatch(/position: relative;/);
+  });
+
+  it('narrow offer cards keep whole words: the name takes the full width under the plate, by the row width', () => {
+    const m = /@container \(max-width: 560px\) \{([\s\S]*?)\n {2}\}\n/.exec(shell);
+    expect(m).not.toBeNull();
+    const narrow = m![1]!;
+    // Still a grid (a block-flow button centres its content); the plate shares row 1 with the
+    // rarity line only, and the name spans both columns under it, never clipped.
+    expect(narrow).not.toMatch(/display: block;|float:/);
+    expect(narrow).toMatch(
+      /\.hud-card\.hud-card-has-art \{\s*grid-template-columns: 36px minmax\(0, 1fr\);/,
+    );
+    expect(narrow).toMatch(
+      /\.hud-card-has-art > \.hud-card-title \{[^}]*grid-column: 1 \/ -1;[^}]*overflow: visible;/,
+    );
+    expect(narrow).toMatch(/\.hud-card-has-art > \.hud-card-kind \{[^}]*grid-row: 1;/);
+    // The row is the container and the cards' scroll box: the buttons never scroll away.
+    const row = rule('.hud-cards:has(> .hud-offer-actions) > .hud-card-row');
+    expect(row).toMatch(/container-type: inline-size;/);
+    expect(row).toMatch(/overflow-y: auto;/);
+    expect(row).toMatch(/max-height: calc\(100dvh - 30px - 12px\);/);
+  });
+
+  it('the version label is hidden here and shown in Help; a base rule hides the Help line elsewhere', () => {
+    expect(rule('.version')).toMatch(/display: none;/);
+    expect(rule('.menu-version')).toMatch(/display: block;/);
+    expect(rules.slice(0, at)).toMatch(/\.menu-version \{\s*display: none;/);
+  });
+
+  it('a 640 px wide window matches the same rules as 641: no width query decides the shell', () => {
+    expect(shell).not.toMatch(/@media[^{]*\bwidth/);
   });
 });

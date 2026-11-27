@@ -7996,7 +7996,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
    a Stage Manager window under 540 px, which the shell suits too;
    a short desktop window (no touch) keeps its top bar as it was. This block is the one place
    the phone's shell is set: it follows every shared rule above it, so it wins them. */
-.rail-icon {
+.rail-icon,
+.menu-version {
   display: none;
 }
 
@@ -8361,24 +8362,29 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     letter-spacing: 0.04em;
   }
 
-  /* --- The skills: an icon-only column against the right rail, up from the bottom edge.
-     Each name stays for a screen reader; the cost and key are not drawn. --- */
+  /* --- The skills: icon-only buttons at the foot of the right rail, under the speeds
+     (ID-275). The Airstrike is the lowest (first in the DOM, so column-reverse puts it at the
+     bottom edge) and Field Repairs, once held, stands above it. Each name stays for a screen
+     reader; the cost and key are not drawn. Nothing floats over the field: the hints and
+     notes sit left of the rail. At 303 px: Scrap 0-28, the speeds 28-204, Repairs 207-251,
+     Airstrike 255-299, 4 px clear of the screen's rounded corner and its gesture edge (a test
+     guards the sum). --- */
   .hud-shop {
     top: auto;
-    right: 44px;
-    bottom: 0;
+    right: 0;
+    bottom: 4px;
     left: auto;
-    flex-direction: column;
+    flex-direction: column-reverse;
     flex-wrap: nowrap;
     align-items: stretch;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: var(--space-4);
     width: 44px;
   }
 
-  /* Room for the Auto pill riding over the strike's top edge (17px up), clear of the item above. */
+  /* The Auto pill no longer rides over the strike's top edge: the gap stays the rail's 4 px. */
   .hud-shop:has(> .hud-strike:not([hidden])) {
-    row-gap: 22px;
+    row-gap: var(--space-4);
   }
 
   /* Never over [hidden]: the build-mode items stay hidden in a horde, as they are on desktop. */
@@ -8428,21 +8434,159 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     text-align: right;
   }
 
-  .hud-auto-pill .hud-auto-touch,
-  .hud-auto-pill .hud-auto-desk {
-    display: none;
+  /* The notes and the one-time hint sit left of the rail, at the field's edge, one above the
+     other (caption 0, note 28, hint 56 px up), never over its middle. */
+  .hud-shop > .hud-auto-note {
+    right: calc(100% + var(--space-6));
+    bottom: 28px;
+    left: auto;
+    margin: 0;
+    transform: none;
   }
 
   .hud-strike-hint {
-    right: 0;
+    right: calc(100% + var(--space-6));
+    bottom: 56px;
     left: auto;
   }
 
-  /* The version line stays clear of the rails, bottom left of the field. */
-  .version {
+  /* The Auto pill is gone from the screen: holding the Airstrike button toggles Auto. It stays
+     in the page for a keyboard and a screen reader (focusable, named, aria-pressed) but
+     clipped to nothing, with no tap area: its focus ring shows on the Airstrike button. */
+  .hud-auto-pill {
+    top: auto;
     right: auto;
+    bottom: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    clip-path: inset(50%);
+    pointer-events: none;
+  }
+
+  .hud-auto-pill::before {
+    content: none;
+  }
+
+  .hud-strike:has(.hud-auto-pill:focus-visible) .hud-skill {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -3px;
+  }
+
+  /* One look per state on the 44 px Airstrike. Cooling: a dark sweep over the icon that
+     shrinks clockwise as it recharges (--cool, 100 just used to 0 ready, a plain number).
+     Auto on: an inset accent frame and an "AUTO" label (the base outer ring would be cut off
+     by the screen's edge). Held: the progress ring, drawn only while the finger is down. */
+  .hud-strike::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: conic-gradient(
+      var(--color-scrim) calc(var(--cool, 0) * 1%),
+      transparent calc(var(--cool, 0) * 1%)
+    );
+    pointer-events: none;
+  }
+
+  /* Cooling, the button keeps its frame so the thumb still finds it; only the icon dims. */
+  .hud-shop .hud-skill:disabled {
+    border-color: var(--color-border-strong);
+  }
+
+  .hud-shop .hud-skill:disabled .hud-icon {
+    opacity: 0.55;
+  }
+
+  /* Choosing a card to ban: Reroll and Skip step back, so the next tap reads as the ban. */
+  .hud-cards-banning .hud-offer-reroll,
+  .hud-cards-banning .hud-offer-skip {
+    opacity: 0.6;
+  }
+
+  .hud-strike[data-auto='on']:has(.hud-auto-pill:not([hidden])) .hud-skill,
+  .hud-strike[data-auto='on']:has(.hud-auto-pill:not([hidden])) .hud-skill:disabled {
+    border-color: var(--color-accent);
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
+
+  .hud-strike[data-auto='on']:has(.hud-auto-pill:not([hidden]))::after {
+    content: 'AUTO';
+    position: absolute;
+    right: 2px;
     bottom: 2px;
-    left: 52px;
+    left: 2px;
+    z-index: 2;
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 11px;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .hud-hold-ring {
+    inset: 2px;
+    width: calc(100% - 4px);
+    height: calc(100% - 4px);
+  }
+
+  /* Field Repairs (ID-231) in the rail: ready is the plain icon; its fire-rate cost running
+     pulses it; spent is greyed with a slash. Absent until the card is held (no button). */
+  .hud-repairs-cost {
+    animation: hud-repairs-cost 1s ease-in-out infinite alternate;
+  }
+
+  @keyframes hud-repairs-cost {
+    to {
+      opacity: 0.55;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hud-repairs-cost {
+      animation: none;
+      opacity: 0.7;
+    }
+  }
+
+  :root[data-reduce-motion] .hud-repairs-cost {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .hud-repairs-spent {
+    opacity: 0.5;
+  }
+
+  .hud-repairs-spent::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top right,
+      transparent calc(50% - 1px),
+      var(--color-text-muted) calc(50% - 1px),
+      var(--color-text-muted) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    );
+    pointer-events: none;
+  }
+
+  /* The version label leaves the field: Menu → Help shows it (ID-275). */
+  .version {
+    display: none;
+  }
+
+  .menu-version {
+    display: block;
+    margin: var(--space-12) 0 0;
+    color: var(--color-text-subtle);
+    font-size: var(--text-sm);
   }
 
   /* --- Windows and panels sit between the rails, from the top edge; the rails stay in
@@ -8454,19 +8598,204 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     padding: var(--space-4);
   }
 
-  .hud-cards,
   .hud-result.hud-debrief {
     top: 4px;
     max-width: calc(100vw - 96px);
     max-height: calc(100dvh - 8px);
-  }
-
-  .hud-result.hud-debrief {
     width: min(780px, calc(100vw - 96px));
   }
 
+  /* --- The level-up offer (ID-275): under the 22 px strip (top 26), never over it, and at
+     most 200 px tall at 862 x 303. The cards fill the left; the right 88 px column holds the
+     heading over Reroll, Skip and Ban, each 44 px tall with 8 px between, anchored at the
+     bottom. Taller than the window allows, the panel scrolls (the buttons never leave it:
+     they stay in the column's own row). --- */
   .hud-cards {
-    overflow-x: auto;
+    top: 26px;
+    width: calc(100vw - 96px);
+    max-width: calc(100vw - 96px);
+    max-height: calc(100dvh - 30px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: var(--space-4) var(--space-8) var(--space-6);
+  }
+
+  .hud-cards:has(> .hud-offer-actions) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 88px;
+    grid-template-rows: auto 1fr;
+    column-gap: var(--space-8);
+    align-items: start;
+  }
+
+  /* The row is the cards' own scroll box: were they ever taller than the window (narrow
+     cards wrap more), they scroll here and the heading and the three buttons stay in view.
+     It is also the container the narrow-card rules below ask about. */
+  .hud-cards:has(> .hud-offer-actions) > .hud-card-row {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    min-width: 0;
+    max-height: calc(100dvh - 30px - 12px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    container-type: inline-size;
+    gap: var(--space-6);
+  }
+
+  .hud-cards:has(> .hud-offer-actions) > h2 {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0 0 var(--space-4);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .hud-cards > .hud-offer-actions {
+    position: static;
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: var(--space-8);
+    margin: 0;
+  }
+
+  /* The shared 28 px look reset: 44 px tall, the label may wrap, and the tap zone is the
+     button itself (the shared one reached 8 px past it, into the gaps). */
+  .hud-cards .hud-offer-act {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 var(--space-4);
+    font-size: 12px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .hud-cards .hud-offer-act::after {
+    inset: 0;
+  }
+
+  /* Ban reads apart from the other two: a danger outline, always. */
+  .hud-cards .hud-offer-ban {
+    border-color: var(--color-danger);
+  }
+
+  /* No 1/2/3 key row on a touch screen; a card's name still carries its number for a screen reader. */
+  .hud-card-has-art .hud-card-key {
+    display: none;
+  }
+
+  /* Each card shares the row; its icon plate sits beside the name and rarity line (not above
+     them), the effect and the warning take the full width under. */
+  .hud-card.hud-card-has-art {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    flex: 1 1 0;
+    column-gap: var(--space-6);
+    row-gap: var(--space-4);
+    align-content: start;
+    width: auto;
+    min-width: 0;
+    padding: var(--space-6) var(--space-8);
+  }
+
+  .hud-card-has-art > .hud-card-art {
+    position: relative;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 44px;
+    height: 44px;
+  }
+
+  .hud-card-has-art > .hud-card-title,
+  .hud-card-has-art > .hud-card-kind {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .hud-card-has-art > .hud-card-title {
+    grid-row: 1;
+    align-self: end;
+  }
+
+  .hud-card-has-art > .hud-card-kind {
+    grid-row: 2;
+    align-self: start;
+  }
+
+  .hud-card-has-art > .hud-card-body {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  .hud-card-has-art > .hud-card-foot {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin-top: 0;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  .hud-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Narrow cards (a row under 560 px: about 148 px a card or less): beside the plate the name
+     was cut mid-word. Here the plate (36 px) shares its row with the rarity line only, and the
+     name, effect and warning take the card's full width under it, so a name wraps by whole
+     words. By the card's row width, not the window's, so 640 and 641 px wide windows draw
+     alike. Still a grid, so every part starts at the top (a block-flow button centres them). */
+  @container (max-width: 560px) {
+    .hud-card.hud-card-has-art {
+      grid-template-columns: 36px minmax(0, 1fr);
+    }
+
+    .hud-card-has-art > .hud-card-art {
+      grid-row: 1;
+      width: 36px;
+      height: 36px;
+    }
+
+    .hud-card-has-art > .hud-card-kind {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: center;
+    }
+
+    .hud-card-has-art > .hud-card-title {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      align-self: start;
+      overflow: visible;
+    }
+
+    .hud-card-icon {
+      width: 30px;
+      height: 30px;
+    }
+  }
+
+  /* "New" and "Lv 1 → 2" in the plate's corner, centred on its foot. */
+  .hud-card-has-art .hud-card-tag {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 50%;
+    padding: 0 3px;
+    transform: translateX(-50%);
+    font-size: 9px;
+    line-height: 12px;
   }
 }
 

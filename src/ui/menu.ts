@@ -9,6 +9,7 @@ import { exportCode, importCode, type ImportResult } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
+import { versionText } from './version.ts';
 import { AUTO_KEY, ENEMY_NAME, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 import { classBadge } from './classicon.ts';
 import { railIcon } from './railicon.ts';
@@ -61,7 +62,7 @@ const FULL_CONTROLS: Controls = [
       ['Click a skill', 'Use it; one that aims goes where you click next'],
       [
         `Hold a skill, or ${AUTO_KEY}`,
-        'Auto on or off: the Airstrike fires by itself (or tap the Auto pill on its button)',
+        'Auto on or off: the Airstrike fires by itself (a touch screen: hold the Airstrike button)',
       ],
       ['1 2 3', 'Pick a card when three are offered'],
       ['Space', 'Pause or resume the fight (or use the pause button beside the speeds)'],
@@ -88,7 +89,7 @@ const SQUAD_CONTROLS: Controls = [
       ],
       [
         `Hold ${skillHelp().keys[0]}, or ${AUTO_KEY}`,
-        'Auto on or off: the Airstrike fires by itself (or tap the Auto pill on its button)',
+        'Auto on or off: the Airstrike fires by itself (a touch screen: hold the Airstrike button)',
       ],
       ['1 2 3', 'Pick a card when three are offered'],
       ['Space', 'Pause or resume the fight (or use the pause button beside the speeds)'],
@@ -639,6 +640,8 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
     body.append(tr);
   }
   traits.append(body);
+  // The build (ID-275): the page's corner label is hidden on a phone, so Help shows it there.
+  const versionLine = el('p', 'menu-version', versionText());
   panels
     .get('help')!
     .append(
@@ -652,6 +655,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
         classLines,
         traits,
       ),
+      versionLine,
     );
 
   function select(next: Tab, focus: boolean): void {
