@@ -214,10 +214,11 @@ describe('an offer on the tick the fight ends (ID-196)', () => {
 });
 
 describe('every offer card one size (ID-195)', () => {
-  // The card's fixed height (`.hud-card.hud-card-has-art` in page.css) was measured in a
-  // browser at 212, 240 and 375 px wide against the longest words below. Characters only
-  // stand in for rendered lines (jsdom has no layout): words longer than these could
-  // overflow the card, so shorten them, or re-measure in a browser and raise the height.
+  // The cards take the offer's longest card's height (ID-204), so the longest words below
+  // set the tallest offer: measured in a browser to fit a phone on its side (667 x 375) and
+  // a 390 px phone with Reroll, Skip and Ban on screen. Characters only stand in for
+  // rendered lines (jsdom has no layout): words longer than these could push the offer
+  // past the screen, so shorten them, or re-measure in a browser.
   const NAME_MAX = 18; // one line: "Recruit B — Gunner"
   const BODY_MAX = 182; // Tar Moat (ID-264; Oil Bomb is 169): re-measured on desktop and a 390 px phone
   const LOWER_MAX = 227; // under the name: effect, synergy and swap warning (Oil Bomb with both fires held)

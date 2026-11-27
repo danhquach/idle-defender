@@ -733,20 +733,20 @@ button[data-card='tar-moat'] .hud-held-icon {
 
 /* ID-195: every offer card is one size, whatever its words, art, rarity or kind, and its
    parts sit in the same place: the key, the plate, the name, the rarity line and the
-   effect from the top, a synergy and then a swap's warning at the bottom. The height fits
-   the longest card, measured in a browser (hud-offer.test.ts holds each card's words to
-   that size). */
+   effect from the top, a synergy and then a swap's warning at the bottom. One width; the
+   height is the offer's longest card (ID-204): the row stretches the others to it, so no
+   card is a tall box with empty space under a one-line effect. */
 .hud-card.hud-card-has-art {
   flex: none;
   width: 212px;
-  height: 364px;
 }
 
 .hud-card-has-art > * {
   flex: none;
 }
 
-/* Should a card's words ever outgrow it, the effect is cut, never the warning under it. */
+/* The card takes its words' height (ID-204); were a height ever set, the effect would be
+   cut first, never the warning under it. */
 .hud-card-has-art > .hud-card-body {
   flex: 0 1 auto;
   min-height: 0;
@@ -7296,6 +7296,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     gap: var(--space-8);
   }
 
+  /* The offer's cards: one column, every row as tall as its longest card (ID-204). Not the
+     camp picker's or a swap's one-line buttons, which keep their own heights. */
+  .hud-card-row:has(> .hud-card-has-art) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: 1fr;
+  }
+
   .hud-card {
     width: auto;
   }
@@ -7317,7 +7325,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   }
 
   /* Stacked, a card's icon sits at its left (ID-103), so three cards still fit the height;
-     every card is still one size, its parts in the same rows (ID-195). */
+     every card is still one size, its parts in the same rows (ID-195), as tall as the
+     offer's longest card (ID-204). */
   .hud-card.hud-card-has-art {
     display: grid;
     grid-template-columns: 64px 1fr;
@@ -7325,7 +7334,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     column-gap: var(--space-12);
     row-gap: var(--space-6);
     width: auto;
-    height: 236px;
   }
 
   .hud-card-has-art > * {
@@ -7387,14 +7395,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .hud-card-epic .hud-card-art {
     background: radial-gradient(circle, var(--color-epic-glow-strong), transparent 80%)
       var(--color-surface-sunken);
-  }
-}
-
-/* The narrowest phones (320px) wrap the longest card into more lines: every card one taller
-   size there (ID-195). */
-@media (max-width: 359px) {
-  .hud-card.hud-card-has-art {
-    height: 260px;
   }
 }
 
@@ -7929,7 +7929,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .hud-card.hud-card-has-art {
     gap: var(--space-4);
     width: 204px;
-    height: 282px;
     padding: var(--space-8);
   }
 
