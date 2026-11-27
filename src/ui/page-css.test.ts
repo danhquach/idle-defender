@@ -1054,3 +1054,32 @@ describe('Weapons on a 320 px window (ID-257)', () => {
     expect(rule('.inv-stash-tools')).toMatch(/flex-wrap: wrap;/);
   });
 });
+
+describe('the camp tab bar on a phone-wide window (ID-258)', () => {
+  const inQuery = (q: string, selector: string): string => {
+    const at = rules.indexOf(`@container (${q}) {`);
+    expect(at, q).toBeGreaterThan(0);
+    const body = rules.slice(at, rules.indexOf('\n}\n', at));
+    const esc = selector.replace(/[.[\]]/g, '\\$&');
+    const m = new RegExp(`\\n {2}${esc} \\{([^}]*)\\}`).exec(body);
+    expect(m, selector).not.toBeNull();
+    return m![1]!;
+  };
+
+  it('the strip starts from nothing, so the close never drops to a row of its own', () => {
+    expect(inQuery('max-width: 479px', '.camp-tabs')).toMatch(/flex: 1 1 0;[^}]*min-width: 0;/);
+  });
+
+  it('no tab label wraps: a longer one ends in "…"', () => {
+    const tab = inQuery('max-width: 479px', '.camp-tabs .camp-tab');
+    expect(tab).toMatch(/min-width: 0;/);
+    expect(tab).toMatch(/text-overflow: ellipsis;/);
+    expect(tab).toMatch(/white-space: nowrap;/);
+  });
+
+  it('at 320 px the tabs take the small text and tighter padding', () => {
+    const tab = inQuery('max-width: 359px', '.camp-tabs .camp-tab');
+    expect(tab).toMatch(/padding: 0 var\(--space-4\);/);
+    expect(tab).toMatch(/font-size: var\(--text-sm\);/);
+  });
+});
