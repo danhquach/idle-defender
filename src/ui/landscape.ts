@@ -7,6 +7,12 @@
 export const PORTRAIT_PHONE =
   '(orientation: portrait) and (pointer: coarse) and (max-width: 599px)';
 
+/**
+ * A touch screen 540 px tall or less (a phone on its side): the phone shell (ID-273) with side
+ * rails and a one-line info strip. Kept in step with the coarse short block in page.css.
+ */
+export const SHORT_TOUCH = '(pointer: coarse) and (max-height: 540px)';
+
 /** Whether a media query matches; false where the browser cannot say. */
 function matches(win: Window, query: string): boolean {
   return typeof win.matchMedia === 'function' && win.matchMedia(query).matches;
@@ -19,6 +25,11 @@ function matches(win: Window, query: string): boolean {
  */
 export function isPhone(win: Window): boolean {
   return matches(win, '(pointer: coarse)') && Math.min(win.screen.width, win.screen.height) < 600;
+}
+
+/** Whether the phone shell is on now. */
+export function isShortTouch(win: Window): boolean {
+  return matches(win, SHORT_TOUCH);
 }
 
 type Lockable = ScreenOrientation & { lock?: (o: 'landscape') => Promise<void> };

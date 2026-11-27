@@ -10,6 +10,7 @@ import { newHorde, type HordeState, type UpgradeId } from '../core/horde.ts';
 import { setup } from '../core/testing.ts';
 import { createHud, heldCards, momentumLeft } from './hud.ts';
 import { FIGHT_FRAME, frameCamera, HUD_SPACE, project } from './projection.ts';
+import { SHORT_TOUCH } from './landscape.ts';
 import { ART_URLS, CARD_ICON } from './sprites.ts';
 
 const noop = (): void => {};
@@ -181,6 +182,46 @@ describe('the held cards strip (ID-113)', () => {
     expect(tip.hidden).toBe(true);
   });
 
+  describe('where the tip sits on the phone shell (ID-273)', () => {
+    /** The strip at x 600, a tip 100 wide, a chip 100 along its row scrolled by `scrolled` (as
+     * its box reports it, so the result is the same on every engine). */
+    function tipLeft(shell: boolean, scrolled: number): string {
+      vi.stubGlobal('innerWidth', 862);
+      vi.stubGlobal('matchMedia', (q: string) => ({ matches: shell && q === SHORT_TOUCH }));
+      const { hud, strip, chips, tip } = mount();
+      hud.update(holding({ ricochet: 1 }));
+      vi.spyOn(strip, 'getBoundingClientRect').mockReturnValue({ left: 600 } as DOMRect);
+      Object.defineProperty(tip, 'offsetWidth', { value: 100 });
+      const chip = chips()[0]!;
+      // Where the chip's box lands: 100 along the row, less what the row has scrolled.
+      vi.spyOn(chip, 'getBoundingClientRect').mockReturnValue({
+        left: 600 + 100 - scrolled,
+      } as DOMRect);
+      chip.click();
+      return tip.style.left;
+    }
+
+    it('follows its chip as the row scrolls sideways', () => {
+      expect(tipLeft(true, 40)).toBe('60px');
+      expect(tipLeft(true, 0)).toBe('100px');
+      vi.unstubAllGlobals();
+    });
+
+    it('stays between the rails: never past the left rail, nor under the right one', () => {
+      // 44 px rail − 600 px strip, at the far left; 862 − 44 − 600 − 100 at the right.
+      expect(tipLeft(true, 900)).toBe('-556px');
+      expect(tipLeft(true, -500)).toBe('118px');
+      vi.unstubAllGlobals();
+    });
+
+    it('is as it was off the shell: from its chip, inside the window', () => {
+      expect(tipLeft(false, 0)).toBe('100px');
+      // 862 − 16 − 600 − 100 = 146 is the most.
+      expect(tipLeft(false, -500)).toBe('146px');
+      vi.unstubAllGlobals();
+    });
+  });
+
   it('ignores a touch’s hover, which a tap’s own click answers', () => {
     const { hud, chips, tip } = mount();
     hud.update(holding({ ricochet: 1 }));
@@ -275,14 +316,14 @@ describe('the fight frame under the held cards strip (ID-113)', () => {
   it('starts the frame under the strip when it reaches past the top bar', () => {
     const view = { w: 1100, h: 520 };
     const top = 90;
-    const cam = frameCamera(view, 0, undefined, top);
+    const cam = frameCamera(view, { top });
     const plain = frameCamera(view);
     // Height-fit: the strip's space comes out of the field's zoom, and the frame's top
     // edge lands at the strip's bottom.
     expect(cam.zoom).toBeLessThan(plain.zoom);
     expect(project({ x: FIGHT_FRAME.left, y: FIGHT_FRAME.top }, cam).sy).toBeCloseTo(top, 6);
     // A strip no taller than the bar changes nothing.
-    expect(frameCamera(view, 0, undefined, HUD_SPACE.top - 10)).toEqual(plain);
+    expect(frameCamera(view, { top: HUD_SPACE.top - 10 })).toEqual(plain);
   });
 });
 

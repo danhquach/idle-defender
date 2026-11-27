@@ -34,6 +34,7 @@ import {
   HEIGHT_SCALE,
   frameCamera,
   HUD_SPACE,
+  HUD_SPACE_SHORT,
   MARGIN_Y,
   MIN_ZOOM,
   mountDepth,
@@ -91,7 +92,7 @@ describe('projection', () => {
       { w: 1280, h: 720, zoom: 0.98 },
     ])('fits the width at $w×$h (about $zoom×), all of it between the HUD bands', (v) => {
       const view = { w: v.w, h: v.h };
-      const cam = frameCamera(view, 0, FRAME);
+      const cam = frameCamera(view, { frame: FRAME });
       expect(cam.zoom).toBeCloseTo(v.w / (FRAME.right - FRAME.left), 9);
       expect(cam.zoom).toBeCloseTo(v.zoom, 2);
       const b = box(cam);
@@ -106,17 +107,21 @@ describe('projection', () => {
     it('keeps a taller bottom HUD (a wrapped shop bar) clear too, never less than its band', () => {
       const view = { w: 1100, h: 600 };
       const wrapped = 120;
-      const b = box(frameCamera(view, wrapped, FRAME));
+      const b = box(frameCamera(view, { bottom: wrapped, frame: FRAME }));
       expect(b.bottom).toBeLessThanOrEqual(view.h - wrapped + 1e-9);
       expect(b.top).toBeGreaterThanOrEqual(HUD_SPACE.top - 1e-9);
       // A bar shorter than the band, or none measured, keeps the band.
-      expect(frameCamera(view, 10, FRAME)).toEqual(frameCamera(view, 0, FRAME));
-      expect(frameCamera(view, 0, FRAME)).toEqual(frameCamera(view, HUD_SPACE.bottom, FRAME));
+      expect(frameCamera(view, { bottom: 10, frame: FRAME })).toEqual(
+        frameCamera(view, { frame: FRAME }),
+      );
+      expect(frameCamera(view, { frame: FRAME })).toEqual(
+        frameCamera(view, { bottom: HUD_SPACE.bottom, frame: FRAME }),
+      );
     });
 
     it('fits the height on a wide, short window, centring the frame across it', () => {
       const view = { w: 3440, h: 600 };
-      const cam = frameCamera(view, 0, FRAME);
+      const cam = frameCamera(view, { frame: FRAME });
       const band = view.h - HUD_SPACE.top - HUD_SPACE.bottom;
       expect(cam.zoom).toBeCloseTo(band / ((FRAME.bottom - FRAME.top) * TILT), 9);
       const b = box(cam);
@@ -132,20 +137,23 @@ describe('projection', () => {
         { w: 400, h: 200 },
         { w: 0, h: 0 },
       ]) {
-        const cam = frameCamera(view, 0, FRAME);
+        const cam = frameCamera(view, { frame: FRAME });
         expect(cam.zoom).toBe(MIN_ZOOM);
         expect(box(cam).left).toBeCloseTo(0, 9);
         expect(Object.values(cam).every(Number.isFinite)).toBe(true);
       }
       // Too short for the frame even at 0.5×: its top stays just under the top bar.
-      expect(box(frameCamera({ w: 400, h: 200 }, 0, FRAME)).top).toBeCloseTo(HUD_SPACE.top, 9);
+      expect(box(frameCamera({ w: 400, h: 200 }, { frame: FRAME })).top).toBeCloseTo(
+        HUD_SPACE.top,
+        9,
+      );
       // Tall and narrow: the frame is centred in the band's spare height.
-      const tall = box(frameCamera({ w: 375, h: 812 }, 0, FRAME));
+      const tall = box(frameCamera({ w: 375, h: 812 }, { frame: FRAME }));
       expect(tall.top - HUD_SPACE.top).toBeCloseTo(812 - HUD_SPACE.bottom - tall.bottom, 9);
     });
 
     it('a click on the frame lands where it is drawn', () => {
-      const cam = frameCamera({ w: 1280, h: 720 }, 0, FRAME);
+      const cam = frameCamera({ w: 1280, h: 720 }, { frame: FRAME });
       for (const p of [
         { x: FRAME.left, y: 0 },
         { x: FRAME.right, y: FIELD.height },
@@ -170,7 +178,7 @@ describe('projection', () => {
       expect(HORDE_ONLY).toBe(true);
       expect(FIGHT_FRAME).toBe(SQUAD_FRAME);
       expect(frameCamera({ w: 1280, h: 720 })).toEqual(
-        frameCamera({ w: 1280, h: 720 }, 0, SQUAD_FRAME),
+        frameCamera({ w: 1280, h: 720 }, { frame: SQUAD_FRAME }),
       );
       // 500 − 30 − 7 − 70: a survivor's half width and the ground behind the line, where a
       // mid-fight swap runs in and limps off (ID-148, `MID_SWAP.from`).
@@ -202,7 +210,7 @@ describe('projection', () => {
         const cam = frameCamera(view);
         expect(cam.zoom).toBeCloseTo(v.zoom, 2);
         // Never further out than ID-064's; a window too wide for the wall's height was already height-bound.
-        expect(cam.zoom).toBeGreaterThanOrEqual(frameCamera(view, 0, FRAME).zoom - 1e-9);
+        expect(cam.zoom).toBeGreaterThanOrEqual(frameCamera(view, { frame: FRAME }).zoom - 1e-9);
         const b = box(cam);
         const eps = 1e-9;
         expect(b.left).toBeGreaterThanOrEqual(-eps);
@@ -230,7 +238,9 @@ describe('projection', () => {
         { w: 1280, h: 720 },
         { w: 1440, h: 900 },
       ]) {
-        expect(frameCamera(view).zoom / frameCamera(view, 0, FRAME).zoom).toBeGreaterThan(1.12);
+        expect(frameCamera(view).zoom / frameCamera(view, { frame: FRAME }).zoom).toBeGreaterThan(
+          1.12,
+        );
       }
     });
 
@@ -241,6 +251,68 @@ describe('projection', () => {
       // The survivor in a slot is still clicked.
       const d = s.defenders[0]!;
       expect(fightHitAt(d.x, d.y - 1, s)).toEqual({ defenderId: d.id });
+    });
+
+    describe('the phone shell (ID-273)', () => {
+      const SHORT = { space: HUD_SPACE_SHORT };
+      const edges = (view: { w: number; h: number }, cam: Camera) => ({
+        wall: project({ x: FIGHT_FRAME.left, y: 0 }, cam).sx,
+        spawn: project({ x: FIGHT_FRAME.right, y: 0 }, cam).sx,
+        top: project({ x: 0, y: FIGHT_FRAME.top }, cam).sy,
+        bottom: project({ x: 0, y: FIGHT_FRAME.bottom }, cam).sy,
+        view,
+      });
+
+      it.each([
+        { w: 862, h: 303 },
+        { w: 667, h: 320 },
+      ])('fits $w×$h between the strip and both rails, the whole wall on screen', (view) => {
+        const e = edges(view, frameCamera(view, SHORT));
+        expect(e.wall).toBeGreaterThanOrEqual(44 - 1e-9);
+        expect(e.spawn).toBeLessThanOrEqual(view.w - 44 + 1e-9);
+        expect(e.top).toBeGreaterThanOrEqual(22 - 1e-9);
+        expect(e.bottom).toBeLessThanOrEqual(view.h + 1e-9);
+      });
+
+      it('fills about 281 of 303 px at 862×303: a field band of at least 270 px', () => {
+        const view = { w: 862, h: 303 };
+        const e = edges(view, frameCamera(view, SHORT));
+        expect(e.bottom - e.top).toBeGreaterThanOrEqual(270);
+        expect(e.bottom - e.top).toBeCloseTo(281, 0);
+      });
+
+      it('at 640×320 floors at MIN_ZOOM with the wall side at the left rail (spawn edge runs under the right one)', () => {
+        const view = { w: 640, h: 320 };
+        const cam = frameCamera(view, SHORT);
+        expect(cam.zoom).toBe(MIN_ZOOM);
+        expect(edges(view, cam).wall).toBeCloseTo(44, 9);
+      });
+
+      it('leaves desktop and iPad views as they were: no side reserve, same bands', () => {
+        expect(HUD_SPACE.left).toBe(0);
+        expect(HUD_SPACE.right).toBe(0);
+        for (const view of [
+          { w: 1440, h: 900 },
+          { w: 1280, h: 720 },
+          { w: 1024, h: 768 },
+          { w: 1180, h: 820 },
+          { w: 768, h: 1024 },
+        ]) {
+          const f = FIGHT_FRAME;
+          const w = f.right - f.left;
+          const h = (f.bottom - f.top) * TILT;
+          const band = view.h - HUD_SPACE.top - HUD_SPACE.bottom;
+          const zoom = Math.max(MIN_ZOOM, Math.min(view.w / w, band / h));
+          const spareX = Math.max(0, view.w - w * zoom) / 2;
+          const spareY = Math.max(0, band - h * zoom) / 2;
+          expect(frameCamera(view)).toEqual({
+            x: f.left - spareX / zoom,
+            y: f.top - (HUD_SPACE.top + spareY) / (zoom * TILT),
+            zoom,
+          });
+          expect(frameCamera(view, { space: HUD_SPACE })).toEqual(frameCamera(view));
+        }
+      });
     });
 
     it('is worked out again for each size: a resize changes the camera', () => {

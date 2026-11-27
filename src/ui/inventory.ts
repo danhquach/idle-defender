@@ -78,6 +78,7 @@ import { classLine, matchupsOpen } from './statlines.ts';
 import { MAP_GUN_AWAY, patrolName, patrolsShown } from './maptext.ts';
 import type { Answer } from './confirm.ts';
 import { ART_URLS, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
+import { railIcon } from './railicon.ts';
 import {
   refusedText,
   type Refused,
@@ -1656,6 +1657,7 @@ export function createInventory(
   const openButton = el('button', 'inv-button', 'Weapons');
   openButton.type = 'button';
   openButton.setAttribute('aria-haspopup', 'dialog');
+  openButton.append(railIcon(doc, 'weapons'));
   openButton.addEventListener('click', () => api.open());
   root.append(openButton);
 

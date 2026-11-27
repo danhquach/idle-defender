@@ -14,7 +14,8 @@ import { start } from './app.ts';
 import { skipIntro } from './testing.ts';
 import { PANEL_SPACE } from './build.ts';
 import { buildCamera, EASE_MS, PLOT_AT } from './buildscene.ts';
-import { FRAME, frameCamera, project, type Camera } from './projection.ts';
+import { FRAME, frameCamera, HUD_SPACE_SHORT, project, type Camera } from './projection.ts';
+import { SHORT_TOUCH } from './landscape.ts';
 import { MOTION_KEY, SPEED_KEY } from '../storage/settings.ts';
 import { drawScene } from './render.ts';
 import { fightSpeed, SKIP_SPEED } from './fastforward.ts';
@@ -285,6 +286,46 @@ describe('the camera in the game (app.ts, ID-064)', () => {
     step(16);
     expect(drawnCam()).toEqual(frameCamera(view()));
     expect(vi.mocked(drawScene).mock.lastCall![9]).toBeNull();
+  });
+
+  it('the phone shell reserve follows the short touch query, with none left over (ID-273)', () => {
+    localStorage.setItem(MOTION_KEY, '1'); // a hard cut to the fight frame, no ease
+    const short = { matches: false };
+    const listeners: (() => void)[] = [];
+    vi.stubGlobal('matchMedia', (q: string) =>
+      q === SHORT_TOUCH
+        ? {
+            get matches() {
+              return short.matches;
+            },
+            addEventListener: (_: string, f: () => void) => listeners.push(f),
+          }
+        : { matches: false },
+    );
+    // Upright first: tall, so the shell is off.
+    vi.stubGlobal('innerWidth', 303);
+    vi.stubGlobal('innerHeight', 862);
+    const { root } = boot();
+    step(0);
+    start(root);
+    step(16);
+    expect(listeners).toHaveLength(1);
+    expect(drawnCam()).toEqual(frameCamera(view()));
+    // Turned sideways: the rails and strip reserve space.
+    vi.stubGlobal('innerWidth', 862);
+    vi.stubGlobal('innerHeight', 303);
+    short.matches = true;
+    listeners.forEach((f) => f());
+    step(32);
+    expect(drawnCam()).toEqual(frameCamera(view(), { space: HUD_SPACE_SHORT }));
+    expect(drawnCam()).not.toEqual(frameCamera(view()));
+    // Back upright: no stale reserve.
+    vi.stubGlobal('innerWidth', 303);
+    vi.stubGlobal('innerHeight', 862);
+    short.matches = false;
+    listeners.forEach((f) => f());
+    step(48);
+    expect(drawnCam()).toEqual(frameCamera(view()));
   });
 
   it('hovering a plot shows a pointer and highlights it; a click opens its part of the panel', () => {
