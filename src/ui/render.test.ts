@@ -2666,7 +2666,7 @@ describe('bullet visuals (ID-045)', () => {
         // blast (ID-135), which is broader but shorter.
         expect(FLASH_STYLE.handcannon.tongues[0]![1]).toBeLessThan(FLASH_STYLE.lmg.tongues[0]![1]);
         for (const g of guns) {
-          if (g !== 'lmg' && g !== 'handcannon')
+          if (g !== 'lmg' && g !== 'handcannon' && g !== 'wallGun')
             expect(FLASH_STYLE[g].tongues[0]![2]).toBeLessThanOrEqual(
               FLASH_STYLE.lmg.tongues[0]![2],
             );
@@ -2684,6 +2684,24 @@ describe('bullet visuals (ID-045)', () => {
         expect(pistol.halo).toBeLessThan(shotgun.halo);
         expect(pistol.flames).toHaveLength(3);
         expect(shotgun.flames).toHaveLength(5);
+      });
+
+      it('the Wall Machine Gun flashes in gunfire, bigger than any squad gun (ID-280)', () => {
+        const { scene } = fight();
+        const p = paints(
+          { ...scene, taken: ['wall-machine-gun'], time: 2, shots: [{ owner: WALL_GUN, at: 2 }] },
+          CAM1,
+        );
+        expect(p.filter((x) => x.style === FLASH_STYLE.wallGun.edge)).toHaveLength(1);
+        expect(p.filter((x) => x.style === FLASH_STYLE.turret.edge)).toHaveLength(0);
+        // The same roll draws it longer and with a wider glow than every squad gun's.
+        const big = flashShape(at, 0, 0.1, FLASH_STYLE.wallGun, 3, CAM1);
+        for (const g of guns) {
+          if (g === 'wallGun' || g === 'turret') continue;
+          const f = flashShape(at, 0, 0.1, FLASH_STYLE[g], 3, CAM1);
+          expect(reach(big), g).toBeGreaterThan(reach(f));
+          expect(big.halo, g).toBeGreaterThan(f.halo);
+        }
       });
 
       it("draws a turret's flash in its own colour", () => {
@@ -2762,7 +2780,8 @@ describe('bullet visuals (ID-045)', () => {
         // Shots up to 0.4 rad off straight across on screen: an enemy up to 0.7× as far off
         // the shooter's row as it is out in the field.
         const aim = 0.4;
-        for (const g of guns) {
+        // The Wall Machine Gun stands alone mid-wall, not between two survivors' posts.
+        for (const g of guns.filter((x) => x !== 'wallGun')) {
           const style = FLASH_STYLE[g];
           const roll = style.roll ?? FLASH.tongue;
           // The most any flame can reach up or down: its longest roll, at its steepest turn,
