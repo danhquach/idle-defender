@@ -113,13 +113,14 @@ describe('the layout goals (ID-237)', () => {
     expect(rule('.hud-trait')).toMatch(/overflow-wrap:\s*anywhere/);
   });
 
-  it('a weapon slot shows the class icon only, its name in the title and the label', () => {
+  it('a weapon slot shows the class badge only, its name in the title and the label', () => {
     const w = rollWeapon(createRng(1), 'a', 'rifle', 'military', 1);
     const it = inventoryView({ ...camp(), armoury: [w] }).stash[0]!;
-    const chip = slotFace(it).find((e) => e.classList.contains('class-chip'))!;
-    expect(chip.textContent).toBe('');
-    expect(chip.getAttribute('aria-label')).toBe('Medium');
-    expect(chip.title).toContain('Medium');
+    const badge = slotFace(it).find((e) => e.classList.contains('class-badge'))!;
+    expect(badge.textContent).toBe('');
+    expect(badge.getAttribute('role')).toBe('img');
+    expect(badge.getAttribute('aria-label')).toBe('Medium');
+    expect(badge.title).toContain('Medium');
     expect(slotLabel(it)).toContain('class Medium');
   });
 

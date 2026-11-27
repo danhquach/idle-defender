@@ -10,7 +10,7 @@ import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import { AUTO_KEY, ENEMY_NAME, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
-import { classIcon } from './classicon.ts';
+import { classBadge } from './classicon.ts';
 import { CLASS_LINES, TRAIT_NOTE, TRAIT_ROWS } from './statlines.ts';
 
 /** What the Save tab says about a refused code. */
@@ -566,7 +566,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   const classLines = el('ul', 'menu-classes');
   for (const { cls, text } of CLASS_LINES) {
     const li = el('li', '');
-    li.append(classIcon(cls), text);
+    li.append(classBadge(cls), text);
     classLines.append(li);
   }
   const traits = el('table', 'menu-traits');
@@ -585,7 +585,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
       [r.weakClass, r.weak],
     ] as const) {
       const td = el('td', '');
-      td.append(classIcon(cls), text);
+      td.append(classBadge(cls), text);
       tr.append(td);
     }
     body.append(tr);

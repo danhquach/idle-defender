@@ -76,7 +76,7 @@ import {
   type UpgradeOffer,
 } from './hud.ts';
 import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
-import { classChip, classIcon } from './classicon.ts';
+import { classBadge } from './classicon.ts';
 import { gunCompare, gunTiles, heldGunOf } from './gunpick.ts';
 import { classLine, matchupsOpen } from './statlines.ts';
 import { MAP_GUN_AWAY, patrolName, patrolsShown } from './maptext.ts';
@@ -613,8 +613,8 @@ export function slotFace(it: InventoryItem, ready = false): HTMLElement[] {
     face.push(el('span', 'inv-slot-text', WEAPONS[it.base].name));
   }
   if (it.cls) {
-    // The class, icon and name as text (ID-237); the sentence in its tooltip.
-    face.push(classChip(it.cls, it.classLine ?? undefined, true));
+    // The class badge alone (ID-237, ID-254): the name is its label, the sentence its tooltip.
+    face.push(classBadge(it.cls, { label: true, title: it.classLine ?? undefined }));
   }
   if (it.badge) {
     // A bare number on the slot: its tooltip says it is the gun's own dmg/s (ID-166).
@@ -1002,7 +1002,7 @@ export function facts(it: InventoryItem): HTMLElement[] {
     const [name, ...matchups] = (it.classLine ?? '').split(' · ');
     const line = el('div', 'inv-class');
     const head = el('span', 'inv-class-name');
-    head.append(classIcon(it.cls), name ?? '');
+    head.append(classBadge(it.cls), name ?? '');
     line.append(head);
     if (matchups.length > 0) line.append(el('span', 'inv-class-note', matchups.join(' · ')));
     role.push(line);

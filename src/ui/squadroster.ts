@@ -12,7 +12,7 @@
 // the page only through textContent.
 import { baseOf, heldName, isOwned, roleOf, type Held } from '../core/armoury.ts';
 import { classOf } from '../core/traits.ts';
-import { JOBS, WEAPONS, type Rarity } from '../core/data.ts';
+import { JOBS, WEAPONS, type GunClass, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import {
   combinePartners,
@@ -63,7 +63,7 @@ import {
   patrolsShown,
   patrolTime,
 } from './maptext.ts';
-import { classChip, classIcon } from './classicon.ts';
+import { classBadge, classChip } from './classicon.ts';
 import { className, classLine, levelText, matchupsOpen } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
 
@@ -101,6 +101,8 @@ export interface RosterTile {
    */
   fits: boolean;
   rarity: Rarity;
+  /** The held gun's class (ID-254), for the badge on its tile; null when it has none. */
+  cls: GunClass | null;
   art: ArtId;
 }
 
@@ -162,6 +164,7 @@ export function rosterTiles(game: Camp, now: number, fight: HordeState | null): 
       dps: heldDps(held, d),
       fits: JOBS[d.job].kind === 'fight' && jobFits(d.job, held),
       rarity: rarityOf(held),
+      cls: classOf(held),
       art: avatarOf(d),
     };
   });
@@ -520,6 +523,14 @@ export function createRoster(
     target?.focus();
   }
 
+  /** A comparison cell; the Class row's carries the class badge before its name (ID-254). */
+  function compareCell(text: string, cls?: GunClass | null): HTMLElement {
+    const td = el('td', '');
+    if (cls) td.append(classBadge(cls));
+    td.append(text);
+    return td;
+  }
+
   function tabItem(t: RosterTile, selected: boolean): HTMLElement {
     const li = el('li', 'rv-cell');
     const tab = el('button', 'rv-tab');
@@ -531,7 +542,7 @@ export function createRoster(
     // Injured, resting between hordes (ID-220): tinted, the portrait greyed and bandaged; the
     // label says the visible word too (label in name), with how long.
     const hurt = t.rest > 0 && !t.away;
-    const label = `${t.name}, level ${t.level}, ${t.job}, ${hurt ? `${INJURED}, ` : ''}${t.health}, ${t.gunFull}, ${t.dps} DPS${t.fits ? `, suits a ${t.job}` : ''}`;
+    const label = `${t.name}, level ${t.level}, ${t.job}, ${hurt ? `${INJURED}, ` : ''}${t.health}, ${t.gunFull}, ${t.cls ? `class ${className(t.cls)}, ` : ''}${t.dps} DPS${t.fits ? `, suits a ${t.job}` : ''}`;
     tab.title = label;
     tab.setAttribute('aria-label', label);
     tab.classList.toggle('rv-tab-down', t.down);
@@ -558,12 +569,11 @@ export function createRoster(
       star.setAttribute('aria-hidden', 'true');
       stat.append(star);
     }
-    tab.append(
-      avatar(t.art, 'roster-avatar roster-avatar-xs', hurt),
-      text,
-      gunIcon(t.rarity, t.gunIcon, 'rv-tab-gun'),
-      stat,
-    );
+    // The gun's class badge sits in the tile's bottom-right corner (ID-254), inside the tile so
+    // the gap to the DPS is untouched; the label says the class in words.
+    const gun = gunIcon(t.rarity, t.gunIcon, 'rv-tab-gun');
+    if (t.cls) gun.append(classBadge(t.cls));
+    tab.append(avatar(t.art, 'roster-avatar roster-avatar-xs', hurt), text, gun, stat);
     tab.addEventListener('click', () => {
       if (t.id === current) return;
       current = t.id;
@@ -973,7 +983,12 @@ export function createRoster(
         if (r.tone) change.dataset.tone = r.tone;
         // The dmg/s row is theirs (ID-152); the gun's own numbers follow.
         const label = r.label === 'DPS' ? `${d.name}'s DPS` : r.label;
-        tr.append(el('th', '', label), el('td', '', r.now), el('td', '', r.next), change);
+        tr.append(
+          el('th', '', label),
+          compareCell(r.now, r.nowCls),
+          compareCell(r.next, r.nextCls),
+          change,
+        );
         for (const th of tr.querySelectorAll('th')) th.scope = 'row';
         body.append(tr);
       }
@@ -1021,7 +1036,7 @@ export function createRoster(
       const tileClass = classOf(t.held);
       if (tileClass) {
         dps.title = className(tileClass);
-        dps.append(classIcon(tileClass));
+        dps.append(classBadge(tileClass));
       }
       dps.append(t.dps);
       tile.append(delta, type, pwr, dps);

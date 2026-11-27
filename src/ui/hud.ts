@@ -182,7 +182,7 @@ import { SPEEDS, type Speed } from '../storage/settings.ts';
 import type { ButtonVariant } from './kit.ts';
 import { setVariant } from './kit.ts';
 import { createHold } from './hold.ts';
-import { classChip } from './classicon.ts';
+import { classBadge, classChip } from './classicon.ts';
 import { classLine, FIT_TIP, FIT_WORD, fitText, matchupsOpen, traitText } from './statlines.ts';
 import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
 import {
@@ -1767,20 +1767,25 @@ export function dropTile(
     guns: [
       ...own.filter((w) => w.uid.startsWith('t')),
       ...own.filter((w) => !w.uid.startsWith('t')),
-    ].map((w) => ({
-      ...(w.uid.startsWith('t') ? { tag: DROP_KIND.theme } : {}),
-      rarity: w.rarity,
-      short: `Lv ${gunLevel(w)} ${WEAPONS[w.base].name}`,
-      power: gunDpsText(gunPower(w)),
-      icon: GUN_ICON[w.base as GunId],
-      lost: thrown.includes(w),
-      lines: [
-        `${gunTag(drop, w)} · ${RARITIES[w.rarity].name}`,
-        roleLine(w.base) ?? '',
-        classLine(w, matchupsOpen(game)) ?? '',
-        affixLines(w).join(', '),
-      ].filter((t) => t !== ''),
-    })),
+    ].map((w) => {
+      const line = classLine(w, matchupsOpen(game)) ?? '';
+      return {
+        ...(w.uid.startsWith('t') ? { tag: DROP_KIND.theme } : {}),
+        rarity: w.rarity,
+        short: `Lv ${gunLevel(w)} ${WEAPONS[w.base].name}`,
+        power: gunDpsText(gunPower(w)),
+        icon: GUN_ICON[w.base as GunId],
+        lost: thrown.includes(w),
+        cls: classOf(w),
+        classLine: line,
+        lines: [
+          `${gunTag(drop, w)} · ${RARITIES[w.rarity].name}`,
+          roleLine(w.base) ?? '',
+          line,
+          affixLines(w).join(', '),
+        ].filter((t) => t !== ''),
+      };
+    }),
     // "No better", not "weaker": a tie throws the drop away too.
     thrown:
       [
@@ -1812,6 +1817,9 @@ export interface DropGun {
   lost: boolean;
   /** Its details, shown on a click: kind and rarity, role and trait, affixes. */
   lines: string[];
+  /** Its class (ID-254) and the `lines` entry that says it, which gets the badge before it. */
+  cls?: GunClass | null;
+  classLine?: string;
 }
 
 /** What a drop tile says about its kind (ID-098). */
@@ -3930,7 +3938,11 @@ export function createHud(
         b.setAttribute('aria-expanded', 'true');
         details.replaceChildren(
           el('p', 'gun-details-name', g.short),
-          ...g.lines.map((line) => el('p', '', line)),
+          ...g.lines.map((line) => {
+            const p = el('p', '', line);
+            if (g.cls && line === g.classLine) p.prepend(classBadge(g.cls));
+            return p;
+          }),
           el('p', 'tile-stash', t.stash),
           ...(t.thrown ? [el('p', 'tile-thrown', t.thrown)] : []),
           ...(t.farmNote ? [el('p', 'tile-farm', t.farmNote)] : []),

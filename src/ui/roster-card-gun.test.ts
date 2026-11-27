@@ -8,6 +8,7 @@ import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { bestGuns, bestSquad, equipGun, squadSpec, startSquadHorde } from '../core/hordeonly.ts';
 import { createRng } from '../core/rng.ts';
 import { survivorDps } from '../core/stats.ts';
+import { className } from './statlines.ts';
 import { ART_URLS, GUN_ICON } from './sprites.ts';
 import type { HordeState } from '../core/horde.ts';
 import { createRoster, rosterTiles, type RosterOptions } from './squadroster.ts';
@@ -202,7 +203,9 @@ describe('the Roster cards show the held gun (ID-180)', () => {
       const tile = rosterTiles(m.game(), NOW, null).find((t) => t.id === id)!;
       const label = m.tab(id).getAttribute('aria-label')!;
       const suits = tile.fits ? `, suits a ${tile.job}` : '';
-      expect(label.endsWith(`${tile.gunFull}, ${dps} DPS${suits}`)).toBe(true);
+      expect(
+        label.endsWith(`${tile.gunFull}, class ${className(tile.cls!)}, ${dps} DPS${suits}`),
+      ).toBe(true);
       expect(m.tab(id).title).toBe(label);
     }
   });
@@ -215,7 +218,8 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     expect(label).toContain('Resting: 2 hordes, Pistol, ');
     const tile = rosterTiles(g, NOW, null).find((t) => t.id === 'recruit-3')!;
     const suits = tile.fits ? `, suits a ${tile.job}` : '';
-    expect(label.endsWith(`, ${tile.dps} DPS${suits}`)).toBe(true);
+    // The gunless recruit holds the free pistol: class Light.
+    expect(label.endsWith(`, Pistol, class Light, ${tile.dps} DPS${suits}`)).toBe(true);
     expect(m.tab('recruit-3').querySelector('.rv-tab-job')!.textContent).toBe('Injured');
   });
 
@@ -244,7 +248,9 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     expect(after.label).toContain('Lv 3 Relic Carbine');
     const held = rosterTiles(m.game(), NOW, null).find((t) => t.id === 'recruit-1')!;
     const suits = held.fits ? `, suits a ${held.job}` : '';
-    expect(after.label!.endsWith(`${after.dps} DPS${suits}`)).toBe(true);
+    expect(
+      after.label!.endsWith(`Lv 3 Relic Carbine, class Medium, ${after.dps} DPS${suits}`),
+    ).toBe(true);
 
     // An outside change plus refresh(): the gun goes back to the stash (pistol).
     const back = equipGun(m.game(), 'recruit-1', 'pistol');
@@ -277,7 +283,9 @@ describe('the Roster cards show the held gun (ID-180)', () => {
     expect(tab.querySelector('.rv-tab-dps')!.textContent).toBe(tile.dps);
     const suits = tile.fits ? `, suits a ${tile.job}` : '';
     expect(
-      tab.getAttribute('aria-label')!.endsWith(`${tile.gunFull}, ${tile.dps} DPS${suits}`),
+      tab
+        .getAttribute('aria-label')!
+        .endsWith(`${tile.gunFull}, class ${className(tile.cls!)}, ${tile.dps} DPS${suits}`),
     ).toBe(true);
     // Whoever left the squad is a bench card now, still with their gun and DPS.
     const out = [...m.scrim.querySelectorAll<HTMLElement>('.rv-bench .rv-tab')];

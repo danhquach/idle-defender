@@ -31,19 +31,30 @@ export function classIcon(cls: GunClass): SVGSVGElement {
 }
 
 /**
- * A chip: the class's icon and its name as text; `title` carries the longer line. `iconOnly`
- * (a small weapon slot, where the name would collide with the dmg/s and the level) keeps the
- * name in the chip's accessible name and title instead.
+ * The class badge (ID-254): the class's polygon, in the class's colour, on a small dark plate.
+ * One look wherever a class shows; `label` makes it a named image (a lone badge), otherwise it
+ * is decoration beside or inside something that says the class already.
  */
-export function classChip(cls: GunClass, title?: string, iconOnly = false): HTMLElement {
+export function classBadge(
+  cls: GunClass,
+  opts: { label?: boolean; title?: string } = {},
+): HTMLElement {
+  const badge = document.createElement('span');
+  badge.className = `class-badge class-badge-${cls}`;
+  if (opts.label) {
+    badge.setAttribute('role', 'img');
+    badge.setAttribute('aria-label', className(cls));
+    badge.title = opts.title ?? className(cls);
+  } else badge.setAttribute('aria-hidden', 'true');
+  badge.append(classIcon(cls));
+  return badge;
+}
+
+/** A chip: the class's badge and its name as text; `title` carries the longer line. */
+export function classChip(cls: GunClass, title?: string): HTMLElement {
   const chip = document.createElement('span');
-  chip.className = `class-chip class-chip-${cls}${iconOnly ? ' class-chip-icon' : ''}`;
-  chip.title = title ?? (iconOnly ? className(cls) : '');
-  if (!chip.title) chip.removeAttribute('title');
-  if (iconOnly) {
-    chip.setAttribute('role', 'img');
-    chip.setAttribute('aria-label', className(cls));
-    chip.append(classIcon(cls));
-  } else chip.append(classIcon(cls), document.createTextNode(className(cls)));
+  chip.className = `class-chip class-chip-${cls}`;
+  if (title) chip.title = title;
+  chip.append(classBadge(cls), document.createTextNode(className(cls)));
   return chip;
 }

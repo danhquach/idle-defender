@@ -12,11 +12,12 @@ import {
   statsOf,
   type Held,
 } from '../core/armoury.ts';
-import { RARITIES, WEAPONS, type Rarity } from '../core/data.ts';
+import { RARITIES, WEAPONS, type GunClass, type Rarity } from '../core/data.ts';
 import type { GameState, RosterDefender } from '../core/game.ts';
 import { handWorth, squadSpec, type GunWorthGame } from '../core/hordeonly.ts';
 import { isGun } from '../core/loadout.ts';
 import { survivorDps } from '../core/stats.ts';
+import { classOf } from '../core/traits.ts';
 import type { DefenderSpec } from '../core/horde.ts';
 import { dpsCaption } from './hud.ts';
 import { powerText } from './mapview.ts';
@@ -144,6 +145,9 @@ export interface CompareRow {
   label: string;
   now: string;
   next: string;
+  /** The Class row's classes (ID-254), for the badge before each name. */
+  nowCls?: GunClass | null;
+  nextCls?: GunClass | null;
   /** The change in words: "1.50 s slower", "80 px shorter", "same". */
   change: string;
   tone: 'better' | 'worse' | '';
@@ -273,6 +277,8 @@ export function gunCompare(held: Held, other: Held, who: DefenderSpec, worth: Wo
       label: 'Class',
       now: classLine(held, false) ?? '',
       next: classLine(other, false) ?? '',
+      nowCls: classOf(held),
+      nextCls: classOf(other),
       change: classLine(held, false) === classLine(other, false) ? 'same' : 'new class',
       tone: '',
     },
