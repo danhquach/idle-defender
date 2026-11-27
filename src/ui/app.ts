@@ -1059,6 +1059,7 @@ export function start(root: HTMLElement, art: Art): void {
             canGear: !horde || resultUp(),
             resumes: horde?.outcome === 'fighting' && !held,
           }),
+          storage,
           onEquip: changeGun,
           onToggleSquad: changeSquad,
           onTreat: treatInjured,

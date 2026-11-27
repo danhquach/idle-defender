@@ -63,6 +63,8 @@ import {
   patrolsShown,
   patrolTime,
 } from './maptext.ts';
+import { readRosterFolds, writeRosterFold } from '../storage/settings.ts';
+import type { SaveStorage } from '../storage/save.ts';
 import { classBadge, classChip } from './classicon.ts';
 import { className, classLine, levelText, matchupsOpen } from './statlines.ts';
 import { ART_URLS, avatarOf, GUN_ICON, type ArtId, type GunId } from './sprites.ts';
@@ -207,6 +209,8 @@ function gunIcon(rarity: Rarity, art: ArtId, extra = ''): HTMLElement {
 }
 
 export interface RosterOptions {
+  /** Where the Bench and Details folds are kept (ID-256); none keeps them for this visit only. */
+  storage?: SaveStorage | null;
   /**
    * The camp now, the fight under way if any, whether guns can be changed, and whether
    * closing resumes a fight (Close label).
@@ -286,6 +290,13 @@ export function createRoster(
   let picked: string | null = null;
   // The Combine pick (ID-170) open under the current survivor's buttons.
   let combining = false;
+  // Folds (ID-256): the stored choice read once. Details also opens for this visit alone when a
+  // survivor is picked or asked for (`detailsOpen`), without changing what is kept. A patrol's
+  // block folds for this visit only (by its number).
+  const folds = readRosterFolds(opts.storage ?? null);
+  let benchOpen = !folds.bench;
+  let detailsOpen = !folds.details;
+  const patrolsClosed = new Set<number>();
   let status = { text: '', tone: 'ok' as 'ok' | 'danger' };
   const button = el('button', 'roster-button', 'Roster');
   button.type = 'button';
@@ -323,9 +334,27 @@ export function createRoster(
   const squadWait = el('p', 'rv-squad-wait', SQUAD_WAIT);
   const squadRow = el('div', 'rv-squad-row');
   squadRow.append(squadLabel, buySquadButton, bestSquadButton, autoLabel, squadWait);
-  const benchLabel = el('p', 'rv-tabs-label');
+  /** A header button that folds the region `id`: the key keeps the keyboard on it across a redraw. */
+  function foldButton(cls: string, key: string, id: string): HTMLButtonElement {
+    const b = el('button', `rv-fold ${cls}`);
+    b.type = 'button';
+    b.dataset.key = key;
+    b.setAttribute('aria-controls', id);
+    return b;
+  }
+  const benchLabel = foldButton('rv-tabs-label', 'fold:bench', 'rv-fold-bench');
   const benchTabs = el('ul', 'rv-tabs rv-bench');
   benchTabs.setAttribute('aria-label', 'Bench');
+  const benchBody = el('div', 'rv-fold-body');
+  benchBody.id = 'rv-fold-bench';
+  benchBody.append(benchTabs);
+  benchLabel.addEventListener('click', () => {
+    benchOpen = !benchOpen;
+    writeRosterFold(opts.storage ?? null, 'bench', !benchOpen);
+    // Opened again: scrolled to the survivor shown once more (ID-241).
+    benchScrolled = null;
+    draw('fold:bench');
+  });
   // Out on a World map patrol (ID-230): under the bench, one block per patrol (ID-234), each
   // named and timed in a header over its members' cards, the bench's look.
   const patrolLabel = el('p', 'rv-tabs-label');
@@ -357,9 +386,37 @@ export function createRoster(
   }
   const top = el('div', 'rv-top');
   const panel = el('div', 'rv-panel');
+  // Details (ID-256): the survivor row and the panel, under a title that folds them.
+  const detailsLabel = foldButton('rv-box-title', 'fold:details', 'rv-fold-details');
+  detailsLabel.textContent = 'Details';
+  const detailsBody = el('div', 'rv-fold-body');
+  detailsBody.id = 'rv-fold-details';
+  detailsBody.append(top, panel);
+  detailsLabel.addEventListener('click', () => {
+    detailsOpen = !detailsOpen;
+    // Folded shut, the gun picker and the Combine pick (both inside Details) go with it, so
+    // Esc never meets a picker nobody can see.
+    if (!detailsOpen) {
+      picking = false;
+      picked = null;
+      combining = false;
+    }
+    writeRosterFold(opts.storage ?? null, 'details', !detailsOpen);
+    draw('fold:details');
+  });
+  // Each section in a box of its own (ID-256); Squad has no fold, Bench and Patrol hide when empty.
+  const box = (name: string, ...kids: HTMLElement[]): HTMLElement => {
+    const s = el('section', `rv-box rv-box-${name}`);
+    s.append(...kids);
+    return s;
+  };
+  const squadBox = box('squad', squadRow, tabs);
+  const benchBox = box('bench', benchLabel, benchBody);
+  const patrolBox = box('patrol', patrolLabel, patrolBlocks);
+  const detailsBox = box('details', detailsLabel, detailsBody);
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
-  pane.append(squadRow, tabs, benchLabel, benchTabs, patrolLabel, patrolBlocks, top, panel);
+  pane.append(squadBox, benchBox, patrolBox, detailsBox);
 
   /** What "Best squad" or a tick of "Auto" did, on the status line. */
   bestSquadButton.addEventListener('click', () => {
@@ -436,13 +493,19 @@ export function createRoster(
     tabs.dataset.count = String(squadMarks.length);
     benchTabs.dataset.count = String(benched.length);
     // With nobody off the squad the rows need no labels: the Roster looks as it did.
-    squadRow.hidden = benched.length + patrol.length === 0;
-    benchLabel.hidden = benchTabs.hidden = benched.length === 0;
-    patrolLabel.hidden = patrolBlocks.hidden = patrol.length === 0;
+    // The Squad title always shows; the bench's controls only with a bench (or a patrol).
+    const hasOthers = benched.length + patrol.length > 0;
+    benchBox.hidden = benchLabel.hidden = benchTabs.hidden = benched.length === 0;
+    benchBody.hidden = !benchOpen;
+    benchLabel.setAttribute('aria-expanded', String(benchOpen));
+    patrolBox.hidden = patrolLabel.hidden = patrolBlocks.hidden = patrol.length === 0;
+    detailsBody.hidden = !detailsOpen;
+    detailsLabel.setAttribute('aria-expanded', String(detailsOpen));
     const offer = game.stock
       ? slotOffer({ slots: game.slots, stock: game.stock }, 'squad', canGear)
       : null;
-    buySquadButton.hidden = offer === null;
+    buySquadButton.hidden = offer === null || !hasOthers;
+    bestSquadButton.hidden = autoLabel.hidden = !hasOthers;
     if (offer) {
       buySquadButton.textContent = offer.text;
       buySquadButton.disabled = offer.disabled;
@@ -453,7 +516,7 @@ export function createRoster(
       );
     }
     bestSquadButton.disabled = autoBox.disabled = !canGear;
-    squadWait.hidden = canGear;
+    squadWait.hidden = canGear || !hasOthers;
     bestSquadButton.title = canGear ? '' : SQUAD_WAIT;
     autoLabel.title = canGear ? AUTO_HINT : SQUAD_WAIT;
     // A screen reader hears why they are greyed (a tooltip never shows on a phone).
@@ -461,11 +524,12 @@ export function createRoster(
     bestSquadButton.setAttribute('aria-label', `Best squad${wait}`);
     autoBox.setAttribute('aria-label', `Auto best squad${wait}`);
     autoBox.checked = game.autoSquad === true;
-    squadLabel.textContent = squadText;
-    benchLabel.textContent = `Bench ${benched.length}`;
+    setTitle(squadLabel, 'Squad', `${squadMarks.length}/${squadCap(game)}`);
+    // Just the words: the arrow is the button's CSS.
+    setTitle(benchLabel, 'Bench', String(benched.length));
     benchTabs.replaceChildren(...benched.map((t) => tabItem(t, t.id === current)));
     revealBenchTab();
-    patrolLabel.textContent = `On patrol ${patrol.length}`;
+    setTitle(patrolLabel, 'On patrol', String(patrol.length));
     // One block per patrol (ID-234), the soonest back first; its members in the order sent.
     shown = patrolsShown(game).flatMap((p) => {
       const members = p.members
@@ -476,18 +540,34 @@ export function createRoster(
       const block = el('section', 'rv-patrol-block');
       block.setAttribute('role', 'group');
       block.setAttribute('aria-label', patrolGroupLabel(p, now));
-      const head = el('div', 'rv-patrol-head');
+      const regionId = `rv-fold-patrol-${p.no}`;
+      const head = foldButton('rv-patrol-head', `fold:patrol:${p.no}`, regionId);
       const time = el('span', 'rv-patrol-time', patrolTime(p, now));
-      const title = el('p', 'rv-patrol-name');
+      const title = el('span', 'rv-patrol-name');
       title.append(el('span', 'rv-patrol-title', patrolName(p)), time);
-      head.append(title, el('p', 'rv-patrol-mission', patrolMission(p)));
+      head.append(title, el('span', 'rv-patrol-mission', patrolMission(p)));
+      // Fixed, so the countdown's rewrites never change what a screen reader hears here.
+      head.setAttribute('aria-label', `${patrolName(p)}, ${patrolMission(p)}`);
+      const open = !patrolsClosed.has(p.no);
+      head.setAttribute('aria-expanded', String(open));
       const list = el('ul', 'rv-tabs rv-bench rv-patrol');
       list.dataset.count = String(members.length);
       list.replaceChildren(...members.map((t) => tabItem(t, t.id === current)));
-      block.append(head, list);
+      const region = el('div', 'rv-fold-body');
+      region.id = regionId;
+      region.hidden = !open;
+      region.append(list);
+      head.addEventListener('click', () => {
+        if (patrolsClosed.has(p.no)) patrolsClosed.delete(p.no);
+        else patrolsClosed.add(p.no);
+        draw(`fold:patrol:${p.no}`);
+      });
+      block.append(head, region);
       return { p, block, time };
     });
     shownKey = patrolKey(game);
+    // A patrol that is gone forgets its fold.
+    for (const no of patrolsClosed) if (!shown.some((s) => s.p.no === no)) patrolsClosed.delete(no);
     patrolBlocks.replaceChildren(...shown.map((s) => s.block));
     if (d) {
       top.replaceChildren(
@@ -575,7 +655,10 @@ export function createRoster(
     if (t.cls) gun.append(classBadge(t.cls));
     tab.append(avatar(t.art, 'roster-avatar roster-avatar-xs', hurt), text, gun, stat);
     tab.addEventListener('click', () => {
-      if (t.id === current) return;
+      // A card picked shows its details, even folded (for this visit; the kept choice stays).
+      const unfold = !detailsOpen;
+      detailsOpen = true;
+      if (t.id === current && !unfold) return;
       current = t.id;
       picking = false;
       picked = null;
@@ -1128,6 +1211,8 @@ export function createRoster(
       const { game } = opts.state();
       const asked = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
       current = (asked ?? game.roster[0])?.id ?? null;
+      // A survivor asked for by name shows their details, even folded (not kept).
+      if (id !== undefined) detailsOpen = true;
       // Asked for by name: shown, even if the player scrolled the bench since (ID-241).
       benchScrolled = null;
       if (opened) {
@@ -1168,6 +1253,11 @@ export function createRoster(
   };
 
   return api;
+}
+
+/** A section title, "Bench 2": the words, then the count in plain weight; the text reads whole. */
+function setTitle(title: HTMLElement, words: string, count: string): void {
+  title.replaceChildren(`${words} `, el('span', 'rv-count', count));
 }
 
 /** What the blocks are drawn from: each patrol and its members. */

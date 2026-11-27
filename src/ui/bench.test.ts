@@ -340,11 +340,11 @@ describe('the Roster and the bench (ID-147)', () => {
     const m = mount(campGame(people(3)));
     m.roster.open('recruit-1');
     expect(m.q('.rv-bench').hidden).toBe(true);
-    expect(
-      [...m.scrim.querySelectorAll<HTMLElement>('.rv-tabs-label')].every(
-        (l) => l.closest('[hidden]') !== null,
-      ),
-    ).toBe(true);
+    // The Squad title always shows (ID-256); the Bench and Patrol titles do not.
+    const shown = [...m.scrim.querySelectorAll<HTMLElement>('.rv-tabs-label')].filter(
+      (l) => l.closest('[hidden]') === null,
+    );
+    expect(shown.map((l) => l.textContent)).toEqual([`Squad 3/${SQUAD_CAP}`]);
     expect(m.q('[data-key="squad"]')).toBeNull();
     // No "Best squad" or "Auto" (ID-154) either, and Tab never lands on them.
     expect(m.q('[data-key="best-squad"]').closest('[hidden]')).not.toBeNull();
@@ -374,7 +374,10 @@ describe('the Roster and the bench (ID-147)', () => {
     const blocks = (m: ReturnType<typeof mount>) => [
       ...m.scrim.querySelectorAll<HTMLElement>('.rv-patrols .rv-patrol-block'),
     ];
-    const label = (el: HTMLElement) => el.previousElementSibling as HTMLElement;
+    // The Bench's tabs sit in a fold body (ID-256): its label is the body's previous sibling.
+    const benchLabel = (list: HTMLElement) =>
+      list.parentElement!.previousElementSibling as HTMLElement;
+    const patrolLabel = (patrols: HTMLElement) => patrols.previousElementSibling as HTMLElement;
 
     it('Squad, Bench and On patrol rows, each counted apart; the card keeps its locks', () => {
       const m = mount(out([person(4), person(5, { rest: 1 }), person(6)], ['recruit-6']));
@@ -382,8 +385,8 @@ describe('the Roster and the bench (ID-147)', () => {
       const bench = m.q<HTMLElement>('.rv-bench:not(.rv-patrol)');
       expect(rowIds('.rv-bench:not(.rv-patrol)', m)).toEqual(['recruit-4', 'recruit-5']);
       expect(rowIds('.rv-patrol', m)).toEqual(['recruit-6']);
-      expect(label(bench).textContent).toBe('Bench 2');
-      expect(label(m.q('.rv-patrols')).textContent).toBe('On patrol 1');
+      expect(benchLabel(bench).textContent).toBe('Bench 2');
+      expect(patrolLabel(m.q('.rv-patrols')).textContent).toBe('On patrol 1');
       expect(m.q('.rv-patrols').hidden).toBe(false);
       expect(m.q('.rv-squad-row').hidden).toBe(false);
       expect(m.q('.rv-patrol [data-defender="recruit-6"] .rv-tab-job').textContent).toBe('Out');
@@ -405,7 +408,7 @@ describe('the Roster and the bench (ID-147)', () => {
       const ps = [...m.game().map!.patrols].sort((a, b) => a.backAt - b.backAt || a.no - b.no);
       const bs = blocks(m);
       expect(bs).toHaveLength(2);
-      expect(label(m.q('.rv-patrols')).textContent).toBe('On patrol 5');
+      expect(patrolLabel(m.q('.rv-patrols')).textContent).toBe('On patrol 5');
       bs.forEach((b, i) => {
         const p = ps[i]!;
         expect(b.getAttribute('role')).toBe('group');
@@ -504,9 +507,9 @@ describe('the Roster and the bench (ID-147)', () => {
       const m = mount(out([person(4)], ['recruit-4']));
       m.roster.open('recruit-1');
       const bench = m.q<HTMLElement>('.rv-bench:not(.rv-patrol)');
-      expect(bench.hidden && label(bench).hidden).toBe(true);
+      expect(bench.hidden && benchLabel(bench).hidden).toBe(true);
       expect(m.q('.rv-patrols').hidden).toBe(false);
-      expect(label(m.q('.rv-patrols')).textContent).toBe('On patrol 1');
+      expect(patrolLabel(m.q('.rv-patrols')).textContent).toBe('On patrol 1');
       expect(m.q('.rv-squad-row').hidden).toBe(false);
     });
 
@@ -548,9 +551,9 @@ describe('the Roster and the bench (ID-147)', () => {
       const m = mount(campGame(people(3), [person(4)]));
       m.roster.open('recruit-1');
       const patrols = m.q<HTMLElement>('.rv-patrols');
-      expect(patrols.hidden && label(patrols).hidden).toBe(true);
+      expect(patrols.hidden && patrolLabel(patrols).hidden).toBe(true);
       expect(blocks(m)).toHaveLength(0);
-      expect(label(m.q('.rv-bench')).textContent).toBe('Bench 1');
+      expect(benchLabel(m.q('.rv-bench')).textContent).toBe('Bench 1');
     });
   });
 

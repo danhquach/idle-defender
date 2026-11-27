@@ -5026,7 +5026,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   min-height: 0;
   padding: var(--space-10) var(--space-12) var(--space-12);
   overflow-y: auto;
-  gap: var(--space-8);
+  gap: var(--space-6);
 }
 
 .roster-avatar {
@@ -5262,11 +5262,28 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* With a bench (ID-147): a small label over the squad's row and the bench's. */
-.rv-tabs-label {
+.rv-tabs-label,
+.rv-box-title {
   margin: 0;
-  color: var(--color-text-subtle);
-  font-size: var(--text-2xs);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
   font-weight: 600;
+}
+
+/* The count after a title ("Bench 2") is plain weight (ID-256). */
+.rv-count {
+  font-weight: 400;
+}
+
+/* Titles with no arrow (Squad, On patrol) sit where the arrowed ones' words do: the fold
+   header's inset, arrow and gap, less the box's padding. */
+.rv-squad-row .rv-tabs-label,
+.rv-box-patrol > .rv-tabs-label {
+  padding-left: 20px;
+}
+
+.rv-squad-row [hidden] {
+  display: none;
 }
 
 .rv-tabs[hidden] {
@@ -5564,10 +5581,6 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   border-color: var(--color-danger);
 }
 
-.rv-squad-row .rv-tabs-label {
-  color: var(--color-accent);
-}
-
 .rv-bench .rv-tab {
   border-style: dashed;
   background: transparent;
@@ -5591,11 +5604,12 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   border-style: solid;
 }
 
-/* Survivors on patrol (ID-234): one bordered block per patrol, side by side where there is
-   room; a header names it and its mission, the countdown on the right, over its cards. */
+/* Survivors on patrol (ID-234): one block per patrol, each the Patrol box's full width and
+   split from the one above by a divider (ID-256); a header names it and its mission, the
+   countdown on the right, over its cards. */
 .rv-patrols {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--space-6);
 }
 
@@ -5603,23 +5617,109 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   display: none;
 }
 
-.rv-patrol-block {
+/* Each Roster section in a box of its own (ID-256): Squad, Bench, Patrol and Details. A
+   fold hides only its body, so the boxes above never move. */
+.rv-box {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  min-width: 0;
-  max-width: 100%;
-  padding: var(--space-4) var(--space-6) var(--space-6);
-  border: 1px solid var(--color-border-strong);
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-sunken);
 }
 
-.rv-patrol-head {
+.rv-box[hidden],
+.rv-fold-body[hidden] {
+  display: none;
+}
+
+/* A header that folds its section: the whole row is the button, the arrow drawn by CSS. The
+   padding and the matching negative margin keep the words where a plain title's are. */
+.rv-fold {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  align-self: stretch;
+  min-height: 28px;
+  margin: 0 -2px;
+  padding: var(--space-4) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  /* The family only: the title classes set the size and weight (ID-256). */
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Only where a pointer really hovers: on touch the last tapped header would stay lit. */
+@media (hover: hover) {
+  .rv-fold:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+/* One arrow, turned to the side when closed. */
+.rv-fold::before {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  content: '\25BE' / '';
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1;
+  text-align: center;
+  transition: transform 120ms ease;
+}
+
+.rv-fold[aria-expanded='false']::before {
+  transform: rotate(-90deg);
+}
+
+/* Shut, a box is just its title row. */
+.rv-box:has(> .rv-fold-body[hidden]) {
+  padding-block: 0;
+}
+
+@media (pointer: coarse) {
+  .rv-fold {
+    min-height: 40px;
+  }
+}
+
+.rv-patrol-block {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-4);
+  flex: 1 1 100%;
   min-width: 0;
+  max-width: 100%;
+}
+
+.rv-patrol-block + .rv-patrol-block {
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-divider);
+}
+
+/* The header is a button (ID-256), a sub-header: the arrow, then the name and countdown
+   over the mission. */
+.rv-patrol-head {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: start;
+  gap: 2px var(--space-4);
+  min-width: 0;
+}
+
+.rv-patrol-head::before {
+  grid-row: 1 / span 2;
+  margin-top: 2px;
+}
+
+.rv-patrol-name,
+.rv-patrol-mission {
+  grid-column: 2;
 }
 
 .rv-patrol-name {
@@ -5644,6 +5744,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 .rv-patrol-mission {
+  display: block;
   margin: 0;
   color: var(--color-text-subtle);
   font-size: var(--text-2xs);
@@ -6071,6 +6172,15 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-sunken);
+}
+
+/* In the Details box (ID-256) the box is the frame: a divider only, no box in a box. */
+.rv-box-details .rv-panel {
+  padding: var(--space-6) 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: none;
 }
 
 .rv-phead {
@@ -6948,6 +7058,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 /* The player's system asks for less motion: no deal, lift, flash or shine (ID-103); the
    icons and frames stay, and a pick closes the offer at once (hud.ts). */
 @media (prefers-reduced-motion: reduce) {
+  .rv-fold::before,
   .hud-card,
   .hud-card:not(.hud-card-picked),
   .hud-card-picked,
