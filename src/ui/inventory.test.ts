@@ -974,7 +974,7 @@ describe('gun level and Squad Power in the Inventory (ID-098)', () => {
     // The dmg/s and the step are the face's own, never in the level's corner.
     expect(ready.map((e) => e.className)).toEqual([
       'gun-icon',
-      'class-chip class-chip-medium class-chip-icon',
+      'class-badge class-badge-medium',
       'inv-slot-badge',
       'inv-slot-corner',
       'inv-slot-step',

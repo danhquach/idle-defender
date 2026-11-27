@@ -484,6 +484,18 @@ describe('drop tile: kind, farm note and level (ID-098, ID-196)', () => {
     expect(root.querySelector('#hud-gun-details')!.textContent).toContain('First clear');
   });
 
+  it('the opened details put the class badge before the class line (ID-254)', () => {
+    const { h, root } = page();
+    const g = squadGame(2, 6);
+    h.showResult(squadScreen(g, fought(g, 6, 'won')));
+    root.querySelector<HTMLElement>('.gun-chip')!.click();
+    const badges = root.querySelectorAll('#hud-gun-details .class-badge');
+    expect(badges).toHaveLength(1);
+    const line = badges[0]!.parentElement!;
+    expect(line.firstElementChild).toBe(badges[0]);
+    expect(line.textContent).toMatch(/^(Light|Medium|Heavy|Spread)/);
+  });
+
   it('says to farm a higher horde when nothing it drops could be an upgrade', () => {
     const w = gun('a', 2);
     const t = dropTile({ armoury: [] }, dropOf(w, { kind: 'replay', noUpgrades: true }));

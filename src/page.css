@@ -133,6 +133,12 @@
   --slot-military: #6e86a3;
   --slot-prototype: #8c7ca3;
   --slot-relic: #ab9969;
+  /* Gun class badge (ID-254): a colour per class, on a dark plate that is the page background. */
+  --class-light: #7cc4f0;
+  --class-medium: #f2efe6;
+  --class-heavy: #f0994a;
+  --class-spread: #f08fc0;
+  --class-badge-bg: var(--color-bg);
   --color-gun-rim: rgb(240 236 224 / 85%);
   --slot-size: 64px;
 
@@ -5928,6 +5934,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   padding: 1px;
   overflow: hidden;
   border-radius: var(--radius-sm);
+  position: relative;
 }
 
 /* Every gun fits the tile, a tall one (pistol, machine pistol) as well as a long one. */
@@ -8729,14 +8736,81 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   fill: currentcolor;
 }
 
-/* On a weapon slot only the icon shows, at the foot's left, clear of the dmg/s badge at the
+/* The class badge (ID-254): the class's polygon in its colour on a dark plate. Colours live here
+   only; the surfaces below set size and position. */
+.class-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-xs);
+  background: var(--class-badge-bg);
+}
+
+.class-badge .class-icon {
+  width: 9px;
+  height: 9px;
+}
+
+.class-badge-light {
+  color: var(--class-light);
+}
+
+.class-badge-medium {
+  color: var(--class-medium);
+}
+
+.class-badge-heavy {
+  color: var(--class-heavy);
+}
+
+.class-badge-spread {
+  color: var(--class-spread);
+}
+
+/* On a Roster card's gun tile: the bottom-right corner, only the top-left corner rounded. */
+.rv-tab-gun .class-badge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  border-radius: var(--radius-xs) 0 0;
+  pointer-events: none;
+}
+
+/* Four cards to a phone's row: the tile is about 24 x 12 px, so any corner at the muzzle end
+   hides it. The badge goes small to the bottom-left, over the stock and grip, and the gun
+   still reads. */
+@container (max-width: 460px) {
+  .rv-tab-gun .class-badge {
+    right: auto;
+    left: 0;
+    width: 9px;
+    height: 9px;
+    border-radius: 0 var(--radius-xs) 0 0;
+  }
+
+  .rv-tab-gun .class-badge .class-icon {
+    width: 7px;
+    height: 7px;
+  }
+}
+
+/* On a weapon slot only the badge shows, at the foot's left, clear of the dmg/s badge at the
    right (the name would not fit the slot's width); the name is its title and aria-label. */
-.inv-slot > .class-chip {
+.inv-slot > .class-badge {
   position: absolute;
   bottom: 2px;
   left: 2px;
-  padding: var(--space-2);
   pointer-events: none;
+}
+
+/* The badge in a comparison cell and a drop's details line: before the name, clear of it. */
+.rv-ctab .class-badge,
+.gun-details .class-badge {
+  margin-right: var(--space-4);
+  vertical-align: middle;
 }
 
 /* The details' class: the icon inline with its name, then the matchups in small type. */
@@ -8896,12 +8970,10 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   align-self: flex-start;
 }
 
-/* On a gun tile the icon sits inline before the DPS number, 3 px clear of it. */
-.rv-dps .class-icon {
-  width: 9px;
-  height: 9px;
+/* On a gun tile the badge sits inline before the DPS number, 3 px clear of it. */
+.rv-dps .class-badge {
   margin-right: 3px;
-  vertical-align: baseline;
+  vertical-align: middle;
 }
 
 /* Half of a trait's text ("Resists [chip]") never breaks inside. */
@@ -8924,9 +8996,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-size: var(--text-body);
 }
 
-.menu-classes .class-icon,
-.menu-traits .class-icon {
-  display: inline-block;
+.menu-classes .class-badge,
+.menu-traits .class-badge {
   margin-right: var(--space-4);
   vertical-align: middle;
 }

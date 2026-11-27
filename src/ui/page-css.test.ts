@@ -17,6 +17,9 @@ const tokens = new Map(
 function rgba(name: string): [number, number, number, number] {
   const value = name.startsWith('--') ? tokens.get(name) : name;
   if (value === undefined) throw new Error(`no token ${name}`);
+  // An alias (--class-badge-bg: var(--color-bg)) is its target's colour.
+  const alias = /^var\((--[\w-]+)\)$/.exec(value);
+  if (alias) return rgba(alias[1]!);
   const hex = /^#([0-9a-f]{6})$/i.exec(value);
   if (hex) {
     const n = parseInt(hex[1]!, 16);
@@ -51,6 +54,11 @@ const contrast = (fg: string, bg: string): number => {
 
 // Each text colour with every surface the page puts it on.
 const TEXT_ON: Record<string, string[]> = {
+  // The class badge's glyphs sit on its own plate (ID-254).
+  '--class-light': ['--class-badge-bg'],
+  '--class-medium': ['--class-badge-bg'],
+  '--class-heavy': ['--class-badge-bg'],
+  '--class-spread': ['--class-badge-bg'],
   '--color-text': [
     '--color-bg',
     '--color-surface-sunken',
@@ -804,5 +812,96 @@ describe('the Craft tab holds still whatever the blueprints held (ID-250)', () =
     expect(rules).toMatch(/\.craft-area > \.craft-sub,\s*\.craft-result \{\s*min-height: 40px;/);
     expect(rules).toMatch(/\.craft-area > \.craft-sub,\s*\.craft-result \{\s*min-height: 50px;/);
     expect(rule('.craft-view')).toMatch(/min-height: 28px;/);
+  });
+});
+
+describe('the gun class badge (ID-254)', () => {
+  const classes = ['light', 'medium', 'heavy', 'spread'];
+  const slots = ['rusty', 'common', 'military', 'prototype', 'relic'].map((r) => `--slot-${r}`);
+
+  it('the plate is the page background, by alias, and each class has its colour token', () => {
+    expect(tokens.get('--class-badge-bg')).toBe('var(--color-bg)');
+    for (const c of classes) expect(tokens.get(`--class-${c}`)).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
+  it('the plate stands out from every rarity tint at 3:1 (non-text), the lowest being Rusty', () => {
+    for (const s of slots) {
+      expect(contrast('--class-badge-bg', s), s).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrast('--class-badge-bg', '--slot-rusty')).toBeCloseTo(4.2, 1);
+    expect(contrast('--class-badge-bg', '--slot-relic')).toBeCloseTo(6.41, 1);
+  });
+
+  it('the glyph colours are the TEXT_ON checks above; one is pinned here', () => {
+    expect(contrast('--class-light', '--class-badge-bg')).toBeCloseTo(9.42, 1);
+    for (const c of classes) {
+      expect(contrast(`--class-${c}`, '--class-badge-bg'), c).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('the 3:1 check can fail: white glyph straight on the Relic tint is 2.80', () => {
+    expect(contrast('#ffffff', '--slot-relic')).toBeLessThan(3);
+    expect(contrast('#ffffff', '--slot-relic')).toBeCloseTo(2.8, 1);
+  });
+
+  it('only the badge rules set colour, background or fill; surfaces set size and position', () => {
+    const blocks = [...rules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+      (m) => [m[1]!.trim(), m[2]!] as const,
+    );
+    const badge = blocks.filter(([sel]) => /class-badge/.test(sel));
+    expect(badge.length).toBeGreaterThan(6);
+    const owners = new Set(['.class-badge', ...classes.map((c) => `.class-badge-${c}`)]);
+    for (const [sel, body] of badge) {
+      const paints = /(^|[\s;])(color|background(-color)?|fill)\s*:/.test(body);
+      if (paints) expect(owners.has(sel), sel).toBe(true);
+    }
+    expect(rule('.class-badge')).toMatch(/background: var\(--class-badge-bg\)/);
+    for (const c of classes) {
+      expect(rule(`.class-badge-${c}`)).toMatch(new RegExp(`color: var\\(--class-${c}\\)`));
+    }
+  });
+
+  it('no surface rule sets display on a badge: only .class-badge itself does', () => {
+    const blocks = [...rules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+      (m) => [m[1]!.trim(), m[2]!] as const,
+    );
+    for (const [sel, body] of blocks) {
+      if (!/(^|[\s,>])[^,{}]*\.class-badge(?![\w-])/.test(sel) || sel === '.class-badge') continue;
+      expect(body, sel).not.toMatch(/(^|[\s;])display\s*:/);
+    }
+    expect(rule('.class-badge')).toMatch(/display: inline-flex/);
+  });
+
+  it('on a Roster card the badge is the tile’s bottom-right corner: 12px plate, 9px glyph', () => {
+    expect(rule('.rv-tab-gun')).toMatch(/position: relative/);
+    expect(rule('.rv-tab-gun')).toMatch(/overflow: hidden/);
+    expect(rule('.class-badge')).toMatch(/width: 12px;\s*height: 12px/);
+    expect(rule('.class-badge .class-icon')).toMatch(/width: 9px;\s*height: 9px/);
+    const corner = rule('.rv-tab-gun .class-badge');
+    expect(corner).toMatch(/position: absolute/);
+    expect(corner).toMatch(/right: 0/);
+    expect(corner).toMatch(/bottom: 0/);
+    expect(corner).toMatch(/pointer-events: none/);
+  });
+
+  it('on a phone (container 460px or less) it shrinks to 9px / 7px and moves bottom-left', () => {
+    const phone =
+      /@container \(max-width: 460px\) \{\s*\.rv-tab-gun \.class-badge \{([^}]*)\}\s*\.rv-tab-gun \.class-badge \.class-icon \{([^}]*)\}/.exec(
+        rules,
+      );
+    expect(phone, 'no phone block for the badge').not.toBeNull();
+    expect(phone![1]).toMatch(/right: auto/);
+    expect(phone![1]).toMatch(/left: 0/);
+    expect(phone![1]).toMatch(/width: 9px;\s*height: 9px/);
+    expect(phone![2]).toMatch(/width: 7px;\s*height: 7px/);
+    // The only two rules for the tile's badge: the base and the phone one.
+    expect(rules.match(/\.rv-tab-gun \.class-badge \{/g)).toHaveLength(2);
+  });
+
+  it('the weapon slot’s badge stays bottom-left', () => {
+    const slot = rule('.inv-slot > .class-badge');
+    expect(slot).toMatch(/position: absolute/);
+    expect(slot).toMatch(/left: 2px/);
+    expect(slot).toMatch(/bottom: 2px/);
   });
 });

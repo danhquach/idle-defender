@@ -3933,11 +3933,25 @@ golden digest are untouched).
   one); the bench keeps plain dmg/s. **The objective trusts Squad Power**, which rates guns of
   equal Squad Power as equal (gun parity: ID-247, #501; the firing line by reach: ID-248, #505). Switching mode
   with Auto on re-fits the squad to the new mode.
-- **UI.** A gun always shows its class: icon and name on its card and the roster, the icon alone
-  (name in its tooltip) on a weapon slot and a gun-pick tile; once Nightmare is unlocked the
+- **UI.** A gun always shows its class: badge and name on its card and the roster, the badge alone
+  (name in its tooltip) on a weapon slot and a gun-pick tile, and in the corner of each Roster card's gun; once Nightmare is unlocked the
   gun's card also says "Light · Good vs Runners, Crawlers, Swollen · Poor vs Brutes, Horrors".
   The picker lists a chip per kind the horde brings ("Hulking · Resists Light · Weak to Heavy"),
   open on a desktop or iPad, a closed "Horde traits" fold on a phone. The Help tab has the table.
+- **Class badge (ID-254, #513).** One badge shows a gun's class wherever it appears: the class's
+  polygon (arrow Light, diamond Medium, hexagon Heavy, three-ray fan Spread; `CLASS_SHAPE`) in the
+  class's colour on a small dark plate. Colour and shape both carry the class, so it reads without
+  colour. Tokens in `:root`: `--class-light` #7cc4f0, `--class-medium` #f2efe6, `--class-heavy`
+  #f0994a, `--class-spread` #f08fc0, the plate `--class-badge-bg` = `--color-bg`. The glyphs meet
+  4.5:1 on the plate (9.4 to 15.6:1) and the plate stands out from every rarity tint at 3:1 or more
+  (4.2 on Rusty, the lowest), which is why the glyph sits on a plate and not straight on the tint.
+  Sizes: default 12px plate / 9px glyph. Roster tile: bottom-right on desktop and iPad; in a
+  container of 460px or less 9/7 at the bottom-left (over the stock), so the muzzle stays visible
+  on the ~24 x 12 px tile. The badge sits inside the tile, so
+  the gap to the dmg/s (ID-249) is unchanged. It is decoration (`aria-hidden`) beside a class name
+  or in a tile whose label says "class Medium"; alone (a weapon slot, bottom-left, ID-253 may move
+  it) it is a named image with the class as its label and the matchup line as its title. In the
+  gun picker it sits inline before the dmg/s, not on the tint. Guns with no class show none.
 - **Out of scope.** Class-aware targeting (preferring a weak target) was tried in the probe and made
   most squads worse, so shooters still take the nearest. The drop pool is unchanged (no class
   is starved by drops). Bespoke trait icons: the trait is its name as text.
