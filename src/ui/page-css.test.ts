@@ -526,21 +526,27 @@ describe('every offer card one size (ID-195)', () => {
     return at;
   };
 
-  it('fixes the width and height in px, at every screen width', () => {
+  it("fixes the width in px; the height is the offer's longest card, at every width (ID-204)", () => {
     const base = block('.hud-card.hud-card-has-art');
     expect(base).toMatch(/\n\s*width: \d+px;/);
-    expect(base).toMatch(/\n\s*height: \d+px;/);
-    // Wide screens: wider, still one size; phones: one height, stacked full width.
+    // Wide screens: wider, still one size; phones: stacked full width.
     expect(block('.hud-card.hud-card-has-art', media('min-width: 1200px'))).toMatch(
       /\n\s*width: \d+px;/,
     );
     const phone = block('.hud-card.hud-card-has-art', media('max-width: 719px'));
-    expect(phone).toMatch(/\n\s*height: \d+px;/);
     expect(phone).toMatch(/\n\s*width: auto;/);
-    // The narrowest phones wrap more: one taller size for every card there.
-    const narrow = block('.hud-card.hud-card-has-art', media('max-width: 359px'));
-    const h = (b: string) => Number(/height: (\d+)px;/.exec(b)![1]);
-    expect(h(narrow)).toBeGreaterThan(h(phone));
+    // No fixed card height anywhere: a set height left a tall box under a one-line effect.
+    const cardRules = rules.match(/\.hud-card\.hud-card-has-art \{[^}]*\}/g)!;
+    expect(cardRules.length).toBeGreaterThanOrEqual(4);
+    for (const r of cardRules)
+      expect(r).not.toMatch(/(?:^|[\s;{])(?:min-|max-)?(?:height|block-size):/);
+    // In a row the cards stretch to the tallest (flex's default); stacked, every grid row is
+    // as tall as the tallest card, so the three stay one size.
+    expect(block('.hud-card-row')).toMatch(/display: flex;/);
+    expect(block('.hud-card-row')).not.toMatch(/align-items/);
+    expect(block('.hud-card-row:has(> .hud-card-has-art)', media('max-width: 719px'))).toMatch(
+      /display: grid;[^}]*grid-auto-rows: 1fr;/,
+    );
   });
 
   it('keeps each part in its place: a one-line name slot and the foot at the bottom', () => {
@@ -565,18 +571,15 @@ describe('every offer card one size (ID-195)', () => {
     );
   });
 
-  it('on its side a phone gets three shorter cards in a row, inside 667 x 360 (ID-205)', () => {
+  it('on its side a phone gets three shorter cards in a row (ID-205; height guard in hud-offer.test.ts)', () => {
     // The last short-window block: the phone-on-its-side rules at the end of page.css.
     const at = rules.lastIndexOf('@media (max-height: 540px) {');
     const card = block('.hud-card.hud-card-has-art', at);
     const width = Number(/width: (\d+)px;/.exec(card)![1]);
-    const height = Number(/height: (\d+)px;/.exec(card)![1]);
     // Three cards, two 8 px gaps, 12 px of panel padding each side, on an iPhone SE.
     expect(3 * width + 2 * 8 + 2 * 12).toBeLessThanOrEqual(667 - 2 * 4);
-    // Under the top buttons (34 px), the heading (about 28 px) and the panel's padding.
-    expect(34 + 6 + 28 + height + 8).toBeLessThanOrEqual(360);
-    // Measured against Oil Bomb with both fires held (the longest card): it fits 276 px.
-    expect(height).toBeGreaterThanOrEqual(276);
+    // Content-sized (ID-204): Oil Bomb with both fires held, the longest card, measured 267 px
+    // at 667 x 375, under the top buttons (34 px), the heading and the panel's padding.
     // Reroll, Skip and Ban ride the heading's row (ID-210), so they add no height under the cards.
     expect(block('.hud-cards > .hud-offer-actions', at)).toMatch(/position: absolute;/);
     // Shorter still (iPhone Safari's bars), the panel scrolls rather than cut a card.
