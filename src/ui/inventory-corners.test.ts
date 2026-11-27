@@ -223,6 +223,31 @@ describe('the ready wedge (ID-253)', () => {
     expect(m.scrim.querySelector('.inv-slot .inv-ready')).toBeNull();
   });
 
+  it('rings the slot and draws three chevrons in a column, pointing up (ID-261)', () => {
+    const m = mount(camp());
+    for (const c of cells(m)) {
+      expect(c.querySelector<HTMLElement>('.inv-slot')!.dataset.ready).toBe('true');
+      const lines = [...c.querySelectorAll('.inv-ready polyline.inv-ready-line')];
+      expect(lines).toHaveLength(3);
+      expect(c.querySelectorAll('.inv-ready polyline.inv-ready-edge')).toHaveLength(3);
+      // The same x for each, one under the other, the tip on top.
+      const pts = lines.map((l) =>
+        l
+          .getAttribute('points')!
+          .split(' ')
+          .map((p) => p.split(',').map(Number)),
+      );
+      for (const p of pts) {
+        expect(p.map(([x]) => x)).toEqual([1.5, 5, 8.5]);
+        expect(p[1]![1]).toBeLessThan(p[0]![1]!);
+        expect(p[2]![1]).toBe(p[0]![1]);
+      }
+      expect(pts.map((p) => p[1]![1])).toEqual([3, 10, 17]);
+    }
+    const plain = m.slot('squad:recruit-1');
+    expect(plain.dataset.ready).toBeUndefined();
+  });
+
   it('is on no held, bench or patrol slot', () => {
     const m = mount(camp());
     m.tab('bench').click();

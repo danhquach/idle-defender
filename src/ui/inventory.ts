@@ -640,6 +640,31 @@ export function slotFace(it: InventoryItem): HTMLElement[] {
   return face;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * The ready-to-combine mark (ID-261): three chevrons stacked in a column, pointing up, each
+ * drawn twice, a dark edge under the green, so it reads on every frame and gun. Decoration:
+ * the slot's label says "can combine".
+ */
+export function readyMark(): HTMLElement {
+  const box = el('span', 'inv-ready');
+  box.setAttribute('aria-hidden', 'true');
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 10 24');
+  svg.setAttribute('focusable', 'false');
+  for (const cls of ['inv-ready-edge', 'inv-ready-line']) {
+    for (const y of [3, 10, 17]) {
+      const p = document.createElementNS(SVG_NS, 'polyline');
+      p.setAttribute('class', cls);
+      p.setAttribute('points', `1.5,${y + 4} 5,${y} 8.5,${y + 4}`);
+      svg.append(p);
+    }
+  }
+  box.append(svg);
+  return box;
+}
+
 /** A slot's button: its face, framed in its rarity's colour; `caption` under it (a name). */
 function slot(it: InventoryItem, ready: boolean, caption?: string): HTMLElement {
   const li = el('li', 'inv-cell');
@@ -653,10 +678,10 @@ function slot(it: InventoryItem, ready: boolean, caption?: string): HTMLElement 
   b.append(...slotFace(it));
   li.append(b);
   if (ready) {
-    // A corner mark on the cell, not the slot: the slot clips what pokes past its frame.
-    const wedge = el('span', 'inv-ready');
-    wedge.setAttribute('aria-hidden', 'true');
-    li.append(wedge);
+    // ID-261: a green ring round the frame, and three green chevrons on the cell (not in the
+    // slot, which clips what pokes past its frame) at the frame's left edge.
+    b.dataset.ready = 'true';
+    li.append(readyMark());
   }
   if (caption !== undefined) {
     // A long name is cut short with an ellipsis; the whole name shows on hover.
@@ -866,7 +891,7 @@ export const ICON_KEY: readonly string[] = [
   `Top right: upgrades, +1 to +${GUN_UPGRADE.max} (none at +0)`,
   "Bottom left: the gun's damage per second",
   'Bottom right: class — Light, Medium, Heavy, Spread',
-  `Green corner: ${COMBINE_COUNT} alike in the stash, ready to combine`,
+  `Green ring and arrows: ${COMBINE_COUNT} alike in the stash, ready to combine`,
 ];
 
 const KEY_CLASSES: readonly GunClass[] = ['light', 'medium', 'heavy', 'spread'];
@@ -879,7 +904,7 @@ function keySample(i: number): HTMLElement {
   else if (i === 1) box.append(el('span', 'inv-slot-step', '+2'));
   else if (i === 2) box.append(el('span', 'inv-slot-badge', '128'));
   else if (i === 3) box.append(...KEY_CLASSES.map((c) => classBadge(c)));
-  else box.append(el('span', 'inv-ready'));
+  else box.append(readyMark());
   return box;
 }
 

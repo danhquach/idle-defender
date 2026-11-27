@@ -993,22 +993,31 @@ describe('slot corners, the ready wedge and the icon key (ID-253)', () => {
     expect(tick).not.toMatch(/bottom:/);
   });
 
-  it('the ready flag sits over the top-left corner of the frame, inert, clear of the level plate', () => {
+  it('a ready set: a green ring outside the frame, three chevrons at its left edge (ID-261)', () => {
     expect(rule('.inv-cell')).toMatch(/position: relative/);
-    const w = rule('.inv-ready');
-    // An 11px square from (-2, -2), half of it drawn: its edge runs at x + y = 7 from the cell
-    // corner; the level plate starts at (4, 4), x + y = 8.
-    expect(w).toMatch(/top: -2px;/);
-    expect(w).toMatch(/left: -2px;/);
-    expect(w).toMatch(/width: 11px;/);
-    expect(w).toMatch(/height: 11px;/);
-    expect(w).not.toMatch(/clip-path/);
-    expect(w).toMatch(/var\(--color-bg\) calc\(50% - 1\.5px\) 50%,\s*transparent 50%/);
-    expect(w).toMatch(/pointer-events: none/);
-    expect(rules).not.toMatch(/\.inv-ready::before/);
+    // The ring sits in the 2 px between the frame and the select/focus outline (offset 2px).
+    expect(rule(".inv-slot[data-ready='true']")).toMatch(
+      /box-shadow: 0 0 0 2px var\(--color-ready\);/,
+    );
+    expect(rule(".inv-slot[aria-pressed='true']")).toMatch(/outline-offset: 2px;/);
+    const m = rule('.inv-ready');
+    // 24 px tall, centred on the 64 px slot: from 20 to 44, between the level plate (ends
+    // about 17) and the dmg/s plate (starts about 47); flush inside the 2 px frame.
+    expect(m).toMatch(/top: calc\(var\(--slot-size\) \/ 2 - 12px\);/);
+    expect(m).toMatch(/left: calc\(50% - var\(--slot-size\) \/ 2 \+ 2px\);/);
+    expect(m).toMatch(/width: 10px;/);
+    expect(m).toMatch(/height: 24px;/);
+    expect(m).toMatch(/pointer-events: none/);
+    // A dark edge under the green line.
+    expect(rule('.inv-ready-edge')).toMatch(/stroke: var\(--color-bg\);[^}]*stroke-width: 4;/);
+    // It fades with a lifted or refusing slot.
+    expect(rules).toMatch(
+      /\.inv-cell:has\(> \.inv-slot\[data-drag-from\]\) > \.inv-ready,\n\.inv-cell:has\(> \.inv-slot\[data-drop='no'\]\) > \.inv-ready \{\s*opacity: 0\.4;/,
+    );
+    expect(rule('.inv-ready-line')).toMatch(/stroke: var\(--color-ready\);[^}]*stroke-width: 2;/);
   });
 
-  it('the flag reads on every rarity frame and tint: its dark edge 3:1 on each, the green 3:1 on the dark', () => {
+  it('the ready mark reads on every rarity frame and tint: its dark edge 3:1 on each, the green 3:1 on the dark', () => {
     for (const r of RARITIES) {
       expect(contrast('--color-bg', `--rarity-${r}`), `frame ${r}`).toBeGreaterThanOrEqual(3);
       expect(contrast('--color-bg', `--slot-${r}`), `tint ${r}`).toBeGreaterThanOrEqual(3);

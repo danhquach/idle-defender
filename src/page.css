@@ -4533,23 +4533,55 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   color: var(--color-accent);
 }
 
-/* Set ready to combine (ID-253), on the cell (the slot clips its children). A corner flag over the frame's rounded top-left corner, its square tip just outside the
-   curve: green with a dark edge so it reads on every frame, and clear of the level plate
-   (the flag's edge runs at x + y = 7 from the cell corner, the plate starts at 4, 4). */
+/* Set ready to combine (ID-253, ID-261): a green ring just outside the rarity frame, so the
+   rarity still reads and the set stands out across the grid, under the select/focus outline
+   (that sits 2 px further out). */
+.inv-slot[data-ready='true'] {
+  box-shadow: 0 0 0 2px var(--color-ready);
+}
+
+/* And three green chevrons in a column at the frame's left edge, centred between the level
+   and dmg/s plates, on the cell (the slot clips its children); a dark edge under the green
+   reads on every frame and gun. */
 .inv-ready {
   position: absolute;
-  top: -2px;
-  left: -2px;
+  top: calc(var(--slot-size) / 2 - 12px);
+  left: calc(50% - var(--slot-size) / 2 + 2px);
   z-index: 1;
-  width: 11px;
-  height: 11px;
-  background: linear-gradient(
-    135deg,
-    var(--color-ready) 0 calc(50% - 1.5px),
-    var(--color-bg) calc(50% - 1.5px) 50%,
-    transparent 50%
-  );
+  display: block;
+  width: 10px;
+  height: 24px;
   pointer-events: none;
+}
+
+.inv-ready svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.inv-ready polyline {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.inv-ready-edge {
+  stroke: var(--color-bg);
+  stroke-width: 4;
+}
+
+.inv-ready-line {
+  stroke: var(--color-ready);
+  stroke-width: 2;
+}
+
+/* The chevrons fade with their slot while it is lifted or refuses a drop (they sit on the
+   cell, so the slot's own opacity doesn't reach them). */
+.inv-cell:has(> .inv-slot[data-drag-from]) > .inv-ready,
+.inv-cell:has(> .inv-slot[data-drop='no']) > .inv-ready {
+  opacity: 0.4;
 }
 
 /* The icon key under the Squad heading: the heading row with the ⓘ at its end, and a legend

@@ -1452,8 +1452,10 @@ profession's output).
   - **Combine in the Inventory** *(in a gun's details since ID-092)*: a stash
     gun's details name its set (its base weapon and rarity, below Relic): a set
     with 3 or more says "4 in stash" and "3 make a Common SMG", with a Combine
-    button, and its slots carry a small green corner mark on the slot's top-left
-    border in the grid (ID-253; on a dark edge so it reads on every rarity frame);
+    button, and its slots in the grid carry a green ring just outside the rarity
+    frame and three green chevrons stacked at the frame's left edge, between the
+    level and dmg/s corners (ID-261, was a small corner mark in ID-253; on a dark
+    edge so it reads on every rarity frame);
     one short says "2/3" and
     "1 more for a Common SMG". A Relic says it combines no further, and a gun in
     hand that it must go back to the stash first. A combine uses
