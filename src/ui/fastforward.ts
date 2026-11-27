@@ -39,6 +39,9 @@ function reachOf(s: HordeState): number {
   if (took(s, 'oil-bomb')) {
     for (const m of mortars(s)) reach = Math.max(reach, m.x + CARD.oil.range);
   }
+  // The Wall Machine Gun fires at the whole field, and Shock Net's pulse reaches the wire band (ID-264).
+  if (took(s, 'wall-machine-gun')) reach = Math.max(reach, wallFront(s) + CARD.wallGun.range);
+  if (took(s, 'shock-net')) reach = Math.max(reach, wallFront(s) + CARD.wire.to);
   for (const t of s.turrets) {
     reach = Math.max(reach, t.x + Math.max(TURRET.range * TURRET_RANGE[t.mount], SPEWER.range));
   }

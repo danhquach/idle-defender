@@ -16,21 +16,20 @@ const isTech = (x: unknown): x is TechId =>
 export function techState(g: Pick<GameState, 'tech'>, id: TechId): TechState {
   const have = techOf(g);
   if (have.includes(id)) return 'done';
-  const needs = TECH[id].needs;
-  return needs === null || have.includes(needs) ? 'open' : 'locked';
+  return TECH[id].needs.every((n) => have.includes(n)) ? 'open' : 'locked';
 }
 
-/** Nodes whose prerequisite is `id`, in table order (the detail panel and the chart's lines). */
-export const unlocksOf = (id: TechId): TechId[] => TECH_IDS.filter((t) => TECH[t].needs === id);
+/** Nodes that list `id` among their prerequisites, in table order (the detail panel and the chart's lines). */
+export const unlocksOf = (id: TechId): TechId[] =>
+  TECH_IDS.filter((t) => TECH[t].needs.includes(id));
 
-/** Why `id` can't be bought now, or null. Order: already researched, prerequisite, Scrap. */
+/** Why `id` can't be bought now, or null. Order: already researched, prerequisite (the first missing one), Scrap. */
 export function techRefusal(g: Pick<GameState, 'tech' | 'stock'>, id: TechId): Refusal | null {
   if (!isTech(id)) return { ok: false, code: 'unknown-tech' };
   if (techOf(g).includes(id)) return { ok: false, code: 'researched' };
   const node = TECH[id];
-  if (node.needs !== null && !techOf(g).includes(node.needs)) {
-    return { ok: false, code: 'needs-tech', node: node.needs };
-  }
+  const missing = node.needs.find((n) => !techOf(g).includes(n));
+  if (missing !== undefined) return { ok: false, code: 'needs-tech', node: missing };
   if (g.stock.scrap < node.cost) return { ok: false, code: 'tech-scrap', need: node.cost };
   return null;
 }
@@ -59,8 +58,8 @@ export const techReady = (g: Pick<GameState, 'tech' | 'stock'>): boolean =>
   TECH_IDS.some((id) => techState(g, id) === 'open' && g.stock.scrap >= TECH[id].cost);
 
 /**
- * The known nodes of `list`, each once, in `TECH_IDS` order, with every node whose
- * prerequisite is missing dropped (a Tier 1 gone takes its Tier 2 and 3). Exact string
+ * The known nodes of `list`, each once, in `TECH_IDS` order, with every node with
+ * a prerequisite missing dropped (a Tier 1 gone takes its Tier 2 and 3, and the Tier 4 above them). Exact string
  * compare, never an index by unchecked text; the result holds the table's own strings.
  */
 export function cleanTech(list: readonly unknown[]): TechId[] {
@@ -68,8 +67,7 @@ export function cleanTech(list: readonly unknown[]): TechId[] {
   for (const x of list) if (isTech(x)) kept.add(x);
   const out: TechId[] = [];
   for (const id of TECH_IDS) {
-    const needs = TECH[id].needs;
-    if (kept.has(id) && (needs === null || out.includes(needs))) out.push(id);
+    if (kept.has(id) && TECH[id].needs.every((n) => out.includes(n))) out.push(id);
   }
   return out;
 }

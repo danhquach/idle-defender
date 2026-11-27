@@ -219,7 +219,7 @@ describe('every offer card one size (ID-195)', () => {
   // stand in for rendered lines (jsdom has no layout): words longer than these could
   // overflow the card, so shorten them, or re-measure in a browser and raise the height.
   const NAME_MAX = 18; // one line: "Recruit B — Gunner"
-  const BODY_MAX = 169; // Oil Bomb
+  const BODY_MAX = 182; // Tar Moat (ID-264; Oil Bomb is 169): re-measured on desktop and a 390 px phone
   const LOWER_MAX = 227; // under the name: effect, synergy and swap warning (Oil Bomb with both fires held)
 
   /** Every state a card's words depend on: nothing held, each card held at each level,

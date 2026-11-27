@@ -18,23 +18,30 @@ const withScrap = (scrap: number, tech?: TechId[]): GameState => {
 };
 
 describe('the table', () => {
-  it('has 11 nodes in 4 branches, costing 9,300 in all', () => {
-    expect(TECH_IDS.length).toBe(11);
+  it('has 14 nodes in 4 branches, costing 25,800 in all', () => {
+    expect(TECH_IDS.length).toBe(14);
     expect(Object.keys(TECH).sort()).toEqual([...TECH_IDS].sort());
     expect(TECH_BRANCHES).toEqual(['wall', 'wire', 'ammo', 'mortars']);
-    expect(TECH_IDS.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(9300);
+    expect(TECH_IDS.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(25800);
+    expect(
+      TECH_IDS.filter((id) => TECH[id].tier < 4).reduce((sum, id) => sum + TECH[id].cost, 0),
+    ).toBe(9300);
   });
 
   it('puts each prerequisite before its node, one tier below, in the same branch', () => {
     TECH_IDS.forEach((id, i) => {
       const { needs, tier, branch } = TECH[id];
-      if (needs === null) return expect(tier).toBe(1);
-      expect(TECH_IDS.indexOf(needs)).toBeLessThan(i);
-      expect(TECH[needs].tier).toBe(tier - 1);
-      expect(TECH[needs].branch).toBe(branch);
+      if (tier === 1) return expect(needs).toEqual([]);
+      expect(needs.length).toBe(tier === 4 ? 2 : 1);
+      for (const n of needs) expect(TECH_IDS.indexOf(n)).toBeLessThan(i);
+      // The first parent is the same-row one, a tier below; a combo's second is another row's.
+      expect(TECH[needs[0]!].branch).toBe(branch);
+      if (tier < 4) expect(TECH[needs[0]!].tier).toBe(tier - 1);
     });
     expect(unlocksOf('reinforced-wall')).toEqual(['steel-plating']);
-    expect(unlocksOf('spiked-wall')).toEqual([]);
+    expect(unlocksOf('spiked-wall')).toEqual(['wall-machine-gun', 'tar-moat']);
+    expect(unlocksOf('steel-plating')).toEqual(['spiked-wall', 'shock-net']);
+    expect(unlocksOf('wall-machine-gun')).toEqual([]);
   });
 });
 
@@ -68,6 +75,79 @@ describe('states and refusals', () => {
       ok: false,
       code: 'unknown-tech',
     });
+  });
+});
+
+const COMBOS: [TechId, [TechId, TechId]][] = [
+  ['wall-machine-gun', ['armour-piercing', 'spiked-wall']],
+  ['shock-net', ['electric-wire', 'steel-plating']],
+  ['tar-moat', ['napalm-mortar', 'spiked-wall']],
+];
+/** Every node but the combos, so only a combo's own rule decides. */
+const TIERS_1_3 = TECH_IDS.filter((id) => TECH[id].tier < 4);
+
+describe('Tier 4 combos (ID-264)', () => {
+  for (const [id, [a, b]] of COMBOS) {
+    it(`${id}: refused with neither parent or one, naming the first missing; open with both`, () => {
+      // None of the two parents: the first is named.
+      const none = withScrap(1e9, ['razor-wire']);
+      expect(techRefusal(none, id)).toEqual({ ok: false, code: 'needs-tech', node: a });
+      expect(techState(none, id)).toBe('locked');
+      // A has its own chain; give A's chain without B's, and B's without A's.
+      const chain = (x: TechId): TechId[] => {
+        const out: TechId[] = [];
+        const walk = (n: TechId): void => {
+          for (const p of TECH[n].needs) walk(p);
+          if (!out.includes(n)) out.push(n);
+        };
+        walk(x);
+        return out;
+      };
+      const withA = cleanTech(chain(a));
+      const withB = cleanTech(chain(b));
+      expect(withA).toContain(a);
+      expect(withB).toContain(b);
+      expect(techRefusal(withScrap(1e9, withA), id)).toEqual({
+        ok: false,
+        code: 'needs-tech',
+        node: b,
+      });
+      expect(techRefusal(withScrap(1e9, withB), id)).toEqual({
+        ok: false,
+        code: 'needs-tech',
+        node: a,
+      });
+      expect(techState(withScrap(1e9, withA), id)).toBe('locked');
+      const both = cleanTech([...chain(a), ...chain(b)]);
+      expect(techRefusal(withScrap(TECH[id].cost - 1, both), id)).toEqual({
+        ok: false,
+        code: 'tech-scrap',
+        need: TECH[id].cost,
+      });
+      expect(techRefusal(withScrap(TECH[id].cost, both), id)).toBeNull();
+      expect(techState(withScrap(0, both), id)).toBe('open');
+      const bought = researchTech(withScrap(TECH[id].cost, both), id);
+      expect(bought.ok && bought.game.tech).toEqual(cleanTech([...both, id]));
+    });
+  }
+
+  it('cleanTech drops all three combos when Reinforced Wall goes (the wall chain feeds them), and a combo before its parents', () => {
+    const all = [...TECH_IDS];
+    expect(cleanTech(all)).toEqual(all);
+    const noWall = all.filter((id) => id !== 'reinforced-wall');
+    expect(cleanTech(noWall)).toEqual(
+      TIERS_1_3.filter((id) => !['reinforced-wall', 'steel-plating', 'spiked-wall'].includes(id)),
+    );
+    expect(cleanTech(['wall-machine-gun', 'shock-net', 'tar-moat'])).toEqual([]);
+    // One parent short: the combo goes, its other parents stay.
+    expect(cleanTech(all.filter((id) => id !== 'armour-piercing'))).not.toContain(
+      'wall-machine-gun',
+    );
+    expect(cleanTech(all.filter((id) => id !== 'armour-piercing'))).toContain('tar-moat');
+  });
+
+  it('a combo is not a prerequisite of anything and ends the chart (unlocks none)', () => {
+    for (const [id] of COMBOS) expect(unlocksOf(id)).toEqual([]);
   });
 });
 

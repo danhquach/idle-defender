@@ -36,8 +36,7 @@ function expectClean(value: unknown): TechId[] {
   const tech = loaded!.game.tech ?? [];
   for (const id of tech) {
     expect(TECH_IDS).toContain(id);
-    const needs = TECH[id].needs;
-    if (needs !== null) expect(tech).toContain(needs);
+    for (const n of TECH[id].needs) expect(tech).toContain(n);
   }
   expect(Object.getOwnPropertyNames(Object.prototype).sort()).toEqual(before);
   expect(({} as Loose).polluted).toBeUndefined();
@@ -120,8 +119,8 @@ describe('save: Research Center (ID-263)', () => {
     expect(expectClean(lookalikes)).toEqual([]);
   });
 
-  it('junk entries before the valid ids: nothing researched (the size cap comes first)', () => {
-    const junk = Array.from({ length: 22 }, (_, i) => 'junk' + i);
+  it('junk entries before the valid ids: nothing researched (the size cap, twice the 14 nodes, comes first)', () => {
+    const junk = Array.from({ length: 28 }, (_, i) => 'junk' + i);
     expect(expectClean([...junk, 'reinforced-wall', 'razor-wire'])).toEqual([]);
     expect(expectClean([...junk.slice(0, 5), 'reinforced-wall'])).toEqual(['reinforced-wall']);
   });
@@ -161,5 +160,112 @@ describe('save: Research Center (ID-263)', () => {
 
   it('a hole in the list (JSON has no sparse arrays: it is null) is ignored like any junk', () => {
     expect(expectClean([null, 'razor-wire', null])).toEqual(['razor-wire']);
+  });
+});
+
+describe('save: Tier 4 combos (ID-264, no version bump)', () => {
+  const WMG: TechId[] = [
+    'reinforced-wall',
+    'steel-plating',
+    'spiked-wall',
+    'hand-loads',
+    'armour-piercing',
+  ];
+  const COMBOS: TechId[] = ['wall-machine-gun', 'shock-net', 'tar-moat'];
+
+  it('the version is still 27: an older build reads the new ids as unknown and drops them', () => {
+    expect(SAVE_VERSION).toBe(27);
+    expect(TECH_IDS.length).toBe(14);
+  });
+
+  it('a combo with both parents loads; a combo alone, or with one parent, is dropped', () => {
+    expect(expectClean([...WMG, 'wall-machine-gun'])).toEqual([...WMG, 'wall-machine-gun']);
+    expect(expectClean(['wall-machine-gun'])).toEqual([]);
+    expect(expectClean(COMBOS)).toEqual([]);
+    // One parent short: Spiked Wall's chain without Armour-piercing.
+    expect(
+      expectClean(['reinforced-wall', 'steel-plating', 'spiked-wall', 'wall-machine-gun']),
+    ).toEqual(['reinforced-wall', 'steel-plating', 'spiked-wall']);
+    // Armour-piercing's chain without Spiked Wall.
+    expect(expectClean(['hand-loads', 'armour-piercing', 'wall-machine-gun'])).toEqual([
+      'hand-loads',
+      'armour-piercing',
+    ]);
+  });
+
+  it('a combo listed before its parents is kept once they are there (the list is put in table order)', () => {
+    const early = ['tar-moat', 'shock-net', 'wall-machine-gun', ...TECH_IDS.slice(0, 11)];
+    expect(expectClean(early)).toEqual([...TECH_IDS]);
+  });
+
+  it('a removed parent takes its combos with it, the others stay', () => {
+    const without = TECH_IDS.filter((id) => id !== 'reinforced-wall');
+    expect(expectClean(without)).toEqual(
+      TECH_IDS.filter(
+        (id) => !['reinforced-wall', 'steel-plating', 'spiked-wall', ...COMBOS].includes(id),
+      ),
+    );
+    expect(expectClean(TECH_IDS.filter((id) => id !== 'napalm-mortar'))).not.toContain('tar-moat');
+    expect(expectClean(TECH_IDS.filter((id) => id !== 'napalm-mortar'))).toContain('shock-net');
+  });
+
+  it('duplicates, numbers, objects and nulls around a combo change nothing', () => {
+    const all: unknown[] = [...TECH_IDS];
+    const noisy = [
+      'shock-net',
+      7,
+      null,
+      {},
+      ['tar-moat'],
+      ...all,
+      ...all,
+      'wall-machine-gun',
+      NaN,
+      true,
+    ];
+    expect(expectClean(noisy)).toEqual([...TECH_IDS]);
+    expect(expectClean([...all, ...all])).toEqual([...TECH_IDS]);
+  });
+
+  it('prototype keys beside a combo do nothing, and the combos stay put', () => {
+    expect(expectClean(['__proto__', 'constructor', ...TECH_IDS])).toEqual([...TECH_IDS]);
+    expect(expectClean({ __proto__: { 'tar-moat': true }, length: 3 })).toEqual([]);
+  });
+
+  it('invisible, bidi and look-alike spellings of a combo are not the combo', () => {
+    const lookalikes = [
+      'shock\u{2011}net',
+      'shock-net\u{200b}',
+      'sho\u{200d}ck-net',
+      '\u{202e}tar-moat',
+      'tar-m\u{43e}at',
+      'Wall-Machine-Gun',
+      'wall-machine-gun\u{0}',
+      ' wall-machine-gun',
+    ];
+    expect(expectClean([...TECH_IDS.slice(0, 11), ...lookalikes])).toEqual([
+      ...TECH_IDS.slice(0, 11),
+    ]);
+  });
+
+  it('more than 28 entries: the list is cut first, so combos past the cut are lost', () => {
+    const pad = Array.from({ length: 28 }, (_, i) => 'pad' + i);
+    expect(expectClean([...pad, ...TECH_IDS])).toEqual([]);
+    expect(expectClean([...TECH_IDS, ...pad])).toEqual([...TECH_IDS]);
+    expect(expectClean(Array.from({ length: 2000 }, () => 'shock-net'))).toEqual([]);
+  });
+
+  it('is byte-stable: save, load, save again gives the same text', () => {
+    const g = camp({ tech: [...TECH_IDS] });
+    const first = encodeSave(g, NOW);
+    const loaded = decodeSave(first)!;
+    expect(loaded.game.tech).toEqual([...TECH_IDS]);
+    expect(encodeSave(loaded.game, NOW)).toBe(first);
+    const part = camp({ tech: [...WMG, 'wall-machine-gun'] });
+    const text = encodeSave(part, NOW);
+    expect(encodeSave(decodeSave(text)!.game, NOW)).toBe(text);
+    // And through the backup code.
+    const got = importCode(exportCode(first));
+    expect(got.ok && got.save.game.tech).toEqual([...TECH_IDS]);
   });
 });

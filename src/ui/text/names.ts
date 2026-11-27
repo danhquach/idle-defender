@@ -3,6 +3,7 @@
 // its core table, so a new id without a name fails tsc).
 import { MODE_UNLOCK_HORDE, modeBefore, type Mode } from '../../core/modes.ts';
 import {
+  CARD,
   AREAS,
   DANGERS,
   ENEMY_TRAITS,
@@ -284,6 +285,27 @@ export const TECH_NAME: Readonly<Record<TechId, string>> = {
   'quick-mortars': 'Quick Mortars',
   'wide-slick': 'Wide Slick',
   'napalm-mortar': 'Napalm Mortar',
+  'wall-machine-gun': 'Wall Machine Gun',
+  'shock-net': 'Shock Net',
+  'tar-moat': 'Tar Moat',
+};
+
+/** Each node in one word, for a Tier 4 combo's locked face ("Needs Armour + Spiked"; ID-264). */
+export const TECH_SHORT: Readonly<Record<TechId, string>> = {
+  'reinforced-wall': 'Reinforced',
+  'steel-plating': 'Steel',
+  'spiked-wall': 'Spiked',
+  'razor-wire': 'Razor',
+  'thick-coils': 'Coils',
+  'electric-wire': 'Electric',
+  'hand-loads': 'Hand-loads',
+  'armour-piercing': 'Armour',
+  'quick-mortars': 'Quick',
+  'wide-slick': 'Wide',
+  'napalm-mortar': 'Napalm',
+  'wall-machine-gun': 'Gun',
+  'shock-net': 'Net',
+  'tar-moat': 'Moat',
 };
 
 /** What each Research Center node does, in the detail panel and a Tier 3 confirm (ID-263). */
@@ -302,6 +324,10 @@ export const TECH_EFFECT: Readonly<Record<TechId, string>> = {
   'quick-mortars': 'Oil Bomb fires every 16 s instead of 20 (the first throw is as soon as ever).',
   'wide-slick': 'Oil Bomb slicks are 25% wider.',
   'napalm-mortar': 'Oil Bomb slicks land already burning, and stay for their full 10 s.',
+  // The Tier 4 words read the card's numbers from CARD, so they can't drift (ID-264).
+  'wall-machine-gun': `A wall-mounted gun fires a ${CARD.wallGun.burst}-round burst every ${CARD.wallGun.every} s at the nearest enemy, anywhere on the field. Ignores part of its armour and keeps pace with bigger hordes.`,
+  'shock-net': `Every ${CARD.net.every} s, stuns enemies near the wire for ${CARD.net.seconds} s.`,
+  'tar-moat': `A tar strip along the wall slows enemies by ${Math.round(CARD.moat.slow * 100)}%. It catches fire after ${CARD.moat.fuse} s, or at once if something lights it.`,
 };
 
 /** Each Research Center branch's name, the chart's rows (ID-263). */

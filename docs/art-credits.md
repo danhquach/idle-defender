@@ -153,3 +153,4 @@ Wikimedia Commons page id where it has none.
 - `card-adrenaline` (ID-245): adapted from "Heart organ" by Lorc,
   <https://game-icons.net>, licensed CC BY 3.0
   (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its layout (a heart with two lobes and a point), recoloured red-orange, with our own bold white pulse line across it, and a dark outline added.
+- `shock-net`, `tar-moat` and `wall-gun` (ID-264): generated with FLUX.2 [klein] 4B (`black-forest-labs/flux.2-klein-4b`) through Pollinations; prompts in `art-src/manifest.json`. Plain descriptions of an electric net, a strip of spilled tar and a pedestal-mounted heavy machine gun, no maker, model or game names.

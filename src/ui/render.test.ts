@@ -218,6 +218,7 @@ function recorder() {
   const drawn: ArtId[] = [];
   const textured: ArtId[] = [];
   const alphas: number[] = [];
+  const transforms: number[][] = [];
   const noop = () => {};
   const ctx = {
     globalAlpha: 1,
@@ -251,6 +252,7 @@ function recorder() {
     save: noop,
     restore: noop,
     translate: noop,
+    transform: (...m: number[]) => transforms.push(m),
     rotate: noop,
     scale: noop,
     roundRect: noop,
@@ -259,7 +261,14 @@ function recorder() {
   const art = Object.fromEntries(
     ART_IDS.map((id) => [id, { id, width: ART_PX, height: ART_PX }]),
   ) as unknown as Art;
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, art, drawn, textured, alphas };
+  return {
+    ctx: ctx as unknown as CanvasRenderingContext2D,
+    art,
+    drawn,
+    textured,
+    alphas,
+    transforms,
+  };
 }
 
 const CAM = { x: 0, y: 0, zoom: 1 };
@@ -943,6 +952,7 @@ describe('drawScene with art', () => {
     Object.assign(r.ctx, {
       drawImage: (img: { id: ArtId }, ...n: number[]) => {
         r.drawn.push(img.id);
+        r.alphas.push(r.ctx.globalAlpha);
         const [x, y, w, h] = n.length === 8 ? n.slice(4) : n;
         at.push({ id: img.id, x: x!, y: y!, w: w!, h: h! });
       },
@@ -950,6 +960,118 @@ describe('drawScene with art', () => {
     drawScene(r.ctx, r.art, scene, cam, VIEW);
     return { ...r, at };
   };
+
+  describe('the Tier 4 cards (ID-264)', () => {
+    const wall = withSegment(blank(), { kind: 'wall', tier: 'wood', hp: 100, maxHp: 100 });
+    const count = (r: { drawn: ArtId[] }, id: ArtId) => r.drawn.filter((d) => d === id).length;
+
+    it('the wall gun stands on its segment with its own sprite, and nothing is drawn without the card', () => {
+      expect(placed(wall).drawn).not.toContain('wall-gun');
+      const gun = placed({ ...wall, taken: ['wall-machine-gun'] });
+      expect(count(gun, 'wall-gun')).toBe(1);
+      expect(gun.drawn).not.toContain('turret-lit');
+      // Firing: its shot and bullet draw a flash from its own muzzle without a throw.
+      const firing = {
+        ...wall,
+        taken: ['wall-machine-gun'],
+        shots: [{ owner: 'turret:wall-gun', at: wall.time }],
+        bullets: [
+          {
+            x: 540,
+            y: 400,
+            dx: 1,
+            dy: 0,
+            speed: 1800,
+            damage: 1,
+            owner: 'turret:wall-gun',
+            fromX: 510,
+            fromY: 400,
+            aim: 100,
+            left: 900,
+            pierce: 0,
+            hit: [],
+            tracer: { colour: '#fff', length: 10, width: 1 },
+          },
+        ],
+      } as unknown as Scene;
+      expect(() => placed(firing)).not.toThrow();
+    });
+
+    it('the gun stands on the nearest built segment, not on rubble or a gap in the middle row', () => {
+      const guns = (mutate: (rows: Layer['segments']) => Layer['segments']) => {
+        const base = withSegment(blank(), { kind: 'wall', tier: 'wood', hp: 100, maxHp: 100 });
+        const scene = {
+          ...base,
+          taken: ['wall-machine-gun'],
+          layers: base.layers.map((l, i) => (i === 0 ? { ...l, segments: mutate(l.segments) } : l)),
+        } as Scene;
+        return placed(scene).at.filter((a) => a.id === 'wall-gun');
+      };
+      const built = { kind: 'wall', tier: 'wood', hp: 100, maxHp: 100 } as const;
+      // Only rows 0 and 9 built: the gun is drawn once, on row 0 (the nearer to the middle ties to the first).
+      const edge = guns((rows) =>
+        rows.map((s, i) => (i === 0 || i === 9 ? { ...s, ...built } : s)),
+      );
+      expect(edge).toHaveLength(1);
+      // Only row 7 built: it moves down to it, below where the row-0 gun stood.
+      const low = guns((rows) => rows.map((s, i) => (i === 7 ? { ...s, ...built } : s)));
+      const top = guns((rows) => rows.map((s, i) => (i === 0 ? { ...s, ...built } : s)));
+      expect(low).toHaveLength(1);
+      expect(low[0]!.y).toBeGreaterThan(top[0]!.y);
+      // The middle row built (rubble beside it): it stays at the middle.
+      const mid = guns((rows) => rows.map((s, i) => (i === 5 ? { ...s, ...built } : s)));
+      expect(mid[0]!.y).toBeGreaterThan(top[0]!.y);
+      expect(mid[0]!.y).toBeLessThan(low[0]!.y);
+    });
+
+    it('the net is drawn across the band only while a pulse fires, fading in and out', () => {
+      const at = (age: number) =>
+        placed({ ...wall, taken: ['shock-net'], nextNetAt: wall.time - age + CARD.net.every });
+      expect(count(at(0.25), 'shock-net')).toBeGreaterThan(1);
+      expect(count(at(1), 'shock-net')).toBe(0);
+      expect(count(at(0.6), 'shock-net')).toBe(0);
+      expect(count(placed({ ...wall, taken: ['shock-net'] }), 'shock-net')).toBe(0);
+      const peak = Math.max(...at(0.25).alphas.filter((a) => a < 1));
+      expect(peak).toBeGreaterThan(0.55);
+      expect(peak).toBeLessThanOrEqual(0.65);
+      // Quick fade at the ends of the pulse.
+      const edge = at(0.02).alphas.filter((a) => a < 1);
+      expect(Math.max(...edge)).toBeLessThan(0.1);
+    });
+
+    it('the moat tiles its art along the wall face, every other tile mirrored, faint once gone', () => {
+      const moat = (m: object, extra: Partial<Scene> = {}) =>
+        placed({ ...wall, taken: ['tar-moat'], moat: m, ...extra } as Scene);
+      expect(count(placed(wall), 'tar-moat')).toBe(0);
+      for (const m of [
+        {},
+        { litAt: wall.time },
+        { litAt: wall.time - 9, refillAt: wall.time + 5 },
+      ]) {
+        // The plain pass and two added gloss passes, four tiles each.
+        expect(count(moat(m), 'tar-moat')).toBe(12);
+      }
+      // The strip's own axis (the b of each tile's transform) runs the same way for tiles 0, 2
+      // and the opposite way for 1, 3: a mirrored tile meets its neighbour at the seam.
+      const all = moat({}).transforms;
+      expect(all).toHaveLength(12);
+      const tiles = all.slice(0, 4);
+      const dir = tiles.map((m) => Math.sign(m[1]!));
+      expect(dir[0]).not.toBe(0);
+      expect(dir).toEqual([dir[0], -dir[0]!, dir[0], -dir[0]!]);
+      // Each tile starts where the last one ends along the strip.
+      const along = tiles.map((m) => m[5]! + (m[1]! > 0 ? 0 : 0));
+      expect(along[1]!).toBeGreaterThan(along[0]!);
+      expect(moat({ litAt: wall.time - 9, refillAt: wall.time + 5 }).alphas).toContain(0.2);
+      expect(moat({}).alphas.slice(0, 4)).toEqual([1, 1, 1, 1]);
+    });
+
+    it('with Sandbags held the tar starts past the bags', () => {
+      const x = (taken: string[]) =>
+        placed({ ...wall, taken, moat: {} } as unknown as Scene).transforms[0]![4]!;
+      expect(x(['tar-moat', 'sandbags'])).toBeGreaterThan(x(['tar-moat']));
+    });
+  });
 
   it("lays a standing gate over its segment's top in its tier: a closed sliding gate, flush with the wall (ID-075)", () => {
     for (const zoom of [0.5, 1, 2]) {

@@ -11,14 +11,14 @@ import {
   squadSpec,
   survivorPower,
 } from './hordeonly.ts';
-import { wavePace } from './pacing.ts';
+import { hordeSeconds } from './pacing.ts';
 import { MODES, modeBosses, type Mode } from './modes.ts';
 import { classOf, fitOfSquad, type Fit } from './traits.ts';
 import { enemyHp, swarmWave, waveCount, waveMix, waveSize } from './waves.ts';
 
 // One survivor's share lives in hordeonly.ts, where "Best squad" (ID-154) ranks by it; so does
 // the horde's HP by kind (ID-237), which the Fit pill and the tools read.
-export { hordeKindHp, survivorPower };
+export { hordeKindHp, hordeSeconds, survivorPower };
 
 /** Squad Power (ID-098): every squad survivor's `survivorPower`, summed, rounded. */
 export const squadPower = (game: Pick<GameState, 'roster'>): number =>
@@ -67,21 +67,6 @@ export function squadFit(
       cls: classOf(squadSpec(d).loadout.primary),
     })),
   );
-}
-
-/**
- * How long horde-only Horde `n`'s waves take to spawn, in fight seconds (ID-102): each
- * wave's enemies its pacing's `interval` apart (a swarm wave's twice as many in the same
- * time), and the break before it. With waves overlapping (ID-128), about a fight's length.
- * A partial overlap (ID-171, `Pace.overlap`) is left out: it makes a fight a little longer
- * than this, so Recommended Power asks a little more than the horde needs, the safe side.
- */
-export function hordeSeconds(n: number): number {
-  const pace = wavePace(n, true);
-  let total = 0;
-  for (let w = 1; w <= waveCount(n); w++)
-    total += waveSize(n, w, true) * pace.interval + pace.break;
-  return total;
 }
 
 /**

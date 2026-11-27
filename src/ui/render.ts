@@ -47,8 +47,13 @@ import {
   sandbagged,
   SAVE_CUE,
   mortars,
+  moatPhase,
+  moatStrip,
+  netBand,
   slickRadius,
   took,
+  WALL_GUN,
+  wallFront,
   turretState,
   type Bullet,
   type Defender,
@@ -177,6 +182,9 @@ import {
   type Art,
   type ArtId,
   type EnemyArt,
+  MOAT_ART,
+  NET_ART,
+  WALL_GUN_ART,
 } from './sprites.ts';
 
 /**
@@ -749,6 +757,8 @@ export type Scene = Pick<
       | 'pools'
       | 'leaving'
       | 'rush'
+      | 'moat'
+      | 'nextNetAt'
     >
   > & {
     /** The game speed (1×, 3×, 5×) a fight is shown at; bullet tails grow with it (ID-070). */
@@ -1260,6 +1270,33 @@ function gunIdOf(d: Pick<Defender, 'loadout'>): GunId | null {
 
 /** A turret's shots, bullets and flash name it `turret:<id>`. */
 const TURRET_OWNER = 'turret:';
+
+/**
+ * Where the Wall Machine Gun (ID-264) stands: mid-wall on the outermost built layer, on top of its
+ * segment; null without the card or a built layer. Its sprite is `WALL_GUN_ART` (sprites.ts).
+ */
+function wallGunAt(
+  scene: Pick<Scene, 'layers'> & Partial<Pick<Scene, 'taken'>>,
+): { x: number; y: number; z: number } | null {
+  if (!took({ taken: scene.taken ?? [] }, 'wall-machine-gun')) return null;
+  const built = scene.layers.filter((l) => l.segments.some((s) => s.kind !== null));
+  if (built.length === 0) return null;
+  const front = wallFront(scene);
+  const layer = built.reduce((a, l) => (l.x > a.x ? l : a));
+  // On the built segment nearest the middle row (the core fires while any segment is built), so
+  // the gun never floats over a gap or rubble.
+  const mid = Math.min(SEGMENTS - 1, Math.floor(FIELD.height / 2 / SEGMENT_HEIGHT));
+  let row = -1;
+  layer.segments.forEach((s, i) => {
+    if (s.kind !== null && (row < 0 || Math.abs(i - mid) < Math.abs(row - mid))) row = i;
+  });
+  const seg = layer.segments[row]!;
+  return {
+    x: front - WALL.depth / 2,
+    y: (row + 0.5) * SEGMENT_HEIGHT,
+    z: wallHeight(seg.hp, seg.maxHp),
+  };
+}
 
 type Sprite = { y: number; x: number; draw: () => void };
 
@@ -2203,6 +2240,11 @@ function muzzleAt(
   y: number,
   owner: string,
 ): { x: number; y: number; z: number } {
+  // The Wall Machine Gun (ID-264) fires from its own spot on the wall.
+  if (owner === WALL_GUN) {
+    const g = wallGunAt(scene);
+    return { x: x + WALL_GUN_LOOK.muzzle.dx, y, z: (g?.z ?? 0) + WALL_GUN_LOOK.muzzle.z };
+  }
   // Found by who fired (`turret:<id>`, as the shot and its sound name it), like its flash.
   const turret = scene.turrets.find((t) => `${TURRET_OWNER}${t.id}` === owner);
   if (turret) {
@@ -4725,6 +4767,11 @@ export function drawScene(
     }
     ctx.globalAlpha = 1;
   }
+  // Tar Moat's strip (ID-264) and Shock Net's pulse lie flat on the ground, under every sprite.
+  if (!build) {
+    drawMoat(ctx, art, scene, cam);
+    drawNetPulse(ctx, art, scene, cam);
+  }
   // Poison pools lie flat too (ID-222), with the mark of the one about to land.
   for (const p of scene.pools ?? []) {
     drawPool(ctx, art, p, scene.time, anim?.reduced ? 0 : scene.time, cam);
@@ -4819,6 +4866,24 @@ export function drawScene(
       draw: () => {
         drawTurret(ctx, art, scene, t, cam);
         drawFlash(ctx, scene, `${TURRET_OWNER}${t.id}`, t.x, t.y, cam);
+      },
+    });
+  }
+  // The Wall Machine Gun (ID-264) stands mid-wall once the card is held, its flash at its muzzle.
+  const wallGun = wallGunAt(scene);
+  if (wallGun) {
+    sprites.push({
+      y: wallGun.y,
+      x: wallGun.x,
+      draw: () => {
+        drawStanding(
+          ctx,
+          art[WALL_GUN_ART],
+          project({ x: wallGun.x, y: wallGun.y, z: wallGun.z }, cam),
+          WALL_GUN_LOOK.height,
+          cam,
+        );
+        drawFlash(ctx, scene, WALL_GUN, wallGun.x, wallGun.y, cam);
       },
     });
   }
@@ -4937,6 +5002,33 @@ export function drawScene(
         x: c.x,
         draw: () =>
           drawStanding(ctx, art[BASE_ART.mortar], project({ ...c, z: 0 }, cam), MORTAR.height, cam),
+      });
+    }
+  }
+  // A lit Tar Moat burns along its strip with the same flames (ID-264).
+  const strip = scene.moat ? moatStrip({ layers: scene.layers, moat: scene.moat }) : null;
+  if (strip && scene.moat?.litAt !== undefined && moatPhase(scene.moat) === 'lit') {
+    const fire = {
+      x: (strip.from + strip.to) / 2,
+      y: 0,
+      at: scene.moat.litAt,
+      until: scene.moat.litAt + CARD.oil.burnFor,
+    };
+    for (let i = 0; i < MOAT_LOOK.flames; i++) {
+      const y = ((i + 0.5) * FIELD.height) / MOAT_LOOK.flames;
+      sprites.push({
+        y,
+        x: fire.x,
+        draw: () => {
+          const look = molotovLook(
+            { ...fire, y },
+            scene.time,
+            flameClock,
+            cam,
+            MOAT_LOOK.flameRadius,
+          );
+          if (look) paintFire(ctx, look);
+        },
       });
     }
   }
@@ -5152,6 +5244,113 @@ function groundArt(
   const w = 2 * r * cam.zoom;
   const h = (w * img.height * TILT) / img.width;
   ctx.drawImage(img, c.sx - w / 2, c.sy - h / 2, w, h);
+}
+
+/** How the Tar Moat and the Shock Net pulse look (ID-264); their art is `MOAT_ART` and `NET_ART` (sprites.ts). */
+const MOAT_LOOK = {
+  tiles: 4,
+  minDepth: 12,
+  /** A burnt-out moat: a faint scorch of tar while it refills. */
+  goneAlpha: 0.2,
+  /** The added gloss passes' strength, and the colour of the thin rim along both edges. */
+  gloss: 0.9,
+  rim: 'rgba(196, 170, 130, 0.75)',
+  flames: 6,
+  flameRadius: 70,
+} as const;
+const NET_LOOK = { alpha: 0.65, seconds: 0.5 } as const;
+/** The Wall Machine Gun's sprite height (px at zoom 1, as `MORTAR.height`) and its barrel end on it. */
+const WALL_GUN_LOOK = { height: 46, muzzle: { dx: 27, z: 28 } } as const;
+
+/**
+ * Tar Moat (ID-264): the tar band's art (`MOAT_ART`) tiled along the outermost wall face, flat on
+ * the ground and squashed by the tilt as the camera sees it, `MOAT_LOOK.tiles` tiles of equal
+ * length, every other one mirrored along the strip so the seams meet. With Sandbags held the bags
+ * stand in the first px of it: the tar starts past them. Lit, its flames are sprites; gone, it is
+ * only a faint scorch until it refills.
+ */
+function drawMoat(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
+  const strip = scene.moat ? moatStrip({ layers: scene.layers, moat: scene.moat }) : null;
+  if (!strip || !scene.moat) return;
+  const img = art[MOAT_ART];
+  const gone = moatPhase(scene.moat) === 'gone';
+  const sand = took({ taken: scene.taken ?? [] }, 'sandbags')
+    ? WALL_CARD.sandbags.gap + WALL_CARD.sandbags.depth
+    : 0;
+  const x0 = strip.from + sand;
+  const depth = Math.max(MOAT_LOOK.minDepth, strip.to - x0);
+  const length = FIELD.height / MOAT_LOOK.tiles;
+  const o = project({ x: x0, y: 0 }, cam);
+  const px = project({ x: x0 + 1, y: 0 }, cam);
+  const py = project({ x: x0, y: 1 }, cam);
+  // The image's u axis (its length) runs down the strip (field y), its v axis (its depth) out
+  // from the wall (field x).
+  const su = length / img.width;
+  const sv = depth / img.height;
+  // The tar's body is near black on dark ground: after the plain pass, the same tiles are added
+  // again (`lighter`) so their brown and blue-grey gloss shows, and a faint warm tint lifts the
+  // body; a thin light rim runs down both edges. All on the preloaded image, no copies made.
+  const pass = (alpha: number, op: GlobalCompositeOperation): void => {
+    ctx.globalCompositeOperation = op;
+    ctx.globalAlpha = alpha;
+    for (let k = 0; k < MOAT_LOOK.tiles; k++) {
+      const mirrored = k % 2 === 1;
+      const u0 = (mirrored ? k + 1 : k) * length;
+      const dir = mirrored ? -su : su;
+      ctx.save();
+      ctx.transform(
+        dir * (py.sx - o.sx),
+        dir * (py.sy - o.sy),
+        sv * (px.sx - o.sx),
+        sv * (px.sy - o.sy),
+        o.sx + u0 * (py.sx - o.sx),
+        o.sy + u0 * (py.sy - o.sy),
+      );
+      ctx.drawImage(img, 0, 0);
+      ctx.restore();
+    }
+  };
+  const fade = gone ? MOAT_LOOK.goneAlpha : 1;
+  pass(fade, 'source-over');
+  pass(fade * MOAT_LOOK.gloss, 'lighter');
+  pass(fade * MOAT_LOOK.gloss, 'lighter');
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = fade;
+  ctx.strokeStyle = MOAT_LOOK.rim;
+  ctx.lineWidth = Math.max(1, cam.zoom);
+  for (const x of [x0, x0 + depth]) {
+    const a = project({ x, y: 0 }, cam);
+    const b = project({ x, y: FIELD.height }, cam);
+    ctx.beginPath();
+    ctx.moveTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * Shock Net (ID-264): for the moment after a pulse nets someone, the net's art (`NET_ART`)
+ * lies across the wire band, tiled down the field, flat and squashed by the tilt, fading in
+ * and out over the pulse. Nothing is drawn between pulses.
+ */
+function drawNetPulse(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
+  if (scene.nextNetAt === undefined) return;
+  const band = netBand(scene);
+  if (!band) return;
+  const age = scene.time - (scene.nextNetAt - CARD.net.every);
+  if (age < 0 || age >= NET_LOOK.seconds) return;
+  const img = art[NET_ART];
+  const width = band.to - band.from;
+  const tile = (width * img.height) / img.width;
+  // The net is light on dark ground: it adds its glow instead of covering the ground.
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = NET_LOOK.alpha * Math.sin((Math.PI * age) / NET_LOOK.seconds);
+  for (let y = tile / 2; y - tile / 2 < FIELD.height; y += tile) {
+    groundArt(ctx, img, (band.from + band.to) / 2, y, width / 2, cam);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
 }
 
 /** Starts a path round a circle of radius `r` on the ground at `(x, y)`, as the tilted camera sees it. */

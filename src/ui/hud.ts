@@ -4155,6 +4155,7 @@ export function createHud(
       img.src =
         ART_URLS[card.kind === 'upgrade' ? CARD_ICON[card.id] : avatarOf(card.defender)] ?? '';
       img.alt = '';
+      if (card.kind === 'upgrade') img.dataset.card = card.id;
       plate.append(img);
       // Every card is one size, its parts in the same place (ID-195): the tag is a badge
       // on the plate's corner, and an ammo swap's warning and a synergy sit at the bottom.

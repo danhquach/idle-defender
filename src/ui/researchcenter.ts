@@ -10,12 +10,12 @@ import { techOf, techReady, techState, unlocksOf } from '../core/techtree.ts';
 import { createCampWindow } from './campwindow.ts';
 import type { Answer } from './confirm.ts';
 import { el, thousands } from './hud.ts';
-import { refusedText, TECH_BRANCH_NAME, TECH_EFFECT, TECH_NAME } from './text/index.ts';
+import { refusedText, TECH_BRANCH_NAME, TECH_EFFECT, TECH_NAME, TECH_SHORT } from './text/index.ts';
 
 /** Why Research is greyed in a fight. */
 export const RESEARCH_WAIT = 'Research between hordes';
 
-/** The tab's name with what is done: "Upgrades · 3/11". */
+/** The tab's name with what is done: "Upgrades · 3/14". */
 export const upgradesLabel = (done: number, total: number): string => `Upgrades · ${done}/${total}`;
 
 /** A node on the chart: ready (open and affordable), short of Scrap, bought, or locked. */
@@ -29,7 +29,11 @@ export function nodeFace(
   const node = TECH[id];
   const base = techState(game, id);
   if (base === 'done') return { state: 'done', text: '✓ Researched' };
-  if (base === 'locked') return { state: 'locked', text: `Needs ${TECH_NAME[node.needs!]}` };
+  if (base === 'locked')
+    return {
+      state: 'locked',
+      text: `Needs ${node.needs.map((n) => (node.tier === 4 ? TECH_SHORT[n] : TECH_NAME[n])).join(' + ')}`,
+    };
   if (game.stock.scrap < node.cost) {
     return {
       state: 'short',
@@ -71,10 +75,10 @@ export function researchOffer(
   };
 }
 
-/** The confirm before a purchase; a Tier 3 node repeats what it does. */
+/** The confirm before a purchase; a Tier 3 or Tier 4 node repeats what it does. */
 export const researchQuestion = (id: TechId, cost: number, scrap: number): string => {
   const node = TECH[id];
-  const effect = node.tier === 3 ? `${TECH_EFFECT[id]} ` : '';
+  const effect = node.tier >= 3 ? `${TECH_EFFECT[id]} ` : '';
   return `Research ${TECH_NAME[id]} for ${thousands(cost)} Scrap? ${effect}You have ${thousands(scrap)}.`;
 };
 
@@ -122,27 +126,82 @@ function flask(doc: Document): SVGSVGElement {
   return svg;
 }
 
-/** The connector lines, one per prerequisite, in a viewBox of one unit a cell (tiers by branches). */
-export function connectors(doc: Document, have: readonly TechId[] = []): SVGSVGElement {
+/** A node's edge, in cell units: nodes sit inside their cell with a margin of about this much. */
+const EDGE = 0.07;
+/** How far apart the vertical trunks of the combo lines run in the gutter before the combo column. */
+const TRUNK = 0.05;
+
+/**
+ * The connector lines, one per prerequisite, in a viewBox of one unit a cell (tiers by
+ * branches). A Tier 1 to 3 line is straight. A Tier 4 combo's lines run at right angles and
+ * through the gutters, never behind a node: a parent in the combo's own row runs straight; the
+ * other leaves its parent's right edge, drops to the gap between two rows if it has to cross
+ * the Tier 3 column, runs to its own vertical trunk in the gutter before Tier 4 (trunks
+ * `TRUNK` apart, the line that goes furthest down on the left, so they don't merge) and enters
+ * the combo from the left. A combo's lines are faint until its node is `active` (selected or
+ * hovered); a researched source is solid, an open one dashed (the CSS).
+ */
+export function connectors(
+  doc: Document,
+  have: readonly TechId[] = [],
+  active: TechId | null = null,
+): SVGSVGElement {
   const svg = doc.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'research-lines');
-  svg.setAttribute('viewBox', `0 0 3 ${TECH_BRANCHES.length}`);
+  svg.setAttribute('viewBox', `0 0 4 ${TECH_BRANCHES.length}`);
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.setAttribute('aria-hidden', 'true');
+  const rowOf = (id: TechId): number => TECH_BRANCHES.indexOf(TECH[id].branch);
+  // The bent combo lines, deepest target first, each given its trunk.
+  const bent = TECH_IDS.flatMap((id) =>
+    TECH[id].tier === 4
+      ? TECH[id].needs
+          .filter((from) => rowOf(from) !== rowOf(id))
+          .map((from) => [from, id] as const)
+      : [],
+  ).sort((p, q) => rowOf(q[1]) - rowOf(p[1]));
+  const trunkOf = (from: TechId, to: TechId): number => {
+    const i = bent.findIndex(([f, t]) => f === from && t === to);
+    return 3 + (i - (bent.length - 1) / 2) * TRUNK;
+  };
   for (const id of TECH_IDS) {
-    const { needs, tier, branch } = TECH[id];
-    if (needs === null) continue;
-    const row = TECH_BRANCHES.indexOf(branch);
-    const line = doc.createElementNS(SVG_NS, 'line');
-    line.setAttribute('x1', String(tier - 1.5));
-    line.setAttribute('x2', String(tier - 0.5));
-    line.setAttribute('y1', String(row + 0.5));
-    line.setAttribute('y2', String(row + 0.5));
-    line.dataset.from = needs;
-    line.dataset.to = id;
-    // Green once its source is researched.
-    line.dataset.done = String(have.includes(needs));
-    svg.append(line);
+    const { needs, tier } = TECH[id];
+    const row = rowOf(id);
+    for (const from of needs) {
+      const parent = TECH[from];
+      const y1 = rowOf(from) + 0.5;
+      const y2 = row + 0.5;
+      let shape: SVGElement;
+      if (tier < 4) {
+        shape = doc.createElementNS(SVG_NS, 'line');
+        shape.setAttribute('x1', String(parent.tier - 0.5));
+        shape.setAttribute('x2', String(tier - 0.5));
+        shape.setAttribute('y1', String(y1));
+        shape.setAttribute('y2', String(y2));
+      } else {
+        shape = doc.createElementNS(SVG_NS, 'path');
+        const x1 = parent.tier - EDGE;
+        const x2 = tier - 1 + EDGE;
+        let d = `M ${x1} ${y1}`;
+        if (y1 !== y2) {
+          const trunk = trunkOf(from, id);
+          // Across the Tier 3 column (the parent is left of it): down its left gutter to the
+          // gap between its row and the next, then along that gap.
+          if (parent.tier < 3) d += ` H ${parent.tier} V ${Math.min(y1, y2) + 0.5} H ${trunk}`;
+          else d += ` H ${trunk}`;
+          d += ` V ${y2}`;
+        }
+        d += ` H ${x2}`;
+        shape.setAttribute('d', d);
+        shape.dataset.combo = 'true';
+        shape.dataset.active = String(id === active || from === active);
+      }
+      shape.dataset.from = from;
+      shape.dataset.to = id;
+      // Solid once its source is researched.
+      shape.dataset.done = String(have.includes(from));
+      svg.append(shape);
+    }
   }
   return svg;
 }
@@ -196,9 +255,16 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
     chart.querySelector<HTMLElement>(`[data-id="${id}"]`)?.focus({ preventScroll: true });
   }
 
+  /** Lights the combo lines that touch `id`; the rest stay faint. */
+  function mark(id: TechId | null): void {
+    for (const l of chart.querySelectorAll<SVGElement>('[data-combo]')) {
+      l.dataset.active = String(id !== null && (l.dataset.from === id || l.dataset.to === id));
+    }
+  }
+
   function drawChart(game: GameState): void {
-    const nodes: Element[] = [connectors(doc, techOf(game))];
-    for (let t = 1; t <= 3; t++) {
+    const nodes: Element[] = [connectors(doc, techOf(game), selected)];
+    for (let t = 1; t <= 4; t++) {
       const head = el('span', 'research-tier', `Tier ${t}`);
       head.style.gridColumn = String(t + 1);
       nodes.push(head);
@@ -214,6 +280,8 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
         b.type = 'button';
         b.dataset.id = id;
         b.dataset.state = face.state;
+        // A Tier 4 combo: its edge is purple, as its lines are.
+        if (node.tier === 4) b.dataset.combo = 'true';
         b.style.gridRow = String(row + 2);
         b.style.gridColumn = String(node.tier + 1);
         b.setAttribute('aria-pressed', String(id === selected));
@@ -222,6 +290,10 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
           el('span', 'research-node-face', face.text),
         );
         b.addEventListener('click', () => pick(id));
+        // A combo's lines light up while its node (or a parent) is hovered or focused.
+        for (const on of ['pointerenter', 'focus'] as const) b.addEventListener(on, () => mark(id));
+        for (const off of ['pointerleave', 'blur'] as const)
+          b.addEventListener(off, () => mark(selected));
         nodes.push(b);
       }
     });
@@ -235,10 +307,18 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
     const have = techOf(game);
     const branch = TECH_BRANCH_NAME[node.branch];
     const needs = el('p', 'research-needs');
-    needs.textContent =
-      node.needs === null
-        ? 'Needs: nothing'
-        : `Needs: ${have.includes(node.needs) ? '✓' : '○'} ${TECH_NAME[node.needs]}`;
+    if (node.needs.length === 0) needs.textContent = 'Needs: nothing';
+    else {
+      needs.append('Needs: ');
+      node.needs.forEach((n, i) => {
+        if (i > 0) needs.append(' + ');
+        const done = have.includes(n);
+        // The parent still missing is bold, so the one to get next stands out.
+        needs.append(
+          el(done ? 'span' : 'strong', 'research-parent', `${done ? '✓' : '○'} ${TECH_NAME[n]}`),
+        );
+      });
+    }
     const next = unlocksOf(selected);
     const unlocks = el(
       'p',

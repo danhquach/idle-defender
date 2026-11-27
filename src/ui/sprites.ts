@@ -269,6 +269,9 @@ export const ART_IDS = [
   'wall-brace',
   'sandbag',
   'mortar',
+  'wall-gun',
+  'shock-net',
+  'tar-moat',
   'sandbags-front',
   'wood-gate',
   'metal-gate',
@@ -502,6 +505,10 @@ export const CARD_ICON: Readonly<Record<UpgradeId, ArtId>> = {
   'gas-masks': 'card-gas-masks',
   'breaching-rounds': 'card-breaching-rounds',
   'adrenaline-rush': 'card-adrenaline',
+  // The Tier 4 cards (ID-264) show their field art.
+  'wall-machine-gun': 'wall-gun',
+  'shock-net': 'shock-net',
+  'tar-moat': 'tar-moat',
 };
 /** Each skill's icon on its button (design §15, ID-041). */
 export const SKILL_ICON: Readonly<Record<SkillId, ArtId>> = {
@@ -724,6 +731,11 @@ export function avatarOf(d: Pick<DefenderSpec, 'id' | 'loadout'>): ArtId {
   const held = isGun(d.loadout.primary) ? d.loadout.primary : 'pistol';
   return (look[baseOf(held) as GunId] ?? look.rifle).idle;
 }
+
+/** The Wall Machine Gun's sprite (ID-264), facing the field; the Shock Net's pulse and the Tar Moat's tile lie flat. */
+export const WALL_GUN_ART: ArtId = 'wall-gun';
+export const NET_ART: ArtId = 'shock-net';
+export const MOAT_ART: ArtId = 'tar-moat';
 
 /** A turret with its wall broken (offline) shows dark, like one with no charge. */
 export const TURRET_ART: Readonly<Record<TurretState, ArtId>> = {
