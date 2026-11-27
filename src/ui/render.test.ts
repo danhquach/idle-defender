@@ -4060,6 +4060,20 @@ describe('damage numbers (ID-082)', () => {
     ...p,
   });
 
+  it('a near-ceiling crit is orange with its "!" and crit size; a trait colour still wins (ID-262)', () => {
+    const crit = popLook(pop({ amount: 12, crit: true }), 1, 1, false)!;
+    const top = popLook(pop({ amount: 12, crit: true, top: true }), 1, 1, false)!;
+    expect(top).toMatchObject({ text: '12!', colour: COLOR.popTopCrit, px: crit.px });
+    expect(COLOR.popTopCrit).toBe('#ff8c1a');
+    expect(new Set([COLOR.popTopCrit, COLOR.popCrit, COLOR.popWall, COLOR.popHit]).size).toBe(4);
+    expect(popLook(pop({ crit: true, top: true, fit: 'weak' }), 1, 1, false)!.colour).toBe(
+      COLOR.popWeak,
+    );
+    expect(popLook(pop({ crit: true, top: true, fit: 'resist' }), 1, 1, false)!.colour).toBe(
+      COLOR.popResist,
+    );
+  });
+
   it('shows a hit rounded (at least 1), a crit bigger, gold and with "!", a blow on the wall as a loss', () => {
     const plain = popLook(pop({ amount: 6.2 }), 1, 1, false)!;
     expect(plain).toMatchObject({ text: '6', colour: '#f4f1ea', alpha: 1, rise: 0 });

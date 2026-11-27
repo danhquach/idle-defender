@@ -3931,8 +3931,8 @@ golden digest are untouched).
   class factor. A resisted Light bullet on a plated, shielded Hell Horror is 0.5 × 0.5 × 0.6 before
   the flat cut (accepted; the Fit pill and the Horror's chip say so).
 - **Damage numbers.** A hit on a trait is muted and a little smaller (resist) or bright, not the
-  crit yellow (weak); a crit keeps its size and its "!", and shows the fit colour (deliberately: the
-  trait matters more than the crit yellow). The first three numbers of each fit created in a fight
+  crit yellow (weak); a crit keeps its size and its "!", and shows the fit colour (deliberately:
+  the trait matters more than the crit yellow, or an orange crit's orange, ID-262). The first three numbers of each fit created in a fight
   carry a small word, "Resists" or "Weak" (about 0.6 of the number, at least 11 px and never bigger
   than the number, kept inside the canvas). A weak-to hit is drawn 1.1 times the size and a resisted
   one 0.85 times, so size says it as well as colour.
@@ -4670,9 +4670,14 @@ original outline.
   for a hit of 40 or more (a wall's loss at 25 or more); a crit is gold,
   60% bigger, with a "!", and lands 40% bigger still, settling over its
   first 0.15 s (no punch with reduce motion), drawn over every plain
-  number. Each has a dark edge so it
+  number. A crit whose multiplier is ×3.25 or more (`TOP_CRIT`, 90% of the
+  ×3.61 ceiling; ID-262) is orange instead of gold, otherwise the same; crit
+  damage never rolls, so it marks a near-ceiling build (Hollow Points at
+  level 3 with a Sniper rifle or a +50% crit damage Carbine), every crit that
+  survivor lands with that gun. The Menu's Help tab keys every colour under
+  "Damage numbers", each with a sample in its colour. Each has a dark edge so it
   reads on any ground. To stay readable, hits on one target within 0.25
-  fight seconds add into one number (crits and plain hits apart), so a
+  fight seconds add into one number (crits, orange crits and plain hits apart), so a
   shotgun round or a fire reads as one; at most 24 show, the newest. An
   enemy's sits 9 px (a crit's 14 px) left, centred or right by its 0.25 s
   window, so numbers

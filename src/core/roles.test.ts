@@ -21,6 +21,7 @@ import {
   GUN_ROLES,
   HORROR,
   STEP,
+  TOP_CRIT,
   TRAIT,
   WEAPONS,
   type AffixId,
@@ -723,5 +724,44 @@ describe('knockback and paralysis stack, but never hold an enemy in place (ID-13
     // always keeps coming: it never ends further back than the cap.
     expect(held.moved).toBeGreaterThan(free.moved - TRAIT.knock.cap - 1e-9);
     expect(held.moved).toBeGreaterThan(0);
+  });
+});
+
+describe('an orange crit near the ceiling (ID-262)', () => {
+  /** `base`'s first shots over seeds, with Hollow Points at `hp` (0: not held): [crit, top] seen. */
+  function crits(base: WeaponId, affixes: OwnedWeapon['affixes'], hp: number) {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 80; seed++) {
+      const t = solo(base, affixes, seed);
+      if (hp > 0) {
+        t.taken = ['hollow-point-rounds'];
+        t.cardLevels = { 'hollow-point-rounds': hp };
+      }
+      dummy(t, 400);
+      const b = tick(t, STEP).bullets[0]!;
+      seen.add(`${b.crit === true}:${b.top === true}`);
+    }
+    return [...seen].sort();
+  }
+
+  it('the threshold is 90% of the ×3.61 ceiling', () => {
+    expect(TOP_CRIT).toBe(3.25);
+  });
+
+  it('a Sniper crit with Hollow Points at level 3 (×3.25) is top; at level 2 or without, it is not', () => {
+    expect(crits('sniper', [], 3)).toEqual(['false:false', 'true:true']);
+    expect(crits('sniper', [], 2)).toEqual(['false:false', 'true:false']);
+    expect(crits('sniper', [], 0)).toEqual(['false:false', 'true:false']);
+  });
+
+  it('a Carbine needs the full +50% crit damage affix with Hollow Points 3; +49% falls short', () => {
+    expect(crits('rifle', [{ id: 'critDamage', value: 50 }], 3)).toEqual([
+      'false:false',
+      'true:true',
+    ]);
+    expect(crits('rifle', [{ id: 'critDamage', value: 49 }], 3)).toEqual([
+      'false:false',
+      'true:false',
+    ]);
   });
 });
