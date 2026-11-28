@@ -13,6 +13,19 @@ const SHAPES = {
     ['path', { d: 'M12 3v5M12 16v5M3 12h5M16 12h5' }],
   ],
   menu: [['path', { d: 'M4 7h16M4 12h16M4 17h16' }]],
+  /** "Best gun for everyone" (ID-288): the sights with a spark. */
+  bestGuns: [
+    ['circle', { cx: '10', cy: '14', r: '5' }],
+    ['path', { d: 'M10 6v4M10 18v4M2 14h4M14 14h4' }],
+    ['path', { d: 'M19 2l1.2 2.8L23 6l-2.8 1.2L19 10l-1.2-2.8L15 6l2.8-1.2z' }],
+  ],
+  /** "Change squad" (ID-288): two survivors. */
+  squad: [
+    ['circle', { cx: '9', cy: '8', r: '3' }],
+    ['path', { d: 'M3 19c0-3.5 2.6-5.5 6-5.5s6 2 6 5.5' }],
+    ['circle', { cx: '17', cy: '9', r: '2.5' }],
+    ['path', { d: 'M15.5 13.6c3 .2 5.5 2 5.5 5.4' }],
+  ],
 } as const;
 
 export type RailIcon = keyof typeof SHAPES;

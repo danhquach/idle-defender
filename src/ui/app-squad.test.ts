@@ -779,6 +779,9 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
     const { root, saved } = wonWithPoints();
     const best = root.querySelector<HTMLButtonElement>('.debrief-squad-head .debrief-best-guns')!;
     expect(best.textContent).toBe(BEST_GUNS);
+    // The phone shell's icon (ID-288) with the words in their own span, the button's name.
+    expect(best.querySelector('svg.rail-icon')).not.toBeNull();
+    expect(best.querySelector('.debrief-action-label')!.textContent).toBe(BEST_GUNS);
     best.click();
     const toast = () => root.querySelector('.hud-toast')!.textContent!;
     expect(toast()).toMatch(/^Equipped: .+ → .+$/);

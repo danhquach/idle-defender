@@ -2,12 +2,13 @@
 // ID-217 The next goal: one line on the start screen and a win's result naming the next boss
 // horde, its radio part and any card it unlocks, or the finale; past it the next mode to unlock
 // (ID-218); none on a loss or on the ending screen. Text reaches the page only through textContent.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { FINALE_HORDE, SQUAD_CAP } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import { startSquadHorde } from '../core/hordeonly.ts';
 import { createHud, nextGoalLine, squadScreen, squadStart } from './hud.ts';
+import { SHORT_TOUCH } from './landscape.ts';
 
 const NOW = 1_700_000_000_000;
 const noop = (): void => {};
@@ -118,5 +119,32 @@ describe('the goal line on the panel (ID-217)', () => {
     expect(root.querySelector('.debrief-goal')!.textContent).toBe(UNLOCK_N);
     h.showResult(squadStart(squadGame(2, 60)));
     expect(root.querySelector('.debrief-goal')).toBeNull();
+    // Elsewhere than the phone shell the header's goal stays hidden and empty.
+    const head = root.querySelector<HTMLElement>('.hud-result-head .debrief-goal-head')!;
+    expect(head.hidden).toBe(true);
+    expect(head.textContent).toBe('');
+  });
+});
+
+describe('the goal in the phone shell header (ID-288)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('moves to the header beside the numbers, once, and leaves with the goal', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === SHORT_TOUCH }));
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    const h = createHud(root, noop, noop, noop, noop, noop, noop, noop, noop, noop, true);
+    h.showResult(squadStart(squadGame(2, 1)));
+    const head = root.querySelector<HTMLElement>('.hud-result-head .debrief-goal-head')!;
+    expect(head.hidden).toBe(false);
+    expect(head.textContent).toBe(H10);
+    expect(head.children).toHaveLength(0);
+    // Right after the numbers, and not again in the body.
+    expect(head.previousElementSibling!.classList.contains('debrief-stats')).toBe(true);
+    expect(root.querySelector('.debrief-goal')).toBeNull();
+    // A screen with no goal clears it.
+    h.showResult(squadStart(squadGame(2, 60)));
+    expect(head.hidden).toBe(true);
+    expect(head.textContent).toBe('');
   });
 });

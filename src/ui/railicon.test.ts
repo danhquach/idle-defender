@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { railIcon, type RailIcon } from './railicon.ts';
 
 describe('the rail icons (ID-273)', () => {
-  it.each(['roster', 'weapons', 'menu'] as RailIcon[])(
+  it.each(['roster', 'weapons', 'menu', 'bestGuns', 'squad'] as RailIcon[])(
     '%s is a hidden-from-readers svg.rail-icon',
     (name) => {
       const svg = railIcon(document, name);

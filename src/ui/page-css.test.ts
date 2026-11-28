@@ -1465,28 +1465,35 @@ describe('the phone squad screen and result (ID-274)', () => {
     const panel = rule('.hud-result.hud-debrief');
     expect(panel).toMatch(/display: grid;/);
     expect(panel).toMatch(/height: calc\(100dvh - 8px\);/);
-    expect(panel).toMatch(/grid-template-columns: minmax\(0, 1fr\) clamp\(220px, 30vw, 260px\);/);
+    expect(panel).toMatch(/grid-template-columns: minmax\(0, 1fr\) 208px;/);
     expect(panel).toMatch(/grid-template-rows: auto minmax\(0, 1fr\);/);
     expect(rule('.hud-debrief .hud-result-head')).toMatch(/grid-column: 1 \/ -1;/);
     expect(rule('.hud-debrief .hud-result-scroll')).toMatch(/grid-column: 1;/);
   });
 
-  it('the squad is one grid of 96 px cells 8 px apart; the head and the card grid drop out of the layout', () => {
-    const grid = rule('section.debrief-squad');
-    expect(grid).toMatch(/display: grid;/);
-    expect(grid).toMatch(/repeat\(auto-fill, minmax\(96px, 1fr\)\)/);
-    expect(grid).toMatch(/gap: var\(--space-8\);/);
-    expect(rule('.debrief-squad-head,\n  .squad-grid')).toMatch(/display: contents;/);
+  it('the actions are a 44 px icon column right of the cards; the cards a grid of their own (ID-288)', () => {
+    const section = rule('section.debrief-squad');
+    expect(section).toMatch(/display: grid;/);
+    expect(section).toMatch(/grid-template-columns: minmax\(0, 1fr\) 44px;/);
+    expect(section).toMatch(/gap: var\(--space-8\);/);
+    const head = rule('.debrief-squad-head');
+    expect(head).toMatch(/grid-row: 1;\s*grid-column: 2;/);
+    expect(head).toMatch(/flex-direction: column;/);
+    const grid = rule('.squad-grid');
+    expect(grid).not.toMatch(/display: contents/);
+    expect(grid).toMatch(/grid-row: 1;\s*grid-column: 1;/);
+    expect(grid).toMatch(/repeat\(auto-fill, minmax\(128px, 1fr\)\)/);
+    expect(rule('section.debrief-squad > .debrief-bench')).toMatch(/grid-column: 1 \/ -1;/);
     expect(rule('.debrief-squad-title')).toMatch(/clip-path: inset\(50%\);/);
-    expect(
-      rule('section.debrief-squad > .debrief-bench,\n  section.debrief-squad > .debrief-empty'),
-    ).toMatch(/grid-column: 1 \/ -1;/);
   });
 
-  it('a squad card is whole one 44 px tap target; Best gun and Change squad are 44 px cells', () => {
+  it('a squad card is whole one 44 px tap target; Best gun and Change squad are 44 px icon buttons', () => {
     expect(rule('.squad-card')).toMatch(/position: relative;\s*min-height: 44px;/);
     expect(rule('.squad-card-open::after')).toMatch(/position: absolute;\s*inset: 0;/);
-    expect(rule('.debrief-change-squad,\n  .debrief-best-guns')).toMatch(/min-height: 44px;/);
+    const actions = rule('.debrief-change-squad,\n  .debrief-best-guns');
+    expect(actions).toMatch(/width: 44px;\s*min-height: 44px;/);
+    // The words stay the name, read out only.
+    expect(rule('.debrief-action-label')).toMatch(/clip-path: inset\(50%\);/);
     expect(rule('.debrief-chips .debrief-details')).toMatch(/min-height: 44px;/);
   });
 
@@ -1523,7 +1530,8 @@ describe('the phone squad screen and result (ID-274)', () => {
     for (const s of [
       'section.debrief-squad',
       '.squad-card-open::after',
-      'clamp(220px, 30vw, 260px)',
+      'minmax(0, 1fr) 208px',
+      '.debrief-action-label',
       '.gun-chip-lv',
       '.gun-chip-gun',
       '.hud-debrief .hud-result-foot {\n    grid-column',
