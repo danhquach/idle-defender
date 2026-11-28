@@ -147,17 +147,20 @@ describe('guns at equal Squad Power (ID-247)', () => {
   it.each([
     ['Nightmare 9', () => nm9],
     ['Hell 1', () => hell1],
-  ])('%s: every one-gun squad wins at least 6; Carbine, LMG and Shotgun at most 18 and within 9', (name, cells) => {
-    const c = cells();
-    // ID-284: the Sniper squad is outside the cap and the spread (see the header); its
-    // upper side is logged, every squad keeps the floor.
-    const capped = ['rifle', 'lmg', 'shotgun'] as const;
-    const w = capped.map((k) => c.wins[k]);
-    for (const k of ONE) expect(c.wins[k], JSON.stringify(c)).toBeGreaterThanOrEqual(6);
-    for (const k of capped) expect(c.wins[k], JSON.stringify(c)).toBeLessThanOrEqual(18);
-    expect(Math.max(...w) - Math.min(...w), JSON.stringify(c)).toBeLessThanOrEqual(9);
-    console.log(`gun-parity ${name}: the Sniper squad won ${c.wins.sniper} of ${SEEDS}`);
-  });
+  ])(
+    '%s: every one-gun squad wins at least 6; Carbine, LMG and Shotgun at most 18 and within 9',
+    (name, cells) => {
+      const c = cells();
+      // ID-284: the Sniper squad is outside the cap and the spread (see the header); its
+      // upper side is logged, every squad keeps the floor.
+      const capped = ['rifle', 'lmg', 'shotgun'] as const;
+      const w = capped.map((k) => c.wins[k]);
+      for (const k of ONE) expect(c.wins[k], JSON.stringify(c)).toBeGreaterThanOrEqual(6);
+      for (const k of capped) expect(c.wins[k], JSON.stringify(c)).toBeLessThanOrEqual(18);
+      expect(Math.max(...w) - Math.min(...w), JSON.stringify(c)).toBeLessThanOrEqual(9);
+      console.log(`gun-parity ${name}: the Sniper squad won ${c.wins.sniper} of ${SEEDS}`);
+    },
+  );
 
   it.each([
     ['Nightmare 9', () => nm9],
