@@ -212,6 +212,7 @@ import {
 } from './render.ts';
 import { fightSpeed } from './fastforward.ts';
 import { createTurnPrompt, goLandscape, isShortTouch, SHORT_TOUCH } from './landscape.ts';
+import { RAIL_BUTTONS } from './shield.ts';
 import { TITLE_PICTURE, type Art } from './sprites.ts';
 import { refusalText, refusedText, type Refused } from './text/index.ts';
 
@@ -936,6 +937,7 @@ export function start(root: HTMLElement, art: Art): void {
   // Its Combine (ID-091, horde-only) works between hordes, like the gun pickers.
   // Both are tabs of one camp window (ID-183): moving between them never closes it.
   const campWindow = createCampWindow(root);
+  campWindow.onChange(() => syncRails());
   const inventory = createInventory(
     root,
     {
@@ -1080,6 +1082,7 @@ export function start(root: HTMLElement, art: Art): void {
       writeChatter(storage, level);
     },
     onHowToCard: () => intro.showCard(),
+    onToggle: () => syncRails(),
   });
   function setMuted(on: boolean): void {
     sound.setMuted(on);
@@ -1137,6 +1140,7 @@ export function start(root: HTMLElement, art: Art): void {
           resumes: horde?.outcome === 'fighting' && !held,
         }),
         onResearch: researchNode,
+        onChange: () => syncRails(),
       })
     : null;
   // The top bar's buttons in the order they show, left to right, so Tab walks them that way.
@@ -1180,6 +1184,97 @@ export function start(root: HTMLElement, art: Art): void {
     !!mapTab?.isOpen() ||
     !!researchCenter?.isOpen() ||
     !!roster?.isOpen();
+  // The phone shell's rail is the sheets' tabs (ID-276): a sheet is open between the rails, its
+  // button lit (aria-expanded); tapping the lit button closes it, another switches to its sheet.
+  // The rail buttons stay live behind a sheet (shield.ts), so this takes their taps first.
+  interface RailSheet {
+    cls: string;
+    /** The window the sheet is a tab of: a switch inside one window never closes it. */
+    window?: unknown;
+    controls: string;
+    lit(): boolean;
+    open(from: HTMLElement): void;
+    close(): void;
+  }
+  const camp = (id: string): boolean => campWindow.current() === id;
+  const rails: RailSheet[] = [
+    {
+      cls: 'roster-button',
+      window: campWindow,
+      controls: campWindow.dialog.id,
+      lit: () => camp('roster'),
+      open: (b) => roster?.open(undefined, b),
+      close: () => campWindow.close(),
+    },
+    {
+      cls: 'inv-button',
+      window: campWindow,
+      controls: campWindow.dialog.id,
+      // Craft is a pill in the Weapons sheet's header: Weapons stays lit on it.
+      lit: () => camp('weapons') || camp('craft'),
+      open: (b) => inventory.open(undefined, b),
+      close: () => campWindow.close(),
+    },
+    {
+      cls: 'map-button',
+      window: campWindow,
+      controls: campWindow.dialog.id,
+      lit: () => camp('map'),
+      open: (b) => mapTab?.open(b),
+      close: () => campWindow.close(),
+    },
+    {
+      cls: 'research-button',
+      controls: researchCenter?.dialog.id ?? '',
+      lit: () => !!researchCenter?.isOpen(),
+      open: (b) => researchCenter?.open(b),
+      close: () => researchCenter?.close(),
+    },
+    {
+      cls: 'menu-button',
+      controls: 'menu-dialog',
+      lit: () => menu.isOpen(),
+      open: () => menu.open(),
+      close: () => menu.close(),
+    },
+  ];
+  function syncRails(): void {
+    for (const r of rails) {
+      const b = root.querySelector(`:scope > .${r.cls}`);
+      if (!b) continue;
+      b.setAttribute('aria-expanded', String(r.lit()));
+      if (r.controls) b.setAttribute('aria-controls', r.controls);
+    }
+  }
+  syncRails();
+  const railOf = (e: Event): { rail: RailSheet; button: HTMLElement } | null => {
+    const b = e.target instanceof Element ? e.target.closest<HTMLElement>(RAIL_BUTTONS) : null;
+    const rail =
+      b && b.parentElement === root ? rails.find((r) => b.classList.contains(r.cls)) : null;
+    return b && rail ? { rail, button: b } : null;
+  };
+  // Capture phase, and the shell checked at the tap: a phone turned or a window resized
+  // changes what a tap on the rail means.
+  root.addEventListener(
+    'click',
+    (e) => {
+      const hit = railOf(e);
+      if (!hit || !isShortTouch(window) || intro.isOpen()) return;
+      const open = rails.find((r) => r.lit());
+      // Nothing open: the button's own handler opens it.
+      if (!open) return;
+      e.stopPropagation();
+      e.preventDefault();
+      if (open === hit.rail) {
+        open.close();
+        return;
+      }
+      // One handler, no gap: a window never shows closed between the two.
+      if (!open.window || open.window !== hit.rail.window) open.close();
+      hit.rail.open(hit.button);
+    },
+    true,
+  );
   function refreshDialogs(): void {
     scrapChip?.set(game.stock.scrap, game.medicine ?? 0);
     menu.refresh();
@@ -1351,6 +1446,16 @@ export function start(root: HTMLElement, art: Art): void {
       panel?.show(game, selected);
     } else if (act === 'defender') selectedDefender = null;
     else if (!e.repeat) menu.open();
+  });
+  // Esc with the keyboard on a rail button closes the open sheet (a key in the sheet is its
+  // own, and never gets here). After the handler above, which stands aside for a sheet.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.repeat || !isShortTouch(window) || intro.isOpen()) return;
+    if (!railOf(e)) return;
+    const open = rails.find((r) => r.lit());
+    if (!open) return;
+    e.preventDefault();
+    open.close();
   });
 
   // In a fight with the menu shut, Space holds or resumes it and A S D set its speed

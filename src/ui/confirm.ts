@@ -7,6 +7,7 @@
 // cancels only the confirm) nor the game's shortcuts. The question reaches the page only as
 // text. Focus starts on Confirm (Enter confirms), stays inside, and goes back to the opener.
 import { el } from './hud.ts';
+import { refreshFields } from './shield.ts';
 import type { Refused } from './text/index.ts';
 
 export interface ConfirmOptions {
@@ -74,6 +75,8 @@ export function askConfirm(question: string, opts: ConfirmOptions = {}): Promise
       doc.removeEventListener('keydown', onKey, true);
       scrim.remove();
       for (const node of inerted) node.removeAttribute('inert');
+      // A sheet's field that was made inert while this was up (the phone turned) is again.
+      refreshFields();
       if (current === handle) current = null;
       if (opener?.isConnected) opener.focus();
       resolve(answer);

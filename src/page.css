@@ -8614,13 +8614,234 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     font-size: var(--text-sm);
   }
 
-  /* --- Windows and panels sit between the rails, from the top edge; the rails stay in
-     view (and, behind a window, the page is inert: its buttons wait for the window to
-     close). A confirmation still covers everything. --- */
+  /* --- Sheets (ID-276): every window is one sheet between the rails, from the top edge, as tall
+     as its content, with a 28 px header and no footer. The rail's buttons are its tabs: the lit
+     one closes it, another switches (app.ts), so the sheet has no x, Esc hint or Done and the
+     tab strip is hidden but for the Weapons and Craft pills. Behind a sheet the page is inert
+     except the rail (shield.ts); a confirmation still covers everything. Every header control
+     is a real 44 px box that reaches 16 px down past the 28 px line; the body starts 24 px
+     under it (16 for the reach and 8 clear), and the status line sits in that band, between the
+     pills and the tools, so nothing overlaps. Rules that come later in the file (Craft,
+     Research) are beaten by the .camp-scrim prefix, not by their order. --- */
   .menu-scrim,
   .camp-scrim {
     inset: 0 44px;
+    padding: 0;
+    place-items: start center;
+  }
+
+  .menu-scrim .menu,
+  .camp-scrim .camp-dialog,
+  .camp-scrim .camp-dialog[data-tab='weapons'],
+  .camp-scrim .camp-dialog[data-tab='craft'],
+  .camp-scrim .camp-dialog[data-tab='upgrades'] {
+    position: relative;
+    container-type: inline-size;
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+
+  .camp-head,
+  .menu-scrim .menu-tabs {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: var(--space-8);
+    box-sizing: border-box;
+    height: 28px;
+    margin-bottom: 24px;
+    padding: 0 var(--space-8);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .camp-tabs {
+    flex: none;
+    gap: var(--space-8);
+    margin: 0;
+  }
+
+  .camp-tabs .camp-tab,
+  .menu-scrim .menu-tabs .menu-tab {
+    box-sizing: border-box;
+    width: 76px;
+    min-width: 76px;
+    height: 44px;
+    min-height: 44px;
+    margin: 0;
+    padding: 0 var(--space-4);
+    overflow: hidden;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: none;
+    font-size: var(--text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .camp-tabs .camp-tab[aria-selected='true'],
+  .menu-scrim .menu-tabs .menu-tab[aria-selected='true'] {
+    border-color: var(--color-accent);
+    background: var(--color-surface-active);
+    color: var(--color-text);
+  }
+
+  .camp-tools {
+    align-self: flex-start;
+    gap: var(--space-8);
+    margin-left: auto;
+    padding: 0;
+  }
+
+  .camp-tools .hud-button {
+    height: 44px;
+    min-height: 44px;
+    padding: 0 var(--space-8);
+  }
+
+  /* What the sheet hides, by the attribute (so Tab skips it): a display set on these elsewhere
+     must not show them. */
+  .camp-close[hidden],
+  .camp-hint[hidden],
+  .camp-done[hidden],
+  .camp-tab[hidden],
+  .menu-close[hidden],
+  .menu-foot[hidden] {
+    display: none;
+  }
+
+  /* The window's status line (the foot's only content here) moves into the header and takes the
+     room between the pills and the tools: one fixed 16 px line in the 24 px band, so a message
+     appearing shifts nothing. */
+  .camp-head > .camp-foot {
+    flex: 1 1 0;
+    align-self: flex-start;
+    min-width: 0;
+    height: 16px;
+    min-height: 0;
+    margin-top: 30px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    pointer-events: none;
+  }
+
+  .camp-head .camp-status,
+  .camp-head .camp-status > * {
+    margin: 0;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The Menu: its tabs are the header row, the Paused chip at the right (dropped before any
+     tab shrinks: three 76 px tabs and the chip need about 340 px); its title is only the
+     dialog's name. */
+  .menu-scrim .menu-head {
+    position: absolute;
+    top: 0;
+    right: var(--space-8);
+    z-index: 2;
+    align-items: center;
+    height: 28px;
+    padding: 0;
+    pointer-events: none;
+  }
+
+  .menu-scrim .menu-title {
+    display: none;
+  }
+
+  .menu-scrim .menu-chip {
+    margin: 0;
+  }
+
+  @container (max-width: 359px) {
+    .menu-scrim .menu-chip {
+      display: none;
+    }
+  }
+
+  .menu-scrim .menu-body {
+    padding: 0 var(--space-12) var(--space-12);
+  }
+
+  /* Craft: the body starts at the 24 px band's foot (28 + 24 = 52 px), the heading is the pill's
+     job, the note goes, and an empty list is one line: the sheet is about 73 px tall. */
+  .camp-scrim .craft-body {
+    gap: var(--space-4);
+    padding: 0 var(--space-8) var(--space-4);
+  }
+
+  .camp-scrim .craft-list > .craft-head,
+  .camp-scrim .craft-note {
+    display: none;
+  }
+
+  .camp-scrim .craft-main:not(:has(.craft-area)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .camp-scrim .craft-list:only-child {
+    height: auto;
+    min-height: 0;
+  }
+
+  /* Research: a 44 px label column and four columns that share the rest (minmax 0), so the whole
+     chart, Tier 4's right border included, fits the 552 px a 640 px screen leaves between the
+     rails; the body keeps 4 px at its sides, and scrolls sideways only as a safety net. */
+  .camp-scrim .research-chart {
+    grid-template-columns: 44px repeat(4, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .camp-scrim .research-body {
     padding: var(--space-4);
+    overflow-x: auto;
+  }
+
+  .camp-scrim .research-branch {
+    min-width: 0;
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+
+  /* A sheet header with nothing in it (no pill, tool or status message, as on Research) keeps
+     8 px under it, not the 24 px that controls hang into. */
+  .camp-head:not(
+    :has(
+      .camp-tab:not([hidden]),
+      .camp-tools:not([hidden]) > *,
+      .camp-status:not([hidden]) > :not(:empty)
+    )
+  ) {
+    margin-bottom: 8px;
+  }
+
+  /* The Menu sheet is solid: the panel behind it never shows through. */
+  .menu-scrim .menu {
+    background: var(--color-panel-solid);
+  }
+
+  /* The lit button: the open sheet's, filled with an accent edge toward the sheet. */
+  .roster-button[aria-expanded='true'],
+  .inv-button[aria-expanded='true'],
+  .map-button[aria-expanded='true'],
+  .research-button[aria-expanded='true'],
+  .menu-button[aria-expanded='true'] {
+    background: var(--color-surface-active);
+    box-shadow:
+      inset -3px 0 var(--color-accent),
+      inset -1px 0 var(--color-border-strong),
+      inset 0 -1px var(--color-border);
+    color: var(--color-text);
   }
 
   /* --- The squad / result panel (ID-274), between the rails: a definite height (the foot

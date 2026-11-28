@@ -1529,3 +1529,170 @@ describe('the phone squad screen and result (ID-274)', () => {
       expect(outside.includes(s), s).toBe(false);
   });
 });
+
+describe('the phone sheets (ID-276)', () => {
+  const query = `@media ${SHORT_TOUCH} {`;
+  const at = rules.indexOf(query);
+  const shell = rules.slice(at, rules.indexOf('\n}\n', at));
+  const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** One rule's body inside the shell block (the exact selector text, comma lists included). */
+  const rule = (selector: string): string => {
+    const m = new RegExp(`(?:^|\\n)  ${esc(selector)} \\{([^}]*)\\}`).exec(shell);
+    if (!m) throw new Error(`no rule ${selector} in the phone shell`);
+    return m[1]!;
+  };
+  const px = (body: string, prop: string): number => {
+    const m = new RegExp(`(?:^|[;\\s])${prop}: (\\d+)px;`).exec(body);
+    if (!m) throw new Error(`no ${prop} in ${body}`);
+    return +m[1]!;
+  };
+
+  it('a sheet hangs from the top edge between the rails, the width of the gap, as tall as its content', () => {
+    const scrims = rule('.menu-scrim,\n  .camp-scrim');
+    expect(scrims).toMatch(/inset: 0 44px;/);
+    expect(scrims).toMatch(/padding: 0;/);
+    expect(scrims).toMatch(/place-items: start center;/);
+    // Every tab the later rules size (Craft, Research, Weapons) is beaten by name, not by order.
+    const sheet = rule(
+      [
+        '.menu-scrim .menu',
+        '.camp-scrim .camp-dialog',
+        ".camp-scrim .camp-dialog[data-tab='weapons']",
+        ".camp-scrim .camp-dialog[data-tab='craft']",
+        ".camp-scrim .camp-dialog[data-tab='upgrades']",
+      ].join(',\n  '),
+    );
+    expect(sheet).toMatch(/width: 100%;/);
+    expect(sheet).toMatch(/height: auto;/);
+    expect(sheet).toMatch(/max-height: 100%;/);
+    expect(sheet).toMatch(/border-radius: 0;/);
+  });
+
+  it('the header is 28 px; its controls are real 44 px boxes reaching 16 px past it, 8 px apart', () => {
+    const head = rule('.camp-head,\n  .menu-scrim .menu-tabs');
+    expect(px(head, 'height')).toBe(28);
+    expect(head).toMatch(/gap: var\(--space-8\);/);
+    const pill = rule('.camp-tabs .camp-tab,\n  .menu-scrim .menu-tabs .menu-tab');
+    expect(px(pill, 'height')).toBe(44);
+    expect(px(pill, 'min-height')).toBe(44);
+    expect(rule('.camp-tools .hud-button')).toMatch(/height: 44px;\s*min-height: 44px;/);
+    expect(rule('.camp-tabs')).toMatch(/gap: var\(--space-8\);/);
+    expect(rule('.camp-tools')).toMatch(/gap: var\(--space-8\);/);
+    // No pseudo-element hit area: the box is the target.
+    expect(shell).not.toMatch(/\.camp-tab::after|\.menu-tab::after|\.camp-tools[^{]*::after/);
+    // The body starts 24 px under the line: 16 for the reach and 8 clear.
+    expect(px(head, 'margin-bottom')).toBe(24);
+    expect(px(pill, 'height') - px(head, 'height') + 8).toBe(px(head, 'margin-bottom'));
+    expect(px(head, 'height') + px(head, 'margin-bottom')).toBe(52);
+  });
+
+  it('the status line shares the band: a 16 px line between the pills and the tools', () => {
+    const foot = rule('.camp-head > .camp-foot');
+    expect(foot).toMatch(/flex: 1 1 0;/);
+    expect(foot).toMatch(/min-width: 0;/);
+    expect(px(foot, 'height')).toBe(16);
+    // 30 + 16 = 46: inside the 28..52 band, under the 44 px reach only beside the pills.
+    expect(px(foot, 'margin-top') + px(foot, 'height')).toBeLessThanOrEqual(52);
+    expect(px(foot, 'margin-top')).toBeGreaterThanOrEqual(28);
+    expect(foot).toMatch(/pointer-events: none;/);
+    const status = rule('.camp-head .camp-status,\n  .camp-head .camp-status > *');
+    expect(status).toMatch(/white-space: nowrap;/);
+    expect(status).toMatch(/text-overflow: ellipsis;/);
+  });
+
+  it('the header row fits 552 px (a 640 px screen less the rails): pills, tools and a status line', () => {
+    const pill = rule('.camp-tabs .camp-tab,\n  .menu-scrim .menu-tabs .menu-tab');
+    const width = px(pill, 'width');
+    expect(px(pill, 'min-width')).toBe(width);
+    // Weapons and Craft: two pills 8 px apart, 8 px padding each side; Best gun beside them.
+    const pills = 2 * width + 8;
+    expect(pills + 16).toBeLessThan(552 / 2);
+    // The Menu: three tabs and the Paused chip; the chip goes before any tab shrinks.
+    const menu = 3 * width + 2 * 8 + 16;
+    expect(menu + 100).toBeLessThanOrEqual(552);
+    const dropped =
+      /@container \(max-width: (\d+)px\) \{\s*\.menu-scrim \.menu-chip \{\s*display: none;/.exec(
+        shell,
+      );
+    expect(dropped).not.toBeNull();
+    expect(+dropped![1]! + 1).toBeGreaterThanOrEqual(menu + 100);
+    expect(+dropped![1]! + 1).toBeLessThan(552);
+  });
+
+  it('what the sheet hides stays hidden whatever display the control has elsewhere', () => {
+    const hidden = rule(
+      [
+        '.camp-close[hidden]',
+        '.camp-hint[hidden]',
+        '.camp-done[hidden]',
+        '.camp-tab[hidden]',
+        '.menu-close[hidden]',
+        '.menu-foot[hidden]',
+      ].join(',\n  '),
+    );
+    expect(hidden).toMatch(/display: none;/);
+  });
+
+  it('Craft: the body starts at 52 px, an empty list is one line, the sheet is under 80 px', () => {
+    const body = rule('.camp-scrim .craft-body');
+    expect(body).toMatch(/padding: 0 var\(--space-8\) var\(--space-4\);/);
+    expect(rule('.camp-scrim .craft-list > .craft-head,\n  .camp-scrim .craft-note')).toMatch(
+      /display: none;/,
+    );
+    expect(rule('.camp-scrim .craft-main:not(:has(.craft-area))')).toMatch(
+      /grid-template-columns: minmax\(0, 1fr\);/,
+    );
+    expect(rule('.camp-scrim .craft-list:only-child')).toMatch(/height: auto;\s*min-height: 0;/);
+    // 28 header + 24 band + one 16 px line + 4 padding + 1 border: the limit is 80.
+    expect(28 + 24 + 16 + 4 + 1).toBeLessThanOrEqual(80);
+    // The shared rules it beats come later in the file, with less weight.
+    const later = rules.indexOf(".camp-dialog[data-tab='craft'] {", at + shell.length);
+    expect(later).toBeGreaterThan(at + shell.length);
+    expect(rules.indexOf('.craft-list {\n  height: 0;', at + shell.length)).toBeGreaterThan(0);
+  });
+
+  it('Research: the chart shares 552 px with a 44 px label column and nothing wider than the sheet', () => {
+    const chart = rule('.camp-scrim .research-chart');
+    expect(chart).toMatch(/grid-template-columns: 44px repeat\(4, minmax\(0, 1fr\)\);/);
+    expect(chart).toMatch(/min-width: 0;/);
+    const body = rule('.camp-scrim .research-body');
+    expect(body).toMatch(/padding: var\(--space-4\);/);
+    expect(body).toMatch(/overflow-x: auto;/);
+    // The later shared rules (72 px column, 568 px minimum) are beaten by the prefix.
+    expect(rules.indexOf('.research-chart {', at + shell.length)).toBeGreaterThan(0);
+    expect(rules.indexOf('.research-body {', at + shell.length)).toBeGreaterThan(0);
+  });
+
+  it('the Menu sheet is opaque, and an empty header keeps 8 px, not 24', () => {
+    expect(rule('.menu-scrim .menu')).toMatch(/background: var\(--color-panel-solid\);/);
+    expect(tokens.get('--color-panel-solid')).toMatch(/^rgb\(\d+ \d+ \d+\)$/);
+    expect(shell).toMatch(/\.camp-head:not\(\s*:has\([\s\S]*?\)\s*\) \{\s*margin-bottom: 8px;/);
+  });
+
+  it('the lit rail button is filled with an accent edge toward the sheet', () => {
+    const lit = rule(
+      ['roster', 'inv', 'map', 'research', 'menu']
+        .map((n) => `.${n}-button[aria-expanded='true']`)
+        .join(',\n  '),
+    );
+    expect(lit).toMatch(/background: var\(--color-surface-active\);/);
+    // The sheet is to the right of the left rail.
+    expect(lit).toMatch(/inset -3px 0 var\(--color-accent\)/);
+  });
+
+  it('the sheet rules live only in the phone shell: desktop and iPad are unchanged', () => {
+    const outside = rules.replace(shell, '');
+    for (const s of [
+      '.camp-head > .camp-foot',
+      '.menu-scrim .menu-tabs',
+      '.menu-scrim .menu-head',
+      '.camp-scrim .research-chart',
+      '.camp-scrim .research-body',
+      '.menu-scrim .menu {',
+      '.camp-scrim .craft-body',
+      ".roster-button[aria-expanded='true']",
+      '.camp-tab[hidden]',
+    ])
+      expect(outside.includes(s), s).toBe(false);
+  });
+});

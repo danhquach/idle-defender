@@ -32,6 +32,18 @@ export function isShortTouch(win: Window): boolean {
   return matches(win, SHORT_TOUCH);
 }
 
+/**
+ * Calls `cb` whenever the phone shell turns on or off (a phone turned, a window resized);
+ * returns what stops it. A browser without media queries never calls it.
+ */
+export function watchShortTouch(win: Window, cb: () => void): () => void {
+  if (typeof win.matchMedia !== 'function') return () => undefined;
+  const list = win.matchMedia(SHORT_TOUCH);
+  if (typeof list.addEventListener !== 'function') return () => undefined;
+  list.addEventListener('change', cb);
+  return () => list.removeEventListener?.('change', cb);
+}
+
 type Lockable = ScreenOrientation & { lock?: (o: 'landscape') => Promise<void> };
 
 /** Whether this browser can go full screen and lock the screen sideways. */
