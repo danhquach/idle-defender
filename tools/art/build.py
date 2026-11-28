@@ -34,7 +34,8 @@ Manifest asset keys (unknown keys stop the build):
   variant of: it takes on that texture's colours and shares its seam border,
   so any variant tiles next to any other, ID-050), part (a generation used only
   inside other sprites, as a reference or an overlay, never written out itself; ID-046: a Gunner
-  holding each gun is drawn from the weaponless body part and that weapon's part),
+  holding each gun is drawn from the weaponless body part and that weapon's part; on a picture,
+  ID-292: an edit used only as another picture's patch),
   style (the manifest style to use instead of its kind's: a
   weapon on its own is generated with the `object` style; the empty `verbatim`
   style means the prompt was sent as it is, with no style added), pose (ID-069: the
@@ -52,7 +53,8 @@ Manifest asset keys (unknown keys stop the build):
   cut at the plain set's feet, up to FEET_SLACK px below them),
   patch (ID-211: {"from": id, "points": [[x, y], ...]}: the polygon (px of the
   generation) copied from that same-size generation onto this one before keying,
-  its edge feathered, so a detail one frame of a set lost matches its other frames),
+  its edge feathered, so a detail one frame of a set lost matches its other frames; on a
+  picture, ID-292: the title art takes only its two fixed guns from an edit of it),
   key (ID-211: [in, out], this sprite's own KEY_IN and KEY_OUT, for a generation
   whose background drifted pale pink and would not key out at the defaults),
   overlay (ID-103: {"part": id, "at": [x, y], "size": s, "turn": degrees}: that
@@ -486,8 +488,8 @@ def check(
         sys.exit(f"{name}: outside is true, on a sprite")
     if not is_drawn and asset.get("style", asset["kind"]) not in styles:
         sys.exit(f"{name}: no style {asset.get('style', asset['kind'])} in the manifest")
-    if "part" in asset and (asset["part"] is not True or asset["kind"] != "sprite"):
-        sys.exit(f"{name}: part is true, on a sprite")
+    if "part" in asset and (asset["part"] is not True or asset["kind"] not in ("sprite", "picture")):
+        sys.exit(f"{name}: part is true, on a sprite or a picture")
     refs = asset.get("ref", [])
     refs = [refs] if isinstance(refs, str) else refs
     if "ref" in asset and (
@@ -554,7 +556,7 @@ def check(
     if "patch" in asset and not (
         isinstance(patch, dict)
         and set(patch) == {"from", "points"}
-        and asset["kind"] == "sprite"
+        and asset["kind"] in ("sprite", "picture")
         and not is_drawn
         and isinstance(patch["from"], str)
         and patch["from"] in ids
@@ -613,7 +615,7 @@ def main(only: list[str]) -> None:
         sys.exit(f"not in the manifest: {sorted(unknown)}")
     parts = sorted({a["id"] for a in assets if a.get("part")} & set(only))
     if parts:
-        print(f"parts are never written out, only used as references or overlays: {parts}")
+        print(f"parts are never written out, only used as references, overlays or patches: {parts}")
     for jpg in [*GEN.glob("*.jpg"), *CONCEPTS.glob("*.jpg")]:
         strip_metadata(jpg)
     OUT.mkdir(parents=True, exist_ok=True)
