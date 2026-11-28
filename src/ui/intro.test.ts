@@ -247,3 +247,28 @@ describe('the title art (backdrop)', () => {
     expect(bare.scrim.querySelector('.intro-shade')).toBeNull();
   });
 });
+
+describe('the phone shell hooks (ID-279)', () => {
+  it('Mute keeps its real checkbox and word, and carries a speaker icon for the corner', () => {
+    const { dialog, mute } = setup();
+    const label = dialog.querySelector('.intro-mute')!;
+    expect(label.contains(mute)).toBe(true);
+    expect(label.querySelector('.intro-mute-text')!.textContent).toBe('Mute');
+    const icon = label.querySelector('svg.intro-mute-icon')!;
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+    expect(icon.querySelector('.intro-mute-waves')).not.toBeNull();
+    expect(icon.querySelector('.intro-mute-slash')).not.toBeNull();
+  });
+
+  it('the card groups each part (name and text) in one box for the two-column layout', () => {
+    const { dialog } = setup({ firstLaunch: true });
+    const items = [...dialog.querySelectorAll('.intro-how > .intro-how-item')];
+    expect(items).toHaveLength(HOW_TO_CARD.length);
+    for (const item of items) {
+      expect([...item.children].map((c) => c.tagName)).toEqual(['DT', 'DD']);
+    }
+    // Got it is a direct child of the card, for the header row.
+    const card = dialog.querySelector('.intro-card')!;
+    expect([...card.children].some((c) => c.textContent === 'Got it')).toBe(true);
+  });
+});

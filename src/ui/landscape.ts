@@ -56,24 +56,77 @@ export function canLock(win: Window): boolean {
 }
 
 /**
+ * The player turned Full screen off with the Menu's switch: the tap to play leaves it off until
+ * the switch is turned on again (ID-279). Kept for the session only, never stored. Leaving by the
+ * back gesture is not a choice: it does not set this, so the next tap goes back in.
+ */
+let declined = false;
+
+/**
  * On a phone, full screen and sideways. Call it from a tap: browsers only grant full
  * screen to a user's gesture. A refusal (or no support) is fine: the prompt covers it.
  */
 export function goLandscape(win: Window): void {
-  if (!isPhone(win) || !canLock(win)) return;
+  if (declined || !isPhone(win) || !canLock(win)) return;
+  void enterFullscreen(win, true);
+}
+
+/**
+ * Full screen (when not already), then the sideways lock if asked. Never rejects: a refusal (or
+ * an older browser that returns nothing instead of a promise, or throws) leaves the screen as it
+ * was, and the turn prompt covers a phone.
+ */
+function enterFullscreen(win: Window, lock: boolean): Promise<void> {
   const doc = win.document;
-  const lock = (): Promise<void> | undefined =>
-    (win.screen.orientation as Lockable).lock?.('landscape');
   try {
-    // An older browser returns nothing instead of a promise, or throws.
     const full = doc.fullscreenElement
       ? undefined
       : doc.documentElement.requestFullscreen({ navigationUI: 'hide' });
-    Promise.resolve(full)
-      .then(lock)
-      .catch(() => undefined);
+    return Promise.resolve(full)
+      .then(() => (lock ? (win.screen.orientation as Lockable).lock?.('landscape') : undefined))
+      .then(
+        () => undefined,
+        () => undefined,
+      );
   } catch {
-    // Refused: the prompt covers it.
+    return Promise.resolve();
+  }
+}
+
+/**
+ * Whether the Menu offers a Full screen switch (ID-279): a touch screen whose browser has the
+ * Fullscreen API. iPhone Safari does not (it has no element full screen), so it has no switch.
+ */
+export function canToggleFullscreen(win: Window): boolean {
+  const doc = win.document;
+  return (
+    matches(win, '(pointer: coarse)') &&
+    doc.fullscreenEnabled === true &&
+    typeof doc.documentElement.requestFullscreen === 'function'
+  );
+}
+
+/** Whether the page is full screen now. */
+export function isFullscreen(win: Window): boolean {
+  return Boolean(win.document.fullscreenElement);
+}
+
+/**
+ * The Menu's Full screen switch: on enters full screen (and, on a phone that can, locks sideways
+ * as the first tap does); off leaves it. Call it from a tap. Resolves when the browser has
+ * answered, never rejects: the caller re-reads `isFullscreen` to show what happened.
+ */
+export function setFullscreen(win: Window, on: boolean): Promise<void> {
+  declined = !on;
+  if (on) return enterFullscreen(win, isPhone(win) && canLock(win));
+  try {
+    const left = win.document.fullscreenElement ? win.document.exitFullscreen() : undefined;
+    return Promise.resolve(left).then(
+      () => undefined,
+      () => undefined,
+    );
+  } catch {
+    return Promise.resolve();
   }
 }
 
@@ -108,7 +161,8 @@ export function createTurnPrompt(win: Window): TurnPrompt {
     go.type = 'button';
     go.className = 'btn btn-primary turn-prompt-button';
     go.textContent = 'Play full screen';
-    go.addEventListener('click', () => goLandscape(win));
+    // An explicit tap: it also lifts a "Full screen off" choice.
+    go.addEventListener('click', () => void setFullscreen(win, true));
     box.append(go);
   }
   // On the body, last, like the intro: over the title screen and every window.

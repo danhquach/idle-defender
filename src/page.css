@@ -7731,6 +7731,25 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-size: var(--text-body);
 }
 
+/* One part of the card: its name over its text. */
+.intro-how-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The title screen's Mute icon is the phone shell's (its block below); elsewhere the box and
+   the word show. */
+.intro-mute-icon {
+  display: none;
+}
+
+/* The Menu's Full screen switch (ID-279) is for phones held sideways: drawn only in the
+   phone shell, so desktop and iPad keep their Settings as they were. */
+.menu-check.menu-fullscreen {
+  display: none;
+}
+
 .intro-how dt {
   margin-top: var(--space-6);
   font-weight: 600;
@@ -10100,6 +10119,200 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     .camp-scrim .inv-panel[data-details='open'] .inv-squad-zone {
       display: none;
     }
+  }
+
+  /* --- Title, How to play and Menu → Settings (ID-279). --- */
+
+  /* The title's Mute is a corner icon: a 44 px box 12 px from the top and right edge (the
+     screen's safe area when that is more: Safari's bars and a notch), the real checkbox
+     stretched over it so the whole box is the target. The buttons it leaves room for stay as
+     the base rules put them. */
+  .intro-scrim .intro-mute {
+    position: absolute;
+    top: max(var(--space-12), env(safe-area-inset-top, 0px));
+    right: max(var(--space-12), env(safe-area-inset-right, 0px));
+    z-index: 1;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+  }
+
+  .intro-scrim .intro-mute .menu-check-box {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* The ring is the label's, since the box itself is see-through. */
+  .intro-scrim .intro-mute .menu-check-box:focus-visible {
+    outline: none;
+  }
+
+  .intro-scrim .intro-mute:has(.menu-check-box:focus-visible) {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  .intro-scrim .intro-mute-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .intro-scrim .intro-mute-icon {
+    display: block;
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+  }
+
+  .intro-scrim .intro-mute-slash,
+  .intro-scrim .intro-mute:has(.menu-check-box:checked) .intro-mute-waves {
+    display: none;
+  }
+
+  .intro-scrim .intro-mute:has(.menu-check-box:checked) .intro-mute-slash {
+    display: inline;
+  }
+
+  /* How to play: one view, no scroll at 862 x 303. The card is a sheet as wide as the screen
+     (the intro holds the whole page, so there are no rails to sit between); its header row is
+     the title, the skip x and "Got it" (each 44 px, 8 px apart); the four parts are two columns
+     of two; the hint is one line. At 667 x 320 it is about 250 px tall. */
+  .intro:has(> .intro-card:not([hidden])) {
+    padding: var(--space-8) max(var(--space-12), env(safe-area-inset-right, 0px)) var(--space-8)
+      max(var(--space-12), env(safe-area-inset-left, 0px));
+  }
+
+  .intro-scrim .intro-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-8);
+    width: 100%;
+    padding: var(--space-8) var(--space-12);
+  }
+
+  .intro-scrim .intro-card[hidden] {
+    display: none;
+  }
+
+  .intro-scrim .intro-card-head {
+    display: contents;
+  }
+
+  .intro-scrim .intro-card-title {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: var(--text-heading);
+  }
+
+  .intro-scrim .intro-card .intro-skip {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .intro-scrim .intro-card > .intro-action {
+    grid-column: 3;
+    grid-row: 1;
+    padding-inline: var(--space-16);
+    font-size: var(--text-body);
+  }
+
+  .intro-scrim .intro-card .intro-how {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-8) var(--space-16);
+  }
+
+  .intro-scrim .intro-card .intro-how dt {
+    margin-top: 0;
+  }
+
+  .intro-scrim .intro-card .intro-hint {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    text-align: left;
+  }
+
+  /* Menu → Settings: no second "Settings" (the tab says it) and one view at 862 x 303: two
+     columns, Reduce motion, Chatter and Full screen with the closing note on the left, Sound
+     on the right. Every control is a 44 px row, 8 px from the next. Notes are 11 px. Budget
+     at 862 x 303: the 52 px header and band, about 220 px of rows, 8 px under: under 300. */
+  .menu-check.menu-fullscreen {
+    display: flex;
+  }
+
+  .menu-scrim .menu-heading-tab {
+    display: none;
+  }
+
+  .menu-scrim #menu-panel-settings:not([hidden]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-content: start;
+    gap: var(--space-8) var(--space-16);
+    padding-bottom: var(--space-8);
+  }
+
+  .menu-scrim #menu-panel-settings > .menu-sound {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .menu-scrim #menu-panel-settings > .menu-settings-note {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .menu-scrim #menu-panel-settings .menu-note {
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .menu-scrim #menu-panel-settings .menu-check {
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .menu-scrim #menu-panel-settings .menu-check-box {
+    margin: 0;
+  }
+
+  .menu-scrim #menu-panel-settings .menu-select {
+    min-height: 44px;
+  }
+
+  .menu-scrim #menu-panel-settings .menu-range {
+    grid-template-columns: 7.5em minmax(0, 1fr) 3em;
+    gap: var(--space-8);
+    min-height: 44px;
+  }
+
+  .menu-scrim #menu-panel-settings .menu-range-input {
+    height: 44px;
   }
 }
 

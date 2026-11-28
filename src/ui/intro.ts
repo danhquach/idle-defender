@@ -6,6 +6,7 @@
 import { el, skillHelp, SQUAD_LOSS_RULE } from './hud.ts';
 import { holdField, releaseField } from './shield.ts';
 import { createTitleLogo } from './introTitle.ts';
+import { speakerIcon } from './railicon.ts';
 
 export const INTRO_TITLE = 'The Long Hold';
 export const INTRO_TAGLINE =
@@ -109,7 +110,8 @@ export function createIntro(root: HTMLElement, opts: IntroOptions): Intro {
   mute.addEventListener('change', () => opts.onMute(mute.checked));
   const muteLabel = el('label', 'intro-mute');
   muteLabel.htmlFor = mute.id;
-  muteLabel.append(mute, el('span', '', 'Mute'));
+  // On the phone shell the label is a corner icon (page.css); elsewhere the box and the word.
+  muteLabel.append(mute, el('span', 'intro-mute-text', 'Mute'), speakerIcon(doc));
   // Key hints are for a keyboard: a touch screen hides them (page.css).
   const hint = el('p', 'intro-hint intro-keys');
   hint.append(el('kbd', 'menu-key', 'Enter'), opts.hasSave ? ' Continue' : ' New game');
@@ -146,7 +148,10 @@ export function createIntro(root: HTMLElement, opts: IntroOptions): Intro {
   for (const [term, text, keys] of HOW_TO_CARD) {
     const dd = el('dd', '', text);
     if (keys) dd.append(el('span', 'intro-keys', ` ${keys}`));
-    list.append(el('dt', '', term), dd);
+    // One box per part, so the phone shell can lay the parts out side by side.
+    const item = el('div', 'intro-how-item');
+    item.append(el('dt', '', term), dd);
+    list.append(item);
   }
   const got = el('button', 'btn btn-primary intro-action', 'Got it');
   got.type = 'button';

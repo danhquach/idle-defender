@@ -30,3 +30,25 @@ export function railIcon(doc: Document, icon: RailIcon): SVGSVGElement {
   }
   return svg;
 }
+
+/**
+ * The title screen's Mute icon (ID-279), drawn only in the phone shell: a speaker with sound
+ * waves, and a slash across it while the box is ticked (the CSS shows one or the other).
+ */
+export function speakerIcon(doc: Document): SVGSVGElement {
+  const svg = doc.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'intro-mute-icon');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const shapes: [string, Record<string, string>][] = [
+    ['path', { d: 'M4 9h4l5-4v14l-5-4H4z' }],
+    ['path', { class: 'intro-mute-waves', d: 'M16 9c1.5 1.5 1.5 4.5 0 6M18.5 6.5c3 3 3 8 0 11' }],
+    ['path', { class: 'intro-mute-slash', d: 'M17 9l5 6M22 9l-5 6' }],
+  ];
+  for (const [tag, attrs] of shapes) {
+    const shape = doc.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) shape.setAttribute(k, v);
+    svg.append(shape);
+  }
+  return svg;
+}

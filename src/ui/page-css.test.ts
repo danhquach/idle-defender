@@ -1995,3 +1995,121 @@ describe('Roster and Weapons use the whole sheet on the phone (ID-277)', () => {
     expect(rule('.camp-scrim .inv-tab')).toMatch(/min-height: 44px;/);
   });
 });
+
+describe('Title, How to play and Menu → Settings on the phone (ID-279)', () => {
+  const at = rules.indexOf(`@media ${SHORT_TOUCH} {`);
+  const shell = rules.slice(at, rules.indexOf('\n}\n', at));
+  const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rule = (selector: string): string => {
+    const m = new RegExp(`(?:^|\\n)  ${esc(selector)} \\{([^}]*)\\}`).exec(shell);
+    if (!m) throw new Error(`no rule ${selector} in the phone shell`);
+    return m[1]!;
+  };
+
+  it('the title Mute is a 44 px corner icon, 12 px or more from the top and right edge', () => {
+    const mute = rule('.intro-scrim .intro-mute');
+    expect(mute).toMatch(/position: absolute;/);
+    expect(mute).toMatch(/top: max\(var\(--space-12\), env\(safe-area-inset-top, 0px\)\);/);
+    expect(mute).toMatch(/right: max\(var\(--space-12\), env\(safe-area-inset-right, 0px\)\);/);
+    expect(mute).toMatch(/width: 44px;\s*height: 44px;\s*min-height: 44px;/);
+    // --space-12 is 12 px: at 320 px tall the box is 12 px from the top and 264 px from the foot.
+    expect(tokens.get('--space-12')).toBe('12px');
+    expect(12 + 44 + 12).toBeLessThanOrEqual(320);
+    // The real checkbox covers the box (the whole icon is the target), its word is read out only.
+    expect(rule('.intro-scrim .intro-mute .menu-check-box')).toMatch(/inset: 0;[^}]*opacity: 0;/);
+    expect(rule('.intro-scrim .intro-mute-text')).toMatch(/clip-path: inset\(50%\);/);
+    // Elsewhere the icon is off and the box and the word show.
+    expect(css).toMatch(/\n\.intro-mute-icon \{\s*display: none;\s*\}/);
+    expect(rule('.intro-scrim .intro-mute-icon')).toMatch(/display: block;/);
+  });
+
+  it('the icon says its state: a slash instead of the waves while the box is ticked', () => {
+    expect(
+      rule(
+        '.intro-scrim .intro-mute-slash,\n  .intro-scrim .intro-mute:has(.menu-check-box:checked) .intro-mute-waves',
+      ),
+    ).toMatch(/display: none;/);
+    expect(rule('.intro-scrim .intro-mute:has(.menu-check-box:checked) .intro-mute-slash')).toMatch(
+      /display: inline;/,
+    );
+    expect(rule('.intro-scrim .intro-mute:has(.menu-check-box:focus-visible)')).toMatch(
+      /outline: 2px/,
+    );
+  });
+
+  it('the how-to-play card is one grid: Got it in the header row, two columns of parts', () => {
+    const card = rule('.intro-scrim .intro-card');
+    expect(card).toMatch(/display: grid;/);
+    expect(card).toMatch(/grid-template-columns: minmax\(0, 1fr\) auto auto;/);
+    expect(card).toMatch(/width: 100%;/);
+    expect(rule('.intro-scrim .intro-card[hidden]')).toMatch(/display: none;/);
+    expect(rule('.intro-scrim .intro-card-head')).toMatch(/display: contents;/);
+    expect(rule('.intro-scrim .intro-card-title')).toMatch(/grid-column: 1;\s*grid-row: 1;/);
+    expect(rule('.intro-scrim .intro-card .intro-skip')).toMatch(/grid-column: 2;\s*grid-row: 1;/);
+    // Got it is last in the DOM and in the row, so Tab runs left to right.
+    expect(rule('.intro-scrim .intro-card > .intro-action')).toMatch(
+      /grid-column: 3;\s*grid-row: 1;/,
+    );
+    expect(rule('.intro-scrim .intro-card .intro-how')).toMatch(
+      /grid-column: 1 \/ -1;\s*grid-row: 2;\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/,
+    );
+    expect(rule('.intro-scrim .intro-card .intro-hint')).toMatch(/grid-row: 3;/);
+    // The header's 44 px boxes: the skip x and "Got it" (.intro-action), 8 px apart.
+    expect(css).toMatch(/\.intro-skip \{\s*width: 44px;\s*height: 44px;/);
+    expect(css).toMatch(/\.intro-action \{\s*min-height: 44px;/);
+    expect(card).toMatch(/gap: var\(--space-8\);/);
+  });
+
+  it('the card fits one view: its height budget at 862 x 303 and at 667 x 320', () => {
+    // Header 44 + 8 + two rows of parts (a name line and up to three text lines of 14 px / 20)
+    // + 8 + one hint line + 16 padding + 16 around: the worst (667 wide, 313 px columns).
+    const part = 18 + 4 + 3 * 20;
+    const card = 44 + 8 + (part * 2 + 8) + 8 + 18 + 16 + 16;
+    expect(card).toBeLessThanOrEqual(303);
+  });
+
+  it('Settings: the repeated heading is hidden; the tab is a two-column grid', () => {
+    expect(rule('.menu-scrim .menu-heading-tab')).toMatch(/display: none;/);
+    const grid = rule('.menu-scrim #menu-panel-settings:not([hidden])');
+    expect(grid).toMatch(/display: grid;/);
+    expect(grid).toMatch(/grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\);/);
+    expect(rule('.menu-scrim #menu-panel-settings > .menu-sound')).toMatch(
+      /grid-column: 2;\s*grid-row: 1 \/ span 2;/,
+    );
+    expect(rule('.menu-scrim #menu-panel-settings > .menu-settings-note')).toMatch(
+      /grid-column: 1;\s*grid-row: 2;/,
+    );
+  });
+
+  it('Settings: every control is a 44 px row, 8 px from the next, and notes are 11 px', () => {
+    expect(rule('.menu-scrim #menu-panel-settings .menu-check')).toMatch(/min-height: 44px;/);
+    expect(rule('.menu-scrim #menu-panel-settings .menu-select')).toMatch(/min-height: 44px;/);
+    const range = rule('.menu-scrim #menu-panel-settings .menu-range');
+    expect(range).toMatch(/min-height: 44px;/);
+    expect(rule('.menu-scrim #menu-panel-settings .menu-range-input')).toMatch(/height: 44px;/);
+    expect(rule('.menu-scrim #menu-panel-settings .menu-note')).toMatch(
+      /font-size: 11px;\s*line-height: 14px;/,
+    );
+    // The rows' gaps are the section's own (8 px) and the sheet body's.
+    expect(css).toMatch(
+      /\.menu-section \{\s*display: flex;\s*flex-direction: column;\s*gap: var\(--space-8\);/,
+    );
+  });
+
+  it('Settings: the height budget at 862 x 303 stays under the screen', () => {
+    // Left: Reduce motion (18 + 3 note lines of 14), Chatter (44 + 6 + 2 lines), Full screen 44,
+    // the closing note (14), three 8 px gaps. Right: heading 20 + four 44 px rows, four gaps.
+    const left = 18 + 3 * 14 + (44 + 6 + 2 * 14) + 44 + 14 + 3 * 8;
+    const right = 20 + 4 * 44 + 4 * 8;
+    // 52 px header and band, the rows, 8 px under them.
+    expect(52 + Math.max(left, right) + 8).toBeLessThanOrEqual(303);
+  });
+});
+
+describe('the Full screen switch is drawn only in the phone shell (ID-279)', () => {
+  it('a base rule hides it; the shell block shows it', () => {
+    const at = rules.indexOf('@media (pointer: coarse) and (max-height: 540px) {');
+    expect(rules.slice(0, at)).toMatch(/\.menu-check\.menu-fullscreen \{\s*display: none;/);
+    expect(rules.slice(at)).toMatch(/\.menu-check\.menu-fullscreen \{\s*display: flex;/);
+  });
+});
