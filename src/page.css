@@ -1,8 +1,8 @@
-/* The title logo's font: Rubik Dirt (SIL OFL 1.1, assets/fonts/OFL-rubik-dirt.txt), cut
-   down to the logo's letters. Served from the game itself (CSP font-src 'self'). */
+/* The title logo's font (ID-281): Bebas Neue (SIL OFL 1.1, assets/fonts/OFL-bebas-neue.txt),
+   cut down to the logo's letters. Served from the game itself (CSP font-src 'self'). */
 @font-face {
   font-family: 'Long Hold Title';
-  src: url('./assets/fonts/rubik-dirt-title.woff') format('woff');
+  src: url('./assets/fonts/bebas-neue-title.woff') format('woff');
   font-display: block;
 }
 
@@ -34,6 +34,8 @@
   --color-intro-shade-top: rgb(0 0 0 / 45%);
   --color-intro-shade-bottom: rgb(21 23 26 / 90%);
   --color-intro-title-edge: rgb(0 0 0 / 85%);
+  /* The phone title art's fade mask (ID-281): only its alpha counts. */
+  --color-intro-art-mask: rgb(0 0 0);
   --color-shadow: rgb(0 0 0 / 60%);
 
   /* Lines */
@@ -7468,13 +7470,36 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 50% 60%;
+  /* Left of centre (ID-281): a screen narrower than the art still shows all three survivors. */
+  object-position: 25% 60%;
   opacity: 0;
   transition: opacity 0.6s ease-out;
 }
 
 .intro-art-on {
   opacity: 1;
+}
+
+/* A tall phone (ID-281): the art sits lower and is aimed at the three survivors on its left,
+   so all of them show under the tagline; its top and bottom fade into the page. */
+@media (max-aspect-ratio: 3/4) {
+  .intro-art {
+    top: 22%;
+    height: 64%;
+    object-position: 8% 50%;
+    -webkit-mask-image: linear-gradient(
+      transparent,
+      var(--color-intro-art-mask) 12%,
+      var(--color-intro-art-mask) 80%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      transparent,
+      var(--color-intro-art-mask) 12%,
+      var(--color-intro-art-mask) 80%,
+      transparent
+    );
+  }
 }
 
 .intro-shade {

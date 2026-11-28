@@ -4484,12 +4484,14 @@ offline progress works across sessions.
   still plays; the Save tab says saving is off and the Menu button shows a
   red dot.
 - **Several tabs:** each saves on its own changes; the last write wins.
-- **Intro** *(as built, ID-106; art redone in ID-117)*: at launch a title screen covers the camp: the
-  title art (three unarmed survivors from behind, at the near side of the wall,
-  looking over it at the horde coming at dusk, kept between the title and the
-  buttons on a phone, a desktop and a 16:9 window; lazy
-  art that fades in, under a 70 % dim) with the title and a one-line tagline in
-  the sky and, at the foot, **Continue** (only with a save, the main action),
+- **Intro** *(as built, ID-106; art redone in ID-117 and ID-281)*: at launch a title screen covers the camp: the
+  title art (ID-281: a painterly dusk, three survivors from behind with rifles slung,
+  on the near side of the wall in the left third, the horde and a burning city beyond,
+  the sky clear for the title; the art sits left of centre so a narrower screen keeps
+  all three, and on a tall phone it sits lower, under the tagline; lazy
+  art that fades in, under a 70 % dim) with the title (ID-281: a clean logo in Bebas
+  Neue, "THE LONG" spaced wide in off-white over a big red "HOLD", edged dark with a
+  soft shadow) and a one-line tagline in the sky and, at the foot, **Continue** (only with a save, the main action),
   **New game** (asks first over a save; without one the new camp is saved at
   once, so the next launch continues) and Mute (kept in step with the Menu's).
   Enter is the main action, Esc goes back. On a first launch (no save, never

@@ -71,7 +71,8 @@ script refuses a model that is not listed here.
 - MAI Image 2.6 (`microsoft/mai-image-2.6`, ID-117, 2026-11-08): the project
   owner chose it for the title art (`title-dusk`) after a side-by-side test
   against FLUX 1.1 Pro, Z-Image Turbo and FLUX.2 Klein 4B, knowing the points
-  here. It is a hosted model with no open weights or licence file. Microsoft's
+  here. The title art was redrawn with it in ID-281 (2026-11-27): the owner
+  picked a painterly style from four. It is a hosted model with no open weights or licence file. Microsoft's
   Foundry documentation lists commercial creative work among its uses and asks
   that use of generated images follow Microsoft's terms of service; no statement
   of who owns the output, or of commercial use, was found, and the model is a
@@ -155,3 +156,9 @@ Wikimedia Commons page id where it has none.
   (<https://creativecommons.org/licenses/by/3.0/>). Changes: redrawn as our own polygons after its layout (a heart with two lobes and a point), recoloured red-orange, with our own bold white pulse line across it, and a dark outline added.
 - `shock-net`, `tar-moat` and `wall-gun` (ID-264): generated with FLUX.2 [klein] 4B (`black-forest-labs/flux.2-klein-4b`) through Pollinations; prompts in `art-src/manifest.json`. Plain descriptions of an electric net, a strip of spilled tar and a pedestal-mounted heavy machine gun, no maker, model or game names.
 - `wall-tech-edge`, `wall-tech-frame`, `wall-tech-plates` and `wall-tech-spikes` (ID-270): generated with FLUX.2 [klein] 4B (`black-forest-labs/flux.2-klein-4b`) through Pollinations; prompts in `art-src/manifest.json`. Plain descriptions of a riveted steel strip, frame, plates and a row of spikes, no maker, model or game names.
+
+## Fonts
+
+- The title logo (ID-281) uses Bebas Neue by Dharma Type, SIL Open Font License 1.1
+  (`src/assets/fonts/OFL-bebas-neue.txt`), cut down to the logo's letters
+  (`bebas-neue-title.woff`). It replaced Rubik Dirt.
