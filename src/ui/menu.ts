@@ -10,6 +10,7 @@ import { encodeSave } from '../storage/save.ts';
 import { clampVolume, VOLUMES, type SoundSettings, type Volume } from '../storage/settings.ts';
 import { FIELD_GREW, LEVELS_REWORKED } from './build.ts';
 import { versionText } from './version.ts';
+import { canToggleFullscreen, isFullscreen, setFullscreen } from './landscape.ts';
 import { AUTO_KEY, ENEMY_NAME, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 import { classBadge } from './classicon.ts';
 import { railIcon } from './railicon.ts';
@@ -472,12 +473,43 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   );
   muteLabel.append(mute, muteText);
 
+  // Full screen (ID-279): only on a touch screen whose browser has the Fullscreen API (not
+  // iPhone Safari). It follows the browser: leaving full screen by the back gesture unticks it.
+  const settingsRows: HTMLElement[] = [motionLabel, chatterBox];
+  let syncFullscreen = (): void => undefined;
+  if (canToggleFullscreen(window)) {
+    const full = el('input', 'menu-check-box');
+    full.type = 'checkbox';
+    full.id = 'menu-fullscreen';
+    full.checked = isFullscreen(window);
+    // Off: a browser may restore a ticked box from the last visit when this is inserted.
+    full.autocomplete = 'off';
+    const sync = (): void => {
+      full.checked = isFullscreen(window);
+    };
+    syncFullscreen = sync;
+    // The change comes from a tap, which browsers require; a refusal leaves the box as it was.
+    full.addEventListener('change', () => void setFullscreen(window, full.checked).then(sync));
+    window.document.addEventListener('fullscreenchange', sync);
+    const fullLabel = el('label', 'menu-check menu-fullscreen');
+    fullLabel.htmlFor = full.id;
+    fullLabel.append(full, el('b', 'menu-check-title', 'Full screen'));
+    settingsRows.push(fullLabel);
+  }
+
+  // The first heading repeats the tab's name: the phone sheet hides it (page.css).
+  const soundSection = section(el('h3', 'menu-heading', 'Sound'), ...sliders, muteLabel);
+  soundSection.classList.add('menu-sound');
   panels
     .get('settings')!
     .append(
-      section(el('h3', 'menu-heading', 'Settings'), motionLabel, chatterBox),
-      section(el('h3', 'menu-heading', 'Sound'), ...sliders, muteLabel),
-      el('p', 'menu-note', 'Settings stay in this browser. They are not part of the backup code.'),
+      section(el('h3', 'menu-heading menu-heading-tab', 'Settings'), ...settingsRows),
+      soundSection,
+      el(
+        'p',
+        'menu-note menu-settings-note',
+        'Settings stay in this browser. They are not part of the backup code.',
+      ),
     );
 
   // Save.
@@ -777,6 +809,7 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
       holdField(root, scrim);
       unwatch = watchShortTouch(window, applySheet);
       applySheet();
+      syncFullscreen();
       api.refresh();
       const alert = saveStatus === 'off' || saveStatus === 'failed';
       select(alert ? 'save' : tab, true);

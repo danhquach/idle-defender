@@ -351,6 +351,9 @@ export function start(root: HTMLElement, art: Art): void {
       if (horde?.offer) horde = chooseCard(horde, index);
     },
     () => {
+      // The Start tap: a phone that left full screen (the back gesture) goes back, sideways
+      // again, as the first tap did (ID-279). Nothing happens where it is already so.
+      goLandscape(window);
       if (HORDE_ONLY) {
         squadNext();
         return;

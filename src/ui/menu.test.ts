@@ -4,7 +4,7 @@
 import { JOB_IDS, STASH_CAP } from '../core/data.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { newGame, type GameState } from '../core/game.ts';
 import { exportCode } from '../storage/code.ts';
 import { encodeSave } from '../storage/save.ts';
@@ -633,5 +633,129 @@ describe('the Menu', () => {
     button('Load code').click();
     expect(dialog.querySelector('img, script')).toBeNull();
     expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
+  });
+});
+
+describe('Settings on the phone shell and its Full screen switch (ID-279)', () => {
+  type Fs = { enabled?: boolean; on?: boolean; request?: () => Promise<void> | undefined };
+  let fullscreenElement: Element | null = null;
+  const exit = vi.fn(() => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event('fullscreenchange'));
+    return Promise.resolve();
+  });
+
+  /** A touch browser as the Menu reads it. */
+  function browser(f: Fs = {}): { request: ReturnType<typeof vi.fn> } {
+    fullscreenElement = f.on ? document.documentElement : null;
+    const request = vi.fn(
+      f.request ??
+        (() => {
+          fullscreenElement = document.documentElement;
+          document.dispatchEvent(new Event('fullscreenchange'));
+          return Promise.resolve();
+        }),
+    );
+    window.matchMedia = ((q: string) => ({
+      matches: q === '(pointer: coarse)',
+    })) as typeof window.matchMedia;
+    Object.defineProperty(document, 'fullscreenEnabled', {
+      value: f.enabled ?? true,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'fullscreenElement', {
+      get: () => fullscreenElement,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'exitFullscreen', { value: exit, configurable: true });
+    document.documentElement.requestFullscreen = request as never;
+    return { request };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'matchMedia');
+    Reflect.deleteProperty(document, 'fullscreenEnabled');
+    Reflect.deleteProperty(document, 'fullscreenElement');
+    Reflect.deleteProperty(document, 'exitFullscreen');
+    Reflect.deleteProperty(document.documentElement, 'requestFullscreen');
+    exit.mockClear();
+  });
+
+  it('the first heading, which repeats the tab, is marked for the phone sheet to hide', () => {
+    const { panel } = setup();
+    const first = panel('settings').querySelector('h3')!;
+    expect(first.textContent).toBe('Settings');
+    expect(first.classList.contains('menu-heading-tab')).toBe(true);
+    expect(panel('settings').querySelector('.menu-sound h3')!.textContent).toBe('Sound');
+    expect(panel('settings').lastElementChild!.classList.contains('menu-settings-note')).toBe(true);
+  });
+
+  it('no switch without a touch screen, the API, or where the browser disables it', () => {
+    expect(setup().panel('settings').querySelector('#menu-fullscreen')).toBeNull();
+    browser({ enabled: false });
+    expect(setup().panel('settings').querySelector('#menu-fullscreen')).toBeNull();
+    // A mouse: not a touch device.
+    browser();
+    window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia;
+    expect(setup().panel('settings').querySelector('#menu-fullscreen')).toBeNull();
+  });
+
+  it('shows a labelled switch under Chatter, off when not full screen, on when it is', () => {
+    browser();
+    const off = setup().panel('settings').querySelector<HTMLInputElement>('#menu-fullscreen')!;
+    expect(off.checked).toBe(false);
+    expect(document.querySelector('label[for="menu-fullscreen"]')!.textContent).toBe('Full screen');
+    // In the left column's section, after Chatter.
+    expect(off.closest('.menu-section')!.querySelector('#menu-chatter')).not.toBeNull();
+    browser({ on: true });
+    expect(
+      setup().panel('settings').querySelector<HTMLInputElement>('#menu-fullscreen')!.checked,
+    ).toBe(true);
+  });
+
+  it('ticking it asks for full screen; unticking leaves it', async () => {
+    const { request } = browser();
+    const box = setup().panel('settings').querySelector<HTMLInputElement>('#menu-fullscreen')!;
+    box.click();
+    expect(request).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(box.checked).toBe(true));
+    box.click();
+    expect(exit).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(box.checked).toBe(false));
+  });
+
+  it('follows the browser: the back gesture leaving full screen unticks it', () => {
+    browser({ on: true });
+    const box = setup().panel('settings').querySelector<HTMLInputElement>('#menu-fullscreen')!;
+    expect(box.checked).toBe(true);
+    fullscreenElement = null;
+    document.dispatchEvent(new Event('fullscreenchange'));
+    expect(box.checked).toBe(false);
+    fullscreenElement = document.documentElement;
+    document.dispatchEvent(new Event('fullscreenchange'));
+    expect(box.checked).toBe(true);
+  });
+
+  it('is unticked at render and when the Menu opens, whatever the box held before', () => {
+    browser();
+    const m = setup();
+    const box = m.panel('settings').querySelector<HTMLInputElement>('#menu-fullscreen')!;
+    expect(box.autocomplete).toBe('off');
+    // A restored or stale tick, with no fullscreenchange to say otherwise.
+    box.checked = true;
+    m.menuButton.click();
+    expect(box.checked).toBe(false);
+    m.menu.close();
+    fullscreenElement = document.documentElement;
+    m.menu.open();
+    expect(box.checked).toBe(true);
+  });
+
+  it('a refused request leaves the box unticked and raises no error', async () => {
+    const { request } = browser({ request: () => Promise.reject(new Error('refused')) });
+    const box = setup().panel('settings').querySelector<HTMLInputElement>('#menu-fullscreen')!;
+    box.click();
+    expect(request).toHaveBeenCalled();
+    await vi.waitFor(() => expect(box.checked).toBe(false));
   });
 });
