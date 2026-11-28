@@ -93,6 +93,7 @@ import {
   type BlastLook,
 } from './explosion.ts';
 import { SPIT, spitFly, spitFrames } from './spit.ts';
+import { BOMB, bombAt } from './bomb.ts';
 import {
   CUTS,
   DEATH,
@@ -284,15 +285,14 @@ export const COLOR = {
   badgeText: '#111110',
 } as const;
 /**
- * An airstrike bomb (ID-107): the Heavy Rounds shell, `bomb` long, dropping from `height`
- * (world units) over `THROW_FALL`, falling faster as it goes and arcing in from `carry`
- * behind (`fallAt`); its shadow (`bombShadow` radius, darkening to `shadowAlpha`) grows
- * under it as it nears the ground. A survivor's thrown Flashbang or Molotov (ID-139; they
+ * An airstrike bomb (ID-107): the Heavy Rounds shell, `BOMB.length` long, dropped from the
+ * sky straight down onto its spot over `THROW_FALL` (`bombAt` in bomb.ts, ID-290); its
+ * shadow (`bombShadow` radius, darkening to `shadowAlpha`) grows under it as it nears the
+ * ground. A survivor's thrown Flashbang or Molotov (ID-139; they
  * fell from the sky as skills before) is `item` across, spinning `spin` turns a second: a
  * flashbang a grey canister, a molotov its icon's bottle.
  */
 export const THROWN = {
-  height: 420,
   spin: 2.5,
   item: 26,
   /** A thrown Flashbang or Molotov in the thrower's hand at the wind-up, across. */
@@ -301,21 +301,8 @@ export const THROWN = {
   can: '#8a9097',
   canEdge: '#1d1f22',
   canShine: '#c9ced4',
-  bomb: 50,
   bombShadow: 18,
-  /** How far an airstrike bomb still travels forward (+x, the plane's way) as it falls. */
-  carry: 280,
 } as const;
-
-/**
- * Where airstrike bomb `i` is `fall` of the way down (ID-107): it keeps the plane's forward
- * speed (left to right, +x), so it arcs in from `carry` behind its spot: steady along x
- * while gravity speeds its drop, landing nose first.
- */
-export function fallAt(i: Incoming, fall: number): { x: number; y: number; z: number } {
-  const carry = THROWN.carry * (1 - fall);
-  return { x: i.x - carry, y: i.y, z: THROWN.height * (1 - fall * fall) };
-}
 
 /**
  * How far airstrike bomb `i` has fallen at `time` (ID-107): 0 just
@@ -3762,24 +3749,22 @@ function drawBlastAir(
   }
 }
 
-/** Draws airstrike bomb `i` `fall` of the way down (`thrownFall`), nose along its path. */
+/** Draws airstrike bomb `i` `fall` of the way down (`thrownFall`), nose down (ID-290). */
 function drawThrown(
   ctx: CanvasRenderingContext2D,
   art: Art,
   i: Incoming,
   fall: number,
   cam: Camera,
+  still: boolean,
 ): void {
-  const c = project(fallAt(i, fall), cam);
+  const c = bombAt(i, fall, cam, still);
   ctx.save();
   ctx.translate(c.sx, c.sy);
-  // A bomb points its nose along its path on screen: near level as it leaves the plane,
-  // steep as it lands. The art lies at 45°, nose to the upper right.
-  const ahead = project(fallAt(i, Math.min(1, fall + 0.02)), cam);
-  const back = project(fallAt(i, Math.max(0, fall - 0.02)), cam);
-  ctx.rotate(Math.atan2(ahead.sy - back.sy, ahead.sx - back.sx) + Math.PI / 4);
+  // The art lies at 45°, nose to the upper right: a quarter turn and an eighth points it down.
+  ctx.rotate((3 * Math.PI) / 4);
   const img = art[BOMB_ART];
-  const h = sized(THROWN.bomb, cam);
+  const h = BOMB.length * cam.zoom;
   const w = (img.width / img.height) * h;
   ctx.drawImage(img, -w / 2, -h / 2, w, h);
   ctx.restore();
@@ -5003,8 +4988,7 @@ export function drawScene(
     const fall = thrownFall(i, scene.time);
     if (fall === null) continue;
     ctx.globalAlpha = THROWN.shadowAlpha * fall;
-    const under = fallAt(i, fall);
-    groundCircle(ctx, under.x, under.y, THROWN.bombShadow * (0.4 + 0.6 * fall), cam);
+    groundCircle(ctx, i.x, i.y, THROWN.bombShadow * (0.4 + 0.6 * fall), cam);
     ctx.fillStyle = COLOR.shadow;
     ctx.fill();
     ctx.globalAlpha = 1;
@@ -5314,7 +5298,7 @@ export function drawScene(
   // Airstrike bombs fall from the sky over everything (ID-107).
   for (const i of scene.incoming) {
     const fall = thrownFall(i, scene.time);
-    if (fall !== null) drawThrown(ctx, art, i, fall, cam);
+    if (fall !== null) drawThrown(ctx, art, i, fall, cam, anim?.reduced ?? false);
   }
   if (aim) {
     // An airstrike shows the area its bombs land in (ID-107, ID-139), fire orange, and one
