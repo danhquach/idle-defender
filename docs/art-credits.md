@@ -72,7 +72,15 @@ script refuses a model that is not listed here.
   owner chose it for the title art (`title-dusk`) after a side-by-side test
   against FLUX 1.1 Pro, Z-Image Turbo and FLUX.2 Klein 4B, knowing the points
   here. The title art was redrawn with it in ID-281 (2026-11-27): the owner
-  picked a painterly style from four. It is a hosted model with no open weights or licence file. Microsoft's
+  picked a painterly style from four. Two of its guns were fixed with it in ID-292
+  (2026-11-28) as edits of a crop of the two survivors (`title-dusk-guns`, seeds 2923
+  then 2924), pasted back over only those two survivors' upper bodies (manifest `patch`),
+  the new guns' wood toned down to match the scene; the rest of the picture is unchanged.
+  Seed 2923 fixed the middle gun and was pasted into the crop (aligned, colour-matched);
+  seed 2924 edited that composite (the right survivor's gun, a leftover rod). The manifest
+  entry records that last edit: its `size` is the crop's request size, and the stored
+  `art-src/gen/title-dusk-guns.jpg` is the full 1536x1024 composite, the only master
+  (it cannot be regenerated from the manifest alone). It is a hosted model with no open weights or licence file. Microsoft's
   Foundry documentation lists commercial creative work among its uses and asks
   that use of generated images follow Microsoft's terms of service; no statement
   of who owns the output, or of commercial use, was found, and the model is a

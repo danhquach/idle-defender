@@ -68,6 +68,8 @@ const manifest = JSON.parse(readFileSync(new URL('art-src/manifest.json', root),
     frames?: string;
     like?: string;
     overlay?: Overlay | Overlay[];
+    /** ID-211, ID-292: a polygon copied from another generation (a part) before cleaning. */
+    patch?: { from: string; points: number[][] };
     draw?: unknown;
     outside?: unknown;
     seed?: number;
@@ -367,12 +369,14 @@ describe('art sources', () => {
     expect(shipped.map((a) => a.id).sort()).toEqual([...ART_IDS].sort());
   });
 
-  it('uses every part as a reference or overlay of a shipped sprite', () => {
+  it('uses every part as a reference, overlay or patch of a shipped asset', () => {
     // ID-103: the card bullet is pasted onto card icons as an overlay, not edited.
+    // ID-292: the title art's fixed guns are a picture part, pasted as its patch.
     const used = new Set(
       shipped.flatMap((a) => [
         ...(a.ref === undefined ? [] : [a.ref].flat()),
         ...(a.overlay ? [a.overlay].flat().map((o) => o.part) : []),
+        ...(a.patch ? [a.patch.from] : []),
       ]),
     );
     for (const a of parts) expect(used.has(a.id), a.id).toBe(true);

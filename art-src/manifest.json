@@ -4302,7 +4302,41 @@
       "model": "microsoft/mai-image-2.6",
       "seed": 2711,
       "size": "1536x1024",
+      "patch": {
+        "from": "title-dusk-guns",
+        "points": [
+          [280, 355],
+          [350, 350],
+          [400, 375],
+          [462, 398],
+          [512, 396],
+          [570, 428],
+          [640, 468],
+          [645, 712],
+          [540, 726],
+          [486, 748],
+          [460, 738],
+          [462, 645],
+          [410, 658],
+          [340, 630],
+          [295, 635],
+          [268, 580],
+          [262, 460],
+          [278, 420]
+        ]
+      },
       "prompt": "Wide 3:2 title screen key art. Composition: the upper-middle third of the image is calm open dusk sky with only soft clouds, kept empty for a game title; the lower-middle is dark quiet ground, kept empty for menu buttons. On the near side of a long cracked concrete wall topped with sandbags, three survivors seen from behind stand in the left third of the image, full bodies, rifles slung on their backs, looking out over the wall. The wall is between them and the danger. Beyond the wall a horde of shambling zombies walks toward it through haze, and far behind a ruined city skyline with smoke on the horizon. No text, no letters, no logo, no frame, no border. Style: rich painterly digital illustration, cinematic concept-art lighting, strong rim light from a low burnt-orange sun, deep teal shadows, high detail, atmospheric depth."
+    },
+    {
+      "id": "title-dusk-guns",
+      "kind": "picture",
+      "part": true,
+      "style": "verbatim",
+      "model": "microsoft/mai-image-2.6",
+      "seed": 2924,
+      "size": "1024x1280",
+      "ref": "title-dusk",
+      "prompt": "Edit this exact image. Keep everything exactly the same: the two people seen from behind, their bodies, poses, coats and backpacks, the taller left person's rifle slung diagonally across their back, the wall, sandbags, sky and light. Make only two changes. 1) The taller person on the left: remove the dark vertical object hanging down along the left edge of their coat, from the side of the backpack down to the hip, so the coat edge there is plain coat cloth. 2) The shorter person on the right (dark hair, bedroll on the backpack): remove the upright rifle standing at their left side and instead give them one whole rifle slung diagonally across their back on a visible strap, the muzzle pointing up behind their left shoulder and the wooden stock down by their right hip, like the left person's rifle; exactly one rifle and one stock, nothing else hanging at their hips. Same painterly style, same dusk rim light."
     },
     {
       "id": "world-map",
