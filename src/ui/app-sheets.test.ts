@@ -3,7 +3,11 @@
 // the rails and the rail is its tabs. The lit button closes it, another switches, a tap on the
 // empty backdrop or Esc from a rail button closes it too; off the shell nothing of this runs.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { recruit } from '../core/camp.ts';
 import { HORDE_ONLY } from '../core/data.ts';
+import { newGame } from '../core/game.ts';
+import { sendMapPatrol, withMap } from '../core/scout.ts';
+import { encodeSave, SAVE_KEY } from '../storage/save.ts';
 import { SHORT_TOUCH } from './landscape.ts';
 import { start } from './app.ts';
 import { skipIntro } from './testing.ts';
@@ -279,5 +283,96 @@ describe('the rail is the sheets tabs (ID-276)', () => {
     expect(camp.querySelector('[role="dialog"]')!.getAttribute('aria-modal')).toBe('true');
     expect(camp.querySelector<HTMLElement>('.camp-close')!.hidden).toBe(false);
     expect(lit()).toEqual(['roster']);
+  });
+});
+
+// ID-278: a patrol back is shown on the start screen a second after the camp loads. On the phone
+// shell that was a sheet opening by itself with the Map button lit, so the player's first tap on
+// Map closed it and the World map seemed never to open.
+describe('a patrol that is back (ID-278)', () => {
+  const ALL = ['roster', 'inv', 'map', 'research', 'menu'];
+
+  /** A camp with one survivor out on a patrol that came back a day ago, saved and booted. */
+  function backCamp() {
+    const g = newGame('horde');
+    const away = withMap(
+      {
+        ...g,
+        hordeNumber: 3,
+        roster: [recruit(1), recruit(2)],
+        reserve: [recruit(3)],
+        camp: { ...g.camp, recruits: 3 },
+      },
+      7,
+    );
+    const sent = sendMapPatrol(
+      away,
+      away.map!.areas[0]!.kind,
+      ['recruit-3'],
+      1,
+      Date.now() - 864e5,
+    );
+    if (!sent.ok) throw new Error(sent.code);
+    localStorage.setItem(SAVE_KEY, encodeSave(sent.game, Date.now()));
+    return boot();
+  }
+  const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 1200));
+  /** Every rail button says what its sheet does: lit exactly when that sheet is on show. */
+  const honest = (b: ReturnType<typeof boot>): void => {
+    const open = (): string[] =>
+      [
+        !b.camp.hidden ? ['camp'] : [],
+        !b.research.hidden ? ['research'] : [],
+        !b.menu.hidden ? ['menu'] : [],
+      ].flat();
+    expect(b.lit().length).toBe(open().length);
+    for (const n of ALL) {
+      expect(b.rail(`${n}-button`).getAttribute('aria-expanded')).toBe(String(b.lit().includes(n)));
+    }
+  };
+
+  it('on the phone shell nothing opens by itself: no rail button is lit, and one tap on Map opens the World map', async () => {
+    const b = backCamp();
+    expect(b.rail('map-button').dataset.ready).toBe('true');
+    honest(b);
+    await settle();
+    expect(b.camp.hidden).toBe(true);
+    expect(b.lit()).toEqual([]);
+    honest(b);
+    b.tap(b.rail('map-button'));
+    expect(b.camp.hidden).toBe(false);
+    expect(b.camp.querySelector<HTMLElement>('[data-tab]')!.dataset.tab).toBe('map');
+    expect(b.lit()).toEqual(['map']);
+    honest(b);
+    // The next tap closes it, and the lit state follows it down.
+    b.tap(b.rail('map-button'));
+    expect(b.camp.hidden).toBe(true);
+    expect(b.lit()).toEqual([]);
+    honest(b);
+  });
+
+  it('every rail button is lit only while its own sheet is open, through open, switch and close', async () => {
+    const b = backCamp();
+    await settle();
+    for (const n of ALL) {
+      b.tap(b.rail(`${n}-button`));
+      expect(b.lit()).toEqual([n]);
+      honest(b);
+    }
+    for (const n of ALL.slice().reverse()) {
+      b.tap(b.rail(`${n}-button`));
+      honest(b);
+      if (b.lit().length === 0) break;
+    }
+    expect(b.lit()).toEqual([]);
+    honest(b);
+  });
+
+  it('off the shell it still opens the report once, as before', async () => {
+    shell = false;
+    const b = backCamp();
+    await settle();
+    expect(b.camp.hidden).toBe(false);
+    expect(b.camp.querySelector<HTMLElement>('[data-tab]')!.dataset.tab).toBe('map');
   });
 });

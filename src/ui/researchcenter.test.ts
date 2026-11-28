@@ -239,6 +239,11 @@ describe('the window', () => {
     expect(node('thick-coils').dataset.state).toBe('locked');
     expect(node('thick-coils').textContent).toContain('Needs Razor Wire');
     expect(q('.research-chart').textContent).toContain('Tier 4');
+    // The phone shell leaves "Needs " and " Scrap" out by their own spans; the words stay whole.
+    const face = (id: Parameters<typeof node>[0]) => node(id).querySelector('.research-node-face')!;
+    expect(face('thick-coils').querySelector('.research-face-lead')!.textContent).toBe('Needs ');
+    expect(face('quick-mortars').querySelector('.research-face-unit')!.textContent).toBe(' Scrap');
+    expect(face('reinforced-wall').children).toHaveLength(0);
   });
 
   it('draws one connector line per prerequisite, green once its source is researched', () => {
@@ -371,7 +376,11 @@ describe('the window', () => {
     rc.open();
     expect(document.querySelectorAll('.research-body img, .research-body script').length).toBe(0);
     for (const n of document.querySelectorAll('.research-node')) {
-      expect(n.querySelectorAll('*').length).toBe(2);
+      // The name, the face and, inside it, the "Needs " and " Scrap" spans: text, never markup.
+      for (const e of n.querySelectorAll('*')) {
+        expect(e.tagName).toBe('SPAN');
+        expect(e.children.length === 0 || e.classList.contains('research-node-face')).toBe(true);
+      }
     }
   });
 });

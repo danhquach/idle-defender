@@ -1509,6 +1509,8 @@ describe('the phone squad screen and result (ID-274)', () => {
     expect(pick).toMatch(/flex: 0 1 auto;/);
     expect(pick).toMatch(/min-height: 0;/);
     expect(pick).toMatch(/overflow-y: auto;/);
+    // One scrolling column: a wrapping column sent the select and Power past the card's edge.
+    expect(pick).toMatch(/flex-wrap: nowrap;/);
     expect(rule('.hud-debrief .hud-start-row')).toMatch(/flex: none;\s*margin-top: auto;/);
     // The loot chip: the gun on its own line, the level and DPS under it (no "…").
     expect(rule('.gun-chip-name')).toMatch(/display: contents;/);
@@ -1651,9 +1653,9 @@ describe('the phone sheets (ID-276)', () => {
     expect(rules.indexOf('.craft-list {\n  height: 0;', at + shell.length)).toBeGreaterThan(0);
   });
 
-  it('Research: the chart shares 552 px with a 44 px label column and nothing wider than the sheet', () => {
+  it('Research: the chart shares 552 px with a 48 px label column and nothing wider than the sheet', () => {
     const chart = rule('.camp-scrim .research-chart');
-    expect(chart).toMatch(/grid-template-columns: 44px repeat\(4, minmax\(0, 1fr\)\);/);
+    expect(chart).toMatch(/grid-template-columns: 48px repeat\(4, minmax\(0, 1fr\)\);/);
     expect(chart).toMatch(/min-width: 0;/);
     const body = rule('.camp-scrim .research-body');
     expect(body).toMatch(/padding: var\(--space-4\);/);
@@ -1661,6 +1663,99 @@ describe('the phone sheets (ID-276)', () => {
     // The later shared rules (72 px column, 568 px minimum) are beaten by the prefix.
     expect(rules.indexOf('.research-chart {', at + shell.length)).toBeGreaterThan(0);
     expect(rules.indexOf('.research-body {', at + shell.length)).toBeGreaterThan(0);
+  });
+
+  it('Research (ID-278): four equal 56 px rows fit under the header at 303 px, every word 11 px or more', () => {
+    const rows = /grid-template-rows: auto repeat\(4, (\d+)px\);/.exec(
+      rule('.camp-scrim .research-chart'),
+    );
+    const row = +rows![1]!;
+    // The lines are drawn in cell units, so equal rows keep every end on its node.
+    expect(row).toBe(56);
+    // 28 header + 8 gap + 1 border, 4 + 4 body padding, 18 tier header, four rows.
+    expect(28 + 8 + 1 + 4 + 4 + 18 + 4 * row).toBeLessThanOrEqual(303);
+    // A node is the row less 4 px above and below: at least 44 px, 8 px from the next.
+    const node = rule('.camp-scrim .research-node');
+    expect(node).toMatch(/margin: var\(--space-4\) var\(--space-8\);/);
+    expect(row - 2 * 4).toBeGreaterThanOrEqual(44);
+    const px = (sel: string): number => +/font-size: (\d+)px;/.exec(rule(sel))![1]!;
+    for (const sel of [
+      '.camp-scrim .research-node-name',
+      '.camp-scrim .research-node-face',
+      '.camp-scrim .research-branch',
+    ])
+      expect(px(sel), sel).toBeGreaterThanOrEqual(11);
+    // Capitals at 11 px would not fit the label column.
+    expect(rule('.camp-scrim .research-branch')).toMatch(/text-transform: none;/);
+    // A node's text fits its box: two 13 px name lines and one 13 px face line, 2 + 2 padding,
+    // 2 border: the face never wraps and drops "Needs " and " Scrap", names never break mid-word.
+    expect(13 * 2 + 13 + 2 + 2 + 2).toBeLessThanOrEqual(row - 8);
+    const face = rule('.camp-scrim .research-node-face');
+    expect(face).toMatch(/white-space: nowrap;/);
+    expect(rule('.camp-scrim .research-face-lead,\n  .camp-scrim .research-face-unit')).toMatch(
+      /display: none;/,
+    );
+    const name = rule('.camp-scrim .research-node-name');
+    expect(name).toMatch(/hyphens: manual;/);
+    expect(name).toMatch(/word-break: normal;/);
+  });
+
+  it('World map (ID-278): four areas in a row, a 44 px button, the countdown clear of the name', () => {
+    expect(rule('.camp-scrim .map-areas')).toMatch(
+      /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/,
+    );
+    expect(rule('.camp-scrim .map-send,\n  .camp-scrim .map-open-report')).toMatch(
+      /min-height: 44px;/,
+    );
+    expect(rule('.camp-scrim .map-team')).toMatch(/min-height: 44px;/);
+    expect(rule('.camp-scrim .map-time')).toMatch(/top: var\(--space-4\);/);
+    // Header 28 + 24 band, 4 + 4 padding, a card of art (68), drops (45), button (44), gaps (21)
+    // at 667 px: under the 320 px (and the 303 px of 862).
+    expect(52 + 8 + 68 + 45 + 44 + 21 + 1).toBeLessThanOrEqual(303);
+  });
+
+  it('the mode row is one line of three 44 px buttons, the unlock condition one line under it (ID-278)', () => {
+    const row = rule('.hud-debrief .hud-mode-row');
+    expect(row).toMatch(/grid-template-columns: repeat\(3, minmax\(min-content, 1fr\)\);/);
+    expect(row).toMatch(/gap: var\(--space-4\) var\(--space-8\);/);
+    expect(rule('.hud-debrief .hud-mode')).toMatch(/font-size: 11px;/);
+    // The long hint leaves the button (its name and title keep it); a line under the row says it.
+    expect(rule('.hud-debrief .hud-mode-hint')).toMatch(/clip-path: inset\(50%\);/);
+    const note = rule('.hud-debrief .hud-mode-note');
+    expect(note).toMatch(/display: block;\s*grid-column: 1 \/ -1;/);
+    expect(note).toMatch(/font-size: 11px;/);
+    expect(rules.slice(0, rules.indexOf(shell))).toMatch(/\.hud-mode-note \{\s*display: none;/);
+    expect(rule('.hud-debrief .hud-mode:disabled .hud-mode-name::before')).toMatch(/content: '';/);
+    // Row 44 + gap 4 + one 13 px line: the card's budget, the line never wrapping.
+    expect(44 + 4 + 13).toBe(61);
+    expect(note).toMatch(/white-space: nowrap;/);
+  });
+
+  it('the horde card is tight: 4 px lines, Power and its badge on one line (ID-278)', () => {
+    const pick = rule('.hud-debrief .hud-horde-pick');
+    expect(pick).toMatch(/gap: var\(--space-4\);/);
+    expect(pick).toMatch(/padding: var\(--space-4\) var\(--space-8\);/);
+    // The row's 4 px margin and the 4 px gap keep the mode buttons 8 px from the select.
+    expect(rule('.hud-debrief .hud-mode-row')).toMatch(/margin-bottom: var\(--space-4\);/);
+    const power = rule('.hud-debrief .hud-horde-power,\n  .hud-debrief .hud-horde-fit');
+    expect(power).toMatch(/white-space: nowrap;/);
+    expect(rule('.hud-debrief .hud-horde-power:not(.hud-horde-injury)')).toMatch(/flex: 1 0 100%;/);
+    expect(rule('.hud-debrief .hud-horde-band')).toMatch(/font-size: 10px;/);
+    // No width query: the size follows the viewport's width by a clamp, 10 px to 11 px.
+    expect(power).toMatch(/font-size: clamp\(10px, 1\.65vw, 11px\);/);
+    // Touch: a real 44 px box in the DOM (border-box, so border and padding count).
+    const mode = rule('.hud-debrief .hud-mode');
+    expect(mode).toMatch(/box-sizing: border-box;/);
+    expect(mode).toMatch(/height: 44px;\s*min-height: 44px;/);
+    // The farm hints are left out of the card (the option says "farm"); the Fit hint stays.
+    expect(rule('.hud-debrief .hud-horde-hint:not(.hud-horde-fit-hint)')).toMatch(
+      /clip-path: inset\(50%\);/,
+    );
+  });
+
+  it('the squad panel is opaque on the phone, and the report title takes no ring (ID-278)', () => {
+    expect(rule('.hud-result.hud-debrief')).toMatch(/background: var\(--color-panel-solid\);/);
+    expect(rule('.camp-scrim .map-area-name:focus')).toMatch(/outline: none;/);
   });
 
   it('the Menu sheet is opaque, and an empty header keeps 8 px, not 24', () => {
@@ -1688,6 +1783,8 @@ describe('the phone sheets (ID-276)', () => {
       '.menu-scrim .menu-head',
       '.camp-scrim .research-chart',
       '.camp-scrim .research-body',
+      '.camp-scrim .map-areas',
+      '.hud-debrief .hud-mode-row',
       '.menu-scrim .menu {',
       '.camp-scrim .craft-body',
       ".roster-button[aria-expanded='true']",

@@ -13,6 +13,7 @@ import {
   goalChip,
   hordePicker,
   modeChoices,
+  phoneLabel,
   squadScreen,
   squadStart,
   squadStatus,
@@ -77,6 +78,17 @@ describe('the mode switch (ID-218)', () => {
     for (const e of root.querySelectorAll('.hud-mode-name, .hud-mode-hint')) {
       expect(e.children).toHaveLength(0);
     }
+    // The phone shell's one line under the row (hidden elsewhere by CSS), once, with the same words.
+    const notes = [...root.querySelectorAll('.hud-mode-note')];
+    expect(notes.map((e) => e.textContent)).toEqual(['Hell: hold Nightmare 50']);
+    expect(notes[0]!.getAttribute('aria-hidden')).toBe('true');
+    expect(notes[0]!.parentElement!.classList.contains('hud-mode-row')).toBe(true);
+  });
+
+  it('the phone label drops "(new)" and shortens "best to farm"', () => {
+    expect(phoneLabel('Normal 60 (new) · Boss')).toBe('Normal 60 · Boss');
+    expect(phoneLabel('Nightmare 12 · best to farm')).toBe('Nightmare 12 · farm');
+    expect(phoneLabel('Hell 5')).toBe('Hell 5');
   });
 
   it('a press goes to the handler; the mode in play and a locked one do not', () => {

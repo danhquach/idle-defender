@@ -155,6 +155,7 @@ import {
   restLabel,
   hordeName,
   unlockHint,
+  unlockShort,
   effectAt,
   type CardPitch,
   cardPitch,
@@ -973,6 +974,10 @@ function fillPowerMeter(meter: HTMLElement, l: PowerLine): void {
   );
 }
 
+/** A horde option's text for the phone shell's narrow select (ID-278). */
+export const phoneLabel = (label: string): string =>
+  label.replace(' (new)', '').replace('best to farm', 'farm');
+
 /** One entry of the horde picker (ID-098). */
 export interface HordeChoice {
   horde: number;
@@ -1077,6 +1082,8 @@ export interface ModeChoice {
   title: string;
   /** What unlocks it, for a locked mode ("Hold Nightmare 50 to unlock Hell"); null when open. */
   hint: string | null;
+  /** The same in a few words for the phone shell's one line ("Hell: hold Nightmare 50"); null when open. */
+  short: string | null;
 }
 
 /**
@@ -1095,6 +1102,7 @@ export function modeChoices(game: ModeProgress): ModeChoice[] | null {
       current: mode === modeOf(game),
       title: open ? `${MODE_NAME[mode]} · best ${best}` : unlockHint(mode),
       hint: open ? null : unlockHint(mode),
+      short: open ? null : unlockShort(mode),
     };
   });
 }
@@ -3768,6 +3776,15 @@ export function createHud(
       });
       row.append(button);
     }
+    // The locked modes' conditions as one line under the row: shown by the phone shell, where a
+    // locked button is too narrow for its hint (still in the button's name and title).
+    const shorts = choices.flatMap((c) => (c.short === null ? [] : [c.short]));
+    if (shorts.length > 0) {
+      const note = el('p', 'hud-mode-note', shorts.join(' · '));
+      // The locked button's own name and title say it in full.
+      note.setAttribute('aria-hidden', 'true');
+      row.append(note);
+    }
     return row;
   }
 
@@ -3786,7 +3803,11 @@ export function createHud(
     const select = el('select', 'build-select hud-horde-select');
     select.id = 'hud-horde-select';
     for (const o of p.options) {
-      const option = el('option', '', o.label);
+      // The phone shell's select is narrow: "(new)" goes and "best to farm" is "farm", the
+      // whole label staying the option's name for a screen reader.
+      const short = isShortTouch(window);
+      const option = el('option', '', short ? phoneLabel(o.label) : o.label);
+      if (short) option.setAttribute('aria-label', o.label);
       option.value = String(o.horde);
       select.append(option);
     }
