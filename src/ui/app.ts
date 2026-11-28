@@ -1168,7 +1168,9 @@ export function start(root: HTMLElement, art: Art): void {
         ? e.target.closest<HTMLElement>('[data-open-survivor], [data-open-roster]')
         : null;
     if (!roster || !t) return;
-    roster.open(t.dataset.openSurvivor, t);
+    // On the phone shell a survivor's card opens on its gun picker (ID-274).
+    const guns = t.dataset.openSurvivor !== undefined && isShortTouch(window);
+    roster.open(t.dataset.openSurvivor, t, guns ? { guns } : undefined);
   });
   const dialogOpen = (): boolean =>
     intro.isOpen() ||

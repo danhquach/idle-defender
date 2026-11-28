@@ -38,6 +38,7 @@ import {
 import { BLUEPRINT_GUNS, rollBlueprint } from '../core/craft.ts';
 import { project } from './projection.ts';
 import { GUNS_WAIT } from './inventory.ts';
+import { SHORT_TOUCH } from './landscape.ts';
 import { drawScene } from './render.ts';
 import type { Art } from './sprites.ts';
 
@@ -810,6 +811,27 @@ describe('the Roster and the result screen together (app.ts, ID-086, ID-108)', (
       expect(scrim.hidden).toBe(false);
       expect(scrim.querySelectorAll('.rv-tab')).toHaveLength(3);
       close();
+    }
+  });
+
+  it('on the phone shell a name opens the gun picker, elsewhere the card (ID-274)', () => {
+    const slot = (scrim: HTMLElement) => scrim.querySelector('.rv-slot');
+    const { scrim, open, close } = wonWithPoints();
+    open();
+    expect(slot(scrim)!.getAttribute('aria-expanded')).toBe('false');
+    close();
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q === SHORT_TOUCH,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      open();
+      expect(scrim.hidden).toBe(false);
+      expect(slot(scrim)!.getAttribute('aria-expanded')).toBe('true');
+      close();
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

@@ -3965,8 +3965,15 @@ export function createHud(
       icon.append(img);
       // Two columns: the icon, then the level and gun over its DPS.
       const text = el('span', 'gun-chip-text');
+      // The level apart from the gun, so the phone shell can set the level beside the DPS; the
+      // name's text is still "Lv 2 Carbine".
+      const name = el('span', 'gun-chip-name');
+      const [, lv, gunName] = /^(Lv \d+ )(.+)$/.exec(g.short) ?? [];
+      if (lv && gunName)
+        name.append(el('span', 'gun-chip-lv', lv), el('span', 'gun-chip-gun', gunName));
+      else name.textContent = g.short;
       text.append(
-        el('span', 'gun-chip-name', g.short),
+        name,
         el('span', 'gun-chip-power', g.lost ? 'Thrown away' : g.power),
         ...(g.tag ? [el('span', 'gun-chip-tag', g.tag)] : []),
       );

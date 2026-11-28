@@ -1448,3 +1448,84 @@ describe('the phone fight HUD (ID-275)', () => {
     expect(shell).not.toMatch(/@media[^{]*\bwidth/);
   });
 });
+
+describe('the phone squad screen and result (ID-274)', () => {
+  const query = `@media ${SHORT_TOUCH} {`;
+  const at = rules.indexOf(query);
+  const shell = rules.slice(at, rules.indexOf('\n}\n', at));
+  const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** One rule's body inside the shell block (the exact selector text, comma lists included). */
+  const rule = (selector: string): string => {
+    const m = new RegExp(`(?:^|\\n)  ${esc(selector)} \\{([^}]*)\\}`).exec(shell);
+    if (!m) throw new Error(`no rule ${selector} in the phone shell`);
+    return m[1]!;
+  };
+
+  it('the panel has a definite height and is a grid: header across, body left, foot column right', () => {
+    const panel = rule('.hud-result.hud-debrief');
+    expect(panel).toMatch(/display: grid;/);
+    expect(panel).toMatch(/height: calc\(100dvh - 8px\);/);
+    expect(panel).toMatch(/grid-template-columns: minmax\(0, 1fr\) clamp\(220px, 30vw, 260px\);/);
+    expect(panel).toMatch(/grid-template-rows: auto minmax\(0, 1fr\);/);
+    expect(rule('.hud-debrief .hud-result-head')).toMatch(/grid-column: 1 \/ -1;/);
+    expect(rule('.hud-debrief .hud-result-scroll')).toMatch(/grid-column: 1;/);
+  });
+
+  it('the squad is one grid of 96 px cells 8 px apart; the head and the card grid drop out of the layout', () => {
+    const grid = rule('section.debrief-squad');
+    expect(grid).toMatch(/display: grid;/);
+    expect(grid).toMatch(/repeat\(auto-fill, minmax\(96px, 1fr\)\)/);
+    expect(grid).toMatch(/gap: var\(--space-8\);/);
+    expect(rule('.debrief-squad-head,\n  .squad-grid')).toMatch(/display: contents;/);
+    expect(rule('.debrief-squad-title')).toMatch(/clip-path: inset\(50%\);/);
+    expect(
+      rule('section.debrief-squad > .debrief-bench,\n  section.debrief-squad > .debrief-empty'),
+    ).toMatch(/grid-column: 1 \/ -1;/);
+  });
+
+  it('a squad card is whole one 44 px tap target; Best gun and Change squad are 44 px cells', () => {
+    expect(rule('.squad-card')).toMatch(/position: relative;\s*min-height: 44px;/);
+    expect(rule('.squad-card-open::after')).toMatch(/position: absolute;\s*inset: 0;/);
+    expect(rule('.debrief-change-squad,\n  .debrief-best-guns')).toMatch(/min-height: 44px;/);
+    expect(rule('.debrief-chips .debrief-details')).toMatch(/min-height: 44px;/);
+  });
+
+  it('the joiners: 220 px columns, 8 px gaps, 32 px text rows, 44 px answers', () => {
+    const join = rule('.debrief-join');
+    expect(join).toMatch(/repeat\(auto-fit, minmax\(220px, 1fr\)\)/);
+    expect(join).toMatch(/gap: var\(--space-8\);/);
+    expect(rule('.join-row')).toMatch(/min-height: 44px;/);
+    // Two 16 px lines at most (32 px of text), plain flow so the name keeps its space.
+    expect(rule('.join-who')).toMatch(/line-height: 16px;/);
+    expect(rule('.join-who')).not.toMatch(/display: flex/);
+  });
+
+  it('the foot is a column: the horde card scrolls, the skills and Start stay pinned', () => {
+    const foot = rule('.hud-debrief .hud-result-foot');
+    expect(foot).toMatch(/grid-column: 2;/);
+    expect(foot).toMatch(/display: flex;\s*flex-direction: column;/);
+    expect(foot).toMatch(/min-height: 0;/);
+    const pick = rule('.hud-debrief .hud-horde-pick');
+    expect(pick).toMatch(/flex: 0 1 auto;/);
+    expect(pick).toMatch(/min-height: 0;/);
+    expect(pick).toMatch(/overflow-y: auto;/);
+    expect(rule('.hud-debrief .hud-start-row')).toMatch(/flex: none;\s*margin-top: auto;/);
+    // The loot chip: the gun on its own line, the level and DPS under it (no "…").
+    expect(rule('.gun-chip-name')).toMatch(/display: contents;/);
+    expect(rule('.gun-chip-gun')).toMatch(/flex: 0 0 100%;/);
+    expect(rule('.gun-chip-gun')).not.toMatch(/ellipsis|line-clamp/);
+  });
+
+  it('the new selectors live only in the phone shell: desktop and iPad are unchanged', () => {
+    const outside = rules.replace(shell, '');
+    for (const s of [
+      'section.debrief-squad',
+      '.squad-card-open::after',
+      'clamp(220px, 30vw, 260px)',
+      '.gun-chip-lv',
+      '.gun-chip-gun',
+      '.hud-debrief .hud-result-foot {\n    grid-column',
+    ])
+      expect(outside.includes(s), s).toBe(false);
+  });
+});

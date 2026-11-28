@@ -9,6 +9,7 @@ import { recruit } from '../core/camp.ts';
 import { DEFENDER_HP, STASH_CAP, type Rarity, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { bestGuns, equipGun, squadSpec, startSquadHorde, toggleSquad } from '../core/hordeonly.ts';
+import { sendMapPatrol, withMap } from '../core/scout.ts';
 import { createRng } from '../core/rng.ts';
 import { maxHpOf, survivorDps, xpForLevel } from '../core/stats.ts';
 import { GUNS_WAIT } from './inventory.ts';
@@ -16,6 +17,7 @@ import { ART_URLS, avatarOf, GUNNER_LOOKS, lookOf } from './sprites.ts';
 import { LEVEL_ONE_TEXT, levelGains, levelText } from './statlines.ts';
 import { statRows } from './jobtext.ts';
 import { heldGunOf } from './gunpick.ts';
+import { MAP_GUN_AWAY } from './maptext.ts';
 import { createRoster, rosterTiles, SQUAD_WAIT, type RosterOptions } from './squadroster.ts';
 
 const NOW = 1_800_000_000_000;
@@ -652,5 +654,82 @@ describe('Combine in a fight (ID-170)', () => {
     calm.roster.open('recruit-1');
     calm.q('.rv-combine').click();
     expect(calm.scrim.querySelectorAll('.rv-combine-pick button')).toHaveLength(7);
+  });
+});
+
+describe('opening on the gun picker (ID-274, the phone shell)', () => {
+  const slotOpen = (m: ReturnType<typeof mount>) =>
+    m.key('slot').getAttribute('aria-expanded') === 'true';
+  const guns = [gun('g1', 'smg', 'military')];
+
+  it("opens straight on that survivor's gun picker, the best upgrade picked", () => {
+    const m = mount(camp([at(1, 2), at(2, 2)], guns));
+    m.roster.open('recruit-2', undefined, { guns: true });
+    expect(m.q('.rv-who-name').textContent).toBe(recruit(2).name);
+    expect(slotOpen(m)).toBe(true);
+    expect(m.scrim.querySelector('.rv-statcols')).toBeNull();
+    expect(m.scrim.querySelector('.rv-tile[data-choice="g1"]')!.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
+  it('scrolls the open picker into view (a short window shows the card first)', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      const m = mount(camp([at(1, 2)], guns));
+      m.roster.open('recruit-1', undefined, { guns: true });
+      expect(scroll).toHaveBeenCalledWith({ block: 'start' });
+      const el = scroll.mock.contexts[0] as HTMLElement;
+      expect(el.classList.contains('rv-phead')).toBe(true);
+    } finally {
+      // @ts-expect-error jsdom has none
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+
+  it('also when the Roster is already on show', () => {
+    const m = mount(camp([at(1, 2), at(2, 2)], guns));
+    m.roster.open('recruit-1');
+    expect(slotOpen(m)).toBe(false);
+    m.roster.open('recruit-2', undefined, { guns: true });
+    expect(m.q('.rv-who-name').textContent).toBe(recruit(2).name);
+    expect(slotOpen(m)).toBe(true);
+  });
+
+  it('stays on the card without the option (Change squad, desktop, iPad)', () => {
+    const m = mount(camp([at(1, 2)], guns));
+    m.roster.open('recruit-1');
+    expect(slotOpen(m)).toBe(false);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
+    m.roster.close();
+    m.roster.open();
+    expect(slotOpen(m)).toBe(false);
+  });
+
+  it('stays on the card in a fight, where guns are locked, and shows the wait', () => {
+    const m = mount(camp([at(1, 2)], guns), { canGear: false });
+    m.roster.open('recruit-1', undefined, { guns: true });
+    expect(slotOpen(m)).toBe(false);
+    expect(m.scrim.querySelector('.rv-statcols')).not.toBeNull();
+    expect(m.key('slot').textContent).toContain(GUNS_WAIT);
+  });
+
+  it('stays on the card for a survivor away on a patrol, with the away note', () => {
+    const base = withMap({ ...camp([at(1, 2), at(2, 2), at(3, 2)], guns), reserve: [at(4, 2)] }, 7);
+    const out = sendMapPatrol(base, base.map!.areas[0]!.kind, ['recruit-4'], 1, Date.now());
+    if (!out.ok) throw new Error(out.code);
+    const m = mount(out.game);
+    m.roster.open('recruit-4', undefined, { guns: true });
+    expect(m.q('.rv-who-name').textContent).toBe(recruit(4).name);
+    expect(slotOpen(m)).toBe(false);
+    expect(m.key('slot').textContent).toContain(MAP_GUN_AWAY);
+  });
+
+  it('an unknown id opens the first survivor, on their picker', () => {
+    const m = mount(camp([at(1, 2)], guns));
+    m.roster.open('nobody', undefined, { guns: true });
+    expect(m.q('.rv-who-name').textContent).toBe(recruit(1).name);
+    expect(slotOpen(m)).toBe(true);
   });
 });

@@ -280,7 +280,7 @@ export interface Roster {
   /**
    * Opens on survivor `id`'s level (the first survivor without one); closing gives the keyboard back to `from` (what was clicked), else to what had it.
    */
-  open(id?: string, from?: HTMLElement): void;
+  open(id?: string, from?: HTMLElement, opts?: { guns?: boolean }): void;
   /** Closes at once. */
   close(): void;
   /** Re-reads the camp: call when it changes. */
@@ -1226,26 +1226,43 @@ export function createRoster(
 
   const api: Roster = {
     isOpen: () => opened,
-    open(id, from) {
-      const { game } = opts.state();
+    open(id, from, how) {
+      const { game, fight, canGear } = opts.state();
       const asked = [...game.roster, ...(game.reserve ?? [])].find((r) => r.id === id);
       current = (asked ?? game.roster[0])?.id ?? null;
       // A survivor asked for by name shows their details, even folded (not kept).
       if (id !== undefined) detailsOpen = true;
       // Asked for by name: shown, even if the player scrolled the bench since (ID-241).
       benchScrolled = null;
+      // The phone shell asks for the gun picker straight away (ID-274), when that survivor can
+      // change guns; away on a patrol, or in a fight, their card shows with its status as ever.
+      const guns =
+        how?.guns === true &&
+        canGear &&
+        current !== null &&
+        rosterTiles(game, Date.now(), fight).some((t) => t.id === current && !t.away);
+      const pickGuns = (): void => {
+        picking = true;
+        picked = bestUpgrade(gunTiles(game, current!)) ?? null;
+        draw('slot');
+        // Short window: the choices sit below the card, so the picker's top scrolls into view.
+        pane.querySelector<HTMLElement>('.rv-phead')?.scrollIntoView?.({ block: 'start' });
+      };
       if (opened) {
         // Already on show: the survivor asked for, on their level.
         picking = false;
         picked = null;
         combining = false;
-        draw(`tab:${current}`);
+        if (guns) pickGuns();
+        else draw(`tab:${current}`);
         return;
       }
       // What had the keyboard (the button, or a name on the squad screen) gets it back.
       const at = from ?? (doc.activeElement as HTMLElement | null);
       at?.blur?.();
       win.open('roster', at);
+      // After the window opens: its show() starts every visit on the card.
+      if (guns) pickGuns();
     },
     close() {
       if (opened) win.close();
