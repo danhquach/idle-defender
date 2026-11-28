@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 // The title logo: every url(#…) it uses points at an element it defines, its text stays
-// inside the cut-down title font, it is the same every time, and the name matches the page.
+// inside the cut-down title font, it is clean (ID-281) and the same every time, and the name
+// matches the page.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { INTRO_TITLE } from './intro.ts';
 import { createTitleLogo } from './introTitle.ts';
 
-/** The letters the title font file holds (src/assets/fonts/rubik-dirt-title.woff). */
+/** The letters the title font file holds (src/assets/fonts/bebas-neue-title.woff, ID-281). */
 const FONT_LETTERS = new Set('THE LONG HOLD');
 
 describe('the title logo', () => {
@@ -30,7 +31,13 @@ describe('the title logo', () => {
     for (const ch of text) expect(FONT_LETTERS.has(ch)).toBe(true);
   });
 
-  it('is the same every time (fixed seed) and holds no script or links', () => {
+  it('is clean (ID-281): no masks, cut-outs, splats or drips, only its two lines of text', () => {
+    const svg = createTitleLogo(document);
+    expect(svg.querySelector('mask, circle, path, feTurbulence, feDisplacementMap')).toBeNull();
+    expect(svg.querySelectorAll('text')).toHaveLength(2);
+  });
+
+  it('is the same every time and holds no script or links', () => {
     const a = createTitleLogo(document);
     const b = createTitleLogo(document);
     expect(a.outerHTML).toBe(b.outerHTML);

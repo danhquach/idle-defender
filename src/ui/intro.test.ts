@@ -55,10 +55,8 @@ describe('the intro title screen', () => {
     // The drawn logo is decoration: hidden from screen readers, so the name is the span's.
     const logo = h1.querySelector('svg')!;
     expect(logo.getAttribute('aria-hidden')).toBe('true');
-    // Two lines, drawn twice: the shadow, then the face.
+    // Two lines, each drawn once: its shadow is a filter (ID-281).
     expect([...logo.querySelectorAll('text')].map((t) => t.textContent)).toEqual([
-      'THE LONG',
-      'HOLD',
       'THE LONG',
       'HOLD',
     ]);
