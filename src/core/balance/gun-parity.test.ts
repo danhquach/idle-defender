@@ -30,6 +30,15 @@ import { gunSquad, inMode, mixedSquad, SEEDS, withRef } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
+/**
+ * `game` with every survivor a Security guard (ID-287): these weigh guns, not jobs, and a
+ * Security guard is a plain survivor with every gun here (theirs are the SMG and Machine Pistol).
+ */
+const guards = (game: GameState): GameState => ({
+  ...game,
+  roster: game.roster.map((d) => ({ ...d, job: 'guard' as const })),
+});
+
 type Mode = HigherMode | 'normal';
 const SQUADS = ['rifle', 'lmg', 'sniper', 'shotgun', 'mix'] as const;
 type Squad = (typeof SQUADS)[number];
@@ -47,7 +56,9 @@ const build =
   (k: Squad, mode: Mode, n: number) =>
   (level: number): GameState => {
     const base = mode === 'normal' ? n : 51;
-    const squad = k === 'mix' ? mixedSquad(base, level) : gunSquad(base, level, [k as GunBase]);
+    const squad = guards(
+      k === 'mix' ? mixedSquad(base, level) : gunSquad(base, level, [k as GunBase]),
+    );
     return inHorde(squad, mode, n);
   };
 

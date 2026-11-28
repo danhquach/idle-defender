@@ -6,6 +6,7 @@ import {
   CRIT_DAMAGE,
   DEFENDER_HP,
   GUNNER,
+  HEAVIER_GUNS,
   JOBS,
   LEVEL_BONUS,
   LEVEL_HALF,
@@ -13,6 +14,7 @@ import {
   OFF_PROFESSION,
   POWER,
   SHIELD,
+  UNTRAINED,
   type Job,
   type JobEffect,
   type JobId,
@@ -151,14 +153,27 @@ export function fireRateFactor(d: Statted, weapon: Held): number {
 }
 
 /**
+ * Share more reload time gun `weapon` takes someone with `job` (ID-287, `UNTRAINED`): 0.1
+ * for a non-fighting job, 0.15 with a heavier gun; 0 for a fighting job, no job or no gun.
+ */
+export function untrainedReload(job: JobId | undefined, weapon: Held | null): number {
+  if (job === undefined || (JOBS[job] as Job).kind === 'fight') return 0;
+  if (weapon === null || !isGun(weapon)) return 0;
+  const heavier = (HEAVIER_GUNS as readonly string[]).includes(baseOf(weapon));
+  return UNTRAINED.reload + (heavier ? UNTRAINED.heavier : 0);
+}
+
+/**
  * Seconds to reload gun `weapon`: a Gunner's 25% faster, an off-profession specialised
- * gun's 50% slower, and a higher level's (and a profession's, ID-149) faster.
+ * gun's 50% slower, a non-fighting job's slower (ID-287), and a higher level's (and a
+ * profession's, ID-149) faster.
  */
 export function reloadTime(d: Statted, weapon: Held): number {
   const gunner = professionFor(d) === 'gunner' ? 1 - GUNNER.reload : 1;
   const off = offProfession(d, weapon) ? 1 + OFF_PROFESSION.reload : 1;
+  const untrained = 1 + untrainedReload(d.job, weapon);
   const level = 1 - bonusOf(d, 'reload', weapon);
-  return gunOf(weapon).reload * gunner * off * level;
+  return gunOf(weapon).reload * gunner * off * untrained * level;
 }
 
 /** Share more rounds a magazine of `weapon` holds for `d`: a Soldier's with their guns (ID-149). */

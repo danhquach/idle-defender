@@ -44,19 +44,19 @@ const CASES: [number, number][] = [
  */
 const GOLDEN: Record<string, string> = {
   'h1-L1-won': 'e0c6024f:11933',
-  'h10-L9-won': '61207097:20149',
-  'h20-L18-lost': '4980ab77:40374',
-  'h20-L40-won': '57a905b8:19941',
-  'h30-L27-lost': '77f5ca0b:46840',
-  'h30-L70-won': '35a1184:19997',
-  'h4-L4-won': '190ef090:16865',
-  'h45-L40-lost': '40f457f0:62592',
-  'h5-L5-won': '3bad2bce:18443',
-  'h50-L150-won': 'a4411e55:19942',
-  'h50-L45-lost': 'a2359238:45823',
-  // ID-248: re-recorded locally (drop and stash scoring use Squad Power's rating, so the replay's
-  // drop changes). CI (Node 22) confirms this entry; if it differs there, add it to NODE_22.
-  'replay-won': 'a46e68fd:13681',
+  'h10-L9-won': '50373c4b:19851',
+  'h20-L18-lost': 'e63921e3:43600',
+  'h20-L40-won': '698999ae:19895',
+  'h30-L27-lost': 'bfe0aa67:48782',
+  'h30-L70-won': 'afdacadd:20022',
+  'h4-L4-won': 'b77247a3:16984',
+  'h45-L40-lost': 'b1959e1b:63415',
+  'h5-L5-won': 'de03c7d9:18576',
+  'h50-L150-won': '89833561:20088',
+  'h50-L45-lost': '81e860dc:42564',
+  // ID-287: every entry but h1 re-recorded locally (Node 25): non-fighting jobs reload slower.
+  // CI (Node 22) confirms them; where it differs there, its value goes in NODE_22.
+  'replay-won': 'a0092725:13581',
 };
 
 /**
@@ -64,8 +64,9 @@ const GOLDEN: Record<string, string> = {
  * (re-taken in ID-236), the same code path that matches main above byte for byte on Node 25.
  */
 const NODE_22: Record<string, string> = {
-  'h20-L18-lost': '8323c83c:40379',
-  'h20-L40-won': 'fde0bb30:19945',
+  // ID-287: taken from the branch on CI after the re-record.
+  'h20-L18-lost': '6a4c509b:43605',
+  'h20-L40-won': '7bdc1b5e:19899',
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */

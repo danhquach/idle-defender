@@ -1209,6 +1209,20 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
 | Teacher | Squad | on the field | +30% horde XP for every survivor who fought |
 | Scavenger | Camp | on the field | +30% bonus-gun chance after a won horde (added to the 50%) |
 
+Every non-fighting job (the 7 that aren't Fighting above) also **reloads slower**
+(ID-287): never trained to handle a gun, they reload every gun 10% slower
+(reload time ×1.10) from level 1, and a **heavier gun** (LMG, Sniper rifle,
+Assault Rifle, Pump Shotgun, Drum Shotgun, Hand Cannon) 5% more on top
+(×1.15); the lighter guns (Pistol, SMG, Machine Pistol, Carbine) take only
+the ×1.10. As every reload speed share on screen, it is read on reload time:
+"−10% reload speed" is reload time ×1.10. Eased from ×1.15 / ×1.20, which tipped the horde balance tests
+(Hell 30, Nightmare 1). The professions balance test weighs each job against
+the mean of its own kind (fighting or not), since this cost lowers the
+non-fighting jobs' on purpose. The heavier-gun list is about the gun's weight in the hands, separate
+from the gun classes enemy traits use (§11, where the LMG is light). It is a
+cost for the non-fighting jobs' own effects (heal, wall, XP, Scrap), which they
+keep, part of the same job budget.
+
 - **Same budget** *(starting points)*, counted in all-round caps (the
   all-round bonus is 6): a fighting job puts about 40% of it (2.4 caps) into
   its two specialty stats, 1.2 caps each, only with its guns; a self job gets
@@ -1221,8 +1235,10 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   the Soldier and Security guard were trimmed to 1.0 cap a specialty, and
   the Student levels twice as fast at the cap. Every gun is covered by at least one fighting job (the
   Machine Pistol by two).
-- **No penalty.** Everyone always gets the full all-round bonus. A fighting
-  job with any other gun is exactly a plain survivor of their level.
+- **Non-fighting jobs reload slower** (ID-287, above). Everyone always gets
+  the full all-round bonus; a non-fighting job's slower reload multiplies with
+  it, with Speed Loaders and with Heavy Rounds' cost. A fighting job with any
+  other gun is exactly a plain survivor of their level: no bonus, no penalty.
 - **Squad effects don't stack**, and count only from the field (the
   Construction worker's wall share and the Paramedic's heal too): with two
   Chefs on the field only the higher-level one counts. A Chef's HP is there
@@ -1238,7 +1254,9 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   each survivor rolls one from their id and the save's time, the same each
   time it loads.
 - **Squad Power** counts a fighting job's specialty with its gun, and the
-  self jobs' stats, the way it counts the level's.
+  self jobs' stats, the way it counts the level's; and a non-fighting job's
+  slower reload (ID-287), as Best gun does. Recommended Power is the horde's
+  own number, so it doesn't change.
 - **On screen:** each Roster tab (squad and bench) is two columns: the
   portrait beside the name, "Lv 7" and the profession (short names of 8 letters
   at most so they fit a 375 px phone: "Police", "Guard", "Medic", "Scav", "Mech",
@@ -1271,6 +1289,12 @@ P = level − 1: nothing at level 1, half the cap at level 21, never the cap.
   the field)"; in a fight the field is the fight, between hordes the squad that
   takes it, so the total matches the HP in a fight (the Roster tab says the same
   between hordes) and a bench survivor has none.
+  A non-fighting job's line ends with its slower reload for the gun held
+  ("; −10% reload speed (not trained)", "−15% … (not trained, heavier gun)",
+  ID-287), and the Reload speed total counts it, named in a row under it
+  ("(−15% not trained, heavier gun)"); the newcomer asking to join says both
+  ("−10% reload speed, −15% with a heavier gun (not trained)", in its tooltip). Jobs are rolled,
+  so no job picker shows it.
   The Roster's gun picker marks a fighting job's
   guns with ★ and says so under the tiles (its DPS counts the bonus since
   ID-152; before, it left it out).
@@ -4001,7 +4025,14 @@ golden digest are untouched).
   the LMG squad, (e) with traits on the mix wins at least 3 more than the LMG squad. Measured
   (wins of 20, traits off then on): Hell 1 at gun level 106: mix 13 then 10 (15 then 10 since ID-248), LMG 14 then 2, Sniper
   19 then 15. Nightmare Horde 9 (logged, not asserted) at gun level 62: mix 14 then 16, LMG 15
-  then 9, Sniper 20 then 18. Medium alone is not asserted: it saturates, and the guns do not match at
+  then 9, Sniper 20 then 18. **ID-287:** every squad in it is all Security guards (a plain
+  survivor with these guns, so the non-fighting jobs' slower reload doesn't move it) and the
+  hold level is where the mix wins 15 of 20 with traits off (most of 5 seeds left the job-neutral
+  mix at 9 of 20, too few wins left to lose); the 3% Squad Power match is what the test asserts.
+  Re-measured: Hell 1 at gun level 108: mix 17 then 12, LMG 16 then 9, Sniper 18 then 6;
+  Nightmare 9 at 63: mix 15 then 13, LMG 15 then 9, Sniper 13 then 12. The gun-parity,
+  throwables and modes tests and the card tests use job-neutral squads too (ID-287).
+  Medium alone is not asserted: it saturates, and the guns do not match at
   equal Squad Power (ID-247). The Carbine replay against the figures before ID-237: Normal
   hold level 54 (same); Nightmare 1 at the first try 8 of 20 (was 9); the 2× squad stopped by
   Nightmare 20 on 20 of 20, at Hordes 5–12 (was 6–11); 130% of Recommended Power wins 5, 4, 5, 5, 5 of

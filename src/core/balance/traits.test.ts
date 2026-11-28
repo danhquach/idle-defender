@@ -1,7 +1,7 @@
 // Balance: enemy traits against gun classes (ID-237, design §11). The older balance checks keep
 // the one-class (Carbine) squad and replay it with traits on. These are the mixed squad's
 // own: in Hell Horde 1, at the level where the 2 LMG / 2 Carbine / 2 Sniper / 2 Pump Shotgun
-// squad just holds the horde with traits off, (a) turning traits on leaves the mix about
+// squad wins 15 of 20 with traits off (every squad all Security guards, ID-287), (a) turning traits on leaves the mix about
 // where it was; at equal Squad Power (b) an all-Light squad and (c) an all-Heavy squad lose
 // wins to the traits, (d) the mix loses fewer than the Light squad, and (e) with traits on the
 // mix beats the Light squad. Nightmare Horde 9 is measured the same way and logged, not
@@ -17,6 +17,15 @@ import { cacheFor } from './cache.ts';
 import { gunSquad, inMode, mixedSquad, SEEDS, withRef } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
+
+/**
+ * `game` with every survivor a Security guard (ID-287): these weigh gun classes, not jobs, and a
+ * Security guard is a plain survivor with every gun here (theirs are the SMG and Machine Pistol).
+ */
+const guards = (game: GameState): GameState => ({
+  ...game,
+  roster: game.roster.map((d) => ({ ...d, job: 'guard' as const })),
+});
 
 /** `squad` in `mode` at its horde `n` (Hell opens after Nightmare's last horde). */
 const inHorde = (squad: GameState, mode: HigherMode, n: number): GameState => {
@@ -34,13 +43,17 @@ function winsWith(game: GameState, n: number, seeds: number, on: boolean): numbe
   return won;
 }
 
-/** The lowest gun level whose squad wins most of 5 seeds with the traits off (wins never fall with level, so it bisects). */
+/**
+ * The lowest gun level whose squad wins 15 of `SEEDS` with the traits off (wins never fall with
+ * level, so it bisects). ID-287: most of 5 seeds left the job-neutral mix at 9 of 20, with too
+ * few wins left for the traits to take.
+ */
 function holdOff(game: (level: number) => GameState, n: number): number {
   let lo = 1;
   let hi = 400;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (winsWith(game(mid), n, 5, false) >= 3) hi = mid;
+    if (winsWith(game(mid), n, SEEDS, false) >= 15) hi = mid;
     else lo = mid + 1;
   }
   return lo;
@@ -73,11 +86,11 @@ interface Cells {
 
 /** Every cell of one mode's check: the mix's own hold level, then the squads at its Squad Power. */
 function measure(mode: HigherMode, n: number): Cells {
-  const mix = (level: number): GameState => inHorde(mixedSquad(51, level), mode, n);
+  const mix = (level: number): GameState => inHorde(guards(mixedSquad(51, level)), mode, n);
   const one =
     (base: GunBase) =>
     (level: number): GameState =>
-      inHorde(gunSquad(51, level, [base]), mode, n);
+      inHorde(guards(gunSquad(51, level, [base])), mode, n);
   const level = holdOff(mix, n);
   const target = squadPower(mix(level));
   const light = matched(one('lmg'), target);

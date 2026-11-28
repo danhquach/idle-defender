@@ -102,10 +102,22 @@ describe('professions (ID-149)', () => {
       );
       return (wins(`job ${job}`, withJob(base, job, held)) - plainRate) / SEEDS;
     });
-    const mean = gains.reduce((a, b) => a + b, 0) / gains.length;
+    // ID-287: each against the mean of its own kind (fighting or not): the non-fighting jobs
+    // reload slower on purpose, which would lower one shared mean and lift the fighters over it.
+    const isFight = (j: JobId): boolean => (JOBS[j] as Job).kind === 'fight';
+    const meanOf = (fight: boolean): number => {
+      const own = gains.filter((_, i) => isFight(JOB_IDS[i]!) === fight);
+      return own.reduce((a, b) => a + b, 0) / own.length;
+    };
+    const means = { fight: meanOf(true), other: meanOf(false) };
     const table = JOB_IDS.map((j, i) => `${j} ${gains[i]!.toFixed(2)}`).join(', ');
-    console.info(`Professions, win-rate gain over plain (mean ${mean.toFixed(2)}): ${table}`);
+    console.info(
+      `Professions, win-rate gain over plain (mean fighting ${means.fight.toFixed(2)}, other ${means.other.toFixed(2)}): ${table}`,
+    );
+    // The two kinds split can't hide the fighters drifting far over the rest.
+    expect(means.fight - means.other, table).toBeLessThanOrEqual(0.13 + 1e-9);
     for (const [i, gain] of gains.entries()) {
+      const mean = isFight(JOB_IDS[i]!) ? means.fight : means.other;
       expect(gain - mean, `${JOB_IDS[i]} (mean ${mean}; ${table})`).toBeLessThanOrEqual(
         0.13 + 1e-9,
       );

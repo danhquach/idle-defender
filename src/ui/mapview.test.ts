@@ -265,7 +265,8 @@ describe('the World map tab: Best fit (ID-244)', () => {
     const g = camp(levels.length);
     return {
       ...g,
-      reserve: g.reserve.map((d, i) => ({ ...d, xp: levels[i]! * 5_000 })),
+      // One job for all (ID-287: a non-fighting job reloads slower), so equal levels tie.
+      reserve: g.reserve.map((d, i) => ({ ...d, job: 'soldier' as const, xp: levels[i]! * 5_000 })),
     };
   }
 

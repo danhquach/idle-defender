@@ -14,7 +14,7 @@ import {
   type Held,
   type OwnedWeapon,
 } from './armoury.ts';
-import { ratedDps, maxHpOf, survivorDps, xpForLevel } from './stats.ts';
+import { ratedDps, maxHpOf, xpForLevel } from './stats.ts';
 import { recruit } from './camp.ts';
 import {
   DEFENDER_HP,
@@ -35,6 +35,7 @@ import {
   campOf,
   equipGun,
   finishSquadHorde,
+  powerOf,
   squadDrop,
   squadResult,
   squadOf,
@@ -717,9 +718,11 @@ describe('best gun for everyone arms the bench too (ID-188)', () => {
       expect(squadIds.size).toBe(n - bench);
       const group = (x: GameState, squad: boolean) =>
         campOf(x).filter((d) => squadIds.has(d.id) === squad);
+      // What Best gun weighs (ID-248): Squad Power with the gun in hand, not paper dmg/s (ID-287:
+      // with a non-fighting job's slower reload the two part ways on some camps).
       const total = (x: GameState, squad: boolean): number =>
         group(x, squad).reduce(
-          (s, d) => s + survivorDps(squadSpec(d), squadSpec(d).loadout.primary),
+          (s, d) => s + powerOf(squadSpec(d), squadSpec(d).loadout.primary),
           0,
         );
       const squadOnly = bestGuns({ ...g, roster: squadOf(g), reserve: [] }).game;
