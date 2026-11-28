@@ -1,0 +1,93 @@
+{
+  "iPad portrait (exactly 3:4)": {
+    "art x": 0,
+    "art y": 225.5,
+    "art w": 768,
+    "art h": 655.5,
+    ".intro-art object-fit": "cover",
+    ".intro-art object-position": "3% 50%",
+    ".intro-art mask-image": "linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 12%, rgb(0, 0, 0) 80%, rgba(0, 0, 0, 0))",
+    ".intro-art transform": "none",
+    ".intro-head padding-top": "71.68px",
+    ".intro-logo max-height": "327.68px",
+    ".intro-foot width": "360px"
+  },
+  "iPad Air portrait": {
+    "art x": 0,
+    "art y": 259.5,
+    "art w": 820,
+    "art h": 755,
+    ".intro-art object-fit": "cover",
+    ".intro-art object-position": "3% 50%",
+    ".intro-art mask-image": "linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 12%, rgb(0, 0, 0) 80%, rgba(0, 0, 0, 0))",
+    ".intro-art transform": "none",
+    ".intro-head padding-top": "82.6px",
+    ".intro-logo max-height": "377.6px",
+    ".intro-foot width": "360px"
+  },
+  "iPad Pro portrait": {
+    "art x": 0,
+    "art y": 300.5,
+    "art w": 1024,
+    "art h": 874,
+    ".intro-art object-fit": "cover",
+    ".intro-art object-position": "3% 50%",
+    ".intro-art mask-image": "linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 12%, rgb(0, 0, 0) 80%, rgba(0, 0, 0, 0))",
+    ".intro-art transform": "none",
+    ".intro-head padding-top": "95.62px",
+    ".intro-logo max-height": "437.12px",
+    ".intro-foot width": "360px"
+  },
+  "phone portrait": {
+    "art x": 0,
+    "art y": 185.5,
+    "art w": 390,
+    "art h": 540,
+    ".intro-art object-fit": "cover",
+    ".intro-art object-position": "3% 50%",
+    ".intro-art mask-image": "linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 12%, rgb(0, 0, 0) 80%, rgba(0, 0, 0, 0))",
+    ".intro-art transform": "none",
+    ".intro-head padding-top": "59.08px",
+    ".intro-logo max-height": "270.08px",
+    ".intro-foot width": "358px"
+  },
+  "phone landscape 862": {
+    "art x": 0,
+    "art y": 0,
+    "art w": 862,
+    "art h": 303,
+    ".intro-art object-fit": "cover",
+    ".intro-art object-position": "25% 60%",
+    ".intro-art mask-image": "none",
+    ".intro-art transform": "none",
+    ".intro-head padding-top": "21.21px",
+    ".intro-logo max-height": "96.96px",
+    ".intro-foot width": "360px"
+  },
+  "phone landscape 844": {
+    "art x": 0,
+    "art y": 0,
+    "art w": 844,
+    "art h": 390,
+    ".intro-art object-fit": "cover",
+    ".intro-art object-position": "25% 60%",
+    ".intro-art mask-image": "none",
+    ".intro-art transform": "none",
+    ".intro-head padding-top": "27.3px",
+    ".intro-logo max-height": "124.8px",
+    ".intro-foot width": "360px"
+  },
+  "phone landscape 932": {
+    "art x": 0,
+    "art y": 0,
+    "art w": 932,
+    "art h": 430,
+    ".intro-art object-fit": "cover",
+    ".intro-art object-position": "25% 60%",
+    ".intro-art mask-image": "none",
+    ".intro-art transform": "none",
+    ".intro-head padding-top": "30.1px",
+    ".intro-logo max-height": "137.6px",
+    ".intro-foot width": "360px"
+  }
+}

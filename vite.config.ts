@@ -56,8 +56,9 @@ export default defineConfig({
   // and under the repository sub-path on GitHub Pages.
   base: './',
   build: {
-    // A sound clip is always its own file: inlined as a data: URL, the CSP's
-    // connect-src 'self' would refuse to fetch it (src/ui/audio.ts).
-    assetsInlineLimit: (file) => (file.endsWith('.mp3') ? false : undefined),
+    // A sound clip and a font are always their own files: inlined as a data: URL, the
+    // CSP's connect-src 'self' would refuse to fetch the clip (src/ui/audio.ts) and its
+    // font-src 'self' the font (ID-282: the cut-down title font is small enough to inline).
+    assetsInlineLimit: (file) => (/\.(mp3|woff2?)$/.test(file) ? false : undefined),
   },
 });

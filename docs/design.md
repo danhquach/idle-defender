@@ -4488,7 +4488,11 @@ offline progress works across sessions.
   title art (ID-281: a painterly dusk, three survivors from behind with rifles slung,
   on the near side of the wall in the left third, the horde and a burning city beyond,
   the sky clear for the title; the art sits left of centre so a narrower screen keeps
-  all three, and on a tall phone it sits lower, under the tagline; lazy
+  all three, and on a tall phone it sits lower, under the tagline; ID-282: a desktop or
+  any screen 3:2 and wider shows the whole painting full height, left of centre, its
+  sides fading into the dark page, with the title sized to the sky above the survivors'
+  heads and the buttons below their knees, checked at every screen shape by a browser
+  test; lazy
   art that fades in, under a 70 % dim) with the title (ID-281: a clean logo in Bebas
   Neue, "THE LONG" spaced wide in off-white over a big red "HOLD", edged dark with a
   soft shadow) and a one-line tagline in the sky and, at the foot, **Continue** (only with a save, the main action),

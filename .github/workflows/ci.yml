@@ -196,14 +196,63 @@ jobs:
       - if: matrix.checks
         run: npm run build
 
+  # ID-282: the browser layout tests (e2e/, `npm run test:ui`): real Chromium measures the
+  # built game's screens at desktop, iPad and phone sizes. Every pull request runs them, so an
+  # art, CSS or font change that breaks a screen fails here.
+  ui:
+    name: UI layout (browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        id: node
+        with:
+          node-version: 22
+          cache: npm
+      - name: Dependency fingerprint
+        id: deps
+        run: |
+          hash=$(node tools/deps-hash.mjs)
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: modules
+        with:
+          path: node_modules
+          key: modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-${{ steps.deps.outputs.hash }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      # The browser build, cached per Playwright version (pinned in package.json).
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: browser
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
+      - if: steps.browser.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps --only-shell chromium
+      - if: steps.browser.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run test:ui
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
   check:
     # The required status check on main: green only when every job above is.
     # Add new jobs to `needs`.
     name: Lint, test, build
-    needs: [changes, build]
+    needs: [changes, build, ui]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed
-        if: needs.changes.result != 'success' || needs.build.result != 'success'
+        if: needs.changes.result != 'success' || needs.build.result != 'success' || needs.ui.result != 'success'
         run: exit 1
