@@ -73,7 +73,10 @@ describe('one structure on every screen (ID-196)', () => {
       expect(head.children[0]!.className, name).toBe('hud-result-title');
       // ID-200: the numbers on one line, then the tags row.
       expect(head.children[1]!.className, name).toBe('debrief-stats');
-      expect(head.children[2]!.className, name).toBe('debrief-chips');
+      // The phone shell's goal slot (ID-288), hidden off the shell, then the tags row.
+      expect(head.children[2]!.className, name).toBe('debrief-goal-head');
+      expect((head.children[2] as HTMLElement).hidden, name).toBe(true);
+      expect(head.children[3]!.className, name).toBe('debrief-chips');
       // The numbers and tags are in the head, never in the body.
       expect(panel.querySelector('.hud-result-scroll .debrief-chips'), name).toBeNull();
       expect(panel.querySelector('.hud-result-scroll .debrief-stats'), name).toBeNull();

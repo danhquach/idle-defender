@@ -1952,7 +1952,8 @@ button[data-card='tar-moat'] .hud-held-icon {
 }
 
 /* The campaign's next goal (ID-217): one line, in the goal chips' amber. */
-.debrief-goal {
+.debrief-goal,
+.debrief-goal-head {
   margin: 0;
   color: var(--color-warn);
   font-size: var(--text-body-sm);
@@ -9128,7 +9129,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     top: 4px;
     background: var(--color-panel-solid);
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(220px, 30vw, 260px);
+    grid-template-columns: minmax(0, 1fr) 208px;
     grid-template-rows: auto minmax(0, 1fr);
     max-width: calc(100vw - 96px);
     height: calc(100dvh - 8px);
@@ -9356,18 +9357,42 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     padding-inline: var(--space-12);
   }
 
-  /* The squad as one grid of 96 px cells, 8 px apart: "Best gun for everyone" and "Change
-     squad" are cells beside the cards (their wrappers drop out of the layout; the DOM and
-     focus order stay: Best guns, Change squad, then the cards). The title is read out only. */
+  /* The actions are a 44 px icon column at the squad's right, by the foot column, the cards a
+     grid of their own beside it (three to a row at 862), so a survivor never shares a row with
+     a button (ID-288). The DOM and focus order stay: Best guns, Change squad, then the cards.
+     The title is read out only. */
   section.debrief-squad {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: start;
     gap: var(--space-8);
   }
 
-  .debrief-squad-head,
+  .debrief-squad-head {
+    grid-row: 1;
+    grid-column: 2;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: var(--space-8);
+    margin: 0;
+  }
+
   .squad-grid {
-    display: contents;
+    grid-row: 1;
+    grid-column: 1;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: var(--space-8);
+  }
+
+  section.debrief-squad > .debrief-empty {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+  }
+
+  section.debrief-squad > .debrief-bench {
+    grid-column: 1 / -1;
+    margin: 0;
   }
 
   .debrief-squad-title {
@@ -9379,17 +9404,31 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     white-space: nowrap;
   }
 
-  section.debrief-squad > .debrief-bench,
-  section.debrief-squad > .debrief-empty {
-    grid-column: 1 / -1;
-    margin: 0;
-  }
-
+  /* Icon buttons: the words are the name, read out only (the icon is 22 px). */
   .debrief-change-squad,
   .debrief-best-guns {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
     min-height: 44px;
-    padding: 0 var(--space-6);
-    line-height: 1.15;
+    padding: 0;
+  }
+
+  .debrief-change-squad > .rail-icon,
+  .debrief-best-guns > .rail-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .debrief-action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   /* The whole card is one tap target, 44 px tall at least: the name button's overlay. A

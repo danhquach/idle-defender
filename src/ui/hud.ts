@@ -196,6 +196,7 @@ import { classBadge, classChip } from './classicon.ts';
 import { classLine, FIT_TIP, FIT_WORD, fitText, matchupsOpen, traitText } from './statlines.ts';
 import { askLine, noJoinText, REFUSE_NOTE, type JoinCard } from './joining.ts';
 import { isShortTouch } from './landscape.ts';
+import { railIcon, type RailIcon } from './railicon.ts';
 import { HUD_SPACE_SHORT } from './projection.ts';
 import {
   ART_URLS,
@@ -3035,8 +3036,12 @@ export function createHud(
   // A list, so a screen reader parts the numbers instead of running them together.
   headStats.setAttribute('role', 'list');
   const headChips = el('div', 'debrief-chips');
+  // The phone shell's next goal (ID-288): beside the numbers, in the header's empty space,
+  // instead of a line of its own in the body. Hidden elsewhere, where the body shows it.
+  const headGoal = el('p', 'debrief-goal-head');
+  headGoal.hidden = true;
   const resultHead = el('div', 'hud-result-head');
-  resultHead.append(resultTitle, headStats, headChips);
+  resultHead.append(resultTitle, headStats, headGoal, headChips);
   const resultList = el('ul', 'hud-result-list');
   const picker = el('div', 'hud-picker');
   const campPicker = el('div', 'hud-picker');
@@ -3924,8 +3929,9 @@ export function createHud(
    */
   function debriefBlock(d: Debrief): HTMLElement[] {
     const parts: HTMLElement[] = [];
-    // The next goal first (ID-217), so a phone shows it without a scroll.
-    if (d.goal) parts.push(el('p', 'debrief-goal', d.goal));
+    // The next goal first (ID-217), so a phone shows it without a scroll; the phone shell
+    // has it in the header instead (`headGoal`, filled just before this, ID-288).
+    if (d.goal && headGoal.hidden) parts.push(el('p', 'debrief-goal', d.goal));
     // A win's warning follows the goal; a loss's comes last, after its callout and retry note.
     const warn = d.warn ? el('p', 'debrief-warn', d.warn) : null;
     if (warn && d.kind !== 'lost') parts.push(warn);
@@ -4038,9 +4044,19 @@ export function createHud(
 
   /** "Best gun for everyone" beside the Squad heading: the app listens for it. */
   function bestGunsButton(): HTMLButtonElement {
-    const b = el('button', 'hud-button debrief-best-guns', BEST_GUNS);
-    b.type = 'button';
+    const b = squadAction('debrief-best-guns', BEST_GUNS, 'bestGuns');
     b.dataset.bestGuns = '';
+    return b;
+  }
+
+  /**
+   * A squad action: its words, and an icon the phone shell shows in their place (ID-288; the
+   * words stay the button's name).
+   */
+  function squadAction(cls: string, label: string, icon: RailIcon): HTMLButtonElement {
+    const b = el('button', `hud-button ${cls}`);
+    b.type = 'button';
+    b.append(railIcon(document, icon), el('span', 'debrief-action-label', label));
     return b;
   }
 
@@ -4051,8 +4067,7 @@ export function createHud(
     head.append(el('h3', 'debrief-squad-title', 'Squad'), bestGunsButton());
     if (roster) {
       // Opens the Roster, where the squad is picked (ID-147): the app listens for it.
-      const change = el('button', 'hud-button debrief-change-squad', roster.label);
-      change.type = 'button';
+      const change = squadAction('debrief-change-squad', roster.label, 'squad');
       change.dataset.openRoster = '';
       head.append(change);
     }
@@ -4613,6 +4628,9 @@ export function createHud(
       joinBox.removeAttribute('data-asking');
       back.classList.toggle('btn-primary', d !== undefined);
       drawHead(d?.chips ?? [], (d?.notes ?? []).length > 0);
+      const goalUp = d?.goal !== undefined && isShortTouch(window);
+      headGoal.hidden = !goalUp;
+      headGoal.textContent = goalUp ? d.goal! : '';
       shownDrop = null;
       picker.replaceChildren(...(d ? debriefBlock(d) : []));
       // The offer line (ID-150) is the body's first card (ID-200): on screen without
